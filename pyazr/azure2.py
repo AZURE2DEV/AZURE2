@@ -14,6 +14,7 @@ import tempfile
 from contextlib import contextmanager
 
 import numpy as np
+from typing import NamedTuple
 
 try:
     from . import _azure2
@@ -41,6 +42,25 @@ def _in_dir(path):
         yield
     finally:
         os.chdir(previous)
+
+
+class ScatteringLength(NamedTuple):
+    """The s-wave scattering length of one channel spin of a particle pair
+    (:meth:`azure2.scattering_lengths`).  ``a0`` is complex when a lower channel
+    is open at the pair's threshold; ``has_levels`` is False when no level has a
+    width in the channel (``a0`` is then the hard-sphere value)."""
+    pair: int
+    s: float
+    parity: int
+    a0: complex
+    has_levels: bool
+
+    @property
+    def jpi(self):
+        """J^pi of the channel (J = s for l = 0), e.g. ``"1/2+"``."""
+        j = self.s
+        text = f"{int(round(2 * j))}/2" if abs(j - round(j)) > 1e-6 else f"{int(round(j))}"
+        return text + ("+" if self.parity > 0 else "-")
 
 
 class _Engine:
@@ -77,7 +97,8 @@ class azure2:
     def __init__(self, file, cwd=None, data_mode=True, use_brune=True,
                  ignore_externals=True, transform=True,
                  use_long_wavelength=True, use_gsl_coul=False, use_rmc=False,
-                 use_park=False):
+                 use_park=False, use_coulomb_table=True, coulomb_table=None,
+                 replace_grids=True):
         """Build the R-matrix engine for ``file`` in this interpreter.
 
         Parameters
@@ -95,6 +116,16 @@ class azure2:
             ``--ignore-externals``, ``--no-transform`` and ``--no-long-wavelength``
             (the ``use_*`` options are ON by default, ``transform`` too).
         use_gsl_coul : use GSL's Coulomb functions instead of AZURE2's own.
+        use_coulomb_table : take P, S and the hard-sphere phase of charged
+            channels from the universal Coulomb table (the default; CLI
+            ``--no-coulomb-table`` turns it off), falling back to the exact
+            routines outside it or when there is no table file.
+        coulomb_table : the table file; ``None`` = ``$AZURE2_COULOMB_TABLE``,
+            else ``~/.azure2/coulomb_table.bin``.
+        replace_grids : lay the adaptive sub-point grids of target effects out
+            again on every evaluation, for the current levels and energy
+            shifts (the default; CLI ``--no-grid-replacement``).  ``False``
+            keeps the grids placed from the file's levels.
         use_rmc : use the R-matrix-with-channels (RMC) formalism instead of
             Brune; mutually exclusive with ``use_brune`` (Brune wins).
         use_park : use Park's level-dependent boundary conditions (Phys. Rev.
@@ -125,7 +156,8 @@ class azure2:
             ignore_externals=bool(ignore_externals), transform=bool(transform),
             use_long_wavelength=bool(use_long_wavelength),
             use_gsl_coul=bool(use_gsl_coul), use_rmc=bool(use_rmc),
-            use_park=bool(use_park))
+            use_park=bool(use_park), use_coulomb_table=bool(use_coulomb_table),
+            coulomb_table=str(coulomb_table or ""), replace_grids=bool(replace_grids))
 
         opts = _azure2.RuntimeOptions()
         for name, value in self.options.items():
@@ -1354,8 +1386,10 @@ class azure2:
             value = (float(x[p.free_index]) if p.free_index is not None and p.free_index < x.size
                      else float(p.value))
             isospin += ((value - p.prior_centre) / p.prior_sigma) ** 2
+        # Measured scattering lengths (<scatteringLengths>): engine side as well, reported here.
+        scattering_length = self.scattering_length_chi2(x)
         return {"norm": norm, "shift": shift, "shift_sqrt": shift_sqrt, "shift_fn": shift_fn,
-                "park": park, "abundance": abundance, "isospin": isospin}
+                "park": park, "abundance": abundance, "isospin": isospin, "scattering_length": scattering_length}
 
     @property
     def nuclei(self):
@@ -1376,6 +1410,43 @@ class azure2:
         if self.options.get("use_park"):
             return 2
         return 1 if self.options.get("use_brune") else 0
+
+    def scattering_lengths(self, params=None):
+        """The s-wave scattering lengths of every particle pair at a free RWA
+        vector (default ``params_rwa``): a list of :class:`ScatteringLength`,
+        one per allowed channel spin (identical pairs: even s only).
+
+        a0 = -a [M/(x^2 K1^2) - 2 I1/(x^2 K1)] with M = gamma^T A gamma at the
+        pair's threshold (Paneru et al., PRC 99, 045807 (2019), Eq. 7), a (1 - M)
+        for a neutral pair; the same in every parametrization.  Call it on each
+        sample of an MCMC chain for the posterior of a0.  The measured ones of
+        the ``<scatteringLengths>`` block are already part of
+        :meth:`calculate_chi2_rwa` (see :meth:`penalties`)."""
+        x = np.asarray(self.params_rwa if params is None else params, float)
+        flat = np.asarray(self.sess.scattering_lengths_rwa(x), float).reshape(-1, 6)
+        return [ScatteringLength(int(r[0]), float(r[1]), int(r[2]), complex(r[3], r[4]), bool(r[5])) for r in flat]
+
+    def scattering_length_chi2(self, params=None):
+        """chi-squared of the measured scattering lengths (``<scatteringLengths>``)
+        at a free RWA vector: the term the engine adds inside
+        :meth:`calculate_chi2_rwa`, recomputed from :meth:`scattering_lengths`."""
+        lines = [e for e in AzrModel.from_file(self.file).scattering_lengths if e.active]
+        if not lines:
+            return 0.0
+        values = self.scattering_lengths(params)
+        pairs = {p.key: p for p in self.pairs}
+        chi2 = 0.0
+        for e in lines:
+            if e.s < 0:
+                w = pairs[e.pair].i1i2factor
+                a = sum((2 * v.s + 1) * w * v.a0 for v in values if v.pair == e.pair)
+            else:
+                a = next(v.a0 for v in values if v.pair == e.pair and abs(v.s - e.s) < 1e-6)
+            if e.sigma > 0:
+                chi2 += ((a.real - e.value) / e.sigma) ** 2
+            if e.im_sigma > 0:
+                chi2 += ((a.imag - e.im_value) / e.im_sigma) ** 2
+        return chi2
 
     def park_norms(self, params=None):
         """Park formalism: the overlap J = 1 - sum_c gamma_c^2 dS_c/dE of every
@@ -1400,7 +1471,8 @@ class azure2:
         """
         x = np.asarray(self.params_rwa if params is None else params, float)
         pen = self.penalties(x)
-        # pen["park"] is already inside calculate_chi2_rwa (engine side).
+        # pen["park"], pen["abundance"] and pen["scattering_length"] are already inside
+        # calculate_chi2_rwa (engine side).
         return (float(np.sum(self.calculate_chi2_rwa(x)))
                 + float(np.sum(pen["norm"])) + float(np.sum(pen["shift"]))
                 + float(np.sum(pen["shift_sqrt"])) + float(np.sum(pen["shift_fn"])))

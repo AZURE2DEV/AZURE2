@@ -895,7 +895,18 @@ only where the internal width is zero. What a fresh load does rebuild
 differently from a running session is the adaptive target-integration
 sub-point grid (built from the level widths at start-up): on
 `tests/hybrid_potential` the round trip is exact with `<targetInt>` off and
-0.17 % in χ² with it on.
+0.17 % in χ² with it on. Until 2026-10-19 the grid was placed once, in
+`EData::ReadTargetEffectsFile` (`AdaptiveIntegrationGrid::GenerateGrid` from the FILE's level
+energies and widths), and never re-placed when a fit moved the levels, so a fit with narrow levels
+under `<targetInt>` minimized against the start model's grid: natural neon refit1, the same x gave
+25,773.959 in a session opened on the start `.azr` and 25,776.084 in one opened on `refit1_fit.azr`.
+SINCE 2026-10-19 (Coulomb table stage 3) the grids are RE-PLACED on every evaluation by default
+(`EData::ReplaceSubPointGrids`: current fit values -> observed E and widths on a private CNuc copy ->
+same generator, resonances offset by the segment's c.m. energy shift; unchanged grids keep their
+sub-points). Both refit1 sessions now give 25,776.076357, refit1q 25,693.609423 from either file.
+`--no-grid-replacement` / pyazr `replace_grids=False` restores the old behaviour; segments that need
+external-capture amplitudes always keep their grids. A fit run on an older build reports the
+start-file grid's objective: re-evaluate its end point in a current session before comparing.
 
 ```python
 azr, sav = m.save_fit("7Be_fit.azr")          # current parameters
@@ -1683,8 +1694,8 @@ Plain-text, section-tagged; prefer the GUI or `AzrModel` over hand edits.
     `merge_projects`, `parameters.abundances` (API record type 6; type 5 is
     a shift-function parameter), `penalties()["abundance"]`.
     Tests: `tests/natural_target` (synthetic p+C), `tests/natural_neon`
-    (the 2026-10-17 natural-neon joint fit on real EXFOR data, three
-    nuclei; each segment reproduces the fit's chi2).
+    (refit1q, the natural-neon model of record since 2026-10-19, on real EXFOR
+    data, three nuclei; levels re-saved from the fit's .sav, so each segment equals the fit exactly).
   - `shiftgroup <label>` (keyword block, 2026-10-13): every segment with the
     label uses the constant shift of the FIRST of them (file order): its
     value, error, vary flag and penalty; the others' own shift fields are
@@ -1804,6 +1815,9 @@ and its **angle column is centre-of-mass**, not lab.
 - `AZUREOut_*.extrap` — 5 cols: cm E, excitation E, cm angle, σ, S (mode 3).
 - `chiSquared.out` — per-segment χ²/N and norms; last line total χ². **The
   quickest scalar check that a run succeeded.**
+- `scatteringLengths.out` — s-wave scattering length of every channel spin of every particle pair at
+  the run's parameters, then the `<scatteringLengths>` constraints with their χ² (see the 2026-10-20
+  note at the end).
 - `param.par` initial / `param.sav` best-fit formal params (reload as the
   external parameter file); `parameters.out` physical/observable params.
 - `param.fit` is rewritten while MINUIT runs: every 100th objective evaluation
@@ -2129,6 +2143,55 @@ complete:
   on an evaluation shows `RecalcEDependentValues -> ShftFunc::theWhitFunc -> gsl_sf_hyperg_U`.
   Timing recipe that found it: switch data groups off in copies of the model and time
   `calculate_chi2_rwa` (the beta-only copy told the story in one line), then sample stacks.
+- 2026-10-18 (17O+a/10-13-26_natNe_seg1, readme 20:30-21:30) -- CLOSED NEUTRAL CHANNELS USE A
+  CLOSED FORM. `ShftFunc` took S_l = a W'/W by a numerical radial derivative of GSL's hyperg_U
+  Whittaker function (6-10 calls per channel per point; 29 % of a cold natural-neon evaluation in a
+  perf profile). For Z1 Z2 = 0 it now uses `ShftFunc::NeutralBoundShift`: S_0 = -rho,
+  S_l = -rho^2/(l - S_{l-1}) - l, rho = kappa a (170x faster, agrees to 3e-9 =
+  `tests/reference/neutral_channel_reference_test`). The example's mode 1 went 628 -> 453 s. Results
+  move by up to 3.6e-5 relative (Hinterberger chi2 +0.4 of 10,506) because dS/dE, a 1 eV central
+  difference of S, was noisy on the old route: 1e-6 to 5.5e-3 relative error vs the analytic value,
+  1e-9 now. Charged closed channels still take the old route, so their dS/dE (Brune basis,
+  observed-width and ANC conversions) carries that noise. `AZURE_NO_NEUTRAL_CLOSED_FORM=1` restores
+  the old route for comparisons. Open neutral channels were NOT changed: Michel's routine at eta = 0
+  is ~0.3 us per call, no slower than the Riccati-Bessel form; the open-channel Coulomb cost in a
+  profile is the charged channels.
+- 2026-10-19 -- Universal Coulomb table, ON BY DEFAULT since stage 3 (`--no-coulomb-table`, pyazr
+  `use_coulomb_table=False` to switch off): P, S and the hard-sphere phase of charged channels, open
+  and closed (`CoulombTable`, design and validation in `docs/source/developer/coulomb_table.rst`).
+  Build the file once: `AZURE2 --build-coulomb-table` (or GUI Configure > Build Coulomb Table...;
+  not distributed, decided 2026-10-20) -> `~/.azure2/coulomb_table.bin` (or
+  `$AZURE2_COULOMB_TABLE`; 100 nodes/decade, 88 MB, ~5 min on 4 threads); no file = one line
+  "Coulomb table: none at ...", exact routines. Natural-neon example mode 1: 473 -> 88 s, same chi2
+  to every printed digit. Not tabulated: neutral pairs, pairs with a nuclear potential, the EC
+  integrals. The EXACT route was made accurate at the same time: closed charged S from the U ratio,
+  open-channel dS/dE by Richardson (the old 1 eV difference of a numerically differentiated
+  Whittaker S was off by 3e-4..4e-3, p+12C); `AZURE_BOUND_SHIFT_NUMERICAL=1` / `AZURE_SHIFT_DE_1EV=1`
+  restore the old routes. EXPECT charged-particle fits with bound/sub-threshold levels to move by up
+  to ~1e-3 in chi2 against results from older builds (13N suite 9.3e-4); table and exact route now
+  agree. Grid re-placement (stage 3) is described under the save/reopen notes above
+  (`--no-grid-replacement`). And `--gsl-coul` is wrong by up to 3-6 % in P and S for
+  0.1 <= eta < 10, 1 <= rho < 10 (Michel agrees with mpmath to 1e-9): do not use it.
+- 2026-10-20 (branch feature/scattering-length; 7Be+p/10-20-26_scattering_length) -- S-WAVE SCATTERING
+  LENGTHS. Every calculation and fit writes `output/scatteringLengths.out` (and the run log): a0 of every
+  channel spin of every particle pair at its threshold, a0 = -a [M/(x^2 K1^2) - 2 I1/(x^2 K1)],
+  M = gamma^T A gamma at E = 0 (Paneru 2019 Eq. 7 = Paneru 2024 Eq. 26), a (1 - M) for neutrons; the same
+  in the standard, Brune and Park bases; complex when a lower channel is open; "hard sphere" = no level
+  has a width in that channel spin. Measured values go in an optional block
+  `<scatteringLengths>` / `active pairKey s value sigma [imValue imSigma]` / `</scatteringLengths>`
+  (s = -1: coherent sum_s (2s+1) a_s/((2j1+1)(2j2+1)); neutron tables give BOUND b, enter b A/(A+1)):
+  each line is a chi2 term in every fitter (exact gradient through the level-matrix adjoint, one LM/GSL
+  residual row per constrained part), the MCMC likelihood and `calculate_chi2_rwa`; chiSquared.out
+  gains `Total-Scattering-Length-Chi-Squared`. pyazr: `m.scattering_lengths(x)` (posterior from a
+  chain), `m.penalties()["scattering_length"]`, `AzrModel.scattering_lengths` /
+  `add_scattering_length` / `set_scattering_lengths`. Validated on Paneru 2024 3He+4He (33.0996 vs
+  33.10 fm) and by the effective-range expansion of AZURE2's own phase shifts (4e-5). TRAP when building
+  a model from published gamma~ (Brune): the .azr width is the OBSERVED width
+  2 P gamma~^2 / (1 + sum gamma~^2 dS/dE), not 2 P gamma~^2 -- dropping the denominator moved the
+  3He+4He a0 by 0.6 % (check `g_int` in parameters.out). Paneru 2019's a02 = -3.18 fm does not follow
+  from its printed Table II (-5.02). Side effect for everyone: a particle channel exactly at its
+  threshold (|E| < 1e-10 MeV) now takes the exact E -> 0 limit (P = 0, S_l(0) from K_2l/K_2l+1)
+  instead of the ill-conditioned zero-binding Whittaker route.
 - 2026-09-13 -- pyazr and `output/intEC.dat`: a session that RELOADS an existing cache for the
   12C+alpha truncated model returns a wrong chi2 (120,593 instead of 113,512, sometimes ~1e26)
   while the CLI reloading the same cache is exact; confirmed with the pre-fix module too, so it is

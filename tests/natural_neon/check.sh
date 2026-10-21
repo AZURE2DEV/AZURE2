@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 #
 # Natural neon: a real three-nucleus project (n+20Ne -> 21Ne, n+22Ne -> 23Ne,
-# n+21Ne -> 22Ne in one file, natural abundances) taken from the 2026-10-17
-# joint fit of the neon total cross sections.  natural_neon.azr itself is a
+# n+21Ne -> 22Ne in one file, natural abundances) taken from refit1q, the model
+# of record of the neon total cross sections (2026-10-19).  natural_neon.azr itself is a
 # chi-squared suite (expected/chiSquared.out, run by run_tests.sh): natural-neon,
 # enriched and folded data segments at the fitted parameters.  This script adds
 # what a chi-squared cannot show, on the test segments (one lab-energy grid):

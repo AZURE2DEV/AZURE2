@@ -1,4 +1,7 @@
 #include "AZUREParams.h"
+#include <cmath>
+#include <cstdlib>
+#include <sstream>
 #include "Config.h"
 #include "CNuc.h"
 
@@ -25,96 +28,69 @@ ROOT::Minuit2::MnUserParameters &AZUREParams::GetMinuitParams() {
  */
 
 void AZUREParams::ReadUserParameters(const Config &configure) {
-  std::vector<std::string> names;
-  vector_r values;
-  vector_r errors;
-  std::vector<bool> fixed;
-  std::string tempname, tempfixed, tempfixed_nows;
-  double tempvalue, temperror;
-
-  std::ifstream in;
-  in.open(configure.paramfile.c_str());
-  if (in) {
-    while (!in.eof()) {
-      in >> tempname >> tempvalue >> temperror;
-      getline(in, tempfixed);
-      if (!in.eof()) {
-        if (tempname == "#parametrization" || tempname == "parametrization") {
-          basisTag_ = (int)tempvalue;
-          continue;
-        }
-        names.push_back(tempname);
-        values.push_back(tempvalue);
-        errors.push_back(temperror);
-        tempfixed_nows.clear();
-        for (int i = 0; i < tempfixed.length(); i++)
-          if (tempfixed[i] != ' ' && tempfixed[i] != '\t')
-            tempfixed_nows.push_back(tempfixed[i]);
-        if (tempfixed_nows == "fixed")
-          fixed.push_back(true);
-        else
-          fixed.push_back(false);
-      }
-    }
-    in.close();
-  } else
-    configure.outStream << "Could not read user parameter file." << std::endl;
-
-  for (int i = 0; i < GetMinuitParams().Params().size(); i++) {
-    for (int ii = 0; ii < names.size(); ii++) {
-      if (GetMinuitParams().GetName(i) == names[ii]) {
-        // A level parameter fixed at zero is freed by a nonzero .sav value, and a
-        // free one fixed by a zero.  An energy shift is not: it follows the vary
-        // flag of its .azr segment line, because its penalty does (a freed shift
-        // would float with no penalty).  The .sav still sets its value.
-        const bool isShift = IsEnergyShiftName(GetMinuitParams().GetName(i));
-        if (!isShift && GetMinuitParams().Value(i) == 0.0 && values[ii] != 0.0 &&
-            GetMinuitParams().Parameter(i).IsFixed()) GetMinuitParams().Release(i);
-        if (!isShift && GetMinuitParams().Value(i) != 0.0 && values[ii] == 0.0 &&
-            !GetMinuitParams().Parameter(i).IsFixed()) GetMinuitParams().Fix(i);
-        GetMinuitParams().SetValue(i, values[ii]);
-        GetMinuitParams().SetError(i, errors[ii]);
-        if (fixed[ii] && !GetMinuitParams().Parameter(i).IsFixed()) GetMinuitParams().Fix(i);
-      }
-    }
-  }
+  ApplyUserParameterFile(configure.paramfile, configure.outStream);
 }
 
 void AZUREParams::ReadUserParameters(const std::string &filename) {
+  ApplyUserParameterFile(filename, std::cout);
+}
+
+/*!
+ * Reads a parameter file -- one "name value error [fixed]" line per parameter --
+ * and applies it to the parameters of the same names.
+ *
+ * The lines are parsed one at a time and the numbers with strtod, which accepts
+ * "nan" and "inf".  The file used to be read with operator>>, which does not: a
+ * failed extraction left the stream in fail() but never eof(), so the loop never
+ * ended and grew the vectors until std::bad_alloc.  A fit whose covariance is
+ * invalid writes "nan" in the error column, so its own .sav could not be read
+ * back (2026-10-19, A=4 session).  A non-finite error now leaves that
+ * parameter's step size as it was; a line without a readable value is skipped
+ * with a warning.
+ */
+void AZUREParams::ApplyUserParameterFile(const std::string &filename, std::ostream &out) {
   std::vector<std::string> names;
   vector_r values;
   vector_r errors;
   std::vector<bool> fixed;
-  std::string tempname, tempfixed, tempfixed_nows;
-  double tempvalue, temperror;
 
-  std::ifstream in;
-  in.open(filename.c_str());
-  if (in) {
-    while (!in.eof()) {
-      in >> tempname >> tempvalue >> temperror;
-      getline(in, tempfixed);
-      if (!in.eof()) {
-        if (tempname == "#parametrization" || tempname == "parametrization") {
-          basisTag_ = (int)tempvalue;
-          continue;
-        }
-        names.push_back(tempname);
-        values.push_back(tempvalue);
-        errors.push_back(temperror);
-        tempfixed_nows.clear();
-        for (int i = 0; i < tempfixed.length(); i++)
-          if (tempfixed[i] != ' ' && tempfixed[i] != '\t')
-            tempfixed_nows.push_back(tempfixed[i]);
-        if (tempfixed_nows == "fixed")
-          fixed.push_back(true);
-        else
-          fixed.push_back(false);
-      }
+  std::ifstream in(filename.c_str());
+  if (!in) {
+    out << "Could not read user parameter file." << std::endl;
+    return;
+  }
+  auto number = [](const std::string &token, double &v) {
+    if (token.empty()) return false;
+    char *end = nullptr;
+    v = std::strtod(token.c_str(), &end);
+    return end && *end == '\0';
+  };
+  std::string line;
+  int lineNumber = 0, skipped = 0;
+  while (std::getline(in, line)) {
+    lineNumber++;
+    std::istringstream fields(line);
+    std::string name, valueToken, errorToken, rest, word;
+    if (!(fields >> name)) continue;  // blank line
+    fields >> valueToken >> errorToken;
+    while (fields >> word) rest += word;
+    double value, error = 0.0;
+    if (!number(valueToken, value)) {
+      if (skipped++ < 5)
+        out << "WARNING: " << filename << " line " << lineNumber << ": no number for " << name << "; line skipped."
+            << std::endl;
+      continue;
     }
-    in.close();
-  } else
-    std::cout << "Could not read user parameter file." << std::endl;
+    if (name == "#parametrization" || name == "parametrization") {
+      basisTag_ = (int)value;
+      continue;
+    }
+    if (!number(errorToken, error)) error = std::nan("");
+    names.push_back(name);
+    values.push_back(value);
+    errors.push_back(error);
+    fixed.push_back(rest == "fixed");
+  }
 
   for (int i = 0; i < GetMinuitParams().Params().size(); i++) {
     for (int ii = 0; ii < names.size(); ii++) {
@@ -129,7 +105,7 @@ void AZUREParams::ReadUserParameters(const std::string &filename) {
         if (!isShift && GetMinuitParams().Value(i) != 0.0 && values[ii] == 0.0 &&
             !GetMinuitParams().Parameter(i).IsFixed()) GetMinuitParams().Fix(i);
         GetMinuitParams().SetValue(i, values[ii]);
-        GetMinuitParams().SetError(i, errors[ii]);
+        if (std::isfinite(errors[ii])) GetMinuitParams().SetError(i, errors[ii]);
         if (fixed[ii] && !GetMinuitParams().Parameter(i).IsFixed()) GetMinuitParams().Fix(i);
       }
     }

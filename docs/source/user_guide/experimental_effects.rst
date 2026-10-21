@@ -75,6 +75,49 @@ convolution or target integration. The required number depends on how rapidly
 the cross section changes with energy. Adjust using the spinner or enter a
 value directly.
 
+Where the sub-points go
+^^^^^^^^^^^^^^^^^^^^^^^
+
+Every effect that integrates over energy (beam spread, target integration, a
+beam profile, a numerical resolution function) evaluates the cross section on
+a grid of sub-points around each data point. The grid is adaptive: fine at the
+narrow resonances inside the integration range and coarse elsewhere. Two
+settings in the dialog shape it, with **Integration Points** as the upper
+bound on the number of sub-points:
+
+**Resonance Width Multiplier** (column *Width Mult.*)
+   How far the fine part of the grid reaches on either side of a resonance:
+   the step grows from the fine to the coarse value over about half this
+   many total widths.
+
+**Points Per Width** (column *Pts/Width*)
+   The step at the centre of a resonance is its total width divided by this
+   number.
+
+The resonances are found from the current level energies and widths, shifted
+by the segment's energy shift. The grids are laid out again at every
+evaluation, so when a fit moves a narrow level or a segment's energy shift,
+the fine part of the grid moves with it. A grid whose resonances have not
+moved keeps its sub-points, so this costs little: in the natural-neon example
+(:doc:`../examples/natural_neon`, 29,322 grids) 0.1--0.5 s in an evaluation
+of about 80 s. When many levels have moved at once, as in the first
+evaluation of a session opened on a project far from its parameters, it takes
+10--20 s to redo a few thousand grids.
+
+.. note::
+
+   Before October 2026 the grids were placed once, from the level parameters
+   in the project file, and kept for the whole session. A fit that moved a
+   narrow level then integrated it on a grid built for its old position, and
+   the χ² of a fitted model depended on the file the session started from:
+   in the natural-neon fit, 25,773.96 from the starting project and 25,776.08
+   from the fitted one, at the same parameters. Both now give 25,776.08.
+   Recalculated with a current version, folded segments of older fits can
+   therefore move slightly. The command-line option ``--no-grid-replacement``
+   (pyazr: ``replace_grids=False``) restores the old behaviour for comparison
+   with older results; the GUI always lays the grids out again. Segments with
+   external capture keep their first grid either way.
+
 Gaussian Beam Spread
 ^^^^^^^^^^^^^^^^^^^^
 

@@ -5,6 +5,7 @@
 #include "TargetEffect.h"
 #include "EDataIterator.h"
 #include <deque>
+#include <memory>
 #include <ios>
 
 class CNuc;
@@ -83,6 +84,9 @@ class EData {
   double GetAbundancePenalty() const { return abundancePenalty_; }
   /// The isospin prior penalty (shifts, mixes) of the last evaluation, reported in chiSquared.out when it exists.
   void SetIsospinPenalty(double penalty) { isospinPenalty_ = penalty; hasIsospinPenalty_ = true; }
+  /// chi2 of the measured scattering lengths (<scatteringLengths>) at the last evaluation.
+  void SetScatteringLengthChi2(double chi2) { scatteringLengthChi2_ = chi2; }
+  double GetScatteringLengthChi2() const { return scatteringLengthChi2_; }
   /// External-capture amplitudes for every point that has an EC component.
   int CalculateECAmplitudes(CNuc *, const Config &);
   /// How many external-capture amplitudes this model expects in an intEC file.
@@ -127,6 +131,15 @@ class EData {
   void FillNormsFromParams(const vector_r &);
   /// Write the energy shifts back from a Minuit parameter vector.
   void FillEnergyShiftsFromParams(const vector_r &, EData *data = nullptr, CNuc *theCNuc = nullptr, const Config *configure = nullptr);
+  /// Lay the adaptive sub-point grids out again for the levels theCNuc holds now
+  /// (its fit values, as observed parameters) and the segments' energy shifts, and
+  /// rebuild the sub-points of every point whose grid changed.  Sub-points of a
+  /// segment in \p shiftActive are left for the energy-shift step to energise and
+  /// their segments are appended to \p reshift; the others are energised here.
+  /// Returns the number of points whose grid changed.  Called by
+  /// FillEnergyShiftsFromParams.
+  int ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, const std::vector<ESegment *> &shiftActive,
+                           std::vector<ESegment *> &reshift);
   /// Drop the last segment.
   void DeleteLastSegment();
   /// Segment \p i, 1-based.
@@ -161,7 +174,19 @@ class EData {
   double abundancePenalty_ = 0.0;
   double isospinPenalty_ = 0.0;
   bool hasIsospinPenalty_ = false;
+  double scatteringLengthChi2_ = 0.0;
   std::vector<std::string> nucleusLabels_;   // one per compound nucleus, for the natural decomposition file
+  // A copy of the compound nucleus that holds the observed level parameters the
+  // sub-point grids are laid out from (ReplaceSubPointGrids).  Never shared: a
+  // copy or Clone of the EData starts without one.
+  struct GridNucleus {
+    std::unique_ptr<CNuc> nuc;
+    GridNucleus();
+    GridNucleus(const GridNucleus &);
+    GridNucleus &operator=(const GridNucleus &);
+    ~GridNucleus();
+  };
+  GridNucleus gridNuc_;
 };
 
 #endif

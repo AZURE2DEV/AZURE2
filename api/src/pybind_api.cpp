@@ -104,6 +104,9 @@ struct RuntimeOptions {
   bool use_gsl_coul = false;        // USE_GSL_COULOMB_FUNC
   bool use_rmc = false;             // USE_RMC_FORMALISM
   bool use_park = false;            // USE_PARK_FORMALISM (implies Brune)
+  bool use_coulomb_table = true;    // Config::useCoulombTable
+  bool replace_grids = true;        // Config::replaceSubPointGrids
+  std::string coulomb_table;        // Config::coulombTablePath ("" = the default file)
 };
 
 void apply_options(Config &config, const RuntimeOptions &opt) {
@@ -135,6 +138,9 @@ void apply_options(Config &config, const RuntimeOptions &opt) {
     config.paramMask |= Config::USE_RMC_FORMALISM;
   else
     config.paramMask &= ~Config::USE_RMC_FORMALISM;
+  config.useCoulombTable = opt.use_coulomb_table;
+  config.coulombTablePath = opt.coulomb_table;
+  config.replaceSubPointGrids = opt.replace_grids;
   // Park shares Brune's per-level shift functions, so it switches Brune on.
   if (opt.use_park)
     config.paramMask |= (Config::USE_PARK_FORMALISM | Config::USE_BRUNE_FORMALISM);
@@ -459,6 +465,12 @@ class Session {
     expect_free(v, "calculate_chi2_physical");
     return api_->CalculateChi2Physical(v);
   }
+  py::array_t<double> scattering_lengths_rwa(const py::array_t<double, py::array::forcecast> &p) {
+    ConfigScope guard(config_, &ecCache_);
+    vector_r v = to_vector(p);
+    expect_free(v, "scattering_lengths_rwa");
+    return to_array(api_->CalculateScatteringLengthsRWA(v));
+  }
   py::array_t<double> park_norms(const py::array_t<double, py::array::forcecast> &p) {
     ConfigScope guard(config_, &ecCache_);
     vector_r v = to_vector(p);
@@ -551,6 +563,9 @@ PYBIND11_MODULE(_azure2, m) {
       .def_readwrite("transform", &RuntimeOptions::transform)
       .def_readwrite("use_long_wavelength", &RuntimeOptions::use_long_wavelength)
       .def_readwrite("use_gsl_coul", &RuntimeOptions::use_gsl_coul)
+      .def_readwrite("use_coulomb_table", &RuntimeOptions::use_coulomb_table)
+      .def_readwrite("coulomb_table", &RuntimeOptions::coulomb_table)
+      .def_readwrite("replace_grids", &RuntimeOptions::replace_grids)
       .def_readwrite("use_rmc", &RuntimeOptions::use_rmc)
       .def_readwrite("use_park", &RuntimeOptions::use_park);
 
@@ -641,6 +656,9 @@ PYBIND11_MODULE(_azure2, m) {
            "As transform_all_rwa, returning every R-matrix parameter's physical value, fixed ones included.")
       .def("calculate_chi2_rwa", &Session::calculate_chi2_rwa,
            py::call_guard<py::gil_scoped_release>(), py::arg("params"))
+      .def("scattering_lengths_rwa", &Session::scattering_lengths_rwa, py::arg("params"),
+           "s-wave scattering lengths of every particle pair at a free RWA vector: 6 numbers per channel "
+           "(pair key, channel spin, parity, Re a0 fm, Im a0 fm, has-levels flag).")
       .def("park_norms", &Session::park_norms, py::arg("params"),
            "Park overlap J of every R-matrix level (1 in Brune mode).")
       .def("calculate_chi2_physical", &Session::calculate_chi2_physical,

@@ -1,4 +1,5 @@
 #include "AZUREAPI.h"
+#include "ScatteringLength.h"
 #include "AZUREParams.h"
 
 #include "GSLException.h"
@@ -7,6 +8,7 @@
 
 #include "Config.h"
 #include "CNuc.h"
+#include "PPair.h"
 #include "EData.h"
 #include "ESegment.h"
 #include "EPoint.h"
@@ -260,8 +262,9 @@ int AZUREAPI::UpdateSegments(vector_r &p) {
 
   localCompound->FillMnParams(params.GetMinuitParams());
   localData->FillMnParams(params.GetMinuitParams());
-  localData->FillEnergyShiftsFromParams(params_, localData, localCompound, &configure());
   localCompound->FillCompoundFromParams(params.GetMinuitParams().Params());
+  // After the compound: the sub-point grids are laid out from its fit values.
+  localData->FillEnergyShiftsFromParams(params_, localData, localCompound, &configure());
   if (configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure());
 
   int newKey = -1;
@@ -813,6 +816,27 @@ bool AZUREAPI::RebuildImpl(const int *idx, const double *r) {
   return true;
 }
 
+vector_r AZUREAPI::CalculateScatteringLengthsRWA(const vector_r &rwaParams) const {
+  vector_r params_ = all_rwa_;
+  int k = 0;
+  for (int i = 0; i < (int)all_rwa_.size(); ++i)
+    if (!fixed_[i]) params_[i] = rwaParams[k++];
+  CNuc *localCompound = compound();
+  localCompound->FillCompoundFromParams(params_);
+  if (configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure());
+  vector_r out;
+  for (int aa = 1; aa <= localCompound->NumPairs(); aa++) {
+    PPair *pair = localCompound->GetPair(aa);
+    if (pair->GetPType() != 0) continue;
+    for (const ScatteringLength::Channel &ch : ScatteringLength::Channels(localCompound, pair->GetPairKey())) {
+      ScatteringLength::Value v = ScatteringLength::Evaluate(localCompound, configure(), ch);
+      out.insert(out.end(), {(double)ch.pairKey, ch.s, (double)ch.parity, std::real(v.a0), std::imag(v.a0),
+                             ch.hasLevels ? 1.0 : 0.0});
+    }
+  }
+  return out;
+}
+
 double AZUREAPI::CalculateChi2RWA(const vector_r &rwaParams) const {
   int k = 0;
   vector_r params_ = all_rwa_;
@@ -874,6 +898,9 @@ double AZUREAPI::CalculateChi2RWA(const vector_r &rwaParams) const {
   // Isospin levels: priors on the internal Coulomb shifts and mix amplitudes.
   if (localCompound->Isospin().HasPenalty() || localCompound->Isospin().HasSoftTies())
     chiSquared += localCompound->Isospin().Penalty() + localCompound->Isospin().SoftPenalty();
+  // Measured scattering lengths (<scatteringLengths>).
+  if (localCompound->HasScatteringLengthConstraints())
+    chiSquared += ScatteringLength::Chi2(localCompound, configure(), localCompound->ScatteringLengthConstraints());
 
   return chiSquared;
 }
@@ -926,8 +953,9 @@ double AZUREAPI::CalculateChi2Physical(const vector_r &physicalParams) const {
 
   localCompound->FillMnParams(params.GetMinuitParams());
   localData->FillMnParams(params.GetMinuitParams());
-  localData->FillEnergyShiftsFromParams(params_, localData, localCompound, &configure());
   localCompound->FillCompoundFromParams(params.GetMinuitParams().Params());
+  // After the compound: the sub-point grids are laid out from its fit values.
+  localData->FillEnergyShiftsFromParams(params_, localData, localCompound, &configure());
   if (configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure());
 
   // Process segments with components - use new integrated calculation method
@@ -1030,6 +1058,11 @@ bool AZUREAPI::Chi2GradEGammaNorm(const vector_r &full, vector_r &gradFull,
   };
 
   bool ok = AccumulateEGammaGradient(lc, ld, configure(), pmap, sdp, fb, accum);
+  // Measured scattering lengths: the level-matrix adjoint at each threshold (false -> finite differences).
+  if (ok && lc->HasScatteringLengthConstraints()) {
+    ok = ScatteringLength::Chi2Gradient(lc, configure(), lc->ScatteringLengthConstraints(), accum, sdp);
+    if (ok) chi2 += ScatteringLength::Chi2(lc, configure(), lc->ScatteringLengthConstraints());
+  }
   if (ok) {
     if (configure().paramMask & Config::USE_PARK_FORMALISM) {
       AddParkPenaltyGradient(lc, configure(), accum);
@@ -1183,6 +1216,28 @@ vector_r AZUREAPI::CalculateResidualJacobianRWA(const vector_r &params) const {
     lc->FillCompoundFromParams(full);
     ld->FillNormsFromParams(full);
     ld->FillEnergyShiftsFromParams(full, ld, lc, &configure());
+  }
+
+  // Measured scattering lengths: rows after the data rows, as AZURECalc::ResidualJacobian.
+  if (lc->HasScatteringLengthConstraints()) {
+    if (configure().paramMask & Config::USE_BRUNE_FORMALISM) lc->CalcShiftFunctions(configure());
+    const std::vector<ScatteringLength::Constraint> &cons = lc->ScatteringLengthConstraints();
+    vector_r rs;
+    ScatteringLength::Residuals(lc, configure(), cons, rs);
+    for (size_t q = 0; q < rs.size(); q++) {
+      GradAccum acc;
+      acc.Init(lc);
+      if (!ScatteringLength::Chi2Gradient(lc, configure(), cons, acc, sdp, (int)q)) return vector_r{-1.0};
+      vector_r rowFull(pmap.NumFull(), 0.0);
+      acc.Scatter(pmap, rowFull);
+      residuals.push_back(rs[q]);
+      const size_t base = jacobian.size();
+      jacobian.resize(base + (size_t)nCols, 0.0);
+      for (int f = 0; f < pmap.NumFull(); f++) {
+        const int a = pmap.FullToPacked(f);
+        if (a >= 0 && a < nCols) jacobian[base + (size_t)a] = rowFull[f];
+      }
+    }
   }
 
   vector_r out;

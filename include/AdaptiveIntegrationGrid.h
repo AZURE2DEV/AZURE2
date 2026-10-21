@@ -36,6 +36,12 @@ class AdaptiveIntegrationGrid {
     /// parameter transformation is enabled but has not run yet.  This is the
     /// state during EData::Fill in every CLI and API flow.
     bool inputWidthsArePhysical;
+    /// Subtracted from every resonance's c.m. energy.  The sub-points of a segment
+    /// with an energy shift are laid out at the unshifted energies and moved with
+    /// the data; offsetting the resonances by the segment's c.m. shift puts the
+    /// dense part of the grid where the resonance is after the move
+    /// (EData::ReplaceSubPointGrids).
+    double resonanceOffset;
 
     // Default constructor with sensible defaults
     GridConfig() :
@@ -50,7 +56,8 @@ class AdaptiveIntegrationGrid {
       resonanceWidthMultiplier(20.0),
       pointsPerWidth(50.0),
       entranceKey(0),
-      inputWidthsArePhysical(false) {}
+      inputWidthsArePhysical(false),
+      resonanceOffset(0.0) {}
   };
 
   /*!

@@ -325,6 +325,7 @@ int CNuc::Fill(const Config &configure, std::pair<int, double> radii) {
 
   if (this->ReadAbundances(configure) == -1) return -1;
   if (isospin_.Resolve(configure, *this) == -1) return -1;
+  if (ScatteringLength::ReadConstraints(this, configure, scatLenConstraints_) == -1) return -1;
 
   return 0;
 }

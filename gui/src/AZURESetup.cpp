@@ -10,6 +10,15 @@
 #include <QSettings>
 #include <QTextStream>
 #include <QDesktopServices>
+#include <QProgressDialog>
+#include <algorithm>
+#include <QCoreApplication>
+#include <QFileInfo>
+#include <QElapsedTimer>
+#include <atomic>
+#include <thread>
+#include <chrono>
+#include "CoulombTable.h"
 
 #include "AZURESetup.h"
 #include "FittingTab.h"
@@ -206,6 +215,10 @@ void AZURESetup::createActions() {
   editOptionsAction = new QAction(tr("&Runtime Options..."), this);
   connect(editOptionsAction, SIGNAL(triggered()), this, SLOT(editOptions()));
 
+  buildCoulombTableAction = new QAction(tr("Build &Coulomb Table..."), this);
+  buildCoulombTableAction->setStatusTip(tr("Build the table AZURE2 takes charged-particle Coulomb functions from"));
+  connect(buildCoulombTableAction, SIGNAL(triggered()), this, SLOT(buildCoulombTable()));
+
   showTabInfoAction = new QAction(tr("Show Documentation For Current Tab"), this);
   showTabInfoAction->setShortcut(QKeySequence(Qt::CTRL + Qt::Key_D));
   connect(showTabInfoAction, SIGNAL(triggered()), this, SLOT(showTabInfo()));
@@ -237,6 +250,7 @@ void AZURESetup::createMenus() {
   configMenu->addAction(editChecksAction);
   configMenu->addAction(editDirsAction);
   configMenu->addAction(editOptionsAction);
+  configMenu->addAction(buildCoulombTableAction);
 
   helpMenu = menuBar()->addMenu(tr("&Documentation"));
   helpMenu->addAction(showTabInfoAction);
@@ -1082,6 +1096,74 @@ void AZURESetup::editDirs() {
   if (aDialog.exec()) {
     GetConfig().outputdir = aDialog.outputDirectoryText->text().toStdString();
     GetConfig().checkdir = aDialog.checksDirectoryText->text().toStdString();
+  }
+}
+
+// Configure > Build Coulomb Table...: the table is not distributed with AZURE2, so a user
+// of a ready-built AZURE2 makes it here (the same build as AZURE2 --build-coulomb-table).
+// The build runs on a worker thread; this loop keeps the window responsive and offers
+// Cancel.  Calculations started afterwards use the new table (CoulombTable::ForgetMissing).
+void AZURESetup::buildCoulombTable() {
+  const QString path = QString::fromStdString(CoulombTable::DefaultPath());
+  const QString intro =
+      tr("AZURE2 takes the Coulomb functions of charged-particle channels from a table when it "
+         "finds one. The results are the same and calculations are several times faster.");
+  const QString question = QFileInfo::exists(path)
+      ? tr("%1\n\nA table already exists at\n%2\n\nBuild it again?").arg(intro, path)
+      : tr("%1\n\nThere is no table at\n%2\n\nBuild it now? It takes about 5 minutes on four "
+           "threads and needs 88 MB of disk space.").arg(intro, path);
+  if (QMessageBox::question(this, tr("Build Coulomb Table"), question, QMessageBox::Yes | QMessageBox::No,
+                            QMessageBox::Yes) != QMessageBox::Yes)
+    return;
+
+  CoulombTable::BuildSpec spec;
+  spec.threads = std::max(1u, std::thread::hardware_concurrency());
+  std::atomic<int> done{0};
+  std::atomic<bool> cancel{false}, finished{false};
+  spec.rowsDone = &done;
+  spec.cancel = &cancel;
+  const int rows = CoulombTable::BuildRows(spec);
+
+  QProgressDialog progress(tr("Building the Coulomb table on %1 thread(s)...").arg(spec.threads), tr("Cancel"), 0,
+                           rows, this);
+  progress.setWindowTitle(tr("Build Coulomb Table"));
+  progress.setWindowModality(Qt::WindowModal);
+  progress.setAutoClose(false);
+  progress.setAutoReset(false);
+  progress.setMinimumDuration(0);
+  progress.setValue(0);
+
+  bool ok = false;
+  std::string error;
+  const std::string file = path.toStdString();
+  QElapsedTimer timer;
+  timer.start();
+  std::thread worker([&] {
+    ok = CoulombTable::BuildFile(file, spec, error);
+    finished = true;
+  });
+  while (!finished) {
+    QCoreApplication::processEvents(QEventLoop::AllEvents, 100);
+    progress.setValue(std::min(done.load(), rows - 1));
+    if (progress.wasCanceled()) {
+      cancel = true;
+      progress.setLabelText(tr("Cancelling..."));
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+  }
+  worker.join();
+  progress.close();
+
+  if (ok) {
+    CoulombTable::ForgetMissing();
+    QMessageBox::information(this, tr("Build Coulomb Table"),
+                             tr("The Coulomb table was written to\n%1\nin %2 s. Calculations started from now on "
+                                "use it.").arg(path).arg(timer.elapsed() / 1000));
+  } else if (cancel) {
+    QMessageBox::information(this, tr("Build Coulomb Table"), tr("Cancelled; no table was written."));
+  } else {
+    QMessageBox::warning(this, tr("Build Coulomb Table"),
+                         tr("The Coulomb table was not built: %1").arg(QString::fromStdString(error)));
   }
 }
 

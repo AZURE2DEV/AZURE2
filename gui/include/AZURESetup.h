@@ -88,6 +88,7 @@ class AZURESetup : public QMainWindow {
   void editChecks();
   void editDirs();
   void editOptions();
+  void buildCoulombTable();
   void showAbout();
   void showTabInfo();
   void openWebsite();
@@ -118,6 +119,7 @@ class AZURESetup : public QMainWindow {
   QAction *aMatrixAction;
   QAction *rMatrixAction;
   QAction *editOptionsAction;
+  QAction *buildCoulombTableAction;
   QAction *recentSeparator;
   QAction *clearRecentAction;
   enum { numRecent = 5 };

@@ -6,6 +6,7 @@
 #include <map>
 #include "JGroup.h"
 #include "PPair.h"
+#include "ScatteringLength.h"
 
 namespace ROOT {
 namespace Minuit2 {
@@ -70,6 +71,10 @@ class CNuc {
   const IsospinLevels &Isospin() const { return isospin_; }
   /// Writes the derived isospin parameters into p and keeps them fixed.
   void SyncIsospinParams(ROOT::Minuit2::MnUserParameters &p) const { isospin_.Sync(p); }
+  /// Measured scattering lengths of the optional <scatteringLengths> block (ScatteringLength::ReadConstraints).
+  const std::vector<ScatteringLength::Constraint> &ScatteringLengthConstraints() const { return scatLenConstraints_; }
+  /// Is there an active constrained scattering length (a chi2 term)?
+  bool HasScatteringLengthConstraints() const { return ScatteringLength::NumResiduals(scatLenConstraints_) > 0; }
   /// Number of samples the <abundances> block defines (0 without the block).
   int NumSamples() const { return (int)samples_.size(); }
   /// Sample \p s, 1-based.
@@ -222,6 +227,7 @@ class CNuc {
   std::vector<AbundanceSample> samples_;
   bool hasAbundanceBlock_ = false;
   IsospinLevels isospin_;
+  std::vector<ScatteringLength::Constraint> scatLenConstraints_;
   int maxLValue_;
   bool transformedIn_ = false;
 };

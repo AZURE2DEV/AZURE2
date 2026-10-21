@@ -104,8 +104,21 @@ class AMatrixFunc : public GenMatrixFunc {
                     int xsComponent = 0, bool ayCrossSection = false);
   /// Store an \f$A^{-1}\f$ element.
   void AddAInvMatrixElement(int, int, int, complex);
+  /*!
+   * Reverse mode of GetUBilinear(jGroupNum, chNum, chNum): accumulates Re(conj(mBar) dB) into accum,
+   * B the bilinear form, through the explicit widths of channel chNum and the level matrix (energies
+   * and every width of the group, standard, Brune or Park).  The matrices must have been filled and
+   * inverted for `point`.  Used for the scattering length (ScatteringLength::Adjoint).  Returns false,
+   * accumulating nothing, for the RMC formalism or a group with levels left out of the R-matrix.
+   */
+  bool BilinearAdjoint(EPoint *point, int jGroupNum, int chNum, complex mBar, GradAccum &accum,
+                       const vector_matrix_r *shiftDeriv = nullptr);
 
  private:
+  /// The level-matrix stage shared by PointAdjoint and BilinearAdjoint (A cotangents -> E, gamma).
+  void LevelMatrixAdjoint(EPoint *point, const std::vector<matrix_c> &aBar, const std::vector<bool> &aBarUsed,
+                          double inEnergy, GradAccum &accum, const vector_matrix_r *shiftDeriv, bool brune,
+                          bool park);
   /// One memoized channel-capture bilinear form, keyed by its pathway.
   struct ChanCapEntry {
     int jGroupNum;

@@ -1,4 +1,5 @@
 #include "AZURECalc.h"
+#include "ScatteringLength.h"
 #include <algorithm>
 #include <atomic>
 #include <chrono>
@@ -398,6 +399,12 @@ double AZURECalc::operator()(const vector_r &p) const {
     chiSquared += isospinPenalty;
     localData->SetIsospinPenalty(isospinPenalty);
   }
+  // Measured scattering lengths (<scatteringLengths>), evaluated at each pair's threshold.
+  if (localCompound->HasScatteringLengthConstraints()) {
+    double slChi2 = ScatteringLength::Chi2(localCompound, configure(), localCompound->ScatteringLengthConstraints());
+    chiSquared += slChi2;
+    localData->SetScatteringLengthChi2(slChi2);
+  }
 
   if (std::getenv("AZURE_DUMP_NONFINITE")) DumpNonFinite(p, chiSquared, localCompound, localData);
 
@@ -573,6 +580,8 @@ double AZURECalc::Chi2On(CNuc *lc, EData *ld, const vector_r &p, std::vector<dou
   // finite-difference gradient columns (found 2026-10-17 by the isospin-levels session).
   if (lc->HasAbundanceBlock()) chiSquared += lc->AbundancePenalty(configure().abundanceSumSigma);
   if (lc->Isospin().HasPenalty() || lc->Isospin().HasSoftTies()) chiSquared += lc->Isospin().Penalty() + lc->Isospin().SoftPenalty();
+  if (lc->HasScatteringLengthConstraints())
+    chiSquared += ScatteringLength::Chi2(lc, configure(), lc->ScatteringLengthConstraints());
   return chiSquared;
 }
 
@@ -723,6 +732,11 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
                  "present (RMC, or a not-yet-handled case)."
               << std::endl;
   }
+  // Measured scattering lengths: exact through the level-matrix adjoint at each threshold; where that
+  // is unsupported (RMC, levels left out of the R-matrix) every parameter falls back to finite differences.
+  if (eg && lc->HasScatteringLengthConstraints() &&
+      !ScatteringLength::Chi2Gradient(lc, configure(), lc->ScatteringLengthConstraints(), accum, sdp))
+    eg = false;
   if (eg) {
     AddParkPenaltyGradient(lc, configure(), accum); // Park J > 0 wall
     AddAbundancePenaltyGradient(lc, configure(), accum);  // abundance priors, sum-to-one
@@ -1333,6 +1347,33 @@ bool AZURECalc::ResidualJacobian(const vector_r &full, vector_r &residuals,
     }
   }
 
+  // Measured scattering lengths: one row per constrained part (Re, Im) after the data rows, in the
+  // order of ScatteringLength::Residuals, with exact rows from the level-matrix adjoint at each
+  // threshold.  They depend on no energy shift (zero columns there).
+  if (ok && lc->HasScatteringLengthConstraints()) {
+    if (configure().paramMask & Config::USE_BRUNE_FORMALISM) lc->CalcShiftFunctions(configure());
+    const std::vector<ScatteringLength::Constraint> &cons = lc->ScatteringLengthConstraints();
+    vector_r rs;
+    ScatteringLength::Residuals(lc, configure(), cons, rs);
+    for (size_t q = 0; q < rs.size() && ok; q++) {
+      GradAccum acc;
+      acc.Init(lc);
+      if (!ScatteringLength::Chi2Gradient(lc, configure(), cons, acc, sdp, (int)q)) {
+        ok = false;
+        break;
+      }
+      vector_r rowFull(pmap.NumFull(), 0.0);
+      acc.Scatter(pmap, rowFull);
+      residuals.push_back(rs[q]);
+      const size_t base = jac.size();
+      jac.resize(base + (size_t)nCols, 0.0);
+      for (int f = 0; f < pmap.NumFull(); f++) {
+        const int a = pmap.FullToPacked(f);
+        if (a >= 0 && a < nCols) jac[base + (size_t)a] = rowFull[f];
+      }
+    }
+  }
+
   packedToFull.resize(pmap.NumPacked());
   for (int a = 0; a < pmap.NumPacked(); a++) packedToFull[a] = pmap.PackedToFull(a);
 
@@ -1743,6 +1784,9 @@ bool AZURECalc::ResidualsOnly(const vector_r &full, vector_r &residuals) const {
       residuals.push_back(denom != 0.0 ? (th - pt->GetCMCrossSection() * norm) / denom : 0.0);
     }
   }
+  // Measured scattering lengths, as the last rows of ResidualJacobian.
+  if (lc->HasScatteringLengthConstraints())
+    ScatteringLength::Residuals(lc, configure(), lc->ScatteringLengthConstraints(), residuals);
   ReturnPooledCNuc(lc);
   ReturnPooledEData(ld);
   return true;

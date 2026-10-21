@@ -9,6 +9,7 @@
 #include "EData.h"
 #include "ESegment.h"
 #include "RMatrixFunc.h"
+#include "ScatteringLength.h"
 #include "ShftFunc.h"
 #include "TargetEffect.h"
 #include "Straggling.h"
@@ -994,6 +995,9 @@ void EPoint::CalcLegendreP(int maxL, CNuc *theCNuc, TargetEffect *targetEffect) 
     double e1 = this->GetLabEnergy();
     double qValue = entrancePair->GetSepE() + entrancePair->GetExE() - exitPair->GetSepE() - exitPair->GetExE();
     double gamma = m1 * m3 / m2 / m4 * e1 / (e1 + qValue);
+    // UPOS: the detected radiation is the secondary gamma ray, not the exit particle, so the exit particle's
+    // lab -> c.m. transformation of the attenuation coefficients does not apply; Q is used as given.
+    if (this->IsUPOS()) gamma = 0.0;
     int numQ = targetEffect->NumQCoefficients();
     std::vector<std::vector<double>> U(numQ, std::vector<double>(numQ, 0.0));
     // double U[numQ][numQ]={0.0};
@@ -1107,7 +1111,16 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure, bool i
         int lValue = theChannel->GetL();
         double localEnergy = inEnergy - thePair->GetSepE() - thePair->GetExE();
         if (thePair->GetPType() == 0) {
-          if (localEnergy <= 0.0) {
+          if (fabs(localEnergy) <= ScatteringLength::kThresholdTolerance) {
+            // Exactly at the channel's threshold (the entrance channel of a scattering length):
+            // the E -> 0 limit, P = 0 and S_l(0) from the zero-energy Coulomb solutions, in
+            // place of the Whittaker log-derivative at zero binding, which is ill-conditioned.
+            complex loElement(ScatteringLength::ZeroEnergyShift(thePair, lValue) - theChannel->GetBoundaryCondition(), 0.0);
+            this->AddLoElement(j, ch, loElement);
+            this->AddSqrtPenetrability(j, ch, 0.0);
+            this->AddExpCoulombPhase(j, ch, 1.0);
+            this->AddExpHardSpherePhase(j, ch, 1.0);
+          } else if (localEnergy < 0.0) {
             ShftFunc theShiftFunction(thePair);
             double localShift = theShiftFunction(lValue, inEnergy);
             double boundary = theChannel->GetBoundaryCondition();
@@ -1138,9 +1151,7 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure, bool i
             for (int ll = 1; ll <= theChannel->GetL(); ll++)
               expCP *= complex((double)ll / sqrt(pow(eta, 2.0) + pow((double)ll, 2.0)),
                                eta / sqrt(pow(eta, 2.0) + pow((double)ll, 2.0)));
-            struct CoulWaves
-                coul = theCoulombFunction(lValue, radius, localEnergy);
-            complex expHSP = CoulombHardSpherePhase(coul);
+            complex expHSP = theCoulombFunction.HardSpherePhase(lValue, radius, localEnergy);
             this->AddLoElement(j, ch, loElement);
             this->AddSqrtPenetrability(j, ch, sqrt(localPene));
             this->AddExpCoulombPhase(j, ch, expCP);
@@ -1405,16 +1416,15 @@ void EPoint::CalculateECAmplitudes(CNuc *theCNuc, const Config &configure) {
                 ECMGroup *theECMGroup = theKGroup->GetECMGroup(ecm);
                 // entrance Phase Calculations;
                 CoulFunc theCoulombFunction(entrancePair, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
-                struct CoulWaves
-                    coul = theCoulombFunction(theECMGroup->GetL(), entrancePair->GetChRad(),
-                                              this->GetCMEnergy());
+
                 double eta = sqrt(uconv / 2.) * fstruc * entrancePair->GetZ(1) * entrancePair->GetZ(2) *
                     sqrt(entrancePair->GetRedMass() / this->GetCMEnergy());
                 complex expCP(1.0, 0.0);
                 for (int ll = 1; ll <= theECMGroup->GetL(); ll++)
                   expCP *= complex((double)ll / sqrt(pow((double)ll, 2.0) + pow(eta, 2.0)),
                                    eta / sqrt(pow((double)ll, 2.0) + pow(eta, 2.0)));
-                complex expHSP = CoulombHardSpherePhase(coul);
+                complex expHSP = theCoulombFunction.HardSpherePhase(theECMGroup->GetL(), entrancePair->GetChRad(),
+                                                                     this->GetCMEnergy());
 
                 double levelEnergy = ecLevel->GetE();
                 double sqrtGammaPene = pow((inEnergy - levelEnergy) / hbarc, theECMGroup->GetMult() + 0.5);

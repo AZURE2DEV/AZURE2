@@ -16,6 +16,8 @@
 #include <limits>
 #include "NuclearPotentialManager.h"
 #include <algorithm>
+#include <atomic>
+#include <chrono>
 #include <cinttypes>
 #include <cstdlib>
 #include <string>
@@ -665,6 +667,198 @@ int EData::GetEnergyShiftFnParamOffset() const {
  * to be applied to the data.
  */
 
+namespace {
+EPoint::SubGridSpec MakeSubGridSpec(const AdaptiveIntegrationGrid::GridConfig &gc, double start, double end,
+                                    const TargetEffect *effect, double conversion) {
+  EPoint::SubGridSpec spec;
+  spec.valid = true;
+  spec.startEnergy = start;
+  spec.endEnergy = end;
+  spec.maxPoints = gc.maxPoints;
+  spec.entranceKey = gc.entranceKey;
+  spec.baseEnergyStep = gc.baseEnergyStep;
+  spec.resonanceWidthMultiplier = gc.resonanceWidthMultiplier;
+  spec.pointsPerWidth = gc.pointsPerWidth;
+  spec.targetIntegration = effect->IsTargetIntegration();
+  spec.stoppingConversion = conversion;
+  return spec;
+}
+}  // namespace
+
+EData::GridNucleus::GridNucleus() {}
+EData::GridNucleus::GridNucleus(const GridNucleus &) {}
+EData::GridNucleus &EData::GridNucleus::operator=(const GridNucleus &) { return *this; }
+EData::GridNucleus::~GridNucleus() {}
+
+namespace {
+// Does this segment need external-capture amplitudes at its sub-points?  They are
+// integrals computed once at initialization (CalculateECAmplitudes), so its grid
+// cannot be re-placed.
+bool SegmentNeedsEC(ESegment &segment, CNuc *theCNuc, const Config &configure) {
+  if (!(configure.paramMask & Config::USE_EXTERNAL_CAPTURE)) return false;
+  const int ir = theCNuc->GetPairNumFromKey(segment.GetExitKey());
+  for (int j = 1; j <= theCNuc->NumJGroups(); j++)
+    for (int la = 1; la <= theCNuc->GetJGroup(j)->NumLevels(); la++) {
+      ALevel *level = theCNuc->GetJGroup(j)->GetLevel(la);
+      if (level->IsECLevel() && level->GetECPairNum() == ir) return true;
+    }
+  return false;
+}
+}  // namespace
+
+/*!
+ * Re-places the adaptive sub-point grids (DeBoer 2026-10-19, Coulomb table stage 3).
+ *
+ * ReadTargetEffectsFile lays each grid out once, from the level energies and
+ * widths in the input file.  A fit that moves a narrow level then integrates it
+ * on a grid built for another position, and the objective depends on which file
+ * the session started from (natural neon refit1: 25,773.96 from the start file,
+ * 25,776.08 from the fitted one, same parameters).  Here the grid is laid out
+ * again for the current parameters: the fit values are converted to observed
+ * energies and widths, as a saved file would hold them (CNuc::TransformOut on a
+ * private copy of the compound nucleus), and fed to the same generator with the
+ * same window, so the grid of a parameter set is the one a session started from
+ * its saved file would place.  Only points whose grid changed get new
+ * sub-points; their Coulomb functions are table lookups.
+ *
+ * Energy shifts: the sub-points are laid out at the unshifted energies and moved
+ * with the data by the shift step; the resonances are offset by the point's c.m.
+ * shift so the dense part of the grid lands on each resonance after the move.
+ *
+ * A grid differs from the current one if a node moved by more than 1e-12
+ * relative: the round trip from the file's observed values through the formal
+ * parameters and back changes them in the last digits only.
+ */
+int EData::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, const std::vector<ESegment *> &shiftActive,
+                                std::vector<ESegment *> &reshift) {
+  if (!configure.replaceSubPointGrids || !configure.useAdaptiveGrid || !theCNuc) return 0;
+  const auto t0 = std::chrono::steady_clock::now();
+
+  struct Item { ESegment *seg; int i; double offset; bool shifted; };
+  std::vector<Item> work;
+  static std::atomic<bool> ecNoted{false};
+  auto collect = [&](ESegment *seg) {
+    bool any = false;
+    for (int i = 1; i <= seg->NumPoints() && !any; i++) any = seg->GetPoint(i)->GetSubGridSpec().valid;
+    if (!any) return;
+    if (SegmentNeedsEC(*seg, theCNuc, configure)) {
+      if (!ecNoted.exchange(true))
+        configure.outStream << "Note: the sub-point grids of segments with external capture are not re-placed "
+                               "(their capture integrals are computed once)." << std::endl;
+      return;
+    }
+    const bool shifted = std::find(shiftActive.begin(), shiftActive.end(), seg) != shiftActive.end();
+    PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(seg->GetEntranceKey()));
+    PPair *exitPair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(seg->GetExitKey()));
+    // The c.m./lab factor the shift step uses for sub-points (ESegment::UpdatePointEnergyWithShift).
+    const double cmFactor = (entrancePair->GetPType() == 20)
+        ? (exitPair->GetM(1) + exitPair->GetM(2)) / exitPair->GetM(2)
+        : entrancePair->GetM(2) / (entrancePair->GetM(1) + entrancePair->GetM(2));
+    for (int i = 1; i <= seg->NumPoints(); i++) {
+      EPoint *point = seg->GetPoint(i);
+      if (!point->GetSubGridSpec().valid) continue;
+      const double offset = shifted ? cmFactor * seg->TotalEnergyShift(point->GetOriginalEnergy()) : 0.0;
+      work.push_back({seg, i, offset, shifted});
+    }
+  };
+  for (ESegment &seg : segments_) collect(&seg);
+  for (ESegment &seg : componentSegments_) collect(&seg);
+  if (work.empty()) return 0;
+
+  // The observed parameters of the current fit values, on the private copy.
+  if (!gridNuc_.nuc) gridNuc_.nuc.reset(theCNuc->Clone());
+  CNuc *g = gridNuc_.nuc.get();
+  for (int j = 1; j <= theCNuc->NumJGroups(); j++)
+    for (int la = 1; la <= theCNuc->GetJGroup(j)->NumLevels(); la++) {
+      ALevel *from = theCNuc->GetJGroup(j)->GetLevel(la);
+      ALevel *to = g->GetJGroup(j)->GetLevel(la);
+      to->SetFitE(from->GetFitE());
+      for (int ch = 1; ch <= theCNuc->GetJGroup(j)->NumChannels(); ch++) to->SetFitGamma(ch, from->GetFitGamma(ch));
+    }
+  g->TransformOut(configure);
+  g->FillCompoundFromParamsPhysical(g->GetTransformParams(configure));
+  const auto t1 = std::chrono::steady_clock::now();
+
+  std::atomic<int> changed{0};
+  std::atomic<long> newSubPoints{0};
+  // For AZURE_GRID_TIMING: per work item, -1 = a different number of nodes, else the
+  // largest node move (MeV) of a grid that changed.
+  std::vector<double> moved(work.size(), 0.0);
+  auto replace = [&](const Item &it, size_t q) {
+    EPoint *point = it.seg->GetPoint(it.i);
+    const EPoint::SubGridSpec &spec = point->GetSubGridSpec();
+    AdaptiveIntegrationGrid::GridConfig gc;
+    gc.maxPoints = spec.maxPoints;
+    gc.entranceKey = spec.entranceKey;
+    gc.inputWidthsArePhysical = true;
+    gc.baseEnergyStep = spec.baseEnergyStep;
+    gc.resonanceWidthMultiplier = spec.resonanceWidthMultiplier;
+    gc.pointsPerWidth = spec.pointsPerWidth;
+    gc.resonanceOffset = it.offset;
+    std::vector<double> grid = AdaptiveIntegrationGrid(gc).GenerateGrid(spec.startEnergy, spec.endEnergy, g);
+    std::vector<EPoint> &subs = point->GetSubPoints();
+    bool same = (subs.size() == grid.size());
+    for (size_t k = 0; same && k < grid.size(); k++)
+      same = std::fabs(subs[k].GetOriginalEnergy() - grid[k]) <= 1.0e-12 * std::max(1.0, std::fabs(grid[k]));
+    if (same) return;
+    if (subs.size() != grid.size())
+      moved[q] = -1.0;
+    else
+      for (size_t k = 0; k < grid.size(); k++) moved[q] = std::max(moved[q], std::fabs(subs[k].GetOriginalEnergy() - grid[k]));
+    TargetEffect *effect = this->GetTargetEffect(it.seg->GetTargetEffectNum());
+    TargetEffect *qEffect = effect->IsQCoefficients() ? effect : nullptr;
+    subs.clear();
+    for (double e : grid) {
+      EPoint sub(point->GetCMAngle(), e, it.seg);
+      if (spec.targetIntegration)
+        sub.SetStoppingPower(spec.stoppingConversion *
+                             effect->GetStoppingPowerEq()->Evaluate(configure, e / spec.stoppingConversion));
+      sub.CalcLegendreP(configure.maxLOrder, theCNuc, qEffect);
+      // A shifted segment's sub-points are moved and energised by the shift step.
+      if (!it.shifted) {
+        sub.CalcEDependentValues(theCNuc, configure);
+        sub.CalcCoulombAmplitude(theCNuc);
+      }
+      point->AddSubPoint(sub);
+    }
+    changed++;
+    newSubPoints += (long)grid.size();
+  };
+#ifdef _OPENMP
+  const bool serial = omp_in_parallel();
+#else
+  const bool serial = true;
+#endif
+  if (serial) {
+    for (size_t q = 0; q < work.size(); q++) replace(work[q], q);
+  } else {
+#pragma omp parallel for schedule(dynamic, 4)
+    for (int q = 0; q < (int)work.size(); q++) replace(work[q], (size_t)q);
+  }
+  if (changed > 0)
+    for (const Item &it : work)
+      if (it.shifted && std::find(reshift.begin(), reshift.end(), it.seg) == reshift.end()) reshift.push_back(it.seg);
+
+  if (std::getenv("AZURE_GRID_TIMING")) {
+    static std::atomic<int> calls{0};
+    const int c = ++calls;
+    if (c <= 20 || c % 50 == 0) {
+      auto ms = [](auto a, auto b) { return std::chrono::duration<double, std::milli>(b - a).count(); };
+      int resized = 0;
+      double maxMove = 0.0;
+      for (double m : moved) {
+        if (m < 0.0) resized++;
+        else maxMove = std::max(maxMove, m);
+      }
+      std::cerr << "[grid] call " << c << ": " << work.size() << " grids, " << changed.load() << " re-placed ("
+                << newSubPoints.load() << " sub-points; " << resized << " with a new node count, largest node move "
+                << maxMove * 1.0e6 << " eV otherwise); observed parameters " << ms(t0, t1) << " ms, grids "
+                << ms(t1, std::chrono::steady_clock::now()) << " ms" << std::endl;
+    }
+  }
+  return changed.load();
+}
+
 int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
   std::ifstream in(configure.configfile.c_str());
   if (!in) return -1;
@@ -827,6 +1021,7 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
             gridConfig.pointsPerWidth = targetEffect->GetPointsPerWidth();
             AdaptiveIntegrationGrid gridGenerator(gridConfig);
             energyGrid = gridGenerator.GenerateGrid(startEnergy, endEnergy, compound);
+            point->SetSubGridSpec(MakeSubGridSpec(gridConfig, startEnergy, endEnergy, targetEffect, cmConversion));
           } else {
             double step = (startEnergy - endEnergy) / numPoints;
             for (int i = 0; i <= numPoints; i++)
@@ -967,6 +1162,7 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
                 gridConfig.pointsPerWidth = targetEffect->GetPointsPerWidth();
                 AdaptiveIntegrationGrid gridGenerator(gridConfig);
                 energyGrid = gridGenerator.GenerateGrid(startEnergy, endEnergy, compound);
+                point->SetSubGridSpec(MakeSubGridSpec(gridConfig, startEnergy, endEnergy, targetEffect, compConversion));
               } else {
                 double step = (startEnergy - endEnergy) / numPoints;
                 for (int i = 0; i <= numPoints; i++)
@@ -1715,6 +1911,9 @@ void EData::WriteOutputFiles(const Config &configure, bool isFit, const BandData
     // Isospin levels: priors on the internal Coulomb shifts and isospin-forbidden amplitudes.
     if (hasIsospinPenalty_)
       chiOut << " Total-Isospin-Chi-Squared: " << isospinPenalty_;
+    // Measured scattering lengths (<scatteringLengths>; table in scatteringLengths.out).
+    if (scatteringLengthChi2_ != 0.0)
+      chiOut << " Total-Scattering-Length-Chi-Squared: " << scatteringLengthChi2_;
     chiOut << std::endl
            << std::endl;
     chiOut.flush();
@@ -3223,6 +3422,8 @@ void EData::FillEnergyShiftsFromParams(const vector_r &p, EData *data, CNuc *the
     auto queueUpdate = [&toUpdate](ESegment *s) {
       if (std::find(toUpdate.begin(), toUpdate.end(), s) == toUpdate.end()) toUpdate.push_back(s);
     };
+    // Segments (and their components) whose points carry an energy shift, moved or not.
+    std::vector<ESegment *> shiftActiveSegments;
     for (ESegmentIterator segment = data->GetSegments().begin(); segment < data->GetSegments().end(); segment++) {
       k++;
 
@@ -3247,6 +3448,10 @@ void EData::FillEnergyShiftsFromParams(const vector_r &p, EData *data, CNuc *the
       const bool shiftActive = segment->IsVaryEnergyShift() || shiftConst != 0.0 || lead >= 0 ||
                                segment->IsVaryEnergyShiftSqrt() || shiftSqrt != 0.0 || segment->HasShiftFn();
       if (shiftActive) {
+        shiftActiveSegments.push_back(&*segment);
+        if (segment->HasComponents())
+          for (ESegment *componentSegment : segment->GetComponentSegments())
+            if (componentSegment) shiftActiveSegments.push_back(componentSegment);
         // Check if energy is the same, if so, continue
         if (segment->GetLastEnergyShift() == shiftConst && segment->GetLastEnergyShiftSqrt() == shiftSqrt &&
             (!segment->HasShiftFn() || segment->GetLastShiftFnValues() == fnValues)) {
@@ -3314,6 +3519,14 @@ void EData::FillEnergyShiftsFromParams(const vector_r &p, EData *data, CNuc *the
       // Always increment i and j since both shift parameters are present for ALL segments
       i++;
       j++;
+    }
+
+    // The sub-point grids, for the levels and shifts just set.  Sub-points of
+    // shifted segments are moved and energised by the step below.
+    if (theCNuc && configure) {
+      std::vector<ESegment *> reshift;
+      if (data->ReplaceSubPointGrids(theCNuc, *configure, shiftActiveSegments, reshift) > 0) anyEnergyShifted = true;
+      for (ESegment *s : reshift) queueUpdate(s);
     }
 
     if (!toUpdate.empty()) {

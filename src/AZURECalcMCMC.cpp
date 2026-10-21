@@ -1,4 +1,5 @@
 #include "AZURECalcMCMC.h"
+#include "ScatteringLength.h"
 #include "ParameterLabel.h"
 #include "Config.h"
 #include "CNuc.h"
@@ -122,6 +123,8 @@ double AZURECalcMCMC::CalculateLogLikelihood(const vector_r &p) const {
   if (localCompound->HasAbundanceBlock()) chiSquared += localCompound->AbundanceSumPenalty(configure().abundanceSumSigma);  // per-nucleus priors: CalculateLogPrior
   // Isospin soft ties couple parameters, so they belong to the likelihood, not to a per-parameter prior.
   if (localCompound->Isospin().HasSoftTies()) chiSquared += localCompound->Isospin().SoftPenalty();
+  if (localCompound->HasScatteringLengthConstraints())  // measured scattering lengths: part of the likelihood
+    chiSquared += ScatteringLength::Chi2(localCompound, configure(), localCompound->ScatteringLengthConstraints());
 
   // Return objects to pool instead of deleting
   ReturnPooledCNuc(localCompound);
@@ -170,8 +173,9 @@ double AZURECalcMCMC::CalculateLogLikelihoodPhysical(const vector_r &params_) co
 
   localCompound->FillMnParams(params.GetMinuitParams(), &configure());
   localData->FillMnParams(params.GetMinuitParams());
-  localData->FillEnergyShiftsFromParams(params_, localData, localCompound, &configure());
   localCompound->FillCompoundFromParams(params.GetMinuitParams().Params());
+  // After the compound: the sub-point grids are laid out from its fit values.
+  localData->FillEnergyShiftsFromParams(params_, localData, localCompound, &configure());
 
   // Fill Compound Nucleus From Minuit Parameters
   if (configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure());
@@ -222,6 +226,8 @@ double AZURECalcMCMC::CalculateLogLikelihoodPhysical(const vector_r &params_) co
   if (localCompound->HasAbundanceBlock()) chiSquared += localCompound->AbundanceSumPenalty(configure().abundanceSumSigma);  // per-nucleus priors: CalculateLogPrior
   // Isospin soft ties couple parameters, so they belong to the likelihood, not to a per-parameter prior.
   if (localCompound->Isospin().HasSoftTies()) chiSquared += localCompound->Isospin().SoftPenalty();
+  if (localCompound->HasScatteringLengthConstraints())  // measured scattering lengths: part of the likelihood
+    chiSquared += ScatteringLength::Chi2(localCompound, configure(), localCompound->ScatteringLengthConstraints());
 
   // Return objects to pool instead of deleting
   ReturnPooledCNuc(localCompound);
@@ -825,8 +831,9 @@ void mcmc_iteration_callback(int current_step, int total_steps) {
               AZUREParams params;
               localCompound->FillMnParams(params.GetMinuitParams(), &g_mcmc_for_callbacks->configure());
               localData->FillMnParams(params.GetMinuitParams());
-              localData->FillEnergyShiftsFromParams(fullParams, localData, localCompound, &g_mcmc_for_callbacks->configure());
               localCompound->FillCompoundFromParams(params.GetMinuitParams().Params());
+              // After the compound: the sub-point grids are laid out from its fit values.
+              localData->FillEnergyShiftsFromParams(fullParams, localData, localCompound, &g_mcmc_for_callbacks->configure());
               rwaFullParams = params.GetMinuitParams().Params();  // RWA params after TransformIn
 
               if (g_mcmc_for_callbacks->configure().paramMask & Config::USE_BRUNE_FORMALISM) {
