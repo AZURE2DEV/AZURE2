@@ -133,6 +133,34 @@ struct LevelArrays {
 const LevelArrays &CurrentLevelArrays(JGroup *jg);
 
 /*!
+ * Derivatives of K and N of a J-group's level matrix with respect to its free
+ * level parameters (AMatrixFunc::LevelBasis): for each, dK = e_l k^T + k e_l^T
+ * and dN = e_l q^T + q e_l^T over all levels (standard and Brune level
+ * matrices).
+ */
+struct LevelDerivatives {
+  std::vector<std::uint64_t> key;  ///< levels, stamps, formalism and free mask
+  struct Entry {
+    int level;  ///< 0-based
+    int ch;     ///< 0-based channel, or -1 for the level energy
+    bool zero;  ///< k = q = 0 (only the kernel and explicit terms remain)
+    std::vector<double> k, q;
+  };
+  std::vector<Entry> entries;
+};
+
+/*!
+ * The LevelDerivatives of J-group `jg` for the free parameters (`freeE`,
+ * `freeG`, by level and level/channel) and the current parameters; `brune`
+ * selects the Brune level matrix (shift-function derivatives from `shiftDeriv`
+ * of the group, [level-1][ch-1]).  Kept per thread, rebuilt when a level's
+ * stamp or the mask changes.
+ */
+const LevelDerivatives &CurrentLevelDerivatives(JGroup *jg, bool brune, const std::vector<char> &freeE,
+                                                const std::vector<std::vector<char>> &freeG,
+                                                const std::vector<std::vector<double>> *shiftDeriv);
+
+/*!
  * Brings `f` up to date with the parameters of J-group `jg` (active levels
  * `levels`, 1-based original numbers).  Returns true if it was rebuilt.  The
  * standard level matrix is rebuilt on every call (it costs what comparing

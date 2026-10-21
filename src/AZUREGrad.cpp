@@ -861,7 +861,8 @@ bool GroupGradient(AMatrixFunc &amf, const GradItem &it, CNuc *compound, const v
 // its own -- still from the one shared forward solve.
 template <class FitBarOf, class RowFn>
 bool GroupRows(AMatrixFunc &amf, const GradItem &it, CNuc *compound, const vector_matrix_r *shiftDeriv,
-               FitBarOf fitBarOf, RowFn rowFn, GradAccum &accum, GradAccum &scratch) {
+               FitBarOf fitBarOf, RowFn rowFn, GradAccum &accum, GradAccum &scratch,
+               const AMatrixFunc::FreeMask *mask) {
   std::vector<double> rawModel, weight;
   GroupForward(amf, it, compound, rawModel, weight);
   EPoint *host = it.members[0].pt;
@@ -884,6 +885,16 @@ bool GroupRows(AMatrixFunc &amf, const GradItem &it, CNuc *compound, const vecto
   std::vector<Key> keys;
   std::vector<std::vector<int>> keyOf(g);
   double costMembers = 0.0, costBasis = 0.0;
+  const bool levelBasis = mask && !(amf.configure().paramMask & Config::USE_PARK_FORMALISM);
+  std::vector<double> freeCount;
+  if (levelBasis) {
+    freeCount.assign(mask->e.size(), 0.0);
+    for (size_t j = 0; j < mask->e.size(); j++)
+      for (size_t la = 0; la < mask->e[j].size(); la++) {
+        freeCount[j] += mask->e[j][la];
+        for (char f : mask->g[j][la]) freeCount[j] += f;
+      }
+  }
   if (bilinear) {
     for (size_t q = 0; q < g; q++) {
       for (int j = 1; j <= (int)terms[q].size(); j++) {
@@ -896,7 +907,9 @@ bool GroupRows(AMatrixFunc &amf, const GradItem &it, CNuc *compound, const vecto
           while (k < (int)keys.size() && !(keys[k].j == j && keys[k].ch == t.ch && keys[k].chp == t.chp)) k++;
           if (k == (int)keys.size()) {
             keys.push_back({j, t.ch, t.chp});
-            costBasis += 2.0 * n2 * (1.0 + jg->NumChannels());
+            // LevelBasis: O(n) per free parameter of the group; else the
+            // structural adjoint, O(n^2 c).
+            costBasis += (levelBasis ? 2.0 * freeCount[j - 1] * jg->NumLevels() : 2.0 * n2 * (1.0 + jg->NumChannels()));
           }
           keyOf[q].push_back(k);
           costBasis += 2.0 * jg->NumLevels() * (1.0 + jg->NumChannels());
@@ -929,6 +942,10 @@ bool GroupRows(AMatrixFunc &amf, const GradItem &it, CNuc *compound, const vecto
     const int n = jg->NumLevels(), nch = jg->NumChannels();
     for (int part = 0; part < 2; part++) {
       std::vector<double> &block = part ? basisIm[k] : basisRe[k];
+      // The rank-two derivatives of the level matrix by free parameter
+      // (LevelBasis), O(n) each, where they apply.
+      const BilinearTerm term{keys[k].ch, keys[k].chp, part ? complex(0.0, 1.0) : complex(1.0, 0.0)};
+      if (mask && amf.LevelBasis(host, j, term, *mask, shiftDeriv, block)) continue;
       for (int la = 0; la < n; la++) {
         scratch.e[j - 1][la] = 0.0;
         std::fill(scratch.gamma[j - 1][la].begin(), scratch.gamma[j - 1][la].end(), 0.0);
@@ -1082,9 +1099,30 @@ namespace {
 // fitBarOf(member) times its gradient.  Shared by the residual Jacobian and the
 // model gradients.  Returns false, with `bailSeg` set, if a point is outside
 // the analytic path.
+// The free level parameters of the packed vector, per J-group (FormalBasis).
+AMatrixFunc::FreeMask BuildFreeMask(CNuc *compound, const ParamIndexMap &pmap) {
+  AMatrixFunc::FreeMask mask;
+  const int nJ = compound->NumJGroups();
+  mask.e.assign(nJ, {});
+  mask.g.assign(nJ, {});
+  auto isFree = [&pmap](int full) { return full >= 0 && full < pmap.NumFull() && pmap.FullToPacked(full) >= 0; };
+  for (int j = 1; j <= nJ; j++) {
+    JGroup *jg = compound->GetJGroup(j);
+    const int nl = jg->NumLevels(), nch = jg->NumChannels();
+    mask.e[j - 1].assign(nl, 0);
+    mask.g[j - 1].assign(nl, std::vector<char>(nch, 0));
+    for (int la = 1; la <= nl; la++) {
+      mask.e[j - 1][la - 1] = isFree(pmap.EIndexFlat(j, la));
+      for (int ch = 1; ch <= nch; ch++) mask.g[j - 1][la - 1][ch - 1] = isFree(pmap.GammaIndexFlat(j, la, ch));
+    }
+  }
+  return mask;
+}
+
 template <class FitBarOf, class WriteRow>
 bool ForEachRow(CNuc *compound, EData *data, const Config &config, const vector_matrix_r *shiftDeriv,
-                FitBarOf fitBarOf, WriteRow writeRow, int &bailSeg, int &numGroups) {
+                FitBarOf fitBarOf, WriteRow writeRow, int &bailSeg, int &numGroups,
+                const AMatrixFunc::FreeMask *mask) {
   const std::vector<GradItem> items = BuildGradItems(data);
   numGroups = 0;
   for (const GradItem &it : items)
@@ -1096,6 +1134,7 @@ bool ForEachRow(CNuc *compound, EData *data, const Config &config, const vector_
     GradAccum accum, scratch;  // per-thread, reused across its rows
     accum.Init(compound);
     scratch.Init(compound);
+    accum.mask = mask;
     AMatrixFunc amf(compound, config);
 #pragma omp for schedule(dynamic, 1)
     for (int k = 0; k < (int)items.size(); k++) {
@@ -1105,7 +1144,7 @@ bool ForEachRow(CNuc *compound, EData *data, const Config &config, const vector_
       if (it.grouped && it.members.size() > 1) {
         auto fb = [&](size_t q, double) { return fitBarOf(it.members[q]); };
         auto row = [&](size_t q, double model, GradAccum &acc) { writeRow(it.members[q], model, acc); };
-        ok = GroupRows(amf, it, compound, shiftDeriv, fb, row, accum, scratch);
+        ok = GroupRows(amf, it, compound, shiftDeriv, fb, row, accum, scratch, mask);
       } else {
         for (const GroupMember &m : it.members) {
           const double fitBar = fitBarOf(m);
@@ -1196,7 +1235,8 @@ bool ComputeResidualJacobian(CNuc *compound, EData *data, const Config &config,
     }
   };
   int bailSeg = 0, numGroups = 0;
-  const bool ok = ForEachRow(compound, data, config, shiftDeriv, fitBarOf, writeRow, bailSeg, numGroups);
+  const AMatrixFunc::FreeMask mask = BuildFreeMask(compound, pmap);
+  const bool ok = ForEachRow(compound, data, config, shiftDeriv, fitBarOf, writeRow, bailSeg, numGroups, &mask);
   if (!ok) ReportBail("Jacobian/gradient", data->GetSegment(bailSeg), bailSeg);
 
   if (timing) {
@@ -1251,7 +1291,8 @@ bool ComputeModelGradients(CNuc *compound, EData *data, const Config &config,
     }
   };
   int bailSeg = 0, numGroups = 0;
-  const bool ok = ForEachRow(compound, data, config, shiftDeriv, fitBarOf, writeRow, bailSeg, numGroups);
+  const AMatrixFunc::FreeMask mask = BuildFreeMask(compound, pmap);
+  const bool ok = ForEachRow(compound, data, config, shiftDeriv, fitBarOf, writeRow, bailSeg, numGroups, &mask);
   if (!ok) {
     ReportBail("Jacobian/gradient", data->GetSegment(bailSeg), bailSeg);
     gradByPoint.clear();

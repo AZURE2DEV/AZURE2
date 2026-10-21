@@ -7,6 +7,7 @@
 #include <memory>
 
 struct GradAccum;
+struct FreeLevelMask;
 class JGroup;
 class Decay;
 
@@ -201,6 +202,22 @@ class AMatrixFunc : public GenMatrixFunc {
    */
   void BilinearAdjoint(EPoint *energyPoint, int jNum, const std::vector<BilinearTerm> &terms,
                        GradAccum &accum, const vector_matrix_r *shiftDeriv = nullptr);
+  /// Free level parameters of each J-group (AZUREGrad.h).
+  typedef FreeLevelMask FreeMask;
+  /*!
+   * The derivative of one bilinear term beta g_ch^T A g_chp of J-group j, at
+   * the energy held now, with respect to the free level parameters of `mask`,
+   * as the block GroupRows uses (energies, then widths level by level; zero for
+   * fixed parameters).  A level parameter changes the level matrix
+   * M = K - E N - G Lambda G^T by rank two in its level's row and column,
+   * dK = e_l k^T + k e_l^T and dN = e_l q^T + q e_l^T with k, q kept per
+   * parameter set (ChannelSpace::CurrentLevelDerivatives), so with the solves
+   * u = A g its derivative is O(n) per free parameter instead of the O(n^2 c)
+   * structural contraction of LevelMatrixAdjoint.  Standard and Brune level
+   * matrices on either route; false for Park (then BilinearAdjoint).
+   */
+  bool LevelBasis(EPoint *energyPoint, int j, const BilinearTerm &term, const FreeMask &mask,
+                  const vector_matrix_r *shiftDeriv, std::vector<double> &block);
   /// Store an \f$A^{-1}\f$ element.
   void AddAInvMatrixElement(int, int, int, complex);
   /*!
@@ -272,6 +289,13 @@ class AMatrixFunc : public GenMatrixFunc {
   bool SolvePencil(int j, double inEnergy);
   /// R of the formal route; false sends the J-group to the level route.
   bool SolveFormal(int j, double inEnergy);
+  /// Rank-two derivatives of the bilinear terms by free level parameter (see LevelBasis).
+  template <class Add>
+  bool LevelAdjoint(EPoint *energyPoint, int j, const std::vector<BilinearTerm> &terms, const FreeMask &mask,
+                    const vector_matrix_r *shiftDeriv, Add add);
+  std::vector<int> la_used_, la_slot_;
+  std::vector<const vector_c *> la_u_;
+  vector_c la_gu_, la_ku_;
   /// Channel kernel Lambda_d of J-group j at the energy of `point` (as LevelMatrixAdjoint takes it).
   const std::vector<complex> &KernelLambda(EPoint *point, int j);
   std::vector<complex> kernel_scratch_;

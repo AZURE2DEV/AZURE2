@@ -1771,6 +1771,16 @@ void AMatrixFunc::BilinearAdjoint(EPoint *energyPoint, int jNum, const std::vect
     }
     return;
   }
+  // A row of the residual Jacobian or of the model gradients: the rank-two
+  // derivatives of the level matrix by free parameter (LevelAdjoint).
+  if (accum.mask && this->LevelAdjoint(energyPoint, jNum, terms, *accum.mask, shiftDeriv,
+                                       [&](int l, int ch, double v) {
+                                         if (ch < 0)
+                                           accum.e[jNum - 1][l] += v;
+                                         else
+                                           accum.gamma[jNum - 1][l][ch] += v;
+                                       }))
+    return;
   matrix_c &Mbar = mbar_scratch_;
   Mbar.resize(n);
   for (int r = 0; r < n; r++) Mbar[r].assign(n, complex(0.0, 0.0));
@@ -2491,4 +2501,99 @@ bool AMatrixFunc::TBarProducts(Decay *theDecay, bool particleExit) {
   tbar_decay_ = theDecay;
   tbar_particle_ = particleExit;
   return true;
+}
+
+/*!
+ * See the declaration.  With conj(Mbar) = -sum_t conj(beta_t) u_ch u_chp^T
+ * (u = A g, the widths as they are), a level parameter's derivative is
+ *   -Re(sum_t conj(beta_t) u_ch^T dM u_chp),  dM = dK - E dN - (dG Lambda G^T + G Lambda dG^T),
+ * and for dK = e_l k^T + k e_l^T:  u^T dK v = u_l (k . v) + (k . u) v_l.  The
+ * widths also enter g_ch^T A g_chp explicitly: conj(beta) u_chp and
+ * conj(beta) u_ch for the entrance and exit width.  `add(level, ch, value)`
+ * receives the derivatives (ch = -1: the level energy).
+ */
+template <class Add>
+bool AMatrixFunc::LevelAdjoint(EPoint *energyPoint, int j, const std::vector<BilinearTerm> &terms,
+                               const FreeMask &mask, const vector_matrix_r *shiftDeriv, Add add) {
+  if (configure().paramMask & Config::USE_PARK_FORMALISM) return false;
+  if (j < 1 || j > (int)route_.size() || j > (int)mask.e.size()) return false;
+  const bool channel = (route_[j - 1] == kRouteChannel);
+  if (!channel && !solver_valid_[j - 1]) return false;
+  // The standard level matrix in channel space has the cheaper formal adjoint.
+  if (channel && (*formal_[j - 1]).identity) return false;
+  JGroup *jg = compound()->GetJGroup(j);
+  const int n = (int)active_levels_[j - 1].size(), nch = jg->NumChannels();
+  if (n == 0 || n != jg->NumLevels()) return false;
+  const bool brune = (configure().paramMask & Config::USE_BRUNE_FORMALISM);
+  if (brune && !shiftDeriv) return false;
+  const ChannelSpace::LevelDerivatives &ld = ChannelSpace::CurrentLevelDerivatives(
+      jg, brune, mask.e[j - 1], mask.g[j - 1], shiftDeriv ? &(*shiftDeriv)[j - 1] : nullptr);
+  const ChannelSpace::LevelArrays &arrays = ChannelSpace::CurrentLevelArrays(jg);
+  const std::vector<complex> &lam = this->KernelLambda(energyPoint, j);
+  const double E = this->InEnergy(energyPoint);
+  // The channels the terms involve, their solves u_c = A g_c and g_d . u_c.
+  std::vector<int> &used = la_used_;
+  used.clear();
+  std::vector<int> &slot = la_slot_;
+  slot.assign(nch, -1);
+  for (const BilinearTerm &t : terms)
+    for (int c : {t.ch - 1, t.chp - 1})
+      if (slot[c] < 0) {
+        slot[c] = (int)used.size();
+        used.push_back(c);
+      }
+  const int nu = (int)used.size();
+  std::vector<const vector_c *> &u = la_u_;
+  u.resize(nu);
+  for (int s = 0; s < nu; s++) u[s] = &this->GetRawChannelSolve(j, used[s] + 1);
+  vector_c &gu = la_gu_;  // [s][d] = g_d . u_s
+  gu.assign((size_t)nu * nch, complex(0.0, 0.0));
+  for (int i = 0; i < n; i++) {
+    const double *g = &arrays.G[(size_t)i * nch];
+    for (int s = 0; s < nu; s++) {
+      const complex ui = (*u[s])[i];
+      complex *row = &gu[(size_t)s * nch];
+      for (int d = 0; d < nch; d++) row[d] += g[d] * ui;
+    }
+  }
+  vector_c &ku = la_ku_;
+  ku.resize(nu);
+  for (const ChannelSpace::LevelDerivatives::Entry &e : ld.entries) {
+    const int l = e.level;
+    if (!e.zero) {
+      std::fill(ku.begin(), ku.end(), complex(0.0, 0.0));
+      for (int i = 0; i < n; i++) {
+        const double kt = e.k[i] - E * e.q[i];
+        if (kt == 0.0) continue;
+        for (int s = 0; s < nu; s++) ku[s] += kt * (*u[s])[i];
+      }
+    }
+    double v = 0.0;
+    for (const BilinearTerm &t : terms) {
+      const int sa = slot[t.ch - 1], sb = slot[t.chp - 1];
+      const complex ua = (*u[sa])[l], ub = (*u[sb])[l];
+      complex dm(0.0, 0.0);
+      if (!e.zero) dm += ua * ku[sb] + ku[sa] * ub;
+      if (e.ch >= 0) dm -= lam[e.ch] * (ua * gu[(size_t)sb * nch + e.ch] + gu[(size_t)sa * nch + e.ch] * ub);
+      const complex cb = conj(t.beta);
+      v -= std::real(cb * dm);
+      if (e.ch == t.ch - 1) v += std::real(cb * ub);
+      if (e.ch == t.chp - 1) v += std::real(cb * ua);
+    }
+    add(l, e.ch, v);
+  }
+  return true;
+}
+
+bool AMatrixFunc::LevelBasis(EPoint *energyPoint, int j, const BilinearTerm &term, const FreeMask &mask,
+                             const vector_matrix_r *shiftDeriv, std::vector<double> &block) {
+  const int n = (int)active_levels_[j - 1].size(), nch = compound()->GetJGroup(j)->NumChannels();
+  block.assign((size_t)n * (1 + nch), 0.0);
+  return this->LevelAdjoint(energyPoint, j, std::vector<BilinearTerm>{term}, mask, shiftDeriv,
+                            [&](int l, int ch, double v) {
+                              if (ch < 0)
+                                block[l] += v;
+                              else
+                                block[n + (size_t)l * nch + ch] += v;
+                            });
 }

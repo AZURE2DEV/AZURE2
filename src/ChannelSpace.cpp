@@ -79,6 +79,91 @@ const LevelArrays &CurrentLevelArrays(JGroup *jg) {
   return a;
 }
 
+/*!
+ * The rank-two derivatives of the standard and Brune level matrices, as
+ * LevelMatrixAdjoint differentiates them (all widths as they are).  Brune:
+ * K_ij = E_i delta_ij + sum_c g_ic g_jc s0_ijc, N_ij = delta_ij - sum_c g_ic g_jc s1_ijc
+ * over the particle channels, s0_ii = S_i, s0_ij = (S_j E_i - S_i E_j)/(E_i - E_j),
+ * s1_ij = (S_i - S_j)/(E_i - E_j), S_i = S(E_i), S' its derivative:
+ *   width g_lc:  k_j = g_jc s0_ljc, k_l = g_lc S_lc, q_j = -g_jc s1_ljc, q_l = 0;
+ *   energy E_l:  k_l = (1 + sum_c g_lc^2 S'_lc)/2,
+ *                k_j = sum_c g_lc g_jc (S_jc - S'_lc E_j - s0_ljc)/(E_l - E_j),
+ *                q_j = -sum_c g_lc g_jc (S'_lc - s1_ljc)/(E_l - E_j).
+ * Standard: k = e_l / 2 for the energy, nothing for a width.
+ */
+const LevelDerivatives &CurrentLevelDerivatives(JGroup *jg, bool brune, const std::vector<char> &freeE,
+                                                const std::vector<std::vector<char>> &freeG,
+                                                const std::vector<std::vector<double>> *shiftDeriv) {
+  thread_local std::unordered_map<const JGroup *, LevelDerivatives> cache;
+  if (cache.size() >= 1024 && cache.find(jg) == cache.end()) cache.clear();
+  LevelDerivatives &ld = cache[jg];
+  const int n = jg->NumLevels(), nch = jg->NumChannels();
+  std::vector<std::uint64_t> key;
+  key.reserve(3 + (size_t)n * (3 + nch));
+  key.push_back(brune);
+  key.push_back(n);
+  key.push_back(nch);
+  for (int i = 0; i < n; i++) {
+    ALevel *level = jg->GetLevel(i + 1);
+    key.push_back(reinterpret_cast<std::uintptr_t>(level));
+    key.push_back(level->Stamp());
+    key.push_back(freeE[i]);
+    for (int c = 0; c < nch; c++) key.push_back(freeG[i][c]);
+  }
+  if (key == ld.key) return ld;
+  ld.key.swap(key);
+  ld.entries.clear();
+  const LevelArrays &a = CurrentLevelArrays(jg);
+  std::vector<char> particle(nch);
+  for (int c = 0; c < nch; c++) particle[c] = brune && (jg->GetChannel(c + 1)->GetRadType() == 'P');
+  auto Sp = [&](int i, int c) { return shiftDeriv ? (*shiftDeriv)[i][c] : 0.0; };
+  for (int l = 0; l < n; l++)
+    for (int c = -1; c < nch; c++) {
+      const bool free = (c < 0) ? freeE[l] : freeG[l][c];
+      if (!free) continue;
+      LevelDerivatives::Entry e;
+      e.level = l;
+      e.ch = c;
+      e.zero = (c >= 0 && !particle[c]);
+      if (!e.zero) {
+        e.k.assign(n, 0.0);
+        e.q.assign(n, 0.0);
+        if (c < 0) {
+          double diag = 1.0;
+          for (int d = 0; d < nch; d++)
+            if (particle[d]) diag += a.G[(size_t)l * nch + d] * a.G[(size_t)l * nch + d] * Sp(l, d);
+          e.k[l] = 0.5 * diag;
+          for (int j = 0; j < n; j++) {
+            if (j == l) continue;
+            const double iv = a.inv[(size_t)l * n + j];
+            for (int d = 0; d < nch; d++) {
+              if (!particle[d]) continue;
+              const double gg = a.G[(size_t)l * nch + d] * a.G[(size_t)j * nch + d];
+              if (gg == 0.0) continue;
+              const double Sl = a.S[(size_t)l * nch + d], Sj = a.S[(size_t)j * nch + d], Spl = Sp(l, d);
+              const double s0 = (Sj * a.E[l] - Sl * a.E[j]) * iv, s1 = (Sl - Sj) * iv;
+              e.k[j] += gg * (Sj - Spl * a.E[j] - s0) * iv;
+              e.q[j] -= gg * (Spl - s1) * iv;
+            }
+          }
+        } else {
+          e.k[l] = a.G[(size_t)l * nch + c] * a.S[(size_t)l * nch + c];
+          for (int j = 0; j < n; j++) {
+            if (j == l) continue;
+            const double gj = a.G[(size_t)j * nch + c];
+            if (gj == 0.0) continue;
+            const double iv = a.inv[(size_t)l * n + j];
+            const double Sl = a.S[(size_t)l * nch + c], Sj = a.S[(size_t)j * nch + c];
+            e.k[j] = gj * (Sj * a.E[l] - Sl * a.E[j]) * iv;
+            e.q[j] = -gj * (Sl - Sj) * iv;
+          }
+        }
+      }
+      ld.entries.push_back(std::move(e));
+    }
+  return ld;
+}
+
 double LUFactor(complex *a, int *piv, int m) {
   double pmin = 0.0, pmax = 0.0;
   for (int k = 0; k < m; k++) {

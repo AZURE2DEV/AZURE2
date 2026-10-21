@@ -140,6 +140,12 @@ class ParamIndexMap {
   int energyShiftFnOffset_ = 0;
 };
 
+/// Free level parameters of each J-group, [j-1][level-1] and [j-1][level-1][ch-1].
+struct FreeLevelMask {
+  std::vector<std::vector<char>> e;
+  std::vector<std::vector<std::vector<char>>> g;
+};
+
 /*!
  * \brief Gradient accumulator in "physics" coordinates.
  *
@@ -179,6 +185,12 @@ struct GradAccum {
    */
   std::vector<std::vector<double>> lmK, lmN;
   std::vector<char> lmUsed;
+  /*!
+   * The free level parameters of a pass that takes rows (residual Jacobian,
+   * model gradients): the level-matrix adjoint is then taken by free
+   * parameter (AMatrixFunc::LevelAdjoint).  Not owned.
+   */
+  const FreeLevelMask *mask = nullptr;
 
   /// Allocate (and zero) the accumulators to match the compound's dimensions.
   void Init(CNuc *compound);

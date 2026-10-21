@@ -506,7 +506,15 @@ energy, so only :math:`\sum_E \mathrm{Re}\,\bar M(E)` and
 :math:`\sum_E E\,\mathrm{Re}\,\bar M(E)` are accumulated (``GradAccum::lmK``,
 ``lmN``) and contracted with the structural derivatives of :math:`K, N` once
 per pass; the kernel term is differentiated at each energy from the rank-one
-terms of :math:`\bar M`, in :math:`O(n c)` each.
+terms of :math:`\bar M`, in :math:`O(n c)` each.  The rows (residual Jacobian,
+model gradients) need each point's derivative with respect to every free
+parameter, so they go the other way: a level parameter changes
+:math:`K - EN` by rank two in its level's row and column,
+:math:`dK = e_l k^T + k e_l^T`, :math:`dN = e_l q^T + q e_l^T` (``ChannelSpace::
+CurrentLevelDerivatives``, per parameter set and free mask), and with the
+solves :math:`u = A g` its derivative is :math:`O(n)` per free parameter
+(``AMatrixFunc::LevelAdjoint``, ``LevelBasis``; standard and Brune level
+matrices, Park keeps ``LevelMatrixAdjoint``).
 Points with components or sub-point target effects are still differentiated
 one by one (``GradOnePoint``), with the same back-propagation.  The gradient
 equals the point-by-point one to rounding (about :math:`10^{-14}` of its
