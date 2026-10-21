@@ -82,6 +82,20 @@ beyond its ends -- errors of several percent in the gaps between points and up
 to orders of magnitude for low-energy points moved below the segment's lowest
 energy.
 
+Screening Parameters
+^^^^^^^^^^^^^^^^^^^^
+
+Shown only when an experimental-effect line carries electron screening (see
+:doc:`experimental_effects`). One row per such line, named ``screening_<n>``
+as in ``param.sav``, with :math:`n` the line's place among the *active*
+experimental-effect lines: **Value** is the screening potential :math:`U_e` in
+eV, **Error** the sigma of its Gaussian prior (0 = none) and **Use as
+Nuisance** whether it is fitted. The three are the line's **U_e**, **Prior
+Sigma** and **Fit U_e**, and an edit in either tab shows in the other. In
+AZURE2's parameter vector the screening potentials come after the energy-shift
+parameters; one that is not fitted takes no slot. **Load from .sav** sets the
+value to the fitted :math:`U_e`, which is also the centre of its prior.
+
 Controls
 --------
 

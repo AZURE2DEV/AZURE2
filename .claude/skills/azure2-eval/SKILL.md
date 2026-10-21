@@ -2182,7 +2182,7 @@ complete:
   among ACTIVE <targetInt> lines, after the shift-fn block), analytic gradient/Jacobian column, prior
   ((U_e-U_e0)/sigma)^2 in every fitter + MCMC auto prior, `Total-Screening-Chi-Squared` in chiSquared.out.
   The line's U_e is the prior centre; the fitted value lives in param.sav (save_fit does not move it).
-  GUI: Experimental Effects dialog, "Include Electron Screening", Adiabatic Limit button =
+  GUI: Experimental Effects dialog (and the Fitting tab's Screening sub-tab, synced both ways), "Include Electron Screening", Adiabatic Limit button =
   B(Z1+Z2)-B(Z1)-B(Z2) from NIST total binding energies (alpha+13C 934.7 eV, p+12C 442.4 eV). pyazr:
   add_target_effect(screening=(Ue, vary, sigma)), AzrModel.screenings / set_screening,
   parameters.screenings, penalties()["screening"] (in objective()). TRAP: like every effect the line also

@@ -490,6 +490,9 @@ nothing else.
   :math:`\chi^2`, :math:`U_e^{0}` being the value entered; 0 means no prior.
   It is reported as ``Total-Screening-Chi-Squared`` in ``chiSquared.out``.
 
+The three settings also appear in the Fitting tab, on its **Screening**
+sub-tab (:doc:`fitting`), and can be edited in either place.
+
 The fitted :math:`U_e` is written to ``param.sav`` with the other parameters
 and read back from it; the value on the ``<targetInt>`` line stays the prior's
 centre. ``pyazr.AzrModel.add_target_effect(..., screening=(Ue, vary, sigma))``

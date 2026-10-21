@@ -83,6 +83,7 @@ class AZURESetup : public QMainWindow {
 
   // Getter for FittingTab (for MCMCTab access)
   FittingTab *getFittingTab() const { return fittingTab; }
+  TargetIntTab *getTargetIntTab() const { return targetIntTab; }
   LevelsTab *getLevelsTab() const { return levelsTab; }
 
  public slots:

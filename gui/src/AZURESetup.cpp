@@ -118,6 +118,7 @@ AZURESetup::AZURESetup() :
   fittingTab = new FittingTab();
   fittingTab->setTabReferences(levelsTab, segmentsTab);
   fittingTab->setAbundancesModel(pairsTab->getAbundancesModel());
+  fittingTab->setTargetIntModel(targetIntTab->getTargetIntModel());
   fittingTab->setConfig(&GetConfig());
 
   runTab = new RunTab();
