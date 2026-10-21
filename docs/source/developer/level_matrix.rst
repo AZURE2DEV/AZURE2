@@ -244,9 +244,46 @@ adjoint (pencil route, level route, nearly degenerate formal levels), it
 accumulates :math:`\sum_E \mathrm{Re}\,\bar M` and :math:`\sum_E E\,\mathrm{Re}\,\bar M`
 and contracts them with :math:`dK, dN` once per pass.  The rows of the
 residual Jacobian and of the model gradients take, per free parameter, the
-rank-two change of :math:`K - EN` it makes (``LevelAdjoint``); Park keeps
-``LevelMatrixAdjoint``.  The solves :math:`A g_c` come from the channel solves
+rank-two change of :math:`K - EN` it makes (``LevelAdjoint``,
+``ChannelSpace::CurrentLevelDerivatives``), in every formalism.  Park's level
+matrix is Brune's off the diagonal; on it :math:`N_{\lambda\lambda} = J_\lambda
+= 1 - \sum_c \gamma_{\lambda c}^2 S'_{\lambda c}` and
+:math:`K_{\lambda\lambda} = E_\lambda J_\lambda + \sum_c \gamma_{\lambda c}^2 S_{\lambda c}`,
+so a width :math:`\gamma_{\lambda c}` changes them by
+:math:`-2\gamma_{\lambda c}S'_{\lambda c}` and
+:math:`2\gamma_{\lambda c}(S_{\lambda c} - E_\lambda S'_{\lambda c})`, and the
+energy by :math:`-\sum_c \gamma_{\lambda c}^2 S''_{\lambda c}` and
+:math:`J_\lambda + \sum_c \gamma_{\lambda c}^2 (S'_{\lambda c} - E_\lambda S''_{\lambda c})`
+(:math:`S', S''` the energy derivatives at :math:`E_\lambda`, which the levels
+hold).  The solves :math:`A g_c` come from the channel solves
 of the route (``GetRawChannelSolve``, ``ApplyA``).
+
+In the Park formalism :math:`S'` and :math:`S''` are numerical derivatives of the
+shift function (Richardson-extrapolated differences of the exact one: four and
+five more Coulomb-function evaluations per open channel; for a charged channel
+the energy derivative of the Coulomb functions has no closed form, the
+:math:`\eta` derivative being an integral).  ``CNuc::CalcShiftFunctions``
+takes them after the shift functions, for all levels at once and in parallel,
+without the Coulomb-function memo (``CoulFuncCache``: per thread and matching
+energies to :math:`10^{-12}` MeV, it made :math:`S'` depend on the run's history
+by up to :math:`10^{-11}`), so that they do not depend on the number of threads;
+channels of a level that differ only in the channel spin share one, and the
+working copies of a fit share them through a memo by exact argument.  It computes
+:math:`S''`, which only the gradient needs, only when asked: a chi-squared
+alone (``AZURECalc::operator()``, ``Chi2On``, ``ResidualsOnly``, MCMC) leaves it
+out, and the next gradient fills it in for the levels that moved
+(``ALevel::ShiftSecondDerivativesValidAt``).  The gradient's table of
+:math:`S'` (``BuildShiftDerivTable``) is read from the levels instead of being
+differentiated again.  With the rows in place the analytic-gradient minimizer
+takes Park's gradient from the residual Jacobian as for the other formalisms
+(``AZURECalc::GradientFromJacobian``, which adds the gradient of the
+:math:`J > 0` wall when a level is past it): MIGRAD asks for G2 with every
+gradient, so the adjoint pass it took besides is saved.  On the 19-segment
+project of :doc:`edata_and_target_effects` in Park mode (one thread) an
+evaluation at new parameters went from 1.55 s to 1.09 s, the residual Jacobian
+from 5.9 s to 2.2 s and 20 MIGRAD calls from 53 s to 26 s (two threads: an
+evaluation 1.31 s to 0.64 s, MIGRAD 36 s to 15 s; level route,
+``AZURE_LEVEL_SPACE=1``, one thread: MIGRAD 83 s to 49 s).
 
 The scattering lengths (:doc:`../theory/scattering_length`) take the same
 routes at each pair's threshold: :math:`M_{cc}` is the channel route's
