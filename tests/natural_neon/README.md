@@ -41,8 +41,16 @@ About 55 s on two threads.
 | 3 | Almeida & Käppeler 1983, low-energy run (21808) | ²¹Ne, 95.4 % | ²¹Ne only, folded σ = 1 keV | 433.353 (255) |
 | 4 | Almeida & Käppeler 1983, low-energy run (21808) | ²²Ne, 99.8 % | ²²Ne only, folded σ = 1 keV | 295.392 (259) |
 | 5 | Sikkema 1958 (20203) | ²²Ne, 98.1 % | ²²Ne only, folded 10.6 keV | 27.9777 (35) |
-| 6 | Sikkema 1958 (20261) | ²⁰Ne | ²⁰Ne only, folded 10.6 keV | 246.304 (35) |
+| 6 | Sikkema 1958 (20261) | ²⁰Ne | ²⁰Ne only, folded 10.6 keV | 247.1 on thm, 246.304 on dev (35; see below) |
 | 7 | Junghans et al., EPJ Web Conf. 239, 01006 (2020) (23755005), E_lab 0.84–1.26 MeV | natural Ne | natural sum, folded with the energy-dependent nELBE resolution | 947.456 (272) |
+
+Segments 5 and 6 share one `<targetInt>` line ("5,6") but have different
+entrance pairs (n+²²Ne and n+²⁰Ne).  dev converts the shared lab sigma to
+c.m. once, with the first segment's pair (22/23), and folds segment 6 with
+that kernel too; thm gives every listed segment its own copy, converted with
+its own pair (20/21 for segment 6; MERGE_NOTES.md section A, row 76888ad).
+On thm segment 6 is therefore pinned at 247.1 (dev 246.304; dev with "5"
+and "6" on separate lines gives 247.15), and the total at 3346.1.
 
 The Almeida resolution is not tabulated; σ = 1 keV stands for the 1 % FWHM
 assumed in the fit. Sikkema is folded with 25 keV FWHM.

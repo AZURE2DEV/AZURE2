@@ -25,7 +25,7 @@ cache guard.
 | 02ae97b | adaptive grid: geometric tails beyond the resonance core; anchors quantised (width to 1.25^n, energy to width/4); only the finest of overlapping lattices kept; a pure Gaussian convolution whose `<targetInt>` line omits the multiplier uses a 2-width core (an explicit value, and target integration, keep 20) | narrow resonances folded 16-38 % high; the union of lattices tripled the sub-points | thick_target_resonance 19.0249 -> 30.8444, hybrid_potential (+1.6e-3); tests/convolution_unify (dev's check; its reference_old/ holds dev's grid): plain target integration 6.1e-5 from the reference, the constant-sigma ratio new/old 1.00259-1.00272 instead of 1.0027100 at every energy.  thm's grid is converged there (3e-8 and 2e-7 from a 4x finer grid), dev's is off by 6.3e-5 and 1.1e-4 near the 3.50/3.55 MeV levels; held to 1e-4 and to a 1.5e-4 spread (the median still to 1e-5) |
 | (02ae97b, 528b672) | the thm sub-point grid refresh (EPoint::RefreshSubPointGrid) is gone since the merge of 64ed575: dev re-places every grid at every evaluation (EData::ReplaceSubPointGrids, a163c06, `--no-grid-replacement`), from the observed values of the current parameters (TransformOut on a copy), which serves Brune, formal parameters and Park alike.  No difference from dev left; the quantized anchors of the row above make the re-placed grid piecewise constant | -- | -- |
 | df8c2c8 | (1 + delta_12) = 2 for every cross section out of an identical entrance pair (reactions, capture, differential); none for an identical exit pair; the adjoint gradient follows; a rate run prints a note | dev applied it to elastic only: 12C(12C,a), d(d,p), d(d,g) were a factor 2 low | none (new tests/identical_entrance_reaction) |
-| 76888ad | a `<targetInt>` line listing several segments gives each segment its own copy, so sigma lab -> c.m. is converted once | the shared object was converted once per listed segment | target_effect_ranges 3861.5 -> 3838.66. dev fixed the same bug with a once-only guard (f0444ab, pin 3838.73); both are kept, and the 7e-5 between the pins is the shift-function rows above. A line shared by segments of different entrance pairs still differs: thm converts each copy with its own pair's factor, dev uses the first segment's |
+| 76888ad | a `<targetInt>` line listing several segments gives each segment its own copy, so sigma lab -> c.m. is converted once | the shared object was converted once per listed segment | target_effect_ranges 3861.5 -> 3838.66. dev fixed the same bug with a once-only guard (f0444ab, pin 3838.73); both are kept, and the 7e-5 between the pins is the shift-function rows above. A line shared by segments of different entrance pairs still differs: thm converts each copy with its own pair's factor, dev uses the first segment's: tests/natural_neon ("5,6": n+22Ne and n+20Ne) segment 6 247.1 on thm, 246.304 on dev (dev with separate lines: 247.15), total 3346.1 (dev 3345.28); examples/natural_neon shares "10,11", "6,8" and "7,9" the same way (its documented table is dev's; not run here) |
 | 79358bb | EPoint::CalcEDependentValues clears its L_o, P and phase tables before refilling | a second call appended copies; lookups read the stale first copy | none. dev fixed the same doubling in RecalcEDependentValues (797c2ea, rows emptied in place); since the merge both functions use dev's ClearEDependentRows, so no output difference remains |
 | 953486f | nuisance priors looked up by full Minuit index in chi2, gradient and LM setup | a fixed parameter before the prior's moved the prior to another parameter (also on dev) | none (new tests/nuisance_prior) |
 | 178ae16 | AZURECalc::FixedMask from the minimizer: LM, GSL-LM, the band covariance and the FD gradient honour the fixed flags | --use-lm / --use-gsl-lm fitted fixed parameters | none (new tests/fixed_param_par); covariance.dat has one row per free parameter |
@@ -314,7 +314,12 @@ Results that move (no table file; the table changes nothing beyond 1e-8):
   projects in the 7th digit.  All of these are the pins thm already had,
   except beam_profile_kernel (re-pinned 40.4393).  natural_neon (test and
   example) needs more than 2.4 GB with either binary and could not be run
-  here.
+  here.  Found by CI after the merge and measured with both binaries under a
+  3.0 GB address-space cap: tests/natural_neon segment 6 247.1 (dev 246.304;
+  row 76888ad, a "5,6" line over two entrance pairs; dev's binary needs more
+  than 3.0 GB for the whole project and was run on segments 5 and 6 alone),
+  and tests/convolution_unify's plain target integration and constant-sigma
+  ratio (row 02ae97b: its reference holds dev's grid).
 - THM against ab85222 (every THM example and test): dev's normalised Gaussian
   kernel moves every folded model by the kernel's missing tail, 2.70e-3
   (1 - erf(3/sqrt 2)) for direct data under a 3-sigma window and 5.7e-7 for
@@ -339,8 +344,9 @@ Results that move (no table file; the table changes nothing beyond 1e-8):
   100.472 (the direct segments' kernel normalisation; single segments by up
   to 3 % of their small chi2).
 
-Still open: natural_neon on this box (memory); the merged EPoint is 152
-bytes larger than dev's.
+Still open: the merged EPoint is 152 bytes larger than dev's; the three
+convolution_unify models with target integration and a beam spread need more
+than 3.0 GB of address space with either binary (checked here on 21 points).
 
 ## Bugs from origin/dev fixed on thm (October 2026)
 
