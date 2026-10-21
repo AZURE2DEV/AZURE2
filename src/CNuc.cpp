@@ -1757,6 +1757,7 @@ void CNuc::CalcAngularDists(int maxL) {
           }
         }
       }
+      theDecay->BuildFlatInterferences();
     }
   }
 }

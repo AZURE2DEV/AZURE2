@@ -1,4 +1,5 @@
 #include "AngCoeff.h"
+#include "Decay.h"
 #include "Profile.h"
 #include "CNuc.h"
 #include "EPoint.h"
@@ -236,20 +237,38 @@ void GenMatrixFunc::CalculateBareCrossSection(EPoint *point) {
       }
       std::vector<double> angularCoeff(std::min(point->GetMaxLOrder() + 1, point->GetMaxAngDistOrder() + 1), 0.);
       PPair *exitPairDiff = compound()->GetPair(compound()->GetPairNumFromKey(point->GetExitKey()));
-      // Entrance = exit pair, or a non-particle exit: the interference sum is
-      // a sum of products that do not depend on the angle, each times a
-      // Legendre polynomial.  The products are taken once per T-matrix and
-      // reused by every point that shares it; each is the same expression,
-      // added in the same order, as in the loop below.
-      const bool standardCase = !(aa != exitPairNum && exitPairDiff->GetPType() == 0);
-      if (standardCase && !point->IsAngularDist()) {
-        if (rt_decay_ != theDecay) {
-          rt_w_.clear();
-          rt_l_.clear();
+      // The interference sum is a sum of products that do not depend on the
+      // angle, each times a Legendre polynomial.  The products are summed by
+      // order once per T-matrix and reused by every point that shares it.
+      // A particle exit other than the entrance (UPOS or not) keeps only the
+      // k-groups of equal channel spins; UPOS points and angular-distribution
+      // coefficients take the loop below.
+      const bool particleExit = (aa != exitPairNum && exitPairDiff->GetPType() == 0);
+      if (!point->IsAngularDist() && !(particleExit && point->IsUPOS())) {
+        const std::vector<FlatInterference> &flat = theDecay->FlatInterferences();
+        if (rt_decay_ != theDecay && (!flat.empty() || theDecay->NumKLGroups() == 0)) {
+          rt_wl_.clear();
+          const std::vector<vector_c> *T = tmatrix_.empty() ? nullptr : &tmatrix_[0];
+          for (const FlatInterference &f : flat) {
+            if (particleExit && !f.spEqual) continue;
+            if ((int)rt_wl_.size() <= f.l) rt_wl_.resize(f.l + 1, complex(0.0, 0.0));
+            if (!f.r1) continue;  // unknown type: no contribution, as in the loop below
+            const complex T1 = (f.r1 == 'E') ? ec_tmatrix_[f.k - 1][f.m1 - 1]
+                                             : (T ? (*T)[f.k - 1][f.m1 - 1] : complex(0.0, 0.0));
+            const complex T2 = (f.r2 == 'E') ? ec_tmatrix_[f.k - 1][f.m2 - 1]
+                                             : (T ? (*T)[f.k - 1][f.m2 - 1] : complex(0.0, 0.0));
+            rt_wl_[f.l] += f.z * T1 * conj(T2);
+          }
+          this->BuildCoulombInterference(theDecay, aa == exitPairNum);
+          rt_decay_ = theDecay;
+        } else if (rt_decay_ != theDecay) {
+          rt_wl_.clear();
           for (int kL = 1; kL <= theDecay->NumKLGroups(); kL++) {
             KLGroup *klGroup = theDecay->GetKLGroup(kL);
             const int kNum = klGroup->GetK();
+            if (particleExit && theDecay->GetKGroup(kNum)->GetSp() != theDecay->GetKGroup(kNum)->GetSp2()) continue;
             const int lOrder = klGroup->GetLOrder();
+            if ((int)rt_wl_.size() <= lOrder) rt_wl_.resize(lOrder + 1, complex(0.0, 0.0));
             for (int inter = 1; inter <= klGroup->NumInterferences(); inter++) {
               Interference *theInterference = klGroup->GetInterference(inter);
               complex T1(0.0, 0.0), T2(0.0, 0.0);
@@ -267,13 +286,14 @@ void GenMatrixFunc::CalculateBareCrossSection(EPoint *point) {
                 T1 = this->GetECTMatrixElement(kNum, theInterference->GetM1());
                 T2 = this->GetECTMatrixElement(kNum, theInterference->GetM2());
               }
-              rt_w_.push_back(theInterference->GetZ1Z2() * T1 * conj(T2));
-              rt_l_.push_back(lOrder);
+              rt_wl_[lOrder] += theInterference->GetZ1Z2() * T1 * conj(T2);
             }
           }
+          this->BuildCoulombInterference(theDecay, aa == exitPairNum);
           rt_decay_ = theDecay;
         }
-        for (size_t i = 0; i < rt_w_.size(); i++) sum += rt_w_[i] * point->GetLegendreP(rt_l_[i]);
+        for (size_t l = 0; l < rt_wl_.size(); l++)
+          if (rt_wl_[l] != complex(0.0, 0.0)) sum += rt_wl_[l] * point->GetLegendreP((int)l);
       } else
       for (int kL = 1; kL <= theDecay->NumKLGroups(); kL++) {
         for (int inter = 1; inter <= theDecay->GetKLGroup(kL)
@@ -418,6 +438,11 @@ void GenMatrixFunc::CalculateBareCrossSection(EPoint *point) {
         }
 
         sum = complex(0., 0.);
+        if (rt_decay_ == theDecay && rt_it_built_) {
+          // The angle-independent factors, summed per (channel spin, l) once
+          // per T-matrix (BuildCoulombInterference).
+          for (const CoulombTerm &e : rt_it_) sum += point->GetCoulombAmplitude(e.s) * e.c * point->GetLegendreP(e.l);
+        } else
         for (int k = 1; k <= theDecay->NumKGroups(); k++) {
           for (int m = 1; m <= theDecay->GetKGroup(k)->NumMGroups(); m++) {
             MGroup *theMGroup = theDecay->GetKGroup(k)->GetMGroup(m);
@@ -826,4 +851,30 @@ bool GenMatrixFunc::CalculateCaptureAnalyzingPower(EPoint *point,
   if (fabs(den) < 1.e-300) return false;
   if (analyzingPower) *analyzingPower = num / den;
   return true;
+}
+
+/*!
+ * The Coulomb-nuclear interference of the elastic differential cross section,
+ * sum over pathways with equal entrance and exit channel of
+ * statSpin f_C(s) conj(T) P_l, summed per (s, l) without the angle-dependent
+ * f_C(s) P_l, for the T-matrix held now.  Only for an elastic decay.
+ */
+void GenMatrixFunc::BuildCoulombInterference(Decay *theDecay, bool elastic) {
+  rt_it_.clear();
+  rt_it_built_ = elastic;
+  if (!elastic) return;
+  for (int k = 1; k <= theDecay->NumKGroups(); k++) {
+    for (int m = 1; m <= theDecay->GetKGroup(k)->NumMGroups(); m++) {
+      MGroup *theMGroup = theDecay->GetKGroup(k)->GetMGroup(m);
+      AChannel *entranceChannel = compound()->GetJGroup(theMGroup->GetJNum())->GetChannel(theMGroup->GetChNum());
+      AChannel *exitChannel = compound()->GetJGroup(theMGroup->GetJNum())->GetChannel(theMGroup->GetChpNum());
+      if (entranceChannel != exitChannel) continue;
+      const double sValue = entranceChannel->GetS();
+      const int lValue = entranceChannel->GetL();
+      size_t i = 0;
+      while (i < rt_it_.size() && !(rt_it_[i].s == sValue && rt_it_[i].l == lValue)) i++;
+      if (i == rt_it_.size()) rt_it_.push_back(CoulombTerm{sValue, lValue, complex(0.0, 0.0)});
+      rt_it_[i].c += theMGroup->GetStatSpinFactor() * conj(this->GetTMatrixElement(k, m));
+    }
+  }
 }

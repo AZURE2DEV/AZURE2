@@ -102,6 +102,7 @@ matrix_c *AMatrixFunc::GetJSpecAInvMatrix(int jGroupNum) {
  */
 
 void AMatrixFunc::ClearMatrices() {
+  tbar_decay_ = nullptr;
   tmatrix_.clear();
   ec_tmatrix_.clear();
   InvalidateTMatrixProducts();
@@ -463,6 +464,7 @@ complex AMatrixFunc::GetChannelCaptureBilinear(int jGroupNum, int chNum, int chp
 
 void AMatrixFunc::CalculateTMatrix(EPoint *point) {
   AZUREProfile::Timer profileTimer(AZUREProfile::kTMatrix);
+  tbar_decay_ = nullptr;
   // Cache frequently accessed values to avoid repeated function calls
   int entranceKey = point->GetEntranceKey();
   int exitKey = point->GetExitKey();
@@ -926,6 +928,18 @@ bool AMatrixFunc::PointTBar(EPoint *point, double fitBar, TMatrixCotangent &bar,
     };
 
     const bool inelasticParticle = (aa != exitPairNum && exitPairDiff->GetPType() == 0);
+    // Away from UPOS the sum is linear in the Legendre polynomials with
+    // angle-independent coefficients: the cotangent of each pathway is a sum
+    // over orders of products taken once per T-matrix (TBarProducts).
+    if (!(inelasticParticle && point->IsUPOS()) && this->TBarProducts(theDecay, inelasticParticle)) {
+      const complex scale = fitBar * cR;
+      for (const TBarProduct &e : tbar_products_) {
+        complex s(0.0, 0.0);
+        for (size_t l = 0; l < e.q.size(); l++)
+          if (e.q[l] != complex(0.0, 0.0)) s += e.q[l] * point->GetLegendreP((int)l);
+        Tadd(e.k, e.m, e.rad, scale * s);
+      }
+    } else
     for (int kL = 1; kL <= theDecay->NumKLGroups(); kL++) {
       int K = theDecay->GetKLGroup(kL)->GetK();
       int lOrder = theDecay->GetKLGroup(kL)->GetLOrder();
@@ -2239,4 +2253,50 @@ void AMatrixFunc::VerifyChannelSpace(int j, EPoint *point, double inEnergy) {
               << " MeV: channel vs level route " << rel << " of the largest form; against an extended-precision LU: channel "
               << dChannel / fmax << ", level " << dLevel / fmax << std::endl;
   }
+}
+
+/*!
+ * The cotangent coefficients of the differential sum of `theDecay` for the
+ * T-matrix held now, by pathway and Legendre order: model += cR Re(sum_i
+ * Z1Z2_i T1_i conj(T2_i) P_{L_i}) gives T1bar += cR Z1Z2 P_L T2 and
+ * T2bar += cR Z1Z2 P_L T1, so each pathway's cotangent is cR sum_L q_L P_L with
+ * q_L summed over the interferences once.  `particleExit` keeps only the
+ * k-groups of equal channel spins, as the forward sum.  False (nothing built)
+ * for an interference type the adjoint does not know.
+ */
+bool AMatrixFunc::TBarProducts(Decay *theDecay, bool particleExit) {
+  if (tbar_decay_ == theDecay && tbar_particle_ == particleExit) return true;
+  tbar_products_.clear();
+  const int nK = theDecay->NumKGroups();
+  std::vector<std::vector<int>> idxR(nK + 1), idxE(nK + 1);
+  auto slot = [&](int K, int m, char rad) -> TBarProduct & {
+    std::vector<int> &idx = (rad == 'E') ? idxE[K] : idxR[K];
+    if ((int)idx.size() <= m) idx.resize(m + 1, -1);
+    if (idx[m] < 0) {
+      idx[m] = (int)tbar_products_.size();
+      tbar_products_.push_back(TBarProduct{K, m, rad, std::vector<complex>()});
+    }
+    return tbar_products_[idx[m]];
+  };
+  const std::vector<FlatInterference> &flat = theDecay->FlatInterferences();
+  if (flat.empty() && theDecay->NumKLGroups() > 0) return false;  // table not built
+  for (const FlatInterference &f : flat) {
+    if (particleExit && !f.spEqual) continue;
+    if (!f.r1) {  // an interference type the adjoint does not know
+      tbar_products_.clear();
+      tbar_decay_ = nullptr;
+      return false;
+    }
+    const complex T1 = (f.r1 == 'E') ? this->GetECTMatrixElement(f.k, f.m1) : this->GetTMatrixElement(f.k, f.m1);
+    const complex T2 = (f.r2 == 'E') ? this->GetECTMatrixElement(f.k, f.m2) : this->GetTMatrixElement(f.k, f.m2);
+    TBarProduct &e1 = slot(f.k, f.m1, f.r1);
+    if ((int)e1.q.size() <= f.l) e1.q.resize(f.l + 1, complex(0.0, 0.0));
+    e1.q[f.l] += f.z * T2;
+    TBarProduct &e2 = slot(f.k, f.m2, f.r2);
+    if ((int)e2.q.size() <= f.l) e2.q.resize(f.l + 1, complex(0.0, 0.0));
+    e2.q[f.l] += f.z * T1;
+  }
+  tbar_decay_ = theDecay;
+  tbar_particle_ = particleExit;
+  return true;
 }

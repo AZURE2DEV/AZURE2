@@ -161,3 +161,34 @@ bool Decay::IsCaptureAyBuilt() const {
 void Decay::SetCaptureAyBuilt() {
   captureAyBuilt_ = true;
 }
+
+/*!
+ * Flattens the interferences of the k,L groups.  An interference type other
+ * than two of 'R'/'E' is stored with r1 = r2 = 0, which the users treat as
+ * unknown.
+ */
+void Decay::BuildFlatInterferences() {
+  flat_.clear();
+  for (KLGroup &kl : klgroups_) {
+    const int k = kl.GetK();
+    KGroup *kg = this->GetKGroup(k);
+    const bool spEqual = kg && kg->GetSp() == kg->GetSp2();
+    for (int i = 1; i <= kl.NumInterferences(); i++) {
+      Interference *itf = kl.GetInterference(i);
+      const std::string &t = itf->GetInterferenceType();
+      FlatInterference f;
+      f.k = k;
+      f.m1 = itf->GetM1();
+      f.m2 = itf->GetM2();
+      f.l = kl.GetLOrder();
+      f.r1 = f.r2 = 0;
+      if (t.size() == 2 && (t[0] == 'R' || t[0] == 'E') && (t[1] == 'R' || t[1] == 'E')) {
+        f.r1 = t[0];
+        f.r2 = t[1];
+      }
+      f.z = itf->GetZ1Z2();
+      f.spEqual = spEqual;
+      flat_.push_back(f);
+    }
+  }
+}

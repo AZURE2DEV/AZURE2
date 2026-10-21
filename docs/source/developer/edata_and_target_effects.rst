@@ -454,10 +454,16 @@ The host is calculated first by every loop over the whole data set, and
 calculates the observables of the points mapped onto it
 (``EPoint::Calculate``); ``AZURECalc::PrecalculatePoints`` hands out hosts
 only.  The angle-independent products :math:`Z_1Z_2\,T_1T_2^*` of the
-differential sum are formed once per T-matrix
-(``GenMatrixFunc::CalculateCrossSection``) and reused by every point that
-shares it, with the same arithmetic in the same order.  The results are
-byte-identical with and without mapping.
+differential sum are formed once per T-matrix and summed by Legendre order
+(``GenMatrixFunc::CalculateCrossSection``, from the flat interference table of
+the decay, ``Decay::FlatInterferences``), as are the Coulomb-nuclear
+interference terms of elastic scattering per channel spin and :math:`l`
+(``BuildCoulombInterference``); every point that shares the T-matrix then
+needs one term per order.  Particle exits other than UPOS take the same path.
+The results are byte-identical with and without mapping.  The adjoint does the
+same: the T-matrix cotangents of a differential point are, per pathway, a sum
+over orders of coefficients taken once per T-matrix
+(``AMatrixFunc::TBarProducts``).
 
 Energy-grouped analytic gradient
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

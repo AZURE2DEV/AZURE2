@@ -12,6 +12,16 @@
  * and serves as a container class for the KGroup and the KLGroup vectors and their subsequent reaction pathways.
  */
 
+/// One interference term of the differential cross section, flattened (Decay::FlatInterferences).
+struct FlatInterference {
+  int k;        ///< k-group (1-based)
+  int m1, m2;   ///< pathways (1-based)
+  int l;        ///< Legendre order
+  char r1, r2;  ///< 'R' internal, 'E' external capture pathway
+  double z;     ///< Z1Z2 coefficient
+  bool spEqual; ///< the k-group has equal entrance and exit channel spins
+};
+
 class Decay {
  public:
   /// Build for the exit pair with this 1-based pair number.
@@ -47,6 +57,14 @@ class Decay {
   /// would never look at.
   bool IsCaptureAyBuilt() const;
   void SetCaptureAyBuilt();
+  /*!
+   * The interferences of all k,L groups as one flat table, in the order of
+   * the groups (CNuc::CalcAngularDists builds it after the groups): what the
+   * differential sums run over at every energy, without walking the groups.
+   */
+  const std::vector<FlatInterference> &FlatInterferences() const { return flat_; }
+  /// Rebuild FlatInterferences() from the k,L groups.
+  void BuildFlatInterferences();
 
  private:
   int pair_;
@@ -54,6 +72,7 @@ class Decay {
   std::vector<KLGroup> klgroups_;
   std::vector<CaptureAyTerm> captureAy_;
   bool captureAyBuilt_ = false;
+  std::vector<FlatInterference> flat_;
 };
 
 

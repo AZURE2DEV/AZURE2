@@ -8,6 +8,7 @@
 
 struct GradAccum;
 class JGroup;
+class Decay;
 
 /*!
  * Cotangents of the T-matrix elements of one decay (AMatrixFunc::PointTBar):
@@ -283,6 +284,18 @@ class AMatrixFunc : public GenMatrixFunc {
    * formal ones (GradAccum::fe/fg) otherwise.
    */
   void FormalBilinearAdjoint(int j, const std::vector<BilinearTerm> &terms, GradAccum &accum);
+  /// Cotangent coefficients of one pathway of the differential sum, by Legendre order.
+  struct TBarProduct {
+    int k;
+    int m;
+    char rad;  ///< 'R' internal, 'E' external capture
+    std::vector<complex> q;
+  };
+  /// Builds tbar_products_ for the T-matrix held now (see the definition).
+  bool TBarProducts(Decay *theDecay, bool particleExit);
+  std::vector<TBarProduct> tbar_products_;
+  const Decay *tbar_decay_ = nullptr;
+  bool tbar_particle_ = false;
   /// AZURE_CHANNEL_VERIFY: compare the channel-space solve of J-group j with the level matrix.
   void VerifyChannelSpace(int j, EPoint *point, double inEnergy);
 
