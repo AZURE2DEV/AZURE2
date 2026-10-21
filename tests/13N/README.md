@@ -6,7 +6,11 @@ particle and photon channels, external capture, target integration, energy
 shifts, angular distributions, and polarization.
 
 `run_tests.sh` runs a plain calculation and compares the total and per-segment
-chi-squared against `expected/chiSquared.out`.
+chi-squared against `expected/chiSquared.out`.  `check.sh` starts a fit with
+the analytic gradient and checks it against finite differences: the working
+copies a fit evaluates hold no external-capture amplitudes, which used to crash
+every fit of a project with external capture (fixed in 2dcb846), and the check
+covers every parameter of the model on both gradient paths.
 
 **Re-baselined 2026-09-11.** Segments 1 and 2 carry the gas-target integration,
 and their reference was recorded at a resonance-width multiplier of 5, which
