@@ -292,3 +292,29 @@ endif()
 add_test(NAME scattering_lengths COMMAND scattering_lengths_test)
 set_tests_properties(scattering_lengths PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+# The segment dialogs' observable controls: a short observable list, the
+# Lab / C.M. frame of a differential cross section, the E1 / E2 multipolarity
+# of angle-integrated capture and the "Total capture" exit item, all mapping
+# onto the unchanged isDiff codes, with edit round trips for every code.
+add_executable(segment_observable_test segment_observable_test.cpp)
+set_target_properties(segment_observable_test PROPERTIES AUTOMOC OFF)
+target_include_directories(segment_observable_test PRIVATE
+    ${AZURE2_SOURCE_DIR}/gui/include
+    ${AZURE2_SOURCE_DIR}/include
+)
+target_link_libraries(segment_observable_test PRIVATE
+    ${AZURESETUP_LIBRARIES}
+    ${AZUREAPI_LIBRARIES}
+    AZURE2Core
+    Qt5::Core Qt5::Gui Qt5::Widgets Qt5::Network
+)
+if(USE_QWT)
+    target_link_libraries(segment_observable_test PRIVATE ${QWT_LIBRARIES})
+endif()
+if(USE_ERYA)
+    target_link_libraries(segment_observable_test PRIVATE pugixml srim_utilities)
+endif()
+add_test(NAME segment_observable COMMAND segment_observable_test)
+set_tests_properties(segment_observable PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen")

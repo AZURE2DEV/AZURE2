@@ -20,7 +20,26 @@ void PairKeyCombo::setEntranceKey(int key) {
   if (mode == Exit) refresh();
 }
 
+bool PairKeyCombo::isGammaPair(int key) const {
+  if (!pairsModel || key < 1 || key > pairsModel->getPairs().size()) return false;
+  return pairsModel->getPairs().at(key - 1).pairType == 10;
+}
+
+bool PairKeyCombo::hasGammaPair() const {
+  if (!pairsModel) return false;
+  for (const PairsData &pair : pairsModel->getPairs())
+    if (pair.pairType == 10) return true;
+  return false;
+}
+
+void PairKeyCombo::setTotalCaptureOffered(bool offered) {
+  if (totalCaptureOffered == offered) return;
+  totalCaptureOffered = offered;
+  refresh();
+}
+
 QString PairKeyCombo::labelFor(int key) const {
+  if (key == TotalCapture) return tr("Total capture (all γ pairs)");
   QList<PairsData> pairs = pairsModel ? pairsModel->getPairs() : QList<PairsData>();
   if (key < 1 || key > pairs.size()) return tr("%1: (no such pair)").arg(key);
   const PairsData &pair = pairs.at(key - 1);
@@ -39,7 +58,9 @@ void PairKeyCombo::refresh() {
   int n = pairsModel ? pairsModel->getPairs().size() : 0;
   for (int k = 1; k <= n; k++) addItem(labelFor(k), k);
   if (current > n) addItem(labelFor(current), current);
-  setCurrentIndex(current >= 1 ? findData(current) : -1);
+  const bool withTotal = mode == Exit && totalCaptureOffered && (hasGammaPair() || current == TotalCapture);
+  if (withTotal) addItem(labelFor(TotalCapture), TotalCapture);
+  setCurrentIndex(current >= 1 || (withTotal && current == TotalCapture) ? findData(current) : -1);
   blockSignals(false);
 }
 
@@ -49,6 +70,11 @@ void PairKeyCombo::showPopup() {
 }
 
 void PairKeyCombo::setKey(int key) {
+  if (key == TotalCapture && mode == Exit && totalCaptureOffered) {
+    if (findData(TotalCapture) == -1) addItem(labelFor(TotalCapture), TotalCapture);
+    setCurrentIndex(findData(TotalCapture));
+    return;
+  }
   if (key < 1) {
     setCurrentIndex(-1);
     return;
