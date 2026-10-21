@@ -18,7 +18,12 @@
 #       and the level at the pole point is deflated (AZURE_PROFILE counters);
 #   (c) the analytic gradient (adjoint and residual-Jacobian paths) agrees with
 #       central finite differences of chi^2 in the three formalisms, and with
-#       the level-space gradient to 1e-9 of its largest component.
+#       the level-space gradient to 1e-9 of its largest component; the
+#       Jacobian path (the rows, by free parameter) covers every parameter;
+#   (d) scattering lengths, electron screening and an angular distribution
+#       (bilinear-basis rows): the routes agree and the gradients equal finite
+#       differences -- Brune, Lane-Thomas (also with a level at the threshold)
+#       and Park.
 #
 #   ./tests/channel_space/check.sh path/to/AZURE2
 
@@ -151,6 +156,10 @@ for mode in brune:"" lanethomas:"--no-brune" park:"--use-park"; do
   else
     bad "$tag: gradient vs finite differences, worst $worst of the largest (> $tol)"
   fi
+  # every formalism takes the Jacobian path (rows of the residual Jacobian, AMatrixFunc::LevelBasis)
+  nj="$(awk '$4 != "-"' "$WORK/g_$tag.rows" | wc -l | tr -d ' ')"
+  [ "$nj" -eq "$nrows" ] && ok "$tag: the Jacobian-path gradient was checked for all $nj parameters" \
+    || bad "$tag: the Jacobian-path gradient covers $nj of $nrows parameters"
   # rows of the two runs matched by parameter index
   same="$(awk 'FNR == NR { la[$1] = $2; lj[$1] = $4; next }
               ($1 in la) { a = $2 < 0 ? -$2 : $2; if (a > m) m = a
@@ -170,7 +179,8 @@ done
 # share one forward solve and take the bilinear-basis rows of the residual Jacobian), and electron
 # screening with U_e free on the elastic segments.  The scattering length of 1/2+ is evaluated at the
 # threshold on the channel route; in the Lane-Thomas variant a 1/2+ level sits 0.5 keV above the
-# threshold (a formal pole there).
+# threshold (a formal pole there).  Park: the same model with --use-park (tolerance 1e-4 against finite
+# differences, as in (c)).
 awk '!/^#/ { k++ } !/^#/ && k % 20 == 1 && n < 10 { n++
        for (a = 30; a <= 170; a += 5) printf "%s %d %.6e %.6e\n", $1, a, $3, 0.05 * $3 }' "$HERE/data/elastic_90.dat" > "$WORK/angdist.dat"
 mkext() {  # mkext LEVEL_ENERGY -> the extended model on stdout, the 3.65 MeV 1/2+ level moved to LEVEL_ENERGY
@@ -184,7 +194,7 @@ mkext() {  # mkext LEVEL_ENERGY -> the extended model on stdout, the 3.65 MeV 1/
 mkext 3.650000 > "$WORK/ext.azr"
 mkext 1.944000 > "$WORK/ext_pole.azr"
 export EXTRA_DATA="$WORK/angdist.dat"
-for v in brune:"":ext lanethomas:"--no-brune":ext pole:"--no-brune":ext_pole; do
+for v in brune:"":ext lanethomas:"--no-brune":ext pole:"--no-brune":ext_pole park:"--use-park":ext; do
   tag="${v%%:*}"; rest="${v#*:}"; flags="${rest%%:*}"; model="$WORK/${rest#*:}.azr"
   MODEL="$model" run "sc_$tag" 1 "$flags"
   MODEL="$model" run "sl_$tag" 1 "$flags" AZURE_LEVEL_SPACE=1
@@ -204,7 +214,8 @@ for v in brune:"":ext lanethomas:"--no-brune":ext pole:"--no-brune":ext_pole; do
              END { for (i = 1; i <= NR; i++) { d = g[i] - f[i]; if (d < 0) d = -d; e = j[i] - f[i]; if (e < 0) e = -e
                                                if (d > w) w = d; if (j[i] != "-" && e > w) w = e }
                    if (m > 0) printf "%.2e", w / m; else print "nan" }' "$WORK/dg_$tag.rows")"
-  if [ "$nrows" -ge 10 ] && awk -v w="$worst" 'BEGIN { exit !(w + 0 <= 1e-5 && w != "nan") }'; then
+  tol=1e-5; [ "$tag" = park ] && tol=1e-4
+  if [ "$nrows" -ge 10 ] && awk -v w="$worst" -v t="$tol" 'BEGIN { exit !(w + 0 <= t + 0 && w != "nan") }'; then
     ok "$tag: gradients with the constraints and U_e = finite differences for $nrows parameters (worst $worst of the largest)"
   else
     bad "$tag: gradient vs finite differences, worst $worst of the largest ($nrows parameters)"
@@ -212,7 +223,7 @@ for v in brune:"":ext lanethomas:"--no-brune":ext pole:"--no-brune":ext_pole; do
   # d chi2 / d U_e on its own scale: the Jacobian rows of the angular distribution carry it too
   scr="$(awk '{ sub(/\r$/, "") } /^\[grad-check\] idx .* screening / { for (i = 1; i <= NF; i++) if ($i == "rel" || $i == "relJ") if ($(i + 1) + 0 > m) m = $(i + 1) + 0; n++ }
               END { if (n) printf "%.2e", m; else print "missing" }' "$WORK/dg_$tag/run.log")"
-  if awk -v s="$scr" 'BEGIN { exit !(s != "missing" && s + 0 <= 1e-5) }'; then
+  if awk -v s="$scr" -v t="$tol" 'BEGIN { exit !(s != "missing" && s + 0 <= t + 0) }'; then
     ok "$tag: d chi2/d U_e, adjoint and Jacobian paths = finite differences (rel $scr)"
   else
     bad "$tag: d chi2/d U_e vs finite differences: $scr"

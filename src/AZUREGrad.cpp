@@ -885,7 +885,7 @@ bool GroupRows(AMatrixFunc &amf, const GradItem &it, CNuc *compound, const vecto
   std::vector<Key> keys;
   std::vector<std::vector<int>> keyOf(g);
   double costMembers = 0.0, costBasis = 0.0;
-  const bool levelBasis = mask && !(amf.configure().paramMask & Config::USE_PARK_FORMALISM);
+  const bool levelBasis = (mask != nullptr);
   std::vector<double> freeCount;
   if (levelBasis) {
     freeCount.assign(mask->e.size(), 0.0);

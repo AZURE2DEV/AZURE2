@@ -2517,7 +2517,6 @@ bool AMatrixFunc::TBarProducts(Decay *theDecay, bool particleExit) {
 template <class Add>
 bool AMatrixFunc::LevelAdjoint(EPoint *energyPoint, int j, const std::vector<BilinearTerm> &terms,
                                const FreeMask &mask, const vector_matrix_r *shiftDeriv, Add add) {
-  if (configure().paramMask & Config::USE_PARK_FORMALISM) return false;
   if (j < 1 || j > (int)route_.size() || j > (int)mask.e.size()) return false;
   const bool channel = (route_[j - 1] == kRouteChannel);
   if (!channel && !solver_valid_[j - 1]) return false;
@@ -2526,10 +2525,21 @@ bool AMatrixFunc::LevelAdjoint(EPoint *energyPoint, int j, const std::vector<Bil
   JGroup *jg = compound()->GetJGroup(j);
   const int n = (int)active_levels_[j - 1].size(), nch = jg->NumChannels();
   if (n == 0 || n != jg->NumLevels()) return false;
-  const bool brune = (configure().paramMask & Config::USE_BRUNE_FORMALISM);
+  const bool park = (configure().paramMask & Config::USE_PARK_FORMALISM);
+  const bool brune = !park && (configure().paramMask & Config::USE_BRUNE_FORMALISM);
+  // Brune takes S' from shiftDeriv, Park from the levels (CNuc::CalcShiftFunctions).
   if (brune && !shiftDeriv) return false;
+  // The channels with the shift terms, as LevelMatrixAdjoint takes them.
+  std::vector<char> &particle = la_particle_;
+  particle.assign(nch, 0);
+  for (int c = 0; c < nch; c++) {
+    AChannel *ch = jg->GetChannel(c + 1);
+    particle[c] = park ? (ch->GetRadType() == 'P' && compound()->GetPair(ch->GetPairNum())->GetPType() == 0)
+                       : (brune && ch->GetRadType() == 'P');
+  }
   const ChannelSpace::LevelDerivatives &ld = ChannelSpace::CurrentLevelDerivatives(
-      jg, brune, mask.e[j - 1], mask.g[j - 1], shiftDeriv ? &(*shiftDeriv)[j - 1] : nullptr);
+      jg, park ? 2 : brune ? 1 : 0, particle, mask.e[j - 1], mask.g[j - 1],
+      (brune && shiftDeriv) ? &(*shiftDeriv)[j - 1] : nullptr);
   const ChannelSpace::LevelArrays &arrays = ChannelSpace::CurrentLevelArrays(jg);
   const std::vector<complex> &lam = this->KernelLambda(energyPoint, j);
   const double E = this->InEnergy(energyPoint);
