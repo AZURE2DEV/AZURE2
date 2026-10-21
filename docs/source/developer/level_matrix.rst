@@ -193,21 +193,38 @@ or the level route (fill and LU, as before).  The level route is taken
 - when the J-group has no fewer coupled channels than levels (no gain);
 - when no formal representation exists (non-finite :math:`K, N`: equal
   level energies; RMC widths with the Brune or Park matrix);
-- near a formal pole: :math:`R` is then dominated by one level and the
-  Woodbury form loses digits the level matrix keeps.  With
-  :math:`s_\lambda = \sum_c \Gamma_{\lambda c}^2 |\Lambda_c| / |e_\lambda - E|`
-  it requires :math:`s_\lambda \le 10^3` and
-  :math:`s_\lambda\, \delta e / |e_\lambda - E| \le 10^{-11}`, where
-  :math:`\delta e` is two ulps of the energies involved (the round-off of
-  :math:`e_\lambda - E`); on the pencil route two ulps of
-  :math:`\max|H - ET|` times :math:`|(K - EN)^{-1} G_c|^2 |\Lambda_c|`, the
-  round-off of column :math:`c` of :math:`R\Lambda`, takes its place;
-- when :math:`1 - R\Lambda` is ill-conditioned (pivot ratio below
-  :math:`10^{-10}`);
+- near a formal pole, when the level there is too narrow to be deflated
+  (below).  Near a pole :math:`R` is dominated by one level and the Woodbury
+  form loses digits the level matrix keeps.  With
+  :math:`s_\lambda = \sum_c \Gamma_{\lambda c}^2 |\Lambda_c| / |e_\lambda - E|`,
+  a level with :math:`s_\lambda > 10^2` or
+  :math:`s_\lambda\, \delta e / |e_\lambda - E| > 10^{-11}`
+  (:math:`\delta e`, two ulps of the energies involved, is the round-off of
+  :math:`e_\lambda - E`; :math:`e_\lambda` is kept to extended precision as a
+  sum of two doubles) is *deflated*: left out of :math:`R` and solved with the
+  channels in the bordered system
+
+  .. math::
+
+     \begin{pmatrix} D_p & -\Gamma_p \\ -\Lambda\Gamma_p^T & 1 - \Lambda R \end{pmatrix}
+     \begin{pmatrix} y_p \\ z \end{pmatrix} = \begin{pmatrix} w_p \\ \Lambda\Gamma_r^T D_r^{-1} w_r \end{pmatrix},
+     \qquad y_r = D_r^{-1}(w_r + \Gamma_r z)
+
+  for :math:`y = A_f w` (``SolveBordered``, ``FormalApply``).  The level matrix
+  is taken when more than eight levels would be deflated or when a deflated
+  level is so narrow (width :math:`w_\lambda = \sum_c \Gamma_{\lambda c}^2|\Lambda_c|`)
+  that the round-off of the bordered solve matters,
+  :math:`2\epsilon\, w_\lambda / (|e_\lambda - E|^2 + w_\lambda^2) > 10^{-11}`.
+  On the pencil route there are no levels to deflate: the round-off of column
+  :math:`c` of :math:`R\Lambda`, two ulps of :math:`\max|H - ET|` times
+  :math:`|(K - EN)^{-1} G_c|^2 |\Lambda_c|`, must stay below :math:`10^{-11}`
+  (and :math:`|R\Lambda|` below :math:`10^3`);
+- when the bordered system (:math:`1 - \Lambda R` without deflated levels)
+  is ill-conditioned (pivot ratio below :math:`10^{-10}`);
 - with ``AZURE_LEVEL_SPACE=1``, or for an ``AMatrixFunc`` switched to it with
   ``SetLevelSpaceOnly(true)`` (callers that want the level matrix itself).
 
-The two routes agree to about :math:`10^{-12}` of the largest bilinear form
+The two routes agree to about :math:`10^{-13}` of the largest bilinear form
 (``AZURE_CHANNEL_VERIFY=1`` compares them, and both with an extended-precision
 LU of the level matrix, at every channel-route solve).  The formal
 representation is cached per thread and J-group and rebuilt when a level's

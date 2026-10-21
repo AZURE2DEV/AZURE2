@@ -6,8 +6,8 @@
 # (channel_space.azr): J = 1/2+ with eight levels, 3/2- with seven, each with
 # four channels (p0, two p1 channel spins of a synthetic 2+ state, gamma), and
 # a one-level 5/2+ group that stays in level space.  The elastic data include
-# a point within 1e-9 MeV of a level (a formal pole of the Lane-Thomas level
-# matrix), where the channel route must hand over to the level route.
+# a point at the energy of a level (a formal pole of the Lane-Thomas level
+# matrix), where the channel route must keep that level out of R (deflation).
 #
 #   (a) every output file of "calculate with data" agrees with
 #       AZURE_LEVEL_SPACE=1 to 1e-10 of the largest value of its column --
@@ -15,8 +15,7 @@
 #   (b) the bilinear forms G^T A G of every channel-space solve agree with
 #       the level matrix's to 1e-11 of the largest (AZURE_CHANNEL_VERIFY); the
 #       J-groups with more levels than channels are solved in channel space,
-#       and the near-pole point falls back to the level route (AZURE_PROFILE
-#       counters);
+#       and the level at the pole point is deflated (AZURE_PROFILE counters);
 #   (c) the analytic gradient (adjoint and residual-Jacobian paths) agrees with
 #       central finite differences of chi^2 in the three formalisms, and with
 #       the level-space gradient to 1e-9 of its largest component.
@@ -109,9 +108,9 @@ for mode in brune:"" lanethomas:"--no-brune" park:"--use-park"; do
   nc="$(profile_count "c_$tag" "channel-space solves")"
   [ "$nc" -gt 0 ] && ok "$tag: $nc J-group solves in channel space" || bad "$tag: no channel-space solve"
   if [ "$tag" = lanethomas ]; then
-    np="$(profile_count "c_$tag" "near pole")"
-    [ "$np" -gt 0 ] && ok "$tag: the point at a level energy falls back to the level route ($np solves)" \
-      || bad "$tag: no near-pole fallback"
+    np="$(profile_count "c_$tag" "deflated")"
+    [ "$np" -gt 0 ] && ok "$tag: the point at a level energy is solved with that level deflated ($np solves)" \
+      || bad "$tag: no deflated solve at the level energy"
   fi
 done
 

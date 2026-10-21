@@ -246,8 +246,8 @@ class AMatrixFunc : public GenMatrixFunc {
     std::vector<complex> dinv;   ///< 1/(e_lambda - E), n
     std::vector<complex> lam;    ///< Lambda per channel, nch
     std::vector<complex> lamAct; ///< Lambda over the active channels, m
-    std::vector<complex> R;      ///< R over the active channels, m x m
-    std::vector<complex> lu;     ///< LU factors of 1 - R Lambda
+    std::vector<complex> R;      ///< R over the active channels (without deflated levels), m x m
+    std::vector<complex> lu;     ///< LU factors of the bordered system (1 - Lambda R without deflated levels)
     std::vector<int> piv;
     std::vector<complex> F;      ///< (1 - R Lambda)^-1 R, column b at F[b*m]
     std::vector<char> fcol;      ///< columns of F computed
@@ -255,7 +255,10 @@ class AMatrixFunc : public GenMatrixFunc {
     std::vector<char> uvalid;
     matrix_c inverse;            ///< A, materialized on request
     bool inverseValid = false;
-    vector_c w1, w2, w3;         ///< scratch
+    vector_c w1, w2, w3, w4;     ///< scratch
+    vector_c w3b, wp, wz;        ///< scratch of the bordered solves
+    std::vector<int> defl;       ///< deflated formal levels (near a pole), kept in the bordered system
+    std::vector<char> isDefl;
     std::vector<double> rreal;   ///< scratch of the real R
     std::vector<double> P;       ///< pencil route: LU factors of H - E T (upper Hessenberg)
     std::vector<char> hswap;     ///< pencil route: row interchanges of that LU
@@ -269,6 +272,10 @@ class AMatrixFunc : public GenMatrixFunc {
   bool SolvePencil(int j, double inEnergy);
   /// R of the formal route; false sends the J-group to the level route.
   bool SolveFormal(int j, double inEnergy);
+  /// Solves the bordered system (deflated levels, channels) in place (wp may be null without deflated levels).
+  void SolveBordered(int j, complex *wp, complex *wz);
+  /// y = A_f w on the formal route, in formal-level coordinates.
+  void FormalApply(int j, const complex *w, complex *y);
   /// Column b (position among the active channels) of (1 - R Lambda)^-1 R.
   const complex *FColumn(int j, int b);
   /// A u in channel space (level-space vectors over the active levels).

@@ -9,7 +9,7 @@ times 1 + 0.05 sin(7 E + segment) with 4 % errors (`data/*.dat`, lab frame):
 elastic scattering at 90 and 150 degrees, the inelastic and the capture cross
 section.  The 90-degree set has one point at the energy of the 4.70 MeV 3/2-
 level, a pole of the Lane-Thomas level matrix, where the channel route must
-hand over to the level matrix.
+keep that level out of R and solve it with the channels (deflation).
 
 `run_tests.sh` compares the chi-squared with `expected/chiSquared.out`;
 `check.sh` compares the channel route with `AZURE_LEVEL_SPACE=1` (outputs,

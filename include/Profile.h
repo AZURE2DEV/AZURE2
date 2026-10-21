@@ -46,6 +46,7 @@ enum Counter {
   kLevelRoutePole,     ///< level space: an energy too close to a formal pole
   kLevelRoutePivot,    ///< level space: 1 - R Lambda ill-conditioned
   kLevelRouteForced,   ///< level space: AZURE_LEVEL_SPACE or SetLevelSpaceOnly
+  kDeflated,           ///< channel space with levels near a pole deflated
   kNumCounters
 };
 

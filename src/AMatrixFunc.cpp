@@ -1730,16 +1730,31 @@ bool AMatrixFunc::SolveChannelSpace(int j, EPoint *point, double inEnergy) {
   }
   st.lamAct.resize(m);
   for (int a = 0; a < m; a++) st.lamAct[a] = st.lam[f.act[a]];
+  st.defl.clear();
   if (f.pencil) {
     if (!this->SolvePencil(j, inEnergy)) return false;
   } else if (!this->SolveFormal(j, inEnergy)) return false;
-  // 1 - R Lambda.
-  st.lu.resize((size_t)m * m);
+  // The bordered system of the deflated levels p and the channels:
+  //   S = [ D_p        -Gamma_p    ]
+  //       [ -Lambda Gamma_p^T   1 - Lambda R ]
+  // (just 1 - Lambda R without deflated levels).
+  const int kd = (int)st.defl.size(), ns = kd + m;
+  st.lu.assign((size_t)ns * ns, complex(0.0, 0.0));
+  for (int p = 0; p < kd; p++) {
+    const int lv = st.defl[p];
+    st.lu[(size_t)p * ns + p] = (f.e[lv] - inEnergy) + f.elo[lv];
+    for (int a = 0; a < m; a++) {
+      const double g = f.gamma[(size_t)lv * m + a];
+      st.lu[(size_t)p * ns + kd + a] = -g;
+      st.lu[(size_t)(kd + a) * ns + p] = -st.lamAct[a] * g;
+    }
+  }
   for (int a = 0; a < m; a++)
     for (int b = 0; b < m; b++)
-      st.lu[(size_t)a * m + b] = (a == b ? complex(1.0, 0.0) : complex(0.0, 0.0)) - st.R[(size_t)a * m + b] * st.lamAct[b];
-  st.piv.resize(m);
-  if (m > 0 && !(ChannelSpace::LUFactor(st.lu.data(), st.piv.data(), m) >= ChannelSpace::kMinPivotRatio)) {
+      st.lu[(size_t)(kd + a) * ns + kd + b] =
+          (a == b ? complex(1.0, 0.0) : complex(0.0, 0.0)) - st.lamAct[a] * st.R[(size_t)a * m + b];
+  st.piv.resize(ns);
+  if (ns > 0 && !(ChannelSpace::LUFactor(st.lu.data(), st.piv.data(), ns) >= ChannelSpace::kMinPivotRatio)) {
     AZUREProfile::Count(AZUREProfile::kLevelRoutePivot);
     return false;
   }
@@ -1817,39 +1832,54 @@ bool AMatrixFunc::SolveFormal(int j, double inEnergy) {
   ChannelState &st = chan_[j - 1];
   const int n = f.n, m = (int)f.act.size();
   st.dinv.resize(n);
-  for (int k = 0; k < n; k++) {
-    const complex d = f.e[k] - inEnergy;
-    if (d == complex(0.0, 0.0)) {
-      AZUREProfile::Count(AZUREProfile::kLevelRoutePole);
-      return false;
-    }
-    st.dinv[k] = 1.0 / d;
-  }
-  // Pole guard.  Level k contributes w_k / (e_k - E) to R, w_k = Gamma_k Gamma_k^T,
-  // which the kernel turns into terms of size s_k = |Gamma_k|^2_Lambda / |e_k - E|.
-  // Near a formal pole two things go wrong that the level matrix does not
-  // suffer from: the large terms cancel in (1 - R Lambda)^-1 R (kappa_k = s_k),
-  // and the absolute error of e_k - E (round-off of E and of the formal energy
-  // e_k, a few ulps of the energies involved) becomes a relative error of
-  // s_k (eta_k = s_k de / |e_k - E|).
+  st.isDefl.assign(n, 0);
+  // Levels near a pole are deflated: kept as unknowns of the bordered system
+  // (SolveChannelSpace) rather than summed into R.  Level k contributes
+  // w_k / (e_k - E) to R, w_k = Gamma_k Gamma_k^T, which the kernel turns into
+  // terms of size s_k = |Gamma_k|^2_Lambda / |e_k - E|.  Near a formal pole
+  // two things would go wrong that the level matrix does not suffer from: the
+  // large terms cancel in (1 - Lambda R)^-1 (kappa_k = s_k), and the absolute
+  // error of e_k - E (round-off of E and of the formal energy e_k, a few ulps
+  // of the energies involved) becomes a relative error of s_k
+  // (eta_k = s_k de / |e_k - E|).
   const double de = ChannelSpace::kEnergyUlps * std::numeric_limits<double>::epsilon() * (f.emax + std::fabs(inEnergy));
   for (int k = 0; k < n; k++) {
+    const complex d = (f.e[k] - inEnergy) + f.elo[k];
     const double *g = &f.gamma[(size_t)k * m];
     double w = 0.0;
     for (int a = 0; a < m; a++) w += g[a] * g[a] * std::abs(st.lamAct[a]);
+    st.dinv[k] = (d == complex(0.0, 0.0)) ? complex(0.0, 0.0) : 1.0 / d;
     const double inv = std::abs(st.dinv[k]);
     const double kappa = w * inv;
-    if (!(kappa <= ChannelSpace::kMaxPoleRatio) || !(kappa * de * inv <= ChannelSpace::kMaxPoleError)) {
-      AZUREProfile::Count(AZUREProfile::kLevelRoutePole);
-      return false;
+    if (w > 0.0 && (d == complex(0.0, 0.0) || !(kappa <= ChannelSpace::kDeflateRatio) ||
+                    !(kappa * de * inv <= ChannelSpace::kMaxPoleError))) {
+      // A deflated level is solved with the channels; the round-off of that
+      // solve moves e_k - E by a few ulps of the (unit-scale) bordered system,
+      // which matters within the level's width w_k: relative error
+      // ~ eps w_k / (|e_k - E|^2 + w_k^2).  Narrower than that, the level
+      // matrix is taken.
+      const double ad = std::abs(d);
+      if (!(ChannelSpace::kEnergyUlps * std::numeric_limits<double>::epsilon() * w / (ad * ad + w * w) <=
+            ChannelSpace::kMaxPoleError)) {
+        AZUREProfile::Count(AZUREProfile::kLevelRoutePole);
+        return false;
+      }
+      st.isDefl[k] = 1;
+      st.defl.push_back(k);
     }
   }
+  if ((int)st.defl.size() > ChannelSpace::kMaxDeflated) {
+    AZUREProfile::Count(AZUREProfile::kLevelRoutePole);
+    return false;
+  }
+  if (!st.defl.empty()) AZUREProfile::Count(AZUREProfile::kDeflated);
   // R = Gamma^T D^-1 Gamma, symmetric; real unless the formal energies are complex.
   st.R.assign((size_t)m * m, complex(0.0, 0.0));
   if (!f.complexE) {
     std::vector<double> &rr = st.rreal;
     rr.assign((size_t)m * m, 0.0);
     for (int k = 0; k < n; k++) {
+      if (st.isDefl[k]) continue;
       const double w = std::real(st.dinv[k]);
       const double *g = &f.gamma[(size_t)k * m];
       for (int a = 0; a < m; a++) {
@@ -1863,6 +1893,7 @@ bool AMatrixFunc::SolveFormal(int j, double inEnergy) {
       for (int b = a; b < m; b++) st.R[(size_t)a * m + b] = st.R[(size_t)b * m + a] = rr[(size_t)a * m + b];
   } else {
     for (int k = 0; k < n; k++) {
+      if (st.isDefl[k]) continue;
       const complex w = st.dinv[k];
       const double *g = &f.gamma[(size_t)k * m];
       for (int a = 0; a < m; a++) {
@@ -1879,23 +1910,89 @@ bool AMatrixFunc::SolveFormal(int j, double inEnergy) {
 }
 
 /*!
- * Column b of \f$F = (1 - R\Lambda)^{-1} R = \Gamma^T A_f \Gamma = G^T A G\f$.
+ * Solves the bordered system of SolveChannelSpace for the right-hand side
+ * (wp over the deflated levels, wz over the channels), in place: on return wp
+ * holds y_p and wz holds z = Lambda Gamma^T y.
+ */
+void AMatrixFunc::SolveBordered(int j, complex *wp, complex *wz) {
+  ChannelState &st = chan_[j - 1];
+  const int kd = (int)st.defl.size(), m = (int)(*formal_[j - 1]).act.size(), ns = kd + m;
+  if (ns == 0) return;
+  vector_c &b = st.w3b;
+  b.resize(ns);
+  for (int p = 0; p < kd; p++) b[p] = wp[p];
+  for (int a = 0; a < m; a++) b[kd + a] = wz[a];
+  ChannelSpace::LUSolve(st.lu.data(), st.piv.data(), ns, b.data());
+  for (int p = 0; p < kd; p++) wp[p] = b[p];
+  for (int a = 0; a < m; a++) wz[a] = b[kd + a];
+}
+
+/*!
+ * Column b of \f$F = \Gamma^T A_f \Gamma = G^T A G\f$: with the deflated levels p,
+ * \f$F_b = \Gamma_p^T y_p + R_b + R z\f$ from the bordered system with
+ * right-hand side \f$(\Gamma_{p b}, \Lambda R_b)\f$ (without deflated levels
+ * \f$(1 - R\Lambda)^{-1} R_b\f$).
  */
 const complex *AMatrixFunc::FColumn(int j, int b) {
   ChannelState &st = chan_[j - 1];
-  const int m = (int)(*formal_[j - 1]).act.size();
+  const ChannelSpace::FormalLevels &f = (*formal_[j - 1]);
+  const int m = (int)f.act.size(), kd = (int)st.defl.size();
   complex *col = &st.F[(size_t)b * m];
   if (!st.fcol[b]) {
-    for (int a = 0; a < m; a++) col[a] = st.R[(size_t)a * m + b];
-    ChannelSpace::LUSolve(st.lu.data(), st.piv.data(), m, col);
+    vector_c &yp = st.wp, &z = st.wz;
+    yp.resize(kd);
+    z.resize(m);
+    for (int p = 0; p < kd; p++) yp[p] = f.gamma[(size_t)st.defl[p] * m + b];
+    for (int a = 0; a < m; a++) z[a] = st.lamAct[a] * st.R[(size_t)a * m + b];
+    this->SolveBordered(j, yp.data(), z.data());
+    for (int a = 0; a < m; a++) {
+      complex s = st.R[(size_t)a * m + b];
+      for (int c = 0; c < m; c++) s += st.R[(size_t)a * m + c] * z[c];
+      for (int p = 0; p < kd; p++) s += f.gamma[(size_t)st.defl[p] * m + a] * yp[p];
+      col[a] = s;
+    }
     st.fcol[b] = 1;
   }
   return col;
 }
 
 /*!
- * \f$A u = V A_f V^T u\f$ with
- * \f$A_f = D^{-1} + D^{-1}\Gamma\,\Lambda(1 - R\Lambda)^{-1}\,\Gamma^T D^{-1}\f$.
+ * \f$y = A_f w\f$ on the formal route (formal-level coordinates): with
+ * \f$t = \Gamma_r^T D_r^{-1} w_r\f$ the bordered system with right-hand side
+ * \f$(w_p, \Lambda t)\f$ gives \f$y_p\f$ and \f$z\f$, and
+ * \f$y_r = D_r^{-1}(w_r + \Gamma_r z)\f$.
+ */
+void AMatrixFunc::FormalApply(int j, const complex *w, complex *y) {
+  const ChannelSpace::FormalLevels &f = (*formal_[j - 1]);
+  ChannelState &st = chan_[j - 1];
+  const int n = f.n, m = (int)f.act.size(), kd = (int)st.defl.size();
+  vector_c &yp = st.wp, &z = st.wz;
+  yp.resize(kd);
+  z.assign(m, complex(0.0, 0.0));
+  for (int p = 0; p < kd; p++) yp[p] = w[st.defl[p]];
+  for (int k = 0; k < n; k++) {
+    if (st.isDefl[k]) continue;
+    const complex t = st.dinv[k] * w[k];
+    if (t == complex(0.0, 0.0)) continue;
+    const double *g = &f.gamma[(size_t)k * m];
+    for (int a = 0; a < m; a++) z[a] += g[a] * t;
+  }
+  for (int a = 0; a < m; a++) z[a] *= st.lamAct[a];
+  this->SolveBordered(j, yp.data(), z.data());
+  for (int k = 0; k < n; k++) {
+    if (st.isDefl[k]) continue;
+    const double *g = &f.gamma[(size_t)k * m];
+    complex s = w[k];
+    for (int a = 0; a < m; a++) s += g[a] * z[a];
+    y[k] = st.dinv[k] * s;
+  }
+  for (int p = 0; p < kd; p++) y[st.defl[p]] = yp[p];
+}
+
+/*!
+ * \f$A u\f$ in channel space: \f$V A_f V^T u\f$ on the formal route
+ * (FormalApply), \f$P^{-1}u + P^{-1}G z\f$ with \f$(1 - \Lambda R) z = \Lambda G^T P^{-1} u\f$
+ * on the pencil route (P = K - E N).
  */
 void AMatrixFunc::ApplyA(int j, const complex *u, complex *out) {
   const ChannelSpace::FormalLevels &f = (*formal_[j - 1]);
@@ -1903,41 +2000,38 @@ void AMatrixFunc::ApplyA(int j, const complex *u, complex *out) {
   const int n = f.n, m = (int)f.act.size();
   vector_c &w = st.w1, &q = st.w2;
   if (f.pencil) {
-    // A = P^-1 + P^-1 G Lambda (1 - R Lambda)^-1 G^T P^-1 with P = K - E N =
-    // Qt^T (H - E T) Z^T:  P^-1 u = Z (H - E T)^-1 Qt u,  P^-1 G = Z X,
+    // P = Qt^T (H - E T) Z^T:  P^-1 u = Z (H - E T)^-1 Qt u,  P^-1 G = Z X,
     // G^T P^-1 u = X^T Z^T u.
     std::vector<double> &re = st.rreal;
     re.assign((size_t)n * 4, 0.0);
-    double *w = re.data(), *zu = re.data() + 2 * (size_t)n;  // n x 2 each: Qt u and Z^T u
+    double *qu = re.data(), *zu = re.data() + 2 * (size_t)n;  // n x 2 each: Qt u and Z^T u
     for (int i = 0; i < n; i++) {
       const double *qt = &f.Qt[(size_t)i * n];
       double qr = 0.0, qi = 0.0, zr = 0.0, zi = 0.0;
       for (int k = 0; k < n; k++) {
         qr += qt[k] * std::real(u[k]);
         qi += qt[k] * std::imag(u[k]);
-        const double z = f.Z[(size_t)k * n + i];
-        zr += z * std::real(u[k]);
-        zi += z * std::imag(u[k]);
+        const double zz = f.Z[(size_t)k * n + i];
+        zr += zz * std::real(u[k]);
+        zi += zz * std::imag(u[k]);
       }
-      w[2 * i] = qr;
-      w[2 * i + 1] = qi;
+      qu[2 * i] = qr;
+      qu[2 * i + 1] = qi;
       zu[2 * i] = zr;
       zu[2 * i + 1] = zi;
     }
-    ChannelSpace::HessenbergSolve(st.P.data(), st.hswap.data(), n, w, 2);
+    ChannelSpace::HessenbergSolve(st.P.data(), st.hswap.data(), n, qu, 2);
     q.resize(m);
     for (int a = 0; a < m; a++) {
       complex s(0.0, 0.0);
       for (int k = 0; k < n; k++) s += st.X[(size_t)k * m + a] * complex(zu[2 * k], zu[2 * k + 1]);
-      q[a] = s;
+      q[a] = st.lamAct[a] * s;
     }
-    if (m > 0) ChannelSpace::LUSolve(st.lu.data(), st.piv.data(), m, q.data());
-    for (int a = 0; a < m; a++) q[a] *= st.lamAct[a];
-    // y = (H - E T)^-1 Qt u + X q, then out = Z y.
+    this->SolveBordered(j, nullptr, q.data());
     vector_c &y = st.w1;
     y.resize(n);
     for (int k = 0; k < n; k++) {
-      complex s(w[2 * k], w[2 * k + 1]);
+      complex s(qu[2 * k], qu[2 * k + 1]);
       for (int a = 0; a < m; a++) s += st.X[(size_t)k * m + a] * q[a];
       y[k] = s;
     }
@@ -1959,27 +2053,16 @@ void AMatrixFunc::ApplyA(int j, const complex *u, complex *out) {
       const double *vr = &f.V[(size_t)r * n];
       for (int k = 0; k < n; k++) w[k] += vr[k] * ur;
     }
-  for (int k = 0; k < n; k++) w[k] *= st.dinv[k];
-  q.assign(m, complex(0.0, 0.0));
-  for (int k = 0; k < n; k++) {
-    const double *g = &f.gamma[(size_t)k * m];
-    for (int a = 0; a < m; a++) q[a] += g[a] * w[k];
-  }
-  if (m > 0) ChannelSpace::LUSolve(st.lu.data(), st.piv.data(), m, q.data());
-  for (int a = 0; a < m; a++) q[a] *= st.lamAct[a];
-  for (int k = 0; k < n; k++) {
-    const double *g = &f.gamma[(size_t)k * m];
-    complex s(0.0, 0.0);
-    for (int a = 0; a < m; a++) s += g[a] * q[a];
-    w[k] += st.dinv[k] * s;
-  }
+  vector_c &y = st.w4;
+  y.resize(n);
+  this->FormalApply(j, w.data(), y.data());
   if (f.identity)
-    for (int k = 0; k < n; k++) out[k] = w[k];
+    for (int k = 0; k < n; k++) out[k] = y[k];
   else
     for (int r = 0; r < n; r++) {
       const double *vr = &f.V[(size_t)r * n];
       complex s(0.0, 0.0);
-      for (int k = 0; k < n; k++) s += vr[k] * w[k];
+      for (int k = 0; k < n; k++) s += vr[k] * y[k];
       out[r] = s;
     }
 }
@@ -1990,53 +2073,17 @@ void AMatrixFunc::ApplyA(int j, const complex *u, complex *out) {
  */
 complex AMatrixFunc::ChannelBilinear(int j, const complex *u, const complex *v) {
   const ChannelSpace::FormalLevels &f = (*formal_[j - 1]);
-  ChannelState &st = chan_[j - 1];
-  const int n = f.n, m = (int)f.act.size();
-  if (f.pencil) {
-    vector_c av(n);
-    this->ApplyA(j, v, av.data());
-    complex s(0.0, 0.0);
-    for (int k = 0; k < n; k++) s += u[k] * av[k];
-    return s;
-  }
-  vector_c &wu = st.w1, &wv = st.w2, &pq = st.w3;
-  wu.assign(n, complex(0.0, 0.0));
-  wv.assign(n, complex(0.0, 0.0));
-  if (f.identity)
-    for (int k = 0; k < n; k++) {
-      wu[k] = u[k];
-      wv[k] = v[k];
-    }
-  else
-    for (int r = 0; r < n; r++) {
-      const double *vr = &f.V[(size_t)r * n];
-      for (int k = 0; k < n; k++) {
-        wu[k] += vr[k] * u[r];
-        wv[k] += vr[k] * v[r];
-      }
-    }
+  const int n = f.n;
+  vector_c av(n);
+  this->ApplyA(j, v, av.data());
   complex s(0.0, 0.0);
-  for (int k = 0; k < n; k++) {
-    s += wu[k] * wv[k] * st.dinv[k];
-    wu[k] *= st.dinv[k];
-    wv[k] *= st.dinv[k];
-  }
-  pq.assign((size_t)2 * m, complex(0.0, 0.0));
-  complex *p = pq.data(), *q = pq.data() + m;
-  for (int k = 0; k < n; k++) {
-    const double *g = &f.gamma[(size_t)k * m];
-    for (int a = 0; a < m; a++) {
-      p[a] += g[a] * wu[k];
-      q[a] += g[a] * wv[k];
-    }
-  }
-  if (m > 0) ChannelSpace::LUSolve(st.lu.data(), st.piv.data(), m, q);
-  for (int a = 0; a < m; a++) s += p[a] * st.lamAct[a] * q[a];
+  for (int k = 0; k < n; k++) s += u[k] * av[k];
   return s;
 }
 
 /*!
- * \f$u_c = A_f \Gamma_c = D^{-1}\Gamma (e_c + \Lambda F e_c)\f$ over the formal levels.
+ * \f$u_c = A_f \Gamma_c\f$ over the formal levels (zero for a channel without
+ * widths), cached per energy.
  */
 const vector_c &AMatrixFunc::FormalSolve(int j, int ch0) {
   const ChannelSpace::FormalLevels &f = (*formal_[j - 1]);
@@ -2048,17 +2095,10 @@ const vector_c &AMatrixFunc::FormalSolve(int j, int ch0) {
     u.assign(n, complex(0.0, 0.0));
     const int b = f.pos[ch0];
     if (b >= 0) {
-      const complex *Fb = this->FColumn(j, b);
-      vector_c &y = st.w2;
-      y.resize(m);
-      for (int a = 0; a < m; a++) y[a] = st.lamAct[a] * Fb[a];
-      y[b] += 1.0;
-      for (int k = 0; k < n; k++) {
-        const double *g = &f.gamma[(size_t)k * m];
-        complex s(0.0, 0.0);
-        for (int a = 0; a < m; a++) s += g[a] * y[a];
-        u[k] = st.dinv[k] * s;
-      }
+      vector_c &w = st.w2;
+      w.resize(n);
+      for (int k = 0; k < n; k++) w[k] = f.gamma[(size_t)k * m + b];
+      this->FormalApply(j, w.data(), u.data());
     }
     st.uvalid[ch0] = 1;
   }

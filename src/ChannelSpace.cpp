@@ -17,6 +17,8 @@ namespace ChannelSpace {
 const double kMaxPoleRatio = 1.0e3;
 const double kMinPivotRatio = 1.0e-10;
 const double kMaxPoleError = 1.0e-11;
+const double kDeflateRatio = 1.0e2;
+const int kMaxDeflated = 8;
 const double kEnergyUlps = 2.0;
 
 bool Enabled() {
@@ -480,6 +482,7 @@ bool Update(JGroup *jg, const std::vector<int> &levels, const Config &configure,
     f.identity = true;
     f.V.clear();
     f.e.resize(n);
+    f.elo.assign(n, 0.0);
     for (int i = 0; i < n; i++) {
       complex ei(E[i], 0.0);
       if (rmc)
@@ -642,9 +645,11 @@ bool Update(JGroup *jg, const std::vector<int> &levels, const Config &configure,
   f.H.clear();
   f.T.clear();
   f.e.resize(n);
+  f.elo.assign(n, 0.0);
   f.emax = 0.0;
   for (int i = 0; i < n; i++) {
     f.e[i] = (double)e[i];
+    f.elo[i] = (double)(e[i] - (ldouble)(double)e[i]);
     f.emax = std::max(f.emax, std::abs(f.e[i]));
   }
   f.V.resize((size_t)n * n);

@@ -49,6 +49,10 @@ bool Enabled();
 
 /// Largest \f$\kappa_\lambda = |e_\lambda - E|^{-1} \sum_c \Gamma_{\lambda c}^2 |\Lambda_c|\f$ the channel route accepts.
 extern const double kMaxPoleRatio;
+/// Levels with a larger |Gamma_k|^2_Lambda / |e_k - E| are deflated (kept out of R, in the bordered system).
+extern const double kDeflateRatio;
+/// At most this many deflated levels; more send the J-group to the level route.
+extern const int kMaxDeflated;
 /// Largest relative error of a level's term in R, from the round-off of \f$e_\lambda - E\f$, the channel route accepts.
 extern const double kMaxPoleError;
 /// Round-off of \f$e_\lambda - E\f$, in units of epsilon times the largest energy involved.
@@ -79,6 +83,10 @@ struct FormalLevels {
   bool complexE = false;   ///< formal energies complex (RMC photon widths)
   int status = 0;        ///< why not usable: 0 usable, 1 size, 2 set-up (eigen-decomposition)
   std::vector<complex> e;  ///< formal energies (n)
+  /// Low part of the formal energies (extended-precision eigenvalue minus e):
+  /// e - E is formed as (e - E) + elo, so that a narrow resonance at a data
+  /// energy sees its distance to E as accurately as on the level route.
+  std::vector<double> elo;
   double emax = 0.0;       ///< largest |e|
   std::vector<double> V;   ///< n x n row-major; column k is eigenvector k
   std::vector<double> gcut;  ///< level-space widths with the 1e-12 cutoff, n x nch row-major
