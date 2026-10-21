@@ -1760,35 +1760,49 @@ bool AMatrixFunc::SolvePencil(int j, double inEnergy) {
   const ChannelSpace::FormalLevels &f = (*formal_[j - 1]);
   ChannelState &st = chan_[j - 1];
   const int n = f.n, m = (int)f.act.size();
-  st.P.resize((size_t)n * n);
-  // Formed in extended precision: K and E N are much larger than their
-  // difference near a formal pole.
-  for (size_t k = 0; k < st.P.size(); k++) st.P[k] = (double)(f.K[k] - (long double)inEnergy * f.N[k]);
-  st.ppiv.resize(n);
-  const double ratio = ChannelSpace::LUFactorReal(st.P.data(), st.ppiv.data(), n);
+  // H - E T, formed in extended precision: H and E T are much larger than
+  // their difference near a formal pole.  Upper Hessenberg.
+  st.P.assign((size_t)n * n, 0.0);
+  const long double e = inEnergy;
+  double pmax = 0.0;
+  for (int i = 0; i < n; i++)
+    for (int k = std::max(0, i - 1); k < n; k++) {
+      const double v = (double)(f.H[(size_t)i * n + k] - e * f.T[(size_t)i * n + k]);
+      st.P[(size_t)i * n + k] = v;
+      pmax = std::max(pmax, std::fabs(v));
+    }
+  st.hswap.resize(n);
+  const double ratio = ChannelSpace::HessenbergLU(st.P.data(), st.hswap.data(), n);
   if (!(ratio > 0.0)) {
     AZUREProfile::Count(AZUREProfile::kLevelRoutePole);
     return false;
   }
-  st.X.assign(f.gamma.begin(), f.gamma.end());
-  ChannelSpace::LUSolveReal(st.P.data(), st.ppiv.data(), n, st.X.data(), m);
+  // X = (H - E T)^-1 Qt G;  R = (Z^T G)^T X  (= G^T (K - E N)^-1 G).
+  st.X.assign(f.gq.begin(), f.gq.end());
+  ChannelSpace::HessenbergSolve(st.P.data(), st.hswap.data(), n, st.X.data(), m);
   st.R.assign((size_t)m * m, complex(0.0, 0.0));
-  double rl = 0.0;
-  for (int a = 0; a < m; a++)
+  double rl = 0.0, x2max = 0.0;
+  for (int a = 0; a < m; a++) {
+    double x2 = 0.0;
+    for (int k = 0; k < n; k++) x2 += st.X[(size_t)k * m + a] * st.X[(size_t)k * m + a];
+    x2max = std::max(x2max, x2 * std::abs(st.lamAct[a]));
     for (int b = a; b < m; b++) {
       double sab = 0.0, sba = 0.0;
       for (int k = 0; k < n; k++) {
-        sab += f.gamma[(size_t)k * m + a] * st.X[(size_t)k * m + b];
-        sba += f.gamma[(size_t)k * m + b] * st.X[(size_t)k * m + a];
+        sab += f.gz[(size_t)k * m + a] * st.X[(size_t)k * m + b];
+        sba += f.gz[(size_t)k * m + b] * st.X[(size_t)k * m + a];
       }
       const double r = 0.5 * (sab + sba);
       st.R[(size_t)a * m + b] = st.R[(size_t)b * m + a] = r;
       rl = std::max(rl, std::fabs(r) * std::max(std::abs(st.lamAct[a]), std::abs(st.lamAct[b])));
     }
-  // Estimated relative error of R: a few ulps times the condition of the
-  // pencil, estimated by its pivot ratio.
-  const double err = ChannelSpace::kEnergyUlps * std::numeric_limits<double>::epsilon() / ratio;
-  if (!(rl <= ChannelSpace::kMaxPoleRatio) || !(err * rl <= ChannelSpace::kMaxPoleError)) {
+  }
+  // Round-off of R Lambda: the pencil is known to a few ulps of its entries,
+  // dP, and dR = -G^T P^-1 dP P^-1 G, so the column of channel a of R Lambda
+  // is uncertain by about ulps eps |P| |P^-1 G_a|^2 |Lambda_a| -- the analogue
+  // of eta on the formal route (P^-1 G = Z X).
+  const double err = ChannelSpace::kEnergyUlps * std::numeric_limits<double>::epsilon() * pmax * x2max;
+  if (!(rl <= ChannelSpace::kMaxPoleRatio) || !(err <= ChannelSpace::kMaxPoleError)) {
     AZUREProfile::Count(AZUREProfile::kLevelRoutePole);
     return false;
   }
@@ -1889,27 +1903,49 @@ void AMatrixFunc::ApplyA(int j, const complex *u, complex *out) {
   const int n = f.n, m = (int)f.act.size();
   vector_c &w = st.w1, &q = st.w2;
   if (f.pencil) {
-    // A = P^-1 + X Lambda (1 - R Lambda)^-1 X^T,  X = P^-1 G.
+    // A = P^-1 + P^-1 G Lambda (1 - R Lambda)^-1 G^T P^-1 with P = K - E N =
+    // Qt^T (H - E T) Z^T:  P^-1 u = Z (H - E T)^-1 Qt u,  P^-1 G = Z X,
+    // G^T P^-1 u = X^T Z^T u.
     std::vector<double> &re = st.rreal;
-    re.assign((size_t)n * 2, 0.0);
-    for (int k = 0; k < n; k++) {
-      re[(size_t)k * 2] = std::real(u[k]);
-      re[(size_t)k * 2 + 1] = std::imag(u[k]);
+    re.assign((size_t)n * 4, 0.0);
+    double *w = re.data(), *zu = re.data() + 2 * (size_t)n;  // n x 2 each: Qt u and Z^T u
+    for (int i = 0; i < n; i++) {
+      const double *qt = &f.Qt[(size_t)i * n];
+      double qr = 0.0, qi = 0.0, zr = 0.0, zi = 0.0;
+      for (int k = 0; k < n; k++) {
+        qr += qt[k] * std::real(u[k]);
+        qi += qt[k] * std::imag(u[k]);
+        const double z = f.Z[(size_t)k * n + i];
+        zr += z * std::real(u[k]);
+        zi += z * std::imag(u[k]);
+      }
+      w[2 * i] = qr;
+      w[2 * i + 1] = qi;
+      zu[2 * i] = zr;
+      zu[2 * i + 1] = zi;
     }
-    ChannelSpace::LUSolveReal(st.P.data(), st.ppiv.data(), n, re.data(), 2);
+    ChannelSpace::HessenbergSolve(st.P.data(), st.hswap.data(), n, w, 2);
     q.resize(m);
-    // q = X^T u = G^T P^-1 u (P symmetric).
     for (int a = 0; a < m; a++) {
       complex s(0.0, 0.0);
-      for (int k = 0; k < n; k++) s += st.X[(size_t)k * m + a] * u[k];
+      for (int k = 0; k < n; k++) s += st.X[(size_t)k * m + a] * complex(zu[2 * k], zu[2 * k + 1]);
       q[a] = s;
     }
     if (m > 0) ChannelSpace::LUSolve(st.lu.data(), st.piv.data(), m, q.data());
     for (int a = 0; a < m; a++) q[a] *= st.lamAct[a];
+    // y = (H - E T)^-1 Qt u + X q, then out = Z y.
+    vector_c &y = st.w1;
+    y.resize(n);
     for (int k = 0; k < n; k++) {
-      complex s(re[(size_t)k * 2], re[(size_t)k * 2 + 1]);
+      complex s(w[2 * k], w[2 * k + 1]);
       for (int a = 0; a < m; a++) s += st.X[(size_t)k * m + a] * q[a];
-      out[k] = s;
+      y[k] = s;
+    }
+    for (int r = 0; r < n; r++) {
+      const double *zr = &f.Z[(size_t)r * n];
+      complex s(0.0, 0.0);
+      for (int k = 0; k < n; k++) s += zr[k] * y[k];
+      out[r] = s;
     }
     return;
   }

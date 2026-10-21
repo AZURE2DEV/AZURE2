@@ -257,9 +257,9 @@ class AMatrixFunc : public GenMatrixFunc {
     bool inverseValid = false;
     vector_c w1, w2, w3;         ///< scratch
     std::vector<double> rreal;   ///< scratch of the real R
-    std::vector<double> P;       ///< pencil route: LU factors of K - E N
-    std::vector<int> ppiv;
-    std::vector<double> X;       ///< pencil route: (K - E N)^-1 G over the active channels, n x m
+    std::vector<double> P;       ///< pencil route: LU factors of H - E T (upper Hessenberg)
+    std::vector<char> hswap;     ///< pencil route: row interchanges of that LU
+    std::vector<double> X;       ///< pencil route: (H - E T)^-1 Qt G over the active channels, n x m
   };
   /// Level matrix of J-group j at this energy, into a_inv_matrices_ (level route).
   void FillLevelMatrix(int j, EPoint *point, double inEnergy);

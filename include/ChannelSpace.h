@@ -71,7 +71,10 @@ struct FormalLevels {
    * factorization.  K and N are kept for it, and `gamma` holds G.
    */
   bool pencil = false;
-  std::vector<long double> K, N;
+  /// Pencil route: Qt K Z = H (upper Hessenberg), Qt N Z = T (upper triangular).
+  std::vector<long double> H, T;
+  std::vector<double> Qt, Z;  ///< n x n row-major
+  std::vector<double> gq, gz; ///< Qt G and Z^T G over the active channels, n x m
   bool adjointOK = false;  ///< formal energies separated enough for the eigen-decomposition adjoint
   bool complexE = false;   ///< formal energies complex (RMC photon widths)
   int status = 0;        ///< why not usable: 0 usable, 1 size, 2 set-up (eigen-decomposition)
@@ -118,6 +121,11 @@ bool Update(JGroup *jg, const std::vector<int> &levels, const Config &configure,
 double LUFactor(complex *a, int *piv, int m);
 /// Solves with the factors of LUFactor, overwriting `b`.
 void LUSolve(const complex *lu, const int *piv, int m, complex *b);
+/// LU factorization with partial pivoting of an upper Hessenberg n x n row-major
+/// matrix, in place; returns the pivot ratio (0 if a pivot vanishes).
+double HessenbergLU(double *a, char *swapped, int n);
+/// Solves with the factors of HessenbergLU for `nrhs` right-hand sides (b is n x nrhs row-major).
+void HessenbergSolve(const double *lu, const char *swapped, int n, double *b, int nrhs);
 /// Real LUFactor.
 double LUFactorReal(double *a, int *piv, int m);
 /// Solves with the factors of LUFactorReal for `nrhs` right-hand sides (b is m x nrhs row-major).

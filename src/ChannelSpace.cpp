@@ -90,6 +90,57 @@ void LUSolve(const complex *lu, const int *piv, int m, complex *b) {
   }
 }
 
+double HessenbergLU(double *a, char *swapped, int n) {
+  double pmin = 0.0, pmax = 0.0;
+  for (int k = 0; k < n; k++) {
+    double *rowK = &a[(size_t)k * n];
+    swapped[k] = 0;
+    if (k + 1 < n) {
+      double *rowN = &a[(size_t)(k + 1) * n];
+      if (std::fabs(rowN[k]) > std::fabs(rowK[k])) {
+        for (int j = k; j < n; j++) std::swap(rowK[j], rowN[j]);
+        swapped[k] = 1;
+      }
+    }
+    const double mod = std::fabs(rowK[k]);
+    if (!(mod > 0.0) || !std::isfinite(mod)) return 0.0;
+    if (k == 0) pmin = pmax = mod;
+    pmin = std::min(pmin, mod);
+    pmax = std::max(pmax, mod);
+    if (k + 1 < n) {
+      double *rowN = &a[(size_t)(k + 1) * n];
+      const double l = rowN[k] / rowK[k];
+      rowN[k] = l;
+      if (l != 0.0)
+        for (int j = k + 1; j < n; j++) rowN[j] -= l * rowK[j];
+    }
+  }
+  return n > 0 ? pmin / pmax : 1.0;
+}
+
+void HessenbergSolve(const double *lu, const char *swapped, int n, double *b, int nrhs) {
+  for (int k = 0; k + 1 < n; k++) {
+    double *bk = &b[(size_t)k * nrhs], *bn = &b[(size_t)(k + 1) * nrhs];
+    if (swapped[k])
+      for (int r = 0; r < nrhs; r++) std::swap(bk[r], bn[r]);
+    const double l = lu[(size_t)(k + 1) * n + k];
+    if (l != 0.0)
+      for (int r = 0; r < nrhs; r++) bn[r] -= l * bk[r];
+  }
+  for (int i = n - 1; i >= 0; i--) {
+    const double *row = &lu[(size_t)i * n];
+    double *bi = &b[(size_t)i * nrhs];
+    for (int j = i + 1; j < n; j++) {
+      const double u = row[j];
+      if (u == 0.0) continue;
+      const double *bj = &b[(size_t)j * nrhs];
+      for (int r = 0; r < nrhs; r++) bi[r] -= u * bj[r];
+    }
+    const double inv = 1.0 / row[i];
+    for (int r = 0; r < nrhs; r++) bi[r] *= inv;
+  }
+}
+
 double LUFactorReal(double *a, int *piv, int m) {
   double pmin = 0.0, pmax = 0.0;
   for (int k = 0; k < m; k++) {
@@ -166,6 +217,81 @@ bool Debug() {
 inline double Cut(double g) { return std::fabs(g) < 1.0e-12 ? 0.0 : g; }
 
 typedef long double ldouble;
+
+/*!
+ * Hessenberg-triangular reduction of the pencil (A, B) (Golub and Van Loan,
+ * Algorithm 7.7.1): Qt A Z = H upper Hessenberg, Qt B Z = T upper triangular,
+ * Qt and Z orthogonal.  A and B (n x n row-major) are overwritten with H and T.
+ */
+void HessenbergTriangular(std::vector<ldouble> &A, std::vector<ldouble> &B, int n, std::vector<ldouble> &Qt,
+                          std::vector<ldouble> &Z) {
+  auto at = [n](std::vector<ldouble> &M, int i, int j) -> ldouble & { return M[(size_t)i * n + j]; };
+  Qt.assign((size_t)n * n, 0.0L);
+  Z.assign((size_t)n * n, 0.0L);
+  for (int i = 0; i < n; i++) at(Qt, i, i) = at(Z, i, i) = 1.0L;
+  // B = Q R by Householder reflections; A and Qt follow from the left.
+  std::vector<ldouble> v(n);
+  for (int k = 0; k + 1 < n; k++) {
+    ldouble norm = 0.0L;
+    for (int i = k; i < n; i++) norm += at(B, i, k) * at(B, i, k);
+    norm = std::sqrt(norm);
+    if (norm == 0.0L) continue;
+    const ldouble alpha = (at(B, k, k) > 0.0L) ? -norm : norm;
+    for (int i = k; i < n; i++) v[i] = at(B, i, k);
+    v[k] -= alpha;
+    ldouble vv = 0.0L;
+    for (int i = k; i < n; i++) vv += v[i] * v[i];
+    if (vv == 0.0L) continue;
+    auto reflect = [&](std::vector<ldouble> &M, int c0) {
+      for (int c = c0; c < n; c++) {
+        ldouble d = 0.0L;
+        for (int i = k; i < n; i++) d += v[i] * at(M, i, c);
+        d = 2.0L * d / vv;
+        for (int i = k; i < n; i++) at(M, i, c) -= d * v[i];
+      }
+    };
+    reflect(B, k);
+    reflect(A, 0);
+    reflect(Qt, 0);
+    for (int i = k + 1; i < n; i++) at(B, i, k) = 0.0L;
+  }
+  // Zero A below its subdiagonal with Givens rotations from the left, each
+  // followed by one from the right that restores the triangle of B.
+  for (int j = 0; j + 2 < n; j++)
+    for (int i = n - 1; i >= j + 2; i--) {
+      ldouble a = at(A, i - 1, j), b = at(A, i, j);
+      if (b != 0.0L) {
+        const ldouble r = std::sqrt(a * a + b * b), c = a / r, s = b / r;
+        auto rows = [&](std::vector<ldouble> &M, int c0) {
+          for (int col = c0; col < n; col++) {
+            const ldouble x = at(M, i - 1, col), y = at(M, i, col);
+            at(M, i - 1, col) = c * x + s * y;
+            at(M, i, col) = -s * x + c * y;
+          }
+        };
+        rows(A, j);
+        rows(B, i - 1);
+        rows(Qt, 0);
+        at(A, i, j) = 0.0L;
+      }
+      a = at(B, i, i);
+      b = at(B, i, i - 1);
+      if (b != 0.0L) {
+        const ldouble r = std::sqrt(a * a + b * b), c = a / r, s = b / r;
+        auto cols = [&](std::vector<ldouble> &M, int rowEnd) {
+          for (int row = 0; row < rowEnd; row++) {
+            const ldouble x = at(M, row, i - 1), y = at(M, row, i);
+            at(M, row, i - 1) = c * x - s * y;
+            at(M, row, i) = s * x + c * y;
+          }
+        };
+        cols(B, i + 1);
+        cols(A, n);
+        cols(Z, n);
+        at(B, i, i - 1) = 0.0L;
+      }
+    }
+}
 
 /*!
  * Eigen-decomposition of the symmetric n x n matrix C (row-major, destroyed)
@@ -478,10 +604,33 @@ bool Update(JGroup *jg, const std::vector<int> &levels, const Config &configure,
       f.status = 2;
       return true;
     }
-    // The pencil K - E N, solved at each energy.
+    // The pencil K - E N, solved at each energy in Hessenberg-triangular
+    // form: Qt (K - E N) Z = H - E T, an upper Hessenberg system, so that
+    // R = (Z^T G)^T (H - E T)^-1 (Qt G) costs O(n^2 m) per energy.
     f.pencil = true;
-    f.K.swap(Kd);
-    f.N.swap(Nd);
+    std::vector<ldouble> Qt, Z;
+    HessenbergTriangular(Kd, Nd, n, Qt, Z);
+    f.H.swap(Kd);
+    f.T.swap(Nd);
+    f.Qt.resize((size_t)n * n);
+    f.Z.resize((size_t)n * n);
+    for (size_t k = 0; k < Qt.size(); k++) {
+      f.Qt[k] = (double)Qt[k];
+      f.Z[k] = (double)Z[k];
+    }
+    f.gq.assign((size_t)n * m, 0.0);
+    f.gz.assign((size_t)n * m, 0.0);
+    for (int i = 0; i < n; i++)
+      for (int a = 0; a < m; a++) {
+        ldouble q = 0.0L, z = 0.0L;
+        for (int r = 0; r < n; r++) {
+          const ldouble g = f.gcut[(size_t)r * nch + f.act[a]];
+          q += Qt[(size_t)i * n + r] * g;
+          z += Z[(size_t)r * n + i] * g;
+        }
+        f.gq[(size_t)i * m + a] = (double)q;
+        f.gz[(size_t)i * m + a] = (double)z;
+      }
     f.V.clear();
     f.e.clear();
     f.emax = 0.0;
@@ -490,8 +639,8 @@ bool Update(JGroup *jg, const std::vector<int> &levels, const Config &configure,
       for (int a = 0; a < m; a++) f.gamma[(size_t)i * m + a] = f.gcut[(size_t)i * nch + f.act[a]];
     return true;
   }
-  f.K.clear();
-  f.N.clear();
+  f.H.clear();
+  f.T.clear();
   f.e.resize(n);
   f.emax = 0.0;
   for (int i = 0; i < n; i++) {

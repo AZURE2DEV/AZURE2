@@ -171,10 +171,11 @@ a :math:`c \times c` solve costing :math:`O(n c^2 + c^3)`
 (``AMatrixFunc::SolveChannelSpace``, ``SolveFormal``, ``FColumn``).  For the
 standard level matrix :math:`V = 1`.  :math:`N` is :math:`a^T a` for the
 eigenvectors :math:`a` of Brune's transformation, positive definite when the
-parameters have a real standard equivalent.  When it is not, the pencil
-:math:`K - E N` is LU-factored in real arithmetic at each energy and
-:math:`R = G^T (K - EN)^{-1} G` (``SolvePencil``): still no complex fill
-and factorization of :math:`A^{-1}`.
+parameters have a real standard equivalent.  When it is not, the pencil is
+reduced once to Hessenberg-triangular form, :math:`Q^T K Z = H`,
+:math:`Q^T N Z = T`, and at each energy :math:`R = (Z^T G)^T (H - ET)^{-1} (Q^T G)`
+is an upper Hessenberg solve in real arithmetic (``SolvePencil``): still no
+complex fill and factorization of :math:`A^{-1}`.
 
 Individual elements of :math:`A`, general bilinear forms (channel capture)
 and the solves :math:`A g_c` of the gradient come from
@@ -198,8 +199,9 @@ or the level route (fill and LU, as before).  The level route is taken
   it requires :math:`s_\lambda \le 10^3` and
   :math:`s_\lambda\, \delta e / |e_\lambda - E| \le 10^{-11}`, where
   :math:`\delta e` is two ulps of the energies involved (the round-off of
-  :math:`e_\lambda - E`); on the pencil route the condition of the pencil
-  (its pivot ratio) takes the place of :math:`\delta e / |e_\lambda - E|`;
+  :math:`e_\lambda - E`); on the pencil route two ulps of
+  :math:`\max|H - ET|` times :math:`|(K - EN)^{-1} G_c|^2 |\Lambda_c|`, the
+  round-off of column :math:`c` of :math:`R\Lambda`, takes its place;
 - when :math:`1 - R\Lambda` is ill-conditioned (pivot ratio below
   :math:`10^{-10}`);
 - with ``AZURE_LEVEL_SPACE=1``, or for an ``AMatrixFunc`` switched to it with
