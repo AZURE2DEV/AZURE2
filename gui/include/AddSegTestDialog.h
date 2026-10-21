@@ -36,21 +36,30 @@ class AddSegTestDialog : public QDialog {
   QLineEdit *energyStepText;
   QLineEdit *lowAngleText;
   QLineEdit *highAngleText;
+  /*! Titled "C.M. Angle [degrees]" for a C.M. differential cross section and an analyzing power, "Lab Angle [degrees]" otherwise. */
+  QGroupBox *angleBox;
   QLineEdit *angleStepText;
+  /*! The observable: Angle Integrated (0), Differential (1), Phase Shift (2), Angular Distribution
+   *  Coefficients (3), Analyzing Power (7). Each item carries that base isDiff code as item data; look items
+   *  up with findData, never by position. */
   QComboBox *dataTypeCombo;
+  /*! Differential only: Lab (isDiff 1) or C.M. (isDiff 5), as item data. */
+  QLabel *frameLabel;
+  QComboBox *frameCombo;
 
-  /*! The observable code written to the .azr. It is not the combo box index:
-   *  the analyzing power is code 7 in both segment kinds, but the two lists
-   *  have different lengths, so the code is carried as item data instead. */
+  /*! The isDiff code written to the .azr, from the observable, its frame and the exit pair (the exit item
+   *  "Total capture", key PairKeyCombo::TotalCapture, with Angle Integrated is code 4). */
   int dataTypeCode() const;
+  /*! Sets the observable, frame and, for code 4, the total-capture exit item. */
   void setDataTypeCode(int code);
+  /*! The base code of the observable list's current item. */
+  int observableCode() const;
 
   QLineEdit *phaseJValueText;
   QLineEdit *phaseLValueText;
   QLabel *phaseJValueLabel;
   QLabel *phaseLValueLabel;
   QLabel *angDistLabel;
-  QLabel *totalCaptureLabel;
   QSpinBox *angDistSpin;
 
   /*! "Natural target": the term and each component are weighted by the isotopic abundance of their
@@ -82,6 +91,7 @@ class AddSegTestDialog : public QDialog {
 
  public slots:
   void dataTypeChanged(int);
+  void exitPairChanged(int key);
   void advancedModeChanged(int);
   void operationTypeChanged(int);
   void updateNaturalCheck();

@@ -6,6 +6,7 @@
 #include "DialogScrollArea.h"
 #include "PairsModel.h"
 #include <QFileDialog>
+#include <QStandardItemModel>
 
 AddSegDataDialog::AddSegDataDialog(QWidget *parent) :
   QDialog(parent) {
@@ -16,6 +17,9 @@ AddSegDataDialog::AddSegDataDialog(QWidget *parent) :
   exitPairCombo = new PairKeyCombo(PairKeyCombo::Exit);
   // The exit list reads as reactions with the chosen entrance pair.
   connect(entrancePairCombo, SIGNAL(keyChanged(int)), exitPairCombo, SLOT(setEntranceKey(int)));
+  // Total capture (isDiff 3) is the last exit item when the project has a gamma pair.
+  exitPairCombo->setTotalCaptureOffered(true);
+  connect(exitPairCombo, SIGNAL(keyChanged(int)), this, SLOT(exitPairChanged(int)));
   lowEnergyText = new QLineEdit;
   highEnergyText = new QLineEdit;
   lowAngleText = new QLineEdit;
@@ -24,19 +28,36 @@ AddSegDataDialog::AddSegDataDialog(QWidget *parent) :
   highAngleText = new QLineEdit;
   highAngleText->setText("180");
   highAngleText->setEnabled(false);
+  // The observable. Each item carries its base isDiff code as item data, and items are only ever looked up
+  // by that code (findData), never by position. The variants are separate controls: the frame of a
+  // differential cross section (Lab 1, C.M. 4), the multipolarity of an angle-integrated capture cross
+  // section (all 0, E1 only 5, E2 only 6), and total capture (3), which is an item of the exit-pair list.
   dataTypeCombo = new QComboBox;
-  dataTypeCombo->addItem(tr("Angle Integrated"));
-  dataTypeCombo->addItem(tr("Differential"));
-  dataTypeCombo->addItem(tr("Phase Shift"));
-  dataTypeCombo->addItem(tr("Angle Integrated Total Capture"));
-  dataTypeCombo->addItem(tr("C.M. Differential"));
-  dataTypeCombo->addItem(tr("Angle Integrated (E1 only)"));
-  dataTypeCombo->addItem(tr("Angle Integrated (E2 only)"));
-  dataTypeCombo->addItem(tr("Analyzing Power"));
-  // Codes 0-6 happen to equal their position; the analyzing power is 7.
-  for (int i = 0; i < dataTypeCombo->count(); i++) dataTypeCombo->setItemData(i, i);
-  dataTypeCombo->setItemData(dataTypeCombo->count() - 1, 7);
+  dataTypeCombo->setObjectName("dataTypeCombo");
+  dataTypeCombo->addItem(tr("Angle Integrated"), 0);
+  dataTypeCombo->addItem(tr("Differential"), 1);
+  dataTypeCombo->addItem(tr("Phase Shift"), 2);
+  dataTypeCombo->addItem(tr("Analyzing Power"), 7);
   connect(dataTypeCombo, SIGNAL(currentIndexChanged(int)), this, SLOT(dataTypeChanged(int)));
+  frameLabel = new QLabel(tr("Frame:"));
+  frameLabel->setVisible(false);
+  frameCombo = new QComboBox;
+  frameCombo->setObjectName("frameCombo");
+  frameCombo->addItem(tr("Lab"), 1);
+  frameCombo->addItem(tr("C.M."), 4);
+  frameCombo->setToolTip(tr("Frame of the data file's angles and cross sections"));
+  frameCombo->setVisible(false);
+  connect(frameCombo, SIGNAL(currentIndexChanged(int)), this, SLOT(dataTypeChanged(int)));
+  multipolarityLabel = new QLabel(tr("Multipolarity:"));
+  multipolarityLabel->setVisible(false);
+  multipolarityCombo = new QComboBox;
+  multipolarityCombo->setObjectName("multipolarityCombo");
+  multipolarityCombo->addItem(tr("All"), 0);
+  multipolarityCombo->addItem(tr("E1 only"), 5);
+  multipolarityCombo->addItem(tr("E2 only"), 6);
+  multipolarityCombo->setToolTip(tr("Fit the capture data to the E1 or E2 part of the calculated cross section only"));
+  multipolarityCombo->setVisible(false);
+  connect(multipolarityCombo, SIGNAL(currentIndexChanged(int)), this, SLOT(dataTypeChanged(int)));
   QRegExp spinRX("^\\d{0,2}(\\.[05]{0,1})?$");
   QValidator *spinValidator = new QRegExpValidator(spinRX, this);
   phaseJValueText = new QLineEdit;
@@ -156,9 +177,6 @@ AddSegDataDialog::AddSegDataDialog(QWidget *parent) :
   pairLayout->addWidget(entrancePairCombo, 0, 1);
   pairLayout->addWidget(new QLabel(tr("Exit Pair:")), 0, 2, Qt::AlignRight);
   pairLayout->addWidget(exitPairCombo, 0, 3);
-  totalCaptureLabel = new QLabel(tr("Total Capture"));
-  totalCaptureLabel->setVisible(false);
-  pairLayout->addWidget(totalCaptureLabel, 0, 4);
   valueLayout->addLayout(pairLayout, 0, 0, 1, 2);
   QGroupBox *energyBox = new QGroupBox(tr("Lab Energy [MeV]"));
   QGridLayout *energyLayout = new QGridLayout;
@@ -168,7 +186,7 @@ AddSegDataDialog::AddSegDataDialog(QWidget *parent) :
   energyLayout->addWidget(highEnergyText, 1, 1);
   energyBox->setLayout(energyLayout);
   valueLayout->addWidget(energyBox, 1, 0);
-  QGroupBox *angleBox = new QGroupBox(tr("Lab Angle [degrees]"));
+  angleBox = new QGroupBox(tr("Lab Angle [degrees]"));
   QGridLayout *angleLayout = new QGridLayout;
   angleLayout->addWidget(new QLabel(tr("Low Angle:")), 0, 0, Qt::AlignRight);
   angleLayout->addWidget(lowAngleText, 0, 1);
@@ -182,16 +200,21 @@ AddSegDataDialog::AddSegDataDialog(QWidget *parent) :
   lowerLayout->addWidget(dataTypeCombo, 0, 1);
 
   QGridLayout *phaseLayout = new QGridLayout;
-  phaseLayout->addItem(new QSpacerItem(1, 25), 0, 0);
-  phaseLayout->setColumnStretch(0, 1);
+  // the observable's variant (frame or multipolarity) sits next to it, the phase-shift J and l on the right
+  phaseLayout->addWidget(frameLabel, 0, 0, Qt::AlignRight);
+  phaseLayout->addWidget(frameCombo, 0, 1);
+  phaseLayout->addWidget(multipolarityLabel, 0, 2, Qt::AlignRight);
+  phaseLayout->addWidget(multipolarityCombo, 0, 3);
+  phaseLayout->addItem(new QSpacerItem(1, 25), 0, 4);
+  phaseLayout->setColumnStretch(4, 1);
   phaseJValueLabel = new QLabel(tr("J:"));
   phaseJValueLabel->setVisible(false);
-  phaseLayout->addWidget(phaseJValueLabel, 0, 1);
-  phaseLayout->addWidget(phaseJValueText, 0, 2);
+  phaseLayout->addWidget(phaseJValueLabel, 0, 5);
+  phaseLayout->addWidget(phaseJValueText, 0, 6);
   phaseLValueLabel = new QLabel(tr("l:"));
   phaseLValueLabel->setVisible(false);
-  phaseLayout->addWidget(phaseLValueLabel, 0, 3);
-  phaseLayout->addWidget(phaseLValueText, 0, 4);
+  phaseLayout->addWidget(phaseLValueLabel, 0, 7);
+  phaseLayout->addWidget(phaseLValueText, 0, 8);
   lowerLayout->addLayout(phaseLayout, 0, 2);
 
   lowerLayout->addWidget(new QLabel(tr("Data Norm.:")), 1, 0, Qt::AlignRight);
@@ -294,6 +317,7 @@ AddSegDataDialog::AddSegDataDialog(QWidget *parent) :
   connect(cancelButton, SIGNAL(clicked()), this, SLOT(reject()));
 
   setWindowTitle(tr("Add a Segment From Data"));
+  dataTypeChanged(0);
 }
 
 void AddSegDataDialog::setChooseFile() {
@@ -303,49 +327,84 @@ void AddSegDataDialog::setChooseFile() {
   }
 }
 
-int AddSegDataDialog::dataTypeCode() const {
+int AddSegDataDialog::observableCode() const {
   const QVariant code = dataTypeCombo->currentData();
-  return code.isValid() ? code.toInt() : dataTypeCombo->currentIndex();
+  return code.isValid() ? code.toInt() : 0;
+}
+
+bool AddSegDataDialog::multipolarityApplies() const {
+  return observableCode() == 0 && exitPairCombo->isGammaPair(exitPairCombo->key());
+}
+
+int AddSegDataDialog::dataTypeCode() const {
+  const int observable = observableCode();
+  if (observable == 0) {
+    if (exitPairCombo->key() == PairKeyCombo::TotalCapture) return 3;
+    if (multipolarityApplies()) return multipolarityCombo->currentData().toInt();
+    return 0;
+  }
+  if (observable == 1) return frameCombo->currentData().toInt();
+  return observable;
 }
 
 void AddSegDataDialog::setDataTypeCode(int code) {
-  const int i = dataTypeCombo->findData(code);
-  dataTypeCombo->setCurrentIndex(i >= 0 ? i : code);
+  int observable = code;
+  if (code == 3 || code == 5 || code == 6) observable = 0;
+  if (code == 4) observable = 1;
+  if (code == 3)
+    exitPairCombo->setKey(PairKeyCombo::TotalCapture);
+  else if (exitPairCombo->key() == PairKeyCombo::TotalCapture)
+    exitPairCombo->setKey(0);  // only a total-capture line has no exit pair
+  frameCombo->setCurrentIndex(frameCombo->findData(code == 4 ? 4 : 1));
+  multipolarityCombo->setCurrentIndex(multipolarityCombo->findData(code == 5 || code == 6 ? code : 0));
+  int i = dataTypeCombo->findData(observable);
+  if (i < 0) {
+    // a code this dialog does not offer: keep it selectable so an edit does not change it
+    dataTypeCombo->addItem(tr("Observable %1").arg(code), code);
+    i = dataTypeCombo->count() - 1;
+  }
+  dataTypeCombo->setCurrentIndex(i);
+  dataTypeChanged(i);
 }
 
-void AddSegDataDialog::dataTypeChanged(int index) {
-  if (index == 2) {
-    phaseJValueLabel->setVisible(true);
-    phaseLValueLabel->setVisible(true);
-    phaseJValueText->setVisible(true);
-    phaseLValueText->setVisible(true);
-  } else {
-    phaseJValueLabel->setVisible(false);
-    phaseLValueLabel->setVisible(false);
-    phaseJValueText->setVisible(false);
-    phaseLValueText->setVisible(false);
-  }
-  if (index == 1) {
-    lowAngleText->setEnabled(true);
-    highAngleText->setEnabled(true);
-  } else {
-    lowAngleText->setEnabled(false);
-    highAngleText->setEnabled(false);
-  }
-  if (index == 3) {
-    exitPairCombo->setVisible(false);
-    totalCaptureLabel->setVisible(true);
-  } else {
-    totalCaptureLabel->setVisible(false);
-    exitPairCombo->setVisible(true);
-  }
-  if (index == 4 || index == 7) {  // C.M. differential or A_y
-    lowAngleText->setEnabled(true);
-    highAngleText->setEnabled(true);
+void AddSegDataDialog::exitPairChanged(int key) {
+  // Total capture is an angle-integrated observable only.
+  if (key == PairKeyCombo::TotalCapture && observableCode() != 0) dataTypeCombo->setCurrentIndex(dataTypeCombo->findData(0));
+  dataTypeChanged(dataTypeCombo->currentIndex());
+}
+
+void AddSegDataDialog::dataTypeChanged(int) {
+  const int code = dataTypeCode();
+  const int observable = observableCode();
+  const bool phase = (code == 2);
+  phaseJValueLabel->setVisible(phase);
+  phaseLValueLabel->setVisible(phase);
+  phaseJValueText->setVisible(phase);
+  phaseLValueText->setVisible(phase);
+  // lab or C.M. differential, or A_y
+  const bool angles = (code == 1 || code == 4 || code == 7);
+  lowAngleText->setEnabled(angles);
+  highAngleText->setEnabled(angles);
+  // C.M. differential and A_y take centre-of-mass angles
+  angleBox->setTitle((code == 4 || code == 7) ? tr("C.M. Angle [degrees]") : tr("Lab Angle [degrees]"));
+  frameLabel->setVisible(observable == 1);
+  frameCombo->setVisible(observable == 1);
+  const bool multipolarity = multipolarityApplies();
+  multipolarityLabel->setVisible(multipolarity);
+  multipolarityCombo->setVisible(multipolarity);
+  // With "Total capture" as the exit pair only the angle-integrated observable is offered.
+  const bool totalCapture = (exitPairCombo->key() == PairKeyCombo::TotalCapture);
+  if (QStandardItemModel *items = qobject_cast<QStandardItemModel *>(dataTypeCombo->model())) {
+    for (int i = 0; i < items->rowCount(); i++) {
+      QStandardItem *item = items->item(i);
+      const bool allowed = !totalCapture || item->data(Qt::UserRole).toInt() == 0;
+      item->setEnabled(allowed);
+      item->setToolTip(allowed ? QString() : tr("Total capture is angle integrated: choose a single exit pair for this observable"));
+    }
   }
   // A_y is a ratio: a normalization factor has no meaning for it.
-  varyNormCheck->setEnabled(index != 7);
-  if (index == 7) varyNormCheck->setChecked(false);
+  varyNormCheck->setEnabled(code != 7);
+  if (code == 7) varyNormCheck->setChecked(false);
 
   // Update fixed angle visibility when data type changes
   operationTypeChanged(operationCombo->currentIndex());
@@ -379,7 +438,8 @@ void AddSegDataDialog::advancedModeChanged(int state) {
 void AddSegDataDialog::operationTypeChanged(int index) {
   // Show fixed angle option only when Ratio is selected AND segment is differential
   bool isRatio = (index == 1);
-  bool isDifferential = (dataTypeCombo->currentIndex() == 1) || (dataTypeCombo->currentIndex() == 4);  // Differential or CM Differential
+  const int code = dataTypeCode();
+  bool isDifferential = (code == 1) || (code == 4);  // Differential, lab or C.M.
 
   if (isRatio && isDifferential) {
     useFixedAngleCheck->setVisible(true);
@@ -513,6 +573,7 @@ void AddSegDataDialog::setPairsModel(PairsModel *model) {
   if (exitPairCombo->key() == 0) exitPairCombo->setKey(1);
   if (componentEntranceCombo->key() == 0) componentEntranceCombo->setKey(1);
   if (componentExitCombo->key() == 0) componentExitCombo->setKey(1);
+  dataTypeChanged(dataTypeCombo->currentIndex());
 }
 
 void AddSegDataDialog::showEvent(QShowEvent *event) {
