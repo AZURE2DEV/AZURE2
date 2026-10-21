@@ -210,7 +210,7 @@ void ECIntegral::Integrate(double chanrad) {
 
     double wwintresult, wwinterror;
 
-    gsl_integration_qagiu(&WW, chanrad, 0.0, 1e-4, 1000, w, &wwintresult, &wwinterror);
+    status_ |= gsl_integration_qagiu(&WW, chanrad, 0.0, epsrel_, 1000, w, &wwintresult, &wwinterror);
     GW_ = wwintresult;
     FW_ = 0.0;
   } else {
@@ -245,8 +245,8 @@ void ECIntegral::Integrate(double chanrad) {
       // FW and GW share their expensive per-x evaluations through g_fgMemo;
       // clear it so this call cannot see stale entries from a previous one.
       ClearFGMemo();
-      gsl_integration_qagiu(&FW, chanrad, 0.0, 1e-4, 1000, w, &fwintresult, &fwinterror);
-      gsl_integration_qagiu(&GW, chanrad, 0.0, 1e-4, 1000, w, &gwintresult, &gwinterror);
+      status_ |= gsl_integration_qagiu(&FW, chanrad, 0.0, epsrel_, 1000, w, &fwintresult, &fwinterror);
+      status_ |= gsl_integration_qagiu(&GW, chanrad, 0.0, epsrel_, 1000, w, &gwintresult, &gwinterror);
       FW_ = fwintresult;
       GW_ = gwintresult;
     }
@@ -278,6 +278,7 @@ complex ECIntegral::CalculateDirect(int theInitialLValue, int theFinalLValue,
                                     double inEnergy, double levelEnergy,
                                     bool isChannelCapture) {
   ResetIntegrals();
+  status_ = 0;
 
   double sepEnergy = pair()->GetSepE() + pair()->GetExE();
   double outEnergy = inEnergy - sepEnergy;

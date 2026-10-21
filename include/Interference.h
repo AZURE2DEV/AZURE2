@@ -21,7 +21,7 @@ class Interference {
   Interference(int, int, double, double, std::string);
   /// "RR", "ER", "RE" or "EE" -- which vector each index refers to,
   /// MGroup (R, resonant) or ECMGroup (E, external).
-  std::string GetInterferenceType() const;
+  const std::string &GetInterferenceType() const;
   /// 1-based position of the first pathway, in the vector the type names.
   int GetM1() const;
   /// 1-based position of the second pathway.

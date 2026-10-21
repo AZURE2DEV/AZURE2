@@ -2,6 +2,7 @@
 #include "Config.h"
 #include "EPoint.h"
 #include "ReactionRate.h"
+#include "ECTable.h"
 #include "AdaptiveIntegrationGrid.h"
 #include <iomanip>
 #include <iostream>
@@ -423,6 +424,8 @@ void RunTabulatedRateCalculation(const std::vector<double> &temps,
     } else {
       os << "\tWarning: could not write " << gridFile << std::endl;
     }
+    if (configure.useECTable && ECTable::Lookups() + ECTable::DirectCalls() > 0)
+      os << "\t" << ECTable::Report() << std::endl;
   }
 
   // Steffen needs at least a handful of points; fall back if the grid collapsed.

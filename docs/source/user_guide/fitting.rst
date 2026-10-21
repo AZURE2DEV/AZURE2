@@ -22,7 +22,12 @@ Displays one row for each level-channel combination with the following columns:
    * - Column
      - Description
    * - **Name**
-     - Identifier for the parameter (level energy or channel width).
+     - Identifier for the parameter (level energy or channel width), numbered
+       as AZURE2 numbers its parameters: ``Level N`` is ``energy_N`` and
+       ``Level N Channel M`` is ``width_N_M`` of ``param.sav``, counting the
+       active levels in the order the project file lists them (by
+       :math:`J^\pi`, then energy) and the channels within each
+       :math:`J^\pi` group.
    * - **Value**
      - Current parameter value (editable).
    * - **Lower Limit**
@@ -66,6 +71,16 @@ Shift?** enabled. A segment's :math:`\sqrt{E}` shift coefficient (the
 ``sqrtshift`` block in the input file, see :doc:`segments`) is fitted by the
 engine under the name ``segment_<key>_energy_shift_sqrt`` but is not listed
 here.
+
+A shifted capture segment evaluates its external-capture amplitudes at the
+shifted energies, from the same energy tables as every other point
+(:doc:`../developer/ec_table`), so a shift gives the same cross sections as
+data whose energies were moved by the same amount.  Before October 2026 (and
+still with ``--no-ec-table``) the amplitudes of a shifted point were
+interpolated linearly between the segment's own points and held constant
+beyond its ends -- errors of several percent in the gaps between points and up
+to orders of magnitude for low-energy points moved below the segment's lowest
+energy.
 
 Controls
 --------

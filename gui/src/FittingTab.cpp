@@ -239,19 +239,23 @@ void FittingTab::populateFromCurrentGUIState() {
     QList<LevelsData> levels = levelsModel->getLevels();
     QList<ChannelsData> channels = channelsModel->getChannels();
 
-    // CORRECT ORDER: For each level, add energy first, then all widths for that level
-    for (int levelIndex = 0; levelIndex < levels.size(); levelIndex++) {
+    // The engine's order and numbering (LevelsTab::engineNumbering of the written order): each level's energy,
+    // then its widths by channel number.  The names carry the engine's numbers, so a "Level N ..." entry of
+    // <parameterSettings> is the parameter energy_N / width_N_M of the file it is written into -- naming them
+    // by model row put limits and nuisance priors on other levels whenever the rows were not in the written
+    // order or an inactive level came first.
+    const LevelsTab::EngineNumbering num = levelsTab_->engineNumbering(levelsTab_->writtenLevelOrder());
+    QList<int> rows;
+    for (int r = 0; r < levels.size(); r++)
+      if (num.level[r] > 0) rows.append(r);
+    std::sort(rows.begin(), rows.end(), [&](int x, int y) { return num.level[x] < num.level[y]; });
+    for (int levelIndex : rows) {
       const LevelsData &level = levels[levelIndex];
-
-      // Skip levels that are not included in the calculation
-      if (level.isActive == 0) {
-        continue;
-      }
 
       // Add energy parameter if not fixed (isFixed == 0 means not fixed)
       if (level.isFixed == 0) {
         FittingParameter energyParam;
-        energyParam.name = QString("Level %1 Energy (MeV)").arg(levelIndex + 1);
+        energyParam.name = QString("Level %1 Energy (MeV)").arg(num.level[levelIndex]);
         energyParam.value = level.energy;
         energyParam.lowerLimit = 0;  // Default limits
         energyParam.upperLimit = 0;
@@ -261,20 +265,24 @@ void FittingTab::populateFromCurrentGUIState() {
         energyParam.category = "level";
         energyParam.levelIndex = levelIndex;
         energyParam.channelIndex = -1;  // Energy parameter
+        energyParam.engineLevel = num.level[levelIndex];
 
         fittingParameters.append(energyParam);
       }
 
-      // Now add all width parameters for this level
-      for (int channelIndex = 0; channelIndex < channels.size(); channelIndex++) {
+      // Now add all width parameters for this level, in the engine's channel order
+      QList<int> chans;
+      for (int channelIndex = 0; channelIndex < channels.size(); channelIndex++)
+        if (channels[channelIndex].levelIndex == levelIndex) chans.append(channelIndex);
+      std::sort(chans.begin(), chans.end(), [&](int x, int y) { return num.channel[x] < num.channel[y]; });
+      for (int channelIndex : chans) {
         const ChannelsData &channel = channels[channelIndex];
 
-        // Only add widths that belong to this level
-        if (channel.levelIndex == levelIndex && channel.isFixed == 0 && channel.reducedWidth != 0.0) {
+        if (channel.isFixed == 0 && channel.reducedWidth != 0.0) {
           FittingParameter widthParam;
           widthParam.name = QString("Level %1 Channel %2 Width (eV)")
-                                .arg(levelIndex + 1)
-                                .arg(channelIndex + 1);
+                                .arg(num.level[levelIndex])
+                                .arg(num.channel[channelIndex]);
 
           // LevelsTab already stores physical widths, use them directly
           widthParam.value = channel.reducedWidth;  // This is actually physical width in the GUI
@@ -286,6 +294,8 @@ void FittingTab::populateFromCurrentGUIState() {
           widthParam.category = "level";
           widthParam.levelIndex = levelIndex;
           widthParam.channelIndex = channelIndex;
+          widthParam.engineLevel = num.level[levelIndex];
+          widthParam.engineChannel = num.channel[channelIndex];
 
           fittingParameters.append(widthParam);
         }
@@ -642,6 +652,12 @@ void FittingTab::loadSettings() {
   // The RWA<->physical transformation uses the current GUI state (levels,
   // channels), so refresh from it first -- a stale state gives a wrong result.
   populateFromCurrentGUIState();
+  diskEngineNames_.clear();
+  for (QObject *parent = this->parent(); parent; parent = parent->parent())
+    if (AZURESetup *setup = qobject_cast<AZURESetup *>(parent)) {
+      diskEngineNames_ = setup->EngineParameterNamesOnDisk();
+      break;
+    }
 
   QString filename = QFileDialog::getOpenFileName(this,
                                                   "Load Parameters from .sav file", "", "AZURE2 Parameter Files (*.sav);;All Files (*)");
@@ -700,13 +716,18 @@ void FittingTab::loadSettings() {
           QList<LevelsData> levels = levelsModel->getLevels();
           QList<ChannelsData> channels = channelsModel->getChannels();
 
-          // Add ALL level parameters (including fixed)
+          // Add ALL level parameters (including fixed), named in the engine's numbering of the written order
+          // (an inactive level is no engine parameter: its own name, matched by nothing)
+          const LevelsTab::EngineNumbering num = levelsTab_->engineNumbering(levelsTab_->writtenLevelOrder());
           for (int levelIndex = 0; levelIndex < levels.size(); levelIndex++) {
             const LevelsData &level = levels[levelIndex];
 
             // Add ALL energy parameters
             FittingParameter energyParam;
-            energyParam.name = QString("Level %1 Energy (MeV)").arg(levelIndex + 1);
+            energyParam.name = num.level[levelIndex] > 0
+                                   ? QString("Level %1 Energy (MeV)").arg(num.level[levelIndex])
+                                   : QString("Inactive level (row %1) Energy (MeV)").arg(levelIndex + 1);
+            energyParam.engineLevel = num.level[levelIndex];
             energyParam.value = level.energy;
             energyParam.lowerLimit = 0;
             energyParam.upperLimit = 0;
@@ -726,9 +747,15 @@ void FittingTab::loadSettings() {
               // Add ALL widths that belong to this level (including fixed and zero-width)
               if (channel.levelIndex == levelIndex) {
                 FittingParameter widthParam;
-                widthParam.name = QString("Level %1 Channel %2 Width (eV)")
-                                      .arg(levelIndex + 1)
-                                      .arg(channelIndex + 1);
+                widthParam.name = num.level[levelIndex] > 0
+                                      ? QString("Level %1 Channel %2 Width (eV)")
+                                            .arg(num.level[levelIndex])
+                                            .arg(num.channel[channelIndex])
+                                      : QString("Inactive level (row %1) Channel %2 Width (eV)")
+                                            .arg(levelIndex + 1)
+                                            .arg(channelIndex + 1);
+                widthParam.engineLevel = num.level[levelIndex];
+                widthParam.engineChannel = num.channel[channelIndex];
 
                 widthParam.value = channel.reducedWidth;
                 widthParam.lowerLimit = 0;
@@ -1534,62 +1561,18 @@ QString FittingTab::findMatchingParameterKey(const FittingParameter &param, cons
     }
 
   } else if (param.category == "level") {
-    // For level parameters: match with .sav file patterns like "energy_1", "width_1_2"
-    // Current GUI names are like "Level 1 Energy (MeV)" and "Level 1 Channel 2 Width (eV)"
-
-    if (param.name.contains("Energy") && param.channelIndex == -1) {
-      // Energy parameter: "Level N Energy (MeV)" -> "energy_N"
-      int levelIndex = param.levelIndex + 1;  // Convert 0-based to 1-based
-
-      QStringList possibleNames;
-      possibleNames << QString("energy_%1").arg(levelIndex);
-      possibleNames << QString("energy%1").arg(levelIndex);
-      possibleNames << QString("level_%1_energy").arg(levelIndex);
-      possibleNames << QString("level%1_energy").arg(levelIndex);
-
-      for (const QString &name : possibleNames) {
-        if (savKeys.contains(name)) {
-          return name;
-        }
-      }
-
-    } else if (param.name.contains("Width") && param.channelIndex >= 0) {
-      // Width parameter: "Level N Channel M Width (eV)" -> "width_N_M"
-      // Need to count channels per level, not global channel index
-      int levelIndex = param.levelIndex + 1;  // Convert 0-based to 1-based
-
-      // Count which channel this is within this specific level
-      int channelWithinLevel = 1;  // Start counting from 1 for .sav file format
-
-      if (levelsTab_ && segmentsTab_) {
-        ChannelsModel *channelsModel = levelsTab_->getChannelsModel();
-        if (channelsModel) {
-          QList<ChannelsData> channels = channelsModel->getChannels();
-          for (int i = 0; i < channels.size(); i++) {
-            const ChannelsData &channel = channels[i];
-            if (channel.levelIndex == param.levelIndex) {
-              if (i == param.channelIndex) {
-                // Found our channel - channelWithinLevel is correct
-                break;
-              }
-              channelWithinLevel++;  // Count channels for this level
-            }
-          }
-        }
-      }
-
-      QStringList possibleNames;
-      possibleNames << QString("width_%1_%2").arg(levelIndex).arg(channelWithinLevel);
-      possibleNames << QString("width%1_%2").arg(levelIndex).arg(channelWithinLevel);
-      possibleNames << QString("level_%1_channel_%2_width").arg(levelIndex).arg(channelWithinLevel);
-      possibleNames << QString("level%1_channel%2_width").arg(levelIndex).arg(channelWithinLevel);
-
-      for (const QString &name : possibleNames) {
-        if (savKeys.contains(name)) {
-          return name;
-        }
-      }
-    }
+    // The engine's name of this level or channel in the file the .sav came from: by identity (J, parity,
+    // energy; pair, l, s) through diskEngineNames_, filled by loadSettings from the project file on disk, else
+    // the engine numbering of the written order.  The old row-based guesses ("energy_<row>", widths counted
+    // within the level) named other levels whenever the rows were not in the engine's order.
+    QString name;
+    const QPair<int, int> key(param.levelIndex, param.channelIndex < 0 ? -1 : param.channelIndex);
+    if (diskEngineNames_.contains(key))
+      name = diskEngineNames_.value(key);
+    else if (param.engineLevel > 0)
+      name = param.channelIndex < 0 ? QString("energy_%1").arg(param.engineLevel)
+                                    : QString("width_%1_%2").arg(param.engineLevel).arg(param.engineChannel);
+    if (!name.isEmpty() && savKeys.contains(name)) return name;
   }
 
   // No match found
@@ -1617,31 +1600,10 @@ void FittingTab::updateParameterInOtherTabs(const QString &paramName, const Fitt
     // Update level parameters in LevelsModel - same pattern as LevelsTab::editLevel()
     LevelsModel *levelsModel = levelsTab_->getLevelsModel();
     if (levelsModel) {
-      // Parse level index from parameter name using current naming scheme
-      // Parameter names are like "Level 1 Energy (MeV)" and "Level 1 Channel 2 Width (eV)"
-      int levelIndex = -1;
-      int channelIndex = -1;
-
-      if (paramName.contains("Energy") && paramName.contains("Level")) {
-        // Energy parameter: "Level N Energy (MeV)"
-        QRegExp rx("Level (\\d+) Energy");
-        if (rx.indexIn(paramName) != -1) {
-          levelIndex = rx.cap(1).toInt() - 1;  // Convert 1-based to 0-based
-        }
-      } else if (paramName.contains("Width") && paramName.contains("Level") && paramName.contains("Channel")) {
-        // Width parameter: "Level N Channel M Width (eV)"
-        QRegExp rx("Level (\\d+) Channel (\\d+) Width");
-        if (rx.indexIn(paramName) != -1) {
-          levelIndex = rx.cap(1).toInt() - 1;    // Convert 1-based to 0-based
-          channelIndex = rx.cap(2).toInt() - 1;  // Convert 1-based to 0-based
-        }
-      }
-
-      // Alternative: use the stored indices from the FittingParameter structure
-      if (levelIndex == -1 && param.levelIndex >= 0) {
-        levelIndex = param.levelIndex;
-        channelIndex = param.channelIndex;
-      }
+      // The model rows the parameter was built from.  Its name carries the engine's numbering
+      // (energy_N / width_N_M), not the rows, so it is not parsed.
+      int levelIndex = param.levelIndex;
+      int channelIndex = param.channelIndex;
 
       if (levelIndex >= 0) {
         QList<LevelsData> levels = levelsModel->getLevels();
@@ -1755,6 +1717,9 @@ bool FittingTab::writeParameterSettings(QTextStream &outStream) {
   // Write current parameter settings to AZURE2 file
   outStream << "# Fitting parameter settings (only non-fixed parameters shown)\n";
   outStream << "# Format: name value lower_limit upper_limit error fit_error nuisance category minuit_index\n";
+  // "Level N ..." is the engine's energy_N / width_N_M of this file (FittingTab::readParameterSettings reads a
+  // block without this line in the older numbering, by GUI row).
+  outStream << "# level numbering: engine\n";
 
   for (const FittingParameter &param : fittingParameters) {
     outStream << param.name << " "
@@ -1785,10 +1750,12 @@ bool FittingTab::readParameterSettings(QTextStream &inStream) {
     numSegments = segmentsTab_->getSegmentsDataModel()->getLines().size();
   QRegExp segmentEntry("^segment_(\\d+)_(norm|energy_shift)$");
 
+  bool marked = false;  // "# level numbering: engine", written by this GUI since 2026-10-21
   QString line;
   while (!inStream.atEnd()) {
     line = inStream.readLine().trimmed();
     if (line.startsWith("<")) break;                       // Next section started
+    if (line.startsWith("#") && line.contains("level numbering: engine")) marked = true;
     if (line.isEmpty() || line.startsWith("#")) continue;  // Skip empty lines and comments
 
     QStringList parts = line.split(" ", Qt::SkipEmptyParts);
@@ -1845,7 +1812,92 @@ bool FittingTab::readParameterSettings(QTextStream &inStream) {
     }
   }
 
+  translateLevelSettings(marked);
   return true;
+}
+
+/*!
+ * Renames the "Level N ..." entries just read into the numbering this tab uses, the engine's numbering of the
+ * order the project is written in (LevelsTab::engineNumbering).  The levels have just been read, so the model
+ * rows are in the file's order.  Two readings of N and M exist:
+ *   engine -- as AZURE2 reads the file: active levels J-group by J-group, M the channel within the J-group
+ *             (this GUI's marked blocks, and blocks written by scripts for the engine);
+ *   rows   -- the older GUI's: N the model row (inactive levels included), M the channel's row in the channel
+ *             table.
+ * A marked block is read the engine's way.  An unmarked one is read the way under which more of its entries'
+ * value columns (the parameter's value when the block was written) equal the parameter's value now; a tie keeps
+ * the engine's reading, the one runs of the file have used.  The older GUI's header comment does not tell the
+ * two apart: scripts copied it (the 12C+a models of 2026-09 carry it over engine-numbered ANC priors).  An
+ * entry that names no active level is dropped.
+ */
+void FittingTab::translateLevelSettings(bool marked) {
+  if (!levelsTab_ || !levelsTab_->getLevelsModel() || !levelsTab_->getChannelsModel()) return;
+  QList<LevelsData> levels = levelsTab_->getLevelsModel()->getLevels();
+  QList<ChannelsData> channels = levelsTab_->getChannelsModel()->getChannels();
+  QList<int> fileOrder;
+  for (int r = 0; r < levels.size(); r++) fileOrder.append(r);
+  const LevelsTab::EngineNumbering asRead = levelsTab_->engineNumbering(fileOrder);
+  const LevelsTab::EngineNumbering written = levelsTab_->engineNumbering(levelsTab_->writtenLevelOrder());
+  QRegExp energyRx("^Level (\\d+) Energy \\(MeV\\)$");
+  QRegExp widthRx("^Level (\\d+) Channel (\\d+) Width \\(eV\\)$");
+
+  // The level row and channel row an entry names under either reading (-1: none).
+  auto locate = [&](const FittingParameter &param, bool engine, int &row, int &chRow) -> bool {
+    row = chRow = -1;
+    const bool isEnergy = energyRx.indexIn(param.name) != -1;
+    const bool isWidth = !isEnergy && widthRx.indexIn(param.name) != -1;
+    if (!isEnergy && !isWidth) return false;
+    const int n = isEnergy ? energyRx.cap(1).toInt() : widthRx.cap(1).toInt();
+    const int m = isWidth ? widthRx.cap(2).toInt() : 0;
+    if (engine) {
+      for (int r = 0; r < levels.size() && row < 0; r++)
+        if (asRead.level[r] == n) row = r;
+      if (isWidth && row >= 0)
+        for (int c = 0; c < channels.size() && chRow < 0; c++)
+          if (channels[c].levelIndex == row && asRead.channel[c] == m) chRow = c;
+    } else {
+      row = (n >= 1 && n <= levels.size()) ? n - 1 : -1;
+      if (isWidth && m >= 1 && m <= channels.size() && channels[m - 1].levelIndex == row) chRow = m - 1;
+    }
+    return true;
+  };
+  auto valueMatches = [&](const FittingParameter &param, int row, int chRow) {
+    if (row < 0) return false;
+    const bool isWidth = widthRx.indexIn(param.name) != -1;
+    if (isWidth && chRow < 0) return false;
+    const double now = isWidth ? channels[chRow].reducedWidth : levels[row].energy;
+    return std::fabs(param.value - now) <= 1.0e-4 * std::max(1.0, std::fabs(now));
+  };
+
+  bool engine = true;
+  if (!marked) {
+    int engineHits = 0, rowHits = 0;
+    for (const FittingParameter &param : savedParameterSettings) {
+      int row, chRow;
+      if (!locate(param, true, row, chRow)) continue;
+      engineHits += valueMatches(param, row, chRow);
+      locate(param, false, row, chRow);
+      rowHits += valueMatches(param, row, chRow);
+    }
+    engine = engineHits >= rowHits;
+  }
+
+  QList<FittingParameter> kept;
+  for (FittingParameter param : savedParameterSettings) {
+    int row, chRow;
+    if (!locate(param, engine, row, chRow)) {
+      kept.append(param);
+      continue;
+    }
+    const bool isWidth = widthRx.indexIn(param.name) != -1;
+    if (row < 0 || written.level[row] == 0 || (isWidth && chRow < 0)) continue;
+    param.levelIndex = row;
+    param.channelIndex = isWidth ? chRow : -1;
+    param.name = isWidth ? QString("Level %1 Channel %2 Width (eV)").arg(written.level[row]).arg(written.channel[chRow])
+                         : QString("Level %1 Energy (MeV)").arg(written.level[row]);
+    kept.append(param);
+  }
+  savedParameterSettings = kept;
 }
 
 void FittingTab::onSegmentNormalizationChanged(int segmentIndex, double value) {

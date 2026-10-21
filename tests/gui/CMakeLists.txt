@@ -242,6 +242,31 @@ add_test(NAME main_thread_config COMMAND main_thread_config_test)
 set_tests_properties(main_thread_config PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
+# <parameterSettings> "Level N ..." entries in the engine's numbering of the file they are written into: a
+# project whose levels are not in the written order, with an inactive level first, through a GUI read/write,
+# checked against CNuc::Fill of the written file; the older row-numbered block; a second read/write.
+add_executable(parameter_settings_numbering_test parameter_settings_numbering_test.cpp)
+set_target_properties(parameter_settings_numbering_test PROPERTIES AUTOMOC OFF)
+target_include_directories(parameter_settings_numbering_test PRIVATE
+    ${AZURE2_SOURCE_DIR}/gui/include
+    ${AZURE2_SOURCE_DIR}/include
+)
+target_link_libraries(parameter_settings_numbering_test PRIVATE
+    ${AZURESETUP_LIBRARIES}
+    ${AZUREAPI_LIBRARIES}
+    AZURE2Core
+    Qt5::Core Qt5::Gui Qt5::Widgets Qt5::Network
+)
+if(USE_QWT)
+    target_link_libraries(parameter_settings_numbering_test PRIVATE ${QWT_LIBRARIES})
+endif()
+if(USE_ERYA)
+    target_link_libraries(parameter_settings_numbering_test PRIVATE pugixml srim_utilities)
+endif()
+add_test(NAME parameter_settings_numbering COMMAND parameter_settings_numbering_test)
+set_tests_properties(parameter_settings_numbering PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
 # The segment dialogs' observable controls: a short observable list, the
 # Lab / C.M. frame of a differential cross section, the E1 / E2 multipolarity
 # of angle-integrated capture and the "Total capture" exit item, all mapping
