@@ -956,7 +956,11 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
           if (nAll[k]) std::cerr << " " << kindName[k] << " " << nBadJ[k] << "/" << nAll[k];
       }
       std::cerr << std::endl;
-      for (int r = 0; r < (int)rows.size() && r < 60; r++) {
+      // Full precision, so two runs (e.g. AZURE_NO_GROUPED_GRADIENT) can be
+      // compared value by value; AZURE_GRAD_CHECK_ROWS lists more than 60.
+      const std::streamsize prec = std::cerr.precision(15);
+      const int maxRows = std::getenv("AZURE_GRAD_CHECK_ROWS") ? std::atoi(std::getenv("AZURE_GRAD_CHECK_ROWS")) : 60;
+      for (int r = 0; r < (int)rows.size() && r < maxRows; r++) {
         const Row &w = rows[r];
         std::cerr << "[grad-check] idx " << w.idx << " " << kindName[(int)w.d.kind] << " J" << w.d.jGroup << " L" << w.d.level
                   << " ch" << w.d.channel << " seg" << w.d.segment << "  analytic " << w.g << "  fd " << w.fd
@@ -964,6 +968,7 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
         if (haveJ) std::cerr << "  jacobian " << w.gj << "  relJ " << w.scoreJ;
         std::cerr << std::endl;
       }
+      std::cerr.precision(prec);
       if (std::string(gc) == "exit" && !g_deferCheckExit) std::exit(0);
     }
   }
