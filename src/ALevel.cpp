@@ -1,5 +1,11 @@
 #include "ALevel.h"
 #include "NucLine.h"
+#include <atomic>
+
+std::uint64_t ALevel::NewStamp() {
+  static std::atomic<std::uint64_t> counter{0};
+  return ++counter;
+}
 
 /*!
  * This constructor is used when a level object is created from an entry in the nuclear file.
@@ -202,6 +208,7 @@ complex ALevel::GetExternalGamma(int channelNum) const {
  */
 
 void ALevel::AddGamma(NucLine nucLine) {
+  stamp_ = NewStamp();
   double b = nucLine.gamma();
   gammas_.push_back(b);
   fitgammas_.push_back(0.0);
@@ -218,6 +225,7 @@ void ALevel::AddGamma(NucLine nucLine) {
 }
 
 void ALevel::PadChannels(int n) {
+  stamp_ = NewStamp();
   while ((int)gammas_.size() < n) {
     gammas_.push_back(0.0);
     fitgammas_.push_back(0.0);
@@ -243,6 +251,7 @@ void ALevel::SetGammaFromLine(int channelNum, NucLine nucLine) {
  */
 
 void ALevel::AddGamma(double reducedWidth) {
+  stamp_ = NewStamp();
   gammas_.push_back(reducedWidth);
   fitgammas_.push_back(0.0);
   transform_gammas_.push_back(0.0);
@@ -275,6 +284,7 @@ void ALevel::SetE(double energy) {
  */
 
 void ALevel::SetFitGamma(int channelNum, double reducedWidth) {
+  stamp_ = NewStamp();
   fitgammas_[channelNum - 1] = reducedWidth;
 }
 
@@ -283,6 +293,7 @@ void ALevel::SetFitGamma(int channelNum, double reducedWidth) {
  */
 
 void ALevel::SetFitE(double energy) {
+  stamp_ = NewStamp();
   fitlevel_e_ = energy;
 }
 
@@ -357,6 +368,7 @@ void ALevel::SetExternalGamma(int channelNum, complex reducedWidth) {
  */
 
 void ALevel::SetShiftFunction(int channelNum, double shiftFunction) {
+  stamp_ = NewStamp();
   shifts_[channelNum - 1] = shiftFunction;
 }
 
@@ -373,6 +385,7 @@ double ALevel::GetParkNorm() const {
  */
 
 void ALevel::SetParkNorm(double parkNorm) {
+  stamp_ = NewStamp();
   park_norm_ = parkNorm;
 }
 
