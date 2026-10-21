@@ -622,6 +622,9 @@ double AZURECalc::Chi2On(CNuc *lc, EData *ld, const vector_r &p, std::vector<dou
     chiSquared += segChi;
   }
   if (limitsManager_) chiSquared += CalculateNuisanceChiSquared(p);
+  // Park: the J > 0 wall, as operator() adds it.  Without it the finite-difference gradient columns (and the
+  // AZURE_GRAD_CHECK reference) missed the wall's gradient wherever a level is past it.
+  if (configure().paramMask & Config::USE_PARK_FORMALISM) chiSquared += lc->ParkNormPenalty();
   // The working copy lc holds the abundances of p (FillCompoundFromParams above); compound() holds whatever the
   // last full evaluation left there, so using it here froze the abundance prior in the LM/GSL cost and in the
   // finite-difference gradient columns (found 2026-10-17 by the isospin-levels session).
