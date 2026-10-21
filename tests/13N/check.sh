@@ -45,15 +45,16 @@ else
   ok "the fit starts (exit status 0)"
 fi
 
-chi="$(awk '/^\[grad-check\] chi2 / { sub(",", "", $3); print $3 }' "$WORK/run.log")"
-want="$(awk '/^Total-Chi-Squared:/ { print $2 }' "$HERE/expected/chiSquared.out")"
+chi="$(awk '{ sub(/\r$/, "") } /^\[grad-check\] chi2 / { sub(",", "", $3); print $3 }' "$WORK/run.log")"
+want="$(awk '{ sub(/\r$/, "") } /^Total-Chi-Squared:/ { print $2 }' "$HERE/expected/chiSquared.out")"
 if [ -n "$chi" ] && awk -v a="$chi" -v b="$want" 'BEGIN { d = (a - b) / b; if (d < 0) d = -d; exit !(d <= 1e-5) }'; then
   ok "chi^2 at the start $chi = calculation $want"
 else
   bad "chi^2 at the start '$chi', calculation $want"
 fi
 
-awk '/^\[grad-check\] idx / { a = f = j = ""
+awk '{ sub(/\r$/, "") }
+     /^\[grad-check\] idx / { a = f = j = ""
        for (i = 4; i <= NF; i++) { if ($i == "analytic") a = $(i + 1); if ($i == "fd") f = $(i + 1); if ($i == "jacobian") j = $(i + 1) }
        print a, f, j }' "$WORK/run.log" > "$WORK/rows"
 n="$(wc -l < "$WORK/rows" | tr -d ' ')"

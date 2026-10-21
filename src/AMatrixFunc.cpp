@@ -1809,7 +1809,9 @@ void AMatrixFunc::BilinearAdjoint(EPoint *energyPoint, int jNum, const std::vect
 bool AMatrixFunc::BilinearAdjoint(EPoint *point, int jGroupNum, int chNum, complex mBar, GradAccum &accum,
                                   const vector_matrix_r *shiftDeriv) {
   if (configure().paramMask & Config::USE_RMC_FORMALISM) return false;
-  if (jGroupNum < 1 || jGroupNum > (int)solvers_.size() || !solver_valid_[jGroupNum - 1]) return false;
+  if (jGroupNum < 1 || jGroupNum > (int)solvers_.size()) return false;
+  // Solved in channel space (FillMatrices) or as a level matrix (InvertMatrices).
+  if (route_[jGroupNum - 1] != kRouteChannel && !solver_valid_[jGroupNum - 1]) return false;
   JGroup *jg = compound()->GetJGroup(jGroupNum);
   if (!jg->IsInRMatrix()) return false;
   for (int la = 1; la <= jg->NumLevels(); la++)

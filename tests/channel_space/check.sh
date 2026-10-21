@@ -47,7 +47,8 @@ run() {
   rm -rf "$dir"
   mkdir -p "$dir/output" "$dir/checks"
   cp -r "$HERE/data" "$dir/"
-  cp "$HERE/channel_space.azr" "$dir/t.azr"
+  [ -n "${EXTRA_DATA:-}" ] && cp "$EXTRA_DATA" "$dir/data/"
+  cp "${MODEL:-$HERE/channel_space.azr}" "$dir/t.azr"
   (cd "$dir" && for v in "$@"; do export "$v"; done &&
    printf "$mode\n\n\n7\n" | run_limited 900 "$AZURE2_BIN" $flags --no-gui --no-readline t.azr > run.log 2>&1)
 }
@@ -56,6 +57,7 @@ run() {
 # the largest |value| of the field's column; "lines" if the files differ in shape.
 maxdiff() {
   awk 'function abs(x) { return x < 0 ? -x : x }
+       { sub(/\r$/, "") }
        FNR == NR { for (i = 1; i <= NF; i++) a[FNR, i] = $i; na[FNR] = NF; nla = FNR; next }
        { if (na[FNR] != NF) { shape = 1; next }
          for (i = 1; i <= NF; i++) {
@@ -116,7 +118,8 @@ done
 
 # ---- (c) gradients -----------------------------------------------------------------------------
 rows() {
-  awk '/^\[grad-check\] idx / { idx = $3; a = f = ""; j = "-"
+  awk '{ sub(/\r$/, "") }
+       /^\[grad-check\] idx / { idx = $3; a = f = ""; j = "-"
          for (i = 4; i <= NF; i++) { if ($i == "analytic") a = $(i + 1); if ($i == "fd") f = $(i + 1); if ($i == "jacobian") j = $(i + 1) }
          print idx, a, f, j }' "$WORK/$1/run.log" | sort -n
 }
@@ -148,16 +151,84 @@ for mode in brune:"" lanethomas:"--no-brune" park:"--use-park"; do
   else
     bad "$tag: gradient vs finite differences, worst $worst of the largest (> $tol)"
   fi
-  same="$(join "$WORK/g_$tag.rows" "$WORK/gl_$tag.rows" | awk '{ a = $2 < 0 ? -$2 : $2; if (a > m) m = a
-              d = $2 - $5; if (d < 0) d = -d; if (d > w) w = d
-              if ($4 != "-" && $7 != "-") { e = $4 - $7; if (e < 0) e = -e; if (e > w) w = e }; n++ }
-              END { if (n == 0 || m == 0) print "nan"; else printf "%.2e %d", w / m, n }')"
+  # rows of the two runs matched by parameter index
+  same="$(awk 'FNR == NR { la[$1] = $2; lj[$1] = $4; next }
+              ($1 in la) { a = $2 < 0 ? -$2 : $2; if (a > m) m = a
+                d = $2 - la[$1]; if (d < 0) d = -d; if (d > w) w = d
+                if ($4 != "-" && lj[$1] != "-") { e = $4 - lj[$1]; if (e < 0) e = -e; if (e > w) w = e }; n++ }
+              END { if (n == 0 || m == 0) print "nan"; else printf "%.2e %d", w / m, n }' "$WORK/gl_$tag.rows" "$WORK/g_$tag.rows")"
   if awk -v s="$same" 'BEGIN { split(s, x, " "); exit !(x[2] > 0 && x[1] + 0 <= 1e-9) }'; then
     ok "$tag: channel-space gradient = level-space gradient (${same% *} of the largest, ${same#* } parameters)"
   else
     bad "$tag: channel-space vs level-space gradient: $same"
   fi
 done
+
+# ---- (d) scattering lengths and electron screening ----------------------------------------------
+# The model with a <scatteringLengths> block (p+12C 1/2+ in channel space, p+12C* 5/2+ in level space;
+# a real and a complex constraint), an angular distribution (29 angles at each of 10 energies, which
+# share one forward solve and take the bilinear-basis rows of the residual Jacobian), and electron
+# screening with U_e free on the elastic segments.  The scattering length of 1/2+ is evaluated at the
+# threshold on the channel route; in the Lane-Thomas variant a 1/2+ level sits 0.5 keV above the
+# threshold (a formal pole there).
+awk '!/^#/ { k++ } !/^#/ && k % 20 == 1 && n < 10 { n++
+       for (a = 30; a <= 170; a += 5) printf "%s %d %.6e %.6e\n", $1, a, $3, 0.05 * $3 }' "$HERE/data/elastic_90.dat" > "$WORK/angdist.dat"
+mkext() {  # mkext LEVEL_ENERGY -> the extended model on stdout, the 3.65 MeV 1/2+ level moved to LEVEL_ENERGY
+  awk -v e="$1" '{ sub(/\r$/, "") }
+       $1 == "0.5" && $3 == "3.650000" { $3 = e }
+       { print }
+       /^1 1 1 0\.5 7 0 180 1 1 1 5 0 0 0 data\/elastic_90\.dat 0 0$/ { print "1 1 1 0.5 7 0 180 1 1 0 0 0 0 0 data/angdist.dat 0 0" }
+       /^<\/segmentsData>/ { print "<scatteringLengths>"; print "1 1 0.5 40 0.5"; print "1 2 2.5 70 0.5 -0.001 0.0002"; print "</scatteringLengths>" }
+       /^<targetInt>/ { print "1  \"1,2,3\"  200  0  0  0  0  \"\"  0  0  0  0  \"\"  0  0  0.04  20  50  screening  1000  1  0" }' "$HERE/channel_space.azr"
+}
+mkext 3.650000 > "$WORK/ext.azr"
+mkext 1.944000 > "$WORK/ext_pole.azr"
+export EXTRA_DATA="$WORK/angdist.dat"
+for v in brune:"":ext lanethomas:"--no-brune":ext pole:"--no-brune":ext_pole; do
+  tag="${v%%:*}"; rest="${v#*:}"; flags="${rest%%:*}"; model="$WORK/${rest#*:}.azr"
+  MODEL="$model" run "sc_$tag" 1 "$flags"
+  MODEL="$model" run "sl_$tag" 1 "$flags" AZURE_LEVEL_SPACE=1
+  a="$WORK/sc_$tag/output/scatteringLengths.out"; b="$WORK/sl_$tag/output/scatteringLengths.out"
+  if [ -s "$a" ] && [ -s "$b" ] && [ "$(tr -d '\r' < "$a")" = "$(tr -d '\r' < "$b")" ]; then
+    ok "$tag: scatteringLengths.out identical on both routes ($(awk '$1 == 1 && $3 == "1/2+" { print "1/2+ a0 " $5 " fm" }' "$a" | tr -d '\r'))"
+  else
+    bad "$tag: scatteringLengths.out differs between the routes or is missing"
+  fi
+  MODEL="$model" gradcheck "dg_$tag" "$flags"
+  MODEL="$model" gradcheck "dgl_$tag" "$flags" AZURE_LEVEL_SPACE=1
+  nrows="$(wc -l < "$WORK/dg_$tag.rows" | tr -d ' ')"
+  # the scattering lengths' adjoint must work on the channel route (else every parameter is a finite difference)
+  if grep -q "analytic block used" "$WORK/dg_$tag/run.log"; then ok "$tag: analytic gradient with the scattering-length constraints"
+  else bad "$tag: the analytic gradient bailed to finite differences"; grep "grad-check\] chi2" "$WORK/dg_$tag/run.log"; fi
+  worst="$(awk '{ a = $2 < 0 ? -$2 : $2; if (a > m) m = a; g[NR] = $2; f[NR] = $3; j[NR] = $4 }
+             END { for (i = 1; i <= NR; i++) { d = g[i] - f[i]; if (d < 0) d = -d; e = j[i] - f[i]; if (e < 0) e = -e
+                                               if (d > w) w = d; if (j[i] != "-" && e > w) w = e }
+                   if (m > 0) printf "%.2e", w / m; else print "nan" }' "$WORK/dg_$tag.rows")"
+  if [ "$nrows" -ge 10 ] && awk -v w="$worst" 'BEGIN { exit !(w + 0 <= 1e-5 && w != "nan") }'; then
+    ok "$tag: gradients with the constraints and U_e = finite differences for $nrows parameters (worst $worst of the largest)"
+  else
+    bad "$tag: gradient vs finite differences, worst $worst of the largest ($nrows parameters)"
+  fi
+  # d chi2 / d U_e on its own scale: the Jacobian rows of the angular distribution carry it too
+  scr="$(awk '{ sub(/\r$/, "") } /^\[grad-check\] idx .* screening / { for (i = 1; i <= NF; i++) if ($i == "rel" || $i == "relJ") if ($(i + 1) + 0 > m) m = $(i + 1) + 0; n++ }
+              END { if (n) printf "%.2e", m; else print "missing" }' "$WORK/dg_$tag/run.log")"
+  if awk -v s="$scr" 'BEGIN { exit !(s != "missing" && s + 0 <= 1e-5) }'; then
+    ok "$tag: d chi2/d U_e, adjoint and Jacobian paths = finite differences (rel $scr)"
+  else
+    bad "$tag: d chi2/d U_e vs finite differences: $scr"
+  fi
+  same="$(awk 'FNR == NR { la[$1] = $2; lj[$1] = $4; next }
+              ($1 in la) { a = $2 < 0 ? -$2 : $2; if (a > m) m = a
+                d = $2 - la[$1]; if (d < 0) d = -d; if (d > w) w = d
+                if ($4 != "-" && lj[$1] != "-") { e = $4 - lj[$1]; if (e < 0) e = -e; if (e > w) w = e }; n++ }
+              END { if (n == 0 || m == 0) print "nan"; else printf "%.2e %d", w / m, n }' "$WORK/dgl_$tag.rows" "$WORK/dg_$tag.rows")"
+  if awk -v s="$same" 'BEGIN { split(s, x, " "); exit !(x[2] > 0 && x[1] + 0 <= 1e-9) }'; then
+    ok "$tag: channel-space gradient = level-space gradient (${same% *} of the largest)"
+  else
+    bad "$tag: channel-space vs level-space gradient: $same"
+  fi
+done
+unset EXTRA_DATA
 
 if [ "$failures" -eq 0 ]; then echo "channel_space: all checks passed"; else echo "channel_space: $failures check(s) FAILED"; fi
 [ "$failures" -eq 0 ]

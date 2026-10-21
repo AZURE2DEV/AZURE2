@@ -14,4 +14,12 @@ keep that level out of R and solve it with the channels (deflation).
 `run_tests.sh` compares the chi-squared with `expected/chiSquared.out`;
 `check.sh` compares the channel route with `AZURE_LEVEL_SPACE=1` (outputs,
 bilinear forms, gradients) and the gradients with finite differences, for the
-Brune, Lane-Thomas and Park level matrices.
+Brune, Lane-Thomas and Park level matrices.  Section (d) extends the model with a `<scatteringLengths>` block (the
+1/2+ length is evaluated at the p + 12C threshold on the channel route), an
+angular distribution of 29 angles at each of 10 energies, and electron
+screening with U_e free on the elastic segments; in a Lane-Thomas variant a
+1/2+ level lies 0.5 keV above the threshold.  It checks that
+`scatteringLengths.out` is identical on both routes, that the gradient stays
+analytic with the constraints, that it (and d chi^2/d U_e on the adjoint and
+residual-Jacobian paths) agrees with finite differences, and that it agrees
+with the level-space gradient.

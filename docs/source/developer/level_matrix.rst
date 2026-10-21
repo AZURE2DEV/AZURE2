@@ -248,6 +248,16 @@ rank-two change of :math:`K - EN` it makes (``LevelAdjoint``); Park keeps
 ``LevelMatrixAdjoint``.  The solves :math:`A g_c` come from the channel solves
 of the route (``GetRawChannelSolve``, ``ApplyA``).
 
+The scattering lengths (:doc:`../theory/scattering_length`) take the same
+routes at each pair's threshold: :math:`M_{cc}` is the channel route's
+bilinear form (``GetUBilinear``), deflated where a level lies at the
+threshold, and its adjoint (``AMatrixFunc::BilinearAdjoint``) is taken on
+either route.  It runs after the scalar pass has resolved its formal
+cotangents, so for Brune and Park on the channel route it takes the
+level-matrix adjoint directly.  ``tests/channel_space/check.sh`` (d) compares
+the lengths, and the gradients with the constraints, between the routes and
+with finite differences, including a level 0.5 keV above the threshold.
+
 T-Matrix Calculation: ``AMatrixFunc::CalculateTMatrix()``
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 

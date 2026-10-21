@@ -130,7 +130,8 @@ In the calculation
 * **Gradient.**  The derivative of :math:`a_0` with respect to the level
   energies and reduced widths is exact: it is the reverse mode of
   :math:`\tilde\gamma^T\tilde A\tilde\gamma` through the same level-matrix
-  adjoint the cross sections use (``AMatrixFunc::BilinearAdjoint``), so
+  adjoint the cross sections use (``AMatrixFunc::BilinearAdjoint``, on the
+  channel-space or the level route, :doc:`../developer/level_matrix`), so
   ``--use-gradient``, ``--use-lm`` and ``--use-gsl-lm`` treat a constraint like
   a data point (one residual row per constrained part).
 * **pyazr.**  :meth:`azure2.scattering_lengths` returns the values at any
