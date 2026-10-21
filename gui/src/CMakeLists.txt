@@ -70,6 +70,7 @@ set(AZURESETUP_SOURCES
     AboutAZURE2Dialog.cpp InfoDialog.cpp InTabDocs.cpp
     IAEALevelData.cpp IAEALevelDialog.cpp NuclearPotentialTab.cpp
     ExforData.cpp ExforDialog.cpp PairKeyCombo.cpp AzureTheme.cpp AbundancesModel.cpp
+    ScatteringLengthsModel.cpp
 )
 
 set(AZURESETUP_HEADERS
@@ -85,6 +86,7 @@ set(AZURESETUP_HEADERS
     ../include/TextEditBuffer.h ../include/AboutAZURE2Dialog.h ../include/InfoDialog.h
     ../include/IAEALevelData.h ../include/IAEALevelDialog.h ../include/NuclearPotentialTab.h
     ../include/ExforData.h ../include/ExforDialog.h ../include/DialogScrollArea.h ../include/AbundancesModel.h
+    ../include/ScatteringLengthsModel.h
 )
 
 set(AZURESETUP_RCCS AZURESetup.qrc)
