@@ -401,6 +401,21 @@ bool AZURESetup::readFile(QString filename) {
   }
   file2.close();
 
+  // The optional <scatteringLengths> block.  The engine scans the whole file for
+  // its tag (src/ScatteringLength.cpp), so it may sit anywhere -- after
+  // </segmentsData>, after </segmentsTest>, ...; the sequential pass above skips
+  // its lines, and the first block is read here, as the engine does.  The GUI
+  // writes it after </segmentsTest>.  Comments in it are not kept.
+  QFile file3(filename);
+  if (!file3.open(QIODevice::ReadOnly)) return false;
+  QTextStream in3(&file3);
+  line = QString("");
+  while (line.trimmed() != QString("<scatteringLengths>") && !in3.atEnd()) line = in3.readLine();
+  if (line.trimmed() == QString("<scatteringLengths>")) {
+    if (!segmentsTab->readScatteringLengths(in3)) return false;
+  }
+  file3.close();
+
   GetConfig().configfile = QDir::fromNativeSeparators(info.absoluteFilePath()).toStdString();
   setWindowTitle(QString("AZURE2 -- %1").arg(QString::fromStdString(GetConfig().configfile)));
   QDir::setCurrent(directory);
@@ -757,6 +772,13 @@ bool AZURESetup::writeFile(QString filename) {
   out << "<segmentsTest>" << Qt::endl;
   if (!segmentsTab->writeSegTestFile(out)) return false;
   out << "</segmentsTest>" << Qt::endl;
+
+  // Measured scattering lengths, only for a project that has some.
+  if (segmentsTab->hasScatteringLengths()) {
+    out << "<scatteringLengths>" << Qt::endl;
+    if (!segmentsTab->writeScatteringLengths(out)) return false;
+    out << "</scatteringLengths>" << Qt::endl;
+  }
 
   out << "<targetInt>" << Qt::endl;
   if (!targetIntTab->writeFile(out)) return false;

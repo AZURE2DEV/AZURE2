@@ -2,11 +2,13 @@ Segments Tab
 ============
 
 The **Segments** tab defines the energies and angles at which cross sections are
-calculated. It is divided into two halves:
+calculated. It is divided into two halves, with a small table below them:
 
 - **Segments From Data** (upper) -- for calculations that reference experimental
   data files.
 - **Segments Without Data** (lower) -- for pure calculations and extrapolations.
+- **Measured Scattering Lengths** (bottom) -- optional constraints on the s-wave
+  scattering lengths of the particle pairs.
 
 Each segment is automatically assigned a numerical key that is referenced in the
 **Experimental Effects** tab.
@@ -388,3 +390,38 @@ segment dialog but includes:
    logarithmic axis cannot display a quantity that goes negative, and it drops
    such points silently rather than complaining, so the curve would look
    merely sparse.
+
+Measured Scattering Lengths
+---------------------------
+
+AZURE2 computes the s-wave scattering length :math:`a_0` of every particle pair
+at the pair's threshold after each calculation or fit and writes it to
+``output/scatteringLengths.out``. The **Measured Scattering Lengths** table at
+the bottom of the tab adds measured values to the fit: each active row adds
+:math:`((a_0 - \text{value})/\sigma)^2` to :math:`\chi^2`, so a scattering
+length counts like one more data point. The definition and how the R-matrix
+parameters determine :math:`a_0` are in :doc:`../theory/scattering_length`.
+
+Click **+** to add a row and **-** to remove the selected one; double-click a
+cell to edit it. The columns are: the check box (whether the row enters
+:math:`\chi^2`); **Pair**, a drop-down of the particle pairs (gamma and beta
+pairs are not offered); **Spin s (J**\ :math:`\pi`\ **)**, the channel spin
+:math:`s`, which for :math:`l = 0` is the :math:`J^\pi` of the channel, chosen
+from the values the pair allows (:math:`|j_1 - j_2|` to :math:`j_1 + j_2`, only
+even ones for a pair of identical particles), or **coherent**, the
+spin-weighted combination
+:math:`\sum_s (2s+1)\,a_s / ((2j_1+1)(2j_2+1))` that a neutron measurement on
+an unpolarized target usually gives (not defined for identical particles);
+**Re a0** and **Re** :math:`\sigma` in fm; and, optionally, **Im a0** and
+**Im** :math:`\sigma` for a pair with open reaction channels at its threshold.
+A :math:`\sigma` of 0 leaves that part unconstrained; blank imaginary cells
+mean no imaginary part.
+
+A row refers to its pair by the pair's key, the row number on the **Particle
+Pairs** tab. When a pair is deleted or edited, rows whose pair no longer exists,
+is no longer a particle pair, or no longer allows the row's channel spin are
+not removed: they turn red, and the tooltip says why. They are saved as they
+are, and the calculation stops with an error naming the line until they are
+corrected. The table is saved as a ``<scatteringLengths>`` block after
+``</segmentsTest>``, and only when it has at least one row; comments in a block
+written by hand are not kept when the GUI saves the file.

@@ -52,6 +52,11 @@ class AZURESetup : public QMainWindow {
   Config &GetConfig();
   void open(QString filename);
   void saveProject() { save(); }  // Public wrapper for MCMCTab to use
+  /*! Reads / writes a project file without any dialog (the headless GUI tests). */
+  bool readProjectFile(const QString &filename) { return readFile(filename); }
+  bool writeProjectFile(const QString &filename) { return writeFile(filename); }
+  SegmentsTab *getSegmentsTab() const { return segmentsTab; }
+  PairsTab *getPairsTab() const { return pairsTab; }
   /*! Grabs the window once per tab into dir/tab<n>_<name>.png (see AZURE2_SCREENSHOT_DIR in main.cpp). */
   void saveTabScreenshots(const QString &dir);
 
