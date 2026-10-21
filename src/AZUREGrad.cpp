@@ -966,6 +966,8 @@ bool GroupRows(AMatrixFunc &amf, const GradItem &it, CNuc *compound, const vecto
     accum.Zero();
     if (fitBar[q] != 0.0) {
       if (m.seg->IsNatural()) accum.AddAbundance(AbundanceOrdinalOf(compound, m.seg), fitBar[q] * rawModel[q]);
+      // The electron-screening derivative is not in the bilinear forms (TBarAdjoint adds it on the other route).
+      for (const auto &s : bars[q].screen) accum.AddScreening(s.first, s.second);
       size_t t = 0;
       for (int j = 1; j <= (int)terms[q].size(); j++)
         for (const BilinearTerm &term : terms[q][j - 1]) {

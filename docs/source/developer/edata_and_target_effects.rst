@@ -486,6 +486,15 @@ from them, and back-propagates:
   each member is cheaper (few members, many channel pairs) or the decay has
   external capture.
 
+Electron screening (a ``screening`` block on a ``<targetInt>`` line) is a
+factor :math:`f = e^{k U_e}` on each point's own observable, applied after the
+bare one is formed from the shared T-matrix (``GenMatrixFunc::CalculateCrossSection``),
+so points with different screening may share a calculation.  In the adjoint
+``PointTBar`` scales the point's cotangent by :math:`f` and records
+:math:`\partial Y/\partial U_e`; ``TBarAdjoint`` adds it, and the
+bilinear-basis rows of ``GroupRows``, which do not back-propagate the
+member, add it to the member's row directly.
+
 The cotangent of the level matrix is a sum of rank-one terms,
 :math:`\bar M = -\sum_t \beta_t\, \overline{A g_c}\,\overline{A g_{c'}}^T`,
 formed from the solves :math:`A g_c` in :math:`O(n^2)` per term instead of the
