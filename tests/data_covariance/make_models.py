@@ -19,6 +19,10 @@ data/p12c_165.dat, which no covariance segment uses (its rows drop out as well).
               an absolute 2 % vector + one smooth global vector
   rel.azr     covariance cov_rel.txt   = cov_dense.txt with the per-file 2 % vectors as
               relvector 0.02 (model-scaled) instead
+  fit.azr     dense.azr with every level energy and width fixed: only the norms, shifts and
+              abundances are free, a problem with one minimum, for the fitter comparison
+              (with the levels free, MIGRAD, LM and GSL reach different minima of this
+              synthetic model, depending on the platform)
 """
 import math
 import os
@@ -97,6 +101,18 @@ def main():
         cov = None if name == "plain" else "cov_%s.txt" % name
         with open(os.path.join(HERE, name + ".azr"), "w") as f:
             f.write(model(cov))
+
+    text = open(os.path.join(HERE, "dense.azr")).read()
+    a, b = text.index("<levels>\n"), text.index("</levels>")
+    lines = []
+    for line in text[a + 9:b].splitlines():
+        t = line.split()
+        if t:
+            t[3], t[10] = "1", "1"  # energy fixed, width fixed
+            line = " ".join(t)
+        lines.append(line)
+    with open(os.path.join(HERE, "fit.azr"), "w") as f:
+        f.write(text[:a + 9] + "\n".join(lines) + "\n" + text[b:])
 
     with open(os.path.join(HERE, "cov_diag.txt"), "w") as f:
         f.write("# tests/data_covariance: diagonal(e_i^2) -- must give the chi2 of no covariance\n")

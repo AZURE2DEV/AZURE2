@@ -11,7 +11,8 @@
 #   (d) the analytic gradient (adjoint and whitened residual-Jacobian paths) agrees with central
 #       finite differences of chi2 for every free parameter (levels, norms, a shift-group shift,
 #       a sqrt(E) shift, a shift function, abundances), dense and relvector;
-#   (e) MIGRAD (--use-gradient), --use-lm and --use-gsl-lm fit the dense model to one minimum;
+#   (e) MIGRAD (--use-gradient), --use-lm and --use-gsl-lm fit the dense model with its levels
+#       fixed (fit.azr: norms, shifts and abundances free, one minimum) to the same chi2;
 #   (f) broken inputs stop the run with an ERROR: wrong record count, a data file missing from
 #       the header, overlapping windows on one file, a matrix that is not positive definite, an
 #       asymmetric block, a covariance block on a test segment.
@@ -128,16 +129,16 @@ objective() {  # data + norm + shift + abundance chi2 of a finished fit
 declare -a objs=()
 for v in "migrad:--use-gradient" "lm:--use-lm" "gsl:--use-gsl-lm"; do
   tag="${v%%:*}"
-  run "f_$tag" dense 2 "${v#*:}"
+  run "f_$tag" fit 2 "${v#*:}"
   objs+=("$tag=$(objective "f_$tag")")
 done
 start="$(objective dense)"
 spread="$(printf '%s\n' "${objs[@]}" | awk -F= -v s="$start" '{ x = $2 + 0; if (NR == 1 || x < lo) lo = x; if (NR == 1 || x > hi) hi = x; if (x >= s) up++ }
-                                                                END { printf "%.3f %d", (hi - lo) / lo, up + 0 }')"
-if awk -v s="$spread" 'BEGIN { split(s, x, " "); exit !(x[1] + 0 <= 2e-3 && x[2] == 0) }'; then
-  ok "MIGRAD, LM and GSL fits of the dense model: ${objs[*]} (start $start), within ${spread% *} of each other"
+                                                                END { printf "%.1e %d", (hi - lo) / lo, up + 0 }')"
+if awk -v s="$spread" 'BEGIN { split(s, x, " "); exit !(x[1] + 0 <= 1e-4 && x[2] == 0) }'; then
+  ok "MIGRAD, LM and GSL fits (levels fixed): ${objs[*]} (start $start), within ${spread% *} of each other"
 else
-  bad "fits of the dense model: ${objs[*]} (start $start), spread/rises $spread"
+  bad "fits with the levels fixed: ${objs[*]} (start $start), spread/rises $spread"
 fi
 
 # ---- (f) broken inputs ---------------------------------------------------------------------------------

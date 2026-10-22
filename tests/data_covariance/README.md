@@ -25,6 +25,7 @@ norm, A_y, a shift group with a free shift, and a free sqrt(E) shift. Its header
 | `diag.azr` | `cov_diag.txt`: diag(e_i^2), so the chi2 must equal plain |
 | `dense.azr` | `cov_dense.txt`: 0.5 diag(e^2), one block per beam energy across all files (0.4 e_i e_j off the diagonal), a 2 % absolute vector per file, one smooth global vector |
 | `rel.azr` | `cov_rel.txt`: as dense, with the per-file 2 % terms as `relvector` |
+| `fit.azr` | `cov_dense.txt`, with every level energy and width fixed (for the fitter comparison) |
 
 `check.sh`:
 
@@ -37,8 +38,11 @@ norm, A_y, a shift group with a free shift, and a free sqrt(E) shift. Its header
   agree with central differences for all 21 free parameters, dense and rel, to 3e-7 of the
   largest. The parameters are level energies and widths, norms, a shift-group shift, a
   sqrt(E) shift, a shift function and abundances.
-- (e) MIGRAD (`--use-gradient`), `--use-lm` and `--use-gsl-lm` fit the dense model to one
-  minimum, within 1e-3 relative.
+- (e) MIGRAD (`--use-gradient`), `--use-lm` and `--use-gsl-lm` fit `fit.azr` (dense with every
+  level fixed: norms, shifts and abundances free) to the same chi2, within 1e-4 relative
+  (3e-8 in practice). With the levels free this synthetic model has several minima, and the
+  fitters reach different ones depending on the platform: the first CI run on Linux found
+  3036 with MIGRAD against 3078 with LM.
 - (f) these broken inputs stop the run with an ERROR:
   - a wrong row count in the header
   - a data file missing from the header
