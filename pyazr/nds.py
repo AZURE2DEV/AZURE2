@@ -23,6 +23,13 @@ dropped straight into an evaluation::
                      observable="total-capture")
     AzrModel.from_file("13N.azr").add_data_segment(**kw).write("13N_new.azr")
 
+When the EXFOR Web-API cannot be reached (it is intermittently behind a
+Cloudflare challenge), ``fetch_exfor`` and ``reference`` read the entry from a
+local copy of the EXFOR master files instead (https://github.com/IAEA-NDS/exfor_master,
+``git clone --depth 1``, about 1.5 GB), found at ``$AZURE2_EXFOR_MASTER`` or
+``~/.azure2/exfor_master``.  ``source="local"`` reads only the copy,
+``source="web"`` only the server.  ``search_exfor`` has no local fallback.
+
 References resolve to a DOI through the CrossRef API, so the paper behind any
 dataset can be pulled up (``reference`` + ``resolve_doi``).
 
@@ -34,6 +41,7 @@ Command line, for a quick look without writing a script::
 
     python -m pyazr.nds search --target C-13 --reaction p,g --quantity SIG
     python -m pyazr.nds download O2599004 -o data/roughton.dat
+    python -m pyazr.nds download O2599004 --source local
 """
 
 import csv
@@ -41,6 +49,7 @@ import dataclasses
 import io
 import json
 import math
+import os
 import re
 import urllib.error
 import urllib.parse
@@ -423,18 +432,57 @@ def search_exfor(target=None, reaction=None, quantity=None, author=None,
     return out
 
 
-def fetch_exfor(dataset_id, plus=0):
-    """Fetch one EXFOR dataset by its ID (``"O2599004"``).
+def fetch_exfor(dataset_id, plus=0, source="auto"):
+    """Fetch one EXFOR dataset by its ID (``"O2599004"``; a pointer dataset as
+    ``"O2599004.1"``).
 
     ``plus=0`` returns the original units (``B*KEV`` S-factors, ``NB/SR``
     differentials, ...); ``plus=1`` the computational units (eV, ``B*EV``,
     ``B/SR``); ``plus=2`` the universal grid (residual/incident/sec energies,
     angle).  Returns an :class:`ExforData`.
+
+    ``source="auto"`` asks the Web-API and, if it cannot be reached or answers
+    with something other than data (a Cloudflare challenge page), reads the
+    local EXFOR master files (:func:`exfor_master_path`) with a warning.
+    ``"web"`` and ``"local"`` use only one of them.  The local copy gives the
+    original units only (``plus=0``); its columns and units are those of the
+    EXFOR entry, as ``x4get`` reports them.
     """
+    if source not in ("auto", "web", "local"):
+        raise ValueError(f"source must be 'auto', 'web' or 'local', not {source!r}")
+    if source == "local":
+        return _fetch_exfor_local(dataset_id, plus)
+    try:
+        return _fetch_exfor_web(dataset_id, plus)
+    except (OSError, _WebUnavailable) as err:   # URLError and timeouts are OSErrors
+        if source == "web" or exfor_master_path() is None:
+            raise
+        warnings.warn(f"EXFOR Web-API unavailable for {dataset_id} ({err}); "
+                      f"reading the local EXFOR master files at "
+                      f"{exfor_master_path()}.")
+        return _fetch_exfor_local(dataset_id, plus)
+
+
+class _WebUnavailable(Exception):
+    """The server answered, but with a page instead of data (a Cloudflare
+    challenge or a maintenance page)."""
+
+
+def _web_text(url, params):
+    text = _http_get(url, params)
+    head = text.lstrip()[:200].lower()
+    if head.startswith(("<!doctype html", "<html")):
+        title = re.search(r"<title>(.*?)</title>", text, re.I | re.S)
+        raise _WebUnavailable(f"HTML page instead of data"
+                              + (f": {title.group(1).strip()!r}" if title else ""))
+    return text
+
+
+def _fetch_exfor_web(dataset_id, plus=0):
     params = {"DatasetID": dataset_id, "op": "csv"}
     if plus:
         params["plus"] = int(plus)
-    text = _http_get(EXFOR_URL + "x4get", params)
+    text = _web_text(EXFOR_URL + "x4get", params)
     if text.strip().startswith("Error"):
         raise ValueError(f"EXFOR x4get {dataset_id}: {text.strip()[:200]}")
     reader = csv.reader(io.StringIO(text))
@@ -464,6 +512,214 @@ def fetch_exfor(dataset_id, plus=0):
     return ExforData(dataset_id=dataset_id, year=year, author=author,
                      reaction=reaction, columns=columns, arrays=arrays,
                      raw=text)
+
+
+# -- local EXFOR master files ------------------------------------------------
+#
+# The EXFOR exchange format (LEXFOR / the EXFOR Formats Manual): 80-column
+# records; a BIB keyword in columns 1-10, its pointer in column 11 and the text
+# in 12-66; COMMON and DATA sections give a heading line and a unit line of
+# 11-column fields, six per record, then the values, a row continuing on the
+# next record after six fields.  Columns 67-80 (record identification) are not
+# used.  Numbers may be written without the E (``1.23-4``), and a blank field is
+# a missing value.
+
+def exfor_master_path():
+    """The local EXFOR master files (the ``exfor_master`` repository, whose
+    entries are ``exforall/<first 3 characters>/<entry>.x4``):
+    ``$AZURE2_EXFOR_MASTER``, else ``~/.azure2/exfor_master``; ``None`` if
+    neither holds an ``exforall`` directory."""
+    for candidate in (os.environ.get("AZURE2_EXFOR_MASTER"),
+                      os.path.join(os.path.expanduser("~"), ".azure2", "exfor_master")):
+        if candidate and os.path.isdir(os.path.join(candidate, "exforall")):
+            return candidate
+    return None
+
+
+def _local_entry_text(entry):
+    """The raw text of EXFOR entry ``entry`` (5 characters) from the local copy."""
+    root = exfor_master_path()
+    if root is None:
+        raise FileNotFoundError(
+            "no local EXFOR master files: clone https://github.com/IAEA-NDS/exfor_master "
+            "and point $AZURE2_EXFOR_MASTER (or ~/.azure2/exfor_master) at it.")
+    entry = entry.upper()
+    path = os.path.join(root, "exforall", entry[:3], entry + ".x4")
+    if not os.path.isfile(path):
+        raise ValueError(f"EXFOR entry {entry} is not in the local copy ({path}).")
+    with open(path, encoding="utf-8", errors="replace") as f:
+        return f.read()
+
+
+def _x4_number(field):
+    """One EXFOR numeric field; NaN when blank.  Accepts the Fortran-style
+    exponent without E (``1.23-4``, ``-5.6+2``) and blanks inside the field,
+    which the Fortran reading of the format ignores (``' 1.44   -06'``)."""
+    t = "".join(field.split())
+    if not t:
+        return math.nan
+    try:
+        return float(t)
+    except ValueError:
+        pass
+    m = re.fullmatch(r"([+-]?(?:\d+\.?\d*|\.\d+))([+-]\d+)", t)
+    if m:
+        return float(f"{m.group(1)}e{m.group(2)}")
+    raise ValueError(f"not an EXFOR number: {field!r}")
+
+
+def _x4_subentries(text):
+    """{subentry number (3 characters): its records} for one entry."""
+    subs, current, key = {}, None, None
+    for line in text.splitlines():
+        tag = line[:10].strip()
+        if tag == "SUBENT":
+            m = re.search(r"[0-9A-Z]{8}", line[10:33])
+            key = m.group(0)[-3:] if m else None
+            current = []
+        elif tag in ("ENDSUBENT", "NOSUBENT"):
+            if current is not None:
+                subs[key] = current
+            current = None
+        elif current is not None:
+            current.append(line.rstrip("\n"))
+    return subs
+
+
+def _x4_bib(records):
+    """{keyword: [(pointer, text line), ...]} from a subentry's BIB section."""
+    bib, keyword, inside = {}, None, False
+    for line in records:
+        tag = line[:10].strip()
+        if tag == "BIB":
+            inside = True
+            continue
+        if tag == "ENDBIB":
+            break
+        if not inside:
+            continue
+        if tag:
+            keyword = tag
+        if keyword:
+            bib.setdefault(keyword, []).append((line[10:11].strip(), line[11:66].rstrip()))
+    return bib
+
+
+def _x4_table(records, section):
+    """The COMMON or DATA section of a subentry: ``(headings, units, rows)``,
+    headings as (name, pointer) and rows as lists of floats; None if absent."""
+    for i, line in enumerate(records):
+        if line[:10].strip() != section:
+            continue
+        nfields = int(line[11:22])
+        nrows = int(line[22:33]) if section == "DATA" else 1
+        per = (nfields + 5) // 6                    # records per heading, unit or data row
+        def fields(start):
+            text = "".join(records[start + k][:66].ljust(66) for k in range(per))
+            return [text[11 * j:11 * (j + 1)] for j in range(nfields)]
+        heads = [(f[:10].strip(), f[10:11].strip()) for f in fields(i + 1)]
+        units = [f.strip() for f in fields(i + 1 + per)]
+        rows = [[_x4_number(v) for v in fields(i + 1 + per * (2 + r))]
+                for r in range(nrows)]
+        return heads, units, rows
+    return None
+
+
+def _x4_reaction(bib, pointer):
+    """The REACTION code for ``pointer`` ('' = the first), without the outer
+    parentheses -- as ``x4get`` reports it in ``Reacode``.  A code continues on
+    the next lines while its parentheses are open (a combination of reactions
+    can start a continuation line with ``(``); the free text after it is
+    dropped."""
+    codes, depth = [], 0                            # [pointer, code text]
+    for ptr, text in bib.get("REACTION", []):
+        t = text.strip()
+        if depth > 0 and codes:
+            part = t
+        elif ptr or t.startswith("("):
+            codes.append([ptr, ""])
+            part = t
+        else:
+            continue                                # free text
+        for k, ch in enumerate(part):
+            depth += (ch == "(") - (ch == ")")
+            codes[-1][1] += ch
+            if depth == 0:                          # the code closed: the rest is free text
+                break
+    for ptr, code in codes:
+        if ptr == pointer or not pointer:
+            return code[1:-1] if code.startswith("(") and code.endswith(")") else code
+    return ""
+
+
+def _fetch_exfor_local(dataset_id, plus=0):
+    if plus:
+        raise ValueError(f"{dataset_id}: the local EXFOR master files give the "
+                         f"original units only (plus=0), not plus={plus}.")
+    m = re.fullmatch(r"([0-9A-Z]{5})([0-9]{3})(?:\.?([0-9A-Z]))?", dataset_id.strip().upper())
+    if not m:
+        raise ValueError(f"not an EXFOR dataset ID: {dataset_id!r} "
+                         f"(entry + subentry, e.g. 'O2599004', or 'O2599004.1' for a pointer)")
+    entry, number, pointer = m.group(1), m.group(2), m.group(3) or ""
+    text = _local_entry_text(entry)
+    subs = _x4_subentries(text)
+    if number not in subs:
+        raise ValueError(f"{dataset_id}: entry {entry} has no subentry {number} "
+                         f"(it has {', '.join(sorted(subs))}).")
+    records = subs[number]
+    data = _x4_table(records, "DATA")
+    if data is None:
+        raise ValueError(f"{dataset_id}: subentry {number} has no DATA section.")
+    heads, units, rows = data
+    pointers = sorted({p for name, p in heads if p})
+    if pointers and pointer not in pointers:
+        raise ValueError(f"{dataset_id}: subentry {number} holds several datasets "
+                         f"(pointers {', '.join(pointers)}); ask for one, e.g. "
+                         f"'{entry}{number}.{pointers[0]}'.")
+    columns, arrays = [], {}
+    def add(name, unit, values):
+        if name in arrays or not np.any(np.isfinite(values)):
+            return
+        columns.append(ExforColumn(name, unit))
+        arrays[name] = values
+    nrow = len(rows)
+    for j, ((name, ptr), unit) in enumerate(zip(heads, units)):
+        if ptr and ptr != pointer:
+            continue
+        add(name, unit, np.array([r[j] for r in rows], dtype=float))
+    # COMMON values of this subentry, then of subentry 001, hold for every row
+    # (x4get repeats them in each line of its CSV).
+    for records_common in (records, subs.get("001", [])):
+        common = _x4_table(records_common, "COMMON")
+        if common is None:
+            continue
+        for ((name, ptr), unit, value) in zip(common[0], common[1], common[2][0]):
+            if ptr and ptr != pointer:
+                continue
+            add(name, unit, np.full(nrow, value))
+    bib = _x4_bib(records)
+    bib1 = _x4_bib(subs.get("001", []))
+    reaction = _x4_reaction(bib, pointer) or _x4_reaction(bib1, pointer)
+    authors = " ".join(t for _, t in bib1.get("AUTHOR", [])).strip()
+    author = authors.strip("()").split(",")[0].strip()
+    year = 0
+    for _, t in bib1.get("REFERENCE", []) + bib.get("REFERENCE", []):
+        for part in re.split(r"[,()]", t):
+            part = part.strip()
+            if re.fullmatch(r"(19|20)\d\d", part):
+                year = int(part)
+                break
+            if re.fullmatch(r"(19|20)\d{4,6}", part):   # a date, 19870515
+                year = int(part[:4])
+                break
+        if year:
+            break
+    if "DATA" not in arrays and "DATA-CM" not in arrays:
+        raise ValueError(f"{dataset_id}: no DATA column in the local entry "
+                         f"(headings {[h for h, _ in heads]}).")
+    return ExforData(dataset_id=dataset_id, year=year, author=author,
+                     reaction=reaction, columns=columns, arrays=arrays,
+                     raw="\n".join(records))
 
 
 def _is_numeric(vals):
@@ -507,7 +763,15 @@ def _azr_columns(data, target_mass=None, projectile_mass=None,
     cs, err = _data_column(data, cols, m_t, m_p,
                            cross_section_scale=cross_section_scale,
                            rutherford=rutherford)
-    return np.column_stack([energy, angle, cs, err])
+    out = np.column_stack([energy, angle, cs, err])
+    # A row with a blank energy, angle or value (EXFOR leaves fields blank, and
+    # the local master files read them as NaN) cannot go into an AZURE2 file.
+    keep = np.all(np.isfinite(out), axis=1)
+    if not np.all(keep):
+        warnings.warn(f"{data.dataset_id}: {int(np.sum(~keep))} of {len(out)} rows "
+                      f"have a blank energy, angle or value and were left out.")
+        out = out[keep]
+    return out
 
 
 def _energy_column(data, cols, m_t, m_p):
@@ -582,8 +846,10 @@ def _error_column(data, cols, raw, data_unit):
             # Quoted in a different unit from the data; restate it in the
             # data's, so the one conversion below serves both.
             err = err * _barn_factor(unit) / (_barn_factor(data_unit) or 1.0)
-        if np.any(err != 0.0):
-            return np.where(err != 0.0, err, _DEFAULT_REL_ERROR * np.abs(raw))
+        # A blank field (NaN from the local master files) counts as missing too.
+        given = np.isfinite(err) & (err != 0.0)
+        if np.any(given):
+            return np.where(given, err, _DEFAULT_REL_ERROR * np.abs(raw))
     return _DEFAULT_REL_ERROR * np.abs(raw)
 
 
@@ -935,15 +1201,29 @@ class Reference:
                 + (f"  doi:{self.doi}" if self.doi else "") + ">")
 
 
-def reference(entry_or_dataset_id):
+def reference(entry_or_dataset_id, source="auto"):
     """Bibliography for an EXFOR **entry** (``"O2599"``) or dataset
     (``"O2599004"`` -> entry ``O2599``).
 
     Returns a :class:`Reference`.  The ``REFERENCE`` line is parsed from the
     entry's EXFOR BIB section; ``doi`` is left blank (use :func:`resolve_doi`).
+    ``source`` as in :func:`fetch_exfor`: the local EXFOR master files hold the
+    same BIB text.
     """
     entry = entry_or_dataset_id[:5]
-    text = _http_get(EXFOR_URL + "x4get", {"sub": entry})
+    if source not in ("auto", "web", "local"):
+        raise ValueError(f"source must be 'auto', 'web' or 'local', not {source!r}")
+    if source == "local":
+        text = _local_entry_text(entry)
+    else:
+        try:
+            text = _web_text(EXFOR_URL + "x4get", {"sub": entry})
+        except (OSError, _WebUnavailable) as err:
+            if source == "web" or exfor_master_path() is None:
+                raise
+            warnings.warn(f"EXFOR Web-API unavailable for {entry} ({err}); "
+                          f"reading the local EXFOR master files.")
+            text = _local_entry_text(entry)
     title = _bib_field(text, "TITLE")
     authors = _bib_field(text, "AUTHOR")
     ref_line = _bib_field(text, "REFERENCE")
@@ -965,7 +1245,9 @@ def reference(entry_or_dataset_id):
 def _parse_x4ref(ref_line):
     """Recover the ``J,PRL,131,162701,2023`` code from a ``REFERENCE`` line
     like ``(J,PRL,131,162701,2023)`` or a free-text citation."""
-    m = re.search(r"\(([A-Z]+,[A-Z0-9+]+,[0-9]+,[0-9]+(?:,[0-9]{4})?)\)",
+    # journal codes may hold "/" and "-" (PR/C, ZP/A, J,NP/A): without them the
+    # code of every Phys. Rev. C entry came back empty
+    m = re.search(r"\(([A-Z]+,[A-Z0-9+/\-]+,[0-9]+,[0-9A-Z]+(?:,[0-9]{4,6})?)\)",
                   ref_line or "")
     return m.group(1) if m else ""
 
@@ -1062,6 +1344,9 @@ def _main(argv=None):
     d.add_argument("dataset_id")
     d.add_argument("-o", "--output", help="write the AZURE2 data file here "
                                           "(default: stdout)")
+    d.add_argument("--source", choices=("auto", "web", "local"), default="auto",
+                   help="the Web-API, the local EXFOR master files, or the "
+                        "Web-API falling back to them (default)")
 
     r = sub.add_parser("reference", help="the paper behind an entry, with DOI")
     r.add_argument("entry_or_dataset_id")
@@ -1082,7 +1367,7 @@ def _main(argv=None):
         return 0
 
     if args.cmd == "download":
-        data = fetch_exfor(args.dataset_id)
+        data = fetch_exfor(args.dataset_id, source=args.source)
         rows = _azr_columns(data)
         text = "".join("  ".join(f"{v:.8g}" for v in row) + "\n" for row in rows)
         print(f"# {args.dataset_id}: {len(rows)} points, "

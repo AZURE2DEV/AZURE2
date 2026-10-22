@@ -1,0 +1,52 @@
+ENTRY            T0001   20261022
+SUBENT        T0001001     20261022
+BIB                  3          5
+TITLE      Synthetic entry for the pyazr local EXFOR reader test
+AUTHOR     (A.Author,B.Second)
+REFERENCE  (J,PR/C,99,012345,2026)
+ENDBIB               5
+COMMON               1          3
+ERR-1      
+PER-CENT   
+        3.0
+ENDCOMMON            3
+ENDSUBENT           12
+SUBENT        T0001002     20261022
+BIB                  1          3
+REACTION   (6-C-12(A,G)8-O-16,,SIG,,
+           SFC) Free text after the code.
+           More free text (with parentheses).
+ENDBIB               3
+COMMON               1          3
+ANG-CM     
+ADEG       
+       90.0
+ENDCOMMON            3
+DATA                 7          3
+EN         EN-ERR     DATA       ERR-S      MISC1      MISC2      
+MISC3      
+KEV        KEV        B*KEV      B*KEV      NO-DIM     NO-DIM     
+NO-DIM     
+      1000.        0.5     1.23-4      1.0-5         1.         2.
+         3.
+      1500.        0.5  2.5   -04    2.0E-05         4.         5.
+         6.
+      2000.        0.5      3.0-4                    7.         8.
+         9.
+ENDDATA             11
+ENDSUBENT           20
+SUBENT        T0001003     20261022
+BIB                  1          3
+REACTION  1(6-C-12(P,G)7-N-13,,SIG)
+          2((6-C-12(P,X)1-H-1,,SIG)+
+           (6-C-12(P,X)1-H-2,,SIG))
+ENDBIB               3
+NOCOMMON             0          0
+DATA                 3          2
+EN         DATA      1DATA      2
+MEV        MB         MB         
+        1.0        5.0        6.0
+        2.0        7.0        8.0
+ENDDATA              4
+ENDSUBENT           12
+ENDENTRY             3

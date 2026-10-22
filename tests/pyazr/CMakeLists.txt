@@ -148,6 +148,13 @@ add_test(NAME pyazr_nds_levels_fallback
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/nds_levels_fallback_test.py)
 
+# fetch_exfor / reference: the local EXFOR master files (IAEA-NDS/exfor_master) when the
+# Web-API is unreachable or answers with a challenge page.  Offline: a synthetic entry in
+# data/exfor_master and canned web failures.
+add_test(NAME pyazr_nds_local_exfor
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/nds_local_exfor_test.py)
+
 # Scattering lengths: the <scatteringLengths> block helpers, azure2.scattering_lengths against the
 # tests/scattering_length reference values, the constraint chi2, its gradient and Jacobian rows.
 add_test(NAME pyazr_scattering_length

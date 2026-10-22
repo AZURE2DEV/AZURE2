@@ -340,6 +340,10 @@ holds the measured reaction data; LiveChart/ENSDF the evaluated level schemes.
                     observable="total-capture")       # lab E, barns
    AzrModel.from_file("13N.azr").add_data_segment(**kw).write("13N_new.azr")
 
+   # without the network, or when the IAEA answers with a challenge page:
+   # the same dataset from a local copy of the EXFOR master files
+   data = nds.fetch_exfor("O2599004", source="local")
+
    # level scheme of the compound nucleus, from ENSDF (IAEA LiveChart, or the
    # NNDC ENSDF API when LiveChart cannot be reached; source="nndc" forces it)
    for lv in nds.fetch_levels("14n"):
@@ -369,6 +373,19 @@ a command-line tool::
    python -m pyazr.nds search --target C-13 --reaction p,g --quantity SIG
    python -m pyazr.nds download O2599004 -o data/skowronski.dat
    python -m pyazr.nds reference O2599004
+
+The IAEA services are sometimes unreachable, or answer every request with a
+Cloudflare challenge page. ``fetch_exfor`` and ``reference`` then read the
+entry from a local copy of the EXFOR library, with a warning. The copy is a
+clone of `IAEA-NDS/exfor_master <https://github.com/IAEA-NDS/exfor_master>`_
+(about 1.5 GB; ``git clone --depth 1``, refreshed with ``git pull``) at
+``$AZURE2_EXFOR_MASTER`` or ``~/.azure2/exfor_master``.
+``nds.exfor_master_path()`` says which copy is used. ``source="web"`` or
+``source="local"`` uses only one of the two, and ``python -m pyazr.nds
+download <ID> --source local`` does the same from the command line. The local
+copy gives the original units only (``plus=0``). A subentry holding several
+datasets needs the pointer, as in ``"C1010003.2"``. ``search_exfor`` needs the
+Web-API.
 
 The Qt setup utility has its own EXFOR dialog, backed by
 ``gui/src/ExforData.cpp``. The two are independent implementations of the same

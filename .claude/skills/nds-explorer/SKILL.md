@@ -32,6 +32,7 @@ edits, load the **`azure2-eval`** skill as well — this skill hands data to it.
 | EXFOR search | `https://nds.iaea.org/exfor/x4list` | matching datasets (ID, reaction, points, E/angle range, author, reference) | `search_exfor()` |
 | EXFOR data | `https://nds.iaea.org/exfor/x4get?DatasetID=…&op=csv` | one dataset's numbers with units | `fetch_exfor()` |
 | EXFOR bibliography | `https://nds.iaea.org/exfor/x4get?sub=ENTRY` | title, authors, journal reference | `reference()` |
+| EXFOR master files (local fallback) | a clone of `https://github.com/IAEA-NDS/exfor_master` at `$AZURE2_EXFOR_MASTER` or `~/.azure2/exfor_master` | every entry as raw EXFOR (`exforall/<3 chars>/<entry>.x4`) | `fetch_exfor(source="local")`, `reference(source="local")` |
 | LiveChart levels | `https://www-nds.iaea.org/relnsd/v1/data?fields=levels&nuclides=…` | level scheme CSV | `fetch_levels()` |
 | NNDC ENSDF API (fallback) | `https://www.nndc.bnl.gov/ensdf-api/levels?nuclide=…&document-type=adopted` | the same adopted levels, JSON | `fetch_levels(source="nndc")` |
 | LiveChart gammas | `…?fields=gammas&nuclides=…` | gamma transitions | `fetch_gammas()` |
@@ -253,8 +254,16 @@ as `SIG,,SFC`, is the cheapest possible check and catches both bugs at once.
   uncertainties), written in LiveChart's spellings (`jp` "2+ 1+", `half_life` the bare number), plus
   `Level.width_kev` and `Level.source`.  Only the trailing zeros of a half-life text (LiveChart "4.70",
   NNDC "4.7") and `half_life_sec` at ~1e-7 for width-only levels can differ.  Force a service with
-  `source="livechart"` / `"nndc"`.  `fetch_gammas` / `fetch_ground_state` and the EXFOR calls have no
-  fallback yet (the ENSDF API has `/gammas`; EXFOR has no NNDC equivalent here) -- retry later.  NNDC also
+  `source="livechart"` / `"nndc"`.  `fetch_exfor` and `reference` fall back to a local clone of the
+  EXFOR master files (`$AZURE2_EXFOR_MASTER` or `~/.azure2/exfor_master`; on the CRC cluster
+  `/groups/rdeboer1/user/rdeboer1/exfor_master`, linked from `~/.azure2/exfor_master`, cloned 2026-10-22,
+  refresh with `git pull origin main`).  The fallback warns; `source="local"` skips the web.  It gives
+  plus=0 only, needs the pointer for a multi-dataset subentry (`"C1010003.2"`, the error lists them), and
+  carries the COMMON values (an angle, a per-cent error) as columns as x4get does.  Checked against the
+  dataexplorer API's own parse of 439 entries: 1,596/1,596 tables and 1,663/1,663 reaction codes identical.
+  On 2026-10-22 x4get AND the dataexplorer API were both behind the challenge, so the dataexplorer
+  work-around no longer helps there.  `search_exfor`, `fetch_gammas` and `fetch_ground_state` have no
+  fallback (search the mirror by hand: `grep -l "6-C-13(P,G)" exforall/*/*.x4`) -- retry later.  NNDC also
   serves ENDF evaluations at `https://www.nndc.bnl.gov/endf-api/` (pointwise cross sections; its listed
   SHA-1 for the main GNDS .xml files does not match the served files, the ENDF-6 ones do; 2026-10-15).
 
