@@ -6,9 +6,9 @@ something for such a project. The THM machinery itself (HOES cross section,
 `<thm>` keys, experiments, R(E), the DW vertex, the ps and angle windows,
 cbackground=, thm_experiments.out) is new and does nothing unless it is used.
 
-`origin/dev` 8673c5c is merged into `thm` (October 2026; see "Merge of
-origin/dev 8673c5c" below; the previous merges were 7e6dba8, 64ed575,
-4a93bc1, and 6f3228e, 3628a87), so all of dev is already in `thm`.
+`origin/dev` 0919dcb is merged into `thm` (October 2026; see "Merge of
+origin/dev 0919dcb" below; the previous merges were 8673c5c, 7e6dba8,
+64ed575, 4a93bc1, and 6f3228e, 3628a87), so all of dev is already in `thm`.
 The dev changes merged by 18c49ea, f56c150, da72def, 497548a, e191991 and
 3628a87 are not differences: the Wigner-limit bound, the elastic identical-pair factor
 (7c34992), the adaptive-grid convergence work, target-integration anchoring,
@@ -348,6 +348,124 @@ Still open: the merged EPoint is 152 bytes larger than dev's; the three
 convolution_unify models with target integration and a beam spread need more
 than 3.0 GB of address space with either binary (checked here on 21 points).
 
+## Merge of origin/dev 0919dcb (October 2026)
+
+dev between 8673c5c and 0919dcb: R. deBoer's Screening sub-tab of the
+Fitting tab (334f104: `screening_<n>` rows, synced both ways with the
+Experimental Effects tab) and tests/screening_6li (657b14b, the 6Li(p,a)
+electron-screening benchmark on Cruz et al. 2005); and the Park speed-up:
+Park rows of the residual Jacobian by free parameter (fc88274:
+`ChannelSpace::CurrentLevelDerivatives` takes the formalism, `LevelAdjoint`
+and `GroupRows` serve Park), the J > 0 wall in `Chi2On` (3ea6020), Park's
+gradient from the residual Jacobian (f61690a: `GradientFromJacobian` adds the
+wall's gradient), d2S/dE2 only when a gradient asks for it and Park's dS/dE
+table read from the levels (ecbca5e: `CalcShiftFunctions(config, false)` for
+a chi-squared alone, `ALevel::ShiftSecondDerivativesValidAt`;
+`BuildShiftDerivTable` reads `GetShiftDerivative` under Park), the shift-
+function derivatives for all levels in parallel and without the Coulomb memo,
+shared through an exact-argument memo (45cc5cf), docs (0919dcb).  All of it
+is in, with these decisions:
+
+- **CNuc::CalcShiftFunctions: dev's structure, thm's functions.**  S is
+  thm's `ChannelFunc::Shift` (continuous through threshold), recomputed only
+  for a level that moved, as before.  dev's deferred, parallel derivative
+  pass is kept (channel-spin sharing, `g_shiftDerivMemo`, the lazy S''), but
+  S' there is thm's `ChannelFunc::ShiftDerivative` -- the dS/dE of every
+  other caller on thm, `BuildShiftDerivTable` under Brune included (row
+  ec416de) -- and S'' the branch the level is on (ShftFunc below threshold,
+  `PEShift_d2E` above), as thm had it.  Like dev, neither uses the Coulomb
+  memo: `ChannelFunc::SetUseGlobalCache(false)` (new; it switches the
+  CoulFunc it makes).  So under Park dev's `BuildShiftDerivTable` shortcut
+  reads the same function at the same energy that it would have
+  differentiated, without the memo.
+- **Brune (and every non-Park run) is untouched**: no derivative is taken
+  there, S is computed as before, and `BuildShiftDerivTable` still
+  differentiates with `ChannelFunc` and the memo.  Every Brune output below
+  is byte for byte 031793d's.
+- **Park round-off (45cc5cf).**  Park's S' no longer goes through
+  `CoulFuncCache` (which matches energies within 1e-12 MeV and depends on the
+  run's history), so Park values move in the last digits.  Measured: of
+  the 18 THM check.sh scripts only tests/thm_park writes different numbers,
+  four files of its f19_pag_thm runs (thm_experiments.out b0 2.1e-11,
+  AZUREOut_aa=1_R=6.out 4.8e-11 relative: the 11th printed digit); its
+  Park = Brune comparison for f19_pag_thm reads max rel 2.144e-11 (was
+  0.000e+00) and the file round trip 8.267e-08 (was 8.262e-08), against
+  tolerances of 1e-8 and 1e-5.  Its fits, MCMC runs and every other Park
+  output (17O, 18O_p_a_thm with each feature, the on-shell examples,
+  c12c12_tumino2018 under Park) are byte for byte.  No pin or tolerance
+  changed.  tests/pyazr/thm_park_test.py prints the same numbers with both
+  builds.
+- **Park + THM gradient.**  `GradientFromJacobian` no longer declines Park,
+  but it still declines every project with a THM segment:
+  `ComputeResidualJacobian` (called with skipTHM = false by
+  `AZURECalc::ResidualJacobian`) refuses THM segments, so `Gradient` takes
+  the adjoint for the classic segments and the THM-only differences
+  (Chi2On thmOnly, which adds no wall: the wall's gradient is the adjoint
+  path's, AddParkPenaltyGradient), as before.  pyazr's
+  `residual_jacobian`/`chi2_and_grad` (skipTHM = true, the THM rows from
+  `ComputeTHMRows`) now get Park's classic rows from `LevelAdjoint`/
+  `CurrentLevelDerivatives` (mode 2) instead of the bilinear fallback.
+  Checked with `AZURE_GRAD_CHECK=exit` (first MIGRAD gradient, every free
+  component against central differences, one thread), Park and Brune, both
+  builds: tests/17O (8 widths; with the 4 energies free too) and
+  examples/f19_pag_thm (25 widths; with 11 energies free too).  Widths agree
+  with the differences to 8e-7 (largest |a - fd| 4e-8 of the largest
+  component) in both modes and builds.  Two f19 energies (J3 L4, J6 L1) read
+  1.8e-2 (Park) and 1.6e-1 (Brune) off at the default step (1e-6 relative)
+  with both builds; at 1e-8 they agree to 1.6e-9 and 2.1e-8 (Park), 4.7e-8 and
+  5.3e-7 (Brune): truncation of the difference near narrow levels, not the
+  gradient.  The analytic gradients of the two builds are equal bit for bit
+  under Brune and for 17O under Park; for f19 under Park the first gradient
+  comes after the seed's 610 evaluations, which the 1e-11 round-off above
+  steers to a slightly different point (1e-5 in the gradient there, the
+  differences moving with it).  One more, in both builds: under Park the
+  energy of tests/17O's first 1/2- level reads 1.1e-4 off the differences
+  at either step (Brune: 4e-8), within dev's Park tolerance (1e-4 of the
+  largest component in tests/channel_space and park_formalism: S' and S''
+  are numerical derivatives); it is 031793d's value bit for bit.
+- `Chi2On`: dev's wall (3ea6020) was already on thm (dcb8064); thm's
+  `thmOnly` early return stays before it, comments merged.
+- **GUI**: the Screening sub-tab sits between Energy Shifts and thm's
+  THM Coherent Background tab; parameter order screening, then cbkg, as the
+  engine (`appendScreeningParameters` before `appendCoherentParameters` in
+  both `populateFromCurrentGUIState` and `loadSettings`); screening rows have
+  no prior-centre column (norms and shifts only).  `getTargetIntTab` was on
+  both sides (kept once).  TargetIntModel's columns 35-38 are the same on
+  thm.
+- tests/screening_6li/check.sh takes thm's time guard (tests/lib/guard.sh).
+- docs/source/developer/level_matrix.rst: S' is ChannelFunc's on this
+  branch; a THM project keeps the adjoint gradient in every formalism.
+
+Verified after the merge (one heavy process at a time, OMP_NUM_THREADS=1,
+engines under a 1.6 GB address-space cap; reference: 031793d built from the
+same sources, tag thm-premerge-2026-10-22c; dev: 0919dcb's own build):
+
+- THM: every THM example and THM test project (13 projects, 73 output files,
+  86 with scatteringLengths.out) byte for byte as 031793d; the 12C+12C best
+  fits too (33 files, 36): plain_6.5 92.2140340427, plain_8.5 70.7968723529,
+  NCxR_8.5 100.894445567 (totals with priors), identical.  The 18 THM
+  check.sh scripts pass with both binaries; of their 5220 work files 78
+  differ: run.azr/thm_experiments.out with the temporary directory names,
+  logs in timings only, and the four tests/thm_park files above.
+- Classic (21 classic test projects, natural_neon apart): 113 of 113 files
+  byte for byte as 031793d.  Against dev 0919dcb: the same 29 files as at
+  the previous merge (section A), and dev 0919dcb gives dev 8673c5c's files
+  on all of them.
+- Suites: build/ ctest 61/61 (pyazr_thm_adjoint, pyazr_thm_park,
+  pyazr_park_gradient, pyazr_thm_profiled included), build-gui ctest 82/82
+  (dev's screening_fitting included), tests/run_tests.sh
+  under 2.4 GB 67 passed, 0 failed (convolution_unify, natural_target and
+  natural_neon left out: memory); tests/natural_target/check.sh passes on
+  its own under 3.0 GB.  dev's tests/screening_6li (new), channel_space,
+  park_formalism (its new wall-gradient check: both paths), 13N,
+  scattering_length and electron_screening check.sh pass on thm.
+- Speed (one thread, same machine): CLI evaluation f19_pag_thm 8.3 s
+  (031793d 8.3-8.4 s), c12c12_tumino2018 45.9 s (46.0 s); the CLI's first
+  gradient on f19 1.02 s (1.02-1.04 s); pyazr chi2_and_grad (HOES adjoint)
+  f19 1.19-1.23 s (1.20-1.21 s), c12c12 (230 parameters) 1.76-1.77 s
+  (1.78-1.79 s), same chi^2 and gradient sums.  THM takes no Park speed-up
+  (none intended: THM stays on the level route).
+
 ## Merge of origin/dev 8673c5c (October 2026)
 
 dev between 7e6dba8 and 8673c5c: R. deBoer's scattering lengths (dfd15a4,
@@ -615,7 +733,11 @@ non-zero; under Park, LM's cost includes the J penalty (zero where J > 0).
    ReplaceSubPointGrids and THM sub-points, AZURECalc (Chi2On thmOnly,
    Gradient)/AZUREGrad/AZUREAPI THM paths, CNuc TransformIn (gammaIsRWA,
    Park), ALevel per-channel vectors (gamma_is_rwa_), ChannelFunc and
-   ShftFunc, the Coulomb-table keys of the THM memos, Config.h flags.
+   ShftFunc, CNuc::CalcShiftFunctions (ChannelFunc's S and S' inside dev's
+   parallel derivative pass, no Coulomb memo there; see the merge of
+   0919dcb), the Coulomb-table keys of the THM memos, Config.h flags;
+   AZURECalc::GradientFromJacobian must keep declining THM projects (or
+   learn their rows) now that it takes Park.
 5. GUI: SegmentsDataData/SegmentsTestData fields (isTHM last before any new
    dev field), level lines 32/33, parameterSettings rows and prior_centre,
    the Runtime Options box; open + save of a classic project must stay byte
