@@ -377,6 +377,44 @@ The GUI review: `printf '1\n<reaction>.sav\n\n7\n' | AZURE2 <flags> --no-gui --n
 - Energy shifts are finite-differenced (kept fixed during exploration, freed in the
   continuation polish). Norms of split segments are shared across shards correctly;
   segments with target effects are never split.
+- Data covariances (`covariance <file>`), normalization groups (`normgroup <label>`) and
+  shift groups (`shiftgroup <label>`) work in both evaluators since 2026-10-22 (`rmfit/covariance.py`; README section "Data
+  covariances and normalization groups"; tests in `13C+a/10-22-26_rmfit_covariance/`).
+  Workers run the model WITHOUT `covariance` and the evaluator whitens the assembled rows
+  with the engine's algorithm (rows = the engine's `residual_jacobian` rows to 1e-14), so
+  a group split across shards keeps its correlations; shards drop `normgroup` and the
+  evaluator rescales a follower's rows to its leader's norm. Before that, rmfit gave a
+  normgroup follower its own norm (single-session fast path) or its own free norm (shards),
+  and whitened only within a shard. What to know:
+  - Needs a pyazr with data covariances (AZURE2 >= 4b71177). With an older one the engine
+    ignores the keyword silently; `SingleSession` compares its chi2 with an engine session
+    on the model as written at its first evaluation and stops on that mismatch.
+  - `relvector` terms: the model is frozen at the evaluator's FIRST evaluation, and every
+    `rmfit` CLI step is a new process, so each polish starts with the model frozen at its
+    own start (the iterative Chiba-Smith scheme); `ev.refreeze_covariance()` in scripts.
+    Objectives of different steps are therefore not strictly comparable.
+  - Row weights (`dataset_weight`, `point_weights`) scale the plain rows before
+    whitening; the Sivia loss is refused. Per-segment chi2 are the engine's partition
+    shares and can be negative; `ev.point_chi2(r)` / `ev.point_residuals(r)` give per-row
+    shares / plain residuals (levelscan and diagnose use them).
+  - Keep covariance files under `data/`: shards need none (the evaluator reads it from the
+    base model's directory) and `single_variant` links one next to the model, but the
+    structure, window and levelscan variants link only `data/`.
+  - `shiftgroup` (2026-10-22): all pieces of a group go to ONE shard, which keeps the
+    keyword (a group with a free shift is one shift-solo unit). `shiftfngroup`
+    (feature/shift-fn-groups) is NOT handled by `Sharded`: use SingleSession or the CLI.
+  - Free `sqrtshift` and `shiftfn` parameters (2026-10-22; before, rmfit refused to open
+    such a model): keys `shift_sqrt[segK]` / `shift_fn[segK aj]`, penalties as in pyazr's
+    `penalties()`, bounds like constant shifts (fixed unless `shifts_free`); a segment with
+    any free shift term is never split.
+  - Conv pieces only for segments without any shift (before 2026-10-22 a fixed nonzero shift,
+    `sqrtshift`, `shiftfn` or group shift was dropped on the conv grid line).
+  - Worker fast path with energy shifts (fixed 2026-10-22, installed with the above on
+    2026-10-23): the engine converts a reaction segment's data to c.m. at its SHIFTED
+    energy, so the worker now re-reads data and errors of every shifted segment after each
+    evaluation. Before, a shard whose shift started nonzero fell back to the slow
+    `residual_jacobian` on every call, and a free shift starting at 0 carried a small bias.
+    Elastic data never showed it. Previous files: `rmfit/*.bak-2026-10-22`.
 - Cost on 13C+a (35k points, 330 free, 24 shards): objective 0.6-1.5 s, Jacobian ~20 s,
   a 60-iteration polish ~9 min, a sign round 2-4 h, a level test ~1.5 h.
 
