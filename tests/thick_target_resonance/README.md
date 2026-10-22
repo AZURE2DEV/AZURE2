@@ -22,18 +22,30 @@ targetInt resonanceWidthMultiplier:
 * segment 2: 20, the default a4095a6 found converged. The regression did not
   show here; it pins the converged answer.
 
+Since 2026-10-22 the zone of nodes anchored to a narrow resonance goes on past
+its lattice (resonanceWidthMultiplier widths) with graded steps, each 10 % of
+the distance to the resonance, until the step reaches the coarse one
+(AdaptiveIntegrationGrid, tests/reference/adaptive_grid_reference_test). Before,
+the lattice edge met coarse steps placed from the window's top edge, so the tail
+was integrated poorly, and differently at every resonance position. Both segments
+now agree with the 1000-sub-point integral: segment 1 at multiplier 5 to 0.55 %
+at the first point and 0.02 % elsewhere (it was 15 % high), segment 2 to 0.08 %
+and 0.003 %. The expected chi2 moved accordingly, from 3.607 / 15.418 to
+15.031 / 15.591. The old segment-1 value of 3.6 came from the under-resolved
+first point lying closer to the data.
+
 Yields (total capture, c.m. keV):
 
-| E_cm     | seg 1 (x5) | seg 2 (x20) | 1000 sub-points | pre-regression 7e533b7, seg 1 / seg 2 | broken dev, seg 1 |
-|----------|------------|-------------|-----------------|---------------------------------------|-------------------|
-| 253.7846 | 4.405e-08  | 3.851e-08   | 3.843e-08       | 3.973e-08 / 3.848e-08                 | 4.347e-07         |
-| 263.0573 | 2.0473e-06 | 2.0394e-06  | 2.0393e-06      | 2.0444e-06 / 2.0396e-06               | 2.588e-06         |
-| 264.8950 | 2.0853e-06 | 2.0774e-06  | 2.0773e-06      | 2.0835e-06 / 2.0775e-06               | 7.346e-05         |
-| 298.3287 | 2.1645e-06 | 2.1505e-06  | 2.1504e-06      | 2.1603e-06 / 2.1507e-06               | 7.391e-05         |
+| E_cm     | seg 1 (x5) | seg 2 (x20) | 1000 sub-points | before 2026-10-22, seg 1 / seg 2 | pre-regression 7e533b7, seg 1 / seg 2 | broken dev, seg 1 |
+|----------|------------|-------------|-----------------|----------------------------------|---------------------------------------|-------------------|
+| 253.7846 | 3.8641e-08 | 3.8461e-08  | 3.843e-08       | 4.405e-08 / 3.851e-08            | 3.973e-08 / 3.848e-08                 | 4.347e-07         |
+| 263.0573 | 2.0396e-06 | 2.0394e-06  | 2.0393e-06      | 2.0473e-06 / 2.0394e-06          | 2.0444e-06 / 2.0396e-06               | 2.588e-06         |
+| 264.8950 | 2.0776e-06 | 2.0773e-06  | 2.0773e-06      | 2.0853e-06 / 2.0774e-06          | 2.0835e-06 / 2.0775e-06               | 7.346e-05         |
+| 298.3287 | 2.1509e-06 | 2.1504e-06  | 2.1504e-06      | 2.1645e-06 / 2.1505e-06          | 2.1603e-06 / 2.1507e-06               | 7.391e-05         |
 
-Segment 2 agrees with the pre-regression build to 0.1%, and with a
-1000-sub-point integral to 0.2%, at every point. Segment 1 is not identical to it: b273abc (the resonance-anchored lattice) and
-a4095a6 (physical widths) both changed that grid on purpose. At multiplier 5
-the first point, 6 keV below the resonance, is still under-resolved -- 15%
-above the 1000-sub-point value, where the pre-regression grid happened to be
-3% above it. That is the multiplier, not the regression; use 20.
+Before the graded tails, segment 2 agreed with the pre-regression build to 0.1 %,
+and with a 1000-sub-point integral to 0.2 %, at every point. Segment 1 was not
+identical to it: b273abc (the resonance-anchored lattice) and a4095a6 (physical
+widths) both changed that grid on purpose, and at multiplier 5 the first point,
+6 keV below the resonance, was 15 % above the 1000-sub-point value (the
+pre-regression grid happened to be 3 % above it).

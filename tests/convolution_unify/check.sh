@@ -60,14 +60,19 @@ r="$(maxrel "$(out tgt_fixed)" "$(out tgt_legacy_const)")"; if le "$r" 1e-9;  th
 # 2. what did not change. The references were recorded on Linux; another platform's libm differs
 #    from it at ~1e-11, so these are held to 1e-8 -- five orders below the smallest change in part 3.
 r="$(maxrel "$(out bare)" "$HERE/reference_old/bare.extrap")"; if le "$r" 1e-8; then ok "no effect: unchanged ($r)"; else bad "bare calculation moved ($r)"; fi
-r="$(maxrel "$(out tgt)"  "$HERE/reference_old/tgt.extrap")";  if le "$r" 1e-8; then ok "plain target integration: unchanged ($r)"; else bad "plain target integration moved ($r)"; fi
+#    Plain target integration is held to 1e-4 instead: the graded resonance tails of the sub-point grid
+#    (2026-10-22, tests/reference/adaptive_grid_reference_test) moved it by up to 6.1e-5, all of it the
+#    old grid's quadrature error (against 2000 sub-points: old 6.1e-5, new 5.2e-8).
+r="$(maxrel "$(out tgt)"  "$HERE/reference_old/tgt.extrap")";  if le "$r" 1e-4; then ok "plain target integration: unchanged but for the grid's tails ($r)"; else bad "plain target integration moved ($r)"; fi
 
 # 3. what changed, by how much, and why
 #    Constant sigma: the old kernel was not renormalised over its +-3 sigma window, so every point was
 #    low by erf(3/sqrt 2) = 0.9973002; the new result is the old one divided by that (as the 2-point
-#    quadrature integrates the kernel, within 1e-5) and by the same factor at every energy.
+#    quadrature integrates the kernel, within 1e-5) and by the same factor at every energy -- within
+#    2e-6 before the graded grid tails of 2026-10-22, which removed up to 1.1e-4 of quadrature error
+#    from the old grid (against 2000 sub-points: old x 1.0027069 1.1e-4, new 4.1e-6), so 1.5e-4 now.
 read lo med hi <<< "$(ratiostat "$(out fixed)" "$HERE/reference_old/fixed.extrap")"
-if within "$med" 1.0027069 1e-5 && within "$lo" "$med" 2e-6 && within "$hi" "$med" 2e-6; then ok "constant sigma: new/old = 1/erf(3/sqrt2) = 1.0027069 everywhere (min $lo, median $med, max $hi)"; else bad "constant sigma: new/old not the kernel normalisation (min $lo, median $med, max $hi; expected 1.0027069)"; fi
+if within "$med" 1.0027069 1e-5 && within "$lo" "$med" 1.5e-4 && within "$hi" "$med" 1.5e-4; then ok "constant sigma: new/old = 1/erf(3/sqrt2) = 1.0027069 everywhere (min $lo, median $med, max $hi)"; else bad "constant sigma: new/old not the kernel normalisation (min $lo, median $med, max $hi; expected 1.0027069)"; fi
 #    Legacy c.m. expression: already normalised before; the width is now taken at the point's energy
 #    instead of at each sub-point, a change of order sigma'(E) * 3 sigma -- small for E^1.5.
 r="$(maxrel "$(out legacy_cm_E)" "$HERE/reference_old/legacy_cm_E.extrap")"; if le "$r" 2e-2; then ok "legacy c.m. sigma(E): width now at the point energy, moved by at most $r"; else bad "legacy c.m. sigma(E) moved by $r (expected < 2e-2)"; fi

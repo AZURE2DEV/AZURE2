@@ -68,3 +68,11 @@ add_executable(parameter_file_reference_test parameter_file_reference_test.cpp)
 target_link_libraries(parameter_file_reference_test PRIVATE AZURE2Core)
 add_test(NAME parameter_file_reference COMMAND parameter_file_reference_test)
 set_tests_properties(parameter_file_reference PROPERTIES TIMEOUT 10)
+
+# The adaptive sub-point grid of the experimental effects (AdaptiveIntegrationGrid):
+# a Lorentzian moved across a fixed window, the grid laid out again at each position
+# as EData::ReplaceSubPointGrids does, its trapezoid integral against the closed form.
+# Checks the accuracy and that the error does not swing as the level moves.
+add_executable(adaptive_grid_reference_test adaptive_grid_reference_test.cpp)
+target_link_libraries(adaptive_grid_reference_test PRIVATE AZURE2Core)
+add_test(NAME adaptive_grid_reference COMMAND adaptive_grid_reference_test)

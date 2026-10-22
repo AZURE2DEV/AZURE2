@@ -81,18 +81,42 @@ Where the sub-points go
 Every effect that integrates over energy (beam spread, target integration, a
 beam profile, a numerical resolution function) evaluates the cross section on
 a grid of sub-points around each data point. The grid is adaptive: fine at the
-narrow resonances inside the integration range and coarse elsewhere. Two
-settings in the dialog shape it, with **Integration Points** as the upper
-bound on the number of sub-points:
+narrow resonances inside the integration range and coarse elsewhere. Three
+settings in the dialog shape it:
+
+**Integration Points**
+   The coarse step is the integration range divided by this number. It is not
+   a limit on the number of sub-points: each narrow resonance adds its own.
 
 **Resonance Width Multiplier** (column *Width Mult.*)
-   How far the fine part of the grid reaches on either side of a resonance:
-   the step grows from the fine to the coarse value over about half this
-   many total widths.
+   How far the fine, evenly spaced part of the grid reaches on either side of
+   a resonance, in widths. Beyond it the step grows by 10 % of the distance to
+   the resonance at each sub-point until it reaches the coarse step, so the
+   resonance's tails are resolved too.
 
 **Points Per Width** (column *Pts/Width*)
-   The step at the centre of a resonance is its total width divided by this
-   number.
+   The step in the fine part is the resonance's particle width (the sum of
+   its open particle-channel widths) divided by this number.
+
+All the sub-points around a resonance, fine and graded, are placed relative
+to the resonance energy, so they move with it. With the defaults (20 widths,
+50 points per width) a resonance adds about 2,100 sub-points to every data
+point whose integration range it reaches, and its integral is accurate to
+about 1e-4 of its area, whatever **Integration Points** is.
+
+.. note::
+
+   Before 22 October 2026 the fine part ended in a single coarse step whose
+   far end was fixed by the integration range, not by the resonance. For a
+   resonance much narrower than the coarse step (a 0.8 eV level under a
+   10 keV target integration with 50 points) the integral was up to 8 % off.
+   Because the grids are laid out again at every evaluation, that error
+   changed as a fit moved the level: χ² oscillated in the level energy with
+   the period of the coarse step, and its gradient disagreed with finite
+   differences. A larger **Resonance Width Multiplier** or more **Integration
+   Points** reduced the effect. Folded segments of fits made before then can
+   move when recalculated; the test suite's target integration moved by up
+   to 6e-5 relative.
 
 The resonances are found from the current level energies and widths, shifted
 by the segment's energy shift. The grids are laid out again at every

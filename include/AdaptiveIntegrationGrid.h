@@ -42,6 +42,10 @@ class AdaptiveIntegrationGrid {
     /// dense part of the grid where the resonance is after the move
     /// (EData::ReplaceSubPointGrids).
     double resonanceOffset;
+    /// Beyond the fine lattice (resonanceWidthMultiplier widths) the nodes of an
+    /// anchored resonance go on with steps of this fraction of the distance to it,
+    /// until the step reaches baseEnergyStep (see GenerateGrid).
+    double tailStepFraction;
 
     // Default constructor with sensible defaults
     GridConfig() :
@@ -57,7 +61,8 @@ class AdaptiveIntegrationGrid {
       pointsPerWidth(50.0),
       entranceKey(0),
       inputWidthsArePhysical(false),
-      resonanceOffset(0.0) {}
+      resonanceOffset(0.0),
+      tailStepFraction(0.1) {}
   };
 
   /*!
@@ -95,6 +100,13 @@ class AdaptiveIntegrationGrid {
    * \return Vector of grid points (energies in descending order)
    */
   std::vector<double> GenerateGrid(double startEnergy, double endEnergy, CNuc *compound);
+
+  /*!
+   * \brief The same grid for a given list of resonances (c.m. energies and widths, MeV),
+   * as IdentifyResonances would return them; used by the CNuc overload and by
+   * tests/reference/adaptive_grid_reference_test.
+   */
+  std::vector<double> GenerateGrid(double startEnergy, double endEnergy, const std::vector<ResonanceInfo> &resonances);
 
   /*!
    * \brief Generate grid with detailed point information
@@ -144,6 +156,24 @@ class AdaptiveIntegrationGrid {
 
  private:
   GridConfig config_;  ///< Grid generation configuration
+
+  /// The nodes anchored to one resonance whose lattice is finer than the coarse step:
+  /// E_R + n pitch for |n| <= numLattice, then E_R +- graded[k], all within E_R +- half.
+  struct Zone {
+    double energy;                ///< E_R (c.m., MeV)
+    double pitch;                 ///< particleWidth / pointsPerWidth
+    int numLattice;               ///< lattice nodes on each side
+    std::vector<double> graded;   ///< offsets beyond the lattice, ascending
+    double half;                  ///< the outermost offset
+  };
+  /// Graded offsets beyond a lattice ending at \p latticeTop, for \p pitch.
+  std::vector<double> GradedOffsets(double pitch, double latticeTop) const;
+  /// Half-width of the zone of a resonance of particle width \p particleWidth (its
+  /// lattice and graded nodes); resonanceWidthMultiplier * width for one without a zone.
+  double ZoneHalfWidth(double particleWidth) const;
+  std::vector<Zone> AnchoredZones(const std::vector<ResonanceInfo> &resonances) const;
+  /// The largest node of \p z strictly below \p energy; -infinity if there is none.
+  static double NextNodeBelow(const Zone &z, double energy);
 
   /*!
    * \brief Identify resonances within the energy range with their widths

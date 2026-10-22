@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <cstdlib>
+#include <limits>
 
 namespace {
 bool DebugGridEnabled() {
@@ -52,8 +53,18 @@ std::vector<double> AdaptiveIntegrationGrid::GenerateGrid(double startEnergy, do
     return grid;
   }
 
-  // Identify resonances in the energy range with their widths
-  std::vector<ResonanceInfo> resonances = IdentifyResonances(startEnergy, endEnergy, compound);
+  return GenerateGrid(startEnergy, endEnergy, IdentifyResonances(startEnergy, endEnergy, compound));
+}
+
+std::vector<double> AdaptiveIntegrationGrid::GenerateGrid(double startEnergy, double endEnergy,
+                                                          const std::vector<ResonanceInfo> &resonances) {
+  std::vector<double> grid;
+  if (startEnergy < endEnergy) std::swap(startEnergy, endEnergy);
+  double totalRange = startEnergy - endEnergy;
+  if (totalRange <= 0.0 || totalRange < 1.0e-6) {
+    grid.push_back(startEnergy);
+    return grid;
+  }
 
   static const bool debugGrid = (std::getenv("AZR_DEBUG_GRID") != nullptr);
   if (debugGrid) {
@@ -83,64 +94,53 @@ std::vector<double> AdaptiveIntegrationGrid::GenerateGrid(double startEnergy, do
   // the fine lattice to the resonance itself removes that drift: every window
   // that reaches the same resonance samples it at the same fixed energies.
 
+  //
+  // Outside the lattice the tail still matters for a narrow resonance: beyond
+  // resonanceWidthMultiplier widths a Lorentzian holds about 1/(pi * multiplier)
+  // of its area (1.6 % at the default 20).  Stepping straight from the lattice
+  // edge to the coarse step put that tail on a single trapezoid whose upper node
+  // was fixed by the window, not by the resonance (DeBoer 2026-10-22, 17O+a: a
+  // 0.8 eV level in a 10 keV target window, 50 sub-points: the 16 meV lattice
+  // met 200 eV steps 16 eV from the peak).  The integral was up to 8 % of the
+  // resonance's area off, and since the grids are laid out again at every
+  // evaluation, the error changed as a fit moved the level: chi2 oscillated in
+  // the level energy with the period of the coarse step and the analytic
+  // gradient disagreed with finite differences.  So the anchored set goes on
+  // past the lattice with GRADED nodes, each step tailStepFraction of the
+  // distance to the resonance, until the step reaches baseEnergyStep.  The whole
+  // zone (lattice plus graded nodes) moves with the resonance, and the coarse
+  // grid meets it where the tail is resolved by the coarse step anyway.
+  std::vector<Zone> zones = AnchoredZones(resonances);
+
   grid.push_back(startEnergy);
   double currentEnergy = startEnergy;
 
   while (currentEnergy > endEnergy) {
-    // Anchor to whichever resonance actually covers currentEnergy (distance
-    // within ITS OWN margin) and, among those, is the NARROWEST -- not simply
-    // whichever resonance is nearest by raw energy distance. A broad nearby
-    // pole's margin can be huge (resonanceWidthMultiplier * its own large
-    // particleWidth) and so trivially contains points that a much narrower,
-    // slightly more distant resonance actually needs fine treatment for; using
-    // plain nearest-distance let the broad pole's far-too-coarse pitch
-    // silently override the narrow resonance's anchoring everywhere the two
-    // overlap, which is precisely the case this anchoring exists to fix.
-    //
-    // Only a resonance whose lattice is FINER than the smooth step is a
-    // refinement worth anchoring to. A broad pole's pitch can exceed the whole
-    // window -- a 10 MeV background level at pointsPerWidth 50 gives 200 keV,
-    // against a 100 keV thick target -- and anchoring to it stepped straight
-    // from the window's start to its end, past everything in between: past the
-    // tail below a narrow resonance, and past the narrow resonance itself
-    // whenever the window started outside its margin, leaving the grid
-    // [start, E_R, end]. The integral then weighted sigma(E_R) by half the
-    // window. This only became reachable once IdentifyResonances returned the
-    // physical widths: a background pole now carries its real 10 MeV. Such a
-    // resonance is left to CalculateAdaptiveStep, which is capped at
-    // baseEnergyStep.
-    const ResonanceInfo *anchorRes = nullptr;
-    for (const ResonanceInfo &res : resonances) {
-      if (!(res.particleWidth > 0.0)) continue;
-      if (config_.pointsPerWidth > 0.0 &&
-          !(res.particleWidth / config_.pointsPerWidth < config_.baseEnergyStep)) continue;
-      double margin = res.particleWidth * config_.resonanceWidthMultiplier;
-      if (std::abs(currentEnergy - res.energy) > margin + 1.0e-12) continue;  // the edge itself counts (see below)
-      if (!anchorRes || res.particleWidth < anchorRes->particleWidth) {
-        anchorRes = &res;
+    // Inside the zone of one or more anchored resonances the next point is the
+    // closest node of their sets below the current one (the union of the sets).
+    // Only a resonance whose lattice is FINER than the smooth step has a zone. A
+    // broad pole's pitch can exceed the whole window -- a 10 MeV background level
+    // at pointsPerWidth 50 gives 200 keV, against a 100 keV thick target -- and
+    // anchoring to it stepped straight from the window's start to its end, past
+    // everything in between, leaving the grid [start, E_R, end]. Such a resonance
+    // is left to CalculateAdaptiveStep, which is capped at baseEnergyStep.
+    double nextEnergy = -std::numeric_limits<double>::infinity();
+    const Zone *anchorZone = nullptr;
+    for (const Zone &z : zones) {
+      if (std::abs(currentEnergy - z.energy) > z.half + 1.0e-12) continue;  // the edge itself counts (see below)
+      double e = NextNodeBelow(z, currentEnergy);
+      if (e > nextEnergy) {
+        nextEnergy = e;
+        anchorZone = &z;
       }
     }
-
-    double nextEnergy;
-    bool anchored = false;
-    if (anchorRes && config_.pointsPerWidth > 0.0) {
-      double pitch = anchorRes->particleWidth / config_.pointsPerWidth;
-      if (pitch > 0.0) {
-        // Largest point of resonance.energy + n*pitch strictly below currentEnergy.
-        double offset = currentEnergy - anchorRes->energy;
-        double n = std::floor(offset / pitch - 1.0e-9);
-        nextEnergy = anchorRes->energy + n * pitch;
-        if (!(nextEnergy < currentEnergy - 1.0e-12)) {
-          nextEnergy = currentEnergy - pitch;
-        }
-        anchored = true;
-      }
-    }
+    bool anchored = (anchorZone != nullptr && std::isfinite(nextEnergy));
     if (!anchored) {
+      anchorZone = nullptr;
       double stepSize = CalculateAdaptiveStep(currentEnergy, resonances);
       nextEnergy = currentEnergy - stepSize;
       // Safety check to avoid infinite loops in the smooth/background regime;
-      // the anchored branch above always advances by a fixed, positive pitch,
+      // the anchored branch above always advances to a node strictly below,
       // so it cannot stall and does not need this guard.
       if (stepSize < 1.0e-10) {
         if (nextEnergy < endEnergy) nextEnergy = endEnergy;
@@ -149,19 +149,14 @@ std::vector<double> AdaptiveIntegrationGrid::GenerateGrid(double startEnergy, do
       }
     }
 
-    // Never step INTO a resonance's region from outside it: stop at its upper
-    // edge, so the region is sampled on its own lattice from there down. The
-    // smooth step is sized by the nearest resonance's Gaussian falloff and is
-    // up to baseEnergyStep long, which can land deep inside a narrow region
-    // (or clear across it) -- a 4.5 keV step from 264.9 keV to 260.4 keV
-    // skipped the whole upper wing of the 0.97 keV-wide 259.7 keV resonance
-    // in 14N(p,g), and the trapezoid then spread sigma at 0.7 keV from the
-    // peak over the full step.
-    for (const ResonanceInfo &res : resonances) {
-      if (!(res.particleWidth > 0.0)) continue;
-      if (config_.pointsPerWidth > 0.0 &&
-          !(res.particleWidth / config_.pointsPerWidth < config_.baseEnergyStep)) continue;
-      double upperEdge = res.energy + res.particleWidth * config_.resonanceWidthMultiplier;
+    // Never step INTO a zone from outside it: stop at its upper edge, so the
+    // zone is sampled on its own nodes from there down. The smooth step is up to
+    // baseEnergyStep long, which can land deep inside a narrow region (or clear
+    // across it) -- a 4.5 keV step from 264.9 keV to 260.4 keV skipped the whole
+    // upper wing of the 0.97 keV-wide 259.7 keV resonance in 14N(p,g), and the
+    // trapezoid then spread sigma at 0.7 keV from the peak over the full step.
+    for (const Zone &z : zones) {
+      double upperEdge = z.energy + z.half;
       if (upperEdge < currentEnergy - 1.0e-12 && upperEdge > nextEnergy) nextEnergy = upperEdge;
     }
 
@@ -170,9 +165,9 @@ std::vector<double> AdaptiveIntegrationGrid::GenerateGrid(double startEnergy, do
     }
 
     if (debugGrid) {
-      fprintf(stderr, "[AZR_DEBUG_GRID]   step: current=%.10f -> next=%.10f anchored=%d anchorE=%.10f anchorW=%.6e\n",
+      fprintf(stderr, "[AZR_DEBUG_GRID]   step: current=%.10f -> next=%.10f anchored=%d anchorE=%.10f anchorPitch=%.6e\n",
               currentEnergy, nextEnergy, anchored ? 1 : 0,
-              anchorRes ? anchorRes->energy : -1.0, anchorRes ? anchorRes->particleWidth : -1.0);
+              anchorZone ? anchorZone->energy : -1.0, anchorZone ? anchorZone->pitch : -1.0);
     }
 
     grid.push_back(nextEnergy);
@@ -222,6 +217,77 @@ std::vector<double> AdaptiveIntegrationGrid::GenerateGrid(double startEnergy, do
   }
 
   return uniqueGrid;
+}
+
+namespace {
+// Is a resonance of this particle width finer than the coarse step, so that it gets a
+// lattice of its own (see GenerateGrid)?
+bool HasLattice(double particleWidth, const AdaptiveIntegrationGrid::GridConfig &c) {
+  return particleWidth > 0.0 && c.pointsPerWidth > 0.0 && particleWidth / c.pointsPerWidth < c.baseEnergyStep;
+}
+}  // namespace
+
+std::vector<double> AdaptiveIntegrationGrid::GradedOffsets(double pitch, double latticeTop) const {
+  std::vector<double> graded;
+  const double f = config_.tailStepFraction;
+  if (!(f > 0.0) || !(pitch > 0.0)) return graded;
+  double x = latticeTop;
+  for (;;) {
+    const double step = std::max(pitch, f * x);
+    if (step >= config_.baseEnergyStep) break;
+    x += step;
+    graded.push_back(x);
+  }
+  return graded;
+}
+
+double AdaptiveIntegrationGrid::ZoneHalfWidth(double particleWidth) const {
+  const double margin = particleWidth * config_.resonanceWidthMultiplier;
+  if (!HasLattice(particleWidth, config_)) return margin;
+  const double pitch = particleWidth / config_.pointsPerWidth;
+  const double latticeTop = std::ceil(margin / pitch - 1.0e-9) * pitch;
+  std::vector<double> graded = GradedOffsets(pitch, latticeTop);
+  return graded.empty() ? latticeTop : graded.back();
+}
+
+std::vector<AdaptiveIntegrationGrid::Zone>
+AdaptiveIntegrationGrid::AnchoredZones(const std::vector<ResonanceInfo> &resonances) const {
+  std::vector<Zone> zones;
+  for (const ResonanceInfo &res : resonances) {
+    if (!HasLattice(res.particleWidth, config_)) continue;
+    Zone z;
+    z.energy = res.energy;
+    z.pitch = res.particleWidth / config_.pointsPerWidth;
+    z.numLattice = (int)std::ceil(res.particleWidth * config_.resonanceWidthMultiplier / z.pitch - 1.0e-9);
+    z.graded = GradedOffsets(z.pitch, z.numLattice * z.pitch);
+    z.half = z.graded.empty() ? z.numLattice * z.pitch : z.graded.back();
+    zones.push_back(std::move(z));
+  }
+  return zones;
+}
+
+double AdaptiveIntegrationGrid::NextNodeBelow(const Zone &z, double energy) {
+  // Node energies are compared directly: (energy - E_R) / pitch is not a reliable
+  // index, since energies of order 10 MeV carry rounding errors of 1e-7 of a
+  // 16 neV pitch.
+  const double eps = 1.0e-12;
+  const double latticeTop = z.numLattice * z.pitch;
+  const double t = energy - z.energy;
+  if (t > latticeTop + eps) {
+    // above the lattice: the largest graded offset below t, else the lattice top
+    auto it = std::lower_bound(z.graded.begin(), z.graded.end(), t - eps);
+    if (it != z.graded.begin()) return z.energy + *(it - 1);
+    return z.energy + latticeTop;
+  }
+  if (t >= -latticeTop - eps) {
+    double n = std::floor(t / z.pitch + 0.5);
+    while (z.energy + n * z.pitch >= energy - eps) n -= 1.0;
+    if (n >= -z.numLattice) return z.energy + n * z.pitch;
+  }
+  // below the lattice: the next graded offset down
+  auto it = std::upper_bound(z.graded.begin(), z.graded.end(), std::max(-t, latticeTop) + eps);
+  if (it != z.graded.end()) return z.energy - *it;
+  return -std::numeric_limits<double>::infinity();
 }
 
 /*!
@@ -374,7 +440,7 @@ AdaptiveIntegrationGrid::IdentifyResonances(double startEnergy, double endEnergy
           fprintf(stderr, "[AZR_DEBUG_GRID]     level E=%.6f: input widths particle=%.6e eV gamma=%.6e eV\n",
                   level->GetE(), particleWidthEV, gammaWidthEV);
         }
-        double margin = particleWidth * config_.resonanceWidthMultiplier;
+        double margin = ZoneHalfWidth(particleWidth);
         if (levelCMEnergy >= endEnergy - margin && levelCMEnergy <= startEnergy + margin) {
           ResonanceInfo resInfo;
           resInfo.energy = levelCMEnergy;
@@ -438,7 +504,9 @@ AdaptiveIntegrationGrid::IdentifyResonances(double startEnergy, double endEnergy
 
       // The resonance in sigma(E) is shaped by the particle width, so the grid
       // is sized by it (see CalculateAdaptiveStep / IsInResonantRegion).
-      double margin = particleWidth * config_.resonanceWidthMultiplier;
+      // A resonance outside the window whose zone (lattice and graded tail) reaches
+      // into it counts: its nodes there move with it, as they do once it is inside.
+      double margin = ZoneHalfWidth(particleWidth);
       if (levelCMEnergy >= endEnergy - margin && levelCMEnergy <= startEnergy + margin) {
         ResonanceInfo resInfo;
         resInfo.energy = levelCMEnergy;

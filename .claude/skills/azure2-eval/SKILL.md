@@ -887,6 +887,17 @@ sub-points). Both refit1 sessions now give 25,776.076357, refit1q 25,693.609423 
 `--no-grid-replacement` / pyazr `replace_grids=False` restores the old behaviour; segments that need
 external-capture amplitudes always keep their grids. A fit run on an older build reports the
 start-file grid's objective: re-evaluate its end point in a current session before comparing.
+Re-placement made a second defect visible, fixed 2026-10-22 (branch fix/grid-graded-tail): around a
+level much narrower than the coarse step (window / Integration Points) the fine lattice
+(Width Mult. widths) ended in ONE coarse step whose far node was fixed by the window, so the tail was
+integrated badly and differently at every level position. 17O+a an2 (0.8 eV 5/2- level, Best n0
+target integration, 50 points): chi2 +-17 with a 10 eV period in E_level, value 27 off, analytic
+gradient of the wrong sign vs finite differences, TRF stalled. Now graded nodes (step = 10 % of the
+distance to the level, up to the coarse step) continue the lattice and move with the level
+(tests/reference/adaptive_grid_reference_test: 7.9e-2 -> 7e-5 of the area). On an older build the
+work-around is a wide fine region (Width Mult. 200, Pts/Width 5): smooth, cos(FD, engine) 0.999.
+If chi2 oscillates or gradient checks fail in ONE narrow level's energy under `<targetInt>`, suspect
+the grid before the physics.
 
 ```python
 azr, sav = m.save_fit("7Be_fit.azr")          # current parameters

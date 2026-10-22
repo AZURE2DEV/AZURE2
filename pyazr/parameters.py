@@ -194,7 +194,8 @@ class Parameter:
                 "fixed" if self.fixed else "free", f"value={self.value:.6g}"]
         if self.kind in ("energy", "width"):
             bits.append(f"J^pi={self.jpi}")
-            bits.append(f"E={self.level_energy:.4g}MeV")
+            if self.level_energy is not None:
+                bits.append(f"E={self.level_energy:.4g}MeV")
         if self.kind == "width":
             bits.append(f"L={self.L}")
             bits.append(f"S={self.S}")
