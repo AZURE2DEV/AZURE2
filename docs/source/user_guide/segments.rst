@@ -166,6 +166,23 @@ appears with the following fields:
    the block but does not edit it, and its Fitting tab still lists a member's
    own vary flag.
 
+   **Correlated uncertainties (covariance matrices, input file only).** A
+   line ending with the keyword block ``covariance <file>`` attaches its
+   points to the data covariance matrix in ``<file>``; all segments naming
+   the same file share it, and their points enter :math:`\chi^2` as
+   :math:`r^T M^{-1} r` (:doc:`chi_squared`; file format in
+   :doc:`../reference/data_formats`), e.g.::
+
+      1 1 3 0 8 14.5 15.5 1 1 0 0 0 0 0 data/n0.dat 0 0 normgroup ALL covariance cov_n.txt
+      1 1 3 0 8 29.5 30.5 1 1 0 0 0 0 0 data/n0.dat 0 0 normgroup ALL covariance cov_n.txt
+
+   Rows of the matrix are the data rows of the files it lists, so one file
+   may be split into several segments (here by angle window) and the energy
+   and angle limits may change without a new matrix. The block may be
+   combined with ``normgroup``, ``shiftgroup`` and the energy-shift blocks,
+   and only data segments take it. The GUI preserves the block but does not
+   edit it.
+
 **Energy Shift**
    An energy calibration shift applied to the data (in MeV).
 

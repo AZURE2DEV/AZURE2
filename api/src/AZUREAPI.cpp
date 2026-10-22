@@ -876,6 +876,8 @@ double AZUREAPI::CalculateChi2RWA(const vector_r &rwaParams) const {
       chiSquared += segmentChiSquared;
     }
   }
+  // Data covariance: r^T M^-1 r over each group in place of its points' r_i^2.
+  if (localData->HasCovariance()) chiSquared += localData->CovarianceChi2Correction();
 
   // Park formalism: the J > 0 wall, part of what a fit must minimize.
   if (configure().paramMask & Config::USE_PARK_FORMALISM) chiSquared += localCompound->ParkNormPenalty();
@@ -886,6 +888,15 @@ double AZUREAPI::CalculateChi2RWA(const vector_r &rwaParams) const {
     chiSquared += ScatteringLength::Chi2(localCompound, configure(), localCompound->ScatteringLengthConstraints());
 
   return chiSquared;
+}
+
+int AZUREAPI::RefreezeCovariance() {
+  EData *ld = data();
+  int n = 0;
+  for (int g = 0; g < ld->NumCovarianceGroups(); g++)
+    if (ld->GetCovarianceGroup(g).HasRelative()) n++;
+  ld->RefreezeCovariance();
+  return n;
 }
 
 vector_r AZUREAPI::ParkNorms(const vector_r &rwaParams) const {
@@ -965,6 +976,8 @@ double AZUREAPI::CalculateChi2Physical(const vector_r &physicalParams) const {
       chiSquared += segmentChiSquared;
     }
   }
+  // Data covariance: r^T M^-1 r over each group in place of its points' r_i^2.
+  if (localData->HasCovariance()) chiSquared += localData->CovarianceChi2Correction();
 
   return chiSquared;
 }
@@ -1007,6 +1020,13 @@ bool AZUREAPI::Chi2GradEGammaNorm(const vector_r &full, vector_r &gradFull,
   // the same model gives the data-term norm gradient, accumulated per segment.
   std::vector<double> normData(ld->NumSegments() + 1, 0.0);
   double chi2 = 0.0;
+  // A data covariance couples the points: their cotangent 2 (M^-1 r)_i / (cmErr n) needs
+  // every residual of the group first (one forward pass of those points), and the
+  // group's chi2 is r^T M^-1 r in place of the sum of r_i^2 accumulated below.
+  if (ld->HasCovariance()) {
+    ld->PrepareCovarianceSeeds(lc, configure());
+    chi2 += ld->CovarianceChi2Correction();
+  }
   FitBarFn fb = [&](ESegment *seg, int i, int pid, double model) -> double {
     EPoint *pt = seg->GetPoint(pid + 1);
     if (!pt) return 0.0;
@@ -1020,6 +1040,17 @@ bool AZUREAPI::Chi2GradEGammaNorm(const vector_r &full, vector_r &gradFull,
     // gradient stay consistent). Runs in the parallel point loop, so guard it.
 #pragma omp atomic
     chi2 += (r * r) / (err * err);
+    if (seg->GetCovarianceGroup() >= 0) {
+      // d chi2/d r_i = 2 z_i, z = M^-1 r; d r_i/d model = 1/(cmErr n), d r_i/d n = -model/(cmErr n^2).
+      const double z = seg->GetCovarianceSeed(pid);
+      const int o = ld->NormOwner(i);
+      if (norm != 0.0 && o >= 1 && o < (int)normData.size() && ld->GetSegment(o)->IsVaryNorm()) {
+        const double dNorm = -2.0 * z * model / (cmErr * norm * norm);
+#pragma omp atomic
+        normData[o] += dNorm;
+      }
+      return 2.0 * z / err;
+    }
     // A norm-group follower's points move its leader's norm (o), the one parameter.
     const int o = ld->NormOwner(i);
     if (norm != 0.0 && o >= 1 && o < (int)normData.size() && ld->GetSegment(o)->IsVaryNorm()) {
@@ -1190,6 +1221,9 @@ vector_r AZUREAPI::CalculateResidualJacobianRWA(const vector_r &params) const {
     ld->FillNormsFromParams(full);
     ld->FillEnergyShiftsFromParams(full, ld, lc, &configure());
   }
+
+  // Data covariance: whiten the data rows, w = W r per group (W^T W = M^-1, sum w^2 = r^T M^-1 r).
+  if (ld->HasCovariance()) ld->WhitenResidualRows(residuals, &jacobian, nCols);
 
   // Measured scattering lengths: rows after the data rows, as AZURECalc::ResidualJacobian.
   if (lc->HasScatteringLengthConstraints()) {

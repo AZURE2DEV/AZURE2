@@ -1691,6 +1691,27 @@ Plain-text, section-tagged; prefer the GUI or `AzrModel` over hand edits.
     Dayras 16/85/86). pyazr: `Segment.norm_group`,
     `add_data_segment(norm_group=...)`; `penalties()["norm"]` only on the
     leader. Tests: `tests/norm_groups`, `tests/pyazr/norm_group_test.py`.
+  - `covariance <file>` (keyword block, 2026-10-21): correlated data
+    uncertainties. The segments naming one file share its covariance matrix,
+    and chi2 over their points is r^T M^-1 r (M = D^-1 C D^-1, r the usual
+    (fit - n d)/(n sigma)). Rows are the DATA ROWS of the `file <path> <count>`
+    header (blank and '#' lines not counted), NOT post-cut points, so cuts and
+    split angle windows need no new matrix. Terms `block/diagonal/vector/
+    relvector/matrix` in the data file's units (lab). `relvector` = model-scaled
+    multiplicative term (no Peelle's puzzle), with the model frozen at the run's
+    first evaluation (`covarianceModel.out`). Re-freeze by rerunning from the .sav
+    or with pyazr `refreeze_covariance()`. The data-scaled `vector` for a
+    normalization IS Peelle's puzzle: fit scales as norms (`normgroup`) or as
+    relvector. The engine factors only B (diagonal + blocks, by components) plus
+    rank-k terms, so every fitted row needs its own diagonal/block variance;
+    N = 14,049 with k = 31 takes 1 ms per evaluation. Error column becomes
+    sqrt(C_ii); chi2 is independent of it. `chiSquared.out` per-segment value =
+    sum r_i (M^-1 r)_i (exact partition, single shares not goodness of fit);
+    `covariance.out` = chi2 per file vs the uncorrelated sum r^2. pyazr returns
+    whitened residuals (sum w^2 = chi2); `Segment.covariance`,
+    `add_data_segment(covariance=...)`. Tests: `tests/data_covariance`
+    (independent numpy check, gradients, 3 fitters, refusals),
+    `tests/pyazr/data_covariance_test.py`.
   - `shiftfn "<f(x)>" N v0 s0 vary0 ...` (keyword block, 2026-10-14): adds
     f(x; a0..a(N-1)), x = the point's ORIGINAL lab energy in MeV, to the
     shift; each aj has value (= penalty nominal), penalty width and vary flag;

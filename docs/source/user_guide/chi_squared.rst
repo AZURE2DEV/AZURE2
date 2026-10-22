@@ -24,6 +24,57 @@ Because both the value and its error are scaled by :math:`n_s`, a normalization
 that is free to move cannot reduce :math:`\chi^2` simply by shrinking the
 uncertainties.
 
+Correlated data: covariance matrices
+------------------------------------
+
+Data whose uncertainties are correlated (a run-by-run fit covariance, a
+detector efficiency common to an excitation function, an analysis systematic
+that moves several observables together) can carry their covariance matrix
+:math:`C`: segments whose lines end with ``covariance <file>``
+(:doc:`segments`; file format in :doc:`../reference/data_formats`) share it, and
+their points enter as
+
+.. math::
+
+   \chi^2_{\text{cov}} = r^{T} M^{-1} r, \qquad
+   r_i = \frac{\sigma^{\text{fit}}_i - n_s\,\sigma^{\text{data}}_i}{n_s\,\delta_i},
+   \qquad M = D^{-1} C D^{-1},
+
+with :math:`r` the same normalized residuals as above and
+:math:`D = \mathrm{diag}(\delta_i)`. This is :math:`v^T C^{-1} v` with
+:math:`v` the model-minus-data differences in the units of the data file, so
+the value does not depend on :math:`\delta_i` (AZURE2 sets it to
+:math:`\sqrt{C_{ii}}`), the matrix scales with the normalization exactly as the
+error column does, and the lab-to-c.m. conversion acts on it as on the error
+column. A diagonal :math:`C = \mathrm{diag}(\delta_i^2)` reproduces the
+uncorrelated sum exactly. The covariance covers only the rows actually fitted:
+points removed by the energy or angle limits drop out of the matrix (the
+marginal distribution). Normalization and energy-shift penalties, normalization
+groups and every fitter (MIGRAD with or without ``--use-gradient``,
+``--use-lm``, ``--use-gsl-lm``, the MCMC likelihood) work unchanged; the
+least-squares fitters see whitened residuals :math:`w = W r` with
+:math:`W^T W = M^{-1}`, so :math:`\sum w_i^2 = \chi^2_{\text{cov}}`.
+
+**Multiplicative uncertainties and Peelle's pertinent puzzle.** A fully
+correlated *relative* uncertainty (an efficiency, a solid angle, an overall
+scale) entered as :math:`(f\,d)(f\,d)^T`, built from the measured values
+:math:`d`, biases a least-squares fit low (Peelle's pertinent puzzle). Two
+remedies: fit the scale as a normalization with its penalty (the usual AZURE2
+way, ``normgroup`` for one scale shared by several segments), or enter it as a
+``relvector`` term, :math:`(f\,m)(f\,m)^T` with :math:`m` the **model** in the
+data's units. AZURE2 freezes :math:`m` at the first evaluation of the run (the
+starting parameters), so :math:`C` stays constant through a minimization, and
+writes it to ``covarianceModel.out``. The iterative scheme (Chiba and Smith)
+refits from the result: run AZURE2 again from the fitted ``param.sav``, or in
+pyazr call ``refreeze_covariance()`` between fits.
+
+``chiSquared.out`` gives a covariance segment the share
+:math:`\sum_{i \in s} r_i (M^{-1} r)_i`; the shares add up to the group's
+:math:`\chi^2` exactly, but a single share is not a goodness of fit of that
+segment alone (it can even be negative). ``covariance.out`` lists each
+covariance file's :math:`\chi^2` next to :math:`\sum r_i^2`, what the same
+points would give with their correlations ignored.
+
 The normalization penalty
 -------------------------
 

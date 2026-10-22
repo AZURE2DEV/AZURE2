@@ -470,6 +470,10 @@ class Session {
     expect_free(v, "park_norms");
     return to_array(api_->ParkNorms(v));
   }
+  int refreeze_covariance() {
+    ConfigScope guard(config_, &ecCache_);
+    return api_->RefreezeCovariance();
+  }
   py::array_t<double> calculate_chi2_grad_rwa(const py::array_t<double, py::array::forcecast> &p) {
     vector_r v = to_vector(p), out;
     expect_free(v, "calculate_chi2_grad_rwa");
@@ -653,6 +657,9 @@ PYBIND11_MODULE(_azure2, m) {
            "(pair key, channel spin, parity, Re a0 fm, Im a0 fm, has-levels flag).")
       .def("park_norms", &Session::park_norms, py::arg("params"),
            "Park overlap J of every R-matrix level (1 in Brune mode).")
+      .def("refreeze_covariance", &Session::refreeze_covariance,
+           "Data covariances: forget the model frozen for the relvector terms; the next chi2 evaluation "
+           "freezes it at its parameters.  Returns the number of covariance groups with relvector terms.")
       .def("calculate_chi2_physical", &Session::calculate_chi2_physical,
            py::call_guard<py::gil_scoped_release>(), py::arg("params"))
       .def("calculate_chi2_grad_rwa", &Session::calculate_chi2_grad_rwa,

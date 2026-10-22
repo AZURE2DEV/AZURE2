@@ -313,6 +313,13 @@ class AZUREAPI {
   vector_r ParkNorms(const vector_r &rwaParams) const;
 
   /*!
+   * Data covariances ("covariance <file>" segments): forget the model frozen for their
+   * relvector terms, so the next chi2 evaluation freezes it again at its parameters
+   * (iterative refits).  Returns the number of covariance groups with relvector terms.
+   */
+  int RefreezeCovariance();
+
+  /*!
    * Value and analytic gradient of the (data) chi-squared with respect to the
    * non-fixed RWA parameters.  Input: the non-fixed RWA parameters (energies,
    * reduced widths, normalizations), as for CalculateChi2RWA.  Returns

@@ -5,6 +5,8 @@
 #include "TargetEffect.h"
 #include "EDataIterator.h"
 #include <deque>
+#include <map>
+#include "DataCovariance.h"
 #include <memory>
 #include <ios>
 
@@ -139,6 +141,33 @@ class EData {
   void ResolveNormGroups(const Config &);
   /// Set each norm-group follower's (fixed) norm parameter to its leader's value.
   void SyncNormGroupParams(ROOT::Minuit2::MnUserParameters &) const;
+  /// The data covariance file \p path, read on first use (segment Fill); null (with an
+  /// ERROR printed and SetCovarianceError) if it cannot be read.
+  std::shared_ptr<DataCovariance::File> CovarianceFileFor(const std::string &path, const Config &);
+  void SetCovarianceError() { covarianceError_ = true; }
+  /// Gather the points of the segments carrying "covariance <file>" into one group per
+  /// file and factor each group's matrix (called by Fill).  Returns -1 on an error.
+  int ResolveCovarianceGroups(const Config &);
+  bool HasCovariance() const { return !covGroups_.empty(); }
+  int NumCovarianceGroups() const { return (int)covGroups_.size(); }
+  DataCovariance::Group &GetCovarianceGroup(int g) const { return *covGroups_[g]; }
+  /// From the points' current fit values: the chi2 of every covariance group, r^T M^-1 r,
+  /// minus the sum of r_i^2 the per-point loops counted for those points (so adding the
+  /// return value to their total gives the covariance chi2).  Sets each covariance
+  /// segment's chi2 to the sum over its points of r_i (M^-1 r)_i (also in \p segChis,
+  /// indexed by segment number, when given) and the points' seeds (M^-1 r)_i.
+  double CovarianceChi2Correction(std::vector<double> *segChis = nullptr);
+  /// Whiten the data rows of a residual vector (and of a row-major Jacobian with \p nCols
+  /// columns, when given): r <- W r within every covariance group (W^T W = M^-1).  Rows are the
+  /// points in segment order, as ComputeResidualJacobian lays them out.
+  void WhitenResidualRows(std::vector<double> &residuals, std::vector<double> *jacobian, int nCols);
+  /// covariance.out: each group's chi2 and the diagonal-only sum, at the current fit values.
+  void WriteCovarianceSummary(const Config &);
+  /// Forget the frozen model of the relvector terms; the next evaluation freezes it again.
+  void RefreezeCovariance();
+  /// Calculate the covariance segments' points at the current parameters and set their
+  /// seeds, for a gradient pass that needs (M^-1 r) before it reaches the points.
+  void PrepareCovarianceSeeds(CNuc *, const Config &);
   /// The segment (1-based) whose norm segment s uses: its norm-group leader, or s itself.
   int NormOwner(int s) const;
   void FillMnParams(ROOT::Minuit2::MnUserParameters &);
@@ -171,7 +200,10 @@ class EData {
   std::vector<TargetEffect> targetEffects_;
   std::vector<ESegment> segments_;
   std::deque<ESegment> componentSegments_;  // Separate storage for component segments (deque avoids pointer invalidation)
-  bool componentError_ = false;              // a component failed CheckComponentPairs
+  bool componentError_ = false;
+  std::map<std::string, std::shared_ptr<DataCovariance::File>> covFiles_;  // only while filling
+  std::vector<std::shared_ptr<DataCovariance::Group>> covGroups_;         // shared by every copy
+  bool covarianceError_ = false;              // a component failed CheckComponentPairs
   int iterations_;
   int normParamOffset_;
   int energyShiftParamOffset_;

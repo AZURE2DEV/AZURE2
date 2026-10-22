@@ -214,6 +214,13 @@ class EPoint {
   double GetCMCrossSection() const;
   /// Measured uncertainty, lab frame.
   double GetLabCrossSectionError() const;
+  /// 1-based number of the point's data row in its file (comments and blank lines not
+  /// counted); 0 for a point not read from a file.  Rows of a data covariance file.
+  int GetFileRecord() const { return fileRecord_; }
+  void SetFileRecord(int k) { fileRecord_ = k; }
+  /// Replace the uncertainty read from the file (lab and c.m. alike: call before the
+  /// lab-to-c.m. conversion), as a data covariance file does with sqrt(C_ii).
+  void SetDataError(double e) { lab_dcrosssection_ = cm_dcrosssection_ = e; }
   /// Measured uncertainty, centre-of-mass frame.
   double GetCMCrossSectionError() const;
   /// Geometrical factor \f$\pi/k^2\f$.
@@ -407,6 +414,7 @@ class EPoint {
   int segment_key_;
   int l_value_;
   int targetEffectNum_;
+  int fileRecord_ = 0;
   double target_blend_weight_ = 1.0;
   int max_ang_dist_order_;
   double cm_angle_;

@@ -96,10 +96,10 @@ _EXTRAP_OBSERVABLE = {
 
 # Keyword blocks a segment line may end with (SegLine.h), and how many tokens
 # each takes: sqrtshift b bError vary; sample <1|name> (alias natural);
-# shiftgroup <label>; normgroup <label>; shiftfn takes a variable number (see
-# _split_keyword_tail).
+# shiftgroup <label>; normgroup <label>; covariance <file>; shiftfn takes a variable
+# number (see _split_keyword_tail).
 _KEYWORDS = {"sqrtshift": 3, "sample": 1, "natural": 1, "shiftgroup": 1, "normgroup": 1,
-             "shiftfn": None}
+             "covariance": 1, "shiftfn": None}
 
 
 def _split_keyword_tail(tokens):
@@ -144,7 +144,7 @@ def _split_keyword_tail(tokens):
             k = end
             continue
         n = _KEYWORDS[kw]
-        if kw in ("shiftgroup", "normgroup") and k + 1 >= len(tokens):
+        if kw in ("shiftgroup", "normgroup", "covariance") and k + 1 >= len(tokens):
             raise ValueError(kw + " without a label: " + " ".join(tokens))
         blocks[kw] = tokens[k + 1:k + 1 + n]
         k += 1 + n
@@ -204,6 +204,8 @@ class Segment:
     # segments with the same label share ONE normalization: the first of them
     # (file order) owns the norm, its vary flag and its penalty
     norm_group: Optional[str] = None
+    # data covariance file ("covariance <file>"): segments naming one file share one matrix
+    covariance: Optional[str] = None
     # energy-shift function f(x; a0..) added at the original lab energy x (MeV):
     # the expression, and (value, sigma, vary) per parameter aj; on a shift
     # group it is declared on the first segment and applies to all members
@@ -324,6 +326,7 @@ class SegmentSet(list):
         #   sample 1 | sample <name>     an abundance-weighted (sample) segment; alias natural
         #   shiftgroup <label>           segments sharing one constant energy shift
         #   normgroup <label>            segments sharing one normalization
+        #   covariance <file>            segments sharing one data covariance matrix
         #   shiftfn "<f(x)>" N v s vary  a shift function f(x; a0..a(N-1))
         # Split them off first so the positional composite parse never sees them.
         shift_sqrt = shift_sqrt_error = 0.0
@@ -376,6 +379,7 @@ class SegmentSet(list):
             natural=natural, natural_sample=natural_sample,
             shift_group=(blocks.get("shiftgroup") or [None])[0],
             norm_group=(blocks.get("normgroup") or [None])[0],
+            covariance=(blocks.get("covariance") or [None])[0],
             shift_fn=shift_fn, shift_fn_params=tuple(shift_fn_params),
             operation=operation, components=tuple(components))
 

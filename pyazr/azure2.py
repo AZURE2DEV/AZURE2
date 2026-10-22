@@ -1218,6 +1218,12 @@ class azure2:
         residuals carry the split: they come back in segment order, so summing
         their squares between the segment boundaries recovers each one.  The
         sum of this equals ``calculate_chi2_rwa`` exactly.
+
+        Segments with a data covariance (``covariance <file>``) carry whitened
+        residuals w = W r (W^T W = M^-1, a mixture of the group's rows), so
+        their split is that of the whitened rows.  It differs from the
+        engine's ``chiSquared.out`` split, sum r_i (M^-1 r)_i; both add up to
+        the group's chi-squared.
         """
         x = np.asarray(self.params_rwa if params is None else params, float)
         r = np.asarray(self.residual_jacobian(x)[0], float)
@@ -1457,6 +1463,17 @@ class azure2:
         """
         x = np.asarray(self.params_rwa if params is None else params, float)
         return np.asarray(self.sess.park_norms(x), float)
+
+    def refreeze_covariance(self):
+        """Data covariances with ``relvector`` terms: forget the model frozen for them.
+
+        The model m in the multiplicative terms (f m)(f m)^T is frozen at the first
+        chi-squared evaluation, so the covariance stays constant through a minimization.
+        After this call the next evaluation freezes it again at its parameters: the
+        iterative scheme is fit, ``refreeze_covariance()``, evaluate at the best fit,
+        fit again.  Returns the number of covariance groups with relvector terms.
+        """
+        return int(self.sess.refreeze_covariance())
 
     def objective(self, params=None):
         """What AZURE2's own fit minimizes: chi-squared plus the penalties.

@@ -102,6 +102,9 @@ class ExtrapLine {
             natural_ = "0";
             break;
           }
+        } else if (keyword == "covariance") {
+          hasCovariance_ = true;  // a data-segment block only: EData::MakePoints refuses the line
+          break;
         } else {
           break;
         }
@@ -112,6 +115,10 @@ class ExtrapLine {
    * Returns non-zero if the line is to be included in the calculation.
    */
   int isActive() const { return isActive_; };
+  /*!
+   * Returns true if the line carries a "covariance" block, which only data segments take.
+   */
+  bool hasCovariance() const { return hasCovariance_; };
   /*!
    * Returns the particle pair key corresponding to the
    * entrance channel for the data segment.
@@ -216,6 +223,7 @@ class ExtrapLine {
   int isAdvanced_;
   int operationType_;
   std::string natural_;
+  bool hasCovariance_ = false;
   std::string componentsList_;
   int isUPOS_;
   int secondaryDecayL_;

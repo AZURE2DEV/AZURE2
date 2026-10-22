@@ -54,6 +54,60 @@ Notes on Data Files
   (angle-integrated) or barns/sr (differential).
 - **Format**: columns can be separated by spaces or tabs.
 
+Data Covariance Files
+---------------------
+
+A data segment whose line ends with ``covariance <file>`` (see
+:doc:`../user_guide/segments` and :doc:`../user_guide/chi_squared`) takes the
+covariance of its points from ``<file>``, a plain-text file with ``#``
+comments and free-form numbers (any whitespace, line breaks anywhere)::
+
+   # neutron groups of one experiment
+   file data/n0.dat 1173        # rows 1..1173: the data rows of data/n0.dat
+   file data/n1.dat 475         # rows 1174..1648
+   block 3                      # a 3 x 3 symmetric block ...
+     12 40 1180                 #   ... on these rows (1-based, any order)
+     1e-9 2e-10 1e-10  2e-10 3e-9 0  1e-10 0 2e-9
+   diagonal                     # N numbers, added to the diagonal
+     ...
+   vector                       # N numbers v: adds v v^T (repeatable)
+     ...
+   relvector                    # N fractions f: adds (f m)(f m)^T, m = the model
+     ...
+   matrix                       # N x N numbers: adds a full symmetric matrix
+     ...
+
+- The ``file`` lines come first. Each names a data file (path relative to the
+  directory AZURE2 runs in, as on the segment line) and its number of data
+  rows, counted as AZURE2 reads them: lines that are neither blank nor
+  comments. The rows of the matrix are these data rows, file after file; a
+  count that does not match the file is an error. ``size N`` may follow as
+  a check.
+- The terms (``block``, ``diagonal``, ``vector``, ``relvector``,
+  ``matrix``) add up to :math:`C`, in the units of the files' value column
+  (lab frame, as in the data file: (b/sr)\ :sup:`2` for differential cross
+  sections). Blocks may overlap and need not be contiguous; ``block`` and
+  ``matrix`` must be symmetric (to :math:`10^{-6}` relative).
+- ``relvector`` multiplies its fractions by the model :math:`m` (in the
+  data's units), frozen at the first evaluation of the run and written to
+  ``covarianceModel.out``; see :doc:`../user_guide/chi_squared`.
+- Every point of a segment naming the file must be a row of it (its data
+  file listed), and no row may be fitted by two segments (overlapping
+  windows on one file): both are errors. Rows not fitted drop out.
+- AZURE2 never forms :math:`C`. It splits it into :math:`B` (``diagonal``,
+  ``block`` and ``matrix`` terms, factored by connected components) and the
+  rank-one ``vector``/``relvector`` terms, and whitens with
+  :math:`W = (I + V T V^T) L_B^{-1}`, :math:`V = L_B^{-1} U`, at a cost of
+  :math:`O(N k)` per evaluation for :math:`k` rank-one terms (about a
+  millisecond for :math:`N = 14\,000`, :math:`k = 31`). :math:`B` must
+  therefore be positive definite by itself: every fitted row needs a
+  diagonal or block variance of its own. A ``matrix`` term makes one dense
+  component of all rows.
+- The data file's uncertainty column is replaced by :math:`\sqrt{C_{ii}}`
+  (with the data value standing in for :math:`m` in ``relvector`` terms); the
+  run log warns if it differed by more than 1 %. :math:`\chi^2` does not
+  depend on it.
+
 Phase Shift Data
 ^^^^^^^^^^^^^^^^
 

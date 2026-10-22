@@ -81,6 +81,7 @@ class SegLine {
     shiftGroup_ = "";
     // shared normalization: off unless a trailing "normgroup" block is present
     normGroup_ = "";
+    covarianceFile_ = "";
     hasSqrtShift_ = false;
     // energy-shift function: off unless a trailing "shiftfn" block is present
     shiftFn_ = "";
@@ -213,6 +214,12 @@ class SegLine {
         // expression is read by the Equation class (as <targetInt> equations);
         // it is quoted, and blanks inside it are dropped.  On a shift group it
         // goes on the group's first segment and applies to every member.
+        // A data-covariance block,
+        //   covariance <file>
+        // couples the segment's points to every other segment naming the same
+        // file: chi^2 over them is r^T R^-1 r instead of the sum of r_i^2
+        // (EData::ResolveCovarianceGroups; the file format is in
+        // docs/source/reference/data_formats.rst).
         // The blocks may come in any order.
         advancedStream.clear();
         std::string keyword;
@@ -267,6 +274,12 @@ class SegLine {
           } else if (keyword == "normgroup") {
             if (!(advancedStream >> normGroup_)) {
               parseError_ = "normgroup needs a label";
+              stream.setstate(std::ios::failbit);
+              break;
+            }
+          } else if (keyword == "covariance") {
+            if (!ReadPathToken(advancedStream, covarianceFile_) || covarianceFile_.empty()) {
+              parseError_ = "covariance needs a file name";
               stream.setstate(std::ios::failbit);
               break;
             }
@@ -395,6 +408,10 @@ class SegLine {
    */
   std::string normGroup() const { return normGroup_; };
   /*!
+   * Returns the data-covariance file of the line ("" when it has no covariance block).
+   */
+  const std::string &covarianceFile() const { return covarianceFile_; };
+  /*!
    * Returns true if the line carries a "sqrtshift" block.
    */
   bool hasSqrtShift() const { return hasSqrtShift_; };
@@ -464,6 +481,7 @@ class SegLine {
   int varyEnergyShiftSqrt_;
   std::string shiftGroup_;
   std::string normGroup_;
+  std::string covarianceFile_;
   bool hasSqrtShift_;
   std::string shiftFn_;
   std::vector<double> shiftFnValues_;

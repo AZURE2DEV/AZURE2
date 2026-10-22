@@ -118,6 +118,8 @@ double AZURECalcMCMC::CalculateLogLikelihood(const vector_r &p) const {
       chiSquared += segmentChiSquared;
     }
   }
+  // Data covariance: r^T M^-1 r over each group in place of its points' r_i^2.
+  if (localData->HasCovariance()) chiSquared += localData->CovarianceChi2Correction();
 
   // Isotopic abundances: priors and the sum-to-one term, part of the posterior as of the fit.
   if (localCompound->HasAbundanceBlock()) chiSquared += localCompound->AbundanceSumPenalty(configure().abundanceSumSigma);  // per-nucleus priors: CalculateLogPrior
@@ -219,6 +221,8 @@ double AZURECalcMCMC::CalculateLogLikelihoodPhysical(const vector_r &params_) co
       chiSquared += segmentChiSquared;
     }
   }
+  // Data covariance: r^T M^-1 r over each group in place of its points' r_i^2.
+  if (localData->HasCovariance()) chiSquared += localData->CovarianceChi2Correction();
 
   // Isotopic abundances: priors and the sum-to-one term, part of the posterior as of the fit.
   if (localCompound->HasAbundanceBlock()) chiSquared += localCompound->AbundanceSumPenalty(configure().abundanceSumSigma);  // per-nucleus priors: CalculateLogPrior

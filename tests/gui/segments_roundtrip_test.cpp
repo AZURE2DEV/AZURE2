@@ -3,7 +3,7 @@
 //
 // A segment line may end with keyword blocks the GUI does not edit --
 // "sqrtshift b bError vary" (sqrt(E) energy-shift term), "natural 1" / "sample <name>"
-// (natural-abundance targets), "shiftgroup <label>", "normgroup <label>" and
+// (natural-abundance targets), "shiftgroup <label>", "normgroup <label>", "covariance <file>" and
 // "shiftfn \"<f(x)>\" N v s vary ..." (energy-shift function) -- which it has to carry through
 // a load/save verbatim.  The sqrtshift block used to be lost on every load:
 // the reader split it off, but the row was then rebuilt column by column and
@@ -74,14 +74,18 @@ int main(int argc, char** argv) {
       "0 1 2 0 5 0 180 0 1 1 7.2 0 0 0 data/both.dat 0 0 sqrtshift 0.001 0.002 1 natural 1\n"
       "1 1 1 0.5 3 0 180 1 1 0 5 0 0.01 1 data/g.dat 0 0 shiftgroup G shiftfn \"a0*(sqrt(x)-sqrt(1.7))\" 1 0 0.02 1\n"
       "1 1 1 0.5 3 0 180 1 1 1 10 0 0 0 data/n.dat 0 0 normgroup D sample 1\n"
+      "1 1 1 0.5 3 0 180 1 1 0 0 0 0 0 data/c.dat 0 0 covariance cov/c.txt normgroup D\n"
       "</segmentsData>\n";
   {
     QString in(dataBlock);
     QTextStream inStream(&in);
     ok("data block read", tab.readSegDataFile(inStream));
     QList<SegmentsDataData> lines = tab.getSegmentsDataModel()->getLines();
-    ok("six data lines", lines.size() == 6, QString::number(lines.size()));
-    if (lines.size() == 6) {
+    ok("seven data lines", lines.size() == 7, QString::number(lines.size()));
+    if (lines.size() == 7) {
+      ok("covariance block (first in the tail) kept", lines[6].extraTokens == "covariance cov/c.txt normgroup D",
+         lines[6].extraTokens);
+      ok("data file of the covariance row", lines[6].dataFile == "data/c.dat", lines[6].dataFile);
       ok("normgroup block kept before the sample block", lines[5].extraTokens == "normgroup D sample 1",
          lines[5].extraTokens);
       ok("data file of the normgroup row", lines[5].dataFile == "data/n.dat", lines[5].dataFile);

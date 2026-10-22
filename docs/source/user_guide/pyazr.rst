@@ -129,6 +129,14 @@ Chi-squared and derivatives
    val, g = azr.chi2_and_grad(x)          # analytic gradient
    r, J   = azr.residual_jacobian(x)      # sum(r**2) == chi2
 
+Segments with a data covariance (``covariance <file>``, :doc:`chi_squared`)
+return whitened residuals :math:`w = W r` and their Jacobian, so
+``sum(r**2) == chi2`` still holds and Gauss-Newton fits need no change; the
+whitened rows mix the points of the covariance group. With ``relvector``
+terms the model in them is frozen at the first evaluation;
+``azr.refreeze_covariance()`` makes the next evaluation freeze it again at its
+parameters (fit, refreeze, evaluate at the fit, fit again).
+
 ``residual_jacobian`` computes the level-energy, reduced-width and
 normalization columns for roughly the cost of two forward evaluations, which
 makes Gauss-Newton and Levenberg-Marquardt fits cheap. It also yields the

@@ -147,6 +147,21 @@ class ESegment {
   /// member's norm and nominal norm, and carries no norm penalty of its own.
   void SetNormGroupFollower(int pos, double norm, double nominal);
   void SetHasNormGroupFollowers(bool);
+  /// Data-covariance file of the segment ("" if none): the segments naming one file
+  /// share one covariance matrix (EData::ResolveCovarianceGroups).
+  const std::string &GetCovarianceFile() const { return covarianceFile_; }
+  /// Index of the segment's covariance group in EData (-1 if it has none).
+  int GetCovarianceGroup() const { return covGroup_; }
+  void SetCovarianceGroup(int g) { covGroup_ = g; }
+  /// (R^-1 r)_i of point \p pointIdx (0-based) at the last EData::CovarianceChi2Correction:
+  /// the point's share of d(chi2)/d(r_i) / 2 with the correlation matrix R of its group.
+  double GetCovarianceSeed(int pointIdx) const {
+    return pointIdx >= 0 && pointIdx < (int)covSeed_.size() ? covSeed_[pointIdx] : 0.0;
+  }
+  void SetCovarianceSeed(int pointIdx, double z) {
+    if ((int)covSeed_.size() <= pointIdx) covSeed_.resize(pointIdx + 1, 0.0);
+    covSeed_[pointIdx] = z;
+  }
   /// The whole lab-energy shift at a point's original lab energy: a + b*sqrt(E).
   double TotalEnergyShift(double labEnergy) const;
   /// Add this segment's energy-shift penalties, ((x - nominal)/sigma)^2 for each varied
@@ -330,6 +345,9 @@ class ESegment {
   std::string normGroup_;
   int normLeaderPos_;
   bool hasNormGroupFollowers_;
+  std::string covarianceFile_;
+  int covGroup_ = -1;
+  std::vector<double> covSeed_;
   bool hasSqrtShiftBlock_;
   // Shift function declared on this line (owner) ...
   std::string shiftFnDeclared_;

@@ -65,6 +65,14 @@ add_test(NAME pyazr_norm_group
                  ${CMAKE_CURRENT_SOURCE_DIR}/norm_group_test.py)
 set_tests_properties(pyazr_norm_group PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
+# Data covariance matrices ("covariance <file>"): the block read and written; with the
+# engine, chi2 = sum of the whitened residuals squared, the gradient against central
+# differences and 2 J^T w, and the relvector model frozen and refrozen.
+add_test(NAME pyazr_data_covariance
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/data_covariance_test.py)
+set_tests_properties(pyazr_data_covariance PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
 # Park parametrization (--use-park): Brune equivalence of the cross sections,
 # analytic gradient and residual Jacobian against finite differences (the
 # adjoint differentiates Park's level matrix and its J-dependent terms), and

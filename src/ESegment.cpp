@@ -4,6 +4,7 @@
 #include "CNuc.h"
 #include "Config.h"
 #include "DataLine.h"
+#include "DataCovariance.h"
 #include "EData.h"
 #include "ESegment.h"
 #include <cstdio>
@@ -76,6 +77,7 @@ ESegment::ESegment(SegLine segLine) {
   shiftLeaderPos_ = -1;
   hasShiftGroupFollowers_ = false;
   normGroup_ = segLine.normGroup();
+  covarianceFile_ = segLine.covarianceFile();
   normLeaderPos_ = -1;
   hasNormGroupFollowers_ = false;
   hasSqrtShiftBlock_ = segLine.hasSqrtShift();
@@ -358,6 +360,21 @@ int ESegment::Fill(CNuc *theCNuc, EData *theData, const Config &configure) {
   std::ifstream in(infile.c_str());
   if (!in) return -1;
   int lineNumber = 0;
+  int record = 0;  // data rows read so far: the rows of a data covariance file
+  std::shared_ptr<DataCovariance::File> covFile;
+  std::string canonicalData;
+  if (!covarianceFile_.empty()) {
+    covFile = theData->CovarianceFileFor(covarianceFile_, configure);
+    if (!covFile) return -1;
+    canonicalData = DataCovariance::CanonicalPath(infile);
+    if (covFile->FileIndex(canonicalData) < 0) {
+      configure.outStream << "ERROR: Data file " << infile << " of segment #" << this->GetSegmentKey()
+                          << " is not among the \"file\" lines of its covariance file " << covarianceFile_ << "."
+                          << std::endl;
+      theData->SetCovarianceError();
+      return -1;
+    }
+  }
   while (true) {
     DataLine line(in);
     lineNumber += line.linesConsumed();
@@ -373,8 +390,31 @@ int ESegment::Fill(CNuc *theCNuc, EData *theData, const Config &configure) {
       in.close();
       return -1;
     }
+    record++;
     {
       EPoint NewEPoint(line, this);
+      NewEPoint.SetFileRecord(record);
+      if (this->IsInSegment(NewEPoint) && covFile) {
+        // The point's uncertainty becomes sqrt(C_ii) (the data value standing in for the
+        // model in relvector terms); chi2 itself does not depend on it (DataCovariance.h).
+        const int row = covFile->RowOf(canonicalData, record);
+        const double c = covFile->Variance(row, line.crossSection());
+        if (!(c > 0.0)) {
+          configure.outStream << "ERROR: Row " << row + 1 << " of covariance file " << covarianceFile_ << " (data row "
+                              << record << " of " << infile << ") has a variance " << c << " <= 0." << std::endl;
+          theData->SetCovarianceError();
+          return -1;
+        }
+        const double sigma = std::sqrt(c);
+        const double rel = std::fabs(line.error() - sigma) / sigma;
+        if (rel > 0.01) {
+          if (covFile->numSigmaMismatch++ == 0)
+            covFile->firstSigmaMismatch = infile + " data row " + std::to_string(record) + ": error column " +
+                                          std::to_string(line.error()) + ", sqrt(C_ii) " + std::to_string(sigma);
+          covFile->worstSigmaMismatch = std::max(covFile->worstSigmaMismatch, rel);
+        }
+        NewEPoint.SetDataError(sigma);
+      }
       if (this->IsInSegment(NewEPoint)) {
         this->AddPoint(NewEPoint);
         PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetEntranceKey()));

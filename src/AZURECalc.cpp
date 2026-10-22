@@ -428,6 +428,8 @@ double AZURECalc::operator()(const vector_r &p) const {
       chiSquared += segmentChiSquared;
     }
   }
+  // Data covariance: r^T M^-1 r over each group in place of its points' r_i^2.
+  if (localData->HasCovariance()) chiSquared += localData->CovarianceChi2Correction();
 
   // Add nuisance parameter chi-squared contributions
   if (limitsManager_) {
@@ -622,6 +624,7 @@ double AZURECalc::Chi2On(CNuc *lc, EData *ld, const vector_r &p, std::vector<dou
     segment->AddShiftPenalty(chiSquared);
     chiSquared += segChi;
   }
+  if (ld->HasCovariance()) chiSquared += ld->CovarianceChi2Correction(segChis);
   if (limitsManager_) chiSquared += CalculateNuisanceChiSquared(p);
   // Park: the J > 0 wall, as operator() adds it.  Without it the finite-difference gradient columns (and the
   // AZURE_GRAD_CHECK reference) missed the wall's gradient wherever a level is past it.
@@ -754,6 +757,9 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
   // it needs no extra forward pass:
   //   d(chi2)/d(n_s) = sum_pts [ -2 r data/(cmErr^2 n^2) - 2 r^2/(cmErr^2 n^3) ].
   std::vector<double> normData(ld->NumSegments() + 1, 0.0);
+  // A data covariance couples the points: their cotangent is 2 (M^-1 r)_i / (cmErr n), which
+  // needs every residual of the group first (one forward pass of those points).
+  if (ld->HasCovariance()) ld->PrepareCovarianceSeeds(lc, configure());
   FitBarFn fitBarFn = [&](ESegment *seg, int i, int pid, double model) -> double {
     EPoint *pt = seg->GetPoint(pid + 1);
     if (!pt) return 0.0;
@@ -763,6 +769,18 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
     double r = model - dataval * norm;
     double err = cmErr * norm;
     if (err == 0.0) return 0.0;
+    if (seg->GetCovarianceGroup() >= 0) {
+      // chi2 = r^T M^-1 r with r_i = (model - d n)/(cmErr n): d chi2/d r_i = 2 z_i, z = M^-1 r;
+      // d r_i/d model = 1/(cmErr n), d r_i/d n = -model/(cmErr n^2).
+      const double z = seg->GetCovarianceSeed(pid);
+      const int o = ld->NormOwner(i);
+      if (norm != 0.0 && o >= 1 && o < (int)normData.size() && ld->GetSegment(o)->IsVaryNorm()) {
+        const double dNorm = -2.0 * z * model / (cmErr * norm * norm);
+#pragma omp atomic
+        normData[o] += dNorm;
+      }
+      return 2.0 * z / err;
+    }
     // A norm-group follower's points move its leader's norm (o), the one parameter.
     const int o = ld->NormOwner(i);
     if (norm != 0.0 && o >= 1 && o < (int)normData.size() && ld->GetSegment(o)->IsVaryNorm()) {
@@ -847,7 +865,9 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
         localShiftOk && pmap.Desc(idx).segment >= 1) {
       const int s = pmap.Desc(idx).segment;
       const ShiftParamTarget target = ShiftTargets(ld, pmap.Desc(idx));
-      if (target.Local(ld) && MappingConfined(partners, target.segs)) {
+      bool inCovariance = false;  // a covariance group's chi2 is not a sum over its segments
+      for (int m : target.segs) inCovariance |= ld->GetSegment(m)->GetCovarianceGroup() >= 0;
+      if (!inCovariance && target.Local(ld) && MappingConfined(partners, target.segs)) {
         auto groupChi = [&](double v) {
           target.Set(ld, v);
           // Every segment is moved before any is calculated: a host calculates
@@ -1402,6 +1422,10 @@ bool AZURECalc::ResidualJacobian(const vector_r &full, vector_r &residuals,
     }
   }
 
+  // Data covariance: whiten the data rows (and their Jacobian rows, energy-shift columns
+  // included), w = W r per group (W^T W = M^-1), so sum w^2 = r^T M^-1 r.
+  if (ok && ld->HasCovariance()) ld->WhitenResidualRows(residuals, &jac, nCols);
+
   // Measured scattering lengths: one row per constrained part (Re, Im) after the data rows, in the
   // order of ScatteringLength::Residuals, with exact rows from the level-matrix adjoint at each
   // threshold.  They depend on no energy shift (zero columns there).
@@ -1841,6 +1865,7 @@ bool AZURECalc::ResidualsOnly(const vector_r &full, vector_r &residuals) const {
       residuals.push_back(denom != 0.0 ? (th - pt->GetCMCrossSection() * norm) / denom : 0.0);
     }
   }
+  if (ld->HasCovariance()) ld->WhitenResidualRows(residuals, nullptr, 0);
   // Measured scattering lengths, as the last rows of ResidualJacobian.
   if (lc->HasScatteringLengthConstraints())
     ScatteringLength::Residuals(lc, configure(), lc->ScatteringLengthConstraints(), residuals);

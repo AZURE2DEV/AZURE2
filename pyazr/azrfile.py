@@ -1485,7 +1485,7 @@ class AzrModel:
                          active=True, energy_shift_sqrt=0.0,
                          energy_shift_sqrt_error=0.0, vary_shift_sqrt=False,
                          shift_group=None, shift_fn=None, shift_fn_params=(),
-                         natural=False, norm_group=None):
+                         natural=False, norm_group=None, covariance=None):
         """Append one data segment (a ``<segmentsData>`` line).
 
         ``data_file`` is the data file path (relative to the run directory,
@@ -1505,7 +1505,9 @@ class AzrModel:
         ``vary_shift_sqrt``; the block is written only when one of the three
         is set, so a plain segment line is unchanged.  ``shift_group`` (a
         label) writes a ``shiftgroup`` block and ``norm_group`` a ``normgroup``
-        block (segments with one label share the first one's normalization); ``shift_fn`` (an expression in
+        block (segments with one label share the first one's normalization), ``covariance`` (a
+        file name) a ``covariance`` block (the segments naming one file share its data
+        covariance matrix; format in the data-formats reference); ``shift_fn`` (an expression in
         the lab energy x, MeV, without blanks) with ``shift_fn_params``, one
         ``(value, sigma, vary)`` per parameter a0, a1, ..., writes a
         ``shiftfn`` block: E' = E + shift + f(x).  ``natural=True`` (or a
@@ -1536,6 +1538,10 @@ class AzrModel:
             toks += ["shiftgroup", str(shift_group)]
         if norm_group:
             toks += ["normgroup", str(norm_group)]
+        if covariance:
+            if any(c.isspace() for c in str(covariance)):
+                raise ValueError("covariance: a file name without blanks, please.")
+            toks += ["covariance", str(covariance)]
         if shift_fn:
             if any(c.isspace() for c in shift_fn) or not shift_fn_params:
                 raise ValueError("shift_fn needs an expression without blanks and "

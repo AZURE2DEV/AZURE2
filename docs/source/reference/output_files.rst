@@ -157,6 +157,25 @@ channel spin in which no level has a width gets the pure Coulomb (hard-sphere)
 value and the note.  The measured lengths of the ``<scatteringLengths>`` block
 follow, each with its model value and :math:`\chi^2`, and their total.
 
+covariance.out
+^^^^^^^^^^^^^^
+
+Written with ``chiSquared.out`` when data segments carry a ``covariance``
+block (:doc:`data_formats`): one line per covariance file, with the number of
+fitted rows, the rows of the file, the segments, :math:`\chi^2 = r^T M^{-1} r`
+and, for comparison, :math:`\sum r_i^2` (the same points with their
+correlations ignored), and the number of ``relvector`` terms.
+
+covarianceModel.out
+^^^^^^^^^^^^^^^^^^^
+
+For covariance files with ``relvector`` terms: the model :math:`m` they were
+built with, frozen at the first evaluation of the run (and appended again at
+every refreeze from pyazr), one line per fitted row: the row of the
+covariance file, the segment key, the lab energy and angle, the data value,
+:math:`m` and the uncertainty used, all in the units of the data file. With
+it the :math:`\chi^2` of the run can be reproduced.
+
 param.errors
 ^^^^^^^^^^^^
 
