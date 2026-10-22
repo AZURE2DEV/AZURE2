@@ -563,8 +563,8 @@ is taken in the formal representation of the level matrix instead, in
 (``AMatrixFunc::FormalBilinearAdjoint``); for the Brune and Park matrices the
 scalar gradient sums the formal cotangents over all points and resolves them
 into the level parameters once per pass (``ResolveFormalCotangents``), while
-the Jacobian rows keep ``LevelMatrixAdjoint`` with the solves :math:`A g_c` of
-the Woodbury form.  Where the scalar gradient does take the level-matrix
+the Jacobian rows take the derivatives by free parameter below, with the solves
+:math:`A g_c` of the Woodbury form.  Where the scalar gradient does take the level-matrix
 adjoint (the level route, the pencil route), it defers it too: the level
 matrix is :math:`K - EN - G\Lambda(E)G^T` with :math:`K, N` independent of the
 energy, so only :math:`\sum_E \mathrm{Re}\,\bar M(E)` and
@@ -578,8 +578,8 @@ parameter, so they go the other way: a level parameter changes
 :math:`dK = e_l k^T + k e_l^T`, :math:`dN = e_l q^T + q e_l^T` (``ChannelSpace::
 CurrentLevelDerivatives``, per parameter set and free mask), and with the
 solves :math:`u = A g` its derivative is :math:`O(n)` per free parameter
-(``AMatrixFunc::LevelAdjoint``, ``LevelBasis``; standard and Brune level
-matrices, Park keeps ``LevelMatrixAdjoint``).
+(``AMatrixFunc::LevelAdjoint``, ``LevelBasis``; standard, Brune and Park
+level matrices).
 Points with components or sub-point target effects are still differentiated
 one by one (``GradOnePoint``), with the same back-propagation.  The gradient
 equals the point-by-point one to rounding (about :math:`10^{-14}` of its

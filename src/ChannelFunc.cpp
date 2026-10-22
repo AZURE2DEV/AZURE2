@@ -16,8 +16,16 @@ ChannelFunc::ChannelFunc(PPair *pair, bool useGSLFunctions)
 ChannelFunc::~ChannelFunc() = default;
 
 CoulFunc &ChannelFunc::coul() {
-  if (!coul_) coul_.reset(new CoulFunc(pair_, useGSL_));
+  if (!coul_) {
+    coul_.reset(new CoulFunc(pair_, useGSL_));
+    coul_->SetUseGlobalCache(useGlobalCache_);
+  }
   return *coul_;
+}
+
+void ChannelFunc::SetUseGlobalCache(bool use) {
+  useGlobalCache_ = use;
+  if (coul_) coul_->SetUseGlobalCache(use);
 }
 
 ShftFunc &ChannelFunc::shft() {

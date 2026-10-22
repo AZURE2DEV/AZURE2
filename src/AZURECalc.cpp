@@ -369,7 +369,8 @@ double AZURECalc::operator()(const vector_r &p) const {
   localCompound->FillCompoundFromParams(p);
   localData->FillNormsFromParams(p);
   localData->FillEnergyShiftsFromParams(p, localData, localCompound, &configure());
-  if (configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure());
+  // A chi-squared alone: no Park second derivatives (CNuc::CalcShiftFunctions).
+  if (configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure(), false);
   const auto te1 = std::chrono::steady_clock::now();
 
   // Calculate all points in one parallel pass when not already inside a parallel
@@ -616,7 +617,8 @@ double AZURECalc::Chi2On(CNuc *lc, EData *ld, const vector_r &p, std::vector<dou
   lc->FillCompoundFromParams(p);
   ld->FillNormsFromParams(p);
   ld->FillEnergyShiftsFromParams(p, ld, lc, &configure());
-  if (configure().paramMask & Config::USE_BRUNE_FORMALISM) lc->CalcShiftFunctions(configure());
+  // A chi-squared alone: no Park second derivatives (CNuc::CalcShiftFunctions).
+  if (configure().paramMask & Config::USE_BRUNE_FORMALISM) lc->CalcShiftFunctions(configure(), false);
   const bool pre = PrecalculatePoints(lc, ld, thmOnly);
 
   double chiSquared = 0.0;
@@ -659,8 +661,10 @@ double AZURECalc::Chi2On(CNuc *lc, EData *ld, const vector_r &p, std::vector<dou
   if (thmOnly) return chiSquared;
   if (limitsManager_) chiSquared += CalculateNuisanceChiSquared(p);
   // Park's J > 0 wall, as operator() adds it: the finite-difference fallback of
-  // Gradient() differentiates this function, and LM / GSL-LM take it as their
-  // cost.
+  // Gradient() and its columns (and the AZURE_GRAD_CHECK reference)
+  // differentiate this function, and LM / GSL-LM take it as their cost.  Not
+  // in the THM-only part (thmOnly returned above), which adds to an analytic
+  // gradient that has the wall.
   if (configure().paramMask & Config::USE_PARK_FORMALISM) chiSquared += lc->ParkNormPenalty();
   // The working copy lc holds the abundances of p (FillCompoundFromParams above); compound() holds whatever the
   // last full evaluation left there, so using it here froze the abundance prior in the LM/GSL cost and in the
@@ -1136,7 +1140,6 @@ std::vector<bool> AZURECalc::FixedMask() const {
 }
 
 bool AZURECalc::GradientFromJacobian(const std::vector<double> &p, std::vector<double> &grad) const {
-  if (configure().paramMask & Config::USE_PARK_FORMALISM) return false;  // Park wall penalty not in J
   vector_r r, jac;
   std::vector<int> packedToFull;
   if (!ResidualJacobian(p, r, jac, packedToFull) || r.empty()) return false;
@@ -1161,6 +1164,20 @@ bool AZURECalc::GradientFromJacobian(const std::vector<double> &p, std::vector<d
       const double n0 = seg->GetNominalNorm(), nerr = n0 / 100.0 * seg->GetNormError();
       if (nerr != 0.0) { grad[idx] += 2.0 * (p[idx] - n0) / (nerr * nerr); g2[idx] += 2.0 / (nerr * nerr); }
     }
+  }
+  // Park: the J > 0 wall, sum over the levels with J < 0 of (J/s)^2, is not a
+  // residual.  Its gradient (zero while every J > 0) as the adjoint path adds it.
+  if (configure().paramMask & Config::USE_PARK_FORMALISM) {
+    CNuc *lc = GetPooledCNuc();
+    lc->FillCompoundFromParams(p);
+    lc->CalcShiftFunctions(configure());
+    if (lc->ParkNormPenalty() > 0.0) {
+      GradAccum accum;
+      accum.Init(lc);
+      AddParkPenaltyGradient(lc, configure(), accum);
+      accum.Scatter(pmap, grad);
+    }
+    ReturnPooledCNuc(lc);
   }
   ForEachShiftPenalty(data(), pmap, [&](int idx, double nominal, double e) {
     if (idx >= (int)p.size()) return;
@@ -1926,7 +1943,7 @@ bool AZURECalc::ResidualsOnly(const vector_r &full, vector_r &residuals) const {
   lc->FillCompoundFromParams(full);
   ld->FillNormsFromParams(full);
   ld->FillEnergyShiftsFromParams(full, ld, lc, &configure());
-  if (configure().paramMask & Config::USE_BRUNE_FORMALISM) lc->CalcShiftFunctions(configure());
+  if (configure().paramMask & Config::USE_BRUNE_FORMALISM) lc->CalcShiftFunctions(configure(), false);
 
   residuals.clear();
   for (int i = 1; i <= ld->NumSegments(); i++) {

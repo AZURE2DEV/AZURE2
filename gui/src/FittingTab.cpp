@@ -25,6 +25,7 @@
 #include <QSignalBlocker>
 #include <QSet>
 #include "RoundTripNumber.h"
+#include "TargetIntModel.h"
 #include "InfoDialog.h"
 #include "LevelsTab.h"
 #include "SegmentsTab.h"
@@ -55,6 +56,10 @@ FittingTab::FittingTab(QWidget *parent) :
   paramTabWidget->addTab(abundanceParamsTable, "Abundances");
   paramTabWidget->setTabVisible(paramTabWidget->indexOf(abundanceParamsTable), false);
 
+  // Shown only when an experimental effect carries electron screening (updateParameterTables).
+  screeningParamsTable = new QTableWidget;
+  setupParameterTable(screeningParamsTable, "Screening Parameters");
+
   normParamsTable = new QTableWidget;
   setupParameterTable(normParamsTable, "Normalization Parameters", true);
   paramTabWidget->addTab(normParamsTable, "Normalization");
@@ -62,6 +67,8 @@ FittingTab::FittingTab(QWidget *parent) :
   shiftParamsTable = new QTableWidget;
   setupParameterTable(shiftParamsTable, "Energy Shift Parameters", true);
   paramTabWidget->addTab(shiftParamsTable, "Energy Shifts");
+  paramTabWidget->addTab(screeningParamsTable, "Screening");
+  paramTabWidget->setTabVisible(paramTabWidget->indexOf(screeningParamsTable), false);
 
   // THM coherent backgrounds (cbackground=): a tab only when there are some.
   cbkgParamsTable = new QTableWidget;
@@ -184,6 +191,7 @@ void FittingTab::updateParameterTables() {
   // Clear existing tables
   levelParamsTable->setRowCount(0);
   abundanceParamsTable->setRowCount(0);
+  screeningParamsTable->setRowCount(0);
   normParamsTable->setRowCount(0);
   shiftParamsTable->setRowCount(0);
   cbkgParamsTable->setRowCount(0);
@@ -200,6 +208,8 @@ void FittingTab::updateParameterTables() {
       targetTable = normParamsTable;
     } else if (param.category == "shift") {
       targetTable = shiftParamsTable;
+    } else if (param.category == "screening") {
+      targetTable = screeningParamsTable;
     } else if (param.category == "cbkg") {
       targetTable = cbkgParamsTable;
     }
@@ -210,6 +220,7 @@ void FittingTab::updateParameterTables() {
   }
   showCoherentTab();
   paramTabWidget->setTabVisible(paramTabWidget->indexOf(abundanceParamsTable), abundanceParamsTable->rowCount() > 0);
+  paramTabWidget->setTabVisible(paramTabWidget->indexOf(screeningParamsTable), screeningParamsTable->rowCount() > 0);
 }
 
 void FittingTab::reset() {
@@ -438,6 +449,7 @@ void FittingTab::populateFromCurrentGUIState() {
       if (segment.isActive == 1) fittingParameters.append(segmentParameter(i, segment, false));
     }
   }
+  appendScreeningParameters();
 
   appendCoherentParameters();
   assignMinuitIndices();
@@ -497,7 +509,7 @@ void FittingTab::assignMinuitIndices() {
                    channels[param.channelIndex].isFixed == 0 &&
                    channels[param.channelIndex].reducedWidth != 0.0);
       }
-    } else if (param.category == "abundance") {
+    } else if (param.category == "abundance" || param.category == "screening") {
       // Emitted fixed unless its vary flag is set, so it counts only when fitted.
       counted = param.useAsNuisance;
     } else if (param.category == "norm" || param.category == "shift") {
@@ -544,6 +556,95 @@ void FittingTab::setAbundancesModel(AbundancesModel *model) {
   connect(model, SIGNAL(modelReset()), this, SLOT(refreshParameters()));
   connect(model, SIGNAL(samplesChanged()), this, SLOT(refreshParameters()));
   connect(model, SIGNAL(dataChanged(QModelIndex, QModelIndex)), this, SLOT(syncAbundances()));
+}
+
+void FittingTab::setTargetIntModel(TargetIntModel *model) {
+  targetIntModel_ = model;
+  if (!model) return;
+  // A screening block appearing or vanishing changes the parameter list; edits change rows in place.
+  connect(model, SIGNAL(rowsInserted(QModelIndex, int, int)), this, SLOT(syncScreening()));
+  connect(model, SIGNAL(rowsRemoved(QModelIndex, int, int)), this, SLOT(syncScreening()));
+  connect(model, SIGNAL(modelReset()), this, SLOT(syncScreening()));
+  connect(model, SIGNAL(dataChanged(QModelIndex, QModelIndex)), this, SLOT(syncScreening()));
+}
+
+// EData::FillMnParams emits one screening_<n> (eV) after the shift-function parameters for each ACTIVE
+// <targetInt> line with a screening block, n its place among the active lines.  Value = U_e, Error = the
+// prior's sigma (0 = none), Nuisance = fitted; all three live on the Experimental Effects line.
+void FittingTab::appendScreeningParameters() {
+  if (!targetIntModel_) return;
+  QList<TargetIntData> lines = targetIntModel_->getLines();
+  int effect = 0;
+  for (int row = 0; row < lines.size(); row++) {
+    const TargetIntData &t = lines[row];
+    if (t.isActive != 1) continue;
+    effect++;
+    if (!t.isScreening) continue;
+    FittingParameter p;
+    p.name = QString("screening_%1").arg(effect);
+    p.value = t.screeningUe;
+    p.lowerLimit = 0;
+    p.upperLimit = 0;
+    p.error = t.screeningSigma;
+    p.fitError = 0.0;
+    p.useAsNuisance = t.screeningVary;
+    p.category = "screening";
+    p.levelIndex = -1;
+    p.channelIndex = row;  // row in the Experimental Effects table
+    fittingParameters.append(p);
+  }
+}
+
+void FittingTab::writeScreening(const FittingParameter &param) {
+  if (param.category != "screening" || !targetIntModel_) return;
+  const int row = param.channelIndex;
+  if (row < 0 || row >= targetIntModel_->getLines().size()) return;
+  // Blocked so the write does not come back through syncScreening.
+  const bool old = targetIntModel_->blockSignals(true);
+  targetIntModel_->setData(targetIntModel_->index(row, 36), param.value, Qt::EditRole);
+  targetIntModel_->setData(targetIntModel_->index(row, 37), param.useAsNuisance, Qt::EditRole);
+  targetIntModel_->setData(targetIntModel_->index(row, 38), std::max(0.0, param.error), Qt::EditRole);
+  targetIntModel_->blockSignals(old);
+}
+
+void FittingTab::syncScreening() {
+  if (!targetIntModel_) return;
+  QList<TargetIntData> lines = targetIntModel_->getLines();
+  // The set of screening lines (and their numbering among the active lines) decides the rows.
+  QStringList want;
+  int effect = 0;
+  for (const TargetIntData &t : lines) {
+    if (t.isActive != 1) continue;
+    effect++;
+    if (t.isScreening) want << QString("screening_%1").arg(effect);
+  }
+  QStringList have;
+  for (const FittingParameter &p : fittingParameters)
+    if (p.category == "screening") have << p.name;
+  if (want != have) {
+    populateFromCurrentGUIState();
+    return;
+  }
+  bool renumber = false;
+  for (int i = 0; i < fittingParameters.size(); i++) {
+    FittingParameter &p = fittingParameters[i];
+    if (p.category != "screening" || p.channelIndex < 0 || p.channelIndex >= lines.size()) continue;
+    const TargetIntData &t = lines[p.channelIndex];
+    if (p.value != t.screeningUe) {
+      p.value = t.screeningUe;
+      updateParameterTableValue(p.name, p.value);
+    }
+    if (p.error != t.screeningSigma) {
+      p.error = t.screeningSigma;
+      updateParameterTableError(p.name, p.error);
+    }
+    if (p.useAsNuisance != t.screeningVary) {
+      p.useAsNuisance = t.screeningVary;
+      updateParameterTableCheckbox(p.name, p.useAsNuisance);
+      renumber = true;
+    }
+  }
+  if (renumber) assignMinuitIndices();
 }
 
 void FittingTab::writeAbundance(const FittingParameter &param) {
@@ -708,6 +809,7 @@ void FittingTab::parameterItemChanged(QTableWidgetItem *item) {
       const FittingParameter &p = fittingParameters[paramIndex];
       writeSegmentColumn(p, p.category == "norm" ? 10 : 15, value);
       writeAbundance(p);
+      writeScreening(p);
     }
 
   } else if (col == 7) {  // Prior centre (norms and shifts): empty = the Value
@@ -736,8 +838,9 @@ void FittingTab::parameterItemChanged(QTableWidgetItem *item) {
     const FittingParameter &p = fittingParameters[paramIndex];
     writeSegmentColumn(p, p.category == "norm" ? 11 : 16, p.useAsNuisance ? 1 : 0);
     writeAbundance(p);
-    // Fitting or fixing an abundance changes the Minuit vector, as with a normalization.
-    if (p.category == "abundance") assignMinuitIndices();
+    writeScreening(p);
+    // Fitting or fixing an abundance or a screening potential changes the Minuit vector, as with a normalization.
+    if (p.category == "abundance" || p.category == "screening") assignMinuitIndices();
   }
 }
 
@@ -952,6 +1055,7 @@ void FittingTab::loadSettings() {
             }
           }
         }
+        appendScreeningParameters();
         appendCoherentParameters();  // with the values just loaded
         assignMinuitIndices();
       }
@@ -1597,7 +1701,7 @@ void FittingTab::loadSettings() {
         if (param.category == "level") updateParameterInOtherTabs(param.name, param);
         // An abundance is named abundance_<Z>_<A> in the .sav exactly as here; its value goes back to the
         // Particle Pairs tab, the vary flag and sigma stay what the user set.
-        if (param.category == "abundance" && savParams.contains(param.name)) {
+        if ((param.category == "abundance" || param.category == "screening") && savParams.contains(param.name)) {
           param.value = savParams[param.name].first;
           param.fitError = savParams[param.name].second;
           updatedCount++;
@@ -1743,6 +1847,8 @@ void FittingTab::updateParameterInOtherTabs(const QString &paramName, const Fitt
     }
   } else if (param.category == "abundance") {
     writeAbundance(param);
+  } else if (param.category == "screening") {
+    writeScreening(param);
   } else if (param.category == "norm" || param.category == "shift") {
     // Update normalization or shift parameters in SegmentsDataModel
     SegmentsDataModel *segmentsModel = segmentsTab_->getSegmentsDataModel();
@@ -1777,6 +1883,8 @@ void FittingTab::updateParameterTableValue(const QString &paramName, double valu
   QTableWidget *targetTable = nullptr;
   if (paramName.startsWith("abundance_")) {
     targetTable = abundanceParamsTable;
+  } else if (paramName.startsWith("screening_")) {
+    targetTable = screeningParamsTable;
   } else if (paramName.contains("Normalization")) {
     targetTable = normParamsTable;
   } else if (paramName.contains("Energy Shift")) {
@@ -2070,6 +2178,8 @@ void FittingTab::updateParameterTableError(const QString &paramName, double erro
   QTableWidget *targetTable = nullptr;
   if (paramName.startsWith("abundance_")) {
     targetTable = abundanceParamsTable;
+  } else if (paramName.startsWith("screening_")) {
+    targetTable = screeningParamsTable;
   } else if (paramName.contains("Normalization")) {
     targetTable = normParamsTable;
   } else if (paramName.contains("Energy Shift")) {
@@ -2102,7 +2212,9 @@ void FittingTab::updateParameterTableCheckbox(const QString &paramName, bool che
   // "segment_N_norm" / "segment_N_energy_shift"; check "shift" before "norm"
   // so the energy-shift name is not mistaken for a normalization.
   QTableWidget *targetTable = nullptr;
-  if (paramName.contains("shift", Qt::CaseInsensitive)) {
+  if (paramName.startsWith("screening_")) {
+    targetTable = screeningParamsTable;
+  } else if (paramName.contains("shift", Qt::CaseInsensitive)) {
     targetTable = shiftParamsTable;
   } else if (paramName.contains("norm", Qt::CaseInsensitive)) {
     targetTable = normParamsTable;

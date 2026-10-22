@@ -80,7 +80,7 @@ const LevelArrays &CurrentLevelArrays(JGroup *jg) {
 }
 
 /*!
- * The rank-two derivatives of the standard and Brune level matrices, as
+ * The rank-two derivatives of the standard, Brune and Park level matrices, as
  * LevelMatrixAdjoint differentiates them (all widths as they are).  Brune:
  * K_ij = E_i delta_ij + sum_c g_ic g_jc s0_ijc, N_ij = delta_ij - sum_c g_ic g_jc s1_ijc
  * over the particle channels, s0_ii = S_i, s0_ij = (S_j E_i - S_i E_j)/(E_i - E_j),
@@ -89,20 +89,31 @@ const LevelArrays &CurrentLevelArrays(JGroup *jg) {
  *   energy E_l:  k_l = (1 + sum_c g_lc^2 S'_lc)/2,
  *                k_j = sum_c g_lc g_jc (S_jc - S'_lc E_j - s0_ljc)/(E_l - E_j),
  *                q_j = -sum_c g_lc g_jc (S'_lc - s1_ljc)/(E_l - E_j).
+ * Park: K_ij = E_i J_ij + sum_c g_ic g_jc S_ic, N = J, is Brune's level matrix
+ * off the diagonal (J_ij = -sum_c g_ic g_jc s1_ijc); on it J_ll = 1 - sum_c g_lc^2 S'_lc,
+ * so with S'' the second derivative the diagonal entries become
+ *   width g_lc:  k_l = g_lc (S_lc - E_l S'_lc), q_l = -g_lc S'_lc;
+ *   energy E_l:  k_l = (J_ll + sum_c g_lc^2 (S'_lc - E_l S''_lc))/2, q_l = -sum_c g_lc^2 S''_lc / 2.
  * Standard: k = e_l / 2 for the energy, nothing for a width.
  */
-const LevelDerivatives &CurrentLevelDerivatives(JGroup *jg, bool brune, const std::vector<char> &freeE,
+const LevelDerivatives &CurrentLevelDerivatives(JGroup *jg, int mode, const std::vector<char> &particleIn,
+                                                const std::vector<char> &freeE,
                                                 const std::vector<std::vector<char>> &freeG,
                                                 const std::vector<std::vector<double>> *shiftDeriv) {
   thread_local std::unordered_map<const JGroup *, LevelDerivatives> cache;
   if (cache.size() >= 1024 && cache.find(jg) == cache.end()) cache.clear();
   LevelDerivatives &ld = cache[jg];
   const int n = jg->NumLevels(), nch = jg->NumChannels();
+  const bool park = (mode == 2);
+  std::vector<char> particle(nch, 0);
+  if (mode != 0)
+    for (int c = 0; c < nch && c < (int)particleIn.size(); c++) particle[c] = particleIn[c];
   std::vector<std::uint64_t> key;
-  key.reserve(3 + (size_t)n * (3 + nch));
-  key.push_back(brune);
+  key.reserve(3 + nch + (size_t)n * (3 + nch));
+  key.push_back(mode);
   key.push_back(n);
   key.push_back(nch);
+  for (int c = 0; c < nch; c++) key.push_back(particle[c]);
   for (int i = 0; i < n; i++) {
     ALevel *level = jg->GetLevel(i + 1);
     key.push_back(reinterpret_cast<std::uintptr_t>(level));
@@ -114,9 +125,10 @@ const LevelDerivatives &CurrentLevelDerivatives(JGroup *jg, bool brune, const st
   ld.key.swap(key);
   ld.entries.clear();
   const LevelArrays &a = CurrentLevelArrays(jg);
-  std::vector<char> particle(nch);
-  for (int c = 0; c < nch; c++) particle[c] = brune && (jg->GetChannel(c + 1)->GetRadType() == 'P');
-  auto Sp = [&](int i, int c) { return shiftDeriv ? (*shiftDeriv)[i][c] : 0.0; };
+  auto Sp = [&](int i, int c) {
+    if (park) return jg->GetLevel(i + 1)->GetShiftDerivative(c + 1);
+    return shiftDeriv ? (*shiftDeriv)[i][c] : 0.0;
+  };
   for (int l = 0; l < n; l++)
     for (int c = -1; c < nch; c++) {
       const bool free = (c < 0) ? freeE[l] : freeG[l][c];
@@ -130,8 +142,23 @@ const LevelDerivatives &CurrentLevelDerivatives(JGroup *jg, bool brune, const st
         e.q.assign(n, 0.0);
         if (c < 0) {
           double diag = 1.0;
-          for (int d = 0; d < nch; d++)
-            if (particle[d]) diag += a.G[(size_t)l * nch + d] * a.G[(size_t)l * nch + d] * Sp(l, d);
+          if (park) {
+            ALevel *level = jg->GetLevel(l + 1);
+            double s2 = 0.0;
+            diag = level->GetParkNorm();
+            for (int d = 0; d < nch; d++)
+              if (particle[d]) {
+                const double g2 = a.G[(size_t)l * nch + d] * a.G[(size_t)l * nch + d];
+                if (g2 == 0.0) continue;
+                diag += g2 * Sp(l, d);
+                s2 += g2 * level->GetShiftSecondDerivative(d + 1);
+              }
+            diag -= a.E[l] * s2;
+            e.q[l] = -0.5 * s2;
+          } else {
+            for (int d = 0; d < nch; d++)
+              if (particle[d]) diag += a.G[(size_t)l * nch + d] * a.G[(size_t)l * nch + d] * Sp(l, d);
+          }
           e.k[l] = 0.5 * diag;
           for (int j = 0; j < n; j++) {
             if (j == l) continue;
@@ -147,13 +174,20 @@ const LevelDerivatives &CurrentLevelDerivatives(JGroup *jg, bool brune, const st
             }
           }
         } else {
-          e.k[l] = a.G[(size_t)l * nch + c] * a.S[(size_t)l * nch + c];
+          const double glc = a.G[(size_t)l * nch + c], Slc = a.S[(size_t)l * nch + c];
+          if (park) {
+            const double Spl = Sp(l, c);
+            e.k[l] = glc * (Slc - a.E[l] * Spl);
+            e.q[l] = -glc * Spl;
+          } else {
+            e.k[l] = glc * Slc;
+          }
           for (int j = 0; j < n; j++) {
             if (j == l) continue;
             const double gj = a.G[(size_t)j * nch + c];
             if (gj == 0.0) continue;
             const double iv = a.inv[(size_t)l * n + j];
-            const double Sl = a.S[(size_t)l * nch + c], Sj = a.S[(size_t)j * nch + c];
+            const double Sl = Slc, Sj = a.S[(size_t)j * nch + c];
             e.k[j] = gj * (Sj * a.E[l] - Sl * a.E[j]) * iv;
             e.q[j] = -gj * (Sl - Sj) * iv;
           }

@@ -20,6 +20,7 @@ class InfoDialog;
 class LevelsTab;
 class SegmentsTab;
 class AbundancesModel;
+class TargetIntModel;
 class Config;
 
 struct FittingParameter {
@@ -89,6 +90,8 @@ class FittingTab : public QWidget {
   /*! The isotopic abundances of the Particle Pairs tab: one parameter abundance_<Z>_<A> per compound nucleus when
    *  the project carries an <abundances> block (Value = abundance, Error = prior sigma, Nuisance = fitted). */
   void setAbundancesModel(AbundancesModel *model);
+  /// The Experimental Effects tab's lines: their screening potentials are parameters too.
+  void setTargetIntModel(TargetIntModel *model);
 
  protected:
   void showEvent(QShowEvent *event) override;
@@ -110,6 +113,8 @@ class FittingTab : public QWidget {
   void onSegmentEnergyShiftVaryChanged(int segmentIndex, bool vary);
   /*! Mirror the Particle Pairs tab's abundance table into the abundance rows (value, sigma, fitted). */
   void syncAbundances();
+  /*! Mirror the Experimental Effects tab's screening potentials into the screening rows. */
+  void syncScreening();
 
  private:
   void setupParameterTable(QTableWidget *table, const QString &title, bool priorCentreColumn = false);
@@ -117,6 +122,10 @@ class FittingTab : public QWidget {
   void updateParameterFromTable(const QString &paramName, int column, const QVariant &value);
   void syncSegmentVaryStates();
   void writeAbundance(const FittingParameter &param);
+  /// Append screening_<n> (eV) for every active <targetInt> line with screening, in the engine's order.
+  void appendScreeningParameters();
+  /// U_e, its prior sigma and its fit flag go back to the Experimental Effects tab.
+  void writeScreening(const FittingParameter &param);
   void assignMinuitIndices();
   void updateParameterInOtherTabs(const QString &paramName, const FittingParameter &param);
   void writeSegmentColumn(const FittingParameter &param, int column, const QVariant &value);
@@ -156,6 +165,7 @@ class FittingTab : public QWidget {
   QTabWidget *paramTabWidget;
   QTableWidget *levelParamsTable;
   QTableWidget *abundanceParamsTable;
+  QTableWidget *screeningParamsTable;
   QTableWidget *normParamsTable;
   QTableWidget *shiftParamsTable;
   QTableWidget *cbkgParamsTable;  ///< THM coherent background; its tab only when there are some
@@ -187,6 +197,7 @@ class FittingTab : public QWidget {
   LevelsTab *levelsTab_;
   SegmentsTab *segmentsTab_;
   AbundancesModel *abundancesModel_ = nullptr;
+  TargetIntModel *targetIntModel_ = nullptr;
   Config *config_ = nullptr;  // for the current .azr path (backup on load)
 };
 

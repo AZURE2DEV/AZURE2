@@ -104,7 +104,8 @@ class AZURESetup : public QMainWindow {
   // Getter for FittingTab (for MCMCTab access)
   FittingTab *getFittingTab() const { return fittingTab; }
   // The tabs whose models the THM workspace reads and edits (getPairsTab and
-  // getSegmentsTab above).
+  // getSegmentsTab above); getTargetIntTab also serves the Fitting tab's
+  // Screening sub-tab.
   LevelsTab *getLevelsTab() const { return levelsTab; }
   TargetIntTab *getTargetIntTab() const { return targetIntTab; }
 

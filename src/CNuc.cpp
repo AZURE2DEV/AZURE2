@@ -9,6 +9,10 @@
 #include "AngCoeff.h"
 #include "CNuc.h"
 #include <mutex>
+#include <exception>
+#ifdef _OPENMP
+#include <omp.h>
+#endif
 #include "ParameterLabel.h"
 #include "Config.h"
 #include "ChannelFunc.h"
@@ -2738,13 +2742,73 @@ void CNuc::SetMaxLValue(int maxL) {
   maxLValue_ = maxL;
 }
 
+namespace {
+
+/*!
+ * Park's numerical shift-function derivatives by their exact arguments (the
+ * pair's parameters, l and the level energy, compared bit for bit), shared by
+ * all compound nuclei of the process: the working copies of a fit (evaluation,
+ * gradient, residual Jacobian) need the same values at the same parameters.
+ * An entry is what the computation returns, so a hit changes nothing.
+ * Cleared by CNuc::InvalidateShiftFunctions (a new nuclear potential) and
+ * when it grows past kShiftDerivMemoMax.
+ */
+struct ShiftDerivKey {
+  int z1, z2, l;
+  bool gsl;
+  long hybrid;
+  double redmass, radius, threshold, energy;
+  bool operator<(const ShiftDerivKey &o) const {
+    return std::tie(z1, z2, l, gsl, hybrid, redmass, radius, threshold, energy) <
+        std::tie(o.z1, o.z2, o.l, o.gsl, o.hybrid, o.redmass, o.radius, o.threshold, o.energy);
+  }
+};
+struct ShiftDerivValue {
+  bool has1 = false, has2 = false;
+  double d1 = 0.0, d2 = 0.0;
+};
+std::mutex g_shiftDerivMutex;
+std::map<ShiftDerivKey, ShiftDerivValue> g_shiftDerivMemo;
+const std::size_t kShiftDerivMemoMax = 1 << 16;
+
+}  // namespace
+
 /*!
  * This function is called for each iteration to calculate the shift
  * functions at new level energies when the Brune parametrization is used.
+ *
+ * In the Park formalism the first and second energy derivatives at the level
+ * energies are numerical (ChannelFunc::ShiftDerivative, CoulFunc::PEShift_d2E,
+ * ShftFunc), four
+ * and five more shift functions per channel and level, most of a serial
+ * evaluation at new parameters.  They are taken after the shift functions, for
+ * all levels at once and in parallel, and without the Coulomb-function memo
+ * (CoulFuncCache, per thread and matching energies to 1e-12 MeV, so what it
+ * returned depended on the thread and the run's history): the values do not
+ * depend on the number of threads.  Channels of a level that differ only in
+ * the channel spin share one derivative, and the working copies of a fit share
+ * them through an exact-argument memo (g_shiftDerivMemo).
  */
 
-void CNuc::CalcShiftFunctions(const Config &configure) {
+void CNuc::CalcShiftFunctions(const Config &configure, bool secondDerivatives) {
   const bool park = (configure.paramMask & Config::USE_PARK_FORMALISM);
+  struct Derivative {
+    ALevel *level;
+    PPair *pair;
+    int ch, l;
+    double energy;
+    bool first, second;
+    double d1, d2;
+    int source;  ///< an earlier entry of the same level, pair and l (another channel spin), or -1
+  };
+  std::vector<Derivative> derivatives;
+  struct Moved {
+    JGroup *group;
+    ALevel *level;
+    double energy;
+    bool recompute, second;
+  };
+  std::vector<Moved> levels;
   for (int j = 1; j <= this->NumJGroups(); j++) {
     if (this->GetJGroup(j)->IsInRMatrix()) {
       JGroup *theJGroup = this->GetJGroup(j);
@@ -2757,57 +2821,145 @@ void CNuc::CalcShiftFunctions(const Config &configure) {
           // moved since the last call.  Park's J below depends on the widths
           // too and is always refreshed.
           const bool recompute = !theLevel->ShiftFunctionsValidAt(levelEnergy);
+          // d^2S/dE^2 (Park) enters only the gradient: the numerical second
+          // derivative costs five shift functions per channel, so a chi-squared
+          // alone leaves it out, and a later call that asks for it fills it in.
+          const bool second = park && secondDerivatives && !theLevel->ShiftSecondDerivativesValidAt(levelEnergy);
+          const int firstOfLevel = (int)derivatives.size();
           for (int ch = 1; ch <= theJGroup->NumChannels(); ch++) {
             AChannel *theChannel = theJGroup->GetChannel(ch);
             PPair *thePair = this->GetPair(theChannel->GetPairNum());
             if (thePair->GetPType() == 0) {
-              if (!recompute) continue;
+              if (!recompute && !second) continue;
               int lValue = theChannel->GetL();
+              const bool parkP = park && theChannel->GetRadType() == 'P';
               double resonanceEnergy = levelEnergy - (thePair->GetSepE() + thePair->GetExE());
-              ChannelFunc channelFunc(thePair, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
-              theLevel->SetShiftFunction(ch, channelFunc.Shift(lValue, resonanceEnergy));
-              if (park && theChannel->GetRadType() == 'P') {
-                // dS/dE as everywhere else (ChannelFunc); d2S/dE2 from the
-                // branch the level is on.
-                double second;
-                if (resonanceEnergy < 0.0) {
-                  ShftFunc theShiftFunction(thePair);
-                  second = theShiftFunction.EnergySecondDerivative(lValue, levelEnergy);
-                } else {
-                  CoulFunc theCoulombFunction(thePair, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
-                  second = theCoulombFunction.PEShift_d2E(lValue, thePair->GetChRad(), resonanceEnergy);
-                }
-                theLevel->SetShiftDerivatives(ch, channelFunc.ShiftDerivative(lValue, resonanceEnergy), second);
+              if (recompute) {
+                // S as everywhere else (ChannelFunc: continuous through threshold).
+                ChannelFunc channelFunc(thePair, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
+                theLevel->SetShiftFunction(ch, channelFunc.Shift(lValue, resonanceEnergy));
+              }
+              if (parkP && (recompute || second)) {
+                // Channels that differ only in the channel spin share the derivative.
+                int source = -1;
+                for (int k = firstOfLevel; k < (int)derivatives.size() && source < 0; k++)
+                  if (derivatives[k].source < 0 && derivatives[k].pair == thePair && derivatives[k].l == lValue) source = k;
+                derivatives.push_back({theLevel, thePair, ch, lValue, levelEnergy, recompute, second, 0.0, 0.0, source});
               }
             } else {
               theLevel->SetShiftFunction(ch, theJGroup->GetLevel(1)->GetShiftFunction(1));
             }
           }
-          if (recompute) theLevel->SetShiftFunctionsEnergy(levelEnergy);
-          if (park) {
-            // Park (2021) Eq. (28): J = 1 - sum_c gamma_c^2 (dS_c/dE) at E_lambda.
-            double parkNorm = 1.0;
-            for (int ch = 1; ch <= theJGroup->NumChannels(); ch++) {
-              AChannel *theChannel = theJGroup->GetChannel(ch);
-              if (theChannel->GetRadType() == 'P' && this->GetPair(theChannel->GetPairNum())->GetPType() == 0)
-                parkNorm -= pow(theLevel->GetFitGamma(ch), 2.0) * theLevel->GetShiftDerivative(ch);
-            }
-            theLevel->SetParkNorm(parkNorm);
-            // N_f^{1/2} multiplies the level's reduced width amplitude wherever
-            // it serves as an external-capture final state.  It is defined with
-            // Brune's amplitudes, gamma_Park / sqrt(J); folding the 1/sqrt(J)
-            // in here keeps gamma * N_f^{1/2} the same number in both
-            // parametrizations.
-            double nFSum = parkNorm;
-            for (int ch = 1; ch <= theJGroup->NumChannels() && ch <= theLevel->NumNFIntegrals(); ch++) {
-              PPair *thePair = this->GetPair(theJGroup->GetChannel(ch)->GetPairNum());
-              nFSum += 2.0 * thePair->GetChRad() * thePair->GetRedMass() * uconv / pow(hbarc, 2.0) *
-                  pow(theLevel->GetFitGamma(ch), 2.0) * theLevel->GetNFIntegral(ch);
-            }
-            theLevel->SetSqrtNFFactor(1.0 / sqrt(nFSum));
+          levels.push_back({theJGroup, theLevel, levelEnergy, recompute, second});
+        }
+      }
+    }
+  }
+
+  // Park: dS/dE and d^2S/dE^2, in parallel (see above); a GSL error is
+  // carried out of the parallel region and rethrown.
+  const bool gslCoulomb = !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC);
+  const int numDerivatives = (int)derivatives.size();
+  std::exception_ptr error;
+#ifdef _OPENMP
+#pragma omp parallel for schedule(dynamic, 1) if (numDerivatives > 1 && !omp_in_parallel())
+#endif
+  for (int k = 0; k < numDerivatives; k++) {
+    try {
+      Derivative &d = derivatives[k];
+      if (d.source >= 0) continue;
+      const double threshold = d.pair->GetSepE() + d.pair->GetExE();
+      const double resonanceEnergy = d.energy - threshold;
+      CoulFunc theCoulombFunction(d.pair, gslCoulomb);
+      theCoulombFunction.SetUseGlobalCache(false);
+      const ShiftDerivKey key{d.pair->GetZ(1), d.pair->GetZ(2), d.l, gslCoulomb, theCoulombFunction.hybridTag(),
+                              d.pair->GetRedMass(), d.pair->GetChRad(), threshold, d.energy};
+      bool need1 = d.first, need2 = d.second;
+      {
+        std::lock_guard<std::mutex> lock(g_shiftDerivMutex);
+        auto it = g_shiftDerivMemo.find(key);
+        if (it != g_shiftDerivMemo.end()) {
+          if (need1 && it->second.has1) {
+            d.d1 = it->second.d1;
+            need1 = false;
+          }
+          if (need2 && it->second.has2) {
+            d.d2 = it->second.d2;
+            need2 = false;
           }
         }
       }
+      if (!need1 && !need2) continue;
+      // dS/dE as everywhere else (ChannelFunc, also BuildShiftDerivTable's
+      // under Brune); d^2S/dE^2 from the branch the level is on.  Neither
+      // uses the Coulomb-function memo.
+      if (need1) {
+        ChannelFunc channelFunc(d.pair, gslCoulomb);
+        channelFunc.SetUseGlobalCache(false);
+        d.d1 = channelFunc.ShiftDerivative(d.l, resonanceEnergy);
+      }
+      if (need2) {
+        if (resonanceEnergy < 0.0) {
+          ShftFunc theShiftFunction(d.pair);
+          d.d2 = theShiftFunction.EnergySecondDerivative(d.l, d.energy);
+        } else {
+          d.d2 = theCoulombFunction.PEShift_d2E(d.l, d.pair->GetChRad(), resonanceEnergy);
+        }
+      }
+      std::lock_guard<std::mutex> lock(g_shiftDerivMutex);
+      if (g_shiftDerivMemo.size() >= kShiftDerivMemoMax) g_shiftDerivMemo.clear();
+      ShiftDerivValue &v = g_shiftDerivMemo[key];
+      if (need1) {
+        v.has1 = true;
+        v.d1 = d.d1;
+      }
+      if (need2) {
+        v.has2 = true;
+        v.d2 = d.d2;
+      }
+    } catch (...) {
+#ifdef _OPENMP
+#pragma omp critical(calc_shift_functions_error)
+#endif
+      if (!error) error = std::current_exception();
+    }
+  }
+  if (error) std::rethrow_exception(error);
+  for (Derivative &d : derivatives) {
+    if (d.source >= 0) {
+      d.d1 = derivatives[d.source].d1;
+      d.d2 = derivatives[d.source].d2;
+    }
+    if (d.first) d.level->SetShiftDerivative(d.ch, d.d1);
+    if (d.second) d.level->SetShiftSecondDerivative(d.ch, d.d2);
+  }
+
+  for (const Moved &m : levels) {
+    ALevel *theLevel = m.level;
+    JGroup *theJGroup = m.group;
+    if (m.recompute) theLevel->SetShiftFunctionsEnergy(m.energy);
+    if (m.second) theLevel->SetShiftSecondDerivativesEnergy(m.energy);
+    if (park) {
+      // Park (2021) Eq. (28): J = 1 - sum_c gamma_c^2 (dS_c/dE) at E_lambda.
+      double parkNorm = 1.0;
+      for (int ch = 1; ch <= theJGroup->NumChannels(); ch++) {
+        AChannel *theChannel = theJGroup->GetChannel(ch);
+        if (theChannel->GetRadType() == 'P' && this->GetPair(theChannel->GetPairNum())->GetPType() == 0)
+          parkNorm -= pow(theLevel->GetFitGamma(ch), 2.0) * theLevel->GetShiftDerivative(ch);
+      }
+      theLevel->SetParkNorm(parkNorm);
+      // N_f^{1/2} multiplies the level's reduced width amplitude wherever
+      // it serves as an external-capture final state.  It is defined with
+      // Brune's amplitudes, gamma_Park / sqrt(J); folding the 1/sqrt(J)
+      // in here keeps gamma * N_f^{1/2} the same number in both
+      // parametrizations.
+      double nFSum = parkNorm;
+      for (int ch = 1; ch <= theJGroup->NumChannels() && ch <= theLevel->NumNFIntegrals(); ch++) {
+        PPair *thePair = this->GetPair(theJGroup->GetChannel(ch)->GetPairNum());
+        nFSum += 2.0 * thePair->GetChRad() * thePair->GetRedMass() * uconv / pow(hbarc, 2.0) *
+            pow(theLevel->GetFitGamma(ch), 2.0) * theLevel->GetNFIntegral(ch);
+      }
+      theLevel->SetSqrtNFFactor(1.0 / sqrt(nFSum));
     }
   }
 }
@@ -2877,6 +3029,10 @@ bool CNuc::ConvertAmplitudeBasis(ROOT::Minuit2::MnUserParameters &p, int from, i
  */
 
 void CNuc::InvalidateShiftFunctions() {
+  {
+    std::lock_guard<std::mutex> lock(g_shiftDerivMutex);
+    g_shiftDerivMemo.clear();
+  }
   for (int j = 1; j <= this->NumJGroups(); j++)
     for (int la = 1; la <= this->GetJGroup(j)->NumLevels(); la++)
       this->GetJGroup(j)->GetLevel(la)->InvalidateShiftFunctions();

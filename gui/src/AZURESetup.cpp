@@ -120,6 +120,7 @@ AZURESetup::AZURESetup() :
   fittingTab = new FittingTab();
   fittingTab->setTabReferences(levelsTab, segmentsTab);
   fittingTab->setAbundancesModel(pairsTab->getAbundancesModel());
+  fittingTab->setTargetIntModel(targetIntTab->getTargetIntModel());
   fittingTab->setConfig(&GetConfig());
   // Segment lines are numbered by position: what names them by number follows a move or a delete.
   connect(segmentsTab, SIGNAL(dataSegmentsRenumbered(QVector<int>)), this, SLOT(followDataSegments(QVector<int>)));

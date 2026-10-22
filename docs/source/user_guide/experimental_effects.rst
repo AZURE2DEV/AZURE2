@@ -495,6 +495,9 @@ nothing else.
   :math:`\chi^2`, :math:`U_e^{0}` being the value entered; 0 means no prior.
   It is reported as ``Total-Screening-Chi-Squared`` in ``chiSquared.out``.
 
+The three settings also appear in the Fitting tab, on its **Screening**
+sub-tab (:doc:`fitting`), and can be edited in either place.
+
 The fitted :math:`U_e` is written to ``param.sav`` with the other parameters
 and read back from it; the value on the ``<targetInt>`` line stays the prior's
 centre. ``pyazr.AzrModel.add_target_effect(..., screening=(Ue, vary, sigma))``
@@ -505,6 +508,14 @@ and ``AzrModel.set_screening`` write the block from a script.
    Like every experimental effect, the line also acts on the extrapolation
    (``<segmentsTest>``) segments with the same keys. To extrapolate the bare
    cross section, deactivate the line in a copy of the project.
+
+**Benchmark.** ``tests/screening_6li`` fits the screening potentials of the
+6Li(p,α)3He data of Cruz *et al.*, *Phys. Lett. B* **624**, 181 (2005), taken
+on a Li₂WO₄ insulator, Li metal and a PdLi alloy, against a 7Be R-matrix
+evaluation fitted only to data above :math:`E_p = 100` keV and held fixed.
+With one screening line per target and the normalizations free it finds
+:math:`U_e` = 323 ± 98, 1211 ± 65 and 3433 ± 231 eV, against the published
+320 ± 110, 1320 ± 70 and 3760 ± 260 eV.
 
 Straggling
 ^^^^^^^^^^

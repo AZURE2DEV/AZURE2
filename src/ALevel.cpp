@@ -430,6 +430,20 @@ void ALevel::SetShiftDerivatives(int channelNum, double first, double second) {
   shift_derivs2_[channelNum - 1] = second;
 }
 
+void ALevel::SetShiftDerivative(int channelNum, double first) {
+  shift_derivs_[channelNum - 1] = first;
+}
+
+/*!
+ * Stores d^2S_c/dE^2; changes the stamp (ChannelSpace::CurrentLevelDerivatives
+ * reads it).
+ */
+
+void ALevel::SetShiftSecondDerivative(int channelNum, double second) {
+  stamp_ = NewStamp();
+  shift_derivs2_[channelNum - 1] = second;
+}
+
 /*!
  * True when the stored shift functions were computed at exactly this level
  * energy.  They depend on nothing else that changes during a fit (the channel
@@ -444,8 +458,17 @@ void ALevel::SetShiftFunctionsEnergy(double energy) {
   shift_cache_energy_ = energy;
 }
 
+bool ALevel::ShiftSecondDerivativesValidAt(double energy) const {
+  return shift_d2_energy_ == energy;
+}
+
+void ALevel::SetShiftSecondDerivativesEnergy(double energy) {
+  shift_d2_energy_ = energy;
+}
+
 void ALevel::InvalidateShiftFunctions() {
   shift_cache_energy_ = std::numeric_limits<double>::quiet_NaN();
+  shift_d2_energy_ = std::numeric_limits<double>::quiet_NaN();
 }
 
 /*!

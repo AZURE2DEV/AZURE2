@@ -135,7 +135,7 @@ const LevelArrays &CurrentLevelArrays(JGroup *jg);
 /*!
  * Derivatives of K and N of a J-group's level matrix with respect to its free
  * level parameters (AMatrixFunc::LevelBasis): for each, dK = e_l k^T + k e_l^T
- * and dN = e_l q^T + q e_l^T over all levels (standard and Brune level
+ * and dN = e_l q^T + q e_l^T over all levels (standard, Brune and Park level
  * matrices).
  */
 struct LevelDerivatives {
@@ -151,12 +151,16 @@ struct LevelDerivatives {
 
 /*!
  * The LevelDerivatives of J-group `jg` for the free parameters (`freeE`,
- * `freeG`, by level and level/channel) and the current parameters; `brune`
- * selects the Brune level matrix (shift-function derivatives from `shiftDeriv`
- * of the group, [level-1][ch-1]).  Kept per thread, rebuilt when a level's
- * stamp or the mask changes.
+ * `freeG`, by level and level/channel) and the current parameters.  `mode`
+ * selects the level matrix: 0 standard, 1 Brune (shift-function derivatives
+ * from `shiftDeriv` of the group, [level-1][ch-1]), 2 Park (the first and
+ * second derivatives and the overlap J the levels hold,
+ * CNuc::CalcShiftFunctions); `particle` marks the channels with the shift
+ * terms (by channel, 0-based).  Kept per thread, rebuilt when a level's stamp
+ * or the mask changes.
  */
-const LevelDerivatives &CurrentLevelDerivatives(JGroup *jg, bool brune, const std::vector<char> &freeE,
+const LevelDerivatives &CurrentLevelDerivatives(JGroup *jg, int mode, const std::vector<char> &particle,
+                                                const std::vector<char> &freeE,
                                                 const std::vector<std::vector<char>> &freeG,
                                                 const std::vector<std::vector<double>> *shiftDeriv);
 
