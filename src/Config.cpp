@@ -38,7 +38,7 @@ void Config::Reset() {
   replaceSubPointGrids = true;  // re-place the adaptive sub-point grids (--no-grid-replacement)
   coulombTablePath.clear();
   useECTable = true;            // external-capture energy tables (--no-ec-table)
-  ecConvectionCurrent = false;  // convection current in exact-form EC (--ec-convection-current)
+  ecConvectionCurrent = true;   // convection current in exact-form EC (--no-ec-convection-current)
   ecTableNodesPerDecade = 50;   // ECTable node density; $AZURE2_EC_TABLE_NODES overrides
   includeAllJPi = false;    // Off unless the <config> block says so: older projects compute as they always did
   hardSphereMaxL = -1;

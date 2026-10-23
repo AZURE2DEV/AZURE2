@@ -80,6 +80,7 @@ class AZUREMainThread : public QThread {
     configure_.useCoulombTable = configure.useCoulombTable;
     configure_.coulombTablePath = configure.coulombTablePath;
     configure_.useECTable = configure.useECTable;
+    configure_.ecConvectionCurrent = configure.ecConvectionCurrent;
     configure_.ecTableNodesPerDecade = configure.ecTableNodesPerDecade;
     configure_.replaceSubPointGrids = configure.replaceSubPointGrids;
     // The <config> block is parsed only by the CLI entry point; the GUI sets

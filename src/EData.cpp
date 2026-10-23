@@ -2202,7 +2202,9 @@ std::string EData::ECSignature(CNuc *theCNuc, const Config &configure) {
   hash.Add("AZURE2 EC signature v2");
   hash.Add((configure.paramMask & Config::USE_GSL_COULOMB_FUNC) ? 1 : 0);
   hash.Add((configure.paramMask & Config::USE_LONGWAVELENGTH_APPROX) ? 1 : 0);
-  if (configure.ecConvectionCurrent) hash.Add("convection current");  // absent: v2 signatures unchanged
+  // The convection current changes exact-form electric terms only; long-wavelength signatures stay as in v2.
+  if (configure.ecConvectionCurrent && !(configure.paramMask & Config::USE_LONGWAVELENGTH_APPROX))
+    hash.Add("convection current");
   hash.Add((configure.paramMask & Config::CALCULATE_REACTION_RATE) ? 1 : 0);
   hash.Add(configure.useHybridMethod ? 1 : 0);
 
