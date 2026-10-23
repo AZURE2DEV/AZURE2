@@ -972,6 +972,67 @@ Two practical points:
   energy, J^pi, pair key, L, radiation type; segment key for normalizations)
   and let genuinely new parameters keep the value the new `.azr` carries.
 
+### A background pole can run away to saturation without the data needing it
+
+An unbounded background pole often drifts to enormous reduced widths while the
+fit improves by nothing measurable: past a point, the extra amplitude only
+pushes the pole's level-shift denominator J = 1/(1 + sum_c gamma_c^2 dS_c/dE)
+toward zero and its observed widths up against their ceiling
+(Gamma_c = 2 P_c gamma_c^2 J). Nothing warns, the chi2 looks good, and the
+level reads as physically absurd. Test whether the data need it before
+reporting the widths or arguing about them.
+
+Worked example, 11B+alpha (`R-matrix/11B+a/10-22-26_bg52_cap/readme`, 2026-10-22).
+The adopted fit (`10-15-26_dayras_normgroup`, total 9925.60) has a 5/2+
+background pole at 30 MeV with Brune amplitudes of 743 (alpha), 344 and 256
+(n, s=1/2 and 3/2) and 52 (p) gamma_W, giving J = 8.5e-5 (sum gamma^2 dS/dE = 11763).
+Refits with |gamma_c| <= k gamma_W on its four channels, from the same `param.sav`:
+
+| cap k | total chi2 | delta | J | amplitudes / gamma_W (a, n1/2, n3/2, p) |
+|---|---|---|---|---|
+| none | 9925.60 | -- | 8.5e-5 | 743, 344, 256, 52 |
+| 100 | 9925.67 | +0.07 | 5.0e-3 | 97, 45, 33, 6.8 |
+| 10 | 9938.12 | +12.5 | 0.28 | 10.0, 5.4, 3.5, 0.8 |
+| 3 | 10014.62 | +89.0 | 0.59 | 3.0, 3.0, 1.7, 0.5 |
+| 10 on n s=1/2 only | 9928.29 | +2.7 | 0.091 | 22, 10.0, 7.4, 1.5 |
+
+So the data want a strong 5/2+ background (cost starts between 30 and 10
+gamma_W, paid in the ELBE n-total and Wang (alpha,n) data), not a saturated one:
+60x less saturated cost 0.07. Capping only the dominant channel pulled the others
+DOWN with it (alpha 743 -> 22); the channels were not compensating each other,
+they were riding the J -> 0 flat direction together.
+
+Why it matters beyond aesthetics:
+
+- **Saturation amplifies tiny numerical differences by 1/J.** For a saturated
+  pole the observed widths scale as 1/sum(gamma^2 dS/dE), so a 1 % change in
+  how dS/dE is computed moves its observed widths 1 %. That is what made dev
+  334f104 print `Denominator less than zero while transforming` on this pole:
+  the `.azr` carried old-binary observed widths, 0.98 % above what the newer,
+  more accurate dS/dE route gives for the same amplitudes, and 1 - sum came
+  out negative. The fit itself was fine: the `.azr` level values are only
+  starting values and the fit is in `param.sav` ("A fit is `.azr` + `.sav`"
+  in the next subsection). None of the capped fits warn.
+- **Reported widths of a saturated pole are meaningless**, and they can make a
+  manuscript referee distrust the whole fit. Its formal amplitudes are not
+  constrained (the chi2 surface is flat along J -> 0) and its observed widths
+  are set by the ceiling, not by the data.
+- **It slows and destabilizes fitting**: huge amplitudes, near-singular
+  transforms, and gradients dominated by one flat direction. In Park mode the
+  same thing shows up as J -> 0 (see "Levels that saturate" above).
+
+How to test (cheap, one refit per cap): bound the pole's amplitudes in
+`<parameterSettings>` as `Level N Channel k Width (eV) <start> -c c 0 0 0 rwa -1`
+(c = k gamma_W in MeV^1/2, category `rwa`), start from the fit's `param.sav`
+with the capped amplitudes clipped to 0.9 c, and scan k = 100, 30, 10, 3
+(script: `10-22-26_bg52_cap/build.py`, per-dataset breakdown `analyse.py`).
+If the loosest cap costs nothing, prefer the capped solution (or at least report
+the pole as unconstrained); where the cost starts tells you how much background
+the data genuinely require. This is a different question from limiting ALL
+background poles to their Wigner limits (+2063 on the same fit): one
+saturated pole can usually be tamed for free even when the background as a whole
+cannot be held to 1 gamma_W.
+
 ### Normalizations live in two places -- and they mean different things
 
 Every data segment's normalization and energy shift exist twice, and the two
