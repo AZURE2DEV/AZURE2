@@ -842,12 +842,24 @@ void EPoint::ConvertCMAngle(PPair *entrancePair, PPair *exitPair, const Config &
 }
 
 /*!
- * Calculates center of mass angles for gamma rays for the relativistic correction.
+ * Velocity (in units of c) of the centre of mass of a projectile of kinetic energy E_lab on a target at rest:
+ * beta = p c / (E_total) = sqrt(E_lab (E_lab + 2 m1 c^2)) / ((m1 + m2) c^2 + E_lab).
+ */
+static double CMVelocity(double labEnergy, PPair *entrancePair) {
+  return sqrt(labEnergy * (labEnergy + 2.0 * entrancePair->GetM(1) * uconv)) /
+      ((entrancePair->GetM(1) + entrancePair->GetM(2)) * uconv + labEnergy);
+}
+
+/*!
+ * Calculates center of mass angles for gamma rays: the aberration of a photon emitted with the centre-of-mass
+ * velocity beta, cos(theta_cm) = (cos(theta_lab) - beta) / (1 - beta cos(theta_lab)).
  */
 void EPoint::ConvertLabAngleGammas(PPair *entrancePair) {
-  double beta = sqrt(this->GetLabEnergy() * (this->GetLabEnergy() + 2.0 * entrancePair->GetM(1) * uconv)) /
-      ((entrancePair->GetM(1) + entrancePair->GetM(2)) * uconv + this->GetLabEnergy());
+  double beta = CMVelocity(this->GetLabEnergy(), entrancePair);
   cm_angle_ = 180. / pi * acos((cos(this->GetLabAngle() * pi / 180.) - beta) / (1 - beta * cos(this->GetLabAngle() * pi / 180.)));
+  // as for particles: the factor that takes the angle back to the lab for the output files
+  angleKinFactor_ = (cm_angle_ > 0.) ? this->GetLabAngle() / cm_angle_ : 1.0;
+  this->SetAngleKinFactor(angleKinFactor_);
 }
 
 /*!
@@ -922,14 +934,18 @@ double EPoint::CalculateCrossSectionConversionFactor(PPair *entrancePair, PPair 
  */
 
 void EPoint::ConvertCrossSectionGammas(PPair *entrancePair) {
-  double conversionFactor;
-
-  double beta = sqrt(this->GetLabEnergy() * (this->GetLabEnergy() + 2.0 * entrancePair->GetM(1) * uconv)) /
-      ((entrancePair->GetM(1) + entrancePair->GetM(2)) * uconv + this->GetLabEnergy());
-
-  conversionFactor = pow(1.0 - beta, 2.0) / (1 - beta * cos(this->GetLabAngle() * pi / 180.0));
+  // dsigma/dOmega_cm = dsigma/dOmega_lab * dOmega_lab/dOmega_cm.  For a photon, from the aberration above,
+  // dOmega_lab/dOmega_cm = d cos(theta_lab)/d cos(theta_cm) = (1 - beta^2)/(1 + beta cos theta_cm)^2
+  //                      = (1 - beta cos theta_lab)^2 / (1 - beta^2).
+  // (Before 2026-10-23 this was (1 - beta)^2/(1 - beta cos theta_lab), wrong at first order in beta: an overall
+  // -2 beta and a P1-shaped 3 beta cos(theta) -- -1.9 % at 90 deg and -4.8 % at 167 deg for 12C(a,g) at 3 MeV.)
+  double beta = CMVelocity(this->GetLabEnergy(), entrancePair);
+  double conversionFactor = pow(1.0 - beta * cos(this->GetLabAngle() * pi / 180.0), 2.0) / (1.0 - beta * beta);
   cm_crosssection_ = this->GetLabCrossSection() * conversionFactor;
   cm_dcrosssection_ = this->GetLabCrossSectionError() * conversionFactor;
+  // the output files take the fitted c.m. cross section back to the lab with this factor (EData::WriteOutputFiles)
+  crossSectionKinFactor_ = conversionFactor;
+  this->SetCrossSectionKinFactor(crossSectionKinFactor_);
 }
 
 /* Calculates the conversion factor for gamma rays */

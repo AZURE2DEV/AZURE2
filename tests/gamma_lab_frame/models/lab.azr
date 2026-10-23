@@ -1,0 +1,30 @@
+<config>
+true #Perform A-Matrix Calculation
+output/ #Full Path to Output Directory
+checks/ #Full Path to Checks Directory
+none #Compond Nucleus Check
+none #Boundary Condition Check
+none #Data Check
+none #Lo-Matrix and Penetrability Check
+none #Legendre Polynomial Check
+none #Coulomb Amplitudes Check
+none #Reaction Pathway Check
+none #Angular Distributions Check
+</config>
+<levels>
+0 1 0 1 1 1 0 0 1 1 1 100 0 1 0 1 0 4.002603 12.0 2 6 7.16192 7.16192 0 0 0.0 0 5.43 0 0 0
+
+1 -1 30 1 1 1 0 2 2 1 1 1e-06 0 1 0 1 0 4.002603 12.0 2 6 7.16192 7.16192 0 0 0.0 0 5.43 0 0 0
+1 -1 30 1 1 2 0 2 2 1 1 0 1 1 0 1 0 0 15.9949 0 8 7.16192 0 0 0 0.0 10 0 0 0 5
+
+2 1 30 1 1 1 0 4 3 1 1 1e-06 0 1 0 1 0 4.002603 12.0 2 6 7.16192 7.16192 0 0 0.0 0 5.43 0 0 0
+2 1 30 1 1 2 0 4 3 1 1 0 1 1 0 1 0 0 15.9949 0 8 7.16192 0 0 0 0.0 10 0 0 0 5
+
+</levels>
+<segmentsData>
+1 1 2 1.99 6.01 0 180 1 1 0 0 0 0 0 data/lab.dat 0 0
+</segmentsData>
+<segmentsTest>
+</segmentsTest>
+<targetInt>
+</targetInt>
