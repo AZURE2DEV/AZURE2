@@ -2013,3 +2013,17 @@ lowest L, RMFIT_SEED_OMITTED=1, total floor 25 keV, local release 0.5 MeV, same-
    floor (+617 vs control) or ends worse than the control (-22,675).  A negative level-add result for a level that could be
    alpha-dominated is not trustworthy from an n0-heavy seed alone.  Test running: the same adds from a 2:1 a0:n0 seed
    (10-15-26_recall/<tag>_aseed, plus 1/2+ 7.958 as the cross-check).  Expected rule: run both seeds, keep the better.
+
+## 2026-10-20 — centred parameter priors (`param_priors`), first use an ANC prior
+
+`ObjectiveSpec.param_priors` (campaign.json `objective`, or `rmfit init --objective @objective.json`):
+`[{"key": "g[1/2+#2 p2 L1 S0.5]", "mean": 0.537, "sigma": 0.062}]` appends a Gaussian row `(x - mean)/sigma` per entry to the
+penalty rows (`Penalties.with_param_priors`, called from `_init_objective`, so SingleSession and Sharded both carry it; unweighted
+like the norm rows; it counts in `penalty`, not `chi2`).  `key` is `str(ParamKey)`; the row acts on the free vector itself, i.e.
+on the OBSERVED (Brune) reduced-width amplitude for a width -- the space AZURE2's own `<parameterSettings>` nuisance priors use
+after `ConvertPhysicalLimitToReduced` (those are NOT seen by rmfit, which builds its objective from pyazr rows).  Give the mean
+with the amplitude's sign.  A prior on a key that is not free raises KeyError (a frozen parameter cannot hide a prior); rmfit.mixture
+raises NotImplementedError.  The old zero-centred `Prior` regularizer is unchanged.  Check: 13C+a/10-20-26_merged_ancprior_ng/
+test_param_prior.py (one extra row, +((x-m)/s)^2 exactly, Jacobian 1/s in one column).  engine.py backup .bak-2026-10-20.
+First use: Avila C~^2 = 3.6(7) fm^-1 for the near-threshold 1/2+ of 17O converted to gamma~ = 0.537 (+0.060/-0.063) at a = 5.4 fm
+by the PRC 101, 045802 (2020) method (13C+a/10-20-26_rate_recalc_Claude/anc_convert.py).
