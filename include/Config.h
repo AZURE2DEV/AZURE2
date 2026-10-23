@@ -126,6 +126,9 @@ class Config {
   /// energies from the same tables; on by default, --no-ec-table restores the direct
   /// integrals and the linear interpolation of shifted amplitudes.
   bool useECTable;
+  /// With the long-wavelength approximation off: add the convection-current (tangential) part of the electric
+  /// multipole operator to external capture (--ec-convection-current).  Off by default.
+  bool ecConvectionCurrent;
   /// Nodes per decade of E_out of those tables ($AZURE2_EC_TABLE_NODES overrides).
   int ecTableNodesPerDecade;
   /// Lay the adaptive sub-point grids of experimental effects out again on every
