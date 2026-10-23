@@ -211,6 +211,19 @@ runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
   (`AzrModel.set_output_dir(...)`) instead of a fit's real `output/`; if it
   happens anyway, repair by rerunning a plain CLI calculate under the correct
   flags and confirming `chiSquared.out` reads back exactly as before.
+- **`--no-long-wavelength` changes external capture only** (resonant photon
+  channels are untouched). It is the extended-Siegert charge term (Friar and
+  Fallieros 1984), and it was verified on 2026-10-23 against an independent
+  absolute calculation (`tests/ec_m1_exact`, about 1e-8). For ordinary E1 and
+  E2 it moves EC by about 0.1 %. Where the LWA E1 charge
+  `Z1 m2/M - Z2 m1/M` nearly vanishes (12C+a, 10B+a) it multiplies the E1 EC
+  amplitude by 3.5-6x, and the omitted tangential-current term enters at that
+  same order. Builds before `fix/ec-m1-external-capture` have two bugs: M1 EC
+  6.25 % low in every mode, and x0.31 for p+16O with `--no-long-wavelength`.
+  Their `intEC.dat` signature also ignores this switch, so delete
+  `output/intEC.*` when toggling it. Keep the photon pair's final-state energy
+  (`e2`) equal to the EC level's energy: the ANC conversion uses the former and
+  the radial integral the latter, and a 0.03 keV mismatch moves EC by 0.16 %.
 - `--gsl-coul` is a real speed/accuracy tradeoff, not just a flag name: the
   default Coulomb-function method (Michel 2007) is more accurate but visibly
   slower than GSL's. Reach for `--gsl-coul` if a fit is too slow and the

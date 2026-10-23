@@ -58,14 +58,14 @@ double ECIntegral::FWIntegrand(double x, void *p) {
   Params *params = (Params *)p;
   FGMemoEntry e = fgEvaluate(x, params);
   double returnValue = e.F * e.whit * pow(x, params->multLValue);
-  return (!params->useLongWavelengthApprox) ? params->effectiveCharge->operator()(x) * returnValue : returnValue;
+  return params->useChargeFunction ? params->effectiveCharge->operator()(x) * returnValue : returnValue;
 }
 
 double ECIntegral::GWIntegrand(double x, void *p) {
   Params *params = (Params *)p;
   FGMemoEntry e = fgEvaluate(x, params);
   double returnValue = e.G * e.whit * pow(x, params->multLValue);
-  return (!params->useLongWavelengthApprox) ? params->effectiveCharge->operator()(x) * returnValue : returnValue;
+  return params->useChargeFunction ? params->effectiveCharge->operator()(x) * returnValue : returnValue;
 }
 
 double ECIntegral::WWIntegrand(double x, void *p) {
@@ -94,7 +94,7 @@ double ECIntegral::WWIntegrand(double x, void *p) {
     double whitOut = theWhitFunc->operator()(lfValue, x, fabs(bindingEnergy));
     returnValue = whitIn * whitOut * pow(x, multLValue);
   }
-  return (!params->useLongWavelengthApprox) ? params->effectiveCharge->operator()(x) * returnValue : returnValue;
+  return params->useChargeFunction ? params->effectiveCharge->operator()(x) * returnValue : returnValue;
 }
 
 namespace {
@@ -227,8 +227,7 @@ void ECIntegral::Integrate(double chanrad) {
       for (size_t k = 0; k < grid->x.size(); ++k) {
         double x = grid->x[k];
         struct CoulWaves coul = params_.coulFunc->operator()(params_.liValue, x, params_.pairEnergy);
-        double eff = params_.useLongWavelengthApprox ? 1.0
-                                                     : params_.effectiveCharge->operator()(x);
+        double eff = params_.useChargeFunction ? params_.effectiveCharge->operator()(x) : 1.0;
         double common = grid->W[k] * eff * grid->whitOut[k] * pow(x, params_.multLValue);
         fw += (long double)coul.F * common;
         gw += (long double)coul.G * common;
@@ -319,6 +318,10 @@ complex ECIntegral::CalculateDirect(int theInitialLValue, int theFinalLValue,
     params_.multLValue = theLMult;
   else
     params_.multLValue = 0;
+  // The charge function is the E_L operator's finite-wavelength form; applying
+  // it to an M1 term multiplied that term by the E1 charge (x0.56 for p+16O, 0
+  // for an N=Z pair) before 2026-10-23.
+  params_.useChargeFunction = !params_.useLongWavelengthApprox && radType == 'E';
   Integrate(chanRad);
 
   complex overlapIntegral(0., 0.);
@@ -407,7 +410,7 @@ complex ECIntegral::CalculateDirect(int theInitialLValue, int theFinalLValue,
     complex spinTerm = -sqrt((2. * theInitialSValue + 1.) * (2. * theFinalSValue + 1.)) *
         AngCoeff::Racah(1, theInitialSValue, theFinalJValue, theInitialLValue, theFinalSValue, theInitialJValue) * tau;
     ecAmplitude = complex(0.0, 1.0) *
-        sqrt(fstruc) * pow(hbarc, 1.5) / (2 * 1.00727638 * uconv) * sqrt(16 / 3) * sqrt(2 * theFinalJValue + 1.) *
+        sqrt(fstruc) * pow(hbarc, 1.5) / (2 * 1.00727638 * uconv) * sqrt(16. / 3.) * sqrt(2 * theFinalJValue + 1.) *
         (orbitalTerm + spinTerm);
   }
 

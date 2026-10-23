@@ -30,6 +30,10 @@ class ECIntegral {
     double pairEnergy;
     double bindingEnergy;
     bool useLongWavelengthApprox;
+    /// The finite-wavelength (Friar-Fallieros) charge function multiplies the
+    /// integrand: electric terms without the long-wavelength approximation.
+    /// Magnetic terms keep their long-wavelength operator in either mode.
+    bool useChargeFunction;
     /// Reference decades subtracted from the Whittaker-Whittaker integrand, so
     /// that a sub-threshold channel (where each factor is ~1e-500) integrates
     /// as O(1) numbers instead of underflowing to zero.  See WhitFunc::Scaled.
@@ -53,6 +57,7 @@ class ECIntegral {
       params_.coulFunc->SetUseGlobalCache(false);
     params_.whitFunc = std::make_unique<WhitFunc>(pPair);
     params_.useLongWavelengthApprox = !!(configure.paramMask & Config::USE_LONGWAVELENGTH_APPROX);
+    params_.useChargeFunction = false;  // set per term in CalculateDirect
     pair_ = pPair;
     configure_ = &configure;
   };

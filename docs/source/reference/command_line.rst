@@ -88,6 +88,22 @@ Available Options
        threads, write it to ``FILE`` (default as for ``--coulomb-table``),
        report progress in steps of 10 % and exit; no project file is needed.
        The same build as **Configure → Build Coulomb Table...** in the GUI.
+   * - ``--no-long-wavelength``
+     - Electric external capture without the long-wavelength approximation:
+       the radial operator :math:`\bar e_L r^L` becomes the charge term of the
+       extended Siegert theorem (Friar and Fallieros, Phys. Rev. C 29, 1645
+       (1984)),
+       :math:`L(2L+1)!!\,k_\gamma^{-L}\,[Z_1 g_L(k_\gamma r\,m_2/M) +
+       (-1)^L Z_2 g_L(k_\gamma r\,m_1/M)]`,
+       :math:`g_L(y) = \int_0^y j_L(t)/t\,dt`, which reduces to
+       :math:`\bar e_L r^L` term by term as :math:`k_\gamma \to 0`.  The current
+       tangential to :math:`r` is still left out.  Small for ordinary E1 and
+       E2 (0.1--0.3 % for p + :sup:`16`\ O and :math:`\alpha` + :sup:`12`\ C
+       E2), large where the long-wavelength E1 charge nearly vanishes
+       (:math:`\alpha` + :sup:`12`\ C E1: 3.5--6 times the amplitude).  M1
+       terms are the same in both modes.  Internal (resonant) photon channels
+       are not affected.  pyazr: ``use_long_wavelength=False``.  Checked against
+       an independent calculation in ``tests/ec_m1_exact``.
    * - ``--no-ec-table``
      - Compute every external-capture integral directly, at every data point
        and sub-point, and interpolate the amplitudes of shifted points

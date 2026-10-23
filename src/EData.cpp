@@ -2196,8 +2196,12 @@ std::string EData::ECSignature(CNuc *theCNuc, const Config &configure) {
   ECSignatureHash hash;
   // Bump the version if what goes into the signature changes, so files written
   // under the old definition are recomputed rather than wrongly matched.
-  hash.Add("AZURE2 EC signature v1");
+  // v2 (2026-10-23): the long-wavelength switch is part of the signature, and
+  // the M1 amplitudes changed (sqrt(16/3) prefactor, no E1 charge function), so
+  // every v1 file is recomputed once.
+  hash.Add("AZURE2 EC signature v2");
   hash.Add((configure.paramMask & Config::USE_GSL_COULOMB_FUNC) ? 1 : 0);
+  hash.Add((configure.paramMask & Config::USE_LONGWAVELENGTH_APPROX) ? 1 : 0);
   hash.Add((configure.paramMask & Config::CALCULATE_REACTION_RATE) ? 1 : 0);
   hash.Add(configure.useHybridMethod ? 1 : 0);
 
