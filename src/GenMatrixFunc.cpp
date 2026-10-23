@@ -72,6 +72,8 @@ void GenMatrixFunc::CalculateBareCrossSection(EPoint *point) {
     for (int dp = 1; dp <= compound()->GetPair(aa)->NumDecays(); dp++) {
       if (compound()->GetPair(compound()->GetPair(aa)->GetDecay(dp)->GetPairNum())->GetPType() == 0) {
         for (int k = 1; k <= compound()->GetPair(aa)->GetDecay(dp)->NumKGroups(); k++) {
+          // A cross-spin UPOS group repeats pathways of the equal-spin groups.
+          if (compound()->GetPair(aa)->GetDecay(dp)->GetKGroup(k)->IsCrossSpin()) continue;
           this->ClearTempTMatrices();
           for (int m = 1; m <= compound()->GetPair(aa)->GetDecay(dp)->GetKGroup(k)->NumMGroups(); m++) {
             MGroup *theMGroup = compound()->GetPair(aa)->GetDecay(dp)->GetKGroup(k)->GetMGroup(m);
@@ -762,6 +764,8 @@ bool GenMatrixFunc::CalculateAmplitudeMatrix(EPoint *point, double *spinSum,
   Polarization::AmplitudeMatrix M(compound(), point, aaPair, irPair);
 
   for (int k = 1; k <= theDecay->NumKGroups(); k++) {
+    // A cross-spin UPOS group repeats pathways of the equal-spin groups.
+    if (theDecay->GetKGroup(k)->IsCrossSpin()) continue;
     for (int m = 1; m <= theDecay->GetKGroup(k)->NumMGroups(); m++) {
       MGroup *g = theDecay->GetKGroup(k)->GetMGroup(m);
       M.AddPathway(g->GetJNum(), g->GetChNum(), g->GetChpNum(),

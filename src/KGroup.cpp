@@ -7,7 +7,8 @@
 KGroup::KGroup(double s, double sPrime) :
   s_(s),
   sp_(sPrime),
-  sp2_(0.) {};
+  sp2_(0.),
+  hasSp2_(false) {};
 
 /*!
  * Overloaded constructor to accommodate multiple final spin combinations for
@@ -17,7 +18,8 @@ KGroup::KGroup(double s, double sPrime) :
 KGroup::KGroup(double s, double sPrime, double sPrime2) :
   s_(s),
   sp_(sPrime),
-  sp2_(sPrime2) {};
+  sp2_(sPrime2),
+  hasSp2_(true) {};
 
 /*!
  * Returns the number of internal reaction pathways in the MGroup vector.
@@ -78,6 +80,14 @@ double KGroup::GetSp() const {
 
 double KGroup::GetSp2() const {
   return sp2_;
+}
+
+/*!
+ * True for a three-spin UPOS k-group whose two exit channel spins differ.
+ */
+
+bool KGroup::IsCrossSpin() const {
+  return hasSp2_ && sp_ != sp2_;
 }
 
 /*!

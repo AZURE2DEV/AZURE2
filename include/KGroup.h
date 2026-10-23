@@ -32,6 +32,10 @@ class KGroup {
   double GetSp() const;
   /// Second exit channel spin, UPOS reactions only.
   double GetSp2() const;
+  /// True for a UPOS k-group with \f$s' \ne s'_2\f$.  Such a group holds the
+  /// pathways of both exit channel spins and feeds only the secondary-gamma
+  /// interference terms; every other observable skips it.
+  bool IsCrossSpin() const;
   void AddMGroup(MGroup);
   void AddECMGroup(ECMGroup);
   /// Internal pathway \\p i, 1-based.
@@ -43,6 +47,7 @@ class KGroup {
   double s_;
   double sp_;
   double sp2_;
+  bool hasSp2_;
   std::vector<MGroup> mgroups_;
   std::vector<ECMGroup> ec_mgroups_;
 };

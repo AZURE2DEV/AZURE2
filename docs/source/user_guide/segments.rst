@@ -345,6 +345,42 @@ appears with the following fields:
    - **Sum** -- sum cross sections from multiple entrance/exit pair combinations.
    - **Ratio** -- compute the ratio of cross sections from different channels.
 
+**Unobserved Primary, Observed Secondary (UPOS)**
+   For a particle exit pair :math:`b+B` whose residual nucleus :math:`B` is
+   left in an excited state, the segment describes the **secondary gamma ray**
+   of :math:`B \to C + \gamma` rather than the particle :math:`b`, which is not
+   detected (Brune and deBoer, Phys. Rev. C **102**, 024628 (2020)). The angle
+   is that of the gamma ray relative to the beam; the calculated quantity is
+   :math:`d\sigma/d\Omega_\gamma` of Eq. (20) of that paper (100 % branching to
+   :math:`C`; scale the data or the normalization for any other branching), and
+   an angle-integrated UPOS segment is the cross section to :math:`B`.
+   **Secondary Decay L** is the multipolarity :math:`L` of the gamma ray,
+   **Final State J (Ic)** the spin of :math:`C`, and **Mixing Ratio (δ)**
+   :math:`\delta = g_{L+1}/g_L` of an :math:`L`/:math:`L+1` mixture (0 for a
+   pure multipole), in the convention of Eqs. (4)-(7) of the paper. In the
+   file the four fields follow the data file (and any composite fields) as
+   ``isUPOS L Ic delta``, e.g. ``... data/n2g.dat 0 1 3 0 0`` for the E3 decay
+   of :math:`^{16}`\ O(6.13, :math:`3^-`) to its :math:`0^+` ground state.
+
+   When the exit pair has more than one channel spin (both :math:`b` and
+   :math:`B` with nonzero spin), the gamma-ray angular distribution contains
+   interference terms between the channel spins, so it depends on the
+   relative signs of their reduced-width amplitudes; those signs are defined
+   with the channel spin coupled light particle first,
+   :math:`(I_b I_B m_b m_B | s'\nu')`, as for the analyzing powers. Eq. (22)
+   of the paper as printed corresponds to the opposite order, which changes
+   the sign of these terms only. Engines before the 2026-10 fix of the
+   channel-spin pairing computed these interference terms incorrectly (see
+   ``tests/secondary_gamma``).
+
+   Give UPOS data in the centre-of-mass frame (data type differential c.m.):
+   the gamma-ray angle in the rest frame of :math:`B` differs from the
+   laboratory angle only by the aberration of order :math:`v_B/c`, while a
+   laboratory-frame segment converts its angles with the kinematics of the
+   particle :math:`b`, which does not apply to a gamma ray. An extrapolation
+   (Segments Without Data) cannot be UPOS; to draw a UPOS curve, give a data
+   segment a grid of pseudo-data.
+
 Editing and Managing Data Segments
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 

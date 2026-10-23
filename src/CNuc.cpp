@@ -1285,7 +1285,10 @@ void CNuc::SortPathways(const Config &configure) {
         }
       } else if (this->GetPair(ir)->GetPType() == 0 && aa != ir) {
         // Unobserved Primary, Observed Secondary (UPOS): create 3-param KGroups with sp2 for
-        // secondary gamma angular distribution calculations
+        // secondary gamma angular distribution calculations.  The secondary-gamma terms
+        // multiply T(s') by T(s2')* (Brune and deBoer, PRC 102, 024628, Eq. 22), so a
+        // group with sp != sp2 holds the pathways of both exit channel spins; a group with
+        // sp == sp2 holds those of sp alone and is the one every other observable uses.
         for (double s = fabs(this->GetPair(aa)->GetJ(1) - this->GetPair(aa)->GetJ(2));
              s <= (this->GetPair(aa)->GetJ(1) + this->GetPair(aa)->GetJ(2)); s += 1.) {
           for (double sp = fabs(this->GetPair(ir)->GetJ(1) - this->GetPair(ir)->GetJ(2));
@@ -1299,7 +1302,8 @@ void CNuc::SortPathways(const Config &configure) {
                   for (int chp = 1; chp <= this->GetJGroup(j)->NumChannels(); chp++) {
                     if (this->GetJGroup(j)->GetChannel(chp)->GetPairNum() != ir ||
                         this->GetJGroup(j)->GetChannel(ch)->GetS() != s ||
-                        this->GetJGroup(j)->GetChannel(chp)->GetS() != sp) continue;
+                        (this->GetJGroup(j)->GetChannel(chp)->GetS() != sp &&
+                         this->GetJGroup(j)->GetChannel(chp)->GetS() != sp2)) continue;
                     Decay NewDecay(ir);
                     DecayNum = this->GetPair(aa)->IsDecay(NewDecay);
                     if (!DecayNum) {
@@ -1659,6 +1663,7 @@ void CNuc::CalcAngularDists(int maxL) {
             for (int m2 = 1; m2 <= theDecay->GetKGroup(k)->NumMGroups() + theDecay->GetKGroup(k)->NumECMGroups(); m2++) {
               std::string interferenceType;
               double j1, j2, l1, l1p, l2, l2p;
+              double s1pCh = -1., s2pCh = -1.;  // exit channel spins of internal pathways
               int w1p, w2p, path1, path2;
               if (m1 > theDecay->GetKGroup(k)->NumMGroups()) {
                 int m1_ec = m1 - theDecay->GetKGroup(k)->NumMGroups();
@@ -1679,6 +1684,7 @@ void CNuc::CalcAngularDists(int maxL) {
                 j1 = jgroup1->GetJ();
                 l1 = (double)channel1->GetL();
                 l1p = (double)channel1p->GetL();
+                s1pCh = channel1p->GetS();
                 if (channel1p->GetRadType() == 'M' || channel1p->GetRadType() == 'P')
                   w1p = 0;
                 else
@@ -1705,6 +1711,7 @@ void CNuc::CalcAngularDists(int maxL) {
                 j2 = jgroup2->GetJ();
                 l2 = (double)channel2->GetL();
                 l2p = (double)channel2p->GetL();
+                s2pCh = channel2p->GetS();
                 if (channel2p->GetRadType() == 'M' || channel2p->GetRadType() == 'P')
                   w2p = 0;
                 else
@@ -1720,6 +1727,9 @@ void CNuc::CalcAngularDists(int maxL) {
                 if (this->GetPair(theDecay->GetPairNum())->GetPType() == 0) {
                   double z2 = sqrt(2. * l1p + 1.) * sqrt(2. * l2p + 1.) * sqrt(2. * j1 + 1.) * sqrt(2. * j2 + 1.) * AngCoeff::ClebGord(l1p, l2p, lOrder, 0., 0., 0.) * AngCoeff::Racah(l1p, j1, l2p, j2, sp, lOrder);
                   z1z2 = pow(-1.0, sp - s) / 4. * z1 * z2;
+                  // A cross-spin UPOS group mixes two exit channel spins; only the
+                  // secondary-gamma coefficient below applies to it.
+                  if (theDecay->GetKGroup(k)->IsCrossSpin()) z1z2 = 0.;
                 } else if (this->GetPair(theDecay->GetPairNum())->GetPType() == 10) {
                   double jf = this->GetPair(theDecay->GetPairNum())->GetJ(2);
                   double z2 = sqrt(2. * l1p + 1.) * sqrt(2. * l2p + 1.) * sqrt(2. * j1 + 1.) * sqrt(2. * j2 + 1.) * AngCoeff::ClebGord(l1p, l2p, lOrder, 1., -1., 0) * AngCoeff::Racah(l1p, j1, l2p, j2, jf, lOrder);
@@ -1727,11 +1737,19 @@ void CNuc::CalcAngularDists(int maxL) {
                 }
                 // Calculate z1z2_upos for Unobserved Primary, Observed Secondary (UPOS) case
                 double z1z2_upos = 0.;
-                if (this->GetPair(theDecay->GetPairNum())->GetPType() == 0 && aa != theDecay->GetPairNum()) {
-                  double sp2 = theDecay->GetKGroup(k)->GetSp2();
+                // Eq. (22) of Brune and deBoer, PRC 102, 024628 (2020): the first
+                // amplitude has exit channel spin s' = sp, the second s2' = sp2.  Eq. (22)
+                // as printed corresponds to coupling the exit channel spin as
+                // (I_B I_b | s'); AZURE2 couples the light particle first, (I_b I_B | s'),
+                // as Eq. (17) of the paper and the analyzing-power code (PolarizationFunc)
+                // do, which multiplies each amplitude by (-1)^(I_b+I_B-s') and the product
+                // by (-1)^(sp-sp2).
+                const double sp2 = theDecay->GetKGroup(k)->GetSp2();
+                if (this->GetPair(theDecay->GetPairNum())->GetPType() == 0 && aa != theDecay->GetPairNum() &&
+                    s1pCh == sp && s2pCh == sp2) {
                   double j1f = this->GetPair(theDecay->GetPairNum())->GetJ(1);
                   double j2f = this->GetPair(theDecay->GetPairNum())->GetJ(2);
-                  z1z2_upos = pow(-1., lOrder + sp2 - sp) * (2. * j1 + 1.) * (2. * j2 + 1.) *
+                  z1z2_upos = pow(-1., sp - sp2) * pow(-1., lOrder + sp2 - sp) * (2. * j1 + 1.) * (2. * j2 + 1.) *
                       pow((2. * l1 + 1.) * (2. * j2f + 1.) * (2. * sp + 1.) * (2. * sp2 + 1.), 0.5) *
                       AngCoeff::ClebGord(lOrder, l1, l2, 0., 0., 0.) *
                       AngCoeff::Racah(lOrder, j2f, sp2, j1f, j2f, sp) *

@@ -781,6 +781,7 @@ bool AMatrixFunc::PointTBar(EPoint *point, double fitBar, TMatrixCotangent &bar,
     } else {
       Polarization::AmplitudeMatrix M(compound(), point, aa, exitPairNum);
       for (int k = 1; k <= nK; k++) {
+        if (theDecay->GetKGroup(k)->IsCrossSpin()) continue;  // as the forward sum
         for (int m = 1; m <= theDecay->GetKGroup(k)->NumMGroups(); m++) {
           MGroup *mg = theDecay->GetKGroup(k)->GetMGroup(m);
           M.AddPathway(mg->GetJNum(), mg->GetChNum(), mg->GetChpNum(),
@@ -792,6 +793,7 @@ bool AMatrixFunc::PointTBar(EPoint *point, double fitBar, TMatrixCotangent &bar,
 
       const std::vector<complex> bar = M.AnalyzingPowerBar();
       for (int k = 1; k <= nK; k++) {
+        if (theDecay->GetKGroup(k)->IsCrossSpin()) continue;
         for (int m = 1; m <= theDecay->GetKGroup(k)->NumMGroups(); m++) {
           MGroup *mg = theDecay->GetKGroup(k)->GetMGroup(m);
           if (!includeInternal(mg)) continue;
