@@ -67,7 +67,12 @@ appears with the following fields:
       * - **Differential**
         - Differential cross section data at specific angles. A **Frame**
           drop-down chooses **Lab** (default) or **C.M.**: the frame in which
-          the data file gives its angles and cross sections.
+          the data file gives its angles and cross sections. Both work for
+          particle and capture exit pairs. Lab-frame capture data are converted
+          to the c.m. frame with the photon aberration and solid-angle Jacobian
+          (:doc:`../reference/data_formats`, "Frame"): a few percent and angle
+          dependent for :sup:`12`\ C(:math:`\alpha,\gamma`) at a few MeV.
+          Most low-energy capture measurements publish lab values.
       * - **Phase Shift**
         - Phase shift data. Requires specifying the total angular momentum (*J*)
           and orbital angular momentum (*l*). The convention is

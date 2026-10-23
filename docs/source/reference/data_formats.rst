@@ -47,9 +47,20 @@ Notes on Data Files
 - **Sorting**: data may be entered in any order. However, for plotting purposes
   it is useful to sort by energy (for excitation curves) or by angle (for
   angular distributions).
-- **Frame**: all input data must be in the **laboratory frame** with
-  **forward kinematics** (light particle as projectile, heavy particle as
-  target).
+- **Frame**: energies are always **laboratory** energies in **forward
+  kinematics** (light particle as projectile, heavy particle as target).
+  Angles and cross sections are laboratory values too, except for the
+  **C.M.** differential observable (code 4 in data segments, 5 in test
+  segments) and the analyzing power (code 7), which take centre-of-mass angles
+  and cross sections.  Both frames work for particle and for capture (gamma)
+  exit pairs.  A lab-frame capture point is converted with the photon
+  aberration, :math:`\cos\theta_{cm} = (\cos\theta - \beta)/(1 - \beta\cos\theta)`,
+  and the solid-angle Jacobian
+  :math:`(1 - \beta\cos\theta)^2/(1 - \beta^2)`, where :math:`\beta` is the
+  c.m. velocity.  Many low-energy capture measurements publish lab angles and
+  cross sections without the transformation; with :math:`\beta \approx 0.01`
+  (:sup:`12`\ C(:math:`\alpha,\gamma`) at a few MeV) the difference is a few
+  percent and angle dependent, so enter such data as **Lab**.
 - **Units**: energies in MeV, angles in degrees, cross sections in barns
   (angle-integrated) or barns/sr (differential).
 - **Format**: columns can be separated by spaces or tabs.
