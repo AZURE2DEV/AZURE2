@@ -1,3 +1,4 @@
+#include "Kinematics.h"
 #include "ECIntegral.h"
 #include "AngCoeff.h"
 #include "EffectiveCharge.h"
@@ -328,12 +329,12 @@ complex ECIntegral::CalculateDirect(int theInitialLValue, int theFinalLValue,
       complex chanExpHSP = CoulombHardSpherePhase(coul);
       overlapIntegral = complex(0.0, -0.5) *
           sqrt(coulfunction()->Penetrability(theInitialLValue, chanRad, outEnergy)) *
-          pow(redMass * uconv / 2. / fabs(outEnergy), 0.25) / sqrt(hbarc) *
+          Kinematics::Channel(pair()).FluxFactor(fabs(outEnergy)) / sqrt(hbarc) *
           chanExpHSP * (GW() + complex(0.0, 1.0) * FW());
     } else {
       const complex hsp = CoulombHardSpherePhase(coul);
       overlapIntegral = (std::real(hsp) * FW() + std::imag(hsp) * GW()) *
-          pow(redMass * uconv / 2. / fabs(outEnergy), 0.25) / sqrt(hbarc);
+          Kinematics::Channel(pair()).FluxFactor(fabs(outEnergy)) / sqrt(hbarc);
     }
     // FW_/GW_ were integrated with the bound-state Whittaker rescaled by
     // 10^-log10RefOut; restore it.  When the reference is far enough below the

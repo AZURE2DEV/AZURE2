@@ -4,6 +4,7 @@
 #include "CNuc.h"
 #include "Config.h"
 #include "CoulFunc.h"
+#include "Kinematics.h"
 #include "DataLine.h"
 #include "ECIntegral.h"
 #include "ECAmplitudeCache.h"
@@ -683,6 +684,15 @@ double EPoint::ConvertLabValue(double value, PPair *pPair) {
  */
 
 void EPoint::ConvertLabEnergy(PPair *pPair) {
+  if (Kinematics::Relativistic()) {
+    // T = sqrt(s) - m1 - m2 with s = (m1 + m2)^2 + 2 m2 E_lab (Kinematics.h)
+    const double m1 = pPair->GetM(1) * uconv, m2 = pPair->GetM(2) * uconv;
+    cm_energy_ = Kinematics::CMFromLab(m1, m2, this->GetLabEnergy());
+    excitation_energy_ = cm_energy_ + pPair->GetSepE();
+    bin_low_cm_ = Kinematics::CMFromLab(m1, m2, bin_low_lab_);
+    bin_high_cm_ = Kinematics::CMFromLab(m1, m2, bin_high_lab_);
+    return;
+  }
   double factor = (pPair->GetM(2)) / (pPair->GetM(1) + pPair->GetM(2));
   cm_energy_ = this->GetLabEnergy() * factor;
   excitation_energy_ = cm_energy_ + pPair->GetSepE();
@@ -707,6 +717,12 @@ void EPoint::ConvertExcitationEnergy(PPair *pPair) {
  */
 
 void EPoint::ConvertDecayEnergy(PPair *pPair) {
+  if (Kinematics::Relativistic()) {
+    // two-body decay at rest: equal momenta, T = E1 + sqrt(m2^2 + p^2) - m2
+    cm_energy_ = Kinematics::CMFromDecay(pPair->GetM(1) * uconv, pPair->GetM(2) * uconv, this->GetLabEnergy());
+    excitation_energy_ = cm_energy_ + pPair->GetSepE();
+    return;
+  }
   cm_energy_ = this->GetLabEnergy() /
       (pPair->GetM(2)) *
       (pPair->GetM(1) + pPair->GetM(2));
@@ -720,8 +736,55 @@ void EPoint::ConvertDecayEnergy(PPair *pPair) {
  * overloaded function is for scattering channels.
  */
 
+/*!
+ * Relativistic lab -> c.m. transformation of a detected particle (relativistic=1, Kinematics.h): particle 1 of
+ * \p exitPair (of \p entrancePair for elastic scattering) at lab angle theta_l.  With the c.m. boost
+ * beta = P_lab / E_lab, gamma = E_lab / sqrt(s) and g = beta / beta_3* (beta_3* the detected particle's c.m.
+ * velocity, from T_f = E_x - S_f), tan theta_l = sin theta* / (gamma (cos theta* + g)), and
+ * dOmega_lab / dOmega_cm = gamma (1 + g cos theta*) / (gamma^2 (g + cos theta*)^2 + sin^2 theta*)^(3/2).
+ * Where the lab angle is reached from two c.m. angles (g > 1) the root nearest \p nrCMAngle is taken, i.e. the
+ * non-relativistic branch.  Returns false if the angle is not reached.
+ */
+bool EPoint::RelativisticLabToCM(PPair *entrancePair, PPair *exitPair, double nrCMAngle, double &cmAngle,
+                                 double &factor) const {
+  const double m1 = entrancePair->GetM(1) * uconv, m2 = entrancePair->GetM(2) * uconv;
+  const double m3 = exitPair->GetM(1) * uconv, m4 = exitPair->GetM(2) * uconv;
+  const double ti = this->GetCMEnergy();
+  const double tf = ti + entrancePair->GetSepE() + entrancePair->GetExE() - exitPair->GetSepE() - exitPair->GetExE();
+  const double e1 = Kinematics::LabFromCM(m1, m2, ti);
+  const double sqrtS = m1 + m2 + ti, eTot = e1 + m1 + m2;
+  const double pLab = sqrt(e1 * (e1 + 2.0 * m1));
+  const double beta = pLab / eTot, gam = eTot / sqrtS;
+  const double pf = Kinematics::K(m3, m4, tf) * hbarc, e3 = sqrt(m3 * m3 + pf * pf);
+  const double g = beta / (pf / e3);
+  const double thl = this->GetLabAngle() * pi / 180.;
+  double x;  // cos theta*
+  if (fabs(sin(thl)) < 1e-12) {
+    x = cos(thl) > 0 ? 1.0 : -1.0;
+    if (g > 1.0) x = (fabs(nrCMAngle) < 90.0) ? 1.0 : -1.0;
+  } else {
+    const double t2 = pow(tan(thl), 2.0), gt2 = gam * gam * t2;
+    const double disc = 1.0 + gt2 * (1.0 - g * g);
+    if (disc < 0.0) return false;
+    const double r1 = (-gt2 * g + sqrt(disc)) / (1.0 + gt2), r2 = (-gt2 * g - sqrt(disc)) / (1.0 + gt2);
+    // a root is valid if cos theta* + g has the sign of cos theta_l
+    const bool v1 = (r1 + g) * cos(thl) > 0.0 && fabs(r1) <= 1.0, v2 = (r2 + g) * cos(thl) > 0.0 && fabs(r2) <= 1.0;
+    const double nrX = cos(nrCMAngle * pi / 180.);
+    if (v1 && v2) x = (fabs(r1 - nrX) <= fabs(r2 - nrX)) ? r1 : r2;
+    else if (v1) x = r1;
+    else if (v2) x = r2;
+    else return false;
+  }
+  x = std::max(-1.0, std::min(1.0, x));
+  cmAngle = acos(x) * 180. / pi;
+  factor = gam * (1.0 + g * x) / pow(gam * gam * (g + x) * (g + x) + 1.0 - x * x, 1.5);
+  return true;
+}
+
 void EPoint::ConvertLabAngle(PPair *pPair) {
   cm_angle_ = this->GetLabAngle() + 180. / pi * asin(pPair->GetM(1) / pPair->GetM(2) * sin(pi / 180. * this->GetLabAngle()));
+  double cmAngle, factor;
+  if (Kinematics::Relativistic() && this->RelativisticLabToCM(pPair, pPair, cm_angle_, cmAngle, factor)) cm_angle_ = cmAngle;
 }
 
 /*!
@@ -755,6 +818,9 @@ void EPoint::ConvertLabAngle(PPair *entrancePair, PPair *exitPair, const Config 
 
   cm_angle_ = 180. / pi * asin(sqrt(E3PerEt / a24) * sin(this->GetLabAngle() * pi / 180.));
   if (switchDomain) cm_angle_ = 180. - cm_angle_;
+  double relAngle, relFactor;
+  if (Kinematics::Relativistic() && this->RelativisticLabToCM(entrancePair, exitPair, cm_angle_, relAngle, relFactor))
+    cm_angle_ = relAngle;
   // define angle kin factor to convert back to lab frame
   angleKinFactor_ = this->GetLabAngle() / cm_angle_;
   this->SetAngleKinFactor(angleKinFactor_);
@@ -792,6 +858,14 @@ void EPoint::ConvertLabAngleGammas(PPair *entrancePair) {
 
 void EPoint::ConvertCrossSection(PPair *entrancePair, PPair *exitPair) {
   double conversionFactor;
+  double relAngle;
+  if (Kinematics::Relativistic() && this->RelativisticLabToCM(entrancePair, exitPair, this->GetCMAngle(), relAngle, conversionFactor)) {
+    cm_crosssection_ = this->GetLabCrossSection() * conversionFactor;
+    cm_dcrosssection_ = this->GetLabCrossSectionError() * conversionFactor;
+    crossSectionKinFactor_ = conversionFactor;
+    this->SetCrossSectionKinFactor(crossSectionKinFactor_);
+    return;
+  }
   if (this->GetLabAngle() == 0.0 || this->GetLabAngle() == 180.0) {
     double m1 = entrancePair->GetM(1);
     double m2 = entrancePair->GetM(2);
@@ -819,6 +893,10 @@ void EPoint::ConvertCrossSection(PPair *entrancePair, PPair *exitPair) {
 
 double EPoint::CalculateCrossSectionConversionFactor(PPair *entrancePair, PPair *exitPair) {
   double conversionFactor;
+  double relAngle;
+  if (Kinematics::Relativistic() && this->RelativisticLabToCM(entrancePair, exitPair, this->GetCMAngle(), relAngle, conversionFactor)) {
+    return conversionFactor;
+  }
   if (this->GetLabAngle() == 0.0 || this->GetLabAngle() == 180.0) {
     double m1 = entrancePair->GetM(1);
     double m2 = entrancePair->GetM(2);
@@ -1128,7 +1206,7 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure, bool i
     sfactorconv = 1.;
   } else {
     inEnergy = this->GetCMEnergy() + entrancePair->GetSepE() + entrancePair->GetExE();
-    geofactor = pi * pow(hbarc, 2.) / (2 * entrancePair->GetRedMass() * uconv * this->GetCMEnergy());
+    geofactor = Kinematics::Channel(entrancePair).PiOverK2(this->GetCMEnergy());
     sfactorconv = this->GetCMEnergy() * exp(2 * pi * sqrt(uconv / 2.) * fstruc * entrancePair->GetZ(1) * entrancePair->GetZ(2) * sqrt(entrancePair->GetRedMass() / this->GetCMEnergy()));
   }
   this->SetGeometricalFactor(geofactor);
@@ -1136,8 +1214,7 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure, bool i
   // Electron screening: f = exp(pi eta U_e / E), so d ln f / d U_e = pi eta / E (charged particle pairs only).
   screen_k_ = 0.0;
   if (entrancePair->GetPType() == 0 && entrancePair->GetZ(1) * entrancePair->GetZ(2) != 0 && this->GetCMEnergy() > 0.0) {
-    const double eta = sqrt(uconv / 2.) * fstruc * entrancePair->GetZ(1) * entrancePair->GetZ(2) *
-                       sqrt(entrancePair->GetRedMass() / this->GetCMEnergy());
+    const double eta = Kinematics::Channel(entrancePair).Eta(this->GetCMEnergy());
     screen_k_ = pi * eta / this->GetCMEnergy();
   }
 
@@ -1186,10 +1263,9 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure, bool i
             double localShift = theCoulombFunction.PEShift(lValue, radius, localEnergy);
             double boundary = theChannel->GetBoundaryCondition();
             complex loElement(localShift - boundary, localPene);
-            double redmass = thePair->GetRedMass();
-            double eta = sqrt(uconv / 2.) * fstruc * thePair->GetZ(1) * thePair->GetZ(2) *
-                sqrt(redmass / localEnergy);
-            double rho = sqrt(2. * uconv) / hbarc * radius * sqrt(redmass * localEnergy);
+            const Kinematics::Channel kin(thePair);
+            double eta = kin.Eta(localEnergy);
+            double rho = kin.Rho(radius, localEnergy);
             complex expCP(1.0, 0.0);
             for (int ll = 1; ll <= theChannel->GetL(); ll++)
               expCP *= complex((double)ll / sqrt(pow(eta, 2.0) + pow((double)ll, 2.0)),
@@ -1392,8 +1468,8 @@ void EPoint::CalcCoulombAmplitude(CNuc *theCNuc, bool includeSubPoints) {
     double redmass = entrancePair->GetRedMass();
     double energy = this->GetCMEnergy();
     double angle = this->GetCMAngle();
-    double eta = sqrt(uconv / 2.) * fstruc * z1 * z2 *
-        sqrt(redmass / energy);
+    double eta = Kinematics::Channel(entrancePair).rel ? Kinematics::Channel(entrancePair).Eta(energy)
+                                                       : sqrt(uconv / 2.) * fstruc * z1 * z2 * sqrt(redmass / energy);
     double cal = (1.0 / (2.0 * sqrt(pi))) * eta * (1.0 / pow(sin(angle * pi / 360.0), 2.));
     double cex = 2.0 * eta * log(sin(angle * pi / 360.0));
     complex calpha(cal * cos(cex), -cal * sin(cex));
@@ -1453,8 +1529,7 @@ static complex ECPathwayAmplitude(CNuc *theCNuc, const Config &configure, PPair 
   // entrance Phase Calculations;
   CoulFunc theCoulombFunction(entrancePair, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
 
-  double eta = sqrt(uconv / 2.) * fstruc * entrancePair->GetZ(1) * entrancePair->GetZ(2) *
-      sqrt(entrancePair->GetRedMass() / cmEnergy);
+  double eta = Kinematics::Channel(entrancePair).Eta(cmEnergy);
   complex expCP(1.0, 0.0);
   for (int ll = 1; ll <= theECMGroup->GetL(); ll++)
     expCP *= complex((double)ll / sqrt(pow((double)ll, 2.0) + pow(eta, 2.0)),

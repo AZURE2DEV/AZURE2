@@ -33,6 +33,19 @@ Contains the **physical** (observable) parameters resulting from the fit. If
 the user wishes to use these as new starting values, they must be manually
 entered into the **Levels and Channels** tab.
 
+relativistic.out
+^^^^^^^^^^^^^^^^
+
+Written with ``relativistic=1`` (:doc:`../user_guide/particle_pairs`). The
+levels of ``parameters.out`` in the level-energy convention of the LANL code
+EDA (ENDF ``KRL=1``): for each level its excitation energy :math:`E_x`, the
+energy :math:`E_s = S_0 + T_0 + T_0^2/(2 m_0)` (:math:`T_0 = E_x - S_0` on the
+reference pair of mass :math:`m_0`), the difference :math:`E_s - E_x` and the
+factor :math:`dE_s/dE_x = 1 + T_0/m_0`; per particle channel the partial width
+and reduced width amplitude, and the same times :math:`1 + T_0/m_0` and its
+square root. The mapping is exact at each level energy; away from it the two
+energy dependences differ at second order in :math:`T_0/m_0`.
+
 normalizations.out
 ^^^^^^^^^^^^^^^^^^
 

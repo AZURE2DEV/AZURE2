@@ -14,6 +14,7 @@
 #include "NuclearPotentialManager.h"
 #include "Config.h"
 #include "CoulombTable.h"
+#include "Kinematics.h"
 
 /*!
  * The CoulFunc object is created with reference to a PPair object.
@@ -37,6 +38,7 @@ CoulFunc::CoulFunc(PPair *pPair, bool useGSLFunctions) :
   z1_ = pPair->GetZ(1);
   z2_ = pPair->GetZ(2);
   redmass_ = (double)pPair->GetRedMass();
+  kin_ = Kinematics::Channel(pPair);
   lLast_ = 0;
   radiusLast_ = 0.0;
   energyLast_ = 0.0;
@@ -61,8 +63,8 @@ bool CoulFunc::TableLookup(int l, double radius, double energy) {
   tLastL_ = l;
   tLastR_ = radius;
   tLastE_ = energy;
-  const double eta = sqrt(uconv / 2.) * fstruc * z1() * z2() * sqrt(redmass() / energy);
-  const double rho = sqrt(2. * uconv) / hbarc * radius * sqrt(redmass() * energy);
+  const double eta = kin_.Eta(energy);
+  const double rho = kin_.Rho(radius, energy);
   CoulombTable::Open o;
   tOk_ = energy > 0.0 && table_->LookupOpen(l, eta, rho, o);
   if (tOk_) {
@@ -180,6 +182,7 @@ CoulWaves CoulFunc::operator()(int l, double radius, double energy) {
     key.l = l;
     key.radius = radius;
     key.hybridTag = hybridTag_;
+    key.mtot = kin_.rel ? kin_.m1 + kin_.m2 : 0.0;
 
     // Single-pass cached lookup (acceptance + interpolation in one map traversal)
     if (g_coulFuncCache->TryGetCoulWaves(key, energy, result)) {
@@ -195,12 +198,8 @@ CoulWaves CoulFunc::operator()(int l, double radius, double energy) {
   if (useHybridMethod_ && nuclearPotential_) {
     newResult = computeHybrid(l, radius, energy);
   } else if (!useGSLFunctions_) {
-    std::complex<double> eta(sqrt(uconv / 2.) * fstruc * z1() * z2() *
-                                 sqrt(redmass() / energy),
-                             0.);
-    std::complex<double> rho(sqrt(2. * uconv) / hbarc * radius *
-                                 sqrt(redmass() * energy),
-                             0.);
+    std::complex<double> eta(kin_.Eta(energy), 0.);
+    std::complex<double> rho(kin_.Rho(radius, energy), 0.);
     std::complex<double> lValue((double)l, 0.);
     Coulomb_wave_functions_accurate coul(true, lValue, eta);
     std::complex<double> c_F, c_dF, c_G, c_dG;
@@ -212,10 +211,8 @@ CoulWaves CoulFunc::operator()(int l, double radius, double energy) {
     newResult.G = real(c_G);
     newResult.dG = real(c_dG);
   } else {
-    double eta = sqrt(uconv / 2.) * fstruc * z1() * z2() *
-        sqrt(redmass() / energy);
-    double rho = sqrt(2. * uconv) / hbarc * radius *
-        sqrt(redmass() * energy);
+    double eta = kin_.Eta(energy);
+    double rho = kin_.Rho(radius, energy);
     double lValue = double(l);
     double eF, eG;
     gsl_sf_result F, Fp, G, Gp;
@@ -237,6 +234,7 @@ CoulWaves CoulFunc::operator()(int l, double radius, double energy) {
     key.l = l;
     key.radius = radius;
     key.hybridTag = hybridTag_;
+    key.mtot = kin_.rel ? kin_.m1 + kin_.m2 : 0.0;
     g_coulFuncCache->AddCoulWaves(key, energy, newResult);
   }
 
@@ -251,7 +249,7 @@ CoulWaves CoulFunc::operator()(int l, double radius, double energy) {
 double CoulFunc::Penetrability(int l, double radius, double energy) {
   if (table_ && TableLookup(l, radius, energy)) return tP_;
   struct CoulWaves coul = this->operator()(l, radius, energy);
-  double rho = sqrt(2. * uconv) / hbarc * radius * sqrt(redmass() * energy);
+  double rho = kin_.Rho(radius, energy);
   return rho / (pow(coul.F, 2.0) + pow(coul.G, 2.0));
 }
 
@@ -263,7 +261,7 @@ double CoulFunc::Penetrability(int l, double radius, double energy) {
 double CoulFunc::PEShift(int l, double radius, double energy) {
   if (table_ && TableLookup(l, radius, energy)) return tS_;
   struct CoulWaves coul = this->operator()(l, radius, energy);
-  double rho = sqrt(2. * uconv) / hbarc * radius * sqrt(redmass() * energy);
+  double rho = kin_.Rho(radius, energy);
   double shift;
   if (pow(coul.F, 2.0) == 0. && coul.F * coul.dF == 0.)
     shift = rho * (coul.dG / coul.G);
@@ -378,12 +376,8 @@ CoulWaves CoulFunc::computeHybrid(int l, double radius, double energy) {
     if (rMatch_ <= r_min || radius > rMatch_ || radius < r_min || drNumerov_ <= 0.0) {
       // Fall back to standard Coulomb calculation
       if (!useGSLFunctions_) {
-        std::complex<double> eta(sqrt(uconv / 2.) * fstruc * z1() * z2() *
-                                     sqrt(redmass() / energy),
-                                 0.);
-        std::complex<double> rho(sqrt(2. * uconv) / hbarc * radius *
-                                     sqrt(redmass() * energy),
-                                 0.);
+        std::complex<double> eta(kin_.Eta(energy), 0.);
+        std::complex<double> rho(kin_.Rho(radius, energy), 0.);
         std::complex<double> lValue((double)l, 0.);
         Coulomb_wave_functions_accurate coul(true, lValue, eta);
         std::complex<double> c_F, c_dF, c_G, c_dG;
@@ -393,8 +387,8 @@ CoulWaves CoulFunc::computeHybrid(int l, double radius, double energy) {
         result.G = real(c_G);
         result.dG = real(c_dG);
       } else {
-        double eta = sqrt(uconv / 2.) * fstruc * z1() * z2() * sqrt(redmass() / energy);
-        double rho = sqrt(2. * uconv) / hbarc * radius * sqrt(redmass() * energy);
+        double eta = kin_.Eta(energy);
+        double rho = kin_.Rho(radius, energy);
         double lValue = double(l);
         double eF, eG;
         gsl_sf_result F, Fp, G, Gp;
@@ -510,12 +504,8 @@ CoulWaves CoulFunc::computeHybrid(int l, double radius, double energy) {
     std::cerr << "Falling back to standard Coulomb calculation." << std::endl;
     // Fall back to standard calculation
     if (!useGSLFunctions_) {
-      std::complex<double> eta(sqrt(uconv / 2.) * fstruc * z1() * z2() *
-                                   sqrt(redmass() / energy),
-                               0.);
-      std::complex<double> rho(sqrt(2. * uconv) / hbarc * radius *
-                                   sqrt(redmass() * energy),
-                               0.);
+      std::complex<double> eta(kin_.Eta(energy), 0.);
+      std::complex<double> rho(kin_.Rho(radius, energy), 0.);
       std::complex<double> lValue((double)l, 0.);
       Coulomb_wave_functions_accurate coul(true, lValue, eta);
       std::complex<double> c_F, c_dF, c_G, c_dG;
@@ -525,8 +515,8 @@ CoulWaves CoulFunc::computeHybrid(int l, double radius, double energy) {
       result.G = real(c_G);
       result.dG = real(c_dG);
     } else {
-      double eta = sqrt(uconv / 2.) * fstruc * z1() * z2() * sqrt(redmass() / energy);
-      double rho = sqrt(2. * uconv) / hbarc * radius * sqrt(redmass() * energy);
+      double eta = kin_.Eta(energy);
+      double rho = kin_.Rho(radius, energy);
       double lValue = double(l);
       double eF, eG;
       gsl_sf_result F, Fp, G, Gp;

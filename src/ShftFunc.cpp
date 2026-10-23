@@ -38,7 +38,8 @@ double ShftFunc::operator()(int l, double energy) {
   // whose logarithmic derivative has the closed form below.  The general route
   // takes a numerical derivative of GSL's hyperg_U (6-10 calls per value).
   if (neutral_ && UseNeutralClosedForm()) {
-    const double rho = sqrt(2. * uconv) / hbarc * radius() * sqrt(redmass_ * params_.bindingEnergy);
+    const double rho = kin_.rel ? kin_.RhoBound(radius(), params_.bindingEnergy)
+                               : sqrt(2. * uconv) / hbarc * radius() * sqrt(redmass_ * params_.bindingEnergy);
     if (rho > 0.0) return NeutralBoundShift(l, rho);
   }
   // Charged channel: the table's Whittaker branch, at eta_b and rho_b = kappa a,
@@ -47,8 +48,10 @@ double ShftFunc::operator()(int l, double energy) {
   // AZURE_BOUND_SHIFT_NUMERICAL=1 the route used before 2026-10-19: its noise makes
   // the 1 eV central difference dS/dE wrong by 3e-4 - 4e-3 (p+12C).
   if (!neutral_ && params_.bindingEnergy > 0.0 && (table_ || UseURatio())) {
-    const double etaB = sqrt(uconv / 2.) * fstruc * zz_ * sqrt(redmass_ / params_.bindingEnergy);
-    const double rhoB = sqrt(2. * uconv) / hbarc * radius() * sqrt(redmass_ * params_.bindingEnergy);
+    const double etaB = kin_.rel ? kin_.EtaBound(params_.bindingEnergy)
+                                 : sqrt(uconv / 2.) * fstruc * zz_ * sqrt(redmass_ / params_.bindingEnergy);
+    const double rhoB = kin_.rel ? kin_.RhoBound(radius(), params_.bindingEnergy)
+                                 : sqrt(2. * uconv) / hbarc * radius() * sqrt(redmass_ * params_.bindingEnergy);
     double s;
     if (table_ && table_->LookupBound(l, etaB, rhoB, s)) return s;
     if (UseURatio()) {

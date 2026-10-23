@@ -1033,6 +1033,24 @@ class AzrModel:
             lines.insert(end, f"abundanceSumSigma={float(value):g}\n")
         self._prefix = "".join(lines)
 
+    @property
+    def relativistic(self):
+        """The ``relativistic`` config key: relativistic two-body kinematics (k, eta, lab <-> c.m. from the
+        invariant mass; user guide "Relativistic Kinematics").  False when absent."""
+        for line in self._prefix.splitlines():
+            if line.strip().startswith("relativistic="):
+                return line.split("=", 1)[1].split("#")[0].strip() in ("1", "true")
+        return False
+
+    @relativistic.setter
+    def relativistic(self, value):
+        lines = self._prefix.splitlines(keepends=True)
+        lines = [ln for ln in lines if not ln.strip().startswith("relativistic=")]
+        if value:
+            end = next(i for i, ln in enumerate(lines) if ln.strip() == "</config>")
+            lines.insert(end, "relativistic=1\n")
+        self._prefix = "".join(lines)
+
     # -- measured scattering lengths ------------------------------------------
 
     @property

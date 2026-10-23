@@ -152,6 +152,12 @@ PairsTab::PairsTab(QWidget *parent) :
   QVBoxLayout *layout = new QVBoxLayout();
   layout->addWidget(pairsView);
   layout->addLayout(buttonBox);
+  relativisticCheck = new QCheckBox(tr("Relativistic kinematics"));
+  relativisticCheck->setObjectName("relativisticCheck");
+  relativisticCheck->setToolTip(tr("Channel wave numbers, Sommerfeld parameters and lab <-> c.m. energies from the invariant mass "
+                                   "(the kinematics of the LANL code EDA, ENDF KRL=1).  Level energies stay excitation energies; "
+                                   "relativistic.out lists them in EDA's E(s) convention.  Saved as relativistic=1 in <config>."));
+  layout->addWidget(relativisticCheck);
   layout->addWidget(abundancesBox);
   setLayout(layout);
 }
@@ -269,9 +275,18 @@ void PairsTab::setAbundanceSumSigma(double sigma) {
   sumSigmaSpin->setValue(sigma);
 }
 
+bool PairsTab::relativistic() const {
+  return relativisticCheck->isChecked();
+}
+
+void PairsTab::setRelativistic(bool on) {
+  relativisticCheck->setChecked(on);
+}
+
 void PairsTab::reset() {
   abundancesModel->clear();
   sumSigmaSpin->setValue(0.0);
+  relativisticCheck->setChecked(false);
 }
 
 PairsModel *PairsTab::getPairsModel() {

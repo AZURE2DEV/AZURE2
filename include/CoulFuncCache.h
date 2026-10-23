@@ -30,6 +30,9 @@ class CoulFuncCache {
     // two pairs sharing z1, z2, redmass and radius but carrying different
     // potentials would silently share a memo.
     long hybridTag;
+    // m1 + m2 (MeV) under relativistic kinematics, where k and eta depend on more than the reduced
+    // mass; 0 otherwise, so non-relativistic keys compare as before.
+    double mtot = 0.0;
 
     // Comparison operator for use as map key
     bool operator<(const CoulFuncKey &other) const {
@@ -40,6 +43,7 @@ class CoulFuncCache {
       if (l != other.l) return l < other.l;
       if (fabs(radius - other.radius) > 1e-10) return radius < other.radius;
       if (hybridTag != other.hybridTag) return hybridTag < other.hybridTag;
+      if (fabs(mtot - other.mtot) > 1e-10) return mtot < other.mtot;
       return false;
     }
   };

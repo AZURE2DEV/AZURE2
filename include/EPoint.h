@@ -298,6 +298,8 @@ class EPoint {
   /// Centre-of-mass gamma cross section.
   void ConvertCrossSectionGammas(PPair *);
   double CalculateCrossSectionConversionFactor(PPair *, PPair *);
+  /// Relativistic lab -> c.m. angle and dOmega_lab/dOmega_cm of the detected particle (relativistic=1).
+  bool RelativisticLabToCM(PPair *entrancePair, PPair *exitPair, double nrCMAngle, double &cmAngle, double &factor) const;
   double CalculateCrossSectionGammaConversionFactor(PPair *);
   /// Append the next Legendre polynomial; they are stored in order L = 0, 1, 2, ...
   void AddLegendreP(double);

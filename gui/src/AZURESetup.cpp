@@ -350,6 +350,9 @@ bool AZURESetup::readFile(QString filename) {
   GetConfig().hardSphereMaxL = levelsTab->maxL();
   pairsTab->setAbundanceSumSigma(fileAbundanceSumSigma);
   GetConfig().abundanceSumSigma = fileAbundanceSumSigma;
+  pairsTab->setRelativistic(fileRelativistic);
+  GetConfig().relativistic = fileRelativistic;
+  GetConfig().relativisticReferencePair = fileRelativisticReferencePair;
 
   // The optional <abundances> block sits between </levels> and <segmentsData>.
   line = QString("");
@@ -638,6 +641,8 @@ bool AZURESetup::readConfig(QTextStream &inStream) {
   fileIncludeAllJPi = false;
   fileMaxL = -1;
   fileAbundanceSumSigma = 0.0;
+  fileRelativistic = false;
+  fileRelativisticReferencePair = 0;
   QString line("");
   while (line.trimmed() != QString("</config>") && !inStream.atEnd()) {
     line = inStream.readLine();
@@ -651,6 +656,10 @@ bool AZURESetup::readConfig(QTextStream &inStream) {
       fileMaxL = value.toInt();
     else if (key == "abundanceSumSigma")
       fileAbundanceSumSigma = value.toDouble();
+    else if (key == "relativistic")
+      fileRelativistic = (value == "1" || value == "true");
+    else if (key == "relativisticReferencePair")
+      fileRelativisticReferencePair = value.toInt();
   }
   if (line.trimmed() != QString("</config>")) return false;
 
@@ -746,6 +755,13 @@ bool AZURESetup::writeFile(QString filename) {
   GetConfig().abundanceSumSigma = pairsTab->abundanceSumSigma();
   if (pairsTab->abundanceSumSigma() > 0.0)
     out << "abundanceSumSigma=" << pairsTab->abundanceSumSigma() << " #Sum-to-one prior on the isotopic abundances" << Qt::endl;
+  // Relativistic kinematics: written only when on, so non-relativistic projects are unchanged.
+  GetConfig().relativistic = pairsTab->relativistic();
+  if (pairsTab->relativistic()) {
+    out << "relativistic=1 #Relativistic two-body kinematics (k, eta, lab <-> c.m. from the invariant mass)" << Qt::endl;
+    if (GetConfig().relativisticReferencePair > 0)
+      out << "relativisticReferencePair=" << GetConfig().relativisticReferencePair << " #Reference pair of relativistic.out" << Qt::endl;
+  }
   out << "</config>" << Qt::endl;
 
   // Write potential section after config.  A pair may be switched on while the

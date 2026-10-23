@@ -5,6 +5,7 @@
 #include <complex>
 #include <memory>
 #include <gsl/gsl_sf_coulomb.h>
+#include "Kinematics.h"
 
 class PPair;
 class CoulFuncCache;
@@ -140,6 +141,8 @@ class CoulFunc {
   int z2_;
   int lLast_;
   double redmass_;
+  /// k and eta of this pair (relativistic or not, Kinematics.h).
+  Kinematics::Channel kin_;
   double radiusLast_;
   double energyLast_;
   struct CoulWaves coulLast_;

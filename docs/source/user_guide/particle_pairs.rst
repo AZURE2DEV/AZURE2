@@ -199,3 +199,57 @@ single-nucleus ones.
    n+\ :sup:`22`\ Ne), while the abundance is that of the target isotope
    (:sup:`22`\ Ne). Every label shows both; the parameter name uses the
    compound nucleus, ``abundance_10_23``.
+
+Relativistic Kinematics
+-----------------------
+
+The **Relativistic kinematics** check box below the pairs table (``relativistic=1``
+in the ``<config>`` block, so command-line and pyazr runs of the project use it
+too) takes every channel's kinematics from the invariant mass :math:`s` instead
+of the non-relativistic relations.  It follows the prescription of the LANL code
+EDA (Haeck, Hale, Paris and Thompson, LA-UR-19-31084, the ENDF ``KRL=1`` flag).
+For a pair of masses :math:`m_1, m_2` (:math:`m = m_1 + m_2`) at centre-of-mass
+kinetic energy :math:`T = \sqrt{s} - m`:
+
+.. math::
+
+   s = m^2 + 2 m_2 E_\text{lab}, \qquad
+   k^2 = \frac{(s - m^2)\,(s - (m_1 - m_2)^2)}{4 s}, \qquad
+   \eta = \frac{Z_1 Z_2 \alpha\,(s - m_1^2 - m_2^2)}{2 k \sqrt{s}},
+
+so the penetrabilities, shift functions, hard-sphere and Coulomb phases, the
+:math:`\pi/k^2` factor and the bound-state decay constants (:math:`k^2 < 0`) all
+use these, and a data point's :math:`T` comes from its lab energy through
+:math:`s` (and, for a beta-delayed particle, from the decay at rest).  Particle
+lab angles and differential cross sections are converted with the exact Lorentz
+boost (:math:`\gamma`-ray data already were).  At low energy everything reduces
+to the familiar :math:`k^2 = 2\mu T`; threshold quantities (scattering lengths,
+the Wigner limit, ANCs) keep the reduced mass.
+
+What changes, and by how much.  Per channel the corrections are of order
+:math:`T/m`: at :math:`E_\text{lab} = 20` MeV, :math:`k` of n+\ :sup:`4`\ He is
+0.19 % larger, :math:`\eta` of p+\ :sup:`4`\ He 1.6 % larger, and c.m. angles and
+cross sections move by up to 0.2° and 0.7 %.  The larger effect is between
+partitions: the excitation energy of a point is :math:`T + S_c`, and with
+:math:`T` from :math:`s` the energy scales of two pairs with a large Q value no
+longer differ by a constant.  In :sup:`5`\ He (Q = 17.6 MeV) an n+\ :sup:`4`\ He
+point at :math:`E_n = 20` MeV sits 27 keV away from where non-relativistic
+kinematics puts it, relative to d+t.
+
+Level energies.  The R-matrix denominators stay :math:`E_\lambda - E_x`: level
+energies remain excitation energies, comparable with tabulations.  EDA instead
+uses :math:`E(s) = (s - m_0^2)/(2 m_0)` of a reference pair; on the excitation
+scale :math:`E_s = S_0 + T_0 + T_0^2/(2 m_0)`, :math:`T_0 = E_x - S_0`, which is
+43 keV above :math:`E_x` at :math:`T_0 = 20` MeV in A = 5.  ``relativistic.out``
+(:doc:`../reference/output_files`) lists every level in that convention, with
+the widths scaled by :math:`dE_s/dE_x = 1 + T_0/m_0`, for comparison with EDA
+parameters or ENDF ``KRL=1`` evaluations; ``relativisticReferencePair=<key>``
+chooses the reference pair (default: the first particle pair).
+
+Limits.  The hybrid nuclear-potential Coulomb functions (a ``<potential>``
+block) solve a Schrödinger equation inside the channel radius and are refused
+with ``relativistic=1``.  Target effects (beam spread, target thickness, sub-point
+grids) and energy shifts convert lab energy intervals to the c.m. frame with the
+constant ratio :math:`m_2/m`; the exact ratio :math:`m_2/\sqrt{s}` differs by
+:math:`T/m` of the interval (0.4 % of a few-keV shift at 20 MeV).  Photon
+energies in capture channels do not include the recoil term.

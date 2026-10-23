@@ -83,6 +83,18 @@ runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
   applies to particle and photon channels alike, and to `gamma=0.0` channels
   handed to `AzrModel.add_level`. It is also why `deactivate_level` both zeroes
   *and* fixes a level's widths — zeroing alone would already have fixed them.
+- **Kinematics is non-relativistic unless `relativistic=1` is in the `<config>` block**
+  (feature/relativistic-kinematics, 2026-10-22; Pairs tab check box, `AzrModel.relativistic`). With the
+  key, k, eta, lab <-> c.m. energies, particle lab angles and cross sections come from the invariant mass
+  (the LANL/EDA prescription, ENDF KRL=1; `include/Kinematics.h`); level energies stay excitation energies
+  and `output/relativistic.out` lists them in EDA's E(s) convention (E_s - E_x = T0^2/(2 m0), 43 keV at
+  T0 = 20 MeV in A = 5). It matters for data above ~10 MeV and above all BETWEEN partitions with a big Q:
+  in 5He an n+4He point at E_n = 20 MeV moves 27 keV relative to d+t. It is a model choice: a project fitted
+  with it must be evaluated with it (the key travels with the file), and changing it moves chi2. Refused
+  with a `<potential>` block (hybrid Coulomb functions). Target-effect kernels and energy shifts still use
+  the constant c.m./lab ratio m2/m (an O(T/m) error of those small intervals). rmfit's conv pieces use the
+  non-relativistic E_cm map: switch them off (`conv_grid=False`) for a relativistic model until rmfit knows
+  the key. Test: `tests/relativistic/check.sh`.
 - **A J^π is in the calculation only if an active level carries it — unless
   `includeAllJPi=1` is in the `<config>` block.** The elastic T-matrix diagonal
   is `e^{2iω} − e^{2i(ω−φ)}(1 + U)`, so a J^π group with channels and no levels

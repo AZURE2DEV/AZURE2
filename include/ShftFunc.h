@@ -28,6 +28,7 @@ class ShftFunc {
     neutral_ = (pPair->GetZ(1) * pPair->GetZ(2) == 0);
     zz_ = pPair->GetZ(1) * pPair->GetZ(2);
     redmass_ = pPair->GetRedMass();
+    kin_ = Kinematics::Channel(pPair);
     table_ = SharedTable(neutral_);
     params_.whitFunc = std::make_unique<WhitFunc>(pPair);
   };
@@ -81,6 +82,7 @@ class ShftFunc {
   bool neutral_;
   int zz_;
   double redmass_;
+  Kinematics::Channel kin_;
   /// The universal Coulomb table for a charged pair when Config::useCoulombTable is set.
   const CoulombTable *table_;
   static const CoulombTable *SharedTable(bool neutral);

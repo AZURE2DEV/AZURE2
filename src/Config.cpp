@@ -42,6 +42,8 @@ void Config::Reset() {
   includeAllJPi = false;    // Off unless the <config> block says so: older projects compute as they always did
   hardSphereMaxL = -1;
   abundanceSumSigma = 0.0;
+  relativistic = false;      // Off unless the <config> block says so: non-relativistic kinematics as before
+  relativisticReferencePair = 0;
 }
 
 /*!
@@ -157,6 +159,10 @@ int Config::ReadConfigFile() {
       hardSphereMaxL = atoi(value.c_str());
     else if (key == "abundanceSumSigma")
       abundanceSumSigma = atof(value.c_str());
+    else if (key == "relativistic")
+      relativistic = (value == "1" || value == "true");
+    else if (key == "relativisticReferencePair")
+      relativisticReferencePair = atoi(value.c_str());
   }
   if (line != "</config>") return -1;
   in.close();

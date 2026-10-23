@@ -88,6 +88,8 @@ class AZUREMainThread : public QThread {
     configure_.includeAllJPi = configure.includeAllJPi;
     configure_.hardSphereMaxL = configure.hardSphereMaxL;
     configure_.abundanceSumSigma = configure.abundanceSumSigma;
+    configure_.relativistic = configure.relativistic;
+    configure_.relativisticReferencePair = configure.relativisticReferencePair;
     connect(&buffer_, SIGNAL(updateLog(QString)), tab->runtimeText, SLOT(write(QString)));
     connect(tab->stopAZUREButton, SIGNAL(clicked()), this, SLOT(stopAZURE()));
     connect(this, SIGNAL(readyToRun()), &worker_, SLOT(run()));

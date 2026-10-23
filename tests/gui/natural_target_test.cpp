@@ -131,6 +131,10 @@ int main(int argc, char** argv) {
     ok("sum sigma default off", pairsTab.abundanceSumSigma() == 0.0);
     pairsTab.setAbundanceSumSigma(0.01);
     ok("sum sigma set", pairsTab.abundanceSumSigma() == 0.01);
+    ok("relativistic kinematics off by default", !pairsTab.relativistic());
+    pairsTab.setRelativistic(true);
+    ok("relativistic kinematics set", pairsTab.relativistic());
+    pairsTab.setRelativistic(false);
     ok("a negative value is refused", !abundances->setEntry(Nucleus{7, 13}, -1.0, false, 0.0));
   }
 

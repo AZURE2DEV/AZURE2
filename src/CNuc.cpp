@@ -156,6 +156,13 @@ int CNuc::GetPairNumFromKey(int key) {
 
 int CNuc::Fill(const Config &configure, std::pair<int, double> radii) {
   transformedIn_ = false;
+  if (configure.relativistic && configure.useHybridMethod) {
+    // The hybrid model solves a Schrodinger equation with a nuclear potential inside the channel
+    // radius; it has no relativistic form here, and mixing the two would be neither.
+    configure.outStream << "ERROR: relativistic=1 cannot be combined with the hybrid nuclear-potential "
+                           "Coulomb functions (a <potential> block)." << std::endl;
+    return -1;
+  }
   int PairNum, LevelNum, ChannelNum, JGroupNum;
   int maxLValue = 0;
   std::map<std::pair<int, int>, std::vector<int> > channelsListed;  // (group, level) -> group channel numbers, in line order
@@ -2572,6 +2579,81 @@ void CNuc::PrintTransformParams(const Config &configure) {
     }
   } else
     configure.outStream << "Could not save parameters.out file." << std::endl;
+  if (configure.relativistic) this->PrintRelativisticParams(configure);
+}
+
+/*!
+ * relativistic.out (runs with relativistic=1): the physical level parameters of parameters.out in
+ * the level-energy convention of the LANL code EDA (ENDF KRL=1, LA-UR-19-31084).  AZURE2 keeps the
+ * R-matrix energy linear in the excitation energy E_x = sqrt(s) - M; EDA uses
+ * E(s) = (s - m0^2) / (2 m0), m0 the mass of a reference pair.  With T0 = E_x - S0 the reference
+ * pair's kinetic energy, E(s) = T0 + T0^2 / (2 m0), written here on the excitation scale (+ S0).
+ * Widths follow the energy derivative dE(s)/dE_x = 1 + T0/m0 at the level (the penetrabilities
+ * are the same in both): Gamma' = Gamma (1 + T0/m0), gamma' = gamma sqrt(1 + T0/m0).  This is exact
+ * at each level energy; away from it the two energy dependences differ at second order in T0/m0.
+ */
+void CNuc::PrintRelativisticParams(const Config &configure) const {
+  char filename[256];
+  snprintf(filename, sizeof(filename), "%srelativistic.out", configure.outputdir.c_str());
+  std::ofstream out(filename);
+  if (!out) {
+    configure.outStream << "Could not save relativistic.out file." << std::endl;
+    return;
+  }
+  // the reference pair of each compound nucleus: the configured key if it belongs to it, else its first particle pair
+  auto reference = [&](int nucleus) -> const PPair * {
+    const PPair *first = nullptr;
+    for (int p = 1; p <= this->NumPairs(); p++) {
+      const PPair *pp = const_cast<CNuc *>(this)->GetPair(p);
+      if (pp->GetPType() != 0 || pp->GetNucleus() != nucleus) continue;
+      if (pp->GetPairKey() == configure.relativisticReferencePair) return pp;
+      if (!first) first = pp;
+    }
+    return first;
+  };
+  out << "# Relativistic kinematics (relativistic=1).  Level parameters of parameters.out in the E(s) convention" << std::endl
+      << "# of the LANL code EDA (ENDF KRL=1): E(s) = (s - m0^2)/(2 m0) for the reference pair (mass m0, threshold S0)," << std::endl
+      << "# here E_s = S0 + T0 + T0^2/(2 m0) with T0 = E_x - S0; Gamma_s = Gamma (1 + T0/m0), g_s = g sqrt(1 + T0/m0)." << std::endl
+      << "# relativisticReferencePair=<key> in <config> chooses the reference pair (default: the first particle pair)." << std::endl;
+  out << std::fixed;
+  for (int j = 1; j <= this->NumJGroups(); j++) {
+    JGroup *theJGroup = const_cast<CNuc *>(this)->GetJGroup(j);
+    const PPair *ref = reference(theJGroup->GetNucleus());
+    if (!ref) continue;
+    const double m0 = (ref->GetM(1) + ref->GetM(2)) * uconv;
+    const double s0 = ref->GetSepE() + ref->GetExE();
+    for (int la = 1; la <= theJGroup->NumLevels(); la++) {
+      ALevel *theLevel = theJGroup->GetLevel(la);
+      const double ex = theLevel->GetTransformE();
+      const double t0 = ex - s0;
+      const double d = 1.0 + t0 / m0;
+      out.precision(1);
+      out << "J = " << std::setw(4) << theJGroup->GetJ() << (theJGroup->GetPi() == -1 ? '-' : '+');
+      out.precision(6);
+      out << "  E_x = " << std::setw(11) << ex << " MeV  E_s = " << std::setw(11) << s0 + t0 + t0 * t0 / (2.0 * m0)
+          << " MeV  (E_s - E_x = " << std::setw(9) << 1e3 * t0 * t0 / (2.0 * m0) << " keV, reference R = "
+          << ref->GetPairKey() << ", dE_s/dE_x = " << std::setprecision(8) << d << ")" << std::endl;
+      for (int ch = 1; ch <= theJGroup->NumChannels(); ch++) {
+        AChannel *theChannel = theJGroup->GetChannel(ch);
+        if (theChannel->GetRadType() != 'P') continue;
+        const PPair *exitPair = const_cast<CNuc *>(this)->GetPair(theChannel->GetPairNum());
+        out.precision(1);
+        out << "    R = " << std::setw(2) << exitPair->GetPairKey() << "  l = " << std::setw(2) << theChannel->GetL()
+            << "  s = " << std::setw(4) << theChannel->GetS();
+        out.precision(6);
+        const double localEnergy = ex - exitPair->GetSepE() - exitPair->GetExE();
+        if (localEnergy < 0.0) {
+          out << "  (bound in this channel)";
+        } else {
+          out << "  G = " << std::setw(13) << fabs(theLevel->GetBigGamma(ch)) * 1e3 << " keV  G_s = " << std::setw(13)
+              << fabs(theLevel->GetBigGamma(ch)) * d * 1e3 << " keV";
+        }
+        out << "  g = " << std::setw(13) << theLevel->GetTransformGamma(ch) << "  g_s = " << std::setw(13)
+            << theLevel->GetTransformGamma(ch) * sqrt(d) << " MeV^(1/2)" << std::endl;
+      }
+      out << std::endl;
+    }
+  }
 }
 
 /* Gets the transformet parameters*/

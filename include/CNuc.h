@@ -188,6 +188,8 @@ class CNuc {
   vector_r GetTransformParams(const Config &configure);
   /// Write the transformed parameters to parameters.out.
   void PrintTransformParams(const Config &);
+  /// relativistic.out: the parameters.out levels in the E(s) (LANL EDA, ENDF KRL=1) convention.
+  void PrintRelativisticParams(const Config &) const;
 
   // -- fitting --------------------------------------------------------------
   /// Seed the Minuit parameter array from the current level parameters.

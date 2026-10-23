@@ -155,6 +155,13 @@ add_test(NAME pyazr_nds_local_exfor
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/nds_local_exfor_test.py)
 
+# Relativistic kinematics: AzrModel.relativistic, and an engine session on the n + 4He hard-sphere model of
+# tests/relativistic against sigma = 4 pi sin^2(ka)/k^2 with k from the invariant mass.
+add_test(NAME pyazr_relativistic
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/relativistic_test.py)
+set_tests_properties(pyazr_relativistic PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
 # Scattering lengths: the <scatteringLengths> block helpers, azure2.scattering_lengths against the
 # tests/scattering_length reference values, the constraint chi2, its gradient and Jacobian rows.
 add_test(NAME pyazr_scattering_length

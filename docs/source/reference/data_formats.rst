@@ -171,6 +171,16 @@ lines, which a reader that does not know a key skips:
    :math:`((\sum_k w_k - 1)/s)^2` to the chi-squared, :math:`w_k` its
    abundances; absent or ``0`` is off.
 
+``relativistic=1``
+   Relativistic two-body kinematics: channel wave numbers, Sommerfeld
+   parameters, lab <-> c.m. energies, angles and cross sections from the
+   invariant mass (:doc:`../user_guide/particle_pairs`, "Relativistic
+   Kinematics"). Absent or ``0``: non-relativistic, as before.
+
+``relativisticReferencePair=<key>``
+   The pair whose :math:`E(s)` ``relativistic.out`` uses; absent or ``0``: the
+   first particle pair of each compound nucleus.
+
 Several compound nuclei.  The compound nucleus of a pair is inferred from its
 columns (particle pair :math:`Z = z_1 + z_2`, :math:`A = \mathrm{round}(m_1 +
 m_2)`; gamma pair the heavy particle; beta pair the daughter), and a project

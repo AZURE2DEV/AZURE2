@@ -142,6 +142,13 @@ class Config {
   /// nuclei: ((sum w) - 1)^2 / s^2 is added to chi-squared when s > 0.  Read from "abundanceSumSigma=s"
   /// in the <config> block; 0 (off) when absent.
   double abundanceSumSigma;
+  /// Relativistic two-body kinematics (Kinematics.h): channel wave numbers, Sommerfeld parameters and
+  /// lab <-> c.m. energies from the invariant mass.  Read from "relativistic=1" in the <config> block;
+  /// off (non-relativistic, as before) when absent.
+  bool relativistic;
+  /// Key of the particle pair whose E(s) = (s - m0^2)/(2 m0) relativistic.out uses (the LANL/EDA
+  /// level-energy convention); "relativisticReferencePair=<key>" in <config>, 0 = the first pair.
+  int relativisticReferencePair;
   /// A constant indicating the maximum order of the Legendre polynomials to calculate.
   static const int maxLOrder = 20;
   /// Read the <config> block, then the optional <potential> block. -1 if the file cannot be read.
