@@ -66,7 +66,9 @@ compare "$WORK/m1_nlw/$OUT" 4 "(d) M1, --no-long-wavelength"
 # (e) reuse across the switch: long-wavelength run first, then --no-long-wavelength in the same directory
 run e1_reuse e1
 run e1_reuse e1 --no-long-wavelength output/intEC.dat
-if grep -q "different integration grid or different inputs" "$WORK/e1_reuse/run.log" && [ -s "$WORK/e1_reuse/$OUT" ] && cmp -s <(awk '{print $4}' "$WORK/e1_reuse/$OUT") <(awk '{print $4}' "$WORK/e1_nlw/$OUT"); then
+if grep -q "different integration grid or different inputs" "$WORK/e1_reuse/run.log" && [ -s "$WORK/e1_reuse/$OUT" ] &&
+   awk 'NR == FNR { a[FNR] = $4; n = FNR; next } { if ($4 != a[FNR]) bad = 1; m = FNR } END { exit (bad || m != n) }' \
+     "$WORK/e1_nlw/$OUT" "$WORK/e1_reuse/$OUT"; then   # no cmp on the Windows runners
   ok "(e) intEC.dat of a long-wavelength run is refused (signature warning) and recomputed with --no-long-wavelength"
 else
   bad "(e) intEC.dat of a long-wavelength run was reused with --no-long-wavelength"
