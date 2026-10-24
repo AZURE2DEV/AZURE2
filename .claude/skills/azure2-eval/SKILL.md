@@ -1796,8 +1796,9 @@ Plain-text, section-tagged; prefer the GUI or `AzrModel` over hand edits.
     first member without a shiftfn, a later member declaring one. The
     degeneracy note counts one free constant per member. pyazr:
     `Segment.shift_fn_group`, `add_data_segment(shift_fn_group=...)`.
-    rmfit's Sharded evaluator does not keep such a group together across
-    shards (as for shiftgroup): use SingleSession or the CLI.
+    rmfit's Sharded evaluator keeps such a group in one shard and never splits a
+    member (since 2026-10-24, as for shiftgroup since 2026-10-22); a pyazr/rmfit
+    older than that splits the group and the shard without the owner errors.
     Test: `tests/shift_fn_groups`.
   - `normgroup <label>` (keyword block, 2026-10-14): the same for the
     normalization -- every segment with the label uses the norm of the FIRST
