@@ -107,6 +107,7 @@ struct RuntimeOptions {
   bool use_coulomb_table = true;    // Config::useCoulombTable
   bool replace_grids = true;        // Config::replaceSubPointGrids
   bool use_ec_table = true;         // Config::useECTable
+  bool ec_convection_current = true;  // Config::ecConvectionCurrent (exact-form external capture only)
   std::string coulomb_table;        // Config::coulombTablePath ("" = the default file)
 };
 
@@ -143,6 +144,7 @@ void apply_options(Config &config, const RuntimeOptions &opt) {
   config.coulombTablePath = opt.coulomb_table;
   config.replaceSubPointGrids = opt.replace_grids;
   config.useECTable = opt.use_ec_table;
+  config.ecConvectionCurrent = opt.ec_convection_current;
   // Park shares Brune's per-level shift functions, so it switches Brune on.
   if (opt.use_park)
     config.paramMask |= (Config::USE_PARK_FORMALISM | Config::USE_BRUNE_FORMALISM);
@@ -564,6 +566,7 @@ PYBIND11_MODULE(_azure2, m) {
       .def_readwrite("coulomb_table", &RuntimeOptions::coulomb_table)
       .def_readwrite("replace_grids", &RuntimeOptions::replace_grids)
       .def_readwrite("use_ec_table", &RuntimeOptions::use_ec_table)
+      .def_readwrite("ec_convection_current", &RuntimeOptions::ec_convection_current)
       .def_readwrite("use_rmc", &RuntimeOptions::use_rmc)
       .def_readwrite("use_park", &RuntimeOptions::use_park);
 
