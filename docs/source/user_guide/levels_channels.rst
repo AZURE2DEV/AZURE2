@@ -125,6 +125,15 @@ Fix Width
    line. Before 2026-10-17 the widths were stored in line order, so a reordered
    or shortened level silently got the wrong widths.
 
+   Lines belong to one level when they carry the same level ID (the ninth
+   column) within 1 keV, or the identical energy. Two levels of one
+   :math:`J^\pi` closer than 1 keV with different IDs (a narrow level on top of
+   a broad one) stay two levels, with a ``WARNING: level ID ... is within 1 keV``
+   line. Before 2026-10-24 any lines within 1 keV were read as one level
+   whatever their IDs: the later level's widths replaced the earlier one's and
+   its parameters disappeared from the fit, with only a "lists channel ... twice"
+   warning.
+
 Channel Configuration
 ---------------------
 
