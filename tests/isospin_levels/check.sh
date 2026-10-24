@@ -21,6 +21,9 @@
 #     equals the hard-tie model's; the gradient check (from shifts -0.8 / -0.6, off the minimum)
 #     agrees for all 13 free parameters, soft slots included; LM is refused; a MIGRAD fit reports
 #     the soft penalty in Total-Isospin-Chi-Squared and isospin.out.
+# (h) relativistic=1: isospin.out keeps the energy relations (excitation scale), the 4H member equals the
+#     standalone 4H project run relativistically, the key changes the tied cross section, and the gradient
+#     check passes through the ties.
 #
 # The models are written by make_models.py (committed).
 
@@ -229,6 +232,62 @@ if [ -s "$WORK/nt.dat" ]; then
     ok "soft-tie fit: $(grep -o 'Total-Isospin-Chi-Squared: [^ ]*' "$WORK/softfit/output/chiSquared.out"), $(grep 'soft-tie penalty' "$WORK/softfit/output/isospin.out")"
   else
     bad "soft-tie fit did not report the soft penalty"; tail -5 "$WORK/softfit/run.log"
+  fi
+fi
+
+# ---- (h) relativistic kinematics (relativistic=1) through the ties ------------------------------------
+# Level energies stay excitation energies under relativistic=1, so the ties are unchanged: isospin.out obeys
+# the same energy relations, the 4H member equals the standalone 4H project run relativistically from its
+# formal parameters, the key does change the cross sections, and the gradient check passes through the ties.
+rel() { awk '/<\/config>/ { print "relativistic=1" } { print }' "$1" > "$2"; }
+rel "$M/iso.azr" "$WORK/iso_rel.azr"
+run isorel "$WORK/iso_rel.azr" 3 "--no-brune"
+isor="$WORK/isorel/output/isospin.out"
+if [ -s "$isor" ] && [ -s "$WORK/isorel/output/relativistic.out" ]; then
+  if python3 - "$isor" <<'EOF'
+import sys
+lv, cur = {}, None
+for raw in open(sys.argv[1]):
+    t = raw.split()
+    if raw.startswith("level ID"):
+        cur = int(t[2]); lv[cur] = {}
+    elif cur is not None and "formal E =" in raw:
+        lv[cur][t[0] + t[1]] = float(t[t.index("E") + 2])
+li, h, he = "Z=3A=4", "Z=1A=4", "Z=2A=4"
+bad = 0
+for name, a, b in [("E(4H)  = E(4Li) - 0.86", lv[1][h], lv[1][li] - 0.86),
+                   ("E(4He) = E(4Li) + 19.8136 - 0.64", lv[1][he], lv[1][li] + 19.8136 - 0.64)]:
+    d = abs(a - b) / max(abs(b), 1.0)
+    print(("  ok   " if d < 1e-12 else "  FAIL ") + "relativistic isospin.out: " + name + " (rel %.1e)" % d)
+    bad += d >= 1e-12
+sys.exit(bad)
+EOF
+  then nok=$((nok + 2)); else nbad=$((nbad + 1)); fi
+  read -r e4h g4h < <(awk '/^level ID 1/ { on = 1 } on && /Z=1 A=4/ { for (i = 1; i <= NF; i++) if ($i == "E") e = $(i + 2); getline; for (i = 1; i <= NF; i++) if ($i == "gamma") g = $(i + 2); print e, g; exit }' "$isor")
+  awk -v e="$e4h" -v g="$g4h" '/<levels>/ { print; getline; $3 = e; $12 = g; print; next } { print }' "$M/standalone_4H.azr" > "$WORK/standalone_abs.azr"
+  rel "$WORK/standalone_abs.azr" "$WORK/standalone_rel.azr"
+  run alonerel "$WORK/standalone_rel.azr" 3 "--no-brune --no-transform"
+  a="$WORK/isorel/output/AZUREOut_aa=2_R=2.extrap"; b="$WORK/alonerel/output/AZUREOut_aa=2_R=2.extrap"
+  if [ -s "$a" ] && [ -s "$b" ] && [ -s "$WORK/a.xs" ]; then
+    xs "$a" > "$WORK/ar.xs"; xs "$b" > "$WORK/br.xs"
+    r="$(maxrel "$WORK/ar.xs" "$WORK/br.xs")"
+    if le "$r" 1e-10; then ok "relativistic: 4H member == standalone relativistic 4H (max rel $r)"; else bad "relativistic: 4H member vs standalone: max rel $r"; fi
+    r="$(maxrel "$WORK/ar.xs" "$WORK/a.xs")"
+    if ! le "$r" 1e-7; then ok "relativistic=1 changes the tied n+t cross section (max rel $r against the non-relativistic run)"; else bad "relativistic=1 left the tied n+t cross section unchanged (max rel $r)"; fi
+  else
+    bad "relativistic: an extrapolation is missing"; tail -5 "$WORK/isorel/run.log" "$WORK/alonerel/run.log"
+  fi
+else
+  bad "relativistic iso.azr wrote no isospin.out or relativistic.out"; tail -5 "$WORK/isorel/run.log"
+fi
+if [ -s "$WORK/nt.dat" ]; then
+  mkdir -p "$WORK/gcr/output" "$WORK/gcr/checks"; cp "$WORK"/*.dat "$WORK/gcr/"; rel "$M/iso_free.azr" "$WORK/gcr/t.azr"
+  (cd "$WORK/gcr" && printf '2\n\n\n7\n' | AZURE_GRAD_CHECK=exit AZURE_GRAD_CHECK_N=50 run_limited 900 "$AZURE2_BIN" --no-brune --use-gradient --no-gui --no-readline t.azr > run.log 2>&1)
+  line="$(grep "components with relative" "$WORK/gcr/run.log" | head -1)"
+  if echo "$line" | grep -q "energy 0/2 gamma 0/3 isospin 0/3; Jacobian path: energy 0/2 gamma 0/3 isospin 0/3"; then
+    ok "relativistic gradient check: energies, widths, shifts and mix agree with finite differences on both paths"
+  else
+    bad "relativistic gradient check: '$line'"
   fi
 fi
 
