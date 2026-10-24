@@ -401,8 +401,9 @@ The GUI review: `printf '1\n<reaction>.sav\n\n7\n' | AZURE2 <flags> --no-gui --n
     base model's directory) and `single_variant` links one next to the model, but the
     structure, window and levelscan variants link only `data/`.
   - `shiftgroup` (2026-10-22): all pieces of a group go to ONE shard, which keeps the
-    keyword (a group with a free shift is one shift-solo unit). `shiftfngroup`
-    (feature/shift-fn-groups) is NOT handled by `Sharded`: use SingleSession or the CLI.
+    keyword (a group with a free shift is one shift-solo unit). `shiftfngroup` (AZURE2 dev
+    62392fc) likewise since 2026-10-24: one shard per group, members never split, the
+    declaring member first (`tests/test_shiftfngroup_sharded.py`; needs a >= 62392fc build).
   - Free `sqrtshift` and `shiftfn` parameters (2026-10-22; before, rmfit refused to open
     such a model): keys `shift_sqrt[segK]` / `shift_fn[segK aj]`, penalties as in pyazr's
     `penalties()`, bounds like constant shifts (fixed unless `shifts_free`); a segment with
