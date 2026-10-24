@@ -79,6 +79,8 @@ class SegLine {
     varyEnergyShiftSqrt_ = 0;
     // shared constant energy shift: off unless a trailing "shiftgroup" block is present
     shiftGroup_ = "";
+    // shared shift function with per-segment constants: off unless a "shiftfngroup" block is present
+    shiftFnGroup_ = "";
     // shared normalization: off unless a trailing "normgroup" block is present
     normGroup_ = "";
     covarianceFile_ = "";
@@ -214,6 +216,14 @@ class SegLine {
         // expression is read by the Equation class (as <targetInt> equations);
         // it is quoted, and blanks inside it are dropped.  On a shift group it
         // goes on the group's first segment and applies to every member.
+        //
+        // A shift-function-group block,
+        //   shiftfngroup <label>
+        // makes every segment carrying the same label apply the shift function
+        // declared (shiftfn) on the first of them, with that segment's
+        // parameters, while each keeps its OWN constant energy shift.  For one
+        // energy-dependent calibration of an experiment whose per-segment
+        // constants differ (e.g. digitization offsets of separate figures).
         // A data-covariance block,
         //   covariance <file>
         // couples the segment's points to every other segment naming the same
@@ -268,6 +278,12 @@ class SegLine {
             }
           } else if (keyword == "shiftgroup") {
             if (!(advancedStream >> shiftGroup_)) {
+              stream.setstate(std::ios::failbit);
+              break;
+            }
+          } else if (keyword == "shiftfngroup") {
+            if (!(advancedStream >> shiftFnGroup_)) {
+              parseError_ = "shiftfngroup needs a label";
               stream.setstate(std::ios::failbit);
               break;
             }
@@ -404,6 +420,10 @@ class SegLine {
    */
   std::string shiftGroup() const { return shiftGroup_; };
   /*!
+   * Returns the shift-function-group label ("" when the segment is in no such group).
+   */
+  std::string shiftFnGroup() const { return shiftFnGroup_; };
+  /*!
    * Returns the normalization-group label ("" when the segment is in no group).
    */
   std::string normGroup() const { return normGroup_; };
@@ -480,6 +500,7 @@ class SegLine {
   double energyShiftSqrtError_;
   int varyEnergyShiftSqrt_;
   std::string shiftGroup_;
+  std::string shiftFnGroup_;
   std::string normGroup_;
   std::string covarianceFile_;
   bool hasSqrtShift_;

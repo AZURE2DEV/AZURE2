@@ -275,6 +275,25 @@ appears with the following fields:
    (10 keV penalty) and the :math:`\sqrt{E}` coefficient (0.02
    MeV\ :sup:`1/2`).
 
+   When the segments of one experiment need their own constant shifts (each
+   angle digitized from a separate figure carries its own offset) but share
+   one energy-dependent calibration, use ``shiftfngroup <label>`` instead of
+   ``shiftgroup``: every segment with the label applies the function declared
+   on the first of them, with that segment's parameters, and keeps its own
+   constant :math:`\Delta E`, value, uncertainty and vary flag::
+
+      1 3 3 0 10  90  90 4 1 1 0 -0.0047 0.01 1 data/pp.dat 0 0 shiftfngroup H shiftfn "a0*(sqrt(x)-sqrt(1.5))" 1 0 0.02 1
+      1 3 3 0 10 125 125 4 1 1 0 -0.0009 0.01 1 data/pp.dat 0 0 shiftfngroup H
+      1 3 3 0 10 141 141 4 1 1 0 -0.0117 0.01 1 data/pp.dat 0 0 shiftfngroup H
+      1 3 3 0 10 165 165 4 1 1 0 -0.0183 0.01 1 data/pp.dat 0 0 shiftfngroup H
+
+   fits four constants and one :math:`\sqrt{E}` coefficient; each
+   constant is then that segment's shift at :math:`E_0` = 1.5 MeV. A segment
+   may be in a ``shiftgroup`` or a ``shiftfngroup``, not both, and only the
+   first member declares the ``shiftfn``. Members that are single-energy
+   angular distributions add nothing to the coefficient: their own constants
+   absorb it.
+
    *Centre the function inside the data.* The constant :math:`\Delta E` and
    its penalty refer to the energy where :math:`f` vanishes. Written as
    ``a0*sqrt(x)``, that is :math:`E = 0`, far below the data, and the 10 keV

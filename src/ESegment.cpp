@@ -76,6 +76,7 @@ ESegment::ESegment(SegLine segLine) {
   shiftGroup_ = segLine.shiftGroup();
   shiftLeaderPos_ = -1;
   hasShiftGroupFollowers_ = false;
+  shiftFnGroup_ = segLine.shiftFnGroup();
   normGroup_ = segLine.normGroup();
   covarianceFile_ = segLine.covarianceFile();
   normLeaderPos_ = -1;
@@ -169,6 +170,7 @@ ESegment::ESegment(ExtrapLine extrapLine) {
   shiftGroup_ = "";
   shiftLeaderPos_ = -1;
   hasShiftGroupFollowers_ = false;
+  shiftFnGroup_ = "";
   normGroup_ = "";
   normLeaderPos_ = -1;
   hasNormGroupFollowers_ = false;
@@ -717,6 +719,8 @@ int ESegment::GetShiftLeaderPos() const { return shiftLeaderPos_; }
 bool ESegment::IsShiftGroupFollower() const { return shiftLeaderPos_ >= 0; }
 
 bool ESegment::HasShiftGroupFollowers() const { return hasShiftGroupFollowers_; }
+
+std::string ESegment::GetShiftFnGroup() const { return shiftFnGroup_; }
 
 void ESegment::SetShiftGroupFollower(int pos, double shift) {
   shiftLeaderPos_ = pos;

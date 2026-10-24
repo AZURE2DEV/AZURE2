@@ -214,7 +214,9 @@ Stoichiometric weights need not sum to one: give that sample ``sum 0``.
 
 A ``<segmentsData>`` or ``<segmentsTest>`` line may end with the keyword
 blocks ``sqrtshift <b> <bError> <vary>``, ``sample <1|name>`` and
-``shiftgroup <label>`` (in any order; writers put ``sample`` last).  ``natural``
+``shiftgroup <label>`` (in any order; writers put ``sample`` last); a data
+line also ``shiftfngroup <label>``, ``normgroup <label>``, ``covariance
+<file>`` and ``shiftfn "<f(x)>" N ...`` (:doc:`../user_guide/segments`).  ``natural``
 is the keyword's older name and is still read.
 ``sample 1`` multiplies the segment's own term and each composite component
 by the abundance of the term's entrance pair's compound nucleus in the

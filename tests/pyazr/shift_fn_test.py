@@ -66,6 +66,27 @@ back = SegmentSet._parse(last.split(), 99)
 check("... and reads back", back.shift_fn == "a0*x^1.5+a1" and back.shift_group == "H"
       and back.shift_fn_params == ((0.001, 0.002, True), (0.0, 0.0, False)), (back.shift_fn, back.shift_fn_params))
 
+m.add_data_segment("data/xs_90.dat", 1, 1, observable="differential-cm", angle_min=90, angle_max=90,
+                   energy_shift=0.001, energy_shift_error=0.01, vary_shift=True, shift_fn_group="F")
+lines = [l for l in m.to_text().splitlines() if l.strip()]
+last = lines[[i for i, l in enumerate(lines) if l.strip() == "</segmentsData>"][0] - 1]
+check("add_data_segment writes a shiftfngroup block", last.split()[-2:] == ["shiftfngroup", "F"], last)
+back = SegmentSet._parse(last.split(), 100)
+check("... and reads back, with its own constant shift",
+      back.shift_fn_group == "F" and back.shift_group is None and back.shift_fn is None
+      and abs(back.energy_shift - 0.001) < 1e-12 and back.vary_shift,
+      (back.shift_fn_group, back.shift_group, back.energy_shift, back.vary_shift))
+back = SegmentSet._parse(("1 1 1 0 100 40 40 4 1 0 0 0 0 0 data/xs_40.dat 0 0 shiftfngroup F normgroup N "
+                          "shiftfn \"a0*(sqrt(x)-sqrt(1.7))\" 1 0 0.02 1").split(), 101)
+check("a shiftfngroup block does not hide the blocks after it",
+      back.shift_fn_group == "F" and back.norm_group == "N" and back.shift_fn == "a0*(sqrt(x)-sqrt(1.7))",
+      (back.shift_fn_group, back.norm_group, back.shift_fn))
+try:
+    m.add_data_segment("data/xs_90.dat", 1, 1, shift_group="G", shift_fn_group="F")
+    check("shift_group together with shift_fn_group is refused", False, "no error")
+except ValueError:
+    check("shift_group together with shift_fn_group is refused", True)
+
 print("\n3. with the engine: parameters, penalty, chi2 and Jacobian")
 try:
     from pyazr import azure2

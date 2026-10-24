@@ -1996,7 +1996,7 @@ void EData::WriteOutputFiles(const Config &configure, bool isFit, const BandData
         std::ostringstream keys;
         double lo = std::numeric_limits<double>::infinity(), hi = -lo;
         for (int m = 0; m < (int)segments_.size(); m++) {
-          if (m != pos && segments_[m].GetShiftLeaderPos() != pos) continue;
+          if (segments_[m].GetShiftFnSourcePos() != pos) continue;
           keys << (m == pos ? "" : " ") << segments_[m].GetSegmentKey();
           for (int pid = 1; pid <= segments_[m].NumPoints(); pid++) {
             EPoint *pt = segments_[m].GetPoint(pid);
@@ -3169,12 +3169,51 @@ std::set<int> ShiftFnParamRefs(const std::string &expression) {
  * declaring a function (the group's calibration belongs to its first segment), a
  * function together with a sqrt(E) term on any member (two descriptions of one
  * calibration), and an expression referring to an undeclared parameter or leaving a
- * declared one unused.  For each function the free shift terms (a, if varied, and
- * every varied aj) are checked for degeneracy over the group's data energies; a term
- * with no effect there is an error.  One log line per function.
+ * declared one unused.  A shift-function group ("shiftfngroup <label>") also applies
+ * the function of its first segment to every member, but each member keeps its own
+ * constant shift; such a group may not overlap a shift group.  For each function the
+ * free shift terms (each free constant a of its members, and every varied aj) are
+ * checked for degeneracy over the members' data energies; a term with no effect there
+ * is an error.  One log line per function.
  */
 
 int EData::ResolveShiftFunctions(const Config &configure) {
+  // Shift-function groups: the first segment with a label (file order) declares the
+  // function; the others apply it and keep their own constant shifts.
+  std::vector<int> fnGroupLeader(segments_.size(), -1);
+  {
+    std::vector<std::pair<std::string, int>> fnLeaders;  // label, leader position
+    for (int pos = 0; pos < (int)segments_.size(); pos++) {
+      const ESegment &seg = segments_[pos];
+      const std::string label = seg.GetShiftFnGroup();
+      if (label.empty()) continue;
+      if (!seg.GetShiftGroup().empty()) {
+        configure.outStream << "ERROR: Data segment #" << seg.GetSegmentKey() << " is in shift group '"
+                            << seg.GetShiftGroup() << "' and in shift-function group '" << label
+                            << "': use one of them (shiftgroup shares the constant shift as well)." << std::endl;
+        return -1;
+      }
+      auto it = std::find_if(fnLeaders.begin(), fnLeaders.end(),
+                             [&label](const std::pair<std::string, int> &e) { return e.first == label; });
+      if (it == fnLeaders.end()) {
+        fnLeaders.push_back({label, pos});
+        if (!seg.OwnsShiftFn()) {
+          configure.outStream << "ERROR: Data segment #" << seg.GetSegmentKey() << " is the first segment of "
+                              << "shift-function group '" << label << "' but declares no shiftfn: put the "
+                              << "group's shiftfn block on it." << std::endl;
+          return -1;
+        }
+        continue;
+      }
+      if (seg.OwnsShiftFn()) {
+        configure.outStream << "ERROR: Data segment #" << seg.GetSegmentKey() << " declares a shiftfn, but it is not "
+                            << "the first segment of shift-function group '" << label << "' (segment #"
+                            << segments_[it->second].GetSegmentKey() << " is): one function per group." << std::endl;
+        return -1;
+      }
+      fnGroupLeader[pos] = it->second;
+    }
+  }
   int fnStart = 0;
   for (int pos = 0; pos < (int)segments_.size(); pos++) {
     ESegment &owner = segments_[pos];
@@ -3191,7 +3230,7 @@ int EData::ResolveShiftFunctions(const Config &configure) {
     }
     std::vector<int> members{pos};
     for (int f = 0; f < (int)segments_.size(); f++)
-      if (segments_[f].GetShiftLeaderPos() == pos) members.push_back(f);
+      if (segments_[f].GetShiftLeaderPos() == pos || fnGroupLeader[f] == pos) members.push_back(f);
     for (int m : members)
       if (segments_[m].HasSqrtShiftBlock()) {
         configure.outStream << "ERROR: Data segment #" << segments_[m].GetSegmentKey() << " has a sqrtshift block and "
@@ -3218,31 +3257,47 @@ int EData::ResolveShiftFunctions(const Config &configure) {
     owner.SetShiftFnParamStart(fnStart);
     fnStart += n;
 
-    // Degeneracy check: columns = d(dE)/d(term) at the group's distinct original lab energies.
-    std::vector<double> energies;
-    for (int m : members)
+    // Degeneracy check: rows = the members' distinct original lab energies (per member,
+    // since members of a shift-function group have their own constants); columns =
+    // d(dE)/d(term) for every free constant (one per constant owner) and every varied aj.
+    std::vector<std::pair<int, double>> rows;  // constant owner position, energy
+    for (int m : members) {
+      const int constOwner = segments_[m].GetShiftLeaderPos() >= 0 ? segments_[m].GetShiftLeaderPos() : m;
+      std::vector<double> e;
       for (int pid = 1; pid <= segments_[m].NumPoints(); pid++) {
         EPoint *pt = segments_[m].GetPoint(pid);
-        energies.push_back(pt->GetOriginalEnergy() > 0 ? pt->GetOriginalEnergy() : pt->GetLabEnergy());
+        e.push_back(pt->GetOriginalEnergy() > 0 ? pt->GetOriginalEnergy() : pt->GetLabEnergy());
       }
+      std::sort(e.begin(), e.end());
+      e.erase(std::unique(e.begin(), e.end()), e.end());
+      for (double x : e) rows.push_back({constOwner, x});
+    }
+    std::vector<double> energies;
+    for (const auto &r : rows) energies.push_back(r.second);
     std::sort(energies.begin(), energies.end());
     energies.erase(std::unique(energies.begin(), energies.end()), energies.end());
     std::vector<std::string> names;
     std::vector<std::vector<double>> cols;
-    if (owner.IsVaryEnergyShift()) {
-      names.push_back("a");
-      cols.push_back(std::vector<double>(energies.size(), 1.0));
+    std::vector<int> constOwners;
+    for (const auto &r : rows)
+      if (std::find(constOwners.begin(), constOwners.end(), r.first) == constOwners.end()) constOwners.push_back(r.first);
+    for (int c : constOwners) {
+      if (!segments_[c].IsVaryEnergyShift()) continue;
+      names.push_back(constOwners.size() == 1 ? std::string("a") : "a#" + std::to_string(segments_[c].GetSegmentKey()));
+      std::vector<double> col(rows.size());
+      for (size_t r = 0; r < rows.size(); r++) col[r] = (rows[r].first == c) ? 1.0 : 0.0;
+      cols.push_back(col);
     }
     ESegment probe = owner;  // a scratch copy: the owner's own values stay untouched
     for (int j = 0; j < n; j++) {
       if (!owner.IsVaryShiftFn(j)) continue;
       const double v0 = owner.GetShiftFnValues()[j], h = 1.0e-6 * (std::fabs(v0) + 1.0);
-      std::vector<double> c(energies.size());
-      for (size_t e = 0; e < energies.size(); e++) {
+      std::vector<double> c(rows.size());
+      for (size_t r = 0; r < rows.size(); r++) {
         probe.SetShiftFnValue(j, v0 + h);
-        const double fp = probe.ShiftFnTerm(energies[e]);
+        const double fp = probe.ShiftFnTerm(rows[r].second);
         probe.SetShiftFnValue(j, v0 - h);
-        c[e] = (fp - probe.ShiftFnTerm(energies[e])) / (2.0 * h);
+        c[r] = (fp - probe.ShiftFnTerm(rows[r].second)) / (2.0 * h);
       }
       probe.SetShiftFnValue(j, v0);
       double norm = 0.0;
@@ -3259,9 +3314,11 @@ int EData::ResolveShiftFunctions(const Config &configure) {
     std::ostringstream note;
     note << "Note: shift function on segment #" << key;
     if (members.size() > 1) {
-      note << " (group '" << owner.GetShiftGroup() << "', segments #" << key;
+      const bool fnGroup = !owner.GetShiftFnGroup().empty();
+      note << " (" << (fnGroup ? "shift-function group '" + owner.GetShiftFnGroup() : "group '" + owner.GetShiftGroup())
+           << "', segments #" << key;
       for (size_t m = 1; m < members.size(); m++) note << " " << segments_[members[m]].GetSegmentKey();
-      note << ")";
+      note << (fnGroup ? "; each keeps its own constant shift)" : ")");
     }
     note << ": dE = a + " << expression << ", x = lab energy (MeV);";
     for (int j = 0; j < n; j++) {
@@ -3271,7 +3328,7 @@ int EData::ResolveShiftFunctions(const Config &configure) {
                                       : " fixed")
            << (j + 1 < n ? "," : ".");
     }
-    const int m = (int)energies.size(), k = (int)cols.size();
+    const int m = (int)rows.size(), k = (int)cols.size();
     if (k >= 2) {
       // Condition number of the column-normalised matrix (scale-free).
       double cond = std::numeric_limits<double>::infinity();
@@ -3295,7 +3352,7 @@ int EData::ResolveShiftFunctions(const Config &configure) {
       }
       note << " Condition number of the free terms (";
       for (int c = 0; c < k; c++) note << names[c] << (c + 1 < k ? ", " : "");
-      note << ") over " << m << " energ" << (m == 1 ? "y" : "ies") << " " << energies.front() << "-" << energies.back()
+      note << ") over " << m << " member energ" << (m == 1 ? "y" : "ies") << " " << energies.front() << "-" << energies.back()
            << " MeV: " << cond << ".";
       configure.outStream << note.str() << std::endl;
       if (!(cond < 1.0e8))
