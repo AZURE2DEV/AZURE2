@@ -166,6 +166,7 @@ int CNuc::Fill(const Config &configure, std::pair<int, double> radii) {
   int PairNum, LevelNum, ChannelNum, JGroupNum;
   int maxLValue = 0;
   std::map<std::pair<int, int>, std::vector<int> > channelsListed;  // (group, level) -> group channel numbers, in line order
+  std::map<std::pair<int, int>, std::set<int> > levelIDs;  // (group, level) -> level IDs of the lines that built it
   std::ifstream in(configure.configfile.c_str());
   if (!in) return -1;
   std::string line = "";
@@ -241,12 +242,42 @@ int CNuc::Fill(const Config &configure, std::pair<int, double> radii) {
           PPair *channelPair = this->GetPair(PairNum);
           this->GetJGroup(JGroupNum)->GetChannel(ChannelNum)->SetWignerLimit(channelPair->GetRedMass(), channelPair->GetChRad());
         }
+        // A line belongs to a level of its J-group that carries the same level ID within 1 keV, or failing that
+        // to one at the identical energy.  Until 2026-10-24 any level within 1 keV was taken (JGroup::IsLevel),
+        // whatever its ID, so a narrow level put next to a broad one of the same J^pi (17O+a: 3/2- at 8.2900 and
+        // 8.2893 MeV, IDs 91 and 22) was silently merged into it: its widths overwrote the broad level's and the
+        // fit lost three parameters.  Lines with other IDs within 1 keV now make their own level, with a warning.
         ALevel NewLevel(Line);
-        LevelNum = this->GetJGroup(JGroupNum)->IsLevel(NewLevel);
-        if (!LevelNum) {
-          this->GetJGroup(JGroupNum)->AddLevel(NewLevel);
-          LevelNum = this->GetJGroup(JGroupNum)->IsLevel(NewLevel);
+        JGroup *group = this->GetJGroup(JGroupNum);
+        LevelNum = 0;
+        int sameEnergy = 0, nearby = 0;
+        for (int lv = 1; lv <= group->NumLevels() && !LevelNum; lv++) {
+          const double dE = fabs(group->GetLevel(lv)->GetE() - NewLevel.GetE());
+          if (dE > 1e-3) continue;
+          if (levelIDs[std::make_pair(JGroupNum, lv)].count(Line.levelID())) LevelNum = lv;
+          else if (dE == 0. && !sameEnergy) sameEnergy = lv;
+          else if (!nearby) nearby = lv;
         }
+        if (!LevelNum && sameEnergy) {
+          LevelNum = sameEnergy;
+          const std::set<int> &ids = levelIDs[std::make_pair(JGroupNum, LevelNum)];
+          configure.outStream << "WARNING: level IDs " << *ids.begin() << " and " << Line.levelID() << " (J = "
+                              << group->GetJ() << (group->GetPi() == -1 ? "-" : "+") << ", E = " << NewLevel.GetE()
+                              << " MeV) have the same J^pi and energy; their lines are read as one level." << std::endl;
+        }
+        if (!LevelNum) {
+          group->AddLevel(NewLevel);
+          LevelNum = group->NumLevels();
+          if (nearby) {
+            const std::set<int> &ids = levelIDs[std::make_pair(JGroupNum, nearby)];
+            configure.outStream << "WARNING: level ID " << Line.levelID() << " (J = " << group->GetJ()
+                                << (group->GetPi() == -1 ? "-" : "+") << ", E = " << NewLevel.GetE()
+                                << " MeV) is within 1 keV of level ID " << *ids.begin() << " (E = "
+                                << group->GetLevel(nearby)->GetE() << " MeV); they are kept as two levels."
+                                << std::endl;
+          }
+        }
+        levelIDs[std::make_pair(JGroupNum, LevelNum)].insert(Line.levelID());
         // The width belongs to the GROUP's channel number: levels of one J-group may list their channel
         // lines in a different order, or not list a channel another level of the group carries.
         this->GetJGroup(JGroupNum)->GetLevel(LevelNum)->SetGammaFromLine(ChannelNum, Line);
