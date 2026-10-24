@@ -98,7 +98,7 @@ class azure2:
                  ignore_externals=True, transform=True,
                  use_long_wavelength=True, use_gsl_coul=False, use_rmc=False,
                  use_park=False, use_coulomb_table=True, coulomb_table=None,
-                 replace_grids=True, use_ec_table=True):
+                 replace_grids=True, use_ec_table=True, ec_convection_current=True):
         """Build the R-matrix engine for ``file`` in this interpreter.
 
         Parameters
@@ -131,6 +131,11 @@ class azure2:
             ``--no-ec-table``).  Shifted points are then evaluated at their
             shifted energies.  ``False`` integrates at every energy and
             interpolates shifted amplitudes between the segment's points.
+        ec_convection_current : with ``use_long_wavelength=False``, external
+            capture carries the convection-current part of the electric
+            multipole operator as well as its charge (extended Siegert) part
+            (the default; CLI ``--no-ec-convection-current`` turns it off).
+            No effect in the long-wavelength approximation.
         use_rmc : use the R-matrix-with-channels (RMC) formalism instead of
             Brune; mutually exclusive with ``use_brune`` (Brune wins).
         use_park : use Park's level-dependent boundary conditions (Phys. Rev.
@@ -163,7 +168,7 @@ class azure2:
             use_gsl_coul=bool(use_gsl_coul), use_rmc=bool(use_rmc),
             use_park=bool(use_park), use_coulomb_table=bool(use_coulomb_table),
             coulomb_table=str(coulomb_table or ""), replace_grids=bool(replace_grids),
-            use_ec_table=bool(use_ec_table))
+            use_ec_table=bool(use_ec_table), ec_convection_current=bool(ec_convection_current))
 
         opts = _azure2.RuntimeOptions()
         for name, value in self.options.items():

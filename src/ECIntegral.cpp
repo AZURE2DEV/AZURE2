@@ -285,7 +285,10 @@ complex ECIntegral::CalculateDirect(int theInitialLValue, int theFinalLValue,
   double chanRad = pair()->GetChRad();
   double redMass = pair()->GetRedMass();
 
-  EffectiveCharge effectiveChargeFunc(pair(), inEnergy - levelEnergy, theLMult);
+  // The convection-current term needs the orbital momenta of this term (electric, exact form only).
+  bool convection = configure_ && configure_->ecConvectionCurrent && radType == 'E';
+  EffectiveCharge effectiveChargeFunc(pair(), inEnergy - levelEnergy, theLMult,
+                                      convection ? theInitialLValue : -1, convection ? theFinalLValue : -1);
 
   params_.effectiveCharge = &effectiveChargeFunc;
   params_.liValue = theInitialLValue;

@@ -8,8 +8,15 @@ pair's multipolarity mask selects the term:
 
   e1.azr : E1 only (mask 1);   m1.azr : M1 only (mask 2)
 
-Each has one angle-integrated segment of 16O(p,g)17F(0.495) at the energies in ECM.  truth.py computes the same cross
-sections independently; check.sh runs both models with and without --no-long-wavelength.
+Each has one angle-integrated segment of 16O(p,g)17F(0.495) at the energies in ECM.
+
+  a12c.azr : 12C(a,g)16O(g.s.), external capture only, E1 (l = 1) and E2 (l = 2) (mask 5), ANC 100 fm^-1/2,
+             a = 5.43 fm, one 30 MeV level (alpha width 1e-6 eV) in 1- and in 2+; energies ECM_A.  An N = Z pair: the
+             long-wavelength E1 charge nearly vanishes (-0.00098), so the exact form and its convection-current term
+             are large here.
+
+truth.py computes the same cross sections independently; check.sh runs the models with and without
+--no-long-wavelength and --no-ec-convection-current.
 
 Run from this directory: python3 make_models.py   (writes models/)
 """
@@ -18,6 +25,8 @@ import os
 HERE = os.path.dirname(os.path.abspath(__file__))
 MP, M16 = 1.007276, 15.99053
 ECM = [0.1, 0.3, 0.6, 1.0, 1.5, 2.0, 3.0]
+MA, M12, SA = 4.002603, 12.0, 7.16192
+ECM_A = [0.6, 1.0, 1.5, 2.0, 3.0]
 
 CONFIG = """<config>
 true #Perform A-Matrix Calculation
@@ -63,6 +72,25 @@ def model(name, mask):
             f.write(f"{e:.10g}  0  1  0.1\n")
 
 
+def model_a12c():
+    alpha = f"0 1 0 1 0 {MA} {M12} 2 6 {SA} {SA} 0 0 0.0 0 5.43 0 0 0"
+    gam = f"1 1 0 1 0 0 15.9949 0 8 {SA} 0 0 0 0.0 10 0 0 0 5"
+    levels = [
+        [line(0, 1, 0, 1, 0, 0, 1, 100, alpha)],                                                  # 16O g.s., ANC
+        [line(1, -1, 30, 1, 0, 2, 2, 1e-6, alpha), line(1, -1, 30, 2, 0, 2, 2, 0, gam)],          # E1 entrance
+        [line(2, 1, 30, 1, 0, 4, 3, 1e-6, alpha), line(2, 1, 30, 2, 0, 4, 3, 0, gam)],            # E2 entrance
+    ]
+    elab = [e * (MA + M12) / M12 for e in ECM_A]
+    seg = f"1 1 2 {elab[0] - 0.01:.6f} {elab[-1] + 0.01:.6f} 0 0 0 1 0 0 0 0 0 data/ecm_a.dat 0 0"
+    txt = (CONFIG + "<levels>\n" + "\n\n".join("\n".join(lv) for lv in levels) + "\n\n</levels>\n<segmentsData>\n"
+           + seg + "\n</segmentsData>\n<segmentsTest>\n</segmentsTest>\n<targetInt>\n</targetInt>\n")
+    open(os.path.join(HERE, "models", "a12c.azr"), "w").write(txt)
+    with open(os.path.join(HERE, "models", "data", "ecm_a.dat"), "w") as f:
+        for e in elab:
+            f.write(f"{e:.10g}  0  1  0.1\n")
+
+
 if __name__ == "__main__":
     model("e1", 1)
     model("m1", 2)
+    model_a12c()
