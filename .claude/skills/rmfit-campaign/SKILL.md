@@ -461,11 +461,15 @@ The GUI review: `printf '1\n<reaction>.sav\n\n7\n' | AZURE2 <flags> --no-gui --n
   truncated logs looked like a broken node; it was the quota.
 - **Park-mode campaigns (`"use_park": true`, since 2026-10-06).** (1) The J > 0 wall
   (`sum (J/1e-3)^2` over levels with `J = 1 - sum gamma^2 dS/dE < 0`) is inside the
-  engine's scalar chi2, so the `plain` objective sees it, but the least-squares rows
-  (`rows_objective`, the LM polish) do not: a Park polish can step a saturating level
-  past J = 0 unnoticed. Check `m.park_norms(x)` (or `Total-Park-Chi-Squared` in a mode-1
-  `chiSquared.out`) on every candidate before accepting it; a level there has no
-  R-matrix meaning. Adding the J rows to the residual vector is the fix, not done yet.
+  engine's scalar chi2. **Since 2026-10-24 rmfit carries it as residual rows**
+  (`engine.ParkWall`: one row per level, `min(J, 0)/1e-3`, after the penalty/prior rows,
+  counted in `penalty`; Jacobian rows from the worker's `park_jac`), and in Park mode
+  `objective()` always takes the residual path -- the engine's scalar chi2 already holds
+  the wall, so the old plain path counted it once per shard. Test
+  `tests/test_park_wall_13n.py`. Before that date the LM polish did not see the wall at
+  all; check `m.park_norms(x)` on any Park result from an older rmfit. On the 13C+a merged
+  model 25 broad levels/poles sit at J 0.19-0.43, and a x1.3 amplitude step puts 23 of them
+  past the wall (13C+a/10-24-26_merged_park/readme).
   (2) `--sav` seeds are applied by parameter NAME with no basis conversion: a Brune
   campaign's `.sav` seeded into a Park campaign (or back) gives amplitudes in the wrong
   basis. Convert first: a CLI mode-1 run in the target mode with that `.sav` as the
