@@ -1,0 +1,56 @@
+<config>
+true #Perform A-Matrix Calculation
+output/ #Full Path to Output Directory
+checks/ #Full Path to Checks Directory
+none #Compond Nucleus Check
+none #Boundary Condition Check
+none #Data Check
+none #Lo-Matrix and Penetrability Check
+none #Legendre Polynomial Check
+none #Coulomb Amplitudes Check
+none #Reaction Pathway Check
+none #Angular Distributions Check
+includeAllJPi=1
+maxOrbitalMomentum=3
+</config>
+<levels>
+0 1 3.000000 1 1 1 0 0 1 1 0 2e+06 1 1 1 1 0 2.01410177812 2.01410177812 1 1 0.0 0.0 0 0 0.0 0 5.0 0.857438 0.857438 0
+
+2 1 4.000000 1 1 1 4 0 2 1 0 1.5e+06 1 1 1 1 0 2.01410177812 2.01410177812 1 1 0.0 0.0 0 0 0.0 0 5.0 0.857438 0.857438 0
+2 1 4.000000 1 1 1 0 4 2 1 0 1e+06 1 1 1 1 0 2.01410177812 2.01410177812 1 1 0.0 0.0 0 0 0.0 0 5.0 0.857438 0.857438 0
+2 1 4.000000 1 1 1 4 4 2 1 0 -800000 1 1 1 1 0 2.01410177812 2.01410177812 1 1 0.0 0.0 0 0 0.0 0 5.0 0.857438 0.857438 0
+
+1 -1 5.000000 1 1 1 2 2 3 1 0 2.5e+06 1 1 1 1 0 2.01410177812 2.01410177812 1 1 0.0 0.0 0 0 0.0 0 5.0 0.857438 0.857438 0
+
+2 -1 6.000000 1 1 1 2 2 4 1 0 3e+06 1 1 1 1 0 2.01410177812 2.01410177812 1 1 0.0 0.0 0 0 0.0 0 5.0 0.857438 0.857438 0
+
+0 -1 7.000000 1 1 1 2 2 5 1 0 2e+06 1 1 1 1 0 2.01410177812 2.01410177812 1 1 0.0 0.0 0 0 0.0 0 5.0 0.857438 0.857438 0
+
+3 -1 8.000000 1 1 1 2 6 6 1 0 1e+06 1 1 1 1 0 2.01410177812 2.01410177812 1 1 0.0 0.0 0 0 0.0 0 5.0 0.857438 0.857438 0
+
+</levels>
+<segmentsData>
+1 1 1 1.9 10.1 0 180 9 b:y 1 0 0 0 0 0 data/by.dat
+1 1 1 1.9 10.1 0 180 9 t:y 1 0 0 0 0 0 data/ty.dat
+1 1 1 1.9 10.1 0 180 9 b:iT11 1 0 0 0 0 0 data/biT11.dat
+1 1 1 1.9 10.1 0 180 9 b:T20 1 0 0 0 0 0 data/bT20.dat
+1 1 1 1.9 10.1 0 180 9 b:T21 1 0 0 0 0 0 data/bT21.dat
+1 1 1 1.9 10.1 0 180 9 b:T22 1 0 0 0 0 0 data/bT22.dat
+1 1 1 1.9 10.1 0 180 9 t:T20 1 0 0 0 0 0 data/tT20.dat
+1 1 1 1.9 10.1 0 180 9 t:T21 1 0 0 0 0 0 data/tT21.dat
+1 1 1 1.9 10.1 0 180 9 t:T22 1 0 0 0 0 0 data/tT22.dat
+1 1 1 1.9 10.1 0 180 9 b:yy 1 0 0 0 0 0 data/byy.dat
+1 1 1 1.9 10.1 0 180 9 b:xx 1 0 0 0 0 0 data/bxx.dat
+1 1 1 1.9 10.1 0 180 9 b:zz 1 0 0 0 0 0 data/bzz.dat
+1 1 1 1.9 10.1 0 180 9 b:xz 1 0 0 0 0 0 data/bxz.dat
+1 1 1 1.9 10.1 0 180 9 b:y*t:y 1 0 0 0 0 0 data/by_x_ty.dat
+1 1 1 1.9 10.1 0 180 9 b:x*t:x 1 0 0 0 0 0 data/bx_x_tx.dat
+1 1 1 1.9 10.1 0 180 9 b:z*t:z 1 0 0 0 0 0 data/bz_x_tz.dat
+1 1 1 1.9 10.1 0 180 9 b:yy*t:yy 1 0 0 0 0 0 data/byy_x_tyy.dat
+1 1 1 1.9 10.1 0 180 9 e1:y 1 0 0 0 0 0 data/e1y.dat
+1 1 1 1.9 10.1 0 180 9 b:y>e1:y 1 0 0 0 0 0 data/by_to_e1y.dat
+</segmentsData>
+<segmentsTest>
+</segmentsTest>
+<targetInt>
+</targetInt>

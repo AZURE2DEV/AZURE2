@@ -435,6 +435,15 @@ class Session {
     }
     return to_array(out);
   }
+  py::array_t<double> tie_all_rwa(const py::array_t<double, py::array::forcecast> &p) {
+    vector_r v = to_vector(p), out;
+    expect_all(v, "tie_all_rwa");
+    {
+      ConfigScope guard(config_, &ecCache_);
+      out = api_->TieAllRWA(v);
+    }
+    return to_array(out);
+  }
   py::array_t<double> transform_all_rwa_full(const py::array_t<double, py::array::forcecast> &p) {
     vector_r v = to_vector(p), out;
     expect_all(v, "transform_all_rwa_full");
@@ -651,6 +660,8 @@ PYBIND11_MODULE(_azure2, m) {
            py::call_guard<py::gil_scoped_release>(), py::arg("params"))
       .def("transform_rwa", &Session::transform_rwa, py::arg("params"))
       .def("transform_all_rwa", &Session::transform_all_rwa, py::arg("params"))
+      .def("tie_all_rwa", &Session::tie_all_rwa, py::arg("params"),
+           "Every parameter with the derived isospin slots recomputed from the free ones (<isospin> block).")
       .def("transform_all_rwa_full", &Session::transform_all_rwa_full, py::arg("params"),
            "As transform_all_rwa, returning every R-matrix parameter's physical value, fixed ones included.")
       .def("calculate_chi2_rwa", &Session::calculate_chi2_rwa,

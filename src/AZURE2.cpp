@@ -1074,6 +1074,9 @@ std::string createPrettyParameterName(const std::string &paramName) {
 
   // Electron screening: "screening_<n>" -> "Screening U_e (eV), effect n"
   if (paramName.find("screening_") == 0) return "Screening U_e (eV), effect " + paramName.substr(10);
+  // Isospin levels: "isospin_shift_Z_A", "isospin_mix_k"
+  if (paramName.find("isospin_shift_") == 0) return "Isospin Coulomb Shift (MeV) " + paramName.substr(14);
+  if (paramName.find("isospin_mix_") == 0) return "Isospin-Forbidden Amplitude " + paramName.substr(12);
 
   // Isotopic abundance: "abundance[_<sample>]_Z_A" -> "Abundance [sample ..] Z=.. A=.."
   if (paramName.find("abundance_") == 0) {
@@ -1185,6 +1188,8 @@ int runMCMC(Config &configure, const MCMCParams &mcmcParams) {
       configure.outStream << "Creating New param.par File..." << std::endl;
       params.WriteUserParameters(configure, false);
     }
+    // A parameter file may hold values (or a free flag) for derived isospin slots.
+    compound->SyncIsospinParams(params.GetMinuitParams());
 
     // Setup compound nucleus from parameters
     compound->FillCompoundFromParams(params.GetMinuitParams().Params());

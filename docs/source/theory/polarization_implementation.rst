@@ -554,12 +554,14 @@ central differences to about :math:`10^{-6}` of the column scale.
 What is not done
 ----------------
 
-* **Tensor observables** need a spin-1 projectile and rank-2 operators. For
-  particle channels the amplitude matrix carries all channel spins and
-  projections already, so the missing part is the observable side; for capture,
-  Seyler and Weller's Eqs. (22)–(25) give the :math:`c_k`, :math:`d_k` and
-  :math:`e_k` coefficients in the same notation as the :math:`b_k` already
-  coded.
+* **Tensor observables in capture.** For particle channels they are done
+  (isDiff 9, below). For capture, Seyler and Weller's Eqs. (22)–(25) give the
+  :math:`c_k`, :math:`d_k` and :math:`e_k` coefficients in the same notation as
+  the :math:`b_k` already coded.
+* **In-plane outgoing components** (:math:`P_{x'}`, :math:`K_x^{x'}`,
+  :math:`K_z^{z'}` ...). They need the exit frame (:math:`z'` along
+  :math:`\mathbf k_\text{out}`) pinned; only normal (*y*) exit operators are
+  meaningful in isDiff 9 today.
 * **Attenuation coefficients for the capture** :math:`A_y`. When a segment
   carries target effects, ``EPoint::CalcLegendreP`` folds the geometric
   attenuation :math:`Q_k` into :math:`P_k`, but there is no :math:`Q_k^1` for
@@ -573,3 +575,57 @@ What is not done
   but never wrong.
 * **Photon polarization** (linear or circular) for capture exits. The capture
   analyzing power is the only capture polarization observable implemented.
+
+General spin observables (isDiff 9)
+-----------------------------------
+
+The amplitude matrix of the previous sections holds :math:`M(s'\nu';s\nu)` in
+the channel-spin basis. Decomposing both indices with the Lane–Thomas
+coefficients the :math:`A_y` code already uses (``ParticleCG``, particle 1
+first),
+
+.. math::
+
+   F(m_3 m_4; m_1 m_2) = \sum_{s s'} \langle j_1 m_1 j_2 m_2|s\nu\rangle
+                        \langle j_3 m_3 j_4 m_4|s'\nu'\rangle M(s'\nu';s\nu),
+
+gives the amplitude in the product basis of the particles' projections, and
+every observable is one trace (Ohlsen, Rep. Prog. Phys. 35 (1972) 717):
+
+.. math::
+
+   O = \frac{\mathrm{Re}\,\big(c\,\mathrm{Tr}(F A F^\dagger B)\big)}{\mathrm{Tr}(F F^\dagger)},
+
+with :math:`A` a product of beam and target operators, :math:`B` of exit
+operators (unity for analyzing powers and correlations) and :math:`c = i` for
+:math:`iT_{kq}`. ``Polarization::AmplitudeMatrix::SpinObservableValue`` builds
+:math:`F`, :math:`A` and :math:`B` (``SpinObservable::TermMatrix``) and takes the
+trace; the token grammar is in :doc:`../reference/data_formats`. ``isDiff 7``
+keeps its own, original code path, so existing projects are byte-identical.
+
+**Adjoint.** With :math:`N=\mathrm{Tr}(FAF^\dagger B)` and :math:`D=\mathrm{Tr}(FF^\dagger)`,
+:math:`\partial N/\partial F^* = BFA`, :math:`\partial N^*/\partial F^* = B^\dagger F A^\dagger`
+and :math:`\partial D/\partial F^* = F`, so
+
+.. math::
+
+   \frac{\partial O}{\partial F^*} = \frac{\tfrac12\,(c\,BFA + c^*B^\dagger F A^\dagger) - O\,F}{D}.
+
+:math:`F` is linear in :math:`M` with real coefficients and :math:`M` linear in
+:math:`T`, so ``SpinObservableBar`` maps this back to the amplitude slots and the
+existing ``PathwayAdjoint`` finishes the contraction. ``AZURE_GRAD_CHECK`` agrees
+with central differences to :math:`10^{-9}` on the test toys.
+
+**Validation** (``Aeql4/10-18-26_spin_impl/check`` in the fit archive):
+
+* an independent code (mpmath Coulomb functions, sympy Clebsch–Gordan, its own
+  S-matrix and operators) on p+\ :sup:`3`\ He with :math:`l`- and :math:`s`-mixing
+  (15 observables), d+\ :sup:`4`\ He (13, tensor powers) and identical-boson d+d
+  (19, symmetrized): agreement to :math:`10^{-6}`–:math:`10^{-7}`, the precision
+  of the toy's numerical :math:`dS/dE`;
+* identities to round-off: ``b:y`` = isDiff 7; :math:`A_{xx}+A_{yy}+A_{zz}=0`;
+  the spherical–Cartesian relations; parity zeros (``b:x``, ``b:z``, ``b:x*t:y``);
+* time reversal in a reaction (:sup:`3`\ H(p,n)\ :sup:`3`\ He against
+  :sup:`3`\ He(n,p)\ :sup:`3`\ H at the same excitation energy): beam analyzing
+  power = outgoing polarization of the inverse, target analyzing power = the
+  other outgoing polarization, and the transfer coefficients, to :math:`10^{-9}`.

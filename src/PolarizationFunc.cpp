@@ -370,4 +370,137 @@ double AmplitudeMatrix::AnalyzingPowerAy() const {
   return 2.0 * std::imag(interference) / denominator;
 }
 
+AmplitudeMatrix::Product AmplitudeMatrix::BuildProduct(const SpinObservable &obs) const {
+  // Both channel-spin indices decomposed into the particles' projections with the same Lane-Thomas
+  // coefficients A_y uses (particle 1, the light one, first):
+  //   F(m3 m4; m1 m2) = sum_{s s'} (j1 m1 j2 m2|s nu)(j3 m3 j4 m4|s' nu') M(s nu -> s' nu').
+  // Projections are ordered m = j, j-1, ..., -j, as in SpinObservable::TermMatrix, and a two-particle
+  // index is (row of particle 1) * dim2 + (row of particle 2).
+  PPair *entrance = compound_->GetPair(aa_);
+  PPair *exit = compound_->GetPair(ir_);
+  const double j[5] = {0.0, entrance->GetJ(1), entrance->GetJ(2), exit->GetJ(1), exit->GetJ(2)};
+  int d[5];
+  for (int p = 1; p <= 4; p++) d[p] = (int)std::lround(2.0 * j[p] + 1.0);
+
+  Product P;
+  P.din = d[1] * d[2];
+  P.dout = d[3] * d[4];
+  P.F.assign(P.dout * P.din, complex(0.0, 0.0));
+  P.slots.assign(amplitudes_.size(), {});
+  for (std::size_t a = 0; a < amplitudes_.size(); a++) {
+    const Amplitude &am = amplitudes_[a];
+    for (int r1 = 0; r1 < d[1]; r1++)
+      for (int r2 = 0; r2 < d[2]; r2++) {
+        const double m1 = j[1] - r1, m2 = j[2] - r2;
+        if (!Same(m1 + m2, am.v)) continue;
+        const double cin = ParticleCG(j[1], j[2], am.s, m1, m2, am.v);
+        if (std::fabs(cin) < 1.e-14) continue;
+        for (int r3 = 0; r3 < d[3]; r3++)
+          for (int r4 = 0; r4 < d[4]; r4++) {
+            const double m3 = j[3] - r3, m4 = j[4] - r4;
+            if (!Same(m3 + m4, am.vp)) continue;
+            const double cout = ParticleCG(j[3], j[4], am.sp, m3, m4, am.vp);
+            if (std::fabs(cout) < 1.e-14) continue;
+            const int idx = (r3 * d[4] + r4) * P.din + (r1 * d[2] + r2);
+            P.F[idx] += cin * cout * am.value;
+            P.slots[a].push_back(std::make_pair(idx, cin * cout));
+          }
+      }
+  }
+
+  // Entrance operator A = (beam term) x (target term), exit operator B = (e1 term) x (e2 term); a particle
+  // without a term contributes the unit matrix.
+  auto kron = [&](int pa, int pb) {
+    std::vector<complex> ma(d[pa] * d[pa], complex(0.0, 0.0)), mb(d[pb] * d[pb], complex(0.0, 0.0));
+    for (int r = 0; r < d[pa]; r++) ma[r * d[pa] + r] = 1.0;
+    for (int r = 0; r < d[pb]; r++) mb[r * d[pb] + r] = 1.0;
+    for (const SpinTerm &t : obs.terms) {
+      if (t.who == pa) ma = SpinObservable::TermMatrix(t, j[pa]);
+      if (t.who == pb) mb = SpinObservable::TermMatrix(t, j[pb]);
+    }
+    const int n = d[pa] * d[pb];
+    std::vector<complex> m(n * n, complex(0.0, 0.0));
+    for (int a1 = 0; a1 < d[pa]; a1++)
+      for (int b1 = 0; b1 < d[pb]; b1++)
+        for (int a2 = 0; a2 < d[pa]; a2++)
+          for (int b2 = 0; b2 < d[pb]; b2++)
+            m[(a1 * d[pb] + b1) * n + (a2 * d[pb] + b2)] = ma[a1 * d[pa] + a2] * mb[b1 * d[pb] + b2];
+    return m;
+  };
+  P.A = kron(1, 2);
+  P.B = kron(3, 4);
+  return P;
+}
+
+namespace {
+
+//! B F A for F (dout x din), A (din x din), B (dout x dout), all row-major.
+std::vector<complex> Sandwich(const std::vector<complex> &B, const std::vector<complex> &F,
+                              const std::vector<complex> &A, int dout, int din) {
+  std::vector<complex> FA(dout * din, complex(0.0, 0.0)), BFA(dout * din, complex(0.0, 0.0));
+  for (int o = 0; o < dout; o++)
+    for (int i = 0; i < din; i++) {
+      const complex f = F[o * din + i];
+      if (f == complex(0.0, 0.0)) continue;
+      for (int k = 0; k < din; k++) FA[o * din + k] += f * A[i * din + k];
+    }
+  for (int o = 0; o < dout; o++)
+    for (int p = 0; p < dout; p++) {
+      const complex b = B[o * dout + p];
+      if (b == complex(0.0, 0.0)) continue;
+      for (int k = 0; k < din; k++) BFA[o * din + k] += b * FA[p * din + k];
+    }
+  return BFA;
+}
+
+std::vector<complex> Adjoint(const std::vector<complex> &m, int n) {
+  std::vector<complex> a(n * n);
+  for (int r = 0; r < n; r++)
+    for (int c = 0; c < n; c++) a[r * n + c] = std::conj(m[c * n + r]);
+  return a;
+}
+
+}  // namespace
+
+double AmplitudeMatrix::SpinObservableValue(const SpinObservable &obs) const {
+  const Product P = BuildProduct(obs);
+  // N = Tr(F A F^dagger B) = sum_{o,i} conj(F_oi) (B F A)_oi,  D = sum |F_oi|^2.
+  const std::vector<complex> BFA = Sandwich(P.B, P.F, P.A, P.dout, P.din);
+  complex N(0.0, 0.0);
+  double D = 0.0;
+  for (std::size_t x = 0; x < P.F.size(); x++) {
+    N += std::conj(P.F[x]) * BFA[x];
+    D += std::norm(P.F[x]);
+  }
+  if (D <= 0.0) return 0.0;
+  return std::real(obs.Prefactor() * N) / D;
+}
+
+std::vector<complex> AmplitudeMatrix::SpinObservableBar(const SpinObservable &obs) const {
+  std::vector<complex> bar(amplitudes_.size(), complex(0.0, 0.0));
+  const Product P = BuildProduct(obs);
+  const std::vector<complex> BFA = Sandwich(P.B, P.F, P.A, P.dout, P.din);
+  const std::vector<complex> BhFAh = Sandwich(Adjoint(P.B, P.dout), P.F, Adjoint(P.A, P.din), P.dout, P.din);
+  complex N(0.0, 0.0);
+  double D = 0.0;
+  for (std::size_t x = 0; x < P.F.size(); x++) {
+    N += std::conj(P.F[x]) * BFA[x];
+    D += std::norm(P.F[x]);
+  }
+  if (D <= 0.0) return bar;
+  const complex c = obs.Prefactor();
+  const double O = std::real(c * N) / D;
+  // O = Re(c N)/D with N = Tr(F A F^+ B):  dN/dF* = B F A,  d(N*)/dF* = B^+ F A^+,  dD/dF* = F, so
+  //   dO/dF* = [ (c B F A + c* B^+ F A^+)/2 - O F ] / D.
+  // F is linear in M with real coefficients, so a slot's cotangent is the coefficient-weighted sum; the
+  // factor of two is the cotangent convention AMatrixFunc uses (as in AnalyzingPowerBar).
+  for (std::size_t a = 0; a < amplitudes_.size(); a++)
+    for (const std::pair<int, double> &sl : P.slots[a]) {
+      const int x = sl.first;
+      const complex g = (0.5 * (c * BFA[x] + std::conj(c) * BhFAh[x]) - O * P.F[x]) / D;
+      bar[a] += 2.0 * sl.second * g;
+    }
+  return bar;
+}
+
 }  // namespace Polarization

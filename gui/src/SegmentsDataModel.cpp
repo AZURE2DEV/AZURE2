@@ -205,6 +205,8 @@ QVariant SegmentsDataModel::data(const QModelIndex &index, int role) const {
         return QString(tr("<center>Angle Integrated (E2)</center>"));
       else if (line.dataType == 7)
         return QString(tr("<center>Analyzing Power</center>"));
+      else if (line.dataType == 9)
+        return QString(tr("<center>Spin: %1</center>")).arg(line.spinObservable);
       else
         return QString(tr("<center>Angle Integrated</center>"));
     } else if (index.column() == 8)
@@ -429,6 +431,11 @@ bool SegmentsDataModel::setData(const QModelIndex &index, const QVariant &value,
   return false;
 }
 
+void SegmentsDataModel::setLineSpin(int row, const QString &token) {
+  if (row < 0 || row >= segDataLineList.size()) return;
+  segDataLineList[row].spinObservable = token;
+}
+
 void SegmentsDataModel::setLineExtras(int row, const QString &tokens) {
   if (row < 0 || row >= segDataLineList.size()) return;
   segDataLineList[row].extraTokens = tokens;
@@ -482,6 +489,7 @@ int SegmentsDataModel::isSegDataLine(const SegmentsDataData &line) const {
         tempLine.varyNorm == line.varyNorm &&
         tempLine.phaseJ == line.phaseJ &&
         tempLine.phaseL == line.phaseL &&
+        tempLine.spinObservable == line.spinObservable &&
         tempLine.energyShift == line.energyShift &&
         tempLine.energyShiftError == line.energyShiftError &&
         tempLine.varyEnergyShift == line.varyEnergyShift) {

@@ -2,6 +2,9 @@
 #define LEVELSTAB_H
 
 #include <QWidget>
+#include <QMap>
+#include <QSet>
+#include <QStringList>
 #include <QItemSelection>
 #include <QLineEdit>
 #include <QSpinBox>
@@ -61,6 +64,11 @@ class LevelsTab : public QWidget {
     QVector<int> channel;
   };
   EngineNumbering engineNumbering(const QList<int> &order);
+  /*! The <isospin> block, read up to </isospin> and kept verbatim; its level
+   *  IDs are remapped to the IDs the last writeNuclearFile gave the levels. */
+  bool readIsospinBlock(QTextStream &inStream);
+  bool hasIsospinBlock() const { return !isospinBlock.isEmpty(); }
+  bool writeIsospinBlock(QTextStream &outStream) const;
   void reset();
   LevelsModel *getLevelsModel() { return levelsModel; }
   /*! Hard-sphere scattering in every J^pi up to the maximum orbital momentum, levels or not
@@ -101,6 +109,9 @@ class LevelsTab : public QWidget {
   void readExistingPair(PairsData, int, bool);
 
  private:
+  QStringList isospinBlock;   // the <isospin> block's lines, without the tags
+  QMap<int, int> isospinIdMap;  // file level ID -> ID written by the last writeNuclearFile
+  QSet<int> isospinLevelIds() const;  // the level IDs the block declares ("level <id> <T>")
 
   QSpinBox *maxLSpin;
   QSpinBox *maxMultSpin;

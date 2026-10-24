@@ -865,6 +865,10 @@ class azure2:
             raise ValueError(f"x has {x.size} entries; the session has "
                              f"{len(free)} free parameters.")
         full[free] = x
+        # isospin levels: the derived (fixed) slots follow the free ones, as the
+        # engine computes them, so the snapshot and its verification see the tie
+        if len(self.parameters.isospin):
+            full = np.asarray(self.sess.tie_all_rwa(full), float)
         want = np.asarray(self.transform_all_rwa(full, free_only=False), float)
 
         path = os.path.abspath(path)
@@ -876,12 +880,21 @@ class azure2:
             model.set_abundance((p.nucleus_Z, p.nucleus_A), value=float(want[p.index]), sample=p.sample or "")
         # Electron-screening potentials are not written into the <targetInt> lines: the value there is the
         # prior's centre, and the fitted U_e travels in the .sav, like a normalization.
+        # isospin shifts and mix amplitudes (projects with an <isospin> block): the fitted
+        # values, from the rwa vector (the same in both bases; the physical transform
+        # returns only the level and abundance slots)
+        for p in self.parameters.isospin:
+            if p.name.startswith("isospin_shift_"):
+                z, a = p.name[len("isospin_shift_"):].split("_")
+                model.set_isospin_shift((int(z), int(a)), value=float(full[p.index]))
+            elif p.name.startswith("isospin_mix_"):
+                model.set_isospin_mix(int(p.name[len("isospin_mix_"):]), value=float(full[p.index]))
         model.write(path)
 
         sav = None
         if param_sav:
             sav = os.path.splitext(path)[0] + ".sav"
-            allrwa = list(np.asarray(self.sess.params_all_rwa(), float))
+            allrwa = list(full) if len(self.parameters.isospin) else list(np.asarray(self.sess.params_all_rwa(), float))
             free = iter(range(len(x)))
             with open(sav, "w") as fh:
                 # AZURE2 tags every parameter file with the amplitudes it holds
@@ -1300,9 +1313,11 @@ class azure2:
         Note the denominator uses the *nominal* normalization, and that
         ``norm_error`` is a percentage.  Returns ``{"norm": array, "shift":
         array, "shift_sqrt": array, "shift_fn": array}``, one entry per segment,
-        and the single numbers ``"park"`` and ``"abundance"`` (isotopic-abundance
-        priors and sum-to-one terms; both already inside the engine's chi-squared),
-        and ``"screening"``: the electron-screening priors ((U_e - nominal)/sigma)^2 of
+        and the single numbers ``"park"``, ``"abundance"`` (isotopic-abundance
+        priors and sum-to-one terms) and ``"isospin"`` (priors on the internal
+        Coulomb shifts and isospin-forbidden amplitudes of an ``<isospin>``
+        block), all three already inside the engine's chi-squared, and
+        ``"screening"``: the electron-screening priors ((U_e - nominal)/sigma)^2 of
         the <targetInt> lines with a ``screening`` block, which :meth:`objective` adds
         like the normalization terms.
         """
@@ -1383,6 +1398,16 @@ class azure2:
                     s_sum = model.abundance_sum_sigma
                 if s_sum > 0:
                     abundance += ((total - 1.0) / s_sum) ** 2
+        # Isospin levels (projects with an <isospin> block): ((x - centre)/sigma)^2
+        # for every varied shift and mix amplitude with a prior.  Added by the
+        # engine inside calculate_chi2_rwa, like the Park and abundance terms.
+        isospin = 0.0
+        for p in self.parameters.isospin:
+            if p.fixed or not p.prior_sigma:
+                continue
+            value = (float(x[p.free_index]) if p.free_index is not None and p.free_index < x.size
+                     else float(p.value))
+            isospin += ((value - p.prior_centre) / p.prior_sigma) ** 2
         # Measured scattering lengths (<scatteringLengths>): engine side as well, reported here.
         scattering_length = self.scattering_length_chi2(x)
         # Electron screening: the prior of each free U_e with a sigma (not inside calculate_chi2_rwa,
@@ -1395,7 +1420,7 @@ class azure2:
                      else float(p.value))
             screening += ((value - p.prior_nominal) / p.prior_sigma) ** 2
         return {"norm": norm, "shift": shift, "shift_sqrt": shift_sqrt, "shift_fn": shift_fn,
-                "park": park, "abundance": abundance, "scattering_length": scattering_length,
+                "park": park, "abundance": abundance, "isospin": isospin, "scattering_length": scattering_length,
                 "screening": screening}
 
     @property
@@ -1760,10 +1785,22 @@ class azure2:
         Segments that are not analyzing-power segments return their cross
         section as usual, so check what you asked for.
 
-        Defined for a spin-1/2 projectile on a spin-0 target, in the Madison
+        Defined for a spin-1/2 projectile on a target of any spin, in the Madison
         convention with y along k_in x k_out. Bounded by one in magnitude, zero
         in the pure-Coulomb limit, and zero at 0 and 180 degrees.
+
+        Spin-observable segments (``observable="spin"``, isDiff 9: target
+        analyzing powers, spin correlations, tensor analyzing powers, outgoing
+        polarizations, transfer coefficients; see :mod:`pyazr.spin`) come back
+        the same way; :meth:`calculate_spin_observable` is the same call under
+        that name.
         """
+        return self.calculate(params)
+
+    def calculate_spin_observable(self, params):
+        """Spin observables per segment (isDiff 9 and isDiff 7 segments), in the
+        cross-section slot; other segments return their cross sections.  Alias of
+        :meth:`calculate`; see :meth:`calculate_analyzing_power`."""
         return self.calculate(params)
 
     def calculate_analyzing_power_rwa(self, params):

@@ -85,6 +85,15 @@ appears with the following fields:
           :math:`A_y` is a ratio, **Vary Norm?** is disabled for it -- a
           normalization factor has no meaning for a quantity that is already
           normalized. See :doc:`../theory/polarization_theory`.
+      * - **Spin Observable**
+        - A general spin observable named by a token in the **Observable**
+          field: ``t:y`` (target analyzing power :math:`A_{0y}`), ``b:y*t:y``
+          (spin correlation :math:`C_{yy}`), ``b:yy`` or ``b:T20`` (deuteron
+          tensor analyzing powers), ``e1:y`` (outgoing polarization),
+          ``b:y>e1:y`` (polarization transfer). Centre-of-mass angles, the same
+          file layout as **Analyzing Power**. Its normalization (a polarization
+          scale) may vary. Grammar and conventions:
+          :doc:`../reference/data_formats`.
 
    While **Total capture (all γ pairs)** is the exit pair, only **Angle
    Integrated** can be chosen; the other observables are greyed out until a
@@ -124,16 +133,20 @@ appears with the following fields:
       * - Analyzing Power
         - 7
         - the exit pair
+      * - Spin Observable (token in the **Observable** field)
+        - 9
+        - the exit pair
 
    Editing a segment restores these controls from its code.
 
 .. note::
 
-   A measured **outgoing polarization** :math:`P` of :math:`A(a,b)B` is, by
-   time reversal, the analyzing power of the inverse reaction
-   :math:`B(b,a)A`, so it is entered as an **Analyzing Power** segment on the
-   inverse channel (entrance :math:`b+B`, exit :math:`a+A`). Data published
-   as the product :math:`P\,d\sigma/d\Omega` must be divided by the
+   A measured **outgoing polarization** :math:`P` of :math:`A(a,b)B` is entered
+   directly as a **Spin Observable** segment ``e1:y`` (polarization of *b*) or
+   ``e2:y`` (of *B*). By time reversal it equals the analyzing power of the
+   inverse reaction :math:`B(b,a)A`, which AZURE2 reproduces to round-off, so
+   an **Analyzing Power** segment on the inverse channel is equivalent. Data
+   published as the product :math:`P\,d\sigma/d\Omega` must be divided by the
    differential cross section first.
 
 **Data Normalization**
@@ -485,6 +498,9 @@ segment dialog but includes:
      coefficients, code 3. Requires specifying the polynomial order.
    - **Analyzing Power** -- the vector analyzing power on the chosen energy and
      angle grid, in the centre-of-mass frame, code 7.
+   - **Spin Observable** -- any observable of the isDiff 9 grammar (target
+     analyzing powers, spin correlations, tensor analyzing powers, outgoing
+     polarization, transfer) on the chosen grid, in the centre-of-mass frame, code 9.
 
 .. warning::
 

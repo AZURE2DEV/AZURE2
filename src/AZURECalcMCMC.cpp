@@ -123,6 +123,8 @@ double AZURECalcMCMC::CalculateLogLikelihood(const vector_r &p) const {
 
   // Isotopic abundances: priors and the sum-to-one term, part of the posterior as of the fit.
   if (localCompound->HasAbundanceBlock()) chiSquared += localCompound->AbundanceSumPenalty(configure().abundanceSumSigma);  // per-nucleus priors: CalculateLogPrior
+  // Isospin soft ties couple parameters, so they belong to the likelihood, not to a per-parameter prior.
+  if (localCompound->Isospin().HasSoftTies()) chiSquared += localCompound->Isospin().SoftPenalty();
   if (localCompound->HasScatteringLengthConstraints())  // measured scattering lengths: part of the likelihood
     chiSquared += ScatteringLength::Chi2(localCompound, configure(), localCompound->ScatteringLengthConstraints());
 
@@ -226,6 +228,8 @@ double AZURECalcMCMC::CalculateLogLikelihoodPhysical(const vector_r &params_) co
 
   // Isotopic abundances: priors and the sum-to-one term, part of the posterior as of the fit.
   if (localCompound->HasAbundanceBlock()) chiSquared += localCompound->AbundanceSumPenalty(configure().abundanceSumSigma);  // per-nucleus priors: CalculateLogPrior
+  // Isospin soft ties couple parameters, so they belong to the likelihood, not to a per-parameter prior.
+  if (localCompound->Isospin().HasSoftTies()) chiSquared += localCompound->Isospin().SoftPenalty();
   if (localCompound->HasScatteringLengthConstraints())  // measured scattering lengths: part of the likelihood
     chiSquared += ScatteringLength::Chi2(localCompound, configure(), localCompound->ScatteringLengthConstraints());
 
@@ -423,6 +427,15 @@ void AZURECalcMCMC::BuildAutoPriors() const {
     allAutoMean.push_back(e.nominal);
     allAutoStd.push_back(e.sigma);
   }
+  // Isospin shifts and mix amplitudes (after the abundances): the <isospin>
+  // prior centre and sigma, as the fit's penalty uses them.
+  for (int k = 0; k < nuc->Isospin().NumParams(); ++k) {
+    double centre, sigma;
+    nuc->Isospin().ParamPrior(k, centre, sigma);
+    allKinds.push_back(PARAM_ISOSPIN);
+    allAutoMean.push_back(centre);
+    allAutoStd.push_back(sigma);
+  }
 
   std::vector<ESegment> &segments = data()->GetSegments();
 
@@ -509,7 +522,8 @@ void AZURECalcMCMC::BuildAutoPriors() const {
   for (size_t i = 0; i < nfree; ++i) {
     const int kind = freeKinds_[i];
 
-    if (kind == PARAM_NORM || kind == PARAM_SHIFT || kind == PARAM_ABUNDANCE || kind == PARAM_SCREENING) {
+    if (kind == PARAM_NORM || kind == PARAM_SHIFT || kind == PARAM_ABUNDANCE || kind == PARAM_SCREENING ||
+        kind == PARAM_ISOSPIN) {
       // Derived from the data, so it always wins over whatever the GUI holds.
       if (freeAutoStd[i] > 0.0) {
         priorMeans_[i] = freeAutoMean[i];
@@ -944,6 +958,14 @@ void AZURECalcMCMC::RunMCMCSampling(int nwalkers, int nsteps, const std::vector<
   try {
     int ndim = initialParams.size();
 
+    // Isospin levels: the physical-to-formal transform mixes the levels of a
+    // J-group, so stale derived members would leak into the free ones.
+    if (!useRWA && compound()->Isospin().Active()) {
+      configure().outStream << "Error: MCMC with isospin levels samples reduced-width amplitudes; "
+                            << "switch the MCMC parameter type to RWA.\n";
+      return;
+    }
+
     // Update parameter vectors if needed
     const_cast<AZURECalcMCMC *>(this)->UpdateParameterVectors(initialParams);
 
@@ -1036,7 +1058,8 @@ void AZURECalcMCMC::RunMCMCSampling(int nwalkers, int nsteps, const std::vector<
       if (kind == PARAM_ENERGY) {
         spread = energySpreadMeV;
         nEnergyCapped++;
-      } else if (kind == PARAM_NORM || kind == PARAM_SHIFT || kind == PARAM_ABUNDANCE || kind == PARAM_SCREENING) {
+      } else if (kind == PARAM_NORM || kind == PARAM_SHIFT || kind == PARAM_ABUNDANCE || kind == PARAM_SCREENING ||
+                 kind == PARAM_ISOSPIN) {
         // Starting outside the prior only wastes steps walking back into it.
         if (j < (int)priorStds_.size() && j < (int)usePriors_.size() &&
             usePriors_[j] && priorStds_[j] > 0.0 && priorStds_[j] < spread) {

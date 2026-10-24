@@ -1962,6 +1962,7 @@ void EPoint::AddSubPoint(EPoint subPoint) {
   // also carries target effects is integrated as though it were a cross
   // section, and A_y is never computed at all.
   subPoint.is_analyzing_power_ = this->is_analyzing_power_;
+  subPoint.spin_observable_ = this->spin_observable_;
   subPoint.is_sub_point_ = true;
   subPoint.screen_ue_ = this->screen_ue_;
   subPoint.screen_param_ = this->screen_param_;

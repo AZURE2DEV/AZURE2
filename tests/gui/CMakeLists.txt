@@ -343,3 +343,29 @@ endif()
 add_test(NAME screening_fitting COMMAND screening_fitting_test)
 set_tests_properties(screening_fitting PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+# Isospin levels: a level ID spanning nuclei is written back as one ID, the
+# <isospin> block kept with its IDs remapped.
+add_executable(isospin_levels_test isospin_levels_test.cpp)
+target_compile_definitions(isospin_levels_test PRIVATE
+    ISO_MODEL="${AZURE2_SOURCE_DIR}/tests/isospin_levels/models/iso_mix.azr")
+set_target_properties(isospin_levels_test PROPERTIES AUTOMOC OFF)
+target_include_directories(isospin_levels_test PRIVATE
+    ${AZURE2_SOURCE_DIR}/gui/include
+    ${AZURE2_SOURCE_DIR}/include
+)
+target_link_libraries(isospin_levels_test PRIVATE
+    ${AZURESETUP_LIBRARIES}
+    ${AZUREAPI_LIBRARIES}
+    AZURE2Core
+    Qt5::Core Qt5::Gui Qt5::Widgets Qt5::Network
+)
+if(USE_QWT)
+    target_link_libraries(isospin_levels_test PRIVATE ${QWT_LIBRARIES})
+endif()
+if(USE_ERYA)
+    target_link_libraries(isospin_levels_test PRIVATE pugixml srim_utilities)
+endif()
+add_test(NAME isospin_levels COMMAND isospin_levels_test)
+set_tests_properties(isospin_levels PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen")

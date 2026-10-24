@@ -126,6 +126,73 @@ Phase shift data follows the same four-column format, but the third column
 contains the phase shift value (in degrees) and the fourth column contains its
 uncertainty. The convention is :math:`-90° < \theta_\text{lab} < 90°`.
 
+Spin Observable Data (isDiff 9)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Analyzing powers of a polarized beam or target, beam-target spin correlations,
+spin-1 tensor analyzing powers, outgoing-particle polarizations and polarization
+transfer coefficients use the same four columns as an analyzing power
+(``E_lab  theta_cm  value  error``; the angle is **centre-of-mass**). The segment
+line names the observable with one token after ``isDiff`` 9, in both
+``<segmentsData>`` and ``<segmentsTest>``::
+
+   1 1 1  2.0 6.0  0 180  9 t:y  1 1 2.0  0 0 0  data/A0y.dat
+   1 1 1  2.0 6.0 0.5  30 150 10  9 b:y*t:y  0
+
+Grammar: ``token := side ['>' side]``, ``side := term {'*' term}``,
+``term := who ':' op``.
+
+.. list-table::
+   :widths: 25 75
+   :header-rows: 1
+
+   * - Part
+     - Meaning
+   * - ``b``, ``t``
+     - beam (light particle of the entrance pair), target (heavy particle)
+   * - ``e1``, ``e2``
+     - light and heavy particle of the exit pair (outgoing polarization, transfer)
+   * - ``x``, ``y``, ``z``
+     - vector operator :math:`S_i/j` (Pauli matrices for spin 1/2, Ohlsen's
+       :math:`S_i` for spin 1); ``b:y`` is :math:`A_y` (the same as isDiff 7)
+   * - ``xx`` ``yy`` ``zz`` ``xy`` ``xz`` ``yz``
+     - Cartesian tensor :math:`\tfrac32(S_iS_j+S_jS_i)-2\delta_{ij}`, spin 1 only
+       (:math:`A_{yy}`, :math:`A_{zz}`, ... of a deuteron beam)
+   * - ``Tkq``, ``iTkq``
+     - spherical tensor :math:`\tau_{kq}` (Madison normalization,
+       :math:`\langle j m'|\tau_{kq}|j m\rangle=\sqrt{2k+1}\,\langle j m\,k q|j m'\rangle`);
+       ``iT11`` multiplies by *i*. Any spin with :math:`k\le 2j`.
+   * - ``*``
+     - product of operators on different particles (``b:y*t:y`` is the spin
+       correlation :math:`C_{yy}`)
+   * - ``>``
+     - polarization transfer from the entrance operator (left) to the exit
+       operator (right), e.g. ``b:y>e1:y`` is :math:`K_y^{y'}`
+
+The value is :math:`\mathrm{Re}(c\,\mathrm{Tr}(F A F^\dagger B))/\mathrm{Tr}(F F^\dagger)`,
+with :math:`F` the scattering amplitude in the product basis of the particles'
+spin projections, :math:`A` the entrance and :math:`B` the exit operator, and
+:math:`c=i` for an ``iTkq`` term. The frame is Madison's: *z* along
+:math:`\mathbf k_\text{in}`, *y* along :math:`\mathbf k_\text{in}\times\mathbf k_\text{out}`;
+exit operators use the same *y* (only normal components, *y*, are meaningful
+for outgoing particles in this version). For a spin-1 beam
+:math:`iT_{11}=\tfrac{\sqrt3}{2}A_y`, :math:`T_{20}=A_{zz}/\sqrt2`,
+:math:`T_{21}=-A_{xz}/\sqrt3`, :math:`T_{22}=(A_{xx}-A_{yy})/(2\sqrt3)`.
+
+.. warning::
+
+   Literature names are ambiguous: :math:`A_{yy}` is the spin correlation of
+   two spin-1/2 particles in the p+\ :sup:`3`\ He literature but the tensor
+   analyzing power of a deuteron beam. Files therefore carry only the explicit
+   token (``b:y*t:y`` or ``b:yy``); pyazr accepts literature names and resolves
+   them from the pair's spins (``pyazr.spin.resolve``).
+
+Both pairs must be particle pairs (for capture only the beam :math:`A_y`,
+isDiff 7, is implemented), and every addressed particle must carry the spin its
+operator needs; otherwise AZURE2 stops at start-up with a message naming the
+segment. The segment normalization multiplies the model observable (a
+polarization scale), with the quoted polarization uncertainty as its prior.
+
 Temperature Files
 ^^^^^^^^^^^^^^^^^
 
@@ -232,6 +299,60 @@ are parameters, named ``abundance_<name>_<Z>_<A>`` for a named sample,
 emitted sample by sample (the unnamed one first, in file order) right after
 the level parameters. A sample name is one token without ``:`` or ``#``.
 Stoichiometric weights need not sum to one: give that sample ``sum 0``.
+
+**Isospin levels.** Several compound nuclei can share isospin-labelled
+levels, as in Hale's charge-independent R-matrix analysis of the A=4 system
+(Tilley, Weller and Hale, Nucl. Phys. A541, 1 (1992)). Such a level is one
+level ID whose channel lines span every nucleus it lives in (each line with
+that nucleus's own excitation energy), declared in an ``<isospin>`` block
+after ``</levels>`` (and after ``</abundances>``)::
+
+   <isospin>
+   reference 3 4 1                  # 4Li: energies measured from pair 1 (p+3He)
+   shift 1 4 2 -0.86 1 -0.86 0.3    # 4H:  pair 2 (n+t), shift, vary, prior centre, prior sigma
+   shift 2 4 3 -0.64 1 -0.64 0.3    # 4He: pair 3 (p+t)
+   level 1 1                        # level ID 1 has T=1
+   level 2 0                        # level ID 2 has T=0
+   mix 1 5 1 1 0.0 1 0              # level 1, pair 5 (d+d), l=1, s=1: value, vary, prior sigma
+   factor 1 3 0.7071                # optional: override a computed Clebsch-Gordan factor
+   pairT 6 0.5 0.5                  # optional: particle isospins of pair 6
+   soft 2 0.05 0.02                 # optional: soft-tie level 2 (sigma E MeV, sigma gamma MeV^1/2)
+   </isospin>
+
+- In each nucleus, a level's formal reduced-width amplitude in a channel of
+  pair (a, b) is :math:`\langle t_a t_{3a}\, t_b t_{3b} | T T_3\rangle`
+  times one amplitude per isospin channel (arrangement, l, s). Particle
+  isospins default to :math:`t = |N-Z|/2`, :math:`t_3 = (Z-N)/2`; pairs whose
+  particles match in mass number, spin, parity and isospin form one
+  arrangement and must share a channel radius.
+- The member in the ``reference`` nucleus (otherwise the first in file
+  order) holds the free parameters. The others are derived: energies
+  :math:`E_m = E_\mathrm{ref} - T_\mathrm{ref} + T_m + \Delta_m` (:math:`T` the
+  named threshold's excitation energy, :math:`\Delta_m` the nucleus's shift,
+  a parameter ``isospin_shift_<Z>_<A>``), amplitudes the factor ratio times
+  the free one. A channel with factor 0 is zero unless a ``mix`` line gives
+  it a free amplitude (``isospin_mix_<k>``). Derived slots stay in the
+  parameter list, fixed, and are written synced.
+- A ``soft`` line relaxes one level's tie: its derived slots become free
+  parameters with the penalty :math:`((x - x_\mathrm{tie})/\sigma)^2` each
+  (forbidden channels centred on 0), reported with the priors as
+  ``Total-Isospin-Chi-Squared``; they start on their tie values. A soft level
+  takes no ``mix`` lines, and the LM and GSL fitters refuse it (the penalty
+  couples parameters); MIGRAD, with or without the analytic gradient, and MCMC
+  (in the likelihood) carry it.
+- Every J-group holding an isospin level uses :math:`B_c = -l_c`, so
+  partners share their boundary values. Isospin levels need the standard
+  parametrization (``--no-brune``). The analytic gradient, the LM and GSL
+  least-squares fitters, MCMC and the API work through the ties (a derived
+  slot's derivative passes to the free slots it follows); MCMC and the API
+  take reduced-width amplitudes only, since the physical-to-formal transform
+  would mix stale derived members into the free ones. pyazr lists the shifts
+  and mixes as ``parameters.isospin`` (kind ``"isospin"``) and reports their
+  priors as ``penalties()["isospin"]`` (already in the engine's chi-squared).
+- The start-up log prints every factor; ``isospin.out`` lists the formal
+  parameters of every member, and ``parameters.out`` labels the members.
+  The GUI keeps the block (its level IDs follow the levels it writes) but has
+  no editor for it: edit the block as text.
 
 A ``<segmentsData>`` or ``<segmentsTest>`` line may end with the keyword
 blocks ``sqrtshift <b> <bError> <vary>``, ``sample <1|name>`` and
