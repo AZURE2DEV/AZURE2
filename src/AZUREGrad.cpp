@@ -1158,13 +1158,29 @@ namespace {
 // fitBarOf(member) times its gradient.  Shared by the residual Jacobian and the
 // model gradients.  Returns false, with `bailSeg` set, if a point is outside
 // the analytic path.
-// The free level parameters of the packed vector, per J-group (FormalBasis).
+// The free level parameters of the packed vector, per J-group (FormalBasis).  An isospin-derived
+// slot is fixed in the packed vector but its derivative reaches free parameters through the chain
+// rule in GradAccum::Scatter, so it counts as free when any of its sources does.
 AMatrixFunc::FreeMask BuildFreeMask(CNuc *compound, const ParamIndexMap &pmap) {
   AMatrixFunc::FreeMask mask;
   const int nJ = compound->NumJGroups();
   mask.e.assign(nJ, {});
   mask.g.assign(nJ, {});
-  auto isFree = [&pmap](int full) { return full >= 0 && full < pmap.NumFull() && pmap.FullToPacked(full) >= 0; };
+  std::vector<char> needed(pmap.NumFull(), 0);
+  for (int f = 0; f < pmap.NumFull(); f++) needed[f] = pmap.FullToPacked(f) >= 0;
+  for (bool grew = true; grew;) {
+    grew = false;
+    for (const IsospinTie &t : pmap.IsospinTies()) {
+      if (t.slot < 0 || t.slot >= pmap.NumFull() || needed[t.slot]) continue;
+      for (const auto &src : t.sources)
+        if (src.first >= 0 && src.first < pmap.NumFull() && needed[src.first]) {
+          needed[t.slot] = 1;
+          grew = true;
+          break;
+        }
+    }
+  }
+  auto isFree = [&needed](int full) { return full >= 0 && full < (int)needed.size() && needed[full]; };
   for (int j = 1; j <= nJ; j++) {
     JGroup *jg = compound->GetJGroup(j);
     const int nl = jg->NumLevels(), nch = jg->NumChannels();
