@@ -430,7 +430,7 @@ int IsospinLevels::Resolve(const Config &configure, CNuc &c) {
   // Report.
   out << "Isospin levels: " << levels_.size() << " level(s); reference " << c.NucleusLabel(refNucleus)
       << "; B_c = -l_c in their J-groups." << std::endl;
-  out << "  note: the GUI does not keep the <isospin> block yet; edit this project as text." << std::endl;
+  out << "  note: the GUI keeps the <isospin> block but has no editor for it; edit the block as text." << std::endl;
   for (const IsospinLevel &L : levels_) {
     JGroup *g = c.GetJGroup(L.members[L.ref].jGroup);
     out << "  level ID " << L.id << "  T=" << L.t << "  J=" << g->GetJ() << (g->GetPi() < 0 ? "-" : "+")

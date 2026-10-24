@@ -351,7 +351,8 @@ after ``</levels>`` (and after ``</abundances>``)::
   priors as ``penalties()["isospin"]`` (already in the engine's chi-squared).
 - The start-up log prints every factor; ``isospin.out`` lists the formal
   parameters of every member, and ``parameters.out`` labels the members.
-  The GUI does not keep the block yet: edit such projects as text.
+  The GUI keeps the block (its level IDs follow the levels it writes) but has
+  no editor for it: edit the block as text.
 
 A ``<segmentsData>`` or ``<segmentsTest>`` line may end with the keyword
 blocks ``sqrtshift <b> <bError> <vary>``, ``sample <1|name>`` and
