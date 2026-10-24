@@ -234,9 +234,13 @@ the level parameters. A sample name is one token without ``:`` or ``#``.
 Stoichiometric weights need not sum to one: give that sample ``sum 0``.
 
 A ``<segmentsData>`` or ``<segmentsTest>`` line may end with the keyword
-blocks ``sqrtshift <b> <bError> <vary>``, ``sample <1|name>`` and
-``shiftgroup <label>`` (in any order; writers put ``sample`` last).  ``natural``
-is the keyword's older name and is still read.
+blocks ``sqrtshift <b> <bError> <vary>``, ``sample <1|name>``,
+``shiftgroup <label>`` and ``total <0|1>`` (in any order; writers put ``sample``
+last).  ``natural`` is the keyword's older name and is still read.
+``total 1`` makes every term whose exit pair is its entrance pair the total
+cross section of that (neutral) pair, by the optical theorem
+(:doc:`../user_guide/segments`, "Neutron Total Cross Sections"); an older
+engine ignores it and computes the elastic cross section.
 ``sample 1`` multiplies the segment's own term and each composite component
 by the abundance of the term's entrance pair's compound nucleus in the
 unnamed sample (or the only sample, if every sample is named);

@@ -525,7 +525,31 @@ solves :math:`u = A g` its derivative is :math:`O(n)` per free parameter
 (``AMatrixFunc::LevelAdjoint``, ``LevelBasis``; standard, Brune and Park
 level matrices).
 Points with components or sub-point target effects are still differentiated
-one by one (``GradOnePoint``), with the same back-propagation.  The gradient
+one by one (``GradOnePoint``), with the same back-propagation.  For a SUM or
+RATIO point without a sub-point target effect, ``GradOnePoint`` solves the
+level matrix once at the base point and takes each term's T-matrix and
+cotangent from it; the terms without external capture enter only through the
+bilinear forms :math:`g_c^T A g_{c'}`, which do not depend on the exit pair,
+so their cotangents are merged by channel pair and back-propagated once
+(``AMatrixFunc::TBarAdjointMany``).
+
+Segments with components (SUM, RATIO, total capture) are mapped as well, since
+October 2026 (``EData::MapComponentSegments``): each component's point is
+mapped onto the base segment's point at the same energy.  A component has its
+own exit pair, so the host's calculation builds the component's T-matrix from
+the solved level matrix (``GenMatrixFunc::RecalculateTMatrix``) before its
+observable; the mapped points of a host come grouped by exit, so each exit's
+T-matrix is built once.  A component keeps and re-energises its own
+energy-dependent values and external-capture amplitudes
+(``EPoint::OwnsEDependentValues``): its segment is shifted in parallel with the
+base segment.  A family is not mapped with other segments, and the base's
+points stay unmapped among themselves (the external-capture file layout
+depends on which points are mapped).  On the 13C+alpha project of
+``13C+a/10-22-26_merged_non16o_non1``, whose neutron total cross section sums
+nine exit pairs over 13 129 points, one evaluation went from 13.1 s to 4.4 s
+(136 136 level-matrix solutions to 23 203) and one residual Jacobian from
+517 s to 141 s (four threads), every output identical and the Jacobian equal
+to :math:`2 \times 10^{-13}`.  The gradient
 equals the point-by-point one to rounding (about :math:`10^{-14}` of its
 largest component on such a project).
 
@@ -547,6 +571,9 @@ Environment switches
 ``AZURE_NO_POINT_MAPPING=1``
    No point mapping at all: every point calculates its own energy-dependent
    values and T-matrix.
+``AZURE_NO_COMPONENT_MAPPING=1``
+   Every term of a SUM, RATIO or total-capture segment is its own calculation,
+   in the evaluation and in the gradient, as before October 2026.
 ``AZURE_NO_GROUPED_GRADIENT=1``
    Differentiate every point on its own (``GradOnePoint``), as before.
 ``AZURE_GRAD_DENSE=1``

@@ -96,10 +96,16 @@ _EXTRAP_OBSERVABLE = {
 
 # Keyword blocks a segment line may end with (SegLine.h), and how many tokens
 # each takes: sqrtshift b bError vary; sample <1|name> (alias natural);
-# shiftgroup <label>; normgroup <label>; covariance <file>; shiftfn takes a variable
-# number (see _split_keyword_tail).
+# shiftgroup <label>; normgroup <label>; covariance <file>; total <0|1>; shiftfn takes a
+# variable number (see _split_keyword_tail).
 _KEYWORDS = {"sqrtshift": 3, "sample": 1, "natural": 1, "shiftgroup": 1, "normgroup": 1,
-             "covariance": 1, "shiftfn": None}
+             "covariance": 1, "total": 1, "shiftfn": None}
+
+
+def _total_token(blocks):
+    """``total 1``: the total cross section of the entrance pair (optical theorem)."""
+    blk = blocks.get("total") or []
+    return bool(blk) and blk[0] == "1"
 
 
 def _split_keyword_tail(tokens):
@@ -206,6 +212,9 @@ class Segment:
     norm_group: Optional[str] = None
     # data covariance file ("covariance <file>"): segments naming one file share one matrix
     covariance: Optional[str] = None
+    # "total 1": every term whose exit pair is its entrance pair is that (neutral) pair's total
+    # cross section, by the optical theorem (one T-matrix per point instead of a SUM over exits)
+    total: bool = False
     # energy-shift function f(x; a0..) added at the original lab energy x (MeV):
     # the expression, and (value, sigma, vary) per parameter aj; on a shift
     # group it is declared on the first segment and applies to all members
@@ -380,6 +389,7 @@ class SegmentSet(list):
             shift_group=(blocks.get("shiftgroup") or [None])[0],
             norm_group=(blocks.get("normgroup") or [None])[0],
             covariance=(blocks.get("covariance") or [None])[0],
+            total=_total_token(blocks),
             shift_fn=shift_fn, shift_fn_params=tuple(shift_fn_params),
             operation=operation, components=tuple(components))
 
@@ -483,6 +493,7 @@ class TestSegment:
     max_ang_dist_order: Optional[int] = None   # isDiff == 3 only
     natural: bool = False                  # sample grid ("sample 1" / "sample <name>", older "natural ...")
     natural_sample: str = ""               # the sample's name ("" = the unnamed, or only, sample)
+    total: bool = False                    # "total 1": the entrance pair's total cross section
 
     @property
     def sample(self):
@@ -565,7 +576,8 @@ class TestSegmentSet(list):
             angle_min=aMin, angle_max=aMax, angle_step=aStep,
             observable=_EXTRAP_OBSERVABLE.get(isDiff, f"code{isDiff}"),
             phase_J=phase_J, phase_L=phase_L, max_ang_dist_order=max_order,
-            natural=natural, natural_sample=natural_sample)
+            natural=natural, natural_sample=natural_sample,
+            total=_total_token(blocks))
 
     # -- views ----------------------------------------------------------------
 

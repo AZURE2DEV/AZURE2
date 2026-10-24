@@ -76,6 +76,7 @@ class SegLine {
     energyShiftSqrt_ = 0.0;
     energyShiftSqrtError_ = 0.0;
     natural_ = "0";
+    total_ = 0;
     varyEnergyShiftSqrt_ = 0;
     // shared constant energy shift: off unless a trailing "shiftgroup" block is present
     shiftGroup_ = "";
@@ -266,6 +267,12 @@ class SegLine {
               natural_ = "0";
               break;
             }
+          } else if (keyword == "total") {
+            if (!(advancedStream >> total_) || (total_ != 0 && total_ != 1)) {
+              parseError_ = "total needs 0 or 1";
+              stream.setstate(std::ios::failbit);
+              break;
+            }
           } else if (keyword == "shiftgroup") {
             if (!(advancedStream >> shiftGroup_)) {
               stream.setstate(std::ios::failbit);
@@ -391,6 +398,8 @@ class SegLine {
    * Returns the sample token ("sample <t>", alias "natural <t>"): "0" (none), "1" (the default sample) or a sample name.
    */
   const std::string &natural() const { return natural_; };
+  /// 1 for "total 1": the total cross section of the entrance pair by the optical theorem (ESegment::IsTotal).
+  int total() const { return total_; };
   /*!
    * Returns the uncertainty of the sqrt(E) energy-shift coefficient (MeV^1/2).
    */
@@ -491,6 +500,7 @@ class SegLine {
   int isAdvanced_;
   int operationType_;
   std::string natural_;
+  int total_;
   std::string componentsList_;
   int isUPOS_;
   int secondaryDecayL_;

@@ -444,6 +444,55 @@ block does not define. Each sample segment also gets an output file
 ``AZUREOut_sample_seg=<key>.out`` (``.extrap`` for a test segment) with the
 total and one column per nucleus (:doc:`../reference/output_files`).
 
+Neutron Total Cross Sections (``total 1``)
+-------------------------------------------
+
+A neutron total cross section can be given as a **Sum** composite of the
+elastic channel and every reaction channel of the compound nucleus, but it is
+cheaper, and cannot miss a channel, to take it from the optical theorem: the
+keyword ``total 1`` at the end of the segment line makes the segment's term the
+total cross section of its entrance pair,
+
+.. math::
+
+   \sigma_\mathrm{tot} = \frac{\pi}{k^2}\,\frac{1}{(2i_1+1)(2i_2+1)}
+   \sum_J (2J+1) \sum_{c} 2\,\mathrm{Re}\,T_{cc}
+   = \frac{2\pi}{k^2}\, g \sum_J (2J+1) \sum_c (1 - \mathrm{Re}\,U_{cc}),
+
+summed over the entrance channels :math:`c`. Every channel of a
+:math:`J^\pi` group is in its level matrix, so :math:`U` is unitary and
+:math:`\sum_{c'} |T_{cc'}|^2 = 2\,\mathrm{Re}\,T_{cc}` over all exit
+channels: the result equals the sum over every particle exit pair of the
+compound nucleus (to :math:`10^{-11}` on the 13C+alpha neutron data), from one
+T-matrix per point instead of one per exit pair. Photon channels have no width
+in the level matrix and external capture is outside it, so capture is not
+included; where it matters, keep the capture pair as a **Sum** component (a
+component whose exit pair differs from its entrance pair stays what it is).
+
+The segment must be angle-integrated (data type 0), its exit pair its entrance
+pair, and the pair neutral (the total cross section of charged particles
+diverges) and not of identical particles; the R-matrix-for-capture formalism
+is refused. In a **Sum** composite every term whose exit pair is its entrance
+pair is a total, so a natural-target total is one line, e.g.::
+
+   1 2 2 0 2.33 0 180 0 1 0 5 0 0 0 data/ntot.dat 1 0 2 4 4 -999 6 6 -999 0 sample 1 total 1
+
+for :math:`\sigma_\mathrm{tot}(\mathrm{n}+{}^{20}\mathrm{Ne})`,
+:math:`\sigma_\mathrm{tot}(\mathrm{n}+{}^{22}\mathrm{Ne})` and
+:math:`\sigma_\mathrm{tot}(\mathrm{n}+{}^{21}\mathrm{Ne})` weighted by the
+abundances. The keyword applies to test segments (Segments Without Data) as
+well. The GUI keeps it through a load and save but has no control for it yet.
+
+.. warning::
+
+   An engine older than October 2026 does not know the keyword and ignores
+   it silently: it computes the elastic cross section alone.
+
+Since October 2026 the terms of a **Sum**, **Ratio** or total-capture segment
+also share one level-matrix solution per energy (each term still gets its own
+T-matrix), in the calculation and in the analytic gradient; the results are
+unchanged.
+
 Segments Without Data
 ---------------------
 
