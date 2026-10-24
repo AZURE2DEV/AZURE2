@@ -236,7 +236,9 @@ Stoichiometric weights need not sum to one: give that sample ``sum 0``.
 A ``<segmentsData>`` or ``<segmentsTest>`` line may end with the keyword
 blocks ``sqrtshift <b> <bError> <vary>``, ``sample <1|name>``,
 ``shiftgroup <label>`` and ``total <0|1>`` (in any order; writers put ``sample``
-last).  ``natural`` is the keyword's older name and is still read.
+last); a data line also ``shiftfngroup <label>``, ``normgroup <label>``,
+``covariance <file>`` and ``shiftfn "<f(x)>" N ...`` (:doc:`../user_guide/segments`).
+``natural`` is the keyword's older name and is still read.
 ``total 1`` makes every term whose exit pair is its entrance pair the total
 cross section of that (neutral) pair, by the optical theorem
 (:doc:`../user_guide/segments`, "Neutron Total Cross Sections"); an older

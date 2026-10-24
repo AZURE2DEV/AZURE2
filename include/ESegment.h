@@ -134,6 +134,9 @@ class ESegment {
   /// shift stops being a fit parameter and starts at the given value.
   void SetShiftGroupFollower(int pos, double shift);
   void SetHasShiftGroupFollowers(bool);
+  /// Shift-function-group label ("" if none): segments with one label apply the shift
+  /// function of the first of them but keep their own constant shifts.
+  std::string GetShiftFnGroup() const;
   /// Normalization-group label ("" if none): segments with one label share one norm.
   std::string GetNormGroup() const;
   /// Position (0-based, in EData's segment vector) of the group member whose norm this
@@ -349,6 +352,7 @@ class ESegment {
   std::string shiftGroup_;
   int shiftLeaderPos_;
   bool hasShiftGroupFollowers_;
+  std::string shiftFnGroup_;
   std::string normGroup_;
   int normLeaderPos_;
   bool hasNormGroupFollowers_;

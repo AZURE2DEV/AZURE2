@@ -1204,6 +1204,10 @@ the data's energy calibration is the first suspect, and the constant
    that. Conversely, grouping digitized sets can cost a lot (11B+a frozen
    group scan +1,913, mostly Fowler/Bartholomew: different figures, different
    digitization offsets) -- group by what shares a calibration, and test it.
+   When the per-segment constants are real (separate figures, separate
+   digitization offsets) but the energy-dependent calibration is one, use
+   `shiftfngroup <label>` instead: the members apply the first one's
+   `shiftfn` and keep their own constants (11B+a 10-22-26_sqrtE_groups).
    The start-up log prints, per function, the condition number of its free
    terms over the group's energies; a term that only duplicates a (sqrt(x)
    on one single-energy angular distribution) is warned about.
@@ -1784,6 +1788,17 @@ Plain-text, section-tagged; prefer the GUI or `AzrModel` over hand edits.
     value, error, vary flag and penalty; the others' own shift fields are
     ignored and their `segment_<key>_energy_shift` is fixed and written back
     with the shared value. Test: `tests/shift_groups`.
+  - `shiftfngroup <label>` (keyword block, 2026-10-22): every segment with
+    the label applies the `shiftfn` declared on the FIRST of them, with its
+    parameters (one `segment_<first>_energy_shift_fn<j>` set, penalised once),
+    but keeps its OWN constant shift (value, error, vary flag, penalty).
+    Errors at start-up: a segment in both a shiftgroup and a shiftfngroup, a
+    first member without a shiftfn, a later member declaring one. The
+    degeneracy note counts one free constant per member. pyazr:
+    `Segment.shift_fn_group`, `add_data_segment(shift_fn_group=...)`.
+    rmfit's Sharded evaluator does not keep such a group together across
+    shards (as for shiftgroup): use SingleSession or the CLI.
+    Test: `tests/shift_fn_groups`.
   - `normgroup <label>` (keyword block, 2026-10-14): the same for the
     normalization -- every segment with the label uses the norm of the FIRST
     of them (value, vary flag, error, the one penalty). A follower whose own

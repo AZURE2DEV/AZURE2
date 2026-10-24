@@ -1503,7 +1503,8 @@ class AzrModel:
                          active=True, energy_shift_sqrt=0.0,
                          energy_shift_sqrt_error=0.0, vary_shift_sqrt=False,
                          shift_group=None, shift_fn=None, shift_fn_params=(),
-                         natural=False, norm_group=None, covariance=None):
+                         natural=False, norm_group=None, covariance=None,
+                         shift_fn_group=None):
         """Append one data segment (a ``<segmentsData>`` line).
 
         ``data_file`` is the data file path (relative to the run directory,
@@ -1522,7 +1523,9 @@ class AzrModel:
         b*sqrt(E/MeV) (b in MeV^1/2), with its ``_error`` and
         ``vary_shift_sqrt``; the block is written only when one of the three
         is set, so a plain segment line is unchanged.  ``shift_group`` (a
-        label) writes a ``shiftgroup`` block and ``norm_group`` a ``normgroup``
+        label) writes a ``shiftgroup`` block, ``shift_fn_group`` a ``shiftfngroup``
+        block (the segments with one label apply the first one's ``shiftfn``, each
+        keeping its own constant shift) and ``norm_group`` a ``normgroup``
         block (segments with one label share the first one's normalization), ``covariance`` (a
         file name) a ``covariance`` block (the segments naming one file share its data
         covariance matrix; format in the data-formats reference); ``shift_fn`` (an expression in
@@ -1554,6 +1557,11 @@ class AzrModel:
                      _fmt(energy_shift_sqrt_error), 1 if vary_shift_sqrt else 0]
         if shift_group:
             toks += ["shiftgroup", str(shift_group)]
+        if shift_fn_group:
+            if shift_group:
+                raise ValueError("shift_group and shift_fn_group: use one of them "
+                                 "(shiftgroup also shares the constant shift).")
+            toks += ["shiftfngroup", str(shift_fn_group)]
         if norm_group:
             toks += ["normgroup", str(norm_group)]
         if covariance:
