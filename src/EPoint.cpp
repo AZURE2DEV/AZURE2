@@ -1652,8 +1652,9 @@ void EPoint::AddECAmplitude(int kGroupNum, int ecMGroupNum, complex ecAmplitude,
     key.segmentKey = segment_key_;
     g_ecAmplitudeCache->AddAmplitude(key, energy, ecAmplitude);
 
-    // Now get the interpolated amplitude from the cache to replace the stored value if ecAmplitudes is 0 or NaN
-    if (std::isnan(std::real(ecAmplitude)) || std::isnan(std::imag(ecAmplitude))) {
+    // A non-finite amplitude (never cached, see ECAmplitudeCache::AddAmplitude) is replaced by the value
+    // interpolated from the neighbouring cached energies.
+    if (!std::isfinite(std::real(ecAmplitude)) || !std::isfinite(std::imag(ecAmplitude))) {
       std::cout << "WARNING: Replacing EC Amplitude with interpolated value from cache for kGroup "
                 << kGroupNum << ", ecMGroup " << ecMGroupNum
                 << " at energy " << energy << " MeV." << std::endl;

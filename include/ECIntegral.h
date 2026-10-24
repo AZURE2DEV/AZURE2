@@ -105,6 +105,8 @@ class ECIntegral {
   double FW_;
   double GW_;
   double epsrel_ = 1e-4;
+  /// Above this Sommerfeld parameter an open channel is treated through its threshold limit (CalculateDirect).
+  static constexpr double kMaxOpenChannelEta = 100.0;
   int status_ = 0;
 
   /*!

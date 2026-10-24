@@ -20,8 +20,10 @@ class EffectiveCharge {
   double operator()(double);
 
  private:
-  /// GSL integrand behind it.
+  /// GSL integrand behind it (multipolarities above 2 only).
   static double Integrand(double, void *);
+  /// int_0^y j_L(t)/t dt (closed forms for L = 1, 2).
+  static double IntJlOverT(int L, double y);
   int z1_;
   int z2_;
   int L_;

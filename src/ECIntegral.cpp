@@ -285,6 +285,32 @@ complex ECIntegral::CalculateDirect(int theInitialLValue, int theFinalLValue,
   double chanRad = pair()->GetChRad();
   double redMass = pair()->GetRedMass();
 
+  // Just above a charged-particle threshold the open-channel form fails: with eta >~ 110 the penetrability
+  // underflows while G overflows, and sqrt(P) * int (G + iF) W came out as 0, as an overflow, as NaN or (from
+  // eta ~ 300) finite but 30 % wrong -- found as NaN in a fold of 16O(n,g) data whose sub-point sat 0.2 keV above
+  // the alpha + 13C threshold of 17O (13C+a/10-20-26_merged_ancprior_ng, HOLT RESOLUTION CHECK).  The physical
+  // amplitude is smooth through the threshold, so between the threshold and the energy E_c where eta reaches
+  // kMaxOpenChannelEta, channel capture is interpolated linearly between its threshold value (the closed-channel,
+  // Whittaker-ratio form just below) and the open form at E_c: continuous at both ends (alpha + 13C: E_c = 1 keV,
+  // amplitude slope 6e-5 per keV relative).  Direct capture from such an entrance channel is suppressed by
+  // ~exp(-pi eta) < exp(-300): zero.
+  if (outEnergy > 0.0 && pair()->GetZ(1) * pair()->GetZ(2) != 0) {
+    const double eta = Kinematics::Channel(pair()).Eta(outEnergy);
+    if (eta > kMaxOpenChannelEta) {
+      if (!isChannelCapture) return complex(0.0, 0.0);
+      const double eCut = outEnergy * pow(eta / kMaxOpenChannelEta, 2.0) * 1.001;  // eta just below the limit
+      const double eBelow = -1e-2 * eCut;  // the threshold value: closer, the Whittaker tail runs to ~1e4 fm and its quadrature fails
+      complex atCut = CalculateDirect(theInitialLValue, theFinalLValue, theInitialSValue, theFinalSValue,
+                                      theInitialJValue, theFinalJValue, theLMult, radType, sepEnergy + eCut,
+                                      levelEnergy, isChannelCapture);
+      complex atThreshold = CalculateDirect(theInitialLValue, theFinalLValue, theInitialSValue, theFinalSValue,
+                                            theInitialJValue, theFinalJValue, theLMult, radType, sepEnergy + eBelow,
+                                            levelEnergy, isChannelCapture);
+      const double t = (outEnergy - eBelow) / (eCut - eBelow);
+      return atThreshold + t * (atCut - atThreshold);
+    }
+  }
+
   // The convection-current term needs the orbital momenta of this term (electric, exact form only).
   bool convection = configure_ && configure_->ecConvectionCurrent && radType == 'E';
   EffectiveCharge effectiveChargeFunc(pair(), inEnergy - levelEnergy, theLMult,
