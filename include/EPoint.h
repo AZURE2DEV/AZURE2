@@ -127,6 +127,9 @@ class EPoint {
   //! Vector analyzing power point; the fit value is A_y, not a cross section.
   bool IsAnalyzingPower() const { return is_analyzing_power_; };
   void SetIsAnalyzingPower(bool v) { is_analyzing_power_ = v; };
+  /// The total cross section of the entrance pair (optical theorem), ESegment::IsTotalTerm.
+  bool IsTotal() const { return is_total_; };
+  void SetIsTotal(bool v) { is_total_ = v; };
   //! A_y is kept beside the cross section rather than replacing it, because
   //! target-effect integration needs the cross section as the weight.
   double GetAnalyzingPower() const { return analyzing_power_; };
@@ -355,6 +358,11 @@ class EPoint {
   void Calculate(CNuc *, const Config &configure, EPoint *parent = NULL, int subPointNum = 0);
   void SetMap(int, int);
   void ClearMapping();
+  /// A mapped point that keeps its own energy-dependent values: a component of a SUM, RATIO or total-capture segment
+  /// mapped onto a point of its base segment (EData::MapData).  Its segment re-energises it on an energy shift, in
+  /// parallel with the host, so the host must not copy its values into it (CalcEDependentValues).
+  bool OwnsEDependentValues() const { return own_e_dependent_; }
+  void SetOwnsEDependentValues(bool own) { own_e_dependent_ = own; }
   void AddLocalMappedPoint(EPoint *);
   void ClearLocalMappedPoints();
   void SetTargetEffectNum(int);
@@ -476,6 +484,8 @@ class EPoint {
   // the energy, the angle and the channel radii).
   double eDependentEnergy_ = 0.0;
   bool eDependentValid_ = false;
+  bool own_e_dependent_ = false;  // OwnsEDependentValues
+  bool is_total_ = false;         // IsTotal
   matrix_c ec_amplitudes_;
   matrix_r ec_energies_;  // Energies at which EC amplitudes were calculated
   /// The amplitude at the last shifted energy of each pathway (GetECAmplitudeWithShift).

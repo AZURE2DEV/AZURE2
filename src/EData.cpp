@@ -11,6 +11,8 @@
 #include "Minuit2/MnUserParameters.h"
 #include "GSLException.h"
 #include <gsl/gsl_linalg.h>
+#include <map>
+#include <tuple>
 #include <gsl/gsl_matrix.h>
 #include <gsl/gsl_vector.h>
 #include <cmath>
@@ -44,6 +46,35 @@
  * 1 and the token would be silently meaningless, which is exactly what an
  * older build would do with it too.
  */
+/*!
+ * A "total 1" segment is the total cross section of its entrance pair by the optical theorem
+ * (GenMatrixFunc::CalculateBareCrossSection): angle-integrated, its exit pair its entrance pair, and a neutral pair
+ * (the Coulomb total diverges) of distinguishable particles.  The R-matrix-for-capture formalism defines T
+ * differently, so it is refused there.
+ */
+static bool TotalAllowed(CNuc *theCNuc, ESegment &segment, int key, bool isTest, const Config &configure) {
+  if (!segment.IsTotal()) return true;
+  const char *what = isTest ? "test segment" : "segment";
+  auto refuse = [&](const std::string &why) {
+    configure.outStream << "ERROR: " << what << " #" << key << " (total 1): " << why << std::endl;
+    return false;
+  };
+  if (segment.GetExitKey() != segment.GetEntranceKey())
+    return refuse("the total cross section of a pair needs the segment's exit pair to be its entrance pair.");
+  if (segment.IsDifferential() || segment.IsPhase() || segment.IsAnalyzingPower() || segment.IsAngularDist() ||
+      segment.IsUPOS())
+    return refuse("a total cross section is angle-integrated (data type 0).");
+  if (!theCNuc->IsPairKey(segment.GetEntranceKey())) return true;  // reported where the pair is checked
+  PPair *pair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(segment.GetEntranceKey()));
+  if (pair->GetPType() != 0 || pair->GetZ(1) * pair->GetZ(2) != 0)
+    return refuse("the optical theorem needs a neutral particle pair (the total cross section of charged particles "
+                  "diverges).");
+  if (pair->IsIdentical()) return refuse("not for a pair of identical particles.");
+  if (configure.paramMask & Config::USE_RMC_FORMALISM)
+    return refuse("not with the R-matrix-for-capture formalism (--use-rmc).");
+  return true;
+}
+
 static bool NaturalAllowed(CNuc *theCNuc, ESegment &segment, int key, bool isTest, const Config &configure) {
   const char *what = isTest ? "test segment" : "segment";
   const std::string &token = segment.GetNaturalToken();
@@ -186,6 +217,7 @@ int EData::Fill(const Config &configure, CNuc *theCNuc) {
           PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(NewSegment.GetEntranceKey()));
           entrancePair->SetEntrance();
           if (!NaturalAllowed(theCNuc, NewSegment, numTotalSegments, false, configure)) return -1;
+          if (!TotalAllowed(theCNuc, NewSegment, numTotalSegments, false, configure)) return -1;
           bool isValidTotal = false;
           if (NewSegment.GetExitKey() == -1) {
             // total capture: every capture pair of the ENTRANCE pair's compound nucleus
@@ -398,6 +430,7 @@ int EData::MakePoints(const Config &configure, CNuc *theCNuc) {
         if (theCNuc->IsPairKey(NewSegment.GetEntranceKey())) {
           PPair *segEntrance = theCNuc->GetPair(theCNuc->GetPairNumFromKey(NewSegment.GetEntranceKey()));
           if (!NaturalAllowed(theCNuc, NewSegment, numTotalSegments, true, configure)) return -1;
+          if (!TotalAllowed(theCNuc, NewSegment, numTotalSegments, true, configure)) return -1;
           bool isValidTotal = false;
           if (NewSegment.GetExitKey() == -1) {
             // total capture: every capture pair of the ENTRANCE pair's compound nucleus
@@ -2577,7 +2610,7 @@ int EData::InitializeComponentSegments(CNuc *theCNuc, const Config &configure) {
     for (int i = 1; i <= componentSegment.NumPoints(); i++) {
       if (configure.stopFlag || localStop) continue;
       EPoint *point = componentSegment.GetPoint(i);
-      if (!(point->IsMapped())) {
+      if (!(point->IsMapped()) || point->OwnsEDependentValues()) {
         try {
           point->CalcEDependentValues(theCNuc, configure);
         } catch (GSLException e) {
@@ -2667,7 +2700,7 @@ int EData::InitializeComponentSegments(CNuc *theCNuc, const Config &configure) {
                   for (int i = 1; i <= numPoints; i++) {
                     if (configure.stopFlag || localStop) continue;
                     EPoint *point = componentSegment.GetPoint(i);
-                    if (!(point->IsMapped())) {
+                    if (!(point->IsMapped()) || point->OwnsEDependentValues()) {
                       try {
                         point->CalculateECAmplitudes(theCNuc, configure);
                       } catch (GSLException e) {
@@ -2716,7 +2749,7 @@ int EData::InitializeComponentSegments(CNuc *theCNuc, const Config &configure) {
                 // regular-segment loop in CalculateECAmplitudes exactly.
                 for (EPointIterator point = componentSegment.GetPoints().begin();
                      point < componentSegment.GetPoints().end(); point++) {
-                  if (!(point->IsMapped())) {
+                  if (!(point->IsMapped()) || point->OwnsEDependentValues()) {
                     for (int k = 1; k <= entrancePair->GetDecay(ir)->NumKGroups(); k++) {
                       for (int ecm = 1; ecm <= entrancePair->GetDecay(ir)->GetKGroup(k)->NumECMGroups(); ecm++) {
                         if (!usePrevious) {
@@ -2827,6 +2860,7 @@ ESegment *EData::CreateComponentSegment(const ESegment &baseSegment, int entranc
   // Clear any existing components to avoid circular references
   componentSegment->ClearComponents();
   componentSegment->SetNatural(false);   // the weighting is the base segment's job
+  componentSegment->ApplyTotalToPoints();
 
   // The component segment now has the same data points as the base segment
   // but with different entrance/exit keys, so it will calculate different
@@ -2866,6 +2900,7 @@ ESegment *EData::CreateComponentSegment(const ESegment &baseSegment, int entranc
   // Clear any existing components to avoid circular references
   componentSegment->ClearComponents();
   componentSegment->SetNatural(false);   // the weighting is the base segment's job
+  componentSegment->ApplyTotalToPoints();
 
   return componentSegment;
 }
@@ -2879,8 +2914,8 @@ namespace {
 // CalculateCrossSection on the point itself (angle, Coulomb amplitude,
 // observable type) may differ.  Whether `a` and `b` may sit in different
 // segments is the caller's question (ShiftsAgree).
-bool SharesCalculation(EPoint &a, EPoint &b) {
-  if (a.GetEntranceKey() != b.GetEntranceKey() || a.GetExitKey() != b.GetExitKey()) return false;
+bool SharesCalculation(EPoint &a, EPoint &b, bool sameExit = true) {
+  if (a.GetEntranceKey() != b.GetEntranceKey() || (sameExit && a.GetExitKey() != b.GetExitKey())) return false;
   if (a.GetOriginalEnergy() != b.GetOriginalEnergy() || a.GetLabEnergy() != b.GetLabEnergy() ||
       a.GetCMEnergy() != b.GetCMEnergy())
     return false;
@@ -2992,6 +3027,12 @@ void EData::MapData(CNuc *theCNuc) {
       point->ClearLocalMappedPoints();
     }
   }
+  for (ESegment &component : componentSegments_) {
+    for (EPointIterator point = component.GetPoints().begin(); point < component.GetPoints().end(); point++) {
+      point->ClearMapping();
+      point->ClearLocalMappedPoints();
+    }
+  }
   const char *off = std::getenv("AZURE_NO_POINT_MAPPING");
   if (off && *off && std::string(off) != "0") return;
   const char *crossOff = std::getenv("AZURE_NO_CROSS_SEGMENT_MAPPING");
@@ -3070,6 +3111,50 @@ void EData::MapData(CNuc *theCNuc) {
       if (!mapped) hosts.push_back(refs[k]);
     }
     start = end;
+  }
+
+  MapComponentSegments(theCNuc);
+}
+
+/*!
+ * Point mapping inside a segment with components (SUM, RATIO, total capture): each component's point i is mapped onto
+ * the base segment's point i.  A component has its own exit pair but the base's entrance pair, energies, sub-point
+ * grid and energy shift, so its level matrix is the host's: the host's calculation builds only the component's
+ * T-matrix and observable (EPoint::Calculate).  Before 2026-10-24 every term was a calculation of its own, and a
+ * neutron total cross section summed over nine exit pairs cost nine level-matrix solutions per point (13C+a: 87 % of
+ * an evaluation).
+ *
+ * Such a family is not mapped with other segments.  A component re-energises its own points on an energy shift
+ * (OwnsEDependentValues).  A beta-delayed entrance is left out: its energy-dependent values depend on the exit pair.
+ * AZURE_NO_COMPONENT_MAPPING=1 switches this off (and AZURE_NO_POINT_MAPPING=1 all mapping).
+ */
+void EData::MapComponentSegments(CNuc *theCNuc) {
+  if (!theCNuc) return;
+  const char *off = std::getenv("AZURE_NO_COMPONENT_MAPPING");
+  if (off && *off && std::string(off) != "0") return;
+  std::vector<ESegment> &segments = GetSegments();
+  for (int s = 0; s < (int)segments.size(); s++) {
+    ESegment &seg = segments[s];
+    if (!seg.HasComponents() && !seg.IsTotalCapture()) continue;
+    const int entrancePair = theCNuc->GetPairNumFromKey(seg.GetEntranceKey());
+    if (entrancePair < 1 || theCNuc->GetPair(entrancePair)->GetPType() == 20) continue;
+    std::vector<EPoint> &points = seg.GetPoints();
+    const int n = (int)points.size();
+    // Each component's point i onto the base's point i (components in turn, so a host's mapped points come grouped
+    // by exit and EPoint::Calculate builds each exit's T-matrix once).  The base's points stay unmapped among
+    // themselves, as before: the external-capture amplitudes and their file (intEC.dat) skip mapped points, so
+    // mapping them would change that file's layout.
+    for (ESegment *component : seg.GetComponentSegments()) {
+      if (!component || component->NumPoints() != n) continue;
+      for (int p = 0; p < n; p++) {
+        EPoint &host = points[p];
+        EPoint *cp = component->GetPoint(p + 1);
+        if (!cp || !SharesCalculation(host, *cp, false)) continue;
+        cp->SetMap(s + 1, p + 1);
+        cp->SetOwnsEDependentValues(true);
+        host.AddLocalMappedPoint(cp);
+      }
+    }
   }
 }
 
@@ -4129,6 +4214,16 @@ EData *EData::Clone() const {
       dataCopy->GetSegment(pointMap.segment)->GetPoint(pointMap.point)->AddLocalMappedPoint(&*data.point());
     }
   }
+  // Component points mapped onto their base segment's points (MapComponentSegments), in the order MapData added
+  // them: components in turn.
+  for (size_t i = 0; i < dataCopy->segments_.size(); i++)
+    for (ESegment *component : dataCopy->segments_[i].GetComponentSegments())
+      for (int j = 1; component && j <= component->NumPoints(); j++) {
+        EPoint *cp = component->GetPoint(j);
+        if (!cp->IsMapped()) continue;
+        EnergyMap pointMap = cp->GetMap();
+        dataCopy->GetSegment(pointMap.segment)->GetPoint(pointMap.point)->AddLocalMappedPoint(cp);
+      }
 
   return dataCopy;
 }

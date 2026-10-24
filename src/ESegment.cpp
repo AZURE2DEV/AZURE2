@@ -97,6 +97,7 @@ ESegment::ESegment(SegLine segLine) {
   operationType_ = segLine.operationType();
   componentsList_ = segLine.componentsList();
   naturalToken_ = segLine.natural();
+  isTotal_ = segLine.total() == 1;
   if (segLine.isUPOS() == 1)
     isUPOS_ = true;
   else
@@ -185,6 +186,7 @@ ESegment::ESegment(ExtrapLine extrapLine) {
   operationType_ = extrapLine.operationType();
   componentsList_ = extrapLine.componentsList();
   naturalToken_ = extrapLine.natural();
+  isTotal_ = extrapLine.total() == 1;
 
   isUPOS_ = false;
   secondaryDecayL_ = 0;
@@ -1084,7 +1086,20 @@ void ESegment::AddPoint(EPoint point) {
   // The observable is a property of the segment; stamp it on the point so the
   // calculation does not have to look back up.
   point.SetIsAnalyzingPower(this->IsAnalyzingPower());
+  point.SetIsTotal(this->IsTotalTerm());
   points_.push_back(point);
+}
+
+/*!
+ * Stamps IsTotalTerm on every point and sub-point: a component made from a "total" base segment
+ * (EData::CreateComponentSegment) is a total only if its exit pair is its entrance pair.
+ */
+void ESegment::ApplyTotalToPoints() {
+  const bool total = this->IsTotalTerm();
+  for (EPoint &point : points_) {
+    point.SetIsTotal(total);
+    for (int i = 1; i <= point.NumSubPoints(); i++) point.GetSubPoint(i)->SetIsTotal(total);
+  }
 }
 
 /*!

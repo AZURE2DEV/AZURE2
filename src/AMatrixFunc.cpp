@@ -703,7 +703,22 @@ bool AMatrixFunc::PointTBar(EPoint *point, double fitBar, TMatrixCotangent &bar,
     return ecg->GetRadType() == 'E' && ecg->GetMult() == xsComponent;
   };
 
-  if (isBetaDelayed) {
+  if (point->IsTotal()) {
+    // ---- Total cross section by the optical theorem (GenMatrixFunc::CalculateBareCrossSection):
+    //        model = (geom i1i2 / 100) sum (2J+1) 2 Re T(k,m) over the diagonal pathways,
+    //      so d(model)/dRe T = (geom i1i2 / 100) 2 (2J+1), d(model)/dIm T = 0, and the cotangent (dL/dRe + i dL/dIm)
+    //      is real. ----
+    if (xsComponent != 0 || isDiff) return false;
+    for (int k = 1; k <= nK; k++) {
+      if (theDecay->GetKGroup(k)->IsCrossSpin()) continue;
+      for (int m = 1; m <= theDecay->GetKGroup(k)->NumMGroups(); m++) {
+        MGroup *mg = theDecay->GetKGroup(k)->GetMGroup(m);
+        if (mg->GetChNum() != mg->GetChpNum()) continue;
+        const double jValue = compound()->GetJGroup(mg->GetJNum())->GetJ();
+        tBar[k - 1][m - 1] += fitBar * geom * i1i2 / 100. * 2. * (2. * jValue + 1.);
+      }
+    }
+  } else if (isBetaDelayed) {
     // ---- Beta-delayed particle emission. GenMatrixFunc forms
     //        sum = sum_{k,m} 25 |T(k,m)|^2 ,   model = Re(sum)/100
     //      with no geometrical or spin factor and no external-capture term --
@@ -1284,6 +1299,37 @@ void AMatrixFunc::TBarAdjoint(EPoint *energyPoint, const TMatrixCotangent &bar, 
       }
     this->LevelMatrixAdjoint(point, jNum, Mbar, inEnergy, accum, shiftDeriv);
   }
+}
+
+void AMatrixFunc::TBarAdjointMany(const std::vector<EPoint *> &points, const std::vector<TMatrixCotangent> &bars,
+                                  GradAccum &accum, const vector_matrix_r *shiftDeriv) {
+  if (points.empty()) return;
+  static const bool dense = [] {
+    const char *e = std::getenv("AZURE_GRAD_DENSE");
+    return e && *e && std::string(e) != "0";
+  }();
+  std::vector<std::vector<BilinearTerm>> merged(compound()->NumJGroups()), terms;
+  for (size_t q = 0; q < points.size() && q < bars.size(); q++) {
+    if (dense || !this->CollectBilinearTerms(points[q], bars[q], terms)) {
+      this->TBarAdjoint(points[q], bars[q], accum, shiftDeriv);
+      continue;
+    }
+    for (const auto &s : bars[q].screen) accum.AddScreening(s.first, s.second);
+    for (int j = 1; j <= (int)terms.size(); j++)
+      for (const BilinearTerm &t : terms[j - 1]) {
+        bool found = false;
+        for (BilinearTerm &m : merged[j - 1])
+          if (m.ch == t.ch && m.chp == t.chp) {
+            m.beta += t.beta;
+            found = true;
+            break;
+          }
+        if (!found) merged[j - 1].push_back(t);
+      }
+  }
+  AZUREProfile::Timer profileTimer(AZUREProfile::kGradBackprop);
+  for (int j = 1; j <= (int)merged.size(); j++)
+    if (!merged[j - 1].empty()) this->BilinearAdjoint(points[0], j, merged[j - 1], accum, shiftDeriv);
 }
 
 /*!

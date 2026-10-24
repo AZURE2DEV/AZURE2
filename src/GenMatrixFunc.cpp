@@ -98,6 +98,27 @@ void GenMatrixFunc::CalculateBareCrossSection(EPoint *point) {
     }
     point->SetFitCrossSection(real(sum) / 100.);
   } else {
+    if (point->IsTotal() && !point->IsPhase()) {
+      // The total cross section of the entrance pair by the optical theorem: with every channel of the J-group in its
+      // level matrix, U is unitary, so sum_c' |T_cc'|^2 over all exit channels is 2 Re T_cc (T = 1 - U for a neutral
+      // pair), and sigma_tot = (pi/k^2) g sum_J (2J+1) sum_c 2 Re T_cc over the entrance channels -- one T-matrix (the
+      // elastic one) instead of one per exit pair.  Photon channels carry no width in the level matrix and external
+      // capture is outside it, so capture is not included (add it as a SUM component).
+      double total = 0.;
+      for (int k = 1; k <= theDecay->NumKGroups(); k++) {
+        if (theDecay->GetKGroup(k)->IsCrossSpin()) continue;
+        for (int m = 1; m <= theDecay->GetKGroup(k)->NumMGroups(); m++) {
+          MGroup *theMGroup = theDecay->GetKGroup(k)->GetMGroup(m);
+          if (theMGroup->GetChNum() != theMGroup->GetChpNum()) continue;
+          const double jValue = compound()->GetJGroup(theMGroup->GetJNum())->GetJ();
+          total += (2. * jValue + 1.) * 2. * real(this->GetTMatrixElement(k, m));
+        }
+      }
+      point->SetFitCrossSection(point->GetGeometricalFactor() * compound()->GetPair(aa)->GetI1I2Factor() * total / 100.);
+      point->SetFitE1CrossSection(0.);
+      point->SetFitE2CrossSection(0.);
+      return;
+    }
     if (!point->IsPhase()) {
       double angleIntegratedXS = 0.;
       double angleIntegratedE1XS = 0.;

@@ -1327,6 +1327,7 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure, bool i
   }
   for (int i = 1; i <= this->NumLocalMappedPoints(); i++) {
     EPoint *mappedPoint = this->GetLocalMappedPoint(i);
+    if (mappedPoint->OwnsEDependentValues()) continue;
     mappedPoint->geofactor_ = geofactor_;
     mappedPoint->sfactorconv_ = sfactorconv_;
     mappedPoint->screen_k_ = screen_k_;
@@ -1720,17 +1721,23 @@ void EPoint::Calculate(CNuc *theCNuc, const Config &configure, EPoint *parent, i
     theMatrixFunc->InvertMatrices();
     theMatrixFunc->CalculateTMatrix(this);
     theMatrixFunc->CalculateCrossSection(this);
+    // A mapped point may have another exit pair (a component of a SUM, RATIO or total-capture segment, EData::MapData):
+    // the solved level matrix is the same, only its T-matrix is built anew.  Mapped points are ordered by exit, so
+    // each exit's T-matrix is built once.
+    int tExitKey = this->GetExitKey();
+    auto mappedCrossSection = [&](EPoint *mapped) {
+      if (mapped->GetExitKey() != tExitKey) {
+        theMatrixFunc->RecalculateTMatrix(mapped);
+        tExitKey = mapped->GetExitKey();
+      }
+      theMatrixFunc->CalculateCrossSection(mapped);
+    };
     if (subPointNum && parent) {
       const int numParentMapped = ScopedPointMappingOff::Active() ? 0 : parent->NumLocalMappedPoints();
-      for (int i = 1; i <= numParentMapped; i++) {
-        EPoint *mappedSubPoint = parent->GetLocalMappedPoint(i)->GetSubPoint(subPointNum);
-        theMatrixFunc->CalculateCrossSection(mappedSubPoint);
-      }
+      for (int i = 1; i <= numParentMapped; i++)
+        mappedCrossSection(parent->GetLocalMappedPoint(i)->GetSubPoint(subPointNum));
     } else {
-      for (int i = 1; i <= numMapped; i++) {
-        EPoint *mappedPoint = this->GetLocalMappedPoint(i);
-        theMatrixFunc->CalculateCrossSection(mappedPoint);
-      }
+      for (int i = 1; i <= numMapped; i++) mappedCrossSection(this->GetLocalMappedPoint(i));
     }
   } else {
     TargetEffect *effect = this->GetParentData()->GetTargetEffect(this->GetTargetEffectNum());
@@ -1925,6 +1932,7 @@ void EPoint::SetMap(int segmentNum, int pointNum) {
 
 void EPoint::ClearMapping() {
   is_mapped_ = false;
+  own_e_dependent_ = false;
   energy_map_.segment = 0;
   energy_map_.point = 0;
 }
@@ -1963,6 +1971,7 @@ void EPoint::AddSubPoint(EPoint subPoint) {
   // also carries target effects is integrated as though it were a cross
   // section, and A_y is never computed at all.
   subPoint.is_analyzing_power_ = this->is_analyzing_power_;
+  subPoint.is_total_ = this->is_total_;
   subPoint.is_sub_point_ = true;
   subPoint.screen_ue_ = this->screen_ue_;
   subPoint.screen_param_ = this->screen_param_;

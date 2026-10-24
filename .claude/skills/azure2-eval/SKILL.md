@@ -2112,6 +2112,20 @@ and the file loads cleanly.
   sum the old file defined, which must reproduce the old number (n0 + alpha0
   gave 698,808 against 203.497 x 3434 = 698,809); then add the channels the old
   definition left out (here n1, open above E_n = 1.716 MeV: 723,978).
+- **Neutron totals: prefer `total 1` (dev, October 2026) to a SUM over exits.**
+  `... data/ntot.dat 0 0 total 1` on an n+X -> n+X angle-integrated line is the
+  optical-theorem total (2 Re T_cc), equal to the SUM over EVERY particle exit
+  of the compound nucleus (1e-11 on 13C+a Cierjacks, 9 exits) from one T-matrix,
+  and it cannot leave a channel out (the trap above). Capture is NOT included
+  (photon channels carry no width in the level matrix): keep a capture pair as
+  a SUM component if it matters. In a natural SUM every elastic component
+  becomes its nucleus's total. Refused for charged/identical pairs, other
+  exits, differential data, `--use-rmc`. Builds before it IGNORE the keyword
+  and compute the elastic cross section alone -- check the build before
+  trusting a `total 1` file. Since the same release every SUM/RATIO/total-
+  capture term shares one level-matrix solution per point (evaluation 3x,
+  Jacobian 3.7x faster on 13C+a; `AZURE_NO_COMPONENT_MAPPING=1` restores the
+  per-term route, same numbers).
 - A stored `output/` in such a directory cannot be reproduced from the unedited
   `.azr` with a current build; say so before comparing chi2 across the edit.
 

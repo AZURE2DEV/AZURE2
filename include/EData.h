@@ -123,6 +123,8 @@ class EData {
   /// Map points at equal energies onto one another, so a shared energy is calculated once.
   /// The compound nucleus tells which segments have a particle exit; null is conservative.
   void MapData(CNuc *theCNuc = nullptr);
+  /// The mapping inside segments with components (MapData calls it last).
+  void MapComponentSegments(CNuc *theCNuc);
   /// Append a target-effect definition.
   void AddTargetEffect(TargetEffect);
   void SetNormParamOffset(int);

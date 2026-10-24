@@ -29,6 +29,7 @@ class ExtrapLine {
     operationType_ = 0;
     componentsList_ = "";
     natural_ = "0";
+    total_ = 0;
     // Initialize UPOS parameters to defaults
     isUPOS_ = 0;
     secondaryDecayL_ = 0;
@@ -100,6 +101,11 @@ class ExtrapLine {
         if (keyword == "sample" || keyword == "natural") {
           if (!(advancedStream >> natural_)) {
             natural_ = "0";
+            break;
+          }
+        } else if (keyword == "total") {
+          if (!(advancedStream >> total_) || (total_ != 0 && total_ != 1)) {
+            stream.setstate(std::ios::failbit);
             break;
           }
         } else if (keyword == "covariance") {
@@ -185,6 +191,8 @@ class ExtrapLine {
    * Returns the sample token ("sample <t>", alias "natural <t>"): "0" (none), "1" (the default sample) or a sample name.
    */
   const std::string &natural() const { return natural_; };
+  /// 1 for "total 1" (SegLine::total).
+  int total() const { return total_; };
   /*!
    * Returns the semicolon-separated list of components.
    */
@@ -223,6 +231,7 @@ class ExtrapLine {
   int isAdvanced_;
   int operationType_;
   std::string natural_;
+  int total_;
   bool hasCovariance_ = false;
   std::string componentsList_;
   int isUPOS_;

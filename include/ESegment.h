@@ -269,6 +269,13 @@ class ESegment {
   /// line, resolved to a 1-based sample of the <abundances> block by
   /// EData::Fill; 0 = not a natural segment).
   bool IsNatural() const { return naturalSample_ > 0; }
+  /// "total 1" on the line: every term of the segment whose exit pair is its entrance pair is the total cross
+  /// section of that pair, from the optical theorem (GenMatrixFunc::CalculateBareCrossSection); a term to another
+  /// exit pair (a SUM component adding capture, say) stays what it is.  Neutral entrance pairs only.
+  bool IsTotal() const { return isTotal_; }
+  /// IsTotal for this term: the segment is "total" and its exit pair is its entrance pair.
+  bool IsTotalTerm() const { return isTotal_ && this->GetExitKey() == this->GetEntranceKey(); }
+  void ApplyTotalToPoints();
   int GetNaturalSample() const { return naturalSample_; }
   void SetNaturalSample(int sample) { naturalSample_ = sample; }
   /// The token as read ("0", "1" or a sample name), before resolution.
@@ -366,6 +373,7 @@ class ESegment {
   int operationType_;
   std::string naturalToken_ = "0";
   int naturalSample_ = 0;
+  bool isTotal_ = false;  // IsTotal
   std::string componentsList_;
   std::string datafile_;
   std::vector<EPoint> points_;

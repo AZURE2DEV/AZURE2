@@ -638,6 +638,98 @@ bool GradOnePoint(ESegment *segment, EData *data, int i, int pointIdx,
     return true;
   }
 
+  // A SUM or RATIO segment whose components share the base point's energy (EData::MapComponentSegments): one
+  // level-matrix solution for every term, each term's T-matrix and cotangent in turn, and one back-propagation of
+  // the merged cotangents (TBarAdjointMany).  Before 2026-10-24 each term was calculated twice on its own (forward,
+  // then forward + adjoint).  AZURE_NO_COMPONENT_MAPPING=1 keeps the per-term route below.
+  static const bool componentMappingOff = [] {
+    const char *e = std::getenv("AZURE_NO_COMPONENT_MAPPING");
+    return e && *e && std::string(e) != "0";
+  }();
+  if (hasComp && !subpointTE && !componentMappingOff) {
+    std::vector<EPoint *> pts{point};
+    std::vector<int> xsComp{baseComp};
+    std::vector<ESegment *> termSeg{segment};
+    bool shared = true;
+    for (ESegment *comp : segment->GetComponentSegments()) {
+      if (!comp || pointIdx >= comp->NumPoints()) continue;
+      EPoint *cp = comp->GetPoint(pointIdx + 1);
+      if (!cp) continue;
+      if (cp->GetEntranceKey() != point->GetEntranceKey() || cp->GetCMEnergy() != point->GetCMEnergy() ||
+          cp->NumSubPoints() != 0)
+        shared = false;
+      pts.push_back(cp);
+      xsComp.push_back(comp->GetCrossSectionComponent());
+      termSeg.push_back(comp);
+    }
+    if (segment->GetOperationType() != SUM && pts.size() < 2) shared = false;
+    if (shared) {
+      AMatrixFunc amf(compound, config);
+      amf.ClearMatrices();
+      amf.FillMatrices(point);
+      amf.InvertMatrices();
+      int tExit = point->GetExitKey();
+      amf.CalculateTMatrix(point);
+      auto useExitOf = [&](EPoint *p) {
+        if (p->GetExitKey() == tExit) return;
+        amf.RecalculateTMatrix(p);
+        tExit = p->GetExitKey();
+      };
+      for (EPoint *p : pts) {
+        useExitOf(p);
+        amf.GenMatrixFunc::CalculateCrossSection(p);
+      }
+      // The combined model from the values the points now hold, exactly as the forward calculation forms it.
+      double model = segment->CalculateTheoreticalCrossSection(pointIdx, compound, config, data, true);
+      outModel = model;
+      double fitBar = fitBarFn(segment, i, pointIdx, model);
+      if (fitBar == 0.0) return true;
+      auto valueOf = [](EPoint *p, int c) {
+        return (c == 1) ? p->GetFitE1CrossSection() : (c == 2) ? p->GetFitE2CrossSection() : p->GetFitCrossSection();
+      };
+      // d(model)/d(term q)
+      std::vector<double> coef(pts.size(), 0.0);
+      if (segment->GetOperationType() == SUM) {
+        for (size_t q = 0; q < pts.size(); q++) {
+          const double v = valueOf(pts[q], xsComp[q]);
+          if (q > 0 && (std::isnan(v) || std::isinf(v))) continue;
+          double w = 1.0;
+          if (natural) {
+            const int nucleus = abundanceOf(termSeg[q]->GetEntranceKey());
+            w = compound->GetAbundance(sample, nucleus);
+            accum.AddAbundance(compound->AbundanceOrdinal(sample, nucleus),
+                               fitBar * (q > 0 ? termSeg[q]->GetComponentScaling() : 1.0) * v);
+          }
+          coef[q] = (q > 0 ? termSeg[q]->GetComponentScaling() : 1.0) * w;
+        }
+      } else {  // RATIO: base / first component
+        const double baseVal = valueOf(pts[0], xsComp[0]);
+        const double denomVal = pts[1]->GetFitCrossSection();
+        if (natural) {
+          const int nucleus = abundanceOf(segment->GetEntranceKey());
+          accum.AddAbundance(compound->AbundanceOrdinal(sample, nucleus), fitBar * baseVal);
+        }
+        if (baseVal != 0.0 && denomVal != 0.0) {
+          coef[0] = model / baseVal;
+          coef[1] = -model / denomVal;
+          xsComp[1] = 0;
+        }
+      }
+      std::vector<EPoint *> barPts;
+      std::vector<TMatrixCotangent> bars;
+      for (size_t q = 0; q < pts.size(); q++) {
+        if (coef[q] == 0.0) continue;
+        useExitOf(pts[q]);
+        TMatrixCotangent bar;
+        if (!amf.PointTBar(pts[q], fitBar * coef[q], bar, xsComp[q])) return false;
+        barPts.push_back(pts[q]);
+        bars.push_back(std::move(bar));
+      }
+      amf.TBarAdjointMany(barPts, bars, accum, shiftDeriv);
+      return true;
+    }
+  }
+
   // Combined model (components and/or target-effect integration).
   double model = segment->CalculateTheoreticalCrossSection(pointIdx, compound, config, data);
   outModel = model;
