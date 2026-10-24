@@ -424,6 +424,18 @@ The GUI review: `printf '1\n<reaction>.sav\n\n7\n' | AZURE2 <flags> --no-gui --n
   one process per session and `bake()` verifies in a fresh process. Do not use
   `save_fit` for campaign files. `pyazr` bakes skip inactive levels since 2026-09-05;
   older baked files may have mis-placed values in J-groups with inactive lines.
+- `bake()` writes the FIXED parameters' current physical values too since 2026-10-24 (worker
+  `transform_all` + `apply_fit(include_fixed=True)`, as `save_fit`).  A fixed parameter is fixed in
+  rwa space: its observed width moves with the level's free amplitudes (Brune's 1 + Σγ²dS/dE,
+  closed channels included).  Before, a fixed width kept the seed file's observed value, so an export
+  failed the 1e-4 check whenever a level mixed fixed and moving amplitudes (13C+a
+  10-22-26_merged_non16o_non1_anc: frozen levels with free ANCs, 14 fixed widths off by up to 13 %,
+  649,551 vs 646,800).  Exports made before that date with such levels are a slightly different model;
+  re-export from the ledger vector.  Test `rmfit/tests/test_bake_fixed_13n.py`.  The engine's own
+  conversion round-trips exactly.  Note "fixed" does not freeze a level's observed widths: to keep a
+  "frozen" level's widths, fix its closed-channel amplitudes too (13C+a `fix_frozen_anc.py`).
+- `total 1` (optical-theorem neutron total, AZURE2 dev d37d4e6) is in rmfit's keyword table and in
+  bake's keyword guard; builds before d37d4e6 ignore it silently and compute elastic only.
 - Delete `output/intEC.*` whenever segments change (stale-cache rule of the AZURE2 skill).
 - New levels are appended at the end of the file and levels are removed by
   deactivation, so every existing parameter key stays valid across structures.
@@ -1702,7 +1714,8 @@ before putting it in a job.
   (a trustworthy verdict).  Tell: the SAME background-pole keys pinned at the cap in every failed
   attempt, and the worst dataset is the one most sensitive to them.  Ask the evaluator how large a
   background contribution the reaction has historically needed before blaming the code.
-- **`export` can fail `bake`'s 1e-4 verify after a tighten polish.**  Structure 8 (built on a tightened
+- **`export` can fail `bake`'s 1e-4 verify after a tighten polish** (2026-10-24: possibly the fixed-parameter
+  gap fixed in §8, if structure 8 had fixed widths on levels with free amplitudes).  Structure 8 (built on a tightened
   base, background amplitudes near the 100 cap) failed at rel 1.15e-4 / levels-only 1.20e-4, EXACTLY
   reproducible (systematic, not noise).  A direct `bake(..., verify_rtol=5e-4)` passed, and a CLI mode-1
   run with the exported `.sav` reproduced the source objective to 1.7e-6.  `export` has no rtol argument;
