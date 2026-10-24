@@ -46,4 +46,4 @@ __all__ = ["azure2", "ScatteringLength", "ScatteringLengthLine",
            "Band", "load_covariance", "rmatrix_columns", "best_fit_params",
            "live_parameters", "step_sizes", "sensitivities", "trimmed_model",
            "uncertainty_bands", "extrapolation_bands"]
-__version__ = '2.8.0'
+__version__ = '2.9.0'
