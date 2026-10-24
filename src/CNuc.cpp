@@ -2738,7 +2738,10 @@ namespace {
 
 /*!
  * Park's numerical shift-function derivatives by their exact arguments (the
- * pair's parameters, l and the level energy, compared bit for bit), shared by
+ * pair's parameters, l and the level energy, compared bit for bit, and the
+ * settings that change the shift function at those arguments: GSL or own
+ * Coulomb functions, a nuclear potential, the Coulomb table, relativistic
+ * kinematics -- pyazr sessions with different settings share one process), shared by
  * all compound nuclei of the process: the working copies of a fit (evaluation,
  * gradient, residual Jacobian) need the same values at the same parameters.
  * An entry is what the computation returns, so a hit changes nothing.
@@ -2749,10 +2752,12 @@ struct ShiftDerivKey {
   int z1, z2, l;
   bool gsl;
   long hybrid;
-  double redmass, radius, threshold, energy;
+  bool table, relativistic;
+  double redmass, mass, radius, threshold, energy;
   bool operator<(const ShiftDerivKey &o) const {
-    return std::tie(z1, z2, l, gsl, hybrid, redmass, radius, threshold, energy) <
-        std::tie(o.z1, o.z2, o.l, o.gsl, o.hybrid, o.redmass, o.radius, o.threshold, o.energy);
+    return std::tie(z1, z2, l, gsl, hybrid, table, relativistic, redmass, mass, radius, threshold, energy) <
+        std::tie(o.z1, o.z2, o.l, o.gsl, o.hybrid, o.table, o.relativistic, o.redmass, o.mass, o.radius, o.threshold,
+                 o.energy);
   }
 };
 struct ShiftDerivValue {
@@ -2870,7 +2875,8 @@ void CNuc::CalcShiftFunctions(const Config &configure, bool secondDerivatives) {
       CoulFunc theCoulombFunction(d.pair, gslCoulomb);
       theCoulombFunction.SetUseGlobalCache(false);
       const ShiftDerivKey key{d.pair->GetZ(1), d.pair->GetZ(2), d.l, gslCoulomb, theCoulombFunction.hybridTag(),
-                              d.pair->GetRedMass(), d.pair->GetChRad(), threshold, d.energy};
+                              theCoulombFunction.UsesTable(), Kinematics::Relativistic(), d.pair->GetRedMass(),
+                              d.pair->GetM(1) + d.pair->GetM(2), d.pair->GetChRad(), threshold, d.energy};
       bool need1 = d.first, need2 = d.second;
       {
         std::lock_guard<std::mutex> lock(g_shiftDerivMutex);

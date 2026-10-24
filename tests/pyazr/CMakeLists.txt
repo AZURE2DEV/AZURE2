@@ -82,6 +82,13 @@ add_test(NAME pyazr_park_gradient
                  ${CMAKE_CURRENT_SOURCE_DIR}/park_gradient_test.py)
 set_tests_properties(pyazr_park_gradient PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=4")
 
+# Park's dS/dE at the level energies (bound, a few MeV, 33 MeV above threshold)
+# against mpmath, with and without the Coulomb table, in one process.
+add_test(NAME pyazr_park_dsde
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/park_dsde_test.py)
+set_tests_properties(pyazr_park_dsde PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
 # Parameter files are read by name: old layouts, the #parametrization tag,
 # write-back by name, foreign files refused.
 add_test(NAME pyazr_sav_readers
