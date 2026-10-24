@@ -6,11 +6,11 @@ ECIntegral.cpp ECTable.cpp ECAmplitudeCache.cpp MatrixInv.cpp LevelMatrixSolver.
 PPair.cpp AZURECalc.cpp
 ECMGroup.cpp ReactionRate.cpp AZUREMain.cpp EData.cpp DataCovariance.cpp ShftFunc.cpp ScatteringLength.cpp
 RMatrixFunc.cpp AZUREOutput.cpp  EDataIterator.cpp   TargetEffect.cpp
-AZUREParams.cpp EPoint.cpp Interference.cpp CNuc.cpp Equation.cpp
+AZUREParams.cpp EPoint.cpp Interference.cpp CNuc.cpp IsospinLevels.cpp Equation.cpp
 JGroup.cpp Config.cpp ESegment.cpp KGroup.cpp IntegratedFermiFunc.cpp
 EffectiveCharge.cpp  GSLException.cpp ParameterLimitsManager.cpp Straggling.cpp
 AdaptiveIntegrationGrid.cpp NuclearPotentialManager.cpp AZUREGrad.cpp
-CovarianceBand.cpp ParameterLabel.cpp PolarizationFunc.cpp CoulombTable.cpp)
+CovarianceBand.cpp ParameterLabel.cpp PolarizationFunc.cpp SpinObservable.cpp CoulombTable.cpp)
 
 # Add GUI stub when GUI is not enabled
 if(NOT BUILD_GUI)

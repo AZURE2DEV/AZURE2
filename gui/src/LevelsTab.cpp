@@ -2,6 +2,7 @@
 #include <QMessageBox>
 #include <QInputDialog>
 #include <QFile>
+#include <QRegularExpression>
 #include <algorithm>
 
 #include "LevelsTab.h"
@@ -351,6 +352,7 @@ void LevelsTab::addLevel(LevelsData level, bool fromFile) {
     index = levelsModel->index(levels.size(), 4, QModelIndex());
     levelsModel->setData(index, level.energy, Qt::EditRole);
     levelsModel->setNucleus(levels.size(), level.nucleus());
+    levelsModel->setFileId(levels.size(), level.fileId);
     levelsView->resizeRowsToContents();
     if (!fromFile) updateChannelsLevelAdded(levels.size());
     updateMissingSpinParities();
@@ -931,7 +933,24 @@ QList<int> LevelsTab::writtenLevelOrder() {
   }
   QList<int> order;
   for (const QList<int> &group : levelsMap) order.append(group);
-  return order;
+  // Isospin levels: the members of one declared level ID (one GUI level per nucleus) are written together,
+  // consecutively, under one ID (writeNuclearFile).  Without an <isospin> block the order is unchanged.
+  const QSet<int> isoIds = isospinLevelIds();
+  if (isoIds.isEmpty()) return order;
+  QList<int> grouped;
+  QSet<int> written;
+  for (int row : order) {
+    const int fileId = levels.at(row).fileId;
+    if (!isoIds.contains(fileId)) {
+      grouped.append(row);
+      continue;
+    }
+    if (written.contains(fileId)) continue;
+    written.insert(fileId);
+    for (int r : order)
+      if (levels.at(r).fileId == fileId) grouped.append(r);
+  }
+  return grouped;
 }
 
 LevelsTab::EngineNumbering LevelsTab::engineNumbering(const QList<int> &order) {
@@ -989,8 +1008,13 @@ bool LevelsTab::writeNuclearFile(QTextStream &outStream) {
   auto full = [](double v) { return QStringLiteral(" ") + QString::number(v, 'g', 15); };
 
   const QList<int> order = this->writtenLevelOrder();
+  // The members of one isospin level ID are consecutive in `order` and share one written ID; isospinIdMap
+  // records it for writeIsospinBlock.
+  const QSet<int> isoIds = isospinLevelIds();
+  isospinIdMap.clear();
   int levelId = 1;
-  for (int row : order) {
+  for (int k = 0; k < order.size(); k++) {
+    const int row = order.at(k);
     const LevelsData &level = levels.at(row);
     for (int ch = 0; ch < channels.size(); ch++) {
       if (channels.at(ch).levelIndex == row) {
@@ -1025,6 +1049,10 @@ bool LevelsTab::writeNuclearFile(QTextStream &outStream) {
                   << qSetFieldWidth(8) << pairs.at(channels.at(ch).pairIndex).ecMultMask
                   << qSetFieldWidth(0) << Qt::endl;
       }
+    }
+    if (isoIds.contains(level.fileId)) {
+      isospinIdMap.insert(level.fileId, levelId);
+      if (k + 1 < order.size() && levels.at(order.at(k + 1)).fileId == level.fileId) continue;
     }
     outStream << Qt::endl;
     levelId++;
@@ -1122,6 +1150,7 @@ bool LevelsTab::readNuclearFile(QTextStream &inStream) {
       Nucleus nucleus = PairsModel::nucleusOf(newPair);  // the engine's rule: the level belongs to its channels' nucleus
       newLevel.nucZ = nucleus.Z;
       newLevel.nucA = nucleus.A;
+      newLevel.fileId = levelId;
       int levelIndex = levelsModel->isLevel(newLevel);
       if (levelIndex == -1) {
         addLevel(newLevel, true);
@@ -1183,7 +1212,41 @@ bool LevelsTab::readNuclearFile(QTextStream &inStream) {
   return true;
 }
 
+QSet<int> LevelsTab::isospinLevelIds() const {
+  QSet<int> ids;
+  for (const QString &line : isospinBlock) {
+    const QStringList t = line.section('#', 0, 0).split(QRegularExpression("\\s+"), Qt::SkipEmptyParts);
+    if (t.size() >= 2 && t.at(0) == "level") ids.insert(t.at(1).toInt());
+  }
+  return ids;
+}
+
+bool LevelsTab::readIsospinBlock(QTextStream &inStream) {
+  isospinBlock.clear();
+  while (!inStream.atEnd()) {
+    const QString line = inStream.readLine();
+    if (line.trimmed() == QString("</isospin>")) return true;
+    isospinBlock.append(line);
+  }
+  return false;
+}
+
+bool LevelsTab::writeIsospinBlock(QTextStream &outStream) const {
+  // "level", "mix", "factor" and "soft" lines name a level ID in their second field.
+  static const QRegularExpression idField("^(\\s*(level|mix|factor|soft)\\s+)(\\d+)");
+  for (const QString &line : isospinBlock) {
+    QString out = line;
+    QRegularExpressionMatch m = idField.match(line);
+    if (m.hasMatch() && isospinIdMap.contains(m.captured(3).toInt()))
+      out = m.captured(1) + QString::number(isospinIdMap.value(m.captured(3).toInt())) + line.mid(m.capturedEnd(3));
+    outStream << out << Qt::endl;
+  }
+  return true;
+}
+
 void LevelsTab::reset() {
+  isospinBlock.clear();
+  isospinIdMap.clear();
   pairsModel->removeRows(0, pairsModel->getPairs().size(), QModelIndex());
   levelsModel->removeRows(0, levelsModel->getLevels().size(), QModelIndex());
   channelsModel->removeRows(0, channelsModel->getChannels().size(), QModelIndex());

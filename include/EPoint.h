@@ -7,6 +7,7 @@
 #include <memory>
 
 #include <cstring>
+#include "SpinObservable.h"
 #include "Constants.h"
 #include "UdrKernel.h"
 
@@ -131,6 +132,9 @@ class EPoint {
   //! target-effect integration needs the cross section as the weight.
   double GetAnalyzingPower() const { return analyzing_power_; };
   void SetAnalyzingPower(double v) { analyzing_power_ = v; };
+  //! The spin observable of an isDiff 9 point (null: isDiff 7 A_y, or not a spin point).
+  const SpinObservable *GetSpinObservable() const { return spin_observable_.get(); };
+  void SetSpinObservable(std::shared_ptr<const SpinObservable> v) { spin_observable_ = v; };
   //! The user-defined resolution kernel built for this point (shared, so
   //! copies of the point and of the data set do not duplicate it), and the
   //! projectile rest energy (MeV) its time-of-flight conversion uses.
@@ -411,6 +415,7 @@ class EPoint {
   bool is_sub_point_ = false;
   SubGridSpec sub_grid_spec_;
   double analyzing_power_ = 0.0;
+  std::shared_ptr<const SpinObservable> spin_observable_;
   int entrance_key_;
   int exit_key_;
   int segment_key_;

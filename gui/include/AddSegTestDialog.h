@@ -56,6 +56,8 @@ class AddSegTestDialog : public QDialog {
   int observableCode() const;
 
   QLineEdit *phaseJValueText;
+  QLineEdit *spinText;  //!< isDiff 9 observable token
+  QLabel *spinLabel;
   QLineEdit *phaseLValueText;
   QLabel *phaseJValueLabel;
   QLabel *phaseLValueLabel;

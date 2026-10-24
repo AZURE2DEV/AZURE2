@@ -39,6 +39,8 @@ struct SegmentsDataData {
   // through so a file that uses them survives a GUI load/save; the GUI does
   // not edit them yet.  Not a table column: set with setLineExtras().
   QString extraTokens;
+  // isDiff 9: the spin-observable token (SpinObservable.h).  Not a table column: set with setLineSpin().
+  QString spinObservable;
 };
 
 /*!
@@ -62,6 +64,7 @@ class SegmentsDataModel : public QAbstractTableModel {
   bool moveLine(int from, int to);
   /// Store the verbatim keyword blocks of a row (no table column addresses them).
   void setLineExtras(int row, const QString &tokens);
+  void setLineSpin(int row, const QString &token);
   Qt::ItemFlags flags(const QModelIndex &index) const;
   int isSegDataLine(const SegmentsDataData &line) const;
   QList<SegmentsDataData> getLines() const { return segDataLineList; };

@@ -791,7 +791,9 @@ bool AMatrixFunc::PointTBar(EPoint *point, double fitBar, TMatrixCotangent &bar,
       if (aa == exitPairNum) M.AddCoulomb();
       if (M.size() == 0) return false;
 
-      const std::vector<complex> bar = M.AnalyzingPowerBar();
+      const std::vector<complex> bar = point->GetSpinObservable()
+          ? M.SpinObservableBar(*point->GetSpinObservable())
+          : M.AnalyzingPowerBar();
       for (int k = 1; k <= nK; k++) {
         if (theDecay->GetKGroup(k)->IsCrossSpin()) continue;
         for (int m = 1; m <= theDecay->GetKGroup(k)->NumMGroups(); m++) {

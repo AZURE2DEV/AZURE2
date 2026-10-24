@@ -1,6 +1,7 @@
 #ifndef ESEGMENT_H
 #define ESEGMENT_H
 
+#include "SpinObservable.h"
 #include "EPoint.h"
 #include "Equation.h"
 #include <vector>
@@ -51,6 +52,12 @@ class ESegment {
    * dimensionless and bounded by one.
    */
   bool IsAnalyzingPower() const { return isAnalyzingPower_; };
+  //! The spin observable of an isDiff 9 segment; null for every other segment (isDiff 7 included).
+  std::shared_ptr<const SpinObservable> GetSpinObservable() const { return spinObservable_; };
+  bool IsSpinSegment() const { return !spinToken_.empty() || !spinParseError_.empty(); };
+  const std::string &GetSpinToken() const { return spinToken_; };
+  const std::string &GetSpinParseError() const { return spinParseError_; };
+  void SetSpinObservable(bool isSpin, const std::string &token);
   /// Unobserved-primary, observed-secondary reaction?
   bool IsUPOS() const;
   /// Number of segments summed for total capture; 0 if this is not a total-capture segment.
@@ -307,6 +314,9 @@ class ESegment {
   bool varyNorm_;
   bool isAngDist_;
   bool isAnalyzingPower_;
+  std::shared_ptr<const SpinObservable> spinObservable_;
+  std::string spinToken_;
+  std::string spinParseError_;
   bool isUPOS_;
   int secondaryDecayL_;
   double Ic_;

@@ -366,6 +366,7 @@ void SegmentsTab::addSegDataLine() {
       newLine.delta = 0.0;
     }
     newLine.extraTokens = SegmentKeywords::withNaturalToken(QString(), aDialog.naturalToken());
+    newLine.spinObservable = (newLine.dataType == 9) ? aDialog.spinText->text().trimmed() : QString();
     addSegDataLine(newLine);
   }
 }
@@ -424,6 +425,7 @@ void SegmentsTab::addSegDataLine(SegmentsDataData line) {
     segmentsDataModel->setData(index, line.delta, Qt::EditRole);
     // Keyword blocks have no column; without this they were lost on every load.
     segmentsDataModel->setLineExtras(lines.size(), line.extraTokens);
+    segmentsDataModel->setLineSpin(lines.size(), line.spinObservable);
     segmentsDataView->resizeRowToContents(lines.size());
     updateSegDataButtons(segmentsDataView->selectionModel()->selection());
   } else {
@@ -468,6 +470,7 @@ void SegmentsTab::addSegTestLine() {
       newLine.componentsList = "";
     }
     newLine.extraTokens = SegmentKeywords::withNaturalToken(QString(), aDialog.naturalToken());
+    newLine.spinObservable = (newLine.dataType == 9) ? aDialog.spinText->text().trimmed() : QString();
     addSegTestLine(newLine);
   }
 }
@@ -509,6 +512,7 @@ void SegmentsTab::addSegTestLine(SegmentsTestData line) {
     index = segmentsTestModel->index(lines.size(), 15, QModelIndex());
     segmentsTestModel->setData(index, line.componentsList, Qt::EditRole);
     segmentsTestModel->setLineExtras(lines.size(), line.extraTokens);
+    segmentsTestModel->setLineSpin(lines.size(), line.spinObservable);
     segmentsTestView->resizeRowToContents(lines.size());
     updateSegTestButtons(segmentsTestView->selectionModel()->selection());
   } else {
@@ -592,6 +596,7 @@ void SegmentsTab::editSegDataLine() {
   QString delta = var.toString();
 
   QString extraTokens = segmentsDataModel->getLines().at(index.row()).extraTokens;
+  QString spinObservable = segmentsDataModel->getLines().at(index.row()).spinObservable;
 
   AddSegDataDialog aDialog;
   aDialog.setPairsModel(pairsModel);
@@ -605,6 +610,7 @@ void SegmentsTab::editSegDataLine() {
   aDialog.lowAngleText->setText(lowAngle);
   aDialog.highAngleText->setText(highAngle);
   aDialog.setDataTypeCode(dataType);
+  aDialog.spinText->setText(spinObservable);
   aDialog.dataFileText->setText(dataFile);
   aDialog.dataNormText->setText(dataNorm);
   aDialog.dataNormErrorText->setText(dataNormError);
@@ -776,6 +782,8 @@ void SegmentsTab::editSegDataLine() {
     }
     QString newExtraTokens = SegmentKeywords::withNaturalToken(extraTokens, aDialog.naturalToken());
     if (newExtraTokens != extraTokens) segmentsDataModel->setLineExtras(index.row(), newExtraTokens);
+    QString newSpin = (aDialog.dataTypeCode() == 9) ? aDialog.spinText->text().trimmed() : QString();
+    if (newSpin != spinObservable) segmentsDataModel->setLineSpin(index.row(), newSpin);
   }
 }
 
@@ -831,6 +839,7 @@ void SegmentsTab::editSegTestLine() {
   QString componentsList = var.toString();
 
   QString extraTokens = segmentsTestModel->getLines().at(index.row()).extraTokens;
+  QString spinObservable = segmentsTestModel->getLines().at(index.row()).spinObservable;
 
   AddSegTestDialog aDialog;
   aDialog.setPairsModel(pairsModel);
@@ -846,6 +855,7 @@ void SegmentsTab::editSegTestLine() {
   aDialog.highAngleText->setText(highAngle);
   aDialog.angleStepText->setText(angleStep);
   aDialog.setDataTypeCode(dataType);
+  aDialog.spinText->setText(spinObservable);
   aDialog.phaseJValueText->setText(phaseJ);
   aDialog.phaseLValueText->setText(phaseL);
   aDialog.angDistSpin->setValue(maxAngDistOrder);
@@ -952,6 +962,8 @@ void SegmentsTab::editSegTestLine() {
     }
     QString newExtraTokens = SegmentKeywords::withNaturalToken(extraTokens, aDialog.naturalToken());
     if (newExtraTokens != extraTokens) segmentsTestModel->setLineExtras(index.row(), newExtraTokens);
+    QString newSpin = (aDialog.dataTypeCode() == 9) ? aDialog.spinText->text().trimmed() : QString();
+    if (newSpin != spinObservable) segmentsTestModel->setLineSpin(index.row(), newSpin);
   }
 }
 
@@ -1141,12 +1153,14 @@ bool SegmentsTab::readSegDataFile(QTextStream &inStream) {
     if (!inStream.atEnd() && line.trimmed() != QString("</segmentsData>")) {
       QTextStream in(&line);
       in >> isActive >> entrancePairIndex >> exitPairIndex >> lowEnergy >> highEnergy >> lowAngle >> highAngle >> dataType;
+      QString spinObs;
       if (dataType == 2)
         in >> phaseJ >> phaseL;
       else {
         phaseJ = 0.;
         phaseL = 0;
       }
+      if (dataType == 9) in >> spinObs;  // spin observable token
       in >> dataNorm >> varyNorm;
       QString restOfLine = in.readLine();
       QTextStream stm(&restOfLine);
@@ -1360,6 +1374,7 @@ bool SegmentsTab::readSegDataFile(QTextStream &inStream) {
       SegmentsDataData newLine = {isActive, entrancePairIndex, exitPairIndex, lowEnergy, highEnergy, lowAngle,
                                   highAngle, dataType, dataFile, dataNorm, dataNormError, varyNorm, phaseJ, phaseL, energyShift, energyShiftError, varyEnergyShift, isAdvanced, operationType, componentsList, isUPOS, secondaryDecayL, finalJ, delta};
       newLine.extraTokens = extraTokens;
+      newLine.spinObservable = spinObs;
       addSegDataLine(newLine);
     }
   }
@@ -1397,6 +1412,7 @@ bool SegmentsTab::writeSegDataFile(QTextStream &outStream) {
               << qSetFieldWidth(15) << lines.at(i).dataType;
     if (lines.at(i).dataType == 2) outStream << qSetFieldWidth(15) << lines.at(i).phaseJ
                                              << qSetFieldWidth(15) << lines.at(i).phaseL;
+    if (lines.at(i).dataType == 9) outStream << qSetFieldWidth(0) << " " << lines.at(i).spinObservable;
     outStream << qSetFieldWidth(15) << lines.at(i).dataNorm
               << qSetFieldWidth(15) << lines.at(i).varyNorm
               << qSetFieldWidth(15) << lines.at(i).dataNormError
@@ -1533,6 +1549,8 @@ bool SegmentsTab::readSegTestFile(QTextStream &inStream) {
       } else {
         maxAngDistOrder = 0;
       }
+      QString spinObs;
+      if (dataType == 9) in >> spinObs;  // spin observable token
       if (in.status() != QTextStream::Ok) return false;
 
       // Initialize advanced segment data to defaults for backwards compatibility
@@ -1621,6 +1639,7 @@ bool SegmentsTab::readSegTestFile(QTextStream &inStream) {
       SegmentsTestData newLine = {isActive, entrancePairIndex, exitPairIndex, lowEnergy, highEnergy, energyStep, lowAngle,
                                   highAngle, angleStep, dataType, phaseJ, phaseL, maxAngDistOrder, isAdvanced, operationType, componentsList};
       newLine.extraTokens = extraTokens;
+      newLine.spinObservable = spinObs;
       addSegTestLine(newLine);
     }
   }
@@ -1648,6 +1667,9 @@ bool SegmentsTab::writeSegTestFile(QTextStream &outStream) {
     } else if (lines.at(i).dataType == 3) {
       outStream << qSetFieldWidth(15) << lines.at(i).dataType
                 << qSetFieldWidth(0) << lines.at(i).maxAngDistOrder;
+    } else if (lines.at(i).dataType == 9) {
+      outStream << qSetFieldWidth(15) << lines.at(i).dataType
+                << qSetFieldWidth(0) << lines.at(i).spinObservable;
     } else
       outStream << qSetFieldWidth(0) << lines.at(i).dataType;
 

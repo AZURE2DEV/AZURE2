@@ -175,6 +175,10 @@ int CNuc::Fill(const Config &configure, std::pair<int, double> radii) {
   // Which compound nucleus each level (by its ID, column 9) belongs to: the
   // channel lines of one level must all come from pairs of one nucleus.
   std::map<int, int> levelNucleus;
+  // An <isospin> block lets the lines of a declared level ID span nuclei; read it first.
+  if (isospin_.Read(configure) == -1) return -1;
+  int lastLevelID = 0;
+  std::set<int> closedLevelIDs;
   line = "";
   while (!in.eof() && line != "</levels>") {
     getline(in, line);
@@ -210,10 +214,19 @@ int CNuc::Fill(const Config &configure, std::pair<int, double> radii) {
           if (it == ecPairs.end()) ecPairs[PairNum] = Line.ecMultMask();
         }
         const int nucleusNum = this->GetPair(PairNum)->GetNucleus();
+        if (Line.levelID() != lastLevelID) {
+          if (isospin_.IsDeclared(Line.levelID()) && closedLevelIDs.count(Line.levelID())) {
+            configure.outStream << "ERROR: the lines of isospin level ID " << Line.levelID()
+                                << " are not consecutive in <levels>." << std::endl;
+            return -1;
+          }
+          closedLevelIDs.insert(lastLevelID);
+          lastLevelID = Line.levelID();
+        }
         std::map<int, int>::iterator lvl = levelNucleus.find(Line.levelID());
         if (lvl == levelNucleus.end()) {
           levelNucleus[Line.levelID()] = nucleusNum;
-        } else if (lvl->second != nucleusNum) {
+        } else if (lvl->second != nucleusNum && !isospin_.IsDeclared(Line.levelID())) {
           configure.outStream << "ERROR: level ID " << Line.levelID() << " (J = " << Line.levelJ()
                               << (Line.levelPi() == -1 ? "-" : "+") << ", E = " << Line.levelE()
                               << " MeV) has channels of two compound nuclei, "
@@ -322,6 +335,7 @@ int CNuc::Fill(const Config &configure, std::pair<int, double> radii) {
     for (int j = 1; j <= this->NumJGroups(); j++) this->GetJGroup(j)->SetNucleusLabelled(true);
 
   if (this->ReadAbundances(configure) == -1) return -1;
+  if (isospin_.Resolve(configure, *this) == -1) return -1;
   if (ScatteringLength::ReadConstraints(this, configure, scatLenConstraints_) == -1) return -1;
 
   return 0;
@@ -1577,7 +1591,17 @@ void CNuc::CalcBoundaryConditions(const Config &configure) {
         continue;
       }
       ALevel *firstLevel = theJGroup->GetLevel(1);
-      if (firstLevel->IsInRMatrix()) {
+      if (theJGroup->BoundaryMinusL()) {
+        // Fixed B_c = -l_c, the same in every nucleus, so that the formal
+        // parameters of isospin partners are related by Clebsch-Gordan factors.
+        for (int ch = 1; ch <= theJGroup->NumChannels(); ch++) {
+          AChannel *theChannel = theJGroup->GetChannel(ch);
+          if (this->GetPair(theChannel->GetPairNum())->GetPType() == 0)
+            theChannel->SetBoundaryCondition(-(double)theChannel->GetL());
+          else
+            theChannel->SetBoundaryCondition(theJGroup->GetChannel(1)->GetBoundaryCondition());
+        }
+      } else if (firstLevel->IsInRMatrix()) {
         for (int ch = 1; ch <= theJGroup->NumChannels(); ch++) {
           AChannel *theChannel = theJGroup->GetChannel(ch);
           PPair *thePair = this->GetPair(theChannel->GetPairNum());
@@ -2088,13 +2112,27 @@ void CNuc::FillMnParams(ROOT::Minuit2::MnUserParameters &p, const Config *config
       }
     }
   }
+  // Isospin shifts and mixes, then the derived members' values (fixed).
+  if (isospin_.Active()) {
+    isospin_.AddParams(p);
+    isospin_.Sync(p);
+    isospin_.InitSoftParams(p);
+  }
 }
 
 /*!
  * Fills the CNuc object from the Minuit parameter array.
  */
 
-void CNuc::FillCompoundFromParams(const vector_r &p) {
+void CNuc::FillCompoundFromParams(const vector_r &pIn) {
+  // Isospin levels: the derived members follow the free parameters.
+  vector_r tied;
+  if (isospin_.Active()) {
+    tied = pIn;
+    isospin_.Apply(tied);
+    isospin_.ReadParams(tied);
+  }
+  const vector_r &p = isospin_.Active() ? tied : pIn;
   int i = 0;
   for (int j = 1; j <= this->NumJGroups(); j++) {
     for (int la = 1; la <= this->GetJGroup(j)->NumLevels(); la++) {
@@ -2534,6 +2572,10 @@ void CNuc::PrintTransformParams(const Config &configure) {
         out << "  E_level = " << std::setw(8) << theLevel->GetTransformE() << " MeV"
             << "  ITERATIONS = " << std::setw(5) << theLevel->GetTransformIterations();
         if (this->NumNuclei() > 1) out << "  NUCLEUS " << this->NucleusLabel(theJGroup->GetNucleus());
+        if (isospin_.Active()) {
+          const std::string iso = isospin_.MemberLabel(j, la);
+          if (!iso.empty()) out << "  " << iso;
+        }
         out << std::endl;
         for (int ch = 1; ch <= this->GetJGroup(j)->NumChannels(); ch++) {
           AChannel *theChannel = this->GetJGroup(j)->GetChannel(ch);
@@ -2597,6 +2639,7 @@ void CNuc::PrintTransformParams(const Config &configure) {
     }
   } else
     configure.outStream << "Could not save parameters.out file." << std::endl;
+  isospin_.Write(configure, *this);
   if (configure.relativistic) this->PrintRelativisticParams(configure);
 }
 

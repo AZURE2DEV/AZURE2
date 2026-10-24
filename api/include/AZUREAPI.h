@@ -92,7 +92,7 @@ class AZUREAPI {
   vector_r GetEnergyShiftIndices();
   // Number of numeric fields packed per parameter by GetParameterInfo().
   // Keep this in sync with pyazr/parameters.py (Parameter._NFIELDS).
-  static const int kParamInfoFields = 15;  // unchanged: shift-function and abundance records reuse the fields (types 5, 6)
+  static const int kParamInfoFields = 15;  // unchanged: shift-function, abundance and isospin records reuse the fields (types 5-7)
   /*!
    * Returns structured metadata describing every parameter, in the same order
    * as params_names() / params_all() / params_fixed().
@@ -111,6 +111,11 @@ class AZUREAPI {
    *                      line with a screening block: the effect number in
    *                      field 6, the prior centre in field 5, the prior sigma
    *                      in field 14 (0 = none)
+   *                    8=isospin parameter (only in a project with an
+   *                      <isospin> block): an internal Coulomb shift or an
+   *                      isospin-forbidden amplitude, k (0-based, shifts then
+   *                      mixes) in field 6, the prior centre in field 5 and
+   *                      the prior sigma (0 = none) in field 14
    *   1  jgroup        1-based J-group index (R-matrix params only)
    *   2  J             total spin of the J-group / level
    *   3  parity        +1 / -1
@@ -282,6 +287,9 @@ class AZUREAPI {
   /// As TransformAllRWAParameters, but returns every R-matrix parameter's
   /// physical value, fixed ones included (the <levels> block of a snapshot).
   vector_r TransformAllRWAParametersFull(const vector_r &p) const;
+  /*! Every parameter (params_all_rwa layout) with the derived isospin slots
+   *  recomputed from the free ones (<isospin> block); p unchanged without one. */
+  vector_r TieAllRWA(const vector_r &p) const;
 
   /*!
    * Calculate chi-squared from RWA parameters
