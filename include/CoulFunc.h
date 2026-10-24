@@ -109,6 +109,8 @@ class CoulFunc {
   /// The nuclear potential these waves are computed under (0 = plain Coulomb);
   /// part of the ECTable term key.
   long hybridTag() const { return hybridTag_; }
+  /// Whether P, S and the phase come from the universal Coulomb table.
+  bool UsesTable() const { return table_ != nullptr; }
 
   // The global (radius-keyed, mutex-protected) Coulomb cache only helps when the
   // same radius is queried across many energies (e.g. penetrabilities at the
