@@ -125,4 +125,16 @@ Checks
   sections with an independent golden-rule calculation (``truth.py``) for
   p + :sup:`16`\ O :math:`\to` :sup:`17`\ F(0.495) (E1 in all three forms,
   and M1) and for :math:`\alpha` + :sup:`12`\ C :math:`\to` :sup:`16`\ O(g.s.)
-  (E1 + E2 in all three forms).
+  (E1 + E2 in all three forms).  Since 2026-10-25 it also covers
+  p + :sup:`14`\ N :math:`\to` :sup:`15`\ O by s-wave M1, with a moment on
+  both clusters and a target of spin 1.
+
+The M1 spin term :math:`g_1 \mathbf S_1 + g_2 \mathbf S_2` (the pair
+columns g1 and g2) had a sign error before 2026-10-25.  A cluster's moment
+term had the wrong sign whenever the other cluster had half-integer spin.  For
+pairs such as p + :sup:`14`\ N the M1 external capture was wrong in size
+(about a factor 0.5–3 depending on the channel spins).  For two clusters with
+half-integer spin (p + :sup:`13`\ C, p + :sup:`15`\ N) the spin term had the
+wrong sign against the orbital term.  Models with a spin-0 target, or with
+only one non-zero g-factor and the other cluster of integer spin, were not
+affected.

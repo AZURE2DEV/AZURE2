@@ -427,12 +427,18 @@ complex ECIntegral::CalculateDirect(int theInitialLValue, int theFinalLValue,
     complex orbitalTerm = effectiveCharge *
         sqrt((2. * theInitialLValue + 1.) * (theInitialLValue + 1.) * theInitialLValue) *
         AngCoeff::Racah(1., theInitialLValue, theInitialJValue, theInitialSValue, theInitialLValue, theFinalJValue);
+    // <(j1 j2)s_f||g1 S1 + g2 S2||(j1 j2)s_i> (Edmonds 7.1.7, 7.1.8).  Racah(a,b,c,d,e,f) = (-1)^(a+b+c+d) {a b e; d c f}
+    // leaves an extra (-1)^(2 j1) in the g1 term and (-1)^(2 j2) in the g2 term; parityJ2 and parityJ1 remove it.
+    // Before 2026-10-25 they were missing: a cluster's moment flipped sign whenever the OTHER cluster had
+    // half-integer spin (p+14N s-wave: sigma_M1 x3.3 or x0.56).  tests/ec_m1_exact cases (k), (l).
+    const double parityJ1 = (lround(2. * pair()->GetJ(1)) % 2) ? -1. : 1.;
+    const double parityJ2 = (lround(2. * pair()->GetJ(2)) % 2) ? -1. : 1.;
     complex tau = pow(std::complex<double>(-1., 0.), pair()->GetJ(1) + pair()->GetJ(2)) *
-        (pow(complex(-1., 0.), theFinalSValue) *
+        (parityJ2 * pow(complex(-1., 0.), theFinalSValue) *
              sqrt(pair()->GetJ(1) * (pair()->GetJ(1) + 1.) * (2. * pair()->GetJ(1) + 1.)) *
              AngCoeff::Racah(theFinalSValue, pair()->GetJ(1), theInitialSValue, pair()->GetJ(1), pair()->GetJ(2), 1.) *
              pair()->GetG(1) +
-         pow(complex(-1., 0.), theInitialSValue) *
+         parityJ1 * pow(complex(-1., 0.), theInitialSValue) *
              sqrt(pair()->GetJ(2) * (pair()->GetJ(2) + 1.) * (2. * pair()->GetJ(2) + 1.)) *
              AngCoeff::Racah(theFinalSValue, pair()->GetJ(2), theInitialSValue, pair()->GetJ(2), pair()->GetJ(1), 1.) *
              pair()->GetG(2));

@@ -13,7 +13,9 @@
 #   alpha + 12C -> 16O(g.s.) + gamma, E1 + E2 (N = Z: the long-wavelength E1 charge nearly vanishes)
 #   (f) long wavelength, (g) charge term, (h) charge + convection current;
 #   saved intEC.dat files are not reused across
-#   (i) the long-wavelength switch, (j) the convection-current switch.
+#   (i) the long-wavelength switch, (j) the convection-current switch;
+#   p + 14N -> 15O, s-wave M1 with both cluster moments (target spin 1), final channel spin (k) 1/2, (l) 3/2
+#   (before 2026-10-25 one moment term had the wrong sign when the other cluster had half-integer spin: x3.3, x0.56).
 #
 #   ./tests/ec_m1_exact/check.sh path/to/AZURE2
 
@@ -74,6 +76,10 @@ run a_lwa a12c;  run a_chg a12c "--no-long-wavelength --no-ec-convection-current
 compare "$WORK/a_lwa/$OUTA" 2 "(f) alpha+12C E1+E2, long wavelength" sigma_a12c.dat
 compare "$WORK/a_chg/$OUTA" 3 "(g) alpha+12C E1+E2, charge term" sigma_a12c.dat
 compare "$WORK/a_nlw/$OUTA" 4 "(h) alpha+12C E1+E2, charge + convection current" sigma_a12c.dat
+
+run p14n_s1 p14n_s1;  run p14n_s3 p14n_s3
+compare "$WORK/p14n_s1/$OUT" 2 "(k) p+14N M1, final channel spin 1/2 (g_p S_p + g_14N S_14N)" sigma_p14n.dat
+compare "$WORK/p14n_s3/$OUT" 3 "(l) p+14N M1, final channel spin 3/2" sigma_p14n.dat
 
 # same4 A B: column 4 of two output files identical, row by row
 same4() { awk 'NR == FNR { a[FNR] = $4; n = FNR; next } { if ($4 != a[FNR]) bad = 1; m = FNR } END { exit (bad || m != n) }' "$1" "$2"; }

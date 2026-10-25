@@ -15,6 +15,12 @@ Each has one angle-integrated segment of 16O(p,g)17F(0.495) at the energies in E
              long-wavelength E1 charge nearly vanishes (-0.00098), so the exact form and its convection-current term
              are large here.
 
+  p14n_s1.azr, p14n_s3.azr : p + 14N -> 15O(1/2+) or 15O(3/2+), a fictitious s-wave proton state bound by 0.2 MeV
+             (ANC 5 fm^-1/2, a = 5 fm), M1 external capture only (mask 2) from the s-wave entrance J-groups 1/2+ and
+             3/2+.  Both clusters carry a moment (g_p 5.5857, g(14N) 0.4038) and the target spin is 1, so the M1
+             spin term has a g1 S1 and a g2 S2 piece and channel spin 1/2 <-> 3/2 transitions.  With l = 0 the
+             orbital term vanishes.  Final channel spin 1/2 (s1) or 3/2 (s3).  Energies ECM.
+
 truth.py computes the same cross sections independently; check.sh runs the models with and without
 --no-long-wavelength and --no-ec-convection-current.
 
@@ -26,6 +32,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 MP, M16 = 1.007276, 15.99053
 ECM = [0.1, 0.3, 0.6, 1.0, 1.5, 2.0, 3.0]
 MA, M12, SA = 4.002603, 12.0, 7.16192
+M14, M15, SP15, B15, ANC15, G14N = 13.999234, 15.003066, 7.2971, 0.2, 5.0, 0.4038
 ECM_A = [0.6, 1.0, 1.5, 2.0, 3.0]
 
 CONFIG = """<config>
@@ -90,7 +97,31 @@ def model_a12c():
             f.write(f"{e:.10g}  0  1  0.1\n")
 
 
+def model_p14n(name, jf):
+    """p + 14N -> 15O(jf+), s-wave final state, M1 only (mask 2); entrance J-groups 1/2+ and 3/2+ (s-wave)."""
+    ex = SP15 - B15
+    prot = f"0.5 1 1 1 0 {MP} {M14} 1 7 {SP15} {SP15} 0 0 0.0 0 5 5.5857 {G14N} 0"
+    gam = f"1 1 {jf} 1 {ex:.4f} 0 {M15} 0 8 {SP15} 0 0 0 0.0 10 0 0 0 2"
+    s2f = int(round(2 * jf))
+    levels = [[line(jf, 1, f"{ex:.4f}", 1, s2f, 0, 1, ANC15, prot)]]                                  # final state, ANC
+    for n, J in enumerate((0.5, 1.5), start=2):
+        lv = [line(J, 1, 30, 1, int(round(2 * J)), 0, n, 1e-6, prot), line(J, 1, 30, 3, s2f, 2, n, 0, gam)]
+        if J == jf:   # the final state's own J-group: the 30 MeV level shares it
+            levels[0].append(line(jf, 1, f"{ex:.4f}", 3, s2f, 2, 1, 0, gam))
+        levels.append(lv)
+    elab = [e * (MP + M14) / M14 for e in ECM]
+    seg = f"1 1 3 {elab[0] - 0.01:.6f} {elab[-1] + 0.01:.6f} 0 0 0 1 0 0 0 0 0 data/ecm_p14n.dat 0 0"
+    txt = (CONFIG + "<levels>\n" + "\n\n".join("\n".join(lv) for lv in levels) + "\n\n</levels>\n<segmentsData>\n"
+           + seg + "\n</segmentsData>\n<segmentsTest>\n</segmentsTest>\n<targetInt>\n</targetInt>\n")
+    open(os.path.join(HERE, "models", name + ".azr"), "w").write(txt)
+    with open(os.path.join(HERE, "models", "data", "ecm_p14n.dat"), "w") as f:
+        for e in elab:
+            f.write(f"{e:.10g}  0  1  0.1\n")
+
+
 if __name__ == "__main__":
     model("e1", 1)
     model("m1", 2)
     model_a12c()
+    model_p14n("p14n_s1", 0.5)
+    model_p14n("p14n_s3", 1.5)

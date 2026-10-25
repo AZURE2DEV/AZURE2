@@ -25,7 +25,11 @@ and e^2 = alpha hbar c, mu_N = e hbar c / (2 m_p c^2).  Reduced matrix elements 
 
 expected/sigma.dat (p + 16O -> 17F(0.495)): E_cm, sigma E1 LWA, E1 charge term, E1 charge + convection, M1 (barn).
 expected/sigma_a12c.dat (alpha + 12C -> 16O g.s., E1 + E2): E_cm, sigma LWA, charge term, charge + convection (barn).
-Run from this directory: python3 truth.py   (needs mpmath, numpy, scipy, sympy; about 20 minutes)
+expected/sigma_p14n.dat (p + 14N -> 15O(1/2+), 15O(3/2+), s-wave, M1 with g_p S_p + g_14N S_14N): E_cm, sigma s_f = 1/2,
+sigma s_f = 3/2 (barn).  The spin matrix element is built from magnetic substates (Clebsch-Gordan sums over
+|m_p m_14N>), not from a recoupling formula.
+Run from this directory: python3 truth.py   (needs mpmath, numpy, scipy, sympy; about 20 minutes);
+python3 truth.py p14n writes only expected/sigma_p14n.dat (about three minutes).
 """
 import os
 import mpmath as mp
@@ -137,6 +141,50 @@ def sigma_p16O(sysp, E):
     return out
 
 
+def red_spin_mscheme(j1, j2, l, si, sf, Ji, Jf, g1, g2):
+    """<(l (j1 j2)sf)Jf||g1 S1 + g2 S2||(l (j1 j2)si)Ji> (Edmonds normalization) from the z component between
+    explicitly coupled m-states."""
+    from sympy import S as Sy
+    from sympy.physics.wigner import clebsch_gordan
+    ms = lambda j: [Sy(j) - k for k in range(int(round(2 * j)) + 1)]
+
+    def state(s, J, M):
+        st = {}
+        for ml in ms(l):
+            for m1 in ms(j1):
+                m2 = M - ml - m1
+                if abs(m2) > j2:
+                    continue
+                c = clebsch_gordan(Sy(l), Sy(s), Sy(J), ml, M - ml, M) * clebsch_gordan(Sy(j1), Sy(j2), Sy(s), m1, m2, M - ml)
+                if c != 0:
+                    st[(ml, m1, m2)] = float(c)
+        return st
+    for M in ms(min(Ji, Jf)):
+        w3 = float(wigner_3j(Jf, 1, Ji, -M, 0, M))
+        if abs(w3) < 1e-12:
+            continue
+        a, b = state(sf, Jf, M), state(si, Ji, M)
+        me = sum(a[k] * b[k] * (g1 * float(k[1]) + g2 * float(k[2])) for k in a if k in b)
+        return me / ((-1) ** int(round(Jf - M)) * w3)
+    return 0.0
+
+
+def sigma_p14n(sysn, E, Jf):
+    """p + 14N -> 15O(Jf+), s-wave external capture, M1 spin term (l = 0: the orbital term vanishes), from the
+    entrance J-groups 1/2+ (s = 1/2) and 3/2+ (s = 3/2)."""
+    j1, j2, gp, gn = 0.5, 1.0, 5.5857, mm.G14N
+    kg = (E + sysn.B) / HBARC
+    k, _, u0 = sysn.ui(0, E)
+    overlap = np.sum(sysn.w * sysn.uf * u0)
+    muN2 = ALPHA * HBARC * (HBARC / (2 * MPROTON)) ** 2
+    s = 0.0
+    for Ji in (0.5, 1.5):
+        red = red_spin_mscheme(j1, j2, 0, Ji, Jf, Ji, Jf, gp, gn)
+        Bm1 = 3 / (4 * np.pi) * muN2 * (red * overlap) ** 2 / (2 * Ji + 1)
+        s += np.pi / k ** 2 * (2 * Ji + 1) / ((2 * j1 + 1) * (2 * j2 + 1)) * gamma_pref(1, kg) * Bm1 * 0.01
+    return s
+
+
 def sigma_a12c(sysa, E):
     """alpha + 12C -> 16O(0+): E1 from l = 1, E2 from l = 2 (spinless clusters, J = l)."""
     kg = (E + sysa.B) / HBARC
@@ -148,7 +196,23 @@ def sigma_a12c(sysa, E):
     return list(tot)
 
 
+def write_p14n(here):
+    sysn = System(1, 7, mm.MP, mm.M14, 5.0, mm.B15, 0, mm.ANC15)
+    # the p + 16O M1 spin matrix element from the same m-scheme routine as the closed form used in sigma_p16O
+    closed = float((-1) ** (0 + 0.5 + 0.5 + 1) * np.sqrt(2 * 2) * wigner_6j(0.5, 0.5, 0, 0.5, 0.5, 1)) * np.sqrt(0.75 * 2)
+    assert abs(red_spin_mscheme(0.5, 0, 0, 0.5, 0.5, 0.5, 0.5, 1.0, 0.0) - closed) < 1e-12
+    with open(os.path.join(here, "expected", "sigma_p14n.dat"), "w") as f:
+        f.write("# E_cm(MeV)  sigma_M1_sf=1/2  sigma_M1_sf=3/2   (barn)  -- truth.py, independent of AZURE2\n")
+        for E in mm.ECM:
+            line = f"{E:.4f}  " + "  ".join(f"{sigma_p14n(sysn, E, Jf):.10e}" for Jf in (0.5, 1.5))
+            f.write(line + "\n"); print("p14n", line, flush=True)
+
+
 if __name__ == "__main__":
+    import sys
+    if sys.argv[1:] == ["p14n"]:
+        write_p14n(os.path.dirname(os.path.abspath(__file__)))
+        sys.exit(0)
     for L in (1, 2):
         for y in (0.01, 0.5, 3.0, 20.0):
             q = integrate.quad(lambda t: special.spherical_jn(L, t) / t, 0, y, epsabs=0, epsrel=1e-13, limit=500)[0]
@@ -171,3 +235,4 @@ if __name__ == "__main__":
             row = sigma_a12c(sysa, E)
             line = f"{E:.4f}  " + "  ".join(f"{v:.10e}" for v in row)
             f.write(line + "\n"); print("a12c", line, flush=True)
+    write_p14n(here)

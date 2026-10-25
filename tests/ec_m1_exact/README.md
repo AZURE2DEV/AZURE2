@@ -35,6 +35,7 @@ in Canton and Levchuk, arXiv:0805.2667, Eqs. 33 and 39-41. The script writes `ex
 | (f), (g), (h) | alpha+12C E1 + E2 in the three forms | 2e-5 |
 | (i) | an `intEC.dat` written by a long-wavelength run is not reused by a `--no-long-wavelength` run | identical to fresh |
 | (j) | an `intEC.dat` written with the convection current is not reused without it | identical to fresh |
+| (k), (l) | p+14N M1, both cluster moments, final channel spin 1/2 and 3/2 | 2e-5 |
 
 AZURE2 agrees with the truth to about 1e-8.
 
@@ -43,6 +44,20 @@ AZURE2 agrees with the truth to about 1e-8.
 sqrt(8(2L+1)(L+1)/L)/(2L+1)!!. (e) failed by a factor 0.294, because the E1 charge function (x0.560 for p + 16O)
 multiplied the M1 integrand. (i) failed because the intEC signature did not include the long-wavelength switch.
 Both M1 defects date from the 2020 initial commit. The E1 terms are unchanged by the fix.
+
+`p14n_s1.azr` and `p14n_s3.azr` are p + 14N -> 15O, M1 external capture from the s-wave entrance J-groups 1/2+ and
+3/2+ into a fictitious s-wave state bound by 0.2 MeV (ANC 5 fm^-1/2, a = 5 fm). Both clusters carry a moment
+(g_p = 5.5857, g(14N) = 0.4038) and the target has spin 1, so the M1 spin term has a g1 S1 and a g2 S2 piece and
+connects channel spins 1/2 and 3/2. With l = 0 the orbital term vanishes. The truth builds the spin matrix element
+from magnetic substates (`python3 truth.py p14n`, about three minutes, writes `expected/sigma_p14n.dat`).
+
+**What it caught (fixed 2026-10-25).** Before the fix, (k) failed by 47 % and (l) by 17 %. The `tau` term in
+`src/ECIntegral.cpp` lacked a factor (-1)^(2 j2) on the g1 S1 piece and (-1)^(2 j1) on the g2 S2 piece, so a cluster's
+moment term had the wrong sign whenever the other cluster had half-integer spin. When both clusters have
+half-integer spin (p+13C, p+15N, p+7Li) the whole spin term had the wrong sign against the orbital term. This test
+cannot see that case, because with l = 0 there is no orbital term. Spin-0 targets (p+16O, case d) were right. The
+spin and orbital amplitudes now equal an m-scheme calculation times one common constant, 1/sqrt(2 J_i + 1), in all
+5,277 combinations of spins 0 to 2, l = 0 to 2 and both g-factors (R-matrix archive `AZURE2_code_audit/10-25-26/fix01_m1_spin`).
 
 **A trap in the input.** The ANC-to-amplitude conversion uses the photon pair's final-state energy (`e2` on the
 pair line). The radial integral uses the level energy. The 16O+p model these numbers come from had 0.49533 MeV
