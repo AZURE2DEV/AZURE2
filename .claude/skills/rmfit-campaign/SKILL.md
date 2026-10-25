@@ -392,7 +392,8 @@ The GUI review: `printf '1\n<reaction>.sav\n\n7\n' | AZURE2 <flags> --no-gui --n
   - `relvector` terms: the model is frozen at the evaluator's FIRST evaluation, and every
     `rmfit` CLI step is a new process, so each polish starts with the model frozen at its
     own start (the iterative Chiba-Smith scheme); `ev.refreeze_covariance()` in scripts.
-    Objectives of different steps are therefore not strictly comparable.
+    Objectives of different steps are therefore not strictly comparable.  Since 2026-10-24
+    `polish` refreezes between passes (`--refreeze-every N`, default 100; last section).
   - Row weights (`dataset_weight`, `point_weights`) scale the plain rows before
     whitening; the Sivia loss is refused. Per-segment chi2 are the engine's partition
     shares and can be negative; `ev.point_chi2(r)` / `ev.point_residuals(r)` give per-row
@@ -2045,3 +2046,24 @@ raises NotImplementedError.  The old zero-centred `Prior` regularizer is unchang
 test_param_prior.py (one extra row, +((x-m)/s)^2 exactly, Jacobian 1/s in one column).  engine.py backup .bak-2026-10-20.
 First use: Avila C~^2 = 3.6(7) fm^-1 for the near-threshold 1/2+ of 17O converted to gamma~ = 0.537 (+0.060/-0.063) at a = 5.4 fm
 by the PRC 101, 045802 (2020) method (13C+a/10-20-26_rate_recalc_Claude/anc_convert.py).
+
+## 2026-10-24 — model-scaled (`relvector`) covariance: refreeze between polish passes (`--refreeze-every`)
+
+A `relvector` covariance term is frozen at the model of an evaluator's FIRST evaluation.  One long polish from a poor seed
+therefore minimises chi2 with the systematics scaled by the SEED's model, and the fresh-session verify (frozen at the result)
+disagrees: 13C+a 10-24-26_merged_park/brune_fixanc, polish 759,688 vs verified 789,402 (HAGRiD 6.13 alone +29.8k); the same
+vector in one session gave 760,721 frozen at the seed and 789,402 after `refreeze_covariance()` (refreeze_check/).  Neither
+number was wrong -- they were different objectives -- but the polish had optimised the wrong one.
+Fix (DeBoer: "Let's do 2"): `local.polish_refreeze` -- passes of at most `every` evaluations, each an ordinary least-squares
+run on a FIXED objective (frozen at its start); between passes refreeze at the pass's end and re-score; stop when a pass
+converged and the refreeze jump <= max(tol_abs 1, tol_rel 1e-5 x objective), or the budget is used.  `Campaign.run_polish`
+uses it per stage (`refreeze_every=100`; CLI `rmfit polish --refreeze-every N`, 0 = the old single freeze).  It returns the
+self-consistent objective, so polish result = verify.  Never refreeze INSIDE a least-squares run: TRF's trust region and
+ftol/xtol tests assume a fixed objective, and a covariance that follows the model within a run lets the fit inflate the model
+to grow its own variance.  Without relvector terms (or `every <= 0`) `polish_refreeze` IS `polish`.  Sign rounds and level
+adds keep single polishes (they compare candidates under one freeze -- verify them on fresh sessions as before).
+Test tests/test_refreeze_polish.py (fixture tests/fixtures/relvector_p12c): refreeze jumps 0.83 -> 2.7e-3 -> 6.9e-5 -> 3.7e-7,
+end point 2986.202 = fresh session, BELOW the single polish's fresh value 2986.675.  Install: local/campaign/cli
+.bak-2026-10-24-refreeze, marker rmfit/.installed-2026-10-24-refreeze; regressions campaign/spine pass.
+Seeds far from the data (a new covariance at a seed fitted without it) are where this matters; reading a campaign's
+"polish: a -> b" line with a relvector covariance from before 2026-10-24: b is frozen at the start point, trust the verify.
