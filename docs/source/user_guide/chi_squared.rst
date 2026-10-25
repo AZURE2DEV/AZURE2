@@ -108,16 +108,25 @@ this time with an absolute rather than a percentage error:
 .. math::
 
    \chi^2_{\text{shift},s} =
-   \left(\frac{\Delta E_s - \Delta E_s^{\text{nom}}}{\delta(\Delta E_s)}\right)^2
+   \left(\frac{\Delta E_s}{\delta(\Delta E_s)}\right)^2
 
-A segment whose :math:`\sqrt{E}` shift coefficient :math:`b_s` is free (the
-``sqrtshift`` block, see :doc:`segments`) adds the same kind of term,
-:math:`((b_s - b_s^{\text{nom}})/\delta b_s)^2`, with :math:`\delta b_s` in
-MeV\ :sup:`1/2`, and so does each free parameter :math:`a_j` of an
-energy-shift function (the ``shiftfn`` block), once, on the segment that
-declares the function: :math:`((a_j - a_j^{\text{nom}})/\delta a_j)^2`, with
-the nominal value the one in the input file. A free shift term with no
-uncertainty has no penalty.
+measured from **zero**, i.e. from no shift: the value of :math:`\Delta E_s` in
+the input file is only where the fit starts. A segment whose :math:`\sqrt{E}`
+shift coefficient :math:`b_s` is free (the ``sqrtshift`` block, see
+:doc:`segments`) adds the same kind of term, :math:`(b_s/\delta b_s)^2`, with
+:math:`\delta b_s` in MeV\ :sup:`1/2`, and so does each free parameter
+:math:`a_j` of an energy-shift function (the ``shiftfn`` block), once, on the
+segment that declares the function: :math:`(a_j/\delta a_j)^2`. A free shift
+term with no uncertainty has no penalty.
+
+.. note::
+
+   Before 25 October 2026 these terms were measured from the value in the input
+   file, :math:`((\Delta E_s - \Delta E_s^{\text{file}})/\delta(\Delta E_s))^2`
+   and likewise for :math:`b_s` and :math:`a_j`. A file whose shifts were seeded
+   from an earlier fit therefore centred the penalty on that fit's shifts. Such
+   files now give a larger :math:`\chi^2` (the shift part changes; the data part
+   does not). The normalization penalty is unchanged.
 
 Nuisance parameters
 -------------------

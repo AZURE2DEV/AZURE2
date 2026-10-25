@@ -93,6 +93,9 @@ class _Engine:
 
 
 class azure2:
+    #: Energy-shift penalties are measured from 0, (dE/sigma)^2, not from the
+    #: .azr value (2026-10-25).  rmfit reads this to match the engine it runs.
+    SHIFT_PENALTY_FROM_ZERO = True
 
     def __init__(self, file, cwd=None, data_mode=True, use_brune=True,
                  ignore_externals=True, transform=True,
@@ -1284,12 +1287,15 @@ class azure2:
         (once per ``normgroup``, on its first member) and, for a segment whose
         energy shift is free,
 
-            ((shift - nominal_shift) / shift_error)^2
+            (shift / shift_error)^2
 
         and the same again for a free sqrt(E) shift coefficient (the b of
         E' = E + shift + b*sqrt(E), key ``"shift_sqrt"``) and, summed per
         segment, for each free parameter aj of a shift function declared on the
-        segment (``shiftfn``, key ``"shift_fn"``).
+        segment (``shiftfn``, key ``"shift_fn"``).  Every shift term is
+        penalised from zero; the value in the .azr is only the starting value
+        (since 2026-10-25, :attr:`SHIFT_PENALTY_FROM_ZERO`; before, the penalty
+        was measured from that value).
 
         Minimize the bare chi-squared instead and the normalizations drift to
         absorb every discrepancy -- a "better" number AZURE2 would never have
@@ -1332,14 +1338,13 @@ class azure2:
                 sval = (float(x[q.free_index])
                         if q is not None and not q.fixed and q.free_index is not None
                         and q.free_index < x.size else d.energy_shift)
-                shift[i] = ((sval - d.energy_shift) / d.energy_shift_error) ** 2
+                shift[i] = (sval / d.energy_shift_error) ** 2
             if d.vary_shift_sqrt and d.energy_shift_sqrt_error:
                 q = sqrting.get(d.key)
                 bval = (float(x[q.free_index])
                         if q is not None and not q.fixed and q.free_index is not None
                         and q.free_index < x.size else d.energy_shift_sqrt)
-                shift_sqrt[i] = ((bval - d.energy_shift_sqrt)
-                                 / d.energy_shift_sqrt_error) ** 2
+                shift_sqrt[i] = (bval / d.energy_shift_sqrt_error) ** 2
             for j, (nominal, sigma, vary) in enumerate(d.shift_fn_params):
                 if not (vary and sigma):
                     continue
@@ -1347,7 +1352,7 @@ class azure2:
                 aval = (float(x[q.free_index])
                         if q is not None and not q.fixed and q.free_index is not None
                         and q.free_index < x.size else nominal)
-                shift_fn[i] += ((aval - nominal) / sigma) ** 2
+                shift_fn[i] += (aval / sigma) ** 2
         # Park formalism: the J > 0 wall, sum (J/1e-3)^2 over levels with J < 0.
         # The engine adds it to calculate_chi2_rwa itself (it is part of what
         # AZURE2 minimizes), so objective() does not add it again; it is

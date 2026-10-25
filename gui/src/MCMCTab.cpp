@@ -631,9 +631,8 @@ void MCMCTab::loadFromAZUREParams(bool isRWA, std::string filename) {
         const double nominalNorm = segments[s].GetNominalNorm();
         autoNormPrior[key] = qMakePair(
             nominalNorm, nominalNorm / 100.0 * segments[s].GetNormError());
-        autoShiftPrior[key] = qMakePair(
-            segments[s].GetNominalEnergyShift(),
-            segments[s].GetEnergyShiftError());
+        // centred on no shift, as the fit's penalty (ESegment::AddShiftPenalty, since 2026-10-25)
+        autoShiftPrior[key] = qMakePair(0.0, segments[s].GetEnergyShiftError());
       }
     }
 

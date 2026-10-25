@@ -339,7 +339,8 @@ appears with the following fields:
    ``param.sav`` (``<key>`` the segment declaring the function) and come after
    every other parameter, so files without a function keep their parameters
    exactly. Each free :math:`a_j` with a nonzero uncertainty adds a penalty
-   (:doc:`chi_squared`). The function is evaluated at every point and every
+   :math:`(a_j/\delta a_j)^2`, measured from zero; the value on the line is
+   only the starting value (:doc:`chi_squared`). The function is evaluated at every point and every
    target-integration or convolution sub-point at its own original energy;
    the target thickness and stopping powers stay those of the unshifted
    energy, as for every shift (:doc:`experimental_effects`).

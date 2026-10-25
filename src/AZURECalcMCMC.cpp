@@ -440,14 +440,14 @@ void AZURECalcMCMC::BuildAutoPriors() const {
   // Energy shifts, one per segment whether it varies or not.
   for (size_t s = 0; s < segments.size(); ++s) {
     allKinds.push_back(PARAM_SHIFT);
-    allAutoMean.push_back(segments[s].GetNominalEnergyShift());
+    allAutoMean.push_back(0.0);  // shift priors are centred on no shift (ESegment::AddShiftPenalty)
     allAutoStd.push_back(segments[s].GetEnergyShiftError());
   }
 
   // sqrt(E) energy-shift coefficients, one per segment, same prior rule.
   for (size_t s = 0; s < segments.size(); ++s) {
     allKinds.push_back(PARAM_SHIFT);
-    allAutoMean.push_back(segments[s].GetNominalEnergyShiftSqrt());
+    allAutoMean.push_back(0.0);
     allAutoStd.push_back(segments[s].GetEnergyShiftSqrtError());
   }
 
@@ -456,7 +456,7 @@ void AZURECalcMCMC::BuildAutoPriors() const {
     if (!segments[s].OwnsShiftFn() || !segments[s].HasShiftFn()) continue;
     for (int j = 0; j < segments[s].NumShiftFnParams(); ++j) {
       allKinds.push_back(PARAM_SHIFT);
-      allAutoMean.push_back(segments[s].GetNominalShiftFnValues()[j]);
+      allAutoMean.push_back(0.0);
       allAutoStd.push_back(segments[s].GetShiftFnErrors()[j]);
     }
   }

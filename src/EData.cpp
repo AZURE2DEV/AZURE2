@@ -2043,7 +2043,7 @@ void EData::WriteOutputFiles(const Config &configure, bool isFit, const BandData
         double pen = 0.0, penOwn = 0.0;
         owner.AddShiftPenalty(pen);
         if (owner.IsVaryEnergyShift() && owner.GetEnergyShiftError() != 0.0)
-          penOwn = pow((owner.GetEnergyShift() - owner.GetNominalEnergyShift()) / owner.GetEnergyShiftError(), 2.0);
+          penOwn = pow(owner.GetEnergyShift() / owner.GetEnergyShiftError(), 2.0);  // from 0, as AddShiftPenalty
         out << "# " << owner.GetSegmentKey() << "," << keys.str() << "," << owner.GetShiftFnExpression() << ","
             << owner.GetEnergyShift() << ",";
         for (int q = 0; q < owner.NumShiftFnParams(); q++) out << (q ? " " : "") << owner.GetShiftFnValues()[q];

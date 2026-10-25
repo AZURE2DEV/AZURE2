@@ -123,7 +123,8 @@ double SegmentLocalChi2(ESegment *segment, CNuc *lc, const Config &config,
 // that needs a penalty's derivatives rather than its value: d/dx = 2 (x - nominal)
 // / sigma^2, curvature 2 / sigma^2.  Exactly the terms ESegment::AddShiftPenalty
 // adds, so the gradient, G2 and the least-squares priors stay consistent with
-// chi^2.
+// chi^2.  The nominal is 0 for every shift term since 2026-10-25 (the file's value
+// is only the start).
 template <class F>
 void ForEachShiftPenalty(EData *data, const ParamIndexMap &pmap, F f) {
   for (int s = 1; s <= data->NumSegments(); s++) {
@@ -131,14 +132,14 @@ void ForEachShiftPenalty(EData *data, const ParamIndexMap &pmap, F f) {
     if (!seg) continue;
     int idx;
     if (seg->IsVaryEnergyShift() && seg->GetEnergyShiftError() != 0.0 && (idx = pmap.EnergyShiftIndex(s)) >= 0)
-      f(idx, seg->GetNominalEnergyShift(), seg->GetEnergyShiftError());
+      f(idx, 0.0, seg->GetEnergyShiftError());
     if (seg->IsVaryEnergyShiftSqrt() && seg->GetEnergyShiftSqrtError() != 0.0 &&
         (idx = pmap.EnergyShiftSqrtIndex(s)) >= 0)
-      f(idx, seg->GetNominalEnergyShiftSqrt(), seg->GetEnergyShiftSqrtError());
+      f(idx, 0.0, seg->GetEnergyShiftSqrtError());
     if (seg->OwnsShiftFn() && seg->HasShiftFn())
       for (int j = 0; j < seg->NumShiftFnParams(); j++)
         if (seg->IsVaryShiftFn(j) && seg->GetShiftFnErrors()[j] != 0.0 && (idx = pmap.EnergyShiftFnIndex(s, j)) >= 0)
-          f(idx, seg->GetNominalShiftFnValues()[j], seg->GetShiftFnErrors()[j]);
+          f(idx, 0.0, seg->GetShiftFnErrors()[j]);
   }
 }
 

@@ -820,16 +820,17 @@ void ESegment::CopyShiftFnFrom(const ESegment &other) {
     if (shiftFnValues_[j] != other.shiftFnValues_[j]) SetShiftFnValue(j, other.shiftFnValues_[j]);
 }
 
+// Every energy-shift term is penalised from ZERO (no shift): (dE/sigma)^2, (b/sigma)^2, (a_j/sigma)^2.  The value
+// on the segment line is only the starting value.  Before 2026-10-25 the penalty was measured from that value, so
+// a refit seeded from an earlier fit's shifts carried those shifts as its prior centre (DeBoer: "It should measure
+// the penalty from 0").  The normalization penalty is unchanged (measured from the nominal norm).
 void ESegment::AddShiftPenalty(double &chi) const {
-  if (varyEnergyShift_ && energyShiftError_ != 0.0)
-    chi += pow((energyShift_ - energyShiftNominal_) / energyShiftError_, 2.0);
-  if (varyEnergyShiftSqrt_ && energyShiftSqrtError_ != 0.0)
-    chi += pow((energyShiftSqrt_ - energyShiftSqrtNominal_) / energyShiftSqrtError_, 2.0);
+  if (varyEnergyShift_ && energyShiftError_ != 0.0) chi += pow(energyShift_ / energyShiftError_, 2.0);
+  if (varyEnergyShiftSqrt_ && energyShiftSqrtError_ != 0.0) chi += pow(energyShiftSqrt_ / energyShiftSqrtError_, 2.0);
   // The shift function's parameters are penalised once, on the segment that owns them.
   if (OwnsShiftFn() && hasShiftFn_)
     for (int j = 0; j < (int)shiftFnValues_.size(); j++)
-      if (shiftFnVary_[j] && shiftFnError_[j] != 0.0)
-        chi += pow((shiftFnValues_[j] - shiftFnNominal_[j]) / shiftFnError_[j], 2.0);
+      if (shiftFnVary_[j] && shiftFnError_[j] != 0.0) chi += pow(shiftFnValues_[j] / shiftFnError_[j], 2.0);
 }
 
 void ESegment::SetEnergyShiftSqrt(double energyShiftSqrt) {
