@@ -6,6 +6,7 @@
 #include <QLineEdit>
 #include <QSpinBox>
 #include "PairKeyCombo.h"
+#include "ScatteringLengthsModel.h"
 #include <QComboBox>
 #include <QLabel>
 #include <QCheckBox>
@@ -57,6 +58,22 @@ class AddSegDataDialog : public QDialog {
   int observableCode() const;
   /*! True when the multipolarity drop-down applies: Angle Integrated with a gamma exit pair. */
   bool multipolarityApplies() const;
+
+  /*! Data Type "Scattering Length": not a segment line but a line of the <scatteringLengths> block (pair, channel
+   *  spin, Re a0 +- sigma, optional Im a0 +- sigma); SegmentsTab lists those under the data segments. */
+  static const int ScatteringLengthCode = 100;
+  bool isScatteringLength() const { return observableCode() == ScatteringLengthCode; }
+  ScatteringLengthEntry scatteringLength() const;
+  /*! Edit mode for a scattering length: the type is fixed and the fields filled from \p entry. */
+  void setScatteringLength(const ScatteringLengthEntry &entry);
+  /*! Edit mode for a segment line: drop the "Scattering Length" type (a segment cannot become one). */
+  void disallowScatteringLength();
+  QGroupBox *scatLenBox;
+  QComboBox *scatLenSpinCombo;
+  QLineEdit *scatLenValueText;
+  QLineEdit *scatLenSigmaText;
+  QLineEdit *scatLenImValueText;
+  QLineEdit *scatLenImSigmaText;
 
   QLineEdit *dataFileText;
   /*! Optional data covariance file (keyword block "covariance <file>"): every data segment naming the same
@@ -125,12 +142,21 @@ class AddSegDataDialog : public QDialog {
   void addComponent();
   void removeComponent();
   void uposChanged(int);
+  void fillScatteringLengthSpins();
 
  protected:
   /*! Sized to the content within the screen on every opening (DialogScrollArea.h). */
   void showEvent(QShowEvent *event) override;
 
  private:
+  /*! Show the scattering-length fields and hide the segment ones, or the reverse (restoring the sections the
+   *  check boxes and the observable decide). */
+  void applyScatteringLengthMode(bool on);
+  QList<QWidget *> segmentOnly;
+  QLabel *entrancePairLabel;
+  bool scatLenMode = false;
+  bool scatLenActive = true;
+  PairsModel *pairs = nullptr;
   QPushButton *okButton;
   QPushButton *cancelButton;
 };

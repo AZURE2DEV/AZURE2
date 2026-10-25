@@ -17,6 +17,8 @@
 #include "SegmentKeywords.h"
 #include "AbundancesModel.h"
 #include "ScatteringLengthsModel.h"
+#include <QScrollBar>
+#include <algorithm>
 
 static bool isSegmentKeyword(const QString &token);
 
@@ -192,7 +194,7 @@ SegmentsTab::SegmentsTab(QWidget *parent) :
   segDataButtonBox->addWidget(segDataExitFilter);
   segDataButtonBox->addSpacing(kGroupGap);
   segDataButtonBox->addWidget(segDataExforButton);
-  segDataLayout->addLayout(segDataButtonBox, 1, 0);
+  segDataLayout->addLayout(segDataButtonBox, 2, 0);
 
   segDataBox->setLayout(segDataLayout);
 
@@ -218,66 +220,42 @@ SegmentsTab::SegmentsTab(QWidget *parent) :
   segTestLayout->addLayout(segTestButtonBox, 1, 0);
   segTestBox->setLayout(segTestLayout);
 
-  // Measured s-wave scattering lengths (the optional <scatteringLengths> block): a small
-  // table edited in place, like the abundance table of the Particle Pairs tab.
+  // Measured s-wave scattering lengths (the optional <scatteringLengths> block) are listed as rows under the data
+  // segments, in the same columns: "Scattering Length" is a Data Type of the Add Segment From Data dialog.  In the
+  // file they stay a block of their own, so segment numbering (targetInt, norms, parameter names) is unchanged.
+  // Before 2026-10-25 they had a table of their own at the bottom of the tab.
   scatteringLengthsModel = new ScatteringLengthsModel(this);
+  scatteringLengthRows = new ScatteringLengthRowsModel(scatteringLengthsModel, segmentsDataModel->columnCount(QModelIndex()), this);
   scatteringLengthsView = new QTableView;
-  scatteringLengthsView->setModel(scatteringLengthsModel);
-  scatteringLengthsView->setItemDelegate(new ScatteringLengthsDelegate(scatteringLengthsView));
-  scatteringLengthsView->verticalHeader()->setVisible(false);
-  scatteringLengthsView->horizontalHeader()->setHighlightSections(false);
+  scatteringLengthsView->setObjectName("scatteringLengthsView");
+  scatteringLengthsView->setModel(scatteringLengthRows);
+  scatteringLengthsView->horizontalHeader()->setVisible(false);
+  scatteringLengthsView->horizontalHeader()->setStretchLastSection(true);
+  scatteringLengthsView->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
   scatteringLengthsView->setSelectionBehavior(QAbstractItemView::SelectRows);
   scatteringLengthsView->setSelectionMode(QAbstractItemView::SingleSelection);
-  scatteringLengthsView->setEditTriggers(QAbstractItemView::DoubleClicked | QAbstractItemView::SelectedClicked |
-                                         QAbstractItemView::EditKeyPressed);
+  scatteringLengthsView->setEditTriggers(QAbstractItemView::NoEditTriggers);
   scatteringLengthsView->setShowGrid(false);
-  scatteringLengthsView->setColumnWidth(ScatteringLengthsModel::ActiveCol, 27);
-  scatteringLengthsView->horizontalHeader()->setSectionResizeMode(ScatteringLengthsModel::ActiveCol, QHeaderView::Fixed);
-  scatteringLengthsView->horizontalHeader()->setSectionResizeMode(ScatteringLengthsModel::PairCol, QHeaderView::Stretch);
-  scatteringLengthsView->setColumnWidth(ScatteringLengthsModel::SpinCol, 130);
-  for (int i = ScatteringLengthsModel::ValueCol; i < ScatteringLengthsModel::NumCols; i++) scatteringLengthsView->setColumnWidth(i, 105);
-  scatteringLengthsView->setMaximumHeight(140);  // about four rows: the table is usually short
+  scatteringLengthsView->setVisible(false);
+  for (int c = 0; c < segmentsDataModel->columnCount(QModelIndex()); c++)
+    scatteringLengthsView->setColumnHidden(c, segmentsDataView->isColumnHidden(c));
+  connect(segmentsDataView->horizontalHeader(), SIGNAL(sectionResized(int, int, int)), this,
+          SLOT(syncScatteringLengthColumns()));
+  connect(segmentsDataView->horizontalHeader(), SIGNAL(geometriesChanged()), this, SLOT(syncScatteringLengthColumns()));
+  connect(segmentsDataView->verticalHeader(), SIGNAL(geometriesChanged()), this, SLOT(syncScatteringLengthColumns()));
+  connect(segmentsDataView->horizontalScrollBar(), SIGNAL(valueChanged(int)), scatteringLengthsView->horizontalScrollBar(),
+          SLOT(setValue(int)));
+  connect(scatteringLengthsView, SIGNAL(doubleClicked(QModelIndex)), this, SLOT(editScatteringLength()));
   connect(scatteringLengthsView->selectionModel(), SIGNAL(selectionChanged(QItemSelection, QItemSelection)), this,
-          SLOT(updateScatteringLengthButtons()));
-  connect(scatteringLengthsModel, SIGNAL(modelReset()), this, SLOT(updateScatteringLengthButtons()));
-
-  scatLenAddButton = new QPushButton(tr("+"));
-  scatLenAddButton->setMaximumSize(28, 28);
-  scatLenAddButton->setToolTip(tr("Add a measured scattering length"));
-  scatLenDeleteButton = new QPushButton(tr("-"));
-  scatLenDeleteButton->setMaximumSize(28, 28);
-  scatLenDeleteButton->setEnabled(false);
-  scatLenDeleteButton->setToolTip(tr("Remove the selected scattering length"));
-  connect(scatLenAddButton, SIGNAL(clicked()), this, SLOT(addScatteringLength()));
-  connect(scatLenDeleteButton, SIGNAL(clicked()), this, SLOT(deleteScatteringLength()));
-
-  QGroupBox *scatLenBox = new QGroupBox(tr("Measured Scattering Lengths"));
-  scatLenBox->setToolTip(tr("s-wave scattering lengths a0 at the pair's threshold (Paneru et al., PRC 99, 045807 (2019)); "
-                            "each line adds ((a0 - value)/sigma)^2 to chi2. Computed values for every pair are written "
-                            "to output/scatteringLengths.out."));
-  QGridLayout *scatLenLayout = new QGridLayout;
-  scatLenLayout->addWidget(scatteringLengthsView, 0, 0);
-  QHBoxLayout *scatLenButtonBox = new QHBoxLayout;
-  scatLenButtonBox->setSpacing(0);
-  scatLenButtonBox->addWidget(scatLenAddButton);
-  scatLenButtonBox->addSpacing(kBtnGap);
-  scatLenButtonBox->addWidget(scatLenDeleteButton);
-  scatLenButtonBox->addSpacing(kGroupGap);
-  QLabel *scatLenHint = new QLabel(tr("Each active line adds ((a0 - value)/sigma)^2 to chi2; computed a0 of every pair: "
-                                      "output/scatteringLengths.out"));
-  scatLenHint->setEnabled(false);  // drawn in the muted text colour
-  scatLenButtonBox->addWidget(scatLenHint);
-  scatLenButtonBox->addStretch(1);
-  scatLenLayout->addLayout(scatLenButtonBox, 1, 0);
-  scatLenBox->setLayout(scatLenLayout);
+          SLOT(scatteringLengthSelectionChanged()));
+  connect(scatteringLengthRows, SIGNAL(modelReset()), this, SLOT(updateScatteringLengthRows()));
+  segDataLayout->addWidget(scatteringLengthsView, 1, 0);
 
   QGridLayout *mainLayout = new QGridLayout;
   mainLayout->addWidget(segDataBox, 0, 0);
   mainLayout->addWidget(segTestBox, 1, 0);
-  mainLayout->addWidget(scatLenBox, 2, 0);
   mainLayout->setRowStretch(0, 1);
   mainLayout->setRowStretch(1, 1);
-  mainLayout->setRowStretch(2, 0);
 
   setLayout(mainLayout);
 }
@@ -291,7 +269,13 @@ SegmentsDataModel *SegmentsTab::getSegmentsDataModel() {
 }
 
 void SegmentsTab::deleteSegDataLine() {
+  const QModelIndexList scatLenRows = scatteringLengthsView->selectionModel()->selectedRows();
+  if (!scatLenRows.isEmpty()) {
+    scatteringLengthsModel->removeRows(scatLenRows.first().row(), 1);
+    return;
+  }
   QItemSelectionModel *selectionModel = segmentsDataView->selectionModel();
+  if (selectionModel->selectedRows().isEmpty()) return;
   QModelIndexList indexes = selectionModel->selectedRows();
   QModelIndex index = indexes.at(0);
 
@@ -313,6 +297,10 @@ void SegmentsTab::addSegDataLine() {
   aDialog.setPairsModel(pairsModel);
   aDialog.setSamples(abundancesModel ? abundancesModel->samples() : QStringList() << QString());
   if (aDialog.exec()) {
+    if (aDialog.isScatteringLength()) {
+      scatteringLengthsModel->addEntry(aDialog.scatteringLength());
+      return;
+    }
     SegmentsDataData newLine;
     newLine.isActive = 1;
     newLine.entrancePairIndex = aDialog.entrancePairCombo->key();
@@ -598,6 +586,7 @@ void SegmentsTab::editSegDataLine() {
   aDialog.setPairsModel(pairsModel);
   aDialog.setSamples(abundancesModel ? abundancesModel->samples() : QStringList() << QString());
   aDialog.setWindowTitle(tr("Edit a Segment From Data"));
+  aDialog.disallowScatteringLength();
   aDialog.setNaturalToken(SegmentKeywords::naturalSample(extraTokens));
   aDialog.covarianceFileText->setText(SegmentKeywords::covarianceFile(extraTokens));
   aDialog.entrancePairCombo->setKey(entrancePairIndex);
@@ -1015,6 +1004,8 @@ void SegmentsTab::moveSegTestLine(unsigned int upDown) {
 
 void SegmentsTab::updateSegDataButtons(const QItemSelection &selection) {
   QModelIndexList indexes = selection.indexes();
+  // one selection across the segments and the scattering-length rows under them
+  if (!indexes.isEmpty()) scatteringLengthsView->clearSelection();
 
   if (indexes.isEmpty()) {
     segDataDeleteButton->setEnabled(false);
@@ -1054,6 +1045,10 @@ void SegmentsTab::updateSegTestButtons(const QItemSelection &selection) {
 }
 
 void SegmentsTab::checkAllSegData() {
+  for (int r = 0; r < scatteringLengthsModel->rowCount(); r++)
+    if (!scatteringLengthsView->isRowHidden(r))
+      scatteringLengthsModel->setData(scatteringLengthsModel->index(r, ScatteringLengthsModel::ActiveCol), Qt::Checked,
+                                      Qt::CheckStateRole);
   QList<SegmentsDataData> lines = segmentsDataModel->getLines();
   for (int i = 0; i < lines.size(); i++) {
     // Only check visible (non-hidden) rows
@@ -1065,6 +1060,10 @@ void SegmentsTab::checkAllSegData() {
 }
 
 void SegmentsTab::uncheckAllSegData() {
+  for (int r = 0; r < scatteringLengthsModel->rowCount(); r++)
+    if (!scatteringLengthsView->isRowHidden(r))
+      scatteringLengthsModel->setData(scatteringLengthsModel->index(r, ScatteringLengthsModel::ActiveCol), Qt::Unchecked,
+                                      Qt::CheckStateRole);
   QList<SegmentsDataData> lines = segmentsDataModel->getLines();
   for (int i = 0; i < lines.size(); i++) {
     // Only uncheck visible (non-hidden) rows
@@ -1117,6 +1116,11 @@ void SegmentsTab::filterSegDataByPairs() {
     // Show or hide the row
     segmentsDataView->setRowHidden(i, !showRow);
   }
+  // a scattering length's pair is its entrance and its exit pair
+  const QList<ScatteringLengthEntry> entries = scatteringLengthsModel->entries();
+  for (int r = 0; r < entries.size(); r++)
+    scatteringLengthsView->setRowHidden(r, (entranceFilter > 0 && entries[r].pairKey != entranceFilter) ||
+                                               (exitFilter > 0 && entries[r].pairKey != exitFilter));
 }
 
 
@@ -1831,23 +1835,46 @@ void SegmentsTab::reset() {
   scatteringLengthsModel->clear();
 }
 
-void SegmentsTab::addScatteringLength() {
-  scatteringLengthsModel->addDefaultEntry();
-  int row = scatteringLengthsModel->rowCount() - 1;
-  scatteringLengthsView->selectRow(row);
-  scatteringLengthsView->scrollToBottom();
-  updateScatteringLengthButtons();
-}
-
-void SegmentsTab::deleteScatteringLength() {
-  QModelIndexList rows = scatteringLengthsView->selectionModel()->selectedRows();
+void SegmentsTab::editScatteringLength() {
+  const QModelIndexList rows = scatteringLengthsView->selectionModel()->selectedRows();
   if (rows.isEmpty()) return;
-  scatteringLengthsModel->removeRows(rows.first().row(), 1);
-  updateScatteringLengthButtons();
+  const int row = rows.first().row();
+  AddSegDataDialog aDialog;
+  aDialog.setPairsModel(pairsModel);
+  aDialog.setWindowTitle(tr("Edit a Scattering Length"));
+  aDialog.setScatteringLength(scatteringLengthsModel->entries().at(row));
+  if (aDialog.exec()) scatteringLengthsModel->setEntry(row, aDialog.scatteringLength());
 }
 
-void SegmentsTab::updateScatteringLengthButtons() {
-  scatLenDeleteButton->setEnabled(!scatteringLengthsView->selectionModel()->selectedRows().isEmpty());
+void SegmentsTab::scatteringLengthSelectionChanged() {
+  const bool any = !scatteringLengthsView->selectionModel()->selectedRows().isEmpty();
+  if (any) {
+    segmentsDataView->clearSelection();
+    segDataDeleteButton->setEnabled(true);
+    segDataUpButton->setEnabled(false);  // the rows follow the block's order; they do not move among segments
+    segDataDownButton->setEnabled(false);
+  } else if (segmentsDataView->selectionModel()->selectedRows().isEmpty()) {
+    segDataDeleteButton->setEnabled(false);
+  }
+}
+
+void SegmentsTab::updateScatteringLengthRows() {
+  const int n = scatteringLengthRows->rowCount();
+  scatteringLengthsView->setVisible(n > 0);
+  if (n > 0) {
+    // as tall as its rows, up to three (the data segments keep the room); a scroll bar beyond that
+    const int rowH = scatteringLengthsView->verticalHeader()->defaultSectionSize();
+    scatteringLengthsView->setFixedHeight(std::min(n, 3) * rowH + 2 * scatteringLengthsView->frameWidth());
+  }
+  syncScatteringLengthColumns();
+  filterSegDataByPairs();
+}
+
+void SegmentsTab::syncScatteringLengthColumns() {
+  for (int c = 0; c < segmentsDataModel->columnCount(QModelIndex()); c++)
+    if (!segmentsDataView->isColumnHidden(c)) scatteringLengthsView->setColumnWidth(c, segmentsDataView->columnWidth(c));
+  scatteringLengthsView->verticalHeader()->setFixedWidth(segmentsDataView->verticalHeader()->width());
+  scatteringLengthsView->horizontalScrollBar()->setValue(segmentsDataView->horizontalScrollBar()->value());
 }
 
 bool SegmentsTab::readScatteringLengths(QTextStream &inStream) {

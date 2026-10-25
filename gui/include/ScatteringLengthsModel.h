@@ -52,6 +52,10 @@ class ScatteringLengthsModel : public QAbstractTableModel {
 
   QList<ScatteringLengthEntry> entries() const { return lines; }
   void addEntry(const ScatteringLengthEntry &entry);
+  /*! Replaces row \p row (the Edit dialog). */
+  void setEntry(int row, const ScatteringLengthEntry &entry);
+  /*! "key: pair label" of a pair key, as the Pair column shows it. */
+  QString pairText(int key) const { return pairLabel(key); }
   /*! A new row on the first particle pair with its first allowed channel spin, nothing constrained yet. */
   void addDefaultEntry();
   void clear();
@@ -81,6 +85,34 @@ class ScatteringLengthsModel : public QAbstractTableModel {
   QString pairLabel(int key) const;
   QList<ScatteringLengthEntry> lines;
   PairsModel *pairsModel = nullptr;
+};
+
+/*!
+ * The scattering lengths as rows under the Segments From Data table (SegmentsTab): the columns of
+ * SegmentsDataModel, filled for a scattering length -- Reaction "a0 of <pair>", Energy Range "threshold", Angle
+ * Range the channel spin, Data Type "Scattering Length", Data File the measured value(s).  Column 0 is the active
+ * check box.  Reads and writes through the ScatteringLengthsModel, which stays the <scatteringLengths> block.
+ */
+class ScatteringLengthRowsModel : public QAbstractTableModel {
+  Q_OBJECT
+
+ public:
+  ScatteringLengthRowsModel(ScatteringLengthsModel *source, int columns, QObject *parent = 0);
+  int rowCount(const QModelIndex &parent = QModelIndex()) const override;
+  int columnCount(const QModelIndex &parent = QModelIndex()) const override;
+  QVariant data(const QModelIndex &index, int role) const override;
+  QVariant headerData(int section, Qt::Orientation orientation, int role) const override;
+  bool setData(const QModelIndex &index, const QVariant &value, int role = Qt::EditRole) override;
+  Qt::ItemFlags flags(const QModelIndex &index) const override;
+  /*! Text of the Data File column: "Re a0 = v +- s fm", and the Im part when given. */
+  static QString valueText(const ScatteringLengthEntry &e);
+
+ private slots:
+  void sourceReset();
+
+ private:
+  ScatteringLengthsModel *src;
+  int ncols;
 };
 
 /*!

@@ -99,9 +99,10 @@ int main(int argc, char** argv) {
   {
     AddSegDataDialog d;
     d.setPairsModel(&pairs);
-    ok("data: observable list is Angle Integrated, Differential, Phase Shift, Analyzing Power",
-       d.dataTypeCombo->count() == 4 && d.dataTypeCombo->itemData(0).toInt() == 0 && d.dataTypeCombo->findData(1) >= 0 &&
-           d.dataTypeCombo->findData(2) >= 0 && d.dataTypeCombo->findData(7) >= 0,
+    ok("data: observable list is Angle Integrated, Differential, Phase Shift, Analyzing Power, Scattering Length",
+       d.dataTypeCombo->count() == 5 && d.dataTypeCombo->itemData(0).toInt() == 0 && d.dataTypeCombo->findData(1) >= 0 &&
+           d.dataTypeCombo->findData(2) >= 0 && d.dataTypeCombo->findData(7) >= 0 &&
+           d.dataTypeCombo->findData(AddSegDataDialog::ScatteringLengthCode) == 4,
        QString::number(d.dataTypeCombo->count()));
     ok("data: no total-capture, C.M. or E1/E2 items in the observable list",
        d.dataTypeCombo->findData(3) < 0 && d.dataTypeCombo->findData(4) < 0 && d.dataTypeCombo->findData(5) < 0 && d.dataTypeCombo->findData(6) < 0);

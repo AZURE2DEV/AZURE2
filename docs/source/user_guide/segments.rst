@@ -2,13 +2,11 @@ Segments Tab
 ============
 
 The **Segments** tab defines the energies and angles at which cross sections are
-calculated. It is divided into two halves, with a small table below them:
+calculated. It is divided into two halves:
 
 - **Segments From Data** (upper) -- for calculations that reference experimental
-  data files.
+  data files, and measured scattering lengths (listed under the data segments).
 - **Segments Without Data** (lower) -- for pure calculations and extrapolations.
-- **Measured Scattering Lengths** (bottom) -- optional constraints on the s-wave
-  scattering lengths of the particle pairs.
 
 Each segment is automatically assigned a numerical key that is referenced in the
 **Experimental Effects** tab.
@@ -588,32 +586,42 @@ Measured Scattering Lengths
 
 AZURE2 computes the s-wave scattering length :math:`a_0` of every particle pair
 at the pair's threshold after each calculation or fit and writes it to
-``output/scatteringLengths.out``. The **Measured Scattering Lengths** table at
-the bottom of the tab adds measured values to the fit: each active row adds
+``output/scatteringLengths.out``. Measured values enter the fit as the data
+type **Scattering Length** of **Segments From Data**: each active one adds
 :math:`((a_0 - \text{value})/\sigma)^2` to :math:`\chi^2`, so a scattering
 length counts like one more data point. The definition and how the R-matrix
 parameters determine :math:`a_0` are in :doc:`../theory/scattering_length`.
 
-Click **+** to add a row and **-** to remove the selected one; double-click a
-cell to edit it. The columns are: the check box (whether the row enters
-:math:`\chi^2`); **Pair**, a drop-down of the particle pairs (gamma and beta
-pairs are not offered); **Spin s (J**\ :math:`\pi`\ **)**, the channel spin
-:math:`s`, which for :math:`l = 0` is the :math:`J^\pi` of the channel, chosen
-from the values the pair allows (:math:`|j_1 - j_2|` to :math:`j_1 + j_2`, only
-even ones for a pair of identical particles), or **coherent**, the
-spin-weighted combination
+Click **+** under **Segments From Data** and choose the Data Type **Scattering
+Length**. The dialog then shows **Pair** (the particle pair; gamma and beta pairs
+have no channel spins), **Channel Spin**, the channel spin :math:`s`, which for
+:math:`l = 0` is the :math:`J^\pi` of the channel, chosen from the values the
+pair allows (:math:`|j_1 - j_2|` to :math:`j_1 + j_2`, only even ones for a pair
+of identical particles), or **coherent**, the spin-weighted combination
 :math:`\sum_s (2s+1)\,a_s / ((2j_1+1)(2j_2+1))` that a neutron measurement on
 an unpolarized target usually gives (not defined for identical particles);
-**Re a0** and **Re** :math:`\sigma` in fm; and, optionally, **Im a0** and
-**Im** :math:`\sigma` for a pair with open reaction channels at its threshold.
-A :math:`\sigma` of 0 leaves that part unconstrained; blank imaginary cells
-mean no imaginary part.
+**Re a0** and its uncertainty in fm; and, optionally, **Im a0** and its
+uncertainty for a pair with open reaction channels at its threshold. An
+uncertainty of 0 leaves that part unconstrained; blank imaginary fields mean no
+imaginary part. The other fields of a data segment (energies, angles, data file,
+normalization, shifts) do not apply and are hidden.
+
+The scattering lengths are listed as rows under the data segments, marked
+**a**\ :math:`_0` instead of a row number: the reaction column names the pair,
+the energy column reads *threshold*, the angle column the channel spin and the
+data-file column the measured value. The check box, **Check All**, **Uncheck
+All** and the pair filters act on them as on the segments; select one and click
+**-** to remove it, or double-click it to edit it (its type cannot be changed to a
+segment, nor a segment's to a scattering length). They are not segments: they
+have no segment number, so adding or removing one does not renumber the
+segments that **Experimental Effects** and the parameter names refer to.
+Before October 2026 they had a table of their own at the bottom of the tab.
 
 A row refers to its pair by the pair's key, the row number on the **Particle
 Pairs** tab. When a pair is deleted or edited, rows whose pair no longer exists,
 is no longer a particle pair, or no longer allows the row's channel spin are
 not removed: they turn red, and the tooltip says why. They are saved as they
 are, and the calculation stops with an error naming the line until they are
-corrected. The table is saved as a ``<scatteringLengths>`` block after
-``</segmentsTest>``, and only when it has at least one row; comments in a block
+corrected. They are saved as a ``<scatteringLengths>`` block after
+``</segmentsTest>``, and only when there is at least one; comments in a block
 written by hand are not kept when the GUI saves the file.

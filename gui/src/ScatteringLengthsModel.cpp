@@ -296,6 +296,12 @@ void ScatteringLengthsModel::addEntry(const ScatteringLengthEntry &entry) {
   endInsertRows();
 }
 
+void ScatteringLengthsModel::setEntry(int row, const ScatteringLengthEntry &entry) {
+  if (row < 0 || row >= lines.size()) return;
+  lines[row] = entry;
+  emit dataChanged(index(row, 0), index(row, NumCols - 1));
+}
+
 void ScatteringLengthsModel::addDefaultEntry() {
   ScatteringLengthEntry e;
   QList<PairsData> pairs = pairsModel ? pairsModel->getPairs() : QList<PairsData>();
@@ -428,4 +434,85 @@ void ScatteringLengthsDelegate::setModelData(QWidget *editor, QAbstractItemModel
     return;
   }
   if (QLineEdit *edit = qobject_cast<QLineEdit *>(editor)) model->setData(index, edit->text(), Qt::EditRole);
+}
+
+// ---- ScatteringLengthRowsModel ------------------------------------------------------------------------------
+
+ScatteringLengthRowsModel::ScatteringLengthRowsModel(ScatteringLengthsModel *source, int columns, QObject *parent)
+    : QAbstractTableModel(parent), src(source), ncols(columns) {
+  connect(src, SIGNAL(modelReset()), this, SLOT(sourceReset()));
+  connect(src, SIGNAL(rowsInserted(QModelIndex, int, int)), this, SLOT(sourceReset()));
+  connect(src, SIGNAL(rowsRemoved(QModelIndex, int, int)), this, SLOT(sourceReset()));
+  connect(src, SIGNAL(dataChanged(QModelIndex, QModelIndex)), this, SLOT(sourceReset()));
+  connect(src, SIGNAL(layoutChanged()), this, SLOT(sourceReset()));
+}
+
+void ScatteringLengthRowsModel::sourceReset() {
+  beginResetModel();
+  endResetModel();
+}
+
+int ScatteringLengthRowsModel::rowCount(const QModelIndex &parent) const {
+  return parent.isValid() ? 0 : src->rowCount();
+}
+
+int ScatteringLengthRowsModel::columnCount(const QModelIndex &parent) const {
+  return parent.isValid() ? 0 : ncols;
+}
+
+QString ScatteringLengthRowsModel::valueText(const ScatteringLengthEntry &e) {
+  QString t = QString("Re a0 = %1 ± %2 fm").arg(e.value).arg(e.sigma);
+  if (e.hasIm) t += QString(", Im a0 = %1 ± %2 fm").arg(e.imValue).arg(e.imSigma);
+  return t;
+}
+
+QVariant ScatteringLengthRowsModel::data(const QModelIndex &index, int role) const {
+  if (!index.isValid() || index.row() >= src->rowCount()) return QVariant();
+  const int row = index.row(), col = index.column();
+  const ScatteringLengthEntry e = src->entries().at(row);
+  if (role == Qt::CheckStateRole && col == 0) return src->index(row, ScatteringLengthsModel::ActiveCol).data(role);
+  if (role == Qt::ToolTipRole) {
+    const QString why = src->problem(e);
+    if (!why.isEmpty()) return why;
+    return valueText(e) + "\n" +
+           tr("Measured s-wave scattering length (the <scatteringLengths> block): adds ((a0 - value)/sigma)^2 to chi2 "
+              "(sigma = 0 leaves that part unconstrained).  Computed a0 of every pair: output/scatteringLengths.out.  "
+              "Double-click to edit.");
+  }
+  if (role == Qt::ForegroundRole) return src->index(row, ScatteringLengthsModel::PairCol).data(role);
+  if (role == Qt::TextAlignmentRole) return col == 1 ? QVariant(Qt::AlignLeft | Qt::AlignVCenter) : QVariant(Qt::AlignCenter);
+  if (role != Qt::DisplayRole) return QVariant();
+  switch (col) {
+    case 1:
+      return QString("a%1 of %2").arg(QChar(0x2080)).arg(src->pairText(e.pairKey));
+    case 3:
+      return tr("threshold");
+    case 5:
+      return QString("s = %1").arg(src->index(row, ScatteringLengthsModel::SpinCol).data(Qt::DisplayRole).toString());
+    case 7:
+      return tr("Scattering Length");
+    case 8:
+      return valueText(e);
+    default:
+      return QVariant();
+  }
+}
+
+QVariant ScatteringLengthRowsModel::headerData(int section, Qt::Orientation orientation, int role) const {
+  if (role != Qt::DisplayRole) return QVariant();
+  if (orientation == Qt::Vertical) return QString("a%1").arg(QChar(0x2080));  // "a0" in place of the row number
+  Q_UNUSED(section);
+  return QVariant();
+}
+
+bool ScatteringLengthRowsModel::setData(const QModelIndex &index, const QVariant &value, int role) {
+  if (!index.isValid() || index.column() != 0 || role != Qt::CheckStateRole) return false;
+  return src->setData(src->index(index.row(), ScatteringLengthsModel::ActiveCol), value, role);
+}
+
+Qt::ItemFlags ScatteringLengthRowsModel::flags(const QModelIndex &index) const {
+  if (!index.isValid()) return Qt::NoItemFlags;
+  Qt::ItemFlags f = Qt::ItemIsEnabled | Qt::ItemIsSelectable;
+  if (index.column() == 0) f |= Qt::ItemIsUserCheckable;
+  return f;
 }

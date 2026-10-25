@@ -6,6 +6,9 @@
 #include "DialogScrollArea.h"
 #include "PairsModel.h"
 #include <QFileDialog>
+#include <algorithm>
+#include <QLocale>
+#include <QDoubleValidator>
 #include <QStandardItemModel>
 
 AddSegDataDialog::AddSegDataDialog(QWidget *parent) :
@@ -38,6 +41,10 @@ AddSegDataDialog::AddSegDataDialog(QWidget *parent) :
   dataTypeCombo->addItem(tr("Differential"), 1);
   dataTypeCombo->addItem(tr("Phase Shift"), 2);
   dataTypeCombo->addItem(tr("Analyzing Power"), 7);
+  dataTypeCombo->addItem(tr("Scattering Length"), ScatteringLengthCode);
+  dataTypeCombo->setItemData(dataTypeCombo->count() - 1,
+                             tr("A measured s-wave scattering length of a particle pair (the <scatteringLengths> block)"),
+                             Qt::ToolTipRole);
   connect(dataTypeCombo, SIGNAL(currentIndexChanged(int)), this, SLOT(dataTypeChanged(int)));
   frameLabel = new QLabel(tr("Frame:"));
   frameLabel->setVisible(false);
@@ -126,6 +133,47 @@ AddSegDataDialog::AddSegDataDialog(QWidget *parent) :
   deltaText->setVisible(false);
   deltaText->setMaximumWidth(60);
 
+  // Scattering-length fields (Data Type "Scattering Length")
+  scatLenBox = new QGroupBox(tr("Scattering Length (s wave, at the pair's threshold)"));
+  scatLenBox->setObjectName("scatLenBox");
+  scatLenBox->setVisible(false);
+  scatLenSpinCombo = new QComboBox;
+  scatLenSpinCombo->setObjectName("scatLenSpinCombo");
+  scatLenSpinCombo->setToolTip(tr("Channel spin s (J = s, parity pi1*pi2 for l = 0), or \"coherent\": the spin-weighted\n"
+                                  "sum of the channel spins, sum (2s+1)/((2j1+1)(2j2+1)) a_s."));
+  QDoubleValidator *numberValidator = new QDoubleValidator(this);
+  QDoubleValidator *sigmaValidator = new QDoubleValidator(this);
+  sigmaValidator->setBottom(0.0);
+  scatLenValueText = new QLineEdit("0.0");
+  scatLenValueText->setValidator(numberValidator);
+  scatLenSigmaText = new QLineEdit("0.0");
+  scatLenSigmaText->setValidator(sigmaValidator);
+  scatLenImValueText = new QLineEdit;
+  scatLenImValueText->setValidator(numberValidator);
+  scatLenImValueText->setPlaceholderText(tr("none"));
+  scatLenImSigmaText = new QLineEdit;
+  scatLenImSigmaText->setValidator(sigmaValidator);
+  scatLenImSigmaText->setPlaceholderText(tr("none"));
+  for (QLineEdit *e : {scatLenValueText, scatLenSigmaText, scatLenImValueText, scatLenImSigmaText}) e->setMaximumWidth(110);
+  QGridLayout *scatLenLayout = new QGridLayout;
+  scatLenLayout->addWidget(new QLabel(tr("Channel Spin:")), 0, 0, Qt::AlignRight);
+  scatLenLayout->addWidget(scatLenSpinCombo, 0, 1);
+  scatLenLayout->addWidget(new QLabel(tr("Re a0 [fm]:")), 1, 0, Qt::AlignRight);
+  scatLenLayout->addWidget(scatLenValueText, 1, 1);
+  scatLenLayout->addWidget(new QLabel(tr("Uncertainty [fm]:")), 1, 2, Qt::AlignRight);
+  scatLenLayout->addWidget(scatLenSigmaText, 1, 3);
+  scatLenLayout->addWidget(new QLabel(tr("Im a0 [fm]:")), 2, 0, Qt::AlignRight);
+  scatLenLayout->addWidget(scatLenImValueText, 2, 1);
+  scatLenLayout->addWidget(new QLabel(tr("Uncertainty [fm]:")), 2, 2, Qt::AlignRight);
+  scatLenLayout->addWidget(scatLenImSigmaText, 2, 3);
+  QLabel *scatLenHint = new QLabel(tr("Adds ((a0 - value)/uncertainty)^2 to chi2; an uncertainty of 0 leaves that part\n"
+                                      "unconstrained.  Im a0 only for a pair with open channels at its threshold.\n"
+                                      "Computed a0 of every pair: output/scatteringLengths.out."));
+  scatLenHint->setEnabled(false);  // muted text colour
+  scatLenLayout->addWidget(scatLenHint, 3, 0, 1, 4);
+  scatLenLayout->setColumnStretch(4, 1);
+  scatLenBox->setLayout(scatLenLayout);
+
   advancedModeCheck = new QCheckBox(tr("Advanced Settings (Sum or Ratio of Components)"));
   connect(advancedModeCheck, SIGNAL(stateChanged(int)), this, SLOT(advancedModeChanged(int)));
 
@@ -184,10 +232,13 @@ AddSegDataDialog::AddSegDataDialog(QWidget *parent) :
   QGroupBox *valueBox = new QGroupBox;
   QGridLayout *valueLayout = new QGridLayout;
   QGridLayout *pairLayout = new QGridLayout;
-  pairLayout->addWidget(new QLabel(tr("Entrance Pair:")), 0, 0, Qt::AlignRight);
+  entrancePairLabel = new QLabel(tr("Entrance Pair:"));
+  pairLayout->addWidget(entrancePairLabel, 0, 0, Qt::AlignRight);
   pairLayout->addWidget(entrancePairCombo, 0, 1);
-  pairLayout->addWidget(new QLabel(tr("Exit Pair:")), 0, 2, Qt::AlignRight);
+  QLabel *exitPairLabel = new QLabel(tr("Exit Pair:"));
+  pairLayout->addWidget(exitPairLabel, 0, 2, Qt::AlignRight);
   pairLayout->addWidget(exitPairCombo, 0, 3);
+  segmentOnly << exitPairLabel << exitPairCombo;
   valueLayout->addLayout(pairLayout, 0, 0, 1, 2);
   QGroupBox *energyBox = new QGroupBox(tr("Lab Energy [MeV]"));
   QGridLayout *energyLayout = new QGridLayout;
@@ -197,6 +248,7 @@ AddSegDataDialog::AddSegDataDialog(QWidget *parent) :
   energyLayout->addWidget(highEnergyText, 1, 1);
   energyBox->setLayout(energyLayout);
   valueLayout->addWidget(energyBox, 1, 0);
+  segmentOnly << energyBox;
   angleBox = new QGroupBox(tr("Lab Angle [degrees]"));
   QGridLayout *angleLayout = new QGridLayout;
   angleLayout->addWidget(new QLabel(tr("Low Angle:")), 0, 0, Qt::AlignRight);
@@ -205,6 +257,7 @@ AddSegDataDialog::AddSegDataDialog(QWidget *parent) :
   angleLayout->addWidget(highAngleText, 1, 1);
   angleBox->setLayout(angleLayout);
   valueLayout->addWidget(angleBox, 1, 1);
+  segmentOnly << angleBox;
 
   QGridLayout *lowerLayout = new QGridLayout;
   lowerLayout->addWidget(new QLabel(tr("Data Type:")), 0, 0, Qt::AlignRight);
@@ -228,7 +281,9 @@ AddSegDataDialog::AddSegDataDialog(QWidget *parent) :
   phaseLayout->addWidget(phaseLValueText, 0, 8);
   lowerLayout->addLayout(phaseLayout, 0, 2);
 
-  lowerLayout->addWidget(new QLabel(tr("Data Norm.:")), 1, 0, Qt::AlignRight);
+  QLabel *dataNormLabel = new QLabel(tr("Data Norm.:"));
+  lowerLayout->addWidget(dataNormLabel, 1, 0, Qt::AlignRight);
+  segmentOnly << dataNormLabel << dataNormText << varyNormCheck << dataNormErrorLabel << dataNormErrorText;
   QHBoxLayout *normLayout = new QHBoxLayout;
   normLayout->addWidget(dataNormText);
   normLayout->addWidget(varyNormCheck);
@@ -240,14 +295,20 @@ AddSegDataDialog::AddSegDataDialog(QWidget *parent) :
   normErrorLayout->addWidget(dataNormErrorText, 0, 2);
   lowerLayout->addLayout(normErrorLayout, 1, 2);
 
-  lowerLayout->addWidget(new QLabel(tr("Data File:")), 2, 0, Qt::AlignRight);
+  QLabel *dataFileLabel = new QLabel(tr("Data File:"));
+  lowerLayout->addWidget(dataFileLabel, 2, 0, Qt::AlignRight);
+  segmentOnly << dataFileLabel << dataFileText << chooseFileButton;
   QGridLayout *fileLayout = new QGridLayout;
   fileLayout->addWidget(dataFileText, 0, 0);
   fileLayout->addWidget(chooseFileButton, 0, 1);
   fileLayout->setColumnStretch(0, 1);
   lowerLayout->addLayout(fileLayout, 2, 1, 1, 2);
 
-  lowerLayout->addWidget(new QLabel(tr("Covariance File:")), 3, 0, Qt::AlignRight);
+  QLabel *covarianceLabel = new QLabel(tr("Covariance File:"));
+  lowerLayout->addWidget(covarianceLabel, 3, 0, Qt::AlignRight);
+  segmentOnly << covarianceLabel << covarianceFileText << chooseCovarianceButton;
+  segmentOnly << energyShiftLabel << energyShiftText << varyEnergyShiftCheck << energyShiftErrorLabel
+              << energyShiftErrorText << uposCheck << advancedModeCheck;
   QGridLayout *covarianceLayout = new QGridLayout;
   covarianceLayout->addWidget(covarianceFileText, 0, 0);
   covarianceLayout->addWidget(chooseCovarianceButton, 0, 1);
@@ -313,6 +374,8 @@ AddSegDataDialog::AddSegDataDialog(QWidget *parent) :
   lowerLayout->addWidget(advancedModeBox, 8, 0, 1, 3);
   lowerLayout->addWidget(naturalLabel, 9, 0, Qt::AlignRight);
   lowerLayout->addWidget(naturalCombo, 9, 1, 1, 2);
+  lowerLayout->addWidget(scatLenBox, 10, 0, 1, 3);
+  connect(entrancePairCombo, SIGNAL(keyChanged(int)), this, SLOT(fillScatteringLengthSpins()));
 
   valueLayout->addLayout(lowerLayout, 2, 0, 1, 2);
   valueBox->setLayout(valueLayout);
@@ -399,6 +462,11 @@ void AddSegDataDialog::exitPairChanged(int key) {
 }
 
 void AddSegDataDialog::dataTypeChanged(int) {
+  if (isScatteringLength()) {
+    applyScatteringLengthMode(true);
+    return;
+  }
+  if (scatLenMode) applyScatteringLengthMode(false);
   const int code = dataTypeCode();
   const int observable = observableCode();
   const bool phase = (code == 2);
@@ -422,7 +490,8 @@ void AddSegDataDialog::dataTypeChanged(int) {
   if (QStandardItemModel *items = qobject_cast<QStandardItemModel *>(dataTypeCombo->model())) {
     for (int i = 0; i < items->rowCount(); i++) {
       QStandardItem *item = items->item(i);
-      const bool allowed = !totalCapture || item->data(Qt::UserRole).toInt() == 0;
+      const int itemCode = item->data(Qt::UserRole).toInt();
+      const bool allowed = !totalCapture || itemCode == 0 || itemCode == ScatteringLengthCode;  // no exit pair
       item->setEnabled(allowed);
       item->setToolTip(allowed ? QString() : tr("Total capture is angle integrated: choose a single exit pair for this observable"));
     }
@@ -588,6 +657,7 @@ void AddSegDataDialog::setNaturalToken(const QString &token) {
 }
 
 void AddSegDataDialog::setPairsModel(PairsModel *model) {
+  pairs = model;
   // The check box only means something when the pairs form more than one compound nucleus.
   naturalLabel->setVisible(model && model->nuclei().size() > 1);
   naturalCombo->setVisible(model && model->nuclei().size() > 1);
@@ -599,6 +669,86 @@ void AddSegDataDialog::setPairsModel(PairsModel *model) {
   if (componentEntranceCombo->key() == 0) componentEntranceCombo->setKey(1);
   if (componentExitCombo->key() == 0) componentExitCombo->setKey(1);
   dataTypeChanged(dataTypeCombo->currentIndex());
+}
+
+void AddSegDataDialog::applyScatteringLengthMode(bool on) {
+  scatLenMode = on;
+  for (QWidget *w : segmentOnly) w->setVisible(!on);
+  scatLenBox->setVisible(on);
+  entrancePairLabel->setText(on ? tr("Pair:") : tr("Entrance Pair:"));
+  setWindowTitle(windowTitle().replace(on ? tr("Segment From Data") : tr("Scattering Length"),
+                                       on ? tr("Scattering Length") : tr("Segment From Data")));
+  if (on) {
+    for (QWidget *w : std::initializer_list<QWidget *>{frameLabel, frameCombo, multipolarityLabel, multipolarityCombo,
+                                                       phaseJValueLabel, phaseJValueText, phaseLValueLabel, phaseLValueText,
+                                                       secondaryLLabel, secondaryLSpin, finalJLabel, finalJText, deltaLabel,
+                                                       deltaText, advancedModeBox, naturalLabel, naturalCombo})
+      w->setVisible(false);
+    fillScatteringLengthSpins();
+    fitDialogToContent(this);
+  } else {
+    // the sections the check boxes and the pairs decide
+    uposChanged(uposCheck->checkState());
+    advancedModeChanged(advancedModeCheck->checkState());
+    naturalLabel->setVisible(pairs && pairs->nuclei().size() > 1);
+    naturalCombo->setVisible(pairs && pairs->nuclei().size() > 1);
+  }
+}
+
+void AddSegDataDialog::fillScatteringLengthSpins() {
+  const QVariant keep = scatLenSpinCombo->currentData();
+  scatLenSpinCombo->clear();
+  const QList<PairsData> list = pairs ? pairs->getPairs() : QList<PairsData>();
+  const int key = entrancePairCombo->key();
+  if (key >= 1 && key <= list.size() && list.at(key - 1).pairType == 0) {
+    const PairsData &p = list.at(key - 1);
+    const QChar parity(p.lightPi * p.heavyPi > 0 ? 0x207A : 0x207B);
+    for (double s : ScatteringLengthsModel::allowedChannelSpins(p))
+      scatLenSpinCombo->addItem(ScatteringLengthsModel::spinLabel(s) + parity, s);
+    if (!ScatteringLengthsModel::isIdentical(p)) scatLenSpinCombo->addItem(ScatteringLengthsModel::spinLabel(-1.0), -1.0);
+  }
+  if (keep.isValid()) {
+    const int i = scatLenSpinCombo->findData(keep);
+    if (i >= 0) scatLenSpinCombo->setCurrentIndex(i);
+  }
+}
+
+ScatteringLengthEntry AddSegDataDialog::scatteringLength() const {
+  ScatteringLengthEntry e;
+  e.active = scatLenActive;
+  e.pairKey = entrancePairCombo->key();
+  e.s = scatLenSpinCombo->count() ? scatLenSpinCombo->currentData().toDouble() : 0.0;
+  e.value = QLocale().toDouble(scatLenValueText->text());
+  if (scatLenValueText->text().trimmed().isEmpty()) e.value = 0.0;
+  e.sigma = std::max(0.0, QLocale().toDouble(scatLenSigmaText->text()));
+  e.hasIm = !scatLenImValueText->text().trimmed().isEmpty() || !scatLenImSigmaText->text().trimmed().isEmpty();
+  e.imValue = QLocale().toDouble(scatLenImValueText->text());
+  e.imSigma = std::max(0.0, QLocale().toDouble(scatLenImSigmaText->text()));
+  return e;
+}
+
+void AddSegDataDialog::setScatteringLength(const ScatteringLengthEntry &e) {
+  scatLenActive = e.active;
+  setDataTypeCode(ScatteringLengthCode);
+  dataTypeCombo->setEnabled(false);  // a scattering length cannot become a segment line
+  entrancePairCombo->setKey(e.pairKey);
+  fillScatteringLengthSpins();
+  int i = scatLenSpinCombo->findData(e.s);
+  if (i < 0) {
+    // a spin the pair does not allow (the table shows the row in red): keep it so an edit does not change it
+    scatLenSpinCombo->addItem(ScatteringLengthsModel::spinLabel(e.s), e.s);
+    i = scatLenSpinCombo->count() - 1;
+  }
+  scatLenSpinCombo->setCurrentIndex(i);
+  scatLenValueText->setText(QLocale().toString(e.value, 'g', 12));
+  scatLenSigmaText->setText(QLocale().toString(e.sigma, 'g', 12));
+  scatLenImValueText->setText(e.hasIm ? QLocale().toString(e.imValue, 'g', 12) : QString());
+  scatLenImSigmaText->setText(e.hasIm ? QLocale().toString(e.imSigma, 'g', 12) : QString());
+}
+
+void AddSegDataDialog::disallowScatteringLength() {
+  const int i = dataTypeCombo->findData(ScatteringLengthCode);
+  if (i >= 0) dataTypeCombo->removeItem(i);
 }
 
 void AddSegDataDialog::showEvent(QShowEvent *event) {

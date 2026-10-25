@@ -39,6 +39,7 @@
 #include <iostream>
 #include "AZURESetup.h"
 #include "SegmentsTab.h"
+#include "AddSegDataDialog.h"
 #include "PairsModel.h"
 #include "ScatteringLengthsModel.h"
 #include "Config.h"
@@ -310,6 +311,73 @@ int main(int argc, char** argv) {
     ok("a new row: first particle pair, first spin, nothing constrained",
        model->entries().last().pairKey == 1 && model->entries().last().s == 1.0 && model->entries().last().sigma == 0.0 &&
            model->entries().last().active);
+  }
+
+  // ---- 4b. scattering lengths as a Data Type of the segment dialog, listed under the data segments ----------
+  {
+    AddSegDataDialog d;
+    d.setPairsModel(&pairs);
+    QComboBox* type = d.findChild<QComboBox*>("dataTypeCombo");
+    ok("dialog offers the Scattering Length type", type && type->findData(AddSegDataDialog::ScatteringLengthCode) >= 0);
+    d.show();
+    QApplication::processEvents();
+    d.setDataTypeCode(AddSegDataDialog::ScatteringLengthCode);
+    QApplication::processEvents();
+    ok("scattering-length mode: its fields shown, the segment ones hidden",
+       d.isScatteringLength() && d.scatLenBox->isVisible() && !d.angleBox->isVisible() && !d.dataFileText->isVisible() &&
+           !d.exitPairCombo->isVisible() && !d.covarianceFileText->isVisible() && !d.uposCheck->isVisible());
+    d.entrancePairCombo->setKey(1);   // p + 7Be: s = 1, 2 and coherent
+    QStringList spins;
+    for (int i = 0; i < d.scatLenSpinCombo->count(); i++) spins << d.scatLenSpinCombo->itemText(i);
+    ok("channel spins of the pair offered", spins.size() == 3 && spins.last() == "coherent", spins.join(","));
+    d.entrancePairCombo->setKey(4);   // d + d (identical): s = 0, 2, no coherent
+    ok("identical pair: even spins, no coherent", d.scatLenSpinCombo->count() == 2 &&
+                                                    d.scatLenSpinCombo->findData(-1.0) < 0);
+    d.entrancePairCombo->setKey(1);
+    d.scatLenSpinCombo->setCurrentIndex(d.scatLenSpinCombo->findData(2.0));
+    d.scatLenValueText->setText("-3.5");
+    d.scatLenSigmaText->setText("0.4");
+    ScatteringLengthEntry e = d.scatteringLength();
+    ok("entry from the dialog", e.active && e.pairKey == 1 && e.s == 2.0 && e.value == -3.5 && e.sigma == 0.4 && !e.hasIm);
+    d.scatLenImValueText->setText("-0.2");
+    d.scatLenImSigmaText->setText("0.05");
+    e = d.scatteringLength();
+    ok("imaginary part when given", e.hasIm && e.imValue == -0.2 && e.imSigma == 0.05);
+    d.setDataTypeCode(1);
+    QApplication::processEvents();
+    ok("back to a segment type: segment fields shown again", !d.isScatteringLength() && !d.scatLenBox->isVisible() &&
+                                                                 d.angleBox->isVisible() && d.dataFileText->isVisible() &&
+                                                                 d.exitPairCombo->isVisible());
+
+    AddSegDataDialog edit;
+    edit.setPairsModel(&pairs);
+    ScatteringLengthEntry in;
+    in.active = false; in.pairKey = 2; in.s = 1.0; in.value = 9.0; in.sigma = 0.5; in.hasIm = true; in.imValue = -0.3;
+    in.imSigma = 0.05;
+    edit.setScatteringLength(in);
+    const ScatteringLengthEntry back = edit.scatteringLength();
+    ok("edit round trip (inactive kept)", !back.active && back.pairKey == 2 && back.s == 1.0 && back.value == 9.0 &&
+                                              back.sigma == 0.5 && back.hasIm && back.imValue == -0.3 && back.imSigma == 0.05);
+    ok("edit: the type is fixed", !edit.findChild<QComboBox*>("dataTypeCombo")->isEnabled());
+    AddSegDataDialog seg;
+    seg.disallowScatteringLength();
+    ok("segment edit: no Scattering Length type",
+       seg.findChild<QComboBox*>("dataTypeCombo")->findData(AddSegDataDialog::ScatteringLengthCode) < 0);
+
+    // rows under the data table: one per entry, in the data table's columns, hidden when there are none
+    QTableView* rows = tab.findChild<QTableView*>("scatteringLengthsView");
+    ok("rows view exists", rows != nullptr);
+    if (rows) {
+      QAbstractItemModel* rm = rows->model();
+      ok("one row per entry", rm->rowCount() == model->rowCount(), QString::number(rm->rowCount()));
+      ok("Data Type column", rm->index(0, 7).data().toString() == "Scattering Length", rm->index(0, 7).data().toString());
+      ok("Data File column: the value", rm->index(0, 8).data().toString().startsWith("Re a0 = 17"),
+         rm->index(0, 8).data().toString());
+      ok("check box mirrors the entry", rm->index(2, 0).data(Qt::CheckStateRole).toInt() == Qt::Unchecked);
+      rm->setData(rm->index(2, 0), Qt::Checked, Qt::CheckStateRole);
+      ok("check box writes the entry", model->entries().at(2).active);
+      rm->setData(rm->index(2, 0), Qt::Unchecked, Qt::CheckStateRole);
+    }
   }
 
   // ---- 5. reset --------------------------------------------------------------------
