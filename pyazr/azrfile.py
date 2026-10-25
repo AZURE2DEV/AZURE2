@@ -1689,7 +1689,9 @@ class AzrModel:
         inverse reaction of a photodissociation measurement,
         ``photodissociation=True`` to weight the average with the
         detailed-balance factor.  ``q_coefficients`` are the finite-geometry
-        attenuation coefficients Q_0..Q_n.
+        attenuation coefficients Q_0..Q_n of the detector, i.e. in the LAB frame
+        (for a particle exit AZURE2 applies them to the lab angular distribution
+        since 2026-10-25; user guide, "Attenuation Coefficients").
 
         ``udr_file`` is a user-defined numerical resolution function in
         SAMMY's UDR format (time-of-flight delay distributions, microseconds

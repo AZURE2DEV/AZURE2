@@ -555,7 +555,59 @@ The angular distribution is corrected as:
 
    W(\theta) = \sum_{i=0}^{\infty} a_i \, Q_i \, P_i(\cos\theta)
 
-where :math:`Q_i` are the attenuation coefficients.
+where :math:`Q_i` are the attenuation coefficients.  They are a property of
+the detector, so they act on the angular distribution in the **laboratory**
+frame, where the detector sits.  Orders not given are taken as
+:math:`Q_i = 1`.
+
+How AZURE2 applies them depends on the exit pair:
+
+- **Photon exits** (capture), **secondary gamma rays** (UPOS segments),
+  **analyzing powers**, and **charged-particle elastic scattering**: each
+  c.m. Legendre term is multiplied by :math:`Q_i` as entered.  For capture
+  and UPOS data the frame difference is of order the c.m. velocity
+  (:math:`\beta \approx 1\%`) times :math:`1 - Q_i`, and is neglected.  For charged-particle
+  elastic scattering it is an approximation: the Coulomb amplitude is not a
+  finite Legendre series, so the frame transform below cannot be used.
+- **Particle exits otherwise** (reactions such as (α,n) or (p,α), and
+  neutron elastic scattering): the lab distribution
+  :math:`W_\mathrm{lab} = W^* \, d\Omega^*/d\Omega_\mathrm{lab}` is
+  expanded in lab Legendre polynomials, :math:`Q_K` multiplies its
+  coefficients :math:`b_K`, and the result is taken back to the point's
+  c.m. angle:
+
+  .. math::
+
+     W_Q(\theta^*) = W^*(\theta^*) + \frac{d\Omega_\mathrm{lab}}{d\Omega^*}
+     \sum_K (Q_K - 1)\, b_K\, P_K(\cos\theta_\mathrm{lab}),
+     \qquad
+     b_K = \frac{2K+1}{2} \int_{-1}^{1} P_K(\cos\theta_\mathrm{lab}(x^*))\,
+     W^*(x^*)\, dx^*.
+
+  This is exact for the coefficients given.  The lab angle follows from
+  :math:`g = v_\mathrm{cm}/v_3^*`, the c.m. velocity over the detected
+  particle's c.m. speed, which also makes it energy dependent; with
+  ``relativistic=1`` the relativistic boost is used.  Where
+  :math:`g \ge 1` the lab angle has two c.m. solutions, and the
+  coefficients are applied as entered.
+
+The lab distribution of a particle exit contains Legendre orders above the
+highest c.m. order, of size about :math:`g^{K}`.  For a detector with a
+large opening angle, or a large :math:`g` (near threshold, light targets),
+give coefficients beyond the highest c.m. order.  The default for the orders
+not given is 1, which is "no attenuation" for those orders.
+
+.. note::
+
+   Before 2026-10-25 a particle exit multiplied each c.m. term by
+   :math:`\sum_{L'} U_{LL'}(\gamma) Q_{L'}` instead.  This was a truncated
+   frame-transform matrix evaluated at about :math:`g^2` rather than
+   :math:`g`, and it changed the result even with every :math:`Q_i = 1`.
+   It was off by a few per cent for archive cases such as
+   :sup:`13`\ C(α,n) and :sup:`15`\ N(p,α).  In addition, a non-particle
+   entrance pair set every term to zero, and more than 20 coefficients read
+   past the end of an array.  Fits with coefficients on particle-exit data
+   made before then should be re-evaluated (``tests/q_attenuation``).
 
 Set the number of coefficients using the spinner and enter the :math:`Q_i`
 values in the table (default value is 1.0 for each).
