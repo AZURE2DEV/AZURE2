@@ -230,6 +230,27 @@ runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
   photon pair's final-state energy (`e2`) equal to the EC level's energy: the
   ANC conversion uses the former and the radial integral the latter, and a
   0.03 keV mismatch moves EC by 0.16 %.
+- **Energy-shift penalties are measured from zero** (dev, 2026-10-25, DeBoer:
+  "It should measure the penalty from 0"): a free constant shift, `sqrtshift`
+  b and `shiftfn` a_j add `(dE/sigma)^2`, `(b/sigma)^2`, `(a_j/sigma)^2`; the
+  value on the segment line is only where the fit starts. Before, the penalty
+  was measured from that value, so an `.azr` whose shifts were seeded from an
+  earlier fit carried them as the prior centre (11B+a msfix: 45 inherited
+  nominals, shift penalty 57.6 -> 317.3 at the same parameters). Any `.azr`
+  with nonzero nominal shifts therefore gives a larger chi2 on new builds;
+  frozen older builds keep the old rule. pyazr `azure2.SHIFT_PENALTY_FROM_ZERO`
+  says which rule an engine uses; the archive's rmfit follows it. Norm
+  penalties are unchanged (from the nominal norm). Test: `tests/shift_penalty_zero`.
+- **Attenuation (Q) coefficients act on the lab distribution** (dev a22b99a,
+  2026-10-25): for a particle exit Q_K multiplies the LAB Legendre coefficients
+  and the result is taken back to the point's c.m. angle exactly. Before, a
+  particle exit used B = U(gamma) Q per order with gamma ~ g^2 -- a few per cent
+  off for the archive's 13C(a,n) and 15N(p,a) fits (181 old fit directories,
+  `Brune_vs_Park_Claude_eval/10-25-26_qcoeff_scan/readme`; 2026 campaigns use
+  photon/UPOS exits, unaffected), and changing the result even with every
+  Q = 1. Photon, UPOS, A_y and charged-particle elastic data keep Q as entered.
+  Give coefficients beyond the highest c.m. order when g = v_cm/v3* is large.
+  Test: `tests/q_attenuation`.
 - `--gsl-coul` is a real speed/accuracy tradeoff, not just a flag name: the
   default Coulomb-function method (Michel 2007) is more accurate but visibly
   slower than GSL's. Reach for `--gsl-coul` if a fit is too slow and the
@@ -532,7 +553,7 @@ an analytically unsupported segment raises.
 **Fit against `objective`, not `calculate_chi2_rwa`.** The latter is the *data*
 χ² only. `AZURECalc::operator()` also adds, per segment,
 `((norm − nominal)/(nominal/100 · norm_error))²` and, for a free energy shift,
-`((shift − nominal)/shift_error)²`. Minimize the bare χ² and the normalizations
+`(shift/shift_error)²` (from zero since 2026-10-25; before, `((shift − nominal)/shift_error)²`). Minimize the bare χ² and the normalizations
 drift to absorb every discrepancy — a "better" number AZURE2 would never have
 found (−480 on the 7Be model). Note the denominator uses the **nominal**
 normalization, and that `norm_error` is a **percentage**.
@@ -951,8 +972,9 @@ match one against the other and every width lands on the wrong channel. Calling
 `AzrModel.apply_fit` directly? Pass `pairs=m.pairs`, or it cannot translate.
 
 **Fitted normalizations and energy shifts live only in the companion `.sav`.**
-The `.azr`'s own `dataNorm`/`energyShift` fields are the nominal values that the
-systematic-error penalty is measured from, and `save_fit` leaves them alone. See
+The `.azr`'s own `dataNorm` field is the nominal value the norm penalty is
+measured from; `energyShift` is only the starting value (shift penalties are
+measured from 0 since 2026-10-25); `save_fit` leaves both alone. See
 "Normalizations live in two places" below before trusting a snapshot with a
 blank parameter file.
 
@@ -1071,8 +1093,8 @@ copies are NOT the same quantity:
 
 | where | field | what it is |
 |---|---|---|
-| `<segmentsData>` line, tokens 9 and 12 (1-based; `dataNorm`, `energyShift`) | stored in the `.azr` | the **nominal** value: the starting value, AND the reference the systematic-error penalty is measured from -- `chi2 += ((N - N_nominal)/(N_nominal * normErr/100))^2` (`AZURECalc.cpp`, `GetNominalNorm`), same for the shift |
-| `param.sav`, `segment_<key>_norm` / `segment_<key>_energy_shift` | written by every fit | the **fitted** value; a run given this file uses it, the penalty still refers to the `.azr` nominal |
+| `<segmentsData>` line, tokens 9 and 12 (1-based; `dataNorm`, `energyShift`) | stored in the `.azr` | the **nominal** value: the starting value, AND (norm only) the reference the systematic-error penalty is measured from -- `chi2 += ((N - N_nominal)/(N_nominal * normErr/100))^2` (`AZURECalc.cpp`, `GetNominalNorm`).  The shift field is only the starting value: shift penalties are `(dE/dE_err)^2`, from 0, since dev 2026-10-25 (before, from this value) |
+| `param.sav`, `segment_<key>_norm` / `segment_<key>_energy_shift` | written by every fit | the **fitted** value; a run given this file uses it, the norm penalty still refers to the `.azr` nominal |
 
 Consequences, each rediscovered the hard way on the 11B+alpha archive:
 
@@ -1219,7 +1241,8 @@ reaches you silently — it raises and removes the file. Two things remain true
 of the `.azr` itself:
 
 - **Fitted normalizations and shifts are only in the `.sav`.** The `.azr`'s
-  `<segmentsData>` fields are the nominal (penalty-reference) values and
+  `<segmentsData>` fields are the nominal values (starting values; the norm
+  penalty's reference) and
   `save_fit` leaves them alone, so a calculate with a blank parameter file is
   NOT the fit and baking is not the fix -- "Normalizations live in two places"
   above.
@@ -1747,7 +1770,8 @@ Plain-text, section-tagged; prefer the GUI or `AzrModel` over hand edits.
   `isAdvanced [operationType nComp {entrance exit angle [scaling]}...] isUPOS [L Ic delta] [sqrtshift b bErr vary]`
   - `sqrtshift b bErr vary` (keyword block, always last; added 2026-10-05) is
     the second energy-shift option: E' = E + energyShift + b*sqrt(E/MeV), b in
-    MeV^1/2, with its own penalty `((b-b_nom)/bErr)^2` and vary flag,
+    MeV^1/2, with its own penalty `(b/bErr)^2` (from 0 since 2026-10-25; before
+    `((b-b_nom)/bErr)^2`) and vary flag,
     independent of the constant shift. It is what an additive offset in an
     analyzing-magnet field reading produces (E = kB^2 -> dE ~ sqrt(E)); use it
     when a set fits at low energy and drifts at high energy (12C+a Bashkin
@@ -1828,12 +1852,14 @@ Plain-text, section-tagged; prefer the GUI or `AzrModel` over hand edits.
     sum r_i (M^-1 r)_i (exact partition, single shares not goodness of fit);
     `covariance.out` = chi2 per file vs the uncorrelated sum r^2. pyazr returns
     whitened residuals (sum w^2 = chi2); `Segment.covariance`,
-    `add_data_segment(covariance=...)`. Tests: `tests/data_covariance`
+    `add_data_segment(covariance=...)`. GUI (dev 9902eba, 2026-10-25): the
+    "Covariance File" field of the data segment dialog. Tests: `tests/data_covariance`
     (independent numpy check, gradients, 3 fitters, refusals),
     `tests/pyazr/data_covariance_test.py`.
   - `shiftfn "<f(x)>" N v0 s0 vary0 ...` (keyword block, 2026-10-14): adds
     f(x; a0..a(N-1)), x = the point's ORIGINAL lab energy in MeV, to the
-    shift; each aj has value (= penalty nominal), penalty width and vary flag;
+    shift; each aj has value (the starting value; penalised from 0 since
+    2026-10-25), penalty width and vary flag;
     parameter `segment_<key>_energy_shift_fn<j>`, after every other
     parameter and only for segments declaring a function. On a shift group:
     on the first segment only, applies to all members (a follower declaring
@@ -2374,7 +2400,9 @@ complete:
   residual row per constrained part), the MCMC likelihood and `calculate_chi2_rwa`; chiSquared.out
   gains `Total-Scattering-Length-Chi-Squared`. pyazr: `m.scattering_lengths(x)` (posterior from a
   chain), `m.penalties()["scattering_length"]`, `AzrModel.scattering_lengths` /
-  `add_scattering_length` / `set_scattering_lengths`. Validated on Paneru 2024 3He+4He (33.0996 vs
+  `add_scattering_length` / `set_scattering_lengths`. GUI (since 2026-10-25): Data Type "Scattering
+  Length" of Add Segment From Data (exit pair greyed out), listed as a0 rows under the data segments;
+  still the <scatteringLengths> block in the file, no segment number. Validated on Paneru 2024 3He+4He (33.0996 vs
   33.10 fm) and by the effective-range expansion of AZURE2's own phase shifts (4e-5). TRAP when building
   a model from published gamma~ (Brune): the .azr width is the OBSERVED width
   2 P gamma~^2 / (1 + sum gamma~^2 dS/dE), not 2 P gamma~^2 -- dropping the denominator moved the
