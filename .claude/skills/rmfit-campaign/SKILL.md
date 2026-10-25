@@ -393,8 +393,9 @@ The GUI review: `printf '1\n<reaction>.sav\n\n7\n' | AZURE2 <flags> --no-gui --n
     `rmfit` CLI step is a new process, so each polish starts with the model frozen at its
     own start (the iterative Chiba-Smith scheme); `ev.refreeze_covariance()` in scripts.
     Objectives of different steps are therefore not strictly comparable.  Since 2026-10-24
-    `polish` refreezes between passes (`--refreeze-every N`, default 100; last section) -- BUT see the
-    2026-10-25 warning there: pass `--refreeze-every 0` on relvector models until it is fixed.
+    `polish` refreezes between passes (`--refreeze-every N`; last section).  That oscillated on 13C+a (2026-10-25
+    warning there) and is superseded by the FIX of 2026-10-25: a campaign made since then scales its relvector terms
+    by ONE reference model (`cov_reference.npz`, saved by `rmfit init`), and `--refreeze-every` defaults to 0.
   - Row weights (`dataset_weight`, `point_weights`) scale the plain rows before
     whitening; the Sivia loss is refused. Per-segment chi2 are the engine's partition
     shares and can be negative; `ev.point_chi2(r)` / `ev.point_residuals(r)` give per-row
@@ -2076,3 +2077,15 @@ readme) the refreeze jumps grew instead of shrinking: +3.1k, +44k, -25k, +140k (
 not the best self-consistent point, so control ended at 924,958, worse than its 851,544 seed (the campaign kept the seed as
 candidate 1).  A polish result from 2026-10-24 23:30 on with relvector terms: check the pass-end objectives in the log, not
 only the final line.  Models without relvector terms are unaffected (plain polish).
+
+### 2026-10-25 — FIX installed: relvector covariance model fixed at a reference (supersedes the refreeze advice)
+DeBoer: "revert the default and use a fixed reference model". `rmfit init` saves the seed's frozen relvector model as
+`cov_reference.npz` (named in campaign.json `objective.cov_reference`). Every evaluator the campaign builds (shards,
+verify, export, level adds, data-off tests) scales the relvector terms by that ONE model. So polish = verify = export is one
+objective, and verify/export also log the self-consistent chi2 (`Score.chi2_self`, frozen at the point itself). To move
+the reference, start the next campaign from the next export, or pass `init --cov-reference <npz>` to share one between a
+control and a variant. `--refreeze-every` now defaults to 0 and is ignored when a reference is set. `polish_refreeze`
+returns its best pass. Old campaigns (made before the change) have no reference and keep the first-evaluation freeze.
+Test: rmfit/tests/test_cov_reference.py. Notes: 13C+a/10-24-26_merged_park/readme. Install: backups
+rmfit/*.bak-2026-10-25-fixedref, marker rmfit/.installed-2026-10-25-fixedref (merged onto the 10:23 shift-penalty-from-zero
+edit of engine.py).
