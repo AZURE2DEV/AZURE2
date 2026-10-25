@@ -235,10 +235,9 @@ AddSegDataDialog::AddSegDataDialog(QWidget *parent) :
   entrancePairLabel = new QLabel(tr("Entrance Pair:"));
   pairLayout->addWidget(entrancePairLabel, 0, 0, Qt::AlignRight);
   pairLayout->addWidget(entrancePairCombo, 0, 1);
-  QLabel *exitPairLabel = new QLabel(tr("Exit Pair:"));
+  exitPairLabel = new QLabel(tr("Exit Pair:"));
   pairLayout->addWidget(exitPairLabel, 0, 2, Qt::AlignRight);
   pairLayout->addWidget(exitPairCombo, 0, 3);
-  segmentOnly << exitPairLabel << exitPairCombo;
   valueLayout->addLayout(pairLayout, 0, 0, 1, 2);
   QGroupBox *energyBox = new QGroupBox(tr("Lab Energy [MeV]"));
   QGridLayout *energyLayout = new QGridLayout;
@@ -289,7 +288,7 @@ AddSegDataDialog::AddSegDataDialog(QWidget *parent) :
   normLayout->addWidget(varyNormCheck);
   lowerLayout->addLayout(normLayout, 1, 1);
   QGridLayout *normErrorLayout = new QGridLayout;
-  normErrorLayout->addItem(new QSpacerItem(1, 25), 0, 0);
+  normErrorLayout->addItem(new QSpacerItem(1, 0, QSizePolicy::Expanding, QSizePolicy::Minimum), 0, 0);  // no height of its own: the row collapses when its fields are hidden
   normErrorLayout->setColumnStretch(0, 1);
   normErrorLayout->addWidget(dataNormErrorLabel, 0, 1, Qt::AlignRight);
   normErrorLayout->addWidget(dataNormErrorText, 0, 2);
@@ -321,7 +320,7 @@ AddSegDataDialog::AddSegDataDialog(QWidget *parent) :
   energyShiftLayout->addWidget(varyEnergyShiftCheck);
   lowerLayout->addLayout(energyShiftLayout, 4, 1);
   QGridLayout *energyShiftErrorLayout = new QGridLayout;
-  energyShiftErrorLayout->addItem(new QSpacerItem(1, 25), 0, 0);
+  energyShiftErrorLayout->addItem(new QSpacerItem(1, 0, QSizePolicy::Expanding, QSizePolicy::Minimum), 0, 0);  // no height of its own: the row collapses when its fields are hidden
   energyShiftErrorLayout->setColumnStretch(0, 1);
   energyShiftErrorLayout->addWidget(energyShiftErrorLabel, 0, 1, Qt::AlignRight);
   energyShiftErrorLayout->addWidget(energyShiftErrorText, 0, 2);
@@ -330,7 +329,7 @@ AddSegDataDialog::AddSegDataDialog(QWidget *parent) :
   // UPOS row
   lowerLayout->addWidget(uposCheck, 5, 0, 1, 3);
   QGridLayout *uposParamLayout = new QGridLayout;
-  uposParamLayout->addItem(new QSpacerItem(1, 5), 0, 0);
+  uposParamLayout->addItem(new QSpacerItem(1, 0, QSizePolicy::Expanding, QSizePolicy::Minimum), 0, 0);
   uposParamLayout->setColumnStretch(0, 1);
   uposParamLayout->addWidget(secondaryLLabel, 0, 1, Qt::AlignRight);
   uposParamLayout->addWidget(secondaryLSpin, 0, 2);
@@ -675,7 +674,10 @@ void AddSegDataDialog::applyScatteringLengthMode(bool on) {
   scatLenMode = on;
   for (QWidget *w : segmentOnly) w->setVisible(!on);
   scatLenBox->setVisible(on);
-  entrancePairLabel->setText(on ? tr("Pair:") : tr("Entrance Pair:"));
+  // a scattering length belongs to its entrance pair alone: the exit pair stays in view, greyed out
+  exitPairLabel->setEnabled(!on);
+  exitPairCombo->setEnabled(!on);
+  exitPairCombo->setToolTip(on ? tr("A scattering length is a property of the entrance pair alone") : QString());
   setWindowTitle(windowTitle().replace(on ? tr("Segment From Data") : tr("Scattering Length"),
                                        on ? tr("Scattering Length") : tr("Segment From Data")));
   if (on) {

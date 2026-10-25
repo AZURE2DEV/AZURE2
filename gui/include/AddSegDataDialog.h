@@ -154,6 +154,7 @@ class AddSegDataDialog : public QDialog {
   void applyScatteringLengthMode(bool on);
   QList<QWidget *> segmentOnly;
   QLabel *entrancePairLabel;
+  QLabel *exitPairLabel;
   bool scatLenMode = false;
   bool scatLenActive = true;
   PairsModel *pairs = nullptr;

@@ -325,7 +325,8 @@ int main(int argc, char** argv) {
     QApplication::processEvents();
     ok("scattering-length mode: its fields shown, the segment ones hidden",
        d.isScatteringLength() && d.scatLenBox->isVisible() && !d.angleBox->isVisible() && !d.dataFileText->isVisible() &&
-           !d.exitPairCombo->isVisible() && !d.covarianceFileText->isVisible() && !d.uposCheck->isVisible());
+           !d.covarianceFileText->isVisible() && !d.uposCheck->isVisible());
+    ok("scattering-length mode: exit pair shown but greyed out", d.exitPairCombo->isVisible() && !d.exitPairCombo->isEnabled());
     d.entrancePairCombo->setKey(1);   // p + 7Be: s = 1, 2 and coherent
     QStringList spins;
     for (int i = 0; i < d.scatLenSpinCombo->count(); i++) spins << d.scatLenSpinCombo->itemText(i);
@@ -347,7 +348,7 @@ int main(int argc, char** argv) {
     QApplication::processEvents();
     ok("back to a segment type: segment fields shown again", !d.isScatteringLength() && !d.scatLenBox->isVisible() &&
                                                                  d.angleBox->isVisible() && d.dataFileText->isVisible() &&
-                                                                 d.exitPairCombo->isVisible());
+                                                                 d.exitPairCombo->isVisible() && d.exitPairCombo->isEnabled());
 
     AddSegDataDialog edit;
     edit.setPairsModel(&pairs);
@@ -359,6 +360,13 @@ int main(int argc, char** argv) {
     ok("edit round trip (inactive kept)", !back.active && back.pairKey == 2 && back.s == 1.0 && back.value == 9.0 &&
                                               back.sigma == 0.5 && back.hasIm && back.imValue == -0.3 && back.imSigma == 0.05);
     ok("edit: the type is fixed", !edit.findChild<QComboBox*>("dataTypeCombo")->isEnabled());
+    if (const char* shots = std::getenv("AZURE2_SCATLEN_PNG")) {   // the dialog as the user sees it
+      edit.show();
+      for (int k = 0; k < 20; k++) QApplication::processEvents();
+      QDir().mkpath(shots);
+      ok("dialog screenshot saved", edit.grab().save(QString("%1/scattering_length_dialog.png").arg(shots)));
+      edit.hide();
+    }
     AddSegDataDialog seg;
     seg.disallowScatteringLength();
     ok("segment edit: no Scattering Length type",
