@@ -96,9 +96,10 @@ if have_engine:
             check("shifted segment 1 == pre-shifted segment 2 (engine)",
                   abs(c[0] - c[1]) < 1e-6 * max(1.0, abs(c[1])), (c[0], c[1]))
             x = x0.copy()
-            x[idx] = 0.005                        # 2 sigma off the nominal
+            x[idx] = 0.005                        # 5 sigma from zero (2 from the file value)
             pen = mdl.penalties(x)
-            check("penalty ((b - b0)/err)^2 = 4", abs(float(pen["shift_sqrt"].sum()) - 4.0) < 1e-9, pen["shift_sqrt"])
+            # measured from zero since 2026-10-25, the file value being only the start
+            check("penalty (b/err)^2 = 25 (from zero)", abs(float(pen["shift_sqrt"].sum()) - 25.0) < 1e-9, pen["shift_sqrt"])
             check("objective = chi2 + penalties",
                   abs(mdl.objective(x) - (float(np.sum(mdl.calculate_chi2_rwa(x))) + float(pen["norm"].sum())
                                            + float(pen["shift"].sum()) + float(pen["shift_sqrt"].sum()))) < 1e-9)

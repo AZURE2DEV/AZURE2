@@ -129,10 +129,11 @@ if have_engine:
                   all(abs(c[k - 1] - expected[k]) < 1e-5 * max(1.0, expected[k]) for k in expected),
                   [(k, c[k - 1], expected[k]) for k in expected])
             x = x0.copy()
-            x[idx] = 0.009                        # 2 sigma off the nominal
+            x[idx] = 0.009                        # 4.5 sigma from zero (2 from the file value)
             pen = mdl.penalties(x)
-            check("penalty ((a0 - 0.005)/0.002)^2 = 4, on segment 5", abs(float(pen["shift_fn"][4]) - 4.0) < 1e-9
-                  and abs(float(pen["shift_fn"].sum()) - 4.0) < 1e-9, pen["shift_fn"])
+            # measured from zero since 2026-10-25, the file value being only the start
+            check("penalty (a0/0.002)^2 = 20.25 (from zero), on segment 5", abs(float(pen["shift_fn"][4]) - 20.25) < 1e-9
+                  and abs(float(pen["shift_fn"].sum()) - 20.25) < 1e-9, pen["shift_fn"])
             check("objective = chi2 + every penalty",
                   abs(mdl.objective(x) - (float(np.sum(mdl.calculate_chi2_rwa(x))) + sum(
                       float(np.sum(pen[k])) for k in ("norm", "shift", "shift_sqrt", "shift_fn")))) < 1e-9)
