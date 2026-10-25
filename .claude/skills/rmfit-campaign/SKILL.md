@@ -2089,3 +2089,17 @@ returns its best pass. Old campaigns (made before the change) have no reference 
 Test: rmfit/tests/test_cov_reference.py. Notes: 13C+a/10-24-26_merged_park/readme. Install: backups
 rmfit/*.bak-2026-10-25-fixedref, marker rmfit/.installed-2026-10-25-fixedref (merged onto the 10:23 shift-penalty-from-zero
 edit of engine.py).
+
+## 2026-10-25 — physical seeds must be TINY, not 1 eV: the Brune transform can fail and rescale a level (10B+α stage 1)
+
+The 09-18 recipe (a 1 eV physical seed, then `frac · γ_W` in the engine) broke on 10B+α: α₁ (10B 0.718 MeV) L=2 on the
+12.60 MeV 3⁺, 0.26 MeV above its threshold, has P ~ 1e-12, so 1 eV -- and even 1 meV -- is a reduced width far above γ_W.
+AZURE2 printed `**WARNING: Denominator less than zero while transforming J^pi=3+, E=12.5953 MeV`, the level's x0 came
+out wrong, and `bake` wrote that level's UNSEEDED widths back ×2.08 (p₁ −22.8 → −47.5 keV) with a perfect round trip --
+nothing failed, the level was just different.  For a channel closed at the level energy the `.azr` field is an ANC, so
+"1.0" there is no small seed either.  Rules: (1) physical seeds 1e-12 eV (open) / ANC 1e-6 (closed); the real seed is set
+in rwa units; (2) grep the seed job's log for `Denominator less than zero` -- it must be empty; (3) compare every unseeded
+width of the baked file with the input file (`10B+a/10-25-26_Rmatrix_Claude/stage1/seed_stage1.py`, `width_check`: max
+relative change 1.1e-3 after the fix).  Also: a script that opens a `SingleSession` needs an `if __name__ == "__main__"`
+guard (spawn start method: "An attempt has been made to start a new process before the current process has finished its
+bootstrapping phase").

@@ -134,3 +134,7 @@ One covariance file per EXPERIMENT (different experiments uncorrelated), coverin
   same detector weights (`10B+a/10-23-26_June5U_Claude/step10_azure/make_hpge_cov.py`).
 - `relvector` terms are scaled by a model; in a campaign that model is one fixed reference
   (`cov_reference.npz`, rmfit 2026-10-25). Outside rmfit the engine freezes it at the first evaluation.
+- **Every data file a covariance file names must be present in the fit's `data/`**, not only the ones the fit's segments use:
+  the engine and rmfit match rows by counting each named file's records (the `file <path> <rows>` header). The 10B+α stage-1
+  model used 6 of the 13 March silicon files; rmfit stopped with `FileNotFoundError: .../data/MANA25_10Bap4_cov.dat`. A builder
+  copies the files from the covariance headers (`10B+a/10-25-26_Rmatrix_Claude/stage1/build_stage1.py`).
