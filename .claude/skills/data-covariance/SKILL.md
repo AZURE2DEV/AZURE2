@@ -128,5 +128,9 @@ One covariance file per EXPERIMENT (different experiments uncorrelated), coverin
 - A frame or Jacobian error upstream (lab <-> c.m.) propagates into every derived table and its matrix: the
   June 2025 Legendre fits multiplied by dOmega_cm/dOmega_lab instead of dividing (found 2026-10-25). Check a
   derived angle-integrated set against an independent one before building its matrix.
+- A `relvector` fraction computed as (variant - nominal) / nominal from the DATA is meaningless where the value is consistent with
+  zero or negative (June 2025 10B a1 below 2.5 MeV: 17 of 86 values negative, fractions up to 70 %, sign-flipped). Use the data
+  fraction only where the point is > 3 sigma; elsewhere the fraction the term would give an ideal (e.g. isotropic) value with the
+  same detector weights (`10B+a/10-23-26_June5U_Claude/step10_azure/make_hpge_cov.py`).
 - `relvector` terms are scaled by a model; in a campaign that model is one fixed reference
   (`cov_reference.npz`, rmfit 2026-10-25). Outside rmfit the engine freezes it at the first evaluation.
