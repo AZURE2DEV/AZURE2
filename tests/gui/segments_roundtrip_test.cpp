@@ -197,6 +197,27 @@ int main(int argc, char** argv) {
        dialog.findChild<QPushButton *>("chooseCovarianceButton") != nullptr);
     ok("covariance field empty by default", dialog.covarianceFileText->text().isEmpty());
   }
+  // ---- showing and hiding a section returns the dialog to its size (fitDialogToContent) -----
+  // Before 2026-10-25 a section hidden inside a nested grid layout left the dialog at its taller size and the
+  // spare height went to the energy and angle boxes (Advanced Settings and UPOS on, then off).
+  {
+    AddSegDataDialog d;
+    d.show();
+    auto settle = [] { for (int k = 0; k < 20; k++) QApplication::processEvents(); };
+    settle();
+    const int h0 = d.height(), box0 = d.angleBox->height();
+    d.advancedModeCheck->setChecked(true); settle();
+    ok("Advanced Settings shown: the dialog grows", d.height() > h0, QString::number(d.height()));
+    d.advancedModeCheck->setChecked(false); settle();
+    ok("Advanced Settings hidden: dialog back to its height", d.height() == h0,
+       QString("%1 vs %2").arg(d.height()).arg(h0));
+    ok("Advanced Settings hidden: energy/angle boxes not stretched", d.angleBox->height() == box0,
+       QString("%1 vs %2").arg(d.angleBox->height()).arg(box0));
+    d.uposCheck->setChecked(true); settle();
+    d.uposCheck->setChecked(false); settle();
+    ok("UPOS hidden: dialog back to its height", d.height() == h0 && d.angleBox->height() == box0,
+       QString("%1 vs %2").arg(d.height()).arg(h0));
+  }
 
   std::cout << (fails ? "FAILED" : "PASSED") << std::endl;
   return fails ? 1 : 0;

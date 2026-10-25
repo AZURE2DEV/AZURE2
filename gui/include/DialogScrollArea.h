@@ -74,6 +74,11 @@ inline void fitDialogToContent(QDialog *dialog) {
   // layout keeps another; a section shown or hidden refreshes them only as
   // the event loop delivers layout requests level by level.  Refresh them all
   // now, bottom to top, so the hint read below is the content's current one.
+  // Nested layouts (a QGridLayout inside another, as the segment dialogs build them) are not any widget's
+  // layout() and keep their own cached hints, so a section hidden inside one left the old height: the dialog
+  // stayed tall and the spare height went to the energy and angle boxes (DeBoer, 2026-10-25).
+  const QList<QLayout *> layouts = dialog->findChildren<QLayout *>();
+  for (int i = layouts.size() - 1; i >= 0; i--) layouts[i]->invalidate();
   const QList<QWidget *> all = dialog->findChildren<QWidget *>();
   for (int i = all.size() - 1; i >= 0; i--) {
     if (QLayout *l = all[i]->layout()) l->invalidate();
