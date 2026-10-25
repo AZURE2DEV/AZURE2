@@ -1853,7 +1853,9 @@ Plain-text, section-tagged; prefer the GUI or `AzrModel` over hand edits.
     `covariance.out` = chi2 per file vs the uncorrelated sum r^2. pyazr returns
     whitened residuals (sum w^2 = chi2); `Segment.covariance`,
     `add_data_segment(covariance=...)`. GUI (dev 9902eba, 2026-10-25): the
-    "Covariance File" field of the data segment dialog. Tests: `tests/data_covariance`
+    "Covariance File" field of the data segment dialog. **Every data set that goes into a fit
+    gets such a file (standing rule, 2026-10-25): how to build them for our own
+    data and for literature sets is the `data-covariance` skill.** Tests: `tests/data_covariance`
     (independent numpy check, gradients, 3 fitters, refusals),
     `tests/pyazr/data_covariance_test.py`.
   - `shiftfn "<f(x)>" N v0 s0 vary0 ...` (keyword block, 2026-10-14): adds
