@@ -59,6 +59,9 @@ class AddSegDataDialog : public QDialog {
   bool multipolarityApplies() const;
 
   QLineEdit *dataFileText;
+  /*! Optional data covariance file (keyword block "covariance <file>"): every data segment naming the same
+   *  file shares one covariance matrix.  Empty = uncorrelated errors (no block). */
+  QLineEdit *covarianceFileText;
   QLineEdit *dataNormText;
   QLineEdit *dataNormErrorText;
   QLabel *dataNormErrorLabel;
@@ -111,6 +114,7 @@ class AddSegDataDialog : public QDialog {
 
  public slots:
   void setChooseFile();
+  void setChooseCovarianceFile();
   void dataTypeChanged(int);
   void exitPairChanged(int key);
   void varyNormChanged(int);

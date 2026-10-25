@@ -171,7 +171,7 @@ appears with the following fields:
    the block but does not edit it, and its Fitting tab still lists a member's
    own vary flag.
 
-   **Correlated uncertainties (covariance matrices, input file only).** A
+   **Correlated uncertainties (covariance matrices).** A
    line ending with the keyword block ``covariance <file>`` attaches its
    points to the data covariance matrix in ``<file>``; all segments naming
    the same file share it, and their points enter :math:`\chi^2` as
@@ -185,8 +185,16 @@ appears with the following fields:
    may be split into several segments (here by angle window) and the energy
    and angle limits may change without a new matrix. The block may be
    combined with ``normgroup``, ``shiftgroup`` and the energy-shift blocks,
-   and only data segments take it. The GUI preserves the block but does not
-   edit it.
+   and only data segments take it. In the GUI it is the **Covariance File**
+   field of the data segment dialog (below).
+
+**Covariance File**
+   Optional. A data covariance file (the ``covariance <file>`` block above):
+   every data segment that names the same file shares one covariance matrix.
+   Type the path or use **Choose...**; the path is resolved like the data
+   file's. Leave the field empty for uncorrelated errors (no block is
+   written). Editing a segment shows the file of its line, and clearing the
+   field removes the block.
 
 **Energy Shift**
    An energy calibration shift applied to the data (in MeV).

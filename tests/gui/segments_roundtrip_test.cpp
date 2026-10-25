@@ -18,6 +18,7 @@
 #include <iostream>
 #include "SegmentKeywords.h"
 #include "SegmentsTab.h"
+#include "AddSegDataDialog.h"
 #include "SegmentsDataModel.h"
 #include "SegmentsTestModel.h"
 #include "PairsModel.h"
@@ -152,6 +153,49 @@ int main(int argc, char** argv) {
          << "1 2 2 0 2.5 0.01 0 180 0 0 1 0 2 2 1 -999 2 3 -999 natural 1"
          << "1 1 1 1.5 3 0.002 120 120 1 1 0";
     ok("test lines written back with their blocks last", got == want, got.join(" | "));
+  }
+
+  // ---- covariance file field (AddSegDataDialog "Covariance File:") ---------
+  {
+    using namespace SegmentKeywords;
+    ok("covariance file read from the tail", covarianceFile("covariance cov/c.txt normgroup D") == "cov/c.txt",
+       covarianceFile("covariance cov/c.txt normgroup D"));
+    ok("no covariance block -> empty", covarianceFile("normgroup D sample 1").isEmpty());
+    ok("quoted path with a space read without quotes",
+       covarianceFile("normgroup D covariance \"my cov/c.txt\" sample 1") == "my cov/c.txt",
+       covarianceFile("normgroup D covariance \"my cov/c.txt\" sample 1"));
+    ok("block replaced where it stands", withCovarianceFile("covariance a.txt normgroup D", "b.txt") ==
+       "covariance b.txt normgroup D", withCovarianceFile("covariance a.txt normgroup D", "b.txt"));
+    ok("new block before the sample block", withCovarianceFile("normgroup D sample 1", "c.txt") ==
+       "normgroup D covariance c.txt sample 1", withCovarianceFile("normgroup D sample 1", "c.txt"));
+    ok("new block on an empty tail", withCovarianceFile(QString(), "c.txt") == "covariance c.txt",
+       withCovarianceFile(QString(), "c.txt"));
+    ok("block removed with an empty file", withCovarianceFile("shiftgroup G covariance c.txt sample 1", "") ==
+       "shiftgroup G sample 1", withCovarianceFile("shiftgroup G covariance c.txt sample 1", ""));
+    ok("a path with a space written in quotes", withCovarianceFile("", "my cov/c.txt") ==
+       "covariance \"my cov/c.txt\"", withCovarianceFile("", "my cov/c.txt"));
+    ok("quoted shift-function expression kept",
+       withCovarianceFile("shiftfn \"a0*(sqrt(x)-1)\" 1 0 0.02 1", "c.txt") ==
+       "shiftfn \"a0*(sqrt(x)-1)\" 1 0 0.02 1 covariance c.txt",
+       withCovarianceFile("shiftfn \"a0*(sqrt(x)-1)\" 1 0 0.02 1", "c.txt"));
+    // written and read back through the data model as a segment line
+    QString line = "1 1 1 0.5 3 0 180 1 1 0 0 0 0 0 data/c.dat 0 0 " +
+                   withCovarianceFile(withNatural(QString(), true), "cov/c.txt") + "\n</segmentsData>\n";
+    QTextStream inStream(&line);
+    SegmentsTab tab2;
+    tab2.setPairsModel(&pairs);
+    ok("line with a covariance field read", tab2.readSegDataFile(inStream));
+    QList<SegmentsDataData> lines = tab2.getSegmentsDataModel()->getLines();
+    ok("covariance file of the read line", lines.size() == 1 && covarianceFile(lines[0].extraTokens) == "cov/c.txt",
+       lines.isEmpty() ? QString() : lines[0].extraTokens);
+    ok("sample token still read with the covariance block before it",
+       lines.size() == 1 && naturalSample(lines[0].extraTokens) == "1");
+  }
+  {
+    AddSegDataDialog dialog;
+    ok("dialog has the covariance file field", dialog.findChild<QLineEdit *>("covarianceFileText") != nullptr &&
+       dialog.findChild<QPushButton *>("chooseCovarianceButton") != nullptr);
+    ok("covariance field empty by default", dialog.covarianceFileText->text().isEmpty());
   }
 
   std::cout << (fails ? "FAILED" : "PASSED") << std::endl;

@@ -365,7 +365,8 @@ void SegmentsTab::addSegDataLine() {
       newLine.finalJ = 0.0;
       newLine.delta = 0.0;
     }
-    newLine.extraTokens = SegmentKeywords::withNaturalToken(QString(), aDialog.naturalToken());
+    newLine.extraTokens = SegmentKeywords::withCovarianceFile(
+        SegmentKeywords::withNaturalToken(QString(), aDialog.naturalToken()), aDialog.covarianceFileText->text());
     addSegDataLine(newLine);
   }
 }
@@ -598,6 +599,7 @@ void SegmentsTab::editSegDataLine() {
   aDialog.setSamples(abundancesModel ? abundancesModel->samples() : QStringList() << QString());
   aDialog.setWindowTitle(tr("Edit a Segment From Data"));
   aDialog.setNaturalToken(SegmentKeywords::naturalSample(extraTokens));
+  aDialog.covarianceFileText->setText(SegmentKeywords::covarianceFile(extraTokens));
   aDialog.entrancePairCombo->setKey(entrancePairIndex);
   aDialog.exitPairCombo->setKey(exitPairIndex);
   aDialog.lowEnergyText->setText(lowEnergy);
@@ -775,6 +777,9 @@ void SegmentsTab::editSegDataLine() {
       segmentsDataModel->setData(i, newDelta, Qt::EditRole);
     }
     QString newExtraTokens = SegmentKeywords::withNaturalToken(extraTokens, aDialog.naturalToken());
+    // rewrite the covariance block only when the field changed, so an untouched tail stays as read
+    if (aDialog.covarianceFileText->text().trimmed() != SegmentKeywords::covarianceFile(extraTokens))
+      newExtraTokens = SegmentKeywords::withCovarianceFile(newExtraTokens, aDialog.covarianceFileText->text());
     if (newExtraTokens != extraTokens) segmentsDataModel->setLineExtras(index.row(), newExtraTokens);
   }
 }

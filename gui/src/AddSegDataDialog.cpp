@@ -73,6 +73,17 @@ AddSegDataDialog::AddSegDataDialog(QWidget *parent) :
   dataFileText = new QLineEdit;
   QPushButton *chooseFileButton = new QPushButton(tr("Choose..."));
   connect(chooseFileButton, SIGNAL(clicked()), this, SLOT(setChooseFile()));
+  covarianceFileText = new QLineEdit;
+  covarianceFileText->setObjectName("covarianceFileText");
+  covarianceFileText->setPlaceholderText(tr("none (uncorrelated errors)"));
+  covarianceFileText->setToolTip(tr("Optional data covariance file (\"covariance <file>\" on the segment line).\n"
+                                    "Every data segment naming the same file shares one covariance matrix, and its\n"
+                                    "points enter chi-squared as r^T M^-1 r.  The file lists its data files and rows\n"
+                                    "(format in the documentation, Data Formats).  The path is resolved like the data\n"
+                                    "file's.  Leave empty for uncorrelated errors."));
+  QPushButton *chooseCovarianceButton = new QPushButton(tr("Choose..."));
+  chooseCovarianceButton->setObjectName("chooseCovarianceButton");
+  connect(chooseCovarianceButton, SIGNAL(clicked()), this, SLOT(setChooseCovarianceFile()));
   dataNormText = new QLineEdit;
   dataNormText->setText("1.0");
   dataNormErrorLabel = new QLabel(tr("Norm. Error [%]:"));
@@ -236,20 +247,27 @@ AddSegDataDialog::AddSegDataDialog(QWidget *parent) :
   fileLayout->setColumnStretch(0, 1);
   lowerLayout->addLayout(fileLayout, 2, 1, 1, 2);
 
-  lowerLayout->addWidget(energyShiftLabel, 3, 0, Qt::AlignRight);
+  lowerLayout->addWidget(new QLabel(tr("Covariance File:")), 3, 0, Qt::AlignRight);
+  QGridLayout *covarianceLayout = new QGridLayout;
+  covarianceLayout->addWidget(covarianceFileText, 0, 0);
+  covarianceLayout->addWidget(chooseCovarianceButton, 0, 1);
+  covarianceLayout->setColumnStretch(0, 1);
+  lowerLayout->addLayout(covarianceLayout, 3, 1, 1, 2);
+
+  lowerLayout->addWidget(energyShiftLabel, 4, 0, Qt::AlignRight);
   QHBoxLayout *energyShiftLayout = new QHBoxLayout;
   energyShiftLayout->addWidget(energyShiftText);
   energyShiftLayout->addWidget(varyEnergyShiftCheck);
-  lowerLayout->addLayout(energyShiftLayout, 3, 1);
+  lowerLayout->addLayout(energyShiftLayout, 4, 1);
   QGridLayout *energyShiftErrorLayout = new QGridLayout;
   energyShiftErrorLayout->addItem(new QSpacerItem(1, 25), 0, 0);
   energyShiftErrorLayout->setColumnStretch(0, 1);
   energyShiftErrorLayout->addWidget(energyShiftErrorLabel, 0, 1, Qt::AlignRight);
   energyShiftErrorLayout->addWidget(energyShiftErrorText, 0, 2);
-  lowerLayout->addLayout(energyShiftErrorLayout, 3, 2);
+  lowerLayout->addLayout(energyShiftErrorLayout, 4, 2);
 
   // UPOS row
-  lowerLayout->addWidget(uposCheck, 4, 0, 1, 3);
+  lowerLayout->addWidget(uposCheck, 5, 0, 1, 3);
   QGridLayout *uposParamLayout = new QGridLayout;
   uposParamLayout->addItem(new QSpacerItem(1, 5), 0, 0);
   uposParamLayout->setColumnStretch(0, 1);
@@ -259,9 +277,9 @@ AddSegDataDialog::AddSegDataDialog(QWidget *parent) :
   uposParamLayout->addWidget(finalJText, 0, 4);
   uposParamLayout->addWidget(deltaLabel, 0, 5, Qt::AlignRight);
   uposParamLayout->addWidget(deltaText, 0, 6);
-  lowerLayout->addLayout(uposParamLayout, 5, 0, 1, 3);
+  lowerLayout->addLayout(uposParamLayout, 6, 0, 1, 3);
 
-  lowerLayout->addWidget(advancedModeCheck, 6, 0, 1, 3);
+  lowerLayout->addWidget(advancedModeCheck, 7, 0, 1, 3);
 
   QGridLayout *advancedLayout = new QGridLayout;
   advancedLayout->addWidget(new QLabel(tr("Operation:")), 0, 0);
@@ -292,9 +310,9 @@ AddSegDataDialog::AddSegDataDialog(QWidget *parent) :
   advancedLayout->addLayout(buttonLayout, 6, 2, 1, 2);
   advancedModeBox->setLayout(advancedLayout);
 
-  lowerLayout->addWidget(advancedModeBox, 7, 0, 1, 3);
-  lowerLayout->addWidget(naturalLabel, 8, 0, Qt::AlignRight);
-  lowerLayout->addWidget(naturalCombo, 8, 1, 1, 2);
+  lowerLayout->addWidget(advancedModeBox, 8, 0, 1, 3);
+  lowerLayout->addWidget(naturalLabel, 9, 0, Qt::AlignRight);
+  lowerLayout->addWidget(naturalCombo, 9, 1, 1, 2);
 
   valueLayout->addLayout(lowerLayout, 2, 0, 1, 2);
   valueBox->setLayout(valueLayout);
@@ -324,6 +342,13 @@ void AddSegDataDialog::setChooseFile() {
   QString filename = QFileDialog::getOpenFileName(this);
   if (!filename.isEmpty()) {
     dataFileText->setText(QDir::fromNativeSeparators(filename));
+  }
+}
+
+void AddSegDataDialog::setChooseCovarianceFile() {
+  QString filename = QFileDialog::getOpenFileName(this, tr("Data Covariance File"));
+  if (!filename.isEmpty()) {
+    covarianceFileText->setText(QDir::fromNativeSeparators(filename));
   }
 }
 

@@ -1,6 +1,8 @@
 #ifndef SEGMENTKEYWORDS_H
 #define SEGMENTKEYWORDS_H
 
+#include <algorithm>
+
 #include <QString>
 #include <QStringList>
 
@@ -71,6 +73,64 @@ inline QString withNaturalToken(const QString &extras, const QString &token) {
 /*! The tail with the default sample set or cleared. */
 inline QString withNatural(const QString &extras, bool natural) {
   return withNaturalToken(extras, natural ? QString("1") : QString());
+}
+
+/*! The tail split into tokens; a double-quoted path with spaces stays one token (quotes kept). */
+inline QStringList tailTokens(const QString &extras) {
+  QStringList out;
+  QString cur;
+  bool quoted = false;
+  for (const QChar c : extras) {
+    if (c == '"') quoted = !quoted;
+    if (c.isSpace() && !quoted) {
+      if (!cur.isEmpty()) out.append(cur);
+      cur.clear();
+    } else {
+      cur.append(c);
+    }
+  }
+  if (!cur.isEmpty()) out.append(cur);
+  return out;
+}
+
+/*! The data covariance file of the tail ("covariance <file>"), without surrounding quotes; "" when none. */
+inline QString covarianceFile(const QString &extras) {
+  const QStringList tokens = tailTokens(extras);
+  for (int i = 0; i + 1 < tokens.size(); i++)
+    if (tokens[i].compare("covariance", Qt::CaseInsensitive) == 0) {
+      QString f = tokens[i + 1];
+      if (f.size() >= 2 && f.startsWith('"') && f.endsWith('"')) f = f.mid(1, f.size() - 2);
+      return f;
+    }
+  return QString();
+}
+
+/*! The tail with its covariance block set to \p file or removed (empty \p file).  An existing block is
+ *  replaced where it stands; a new one goes before a sample block (the engine's writers put that last) or
+ *  at the end.  A path with a space is written in double quotes, which the engine reads (ReadPathToken). */
+inline QString withCovarianceFile(const QString &extras, const QString &file) {
+  QStringList tokens = tailTokens(extras);
+  int at = -1;
+  for (int i = 0; i < tokens.size(); i++)
+    if (tokens[i].compare("covariance", Qt::CaseInsensitive) == 0) {
+      at = i;
+      tokens.erase(tokens.begin() + i, tokens.begin() + std::min<int>(i + 2, tokens.size()));
+      break;
+    }
+  const QString f = file.trimmed();
+  if (!f.isEmpty()) {
+    if (at < 0) {
+      at = tokens.size();
+      for (int i = 0; i < tokens.size(); i++)
+        if (isSampleKeyword(tokens[i])) {
+          at = i;
+          break;
+        }
+    }
+    tokens.insert(at, f.contains(' ') ? '"' + f + '"' : f);
+    tokens.insert(at, "covariance");
+  }
+  return tokens.join(' ');
 }
 
 }  // namespace SegmentKeywords
