@@ -393,7 +393,8 @@ The GUI review: `printf '1\n<reaction>.sav\n\n7\n' | AZURE2 <flags> --no-gui --n
     `rmfit` CLI step is a new process, so each polish starts with the model frozen at its
     own start (the iterative Chiba-Smith scheme); `ev.refreeze_covariance()` in scripts.
     Objectives of different steps are therefore not strictly comparable.  Since 2026-10-24
-    `polish` refreezes between passes (`--refreeze-every N`, default 100; last section).
+    `polish` refreezes between passes (`--refreeze-every N`, default 100; last section) -- BUT see the
+    2026-10-25 warning there: pass `--refreeze-every 0` on relvector models until it is fixed.
   - Row weights (`dataset_weight`, `point_weights`) scale the plain rows before
     whitening; the Sivia loss is refused. Per-segment chi2 are the engine's partition
     shares and can be negative; `ev.point_chi2(r)` / `ev.point_residuals(r)` give per-row
@@ -2067,3 +2068,11 @@ end point 2986.202 = fresh session, BELOW the single polish's fresh value 2986.6
 .bak-2026-10-24-refreeze, marker rmfit/.installed-2026-10-24-refreeze; regressions campaign/spine pass.
 Seeds far from the data (a new covariance at a seed fitted without it) are where this matters; reading a campaign's
 "polish: a -> b" line with a relvector covariance from before 2026-10-24: b is frozen at the start point, trust the verify.
+
+**WARNING 2026-10-25: the refreeze iteration can OSCILLATE -- use `rmfit polish --refreeze-every 0` on any model with
+relvector terms until the code is fixed (DeBoer decides the fix).**  On the 13C+a merged model (10-24-26_merged_antot_n1cut,
+readme) the refreeze jumps grew instead of shrinking: +3.1k, +44k, -25k, +140k (control) and +3.8k, +116k, -33k, -25k
+(n1cut); the p+12C fixture's contraction does not carry over to a large model.  `polish_refreeze` also returns the LAST pass,
+not the best self-consistent point, so control ended at 924,958, worse than its 851,544 seed (the campaign kept the seed as
+candidate 1).  A polish result from 2026-10-24 23:30 on with relvector terms: check the pass-end objectives in the log, not
+only the final line.  Models without relvector terms are unaffected (plain polish).
