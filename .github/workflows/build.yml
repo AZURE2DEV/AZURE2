@@ -191,6 +191,7 @@ jobs:
             "${EXTRA[@]}"
 
       - name: Build
+        id: build
         run: cmake --build build --parallel
 
       # Catches link errors and libraries the binary cannot resolve at runtime.
@@ -229,7 +230,11 @@ jobs:
       # and nothing else: the GUI widgets (the Nuclear Potential tab once
       # shipped with a selector that could never list a channel) and the .azr
       # round-trip. Neither needs a display.
+      # Runs even when the physics suite failed: otherwise one platform-specific
+      # chi-squared failure hides every unit-test failure on that platform for
+      # as long as it lasts (macOS, 2026-10-25 on).
       - name: Unit tests
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         # The pyazr tests labelled slow (tests/pyazr/CMakeLists.txt) take 5-40 min
         # each; run them locally (ctest -L slow) when changing pyazr.
         run: ctest --test-dir build --output-on-failure -LE slow
