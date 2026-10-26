@@ -2232,7 +2232,9 @@ std::string EData::ECSignature(CNuc *theCNuc, const Config &configure) {
   // v2 (2026-10-23): the long-wavelength switch is part of the signature, and
   // the M1 amplitudes changed (sqrt(16/3) prefactor, no E1 charge function), so
   // every v1 file is recomputed once.
-  hash.Add("AZURE2 EC signature v2");
+  // v3 (2026-10-26): the M1 spin-term sign for a cluster whose partner has
+  // half-integer spin (ECIntegral.cpp), so every v2 file is recomputed once.
+  hash.Add("AZURE2 EC signature v3");
   hash.Add((configure.paramMask & Config::USE_GSL_COULOMB_FUNC) ? 1 : 0);
   hash.Add((configure.paramMask & Config::USE_LONGWAVELENGTH_APPROX) ? 1 : 0);
   // The convection current changes exact-form electric terms only; long-wavelength signatures stay as in v2.

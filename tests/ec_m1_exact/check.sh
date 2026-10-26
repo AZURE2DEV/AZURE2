@@ -103,4 +103,14 @@ else
   bad "(j) intEC.dat with the convection current was reused with --no-ec-convection-current"
 fi
 
+# (m) an intEC.dat written before the M1 spin-term fix (models/stale_v2: case (k) by dev 823369d, signature v2,
+# the old M1 amplitudes) is refused and recomputed; reusing it gives (k) 47 % off
+mkdir -p "$WORK/p14n_stale/output" && cp "$HERE/models/stale_v2/intEC.dat" "$HERE/models/stale_v2/intEC.dat.sig" "$WORK/p14n_stale/output/"
+run p14n_stale p14n_s1 "" output/intEC.dat
+if grep -q "$SIGWARN" "$WORK/p14n_stale/run.log" && same4 "$WORK/p14n_s1/$OUT" "$WORK/p14n_stale/$OUT"; then
+  ok "(m) intEC.dat from before the M1 spin-term fix is refused and recomputed"
+else
+  bad "(m) intEC.dat from before the M1 spin-term fix was reused"
+fi
+
 if [ "$failures" -eq 0 ]; then echo "ec_m1_exact: PASS"; else echo "ec_m1_exact: FAIL ($failures)"; exit 1; fi

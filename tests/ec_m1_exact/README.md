@@ -36,6 +36,7 @@ in Canton and Levchuk, arXiv:0805.2667, Eqs. 33 and 39-41. The script writes `ex
 | (i) | an `intEC.dat` written by a long-wavelength run is not reused by a `--no-long-wavelength` run | identical to fresh |
 | (j) | an `intEC.dat` written with the convection current is not reused without it | identical to fresh |
 | (k), (l) | p+14N M1, both cluster moments, final channel spin 1/2 and 3/2 | 2e-5 |
+| (m) | an `intEC.dat` from before the M1 spin-term fix (`models/stale_v2`, case (k) by dev 823369d) is not reused | identical to fresh |
 
 AZURE2 agrees with the truth to about 1e-8.
 
@@ -57,7 +58,9 @@ moment term had the wrong sign whenever the other cluster had half-integer spin.
 half-integer spin (p+13C, p+15N, p+7Li) the whole spin term had the wrong sign against the orbital term. This test
 cannot see that case, because with l = 0 there is no orbital term. Spin-0 targets (p+16O, case d) were right. The
 spin and orbital amplitudes now equal an m-scheme calculation times one common constant, 1/sqrt(2 J_i + 1), in all
-5,277 combinations of spins 0 to 2, l = 0 to 2 and both g-factors (R-matrix archive `AZURE2_code_audit/10-25-26/fix01_m1_spin`).
+5,277 combinations of spins 0 to 2, l = 0 to 2 and both g-factors (R-matrix archive `AZURE2_code_audit/10-25-26/fix01_m1_spin`). The
+first push of the fix (dev 0465351) still reused an `intEC.dat` written before it, because the signature version
+was unchanged, and gave (k) 47 % off again; (m) checks the bump to signature v3.
 
 **A trap in the input.** The ANC-to-amplitude conversion uses the photon pair's final-state energy (`e2` on the
 pair line). The radial integral uses the level energy. The 16O+p model these numbers come from had 0.49533 MeV
