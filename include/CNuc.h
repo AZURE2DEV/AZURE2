@@ -131,7 +131,7 @@ class CNuc {
   int CheckIdenticalChannels(const Config &);
   /// Read the external-capture file into the ECLevel vector and check each
   /// final state against the nuclear file.
-  void ParseExternalCapture(const Config &, std::map<int, int> &);
+  int ParseExternalCapture(const Config &, std::map<int, int> &);
   /// Boundary conditions, the physical-to-formal transformation, the reaction
   /// pathways and the angular-distribution coefficients -- everything derived
   /// that a calculation needs. Run after Fill, and again after anything that

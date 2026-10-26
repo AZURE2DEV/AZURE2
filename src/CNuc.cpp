@@ -347,7 +347,7 @@ int CNuc::Fill(const Config &configure, std::pair<int, double> radii) {
   }
   if (this->CheckIdenticalChannels(configure) == -1) return -1;
   if ((configure.paramMask & Config::USE_EXTERNAL_CAPTURE) && this->NumJGroups() > 0 && this->NumPairs() > 0)
-    this->ParseExternalCapture(configure, ecPairs);
+    if (this->ParseExternalCapture(configure, ecPairs) == -1) return -1;
 
   if (this->NumNuclei() > 1)
     for (int j = 1; j <= this->NumJGroups(); j++) this->GetJGroup(j)->SetNucleusLabelled(true);
@@ -630,20 +630,35 @@ int CNuc::CheckIdenticalChannels(const Config &configure) {
  * exists from the nuclear file.  If not, the state is created.
  */
 
-void CNuc::ParseExternalCapture(const Config &configure, std::map<int, int> &ecPairs) {
+int CNuc::ParseExternalCapture(const Config &configure, std::map<int, int> &ecPairs) {
   for (std::map<int, int>::iterator ec = ecPairs.begin(); ec != ecPairs.end(); ec++) {
     PPair *exitPair = this->GetPair(ec->first);
     if (exitPair->GetPType() != 10) {
       configure.outStream << "Final state is not a capture pair." << std::endl;
       continue;
     }
-    // create new level in compound nucleus for EC state, if it doesn't exist
+    // The final state of an external-capture pair must be a level of the project (user guide, "Gamma-Ray
+    // Calculations"): its ANC and gamma widths live on that level's lines.  Before 2026-10-26 a missing level
+    // was silently created here with a fixed energy and FREE particle widths of 0.1 MeV^1/2 that were in no
+    // .azr line and not in the GUI, and -- because it was appended to its J-group only when external capture
+    // was on, i.e. only in modes with a capture segment on the CLI, always in the API -- every later level's
+    // energy_N / width_N_c name moved by one between runs of the same project, so a param.sav landed on the
+    // wrong levels without a message.  tests/ec_final_state_listed.
     double jValue = exitPair->GetJ(2);
     int parity = exitPair->GetPi(2);
     JGroup newJGroup(jValue, parity);
     newJGroup.SetNucleus(exitPair->GetNucleus(), exitPair->GetNucleusZ(), exitPair->GetNucleusA());
     int jGroupNum = this->IsJGroup(newJGroup);
     int levelNum = 0;
+    ALevel probeLevel(exitPair->GetExE());
+    if (!jGroupNum || !this->GetJGroup(jGroupNum)->IsLevel(probeLevel)) {
+      configure.outStream << "ERROR: external capture into pair " << exitPair->GetPairKey() << " needs its final state, J^pi = "
+                          << jValue << (parity > 0 ? "+" : "-") << " at E_x = " << exitPair->GetExE()
+                          << " MeV, as a level of the project (with its ANC and gamma widths); none is listed"
+                          << (jGroupNum ? " within 1 keV in that J^pi group." : " and that J^pi group does not exist.")
+                          << std::endl;
+      return -1;
+    }
     if (jGroupNum) {
       ALevel newLevel(exitPair->GetExE());
       levelNum = this->GetJGroup(jGroupNum)->IsLevel(newLevel);
@@ -720,6 +735,7 @@ void CNuc::ParseExternalCapture(const Config &configure, std::map<int, int> &ecP
       }
     }
   }
+  return 0;
 }
 
 /*!
