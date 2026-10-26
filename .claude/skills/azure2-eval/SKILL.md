@@ -230,6 +230,15 @@ runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
   photon pair's final-state energy (`e2`) equal to the EC level's energy: the
   ANC conversion uses the former and the radial integral the latter, and a
   0.03 keV mismatch moves EC by 0.16 %.
+  Builds before dev 0465351 (2026-10-26) also had the SIGN of the M1 spin term
+  wrong for a cluster whose partner has half-integer spin: p+14N s-wave M1
+  x3.3 / x0.56 by channel spin; for two half-integer spins (p+13C, p+15N, p+7Li)
+  the whole spin term had the wrong sign against the orbital term; spin-0
+  targets (p+16O, 12C+a) were right. 14N+p/6-5-26_6790keV_bgp at its fitted
+  parameters: chi2 43,130 -> 43,082, GS capture segments move most (needs a
+  refit). An `output/intEC.*` written by an older build holds the old
+  amplitudes; the new build refuses it (EC signature v3) and recomputes, but
+  a frozen old build will not. Tests (k)-(m) of `tests/ec_m1_exact`.
 - **Energy-shift penalties are measured from zero** (dev, 2026-10-25, DeBoer:
   "It should measure the penalty from 0"): a free constant shift, `sqrtshift`
   b and `shiftfn` a_j add `(dE/sigma)^2`, `(b/sigma)^2`, `(a_j/sigma)^2`; the
