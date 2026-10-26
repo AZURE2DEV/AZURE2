@@ -454,6 +454,7 @@ enable_testing()
 add_subdirectory(tests/gui)
 add_subdirectory(tests/reference)
 add_subdirectory(tests/pyazr)
+add_subdirectory(tests/consistency)
 
 # Install and copy SRIM data file (only if ERYA is enabled)
 if(USE_ERYA)
