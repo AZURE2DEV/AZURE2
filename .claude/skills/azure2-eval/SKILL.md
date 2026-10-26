@@ -239,6 +239,14 @@ runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
   refit). An `output/intEC.*` written by an older build holds the old
   amplitudes; the new build refuses it (EC signature v3) and recomputes, but
   a frozen old build will not. Tests (k)-(m) of `tests/ec_m1_exact`.
+  Builds up to dev c23a2d3 also ADDED THE M1 ORBITAL TERM on channel-spin-flip
+  pathways (s_f != s_i), where only the spin term can act (audit item 2, fixed
+  2026-10-26, EC signature v4). It needs l >= 1 on both sides and a final state
+  that couples to both channel spins at that l: M1 capture into p- or d-wave
+  states of two-spin systems (p+14N GS and 6.18 MeV, p+13C, p+15N, p+10B,
+  p+6Li, p+23Na). s-wave capture is untouched. Test model: orbital-only
+  cross section exactly 2x, with moments 39 % high; 14N+p/6-5-26_6790keV_bgp
+  chi2 43,082 -> 43,065 (GS and 6.18 MeV capture segments). Tests (n)-(p).
 - **Energy-shift penalties are measured from zero** (dev, 2026-10-25, DeBoer:
   "It should measure the penalty from 0"): a free constant shift, `sqrtshift`
   b and `shiftfn` a_j add `(dE/sigma)^2`, `(b/sigma)^2`, `(a_j/sigma)^2`; the
