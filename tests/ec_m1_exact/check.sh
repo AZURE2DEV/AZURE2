@@ -16,6 +16,8 @@
 #   (i) the long-wavelength switch, (j) the convection-current switch;
 #   p + 14N -> 15O, s-wave M1 with both cluster moments (target spin 1), final channel spin (k) 1/2, (l) 3/2
 #   (before 2026-10-25 one moment term had the wrong sign when the other cluster had half-integer spin: x3.3, x0.56).
+#   p + 14N -> 15O(5/2-), p-wave M1: (n) orbital + spin terms, (o) orbital term alone (g = 0); the 3/2- (s = 1/2)
+#   entrance channel flips the channel spin, where before 2026-10-26 the orbital term was wrongly added.
 #
 #   ./tests/ec_m1_exact/check.sh path/to/AZURE2
 
@@ -80,6 +82,9 @@ compare "$WORK/a_nlw/$OUTA" 4 "(h) alpha+12C E1+E2, charge + convection current"
 run p14n_s1 p14n_s1;  run p14n_s3 p14n_s3
 compare "$WORK/p14n_s1/$OUT" 2 "(k) p+14N M1, final channel spin 1/2 (g_p S_p + g_14N S_14N)" sigma_p14n.dat
 compare "$WORK/p14n_s3/$OUT" 3 "(l) p+14N M1, final channel spin 3/2" sigma_p14n.dat
+run p14n_p p14n_p;  run p14n_p0 p14n_p0
+compare "$WORK/p14n_p/$OUT" 2 "(n) p+14N M1, p-wave: orbital + spin terms, with a channel-spin-flip pathway" sigma_p14n_p.dat
+compare "$WORK/p14n_p0/$OUT" 3 "(o) p+14N M1, p-wave, g = 0: orbital term only" sigma_p14n_p.dat
 
 # same4 A B: column 4 of two output files identical, row by row
 same4() { awk 'NR == FNR { a[FNR] = $4; n = FNR; next } { if ($4 != a[FNR]) bad = 1; m = FNR } END { exit (bad || m != n) }' "$1" "$2"; }
@@ -111,6 +116,16 @@ if grep -q "$SIGWARN" "$WORK/p14n_stale/run.log" && same4 "$WORK/p14n_s1/$OUT" "
   ok "(m) intEC.dat from before the M1 spin-term fix is refused and recomputed"
 else
   bad "(m) intEC.dat from before the M1 spin-term fix was reused"
+fi
+
+# (p) the same for an intEC.dat written before the M1 orbital-term fix (models/stale_v3: case (n) by dev c23a2d3,
+# signature v3); reusing it gives (n) 39 % high
+mkdir -p "$WORK/p14n_stale3/output" && cp "$HERE/models/stale_v3/intEC.dat" "$HERE/models/stale_v3/intEC.dat.sig" "$WORK/p14n_stale3/output/"
+run p14n_stale3 p14n_p "" output/intEC.dat
+if grep -q "$SIGWARN" "$WORK/p14n_stale3/run.log" && same4 "$WORK/p14n_p/$OUT" "$WORK/p14n_stale3/$OUT"; then
+  ok "(p) intEC.dat from before the M1 orbital-term fix is refused and recomputed"
+else
+  bad "(p) intEC.dat from before the M1 orbital-term fix was reused"
 fi
 
 if [ "$failures" -eq 0 ]; then echo "ec_m1_exact: PASS"; else echo "ec_m1_exact: FAIL ($failures)"; exit 1; fi

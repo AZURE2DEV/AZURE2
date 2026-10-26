@@ -37,6 +37,8 @@ in Canton and Levchuk, arXiv:0805.2667, Eqs. 33 and 39-41. The script writes `ex
 | (j) | an `intEC.dat` written with the convection current is not reused without it | identical to fresh |
 | (k), (l) | p+14N M1, both cluster moments, final channel spin 1/2 and 3/2 | 2e-5 |
 | (m) | an `intEC.dat` from before the M1 spin-term fix (`models/stale_v2`, case (k) by dev 823369d) is not reused | identical to fresh |
+| (n), (o) | p+14N M1 from p-waves into a p-wave state: orbital + spin terms; orbital term alone (g = 0) | 2e-5 |
+| (p) | an `intEC.dat` from before the M1 orbital-term fix (`models/stale_v3`, case (n) by dev c23a2d3) is not reused | identical to fresh |
 
 AZURE2 agrees with the truth to about 1e-8.
 
@@ -61,6 +63,21 @@ spin and orbital amplitudes now equal an m-scheme calculation times one common c
 5,277 combinations of spins 0 to 2, l = 0 to 2 and both g-factors (R-matrix archive `AZURE2_code_audit/10-25-26/fix01_m1_spin`). The
 first push of the fix (dev 0465351) still reused an `intEC.dat` written before it, because the signature version
 was unchanged, and gave (k) 47 % off again; (m) checks the bump to signature v3.
+
+`p14n_p.azr` and `p14n_p0.azr` are p + 14N -> 15O(3/2-), M1 external capture from the p-wave entrance J-groups 1/2-,
+3/2- (channel spins 1/2 and 3/2) and 5/2- (s = 3/2) into a fictitious p-wave state bound by 0.2 MeV (ANC 5 fm^-1/2
+in the s = 3/2 channel, 0 in s = 1/2, a = 5 fm). With l = 1 the orbital term g_l L is present (g_l = m_p mu
+(Z1/m1^2 + Z2/m2^2) = 0.96) and interferes with the spin term on the s = 3/2 pathways; the s = 1/2 entrance
+channels change the channel spin, which only the spin term can do. `p14n_p0` sets both g-factors to 0. The truth
+builds the full operator g_l L + g_p S_p + g_14N S_14N from magnetic substates (`python3 truth.py p14n_p`, about
+five minutes, writes `expected/sigma_p14n_p.dat`).
+
+**What it caught (fixed 2026-10-26).** Before the fix, (n) was 39 % high and (o) exactly 2x: `src/ECIntegral.cpp`
+added the orbital term on every M1 pathway, including those with s_f != s_i, where L cannot act. The spurious term
+needs a final state that couples to both channel spins at the same l (J_f = 3/2 here; with J_f = 5/2 and s_i = 1/2 it
+vanishes by a triangle rule, which is why a first version of this model saw nothing), so l >= 1 on both sides and
+two cluster spins: p+14N, p+13C, p+15N, p+10B, p+6Li, p+23Na M1 capture into p- or d-wave states, never s-wave
+capture (the orbital term has sqrt(l(l+1))). (p) checks the signature bump to v4.
 
 **A trap in the input.** The ANC-to-amplitude conversion uses the photon pair's final-state energy (`e2` on the
 pair line). The radial integral uses the level energy. The 16O+p model these numbers come from had 0.49533 MeV

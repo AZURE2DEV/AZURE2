@@ -2234,7 +2234,9 @@ std::string EData::ECSignature(CNuc *theCNuc, const Config &configure) {
   // every v1 file is recomputed once.
   // v3 (2026-10-26): the M1 spin-term sign for a cluster whose partner has
   // half-integer spin (ECIntegral.cpp), so every v2 file is recomputed once.
-  hash.Add("AZURE2 EC signature v3");
+  // v4 (2026-10-26): the M1 orbital term is dropped on channel-spin-flip pathways (ECIntegral.cpp), so every
+  // v3 file with such pathways is recomputed once.
+  hash.Add("AZURE2 EC signature v4");
   hash.Add((configure.paramMask & Config::USE_GSL_COULOMB_FUNC) ? 1 : 0);
   hash.Add((configure.paramMask & Config::USE_LONGWAVELENGTH_APPROX) ? 1 : 0);
   // The convection current changes exact-form electric terms only; long-wavelength signatures stay as in v2.

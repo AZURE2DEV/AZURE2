@@ -21,6 +21,11 @@ Each has one angle-integrated segment of 16O(p,g)17F(0.495) at the energies in E
              spin term has a g1 S1 and a g2 S2 piece and channel spin 1/2 <-> 3/2 transitions.  With l = 0 the
              orbital term vanishes.  Final channel spin 1/2 (s1) or 3/2 (s3).  Energies ECM.
 
+  p14n_p.azr, p14n_p0.azr : p + 14N -> 15O(3/2-), a fictitious p-wave state (l = 1, s = 3/2) bound by 0.2 MeV, M1
+             only, from the p-wave entrance J-groups 1/2-, 3/2- (channel spins 1/2 and 3/2) and 5/2- (s = 3/2).
+             Orbital and spin terms interfere on the s = 3/2 pathways; the s = 1/2 pathways flip the channel spin
+             and carry the spin term alone.  p14n_p0 has both g-factors 0 (orbital term only).  Energies ECM.
+
 truth.py computes the same cross sections independently; check.sh runs the models with and without
 --no-long-wavelength and --no-ec-convection-current.
 
@@ -119,9 +124,36 @@ def model_p14n(name, jf):
             f.write(f"{e:.10g}  0  1  0.1\n")
 
 
+def model_p14n_p(name, gp, gn):
+    """p + 14N -> 15O(3/2-), a fictitious p-wave state (l = 1, channel spin 3/2; the s = 1/2 channel has ANC 0) bound
+    by 0.2 MeV, M1 only (mask 2); entrance J-groups 1/2- and 3/2- (l = 1, channel spins 1/2 and 3/2) and 5/2-
+    (l = 1, s = 3/2).  The s = 1/2 entrance channels change the channel spin, so only the spin term can act on them
+    (J_f = 3/2 couples to both l = 1 channel spins, so nothing vanishes by a triangle rule); gp, gn = 0 leaves the
+    orbital term alone."""
+    ex = SP15 - B15
+    prot = f"0.5 1 1 1 0 {MP} {M14} 1 7 {SP15} {SP15} 0 0 0.0 0 5 {gp} {gn} 0"
+    gam = f"1 1 1.5 -1 {ex:.4f} 0 {M15} 0 8 {SP15} 0 0 0 0.0 10 0 0 0 2"
+    levels = [
+        [line(1.5, -1, f"{ex:.4f}", 1, 3, 2, 1, ANC15, prot), line(1.5, -1, f"{ex:.4f}", 1, 1, 2, 1, 0, prot),
+         line(1.5, -1, f"{ex:.4f}", 3, 3, 2, 1, 0, gam)],                                                  # final state
+        [line(0.5, -1, 30, 1, 1, 2, 2, 1e-6, prot), line(0.5, -1, 30, 1, 3, 2, 2, 1e-6, prot),
+         line(0.5, -1, 30, 3, 3, 2, 2, 0, gam)],
+        [line(1.5, -1, 30, 1, 3, 2, 3, 1e-6, prot), line(1.5, -1, 30, 1, 1, 2, 3, 1e-6, prot),
+         line(1.5, -1, 30, 3, 3, 2, 3, 0, gam)],
+        [line(2.5, -1, 30, 1, 3, 2, 4, 1e-6, prot), line(2.5, -1, 30, 3, 3, 2, 4, 0, gam)],
+    ]
+    elab = [e * (MP + M14) / M14 for e in ECM]
+    seg = f"1 1 3 {elab[0] - 0.01:.6f} {elab[-1] + 0.01:.6f} 0 0 0 1 0 0 0 0 0 data/ecm_p14n.dat 0 0"
+    txt = (CONFIG + "<levels>\n" + "\n\n".join("\n".join(lv) for lv in levels) + "\n\n</levels>\n<segmentsData>\n"
+           + seg + "\n</segmentsData>\n<segmentsTest>\n</segmentsTest>\n<targetInt>\n</targetInt>\n")
+    open(os.path.join(HERE, "models", name + ".azr"), "w").write(txt)
+
+
 if __name__ == "__main__":
     model("e1", 1)
     model("m1", 2)
     model_a12c()
     model_p14n("p14n_s1", 0.5)
     model_p14n("p14n_s3", 1.5)
+    model_p14n_p("p14n_p", 5.5857, G14N)
+    model_p14n_p("p14n_p0", 0.0, 0.0)

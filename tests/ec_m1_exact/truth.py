@@ -29,7 +29,9 @@ expected/sigma_p14n.dat (p + 14N -> 15O(1/2+), 15O(3/2+), s-wave, M1 with g_p S_
 sigma s_f = 3/2 (barn).  The spin matrix element is built from magnetic substates (Clebsch-Gordan sums over
 |m_p m_14N>), not from a recoupling formula.
 Run from this directory: python3 truth.py   (needs mpmath, numpy, scipy, sympy; about 20 minutes);
-python3 truth.py p14n writes only expected/sigma_p14n.dat (about three minutes).
+python3 truth.py p14n writes only expected/sigma_p14n.dat (about three minutes); python3 truth.py p14n_p writes only
+expected/sigma_p14n_p.dat (p + 14N -> 15O(3/2-), p-wave, full M1 operator gl L + g_p S_p + g_14N S_14N, and the
+orbital term alone).
 """
 import os
 import mpmath as mp
@@ -141,9 +143,9 @@ def sigma_p16O(sysp, E):
     return out
 
 
-def red_spin_mscheme(j1, j2, l, si, sf, Ji, Jf, g1, g2):
-    """<(l (j1 j2)sf)Jf||g1 S1 + g2 S2||(l (j1 j2)si)Ji> (Edmonds normalization) from the z component between
-    explicitly coupled m-states."""
+def red_spin_mscheme(j1, j2, l, si, sf, Ji, Jf, g1, g2, gl=0.0):
+    """<(l (j1 j2)sf)Jf||gl L + g1 S1 + g2 S2||(l (j1 j2)si)Ji> (Edmonds normalization) from the z component between
+    explicitly coupled m-states.  The orbital part is diagonal in the channel spin by construction."""
     from sympy import S as Sy
     from sympy.physics.wigner import clebsch_gordan
     ms = lambda j: [Sy(j) - k for k in range(int(round(2 * j)) + 1)]
@@ -164,7 +166,7 @@ def red_spin_mscheme(j1, j2, l, si, sf, Ji, Jf, g1, g2):
         if abs(w3) < 1e-12:
             continue
         a, b = state(sf, Jf, M), state(si, Ji, M)
-        me = sum(a[k] * b[k] * (g1 * float(k[1]) + g2 * float(k[2])) for k in a if k in b)
+        me = sum(a[k] * b[k] * (gl * float(k[0]) + g1 * float(k[1]) + g2 * float(k[2])) for k in a if k in b)
         return me / ((-1) ** int(round(Jf - M)) * w3)
     return 0.0
 
@@ -180,6 +182,24 @@ def sigma_p14n(sysn, E, Jf):
     s = 0.0
     for Ji in (0.5, 1.5):
         red = red_spin_mscheme(j1, j2, 0, Ji, Jf, Ji, Jf, gp, gn)
+        Bm1 = 3 / (4 * np.pi) * muN2 * (red * overlap) ** 2 / (2 * Ji + 1)
+        s += np.pi / k ** 2 * (2 * Ji + 1) / ((2 * j1 + 1) * (2 * j2 + 1)) * gamma_pref(1, kg) * Bm1 * 0.01
+    return s
+
+
+def sigma_p14n_p(sysn, E, gp, gn):
+    """p + 14N -> 15O(3/2-), p-wave external capture (l = 1, s_f = 3/2), full M1 operator gl L + gp S_p + gn S_14N
+    from the entrance channels (J, s) = (1/2, 1/2), (1/2, 3/2), (3/2, 1/2), (3/2, 3/2), (5/2, 3/2); the s = 1/2 ones
+    flip the channel spin.  gl = m_p mu (Z1/m1^2 + Z2/m2^2) in nuclear magnetons (masses in u)."""
+    j1, j2 = 0.5, 1.0
+    gl = mm.MP * (mm.MP * mm.M14 / (mm.MP + mm.M14)) * (1 / mm.MP ** 2 + 7 / mm.M14 ** 2)
+    kg = (E + sysn.B) / HBARC
+    k, _, u1 = sysn.ui(1, E)
+    overlap = np.sum(sysn.w * sysn.uf * u1)
+    muN2 = ALPHA * HBARC * (HBARC / (2 * MPROTON)) ** 2
+    s = 0.0
+    for Ji, si in ((0.5, 0.5), (0.5, 1.5), (1.5, 0.5), (1.5, 1.5), (2.5, 1.5)):
+        red = red_spin_mscheme(j1, j2, 1, si, 1.5, Ji, 1.5, gp, gn, gl=gl)
         Bm1 = 3 / (4 * np.pi) * muN2 * (red * overlap) ** 2 / (2 * Ji + 1)
         s += np.pi / k ** 2 * (2 * Ji + 1) / ((2 * j1 + 1) * (2 * j2 + 1)) * gamma_pref(1, kg) * Bm1 * 0.01
     return s
@@ -208,10 +228,23 @@ def write_p14n(here):
             f.write(line + "\n"); print("p14n", line, flush=True)
 
 
+def write_p14n_p(here):
+    sysn = System(1, 7, mm.MP, mm.M14, 5.0, mm.B15, 1, mm.ANC15)
+    with open(os.path.join(here, "expected", "sigma_p14n_p.dat"), "w") as f:
+        f.write("# E_cm(MeV)  sigma_M1_pwave(g_p,g_14N)  sigma_M1_pwave(g=0, orbital only)   (barn)"
+                "  -- truth.py, independent of AZURE2\n")
+        for E in mm.ECM:
+            line = f"{E:.4f}  {sigma_p14n_p(sysn, E, 5.5857, mm.G14N):.10e}  {sigma_p14n_p(sysn, E, 0.0, 0.0):.10e}"
+            f.write(line + "\n"); print("p14n_p", line, flush=True)
+
+
 if __name__ == "__main__":
     import sys
     if sys.argv[1:] == ["p14n"]:
         write_p14n(os.path.dirname(os.path.abspath(__file__)))
+        sys.exit(0)
+    if sys.argv[1:] == ["p14n_p"]:
+        write_p14n_p(os.path.dirname(os.path.abspath(__file__)))
         sys.exit(0)
     for L in (1, 2):
         for y in (0.01, 0.5, 3.0, 20.0):
@@ -236,3 +269,4 @@ if __name__ == "__main__":
             line = f"{E:.4f}  " + "  ".join(f"{v:.10e}" for v in row)
             f.write(line + "\n"); print("a12c", line, flush=True)
     write_p14n(here)
+    write_p14n_p(here)

@@ -424,9 +424,15 @@ complex ECIntegral::CalculateDirect(int theInitialLValue, int theFinalLValue,
         AngCoeff::ClebGord(theInitialLValue, theLMult, theFinalLValue, 0, 0, 0) * sqrt(2. * theInitialLValue + 1.) * sqrt(2. * theFinalJValue + 1.) *
         AngCoeff::Racah(theLMult, theFinalLValue, theInitialJValue, theInitialSValue, theInitialLValue, theFinalJValue);
   } else {
-    complex orbitalTerm = effectiveCharge *
-        sqrt((2. * theInitialLValue + 1.) * (theInitialLValue + 1.) * theInitialLValue) *
-        AngCoeff::Racah(1., theInitialLValue, theInitialJValue, theInitialSValue, theInitialLValue, theFinalJValue);
+    // <(l s_f)J_f||L||(l s_i)J_i> is diagonal in the channel spin: L acts on the orbital part only, so the
+    // orbital term exists for s_f = s_i alone.  Before 2026-10-26 it was also added on the spin-flip pathways
+    // (s_f != s_i, which CNuc::SortPathways builds for M1), where only g1 S1 + g2 S2 can act.  tests/ec_m1_exact
+    // cases (n), (o).
+    complex orbitalTerm(0.0, 0.0);
+    if (fabs(theFinalSValue - theInitialSValue) < 1e-6)
+      orbitalTerm = effectiveCharge *
+          sqrt((2. * theInitialLValue + 1.) * (theInitialLValue + 1.) * theInitialLValue) *
+          AngCoeff::Racah(1., theInitialLValue, theInitialJValue, theInitialSValue, theInitialLValue, theFinalJValue);
     // <(j1 j2)s_f||g1 S1 + g2 S2||(j1 j2)s_i> (Edmonds 7.1.7, 7.1.8).  Racah(a,b,c,d,e,f) = (-1)^(a+b+c+d) {a b e; d c f}
     // leaves an extra (-1)^(2 j1) in the g1 term and (-1)^(2 j2) in the g2 term; parityJ2 and parityJ1 remove it.
     // Before 2026-10-25 they were missing: a cluster's moment flipped sign whenever the OTHER cluster had
