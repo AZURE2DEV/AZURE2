@@ -53,7 +53,7 @@ Everything else that is documented or physically certain goes in:
 | feeding / cascade subtraction within one run (gamma-ray level cross sections) | `block` per run | J diag(err_line²) Jᵀ, J = d(levels)/d(lines) |
 | per-detector solid angle or efficiency, common to all energies and lines of that detector | `relvector` per detector | calibration (gold runs, sources, pair scatter) |
 | efficiency shape vs energy (one curve shared by all points) | `relvector`, one per shape parameter | change of the curve's parameter by 1 sigma, as a fraction of each point |
-| analysis choices (line shapes, background models, K-factors, light gain, ...) | `vector`, one per variant | HALF the difference between the variant and production (two-sided variants: half the spread) |
+| analysis choices (line shapes, background models, K-factors, light gain, ...) | `relvector`, one per variant (`vector` before 2026-10-25: see Traps) | HALF the difference between the variant and production (two-sided variants: half the spread), as a fraction shift / max(value, 3 σ_stat) |
 | uncorrelated per-point scatter beyond statistics (e.g. detector-pair disagreement) | second `diagonal` | robust per-point term s x value per (line, angle) |
 
 Rows of the matrix are the DATA ROWS of the `_cov.dat` named in the `file <path> <rows>` header, not the points
@@ -138,3 +138,17 @@ One covariance file per EXPERIMENT (different experiments uncorrelated), coverin
   the engine and rmfit match rows by counting each named file's records (the `file <path> <rows>` header). The 10B+α stage-1
   model used 6 of the 13 March silicon files; rmfit stopped with `FileNotFoundError: .../data/MANA25_10Bap4_cov.dat`. A builder
   copies the files from the covariance headers (`10B+a/10-25-26_Rmatrix_Claude/stage1/build_stage1.py`).
+- **Analysis-variant terms must be model-scaled `relvector`s, not data-scaled `vector`s** (10B+α, 2026-10-25; DeBoer:
+  "convert them to relvector"). A variation that has the same sign on most rows (the June 2025 room-background term: −5 % on
+  nearly every n₀ row, −11 % on n₁) is a hidden normalization. A residual along it costs only (offset/0.05)², about 100 for
+  a 50 % offset over 968 rows, so the set's overall scale is almost free inside C. Because the term is computed from the data,
+  it also carries Peelle's bias. Symptom in the fit: the set's norm moved AGAINST fit/data. The stage-1b fit sat at 0.64 × the
+  June n₀ data while the ND5U25 norm went to 1.32. The engine and rmfit agreed on that minimum, and the plain uncorrelated χ²
+  had its minimum at 0.66. After the conversion, the same scan has its minimum at 0.85
+  (`10B+a/10-25-26_Rmatrix_Claude/stage1/norm_scan.py`, readme). Fraction = shift / max(value, 3 σ_stat): the data
+  fraction where the point is > 3σ, the shift relative to 3σ below that. That changed the March n₁ error column on 223 weak
+  rows and nothing on significant rows. Builders: `10B+a/10-23-26_June5U_Claude/step10_azure/make_azure_june.py`,
+  `10B+a/10-19-26_MANA_Claude/azure/cov_tools.py` (`ana_fractions`), `make_charged.py`; previous outputs in `pre_relana/`;
+  checker `10B+a/10-25-26_Rmatrix_Claude/check_cov_file.py` (√C_ii with relvectors on the data vs the error column, positive
+  definiteness, data unchanged vs a backup). Diagnose any set whose norm and fit/data disagree with that scan: plain
+  vs covariance χ² as a function of its norm alone.

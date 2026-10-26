@@ -360,6 +360,13 @@ Cost: 11 J^π = 4 node jobs × 6-8 h; the anatomy and the window screen are logi
   chi2/N is far above the rest, or whose removal recovers more than its own chi2 in
   the others, is an evaluation question (normalization, energy calibration, resolution),
   not a fitting question.
+- **Check every fitted norm against the set's fit/data ratio** (the norm multiplies the data and its errors, so at a
+  sensible minimum fit/data ≈ norm). A norm that moved the other way (10B+α stage 1b, 2026-10-25: June ND5U25 norm 1.32
+  with the fit at 0.64 of those data) points to a data-scaled `vector` in that set's covariance acting as a hidden
+  normalization with Peelle's bias, not to an rmfit bug. Scan that one norm with the plain and the covariance χ²; the
+  fix and the numbers are in the `data-covariance` skill's Traps (analysis variants as `relvector`). Also distrust norms
+  sitting on the `norm_range` bounds while χ²/N ≫ 1: the priors are negligible there and the norms absorb shape misfit
+  (see "First fits" in section 2).
 
 ## 5. What the human decides
 
