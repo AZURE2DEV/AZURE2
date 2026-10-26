@@ -2477,7 +2477,8 @@ complete:
   amplitudes; the shifted-amplitude memo was sized from them and indexed past the end). Calculations (mode 1)
   were fine. Fixed on dev 2dcb846 (2026-10-21); tests/ec_shift now runs a gradient-checked fit.
 - 2026-10-20 (on dev since 2026-10-21; 7Be+p/10-20-26_scattering_length) -- S-WAVE SCATTERING
-  LENGTHS. Every calculation and fit writes `output/scatteringLengths.out` (and the run log): a0 of every
+  LENGTHS. Every calculation and fit writes `output/scatteringLengths.out` (the run log names the file; before dev
+  2026-10-26 the table was also printed to the screen): a0 of every
   channel spin of every particle pair at its threshold, a0 = -a [M/(x^2 K1^2) - 2 I1/(x^2 K1)],
   M = gamma^T A gamma at E = 0 (Paneru 2019 Eq. 7 = Paneru 2024 Eq. 26), a (1 - M) for neutrons; the same
   in the standard, Brune and Park bases; complex when a lower channel is open; "hard sphere" = no level
