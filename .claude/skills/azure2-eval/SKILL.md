@@ -284,9 +284,11 @@ runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
   name moved by one between runs of the same project, so a `param.sav` landed
   on the wrong levels without a message (13N: the 2.37 MeV 1/2+ level is
   `energy_3` with capture, `energy_2` without). New builds print
-  `ERROR: external capture into pair K needs its final state ...` and stop; add
-  the level at the pair's E_x (ANC in the particle channels, a gamma line) and
-  rerun. A `.sav` from such an old run has that hidden slot in its numbering:
+  `ERROR: external capture into pair K needs its final state ...` and stop
+  when a segment (or the rate pair) exits into that pair; add the level at the
+  pair's E_x (ANC in the particle channels, a gamma line) and rerun. A pair no
+  segment uses (level-isolation scratch models with the final state switched
+  off) only gets a WARNING, no capture into it and no hidden level. A `.sav` from such an old run has that hidden slot in its numbering:
   do not reuse it by name. Test: `tests/ec_final_state_listed`.
 - **Attenuation (Q) coefficients act on the lab distribution** (dev a22b99a,
   2026-10-25): for a particle exit Q_K multiplies the LAB Legendre coefficients

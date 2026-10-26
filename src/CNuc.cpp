@@ -630,7 +630,33 @@ int CNuc::CheckIdenticalChannels(const Config &configure) {
  * exists from the nuclear file.  If not, the state is created.
  */
 
+/*!
+ * Pair keys that the project's active segments (data and test lines) or the reaction-rate pair exit into: the
+ * pairs whose external capture a run can use.  Read from the configuration file, since the data are not
+ * parsed yet when the compound nucleus is built.
+ */
+static std::set<int> ExitPairKeysInFile(const Config &configure) {
+  std::set<int> keys;
+  std::ifstream in(configure.configfile.c_str());
+  std::string line;
+  bool inSegments = false;
+  while (std::getline(in, line)) {
+    std::string s = line;
+    s.erase(0, s.find_first_not_of(" \t\r"));
+    s.erase(s.find_last_not_of(" \t\r") + 1);
+    if (s == "<segmentsData>" || s == "<segmentsTest>") { inSegments = true; continue; }
+    if (s == "</segmentsData>" || s == "</segmentsTest>") { inSegments = false; continue; }
+    if (!inSegments || s.empty()) continue;
+    std::istringstream stm(s);
+    int active = 0, entranceKey = 0, exitKey = 0;
+    if ((stm >> active >> entranceKey >> exitKey) && active == 1) keys.insert(exitKey);
+  }
+  if (configure.paramMask & Config::CALCULATE_REACTION_RATE) keys.insert(configure.rateParams.exitPair);
+  return keys;
+}
+
 int CNuc::ParseExternalCapture(const Config &configure, std::map<int, int> &ecPairs) {
+  const std::set<int> usedExitKeys = ExitPairKeysInFile(configure);
   for (std::map<int, int>::iterator ec = ecPairs.begin(); ec != ecPairs.end(); ec++) {
     PPair *exitPair = this->GetPair(ec->first);
     if (exitPair->GetPType() != 10) {
@@ -643,7 +669,9 @@ int CNuc::ParseExternalCapture(const Config &configure, std::map<int, int> &ecPa
     // .azr line and not in the GUI, and -- because it was appended to its J-group only when external capture
     // was on, i.e. only in modes with a capture segment on the CLI, always in the API -- every later level's
     // energy_N / width_N_c name moved by one between runs of the same project, so a param.sav landed on the
-    // wrong levels without a message.  tests/ec_final_state_listed.
+    // wrong levels without a message.  Now: a pair that an active segment (or the rate pair) exits into is
+    // refused; one that nothing uses (a level-isolation or scratch model whose final-state lines are switched
+    // off) is warned about and gets no external capture and no hidden level.  tests/ec_final_state_listed.
     double jValue = exitPair->GetJ(2);
     int parity = exitPair->GetPi(2);
     JGroup newJGroup(jValue, parity);
@@ -652,12 +680,15 @@ int CNuc::ParseExternalCapture(const Config &configure, std::map<int, int> &ecPa
     int levelNum = 0;
     ALevel probeLevel(exitPair->GetExE());
     if (!jGroupNum || !this->GetJGroup(jGroupNum)->IsLevel(probeLevel)) {
-      configure.outStream << "ERROR: external capture into pair " << exitPair->GetPairKey() << " needs its final state, J^pi = "
-                          << jValue << (parity > 0 ? "+" : "-") << " at E_x = " << exitPair->GetExE()
-                          << " MeV, as a level of the project (with its ANC and gamma widths); none is listed"
+      const bool used = usedExitKeys.count(exitPair->GetPairKey()) > 0;
+      configure.outStream << (used ? "ERROR" : "WARNING") << ": external capture into pair " << exitPair->GetPairKey()
+                          << " needs its final state, J^pi = " << jValue << (parity > 0 ? "+" : "-") << " at E_x = "
+                          << exitPair->GetExE() << " MeV, as a level of the project (with its ANC and gamma widths); none is listed"
                           << (jGroupNum ? " within 1 keV in that J^pi group." : " and that J^pi group does not exist.")
+                          << (used ? "" : "  No segment uses this pair: external capture into it is switched off for this run.")
                           << std::endl;
-      return -1;
+      if (used) return -1;
+      continue;
     }
     if (jGroupNum) {
       ALevel newLevel(exitPair->GetExE());

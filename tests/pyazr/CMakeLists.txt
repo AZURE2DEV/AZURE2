@@ -38,6 +38,13 @@ add_test(NAME pyazr_inactive_lines
                  ${CMAKE_CURRENT_SOURCE_DIR}/inactive_lines_test.py)
 set_tests_properties(pyazr_inactive_lines PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
+# An external-capture final state must be a listed level: a used pair raises AZURE2Error, an unused one warns
+# and gets no hidden level (tests/ec_final_state_listed models).
+add_test(NAME pyazr_ec_final_state
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/ec_final_state_test.py)
+set_tests_properties(pyazr_ec_final_state PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
 # write_output_files must produce the same files the binary does.
 add_test(NAME pyazr_output_files
          COMMAND ${Python3_EXECUTABLE}

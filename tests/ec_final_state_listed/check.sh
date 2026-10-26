@@ -11,6 +11,8 @@
 #   listed        : the final state is a level -> runs, chi2 as expected/listed_chi2
 #   missing_level : the 1/2+ group exists (a 30 MeV level) but the 0.495 MeV level is not listed -> refused
 #   missing_group : no 1/2+ level at all -> refused
+#   unused        : missing_level, but the only segment is elastic 16O(p,p) at 90 deg (data/pp90.dat): nothing exits into the capture pair ->
+#                   runs, no hidden level in param.par (the API's WARNING path: tests/pyazr/ec_final_state_test.py)
 # "Refused" = the ERROR line naming the pair, J^pi and E_x, and no chiSquared.out.
 #
 #   ./tests/ec_final_state_listed/check.sh path/to/AZURE2
@@ -42,7 +44,7 @@ refused() {  # MODEL LABEL
 }
 
 echo "ec_final_state_listed: $AZURE2_BIN"
-run listed; run missing_level; run missing_group
+run listed; run missing_level; run missing_group; run unused
 chi2=$(awk '/^Total-Chi-Squared:/ { print $2 }' "$WORK/listed/output/chiSquared.out" 2>/dev/null)
 exp=$(cat "$HERE/expected/listed_chi2")
 if [ -n "$chi2" ] && awk -v a="$chi2" -v b="$exp" 'BEGIN { d = a - b; if (d < 0) d = -d; exit !(d <= 1e-3 * b) }'; then
@@ -50,4 +52,12 @@ if [ -n "$chi2" ] && awk -v a="$chi2" -v b="$exp" 'BEGIN { d = a - b; if (d < 0)
 else bad "(a) final state listed: chi2 '$chi2' vs expected $exp"; fi
 refused missing_level "(b) final state not listed although its J^pi group exists: refused with the ERROR line, no output"
 refused missing_group "(c) final state's J^pi group absent: refused with the ERROR line, no output"
+# (d) the same missing level, but no segment exits into the capture pair (an elastic 16O(p,p) segment instead):
+# runs, and param.par lists exactly the three listed levels (energy_1..energy_3), no hidden level.  On the CLI a
+# mode without a capture segment never switches external capture on, so no message is expected here; the WARNING
+# path (external capture always on in the API) is covered by tests/pyazr/ec_final_state_test.py.
+nlev=$(grep -cE "^ *energy_" "$WORK/unused/output/param.par" 2>/dev/null)
+if ! grep -q "ERROR: external capture" "$WORK/unused/run.log" && [ -s "$WORK/unused/output/chiSquared.out" ] && [ "$nlev" = 3 ]; then
+  ok "(d) unused capture pair with a missing final state: runs, no hidden level (3 energy_ parameters)"
+else bad "(d) unused capture pair with a missing final state: chiSquared.out $([ -s "$WORK/unused/output/chiSquared.out" ] && echo written || echo absent), $nlev energy_ parameters"; fi
 if [ "$failures" -eq 0 ]; then echo "ec_final_state_listed: PASS"; else echo "ec_final_state_listed: FAIL ($failures)"; exit 1; fi
