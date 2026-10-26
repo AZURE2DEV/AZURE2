@@ -174,6 +174,12 @@ double AZURECalcMCMC::CalculateLogLikelihoodPhysical(const vector_r &params_) co
   localCompound->FillMnParams(params.GetMinuitParams(), &configure());
   localData->FillMnParams(params.GetMinuitParams());
   localCompound->FillCompoundFromParams(params.GetMinuitParams().Params());
+  // The tail of the physical vector (normalizations, energy shifts, screening)
+  // is the same in both bases.  The norms were never copied out of it, so the
+  // pooled EData kept its starting norms: the sampler moved the norm
+  // parameters under their priors while the likelihood never saw them (norm
+  // posterior = prior, R-matrix posterior at frozen norms; 2026-10-26).
+  localData->FillNormsFromParams(params_);
   // After the compound: the sub-point grids are laid out from its fit values.
   localData->FillEnergyShiftsFromParams(params_, localData, localCompound, &configure());
 
@@ -833,9 +839,16 @@ void mcmc_iteration_callback(int current_step, int total_steps) {
               localCompound->FillMnParams(params.GetMinuitParams(), &g_mcmc_for_callbacks->configure());
               localData->FillMnParams(params.GetMinuitParams());
               localCompound->FillCompoundFromParams(params.GetMinuitParams().Params());
+              localData->FillNormsFromParams(fullParams);
               // After the compound: the sub-point grids are laid out from its fit values.
               localData->FillEnergyShiftsFromParams(fullParams, localData, localCompound, &g_mcmc_for_callbacks->configure());
               rwaFullParams = params.GetMinuitParams().Params();  // RWA params after TransformIn
+              // FillMnParams read the clone's starting norms and shifts; the
+              // sample's are in the tail of the physical vector, the same in
+              // both bases from the first data parameter on, so param.mcmc
+              // gets the sampled values rather than the start (2026-10-26).
+              for (size_t i = (size_t)localData->GetNormParamOffset(); i < rwaFullParams.size() && i < fullParams.size(); i++)
+                rwaFullParams[i] = fullParams[i];
 
               if (g_mcmc_for_callbacks->configure().paramMask & Config::USE_BRUNE_FORMALISM) {
                 localCompound->CalcShiftFunctions(g_mcmc_for_callbacks->configure());

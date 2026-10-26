@@ -256,6 +256,9 @@ int AZUREAPI::UpdateSegments(vector_r &p) {
   localCompound->FillMnParams(params.GetMinuitParams());
   localData->FillMnParams(params.GetMinuitParams());
   localCompound->FillCompoundFromParams(params.GetMinuitParams().Params());
+  // Norms are the same in both bases (model curves do not use them, but the
+  // segments then hold the vector's values, as after CalculateChi2Physical).
+  localData->FillNormsFromParams(params_);
   // After the compound: the sub-point grids are laid out from its fit values.
   localData->FillEnergyShiftsFromParams(params_, localData, localCompound, &configure());
   if (configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure());
@@ -937,11 +940,19 @@ double AZUREAPI::CalculateChi2Physical(const vector_r &physicalParams) const {
   localCompound->FillCompoundFromParamsPhysical(params_);
   bool isValid = localCompound->TransformIn(configure());
 
-  if (!isValid) return 0;
+  // A physical vector the transform rejects (a width beyond what the level
+  // matrix can hold) is not a model: it used to come back as chi2 = 0, the
+  // global minimum of any minimiser driving this function.
+  if (!isValid) return std::numeric_limits<double>::infinity();
 
   localCompound->FillMnParams(params.GetMinuitParams());
   localData->FillMnParams(params.GetMinuitParams());
   localCompound->FillCompoundFromParams(params.GetMinuitParams().Params());
+  // The tail of the physical vector (normalizations, energy shifts, screening)
+  // is the same in both bases; the norms were never copied out of it, so the
+  // segments kept whatever norm the previous call had set (pyazr
+  // calculate_chi2 ignored its norm entries, 2026-10-26).
+  localData->FillNormsFromParams(params_);
   // After the compound: the sub-point grids are laid out from its fit values.
   localData->FillEnergyShiftsFromParams(params_, localData, localCompound, &configure());
   if (configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure());
@@ -978,6 +989,15 @@ double AZUREAPI::CalculateChi2Physical(const vector_r &physicalParams) const {
   }
   // Data covariance: r^T M^-1 r over each group in place of its points' r_i^2.
   if (localData->HasCovariance()) chiSquared += localData->CovarianceChi2Correction();
+
+  // The same terms CalculateChi2RWA adds: the two bases must give one objective.
+  // Park formalism: the J > 0 wall, part of what a fit must minimize.
+  if (configure().paramMask & Config::USE_PARK_FORMALISM) chiSquared += localCompound->ParkNormPenalty();
+  // Isotopic abundances: priors and the sum-to-one term.
+  if (localCompound->HasAbundanceBlock()) chiSquared += localCompound->AbundancePenalty(configure().abundanceSumSigma);
+  // Measured scattering lengths (<scatteringLengths>).
+  if (localCompound->HasScatteringLengthConstraints())
+    chiSquared += ScatteringLength::Chi2(localCompound, configure(), localCompound->ScatteringLengthConstraints());
 
   return chiSquared;
 }

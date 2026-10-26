@@ -121,7 +121,17 @@ Sampling settings
 **Use Reduced Widths**
    Sample reduced width amplitudes rather than physical widths. Usually
    preferable — it is the natural fit space, and avoids a transformation at
-   every evaluation.
+   every evaluation. Both modes sample the normalizations and energy shifts
+   with the level parameters and apply them in the likelihood.
+
+   .. note::
+
+      Before 2026-10-26 the physical-parameter mode applied only the level
+      parameters and the energy shifts: the sampled normalizations never
+      reached the likelihood, so their posterior was their prior, the
+      R-matrix posterior was taken at the starting normalizations, and
+      ``param.mcmc`` recorded the starting values. A physical-mode chain with
+      a free normalization from an older build should be rerun.
 
 Monitoring a run
 ----------------

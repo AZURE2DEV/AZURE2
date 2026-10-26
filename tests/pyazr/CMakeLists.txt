@@ -31,6 +31,14 @@ add_test(NAME pyazr_objective
                  ${CMAKE_CURRENT_SOURCE_DIR}/objective_test.py)
 set_tests_properties(pyazr_objective PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
+# calculate_chi2 (physical parameters) is the same objective as calculate_chi2_rwa:
+# the normalizations in its vector are applied (they were not before 2026-10-26),
+# the Park / abundance / scattering-length terms are included, a rejected vector is +inf.
+add_test(NAME pyazr_physical_norm
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/physical_norm_test.py)
+set_tests_properties(pyazr_physical_norm PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
 # Inactive <levels> and <segmentsData> lines must not shift pyazr's level
 # numbering or its per-segment penalties off the engine's.
 add_test(NAME pyazr_inactive_lines

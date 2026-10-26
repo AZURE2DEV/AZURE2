@@ -1182,7 +1182,14 @@ class azure2:
         return [float(self.sess.calculate_chi2_rwa(params))]
 
     def calculate_chi2(self, params):
-        """As calculate_chi2_rwa, taking the physical parameter vector instead."""
+        """As calculate_chi2_rwa, taking the physical parameter vector instead.
+
+        The vector is ``transform_rwa`` of the free level block followed by the
+        free normalizations, shifts and screening potentials, which are the
+        same in both bases.  Before 2026-10-26 the normalization entries were
+        ignored (the segments kept the norms of the previous call) and the
+        Park, abundance and scattering-length terms were left out.
+        """
         return [float(self.sess.calculate_chi2_physical(params))]
 
     def write_output_files(self, params=None):
