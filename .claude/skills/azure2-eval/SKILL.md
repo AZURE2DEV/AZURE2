@@ -322,6 +322,22 @@ runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
   the fixed build agrees with an independent integral of the extrapolated
   cross section to 1e-4 (narrow level) and 2e-5 (smooth). Rates with
   `useAdaptiveGrid=0` (per-temperature quadrature) had (2)-(5) too.
+- **Physical-parameter objectives ignored the normalizations** (fixed
+  2026-10-26, audit item 6, `tests/pyazr/physical_norm_test.py`,
+  `tests/mcmc_physical_norm`): pyazr `calculate_chi2(x)` (the physical
+  vector: `transform_rwa` of the free level block followed by the free norms,
+  shifts and screening, same in both bases) never applied the norm entries of
+  `x` -- the segments kept the norms of the PREVIOUS call, so the value
+  depended on the call history (13N: 467,267 instead of 336,480 at the
+  nominal norm after a call at norm 0.8) -- and left out the Park, abundance
+  and scattering-length terms; MCMC mode 6 with "Use Reduced Width
+  Amplitudes: no" (the CLI and GUI DEFAULT) sampled the norms under their
+  priors but the likelihood never saw them (norm posterior = prior, R-matrix
+  posterior at the starting norms) and `param.mcmc` recorded the starting
+  norms. A physical-mode chain with a free normalization from a build before
+  dev 2026-10-26 should be rerun; RWA-mode chains, `calculate_chi2_rwa` /
+  `objective()` (rmfit, the emcee wrappers) and Minuit fits were never
+  affected.
 - **Attenuation (Q) coefficients act on the lab distribution** (dev a22b99a,
   2026-10-25): for a particle exit Q_K multiplies the LAB Legendre coefficients
   and the result is taken back to the point's c.m. angle exactly. Before, a
