@@ -290,6 +290,18 @@ runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
   segment uses (level-isolation scratch models with the final state switched
   off) only gets a WARNING, no capture into it and no hidden level. A `.sav` from such an old run has that hidden slot in its numbering:
   do not reuse it by name. Test: `tests/ec_final_state_listed`.
+- **Gaussian kernels now reach 5 sigma, not 3** (2026-10-26, audit fix05,
+  reported by the 17O+a ODeSA session): every beam-spread, straggling and
+  energy-convolution kernel was integrated over +-3 sigma and renormalised, so
+  the 0.27 % of weight beyond 3 sigma was dropped. Next to a resonance 10^3 x
+  its surroundings a point 2-3 sigma from the peak came out 2-4 % low (17O(a,n0)
+  ODeSA targets at 1.44 MeV: -3.8 %) and one more than 3 sigma away lost the
+  peak. Converged results move only where such a resonance sits within 5 sigma
+  of a point (natural_neon suite -0.1 % total, one segment -0.8 %; check the
+  13C+a, 12C+a, 11B+a campaign kernels before trusting old numbers). Cost:
+  target integration ~40 % slower (ODeSA T: 132 -> 185 s); a pure Gaussian
+  grid now spans 10 sigma at the same sub-point count. Test:
+  `tests/convolution_window` (3 sigma build 5-12 % off).
 - **Attenuation (Q) coefficients act on the lab distribution** (dev a22b99a,
   2026-10-25): for a particle exit Q_K multiplies the LAB Legendre coefficients
   and the result is taken back to the point's c.m. angle exactly. Before, a
