@@ -154,7 +154,7 @@ With a ``<scatteringLengths>`` block the totals line ends with
 scatteringLengths.out
 ^^^^^^^^^^^^^^^^^^^^^
 
-Written after every calculation and fit (also printed in the run log): the
+Written after every calculation and fit (the run log only names the file): the
 s-wave scattering length of every channel spin of every particle pair at the
 parameters of the run::
 

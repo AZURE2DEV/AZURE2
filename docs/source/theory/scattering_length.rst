@@ -117,7 +117,7 @@ number :math:`A`.
 In the calculation
 ------------------
 
-* **Output.**  ``output/scatteringLengths.out`` and the run log list every
+* **Output.**  ``output/scatteringLengths.out`` lists every
   channel of every particle pair (key, particles, :math:`J^\pi`, :math:`x`,
   :math:`\mathrm{Re}\,a_0`, :math:`\mathrm{Im}\,a_0`) at the parameters of the
   run, then the constraints with their :math:`\chi^2`.
