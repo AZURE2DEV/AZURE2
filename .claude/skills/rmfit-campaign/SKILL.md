@@ -2130,6 +2130,42 @@ Test: rmfit/tests/test_cov_reference.py. Notes: 13C+a/10-24-26_merged_park/readm
 rmfit/*.bak-2026-10-25-fixedref, marker rmfit/.installed-2026-10-25-fixedref (merged onto the 10:23 shift-penalty-from-zero
 edit of engine.py).
 
+### 2026-10-26 — relvector covariance with a FREE norm: neither reference convention is safe (the 10-25 fix is incomplete)
+- What changed: the 10-25 reference held the relvector model in DATA units. A free norm then ran UP (13C+α
+  refit_from_cut: ND2021r normgroup 0.63 -> 3.08, Peelle-type pull of a constant covariance with large common terms).
+- rmfit was then changed (installed 2026-10-25 23:40, backups *.bak-2026-10-26-covnorm) so the reference is a CROSS
+  SECTION, ref_xs = model x norm, divided by the current norm per row, with exact d(W)/dn Jacobian columns.
+- Result: the same refit (refit_from_cut2, job 1628541) ran the norms DOWN to the 0.2 floor (0.631 -> 0.200). A
+  model-following relative variance grows as 1/n^2 in data units, so lowering n pays (variance-inflation bias).
+- Scan at the start point, ND cov chi2:
+  - following reference: 318.8k at n=0.2, 352.5k at 0.631, 383.0k at 1.0
+  - data-unit reference: 445.6k at 0.2, 351.7k at 1.0
+  - a likelihood ln det term adds only +846 at 0.2
+- Both pulls grow with misfit (chi2/N ~ 25-30 here).
+- Rule: a relvector (model-proportional) covariance plus a free normalization on the same rows is biased under either
+  freeze. Before trusting such a fit: check the norm against its prior; scan the norm with everything else fixed, under
+  both conventions. The AZURE2 engine has the same data-unit freeze (R-matrix/AZURE2_code_audit/10-25-26/readme), so
+  the rule applies to CLI fits with `covariance` + a free norm too.
+- The remedy is DeBoer's call and still open. Options: fix the norm and let C carry the scale; log-space relvector
+  terms (no pull either way); revert.
+- Records: 13C+a/10-25-26_covref_norm/readme (CORRECTION 10-26 04:05) and
+  13C+a/10-24-26_merged_antot_n1cut/refit_from_cut2/diag2.log.
+- The test that missed this, test_cov_reference_norm (g), only checked that RAISING a norm costs more. A norm test must
+  check both directions.
+
+### 2026-10-26 — Jacobian-cost shard balancing (rmfit, installed 00:50, DeBoer approved)
+- What it does: Sharded times each shard's residual and residual+Jacobian evaluation once, fits time = R (alpha + beta k)
+  with k = the shard's finite-differenced shift columns, and repacks greedily (model.pack_jac: shift units first, a shift
+  or shift-function group stays whole).
+- It runs up to 2 correction rounds and caches the plan in <workdir>/jac_balance.json, so later steps start balanced.
+- On by default; RMFIT_JAC_BALANCE=0 turns it off.
+- 13C+α (51,140 pts, 1,226 free, 8 shards): slowest shard 23 s -> 11.7 s; parallel Jacobian 28.3 -> 17.7 s;
+  8-evaluation polish 504 -> 309 s (-39%); results identical to 1e-15; one-time start-up about 4 min.
+- Expect that start-up measurement the first time a new shards directory is used.
+- After this, the TRF svd (~10-12 s per iteration, single thread) is the largest remaining cost.
+- Records: 13C+a/10-26-26_jac_balance/readme; tests/test_jac_balance.py.
+- tests/test_objective_13n.py now joins pieces by e_lo, because a segment can now span several pieces.
+
 ## 2026-10-25 — physical seeds must be TINY, not 1 eV: the Brune transform can fail and rescale a level (10B+α stage 1)
 
 The 09-18 recipe (a 1 eV physical seed, then `frac · γ_W` in the engine) broke on 10B+α: α₁ (10B 0.718 MeV) L=2 on the
