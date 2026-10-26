@@ -1,5 +1,6 @@
 build/**
 build-release/**
+build-release-*/
 build-windows/**
 build-linux/**
 build-macos/**
@@ -8,8 +9,10 @@ build-macos/**
 .vscode/**
 .vscode/settings.json
 azure2
-CLAUDE.md
 build.log
+
+# Personal Claude Code notes; the shared CLAUDE.md files are committed.
+CLAUDE.local.md
 
 # Claude Code: skills are shared, local settings are personal
 .claude/settings.local.json

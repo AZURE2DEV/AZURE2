@@ -132,6 +132,35 @@ Available Options
    * - ``--no-transform``
      - Do not perform parameter transformations; input formal R-matrix
        parameters directly (equivalent to the GUI option).
+   * - ``--ec-table``, ``--ec-convection-current``, ``--grid-replacement``
+     - The defaults, stated explicitly.  Options are applied in order, so each
+       undoes its ``--no-`` form given earlier.
+   * - ``--use-gradient``
+     - Fit with MIGRAD using the analytic gradient instead of numerical
+       derivatives.
+   * - ``--use-lm``
+     - Fit with the Levenberg-Marquardt minimizer on the analytic Jacobian;
+       falls back to MIGRAD.
+   * - ``--use-gsl-lm``
+     - Fit with the GSL trust-region least-squares minimizer with geodesic
+       acceleration (analytic Jacobian); falls back to MIGRAD.
+   * - ``--use-nlopt``
+     - Fit with NLopt's BOBYQA instead of Minuit2.  Only in builds configured
+       with ``-DUSE_NLOPT=ON``.
+   * - ``--covariance-band``
+     - Write the cross-section uncertainty band from the parameter covariance.
+       Without the flag, calculate and fit runs ask for it interactively; with
+       it they do not, so scripted runs are deterministic.
+   * - ``--scale-covariance``
+     - With ``--covariance-band`` after a fit: inflate the covariance by the
+       reduced :math:`\chi^2` when it exceeds 1 (Birge ratio).  Never deflates.
+   * - ``--use-api``
+     - Removed.  AZURE2 no longer serves a socket API and stops with an error;
+       drive it from Python with ``from pyazr import azure2``.
+
+Options can also be read from a file, one per line, named by the environment
+variable ``AZURE_OPTIONS_FILE``; they are applied after those on the command
+line.  An unknown option prints a warning and is otherwise ignored.
 
 Multiple options can be combined:
 

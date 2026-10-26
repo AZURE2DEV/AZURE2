@@ -66,6 +66,10 @@ source there. On a system without FUSE 2 the AppImage cannot mount itself; run
 it as `./AZURE2-x86_64.AppImage --appimage-extract-and-run` instead, which
 unpacks to a temporary directory and needs no kernel support.
 
+Every push, on any branch, also attaches the Linux, macOS and Windows builds to
+its run under **Actions → build → Artifacts**, and tagging a commit `v*`
+collects them into a draft GitHub release.
+
 We deliberately do not ship a snap or a Flatpak. Both sandbox the application,
 and AZURE2 reads `.azr` projects and data from wherever you point it -- an
 external disk, a network share, cluster scratch -- while writing `output/` and
@@ -326,35 +330,32 @@ Copy the resulting `AZURE2.sif` to your HPC resource.
 
 ---
 
-## Downloads
-
-Every push builds AZURE2 on Linux, macOS and Windows and attaches the results
-to the run under **Actions → build → Artifacts**. Tagging a commit `v*`
-collects the same artifacts into a draft GitHub release.
-
-| Platform | Artifact | Notes |
-|----------|----------|-------|
-| Linux    | `AZURE2-x86_64.AppImage` | Self-contained; `chmod +x` and run. No installation, no root. |
-| Windows  | `AZURE2.exe` + Qt runtime | Built with MSYS2/mingw-w64. |
-| macOS    | `AZURE2` (x86_64) | Not yet a signed `.app` bundle — see `dist/README-packaging.txt` in the artifact. |
-
----
-
 ## Tests
 
-`tests/` holds reference evaluations. Each is run through AZURE2 and its
-χ² compared against a recorded result, which catches a change that still
-compiles and still runs but moves the physics:
+Four kinds of test, all run by CI on Linux, macOS and Windows:
 
 ```bash
-./tests/run_tests.sh                  # uses build/src/AZURE2
-./tests/run_tests.sh path/to/AZURE2   # or an explicit binary
-TOL=1e-4 ./tests/run_tests.sh         # tighter tolerance
+ctest --test-dir build -LE slow --output-on-failure   # unit, reference, GUI, pyazr, consistency
+ctest --test-dir build -L slow                         # the long pyazr tests (5-40 min each)
+./tests/run_tests.sh                                   # physics regression, newest build*/src/AZURE2
+./tests/run_tests.sh path/to/AZURE2                    # ... or an explicit binary
+TOL=1e-4 ./tests/run_tests.sh                          # tighter tolerance
 ```
 
-The suite runs on all three platforms in CI. AZURE2 currently agrees to within
-about 1×10⁻⁵ across GCC, Clang and MinGW, so the default relative tolerance is
-1×10⁻³ — loose enough for that spread, far tighter than any real regression.
+- **Physics regression** (`tests/<name>/`). Each evaluation is run through
+  AZURE2 and its χ² compared against a recorded result, which catches a change
+  that still compiles and still runs but moves the physics. AZURE2 agrees to
+  about 1×10⁻⁵ across GCC, Clang and MinGW, so the default relative tolerance
+  is 1×10⁻³ — loose enough for that spread, far tighter than any real
+  regression. A `tests/<name>/check.sh` covers what one χ² cannot (a sequence
+  of runs, a cache, an error message).
+- **Reference** (`tests/reference/`). Quantities computed a second way — from
+  a closed form or an independent implementation — rather than against an
+  earlier run of this code. See `tests/reference/README.md`.
+- **GUI and pyazr** (`tests/gui/`, `tests/pyazr/`). Round trips of the `.azr`
+  file through each front end, and pyazr against the engine.
+- **Consistency** (`tests/consistency/`). Command-line flags against `--help`
+  and the documentation, every test registered, every `check.sh` executable.
 
 **Adding an evaluation.** Create `tests/<name>/` containing `<name>.azr`, its
 `data/`, and `expected/chiSquared.out` taken from a run you trust. Cases are
@@ -366,9 +367,9 @@ one exactly — a change there means data was dropped or misread).
 
 ## Documentation
 
-The site at <https://azure2dev.github.io/AZURE2/> is published by CI from the
-default branch (`qt5`); pushes to other branches build the documentation to
-catch breakage but do not publish. Sources live in `docs/`; the generated output is not tracked.
+The site at <https://azure2dev.github.io/AZURE2/> is published by CI from
+`dev`; pushes to other branches and pull requests build the documentation (with
+warnings as errors) to catch breakage but do not publish. Sources live in `docs/`; the generated output is not tracked.
 To build it locally:
 
 ```bash
@@ -379,16 +380,25 @@ make -C docs api      # C++ internals via Doxygen -> docs/api/html/index.html
 
 ---
 
-## Claude Code skill
+## Working on AZURE2 with Claude Code
 
-`.claude/skills/azure2-eval/SKILL.md` is a project-scoped
-[Claude Code](https://claude.com/claude-code) skill describing how to drive
-AZURE2 — the CLI menu modes, the `pyazr` API, adding and removing levels,
-decomposing cross sections, and the conventions that are easy to get wrong
-(lab vs. centre-of-mass frames, segment indexing, the external-capture integral
-caches). It is picked up automatically when Claude Code runs in this
-repository; no setup is needed. Editing it is the way to teach Claude something
-new about the project.
+Much of AZURE2's development is done with [Claude Code](https://claude.com/claude-code).
+Two kinds of file in the repository steer it, and are read automatically when
+it runs here:
+
+- **`CLAUDE.md`** (with shorter ones in `tests/`, `pyazr/` and `gui/`) — how to
+  *develop* the code: build and test commands, what "done" means for a change,
+  the places a new `.azr` keyword has to reach, and the rules that keep the test
+  references trustworthy. The human-readable version is the
+  [contributing guide](https://azure2dev.github.io/AZURE2/developer/contributing.html).
+- **`.claude/skills/`** — how to *use* the code: `azure2-eval` drives AZURE2
+  (the CLI menu modes, the `pyazr` API, adding and removing levels, decomposing
+  cross sections, and the conventions that are easy to get wrong), and the
+  others cover building projects, dropping data sets, covariances, resonance
+  searches and fitting campaigns.
+
+Editing these files is the way to teach Claude something new about the
+project. Personal notes go in `CLAUDE.local.md`, which is not committed.
 
 ---
 
