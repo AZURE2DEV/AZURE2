@@ -273,6 +273,21 @@ runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
   were never affected (12C+a: no change). Any fit of an exposed segment made
   with an older build has that segment at wrong angles: refit. Test:
   `tests/shift_subpoint_angle`.
+- **An external-capture final state must be a level of the project** (refused
+  since 2026-10-26, audit item 4): the user guide asks for one level per
+  gamma-ray pair, carrying the ANC and gamma widths. Older builds created a
+  missing final state silently: a hidden level fixed at the pair's E_x,
+  outside the R-matrix, with FREE reduced widths of 0.1 MeV^1/2 in every
+  particle channel that were in no `.azr` line and not in the GUI; and since
+  it was appended only when external capture was on (CLI: modes with a
+  capture segment; API: always), every later level's `energy_N`/`width_N_c`
+  name moved by one between runs of the same project, so a `param.sav` landed
+  on the wrong levels without a message (13N: the 2.37 MeV 1/2+ level is
+  `energy_3` with capture, `energy_2` without). New builds print
+  `ERROR: external capture into pair K needs its final state ...` and stop; add
+  the level at the pair's E_x (ANC in the particle channels, a gamma line) and
+  rerun. A `.sav` from such an old run has that hidden slot in its numbering:
+  do not reuse it by name. Test: `tests/ec_final_state_listed`.
 - **Attenuation (Q) coefficients act on the lab distribution** (dev a22b99a,
   2026-10-25): for a particle exit Q_K multiplies the LAB Legendre coefficients
   and the result is taken back to the point's c.m. angle exactly. Before, a
