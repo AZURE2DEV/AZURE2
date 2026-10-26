@@ -1038,24 +1038,18 @@ void ESegment::UpdatePointEnergyWithShift(int i, CNuc *theCNuc, const Config *co
               // subPoint->ConvertLabEnergy(entrancePair);
             }
 
-            if (exitPair->GetPType() == 0 && this->IsDifferential() && !this->IsPhase() && !this->IsCMDifferential()) {
-              if (this->GetEntranceKey() == this->GetExitKey()) {
-                subPoint->ConvertLabAngle(entrancePair);
-              } else {
-                subPoint->ConvertLabAngle(entrancePair, exitPair, *configure);
-              }
-              // Skip cross section conversion for ratio segments (ratios are dimensionless)
-              if (!(this->IsAdvanced() && this->GetLegacyOperationType() == 1)) {
-                subPoint->ConvertCrossSection(entrancePair, exitPair);
-              }
-            }
-
-            if (exitPair->GetPType() == 10 && this->IsDifferential() && !this->IsPhase() && !this->IsCMDifferential()) {
-              subPoint->ConvertLabAngleGammas(entrancePair);
-              // Skip cross section conversion for ratio segments (ratios are dimensionless)
-              if (!(this->IsAdvanced() && this->GetLegacyOperationType() == 1)) {
-                subPoint->ConvertCrossSectionGammas(entrancePair);
-              }
+            // A sub-point is built at its parent's c.m. angle (EData::ReadTargetEffectsFile, EPoint(angle, energy,
+            // parent) puts that angle in both slots) and carries no data of its own, so the lab-to-c.m. angle and
+            // cross-section conversions of the parent (above) must not be applied to it.  Before 2026-10-26 they
+            // were, which took the parent's c.m. angle for a lab angle and moved every sub-point by the full
+            // lab-c.m. difference (2-5 deg for p + light nuclei, 18 deg for alpha + 12C): a lab-frame differential
+            // segment with target/resolution integration and any active shift (nonzero, varied, shiftgroup,
+            // sqrtshift, shiftfn) fitted at the wrong angles, and its shift derivatives were wrong with it
+            // (16O(p,p) with a 0.1 keV convolution: chi2 13,484 -> 23,097 at a 1e-7 MeV shift).  The parent's
+            // c.m. angle at the shifted energy is the right value; tests/shift_subpoint_angle.
+            if (this->IsDifferential() && !this->IsCMDifferential()) {
+              subPoint->SetLabAngle(point->GetCMAngle());
+              subPoint->SetCMAngle(point->GetCMAngle());
             }
 
             if (this->IsDifferential() || this->IsCMDifferential()) {
