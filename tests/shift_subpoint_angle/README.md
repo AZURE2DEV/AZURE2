@@ -25,7 +25,7 @@ every model a 0.1 keV Gaussian convolution (20 sub-points) on all segments:
 
 | | check | tolerance |
 |---|---|---|
-| (a) | a1 equals a0 | 1e-5 (the printed chi2 has 6 digits) |
+| (a) | a1 equals a0 | 1e-4 (the shifted grid is rebuilt, so the discretisation moves chi2 by ~1e-5; the bug is 7e-1) |
 | (b) | av equals a0 | 1e-6 |
 | (c) | g1 equals g0 on the three capture segments (gamma branch of the same code) | 1e-5 |
 | (d) | a0 against `expected/a0_chi2` (the unshifted value, which the fix does not change) | 1e-3 |

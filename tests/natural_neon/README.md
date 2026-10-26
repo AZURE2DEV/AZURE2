@@ -73,3 +73,9 @@ from the current levels on every evaluation since dev a163c06. A session of
 the fit's build laid it out once from its start file's levels, so the fit's
 own `output_refit1q/chiSquared.out` differs for those segments (Sikkema ²⁰Ne
 246.119 there).
+
+**Re-baselined 2026-10-26 (convolution window 3 -> 5 sigma).** `TargetEffect::convolutionRange` went from 3 to 5
+(audit fix05: the +-3 sigma cut and renormalisation of every Gaussian kernel dropped 0.27 % of the weight and biased
+target averages by 2-4 % next to strong narrow resonances, 17O+a ODeSA). With the same sub-point counts the
+convolved segments 5-7 moved by 0.1-0.8 % (total chi2 3345.28 -> 3341.63); `expected/chiSquared.out` is the 5 sigma
+value from the same build that passed every other suite.

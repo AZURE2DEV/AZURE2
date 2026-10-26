@@ -49,7 +49,9 @@ same() {  # MODEL REF LABEL TOL
 
 echo "shift_subpoint_angle: $AZURE2_BIN"
 for m in a0 a1 av g0 g1; do run $m; done
-same a1 a0 "(a) 1e-7 MeV shift on a convolved lab-frame 16O(p,p) segment leaves chi2 unchanged" 1e-5
+# 1e-4: the shifted segment's sub-point grid is rebuilt at the shifted energies, so chi2 moves by the grid's
+# discretisation (1.5e-5 with 20 sub-points over a 5 sigma window); the bug this guards against is 7e-1.
+same a1 a0 "(a) 1e-7 MeV shift on a convolved lab-frame 16O(p,p) segment leaves chi2 unchanged" 1e-4
 same av a0 "(b) a varied shift of exactly 0 leaves chi2 unchanged" 1e-6
 g1=$(segsum g1 12 14); g0=$(segsum g0 12 14); d=$(reldev "$g1" "$g0")
 if within "$d" 1e-5; then ok "(c) the shift on convolved lab-frame 16O(p,g0) segments leaves their chi2 unchanged: $g1 vs $g0 (rel. $d)"

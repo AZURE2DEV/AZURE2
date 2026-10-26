@@ -116,7 +116,7 @@ class TargetEffect {
   double BlendWeight(double labEnergy) const;
 
   /// The multiple of sigma above and below centroid energy to use as integration range
-  static constexpr double convolutionRange = 3.;
+  static constexpr double convolutionRange = 5.;
 
   /// One skewed-Gaussian component of a beam energy profile.
   struct BeamProfileComponent {
