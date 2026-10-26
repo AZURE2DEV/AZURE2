@@ -64,15 +64,24 @@ run is a strong indicator of a robust fit.
 Reaction Rate Integration Failures
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-**Symptom**: Crashes or incorrect results during reaction rate calculation.
+**Symptom**: A reaction rate that disagrees with an integral of the extrapolated
+cross section, or that changes when a level is moved by a parameter file.
 
-**Cause**: The numerical integration encounters a threshold or a very narrow
-resonance that cannot be resolved by the adaptive integration routine.
+**Cause**: The rate tabulates the cross section once on an energy grid (0.1 eV to
+50 MeV in the centre of mass, 48 points per decade, plus a cluster of points from
+1/32 to 64 widths around every level of the parameters being evaluated), splines
+ln σ against ln E and integrates each temperature over that spline. A resonance
+the parameters have moved outside the energy range is not integrated at all, and
+a level with no width in any channel is not treated as a resonance.
 
-**Solution**: For narrow resonances (total width less than approximately 1 keV),
-calculate the reaction rate contribution separately using the narrow-resonance
-approximation. For threshold issues, create a fine energy extrapolation and
-perform the numerical integration externally (e.g., Simpson's rule).
+**Solution**: Look at ``output/cross_section_grid.dat`` (E_cm, σ, S-factor), which
+is exactly the grid the rate integrated, and at ``parameters.out`` for the observed
+widths; compare with a fine mode-3 extrapolation integrated externally (the
+regression test ``tests/reaction_rate`` does this with its ``truth.py``). Older
+builds (before 2026-10-26) splined σ itself and set σ = 0 below 1 keV, which made
+charged-particle rates about 1 % low at low temperature and neutron (1/v) rates
+49 % low at T9 = 0.01, and placed the resonance clusters at the .azr level
+energies rather than at the parameters being evaluated.
 
 Hanging Calculations
 ^^^^^^^^^^^^^^^^^^^^

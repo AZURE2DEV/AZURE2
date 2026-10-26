@@ -89,14 +89,20 @@ Additional fields appear for this mode:
    - **Grid** -- specify minimum, maximum, and step temperatures (in GK).
    - **File** -- provide a file listing specific temperatures (single column, in GK).
 
-Results are written to ``reactionrates.dat``.
+Results are written to ``reactionrates.out``; the cross-section grid the rate
+integrated is written to ``cross_section_grid.dat``.
 
 .. warning::
 
-   Numerical integration is limited to broad resonance structures. If resonances
-   are narrower than approximately 1 keV, the integration may fail. For narrow
-   resonances, calculate the contribution separately using the narrow-resonance
-   approximation.
+   The rate integrates a spline of ln σ against ln E through a grid of 48 points per
+   decade from 0.1 eV to 50 MeV (centre of mass) plus a cluster of points from 1/32
+   to 64 widths around every level of the parameters being evaluated, so narrow
+   resonances are resolved (a 22 eV level to 1e-4 in ``tests/reaction_rate``). The
+   grid is written to ``cross_section_grid.dat``; a resonance outside 0.1 eV to
+   50 MeV, or a level without widths, is not integrated. Builds before 2026-10-26
+   splined σ itself (charged-particle rates about 1 % low at low temperature), set
+   σ = 0 below 1 keV (neutron rates 49 % low at T9 = 0.01) and placed the clusters
+   at the ``.azr`` level energies rather than at the parameters in use.
 
 Minimizer Selection
 -------------------

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """A thermonuclear reaction rate from an extrapolated cross section.
 
-AZURE2's own mode 5 writes `reactionrates.dat`; this does the same integral in
+AZURE2's own mode 5 writes `reactionrates.out`; this does the same integral in
 Python, which is the useful form when the rate has to be recomputed for every
 sample of a posterior, or split by level, or differentiated.
 

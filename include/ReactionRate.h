@@ -6,7 +6,7 @@
 
 class CNuc;
 
-extern std::vector<double> gsl_reactionrate_breakpoints(CNuc *, int);
+extern std::vector<double> gsl_reactionrate_breakpoints(CNuc *, const Config &, int);
 extern double gsl_reactionrate_integration(double, CNuc *, const Config &, int, int,
                                            const std::vector<double> &);
 
@@ -62,7 +62,7 @@ class ReactionRate {
    * Returns the exit pair key.
    */
   int exitKey() const { return exit_key_; };
-  /// Reaction rate on the temperature grid, writing reactionrates.dat.
+  /// Reaction rate on the temperature grid, writing reactionrates.out.
   void CalculateRates();
   /// As above, on temperatures read from a file.
   void CalculateFileRates();

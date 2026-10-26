@@ -244,12 +244,22 @@ intEC.extrap
 Same as ``intEC.dat``, but for the calculation (extrapolation) segments; its
 signature is ``intEC.extrap.sig``.
 
-reactionrates.dat
+reactionrates.out
 ^^^^^^^^^^^^^^^^^
 
 Contains temperatures (in GK) and calculated reaction rates
 (in cm\ :sup:`3` mol\ :sup:`-1` s\ :sup:`-1`) from the **Calculate Reaction
 Rate** mode.
+
+cross_section_grid.dat
+^^^^^^^^^^^^^^^^^^^^^^
+
+The energy grid the reaction rate integrated: centre-of-mass energy (MeV), the
+angle-integrated cross section (b) and the S-factor (MeV b) at every node (48 per
+decade from 0.1 eV to 50 MeV, plus a cluster around every level of the parameters
+being evaluated). The rate is the integral of a spline of ln σ against ln E
+through these points, so this file is the first thing to plot when a rate looks
+wrong.
 
 samples.mcmc
 ^^^^^^^^^^^^
