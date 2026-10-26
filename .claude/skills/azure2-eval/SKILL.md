@@ -302,6 +302,26 @@ runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
   target integration ~40 % slower (ODeSA T: 132 -> 185 s); a pure Gaussian
   grid now spans 10 sigma at the same sub-point count. Test:
   `tests/convolution_window` (3 sigma build 5-12 % off).
+- **Reaction rates (mode 5) were low and could drop a moved narrow level**
+  (fixed 2026-10-26, audit item 5, `tests/reaction_rate`): (1) the default
+  tabulated path splined sigma itself against E on a 48-per-decade grid, so
+  every non-resonant charged-particle rate was low (12C(p,g) -0.8 % at
+  T9 = 0.01, 12C(a,g) -1.2 % at 0.1), now ln sigma against ln E; (2) sigma was
+  zero below E_cm = 1 keV on both paths, so NEUTRON-entrance (1/v) rates were
+  49 % low at T9 = 0.01, 14 % at 0.03, 2.8 % at 0.1, 0.6 % at 0.3 (now from
+  0.1 eV); (3) the resonance clusters and quadrature breakpoints followed the
+  .azr level values (formal ones under --no-brune), not the parameter file
+  being evaluated: a narrow level moved by more than ~64 widths fell between
+  5 % backbone nodes and the rate lost it (test: 22 eV level moved 5 keV, rate
+  99.6 % low). Now the grid follows the parameters, as the target-effect
+  sub-grids do; (4) k_B 8.6171e-2 -> CODATA 8.617333262e-2 MeV/GK (narrow
+  resonances +0.1-0.3 %); (5) the quadratures run over ln E (the old qagp
+  stopped 3e-4 short at T9 = 0.1 on a smooth 1/v integrand). Any
+  `reactionrates.out` from an older build with a neutron entrance, a low
+  temperature, or a .sav that moved a narrow level is wrong by those amounts;
+  the fixed build agrees with an independent integral of the extrapolated
+  cross section to 1e-4 (narrow level) and 2e-5 (smooth). Rates with
+  `useAdaptiveGrid=0` (per-temperature quadrature) had (2)-(5) too.
 - **Attenuation (Q) coefficients act on the lab distribution** (dev a22b99a,
   2026-10-25): for a particle exit Q_K multiplies the LAB Legendre coefficients
   and the result is taken back to the point's c.m. angle exactly. Before, a
@@ -342,7 +362,7 @@ pipe. `tests/run_tests.sh` is the working reference.
 | 2 | Fit Segments From Data (Minuit2 → `param.sav`, `parameters.out`) |
 | 3 | Calculate Segments Without Data / extrapolate (`AZUREOut_*.extrap`) |
 | 4 | MINOS Error Analysis (`param.errors`, `covariance_matrix.out`) |
-| 5 | Calculate Reaction Rate (needs temps → `reactionrates.dat`) |
+| 5 | Calculate Reaction Rate (needs temps → `reactionrates.out`) |
 | 6 | MCMC Bayesian Sampling (`samples.mcmc`) |
 | 7 | Exit |
 
@@ -363,11 +383,16 @@ result as final-for-this-run while noting it may still improve with a further
 warm-started refit. A fit's results are written only when it ends: killing a
 long run (or a crash) loses it — see `param.fit` under Output files.
 
-Mode 5's numerical integration (GSL adaptive quadrature over the excitation
-curve) is unreliable for narrow resonances — the manual advises caution below
-a total width of ≈1 keV, where the integral may fail outright. In that regime,
-sum the single-level narrow-resonance approximation instead of trusting the
-numerical rate.
+Mode 5 tabulates sigma(E) once on a resonance-aware grid (0.1 eV to 50 MeV c.m.,
+48 points per decade plus a cluster from 1/32 to 64 widths around every level
+of the parameters being evaluated), splines ln sigma against ln E and
+integrates each temperature over the knots; `output/cross_section_grid.dat`
+(E_cm, sigma, S) is the grid it used, so plot it when a rate looks odd. Narrow
+levels are resolved (a 22 eV level is integrated to 1e-4; `tests/reaction_rate`),
+so the old advice to add narrow resonances by hand no longer applies.
+`useAdaptiveGrid=0` in the `<potential>` block selects the older
+per-temperature quadrature that calls the engine at every abscissa (slow, same
+answer to 1e-5).
 
 The **external parameter file** prompt: give a saved `output/param.sav` to start
 from those best-fit formal parameters, or leave **blank** to build fresh from
@@ -2061,7 +2086,7 @@ and its **angle column is centre-of-mass**, not lab.
   writes no output. Create it in every new run directory.
 - `normalizations.out` — fitted segment norms (auto-loaded with `param.sav`).
 - `param.errors`, `covariance_matrix.out` — MINOS (mode 4).
-- `reactionrates.dat` (mode 5); `samples.mcmc` (mode 6).
+- `reactionrates.out` (mode 5, plus `cross_section_grid.dat`); `samples.mcmc` (mode 6).
 - `intEC.dat` / `intEC.extrap` — external-capture integral caches; see the
   golden rule above.
 
