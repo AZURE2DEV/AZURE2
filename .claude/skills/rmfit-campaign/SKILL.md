@@ -2166,6 +2166,33 @@ edit of engine.py).
 - Records: 13C+a/10-26-26_jac_balance/readme; tests/test_jac_balance.py.
 - tests/test_objective_13n.py now joins pieces by e_lo, because a segment can now span several pieces.
 
+### 2026-10-26 — t0 method for free norms on relvector-covariance rows; guard installed (DeBoer: "build the t0 version", "Install the guard once the regression passes")
+- Literature: Ball et al. (NNPDF), "Fitting PDF data with multiplicative normalization uncertainties", JHEP 05 (2010)
+  075, arXiv:0912.2276. A covariance built from the MEASURED values gives the d'Agostini/Peelle bias (fit low); one
+  built from the FITTED values ("self-consistent covmat", their sec. 5) is biased the other way and has a spurious
+  extra stationary point; a free norm with a prior (penalty trick) is unbiased for one data set only if the norm
+  rescales the theory (AZURE2's n*d with n*sigma does), and biased again once several norms are combined. The fix
+  (sec. 6, t0): put the normalization uncertainty INTO the covariance, built from a FIXED prediction t0 of a previous
+  fit, held constant during the fit so chi2 stays quadratic; refresh t0 and refit (one iteration is usually enough).
+  No free norm on those data. Neutron standards (GMA/GMAP) use the same idea via Chiba-Smith (ANL/NDM-121).
+- 13C+a showed both biased cases: the 10-25 data-unit reference ran the ND2021r norm UP (0.63 -> 3.08), and the 10-26
+  norm-following reference ran it DOWN to the 0.2 floor. The relvector terms together span the data vector (run
+  blocks, energy-region terms, efficiency common), so with a free norm, scaling the data to 0 or infinity costs a
+  bounded amount (~1/rel^2 per term), which is cheaper than the shape misfit when chi2/N ~ 25-30.
+- Recipe (13C+a/10-26-26_t0_cov/build_t0.py): set varyNorm 0 at the nominal norm; add one relvector term per former
+  norm parameter to the covariance file, (prior) x 1 over the rows that norm scaled (group prior over the group rows,
+  own prior over a separate segment's rows); keep rmfit's campaign reference (cov_reference.npz = the seed's model) as
+  t0; refresh t0 by starting the next campaign from the export. With the norms fixed, the 10-25 and 10-26 reference
+  conventions coincide, so this needs no special code.
+- Guard (installed 2026-10-26, backups *.bak-2026-10-26-t0guard): Campaign.init (rmfit init) REFUSES a free data
+  normalization on rows of a relvector covariance. The error names the covariance file and segments and gives this
+  recipe. To keep such a norm free on purpose, name the covariance file basename in the objective, e.g.
+  --objective '{"cov_free_norm_ok": ["<cov file>"]}'; init then logs a WARNING. New: ObjectiveSpec.cov_free_norm_ok,
+  Evaluator.free_norms_on_relvector(), tests/test_cov_t0_guard.py. 12/12 regression tests pass.
+- Consequence: 13C+a campaigns that keep HAGRiD's free norms (segments 178-180 on HAGRiD2018_13C_cov_*.dat) now need
+  that file in cov_free_norm_ok, or the t0 treatment for HAGRiD too (planned for the next 13C+a run; prior choice
+  pending with DeBoer).
+
 ## 2026-10-25 — physical seeds must be TINY, not 1 eV: the Brune transform can fail and rescale a level (10B+α stage 1)
 
 The 09-18 recipe (a 1 eV physical seed, then `frac · γ_W` in the engine) broke on 10B+α: α₁ (10B 0.718 MeV) L=2 on the
