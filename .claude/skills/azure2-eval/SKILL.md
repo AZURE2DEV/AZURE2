@@ -258,6 +258,21 @@ runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
   frozen older builds keep the old rule. pyazr `azure2.SHIFT_PENALTY_FROM_ZERO`
   says which rule an engine uses; the archive's rmfit follows it. Norm
   penalties are unchanged (from the nominal norm). Test: `tests/shift_penalty_zero`.
+- **An energy shift used to move the sub-points of a target or resolution
+  integration to the wrong angle** (fixed 2026-10-26, audit item 3): sub-points
+  are built at the parent's c.m. angle, and the shift path re-converted that
+  angle as if it were a lab angle, so every sub-point of a LAB-frame
+  differential segment with convolution, target integration or a beam-profile
+  kernel moved by the full lab-c.m. difference (2-5 deg for p + light nuclei,
+  18 deg for alpha + 12C) whenever its shift was active (nonzero, varied once
+  the fitter moves it, shiftgroup, sqrtshift, shiftfn); the finite-difference
+  shift derivatives were wrong with it. 16O(p,p) with a 0.1 keV convolution:
+  chi2 13,484 -> 23,097 at a 1e-7 MeV shift. 11B+a 10-25-26_thermal_gradcheck
+  at its .azr values: 394,240 -> 394,669 (target-integrated 11B(a,p) segments
+  79, 80, 84). c.m.-frame, angle-integrated and Q-coefficient-only segments
+  were never affected (12C+a: no change). Any fit of an exposed segment made
+  with an older build has that segment at wrong angles: refit. Test:
+  `tests/shift_subpoint_angle`.
 - **Attenuation (Q) coefficients act on the lab distribution** (dev a22b99a,
   2026-10-25): for a particle exit Q_K multiplies the LAB Legendre coefficients
   and the result is taken back to the point's c.m. angle exactly. Before, a
