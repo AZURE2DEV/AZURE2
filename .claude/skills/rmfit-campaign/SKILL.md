@@ -59,6 +59,39 @@ Prerequisites (do these in the reaction's fit directory, not in the campaign):
    new file: a single negative or spiked cross section can dominate the objective.
 4. Record all of that in the reaction directory's `readme`.
 
+### First fits: build starting parameters before any global fit (DeBoer, 2026-10-25 -- RE-EVALUATE LATER)
+
+**Provisional.** This is DeBoer's general suggestion, written down before it was tried end to end. Re-evaluate it once
+10B+α (the first reaction to use it, `10B+a/10-25-26_Rmatrix_Claude`) has a real fit: record what worked and what
+did not here, and change or drop the procedure accordingly.
+
+DeBoer: "Fix one representative data set's norms but let the others vary. This then provides more of a fixed scale
+for the cross sections initially, but still allows data sets with inconsistent norms but consistent shapes to not
+hinder the fit. In our case, since we have data in every channel, I would suggest we fix our data to begin with and
+let the others vary. Also, we should make sure that we allow the lowest l channels for each particle pair to vary,
+giving it some small non-zero value for every level, even if the literature does not give it a branch to that
+channel. I would also suggest starting at low energy and doing some polishes on one level at a time to see how well
+it can match the data. Then come back and try adding in levels where resonances are clearly present that don't match
+any of the known levels in energy and / or width. I wouldn't try a real fit until you have reasonably good starting
+parameters."
+
+As a procedure:
+1. **Fix the scale with one representative data set.** Fix its norms at 1 (our own data when they cover every
+   channel); let every other set's norm vary. Sets with consistent shapes but a different scale then do not
+   hold the fit back.
+2. **Seed the lowest-L channel of every pair, for every level.** Give it a small non-zero amplitude (0.01 γ_W, set
+   in the engine; physical placeholders tiny, see the 2026-10-25 seeding entry), even where the literature lists no
+   branch to that channel.
+3. **Level by level, from low energy up.** Polish one level at a time (its energy and widths, plus the free norms)
+   against the data around it, and look at how well it can match.
+4. **Then add levels** where a resonance is clearly present and no known level matches it in energy and/or width.
+5. **Only then a real (global) fit**: `init` a campaign on the result.
+
+Why (10B+α stage 1, 2026-10-25): global polishes from a poor start (χ²/N ≈ 200, 2-27-25 levels with new
+channels near zero) traded the missing strength for normalizations. With every norm free, almost all of them fell to
+0.38-0.68 in 150 evaluations. Bounded to 0.7-1.5, eight sat on a bound and the fit stalled at χ²/N 12.7. With
+χ² ~ 10⁵, norm priors of a few percent cost nothing (`10B+a/10-25-26_rmfit_stage1`, `_stage1b`).
+
 Then, in a new dated campaign directory (`<reaction>/<M>-<D>-<YY>_rmfit_campaign/`):
 
 ```bash
