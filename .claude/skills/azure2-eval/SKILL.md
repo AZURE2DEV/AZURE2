@@ -511,6 +511,24 @@ runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
   `teichmann_wigner()` now returns it unchanged (it used to give
   2.25 ħ²/(μa²), θ² too small by 1.5); `lane_thomas_wigner()` gives the
   ħ²/(μa²) unit.
+- **The straggling coefficient is a c.m. quantity, and 0 means Bohr straggling**
+  (2026-10-27, audit tier 3 entry 1, `tests/straggling_bohr`): the width is
+  c_s sqrt(dE_cm [keV]) keV with the energy loss in the c.m. and no frame
+  factor, so a coefficient quoted for the beam in the lab goes in as
+  c_lab sqrt(m2/(m1+m2)) (0.85 for α + ¹¹B, 0.96 for p + ¹²C); the 11B+a CASPAR
+  lines (c = 1, 1.1, 2.5) were tuned under this convention and are unchanged.
+  The old default 0.04 keV^1/2 is 5-10x below Bohr (0.3-0.5 for light ions in
+  light targets: p + ¹⁴N at 270 keV 0.31), i.e. no straggling; straggling on
+  with coefficient 0 (the new GUI default) now computes Bohr's width from the
+  entrance pair's Z1, Z2 and the line's stopping cross section (areal density
+  traversed, int dE/eps over the sub-points, c.m. factor m2/(m1+m2)). Bohr
+  counts only the target nucleus's electrons: for a compound target (stopping
+  per molecule or per active atom) enter c_s = sqrt(f 4π Z1² e⁴ Z_entity/ε)
+  yourself (ε in MeV cm², e² = 1.44e-13 MeV cm, f = m2/(m1+m2)), and note Bohr
+  is the high-velocity limit (too large below ~1 MeV/u). Existing files keep
+  the coefficient written in them (12,192 archive lines, 11,570 of them
+  11B+a CASPAR); a hand-written line with flag 1 and coefficient 0 now
+  straggles where it did not before.
 - **Attenuation (Q) coefficients act on the lab distribution** (dev a22b99a,
   2026-10-25): for a particle exit Q_K multiplies the LAB Legendre coefficients
   and the result is taken back to the point's c.m. angle exactly. Before, a
