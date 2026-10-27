@@ -732,12 +732,44 @@ double TargetEffect::GetDensity() const {
 }
 
 /*!
- * Calculates the Target thickness from the stopping cross section and
- * the target density as a function of energy.
+ * The energy loss Delta (lab MeV) of the beam across the target at lab energy E: the solution of
+ *   int_{E - Delta}^{E} dE' / epsilon(E') = N,
+ * the areal density N (atoms/cm^2) being reached when the beam has crossed the whole target.  Up to
+ * 2026-10-27 this was the first-order epsilon(E) N, which with a stopping cross section that rises through
+ * the target (every ion above the Bragg peak) misplaces the back edge by 2-8 % for targets of 5-20 % energy
+ * loss and, with 1/epsilon in the yield integrand, under-weights a flat cross section by the same amount
+ * (audit 2026-10-25, tier 3 entry 2).  Newton on A(Delta) = int - N with A' = 1/epsilon(E - Delta), the
+ * integral by Simpson's rule on 16 intervals, from the first-order estimate (exact for a constant epsilon).
+ * A non-positive epsilon(E) is returned as epsilon(E) N, i.e. <= 0, so the caller's error check fires as
+ * before; a target the beam cannot cross returns E itself (the caller floors the grid at 1 keV).
  */
 
 double TargetEffect::TargetThickness(double energy, const Config &configure) {
-  return this->GetStoppingPowerEq()->Evaluate(configure, energy) * this->GetDensity();
+  const double density = this->GetDensity();
+  const double eps0 = stoppingPowerEq_.Evaluate(configure, energy);
+  if (!(eps0 > 0.0) || !(density > 0.0) || !(energy > 0.0)) return eps0 * density;
+  auto invEps = [&](double e) {
+    const double eps = stoppingPowerEq_.Evaluate(configure, e);
+    return (eps > 0.0) ? 1.0 / eps : 0.0;
+  };
+  double delta = eps0 * density;
+  for (int iter = 0; iter < 30; iter++) {
+    if (!(delta < energy)) return energy;
+    const int n = 16;
+    const double h = delta / n;
+    double sum = invEps(energy) + invEps(energy - delta);
+    for (int k = 1; k < n; k++) sum += ((k % 2) ? 4.0 : 2.0) * invEps(energy - k * h);
+    const double residual = sum * h / 3.0 - density;
+    const double slope = invEps(energy - delta);
+    if (!(slope > 0.0)) break;
+    double step = residual / slope;
+    // never jump past the beam energy or below a tenth of the current estimate
+    if (delta - step > energy) step = delta - energy;
+    if (delta - step < 0.1 * delta) step = 0.9 * delta;
+    delta -= step;
+    if (std::fabs(step) <= 1.0e-7 * delta) break;
+  }
+  return delta;
 }
 
 /*!

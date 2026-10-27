@@ -104,7 +104,8 @@ class TargetEffect {
   /// exactly 0 under a beam spread or straggling, and also fired for a thin target whose stopping
   /// cross section came out <= 0; audit item 17.)
   bool IsThickTarget() const { return isThickTarget_; }
-  /// Energy loss across the target at a given energy, from the stopping cross section and the density.
+  /// Energy loss (lab MeV) across the target at lab energy E: Delta with int_{E-Delta}^{E} dE'/epsilon = N, the
+  /// exact range integral (first-order epsilon(E) N before 2026-10-27, 2-8 % off for 5-20 % targets).
   double TargetThickness(double, const Config &);
   /// Attenuation coefficient of the given order.
   double GetQCoefficient(int) const;

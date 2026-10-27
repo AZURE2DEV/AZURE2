@@ -195,10 +195,17 @@ target. The yield is computed as
 .. math::
 
    Y(E_0) = \frac{1}{N} \int_{E_0 - \Delta}^{E_0} \frac{\sigma(E')}{\epsilon(E')}\, dE',
-   \qquad \Delta = \epsilon(E_0)\, N ,
+   \qquad \int_{E_0 - \Delta}^{E_0} \frac{dE'}{\epsilon(E')} = N ,
 
 where :math:`N` is the areal density entered below and :math:`\epsilon(E)` the
-stopping cross section entered below.
+stopping cross section entered below. The energy loss :math:`\Delta` is the
+exact range integral: the energy at which the beam has crossed the areal
+density :math:`N`, so a constant cross section is reproduced exactly. (Before
+October 2026 the first-order :math:`\Delta = \epsilon(E_0)\,N` was used; with
+a stopping cross section that rises through the target, as it does for every
+ion above the Bragg peak, that put the back edge 2-8 % too shallow for
+targets of 5-20 % energy loss and gave a flat cross section a yield low by
+the same fraction, a distortion that grows towards low energy.)
 
 **Active Density** (atoms/cm\ :sup:`2`)
    The areal density of the active target material (the nuclei producing the
@@ -288,8 +295,10 @@ be normalized to the same thing the density counts.**
    If the experiment reports the energy loss in the target directly (for
    example "the target thickness corresponded to 1.5 keV at the resonance"),
    that number is more reliable than a stoichiometry and a nominal thickness:
-   choose :math:`N` so that :math:`\epsilon(E_0)\,N` reproduces the quoted
-   loss at the energy of interest.
+   choose :math:`N` so that the energy loss reproduces the quoted value at
+   the energy of interest (:math:`N \approx \Delta/\epsilon(E_0)` for a thin
+   target; a few per cent more for a target of 10-20 % energy loss, since
+   :math:`\epsilon` rises through it).
 
 .. note::
 

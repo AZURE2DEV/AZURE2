@@ -49,3 +49,10 @@ identical to it: b273abc (the resonance-anchored lattice) and a4095a6 (physical
 widths) both changed that grid on purpose, and at multiplier 5 the first point,
 6 keV below the resonance, was 15 % above the 1000-sub-point value (the
 pre-regression grid happened to be 3 % above it).
+
+2026-10-27 (audit tier 3 entry 2, `tests/target_thickness_exact`): the thin-target energy
+loss is now the exact range integral, not `epsilon(E0) N`. This target is 3.2e19 at/cm2 under
+a stopping formula whose value falls towards lower energy in this range (3.35e-21 MeV cm2 at
+272 keV), so the first-order loss of 107 keV (39 % of the beam energy) becomes 102 keV, and the
+yields move by a few 0.1 %: expected chi2 15.0305 / 15.5912 -> 15.0799 / 15.6401 (total 30.6218
+-> 30.7201). Re-baselined for that reason only.

@@ -326,8 +326,11 @@ Key Helper Functions
    a user-provided equation).
 
 ``TargetEffect::TargetThickness(energy, config)``
-   Returns :math:`\epsilon(E) \cdot \rho` -- the product of stopping power
-   and density.
+   Returns the energy loss :math:`\Delta` across the target at lab energy
+   :math:`E`, the solution of :math:`\int_{E-\Delta}^{E} dE'/\epsilon(E') = N`
+   (Newton from the first-order :math:`\epsilon(E)\,N`, Simpson on 16
+   intervals; exact for a constant :math:`\epsilon`). Up to 2026-10-27 it
+   returned the first-order product itself.
 
 ``TargetEffect::GetStoppingPowerEq()``
    Returns the ``Equation`` object for the parametrized stopping cross section
