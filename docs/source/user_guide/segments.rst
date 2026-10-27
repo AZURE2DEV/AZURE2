@@ -376,6 +376,17 @@ appears with the following fields:
    - **Sum** -- sum cross sections from multiple entrance/exit pair combinations.
    - **Ratio** -- compute the ratio of cross sections from different channels.
 
+   Frames: a lab-frame differential **Sum** (Data Type "Differential", lab
+   angles) is the sum of the terms' *lab* cross sections. Each term is
+   evaluated in the c.m. frame of its own pair, so a component to another exit
+   pair (a different Q value, or another compound nucleus of a natural target)
+   carries its own lab-to-c.m. Jacobian; the engine applies the ratio of the
+   base pair's Jacobian to the term's when it adds the term (since October
+   2026; before, the c.m. values were added as they were, which for
+   :math:`^{13}`\ C(α,n\ :sub:`1`\ +n\ :sub:`2`) at 6 MeV was −3 % at 0° and
+   +6 % at 150°). A c.m. **Sum**, an angle-integrated one, a component of the
+   same pair, or gamma terms of one entrance pair are unaffected.
+
 **Unobserved Primary, Observed Secondary (UPOS)**
    For a particle exit pair :math:`b+B` whose residual nucleus :math:`B` is
    left in an excited state, the segment describes the **secondary gamma ray**

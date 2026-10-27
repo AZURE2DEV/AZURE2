@@ -296,6 +296,16 @@ class ESegment {
   void SetComponentScaling(double scaling);
   /// Scale factor as a component; 1.0 unless it is one.
   double GetComponentScaling() const;
+  /// The factor that takes a SUM term's c.m. cross section into the frame of
+  /// the base point: the base point's lab-to-c.m. conversion factor over the
+  /// term's.  A lab-frame differential segment is compared in the base pair's
+  /// c.m. frame (sigma_cm = J_base sigma_lab, ESegment::Fill), while a
+  /// component to another exit pair is evaluated in its own c.m. frame with its
+  /// own Jacobian J_term, so the lab-frame sum  sum_i s_i sigma_cm,i / J_i
+  /// reads  sum_i s_i (J_base / J_i) sigma_cm,i  there.  1 when the frames
+  /// agree: c.m. or angle-integrated segments, a component of the same pair,
+  /// gamma terms of one entrance pair.
+  static double TermFrameFactor(const EPoint *basePoint, const EPoint *termPoint);
 
   // Calculate theoretical cross section including components
   /// Theoretical value at a point, combining the components if this is a composite segment.

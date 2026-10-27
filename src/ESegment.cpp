@@ -1283,6 +1283,22 @@ double ESegment::GetComponentScaling() const {
 }
 
 /*!
+ * The frame factor of a SUM term (ESegment.h).  Each point carries the
+ * lab-to-c.m. factor of its own conversion (EPoint::ConvertCrossSection,
+ * ConvertCrossSectionGammas; 1 when none was done), refreshed with the energy
+ * shift (UpdatePointEnergyWithShift).  Before 2026-10-26 the terms were added
+ * as they were: 13C(a,n1+n2) at 6 MeV, -2.9 % at 0 deg to +5.6 % at 150 deg
+ * (audit item 7, tests/sum_lab_frame).
+ */
+double ESegment::TermFrameFactor(const EPoint *basePoint, const EPoint *termPoint) {
+  if (!basePoint || !termPoint) return 1.0;
+  const double jTerm = termPoint->GetCrossSectionKinFactor();
+  const double jBase = basePoint->GetCrossSectionKinFactor();
+  if (jTerm == 0.0 || jBase == 0.0 || jTerm == jBase) return 1.0;
+  return jBase / jTerm;
+}
+
+/*!
  * Calculates the theoretical cross section for this segment, including
  * combination with any additional components according to the operation type
  */
@@ -1355,7 +1371,8 @@ double ESegment::CalculateTheoreticalCrossSection(int pointIndex, CNuc *cnuc, co
           double compValue = componentPoint->GetFitCrossSection();
           // Check if NaN or infinite and skip if so
           if (!std::isnan(compValue) && !std::isinf(compValue)) {
-            double term = componentSegment->GetComponentScaling() * compValue;
+            // the term in the base point's frame (TermFrameFactor)
+            double term = componentSegment->GetComponentScaling() * TermFrameFactor(basePoint, componentPoint) * compValue;
             if (natural) {
               const int nucleus = cnuc->GetPair(cnuc->GetPairNumFromKey(componentSegment->GetEntranceKey()))->GetNucleus();
               term *= cnuc->GetAbundance(naturalSample_, nucleus);

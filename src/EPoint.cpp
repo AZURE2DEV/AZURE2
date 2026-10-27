@@ -939,8 +939,7 @@ void EPoint::ConvertCrossSectionGammas(PPair *entrancePair) {
   //                      = (1 - beta cos theta_lab)^2 / (1 - beta^2).
   // (Before 2026-10-23 this was (1 - beta)^2/(1 - beta cos theta_lab), wrong at first order in beta: an overall
   // -2 beta and a P1-shaped 3 beta cos(theta) -- -1.9 % at 90 deg and -4.8 % at 167 deg for 12C(a,g) at 3 MeV.)
-  double beta = CMVelocity(this->GetLabEnergy(), entrancePair);
-  double conversionFactor = pow(1.0 - beta * cos(this->GetLabAngle() * pi / 180.0), 2.0) / (1.0 - beta * beta);
+  double conversionFactor = this->CalculateCrossSectionGammaConversionFactor(entrancePair);
   cm_crosssection_ = this->GetLabCrossSection() * conversionFactor;
   cm_dcrosssection_ = this->GetLabCrossSectionError() * conversionFactor;
   // the output files take the fitted c.m. cross section back to the lab with this factor (EData::WriteOutputFiles)
@@ -948,16 +947,16 @@ void EPoint::ConvertCrossSectionGammas(PPair *entrancePair) {
   this->SetCrossSectionKinFactor(crossSectionKinFactor_);
 }
 
-/* Calculates the conversion factor for gamma rays */
+/*!
+ * The lab-to-c.m. conversion factor for gamma rays (the one ConvertCrossSectionGammas stores; also the
+ * RATIO path of ESegment::CalculateTheoreticalCrossSection).  Until 2026-10-26 this copy still had the
+ * pre-2026-10-23 formula (1 - beta)^2 / (1 - beta cos theta_lab); a gamma RATIO of one entrance pair was
+ * unaffected (the same wrong factor in numerator and denominator).
+ */
 
 double EPoint::CalculateCrossSectionGammaConversionFactor(PPair *entrancePair) {
-  double conversionFactor;
-
-  double beta = sqrt(this->GetLabEnergy() * (this->GetLabEnergy() + 2.0 * entrancePair->GetM(1) * uconv)) /
-      ((entrancePair->GetM(1) + entrancePair->GetM(2)) * uconv + this->GetLabEnergy());
-
-  conversionFactor = pow(1.0 - beta, 2.0) / (1 - beta * cos(this->GetLabAngle() * pi / 180.0));
-  return conversionFactor;
+  double beta = CMVelocity(this->GetLabEnergy(), entrancePair);
+  return pow(1.0 - beta * cos(this->GetLabAngle() * pi / 180.0), 2.0) / (1.0 - beta * beta);
 }
 
 /*!

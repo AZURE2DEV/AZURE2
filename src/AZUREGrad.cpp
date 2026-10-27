@@ -693,14 +693,15 @@ bool GradOnePoint(ESegment *segment, EData *data, int i, int pointIdx,
         for (size_t q = 0; q < pts.size(); q++) {
           const double v = valueOf(pts[q], xsComp[q]);
           if (q > 0 && (std::isnan(v) || std::isinf(v))) continue;
+          // the term's scaling and its frame factor into the base point's frame (ESegment::TermFrameFactor)
+          const double s = q > 0 ? termSeg[q]->GetComponentScaling() * ESegment::TermFrameFactor(point, pts[q]) : 1.0;
           double w = 1.0;
           if (natural) {
             const int nucleus = abundanceOf(termSeg[q]->GetEntranceKey());
             w = compound->GetAbundance(sample, nucleus);
-            accum.AddAbundance(compound->AbundanceOrdinal(sample, nucleus),
-                               fitBar * (q > 0 ? termSeg[q]->GetComponentScaling() : 1.0) * v);
+            accum.AddAbundance(compound->AbundanceOrdinal(sample, nucleus), fitBar * s * v);
           }
-          coef[q] = (q > 0 ? termSeg[q]->GetComponentScaling() : 1.0) * w;
+          coef[q] = s * w;
         }
       } else {  // RATIO: base / first component
         const double baseVal = valueOf(pts[0], xsComp[0]);
@@ -757,14 +758,15 @@ bool GradOnePoint(ESegment *segment, EData *data, int i, int pointIdx,
       if (!cp) continue;
       double cv = cp->GetFitCrossSection();
       if (std::isnan(cv) || std::isinf(cv)) continue;
+      // the term's scaling and its frame factor into the base point's frame (ESegment::TermFrameFactor)
+      const double s = comp->GetComponentScaling() * ESegment::TermFrameFactor(point, cp);
       double compWeight = 1.0;
       if (natural) {
         const int nucleus = abundanceOf(comp->GetEntranceKey());
         compWeight = compound->GetAbundance(sample, nucleus);
-        accum.AddAbundance(compound->AbundanceOrdinal(sample, nucleus), fitBar * comp->GetComponentScaling() * cv);
+        accum.AddAbundance(compound->AbundanceOrdinal(sample, nucleus), fitBar * s * cv);
       }
-      if (!GradAdjointPoint(cp, comp->GetCrossSectionComponent(),
-                            fitBar * comp->GetComponentScaling() * compWeight, accum,
+      if (!GradAdjointPoint(cp, comp->GetCrossSectionComponent(), fitBar * s * compWeight, accum,
                             shiftDeriv, compound, config))
         return false;
     }
