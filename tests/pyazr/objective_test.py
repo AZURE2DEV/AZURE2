@@ -138,6 +138,54 @@ with tempfile.TemporaryDirectory() as tmp:
                   f"{engine_norm} vs {penalty}")
 
 print()
+# ---- 5. a shiftgroup follower is not charged a second shift penalty ----------------------------------------------
+print("\n5. shiftgroup followers are not penalised twice")
+with tempfile.TemporaryDirectory() as tmp:
+    work = os.path.join(tmp, "sg")
+    shutil.copytree(os.path.join(ROOT, "tests", "shift_groups"), work)
+    for junk in ("output", "checks"):
+        shutil.rmtree(os.path.join(work, junk), ignore_errors=True)
+    os.makedirs(os.path.join(work, "output"))
+    os.makedirs(os.path.join(work, "checks"))
+    # both members of shiftgroup G with a shift of 0.004, an error of 0.01 and vary = 1 on their own lines:
+    # the engine penalises the group's shift once, (0.004/0.01)^2 = 0.16, on the first member
+    src = open(os.path.join(work, "shift_groups.azr")).read()
+    lines = []
+    for l in src.split("\n"):
+        if "shiftgroup G" in l:
+            t = l.split()
+            t[11], t[12], t[13] = "0.004", "0.01", "1"
+            l = " ".join(t)
+        lines.append(l)
+    azr = os.path.join(work, "sg.azr")
+    open(azr, "w").write("\n".join(lines))
+    with azure2(azr, cwd=work) as m:
+        x = np.asarray(m.params_rwa, float)
+        pen = m.penalties(x)["shift"]
+        chi2 = float(np.sum(m.calculate_chi2_rwa(x)))
+        obj = float(m.objective(x))
+        check("the group's shift penalty is charged once, on the first member",
+              np.allclose(pen, [0.16, 0.0], atol=1e-12), str(pen.tolist()))
+        check("objective = chi-squared + 0.16", np.isclose(obj, chi2 + 0.16, rtol=1e-12),
+              f"{obj} vs {chi2} + 0.16")
+    binary = None
+    for cand in sorted(glob.glob(os.path.join(ROOT, "build*", "src", "AZURE2*"))):
+        if os.path.isfile(cand) and os.access(cand, os.X_OK):
+            binary = cand
+            break
+    if binary is None:
+        print("  skip  no AZURE2 binary to cross-check against")
+    else:
+        r = subprocess.run([binary, "--no-gui", "--no-readline", "sg.azr"], cwd=work,
+                           input="1\n\n\n7\n", text=True, capture_output=True, timeout=900)
+        total = None
+        for l in r.stdout.splitlines():
+            if l.startswith("Total Chi-Squared:"):
+                total = float(l.split()[2])
+        check("AZURE2 printed its total (with the penalties)", total is not None)
+        if total is not None:
+            check("pyazr objective = AZURE2's total", np.isclose(obj, total, rtol=2e-5), f"{obj} vs {total}")
+
 if failures:
     print(f"FAILED: {len(failures)} check(s): {', '.join(failures)}")
     sys.exit(1)

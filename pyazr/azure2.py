@@ -1307,7 +1307,7 @@ class azure2:
             ((norm - nominal) / (nominal/100 * norm_error))^2
 
         (once per ``normgroup``, on its first member) and, for a segment whose
-        energy shift is free,
+        energy shift is free (once per ``shiftgroup``, on its first member),
 
             (shift / shift_error)^2
 
@@ -1344,6 +1344,7 @@ class azure2:
         shift_fn = np.zeros(self.nsegments)
         fn_par = {(p.segment_key, p.fn_term): p for p in self.parameters.fn_shifts}
         norm_groups = set()                  # labels whose first member has been seen
+        shift_groups = set()                 # the same for shiftgroup (the shift belongs to the first member)
         for i, d in enumerate(self.active_datasets):
             p = current.get(d.key)
             value = (float(x[p.free_index])
@@ -1355,7 +1356,13 @@ class azure2:
                 norm_groups.add(d.norm_group)
             if sigma and not follower:       # a normgroup's penalty is its first member's
                 norm[i] = ((value - d.norm) / sigma) ** 2
-            if d.vary_shift and d.energy_shift_error:
+            # A shiftgroup follower's shift is its leader's and its own parameter is fixed: the engine
+            # (ESegment::SetShiftGroupFollower, AddShiftPenalty) adds no penalty for it.  Before 2026-10-27
+            # a follower whose line kept vary = 1, an error and a value was charged (shift/error)^2 again.
+            shift_follower = bool(d.shift_group) and d.shift_group in shift_groups
+            if d.shift_group:
+                shift_groups.add(d.shift_group)
+            if d.vary_shift and d.energy_shift_error and not shift_follower:
                 q = shifting.get(d.key)
                 sval = (float(x[q.free_index])
                         if q is not None and not q.fixed and q.free_index is not None

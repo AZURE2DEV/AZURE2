@@ -6,8 +6,9 @@ sensible depends on how it compares with the largest width a single-particle
 picture allows.  This module builds that comparison for a whole level scheme at
 once, at whatever parameter vector you hand it:
 
-* **particle channels** -- the Wigner (single-particle) limit
-  ``gamma^2_W = hbar^2 / (mu a^2)``, and the dimensionless reduced width
+* **particle channels** -- the Wigner (single-particle) limit in AZURE2's
+  convention, ``gamma^2_W = 3 hbar^2 / (2 mu a^2)`` (the Teichmann-Wigner
+  sum-rule unit, ``AChannel::SetWignerLimit``), and the dimensionless reduced width
   ``theta^2 = Gamma_c / Gamma_W`` with ``Gamma_W = 2 P_l(E_r) gamma^2_W``.
   ``theta^2 <= 1`` is the sum-rule expectation.
 * **photon channels** -- the Weisskopf single-particle estimate for the
@@ -86,10 +87,19 @@ def weisskopf_width(radiation_type, L, e_gamma, mass_number):
 def teichmann_wigner(wigner_gamma2):
     """The Teichmann-Wigner sum-rule unit ``3 hbar^2 / (2 mu a^2)``.
 
-    Some references quote dimensionless widths against this instead of
-    ``hbar^2/(mu a^2)``; it is 1.5x larger, so their theta^2 is 1.5x smaller.
+    AZURE2's ``Parameter.wigner_limit`` (and :attr:`ChannelWidth.wigner_gamma2`)
+    already IS this unit, so the value is returned unchanged.  Before 2026-10-27
+    this multiplied by 1.5 again, giving ``2.25 hbar^2 / (mu a^2)`` and a
+    theta^2 too small by 1.5 (audit item 19).  For the other common convention,
+    ``hbar^2 / (mu a^2)``, use :func:`lane_thomas_wigner`.
     """
-    return None if wigner_gamma2 is None else 1.5 * wigner_gamma2
+    return None if wigner_gamma2 is None else wigner_gamma2
+
+
+def lane_thomas_wigner(wigner_gamma2):
+    """The ``hbar^2 / (mu a^2)`` unit, 2/3 of AZURE2's ``3 hbar^2 / (2 mu a^2)``:
+    a theta^2 quoted against it is 1.5x LARGER than AZURE2's."""
+    return None if wigner_gamma2 is None else wigner_gamma2 / 1.5
 
 
 @dataclass
@@ -124,7 +134,7 @@ class ChannelWidth:
     is_photon: bool = False
     is_open: bool = True            # above threshold at this level energy?
     threshold: Optional[float] = None       # channel threshold, in Ex (MeV)
-    wigner_gamma2: Optional[float] = None   # hbar^2/(mu a^2), MeV
+    wigner_gamma2: Optional[float] = None   # 3 hbar^2/(2 mu a^2), MeV (AZURE2's convention)
     wigner_width: Optional[float] = None    # 2 P_l(E_r) gamma^2_W, eV
     theta2: Optional[float] = None          # Gamma / Gamma_W
     theta2_formal: Optional[float] = None   # gamma^2 / gamma^2_W

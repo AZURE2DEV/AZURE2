@@ -526,7 +526,10 @@ Dimensionless widths
    [c for c in t.particles if c.theta2 and c.theta2 > 1]   # unphysical
 
 θ² > 1 exceeds the Wigner limit and is unphysical; γ-ray strengths in Weisskopf
-units are the corresponding sanity check for capture.
+units are the corresponding sanity check for capture. AZURE2's Wigner limit
+(``Parameter.wigner_limit``, ``ChannelWidth.wigner_gamma2``) is the
+Teichmann-Wigner sum-rule unit 3ħ²/(2μa²); a θ² quoted against the other
+common unit, ħ²/(μa²) (``lane_thomas_wigner()``), is 1.5 times larger.
 
 The external region, and the caches
 -----------------------------------

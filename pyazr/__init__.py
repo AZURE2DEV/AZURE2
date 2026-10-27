@@ -12,7 +12,7 @@ from .nds import (ExforData, ExforDataset, GroundState, Gamma,
                   fetch_gammas, fetch_ground_state, reference, resolve_doi,
                   aps_doi, sfactor_to_cross_section, cm_to_lab)
 from .widths import (ChannelWidth, WidthTable, weisskopf_width,
-                     teichmann_wigner)
+                     teichmann_wigner, lane_thomas_wigner)
 from .transform import (Channel, Level, TransformedChannel, TransformedLevel,
                         transform_out, partial_widths, LevelWidthTransformer,
                         levels_from_azr, levels_from_scheme,
@@ -36,7 +36,7 @@ __all__ = ["azure2", "ScatteringLength", "ScatteringLengthLine",
            "Reference", "search_exfor", "fetch_exfor", "fetch_levels",
            "fetch_gammas", "fetch_ground_state", "reference", "resolve_doi",
            "aps_doi", "sfactor_to_cross_section", "cm_to_lab",
-           "ChannelWidth", "WidthTable", "weisskopf_width", "teichmann_wigner",
+           "ChannelWidth", "WidthTable", "weisskopf_width", "teichmann_wigner", "lane_thomas_wigner",
            "Channel", "Level", "TransformedChannel", "TransformedLevel",
            "transform_out", "partial_widths", "LevelWidthTransformer",
            "levels_from_azr", "levels_from_scheme",
