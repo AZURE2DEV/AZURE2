@@ -349,9 +349,10 @@ runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
   across the lab angles, and 13C+a seed segment 181 (a+13C -> n1 with an n2
   component, 10-19-26_merged_hagrid_n12) was fitted that way. c.m. Sums
   (isDiff 4/5), angle-integrated Sums (natural_neon totals), a component of
-  the same pair, gamma terms of one entrance pair and every RATIO were right
-  already. The lab output (`kinflag.dat` = 1) of such a segment is the lab
-  sum now. Sibling: the gamma conversion factor used by the RATIO path
+  the same pair, gamma terms of one entrance pair and RATIOs of one pair were
+  right already (RATIOs to another exit pair: see audit item 15 below). The
+  lab output (`kinflag.dat` = 1) of such a segment is the lab sum now.
+  Sibling: the gamma conversion factor used by the RATIO path
   (`CalculateCrossSectionGammaConversionFactor`) still had the
   pre-2026-10-23 aberration formula; it is the corrected one now (a gamma
   ratio of one entrance pair never saw it, the factor cancelled).
@@ -444,6 +445,23 @@ runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
   `--use-lm`/GSL penalty rows were right all along; pyazr and the MCMC never
   apply `<parameterSettings>` priors. Archive exposure: see
   `AZURE2_code_audit/10-25-26/fix16_nuisance_index/readme`.
+- **RATIO denominators got the base segment's Jacobian** (fixed 2026-10-27,
+  audit item 15, `tests/ratio_frame`): a lab-frame differential Ratio
+  segment is base/denominator in the LAB, each term taken to the lab with
+  its own pair's Jacobian, but the engine computed the denominator's factor
+  with the BASE segment's pairs and exit type. Harmless for a denominator of
+  the same pair (12C+a Tischhauser sigma(theta)/sigma(58.9 deg)) and for
+  another particle pair at a general angle without `relativistic=1` (the
+  non-relativistic factor uses only the point's two angles); wrong for
+  another exit pair with `relativistic=1` or at exactly 0/180 deg (13C+a
+  n0+/n3- 3 %), and for a capture over an elastic ratio or the reverse
+  (12C(a,g)/(a,a)(60 deg) 31 %; the wrong kind of Jacobian). c.m. and
+  angle-integrated ratios never had a factor. Also fixed: in mode 3 the lab
+  output (`kinflag.dat` = 1) of a RATIO TEST segment was divided by J_base
+  (17-20 % low on 13C+a), because `MakePoints` converted the test points'
+  cross sections while data ratios skip that; the c.m. output (`kinflag` 0)
+  always printed the ratio itself. Data-segment ratios in mode 1/2 were
+  printed right.
 - **Attenuation (Q) coefficients act on the lab distribution** (dev a22b99a,
   2026-10-25): for a particle exit Q_K multiplies the LAB Legendre coefficients
   and the result is taken back to the point's c.m. angle exactly. Before, a
