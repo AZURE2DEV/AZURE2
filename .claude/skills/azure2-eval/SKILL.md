@@ -497,6 +497,20 @@ runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
   back, the fitted norms travel in `param.sav` (the docs and GUI help said
   otherwise). Every archived normalizations.out from a project with mixed
   fixed and varied norms has those stray rows: read the ten-field rows only.
+- **pyazr `penalties()` charged a shiftgroup follower a second shift
+  penalty, and `teichmann_wigner()` multiplied the Wigner limit by 1.5 twice**
+  (fixed 2026-10-27, audit item 19, `tests/pyazr/objective_test.py` section 5,
+  `tests/pyazr/wigner_convention_test.py`): the engine penalises a
+  `shiftgroup`'s shift once, on its first member (a follower's own parameter
+  is fixed), but `penalties()` tested the follower's own line (vary = 1, an
+  error, a value, as the GUI copies them) and charged (shift/error)^2 again,
+  so `objective()` was off from the CLI by a constant (gradients unaffected;
+  13C+a / 11B+a shiftgroup fits through rmfit saw the offset in the reported
+  objective, not in the minimum). And AZURE2's `wigner_limit` IS the
+  Teichmann-Wigner unit 3ħ²/(2μa²) (`AChannel::SetWignerLimit`), so
+  `teichmann_wigner()` now returns it unchanged (it used to give
+  2.25 ħ²/(μa²), θ² too small by 1.5); `lane_thomas_wigner()` gives the
+  ħ²/(μa²) unit.
 - **Attenuation (Q) coefficients act on the lab distribution** (dev a22b99a,
   2026-10-25): for a particle exit Q_K multiplies the LAB Legendre coefficients
   and the result is taken back to the point's c.m. angle exactly. Before, a
@@ -1911,15 +1925,18 @@ non-interchangeable forms.
 1. **GUI / width form**, in eV next to each channel: `Γ_W = 2 P_l(E_r) γ²_W`,
    energy-dependent. **θ² = Γ/Γ_W** — prefer this; it is checkable one channel
    at a time in the GUI.
-2. **API form**, `Parameter.wigner_limit`: `γ²_W = ħ²/(μ a²)` in **MeV**,
-   already squared and energy-independent. Then θ² = γ²_formal/γ²_W with the
+2. **API form**, `Parameter.wigner_limit`: `γ²_W = 3ħ²/(2μ a²)` in **MeV**
+   (the Teichmann-Wigner sum-rule unit, `AChannel::SetWignerLimit`; the
+   docstrings said ħ²/(μa²) until 2026-10-27), already squared and
+   energy-independent. Then θ² = γ²_formal/γ²_W with the
    formal reduced width (`g_int` in `parameters.out`, squared).
 
 Never divide by `wigner_limit` twice. The two differ by the level-shift factor
 `1/(1 + Σ_c γ_c² dS_c/dE)`, negligible for narrow levels but a factor 70+ for
 the 30 MeV background poles. AZURE2 reports **observed** partial widths,
-`Γ_c = 2 P_c γ_c²/(1 + Σ γ² dS/dE)`. Some references use the Teichmann–Wigner
-sum-rule unit `3ħ²/(2μa²)`, 1.5× larger (`teichmann_wigner()`).
+`Γ_c = 2 P_c γ_c²/(1 + Σ γ² dS/dE)`. AZURE2's unit is the Teichmann–Wigner
+`3ħ²/(2μa²)` (`teichmann_wigner()` returns it unchanged); references that use
+`ħ²/(μa²)` (`lane_thomas_wigner()`, 2/3 of it) quote a θ² 1.5× larger.
 
 `Γ_W` needs `P_l(E_r)`, which the API does not expose; `wigner_widths` gets it
 out of AZURE2 itself by transforming a probe vector with every rwa set to a tiny
