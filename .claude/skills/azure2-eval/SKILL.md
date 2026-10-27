@@ -338,6 +338,23 @@ runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
   dev 2026-10-26 should be rerun; RWA-mode chains, `calculate_chi2_rwa` /
   `objective()` (rmfit, the emcee wrappers) and Minuit fits were never
   affected.
+- **Lab-frame SUM composites added c.m. terms without their Jacobians**
+  (fixed 2026-10-26, audit item 7, `tests/sum_lab_frame`): a lab-frame
+  differential Sum segment (isDiff 1) is compared in the c.m. frame of its
+  BASE pair, but a component to another exit pair (another Q, or another
+  compound nucleus of a natural target) is evaluated in its own c.m. frame.
+  The engine now multiplies each term by J_base/J_term
+  (`ESegment::TermFrameFactor`, also in both gradient paths); before, the
+  c.m. values were simply added: 13C(a,n0+ + n3-) at 6 MeV -2.5 % to +6 %
+  across the lab angles, and 13C+a seed segment 181 (a+13C -> n1 with an n2
+  component, 10-19-26_merged_hagrid_n12) was fitted that way. c.m. Sums
+  (isDiff 4/5), angle-integrated Sums (natural_neon totals), a component of
+  the same pair, gamma terms of one entrance pair and every RATIO were right
+  already. The lab output (`kinflag.dat` = 1) of such a segment is the lab
+  sum now. Sibling: the gamma conversion factor used by the RATIO path
+  (`CalculateCrossSectionGammaConversionFactor`) still had the
+  pre-2026-10-23 aberration formula; it is the corrected one now (a gamma
+  ratio of one entrance pair never saw it, the factor cancelled).
 - **Attenuation (Q) coefficients act on the lab distribution** (dev a22b99a,
   2026-10-25): for a particle exit Q_K multiplies the LAB Legendre coefficients
   and the result is taken back to the point's c.m. angle exactly. Before, a
