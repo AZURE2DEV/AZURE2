@@ -319,6 +319,30 @@ add_test(NAME segment_observable COMMAND segment_observable_test)
 set_tests_properties(segment_observable PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
+# The EXFOR client's ratio-to-Rutherford conversion: a lab ANG column is taken to the centre of mass and
+# divided by the lab-to-c.m. factor; an ANG-CM column is used as is (audit item 8, GUI sibling of pyazr.nds).
+add_executable(exfor_rutherford_test exfor_rutherford_test.cpp)
+set_target_properties(exfor_rutherford_test PROPERTIES AUTOMOC OFF)
+target_include_directories(exfor_rutherford_test PRIVATE
+    ${AZURE2_SOURCE_DIR}/gui/include
+    ${AZURE2_SOURCE_DIR}/include
+)
+target_link_libraries(exfor_rutherford_test PRIVATE
+    ${AZURESETUP_LIBRARIES}
+    ${AZUREAPI_LIBRARIES}
+    AZURE2Core
+    Qt5::Core Qt5::Gui Qt5::Widgets Qt5::Network
+)
+if(USE_QWT)
+    target_link_libraries(exfor_rutherford_test PRIVATE ${QWT_LIBRARIES})
+endif()
+if(USE_ERYA)
+    target_link_libraries(exfor_rutherford_test PRIVATE pugixml srim_utilities)
+endif()
+add_test(NAME exfor_rutherford COMMAND exfor_rutherford_test)
+set_tests_properties(exfor_rutherford PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
 # The Fitting tab's Screening rows: screening_<n> per active Experimental Effects line with electron
 # screening, synced both ways with that tab and written back to the project file.
 add_executable(screening_fitting_test screening_fitting_test.cpp)
