@@ -789,6 +789,28 @@ m.calculate_angular_dists_rwa(x)    # Legendre coefficients, for ang-dist segmen
 Plot different reaction channels against **excitation energy**; it is the only
 axis shared by all entrance pairs. `E_cm = Ex − threshold`.
 
+### Angular-distribution coefficients as data (observable 9, 2026-10-26)
+
+Papers that publish only Legendre coefficients a_k = A_k/A_0 of
+dσ/dΩ_cm = A_0 [1 + Σ_k a_k P_k(cos θ_cm)] (11B(α,p)14C: Wang 1991 Fig. 8,
+Dayras 1976 Fig. 3) are fitted with a data segment of type 9,
+`observable="angular-coefficients"`: data rows `E_lab  k  a_k  da_k`, the
+ORDER k in the angle column (several orders at one energy = several rows);
+`absolute 1` on the line (`absolute=True`) makes the rows the absolute A_k in
+b/sr (A_0 = σ/4π). The coefficients are the ones an `angular-distribution`
+test segment (isDiff 3) writes to `AZUREOut_*.acoeff`, a_0 = 1, checked
+against the Legendre projection of dσ/dΩ (tests/angular_coefficients).
+Target integration / resolution fold the absolute A_k (linear in σ), then
+divide; the analytic gradient covers bare and folded points (both paths);
+energy shifts as usual. Refused: a free norm on normalised coefficients (no
+scale), an elastic pair (the expansion has no Coulomb term), total capture,
+SUM/RATIO, samples, "total", UPOS, and isDiff 9 in `<segmentsTest>` (use 3).
+Not implemented: the finite-angle emulation (fitting only P_0..P_Lmax at the
+detector angles the experiment used); compare the model's A_5+ content first
+(11B+a/10-26-26_wang_ap_coeffs/scripts/compare_ak.py did: ~0 below 2 MeV).
+A gradient check on a folded coefficient segment needs
+`--no-grid-replacement` (the FD includes the grid motion, ~1e-5).
+
 ### Analyzing power (observable 7)
 
 The vector analyzing power `A_y` for a spin-1/2 projectile. Declare a segment
