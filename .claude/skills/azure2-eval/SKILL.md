@@ -378,6 +378,15 @@ runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
   same commit refuses an analyzing-power segment whose projectile is not
   spin-1/2 (the capture route silently returned 1.5x the Madison A_y for a
   deuteron; the particle route returned 0).
+- **UPOS secondary-gamma spin from the decay index** (fixed 2026-10-26,
+  audit item 10, `tests/upos_pair_index`): the residual spin j2f of the
+  secondary-gamma R_k was read as GetPair(ir) with ir the DECAY index, which
+  equals the pair number only while every earlier pair has a decay from the
+  entrance pair. With a pair of another compound nucleus listed first, a
+  beta-delayed pair, or a pair whose J-groups are out of the R-matrix, the
+  13C(a,n'g)-type distribution used the wrong nucleus's spin (NaN or wrong
+  shape). Single-nucleus files whose pairs all share J-groups with the
+  entrance pair (every 13C+a file so far) were right.
 - **Attenuation (Q) coefficients act on the lab distribution** (dev a22b99a,
   2026-10-25): for a particle exit Q_K multiplies the LAB Legendre coefficients
   and the result is taken back to the point's c.m. angle exactly. Before, a
