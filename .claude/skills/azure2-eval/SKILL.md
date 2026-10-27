@@ -401,6 +401,19 @@ runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
   Fits with a free sqrt/function shift AND an active target-integration or
   resolution line (11B+a CASPAR 10-22-26_sqrtE_groups and later) carry the
   old stretch; re-evaluate before comparing chi2 across the fix.
+- **A param.sav in an extrapolation moved the test grids** (fixed
+  2026-10-26, audit item 12, `tests/extrap_sav_segments`): mode 3 (and a
+  rate run) numbers its `<segmentsTest>` grids 1..N and emits
+  `segment_<k>_energy_shift` / `_norm` for them, so a fit's param.sav handed
+  DATA segment k's fitted shift (and b sqrt E) to TEST segment k by name and
+  moved the requested grid by that shift (c.m.): the energy-shift twin of the
+  `<targetInt>` trap. The CLI reader and pyazr `load_sav` now skip the
+  file's `segment_*` entries in a run without data, with a note. Any mode-3
+  extrapolation or pyazr `extrap_mode()` + `load_sav` made before the fix
+  from a fit whose segment k had a nonzero shift has its grid k displaced
+  (the printed c.m. energies are the shifted ones, so the curve is right at
+  the printed energies but not on the grid asked for; S-factors "at E"
+  taken from such files are at E + shift).
 - **Attenuation (Q) coefficients act on the lab distribution** (dev a22b99a,
   2026-10-25): for a particle exit Q_K multiplies the LAB Legendre coefficients
   and the result is taken back to the point's c.m. angle exactly. Before, a
