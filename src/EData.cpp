@@ -46,6 +46,28 @@
  * 1 and the token would be silently meaningless, which is exactly what an
  * older build would do with it too.
  */
+
+/*!
+ * An analyzing-power segment (isDiff 7) needs a spin-1/2 projectile: the
+ * particle route (PolarizationFunc) is written for one and returned 0 for any
+ * other, and the capture route (CNuc::CalcCaptureAnalyzingPower) ran for any
+ * projectile spin but returned 3/(x+1) <S_y>, which is the Madison A_y only
+ * at x = 1/2 (for a deuteron 1.5 times Ohlsen's Cartesian A_y).  Both are
+ * refused here instead (2026-10-26, audit item 9); tensor observables and the
+ * spin-1 vector analyzing power are not implemented.
+ */
+static bool AnalyzingPowerAllowed(CNuc *theCNuc, const ESegment &segment, int number, bool isTest,
+                                  const Config &configure) {
+  if (!segment.IsAnalyzingPower()) return true;
+  PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(segment.GetEntranceKey()));
+  if (fabs(entrancePair->GetJ(1) - 0.5) < 1.e-6) return true;
+  configure.outStream << "ERROR: " << (isTest ? "test segment #" : "segment #") << number
+                      << ": an analyzing power needs a spin-1/2 projectile; entrance pair " << segment.GetEntranceKey()
+                      << " has a spin-" << entrancePair->GetJ(1) << " projectile (tensor observables and the spin-1 vector"
+                      << " analyzing power are not implemented)." << std::endl;
+  return false;
+}
+
 /*!
  * A "total 1" segment is the total cross section of its entrance pair by the optical theorem
  * (GenMatrixFunc::CalculateBareCrossSection): angle-integrated, its exit pair its entrance pair, and a neutral pair
@@ -216,6 +238,7 @@ int EData::Fill(const Config &configure, CNuc *theCNuc) {
         if (theCNuc->IsPairKey(NewSegment.GetEntranceKey())) {
           PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(NewSegment.GetEntranceKey()));
           entrancePair->SetEntrance();
+          if (!AnalyzingPowerAllowed(theCNuc, NewSegment, numTotalSegments, false, configure)) return -1;
           if (!NaturalAllowed(theCNuc, NewSegment, numTotalSegments, false, configure)) return -1;
           if (!TotalAllowed(theCNuc, NewSegment, numTotalSegments, false, configure)) return -1;
           bool isValidTotal = false;
@@ -429,6 +452,7 @@ int EData::MakePoints(const Config &configure, CNuc *theCNuc) {
         ESegment NewSegment(segment);
         if (theCNuc->IsPairKey(NewSegment.GetEntranceKey())) {
           PPair *segEntrance = theCNuc->GetPair(theCNuc->GetPairNumFromKey(NewSegment.GetEntranceKey()));
+          if (!AnalyzingPowerAllowed(theCNuc, NewSegment, numTotalSegments, true, configure)) return -1;
           if (!NaturalAllowed(theCNuc, NewSegment, numTotalSegments, true, configure)) return -1;
           if (!TotalAllowed(theCNuc, NewSegment, numTotalSegments, true, configure)) return -1;
           bool isValidTotal = false;

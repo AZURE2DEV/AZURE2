@@ -2025,8 +2025,20 @@ void CNuc::CalcCaptureAnalyzingPower(int aa, int decayNum, int maxL) {
             double x9j = AngCoeff::Wigner9j(t1.l, t1.s, t1.b,
                                             t2.l, t2.s, t2.b,
                                             (double)k, 1.0, (double)k);
+            // Seyler and Weller couple the channel spin target first,
+            // <j2 m2 j1 m1 | s nu>; AZURE2 couples it light particle first,
+            // <j1 m1 j2 m2 | s nu> = (-1)^(j1 + j2 - s) <j2 m2 j1 m1 | s nu>
+            // (Lane and Thomas; PolarizationFunc, the M1 EC spin operator, the
+            // UPOS coupling), which for the product R R'^* is a (-1)^(s - s')
+            // on every channel-spin off-diagonal term.  Without it (before
+            // 2026-10-26, audit item 9) the capture A_y of a target with spin
+            // had the sign of every such term flipped: fitting it was the same
+            // as flipping the sign of every width with odd j1 + j2 - s, and
+            // inconsistent with the particle A_y of the same widths.  Spin-0
+            // targets (one channel spin) are unaffected; tests/capture_ay_coupling.
             if (fabs(x9j) >= 1.e-14)
-              bk = bPrefactor[k] * common * Hat(t1.s) * Hat(t2.s) * wS * x9j * PhaseM1(aSpin - xSpin + cSpin - t1.b - t1.s + t1.l);
+              bk = bPrefactor[k] * common * Hat(t1.s) * Hat(t2.s) * wS * x9j *
+                   PhaseM1(aSpin - xSpin + cSpin - t1.b - t1.s + t1.l) * PhaseM1(t1.s - t2.s);
           }
         }
 

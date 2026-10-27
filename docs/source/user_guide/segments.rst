@@ -76,8 +76,9 @@ appears with the following fields:
           and orbital angular momentum (*l*). The convention is
           :math:`-90° < \theta_\text{lab} < 90°`.
       * - **Analyzing Power**
-        - Vector analyzing power :math:`A_y` for a spin-1/2 projectile, in the
-          Madison convention, for a **particle or a capture** exit channel.
+        - Vector analyzing power :math:`A_y` for a spin-1/2 projectile (any
+          other projectile spin is refused), in the Madison convention, for a
+          **particle or a capture** exit channel.
           Angles are centre-of-mass, as for a C.M. differential cross section,
           and the data file carries ``E_lab  theta_cm  A_y  dA_y``. Because
           :math:`A_y` is a ratio, **Vary Norm?** is disabled for it -- a
