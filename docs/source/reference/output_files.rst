@@ -58,8 +58,12 @@ energy dependences differ at second order in :math:`T_0/m_0`.
 normalizations.out
 ^^^^^^^^^^^^^^^^^^
 
-Contains the fitted normalization factors for data segments where normalization
-was varied. This file is automatically loaded when ``param.sav`` is selected.
+One complete row per data segment whose normalization is fitted (a varied
+normalization, or a member of a ``normgroup``): segment key, data file, angle
+bounds and frame, energy bounds and frame, the fitted normalization and the
+energy shift. It is a report only; the fitted normalizations are carried by
+``param.sav`` and nothing reads this file back. (Before October 2026 every
+other segment also left a row of six fields without key, file or angles.)
 
 Cross Section Output
 --------------------

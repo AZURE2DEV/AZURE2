@@ -2018,11 +2018,15 @@ void EData::WriteOutputFiles(const Config &configure, bool isFit, const BandData
       out.precision(4);
       out << std::scientific;
       out << "segment_key_#, file_name, low_angle_bound, high_angle_bound, aframe, low_energy_bound, high_energy_bound, eframe, norm, shift" << std::endl;
+      // One complete row per segment whose normalization is varied (a norm-group member keeps its own
+      // flag).  Before 2026-10-27 only the first four fields were conditional, so every other segment
+      // left a row of six fields without key, file or angles.
       for (ESegmentIterator segment = GetSegments().begin(); segment < GetSegments().end(); segment++) {
-        if (segment->IsVaryNorm()) out << segment->GetSegmentKey() << ","
-                                       << segment->GetDataFile() << ","
-                                       << segment->GetMinAngle() << ","
-                                       << segment->GetMaxAngle() << ",";
+        if (!segment->IsVaryNorm()) continue;
+        out << segment->GetSegmentKey() << ","
+            << segment->GetDataFile() << ","
+            << segment->GetMinAngle() << ","
+            << segment->GetMaxAngle() << ",";
         if (segment->IsCMDifferential() == true) {
           out << "CM,";
         } else
