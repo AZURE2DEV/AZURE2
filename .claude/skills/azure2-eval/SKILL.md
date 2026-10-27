@@ -414,6 +414,20 @@ runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
   (the printed c.m. energies are the shifted ones, so the curve is right at
   the printed energies but not on the grid asked for; S-factors "at E"
   taken from such files are at E + shift).
+- **Non-Brune transform handed eigenvalues to levels in file order** (fixed
+  2026-10-27, audit item 13, `tests/transform_level_order`): with
+  `--no-brune` (GUI: Brune box unchecked; pyazr `use_brune=False`) the
+  physical-to-formal transformation assigned its ascending eigenvalues to a
+  J^pi group's levels by their position in the file. A group listed out of
+  energy order (a 40 MeV pole first) had energies, widths and fix flags
+  permuted: the pole's line carried the lowest formal energy,
+  `parameters.out` listed the group ascending instead of in file order, and
+  a fit that fixed the pole varied the low level instead. Cross sections
+  were never affected (same set of levels, other labels), so nothing warned.
+  Now each level gets the eigenvalue of its energy rank, both ways. Files in
+  energy order and every Brune run (the archive norm, `--use-brune`) are
+  unchanged. Suspect any old non-Brune fit whose param.par has
+  `energy_N` values out of step with the file's levels.
 - **Attenuation (Q) coefficients act on the lab distribution** (dev a22b99a,
   2026-10-25): for a particle exit Q_K multiplies the LAB Legendre coefficients
   and the result is taken back to the point's c.m. angle exactly. Before, a
