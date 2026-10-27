@@ -2206,3 +2206,21 @@ width of the baked file with the input file (`10B+a/10-25-26_Rmatrix_Claude/stag
 relative change 1.1e-3 after the fix).  Also: a script that opens a `SingleSession` needs an `if __name__ == "__main__"`
 guard (spawn start method: "An attempt has been made to start a new process before the current process has finished its
 bootstrapping phase").
+
+## 2026-10-26 -- a frozen build needs AZURE2_ROOT, not just PYTHONPATH (13C+a session)
+
+`rmfit/__init__.py` reads `AZURE2_ROOT` and, when it is unset, falls back to `/users/rdeboer1/AZURE2` and puts it
+FIRST on `sys.path`.  A job that sets only `PYTHONPATH=<frozen build>:...` therefore imports the frozen pyazr in
+the parent (its own import check passes) but the shard workers, which import rmfit, load ~/AZURE2's pyazr -- the
+shared copy that installs replace under running jobs.  Three 13C+a page-curve jobs did that on 2026-10-26; one died
+with an EOFError when the shared `_azure2` .so was replaced at 22:38-22:43.  Rule for every queue job on a frozen
+build:
+
+```csh
+setenv AZURE2_ROOT /groups/rdeboer1/user/rdeboer1/R-matrix/13C+a/10-26-26_azure2_17d500b
+setenv PYTHONPATH  ${AZURE2_ROOT}:/groups/rdeboer1/user/rdeboer1/R-matrix
+```
+
+and, in the script, `assert pyazr.__file__.startswith(rmfit.AZURE2_ROOT)` (and the .so md5 guard from the frozen
+directory's readme) before any work starts.  Installs into ~/AZURE2 are announced in the audit readme, but a job that
+reaches the shared copy by the fallback is exposed to them without anyone knowing.
