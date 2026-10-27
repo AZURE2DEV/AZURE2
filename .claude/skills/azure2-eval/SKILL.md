@@ -428,6 +428,22 @@ runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
   energy order and every Brune run (the archive norm, `--use-brune`) are
   unchanged. Suspect any old non-Brune fit whose param.par has
   `energy_N` values out of step with the file's levels.
+- **MIGRAD nuisance priors on level parameters hit the wrong parameter**
+  (fixed 2026-10-27, audit item 14, `tests/nuisance_level_index`): a
+  `<parameterSettings>` entry with nuisance 1 on a level energy or width
+  adds ((p - nominal)/sigma)^2 to chi^2, and `CalculateNuisanceChiSquared` /
+  `AddNuisanceGradient` indexed Minuit's FULL parameter vector with the
+  settings' non-fixed index. With any fixed level parameter before the
+  flagged one (a fixed ground-state energy is enough) the penalty was
+  evaluated on another parameter: a parameter at its own nominal value paid a
+  large penalty and MIGRAD pulled the other parameter toward the nominal
+  (13N: the prior on energy_3 landed on width_1_1, +12,460 instead of +4; a
+  gamma width at its nominal paid +273,466). This was the real cause of the
+  2026-09-13 note below (nuisance entries on ANCs / gamma widths "giving
+  wrong penalties"): the conversion to reduced widths is fine.
+  `--use-lm`/GSL penalty rows were right all along; pyazr and the MCMC never
+  apply `<parameterSettings>` priors. Archive exposure: see
+  `AZURE2_code_audit/10-25-26/fix16_nuisance_index/readme`.
 - **Attenuation (Q) coefficients act on the lab distribution** (dev a22b99a,
   2026-10-25): for a particle exit Q_K multiplies the LAB Legendre coefficients
   and the result is taken back to the point's c.m. angle exactly. Before, a
@@ -2641,7 +2657,9 @@ complete:
   closed-channel or photon parameters until this is fixed; the mode-6 `<mcmc>` priors act on the
   physical values directly (usereducedwidths 0) and are fine. Test recipe: mode 1 with the
   external parameter file, compare the log's "Total Chi-Squared" (includes the penalty) against
-  chiSquared.out (data only).
+  chiSquared.out (data only). 2026-10-27: FIXED -- the cause was audit item 14 (the penalty was
+  evaluated on the wrong parameter, see the Golden-rules bullet), not the conversion; nuisance
+  entries on any level parameter are usable on builds from 2026-10-27 on (`tests/nuisance_level_index`).
 - 2026-09-22 (12C+p Meyer 1976 teaching exercise; numbers from a scratch copy of
   `12C+p/8-9-26_claude_learns_12C+p`) -- WHICH EXPERIMENTAL-EFFECT KERNEL TO USE, and
   "TARGET INTEGRATION LOOKS WRONG FOR A THIN TARGET" IS NOT A BUG.
