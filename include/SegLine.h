@@ -77,6 +77,7 @@ class SegLine {
     energyShiftSqrtError_ = 0.0;
     natural_ = "0";
     total_ = 0;
+    absolute_ = 0;
     varyEnergyShiftSqrt_ = 0;
     // shared constant energy shift: off unless a trailing "shiftgroup" block is present
     shiftGroup_ = "";
@@ -283,6 +284,14 @@ class SegLine {
               stream.setstate(std::ios::failbit);
               break;
             }
+          } else if (keyword == "absolute") {
+            // angular-coefficient segments (isDiff 9): the data are the absolute
+            // A_k (b/sr, dsigma/dOmega = sum_k A_k P_k) instead of a_k = A_k / A_0
+            if (!(advancedStream >> absolute_) || (absolute_ != 0 && absolute_ != 1)) {
+              parseError_ = "absolute needs 0 or 1";
+              stream.setstate(std::ios::failbit);
+              break;
+            }
           } else if (keyword == "shiftgroup") {
             if (!(advancedStream >> shiftGroup_)) {
               stream.setstate(std::ios::failbit);
@@ -416,6 +425,8 @@ class SegLine {
   const std::string &natural() const { return natural_; };
   /// 1 for "total 1": the total cross section of the entrance pair by the optical theorem (ESegment::IsTotal).
   int total() const { return total_; };
+  /// "absolute 1": angular-coefficient data are the absolute A_k, not a_k / a_0.
+  int absolute() const { return absolute_; };
   /*!
    * Returns the uncertainty of the sqrt(E) energy-shift coefficient (MeV^1/2).
    */
@@ -522,6 +533,7 @@ class SegLine {
   int operationType_;
   std::string natural_;
   int total_;
+  int absolute_;
   std::string componentsList_;
   int isUPOS_;
   int secondaryDecayL_;

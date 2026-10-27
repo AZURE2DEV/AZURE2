@@ -193,6 +193,16 @@ class EPoint {
   void SetTargetBlendWeight(double w) { target_blend_weight_ = w; };
   /// Highest Legendre order. Angular-distribution points only.
   int GetMaxAngDistOrder() const;
+  /// An angular-coefficient data point (segment isDiff 9): the fit value is the Legendre
+  /// coefficient of this order, a_k = A_k / A_0 (or A_k itself, b/sr, when absolute).
+  bool IsCoefficient() const { return coefficient_order_ >= 0; };
+  int GetCoefficientOrder() const { return coefficient_order_; };
+  bool GetCoefficientAbsolute() const { return coefficient_absolute_; };
+  void SetCoefficientOrder(int k) { coefficient_order_ = k; };
+  void SetCoefficientAbsolute(bool a) { coefficient_absolute_ = a; };
+  /// A_0 = sigma_int / 4 pi (b/sr) of an angular-distribution point, set with its coefficients.
+  double GetAngDistA0() const { return ang_dist_a0_; };
+  void SetAngDistA0(double a0) { ang_dist_a0_ = a0; };
   /// Number of stored angular-distribution coefficients.
   int GetNumAngularDists() const;
   /// Angular momentum of the secondary decay. UPOS points only.
@@ -477,6 +487,9 @@ class EPoint {
   complex coulombexchange_ = complex(0., 0.);
   vector_r legendreP_;
   vector_r angularDists_;
+  int coefficient_order_ = -1;
+  bool coefficient_absolute_ = false;
+  double ang_dist_a0_ = 0.0;
   matrix_c lo_elements_;
   matrix_r penetrabilities_;
   matrix_c coulombphase_;

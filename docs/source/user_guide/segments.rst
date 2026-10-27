@@ -84,6 +84,23 @@ appears with the following fields:
           :math:`A_y` is a ratio, **Vary Norm?** is disabled for it -- a
           normalization factor has no meaning for a quantity that is already
           normalized. See :doc:`../theory/polarization_theory`.
+      * - **Angular Coefficients**
+        - Legendre coefficients of a reaction's centre-of-mass angular
+          distribution, :math:`d\sigma/d\Omega_\text{cm} = A_0\,[1 + \sum_k
+          a_k P_k(\cos\theta_\text{cm})]`, as data: the file carries
+          ``E_lab  k  a_k  da_k`` with the Legendre order :math:`k` in the
+          angle column, and the fit value of each point is the model's
+          coefficient of that order -- the same coefficients a test segment of
+          type **Angular Distribution** computes. The trailing keyword
+          ``absolute 1`` makes the data the absolute :math:`A_k` in b/sr
+          (:math:`A_0 = \sigma/4\pi`). Target integration and resolution
+          folding act on the absolute :math:`A_k`, which are linear in the
+          cross section, and the ratio is formed afterwards. A normalised
+          coefficient has no scale, so **Vary Norm?** is refused for it; an
+          elastic pair (the expansion leaves the Coulomb amplitude out), total
+          capture, composites and UPOS segments are refused. Energy shifts and
+          the analytic gradient work as for any segment. Since October 2026
+          (for the 11B(α,p)14C coefficients of Wang 1991 and Dayras 1976).
 
    While **Total capture (all γ pairs)** is the exit pair, only **Angle
    Integrated** can be chosen; the other observables are greyed out until a
@@ -119,6 +136,12 @@ appears with the following fields:
         - the exit pair
       * - Angle Integrated, gamma exit, Multipolarity E2 only
         - 6
+        - the exit pair
+      * - Analyzing Power
+        - 7
+        - the exit pair
+      * - Angular Coefficients
+        - 9
         - the exit pair
       * - Analyzing Power
         - 7

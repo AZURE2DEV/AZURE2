@@ -185,6 +185,14 @@ add_test(NAME pyazr_nds_rutherford
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/nds_rutherford_test.py)
 
+# Angular-coefficient data segments (isDiff 9): add_data_segment(observable="angular-coefficients",
+# absolute=...), the datasets reader, and the engine evaluating such a segment on the model's own
+# Legendre coefficients (tests/angular_coefficients models).
+add_test(NAME pyazr_angular_coefficients
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/angular_coefficients_test.py)
+set_tests_properties(pyazr_angular_coefficients PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
 # Relativistic kinematics: AzrModel.relativistic, and an engine session on the n + 4He hard-sphere model of
 # tests/relativistic against sigma = 4 pi sin^2(ka)/k^2 with k from the invariant mass.
 add_test(NAME pyazr_relativistic

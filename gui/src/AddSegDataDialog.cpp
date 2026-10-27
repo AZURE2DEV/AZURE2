@@ -41,6 +41,7 @@ AddSegDataDialog::AddSegDataDialog(QWidget *parent) :
   dataTypeCombo->addItem(tr("Differential"), 1);
   dataTypeCombo->addItem(tr("Phase Shift"), 2);
   dataTypeCombo->addItem(tr("Analyzing Power"), 7);
+  dataTypeCombo->addItem(tr("Angular Coefficients"), 9);
   dataTypeCombo->addItem(tr("Scattering Length"), ScatteringLengthCode);
   dataTypeCombo->setItemData(dataTypeCombo->count() - 1,
                              tr("A measured s-wave scattering length of a particle pair (the <scatteringLengths> block)"),

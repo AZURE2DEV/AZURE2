@@ -9,14 +9,14 @@
 /*!
  * The keyword blocks a segment line may end with (SegLine.h / ExtrapLine.h):
  * "sqrtshift <b> <bError> <vary>", "sample <1|name>" (alias "natural", the keyword before
- * samples existed), "shiftgroup <label>", "shiftfngroup <label>", "normgroup <label>", "covariance <file>", "total <0|1>" and "shiftfn \"<f(x)>\" N v s vary ...".  The GUI keeps the tail verbatim in
+ * samples existed), "shiftgroup <label>", "shiftfngroup <label>", "normgroup <label>", "covariance <file>", "total <0|1>", "absolute <0|1>" (angular-coefficient data are the absolute A_k) and "shiftfn \"<f(x)>\" N v s vary ...".  The GUI keeps the tail verbatim in
  * SegmentsDataData::extraTokens / SegmentsTestData::extraTokens and edits only the sample
  * token through these helpers, so a block it does not know survives a load/save untouched.
  */
 namespace SegmentKeywords {
 
 inline bool isKeyword(const QString &token) {
-  // sqrtshift, sample (alias natural), shiftgroup, shiftfngroup, normgroup, covariance, shiftfn and total are
+  // sqrtshift, sample (alias natural), shiftgroup, shiftfngroup, normgroup, covariance, shiftfn, total and absolute are
   // the engine's (SegLine.h);
   // mixture is the retired 2026-10-12 block, still carried through a load/save of an old file.
   return token.compare("sqrtshift", Qt::CaseInsensitive) == 0 ||
@@ -28,6 +28,7 @@ inline bool isKeyword(const QString &token) {
          token.compare("covariance", Qt::CaseInsensitive) == 0 ||
          token.compare("shiftfn", Qt::CaseInsensitive) == 0 ||
          token.compare("total", Qt::CaseInsensitive) == 0 ||
+         token.compare("absolute", Qt::CaseInsensitive) == 0 ||
          token.compare("mixture", Qt::CaseInsensitive) == 0;
 }
 

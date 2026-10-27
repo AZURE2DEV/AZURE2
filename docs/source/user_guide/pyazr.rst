@@ -460,6 +460,27 @@ Data files carry ``E_lab  theta_cm  A_y  dA_y`` -- angles are centre-of-mass,
 unlike an ordinary differential segment. Leave ``vary_norm`` off: a
 normalization factor is meaningless for a ratio.
 
+Angular-distribution coefficients
+---------------------------------
+
+Legendre coefficients of a reaction's c.m. angular distribution are observable
+code 9, ``observable="angular-coefficients"``: data rows ``E_lab  k  a_k  da_k``
+with the order :math:`k` in the angle column, :math:`a_k = A_k/A_0` of
+:math:`d\sigma/d\Omega_\text{cm} = A_0[1 + \sum_k a_k P_k]` (the coefficients an
+``angular-distribution`` test segment computes). ``absolute=True`` writes
+``absolute 1``: the rows are the absolute :math:`A_k` in b/sr. The model's
+coefficient of each row's order comes back from :meth:`~pyazr.azure2.calculate_rwa`
+in the data slot, so :math:`\chi^2`, fitting and the analytic gradient need no
+special handling; target integration folds the absolute :math:`A_k` before the
+ratio. Normalised coefficients cannot carry a free norm (``add_data_segment``
+with ``vary_norm=True`` is refused by the engine); an elastic pair, total
+capture, composites and UPOS segments are refused.
+
+.. code-block:: python
+
+   model.add_data_segment("data/wang_ak.dat", 2, 1, observable="angular-coefficients",
+                          energy_min=0.8, energy_max=1.9)
+
 One trap is worth knowing about: comparing against thin-target data requires
 segments with **no target integration**, because :math:`A_y` averaged over a
 thick target is weighted by the cross section and Rutherford scattering drives

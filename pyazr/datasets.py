@@ -81,6 +81,7 @@ _OBSERVABLE = {
     5: "angle-integrated-E1",
     6: "angle-integrated-E2",
     7: "analyzing-power",
+    9: "angular-coefficients",
 }
 
 # isDiff codes for <segmentsTest> -- ESegment::ESegment(ExtrapLine).
@@ -100,7 +101,7 @@ _EXTRAP_OBSERVABLE = {
 # shiftgroup <label>; shiftfngroup <label>; normgroup <label>; covariance <file>;
 # total <0|1>; shiftfn takes a variable number (see _split_keyword_tail).
 _KEYWORDS = {"sqrtshift": 3, "sample": 1, "natural": 1, "shiftgroup": 1, "shiftfngroup": 1,
-             "normgroup": 1, "covariance": 1, "total": 1, "shiftfn": None}
+             "normgroup": 1, "covariance": 1, "total": 1, "absolute": 1, "shiftfn": None}
 
 
 def _total_token(blocks):
@@ -219,6 +220,8 @@ class Segment:
     # "total 1": every term whose exit pair is its entrance pair is that (neutral) pair's total
     # cross section, by the optical theorem (one T-matrix per point instead of a SUM over exits)
     total: bool = False
+    # "absolute 1" on an angular-coefficients segment: the data are the absolute A_k (b/sr), not a_k / a_0
+    absolute: bool = False
     # energy-shift function f(x; a0..) added at the original lab energy x (MeV):
     # the expression, and (value, sigma, vary) per parameter aj; on a shift
     # group it is declared on the first segment and applies to all members
@@ -396,6 +399,7 @@ class SegmentSet(list):
             norm_group=(blocks.get("normgroup") or [None])[0],
             covariance=(blocks.get("covariance") or [None])[0],
             total=_total_token(blocks),
+            absolute=bool(blocks.get("absolute")) and blocks["absolute"][0] == "1",
             shift_fn=shift_fn, shift_fn_params=tuple(shift_fn_params),
             operation=operation, components=tuple(components))
 

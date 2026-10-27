@@ -421,6 +421,14 @@ void GenMatrixFunc::CalculateBareCrossSection(EPoint *point) {
       }
       if (point->IsAngularDist()) {
         point->SetAngularDists(angularCoeff);
+        // A_0 = sigma_int / 4 pi (b/sr):  dsigma/dOmega_cm = A_0 [1 + sum_k a_k P_k(cos theta)]
+        point->SetAngDistA0(angleIntegratedXS / (4.0 * pi));
+        if (point->IsCoefficient()) {
+          // an angular-coefficient data point: its fit value is its own order's coefficient
+          const int kOrd = point->GetCoefficientOrder();
+          const double ak = (kOrd >= 0 && kOrd < (int)angularCoeff.size()) ? angularCoeff[kOrd] : 0.0;
+          point->SetFitCrossSection(point->GetCoefficientAbsolute() ? ak * angleIntegratedXS / (4.0 * pi) : ak);
+        }
         return;
       }
       // Identical-particle symmetrization (elastic, aa==ir):

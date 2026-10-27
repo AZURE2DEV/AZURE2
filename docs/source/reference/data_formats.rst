@@ -126,6 +126,19 @@ Phase shift data follows the same four-column format, but the third column
 contains the phase shift value (in degrees) and the fourth column contains its
 uncertainty. The convention is :math:`-90° < \theta_\text{lab} < 90°`.
 
+Angular-Coefficient Data
+^^^^^^^^^^^^^^^^^^^^^^^^
+
+A segment of type **Angular Coefficients** (``isDiff`` 9) reads the same
+four columns as ``E_lab  k  a_k  da_k``: the lab energy, the Legendre order
+:math:`k` (an integer, 0-20, in the angle column), the coefficient
+:math:`a_k = A_k/A_0` of :math:`d\sigma/d\Omega_\text{cm} = A_0\,[1 +
+\sum_k a_k P_k(\cos\theta_\text{cm})]` and its uncertainty. Several orders
+at one energy are separate rows. With the segment keyword ``absolute 1`` the
+third column is the absolute :math:`A_k` in b/sr (:math:`A_0 = \sigma/4\pi`).
+A normalised coefficient carries no normalization (the segment's norm must stay
+fixed at 1).
+
 Temperature Files
 ^^^^^^^^^^^^^^^^^
 

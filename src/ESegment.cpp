@@ -59,6 +59,11 @@ ESegment::ESegment(SegLine segLine) {
     crossSectionComponent_ = 0;
   isAngDist_ = false;
   maxAngDistOrder_ = 0;
+  // isDiff 9: Legendre coefficients of the angular distribution as data (the points are
+  // angular-distribution points; every order the compound allows is computed)
+  isCoefficients_ = (segLine.isDiff() == 9);
+  coefficientsAbsolute_ = (segLine.absolute() == 1);
+  if (isCoefficients_) maxAngDistOrder_ = 20;
   datafile_ = segLine.dataFile();
   dataNorm_ = dataNormNominal_ = segLine.dataNorm();
   dataNormError_ = segLine.dataNormError();
@@ -398,6 +403,19 @@ int ESegment::Fill(CNuc *theCNuc, EData *theData, const Config &configure) {
     {
       EPoint NewEPoint(line, this);
       NewEPoint.SetFileRecord(record);
+      if (this->IsCoefficients()) {
+        // the angle column is the Legendre order k
+        const double k = line.angle();
+        if (k < 0.0 || k > 20.0 || std::fabs(k - std::round(k)) > 1.0e-9) {
+          configure.outStream << "ERROR: line " << lineNumber << " of " << infile << ": an angular-coefficient"
+                              << " segment's second column is the Legendre order k (an integer, 0-20), got " << k
+                              << "." << std::endl;
+          in.close();
+          return -1;
+        }
+        NewEPoint.SetCoefficientOrder((int)std::round(k));
+        NewEPoint.SetCoefficientAbsolute(this->IsCoefficientAbsolute());
+      }
       if (this->IsInSegment(NewEPoint) && covFile) {
         // The point's uncertainty becomes sqrt(C_ii) (the data value standing in for the
         // model in relvector terms); chi2 itself does not depend on it (DataCovariance.h).

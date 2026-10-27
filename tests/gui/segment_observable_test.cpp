@@ -1,7 +1,7 @@
 // Headless checks on the observable controls of the segment dialogs.
 //
 // The observable list is short (Angle Integrated, Differential, Phase Shift,
-// Analyzing Power, and for test segments Angular Distribution Coefficients);
+// Analyzing Power, Angular Coefficients, and for test segments Angular Distribution Coefficients);
 // its variants are separate controls that map onto the unchanged isDiff codes:
 //   - Differential + Frame Lab / C.M.            -> data 1 / 4,  test 1 / 5
 //   - Angle Integrated + gamma exit pair +
@@ -99,10 +99,10 @@ int main(int argc, char** argv) {
   {
     AddSegDataDialog d;
     d.setPairsModel(&pairs);
-    ok("data: observable list is Angle Integrated, Differential, Phase Shift, Analyzing Power, Scattering Length",
-       d.dataTypeCombo->count() == 5 && d.dataTypeCombo->itemData(0).toInt() == 0 && d.dataTypeCombo->findData(1) >= 0 &&
-           d.dataTypeCombo->findData(2) >= 0 && d.dataTypeCombo->findData(7) >= 0 &&
-           d.dataTypeCombo->findData(AddSegDataDialog::ScatteringLengthCode) == 4,
+    ok("data: observable list is Angle Integrated, Differential, Phase Shift, Analyzing Power, Angular Coefficients, Scattering Length",
+       d.dataTypeCombo->count() == 6 && d.dataTypeCombo->itemData(0).toInt() == 0 && d.dataTypeCombo->findData(1) >= 0 &&
+           d.dataTypeCombo->findData(2) >= 0 && d.dataTypeCombo->findData(7) >= 0 && d.dataTypeCombo->findData(9) == 4 &&
+           d.dataTypeCombo->findData(AddSegDataDialog::ScatteringLengthCode) == 5,
        QString::number(d.dataTypeCombo->count()));
     ok("data: no total-capture, C.M. or E1/E2 items in the observable list",
        d.dataTypeCombo->findData(3) < 0 && d.dataTypeCombo->findData(4) < 0 && d.dataTypeCombo->findData(5) < 0 && d.dataTypeCombo->findData(6) < 0);

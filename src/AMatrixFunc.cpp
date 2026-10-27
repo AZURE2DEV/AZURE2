@@ -630,7 +630,11 @@ bool AMatrixFunc::PointTBar(EPoint *point, double fitBar, TMatrixCotangent &bar,
 
   // --- Common gating. ---
   if (configure().paramMask & Config::USE_RMC_FORMALISM) return false;
-  if (point->IsAngularDist()) return false;  // angular-dist coefficients
+  if (point->IsAngularDist() && !point->IsCoefficient()) return false;  // angular-dist test points
+  // xsComponent < 0 asks for A_0 = sigma_int / 4 pi of an angular-distribution point: the angle-integrated
+  // cotangent scaled by 1 / 4 pi (GradTargetEffectAdjoint, normalised coefficients under a target effect).
+  const bool a0Mode = (xsComponent < 0);
+  if (a0Mode) xsComponent = 0;
   // E1/E2 component selection only applies to the angle-integrated capture XS.
   if (xsComponent != 0 && (point->IsDifferential() || point->IsPhase())) return false;
 
@@ -670,7 +674,7 @@ bool AMatrixFunc::PointTBar(EPoint *point, double fitBar, TMatrixCotangent &bar,
   // screened value this point holds from its forward calculation.  A phase shift and an A_y value are
   // not screened (an A_y sub-point's cross section is: ayCrossSection).
   bar.screen.clear();
-  if (point->GetScreeningParam() > 0 && point->GetScreeningK() != 0.0 && !isPhase &&
+  if (point->GetScreeningParam() > 0 && point->GetScreeningK() != 0.0 && !isPhase && !point->IsCoefficient() &&
       !(point->IsAnalyzingPower() && !ayCrossSection)) {
     double y = point->GetFitCrossSection();
     if (xsComponent == 1) y = point->GetFitE1CrossSection();
@@ -701,6 +705,66 @@ bool AMatrixFunc::PointTBar(EPoint *point, double fitBar, TMatrixCotangent &bar,
   auto includeEC = [&](ECMGroup *ecg) -> bool {
     if (xsComponent == 0) return true;
     return ecg->GetRadType() == 'E' && ecg->GetMult() == xsComponent;
+  };
+
+  // The angle-integrated cotangent as a function of its own cotangent `bar`: the chain below calls it with
+  // fitBar; a normalised Legendre coefficient a_k = N_k / sigma_int calls it with -fitBar a_k / sigma_int.
+  auto integratedBar = [&](double bar) {
+    // ---- Angle-integrated: model = (1/100) sum_k sum_temp w_temp |T_temp|^2,
+    //      w_temp = geom (2J+1) I1I2,  T_temp = sum_m T(k,m) sharing (J,l,l'). ----
+    for (int k = 1; k <= nK; k++) {
+      // Mirror the angle-integrated UPOS over-counting guard.
+      if (aa != exitPairNum && compound()->GetPair(exitPairNum)->GetPType() == 0) {
+        if (theDecay->GetKGroup(k)->GetSp() != theDecay->GetKGroup(k)->GetSp2()) continue;
+      }
+      int numM = theDecay->GetKGroup(k)->NumMGroups();
+      int numEC = theDecay->GetKGroup(k)->NumECMGroups();
+      struct Group {
+        double j;
+        int l;
+        int lp;
+        complex tsum;
+      };
+      std::vector<Group> groups;
+      std::vector<int> mGroupIdx(numM + 1, -1);
+      std::vector<int> ecGroupIdx(numEC + 1, -1);
+      auto findGroup = [&](double jv, int lv, int lpv) -> int {
+        for (int g = 0; g < (int)groups.size(); g++)
+          if (groups[g].j == jv && groups[g].l == lv && groups[g].lp == lpv) return g;
+        groups.push_back(Group{jv, lv, lpv, complex(0.0, 0.0)});
+        return (int)groups.size() - 1;
+      };
+      // Internal pathways T(k,m), grouped by (J,l,l').
+      for (int m = 1; m <= numM; m++) {
+        MGroup *mg = theDecay->GetKGroup(k)->GetMGroup(m);
+        if (!includeInternal(mg)) continue;
+        JGroup *jg = compound()->GetJGroup(mg->GetJNum());
+        int gi = findGroup(jg->GetJ(),
+                           jg->GetChannel(mg->GetChNum())->GetL(),
+                           jg->GetChannel(mg->GetChpNum())->GetL());
+        groups[gi].tsum += this->GetTMatrixElement(k, m);
+        mGroupIdx[m] = gi;
+      }
+      // External-capture pathways T(k,ecm), grouped by (J, L, mult) and merged
+      // with the matching internal group (forward: same temp T-matrix list).
+      for (int m = 1; m <= numEC; m++) {
+        ECMGroup *ecg = theDecay->GetKGroup(k)->GetECMGroup(m);
+        if (!includeEC(ecg)) continue;
+        int gi = findGroup(ecg->GetJ(), ecg->GetL(), ecg->GetMult());
+        groups[gi].tsum += this->GetECTMatrixElement(k, m);
+        ecGroupIdx[m] = gi;
+      }
+      std::vector<complex> tBarGroup(groups.size());
+      for (int g = 0; g < (int)groups.size(); g++) {
+        double w = geom * (2.0 * groups[g].j + 1.0) * i1i2;
+        tBarGroup[g] = bar * (2.0 / 100.0) * w * groups[g].tsum;
+      }
+      // accumulate (not assign): a normalised Legendre coefficient adds this to its order-k cotangents
+      for (int m = 1; m <= numM; m++)
+        if (mGroupIdx[m] >= 0) tBar[k - 1][m - 1] += tBarGroup[mGroupIdx[m]];
+      for (int m = 1; m <= numEC; m++)
+        if (ecGroupIdx[m] >= 0) ecBar[k - 1][m - 1] += tBarGroup[ecGroupIdx[m]];
+    }
   };
 
   if (point->IsTotal()) {
@@ -852,61 +916,8 @@ bool AMatrixFunc::PointTBar(EPoint *point, double fitBar, TMatrixCotangent &bar,
       for (const PM &pm : matches)
         tBar[pm.k - 1][pm.m - 1] += conj(-pm.invExpCP2) * Ubar;
     }
-  } else if (!isDiff) {
-    // ---- Angle-integrated: model = (1/100) sum_k sum_temp w_temp |T_temp|^2,
-    //      w_temp = geom (2J+1) I1I2,  T_temp = sum_m T(k,m) sharing (J,l,l'). ----
-    for (int k = 1; k <= nK; k++) {
-      // Mirror the angle-integrated UPOS over-counting guard.
-      if (aa != exitPairNum && compound()->GetPair(exitPairNum)->GetPType() == 0) {
-        if (theDecay->GetKGroup(k)->GetSp() != theDecay->GetKGroup(k)->GetSp2()) continue;
-      }
-      int numM = theDecay->GetKGroup(k)->NumMGroups();
-      int numEC = theDecay->GetKGroup(k)->NumECMGroups();
-      struct Group {
-        double j;
-        int l;
-        int lp;
-        complex tsum;
-      };
-      std::vector<Group> groups;
-      std::vector<int> mGroupIdx(numM + 1, -1);
-      std::vector<int> ecGroupIdx(numEC + 1, -1);
-      auto findGroup = [&](double jv, int lv, int lpv) -> int {
-        for (int g = 0; g < (int)groups.size(); g++)
-          if (groups[g].j == jv && groups[g].l == lv && groups[g].lp == lpv) return g;
-        groups.push_back(Group{jv, lv, lpv, complex(0.0, 0.0)});
-        return (int)groups.size() - 1;
-      };
-      // Internal pathways T(k,m), grouped by (J,l,l').
-      for (int m = 1; m <= numM; m++) {
-        MGroup *mg = theDecay->GetKGroup(k)->GetMGroup(m);
-        if (!includeInternal(mg)) continue;
-        JGroup *jg = compound()->GetJGroup(mg->GetJNum());
-        int gi = findGroup(jg->GetJ(),
-                           jg->GetChannel(mg->GetChNum())->GetL(),
-                           jg->GetChannel(mg->GetChpNum())->GetL());
-        groups[gi].tsum += this->GetTMatrixElement(k, m);
-        mGroupIdx[m] = gi;
-      }
-      // External-capture pathways T(k,ecm), grouped by (J, L, mult) and merged
-      // with the matching internal group (forward: same temp T-matrix list).
-      for (int m = 1; m <= numEC; m++) {
-        ECMGroup *ecg = theDecay->GetKGroup(k)->GetECMGroup(m);
-        if (!includeEC(ecg)) continue;
-        int gi = findGroup(ecg->GetJ(), ecg->GetL(), ecg->GetMult());
-        groups[gi].tsum += this->GetECTMatrixElement(k, m);
-        ecGroupIdx[m] = gi;
-      }
-      std::vector<complex> tBarGroup(groups.size());
-      for (int g = 0; g < (int)groups.size(); g++) {
-        double w = geom * (2.0 * groups[g].j + 1.0) * i1i2;
-        tBarGroup[g] = fitBar * (2.0 / 100.0) * w * groups[g].tsum;
-      }
-      for (int m = 1; m <= numM; m++)
-        if (mGroupIdx[m] >= 0) tBar[k - 1][m - 1] = tBarGroup[mGroupIdx[m]];
-      for (int m = 1; m <= numEC; m++)
-        if (ecGroupIdx[m] >= 0) ecBar[k - 1][m - 1] = tBarGroup[ecGroupIdx[m]];
-    }
+  } else if (!isDiff && (!point->IsCoefficient() || a0Mode)) {
+    integratedBar(a0Mode ? fitBar / (4.0 * pi) : fitBar);
   } else {
     // ---- Differential: model = (Re(CT)+Re(RT)+Re(IT))/100. ----
     //   RT = (geom I1I2 rtFactor/pi) Re( sum_{kL,inter} weight T1 conj(T2) P_L )
@@ -922,6 +933,18 @@ bool AMatrixFunc::PointTBar(EPoint *point, double fitBar, TMatrixCotangent &bar,
       itFactor = 2.0;
     }
     double cR = geom * i1i2 * rtFactor / (pi * 100.0);
+    // An angular-coefficient point (ESegment isDiff 9): the forward value is
+    //   a_k = (4 geom i1i2 / (100 sigma_int)) sum_{L=k} z T1 T2*   (normalised)   or   A_k = a_k sigma_int / 4 pi,
+    // i.e. the differential model's Legendre coefficient of order k, coeff_k = cR sum_{L=k} z T1 T2*, times
+    // 4 pi / (rtFactor sigma_int) (normalised) or 1 / rtFactor (absolute).  So the differential machinery below
+    // with a Kronecker delta in place of P_l(cos theta) gives the N_k part; the normalised one then adds the
+    // sigma_int cotangent -fitBar a_k / sigma_int (integratedBar).  No Coulomb terms: elastic pairs are refused.
+    const bool coef = point->IsCoefficient();
+    const int kOrd = coef ? point->GetCoefficientOrder() : -1;
+    const double sigmaInt = coef ? 4.0 * pi * point->GetAngDistA0() : 0.0;
+    if (coef && (point->IsUPOS() || !(sigmaInt > 0.0))) return false;
+    const double dfac = coef ? (point->GetCoefficientAbsolute() ? 1.0 / rtFactor : 4.0 * pi / (rtFactor * sigmaInt)) : 0.0;
+    auto pl = [&](int l) -> double { return coef ? ((l == kOrd) ? dfac : 0.0) : point->GetLegendreP(l); };
 
     // Fetch a T value (internal 'R' or external-capture 'E') and route a
     // cotangent contribution to the right accumulator.
@@ -952,7 +975,7 @@ bool AMatrixFunc::PointTBar(EPoint *point, double fitBar, TMatrixCotangent &bar,
       const int nl = theDecay->NumInterferenceOrders();
       tbar_legendre_.assign(nl, 0.0);
       const int nP = std::min(nl, point->GetMaxLOrder() + 1);
-      for (int l = 0; l < nP; l++) tbar_legendre_[l] = point->GetLegendreP(l);
+      for (int l = 0; l < nP; l++) tbar_legendre_[l] = pl(l);
       for (size_t p = 0; p < paths.size(); p++) {
         const complex *q = &tbar_q_[p * nl];
         complex s(0.0, 0.0);
@@ -963,7 +986,7 @@ bool AMatrixFunc::PointTBar(EPoint *point, double fitBar, TMatrixCotangent &bar,
     for (int kL = 1; kL <= theDecay->NumKLGroups(); kL++) {
       int K = theDecay->GetKLGroup(kL)->GetK();
       int lOrder = theDecay->GetKLGroup(kL)->GetLOrder();
-      double legP = point->GetLegendreP(lOrder);
+      double legP = pl(lOrder);
       KGroup *kg = theDecay->GetKGroup(K);
       for (int inter = 1; inter <= theDecay->GetKLGroup(kL)->NumInterferences(); inter++) {
         Interference *itf = theDecay->GetKLGroup(kL)->GetInterference(inter);
@@ -1007,13 +1030,18 @@ bool AMatrixFunc::PointTBar(EPoint *point, double fitBar, TMatrixCotangent &bar,
       }
     }
 
-    if (aa == exitPairNum && theDecay->TablesBuilt()) {  // elastic Coulomb-nuclear interference
+    if (coef && !point->GetCoefficientAbsolute()) {
+      // a_k = N_k / sigma_int: the sigma_int cotangent through the angle-integrated form
+      integratedBar(-fitBar * point->GetFitCrossSection() / sigmaInt);
+    }
+
+    if (!coef && aa == exitPairNum && theDecay->TablesBuilt()) {  // elastic Coulomb-nuclear interference
       const complex cI = I * geom * itFactor / (std::sqrt(pi) * 100.0);
       for (const DiagonalPathway &d : theDecay->DiagonalPathways()) {
         const complex B = cI * d.statSpin * point->GetCoulombAmplitude(d.s) * point->GetLegendreP(d.l);
         tBar[d.k - 1][d.m - 1] += fitBar * B;
       }
-    } else if (aa == exitPairNum) {  // elastic Coulomb-nuclear interference
+    } else if (!coef && aa == exitPairNum) {  // elastic Coulomb-nuclear interference
       complex cI = I * geom * itFactor / (std::sqrt(pi) * 100.0);
       for (int k = 1; k <= nK; k++) {
         for (int m = 1; m <= theDecay->GetKGroup(k)->NumMGroups(); m++) {

@@ -276,6 +276,12 @@ class ESegment {
   /// section of that pair, from the optical theorem (GenMatrixFunc::CalculateBareCrossSection); a term to another
   /// exit pair (a SUM component adding capture, say) stays what it is.  Neutral entrance pairs only.
   bool IsTotal() const { return isTotal_; }
+  /// An angular-coefficient data segment (isDiff 9): rows E_lab, k, value, error; the value
+  /// is the Legendre coefficient a_k = A_k / A_0 of dsigma/dOmega_cm = A_0 [1 + sum_k a_k P_k]
+  /// (or the absolute A_k with "absolute 1").  The points are angular-distribution points
+  /// whose fit value is their own order's coefficient.
+  bool IsCoefficients() const { return isCoefficients_; }
+  bool IsCoefficientAbsolute() const { return coefficientsAbsolute_; }
   /// IsTotal for this term: the segment is "total" and its exit pair is its entrance pair.
   bool IsTotalTerm() const { return isTotal_ && this->GetExitKey() == this->GetEntranceKey(); }
   void ApplyTotalToPoints();
@@ -388,6 +394,8 @@ class ESegment {
   std::string naturalToken_ = "0";
   int naturalSample_ = 0;
   bool isTotal_ = false;  // IsTotal
+  bool isCoefficients_ = false;
+  bool coefficientsAbsolute_ = false;
   std::string componentsList_;
   std::string datafile_;
   std::vector<EPoint> points_;

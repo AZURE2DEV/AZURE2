@@ -752,7 +752,7 @@ class AzrModel:
         # Vector analyzing power A_y. Differential in the centre-of-mass frame
         # like code 5, but the quantity is a dimensionless ratio, not a cross
         # section.
-        "analyzing-power": 7,
+        "analyzing-power": 7, "angular-coefficients": 9,
     }
 
     def _splice_segments_test(self, new_lines):
@@ -1491,6 +1491,7 @@ class AzrModel:
         "angle-integrated": 0, "differential": 1, "phase-shift": 2,
         "total-capture": 3, "differential-cm": 4, "angle-integrated-E1": 5,
         "angle-integrated-E2": 6, "analyzing-power": 7,
+        "angular-coefficients": 9,
     }
 
     def add_data_segment(self, data_file, entrance, exit,
@@ -1504,7 +1505,7 @@ class AzrModel:
                          energy_shift_sqrt_error=0.0, vary_shift_sqrt=False,
                          shift_group=None, shift_fn=None, shift_fn_params=(),
                          natural=False, norm_group=None, covariance=None,
-                         shift_fn_group=None):
+                         shift_fn_group=None, absolute=False):
         """Append one data segment (a ``<segmentsData>`` line).
 
         ``data_file`` is the data file path (relative to the run directory,
@@ -1513,7 +1514,11 @@ class AzrModel:
         summed/total observable).  ``observable`` is one of
         ``angle-integrated``, ``differential``, ``differential-cm``,
         ``total-capture``, ``phase-shift``, ``angle-integrated-E1``,
-        ``angle-integrated-E2``.
+        ``angle-integrated-E2``, ``analyzing-power``, ``angular-coefficients``
+        (rows ``E_lab  k  a_k  error``: the Legendre coefficients a_k = A_k/A_0 of
+        the c.m. angular distribution of a reaction, order k in the angle
+        column; ``absolute=True`` writes ``absolute 1`` and the rows are the
+        absolute A_k in b/sr; normalised coefficients cannot carry a free norm).
 
         ``norm`` is the normalization applied to the data, ``norm_error`` its
         systematic error (percent, as stored in the file), ``energy_shift``
@@ -1575,6 +1580,10 @@ class AzrModel:
             toks += ["shiftfn", '"' + shift_fn + '"', len(shift_fn_params)]
             for v, sig, vary in shift_fn_params:
                 toks += [_fmt(v), _fmt(sig), 1 if vary else 0]
+        if absolute:
+            if observable != "angular-coefficients":
+                raise ValueError("absolute=True belongs to angular-coefficients segments.")
+            toks += ["absolute", 1]
         if natural:                           # writers put the sample block last
             toks += ["sample", natural if isinstance(natural, str) else 1]
         line = "  ".join(t if isinstance(t, str) else _fmt(t) for t in toks)

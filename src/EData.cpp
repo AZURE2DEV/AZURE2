@@ -56,6 +56,34 @@
  * refused here instead (2026-10-26, audit item 9); tensor observables and the
  * spin-1 vector analyzing power are not implemented.
  */
+/*!
+ * An angular-coefficient segment (isDiff 9) is the Legendre expansion of a reaction's c.m.
+ * angular distribution.  Refused: an elastic pair (the expansion of GenMatrixFunc leaves the
+ * Coulomb amplitude out), total capture, composites, samples, "total", UPOS, and a free
+ * normalization on normalised coefficients (a_k / a_0 has no scale; use "absolute 1" for A_k).
+ */
+static bool CoefficientsAllowed(CNuc *theCNuc, const ESegment &segment, int number, const Config &configure) {
+  if (!segment.IsCoefficients()) return true;
+  std::string why;
+  if (segment.GetExitKey() == -1)
+    why = "total capture has no angular distribution";
+  else if (segment.GetExitKey() == segment.GetEntranceKey())
+    why = "an elastic distribution includes the Coulomb amplitude, which the Legendre expansion leaves out";
+  else if (segment.HasComponents() || segment.IsAdvanced())
+    why = "a composite (SUM / RATIO) is not supported";
+  else if (segment.IsNatural())
+    why = "a sample segment is not supported";
+  else if (segment.IsTotal())
+    why = "\"total 1\" has no angular distribution";
+  else if (segment.IsUPOS())
+    why = "a secondary-gamma (UPOS) distribution is not supported";
+  else if (!segment.IsCoefficientAbsolute() && segment.IsVaryNorm())
+    why = "normalised coefficients a_k / a_0 have no scale: fix the normalization at 1, or give the absolute A_k with \"absolute 1\"";
+  if (why.empty()) return true;
+  configure.outStream << "ERROR: segment #" << number << " (angular coefficients): " << why << "." << std::endl;
+  return false;
+}
+
 static bool AnalyzingPowerAllowed(CNuc *theCNuc, const ESegment &segment, int number, bool isTest,
                                   const Config &configure) {
   if (!segment.IsAnalyzingPower()) return true;
@@ -239,6 +267,7 @@ int EData::Fill(const Config &configure, CNuc *theCNuc) {
           PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(NewSegment.GetEntranceKey()));
           entrancePair->SetEntrance();
           if (!AnalyzingPowerAllowed(theCNuc, NewSegment, numTotalSegments, false, configure)) return -1;
+          if (!CoefficientsAllowed(theCNuc, NewSegment, numTotalSegments, configure)) return -1;
           if (!NaturalAllowed(theCNuc, NewSegment, numTotalSegments, false, configure)) return -1;
           if (!TotalAllowed(theCNuc, NewSegment, numTotalSegments, false, configure)) return -1;
           bool isValidTotal = false;
@@ -439,6 +468,12 @@ int EData::MakePoints(const Config &configure, CNuc *theCNuc) {
         configure.outStream << "ERROR: Test segment #" << numTotalSegments
                             << " carries a covariance block; a data covariance belongs on data segments only."
                             << std::endl;
+        return -1;
+      }
+      if (segment.isDiff() == 9) {
+        configure.outStream << "ERROR: Test segment #" << numTotalSegments
+                            << " uses isDiff 9 (angular coefficients), a data-segment type; a test segment"
+                            << " computes the coefficients with isDiff 3 and a maximum order." << std::endl;
         return -1;
       }
       if (segment.isDiff() == 8) {
@@ -840,6 +875,8 @@ int EData::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, const st
     subs.clear();
     for (double e : grid) {
       EPoint sub(point->GetCMAngle(), e, it.seg);
+      sub.SetCoefficientOrder(point->GetCoefficientOrder());
+      sub.SetCoefficientAbsolute(point->GetCoefficientAbsolute());
       if (spec.targetIntegration)
         sub.SetStoppingPower(spec.stoppingConversion *
                              effect->GetStoppingPowerEq()->Evaluate(configure, e / spec.stoppingConversion));
@@ -1066,6 +1103,8 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
           for (size_t i = 0; i < energyGrid.size(); i++) {
             double subEnergy = energyGrid[i];
             EPoint subPoint(point->GetCMAngle(), subEnergy, &*segment);
+            subPoint.SetCoefficientOrder(point->GetCoefficientOrder());
+            subPoint.SetCoefficientAbsolute(point->GetCoefficientAbsolute());
             if (targetEffect->IsTargetIntegration()) {
               double stoppingPower = cmConversion * targetEffect->GetStoppingPowerEq()->Evaluate(configure, subEnergy / cmConversion);
               subPoint.SetStoppingPower(stoppingPower);
@@ -1207,6 +1246,8 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
               for (size_t i = 0; i < energyGrid.size(); i++) {
                 double subEnergy = energyGrid[i];
                 EPoint subPoint(point->GetCMAngle(), subEnergy, &*component);
+                subPoint.SetCoefficientOrder(point->GetCoefficientOrder());
+                subPoint.SetCoefficientAbsolute(point->GetCoefficientAbsolute());
                 if (targetEffect->IsTargetIntegration()) {
                   double stoppingPower = compConversion * targetEffect->GetStoppingPowerEq()->Evaluate(configure, subEnergy / compConversion);
                   subPoint.SetStoppingPower(stoppingPower);
@@ -2953,6 +2994,8 @@ bool SharesCalculation(EPoint &a, EPoint &b, bool sameExit = true) {
     return false;
   if (a.IsAnalyzingPower() != b.IsAnalyzingPower()) return false;
   if (a.IsAngularDist() != b.IsAngularDist()) return false;
+  if (a.IsCoefficient() != b.IsCoefficient()) return false;
+  if (a.IsCoefficient() && a.GetCoefficientAbsolute() != b.GetCoefficientAbsolute()) return false;
   if (a.NumSubPoints() != b.NumSubPoints()) return false;
   std::vector<EPoint> &sa = a.GetSubPoints();
   std::vector<EPoint> &sb = b.GetSubPoints();

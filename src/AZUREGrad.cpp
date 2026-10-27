@@ -455,6 +455,16 @@ bool GradTargetEffectAdjoint(EPoint *point, double fitBar, GradAccum &accum,
   }
 
   const bool isAy = point->IsAnalyzingPower();
+  // A normalised Legendre coefficient under a target effect is the same ratio structure as A_y, with A_0 = sigma_int / 4 pi
+  // in place of the differential cross section:  <a_k> = sum c_i A0_i a_i / sum c_i A0_i  (EPoint::IntegrateTargetEffectForObservable),
+  //   d<a_k> = sum c_i [ A0_i da_i + (a_i - <a_k>) dA0_i ] / D,
+  // an a_k cotangent fitBar c_i A0_i / D (PointTBar's coefficient form) and an A_0 cotangent fitBar c_i (a_i - <a_k>) / D
+  // (PointTBar with xsComponent -1).  An absolute A_k is linear in the sub-point values and takes the plain route.
+  const bool isCoefNorm = point->IsCoefficient() && !point->GetCoefficientAbsolute();
+  if (isCoefNorm) {
+    if (xsComponent != 0) return false;
+    if (!ScopedPointMappingOff::Active() && (point->IsMapped() || point->NumLocalMappedPoints() > 0)) return false;
+  }
   if (isAy) {
     // Supported: particle-exit A_y, full observable, no point mapping in
     // effect (a mapped point's sub-points would be written by another point's
@@ -534,6 +544,20 @@ bool GradTargetEffectAdjoint(EPoint *point, double fitBar, GradAccum &accum,
       return true;
     }
     avg = num / den;
+  } else if (isCoefNorm) {
+    for (int i = 1; i <= nsp; i++) point->GetSubPoint(i)->SetFitCrossSection(point->GetSubPoint(i)->GetAngDistA0());
+    point->IntegrateTargetEffect(config);
+    den = point->GetFitCrossSection();
+    for (int i = 1; i <= nsp; i++)
+      point->GetSubPoint(i)->SetFitCrossSection(sigma[i - 1] * point->GetSubPoint(i)->GetAngDistA0());
+    point->IntegrateTargetEffect(config);
+    const double num = point->GetFitCrossSection();
+    for (int i = 1; i <= nsp; i++) point->GetSubPoint(i)->SetFitCrossSection(sigma[i - 1]);
+    if (!(std::fabs(den) > 0.0)) {
+      point->SetFitCrossSection(model);
+      return true;
+    }
+    avg = num / den;
   }
   point->SetFitCrossSection(model);
   const auto tc1 = std::chrono::steady_clock::now();
@@ -548,8 +572,16 @@ bool GradTargetEffectAdjoint(EPoint *point, double fitBar, GradAccum &accum,
     amf.FillMatrices(sp);
     amf.InvertMatrices();
     amf.CalculateTMatrix(sp);
-    if (!isAy) {
+    if (!isAy && !isCoefNorm) {
       if (!amf.PointAdjoint(sp, fitBar * c[i - 1], accum, shiftDeriv, xsComponent)) ok = false;
+      continue;
+    }
+    if (isCoefNorm) {
+      const double a0 = sp->GetAngDistA0();
+      const double akBar = fitBar * c[i - 1] * a0 / den;
+      const double a0Bar = fitBar * c[i - 1] * (sigma[i - 1] - avg) / den;
+      if (akBar != 0.0 && !amf.PointAdjoint(sp, akBar, accum, shiftDeriv, 0)) ok = false;
+      if (ok && a0Bar != 0.0 && !amf.PointAdjoint(sp, a0Bar, accum, shiftDeriv, -1)) ok = false;
       continue;
     }
     const double ayBar = fitBar * c[i - 1] * sigma[i - 1] / den;
