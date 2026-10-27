@@ -70,10 +70,11 @@ class TargetEffect {
     const double r = (screeningUe_ - screeningNominal_) / screeningSigma_;
     return r * r;
   }
-  /// The c.m. beam-spread sigma at c.m. energy \p eCM: the one place every kernel takes its width from.
-  /// A constant sigma was converted lab -> c.m. by ConvertSigmaToCM; a lab expression is evaluated at
-  /// eCM / F and its value scaled by F, the same factor; a legacy expression is used as it stands.
-  double SigmaCM(double eCM, const Config &) const;
+  /// The c.m. beam-spread sigma at c.m. energy \p eCM for a point whose entrance pair has the c.m./lab
+  /// factor \p cmFactor: the one place every kernel takes its width from.  A constant sigma (lab, as read)
+  /// is scaled by the factor; a lab expression is evaluated at eCM / F and its value scaled by F; a legacy
+  /// expression is used as it stands.
+  double SigmaCM(double eCM, const Config &, double cmFactor) const;
   /// The normalised Gaussian kernel exp(-(e - centroid)^2 / 2 sigma^2) / (sigma sqrt(2 pi)).
   static double GaussianKernel(double e, double centroid, double sigma);
   /// Straggling sigma (c.m. MeV) after an energy loss of \p deltaE (c.m. MeV): c_s * sqrt(dE[keV]) keV.  The
@@ -87,14 +88,13 @@ class TargetEffect {
   /// entrance pair, and the c.m. width m2/(m1+m2) Omega_lab.  (Before 2026-10-27 the default coefficient
   /// was 0.04 keV^1/2, several times below Bohr for light ions in light targets: essentially no straggling.)
   bool IsBohrStraggling() const { return isStraggling_ && !(stragglingCoefficient_ > 0.0); }
-  /// The Bohr straggling sigma (c.m. MeV) after traversing \p arealDensity atoms/cm^2 of the target.
-  double BohrStragglingSigma(double arealDensity) const;
-  /// The entrance pair's charges (beam Z1, target Z2) for Bohr straggling; the first call wins, like
-  /// ConvertSigmaToCM, since every segment on the line shares the effect.
-  void SetBohrCharges(int z1, int z2);
+  /// The Bohr straggling sigma (c.m. MeV) after traversing \p arealDensity atoms/cm^2 of the target, for a
+  /// point whose entrance pair has the c.m./lab factor \p cmFactor and charges \p z1 (beam), \p z2 (target).
+  double BohrStragglingSigma(double arealDensity, double cmFactor, int z1, int z2) const;
   /// How far the sub-point grid of a point at c.m. energy \p eCM must reach above (\p forward) and below
-  /// (\p backward) it for this effect; \p thicknessCM is the point's target thickness (c.m. MeV, 0 if none).
-  void GridExtent(double eCM, double thicknessCM, const Config &, double &forward, double &backward) const;
+  /// (\p backward) it for this effect; \p thicknessCM is the point's target thickness (c.m. MeV, 0 if none),
+  /// \p cmFactor and \p z1, \p z2 the point's entrance-pair factor and charges (Bohr straggling).
+  void GridExtent(double eCM, double thicknessCM, const Config &, double cmFactor, int z1, int z2, double &forward, double &backward) const;
   /// Target density in atoms/cm^2. Target integration only.
   double GetDensity() const;
   /// A target integration with a density of 0 is an infinitely THICK target: the yield per incident
@@ -164,10 +164,12 @@ class TargetEffect {
   double GetBeamTruncation() const;
   /// Weight the integrand by the detailed-balance factor of the inverse reaction.
   bool IsBeamPhotodissociation() const;
-  /// Scale every beam-profile energy (xi, omega, tpc sigma) once, lab -> c.m.
-  void ConvertBeamProfileToCM(double factor);
-  /// Scale the fixed convolution sigma once, lab -> c.m.
-  void ConvertSigmaToCM(double factor);
+  // Every energy the line carries (the Gaussian sigma, a `sigmalab` expression, the beam-profile
+  // components and TPC sigma, the stopping cross section) is kept in the LAB frame of the input file and
+  // converted at the point: each kernel takes the point's own c.m./lab factor (EPoint::SetTargetKinematics).
+  // Up to 2026-10-27 the sigma and the profile were converted once, with the factor of the first segment
+  // on the line, so a line shared by entrance pairs of different mass ratio (natural-target components,
+  // segments of several pairs) used the wrong factor for the others (audit 2026-10-25, tier 3 entry 3).
   const std::vector<BeamProfileComponent> &GetBeamProfile() const;
 
   /// User-defined numerical resolution function (SAMMY's UDR): a file of
@@ -229,14 +231,10 @@ class TargetEffect {
   double screeningNominal_ = 0.0; ///< eV, as read
   bool screeningVary_ = false;
   double screeningSigma_ = 0.0;   ///< eV, prior width (0 = none)
-  double cmFactor_ = 1.0;        ///< c.m. / lab energy of the entrance pair, set by ConvertSigmaToCM
 
   // Energy straggling: sigma = c_s sqrt(dE_cm) (c.m. coefficient), or Bohr's formula when c_s = 0.
   bool isStraggling_;
   double stragglingCoefficient_;
-  int bohrZ1_ = 0;               ///< beam charge for Bohr straggling (SetBohrCharges)
-  int bohrZ2_ = 0;               ///< target charge for Bohr straggling
-  bool bohrChargesSet_ = false;
 
   // Adaptive integration grid parameters
   double resonanceWidthMultiplier_;
@@ -255,8 +253,6 @@ class TargetEffect {
   double beamTpcSigma_ = 0.0;
   double beamTruncation_ = 0.0;
   bool beamPhotodissociation_ = false;
-  bool beamProfileConverted_ = false;
-  bool sigmaConverted_ = false;
 };
 
 #endif

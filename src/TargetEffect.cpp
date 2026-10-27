@@ -563,41 +563,20 @@ bool TargetEffect::IsBeamPhotodissociation() const {
 }
 
 /*!
- * Converts the beam-profile energies from the frame of the input file (lab)
- * to the centre of mass, exactly once, however many segments share the effect.
+ * The c.m. beam-spread sigma at c.m. energy eCM for a point whose entrance pair has the c.m./lab factor
+ * cmFactor.  The sigma and a `sigmalab` expression are kept in the lab frame of the input file and
+ * converted here, per point: every segment listed on a <targetInt> line, and every component of an
+ * advanced (SUM/RATIO or natural-target) segment, points to the same TargetEffect, and up to 2026-10-27
+ * the sigma was converted once with the factor of the first segment on the line (and before 2026-10-01
+ * once per segment), wrong for the other pairs by the ratio of their mass ratios.
  */
 
-void TargetEffect::ConvertBeamProfileToCM(double factor) {
-  if (beamProfileConverted_) return;
-  for (std::vector<BeamProfileComponent>::iterator c = beamProfile_.begin(); c != beamProfile_.end(); c++) {
-    c->xi *= factor;
-    c->omega *= factor;
-  }
-  beamTpcSigma_ *= factor;
-  beamProfileConverted_ = true;
-}
-
-/*!
- * Converts the fixed convolution sigma from the frame of the input file (lab)
- * to the centre of mass, exactly once, however many segments share the effect.
- * Every segment listed on a <targetInt> line, and every component of an
- * advanced (SUM/RATIO) segment, points to the same TargetEffect; converting it
- * once per segment shrank the kernel by the mass ratio for each extra one.
- */
-
-void TargetEffect::ConvertSigmaToCM(double factor) {
-  if (sigmaConverted_) return;
-  sigma_ *= factor;
-  cmFactor_ = factor;
-  sigmaConverted_ = true;
-}
-
-double TargetEffect::SigmaCM(double eCM, const Config &configure) const {
+double TargetEffect::SigmaCM(double eCM, const Config &configure, double cmFactor) const {
   if (isConvCoefficients_ && convolutionEq_.GetEquation() != "") {
-    if (sigmaLab_) return cmFactor_ * convolutionEq_.Evaluate(configure, eCM / cmFactor_);
+    if (sigmaLab_) return cmFactor * convolutionEq_.Evaluate(configure, eCM / cmFactor);
     return convolutionEq_.Evaluate(configure, eCM);
   }
-  return sigma_;
+  return cmFactor * sigma_;
 }
 
 double TargetEffect::GaussianKernel(double e, double centroid, double sigma) {
@@ -618,18 +597,11 @@ double TargetEffect::StragglingSigma(double deltaE) const {
  * explicit coefficient should be entered instead.
  */
 
-double TargetEffect::BohrStragglingSigma(double arealDensity) const {
-  if (!this->IsBohrStraggling() || !(arealDensity > 0.0) || bohrZ1_ == 0 || bohrZ2_ <= 0) return 0.0;
+double TargetEffect::BohrStragglingSigma(double arealDensity, double cmFactor, int z1, int z2) const {
+  if (!this->IsBohrStraggling() || !(arealDensity > 0.0) || z1 == 0 || z2 <= 0) return 0.0;
   const double e2 = fstruc * hbarc * 1.0e-13;  // MeV cm
-  const double omega2 = 4.0 * pi * bohrZ1_ * bohrZ1_ * bohrZ2_ * e2 * e2 * arealDensity;  // lab MeV^2
-  return cmFactor_ * std::sqrt(omega2);
-}
-
-void TargetEffect::SetBohrCharges(int z1, int z2) {
-  if (bohrChargesSet_) return;
-  bohrZ1_ = z1;
-  bohrZ2_ = z2;
-  bohrChargesSet_ = true;
+  const double omega2 = 4.0 * pi * z1 * z1 * z2 * e2 * e2 * arealDensity;  // lab MeV^2
+  return cmFactor * std::sqrt(omega2);
 }
 
 /*!
@@ -641,10 +613,10 @@ void TargetEffect::SetBohrCharges(int z1, int z2) {
  * eight times in EData.cpp.
  */
 
-void TargetEffect::GridExtent(double eCM, double thicknessCM, const Config &configure, double &forward, double &backward) const {
+void TargetEffect::GridExtent(double eCM, double thicknessCM, const Config &configure, double cmFactor, int z1, int z2, double &forward, double &backward) const {
   forward = 0.0;
   backward = 0.0;
-  double beam = this->IsGaussian() ? convolutionRange * this->SigmaCM(eCM, configure) : 0.0;
+  double beam = this->IsGaussian() ? convolutionRange * this->SigmaCM(eCM, configure, cmFactor) : 0.0;
   if (this->IsTargetIntegration()) {
     backward = thicknessCM + (this->IsGaussian() ? 5.0 * beam : 0.0);
     forward = this->IsGaussian() ? 5.0 * beam : 0.0;
@@ -652,10 +624,10 @@ void TargetEffect::GridExtent(double eCM, double thicknessCM, const Config &conf
       // the whole target: its areal density, or for a thick target the thickness over the surface stopping power
       double areal = density_;
       if (isThickTarget_) {
-        const double eps = cmFactor_ * stoppingPowerEq_.Evaluate(configure, eCM / cmFactor_);
+        const double eps = cmFactor * stoppingPowerEq_.Evaluate(configure, eCM / cmFactor);
         areal = (eps > 0.0) ? thicknessCM / eps : 0.0;
       }
-      backward += convolutionRange * this->BohrStragglingSigma(areal);
+      backward += convolutionRange * this->BohrStragglingSigma(areal, cmFactor, z1, z2);
     } else {
       backward += convolutionRange * this->StragglingSigma(thicknessCM);
     }

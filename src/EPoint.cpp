@@ -2134,10 +2134,10 @@ V EPoint::IntegrateTargetEffectImpl(const Config &configure, Read rd) {
         if (half < 1.0e-10) continue;
         for (int gp = 0; gp < 2; gp++) {
           double eDepth = mid + half * (gp == 0 ? x1 : x2);
-          double beam = targetEffect->IsGaussian() ? targetEffect->SigmaCM(eDepth, configure) : 0.0;
+          double beam = targetEffect->IsGaussian() ? targetEffect->SigmaCM(eDepth, configure, cm_factor_) : 0.0;
           if (!(beam > 0.)) beam = 0.0;
           double straggle = targetEffect->IsBohrStraggling()
-                                ? targetEffect->BohrStragglingSigma(arealTo(eDepth) - arealTo(surface))
+                                ? targetEffect->BohrStragglingSigma(arealTo(eDepth) - arealTo(surface), cm_factor_, bohr_z1_, bohr_z2_)
                                 : targetEffect->StragglingSigma(surface - eDepth);
           double sigmaEff = std::sqrt(beam * beam + straggle * straggle);
           V inner = 0.0;
@@ -2156,7 +2156,7 @@ V EPoint::IntegrateTargetEffectImpl(const Config &configure, Read rd) {
     // a thick target (density 0) is the yield per incident particle, not divided by a density
     yield = targetEffect->IsThickTarget() ? outer : outer / (targetEffect->GetDensity() * 1.0e-24);
   } else if (targetEffect->IsGaussian()) {
-    const double s = targetEffect->SigmaCM(centroid, configure);
+    const double s = targetEffect->SigmaCM(centroid, configure, cm_factor_);
     if (!(s > 0.)) {
       // no spread: the bare value at the point, interpolated on the grid
       for (int j = 1; j < numPoints; j++) {
@@ -2256,7 +2256,7 @@ V EPoint::IntegrateTargetEffectImpl(const Config &configure, Read rd) {
     //    numerator only: in the denominator too it would replace f_db(E0) by
     //    its beam average and cancel its own normalisation (a 1-5 % error
     //    when the kernel's centroid is tens of keV off the point energy).
-    const double s = targetEffect->GetBeamTpcSigma();
+    const double s = cm_factor_ * targetEffect->GetBeamTpcSigma();  // the line's lab sigma, this pair's frame
     const bool window = this->HasBinWindow();
     // The energy shift moved the point (and the sub-point grid); the window
     // is stored unshifted, so shift it by the same c.m. amount.
@@ -2277,7 +2277,7 @@ V EPoint::IntegrateTargetEffectImpl(const Config &configure, Read rd) {
     };
     double dbNorm = photo ? dbWeight(originalCM) : 1.0;
     auto kernel = [&](double e) {
-      double k = targetEffect->BeamProfileWeight(e);
+      double k = targetEffect->BeamProfileWeight(e / cm_factor_);  // the profile is lab; e is c.m.
       if (window) {
         if (s > 0.0)
           k *= 0.5 * (std::erf((b - e) / (s * std::sqrt(2.0))) - std::erf((a - e) / (s * std::sqrt(2.0))));

@@ -140,8 +140,9 @@ Bohr's instead (``TargetEffect::BohrStragglingSigma``),
    \sqrt{4\pi Z_1^2 e^4 Z_2\, N x},
 
 with :math:`N x` the areal density of target atoms traversed, the charges
-those of the entrance pair (``TargetEffect::SetBohrCharges``, set beside
-``ConvertSigmaToCM``), and :math:`e^2 = \alpha\hbar c`. For the grid extent
+those of the point's entrance pair (``EPoint::SetTargetKinematics``, set by
+``EData::ReadTargetEffectsFile`` with the point's own c.m./lab factor), and
+:math:`e^2 = \alpha\hbar c`. For the grid extent
 :math:`N x` is the line's density (a thick target: the thickness over the
 stopping cross section at the surface).
 
@@ -383,9 +384,12 @@ skewed-Gaussian components ``BeamProfileComponent {xi, omega, alpha, weight}``,
 a detector resolution ``beamTpcSigma_``, a truncation and a
 detailed-balance flag, parsed from the ``beamprofile`` keyword block at the
 end of the ``targetInt`` line (older readers stop in front of the keyword).
-``EData::ReadTargetEffectsFile`` converts its energies lab → c.m. once
-(``ConvertBeamProfileToCM``) and sizes the sub-point grid from
-``BeamProfileSupport`` intersected with the point's window ± 4 s.  The window
+The profile is stored in the lab frame of the input file and converted at
+each point with that point's own entrance-pair factor (``EPoint::SetTargetKinematics``;
+up to October 2026 the line was converted once with the first segment's
+factor, wrong for other pairs sharing it), and ``EData::ReadTargetEffectsFile``
+sizes the sub-point grid from ``BeamProfileSupport`` (scaled by the factor)
+intersected with the point's window ± 4 s.  The window
 comes from ``DataLine`` extras (columns 5–6, ``EPoint::HasBinWindow``), is
 converted with the point in ``ConvertLabEnergy`` and stored unshifted; the
 branch in ``EPoint::IntegrateTargetEffect`` shifts it by the segment's current

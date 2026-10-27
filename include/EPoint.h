@@ -155,6 +155,12 @@ class EPoint {
   };
   void SetSubGridSpec(const SubGridSpec &spec) { sub_grid_spec_ = spec; };
   const SubGridSpec &GetSubGridSpec() const { return sub_grid_spec_; };
+  /// The point's own lab -> c.m. factor and entrance-pair charges, with which every target-effect kernel
+  /// converts the line's lab energies (beam sigma, beam profile, Bohr straggling).  Set by
+  /// EData::ReadTargetEffectsFile for each point and component point; a line shared by several pairs
+  /// used to be converted once with the first pair's factor (2026-10-27).
+  void SetTargetKinematics(double cmFactor, int z1, int z2) { cm_factor_ = cmFactor; bohr_z1_ = z1; bohr_z2_ = z2; }
+  double GetCMFactor() const { return cm_factor_; }
   /// Is this one of the sub-points a target-effect integral is built from?
   bool IsSubPoint() const { return is_sub_point_; };
   /*!
@@ -429,6 +435,9 @@ class EPoint {
   bool is_ang_dist_;
   bool is_analyzing_power_ = false;
   bool is_sub_point_ = false;
+  double cm_factor_ = 1.0;   ///< c.m./lab energy factor of the point's entrance pair (SetTargetKinematics)
+  int bohr_z1_ = 0;          ///< beam charge of the entrance pair, for Bohr straggling
+  int bohr_z2_ = 0;          ///< target charge of the entrance pair
   SubGridSpec sub_grid_spec_;
   double analyzing_power_ = 0.0;
   int entrance_key_;

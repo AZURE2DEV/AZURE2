@@ -988,9 +988,9 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
 
     if (segment->IsTargetEffect()) {
       TargetEffect *targetEffect = this->GetTargetEffect(segment->GetTargetEffectNum());
-      targetEffect->ConvertSigmaToCM(cmConversion);
-      targetEffect->SetBohrCharges(entrancePair->GetPType() == 20 ? 0 : entrancePair->GetZ(1), entrancePair->GetZ(2));
-      if (targetEffect->IsBeamProfile()) targetEffect->ConvertBeamProfileToCM(cmConversion);
+      // the line's energies stay in the lab frame; every point converts them with its own pair's factor
+      const int bohrZ1 = (entrancePair->GetPType() == 20) ? 0 : entrancePair->GetZ(1);
+      const int bohrZ2 = entrancePair->GetZ(2);
       if (targetEffect->IsUdr()) {
         double eMin = 1.0e300, eMax = 0.0;
         for (EPointIterator point = segment->GetPoints().begin(); point < segment->GetPoints().end(); point++) {
@@ -1008,6 +1008,7 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
         if (blendWeight <= 0.) continue;
         point->SetTargetEffectNum(segment->GetTargetEffectNum());
         point->SetTargetBlendWeight(blendWeight);
+        point->SetTargetKinematics(cmConversion, bohrZ1, bohrZ2);
 
         if (targetEffect->IsSubPointEffect()) {
           double forwardDepth = 0.0;
@@ -1032,7 +1033,7 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
             point->SetTargetThickness(targetThickness);
           }
           // How far the grid reaches above and below the point for this effect (beam spread, target, straggling).
-          targetEffect->GridExtent(point->GetCMEnergy(), targetThickness, configure, forwardDepth, backwardDepth);
+          targetEffect->GridExtent(point->GetCMEnergy(), targetThickness, configure, cmConversion, bohrZ1, bohrZ2, forwardDepth, backwardDepth);
 
           // Generate adaptive integration grid
           double startEnergy = point->GetCMEnergy() + forwardDepth;
@@ -1059,8 +1060,9 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
             // is, narrowed to the point's energy window (plus the resolution
             // tails) when it has one, not around the point's own energy.
             double low, high;
-            targetEffect->BeamProfileSupport(low, high);
-            double s = targetEffect->GetBeamTpcSigma();
+            targetEffect->BeamProfileSupport(low, high);  // lab
+            low *= cmConversion; high *= cmConversion;
+            double s = cmConversion * targetEffect->GetBeamTpcSigma();
             if (point->HasBinWindow()) {
               low = std::max(low, point->GetBinLowCM() - 4.0 * s);
               high = std::min(high, point->GetBinHighCM() + 4.0 * s);
@@ -1145,9 +1147,8 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
         }
         if (component->IsTargetEffect()) {
           TargetEffect *targetEffect = this->GetTargetEffect(component->GetTargetEffectNum());
-          targetEffect->ConvertSigmaToCM(compConversion);
-          targetEffect->SetBohrCharges(compEntrance->GetPType() == 20 ? 0 : compEntrance->GetZ(1), compEntrance->GetZ(2));
-          if (targetEffect->IsBeamProfile()) targetEffect->ConvertBeamProfileToCM(compConversion);
+          const int bohrZ1 = (compEntrance->GetPType() == 20) ? 0 : compEntrance->GetZ(1);
+          const int bohrZ2 = compEntrance->GetZ(2);
           if (targetEffect->IsUdr()) {
             double eMin = 1.0e300, eMax = 0.0;
             for (EPointIterator point = component->GetPoints().begin(); point < component->GetPoints().end(); point++) {
@@ -1162,6 +1163,7 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
             if (blendWeight <= 0.) continue;
             point->SetTargetEffectNum(component->GetTargetEffectNum());
             point->SetTargetBlendWeight(blendWeight);
+            point->SetTargetKinematics(compConversion, bohrZ1, bohrZ2);
 
             if (targetEffect->IsSubPointEffect()) {
               double forwardDepth = 0.0;
@@ -1183,7 +1185,7 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
                 point->SetTargetThickness(targetThickness);
               }
               // How far the grid reaches above and below the point for this effect (beam spread, target, straggling).
-              targetEffect->GridExtent(point->GetCMEnergy(), targetThickness, configure, forwardDepth, backwardDepth);
+              targetEffect->GridExtent(point->GetCMEnergy(), targetThickness, configure, compConversion, bohrZ1, bohrZ2, forwardDepth, backwardDepth);
 
               // Generate adaptive integration grid for component segment
               double startEnergy = point->GetCMEnergy() + forwardDepth;
@@ -1206,8 +1208,9 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
 
               if (targetEffect->IsBeamProfile()) {
                 double low, high;
-                targetEffect->BeamProfileSupport(low, high);
-                double s = targetEffect->GetBeamTpcSigma();
+                targetEffect->BeamProfileSupport(low, high);  // lab
+                low *= compConversion; high *= compConversion;
+                double s = compConversion * targetEffect->GetBeamTpcSigma();
                 if (point->HasBinWindow()) {
                   low = std::max(low, point->GetBinLowCM() - 4.0 * s);
                   high = std::min(high, point->GetBinHighCM() + 4.0 * s);

@@ -79,3 +79,9 @@ own `output_refit1q/chiSquared.out` differs for those segments (Sikkema ²⁰Ne
 target averages by 2-4 % next to strong narrow resonances, 17O+a ODeSA). With the same sub-point counts the
 convolved segments 5-7 moved by 0.1-0.8 % (total chi2 3345.28 -> 3341.63); `expected/chiSquared.out` is the 5 sigma
 value from the same build that passed every other suite.
+
+**Re-baselined 2026-10-27 (shared beam-spread lines converted per pair).** The lines "3,4" and "5,6" (0.001 and
+0.0106 MeV lab sigma) are shared by the 20Ne, 21Ne and 22Ne components of the natural segments; the sigma used to
+be converted lab -> c.m. once with the first component's m2/(m1+m2) (20Ne, 0.9520), now each component converts
+with its own (21Ne 0.9541, 22Ne 0.9561: kernels 0.2-0.4 % wider; audit tier 3 entry 3, `tests/shared_effect_pairs`).
+Total chi2 3341.63 -> 3342.46.
