@@ -541,6 +541,18 @@ runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
   thick (>5 %) targets at low energy -- CASPAR 11B+a, 17O+a (a,n) -- should be
   re-evaluated, and a target thickness tuned to a quoted keV loss means
   N ≈ Δ/ε(E0) only to first order (a few % more for a 10-20 % target).
+- **A `<targetInt>` line shared by several entrance pairs converts per point**
+  (2026-10-27, audit tier 3 entry 3 / checklist t3-22, `tests/shared_effect_pairs`):
+  the beam sigma, a `sigmalab` expression, the beam profile and the Bohr
+  straggling width used to be converted lab -> c.m. once with the FIRST
+  segment's m2/(m1+m2), so natural-target components (20Ne/21Ne/22Ne: 0.2-0.4 %
+  on the kernel width) and lines listing segments of different pairs got the
+  wrong factor, and a beam-profile centroid shared across pairs was off by
+  tens of keV. Now the line keeps its lab values and every point (and
+  component point) converts with its own pair (`EPoint::SetTargetKinematics`).
+  `tests/natural_neon` moved slightly (re-baselined). Nothing to change in
+  files; a line shared by pairs of very different mass ratio (inverse
+  kinematics with several isotopes) was the exposed case.
 - **Attenuation (Q) coefficients act on the lab distribution** (dev a22b99a,
   2026-10-25): for a particle exit Q_K multiplies the LAB Legendre coefficients
   and the result is taken back to the point's c.m. angle exactly. Before, a
