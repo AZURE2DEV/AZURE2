@@ -2076,9 +2076,11 @@ void AZURECalc::AddNuisanceGradient(const vector_r &p, std::vector<double> &grad
     if (!limitsManager_->IsNuisanceParameterByIndex(nf)) continue;
     double nominalValue = limitsManager_->GetConvertedNominalValueByIndex(nf);
     double paramError = limitsManager_->GetConvertedErrorByIndex(nf);
-    if (paramError > 0.0) {
-      // d/d p[nf] of ((p[nf]-nominal)/error)^2.
-      grad[nf] += 2.0 * (p[nf] - nominalValue) / (paramError * paramError);
+    if (paramError > 0.0 && actualIndex < (int)p.size() && actualIndex < (int)grad.size()) {
+      // p and grad are the FULL Minuit vectors (fixed parameters included); nf is the limits manager's index among
+      // the non-fixed ones.  Before 2026-10-27 this read p[nf] and wrote grad[nf], the wrong parameter as soon
+      // as a fixed level parameter preceded the one with the prior (audit item 14).
+      grad[actualIndex] += 2.0 * (p[actualIndex] - nominalValue) / (paramError * paramError);
     }
   }
 }
@@ -2120,8 +2122,12 @@ double AZURECalc::CalculateNuisanceChiSquared(const vector_r &p) const {
     double paramError = limitsManager_->GetConvertedErrorByIndex(nonFixedIndex);
 
     // If we got valid values (non-zero error means this parameter has valid nuisance settings)
-    if (paramError > 0.0) {
-      double paramValue = p[nonFixedIndex];
+    if (paramError > 0.0 && actualIndex < (int)p.size()) {
+      // p is the FULL Minuit vector (fixed parameters included): index it with the parameter's actual position,
+      // not with the limits manager's non-fixed index.  Before 2026-10-27 this read p[nonFixedIndex], so a prior
+      // on a level parameter preceded by any fixed level parameter penalized a different parameter (13N: the prior
+      // on energy_3 was evaluated on width_1_1; audit item 14).
+      double paramValue = p[actualIndex];
       double deviation = (paramValue - nominalValue) / paramError;
       nuisanceChiSquared += deviation * deviation;
     }

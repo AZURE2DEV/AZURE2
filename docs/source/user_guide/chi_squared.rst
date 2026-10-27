@@ -133,7 +133,13 @@ Nuisance parameters
 
 Level energies and widths flagged **Use as Nuisance** in the Fitting tab add a
 Gaussian term of the same shape, using the **Error** column as the width. This
-is how prior knowledge of a resonance energy enters a least-squares fit.
+is how prior knowledge of a resonance energy enters a least-squares fit. The
+term is evaluated on the flagged parameter itself; before 2026-10-27 it was
+evaluated on the wrong parameter whenever a fixed level parameter preceded the
+flagged one in the parameter list (a fixed ground-state energy was enough),
+so MIGRAD pulled another parameter toward the nominal value and a parameter
+sitting at its nominal value still paid a penalty. The least-squares drivers
+were not affected.
 
 What ``chiSquared.out`` actually reports
 ----------------------------------------
