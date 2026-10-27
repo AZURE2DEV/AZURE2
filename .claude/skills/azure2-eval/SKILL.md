@@ -462,6 +462,19 @@ runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
   cross sections while data ratios skip that; the c.m. output (`kinflag` 0)
   always printed the ratio itself. Data-segment ratios in mode 1/2 were
   printed right.
+- **Hybrid-potential Coulomb functions had an O(dr) derivative** (fixed
+  2026-10-27, audit item 16, `tests/pyazr/hybrid_derivative_test.py`): with a
+  `<potential>` block the Numerov solution was read at the channel radius by
+  linear interpolation between grid nodes and its derivative was the chord
+  slope of that cell, so the shift function of every hybrid pair was off by
+  ~4e-3 (l = 0) to 4e-2 (l = 3) for p+12C at a = 5.4 fm, depending on where
+  the radius fell between nodes (largest ON a node); F, G and P were good to
+  1e-5. The grid now has the requested radius as a node and the derivative
+  is a five-point central difference (S to ~1e-5, the Numerov accuracy),
+  and the function uses the engine's constants instead of its own rounded
+  copies. Every fit with a `<potential>` block moves slightly (the
+  `tests/hybrid_potential` chi2 by 3e-4 on one segment); archive exposure in
+  `AZURE2_code_audit/10-25-26/fix18_hybrid_deriv/readme`.
 - **Attenuation (Q) coefficients act on the lab distribution** (dev a22b99a,
   2026-10-25): for a particle exit Q_K multiplies the LAB Legendre coefficients
   and the result is taken back to the point's c.m. angle exactly. Before, a
