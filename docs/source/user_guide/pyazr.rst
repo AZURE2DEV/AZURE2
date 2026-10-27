@@ -366,6 +366,16 @@ analyzing power looks like — and ``x4get`` drops the quantity suffix that
 distinguishes them, so only the *search* result knows. ``to_azr`` warns and
 passes such values through; give it ``rutherford=True`` to multiply by the
 Coulomb cross section, or ``rutherford=False`` once you have checked.
+The cross section written is in the frame of the angle column: a lab ``ANG``
+column is taken to the c.m. frame with the elastic kinematics of the entrance
+masses (``elastic_lab_to_cm``) and the c.m. Rutherford value is divided by
+the lab-to-c.m. Jacobian, so AZURE2 recovers ratio × σ\ :sub:`R,cm`\ (θ\
+:sub:`cm`) from the file; pass ``target_mass`` / ``projectile_mass`` for an
+exact round trip (the default masses are mass numbers). Before October 2026
+the c.m. Rutherford value at the *lab* angle was written (1.13× off for
+p + :sup:`16`\ O, 1.8–2.2× for α + :sup:`12`\ C), and every angle column was
+labelled ``differential-cm`` by the observable guess; a lab column is
+``differential`` now.
 
 The module needs nothing beyond NumPy and the standard library, and doubles as
 a command-line tool::

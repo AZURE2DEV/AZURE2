@@ -234,6 +234,16 @@ class ExforData:
         ``x4get`` drops the quantity suffix that says which.  ``rutherford=True``
         multiplies by the Coulomb cross section to give barn/sr; ``False``
         passes the values through; the default warns when the choice matters.
+        The ratio is the same in both frames, but the cross section written
+        is in the frame of the angle column: for ``ANG-CM`` it is the c.m.
+        Rutherford cross section at that angle; for a lab ``ANG`` column the
+        lab angle is taken to the c.m. frame with the elastic kinematics of
+        the entrance masses (the same ``target_mass`` / ``projectile_mass``
+        as the energy conversion; pass the exact masses for an exact
+        round trip) and the c.m. value is divided by the lab-to-c.m. Jacobian,
+        so AZURE2 recovers ratio x sigma_R,cm(theta_cm) from the file
+        (before 2026-10-26 the c.m. Rutherford value at the *lab* angle was
+        written, 1.13x off for p + 16O and 1.8-2.2x for alpha + 12C).
 
         Other unit conversions (``MB``, ``NB/SR``, ...) are applied from the
         column unit; ``cross_section_scale`` / ``energy_scale`` / ``angle_scale``
@@ -252,7 +262,13 @@ class ExforData:
         with open(path, "w") as f:
             for row in data:
                 f.write("  ".join(f"{v:.8g}" for v in row) + "\n")
-        obs = observable or self._guess_observable()
+        if observable:
+            obs = observable
+        else:
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")   # _azr_columns has warned already
+                is_ratio = _is_rutherford_ratio(self, {c.name: c.unit for c in self.columns}, rutherford)
+            obs = self._guess_observable(rutherford=is_ratio)
         ang = data[:, 1]
         en = data[:, 0]
         syspct = self._sys_error_percent()
@@ -275,13 +291,25 @@ class ExforData:
                 unit = c.unit
         return float(arr[0]) if unit == "PER-CENT" else None
 
-    def _guess_observable(self):
+    def _guess_observable(self, rutherford=False):
+        """The AZURE2 observable the columns suggest.
+
+        The angle column's frame decides between ``differential`` (EXFOR
+        ``ANG`` / ``COS``, lab) and ``differential-cm`` (``ANG-CM`` /
+        ``COS-CM``); before 2026-10-26 every angle column was called c.m.  A
+        dimensionless differential is an analyzing power unless it is a ratio
+        to Rutherford (``rutherford``), which :meth:`to_azr` has turned into a
+        cross section.
+        """
         if self.exit == "G" or "SFC" in self.reaction:
             return "total-capture"
-        if "POL" in self.reaction or "NO-DIM" in [c.unit for c in self.columns]:
+        frame = _angle_frame(self)
+        if not rutherford and ("POL" in self.reaction or "NO-DIM" in [c.unit for c in self.columns]):
             return "analyzing-power"
-        if any(c.name.startswith("ANG") for c in self.columns):
+        if frame == "cm":
             return "differential-cm"
+        if frame == "lab":
+            return "differential"
         return "angle-integrated"
 
 
@@ -738,6 +766,35 @@ def cm_to_lab(E_cm, m_target, m_projectile):
     return E_cm * (m_target + m_projectile) / m_target
 
 
+def elastic_lab_to_cm(theta_lab_deg, m_target, m_projectile):
+    """Elastic scattering: lab angle of the projectile -> ``(theta_cm_deg, J)``.
+
+    ``theta_cm = theta_lab + asin(gamma sin theta_lab)`` with ``gamma = m_p/m_t``
+    (the forward branch; ``m_p <= m_t``), as AZURE2's ``EPoint::ConvertLabAngle``.
+    ``J = dsigma/dOmega_cm / dsigma/dOmega_lab = |1 + gamma cos theta_cm| /
+    (1 + gamma^2 + 2 gamma cos theta_cm)^(3/2)``, the factor AZURE2 applies to
+    a lab data value (``EPoint::ConvertCrossSection``), well defined at 0 and
+    180 degrees.  Non-relativistic.
+    """
+    gamma = float(m_projectile) / float(m_target)
+    t = np.radians(np.asarray(theta_lab_deg, float))
+    s = np.clip(gamma * np.sin(t), -1.0, 1.0)
+    tc = t + np.arcsin(s)
+    c = np.cos(tc)
+    jac = np.abs(1.0 + gamma * c) / (1.0 + gamma * gamma + 2.0 * gamma * c) ** 1.5
+    return np.degrees(tc), jac
+
+
+def _angle_frame(data):
+    """``"lab"`` (EXFOR ``ANG`` / ``COS``), ``"cm"`` (``ANG-CM`` / ``COS-CM``) or ``None``."""
+    for c in data.columns:
+        if c.name in ("ANG-CM", "COS-CM"):
+            return "cm"
+        if c.name == "ANG" or c.name.startswith("COS"):
+            return "lab"
+    return None
+
+
 def sfactor_to_cross_section(S, E_cm_kev, z1, z2, mu):
     """Convert an S-factor to a cross section: ``sigma = S exp(-2 pi eta) / E``.
 
@@ -925,9 +982,24 @@ def _data_column(data, cols, m_t, m_p, cross_section_scale=1.0,
                 f"{data.dataset_id}: ratio-to-Rutherford data needs the "
                 f"entrance-channel charges, which could not be read from "
                 f"{data.reaction!r}.")
+        # The ratio is frame-independent; the cross section written must be
+        # in the frame of the angle column.  A lab angle goes to the c.m.
+        # frame with the elastic kinematics of the entrance masses, and the
+        # c.m. Rutherford value comes back to the lab through the Jacobian
+        # AZURE2 will apply when it reads the file (EPoint::ConvertCrossSection),
+        # so the engine sees ratio x sigma_R,cm(theta_cm).  Before 2026-10-26
+        # the c.m. Rutherford at the LAB angle was written for ANG data.
+        angle = _angle_column(data, cols)
+        jac = 1.0
+        if _angle_frame(data) == "lab":
+            angle, jac = elastic_lab_to_cm(angle, m_t, m_p)
+        if za_t and za_p and za_t == za_p:
+            warnings.warn(
+                f"{data.dataset_id}: identical particles ({data.reaction!r}); "
+                f"the ratio is to the Mott cross section, which this conversion "
+                f"does not form -- the values written are ratio x Rutherford.")
         coulomb = _rutherford_barn_per_sr(
-            z1, z2, _cm_kev(data, cols, m_t, m_p) / 1e3,
-            _angle_column(data, cols))
+            z1, z2, _cm_kev(data, cols, m_t, m_p) / 1e3, angle) / jac
         cs = cs * coulomb
         stat = stat * coulomb
     elif "NO-DIM" in unit or "ARB" in unit:

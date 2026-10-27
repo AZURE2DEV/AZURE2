@@ -177,6 +177,14 @@ add_test(NAME pyazr_nds_local_exfor
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/nds_local_exfor_test.py)
 
+# Ratio-to-Rutherford EXFOR data with a lab angle column: to_azr converts the lab angle to the c.m.
+# frame and divides by the Jacobian, so the engine sees ratio x sigma_R,cm(theta_cm) (audit item 8);
+# the observable guess follows the angle column's frame.  Offline fixture subentries T0001004/5; the
+# engine round trip runs when the extension is importable.
+add_test(NAME pyazr_nds_rutherford
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/nds_rutherford_test.py)
+
 # Relativistic kinematics: AzrModel.relativistic, and an engine session on the n + 4He hard-sphere model of
 # tests/relativistic against sigma = 4 pi sin^2(ka)/k^2 with k from the invariant mass.
 add_test(NAME pyazr_relativistic
