@@ -387,6 +387,20 @@ runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
   13C(a,n'g)-type distribution used the wrong nucleus's spin (NaN or wrong
   shape). Single-nucleus files whose pairs all share J-groups with the
   entrance pair (every 13C+a file so far) were right.
+- **Sub-points moved by the shift at their own energy** (fixed 2026-10-26,
+  audit item 11, `tests/shift_sqrt_subpoints`): under a `sqrtshift` or a
+  `shiftfn`, each sub-point of a target-integration / resolution grid was
+  moved by s(E_sub) instead of the data point's s(E0). Two effects: the
+  integration window stretched by 1 + ds/dE (a yield factor the fit could
+  trade against b: ~1.9 % for b = 0.02 at 0.28 MeV in a flat region), and
+  the resonance-anchored fine grid -- placed with s(E0) -- sat off a narrow
+  resonance deep in the target by s' x depth (a 10 eV resonance 40 keV deep
+  with b = 0.02: missed entirely). Sub-points now move rigidly with their
+  data point (a calibration of the measured beam energy), the window keeps
+  its width and the fine grid is exact; a constant shift was never affected.
+  Fits with a free sqrt/function shift AND an active target-integration or
+  resolution line (11B+a CASPAR 10-22-26_sqrtE_groups and later) carry the
+  old stretch; re-evaluate before comparing chi2 across the fix.
 - **Attenuation (Q) coefficients act on the lab distribution** (dev a22b99a,
   2026-10-25): for a particle exit Q_K multiplies the LAB Legendre coefficients
   and the result is taken back to the point's c.m. angle exactly. Before, a
