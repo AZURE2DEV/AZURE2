@@ -475,6 +475,20 @@ runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
   copies. Every fit with a `<potential>` block moves slightly (the
   `tests/hybrid_potential` chi2 by 3e-4 on one segment); archive exposure in
   `AZURE2_code_audit/10-25-26/fix18_hybrid_deriv/readme`.
+- **A thick target (target integration, density 0) with a beam spread or
+  straggling zeroed its first point** (fixed 2026-10-27, audit item 17,
+  `tests/thick_target`): density 0 means an infinitely thick target (the yield
+  per incident particle, int_0^E0 sigma/epsilon dE, no division by N). The
+  engine implemented it by overwriting the line's density with 1e24 at the
+  first point, which left that point with thickness 0: under a beam spread or
+  straggling its yield was exactly 0 (13N segment 1: 0 instead of 2.85e-14),
+  and a THIN target whose stopping cross section evaluated to <= 0 at some
+  point silently became thick from there on, yields divided by 1 instead of
+  N. Now `TargetEffect::IsThickTarget` is explicit, every thick point
+  integrates down to 1 keV, and a non-positive stopping power on a thin
+  target is an ERROR naming the segment and energy (a fit that used to run
+  with such a polynomial stops now: fix the stopping-power range). Thick
+  lines without spread or straggling (13N, hybrid_potential) are unchanged.
 - **Attenuation (Q) coefficients act on the lab distribution** (dev a22b99a,
   2026-10-25): for a particle exit Q_K multiplies the LAB Legendre coefficients
   and the result is taken back to the point's c.m. angle exactly. Before, a
