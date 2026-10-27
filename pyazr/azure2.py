@@ -730,6 +730,9 @@ class azure2:
         the engine from the ``.azr`` and discards what this loaded: call it
         again after the switch.  Names are matched against the engine's live
         parameter list, so it works in either mode, as the CLI's reader does.
+        In extrapolation mode the file's ``segment_*`` entries (data-segment
+        normalizations and energy shifts) are not applied: they belong to data
+        segment k, and until 2026-10-26 they moved test segment k's energy grid.
         """
         tag = self.read_sav_basis(path)
         if tag is not None and tag != self.basis:
@@ -745,11 +748,23 @@ class azure2:
         full = np.asarray(s.params_all_rwa(), float).copy()
         vals = self.read_sav(path)
         hit = 0
+        skipped = 0
         for i in range(full.size):
             name = s.params_names(i)
             if name in vals:
+                if self.mode == "extrap" and name.startswith("segment_"):
+                    # A test segment carries no normalization or energy shift of its own; the
+                    # file's segment_<k>_* entries belong to DATA segment k and would move test
+                    # segment k's grid (audit 2026-10-25 item 12; the CLI skips them too).
+                    skipped += 1
+                    continue
                 full[i] = vals[name]
                 hit += 1
+        if skipped:
+            import warnings
+            warnings.warn(f"{path}: {skipped} segment_* entries (data-segment normalizations and "
+                          f"energy shifts) not applied in extrapolation mode; a test segment's grid "
+                          f"is the one its line asks for.")
         if hit == 0:
             raise ValueError(f"{path}: no parameter name matches this model "
                              f"(is it a file from another project?)")

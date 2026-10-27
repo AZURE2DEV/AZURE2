@@ -26,6 +26,15 @@ level parameters as ``abundance_<Z>_<A>`` (:doc:`data_formats`). An
 experimental-effect line with a ``screening`` block adds its screening potential
 (eV) as ``screening_<n>`` after the energy-shift parameters.
 
+The ``segment_<k>_*`` lines (normalizations and energy shifts) belong to the
+data segments of the fit that wrote the file. A run without data -- an
+extrapolation (**Calculate Segments Without Data**) or a reaction rate --
+numbers its own test grids 1, 2, ... and does not apply those lines (the run
+log says so): a test segment's energies are the ones its line asks for. Until
+October 2026 data segment *k*'s fitted shift was handed to test segment *k* by
+name and moved its grid. ``pyazr``'s ``load_sav`` does the same in
+extrapolation mode.
+
 parameters.out
 ^^^^^^^^^^^^^^
 

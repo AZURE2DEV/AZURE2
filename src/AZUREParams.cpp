@@ -28,7 +28,11 @@ ROOT::Minuit2::MnUserParameters &AZUREParams::GetMinuitParams() {
  */
 
 void AZUREParams::ReadUserParameters(const Config &configure) {
-  ApplyUserParameterFile(configure.paramfile, configure.outStream);
+  // A run without data (extrapolation, reaction rates) numbers its <segmentsTest> grids 1..N and emits
+  // segment_<k>_* parameters for them, so a param.sav written by a fit would hand DATA segment k's fitted
+  // normalization and energy shift to TEST segment k by name and move the requested grid (audit 2026-10-25,
+  // item 12; tests/extrap_sav_segments).  Test segments carry no shift: those entries are skipped.
+  ApplyUserParameterFile(configure.paramfile, configure.outStream, (configure.paramMask & Config::CALCULATE_WITH_DATA) != 0);
 }
 
 void AZUREParams::ReadUserParameters(const std::string &filename) {
@@ -48,8 +52,9 @@ void AZUREParams::ReadUserParameters(const std::string &filename) {
  * parameter's step size as it was; a line without a readable value is skipped
  * with a warning.
  */
-void AZUREParams::ApplyUserParameterFile(const std::string &filename, std::ostream &out) {
+void AZUREParams::ApplyUserParameterFile(const std::string &filename, std::ostream &out, bool segmentEntries) {
   std::vector<std::string> names;
+  int segmentSkipped = 0;
   vector_r values;
   vector_r errors;
   std::vector<bool> fixed;
@@ -86,11 +91,20 @@ void AZUREParams::ApplyUserParameterFile(const std::string &filename, std::ostre
       continue;
     }
     if (!number(errorToken, error)) error = std::nan("");
+    if (!segmentEntries && name.compare(0, 8, "segment_") == 0) {
+      segmentSkipped++;
+      continue;
+    }
     names.push_back(name);
     values.push_back(value);
     errors.push_back(error);
     fixed.push_back(rest == "fixed");
   }
+
+  if (segmentSkipped > 0)
+    out << "Note: " << segmentSkipped << " segment_* entries of " << filename
+        << " (data-segment normalizations and energy shifts) are not applied: this run has no data segments,"
+        << " and a test segment's grid is the one its line asks for." << std::endl;
 
   for (int i = 0; i < GetMinuitParams().Params().size(); i++) {
     for (int ii = 0; ii < names.size(); ii++) {

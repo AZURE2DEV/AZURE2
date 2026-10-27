@@ -48,8 +48,10 @@ class AZUREParams {
   static const char *BasisName(int);
 
  private:
-  /// The body of both ReadUserParameters overloads; "could not read" goes to out.
-  void ApplyUserParameterFile(const std::string &filename, std::ostream &out);
+  /// The body of both ReadUserParameters overloads; "could not read" goes to out.  With
+  /// segmentEntries false (a run without data: extrapolation, reaction rates) the file's
+  /// segment_* lines -- data-segment normalizations and energy shifts -- are not applied.
+  void ApplyUserParameterFile(const std::string &filename, std::ostream &out, bool segmentEntries = true);
   ROOT::Minuit2::MnUserParameters params_;
   int basisTag_ = kBasisUnknown;
 };
