@@ -103,6 +103,11 @@ the CSV header):
   analyzing power. Any data file made from a `,,RTH` set with a lab `ANG`
   column before that date must be regenerated (`tests/pyazr/nds_rutherford_test.py`).
   Identical particles (ratio to Mott) get a warning and ratio × Rutherford.
+  The GUI's own EXFOR dialog (gui/src/ExforData.cpp, "Retrieve Experimental Data
+  from EXFOR") had the same lab-angle mistake and is fixed the same way (2026-10-27,
+  tests/gui/exfor_rutherford_test); data files it made from a lab-angle `,,RTH`
+  set before that date (12C+p/8-9-26_claude_learns_12C+p: Milne 1954, Jiang 2004,
+  if their EXFOR angle column is `ANG`) need regenerating too.
 - `plus=1` gives computational units (eV, `B*EV`, `B/SR`); `plus=2` the
   universal grid. Not needed for AZURE2; `plus=0` is the default.
 
