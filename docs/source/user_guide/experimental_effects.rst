@@ -278,14 +278,21 @@ be normalized to the same thing the density counts.**
 .. note::
 
    **Energy shifts under target integration.** A segment's energy shift
-   (constant, :math:`\sqrt{E}` or shift function, :doc:`segments`) moves
-   every sub-point by the shift evaluated at that sub-point's own original
-   energy, so a constant shift translates the sub-point grid rigidly and an
-   energy-dependent one stretches it. The target thickness, the stopping
+   (constant, :math:`\sqrt{E}` or shift function, :doc:`segments`) is a
+   calibration of the measured beam energy, so it moves every sub-point
+   rigidly with its data point, by the shift evaluated at the data point's
+   original energy. The target thickness, the beam profile, the stopping
    powers and the resolution kernels stay those computed for the unshifted
-   energy. This is a first-order approximation in
+   energy, and the resonance-anchored fine grid is laid out at the shifted
+   position of each resonance. This is a first-order approximation in
    :math:`\Delta E\,\mathrm{d}\epsilon/\mathrm{d}E`, accurate while the shift
    is small compared with the energy over which the stopping power changes.
+   (Until October 2026 each sub-point moved by the shift at its own energy,
+   which for a :math:`\sqrt{E}` shift or a shift function stretched the
+   integration window by :math:`1 + \mathrm{d}s/\mathrm{d}E` -- a yield factor
+   of order 1 % for :math:`b = 0.02` at 0.3 MeV -- and left the fine grid off a
+   narrow resonance deep in the target by :math:`s' \times` depth; a constant
+   shift was never affected.)
 
 Restricting an Effect to Energy Ranges
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

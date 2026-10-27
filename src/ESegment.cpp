@@ -1007,8 +1007,18 @@ void ESegment::UpdatePointEnergyWithShift(int i, CNuc *theCNuc, const Config *co
           EPoint *subPoint = point->GetSubPoint(j);
           if (subPoint && subPoint->GetOriginalEnergy() > 0) {
             double subOriginalEnergy = subPoint->GetOriginalEnergy();
-            // Subpoints hold c.m. energies: evaluate the lab shift at the
-            // subpoint's own lab energy and convert it to the c.m. frame.
+            // Sub-points hold c.m. energies and are the depth / resolution samples
+            // of their parent point: they move RIGIDLY with it, by the parent's
+            // own lab shift converted to the c.m. frame.  A shift is a calibration
+            // of the measured beam energy; the target thickness, the beam profile
+            // and the depth grid are physical and keep their width.  Before
+            // 2026-10-26 each sub-point was moved by the shift at its own energy,
+            // which for a sqrt(E) shift or a shift function stretched the window by
+            // (1 + ds/dE) -- a yield factor the fit could trade against b -- and put
+            // the resonance-anchored lattice (EData::ReplaceSubPointGrids, which
+            // offsets by the parent's shift) off a narrow resonance by s' x depth
+            // (audit item 11, tests/shift_sqrt_subpoints).  A constant shift was
+            // never affected.
             double cmFactor;
             // A beta-delayed segment (entrance ptype 20) carries the light decay
             // particle's lab energy; c.m. = lab*(M1+M2)/M2 of the EXIT pair
@@ -1017,7 +1027,7 @@ void ESegment::UpdatePointEnergyWithShift(int i, CNuc *theCNuc, const Config *co
               cmFactor = (exitPair->GetM(1) + exitPair->GetM(2)) / exitPair->GetM(2);
             else
               cmFactor = (entrancePair->GetM(2)) / (entrancePair->GetM(1) + entrancePair->GetM(2));
-            double energyShiftCM = cmFactor * TotalEnergyShift(subOriginalEnergy / cmFactor);
+            double energyShiftCM = cmFactor * TotalEnergyShift(originalEnergy);
             double subShiftedEnergy = ShiftedEnergy(subOriginalEnergy, energyShiftCM);
 
             // Set the shifted energy for subpoint
