@@ -364,6 +364,20 @@ runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
   called every angle column `differential-cm`; a lab `ANG` column is
   `differential` now. Regenerate any data file made from a lab-angle `,,RTH`
   set before that date (details in the nds-explorer skill).
+- **Capture analyzing power coupled the channel spin target first** (fixed
+  2026-10-26, audit item 9, `tests/capture_ay_coupling`): Seyler and
+  Weller's b_k (CNuc::CalcCaptureAnalyzingPower) couple <j2 m2 j1 m1|s nu>,
+  AZURE2 couples light particle first everywhere else (PolarizationFunc,
+  the M1 EC spin operator, UPOS), a (-1)^(s-s') on every channel-spin
+  off-diagonal b_k term that was missing. For a target with spin the capture
+  A_y had those terms sign-flipped: fitting it alone was the same as
+  flipping the sign of every width with odd j1+j2-s, and a joint fit with
+  the particle A_y (15N(p,p) + 15N(p,g)) was inconsistent. Spin-0 targets
+  (12C(p,g), 13N_capture_ay) were never affected. Any capture-A_y fit on a
+  target with spin from a build before dev 2026-10-26 should be redone. The
+  same commit refuses an analyzing-power segment whose projectile is not
+  spin-1/2 (the capture route silently returned 1.5x the Madison A_y for a
+  deuteron; the particle route returned 0).
 - **Attenuation (Q) coefficients act on the lab distribution** (dev a22b99a,
   2026-10-25): for a particle exit Q_K multiplies the LAB Legendre coefficients
   and the result is taken back to the point's c.m. angle exactly. Before, a
