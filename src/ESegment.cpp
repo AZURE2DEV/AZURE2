@@ -1327,6 +1327,24 @@ double ESegment::TermFrameFactor(const EPoint *basePoint, const EPoint *termPoin
 }
 
 /*!
+ * The lab-to-c.m. factor of one RATIO term at a point (ESegment.h): the term's own
+ * pairs, the photon Jacobian for a gamma exit and the particle one otherwise, and
+ * 1 for a ratio that is not a lab-frame differential one (c.m., angle-integrated,
+ * phase shift) or a term without a proper exit pair (a total-capture term).
+ */
+double ESegment::RatioTermFrameFactor(EPoint *point, const ESegment *term, CNuc *cnuc) {
+  if (!point || !term || !cnuc) return 1.0;
+  if (!term->IsDifferential() || term->IsCMDifferential() || term->IsPhase() || term->IsAngularDist()) return 1.0;
+  if (!cnuc->IsPairKey(term->GetEntranceKey()) || !cnuc->IsPairKey(term->GetExitKey())) return 1.0;
+  PPair *entrancePair = cnuc->GetPair(cnuc->GetPairNumFromKey(term->GetEntranceKey()));
+  PPair *exitPair = cnuc->GetPair(cnuc->GetPairNumFromKey(term->GetExitKey()));
+  if (entrancePair->GetPType() == 20) return 1.0;
+  if (exitPair->GetPType() == 10) return point->CalculateCrossSectionGammaConversionFactor(entrancePair);
+  if (exitPair->GetPType() != 0) return 1.0;
+  return point->CalculateCrossSectionConversionFactor(entrancePair, exitPair);
+}
+
+/*!
  * Calculates the theoretical cross section for this segment, including
  * combination with any additional components according to the operation type
  */
@@ -1438,20 +1456,13 @@ double ESegment::CalculateTheoreticalCrossSection(int pointIndex, CNuc *cnuc, co
           return 0.0;
         }
 
-        // Calculate the conversion factors for baseValue and denominatorValue
-        PPair *entrancePair = cnuc->GetPair(cnuc->GetPairNumFromKey(this->GetEntranceKey()));
-        PPair *exitPair = cnuc->GetPair(cnuc->GetPairNumFromKey(this->GetExitKey()));
-
-        // If not a gamma exit, calculate conversion factors
-        double baseConversionFactor;
-        double denominatorConversionFactor;
-        if (exitPair->GetPType() != 10) {
-          baseConversionFactor = basePoint->CalculateCrossSectionConversionFactor(entrancePair, exitPair);
-          denominatorConversionFactor = denominatorPoint->CalculateCrossSectionConversionFactor(entrancePair, exitPair);
-        } else {
-          baseConversionFactor = basePoint->CalculateCrossSectionGammaConversionFactor(entrancePair);
-          denominatorConversionFactor = denominatorPoint->CalculateCrossSectionGammaConversionFactor(entrancePair);
-        }
+        // A lab-frame differential ratio is the ratio of the two LAB cross sections,
+        // sigma_lab = sigma_cm / J: each term with its own pair's Jacobian.  (Before
+        // 2026-10-27 the denominator's J was computed with the base segment's pairs:
+        // wrong for a denominator to another exit pair with relativistic=1 or at 0 /
+        // 180 deg, and for a photon over a particle or the reverse; audit item 15.)
+        const double baseConversionFactor = RatioTermFrameFactor(basePoint, this, cnuc);
+        const double denominatorConversionFactor = RatioTermFrameFactor(denominatorPoint, firstComponent, cnuc);
 
         double ratioValue = baseValue / denominatorValue * (denominatorConversionFactor / baseConversionFactor);
         return ratioValue;

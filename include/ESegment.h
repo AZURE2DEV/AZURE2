@@ -313,6 +313,15 @@ class ESegment {
   /// gamma terms of one entrance pair.
   static double TermFrameFactor(const EPoint *basePoint, const EPoint *termPoint);
 
+  /// The lab-to-c.m. factor of one RATIO term (sigma_cm = J sigma_lab) at a point,
+  /// with the TERM's own entrance and exit pair and the Jacobian of its own exit
+  /// type (photon or particle).  1 unless the ratio is a lab-frame differential
+  /// one (the term's points were then never converted, so nothing is stored on
+  /// them: the RATIO data value is dimensionless and ESegment::Fill skips the
+  /// cross-section conversion).  Before 2026-10-27 the denominator's factor was
+  /// computed with the BASE segment's pairs (audit item 15).
+  static double RatioTermFrameFactor(EPoint *point, const ESegment *term, CNuc *cnuc);
+
   // Calculate theoretical cross section including components
   /// Theoretical value at a point, combining the components if this is a composite segment.
   /*!

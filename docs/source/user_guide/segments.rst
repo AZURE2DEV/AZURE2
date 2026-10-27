@@ -411,6 +411,19 @@ appears with the following fields:
    +6 % at 150°). A c.m. **Sum**, an angle-integrated one, a component of the
    same pair, or gamma terms of one entrance pair are unaffected.
 
+   A lab-frame differential **Ratio** is the ratio of the two terms' *lab*
+   cross sections: each term is taken to the lab with the Jacobian of its own
+   pair and exit type (photon or particle), so a denominator to another exit
+   pair, at a fixed angle, or of the other kind (a capture yield over an
+   elastic one) is compared in the right frame. Before October 2026 the
+   denominator's Jacobian was computed with the base segment's pairs: right
+   for a denominator of the same pair and for another particle pair at a
+   general angle without ``relativistic=1``, but 3 % off for another exit pair
+   with ``relativistic=1`` or at 0° / 180°, and 30 % off for a capture over an
+   elastic ratio. A c.m. or angle-integrated **Ratio** carries no frame factor.
+   The lab output (``kinflag.dat`` = 1) of a **Ratio** test segment prints the
+   ratio itself.
+
 **Unobserved Primary, Observed Secondary (UPOS)**
    For a particle exit pair :math:`b+B` whose residual nucleus :math:`B` is
    left in an excited state, the segment describes the **secondary gamma ray**

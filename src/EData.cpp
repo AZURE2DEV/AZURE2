@@ -533,6 +533,9 @@ int EData::MakePoints(const Config &configure, CNuc *theCNuc) {
                   thePoint->ConvertLabEnergy(entrancePair);
                 else if (theSegment->IsCMDifferential())
                   thePoint->ConvertLabEnergy(entrancePair);
+                // A RATIO is dimensionless: no cross-section conversion (as ESegment::Fill for data segments;
+                // the stored factor would otherwise divide the ratio in the lab output, kinflag.dat = 1).
+                const bool isRatio = theSegment->IsAdvanced() && theSegment->GetLegacyOperationType() == 1;
                 if (exitPair->GetPType() == 0 && theSegment->IsDifferential() &&
                     !theSegment->IsPhase() && !theSegment->IsAngularDist() && !theSegment->IsCMDifferential()) {
                   if (theSegment->GetEntranceKey() == theSegment->GetExitKey()) {
@@ -540,12 +543,12 @@ int EData::MakePoints(const Config &configure, CNuc *theCNuc) {
                   } else {
                     thePoint->ConvertLabAngle(entrancePair, exitPair, configure);
                   }
-                  thePoint->ConvertCrossSection(entrancePair, exitPair);
+                  if (!isRatio) thePoint->ConvertCrossSection(entrancePair, exitPair);
                 }
                 if (exitPair->GetPType() == 10 && theSegment->IsDifferential() &&
                     !theSegment->IsPhase() && !theSegment->IsAngularDist() && !theSegment->IsCMDifferential()) {
                   thePoint->ConvertLabAngleGammas(entrancePair);
-                  thePoint->ConvertCrossSectionGammas(entrancePair);
+                  if (!isRatio) thePoint->ConvertCrossSectionGammas(entrancePair);
                 }
                 if (eStep == 0.0) break;
               }
