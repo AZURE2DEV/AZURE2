@@ -489,6 +489,14 @@ runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
   target is an ERROR naming the segment and energy (a fit that used to run
   with such a polynomial stops now: fix the stopping-power range). Thick
   lines without spread or straggling (13N, hybrid_potential) are unchanged.
+- **`normalizations.out` had a malformed six-field row for every segment
+  with a fixed norm** (fixed 2026-10-27, audit item 18,
+  `tests/normalizations_out`): only the key/file/angle fields were
+  conditional on a varied norm, the rest were written for every segment. It
+  is a report only (one complete row per varied norm now); nothing reads it
+  back, the fitted norms travel in `param.sav` (the docs and GUI help said
+  otherwise). Every archived normalizations.out from a project with mixed
+  fixed and varied norms has those stray rows: read the ten-field rows only.
 - **Attenuation (Q) coefficients act on the lab distribution** (dev a22b99a,
   2026-10-25): for a particle exit Q_K multiplies the LAB Legendre coefficients
   and the result is taken back to the point's c.m. angle exactly. Before, a
