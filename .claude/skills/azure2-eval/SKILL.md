@@ -529,6 +529,18 @@ runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
   the coefficient written in them (12,192 archive lines, 11,570 of them
   11B+a CASPAR); a hand-written line with flag 1 and coefficient 0 now
   straggles where it did not before.
+- **The thin-target energy loss is the exact range integral** (2026-10-27, audit
+  tier 3 entry 2, `tests/target_thickness_exact`): `TargetEffect::TargetThickness`
+  solves int_{E0-Δ}^{E0} dE/ε = N instead of returning ε(E0) N. With ε rising
+  through the target (every ion above the Bragg peak) the first-order back edge
+  was too shallow and, with 1/ε in the integrand, a flat cross section came out
+  low by 2 % for a 5 % target and 8 % for a 20 % one, more at lower energy and
+  far more when the back edge sits on a resonance tail (65 % in the test). Yields
+  of every target-integrated thin-target segment move by that amount on the new
+  build (constant-ε lines and thick targets, density 0, are unchanged); fits of
+  thick (>5 %) targets at low energy -- CASPAR 11B+a, 17O+a (a,n) -- should be
+  re-evaluated, and a target thickness tuned to a quoted keV loss means
+  N ≈ Δ/ε(E0) only to first order (a few % more for a 10-20 % target).
 - **Attenuation (Q) coefficients act on the lab distribution** (dev a22b99a,
   2026-10-25): for a particle exit Q_K multiplies the LAB Legendre coefficients
   and the result is taken back to the point's c.m. angle exactly. Before, a
