@@ -545,6 +545,17 @@ solution through a nuclear potential (the hybrid model of the
 ``<potential>`` block). Comparing them is how one sees what those options do to
 the external region.
 
+The hybrid values come from a Numerov integration of H⁺ = G + iF inward from
+the 15 fm matching radius on a grid of about 0.0275 fm, laid so that the
+requested radius is a grid node; the functions and their derivatives are good
+to about 10\ :sup:`−5` there, which is the accuracy of the integration itself.
+Before October 2026 the values were interpolated linearly between nodes and the
+derivatives were the slope of the bracketing cell, a first-order quantity: the
+shift function of a hybrid pair was off by 4·10\ :sup:`−3` (l = 0) to
+4·10\ :sup:`−2` (l = 3) for p + :sup:`12`\ C at 5.4 fm, depending on where the
+radius fell between nodes. A potential of vanishing depth now reproduces the
+plain Coulomb functions (``tests/pyazr/hybrid_derivative_test.py``).
+
 The hybrid nuclear potential, per particle pair
 -----------------------------------------------
 

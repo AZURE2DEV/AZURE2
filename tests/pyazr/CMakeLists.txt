@@ -39,6 +39,14 @@ add_test(NAME pyazr_physical_norm
                  ${CMAKE_CURRENT_SOURCE_DIR}/physical_norm_test.py)
 set_tests_properties(pyazr_physical_norm PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
+# The hybrid Coulomb functions with a vanishing nuclear potential equal the plain ones: the
+# derivative at the channel radius is O(dr^4) on a grid that has the radius as a node (before
+# 2026-10-27 the chord slope of the bracketing cell put 4e-3 to 4e-2 into S; audit item 16).
+add_test(NAME pyazr_hybrid_derivative
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/hybrid_derivative_test.py)
+set_tests_properties(pyazr_hybrid_derivative PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
 # Inactive <levels> and <segmentsData> lines must not shift pyazr's level
 # numbering or its per-segment penalties off the engine's.
 add_test(NAME pyazr_inactive_lines

@@ -365,10 +365,12 @@ double CoulFunc::PEShift_d2E(int l, double radius, double energy) {
 CoulWaves CoulFunc::computeHybrid(int l, double radius, double energy) {
   struct CoulWaves result = {0.0, 0.0, 0.0, 0.0};
 
-  // Physical constants (consistent with pycoulomb implementation)
-  const double UCONV = 931.494;      // MeV/amu
-  const double FSTRUC = 0.00729735;  // fine structure constant * hc (MeV*fm)
-  const double HBARC = 197.327;      // hbar*c in MeV*fm
+  // The engine's constants (Constants.h), as the plain Coulomb path uses them.
+  // Before 2026-10-27 this function had its own rounded copies (931.494,
+  // 0.00729735, 197.327; audit item 16).
+  const double UCONV = uconv;    // MeV/u
+  const double FSTRUC = fstruc;  // the fine-structure constant
+  const double HBARC = hbarc;    // hbar c in MeV fm
 
   try {
     // Validate inputs
@@ -434,16 +436,25 @@ CoulWaves CoulFunc::computeHybrid(int l, double radius, double energy) {
       return std::sqrt(2.0 * redmass_MeV) / HBARC * r * std::sqrt(energy);
     };
 
-    // Create grid and set boundary conditions
-    int nmax = static_cast<int>((rMatch_ - r_min) / drNumerov_) + 1;
-    if (nmax % 4 != 0) nmax = nmax - (nmax % 4) + 4;
-    int npts = nmax + 1;
+    // The grid: a step close to drNumerov_ chosen so that the requested radius
+    // is a node, n_a = radius / dr, and the two nodes beyond the matching
+    // radius carry the Coulomb boundary conditions.  The value is then the
+    // Numerov node value and the derivative a five-point central difference,
+    // both O(dr^4).  Before 2026-10-27 the grid was fixed, the value was a
+    // linear interpolation between the bracketing nodes and the derivative the
+    // chord slope of that cell, an O(dr) quantity that put ~2e-3 to 2e-2 into
+    // the shift function (a+12C, a = 5.5 fm on a node: S off by 0.023; audit
+    // item 16).
+    const int n_a = std::max(2, static_cast<int>(std::lround(radius / drNumerov_)));
+    const double dr = radius / n_a;
+    const int n_top = static_cast<int>(std::ceil((rMatch_ - r_min) / dr));
+    const int npts = std::max(n_top + 3, n_a + 3);
 
     std::vector<double> r_grid(npts);
     std::vector<std::complex<double>> u(npts);
 
     for (int i = 0; i < npts; ++i) {
-      r_grid[i] = r_min + i * drNumerov_;
+      r_grid[i] = r_min + i * dr;
       if (i >= npts - 2) {
         u[i] = compute_H_plus(r_to_rho(r_grid[i]));
       }
@@ -468,7 +479,7 @@ CoulWaves CoulFunc::computeHybrid(int l, double radius, double energy) {
     }
 
     // Numerov backward integration from matching radius inward
-    double dr2 = drNumerov_ * drNumerov_;
+    double dr2 = dr * dr;
     for (int i = npts - 3; i >= 0; --i) {
       double denom = 1.0 + (dr2 / 12.0) * g[i];
       if (std::abs(denom) > 1e-20) {
@@ -480,18 +491,11 @@ CoulWaves CoulFunc::computeHybrid(int l, double radius, double energy) {
       }
     }
 
-    // Linear interpolation at requested radius
-    int idx_lower = 0;
-    for (int i = 0; i < npts - 1; ++i) {
-      if (r_grid[i] <= radius && radius <= r_grid[i + 1]) {
-        idx_lower = i;
-        break;
-      }
-    }
-
-    double frac = (radius - r_grid[idx_lower]) / (r_grid[idx_lower + 1] - r_grid[idx_lower]);
-    std::complex<double> H_plus = u[idx_lower] + frac * (u[idx_lower + 1] - u[idx_lower]);
-    std::complex<double> dH_dr = (u[idx_lower + 1] - u[idx_lower]) / drNumerov_;
+    // H+ at the requested radius (a node) and its derivative: the five-point
+    // central difference, O(dr^4).  n_a >= 2 and n_a + 2 <= npts - 1 by
+    // construction.
+    std::complex<double> H_plus = u[n_a];
+    std::complex<double> dH_dr = (u[n_a - 2] - 8.0 * u[n_a - 1] + 8.0 * u[n_a + 1] - u[n_a + 2]) / (12.0 * dr);
 
     // Extract F, G and their derivatives from H+ = G + iF
     result.G = H_plus.real();
