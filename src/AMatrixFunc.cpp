@@ -984,7 +984,7 @@ bool AMatrixFunc::PointTBar(EPoint *point, double fitBar, TMatrixCotangent &bar,
             // R_L coefficient (constant w.r.t. parameters), even lOrder only.
             double finalL = (double)point->GetSecondaryDecayL();
             double Ic = point->GetIc();
-            double j2f = compound()->GetPair(ir)->GetJ(2);
+            double j2f = compound()->GetPair(exitPairNum)->GetJ(2);  // the exit pair, not the decay index (GenMatrixFunc)
             double delta = point->GetDelta();
             double R_L = 0.0;
             if ((int)lOrder % 2 == 0) {

@@ -368,7 +368,10 @@ void GenMatrixFunc::CalculateBareCrossSection(EPoint *point) {
               int lOrder = theDecay->GetKLGroup(kL)->GetLOrder();
               double finalL = (double)point->GetSecondaryDecayL();
               double Ic = point->GetIc();
-              double j2f = compound()->GetPair(ir)->GetJ(2);
+              // the residual nucleus of the EXIT PAIR: ir is the decay index within the entrance pair's list,
+              // not a pair number (wrong whenever an earlier pair has no decay from the entrance pair:
+              // another compound nucleus, a beta-delayed pair, ...; audit item 10, tests/upos_pair_index)
+              double j2f = compound()->GetPair(exitPairNum)->GetJ(2);
               double delta = point->GetDelta();
               double R_L = 0.;
               if ((int)lOrder % 2 == 0) {
