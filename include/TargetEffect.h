@@ -84,6 +84,13 @@ class TargetEffect {
   void GridExtent(double eCM, double thicknessCM, const Config &, double &forward, double &backward) const;
   /// Target density in atoms/cm^2. Target integration only.
   double GetDensity() const;
+  /// A target integration with a density of 0 is an infinitely THICK target: the yield per incident
+  /// particle, int_0^{E0} sigma(E) / epsilon(E) dE, not divided by a density; every point integrates
+  /// down to 1 keV.  (Before 2026-10-27 this was done by overwriting the effect's density with 1e24
+  /// at the first zero-thickness point, which left that point with a thickness of 0 and a yield of
+  /// exactly 0 under a beam spread or straggling, and also fired for a thin target whose stopping
+  /// cross section came out <= 0; audit item 17.)
+  bool IsThickTarget() const { return isThickTarget_; }
   /// Energy loss across the target at a given energy, from the stopping cross section and the density.
   double TargetThickness(double, const Config &);
   /// Attenuation coefficient of the given order.
@@ -195,6 +202,7 @@ class TargetEffect {
   int numIntegrationPoints_;
   double sigma_;
   double density_;
+  bool isThickTarget_ = false;   ///< target integration with density 0 (IsThickTarget)
   Equation stoppingPowerEq_;
   std::string segmentsList_;
   vector_r qCoefficients_;

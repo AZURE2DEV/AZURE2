@@ -1014,7 +1014,20 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
 
           double targetThickness = 0.0;
           if (targetEffect->IsTargetIntegration()) {
-            targetThickness = cmConversion * targetEffect->TargetThickness(point->GetLabEnergy(), configure);
+            if (targetEffect->IsThickTarget()) {
+              // an infinitely thick target: the point integrates from its energy down to 1 keV
+              targetThickness = std::max(point->GetCMEnergy() - 0.001, 0.0);
+            } else {
+              targetThickness = cmConversion * targetEffect->TargetThickness(point->GetLabEnergy(), configure);
+              if (!(targetThickness > 0.0)) {
+                configure.outStream << "ERROR: target integration of segment #" << segment->GetSegmentKey()
+                                    << " at E_lab = " << point->GetLabEnergy() << " MeV: the stopping cross section times the"
+                                    << " density is " << targetThickness / cmConversion << " (not positive).  A density of 0"
+                                    << " means an infinitely thick target; otherwise the stopping power must be positive"
+                                    << " at every point." << std::endl;
+                return -1;
+              }
+            }
             point->SetTargetThickness(targetThickness);
           }
           // How far the grid reaches above and below the point for this effect (beam spread, target, straggling).
@@ -1024,21 +1037,12 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
           double startEnergy = point->GetCMEnergy() + forwardDepth;
           double endEnergy;
 
-          // Check if target thickness is zero (for convolution-only cases)
           if (targetEffect->IsTargetIntegration()) {
-            double targetThickness = point->GetTargetThickness();
-            if (targetThickness < 1.0e-10) {
-              // Target thickness is effectively zero - integrate down to 0.001 MeV
+            // the target (or, for a thick target, everything down to 1 keV), plus the spread below it
+            endEnergy = point->GetCMEnergy() - backwardDepth;
+            // Safety check: if backwardDepth > energy, set endEnergy to minimum
+            if (endEnergy < 0.001) {
               endEnergy = 0.001;
-              // Set density to 1e24 to prevent division issues
-              targetEffect->SetDensity(1.0e24);
-            } else {
-              // Normal case - use backward depth
-              endEnergy = point->GetCMEnergy() - backwardDepth;
-              // Safety check: if backwardDepth > energy, set endEnergy to minimum
-              if (endEnergy < 0.001) {
-                endEnergy = 0.001;
-              }
             }
           } else {
             // Convolution or ConvCoefficients - use backward depth
@@ -1163,7 +1167,17 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
 
               double targetThickness = 0.0;
               if (targetEffect->IsTargetIntegration()) {
-                targetThickness = compConversion * targetEffect->TargetThickness(point->GetLabEnergy(), configure);
+                if (targetEffect->IsThickTarget()) {
+                  targetThickness = std::max(point->GetCMEnergy() - 0.001, 0.0);
+                } else {
+                  targetThickness = compConversion * targetEffect->TargetThickness(point->GetLabEnergy(), configure);
+                  if (!(targetThickness > 0.0)) {
+                    configure.outStream << "ERROR: target integration of a component of segment #" << segment->GetSegmentKey()
+                                        << " at E_lab = " << point->GetLabEnergy() << " MeV: the stopping cross section times"
+                                        << " the density is " << targetThickness / compConversion << " (not positive)." << std::endl;
+                    return -1;
+                  }
+                }
                 point->SetTargetThickness(targetThickness);
               }
               // How far the grid reaches above and below the point for this effect (beam spread, target, straggling).
@@ -1173,21 +1187,11 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
               double startEnergy = point->GetCMEnergy() + forwardDepth;
               double endEnergy;
 
-              // Check if target thickness is zero (for convolution-only cases)
               if (targetEffect->IsTargetIntegration()) {
-                double targetThickness = point->GetTargetThickness();
-                if (targetThickness < 1.0e-10) {
-                  // Target thickness is effectively zero - integrate down to 0.001 MeV
+                endEnergy = point->GetCMEnergy() - backwardDepth;
+                // Safety check: if backwardDepth > energy, set endEnergy to minimum
+                if (endEnergy < 0.001) {
                   endEnergy = 0.001;
-                  // Set density to 1e24 to prevent division issues
-                  targetEffect->SetDensity(1.0e24);
-                } else {
-                  // Normal case - use backward depth
-                  endEnergy = point->GetCMEnergy() - backwardDepth;
-                  // Safety check: if backwardDepth > energy, set endEnergy to minimum
-                  if (endEnergy < 0.001) {
-                    endEnergy = 0.001;
-                  }
                 }
               } else {
                 // Convolution or ConvCoefficients - use backward depth

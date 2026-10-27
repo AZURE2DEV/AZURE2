@@ -2126,7 +2126,8 @@ V EPoint::IntegrateTargetEffectImpl(const Config &configure, Read rd) {
         }
       }
     }
-    yield = outer / (targetEffect->GetDensity() * 1.0e-24);
+    // a thick target (density 0) is the yield per incident particle, not divided by a density
+    yield = targetEffect->IsThickTarget() ? outer : outer / (targetEffect->GetDensity() * 1.0e-24);
   } else if (targetEffect->IsGaussian()) {
     const double s = targetEffect->SigmaCM(centroid, configure);
     if (!(s > 0.)) {

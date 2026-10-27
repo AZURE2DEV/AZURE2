@@ -204,6 +204,22 @@ stopping cross section entered below.
    The areal density of the active target material (the nuclei producing the
    reactions of interest in a mixed-material target).
 
+   A density of **0** means an infinitely *thick* target: the yield per
+   incident particle,
+
+   .. math::
+
+      Y(E_0) = \int_{0}^{E_0} \frac{\sigma(E')}{\epsilon(E')}\, dE' ,
+
+   with no division by :math:`N`; every point integrates down to 1 keV, and a
+   beam spread or straggling on the same line is folded in as for a thin
+   target. (Before October 2026 the thick-target case was handled by
+   overwriting the line's density at its first point, which left that point
+   with a yield of exactly 0 whenever a beam spread or straggling was on the
+   line; a thin target whose stopping cross section evaluated to zero or
+   below at some energy silently became thick from that point on. The latter
+   is now an error.)
+
 **Stopping Cross Section**
    The effective stopping cross section must be entered as a continuous function
    of energy using a parameterized equation:

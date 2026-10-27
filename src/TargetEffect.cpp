@@ -246,6 +246,8 @@ TargetEffect::TargetEffect(std::istream &stream, const Config &configure) {
     else
       isTargetIntegration_ = false;
     density_ = density;
+    // density 0 (or negative) with target integration = an infinitely thick target (IsThickTarget)
+    isThickTarget_ = isTargetIntegration_ && !(density_ > 0.0);
     if (isTargetIntegration_) {
       stoppingPowerEq_.Initialize(stoppingPowerEq, numParameters, configure);
       for (int i = 0; i < numParameters; i++) {
