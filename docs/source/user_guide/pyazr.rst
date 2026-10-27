@@ -114,6 +114,13 @@ name like ``width_1_2``:
    for w in azr.parameters.widths.free:
        print(w.name, w.jpi, "L =", w.L, "S =", w.S, "pair", w.pair)
 
+A pair prints as ``Pair(#7 key=8 ...)``: ``#7`` is the engine's internal pair
+number, which ``Parameter.pair`` carries, and ``key=8`` the pair key of the
+``.azr`` file, which the engine's messages and ``isospin.out`` use. The two
+differ whenever the file numbers its pairs in another order than the engine
+counts them, so match a parameter to a reaction through ``azr.pairs`` rather
+than by reading the key as the number.
+
 Filtered views (``.free``, ``.energies``, ``.widths``, ``.norms``,
 ``.shifts``, ``.sqrt_shifts``, ``.fn_shifts``) and lookups (``.by_level(...)``, ``.by_name(...)``,
 ``.by_physical_level()``) are all available. A ``LevelKey`` prints as

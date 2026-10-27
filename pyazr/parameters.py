@@ -319,7 +319,10 @@ class Pair:
         )
 
     def __repr__(self):
-        return (f"Pair(#{self.number}"
+        # the engine's internal number AND the .azr key: engine messages and
+        # isospin.out name pairs by key, Parameter.pair by number, and the two
+        # can differ (2026-10-27, A=4 session)
+        return (f"Pair(#{self.number} key={self.key}"
                 f"{' entrance' if self.is_entrance else ''}"
                 f"{' photon' if self.is_photon else ''}, "
                 f"J1={self.J1:g}, J2={self.J2:g}, "
