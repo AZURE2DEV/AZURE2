@@ -77,6 +77,10 @@ Selecting **Runtime Options...** opens a dialog with the following settings:
      - Use the Brune parameterization for R-matrix parameters
        (C.R. Brune, *Physical Review C* **66**, 044611, 2002). Recommended and
        enabled by default. More numerically stable than the classical approach.
+       With it off, the physical parameters are transformed to formal ones per
+       :math:`J^\pi` group; since 2026-10-27 that transformation keeps each
+       level's identity whatever the order the levels are listed in (see the
+       note in :doc:`levels_channels`).
    * - **Ignore external width if internal width is zeroed**
      - When enabled, the external gamma-ray width of a level is set to zero if
        no total gamma-ray width is specified.

@@ -134,6 +134,16 @@ Fix Width
    its parameters disappeared from the fit, with only a "lists channel ... twice"
    warning.
 
+   The levels of a :math:`J^\pi` group may also be listed in any energy order
+   (a background pole first, say). Before 2026-10-27 this mattered in the
+   standard (non-Brune) parametrization: the transformation to formal
+   parameters handed its ascending eigenvalues to the levels in file order, so
+   the first-listed level carried the lowest formal energy, ``parameters.out``
+   listed the group in ascending order rather than the file's, and a fit that
+   fixed the pole's energy varied the low level instead. The cross sections
+   were never affected (the set of levels is the same whatever the labels).
+   The Brune parametrization, the default, never had the problem.
+
 Channel Configuration
 ---------------------
 

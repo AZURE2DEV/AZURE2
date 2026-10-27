@@ -1001,6 +1001,22 @@ void CNuc::PrintCompoundFromParams() {
 }
 
 /*!
+ * The rank of each entry of `energies` in ascending order (ties keep their
+ * file order), so that `energies[i]` is the `rank[i]`-th smallest.  Used to hand
+ * the ascending eigenvalues of the parameter transformations to the levels by
+ * energy rather than by their position in the file.
+ */
+
+static std::vector<int> AscendingRanks(const vector_r &energies) {
+  std::vector<int> order(energies.size());
+  for (int i = 0; i < (int)order.size(); i++) order[i] = i;
+  std::stable_sort(order.begin(), order.end(), [&](int a, int b) { return energies[a] < energies[b]; });
+  std::vector<int> rank(energies.size());
+  for (int k = 0; k < (int)order.size(); k++) rank[order[k]] = k;
+  return rank;
+}
+
+/*!
  * Performs the initial parameter transformations from physical to formal parameters.
  */
 
@@ -1259,14 +1275,20 @@ bool CNuc::TransformIn(const Config &configure) {
             }
           }
         }
-        // solve eigenvalue problem
+        // solve eigenvalue problem.  The eigenvalues come back in ascending
+        // order, so they are handed to the levels by the rank of their
+        // physical energy, not by their position in the file: a level listed
+        // first (a background pole, say) keeps its own energy, widths and fix
+        // flags.  TransformOut uses the same rank mapping in the other direction.
         EigenFunc eigenFunc(nMatrix, mMatrix);
+        const std::vector<int> rank = AscendingRanks(tempEnergies);
         for (int la = 0; la < tempEnergies.size(); la++) {
-          theJGroup->GetLevel(levelKeys[la])->SetE(eigenFunc.eigenvalues()[la]);
+          const int k = rank[la];
+          theJGroup->GetLevel(levelKeys[la])->SetE(eigenFunc.eigenvalues()[k]);
           for (int ch = 1; ch <= theJGroup->NumChannels(); ch++) {
             double sum = 0.0;
             for (int mu = 0; mu < tempEnergies.size(); mu++) {
-              sum += eigenFunc.eigenvectors()[mu][la] * tempGammas[mu][ch - 1];
+              sum += eigenFunc.eigenvectors()[mu][k] * tempGammas[mu][ch - 1];
             }
             theJGroup->GetLevel(levelKeys[la])->SetGamma(ch, sum);
           }
@@ -2248,6 +2270,10 @@ void CNuc::TransformOut(const Config &configure) {
           for (int lap = 1; lap <= this->GetJGroup(j)->NumLevels(); lap++) {
             if (this->GetJGroup(j)->GetLevel(lap)->IsInRMatrix()) {
               tempE.push_back(this->GetJGroup(j)->GetLevel(lap)->GetFitE());
+              // The iteration below re-sorts the energies ascending at every
+              // step, so this level is followed by the rank of its formal
+              // energy among the group's, the inverse of the mapping in
+              // TransformIn (not by its position in the file).
               if (this->GetJGroup(j)->GetLevel(lap) == theLevel) thisLevel = tempE.size() - 1;
               vector_r tempChanVector;
               tempGamma.push_back(tempChanVector);
@@ -2256,6 +2282,22 @@ void CNuc::TransformOut(const Config &configure) {
                 if (tempE.size() == 1) tempBoundary.push_back(this->GetJGroup(j)->GetChannel(ch)->GetBoundaryCondition());
               }
             }
+          }
+          {
+            // Put the group's levels in ascending formal energy (the order the
+            // eigen solver returns them in), so that tempE[thisLevel] is this
+            // level's own energy from the first iteration on.  For a file that
+            // lists its levels in energy order this is the identity.
+            const std::vector<int> rank = AscendingRanks(tempE);
+            vector_r sortedE(tempE.size());
+            matrix_r sortedGamma(tempE.size());
+            for (int i = 0; i < (int)tempE.size(); i++) {
+              sortedE[rank[i]] = tempE[i];
+              sortedGamma[rank[i]] = tempGamma[i];
+            }
+            thisLevel = rank[thisLevel];
+            tempE.swap(sortedE);
+            tempGamma.swap(sortedGamma);
           }
           while (iteration <= maxIterations && !done) {
             vector_r boundaryDiff;
