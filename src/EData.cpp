@@ -989,6 +989,7 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
     if (segment->IsTargetEffect()) {
       TargetEffect *targetEffect = this->GetTargetEffect(segment->GetTargetEffectNum());
       targetEffect->ConvertSigmaToCM(cmConversion);
+      targetEffect->SetBohrCharges(entrancePair->GetPType() == 20 ? 0 : entrancePair->GetZ(1), entrancePair->GetZ(2));
       if (targetEffect->IsBeamProfile()) targetEffect->ConvertBeamProfileToCM(cmConversion);
       if (targetEffect->IsUdr()) {
         double eMin = 1.0e300, eMax = 0.0;
@@ -1145,6 +1146,7 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
         if (component->IsTargetEffect()) {
           TargetEffect *targetEffect = this->GetTargetEffect(component->GetTargetEffectNum());
           targetEffect->ConvertSigmaToCM(compConversion);
+          targetEffect->SetBohrCharges(compEntrance->GetPType() == 20 ? 0 : compEntrance->GetZ(1), compEntrance->GetZ(2));
           if (targetEffect->IsBeamProfile()) targetEffect->ConvertBeamProfileToCM(compConversion);
           if (targetEffect->IsUdr()) {
             double eMin = 1.0e300, eMax = 0.0;

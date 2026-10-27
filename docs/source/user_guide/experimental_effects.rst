@@ -563,7 +563,48 @@ Straggling
 ^^^^^^^^^^
 
 Check **Include Straggling** to account for energy straggling of beam particles
-in the target. Enter the straggling coefficient in the provided field.
+in the target. At each depth the cross section is averaged over a Gaussian
+whose width grows with the energy already lost,
+
+.. math::
+
+   \sigma_\text{straggling} = c_s \sqrt{\Delta E_\text{c.m.}\,[\text{keV}]}
+   \quad\text{keV},
+
+combined in quadrature with the beam spread. **The coefficient** :math:`c_s`
+(keV\ :sup:`1/2`) **is a centre-of-mass quantity**: the energy loss it
+multiplies and the width it gives are both c.m., with no frame factor (every
+other number on the line, the beam sigma and the stopping cross section, is
+laboratory). A coefficient that describes the beam in the laboratory,
+:math:`\sigma_\text{lab} = c_\text{lab}\sqrt{\Delta E_\text{lab}}`, is entered
+as :math:`c_s = c_\text{lab}\sqrt{m_2/(m_1+m_2)}` (0.96 for p + ¹²C, 0.85 for
+α + ¹¹B).
+
+**A coefficient of 0** (the default) means Bohr straggling, computed from the
+charges of the entrance pair and the stopping cross section instead of a
+coefficient,
+
+.. math::
+
+   \sigma_\text{straggling} = \frac{m_2}{m_1+m_2}
+   \sqrt{4\pi Z_1^2 e^4 Z_2\, N x}, \qquad
+   N x = \int_{E_d}^{E_0} \frac{dE}{\epsilon(E)},
+
+with :math:`N x` the areal density of target atoms the beam has crossed.
+Bohr's value, :math:`c_s \approx \sqrt{(m_2/(m_1+m_2))\,4\pi Z_1^2 Z_2 e^4 /
+\epsilon}`, is 0.3-0.5 keV\ :sup:`1/2` for light ions in light targets at a
+few MeV (p + ¹⁴N at 270 keV: 0.31); it is the high-velocity limit and an
+underestimate below about 1 MeV/u, where Lindhard-Scharff straggling is
+smaller than Bohr. :math:`Z_2` is the charge of the target nucleus of the
+entrance pair, so for a **compound target** (a stopping cross section per
+molecule or per active atom, see above) the electrons of the other
+constituents are not counted: enter the coefficient yourself,
+:math:`c_s = \sqrt{(m_2/(m_1+m_2))\,4\pi Z_1^2 e^4 Z_\text{entity}/\epsilon}`
+with :math:`Z_\text{entity}` the electrons per entity the density counts and
+:math:`\epsilon` in MeV cm², :math:`e^2 = 1.44\times10^{-13}` MeV cm. Before
+October 2026 the default was a fixed 0.04 keV\ :sup:`1/2`, several times below
+Bohr: a line that kept it had essentially no straggling. Lines in existing
+files keep whatever coefficient is written in them.
 
 Attenuation Coefficients (Q-Coefficients)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

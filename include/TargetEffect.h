@@ -8,7 +8,6 @@
 #include <iosfwd>
 #include "Constants.h"
 #include "Equation.h"
-#include "Straggling.h"
 #include "UdrKernel.h"
 
 /// An AZURE target effect entry
@@ -77,8 +76,22 @@ class TargetEffect {
   double SigmaCM(double eCM, const Config &) const;
   /// The normalised Gaussian kernel exp(-(e - centroid)^2 / 2 sigma^2) / (sigma sqrt(2 pi)).
   static double GaussianKernel(double e, double centroid, double sigma);
-  /// Straggling sigma (c.m. MeV) after an energy loss of \p deltaE (c.m. MeV): coefficient * sqrt(dE[keV]) keV.
+  /// Straggling sigma (c.m. MeV) after an energy loss of \p deltaE (c.m. MeV): c_s * sqrt(dE[keV]) keV.  The
+  /// coefficient c_s (keV^1/2) is a CENTRE-OF-MASS quantity: the width it gives is the c.m. width of the
+  /// energy distribution after a c.m. energy loss, with no frame factor (documented as such 2026-10-27; a
+  /// coefficient describing the beam in the lab has to be multiplied by sqrt(m2/(m1+m2)) first).
   double StragglingSigma(double deltaE) const;
+  /// Straggling on with a coefficient of 0 (the default) means Bohr straggling, computed from the charges
+  /// and the stopping power instead of a coefficient: Omega_lab^2 = 4 pi Z1^2 e^4 Z2 N x, with N x the
+  /// areal density (atoms/cm^2) traversed (int dE / epsilon), Z1 the beam and Z2 the target nucleus of the
+  /// entrance pair, and the c.m. width m2/(m1+m2) Omega_lab.  (Before 2026-10-27 the default coefficient
+  /// was 0.04 keV^1/2, several times below Bohr for light ions in light targets: essentially no straggling.)
+  bool IsBohrStraggling() const { return isStraggling_ && !(stragglingCoefficient_ > 0.0); }
+  /// The Bohr straggling sigma (c.m. MeV) after traversing \p arealDensity atoms/cm^2 of the target.
+  double BohrStragglingSigma(double arealDensity) const;
+  /// The entrance pair's charges (beam Z1, target Z2) for Bohr straggling; the first call wins, like
+  /// ConvertSigmaToCM, since every segment on the line shares the effect.
+  void SetBohrCharges(int z1, int z2);
   /// How far the sub-point grid of a point at c.m. energy \p eCM must reach above (\p forward) and below
   /// (\p backward) it for this effect; \p thicknessCM is the point's target thickness (c.m. MeV, 0 if none).
   void GridExtent(double eCM, double thicknessCM, const Config &, double &forward, double &backward) const;
@@ -104,7 +117,7 @@ class TargetEffect {
   Equation *GetStoppingPowerEq();
   Equation *GetConvolutionEq();
 
-  // ERYA straggling integration methods
+  // Energy straggling (see StragglingSigma / IsBohrStraggling)
   bool IsStraggling() const;
   double GetStragglingCoefficient() const;
 
@@ -217,9 +230,12 @@ class TargetEffect {
   double screeningSigma_ = 0.0;   ///< eV, prior width (0 = none)
   double cmFactor_ = 1.0;        ///< c.m. / lab energy of the entrance pair, set by ConvertSigmaToCM
 
-  // ERYA straggling integration variables
+  // Energy straggling: sigma = c_s sqrt(dE_cm) (c.m. coefficient), or Bohr's formula when c_s = 0.
   bool isStraggling_;
   double stragglingCoefficient_;
+  int bohrZ1_ = 0;               ///< beam charge for Bohr straggling (SetBohrCharges)
+  int bohrZ2_ = 0;               ///< target charge for Bohr straggling
+  bool bohrChargesSet_ = false;
 
   // Adaptive integration grid parameters
   double resonanceWidthMultiplier_;

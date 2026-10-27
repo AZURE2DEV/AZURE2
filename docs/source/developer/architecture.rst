@@ -70,8 +70,9 @@ A run, from the command line
    ``LevelMatrixSolver`` and ``ChannelSpace`` (the channel-space solution), and
    ``CoulFunc`` / ``CoulombTable`` / ``ShftFunc`` (penetrabilities and shift
    functions). External capture is in ``ECIntegral``, ``ECTable`` and
-   ``ECAmplitudeCache``. Experimental effects are in ``TargetEffect``,
-   ``Straggling``, ``AdaptiveIntegrationGrid`` and ``UdrKernel``.
+   ``ECAmplitudeCache``. Experimental effects are in ``TargetEffect``
+   (beam spread, target integration, straggling), ``AdaptiveIntegrationGrid``
+   and ``UdrKernel``.
 
 The Python path
 ---------------

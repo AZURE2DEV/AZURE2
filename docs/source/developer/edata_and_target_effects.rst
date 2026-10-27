@@ -128,7 +128,22 @@ straggling width at the back of the target:
 
    \sigma_\text{straggling} = c_s \sqrt{\Delta E_\text{target}}
 
-where :math:`c_s` is the straggling coefficient (in keV units).
+where :math:`c_s` is the straggling coefficient in keV\ :sup:`1/2` and
+:math:`\Delta E_\text{target}` the energy loss in keV, **both in the centre of
+mass**: the coefficient is a c.m. quantity and no frame factor is applied
+(``TargetEffect::StragglingSigma``). With a coefficient of 0 the width is
+Bohr's instead (``TargetEffect::BohrStragglingSigma``),
+
+.. math::
+
+   \sigma_\text{straggling} = \frac{m_2}{m_1 + m_2}\,
+   \sqrt{4\pi Z_1^2 e^4 Z_2\, N x},
+
+with :math:`N x` the areal density of target atoms traversed, the charges
+those of the entrance pair (``TargetEffect::SetBohrCharges``, set beside
+``ConvertSigmaToCM``), and :math:`e^2 = \alpha\hbar c`. For the grid extent
+:math:`N x` is the line's density (a thick target: the thickness over the
+stopping cross section at the surface).
 
 Adaptive Grid Generation
 ^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -278,11 +293,18 @@ beam energy distribution at each depth.
 
       \sigma_\text{eff} = \sqrt{\sigma_b^2 + \sigma_\text{straggling}^2}
 
-   The straggling contribution grows with depth:
+   The straggling contribution grows with depth (c.m. energies and a c.m.
+   coefficient):
 
    .. math::
 
       \sigma_\text{straggling} = c_s \sqrt{E_\text{surface} - E_d}
+
+   or, with :math:`c_s = 0`, Bohr's width for the areal density between the
+   surface and :math:`E_d`, :math:`N x = \int_{E_d}^{E_\text{surface}}
+   dE/\epsilon(E)`, accumulated over the sub-points (trapezoid in
+   :math:`1/\epsilon`; a node with a non-positive stopping cross section adds
+   nothing).
 
 Target Integration + Straggling (no beam convolution)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

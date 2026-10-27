@@ -15,7 +15,6 @@
 #include "ScatteringLength.h"
 #include "ShftFunc.h"
 #include "TargetEffect.h"
-#include "Straggling.h"
 #include "IntegratedFermiFunc.h"
 #include <iostream>
 #include <assert.h>
@@ -2088,6 +2087,32 @@ V EPoint::IntegrateTargetEffectImpl(const Config &configure, Read rd) {
     }
     return V(0.0);
   };
+  // Areal density (atoms/cm^2) of target traversed from the grid's top node down to c.m. energy e, int dE / epsilon
+  // over the sub-points (trapezoid in 1/epsilon; epsilon in c.m. units as the sub-points carry it, and dE_cm /
+  // eps_cm = dE_lab / eps_lab).  For Bohr straggling.  A node with a non-positive stopping power contributes nothing.
+  std::vector<double> arealCum;
+  auto invEps = [](double eps) { return (eps > 0.0) ? 1.0 / eps : 0.0; };
+  if (targetEffect->IsBohrStraggling()) {
+    arealCum.assign(numPoints + 1, 0.0);
+    for (int j = 1; j < numPoints; j++) {
+      double Ea = this->GetSubPoint(j)->GetCMEnergy(), Eb = this->GetSubPoint(j + 1)->GetCMEnergy();
+      double ia = invEps(this->GetSubPoint(j)->GetStoppingPower()), ib = invEps(this->GetSubPoint(j + 1)->GetStoppingPower());
+      arealCum[j + 1] = arealCum[j] + 0.5 * (ia + ib) * (Ea - Eb);
+    }
+  }
+  auto arealTo = [&](double e) {
+    if (arealCum.empty() || e >= eHigh) return 0.0;
+    for (int j = 1; j < numPoints; j++) {
+      double Ea = this->GetSubPoint(j)->GetCMEnergy(), Eb = this->GetSubPoint(j + 1)->GetCMEnergy();
+      if (e <= Ea && e >= Eb) {
+        double frac = (Ea - e) / (Ea - Eb);
+        double ia = invEps(this->GetSubPoint(j)->GetStoppingPower()), ib = invEps(this->GetSubPoint(j + 1)->GetStoppingPower());
+        double ie = (1.0 - frac) * ia + frac * ib;
+        return arealCum[j] + 0.5 * (ia + ie) * (Ea - e);
+      }
+    }
+    return arealCum[numPoints];
+  };
 
   if (targetEffect->IsTargetIntegration()) {
     const double surface = centroid;
@@ -2111,7 +2136,9 @@ V EPoint::IntegrateTargetEffectImpl(const Config &configure, Read rd) {
           double eDepth = mid + half * (gp == 0 ? x1 : x2);
           double beam = targetEffect->IsGaussian() ? targetEffect->SigmaCM(eDepth, configure) : 0.0;
           if (!(beam > 0.)) beam = 0.0;
-          double straggle = targetEffect->StragglingSigma(surface - eDepth);
+          double straggle = targetEffect->IsBohrStraggling()
+                                ? targetEffect->BohrStragglingSigma(arealTo(eDepth) - arealTo(surface))
+                                : targetEffect->StragglingSigma(surface - eDepth);
           double sigmaEff = std::sqrt(beam * beam + straggle * straggle);
           V inner = 0.0;
           if (sigmaEff > 1.0e-10) {

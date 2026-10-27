@@ -4,7 +4,6 @@
 #include <cctype>
 #include <cstdlib>
 #include <algorithm>
-#include "Straggling.h"
 #include <cmath>
 
 /*!
@@ -14,9 +13,9 @@
  */
 
 TargetEffect::TargetEffect(std::istream &stream, const Config &configure) {
-  // Initialize straggling to safe defaults
+  // Straggling off; a coefficient of 0 means Bohr straggling when it is on (0.04 keV^1/2 before 2026-10-27)
   isStraggling_ = false;
-  stragglingCoefficient_ = 0.04;
+  stragglingCoefficient_ = 0.0;
 
   // Initialize adaptive grid parameters to defaults
   // See AdaptiveIntegrationGrid::GridConfig for why this is 20 rather than 5.
@@ -91,7 +90,7 @@ TargetEffect::TargetEffect(std::istream &stream, const Config &configure) {
       // Try to read coefficient if available
       if (stream.good()) stream >> std::ws;
       if (stream.good() && stream.peek() != '<' && (std::isdigit(stream.peek()) || stream.peek() == '.' || stream.peek() == '-')) {
-        double stragglingCoeff = 0.04;
+        double stragglingCoeff = 0.0;
         stream >> stragglingCoeff;
         stragglingCoefficient_ = stragglingCoeff;
 
@@ -611,6 +610,29 @@ double TargetEffect::StragglingSigma(double deltaE) const {
 }
 
 /*!
+ * Bohr's energy straggling after traversing an areal density N x (atoms/cm^2) of the target:
+ * Omega_lab^2 = 4 pi Z1^2 e^4 Z2 N x (N. Bohr, Phil. Mag. 30 (1915) 581), a lab width converted to the
+ * c.m. with the entrance pair's mass ratio.  e^2 = alpha hbar c in MeV fm, 1 fm = 1e-13 cm.  Z2 is the
+ * charge of the target nucleus: for a compound target whose stopping cross section is per molecule or per
+ * active atom (see the user guide) the electrons of the other constituents are not counted, and an
+ * explicit coefficient should be entered instead.
+ */
+
+double TargetEffect::BohrStragglingSigma(double arealDensity) const {
+  if (!this->IsBohrStraggling() || !(arealDensity > 0.0) || bohrZ1_ == 0 || bohrZ2_ <= 0) return 0.0;
+  const double e2 = fstruc * hbarc * 1.0e-13;  // MeV cm
+  const double omega2 = 4.0 * pi * bohrZ1_ * bohrZ1_ * bohrZ2_ * e2 * e2 * arealDensity;  // lab MeV^2
+  return cmFactor_ * std::sqrt(omega2);
+}
+
+void TargetEffect::SetBohrCharges(int z1, int z2) {
+  if (bohrChargesSet_) return;
+  bohrZ1_ = z1;
+  bohrZ2_ = z2;
+  bohrChargesSet_ = true;
+}
+
+/*!
  * The sub-point grid of a point reaches forwardDepth above and backwardDepth below its energy. A
  * Gaussian beam spread needs convolutionRange sigma on each side; target integration needs the target
  * thickness below, and with a beam spread the window is padded by a further factor 5 (kept from the
@@ -626,7 +648,17 @@ void TargetEffect::GridExtent(double eCM, double thicknessCM, const Config &conf
   if (this->IsTargetIntegration()) {
     backward = thicknessCM + (this->IsGaussian() ? 5.0 * beam : 0.0);
     forward = this->IsGaussian() ? 5.0 * beam : 0.0;
-    backward += convolutionRange * this->StragglingSigma(thicknessCM);
+    if (this->IsBohrStraggling()) {
+      // the whole target: its areal density, or for a thick target the thickness over the surface stopping power
+      double areal = density_;
+      if (isThickTarget_) {
+        const double eps = cmFactor_ * stoppingPowerEq_.Evaluate(configure, eCM / cmFactor_);
+        areal = (eps > 0.0) ? thicknessCM / eps : 0.0;
+      }
+      backward += convolutionRange * this->BohrStragglingSigma(areal);
+    } else {
+      backward += convolutionRange * this->StragglingSigma(thicknessCM);
+    }
   } else if (this->IsGaussian()) {
     backward = beam;
     forward = beam;
@@ -818,8 +850,7 @@ bool TargetEffect::IsStraggling() const {
 }
 
 /*!
- * Returns the straggling coefficient for the target effect.
- * Typical value is 0.04 keV^0.5 per keV^0.5 of energy loss.
+ * Returns the straggling coefficient c_s (keV^1/2, c.m.): sigma_cm = c_s sqrt(dE_cm [keV]); 0 = Bohr straggling.
  */
 
 double TargetEffect::GetStragglingCoefficient() const {

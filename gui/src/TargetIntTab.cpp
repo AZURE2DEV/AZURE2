@@ -804,7 +804,7 @@ bool TargetIntTab::readFile(QTextStream &inStream) {
 
       // Try to read straggling flag and coefficient (optional for backward compatibility)
       isStraggling = 0;                       // Default to false
-      stragglingCoefficient = 0.04;           // Default coefficient
+      stragglingCoefficient = 0.0;            // Default coefficient: 0 = Bohr straggling
       double resonanceWidthMultiplier = 20.0;  // Default; see AdaptiveIntegrationGrid
       double pointsPerWidth = 50.0;           // Default
 

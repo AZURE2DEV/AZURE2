@@ -251,7 +251,7 @@ QVariant TargetIntModel::headerData(int section, Qt::Orientation orientation, in
       case 15:
         return tr("Straggling Active?");
       case 16:
-        return tr("Straggling Coefficient");
+        return tr("Straggling Coefficient (0 = Bohr)");
       case 17:
         return tr("Width Mult.");
       case 18:

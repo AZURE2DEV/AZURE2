@@ -119,8 +119,11 @@ AddTargetIntDialog::AddTargetIntDialog(QWidget *parent) :
   isStraggling = new QCheckBox(tr("Include Energy Straggling"));
   isStraggling->setChecked(false);
   stragglingCoefficientText = new QLineEdit;
-  stragglingCoefficientText->setText("0.04");  // Default straggling coefficient
-  stragglingCoefficientText->setToolTip("Straggling coefficient (keV^0.5 per keV^0.5 of energy loss). Typical value: 0.04 for protons in Al.");
+  stragglingCoefficientText->setText("0");  // 0 = Bohr straggling from the charges and the stopping power
+  stragglingCoefficientText->setToolTip(
+      "Straggling coefficient c (keV^1/2): the c.m. width is c sqrt(c.m. energy loss in keV).\n"
+      "0 (default) = Bohr straggling, computed from the beam and target charges and the stopping power.\n"
+      "Enter a value for a compound target or a measured straggling (the pre-2026 default 0.04 is far below Bohr).");
   stragglingCoefficientText->setEnabled(false);
   connect(isStraggling, SIGNAL(toggled(bool)), stragglingCoefficientText, SLOT(setEnabled(bool)));
 
