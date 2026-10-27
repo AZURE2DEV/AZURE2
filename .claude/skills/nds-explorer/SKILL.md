@@ -91,7 +91,18 @@ the CSV header):
   passes the values through; pass `rutherford=True` to multiply by the Coulomb
   cross section (→ b/sr), or `rutherford=False` to accept the ratio and
   silence the warning. **Check the search result's reaction code** — that is
-  the only place the marker survives.
+  the only place the marker survives. The cross section written is in the
+  frame of the angle column: for a lab `ANG` column `to_azr` converts the
+  angle to the c.m. frame (`elastic_lab_to_cm`, the entrance masses — pass
+  `target_mass`/`projectile_mass` for exact ones) and divides the c.m.
+  Rutherford value by the lab→c.m. Jacobian, so AZURE2 reads back
+  ratio × σ_R,cm(θ_cm). **Before 2026-10-26 (audit item 8) it wrote the c.m.
+  Rutherford at the lab angle** (1.13× off for p+16O, 1.8–2.2× for α+12C) and
+  `_guess_observable` called every angle column `differential-cm`; a lab
+  column is `differential` now, and a ratio is no longer guessed as an
+  analyzing power. Any data file made from a `,,RTH` set with a lab `ANG`
+  column before that date must be regenerated (`tests/pyazr/nds_rutherford_test.py`).
+  Identical particles (ratio to Mott) get a warning and ratio × Rutherford.
 - `plus=1` gives computational units (eV, `B*EV`, `B/SR`); `plus=2` the
   universal grid. Not needed for AZURE2; `plus=0` is the default.
 

@@ -355,6 +355,15 @@ runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
   (`CalculateCrossSectionGammaConversionFactor`) still had the
   pre-2026-10-23 aberration formula; it is the corrected one now (a gamma
   ratio of one entrance pair never saw it, the factor cancelled).
+- **pyazr.nds ratio-to-Rutherford data with a lab angle column** (fixed
+  2026-10-26, audit item 8, `tests/pyazr/nds_rutherford_test.py`): `to_azr`
+  multiplied a `,,RTH` ratio by the c.m. Rutherford cross section at the LAB
+  angle (1.13x off for p+16O, 1.8-2.2x for alpha+12C); it now converts the
+  lab angle with the elastic kinematics and divides by the Jacobian, so
+  AZURE2 reads back ratio x sigma_R,cm(theta_cm). The observable guess also
+  called every angle column `differential-cm`; a lab `ANG` column is
+  `differential` now. Regenerate any data file made from a lab-angle `,,RTH`
+  set before that date (details in the nds-explorer skill).
 - **Attenuation (Q) coefficients act on the lab distribution** (dev a22b99a,
   2026-10-25): for a particle exit Q_K multiplies the LAB Legendre coefficients
   and the result is taken back to the point's c.m. angle exactly. Before, a
