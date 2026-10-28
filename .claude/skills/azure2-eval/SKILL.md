@@ -652,6 +652,22 @@ runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
   non-finite limit is ignored. Internal API arrays also keep their alignment
   on a GSL failure (NaN in place of a skipped point). Tests
   parameter_settings_nan, pyazr potential_sessions and output_penalties.
+- **A lab angle the forward-branch kinematics cannot reach is refused, not
+  NaN** (dev 2026-10-27, audit item 31). The lab-to-c.m. map of a differential
+  segment (code 1) covers the forward branch only. Past the kinematic maximum
+  lab angle (a reaction near the threshold of an endothermic exit: 7Li(p,n) at
+  E_p 1.89-1.90 MeV has theta_max 22-39 deg; elastic scattering with m1 > m2:
+  asin(m2/m1)) and for a lab-differential point BELOW the exit threshold, the
+  old builds wrote `nan` into chiSquared.out / the extrap file and exited 0
+  (one log line for a reaction, none for elastic or below threshold), so a fit
+  with such a point was silently wrecked. Now `ERROR: segment #k: lab angle X
+  deg at E_lab = Y MeV: beyond the kinematic maximum ... / below the threshold
+  ...` and no output; an energy shift that moves a point past the limit
+  mid-fit warns and keeps the last valid c.m. angle. Give such points as c.m.
+  (code 4 / 5) or drop them. Still by design and documented: recoil detection
+  is not an option (convert by hand), A_y angles (code 7) are c.m., a UPOS
+  lab-differential segment is converted with particle b's kinematics (now
+  warned). Test: tests/kinematic_limits.
 - **Attenuation (Q) coefficients act on the lab distribution** (dev a22b99a,
   2026-10-25): for a particle exit Q_K multiplies the LAB Legendre coefficients
   and the result is taken back to the point's c.m. angle exactly. Before, a
