@@ -689,6 +689,16 @@ runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
   dS/dE. Note on frames: the DEFAULT output of a lab-differential SUM test
   segment is in the BASE pair's c.m. frame, so its second term carries
   J_base/J_term; the lab sum of the terms appears with `kinflag.dat` = 1.
+- **The E_x column of AZUREOut_* includes the pair's E\*** (dev 2026-10-28,
+  audit 01 B3). Before, the excitation-energy column (and pyazr's excitation
+  energies) was E_cm + S without the entrance pair's excitation energy, so for
+  a segment on an excited-state pair (the inverse-channel A_y segment the docs
+  recommend, n + 7Be\* and the like) it was low by E\*; the physics always used
+  the full value, so only the column was wrong (tests/excitation_energy_column).
+  Same commit: Park's second energy derivative of the shift function takes the
+  exact bound-state route for its whole 10 keV stencil (the table's Hermite
+  interpolant is only C1 across cells); on 13N the effect was below 1e-8, so
+  this one is defensive, with no regression test.
 - **Attenuation (Q) coefficients act on the lab distribution** (dev a22b99a,
   2026-10-25): for a particle exit Q_K multiplies the LAB Legendre coefficients
   and the result is taken back to the point's c.m. angle exactly. Before, a
