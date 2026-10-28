@@ -627,6 +627,32 @@ segment dialog but includes:
    kinematically allowed, or if the energy is too low and the penetrability
    becomes vanishingly small.
 
+Kinematic limits of the lab frame
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The lab-to-c.m. conversion of a differential segment (data or test, code 1)
+covers the forward branch only, and the lab angle is always that of the light
+ejectile (particle 1 of the exit pair):
+
+- Where two c.m. angles reach the same lab angle (a reaction near the
+  threshold of an endothermic exit, e.g. 7Li(p,n)7Be below about 2 MeV,
+  or elastic scattering with a projectile heavier than the target), AZURE2
+  models the forward c.m. angle. A lab angle beyond the kinematic maximum
+  of that point's energy is refused: ``ERROR: ... beyond the kinematic
+  maximum``. Before October 2026 such a point became NaN silently (one line
+  in the log for a reaction, none for elastic scattering) and the run went
+  on with ``nan`` in ``chiSquared.out`` and the extrapolation files.
+  A lab-differential point below the threshold of its exit pair is refused
+  for the same reason (no ejectile, nothing to convert).
+- Recoil detection is not an option: data taken on the heavy recoil must be
+  converted by hand (elastic scattering: :math:`\theta_{c.m.} = 180^\circ -
+  2\theta_{recoil}`) and given as c.m. (code 5 / 4).
+- Analyzing-power angles (code 7) are c.m.; lab-angle :math:`A_y` data need
+  converting first (the value needs no Jacobian, the angle does).
+- A UPOS secondary-gamma segment given as lab differential is converted with
+  the kinematics of particle b (see UPOS below); the run says so with a
+  warning.
+
 .. note::
 
    An analyzing power measured on a **thin** target should be given a segment

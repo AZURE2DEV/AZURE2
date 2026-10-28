@@ -17,6 +17,7 @@
 #include "TargetEffect.h"
 #include "IntegratedFermiFunc.h"
 #include <iostream>
+#include <sstream>
 #include <assert.h>
 #include <fstream>
 #include <memory>
@@ -782,10 +783,22 @@ bool EPoint::RelativisticLabToCM(PPair *entrancePair, PPair *exitPair, double nr
   return true;
 }
 
-void EPoint::ConvertLabAngle(PPair *pPair) {
-  cm_angle_ = this->GetLabAngle() + 180. / pi * asin(pPair->GetM(1) / pPair->GetM(2) * sin(pi / 180. * this->GetLabAngle()));
+bool EPoint::ConvertLabAngle(PPair *pPair) {
+  const double ratio = pPair->GetM(1) / pPair->GetM(2);
+  if (ratio > 1.0) {
+    labAngleMax_ = 180. / pi * asin(1.0 / ratio);
+    if (ratio * sin(pi / 180. * this->GetLabAngle()) > 1.0) {
+      std::ostringstream why;
+      why << "beyond the kinematic maximum " << labAngleMax_ << " deg of elastic scattering with a projectile heavier than "
+          << "the target (only the forward branch is modelled; give the point as c.m., code 4 / 5, or drop it)";
+      labAngleWhy_ = why.str();
+      return false;
+    }
+  }
+  cm_angle_ = this->GetLabAngle() + 180. / pi * asin(ratio * sin(pi / 180. * this->GetLabAngle()));
   double cmAngle, factor;
   if (Kinematics::Relativistic() && this->RelativisticLabToCM(pPair, pPair, cm_angle_, cmAngle, factor)) cm_angle_ = cmAngle;
+  return true;
 }
 
 /*!
@@ -795,20 +808,35 @@ void EPoint::ConvertLabAngle(PPair *pPair) {
  * overloaded function is for non-elastic particle channels.
  */
 
-void EPoint::ConvertLabAngle(PPair *entrancePair, PPair *exitPair, const Config &configure) {
+bool EPoint::ConvertLabAngle(PPair *entrancePair, PPair *exitPair, const Config &configure) {
   double qValue = entrancePair->GetSepE() + entrancePair->GetExE() - exitPair->GetSepE() - exitPair->GetExE();
   double a13 = (entrancePair->GetM(1) * exitPair->GetM(1)) * this->GetLabEnergy() / (this->GetLabEnergy() + qValue) /
       (entrancePair->GetM(1) + entrancePair->GetM(2)) / (exitPair->GetM(1) + exitPair->GetM(2));
   double a24 = (entrancePair->GetM(2) * exitPair->GetM(2)) * (1 + entrancePair->GetM(1) / entrancePair->GetM(2) * qValue / (this->GetLabEnergy() + qValue)) /
       (entrancePair->GetM(1) + entrancePair->GetM(2)) / (exitPair->GetM(1) + exitPair->GetM(2));
 
+  // Below the threshold of the exit pair (classically E_lab + Q <= 0 in the c.m. share, i.e. a24 <= 0) there is
+  // no ejectile; the Marion-Young map then has no meaning and the sqrt below went NaN with no message.
+  if (!(this->GetLabEnergy() + qValue > 0.0) || !(a24 > 0.0)) {
+    std::ostringstream why;
+    why << "below the threshold of the exit pair (Q = " << qValue << " MeV): the lab angle cannot be converted; give "
+        << "the point as c.m. (code 4 / 5) or drop it";
+    labAngleWhy_ = why.str();
+    labAngleMax_ = 0.0;
+    return false;
+  }
   if (a13 > a24) {
-    double thetaMax = asin(sqrt(a24 / a13)) * 180. / pi;
-    if (thetaMax < this->GetLabAngle()) configure.outStream << std::endl
-                                                            << "Lab Angle (" << this->GetLabAngle()
-                                                            << " degrees) is not kinematically possible.  Maximum angle is "
-                                                            << thetaMax << " degrees." << std::endl;
-    assert(thetaMax >= this->GetLabAngle());
+    // Two c.m. angles reach every lab angle below thetaMax and none above it; only the forward branch is
+    // modelled.  The caller reports the point and stops (before 2026-10-27: a message, an assert that
+    // release builds compile out, and NaN from the sqrt below).
+    labAngleMax_ = asin(sqrt(a24 / a13)) * 180. / pi;
+    if (labAngleMax_ < this->GetLabAngle()) {
+      std::ostringstream why;
+      why << "beyond the kinematic maximum " << labAngleMax_ << " deg at this energy (two c.m. angles reach every lab "
+          << "angle below it and only the forward branch is modelled; give the point as c.m., code 4 / 5, or drop it)";
+      labAngleWhy_ = why.str();
+      return false;
+    }
   }
 
   double E3PerEt = a13 * pow(cos(this->GetLabAngle() * pi / 180.) + sqrt(a24 / a13 - pow(sin(this->GetLabAngle() * pi / 180.), 2.0)), 2.0);
@@ -825,6 +853,7 @@ void EPoint::ConvertLabAngle(PPair *entrancePair, PPair *exitPair, const Config 
   // define angle kin factor to convert back to lab frame
   angleKinFactor_ = this->GetLabAngle() / cm_angle_;
   this->SetAngleKinFactor(angleKinFactor_);
+  return true;
 }
 
 /*!

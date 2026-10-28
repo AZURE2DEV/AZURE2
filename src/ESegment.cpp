@@ -453,10 +453,16 @@ int ESegment::Fill(CNuc *theCNuc, EData *theData, const Config &configure) {
           this->GetPoint(this->NumPoints())->ConvertLabEnergy(entrancePair);
         }
         if (exitPair->GetPType() == 0 && this->IsDifferential() && !this->IsPhase() && !this->IsCMDifferential()) {
-          if (this->GetEntranceKey() == this->GetExitKey()) {
-            this->GetPoint(this->NumPoints())->ConvertLabAngle(entrancePair);
-          } else {
-            this->GetPoint(this->NumPoints())->ConvertLabAngle(entrancePair, exitPair, configure);
+          EPoint *converted = this->GetPoint(this->NumPoints());
+          const bool inRange = (this->GetEntranceKey() == this->GetExitKey())
+                                   ? converted->ConvertLabAngle(entrancePair)
+                                   : converted->ConvertLabAngle(entrancePair, exitPair, configure);
+          if (!inRange) {
+            // Beyond the kinematic maximum lab angle: not a NaN point, not a dropped segment (audit 2026-10-25, 31).
+            configure.outStream << "ERROR: " << "segment #" << this->GetSegmentKey() << ": lab angle " << converted->GetLabAngle() << " deg at E_lab = " << converted->GetLabEnergy()
+    << " MeV: " << converted->GetLabAngleWhy() << "." << std::endl;
+            theData->SetKinematicsError();
+            return -1;
           }
           // Skip cross section conversion for ratio segments (ratios are dimensionless)
           // Use IsAdvanced() and GetLegacyOperationType() since components aren't added yet during Fill()
@@ -984,10 +990,16 @@ void ESegment::UpdatePointEnergyWithShift(int i, CNuc *theCNuc, const Config *co
         }
 
         if (exitPair->GetPType() == 0 && this->IsDifferential() && !this->IsPhase() && !this->IsCMDifferential()) {
-          if (this->GetEntranceKey() == this->GetExitKey()) {
-            point->ConvertLabAngle(entrancePair);
-          } else {
-            point->ConvertLabAngle(entrancePair, exitPair, *configure);
+          const bool inRange = (this->GetEntranceKey() == this->GetExitKey())
+                                   ? point->ConvertLabAngle(entrancePair)
+                                   : point->ConvertLabAngle(entrancePair, exitPair, *configure);
+          if (!inRange) {
+            // An energy shift moved the point past the kinematic maximum lab angle mid-fit: the c.m. angle keeps
+            // its last valid value and the run says so (it cannot stop here; audit 2026-10-25, item 31).
+            configure->outStream << "WARNING: segment #" << this->GetSegmentKey() << ": the energy shift moved the point at lab angle "
+                                 << point->GetLabAngle() << " deg to E_lab = " << point->GetLabEnergy()
+                                 << " MeV, beyond its kinematic maximum " << point->GetLabAngleMax()
+                                 << " deg; its c.m. angle is kept at the last valid value." << std::endl;
           }
           // Skip cross section conversion for ratio segments (ratios are dimensionless)
           if (!(this->IsAdvanced() && this->GetLegacyOperationType() == 1)) {

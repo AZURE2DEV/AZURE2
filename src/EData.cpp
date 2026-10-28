@@ -102,6 +102,19 @@ static bool AnalyzingPowerAllowed(CNuc *theCNuc, const ESegment &segment, int nu
  * (the Coulomb total diverges) of distinguishable particles.  The R-matrix-for-capture formalism defines T
  * differently, so it is refused there.
  */
+/*!
+ * A UPOS (secondary-gamma) segment given as a lab differential is converted with the kinematics of particle b, the
+ * light ejectile of the exit pair, which is right for a gamma measured in coincidence with it and not otherwise
+ * (segments.rst, UPOS).  Say so instead of converting silently (audit 2026-10-25, item 31).
+ */
+static void UPOSLabNote(const ESegment &segment, int key, bool isTest, const Config &configure) {
+  if (!segment.IsUPOS() || !segment.IsDifferential() || segment.IsCMDifferential() || segment.IsPhase()) return;
+  configure.outStream << "WARNING: " << (isTest ? "test segment #" : "segment #") << key
+                      << " (UPOS, lab differential): the lab angle is converted with the kinematics of particle b, "
+                      << "the light ejectile of the exit pair (not the gamma's); give c.m. angles if that is not meant."
+                      << std::endl;
+}
+
 static bool TotalAllowed(CNuc *theCNuc, ESegment &segment, int key, bool isTest, const Config &configure) {
   if (!segment.IsTotal()) return true;
   const char *what = isTest ? "test segment" : "segment";
@@ -270,6 +283,7 @@ int EData::Fill(const Config &configure, CNuc *theCNuc) {
           if (!CoefficientsAllowed(theCNuc, NewSegment, numTotalSegments, configure)) return -1;
           if (!NaturalAllowed(theCNuc, NewSegment, numTotalSegments, false, configure)) return -1;
           if (!TotalAllowed(theCNuc, NewSegment, numTotalSegments, false, configure)) return -1;
+          UPOSLabNote(NewSegment, numTotalSegments, false, configure);
           bool isValidTotal = false;
           if (NewSegment.GetExitKey() == -1) {
             // total capture: every capture pair of the ENTRANCE pair's compound nucleus
@@ -295,7 +309,7 @@ int EData::Fill(const Config &configure, CNuc *theCNuc) {
 
             // Fill the segment with data first
             if (this->GetSegment(this->NumSegments())->Fill(theCNuc, this, configure) == -1) {
-              if (covarianceError_) return -1;  // a broken covariance input is never skipped silently
+              if (covarianceError_ || kinematicsError_) return -1;  // never skipped silently
               configure.outStream << "WARNING: Could Not Fill Segment #" << this->NumSegments()
                                   << " from file." << std::endl;
               this->DeleteLastSegment();
@@ -490,6 +504,7 @@ int EData::MakePoints(const Config &configure, CNuc *theCNuc) {
           if (!AnalyzingPowerAllowed(theCNuc, NewSegment, numTotalSegments, true, configure)) return -1;
           if (!NaturalAllowed(theCNuc, NewSegment, numTotalSegments, true, configure)) return -1;
           if (!TotalAllowed(theCNuc, NewSegment, numTotalSegments, true, configure)) return -1;
+          UPOSLabNote(NewSegment, numTotalSegments, true, configure);
           bool isValidTotal = false;
           if (NewSegment.GetExitKey() == -1) {
             // total capture: every capture pair of the ENTRANCE pair's compound nucleus
@@ -538,10 +553,13 @@ int EData::MakePoints(const Config &configure, CNuc *theCNuc) {
                 const bool isRatio = theSegment->IsAdvanced() && theSegment->GetLegacyOperationType() == 1;
                 if (exitPair->GetPType() == 0 && theSegment->IsDifferential() &&
                     !theSegment->IsPhase() && !theSegment->IsAngularDist() && !theSegment->IsCMDifferential()) {
-                  if (theSegment->GetEntranceKey() == theSegment->GetExitKey()) {
-                    thePoint->ConvertLabAngle(entrancePair);
-                  } else {
-                    thePoint->ConvertLabAngle(entrancePair, exitPair, configure);
+                  const bool inRange = (theSegment->GetEntranceKey() == theSegment->GetExitKey())
+                                           ? thePoint->ConvertLabAngle(entrancePair)
+                                           : thePoint->ConvertLabAngle(entrancePair, exitPair, configure);
+                  if (!inRange) {
+                    configure.outStream << "ERROR: " << "test segment #" << theSegment->GetSegmentKey() << ": lab angle " << thePoint->GetLabAngle() << " deg at E_lab = " << thePoint->GetLabEnergy()
+    << " MeV: " << thePoint->GetLabAngleWhy() << "." << std::endl;
+                    return -1;
                   }
                   if (!isRatio) thePoint->ConvertCrossSection(entrancePair, exitPair);
                 }
@@ -2725,10 +2743,12 @@ int EData::InitializeComponentSegments(CNuc *theCNuc, const Config &configure) {
 
         if (exitPair->GetPType() == 0 && componentSegment.IsDifferential() &&
             !componentSegment.IsPhase() && !componentSegment.IsAngularDist() && !componentSegment.IsCMDifferential()) {
-          if (entranceKey == exitKey) {
-            point->ConvertLabAngle(entrancePair);
-          } else {
-            point->ConvertLabAngle(entrancePair, exitPair, configure);
+          const bool inRange = (entranceKey == exitKey) ? point->ConvertLabAngle(entrancePair)
+                                                        : point->ConvertLabAngle(entrancePair, exitPair, configure);
+          if (!inRange) {
+            configure.outStream << "ERROR: " << "component (" << entranceKey << " -> " << exitKey << ") of segment #" << componentSegment.GetSegmentKey() << ": lab angle " << point->GetLabAngle() << " deg at E_lab = " << point->GetLabEnergy()
+    << " MeV: " << point->GetLabAngleWhy() << "." << std::endl;
+            return -1;
           }
           point->ConvertCrossSection(entrancePair, exitPair);
         }

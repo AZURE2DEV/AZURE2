@@ -3,6 +3,7 @@
 #include <cmath>
 #include <limits>
 #include <vector>
+#include <string>
 #include <utility>
 #include <memory>
 
@@ -306,10 +307,18 @@ class EPoint {
   void ConvertExcitationEnergy(PPair *);
   /// Total decay energy from the light particle's, with the parent at rest.
   void ConvertDecayEnergy(PPair *);
-  /// Fill the centre-of-mass angle from the lab angle.
-  void ConvertLabAngle(PPair *);
-  /// As above for a reaction with different entrance and exit pairs.
-  void ConvertLabAngle(PPair *, PPair *, const Config &);
+  /// Fill the centre-of-mass angle from the lab angle (elastic).  False when the lab angle is beyond the
+  /// kinematic maximum (m1 > m2: asin(m2/m1)); GetLabAngleMax() then holds that maximum.  Only the forward
+  /// branch is modelled.  Until 2026-10-27 the angle silently became NaN (audit 2026-10-25, item 31).
+  bool ConvertLabAngle(PPair *);
+  /// As above for a reaction with different entrance and exit pairs: false beyond the maximum lab angle where
+  /// two c.m. angles reach one lab angle (near the threshold of an endothermic exit); before, a message and an
+  /// assert that release builds compile out, then NaN.
+  bool ConvertLabAngle(PPair *, PPair *, const Config &);
+  /// The kinematic maximum lab angle (degrees) found by the last ConvertLabAngle that returned false.
+  double GetLabAngleMax() const { return labAngleMax_; };
+  /// Why the last ConvertLabAngle returned false (a sentence for the error message).
+  const std::string &GetLabAngleWhy() const { return labAngleWhy_; };
   /// Centre-of-mass angle by the relativistic form, Iliadis C.37-C.38.
   void ConvertCMAngle(PPair *, PPair *, const Config &);
   /// Fill the centre-of-mass cross section and uncertainty from the lab ones.
@@ -476,6 +485,8 @@ class EPoint {
   double stoppingPower_;
   double targetThickness_;
   double angleKinFactor_;
+  double labAngleMax_ = 180.;  ///< kinematic maximum lab angle of the last failed conversion
+  std::string labAngleWhy_;    ///< the reason of the last failed conversion
   double crossSectionKinFactor_;
   // Beam-profile effect: per-point energy window (lab as read, c.m. after
   // conversion; NaN when the data file has no such columns) and the inverse

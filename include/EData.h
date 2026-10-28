@@ -147,6 +147,8 @@ class EData {
   /// ERROR printed and SetCovarianceError) if it cannot be read.
   std::shared_ptr<DataCovariance::File> CovarianceFileFor(const std::string &path, const Config &);
   void SetCovarianceError() { covarianceError_ = true; }
+  /// A data point beyond the kinematic maximum lab angle (ESegment::Fill): the run stops instead of dropping the segment.
+  void SetKinematicsError() { kinematicsError_ = true; }
   /// Gather the points of the segments carrying "covariance <file>" into one group per
   /// file and factor each group's matrix (called by Fill).  Returns -1 on an error.
   int ResolveCovarianceGroups(const Config &);
@@ -206,6 +208,7 @@ class EData {
   std::map<std::string, std::shared_ptr<DataCovariance::File>> covFiles_;  // only while filling
   std::vector<std::shared_ptr<DataCovariance::Group>> covGroups_;         // shared by every copy
   bool covarianceError_ = false;              // a component failed CheckComponentPairs
+  bool kinematicsError_ = false;              // a lab angle beyond the kinematic maximum (audit 2026-10-25, item 31)
   int iterations_;
   int normParamOffset_;
   int energyShiftParamOffset_;
