@@ -656,6 +656,15 @@ calculation, which is why the Coulomb functions they need are memoized.
 few of their entries were being asked for twice --- which is what a *varying*
 energy shift produces, since it moves every point energy at every iteration.
 
+The transform to physical parameters (``transform_rwa``, ``transform_physical``)
+works at the level energies, which a fit or a sampler moves at every call, and
+evaluates the external part of each radiative width there. It shares Coulomb
+functions within the call but leaves none in the memo afterwards, so a sampler
+that transforms at every step (physical priors, a fixed total gamma width) keeps
+a constant footprint. Before October 2026 every such call added a few thousand
+entries for good: about 4 GB per worker after 17,000 evaluations of a
+12C(α,γ) chain.
+
 Examples
 --------
 

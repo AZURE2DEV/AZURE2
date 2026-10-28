@@ -17,6 +17,7 @@
 #include "CoulFunc.h"
 #include "EigenFunc.h"
 #include "ECIntegral.h"
+#include "CoulFuncCache.h"
 #include "GSLException.h"
 #include "NucLine.h"
 #include "Minuit2/MnUserParameters.h"
@@ -2264,6 +2265,9 @@ void CNuc::FillCompoundFromParams(const vector_r &p) {
  */
 
 void CNuc::TransformOut(const Config &configure) {
+  // Everything here is evaluated at the level energies, which a fit or a sampler moves at every call: share
+  // Coulomb functions within this transform, keep none of them (CoulFuncCache::TransientScope).
+  CoulFuncCache::TransientScope transientCoulomb;
   // Park (2021): the fit parameters already are the observed reduced width
   // amplitudes, so Gamma = 2 P gamma^2 with no 1 + sum gamma^2 dS/dE factor.
   // Refresh J and the bound-state normalization for the current parameters.

@@ -250,3 +250,10 @@ add_test(NAME pyazr_output_penalties
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/output_penalties_test.py)
 set_tests_properties(pyazr_output_penalties PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
+# The transform to physical parameters (level energies, external widths) leaves nothing in the Coulomb memo
+# (2026-10-28, the 12C(a,g) MCMC memory growth).
+add_test(NAME pyazr_coulomb_memo_transform
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/coulomb_memo_transform_test.py)
+set_tests_properties(pyazr_coulomb_memo_transform PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
