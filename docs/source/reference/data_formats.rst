@@ -248,9 +248,10 @@ Stoichiometric weights need not sum to one: give that sample ``sum 0``.
 
 Total capture is the exit key ``-1`` together with the total-capture data
 type (3 on a data line, 4 on a test line); the reader expands such a segment
-into one term per capture pair. The key without the type, or the type
-without the key, is refused (before October 2026 the engine read past the
-start of its pair list for such a line and could crash).
+into one term per capture pair. The key without the type is refused (before
+October 2026 the engine read past the start of its pair list for such a line
+and could crash); the type with a real exit key has always meant total
+capture, the exit key being ignored, and now draws a warning saying so.
 
 A ``<segmentsData>`` line may end with the keyword blocks
 ``sqrtshift <b> <bError> <vary>``, ``sample <1|name>``, ``shiftgroup <label>``,

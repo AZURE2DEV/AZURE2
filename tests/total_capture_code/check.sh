@@ -11,7 +11,9 @@
 #   (a) tests/13N + a TEST line "1 1 -1 0.5 2.0 0.5 0 0 0 0" (exit -1, type 0), mode 3: ERROR, no output;
 #   (b) a DATA line with exit -1 and type 0 (angle-integrated), mode 1: ERROR, no chiSquared.out;
 #   (c) the proper test line "1 1 -1 0.5 2.0 0.5 0 0 0 4" beside "1 1 2 ... 0": AZUREOut_aa=1_TOTAL_CAPTURE.extrap
-#       equals AZUREOut_aa=1_R=2.extrap (13N has one capture pair) point by point.
+#       equals AZUREOut_aa=1_R=2.extrap (13N has one capture pair) point by point;
+#   (d) the type with a real exit key, "1 1 2 0.5 2.0 0.5 0 0 0 4": runs as total capture with a WARNING that the key
+#       is ignored (as every build did silently), and equals (c).
 # dev 510e6d1: (a) segmentation fault (exit 139) with no output; (b) the same read of pairs_[-1].
 #
 #   ./tests/total_capture_code/check.sh path/to/AZURE2
@@ -59,6 +61,12 @@ ft="$WORK/c/output/AZUREOut_aa=1_TOTAL_CAPTURE.extrap"; fr="$WORK/c/output/AZURE
 if [ -s "$ft" ] && [ -s "$fr" ] && paste <(awk 'NF{print $4}' "$ft") <(awk 'NF{print $4}' "$fr") | awk '{ d = $1 - $2; if (d < 0) d = -d; if (d > 1e-9 * ($2 > 0 ? $2 : 1)) bad = 1 } END { exit bad }'; then
   ok "(c) total capture with data type 4 equals capture to the single gamma pair ($(awk 'NF' "$ft" | wc -l | tr -d ' ') energies)"
 else bad "(c) total capture (type 4) vs capture to pair 2: $(status c); $(head -2 "$ft" 2> /dev/null | awk '{print $4}' | tr '\n' ' ') vs $(head -2 "$fr" 2> /dev/null | awk '{print $4}' | tr '\n' ' ')"; fi
+
+model d 3 "1 1 2 0.5 2.0 0.5 0 0 0 4"
+fd="$(ls "$WORK/d/output"/AZUREOut_aa=1_TOTAL_CAPTURE.extrap "$WORK/d/output"/AZUREOut_aa=1_R=2.extrap 2> /dev/null | head -1)"
+if [ -s "$fd" ] && [ "$(grep -c 'the exit key is ignored' "$WORK/d/run.log")" -ge 1 ] && paste <(awk 'NF{print $4}' "$ft") <(awk 'NF{print $4}' "$fd") | awk '{ d = $1 - $2; if (d < 0) d = -d; if (d > 1e-9 * ($2 > 0 ? $2 : 1)) bad = 1 } END { exit bad }'; then
+  ok "(d) the total-capture type with exit pair 2: runs as total capture with a warning, equals (c)"
+else bad "(d) type 4 with exit 2: $(status d); warnings $(grep -c 'the exit key is ignored' "$WORK/d/run.log"); file $(ls -la "$fd" 2> /dev/null | awk '{print $5}') bytes"; fi
 
 if [ "$failures" -ne 0 ]; then echo "$failures check(s) FAILED"; exit 1; fi
 echo "all checks passed"

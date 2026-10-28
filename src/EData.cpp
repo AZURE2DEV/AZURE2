@@ -126,11 +126,18 @@ static bool TotalCaptureCodeOk(const ESegment &segment, int key, bool isTest, co
   const bool keyTotal = segment.GetExitKey() == -1;
   const bool codeTotal = segment.IsTotalCapture() != 0;
   if (keyTotal == codeTotal) return true;
-  configure.outStream << "ERROR: " << (isTest ? "test segment #" : "segment #") << key << ": "
-                      << (keyTotal ? "the exit key -1 (total capture) needs the total-capture data type ("
-                                   : "the total-capture data type needs the exit key -1 (")
-                      << (isTest ? "4 on a test line" : "3 on a data line") << ")." << std::endl;
-  return false;
+  const char *what = isTest ? "test segment #" : "segment #";
+  if (keyTotal) {
+    configure.outStream << "ERROR: " << what << key << ": the exit key -1 (total capture) needs the total-capture data type ("
+                        << (isTest ? "4 on a test line" : "3 on a data line") << ")." << std::endl;
+    return false;
+  }
+  // The type with a real exit key has always meant total capture: the expansion below replaces the exit key with
+  // the first capture pair and adds the others as components.  Say so instead of doing it silently.
+  configure.outStream << "WARNING: " << what << key << ": the total-capture data type with exit pair " << segment.GetExitKey()
+                      << ": the exit key is ignored; the segment is the total capture over every capture pair of the "
+                      << "entrance nucleus (write the exit key -1 to say so)." << std::endl;
+  return true;
 }
 
 static bool TotalAllowed(CNuc *theCNuc, ESegment &segment, int key, bool isTest, const Config &configure) {

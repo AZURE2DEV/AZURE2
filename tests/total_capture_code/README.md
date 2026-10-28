@@ -8,9 +8,11 @@ data line, 4 on a test line) into one term per capture pair. The key `-1` with
 another data type left a segment whose exit pair does not exist:
 `GetPair(GetPairNumFromKey(-1))` read `pairs_[-1]`, and in mode 3 the
 external-capture lookup for that point crashed (SIGSEGV on `tests/13N`; a model
-without external capture gave meaningless numbers instead). The two halves are
-now checked against each other and the mismatch is refused; the segment-level
-lookups use `CNuc::GetPairFromKey`, which returns null for a key no pair has.
+without external capture gave meaningless numbers instead). The key without
+the type is now refused; the type with a real exit key has always meant total
+capture (the expansion replaces the key with the capture pairs) and now says
+so with a warning. The segment-level lookups use `CNuc::GetPairFromKey`, which
+returns null for a key no pair has.
 
 ## Checks (`check.sh path/to/AZURE2`)
 
@@ -20,6 +22,8 @@ lookups use `CNuc::GetPairFromKey`, which returns null for a key no pair has.
   refused, no `chiSquared.out`;
 - (c) the proper test line `1 1 -1 0.5 2.0 0.5 0 0 0 4` beside
   `1 1 2 ... 0`: `AZUREOut_aa=1_TOTAL_CAPTURE.extrap` equals
-  `AZUREOut_aa=1_R=2.extrap` point by point (13N has one capture pair).
+  `AZUREOut_aa=1_R=2.extrap` point by point (13N has one capture pair);
+- (d) the type with a real exit key (`1 1 2 ... 4`) runs as total capture with
+  a warning and equals (c).
 
 dev 510e6d1: (a) and (b) segmentation fault (exit 139) with no output.
