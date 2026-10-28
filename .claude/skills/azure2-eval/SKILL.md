@@ -565,6 +565,19 @@ runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
   spins" when the level scheme has several spins for that (J, l) and the line
   gives none, or the given spin has no channel. Spin-0 targets and single-spin
   (J, l) need nothing. Older engines ignore the keyword (and sum again).
+- **UPOS multipole mixing applies at every Legendre order; channels with
+  l > 10 are flagged** (2026-10-27, audit checklist t3-24,
+  `tests/mixing_guard_lorder`): the mixed radiation parameter
+  (R_k^LL + 2δ R_k^LL' + δ² R_k^L'L')/(1+δ²) was skipped at any order where
+  R_k^L'L' happened to vanish while R_k^LL did not (first case: a 3/2 → 3/2
+  M1/E2 secondary gamma at k = 2: R_2(2,2) = 0, R_2(1,2) = 0.77), leaving that
+  a_k at its pure-L value whatever δ. The archive's UPOS decays (16O 3⁻ → 0⁺
+  E3, 13C 3/2⁻ → 1/2⁻, 12C 2⁺ → 0⁺) are not that case; a 3/2 → 3/2 or
+  similar mixed decay with δ ≠ 0 was. And Legendre orders stop at
+  `Config::maxLOrder` = 20: a particle channel with l > 10 truncates every
+  differential cross section it enters (angle-integrated values are
+  complete); the run log now says "WARNING: channel l = ... exceeds 10" per
+  such channel instead of staying silent.
 - **Attenuation (Q) coefficients act on the lab distribution** (dev a22b99a,
   2026-10-25): for a particle exit Q_K multiplies the LAB Legendre coefficients
   and the result is taken back to the point's c.m. angle exactly. Before, a
