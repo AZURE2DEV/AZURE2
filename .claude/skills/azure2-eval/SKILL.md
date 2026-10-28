@@ -578,6 +578,17 @@ runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
   differential cross section it enters (angle-integrated values are
   complete); the run log now says "WARNING: channel l = ... exceeds 10" per
   such channel instead of staying silent.
+- **`relativistic=1` is part of the intEC signature and of the EC node-table
+  key** (2026-10-27, audit checklist t3-25, `tests/ec_relativistic_signature`,
+  ctest `pyazr_ec_relativistic`): the switch changes eta, rho and the flux
+  factor of every external-capture amplitude (0.1-1 % through the
+  penetrabilities), but a relativistic run used to read back an `intEC.dat`
+  written without it, and one pyazr process evaluating a model and then its
+  relativistic variant reused the other's nodes. Now the signature carries
+  "relativistic" when on (non-relativistic files keep their signature, nothing
+  in the archive is recomputed) and the table key has the flag. If a
+  relativistic campaign reused a non-relativistic intEC.dat before this, its
+  EC amplitudes were the non-relativistic ones: rerun once (the warning says so).
 - **Attenuation (Q) coefficients act on the lab distribution** (dev a22b99a,
   2026-10-25): for a particle exit Q_K multiplies the LAB Legendre coefficients
   and the result is taken back to the point's c.m. angle exactly. Before, a
