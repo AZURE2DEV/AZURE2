@@ -154,6 +154,8 @@ class CoulFunc {
   // point asks for P, S and the phase of the same (l, radius, energy) in turn.
   const CoulombTable *table_ = nullptr;
   bool TableLookup(int l, double radius, double energy);
+  /// PEShift by the exact routine (never the table): one route for every point of a difference stencil.
+  double PEShiftExact(int l, double radius, double energy);
   int tLastL_ = -1;
   double tLastR_ = 0.0, tLastE_ = 0.0, tP_ = 0.0, tS_ = 0.0, tPhi_ = 0.0;
   bool tOk_ = false;

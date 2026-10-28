@@ -111,6 +111,9 @@ class CNuc {
   int GetPairNumFromKey(int);
   /// Pair \p i, 1-based.
   PPair *GetPair(int);
+  /// The pair with this key, or nullptr when no pair has it (a total-capture exit key -1, a typo): the
+  /// GetPair(GetPairNumFromKey(key)) idiom read pairs_[-1] for those (audit 2026-10-25, item 32).
+  PPair *GetPairFromKey(int key);
   /// \f$J^\pi\f$ group \p i, 1-based.
   JGroup *GetJGroup(int);
   void AddPair(PPair);

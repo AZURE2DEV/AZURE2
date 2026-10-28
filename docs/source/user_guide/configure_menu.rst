@@ -93,7 +93,11 @@ Selecting **Runtime Options...** opens a dialog with the following settings:
        calculation. Note that formal parameters are radius and boundary-condition
        dependent.
    * - **Use Wigner limits for parameter limits**
-     - Automatically apply Wigner limit bounds on fit parameters.
+     - Automatically apply Wigner limit bounds on fit parameters: the
+       reduced-width amplitude of every particle channel is bounded by
+       :math:`\pm\sqrt{3\hbar^2/(2\mu a^2)}`. Photon and beta channels have
+       no such limit (before October 2026 a photon pair with a nonzero channel
+       radius would have produced an infinite one).
    * - **Use Hybrid Coulomb method**
      - Use a hybrid method for Coulomb function calculations that includes a
        nuclear potential (Woods-Saxon or Gaussian). This is the master switch;

@@ -246,6 +246,12 @@ emitted sample by sample (the unnamed one first, in file order) right after
 the level parameters. A sample name is one token without ``:`` or ``#``.
 Stoichiometric weights need not sum to one: give that sample ``sum 0``.
 
+Total capture is the exit key ``-1`` together with the total-capture data
+type (3 on a data line, 4 on a test line); the reader expands such a segment
+into one term per capture pair. The key without the type, or the type
+without the key, is refused (before October 2026 the engine read past the
+start of its pair list for such a line and could crash).
+
 A ``<segmentsData>`` line may end with the keyword blocks
 ``sqrtshift <b> <bError> <vary>``, ``sample <1|name>``, ``shiftgroup <label>``,
 ``shiftfngroup <label>``, ``normgroup <label>``, ``covariance <file>``,

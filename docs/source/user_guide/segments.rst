@@ -416,7 +416,11 @@ appears with the following fields:
    2026; before, the c.m. values were added as they were, which for
    :math:`^{13}`\ C(α,n\ :sub:`1`\ +n\ :sub:`2`) at 6 MeV was −3 % at 0° and
    +6 % at 150°). A c.m. **Sum**, an angle-integrated one, a component of the
-   same pair, or gamma terms of one entrance pair are unaffected.
+   same pair, or gamma terms of one entrance pair are unaffected. A target
+   effect on a composite integrates each term at that term's own c.m. angle
+   (its sub-points follow the component's conversion; before October 2026 a
+   component to another pair, or a fixed-angle **Ratio** denominator, was
+   integrated at the base pair's angle).
 
    A lab-frame differential **Ratio** is the ratio of the two terms' *lab*
    cross sections: each term is taken to the lab with the Jacobian of its own

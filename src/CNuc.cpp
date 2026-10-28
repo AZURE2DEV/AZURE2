@@ -2204,7 +2204,7 @@ void CNuc::FillMnParams(ROOT::Minuit2::MnUserParameters &p, const Config *config
         if (config && (config->paramMask & Config::USE_WIGNER_LIMITS)) {
           AChannel *channel = this->GetJGroup(j)->GetChannel(ch);
           double wignerLimit = channel->GetWignerLimit();
-          if (wignerLimit > 0.0) {
+          if (channel->GetRadType() == 'P' && wignerLimit > 0.0 && std::isfinite(wignerLimit)) {
             double gammaLimit = sqrt(wignerLimit);
             p.SetLimits(varname, -gammaLimit, gammaLimit);
           }
@@ -3318,6 +3318,11 @@ complex CNuc::CalcExternalWidth(JGroup *theJGroup, ALevel *theLevel,
 PPair *CNuc::GetPair(int pairNum) {
   PPair *b = &pairs_[pairNum - 1];
   return b;
+}
+
+PPair *CNuc::GetPairFromKey(int key) {
+  const int num = GetPairNumFromKey(key);
+  return num > 0 ? GetPair(num) : nullptr;
 }
 
 /*!

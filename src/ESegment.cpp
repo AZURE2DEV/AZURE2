@@ -442,9 +442,9 @@ int ESegment::Fill(CNuc *theCNuc, EData *theData, const Config &configure) {
       if (this->IsInSegment(NewEPoint)) {
         this->AddPoint(NewEPoint);
         PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetEntranceKey()));
-        PPair *exitPair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetExitKey()));
+        PPair *exitPair = theCNuc->GetPairFromKey(this->GetExitKey());  // nullptr for total capture (-1)
         this->GetPoint(this->NumPoints())->SetParentData(theData);
-        if (entrancePair->GetPType() == 20) {
+        if (entrancePair->GetPType() == 20 && exitPair) {
           this->GetPoint(this->NumPoints())->ConvertDecayEnergy(exitPair);
         } else if (this->IsCMDifferential()) {
           //          this->GetPoint(this->NumPoints())->ConvertExcitationEnergy(entrancePair);
@@ -452,7 +452,7 @@ int ESegment::Fill(CNuc *theCNuc, EData *theData, const Config &configure) {
         } else if (!this->IsCMDifferential()) {
           this->GetPoint(this->NumPoints())->ConvertLabEnergy(entrancePair);
         }
-        if (exitPair->GetPType() == 0 && this->IsDifferential() && !this->IsPhase() && !this->IsCMDifferential()) {
+        if (exitPair && exitPair->GetPType() == 0 && this->IsDifferential() && !this->IsPhase() && !this->IsCMDifferential()) {
           EPoint *converted = this->GetPoint(this->NumPoints());
           const bool inRange = (this->GetEntranceKey() == this->GetExitKey())
                                    ? converted->ConvertLabAngle(entrancePair)
@@ -473,7 +473,7 @@ int ESegment::Fill(CNuc *theCNuc, EData *theData, const Config &configure) {
         //        if(exitPair->GetPType()==0&&!this->IsDifferential()&&!this->IsPhase()&&this->IsCMDifferential()) {
         //          this->GetPoint(this->NumPoints())->ConvertCMAngle(entrancePair,exitPair,configure);
         //        }
-        if (exitPair->GetPType() == 10 && this->IsDifferential() && !this->IsPhase() && !this->IsCMDifferential()) {
+        if (exitPair && exitPair->GetPType() == 10 && this->IsDifferential() && !this->IsPhase() && !this->IsCMDifferential()) {
           this->GetPoint(this->NumPoints())->ConvertLabAngleGammas(entrancePair);
           // Skip cross section conversion for ratio segments (ratios are dimensionless)
           // Use IsAdvanced() and GetLegacyOperationType() since components aren't added yet during Fill()
@@ -978,10 +978,10 @@ void ESegment::UpdatePointEnergyWithShift(int i, CNuc *theCNuc, const Config *co
       // Recalculate energy dependent values
       if (theCNuc && configure) {
         PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetEntranceKey()));
-        PPair *exitPair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetExitKey()));
+        PPair *exitPair = theCNuc->GetPairFromKey(this->GetExitKey());  // nullptr for total capture (-1)
 
         // Apply the same conversion functions as in ESegment::Fill
-        if (entrancePair->GetPType() == 20) {
+        if (entrancePair->GetPType() == 20 && exitPair) {
           point->ConvertDecayEnergy(exitPair);
         } else if (this->IsCMDifferential()) {
           point->ConvertLabEnergy(entrancePair);
@@ -989,7 +989,7 @@ void ESegment::UpdatePointEnergyWithShift(int i, CNuc *theCNuc, const Config *co
           point->ConvertLabEnergy(entrancePair);
         }
 
-        if (exitPair->GetPType() == 0 && this->IsDifferential() && !this->IsPhase() && !this->IsCMDifferential()) {
+        if (exitPair && exitPair->GetPType() == 0 && this->IsDifferential() && !this->IsPhase() && !this->IsCMDifferential()) {
           const bool inRange = (this->GetEntranceKey() == this->GetExitKey())
                                    ? point->ConvertLabAngle(entrancePair)
                                    : point->ConvertLabAngle(entrancePair, exitPair, *configure);
@@ -1007,7 +1007,7 @@ void ESegment::UpdatePointEnergyWithShift(int i, CNuc *theCNuc, const Config *co
           }
         }
 
-        if (exitPair->GetPType() == 10 && this->IsDifferential() && !this->IsPhase() && !this->IsCMDifferential()) {
+        if (exitPair && exitPair->GetPType() == 10 && this->IsDifferential() && !this->IsPhase() && !this->IsCMDifferential()) {
           point->ConvertLabAngleGammas(entrancePair);
           // Skip cross section conversion for ratio segments (ratios are dimensionless)
           if (!(this->IsAdvanced() && this->GetLegacyOperationType() == 1)) {

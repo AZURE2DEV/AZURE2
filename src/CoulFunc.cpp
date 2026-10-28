@@ -260,6 +260,10 @@ double CoulFunc::Penetrability(int l, double radius, double energy) {
 
 double CoulFunc::PEShift(int l, double radius, double energy) {
   if (table_ && TableLookup(l, radius, energy)) return tS_;
+  return PEShiftExact(l, radius, energy);
+}
+
+double CoulFunc::PEShiftExact(int l, double radius, double energy) {
   struct CoulWaves coul = this->operator()(l, radius, energy);
   double rho = kin_.Rho(radius, energy);
   double shift;
@@ -308,7 +312,13 @@ double CoulFunc::PEShift_dE(int l, double radius, double energy) {
   static const bool richardson = (std::getenv("AZURE_SHIFT_DE_1EV") == nullptr);
   if (richardson && energy > 0.0) {
     const double h = 1e-3 * energy;
-    auto cd = [&](double hh) { return (PEShift(l, radius, energy + hh) - PEShift(l, radius, energy - hh)) / (2.0 * hh); };
+    // One route for the whole stencil: when a point of it falls outside the Coulomb table, every point is
+    // taken from the exact routine.  Mixing the table (~1e-7 interpolation error) with the exact value across
+    // the table's edge put a jump of order 1e-7 / (2 h) into the derivative (audit 2026-10-25, item 32).
+    const bool viaTable = table_ && TableLookup(l, radius, energy + h) && TableLookup(l, radius, energy - h) &&
+                          TableLookup(l, radius, energy + 0.5 * h) && TableLookup(l, radius, energy - 0.5 * h);
+    auto s = [&](double e) { return viaTable ? PEShift(l, radius, e) : PEShiftExact(l, radius, e); };
+    auto cd = [&](double hh) { return (s(energy + hh) - s(energy - hh)) / (2.0 * hh); };
     return (4.0 * cd(0.5 * h) - cd(h)) / 3.0;
   }
 

@@ -104,6 +104,14 @@ it had happened to cache, and was made exact-match because those
 history-dependent values broke the adaptive quadrature of the reaction rate
 (``CoulFuncCache.cpp``).
 
+The energy derivatives of the shift function (``CoulFunc::PEShift_dE``,
+``ShftFunc::EnergyDerivative``) are finite differences, and every point of a
+stencil takes the same route: the table only when it covers all of them, else
+the exact routine for all. A stencil straddling the table's edge would
+otherwise difference a ~1e-7 interpolation error against an exact value and
+put a jump of order :math:`10^{-7}/2h` into the derivative (since October
+2026).
+
 Stage-1 validation
 ------------------
 

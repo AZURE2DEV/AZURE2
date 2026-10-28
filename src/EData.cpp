@@ -115,6 +115,24 @@ static void UPOSLabNote(const ESegment &segment, int key, bool isTest, const Con
                       << std::endl;
 }
 
+/*!
+ * Total capture is the exit key -1 together with the total-capture data type (3 on a data line, 4 on a test
+ * line): the reader expands such a segment into one term per capture pair.  Either half alone -- the key -1
+ * with another type, or the type with a real exit pair -- left a segment whose exit pair does not exist:
+ * mode 3 with "1 1 -1 ... 0" read pairs_[-1] and crashed in the external-capture lookup (13N), and a model
+ * without external capture gave meaningless numbers (audit 2026-10-25, item 32).
+ */
+static bool TotalCaptureCodeOk(const ESegment &segment, int key, bool isTest, const Config &configure) {
+  const bool keyTotal = segment.GetExitKey() == -1;
+  const bool codeTotal = segment.IsTotalCapture() != 0;
+  if (keyTotal == codeTotal) return true;
+  configure.outStream << "ERROR: " << (isTest ? "test segment #" : "segment #") << key << ": "
+                      << (keyTotal ? "the exit key -1 (total capture) needs the total-capture data type ("
+                                   : "the total-capture data type needs the exit key -1 (")
+                      << (isTest ? "4 on a test line" : "3 on a data line") << ")." << std::endl;
+  return false;
+}
+
 static bool TotalAllowed(CNuc *theCNuc, ESegment &segment, int key, bool isTest, const Config &configure) {
   if (!segment.IsTotal()) return true;
   const char *what = isTest ? "test segment" : "segment";
@@ -283,6 +301,7 @@ int EData::Fill(const Config &configure, CNuc *theCNuc) {
           if (!CoefficientsAllowed(theCNuc, NewSegment, numTotalSegments, configure)) return -1;
           if (!NaturalAllowed(theCNuc, NewSegment, numTotalSegments, false, configure)) return -1;
           if (!TotalAllowed(theCNuc, NewSegment, numTotalSegments, false, configure)) return -1;
+          if (!TotalCaptureCodeOk(NewSegment, numTotalSegments, false, configure)) return -1;
           UPOSLabNote(NewSegment, numTotalSegments, false, configure);
           bool isValidTotal = false;
           if (NewSegment.GetExitKey() == -1) {
@@ -504,6 +523,7 @@ int EData::MakePoints(const Config &configure, CNuc *theCNuc) {
           if (!AnalyzingPowerAllowed(theCNuc, NewSegment, numTotalSegments, true, configure)) return -1;
           if (!NaturalAllowed(theCNuc, NewSegment, numTotalSegments, true, configure)) return -1;
           if (!TotalAllowed(theCNuc, NewSegment, numTotalSegments, true, configure)) return -1;
+          if (!TotalCaptureCodeOk(NewSegment, numTotalSegments, true, configure)) return -1;
           UPOSLabNote(NewSegment, numTotalSegments, true, configure);
           bool isValidTotal = false;
           if (NewSegment.GetExitKey() == -1) {
@@ -531,7 +551,7 @@ int EData::MakePoints(const Config &configure, CNuc *theCNuc) {
 
             theCNuc->GetPair(theCNuc->GetPairNumFromKey(theSegment->GetEntranceKey()))->SetEntrance();
             PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(theSegment->GetEntranceKey()));
-            PPair *exitPair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(theSegment->GetExitKey()));
+            PPair *exitPair = theCNuc->GetPairFromKey(theSegment->GetExitKey());  // nullptr for total capture (-1)
             double aStep = theSegment->GetAStep();
             double eStep = theSegment->GetEStep();
             for (double angle = theSegment->GetMinAngle();
@@ -542,7 +562,7 @@ int EData::MakePoints(const Config &configure, CNuc *theCNuc) {
                 theSegment->AddPoint(NewPoint);
                 EPoint *thePoint = theSegment->GetPoint(theSegment->NumPoints());
                 thePoint->SetParentData(this);
-                if (entrancePair->GetPType() == 20)
+                if (entrancePair->GetPType() == 20 && exitPair)
                   thePoint->ConvertDecayEnergy(exitPair);
                 else if (!theSegment->IsCMDifferential())
                   thePoint->ConvertLabEnergy(entrancePair);
@@ -551,7 +571,7 @@ int EData::MakePoints(const Config &configure, CNuc *theCNuc) {
                 // A RATIO is dimensionless: no cross-section conversion (as ESegment::Fill for data segments;
                 // the stored factor would otherwise divide the ratio in the lab output, kinflag.dat = 1).
                 const bool isRatio = theSegment->IsAdvanced() && theSegment->GetLegacyOperationType() == 1;
-                if (exitPair->GetPType() == 0 && theSegment->IsDifferential() &&
+                if (exitPair && exitPair->GetPType() == 0 && theSegment->IsDifferential() &&
                     !theSegment->IsPhase() && !theSegment->IsAngularDist() && !theSegment->IsCMDifferential()) {
                   const bool inRange = (theSegment->GetEntranceKey() == theSegment->GetExitKey())
                                            ? thePoint->ConvertLabAngle(entrancePair)
@@ -563,7 +583,7 @@ int EData::MakePoints(const Config &configure, CNuc *theCNuc) {
                   }
                   if (!isRatio) thePoint->ConvertCrossSection(entrancePair, exitPair);
                 }
-                if (exitPair->GetPType() == 10 && theSegment->IsDifferential() &&
+                if (exitPair && exitPair->GetPType() == 10 && theSegment->IsDifferential() &&
                     !theSegment->IsPhase() && !theSegment->IsAngularDist() && !theSegment->IsCMDifferential()) {
                   thePoint->ConvertLabAngleGammas(entrancePair);
                   if (!isRatio) thePoint->ConvertCrossSectionGammas(entrancePair);
@@ -834,9 +854,9 @@ int EData::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, const st
     }
     const bool shifted = std::find(shiftActive.begin(), shiftActive.end(), seg) != shiftActive.end();
     PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(seg->GetEntranceKey()));
-    PPair *exitPair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(seg->GetExitKey()));
+    PPair *exitPair = theCNuc->GetPairFromKey(seg->GetExitKey());  // nullptr for total capture (-1)
     // The c.m./lab factor the shift step uses for sub-points (ESegment::UpdatePointEnergyWithShift).
-    const double cmFactor = (entrancePair->GetPType() == 20)
+    const double cmFactor = (entrancePair->GetPType() == 20 && exitPair)
         ? (exitPair->GetM(1) + exitPair->GetM(2)) / exitPair->GetM(2)
         : entrancePair->GetM(2) / (entrancePair->GetM(1) + entrancePair->GetM(2));
     for (int i = 1; i <= seg->NumPoints(); i++) {
@@ -997,9 +1017,9 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
   if (line != "</targetInt>") return -1;
   for (ESegmentIterator segment = GetSegments().begin(); segment < GetSegments().end(); segment++) {
     PPair *entrancePair = compound->GetPair(compound->GetPairNumFromKey(segment->GetEntranceKey()));
-    PPair *exitPair = compound->GetPair(compound->GetPairNumFromKey(segment->GetExitKey()));
+    PPair *exitPair = compound->GetPairFromKey(segment->GetExitKey());  // nullptr for total capture (-1)
     double cmConversion;
-    if (entrancePair->GetPType() == 20)
+    if (entrancePair->GetPType() == 20 && exitPair)
       cmConversion = (exitPair->GetM(1) + exitPair->GetM(2)) / exitPair->GetM(2);
     else
       cmConversion = entrancePair->GetM(2) / (entrancePair->GetM(1) + entrancePair->GetM(2));
@@ -1151,9 +1171,9 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
         // energies; convert them for this pair before the grid is laid out
         // (EData::Initialize repeats this, idempotently, from the lab energy).
         PPair *compEntrance = compound->GetPair(compound->GetPairNumFromKey(component->GetEntranceKey()));
-        PPair *compExit = compound->GetPair(compound->GetPairNumFromKey(component->GetExitKey()));
+        PPair *compExit = compound->GetPairFromKey(component->GetExitKey());
         double compConversion;
-        if (compEntrance->GetPType() == 20)
+        if (compEntrance->GetPType() == 20 && compExit)
           compConversion = (compExit->GetM(1) + compExit->GetM(2)) / compExit->GetM(2);
         else
           compConversion = compEntrance->GetM(2) / (compEntrance->GetM(1) + compEntrance->GetM(2));
@@ -2757,6 +2777,15 @@ int EData::InitializeComponentSegments(CNuc *theCNuc, const Config &configure) {
             !componentSegment.IsPhase() && !componentSegment.IsAngularDist() && !componentSegment.IsCMDifferential()) {
           point->ConvertLabAngleGammas(entrancePair);
           point->ConvertCrossSectionGammas(entrancePair);
+        }
+        // The sub-points of a target effect were laid out (ReadTargetEffectsFile) from the copied base
+        // point's c.m. angle, before this conversion with the component's own pair; put them at the
+        // converted angle (CalcLegendreP below recurses into them).  Until 2026-10-27 a component with a
+        // different exit pair, or a fixed-angle RATIO denominator (raw lab angle), was integrated at the
+        // wrong angle (audit 2026-10-25, item 32).
+        for (int k = 1; k <= point->NumSubPoints(); k++) {
+          point->GetSubPoint(k)->SetLabAngle(point->GetLabAngle());
+          point->GetSubPoint(k)->SetCMAngle(point->GetCMAngle());
         }
       }
     }
