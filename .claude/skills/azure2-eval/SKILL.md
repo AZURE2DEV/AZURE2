@@ -637,6 +637,21 @@ runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
   file used to take the ANC silently. Now "ERROR: external capture into pair k:
   N levels of J^π lie within 1 keV of its final-state energy" stops the run:
   move the extra level, or set the pair's energy to the level it decays to.
+- **pyazr sessions own their hybrid potential; `write_output_files` carries
+  the penalty totals; `nan` in `<parameterSettings>` no longer kills the CLI**
+  (dev 2026-10-27, audit item 30). Before: `NuclearPotentialManager` was a
+  process singleton, so opening a SECOND session with a `<potential>` block
+  (or `set_nuclear_potential` on it) silently switched every live session to
+  that potential (tests/pyazr/potential_sessions_test.py: session A with V0 =
+  80 computed with B's 120 from the moment B existed, dS up to 10). Now each
+  session installs its own settings on every call. `write_output_files()`
+  wrote `chiSquared.out` with the Park, abundance and scattering-length totals
+  at 0 (the line missing) or stale; now evaluated at the parameters written.
+  A `nan`/`inf` fit error in `<parameterSettings>` (singular covariance) made
+  `custom_stod` throw and the CLI terminate with no output; accepted now, a
+  non-finite limit is ignored. Internal API arrays also keep their alignment
+  on a GSL failure (NaN in place of a skipped point). Tests
+  parameter_settings_nan, pyazr potential_sessions and output_penalties.
 - **Attenuation (Q) coefficients act on the lab distribution** (dev a22b99a,
   2026-10-25): for a particle exit Q_K multiplies the LAB Legendre coefficients
   and the result is taken back to the point's c.m. angle exactly. Before, a
