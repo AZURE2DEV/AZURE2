@@ -614,6 +614,22 @@ runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
   two sides of an EC integral come from different Hamiltonians. Put the
   channel radius beyond R + 5a of the Woods-Saxon, or accept it. No archive
   fit uses the hybrid model (item 16 scan). No code change.
+- **Old segment-line layouts are read right; test lines skip data-only keywords**
+  (2026-10-27, audit checklist item 29, `tests/segline_formats`): a data line's
+  three shift fields are optional (older files carry one shift or none before
+  the file), and the reader used to decide the layout by whether `>> double`
+  succeeded, so a no-shift line whose file name starts with digits
+  (`... normErr 12C_p.dat`) became a 12 MeV shift with the file `C_p.dat`, and
+  the one-shift layout (`0.001 data/foo.dat`) lost the file; either way EData
+  printed "WARNING: Could Not Fill Segment" and the fit silently ran without
+  that data set (pyazr parsed both correctly, so `active_datasets` raised a
+  count mismatch). Now the layout is decided by whole tokens. And a
+  `<segmentsTest>` line stopped its keyword reader at `sqrtshift`,
+  `shiftgroup`, `shiftfngroup`, `normgroup`, `absolute` or `shiftfn`, losing a
+  `sample`/`total`/`spin` written after them; they are skipped now. A typo'd
+  keyword (`normgruop`) is still silently ignored by engine and pyazr, by
+  design (older engines must ignore newer keywords): check the log's segment
+  summary when a keyword seems to do nothing.
 - **An external-capture final state matching two levels is refused** (2026-10-27,
   audit checklist item 28, `tests/ec_final_state_ambiguous`): a capture pair's
   final state is the level of its J^π within 1 keV of the pair's E_x; since
