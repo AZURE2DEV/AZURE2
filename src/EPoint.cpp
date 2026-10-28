@@ -690,14 +690,14 @@ void EPoint::ConvertLabEnergy(PPair *pPair) {
     // T = sqrt(s) - m1 - m2 with s = (m1 + m2)^2 + 2 m2 E_lab (Kinematics.h)
     const double m1 = pPair->GetM(1) * uconv, m2 = pPair->GetM(2) * uconv;
     cm_energy_ = Kinematics::CMFromLab(m1, m2, this->GetLabEnergy());
-    excitation_energy_ = cm_energy_ + pPair->GetSepE();
+    excitation_energy_ = cm_energy_ + pPair->GetSepE() + pPair->GetExE();  // E_x = E_cm + S + E* of the pair (audit 01 B3, 2026-10-28)
     bin_low_cm_ = Kinematics::CMFromLab(m1, m2, bin_low_lab_);
     bin_high_cm_ = Kinematics::CMFromLab(m1, m2, bin_high_lab_);
     return;
   }
   double factor = (pPair->GetM(2)) / (pPair->GetM(1) + pPair->GetM(2));
   cm_energy_ = this->GetLabEnergy() * factor;
-  excitation_energy_ = cm_energy_ + pPair->GetSepE();
+  excitation_energy_ = cm_energy_ + pPair->GetSepE() + pPair->GetExE();  // E_x = E_cm + S + E* of the pair (audit 01 B3, 2026-10-28)
   bin_low_cm_ = bin_low_lab_ * factor;
   bin_high_cm_ = bin_high_lab_ * factor;
 }
@@ -708,7 +708,7 @@ void EPoint::ConvertLabEnergy(PPair *pPair) {
  */
 
 void EPoint::ConvertExcitationEnergy(PPair *pPair) {
-  excitation_energy_ = cm_energy_ + pPair->GetSepE();
+  excitation_energy_ = cm_energy_ + pPair->GetSepE() + pPair->GetExE();  // E_x = E_cm + S + E* of the pair (audit 01 B3, 2026-10-28)
 }
 
 /*!
@@ -722,13 +722,13 @@ void EPoint::ConvertDecayEnergy(PPair *pPair) {
   if (Kinematics::Relativistic()) {
     // two-body decay at rest: equal momenta, T = E1 + sqrt(m2^2 + p^2) - m2
     cm_energy_ = Kinematics::CMFromDecay(pPair->GetM(1) * uconv, pPair->GetM(2) * uconv, this->GetLabEnergy());
-    excitation_energy_ = cm_energy_ + pPair->GetSepE();
+    excitation_energy_ = cm_energy_ + pPair->GetSepE() + pPair->GetExE();  // E_x = E_cm + S + E* of the pair (audit 01 B3, 2026-10-28)
     return;
   }
   cm_energy_ = this->GetLabEnergy() /
       (pPair->GetM(2)) *
       (pPair->GetM(1) + pPair->GetM(2));
-  excitation_energy_ = cm_energy_ + pPair->GetSepE();
+  excitation_energy_ = cm_energy_ + pPair->GetSepE() + pPair->GetExE();  // E_x = E_cm + S + E* of the pair (audit 01 B3, 2026-10-28)
 }
 
 /*!

@@ -85,7 +85,10 @@ Nine columns:
    * - 1
      - Center-of-mass energy (MeV)
    * - 2
-     - Excitation energy (MeV)
+     - Excitation energy (MeV): :math:`E_{c.m.} + S + E^*` of the entrance pair
+       (for a beta-delayed segment, of the exit pair); before October 2026 the
+       pair's :math:`E^*` was left out, so the column was low by it for an
+       excited-state pair
    * - 3
      - Center-of-mass angle (degrees)
    * - 4
@@ -122,7 +125,10 @@ as above. Five columns:
    * - 1
      - Center-of-mass energy (MeV)
    * - 2
-     - Excitation energy (MeV)
+     - Excitation energy (MeV): :math:`E_{c.m.} + S + E^*` of the entrance pair
+       (for a beta-delayed segment, of the exit pair); before October 2026 the
+       pair's :math:`E^*` was left out, so the column was low by it for an
+       excited-state pair
    * - 3
      - Center-of-mass angle (degrees)
    * - 4

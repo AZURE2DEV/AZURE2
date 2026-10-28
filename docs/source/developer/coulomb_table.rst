@@ -111,6 +111,10 @@ the exact routine for all. A stencil straddling the table's edge would
 otherwise difference a ~1e-7 interpolation error against an exact value and
 put a jump of order :math:`10^{-7}/2h` into the derivative (since October
 2026).
+The second energy derivative Park's parametrization needs
+(``ShftFunc::EnergySecondDerivative``, a 10 keV Richardson stencil) takes the
+exact bound-state route throughout: the table's Hermite interpolant is only
+C1 across its cells, which a 10 keV stencil crosses.
 
 Stage-1 validation
 ------------------

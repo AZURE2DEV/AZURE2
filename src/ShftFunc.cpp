@@ -114,6 +114,14 @@ double ShftFunc::EnergySecondDerivative(int l, double energy) {
   // stencil when the level is within 4h of it.
   const double h = 1.0e-2;
   double binding = totalSepE() - energy;
+  // The whole stencil by the exact route: the table's Hermite interpolant is C1 across its cells, and a 10 keV
+  // stencil crosses them, which put a kink of the interpolation error into the second difference (audit
+  // 2026-10-25, 03 F8; 2026-10-28).  Five exact bound-state evaluations per level are cheap.
+  struct ExactScope {
+    bool &flag; bool saved;
+    ExactScope(bool &f) : flag(f), saved(f) { flag = true; }
+    ~ExactScope() { flag = saved; }
+  } exact(forceExact_);
   if (binding < 4.0 * h) {
     const double f = 1.0e-3;
     double s0 = operator()(l, energy);
