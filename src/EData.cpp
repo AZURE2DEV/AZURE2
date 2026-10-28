@@ -2374,6 +2374,10 @@ std::string EData::ECSignature(CNuc *theCNuc, const Config &configure) {
     hash.Add("convection current");
   hash.Add((configure.paramMask & Config::CALCULATE_REACTION_RATE) ? 1 : 0);
   hash.Add(configure.useHybridMethod ? 1 : 0);
+  // Relativistic kinematics (relativistic=1 in <config>) change eta, rho and the flux factor of every amplitude.
+  // Added only when on, so every non-relativistic v4 file keeps its signature and is not recomputed; a relativistic
+  // run no longer reads back a file written without the switch (2026-10-27, checklist t3-25).
+  if (configure.relativistic) hash.Add("relativistic");
 
   std::set<int> pairs;
   hash.Add("data segments");

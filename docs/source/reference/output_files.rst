@@ -232,6 +232,10 @@ speed up subsequent calculations, as long as:
   energies the integrals are evaluated at.
 - The Coulomb-function routine (``--gsl-coul``) and the hybrid potential are
   the same.
+- Relativistic kinematics (``relativistic=1`` in ``<config>``) are on or off as
+  before: the switch changes every channel's eta, rho and flux factor (it was
+  missing from the signature before October 2026; a file written with it off is
+  no longer read back by a run with it on).
 
 Energies, widths, and ANCs of the R-matrix levels can be changed freely while
 reusing this file; the energy of an external-capture final state cannot, since

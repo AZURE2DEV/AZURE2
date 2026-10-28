@@ -228,3 +228,11 @@ add_test(NAME pyazr_screening
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/screening_test.py)
 set_tests_properties(pyazr_screening PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
+# The external-capture node table keys on the relativistic switch: a session evaluating a model and then its
+# relativistic=1 variant gives the fresh-process relativistic objective (before 2026-10-27 the nodes computed
+# without the switch were reused; checklist t3-25).
+add_test(NAME pyazr_ec_relativistic
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/ec_relativistic_test.py)
+set_tests_properties(pyazr_ec_relativistic PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2" LABELS "slow")
