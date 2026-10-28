@@ -2892,8 +2892,9 @@ complete:
   gains `Total-Scattering-Length-Chi-Squared`. pyazr: `m.scattering_lengths(x)` (posterior from a
   chain), `m.penalties()["scattering_length"]`, `AzrModel.scattering_lengths` /
   `add_scattering_length` / `set_scattering_lengths`. GUI (since 2026-10-25): Data Type "Scattering
-  Length" of Add Segment From Data (exit pair greyed out), listed as a0 rows under the data segments;
-  still the <scatteringLengths> block in the file, no segment number. Validated on Paneru 2024 3He+4He (33.0996 vs
+  Length" of Add Segment From Data (exit pair greyed out), listed as rows of the data-segment table
+  after the last segment, numbered on from it (since 2026-10-28; display numbers only); still the
+  <scatteringLengths> block in the file, so no segment number moves. Validated on Paneru 2024 3He+4He (33.0996 vs
   33.10 fm) and by the effective-range expansion of AZURE2's own phase shifts (4e-5). TRAP when building
   a model from published gamma~ (Brune): the .azr width is the OBSERVED width
   2 P gamma~^2 / (1 + sum gamma~^2 dS/dE), not 2 P gamma~^2 -- dropping the denominator moved the
