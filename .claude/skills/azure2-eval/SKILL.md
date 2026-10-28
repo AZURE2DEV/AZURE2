@@ -589,6 +589,38 @@ runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
   in the archive is recomputed) and the table key has the flag. If a
   relativistic campaign reused a non-relativistic intEC.dat before this, its
   EC amplitudes were the non-relativistic ones: rerun once (the warning says so).
+- **E1-M1 interference of external capture in dσ/dΩ is right** (verified
+  2026-10-27, audit checklist item 26, `tests/ec_e1m1_phase`): the relative
+  phase of the E (-i·i^(li+L-lf)) and M1 (+i) EC amplitudes was never tied to
+  an independent calculation. A convention-free m-scheme truth (the dipole
+  interaction -d·E - μ·B between the Coulomb + hard-sphere scattering state
+  and the ANC-normalized bound level, summed over substates and helicities)
+  reproduces AZURE2's c.m. differential capture to 2e-8, including a 16 %
+  forward/backward asymmetry on a p-wave final state. Three traps for anyone
+  building such a truth: (1) with a spin-0 target and unpolarized beam, E1
+  and a pure spin-flip M1 (s-wave final state) do not interfere at all, so
+  17F(1/2+) cannot test the phase; (2) the final state must be the |(l_f s)J_f⟩
+  level, not every product state of the orbital; (3) an ANC must be physical
+  for the channel radius -- 84 fm^-1/2 on a p-wave state bound by 100 keV puts
+  130 % of the state outside 5 fm, AZURE2 warns "Denominator less than zero
+  while transforming" and its cross section stops scaling as ANC², which is
+  the input's fault, not the code's.
+- **The hybrid nuclear potential bends the scattering functions only** (audit
+  checklist item 27, documented 2026-10-27, user guide pyazr.rst "What the
+  potential does not touch"): F and G inside 15 fm, hence P, S and the
+  entrance wave of the EC integrand; the bound-state Whittaker tail, the
+  ANC-to-width conversion at the channel radius and the NF integral stay pure
+  Coulomb, so with a potential still of a few MeV at the channel radius the
+  two sides of an EC integral come from different Hamiltonians. Put the
+  channel radius beyond R + 5a of the Woods-Saxon, or accept it. No archive
+  fit uses the hybrid model (item 16 scan). No code change.
+- **An external-capture final state matching two levels is refused** (2026-10-27,
+  audit checklist item 28, `tests/ec_final_state_ambiguous`): a capture pair's
+  final state is the level of its J^π within 1 keV of the pair's E_x; since
+  e239a12 two such levels may coexist (different IDs), and the first in the
+  file used to take the ANC silently. Now "ERROR: external capture into pair k:
+  N levels of J^π lie within 1 keV of its final-state energy" stops the run:
+  move the extra level, or set the pair's energy to the level it decays to.
 - **Attenuation (Q) coefficients act on the lab distribution** (dev a22b99a,
   2026-10-25): for a particle exit Q_K multiplies the LAB Legendre coefficients
   and the result is taken back to the point's c.m. angle exactly. Before, a
