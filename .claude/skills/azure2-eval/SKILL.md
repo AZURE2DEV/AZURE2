@@ -668,6 +668,25 @@ runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
   is not an option (convert by hand), A_y angles (code 7) are c.m., a UPOS
   lab-differential segment is converted with particle b's kinematics (now
   warned). Test: tests/kinematic_limits.
+- **Total capture is the exit key -1 TOGETHER with the total-capture data
+  type (3 on a data line, 4 on a test line)** (dev 2026-10-27, audit item 32).
+  A hand-written test line `1 1 -1 Emin Emax step 0 0 0 0` (key -1, type 0)
+  made every build up to 510e6d1 read past the start of its pair list: a
+  segfault in the external-capture lookup on 13N, meaningless numbers on a
+  model without EC (the "mode-3 total capture 1e-8 of mode 1" note of item
+  21 was this). Now refused: `ERROR: ... the exit key -1 (total capture) needs
+  the total-capture data type`. With type 4 the TOTAL_CAPTURE extrap equals
+  the sum over the capture pairs (tests/total_capture_code). Same commit:
+  a SUM/RATIO component with another exit pair (or a fixed-angle RATIO
+  denominator) integrated its target-effect sub-points at the base pair's
+  c.m. angle (0.5 % on a p+12C/p+13C SUM at 90 deg lab with a 0.1 keV
+  convolution; tests/component_subpoint_angle); the Wigner limit is a
+  particle-channel bound only (a photon pair with a nonzero radius gave an
+  infinite one, mu = 0); the shift-function derivatives take one route per
+  stencil (table or exact) so the Coulomb table's edge cannot put a jump into
+  dS/dE. Note on frames: the DEFAULT output of a lab-differential SUM test
+  segment is in the BASE pair's c.m. frame, so its second term carries
+  J_base/J_term; the lab sum of the terms appears with `kinflag.dat` = 1.
 - **Attenuation (Q) coefficients act on the lab distribution** (dev a22b99a,
   2026-10-25): for a particle exit Q_K multiplies the LAB Legendre coefficients
   and the result is taken back to the point's c.m. angle exactly. Before, a
