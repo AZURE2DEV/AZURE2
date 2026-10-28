@@ -675,8 +675,10 @@ runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
   segfault in the external-capture lookup on 13N, meaningless numbers on a
   model without EC (the "mode-3 total capture 1e-8 of mode 1" note of item
   21 was this). Now refused: `ERROR: ... the exit key -1 (total capture) needs
-  the total-capture data type`. With type 4 the TOTAL_CAPTURE extrap equals
-  the sum over the capture pairs (tests/total_capture_code). Same commit:
+  the total-capture data type`. The other way round (type 3/4 with a real
+  exit key) has always meant total capture with the key ignored, now with a
+  WARNING. With type 4 the TOTAL_CAPTURE extrap equals the sum over the
+  capture pairs (tests/total_capture_code). Same commit:
   a SUM/RATIO component with another exit pair (or a fixed-angle RATIO
   denominator) integrated its target-effect sub-points at the base pair's
   c.m. angle (0.5 % on a p+12C/p+13C SUM at 90 deg lab with a 0.1 keV
