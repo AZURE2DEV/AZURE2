@@ -1016,8 +1016,8 @@ bool AMatrixFunc::PointTBar(EPoint *point, double fitBar, TMatrixCotangent &bar,
                 double finalLp = finalL + 1.0;
                 double R_LLp = this->GetRk(j2f, finalL, finalLp, Ic, lOrder);
                 double R_LpLp = this->GetRk(j2f, finalLp, finalLp, Ic, lOrder);
-                if (R_LpLp != 0.0)
-                  R_L = (R_L + 2.0 * delta * R_LLp + delta * delta * R_LpLp) / (1.0 + delta * delta);
+                // unconditionally, as in GenMatrixFunc (checklist t3-24)
+                R_L = (R_L + 2.0 * delta * R_LLp + delta * delta * R_LpLp) / (1.0 + delta * delta);
               }
             }
             double W = cR * itf->GetZ1Z2_UPOS() * std::pow(2.0 * lOrder + 1.0, 0.5) / 4.0 * R_L * legP;

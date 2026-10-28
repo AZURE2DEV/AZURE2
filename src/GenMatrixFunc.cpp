@@ -380,7 +380,12 @@ void GenMatrixFunc::CalculateBareCrossSection(EPoint *point) {
                   double finalLp = finalL + 1.;
                   double R_LLp = this->GetRk(j2f, finalL, finalLp, Ic, lOrder);
                   double R_LpLp = this->GetRk(j2f, finalLp, finalLp, Ic, lOrder);
-                  if (R_LpLp != 0.) R_L = (R_L + 2. * delta * R_LLp + delta * delta * R_LpLp) / (1. + delta * delta);
+                  // Eq. (7) of Brune and deBoer (2020) unconditionally: every R_k is 0 when its coupling is not
+                  // allowed, and the mixed form is well defined.  Up to 2026-10-27 it was applied only when
+                  // R_L'L' != 0, so at an order k where R_L'L' happens to vanish while R_LL does not (3/2 -> 3/2
+                  // M1/E2, k = 2: R_2(2,2) = 0, R_2(1,2) = 0.77) the 2 delta R_LL' term and the 1/(1 + delta^2)
+                  // were dropped for that k (audit 2026-10-25, checklist t3-24).
+                  R_L = (R_L + 2. * delta * R_LLp + delta * delta * R_LpLp) / (1. + delta * delta);
                 }
               }
               sum += theInterference->GetZ1Z2_UPOS() * T1 * conj(T2) *

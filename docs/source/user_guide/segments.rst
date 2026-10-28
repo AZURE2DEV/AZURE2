@@ -95,7 +95,10 @@ appears with the following fields:
           ``E_lab  k  a_k  da_k`` with the Legendre order :math:`k` in the
           angle column, and the fit value of each point is the model's
           coefficient of that order -- the same coefficients a test segment of
-          type **Angular Distribution** computes. The trailing keyword
+          type **Angular Distribution** computes. Legendre orders are computed
+          up to 20, so a particle channel with :math:`l > 10` truncates every
+          differential cross section it enters (the run log warns for each
+          such channel; angle-integrated values are complete). The trailing keyword
           ``absolute 1`` makes the data the absolute :math:`A_k` in b/sr
           (:math:`A_0 = \sigma/4\pi`). Target integration and resolution
           folding act on the absolute :math:`A_k`, which are linear in the
@@ -440,7 +443,12 @@ appears with the following fields:
    **Secondary Decay L** is the multipolarity :math:`L` of the gamma ray,
    **Final State J (Ic)** the spin of :math:`C`, and **Mixing Ratio (δ)**
    :math:`\delta = g_{L+1}/g_L` of an :math:`L`/:math:`L+1` mixture (0 for a
-   pure multipole), in the convention of Eqs. (4)-(7) of the paper. In the
+   pure multipole), in the convention of Eqs. (4)-(7) of the paper; the
+   mixed radiation parameter :math:`(R_k^{LL} + 2\delta R_k^{LL'} + \delta^2
+   R_k^{L'L'})/(1+\delta^2)` is applied at every order :math:`k` (before
+   October 2026 it was skipped at an order where :math:`R_k^{L'L'}` happened
+   to vanish, such as :math:`k = 2` of a :math:`3/2 \to 3/2` M1/E2 decay,
+   which dropped the interference term and the normalization there). In the
    file the four fields follow the data file (and any composite fields) as
    ``isUPOS L Ic delta``, e.g. ``... data/n2g.dat 0 1 3 0 0`` for the E3 decay
    of :math:`^{16}`\ O(6.13, :math:`3^-`) to its :math:`0^+` ground state.

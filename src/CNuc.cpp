@@ -841,6 +841,20 @@ void CNuc::Initialize(const Config &configure) {
   // Calculate Angular Distribution Coefficients
   if (!(configure.paramMask & Config::USE_API))
     configure.outStream << "Calculating Angular Distribution Coefficients..." << std::endl;
+  // Legendre orders above Config::maxLOrder are never computed, so a particle channel with l > maxLOrder/2
+  // contributes terms (l + l' > maxLOrder) that are silently dropped from every differential cross section
+  // (angle-integrated values are complete).  Say so once per such channel (checklist t3-24).
+  for (int j = 1; j <= this->NumJGroups(); j++) {
+    JGroup *jg = this->GetJGroup(j);
+    for (int ch = 1; ch <= jg->NumChannels(); ch++) {
+      AChannel *channel = jg->GetChannel(ch);
+      if (channel->GetRadType() != 'P' || 2 * channel->GetL() <= Config::maxLOrder) continue;
+      configure.outStream << "**WARNING: channel l = " << channel->GetL() << " (J = " << jg->GetJ() << ", pair "
+                          << this->GetPair(channel->GetPairNum())->GetPairKey() << ") exceeds " << Config::maxLOrder / 2
+                          << ": Legendre terms above order " << Config::maxLOrder
+                          << " are not computed, so differential cross sections involving it are truncated." << std::endl;
+    }
+  }
   this->CalcAngularDists(configure.maxLOrder);
   if ((configure.fileCheckMask | configure.screenCheckMask) & Config::CHECK_ANGULAR_DISTS)
     this->PrintAngularDists(configure);
