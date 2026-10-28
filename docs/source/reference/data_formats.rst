@@ -246,11 +246,20 @@ emitted sample by sample (the unnamed one first, in file order) right after
 the level parameters. A sample name is one token without ``:`` or ``#``.
 Stoichiometric weights need not sum to one: give that sample ``sum 0``.
 
-A ``<segmentsData>`` or ``<segmentsTest>`` line may end with the keyword
-blocks ``sqrtshift <b> <bError> <vary>``, ``sample <1|name>``,
-``shiftgroup <label>`` and ``total <0|1>`` (in any order; writers put ``sample``
-last); a data line also ``shiftfngroup <label>``, ``normgroup <label>``,
-``covariance <file>`` and ``shiftfn "<f(x)>" N ...`` (:doc:`../user_guide/segments`).
+A ``<segmentsData>`` line may end with the keyword blocks
+``sqrtshift <b> <bError> <vary>``, ``sample <1|name>``, ``shiftgroup <label>``,
+``shiftfngroup <label>``, ``normgroup <label>``, ``covariance <file>``,
+``shiftfn "<f(x)>" N ...``, ``total <0|1>`` and ``spin <s>`` (in any order;
+writers put ``sample`` last). A ``<segmentsTest>`` line honours ``sample``,
+``total`` and ``spin``; the shift, norm and shift-function blocks have no
+meaning without data and are skipped there (before October 2026 they stopped
+the keyword reader, so a ``sample`` or ``total`` written after them was lost),
+and ``covariance`` on a test line is refused (:doc:`../user_guide/segments`).
+The three shift fields of a data line (``shift shiftError vary``) are
+optional: a line may carry one shift value or none before the data file, and
+the reader tells a value from a file name by the whole token, so a file whose
+name starts with digits (``12C_p.dat``) is a file (before October 2026 it was
+read as a 12 MeV shift and the file ``C_p.dat``).
 ``natural`` is the keyword's older name and is still read.
 ``spin <s>`` on a phase-shift line (``isDiff`` 2) names the channel spin of
 the partial wave: a phase shift is one (J, l, s) wave, and the engine refuses a

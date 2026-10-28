@@ -3,6 +3,7 @@
 
 #include <iostream>
 #include <string>
+#include <cstdlib>
 #include <sstream>
 #include <vector>
 
@@ -23,6 +24,14 @@
  * before, so every existing .azr file keeps parsing identically; only files
  * written with a space in the path use the quoted form.
  */
+/// Is the whole token a number (as strtod reads it, nothing left over)?  "12C_p.dat" is not; "1e-3" is.
+inline bool WholeNumber(const std::string &token, double &value) {
+  if (token.empty()) return false;
+  char *end = 0;
+  value = std::strtod(token.c_str(), &end);
+  return end != token.c_str() && *end == '\0';
+}
+
 inline bool ReadPathToken(std::istream &stream, std::string &path) {
   std::string token;
   if (!(stream >> token)) return false;
@@ -92,19 +101,36 @@ class SegLine {
     shiftFn_ = "";
     parseError_ = "";
 
-    // Try to parse energy shift from the remaining line, default to 0.0 for backward compatibility
+    // The shift fields are optional and came in three layouts: "shift shiftError vary file ...", the older
+    // "shift file ..." and the oldest "file ...".  Decide by the TOKENS, not by whether ">> double" succeeds:
+    // "12C_p.dat" used to be read as a 12 MeV shift with the file "C_p.dat", and "0.002 data/foo.dat" left the
+    // stream failed after the second read and the file empty (audit 2026-10-25, item 29; tests/segline_formats).
     std::istringstream restStream(dummyString);
-    double tempEnergyShift;
-    if (restStream >> tempEnergyShift) {
-      energyShift_ = tempEnergyShift;
-      // Try to read energyShiftError and varyEnergyShift
-      if (restStream >> energyShiftError_ >> varyEnergyShift_) {
-        // Successfully read all three values
+    {
+      energyShift_ = 0.0;
+      energyShiftError_ = 0.0;
+      varyEnergyShift_ = 0;
+      std::streampos start = restStream.tellg();
+      std::string tok1;
+      double v1 = 0.0;
+      if (restStream >> tok1 && WholeNumber(tok1, v1)) {
+        energyShift_ = v1;
+        std::streampos afterShift = restStream.tellg();
+        std::string tok2, tok3;
+        double v2 = 0.0, v3 = 0.0;
+        if (restStream >> tok2 >> tok3 && WholeNumber(tok2, v2) && WholeNumber(tok3, v3)) {
+          energyShiftError_ = v2;
+          varyEnergyShift_ = (int)v3;
+        } else {
+          restStream.clear();
+          restStream.seekg(afterShift);
+        }
       } else {
-        // Only energy shift was available (old format)
-        energyShiftError_ = 0.0;
-        varyEnergyShift_ = 0;
+        restStream.clear();
+        restStream.seekg(start);
       }
+    }
+    {
       // Get remaining string after energy shift parameters
       std::string remainingString;
       getline(restStream, remainingString);
@@ -337,18 +363,6 @@ class SegLine {
         } else
           dataFile_ = std::string();
       }
-    } else {
-      // No energy shift found, treat entire dummyString as dataFile (backward compatibility)
-      energyShift_ = 0.0;
-      energyShiftError_ = 0.0;
-      varyEnergyShift_ = 0;
-      int p2 = dummyString.find_last_not_of(" \n\t\r");
-      if (p2 != std::string::npos) {
-        int p1 = dummyString.find_first_not_of(" \n\t\r");
-        if (p1 == std::string::npos) p1 = 0;
-        dataFile_ = StripPathQuotes(dummyString.substr(p1, (p2 - p1) + 1));
-      } else
-        dataFile_ = std::string();
     }
   };
   /*!

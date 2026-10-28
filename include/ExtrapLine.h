@@ -117,6 +117,30 @@ class ExtrapLine {
         } else if (keyword == "covariance") {
           hasCovariance_ = true;  // a data-segment block only: EData::MakePoints refuses the line
           break;
+        } else if (keyword == "sqrtshift") {
+          // data-segment blocks: a test segment has no shift, norm or shift function.  They used to stop the
+          // keyword loop here, losing a "sample" or "total" written after them (audit 2026-10-25, item 29);
+          // now they are skipped with their values and the loop goes on.
+          std::string a, b, c;
+          if (!(advancedStream >> a >> b >> c)) break;
+        } else if (keyword == "shiftgroup" || keyword == "shiftfngroup" || keyword == "normgroup" || keyword == "absolute") {
+          std::string a;
+          if (!(advancedStream >> a)) break;
+        } else if (keyword == "shiftfn") {
+          std::string expression;
+          int numParams = 0;
+          if (!(advancedStream >> expression)) break;
+          if (expression.size() > 1 && expression[0] == '"' && expression[expression.size() - 1] != '"') {
+            std::string rest;
+            if (std::getline(advancedStream, rest, '"')) expression += rest;
+          }
+          if (!(advancedStream >> numParams)) break;
+          bool okParams = true;
+          for (int j = 0; j < 3 * numParams && okParams; j++) {
+            std::string v;
+            if (!(advancedStream >> v)) okParams = false;
+          }
+          if (!okParams) break;
         } else {
           break;
         }
