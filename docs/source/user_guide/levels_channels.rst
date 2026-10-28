@@ -210,4 +210,10 @@ For gamma-ray calculations, the user should define a level corresponding to each
 gamma-ray particle pair defined in the **Particle Pairs** tab. This allows
 setting the ANCs and gamma-ray decay widths for each bound state. The energies
 of these levels must match the excitation energies of the gamma-ray particle
-pairs.
+pairs: the pair's final state is the level of its :math:`J^\pi` whose energy
+lies within 1 keV of the pair's excitation energy. A pair with no such level
+is refused when a segment uses it (warned about otherwise), and one whose
+window holds two or more levels of that :math:`J^\pi` is refused as
+ambiguous (before October 2026 the first one in the file was taken silently):
+move the extra level by more than 1 keV, or give the pair the energy of the
+level it decays to.

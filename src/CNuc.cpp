@@ -693,6 +693,21 @@ int CNuc::ParseExternalCapture(const Config &configure, std::map<int, int> &ecPa
     if (jGroupNum) {
       ALevel newLevel(exitPair->GetExE());
       levelNum = this->GetJGroup(jGroupNum)->IsLevel(newLevel);
+      // IsLevel is an energy-only match within 1 keV and returns the first level that fits.  Since e239a12 two
+      // levels of one J^pi may sit within 1 keV of each other (different level IDs), so the pair's E_x can match
+      // more than one: refuse that instead of taking the first silently (audit 2026-10-25, checklist item 28).
+      {
+        int matches = 0;
+        for (int lv = 1; lv <= this->GetJGroup(jGroupNum)->NumLevels(); lv++)
+          if (fabs(this->GetJGroup(jGroupNum)->GetLevel(lv)->GetE() - exitPair->GetExE()) <= 1.0e-3) matches++;
+        if (matches > 1) {
+          configure.outStream << "ERROR: external capture into pair " << exitPair->GetPairKey() << ": " << matches
+                              << " levels of J^pi = " << jValue << (parity > 0 ? "+" : "-") << " lie within 1 keV of its final-state energy E_x = "
+                              << exitPair->GetExE() << " MeV, so the final state is ambiguous.  Move the extra level(s) by more than 1 keV"
+                              << " or give the pair the energy of the one it decays to." << std::endl;
+          return -1;
+        }
+      }
       if (!levelNum) {
         this->GetJGroup(jGroupNum)->AddLevel(newLevel);
         levelNum = this->GetJGroup(jGroupNum)->IsLevel(newLevel);

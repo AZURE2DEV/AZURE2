@@ -566,6 +566,21 @@ shift function of a hybrid pair was off by 4·10\ :sup:`−3` (l = 0) to
 radius fell between nodes. A potential of vanishing depth now reproduces the
 plain Coulomb functions (``tests/pyazr/hybrid_derivative_test.py``).
 
+What the potential does not touch (a design limit, audit 2026-10-25 item 27):
+it bends the **scattering** functions F and G of the pair inside the 15 fm
+matching radius, and with them the penetrabilities, shift functions and the
+entrance-channel wave of the external-capture integrand. The **bound-state**
+side of external capture stays pure Coulomb: the final-state tail is the
+Whittaker function :math:`C\,W_{-\eta,l+1/2}(2\kappa r)` normalized by its
+ANC, the ANC-to-reduced-width conversion evaluates that Whittaker function at
+the channel radius, and the NF integral of the Brune normalization integrates
+it. With a potential still of a few MeV at the channel radius (the default
+Woods-Saxon R = 3.6 fm, a = 0.6 fm is 9 % of V₀ at 5 fm) the initial and
+final states of an external-capture integral therefore come from different
+Hamiltonians between the channel radius and the range of the potential. Use
+a channel radius beyond that range, or accept the inconsistency; the
+mismatch is below 10\ :sup:`−3` of the potential's depth beyond R + 5a.
+
 The hybrid nuclear potential, per particle pair
 -----------------------------------------------
 
