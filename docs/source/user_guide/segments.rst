@@ -5,7 +5,7 @@ The **Segments** tab defines the energies and angles at which cross sections are
 calculated. It is divided into two halves:
 
 - **Segments From Data** (upper) -- for calculations that reference experimental
-  data files, and measured scattering lengths (listed under the data segments).
+  data files, and measured scattering lengths (listed after the data segments).
 - **Segments Without Data** (lower) -- for pure calculations and extrapolations.
 
 Each segment is automatically assigned a numerical key that is referenced in the
@@ -697,16 +697,20 @@ uncertainty of 0 leaves that part unconstrained; blank imaginary fields mean no
 imaginary part. The other fields of a data segment (energies, angles, data file,
 normalization, shifts) do not apply and are hidden.
 
-The scattering lengths are listed as rows under the data segments, marked
-**a**\ :math:`_0` instead of a row number: the reaction column names the pair,
-the energy column reads *threshold*, the angle column the channel spin and the
-data-file column the measured value. The check box, **Check All**, **Uncheck
-All** and the pair filters act on them as on the segments; select one and click
-**-** to remove it, or double-click it to edit it (its type cannot be changed to a
-segment, nor a segment's to a scattering length). They are not segments: they
-have no segment number, so adding or removing one does not renumber the
-segments that **Experimental Effects** and the parameter names refer to.
-Before October 2026 they had a table of their own at the bottom of the tab.
+The scattering lengths are rows of the **Segments From Data** table, after the
+last data segment and numbered on from it: the reaction column names the pair
+(**a**\ :math:`_0` of ...), the energy column reads *threshold*, the angle column
+the channel spin, the data-type column *Scattering Length* and the data-file
+column the measured value. The check box, **Check All**, **Uncheck All** and the
+pair filters act on them as on the segments; select one and click **-** to remove
+it, or double-click it to edit it (its type cannot be changed to a segment, nor a
+segment's to a scattering length; the arrow buttons do not move it among the
+segments). In the file they are not segments but the ``<scatteringLengths>``
+block, written after all the segments: their row numbers are display only, and
+adding or removing one never renumbers the segments that **Experimental
+Effects** and the parameter names refer to (adding a segment moves the
+scattering lengths down by one). Before October 2026 they had a table of their
+own, at the bottom of the tab and then under the segment table.
 
 A row refers to its pair by the pair's key, the row number on the **Particle
 Pairs** tab. When a pair is deleted or edited, rows whose pair no longer exists,

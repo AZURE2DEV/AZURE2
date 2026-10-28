@@ -63,9 +63,7 @@ class SegmentsTab : public QWidget {
   void getDataFromExfor();
   void filterSegDataByPairs();
   void editScatteringLength();
-  void scatteringLengthSelectionChanged();
   void updateScatteringLengthRows();
-  void syncScatteringLengthColumns();
   /*void openSegDataFile();
   void openSegDataFile(QString filename);
   void saveSegDataFile();
@@ -118,7 +116,11 @@ class SegmentsTab : public QWidget {
   QPushButton *segTestDownButton;
   ScatteringLengthsModel *scatteringLengthsModel;
   ScatteringLengthRowsModel *scatteringLengthRows;
-  QTableView *scatteringLengthsView;
+  QAbstractItemModel *segmentsDataRows;  ///< the data segments, then the scattering lengths (one table)
+  /*! The scattering-length row a row of the data table shows, or -1 for a data segment. */
+  int scatteringLengthRowOf(int viewRow) const;
+  /*! The selected row of the data table, or -1. */
+  int selectedSegDataRow() const;
   QSignalMapper *mapper;
   QPushButton *infoButton[5];
   static const std::vector<QString> infoText;

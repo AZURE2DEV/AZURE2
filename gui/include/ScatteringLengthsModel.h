@@ -108,7 +108,15 @@ class ScatteringLengthRowsModel : public QAbstractTableModel {
   static QString valueText(const ScatteringLengthEntry &e);
 
  private slots:
-  void sourceReset();
+  void sourceAboutToBeReset() { beginResetModel(); }
+  void sourceReset() { endResetModel(); }
+  void sourceRowsAboutToBeInserted(const QModelIndex &, int first, int last) { beginInsertRows(QModelIndex(), first, last); }
+  void sourceRowsInserted() { endInsertRows(); }
+  void sourceRowsAboutToBeRemoved(const QModelIndex &, int first, int last) { beginRemoveRows(QModelIndex(), first, last); }
+  void sourceRowsRemoved() { endRemoveRows(); }
+  void sourceDataChanged(const QModelIndex &topLeft, const QModelIndex &bottomRight);
+  void sourceLayoutAboutToBeChanged() { emit layoutAboutToBeChanged(); }
+  void sourceLayoutChanged() { emit layoutChanged(); }
 
  private:
   ScatteringLengthsModel *src;

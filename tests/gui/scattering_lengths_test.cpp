@@ -39,6 +39,7 @@
 #include <iostream>
 #include "AZURESetup.h"
 #include "SegmentsTab.h"
+#include "SegmentsDataModel.h"
 #include "AddSegDataDialog.h"
 #include "PairsModel.h"
 #include "ScatteringLengthsModel.h"
@@ -372,19 +373,40 @@ int main(int argc, char** argv) {
     ok("segment edit: no Scattering Length type",
        seg.findChild<QComboBox*>("dataTypeCombo")->findData(AddSegDataDialog::ScatteringLengthCode) < 0);
 
-    // rows under the data table: one per entry, in the data table's columns, hidden when there are none
-    QTableView* rows = tab.findChild<QTableView*>("scatteringLengthsView");
-    ok("rows view exists", rows != nullptr);
-    if (rows) {
-      QAbstractItemModel* rm = rows->model();
-      ok("one row per entry", rm->rowCount() == model->rowCount(), QString::number(rm->rowCount()));
-      ok("Data Type column", rm->index(0, 7).data().toString() == "Scattering Length", rm->index(0, 7).data().toString());
-      ok("Data File column: the value", rm->index(0, 8).data().toString().startsWith("Re a0 = 17"),
-         rm->index(0, 8).data().toString());
-      ok("check box mirrors the entry", rm->index(2, 0).data(Qt::CheckStateRole).toInt() == Qt::Unchecked);
-      rm->setData(rm->index(2, 0), Qt::Checked, Qt::CheckStateRole);
+    // rows of the data table itself, after the data segments, numbered on from them (no second table, 2026-10-28)
+    ok("no separate scattering-length table", tab.findChild<QTableView*>("scatteringLengthsView") == nullptr);
+    QTableView* view = tab.findChild<QTableView*>("segmentsDataView");
+    ok("data table exists", view != nullptr);
+    if (view) {
+      QAbstractItemModel* rm = view->model();
+      SegmentsDataModel* segs = tab.getSegmentsDataModel();
+      segs->insertRows(0, 2, QModelIndex());   // two data segments ahead of the entries
+      const int n = segs->rowCount(QModelIndex());
+      ok("one row per segment, then one per entry", n == 2 && rm->rowCount() == n + model->rowCount(),
+         QString("%1 + %2 vs %3").arg(n).arg(model->rowCount()).arg(rm->rowCount()));
+      ok("numbered on from the segments", rm->headerData(0, Qt::Vertical).toInt() == 1 &&
+                                              rm->headerData(n, Qt::Vertical).toInt() == n + 1 &&
+                                              rm->headerData(n + 2, Qt::Vertical).toInt() == n + 3,
+         rm->headerData(n, Qt::Vertical).toString());
+      ok("Data Type column", rm->index(n, 7).data().toString() == "Scattering Length", rm->index(n, 7).data().toString());
+      ok("Data File column: the value", rm->index(n, 8).data().toString().startsWith("Re a0 = 17"),
+         rm->index(n, 8).data().toString());
+      ok("the segments' header row is the table's", rm->headerData(1, Qt::Horizontal).toString() == "Reaction");
+      ok("check box mirrors the entry", rm->index(n + 2, 0).data(Qt::CheckStateRole).toInt() == Qt::Unchecked);
+      rm->setData(rm->index(n + 2, 0), Qt::Checked, Qt::CheckStateRole);
       ok("check box writes the entry", model->entries().at(2).active);
-      rm->setData(rm->index(2, 0), Qt::Unchecked, Qt::CheckStateRole);
+      rm->setData(rm->index(n + 2, 0), Qt::Unchecked, Qt::CheckStateRole);
+      // selection survives an entry's check box (row-level signals, not a model reset)
+      view->selectionModel()->select(rm->index(n + 1, 0), QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Rows);
+      rm->setData(rm->index(n + 2, 0), Qt::Checked, Qt::CheckStateRole);
+      ok("selection kept across a check-box change", view->selectionModel()->isRowSelected(n + 1, QModelIndex()));
+      rm->setData(rm->index(n + 2, 0), Qt::Unchecked, Qt::CheckStateRole);
+      // a new segment pushes the entries down and renumbers them; the entries themselves do not change
+      segs->insertRows(n, 1, QModelIndex());
+      ok("a new segment shifts the entries one row down", rm->rowCount() == n + 1 + model->rowCount() &&
+                                                              rm->index(n + 1, 7).data().toString() == "Scattering Length");
+      segs->removeRows(0, n + 1, QModelIndex());
+      ok("segments removed, entries stay", rm->rowCount() == model->rowCount());
     }
   }
 
@@ -432,8 +454,7 @@ int main(int argc, char** argv) {
       QDir().mkpath(shots);
       bool saved = setup.grab().save(QString("%1/segments_tab_scattering_lengths.png").arg(shots));
       // The table itself scrolled to the flagged row, with its tooltip text.
-      for (QTableView* view : setup.getSegmentsTab()->findChildren<QTableView*>()) {
-        if (view->model() != setup.getSegmentsTab()->getScatteringLengthsModel()) continue;
+      if (QTableView* view = setup.getSegmentsTab()->findChild<QTableView*>("segmentsDataView")) {
         view->scrollToBottom();
         QApplication::processEvents();
         saved &= view->parentWidget()->grab().save(QString("%1/scattering_lengths_table_flagged.png").arg(shots));

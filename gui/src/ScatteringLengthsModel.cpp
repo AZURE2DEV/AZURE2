@@ -440,16 +440,22 @@ void ScatteringLengthsDelegate::setModelData(QWidget *editor, QAbstractItemModel
 
 ScatteringLengthRowsModel::ScatteringLengthRowsModel(ScatteringLengthsModel *source, int columns, QObject *parent)
     : QAbstractTableModel(parent), src(source), ncols(columns) {
+  // Row-level forwarding: the rows sit in the data-segment table (a concatenation of the two models), where a
+  // reset on every change would drop the selection and the scroll position (2026-10-28).
+  connect(src, SIGNAL(modelAboutToBeReset()), this, SLOT(sourceAboutToBeReset()));
   connect(src, SIGNAL(modelReset()), this, SLOT(sourceReset()));
-  connect(src, SIGNAL(rowsInserted(QModelIndex, int, int)), this, SLOT(sourceReset()));
-  connect(src, SIGNAL(rowsRemoved(QModelIndex, int, int)), this, SLOT(sourceReset()));
-  connect(src, SIGNAL(dataChanged(QModelIndex, QModelIndex)), this, SLOT(sourceReset()));
-  connect(src, SIGNAL(layoutChanged()), this, SLOT(sourceReset()));
+  connect(src, SIGNAL(rowsAboutToBeInserted(QModelIndex, int, int)), this, SLOT(sourceRowsAboutToBeInserted(QModelIndex, int, int)));
+  connect(src, SIGNAL(rowsInserted(QModelIndex, int, int)), this, SLOT(sourceRowsInserted()));
+  connect(src, SIGNAL(rowsAboutToBeRemoved(QModelIndex, int, int)), this, SLOT(sourceRowsAboutToBeRemoved(QModelIndex, int, int)));
+  connect(src, SIGNAL(rowsRemoved(QModelIndex, int, int)), this, SLOT(sourceRowsRemoved()));
+  connect(src, SIGNAL(dataChanged(QModelIndex, QModelIndex)), this, SLOT(sourceDataChanged(QModelIndex, QModelIndex)));
+  connect(src, SIGNAL(layoutAboutToBeChanged()), this, SLOT(sourceLayoutAboutToBeChanged()));
+  connect(src, SIGNAL(layoutChanged()), this, SLOT(sourceLayoutChanged()));
 }
 
-void ScatteringLengthRowsModel::sourceReset() {
-  beginResetModel();
-  endResetModel();
+void ScatteringLengthRowsModel::sourceDataChanged(const QModelIndex &topLeft, const QModelIndex &bottomRight) {
+  if (!topLeft.isValid() || !bottomRight.isValid()) return;
+  emit dataChanged(index(topLeft.row(), 0), index(bottomRight.row(), ncols - 1));
 }
 
 int ScatteringLengthRowsModel::rowCount(const QModelIndex &parent) const {
@@ -499,9 +505,10 @@ QVariant ScatteringLengthRowsModel::data(const QModelIndex &index, int role) con
 }
 
 QVariant ScatteringLengthRowsModel::headerData(int section, Qt::Orientation orientation, int role) const {
+  // The data-segment table numbers these rows on from its segments (SegmentsTab's concatenating model); alone,
+  // a row is numbered from 1.
   if (role != Qt::DisplayRole) return QVariant();
-  if (orientation == Qt::Vertical) return QString("a%1").arg(QChar(0x2080));  // "a0" in place of the row number
-  Q_UNUSED(section);
+  if (orientation == Qt::Vertical) return section + 1;
   return QVariant();
 }
 
