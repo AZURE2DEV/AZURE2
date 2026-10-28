@@ -553,6 +553,18 @@ runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
   `tests/natural_neon` moved slightly (re-baselined). Nothing to change in
   files; a line shared by pairs of very different mass ratio (inverse
   kinematics with several isotopes) was the exposed case.
+- **A phase-shift segment is one (J, l, s) wave: `spin <s>` on the line, and an
+  ambiguous (J, l) is refused** (2026-10-27, audit checklist t3-23,
+  `tests/phase_channel_spin`): the engine used to sum the diagonal S-matrix
+  elements of every channel spin with the segment's (J, l) and report half the
+  argument, which for a target with spin (p + ³He ¹P₁/³P₁, p + ⁷Be J = 1 l = 1
+  with s = 1, 2) is the phase of neither wave (34° off in the test). A
+  phase-shift data or test line now takes the keyword `spin <s>` after the
+  shift fields (GUI: the **s** field next to J and l; pyazr `Segment.phase_S`),
+  and a run STOPS with "ERROR: phase-shift segment #k (J, l) has N channel
+  spins" when the level scheme has several spins for that (J, l) and the line
+  gives none, or the given spin has no channel. Spin-0 targets and single-spin
+  (J, l) need nothing. Older engines ignore the keyword (and sum again).
 - **Attenuation (Q) coefficients act on the lab distribution** (dev a22b99a,
   2026-10-25): for a particle exit Q_K multiplies the LAB Legendre coefficients
   and the result is taken back to the point's c.m. angle exactly. Before, a
