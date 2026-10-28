@@ -73,7 +73,11 @@ appears with the following fields:
           Most low-energy capture measurements publish lab values.
       * - **Phase Shift**
         - Phase shift data. Requires specifying the total angular momentum (*J*)
-          and orbital angular momentum (*l*). The convention is
+          and orbital angular momentum (*l*), and, when the target has spin so
+          that several channel spins *s* share that (*J*, *l*), the channel
+          spin (the **s** field, written as ``spin <s>`` on the line): a phase
+          shift belongs to one (*J*, *l*, *s*) partial wave, and an ambiguous
+          segment is refused with the spins listed. The convention is
           :math:`-90° < \theta_\text{lab} < 90°`.
       * - **Analyzing Power**
         - Vector analyzing power :math:`A_y` for a spin-1/2 projectile (any

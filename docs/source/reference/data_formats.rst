@@ -252,6 +252,13 @@ blocks ``sqrtshift <b> <bError> <vary>``, ``sample <1|name>``,
 last); a data line also ``shiftfngroup <label>``, ``normgroup <label>``,
 ``covariance <file>`` and ``shiftfn "<f(x)>" N ...`` (:doc:`../user_guide/segments`).
 ``natural`` is the keyword's older name and is still read.
+``spin <s>`` on a phase-shift line (``isDiff`` 2) names the channel spin of
+the partial wave: a phase shift is one (J, l, s) wave, and the engine refuses a
+phase-shift segment whose (J, l) has several channel spins in the level scheme
+unless the line says which (before October 2026 it summed the S-matrix
+elements of all of them and reported half the argument, which is not a phase
+shift of anything; an older engine ignores the keyword). A single-spin (J, l),
+such as any spin-0 target, needs no keyword.
 ``total 1`` makes every term whose exit pair is its entrance pair the total
 cross section of that (neutral) pair, by the optical theorem
 (:doc:`../user_guide/segments`, "Neutron Total Cross Sections"); an older

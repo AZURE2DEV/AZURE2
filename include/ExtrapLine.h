@@ -30,6 +30,7 @@ class ExtrapLine {
     componentsList_ = "";
     natural_ = "0";
     total_ = 0;
+    phaseS_ = -1.0;  // phase-shift channel spin: < 0 = not given ("spin <s>" keyword)
     // Initialize UPOS parameters to defaults
     isUPOS_ = 0;
     secondaryDecayL_ = 0;
@@ -101,6 +102,11 @@ class ExtrapLine {
         if (keyword == "sample" || keyword == "natural") {
           if (!(advancedStream >> natural_)) {
             natural_ = "0";
+            break;
+          }
+        } else if (keyword == "spin") {
+          if (!(advancedStream >> phaseS_) || phaseS_ < 0.0) {
+            stream.setstate(std::ios::failbit);
             break;
           }
         } else if (keyword == "total") {
@@ -175,6 +181,10 @@ class ExtrapLine {
    */
   int phaseL() const { return phaseL_; };
   /*!
+   * The channel spin of a phase-shift test segment ("spin <s>" keyword), or -1 when not given.
+   */
+  double phaseS() const { return phaseS_; };
+  /*!
    * Returns the maximum polynomial order if segment is
    * angular distribution.
    */
@@ -227,6 +237,7 @@ class ExtrapLine {
   int isDiff_;
   double phaseJ_;
   int phaseL_;
+  double phaseS_;
   int maxAngDistOrder_;
   int isAdvanced_;
   int operationType_;

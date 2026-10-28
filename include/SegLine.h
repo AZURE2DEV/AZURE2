@@ -67,6 +67,7 @@ class SegLine {
     isAdvanced_ = 0;
     operationType_ = 0;
     componentsList_ = "";
+    phaseS_ = -1.0;  // phase-shift channel spin: < 0 = not given ("spin <s>" keyword)
     // Initialize UPOS parameters to defaults
     isUPOS_ = 0;
     secondaryDecayL_ = 0;
@@ -278,6 +279,13 @@ class SegLine {
               natural_ = "0";
               break;
             }
+          } else if (keyword == "spin") {
+            // phase-shift segments: the channel spin s whose partial wave the phase belongs to
+            if (!(advancedStream >> phaseS_) || phaseS_ < 0.0) {
+              parseError_ = "spin needs the channel spin s (>= 0)";
+              stream.setstate(std::ios::failbit);
+              break;
+            }
           } else if (keyword == "total") {
             if (!(advancedStream >> total_) || (total_ != 0 && total_ != 1)) {
               parseError_ = "total needs 0 or 1";
@@ -404,6 +412,10 @@ class SegLine {
    */
   int phaseL() const { return phaseL_; };
   /*!
+   * The channel spin of a phase-shift segment ("spin <s>" keyword), or -1 when the line does not give one.
+   */
+  double phaseS() const { return phaseS_; };
+  /*!
    * Returns the energy shift value for the segment.
    */
   double energyShift() const { return energyShift_; };
@@ -513,6 +525,7 @@ class SegLine {
   int varyNorm_;
   double phaseJ_;
   int phaseL_;
+  double phaseS_;
   double energyShift_;
   double energyShiftError_;
   int varyEnergyShift_;

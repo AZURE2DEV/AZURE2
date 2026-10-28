@@ -85,6 +85,8 @@ class AddSegDataDialog : public QDialog {
   QCheckBox *varyNormCheck;
   QLineEdit *phaseJValueText;
   QLineEdit *phaseLValueText;
+  QLineEdit *phaseSValueText;   ///< channel spin of a phase-shift segment ("spin <s>"), empty = not given
+  QLabel *phaseSValueLabel;
   QLabel *phaseLValueLabel;
   QLabel *phaseJValueLabel;
   QLineEdit *energyShiftText;

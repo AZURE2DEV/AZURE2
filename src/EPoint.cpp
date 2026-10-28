@@ -64,6 +64,7 @@ EPoint::EPoint(DataLine dataLine, ESegment *parent) {
   is_ang_dist_ = parent->IsAngularDist() || parent->IsCoefficients();
   max_ang_dist_order_ = parent->GetMaxAngDistOrder();
   j_value_ = parent->GetJ();
+  phase_s_value_ = parent->GetPhaseS();
   l_value_ = parent->GetL();
   isUPOS_ = parent->IsUPOS();
   secondaryDecayL_ = parent->GetSecondaryDecayL();
@@ -108,6 +109,7 @@ EPoint::EPoint(double angle, double energy, ESegment *parent) {
   is_ang_dist_ = parent->IsAngularDist() || parent->IsCoefficients();
   max_ang_dist_order_ = parent->GetMaxAngDistOrder();
   j_value_ = parent->GetJ();
+  phase_s_value_ = parent->GetPhaseS();
   l_value_ = parent->GetL();
   isUPOS_ = parent->IsUPOS();
   secondaryDecayL_ = parent->GetSecondaryDecayL();

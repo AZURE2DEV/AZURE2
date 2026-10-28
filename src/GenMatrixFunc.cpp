@@ -497,6 +497,10 @@ void GenMatrixFunc::CalculateBareCrossSection(EPoint *point) {
     } else if (aa == exitPairNum) {
       double segmentJ = point->GetJ();
       int segmentL = point->GetL();
+      // The channel spin the phase belongs to ("spin <s>" on the segment line); without it the
+      // segment must have a single spin for its (J, l), which EData::Initialize enforces: summing
+      // the U-matrix elements of two channel spins (as happened up to 2026-10-27) is not a phase.
+      const double segmentS = point->GetPhaseS();
       PPair *entrancePair = compound()->GetPair(aa);
       this->ClearTempTMatrices();
       for (int k = 1; k <= theDecay->NumKGroups(); k++) {
@@ -506,7 +510,8 @@ void GenMatrixFunc::CalculateBareCrossSection(EPoint *point) {
           AChannel *entranceChannel = compound()->GetJGroup(theMGroup->GetJNum())->GetChannel(theMGroup->GetChNum());
           int lValue = entranceChannel->GetL();
           AChannel *exitChannel = compound()->GetJGroup(theMGroup->GetJNum())->GetChannel(theMGroup->GetChpNum());
-          if (jValue == segmentJ && lValue == segmentL && entranceChannel == exitChannel) {
+          if (jValue == segmentJ && lValue == segmentL && entranceChannel == exitChannel &&
+              (segmentS < 0.0 || std::fabs(entranceChannel->GetS() - segmentS) < 1.0e-6)) {
             complex expCoulPhaseSquared = point->GetExpCoulombPhase(theMGroup->GetJNum(), theMGroup->GetChNum()) *
                 point->GetExpCoulombPhase(theMGroup->GetJNum(), theMGroup->GetChNum());
             complex theUMatrix = (expCoulPhaseSquared - this->GetTMatrixElement(k, m)) / expCoulPhaseSquared;

@@ -1397,6 +1397,54 @@ int EData::Initialize(CNuc *compound, const Config &configure) {
     }
   }
 
+  // A phase-shift segment is one partial wave: (J, l) and the channel spin s.  Up to 2026-10-27 the
+  // diagonal U-matrix elements of every channel spin with the segment's (J, l) were summed and half
+  // the argument reported, which is not a phase shift of anything when two spins contribute (p + 3He
+  // 1P1 and 3P1, p + 7Be J = 1 l = 1 with s = 1 and 2; audit 2026-10-25, tier 3 entry 4).  A segment
+  // whose (J, l) has several channel spins in the level scheme must say which with "spin <s>", and a
+  // given s must exist.
+  for (int s = 1; s <= this->NumSegments(); s++) {
+    ESegment *seg = this->GetSegment(s);
+    if (!seg->IsPhase()) continue;
+    int aa = compound->GetPairNumFromKey(seg->GetEntranceKey());
+    if (aa == 0) continue;
+    std::vector<double> spins;
+    for (int j = 1; j <= compound->NumJGroups(); j++) {
+      JGroup *jg = compound->GetJGroup(j);
+      if (jg->GetJ() != seg->GetJ()) continue;
+      for (int ch = 1; ch <= jg->NumChannels(); ch++) {
+        AChannel *channel = jg->GetChannel(ch);
+        if (channel->GetRadType() != 'P' || channel->GetPairNum() != aa || channel->GetL() != seg->GetL()) continue;
+        bool seen = false;
+        for (double v : spins) if (std::fabs(v - channel->GetS()) < 1.0e-6) seen = true;
+        if (!seen) spins.push_back(channel->GetS());
+      }
+    }
+    const double want = seg->GetPhaseS();
+    if (want >= 0.0) {
+      bool found = false;
+      for (double v : spins) if (std::fabs(v - want) < 1.0e-6) found = true;
+      if (!found) {
+        configure.outStream << "ERROR: phase-shift segment #" << seg->GetSegmentKey() << " (J = " << seg->GetJ() << ", l = " << seg->GetL()
+                            << ") asks for channel spin s = " << want << ", but the level scheme has ";
+        if (spins.empty()) configure.outStream << "no channel of that (J, l) for its entrance pair." << std::endl;
+        else {
+          configure.outStream << "only s =";
+          for (double v : spins) configure.outStream << " " << v;
+          configure.outStream << " for it." << std::endl;
+        }
+        return -1;
+      }
+    } else if (spins.size() > 1) {
+      configure.outStream << "ERROR: phase-shift segment #" << seg->GetSegmentKey() << " (J = " << seg->GetJ() << ", l = " << seg->GetL()
+                          << ") has " << spins.size() << " channel spins in the level scheme (s =";
+      for (double v : spins) configure.outStream << " " << v;
+      configure.outStream << "): a phase shift belongs to one partial wave, so add \"spin <s>\" to the segment line"
+                          << " (older builds summed the S-matrix elements of all of them, which is not a phase shift)." << std::endl;
+      return -1;
+    }
+  }
+
   // Calculate channel lo-matrix and channel penetrability for each channel at each local energy
   if (!(configure.paramMask & Config::USE_API))
     configure.outStream << "Calculating Lo-Matrix, Phases, and Penetrabilities..." << std::endl;

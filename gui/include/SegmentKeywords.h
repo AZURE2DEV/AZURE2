@@ -29,11 +29,47 @@ inline bool isKeyword(const QString &token) {
          token.compare("shiftfn", Qt::CaseInsensitive) == 0 ||
          token.compare("total", Qt::CaseInsensitive) == 0 ||
          token.compare("absolute", Qt::CaseInsensitive) == 0 ||
+         token.compare("spin", Qt::CaseInsensitive) == 0 ||
          token.compare("mixture", Qt::CaseInsensitive) == 0;
 }
 
 inline bool isSampleKeyword(const QString &token) {
   return token.compare("sample", Qt::CaseInsensitive) == 0 || token.compare("natural", Qt::CaseInsensitive) == 0;
+}
+
+/*! The channel spin of a phase-shift segment's tail ("spin <s>"); "" when none. */
+inline QString phaseSpin(const QString &extras) {
+  QStringList tokens = extras.split(' ', Qt::SkipEmptyParts);
+  for (int i = 0; i + 1 < tokens.size(); i++)
+    if (tokens[i].compare("spin", Qt::CaseInsensitive) == 0) return tokens[i + 1];
+  return QString();
+}
+
+/*! The tail with its spin block set to \p s or removed (empty \p s); an existing block is replaced where it
+ *  stands, a new one goes before a sample block (writers put that last) or at the end. */
+inline QString withPhaseSpin(const QString &extras, const QString &s) {
+  QStringList tokens = extras.split(' ', Qt::SkipEmptyParts);
+  int at = -1;
+  for (int i = 0; i < tokens.size(); i++)
+    if (tokens[i].compare("spin", Qt::CaseInsensitive) == 0) {
+      at = i;
+      tokens.erase(tokens.begin() + i, tokens.begin() + std::min<int>(i + 2, tokens.size()));
+      break;
+    }
+  const QString v = s.trimmed();
+  if (!v.isEmpty()) {
+    if (at < 0) {
+      at = tokens.size();
+      for (int i = 0; i < tokens.size(); i++)
+        if (isSampleKeyword(tokens[i])) {
+          at = i;
+          break;
+        }
+    }
+    tokens.insert(at, v);
+    tokens.insert(at, "spin");
+  }
+  return tokens.join(" ");
 }
 
 /*! The sample token of the tail: "" when there is none (or "sample 0"), "1" for the default

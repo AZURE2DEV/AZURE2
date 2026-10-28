@@ -78,6 +78,15 @@ AddSegDataDialog::AddSegDataDialog(QWidget *parent) :
   phaseLValueText->setValidator(intValidator);
   phaseLValueText->setVisible(false);
   phaseLValueText->setMaximumWidth(50);
+  phaseSValueText = new QLineEdit;
+  phaseSValueText->setObjectName("phaseSValueText");
+  phaseSValueText->setValidator(spinValidator);
+  phaseSValueText->setVisible(false);
+  phaseSValueText->setMaximumWidth(50);
+  phaseSValueText->setPlaceholderText(tr("s"));
+  phaseSValueText->setToolTip(tr("Channel spin of the partial wave (\"spin <s>\" on the segment line).\n"
+                                 "Required when the level scheme has several channel spins with this J and l\n"
+                                 "(a target with spin); may be left empty when only one exists."));
   dataFileText = new QLineEdit;
   QPushButton *chooseFileButton = new QPushButton(tr("Choose..."));
   connect(chooseFileButton, SIGNAL(clicked()), this, SLOT(setChooseFile()));
@@ -279,6 +288,10 @@ AddSegDataDialog::AddSegDataDialog(QWidget *parent) :
   phaseLValueLabel->setVisible(false);
   phaseLayout->addWidget(phaseLValueLabel, 0, 7);
   phaseLayout->addWidget(phaseLValueText, 0, 8);
+  phaseSValueLabel = new QLabel(tr("s:"));
+  phaseSValueLabel->setVisible(false);
+  phaseLayout->addWidget(phaseSValueLabel, 0, 9);
+  phaseLayout->addWidget(phaseSValueText, 0, 10);
   lowerLayout->addLayout(phaseLayout, 0, 2);
 
   QLabel *dataNormLabel = new QLabel(tr("Data Norm.:"));
@@ -474,6 +487,8 @@ void AddSegDataDialog::dataTypeChanged(int) {
   phaseLValueLabel->setVisible(phase);
   phaseJValueText->setVisible(phase);
   phaseLValueText->setVisible(phase);
+  phaseSValueLabel->setVisible(phase);
+  phaseSValueText->setVisible(phase);
   // lab or C.M. differential, or A_y
   const bool angles = (code == 1 || code == 4 || code == 7);
   lowAngleText->setEnabled(angles);

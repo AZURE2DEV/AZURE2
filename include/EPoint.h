@@ -256,6 +256,8 @@ class EPoint {
   double GetSqrtPenetrability(int, int) const;
   /// Total spin. Phase-shift points only.
   double GetJ() const;
+  /// Channel spin of a phase-shift point (< 0: the segment gave none, so a single spin must match).
+  double GetPhaseS() const { return phase_s_value_; }
   /// Stopping cross section at this sub-point, for a yield-curve target integration.
   double GetStoppingPower() const;
   /// Beam energy loss across the target at this point.
@@ -470,6 +472,7 @@ class EPoint {
   double screen_ue_ = 0.0;
   int screen_param_ = 0;
   double j_value_;
+  double phase_s_value_ = -1.0;
   double stoppingPower_;
   double targetThickness_;
   double angleKinFactor_;

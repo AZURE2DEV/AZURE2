@@ -43,6 +43,7 @@ ESegment::ESegment(SegLine segLine) {
     isphase_ = true;
     j_ = segLine.phaseJ();
     l_ = segLine.phaseL();
+    phaseS_ = segLine.phaseS();
   } else {
     isphase_ = false;
     j_ = 0.0;
@@ -149,6 +150,7 @@ ESegment::ESegment(ExtrapLine extrapLine) {
     isphase_ = true;
     j_ = extrapLine.phaseJ();
     l_ = extrapLine.phaseL();
+    phaseS_ = extrapLine.phaseS();
   } else {
     isphase_ = false;
     j_ = 0.0;

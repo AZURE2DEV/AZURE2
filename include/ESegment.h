@@ -91,6 +91,8 @@ class ESegment {
   double GetAStep() const;
   /// Total spin. Phase-shift segments only.
   double GetJ() const;
+  /// Channel spin of a phase-shift segment ("spin <s>"), or -1 when the line gives none; see EData::Initialize.
+  double GetPhaseS() const { return phaseS_; }
   /// Current normalization applied to the data.
   double GetNorm() const;
   /// Normalization as declared in the input file, the value the fit penalty pulls towards.
@@ -336,6 +338,7 @@ class ESegment {
   bool isdifferential_;
   bool iscmdifferential_;
   bool isphase_;
+  double phaseS_ = -1.0;
   /// Which cross section component to compare against: 0 = full, 1 = E1 only, 2 = E2 only.
   int crossSectionComponent_;
   bool isTargetEffect_;

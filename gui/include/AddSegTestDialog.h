@@ -57,6 +57,8 @@ class AddSegTestDialog : public QDialog {
 
   QLineEdit *phaseJValueText;
   QLineEdit *phaseLValueText;
+  QLineEdit *phaseSValueText;   ///< channel spin of a phase-shift segment ("spin <s>"), empty = not given
+  QLabel *phaseSValueLabel;
   QLabel *phaseJValueLabel;
   QLabel *phaseLValueLabel;
   QLabel *angDistLabel;

@@ -355,6 +355,7 @@ void SegmentsTab::addSegDataLine() {
     }
     newLine.extraTokens = SegmentKeywords::withCovarianceFile(
         SegmentKeywords::withNaturalToken(QString(), aDialog.naturalToken()), aDialog.covarianceFileText->text());
+    if (newLine.dataType == 2) newLine.extraTokens = SegmentKeywords::withPhaseSpin(newLine.extraTokens, aDialog.phaseSValueText->text());
     addSegDataLine(newLine);
   }
 }
@@ -457,6 +458,7 @@ void SegmentsTab::addSegTestLine() {
       newLine.componentsList = "";
     }
     newLine.extraTokens = SegmentKeywords::withNaturalToken(QString(), aDialog.naturalToken());
+    if (newLine.dataType == 2) newLine.extraTokens = SegmentKeywords::withPhaseSpin(newLine.extraTokens, aDialog.phaseSValueText->text());
     addSegTestLine(newLine);
   }
 }
@@ -589,6 +591,7 @@ void SegmentsTab::editSegDataLine() {
   aDialog.disallowScatteringLength();
   aDialog.setNaturalToken(SegmentKeywords::naturalSample(extraTokens));
   aDialog.covarianceFileText->setText(SegmentKeywords::covarianceFile(extraTokens));
+  aDialog.phaseSValueText->setText(SegmentKeywords::phaseSpin(extraTokens));
   aDialog.entrancePairCombo->setKey(entrancePairIndex);
   aDialog.exitPairCombo->setKey(exitPairIndex);
   aDialog.lowEnergyText->setText(lowEnergy);
@@ -769,6 +772,8 @@ void SegmentsTab::editSegDataLine() {
     // rewrite the covariance block only when the field changed, so an untouched tail stays as read
     if (aDialog.covarianceFileText->text().trimmed() != SegmentKeywords::covarianceFile(extraTokens))
       newExtraTokens = SegmentKeywords::withCovarianceFile(newExtraTokens, aDialog.covarianceFileText->text());
+    if (aDialog.phaseSValueText->text().trimmed() != SegmentKeywords::phaseSpin(extraTokens))
+      newExtraTokens = SegmentKeywords::withPhaseSpin(newExtraTokens, aDialog.phaseSValueText->text());
     if (newExtraTokens != extraTokens) segmentsDataModel->setLineExtras(index.row(), newExtraTokens);
   }
 }
@@ -831,6 +836,7 @@ void SegmentsTab::editSegTestLine() {
   aDialog.setSamples(abundancesModel ? abundancesModel->samples() : QStringList() << QString());
   aDialog.setWindowTitle(tr("Edit a Segment Without Data"));
   aDialog.setNaturalToken(SegmentKeywords::naturalSample(extraTokens));
+  aDialog.phaseSValueText->setText(SegmentKeywords::phaseSpin(extraTokens));
   aDialog.entrancePairCombo->setKey(entrancePairIndex);
   aDialog.exitPairCombo->setKey(exitPairIndex);
   aDialog.lowEnergyText->setText(lowEnergy);
@@ -945,6 +951,8 @@ void SegmentsTab::editSegTestLine() {
       segmentsTestModel->setData(i, newComponentsList, Qt::EditRole);
     }
     QString newExtraTokens = SegmentKeywords::withNaturalToken(extraTokens, aDialog.naturalToken());
+    if (aDialog.phaseSValueText->text().trimmed() != SegmentKeywords::phaseSpin(extraTokens))
+      newExtraTokens = SegmentKeywords::withPhaseSpin(newExtraTokens, aDialog.phaseSValueText->text());
     if (newExtraTokens != extraTokens) segmentsTestModel->setLineExtras(index.row(), newExtraTokens);
   }
 }
