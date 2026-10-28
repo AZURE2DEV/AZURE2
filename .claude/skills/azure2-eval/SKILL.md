@@ -699,6 +699,23 @@ runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
   exact bound-state route for its whole 10 keV stencil (the table's Hermite
   interpolant is only C1 across cells); on 13N the effect was below 1e-8, so
   this one is defensive, with no regression test.
+- **pyazr `transform_rwa` in a sampler no longer grows memory** (dev 2026-10-28).
+  The physical transform (CNuc::TransformOut) works at the LEVEL energies --
+  penetrabilities, shift functions and the external part of each radiative
+  width (an EC radial integral at the level energy) -- and stored every
+  (l, radius, energy) Coulomb function in the global memo, where moving level
+  energies never recur: ~5,000 entries per call per worker, never released
+  (the memo's hit-rate guard never fires because the data-grid keys keep the
+  hit rate ~90 %). The 12C(a,g) emcee chains with --fix-gamma-total (1-4
+  transform_rwa per log-prob) reached ~4 GB per worker by step 1,400 and ~100
+  GB per 25-slot job against a 42.5 GB reservation. Diagnosis tool:
+  `m.cache_stats()["entries"]` before/after a call; growth per call is the
+  smoking gun. Fix: CoulFuncCache::TransientScope around TransformOut (shares
+  within the call, keeps nothing; bit-identical values, same speed; turning
+  the memo off for those integrals instead made transform_rwa 3x slower).
+  Builds before this (incl. frozen e239a12) still grow: plan the memory
+  reservation of a long chain that transforms per step, or recycle workers.
+  Test tests/pyazr/coulomb_memo_transform_test.py.
 - **Attenuation (Q) coefficients act on the lab distribution** (dev a22b99a,
   2026-10-25): for a particle exit Q_K multiplies the LAB Legendre coefficients
   and the result is taken back to the point's c.m. angle exactly. Before, a
