@@ -236,3 +236,17 @@ add_test(NAME pyazr_ec_relativistic
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/ec_relativistic_test.py)
 set_tests_properties(pyazr_ec_relativistic PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2" LABELS "slow")
+
+# The hybrid nuclear potential belongs to the session: a second session's <potential> block or set_potential
+# used to reconfigure every live session through the process singleton (2026-10-27, audit item 30).
+add_test(NAME pyazr_potential_sessions
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/potential_sessions_test.py)
+set_tests_properties(pyazr_potential_sessions PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
+# chiSquared.out written through the API carries the Park, abundance and scattering-length totals
+# (2026-10-27, audit item 30).
+add_test(NAME pyazr_output_penalties
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/output_penalties_test.py)
+set_tests_properties(pyazr_output_penalties PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")

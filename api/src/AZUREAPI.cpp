@@ -305,18 +305,20 @@ int AZUREAPI::UpdateSegments(vector_r &p) {
     } else {
       // Regular segment calculation (existing logic)
       for (int k = 0; k < data.size(); ++k) {
+        bool failed = false;
         if (!data[k].IsMapped()) {
           try {
             data[k].Calculate(localCompound, configure());
           } catch (GSLException &e) {
-            // Skip this point if GSL calculation fails
-            continue;
+            // A GSL failure at one point used to skip every push_back for it, so the arrays came back shorter
+            // than the data and misaligned with it, silently (audit 2026-10-25, item 30).  Keep the slot: NaN.
+            failed = true;
           }
         }
-
-        cross.push_back(data[k].GetFitCrossSection());
-        crossE1.push_back(data[k].GetFitE1CrossSection());
-        crossE2.push_back(data[k].GetFitE2CrossSection());
+        const double nan = std::numeric_limits<double>::quiet_NaN();
+        cross.push_back(failed ? nan : data[k].GetFitCrossSection());
+        crossE1.push_back(failed ? nan : data[k].GetFitE1CrossSection());
+        crossE2.push_back(failed ? nan : data[k].GetFitE2CrossSection());
         angles.push_back(data[k].GetCMAngle());
         energies.push_back(data[k].GetCMEnergy());
         conv.push_back(data[k].GetSFactorConversion());
@@ -411,18 +413,20 @@ int AZUREAPI::UpdateSegmentsRWA(vector_r &p) {
     } else {
       // Regular segment calculation (existing logic)
       for (int k = 0; k < data.size(); ++k) {
+        bool failed = false;
         if (!data[k].IsMapped()) {
           try {
             data[k].Calculate(localCompound, configure());
           } catch (GSLException &e) {
-            // Skip this point if GSL calculation fails
-            continue;
+            // A GSL failure at one point used to skip every push_back for it, so the arrays came back shorter
+            // than the data and misaligned with it, silently (audit 2026-10-25, item 30).  Keep the slot: NaN.
+            failed = true;
           }
         }
-
-        cross.push_back(data[k].GetFitCrossSection());
-        crossE1.push_back(data[k].GetFitE1CrossSection());
-        crossE2.push_back(data[k].GetFitE2CrossSection());
+        const double nan = std::numeric_limits<double>::quiet_NaN();
+        cross.push_back(failed ? nan : data[k].GetFitCrossSection());
+        crossE1.push_back(failed ? nan : data[k].GetFitE1CrossSection());
+        crossE2.push_back(failed ? nan : data[k].GetFitE2CrossSection());
         angles.push_back(data[k].GetCMAngle());
         energies.push_back(data[k].GetCMEnergy());
         conv.push_back(data[k].GetSFactorConversion());
@@ -518,18 +522,20 @@ int AZUREAPI::UpdateSegmentsAllRWA(vector_r &p) {
     } else {
       // Regular segment calculation (existing logic)
       for (int k = 0; k < data.size(); ++k) {
+        bool failed = false;
         if (!data[k].IsMapped()) {
           try {
             data[k].Calculate(localCompound, configure());
           } catch (GSLException &e) {
-            // Skip this point if GSL calculation fails
-            continue;
+            // A GSL failure at one point used to skip every push_back for it, so the arrays came back shorter
+            // than the data and misaligned with it, silently (audit 2026-10-25, item 30).  Keep the slot: NaN.
+            failed = true;
           }
         }
-
-        cross.push_back(data[k].GetFitCrossSection());
-        crossE1.push_back(data[k].GetFitE1CrossSection());
-        crossE2.push_back(data[k].GetFitE2CrossSection());
+        const double nan = std::numeric_limits<double>::quiet_NaN();
+        cross.push_back(failed ? nan : data[k].GetFitCrossSection());
+        crossE1.push_back(failed ? nan : data[k].GetFitE1CrossSection());
+        crossE2.push_back(failed ? nan : data[k].GetFitE2CrossSection());
         angles.push_back(data[k].GetCMAngle());
         energies.push_back(data[k].GetCMEnergy());
         conv.push_back(data[k].GetSFactorConversion());
@@ -750,6 +756,17 @@ bool AZUREAPI::SetRadius(int idx, double r) {
 
 bool AZUREAPI::WriteOutputFiles() {
   if (data_ == nullptr) return false;
+  // chiSquared.out reports the Park, abundance and scattering-length totals from the EData object; the CLI's
+  // chi2 path stores them there, the API's CalculateChi2RWA does not (pyazr adds those terms in Python), so
+  // through pyazr the file carried 0 or stale values (audit 2026-10-25, item 30).  Evaluate them at the current
+  // parameters before writing.
+  CNuc *localCompound = compound();
+  if (localCompound) {
+    if (configure().paramMask & Config::USE_PARK_FORMALISM) data()->SetParkPenalty(localCompound->ParkNormPenalty());
+    if (localCompound->HasAbundanceBlock()) data()->SetAbundancePenalty(localCompound->AbundancePenalty(configure().abundanceSumSigma));
+    if (localCompound->HasScatteringLengthConstraints())
+      data()->SetScatteringLengthChi2(ScatteringLength::Chi2(localCompound, configure(), localCompound->ScatteringLengthConstraints()));
+  }
   data()->WriteOutputFiles(configure(), false, nullptr);
   return true;
 }

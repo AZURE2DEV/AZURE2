@@ -81,6 +81,31 @@ bool NuclearPotentialManager::getGaussianParameters(double &V0, double &r0) cons
   return true;
 }
 
+NuclearPotentialManager::State NuclearPotentialManager::exportState() const {
+  State s;
+  s.defaultSetting = defaultSetting_;
+  s.pairSettings = pairSettings_;
+  s.pairTags = pairTags_;
+  s.defaultTag = defaultTag_;
+  return s;
+}
+
+void NuclearPotentialManager::importState(const State &state) {
+  defaultSetting_ = state.defaultSetting;
+  potential_ = build(defaultSetting_);
+  currentType_ = defaultSetting_.type;
+  pairSettings_ = state.pairSettings;
+  pairPotentials_.clear();
+  for (std::map<int, NuclearPotentialSetting>::const_iterator it = pairSettings_.begin();
+       it != pairSettings_.end(); ++it)
+    pairPotentials_[it->first] = build(it->second);
+  pairTags_ = state.pairTags;
+  for (std::map<int, NuclearPotentialSetting>::const_iterator it = pairSettings_.begin();
+       it != pairSettings_.end(); ++it)
+    if (pairTags_.find(it->first) == pairTags_.end()) pairTags_[it->first] = ++tagCounter_;
+  defaultTag_ = state.defaultTag ? state.defaultTag : ++tagCounter_;
+}
+
 void NuclearPotentialManager::resetToDefault() {
   defaultSetting_ = NuclearPotentialSetting();
   potential_ = build(defaultSetting_);

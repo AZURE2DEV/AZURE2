@@ -260,6 +260,14 @@ optional: a line may carry one shift value or none before the data file, and
 the reader tells a value from a file name by the whole token, so a file whose
 name starts with digits (``12C_p.dat``) is a file (before October 2026 it was
 read as a 12 MeV shift and the file ``C_p.dat``).
+
+The ``<parameterSettings>`` block (written by the Fitting tab) has one line per
+parameter: a label of several words, then ``value lower upper error fit_error
+nuisance category minuit_index``. The numeric fields accept ``nan`` and
+``inf`` (any case, signed): a fit error written from a singular covariance can
+be either, and before October 2026 the parser threw on them and the
+command-line run ended before any output. The fit error is a report, not an
+input; a limit that is not finite is ignored (no limit).
 ``natural`` is the keyword's older name and is still read.
 ``spin <s>`` on a phase-shift line (``isDiff`` 2) names the channel spin of
 the partial wave: a phase shift is one (J, l, s) wave, and the engine refuses a

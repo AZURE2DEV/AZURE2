@@ -163,6 +163,10 @@ This file is the quickest scalar check that a run succeeded.
 With a ``<scatteringLengths>`` block the totals line ends with
 ``Total-Scattering-Length-Chi-Squared``, the constraint term of
 :doc:`../theory/scattering_length` (also part of the minimised sum).
+The same holds for ``Total-Park-Chi-Squared`` and
+``Total-Abundance-Chi-Squared``; the file written through pyazr's
+``write_output_files`` carries all three evaluated at the parameters it was
+asked for (before October 2026 the API left them at zero or stale).
 
 scatteringLengths.out
 ^^^^^^^^^^^^^^^^^^^^^

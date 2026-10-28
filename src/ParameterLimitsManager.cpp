@@ -8,6 +8,8 @@
 #include <iostream>
 #include <cmath>
 #include <regex>
+#include <cctype>
+#include <limits>
 
 inline double custom_stod(const std::string &str, std::size_t *pos = nullptr) {
   std::size_t i = 0;
@@ -28,6 +30,20 @@ inline double custom_stod(const std::string &str, std::size_t *pos = nullptr) {
   } else if (str[i] == '-') {
     sign = -1;
     ++i;
+  }
+
+  // nan / inf (any case, optional sign already consumed): a fitError written from a singular covariance
+  // (audit 2026-10-25, item 30) used to throw here and end the CLI run; they are legal doubles.
+  {
+    std::string rest = str.substr(i);
+    for (std::size_t q = 0; q < rest.size(); q++) rest[q] = (char)std::tolower((unsigned char)rest[q]);
+    if (rest.compare(0, 3, "nan") == 0 || rest.compare(0, 3, "inf") == 0) {
+      const bool isNan = rest.compare(0, 3, "nan") == 0;
+      i += 3;
+      if (!isNan && rest.compare(0, 8, "infinity") == 0) i += 5;
+      if (pos) *pos = i;
+      return isNan ? std::numeric_limits<double>::quiet_NaN() : sign * std::numeric_limits<double>::infinity();
+    }
   }
 
   // Parse integer part
@@ -349,7 +365,10 @@ void ParameterLimitsManager::ApplyParameterSetting(const std::string &paramName,
   }
 
   // Apply limits if they are not both zero (0,0 means free parameter)
-  if (setting->lowerLimit != 0.0 || setting->upperLimit != 0.0) {
+  // A limit that is not finite (a nan or inf left in the block, which the parser accepts since 2026-10-27) is no limit.
+  if (!std::isfinite(setting->lowerLimit) || !std::isfinite(setting->upperLimit)) {
+    std::cout << "WARNING: <parameterSettings> " << matchedName << ": a limit is not finite; no limit applied." << std::endl;
+  } else if (setting->lowerLimit != 0.0 || setting->upperLimit != 0.0) {
     double lower = setting->lowerLimit;
     double upper = setting->upperLimit;
 

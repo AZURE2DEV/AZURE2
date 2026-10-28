@@ -218,6 +218,29 @@ class NuclearPotentialManager {
    */
   long tagFor(int pairKey) const;
 
+  /*!
+   * @brief The whole configuration: default, per-pair settings and the cache
+   * tags that go with them.
+   *
+   * For a client that keeps several configurations alive at once (pyazr
+   * sessions): the manager is a process singleton, and until 2026-10-27 the
+   * last session to read a <potential> block or call set_potential silently
+   * reconfigured every other live session (audit 2026-10-25, item 30).
+   */
+  struct State {
+    NuclearPotentialSetting defaultSetting;
+    std::map<int, NuclearPotentialSetting> pairSettings;
+    std::map<int, long> pairTags;
+    long defaultTag = 0;  ///< 0 = never assigned (a fresh state)
+  };
+  State exportState() const;
+  /*!
+   * @brief Install a state.  The potentials are rebuilt from the settings; the
+   * tags are kept, so a state that goes out and comes back keeps its CoulFunc
+   * cache entries, and a fresh state (defaultTag 0) is given a new tag.
+   */
+  void importState(const State &state);
+
  private:
   /*!
    * @brief Private constructor for singleton pattern

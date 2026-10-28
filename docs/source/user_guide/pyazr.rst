@@ -640,6 +640,14 @@ the same block, and ``--no-gui`` reads it through the same parser, so the three
 cannot drift. Worked example: ``pyazr/examples/nuclear_potential.py``;
 ``tests/hybrid_potential`` pins the behaviour.
 
+The potential belongs to the session. Several sessions in one process keep
+their own default and per-pair settings: a second session's ``<potential>``
+block, or ``set_nuclear_potential`` on it, leaves the first session computing
+with the settings it was opened with. (Before October 2026 the manager behind
+the settings was one process-wide object, so the last session to read a
+``<potential>`` block silently reconfigured every other live session;
+``tests/pyazr/potential_sessions_test.py`` pins the isolation.)
+
 External-capture integrals are the most expensive part of a capture
 calculation, which is why the Coulomb functions they need are memoized.
 ``cache_stats`` makes that visible: asking for the same integrals twice on
