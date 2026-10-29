@@ -154,8 +154,14 @@ with tempfile.TemporaryDirectory() as tmp:
 
 # The two routes round differently, so identical numbers mean the second session read the first one's
 # derivatives (the process-wide memo of CNuc::CalcShiftFunctions was keyed without the table until 2026-10-24).
-check("table and exact sessions in one process computed their own dS/dE",
-      any(found.get(("table", k)) != found.get(("exact", k)) for k in TRUTH), "bit-identical in every level")
+# Only meaningful where a Coulomb table exists: without one (a fresh CI runner) both sessions take the exact route
+# and must agree bit for bit.
+table_file = os.environ.get("AZURE2_COULOMB_TABLE") or os.path.expanduser("~/.azure2/coulomb_table.bin")
+if os.path.isfile(table_file):
+    check("table and exact sessions in one process computed their own dS/dE",
+          any(found.get(("table", k)) != found.get(("exact", k)) for k in TRUTH), "bit-identical in every level")
+else:
+    print(f"  skip  table vs exact in one process: no Coulomb table at {table_file}, both sessions are exact")
 
 print()
 if failures:
