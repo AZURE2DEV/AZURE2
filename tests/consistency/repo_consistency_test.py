@@ -91,7 +91,7 @@ check_registered("tests/consistency", r".+_test\.py")
 #    fresh clone (and CI) gets.
 def git_mode(rel):
     try:
-        out = subprocess.run(["git", "ls-files", "-s", "--", rel], cwd=ROOT,
+        out = subprocess.run(["git", "-c", "safe.directory=*", "ls-files", "-s", "--", rel], cwd=ROOT,
                              capture_output=True, text=True, check=True).stdout
     except (OSError, subprocess.CalledProcessError):
         return None
@@ -109,7 +109,12 @@ for name in sorted(os.listdir(os.path.join(ROOT, "tests"))):
         problems.append(f"tests/{name}: has an .azr but neither expected/chiSquared.out nor check.sh, so it never runs")
     if os.path.isfile(check):
         mode = git_mode(f"tests/{name}/check.sh")
-        executable = (mode == "100755") if mode else bool(os.stat(check).st_mode & stat.S_IXUSR)
+        if mode:
+            executable = mode == "100755"
+        elif os.name == "nt" or sys.platform.startswith(("win", "msys", "cygwin")):
+            executable = True   # no executable bit on Windows file systems and no git answer: cannot judge here
+        else:
+            executable = bool(os.stat(check).st_mode & stat.S_IXUSR)
         if not executable:
             problems.append(f"tests/{name}/check.sh: not executable, so tests/run_tests.sh skips it (git update-index --chmod=+x)")
 

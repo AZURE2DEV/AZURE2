@@ -73,7 +73,8 @@ if [ -n "$REF_BIN" ]; then
     mode=1; case "$m" in na_hs|pa_hs) mode=3;; esac
     run "$REF_BIN" "ref_$m" "$m" "$mode"
     same=1
-    for f in "$WORK/$m/output/"AZUREOut_*; do cmp -s "$f" "$WORK/ref_$m/output/$(basename "$f")" || same=0; done
+    for f in "$WORK/$m/output/"AZUREOut_*; do  # no cmp on the Windows runners
+      g="$WORK/ref_$m/output/$(basename "$f")"; [ -f "$g" ] && [ "$(tr -d '\r' < "$f")" = "$(tr -d '\r' < "$g")" ] || same=0; done
     [ "$same" = 1 ] && ok "(f) $m: non-relativistic output byte-identical to the reference build" \
                     || bad "(f) $m: non-relativistic output differs from the reference build"
   done

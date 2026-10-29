@@ -27,6 +27,10 @@ WORK="$(mktemp -d "${TMPDIR:-/tmp}/q_attenuation.XXXXXX")"
 [ -n "${KEEP_WORK:-}" ] || trap 'rm -rf "$WORK"' EXIT
 OUT=output/AZUREOut_aa=2_R=5.extrap
 
+# Byte-identical files without cmp (not in every MSYS2 image);  stripped so a
+# CRLF-writing Windows build compares like the others.
+same_file() { [ -f "$2" ] && [ "$(tr -d '' < "$1")" = "$(tr -d '' < "$2")" ]; }
+
 failures=0
 ok() { echo "  ok    $1"; }
 bad() { echo "  FAIL  $1"; failures=$((failures + 1)); }
@@ -46,7 +50,7 @@ for m in plain q q1 q5; do
 done
 [ "$failures" -eq 0 ] || { echo "q_attenuation: FAIL ($failures)"; exit 1; }
 
-if cmp -s "$WORK/plain/$OUT" "$WORK/q1/$OUT"; then
+if same_file "$WORK/plain/$OUT" "$WORK/q1/$OUT"; then
   ok "(a) every Q_K = 1 leaves the output byte-identical"
 else
   bad "(a) every Q_K = 1 changes the output"

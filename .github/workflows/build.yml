@@ -72,7 +72,7 @@ jobs:
             libgsl-dev libreadline-dev \
             qtbase5-dev qtbase5-dev-tools qttools5-dev libqt5svg5-dev \
             libqwt-qt5-dev \
-            python3-dev python3-numpy pybind11-dev
+            python3-dev python3-numpy python3-mpmath pybind11-dev
 
       # ---------------------------------------------------------------- macos
       # Qt5 and Qwt come from Homebrew rather than install-qt-action, because
@@ -88,8 +88,9 @@ jobs:
         if: matrix.name == 'macos'
         run: |
           brew install ninja gsl readline libomp qt@5 qwt-qt5
-          # numpy and pybind11 for the pyazr engine module and its tests.
-          python3 -m pip install --break-system-packages numpy pybind11
+          # numpy and pybind11 for the pyazr engine module and its tests; mpmath because
+          # pyazr imports it at load (pyazr.transform) -- without it every pyazr test skipped.
+          python3 -m pip install --break-system-packages numpy pybind11 mpmath
           echo "PYBIND11_DIR=$(python3 -m pybind11 --cmakedir)" >> "$GITHUB_ENV"
           echo "LIBOMP=$(brew --prefix libomp)" >> "$GITHUB_ENV"
           # Both are keg-only, so they are not on the default search paths.
@@ -146,6 +147,7 @@ jobs:
             mingw-w64-ucrt-x86_64-qwt-qt5
             mingw-w64-ucrt-x86_64-python
             mingw-w64-ucrt-x86_64-python-numpy
+            mingw-w64-ucrt-x86_64-python-mpmath
             mingw-w64-ucrt-x86_64-pybind11
 
       # --------------------------------------------------------------- build

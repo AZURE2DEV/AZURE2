@@ -42,10 +42,11 @@ model() {
   mkdir -p "$WORK/$name/output" "$WORK/$name/checks"
   [ -d "$(dirname "$SRC")/data" ] && cp -r "$(dirname "$SRC")/data" "$WORK/$name/"
   echo 1 > "$WORK/$name/kinflag.dat"   # lab-frame output files
-  awk -v L="$(printf '%s\n' "$@")" -v E="$effect" '
-    /<segmentsTest>/ { print; print L; skip = 1; next }
+  # the lines go through the environment: BSD awk (macOS) refuses a newline in -v ("newline in string")
+  LINES="$(printf '%s\n' "$@")" EFFECT="$effect" awk '
+    /<segmentsTest>/ { print; print ENVIRON["LINES"]; skip = 1; next }
     /<\/segmentsTest>/ { skip = 0 }
-    /<targetInt>/ { print; if (E != "") print E; skip = 1; next }
+    /<targetInt>/ { print; if (ENVIRON["EFFECT"] != "") print ENVIRON["EFFECT"]; skip = 1; next }
     /<\/targetInt>/ { skip = 0 }
     !skip { print }' "$SRC" > "$WORK/$name/m.azr"
   (cd "$WORK/$name" && printf '3\n\n\n7\n' | run_limited 600 "$AZURE2_BIN" --no-gui --no-readline m.azr > run.log 2>&1; echo "exit $?" >> run.log)

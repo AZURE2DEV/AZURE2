@@ -84,7 +84,7 @@ if [ -n "$REF_BIN" ]; then
   for m in spin2_plus spin2_multil mixing; do
     run "$REF_BIN" "ref_$m" "$m" 1 ""
     f="$(basename "$(ls "$WORK/$m/output/"AZUREOut_* | head -1)")"
-    if cmp -s <(tail -n +14 "$WORK/$m/output/$f") <(tail -n +14 "$WORK/ref_$m/output/$f"); then
+    if [ "$(tail -n +14 "$WORK/$m/output/$f" | tr -d '\r')" = "$(tail -n +14 "$WORK/ref_$m/output/$f" | tr -d '\r')" ]; then  # no cmp on the Windows runners
       ok "(e) $m: angle-integrated and particle angular distribution byte-identical to the reference build"
     else
       bad "(e) $m: non-UPOS segments differ from the reference build"

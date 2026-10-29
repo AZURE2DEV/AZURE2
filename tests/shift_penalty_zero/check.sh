@@ -33,8 +33,9 @@ mk() {  # NAME LINE... : shift_fn.azr with these <segmentsData> lines
   local dir="$WORK/$1"; shift
   mkdir -p "$dir/output" "$dir/checks"
   cp -r "$SRC/data" "$dir/"
-  awk -v lines="$(printf '%s\n' "$@")" '
-    /<segmentsData>/ { print; printf "%s\n", lines; skip = 1; next }
+  # the lines go through the environment: BSD awk (macOS) refuses a newline in -v ("newline in string")
+  LINES="$(printf '%s\n' "$@")" awk '
+    /<segmentsData>/ { print; printf "%s\n", ENVIRON["LINES"]; skip = 1; next }
     /<\/segmentsData>/ { skip = 0 }
     !skip { print }' "$SRC/shift_fn.azr" > "$dir/t.azr"
 }

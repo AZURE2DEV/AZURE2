@@ -38,10 +38,12 @@ bad() { echo "  FAIL  $1"; failures=$((failures + 1)); }
 model() {
   local name="$1" mode="$2"; shift 2
   mkdir -p "$WORK/$name/output" "$WORK/$name/checks"; cp -r "$BASE/data" "$WORK/$name/"
+  # the lines go through the environment: BSD awk (macOS) refuses a newline in -v ("newline in string")
+  export LINES="$(printf '%s\n' "$@")"
   if [ "$mode" = 3 ]; then
-    awk -v L="$(printf '%s\n' "$@")" '/<segmentsTest>/{print; print L; skip=1; next} /<\/segmentsTest>/{skip=0} !skip{print}' "$BASE/13N.azr"
+    awk '/<segmentsTest>/{print; print ENVIRON["LINES"]; skip=1; next} /<\/segmentsTest>/{skip=0} !skip{print}' "$BASE/13N.azr"
   else
-    awk -v L="$(printf '%s\n' "$@")" '{print} /<segmentsData>/{print L}' "$BASE/13N.azr"
+    awk '{print} /<segmentsData>/{print ENVIRON["LINES"]}' "$BASE/13N.azr"
   fi | awk '/<targetInt>/{p=1; print; next} /<\/targetInt>/{p=0} p{ $1 = 0 } {print}' > "$WORK/$name/m.azr"
   (cd "$WORK/$name" && printf '%s\n\n\n7\n' "$mode" | run_limited 600 "$AZURE2_BIN" --no-gui --no-readline m.azr > run.log 2>&1; echo "exit $?" >> run.log)
 }
