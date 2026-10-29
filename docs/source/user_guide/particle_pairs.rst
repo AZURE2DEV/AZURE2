@@ -200,6 +200,36 @@ single-nucleus ones.
    (:sup:`22`\ Ne). Every label shows both; the parameter name uses the
    compound nucleus, ``abundance_10_23``.
 
+Masses and separation energies
+------------------------------
+
+A pair carries both its two masses and its separation energy, and the two are
+linked: for two particle pairs of the same compound nucleus,
+:math:`S_b - S_a = (m_{1b} + m_{2b} - m_{1a} - m_{2a})\,c^2`. AZURE2 takes the
+thresholds (and so the whole energy scale) from the separation energies and
+uses the masses only in the kinematics (reduced masses, lab-to-c.m.
+conversions), so a mismatch does not change a calculation by more than the
+mass error itself (1e-4 u on a mass of 12 u is 1e-5). It is, however, how a
+typo or a mixed mass convention shows up, and since October 2026 the engine
+reports one when it reads the pairs:
+
+.. code-block:: text
+
+   **WARNING: separation energies and masses disagree: pair 2 (S = 18.8943 MeV,
+   m1 + m2 = 8.025593633 u) and pair 1 (S = 17.2551 MeV, m1 + m2 = 8.023828466 u):
+   the separation energies differ by 1.6392 MeV, the masses by 1.6442 MeV (-5.0 keV). ...
+
+Each particle pair is compared with the first particle pair of its compound
+nucleus; mismatches above 1 keV are listed (the first three, then a count). A
+mismatch within 5 keV of a multiple of the electron mass adds a hint that atomic
+and nuclear masses are mixed, typically a bare-proton mass (1.00728 u) next to
+atomic masses for the rest. Gamma and beta pairs are not compared: their heavy
+mass is only a label. A project that uses mass numbers as masses (12, 4, ...)
+gets one note instead, since its masses carry no Q value. The cure is to take
+the masses from one mass table (AME, atomic masses throughout) and the
+separation energies from the same table: :math:`S = m_1 + m_2 - M` of the
+compound nucleus.
+
 Relativistic Kinematics
 -----------------------
 

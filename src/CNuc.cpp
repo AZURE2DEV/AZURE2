@@ -1,4 +1,5 @@
 #include <iostream>
+#include <cmath>
 #include <iomanip>
 #include <sstream>
 #include <algorithm>
@@ -355,6 +356,8 @@ int CNuc::Fill(const Config &configure, std::pair<int, double> radii) {
 
   if (this->ReadAbundances(configure) == -1) return -1;
   if (ScatteringLength::ReadConstraints(this, configure, scatLenConstraints_) == -1) return -1;
+  // right after the pairs are known, before any data file is read (a project whose data fail still gets it)
+  this->CheckMassSeparationConsistency(configure);
 
   return 0;
 }
@@ -798,6 +801,77 @@ int CNuc::GetMaxLValue() const {
  * physical to formal parameters, creating and sorting all reaction pathways, and calculating angular interference
  * contributions and coefficients.  A CNuc object can only be initialized for use AFTER it is filled.
  */
+
+/*!
+ * Separation energies against masses, per compound nucleus (DeBoer 2026-10-29).  Every particle pair (pType 0) of a
+ * nucleus is compared with the first one: S_b - S_a against (m1b + m2b - m1a - m2a) uconv.  Gamma and beta pairs are
+ * left out -- their heavy mass is only a label (the photon energies come from excitation energies), and many projects
+ * enter it as a mass number.  A mismatch within 5 keV of a multiple of the electron mass gets a hint: atomic and
+ * nuclear (or bare-proton) masses mixed.  Nothing in the calculation changes.
+ */
+int CNuc::CheckMassSeparationConsistency(const Config &configure) const {
+  const double me = 0.51099895;  // MeV
+  const int kMaxListed = 3;
+  // A pair whose masses are mass numbers (both integers, other than 12C's exact 12) carries no Q value: it is
+  // reported once, not compared.
+  auto massNumbers = [](const PPair *p) {
+    auto integral = [](double m) { return std::fabs(m - std::round(m)) < 1e-6; };
+    return integral(p->GetM(1)) && integral(p->GetM(2)) && !(std::round(p->GetM(1)) == 12 && std::round(p->GetM(2)) == 12);
+  };
+  int warnings = 0, unlisted = 0;
+  std::map<int, int> reference;  // nucleus -> pair number of its first particle pair with real masses
+  std::set<int> massNumberPairs;
+  for (int i = 1; i <= this->NumPairs(); i++) {
+    PPair *pb = const_cast<CNuc *>(this)->GetPair(i);
+    if (pb->GetPType() != 0) continue;
+    if (massNumbers(pb)) {
+      massNumberPairs.insert(pb->GetPairKey());
+      continue;
+    }
+    auto it = reference.find(pb->GetNucleus());
+    if (it == reference.end()) {
+      reference[pb->GetNucleus()] = i;
+      continue;
+    }
+    PPair *pa = const_cast<CNuc *>(this)->GetPair(it->second);
+    const double fromS = pb->GetSepE() - pa->GetSepE();
+    const double fromM = (pb->GetM(1) + pb->GetM(2) - pa->GetM(1) - pa->GetM(2)) * uconv;
+    const double diff = fromS - fromM;
+    if (!(std::fabs(diff) > kMassCheckTolerance)) continue;
+    if (++warnings > kMaxListed) {
+      ++unlisted;
+      continue;
+    }
+    std::ostringstream msg;
+    msg << std::setprecision(6) << "**WARNING: separation energies and masses disagree";
+    if (this->NumNuclei() > 1) msg << " in " << this->NucleusLabel(pb->GetNucleus());
+    msg << ": pair " << pb->GetPairKey() << " (S = " << pb->GetSepE() << " MeV, m1 + m2 = " << std::setprecision(10)
+        << pb->GetM(1) + pb->GetM(2) << " u) and pair " << pa->GetPairKey() << " (S = " << std::setprecision(6)
+        << pa->GetSepE() << " MeV, m1 + m2 = " << std::setprecision(10) << pa->GetM(1) + pa->GetM(2)
+        << " u): the separation energies differ by " << std::fixed << std::setprecision(4) << fromS
+        << " MeV, the masses by " << fromM << " MeV (" << std::showpos << std::setprecision(1) << diff * 1e3
+        << std::noshowpos << " keV).";
+    const double ne = diff / me;
+    if (std::fabs(ne) > 0.5 && std::fabs(ne - std::round(ne)) * me < 5.0e-3)
+      msg << "  That is " << std::lround(std::fabs(ne)) << " electron mass" << (std::lround(std::fabs(ne)) > 1 ? "es" : "")
+          << ": atomic and nuclear masses mixed (a bare-proton 1.00728 u among atomic masses, for one).";
+    msg << "  Thresholds use the separation energies and the kinematics the masses; take both from one mass table "
+           "(S = m1 + m2 - M of the compound nucleus).";
+    configure.outStream << msg.str() << std::endl;
+  }
+  if (unlisted > 0)
+    configure.outStream << "**WARNING: " << unlisted << " more pair" << (unlisted > 1 ? "s" : "")
+                        << " disagree in the same way (separation energies against masses)." << std::endl;
+  if (!massNumberPairs.empty()) {
+    std::ostringstream msg;
+    msg << "**NOTE: pair" << (massNumberPairs.size() > 1 ? "s" : "");
+    for (int k : massNumberPairs) msg << " " << k;
+    msg << " use" << (massNumberPairs.size() > 1 ? "" : "s") << " mass numbers as masses: the kinematics are good to "
+        << "about 0.1 % and the separation energies cannot be checked against them.";
+    configure.outStream << msg.str() << std::endl;
+  }
+  return warnings;
+}
 
 void CNuc::Initialize(const Config &configure) {
   // Validate channels associated with identical-particle pairs:

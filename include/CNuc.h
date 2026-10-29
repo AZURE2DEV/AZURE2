@@ -140,6 +140,14 @@ class CNuc {
   /// that a calculation needs. Run after Fill, and again after anything that
   /// changes the Coulomb functions.
   void Initialize(const Config &);
+  /*!
+   * Warn where the separation energies and the masses of a compound nucleus's particle pairs disagree:
+   * S_b - S_a should equal (m1b + m2b - m1a - m2a) c^2.  Thresholds come from the separation energies and the
+   * kinematics from the masses, so a mismatch is never an error in the calculation, but it is how typos and mixed
+   * mass conventions show up.  Returns the number of warnings printed (tolerance kMassCheckTolerance).
+   */
+  int CheckMassSeparationConsistency(const Config &) const;
+  static constexpr double kMassCheckTolerance = 1.0e-3;  ///< MeV
 
   // -- derived quantities ---------------------------------------------------
   /// Boundary condition per channel, evaluated at the energy of the group's
