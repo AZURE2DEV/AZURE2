@@ -222,7 +222,19 @@ so the penetrabilities, shift functions, hard-sphere and Coulomb phases, the
 use these, and a data point's :math:`T` comes from its lab energy through
 :math:`s` (and, for a beta-delayed particle, from the decay at rest).  Particle
 lab angles and differential cross sections are converted with the exact Lorentz
-boost (:math:`\gamma`-ray data already were).  At low energy everything reduces
+boost (:math:`\gamma`-ray data already were). Where two c.m. angles reach one
+lab angle (just above the threshold of an endothermic exit, or a projectile
+heavier than the target) the forward root is taken, and the lab angle has a
+maximum, :math:`\sin\theta_\text{max} = \gamma_3^*/(\gamma\, g)` with
+:math:`g = \beta/\beta_3^*`. That maximum is smaller than the
+non-relativistic one, by 0.3 to 0.6° just above the 7Li(p,n) and 12C(α,p)
+thresholds, and a point beyond it, or below the relativistic threshold, is
+refused (before October 2026 the non-relativistic limits decided, so a point
+between the two maxima was converted with the non-relativistic angle and
+Jacobian without a warning). The conversions agree with the independent
+reaction-kinematics calculator (det-lab) to 1e-7° in angle and 4e-9 in
+:math:`d\Omega_\text{lab}/d\Omega_\text{cm}` for 7Li(p,n), t(d,n)α,
+12C(α,p), p + 4He and 12C + p (inverse kinematics) up to 200 MeV.  At low energy everything reduces
 to the familiar :math:`k^2 = 2\mu T`; threshold quantities (scattering lengths,
 the Wigner limit, ANCs) keep the reduced mass.
 

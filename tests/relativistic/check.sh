@@ -10,7 +10,8 @@
 #       (and, in the non-relativistic models, with the non-relativistic mapping and k);
 #   (d) relativistic.out: the levels in the E(s) convention of the LANL code EDA;
 #   (e) lab-frame differential data: the relativistic c.m. angle and dOmega_lab/dOmega_cm against an
-#       explicit four-vector boost (t(d,n)a and p + 4He elastic);
+#       explicit four-vector boost (t(d,n)a, p + 4He elastic, and 7Li(p,n)7Be just above threshold, forward branch);
+#   (h) a lab angle between the relativistic and the non-relativistic maximum is refused with relativistic=1;
 #   (g) relativistic=1 with the hybrid nuclear-potential Coulomb functions (<potential> block) stops with an ERROR.
 #   (f) with a second binary (a build without relativistic kinematics), every non-relativistic model's
 #       output is byte-identical between the two.
@@ -44,8 +45,8 @@ run() {
   (cd "$dir" && printf "$4\n\n\n7\n" | run_limited 300 "$bin" --no-coulomb-table --no-gui --no-readline t.azr > run.log 2>&1)
 }
 for m in na_hs pa_hs; do run "$AZURE2_BIN" "$m" "$m" 3; run "$AZURE2_BIN" "${m}_rel" "${m}_rel" 3; done
-for m in he5 he5_ang pa_ang; do run "$AZURE2_BIN" "$m" "$m" 1; run "$AZURE2_BIN" "${m}_rel" "${m}_rel" 1; done
-for d in na_hs na_hs_rel pa_hs pa_hs_rel he5 he5_rel he5_ang he5_ang_rel pa_ang pa_ang_rel; do
+for m in he5 he5_ang pa_ang li7pn_ang; do run "$AZURE2_BIN" "$m" "$m" 1; run "$AZURE2_BIN" "${m}_rel" "${m}_rel" 1; done
+for d in na_hs na_hs_rel pa_hs pa_hs_rel he5 he5_rel he5_ang he5_ang_rel pa_ang pa_ang_rel li7pn_ang li7pn_ang_rel; do
   if ! ls "$WORK/$d/output/"AZUREOut_* > /dev/null 2>&1; then bad "$d: no output"; tail -15 "$WORK/$d/run.log"; fi
 done
 
@@ -53,6 +54,17 @@ if [ -n "$PYTHON" ] && "$PYTHON" -c "import numpy" > /dev/null 2>&1; then
   "$PYTHON" "$HERE/verify.py" "$WORK" || failures=$((failures + $?))
 else
   echo "  skip  (a)-(d): no python3 with numpy"
+fi
+
+# (h) a 7Li(p,n) lab angle between the relativistic (44.60 deg) and non-relativistic maxima at 1.90 MeV (these masses):
+#     refused with relativistic=1 (until 2026-10-29 converted with the non-relativistic angle and Jacobian, 9.5 % off,
+#     silently), converted without it
+run "$AZURE2_BIN" li7pn_edge li7pn_edge 1; run "$AZURE2_BIN" li7pn_edge_rel li7pn_edge_rel 1
+if grep -q "beyond the kinematic maximum 44\.[0-9]*.*relativistic kinematics" "$WORK/li7pn_edge_rel/run.log" &&
+   ! ls "$WORK/li7pn_edge_rel/output/"AZUREOut_* > /dev/null 2>&1 && ls "$WORK/li7pn_edge/output/"AZUREOut_* > /dev/null 2>&1; then
+  ok "(h) 7Li(p,n) at 1.90 MeV, 44.9 deg: refused at the relativistic maximum (44.60 deg with these masses) with relativistic=1, converted without (Marion-Young 44.93 deg)"
+else
+  bad "(h) 7Li(p,n) 44.9 deg edge: $(grep -m1 ERROR "$WORK/li7pn_edge_rel/run.log"); rel outputs: $(ls "$WORK/li7pn_edge_rel/output" | grep -c AZUREOut)"
 fi
 
 # (e) the hybrid model is refused

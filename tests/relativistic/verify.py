@@ -23,7 +23,8 @@ except ImportError:
     mpmath = None
 
 U, HBARC, ALPHA = 931.4940880, 197.32696310, 1.0 / 137.0359996790
-M = dict(n=1.00866491595, p=1.00782503207, d=2.01410177812, t=3.0160492779, a=4.00260325413)
+M = dict(n=1.00866491595, p=1.00782503207, d=2.01410177812, t=3.0160492779, a=4.00260325413,
+         li7=7.016003434, be7=7.016928717)
 work = sys.argv[1]
 fails = 0
 
@@ -141,7 +142,13 @@ def boost(e1, m1, m2, m3, m4, q, cth):
 
 def lab_to_cm(e1, m1, m2, m3, m4, q, lab):
     target = np.cos(np.radians(lab))
-    lo, hi = -1.0, 1.0                      # cos(theta_lab) increases with cos(theta*) (g < 1 here)
+    # the forward branch: cos(theta_lab) increases with cos(theta*) on [max(-1, -1/g), 1], g = beta / beta_3*
+    # (g > 1 just above an endothermic threshold, where the lab angle has a maximum at cos(theta*) = -1/g)
+    a, b, c, d = m1 * U, m2 * U, m3 * U, m4 * U
+    ti = 2 * b * e1 / (np.sqrt((a + b) ** 2 + 2 * b * e1) + a + b)
+    pf = np.sqrt(k2(m3, m4, ti + q, True)) * HBARC
+    g = (np.sqrt(e1 * (e1 + 2 * a)) / (e1 + a + b)) / (pf / np.sqrt(c * c + pf * pf))
+    lo, hi = (max(-1.0, -1.0 / g) if g > 1.0 else -1.0), 1.0
     for _ in range(200):
         mid = 0.5 * (lo + hi)
         if boost(e1, m1, m2, m3, m4, q, mid) < target: lo = mid
@@ -155,7 +162,9 @@ def lab_to_cm(e1, m1, m2, m3, m4, q, lab):
 
 for run, fname, datf, masses, q in (
         ("he5_ang_rel", "AZUREOut_aa=2_R=1.out", "dt_ang.dat", (M['d'], M['t'], M['n'], M['a']), 16.854 + 0.735),
-        ("pa_ang_rel", "AZUREOut_aa=1_R=1.out", "pa_ang.dat", (M['p'], M['a'], M['p'], M['a']), 0.0)):
+        ("pa_ang_rel", "AZUREOut_aa=1_R=1.out", "pa_ang.dat", (M['p'], M['a'], M['p'], M['a']), 0.0),
+        ("li7pn_ang_rel", "AZUREOut_aa=1_R=2.out", "li7pn_ang.dat", (M['p'], M['li7'], M['n'], M['be7']),
+         (M['p'] + M['li7'] - M['n'] - M['be7']) * U)):
     d = load(run, fname)
     lab = np.loadtxt(os.path.join(work, run, "data", datf), ndmin=2)
     wa = wf = 0.0

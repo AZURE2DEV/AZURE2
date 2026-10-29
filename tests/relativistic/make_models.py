@@ -11,7 +11,8 @@ Each is written twice: <name>.azr (non-relativistic) and <name>_rel.azr (relativ
 import os
 HERE = os.path.dirname(os.path.abspath(__file__))
 U = 931.4940880
-M = dict(n=1.00866491595, p=1.00782503207, d=2.01410177812, t=3.0160492779, a=4.00260325413)
+M = dict(n=1.00866491595, p=1.00782503207, d=2.01410177812, t=3.0160492779, a=4.00260325413,
+         li7=7.016003434, be7=7.016928717)
 
 CONFIG = """<config>
 true #Perform A-Matrix Calculation
@@ -117,4 +118,24 @@ for rel in (False, True):
         "1 1 1 0.0 30.0 0 180 1 1 0 0 0 0 0 data/pa_ang.dat 0 0" + "\n</segmentsData>\n<segmentsTest>\n</segmentsTest>\n" + TAIL
     with open(os.path.join(HERE, "models", "pa_ang" + ("_rel" if rel else "") + ".azr"), "w") as fh:
         fh.write(txt)
+# 7Li(p,n)7Be just above its threshold (Q = -1.644 MeV from the masses): two c.m. angles reach each lab angle
+# (g > 1) and the lab angle has a maximum, which relativistically is 0.3-0.5 deg below the Marion-Young one.
+QLI = (M['p'] + M['li7'] - M['n'] - M['be7']) * U
+PLI = (0.5, 1, 1.5, -1, M['p'], M['li7'], 1, 3, 17.2551, 4.0)          # 8Be S_p
+NBE = (0.5, 1, 1.5, -1, M['n'], M['be7'], 0, 4, 17.2551 - QLI, 4.0)   # S_n = S_p - Q
+with open(os.path.join(HERE, "models", "data", "li7pn_ang.dat"), "w") as fh:
+    for e, angles in ((1.89, (0.0, 10.0, 20.0, 29.0)), (1.90, (0.0, 15.0, 30.0, 44.0)), (1.95, (5.0, 40.0, 80.0)),
+                      (3.0, (30.0, 90.0, 150.0))):
+        for a in angles: fh.write(f"{e:.4f} {a:.1f} 1.0 0.1\n")
+with open(os.path.join(HERE, "models", "data", "li7pn_edge.dat"), "w") as fh:
+    fh.write("1.9000 44.9 1.0 0.1\n")   # between the relativistic (44.60) and non-relativistic maxima (atomic masses)
+for rel in (False, True):
+    cfg = CONFIG.format(extra="relativistic=1\n" if rel else "")
+    PAIRKEY.clear(); PAIRKEY[PLI] = 1; PAIRKEY[NBE] = 2
+    lev = [line(2, -1, 19.5, 1, 2.0, 0, 1, 0.5, PLI), line(2, -1, 19.5, 1, 2.0, 0, 1, 0.5, NBE)]
+    for name, dat in (("li7pn_ang", "li7pn_ang.dat"), ("li7pn_edge", "li7pn_edge.dat")):
+        txt = cfg + "<levels>\n" + "\n".join(lev) + "\n\n</levels>\n<segmentsData>\n" + \
+            f"1 1 2 0.0 10.0 0 180 1 1 0 0 0 0 0 data/{dat} 0 0" + "\n</segmentsData>\n<segmentsTest>\n</segmentsTest>\n" + TAIL
+        with open(os.path.join(HERE, "models", name + ("_rel" if rel else "") + ".azr"), "w") as fh:
+            fh.write(txt)
 print("models written")

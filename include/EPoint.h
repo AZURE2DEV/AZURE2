@@ -315,6 +315,8 @@ class EPoint {
   /// two c.m. angles reach one lab angle (near the threshold of an endothermic exit); before, a message and an
   /// assert that release builds compile out, then NaN.
   bool ConvertLabAngle(PPair *, PPair *, const Config &);
+  /// The non-relativistic (Marion-Young) part of the above: cm_angle_, or false with labAngleWhy_ set.
+  bool ConvertLabAngleNR(PPair *, PPair *);
   /// The kinematic maximum lab angle (degrees) found by the last ConvertLabAngle that returned false.
   double GetLabAngleMax() const { return labAngleMax_; };
   /// Why the last ConvertLabAngle returned false (a sentence for the error message).
@@ -485,8 +487,8 @@ class EPoint {
   double stoppingPower_;
   double targetThickness_;
   double angleKinFactor_;
-  double labAngleMax_ = 180.;  ///< kinematic maximum lab angle of the last failed conversion
-  std::string labAngleWhy_;    ///< the reason of the last failed conversion
+  mutable double labAngleMax_ = 180.;  ///< kinematic maximum lab angle of the last failed conversion
+  mutable std::string labAngleWhy_;    ///< the reason of the last failed conversion (set by the const relativistic map too)
   double crossSectionKinFactor_;
   // Beam-profile effect: per-point energy window (lab as read, c.m. after
   // conversion; NaN when the data file has no such columns) and the inverse

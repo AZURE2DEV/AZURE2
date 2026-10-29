@@ -753,6 +753,14 @@ bool EPoint::RelativisticLabToCM(PPair *entrancePair, PPair *exitPair, double nr
   const double m3 = exitPair->GetM(1) * uconv, m4 = exitPair->GetM(2) * uconv;
   const double ti = this->GetCMEnergy();
   const double tf = ti + entrancePair->GetSepE() + entrancePair->GetExE() - exitPair->GetSepE() - exitPair->GetExE();
+  if (!(tf > 0.0) || !(ti > 0.0)) {  // below the exit threshold (relativistic): no ejectile (K would take |k^2|)
+    std::ostringstream why;
+    why << "below the threshold of the exit pair (relativistic kinematics, c.m. energy in the exit channel " << tf
+        << " MeV): the lab angle cannot be converted; give the point as c.m. (code 4 / 5) or drop it";
+    labAngleWhy_ = why.str();
+    labAngleMax_ = 0.0;
+    return false;
+  }
   const double e1 = Kinematics::LabFromCM(m1, m2, ti);
   const double sqrtS = m1 + m2 + ti, eTot = e1 + m1 + m2;
   const double pLab = sqrt(e1 * (e1 + 2.0 * m1));
@@ -760,6 +768,18 @@ bool EPoint::RelativisticLabToCM(PPair *entrancePair, PPair *exitPair, double nr
   const double pf = Kinematics::K(m3, m4, tf) * hbarc, e3 = sqrt(m3 * m3 + pf * pf);
   const double g = beta / (pf / e3);
   const double thl = this->GetLabAngle() * pi / 180.;
+  // Where two c.m. angles reach one lab angle (g > 1) the lab angle has a maximum, sin theta_max = gamma_3* /
+  // (gamma g) with gamma_3* = E_3*/m_3 (the same as reaction-kinematics' p*/(m_3 sinh y)).  It is SMALLER than
+  // the non-relativistic Marion-Young maximum, by 0.3-0.6 deg just above the 7Li(p,n) and 12C(a,p) thresholds.
+  auto beyond = [&]() {
+    labAngleMax_ = (g > 1.0 && m3 > 0.0) ? asin(std::min(1.0, e3 / (m3 * gam * g))) * 180. / pi : 180.;
+    std::ostringstream why;
+    why << "beyond the kinematic maximum " << labAngleMax_ << " deg at this energy (relativistic kinematics; two c.m. "
+        << "angles reach every lab angle below it and only the forward branch is modelled; give the point as c.m., "
+        << "code 4 / 5, or drop it)";
+    labAngleWhy_ = why.str();
+    return false;
+  };
   double x;  // cos theta*
   if (fabs(sin(thl)) < 1e-12) {
     x = cos(thl) > 0 ? 1.0 : -1.0;
@@ -767,7 +787,7 @@ bool EPoint::RelativisticLabToCM(PPair *entrancePair, PPair *exitPair, double nr
   } else {
     const double t2 = pow(tan(thl), 2.0), gt2 = gam * gam * t2;
     const double disc = 1.0 + gt2 * (1.0 - g * g);
-    if (disc < 0.0) return false;
+    if (disc < 0.0) return beyond();
     const double r1 = (-gt2 * g + sqrt(disc)) / (1.0 + gt2), r2 = (-gt2 * g - sqrt(disc)) / (1.0 + gt2);
     // a root is valid if cos theta* + g has the sign of cos theta_l
     const bool v1 = (r1 + g) * cos(thl) > 0.0 && fabs(r1) <= 1.0, v2 = (r2 + g) * cos(thl) > 0.0 && fabs(r2) <= 1.0;
@@ -775,7 +795,7 @@ bool EPoint::RelativisticLabToCM(PPair *entrancePair, PPair *exitPair, double nr
     if (v1 && v2) x = (fabs(r1 - nrX) <= fabs(r2 - nrX)) ? r1 : r2;
     else if (v1) x = r1;
     else if (v2) x = r2;
-    else return false;
+    else return beyond();
   }
   x = std::max(-1.0, std::min(1.0, x));
   cmAngle = acos(x) * 180. / pi;
@@ -797,7 +817,10 @@ bool EPoint::ConvertLabAngle(PPair *pPair) {
   }
   cm_angle_ = this->GetLabAngle() + 180. / pi * asin(ratio * sin(pi / 180. * this->GetLabAngle()));
   double cmAngle, factor;
-  if (Kinematics::Relativistic() && this->RelativisticLabToCM(pPair, pPair, cm_angle_, cmAngle, factor)) cm_angle_ = cmAngle;
+  if (Kinematics::Relativistic()) {
+    if (!this->RelativisticLabToCM(pPair, pPair, cm_angle_, cmAngle, factor)) return false;  // why: set by the map
+    cm_angle_ = cmAngle;
+  }
   return true;
 }
 
@@ -809,6 +832,31 @@ bool EPoint::ConvertLabAngle(PPair *pPair) {
  */
 
 bool EPoint::ConvertLabAngle(PPair *entrancePair, PPair *exitPair, const Config &configure) {
+  // relativistic=1: the relativistic map (RelativisticLabToCM) decides whether the lab angle is reached and gives
+  // the c.m. angle; the Marion-Young angle below only picks the branch.  Until 2026-10-29 its non-relativistic
+  // limits decided, so a point between the two maxima was converted with the NON-relativistic angle and Jacobian
+  // without a word (7Li(p,n) at 1.90 MeV, 44.9 deg: c.m. angle off by 0.3 deg, Jacobian by 9.5 %).
+  if (Kinematics::Relativistic()) {
+    const bool nrOk = this->ConvertLabAngleNR(entrancePair, exitPair);
+    double relAngle, relFactor;
+    // no non-relativistic angle (beyond its maximum or threshold): the forward root
+    if (!this->RelativisticLabToCM(entrancePair, exitPair, nrOk ? cm_angle_ : 0.0, relAngle, relFactor)) return false;
+    cm_angle_ = relAngle;
+    angleKinFactor_ = this->GetLabAngle() / cm_angle_;
+    this->SetAngleKinFactor(angleKinFactor_);
+    return true;
+  }
+  if (!this->ConvertLabAngleNR(entrancePair, exitPair)) return false;
+  angleKinFactor_ = this->GetLabAngle() / cm_angle_;
+  this->SetAngleKinFactor(angleKinFactor_);
+  return true;
+}
+
+/*!
+ * The non-relativistic (Marion-Young) lab -> c.m. angle of a reaction exit; false below the exit threshold or
+ * beyond the maximum lab angle (labAngleWhy_, labAngleMax_), cm_angle_ otherwise.
+ */
+bool EPoint::ConvertLabAngleNR(PPair *entrancePair, PPair *exitPair) {
   double qValue = entrancePair->GetSepE() + entrancePair->GetExE() - exitPair->GetSepE() - exitPair->GetExE();
   double a13 = (entrancePair->GetM(1) * exitPair->GetM(1)) * this->GetLabEnergy() / (this->GetLabEnergy() + qValue) /
       (entrancePair->GetM(1) + entrancePair->GetM(2)) / (exitPair->GetM(1) + exitPair->GetM(2));
@@ -847,12 +895,6 @@ bool EPoint::ConvertLabAngle(PPair *entrancePair, PPair *exitPair, const Config 
 
   cm_angle_ = 180. / pi * asin(sqrt(E3PerEt / a24) * sin(this->GetLabAngle() * pi / 180.));
   if (switchDomain) cm_angle_ = 180. - cm_angle_;
-  double relAngle, relFactor;
-  if (Kinematics::Relativistic() && this->RelativisticLabToCM(entrancePair, exitPair, cm_angle_, relAngle, relFactor))
-    cm_angle_ = relAngle;
-  // define angle kin factor to convert back to lab frame
-  angleKinFactor_ = this->GetLabAngle() / cm_angle_;
-  this->SetAngleKinFactor(angleKinFactor_);
   return true;
 }
 
@@ -901,10 +943,13 @@ void EPoint::ConvertLabAngleGammas(PPair *entrancePair) {
 void EPoint::ConvertCrossSection(PPair *entrancePair, PPair *exitPair) {
   double conversionFactor;
   double relAngle;
-  if (Kinematics::Relativistic() && this->RelativisticLabToCM(entrancePair, exitPair, this->GetCMAngle(), relAngle, conversionFactor)) {
-    cm_crosssection_ = this->GetLabCrossSection() * conversionFactor;
-    cm_dcrosssection_ = this->GetLabCrossSectionError() * conversionFactor;
-    crossSectionKinFactor_ = conversionFactor;
+  if (Kinematics::Relativistic()) {
+    // Unreached only for a point an energy shift moved past the kinematic limit mid-fit (the angle converter
+    // warned and kept the last valid angle): keep the last valid factor too rather than a non-relativistic one.
+    if (this->RelativisticLabToCM(entrancePair, exitPair, this->GetCMAngle(), relAngle, conversionFactor))
+      crossSectionKinFactor_ = conversionFactor;
+    cm_crosssection_ = this->GetLabCrossSection() * crossSectionKinFactor_;
+    cm_dcrosssection_ = this->GetLabCrossSectionError() * crossSectionKinFactor_;
     this->SetCrossSectionKinFactor(crossSectionKinFactor_);
     return;
   }
