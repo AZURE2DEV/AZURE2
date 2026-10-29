@@ -716,6 +716,25 @@ runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
   Builds before this (incl. frozen e239a12) still grow: plan the memory
   reservation of a long chain that transforms per step, or recycle workers.
   Test tests/pyazr/coulomb_memo_transform_test.py.
+- **relativistic=1: lab angles past the RELATIVISTIC maximum are refused**
+  (dev 2026-10-29). The relativistic lab -> c.m. map (EPoint::
+  RelativisticLabToCM, exact boost) agrees with the independent
+  reaction-kinematics calculator (det-lab, installed in ~/reaction-kinematics,
+  `~/bin/rk-python`) to 1e-7 deg / 4e-9 Jacobian for 7Li(p,n), t(d,n)a,
+  12C(a,p), p+4He and inverse-kinematics 12C+p up to 200 MeV -- WHEN the .azr
+  carries full-precision masses and separation energies (6-decimal S values
+  gave 4e-4 deg / 4e-5 near thresholds: the comparison is that sensitive).
+  Before this commit the Marion-Young (non-relativistic) limits decided which
+  lab angles were reachable even with relativistic=1; the relativistic
+  maximum is 0.3-0.6 deg smaller just above 7Li(p,n) / 12C(a,p) thresholds,
+  and a point in between got the NON-relativistic angle and Jacobian silently
+  (7Li(p,n) 1.90 MeV 44.9 deg: Jacobian 9.5 % off). Now the relativistic map
+  decides (sin theta_max = gamma3*/(gamma g)); the Marion-Young angle only
+  picks the branch. Non-relativistic mode is unchanged. Remaining
+  linearizations in relativistic mode: target-effect sub-point offsets and
+  energy shifts go lab -> c.m. with m2/(m1+m2) instead of m2/sqrt(s), a
+  ~4e-4 relative error on offsets (tens of eV over a 50 keV target).
+  Test: tests/relativistic (e) 7Li(p,n) forward branch, (h) the edge point.
 - **Attenuation (Q) coefficients act on the lab distribution** (dev a22b99a,
   2026-10-25): for a particle exit Q_K multiplies the LAB Legendre coefficients
   and the result is taken back to the point's c.m. angle exactly. Before, a
