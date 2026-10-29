@@ -735,6 +735,19 @@ runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
   energy shifts go lab -> c.m. with m2/(m1+m2) instead of m2/sqrt(s), a
   ~4e-4 relative error on offsets (tens of eV over a 50 keV target).
   Test: tests/relativistic (e) 7Li(p,n) forward branch, (h) the edge point.
+- **Masses and separation energies are checked against each other at load**
+  (dev 2026-10-29, CNuc::CheckMassSeparationConsistency). For two particle
+  pairs of one compound nucleus S_b - S_a must equal (m1b+m2b-m1a-m2a) uconv;
+  AZURE2 takes thresholds from S and kinematics from the masses, so a
+  mismatch only costs ~ the mass error in the kinematics, but it exposes
+  typos and mixed conventions. Warnings above 1 keV (first three listed, then
+  a count), an electron-mass hint (bare proton 1.00728 among atomic masses ->
+  -508/-511 keV), one NOTE for projects with mass numbers as masses; gamma and
+  beta pairs skipped. Archive scan (AZURE2_code_audit/10-25-26/
+  mass_s_consistency): of 5,705 projects with two or more particle pairs
+  only 1,138 agree to 0.1 keV; 4-decimal masses give tens of keV; one 17O+a
+  project is 73 MeV off. When building a model, take masses AND S from AME:
+  S = m1 + m2 - M(compound). Test tests/mass_separation_check.
 - **Attenuation (Q) coefficients act on the lab distribution** (dev a22b99a,
   2026-10-25): for a particle exit Q_K multiplies the LAB Legendre coefficients
   and the result is taken back to the point's c.m. angle exactly. Before, a
