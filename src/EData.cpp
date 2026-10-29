@@ -3955,6 +3955,12 @@ void EData::WriteCovarianceSummary(const Config &configure) {
   }
 }
 
+bool EData::HasRelativeCovariance() const {
+  for (const std::shared_ptr<DataCovariance::Group> &gp : covGroups_)
+    if (gp->HasRelative()) return true;
+  return false;
+}
+
 void EData::RefreezeCovariance() {
   for (const std::shared_ptr<DataCovariance::Group> &gp : covGroups_) gp->Refreeze();
 }

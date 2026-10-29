@@ -113,6 +113,10 @@ class Config {
   int nloptAlgorithm;
   /// Use hybrid Coulomb method with nuclear potential
   bool useHybridMethod;
+  /// Extra MIGRAD passes after re-freezing the model of relvector data-covariance terms at the
+  /// fitted parameters (--refreeze-covariance[=N]); 0 = none.  The final outputs always use the
+  /// model re-frozen at the fitted parameters, so they match a calculation from param.sav.
+  int refreezeCovariance;
   /// Use adaptive integration grid for target effects (false = uniform grid)
   bool useAdaptiveGrid;
   /// Take P, S and the hard-sphere phase of charged channels from the universal Coulomb

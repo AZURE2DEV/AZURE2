@@ -138,6 +138,14 @@ Available Options
    * - ``--use-gradient``
      - Fit with MIGRAD using the analytic gradient instead of numerical
        derivatives.
+   * - ``--refreeze-covariance[=N]``
+     - For data covariances with ``relvector`` terms, whose model is frozen at
+       the first evaluation of a run (the fit's starting point): rerun MIGRAD
+       up to N times (default 5) with the model re-frozen at the fitted
+       parameters, until the objective stops changing.  Without the option the
+       model is still re-frozen once after the fit, so the outputs match a
+       calculation from ``param.sav``, and a warning is printed when the fit
+       and the re-frozen objective differ.
    * - ``--use-lm``
      - Fit with the Levenberg-Marquardt minimizer on the analytic Jacobian;
        falls back to MIGRAD.

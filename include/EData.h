@@ -169,6 +169,8 @@ class EData {
   void WriteCovarianceSummary(const Config &);
   /// Forget the frozen model of the relvector terms; the next evaluation freezes it again.
   void RefreezeCovariance();
+  /// True when any data-covariance group has relvector terms (a model frozen at the first evaluation).
+  bool HasRelativeCovariance() const;
   /// Calculate the covariance segments' points at the current parameters and set their
   /// seeds, for a gradient pass that needs (M^-1 r) before it reaches the points.
   void PrepareCovarianceSeeds(CNuc *, const Config &);

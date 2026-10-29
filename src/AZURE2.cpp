@@ -39,6 +39,7 @@
 #include <readline/history.h>
 #endif
 #include <string.h>
+#include <algorithm>
 #include <cstdlib>
 
 // Reads one line of stdin for a prompt. At end of input (a closed or empty
@@ -128,6 +129,7 @@ void printHelp() {
             << std::setw(25) << std::left << "\t--use-nlopt:" << std::setw(0) << "Use NLopt minimizer (BOBYQA) instead of Minuit2." << std::endl
 #endif
             << std::setw(25) << std::left << "\t--use-gradient:" << std::setw(0) << "Use Minuit2 (MIGRAD) with the analytic gradient (default: numerical)." << std::endl
+            << std::setw(25) << std::left << "\t--refreeze-covariance[=N]:" << std::setw(0) << "Refit up to N times (default 5) with relvector covariance terms re-frozen at the fitted parameters." << std::endl
             << std::setw(25) << std::left << "\t--use-lm:" << std::setw(0) << "Use the Levenberg-Marquardt minimizer (analytic Jacobian; falls back to MIGRAD)." << std::endl
             << std::setw(25) << std::left << "\t--use-gsl-lm:" << std::setw(0) << "Use the GSL trust-region least-squares minimizer with geodesic acceleration (analytic Jacobian; falls back to MIGRAD)." << std::endl
             << std::setw(25) << std::left << "\t--covariance-band:" << std::setw(0) << "Write the cross-section uncertainty band from the parameter covariance, without the interactive prompt." << std::endl
@@ -273,6 +275,10 @@ bool parseOptions(int argc, char *argv[], Config &configure) {
       configure.paramMask |= Config::USE_GSL_LM_MINIMIZER;
     else if (*it == "--use-gradient")
       configure.paramMask |= Config::USE_ANALYTIC_GRADIENT;
+    else if (*it == "--refreeze-covariance")
+      configure.refreezeCovariance = 5;
+    else if (it->compare(0, 22, "--refreeze-covariance=") == 0)
+      configure.refreezeCovariance = std::max(0, std::atoi(it->substr(22).c_str()));
     else if (*it == "--covariance-band")
       configure.paramMask |= Config::CALCULATE_COVARIANCE_BAND;
     else if (*it == "--scale-covariance")

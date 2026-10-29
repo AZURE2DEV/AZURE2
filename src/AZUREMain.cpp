@@ -1,3 +1,4 @@
+#include <cmath>
 #include "AZURECalc.h"
 #include "AZUREMain.h"
 #include "ScatteringLength.h"
@@ -406,22 +407,51 @@ int AZUREMain::operator()() {
           // gradient runtime option is on, pass theFunc as an FCNGradientBase so
           // Migrad uses AZURECalc::Gradient; otherwise pass it as a plain FCNBase
           // so Minuit falls back to its own numerical gradient.
-          ROOT::Minuit2::FunctionMinimum min = [&]() {
+          auto runMigrad = [&](const ROOT::Minuit2::MnUserParameters &start) {
             if (configure().paramMask & Config::USE_ANALYTIC_GRADIENT) {
               configure().outStream << "Using analytic gradient for Minuit2." << std::endl;
-              std::vector<double> p0 = params.GetMinuitParams().Params();
+              std::vector<double> p0 = start.Params();
               if (theFunc.EnableG2(p0))
                 configure().outStream << "Seeding MIGRAD with the analytic Gauss-Newton G2." << std::endl;
               else
                 configure().outStream << "Analytic G2 unavailable for this model; MIGRAD seeds numerically." << std::endl;
-              ROOT::Minuit2::MnMigrad migrad(theFunc, params.GetMinuitParams());
+              ROOT::Minuit2::MnMigrad migrad(theFunc, start);
               return migrad(50000);
             } else {
               const ROOT::Minuit2::FCNBase &fb = theFunc;
-              ROOT::Minuit2::MnMigrad migrad(fb, params.GetMinuitParams());
+              ROOT::Minuit2::MnMigrad migrad(fb, start);
               return migrad(50000);
             }
-          }();
+          };
+          ROOT::Minuit2::FunctionMinimum min = runMigrad(params.GetMinuitParams());
+          // relvector data-covariance terms use the model frozen at the FIRST evaluation of the run,
+          // i.e. at the starting parameters, so MIGRAD minimized a chi^2 whose covariance belongs to
+          // the start.  Re-freeze it at the fitted parameters: the outputs (chiSquared.out, ...) then
+          // match a calculation from the param.sav written below; with --refreeze-covariance[=N]
+          // MIGRAD is rerun with the re-frozen covariance until the objective stops changing.
+          // (12C+a_onefile 10-29-26: fits that started 15k-90k above their minimum reported a chi^2
+          // 50-600 away from a mode-1 calculation of their own param.sav.)
+          if (data()->HasRelativeCovariance()) {
+            for (int pass = 0;; pass++) {
+              const double frozen = min.Fval();
+              data()->RefreezeCovariance();
+              const double refrozen = theFunc(min.UserParameters().Params());
+              configure().outStream << "Data covariance: relvector model re-frozen at the fitted parameters; objective "
+                                    << frozen << " (model frozen at the start of this pass) -> " << refrozen << "."
+                                    << std::endl;
+              if (std::fabs(refrozen - frozen) < 0.5) break;
+              if (pass >= configure().refreezeCovariance) {
+                configure().outStream << "WARNING: the fitted parameters minimize the chi^2 with the start's covariance "
+                                         "model, not with their own"
+                                      << (configure().refreezeCovariance > 0 ? " (pass limit reached)" : "")
+                                      << "; rerun from param.sav or use --refreeze-covariance." << std::endl;
+                break;
+              }
+              configure().outStream << "Refitting with the re-frozen covariance (pass " << pass + 1 << " of at most "
+                                    << configure().refreezeCovariance << ")..." << std::endl;
+              min = runMigrad(min.UserParameters());
+            }
+          }
           // MIGRAD's error matrix is approximate; refine it with HESSE for the band,
           // falling back to the MIGRAD matrix if HESSE gives no valid covariance.
           if (configure().paramMask & Config::CALCULATE_COVARIANCE_BAND) {

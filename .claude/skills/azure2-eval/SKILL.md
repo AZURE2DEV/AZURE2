@@ -2367,7 +2367,15 @@ Plain-text, section-tagged; prefer the GUI or `AzrModel` over hand edits.
     relvector/matrix` in the data file's units (lab). `relvector` = model-scaled
     multiplicative term (no Peelle's puzzle), with the model frozen at the run's
     first evaluation (`covarianceModel.out`). Re-freeze by rerunning from the .sav
-    or with pyazr `refreeze_covariance()`. The data-scaled `vector` for a
+    or with pyazr `refreeze_covariance()`. **A fit that starts far from its
+    minimum therefore minimizes a chi2 built on the START's model**: 12C+a
+    10-28/29 radius steps that began 13-90k above their minimum reported
+    chiSquared.out values 50-600 away from a mode-1 run of their own param.sav
+    (all of it in the relvector segments). Since fix/refreeze-covariance the CLI
+    re-freezes at the fitted parameters after MIGRAD (outputs then match mode 1;
+    the log prints both objectives and warns when they differ by > 0.5), and
+    `--refreeze-covariance[=N]` reruns MIGRAD until they agree. With an older
+    binary: score by mode 1 and refit from the result's param.sav. The data-scaled `vector` for a
     normalization IS Peelle's puzzle: fit scales as norms (`normgroup`) or as
     relvector. The engine factors only B (diagonal + blocks, by components) plus
     rank-k terms, so every fitted row needs its own diagonal/block variance;
