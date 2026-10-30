@@ -790,6 +790,14 @@ evaluates one χ² per walker:
 
 See ``pyazr/examples/fit_emcee.py`` and ``fit_zeus.py`` for the full recipe.
 
+Inside one session the engine uses threads: every evaluation (``calculate_chi2_rwa``,
+``calculate_chi2``, ``calculate_rwa``, ``calculate``, ``calculate_all_rwa``) spreads
+its data points over ``OMP_NUM_THREADS`` threads, as the command-line χ² does, and so
+does ``residual_jacobian``. (Before 2026-10-30 the evaluations ran their points one at a
+time on one thread.) With several worker processes, keep workers × ``OMP_NUM_THREADS``
+at or below the cores you have; ``AZURE_SERIAL_CHI2=1`` restores the one-at-a-time
+evaluation. The results agree with it to rounding (a few units in the last place).
+
 The same applies inside ``pyazr`` itself: ``sensitivities``,
 ``uncertainty_bands`` and ``extrapolation_bands`` take ``nprocs=N``, which
 spreads the finite-difference columns over ``N`` worker processes, each with

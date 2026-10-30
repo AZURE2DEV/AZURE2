@@ -18,6 +18,7 @@
 #include "CovarianceBand.h"
 #include "CoulFunc.h"
 #include "ECIntegral.h"
+#include "Profile.h"
 
 #include <iostream>
 #include <iomanip>
@@ -31,6 +32,35 @@ AZUREAPI::~AZUREAPI() {
   // compound nucleus and its data are ~10 MB per model and must be returned.
   if (compound_ != nullptr) delete compound_;
   if (data_ != nullptr) delete data_;
+}
+
+// The points of an API calculation in one parallel pass, as the CLI's
+// AZURECalc::PrecalculatePoints (before 2026-10-30 the API calculated them one
+// at a time).  Used only when every point calculated: after a failure the
+// caller repeats the calculation point by point, so a failed point keeps the
+// serial path's handling (a NaN slot in UpdateSegments*, 0 or a skipped
+// component in a chi-squared) and the results equal the serial path's.
+static bool PrecalculateAll(const std::vector<ESegment *> &segments, CNuc *lc, const Config &cfg) {
+  return EData::CalculatePointsInParallel(segments, lc, cfg) == 0;
+}
+
+// The segments the UpdateSegments* loops report: the first of each run of equal keys.
+static std::vector<ESegment *> ReportedSegments(std::vector<ESegment> &segments) {
+  std::vector<ESegment *> out;
+  int prevKey = -1;
+  for (ESegment &seg : segments) {
+    if (seg.GetSegmentKey() == prevKey) continue;
+    prevKey = seg.GetSegmentKey();
+    out.push_back(&seg);
+  }
+  return out;
+}
+
+// Every segment of the data, as the chi-squared loops visit them.
+static std::vector<ESegment *> AllSegments(EData *ld) {
+  std::vector<ESegment *> out;
+  for (int i = 1; i <= ld->NumSegments(); i++) out.push_back(ld->GetSegment(i));
+  return out;
 }
 
 int AZUREAPI::Initialize() {
@@ -268,6 +298,8 @@ int AZUREAPI::UpdateSegments(vector_r &p) {
   int nSegments = 0;
 
   std::vector<ESegment> &segments = localData->GetSegments();
+  AZUREProfile::ScopedReport profileReport("api segments");
+  const bool pre = PrecalculateAll(ReportedSegments(segments), localCompound, configure());
   for (int i = 0; i < segments.size(); ++i) {
     newKey = segments[i].GetSegmentKey();
     if (prevKey == newKey) continue;
@@ -286,7 +318,7 @@ int AZUREAPI::UpdateSegments(vector_r &p) {
     if (segments[i].HasComponents() || segments[i].IsNatural()) {
       for (int k = 0; k < data.size(); ++k) {
         // Use the new component-aware calculation method
-        double theoreticalValue = segments[i].CalculateTheoreticalCrossSection(k, localCompound, configure(), localData);
+        double theoreticalValue = segments[i].CalculateTheoreticalCrossSection(k, localCompound, configure(), localData, pre);
 
         // Update the point's fit cross section with the combined result
         data[k].SetFitCrossSection(theoreticalValue);
@@ -306,7 +338,7 @@ int AZUREAPI::UpdateSegments(vector_r &p) {
       // Regular segment calculation (existing logic)
       for (int k = 0; k < data.size(); ++k) {
         bool failed = false;
-        if (!data[k].IsMapped()) {
+        if (!pre && !data[k].IsMapped()) {
           try {
             data[k].Calculate(localCompound, configure());
           } catch (GSLException &e) {
@@ -376,6 +408,8 @@ int AZUREAPI::UpdateSegmentsRWA(vector_r &p) {
   int nSegments = 0;
 
   std::vector<ESegment> &segments = localData->GetSegments();
+  AZUREProfile::ScopedReport profileReport("api segments");
+  const bool pre = PrecalculateAll(ReportedSegments(segments), localCompound, configure());
   for (int i = 0; i < segments.size(); ++i) {
     newKey = segments[i].GetSegmentKey();
     if (prevKey == newKey) continue;
@@ -394,7 +428,7 @@ int AZUREAPI::UpdateSegmentsRWA(vector_r &p) {
     if (segments[i].HasComponents() || segments[i].IsNatural()) {
       for (int k = 0; k < data.size(); ++k) {
         // Use the new component-aware calculation method
-        double theoreticalValue = segments[i].CalculateTheoreticalCrossSection(k, localCompound, configure(), localData);
+        double theoreticalValue = segments[i].CalculateTheoreticalCrossSection(k, localCompound, configure(), localData, pre);
 
         // Update the point's fit cross section with the combined result
         data[k].SetFitCrossSection(theoreticalValue);
@@ -414,7 +448,7 @@ int AZUREAPI::UpdateSegmentsRWA(vector_r &p) {
       // Regular segment calculation (existing logic)
       for (int k = 0; k < data.size(); ++k) {
         bool failed = false;
-        if (!data[k].IsMapped()) {
+        if (!pre && !data[k].IsMapped()) {
           try {
             data[k].Calculate(localCompound, configure());
           } catch (GSLException &e) {
@@ -485,6 +519,8 @@ int AZUREAPI::UpdateSegmentsAllRWA(vector_r &p) {
   int nSegments = 0;
 
   std::vector<ESegment> &segments = localData->GetSegments();
+  AZUREProfile::ScopedReport profileReport("api segments");
+  const bool pre = PrecalculateAll(ReportedSegments(segments), localCompound, configure());
   for (int i = 0; i < segments.size(); ++i) {
     newKey = segments[i].GetSegmentKey();
     if (prevKey == newKey) continue;
@@ -503,7 +539,7 @@ int AZUREAPI::UpdateSegmentsAllRWA(vector_r &p) {
     if (segments[i].HasComponents() || segments[i].IsNatural()) {
       for (int k = 0; k < data.size(); ++k) {
         // Use the new component-aware calculation method
-        double theoreticalValue = segments[i].CalculateTheoreticalCrossSection(k, localCompound, configure(), localData);
+        double theoreticalValue = segments[i].CalculateTheoreticalCrossSection(k, localCompound, configure(), localData, pre);
 
         // Update the point's fit cross section with the combined result
         data[k].SetFitCrossSection(theoreticalValue);
@@ -523,7 +559,7 @@ int AZUREAPI::UpdateSegmentsAllRWA(vector_r &p) {
       // Regular segment calculation (existing logic)
       for (int k = 0; k < data.size(); ++k) {
         bool failed = false;
-        if (!data[k].IsMapped()) {
+        if (!pre && !data[k].IsMapped()) {
           try {
             data[k].Calculate(localCompound, configure());
           } catch (GSLException &e) {
@@ -866,13 +902,16 @@ double AZUREAPI::CalculateChi2RWA(const vector_r &rwaParams) const {
   localData->FillEnergyShiftsFromParams(params_, localData, localCompound, &configure());
   if (configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure());
 
+  AZUREProfile::ScopedReport profileReport("api chi2");
+  const bool pre = PrecalculateAll(AllSegments(localData), localCompound, configure());
+
   // Process segments with components - use new integrated calculation method
   for (int i = 1; i <= localData->NumSegments(); i++) {
     ESegment *segment = localData->GetSegment(i);
     if (segment) {
       // Recalculate points using the new combined calculation method
       for (int pointIdx = 0; pointIdx < segment->NumPoints(); pointIdx++) {
-        double theoreticalValue = segment->CalculateTheoreticalCrossSection(pointIdx, localCompound, configure(), localData);
+        double theoreticalValue = segment->CalculateTheoreticalCrossSection(pointIdx, localCompound, configure(), localData, pre);
         EPoint *point = segment->GetPoint(pointIdx + 1);
         if (point) {
           point->SetFitCrossSection(theoreticalValue);
@@ -974,13 +1013,16 @@ double AZUREAPI::CalculateChi2Physical(const vector_r &physicalParams) const {
   localData->FillEnergyShiftsFromParams(params_, localData, localCompound, &configure());
   if (configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure());
 
+  AZUREProfile::ScopedReport profileReport("api chi2");
+  const bool pre = PrecalculateAll(AllSegments(localData), localCompound, configure());
+
   // Process segments with components - use new integrated calculation method
   for (int i = 1; i <= localData->NumSegments(); i++) {
     ESegment *segment = localData->GetSegment(i);
     if (segment) {
       // Recalculate points using the new combined calculation method
       for (int pointIdx = 0; pointIdx < segment->NumPoints(); pointIdx++) {
-        double theoreticalValue = segment->CalculateTheoreticalCrossSection(pointIdx, localCompound, configure(), localData);
+        double theoreticalValue = segment->CalculateTheoreticalCrossSection(pointIdx, localCompound, configure(), localData, pre);
         EPoint *point = segment->GetPoint(pointIdx + 1);
         if (point) {
           point->SetFitCrossSection(theoreticalValue);

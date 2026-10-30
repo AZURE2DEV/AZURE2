@@ -277,3 +277,11 @@ set_tests_properties(pyazr_coulomb_memo_transform PROPERTIES ENVIRONMENT "OMP_NU
 add_test(NAME pyazr_masses
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/masses_test.py)
+
+# The API calls behind pyazr calculate an evaluation's points in one parallel pass, as the CLI's chi-squared does,
+# with results bit-identical to the serial path (2026-10-30; before, they ran one point at a time on one thread).
+# Sets its own OMP_NUM_THREADS=4 in the processes it starts.
+add_test(NAME pyazr_parallel_points
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/parallel_points_test.py)
+set_tests_properties(pyazr_parallel_points PROPERTIES LABELS "slow")

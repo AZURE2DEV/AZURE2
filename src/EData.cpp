@@ -1,4 +1,5 @@
 #include "AZUREOutput.h"
+#include "Profile.h"
 #include "CNuc.h"
 #include "Config.h"
 #include "CovarianceBand.h"
@@ -4651,4 +4652,60 @@ EDataIterator EData::end() {
 
 std::vector<ESegment> &EData::GetSegments() {
   return segments_;
+}
+
+/*!
+ * One parallel pass over the points of an evaluation, shared by the CLI
+ * (AZURECalc::PrecalculatePoints) and the API's calculations (AZUREAPI).
+ */
+
+int EData::CalculatePointsInParallel(const std::vector<ESegment *> &segments, CNuc *theCNuc,
+                                     const Config &configure) {
+#ifdef _OPENMP
+  if (omp_in_parallel()) return -1;
+#else
+  return -1;
+#endif
+  if (ScopedPointMappingOff::Active()) return -1;
+  if (std::getenv("AZURE_SERIAL_CHI2")) return -1;
+  std::vector<EPoint *> work;
+  std::set<ESegment *> seen;
+  auto add = [&](ESegment *seg) {
+    if (!seg || !seen.insert(seg).second) return;
+    for (int p = 1; p <= seg->NumPoints(); p++) {
+      EPoint *pt = seg->GetPoint(p);
+      if (pt && !pt->IsMapped()) work.push_back(pt);
+    }
+  };
+  for (ESegment *seg : segments) {
+    if (!seg) continue;
+    add(seg);
+    for (ESegment *comp : seg->GetComponentSegments()) add(comp);
+  }
+  // A host also calculates every point mapped onto it (EData::MapData), so
+  // its work grows with that number: one Fowler-type angular distribution at
+  // a single energy is one item.  Largest items first, one at a time, so such
+  // an item does not end up last on one thread.  Each item is calculated the
+  // same way whatever the order.
+  std::vector<double> cost(work.size());
+  for (size_t k = 0; k < work.size(); k++)
+    cost[k] = (1.0 + work[k]->NumSubPoints()) * (1.0 + work[k]->NumLocalMappedPoints());
+  std::vector<size_t> order(work.size());
+  for (size_t k = 0; k < order.size(); k++) order[k] = k;
+  std::stable_sort(order.begin(), order.end(), [&cost](size_t a, size_t b) { return cost[a] > cost[b]; });
+  std::vector<EPoint *> sorted(work.size());
+  for (size_t k = 0; k < order.size(); k++) sorted[k] = work[order[k]];
+  work.swap(sorted);
+  int failed = 0;
+  AZUREProfile::Timer profileTimer(AZUREProfile::kPoints);
+#pragma omp parallel for schedule(dynamic, 1) reduction(+ : failed)
+  for (int k = 0; k < (int)work.size(); k++) {
+    try {
+      work[k]->Calculate(theCNuc, configure);
+    } catch (...) {
+      work[k]->SetFitCrossSection(0.0);  // as the per-point path, which returns 0 on failure
+      failed++;
+    }
+  }
+  return failed;
 }

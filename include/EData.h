@@ -219,6 +219,18 @@ class EData {
   EDataIterator begin();
   EDataIterator end();
   std::vector<ESegment> &GetSegments();
+  /*!
+   * Calculates every point of \p segments and of their component segments in
+   * one OpenMP pass, largest items first.  A host point also fills the points
+   * mapped onto it, so mapped points are not items of their own.  A point whose
+   * calculation throws gets a fit cross section of 0.  Returns the number of
+   * such points, or -1 when nothing was calculated: no OpenMP, already inside a
+   * parallel region, point mapping switched off on this thread, or
+   * AZURE_SERIAL_CHI2 set.  The caller then reads the points with
+   * ESegment::CalculateTheoreticalCrossSection(..., precalculated = true).
+   */
+  static int CalculatePointsInParallel(const std::vector<ESegment *> &segments, CNuc *theCNuc,
+                                       const Config &configure);
 
  private:
   std::vector<TargetEffect> targetEffects_;

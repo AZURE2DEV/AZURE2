@@ -559,52 +559,9 @@ void AZURECalc::WriteIterationOutput(const vector_r &p) const {
 }
 
 bool AZURECalc::PrecalculatePoints(CNuc *lc, EData *ld) const {
-#ifdef _OPENMP
-  if (omp_in_parallel()) return false;
-#else
-  return false;
-#endif
-  if (std::getenv("AZURE_SERIAL_CHI2")) return false;
-  std::vector<EPoint *> work;
-  std::set<ESegment *> seen;
-  auto add = [&](ESegment *seg) {
-    if (!seg || !seen.insert(seg).second) return;
-    for (int p = 1; p <= seg->NumPoints(); p++) {
-      EPoint *pt = seg->GetPoint(p);
-      if (pt && !pt->IsMapped()) work.push_back(pt);
-    }
-  };
-  for (int i = 1; i <= ld->NumSegments(); i++) {
-    ESegment *seg = ld->GetSegment(i);
-    if (!seg) continue;
-    add(seg);
-    for (ESegment *comp : seg->GetComponentSegments()) add(comp);
-  }
-  // A host also calculates every point mapped onto it (EData::MapData), so
-  // its work grows with that number: one Fowler-type angular distribution at
-  // a single energy is one item.  Largest items first, one at a time, so such
-  // an item does not end up last on one thread.  Each item is calculated the
-  // same way whatever the order.
-  std::vector<double> cost(work.size());
-  for (size_t k = 0; k < work.size(); k++)
-    cost[k] = (1.0 + work[k]->NumSubPoints()) * (1.0 + work[k]->NumLocalMappedPoints());
-  std::vector<size_t> order(work.size());
-  for (size_t k = 0; k < order.size(); k++) order[k] = k;
-  std::stable_sort(order.begin(), order.end(), [&cost](size_t a, size_t b) { return cost[a] > cost[b]; });
-  std::vector<EPoint *> sorted(work.size());
-  for (size_t k = 0; k < order.size(); k++) sorted[k] = work[order[k]];
-  work.swap(sorted);
-  const Config &cfg = configure();
-  AZUREProfile::Timer profileTimer(AZUREProfile::kPoints);
-#pragma omp parallel for schedule(dynamic, 1)
-  for (int k = 0; k < (int)work.size(); k++) {
-    try {
-      work[k]->Calculate(lc, cfg);
-    } catch (...) {
-      work[k]->SetFitCrossSection(0.0);  // as the per-point path, which returns 0 on failure
-    }
-  }
-  return true;
+  std::vector<ESegment *> segments;
+  for (int i = 1; i <= ld->NumSegments(); i++) segments.push_back(ld->GetSegment(i));
+  return EData::CalculatePointsInParallel(segments, lc, configure()) >= 0;
 }
 
 double AZURECalc::Chi2On(CNuc *lc, EData *ld, const vector_r &p, std::vector<double> *segChis) const {
