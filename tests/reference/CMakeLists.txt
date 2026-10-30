@@ -82,3 +82,8 @@ add_test(NAME adaptive_grid_reference COMMAND adaptive_grid_reference_test)
 add_executable(wigner_limit_reference_test wigner_limit_reference_test.cpp)
 target_link_libraries(wigner_limit_reference_test PRIVATE AZURE2Core)
 add_test(NAME wigner_limit_reference COMMAND wigner_limit_reference_test)
+
+# The integrated Fermi function stays finite down to the beta end point (it was NaN within ~0.2 keV of it).
+add_executable(fermi_endpoint_reference_test fermi_endpoint_reference_test.cpp)
+target_link_libraries(fermi_endpoint_reference_test PRIVATE AZURE2Core)
+add_test(NAME fermi_endpoint_reference COMMAND fermi_endpoint_reference_test)
