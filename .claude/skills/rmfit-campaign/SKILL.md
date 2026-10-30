@@ -82,10 +82,21 @@ As a procedure:
 2. **Seed the lowest-L channel of every pair, for every level.** Give it a small non-zero amplitude (0.01 γ_W, set
    in the engine; physical placeholders tiny, see the 2026-10-25 seeding entry), even where the literature lists no
    branch to that channel.
-3. **Level by level, from low energy up.** Polish one level at a time (its energy and widths, plus the free norms)
+3. **Every channel that opens inside the fit range is in the model -- by default.** Whenever the fit range is
+   extended (a new energy window, or a data set that reaches higher), list every partition open below the TOP of
+   the range: each excited state of each residual nucleus (ENSDF) and the other light-particle partitions (d, t,
+   ³He, ...), with thresholds Ex = sepE + e2. Add a pair for each before fitting, without being asked: the lowest
+   allowed L of each channel spin on every level; seeded per item 2 on levels at or within 0.5 MeV below the
+   threshold and on background poles, inert (0, fixed) elsewhere. Add the new exits to every summed segment
+   (total cross sections, total (n,p), (n,α), ...). Do NOT cap a data window at a threshold instead. A cap is a
+   stop-gap: log it in the readme with the channel that forced it, and list it for the evaluator.
+   (DeBoer 2026-10-30, 11B+α HE extension: the ELBE ¹⁴N+n total cross section had been capped at E_n 5.1 MeV because
+   ¹⁴N(n,n₄) had no pair. That left the top 1.2 MeV of the fit without its strongest constraint, a norm-fixed total.
+   Builder example: `11B+a/10-27-26_HE_claude/model/add_pairs_he.py`, 7 pairs n4 a3 d0 p1 n5 n6 p2.)
+4. **Level by level, from low energy up.** Polish one level at a time (its energy and widths, plus the free norms)
    against the data around it, and look at how well it can match.
-4. **Then add levels** where a resonance is clearly present and no known level matches it in energy and/or width.
-5. **Only then a real (global) fit**: `init` a campaign on the result.
+5. **Then add levels** where a resonance is clearly present and no known level matches it in energy and/or width.
+6. **Only then a real (global) fit**: `init` a campaign on the result.
 
 Why (10B+α stage 1, 2026-10-25): global polishes from a poor start (χ²/N ≈ 200, 2-27-25 levels with new
 channels near zero) traded the missing strength for normalizations. With every norm free, almost all of them fell to
@@ -1850,6 +1861,13 @@ import the cp312 pyazr extension.  What works -- the 3.12.13 install still exist
     python3 -c "import sqlite3, sys; sys.path.insert(0, '/users/rdeboer1/AZURE2'); import pyazr._azure2" || exit 1
 The last line is the guard: a job must prove both imports on its own node before the first rmfit step.
 Login-node shells inherit the old module and prove nothing.
+SECOND CORRECTION (2026-10-30, 11B+α HE session): `/software/p/python/3.12.13` is GONE as well, so the PATH above
+points nowhere and the job falls back to Python 3.9.  Use the 3.12.15 install (the cp312 extension loads unchanged)
+and put the cluster's newer SQLite library ahead of `/lib64`, which on compute nodes lacks `sqlite3_deserialize`:
+    module unload python
+    setenv PATH /software/p/python/3.12.15/gcc/11.5.0/bin:${PATH}
+    setenv LD_LIBRARY_PATH /software/p/python/3.12.15/gcc/11.5.0/lib:/software/s/sqlite-libs/3.34.1-11.el9_8/usr/lib64:${LD_LIBRARY_PATH}
+Verified on a compute node (SGE 1655350, d32cepyc nodes): guard passes, rmfit Sharded fit runs.
 
 ## 2026-10-02 — idle-time reviews are part of the process (section 3b); four lessons from the 13C+α merged fit
 - IDLE TIME: while jobs run, audit the input file and the data and read the literature (section 3b, DeBoer's
@@ -2224,3 +2242,15 @@ setenv PYTHONPATH  ${AZURE2_ROOT}:/groups/rdeboer1/user/rdeboer1/R-matrix
 and, in the script, `assert pyazr.__file__.startswith(rmfit.AZURE2_ROOT)` (and the .so md5 guard from the frozen
 directory's readme) before any work starts.  Installs into ~/AZURE2 are announced in the audit readme, but a job that
 reaches the shared copy by the fallback is exposed to them without anyone knowing.
+
+## 2026-10-30 -- level labels in models with several compound nuclei carry "@<nucleus>"
+
+The engine numbers levels per (J^pi, compound nucleus), so in a natural-target model two odd-A nuclei both had a
+"1/2-#1" and rmfit's labels collided: `level_energy` kept one of the two energies (wrong width caps, background-pole
+test and floors) and two free energies shared one key (17O+a an6pre, 21Ne + 23Ne).  Since 2026-10-30 (DeBoer
+"go ahead with the rmfit fix") every level of a model with MORE than one compound nucleus is labelled
+"<J^pi>#<n>@<nucleus>", e.g. `E[1/2-#2@21Ne]`, `g[1/2-#2@21Ne p1 L1 S0.5]`; `build_keys` raises on a duplicate key.
+Single-nucleus labels are byte-identical to before.  Checkpoints, ledgers and `param_priors` keys written with the old
+labels for a multi-nucleus model no longer match by name.  Still per J^pi only (documented in rmfit/README.md): sign-round
+groups, `free_mask(jpi=)`, level add and levelscan.  Test `rmfit/tests/test_level_labels_multicn.py` (fails on the old
+code); records R-matrix/AZURE2_code_audit/10-25-26/rmfit_cnlabel/readme.
