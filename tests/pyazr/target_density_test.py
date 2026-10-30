@@ -53,6 +53,9 @@ except Exception as err:                       # same skip as the other pyazr te
     print(f"skip: pyazr engine not importable ({type(err).__name__}: {err})")
     sys.exit(0)
 
+# numpy >= 2.0 renamed trapz to trapezoid; the linux CI job runs Ubuntu 22.04's numpy 1.21, which has only trapz.
+_trapezoid = getattr(np, "trapezoid", None) or np.trapz
+
 SRC = os.path.join(ROOT, "tests", "13N", "13N.azr")
 N0, EPS = 1.0e18, 1.0e-20
 STOP = f'"a0" 1 {EPS:g}'
@@ -94,7 +97,7 @@ def bare_average(e_fine, s_fine, lo, hi):
     """Trapezoid average of the bare cross section over [lo, hi] (linear interpolation at the ends)."""
     grid = np.concatenate([[lo], e_fine[(e_fine > lo) & (e_fine < hi)], [hi]])
     vals = np.interp(grid, e_fine, s_fine)
-    return np.trapezoid(vals, grid) / (hi - lo)
+    return _trapezoid(vals, grid) / (hi - lo)
 
 
 def session(work, **kw):
