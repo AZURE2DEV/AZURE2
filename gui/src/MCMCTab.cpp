@@ -208,7 +208,8 @@ bool MCMCTab::isAutoPriorCategory(const QString &category) {
   // Normalizations and energy shifts carry an experimental error in the
   // segment definition, so AZURECalcMCMC::BuildAutoPriors() derives their
   // priors from the data and overrides whatever this table holds.
-  return category == "norm" || category == "shift" || category == "abundance" || category == "screening";
+  return category == "norm" || category == "shift" || category == "abundance" || category == "screening" ||
+         category == "density";
 }
 
 QString MCMCTab::categoryFromStoredName(const QString &name) {
@@ -218,6 +219,7 @@ QString MCMCTab::categoryFromStoredName(const QString &name) {
   // (segment_N_norm)"; all of them are recognised here.
   if (name.startsWith("abundance", Qt::CaseInsensitive)) return "abundance";
   if (name.contains("screening", Qt::CaseInsensitive)) return "screening";
+  if (name.contains("target density", Qt::CaseInsensitive) || name.startsWith("density_")) return "density";
   if (name.contains("norm", Qt::CaseInsensitive)) return "norm";
   if (name.contains("shift", Qt::CaseInsensitive)) return "shift";
   return "loaded";
@@ -668,6 +670,8 @@ void MCMCTab::loadFromAZUREParams(bool isRWA, std::string filename) {
           param.category = "abundance";
         } else if (paramName.startsWith("screening_")) {
           param.category = "screening";  // its prior comes from the <targetInt> line (BuildAutoPriors)
+        } else if (paramName.startsWith("density_")) {
+          param.category = "density";  // likewise (densityfit sigma)
         } else if (paramName.contains("norm", Qt::CaseInsensitive)) {
           param.category = "norm";
         } else if (paramName.contains("shift", Qt::CaseInsensitive)) {
@@ -689,8 +693,8 @@ void MCMCTab::loadFromAZUREParams(bool isRWA, std::string filename) {
             param.useGaussianPrior = (param.priorStd > 0.0);
             param.autoPrior = true;
           }
-        } else if (param.category == "screening") {
-          // The engine takes U_e's prior from its <targetInt> line (AZURECalcMCMC::BuildAutoPriors).
+        } else if (param.category == "screening" || param.category == "density") {
+          // The engine takes U_e's and a density's prior from its <targetInt> line (AZURECalcMCMC::BuildAutoPriors).
           param.useGaussianPrior = false;
           param.autoPrior = true;
         } else if (isAutoPriorCategory(param.category)) {

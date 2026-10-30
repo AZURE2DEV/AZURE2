@@ -99,6 +99,8 @@ class FittingTab : public QWidget {
   void syncAbundances();
   /*! Mirror the Experimental Effects tab's screening potentials into the screening rows. */
   void syncScreening();
+  /*! Mirror the Experimental Effects tab's fitted target densities into the density rows. */
+  void syncDensity();
 
  private:
   void setupParameterTable(QTableWidget *table, const QString &title);
@@ -110,6 +112,11 @@ class FittingTab : public QWidget {
   void appendScreeningParameters();
   /// U_e, its prior sigma and its fit flag go back to the Experimental Effects tab.
   void writeScreening(const FittingParameter &param);
+  /// Append density_<n> (atoms/cm^2) for every active line holding a densityfit parameter, in the engine's order.
+  void appendDensityParameters();
+  /// The density, its prior sigma and its fit flag go back to the Experimental Effects tab (the density to every
+  /// line of its group).
+  void writeDensity(const FittingParameter &param);
   void assignMinuitIndices();
   void updateParameterInOtherTabs(const QString &paramName, const FittingParameter &param);
   void writeSegmentColumn(const FittingParameter &param, int column, const QVariant &value);
@@ -133,6 +140,7 @@ class FittingTab : public QWidget {
   QTableWidget *levelParamsTable;
   QTableWidget *abundanceParamsTable;
   QTableWidget *screeningParamsTable;
+  QTableWidget *densityParamsTable;
   QTableWidget *normParamsTable;
   QTableWidget *shiftParamsTable;
 

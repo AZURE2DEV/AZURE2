@@ -65,6 +65,11 @@ FittingTab::FittingTab(QWidget *parent) :
   paramTabWidget->addTab(shiftParamsTable, "Energy Shifts");
   paramTabWidget->addTab(screeningParamsTable, "Screening");
   paramTabWidget->setTabVisible(paramTabWidget->indexOf(screeningParamsTable), false);
+  // Shown only when an experimental effect has a fitted target density (updateParameterTables).
+  densityParamsTable = new QTableWidget;
+  setupParameterTable(densityParamsTable, "Target Density Parameters");
+  paramTabWidget->addTab(densityParamsTable, "Target Densities");
+  paramTabWidget->setTabVisible(paramTabWidget->indexOf(densityParamsTable), false);
 
   mainLayout->addWidget(paramTabWidget);
 
@@ -155,6 +160,7 @@ void FittingTab::updateParameterTables() {
   levelParamsTable->setRowCount(0);
   abundanceParamsTable->setRowCount(0);
   screeningParamsTable->setRowCount(0);
+  densityParamsTable->setRowCount(0);
   normParamsTable->setRowCount(0);
   shiftParamsTable->setRowCount(0);
 
@@ -172,6 +178,8 @@ void FittingTab::updateParameterTables() {
       targetTable = shiftParamsTable;
     } else if (param.category == "screening") {
       targetTable = screeningParamsTable;
+    } else if (param.category == "density") {
+      targetTable = densityParamsTable;
     }
 
     if (targetTable) {
@@ -180,6 +188,7 @@ void FittingTab::updateParameterTables() {
   }
   paramTabWidget->setTabVisible(paramTabWidget->indexOf(abundanceParamsTable), abundanceParamsTable->rowCount() > 0);
   paramTabWidget->setTabVisible(paramTabWidget->indexOf(screeningParamsTable), screeningParamsTable->rowCount() > 0);
+  paramTabWidget->setTabVisible(paramTabWidget->indexOf(densityParamsTable), densityParamsTable->rowCount() > 0);
 }
 
 void FittingTab::reset() {
@@ -393,6 +402,7 @@ void FittingTab::populateFromCurrentGUIState() {
     }
   }
   appendScreeningParameters();
+  appendDensityParameters();
 
   assignMinuitIndices();
 
@@ -451,7 +461,7 @@ void FittingTab::assignMinuitIndices() {
                    channels[param.channelIndex].isFixed == 0 &&
                    channels[param.channelIndex].reducedWidth != 0.0);
       }
-    } else if (param.category == "abundance" || param.category == "screening") {
+    } else if (param.category == "abundance" || param.category == "screening" || param.category == "density") {
       // Emitted fixed unless its vary flag is set, so it counts only when fitted.
       counted = param.useAsNuisance;
     } else if (param.category == "norm" || param.category == "shift") {
@@ -506,6 +516,114 @@ void FittingTab::setTargetIntModel(TargetIntModel *model) {
   connect(model, SIGNAL(rowsRemoved(QModelIndex, int, int)), this, SLOT(syncScreening()));
   connect(model, SIGNAL(modelReset()), this, SLOT(syncScreening()));
   connect(model, SIGNAL(dataChanged(QModelIndex, QModelIndex)), this, SLOT(syncScreening()));
+  connect(model, SIGNAL(rowsInserted(QModelIndex, int, int)), this, SLOT(syncDensity()));
+  connect(model, SIGNAL(rowsRemoved(QModelIndex, int, int)), this, SLOT(syncDensity()));
+  connect(model, SIGNAL(modelReset()), this, SLOT(syncDensity()));
+  connect(model, SIGNAL(dataChanged(QModelIndex, QModelIndex)), this, SLOT(syncDensity()));
+}
+
+namespace {
+// The density parameters the engine emits (EData::SetUpDensityParams): one per ACTIVE thin-target line with a
+// densityfit block that is not a later member of an earlier line's group; n = its place among the active lines.
+// Returns (n, row) pairs in order.
+QList<QPair<int, int>> densityParameterRows(const QList<TargetIntData> &lines) {
+  QList<QPair<int, int>> out;
+  QStringList groups;
+  int effect = 0;
+  for (int row = 0; row < lines.size(); row++) {
+    const TargetIntData &t = lines[row];
+    if (t.isActive != 1) continue;
+    effect++;
+    if (!t.isTargetIntegration || !(t.density > 0.0)) continue;
+    const QString g = t.densityGroup.trimmed();
+    if (!g.isEmpty()) {
+      if (groups.contains(g)) continue;  // a member: follows the group's first line
+      groups << g;
+    }
+    if (t.densityFit) out.append(qMakePair(effect, row));
+  }
+  return out;
+}
+}  // namespace
+
+// EData::FillMnParams emits one density_<n> (atoms/cm^2) after the screening potentials for each line holding a
+// densityfit parameter.  Value = the density, Error = the prior's sigma in atoms/cm^2 (0 = none), Nuisance = fitted.
+void FittingTab::appendDensityParameters() {
+  if (!targetIntModel_) return;
+  QList<TargetIntData> lines = targetIntModel_->getLines();
+  for (const QPair<int, int> &er : densityParameterRows(lines)) {
+    const TargetIntData &t = lines[er.second];
+    FittingParameter p;
+    p.name = QString("density_%1").arg(er.first);
+    p.value = t.density;
+    p.lowerLimit = 0;
+    p.upperLimit = 0;
+    p.error = std::max(0.0, densitySigmaValue(t.densitySigma, t.density));
+    p.fitError = 0.0;
+    p.useAsNuisance = t.densityVary;
+    p.category = "density";
+    p.levelIndex = -1;
+    p.channelIndex = er.second;  // row in the Experimental Effects table
+    fittingParameters.append(p);
+  }
+}
+
+void FittingTab::writeDensity(const FittingParameter &param) {
+  if (param.category != "density" || !targetIntModel_) return;
+  const int row = param.channelIndex;
+  QList<TargetIntData> lines = targetIntModel_->getLines();
+  if (row < 0 || row >= lines.size()) return;
+  const bool old = targetIntModel_->blockSignals(true);
+  if (lines[row].density != param.value) {
+    // the group shares one density: write it to every line of the group
+    const QString g = lines[row].densityGroup.trimmed();
+    for (int r = 0; r < lines.size(); r++)
+      if (r == row || (!g.isEmpty() && lines[r].densityGroup.trimmed() == g))
+        targetIntModel_->setData(targetIntModel_->index(r, 6), param.value, Qt::EditRole);
+  }
+  targetIntModel_->setData(targetIntModel_->index(row, 40), param.useAsNuisance, Qt::EditRole);
+  // the sigma as edited here is in atoms/cm^2; the line's own form (a percentage) is kept unless the Error cell
+  // was changed, judged against the line's density before this write (lines is the earlier snapshot)
+  if (std::fabs(densitySigmaValue(lines[row].densitySigma, lines[row].density) - std::max(0.0, param.error)) >
+      1e-9 * std::max(1.0, param.error))
+    targetIntModel_->setData(targetIntModel_->index(row, 41), QString::number(std::max(0.0, param.error), 'g', 12),
+                             Qt::EditRole);
+  targetIntModel_->blockSignals(old);
+}
+
+void FittingTab::syncDensity() {
+  if (!targetIntModel_) return;
+  QList<TargetIntData> lines = targetIntModel_->getLines();
+  QStringList want;
+  for (const QPair<int, int> &er : densityParameterRows(lines)) want << QString("density_%1").arg(er.first);
+  QStringList have;
+  for (const FittingParameter &p : fittingParameters)
+    if (p.category == "density") have << p.name;
+  if (want != have) {
+    populateFromCurrentGUIState();
+    return;
+  }
+  bool renumber = false;
+  for (int i = 0; i < fittingParameters.size(); i++) {
+    FittingParameter &p = fittingParameters[i];
+    if (p.category != "density" || p.channelIndex < 0 || p.channelIndex >= lines.size()) continue;
+    const TargetIntData &t = lines[p.channelIndex];
+    if (p.value != t.density) {
+      p.value = t.density;
+      updateParameterTableValue(p.name, p.value);
+    }
+    const double s = std::max(0.0, densitySigmaValue(t.densitySigma, t.density));
+    if (p.error != s) {
+      p.error = s;
+      updateParameterTableError(p.name, p.error);
+    }
+    if (p.useAsNuisance != t.densityVary) {
+      p.useAsNuisance = t.densityVary;
+      updateParameterTableCheckbox(p.name, p.useAsNuisance);
+      renumber = true;
+    }
+  }
+  if (renumber) assignMinuitIndices();
 }
 
 // EData::FillMnParams emits one screening_<n> (eV) after the shift-function parameters for each ACTIVE
@@ -736,6 +854,7 @@ void FittingTab::parameterItemChanged(QTableWidgetItem *item) {
       writeSegmentColumn(p, p.category == "norm" ? 10 : 15, value);
       writeAbundance(p);
       writeScreening(p);
+      writeDensity(p);
     }
 
   } else if (col == 6) {  // Nuisance checkbox
@@ -746,8 +865,10 @@ void FittingTab::parameterItemChanged(QTableWidgetItem *item) {
     writeSegmentColumn(p, p.category == "norm" ? 11 : 16, p.useAsNuisance ? 1 : 0);
     writeAbundance(p);
     writeScreening(p);
-    // Fitting or fixing an abundance or a screening potential changes the Minuit vector, as with a normalization.
-    if (p.category == "abundance" || p.category == "screening") assignMinuitIndices();
+    writeDensity(p);
+    // Fitting or fixing an abundance, a screening potential or a density changes the Minuit vector, as with a
+    // normalization.
+    if (p.category == "abundance" || p.category == "screening" || p.category == "density") assignMinuitIndices();
   }
 }
 
@@ -947,6 +1068,7 @@ void FittingTab::loadSettings() {
           }
         }
         appendScreeningParameters();
+        appendDensityParameters();
         assignMinuitIndices();
       }
 
@@ -1591,7 +1713,8 @@ void FittingTab::loadSettings() {
         if (param.category == "level") updateParameterInOtherTabs(param.name, param);
         // An abundance is named abundance_<Z>_<A> in the .sav exactly as here; its value goes back to the
         // Particle Pairs tab, the vary flag and sigma stay what the user set.
-        if ((param.category == "abundance" || param.category == "screening") && savParams.contains(param.name)) {
+        if ((param.category == "abundance" || param.category == "screening" || param.category == "density") &&
+            savParams.contains(param.name)) {
           param.value = savParams[param.name].first;
           param.fitError = savParams[param.name].second;
           updatedCount++;
@@ -1739,6 +1862,8 @@ void FittingTab::updateParameterInOtherTabs(const QString &paramName, const Fitt
     writeAbundance(param);
   } else if (param.category == "screening") {
     writeScreening(param);
+  } else if (param.category == "density") {
+    writeDensity(param);
   } else if (param.category == "norm" || param.category == "shift") {
     // Update normalization or shift parameters in SegmentsDataModel
     SegmentsDataModel *segmentsModel = segmentsTab_->getSegmentsDataModel();
@@ -1775,6 +1900,8 @@ void FittingTab::updateParameterTableValue(const QString &paramName, double valu
     targetTable = abundanceParamsTable;
   } else if (paramName.startsWith("screening_")) {
     targetTable = screeningParamsTable;
+  } else if (paramName.startsWith("density_")) {
+    targetTable = densityParamsTable;
   } else if (paramName.contains("Normalization")) {
     targetTable = normParamsTable;
   } else if (paramName.contains("Energy Shift")) {
@@ -2041,6 +2168,8 @@ void FittingTab::updateParameterTableError(const QString &paramName, double erro
     targetTable = abundanceParamsTable;
   } else if (paramName.startsWith("screening_")) {
     targetTable = screeningParamsTable;
+  } else if (paramName.startsWith("density_")) {
+    targetTable = densityParamsTable;
   } else if (paramName.contains("Normalization")) {
     targetTable = normParamsTable;
   } else if (paramName.contains("Energy Shift")) {
@@ -2075,6 +2204,8 @@ void FittingTab::updateParameterTableCheckbox(const QString &paramName, bool che
   QTableWidget *targetTable = nullptr;
   if (paramName.startsWith("screening_")) {
     targetTable = screeningParamsTable;
+  } else if (paramName.startsWith("density_")) {
+    targetTable = densityParamsTable;
   } else if (paramName.contains("shift", Qt::CaseInsensitive)) {
     targetTable = shiftParamsTable;
   } else if (paramName.contains("norm", Qt::CaseInsensitive)) {

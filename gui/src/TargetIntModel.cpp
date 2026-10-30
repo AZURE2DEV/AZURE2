@@ -2,6 +2,7 @@
 
 #include "TargetIntModel.h"
 #include <QStringList>
+#include <algorithm>
 
 TargetIntModel::TargetIntModel(QObject *parent) :
   QAbstractTableModel(parent) {
@@ -37,7 +38,28 @@ static QString effectSummary(const TargetIntData &t) {
   if (t.isScreening)
     names << QObject::tr("Electron screening, U_e = %1 eV%2")
                  .arg(QString::number(t.screeningUe, 'g', 6), t.screeningVary ? QObject::tr(" (fitted)") : QString());
+  if (t.isTargetIntegration && (t.densityFit || !t.densityGroup.isEmpty())) {
+    QString d = t.densityFit ? (t.densityVary ? QObject::tr("density fitted") : QObject::tr("density parameter, fixed"))
+                             : QObject::tr("density");
+    if (!t.densityGroup.isEmpty()) d += QObject::tr(" (group %1)").arg(t.densityGroup);
+    names << d;
+  }
   return names.isEmpty() ? QObject::tr("none") : names.join(", ");
+}
+
+double densitySigmaValue(const QString &token, double density) {
+  QString s = token.trimmed();
+  bool ok = false;
+  double v;
+  if (s.endsWith('%'))
+    v = s.left(s.size() - 1).toDouble(&ok) / 100.0 * density;
+  else
+    v = s.toDouble(&ok);
+  return (ok && v >= 0.0) ? v : -1.0;
+}
+
+double defaultDensityMax(double density, double sigma) {
+  return (sigma > 0.0) ? std::max(density + 3.0 * sigma, 1.1 * density) : 1.5 * density;
 }
 
 QVariant TargetIntModel::data(const QModelIndex &index, int role) const {
@@ -151,6 +173,16 @@ QVariant TargetIntModel::data(const QModelIndex &index, int role) const {
       return targetInt.screeningVary ? QString(tr("YES")) : QString(tr("NO"));
     else if (index.column() == 38)
       return targetInt.screeningSigma;
+    else if (index.column() == 39)
+      return targetInt.densityFit ? QString(tr("YES")) : QString(tr("NO"));
+    else if (index.column() == 40)
+      return targetInt.densityVary ? QString(tr("YES")) : QString(tr("NO"));
+    else if (index.column() == 41)
+      return targetInt.densitySigma;
+    else if (index.column() == 42)
+      return targetInt.densityMax;
+    else if (index.column() == 43)
+      return targetInt.densityGroup;
   } else if (role == Qt::EditRole) {
     TargetIntData targetInt = targetIntList.at(index.row());
     if (index.column() == 1) return targetInt.segmentsList;
@@ -190,6 +222,11 @@ QVariant TargetIntModel::data(const QModelIndex &index, int role) const {
     if (index.column() == 36) return targetInt.screeningUe;
     if (index.column() == 37) return targetInt.screeningVary;
     if (index.column() == 38) return targetInt.screeningSigma;
+    if (index.column() == 39) return targetInt.densityFit;
+    if (index.column() == 40) return targetInt.densityVary;
+    if (index.column() == 41) return targetInt.densitySigma;
+    if (index.column() == 42) return targetInt.densityMax;
+    if (index.column() == 43) return targetInt.densityGroup;
   } else if (role == Qt::CheckStateRole && index.column() == 0) {
     TargetIntData targetInt = targetIntList.at(index.row());
     if (targetInt.isActive == 1)
@@ -296,6 +333,16 @@ QVariant TargetIntModel::headerData(int section, Qt::Orientation orientation, in
         return tr("Fit U_e?");
       case 38:
         return tr("U_e Prior Sigma [eV]");
+      case 39:
+        return tr("Density Parameter?");
+      case 40:
+        return tr("Fit Density?");
+      case 41:
+        return tr("Density Prior Sigma");
+      case 42:
+        return tr("Density Grid Maximum");
+      case 43:
+        return tr("Density Group");
       default:
         return QVariant();
     }
@@ -384,6 +431,16 @@ bool TargetIntModel::setData(const QModelIndex &index, const QVariant &value, in
       tempData.screeningVary = value.toBool();
     else if (index.column() == 38)
       tempData.screeningSigma = value.toDouble();
+    else if (index.column() == 39)
+      tempData.densityFit = value.toBool();
+    else if (index.column() == 40)
+      tempData.densityVary = value.toBool();
+    else if (index.column() == 41)
+      tempData.densitySigma = value.toString().trimmed().isEmpty() ? QString("0") : value.toString().trimmed();
+    else if (index.column() == 42)
+      tempData.densityMax = value.toDouble();
+    else if (index.column() == 43)
+      tempData.densityGroup = value.toString().trimmed();
     else
       return false;
     targetIntList.replace(row, tempData);

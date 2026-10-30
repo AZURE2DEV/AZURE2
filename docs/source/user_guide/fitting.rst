@@ -96,6 +96,22 @@ AZURE2's parameter vector the screening potentials come after the energy-shift
 parameters; one that is not fitted takes no slot. **Load from .sav** sets the
 value to the fitted :math:`U_e`, which is also the centre of its prior.
 
+Target Density Parameters
+^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Shown only when an experimental-effect line has a fitted target density (see
+:doc:`experimental_effects`). One row per parameter, named ``density_<n>`` as in
+``param.sav``: one per line with **Density Is a Fit Parameter** checked, a density
+group counting once, under the number of its first line. **Value** is the density
+in atoms/cm², **Error** the sigma of its prior in atoms/cm² (0 = none) and **Use as
+Nuisance** whether it is fitted. They are the line's **Active Density**, **Prior
+Sigma** and **Fit Density**, and an edit in either tab shows in the other; a new
+value goes to every line of the group. A prior given on the line as a percentage
+stays a percentage unless **Error** is edited here. In AZURE2's parameter vector
+the densities come after the screening potentials; one that is not fitted takes no
+slot. **Load from .sav** sets the density to the fitted value, which is also the
+centre of its prior.
+
 Controls
 --------
 

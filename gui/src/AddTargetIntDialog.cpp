@@ -17,6 +17,8 @@
 
 #include "AddTargetIntDialog.h"
 #include <QRegularExpression>
+#include <QRegularExpressionValidator>
+#include "TargetIntModel.h"
 #include <QScrollBar>
 #include <QHeaderView>
 #include <algorithm>
@@ -406,6 +408,51 @@ AddTargetIntDialog::AddTargetIntDialog(QWidget *parent) :
   stoppingPowerBox->setLayout(stoppingPowerLayout);
   stoppingPowerBox->hide();
 
+  // Fitted target density: the areal density above as a fit parameter (density_<n>), with a prior, and lines
+  // that see one target sharing it through a group label.
+  isDensityFitCheck = new QCheckBox(tr("Density Is a Fit Parameter"));
+  isDensityFitCheck->setObjectName("densityFitCheck");
+  isDensityFitCheck->setToolTip(tr("Make the Active Density the fit parameter density_<n> (n = this line's place among the "
+                                   "active lines). It moves only the energy-loss window and the straggling with depth: the "
+                                   "yield is divided by the same density, so the result is the depth average of the cross "
+                                   "section, without a factor of the density."));
+  connect(isDensityFitCheck, SIGNAL(toggled(bool)), this, SLOT(densityFitCheckChanged(bool)));
+  densityVaryCheck = new QCheckBox(tr("Fit Density"));
+  densityVaryCheck->setObjectName("densityVaryCheck");
+  densityVaryCheck->setToolTip(tr("Free in the fit; unchecked keeps the parameter fixed at the density above."));
+  densitySigmaText = new QLineEdit("0");
+  densitySigmaText->setObjectName("densitySigmaText");
+  densitySigmaText->setToolTip(tr("Width of a Gaussian prior about the density above, in atoms/cm^2 or as a percentage of it "
+                                  "(\"2.3%\"); 0 = no prior. Reported as Total-Density-Chi-Squared."));
+  densityMaxText = new QLineEdit;
+  densityMaxText->setObjectName("densityMaxText");
+  densityMaxText->setToolTip(tr("The largest density the integration grids are laid out for (atoms/cm^2). Blank = the default: "
+                                "density + 3 sigma, at least 1.1 x the density, or 1.5 x without a prior. A fit asking for "
+                                "more is computed at this value, with a warning."));
+  densityDefaultLabel = new QLabel;
+  densityGroupText = new QLineEdit;
+  densityGroupText->setObjectName("densityGroupText");
+  densityGroupText->setValidator(new QRegularExpressionValidator(QRegularExpression("\\S*"), densityGroupText));
+  densityGroupText->setToolTip(tr("Lines with the same label share one density parameter (one target seen by several detectors). "
+                                  "The group's first line holds the parameter and must have Density Is a Fit Parameter checked; "
+                                  "the others need only the label, and their own density is replaced by the group's."));
+  connect(densitySigmaText, SIGNAL(textChanged(QString)), this, SLOT(updateDensityDefault()));
+  connect(densityText, SIGNAL(textChanged(QString)), this, SLOT(updateDensityDefault()));
+  densityBox = new QGroupBox(tr("Fitted Target Density"));
+  QGridLayout *densityLayout = new QGridLayout;
+  densityLayout->addWidget(isDensityFitCheck, 0, 0, 1, 2);
+  densityLayout->addWidget(densityVaryCheck, 0, 2, 1, 2);
+  densityLayout->addWidget(new QLabel(tr("Prior Sigma [atoms/cm^2 or %]:")), 1, 0, Qt::AlignRight);
+  densityLayout->addWidget(densitySigmaText, 1, 1);
+  densityLayout->addWidget(new QLabel(tr("Grid Maximum [atoms/cm^2]:")), 1, 2, Qt::AlignRight);
+  densityLayout->addWidget(densityMaxText, 1, 3);
+  densityLayout->addWidget(densityDefaultLabel, 2, 2, 1, 2, Qt::AlignRight);
+  densityLayout->addWidget(new QLabel(tr("Density Group:")), 3, 0, Qt::AlignRight);
+  densityLayout->addWidget(densityGroupText, 3, 1);
+  densityBox->setLayout(densityLayout);
+  densityBox->hide();
+  densityFitCheckChanged(false);
+
   QGridLayout *qCoefficientCheckBoxLayout = new QGridLayout;
   qCoefficientCheckBoxLayout->addWidget(isQCoefficientCheck, 0, 0);
   qCoefficientCheckBoxLayout->addItem(new QSpacerItem(1, 20), 0, 1);
@@ -516,6 +563,7 @@ AddTargetIntDialog::AddTargetIntDialog(QWidget *parent) :
   mainLayout->addWidget(convCoefficientBox);
   mainLayout->addLayout(checkBoxLayout);
   mainLayout->addWidget(stoppingPowerBox);
+  mainLayout->addWidget(densityBox);
   mainLayout->addLayout(qCoefficientCheckBoxLayout);
   mainLayout->addWidget(qCoefficientBox);
   mainLayout->addLayout(beamProfileCheckBoxLayout);
@@ -687,6 +735,7 @@ void AddTargetIntDialog::convertExpressionToLab() {
 }
 
 void AddTargetIntDialog::targetIntCheckChanged(bool checked) {
+  densityBox->setVisible(checked);
   if (checked) {
     stoppingPowerBox->show();
     densityText->setEnabled(true);
@@ -843,6 +892,68 @@ void AddTargetIntDialog::udrCheckChanged(bool checked) {
 
 void AddTargetIntDialog::setAdiabaticProvider(std::function<double(const QString &)> provider) {
   adiabaticProvider_ = provider;
+}
+
+void AddTargetIntDialog::densityFitCheckChanged(bool checked) {
+  densityVaryCheck->setEnabled(checked);
+  densitySigmaText->setEnabled(checked);
+  densityMaxText->setEnabled(checked);
+  updateDensityDefault();
+}
+
+void AddTargetIntDialog::updateDensityDefault() {
+  const double n = densityText->text().trimmed().toDouble();
+  const double s = densitySigmaValue(densitySigmaText->text(), n);
+  if (isDensityFitCheck->isChecked() && n > 0.0 && s >= 0.0) {
+    const QString def = QString::number(defaultDensityMax(n, s), 'g', 6);
+    densityDefaultLabel->setText(tr("blank = %1").arg(def));
+    densityMaxText->setPlaceholderText(def);
+  } else {
+    densityDefaultLabel->clear();
+    densityMaxText->setPlaceholderText(QString());
+  }
+}
+
+void AddTargetIntDialog::setDensityFit(bool fit, bool vary, const QString &sigma, double densityMax, const QString &group) {
+  densityVaryCheck->setChecked(vary);
+  densitySigmaText->setText(sigma.trimmed().isEmpty() ? QString("0") : sigma.trimmed());
+  densityMaxText->setText(densityMax > 0.0 ? QString::number(densityMax, 'g', 12) : QString());
+  densityGroupText->setText(group);
+  isDensityFitCheck->setChecked(fit);
+  densityFitCheckChanged(fit);
+}
+
+QString AddTargetIntDialog::densityFitProblem() const {
+  if (!isTargetIntegrationCheck->isChecked()) return QString();
+  const bool fit = isDensityFitCheck->isChecked();
+  const bool grouped = !densityGroupText->text().trimmed().isEmpty();
+  if (!fit && !grouped) return QString();
+  const double n = densityText->text().trimmed().toDouble();
+  if (!(n > 0.0))
+    return tr("A fitted or grouped density needs a thin target: an Active Density above 0 (0 is an infinitely thick target).");
+  if (isBeamProfileCheck->isChecked() || isUdrCheck->isChecked())
+    return tr("A fitted or grouped density cannot be combined with a beam profile or a user-defined resolution function.");
+  if (fit) {
+    if (densitySigmaValue(densitySigmaText->text(), n) < 0.0)
+      return tr("The density prior sigma \"%1\" is not a number >= 0 in atoms/cm^2 or a percentage such as 2.3%.")
+          .arg(densitySigmaText->text().trimmed());
+    const QString mx = densityMaxText->text().trimmed();
+    if (!mx.isEmpty()) {
+      bool ok = false;
+      const double m = mx.toDouble(&ok);
+      if (!ok || !(m > n)) return tr("The grid maximum must be a density above the Active Density, or blank for the default.");
+    }
+  }
+  return QString();
+}
+
+void AddTargetIntDialog::accept() {
+  const QString problem = densityFitProblem();
+  if (!problem.isEmpty()) {
+    QMessageBox::warning(this, tr("Fitted Target Density"), problem);
+    return;
+  }
+  QDialog::accept();
 }
 
 void AddTargetIntDialog::screeningCheckChanged(bool checked) {

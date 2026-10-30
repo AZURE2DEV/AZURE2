@@ -39,5 +39,6 @@ across the 0.457 MeV resonance, every level fixed, a constant stopping cross sec
 The independent physics check (the engine's yield against the average of the bare cross section over the
 window computed from a 0.25 keV grid, at 0.9, 1.0 and 1.1 N0 and with an energy shift; a fitted density
 against a plain line at the same N; the group; penalties; the Jacobian column) is
-`tests/pyazr/target_density_test.py`. The GUI keeps the blocks through a read and write
-(`tests/gui/target_int_tab_test.cpp`); it does not edit them yet.
+`tests/pyazr/target_density_test.py`. The GUI side (the dialog's Fitted Target Density box, its refusals,
+the read/write of both blocks, a group member) is `tests/gui/target_int_tab_test.cpp`, and the Fitting tab's
+Target Densities rows `tests/gui/density_fitting_test.cpp`.

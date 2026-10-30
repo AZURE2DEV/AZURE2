@@ -305,27 +305,94 @@ int main(int argc, char** argv) {
     ok("no adiabatic limit for a neutron", AdiabaticScreeningEv(0, 6) < 0.0);
   }
 
-  // Fitted target density: the densityfit / densitygroup blocks are kept as written (the tab does not edit them),
-  // beside straggling and screening, and a line without them gains none.
+  // Fitted target density: densityfit / densitygroup read into the line's fields, written back from them, edited in
+  // the dialog (box shown with target integration, the default grid maximum, refusals), summarised in the table.
   {
     QString denLine =
         "1 \"18\" 50 1 0.0009 1 4.09554e+17 \"a1*x+a0\" 2 6.1e-20 1.2e-19 0 0 0 \"\" 0 1 0.7489 20 50 "
-        "screening 0 0 0 densityfit 1 2.3% 4.5e17 densitygroup t3b\n</targetInt>\n";
+        "screening 0 0 0 densityfit 1 2.3% 4.5e17 densitygroup t3b\n"
+        "1 \"19\" 50 1 0.0009 1 4.09554e+17 \"a1*x+a0\" 2 6.1e-20 1.2e-19 0 0 0 \"\" 0 1 0.7489 20 50 densitygroup t3b\n"
+        "</targetInt>\n";
     bool readD = false;
     QString outD = roundTrip(tab, denLine, readD);
-    ok("read a line with densityfit and densitygroup", readD);
+    ok("read a line with densityfit and densitygroup, and a group member", readD);
     QList<TargetIntData> dl = tab.getTargetIntModel()->getLines();
-    ok("density blocks kept", dl.size() == 1 && dl.at(0).densityBlock == "densityfit 1 2.3% 4.5e17 densitygroup t3b",
-       dl.isEmpty() ? QString() : dl.at(0).densityBlock);
-    if (dl.size() == 1)
-      ok("straggling and density still read beside them",
-         dl.at(0).isStraggling && dl.at(0).stragglingCoefficient == 0.7489 && dl.at(0).density == 4.09554e+17);
-    ok("written back", outD.contains(" densityfit 1 2.3% 4.5e17 densitygroup t3b"), outD);
+    ok("two rows", dl.size() == 2, outD);
+    if (dl.size() == 2) {
+      const TargetIntData &d = dl.at(0), &m = dl.at(1);
+      ok("leader: parameter, varied, prior 2.3%, maximum 4.5e17, group t3b",
+         d.densityFit && d.densityVary && d.densitySigma == "2.3%" && d.densityMax == 4.5e17 && d.densityGroup == "t3b");
+      ok("straggling, screening and the density still read beside them",
+         d.isStraggling && d.stragglingCoefficient == 0.7489 && d.isScreening && d.density == 4.09554e+17);
+      ok("member: the label only", !m.densityFit && m.densityGroup == "t3b" && m.densitySigma == "0" && m.densityMax == 0.);
+      const QString s0 = tab.getTargetIntModel()->data(tab.getTargetIntModel()->index(0, 33), Qt::DisplayRole).toString();
+      const QString s1 = tab.getTargetIntModel()->data(tab.getTargetIntModel()->index(1, 33), Qt::DisplayRole).toString();
+      ok("table summary names the fitted density and the group", s0.contains("density fitted (group t3b)") &&
+         s1.contains("density (group t3b)") && !s1.contains("fitted"), s0 + " | " + s1);
+    }
+    ok("leader written back", outD.contains(" densityfit 1 2.3% 4.5e+17 densitygroup t3b\n") ||
+                              outD.contains(" densityfit 1 2.3% 4.5e17 densitygroup t3b\n"), outD);
+    ok("member written with the label only", outD.contains("20 50 densitygroup t3b\n") &&
+                                             outD.count("densityfit") == 1, outD);
     bool readD2 = false;
     QString outD2 = roundTrip(tab, outD + "</targetInt>\n", readD2);
     ok("second round trip identical", readD2 && outD2 == outD, outD2);
     QString noDen = roundTrip(tab, legacy, readD);
     ok("a line without them gains no block", !noDen.contains("density"), noDen);
+
+    // A line built in the tab (TargetIntTab::addLine(TargetIntData)) is written with its blocks.
+    tab.reset();
+    TargetIntData n;
+    n.isActive = 1; n.segmentsList = "3"; n.numPoints = 50; n.isConvolution = false; n.sigma = 0.;
+    n.isTargetIntegration = true; n.density = 1e18; n.stoppingPowerEq = "a0"; n.numParameters = 1; n.parameters << 1e-20;
+    n.isQCoefficients = false; n.isConvCoefficients = false; n.isStraggling = false; n.stragglingCoefficient = 0.;
+    n.resonanceWidthMultiplier = 20.; n.pointsPerWidth = 50.; n.transitionWidth = 0.; n.autoTolerance = 0.;
+    n.densityFit = true; n.densityVary = true; n.densitySigma = "5e16";
+    tab.addLine(n);
+    QString built;
+    QTextStream builtStream(&built);
+    tab.writeFile(builtStream);
+    ok("a new line: densityfit 1 5e16, no maximum, no group", built.contains(" densityfit 1 5e16\n") &&
+                                                               !built.contains("densitygroup"), built);
+
+    // The dialog
+    AddTargetIntDialog dlg;
+    ok("density box hidden without target integration", !dlg.findChild<QCheckBox*>("densityFitCheck")->isVisibleTo(&dlg));
+    dlg.isTargetIntegrationCheck->setChecked(true);
+    dlg.densityText->setText("4.09554e17");
+    ok("shown with it", dlg.findChild<QCheckBox*>("densityFitCheck")->isVisibleTo(&dlg));
+    dlg.setDensityFit(false, false, "0", 0., "");
+    ok("prior and maximum disabled until the density is a parameter",
+       !dlg.densitySigmaText->isEnabled() && !dlg.densityMaxText->isEnabled() && dlg.densityGroupText->isEnabled());
+    dlg.setDensityFit(true, true, "2.3%", 0., "t3b");
+    ok("enabled with it", dlg.densitySigmaText->isEnabled() && dlg.densityVaryCheck->isEnabled());
+    ok("default maximum shown: max(N + 3 sigma, 1.1 N) = 4.50509e+17",
+       dlg.densityMaxText->placeholderText() == "4.50509e+17", dlg.densityMaxText->placeholderText());
+    dlg.densitySigmaText->setText("16%");
+    ok("16 %: N + 3 sigma = 6.0614e+17", dlg.densityMaxText->placeholderText() == "6.0614e+17", dlg.densityMaxText->placeholderText());
+    ok("valid settings pass", dlg.densityFitProblem().isEmpty(), dlg.densityFitProblem());
+    dlg.densitySigmaText->setText("2.3 %x");
+    ok("a malformed sigma is refused", !dlg.densityFitProblem().isEmpty());
+    dlg.densitySigmaText->setText("-1");
+    ok("a negative sigma is refused", !dlg.densityFitProblem().isEmpty());
+    dlg.densitySigmaText->setText("1e16");
+    dlg.densityMaxText->setText("4e17");
+    ok("a maximum below the density is refused", !dlg.densityFitProblem().isEmpty());
+    dlg.densityMaxText->setText("5e17");
+    ok("a maximum above it passes", dlg.densityFitProblem().isEmpty(), dlg.densityFitProblem());
+    dlg.densityText->setText("0");
+    ok("a thick target (density 0) is refused", !dlg.densityFitProblem().isEmpty());
+    dlg.densityText->setText("4.09554e17");
+    dlg.isBeamProfileCheck->setChecked(true);
+    ok("with a beam profile it is refused", !dlg.densityFitProblem().isEmpty());
+    dlg.isBeamProfileCheck->setChecked(false);
+    dlg.isDensityFitCheck->setChecked(false);
+    ok("a group member (label only) passes", dlg.densityFitProblem().isEmpty(), dlg.densityFitProblem());
+    if (const char* stem = std::getenv("AZURE2_TARGET_INT_PNG")) {
+      dlg.isDensityFitCheck->setChecked(true);
+      dlg.show(); QApplication::processEvents(); dlg.adjustSize(); QApplication::processEvents();
+      dlg.grab().save(QString("%1_density.png").arg(stem));
+    }
   }
 
   std::cout << (fails ? "FAILED" : "PASSED") << std::endl;

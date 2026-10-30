@@ -609,10 +609,29 @@ its derivative is taken by finite differences. ``densityfit`` is refused on a
 line without target integration, on a thick target (density 0) and beside a
 beam profile or a UDR kernel.
 
+In the GUI, the *Add/Edit Experimental Effect* dialog shows a **Fitted Target
+Density** box when **Include Target Integration** is checked:
+
+- **Density Is a Fit Parameter** writes the ``densityfit`` block, with the
+  **Active Density** as :math:`N_0`; **Fit Density** frees it (unchecked, the
+  parameter stays fixed).
+- **Prior Sigma** is the prior width in atoms/cm² or as a percentage
+  (``2.3%``); 0 means no prior.
+- **Grid Maximum** is ``max``; left blank, the engine's default is used and shown
+  beside the field.
+- **Density Group** is the ``densitygroup`` label. Give every line of the target
+  the same label and check **Density Is a Fit Parameter** on its first line
+  only.
+
+The dialog refuses a fitted or grouped density on a thick target (density 0), next to a
+beam profile or a UDR kernel, a prior it cannot read and a maximum below the
+density. The table's summary column names the fitted density and its group. The
+Fitting tab lists each parameter on its **Target Densities** sub-tab
+(:doc:`fitting`).
+
 The fitted :math:`N` is written to ``param.sav`` and read back from it, like a
-normalization; the density on the line stays the prior's centre. The GUI keeps
-the two blocks when it reads and writes a project but does not edit them yet:
-``pyazr.AzrModel.set_target_density`` writes them, and
+normalization; the density on the line stays the prior's centre.
+``pyazr.AzrModel.set_target_density`` writes the blocks from a script, and
 ``AzrModel.target_densities`` lists them.
 
 Straggling
