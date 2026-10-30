@@ -70,6 +70,41 @@ class TargetEffect {
     const double r = (screeningUe_ - screeningNominal_) / screeningSigma_;
     return r * r;
   }
+  /*!
+   * Fitted target density (`densityfit vary sigma` on a target-integration line, sigma in atoms/cm^2 or as a
+   * percentage of the line's density, "2.3%"): the areal density is a fit parameter `density_<n>` (EData::
+   * FillMnParams), with a Gaussian prior ((N - N0)/sigma)^2 about the line's value when sigma > 0.  It moves only
+   * the target thickness, dE with int_{E-dE}^{E} dE'/epsilon = N, i.e. the depth window and the straggling with
+   * depth: the yield is the integral over the window divided by the same N, so the depth-averaged cross section
+   * carries no factor of N.  `densitygroup <label>` shares one parameter between lines (one physical target seen
+   * by several detectors); the group's first line holds the parameter and its densityfit block.
+   *
+   * The sub-point grids are laid out once for the largest density the fit is expected to reach
+   * (GetLayoutDensity: N0 + 3 sigma, at least 1.1 N0; 1.5 N0 without a prior) and the depth integral is cut at
+   * E0 - dE(N), so the yield moves smoothly with N and the grids stay put (EPoint::IntegrateTargetEffect).
+   */
+  bool HasDensityFit() const { return hasDensityFit_; }
+  /// A malformed `densityfit` / `densitygroup` block, or one on a line that does not integrate a thin target.
+  bool HasDensityFitError() const { return densityFitError_; }
+  const std::string &GetDensityFitErrorText() const { return densityFitErrorText_; }
+  bool IsDensityVaried() const { return densityVary_; }
+  /// The line's density, the centre of the prior (atoms/cm^2).
+  double GetDensityNominal() const { return densityNominal_; }
+  /// Prior width in atoms/cm^2 (a percentage already converted), 0 = no prior.
+  double GetDensitySigma() const { return densitySigma_; }
+  /// The `densitygroup` label, empty without one.
+  const std::string &GetDensityGroup() const { return densityGroup_; }
+  /// ((N - N0)/sigma)^2, or 0 without a prior.
+  double DensityPenalty() const {
+    if (!hasDensityFit_ || densitySigma_ <= 0.0) return 0.0;
+    const double r = (density_ - densityNominal_) / densitySigma_;
+    return r * r;
+  }
+  /// The density the sub-point grids span (the line's density when it is not fitted).
+  double GetLayoutDensity() const { return (layoutDensity_ > 0.0) ? layoutDensity_ : density_; }
+  void SetLayoutDensity(double n) { layoutDensity_ = n; }
+  /// Join a density group: take its first line's density, prior and layout density.
+  void JoinDensityGroup(const TargetEffect &leader);
   /// The c.m. beam-spread sigma at c.m. energy \p eCM for a point whose entrance pair has the c.m./lab
   /// factor \p cmFactor: the one place every kernel takes its width from.  A constant sigma (lab, as read)
   /// is scaled by the factor; a lab expression is evaluated at eCM / F and its value scaled by F; a legacy
@@ -107,6 +142,8 @@ class TargetEffect {
   /// Energy loss (lab MeV) across the target at lab energy E: Delta with int_{E-Delta}^{E} dE'/epsilon = N, the
   /// exact range integral (first-order epsilon(E) N before 2026-10-27, 2-8 % off for 5-20 % targets).
   double TargetThickness(double, const Config &);
+  /// The same for an areal density \p density instead of the current one.
+  double TargetThickness(double, const Config &, double density);
   /// Attenuation coefficient of the given order.
   double GetQCoefficient(int) const;
   /// Convolution coefficient of the given order.
@@ -231,6 +268,14 @@ class TargetEffect {
   double screeningNominal_ = 0.0; ///< eV, as read
   bool screeningVary_ = false;
   double screeningSigma_ = 0.0;   ///< eV, prior width (0 = none)
+  bool hasDensityFit_ = false;    ///< `densityfit` block present (or joined through a density group)
+  bool densityFitError_ = false;
+  std::string densityFitErrorText_;
+  bool densityVary_ = false;
+  double densityNominal_ = 0.0;   ///< atoms/cm^2, as read
+  double densitySigma_ = 0.0;     ///< atoms/cm^2, prior width (0 = none)
+  std::string densityGroup_;
+  double layoutDensity_ = 0.0;    ///< density the sub-point grids span; 0 = the current density
 
   // Energy straggling: sigma = c_s sqrt(dE_cm) (c.m. coefficient), or Bohr's formula when c_s = 0.
   bool isStraggling_;

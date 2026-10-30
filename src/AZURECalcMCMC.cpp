@@ -400,6 +400,7 @@ void AZURECalcMCMC::BuildAutoPriors() const {
   //   one sqrt(E) energy-shift coefficient per segment (all segments)
   //   the shift-function parameters of each segment declaring a "shiftfn" block
   //   one electron-screening potential per <targetInt> line with a screening block
+  //   one fitted target density per <targetInt> line with a densityfit block or per density group
   // AZUREAPI::GetParameterInfo() walks the same sequence.
   std::vector<int> allKinds;
   std::vector<double> allAutoMean;
@@ -476,6 +477,15 @@ void AZURECalcMCMC::BuildAutoPriors() const {
     allAutoStd.push_back(te->GetScreeningSigma());
   }
 
+  // Fitted target densities (atoms/cm^2), one per densityfit line or density group: the line's density and
+  // sigma are the prior, as the fit uses them.
+  for (int k = 1; k <= data()->NumDensityParams(); ++k) {
+    const TargetEffect *te = data()->GetTargetEffect(data()->GetDensityEffect(k));
+    allKinds.push_back(PARAM_DENSITY);
+    allAutoMean.push_back(te->GetDensityNominal());
+    allAutoStd.push_back(te->GetDensitySigma());
+  }
+
   if (allKinds.size() != fixed_.size()) {
     configure().outStream << "Warning: parameter classification produced "
                           << allKinds.size() << " entries but there are "
@@ -515,7 +525,8 @@ void AZURECalcMCMC::BuildAutoPriors() const {
   for (size_t i = 0; i < nfree; ++i) {
     const int kind = freeKinds_[i];
 
-    if (kind == PARAM_NORM || kind == PARAM_SHIFT || kind == PARAM_ABUNDANCE || kind == PARAM_SCREENING) {
+    if (kind == PARAM_NORM || kind == PARAM_SHIFT || kind == PARAM_ABUNDANCE || kind == PARAM_SCREENING ||
+        kind == PARAM_DENSITY) {
       // Derived from the data, so it always wins over whatever the GUI holds.
       if (freeAutoStd[i] > 0.0) {
         priorMeans_[i] = freeAutoMean[i];
@@ -1049,7 +1060,8 @@ void AZURECalcMCMC::RunMCMCSampling(int nwalkers, int nsteps, const std::vector<
       if (kind == PARAM_ENERGY) {
         spread = energySpreadMeV;
         nEnergyCapped++;
-      } else if (kind == PARAM_NORM || kind == PARAM_SHIFT || kind == PARAM_ABUNDANCE || kind == PARAM_SCREENING) {
+      } else if (kind == PARAM_NORM || kind == PARAM_SHIFT || kind == PARAM_ABUNDANCE || kind == PARAM_SCREENING ||
+        kind == PARAM_DENSITY) {
         // Starting outside the prior only wastes steps walking back into it.
         if (j < (int)priorStds_.size() && j < (int)usePriors_.size() &&
             usePriors_[j] && priorStds_[j] > 0.0 && priorStds_[j] < spread) {

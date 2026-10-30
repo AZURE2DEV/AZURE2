@@ -223,6 +223,7 @@ void TargetIntTab::addLine(TargetIntData line) {
   targetIntModel->setData(index, line.screeningVary, Qt::EditRole);
   index = targetIntModel->index(lines.size(), 38, QModelIndex());
   targetIntModel->setData(index, line.screeningSigma, Qt::EditRole);
+  targetIntModel->setDensityBlock(lines.size(), line.densityBlock);
 
   targetIntView->resizeRowsToContents();
 }
@@ -683,6 +684,8 @@ bool TargetIntTab::writeFile(QTextStream &outStream) {
     if (lines.at(i).isScreening)
       outStream << " screening " << QString::number(lines.at(i).screeningUe, 'g', 12) << " "
                 << (lines.at(i).screeningVary ? 1 : 0) << " " << QString::number(lines.at(i).screeningSigma, 'g', 12);
+    // A fitted target density, as read (keyword-introduced, before the blocks that run to the end of the line).
+    if (!lines.at(i).densityBlock.isEmpty()) outStream << " " << lines.at(i).densityBlock;
     // Optional beam-profile kernel, last on the line and introduced by its own
     // keyword: every older reader probes for a digit or a quote here, so an
     // alphabetic token stops it cleanly and the rest of the line is ignored
@@ -840,6 +843,16 @@ bool TargetIntTab::readFile(QTextStream &inStream) {
           remaining = (remaining.left(sm.capturedStart()) + " " + remaining.mid(sm.capturedEnd())).simplified();
         }
       }
+      // Fitted target density: the densityfit / densitygroup blocks, carried as text (TargetIntData::densityBlock).
+      QString densityBlock;
+      {
+        QRegularExpression densityKeyword("(^|\\s)(densityfit\\s+\\S+\\s+\\S+(\\s+[0-9.][0-9.eE+-]*)?|densitygroup\\s+\\S+)(?=\\s|$)");
+        QRegularExpressionMatch dm;
+        while ((dm = densityKeyword.match(remaining)).hasMatch()) {
+          densityBlock = (densityBlock + " " + dm.captured(2)).simplified();
+          remaining = (remaining.left(dm.capturedStart()) + " " + remaining.mid(dm.capturedEnd())).simplified();
+        }
+      }
       bool tempIsUdr = false;
       QString udrFile;
       double udrFlightPath = 0., udrBurst = 0., udrChannel = 0.;
@@ -943,6 +956,7 @@ bool TargetIntTab::readFile(QTextStream &inStream) {
       if (isTargetIntegration == 1) tempIsTargetIntegration = true;
 
       TargetIntData newLine = {isActive, segmentsList.remove('\"'), numPoints, tempIsConvolution, sigma, tempIsTargetIntegration, density, stoppingPowerEq.remove('\"'), numParameters, parameters, tempIsQCoefficient, qCoefficients, tempIsConvCoefficient, convCoefficients, convolutionEq.remove('\"'), tempIsStraggling, stragglingCoefficient, resonanceWidthMultiplier, pointsPerWidth, applyRanges, transitionWidth, autoTolerance, tempIsBeamProfile, beamProfile, beamTpcSigma, beamTruncation, beamPhotodissociation == 1, tempIsUdr, udrFile, udrFlightPath, udrBurst, udrChannel, udrCentred != 0, tempSigmaLab, tempIsScreening, screeningUe, screeningVary != 0, screeningSigma};
+      newLine.densityBlock = densityBlock;
       addLine(newLine);
     }
   }

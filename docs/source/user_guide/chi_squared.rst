@@ -166,6 +166,8 @@ The file separates the two contributions::
 - **Total-Screening-Chi-Squared**, when an electron-screening potential has a
   prior (:doc:`experimental_effects`), is the sum of
   :math:`((U_e - U_e^{0})/\sigma)^2`.
+- **Total-Density-Chi-Squared**, when a fitted target density has a prior
+  (:doc:`experimental_effects`), is the sum of :math:`((N - N_0)/\sigma)^2`.
 - **Total-Scattering-Length-Chi-Squared**, when the project has a
   ``<scatteringLengths>`` block, is the sum over its active lines of
   :math:`((a_0 - a_{\mathrm{exp}})/\sigma)^2` (real and, if given, imaginary

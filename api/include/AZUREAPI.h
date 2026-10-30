@@ -111,6 +111,10 @@ class AZUREAPI {
    *                      line with a screening block: the effect number in
    *                      field 6, the prior centre in field 5, the prior sigma
    *                      in field 14 (0 = none)
+   *                    8=fitted target density (atoms/cm^2) of a <targetInt>
+   *                      line with a densityfit block or of a density group:
+   *                      as type 7, plus the largest density the sub-point
+   *                      grids span in field 8
    *   1  jgroup        1-based J-group index (R-matrix params only)
    *   2  J             total spin of the J-group / level
    *   3  parity        +1 / -1

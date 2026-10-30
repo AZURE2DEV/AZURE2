@@ -113,9 +113,10 @@ void AZUREParams::ApplyUserParameterFile(const std::string &filename, std::ostre
         // free one fixed by a zero.  An energy shift is not: it follows the vary
         // flag of its .azr segment line, because its penalty does (a freed shift
         // would float with no penalty).  The .sav still sets its value.
-        // A screening potential likewise follows its <targetInt> vary flag.
+        // A screening potential and a fitted target density likewise follow their <targetInt> vary flags.
         const bool isShift = IsEnergyShiftName(GetMinuitParams().GetName(i)) ||
-                             GetMinuitParams().GetName(i).rfind("screening_", 0) == 0;
+                             GetMinuitParams().GetName(i).rfind("screening_", 0) == 0 ||
+                             GetMinuitParams().GetName(i).rfind("density_", 0) == 0;
         if (!isShift && GetMinuitParams().Value(i) == 0.0 && values[ii] != 0.0 &&
             GetMinuitParams().Parameter(i).IsFixed()) GetMinuitParams().Release(i);
         if (!isShift && GetMinuitParams().Value(i) != 0.0 && values[ii] == 0.0 &&

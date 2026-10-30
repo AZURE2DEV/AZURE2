@@ -161,6 +161,18 @@ with many free shifts is dominated by their columns. This covers the
 (``kind == "shift_fn"``, :attr:`Parameter.fn_term` = j) as well;
 ``penalties()`` and ``objective()`` include their penalties.
 
+A fitted target density (``densityfit`` / ``densitygroup`` on a ``<targetInt>``
+line, :doc:`experimental_effects`) is a parameter of kind ``"density"``
+(``ParameterSet.densities``; :attr:`Parameter.effect` is the line holding it,
+``prior_nominal`` / ``prior_sigma`` its prior and ``density_max`` the largest
+density its grids span). Its column is finite-differenced the same way, and
+``penalties()["density"]`` is its prior, which ``objective()`` adds.
+``AzrModel.target_densities`` reads the blocks of a file and
+``AzrModel.set_target_density(effect, density=, vary=, sigma=, max=, group=)``
+writes them (``sigma`` in atoms/cm² or a string such as ``"2.3%"``). Like a
+normalization, the fitted density travels in the ``.sav``; ``save_fit`` leaves
+the line's value, the prior's centre, as it is.
+
 .. warning::
 
    These return the **data** χ² only. AZURE2's own fit objective additionally

@@ -395,6 +395,18 @@ ParamIndexMap BuildParamIndexMap(CNuc *compound, EData *data,
     }
   }
 
+  // --- Fitted target densities: one per densityfit line or density group (EData::FillMnParams). ---
+  // No analytic derivative: the target thickness enters through the depth window, finite differences.
+  if (data) {
+    for (int k = 1; k <= data->NumDensityParams(); k++) {
+      map.densityIndex_[k] = i;
+      ParamDesc d{ParamKind::Density, -1, -1, -1, -1, false};
+      d.density = k;
+      map.desc_.push_back(d);
+      i++;
+    }
+  }
+
   // --- Apply the fixed mask and build packed<->full lookups. ---
   const int nFull = (int)map.desc_.size();
   map.fullToPacked_.assign(nFull, -1);

@@ -62,6 +62,24 @@ class EData {
   void FillScreeningFromParams(const vector_r &);
   /// Sum of the screening priors ((U_e - nominal)/sigma)^2.
   double ScreeningPenalty() const;
+  /*!
+   * Fitted target densities (TargetEffect::HasDensityFit).  One parameter `density_<n>` (atoms/cm^2) per
+   * ungrouped `densityfit` line and per `densitygroup`, n = the effect number of the line (of the group's first
+   * line), after the screening parameters.  None without a densityfit block.
+   */
+  int NumDensityParams() const { return (int)densityEffects_.size(); }
+  /// Effect number of density parameter k (1-based): the line, or the first line of its group.
+  int GetDensityEffect(int k) const { return densityEffects_[k - 1]; }
+  int GetDensityParamOffset() const { return densityParamOffset_; }
+  /// The density parameter (1-based) effect \p n follows, 0 if its density is not fitted.
+  int DensityParamOfEffect(int n) const {
+    return (n >= 1 && n <= (int)densityParamOfEffect_.size()) ? densityParamOfEffect_[n - 1] : 0;
+  }
+  /// Set the fitted densities from a parameter vector and recompute the target thickness of every point of
+  /// their lines (called by FillEnergyShiftsFromParams, so every evaluation sees the vector's values).
+  void FillDensitiesFromParams(const vector_r &, const Config &);
+  /// Sum of the density priors ((N - N0)/sigma)^2.
+  double DensityPenalty() const;
   /// Read the target-effects input file and build the TargetEffect objects.
   int ReadTargetEffectsFile(const Config &, CNuc *);
   /// Is this a fit? AZURECalc clones the compound nucleus and data per thread only when it is.
@@ -218,6 +236,11 @@ class EData {
   int energyShiftFnParamOffset_ = 0;
   int screeningParamOffset_ = -1;  // -1 until FillMnParams has laid the vector out
   std::vector<int> screeningEffects_;  // effect numbers with a screening block, in order
+  int densityParamOffset_ = -1;        // -1 until FillMnParams has laid the vector out
+  std::vector<int> densityEffects_;    // effect number holding each density parameter, in order
+  std::vector<int> densityParamOfEffect_;  // per effect (0-based): its density parameter, 0 = none
+  /// Group the densityfit / densitygroup lines into parameters (ReadTargetEffectsFile); -1 on an error.
+  int SetUpDensityParams(const Config &);
   bool isFit_;
   bool isErrorAnalysis_;
   std::streampos ecReadPos_;  // File offset where component-segment EC integrals begin in the intEC file

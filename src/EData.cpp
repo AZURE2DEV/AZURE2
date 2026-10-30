@@ -999,6 +999,10 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
                   << std::endl;
         return -1;
       }
+      if (targetEffect.HasDensityFitError()) {
+        std::cout << "ERROR: <targetInt> line \"" << line << "\": " << targetEffect.GetDensityFitErrorText() << std::endl;
+        return -1;
+      }
       if (stm.rdstate() & (std::stringstream::failbit | std::stringstream::badbit)) return -1;
       if (targetEffect.IsActive()) {
         this->AddTargetEffect(targetEffect);
@@ -1022,6 +1026,7 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
     }
   }
   if (line != "</targetInt>") return -1;
+  if (this->SetUpDensityParams(configure) == -1) return -1;
   for (ESegmentIterator segment = GetSegments().begin(); segment < GetSegments().end(); segment++) {
     PPair *entrancePair = compound->GetPair(compound->GetPairNumFromKey(segment->GetEntranceKey()));
     PPair *exitPair = compound->GetPairFromKey(segment->GetExitKey());  // nullptr for total capture (-1)
@@ -1065,7 +1070,9 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
               // an infinitely thick target: the point integrates from its energy down to 1 keV
               targetThickness = std::max(point->GetCMEnergy() - 0.001, 0.0);
             } else {
-              targetThickness = cmConversion * targetEffect->TargetThickness(point->GetLabEnergy(), configure);
+              // the grid spans the target at its layout density (a fitted density's largest expected value)
+              targetThickness = cmConversion * targetEffect->TargetThickness(point->GetLabEnergy(), configure,
+                                                                             targetEffect->GetLayoutDensity());
               if (!(targetThickness > 0.0)) {
                 configure.outStream << "ERROR: target integration of segment #" << segment->GetSegmentKey()
                                     << " at E_lab = " << point->GetLabEnergy() << " MeV: the stopping cross section times the"
@@ -1075,7 +1082,10 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
                 return -1;
               }
             }
-            point->SetTargetThickness(targetThickness);
+            point->SetTargetLabEnergy(point->GetLabEnergy());
+            point->SetTargetThickness(targetEffect->HasDensityFit()
+                                          ? cmConversion * targetEffect->TargetThickness(point->GetLabEnergy(), configure)
+                                          : targetThickness);
           }
           // How far the grid reaches above and below the point for this effect (beam spread, target, straggling).
           targetEffect->GridExtent(point->GetCMEnergy(), targetThickness, configure, cmConversion, bohrZ1, bohrZ2, forwardDepth, backwardDepth);
@@ -1219,7 +1229,8 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
                 if (targetEffect->IsThickTarget()) {
                   targetThickness = std::max(point->GetCMEnergy() - 0.001, 0.0);
                 } else {
-                  targetThickness = compConversion * targetEffect->TargetThickness(point->GetLabEnergy(), configure);
+                  targetThickness = compConversion * targetEffect->TargetThickness(point->GetLabEnergy(), configure,
+                                                                                   targetEffect->GetLayoutDensity());
                   if (!(targetThickness > 0.0)) {
                     configure.outStream << "ERROR: target integration of a component of segment #" << segment->GetSegmentKey()
                                         << " at E_lab = " << point->GetLabEnergy() << " MeV: the stopping cross section times"
@@ -1227,7 +1238,10 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
                     return -1;
                   }
                 }
-                point->SetTargetThickness(targetThickness);
+                point->SetTargetLabEnergy(point->GetLabEnergy());
+                point->SetTargetThickness(targetEffect->HasDensityFit()
+                                              ? compConversion * targetEffect->TargetThickness(point->GetLabEnergy(), configure)
+                                              : targetThickness);
               }
               // How far the grid reaches above and below the point for this effect (beam spread, target, straggling).
               targetEffect->GridExtent(point->GetCMEnergy(), targetThickness, configure, compConversion, bohrZ1, bohrZ2, forwardDepth, backwardDepth);
@@ -2099,6 +2113,13 @@ void EData::WriteOutputFiles(const Config &configure, bool isFit, const BandData
       for (int k = 1; k <= this->NumScreeningParams(); k++)
         if (this->GetTargetEffect(this->GetScreeningEffect(k))->GetScreeningSigma() > 0.0) anyPrior = true;
       if (anyPrior) chiOut << " Total-Screening-Chi-Squared: " << this->ScreeningPenalty();
+    }
+    // Fitted target densities: their priors, and the densities themselves (which param.sav also holds).
+    if (this->NumDensityParams() > 0) {
+      bool anyPrior = false;
+      for (int k = 1; k <= this->NumDensityParams(); k++)
+        if (this->GetTargetEffect(this->GetDensityEffect(k))->GetDensitySigma() > 0.0) anyPrior = true;
+      if (anyPrior) chiOut << " Total-Density-Chi-Squared: " << this->DensityPenalty();
     }
     // Measured scattering lengths (<scatteringLengths>; table in scatteringLengths.out).
     if (scatteringLengthChi2_ != 0.0)
@@ -4075,6 +4096,108 @@ void EData::FillMnParams(ROOT::Minuit2::MnUserParameters &p) {
     p.SetLowerLimit(varname, 0.0);
     if (!te->IsScreeningVaried()) p.Fix(varname);
   }
+
+  // Fitted target densities (atoms/cm^2): one per densityfit line or density group, none otherwise.  Bounded by
+  // the density the sub-point grids span (TargetEffect::GetLayoutDensity) and a hundredth of the line's.
+  densityParamOffset_ = p.Params().size();
+  for (int k = 1; k <= this->NumDensityParams(); k++) {
+    const TargetEffect *te = this->GetTargetEffect(this->GetDensityEffect(k));
+    snprintf(varname, sizeof(varname), "density_%d", this->GetDensityEffect(k));
+    const double n = te->GetDensity();
+    p.Add(varname, n, (te->GetDensitySigma() > 0.0) ? 0.1 * te->GetDensitySigma() : 0.01 * n);
+    p.SetLimits(varname, 0.01 * te->GetDensityNominal(), te->GetLayoutDensity());
+    if (!te->IsDensityVaried()) p.Fix(varname);
+  }
+}
+
+int EData::SetUpDensityParams(const Config &configure) {
+  densityEffects_.clear();
+  densityParamOfEffect_.assign(this->NumTargetEffects(), 0);
+  std::map<std::string, int> groupLeader;  // label -> effect number of its first line
+  for (int n = 1; n <= this->NumTargetEffects(); n++) {
+    TargetEffect *te = this->GetTargetEffect(n);
+    const std::string &group = te->GetDensityGroup();
+    if (!group.empty()) {
+      auto it = groupLeader.find(group);
+      if (it != groupLeader.end()) {
+        const TargetEffect *lead = this->GetTargetEffect(it->second);
+        if (std::fabs(te->GetDensity() - lead->GetDensity()) > 1.0e-9 * lead->GetDensity())
+          configure.outStream << "Note: <targetInt> effect " << n << " (density group " << group << ") has density "
+                              << te->GetDensity() << "; the group's density is its first line's, " << lead->GetDensity()
+                              << " (effect " << it->second << ")." << std::endl;
+        if (te->HasDensityFit() && (te->IsDensityVaried() != lead->IsDensityVaried() ||
+                                    std::fabs(te->GetDensitySigma() - lead->GetDensitySigma()) > 1.0e-9 * lead->GetDensity()))
+          configure.outStream << "Note: <targetInt> effect " << n << " (density group " << group
+                              << "): its densityfit block is ignored, the group's is its first line's (effect "
+                              << it->second << ")." << std::endl;
+        te->JoinDensityGroup(*lead);
+        densityParamOfEffect_[n - 1] = densityParamOfEffect_[it->second - 1];
+        continue;
+      }
+      if (!te->HasDensityFit()) {
+        configure.outStream << "ERROR: density group " << group << ": its first <targetInt> line (effect " << n
+                            << ") has no 'densityfit vary sigma' block; the group's parameter and prior are read from it."
+                            << std::endl;
+        return -1;
+      }
+      groupLeader[group] = n;
+    }
+    if (!te->HasDensityFit()) continue;
+    densityEffects_.push_back(n);
+    densityParamOfEffect_[n - 1] = (int)densityEffects_.size();
+  }
+  return 0;
+}
+
+void EData::FillDensitiesFromParams(const vector_r &p, const Config &configure) {
+  if (densityEffects_.empty() || densityParamOffset_ < 0) return;
+  std::vector<char> changed(this->NumTargetEffects(), 0);
+  bool any = false;
+  for (int k = 1; k <= this->NumDensityParams(); k++) {
+    const int idx = densityParamOffset_ + k - 1;
+    if (idx < 0 || idx >= (int)p.size()) return;  // a vector without the density block
+    const TargetEffect *lead = this->GetTargetEffect(this->GetDensityEffect(k));
+    double v = p[idx];
+    // The sub-point grids span the layout density: beyond it the depth integral would run off the grid.
+    const double vMax = lead->GetLayoutDensity(), vMin = 0.01 * lead->GetDensityNominal();
+    if (v > vMax || !(v >= vMin)) {
+      static std::atomic<bool> warned{false};
+      if (!warned.exchange(true))
+        configure.outStream << "WARNING: density_" << this->GetDensityEffect(k) << " = " << v << " is outside ["
+                            << vMin << ", " << vMax << "], the range its sub-point grids span; the calculation uses the"
+                            << " nearest end.  Give the line a wider range with 'densityfit vary sigma max'."
+                            << " (Printed once.)" << std::endl;
+      v = (v > vMax) ? vMax : vMin;
+    }
+    for (int n = 1; n <= this->NumTargetEffects(); n++) {
+      if (densityParamOfEffect_[n - 1] != k) continue;
+      TargetEffect *te = this->GetTargetEffect(n);
+      if (te->GetDensity() == v) continue;
+      te->SetDensity(v);
+      changed[n - 1] = 1;
+      any = true;
+    }
+  }
+  if (!any) return;
+  auto update = [&](ESegment &seg) {
+    if (!seg.IsTargetEffect()) return;
+    const int n = seg.GetTargetEffectNum();
+    if (n < 1 || n > (int)changed.size() || !changed[n - 1]) return;
+    TargetEffect *te = this->GetTargetEffect(n);
+    for (EPointIterator point = seg.GetPoints().begin(); point < seg.GetPoints().end(); point++) {
+      if (point->GetTargetEffectNum() != n || !(point->GetTargetThickness() > 0.0)) continue;
+      point->SetTargetThickness(point->GetCMFactor() * te->TargetThickness(point->GetTargetLabEnergy(), configure));
+    }
+  };
+  for (ESegment &seg : segments_) update(seg);
+  for (ESegment &seg : componentSegments_) update(seg);
+}
+
+double EData::DensityPenalty() const {
+  double chi2 = 0.0;
+  for (int k = 1; k <= this->NumDensityParams(); k++)
+    chi2 += const_cast<EData *>(this)->GetTargetEffect(this->GetDensityEffect(k))->DensityPenalty();
+  return chi2;
 }
 
 void EData::ApplyScreening() {
@@ -4146,6 +4269,8 @@ void EData::FillNormsFromParams(const vector_r &p) {
 void EData::FillEnergyShiftsFromParams(const vector_r &p, EData *data, CNuc *theCNuc, const Config *configure) {
   // Screening first: sub-points rebuilt below (ReplaceSubPointGrids) inherit their parent's U_e.
   this->FillScreeningFromParams(p);
+  // Fitted target densities: the thickness of each point of their lines (the grids stay put).
+  if (configure) this->FillDensitiesFromParams(p, *configure);
   int i = GetEnergyShiftParamOffset();
   int j = GetEnergyShiftSqrtParamOffset();
   int k = 0;
@@ -4409,6 +4534,9 @@ EData *EData::Clone() const {
   dataCopy->energyShiftFnParamOffset_ = this->energyShiftFnParamOffset_;
   dataCopy->screeningParamOffset_ = this->screeningParamOffset_;
   dataCopy->screeningEffects_ = this->screeningEffects_;
+  dataCopy->densityParamOffset_ = this->densityParamOffset_;
+  dataCopy->densityEffects_ = this->densityEffects_;
+  dataCopy->densityParamOfEffect_ = this->densityParamOfEffect_;
   dataCopy->isFit_ = this->isFit_;
   dataCopy->isErrorAnalysis_ = this->isErrorAnalysis_;
   dataCopy->targetEffects_ = this->targetEffects_;

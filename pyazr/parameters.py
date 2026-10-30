@@ -18,7 +18,7 @@ from typing import Optional
 
 # Parameter kinds, indexed by the integer ``type`` code in the C++ record.
 _KINDS = {0: "energy", 1: "width", 2: "norm", 3: "shift", 4: "shift_sqrt", 5: "shift_fn",
-          6: "abundance", 7: "screening"}
+          6: "abundance", 7: "screening", 8: "density"}
 
 
 @dataclass(frozen=True)
@@ -68,7 +68,7 @@ class Parameter:
 
     index: int                      # position among *all* parameters
     name: str                       # raw AZURE2 parameter name
-    kind: str                       # 'energy' | 'width' | 'norm' | 'shift' | 'shift_sqrt' | 'shift_fn' | 'abundance' | 'screening'
+    kind: str                       # 'energy' | 'width' | 'norm' | 'shift' | 'shift_sqrt' | 'shift_fn' | 'abundance' | 'screening' | 'density'
     fixed: bool                     # held fixed during the fit?
     value: float                    # current (physical) value
     free_index: Optional[int]       # position among the non-fixed parameters
@@ -110,6 +110,10 @@ class Parameter:
     # width is ``prior_sigma`` (0 = none).
     effect: Optional[int] = None
     prior_nominal: Optional[float] = None
+    # Fitted target density (atoms/cm^2) of a <targetInt> line with a ``densityfit`` block, or of a
+    # ``densitygroup`` (``effect`` = its first line): ``prior_nominal`` / ``prior_sigma`` as above, and the largest
+    # density its sub-point grids span (beyond it the engine uses this value and warns).
+    density_max: Optional[float] = None
 
     @property
     def nucleus(self):
@@ -168,6 +172,16 @@ class Parameter:
                 prior_sigma=float(wigner_limit),
             )
 
+        if int(round(type_code)) == 8:
+            # a fitted target density (atoms/cm^2): the effect number in the channel field, the prior centre in
+            # the level-energy field, its sigma in the Wigner-limit field and the grids' largest density in S
+            return cls(
+                index=index, name=name, kind="density",
+                fixed=bool(round(fixed)), value=float(value), free_index=free_index,
+                effect=int(round(channel)), prior_nominal=float(level_energy),
+                prior_sigma=float(wigner_limit), density_max=float(S),
+            )
+
         return cls(
             index=index,
             name=name,
@@ -207,10 +221,12 @@ class Parameter:
             bits.append(f"segment={self.segment_key}")
         if self.kind == "shift_fn":
             bits.append(f"a{self.fn_term}")
-        if self.kind == "screening":
+        if self.kind in ("screening", "density"):
             bits.append(f"effect={self.effect}")
             if self.prior_sigma:
                 bits.append(f"prior={self.prior_nominal:.6g}+-{self.prior_sigma:.6g}")
+        if self.kind == "density":
+            bits.append(f"max={self.density_max:.6g}")
         return "Parameter(" + ", ".join(bits) + ")"
 
 
@@ -455,6 +471,12 @@ class ParameterSet(list):
         """The electron-screening potentials U_e (eV), one per <targetInt> line with a ``screening``
         block (none otherwise)."""
         return ParameterSet(p for p in self if p.kind == "screening")
+
+    @property
+    def densities(self):
+        """The fitted target densities (atoms/cm^2), one per <targetInt> line with a ``densityfit`` block or
+        per ``densitygroup`` (none otherwise)."""
+        return ParameterSet(p for p in self if p.kind == "density")
 
     @property
     def sqrt_shifts(self):

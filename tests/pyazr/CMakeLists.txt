@@ -88,6 +88,13 @@ add_test(NAME pyazr_shift_first_call
                  ${CMAKE_CURRENT_SOURCE_DIR}/shift_first_call_test.py)
 set_tests_properties(pyazr_shift_first_call PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
+# Fitted target density (densityfit / densitygroup on a <targetInt> line): the depth window and no factor of N
+# against the bare cross section, groups, penalties, the Jacobian column, shift + density, refused lines.
+add_test(NAME pyazr_target_density
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/target_density_test.py)
+set_tests_properties(pyazr_target_density PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
 # Energy-shift functions (shiftfn): read, written, and (with the engine) listed,
 # penalised and differenced exactly as AZURE2 does.
 add_test(NAME pyazr_shift_fn

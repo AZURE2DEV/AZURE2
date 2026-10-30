@@ -263,6 +263,10 @@ class EPoint {
   double GetStoppingPower() const;
   /// Beam energy loss across the target at this point.
   double GetTargetThickness() const;
+  /// The lab energy the target thickness was computed at (EData::ReadTargetEffectsFile, unshifted), so a
+  /// fitted density recomputes it at the same energy (EData::FillDensitiesFromParams).
+  double GetTargetLabEnergy() const { return targetLabEnergy_; }
+  void SetTargetLabEnergy(double e) { targetLabEnergy_ = e; }
   /// Angular-distribution coefficient of the given order.
   double GetAngularDist(int) const;
   /// Jacobian converting the angle from lab to centre of mass.
@@ -486,6 +490,7 @@ class EPoint {
   double phase_s_value_ = -1.0;
   double stoppingPower_;
   double targetThickness_;
+  double targetLabEnergy_ = 0.0;
   double angleKinFactor_;
   mutable double labAngleMax_ = 180.;  ///< kinematic maximum lab angle of the last failed conversion
   mutable std::string labAngleWhy_;    ///< the reason of the last failed conversion (set by the const relativistic map too)

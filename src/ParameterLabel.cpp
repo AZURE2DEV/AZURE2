@@ -149,6 +149,7 @@ int NumParameters(CNuc *compound, EData *data) {
     for (size_t s = 0; s < segments.size(); s++)  // shift-function parameters of the segments declaring one
       if (segments[s].OwnsShiftFn() && segments[s].HasShiftFn()) n += segments[s].NumShiftFnParams();
     n += data->NumScreeningParams();  // electron-screening potentials
+    n += data->NumDensityParams();    // fitted target densities
   }
   return n;
 }
@@ -236,6 +237,16 @@ std::string Parameter(CNuc *compound, EData *data, int minuitIndex) {
     if (index == minuitIndex) {
       std::ostringstream out;
       out << "electron-screening potential U_e (eV) of experimental effect " << data->GetScreeningEffect(k);
+      return out.str();
+    }
+    index++;
+  }
+  for (int k = 1; k <= data->NumDensityParams(); k++) {
+    if (index == minuitIndex) {
+      std::ostringstream out;
+      const TargetEffect *te = data->GetTargetEffect(data->GetDensityEffect(k));
+      out << "target density (atoms/cm^2) of experimental effect " << data->GetDensityEffect(k);
+      if (!te->GetDensityGroup().empty()) out << " (density group " << te->GetDensityGroup() << ")";
       return out.str();
     }
     index++;

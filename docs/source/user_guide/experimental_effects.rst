@@ -568,6 +568,53 @@ With one screening line per target and the normalizations free it finds
 :math:`U_e` = 323 ± 98, 1211 ± 65 and 3433 ± 231 eV, against the published
 320 ± 110, 1320 ± 70 and 3760 ± 260 eV.
 
+Fitted Target Density
+^^^^^^^^^^^^^^^^^^^^^
+
+The areal density :math:`N` of a thin target (target integration with a density
+above 0) can be a fit parameter, so that a resonance profile measured with the
+target constrains its thickness. Add to the ``<targetInt>`` line
+
+.. code-block:: text
+
+   densityfit <vary> <sigma> [<max>]
+   densitygroup <label>
+
+``densityfit`` makes :math:`N` the parameter ``density_<n>`` (atoms/cm²; :math:`n`
+the line's place among the *active* experimental-effect lines), free when
+``vary`` is 1. ``sigma`` > 0 adds the prior :math:`((N - N_0)/\sigma)^2` about the
+line's density :math:`N_0`, reported as ``Total-Density-Chi-Squared`` in
+``chiSquared.out``; it is given in atoms/cm² or as a percentage of :math:`N_0`
+(``2.3%``). ``densitygroup`` shares one parameter between lines: the same target
+seen by several detectors is one line per detector, and every line of a group
+follows the parameter of its first line, which must carry the ``densityfit``
+block. A member's own density is replaced by the group's (the run says so).
+
+:math:`N` sets the energy loss :math:`\Delta E` through
+:math:`\int_{E-\Delta E}^{E} dE'/\epsilon(E') = N` and nothing else: the window of
+the depth integral and the straggling with depth move, but the yield is that
+integral divided by the same :math:`N`, so the result is the depth average of the
+(beam-spread, straggled) cross section and carries no factor of :math:`N`.
+
+The sub-point grids are laid out once, for the largest density the fit is
+expected to reach, and the depth integral is cut at :math:`E_0 - \Delta E(N)`, so
+the yield moves smoothly with :math:`N` and no grid is rebuilt during a fit. That
+largest density is ``max`` when given, otherwise :math:`N_0 + 3\sigma` (at least
+:math:`1.1\,N_0`), or :math:`1.5\,N_0` without a prior. MIGRAD has it as the
+parameter's upper limit; a density asked for beyond it (pyazr, rmfit) is computed
+at ``max``, with a warning printed once, so give a larger ``max`` if a fit
+presses against it. Every fitter (MIGRAD, ``--use-gradient``, ``--use-lm``,
+``--use-gsl-lm``) moves the density, and MCMC samples it with the prior above;
+its derivative is taken by finite differences. ``densityfit`` is refused on a
+line without target integration, on a thick target (density 0) and beside a
+beam profile or a UDR kernel.
+
+The fitted :math:`N` is written to ``param.sav`` and read back from it, like a
+normalization; the density on the line stays the prior's centre. The GUI keeps
+the two blocks when it reads and writes a project but does not edit them yet:
+``pyazr.AzrModel.set_target_density`` writes them, and
+``AzrModel.target_densities`` lists them.
+
 Straggling
 ^^^^^^^^^^
 

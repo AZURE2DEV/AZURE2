@@ -305,6 +305,29 @@ int main(int argc, char** argv) {
     ok("no adiabatic limit for a neutron", AdiabaticScreeningEv(0, 6) < 0.0);
   }
 
+  // Fitted target density: the densityfit / densitygroup blocks are kept as written (the tab does not edit them),
+  // beside straggling and screening, and a line without them gains none.
+  {
+    QString denLine =
+        "1 \"18\" 50 1 0.0009 1 4.09554e+17 \"a1*x+a0\" 2 6.1e-20 1.2e-19 0 0 0 \"\" 0 1 0.7489 20 50 "
+        "screening 0 0 0 densityfit 1 2.3% 4.5e17 densitygroup t3b\n</targetInt>\n";
+    bool readD = false;
+    QString outD = roundTrip(tab, denLine, readD);
+    ok("read a line with densityfit and densitygroup", readD);
+    QList<TargetIntData> dl = tab.getTargetIntModel()->getLines();
+    ok("density blocks kept", dl.size() == 1 && dl.at(0).densityBlock == "densityfit 1 2.3% 4.5e17 densitygroup t3b",
+       dl.isEmpty() ? QString() : dl.at(0).densityBlock);
+    if (dl.size() == 1)
+      ok("straggling and density still read beside them",
+         dl.at(0).isStraggling && dl.at(0).stragglingCoefficient == 0.7489 && dl.at(0).density == 4.09554e+17);
+    ok("written back", outD.contains(" densityfit 1 2.3% 4.5e17 densitygroup t3b"), outD);
+    bool readD2 = false;
+    QString outD2 = roundTrip(tab, outD + "</targetInt>\n", readD2);
+    ok("second round trip identical", readD2 && outD2 == outD, outD2);
+    QString noDen = roundTrip(tab, legacy, readD);
+    ok("a line without them gains no block", !noDen.contains("density"), noDen);
+  }
+
   std::cout << (fails ? "FAILED" : "PASSED") << std::endl;
   return fails ? 1 : 0;
 }

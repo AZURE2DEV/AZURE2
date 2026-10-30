@@ -38,7 +38,8 @@ enum class ParamKind {
   EnergyShiftSqrt,  ///< per-segment sqrt(E) energy-shift coefficient
   EnergyShiftFn,    ///< parameter aj of a segment's shift function ("shiftfn")
   Abundance,        ///< isotopic abundance of a compound nucleus (projects with an <abundances> block)
-  Screening         ///< electron-screening potential U_e (eV) of a <targetInt> line with a screening block
+  Screening,        ///< electron-screening potential U_e (eV) of a <targetInt> line with a screening block
+  Density           ///< fitted areal density (atoms/cm^2) of a <targetInt> line or density group (densityfit)
 };
 
 /// Description of one entry in the full (unfiltered) flat parameter vector.
@@ -53,6 +54,7 @@ struct ParamDesc {
   int sample = -1;   ///< 1-based sample of the <abundances> block (Abundance only, else -1)
   int fnTerm = -1;  ///< j of a shift-function parameter aj (EnergyShiftFn only, else -1)
   int screening = -1;  ///< 1-based screening parameter (EData::GetScreeningEffect), Screening only, else -1
+  int density = -1;    ///< 1-based density parameter (EData::GetDensityEffect), Density only, else -1
 };
 
 /*!
@@ -94,6 +96,11 @@ class ParamIndexMap {
     auto it = screeningIndex_.find(k);
     return (it == screeningIndex_.end()) ? -1 : it->second;
   }
+  /// Full index of the 1-based density parameter k, or -1.
+  int DensityIndex(int k) const {
+    auto it = densityIndex_.find(k);
+    return (it == densityIndex_.end()) ? -1 : it->second;
+  }
 
   /// Number of entries in the full (unfiltered) parameter vector.
   int NumFull() const { return (int)desc_.size(); }
@@ -131,6 +138,7 @@ class ParamIndexMap {
   std::map<int, int> abundanceIndex_;                    ///< abundance ordinal -> full idx
   std::map<std::pair<int, int>, int> fnShiftIndex_;      ///< (segment, j) -> full idx
   std::map<int, int> screeningIndex_;                    ///< screening parameter k -> full idx
+  std::map<int, int> densityIndex_;                      ///< density parameter k -> full idx
   std::vector<int> fullToPacked_;
   std::vector<int> packedToFull_;
   int numPacked_ = 0;

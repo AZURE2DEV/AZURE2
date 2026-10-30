@@ -1221,9 +1221,11 @@ vector_r AZUREAPI::CalculateResidualJacobianRWA(const vector_r &params) const {
     int nc = 0;
     for (int f = 0; f < pmap.NumFull(); f++) {
       if (fixed_[f]) continue;
+      // (a fitted target density likewise moves the depth window of every point of its lines)
       if (pmap.Desc(f).kind != ParamKind::EnergyShift &&
           pmap.Desc(f).kind != ParamKind::EnergyShiftSqrt &&
-          pmap.Desc(f).kind != ParamKind::EnergyShiftFn) continue;
+          pmap.Desc(f).kind != ParamKind::EnergyShiftFn &&
+          pmap.Desc(f).kind != ParamKind::Density) continue;
       const int packed = pmap.FullToPacked(f);
       if (packed < 0 || packed >= (int)params.size()) continue;
 
@@ -1497,6 +1499,15 @@ vector_r AZUREAPI::GetParameterInfo() const {
     const TargetEffect *te = data()->GetTargetEffect(data()->GetScreeningEffect(k));
     push(7, -1, -1, 0, -1, te->GetScreeningNominal(), data()->GetScreeningEffect(k), -1, -1, -1, -1, -1,
          te->GetScreeningSigma());
+  }
+
+  // Fitted target densities (atoms/cm^2), one per densityfit line or density group: type 8, the effect number
+  // (the group's first line) in field 6, the prior centre in field 5, its sigma in field 14 (0 = no prior) and
+  // the largest density the sub-point grids span in field 8 (the S field).
+  for (int k = 1; k <= data()->NumDensityParams(); ++k) {
+    const TargetEffect *te = data()->GetTargetEffect(data()->GetDensityEffect(k));
+    push(8, -1, -1, 0, -1, te->GetDensityNominal(), data()->GetDensityEffect(k), -1, te->GetLayoutDensity(), -1, -1, -1,
+         te->GetDensitySigma());
   }
 
   return info;

@@ -2198,8 +2198,11 @@ V EPoint::IntegrateTargetEffectImpl(const Config &configure, Read rd) {
       // The grid was built to span the target (EData::GridExtent), so it is integrated whole, as it
       // always was: clipping it to [E0 - T, E0] here would drop a point whose segment energy shift
       // moved E0 away from the grid's own centre (13N, segment 1, lowest point).
+      // A fitted density (TargetEffect::HasDensityFit) lays the grid out for the largest density the fit may
+      // reach, so the depth integral is cut at the back of the target, E0 - T(N): smooth in N, grid unchanged.
       double unused = 0.0;
-      GridQuadrature<V>(this, rd, eLow, eHigh, true, one, one, outer, unused);
+      const double lo = targetEffect->HasDensityFit() ? std::max(eLow, back) : eLow;
+      GridQuadrature<V>(this, rd, lo, eHigh, true, one, one, outer, unused);
     } else {
       const double x1 = -1.0 / sqrt(3.0), x2 = 1.0 / sqrt(3.0);
       for (int i = 1; i < numPoints; i++) {

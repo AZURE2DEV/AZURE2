@@ -524,6 +524,15 @@ so points with different screening may share a calculation.  In the adjoint
 bilinear-basis rows of ``GroupRows``, which do not back-propagate the
 member, add it to the member's row directly.
 
+A fitted target density (``densityfit`` / ``densitygroup``, ``EData::SetUpDensityParams``)
+is not in the adjoint: ``EData::FillDensitiesFromParams`` sets the density of the
+group's lines and recomputes each point's target thickness at the lab energy it
+was laid out at (``EPoint::GetTargetLabEnergy``), and the gradient, the Jacobian
+column and the LM / GSL rows difference it like an energy shift.  The sub-point
+grids are laid out for ``TargetEffect::GetLayoutDensity`` and
+``EPoint::IntegrateTargetEffect`` cuts the depth integral at :math:`E_0 - T(N)`,
+so no grid moves with the parameter.
+
 The cotangent of the level matrix is a sum of rank-one terms,
 :math:`\bar M = -\sum_t \beta_t\, \overline{A g_c}\,\overline{A g_{c'}}^T`,
 formed from the solves :math:`A g_c` in :math:`O(n^2)` per term instead of the

@@ -59,6 +59,9 @@ struct TargetIntData {
   double screeningUe = 0.;     // eV
   bool screeningVary = false;
   double screeningSigma = 0.;  // eV
+  // A fitted target density (`densityfit vary sigma [max]`, `densitygroup <label>`), kept as the line's text
+  // and written back unchanged: the tab does not edit it yet (the engine and pyazr do).
+  QString densityBlock;
 };
 
 /*!
@@ -78,6 +81,10 @@ class TargetIntModel : public QAbstractTableModel {
   bool removeRows(int position, int rows, const QModelIndex &index = QModelIndex());
   Qt::ItemFlags flags(const QModelIndex &index) const;
   QList<TargetIntData> getLines() const { return targetIntList; };
+  /// The densityfit / densitygroup text of a row (no table column: it is carried, not edited, by the tab).
+  void setDensityBlock(int row, const QString &block) {
+    if (row >= 0 && row < targetIntList.size()) targetIntList[row].densityBlock = block;
+  }
 
  private:
   QList<TargetIntData> targetIntList;

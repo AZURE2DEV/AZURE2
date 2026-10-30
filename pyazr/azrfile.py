@@ -1994,6 +1994,100 @@ class AzrModel:
         self._suffix = "\n".join(lines)
         return self
 
+    _DENSITYFIT_RE = re.compile(r"\bdensityfit\s+(\S+)\s+(\S+)(?:\s+([0-9.][0-9.eE+-]*))?")
+    _DENSITYGROUP_RE = re.compile(r"\bdensitygroup\s+(\S+)")
+
+    @staticmethod
+    def _density_sigma(token, density):
+        """A densityfit sigma token, "2.3%" or atoms/cm^2, in atoms/cm^2."""
+        token = str(token)
+        if token.endswith("%"):
+            return float(token[:-1]) / 100.0 * density
+        return float(token)
+
+    @property
+    def target_densities(self):
+        """Fitted target densities of the <targetInt> lines (``densityfit`` / ``densitygroup`` blocks), as
+        AZURE2 reads them: ``{effect: dict}`` for every ACTIVE line that has either block, keyed by its effect
+        number (place among the active lines, as in ``density_<effect>``).  Each dict holds ``density`` (the
+        line's areal density, atoms/cm^2), ``vary``, ``sigma`` (prior width in atoms/cm^2, a percentage already
+        converted; 0 = none), ``max`` (the largest density the sub-point grids span: the optional fourth field,
+        else N0 + 3 sigma but at least 1.1 N0, or 1.5 N0 without a prior), ``group`` (label or ``None``) and
+        ``leader`` (the effect holding the parameter: itself, or its group's first line, whose density, prior
+        and maximum the group shares)."""
+        _, tl = self._target_int_lines()
+        out, n, leader_of = {}, 0, {}
+        for _, line in tl:
+            tok = line.split()
+            if tok[0] != "1":
+                continue
+            n += 1
+            fit = self._DENSITYFIT_RE.search(line)
+            grp = self._DENSITYGROUP_RE.search(line)
+            if not fit and not grp:
+                continue
+            density = float(tok[6])
+            group = grp.group(1) if grp else None
+            if group is not None and group in leader_of:
+                lead = out[leader_of[group]]
+                out[n] = dict(lead, density=lead["density"], group=group, leader=leader_of[group])
+                continue
+            if not fit:
+                raise ValueError(f"<targetInt> effect {n}: density group {group} starts without a densityfit block")
+            sigma = self._density_sigma(fit.group(2), density)
+            dmax = (float(fit.group(3)) if fit.group(3) else
+                    max(density + 3.0 * sigma, 1.1 * density) if sigma > 0 else 1.5 * density)
+            out[n] = dict(density=density, vary=int(float(fit.group(1))) != 0, sigma=sigma, max=dmax,
+                          group=group, leader=n)
+            if group is not None:
+                leader_of[group] = n
+        return out
+
+    def set_target_density(self, effect, density=None, vary=None, sigma=None, max=None, group=None):
+        """Set the areal density of active <targetInt> line ``effect`` (1-based among the active lines) and its
+        ``densityfit`` block: ``vary``, ``sigma`` (atoms/cm^2, or a string such as ``"2.3%"`` of the line's
+        density), ``max`` (the largest density the grids span; ``None`` keeps the line's, 0 removes it) and
+        ``group`` (a ``densitygroup`` label; ``""`` removes it).  A line without a densityfit block gets one
+        (fixed, no prior) when ``vary``, ``sigma`` or ``max`` is given.  Returns ``self``."""
+        lines, tl = self._target_int_lines()
+        active = [(i, line) for i, line in tl if line.split()[0] == "1"]
+        if not 1 <= effect <= len(active):
+            raise ValueError(f"no active <targetInt> line {effect} ({len(active)} active)")
+        i, line = active[effect - 1]
+        tok = line.split()
+        if tok[5] != "1":
+            raise ValueError(f"<targetInt> effect {effect} has no target integration")
+        if density is not None:
+            if not float(density) > 0:
+                raise ValueError("a fitted density must be > 0 (0 is the thick-target flag)")
+            # the positional density is the 7th field; rewrite it in place, keeping the line's spacing
+            parts = re.split(r"(\s+)", line)
+            words = [k for k, w in enumerate(parts) if w and not w.isspace()]
+            parts[words[6]] = _fmt(float(density))
+            line = "".join(parts)
+        fit = self._DENSITYFIT_RE.search(line)
+        if fit or vary is not None or sigma is not None or max is not None:
+            old_vary = int(float(fit.group(1))) != 0 if fit else False
+            old_sigma = fit.group(2) if fit else "0"
+            old_max = fit.group(3) if fit else None
+            v = old_vary if vary is None else bool(vary)
+            s = old_sigma if sigma is None else (sigma if isinstance(sigma, str) else _fmt(float(sigma)))
+            if (s.endswith("%") and float(s[:-1]) < 0) or (not s.endswith("%") and float(s) < 0):
+                raise ValueError("the density prior sigma must be >= 0")
+            mx = old_max if max is None else (None if not max else _fmt(float(max)))
+            block = f"densityfit {1 if v else 0} {s}" + (f" {mx}" if mx else "")
+            line = self._DENSITYFIT_RE.sub(block, line) if fit else line.rstrip() + "  " + block
+        if group is not None:
+            grp = self._DENSITYGROUP_RE.search(line)
+            if group == "":
+                line = self._DENSITYGROUP_RE.sub("", line).rstrip() if grp else line
+            else:
+                block = f"densitygroup {group}"
+                line = self._DENSITYGROUP_RE.sub(block, line) if grp else line.rstrip() + "  " + block
+        lines[i] = line
+        self._suffix = "\n".join(lines)
+        return self
+
     # -- rendering ------------------------------------------------------------
 
     def __str__(self):

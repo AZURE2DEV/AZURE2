@@ -159,6 +159,12 @@ TargetEffect::TargetEffect(std::istream &stream, const Config &configure) {
     //   beamprofile N {xi omega alpha weight}xN tpcSigma nCut dbFlag
     //   udr "<file>" flightPath_m burstFWHM_ns channel_ns centred
     //   screening Ue_eV vary sigma_eV
+    //   densityfit vary sigma [max]    (sigma in atoms/cm^2, or "<p>%" of the line's density; max: the largest
+    //                                   density the sub-point grids must span, atoms/cm^2)
+    //   densitygroup <label>
+    std::string densitySigmaToken;
+    bool densityFitRead = false;
+    double densityMaxRead = 0.0;
     while (stream.good()) {
       stream >> std::ws;
       if (!(stream.good() && std::isalpha(stream.peek()))) break;
@@ -190,6 +196,33 @@ TargetEffect::TargetEffect(std::istream &stream, const Config &configure) {
           hasScreening_ = true;
           screeningVary_ = (vary != 0);
           screeningUe_ = screeningNominal_;
+        }
+      } else if (keyword == "densityfit") {
+        int vary = 0;
+        stream >> vary >> densitySigmaToken;
+        if (stream.fail() || densitySigmaToken.empty()) {
+          densityFitError_ = true;
+          densityFitErrorText_ = "a densityfit block is 'densityfit vary sigma' (sigma in atoms/cm^2 or a percentage, \"2.3%\")";
+          stream.setstate(std::ios_base::failbit);
+        } else {
+          densityFitRead = true;
+          densityVary_ = (vary != 0);
+          // optional: the largest density the grids must span (atoms/cm^2)
+          if (stream.good()) stream >> std::ws;
+          if (stream.good() && (std::isdigit(stream.peek()) || stream.peek() == '.')) {
+            stream >> densityMaxRead;
+            if (stream.fail()) {
+              densityFitError_ = true;
+              densityFitErrorText_ = "the optional densityfit maximum is not a number";
+            }
+          }
+        }
+      } else if (keyword == "densitygroup") {
+        stream >> densityGroup_;
+        if (stream.fail() || densityGroup_.empty()) {
+          densityFitError_ = true;
+          densityFitErrorText_ = "a densitygroup block is 'densitygroup <label>'";
+          stream.setstate(std::ios_base::failbit);
         }
       } else if (keyword == "udr") {
         stream >> std::ws;
@@ -247,6 +280,38 @@ TargetEffect::TargetEffect(std::istream &stream, const Config &configure) {
     density_ = density;
     // density 0 (or negative) with target integration = an infinitely thick target (IsThickTarget)
     isThickTarget_ = isTargetIntegration_ && !(density_ > 0.0);
+    if (densityFitRead || (!densityGroup_.empty() && !densityFitError_)) {
+      if (!isTargetIntegration_ || isThickTarget_) {
+        densityFitError_ = true;
+        densityFitErrorText_ = "densityfit / densitygroup need target integration with a density > 0 (a thin target)";
+      } else if (isBeamProfile_ || isUdr_) {
+        densityFitError_ = true;
+        densityFitErrorText_ = "densityfit / densitygroup cannot be combined with a beam profile or a UDR kernel";
+      }
+    }
+    if (densityFitRead && !densityFitError_) {
+      const bool percent = densitySigmaToken.back() == '%';
+      const std::string number = percent ? densitySigmaToken.substr(0, densitySigmaToken.size() - 1) : densitySigmaToken;
+      char *end = nullptr;
+      const double s = std::strtod(number.c_str(), &end);
+      if (number.empty() || end == number.c_str() || *end != '\0' || !(s >= 0.0)) {
+        densityFitError_ = true;
+        densityFitErrorText_ = "the densityfit sigma \"" + densitySigmaToken + "\" is not a non-negative number or percentage";
+      } else {
+        hasDensityFit_ = true;
+        densityNominal_ = density_;
+        densitySigma_ = percent ? s / 100.0 * density_ : s;
+        // the grids span the largest density the fit is expected to reach (see HasDensityFit)
+        layoutDensity_ = (densitySigma_ > 0.0) ? std::max(density_ + 3.0 * densitySigma_, 1.1 * density_) : 1.5 * density_;
+        if (densityMaxRead > 0.0) {
+          if (!(densityMaxRead > density_)) {
+            densityFitError_ = true;
+            densityFitErrorText_ = "the densityfit maximum must be above the line's density";
+          }
+          layoutDensity_ = densityMaxRead;
+        }
+      }
+    }
     if (isTargetIntegration_) {
       stoppingPowerEq_.Initialize(stoppingPowerEq, numParameters, configure);
       for (int i = 0; i < numParameters; i++) {
@@ -621,8 +686,9 @@ void TargetEffect::GridExtent(double eCM, double thicknessCM, const Config &conf
     backward = thicknessCM + (this->IsGaussian() ? 5.0 * beam : 0.0);
     forward = this->IsGaussian() ? 5.0 * beam : 0.0;
     if (this->IsBohrStraggling()) {
-      // the whole target: its areal density, or for a thick target the thickness over the surface stopping power
-      double areal = density_;
+      // the whole target: its areal density (the largest a fitted density is laid out for), or for a thick
+      // target the thickness over the surface stopping power
+      double areal = this->GetLayoutDensity();
       if (isThickTarget_) {
         const double eps = cmFactor * stoppingPowerEq_.Evaluate(configure, eCM / cmFactor);
         areal = (eps > 0.0) ? thicknessCM / eps : 0.0;
@@ -717,7 +783,10 @@ double TargetEffect::GetDensity() const {
  */
 
 double TargetEffect::TargetThickness(double energy, const Config &configure) {
-  const double density = this->GetDensity();
+  return this->TargetThickness(energy, configure, this->GetDensity());
+}
+
+double TargetEffect::TargetThickness(double energy, const Config &configure, double density) {
   const double eps0 = stoppingPowerEq_.Evaluate(configure, energy);
   if (!(eps0 > 0.0) || !(density > 0.0) || !(energy > 0.0)) return eps0 * density;
   auto invEps = [&](double e) {
@@ -742,6 +811,20 @@ double TargetEffect::TargetThickness(double energy, const Config &configure) {
     if (std::fabs(step) <= 1.0e-7 * delta) break;
   }
   return delta;
+}
+
+/*!
+ * Makes this line a member of a density group whose first line is \p leader: its density, prior and layout
+ * density become the leader's (the group has one parameter, held by the leader).
+ */
+
+void TargetEffect::JoinDensityGroup(const TargetEffect &leader) {
+  hasDensityFit_ = true;
+  densityVary_ = leader.densityVary_;
+  density_ = leader.density_;
+  densityNominal_ = leader.densityNominal_;
+  densitySigma_ = leader.densitySigma_;
+  layoutDensity_ = leader.layoutDensity_;
 }
 
 /*!

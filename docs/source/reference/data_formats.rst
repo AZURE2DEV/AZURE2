@@ -344,7 +344,13 @@ prior about the value given (0 = none); see
 refuses a line with this keyword, and an older GUI drops it on save. ``sigmalab`` marks an energy-dependent beam-spread
 expression as laboratory in, laboratory out (see
 :doc:`../user_guide/experimental_effects`); an expression without it is read in
-the pre-October-2026 centre-of-mass convention.
+the pre-October-2026 centre-of-mass convention. ``densityfit vary sigma [max]``
+and ``densitygroup <label>`` make a thin target's density a fit parameter
+(``density_<n>``) with an optional prior (atoms/cm², or ``2.3%`` of the line's
+density), the largest density its sub-point grids span, and a label shared by
+lines that see one target; see :doc:`../user_guide/experimental_effects`. Engines
+older than the feature refuse a line with these keywords; GUIs older than it drop
+them on save.
 
 .. tip::
 
