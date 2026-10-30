@@ -2,7 +2,8 @@ from .azure2 import azure2, ScatteringLength
 from .parameters import (Pair, PairSet, Parameter, ParameterSet, LevelKey,
                          NuclearPotential)
 from .scheme import LevelScheme, SchemeLevel, SchemeChannel
-from .azrfile import AzrModel, AzrLevel, AzrChannel, ScatteringLengthLine
+from .azrfile import AzrModel, AzrLevel, AzrChannel, ScatteringLengthLine, PairMassCheck
+from . import masses
 from .datasets import (Segment, SegmentSet, TestSegment, TestSegmentSet,
                        fitted_norms)
 # nds also defines a Level, but transform.Level owns the name here; reach the
@@ -29,7 +30,7 @@ __all__ = ["azure2", "ScatteringLength", "ScatteringLengthLine",
            "Pair", "PairSet", "Parameter", "ParameterSet", "LevelKey",
            "NuclearPotential",
            "LevelScheme", "SchemeLevel", "SchemeChannel",
-           "AzrModel", "AzrLevel", "AzrChannel",
+           "AzrModel", "AzrLevel", "AzrChannel", "PairMassCheck", "masses",
            "Segment", "SegmentSet", "TestSegment", "TestSegmentSet",
            "fitted_norms",
            "ExforData", "ExforDataset", "GroundState", "Gamma",

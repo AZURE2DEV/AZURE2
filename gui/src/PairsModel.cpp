@@ -1,6 +1,9 @@
 #include "PairsModel.h"
 #include "ElementMap.h"
+#include "MassTable.h"
 #include <math.h>
+#include <QBrush>
+#include <QColor>
 #include <QRegularExpression>
 
 PairsModel::PairsModel(QObject *parent) :
@@ -142,6 +145,19 @@ QVariant PairsModel::data(const QModelIndex &index, int role) const {
       return pair.ecMultMask;
   } else if (role == Qt::TextAlignmentRole)
     return Qt::AlignCenter;
+  else if ((role == Qt::ToolTipRole || role == Qt::ForegroundRole) && index.column() == 11) {
+    // the separation energy against the mass table: a tooltip always, a warning colour beyond the engine's 1 keV
+    const PairMassCheck c = MassTable::instance().check(pairsList.at(index.row()));
+    if (!c.hasS) return QVariant();
+    const bool off = fabs(c.dSkeV) > MassTable::kToleranceKeV;
+    if (role == Qt::ForegroundRole) return off ? QVariant(QBrush(QColor(214, 80, 0))) : QVariant();
+    if (off)
+      return tr("%1 gives S = %2 MeV for %3 + %4: this pair's S differs by %5 keV.  \"Masses from %1...\" below the "
+                "table fills masses and separation energies from it.")
+          .arg(MassTable::version()).arg(c.sTable, 0, 'f', 6).arg(c.light->label()).arg(c.heavy->label())
+          .arg(c.dSkeV, 0, 'f', 2);
+    return tr("Consistent with %1 (S = %2 MeV, %3 keV).").arg(MassTable::version()).arg(c.sTable, 0, 'f', 6).arg(c.dSkeV, 0, 'f', 2);
+  }
 
   return QVariant();
 }

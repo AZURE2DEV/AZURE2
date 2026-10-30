@@ -257,3 +257,9 @@ add_test(NAME pyazr_coulomb_memo_transform
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/coulomb_memo_transform_test.py)
 set_tests_properties(pyazr_coulomb_memo_transform PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
+# pyazr.masses reads the AME2020 table (pyazr/data/mass_1.mas20) exactly, its separation energies equal the
+# engine's (m1 + m2 - M) c^2, and AzrModel.fill_masses rewrites only a pair's mass and S columns (2026-10-29).
+add_test(NAME pyazr_masses
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/masses_test.py)

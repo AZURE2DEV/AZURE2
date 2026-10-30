@@ -56,7 +56,7 @@ all = ["matplotlib", "emcee", "multiprocess", "zeus-mcmc"]
 packages = ["pyazr"]
 
 [tool.setuptools.package-data]
-pyazr = ["_azure2*.so", "_azure2*.dylib", "_azure2*.pyd"]
+pyazr = ["_azure2*.so", "_azure2*.dylib", "_azure2*.pyd", "data/mass_1.mas20", "data/README.md"]
 
 [tool.setuptools.dynamic]
 version = { attr = "pyazr.__version__" }

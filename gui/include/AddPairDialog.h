@@ -40,9 +40,22 @@ class AddPairDialog : public QDialog {
   // QCheckBox *m1Check;
   QCheckBox *e2Check;
   QGroupBox *multBox;
+  /*! Optional isotope names ("p", "a", "12C"): an entry the mass table knows fills that particle's Z and M. */
+  QLineEdit *lightIsotopeText;
+  QLineEdit *heavyIsotopeText;
+  /*! Fills both masses and the separation energy from the mass table (MassTable, AME2020). */
+  QPushButton *fillButton;
+  /*! The entered masses and S against the mass table, updated as they are typed. */
+  QLabel *massCheckLabel;
 
  public slots:
   void updateLightParticle(int index);
+  /*! A particle's isotope field was edited: look it up, fill Z and M. */
+  void lightIsotopeEdited();
+  void heavyIsotopeEdited();
+  /*! Masses (and, for a particle pair, S) from the mass table, the particles identified by Z and M. */
+  void fillFromMassTable();
+  void updateMassCheck();
 
  private:
   QLabel *lightJLabel;
@@ -59,6 +72,9 @@ class AddPairDialog : public QDialog {
   QLabel *seperationEnergyLabel;
   QLabel *channelRadiusLabel;
   QLabel *pairTypeLabel;
+  QLabel *lightIsotopeLabel;
+  QLabel *heavyIsotopeLabel;
+  bool isotopeEdited(QLineEdit *isotope, QLineEdit *zText, QLineEdit *mText);
 
   QPushButton *okButton;
   QPushButton *cancelButton;

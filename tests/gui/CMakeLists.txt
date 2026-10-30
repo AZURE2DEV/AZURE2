@@ -367,3 +367,27 @@ endif()
 add_test(NAME screening_fitting COMMAND screening_fitting_test)
 set_tests_properties(screening_fitting PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+# The AME2020 mass table the GUI embeds (the file pyazr.masses reads) and what fills from it: the pair dialog's
+# isotope fields and fill button, the S column's tooltip and colour, and the "Masses from AME2020..." dialog.
+add_executable(mass_table_test mass_table_test.cpp)
+set_target_properties(mass_table_test PROPERTIES AUTOMOC OFF)
+target_include_directories(mass_table_test PRIVATE
+    ${AZURE2_SOURCE_DIR}/gui/include
+    ${AZURE2_SOURCE_DIR}/include
+)
+target_link_libraries(mass_table_test PRIVATE
+    ${AZURESETUP_LIBRARIES}
+    ${AZUREAPI_LIBRARIES}
+    AZURE2Core
+    Qt5::Core Qt5::Gui Qt5::Widgets Qt5::Network
+)
+if(USE_QWT)
+    target_link_libraries(mass_table_test PRIVATE ${QWT_LIBRARIES})
+endif()
+if(USE_ERYA)
+    target_link_libraries(mass_table_test PRIVATE pugixml srim_utilities)
+endif()
+add_test(NAME mass_table COMMAND mass_table_test)
+set_tests_properties(mass_table PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen")

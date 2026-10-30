@@ -193,7 +193,7 @@ channel set**. Adding a level to an existing J\ :sup:`π` clones that group's
 channel structure; only a brand-new J\ :sup:`π` lets your channel list define
 the group.
 
-Also available: ``set_channel_radius``, ``set_segment_norm``,
+Also available: ``set_channel_radius``, ``mass_check``, ``fill_masses``, ``set_segment_norm``,
 ``set_segment_active``, ``set_segment_datafile``, ``add_data_segment``,
 ``remove_data_segments``, ``clear_data_segments``, ``set_extrapolations`` and
 ``apply_fit``; for a project with several compound nuclei (next section)
@@ -238,6 +238,37 @@ a snapshot runs from the directory the original did.
    output directory) so the integrals are recomputed;
    ``azure2.recalculate_external_capture()`` forces it inside a live session.
    See ``pyazr/examples/edit_model.py``.
+
+Masses and separation energies
+------------------------------
+
+``pyazr.masses`` reads the AME2020 atomic mass table that ships with pyazr
+(``pyazr/data/mass_1.mas20``, the same file the GUI embeds). Particles are
+named by isotope (``"12C"``, ``"C12"``, ``"c-12"``) or shorthand (``"p"``,
+``"n"``, ``"d"``, ``"t"``, ``"a"``, ``"helion"``):
+
+.. code-block:: python
+
+   from pyazr import masses, AzrModel
+
+   masses.atomic_mass("p")               # 1.007825031898 u, atomic
+   masses.separation_energy("p", "12C")  # 1.943490064 MeV, from the mass excesses
+   masses.pair_masses("a", "12C")        # Z1, M1, Z2, M2, S and the compound (8, 16)
+
+   mdl = AzrModel.from_file("13N.azr")
+   for row in mdl.mass_check():          # every pair against the table
+       print(row.describe())
+   mdl.fill_masses()                     # masses and S of every pair from the table
+   mdl.fill_masses(pairs=[2], separation=False)   # masses of pair 2 only
+   mdl.write("13N_ame.azr")
+
+``fill_masses`` identifies each particle by its charge and its mass rounded
+to a mass number, so mass numbers and a bare-proton mass are recognised. It
+rewrites only the mass and separation-energy columns of the chosen pairs (and
+the entrance-S copy on the lines whose entrance pair changed), and returns the
+list of changes. A gamma pair gets the compound nucleus's mass and keeps its
+S of 0. A beta pair gets its parent's mass. Moving S moves the pair's
+threshold, so compare the fit before and after.
 
 Several compound nuclei (natural targets)
 -----------------------------------------

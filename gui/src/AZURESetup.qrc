@@ -2,5 +2,7 @@
  <qresource>
      <file alias="azure-icon.png">../images/azure2_icon.png</file>
      <file alias="azuma-background.png">../images/azuma_background.png</file>
+     <!-- the AME2020 mass table, the same file pyazr.masses reads (MassTable) -->
+     <file alias="ame/mass_1.mas20">../../pyazr/data/mass_1.mas20</file>
  </qresource>
  </RCC>

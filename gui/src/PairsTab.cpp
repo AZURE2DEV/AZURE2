@@ -10,6 +10,8 @@
 #include "PairsTab.h"
 #include "RichTextDelegate.h"
 #include "InfoDialog.h"
+#include "MassCheckDialog.h"
+#include "MassTable.h"
 #include <QLabel>
 #include <QRegularExpression>
 #include <iostream>
@@ -68,10 +70,17 @@ PairsTab::PairsTab(QWidget *parent) :
   connect(infoButton[0],SIGNAL(clicked()),mapper,SLOT(map()));
   */
 
+  massButton = new QPushButton(tr("Masses from %1...").arg(MassTable::version()));
+  massButton->setObjectName("massesButton");
+  massButton->setToolTip(tr("Compare every pair's masses and separation energy with the %1 atomic mass table, and fill the "
+                            "pairs you tick from it.").arg(MassTable::version()));
+  connect(massButton, SIGNAL(clicked()), this, SLOT(checkMasses()));
+
   QGridLayout *buttonBox = new QGridLayout;
   buttonBox->addWidget(addButton, 0, 0);
   buttonBox->addWidget(deleteButton, 0, 1);
   buttonBox->addItem(new QSpacerItem(28, 28), 0, 2);
+  buttonBox->addWidget(massButton, 0, 4);
   // buttonBox->addWidget(infoButton[0],0,3);
   buttonBox->setColumnStretch(0, 0);
   buttonBox->setColumnStretch(1, 0);
@@ -585,6 +594,22 @@ void PairsTab::editPair(PairsData pair, int pairIndex, bool fromFile) {
   if (pair.pairType != var.toInt()) pairsModel->setData(i, pair.ecMultMask, Qt::EditRole);
 
   if (!fromFile) emit(pairEdited(pairIndex));
+}
+
+void PairsTab::checkMasses() {
+  if (pairsModel->numPairs() == 0) {
+    QMessageBox::information(this, tr("Masses"), tr("There are no pairs yet."));
+    return;
+  }
+  if (!MassTable::instance().isLoaded()) {
+    QMessageBox::warning(this, tr("Masses"), tr("The %1 mass table could not be read.").arg(MassTable::version()));
+    return;
+  }
+  MassCheckDialog dialog(pairsModel, this);
+  if (dialog.exec() != QDialog::Accepted) return;
+  const QList<QPair<int, PairsData>> changes = dialog.filledPairs();
+  for (const auto &change : changes) editPair(change.second, change.first, false);
+  pairsView->viewport()->update();
 }
 
 void PairsTab::updateButtons(const QItemSelection &selection) {

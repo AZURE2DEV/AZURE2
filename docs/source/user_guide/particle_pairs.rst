@@ -65,11 +65,19 @@ Spin (J)
 Parity
    The parity of the particle, selected from the drop-down menu: **+** or **-**.
 
+Isotope
+   Optional. An isotope name (``12C``, ``C12``, ``7Li``) or a shorthand
+   (``p``, ``n``, ``d``, ``t``, ``a``, ``helion``) fills **Z** and **M** from
+   the AME2020 atomic mass table when you leave the field. The field is off for
+   the photon of a (Particle, Gamma) pair.
+
 Proton Number (Z)
    The number of protons in the particle.
 
 Mass (M)
-   The mass number of the particle.
+   The **atomic** mass of the particle in u (electrons included, so 1.007825 u
+   for the proton, not the bare 1.007276 u). The engine rounds it to a mass
+   number wherever it needs one.
 
 Pair Properties
 ^^^^^^^^^^^^^^^
@@ -81,6 +89,16 @@ Excitation Energy
 Separation Energy
    The energy required to separate the compound system (in its ground state) into
    the constituent particle pair (in MeV).
+
+**Fill masses and S from AME2020**
+   Sets both atomic masses and the separation energy
+   :math:`S = m_1 + m_2 - M` of the compound nucleus from the AME2020 table.
+   The particles are identified by Z and by M rounded to a mass number, so a
+   pair typed with mass numbers works too. For a (Particle, Gamma) or Beta
+   Decay pair, only the heavy particle's mass is filled. The line under the
+   button compares what is entered with the table as you type. It turns orange
+   when S differs by more than 1 keV, and it also reports masses that differ
+   from the table.
 
 Channel Radius
    The R-matrix channel radius (in fm). Different particle pairs need not share
@@ -229,6 +247,29 @@ gets one note instead, since its masses carry no Q value. The cure is to take
 the masses from one mass table (AME, atomic masses throughout) and the
 separation energies from the same table: :math:`S = m_1 + m_2 - M` of the
 compound nucleus.
+
+The GUI and pyazr both carry the AME2020 table (``pyazr/data/mass_1.mas20``,
+the Atomic Mass Data Center's file; the GUI embeds the same copy). In the GUI:
+
+- The **Separation Energy** column of the pairs table has a tooltip with the
+  table's S for each particle pair. It turns orange when the pair's S differs
+  by more than 1 keV.
+- **Masses from AME2020...** below the table lists every pair with its masses,
+  its S, the table's S and the difference. Accepting fills the ticked pairs:
+  their atomic masses and, with **Also set the separation energies**, their S.
+  Pairs that differ from the table start ticked. A pair whose particles the
+  table does not know cannot be ticked.
+
+In pyazr, ``pyazr.masses`` gives the table (``atomic_mass("12C")``,
+``separation_energy("p", "12C")``, ``pair_masses("a", "12C")``), and
+``AzrModel.mass_check()`` / ``AzrModel.fill_masses()`` do what the dialog does
+for a file (see the pyazr page).
+
+Filling S moves that pair's threshold, and with it the energy scale of every
+channel of the pair. A typical archive mismatch is a few keV, so compare the
+fit before and after, and refit when the shift matters next to a narrow
+resonance. Filling the masses alone changes results by about the relative mass
+change, which is 1e-5 for 1e-4 u at mass 12.
 
 Relativistic Kinematics
 -----------------------

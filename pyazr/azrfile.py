@@ -189,10 +189,16 @@ class AzrChannel:
         """Mass of the light particle, in u."""
         return self._get("m1", float)
 
+    @M1.setter
+    def M1(self, v):       self._set("m1", float(v))
+
     @property
     def M2(self):
         """Mass of the heavy particle, in u."""
         return self._get("m2", float)
+
+    @M2.setter
+    def M2(self, v):       self._set("m2", float(v))
 
     @property
     def J1(self):
@@ -227,6 +233,18 @@ class AzrChannel:
     def sep_energy(self):
         """Separation energy of the pair, in MeV."""
         return self._get("sepE", float)
+
+    @sep_energy.setter
+    def sep_energy(self, v): self._set("sepE", float(v))
+
+    @property
+    def entrance_sep_energy(self):
+        """The line's copy of the entrance pair's separation energy (MeV).  The
+        engine does not read it; the GUI writes pair 1's value on every line."""
+        return self._get("entranceSepE", float)
+
+    @entrance_sep_energy.setter
+    def entrance_sep_energy(self, v): self._set("entranceSepE", float(v))
 
     # level fields (shared across a level's channel lines)
 
@@ -407,6 +425,61 @@ def _nuclei_module():
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
         return mod
+
+
+def _masses_module():
+    """``pyazr.masses``, also when this file is loaded standalone by path."""
+    try:
+        from . import masses
+        return masses
+    except ImportError:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "pyazr_masses_standalone", os.path.join(os.path.dirname(os.path.abspath(__file__)), "masses.py"))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+
+
+class PairMassCheck(NamedTuple):
+    """One pair of a model against the mass table (:meth:`AzrModel.mass_check`).
+
+    ``light`` / ``heavy`` are the table rows the pair's columns identify (by
+    charge and mass rounded to a mass number), ``None`` for a photon, an
+    electron or a nuclide the table lacks.  ``S_table`` is the separation
+    energy from the table, for particle pairs only (a gamma pair's 0 and a
+    beta pair's value are conventions, not checked).  ``dS_kev`` is the file's
+    S minus the table's, in keV.
+    """
+    pair: int
+    ptype: int
+    light: object
+    heavy: object
+    M1: float
+    M2: float
+    S: float
+    M1_table: Optional[float]
+    M2_table: Optional[float]
+    S_table: Optional[float]
+    dS_kev: Optional[float]
+
+    @property
+    def mass_offset(self):
+        """Largest |file mass - table mass| of the pair, in u (0 when nothing was identified)."""
+        d = [abs(m - t) for m, t in ((self.M1, self.M1_table), (self.M2, self.M2_table)) if t is not None]
+        return max(d) if d else 0.0
+
+    def describe(self, tol_kev=1.0):
+        """One line: the pair, its masses and S against the table."""
+        lab = lambda e: e.label if e is not None else "-"
+        parts = [f"pair {self.pair} ({lab(self.light)} + {lab(self.heavy)}, type {self.ptype})"]
+        for name, m, t in (("M1", self.M1, self.M1_table), ("M2", self.M2, self.M2_table)):
+            if t is not None:
+                parts.append(f"{name} {m!r} u" + ("" if abs(m - t) < 5e-10 else f" (table {t!r})"))
+        if self.S_table is not None:
+            flag = "" if abs(self.dS_kev) <= tol_kev else "  <-- differs"
+            parts.append(f"S {self.S:.6f} MeV (table {self.S_table:.6f}, {self.dS_kev:+.2f} keV){flag}")
+        return ", ".join(parts)
 
 
 class ScatteringLengthLine(NamedTuple):
@@ -719,6 +792,107 @@ class AzrModel:
                 f"pair {pair} has no particle channel in this model "
                 f"(radii: {self.channel_radii()}).")
         return changed
+
+    # -- pair masses and separation energies (AME mass table) -----------------
+
+    def pair_lines(self):
+        """``{pair key: first channel line naming it}`` -- the line the engine
+        reads the pair's columns from (inactive lines included)."""
+        out = {}
+        for lv in self.levels:
+            for c in lv.channels:
+                out.setdefault(c.pair, c)
+        return dict(sorted(out.items()))
+
+    def mass_check(self):
+        """Every pair against the mass table (``pyazr.masses``, AME2020):
+        a list of :class:`PairMassCheck`, by pair key.
+
+        >>> for row in AzrModel.from_file("13N.azr").mass_check():
+        ...     print(row.describe())
+        pair 1 (1H + 12C, type 0), M1 1.00728 u (table 1.007825031898), M2 12.0 u, S 1.943510 MeV (table 1.943490, +0.02 keV)
+        pair 2 (- + 13N, type 10), M2 13.0057 u (table 13.005738609)
+        """
+        m = _masses_module()
+        rows = []
+        for key, c in self.pair_lines().items():
+            ptype = c.ptype
+            light = m.identify(c.Z1, c.M1) if ptype == 0 else None
+            heavy = m.identify(c.Z2, c.M2)
+            s_table = None
+            if ptype == 0 and light is not None and heavy is not None:
+                try:
+                    s_table = m.separation_energy((light.Z, light.A), (heavy.Z, heavy.A))
+                except KeyError:
+                    s_table = None
+            rows.append(PairMassCheck(
+                pair=key, ptype=ptype, light=light, heavy=heavy,
+                M1=c.M1, M2=c.M2, S=c.sep_energy,
+                M1_table=light.atomic_mass if light is not None else None,
+                M2_table=heavy.atomic_mass if heavy is not None else None,
+                S_table=s_table,
+                dS_kev=(c.sep_energy - s_table) * 1e3 if s_table is not None else None))
+        return rows
+
+    def fill_masses(self, pairs=None, separation=True):
+        """Set pair masses -- and, with ``separation``, particle-pair separation
+        energies -- from the mass table, on every line of each pair.
+
+        ``pairs`` is an iterable of pair keys (default: every pair).  A particle
+        is identified by its charge and its mass rounded to a mass number, so a
+        file with mass numbers (12, 4) or a bare-proton mass (1.00728) gets the
+        atomic masses of 12C, 4He and 1H.  A gamma pair gets the compound
+        nucleus's mass (its S stays 0), a beta pair its parent's mass; the
+        photon and electron columns are left alone.  With ``separation`` a
+        particle pair's S becomes the table's ``D1 + D2 - Dc``, and the lines
+        whose entrance pair it is get the same value in their entrance-S copy.
+
+        Moving S moves the pair's threshold and therefore the energy scale of
+        every channel of that pair: compare the fit before and after, and refit
+        if the shift matters (more than a few keV next to a narrow resonance).
+        With ``separation=False`` only the masses change, which moves results by
+        about the relative mass change (1e-5 for 1e-4 u at mass 12).
+
+        Returns the list of changes, ``(pair, column, old, new)``; a pair the
+        table cannot identify is skipped and reported as ``(pair, "skipped",
+        reason, None)``.
+        """
+        want = None if pairs is None else {int(p) for p in pairs}
+        checks = {r.pair: r for r in self.mass_check()}
+        if want is not None:
+            missing = sorted(want - set(checks))
+            if missing:
+                raise KeyError(f"no pair with key(s) {missing} in this model (pairs: {sorted(checks)})")
+        changes, new_m1, new_m2, new_s = [], {}, {}, {}
+        for key, r in checks.items():
+            if want is not None and key not in want:
+                continue
+            if r.ptype == 0 and (r.light is None or r.heavy is None):
+                changes.append((key, "skipped", "a particle is not in the mass table", None))
+                continue
+            if r.ptype != 0 and r.heavy is None:
+                changes.append((key, "skipped", "the heavy particle is not in the mass table", None))
+                continue
+            if r.M1_table is not None and r.M1_table != r.M1:
+                new_m1[key] = r.M1_table
+                changes.append((key, "M1", r.M1, r.M1_table))
+            if r.M2_table is not None and r.M2_table != r.M2:
+                new_m2[key] = r.M2_table
+                changes.append((key, "M2", r.M2, r.M2_table))
+            if separation and r.S_table is not None and r.S_table != r.S:
+                new_s[key] = r.S_table
+                changes.append((key, "S", r.S, r.S_table))
+        for lv in self.levels:
+            for c in lv.channels:
+                if c.pair in new_m1:
+                    c.M1 = new_m1[c.pair]
+                if c.pair in new_m2:
+                    c.M2 = new_m2[c.pair]
+                if c.pair in new_s:
+                    c.sep_energy = new_s[c.pair]
+                if c.entrance_key in new_s:
+                    c.entrance_sep_energy = new_s[c.entrance_key]
+        return changes
 
     # -- level activation -----------------------------------------------------
 

@@ -21,7 +21,7 @@ and one Qt model:
      - Classes
      - ``.azr`` block
    * - Particle Pairs
-     - ``PairsTab``, ``PairsModel``, ``AddPairDialog``
+     - ``PairsTab``, ``PairsModel``, ``AddPairDialog``, ``MassCheckDialog``
      - ``<pairs>``
    * - Levels and Channels
      - ``LevelsTab``, ``LevelsModel``, ``ChannelsModel``, ``AddLevelDialog``
@@ -50,6 +50,12 @@ Dialogs for data import are ``ExforDialog`` / ``ExforData`` (EXFOR; the same
 Web-API as ``pyazr.nds``, so a parsing rule learned by one belongs in both) and
 ``IAEALevelDialog`` / ``IAEALevelData`` (ENSDF levels). The help text shown in
 each tab is in ``InTabDocs.cpp``.
+
+``MassTable`` reads the AME2020 atomic mass table that the GUI embeds as the
+Qt resource ``:/ame/mass_1.mas20``. It is the file ``pyazr/data/mass_1.mas20``
+that ``pyazr.masses`` reads, so both fill identical masses and separation
+energies. A newer evaluation replaces that one file and the two version
+strings named in ``pyazr/data/README.md``.
 
 Running calculations
 --------------------
