@@ -165,6 +165,13 @@ runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
   (integrals for data and test segments are built together at INITIALIZE).
   `intEC.dat` is the data-segment equivalent and is safe while `<segmentsData>`
   is untouched. Both are safe to delete; they just cost time to rebuild.
+- **`intEC.dat` holds every digit only from dev 2026-10-30 on** (signature v5).
+  Before, it held 6 significant digits, so every run after the first in a
+  directory read rounded capture amplitudes: tests/13N chi2 336479.7107 when
+  computed vs 336479.0869 when read back (-0.62, ~2e-6; up to ~1e-5 on single
+  capture points).  Comparing two older-build runs to better than ~1e-5: check
+  whether one computed and the other reused `intEC.dat`.  Older files carry a
+  v4 signature and are recomputed once (a WARNING says so).
 - **Several sessions can be open at once**, each an independent engine that
   enters its own directory per call — that is how `save_fit` verifies what it
   wrote. The engine is not *thread*-safe, so parallelism is one session per
@@ -1073,6 +1080,15 @@ m.objective(x)         # chi2 + penalties: what AZURE2's own fit minimizes
 (reverse-mode adjoint) — that is what makes a Gauss-Newton / LM fit in Python
 cheaper than Minuit's numerical gradients. Energy-shift columns come back zero;
 an analytically unsupported segment raises.
+
+**Threads.** Every evaluation (`calculate_chi2_rwa`, `calculate_chi2`,
+`calculate_rwa`, `calculate`, `calculate_all_rwa`) spreads its points over
+`OMP_NUM_THREADS` threads since dev 2026-10-30, the CLI's own parallel pass
+(before, they ran one point at a time; only `residual_jacobian` was parallel):
+tests/13N chi2 4.1x, natural_neon 2.4x at 4 threads.  Results equal the serial
+path to a few ulp (`AZURE_SERIAL_CHI2=1` restores it).  With several worker
+processes (rmfit shards, emcee pools) keep processes x threads within the slots
+requested: a worker inherits the job's `OMP_NUM_THREADS`.
 
 **Fit against `objective`, not `calculate_chi2_rwa`.** The latter is the *data*
 χ² only. `AZURECalc::operator()` also adds, per segment,
