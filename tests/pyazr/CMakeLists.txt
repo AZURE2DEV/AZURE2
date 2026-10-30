@@ -81,6 +81,13 @@ add_test(NAME pyazr_sqrt_shift
                  ${CMAKE_CURRENT_SOURCE_DIR}/sqrt_shift_test.py)
 set_tests_properties(pyazr_sqrt_shift PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
+# The first evaluation of a session uses the shift it is given: a first request of 0 against a nonzero shift on the
+# line returned the chi2 of the line's shift when the segment had sub-points (17O+a Kunz profile, 2026-10-29).
+add_test(NAME pyazr_shift_first_call
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/shift_first_call_test.py)
+set_tests_properties(pyazr_shift_first_call PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
 # Energy-shift functions (shiftfn): read, written, and (with the engine) listed,
 # penalised and differenced exactly as AZURE2 does.
 add_test(NAME pyazr_shift_fn

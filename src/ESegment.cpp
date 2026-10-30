@@ -69,14 +69,14 @@ ESegment::ESegment(SegLine segLine) {
   dataNorm_ = dataNormNominal_ = segLine.dataNorm();
   dataNormError_ = segLine.dataNormError();
   energyShift_ = energyShiftNominal_ = segLine.energyShift();
-  lastEnergyShift_ = 0.0;
+  lastEnergyShift_ = std::numeric_limits<double>::quiet_NaN();  // the points start unshifted: the first fill always applies the shift
   energyShiftError_ = segLine.energyShiftError();
   if (segLine.varyEnergyShift() == 1)
     varyEnergyShift_ = true;
   else
     varyEnergyShift_ = false;
   energyShiftSqrt_ = energyShiftSqrtNominal_ = segLine.energyShiftSqrt();
-  lastEnergyShiftSqrt_ = 0.0;
+  lastEnergyShiftSqrt_ = std::numeric_limits<double>::quiet_NaN();
   energyShiftSqrtError_ = segLine.energyShiftSqrtError();
   varyEnergyShiftSqrt_ = (segLine.varyEnergyShiftSqrt() == 1);
   shiftGroup_ = segLine.shiftGroup();
@@ -170,10 +170,10 @@ ESegment::ESegment(ExtrapLine extrapLine) {
   dataNormError_ = 0.;
   energyShift_ = energyShiftNominal_ = 0.0;
   energyShiftError_ = 0.0;
-  lastEnergyShift_ = 0.0;
+  lastEnergyShift_ = std::numeric_limits<double>::quiet_NaN();  // the points start unshifted: the first fill always applies the shift
   varyEnergyShift_ = false;
   energyShiftSqrt_ = energyShiftSqrtNominal_ = 0.0;
-  lastEnergyShiftSqrt_ = 0.0;
+  lastEnergyShiftSqrt_ = std::numeric_limits<double>::quiet_NaN();
   energyShiftSqrtError_ = 0.0;
   shiftGroup_ = "";
   shiftLeaderPos_ = -1;

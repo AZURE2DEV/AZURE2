@@ -368,12 +368,12 @@ class ESegment {
   double dataNormNominal_;
   double dataNormError_;
   double energyShift_;
-  double lastEnergyShift_;  // To track last applied energy shift
+  double lastEnergyShift_;  // the shift the points carry; NaN until the first FillEnergyShiftsFromParams applies one
   double energyShiftNominal_;
   double energyShiftError_;
   bool varyEnergyShift_;
   double energyShiftSqrt_;
-  double lastEnergyShiftSqrt_;  // To track last applied sqrt(E) coefficient
+  double lastEnergyShiftSqrt_;  // likewise for the sqrt(E) coefficient
   double energyShiftSqrtNominal_;
   double energyShiftSqrtError_;
   bool varyEnergyShiftSqrt_;
