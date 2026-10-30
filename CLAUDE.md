@@ -186,7 +186,7 @@ Reference implementations to copy: `git show --stat 062b1bfe` (segment keyword
   Bump the minor version for new public API, the patch version for fixes, and
   the major version for breaking changes, which also need a deprecation period.
   Keep `__all__` to deliberate public names.
-- Engine: `AZURE2_VERSION_*` in `CMakeLists.txt` (2.0.0). It is independent of
+- Engine: `AZURE2_VERSION_*` in `CMakeLists.txt` (2.1.0). It is independent of
   pyazr's version, and the docs take theirs from it.
 
 ## Commits
