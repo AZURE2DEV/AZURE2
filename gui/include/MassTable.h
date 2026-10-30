@@ -57,6 +57,8 @@ class MassTable {
   static QString version() { return QStringLiteral("AME2020"); }
   /*! The agreement within which a pair's S counts as consistent, keV (the engine's warning threshold). */
   static constexpr double kToleranceKeV = 1.0;
+  /*! A mass this far from the table (u) is flagged: about 1 MeV, so a mass number or a typo, not a rounding. */
+  static constexpr double kMassFlagU = 1.0e-3;
 
   bool isLoaded() const { return !entries_.isEmpty(); }
   int size() const { return entries_.size(); }

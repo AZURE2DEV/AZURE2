@@ -441,6 +441,11 @@ def _masses_module():
         return mod
 
 
+#: A mass this far from the table (u) is flagged by :meth:`PairMassCheck.describe`: about 1 MeV, beyond any
+#: rounding or older evaluation, so a mass number or a typo (1.08664 for the neutron's 1.00866).
+MASS_FLAG_U = 1e-3
+
+
 class PairMassCheck(NamedTuple):
     """One pair of a model against the mass table (:meth:`AzrModel.mass_check`).
 
@@ -475,7 +480,10 @@ class PairMassCheck(NamedTuple):
         parts = [f"pair {self.pair} ({lab(self.light)} + {lab(self.heavy)}, type {self.ptype})"]
         for name, m, t in (("M1", self.M1, self.M1_table), ("M2", self.M2, self.M2_table)):
             if t is not None:
-                parts.append(f"{name} {m!r} u" + ("" if abs(m - t) < 5e-10 else f" (table {t!r})"))
+                text = f"{name} {m!r} u" + ("" if abs(m - t) < 5e-10 else f" (table {t!r})")
+                if abs(m - t) > MASS_FLAG_U:
+                    text += "  <-- mass"
+                parts.append(text)
         if self.S_table is not None:
             flag = "" if abs(self.dS_kev) <= tol_kev else "  <-- differs"
             parts.append(f"S {self.S:.6f} MeV (table {self.S_table:.6f}, {self.dS_kev:+.2f} keV){flag}")

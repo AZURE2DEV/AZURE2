@@ -59,8 +59,12 @@ MassCheckDialog::MassCheckDialog(const PairsModel *model, QWidget *parent) : QDi
     if (!c.fillable) fill->setToolTip(tr("%1 has no nuclide for this pair's charge and mass number.").arg(MassTable::version()));
     table_->setItem(row, Fill, fill);
     table_->setItem(row, Pair, new QTableWidgetItem(QString("%1: %2").arg(row + 1).arg(model->getPairLabel(p))));
-    table_->setItem(row, Light, new QTableWidgetItem(p.pairType == 0 ? massCell(p.lightM, c.light) : QString("-")));
-    table_->setItem(row, Heavy, new QTableWidgetItem(massCell(p.heavyM, c.heavy)));
+    QTableWidgetItem *light = new QTableWidgetItem(p.pairType == 0 ? massCell(p.lightM, c.light) : QString("-"));
+    QTableWidgetItem *heavy = new QTableWidgetItem(massCell(p.heavyM, c.heavy));
+    if (c.light && std::fabs(p.lightM - c.light->atomicMass) > MassTable::kMassFlagU) light->setForeground(QBrush(QColor(214, 80, 0)));
+    if (c.heavy && std::fabs(p.heavyM - c.heavy->atomicMass) > MassTable::kMassFlagU) heavy->setForeground(QBrush(QColor(214, 80, 0)));
+    table_->setItem(row, Light, light);
+    table_->setItem(row, Heavy, heavy);
     table_->setItem(row, S, new QTableWidgetItem(full(p.seperationEnergy)));
     table_->setItem(row, STable, new QTableWidgetItem(c.hasS ? full(c.sTable) : QString("-")));
     QTableWidgetItem *ds = new QTableWidgetItem(c.hasS ? QString::number(c.dSkeV, 'f', 3) : QString("-"));

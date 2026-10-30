@@ -142,6 +142,17 @@ def fill():
     except KeyError:
         check(True, "an unknown pair key is refused")
 
+    d = rows[0].describe()
+    check("<-- mass" not in d, "describe: a bare-proton mass (5e-4 u off) is listed, not flagged")
+    m = AzrModel.from_file(src)
+    for lv in m.levels:
+        for c in lv.channels:
+            if c.pair == 1:
+                c.M1 = 1.08664          # the 17O+a typo for 1.00866
+    d = m.mass_check()[0].describe()
+    check("<-- mass" in d and abs(m.mass_check()[0].dS_kev - 0.0199) < 1e-3,
+          f"describe: a mistyped mass (1.08664 u) is flagged, S still compared through the identified 1H ({d})")
+
     # a mass-number model fills to the same numbers
     m = AzrModel.from_file(src)
     for lv in m.levels:

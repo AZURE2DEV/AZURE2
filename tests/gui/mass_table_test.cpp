@@ -125,7 +125,14 @@ int main(int argc, char** argv) {
     d.lightMText->setText("1.00728");
     emit d.lightIsotopeText->editingFinished();   // focus passing through, no new entry
     ok("an isotope field left alone does not overwrite a typed mass", d.lightMText->text() == "1.00728");
-    ok("a mass off the table is reported", d.massCheckLabel->text().contains("differ from AME2020"), d.massCheckLabel->text());
+    ok("a mass off the table is reported, not coloured below 1e-3 u",
+       d.massCheckLabel->text().contains("differ from AME2020") &&
+           !d.massCheckLabel->text().section("<br/>", 1).contains("color"),
+       d.massCheckLabel->text());
+    d.lightMText->setText("1.08664");
+    ok("a mistyped mass (0.078 u off) is coloured", d.massCheckLabel->text().section("<br/>", 1).contains("color"),
+       d.massCheckLabel->text());
+    d.lightMText->setText("1.00728");
     if (const char* stem = std::getenv("AZURE2_MASS_TABLE_PNG")) {
       d.show();
       d.grab().save(QString("%1_pair.png").arg(stem));
@@ -168,6 +175,8 @@ int main(int argc, char** argv) {
       dialog.show();
       dialog.grab().save(QString("%1_masses.png").arg(stem));
     }
+    ok("mass cells: a mass number (0.0087 u off) is coloured, a bare proton (5e-4 u) is not",
+       t->item(1, 2)->foreground().style() != Qt::NoBrush && t->item(0, 2)->foreground().style() == Qt::NoBrush);
     ok("the dialog lists every pair, the differing ones ticked",
        t->rowCount() == 4 && t->item(0, 0)->checkState() == Qt::Checked && t->item(1, 0)->checkState() == Qt::Checked &&
            t->item(2, 0)->checkState() == Qt::Checked && t->item(3, 0)->checkState() == Qt::Unchecked);

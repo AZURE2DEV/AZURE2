@@ -280,7 +280,10 @@ void AddPairDialog::updateMassCheck() {
   } else if (pair.pairType != 0 && c.heavy) {
     lines << tr("%1: M(%2) = %3 u").arg(MassTable::version()).arg(c.heavy->label()).arg(full(c.heavy->atomicMass));
   }
-  if (c.massOffset > 5e-7)
+  if (c.massOffset > MassTable::kMassFlagU)
+    lines << QString("<span style=\"color:#d65000\">%1</span>")
+                 .arg(tr("The masses entered differ from %1 by up to %2 u.").arg(MassTable::version()).arg(c.massOffset, 0, 'g', 3));
+  else if (c.massOffset > 5e-7)
     lines << tr("The masses entered differ from %1 by up to %2 u.").arg(MassTable::version()).arg(c.massOffset, 0, 'g', 3);
   massCheckLabel->setText(lines.join("<br/>"));
   fillButton->setEnabled(c.fillable);
