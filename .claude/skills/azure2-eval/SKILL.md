@@ -2931,6 +2931,25 @@ complete:
   benchmark tests/screening_6li (Cruz 2005 6Li(p,a) on Li2WO4 / Li metal / PdLi against Skowronski's 7Be fit
   held fixed: U_e 323 / 1211 / 3433 eV vs published 320 / 1320 / 3760).  TRAP from it: EXFOR O1282 tags its
   energies EN (lab) but they are c.m.; read as lab the metals come out 26-27 % low.
+- 2026-10-29 (dev f272a35) -- FITTED TARGET DENSITY. A thin-target line (target integration, density > 0) may carry
+  `densityfit vary sigma [max]` (sigma atoms/cm^2 or "2.3%" of the line's N0; max = largest N the sub-point grids
+  span, default N0 + 3 sigma, >= 1.1 N0; 1.5 N0 without a prior) and `densitygroup <label>` (one target on several
+  lines, e.g. one line per detector: every member follows the parameter of the group's FIRST line, which must carry
+  densityfit; a member's own density is replaced, with a note). Parameter `density_<n>` (atoms/cm^2, n = place among
+  ACTIVE <targetInt> lines; after the screening block), prior ((N-N0)/sigma)^2 -> `Total-Density-Chi-Squared`.
+  N moves only the energy-loss window (int dE'/eps = N) and the straggling with depth; the yield is divided by the
+  same N, so the result is the depth average, NO factor of N (tests/pyazr/target_density_test.py: vs the bare
+  average over the window, 2e-5). Grids are laid out once at max and the depth integral is cut at E0 - dE(N):
+  smooth in N, finite-difference columns; beyond max the engine computes AT max (warning once) -- give a larger max
+  if a fit presses on it. Every fitter + MCMC; fitted N lives in param.sav, the line keeps N0 (save_fit too).
+  Refused: no target integration, thick target, beamprofile/udr, group without a densityfit leader. Older engines
+  REFUSE the keywords. GUI keeps the blocks through read/write but does not edit them yet. pyazr:
+  AzrModel.target_densities / set_target_density(effect, density=, vary=, sigma=, max=, group=),
+  parameters.densities, penalties()["density"] (in objective()). rmfit: key `density[t<n>]`, prior row, bounds
+  [0.01 N0, max]; SingleSession only (build_keys raises for shards). Tests: tests/target_density (MIGRAD, LM, GSL
+  recover N; grad check; prior; group), tests/pyazr/target_density_test.py. Same push (f19327a): a session's FIRST
+  evaluation at a shift of exactly 0 used the .azr's nonzero shift on segments with target-effect sub-points
+  (17O+a Kunz profile: "0 keV" was +8 keV); builds before f19327a have it.
 - 2026-10-21 -- EXTERNAL-CAPTURE ENERGY TABLE, ON BY DEFAULT (`--no-ec-table`, pyazr `use_ec_table=False`;
   design `docs/source/developer/ec_table.rst`; 12C+a_onefile/10-20-26_EC_table_timing). Each capture term's
   radial integral is tabulated on demand in ln(E_out), 50 nodes/decade, nodes converged to 1e-10 (8-point
