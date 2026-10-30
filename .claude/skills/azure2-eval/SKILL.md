@@ -2943,7 +2943,8 @@ complete:
   smooth in N, finite-difference columns; beyond max the engine computes AT max (warning once) -- give a larger max
   if a fit presses on it. Every fitter + MCMC; fitted N lives in param.sav, the line keeps N0 (save_fit too).
   Refused: no target integration, thick target, beamprofile/udr, group without a densityfit leader. Older engines
-  REFUSE the keywords. GUI keeps the blocks through read/write but does not edit them yet. pyazr:
+  REFUSE the keywords. GUI (dev e641f97): Add/Edit Experimental Effect -> "Fitted Target Density" box (parameter,
+  Fit Density, Prior Sigma, Grid Maximum, Density Group) and the Fitting tab's "Target Densities" sub-tab. pyazr:
   AzrModel.target_densities / set_target_density(effect, density=, vary=, sigma=, max=, group=),
   parameters.densities, penalties()["density"] (in objective()). rmfit: key `density[t<n>]`, prior row, bounds
   [0.01 N0, max]; SingleSession only (build_keys raises for shards). Tests: tests/target_density (MIGRAD, LM, GSL
