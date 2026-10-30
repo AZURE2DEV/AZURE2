@@ -748,6 +748,18 @@ runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
   only 1,138 agree to 0.1 keV; 4-decimal masses give tens of keV; one 17O+a
   project is 73 MeV off. When building a model, take masses AND S from AME:
   S = m1 + m2 - M(compound). Test tests/mass_separation_check.
+  **Filling from AME2020** (2026-10-29): pyazr ships the AMDC file
+  (`pyazr/data/mass_1.mas20`) and the GUI embeds the same copy (MassTable).
+  `pyazr.masses.atomic_mass("12C")`, `separation_energy("p", "12C")` (from
+  mass excesses), `pair_masses("a", "12C")`; `AzrModel.mass_check()` lists
+  every pair against the table, `AzrModel.fill_masses(pairs=None,
+  separation=True)` rewrites only the m1/m2/S (+ entrance-S copy) columns.
+  Particles are identified by Z and round(M), so mass numbers and bare
+  protons are recognised; gamma pairs get M(compound) and keep S = 0. GUI:
+  isotope fields + "Fill masses and S from AME2020" in the pair dialog, an S
+  column tooltip (orange > 1 keV), "Masses from AME2020..." under the pairs
+  table. Filling S moves thresholds: never fill an archive fit in place;
+  copy it, fill, compare chi2, and leave refits to the evaluator.
 - **Attenuation (Q) coefficients act on the lab distribution** (dev a22b99a,
   2026-10-25): for a particle exit Q_K multiplies the LAB Legendre coefficients
   and the result is taken back to the point's c.m. angle exactly. Before, a
