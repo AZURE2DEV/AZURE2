@@ -285,3 +285,10 @@ add_test(NAME pyazr_parallel_points
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/parallel_points_test.py)
 set_tests_properties(pyazr_parallel_points PROPERTIES LABELS "slow")
+
+# A session that reads the external-capture integrals back from intEC.dat equals the one that computed them
+# (2026-10-30: the file had 6 significant digits; tests/13N chi2 moved by 0.62 on read-back).
+add_test(NAME pyazr_ec_cache_precision
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/ec_cache_precision_test.py)
+set_tests_properties(pyazr_ec_cache_precision PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")

@@ -2433,7 +2433,8 @@ std::string EData::ECSignature(CNuc *theCNuc, const Config &configure) {
   // half-integer spin (ECIntegral.cpp), so every v2 file is recomputed once.
   // v4 (2026-10-26): the M1 orbital term is dropped on channel-spin-flip pathways (ECIntegral.cpp), so every
   // v3 file with such pathways is recomputed once.
-  hash.Add("AZURE2 EC signature v4");
+  // v5 (2026-10-30): the file holds every digit (17 significant, was 6), so every v4 file is recomputed once.
+  hash.Add("AZURE2 EC signature v5");
   hash.Add((configure.paramMask & Config::USE_GSL_COULOMB_FUNC) ? 1 : 0);
   hash.Add((configure.paramMask & Config::USE_LONGWAVELENGTH_APPROX) ? 1 : 0);
   // The convection current changes exact-form electric terms only; long-wavelength signatures stay as in v2.
@@ -2442,7 +2443,7 @@ std::string EData::ECSignature(CNuc *theCNuc, const Config &configure) {
   hash.Add((configure.paramMask & Config::CALCULATE_REACTION_RATE) ? 1 : 0);
   hash.Add(configure.useHybridMethod ? 1 : 0);
   // Relativistic kinematics (relativistic=1 in <config>) change eta, rho and the flux factor of every amplitude.
-  // Added only when on, so every non-relativistic v4 file keeps its signature and is not recomputed; a relativistic
+  // Added only when on, so every non-relativistic file keeps its signature and is not recomputed; a relativistic
   // run no longer reads back a file written without the switch (2026-10-27, checklist t3-25).
   if (configure.relativistic) hash.Add("relativistic");
 
@@ -2587,6 +2588,9 @@ int EData::CalculateECAmplitudes(CNuc *theCNuc, const Config &configure) {
     std::remove(ECSignaturePath(outputfile).c_str());
     out.open(outputfile.c_str());
     if (!out) configure.outStream << "Could not write to EC Amplitude File." << std::endl;
+    // Every digit (17 significant): the default 6 left a run that reads the file back ~1e-6 off the run that
+    // wrote it (tests/13N chi2 by 0.62, 2026-10-30).
+    out.precision(17);
   }
   int sumSegmentI = 0;
   int numSumSegments = 0;
@@ -2887,6 +2891,7 @@ int EData::InitializeComponentSegments(CNuc *theCNuc, const Config &configure) {
       // Append the component-segment integrals after the regular-segment ones.
       out.open(outputfile.c_str(), std::ios::app);
       if (!out) configure.outStream << "Could not append to EC Amplitude File." << std::endl;
+      out.precision(17);  // as the data-segment amplitudes (CalculateECAmplitudes)
       if (!(configure.paramMask & Config::USE_API))
         configure.outStream << "Calculating EC Amplitudes for Component Segments..." << std::endl;
     }

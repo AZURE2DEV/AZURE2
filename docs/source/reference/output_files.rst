@@ -264,8 +264,11 @@ recomputed once, with a warning, and gets one.
 With the external-capture energy tables (the default, see
 :doc:`../developer/ec_table`) computing the integrals afresh costs seconds even
 with resolution or target integration, so reusing the file saves little.  The
-file stores six significant digits, so a reused file moves segment
-:math:`\chi^2` values by up to about 1e-5 relative to a fresh calculation.
+file stores every digit (17 significant), so a reused file gives the same
+:math:`\chi^2` as the fresh calculation that wrote it.  Before 30 October 2026
+it stored six, which moved segment :math:`\chi^2` values by up to about 1e-5
+relative (the ``tests/13N`` total by 0.62); such files carry an older signature
+and are recomputed once.
 
 intEC.extrap
 ^^^^^^^^^^^^
