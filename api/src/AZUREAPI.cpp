@@ -1209,7 +1209,7 @@ vector_r AZUREAPI::CalculateChi2GradRWA(const vector_r &params) const {
   return out;
 }
 
-vector_r AZUREAPI::CalculateResidualJacobianRWA(const vector_r &params) const {
+vector_r AZUREAPI::CalculateResidualJacobianRWA(const vector_r &params, const std::vector<int> &skipColumns) const {
   vector_r full = MapPackedToFull(params, all_rwa_, fixed_);
 
   // One request at a time: operate on the canonical compound/data in place
@@ -1261,6 +1261,10 @@ vector_r AZUREAPI::CalculateResidualJacobianRWA(const vector_r &params) const {
     const size_t nRes = residuals.size();
     vector_r rPlus, rMinus, jTmp;
     int nc = 0;
+    // Columns the caller holds fixed (skipColumns): not differenced, left zero.
+    std::vector<char> skip(params.size(), 0);
+    for (int c : skipColumns)
+      if (c >= 0 && c < (int)params.size()) skip[c] = 1;
     for (int f = 0; f < pmap.NumFull(); f++) {
       if (fixed_[f]) continue;
       // (a fitted target density likewise moves the depth window of every point of its lines)
@@ -1270,6 +1274,7 @@ vector_r AZUREAPI::CalculateResidualJacobianRWA(const vector_r &params) const {
           pmap.Desc(f).kind != ParamKind::Density) continue;
       const int packed = pmap.FullToPacked(f);
       if (packed < 0 || packed >= (int)params.size()) continue;
+      if (skip[packed]) continue;
 
       const double x0 = params[packed];
       // A few eV: far inside any quoted beam-energy calibration uncertainty,

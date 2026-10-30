@@ -502,13 +502,18 @@ class Session {
     }
     return to_array(out);
   }
-  py::array_t<double> calculate_residual_jacobian_rwa(const py::array_t<double, py::array::forcecast> &p) {
+  py::array_t<double> calculate_residual_jacobian_rwa(const py::array_t<double, py::array::forcecast> &p,
+                                                      const std::vector<int> &skip) {
     vector_r v = to_vector(p), out;
     expect_free(v, "calculate_residual_jacobian_rwa");
+    for (int c : skip)
+      if (c < 0 || c >= (int)v.size())
+        throw AZURE2Error("calculate_residual_jacobian_rwa: skip column " + std::to_string(c) + " is outside the " +
+                          std::to_string(v.size()) + " free parameters.");
     {
       py::gil_scoped_release release;
       ConfigScope guard(config_, &ecCache_, &potentials_);
-      out = api_->CalculateResidualJacobianRWA(v);
+      out = api_->CalculateResidualJacobianRWA(v, skip);
     }
     return to_array(out);
   }
@@ -685,7 +690,8 @@ PYBIND11_MODULE(_azure2, m) {
       .def("calculate_chi2_grad_rwa", &Session::calculate_chi2_grad_rwa,
            py::arg("params"))
       .def("calculate_residual_jacobian_rwa", &Session::calculate_residual_jacobian_rwa,
-           py::arg("params"))
+           py::arg("params"), py::arg("skip") = std::vector<int>(),
+           "Residuals and Jacobian; the free columns listed in skip are not finite-differenced (left zero).")
       .def("calculate_model_gradients_rwa", &Session::calculate_model_gradients_rwa,
            py::arg("params"))
       .def("coulomb_functions", &Session::coulomb_functions, py::arg("request"))

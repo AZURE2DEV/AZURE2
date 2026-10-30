@@ -1563,7 +1563,7 @@ class azure2:
             dtype=float)
         return float(resp[0]), np.asarray(resp[1:], dtype=float)
 
-    def residual_jacobian(self, params):
+    def residual_jacobian(self, params, skip=None):
         """Standardized residuals and their Jacobian.
 
         ``r_i = (fit_i - data_i*n)/(cmErr_i*n)`` so ``sum(r_i**2) == chi2``.
@@ -1587,10 +1587,20 @@ class azure2:
         (Before pyazr 2.7 these columns came back as zero, which a
         least-squares driver accepts silently by never moving those
         parameters.)
+
+        ``skip``: free-column indices (into ``params``) the caller holds fixed.
+        Their finite differences are not computed and the columns come back
+        zero; every other column is unchanged.  A fit that varies only some of
+        the free parameters saves two residual evaluations per skipped shift,
+        shift-function or density column (2026-10-30; rmfit's polish passes the
+        columns its bounds fix).
         """
-        resp = np.asarray(
-            self.sess.calculate_residual_jacobian_rwa(
-                np.asarray(params, float).ravel()), dtype=float)
+        x = np.asarray(params, float).ravel()
+        if skip is None or len(skip) == 0:
+            resp = self.sess.calculate_residual_jacobian_rwa(x)
+        else:
+            resp = self.sess.calculate_residual_jacobian_rwa(x, skip=[int(c) for c in skip])
+        resp = np.asarray(resp, dtype=float)
         if resp.size == 1 and resp[0] == -1.0:
             raise RuntimeError("residual_jacobian: an analytically-unsupported "
                                "segment/config is present.")

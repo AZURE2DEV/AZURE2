@@ -161,6 +161,13 @@ with many free shifts is dominated by their columns. This covers the
 (``kind == "shift_fn"``, :attr:`Parameter.fn_term` = j) as well;
 ``penalties()`` and ``objective()`` include their penalties.
 
+A fit that varies only some of the free parameters can say which of these
+columns it does not need: ``residual_jacobian(x, skip=[...])`` (free-column
+indices) leaves their finite differences out and returns those columns as zero;
+every other column is unchanged. rmfit's ``polish`` passes the columns its
+bounds hold (since 30 October 2026, before which a held shift cost its two
+evaluations on every Jacobian all the same).
+
 A fitted target density (``densityfit`` / ``densitygroup`` on a ``<targetInt>``
 line, :doc:`experimental_effects`) is a parameter of kind ``"density"``
 (``ParameterSet.densities``; :attr:`Parameter.effect` is the line holding it,

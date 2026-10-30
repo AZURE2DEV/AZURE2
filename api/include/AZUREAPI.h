@@ -340,10 +340,14 @@ class AZUREAPI {
    * Gauss-Newton / Levenberg-Marquardt.  Columns are the non-fixed parameters
    * (input order).  Returns
    *   [ nRes, nCols, r_0..r_{nRes-1}, J row-major (nRes x nCols) ],
-   * or [ -1 ] if a point is outside the supported analytic path.  Energy-shift
-   * columns are left zero.
+   * or [ -1 ] if a point is outside the supported analytic path.  Energy-shift,
+   * sqrt(E)-shift, shift-function and target-density columns are central
+   * differences, two residual evaluations each; a column listed in
+   * \p skipColumns (0-based indices into \p params) is not differenced and
+   * comes back zero, for a caller that holds those parameters (rmfit's fixed
+   * bounds, 2026-10-30).  The adjoint columns are always filled.
    */
-  vector_r CalculateResidualJacobianRWA(const vector_r &params) const;
+  vector_r CalculateResidualJacobianRWA(const vector_r &params, const std::vector<int> &skipColumns = {}) const;
 
   /*!
    * Per-point sensitivities d(model)/d(theta) of the calculated segments, for

@@ -292,3 +292,10 @@ add_test(NAME pyazr_ec_cache_precision
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/ec_cache_precision_test.py)
 set_tests_properties(pyazr_ec_cache_precision PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
+# residual_jacobian(x, skip=cols): held columns are not finite-differenced and come back zero, everything else
+# bit-identical (2026-10-30, rmfit polish passes the columns its bounds fix).
+add_test(NAME pyazr_jacobian_skip
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/jacobian_skip_test.py)
+set_tests_properties(pyazr_jacobian_skip PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
