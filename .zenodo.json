@@ -1,0 +1,10 @@
+{
+  "title": "AZURE2",
+  "upload_type": "software",
+  "description": "AZURE2: a multilevel, multichannel R-matrix code for nuclear astrophysics and nuclear data evaluation, with the pyazr Python interface.",
+  "creators": [
+    {"name": "Skowronski, Jakub", "affiliation": "Università degli Studi di Padova"},
+    {"name": "deBoer, Richard James", "affiliation": "University of Notre Dame"}
+  ],
+  "license": "GPL-3.0-only"
+}
