@@ -102,7 +102,11 @@ runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
   a group from an *active* level line, so a J^π with no level was absent and
   its potential scattering silently missing from elastic data. The old fix was
   a fixed zero-width "dummy" level per J^π (easily mistaken for a background
-  pole). Since 2026-10-11 the `.azr` can carry `includeAllJPi=1` and
+  pole). (Before dev 63429c2, 2026-10-31, a level with ALL widths 0 sitting
+  exactly on a point's energy made the level matrix singular and the whole J^π
+  group vanished at that point -- R-matrix route: NaN or a GSL exception.  12C+12C:
+  a zero-width 4+ at a Tan2024 energy, chi2 4353 -> 4508.  Older builds: keep such
+  levels off data energies.) Since 2026-10-11 the `.azr` can carry `includeAllJPi=1` and
   `maxOrbitalMomentum=N` after the fixed `<config>` lines: `CNuc::AddHardSphereGroups`
   then adds a level-less group with its particle channels for every J^π the
   pairs allow up to `N` (default: the largest particle-channel l in the file).

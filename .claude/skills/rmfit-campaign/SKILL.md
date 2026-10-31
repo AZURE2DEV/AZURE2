@@ -649,7 +649,9 @@ The GUI review: `printf '1\n<reaction>.sav\n\n7\n' | AZURE2 <flags> --no-gui --n
 - 2026-09-10 -- `rmfit levelscan` built (rmfit/levelscan.py, test_levelscan_13n.py). Lessons:
   the engine numbers levels inside a J^pi group in its own order (resolve dummy labels from
   `ev.level_energy`, never from file order); pyazr's `deactivate_level` keeps a zero-width
-  level with a free energy in the file (use `remove_level` for a real removal); new J^pi
+  level with a free energy in the file (use `remove_level` for a real removal; before AZURE2
+  dev 63429c2, 2026-10-31, such a level exactly on a data energy dropped its whole J^pi
+  group at that point); new J^pi
   groups add hard-sphere terms; photon channels need their own tiny trial widths; and a
   16-digit energy in an add_level line silently corrupts the model. Not yet run on 13C+a.
 - 2026-09-10 -- `levelscan.review_figure` + `Campaign.review_figure`: written by `relocate`
