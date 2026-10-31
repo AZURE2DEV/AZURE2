@@ -1078,8 +1078,14 @@ m.objective(x)         # chi2 + penalties: what AZURE2's own fit minimizes
 
 `residual_jacobian` costs ~2 forward evaluations for the whole Jacobian
 (reverse-mode adjoint) — that is what makes a Gauss-Newton / LM fit in Python
-cheaper than Minuit's numerical gradients. Energy-shift columns come back zero;
-an analytically unsupported segment raises.
+cheaper than Minuit's numerical gradients. An analytically unsupported segment
+raises.  Energy-shift, sqrt(E)-shift, shift-function and density columns are
+central differences, forward only (dev 5fbf446, 2026-10-30; before, each side
+re-solved the whole Jacobian): a self-contained segment's shift costs two
+evaluations of that segment's points, any other (composite, mapped, density)
+two full forward passes.  `residual_jacobian(x, skip=[cols])` (dev 77cd6b3)
+leaves listed free columns undifferenced and zero, for a fit that holds them;
+`AZURE_PROFILE=1` reports "shift cols (segment)" / "shift cols (full)".
 
 **Threads.** Every evaluation (`calculate_chi2_rwa`, `calculate_chi2`,
 `calculate_rwa`, `calculate`, `calculate_all_rwa`) spreads its points over

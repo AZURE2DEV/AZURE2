@@ -426,7 +426,8 @@ The GUI review: `printf '1\n<reaction>.sav\n\n7\n' | AZURE2 <flags> --no-gui --n
   is untested since the escalations; run `perturb` on every new reaction before trusting
   the method there.
 - Energy shifts are finite-differenced (kept fixed during exploration, freed in the
-  continuation polish). Norms of split segments are shared across shards correctly;
+  continuation polish); a shift held by polish's bounds is not differenced at all with
+  AZURE2 >= 77cd6b3 (see the 2026-10-30 entry at the end). Norms of split segments are shared across shards correctly;
   segments with target effects are never split.
 - Data covariances (`covariance <file>`), normalization groups (`normgroup <label>`) and
   shift groups (`shiftgroup <label>`) work in both evaluators since 2026-10-22 (`rmfit/covariance.py`; README section "Data
@@ -1986,7 +1987,8 @@ single session takes only 45 s per objective -- the shards were badly balanced. 
 - a composite "sum" segment (the Cierjacks n-total, 13,129 points summed over 8 exits) was never split and sat alone in one shard.
   plan_pieces now splits sum composites by energy like plain segments, with the cost multiplied by the component count
   (RMFIT_SPLIT_SUM=0 restores the old rule). Objective 25 s -> 3-4.5 s, bit-identical.
-- a free energy shift is finite-differenced in the Jacobian and each step re-evaluates the WHOLE shard (~0.024 s per point per shift),
+- a free energy shift is finite-differenced in the Jacobian and each step re-evaluated the WHOLE shard (~0.024 s per point per shift;
+  since AZURE2 5fbf446, 2026-10-30, a self-contained segment's shift re-evaluates only that segment, forward only),
   so shards holding shifted segments took 28-92 s while the rest took 10-17 s. build_shards now gives each free-shift segment a shard
   of its own while they are no more than half the shards (RMFIT_SHIFT_SOLO=0 restores). Jacobian 115-141 s -> 25-29 s, |J| identical.
 How it was found (reusable): time each shard's eval and Jacobian separately (call each _Worker in turn) -- the slowest shard sets the
@@ -2254,3 +2256,23 @@ Single-nucleus labels are byte-identical to before.  Checkpoints, ledgers and `p
 labels for a multi-nucleus model no longer match by name.  Still per J^pi only (documented in rmfit/README.md): sign-round
 groups, `free_mask(jpi=)`, level add and levelscan.  Test `rmfit/tests/test_level_labels_multicn.py` (fails on the old
 code); records R-matrix/AZURE2_code_audit/10-25-26/rmfit_cnlabel/readme.
+
+## 2026-10-30 -- Jacobian shift columns: held ones skipped, the rest forward only (DeBoer: "go ahead with the column mask", "push and install, and do the residuals-only saving too")
+
+The 17O+a an6pre polish (8 held shift/shift-function terms) spent ~16 of ~18 evaluations per Jacobian (41 min each) on
+finite-differenced columns it then discarded, and ran 7.5 h without finishing a step.  Two changes:
+- rmfit (live 2026-10-30, backups *.bak-2026-10-30-jacmask): `Evaluator.residuals(x, jac=True, cols=...)` names the
+  columns wanted; polish and gn_step pass their free ones, and the workers hand the complement to
+  `residual_jacobian(x, skip=)`.  With a pyazr without `skip` the workers compute every column as before.  Held columns
+  come back zero on the data rows; analytic penalty rows keep theirs.  Test rmfit/tests/test_jac_skip_columns.py.
+- AZURE2 (dev 77cd6b3 skip, 5fbf446 forward-only columns; installed 2026-10-30): the columns still differenced no
+  longer re-solve the Jacobian per side; a self-contained segment's shift (no components, not total capture, no point
+  mapping outside its segments) is differenced on its own rows, a density or composite/mapped shift with one forward
+  pass over all points.  Values equal the old columns (tests/pyazr/jacobian_shift_columns_test.py: 0 deviation from
+  differences of the returned residuals).
+What to do: a campaign started before the install keeps its old .so (kept inode) -- restart it, or run on a frozen
+build >= 5fbf446, to get the saving.  Shift columns still cost two evaluations each of the rows they move, so keep
+shifts fixed during exploration as before.  Not yet adapted: Sharded's Jacobian-cost balancing (2026-10-26) models a
+shift column as costing a whole shard (R (alpha + beta k), k counting held shifts too); with this engine a local shift
+costs its own segment and a held one nothing.  Its packing stays valid, only tuned for the old cost, and a cached
+<workdir>/jac_balance.json keeps the old fit -- re-tuning is a candidate, not done.
