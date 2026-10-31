@@ -374,6 +374,10 @@ class AMatrixFunc : public GenMatrixFunc {
   // Pre-allocated buffers to prevent memory fragmentation
   mutable std::vector<std::vector<double>> levelGammas_;
   mutable std::vector<double> levelEnergies_;
+  /// 1 for a level whose widths are all below the fill's cutoff (FillLevelMatrix).
+  mutable std::vector<char> levelDecoupled_;
+  /// Total energy of the last FillMatrices (for the singular-matrix warning).
+  double lastInEnergy_ = 0.0;
   mutable std::vector<std::vector<double>> shiftFunctions_;
   mutable int cached_max_levels_;
   mutable int cached_max_channels_;

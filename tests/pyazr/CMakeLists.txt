@@ -306,3 +306,10 @@ add_test(NAME pyazr_jacobian_shift_columns
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/jacobian_shift_columns_test.py)
 set_tests_properties(pyazr_jacobian_shift_columns PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
+# A level whose widths are all zero changes nothing, also at a point exactly at its energy (the level matrix is
+# singular there; the A-matrix level route dropped the whole J-group, the R-matrix route gave 0/0).
+add_test(NAME pyazr_zero_width_level
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/zero_width_level_test.py)
+set_tests_properties(pyazr_zero_width_level PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")

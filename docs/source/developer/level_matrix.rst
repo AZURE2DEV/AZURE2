@@ -125,6 +125,16 @@ pivoting (``LevelMatrixSolver``, reusable storage).  The T-matrix needs only
 the bilinear forms :math:`g_c^T A\, g_{c'}`, one triangular solve per channel;
 the full inverse is formed only on request (``GetAMatrixElement``).
 
+A level whose widths are all below the cutoff decouples: its row and column of
+:math:`A^{-1}` are zero but for the diagonal :math:`E_\lambda - E`, which
+vanishes at :math:`E = E_\lambda`.  The level contributes nothing at any
+energy, so ``FillLevelMatrix`` puts a unit diagonal there and the matrix stays
+regular.  Until 2026-10-31 the factorization failed instead and the whole
+J-group was left out at that energy (a zero-width level placed on a data
+energy changed :math:`\chi^2`); the R-matrix route (``RMatrixFunc``) divided
+0 by 0 or failed its GSL inversion.  Any other singular matrix still leaves the
+group out at that energy, with a warning printed once.
+
 Channel-Space Solution (default)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 

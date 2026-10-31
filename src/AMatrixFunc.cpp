@@ -16,6 +16,8 @@
 #include "AChannel.h"
 #include "PPair.h"
 #include <assert.h>
+#include <atomic>
+#include <iomanip>
 #include <cstdlib>
 #include <string>
 #include <iostream>
@@ -181,6 +183,7 @@ void AMatrixFunc::ClearMatrices() {
 void AMatrixFunc::FillMatrices(EPoint *point) {
   AZUREProfile::Timer profileTimer(AZUREProfile::kFill);
   const double inEnergy = this->InEnergy(point);
+  lastInEnergy_ = inEnergy;
   // Groups of another compound nucleus are not part of this point's matrices
   // (EPoint::CalcEDependentValues left their rows empty).
   activeNucleus_ = compound()->GetPair(compound()->GetPairNumFromKey(point->GetEntranceKey()))->GetNucleus();
@@ -238,6 +241,7 @@ void AMatrixFunc::FillLevelMatrix(int j, EPoint *point, double inEnergy) {
 
     levelGammas_.resize(cached_max_levels_ + 1);
     levelEnergies_.resize(cached_max_levels_ + 1);
+    levelDecoupled_.resize(cached_max_levels_ + 1);
     shiftFunctions_.resize(cached_max_levels_ + 1);
 
     for (int la = 0; la <= cached_max_levels_; la++) {
@@ -252,9 +256,11 @@ void AMatrixFunc::FillLevelMatrix(int j, EPoint *point, double inEnergy) {
       ALevel *level = jGroup->GetLevel(la);
       levelEnergies_[la] = level->GetFitE();
 
+      levelDecoupled_[la] = 1;
       for (int ch = 1; ch <= numChannels; ch++) {
         levelGammas_[la][ch] = level->GetFitGamma(ch);
         shiftFunctions_[la][ch] = level->GetShiftFunction(ch);
+        if (fabs(levelGammas_[la][ch]) >= 1.0e-12) levelDecoupled_[la] = 0;
       }
     }
   }
@@ -303,16 +309,25 @@ void AMatrixFunc::FillLevelMatrix(int j, EPoint *point, double inEnergy) {
                     (levelEnergies_[la] - levelEnergies_[lap]);
             }
           }
+          complex element;
           if (park) {
             // Park (2021) Eqs. (21)-(22): A^-1 = (E_lambda - E) J - gamma (S - B_lambda + iP) gamma^T,
             // with the diagonal overlap J_{lambda lambda} of Eq. (28).
             if (la == lap) parkOverlap = level->GetParkNorm();
-            this->AddAInvMatrixElement(j, la, lap, (levelEnergies_[la] - inEnergy) * parkOverlap - sum);
+            element = (levelEnergies_[la] - inEnergy) * parkOverlap - sum;
           } else if (la == lap) {
             double resenergy = levelEnergies_[la];
-            this->AddAInvMatrixElement(j, la, lap, resenergy - inEnergy - sum);
+            element = resenergy - inEnergy - sum;
           } else
-            this->AddAInvMatrixElement(j, la, lap, -sum);
+            element = -sum;
+          // A level with no width above the cutoff has a zero row and column but
+          // for this diagonal, which vanishes at E = E_lambda.  The level
+          // contributes nothing at any energy (everything that uses A weighs it
+          // by its widths), so a unit diagonal there keeps the matrix regular;
+          // the failed factorization used to drop the whole J-group at that
+          // point (12C+12C 2026-10-30: a zero-width 4+ on a data energy).
+          if (la == lap && levelDecoupled_[la] && element == complex(0.0, 0.0)) element = 1.0;
+          this->AddAInvMatrixElement(j, la, lap, element);
         }
       }
     }
@@ -342,6 +357,18 @@ void AMatrixFunc::InvertMatrices() {
         continue;  // Skip empty matrices
       }
       solver_valid_[j - 1] = solvers_[j - 1].Decompose(*theAInvMatrix) ? 1 : 0;
+      if (!solver_valid_[j - 1]) {
+        // The group then contributes nothing at this energy.  A level without
+        // widths no longer gets here (FillLevelMatrix); say so once if
+        // anything else does.
+        static std::atomic<bool> warned(false);
+        if (!warned.exchange(true)) {
+          JGroup *jg = compound()->GetJGroup(j);
+          std::cerr << "Warning: singular level matrix of J-group " << jg->GetJ() << (jg->GetPi() < 0 ? "-" : "+")
+                    << " at E_x = " << std::setprecision(10) << lastInEnergy_
+                    << " MeV; the group is left out at that energy (reported once)." << std::endl;
+        }
+      }
     }
   }
   chan_cap_cache_.clear();

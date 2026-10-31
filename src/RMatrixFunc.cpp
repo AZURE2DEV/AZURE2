@@ -109,6 +109,15 @@ void RMatrixFunc::FillMatrices(EPoint *point) {
                     (level->GetShiftFunction(ch) * (inEnergy - levelp->GetFitE()) - levelp->GetShiftFunction(ch) * (inEnergy - level->GetFitE())) /
                     (level->GetFitE() - levelp->GetFitE());
             }
+            // A level without widths (zero row and column) at E = E_lambda: as in
+            // AMatrixFunc::FillLevelMatrix, a unit diagonal keeps the matrix regular;
+            // the level contributes nothing either way.
+            if (la == lap && sum == complex(0.0, 0.0)) {
+              bool decoupled = true;
+              for (int ch = 1; ch <= compound()->GetJGroup(j)->NumChannels() && decoupled; ch++)
+                decoupled = (level->GetFitGamma(ch) == 0.0);
+              if (decoupled) sum = 1.0;
+            }
             tempVector.push_back(sum);
           }
           qMatrixInverse.push_back(tempVector);
@@ -147,6 +156,8 @@ void RMatrixFunc::FillMatrices(EPoint *point) {
                 ALevel *level = compound()->GetJGroup(j)->GetLevel(la);
                 double gammaCh = level->GetFitGamma(ch);
                 double gammaChp = level->GetFitGamma(chp);
+                // A zero width contributes zero, also at E = E_lambda (not 0/0).
+                if (gammaCh == 0.0 || gammaChp == 0.0) continue;
                 double resenergy = level->GetFitE();
                 double gammaSum = 0.;
                 if (configure().paramMask & Config::USE_RMC_FORMALISM)

@@ -198,7 +198,9 @@ shifts of a :math:`J^\pi` that had no level was a **dummy level**: a level at an
 arbitrary (usually high) energy with that :math:`J^\pi`, its energy fixed and
 all partial widths set to zero. Such levels are easily confused with background
 poles, which do carry widths. With the option on, dummy levels are harmless (a
-zero-width level adds nothing to the level sum) and can be deleted; the
+zero-width level adds nothing to the level sum, also at a data point exactly at
+its energy since 2026-10-31; before, such a point lost its whole
+:math:`J^\pi` group) and can be deleted; the
 ``tests/hard_sphere`` check of the source tree verifies that a model with a
 dummy level per :math:`J^\pi` and the same model with the option on give
 identical cross sections.
