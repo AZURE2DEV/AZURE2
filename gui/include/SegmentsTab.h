@@ -48,6 +48,9 @@ class SegmentsTab : public QWidget {
   void addSegDataLine(SegmentsDataData line);
   void addSegTestLine();
   void addSegTestLine(SegmentsTestData line);
+  /// Append a line without the duplicate check (file reader).
+  void appendSegDataLine(SegmentsDataData line);
+  void appendSegTestLine(SegmentsTestData line);
   void editSegDataLine();
   void editSegTestLine();
   void deleteSegDataLine();

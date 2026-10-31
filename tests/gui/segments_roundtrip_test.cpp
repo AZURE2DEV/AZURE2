@@ -13,6 +13,8 @@
 
 #include <QApplication>
 #include <QTextStream>
+#include <QTimer>
+#include <QWidget>
 #include <QString>
 #include <QStringList>
 #include <iostream>
@@ -217,6 +219,80 @@ int main(int argc, char** argv) {
     d.uposCheck->setChecked(false); settle();
     ok("UPOS hidden: dialog back to its height", d.height() == h0 && d.angleBox->height() == box0,
        QString("%1 vs %2").arg(d.height()).arg(h0));
+  }
+
+  // ---- lines that differ only in components, UPOS or keyword blocks are not duplicates ------------------------
+  // Before 2026-10-31 the duplicate check ignored those fields, and the file reader went through it: tests/natural_neon's
+  // test lines 1 and 2 (a natural SUM of three terms and the 20Ne term alone) were "Duplicate Line", the second was
+  // dropped behind a modal message box (the screenshot mode hung on it), and every later segment key moved by one.
+  {
+    int boxes = 0;
+    QTimer watchdog;  // closes any message box so a regression fails instead of hanging
+    QObject::connect(&watchdog, &QTimer::timeout, [&boxes] {
+      if (QWidget *w = QApplication::activeModalWidget()) { boxes++; w->close(); }
+    });
+    watchdog.start(20);
+    SegmentsTab t;
+    t.setPairsModel(&pairs);
+    const QString neon =
+        "1 2 2 0.03 0.8 0.002 0 0 0 0 1 0 6 2 1 -999 2 3 -999 4 4 -999 4 5 -999 6 6 -999 6 7 -999 natural 1\n"
+        "1 2 2 0.03 0.8 0.002 0 0 0 0 1 0 2 2 1 -999 2 3 -999\n"
+        "1 2 2 0.03 0.8 0.002 0 0 0 0 1 0 2 2 1 -999 2 3 -999 natural 1\n"
+        "1 2 2 0.03 0.8 0.002 0 0 0 0 0\n"
+        "1 2 2 0.03 0.8 0.002 0 0 0 0 0\n"  // an exact duplicate in the file is kept too
+        "</segmentsTest>\n";
+    QString in(neon);
+    QTextStream inStream(&in);
+    ok("natural_neon-like test block read", t.readSegTestFile(inStream));
+    QList<SegmentsTestData> tl = t.getSegmentsTestModel()->getLines();
+    ok("every test line of the file kept", tl.size() == 5, QString::number(tl.size()));
+    ok("no message box while reading the test block", boxes == 0, QString::number(boxes));
+    const QString data =
+        "1 1 1 0.5 3 0 180 1 1 0 0 0 0 0 data/x.dat 0 0\n"
+        "1 1 1 0.5 3 0 180 1 1 0 0 0 0 0 data/x.dat 0 0 natural 1\n"
+        "1 1 1 0.5 3 0 180 1 1 0 0 0 0 0 data/x.dat 1 0 1 1 1 -999 0\n"
+        "1 1 1 0.5 3 0 180 1 1 0 0 0 0 0 data/x.dat 1 0 2 1 1 -999 1 2 -999 0\n"
+        "1 1 1 0.5 3 0 180 1 1 0 0 0 0 0 data/x.dat 0 1 2 1.5 0.1\n"
+        "1 1 1 0.5 3 0 180 1 1 0 0 0 0 0 data/x.dat 0 1 1 1.5 0.1\n"
+        "1 1 1 0.5 3 0 180 1 1 0 0 0 0 0 data/x.dat 0 0\n"
+        "</segmentsData>\n";
+    QString din(data);
+    QTextStream dStream(&din);
+    ok("data block read", t.readSegDataFile(dStream));
+    QList<SegmentsDataData> dl = t.getSegmentsDataModel()->getLines();
+    ok("every data line of the file kept", dl.size() == 7, QString::number(dl.size()));
+    ok("no message box while reading the data block", boxes == 0, QString::number(boxes));
+    if (tl.size() == 5 && dl.size() == 7) {
+      SegmentsTestModel *tm = t.getSegmentsTestModel();
+      SegmentsDataModel *dm = t.getSegmentsDataModel();
+      ok("test lines 1 and 2 differ (components)", tm->isSegTestLine(tl[1]) == 1, QString::number(tm->isSegTestLine(tl[1])));
+      ok("test lines 2 and 3 differ (keyword block)", tm->isSegTestLine(tl[2]) == 2, QString::number(tm->isSegTestLine(tl[2])));
+      ok("test lines 4 and 5 are duplicates", tm->isSegTestLine(tl[4]) == 3, QString::number(tm->isSegTestLine(tl[4])));
+      ok("data lines differ (keyword block)", dm->isSegDataLine(dl[1]) == 1, QString::number(dm->isSegDataLine(dl[1])));
+      ok("data lines differ (components)", dm->isSegDataLine(dl[3]) == 3, QString::number(dm->isSegDataLine(dl[3])));
+      ok("data lines differ (UPOS)", dm->isSegDataLine(dl[4]) == 4 && dm->isSegDataLine(dl[5]) == 5,
+         QString("%1 %2").arg(dm->isSegDataLine(dl[4])).arg(dm->isSegDataLine(dl[5])));
+      // The dialog's path still refuses an identical line, with the message box.
+      t.addSegTestLine(tl[1]);
+      ok("identical test line from the dialog refused", tm->getLines().size() == 5 && boxes == 1,
+         QString("%1 lines, %2 boxes").arg(tm->getLines().size()).arg(boxes));
+      SegmentsTestData other = tl[1];
+      other.componentsList = tl[0].componentsList;
+      other.extraTokens = "";
+      t.addSegTestLine(other);
+      ok("test line differing in its tail from the dialog added", tm->getLines().size() == 6 && boxes == 1,
+         QString("%1 lines, %2 boxes").arg(tm->getLines().size()).arg(boxes));
+      t.addSegDataLine(dl[3]);
+      ok("identical data line from the dialog refused", dm->getLines().size() == 7 && boxes == 2,
+         QString("%1 lines, %2 boxes").arg(dm->getLines().size()).arg(boxes));
+    }
+    QString out;
+    QTextStream outStream(&out);
+    outStream.setFieldAlignment(QTextStream::AlignLeft);
+    t.writeSegDataFile(outStream);
+    QStringList got = tokens(out), want = tokens(data);
+    want.removeLast();
+    ok("data lines written back token for token", got == want, got.join(" | "));
   }
 
   std::cout << (fails ? "FAILED" : "PASSED") << std::endl;

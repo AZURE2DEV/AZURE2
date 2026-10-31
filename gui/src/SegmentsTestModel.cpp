@@ -392,6 +392,8 @@ Qt::ItemFlags SegmentsTestModel::flags(const QModelIndex &index) const {
   return QAbstractTableModel::flags(index);
 }
 
+// Row of a line equal to this one in every field (components and keyword blocks included; not the active flag),
+// or -1.  Before 2026-10-31 the components and keyword blocks were not compared.
 int SegmentsTestModel::isSegTestLine(const SegmentsTestData &line) const {
   int foundLine = -1;
   for (int i = 0; i < segTestLineList.size(); i++) {
@@ -407,7 +409,11 @@ int SegmentsTestModel::isSegTestLine(const SegmentsTestData &line) const {
         tempLine.dataType == line.dataType &&
         tempLine.phaseJ == line.phaseJ &&
         tempLine.phaseL == line.phaseL &&
-        tempLine.maxAngDistOrder == line.maxAngDistOrder) {
+        tempLine.maxAngDistOrder == line.maxAngDistOrder &&
+        tempLine.isAdvanced == line.isAdvanced &&
+        tempLine.operationType == line.operationType &&
+        tempLine.componentsList == line.componentsList &&
+        tempLine.extraTokens.simplified() == line.extraTokens.simplified()) {
       foundLine = i;
       break;
     }

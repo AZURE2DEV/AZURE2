@@ -11,6 +11,15 @@ calculated. It is divided into two halves:
 Each segment is automatically assigned a numerical key that is referenced in the
 **Experimental Effects** tab.
 
+A line added with **+** is refused ("Duplicate Line") only when its table already
+holds an identical line: every field, the components of a composite segment and
+the keyword blocks at the end of the line included. Opening a project keeps
+every line of the file as written, so the keys are the file's. (Before
+2026-10-31 the check ignored the components and keyword blocks and also ran when
+a file was opened: a natural-target sum and its single-isotope term, for
+example, were taken for duplicates, the second line was dropped behind a message
+box and every later key moved by one.)
+
 Segments From Data
 ------------------
 

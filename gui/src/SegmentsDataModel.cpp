@@ -467,6 +467,8 @@ Qt::ItemFlags SegmentsDataModel::flags(const QModelIndex &index) const {
   return QAbstractTableModel::flags(index);
 }
 
+// Row of a line equal to this one in every field (components, UPOS and keyword blocks included; not the active
+// flag), or -1.  Before 2026-10-31 the components, UPOS fields and keyword blocks were not compared.
 int SegmentsDataModel::isSegDataLine(const SegmentsDataData &line) const {
   int foundLine = -1;
   for (int i = 0; i < segDataLineList.size(); i++) {
@@ -486,7 +488,15 @@ int SegmentsDataModel::isSegDataLine(const SegmentsDataData &line) const {
         tempLine.phaseL == line.phaseL &&
         tempLine.energyShift == line.energyShift &&
         tempLine.energyShiftError == line.energyShiftError &&
-        tempLine.varyEnergyShift == line.varyEnergyShift) {
+        tempLine.varyEnergyShift == line.varyEnergyShift &&
+        tempLine.isAdvanced == line.isAdvanced &&
+        tempLine.operationType == line.operationType &&
+        tempLine.componentsList == line.componentsList &&
+        tempLine.isUPOS == line.isUPOS &&
+        tempLine.secondaryDecayL == line.secondaryDecayL &&
+        tempLine.finalJ == line.finalJ &&
+        tempLine.delta == line.delta &&
+        tempLine.extraTokens.simplified() == line.extraTokens.simplified()) {
       foundLine = i;
       break;
     }

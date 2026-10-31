@@ -375,65 +375,73 @@ void SegmentsTab::addSegDataLine() {
   }
 }
 
+// A line added from the dialog: refused when an identical line (every field, components and keyword blocks
+// included) is already there.
 void SegmentsTab::addSegDataLine(SegmentsDataData line) {
-  QList<SegmentsDataData> lines = segmentsDataModel->getLines();
-  if (segmentsDataModel->isSegDataLine(line) == -1) {
-    segmentsDataModel->insertRows(lines.size(), 1, QModelIndex());
-    QModelIndex index = segmentsDataModel->index(lines.size(), 0, QModelIndex());
-    segmentsDataModel->setData(index, line.isActive, Qt::EditRole);
-    index = segmentsDataModel->index(lines.size(), 1, QModelIndex());
-    segmentsDataModel->setData(index, line.entrancePairIndex, Qt::EditRole);
-    index = segmentsDataModel->index(lines.size(), 2, QModelIndex());
-    segmentsDataModel->setData(index, line.exitPairIndex, Qt::EditRole);
-    index = segmentsDataModel->index(lines.size(), 3, QModelIndex());
-    segmentsDataModel->setData(index, line.lowEnergy, Qt::EditRole);
-    index = segmentsDataModel->index(lines.size(), 4, QModelIndex());
-    segmentsDataModel->setData(index, line.highEnergy, Qt::EditRole);
-    index = segmentsDataModel->index(lines.size(), 5, QModelIndex());
-    segmentsDataModel->setData(index, line.lowAngle, Qt::EditRole);
-    index = segmentsDataModel->index(lines.size(), 6, QModelIndex());
-    segmentsDataModel->setData(index, line.highAngle, Qt::EditRole);
-    index = segmentsDataModel->index(lines.size(), 7, QModelIndex());
-    segmentsDataModel->setData(index, line.dataType, Qt::EditRole);
-    index = segmentsDataModel->index(lines.size(), 8, QModelIndex());
-    segmentsDataModel->setData(index, line.dataFile, Qt::EditRole);
-    index = segmentsDataModel->index(lines.size(), 9, QModelIndex());
-    segmentsDataModel->setData(index, line.dataNorm, Qt::EditRole);
-    index = segmentsDataModel->index(lines.size(), 10, QModelIndex());
-    segmentsDataModel->setData(index, line.dataNormError, Qt::EditRole);
-    index = segmentsDataModel->index(lines.size(), 11, QModelIndex());
-    segmentsDataModel->setData(index, line.varyNorm, Qt::EditRole);
-    index = segmentsDataModel->index(lines.size(), 12, QModelIndex());
-    segmentsDataModel->setData(index, line.phaseJ, Qt::EditRole);
-    index = segmentsDataModel->index(lines.size(), 13, QModelIndex());
-    segmentsDataModel->setData(index, line.phaseL, Qt::EditRole);
-    index = segmentsDataModel->index(lines.size(), 14, QModelIndex());
-    segmentsDataModel->setData(index, line.energyShift, Qt::EditRole);
-    index = segmentsDataModel->index(lines.size(), 15, QModelIndex());
-    segmentsDataModel->setData(index, line.energyShiftError, Qt::EditRole);
-    index = segmentsDataModel->index(lines.size(), 16, QModelIndex());
-    segmentsDataModel->setData(index, line.varyEnergyShift, Qt::EditRole);
-    index = segmentsDataModel->index(lines.size(), 17, QModelIndex());
-    segmentsDataModel->setData(index, line.isAdvanced, Qt::EditRole);
-    index = segmentsDataModel->index(lines.size(), 18, QModelIndex());
-    segmentsDataModel->setData(index, line.operationType, Qt::EditRole);
-    index = segmentsDataModel->index(lines.size(), 19, QModelIndex());
-    segmentsDataModel->setData(index, line.componentsList, Qt::EditRole);
-    index = segmentsDataModel->index(lines.size(), 20, QModelIndex());
-    segmentsDataModel->setData(index, line.isUPOS, Qt::EditRole);
-    index = segmentsDataModel->index(lines.size(), 21, QModelIndex());
-    segmentsDataModel->setData(index, line.secondaryDecayL, Qt::EditRole);
-    index = segmentsDataModel->index(lines.size(), 22, QModelIndex());
-    segmentsDataModel->setData(index, line.finalJ, Qt::EditRole);
-    index = segmentsDataModel->index(lines.size(), 23, QModelIndex());
-    segmentsDataModel->setData(index, line.delta, Qt::EditRole);
-    // Keyword blocks have no column; without this they were lost on every load.
-    segmentsDataModel->setLineExtras(lines.size(), line.extraTokens);
-    segmentsDataView->resizeRowToContents(lines.size());
-    updateSegDataButtons(segmentsDataView->selectionModel()->selection());
-  } else {
+  if (segmentsDataModel->isSegDataLine(line) != -1) {
     QMessageBox::information(this, tr("Duplicate Line"), tr("This line already exists."));
+    return;
   }
+  appendSegDataLine(line);
+}
+
+// Appends without the duplicate check.  The file reader uses it: a line of the file is never dropped (that would
+// renumber the segments every later key refers to) and loading never stops on a message box.
+void SegmentsTab::appendSegDataLine(SegmentsDataData line) {
+  QList<SegmentsDataData> lines = segmentsDataModel->getLines();
+  segmentsDataModel->insertRows(lines.size(), 1, QModelIndex());
+  QModelIndex index = segmentsDataModel->index(lines.size(), 0, QModelIndex());
+  segmentsDataModel->setData(index, line.isActive, Qt::EditRole);
+  index = segmentsDataModel->index(lines.size(), 1, QModelIndex());
+  segmentsDataModel->setData(index, line.entrancePairIndex, Qt::EditRole);
+  index = segmentsDataModel->index(lines.size(), 2, QModelIndex());
+  segmentsDataModel->setData(index, line.exitPairIndex, Qt::EditRole);
+  index = segmentsDataModel->index(lines.size(), 3, QModelIndex());
+  segmentsDataModel->setData(index, line.lowEnergy, Qt::EditRole);
+  index = segmentsDataModel->index(lines.size(), 4, QModelIndex());
+  segmentsDataModel->setData(index, line.highEnergy, Qt::EditRole);
+  index = segmentsDataModel->index(lines.size(), 5, QModelIndex());
+  segmentsDataModel->setData(index, line.lowAngle, Qt::EditRole);
+  index = segmentsDataModel->index(lines.size(), 6, QModelIndex());
+  segmentsDataModel->setData(index, line.highAngle, Qt::EditRole);
+  index = segmentsDataModel->index(lines.size(), 7, QModelIndex());
+  segmentsDataModel->setData(index, line.dataType, Qt::EditRole);
+  index = segmentsDataModel->index(lines.size(), 8, QModelIndex());
+  segmentsDataModel->setData(index, line.dataFile, Qt::EditRole);
+  index = segmentsDataModel->index(lines.size(), 9, QModelIndex());
+  segmentsDataModel->setData(index, line.dataNorm, Qt::EditRole);
+  index = segmentsDataModel->index(lines.size(), 10, QModelIndex());
+  segmentsDataModel->setData(index, line.dataNormError, Qt::EditRole);
+  index = segmentsDataModel->index(lines.size(), 11, QModelIndex());
+  segmentsDataModel->setData(index, line.varyNorm, Qt::EditRole);
+  index = segmentsDataModel->index(lines.size(), 12, QModelIndex());
+  segmentsDataModel->setData(index, line.phaseJ, Qt::EditRole);
+  index = segmentsDataModel->index(lines.size(), 13, QModelIndex());
+  segmentsDataModel->setData(index, line.phaseL, Qt::EditRole);
+  index = segmentsDataModel->index(lines.size(), 14, QModelIndex());
+  segmentsDataModel->setData(index, line.energyShift, Qt::EditRole);
+  index = segmentsDataModel->index(lines.size(), 15, QModelIndex());
+  segmentsDataModel->setData(index, line.energyShiftError, Qt::EditRole);
+  index = segmentsDataModel->index(lines.size(), 16, QModelIndex());
+  segmentsDataModel->setData(index, line.varyEnergyShift, Qt::EditRole);
+  index = segmentsDataModel->index(lines.size(), 17, QModelIndex());
+  segmentsDataModel->setData(index, line.isAdvanced, Qt::EditRole);
+  index = segmentsDataModel->index(lines.size(), 18, QModelIndex());
+  segmentsDataModel->setData(index, line.operationType, Qt::EditRole);
+  index = segmentsDataModel->index(lines.size(), 19, QModelIndex());
+  segmentsDataModel->setData(index, line.componentsList, Qt::EditRole);
+  index = segmentsDataModel->index(lines.size(), 20, QModelIndex());
+  segmentsDataModel->setData(index, line.isUPOS, Qt::EditRole);
+  index = segmentsDataModel->index(lines.size(), 21, QModelIndex());
+  segmentsDataModel->setData(index, line.secondaryDecayL, Qt::EditRole);
+  index = segmentsDataModel->index(lines.size(), 22, QModelIndex());
+  segmentsDataModel->setData(index, line.finalJ, Qt::EditRole);
+  index = segmentsDataModel->index(lines.size(), 23, QModelIndex());
+  segmentsDataModel->setData(index, line.delta, Qt::EditRole);
+  // Keyword blocks have no column; without this they were lost on every load.
+  segmentsDataModel->setLineExtras(lines.size(), line.extraTokens);
+  segmentsDataView->resizeRowToContents(lines.size());
+  updateSegDataButtons(segmentsDataView->selectionModel()->selection());
 }
 
 void SegmentsTab::addSegTestLine() {
@@ -478,48 +486,56 @@ void SegmentsTab::addSegTestLine() {
   }
 }
 
+// A line added from the dialog: refused when an identical line (every field, components and keyword blocks
+// included) is already there.
 void SegmentsTab::addSegTestLine(SegmentsTestData line) {
-  QList<SegmentsTestData> lines = segmentsTestModel->getLines();
-  if (segmentsTestModel->isSegTestLine(line) == -1) {
-    segmentsTestModel->insertRows(lines.size(), 1, QModelIndex());
-    QModelIndex index = segmentsTestModel->index(lines.size(), 0, QModelIndex());
-    segmentsTestModel->setData(index, line.isActive, Qt::EditRole);
-    index = segmentsTestModel->index(lines.size(), 1, QModelIndex());
-    segmentsTestModel->setData(index, line.entrancePairIndex, Qt::EditRole);
-    index = segmentsTestModel->index(lines.size(), 2, QModelIndex());
-    segmentsTestModel->setData(index, line.exitPairIndex, Qt::EditRole);
-    index = segmentsTestModel->index(lines.size(), 3, QModelIndex());
-    segmentsTestModel->setData(index, line.lowEnergy, Qt::EditRole);
-    index = segmentsTestModel->index(lines.size(), 4, QModelIndex());
-    segmentsTestModel->setData(index, line.highEnergy, Qt::EditRole);
-    index = segmentsTestModel->index(lines.size(), 5, QModelIndex());
-    segmentsTestModel->setData(index, line.energyStep, Qt::EditRole);
-    index = segmentsTestModel->index(lines.size(), 6, QModelIndex());
-    segmentsTestModel->setData(index, line.lowAngle, Qt::EditRole);
-    index = segmentsTestModel->index(lines.size(), 7, QModelIndex());
-    segmentsTestModel->setData(index, line.highAngle, Qt::EditRole);
-    index = segmentsTestModel->index(lines.size(), 8, QModelIndex());
-    segmentsTestModel->setData(index, line.angleStep, Qt::EditRole);
-    index = segmentsTestModel->index(lines.size(), 9, QModelIndex());
-    segmentsTestModel->setData(index, line.dataType, Qt::EditRole);
-    index = segmentsTestModel->index(lines.size(), 10, QModelIndex());
-    segmentsTestModel->setData(index, line.phaseJ, Qt::EditRole);
-    index = segmentsTestModel->index(lines.size(), 11, QModelIndex());
-    segmentsTestModel->setData(index, line.phaseL, Qt::EditRole);
-    index = segmentsTestModel->index(lines.size(), 12, QModelIndex());
-    segmentsTestModel->setData(index, line.maxAngDistOrder, Qt::EditRole);
-    index = segmentsTestModel->index(lines.size(), 13, QModelIndex());
-    segmentsTestModel->setData(index, line.isAdvanced, Qt::EditRole);
-    index = segmentsTestModel->index(lines.size(), 14, QModelIndex());
-    segmentsTestModel->setData(index, line.operationType, Qt::EditRole);
-    index = segmentsTestModel->index(lines.size(), 15, QModelIndex());
-    segmentsTestModel->setData(index, line.componentsList, Qt::EditRole);
-    segmentsTestModel->setLineExtras(lines.size(), line.extraTokens);
-    segmentsTestView->resizeRowToContents(lines.size());
-    updateSegTestButtons(segmentsTestView->selectionModel()->selection());
-  } else {
+  if (segmentsTestModel->isSegTestLine(line) != -1) {
     QMessageBox::information(this, tr("Duplicate Line"), tr("This line already exists."));
+    return;
   }
+  appendSegTestLine(line);
+}
+
+// Appends without the duplicate check.  The file reader uses it: a line of the file is never dropped (that would
+// renumber the segments every later key refers to) and loading never stops on a message box.
+void SegmentsTab::appendSegTestLine(SegmentsTestData line) {
+  QList<SegmentsTestData> lines = segmentsTestModel->getLines();
+  segmentsTestModel->insertRows(lines.size(), 1, QModelIndex());
+  QModelIndex index = segmentsTestModel->index(lines.size(), 0, QModelIndex());
+  segmentsTestModel->setData(index, line.isActive, Qt::EditRole);
+  index = segmentsTestModel->index(lines.size(), 1, QModelIndex());
+  segmentsTestModel->setData(index, line.entrancePairIndex, Qt::EditRole);
+  index = segmentsTestModel->index(lines.size(), 2, QModelIndex());
+  segmentsTestModel->setData(index, line.exitPairIndex, Qt::EditRole);
+  index = segmentsTestModel->index(lines.size(), 3, QModelIndex());
+  segmentsTestModel->setData(index, line.lowEnergy, Qt::EditRole);
+  index = segmentsTestModel->index(lines.size(), 4, QModelIndex());
+  segmentsTestModel->setData(index, line.highEnergy, Qt::EditRole);
+  index = segmentsTestModel->index(lines.size(), 5, QModelIndex());
+  segmentsTestModel->setData(index, line.energyStep, Qt::EditRole);
+  index = segmentsTestModel->index(lines.size(), 6, QModelIndex());
+  segmentsTestModel->setData(index, line.lowAngle, Qt::EditRole);
+  index = segmentsTestModel->index(lines.size(), 7, QModelIndex());
+  segmentsTestModel->setData(index, line.highAngle, Qt::EditRole);
+  index = segmentsTestModel->index(lines.size(), 8, QModelIndex());
+  segmentsTestModel->setData(index, line.angleStep, Qt::EditRole);
+  index = segmentsTestModel->index(lines.size(), 9, QModelIndex());
+  segmentsTestModel->setData(index, line.dataType, Qt::EditRole);
+  index = segmentsTestModel->index(lines.size(), 10, QModelIndex());
+  segmentsTestModel->setData(index, line.phaseJ, Qt::EditRole);
+  index = segmentsTestModel->index(lines.size(), 11, QModelIndex());
+  segmentsTestModel->setData(index, line.phaseL, Qt::EditRole);
+  index = segmentsTestModel->index(lines.size(), 12, QModelIndex());
+  segmentsTestModel->setData(index, line.maxAngDistOrder, Qt::EditRole);
+  index = segmentsTestModel->index(lines.size(), 13, QModelIndex());
+  segmentsTestModel->setData(index, line.isAdvanced, Qt::EditRole);
+  index = segmentsTestModel->index(lines.size(), 14, QModelIndex());
+  segmentsTestModel->setData(index, line.operationType, Qt::EditRole);
+  index = segmentsTestModel->index(lines.size(), 15, QModelIndex());
+  segmentsTestModel->setData(index, line.componentsList, Qt::EditRole);
+  segmentsTestModel->setLineExtras(lines.size(), line.extraTokens);
+  segmentsTestView->resizeRowToContents(lines.size());
+  updateSegTestButtons(segmentsTestView->selectionModel()->selection());
 }
 
 void SegmentsTab::editSegDataLine() {
@@ -1399,7 +1415,7 @@ bool SegmentsTab::readSegDataFile(QTextStream &inStream) {
       SegmentsDataData newLine = {isActive, entrancePairIndex, exitPairIndex, lowEnergy, highEnergy, lowAngle,
                                   highAngle, dataType, dataFile, dataNorm, dataNormError, varyNorm, phaseJ, phaseL, energyShift, energyShiftError, varyEnergyShift, isAdvanced, operationType, componentsList, isUPOS, secondaryDecayL, finalJ, delta};
       newLine.extraTokens = extraTokens;
-      addSegDataLine(newLine);
+      appendSegDataLine(newLine);
     }
   }
   if (line.trimmed() != QString("</segmentsData>")) return false;
@@ -1660,7 +1676,7 @@ bool SegmentsTab::readSegTestFile(QTextStream &inStream) {
       SegmentsTestData newLine = {isActive, entrancePairIndex, exitPairIndex, lowEnergy, highEnergy, energyStep, lowAngle,
                                   highAngle, angleStep, dataType, phaseJ, phaseL, maxAngDistOrder, isAdvanced, operationType, componentsList};
       newLine.extraTokens = extraTokens;
-      addSegTestLine(newLine);
+      appendSegTestLine(newLine);
     }
   }
   if (line.trimmed() != QString("</segmentsTest>")) return false;
