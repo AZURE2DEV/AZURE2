@@ -307,6 +307,39 @@ bool ComputeResidualJacobian(CNuc *compound, EData *data, const Config &config,
                              const vector_matrix_r *shiftDeriv,
                              vector_r &residuals, vector_r &jacobian, int &nCols);
 
+/// How many energy-shift columns FillShiftColumns differenced, and how.
+struct ShiftColumnCount {
+  int local = 0;  ///< on their own segments' rows
+  int full = 0;   ///< on every row
+};
+
+/*!
+ * \brief The energy-shift, sqrt(E)-shift, shift-function and target-density
+ *        columns of a residual Jacobian, by central differences.
+ *
+ * The adjoint of ComputeResidualJacobian does not cover these (a shift moves
+ * the energy of every quantity of its segments; a density moves the depth
+ * window of every point of its target's lines), so they are differenced,
+ * forward only, on the residual rows ComputeResidualJacobian lays out:
+ * - a shift whose segments are self-contained (no components, not a
+ *   total-capture sum, no point mapping outside them) on those segments' rows
+ *   alone, every other row being exactly zero;
+ * - any other column on every row, with one parallel pass over the points
+ *   (EData::CalculatePointsInParallel) per side.
+ * Neither side solves an adjoint: up to 2026-10-30 pyazr re-solved the whole
+ * Jacobian twice per column and threw it away.
+ *
+ * `compound`/`data` are filled at `full` (full parameter order, as `pmap`);
+ * `fixed` is the full fixed mask.  `skipPacked` (may be null) marks packed
+ * columns not to difference; they are left as they are.  `nRes` data rows
+ * (before any whitening), row-major `jac` with `nCols` columns.  The model is
+ * left at `full`.  Defined in AZURECalc.cpp, beside the shift helpers the
+ * analytic gradient shares.
+ */
+ShiftColumnCount FillShiftColumns(CNuc *compound, EData *data, const Config &config, const ParamIndexMap &pmap,
+                                  const std::vector<bool> &fixed, const vector_r &full,
+                                  const std::vector<char> *skipPacked, size_t nRes, int nCols, vector_r &jac);
+
 /*!
  * \brief Per-point d(model)/d(theta) for analytic covariance bands, keyed by
  *        EPoint*.  Columns are the packed parameters of `pmap`; only the R-matrix

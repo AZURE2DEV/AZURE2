@@ -150,8 +150,13 @@ makes Gauss-Newton and Levenberg-Marquardt fits cheap. It also yields the
 per-segment χ² the API does not expose directly, by slicing the residuals by
 segment length.
 
-Energy-shift columns are finite-differenced instead, at two extra residual
-evaluations each. A shift translates the energy axis of a whole segment, so
+Energy-shift columns are finite-differenced instead, from two forward residual
+evaluations each (no adjoint). A shift whose segments are self-contained (no
+components, not a total-capture sum, no point mapping onto other segments) is
+differenced on those segments' points alone; any other shift, and a fitted
+target density, re-evaluates every point, in one parallel pass per side. (Until
+30 October 2026 each side re-solved the whole Jacobian, adjoints included, and
+re-evaluated every point whatever the shift.) A shift translates the energy axis of a whole segment, so
 what is wanted is :math:`\partial\,\mathrm{model}/\partial E`, and AZURE2
 applies a shift by rebuilding every energy-dependent quantity of the affected
 points --- level matrix, penetrabilities, Coulomb and hard-sphere phases,

@@ -13,7 +13,8 @@ const char *const kNames[kNumStages] = {"evaluation",     "points",          "E-
                                         "matrix fill",    "factor/solve",    "T-matrix",
                                         "channel solves", "cross sections",  "gradient",
                                         "grad forward",   "grad T-cotangent", "grad back-propagation",
-                                        "grad level matrix", "grad rows"};
+                                        "grad level matrix", "grad rows",
+                                        "shift cols (segment)", "shift cols (full)"};
 std::atomic<long long> g_count[kNumCounters];
 const char *const kCounterNames[kNumCounters] = {"channel-space solves", "level route: size",
                                                  "level route: no formal set-up", "level route: near pole",

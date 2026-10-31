@@ -250,6 +250,189 @@ bool MappingConfined(const std::vector<std::vector<int>> &partners, const std::v
 
 }  // namespace
 
+ShiftColumnCount FillShiftColumns(CNuc *lc, EData *ld, const Config &config, const ParamIndexMap &pmap,
+                                  const std::vector<bool> &fixed, const vector_r &full,
+                                  const std::vector<char> *skipPacked, size_t nRes, int nCols, vector_r &jac) {
+  ShiftColumnCount count;
+
+  // A shift of a self-contained segment (no components, not a total-capture
+  // sum, no point mapping onto other segments) moves only that segment's rows, so
+  // its column is differenced on those rows alone; every other row of a full
+  // re-evaluation would difference to exactly zero.  With 55 free shifts on
+  // 11B+a the full path took over an hour per gradient.  Same criterion as the
+  // segment-local shift gradient in Gradient().
+  bool rowLayoutUnknown = false;
+  const std::vector<std::vector<int>> partners = CrossSegmentPartners(ld);
+  std::vector<int> rowStart(ld->NumSegments() + 2, 0);
+  std::vector<ESegment *> segments;
+  {
+    int row = 0;
+    for (int s = 1; s <= ld->NumSegments(); s++) {
+      rowStart[s] = row;
+      ESegment *seg = ld->GetSegment(s);
+      if (!seg) continue;
+      segments.push_back(seg);
+      for (int pid = 0; pid < seg->NumPoints(); pid++) {
+        EPoint *pt = seg->GetPoint(pid + 1);
+        if (!pt) continue;
+        row++;
+      }
+    }
+    rowStart[ld->NumSegments() + 1] = row;
+    if ((size_t)row != nRes) rowLayoutUnknown = true;  // row layout not understood: use the full path
+  }
+  // Residuals of one segment's rows, in row order, exactly as
+  // ComputeResidualJacobian forms them.
+  auto segmentResiduals = [&](ESegment *seg, vector_r &out, bool parallel) {
+    const int nPts = seg->NumPoints();
+    const double norm = seg->GetNorm();
+    std::vector<double> byPoint(nPts, 0.0);
+    std::vector<char> present(nPts, 0);
+    auto one = [&](int pid) {
+      EPoint *pt = seg->GetPoint(pid + 1);
+      if (!pt) return;
+      present[pid] = 1;
+      const double model = seg->CalculateTheoreticalCrossSection(pid, lc, config, ld);
+      const double denom = pt->GetCMCrossSectionError() * norm;
+      byPoint[pid] = (denom != 0.0) ? (model - pt->GetCMCrossSection() * norm) / denom : 0.0;
+    };
+    // No parallel construct inside an enclosing parallel region (see
+    // CoulFuncCache::localCache).  In parallel each point is calculated on
+    // its own, without point mapping (ScopedPointMappingOff, as in the
+    // AZUREGrad.cpp loops): a mapped point would otherwise read a value its
+    // host may not have calculated yet.  Serially, index order puts every
+    // host first and the sharing is kept.
+    if (parallel && !InParallelRegion()) {
+#pragma omp parallel for schedule(dynamic)
+      for (int pid = 0; pid < nPts; pid++) {
+        ScopedPointMappingOff noPointMapping;
+        one(pid);
+      }
+    } else {
+      for (int pid = 0; pid < nPts; pid++) one(pid);
+    }
+    out.clear();
+    for (int pid = 0; pid < nPts; pid++)
+      if (present[pid]) out.push_back(byPoint[pid]);
+  };
+  // Every row, forward only: one parallel pass over the points (as a
+  // chi-squared evaluation), then the residuals in row order.  If a point
+  // failed in the pass, the combination recalculates point by point.
+  auto allResiduals = [&](vector_r &out) {
+    const bool pre = EData::CalculatePointsInParallel(segments, lc, config) == 0;
+    out.clear();
+    for (ESegment *seg : segments) {
+      const double norm = seg->GetNorm();
+      for (int pid = 0; pid < seg->NumPoints(); pid++) {
+        EPoint *pt = seg->GetPoint(pid + 1);
+        if (!pt) continue;
+        const double model = seg->CalculateTheoreticalCrossSection(pid, lc, config, ld, pre);
+        const double denom = pt->GetCMCrossSectionError() * norm;
+        out.push_back((denom != 0.0) ? (model - pt->GetCMCrossSection() * norm) / denom : 0.0);
+      }
+    }
+  };
+
+  // Local shift columns: a parameter whose segments (its own, plus its shift
+  // group's followers for a group's constant shift or a shift-function
+  // parameter) are all self-contained is differenced on their rows alone.
+  struct LocalShift { int f, packed; ShiftParamTarget target; };
+  std::vector<LocalShift> localCols;
+  std::vector<int> fullShifts;
+  for (int f = 0; f < pmap.NumFull() && f < (int)full.size() && f < (int)fixed.size(); f++) {
+    if (fixed[f]) continue;
+    const ParamKind kind = pmap.Desc(f).kind;
+    if (kind != ParamKind::EnergyShift && kind != ParamKind::EnergyShiftSqrt && kind != ParamKind::EnergyShiftFn &&
+        kind != ParamKind::Density) continue;
+    const int packed = pmap.FullToPacked(f);
+    if (packed < 0 || packed >= nCols) continue;
+    // Columns the caller holds fixed: not differenced.
+    if (skipPacked && packed < (int)skipPacked->size() && (*skipPacked)[packed]) continue;
+    // A fitted target density moves the depth window of every point of its lines: full re-evaluation.
+    if (kind == ParamKind::Density) {
+      fullShifts.push_back(f);
+      continue;
+    }
+    const int sNum = pmap.Desc(f).segment;
+    if (!rowLayoutUnknown && sNum >= 1 && sNum <= ld->NumSegments()) {
+      const ShiftParamTarget target = ShiftTargets(ld, pmap.Desc(f));
+      // Mapping across segments keeps the column local while it stays among
+      // the parameter's segments (MappingConfined): they are all moved, then
+      // all evaluated, below.
+      if (target.Local(ld) && MappingConfined(partners, target.segs)) {
+        localCols.push_back({f, packed, target});
+        continue;
+      }
+    }
+    fullShifts.push_back(f);
+  }
+  // Segments in sequence, each one's points in parallel: re-energising a
+  // point (UpdatePointEnergyWithShift) and evaluating it touch only that
+  // point.  (Parallel over segments instead left the largest segment running
+  // alone at the end.)
+  auto updateSegment = [&](ESegment *seg) {
+    if (!InParallelRegion()) {
+#pragma omp parallel for schedule(dynamic, 1)
+      for (int pid = 0; pid < seg->NumPoints(); pid++) seg->UpdatePointGroupEnergyWithShift(pid, lc, &config);
+    } else {
+      seg->UpdatePointEnergiesWithShift(lc, &config);
+    }
+  };
+  for (const LocalShift &ls : localCols) {
+    AZUREProfile::Timer profileColumn(AZUREProfile::kShiftLocal);
+    const std::vector<int> &segs = ls.target.segs;
+    std::vector<vector_r> rP(segs.size()), rM(segs.size());
+    const double x0 = full[ls.f];
+    const double h = 1.0e-6 * (std::fabs(x0) + 1.0);
+    const double d0 = ls.target.Get(ld);
+    ls.target.Set(ld, x0 + h);
+    for (size_t m = 0; m < segs.size(); m++) updateSegment(ld->GetSegment(segs[m]));
+    for (size_t m = 0; m < segs.size(); m++) segmentResiduals(ld->GetSegment(segs[m]), rP[m], true);
+    ls.target.Set(ld, x0 - h);
+    for (size_t m = 0; m < segs.size(); m++) updateSegment(ld->GetSegment(segs[m]));
+    for (size_t m = 0; m < segs.size(); m++) segmentResiduals(ld->GetSegment(segs[m]), rM[m], true);
+    ls.target.Set(ld, d0);
+    for (size_t m = 0; m < segs.size(); m++) updateSegment(ld->GetSegment(segs[m]));
+    for (size_t m = 0; m < segs.size(); m++) {
+      const int sNum = segs[m];
+      const size_t r0 = (size_t)rowStart[sNum], nSegRows = (size_t)(rowStart[sNum + 1] - rowStart[sNum]);
+      if (rP[m].size() == nSegRows && rM[m].size() == nSegRows)
+        for (size_t r = 0; r < nSegRows; r++)
+          jac[(r0 + r) * (size_t)nCols + (size_t)ls.packed] = (rP[m][r] - rM[m][r]) / (2.0 * h);
+    }
+  }
+  count.local = (int)localCols.size();
+
+  vector_r rPlus, rMinus;
+  for (int f : fullShifts) {
+    AZUREProfile::Timer profileColumn(AZUREProfile::kShiftFull);
+    const int packed = pmap.FullToPacked(f);
+    const double x0 = full[f];
+    // A few eV: far inside any quoted beam-energy calibration uncertainty,
+    // far outside the noise of the forward model.
+    const double h = 1.0e-6 * (std::fabs(x0) + 1.0);
+    count.full++;
+    auto residualsAt = [&](double value, vector_r &out) {
+      vector_r fk = full;
+      fk[f] = value;
+      lc->FillCompoundFromParams(fk);
+      ld->FillNormsFromParams(fk);
+      ld->FillEnergyShiftsFromParams(fk, ld, lc, &config);
+      allResiduals(out);
+    };
+    residualsAt(x0 + h, rPlus);
+    residualsAt(x0 - h, rMinus);
+    if (rPlus.size() == nRes && rMinus.size() == nRes)
+      for (size_t r = 0; r < nRes; r++)
+        jac[r * (size_t)nCols + (size_t)packed] = (rPlus[r] - rMinus[r]) / (2.0 * h);
+  }
+  // Leave the model at the parameters that were asked for.
+  lc->FillCompoundFromParams(full);
+  ld->FillNormsFromParams(full);
+  ld->FillEnergyShiftsFromParams(full, ld, lc, &config);
+  return count;
+}
+
 /*!
  * AZURE_DUMP_NONFINITE=1 (optional threshold: AZURE_DUMP_NONFINITE=<chi2>, default 1e10): whenever a
  * chi-squared evaluation is non-finite or above the threshold, append to nonfinite_dump.txt (in the
@@ -1236,168 +1419,16 @@ bool AZURECalc::ResidualJacobian(const vector_r &full, vector_r &residuals,
   const auto tj1 = std::chrono::steady_clock::now();
   int nShiftLocal = 0, nShiftFull = 0;
 
-  // Energy-shift columns by central differences, as AZUREAPI::
-  // CalculateResidualJacobianRWA does for pyazr.  The adjoint does not cover a
+  // Energy-shift columns by central differences (FillShiftColumns, shared with
+  // AZUREAPI::CalculateResidualJacobianRWA).  The adjoint does not cover a
   // shift (it moves the energy of every quantity of the segment), and left as
   // zero the Levenberg-Marquardt and GSL drivers flag the shifts as
-  // data-insensitive and never move them.  Differencing the residual vector
-  // of the same function keeps the rows aligned.
+  // data-insensitive and never move them.
   if (ok) {
-    const size_t nRes = residuals.size();
-    vector_r rPlus, rMinus, jTmp;
-    int nc = 0;
-
-    // A shift of a self-contained segment (no components, not a total-capture
-    // sum, no point mapping onto other segments) moves only that segment's rows, so
-    // its column is differenced on those rows alone; every other row of the
-    // full re-evaluation below would difference to exactly zero.  The full
-    // path re-solved the WHOLE Jacobian, adjoints included, twice per shift:
-    // with 55 free shifts on 11B+a one gradient took over an hour.  Same
-    // criterion as the segment-local shift gradient in Gradient().
-    bool rowLayoutUnknown = false;
-    const std::vector<std::vector<int>> partners = CrossSegmentPartners(ld);
-    std::vector<int> rowStart(ld->NumSegments() + 2, 0);
-    {
-      int row = 0;
-      for (int s = 1; s <= ld->NumSegments(); s++) {
-        rowStart[s] = row;
-        ESegment *seg = ld->GetSegment(s);
-        if (!seg) continue;
-        for (int pid = 0; pid < seg->NumPoints(); pid++) {
-          EPoint *pt = seg->GetPoint(pid + 1);
-          if (!pt) continue;
-          row++;
-        }
-      }
-      rowStart[ld->NumSegments() + 1] = row;
-      if ((size_t)row != nRes) rowLayoutUnknown = true;  // row layout not understood: use the full path
-    }
-    // Residuals of one segment's rows, in row order, exactly as
-    // ComputeResidualJacobian forms them.
-    auto segmentResiduals = [&](ESegment *seg, vector_r &out, bool parallel) {
-      const int nPts = seg->NumPoints();
-      const double norm = seg->GetNorm();
-      std::vector<double> byPoint(nPts, 0.0);
-      std::vector<char> present(nPts, 0);
-      auto one = [&](int pid) {
-        EPoint *pt = seg->GetPoint(pid + 1);
-        if (!pt) return;
-        present[pid] = 1;
-        const double model = seg->CalculateTheoreticalCrossSection(pid, lc, configure(), ld);
-        const double denom = pt->GetCMCrossSectionError() * norm;
-        byPoint[pid] = (denom != 0.0) ? (model - pt->GetCMCrossSection() * norm) / denom : 0.0;
-      };
-      // No parallel construct inside an enclosing parallel region (see
-      // CoulFuncCache::localCache).  In parallel each point is calculated on
-      // its own, without point mapping (ScopedPointMappingOff, as in the
-      // AZUREGrad.cpp loops): a mapped point would otherwise read a value its
-      // host may not have calculated yet.  Serially, index order puts every
-      // host first and the sharing is kept.
-      if (parallel && !InParallelRegion()) {
-#pragma omp parallel for schedule(dynamic)
-        for (int pid = 0; pid < nPts; pid++) {
-          ScopedPointMappingOff noPointMapping;
-          one(pid);
-        }
-      } else {
-        for (int pid = 0; pid < nPts; pid++) one(pid);
-      }
-      out.clear();
-      for (int pid = 0; pid < nPts; pid++)
-        if (present[pid]) out.push_back(byPoint[pid]);
-    };
-
-    // Local shift columns: a parameter whose segments (its own, plus its shift
-    // group's followers for a group's constant shift or a shift-function
-    // parameter) are all self-contained is differenced on their rows alone.
-    struct LocalShift { int f, packed; ShiftParamTarget target; };
-    std::vector<LocalShift> localCols;
-    std::vector<int> fullShifts;
-    for (int f = 0; f < pmap.NumFull() && f < (int)full.size(); f++) {
-      if (fixed[f]) continue;
-      const ParamKind kind = pmap.Desc(f).kind;
-      if (kind != ParamKind::EnergyShift && kind != ParamKind::EnergyShiftSqrt && kind != ParamKind::EnergyShiftFn &&
-          kind != ParamKind::Density) continue;
-      const int packed = pmap.FullToPacked(f);
-      if (packed < 0 || packed >= nCols) continue;
-      // A fitted target density moves the depth window of every point of its lines: full re-evaluation.
-      if (kind == ParamKind::Density) {
-        fullShifts.push_back(f);
-        continue;
-      }
-      const int sNum = pmap.Desc(f).segment;
-      if (!rowLayoutUnknown && sNum >= 1 && sNum <= ld->NumSegments()) {
-        const ShiftParamTarget target = ShiftTargets(ld, pmap.Desc(f));
-        // Mapping across segments keeps the column local while it stays among
-        // the parameter's segments (MappingConfined): they are all moved, then
-        // all evaluated, below.
-        if (target.Local(ld) && MappingConfined(partners, target.segs)) {
-          localCols.push_back({f, packed, target});
-          continue;
-        }
-      }
-      fullShifts.push_back(f);
-    }
-    // Segments in sequence, each one's points in parallel: re-energising a
-    // point (UpdatePointEnergyWithShift) and evaluating it touch only that
-    // point.  (Parallel over segments instead left the largest segment running
-    // alone at the end.)
-    auto updateSegment = [&](ESegment *seg) {
-      if (!InParallelRegion()) {
-#pragma omp parallel for schedule(dynamic, 1)
-        for (int pid = 0; pid < seg->NumPoints(); pid++) seg->UpdatePointGroupEnergyWithShift(pid, lc, &configure());
-      } else {
-        seg->UpdatePointEnergiesWithShift(lc, &configure());
-      }
-    };
-    for (const LocalShift &ls : localCols) {
-      const std::vector<int> &segs = ls.target.segs;
-      std::vector<vector_r> rP(segs.size()), rM(segs.size());
-      const double x0 = full[ls.f];
-      const double h = 1.0e-6 * (std::fabs(x0) + 1.0);
-      const double d0 = ls.target.Get(ld);
-      ls.target.Set(ld, x0 + h);
-      for (size_t m = 0; m < segs.size(); m++) updateSegment(ld->GetSegment(segs[m]));
-      for (size_t m = 0; m < segs.size(); m++) segmentResiduals(ld->GetSegment(segs[m]), rP[m], true);
-      ls.target.Set(ld, x0 - h);
-      for (size_t m = 0; m < segs.size(); m++) updateSegment(ld->GetSegment(segs[m]));
-      for (size_t m = 0; m < segs.size(); m++) segmentResiduals(ld->GetSegment(segs[m]), rM[m], true);
-      ls.target.Set(ld, d0);
-      for (size_t m = 0; m < segs.size(); m++) updateSegment(ld->GetSegment(segs[m]));
-      for (size_t m = 0; m < segs.size(); m++) {
-        const int sNum = segs[m];
-        const size_t r0 = (size_t)rowStart[sNum], nSegRows = (size_t)(rowStart[sNum + 1] - rowStart[sNum]);
-        if (rP[m].size() == nSegRows && rM[m].size() == nSegRows)
-          for (size_t r = 0; r < nSegRows; r++)
-            jac[(r0 + r) * (size_t)nCols + (size_t)ls.packed] = (rP[m][r] - rM[m][r]) / (2.0 * h);
-      }
-    }
-    nShiftLocal = (int)localCols.size();
-
-    for (int f : fullShifts) {
-      const int packed = pmap.FullToPacked(f);
-      const double x0 = full[f];
-      const double h = 1.0e-6 * (std::fabs(x0) + 1.0);
-      nShiftFull++;
-      auto residualsAt = [&](double value, vector_r &out) -> bool {
-        vector_r fk = full;
-        fk[f] = value;
-        lc->FillCompoundFromParams(fk);
-        ld->FillNormsFromParams(fk);
-        ld->FillEnergyShiftsFromParams(fk, ld, lc, &configure());
-        out.clear();
-        jTmp.clear();
-        return ComputeResidualJacobian(lc, ld, configure(), pmap, sdp, out, jTmp, nc);
-      };
-      const bool okp = residualsAt(x0 + h, rPlus);
-      const bool okm = residualsAt(x0 - h, rMinus);
-      if (okp && okm && rPlus.size() == nRes && rMinus.size() == nRes)
-        for (size_t r = 0; r < nRes; r++)
-          jac[r * (size_t)nCols + (size_t)packed] = (rPlus[r] - rMinus[r]) / (2.0 * h);
-    }
-    lc->FillCompoundFromParams(full);
-    ld->FillNormsFromParams(full);
-    ld->FillEnergyShiftsFromParams(full, ld, lc, &configure());
+    const ShiftColumnCount cols = FillShiftColumns(lc, ld, configure(), pmap, fixed, full, nullptr,
+                                                   residuals.size(), nCols, jac);
+    nShiftLocal = cols.local;
+    nShiftFull = cols.full;
   }
   if (std::getenv("AZURE_GRAD_TIMING")) {
     static std::atomic<int> rjCalls{0};

@@ -1210,6 +1210,7 @@ vector_r AZUREAPI::CalculateChi2GradRWA(const vector_r &params) const {
 }
 
 vector_r AZUREAPI::CalculateResidualJacobianRWA(const vector_r &params, const std::vector<int> &skipColumns) const {
+  AZUREProfile::ScopedReport profileReport("api jacobian");
   vector_r full = MapPackedToFull(params, all_rwa_, fixed_);
 
   // One request at a time: operate on the canonical compound/data in place
@@ -1250,62 +1251,19 @@ vector_r AZUREAPI::CalculateResidualJacobianRWA(const vector_r &params, const st
   //
   // Returning these columns as zero, which is what this function used to do,
   // is the worst of the options: a least-squares driver handed a zero column
-  // simply never moves that parameter, converges, and reports success. Finite
-  // differences cost two residual evaluations per free shift and are correct.
+  // simply never moves that parameter, converges, and reports success.
   //
-  // This mirrors what CalculateChi2GradRWA already does for the scalar
-  // gradient. Differencing the residual vector that ComputeResidualJacobian
-  // itself returns guarantees the rows line up, since it is the same function
-  // that assigned them.
+  // FillShiftColumns (shared with the CLI's AZURECalc::ResidualJacobian)
+  // differences them forward only: a self-contained segment's shift on that
+  // segment's rows alone, anything else with one parallel point pass per side.
+  // Until 2026-10-30 this function re-solved the whole Jacobian, adjoints
+  // included, twice per column and kept only its residuals.
   {
-    const size_t nRes = residuals.size();
-    vector_r rPlus, rMinus, jTmp;
-    int nc = 0;
     // Columns the caller holds fixed (skipColumns): not differenced, left zero.
     std::vector<char> skip(params.size(), 0);
     for (int c : skipColumns)
       if (c >= 0 && c < (int)params.size()) skip[c] = 1;
-    for (int f = 0; f < pmap.NumFull(); f++) {
-      if (fixed_[f]) continue;
-      // (a fitted target density likewise moves the depth window of every point of its lines)
-      if (pmap.Desc(f).kind != ParamKind::EnergyShift &&
-          pmap.Desc(f).kind != ParamKind::EnergyShiftSqrt &&
-          pmap.Desc(f).kind != ParamKind::EnergyShiftFn &&
-          pmap.Desc(f).kind != ParamKind::Density) continue;
-      const int packed = pmap.FullToPacked(f);
-      if (packed < 0 || packed >= (int)params.size()) continue;
-      if (skip[packed]) continue;
-
-      const double x0 = params[packed];
-      // A few eV: far inside any quoted beam-energy calibration uncertainty,
-      // far outside the noise of the forward model.
-      const double h = 1.0e-6 * (std::fabs(x0) + 1.0);
-
-      auto residualsAt = [&](double value, vector_r &out) -> bool {
-        vector_r pk = params;
-        pk[packed] = value;
-        vector_r fullk = MapPackedToFull(pk, all_rwa_, fixed_);
-        lc->FillCompoundFromParams(fullk);
-        ld->FillNormsFromParams(fullk);
-        ld->FillEnergyShiftsFromParams(fullk, ld, lc, &configure());
-        out.clear();
-        jTmp.clear();
-        return ComputeResidualJacobian(lc, ld, configure(), pmap, sdp,
-                                       out, jTmp, nc);
-      };
-
-      const bool okp = residualsAt(x0 + h, rPlus);
-      const bool okm = residualsAt(x0 - h, rMinus);
-      if (okp && okm && rPlus.size() == nRes && rMinus.size() == nRes) {
-        for (size_t r = 0; r < nRes; r++)
-          jacobian[r * (size_t)nCols + (size_t)packed] =
-              (rPlus[r] - rMinus[r]) / (2.0 * h);
-      }
-    }
-    // Leave the model at the parameters that were asked for.
-    lc->FillCompoundFromParams(full);
-    ld->FillNormsFromParams(full);
-    ld->FillEnergyShiftsFromParams(full, ld, lc, &configure());
+    FillShiftColumns(lc, ld, configure(), pmap, fixed_, full, &skip, residuals.size(), nCols, jacobian);
   }
 
   // Data covariance: whiten the data rows, w = W r per group (W^T W = M^-1, sum w^2 = r^T M^-1 r).

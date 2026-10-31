@@ -299,3 +299,10 @@ add_test(NAME pyazr_jacobian_skip
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/jacobian_skip_test.py)
 set_tests_properties(pyazr_jacobian_skip PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
+# residual_jacobian differences shift and density columns forward only, a self-contained segment's shift on its own
+# rows (2026-10-30: each side re-solved the whole Jacobian, adjoints included).
+add_test(NAME pyazr_jacobian_shift_columns
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/jacobian_shift_columns_test.py)
+set_tests_properties(pyazr_jacobian_shift_columns PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")

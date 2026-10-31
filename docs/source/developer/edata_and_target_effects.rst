@@ -474,8 +474,9 @@ segments mapped onto each other are then at the same energy whatever a fit or
 a finite-difference step does to the shifts; segments whose shifts only
 coincide at the current values are not mapped.  Every change of a shift or of
 a sub-point grid rebuilds the mapping (``EData::FillEnergyShiftsFromParams``).
-The segment-local energy-shift derivatives of ``AZURECalc::Gradient`` and
-``AZURECalc::ResidualJacobian`` stay local as long as a parameter's segments
+The segment-local energy-shift derivatives of ``AZURECalc::Gradient`` and of
+the residual Jacobian (``FillShiftColumns``, shared by
+``AZURECalc::ResidualJacobian`` and pyazr's ``residual_jacobian``) stay local as long as a parameter's segments
 are mapped only among themselves; they move all of them before calculating
 any.
 
