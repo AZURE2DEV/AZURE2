@@ -131,6 +131,11 @@ runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
   silently left out of the sum and a failed RATIO denominator gave 0 -- chi2 looked normal.  On an older build, a
   composite segment with exact zeros or a suspiciously low SUM is a candidate for that.  Test hook for such paths:
   `AZURE_TEST_FAIL_E=<lab E>` (+ `AZURE_TEST_FAIL_EXIT=<pair key>`).
+- **`--no-brune` on a Brune fit with very broad background poles may have NO standard equivalent**: the
+  observed->formal transform (N a = E M a, M = 1 - sum gamma gamma' dS/dE) needs M positive definite.  Since dev
+  2026-11-01 the run stops with "No standard R-matrix ... corresponds to the levels of J^pi = ..." (pyazr
+  `AZURE2Error`); older builds crashed ("z is not finite in log_Gamma", core dump) -- tests/7Li_p_ay is the example.
+  "Denominator less than zero while transforming" warnings name the levels.  Stay with Brune for such files.
 - **Input is LAB frame, forward kinematics** (light particle = projectile).
   **All output files and API results are CENTER-OF-MASS.** Never mix them.
   This includes `add_extrapolation(e_min, e_max, e_step)` — those are **lab**
