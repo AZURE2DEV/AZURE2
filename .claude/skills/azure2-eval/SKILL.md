@@ -155,6 +155,11 @@ runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
     1.2345678e-4 became 1.23e-4) and the GUI kept six significant digits.
   - A scaling that is not a number refuses the project ("component k of n: the scaling factor is not a number"); it
     used to be a silent 1.0.
+  - Old-GUI component lists with entrance/exit keys only (no angle) are read as the GUI reads them (dev 0cc720d).
+    Older engines misread them silently: "1 0 2 2 2 2 3" became 2->2 at a fixed 2 deg with 2->3 dropped, and
+    "1 0 1 1 2" lost its only component.  86 archive lines are affected, all 2025 (11B+a ELBE and 13C+a
+    Cierjacks/Fowler neutron totals).  Too few numbers for the count: a WARNING, and the line is read as a plain
+    segment.
 - **Input is LAB frame, forward kinematics** (light particle = projectile).
   **All output files and API results are CENTER-OF-MASS.** Never mix them.
   This includes `add_extrapolation(e_min, e_max, e_step)` — those are **lab**

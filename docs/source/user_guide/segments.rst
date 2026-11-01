@@ -455,6 +455,14 @@ appears with the following fields:
    0.000123), and a factor that is not a number now stops the project from
    loading with an error naming the segment and component (it was taken as 1).
 
+   Project files written by old GUI versions list each component as its
+   entrance and exit keys only, without an angle.  Since November 2026 the
+   engine reads them as the GUI does; older engines took the next component's
+   entrance key for an angle and dropped the last component without a word
+   (e.g. the 2025 11B+α and 13C+α neutron totals, whose sum lost its last term).
+   A component count with too few numbers after it gives a warning, and the
+   line is read as a plain segment.
+
 **Unobserved Primary, Observed Secondary (UPOS)**
    For a particle exit pair :math:`b+B` whose residual nucleus :math:`B` is
    left in an excited state, the segment describes the **secondary gamma ray**
