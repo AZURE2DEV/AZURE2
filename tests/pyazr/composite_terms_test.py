@@ -176,6 +176,38 @@ def main():
         check("SUM, scaling 'abc': the engine names segment and component",
               "Data segment #1: component 1 of 1: the scaling factor is not a number" in log, log[-600:])
 
+        # 2b. The two-number component layout of old GUI files ("entrance exit" per component, no angle), read as the
+        # GUI reads it.  Before 2026-11-01 the engine took the next component's entrance key as an angle and dropped
+        # the last component ("2 2 5 2 3" gave 2->5 at a fixed 2 deg only); the archive has 86 such lines (11B+a ELBE
+        # and 13C+a Cierjacks/Fowler neutron totals, 2025).  Too few numbers: a warning, read as a plain segment.
+        def with_tail(tail):
+            def fn(lines):
+                out = []
+                for l in lines:
+                    t = l.split()
+                    if t[-6:] == ["1", "0", "1", "2", "5", "-999"]:
+                        l = "  ".join(t[:-6] + tail.split())
+                    out.append(l)
+                return out
+            return fn
+        layouts = {}
+        for name, tail in (("three", "1 0 2 2 5 -999 2 3 -999"), ("two", "1 0 2 2 5 2 3"),
+                           ("short", "1 0 2 2 5"), ("plain", "0")):
+            azr = os.path.join(work, f"sum_{name}.azr")
+            edit(base, azr, with_tail(tail))
+            res, log = run(azr, work)
+            layouts[name] = (np.array(res["values"][0], float) if "error" not in res else None, log)
+            if layouts[name][0] is None:
+                check(f"SUM, {name}-number layout: ran", False, res["error"])
+        if all(v[0] is not None for v in layouts.values()):
+            d = np.max(np.abs(layouts["two"][0] - layouts["three"][0]) / np.abs(layouts["three"][0]))
+            check(f"SUM, two-number layout (2 5, 2 3) = three-number layout (worst {d:.1e})", d <= 1e-12)
+            d = np.max(np.abs(layouts["short"][0] - layouts["plain"][0]) / np.abs(layouts["plain"][0]))
+            check(f"SUM, too few numbers: read as the plain segment (worst {d:.1e})", d <= 1e-12)
+            check("SUM, too few numbers: warning names the segment",
+                  "WARNING: Data segment #1: the component list declares 2 component(s) but holds only 2 number(s)"
+                  in layouts["short"][1], layouts["short"][1][-600:])
+
         # 3. Route: R-matrix asked for, with and without ignore_externals
         work, base = project("13N", None)
         works.append(work)

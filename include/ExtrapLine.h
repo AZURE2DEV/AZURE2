@@ -30,6 +30,7 @@ class ExtrapLine {
     operationType_ = 0;
     componentsList_ = "";
     parseError_ = "";
+    parseWarning_ = "";
     natural_ = "0";
     total_ = 0;
     phaseS_ = -1.0;  // phase-shift channel spin: < 0 = not given ("spin <s>" keyword)
@@ -53,7 +54,7 @@ class ExtrapLine {
       if (advancedStream >> tempIsAdvanced && tempIsAdvanced == 1) {
         isAdvanced_ = 1;
         if (advancedStream >> operationType_) {
-          const std::string componentError = ReadComponentList(advancedStream, componentsList_);
+          const std::string componentError = ReadComponentList(advancedStream, componentsList_, parseWarning_);
           if (!componentError.empty()) {
             parseError_ = componentError;
             stream.setstate(std::ios::failbit);
@@ -217,9 +218,12 @@ class ExtrapLine {
 
   /// What could not be read when the line failed (empty when it did not, or for an older failure without a message).
   std::string parseError() const { return parseError_; };
+  /// A note about the line that did not fail it (printed by EData with the segment number).
+  std::string parseWarning() const { return parseWarning_; };
 
  private:
   std::string parseError_;
+  std::string parseWarning_;
   int isActive_;
   int entranceKey_;
   int exitKey_;

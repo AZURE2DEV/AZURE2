@@ -7,7 +7,6 @@
 #include <sstream>
 #include "ComponentList.h"
 #include <vector>
-#include "ComponentList.h"
 
 /// A class to read and store a line from the data segments input file.
 
@@ -102,6 +101,7 @@ class SegLine {
     // energy-shift function: off unless a trailing "shiftfn" block is present
     shiftFn_ = "";
     parseError_ = "";
+    parseWarning_ = "";
 
     // The shift fields are optional and came in three layouts: "shift shiftError vary file ...", the older
     // "shift file ..." and the oldest "file ...".  Decide by the TOKENS, not by whether ">> double" succeeds:
@@ -149,7 +149,7 @@ class SegLine {
         if (advancedStream >> tempIsAdvanced && tempIsAdvanced == 1) {
           isAdvanced_ = 1;
           if (advancedStream >> operationType_) {
-            const std::string componentError = ReadComponentList(advancedStream, componentsList_);
+            const std::string componentError = ReadComponentList(advancedStream, componentsList_, parseWarning_);
             if (!componentError.empty()) {
               parseError_ = componentError;
               stream.setstate(std::ios::failbit);
@@ -459,6 +459,8 @@ class SegLine {
    * Returns why the line could not be read ("" if it could, or if the reason is not known).
    */
   std::string parseError() const { return parseError_; };
+  /// A note about the line that did not fail it (printed by EData with the segment number).
+  std::string parseWarning() const { return parseWarning_; };
   /*!
    * Returns non-zero if this is an advanced segment (sum/ratio).
    */
@@ -520,6 +522,7 @@ class SegLine {
   std::vector<double> shiftFnErrors_;
   std::vector<int> shiftFnVary_;
   std::string parseError_;
+  std::string parseWarning_;
   int isAdvanced_;
   int operationType_;
   std::string natural_;

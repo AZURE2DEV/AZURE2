@@ -287,6 +287,9 @@ int EData::Fill(const Config &configure, CNuc *theCNuc) {
         return -1;
       }
       numTotalSegments++;
+      if (!segment.parseWarning().empty())
+        configure.outStream << "WARNING: Data segment #" << numTotalSegments << ": " << segment.parseWarning() << "."
+                            << std::endl;
       if (segment.isDiff() == 8) {
         // Polarization x Cross Section was removed: the outgoing polarization of
         // A(a,b)B is the analyzing power of the inverse reaction B(b,a)A.
@@ -512,6 +515,9 @@ int EData::MakePoints(const Config &configure, CNuc *theCNuc) {
         return -1;
       }
       numTotalSegments++;
+      if (!segment.parseWarning().empty())
+        configure.outStream << "WARNING: Test segment #" << numTotalSegments << ": " << segment.parseWarning() << "."
+                            << std::endl;
       if (segment.hasCovariance()) {
         configure.outStream << "ERROR: Test segment #" << numTotalSegments
                             << " carries a covariance block; a data covariance belongs on data segments only."
