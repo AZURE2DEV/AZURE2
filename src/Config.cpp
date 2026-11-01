@@ -53,6 +53,21 @@ void Config::Reset() {
  * This funciton reads the configuration file and parses various options.
  */
 
+bool Config::ResolveMatrixRoute() {
+  if (paramMask & USE_AMATRIX) return false;
+  const bool ignore = (paramMask & IGNORE_ZERO_WIDTHS), park = (paramMask & USE_PARK_FORMALISM);
+  if (!ignore && !park) return false;
+  outStream << "WARNING: the R-matrix route (<config> first line false) does not implement ";
+  if (ignore)
+    outStream << "ignore-externals, which is on (CLI: the default, --no-ignore-externals turns it off; pyazr:"
+              << " ignore_externals=False)";
+  if (ignore && park) outStream << ", nor ";
+  if (park) outStream << "Park's parametrization";
+  outStream << ".  The A-matrix route will be used." << std::endl;
+  paramMask |= USE_AMATRIX;
+  return true;
+}
+
 int Config::ReadConfigFile() {
   std::string dummy;
   std::string temp;

@@ -5,6 +5,7 @@
 #include <string>
 #include <sstream>
 #include <vector>
+#include "ComponentList.h"
 
 /// A class to read and store a line from the extrapolation input file.
 
@@ -28,6 +29,7 @@ class ExtrapLine {
     isAdvanced_ = 0;
     operationType_ = 0;
     componentsList_ = "";
+    parseError_ = "";
     natural_ = "0";
     total_ = 0;
     phaseS_ = -1.0;  // phase-shift channel spin: < 0 = not given ("spin <s>" keyword)
@@ -51,45 +53,10 @@ class ExtrapLine {
       if (advancedStream >> tempIsAdvanced && tempIsAdvanced == 1) {
         isAdvanced_ = 1;
         if (advancedStream >> operationType_) {
-          int numComponents;
-          if (advancedStream >> numComponents) {
-            // Marker -1 selects the newer "with scaling" format (see SegLine.h)
-            bool hasScalingToken = false;
-            if (numComponents == -1) {
-              hasScalingToken = true;
-              if (!(advancedStream >> numComponents)) numComponents = 0;
-            }
-            std::vector<std::string> components;
-            for (int i = 0; i < numComponents; i++) {
-              int entrance, exit;
-              double angle;
-              if (advancedStream >> entrance >> exit >> angle) {
-                double scaling = 1.0;
-                if (hasScalingToken) {
-                  if (!(advancedStream >> scaling)) scaling = 1.0;
-                }
-                std::string componentStr = "Entrance: " + std::to_string(entrance) + ", Exit: " + std::to_string(exit);
-                if (angle > -900.0) {
-                  componentStr += ", Angle: " + std::to_string(angle);
-                }
-                if (hasScalingToken && scaling > -900.0) {
-                  componentStr += ", Scaling: " + std::to_string(scaling);
-                }
-                components.push_back(componentStr);
-              } else {
-                // Fallback to old format (entrance, exit only) for backward compatibility
-                advancedStream.clear();
-                if (advancedStream >> entrance >> exit) {
-                  components.push_back("Entrance: " + std::to_string(entrance) + ", Exit: " + std::to_string(exit));
-                }
-              }
-            }
-            if (!components.empty()) {
-              componentsList_ = components[0];
-              for (size_t i = 1; i < components.size(); i++) {
-                componentsList_ += ";" + components[i];
-              }
-            }
+          const std::string componentError = ReadComponentList(advancedStream, componentsList_);
+          if (!componentError.empty()) {
+            parseError_ = componentError;
+            stream.setstate(std::ios::failbit);
           }
         }
       }
@@ -248,7 +215,11 @@ class ExtrapLine {
    */
   double delta() const { return delta_; };
 
+  /// What could not be read when the line failed (empty when it did not, or for an older failure without a message).
+  std::string parseError() const { return parseError_; };
+
  private:
+  std::string parseError_;
   int isActive_;
   int entranceKey_;
   int exitKey_;

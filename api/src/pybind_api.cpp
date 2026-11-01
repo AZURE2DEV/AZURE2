@@ -184,6 +184,10 @@ class Session {
       std::string msg = "Could not open " + configfile + " or no <config> block found.";
       fail(msg);
     }
+    // R-matrix route + ignore_externals (the default): A-matrix with a warning, as the CLI and the GUI.  Before
+    // 2026-11-01 pyazr ran the R-matrix route and silently kept the internal-capture term ignore_externals drops
+    // (13N capture 3e-5 off the A-matrix route).
+    config_->ResolveMatrixRoute();
 
     InitializeCoulFuncCache();
     InitializeECAmplitudeCache();

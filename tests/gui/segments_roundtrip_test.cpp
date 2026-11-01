@@ -295,6 +295,28 @@ int main(int argc, char** argv) {
     ok("data lines written back token for token", got == want, got.join(" | "));
   }
 
+  // Component angles and scalings keep every digit.  Before 2026-11-01 the reader formatted them with QString::arg
+  // and the writer with QTextStream, both six significant digits: a scaling of 0.00012345678 was saved as
+  // 0.000123457, an angle of 37.1234567 as 37.1235.
+  {
+    SegmentsTab t;
+    t.setPairsModel(&pairs);
+    const QString data =
+        "1 1 1 0.5 3 0 180 1 1 0 0 0 0 0 data/x.dat 1 0 -1 2 1 1 37.1234567 0.00012345678 1 2 -999 1.5e-07 0\n"
+        "</segmentsData>\n";
+    QString din(data);
+    QTextStream dStream(&din);
+    ok("scaled SUM line read", t.readSegDataFile(dStream));
+    QString out;
+    QTextStream outStream(&out);
+    outStream.setFieldAlignment(QTextStream::AlignLeft);
+    t.writeSegDataFile(outStream);
+    QStringList got = tokens(out).join(" ").split(' ', Qt::SkipEmptyParts);
+    ok("component angle 37.1234567 written with every digit", got.contains("37.1234567"), got.join(" "));
+    ok("component scaling 0.00012345678 written with every digit", got.contains("0.00012345678"), got.join(" "));
+    ok("component scaling 1.5e-07 written", got.contains("1.5e-07"), got.join(" "));
+  }
+
   std::cout << (fails ? "FAILED" : "PASSED") << std::endl;
   return fails ? 1 : 0;
 }

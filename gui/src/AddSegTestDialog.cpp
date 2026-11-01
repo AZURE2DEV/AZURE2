@@ -1,3 +1,4 @@
+#include <QLocale>
 #include "AddSegTestDialog.h"
 
 #include <QPushButton>
@@ -381,7 +382,7 @@ void AddSegTestDialog::addComponent() {
     // For ratio, this is the denominator (only one component needed)
     if (useFixedAngle) {
       double angle = fixedAngleText->text().toDouble();
-      component += QString(", Angle: %1").arg(angle);
+      component += QString(", Angle: %1").arg(QString::number(angle, 'g', QLocale::FloatingPointShortest));
     }
 
     // Only allow one component for ratio
@@ -394,7 +395,7 @@ void AddSegTestDialog::addComponent() {
     bool scalingOk = false;
     double scaling = componentScalingText->text().toDouble(&scalingOk);
     if (scalingOk && scaling != 1.0) {
-      component += QString(", Scaling: %1").arg(scaling);
+      component += QString(", Scaling: %1").arg(QString::number(scaling, 'g', QLocale::FloatingPointShortest));
     }
   }
 

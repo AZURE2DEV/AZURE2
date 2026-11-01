@@ -96,6 +96,9 @@ class AZUREMainThread : public QThread {
     connect(this, SIGNAL(readyToRun()), &worker_, SLOT(run()));
     connect(&worker_, SIGNAL(done()), this, SLOT(quit()));
     worker_.moveToThread(this);
+    // A file loaded with the R-matrix route and ignore-externals both on (the dialogs refuse the pair, a file
+    // load does not): use the A-matrix, as the CLI and pyazr do (Config::ResolveMatrixRoute).
+    configure_.ResolveMatrixRoute();
   };
   const Config &configure() const { return configure_; };
  signals:

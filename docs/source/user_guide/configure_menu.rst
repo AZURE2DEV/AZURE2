@@ -83,7 +83,11 @@ Selecting **Runtime Options...** opens a dialog with the following settings:
        note in :doc:`levels_channels`).
    * - **Ignore external width if internal width is zeroed**
      - When enabled, the external gamma-ray width of a level is set to zero if
-       no total gamma-ray width is specified.
+       no total gamma-ray width is specified.  The R-matrix formalism does not
+       implement it (nor Park's parametrization): the two cannot be selected
+       together, and a calculation with the R-matrix and either option runs
+       the A-matrix with a warning (as the command line and pyazr do; see
+       :doc:`../reference/command_line`).
    * - **Use RMC capture formalism**
      - Enable the Reich-Moore capture formalism. Currently only supported for
        (n, gamma) reactions. Do not use for other reaction types.

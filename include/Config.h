@@ -166,6 +166,12 @@ class Config {
   int ReadConfigFile();
   /// Reads the <potential> block of the configuration file, if it has one.
   int ReadPotentialBlock();
+  /// The R-matrix route (<config> first line false) implements neither IGNORE_ZERO_WIDTHS (the A-matrix route leaves
+  /// the levels whose internal width is zero out of the channel-capture term; RMatrixFunc keeps them) nor Park's
+  /// parametrization (RMatrixFunc would read the Park amplitudes as Brune's: tests/13N up to 9x off).  When either is
+  /// on with the R-matrix route, switch to the A-matrix with a warning and return true.  Called by the CLI, pyazr
+  /// (Session) and the GUI's run thread (AZUREMainThread).
+  bool ResolveMatrixRoute();
 #ifndef NO_STAT
   /// Check that the output and checks directories exist.
   int CheckForInputFiles();

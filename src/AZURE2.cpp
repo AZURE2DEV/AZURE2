@@ -115,7 +115,8 @@ void printHelp() {
             << std::setw(25) << std::left << "\t--use-brune:" << std::setw(0) << "Use the alternative level matrix of C.R. Brune (the default)." << std::endl
             << std::setw(25) << std::left << "\t--no-brune:" << std::setw(0) << "Use the standard Lane-Thomas parametrization (constant boundary conditions) instead." << std::endl
             << std::setw(25) << std::left << "\t--use-park:" << std::setw(0) << "Fit the observed reduced width amplitudes (T.-S. Park, PRC 104, 064612); implies --use-brune." << std::endl
-            << std::setw(25) << std::left << "\t--ignore-externals:" << std::setw(0) << "Ignore external resonant capture amplitude if internal width is zero." << std::endl
+            << std::setw(25) << std::left << "\t--ignore-externals:" << std::setw(0) << "Ignore external resonant capture amplitude if internal width is zero (the default)." << std::endl
+            << std::setw(25) << std::left << "\t--no-ignore-externals:" << std::setw(0) << "Keep it; needed for the R-matrix route (<config> first line false)." << std::endl
             << std::setw(25) << std::left << "\t--use-rmc:" << std::setw(0) << "Use Reich-Moore approximation for capture (neutron capture only)." << std::endl
             << std::setw(25) << std::left << "\t--gsl-coul:" << std::setw(0) << "Use GSL Coulomb functions (faster, but less accurate)." << std::endl
             << std::setw(25) << std::left << "\t--coulomb-table[=FILE]:" << std::setw(0) << "Charged channels from the universal Coulomb table (the default; FILE: $AZURE2_COULOMB_TABLE or ~/.azure2/coulomb_table.bin)." << std::endl
@@ -263,6 +264,8 @@ bool parseOptions(int argc, char *argv[], Config &configure) {
       configure.replaceSubPointGrids = false;
     else if (*it == "--ignore-externals")
       configure.paramMask |= Config::IGNORE_ZERO_WIDTHS;
+    else if (*it == "--no-ignore-externals")
+      configure.paramMask &= ~Config::IGNORE_ZERO_WIDTHS;
     else if (*it == "--use-rmc")
       configure.paramMask |= Config::USE_RMC_FORMALISM;
     else if (*it == "--use-api")
@@ -1556,13 +1559,15 @@ int main(int argc, char *argv[]) {
     configure.paramMask &= ~Config::USE_BRUNE_FORMALISM;
     configure.paramMask &= ~Config::USE_PARK_FORMALISM;
   }
-  if ((configure.paramMask & Config::USE_BRUNE_FORMALISM) || (configure.paramMask & Config::IGNORE_ZERO_WIDTHS)) {
-    if (!(configure.paramMask & Config::USE_AMATRIX))
-      configure.outStream << "WARNING: R-Matrix specified but --ignore-externals and --use-brune options require A-Matrix.  A-Matrix will be used."
-                          << std::endl;
-    configure.paramMask |= Config::USE_AMATRIX;
-  }
+  // Before 2026-11-01 Brune OR ignore-externals forced the A-matrix ("--ignore-externals and --use-brune options
+  // require A-Matrix"), and as ignore-externals is on by default with no flag to clear it the CLI could never use
+  // the R-matrix route.  Brune has been implemented on the R-matrix route (RMatrixFunc; equal to the A-matrix route
+  // to ~1e-13); ignore-externals still is not.
+  configure.ResolveMatrixRoute();
 
+  // Exit status: 1 when the calculation was aborted or failed ("Calculation was aborted.", a refused project, a
+  // failed MCMC run), so that scripts and job chains can tell; before 2026-11-01 it was 0 whatever happened.
+  int returnValue = 0;
   {
     // Print welcome message
     welcomeMessage(configure);
@@ -1611,7 +1616,7 @@ int main(int argc, char *argv[]) {
 
       configure.outStream << std::endl;
       startMessage(configure);
-      int returnValue = runMCMC(configure, mcmcParams);
+      returnValue = runMCMC(configure, mcmcParams);
 
       if (returnValue != 0) {
         configure.outStream << "MCMC sampling failed." << std::endl;
@@ -1623,7 +1628,7 @@ int main(int argc, char *argv[]) {
       AZUREMain azureMain(configure);
       configure.outStream << std::endl;
       startMessage(configure);
-      int returnValue = azureMain();
+      returnValue = azureMain();
 #ifdef USE_MCMC
     }
 #endif
@@ -1641,5 +1646,5 @@ int main(int argc, char *argv[]) {
   CleanupCoulFuncCache();
   CleanupECAmplitudeCache();
 
-  return 0;
+  return returnValue != 0 ? 1 : 0;
 }

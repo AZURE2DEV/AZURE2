@@ -646,4 +646,7 @@ failed or non-finite term is NaN at that point.  :math:`\chi^2` is then NaN,
 so a failed evaluation cannot pass for a result.  Before 2026-11-01 a failed
 point was 0, a failed or non-finite SUM term was left out and a failed RATIO
 denominator gave 0, all silently (the natural SUM segments of
-``tests/natural_neon`` on the R-matrix route came back 0 at 84 points).
+``tests/natural_neon`` on the R-matrix route came back 0 at 84 points).  A RATIO
+whose denominator is exactly 0 is NaN too, with its own one-time warning, but
+only that term: the base point and the points mapped onto it keep their values
+(before 2026-11-01: 0).

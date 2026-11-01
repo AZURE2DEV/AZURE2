@@ -65,7 +65,12 @@ Available Options
        default; see the note below.
    * - ``--ignore-externals``
      - Ignore external width if internal width is zeroed (equivalent to the
-       GUI option).
+       GUI option).  This is the default.
+   * - ``--no-ignore-externals``
+     - Keep the external width of a level whose internal width is zero (the
+       GUI option unticked; pyazr ``ignore_externals=False``).  Needed for the
+       R-matrix route, see below.  Before November 2026 the CLI had no way to
+       turn the option off.
    * - ``--use-rmc``
      - Use the RMC capture formalism for neutron capture (equivalent to the
        GUI option).
@@ -184,6 +189,38 @@ Multiple options can be combined:
 .. code-block:: bash
 
    AZURE2 --no-gui --use-brune --ignore-externals input_file.azr
+
+A-matrix or R-matrix route
+--------------------------
+
+The first line of the ``<config>`` block chooses how the cross sections are
+computed: ``true`` the A-matrix (level matrix), ``false`` the R-matrix (channel
+matrix :math:`[1-RL]^{-1}R`).  The two agree to about :math:`10^{-13}`, with
+Brune's parametrization or without.  The R-matrix route implements neither
+``--ignore-externals``, which is on by default, nor ``--use-park``, so with
+either on an R-matrix request runs the A-matrix and says so::
+
+   WARNING: the R-matrix route (<config> first line false) does not implement
+   ignore-externals, which is on (...).  The A-matrix route will be used.
+
+Add ``--no-ignore-externals`` (and leave out ``--use-park``) to run the
+R-matrix route; the run log then reads "Performing R-Matrix Calculation...".
+pyazr and the GUI's calculations follow the same rule (pyazr's
+``ignore_externals`` is ``True`` by default).  Before November 2026 the CLI
+forced the A-matrix whenever Brune or ignore-externals was on
+("--ignore-externals and --use-brune options require A-Matrix") and so never
+ran the R-matrix route, while pyazr and the GUI ran it with Park's
+parametrization (reading the Park amplitudes as Brune's: ``tests/13N`` up to a
+factor 9 off) and pyazr also with ``ignore_externals=True`` (keeping the terms
+that option drops: up to 4.5 % off).
+
+Exit status
+-----------
+
+AZURE2 exits with 0 when the run completed and 1 when it was aborted or
+refused ("Calculation was aborted.", a project that cannot be read, a failed
+MCMC run), so that a script or a job chain can tell.  Before November 2026 it
+exited with 0 in every case.
 
 Brune and Park parametrizations
 -------------------------------

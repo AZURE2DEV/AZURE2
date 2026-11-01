@@ -442,7 +442,18 @@ appears with the following fields:
    with ``relativistic=1`` or at 0° / 180°, and 30 % off for a capture over an
    elastic ratio. A c.m. or angle-integrated **Ratio** carries no frame factor.
    The lab output (``kinflag.dat`` = 1) of a **Ratio** test segment prints the
-   ratio itself.
+   ratio itself.  Where the denominator's cross section is exactly zero (e.g.
+   its exit channel is closed at that energy) no ratio exists: the point is NaN
+   and a warning naming the segment and energy is printed once.  Before
+   November 2026 it was 0, which a fit compared with the datum as if it had
+   been calculated.
+
+   A **Sum** component can carry a **Scaling** factor, which multiplies that
+   term.  It is written to the project file with all its digits (before
+   November 2026 the GUI kept six significant digits and the engine read the
+   factor with six decimals, so 1.5e-7 became 0 and 0.00012345678 became
+   0.000123), and a factor that is not a number now stops the project from
+   loading with an error naming the segment and component (it was taken as 1).
 
 **Unobserved Primary, Observed Secondary (UPOS)**
    For a particle exit pair :math:`b+B` whose residual nucleus :math:`B` is

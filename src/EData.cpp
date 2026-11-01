@@ -369,10 +369,12 @@ int EData::Fill(const Config &configure, CNuc *theCNuc) {
 
                       double componentScaling = 1.0;
                       if (scalingPos != std::string::npos) {
-                        try {
+                        try {  // SegLine / ExtrapLine wrote it (ReadComponentList), so a number; 1.0 silently before 2026-11-01
                           componentScaling = std::stod(component.substr(scalingPos + 9));
                         } catch (...) {
-                          componentScaling = 1.0;
+                          configure.outStream << "ERROR: segment #" << numTotalSegments << ": the scaling of component \""
+                                              << component << "\" is not a number." << std::endl;
+                          return -1;
                         }
                       }
 
@@ -503,7 +505,12 @@ int EData::MakePoints(const Config &configure, CNuc *theCNuc) {
       std::istringstream stm;
       stm.str(line);
       ExtrapLine segment(stm);
-      if (stm.rdstate() & (std::stringstream::failbit | std::stringstream::badbit)) return -1;
+      if (stm.rdstate() & (std::stringstream::failbit | std::stringstream::badbit)) {
+        if (!segment.parseError().empty())
+          configure.outStream << "ERROR: Test segment #" << numTotalSegments + 1 << ": " << segment.parseError() << "."
+                              << std::endl;
+        return -1;
+      }
       numTotalSegments++;
       if (segment.hasCovariance()) {
         configure.outStream << "ERROR: Test segment #" << numTotalSegments
@@ -623,10 +630,12 @@ int EData::MakePoints(const Config &configure, CNuc *theCNuc) {
 
                     double componentScaling = 1.0;
                     if (scalingPos != std::string::npos) {
-                      try {
+                      try {  // SegLine / ExtrapLine wrote it (ReadComponentList), so a number; 1.0 silently before 2026-11-01
                         componentScaling = std::stod(component.substr(scalingPos + 9));
                       } catch (...) {
-                        componentScaling = 1.0;
+                        configure.outStream << "ERROR: segment #" << numTotalSegments << ": the scaling of component \""
+                                            << component << "\" is not a number." << std::endl;
+                        return -1;
                       }
                     }
 

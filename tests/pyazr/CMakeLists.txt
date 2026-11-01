@@ -335,3 +335,11 @@ add_test(NAME pyazr_no_brune_transform
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/no_brune_transform_test.py)
 set_tests_properties(pyazr_no_brune_transform PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
+# Composite segments and the route (2026-11-01): a zero RATIO denominator is NaN with a warning (was 0); component
+# scalings keep every digit and one that is not a number refuses the project (was "%f" and a silent 1.0); the R-matrix
+# route with ignore_externals=True runs the A-matrix with a warning (was the R-matrix route, 13N up to 4.5 % off).
+add_test(NAME pyazr_composite_terms
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/composite_terms_test.py)
+set_tests_properties(pyazr_composite_terms PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")

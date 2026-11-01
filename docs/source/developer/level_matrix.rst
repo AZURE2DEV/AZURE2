@@ -24,7 +24,9 @@ The matrix calculation is organized through an inheritance hierarchy:
 ``RMatrixFunc`` (channel matrix formalism)
    Works with the R-matrix, a channel-by-channel matrix: the older route
    (standard and Brune formalisms; no Park matrices, caching or gradient), used
-   only when the A-matrix is switched off.
+   only when the A-matrix is switched off, and not even then with
+   ignore-externals or Park on (``Config::ResolveMatrixRoute``, since
+   2026-11-01: the A-matrix is used with a warning).
 
 **Key files:**
 

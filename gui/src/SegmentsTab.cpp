@@ -1,3 +1,4 @@
+#include <QLocale>
 #include <QGridLayout>
 #include <QHBoxLayout>
 #include <QMessageBox>
@@ -1314,8 +1315,8 @@ bool SegmentsTab::readSegDataFile(QTextStream &inStream) {
                       break;
                     }
                     QString component = QString("Entrance: %1, Exit: %2").arg(entrance).arg(exit);
-                    if (angle > -900.0) component += QString(", Angle: %1").arg(angle);
-                    if (scaling > -900.0) component += QString(", Scaling: %1").arg(scaling);
+                    if (angle > -900.0) component += QString(", Angle: %1").arg(QString::number(angle, 'g', QLocale::FloatingPointShortest));
+                    if (scaling > -900.0) component += QString(", Scaling: %1").arg(QString::number(scaling, 'g', QLocale::FloatingPointShortest));
                     components.append(component);
                   }
                   if (fourTokenOk) {
@@ -1342,7 +1343,7 @@ bool SegmentsTab::readSegDataFile(QTextStream &inStream) {
                           if (ok) {
                             QString component;
                             if (angle > -900.0) {  // Check if angle is not the sentinel value
-                              component = QString("Entrance: %1, Exit: %2, Angle: %3").arg(entrance).arg(exit).arg(angle);
+                              component = QString("Entrance: %1, Exit: %2, Angle: %3").arg(entrance).arg(exit).arg(QString::number(angle, 'g', QLocale::FloatingPointShortest));
                             } else {
                               component = QString("Entrance: %1, Exit: %2").arg(entrance).arg(exit);
                             }
@@ -1499,8 +1500,8 @@ bool SegmentsTab::writeSegDataFile(QTextStream &outStream) {
             int exit = parts[1].split(": ")[1].trimmed().toInt();
             double angle, scaling;
             extractAngleScaling(component, angle, scaling);
-            outStream << " " << entrance << " " << exit << " " << angle;
-            if (anyScaling) outStream << " " << scaling;
+            outStream << " " << entrance << " " << exit << " " << QString::number(angle, 'g', QLocale::FloatingPointShortest);
+            if (anyScaling) outStream << " " << QString::number(scaling, 'g', QLocale::FloatingPointShortest);  // all digits (QTextStream: 6)
           }
         }
       } else {  // Ratio - only 1 component (denominator, main segment is numerator)
@@ -1515,8 +1516,8 @@ bool SegmentsTab::writeSegDataFile(QTextStream &outStream) {
             int exit = parts[1].split(": ")[1].trimmed().toInt();
             double angle, scaling;
             extractAngleScaling(components[0], angle, scaling);
-            outStream << " " << entrance << " " << exit << " " << angle;
-            if (anyScaling) outStream << " " << scaling;
+            outStream << " " << entrance << " " << exit << " " << QString::number(angle, 'g', QLocale::FloatingPointShortest);
+            if (anyScaling) outStream << " " << QString::number(scaling, 'g', QLocale::FloatingPointShortest);  // all digits (QTextStream: 6)
           }
         }
       }
@@ -1633,12 +1634,12 @@ bool SegmentsTab::readSegTestFile(QTextStream &inStream) {
                 }
                 QString component;
                 if (angle > -900.0) {  // Check if angle is not the sentinel value
-                  component = QString("Entrance: %1, Exit: %2, Angle: %3").arg(entrance).arg(exit).arg(angle);
+                  component = QString("Entrance: %1, Exit: %2, Angle: %3").arg(entrance).arg(exit).arg(QString::number(angle, 'g', QLocale::FloatingPointShortest));
                 } else {
                   component = QString("Entrance: %1, Exit: %2").arg(entrance).arg(exit);
                 }
                 if (hasScalingToken && scaling > -900.0) {
-                  component += QString(", Scaling: %1").arg(scaling);
+                  component += QString(", Scaling: %1").arg(QString::number(scaling, 'g', QLocale::FloatingPointShortest));
                 }
                 components.append(component);
               } else {
@@ -1742,8 +1743,8 @@ bool SegmentsTab::writeSegTestFile(QTextStream &outStream) {
             int exit = parts[1].split(": ")[1].trimmed().toInt();
             double angle, scaling;
             extractAngleScaling(component, angle, scaling);
-            outStream << " " << entrance << " " << exit << " " << angle;
-            if (anyScaling) outStream << " " << scaling;
+            outStream << " " << entrance << " " << exit << " " << QString::number(angle, 'g', QLocale::FloatingPointShortest);
+            if (anyScaling) outStream << " " << QString::number(scaling, 'g', QLocale::FloatingPointShortest);  // all digits (QTextStream: 6)
           }
         }
       } else {  // Ratio - only 1 component (denominator, main segment is numerator)
@@ -1758,8 +1759,8 @@ bool SegmentsTab::writeSegTestFile(QTextStream &outStream) {
             int exit = parts[1].split(": ")[1].trimmed().toInt();
             double angle, scaling;
             extractAngleScaling(components[0], angle, scaling);
-            outStream << " " << entrance << " " << exit << " " << angle;
-            if (anyScaling) outStream << " " << scaling;
+            outStream << " " << entrance << " " << exit << " " << QString::number(angle, 'g', QLocale::FloatingPointShortest);
+            if (anyScaling) outStream << " " << QString::number(scaling, 'g', QLocale::FloatingPointShortest);  // all digits (QTextStream: 6)
           }
         }
       }

@@ -8,6 +8,8 @@
 #include "DataCovariance.h"
 #include "EData.h"
 #include "ESegment.h"
+
+#include <atomic>
 #include <cstdio>
 #include <cstdlib>
 #include "ExtrapLine.h"
@@ -1478,7 +1480,18 @@ double ESegment::CalculateTheoreticalCrossSection(int pointIndex, CNuc *cnuc, co
 
         double denominatorValue = denominatorPoint->GetFitCrossSection();
         if (denominatorValue == 0.0) {
-          return 0.0;
+          // No ratio exists (e.g. the denominator's exit channel is closed at this energy).  Before 2026-11-01 the
+          // point was 0, which a fit compared with the datum as if it were a calculated ratio.  Now NaN and a
+          // warning, once.  Only this term is NaN: the base point and the points mapped onto it are left alone.
+          static std::atomic<bool> reported(false);
+          if (!reported.exchange(true)) {
+#pragma omp critical(azure_failed_point)
+            configure.outStream << "WARNING: the RATIO denominator of segment " << basePoint->GetSegmentKey()
+                                << " is 0 at E_lab " << basePoint->GetLabEnergy() << " MeV, angle "
+                                << basePoint->GetLabAngle() << " deg: the ratio is NaN there (further zero"
+                                << " denominators are not reported)." << std::endl;
+          }
+          return nan;
         }
 
         // A lab-frame differential ratio is the ratio of the two LAB cross sections,
@@ -1493,7 +1506,7 @@ double ESegment::CalculateTheoreticalCrossSection(int pointIndex, CNuc *cnuc, co
         return ratioValue;
       }
     }
-    return 0.0;
+    return nan;  // no denominator point (component segments copy the base's points, so not expected)
   }
 
   return baseValue;
