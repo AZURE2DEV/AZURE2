@@ -31,6 +31,7 @@
 #include <sstream>
 #include <cctype>
 #include <vector>
+#include <algorithm>
 #include <map>
 #include <tuple>
 #include <gsl/gsl_errno.h>
@@ -130,6 +131,7 @@ void printHelp() {
 #endif
             << std::setw(25) << std::left << "\t--use-gradient:" << std::setw(0) << "Use Minuit2 (MIGRAD) with the analytic gradient (default: numerical)." << std::endl
             << std::setw(25) << std::left << "\t--refreeze-covariance[=N]:" << std::setw(0) << "Refit up to N times (default 5) with relvector covariance terms re-frozen at the fitted parameters." << std::endl
+            << std::setw(25) << std::left << "\t--max-calls=N:" << std::setw(0) << "Stop a MIGRAD or NLopt fit after N function calls (default: no limit; the fit ends at convergence)." << std::endl
             << std::setw(25) << std::left << "\t--use-lm:" << std::setw(0) << "Use the Levenberg-Marquardt minimizer (analytic Jacobian; falls back to MIGRAD)." << std::endl
             << std::setw(25) << std::left << "\t--use-gsl-lm:" << std::setw(0) << "Use the GSL trust-region least-squares minimizer with geodesic acceleration (analytic Jacobian; falls back to MIGRAD)." << std::endl
             << std::setw(25) << std::left << "\t--covariance-band:" << std::setw(0) << "Write the cross-section uncertainty band from the parameter covariance, without the interactive prompt." << std::endl
@@ -279,7 +281,16 @@ bool parseOptions(int argc, char *argv[], Config &configure) {
       configure.refreezeCovariance = 5;
     else if (it->compare(0, 22, "--refreeze-covariance=") == 0)
       configure.refreezeCovariance = std::max(0, std::atoi(it->substr(22).c_str()));
-    else if (*it == "--covariance-band")
+    else if (it->compare(0, 12, "--max-calls=") == 0) {
+      char *end = nullptr;
+      const std::string v = it->substr(12);
+      const long n = std::strtol(v.c_str(), &end, 10);
+      if (v.empty() || *end != '\0' || n < 0)
+        configure.outStream << "WARNING: --max-calls needs a whole number >= 0 (0 = no limit); " << *it
+                            << " ignored." << std::endl;
+      else
+        configure.maxCalls = static_cast<unsigned int>(std::min(n, 1000000000L));
+    } else if (*it == "--covariance-band")
       configure.paramMask |= Config::CALCULATE_COVARIANCE_BAND;
     else if (*it == "--scale-covariance")
       configure.paramMask |= Config::SCALE_COVARIANCE_BY_CHI2;

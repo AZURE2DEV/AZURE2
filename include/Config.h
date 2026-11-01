@@ -117,6 +117,9 @@ class Config {
   /// fitted parameters (--refreeze-covariance[=N]); 0 = none.  The final outputs always use the
   /// model re-frozen at the fitted parameters, so they match a calculation from param.sav.
   int refreezeCovariance;
+  /// Function-call limit of a MIGRAD or NLopt fit (--max-calls=N); 0 = none, so MIGRAD's EDM criterion (or NLopt's
+  /// tolerances) ends the fit.  Before 2026-10-31 a fixed 50,000 that a fit of ~100+ free parameters reached silently.
+  unsigned int maxCalls;
   /// Use adaptive integration grid for target effects (false = uniform grid)
   bool useAdaptiveGrid;
   /// Take P, S and the hard-sphere phase of charged channels from the universal Coulomb

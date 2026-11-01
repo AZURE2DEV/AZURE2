@@ -166,7 +166,30 @@ One line per data segment, then a total::
 ``N`` counts data points (not degrees of freedom). The quantity a fit actually
 minimises is the sum of both — see :doc:`../user_guide/chi_squared`.
 
-This file is the quickest scalar check that a run succeeded.
+This file is the quickest scalar check that a run succeeded.  After a fit,
+check ``fitStatus.out`` too: ``chiSquared.out`` is written whether or not the
+minimizer converged.
+
+fitStatus.out
+^^^^^^^^^^^^^
+
+Written by every MIGRAD or NLopt fit (and removed at the start of a fit, so it
+never describes an earlier one)::
+
+    minimizer   MIGRAD
+    status      converged
+    valid       1
+    edm         6.06159e-08
+    edm_goal    0.0002
+    calls       489
+    call_limit  none
+
+``status`` is ``converged``, ``call_limit`` (stopped at the ``--max-calls``
+limit) or ``invalid`` (MIGRAD's minimum is not valid: EDM above its goal or no
+valid covariance); NLopt writes ``converged_<reason>``, ``call_limit`` or
+``failed_<reason>`` and no EDM lines.  ``calls`` counts objective evaluations as
+the minimizer counts them.  The Levenberg-Marquardt and GSL minimizers do not
+write this file unless they fall back to MIGRAD.
 
 With a ``<scatteringLengths>`` block the totals line ends with
 ``Total-Scattering-Length-Chi-Squared``, the constraint term of

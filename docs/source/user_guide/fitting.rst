@@ -137,3 +137,26 @@ Clear Limits
    Using the **Populate Wigner Limits** feature is a good starting point for
    constraining fits, especially for initial explorations of parameter space.
    Limits can then be adjusted manually as needed.
+
+How a Fit Ends
+--------------
+
+MIGRAD (the default minimizer) stops when the estimated distance to the minimum
+(EDM) falls below its goal, :math:`2\times10^{-4}` times the error definition
+(1 for a :math:`\chi^2` fit).  There is no limit on the number of function
+calls unless the command-line option ``--max-calls=N`` sets one (see
+:doc:`../reference/command_line`).  At the end of every fit the run says how
+MIGRAD ended:
+
+- ``MIGRAD converged: valid minimum, EDM ... (goal ...), N function calls``;
+- ``WARNING: MIGRAD did NOT converge: stopped at the call limit ...`` or
+  ``... invalid minimum ...`` (EDM above its goal, no valid covariance, HESSE
+  failed).
+
+The same is written to ``fitStatus.out`` in the output directory (see
+:doc:`../reference/output_files`).  A fit that did not converge still writes
+``param.sav``, ``chiSquared.out`` and the other outputs, from MIGRAD's last
+point: rerun the fit from ``param.sav``.  Before 2026-10-31 MIGRAD and NLopt
+stopped at a fixed 50,000 function calls without a message, which fits with
+roughly a hundred or more free parameters could reach; their outputs looked
+like a converged fit's.

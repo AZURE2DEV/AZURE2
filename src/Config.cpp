@@ -34,6 +34,7 @@ void Config::Reset() {
   nloptAlgorithm = 0;       // Default to SBPLX
   useHybridMethod = false;  // Default to disabled
   refreezeCovariance = 0;
+  maxCalls = 0;
   useAdaptiveGrid = true;   // Default to adaptive grid
   useCoulombTable = true;   // the universal Coulomb table where it covers a channel (--no-coulomb-table)
   replaceSubPointGrids = true;  // re-place the adaptive sub-point grids (--no-grid-replacement)

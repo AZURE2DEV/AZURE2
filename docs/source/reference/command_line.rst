@@ -138,6 +138,12 @@ Available Options
    * - ``--use-gradient``
      - Fit with MIGRAD using the analytic gradient instead of numerical
        derivatives.
+   * - ``--max-calls=N``
+     - Stop a MIGRAD or NLopt fit after about N function calls (MIGRAD checks
+       the limit between its steps, so it overshoots a little).  Default: no
+       limit, MIGRAD's EDM criterion ends the fit.  ``0`` also means no limit.
+       How the fit ended is printed and written to ``fitStatus.out``.  Before
+       2026-10-31 the limit was a fixed 50,000 and reaching it was silent.
    * - ``--refreeze-covariance[=N]``
      - For data covariances with ``relvector`` terms, whose model is frozen at
        the first evaluation of a run (the fit's starting point): rerun MIGRAD
