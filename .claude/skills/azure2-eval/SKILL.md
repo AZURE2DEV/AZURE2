@@ -136,6 +136,25 @@ runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
   2026-11-01 the run stops with "No standard R-matrix ... corresponds to the levels of J^pi = ..." (pyazr
   `AZURE2Error`); older builds crashed ("z is not finite in log_Gamma", core dump) -- tests/7Li_p_ay is the example.
   "Denominator less than zero while transforming" warnings name the levels.  Stay with Brune for such files.
+- **R-matrix route (`<config>` first line `false`) and AZURE2's exit status** (dev 2026-11-01):
+  - The R-matrix route implements neither ignore-externals (on by default) nor Park.  With either on, every caller
+    now runs the A-matrix and warns "the R-matrix route ... does not implement ...".  The callers are the CLI, pyazr
+    and GUI calculations.
+  - To run the R-matrix route, use the CLI flag `--no-ignore-externals` (new; the CLI could not turn the option off
+    before) or pyazr's `ignore_externals=False`. It equals the A route to ~1e-13 (Brune or standard).
+  - Older builds:
+    - The CLI never ran the R route. Its "--ignore-externals and --use-brune options require A-Matrix" warning was
+      out of date.
+    - pyazr and the GUI ran it with Park, reading the Park amplitudes as Brune's (13N up to 9x off).
+    - pyazr also ran it with `ignore_externals=True` (13N up to 4.5 % off).
+  - Exit status is now 1 after "Calculation was aborted." or a refused project. It used to be 0 always, so a job
+    script can now test it.
+- **Composite segments** (dev 2026-11-01):
+  - A RATIO whose denominator is exactly 0 is NaN, with one warning per run (it used to be a silent 0).
+  - A SUM component `Scaling` keeps all its digits. Before, the engine kept six decimals ("%f": 1.5e-7 became 0,
+    1.2345678e-4 became 1.23e-4) and the GUI kept six significant digits.
+  - A scaling that is not a number refuses the project ("component k of n: the scaling factor is not a number"); it
+    used to be a silent 1.0.
 - **Input is LAB frame, forward kinematics** (light particle = projectile).
   **All output files and API results are CENTER-OF-MASS.** Never mix them.
   This includes `add_extrapolation(e_min, e_max, e_step)` — those are **lab**
