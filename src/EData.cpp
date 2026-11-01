@@ -4707,8 +4707,13 @@ int EData::CalculatePointsInParallel(const std::vector<ESegment *> &segments, CN
   for (int k = 0; k < (int)work.size(); k++) {
     try {
       work[k]->Calculate(theCNuc, configure);
+    } catch (const std::exception &e) {
+      // NaN on the point and the points mapped onto it, reported once (EPoint::MarkFailed); 0 on the point alone,
+      // silently, before 2026-11-01 -- and the CLI's objective takes these values (PrecalculatePoints).
+      work[k]->MarkFailed("point", configure, e.what());
+      failed++;
     } catch (...) {
-      work[k]->SetFitCrossSection(0.0);  // as the per-point path, which returns 0 on failure
+      work[k]->MarkFailed("point", configure, "unknown exception.");
       failed++;
     }
   }

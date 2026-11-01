@@ -22,6 +22,11 @@
 #include <fstream>
 #include <memory>
 #include <mutex>
+#include <limits>
+#include <atomic>
+#include <stdexcept>
+#include <cstdlib>
+#include <algorithm>
 
 /*!
  * This constructor is used if the data point is to be created from a line in a data file.
@@ -1781,7 +1786,35 @@ ScopedPointMappingOff::ScopedPointMappingOff() : previous_(tlPointMappingOff) { 
 ScopedPointMappingOff::~ScopedPointMappingOff() { tlPointMappingOff = previous_; }
 bool ScopedPointMappingOff::Active() { return tlPointMappingOff; }
 
+void EPoint::MarkFailed(const char *role, const Config &configure, const char *why) {
+  const double nan = std::numeric_limits<double>::quiet_NaN();
+  this->SetFitCrossSection(nan);
+  this->SetFitE1CrossSection(nan);
+  this->SetFitE2CrossSection(nan);
+  for (int i = 1; i <= this->NumLocalMappedPoints(); i++) {
+    EPoint *mapped = this->GetLocalMappedPoint(i);
+    mapped->SetFitCrossSection(nan);
+    mapped->SetFitE1CrossSection(nan);
+    mapped->SetFitE2CrossSection(nan);
+  }
+  static std::atomic<bool> reported(false);
+  if (!reported.exchange(true)) {
+#pragma omp critical(azure_failed_point)
+    configure.outStream << "WARNING: the calculation failed at segment " << this->GetSegmentKey() << " (" << role
+                        << "), E_lab " << this->GetLabEnergy() << " MeV, angle " << this->GetLabAngle() << " deg: " << why
+                        << "  The point is NaN (further failures are not reported)." << std::endl;
+  }
+}
+
 void EPoint::Calculate(CNuc *theCNuc, const Config &configure, EPoint *parent, int subPointNum) {
+  // Test hook (tests/pyazr/failed_point_test.py): AZURE_TEST_FAIL_E=<lab energy, MeV> makes the calculation of a
+  // data or test point at that energy throw, AZURE_TEST_FAIL_EXIT=<pair key> only for that exit pair, so the
+  // handling of a failed point (ESegment::CalculateTheoreticalCrossSection) can be exercised.
+  static const double testFailE = [] { const char *v = std::getenv("AZURE_TEST_FAIL_E"); return v ? std::atof(v) : -1.0; }();
+  static const int testFailExit = [] { const char *v = std::getenv("AZURE_TEST_FAIL_EXIT"); return v ? std::atoi(v) : 0; }();
+  if (testFailE >= 0.0 && !parent && std::fabs(this->GetLabEnergy() - testFailE) <= 1e-9 * std::max(1.0, testFailE) &&
+      (testFailExit == 0 || this->GetExitKey() == testFailExit))
+    throw std::runtime_error("injected failure (AZURE_TEST_FAIL_E).");
   // Points mapped onto this one (EData::MapData), unless mapping is switched
   // off on this thread (ScopedPointMappingOff).
   const int numMapped = ScopedPointMappingOff::Active() ? 0 : this->NumLocalMappedPoints();

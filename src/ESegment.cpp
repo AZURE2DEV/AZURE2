@@ -1,3 +1,4 @@
+#include <exception>
 #include <functional>
 #include <cmath>
 #include <limits>
@@ -1358,6 +1359,29 @@ double ESegment::RatioTermFrameFactor(EPoint *point, const ESegment *term, CNuc 
   return point->CalculateCrossSectionConversionFactor(entrancePair, exitPair);
 }
 
+namespace {
+
+/*!
+ * Calculate a point; if the calculation throws (a singular matrix, a Coulomb function out of range, ...), mark it
+ * failed (EPoint::MarkFailed: NaN, reported once) and return false, so that neither the point nor chi^2 can pass for
+ * a result.  Before 2026-11-01 a failed base point gave 0, a failed or non-finite component was left out of a SUM and
+ * a failed RATIO denominator gave 0, all without a word: the natural SUM segments of tests/natural_neon on the
+ * R-matrix route came back 0 at 84 points.
+ */
+bool CalculatePoint(EPoint *point, const char *role, CNuc *cnuc, const Config &configure) {
+  try {
+    point->Calculate(cnuc, configure);
+    return true;
+  } catch (const std::exception &e) {
+    point->MarkFailed(role, configure, e.what());
+  } catch (...) {
+    point->MarkFailed(role, configure, "unknown exception.");
+  }
+  return false;
+}
+
+}  // namespace
+
 /*!
  * Calculates the theoretical cross section for this segment, including
  * combination with any additional components according to the operation type
@@ -1375,13 +1399,10 @@ double ESegment::CalculateTheoreticalCrossSection(int pointIndex, CNuc *cnuc, co
   }
 
   // Calculate base point if not already calculated
-  if (!precalculated && (!basePoint->IsMapped() || ScopedPointMappingOff::Active())) {
-    try {
-      basePoint->Calculate(cnuc, configure);
-    } catch (...) {
-      return 0.0;
-    }
-  }
+  const double nan = std::numeric_limits<double>::quiet_NaN();
+  if (!precalculated && (!basePoint->IsMapped() || ScopedPointMappingOff::Active()) &&
+      !CalculatePoint(basePoint, "base term", cnuc, configure))
+    return nan;
 
   // For E1/E2-only segments compare against the corresponding component of the
   // (angle-integrated capture) cross section instead of the full cross section.
@@ -1421,25 +1442,19 @@ double ESegment::CalculateTheoreticalCrossSection(int pointIndex, CNuc *cnuc, co
         EPoint *componentPoint = componentSegment->GetPoint(pointIndex + 1);
         if (componentPoint) {
           // No lock needed since each thread works on independent EData clones
-          if (!precalculated && (!componentPoint->IsMapped() || ScopedPointMappingOff::Active())) {
-            try {
-              componentPoint->Calculate(cnuc, configure);
-            } catch (...) {
-              continue;  // Skip this component if calculation fails
-            }
-          }
+          if (!precalculated && (!componentPoint->IsMapped() || ScopedPointMappingOff::Active()) &&
+              !CalculatePoint(componentPoint, "SUM component", cnuc, configure))
+            return nan;
+          // A non-finite term makes the sum non-finite (it was left out before 2026-11-01).
           double compValue = componentPoint->GetFitCrossSection();
-          // Check if NaN or infinite and skip if so
-          if (!std::isnan(compValue) && !std::isinf(compValue)) {
-            // the term in the base point's frame (TermFrameFactor)
-            double term = componentSegment->GetComponentScaling() * TermFrameFactor(basePoint, componentPoint) * compValue;
-            if (natural) {
-              const int nucleus = cnuc->GetPair(cnuc->GetPairNumFromKey(componentSegment->GetEntranceKey()))->GetNucleus();
-              term *= cnuc->GetAbundance(naturalSample_, nucleus);
-              naturalTerms[nucleus - 1] += term;
-            }
-            sum += term;
+          // the term in the base point's frame (TermFrameFactor)
+          double term = componentSegment->GetComponentScaling() * TermFrameFactor(basePoint, componentPoint) * compValue;
+          if (natural) {
+            const int nucleus = cnuc->GetPair(cnuc->GetPairNumFromKey(componentSegment->GetEntranceKey()))->GetNucleus();
+            term *= cnuc->GetAbundance(naturalSample_, nucleus);
+            naturalTerms[nucleus - 1] += term;
           }
+          sum += term;
           compIdx++;
         }
       }
@@ -1457,13 +1472,9 @@ double ESegment::CalculateTheoreticalCrossSection(int pointIndex, CNuc *cnuc, co
       EPoint *denominatorPoint = firstComponent->GetPoint(pointIndex + 1);
       if (denominatorPoint) {
         // No lock needed since each thread works on independent EData clones
-        if (!precalculated && (!denominatorPoint->IsMapped() || ScopedPointMappingOff::Active())) {
-          try {
-            denominatorPoint->Calculate(cnuc, configure);
-          } catch (...) {
-            return 0.0;
-          }
-        }
+        if (!precalculated && (!denominatorPoint->IsMapped() || ScopedPointMappingOff::Active()) &&
+            !CalculatePoint(denominatorPoint, "RATIO denominator", cnuc, configure))
+          return nan;
 
         double denominatorValue = denominatorPoint->GetFitCrossSection();
         if (denominatorValue == 0.0) {

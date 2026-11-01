@@ -321,3 +321,10 @@ add_test(NAME pyazr_rmatrix_pole
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/rmatrix_pole_test.py)
 set_tests_properties(pyazr_rmatrix_pole PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2" LABELS slow)
+
+# A failed point is NaN, also in SUM / RATIO segments, with a warning (before 2026-11-01: 0 or a missing term,
+# silently).  Uses the AZURE_TEST_FAIL_E hook.
+add_test(NAME pyazr_failed_point
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/failed_point_test.py)
+set_tests_properties(pyazr_failed_point PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")

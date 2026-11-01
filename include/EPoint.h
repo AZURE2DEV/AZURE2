@@ -353,6 +353,12 @@ class EPoint {
   void SetNaturalTerms(const std::vector<double> &terms) { natural_terms_ = terms; }
   void SetFitE1CrossSection(double);
   void SetFitE2CrossSection(double);
+  /// A calculation that threw: NaN cross sections (total, E1, E2) on this point and on every point mapped onto it,
+  /// and a warning naming the segment, the role of the point, its energy and the error, the first time in a run.
+  /// Used by ESegment::CalculateTheoreticalCrossSection and EData::CalculatePointsInParallel (before 2026-11-01
+  /// both gave 0 or left the term out, silently).
+  void MarkFailed(const char *role, const Config &configure, const char *why);
+  int GetSegmentKey() const { return segment_key_; }
   /// Set the cross-section to S-factor conversion.
   void SetSFactorConversion(double);
   void SetLabEnergy(double);

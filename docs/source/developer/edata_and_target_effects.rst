@@ -626,3 +626,24 @@ Environment switches
 
 None of them changes a result beyond rounding; they exist to check that and
 to time the alternatives.
+
+``AZURE_TEST_FAIL_E=<lab energy>`` (with ``AZURE_TEST_FAIL_EXIT=<pair key>``)
+   A test hook, not a switch: the calculation of a point at that lab energy
+   (of that exit pair) throws, to exercise the handling of failed points
+   below (``tests/failed_point``, ``tests/pyazr/failed_point_test.py``).
+
+Failed points
+^^^^^^^^^^^^^
+
+A point whose calculation throws (a singular matrix, a Coulomb function out of
+range, ...) is marked failed (``EPoint::MarkFailed``): its cross sections and
+those of the points mapped onto it are NaN, and a warning naming the segment,
+the energy and the error is printed the first time in a run.  Both evaluation
+paths do this, the parallel pre-pass (``EData::CalculatePointsInParallel``,
+whose values the CLI's objective takes) and the per-point path
+(``ESegment::CalculateTheoreticalCrossSection``); a SUM or RATIO segment with a
+failed or non-finite term is NaN at that point.  :math:`\chi^2` is then NaN,
+so a failed evaluation cannot pass for a result.  Before 2026-11-01 a failed
+point was 0, a failed or non-finite SUM term was left out and a failed RATIO
+denominator gave 0, all silently (the natural SUM segments of
+``tests/natural_neon`` on the R-matrix route came back 0 at 84 points).
