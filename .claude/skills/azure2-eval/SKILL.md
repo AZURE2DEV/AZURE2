@@ -125,6 +125,12 @@ runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
   - pairs on inactive lines are kept when the option is on, so a pair whose
     levels are all off still has channels;
   - capture and β pairs get nothing from it: no level, no photon vertex.
+- **A `nan` point / `Total-Chi-Squared: nan` means a calculation FAILED** (since dev 2026-11-01): look for
+  `WARNING: the calculation failed at segment K (...), E_lab ... : <error>` in the log (printed once per run).
+  Before that, a failed point was a silent **0** (CLI objective and pre-pass), a failed or NaN SUM/natural term was
+  silently left out of the sum and a failed RATIO denominator gave 0 -- chi2 looked normal.  On an older build, a
+  composite segment with exact zeros or a suspiciously low SUM is a candidate for that.  Test hook for such paths:
+  `AZURE_TEST_FAIL_E=<lab E>` (+ `AZURE_TEST_FAIL_EXIT=<pair key>`).
 - **Input is LAB frame, forward kinematics** (light particle = projectile).
   **All output files and API results are CENTER-OF-MASS.** Never mix them.
   This includes `add_extrapolation(e_min, e_max, e_step)` — those are **lab**
