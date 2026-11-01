@@ -14,6 +14,10 @@ R-matrix route, Brune and standard, ignore_externals=False (the R-matrix route d
 Every point must be finite and equal to the A-matrix route's (relative 1e-10).  A second pass with the target
 integration switched off is the control (no sub-points: equal before the fix too).
 
+At an exact pole Brune's real level matrix is singular, and inverting it to form R threw "GSL LU decomposition
+failed": tests/identical_pp_res (Brune) failed outright on the R-matrix route, and in tests/natural_neon (natural
+SUM segments, whose composite evaluation swallowed the exception) 84 points came back 0.  Both are checked here too.
+
 Run from anywhere:  python3 tests/pyazr/rmatrix_pole_test.py
 """
 import os
@@ -68,6 +72,38 @@ def main():
             write_model(path, amatrix, target_int)
             with azure2(path, cwd=work, use_brune=brune, ignore_externals=False) as a:
                 return np.asarray(a.calculate_rwa(np.array(a.params_rwa, float))[0], float)
+
+        def calc_project(name, amatrix, brune):
+            pw = os.path.join(work, f"{name}_{int(amatrix)}{int(brune)}")
+            shutil.copytree(os.path.join(ROOT, "tests", name), pw,
+                            ignore=shutil.ignore_patterns("output", "checks", "expected", "*.log"))
+            os.makedirs(os.path.join(pw, "output"), exist_ok=True)
+            os.makedirs(os.path.join(pw, "checks"), exist_ok=True)
+            path = os.path.join(pw, name + ".azr")
+            lines = open(path).read().split("\n")
+            c = lines.index("<config>") + 1
+            lines[c] = ("true" if amatrix else "false") + "  " + lines[c].split(None, 1)[1]
+            lines[c + 1], lines[c + 2] = "output/", "checks/"
+            open(path, "w").write("\n".join(lines))
+            try:
+                with azure2(path, cwd=pw, use_brune=brune, ignore_externals=False) as a:
+                    v = a.calculate_rwa(np.array(a.params_rwa, float))
+                    return np.concatenate([np.ravel(np.asarray(x, float)) for x in v]), ""
+            except Exception as err:
+                return None, f"{type(err).__name__}: {err}"
+
+        for name in ("identical_pp_res", "natural_neon"):
+            (va, ea), (vr, er) = calc_project(name, True, True), calc_project(name, False, True)
+            check(f"{name}, Brune: R-matrix route runs", vr is not None and va is not None, er or ea)
+            if vr is None or va is None:
+                continue
+            ok = np.isfinite(vr) & (va != 0)
+            d = np.full(va.shape, np.inf)
+            d[ok] = np.abs(vr[ok] - va[ok]) / np.abs(va[ok])
+            d[va == 0] = np.where(vr[va == 0] == 0, 0.0, np.inf)
+            k = int(np.argmax(d))
+            check(f"{name}, Brune: R-matrix route = A-matrix route (worst {d.max():.1e})", d.max() <= 1e-10,
+                  f"{int((d > 1e-10).sum())} points; point {k}: A {va[k]:.6e}, R {vr[k]:.6e}")
 
         for target_int in (True, False):
             for brune in (True, False):

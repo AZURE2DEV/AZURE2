@@ -4,6 +4,7 @@
 #include "RMatrixFunc.h"
 #include <assert.h>
 #include <cmath>
+#include <limits>
 
 namespace {
 
@@ -179,12 +180,14 @@ void RMatrixFunc::FillMatrices(EPoint *point) {
           }
           qMatrixInverse.push_back(tempVector);
         }
+        // qMatrixInverse's rows and columns follow the in-R-matrix levels only (a bound state kept just as an
+        // external-capture final state is not one of them): row of level la.
+        std::vector<int> rowOf;
+        for (int la = 1, r = 0; la <= theJGroup->NumLevels(); la++)
+          rowOf.push_back(theJGroup->GetLevel(la)->IsInRMatrix() ? r++ : -1);
         if (atPole) {
-          // qMatrixInverse's rows and columns follow the in-R-matrix levels; keep the coupled ones (a level
-          // without widths has no off-diagonal elements, so leaving it out is exact).
-          std::vector<int> rowOf;
-          for (int la = 1, r = 0; la <= theJGroup->NumLevels(); la++)
-            rowOf.push_back(theJGroup->GetLevel(la)->IsInRMatrix() ? r++ : -1);
+          // Keep the coupled levels (a level without widths has no off-diagonal elements, so leaving it out is
+          // exact).  R itself is not finite here and is not formed: Q^{-1} is singular at an exact pole.
           for (int la : coupled) {
             vector_c row;
             for (int lap : coupled) row.push_back(qMatrixInverse[rowOf[la - 1]][rowOf[lap - 1]]);
@@ -192,20 +195,25 @@ void RMatrixFunc::FillMatrices(EPoint *point) {
           }
         }
         // A hard-sphere group has no levels: its level matrix is empty and its R-matrix is zero.
-        MatrixInv matrixInv(qMatrixInverse.empty() ? matrix_c(1, vector_c(1, complex(1.0, 0.0))) : qMatrixInverse);
+        const matrix_c unit(1, vector_c(1, complex(1.0, 0.0)));
+        MatrixInv matrixInv(qMatrixInverse.empty() || atPole ? unit : qMatrixInverse);
+        const double notFormed = std::numeric_limits<double>::quiet_NaN();
         for (int ch = 1; ch <= compound()->GetJGroup(j)->NumChannels(); ch++) {
           for (int chp = 1; chp <= compound()->GetJGroup(j)->NumChannels(); chp++) {
             complex rTemp(0.0, 0.0);
-            ;
-            for (int la = 1; la <= compound()->GetJGroup(j)->NumLevels(); la++) {
+            for (int la = 1; la <= compound()->GetJGroup(j)->NumLevels() && !atPole; la++) {
               if (!compound()->GetJGroup(j)->GetLevel(la)->IsInRMatrix()) continue;
               complex temp(0.0, 0.0);
               for (int lap = 1; lap <= compound()->GetJGroup(j)->NumLevels(); lap++) {
                 if (!compound()->GetJGroup(j)->GetLevel(lap)->IsInRMatrix()) continue;
-                temp += matrixInv.inverse()[la - 1][lap - 1] * compound()->GetJGroup(j)->GetLevel(lap)->GetFitGamma(chp);
+                // Rows by in-R-matrix position: before 2026-11-01 by level number, out of range (undefined) when a
+                // capture final state came before an R-matrix level of the group.
+                temp += matrixInv.inverse()[rowOf[la - 1]][rowOf[lap - 1]] *
+                        compound()->GetJGroup(j)->GetLevel(lap)->GetFitGamma(chp);
               }
               rTemp += temp * compound()->GetJGroup(j)->GetLevel(la)->GetFitGamma(ch);
             }
+            if (atPole) rTemp = complex(notFormed, notFormed);  // not finite; the level form is used instead
             this->AddRMatrixElement(j, ch, chp, rTemp);
             double tempPene = 0.;
             if (compound()->GetJGroup(j)->GetChannel(chp)->GetRadType() == 'P')

@@ -379,7 +379,9 @@ a level, ``FillMatrices`` solves the group in the level form
 adaptive sub-point grid of a target effect places a node exactly at a level's
 energy, so this happens in ordinary runs: before 2026-11-01 the standard
 formalism gave NaN there and Brune's an ill-conditioned inverse, which the
-convolution carried into the data points around the resonance
+convolution carried into the data points around the resonance; at an exact
+pole Brune's Q-matrix is singular and its inversion threw "GSL LU
+decomposition failed" (an error, or a silent 0 in a SUM segment)
 (``tests/pyazr/rmatrix_pole_test.py``).
 
 Cross Section Calculation

@@ -315,8 +315,9 @@ add_test(NAME pyazr_zero_width_level
 set_tests_properties(pyazr_zero_width_level PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
 # The R-matrix route (<config> first line false) at a pole of the R-matrix: tests/13N's thick-target capture puts a
-# sub-point exactly at a level's energy (NaN / 1.2 % off before 2026-11-01).
+# sub-point exactly at a level's energy (NaN / 1.2 % off before 2026-11-01); identical_pp_res and natural_neon hit an
+# exact pole with Brune (LU failure / 84 points 0).  ~4 min.
 add_test(NAME pyazr_rmatrix_pole
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/rmatrix_pole_test.py)
-set_tests_properties(pyazr_rmatrix_pole PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+set_tests_properties(pyazr_rmatrix_pole PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2" LABELS slow)
