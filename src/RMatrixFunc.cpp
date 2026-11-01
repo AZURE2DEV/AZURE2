@@ -3,6 +3,42 @@
 #include "MatrixInv.h"
 #include "RMatrixFunc.h"
 #include <assert.h>
+#include <cmath>
+
+namespace {
+
+/// A level closer than this to the energy (MeV) puts the evaluation at a pole of the R-matrix.
+const double kRPoleWindow = 1.0e-6;
+
+/*!
+ * \f$ [1-RL]^{-1}R \f$ of a group whose R-matrix \f$ R = \gamma^T M^{-1} \gamma \f$ has a pole at this energy,
+ * in the level form \f$ \gamma^T (M - \gamma L \gamma^T)^{-1} \gamma \f$ (push-through identity), which stays finite
+ * there; also \f$ [1-RL]^{-1} = 1 + [1-RL]^{-1} R L \f$.  M is the matrix whose inverse gives R (diagonal
+ * \f$ E_\lambda - E \f$ in the standard formalism, Brune's real level matrix otherwise), g[level][channel] the
+ * reduced width amplitudes of the levels kept in M, L the channels' \f$ L \f$.
+ */
+void PoleLevelForm(const matrix_c &M, const std::vector<std::vector<double>> &g, const vector_c &L,
+                   matrix_c &rlInvR, matrix_c &rlInv) {
+  const size_t nl = M.size(), nc = L.size();
+  matrix_c aInv(M);
+  for (size_t la = 0; la < nl; la++)
+    for (size_t lap = 0; lap < nl; lap++)
+      for (size_t c = 0; c < nc; c++) aInv[la][lap] -= g[la][c] * L[c] * g[lap][c];
+  MatrixInv a(aInv);
+  rlInvR.assign(nc, vector_c(nc, complex(0.0, 0.0)));
+  rlInv.assign(nc, vector_c(nc, complex(0.0, 0.0)));
+  for (size_t c = 0; c < nc; c++)
+    for (size_t cp = 0; cp < nc; cp++) {
+      complex x(0.0, 0.0);
+      for (size_t la = 0; la < nl; la++)
+        for (size_t lap = 0; lap < nl; lap++) x += g[la][c] * a.inverse()[la][lap] * g[lap][cp];
+      rlInvR[c][cp] = x;
+    }
+  for (size_t c = 0; c < nc; c++)
+    for (size_t cp = 0; cp < nc; cp++) rlInv[c][cp] = (c == cp ? 1.0 : 0.0) + rlInvR[c][cp] * L[cp];
+}
+
+}  // namespace
 
 /*!
  * The RMatrixFunc object is created with reference to a CNuc object.
@@ -64,6 +100,8 @@ void RMatrixFunc::ClearMatrices() {
   rl_inv_r_matrices_.clear();
   tmatrix_.clear();
   ec_tmatrix_.clear();
+  pole_rl_inv_r_.clear();
+  pole_rl_inv_.clear();
   InvalidateTMatrixProducts();
 }
 
@@ -86,6 +124,25 @@ void RMatrixFunc::FillMatrices(EPoint *point) {
   activeNucleus_ = compound()->GetPair(compound()->GetPairNumFromKey(point->GetEntranceKey()))->GetNucleus();
   for (int j = 1; j <= compound()->NumJGroups(); j++) {
     if (compound()->GetJGroup(j)->IsInRMatrix() && compound()->GetJGroup(j)->GetNucleus() == activeNucleus_) {
+      JGroup *theJGroup = compound()->GetJGroup(j);
+      // The R-matrix has a pole at the energy of every level with a width (standard formalism: the formal energy;
+      // Brune: the observed one, where the level's row of the real level matrix vanishes).  An energy on or next to
+      // one (the adaptive sub-point grid of a target effect places a node exactly there) is solved in the level
+      // form, which is finite there.  Before 2026-11-01 the standard formalism gave NaN there and Brune's an
+      // ill-conditioned inverse (tests/13N capture with target integration: NaN above the 1/2+ resonance, 1.2 %
+      // off at it).
+      std::vector<int> coupled;  // levels with a width, in R-matrix order
+      bool atPole = false;
+      for (int la = 1; la <= theJGroup->NumLevels(); la++) {
+        if (!theJGroup->GetLevel(la)->IsInRMatrix()) continue;
+        bool hasWidth = false;
+        for (int ch = 1; ch <= theJGroup->NumChannels() && !hasWidth; ch++)
+          hasWidth = (theJGroup->GetLevel(la)->GetFitGamma(ch) != 0.0);
+        if (!hasWidth) continue;
+        coupled.push_back(la);
+        if (std::fabs(theJGroup->GetLevel(la)->GetFitE() - inEnergy) < kRPoleWindow) atPole = true;
+      }
+      matrix_c poleM;  // the matrix whose inverse gives R, over the coupled levels (filled only at a pole)
       if (configure().paramMask & Config::USE_BRUNE_FORMALISM) {
         matrix_c qMatrixInverse;
         for (int la = 1; la <= compound()->GetJGroup(j)->NumLevels(); la++) {
@@ -122,6 +179,18 @@ void RMatrixFunc::FillMatrices(EPoint *point) {
           }
           qMatrixInverse.push_back(tempVector);
         }
+        if (atPole) {
+          // qMatrixInverse's rows and columns follow the in-R-matrix levels; keep the coupled ones (a level
+          // without widths has no off-diagonal elements, so leaving it out is exact).
+          std::vector<int> rowOf;
+          for (int la = 1, r = 0; la <= theJGroup->NumLevels(); la++)
+            rowOf.push_back(theJGroup->GetLevel(la)->IsInRMatrix() ? r++ : -1);
+          for (int la : coupled) {
+            vector_c row;
+            for (int lap : coupled) row.push_back(qMatrixInverse[rowOf[la - 1]][rowOf[lap - 1]]);
+            poleM.push_back(row);
+          }
+        }
         // A hard-sphere group has no levels: its level matrix is empty and its R-matrix is zero.
         MatrixInv matrixInv(qMatrixInverse.empty() ? matrix_c(1, vector_c(1, complex(1.0, 0.0))) : qMatrixInverse);
         for (int ch = 1; ch <= compound()->GetJGroup(j)->NumChannels(); ch++) {
@@ -148,6 +217,18 @@ void RMatrixFunc::FillMatrices(EPoint *point) {
           }
         }
       } else {
+        if (atPole)
+          for (size_t i = 0; i < coupled.size(); i++) {
+            ALevel *level = theJGroup->GetLevel(coupled[i]);
+            double gammaSum = 0.;
+            if (configure().paramMask & Config::USE_RMC_FORMALISM)
+              for (int chpp = 1; chpp <= theJGroup->NumChannels(); chpp++)
+                if (theJGroup->GetChannel(chpp)->GetRadType() == 'M' || theJGroup->GetChannel(chpp)->GetRadType() == 'E')
+                  gammaSum += pow(level->GetFitGamma(chpp), 2.0);
+            vector_c row(coupled.size(), complex(0.0, 0.0));
+            row[i] = level->GetFitE() - inEnergy - complex(0.0, 1.0) * gammaSum;
+            poleM.push_back(row);
+          }
         for (int ch = 1; ch <= compound()->GetJGroup(j)->NumChannels(); ch++) {
           for (int chp = 1; chp <= compound()->GetJGroup(j)->NumChannels(); chp++) {
             complex sum(0.0, 0.0);
@@ -177,6 +258,31 @@ void RMatrixFunc::FillMatrices(EPoint *point) {
           }
         }
       }
+      if (atPole) {
+        // L as each branch puts it into [1-RL]: the channel's L^o in the standard formalism; i P of a particle
+        // channel (0 otherwise) in Brune's, whose R already holds the shift.
+        const bool brune = configure().paramMask & Config::USE_BRUNE_FORMALISM;
+        vector_c L;
+        for (int ch = 1; ch <= theJGroup->NumChannels(); ch++) {
+          if (!brune)
+            L.push_back(point->GetLoElement(j, ch));
+          else if (theJGroup->GetChannel(ch)->GetRadType() == 'P')
+            L.push_back(complex(0.0, pow(point->GetSqrtPenetrability(j, ch), 2.)));
+          else
+            L.push_back(complex(0.0, 0.0));
+        }
+        std::vector<std::vector<double>> g;
+        for (int la : coupled) {
+          std::vector<double> row;
+          for (int ch = 1; ch <= theJGroup->NumChannels(); ch++) row.push_back(theJGroup->GetLevel(la)->GetFitGamma(ch));
+          g.push_back(row);
+        }
+        if (pole_rl_inv_r_.size() < (size_t)j) {
+          pole_rl_inv_r_.resize(j);
+          pole_rl_inv_.resize(j);
+        }
+        PoleLevelForm(poleM, g, L, pole_rl_inv_r_[j - 1], pole_rl_inv_[j - 1]);
+      }
     }
   }
 }
@@ -191,6 +297,14 @@ void RMatrixFunc::InvertMatrices() {
     if (compound()->GetJGroup(j)->IsInRMatrix() && compound()->GetJGroup(j)->GetNucleus() != activeNucleus_) {
       // Another nucleus's group: keep the per-group vectors aligned with an empty entry.
       this->AddRLInvMatrix(matrix_c());
+      continue;
+    }
+    if (compound()->GetJGroup(j)->IsInRMatrix() && (size_t)j <= pole_rl_inv_r_.size() && !pole_rl_inv_r_[j - 1].empty()) {
+      // At a pole of R (FillMatrices): [1-RL] is not finite; its inverse and [1-RL]^{-1}R come from the level form.
+      this->AddRLInvMatrix(pole_rl_inv_[j - 1]);
+      for (int ch = 1; ch <= compound()->GetJGroup(j)->NumChannels(); ch++)
+        for (int chp = 1; chp <= compound()->GetJGroup(j)->NumChannels(); chp++)
+          this->AddRLInvRMatrixElement(j, ch, chp, pole_rl_inv_r_[j - 1][ch - 1][chp - 1]);
       continue;
     }
     if (compound()->GetJGroup(j)->IsInRMatrix()) {

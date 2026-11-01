@@ -313,3 +313,10 @@ add_test(NAME pyazr_zero_width_level
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/zero_width_level_test.py)
 set_tests_properties(pyazr_zero_width_level PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
+# The R-matrix route (<config> first line false) at a pole of the R-matrix: tests/13N's thick-target capture puts a
+# sub-point exactly at a level's energy (NaN / 1.2 % off before 2026-11-01).
+add_test(NAME pyazr_rmatrix_pole
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/rmatrix_pole_test.py)
+set_tests_properties(pyazr_rmatrix_pole PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")

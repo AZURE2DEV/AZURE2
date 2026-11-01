@@ -23,8 +23,8 @@ The matrix calculation is organized through an inheritance hierarchy:
 
 ``RMatrixFunc`` (channel matrix formalism)
    Works with the R-matrix, a channel-by-channel matrix: the older route
-   without the Brune and Park matrices, caching or gradient, used only when the
-   A-matrix is switched off.
+   (standard and Brune formalisms; no Park matrices, caching or gradient), used
+   only when the A-matrix is switched off.
 
 **Key files:**
 
@@ -361,6 +361,26 @@ the T-matrix calculation.
 
 When the Brune formalism is enabled, an intermediate Q-matrix inversion is
 performed at the level stage before building the R-matrix from the result.
+
+**At a pole of R.** :math:`R` is infinite at the energy of every level with a
+width -- the formal energy in the standard formalism; with Brune, the observed
+energy, where that level's row of the real Q-matrix vanishes -- although
+:math:`[1-RL]^{-1}R` is finite there.  When the energy is within 1 eV of such
+a level, ``FillMatrices`` solves the group in the level form
+
+.. math::
+
+   [1-RL]^{-1}R = \gamma^T \left(M - \gamma L \gamma^T\right)^{-1} \gamma,
+   \qquad [1-RL]^{-1} = 1 + [1-RL]^{-1} R L,
+
+(push-through identity; :math:`M` is the matrix whose inverse gives
+:math:`R`, :math:`L` the channels' entries of :math:`[1-RL]`), and
+``InvertMatrices`` takes these in place of inverting :math:`[1-RL]`.  The
+adaptive sub-point grid of a target effect places a node exactly at a level's
+energy, so this happens in ordinary runs: before 2026-11-01 the standard
+formalism gave NaN there and Brune's an ill-conditioned inverse, which the
+convolution carried into the data points around the resonance
+(``tests/pyazr/rmatrix_pole_test.py``).
 
 Cross Section Calculation
 -------------------------
