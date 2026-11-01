@@ -815,14 +815,22 @@ pipe. `tests/run_tests.sh` is the working reference.
 | 6 | MCMC Bayesian Sampling (`samples.mcmc`) |
 | 7 | Exit |
 
-Mode 2's Minuit2 fit (MIGRAD) is called as `migrad(50000)` (`AZUREMain.cpp`):
-**50,000 is MIGRAD's function-call budget (maxfcn), not an iteration cap.** The
+**Mode 2's MIGRAD has no call limit since dev 2026-10-31** (`--max-calls=N` sets
+one); the end of every fit prints `MIGRAD converged: valid minimum, EDM ...` or
+`WARNING: MIGRAD did NOT converge: stopped at the call limit ...` / `... invalid
+minimum ...`, and writes `output/fitStatus.out` (`status converged|call_limit|
+invalid`, `valid`, `edm`, `edm_goal`, `calls`, `call_limit`). **Read that before
+calling a fit converged**; chiSquared.out and param.sav are written either way.
+Older builds (and every fit before that date) stopped MIGRAD and NLopt at a
+fixed 50,000 function calls (maxfcn) with no message: the 19F (15N+a) refit,
+145 free parameters, stopped there in most of its J^pi fits and looked
+converged. For an old-build fit, a log that ended near 50k Minuit calls means
+"not converged": restart from param.sav until chi2 stops dropping. The
 `Iteration: N` counter in the log is AZURE2's own count of objective
-evaluations (`AZURECalc.cpp`, printed every 10th call), and MIGRAD only checks
-its budget between its own steps, so runs overshoot it: 12C+alpha mode-2 fits
-with 300-650 free parameters logged 56k, 63k, 68k, 110k and 136k before
-stopping (2026-09). "The log reached ~50,000" therefore does not mean "the cap
-cut it off", and a run can keep going long after it has plateaued.
+evaluations (`AZURECalc.cpp`, printed every 10th call; it can exceed Minuit's
+count), and MIGRAD only checks its budget between its own steps, so runs
+overshoot it: 12C+alpha mode-2 fits with 300-650 free parameters logged 56k,
+63k, 68k, 110k and 136k before stopping (2026-09).
 On a large model (hundreds of free parameters), a flat-looking plateau is not
 proof of a true minimum, and small stepwise improvements (long flat stretches
 punctuated by discrete drops) can recur throughout the whole run, including
