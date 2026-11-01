@@ -187,6 +187,8 @@ class CNuc {
   /// Observed widths and energies to formal R-matrix parameters. Returns false
   /// if a level could not be transformed.
   bool TransformIn(const Config &);
+  /// Why the last TransformIn returned false (empty if it did not).
+  const std::string &TransformError() const { return transformError_; }
   /// Has TransformIn run on the current level scheme?  Until it has, the
   /// level gammas are the input values (partial widths in eV, ANCs, gamma
   /// widths in eV), not reduced width amplitudes -- consumers that need to
@@ -226,6 +228,7 @@ class CNuc {
   CNuc *Clone() const;
 
  private:
+  std::string transformError_;
   /// 1-based index of the nucleus with this (Z, A), appending it if new.
   int FindOrAddNucleus(int z, int a);
   /// Reads the optional <abundances> block of the project file into samples_.

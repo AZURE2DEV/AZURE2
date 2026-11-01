@@ -53,7 +53,10 @@ Available Options
        "Use Brune formalism" option).  This is the default.
    * - ``--no-brune``
      - Use the standard Lane-Thomas parameterization (constant boundary
-       conditions) instead of Brune's or Park's.
+       conditions) instead of Brune's or Park's.  The input parameters are
+       transformed to formal ones; a project whose observed widths have no
+       standard equivalent is refused with the J^pi groups concerned (see
+       :doc:`troubleshooting`).
    * - ``--use-park``
      - Use Park's level-dependent boundary conditions (Phys. Rev. C 104,
        064612) in place of Brune's alternative level matrix.  The fit

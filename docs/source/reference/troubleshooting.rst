@@ -49,6 +49,30 @@ code then fails.
    problematic one(s).
 3. Add parameter limits in the **Fitting** tab.
 
+No Standard R-Matrix Corresponds to the Levels
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+**Symptom**: With the Brune parameterization off (``--no-brune``, pyazr
+``use_brune=False``) the run stops at the parameter transformation: "No
+standard R-matrix (constant boundary conditions) corresponds to the levels of
+J^pi = ...", then "Calculation was aborted." (pyazr: ``AZURE2Error`` on
+opening the session).
+
+**Cause**: The standard formalism needs the input (observed) energies and
+widths transformed to formal ones, a generalized eigenvalue problem
+:math:`N a = E M a` with
+:math:`M = 1 - \sum_c \gamma_c \gamma'_c\, dS_c/dE` (Brune, Phys. Rev. C 66,
+044611).  It has a real solution only when :math:`M` is positive definite;
+widths too large for the channel radii -- typically broad background poles of
+a Brune fit -- make it indefinite, and no standard R-matrix reproduces those
+levels.  (Before 2026-11-01 the failure went unnoticed: the run crashed with
+"z is not finite in log_Gamma".)  The warnings "Denominator less than zero
+while transforming" printed just before name the levels whose own
+:math:`1 - \sum_c \gamma_c^2\, dS_c/dE` is negative.
+
+**Solution**: Use the Brune parameterization (the default), or reduce the
+widths of the levels listed (or enlarge the channel radii).
+
 MINOS Crashes
 ^^^^^^^^^^^^^
 

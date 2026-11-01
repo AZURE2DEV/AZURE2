@@ -328,3 +328,10 @@ add_test(NAME pyazr_failed_point
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/failed_point_test.py)
 set_tests_properties(pyazr_failed_point PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
+# use_brune=False on a project with no standard-R-matrix equivalent (tests/7Li_p_ay): AZURE2Error with the reason,
+# not "z is not finite in log_Gamma" (before 2026-11-01).
+add_test(NAME pyazr_no_brune_transform
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/no_brune_transform_test.py)
+set_tests_properties(pyazr_no_brune_transform PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")

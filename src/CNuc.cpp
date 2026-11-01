@@ -918,7 +918,8 @@ void CNuc::Initialize(const Config &configure) {
   if (configure.paramMask & Config::TRANSFORM_PARAMETERS) {
     if (!(configure.paramMask & Config::USE_API))
       configure.outStream << "Performing Input Parameter Transformation..." << std::endl;
-    this->TransformIn(configure);
+    // No standard R-matrix may correspond to the input (TransformIn): stop, as for any other GSL failure here.
+    if (!this->TransformIn(configure)) throw GSLException(this->TransformError());
   }
 
   // Sort reaction pathways
@@ -1126,6 +1127,7 @@ static std::vector<int> AscendingRanks(const vector_r &energies) {
 
 bool CNuc::TransformIn(const Config &configure) {
   transformedIn_ = true;
+  transformError_.clear();
   // Park (2021): the fit parameter is the observed reduced width amplitude,
   // Gamma = 2 P gamma^2 (Eqs. 31-33), so the 1 - sum gamma^2 dS/dE factor that
   // turns an observed width into Brune's reduced width is not applied.  It is
@@ -1385,6 +1387,23 @@ bool CNuc::TransformIn(const Config &configure) {
         // first (a background pole, say) keeps its own energy, widths and fix
         // flags.  TransformOut uses the same rank mapping in the other direction.
         EigenFunc eigenFunc(nMatrix, mMatrix);
+        if (!eigenFunc.ok()) {
+          // N a = E M a has a real solution only for a positive-definite M (Brune, PRC 66, 044611 (2002)); M is
+          // 1 - sum_c gamma gamma' dS_c/dE, so widths too large for the channel radii make it indefinite.  Before
+          // 2026-11-01 the unset eigenvalues were used (formal energies ~1e-320): NaN, and a crash in TransformOut
+          // ("z is not finite in log_Gamma", tests/7Li_p_ay with --no-brune).
+          std::ostringstream msg;
+          msg << "No standard R-matrix (constant boundary conditions) corresponds to the levels of J^pi = "
+              << theJGroup->GetJ() << (theJGroup->GetPi() > 0 ? "+" : "-")
+              << ": the observed widths are too large for the channel radii (the matrix 1 - sum gamma gamma' dS/dE "
+              << "of the transformation is not positive definite).  Use the Brune parametrization (the default; "
+              << "drop --no-brune) or smaller widths for these levels:";
+          for (int la : levelKeys)
+            msg << std::endl
+                << "    " << AZURELabel::Level(theJGroup, theJGroup->GetLevel(la), j, la);
+          transformError_ = msg.str();
+          return false;
+        }
         const std::vector<int> rank = AscendingRanks(tempEnergies);
         for (int la = 0; la < tempEnergies.size(); la++) {
           const int k = rank[la];
@@ -2454,6 +2473,17 @@ void CNuc::TransformOut(const Config &configure) {
               }
             }
             EigenFunc eigenFunc(cMatrix);
+            if (!eigenFunc.ok()) {
+              // As for a level that does not converge (below): keep the input values, say so.
+              configure.outStream << "**WARNING: Could not transform level (eigenvalue problem failed)" << std::endl
+                                  << "    " << AZURELabel::Level(this->GetJGroup(j), theLevel, j, la) << std::endl
+                                  << "  The input energy and widths are kept for this level; its "
+                                  << "transformed values are unreliable." << std::endl;
+              tempE[thisLevel] = theLevel->GetFitE();
+              for (int ch = 1; ch <= this->GetJGroup(j)->NumChannels(); ch++)
+                tempGamma[thisLevel][ch - 1] = theLevel->GetFitGamma(ch);
+              break;
+            }
             if (fabs(eigenFunc.eigenvalues()[thisLevel] - tempE[thisLevel]) <= energyTolerance)
               done = true;
             matrix_r newGamma;
