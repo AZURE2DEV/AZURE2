@@ -35,6 +35,13 @@
 #include <map>
 #include <tuple>
 #include <gsl/gsl_errno.h>
+#ifdef _WIN32
+#include <io.h>
+#define AZURE2_ISATTY(fd) _isatty(fd)
+#else
+#include <unistd.h>
+#define AZURE2_ISATTY(fd) isatty(fd)
+#endif
 #ifndef NO_READLINE
 #include <readline/readline.h>
 #include <readline/history.h>
@@ -362,14 +369,38 @@ int commandShell(const Config &configure) {
  */
 
 // Read a yes/no answer from stdin; empty/unrecognized input counts as "no".
+/*!
+ * A y/n question of the text menu.  Answers (any case): y, yes, 1, t, true; n, no, 0, f, false; a blank line is "no"
+ * (1 and t were "yes" before, and job scripts answer 1).  Anything else is refused.  From a pipe or a file the run stops with exit status 1: asking again would hand the NEXT scripted line to
+ * this question, and that is how the trap worked -- a script that left out the band question of modes 2 and 3
+ * ('3\nparam.sav\n\n7') gave the parameter-file name to it, which was read as "no", and the blank line after it to
+ * the parameter-file prompt, so the run used the <levels> of the .azr without a word.  At a terminal the question is
+ * asked again.  Before 2026-11-01 any answer not starting with y, 1 or t was "no".
+ */
 static bool askYesNo(Config &configure, const std::string &prompt) {
-  configure.outStream << prompt << " (y/n): ";
-  std::string in;
-  getline(std::cin, in);
-  size_t a = in.find_first_not_of(" \t\r\n");
-  if (a == std::string::npos) return false;
-  char c = (char)std::tolower(in[a]);
-  return (c == 'y' || c == '1' || c == 't');
+  const bool terminal = AZURE2_ISATTY(0) != 0;
+  while (true) {
+    configure.outStream << prompt << " (y/n): ";
+    std::string in;
+    if (!getline(std::cin, in)) return false;  // end of input: the next prompt stops the run
+    const size_t a = in.find_first_not_of(" \t\r\n");
+    if (a == std::string::npos) return false;
+    const size_t b = in.find_last_not_of(" \t\r\n");
+    const std::string answer = in.substr(a, b - a + 1);
+    std::string lower = answer;
+    std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c) { return (char)std::tolower(c); });
+    if (lower == "y" || lower == "yes" || lower == "1" || lower == "t" || lower == "true") return true;
+    if (lower == "n" || lower == "no" || lower == "0" || lower == "f" || lower == "false") return false;
+    configure.outStream << std::endl
+                        << "ERROR: \"" << prompt << "\" takes y or n, not \"" << answer << "\"." << std::endl;
+    if (terminal) continue;
+    configure.outStream << "Modes 2 and 3 ask about the uncertainty band BEFORE the parameter file, so a script answers"
+                        << std::endl
+                        << "it first, e.g. printf '3\\nn\\nparam.sav\\n\\n7\\n' | AZURE2 --no-gui --no-readline project.azr"
+                        << std::endl
+                        << "(--covariance-band answers it yes without a prompt).  Nothing was calculated." << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
 }
 
 // Offer the cross-section uncertainty band (and, for fit modes, the reduced-chi^2

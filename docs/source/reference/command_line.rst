@@ -32,6 +32,39 @@ available in the GUI are accessible from the command line.
    project file are **not** applied automatically. They must be specified as
    command-line flags each time.
 
+Scripted input
+^^^^^^^^^^^^^^
+
+A run can be scripted by piping the answers to the menu (pass ``--no-readline``).
+The prompts come in this order:
+
+1. the menu choice (1 to 7);
+2. modes 2, 3 and 4 only: "Calculate cross-section uncertainty band? (y/n)";
+   after a yes, the fit modes also ask "Scale covariance to reduced
+   chi-squared = 1? (y/n)" (mode 4 asks for the allowed chi-squared variance
+   before both);
+3. the external parameter file (blank: start from the ``<levels>`` of the
+   project);
+4. the external capture amplitude file (blank: compute them);
+5. the menu again (``7`` exits).
+
+.. code-block:: bash
+
+   printf '1\nfit.sav\n\n7\n'   | AZURE2 --no-gui --no-readline project.azr   # calculate
+   printf '2\nn\nfit.sav\n\n7\n' | AZURE2 --no-gui --no-readline project.azr   # fit from fit.sav
+   printf '3\nn\nfit.sav\n\n7\n' | AZURE2 --no-gui --no-readline project.azr   # calculate without data
+
+A y/n question takes y, yes, 1, t, true or n, no, 0, f, false (any case); a
+blank line is "no".  Any other answer stops a piped run with an error and exit
+status 1 before anything is calculated (at a terminal the question is asked
+again).  Before November 2026 any other answer counted as "no", so a script
+that left out the band line gave the parameter-file name to the y/n question
+and the next line to the parameter-file prompt, and the run used the
+``<levels>`` of the project without an error.  Check the log of an older run:
+one that read the file prints ``Reading User Parameter File...``, one that did
+not prints ``Creating New param.par File...``.  ``--covariance-band`` answers
+the band question yes without a prompt.
+
 Available Options
 -----------------
 
