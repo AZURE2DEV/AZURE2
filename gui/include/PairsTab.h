@@ -44,9 +44,6 @@ class PairsTab : public QWidget {
   bool hasAbundanceBlock() const;
   double abundanceSumSigma() const;
   void setAbundanceSumSigma(double sigma);
-  /*! Relativistic two-body kinematics ("relativistic=1" in <config>). */
-  bool relativistic() const;
-  void setRelativistic(bool on);
   /*! A new file: default abundances, no sum-to-one prior. */
   void reset();
 
@@ -81,7 +78,6 @@ class PairsTab : public QWidget {
   QTableView *abundancesView;
   QGroupBox *abundancesBox;
   QDoubleSpinBox *sumSigmaSpin;
-  QCheckBox *relativisticCheck;
   QComboBox *sampleCombo;
   QPushButton *addSampleButton;
   QPushButton *removeSampleButton;

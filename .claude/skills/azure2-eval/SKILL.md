@@ -84,7 +84,7 @@ runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
   handed to `AzrModel.add_level`. It is also why `deactivate_level` both zeroes
   *and* fixes a level's widths — zeroing alone would already have fixed them.
 - **Kinematics is non-relativistic unless `relativistic=1` is in the `<config>` block**
-  (feature/relativistic-kinematics, 2026-10-22; Pairs tab check box, `AzrModel.relativistic`). With the
+  (feature/relativistic-kinematics, 2026-10-22; GUI: Configure > Runtime Options > Kinematics since 2026-11-01, a Pairs tab check box before; `AzrModel.relativistic`). With the
   key, k, eta, lab <-> c.m. energies, particle lab angles and cross sections come from the invariant mass
   (the LANL/EDA prescription, ENDF KRL=1; `include/Kinematics.h`); level energies stay excitation energies
   and `output/relativistic.out` lists them in EDA's E(s) convention (E_s - E_x = T0^2/(2 m0), 43 keV at

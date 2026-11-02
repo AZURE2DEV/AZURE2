@@ -109,6 +109,14 @@ Selecting **Runtime Options...** opens a dialog with the following settings:
        to, one at a time. Enables the Nuclear Potential
        tab.
 
+Below these, a **Kinematics** box holds the **Relativistic kinematics** check
+box: channel wave numbers, Sommerfeld parameters and lab ↔ c.m. conversions
+from the invariant mass (see :ref:`relativistic-kinematics`).  Unlike the
+options above it is part of the project (``relativistic=1`` in ``<config>``),
+so command-line and pyazr runs of the project use it as well; nothing has to be
+passed on the command line.  Before November 2026 it was a check box below the
+Particle Pairs table.
+
 .. note::
 
    The **Brune formalism** and **RMC capture formalism** are mutually exclusive.

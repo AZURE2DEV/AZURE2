@@ -271,12 +271,15 @@ fit before and after, and refit when the shift matters next to a narrow
 resonance. Filling the masses alone changes results by about the relative mass
 change, which is 1e-5 for 1e-4 u at mass 12.
 
+.. _relativistic-kinematics:
+
 Relativistic Kinematics
 -----------------------
 
-The **Relativistic kinematics** check box below the pairs table (``relativistic=1``
-in the ``<config>`` block, so command-line and pyazr runs of the project use it
-too) takes every channel's kinematics from the invariant mass :math:`s` instead
+The **Relativistic kinematics** check box under **Configure → Runtime Options**
+(``relativistic=1`` in the ``<config>`` block, so command-line and pyazr runs of
+the project use it too; before November 2026 the check box sat below the pairs
+table) takes every channel's kinematics from the invariant mass :math:`s` instead
 of the non-relativistic relations.  It follows the prescription of the LANL code
 EDA (Haeck, Hale, Paris and Thompson, LA-UR-19-31084, the ENDF ``KRL=1`` flag).
 For a pair of masses :math:`m_1, m_2` (:math:`m = m_1 + m_2`) at centre-of-mass

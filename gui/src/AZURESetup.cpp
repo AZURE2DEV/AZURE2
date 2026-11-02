@@ -350,7 +350,6 @@ bool AZURESetup::readFile(QString filename) {
   GetConfig().hardSphereMaxL = levelsTab->maxL();
   pairsTab->setAbundanceSumSigma(fileAbundanceSumSigma);
   GetConfig().abundanceSumSigma = fileAbundanceSumSigma;
-  pairsTab->setRelativistic(fileRelativistic);
   GetConfig().relativistic = fileRelativistic;
   GetConfig().relativisticReferencePair = fileRelativisticReferencePair;
 
@@ -755,9 +754,9 @@ bool AZURESetup::writeFile(QString filename) {
   GetConfig().abundanceSumSigma = pairsTab->abundanceSumSigma();
   if (pairsTab->abundanceSumSigma() > 0.0)
     out << "abundanceSumSigma=" << pairsTab->abundanceSumSigma() << " #Sum-to-one prior on the isotopic abundances" << Qt::endl;
-  // Relativistic kinematics: written only when on, so non-relativistic projects are unchanged.
-  GetConfig().relativistic = pairsTab->relativistic();
-  if (pairsTab->relativistic()) {
+  // Relativistic kinematics (Configure > Runtime Options): written only when on, so non-relativistic projects are
+  // unchanged.  Unlike the other runtime options it is read from the file by the command line and pyazr as well.
+  if (GetConfig().relativistic) {
     out << "relativistic=1 #Relativistic two-body kinematics (k, eta, lab <-> c.m. from the invariant mass)" << Qt::endl;
     if (GetConfig().relativisticReferencePair > 0)
       out << "relativisticReferencePair=" << GetConfig().relativisticReferencePair << " #Reference pair of relativistic.out" << Qt::endl;
@@ -1241,6 +1240,7 @@ void AZURESetup::editOptions() {
     aDialog.useHybridMethodCheck->setChecked(false);
 
   aDialog.useAdaptiveGridCheck->setChecked(GetConfig().useAdaptiveGrid);
+  aDialog.relativisticCheck->setChecked(GetConfig().relativistic);
 
   // if(!(GetConfig().paramMask & Config::USE_LONGWAVELENGTH_APPROX)) aDialog.noLongWavelengthCheck->setChecked(true);
   // else aDialog.noLongWavelengthCheck->setChecked(false);
@@ -1288,6 +1288,7 @@ void AZURESetup::editOptions() {
     }
 
     GetConfig().useAdaptiveGrid = aDialog.useAdaptiveGridCheck->isChecked();
+    GetConfig().relativistic = aDialog.relativisticCheck->isChecked();
 
     // Update tab visibility based on hybrid method setting
     updateNuclearPotentialTabVisibility();
