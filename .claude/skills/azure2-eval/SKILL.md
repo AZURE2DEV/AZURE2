@@ -833,10 +833,16 @@ large model, is in the `azure2-gui-review` skill.
 
 ## Workflow A — interactive CLI (one-shot runs)
 
-Prompt order: **(1) menu choice → (2) external parameter file → (3) external
-capture amplitude file → (4) mode-specific prompts**, then `7` to exit. Both
-file prompts appear whether or not the model has capture, and a recipe that
-feeds only one leaves the rest of the answers off by a line. Pipe stdin to run
+Prompt order: **(1) menu choice → (1b) modes 2 and 3 ONLY: "Calculate
+cross-section uncertainty band? (y/n)" (a yes in mode 2 adds a second y/n on
+chi2 scaling) → (2) external parameter file → (3) external capture amplitude
+file → (4) mode-specific prompts**, then `7` to exit. Mode 1 has no y/n
+prompt; mode 3 with a parameter file is `printf '3\nn\nparam.sav\n\n7\n'`.
+Both file prompts appear whether or not the model has capture, and a recipe
+that feeds only one leaves the rest of the answers off by a line. A missed
+y/n line silently drops the parameter file (warning and examples below): check
+the log for `Reading User Parameter File...` after every scripted run (2026-11-01,
+7Be A_y test segments: a mode-3 run built from the old summary used `<levels>`). Pipe stdin to run
 non-interactively, and pass `--no-readline` so readline does not fight the
 pipe. `tests/run_tests.sh` is the working reference.
 
