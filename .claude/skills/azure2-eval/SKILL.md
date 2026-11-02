@@ -925,6 +925,11 @@ and the blank line to the parameter-file prompt, so AZURE2 starts from the `.azr
 file prints `Reading User Parameter File...`; one that did not prints
 `Creating New param.par File...`. (`--covariance-band` also removes the prompt, but
 by answering it *yes* -- it turns the band calculation on. pyazr has no prompts.)
+Since dev 56bee50 (2026-11-01) a y/n question takes only y/yes/1/t/true, n/no/0/f/false or a blank
+line; anything else (a file name) stops a piped run with an ERROR and exit 1 before anything is
+calculated. Older builds (and the frozen ones, e.g. `~/bin/AZURE2_12Cag`) still take it silently as
+"no": the 12C+a `run_crc_12C+a_run_again` fits of 7-15..8-7-26 started from `<levels>` that way
+(`R-matrix/AZURE2_code_audit/10-25-26/ay_test_segments/readme`).
 
 Non-interactive band control: `--covariance-band` (+ `--scale-covariance`) skips
 the y/n prompts. Other flags: `--use-brune`, `--gsl-coul`, `--ignore-externals`,
