@@ -918,6 +918,15 @@ printf '2\nn\noutput/param.sav\n\n7\n' | AZURE2 --no-gui --no-readline 7Be.azr
 printf '3\nn\noutput/param.sav\n\n7\n' | AZURE2 --no-gui --no-readline 7Be_extrap.azr
 ```
 
+**Write the flags out; never pass them in an unquoted zsh variable.** zsh (the
+Bash tool's shell here) does not word-split `$F`, so `F="--use-brune --no-gui
+--no-readline"; AZURE2 $F x.azr` hands AZURE2 ONE argument, it never sees
+`--no-gui`, and a GUI build opens the GUI: an xcb "could not connect to display"
+abort with a dead `DISPLAY`, or with `QT_QPA_PLATFORM=offscreen` an invisible
+window that prints nothing and writes no output, forever (3H+d, 2026-11-02;
+looked like a headless bug, was not). Use a zsh array (`F=(--use-brune --no-gui)`,
+then `$F`) or `${=F}`; csh job scripts with the flags written out are fine.
+
 **Get this ordering wrong and the run silently ignores your parameter file.**
 Feeding `2\nparam.sav\n\n7` gives the filename to the y/n prompt (read as "no")
 and the blank line to the parameter-file prompt, so AZURE2 starts from the `.azr`
