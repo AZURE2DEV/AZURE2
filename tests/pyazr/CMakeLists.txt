@@ -47,6 +47,13 @@ add_test(NAME pyazr_radius_override
                  ${CMAKE_CURRENT_SOURCE_DIR}/radius_override_test.py)
 set_tests_properties(pyazr_radius_override PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
+# A session parses its .azr once: calculate_rwa / objective do not re-read the file per segment per
+# call (before 2026-11-03: 83 ms per call from NFS on the 3H+d model instead of 8 ms).
+add_test(NAME pyazr_azr_parse_cache
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/azr_parse_cache_test.py)
+set_tests_properties(pyazr_azr_parse_cache PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
 # The hybrid Coulomb functions with a vanishing nuclear potential equal the plain ones: the
 # derivative at the channel radius is O(dr^4) on a grid that has the radius as a node (before
 # 2026-10-27 the chord slope of the bracketing cell put 4e-3 to 4e-2 into S; audit item 16).
