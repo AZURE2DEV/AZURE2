@@ -39,6 +39,14 @@ add_test(NAME pyazr_physical_norm
                  ${CMAKE_CURRENT_SOURCE_DIR}/physical_norm_test.py)
 set_tests_properties(pyazr_physical_norm PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
+# A channel radius set with azure2.set_channel_radius survives every later rebuild of the session
+# (another pair's radius, a nuclear-potential change, a mode switch); before 2026-11-02 each rebuild
+# re-read the .azr with only its own call's radius.  The wrapper checks the read-back radius.
+add_test(NAME pyazr_radius_override
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/radius_override_test.py)
+set_tests_properties(pyazr_radius_override PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
 # The hybrid Coulomb functions with a vanishing nuclear potential equal the plain ones: the
 # derivative at the channel radius is O(dr^4) on a grid that has the radius as a node (before
 # 2026-10-27 the chord slope of the bracketing cell put 4e-3 to 4e-2 into S; audit item 16).

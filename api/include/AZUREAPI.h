@@ -4,6 +4,7 @@
 #include "AZUREMain.h"
 
 #include "Constants.h"
+#include <map>
 #include <vector>
 
 class Config;
@@ -62,8 +63,13 @@ class AZUREAPI {
   void SetExtrap();
   // Set the channel radius of particle pair idx (1-based) to r fm and rebuild
   // the compound nucleus, data and parameters.  Returns false if the rebuild
-  // failed, in which case the instance is no longer usable.
+  // failed, in which case the instance is no longer usable.  The override is
+  // kept for the life of the instance: every later rebuild (another SetRadius,
+  // Rebuild after a potential change, Initialize on a mode switch) applies all
+  // of them.  Before 2026-11-02 each rebuild applied only its own call's pair.
   bool SetRadius(int idx, double r);
+  // The channel-radius overrides in force, pair number -> fm.
+  const std::map<int, double> &RadiusOverrides() const { return radiusOverrides_; }
   /*!
    * Rebuild the compound nucleus and the data from the .azr and re-initialize,
    * recomputing the external-capture integrals rather than reading back
@@ -413,8 +419,10 @@ class AZUREAPI {
 
 
  private:
-  /// Shared body of SetRadius and Rebuild; idx/r are null for a plain rebuild.
-  bool RebuildImpl(const int *idx, const double *r);
+  /// Shared body of SetRadius and Rebuild: refill from the .azr with every radius override in \p radii.
+  bool RebuildImpl(const std::map<int, double> &radii);
+  /// Channel-radius overrides set through SetRadius, applied on every (re)build.
+  std::map<int, double> radiusOverrides_;
 
 
   /*!

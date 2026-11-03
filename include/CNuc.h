@@ -124,9 +124,9 @@ class CNuc {
 
   // -- building -------------------------------------------------------------
   /// Build the whole object from the nuclear and external-capture input files.
-  /// Returns -1 if a file cannot be read. \p radii optionally overrides one
-  /// pair's channel radius, as SetRadius does.
-  int Fill(const Config &, std::pair<int, double> radii = std::pair<int, double>(0, 0.0));
+  /// Returns -1 if a file cannot be read. \p radii overrides channel radii, pair number (1-based) -> fm, as the
+  /// API's SetRadius does; it holds every override of the session, so a rebuild keeps them all.
+  int Fill(const Config &, const std::map<int, double> &radii = std::map<int, double>());
   /// Adds a level-less J^pi group, with its particle channels, for every J^pi the particle pairs allow up to
   /// \p maxL that no active level provides. Such a group contributes hard-sphere scattering only.
   int AddHardSphereGroups(const Config &, int maxL);

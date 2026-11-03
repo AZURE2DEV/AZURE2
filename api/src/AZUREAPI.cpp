@@ -110,7 +110,8 @@ int AZUREAPI::Initialize() {
   compound_ = new CNuc();
 
   // configure().outStream << "Filling Compound Nucleus..." << std::endl;
-  if (compound()->Fill(configure()) == -1) {
+  // With the session's radius overrides: Initialize runs again on every mode switch.
+  if (compound()->Fill(configure(), radiusOverrides_) == -1) {
     // configure().outStream << "Could not fill compound nucleus from file." << std::endl;
     return -1;
   } else if (compound()->NumPairs() == 0 || compound()->NumJGroups() == 0) {
@@ -787,7 +788,12 @@ void AZUREAPI::SetExtrap() {
 // output/intEC*, and the parameter bookkeeping -- values, names, fixed flags
 // and the transformed physical parameters -- is refilled to match.
 bool AZUREAPI::SetRadius(int idx, double r) {
-  return RebuildImpl(&idx, &r);
+  // The new override joins the earlier ones; it is kept only if the rebuild worked.
+  std::map<int, double> radii = radiusOverrides_;
+  radii[idx] = r;
+  if (!RebuildImpl(radii)) return false;
+  radiusOverrides_ = radii;
+  return true;
 }
 
 bool AZUREAPI::WriteOutputFiles() {
@@ -808,24 +814,20 @@ bool AZUREAPI::WriteOutputFiles() {
 }
 
 bool AZUREAPI::Rebuild() {
-  return RebuildImpl(nullptr, nullptr);
+  return RebuildImpl(radiusOverrides_);
 }
 
-// Shared body of SetRadius and Rebuild.  Everything the two do is identical
-// apart from whether CNuc::Fill is handed a radius override.
-bool AZUREAPI::RebuildImpl(const int *idx, const double *r) {
+// Shared body of SetRadius and Rebuild.  Every radius override of the session
+// goes to CNuc::Fill, so a rebuild for one reason (a potential change, another
+// pair's radius) does not undo an earlier SetRadius.
+bool AZUREAPI::RebuildImpl(const std::map<int, double> &radii) {
   if (compound_ != nullptr) delete compound_;
   if (data_ != nullptr) delete data_;
 
   compound_ = new CNuc;
   data_ = new EData;
 
-  if (idx && r) {
-    std::pair<int, double> pair = std::make_pair(*idx, *r);
-    if (compound()->Fill(configure(), pair) == -1) return false;
-  } else {
-    if (compound()->Fill(configure()) == -1) return false;
-  }
+  if (compound()->Fill(configure(), radii) == -1) return false;
   if (compound()->NumPairs() == 0 || compound()->NumJGroups() == 0) return false;
 
   // Mirror the branch taken at startup: data mode reads the data segments,

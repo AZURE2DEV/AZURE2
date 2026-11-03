@@ -320,6 +320,14 @@ class azure2:
         untouched.  To persist a radius (and to scan several radii, which is
         the safer pattern) use :meth:`pyazr.AzrModel.set_channel_radius` and
         write a new file.
+
+        The radius stays set for the life of the session, through later
+        rebuilds: another pair's ``set_channel_radius``, a nuclear-potential
+        change and :meth:`extrap_mode`/:meth:`data_mode` keep it.  (Before
+        2026-11-02 each rebuild re-read the ``.azr`` with only its own call's
+        radius, so setting pair 2 put pair 1 back to its file value, silently.)
+        The radius read back from the rebuilt model is checked against the
+        request; a mismatch raises ``RuntimeError``.
         """
         pair = int(pair)
         if not any(p.number == pair for p in self.pairs):
@@ -332,7 +340,12 @@ class azure2:
                 f"AZURE2 could not rebuild with pair {pair} at "
                 f"{radius} fm; the session is no longer usable.")
         self.configure()
-        return self.pairs.by_number(pair).channel_radius
+        got = self.pairs.by_number(pair).channel_radius
+        if abs(got - float(radius)) > 1e-9 * float(radius):
+            raise RuntimeError(
+                f"pair {pair}: asked for a channel radius of {radius} fm, the "
+                f"rebuilt model has {got} fm.")
+        return got
 
     # -- hybrid nuclear potential, per particle pair --------------------------
 

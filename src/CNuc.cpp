@@ -156,7 +156,7 @@ int CNuc::GetPairNumFromKey(int key) {
  * input files.  Returns -1 if the files could not be read, and 0 if the files were read successfully.
  */
 
-int CNuc::Fill(const Config &configure, std::pair<int, double> radii) {
+int CNuc::Fill(const Config &configure, const std::map<int, double> &radii) {
   transformedIn_ = false;
   if (configure.relativistic && configure.useHybridMethod) {
     // The hybrid model solves a Schrodinger equation with a nuclear potential inside the channel
@@ -325,16 +325,24 @@ int CNuc::Fill(const Config &configure, std::pair<int, double> radii) {
     level->PadChannels(group->NumChannels());
   }
 
-  if (radii.first != 0) {
-    this->GetPair(radii.first)->SetChRad(radii.second);
+  // Channel-radius overrides (the API's SetRadius).  All of them, every time: before 2026-11-02 only the latest
+  // call's pair was passed, so a second SetRadius, a potential change or a mode switch rebuilt the model with the
+  // earlier pairs back at their .azr radius, silently.
+  for (std::map<int, double>::const_iterator it = radii.begin(); it != radii.end(); ++it) {
+    if (it->first < 1 || it->first > this->NumPairs()) {
+      configure.outStream << "ERROR: channel-radius override for pair " << it->first << ", but the model has pairs 1-"
+                          << this->NumPairs() << "." << std::endl;
+      return -1;
+    }
+    PPair *changedPair = this->GetPair(it->first);
+    changedPair->SetChRad(it->second);
     // The Wigner limits above were computed inside the parse loop, i.e. with
     // the radius as written in the .azr.  Redo them for the overridden pair,
     // or every theta^2 reported after a radius change is against the old limit.
-    PPair *changedPair = this->GetPair(radii.first);
     for (int j = 1; j <= this->NumJGroups(); j++) {
       for (int ch = 1; ch <= this->GetJGroup(j)->NumChannels(); ch++) {
         AChannel *theChannel = this->GetJGroup(j)->GetChannel(ch);
-        if (theChannel->GetPairNum() == radii.first)
+        if (theChannel->GetPairNum() == it->first)
           theChannel->SetWignerLimit(changedPair->GetRedMass(),
                                      changedPair->GetChRad());
       }
