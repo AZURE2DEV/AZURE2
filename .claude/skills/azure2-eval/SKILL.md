@@ -982,6 +982,13 @@ once — each enters its own directory per call, so they never disturb each othe
 or your cwd. The engine is *not* thread-safe, so parallelism is per process:
 construct the session at module level of the worker module and every pool
 worker gets its own, under either `spawn` or `fork`.
+A session parses its `.azr` once (dev 5e90eb5, 2026-11-03) and re-reads it only
+when the file changes on disk or `configure()` runs. Before that,
+`calculate_rwa` re-parsed the whole file once per segment per call, and
+`objective()` twice more. From /groups (NFS) this cost 3-75 ms per call,
+depending on how warm the NFS cache was. If an older pyazr has slow workers,
+look for this before blaming fork. `m.datasets` / `m.active_datasets` /
+`m.extrapolations` return copies: editing them changes nothing in the session.
 
 ### Two parameter conventions
 
@@ -2233,6 +2240,13 @@ no longer fitted, so refit before reading anything off it.** For a scan, give
 each radius its own directory (own `output/`, `data` symlinked) and walk the
 ladder outward, warm-starting each radius from its converged neighbour rather
 than from the original fit; starting them all from one point biases the ends.
+**Before dev b1faa07 (2026-11-02) a second `set_channel_radius` silently undid the
+first**: every rebuild re-read the `.azr` with only that call's override, so
+`set(1, r1)` then `set(2, r2)` left pair 1 back at its file radius, and so did a
+`set/clear_nuclear_potential` or a `data_mode()`/`extrap_mode()` switch. Since
+then the overrides persist through every rebuild, and `set_channel_radius`
+raises if the rebuilt model does not have the radius asked for. On an older
+build, write every radius into the `.azr` (`AzrModel`) and open a fresh session.
 
 **Is a new level/channel warranted?** Add it (`add_level`, or free one more
 channel of an existing level), refit the subset it can affect, and weigh Δχ²
