@@ -108,8 +108,10 @@ int AZUREMain::operator()() {
 
     // Cache will be populated dynamically as integrals are calculated
   } else {
-    if (!compound()->IsPairKey(configure().rateParams.entrancePair) || !compound()->IsPairKey(configure().rateParams.exitPair)) {
-      configure().outStream << "Reaction rate pairs do not exist in compound nucleus." << std::endl;
+    const std::string rateProblem =
+        compound()->RatePairsProblem(configure().rateParams.entrancePair, configure().rateParams.exitPair);
+    if (!rateProblem.empty()) {
+      configure().outStream << rateProblem << std::endl;
       return -1;
     } else {
       compound()->GetPair(compound()->GetPairNumFromKey(configure().rateParams.entrancePair))->SetEntrance();

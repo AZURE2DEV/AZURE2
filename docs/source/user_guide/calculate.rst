@@ -81,7 +81,16 @@ section over a Maxwell-Boltzmann energy distribution:
 Additional fields appear for this mode:
 
 **Entrance / Exit Pair Keys**
-   Specify the particle pair keys for the reaction.
+   Specify the particle pair keys for the reaction. For the **total radiative
+   capture** rate choose "Total capture (all γ pairs)" as the exit pair (on the
+   command line, exit pair ``-1``, the key a total-capture segment line carries):
+   the rate then integrates the sum of the capture cross sections into every
+   capture (γ, pair type 10) pair of the entrance pair's compound nucleus, e.g.
+   capture to the ground state and to each bound excited state. The run log names
+   the pairs summed, and ``cross_section_grid.dat`` holds the summed cross
+   section. The entrance must be a particle pair. Builds before 2026-11-04 refuse
+   the key; with them, add the rates of the individual capture pairs (the rate is
+   linear in σ).
 
 **Temperature Source**
    Choose between:

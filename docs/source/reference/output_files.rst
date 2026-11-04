@@ -304,7 +304,8 @@ reactionrates.out
 
 Contains temperatures (in GK) and calculated reaction rates
 (in cm\ :sup:`3` mol\ :sup:`-1` s\ :sup:`-1`) from the **Calculate Reaction
-Rate** mode.
+Rate** mode. With the exit pair "Total capture" (key ``-1``) the rate is the total
+radiative capture rate, summed over every capture pair of the entrance nucleus.
 
 cross_section_grid.dat
 ^^^^^^^^^^^^^^^^^^^^^^

@@ -801,8 +801,14 @@ void getRateParams(Config &configure, std::vector<SegPairs> &segPairs, bool useR
       if (!promptLine(configure, inString)) std::exit(EXIT_FAILURE);
       std::istringstream stm;
       stm.str(inString);
-      if (!(stm >> configure.rateParams.exitPair) || configure.rateParams.exitPair == 0)
-        configure.outStream << "Please enter an integer greater than zero." << std::endl;
+      // -1: the total radiative capture, summed over every capture pair of the entrance nucleus (the exit
+      // key a total-capture segment line carries).
+      if (!(stm >> configure.rateParams.exitPair) || configure.rateParams.exitPair == 0 ||
+          configure.rateParams.exitPair < -1) {
+        configure.outStream << "Please enter an integer greater than zero, or -1 for the total radiative capture."
+                            << std::endl;
+        configure.rateParams.exitPair = 0;
+      }
     }
     if (configure.rateParams.entrancePair == configure.rateParams.exitPair) {
       configure.outStream << "Cannot calculate rate for elastic scattering." << std::endl;

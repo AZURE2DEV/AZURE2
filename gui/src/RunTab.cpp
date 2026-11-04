@@ -144,6 +144,8 @@ RunTab::RunTab(QWidget *parent) :
   gridTempButton = new QRadioButton(tr("Create Temperatures"));
   rateEntranceKey = new PairKeyCombo(PairKeyCombo::Entrance);
   rateExitKey = new PairKeyCombo(PairKeyCombo::Exit);
+  // "Total capture (all γ pairs)", key -1: the rate summed over every capture pair of the entrance nucleus.
+  rateExitKey->setTotalCaptureOffered(true);
   connect(rateEntranceKey, SIGNAL(keyChanged(int)), rateExitKey, SLOT(setEntranceKey(int)));
   minTempText = new QLineEdit;
   minTempText->setMinimumWidth(50);

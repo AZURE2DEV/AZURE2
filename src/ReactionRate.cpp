@@ -31,6 +31,13 @@
 static const double kRateEnergyLow = 1.0e-7;
 static const double kRateEnergyHigh = 50.0;
 
+// The exit keys whose cross sections make up the rate: the exit key itself, or for -1 (total radiative
+// capture) every capture pair of the entrance pair's compound nucleus (CNuc::CapturePairKeys).
+static std::vector<int> RateExitKeys(CNuc *compound, int entranceKey, int exitKey) {
+  if (exitKey == -1) return compound->CapturePairKeys(entranceKey);
+  return std::vector<int>(1, exitKey);
+}
+
 struct gsl_reactionrate_params {
   gsl_reactionrate_params(const Config &config) :
     configure(config) {};
@@ -38,7 +45,7 @@ struct gsl_reactionrate_params {
   double temperature;
   CNuc *compound;
   int entranceKey;
-  int exitKey;
+  std::vector<int> exitKeys;
 };
 
 // The quadratures run over u = ln E: sigma(E) E^2 exp(-E/kT) du.  Over the 8.7 decades
@@ -51,19 +58,19 @@ double gsl_reactionrate_integrand(double u, void *p) {
   const Config &configure = params->configure;
   double temperature = params->temperature;
   int entranceKey = params->entranceKey;
-  int exitKey = params->exitKey;
   const double x = exp(u);
 
-  double crossSection;
+  double crossSection = 0.0;
   if (x <= kRateEnergyHigh && x >= kRateEnergyLow) {
-    EPoint *point = new EPoint(55.0, x, entranceKey, exitKey, false, false, false, 0.0, 0, 0);
-    point->Initialize(compound, configure);
-    point->Calculate(compound, configure);
-    crossSection = point->GetFitCrossSection();
-    delete point;
-    if (!std::isfinite(crossSection) || crossSection < 0.0) crossSection = 0.0;
-  } else
-    crossSection = 0.0;
+    for (int exitKey : params->exitKeys) {
+      EPoint *point = new EPoint(55.0, x, entranceKey, exitKey, false, false, false, 0.0, 0, 0);
+      point->Initialize(compound, configure);
+      point->Calculate(compound, configure);
+      double sigma = point->GetFitCrossSection();
+      delete point;
+      if (std::isfinite(sigma) && sigma > 0.0) crossSection += sigma;
+    }
+  }
 
   return crossSection * x * x * exp(-x / temperature / boltzConst);
 }
@@ -162,7 +169,7 @@ double gsl_reactionrate_integration(double temperature, CNuc *compound, const Co
   params.temperature = temperature;
   params.compound = compound;
   params.entranceKey = entranceKey;
-  params.exitKey = exitKey;
+  params.exitKeys = RateExitKeys(compound, entranceKey, exitKey);
 
   gsl_integration_workspace *w = gsl_integration_workspace_alloc(2000);
 
@@ -273,18 +280,24 @@ std::vector<double> BuildRateCrossSectionGrid(CNuc *compound, int entranceKey,
   return uniq;
 }
 
-// Fit cross section at one CM energy (same EPoint path as the legacy integrand).
+// Fit cross section at one CM energy (same EPoint path as the legacy integrand), summed over the
+// exit keys of RateExitKeys (one, or every capture pair for the total capture -1).
 // Returns NaN if the level matrix is singular here (e.g. exactly on a pole with
 // vanishing penetrability) or the result is not finite; the caller drops such points.
 double RateCrossSectionAt(double energy, CNuc *compound, const Config &configure,
                           int entranceKey, int exitKey) {
   if (!(energy >= kRateEnergyLow && energy <= kRateEnergyHigh)) return 0.0;
   try {
-    EPoint point(55.0, energy, entranceKey, exitKey, false, false, false, 0.0, 0, 0);
-    point.Initialize(compound, configure);
-    point.Calculate(compound, configure);
-    double sigma = point.GetFitCrossSection();
-    return std::isfinite(sigma) ? sigma : std::numeric_limits<double>::quiet_NaN();
+    double total = 0.0;
+    for (int key : RateExitKeys(compound, entranceKey, exitKey)) {
+      EPoint point(55.0, energy, entranceKey, key, false, false, false, 0.0, 0, 0);
+      point.Initialize(compound, configure);
+      point.Calculate(compound, configure);
+      double sigma = point.GetFitCrossSection();
+      if (!std::isfinite(sigma)) return std::numeric_limits<double>::quiet_NaN();
+      total += sigma;
+    }
+    return total;
   } catch (const std::exception &) {
     return std::numeric_limits<double>::quiet_NaN();
   }
@@ -555,6 +568,12 @@ ReactionRate::ReactionRate(CNuc *compound, const vector_r &params,
   compound_->FillCompoundFromParams(params);
   entrance_key_ = entranceKey;
   exit_key_ = exitKey;
+  if (exitKey == -1) {
+    std::vector<int> keys = compound_->CapturePairKeys(entranceKey);
+    configure_.outStream << "\tTotal radiative capture: the rate sums the capture pairs";
+    for (size_t i = 0; i < keys.size(); i++) configure_.outStream << (i ? ", " : " ") << keys[i];
+    configure_.outStream << " of the entrance pair's compound nucleus." << std::endl;
+  }
 }
 
 /*!

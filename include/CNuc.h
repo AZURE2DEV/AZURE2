@@ -2,6 +2,7 @@
 #define CNUC_H
 
 #include <string>
+#include <vector>
 #include <map>
 #include "JGroup.h"
 #include "PPair.h"
@@ -114,6 +115,13 @@ class CNuc {
   /// The pair with this key, or nullptr when no pair has it (a total-capture exit key -1, a typo): the
   /// GetPair(GetPairNumFromKey(key)) idiom read pairs_[-1] for those (audit 2026-10-25, item 32).
   PPair *GetPairFromKey(int key);
+  /// Keys of the capture (gamma, pair type 10) pairs of the compound nucleus of the pair with key
+  /// \p entranceKey, in pair order: what the exit key -1 (total capture) stands for.  Empty when the
+  /// entrance key is unknown or the nucleus has no capture pair.
+  std::vector<int> CapturePairKeys(int entranceKey);
+  /// Why a reaction rate cannot be calculated for these keys ("" when it can).  The exit key -1 is the
+  /// total radiative capture: the sum over CapturePairKeys(entranceKey).
+  std::string RatePairsProblem(int entranceKey, int exitKey);
   /// \f$J^\pi\f$ group \p i, 1-based.
   JGroup *GetJGroup(int);
   void AddPair(PPair);

@@ -40,6 +40,32 @@ bool CNuc::IsPairKey(int key) {
   return b;
 }
 
+std::vector<int> CNuc::CapturePairKeys(int entranceKey) {
+  std::vector<int> keys;
+  PPair *entrance = GetPairFromKey(entranceKey);
+  if (!entrance) return keys;
+  for (int i = 1; i <= NumPairs(); i++)
+    if (GetPair(i)->GetPType() == 10 && GetPair(i)->GetNucleus() == entrance->GetNucleus())
+      keys.push_back(GetPair(i)->GetPairKey());
+  return keys;
+}
+
+std::string CNuc::RatePairsProblem(int entranceKey, int exitKey) {
+  PPair *entrance = GetPairFromKey(entranceKey);
+  if (!entrance) return "Reaction rate entrance pair " + std::to_string(entranceKey) + " does not exist in compound nucleus.";
+  if (entrance->GetPType() != 0)
+    return "Reaction rate entrance pair " + std::to_string(entranceKey) + " is not a particle pair.";
+  if (exitKey == -1) {
+    if (CapturePairKeys(entranceKey).empty())
+      return "Total capture rate (exit key -1): the compound nucleus of entrance pair " + std::to_string(entranceKey) +
+             " has no capture (gamma) pair.";
+    return "";
+  }
+  if (!GetPairFromKey(exitKey)) return "Reaction rate exit pair " + std::to_string(exitKey) + " does not exist in compound nucleus.";
+  if (exitKey == entranceKey) return "Cannot calculate rate for elastic scattering.";
+  return "";
+}
+
 /*!
  * Returns the number of particle pairs in the PPair vector.
  */
@@ -671,7 +697,10 @@ static std::set<int> ExitPairKeysInFile(const Config &configure) {
 }
 
 int CNuc::ParseExternalCapture(const Config &configure, std::map<int, int> &ecPairs) {
-  const std::set<int> usedExitKeys = ExitPairKeysInFile(configure);
+  std::set<int> usedExitKeys = ExitPairKeysInFile(configure);
+  // A total-capture rate (exit key -1) exits into every capture pair of its entrance nucleus.
+  if ((configure.paramMask & Config::CALCULATE_REACTION_RATE) && configure.rateParams.exitPair == -1)
+    for (int key : CapturePairKeys(configure.rateParams.entrancePair)) usedExitKeys.insert(key);
   for (std::map<int, int>::iterator ec = ecPairs.begin(); ec != ecPairs.end(); ec++) {
     PPair *exitPair = this->GetPair(ec->first);
     if (exitPair->GetPType() != 10) {

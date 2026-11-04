@@ -27,6 +27,19 @@ and checks every temperature to 1e-3:
 | (d) | moved with the parameter file of moved_azr against the truth of moved_azr | 99.6 % low at T9 = 0.1 to 1 | 1e-4 |
 | (e) | moved_azr (no parameter file) equals (d) to 1e-9 | differs by 230x | equal |
 
+**Total radiative capture (2026-11-04).** The exit key `-1` ("Total capture (all γ pairs)" in the
+GUI's Run tab) makes the rate integrate the sum of the capture cross sections into every capture pair
+of the entrance pair's compound nucleus. `p12C_2g` (`make_models.py`) is p12C with a second capture
+pair, key 3, to a fictitious bound 3/2- state of 13N at E_x = 1.0 MeV (every pair-2 gamma line copied
+with 0.6 x the width); `p12C_2g_pert` is the same on the per-temperature path.
+
+| | check | old build (dev c5b6c27) | new |
+|---|---|---|---|
+| (f) | p12C: exit -1 equals exit 2 (one capture pair) | -1 refused at the prompt, no rate | identical |
+| (g) | p12C_2g: exit -1 = rate(2) + rate(3), pair 3 at least 10 % of it | refused | 2.3e-6 (6-digit output), pair 3 27 % |
+| (h) | the same, per-temperature quadrature | refused | 2.3e-6 |
+| (i) | exit -1 with the capture pair as entrance: refused, no rate file | refused for the wrong reason | refused ("is not a particle pair") |
+
 **What it caught (2026-10-25 audit, items F1, F2, F3, F6 of `03_rmatrix_core.md`; fixed
 2026-10-26).**
 

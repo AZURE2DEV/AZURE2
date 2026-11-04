@@ -10,6 +10,11 @@ or two on the R-matrix part alone.
   n12C        the same levels with a neutron entrance (z1 = 0, m1 = 1.008665): sigma ~ 1/v
               from the s-wave 1/2+ level (audit F2: sigma = 0 below 1 keV lost 49 % at T9 = 0.01).
   n12C_pert   n12C with useAdaptiveGrid=0, the per-temperature quadrature path (same floor).
+  p12C_2g     p12C with a second capture pair (key 3) to a fictitious bound 3/2- state of 13N at
+              E_x = 1.0 MeV: every pair-2 gamma line copied with the final state 3/2- and 0.6 x the
+              width (all the multipolarities stay allowed into 3/2-).  The total radiative capture
+              rate (exit key -1) must be the sum of the rates into pairs 2 and 3.
+  p12C_2g_pert  the same with useAdaptiveGrid=0 (per-temperature quadrature path).
   moved       p12C plus a narrow 1/2+ level (Gamma_p = 20 eV s-wave, Gamma_gamma = 2 eV, Gamma = 22 eV) at
               E_x = 2.0935 MeV (E_cm = 0.150 MeV).  moved_azr has it at 2.0985 MeV instead
               (+5 keV = 250 widths); its parameter file is used on moved.azr, so the parameters
@@ -116,6 +121,21 @@ def with_narrow(text, ex):
     return head + "\n" + "\n".join(lines) + "\n" + tail
 
 
+def second_capture_pair(text, key=3, j2="1.5", pi2="-1", ex="1.0", scale=0.6):
+    """Copy every pair-2 gamma line as pair `key`: final state j2^pi2 at E_x = ex, width x scale."""
+    head, lines, tail = level_lines(text)
+    out = []
+    for l in lines:
+        out.append(l)
+        t = l.split()
+        if t[26] == "10" and t[5] == "2":
+            t[5] = str(key)
+            t[14], t[15], t[16] = j2, pi2, ex
+            t[11] = "%g" % (float(t[11]) * scale)
+            out.append("  ".join(t))
+    return head + "\n" + "\n".join(out) + "\n" + tail
+
+
 def truth_segments(lab, e_low, window=None):
     """Decade segments e_low..50 MeV c.m. (step 1 % of the decade's low end) plus a window."""
     segs = []
@@ -143,6 +163,8 @@ def main():
     models["p12C"] = base
     models["n12C"] = neutron(base)
     models["n12C_pert"] = set_potential_key(models["n12C"], "useAdaptiveGrid", "0")
+    models["p12C_2g"] = second_capture_pair(base)
+    models["p12C_2g_pert"] = set_potential_key(models["p12C_2g"], "useAdaptiveGrid", "0")
     models["moved"] = with_narrow(base, NARROW_EX)
     models["moved_azr"] = with_narrow(base, NARROW_EX + NARROW_SHIFT)
     for name, text in models.items():

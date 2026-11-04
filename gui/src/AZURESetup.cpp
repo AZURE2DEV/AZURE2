@@ -447,8 +447,9 @@ bool AZURESetup::readFile(QString filename) {
 bool AZURESetup::readLastRun(QTextStream &inStream) {
   unsigned int paramMask;
   unsigned int useTempFile;
-  unsigned int rateEntrancePair;
-  unsigned int rateExitPair;
+  // Signed: the exit key -1 is the total radiative capture rate.
+  int rateEntrancePair = 0;
+  int rateExitPair = 0;
   QString paramFile;
   QString integralsFile;
   QString temperatureFile;
