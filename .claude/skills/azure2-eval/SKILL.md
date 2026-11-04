@@ -892,6 +892,15 @@ so the old advice to add narrow resonances by hand no longer applies.
 per-temperature quadrature that calls the engine at every abscissa (slow, same
 answer to 1e-5).
 
+**Total radiative capture rate** (dev 123c747, 2026-11-04): give the exit pair
+`-1` at the "Reaction Rate Exit Pair" prompt (GUI Run tab: "Total capture (all
+γ pairs)"). The rate then integrates the sum of the capture cross sections into
+every capture pair (pType 10) of the entrance pair's compound nucleus (ground
+state plus each bound excited state); the log lists the pairs summed and
+`cross_section_grid.dat` holds the summed sigma. Cost: one point evaluation per
+capture pair per energy. Older builds refuse `-1`: there, run each capture pair
+and add the rates (the rate is linear in sigma). `tests/reaction_rate` (f)-(i).
+
 The **external parameter file** prompt: give a saved `output/param.sav` to start
 from those best-fit formal parameters, or leave **blank** to build fresh from
 the `.azr` levels.
