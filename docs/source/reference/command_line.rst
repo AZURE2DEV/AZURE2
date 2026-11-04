@@ -293,12 +293,17 @@ minimizer works in:
   :math:`\theta^2`.
 
 Input and output files are the same in both modes: energies, partial widths and
-ANCs in ``<levels>`` and ``parameters.out``.  ``param.par`` / ``param.sav`` hold
-the mode's own amplitudes; their first line, ``#parametrization`` (0 standard,
+ANCs in ``<levels>`` and ``parameters.out``.  ``param.par`` / ``param.sav`` /
+``param.fit`` / ``param.mcmc`` hold the mode's own amplitudes; their first line, ``#parametrization`` (0 standard,
 1 Brune, 2 Park), says which (a comment line, so ``numpy.loadtxt`` and other
 positional readers are unaffected), and a file written in the other alternative mode
 is converted on read (``gamma_Park = gamma_Brune sqrt(J)``), with a message.  A
-file without the tag (written before it existed) is taken as Brune's.  The GUI
+file without the tag (written before it existed) is taken as Brune's.  Before
+2026-11-04 ``param.fit`` (the snapshot a fit writes every 100 calls, which an
+interrupted job restarts from) and ``param.mcmc`` were written without the tag,
+so a ``--use-park`` fit resumed from its own ``param.fit`` had every amplitude
+converted a second time; give such a file the first line
+``#parametrization 2 0`` before reading it in Park mode.  The GUI
 offers the mode as "Use Park parametrization" under Runtime Options.
 
 Level-matrix solver and profiling

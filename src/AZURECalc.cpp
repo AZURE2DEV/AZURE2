@@ -2261,6 +2261,14 @@ void AZURECalc::WriteParameters(AZUREParams &params, const Config &configure) co
   out.open(filename);
   if (out) {
     out.precision(7);
+    // The same first line as param.par/param.sav: which amplitudes the file
+    // holds.  Before 2026-11-04 param.fit had none, so a --use-park fit
+    // resumed from it took its Park amplitudes for Brune's and converted
+    // them again (every amplitude times sqrt(J), fixed ones included;
+    // 11B+a 11-04-26_park_gpSM, chi2 10733 -> 49532 after three resumes).
+    out << std::setw(20) << "#parametrization"
+        << std::scientific << std::setw(20) << (double)AZUREParams::BasisForConfig(configure)
+        << std::scientific << std::setw(20) << 0.0 << std::endl;
     for (int i = 0; i < params.GetMinuitParams().Params().size(); i++) {
       out << std::setw(20) << params.GetMinuitParams().GetName(i)
           << std::scientific << std::setw(20) << params.GetMinuitParams().Value(i)

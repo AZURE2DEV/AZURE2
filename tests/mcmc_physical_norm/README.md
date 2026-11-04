@@ -34,3 +34,7 @@ Fixed build: (a) 3e-8, (b) 1e-5 against the sampled norm, 2e-3 against the start
 ```
 bash tests/mcmc_physical_norm/check.sh path/to/AZURE2
 ```
+
+Check **(c)** (2026-11-04): `param.mcmc` starts with the run's `#parametrization` tag, as `param.sav`
+does. Before then it had none, so a `--use-park` chain's snapshot read back in Park mode was taken as
+Brune amplitudes and converted again (same defect as `param.fit`, see `tests/park_formalism` 2b).

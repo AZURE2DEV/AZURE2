@@ -210,7 +210,8 @@ bool AZUREParams::ReconcileBasis(CNuc *compound, const Config &configure) {
     // that wrote them, which could not have been Park's.
     if (mode != kBasisPark) return true;
     configure.outStream << "The parameter file carries no parametrization tag; taking its amplitudes as Brune's."
-                        << std::endl;
+                        << "  (A param.fit or param.mcmc written by a --use-park run before 2026-11-04 is untagged but"
+                        << " holds Park amplitudes: give it the first line '#parametrization 2 0'.)" << std::endl;
     tag = kBasisBrune;
   }
   if (tag == mode) return true;

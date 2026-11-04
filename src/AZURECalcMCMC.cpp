@@ -888,6 +888,11 @@ void mcmc_iteration_callback(int current_step, int total_steps) {
               std::ofstream paramOut(paramMCMCFile);
               if (paramOut) {
                 paramOut.precision(7);
+                // Tagged like param.sav (the amplitudes are this run's basis);
+                // untagged before 2026-11-04, see AZURECalc::WriteParameters.
+                paramOut << std::setw(20) << "#parametrization" << std::scientific << std::setw(20)
+                         << (double)AZUREParams::BasisForConfig(g_mcmc_for_callbacks->configure())
+                         << std::scientific << std::setw(20) << 0.0 << std::endl;
                 for (size_t i = 0; i < rwaFullParams.size(); i++) {
                   paramOut << std::setw(20) << g_param_names[i]
                            << std::scientific << std::setw(20) << rwaFullParams[i]

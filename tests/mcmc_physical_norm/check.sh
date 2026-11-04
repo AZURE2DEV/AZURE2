@@ -62,5 +62,10 @@ if awk -v a="$ds" -v b="$d0" 'BEGIN { exit !(a + 0 <= 1e-4 && a + 0 < b + 0) }';
 else
   bad "(b) -2 logL $m2 vs chi2 at the sampled norm $cs (rel $ds) and at the start norm $c0 (rel $d0): the likelihood did not use the sampled norm"
 fi
+# (c) param.mcmc says which amplitudes it holds, like param.sav (untagged before 2026-11-04: a
+# --use-park chain's snapshot was then read back as Brune's and converted a second time).
+if awk 'NR == 1 { exit !($1 == "#parametrization" && $2 + 0 == 1) }' output/param.mcmc; then
+  ok "(c) param.mcmc starts with this run's #parametrization tag (1, Brune)"
+else bad "(c) param.mcmc first line is not '#parametrization 1': $(head -1 output/param.mcmc)"; fi
 [ $fail -eq 0 ] && echo "mcmc_physical_norm: PASS" || echo "mcmc_physical_norm: FAIL"
 exit $fail
