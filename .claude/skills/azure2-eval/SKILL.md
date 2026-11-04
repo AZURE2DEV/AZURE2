@@ -1061,7 +1061,7 @@ and `chiSquared.out`. What changes is the fit space:
   Levels that saturate — the 13C+a 9-5-26 fit had seven with J down to 2e-7
   and Brune amplitudes of 10^2-10^3 MeV^1/2 — show up in Park mode as J -> 0
   instead of as runaway amplitudes.
-- **Parameter files carry the basis.** `param.par`/`param.sav`/`param.fit`
+- **Parameter files carry the basis.** `param.par`/`param.sav`
   start with a `#parametrization <0|1|2>` line (0 standard, 1 Brune, 2 Park).
   A file in the other alternative basis is converted on read
   (`Converted the parameter file from Brune to Park (observed) amplitudes.`
@@ -1076,6 +1076,15 @@ and `chiSquared.out`. What changes is the fit space:
   high because the grid was built at the ground state's energy instead of
   the Hoyle state's. Files from that window: strip or `#`-prefix the first
   line. Reading a `.sav` by NAME (first column) is immune to both.
+  **But `param.fit` (written during a fit, the file a resumed or evicted job
+  restarts from) and MCMC's `param.mcmc` carry NO tag in builds up to at least
+  dev 2631b53 (2026-11-04)**: after a `--use-park` fit, `param.fit` holds Park
+  amplitudes untagged, a Park run reading it takes them as Brune's and
+  multiplies every amplitude by sqrt(J) again, fixed ones included (11B+a
+  11-04-26_park_gpSM: chi2 10733 -> 49532 after three Condor resumes). Before
+  resuming a Park fit from `param.fit`/`param.mcmc`, prepend
+  `    #parametrization       2.0000000e+00       0.0000000e+00` (Brune/standard
+  runs are unaffected: an untagged file is taken as their own basis).
 - **Analytic derivatives work** (`chi2_and_grad`, `residual_jacobian`,
   `--use-lm`, the covariance band). Checking them against finite differences
   resolves only ~1e-5 in Park mode, not Brune's 1e-7: the level matrix
