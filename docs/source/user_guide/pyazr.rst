@@ -602,7 +602,15 @@ integrate.
    paths = azr.ec_integrals(pair=1, energies=E)         # one entry per EC pathway
    paths[0]["li"], paths[0]["lf"], paths[0]["radiation"], paths[0]["value"]
 
-   azr.cache_stats()   # queries, hits, hit_rate, entries, keys, disabled_keys
+   azr.cache_stats()   # queries, hits, hit_rate, entries, keys, disabled_keys,
+                       # input_files_read, input_files_served, input_files_held
+
+A rebuild of the model (``set_channel_radius``, a nuclear-potential change, a mode switch) clears the
+Coulomb memo, reads no input file that has not changed on disk (the ``input_files_*`` counters, for the
+whole process) and does not print the setup ``Note:`` lines again: a session prints each once. Before
+AZURE2 dev 2026-11-04 a likelihood that sampled a channel radius grew the memo by about 100 kB per new
+radius without bound, re-read the ``.azr`` and every data file at each call, and printed every Note at
+each call.
 
 The Coulomb functions follow the run's own configuration, so the same call
 returns the accurate routine's values, GSL's (``--gsl-coul``), or the Numerov

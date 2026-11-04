@@ -225,7 +225,8 @@ class TargetEffect {
   /// Read the tabulated functions whose energies lie within a decade of
   /// [eMin, eMax] (lab MeV), plus the bracketing ones; merges with what is
   /// already loaded.  Returns false if the file cannot be read.
-  bool LoadUdrTable(double eMinLab, double eMaxLab, std::ostream &log);
+  /// cached: read the file through InputFiles (Config::cacheInputFiles).
+  bool LoadUdrTable(double eMinLab, double eMaxLab, std::ostream &log, bool cached = false);
   /// The kernel for a point at lab energy eLab (MeV) for a projectile of rest
   /// energy mass (MeV): the table interpolated in energy, centred if asked,
   /// convolved with the burst and channel width, normalised.

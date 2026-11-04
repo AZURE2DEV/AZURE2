@@ -1,3 +1,4 @@
+#include "InputFiles.h"
 #include "AZUREOutput.h"
 #include "Profile.h"
 #include "CNuc.h"
@@ -260,7 +261,8 @@ int EData::NumSegments() const {
  */
 
 int EData::Fill(const Config &configure, CNuc *theCNuc) {
-  std::ifstream in(configure.configfile.c_str());
+  std::unique_ptr<std::istream> inStream = InputFiles::Open(configure.configfile, configure.cacheInputFiles);
+  std::istream &in = *inStream;
   if (!in) return -1;
   std::string line = "";
   while (line != "<segmentsData>" && !in.eof()) getline(in, line);
@@ -467,7 +469,6 @@ int EData::Fill(const Config &configure, CNuc *theCNuc) {
 
   if (line != "</segmentsData>") return -1;
 
-  in.close();
 
   if (this->ResolveShiftGroups(configure) == -1) return -1;
   this->ResolveNormGroups(configure);
@@ -488,7 +489,8 @@ int EData::Fill(const Config &configure, CNuc *theCNuc) {
  */
 
 int EData::MakePoints(const Config &configure, CNuc *theCNuc) {
-  std::ifstream in(configure.configfile.c_str());
+  std::unique_ptr<std::istream> inStream = InputFiles::Open(configure.configfile, configure.cacheInputFiles);
+  std::istream &in = *inStream;
   if (!in) return -1;
   std::string line = "";
   while (line != "<segmentsTest>" && !in.eof()) getline(in, line);
@@ -737,7 +739,6 @@ int EData::MakePoints(const Config &configure, CNuc *theCNuc) {
 
   if (line != "</segmentsTest>") return -1;
 
-  in.close();
 
   if (this->NumSegments() > 0) {
     if (this->ReadTargetEffectsFile(configure, theCNuc) == -1) return -1;
@@ -991,7 +992,8 @@ int EData::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, const st
 }
 
 int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
-  std::ifstream in(configure.configfile.c_str());
+  std::unique_ptr<std::istream> inStream = InputFiles::Open(configure.configfile, configure.cacheInputFiles);
+  std::istream &in = *inStream;
   if (!in) return -1;
   std::string line = "";
   while (line != "<targetInt>" && !in.eof()) getline(in, line);
@@ -1063,7 +1065,7 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
           eMin = std::min(eMin, point->GetLabEnergy());
           eMax = std::max(eMax, point->GetLabEnergy());
         }
-        if (eMax > 0.0 && !targetEffect->LoadUdrTable(eMin, eMax, configure.outStream)) return -1;
+        if (eMax > 0.0 && !targetEffect->LoadUdrTable(eMin, eMax, configure.outStream, configure.cacheInputFiles)) return -1;
       }
 
       for (EPointIterator point = segment->GetPoints().begin(); point < segment->GetPoints().end(); point++) {
@@ -1226,7 +1228,7 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
               eMin = std::min(eMin, point->GetLabEnergy());
               eMax = std::max(eMax, point->GetLabEnergy());
             }
-            if (eMax > 0.0 && !targetEffect->LoadUdrTable(eMin, eMax, configure.outStream)) return -1;
+            if (eMax > 0.0 && !targetEffect->LoadUdrTable(eMin, eMax, configure.outStream, configure.cacheInputFiles)) return -1;
           }
 
           for (EPointIterator point = component->GetPoints().begin(); point < component->GetPoints().end(); point++) {
@@ -3462,14 +3464,14 @@ int EData::ResolveShiftGroups(const Config &configure) {
         n++;
       }
     if (n == 0) {
-      configure.outStream << "Note: shift group '" << g.first << "' has only segment #" << leader.GetSegmentKey()
-                          << "; nothing is shared." << std::endl;
+      configure.Note("Note: shift group '" + g.first + "' has only segment #" +
+                     std::to_string(leader.GetSegmentKey()) + "; nothing is shared.");
       continue;
     }
-    configure.outStream << "Note: shift group '" << g.first << "': segments #" << leader.GetSegmentKey() << " +"
-                        << members.str() << " share one constant energy shift (segment #"
-                        << leader.GetSegmentKey() << "'s parameter, " << (leader.IsVaryEnergyShift() ? "free" : "fixed")
-                        << ")." << std::endl;
+    configure.Note("Note: shift group '" + g.first + "': segments #" + std::to_string(leader.GetSegmentKey()) + " +" +
+                   members.str() + " share one constant energy shift (segment #" +
+                   std::to_string(leader.GetSegmentKey()) + "'s parameter, " +
+                   (leader.IsVaryEnergyShift() ? "free" : "fixed") + ").");
   }
   return ResolveShiftFunctions(configure);
 }
@@ -3684,13 +3686,13 @@ int EData::ResolveShiftFunctions(const Config &configure) {
       for (int c = 0; c < k; c++) note << names[c] << (c + 1 < k ? ", " : "");
       note << ") over " << m << " member energ" << (m == 1 ? "y" : "ies") << " " << energies.front() << "-" << energies.back()
            << " MeV: " << cond << ".";
-      configure.outStream << note.str() << std::endl;
+      configure.Note(note.str());
       if (!(cond < 1.0e8))
         configure.outStream << "WARNING: shift function on segment #" << key << ": its free terms cannot be told apart "
                             << "over this group's energies (condition number " << cond << "); fix one of them or "
                             << "constrain it with a penalty." << std::endl;
     } else {
-      configure.outStream << note.str() << std::endl;
+      configure.Note(note.str());
     }
   }
   return 0;
@@ -3746,13 +3748,13 @@ void EData::ResolveNormGroups(const Config &configure) {
         n++;
       }
     if (n == 0) {
-      configure.outStream << "Note: normalization group '" << g.first << "' has only segment #"
-                          << leader.GetSegmentKey() << "; nothing is shared." << std::endl;
+      configure.Note("Note: normalization group '" + g.first + "' has only segment #" +
+                     std::to_string(leader.GetSegmentKey()) + "; nothing is shared.");
       continue;
     }
-    configure.outStream << "Note: normalization group '" << g.first << "': segments #" << leader.GetSegmentKey()
-                        << " +" << members.str() << " share one normalization (segment #" << leader.GetSegmentKey()
-                        << "'s, " << (leader.IsVaryNorm() ? "free" : "fixed") << ")." << std::endl;
+    configure.Note("Note: normalization group '" + g.first + "': segments #" + std::to_string(leader.GetSegmentKey()) +
+                   " +" + members.str() + " share one normalization (segment #" +
+                   std::to_string(leader.GetSegmentKey()) + "'s, " + (leader.IsVaryNorm() ? "free" : "fixed") + ").");
   }
 }
 
@@ -3767,7 +3769,7 @@ std::shared_ptr<DataCovariance::File> EData::CovarianceFileFor(const std::string
   auto it = covFiles_.find(key);
   if (it != covFiles_.end()) return it->second;
   std::string err;
-  std::shared_ptr<DataCovariance::File> f = DataCovariance::Read(path, err);
+  std::shared_ptr<DataCovariance::File> f = DataCovariance::Read(path, err, configure.cacheInputFiles);
   if (!f) {
     configure.outStream << "ERROR: Covariance file: " << err << "." << std::endl;
     covarianceError_ = true;
@@ -4142,15 +4144,18 @@ int EData::SetUpDensityParams(const Config &configure) {
       auto it = groupLeader.find(group);
       if (it != groupLeader.end()) {
         const TargetEffect *lead = this->GetTargetEffect(it->second);
-        if (std::fabs(te->GetDensity() - lead->GetDensity()) > 1.0e-9 * lead->GetDensity())
-          configure.outStream << "Note: <targetInt> effect " << n << " (density group " << group << ") has density "
-                              << te->GetDensity() << "; the group's density is its first line's, " << lead->GetDensity()
-                              << " (effect " << it->second << ")." << std::endl;
+        if (std::fabs(te->GetDensity() - lead->GetDensity()) > 1.0e-9 * lead->GetDensity()) {
+          std::ostringstream note;
+          note << "Note: <targetInt> effect " << n << " (density group " << group << ") has density "
+               << te->GetDensity() << "; the group's density is its first line's, " << lead->GetDensity()
+               << " (effect " << it->second << ").";
+          configure.Note(note.str());
+        }
         if (te->HasDensityFit() && (te->IsDensityVaried() != lead->IsDensityVaried() ||
                                     std::fabs(te->GetDensitySigma() - lead->GetDensitySigma()) > 1.0e-9 * lead->GetDensity()))
-          configure.outStream << "Note: <targetInt> effect " << n << " (density group " << group
-                              << "): its densityfit block is ignored, the group's is its first line's (effect "
-                              << it->second << ")." << std::endl;
+          configure.Note("Note: <targetInt> effect " + std::to_string(n) + " (density group " + group +
+                         "): its densityfit block is ignored, the group's is its first line's (effect " +
+                         std::to_string(it->second) + ").");
         te->JoinDensityGroup(*lead);
         densityParamOfEffect_[n - 1] = densityParamOfEffect_[it->second - 1];
         continue;

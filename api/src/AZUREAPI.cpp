@@ -19,6 +19,7 @@
 #include "CoulFunc.h"
 #include "ECIntegral.h"
 #include "Profile.h"
+#include "InputFiles.h"
 
 #include <iostream>
 #include <iomanip>
@@ -26,6 +27,13 @@
 #include <limits>
 #include <new>
 #include <cmath>
+
+AZUREAPI::AZUREAPI(Config &configure) : configure_(configure), data_(nullptr), compound_(nullptr) {
+  // A session rebuilds its model from the files (SetRadius, potential changes, mode switches): read each
+  // input file once and print each setup Note once, not on every rebuild (Config::cacheInputFiles, Note).
+  configure_.cacheInputFiles = true;
+  if (!configure_.noteLog) configure_.noteLog = std::make_shared<Config::NoteLog>();
+}
 
 AZUREAPI::~AZUREAPI() {
   // A session used to be a process, so the OS reclaimed these; in-process the
@@ -821,6 +829,10 @@ bool AZUREAPI::Rebuild() {
 // goes to CNuc::Fill, so a rebuild for one reason (a potential change, another
 // pair's radius) does not undo an earlier SetRadius.
 bool AZUREAPI::RebuildImpl(const std::map<int, double> &radii) {
+  // The Coulomb memo is keyed on the channel radius (and the potential): what the old model put there is of no use
+  // to the new one, and kept, it grew by one set of keys per new radius without bound (3H+d free-radius MCMC,
+  // 2026-11-03).  Values are unaffected either way: the memo only stores exact results.
+  if (g_coulFuncCache) g_coulFuncCache->Clear();
   if (compound_ != nullptr) delete compound_;
   if (data_ != nullptr) delete data_;
 
@@ -1716,10 +1728,15 @@ vector_r AZUREAPI::GetECIntegrals(const vector_r &request) const {
 }
 
 /*!
- * Coulomb-function cache counters, aggregated over threads.
+ * Coulomb-function cache counters, aggregated over threads, then the input-file counters of the process
+ * (InputFiles: files read from disk, opens served from memory, files held).
  */
 vector_r AZUREAPI::GetCacheStats() const {
-  vector_r out(6, 0.0);
+  vector_r out(9, 0.0);
+  const InputFiles::Stats in = InputFiles::GetStats();
+  out[6] = static_cast<double>(in.reads);
+  out[7] = static_cast<double>(in.served);
+  out[8] = static_cast<double>(in.files);
   if (!g_coulFuncCache) return out;
   CoulFuncCache::Stats s = g_coulFuncCache->GetStats();
   out[0] = static_cast<double>(s.queries);

@@ -32,6 +32,12 @@ CoulFuncCache *g_coulFuncCache = nullptr;
 static const std::size_t kMaxEntriesPerKey = 32768;
 static const long kMinQueriesBeforeJudging = 4096;
 static const double kMinUsefulHitRate = 0.05;
+// The guards above are per key, and the key holds the channel radius: a pyazr session that samples a radius
+// opened a new key per l at every new radius and never let one go (3H+d free-radius MCMC, 2026-11-03: ~96 kB
+// per call, 239 GB over 16 workers).  AZUREAPI clears the memo at every rebuild; this caps the number of keys a
+// thread holds in case anything else multiplies them.  A legitimate model has (pairs x l x potentials) keys,
+// far below it.
+static const std::size_t kMaxKeysPerThread = 4096;
 
 CoulFuncCache::CoulFuncCache() {
 #ifdef _OPENMP
@@ -115,7 +121,9 @@ void CoulFuncCache::AddCoulWaves(const CoulFuncKey &key, double energy, const Co
     return;
   }
   // Get or create the data structure for this key
-  CoulFuncData &data = localCache()[key];
+  std::map<CoulFuncKey, CoulFuncData> &cache = localCache();
+  if (cache.size() >= kMaxKeysPerThread && cache.find(key) == cache.end()) cache.clear();
+  CoulFuncData &data = cache[key];
 
   if (data.disabled) return;
 

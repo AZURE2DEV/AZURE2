@@ -1,5 +1,5 @@
 # Core sources, shared by the AZURE2 executable and the _azure2 Python module.
-set(AZURE2_CORE_SOURCES AChannel.cpp CoulFunc.cpp CoulFuncCache.cpp GenMatrixFunc.cpp
+set(AZURE2_CORE_SOURCES AChannel.cpp CoulFunc.cpp CoulFuncCache.cpp InputFiles.cpp GenMatrixFunc.cpp
 KLGroup.cpp ALevel.cpp Decay.cpp AngCoeff.cpp MGroup.cpp
 AMatrixFunc.cpp  DoubleFactorial.cpp EigenFunc.cpp  NFIntegral.cpp
 ECIntegral.cpp ECTable.cpp ECAmplitudeCache.cpp MatrixInv.cpp LevelMatrixSolver.cpp Profile.cpp ChannelSpace.cpp

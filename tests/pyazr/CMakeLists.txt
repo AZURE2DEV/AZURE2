@@ -54,6 +54,14 @@ add_test(NAME pyazr_azr_parse_cache
                  ${CMAKE_CURRENT_SOURCE_DIR}/azr_parse_cache_test.py)
 set_tests_properties(pyazr_azr_parse_cache PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
+# A rebuild (set_channel_radius, a potential change) keeps no Coulomb memo of the old radius, reads no
+# unchanged input file and prints the setup Notes once per session (before 2026-11-04: ~96 kB per new
+# radius, every file re-read, every Note reprinted; the 3H+d free-radius MCMC reached 239 GB).
+add_test(NAME pyazr_rebuild_resources
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/rebuild_resources_test.py)
+set_tests_properties(pyazr_rebuild_resources PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
 # The hybrid Coulomb functions with a vanishing nuclear potential equal the plain ones: the
 # derivative at the channel radius is O(dr^4) on a grid that has the radius as a node (before
 # 2026-10-27 the chord slope of the bracketing cell put 4e-3 to 4e-2 into S; audit item 16).

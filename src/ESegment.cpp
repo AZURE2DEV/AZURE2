@@ -2,6 +2,7 @@
 #include <functional>
 #include <cmath>
 #include <limits>
+#include "InputFiles.h"
 #include "CNuc.h"
 #include "Config.h"
 #include "DataLine.h"
@@ -371,7 +372,8 @@ int ESegment::GetExitKey() const {
 
 int ESegment::Fill(CNuc *theCNuc, EData *theData, const Config &configure) {
   std::string infile = this->GetDataFile();
-  std::ifstream in(infile.c_str());
+  std::unique_ptr<std::istream> inStream = InputFiles::Open(infile, configure.cacheInputFiles);
+  std::istream &in = *inStream;
   if (!in) return -1;
   int lineNumber = 0;
   int record = 0;  // data rows read so far: the rows of a data covariance file
@@ -401,7 +403,6 @@ int ESegment::Fill(CNuc *theCNuc, EData *theData, const Config &configure) {
                           << "\"" << std::endl
                           << "       A data line needs at least four numeric columns (energy, angle, value,"
                           << " uncertainty). Lines beginning with '#' and blank lines are ignored." << std::endl;
-      in.close();
       return -1;
     }
     record++;
@@ -415,7 +416,6 @@ int ESegment::Fill(CNuc *theCNuc, EData *theData, const Config &configure) {
           configure.outStream << "ERROR: line " << lineNumber << " of " << infile << ": an angular-coefficient"
                               << " segment's second column is the Legendre order k (an integer, 0-20), got " << k
                               << "." << std::endl;
-          in.close();
           return -1;
         }
         NewEPoint.SetCoefficientOrder((int)std::round(k));
@@ -487,7 +487,6 @@ int ESegment::Fill(CNuc *theCNuc, EData *theData, const Config &configure) {
       }
     }
   }
-  in.close();
   return 0;
 }
 

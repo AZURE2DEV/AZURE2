@@ -3,6 +3,9 @@
 
 #include <string>
 #include <fstream>
+#include <memory>
+#include <mutex>
+#include <set>
 
 /// A structure holding the reaction rate calculation configuration
 
@@ -160,6 +163,24 @@ class Config {
   /// Key of the particle pair whose E(s) = (s - m0^2)/(2 m0) relativistic.out uses (the LANL/EDA
   /// level-energy convention); "relativisticReferencePair=<key>" in <config>, 0 = the first pair.
   int relativisticReferencePair;
+  /// The Notes a session has printed (see Note()).  Null -- the CLI and the GUI -- prints every Note; a pyazr
+  /// session (AZUREAPI) sets one so that the setup Notes of its rebuilds are printed once: a channel-radius
+  /// scan rebuilds the model on every likelihood call, and before 2026-11-04 each rebuild printed every Note
+  /// again (the 3H+d free-radius MCMC, 2026-11-03).  Not touched by Reset().
+  struct NoteLog {
+    std::mutex mutex;
+    std::set<std::string> printed;
+  };
+  std::shared_ptr<NoteLog> noteLog;
+  /// Prints one informational line ("Note: ...") to outStream, unless noteLog is set and has already seen
+  /// exactly this text.  Warnings and errors are not routed through here: they print every time.
+  void Note(const std::string &line) const;
+  /// Read input files (the .azr, data, covariance and target-effect files) through InputFiles, which keeps
+  /// their contents in memory and reads a file again only when it changes on disk.  Set by AZUREAPI: a
+  /// rebuild there (SetRadius, a potential change, a mode switch) used to re-read every file, which on
+  /// /groups stalled 16 forked MCMC workers (2026-11-03).  False -- read from disk -- for the CLI and GUI.
+  /// Not touched by Reset().
+  bool cacheInputFiles = false;
   /// A constant indicating the maximum order of the Legendre polynomials to calculate.
   static const int maxLOrder = 20;
   /// Read the <config> block, then the optional <potential> block. -1 if the file cannot be read.

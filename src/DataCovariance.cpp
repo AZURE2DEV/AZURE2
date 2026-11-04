@@ -1,3 +1,4 @@
+#include "InputFiles.h"
 #include "DataCovariance.h"
 
 #include <algorithm>
@@ -81,8 +82,9 @@ class Tokens {
 };
 
 // Data rows of a data file, counted as ESegment::Fill counts them (DataLine: neither blank nor '#').
-int CountRecords(const std::string &path) {
-  std::ifstream in(path.c_str());
+int CountRecords(const std::string &path, bool cached) {
+  std::unique_ptr<std::istream> inStream = InputFiles::Open(path, cached);
+  std::istream &in = *inStream;
   if (!in) return -1;
   std::string raw;
   int n = 0;
@@ -101,8 +103,9 @@ int CountRecords(const std::string &path) {
 
 }  // namespace
 
-std::shared_ptr<File> Read(const std::string &path, std::string &err) {
-  std::ifstream in(path.c_str());
+std::shared_ptr<File> Read(const std::string &path, std::string &err, bool cached) {
+  std::unique_ptr<std::istream> inStream = InputFiles::Open(path, cached);
+  std::istream &in = *inStream;
   if (!in) {
     err = "cannot open the covariance file " + path;
     return nullptr;
@@ -169,7 +172,7 @@ std::shared_ptr<File> Read(const std::string &path, std::string &err) {
         err = where() + ": data file " + name + " is listed twice";
         return nullptr;
       }
-      const int actual = CountRecords(name);
+      const int actual = CountRecords(name, cached);
       if (actual < 0) {
         err = where() + ": cannot open data file " + name + " (paths are relative to the directory AZURE2 runs in)";
         return nullptr;

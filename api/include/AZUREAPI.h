@@ -28,10 +28,8 @@ class AZUREAPI {
    * The AZUREAPI object is created with reference to an EData and CNuc object.
    *. The runtime configurations are also passed through a Config structure.
    */
-  AZUREAPI(Config &configure) :
-    configure_(configure),
-    data_(nullptr),
-    compound_(nullptr) {};
+  // Defined in the .cpp (Config is incomplete here).
+  AZUREAPI(Config &configure);
 
   // Defined in the .cpp: EData and CNuc are incomplete here, and deleting an
   // incomplete type is undefined.

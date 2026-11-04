@@ -49,6 +49,14 @@ void Config::Reset() {
   relativisticReferencePair = 0;
 }
 
+void Config::Note(const std::string &line) const {
+  if (noteLog) {
+    std::lock_guard<std::mutex> lock(noteLog->mutex);
+    if (!noteLog->printed.insert(line).second) return;
+  }
+  outStream << line << std::endl;
+}
+
 /*!
  * This funciton reads the configuration file and parses various options.
  */

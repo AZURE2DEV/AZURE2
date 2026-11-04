@@ -1,3 +1,4 @@
+#include "InputFiles.h"
 #include "TargetEffect.h"
 #include <sstream>
 #include <iostream>
@@ -388,13 +389,14 @@ bool TargetEffect::IsUdrCentred() const { return udrCentred_; }
  * 600 energies over twelve decades with 9000 points each.
  */
 
-bool TargetEffect::LoadUdrTable(double eMinLab, double eMaxLab, std::ostream &log) {
+bool TargetEffect::LoadUdrTable(double eMinLab, double eMaxLab, std::ostream &log, bool cached) {
   if (!isUdr_) return false;
   const double keepMin = eMinLab / 10.0, keepMax = eMaxLab * 10.0;
   if (udrTable_ && udrTable_->file == udrFile_ && !udrTable_->energy.empty() &&
       udrTable_->loadedMin <= keepMin && udrTable_->loadedMax >= keepMax)
     return true;
-  std::ifstream in(udrFile_.c_str());
+  std::unique_ptr<std::istream> inStream = InputFiles::Open(udrFile_, cached);
+  std::istream &in = *inStream;
   if (!in) {
     log << "ERROR: cannot open the user-defined resolution file " << udrFile_ << std::endl;
     return false;

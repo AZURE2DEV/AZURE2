@@ -6,6 +6,7 @@
 #include <set>
 #include <map>
 #include <tuple>
+#include "InputFiles.h"
 #include "AngCoeff.h"
 #include "CNuc.h"
 #include <mutex>
@@ -169,7 +170,8 @@ int CNuc::Fill(const Config &configure, const std::map<int, double> &radii) {
   int maxLValue = 0;
   std::map<std::pair<int, int>, std::vector<int> > channelsListed;  // (group, level) -> group channel numbers, in line order
   std::map<std::pair<int, int>, std::set<int> > levelIDs;  // (group, level) -> level IDs of the lines that built it
-  std::ifstream in(configure.configfile.c_str());
+  std::unique_ptr<std::istream> inStream = InputFiles::Open(configure.configfile, configure.cacheInputFiles);
+  std::istream &in = *inStream;
   if (!in) return -1;
   std::string line = "";
   while (line != "<levels>" && !in.eof()) getline(in, line);
@@ -290,7 +292,6 @@ int CNuc::Fill(const Config &configure, const std::map<int, double> &radii) {
 
   if (line != "</levels>") return -1;
 
-  in.close();
 
   // Every level of a J-group needs one width per group channel.  Until 2026-10-17 widths were appended in the
   // order of each level's own lines, so a level listing fewer channels than its group left a short width vector
@@ -382,7 +383,8 @@ int CNuc::Fill(const Config &configure, const std::map<int, double> &radii) {
 int CNuc::ReadAbundances(const Config &configure) {
   hasAbundanceBlock_ = false;
   samples_.clear();
-  std::ifstream in(configure.configfile.c_str());
+  std::unique_ptr<std::istream> inStream = InputFiles::Open(configure.configfile, configure.cacheInputFiles);
+  std::istream &in = *inStream;
   if (!in) return -1;
   std::string line = "";
   while (line != "<abundances>" && !in.eof()) getline(in, line);
@@ -649,7 +651,8 @@ int CNuc::CheckIdenticalChannels(const Config &configure) {
  */
 static std::set<int> ExitPairKeysInFile(const Config &configure) {
   std::set<int> keys;
-  std::ifstream in(configure.configfile.c_str());
+  std::unique_ptr<std::istream> inStream = InputFiles::Open(configure.configfile, configure.cacheInputFiles);
+  std::istream &in = *inStream;
   std::string line;
   bool inSegments = false;
   while (std::getline(in, line)) {
