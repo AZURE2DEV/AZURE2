@@ -2247,6 +2247,16 @@ first**: every rebuild re-read the `.azr` with only that call's override, so
 then the overrides persist through every rebuild, and `set_channel_radius`
 raises if the rebuilt model does not have the radius asked for. On an older
 build, write every radius into the `.azr` (`AzrModel`) and open a fresh session.
+**Sampling the radius in a likelihood (MCMC, many random radii in one session)
+leaked memory before dev e92043e (2026-11-04)**: the Coulomb-function memo is keyed
+on the radius and no rebuild cleared it, ~100 kB per new radius (3H+d free-radius
+chain: 239 GB over 16 workers); every rebuild also re-read the `.azr` and all data
+files from disk and re-printed every setup "Note:". Since then a rebuild clears
+the memo, serves unchanged input files from memory (re-read only when size, mtime,
+ctime or inode change; `cache_stats()` gives `input_files_read/served/held`), and
+each Note prints once per session. On an older build, recycle the worker
+processes (`multiprocessing.Pool(..., maxtasksperchild=N)`) or write the radius
+into the `.azr` per sample.
 
 **Is a new level/channel warranted?** Add it (`add_level`, or free one more
 channel of an existing level), refit the subset it can affect, and weigh Δχ²
