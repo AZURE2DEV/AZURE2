@@ -1076,13 +1076,15 @@ and `chiSquared.out`. What changes is the fit space:
   high because the grid was built at the ground state's energy instead of
   the Hoyle state's. Files from that window: strip or `#`-prefix the first
   line. Reading a `.sav` by NAME (first column) is immune to both.
-  **But `param.fit` (written during a fit, the file a resumed or evicted job
-  restarts from) and MCMC's `param.mcmc` carry NO tag in builds up to at least
-  dev 2631b53 (2026-11-04)**: after a `--use-park` fit, `param.fit` holds Park
-  amplitudes untagged, a Park run reading it takes them as Brune's and
-  multiplies every amplitude by sqrt(J) again, fixed ones included (11B+a
+  **`param.fit` (written during a fit, the file a resumed or evicted job
+  restarts from) and MCMC's `param.mcmc` carried NO tag before dev c5b6c27
+  (2026-11-04, installed 15:47; `tests/park_formalism` 2b)**: after a
+  `--use-park` fit, `param.fit` held Park
+  amplitudes untagged, a Park run reading it took them as Brune's and
+  multiplied every amplitude by sqrt(J) again, fixed ones included (11B+a
   11-04-26_park_gpSM: chi2 10733 -> 49532 after three Condor resumes). Before
-  resuming a Park fit from `param.fit`/`param.mcmc`, prepend
+  resuming a Park fit from a `param.fit`/`param.mcmc` written by an older
+  build (frozen binaries included), prepend
   `    #parametrization       2.0000000e+00       0.0000000e+00` (Brune/standard
   runs are unaffected: an untagged file is taken as their own basis).
 - **Analytic derivatives work** (`chi2_and_grad`, `residual_jacobian`,
