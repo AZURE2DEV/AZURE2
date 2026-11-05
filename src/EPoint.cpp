@@ -2194,13 +2194,18 @@ V EPoint::IntegrateTargetEffectImpl(const Config &configure, Read rd) {
   return this->IntegrateKernelsImpl<V>(configure, [&b](int j) { return b[j - 1]; });
 }
 
-void EPoint::DopplerWeights(double eCM, std::vector<std::pair<int, double>> &w) const {
+void EPoint::DopplerWeights(double eCM, std::vector<std::pair<int, double>> &w,
+                            std::vector<std::pair<int, double>> *dwdT) const {
   w.clear();
+  if (dwdT) dwdT->clear();
   const TargetEffect *te = this->GetParentData()->GetTargetEffect(this->GetTargetEffectNum());
   const int n = this->NumSubPoints();
   const double c = cm_factor_;
   const double u = te->DopplerU(c);
   if (n < 2 || !(u > 0.0) || !(eCM > 0.0)) return;
+  // The window (layout temperature) and the pieces (nominal temperature) do not move with T: only the kernel
+  // values below do, so sigma_D is smooth in a fitted T.  For a fixed line both are the line's T.
+  const double u0 = te->DopplerUAt(c, te->GetDopplerNominal());
   double lo, hi;
   te->DopplerWindow(eCM, c, lo, hi);
   const double v = std::sqrt(eCM / c);
@@ -2219,7 +2224,11 @@ void EPoint::DopplerWeights(double eCM, std::vector<std::pair<int, double>> &w) 
     }
     first = a;
   }
-  std::map<int, double> acc;
+  std::map<int, double> acc, dacc;
+  // d(norm k)/dT = norm [-k/u + dk/du] du/dT, du/dT = u/(2T)
+  const double T = te->GetDopplerTemperature();
+  const double dudT = (T > 0.0) ? 0.5 * u / T : 0.0;
+  const double u2 = u * u, u3 = u2 * u;
   for (int j = first; j <= last; j++) {
     const double Ea = energy(j), Eb = energy(j + 1);
     if (Ea <= lo) break;
@@ -2227,9 +2236,9 @@ void EPoint::DopplerWeights(double eCM, std::vector<std::pair<int, double>> &w) 
     const double a = std::min(Ea, hi), b = std::max(Eb, lo);
     if (!(a > b) || !(Ea > Eb)) continue;
     const double wa = std::sqrt(a / c), wb = std::sqrt(b / c);
-    const int pieces = std::max(1, static_cast<int>(std::ceil((wa - wb) / (0.25 * u))));
+    const int pieces = std::max(1, static_cast<int>(std::ceil((wa - wb) / (0.25 * u0))));
     const double hw = (wa - wb) / pieces;
-    double toA = 0.0, toB = 0.0;
+    double toA = 0.0, toB = 0.0, dToA = 0.0, dToB = 0.0;
     for (int p = 0; p < pieces; p++) {
       const double mid = wb + (p + 0.5) * hw, half = 0.5 * hw;
       for (int g = 0; g < 4; g++) {
@@ -2238,12 +2247,42 @@ void EPoint::DopplerWeights(double eCM, std::vector<std::pair<int, double>> &w) 
         const double frac = (Ea - c * x * x) / (Ea - Eb);  // 0 at sub-point j, 1 at sub-point j + 1
         toA += half * gw[g] * k * (1.0 - frac);
         toB += half * gw[g] * k * frac;
+        if (dwdT) {
+          const double dm2 = (v - x) * (v - x), dp2 = (v + x) * (v + x);
+          const double dk = -k / u + x * x * 2.0 * (dm2 * std::exp(-dm2 / u2) - dp2 * std::exp(-dp2 / u2)) / u3;
+          dToA += half * gw[g] * dk * (1.0 - frac);
+          dToB += half * gw[g] * dk * frac;
+        }
       }
     }
     acc[j] += norm * toA;
     acc[j + 1] += norm * toB;
+    if (dwdT) {
+      dacc[j] += norm * dToA * dudT;
+      dacc[j + 1] += norm * dToB * dudT;
+    }
   }
   w.assign(acc.begin(), acc.end());
+  if (dwdT) dwdT->assign(dacc.begin(), dacc.end());
+}
+
+double EPoint::DopplerTemperatureDerivative(const Config &configure, const std::vector<double> &values) {
+  TargetEffect *targetEffect = this->GetParentData()->GetTargetEffect(this->GetTargetEffectNum());
+  if (!targetEffect->IsDoppler() || doppler_applied_) return 0.0;
+  const int n = this->NumSubPoints();
+  if (n < 2 || (int)values.size() < n) return 0.0;
+  std::vector<std::pair<int, double>> w, dw;
+  auto dBroaden = [&](double e) {
+    this->DopplerWeights(e, w, &dw);
+    double s = 0.0;
+    for (const auto &t : dw) s += t.second * values[t.first - 1];
+    return s;
+  };
+  if (!targetEffect->HasResolutionStage()) return dBroaden(this->GetCMEnergy());
+  // The kernel after the Doppler step is linear in its sub-point values: apply it to d(sigma_D)/dT.
+  std::vector<double> b(n);
+  for (int j = 1; j <= n; j++) b[j - 1] = dBroaden(this->GetSubPoint(j)->GetCMEnergy());
+  return this->IntegrateKernelsImpl<double>(configure, [&b](int j) { return b[j - 1]; });
 }
 
 template <class V, class Read>

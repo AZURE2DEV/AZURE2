@@ -109,6 +109,8 @@ class FittingTab : public QWidget {
   /*! Mark the norm and shift rows tied by normgroup / shiftgroup blocks (the Segments tab's keyword tails), give
    *  them their leader's value, and rebuild the tables when a row became tied or independent. */
   void syncSegmentGroups();
+  /*! Mirror the Experimental Effects tab's fitted Doppler temperatures into the doppler rows. */
+  void syncDoppler();
 
  private:
   void setupParameterTable(QTableWidget *table, const QString &title);
@@ -128,6 +130,11 @@ class FittingTab : public QWidget {
   /// The density, its prior sigma and its fit flag go back to the Experimental Effects tab (the density to every
   /// line of its group).
   void writeDensity(const FittingParameter &param);
+  /// Append doppler_<n> (K) for every active line with the fit form 'doppler T vary sigma [Tmax]', in the
+  /// engine's order (after the densities).
+  void appendDopplerParameters();
+  /// The temperature, its prior sigma and its fit flag go back to the Experimental Effects tab.
+  void writeDoppler(const FittingParameter &param);
   void assignMinuitIndices();
   void updateParameterInOtherTabs(const QString &paramName, const FittingParameter &param);
   void writeSegmentColumn(const FittingParameter &param, int column, const QVariant &value);
@@ -152,6 +159,7 @@ class FittingTab : public QWidget {
   QTableWidget *abundanceParamsTable;
   QTableWidget *screeningParamsTable;
   QTableWidget *densityParamsTable;
+  QTableWidget *dopplerParamsTable;
   QTableWidget *normParamsTable;
   QTableWidget *shiftParamsTable;
 

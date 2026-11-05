@@ -1137,6 +1137,8 @@ std::string createPrettyParameterName(const std::string &paramName) {
   if (paramName.find("screening_") == 0) return "Screening U_e (eV), effect " + paramName.substr(10);
   // Fitted target density: "density_<n>" -> "Target density (atoms/cm^2), effect n"
   if (paramName.find("density_") == 0) return "Target density (atoms/cm^2), effect " + paramName.substr(8);
+  // Fitted Doppler temperature: "doppler_<n>" -> "Doppler temperature (K), effect n"
+  if (paramName.find("doppler_") == 0) return "Doppler temperature (K), effect " + paramName.substr(8);
 
   // Isotopic abundance: "abundance[_<sample>]_Z_A" -> "Abundance [sample ..] Z=.. A=.."
   if (paramName.find("abundance_") == 0) {

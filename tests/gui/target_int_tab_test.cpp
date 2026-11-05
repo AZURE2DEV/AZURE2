@@ -565,6 +565,117 @@ int main(int argc, char** argv) {
     ok("unchecked in the edit dialog: no doppler block written", !off.contains("doppler"), off);
   }
 
+  // The fitted temperature, `doppler T vary sigma [Tmax]` (parameter doppler_<n>): read into columns 46-49, written
+  // back as read (the plain form stays plain, `0 sigma` stays the fit form), and set from the dialog.
+  {
+    bool readP = false;
+    const QString fitA = "1 \"1,2\" 400 0 0 0 0 \"\" 0 0 0 0 \"\" 0 doppler 300 1 20 900\n";
+    const QString fitB = "1 \"3,4\" 1000 1 0.0001 0 0 \"\" 0 0 0 0 \"\" 0 doppler 310 0 0\n";
+    const QString plain = "1 \"5\" 400 0 0 0 0 \"\" 0 0 0 0 \"\" 0 doppler 320\n";
+    const QString outP = roundTrip(tab, fitA + fitB + plain + "</targetInt>\n", readP);
+    QList<TargetIntData> pl = tab.getTargetIntModel()->getLines();
+    ok("read two fit-form lines and a plain one", readP && pl.size() == 3, outP);
+    if (pl.size() == 3) {
+      ok("fit form with Tmax: T 300, fitted, sigma 20, max 900",
+         pl.at(0).isDoppler && pl.at(0).dopplerTemperature == 300. && pl.at(0).dopplerFit && pl.at(0).dopplerVary &&
+         pl.at(0).dopplerSigma == 20. && pl.at(0).dopplerMax == 900.);
+      ok("fit form 'vary 0 sigma 0': a fixed parameter, no Tmax, Gaussian kept",
+         pl.at(1).isDoppler && pl.at(1).dopplerTemperature == 310. && pl.at(1).dopplerFit && !pl.at(1).dopplerVary &&
+         pl.at(1).dopplerSigma == 0. && pl.at(1).dopplerMax == 0. && pl.at(1).isConvolution && pl.at(1).sigma == 0.0001);
+      ok("plain line: no fit form", pl.at(2).isDoppler && pl.at(2).dopplerTemperature == 320. && !pl.at(2).dopplerFit);
+      TargetIntModel *m = tab.getTargetIntModel();
+      ok("columns 46-49 carry the fit form (edit role)",
+         m->data(m->index(0, 46), Qt::EditRole).toBool() && m->data(m->index(0, 47), Qt::EditRole).toBool() &&
+         m->data(m->index(0, 48), Qt::EditRole).toDouble() == 20. && m->data(m->index(0, 49), Qt::EditRole).toDouble() == 900.);
+      ok("header names", m->headerData(46, Qt::Horizontal, Qt::DisplayRole).toString() == "Doppler T Parameter?" &&
+                         m->headerData(49, Qt::Horizontal, Qt::DisplayRole).toString() == "Doppler Grid Maximum [K]");
+      const QString sum0 = m->data(m->index(0, 33), Qt::DisplayRole).toString();
+      ok("summary says the temperature is fitted", sum0.contains("T = 300 K (fitted)"), sum0);
+      ok("defaultDopplerMax: max(T + 3 sigma, 1.21 T) / 2 T", defaultDopplerMax(300, 20) == 363. &&
+         defaultDopplerMax(300, 0) == 600. && std::fabs(defaultDopplerMax(300, 5) - 363.) < 1e-9);
+    }
+    const QStringList outLines = outP.split('\n', Qt::SkipEmptyParts);
+    ok("written back as read: ' doppler 300 1 20 900', ' doppler 310 0 0', ' doppler 320'",
+       outLines.size() == 3 && outLines.at(0).endsWith(" doppler 300 1 20 900") &&
+       outLines.at(1).endsWith(" doppler 310 0 0") && outLines.at(2).endsWith(" doppler 320"), outP);
+    const QString mixed = roundTrip(tab, "1 \"3\" 200 0 0 0 0 \"\" 0 0 0 0 \"\" 0 0 0.04 20 50 doppler 293.6 1 15 screening 934.7 1 200\n"
+                                         "</targetInt>\n", readP);
+    pl = tab.getTargetIntModel()->getLines();
+    ok("a fit form followed by another keyword: both read, both written",
+       readP && pl.size() == 1 && pl.at(0).dopplerFit && pl.at(0).dopplerSigma == 15. && pl.at(0).isScreening &&
+       mixed.contains(" screening 934.7 1 200") && mixed.contains(" doppler 293.6 1 15") && !mixed.contains("doppler 293.6 1 15 9"),
+       mixed);
+
+    // The dialog: the fields follow the 'Temperature Is a Fit Parameter' box; the default maximum is shown; refusals.
+    {
+      AddTargetIntDialog dlg;
+      dlg.isDopplerCheck->setChecked(true);
+      dlg.dopplerTemperatureText->setText("300");
+      ok("fit fields disabled until the fit box is checked",
+         !dlg.dopplerVaryCheck->isEnabled() && !dlg.dopplerSigmaText->isEnabled() && !dlg.dopplerMaxText->isEnabled());
+      dlg.dopplerFitCheck->setChecked(true);
+      ok("enabled with it", dlg.dopplerVaryCheck->isEnabled() && dlg.dopplerSigmaText->isEnabled() &&
+         dlg.dopplerMaxText->isEnabled());
+      dlg.dopplerSigmaText->setText("20");
+      ok("blank maximum shows the default 363", dlg.dopplerMaxText->placeholderText() == "363",
+         dlg.dopplerMaxText->placeholderText());
+      dlg.dopplerSigmaText->setText("0");
+      ok("without a prior the default is 2 T = 600", dlg.dopplerMaxText->placeholderText() == "600",
+         dlg.dopplerMaxText->placeholderText());
+      ok("a valid fit form passes", dlg.dopplerProblem().isEmpty(), dlg.dopplerProblem());
+      dlg.dopplerSigmaText->setText("-1");
+      ok("a negative prior sigma is refused", !dlg.dopplerProblem().isEmpty());
+      dlg.dopplerSigmaText->setText("20");
+      dlg.dopplerMaxText->setText("250");
+      ok("a grid maximum not above T is refused", !dlg.dopplerProblem().isEmpty());
+      dlg.dopplerMaxText->setText("900");
+      ok("a grid maximum above T passes", dlg.dopplerProblem().isEmpty(), dlg.dopplerProblem());
+      dlg.dopplerFitCheck->setChecked(false);
+      dlg.dopplerMaxText->setText("250");
+      ok("the fit fields are not checked without the fit box", dlg.dopplerProblem().isEmpty(), dlg.dopplerProblem());
+      if (const char* stem = std::getenv("AZURE2_TARGET_INT_PNG")) {
+        dlg.dopplerFitCheck->setChecked(true);
+        dlg.dopplerMaxText->setText("");
+        dlg.show(); QApplication::processEvents(); dlg.adjustSize(); QApplication::processEvents();
+        dlg.grab().save(QString("%1_doppler_fit.png").arg(stem));
+      }
+    }
+
+    // Through the tab: edit the plain line into the fit form, then the dialog comes back with it.
+    roundTrip(tab, plain + "</targetInt>\n", readP);
+    QTableView *view = tab.findChild<QTableView*>();
+    bool sawFit = false, backFit = false;
+    if (view) {
+      view->selectionModel()->select(tab.getTargetIntModel()->index(0, 1),
+                                     QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Rows);
+      QTimer::singleShot(0, [&]() {
+        AddTargetIntDialog *d = qobject_cast<AddTargetIntDialog*>(QApplication::activeModalWidget());
+        if (!d) return;
+        sawFit = !d->dopplerFitCheck->isChecked();
+        d->dopplerFitCheck->setChecked(true);
+        d->dopplerVaryCheck->setChecked(true);
+        d->dopplerSigmaText->setText("25");
+        d->dopplerMaxText->setText("1000");
+        d->accept();
+      });
+      tab.editLine();
+      QTimer::singleShot(0, [&]() {
+        AddTargetIntDialog *d = qobject_cast<AddTargetIntDialog*>(QApplication::activeModalWidget());
+        if (!d) return;
+        backFit = d->dopplerFitCheck->isChecked() && d->dopplerVaryCheck->isChecked() &&
+                  d->dopplerSigmaText->text() == "25" && d->dopplerMaxText->text() == "1000";
+        d->reject();
+      });
+      tab.editLine();
+    }
+    ok("the edit dialog opened on the plain line without the fit form", sawFit);
+    ok("and comes back with the fit form it was given", backFit);
+    QString fitOut;
+    QTextStream fitStream(&fitOut);
+    tab.writeFile(fitStream);
+    ok("edited line written with ' doppler 320 1 25 1000'", fitOut.trimmed().endsWith(" doppler 320 1 25 1000"), fitOut);
+  }
+
   std::cout << (fails ? "FAILED" : "PASSED") << std::endl;
   return fails ? 1 : 0;
 }

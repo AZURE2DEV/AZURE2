@@ -18,7 +18,21 @@
 #       all three kinds, every free parameter varied, --no-grid-replacement (as tests/transmission_yield);
 #   (e) refused with an ERROR and no output: "doppler 0" and "doppler" without a temperature.
 #
-#   ./tests/doppler_fgm/check.sh path/to/AZURE2
+# The fitted temperature, "doppler T vary sigma [Tmax]" (parameter doppler_<n>):
+#
+#   (f) data = the dop model's sigma_t and sigma_gamma at T = 450 K (1 % errors), every level fixed, the line
+#       "doppler 300 1 0 900": MIGRAD (--use-gradient) and --use-lm recover T within 1 K;
+#   (g) AZURE_GRAD_CHECK on grad_fit (doppler_1 "300 1 0 900" on the Doppler-only and transmission/yield
+#       segments, doppler_2 "300 1 20" on the Doppler + Gaussian transmission/yield ones), free with the widths:
+#       the analytic gradient = finite differences (1e-6 of the largest) and the Jacobian path (1e-10);
+#   (h) "doppler 300 1 20" against the same data with 20 % errors: T lands between 300 K and the default layout
+#       temperature 363 K, and Total-Doppler-Chi-Squared in chiSquared.out = ((T - 300)/20)^2;
+#   (i) malformed fit forms refused with an ERROR and no output: vary 2, sigma missing, sigma < 0, Tmax <= T,
+#       T < 0;
+#   (j) only with REF_AZURE2=<an f373664 build>: the plain "doppler T" models' AZUREOut files and chiSquared.out
+#       are byte-identical to that build's (the fit form changed nothing for a fixed line).
+#
+#   [REF_AZURE2=path/to/reference/AZURE2] ./tests/doppler_fgm/check.sh path/to/AZURE2
 
 set -uo pipefail
 export LC_ALL=C
@@ -125,5 +139,83 @@ for name in refuse_zero refuse_missing; do
     ok "(e) refused: $name"
   else bad "(e) not refused: $name"; grep -m2 -E 'ERROR|WARN' "$WORK/$name/run.log"; fi
 done
+
+# (f) a fitted temperature: data at T = 450 K, the fit starts at 300 K
+fit() {  # fit <name> <model> <flags>: mode 2, no parameter file
+  local dir="$WORK/$1"
+  mkdir -p "$dir/output" "$dir/checks"
+  ln -s "$WORK/models/data" "$dir/data"
+  cp "$WORK/models/$2.azr" "$dir/t.azr"
+  (cd "$dir" && printf '2\nn\n\n\n' | run_limited 900 "$AZURE2_BIN" $3 --no-gui --no-readline t.azr > run.log 2>&1)
+}
+par() { awk -v n="$2" '$1 == n { print $2; exit }' "$WORK/$1/output/param.sav"; }
+chi() { sed -n "s/.*$2: \([^ ]*\).*/\1/p" "$WORK/$1/output/chiSquared.out" | head -1; }
+run dop450 dop450 1
+if "$PY" -I "$HERE/make_models.py" fitdata "$HERE/../reaction_rate/models/n12C.azr" "$WORK/dop450" "$WORK/models"; then
+  for v in "fit_grad:--use-gradient" "fit_lm:--use-lm"; do
+    name="${v%%:*}"; flags="${v#*:}"
+    fit "$name" fit "$flags"
+    t="$(par "$name" doppler_1)"; c="$(chi "$name" Total-Chi-Squared)"
+    if [ -n "$t" ] && awk -v t="$t" -v re="$num" 'BEGIN { d = t - 450; if (d < 0) d = -d; exit !(t ~ re && d < 1) }'; then
+      ok "(f) $flags: doppler_1 = $t K from 300 K (truth 450 K), chi2 $c"
+    else bad "(f) $flags: doppler_1 '${t}', chi2 '${c}'"; tail -5 "$WORK/$name/run.log"; fi
+  done
+else bad "(f) fit data not built"; fi
+
+# (g) gradient check with the temperatures free
+mkdir -p "$WORK/gfit/output" "$WORK/gfit/checks"; ln -s "$WORK/models/data" "$WORK/gfit/data"
+cp "$WORK/models/grad_fit.azr" "$WORK/gfit/t.azr"
+(cd "$WORK/gfit" && printf '2\n\n\n7\n' | AZURE_GRAD_CHECK=exit AZURE_GRAD_CHECK_N=100000 AZURE_GRAD_CHECK_ROWS=100000 \
+   run_limited 1200 "$AZURE2_BIN" --use-gradient --no-grid-replacement --no-gui --no-readline t.azr > run.log 2>&1)
+awk '{ sub(/\r$/, "") }
+     /^\[grad-check\] idx / { a = f = j = ""
+       for (i = 4; i <= NF; i++) { if ($i == "analytic") a = $(i + 1); if ($i == "fd") f = $(i + 1); if ($i == "jacobian") j = $(i + 1) }
+       print a, f, j, $4 }' "$WORK/gfit/run.log" > "$WORK/gfit/rows"
+nrow="$(awk 'END { print NR }' "$WORK/gfit/rows")"
+ndop="$(awk '$4 == "doppler"' "$WORK/gfit/rows" | grep -c .)"
+if [ "$ndop" -ne 2 ] || [ "$nrow" -lt 4 ]; then bad "(g) gradient check listed $nrow parameters, $ndop temperatures"
+else
+  read -r fd jac <<< "$(awk '{ a = $1 < 0 ? -$1 : $1; if (a > m) m = a
+                               d = $1 - $2; if (d < 0) d = -d; if (d > w) w = d
+                               e = $1 - $3; if (e < 0) e = -e; if (e > v) v = e }
+                             END { printf "%.2e %.2e", w / m, v / m }' "$WORK/gfit/rows")"
+  read -r dfd <<< "$(awk '$4 == "doppler" { d = ($1 - $2) / $2; if (d < 0) d = -d; if (d > w) w = d } END { printf "%.2e", w }' \
+                     "$WORK/gfit/rows")"
+  le "$fd" 1e-6 && ok "(g) gradient = finite differences for $nrow parameters, doppler_1 and doppler_2 among them ($fd of the largest; the temperatures to $dfd of their own)" \
+    || bad "(g) gradient vs finite differences: $fd of the largest (temperatures $dfd of their own)"
+  le "$jac" 1e-10 && ok "(g) Jacobian-path gradient = adjoint gradient ($jac of the largest)" \
+    || bad "(g) Jacobian-path vs adjoint gradient: $jac of the largest"
+fi
+
+# (h) a prior
+fit prior fit_prior --use-gradient
+t="$(par prior doppler_1)"; dc="$(chi prior Total-Doppler-Chi-Squared)"
+if [ -n "$t" ] && [ -n "$dc" ] && awk -v t="$t" -v s="$dc" -v re="$num" 'BEGIN { p = ((t - 300) / 20)^2; d = s - p; if (d < 0) d = -d
+       exit !(t ~ re && s ~ re && t > 300 && t < 363 && d <= 1e-5 * (p + 1)) }'; then
+  ok "(h) a 20 K prior holds T at $t K (data alone: 450 K); Total-Doppler-Chi-Squared $dc = ((T - 300)/20)^2"
+else bad "(h) prior fit: doppler_1 '${t}', Total-Doppler-Chi-Squared '${dc}'"; tail -5 "$WORK/prior/run.log"; fi
+
+# (i) malformed fit forms
+for name in refuse_vary refuse_nosigma refuse_sigma refuse_tmax refuse_negT; do
+  run "$name" "$name" 1
+  if grep -q "a doppler block is 'doppler T'" "$WORK/$name/run.log" && [ ! -s "$WORK/$name/output/chiSquared.out" ]; then
+    ok "(i) refused: $name ($(grep -m1 -o "a doppler block is.*" "$WORK/$name/run.log" | cut -c1-120))"
+  else bad "(i) not refused: $name"; grep -m2 -E 'ERROR|WARN' "$WORK/$name/run.log"; fi
+done
+
+# (j) plain "doppler T" byte-identical to a reference build (optional)
+if [ -n "${REF_AZURE2:-}" ]; then
+  ref="$AZURE2_BIN"; AZURE2_BIN="$REF_AZURE2"
+  for m in dop dopg dopT dopgT; do run "ref_$m" "$m" 1; done
+  AZURE2_BIN="$ref"
+  same=0; diff=0
+  for m in dop dopg dopT dopgT; do
+    for f in "$WORK/ref_$m"/output/AZUREOut_*.out "$WORK/ref_$m/output/chiSquared.out"; do
+      if cmp -s "$f" "$WORK/$m/output/$(basename "$f")"; then same=$((same + 1)); else diff=$((diff + 1)); fi
+    done
+  done
+  if [ "$diff" -eq 0 ] && [ "$same" -ge 12 ]; then ok "(j) plain doppler T: $same output files byte-identical to $REF_AZURE2"
+  else bad "(j) plain doppler T: $diff of $((same + diff)) output files differ from $REF_AZURE2"; fi
+fi
 
 if [ "$failures" -eq 0 ]; then echo "PASS: free-gas Doppler broadening"; else echo "FAIL: $failures check(s)"; exit 1; fi

@@ -37,7 +37,10 @@ static QString effectSummary(const TargetIntData &t) {
   if (t.isUdr) names << QObject::tr("User-defined resolution");
   if (t.isQCoefficients) names << QObject::tr("Attenuation coefficients");
   if (t.isDoppler)
-    names << QObject::tr("Free-gas Doppler broadening, T = %1 K").arg(QString::number(t.dopplerTemperature, 'g', 6));
+    names << QObject::tr("Free-gas Doppler broadening, T = %1 K%2")
+                 .arg(QString::number(t.dopplerTemperature, 'g', 6),
+                      t.dopplerFit ? (t.dopplerVary ? QObject::tr(" (fitted)") : QObject::tr(" (parameter, fixed)"))
+                                   : QString());
   if (t.isScreening)
     names << QObject::tr("Electron screening, U_e = %1 eV%2")
                  .arg(QString::number(t.screeningUe, 'g', 6), t.screeningVary ? QObject::tr(" (fitted)") : QString());
@@ -63,6 +66,10 @@ double densitySigmaValue(const QString &token, double density) {
 
 double defaultDensityMax(double density, double sigma) {
   return (sigma > 0.0) ? std::max(density + 3.0 * sigma, 1.1 * density) : 1.5 * density;
+}
+
+double defaultDopplerMax(double temperature, double sigma) {
+  return (sigma > 0.0) ? std::max(temperature + 3.0 * sigma, 1.21 * temperature) : 2.0 * temperature;
 }
 
 QVariant TargetIntModel::data(const QModelIndex &index, int role) const {
@@ -190,6 +197,14 @@ QVariant TargetIntModel::data(const QModelIndex &index, int role) const {
       return targetInt.isDoppler ? QString(tr("YES")) : QString(tr("NO"));
     else if (index.column() == 45)
       return targetInt.dopplerTemperature;
+    else if (index.column() == 46)
+      return targetInt.dopplerFit ? QString(tr("YES")) : QString(tr("NO"));
+    else if (index.column() == 47)
+      return targetInt.dopplerVary ? QString(tr("YES")) : QString(tr("NO"));
+    else if (index.column() == 48)
+      return targetInt.dopplerSigma;
+    else if (index.column() == 49)
+      return targetInt.dopplerMax;
   } else if (role == Qt::EditRole) {
     TargetIntData targetInt = targetIntList.at(index.row());
     if (index.column() == 1) return targetInt.segmentsList;
@@ -236,6 +251,10 @@ QVariant TargetIntModel::data(const QModelIndex &index, int role) const {
     if (index.column() == 43) return targetInt.densityGroup;
     if (index.column() == 44) return targetInt.isDoppler;
     if (index.column() == 45) return targetInt.dopplerTemperature;
+    if (index.column() == 46) return targetInt.dopplerFit;
+    if (index.column() == 47) return targetInt.dopplerVary;
+    if (index.column() == 48) return targetInt.dopplerSigma;
+    if (index.column() == 49) return targetInt.dopplerMax;
   } else if (role == Qt::CheckStateRole && index.column() == 0) {
     TargetIntData targetInt = targetIntList.at(index.row());
     if (targetInt.isActive == 1)
@@ -260,6 +279,10 @@ QVariant TargetIntModel::headerData(int section, Qt::Orientation orientation, in
       case 33: return tr("Effect types switched on in this entry; their parameters are in the Edit dialog");
       case 44: return tr("Free-gas Doppler broadening of the cross section (doppler keyword)");
       case 45: return tr("Effective temperature of the target atoms for free-gas Doppler broadening [K]");
+      case 46: return tr("The temperature is the fit parameter doppler_<n> (doppler T vary sigma [Tmax])");
+      case 47: return tr("The Doppler temperature is free in the fit");
+      case 48: return tr("Width of the Gaussian prior on the Doppler temperature [K]; 0 = none");
+      case 49: return tr("Largest temperature the integration grids span [K]; 0 = the default");
       default: return QVariant();
     }
   }
@@ -358,6 +381,14 @@ QVariant TargetIntModel::headerData(int section, Qt::Orientation orientation, in
         return tr("Doppler?");
       case 45:
         return tr("Doppler T [K]");
+      case 46:
+        return tr("Doppler T Parameter?");
+      case 47:
+        return tr("Fit Doppler T?");
+      case 48:
+        return tr("Doppler T Prior Sigma [K]");
+      case 49:
+        return tr("Doppler Grid Maximum [K]");
       default:
         return QVariant();
     }
@@ -460,6 +491,14 @@ bool TargetIntModel::setData(const QModelIndex &index, const QVariant &value, in
       tempData.isDoppler = value.toBool();
     else if (index.column() == 45)
       tempData.dopplerTemperature = value.toDouble();
+    else if (index.column() == 46)
+      tempData.dopplerFit = value.toBool();
+    else if (index.column() == 47)
+      tempData.dopplerVary = value.toBool();
+    else if (index.column() == 48)
+      tempData.dopplerSigma = value.toDouble();
+    else if (index.column() == 49)
+      tempData.dopplerMax = value.toDouble();
     else
       return false;
     targetIntList.replace(row, tempData);

@@ -80,6 +80,22 @@ class EData {
   void FillDensitiesFromParams(const vector_r &, const Config &);
   /// Sum of the density priors ((N - N0)/sigma)^2.
   double DensityPenalty() const;
+  /*!
+   * Fitted Doppler temperatures (TargetEffect::HasDopplerFit, `doppler T vary sigma [Tmax]`).  One parameter
+   * `doppler_<n>` (K) per such line, n = the effect number of the line (its place among the active <targetInt>
+   * lines, as screening_<n>), after the density parameters.  None without the fit form.
+   */
+  int NumDopplerParams() const { return (int)dopplerEffects_.size(); }
+  /// Effect number of Doppler parameter k (1-based).
+  int GetDopplerEffect(int k) const { return dopplerEffects_[k - 1]; }
+  int GetDopplerParamOffset() const { return dopplerParamOffset_; }
+  /// The Doppler parameter (1-based) of effect \p n, 0 if its temperature is not a fit parameter.
+  int DopplerParamOfEffect(int n) const;
+  /// Set the fitted temperatures from a parameter vector (clamped to [T0/4, layout temperature], with a warning
+  /// printed once), called by FillEnergyShiftsFromParams so every evaluation sees the vector's values.
+  void FillDopplerFromParams(const vector_r &, const Config *configure);
+  /// Sum of the Doppler priors ((T - T0)/sigma)^2.
+  double DopplerPenalty() const;
   /// Read the target-effects input file and build the TargetEffect objects.
   int ReadTargetEffectsFile(const Config &, CNuc *);
   /// Is this a fit? AZURECalc clones the compound nucleus and data per thread only when it is.
@@ -255,6 +271,8 @@ class EData {
   int densityParamOffset_ = -1;        // -1 until FillMnParams has laid the vector out
   std::vector<int> densityEffects_;    // effect number holding each density parameter, in order
   std::vector<int> densityParamOfEffect_;  // per effect (0-based): its density parameter, 0 = none
+  int dopplerParamOffset_ = -1;        // -1 until FillMnParams has laid the vector out
+  std::vector<int> dopplerEffects_;    // effect numbers with a fitted Doppler temperature, in order
   /// Group the densityfit / densitygroup lines into parameters (ReadTargetEffectsFile); -1 on an error.
   int SetUpDensityParams(const Config &);
   bool isFit_;

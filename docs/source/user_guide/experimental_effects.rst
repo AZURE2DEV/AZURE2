@@ -550,8 +550,8 @@ Notes:
 * Any particle entrance pair (``pType`` 0) may be broadened: neutrons, and
   charged beams on a gas target. A segment whose entrance pair is a photon or
   beta-decay pair is refused with an ERROR.
-* The temperature is fixed (not a fit parameter), and the grids do not reach
-  below 1 keV (c.m.), as for every sub-point effect.
+* The temperature is fixed unless the line uses the fit form below, and the
+  grids do not reach below 1 keV (c.m.), as for every sub-point effect.
 * The analytic gradient (``--use-gradient``) covers it, with or without a
   transform and a kernel.
 * An engine older than this feature refuses the whole ``<targetInt>`` block
@@ -562,6 +562,54 @@ In the GUI, check **Include Free-Gas Doppler Broadening** in the
 *Add/Edit Experimental Effect* dialog and give the temperature in kelvin.
 ``tests/doppler_fgm`` compares every combination with an independent
 free-gas integral of a 1 eV grid of unbroadened cross sections (to 2 × 10\ :sup:`-4`).
+
+**A fitted temperature.** The effective temperature of a solid is known only
+roughly (Lamb's effective temperature is above the room temperature by an amount
+that depends on the Debye temperature), and a narrow resonance measured with good
+resolution constrains it. The fit form
+
+.. code-block:: text
+
+   doppler <T> <vary> <sigma> [<Tmax>]
+
+makes :math:`T` the parameter ``doppler_<n>`` (kelvin; :math:`n` the line's place
+among the active ``<targetInt>`` lines, as for ``screening_<n>``), started at the
+line's :math:`T_0`. ``vary`` is 1 (fitted) or 0 (a fixed parameter); ``sigma`` > 0
+adds the Gaussian prior :math:`((T - T_0)/\sigma)^2`, reported as
+``Total-Doppler-Chi-Squared`` in ``chiSquared.out`` (0 = no prior).
+
+.. code-block:: text
+
+   1 "1,2" 400 0 0 0 0 "" 0 0 0 0 "" 0 doppler 300 1 0 900     T free from 300 K, no prior, grids for 900 K
+   1 "3,4" 1000 1 0.0001 0 0 "" 0 0 0 0 "" 0 doppler 300 1 20  a 20 K prior, grids for 363 K
+
+The sub-point grids, and the velocity window of every Doppler integral, are laid
+out **once**, for the *layout temperature* :math:`T_{\mathrm{layout}}`: ``Tmax`` if
+given, else :math:`\max(T_0 + 3\sigma,\ 1.21\,T_0)` with a prior, or
+:math:`2\,T_0` without one. The Gauss-Legendre pieces of the integral are laid out
+for :math:`T_0` (each at most a quarter of :math:`u(T_0)` wide). Neither moves
+when :math:`T` does: only the values of the kernel change, so the broadened cross
+section is smooth in :math:`T` and its analytic derivative is exact (the gradient
+and the residual Jacobian take :math:`\partial\sigma_D/\partial T` through the
+Doppler weights, with or without a transform and a kernel). MIGRAD keeps
+:math:`T` within :math:`[T_0/4,\ T_{\mathrm{layout}}]`; a value outside it (an
+MCMC step, a pyazr vector) is computed at the nearest end, with a warning printed
+once -- give ``Tmax`` when the fit should be free to go higher. Below
+:math:`T_0/4` the pieces would be wider than half the kernel. A plain ``doppler T``
+line has :math:`T_{\mathrm{layout}} = T_0 = T` and computes exactly as before
+the fit form existed.
+
+Malformed fit forms are refused with an ERROR: ``vary`` other than 0 or 1, a
+missing or negative ``sigma``, a ``Tmax`` not above :math:`T`. Like a screening
+potential, the fitted :math:`T` travels in ``param.sav`` and the line's value is
+the prior's centre; the MCMC takes its prior from the line. In the GUI, the
+Doppler box of the dialog has **Temperature Is a Fit Parameter**, **Fit T**,
+**Prior Sigma [K]** and **Grid Maximum [K]** (blank = the default, shown beside
+it), and the Fitting tab lists the parameter under *Doppler Temperatures*
+(:doc:`fitting`). ``pyazr``: kind ``"doppler"``, ``penalties()["doppler"]``,
+``AzrModel.dopplers`` / ``set_doppler`` (:doc:`pyazr`). ``tests/doppler_fgm``
+recovers 450 K from 300 K (MIGRAD and ``--use-lm``) and checks the gradient, the
+prior and the refusals.
 
 Electron Screening
 ^^^^^^^^^^^^^^^^^^

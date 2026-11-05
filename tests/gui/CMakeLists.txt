@@ -516,3 +516,28 @@ endif()
 add_test(NAME light_excitation_gui COMMAND light_excitation_test)
 set_tests_properties(light_excitation_gui PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+# The Fitting tab's Doppler Temperatures rows: doppler_<n> per line with the fit form 'doppler T vary sigma [Tmax]',
+# synced both ways with the Experimental Effects tab and written back to the project file.
+add_executable(doppler_fitting_test doppler_fitting_test.cpp)
+set_target_properties(doppler_fitting_test PROPERTIES AUTOMOC OFF)
+target_include_directories(doppler_fitting_test PRIVATE
+    ${AZURE2_SOURCE_DIR}/gui/include
+    ${AZURE2_SOURCE_DIR}/include
+)
+target_compile_definitions(doppler_fitting_test PRIVATE AZURE2_TEST_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+target_link_libraries(doppler_fitting_test PRIVATE
+    ${AZURESETUP_LIBRARIES}
+    ${AZUREAPI_LIBRARIES}
+    AZURE2Core
+    Qt5::Core Qt5::Gui Qt5::Widgets Qt5::Network
+)
+if(USE_QWT)
+    target_link_libraries(doppler_fitting_test PRIVATE ${QWT_LIBRARIES})
+endif()
+if(USE_ERYA)
+    target_link_libraries(doppler_fitting_test PRIVATE pugixml srim_utilities)
+endif()
+add_test(NAME doppler_fitting COMMAND doppler_fitting_test)
+set_tests_properties(doppler_fitting PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen")

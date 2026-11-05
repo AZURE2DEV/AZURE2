@@ -196,6 +196,20 @@ writes them (``sigma`` in atoms/cm² or a string such as ``"2.3%"``). Like a
 normalization, the fitted density travels in the ``.sav``; ``save_fit`` leaves
 the line's value, the prior's centre, as it is.
 
+A fitted free-gas Doppler temperature (``doppler T vary sigma [Tmax]``,
+:doc:`experimental_effects`) is a parameter of kind ``"doppler"``
+(``ParameterSet.dopplers``; :attr:`Parameter.effect` is its line,
+``prior_nominal`` / ``prior_sigma`` its prior and ``doppler_max`` the layout
+temperature its grids span). Unlike a density its gradient entry and Jacobian
+column are analytic, through the Doppler weights. ``penalties()["doppler"]`` is
+its prior, which ``objective()`` adds. ``AzrModel.dopplers`` reads the ``doppler``
+blocks of a file (``temperature``, ``fit``, ``vary``, ``sigma``, ``tmax``, ``max``),
+``AzrModel.set_doppler(effect, T=, vary=, sigma=, tmax=)`` writes one (giving
+``vary``, ``sigma`` or ``tmax`` writes the fit form; ``tmax=0`` removes Tmax), and
+``add_target_effect(..., doppler=(T, vary, sigma[, tmax]))`` starts a line with
+it. The fitted temperature travels in the ``.sav``; ``save_fit`` leaves the line's
+value, the prior's centre, as it is.
+
 .. warning::
 
    These return the **data** χ² only. AZURE2's own fit objective additionally

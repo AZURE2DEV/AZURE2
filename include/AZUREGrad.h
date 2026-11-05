@@ -39,7 +39,8 @@ enum class ParamKind {
   EnergyShiftFn,    ///< parameter aj of a segment's shift function ("shiftfn")
   Abundance,        ///< isotopic abundance of a compound nucleus (projects with an <abundances> block)
   Screening,        ///< electron-screening potential U_e (eV) of a <targetInt> line with a screening block
-  Density           ///< fitted areal density (atoms/cm^2) of a <targetInt> line or density group (densityfit)
+  Density,          ///< fitted areal density (atoms/cm^2) of a <targetInt> line or density group (densityfit)
+  Doppler           ///< fitted free-gas Doppler temperature (K) of a <targetInt> line ('doppler T vary sigma')
 };
 
 /// Description of one entry in the full (unfiltered) flat parameter vector.
@@ -55,6 +56,7 @@ struct ParamDesc {
   int fnTerm = -1;  ///< j of a shift-function parameter aj (EnergyShiftFn only, else -1)
   int screening = -1;  ///< 1-based screening parameter (EData::GetScreeningEffect), Screening only, else -1
   int density = -1;    ///< 1-based density parameter (EData::GetDensityEffect), Density only, else -1
+  int doppler = -1;    ///< 1-based Doppler parameter (EData::GetDopplerEffect), Doppler only, else -1
 };
 
 /*!
@@ -101,6 +103,11 @@ class ParamIndexMap {
     auto it = densityIndex_.find(k);
     return (it == densityIndex_.end()) ? -1 : it->second;
   }
+  /// Full index of the 1-based Doppler-temperature parameter k, or -1.
+  int DopplerIndex(int k) const {
+    auto it = dopplerIndex_.find(k);
+    return (it == dopplerIndex_.end()) ? -1 : it->second;
+  }
 
   /// Number of entries in the full (unfiltered) parameter vector.
   int NumFull() const { return (int)desc_.size(); }
@@ -139,6 +146,7 @@ class ParamIndexMap {
   std::map<std::pair<int, int>, int> fnShiftIndex_;      ///< (segment, j) -> full idx
   std::map<int, int> screeningIndex_;                    ///< screening parameter k -> full idx
   std::map<int, int> densityIndex_;                      ///< density parameter k -> full idx
+  std::map<int, int> dopplerIndex_;                      ///< Doppler parameter k -> full idx
   std::vector<int> fullToPacked_;
   std::vector<int> packedToFull_;
   int numPacked_ = 0;
@@ -170,6 +178,8 @@ struct GradAccum {
   std::vector<double> abundance;
   // screening[k-1]          -> d/dU_e (eV) of screening parameter k (grows on first use)
   std::vector<double> screening;
+  // doppler[k-1]            -> d/dT (K) of Doppler-temperature parameter k (grows on first use)
+  std::vector<double> doppler;
   /*!
    * Cotangents of the formal energies and widths of the Brune and Park level
    * matrices, fe[j-1][k] and fgamma[j-1][k][ch-1] for formal level k
@@ -222,6 +232,12 @@ struct GradAccum {
     if (k < 1) return;
     if (k > (int)screening.size()) screening.resize(k, 0.0);
     screening[k - 1] += v;
+  }
+  /// Add a contribution to d/dT (K) of Doppler-temperature parameter k (1-based, EData::DopplerParamOfEffect).
+  void AddDoppler(int k, double v) {
+    if (k < 1) return;
+    if (k > (int)doppler.size()) doppler.resize(k, 0.0);
+    doppler[k - 1] += v;
   }
   /// Scatter into the flat (full) gradient vector using the index map.
   void Scatter(const ParamIndexMap &map, vector_r &gradFull) const;

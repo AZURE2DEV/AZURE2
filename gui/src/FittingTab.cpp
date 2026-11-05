@@ -74,6 +74,11 @@ FittingTab::FittingTab(QWidget *parent) :
   setupParameterTable(densityParamsTable, "Target Density Parameters");
   paramTabWidget->addTab(densityParamsTable, "Target Densities");
   paramTabWidget->setTabVisible(paramTabWidget->indexOf(densityParamsTable), false);
+  // Shown only when an experimental effect has a fitted Doppler temperature (updateParameterTables).
+  dopplerParamsTable = new QTableWidget;
+  setupParameterTable(dopplerParamsTable, "Doppler Temperature Parameters");
+  paramTabWidget->addTab(dopplerParamsTable, "Doppler Temperatures");
+  paramTabWidget->setTabVisible(paramTabWidget->indexOf(dopplerParamsTable), false);
 
   mainLayout->addWidget(paramTabWidget);
 
@@ -182,6 +187,7 @@ void FittingTab::updateParameterTables() {
   abundanceParamsTable->setRowCount(0);
   screeningParamsTable->setRowCount(0);
   densityParamsTable->setRowCount(0);
+  dopplerParamsTable->setRowCount(0);
   normParamsTable->setRowCount(0);
   shiftParamsTable->setRowCount(0);
 
@@ -201,6 +207,8 @@ void FittingTab::updateParameterTables() {
       targetTable = screeningParamsTable;
     } else if (param.category == "density") {
       targetTable = densityParamsTable;
+    } else if (param.category == "doppler") {
+      targetTable = dopplerParamsTable;
     }
 
     if (targetTable) {
@@ -210,6 +218,7 @@ void FittingTab::updateParameterTables() {
   paramTabWidget->setTabVisible(paramTabWidget->indexOf(abundanceParamsTable), abundanceParamsTable->rowCount() > 0);
   paramTabWidget->setTabVisible(paramTabWidget->indexOf(screeningParamsTable), screeningParamsTable->rowCount() > 0);
   paramTabWidget->setTabVisible(paramTabWidget->indexOf(densityParamsTable), densityParamsTable->rowCount() > 0);
+  paramTabWidget->setTabVisible(paramTabWidget->indexOf(dopplerParamsTable), dopplerParamsTable->rowCount() > 0);
 }
 
 void FittingTab::reset() {
@@ -426,6 +435,7 @@ void FittingTab::populateFromCurrentGUIState() {
   }
   appendScreeningParameters();
   appendDensityParameters();
+  appendDopplerParameters();
 
   assignMinuitIndices();
 
@@ -484,7 +494,8 @@ void FittingTab::assignMinuitIndices() {
                    channels[param.channelIndex].isFixed == 0 &&
                    channels[param.channelIndex].reducedWidth != 0.0);
       }
-    } else if (param.category == "abundance" || param.category == "screening" || param.category == "density") {
+    } else if (param.category == "abundance" || param.category == "screening" || param.category == "density" ||
+               param.category == "doppler") {
       // Emitted fixed unless its vary flag is set, so it counts only when fitted.
       counted = param.useAsNuisance;
     } else if (param.category == "norm" || param.category == "shift") {
@@ -611,6 +622,10 @@ void FittingTab::setTargetIntModel(TargetIntModel *model) {
   connect(model, SIGNAL(rowsRemoved(QModelIndex, int, int)), this, SLOT(syncDensity()));
   connect(model, SIGNAL(modelReset()), this, SLOT(syncDensity()));
   connect(model, SIGNAL(dataChanged(QModelIndex, QModelIndex)), this, SLOT(syncDensity()));
+  connect(model, SIGNAL(rowsInserted(QModelIndex, int, int)), this, SLOT(syncDoppler()));
+  connect(model, SIGNAL(rowsRemoved(QModelIndex, int, int)), this, SLOT(syncDoppler()));
+  connect(model, SIGNAL(modelReset()), this, SLOT(syncDoppler()));
+  connect(model, SIGNAL(dataChanged(QModelIndex, QModelIndex)), this, SLOT(syncDoppler()));
 }
 
 namespace {
@@ -710,6 +725,91 @@ void FittingTab::syncDensity() {
     }
     if (p.useAsNuisance != t.densityVary) {
       p.useAsNuisance = t.densityVary;
+      updateParameterTableCheckbox(p.name, p.useAsNuisance);
+      renumber = true;
+    }
+  }
+  if (renumber) assignMinuitIndices();
+}
+
+namespace {
+// The Doppler parameters the engine emits (EData::FillMnParams): one per ACTIVE line with the fit form
+// 'doppler T vary sigma [Tmax]', n = its place among the active lines.  Returns (n, row) pairs in order.
+QList<QPair<int, int>> dopplerParameterRows(const QList<TargetIntData> &lines) {
+  QList<QPair<int, int>> out;
+  int effect = 0;
+  for (int row = 0; row < lines.size(); row++) {
+    const TargetIntData &t = lines[row];
+    if (t.isActive != 1) continue;
+    effect++;
+    if (t.isDoppler && t.dopplerFit && t.dopplerTemperature > 0.0) out.append(qMakePair(effect, row));
+  }
+  return out;
+}
+}  // namespace
+
+// EData::FillMnParams emits one doppler_<n> (K) after the target densities for each line with the fit form.
+// Value = T, Error = the prior's sigma in K (0 = none), Nuisance = fitted; all three live on the line.
+void FittingTab::appendDopplerParameters() {
+  if (!targetIntModel_) return;
+  QList<TargetIntData> lines = targetIntModel_->getLines();
+  for (const QPair<int, int> &er : dopplerParameterRows(lines)) {
+    const TargetIntData &t = lines[er.second];
+    FittingParameter p;
+    p.name = QString("doppler_%1").arg(er.first);
+    p.value = t.dopplerTemperature;
+    p.lowerLimit = 0;
+    p.upperLimit = 0;
+    p.error = std::max(0.0, t.dopplerSigma);
+    p.fitError = 0.0;
+    p.useAsNuisance = t.dopplerVary;
+    p.category = "doppler";
+    p.levelIndex = -1;
+    p.channelIndex = er.second;  // row in the Experimental Effects table
+    fittingParameters.append(p);
+  }
+}
+
+void FittingTab::writeDoppler(const FittingParameter &param) {
+  if (param.category != "doppler" || !targetIntModel_) return;
+  const int row = param.channelIndex;
+  if (row < 0 || row >= targetIntModel_->getLines().size() || !(param.value > 0.0)) return;
+  // Blocked so the write does not come back through syncDoppler.
+  const bool old = targetIntModel_->blockSignals(true);
+  targetIntModel_->setData(targetIntModel_->index(row, 45), param.value, Qt::EditRole);
+  targetIntModel_->setData(targetIntModel_->index(row, 47), param.useAsNuisance, Qt::EditRole);
+  targetIntModel_->setData(targetIntModel_->index(row, 48), std::max(0.0, param.error), Qt::EditRole);
+  targetIntModel_->blockSignals(old);
+}
+
+void FittingTab::syncDoppler() {
+  if (!targetIntModel_) return;
+  QList<TargetIntData> lines = targetIntModel_->getLines();
+  QStringList want;
+  for (const QPair<int, int> &er : dopplerParameterRows(lines)) want << QString("doppler_%1").arg(er.first);
+  QStringList have;
+  for (const FittingParameter &p : fittingParameters)
+    if (p.category == "doppler") have << p.name;
+  if (want != have) {
+    populateFromCurrentGUIState();
+    return;
+  }
+  bool renumber = false;
+  for (int i = 0; i < fittingParameters.size(); i++) {
+    FittingParameter &p = fittingParameters[i];
+    if (p.category != "doppler" || p.channelIndex < 0 || p.channelIndex >= lines.size()) continue;
+    const TargetIntData &t = lines[p.channelIndex];
+    if (p.value != t.dopplerTemperature) {
+      p.value = t.dopplerTemperature;
+      updateParameterTableValue(p.name, p.value);
+    }
+    const double s = std::max(0.0, t.dopplerSigma);
+    if (p.error != s) {
+      p.error = s;
+      updateParameterTableError(p.name, p.error);
+    }
+    if (p.useAsNuisance != t.dopplerVary) {
+      p.useAsNuisance = t.dopplerVary;
       updateParameterTableCheckbox(p.name, p.useAsNuisance);
       renumber = true;
     }
@@ -948,6 +1048,7 @@ void FittingTab::parameterItemChanged(QTableWidgetItem *item) {
       writeAbundance(p);
       writeScreening(p);
       writeDensity(p);
+      writeDoppler(p);
     }
 
   } else if (col == 6) {  // Nuisance checkbox
@@ -959,9 +1060,11 @@ void FittingTab::parameterItemChanged(QTableWidgetItem *item) {
     writeAbundance(p);
     writeScreening(p);
     writeDensity(p);
-    // Fitting or fixing an abundance, a screening potential or a density changes the Minuit vector, as with a
-    // normalization.
-    if (p.category == "abundance" || p.category == "screening" || p.category == "density") assignMinuitIndices();
+    writeDoppler(p);
+    // Fitting or fixing an abundance, a screening potential, a density or a Doppler temperature changes the Minuit
+    // vector, as with a normalization.
+    if (p.category == "abundance" || p.category == "screening" || p.category == "density" || p.category == "doppler")
+      assignMinuitIndices();
   }
 }
 
@@ -1162,6 +1265,7 @@ void FittingTab::loadSettings() {
         }
         appendScreeningParameters();
         appendDensityParameters();
+        appendDopplerParameters();
         assignMinuitIndices();
       }
 
@@ -1806,7 +1910,8 @@ void FittingTab::loadSettings() {
         if (param.category == "level") updateParameterInOtherTabs(param.name, param);
         // An abundance is named abundance_<Z>_<A> in the .sav exactly as here; its value goes back to the
         // Particle Pairs tab, the vary flag and sigma stay what the user set.
-        if ((param.category == "abundance" || param.category == "screening" || param.category == "density") &&
+        if ((param.category == "abundance" || param.category == "screening" || param.category == "density" ||
+             param.category == "doppler") &&
             savParams.contains(param.name)) {
           param.value = savParams[param.name].first;
           param.fitError = savParams[param.name].second;
@@ -1957,6 +2062,8 @@ void FittingTab::updateParameterInOtherTabs(const QString &paramName, const Fitt
     writeScreening(param);
   } else if (param.category == "density") {
     writeDensity(param);
+  } else if (param.category == "doppler") {
+    writeDoppler(param);
   } else if (param.category == "norm" || param.category == "shift") {
     // Update normalization or shift parameters in SegmentsDataModel
     SegmentsDataModel *segmentsModel = segmentsTab_->getSegmentsDataModel();
@@ -1993,6 +2100,7 @@ QTableWidget *FittingTab::tableForParameter(const QString &paramName) const {
   if (paramName.startsWith("abundance_")) return abundanceParamsTable;
   if (paramName.startsWith("screening_")) return screeningParamsTable;
   if (paramName.startsWith("density_")) return densityParamsTable;
+  if (paramName.startsWith("doppler_")) return dopplerParamsTable;
   if (paramName.startsWith("segment_") && paramName.contains("shift", Qt::CaseInsensitive)) return shiftParamsTable;
   if (paramName.startsWith("segment_") && paramName.contains("norm", Qt::CaseInsensitive)) return normParamsTable;
   return levelParamsTable;
@@ -2285,6 +2393,8 @@ void FittingTab::updateParameterTableCheckbox(const QString &paramName, bool che
     targetTable = screeningParamsTable;
   } else if (paramName.startsWith("density_")) {
     targetTable = densityParamsTable;
+  } else if (paramName.startsWith("doppler_")) {
+    targetTable = dopplerParamsTable;
   } else if (paramName.contains("shift", Qt::CaseInsensitive)) {
     targetTable = shiftParamsTable;
   } else if (paramName.contains("norm", Qt::CaseInsensitive)) {

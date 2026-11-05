@@ -1401,6 +1401,8 @@ class azure2:
         the <targetInt> lines with a ``screening`` block, which :meth:`objective` adds
         like the normalization terms, and ``"density"``: the priors ((N - N0)/sigma)^2 of
         the fitted target densities (``densityfit`` lines and ``densitygroup`` groups),
+        added the same way, and ``"doppler"``: the priors ((T - T0)/sigma)^2 of the
+        fitted free-gas Doppler temperatures (``doppler T vary sigma [Tmax]`` lines),
         added the same way.
         """
         x = np.asarray(self.params_rwa if params is None else params, float)
@@ -1507,9 +1509,19 @@ class azure2:
                      else float(p.value))
             value = min(max(value, 0.01 * p.prior_nominal), p.density_max)
             density += ((value - p.prior_nominal) / p.prior_sigma) ** 2
+        # Fitted Doppler temperatures: the prior of each free temperature with a sigma, the same way.  Outside
+        # [T0/4, the layout temperature] the engine computes at the nearest end (and warns); the prior is taken there.
+        doppler = 0.0
+        for p in self.parameters.dopplers:
+            if p.fixed or not p.prior_sigma:
+                continue
+            value = (float(x[p.free_index]) if p.free_index is not None and p.free_index < x.size
+                     else float(p.value))
+            value = min(max(value, 0.25 * p.prior_nominal), p.doppler_max)
+            doppler += ((value - p.prior_nominal) / p.prior_sigma) ** 2
         return {"norm": norm, "shift": shift, "shift_sqrt": shift_sqrt, "shift_fn": shift_fn,
                 "park": park, "abundance": abundance, "scattering_length": scattering_length,
-                "screening": screening, "density": density}
+                "screening": screening, "density": density, "doppler": doppler}
 
     @property
     def nuclei(self):
@@ -1607,7 +1619,7 @@ class azure2:
         return (float(np.sum(self.calculate_chi2_rwa(x)))
                 + float(np.sum(pen["norm"])) + float(np.sum(pen["shift"]))
                 + float(np.sum(pen["shift_sqrt"])) + float(np.sum(pen["shift_fn"]))
-                + pen["screening"] + pen["density"])
+                + pen["screening"] + pen["density"] + pen["doppler"])
 
     def chi2_and_grad(self, params):
         """Value and analytic gradient of the (data) chi-squared.

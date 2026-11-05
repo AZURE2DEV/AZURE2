@@ -560,6 +560,28 @@ grids are laid out for ``TargetEffect::GetLayoutDensity`` and
 ``EPoint::IntegrateTargetEffect`` cuts the depth integral at :math:`E_0 - T(N)`,
 so no grid moves with the parameter.
 
+A fitted Doppler temperature (``doppler T vary sigma [Tmax]``,
+``TargetEffect::HasDopplerFit``, ``EData::FillDopplerFromParams``) moves only the
+kernel values of ``EPoint::DopplerWeights``: the grids are padded and each
+integral's window taken at ``TargetEffect::GetDopplerLayoutTemperature``, and the
+number of Gauss-Legendre pieces per interval is fixed by the nominal temperature
+(``DopplerUAt(c, GetDopplerNominal())``). ``DopplerWeights(eCM, w, &dwdT)`` also
+returns :math:`\partial w/\partial T` on the same nodes, with
+:math:`\partial(\mathrm{norm}\,k)/\partial u = \mathrm{norm}\,[-k/u + x^2(2(v-x)^2
+e^{-(v-x)^2/u^2} - 2(v+x)^2 e^{-(v+x)^2/u^2})/u^3]` and :math:`du/dT = u/(2T)`.
+The adjoint adds :math:`\bar Y\,\partial Y/\partial T` to ``GradAccum::doppler``:
+``GradTargetEffectAdjoint`` through ``EPoint::DopplerTemperatureDerivative`` (the
+line's kernel applied to the broadened derivatives; :math:`(dN - \langle A\rangle
+dD)/D` for an analyzing power or a normalised coefficient), and
+``GradTransformedPoint`` with each term's cotangent :math:`\bar Y c_J\,\partial
+F/\partial s_q\,w_q` on :math:`\sum_k \partial D_{Jk}/\partial T\,\sigma_{qk}`.
+``GradAccum::Scatter`` puts it in the ``ParamKind::Doppler`` column, so the scalar
+gradient, the residual Jacobian and the model gradients all carry it. A segment
+with components (SUM, RATIO, a yield's total term) reads its target effect through
+its points' parent data: ``EData::Clone`` sets that for those segments too (before
+2026-11-05 ``EDataIterator`` skipped them, and a fit's working copies read the
+original's temperature for a yield).
+
 The cotangent of the level matrix is a sum of rank-one terms,
 :math:`\bar M = -\sum_t \beta_t\, \overline{A g_c}\,\overline{A g_{c'}}^T`,
 formed from the solves :math:`A g_c` in :math:`O(n^2)` per term instead of the

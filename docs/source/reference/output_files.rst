@@ -26,7 +26,8 @@ level parameters as ``abundance_<Z>_<A>`` (:doc:`data_formats`). An
 experimental-effect line with a ``screening`` block adds its screening potential
 (eV) as ``screening_<n>`` after the energy-shift parameters, and a fitted target
 density (``densityfit``, one per line or ``densitygroup``) adds ``density_<n>``
-(atoms/cm²) after those.
+(atoms/cm²) after those, and a fitted Doppler temperature (``doppler T vary sigma``)
+adds ``doppler_<n>`` (K) after the densities.
 
 The ``segment_<k>_*`` lines (normalizations and energy shifts) belong to the
 data segments of the fit that wrote the file. A run without data -- an

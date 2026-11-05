@@ -203,14 +203,45 @@ class TargetEffect {
    * profile) applied: SAMMY's order.  A line with only `doppler` evaluates sigma_D at the point.
    */
   bool IsDoppler() const { return isDoppler_; }
-  /// A malformed `doppler` block (missing or non-positive temperature).
+  /// A malformed `doppler` block (missing or non-positive temperature, or a malformed fit form).
   bool HasDopplerError() const { return dopplerError_; }
-  /// Effective temperature, K.
+  /// Why the `doppler` block was refused (HasDopplerError).
+  const std::string &GetDopplerErrorText() const { return dopplerErrorText_; }
+  /// Effective temperature, K (the current value: a fitted temperature follows the parameter vector).
   double GetDopplerTemperature() const { return dopplerTemperature_; }
-  /// u = sqrt(kT m/M) in sqrt(MeV) for a pair of c.m./lab factor cmFactor = M/(m+M).
+  /// Set the current temperature (EData::FillDopplerFromParams); the nominal and layout temperatures stay.
+  void SetDopplerTemperature(double t) { dopplerTemperature_ = t; }
+  /*!
+   * Fitted temperature (`doppler T vary sigma [Tmax]`): T is the fit parameter `doppler_<n>` (n = the effect
+   * number, as screening_<n>), with a Gaussian prior ((T - T0)/sigma)^2 about the line's T0 when sigma > 0.  The
+   * sub-point grids and the integration windows are laid out once for the layout temperature
+   * (GetDopplerLayoutTemperature: Tmax, else T0 + 3 sigma but at least 1.21 T0, or 2 T0 without a prior) and the
+   * Gauss-Legendre pieces for T0 (EPoint::DopplerWeights), so the broadened cross section is smooth in T and
+   * neither moves during a fit.
+   */
+  bool HasDopplerFit() const { return dopplerFit_; }
+  bool IsDopplerVaried() const { return dopplerVary_; }
+  /// The line's temperature, the centre of the prior and the temperature the pieces are laid out for (K).
+  double GetDopplerNominal() const { return dopplerFit_ ? dopplerNominal_ : dopplerTemperature_; }
+  /// Prior width in K, 0 = no prior.
+  double GetDopplerSigma() const { return dopplerSigma_; }
+  /// The temperature the sub-point grids and the integration windows span (the line's T when not fitted).
+  double GetDopplerLayoutTemperature() const { return (dopplerLayout_ > 0.0) ? dopplerLayout_ : dopplerTemperature_; }
+  /// The lowest temperature a fit may reach: T0/4 (the pieces, u(T0)/4 wide, stay within u(T)/2).
+  double GetDopplerMinimum() const { return 0.25 * this->GetDopplerNominal(); }
+  /// ((T - T0)/sigma)^2, or 0 without a prior.
+  double DopplerPenalty() const {
+    if (!dopplerFit_ || dopplerSigma_ <= 0.0) return 0.0;
+    const double r = (dopplerTemperature_ - dopplerNominal_) / dopplerSigma_;
+    return r * r;
+  }
+  /// u = sqrt(kT m/M) in sqrt(MeV) for a pair of c.m./lab factor cmFactor = M/(m+M), at the current T.
   double DopplerU(double cmFactor) const;
+  /// The same at temperature \p temperature (K).
+  double DopplerUAt(double cmFactor, double temperature) const;
   /// The c.m. energy window [lo, hi] beyond which the Doppler kernel at c.m. energy eCM is below
-  /// exp(-convolutionRange^2 / 2), i.e. +-convolutionRange standard deviations in velocity (lo >= 0).
+  /// exp(-convolutionRange^2 / 2), i.e. +-convolutionRange standard deviations in velocity (lo >= 0), at the
+  /// layout temperature (GetDopplerLayoutTemperature): the grids are padded and the integrals cut with it.
   void DopplerWindow(double eCM, double cmFactor, double &lo, double &hi) const;
   /// Does the line also carry a kernel applied after the Doppler step (Gaussian, UDR, target integration,
   /// beam profile)?  Without one the value is sigma_D at the point.
@@ -266,7 +297,13 @@ class TargetEffect {
   };
   bool isDoppler_ = false;
   bool dopplerError_ = false;
-  double dopplerTemperature_ = 0.0;  ///< K
+  std::string dopplerErrorText_;
+  double dopplerTemperature_ = 0.0;  ///< K, current
+  bool dopplerFit_ = false;          ///< `doppler T vary sigma [Tmax]`
+  bool dopplerVary_ = false;
+  double dopplerNominal_ = 0.0;      ///< K, as read
+  double dopplerSigma_ = 0.0;        ///< K, prior width (0 = none)
+  double dopplerLayout_ = 0.0;       ///< K, the temperature the grids span; 0 = the current temperature
   bool isUdr_ = false;
   std::string udrFile_;
   double udrFlightPath_ = 0.0;   ///< metres

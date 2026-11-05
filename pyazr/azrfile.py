@@ -1953,7 +1953,11 @@ class AzrModel:
         (kelvin, > 0): the cross section of every sub-point is broadened first,
         then any transmission/yield transform and the kernel above are applied
         (user guide, "Free-Gas Doppler Broadening").  A line may carry it alone;
-        engines older than November 2026 refuse such a line.
+        engines older than November 2026 refuse such a line.  A tuple
+        ``(T, vary, sigma[, tmax])`` makes T the fit parameter ``doppler_<n>``
+        (``doppler T vary sigma [Tmax]``): a Gaussian prior of width ``sigma`` K
+        about T when ``sigma > 0``, and the sub-point grids laid out for ``tmax``
+        (default T + 3 sigma but at least 1.21 T, or 2 T without a prior).
         Returns ``self``.
         """
         if not isinstance(segments, str):
@@ -1994,9 +1998,7 @@ class AzrModel:
                 raise ValueError("the screening prior sigma must be >= 0")
             toks += ["screening", _fmt(ue), 1 if vary else 0, _fmt(sigma)]
         if doppler is not None:
-            if not float(doppler) > 0:
-                raise ValueError("the doppler temperature must be > 0 kelvin")
-            toks += ["doppler", _fmt(doppler)]
+            toks += self._doppler_block(*(doppler if isinstance(doppler, (tuple, list)) else (doppler,))).split()
         line = "  ".join(t if isinstance(t, str) else _fmt(t) for t in toks)
         lines = self._suffix.splitlines()
         if "<targetInt>" in lines:
@@ -2050,6 +2052,84 @@ class AzrModel:
             raise ValueError("the screening prior sigma must be >= 0")
         block = f"screening {_fmt(ue)} {1 if vary else 0} {_fmt(sigma)}"
         lines[i] = self._SCREENING_RE.sub(block, line) if m else line.rstrip() + "  " + block
+        self._suffix = "\n".join(lines)
+        return self
+
+    # "doppler T" or "doppler T vary sigma [Tmax]" (the numbers; a following keyword starts with a letter)
+    _DOPPLER_RE = re.compile(r"\bdoppler(?:\s+([-+0-9.]\S*))?(?:\s+([-+0-9.]\S*)\s+([-+0-9.]\S*)(?:\s+([-+0-9.]\S*))?)?")
+
+    @staticmethod
+    def _doppler_block(T, vary=None, sigma=None, tmax=None):
+        """The text of a ``doppler`` block, checked as the engine checks it: ``doppler T`` without ``vary`` /
+        ``sigma``, else ``doppler T vary sigma [Tmax]``."""
+        T = float(T)
+        if not T > 0:
+            raise ValueError("the doppler temperature must be > 0 kelvin")
+        if vary is None and sigma is None and tmax is None:
+            return f"doppler {_fmt(T)}"
+        sigma = 0.0 if sigma is None else float(sigma)
+        if sigma < 0:
+            raise ValueError("the doppler prior sigma must be >= 0 (kelvin; 0 = no prior)")
+        block = f"doppler {_fmt(T)} {1 if vary else 0} {_fmt(sigma)}"
+        if tmax:
+            if not float(tmax) > T:
+                raise ValueError("the doppler grid maximum Tmax must be above T")
+            block += f" {_fmt(float(tmax))}"
+        return block
+
+    @property
+    def dopplers(self):
+        """Free-gas Doppler broadening of the <targetInt> lines, as AZURE2 reads it: ``{effect: dict}`` for every
+        ACTIVE line with a ``doppler`` block, keyed by its effect number (place among the active lines, as in
+        ``doppler_<effect>``).  Each dict holds ``temperature`` (K), ``fit`` (the line has the fit form
+        ``doppler T vary sigma [Tmax]``, i.e. a parameter ``doppler_<effect>``), ``vary``, ``sigma`` (prior width in
+        K, 0 = none), ``tmax`` (the optional Tmax field, else ``None``) and ``max`` (the layout temperature its
+        sub-point grids span: Tmax, else T + 3 sigma but at least 1.21 T, or 2 T without a prior; T for a fixed
+        line)."""
+        _, tl = self._target_int_lines()
+        out, n = {}, 0
+        for _, line in tl:
+            if line.split()[0] != "1":
+                continue
+            n += 1
+            m = self._DOPPLER_RE.search(line)
+            if not m or m.group(1) is None:
+                continue
+            T = float(m.group(1))
+            fit = m.group(2) is not None
+            vary = fit and int(float(m.group(2))) != 0
+            sigma = float(m.group(3)) if fit else 0.0
+            tmax = float(m.group(4)) if fit and m.group(4) else None
+            layout = (tmax if tmax else (max(T + 3.0 * sigma, 1.21 * T) if sigma > 0 else 2.0 * T)) if fit else T
+            out[n] = dict(temperature=T, fit=fit, vary=vary, sigma=sigma, tmax=tmax, max=layout)
+        return out
+
+    def set_doppler(self, effect, T=None, vary=None, sigma=None, tmax=None):
+        """Set (or add) free-gas Doppler broadening on active <targetInt> line ``effect`` (1-based among the
+        active lines, as in ``doppler_<effect>``).  ``T`` is the temperature (K; required for a line without a
+        ``doppler`` block).  Giving ``vary``, ``sigma`` or ``tmax`` writes the fit form ``doppler T vary sigma
+        [Tmax]`` (a parameter ``doppler_<effect>``; ``sigma`` K the prior width, 0 = none; ``tmax`` the largest
+        temperature the grids span, 0 removes it); arguments left ``None`` keep the line's values, and a plain
+        ``doppler T`` stays plain.  Returns ``self``."""
+        lines, tl = self._target_int_lines()
+        active = [(i, line) for i, line in tl if line.split()[0] == "1"]
+        if not 1 <= effect <= len(active):
+            raise ValueError(f"no active <targetInt> line {effect} ({len(active)} active)")
+        i, line = active[effect - 1]
+        m = self._DOPPLER_RE.search(line)
+        old = self.dopplers.get(effect) if m else None
+        if old is None and T is None:
+            raise ValueError(f"<targetInt> effect {effect} has no doppler block: give T")
+        T = old["temperature"] if T is None else float(T)
+        fit = (old is not None and old["fit"]) or vary is not None or sigma is not None or bool(tmax)
+        if fit:
+            v = (old["vary"] if old else False) if vary is None else bool(vary)
+            sg = (old["sigma"] if old else 0.0) if sigma is None else float(sigma)
+            tm = (old["tmax"] if old else None) if tmax is None else (float(tmax) if tmax else None)
+            block = self._doppler_block(T, v, sg, tm)
+        else:
+            block = self._doppler_block(T)
+        lines[i] = (line[:m.start()] + block + line[m.end():]) if m else line.rstrip() + "  " + block
         self._suffix = "\n".join(lines)
         return self
 

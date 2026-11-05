@@ -432,7 +432,13 @@ them on save. ``doppler T`` is free-gas Doppler broadening of the listed
 segments at the effective temperature T (kelvin), applied to the cross section
 before any ``transmission``/``yield`` transform and before the line's resolution
 kernel; a line may carry it alone. Engines older than November 2026 refuse a line
-with it; older GUIs drop it on save.
+with it; older GUIs drop it on save. ``doppler T vary sigma [Tmax]`` makes T the fit
+parameter ``doppler_<n>`` (vary 0 or 1, a prior of width sigma kelvin about T, 0 =
+none, and the largest temperature the sub-point grids span, by default
+max(T + 3 sigma, 1.21 T), or 2 T without a prior); see
+:doc:`../user_guide/experimental_effects`. Engines older than November 2026 refuse
+it; a build that knows only ``doppler T`` ignores the numbers after T (a fixed
+temperature, no parameter) and its GUI misreads the line.
 
 .. tip::
 

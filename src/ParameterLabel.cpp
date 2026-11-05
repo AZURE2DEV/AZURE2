@@ -150,6 +150,7 @@ int NumParameters(CNuc *compound, EData *data) {
       if (segments[s].OwnsShiftFn() && segments[s].HasShiftFn()) n += segments[s].NumShiftFnParams();
     n += data->NumScreeningParams();  // electron-screening potentials
     n += data->NumDensityParams();    // fitted target densities
+    n += data->NumDopplerParams();    // fitted Doppler temperatures
   }
   return n;
 }
@@ -247,6 +248,14 @@ std::string Parameter(CNuc *compound, EData *data, int minuitIndex) {
       const TargetEffect *te = data->GetTargetEffect(data->GetDensityEffect(k));
       out << "target density (atoms/cm^2) of experimental effect " << data->GetDensityEffect(k);
       if (!te->GetDensityGroup().empty()) out << " (density group " << te->GetDensityGroup() << ")";
+      return out.str();
+    }
+    index++;
+  }
+  for (int k = 1; k <= data->NumDopplerParams(); k++) {
+    if (index == minuitIndex) {
+      std::ostringstream out;
+      out << "free-gas Doppler temperature (K) of experimental effect " << data->GetDopplerEffect(k);
       return out.str();
     }
     index++;

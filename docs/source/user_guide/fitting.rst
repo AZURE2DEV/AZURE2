@@ -129,6 +129,20 @@ the densities come after the screening potentials; one that is not fitted takes 
 slot. **Load from .sav** sets the density to the fitted value, which is also the
 centre of its prior.
 
+Doppler Temperature Parameters
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Shown only when an experimental-effect line has a fitted free-gas Doppler
+temperature (``doppler T vary sigma [Tmax]``, see :doc:`experimental_effects`).
+One row per such line, named ``doppler_<n>`` as in ``param.sav``, :math:`n` the
+line's place among the active lines; a plain ``doppler T`` line has none.
+**Value** is the temperature in K, **Error** the sigma of its prior in K (0 =
+none) and **Use as Nuisance** whether it is fitted: the line's **Effective
+Temperature T**, **Prior Sigma** and **Fit T**, synced both ways with the
+Experimental Effects tab. In AZURE2's parameter vector the temperatures come after
+the target densities; one that is not fitted takes no slot. **Load from .sav**
+sets the temperature to the fitted value, which is also the centre of its prior.
+
 Controls
 --------
 

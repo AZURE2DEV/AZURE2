@@ -139,6 +139,7 @@ void GradAccum::Init(CNuc *compound) {
   lmUsed.assign(nJ, 0);
   abundance.assign(compound->NumAbundanceParams(), 0.0);
   screening.clear();
+  doppler.clear();
 }
 
 /*!
@@ -150,6 +151,7 @@ void GradAccum::Zero() {
     for (auto &row : lev) std::fill(row.begin(), row.end(), 0.0);
   std::fill(abundance.begin(), abundance.end(), 0.0);
   std::fill(screening.begin(), screening.end(), 0.0);
+  std::fill(doppler.begin(), doppler.end(), 0.0);
   if (formalUsed) {
     for (auto &row : fe) std::fill(row.begin(), row.end(), 0.0);
     for (auto &lev : fgamma)
@@ -178,6 +180,8 @@ void GradAccum::Add(const GradAccum &o) {
   for (int k = 0; k < (int)abundance.size() && k < (int)o.abundance.size(); k++) abundance[k] += o.abundance[k];
   if (o.screening.size() > screening.size()) screening.resize(o.screening.size(), 0.0);
   for (int k = 0; k < (int)o.screening.size(); k++) screening[k] += o.screening[k];
+  if (o.doppler.size() > doppler.size()) doppler.resize(o.doppler.size(), 0.0);
+  for (int k = 0; k < (int)o.doppler.size(); k++) doppler[k] += o.doppler[k];
   for (size_t j = 0; j < o.lmUsed.size() && j < lmUsed.size(); j++)
     if (o.lmUsed[j]) {
       if (lmK[j].size() != o.lmK[j].size()) {
@@ -222,6 +226,10 @@ void GradAccum::Scatter(const ParamIndexMap &map, vector_r &gradFull) const {
   for (int k = 0; k < (int)screening.size(); k++) {
     int si = map.ScreeningIndex(k + 1);
     if (si >= 0 && si < (int)gradFull.size()) gradFull[si] += screening[k];
+  }
+  for (int k = 0; k < (int)doppler.size(); k++) {
+    int di = map.DopplerIndex(k + 1);
+    if (di >= 0 && di < (int)gradFull.size()) gradFull[di] += doppler[k];
   }
 }
 
@@ -407,6 +415,18 @@ ParamIndexMap BuildParamIndexMap(CNuc *compound, EData *data,
     }
   }
 
+  // --- Fitted Doppler temperatures: one per 'doppler T vary sigma' line (EData::FillMnParams). ---
+  // Analytic: d/dT through the Doppler weights (EPoint::DopplerWeights), GradAccum::AddDoppler.
+  if (data) {
+    for (int k = 1; k <= data->NumDopplerParams(); k++) {
+      map.dopplerIndex_[k] = i;
+      ParamDesc d{ParamKind::Doppler, -1, -1, -1, -1, false};
+      d.doppler = k;
+      map.desc_.push_back(d);
+      i++;
+    }
+  }
+
   // --- Apply the fixed mask and build packed<->full lookups. ---
   const int nFull = (int)map.desc_.size();
   map.fullToPacked_.assign(nFull, -1);
@@ -572,6 +592,30 @@ bool GradTargetEffectAdjoint(EPoint *point, double fitBar, GradAccum &accum,
     avg = num / den;
   }
   point->SetFitCrossSection(model);
+  // A fitted Doppler temperature (doppler_<n>): d/dT through the Doppler weights, the sub-point values fixed.  The
+  // ratios (A_y, a normalised coefficient) take d(N/D) = (dN - <A> dD)/D on the same integrator.
+  if (const int dk = point->GetParentData()->DopplerParamOfEffect(point->GetTargetEffectNum())) {
+    std::vector<double> vals(nsp);
+    double dT = 0.0;
+    if (isAy || isCoefNorm) {
+      std::vector<double> weight(nsp);
+      for (int i = 1; i <= nsp; i++)
+        weight[i - 1] = isAy ? sigma[i - 1] : point->GetSubPoint(i)->GetAngDistA0();
+      for (int i = 1; i <= nsp; i++)
+        vals[i - 1] = weight[i - 1] * (isAy ? point->GetSubPoint(i)->GetAnalyzingPower() : sigma[i - 1]);
+      const double dN = point->DopplerTemperatureDerivative(config, vals);
+      const double dD = point->DopplerTemperatureDerivative(config, weight);
+      dT = (dN - avg * dD) / den;
+    } else {
+      for (int i = 1; i <= nsp; i++) {
+        EPoint *sp = point->GetSubPoint(i);
+        vals[i - 1] = (xsComponent == 1) ? sp->GetFitE1CrossSection()
+                      : (xsComponent == 2) ? sp->GetFitE2CrossSection() : sigma[i - 1];
+      }
+      dT = point->DopplerTemperatureDerivative(config, vals);
+    }
+    accum.AddDoppler(dk, fitBar * dT);
+  }
   const auto tc1 = std::chrono::steady_clock::now();
   g_teCombinerNs += std::chrono::duration_cast<std::chrono::nanoseconds>(tc1 - tc0).count();
 
@@ -690,9 +734,12 @@ bool GradTransformedPoint(ESegment *segment, EData *data, int i, int pointIdx, C
         if (c[j - 1] != 0.0) stage.emplace_back(base->GetSubPoint(j)->GetCMEnergy(), c[j - 1]);
     }
     std::vector<std::vector<double>> cot(terms.size(), std::vector<double>(nsp, 0.0));
-    std::vector<std::pair<int, double>> dw;
+    std::vector<std::pair<int, double>> dw, dwdT;
+    // A fitted temperature (doppler_<n>): dY/dT = sum_J c_J sum_q dF/d(term q) weight_q sum_k dD_Jk/dT sigma_qk,
+    // the same cotangents cq applied to the T-derivatives of the Doppler weights.
+    const int dk = base->GetParentData()->DopplerParamOfEffect(base->GetTargetEffectNum());
     for (const auto &st : stage) {
-      base->DopplerWeights(st.first, dw);
+      base->DopplerWeights(st.first, dw, dk > 0 ? &dwdT : nullptr);
       for (size_t q = 0; q < terms.size(); q++) {
         double s = 0.0;
         for (const auto &t : dw) s += t.second * raw[q][t.first - 1];
@@ -700,6 +747,11 @@ bool GradTransformedPoint(ESegment *segment, EData *data, int i, int pointIdx, C
       }
       backProp(st.second, [&](size_t q, double cq) {
         for (const auto &t : dw) cot[q][t.first - 1] += cq * t.second;
+        if (dk > 0) {
+          double ds = 0.0;
+          for (const auto &t : dwdT) ds += t.second * raw[q][t.first - 1];
+          accum.AddDoppler(dk, cq * ds);
+        }
         return true;
       });
     }

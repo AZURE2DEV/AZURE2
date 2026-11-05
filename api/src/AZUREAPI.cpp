@@ -1203,7 +1203,7 @@ vector_r AZUREAPI::CalculateChi2GradRWA(const vector_r &params) const {
     if (fixed_[f]) continue;
     ParamKind kind = pmap.Desc(f).kind;
     if (eg && (kind == ParamKind::LevelEnergy || kind == ParamKind::Gamma || kind == ParamKind::Norm ||
-               kind == ParamKind::Screening)) continue;
+               kind == ParamKind::Screening || kind == ParamKind::Doppler)) continue;
     int packed = pmap.FullToPacked(f);
     if (packed < 0 || packed >= (int)params.size()) continue;
     double x0 = params[packed];
@@ -1527,6 +1527,15 @@ vector_r AZUREAPI::GetParameterInfo() const {
     const TargetEffect *te = data()->GetTargetEffect(data()->GetDensityEffect(k));
     push(8, -1, -1, 0, -1, te->GetDensityNominal(), data()->GetDensityEffect(k), -1, te->GetLayoutDensity(), -1, -1, -1,
          te->GetDensitySigma());
+  }
+
+  // Fitted Doppler temperatures (K), one per 'doppler T vary sigma [Tmax]' line: type 9, the effect number in field 6,
+  // the prior centre in field 5, its sigma in field 14 (0 = no prior) and the layout temperature (the largest the
+  // sub-point grids span) in field 8 (the S field).
+  for (int k = 1; k <= data()->NumDopplerParams(); ++k) {
+    const TargetEffect *te = data()->GetTargetEffect(data()->GetDopplerEffect(k));
+    push(9, -1, -1, 0, -1, te->GetDopplerNominal(), data()->GetDopplerEffect(k), -1, te->GetDopplerLayoutTemperature(),
+         -1, -1, -1, te->GetDopplerSigma());
   }
 
   return info;

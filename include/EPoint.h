@@ -413,9 +413,19 @@ class EPoint {
    * Free-gas Doppler broadening on this point's sub-point grid (TargetEffect::IsDoppler): the weights w with
    * sigma_D(eCM) = sum w.second * sigma(sub-point w.first), sigma linear in E between sub-points, from the
    * velocity-space integral of TargetEffect::IsDoppler (4-point Gauss-Legendre on pieces no wider than u/4).
-   * Empty when the effect has no Doppler step or the point no grid.
+   * Empty when the effect has no Doppler step or the point no grid.  The integration window is the one at the
+   * layout temperature and the pieces are those of the nominal temperature (TargetEffect::HasDopplerFit), so
+   * only the kernel values depend on the current T; \p dwdT, if given, receives dw/dT (per K) on the same nodes.
    */
-  void DopplerWeights(double eCM, std::vector<std::pair<int, double>> &w) const;
+  void DopplerWeights(double eCM, std::vector<std::pair<int, double>> &w,
+                      std::vector<std::pair<int, double>> *dwdT = nullptr) const;
+  /*!
+   * d/dT of the integrated value (IntegrateTargetEffect) for the sub-point values \p values (0-based): the
+   * line's kernel applied to the T-derivatives of the Doppler-broadened values, or the derivative of sigma_D
+   * at the point for a line without a kernel.  0 when the line has no Doppler step or it is applied elsewhere
+   * (DopplerAppliedScope).  For the analytic gradient of a fitted temperature (doppler_<n>).
+   */
+  double DopplerTemperatureDerivative(const Config &, const std::vector<double> &values);
   /*!
    * While alive, IntegrateTargetEffect (and TargetEffectWeights) skip the Doppler step: for the
    * transmission/yield assembly (ESegment::TransformedValue), which broadens the terms itself before the

@@ -91,7 +91,16 @@ class AddTargetIntDialog : public QDialog {
   // Free-gas Doppler broadening (the `doppler T` keyword): the effective temperature of the target atoms, K.
   QCheckBox *isDopplerCheck;
   QLineEdit *dopplerTemperatureText;
-  /*! Why the Doppler settings cannot be written (T not a number > 0), or an empty string. */
+  // Fitted temperature (`doppler T vary sigma [Tmax]`): T is the parameter doppler_<n>; Fit T (vary), the prior
+  // sigma in K (0 = none) and the grid maximum in K (blank = the engine's default, shown beside it).
+  QCheckBox *dopplerFitCheck;
+  QCheckBox *dopplerVaryCheck;
+  QLineEdit *dopplerSigmaText;
+  QLineEdit *dopplerMaxText;
+  /*! Fill the fitted-temperature fields from a line (dopplerMax 0 = the default, shown blank). */
+  void setDopplerFit(bool fit, bool vary, double sigma, double dopplerMax);
+  /*! Why the Doppler settings cannot be written (T not a number > 0, a prior sigma < 0, a grid maximum not above
+   *  T), or an empty string. */
   QString dopplerProblem() const;
   /*! Fill the density box from a line (densityMax 0 = the default, shown blank). */
   void setDensityFit(bool fit, bool vary, const QString &sigma, double densityMax, const QString &group);
@@ -147,6 +156,9 @@ class AddTargetIntDialog : public QDialog {
 
   void screeningCheckChanged(bool checked);
   void dopplerCheckChanged(bool checked);
+  void dopplerFitCheckChanged(bool checked);
+  /// Show the grid maximum the engine would use for a fitted temperature when the field is left blank.
+  void updateDopplerDefault();
   void densityFitCheckChanged(bool checked);
   /// Show the grid maximum the engine would use when the field is left blank.
   void updateDensityDefault();
@@ -172,6 +184,7 @@ class AddTargetIntDialog : public QDialog {
   QGroupBox *dopplerBox;
   QGroupBox *densityBox;
   QLabel *densityDefaultLabel;
+  QLabel *dopplerDefaultLabel;
   std::function<double(const QString &)> adiabaticProvider_;
 
   int selectedElement_;

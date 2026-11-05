@@ -119,6 +119,10 @@ class AZUREAPI {
    *                      line with a densityfit block or of a density group:
    *                      as type 7, plus the largest density the sub-point
    *                      grids span in field 8
+   *                    9=fitted free-gas Doppler temperature (K) of a
+   *                      <targetInt> line with 'doppler T vary sigma
+   *                      [Tmax]': as type 8, the layout temperature (the
+   *                      largest the sub-point grids span) in field 8
    *   1  jgroup        1-based J-group index (R-matrix params only)
    *   2  J             total spin of the J-group / level
    *   3  parity        +1 / -1

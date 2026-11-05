@@ -1046,8 +1046,7 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
         return -1;
       }
       if (targetEffect.HasDopplerError()) {
-        std::cout << "ERROR: <targetInt> line \"" << line << "\": a doppler block is 'doppler T' with the effective"
-                  << " temperature T > 0 in kelvin" << std::endl;
+        std::cout << "ERROR: <targetInt> line \"" << line << "\": " << targetEffect.GetDopplerErrorText() << std::endl;
         return -1;
       }
       if (targetEffect.HasDensityFitError()) {
@@ -1413,6 +1412,9 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
   for (int n = 1; n <= this->NumTargetEffects(); n++)
     if (this->GetTargetEffect(n)->HasScreening()) screeningEffects_.push_back(n);
   this->ApplyScreening();
+  dopplerEffects_.clear();
+  for (int n = 1; n <= this->NumTargetEffects(); n++)
+    if (this->GetTargetEffect(n)->HasDopplerFit()) dopplerEffects_.push_back(n);
   return 0;
 }
 
@@ -2196,6 +2198,13 @@ void EData::WriteOutputFiles(const Config &configure, bool isFit, const BandData
       for (int k = 1; k <= this->NumDensityParams(); k++)
         if (this->GetTargetEffect(this->GetDensityEffect(k))->GetDensitySigma() > 0.0) anyPrior = true;
       if (anyPrior) chiOut << " Total-Density-Chi-Squared: " << this->DensityPenalty();
+    }
+    // Fitted Doppler temperatures: their priors.
+    if (this->NumDopplerParams() > 0) {
+      bool anyPrior = false;
+      for (int k = 1; k <= this->NumDopplerParams(); k++)
+        if (this->GetTargetEffect(this->GetDopplerEffect(k))->GetDopplerSigma() > 0.0) anyPrior = true;
+      if (anyPrior) chiOut << " Total-Doppler-Chi-Squared: " << this->DopplerPenalty();
     }
     // Measured scattering lengths (<scatteringLengths>; table in scatteringLengths.out).
     if (scatteringLengthChi2_ != 0.0)
@@ -4301,6 +4310,55 @@ void EData::FillMnParams(ROOT::Minuit2::MnUserParameters &p) {
     p.SetLimits(varname, 0.01 * te->GetDensityNominal(), te->GetLayoutDensity());
     if (!te->IsDensityVaried()) p.Fix(varname);
   }
+
+  // Fitted Doppler temperatures (K): one per line with the fit form 'doppler T vary sigma [Tmax]', none otherwise.
+  // Bounded by the temperature the grids span (TargetEffect::GetDopplerLayoutTemperature) and T0/4.
+  dopplerParamOffset_ = p.Params().size();
+  for (int k = 1; k <= this->NumDopplerParams(); k++) {
+    const TargetEffect *te = this->GetTargetEffect(this->GetDopplerEffect(k));
+    snprintf(varname, sizeof(varname), "doppler_%d", this->GetDopplerEffect(k));
+    const double t = te->GetDopplerTemperature();
+    p.Add(varname, t, (te->GetDopplerSigma() > 0.0) ? 0.1 * te->GetDopplerSigma() : 0.01 * t);
+    p.SetLimits(varname, te->GetDopplerMinimum(), te->GetDopplerLayoutTemperature());
+    if (!te->IsDopplerVaried()) p.Fix(varname);
+  }
+}
+
+int EData::DopplerParamOfEffect(int n) const {
+  for (int k = 1; k <= this->NumDopplerParams(); k++)
+    if (dopplerEffects_[k - 1] == n) return k;
+  return 0;
+}
+
+void EData::FillDopplerFromParams(const vector_r &p, const Config *configure) {
+  if (dopplerEffects_.empty() || dopplerParamOffset_ < 0) return;
+  for (int k = 1; k <= this->NumDopplerParams(); k++) {
+    const int idx = dopplerParamOffset_ + k - 1;
+    if (idx < 0 || idx >= (int)p.size()) return;  // a vector without the Doppler block
+    TargetEffect *te = this->GetTargetEffect(this->GetDopplerEffect(k));
+    double v = p[idx];
+    // The grids and the integration windows span the layout temperature; below T0/4 the Gauss-Legendre pieces
+    // (laid out for T0) would be too wide for the kernel.
+    const double vMax = te->GetDopplerLayoutTemperature(), vMin = te->GetDopplerMinimum();
+    if (v > vMax || !(v >= vMin)) {
+      static std::atomic<bool> warned{false};
+      if (!warned.exchange(true))
+        (configure ? configure->outStream : std::cout)
+            << "WARNING: doppler_" << this->GetDopplerEffect(k) << " = " << v << " K is outside [" << vMin << ", "
+            << vMax << "] K, the range its sub-point grids and integration pieces span; the calculation uses the"
+            << " nearest end.  Give the line a wider range with 'doppler T vary sigma Tmax'. (Printed once.)"
+            << std::endl;
+      v = (v > vMax) ? vMax : vMin;
+    }
+    te->SetDopplerTemperature(v);
+  }
+}
+
+double EData::DopplerPenalty() const {
+  double chi2 = 0.0;
+  for (int k = 1; k <= this->NumDopplerParams(); k++)
+    chi2 += const_cast<EData *>(this)->GetTargetEffect(this->GetDopplerEffect(k))->DopplerPenalty();
+  return chi2;
 }
 
 int EData::SetUpDensityParams(const Config &configure) {
@@ -4467,6 +4525,8 @@ void EData::FillEnergyShiftsFromParams(const vector_r &p, EData *data, CNuc *the
   this->FillScreeningFromParams(p);
   // Fitted target densities: the thickness of each point of their lines (the grids stay put).
   if (configure) this->FillDensitiesFromParams(p, *configure);
+  // Fitted Doppler temperatures: only the kernel values move (the grids and pieces stay put).
+  this->FillDopplerFromParams(p, configure);
   int i = GetEnergyShiftParamOffset();
   int j = GetEnergyShiftSqrtParamOffset();
   int k = 0;
@@ -4733,6 +4793,8 @@ EData *EData::Clone() const {
   dataCopy->densityParamOffset_ = this->densityParamOffset_;
   dataCopy->densityEffects_ = this->densityEffects_;
   dataCopy->densityParamOfEffect_ = this->densityParamOfEffect_;
+  dataCopy->dopplerParamOffset_ = this->dopplerParamOffset_;
+  dataCopy->dopplerEffects_ = this->dopplerEffects_;
   dataCopy->isFit_ = this->isFit_;
   dataCopy->isErrorAnalysis_ = this->isErrorAnalysis_;
   dataCopy->targetEffects_ = this->targetEffects_;

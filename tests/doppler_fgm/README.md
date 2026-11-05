@@ -20,6 +20,17 @@ grid of unbroadened cross sections (mode 3).
 | (c) | transmission and yield: the transform of σ_D at the point (doppler alone), or the Gaussian average of the transform of σ_D (with the Gaussian), to 2e-4; transforming the broadened σ instead is more than 1 % off. |
 | (d) | `AZURE_GRAD_CHECK` on a project with all three kinds: analytic gradient = finite differences (1e-6 of the largest) and the Jacobian path (1e-10), `--no-grid-replacement`. |
 | (e) | `doppler 0` and `doppler` without a temperature are refused with an ERROR and no output. |
+| (f) | the fitted temperature, `doppler T vary sigma [Tmax]` (parameter `doppler_<n>`): data = the `dop` model's σ_t and σ_γ at 450 K (1 % errors, every level fixed), the line `doppler 300 1 0 900`; MIGRAD (`--use-gradient`) and `--use-lm` recover T within 1 K. |
+| (g) | `AZURE_GRAD_CHECK` on `grad_fit` (`doppler 300 1 0 900` on the Doppler-only and transmission/yield segments, `doppler 300 1 20` on the Doppler + Gaussian transmission/yield ones), `doppler_1`, `doppler_2` free with the widths: analytic = finite differences (1e-6 of the largest) and the Jacobian path (1e-10). |
+| (h) | `doppler 300 1 20` against the same values with 20 % errors: T lands between 300 K and the default layout temperature 363 K, and `Total-Doppler-Chi-Squared` = ((T − 300)/20)². |
+| (i) | malformed fit forms are refused with an ERROR and no output: vary 2, sigma missing, sigma < 0, Tmax ≤ T, T < 0. |
+| (j) | only with `REF_AZURE2=<a build of f373664>`: the plain `doppler T` models' `AZUREOut` files and `chiSquared.out` are byte-identical to that build's. |
+
+A fitted line lays its sub-point grids and every Doppler integral's window out once, for the layout temperature
+(Tmax, else max(T + 3σ, 1.21 T), or 2 T without a prior), and the Gauss-Legendre pieces for the line's T; only
+the kernel values move with the parameter, so the analytic derivative is exact. A plain `doppler T` line is
+unchanged (check (j)). The fits recover 449.95 K rather than 450.00 K: the data were computed with the plain
+line's window and pieces, the fit with those of the fit form, and the two quadratures differ by about 1e-6.
 
 The lines under the Gaussian use 1000 sub-points: the Gaussian's window is wider than the Doppler one and
 the grid must still resolve the 200 eV resonance (400 sub-points leave 4e-4 at the σ_t dip, 1600 give 3e-5).
@@ -27,4 +38,4 @@ the grid must still resolve the 200 eV resonance (400 sub-points leave 4e-4 at t
 An engine older than November 2026 refuses the whole `<targetInt>` block ("Could not fill data object from
 file"), so every check fails on it: it does not ignore the keyword.
 
-    ./tests/doppler_fgm/check.sh path/to/AZURE2      # ~75 s
+    [REF_AZURE2=path/to/f373664/AZURE2] ./tests/doppler_fgm/check.sh path/to/AZURE2      # ~3.5 min
