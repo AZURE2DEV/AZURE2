@@ -1661,11 +1661,16 @@ int main(int argc, char *argv[]) {
     } else {
 #endif
       // Create instance of main AZURE function, print start message,
-      //  and execute
-      AZUREMain azureMain(configure);
+      //  and execute.  On the heap and deliberately never deleted: the process
+      //  ends right after this, and freeing the millions of EPoint objects one by
+      //  one took 2.3-3.7 s of a natural_neon calculation (more with more threads)
+      //  after every output file had been written.  No engine object holds a file
+      //  or another resource its destructor would release; the OS reclaims the
+      //  memory.
+      AZUREMain *azureMain = new AZUREMain(configure);
       configure.outStream << std::endl;
       startMessage(configure);
-      returnValue = azureMain();
+      returnValue = (*azureMain)();
 #ifdef USE_MCMC
     }
 #endif

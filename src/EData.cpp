@@ -2850,9 +2850,14 @@ int EData::InitializeComponentSegments(CNuc *theCNuc, const Config &configure) {
     }
   }
 
-  // CalcEDependentValues for component segments
+  // CalcEDependentValues for component segments, in parallel as for the data segments
+  // (EData::CalcEDependentValues).  Each point writes only itself, its sub-points and its local
+  // mapped points that do not own their values; those are never computed here (the condition
+  // below) and each has exactly one host, so no two threads write the same point.  Serial, this
+  // loop was 9 of the 17.6 s of a natural_neon calculation on 24 threads.
   for (auto &componentSegment : componentSegments_) {
     bool localStop = false;
+#pragma omp parallel for shared(localStop, configure)
     for (int i = 1; i <= componentSegment.NumPoints(); i++) {
       if (configure.stopFlag || localStop) continue;
       EPoint *point = componentSegment.GetPoint(i);
@@ -2860,8 +2865,11 @@ int EData::InitializeComponentSegments(CNuc *theCNuc, const Config &configure) {
         try {
           point->CalcEDependentValues(theCNuc, configure);
         } catch (GSLException e) {
-          configure.outStream << "Component segment calculation error: " << e.what() << std::endl;
-          localStop = true;
+#pragma omp critical
+          {
+            configure.outStream << "Component segment calculation error: " << e.what() << std::endl;
+            localStop = true;
+          }
         }
       }
     }
