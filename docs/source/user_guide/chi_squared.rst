@@ -171,6 +171,10 @@ The file separates the two contributions::
 - **Total-Doppler-Chi-Squared**, when a fitted Doppler temperature has a prior
   (``doppler T vary sigma``, :doc:`experimental_effects`), is the sum of
   :math:`((T - T_0)/\sigma)^2`.
+- **Total-Thickness-Chi-Squared**, when a fitted sample thickness has a prior
+  (``transmission n vary sigma`` or ``yield n vary sigma``,
+  :doc:`segments`), is the sum of :math:`((n - n_0)/\sigma)^2` (a
+  ``thicknessgroup`` counts once, with its first segment's prior).
 - **Total-Scattering-Length-Chi-Squared**, when the project has a
   ``<scatteringLengths>`` block, is the sum over its active lines of
   :math:`((a_0 - a_{\mathrm{exp}})/\sigma)^2` (real and, if given, imaginary

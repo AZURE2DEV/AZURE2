@@ -226,6 +226,12 @@ AddSegTestDialog::AddSegTestDialog(QWidget *parent) :
   lowerLayout->addWidget(advancedModeBox, 2, 0, 1, 4);
   lowerLayout->addWidget(naturalLabel, 3, 0, Qt::AlignRight);
   lowerLayout->addWidget(naturalCombo, 3, 1, 1, 3);
+  sampleRow = new SampleRow(false);
+  sampleRow->setObjectName("sampleRow");
+  QLabel *sampleLabel = new QLabel(tr("Sample:"));
+  sampleLabel->setToolTip(sampleRow->kindCombo->toolTip());
+  lowerLayout->addWidget(sampleLabel, 4, 0, Qt::AlignRight);
+  lowerLayout->addWidget(sampleRow, 4, 1, 1, 3);
 
   valueLayout->addLayout(lowerLayout, 2, 0, 1, 2);
   valueBox->setLayout(valueLayout);

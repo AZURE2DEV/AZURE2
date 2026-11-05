@@ -143,6 +143,21 @@ Experimental Effects tab. In AZURE2's parameter vector the temperatures come aft
 the target densities; one that is not fitted takes no slot. **Load from .sav**
 sets the temperature to the fitted value, which is also the centre of its prior.
 
+Sample Thickness Parameters
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Shown only when a transmission or self-shielded-yield segment has the fit form
+of its block (``transmission n vary sigma``, see :doc:`segments`). One row per
+such active line, named ``segment_<k>_thickness`` as in ``param.sav``. **Value**
+is :math:`n` in atoms/barn, **Error** the sigma of its prior (0 = none) and **Use
+as Nuisance** whether it is fitted: the **Sample** row of the segment dialog
+(n, Prior sigma, Fit), synced both ways with the Segments tab. A
+``thicknessgroup`` follower's row is tied to its leader, as a normalization-group
+follower's is: greyed, without a check box, showing the leader's value. As an
+energy shift, a thickness parameter takes a slot in AZURE2's parameter vector
+whether it is fitted or not. **Load from .sav** sets :math:`n` to the fitted value,
+which is also the centre of its prior.
+
 Controls
 --------
 

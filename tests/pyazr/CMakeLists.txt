@@ -374,6 +374,14 @@ add_test(NAME pyazr_doppler
                  ${CMAKE_CURRENT_SOURCE_DIR}/doppler_test.py)
 set_tests_properties(pyazr_doppler PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
+# The fitted sample thickness of transmission / yield segments ("transmission n vary sigma", thicknessgroup):
+# AzrModel helpers, type-10 records, penalties()["thickness"], chi2_and_grad and residual_jacobian columns
+# (tests/transmission_yield models).
+add_test(NAME pyazr_thickness
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/thickness_test.py)
+set_tests_properties(pyazr_thickness PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
 # The light particle's excitation energy, column 32 of a <levels> line (2026-11-05): AzrModel keeps the column
 # (and adds or drops it only when e1 changes to or from 0), Pair carries light_excitation (and still reads an
 # older engine's 19-field record), and the excitation moved between the partners gives the same cross sections

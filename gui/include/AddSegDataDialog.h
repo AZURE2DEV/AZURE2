@@ -1,6 +1,7 @@
 #ifndef ADDSEGDATADIALOG_H
 #define ADDSEGDATADIALOG_H
 
+#include "SampleRow.h"
 #include <QDialog>
 #include <QShowEvent>
 #include <QLineEdit>
@@ -111,6 +112,12 @@ class AddSegDataDialog : public QDialog {
   QString groupLabel(const QString &keyword) const;
   void setGroupLabel(const QString &keyword, const QString &label);
   QComboBox *groupCombo(const QString &keyword) const;
+  /*! The transmission / self-shielded-yield block of the line and its thickness group ("Sample:" row, SampleRow.h);
+   *  the group is the "thicknessgroup" keyword of setGroupChoices / groupLabel.  Shown where the engine allows the
+   *  block (an angle-integrated or total-capture observable of a neutral entrance pair) or the line has one. */
+  SampleRow *sampleRow = nullptr;
+  /*! Fill the Sample row from a line's block (and show it if the line has one). */
+  void setSampleBlock(const SegmentKeywords::SampleBlock &b);
 
   /*! "Natural target": the term and each component are weighted by the isotopic abundance of their
    *  entrance pair's compound nucleus in one sample of the <abundances> block (keyword tail
@@ -175,6 +182,9 @@ class AddSegDataDialog : public QDialog {
    *  check boxes and the observable decide). */
   void applyScatteringLengthMode(bool on);
   QList<QWidget *> segmentOnly;
+  QLabel *sampleLabel = nullptr;
+  /*! Show the Sample row where the block can apply (updateSampleRow's rule above), hide it otherwise. */
+  void updateSampleRow();
   QLabel *entrancePairLabel;
   QLabel *exitPairLabel;
   bool scatLenMode = false;

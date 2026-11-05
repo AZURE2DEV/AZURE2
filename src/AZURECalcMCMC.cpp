@@ -401,7 +401,8 @@ void AZURECalcMCMC::BuildAutoPriors() const {
   //   the shift-function parameters of each segment declaring a "shiftfn" block
   //   one electron-screening potential per <targetInt> line with a screening block
   //   one fitted target density per <targetInt> line with a densityfit block or per density group
-  //   one fitted Doppler temperature per <targetInt> line with 'doppler T vary sigma' 
+  //   one fitted Doppler temperature per <targetInt> line with 'doppler T vary sigma'
+  //   one fitted sample thickness per data segment with 'transmission n vary sigma' / 'yield n vary sigma' 
   // AZUREAPI::GetParameterInfo() walks the same sequence.
   std::vector<int> allKinds;
   std::vector<double> allAutoMean;
@@ -495,6 +496,15 @@ void AZURECalcMCMC::BuildAutoPriors() const {
     allAutoStd.push_back(te->GetDopplerSigma());
   }
 
+  // Fitted sample thicknesses (atoms/barn), one per transmission / yield line with the fit form: the line's n and
+  // sigma are the prior (none for a thickness-group follower, whose parameter is fixed).
+  for (int k = 1; k <= data()->NumThicknessParams(); ++k) {
+    const ESegment *seg = data()->GetSegment(data()->GetThicknessSegment(k));
+    allKinds.push_back(PARAM_THICKNESS);
+    allAutoMean.push_back(seg->GetNominalThickness());
+    allAutoStd.push_back(seg->IsThicknessGroupFollower() ? 0.0 : seg->GetThicknessSigma());
+  }
+
   if (allKinds.size() != fixed_.size()) {
     configure().outStream << "Warning: parameter classification produced "
                           << allKinds.size() << " entries but there are "
@@ -535,7 +545,7 @@ void AZURECalcMCMC::BuildAutoPriors() const {
     const int kind = freeKinds_[i];
 
     if (kind == PARAM_NORM || kind == PARAM_SHIFT || kind == PARAM_ABUNDANCE || kind == PARAM_SCREENING ||
-        kind == PARAM_DENSITY || kind == PARAM_DOPPLER) {
+        kind == PARAM_DENSITY || kind == PARAM_DOPPLER || kind == PARAM_THICKNESS) {
       // Derived from the data, so it always wins over whatever the GUI holds.
       if (freeAutoStd[i] > 0.0) {
         priorMeans_[i] = freeAutoMean[i];
@@ -1084,7 +1094,7 @@ void AZURECalcMCMC::RunMCMCSampling(int nwalkers, int nsteps, const std::vector<
         spread = energySpreadMeV;
         nEnergyCapped++;
       } else if (kind == PARAM_NORM || kind == PARAM_SHIFT || kind == PARAM_ABUNDANCE || kind == PARAM_SCREENING ||
-        kind == PARAM_DENSITY || kind == PARAM_DOPPLER) {
+        kind == PARAM_DENSITY || kind == PARAM_DOPPLER || kind == PARAM_THICKNESS) {
         // Starting outside the prior only wastes steps walking back into it.
         if (j < (int)priorStds_.size() && j < (int)usePriors_.size() &&
             usePriors_[j] && priorStds_[j] > 0.0 && priorStds_[j] < spread) {

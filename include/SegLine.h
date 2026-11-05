@@ -61,6 +61,40 @@ inline std::string StripPathQuotes(const std::string &path) {
   return path;
 }
 
+/*!
+ * Reads the rest of a "transmission" / "yield" block after its keyword: the sample thickness n (atoms/barn, > 0) and,
+ * in the fit form "n vary sigma", the vary flag (0 or 1) and the Gaussian prior width sigma (atoms/barn, >= 0, 0 =
+ * no prior) of the parameter segment_<key>_thickness.  The fit form is recognised by a number after n (no keyword is
+ * a number).  Returns "" on success, else why the block is malformed; the stream is left after the block.
+ */
+inline std::string ReadThicknessBlock(std::istream &stream, const std::string &keyword, double &n, bool &fit, int &vary,
+                                      double &sigma) {
+  fit = false;
+  vary = 0;
+  sigma = 0.0;
+  if (!(stream >> n) || !(n > 0.0)) return keyword + " needs the sample thickness n > 0 in atoms/barn";
+  const std::streampos afterN = stream.tellg();
+  std::string tok;
+  double v = 0.0;
+  if (!(stream >> tok) || !WholeNumber(tok, v)) {  // the plain form "keyword n"
+    stream.clear();
+    stream.seekg(afterN);
+    return std::string();
+  }
+  if (v != 0.0 && v != 1.0)
+    return keyword + " " + tok + ": the fit form is '" + keyword + " n vary sigma' with vary 0 or 1 (read " + tok + ")";
+  std::string stok;
+  double s = 0.0;
+  if (!(stream >> stok) || !WholeNumber(stok, s))
+    return "the fit form '" + keyword + " n vary sigma' needs the prior width sigma (atoms/barn, 0 = no prior) after "
+           "the vary flag";
+  if (!(s >= 0.0)) return keyword + ": the prior width sigma must be >= 0 (0 = no prior), read " + stok;
+  fit = true;
+  vary = (int)v;
+  sigma = s;
+  return std::string();
+}
+
 class SegLine {
  public:
   /*!
@@ -90,6 +124,10 @@ class SegLine {
     total_ = 0;
     transmission_ = 0.0;
     yield_ = 0.0;
+    thicknessFit_ = false;
+    thicknessVary_ = 0;
+    thicknessSigma_ = 0.0;
+    thicknessGroup_ = "";
     absolute_ = 0;
     varyEnergyShiftSqrt_ = 0;
     // shared constant energy shift: off unless a trailing "shiftgroup" block is present
@@ -225,6 +263,15 @@ class SegLine {
         // file: chi^2 over them is r^T R^-1 r instead of the sum of r_i^2
         // (EData::ResolveCovarianceGroups; the file format is in
         // docs/source/reference/data_formats.rst).
+        // A sample-thickness block,
+        //   transmission <n> [<vary> <sigma>]   or   yield <n> [<vary> <sigma>]
+        // makes the segment the transmission or the self-shielded yield of a
+        // sample n atoms/barn thick; with vary and sigma n is the fit parameter
+        // segment_<key>_thickness (prior ((n - n0)/sigma)^2, sigma 0 = none).
+        //   thicknessgroup <label>
+        // makes every segment carrying the label (each with its own
+        // transmission or yield block) share ONE thickness, that of the first
+        // such segment in file order (EData::ResolveThicknessGroups).
         // The blocks may come in any order.
         advancedStream.clear();
         std::string keyword;
@@ -286,10 +333,18 @@ class SegLine {
             }
           } else if (keyword == "transmission" || keyword == "yield") {
             // a thick-sample neutron observable of the segment's cross section, n in atoms/barn (ESegment::IsTransformed):
-            // transmission T = exp(-n sigma), capture/reaction yield Y0 = (sigma_x/sigma_t)(1 - exp(-n sigma_t))
+            // transmission T = exp(-n sigma), capture/reaction yield Y0 = (sigma_x/sigma_t)(1 - exp(-n sigma_t)).
+            // The fit form "transmission n vary sigma" makes n the parameter segment_<key>_thickness (vary 0/1, sigma
+            // the Gaussian prior width in atoms/barn about n, 0 = none); ReadThicknessBlock.
             double &n = (keyword == "transmission") ? transmission_ : yield_;
-            if (!(advancedStream >> n) || !(n > 0.0)) {
-              parseError_ = keyword + " needs the sample thickness n > 0 in atoms/barn";
+            parseError_ = ReadThicknessBlock(advancedStream, keyword, n, thicknessFit_, thicknessVary_, thicknessSigma_);
+            if (!parseError_.empty()) {
+              stream.setstate(std::ios::failbit);
+              break;
+            }
+          } else if (keyword == "thicknessgroup") {
+            if (!(advancedStream >> thicknessGroup_)) {
+              parseError_ = "thicknessgroup needs a label";
               stream.setstate(std::ios::failbit);
               break;
             }
@@ -430,6 +485,13 @@ class SegLine {
   double transmission() const { return transmission_; };
   /// "yield <n>": the segment is the self-shielded yield (sigma/sigma_t)(1 - exp(-n sigma_t)) (0: not).
   double yieldThickness() const { return yield_; };
+  /// True when the transmission / yield block has the fit form "n vary sigma" (a parameter segment_<key>_thickness).
+  bool thicknessFit() const { return thicknessFit_; };
+  /// The vary flag (0/1) and the prior width (atoms/barn, 0 = none) of the fit form; 0 for the plain form.
+  int thicknessVary() const { return thicknessVary_; };
+  double thicknessSigma() const { return thicknessSigma_; };
+  /// "thicknessgroup <label>": the segments with the label share one sample thickness ("" = none).
+  const std::string &thicknessGroup() const { return thicknessGroup_; };
   /// "absolute 1": angular-coefficient data are the absolute A_k, not a_k / a_0.
   int absolute() const { return absolute_; };
   /*!
@@ -544,6 +606,10 @@ class SegLine {
   int total_;
   double transmission_;
   double yield_;
+  bool thicknessFit_;
+  int thicknessVary_;
+  double thicknessSigma_;
+  std::string thicknessGroup_;
   int absolute_;
   std::string componentsList_;
   int isUPOS_;

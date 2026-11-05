@@ -43,6 +43,27 @@ static QString withDialogGroups(QString extraTokens, const AddSegDataDialog &dia
   return extraTokens;
 }
 
+// The tail with the dialog's transmission / yield block (SampleRow.h): rewritten only when it changed, so an untouched
+// tail stays exactly as read.  A block the engine would refuse (n not > 0, a negative prior) is not written: the line
+// keeps its old block and a warning says why.
+static QString withDialogSample(const QString &extraTokens, const SampleRow *row, QWidget *parent) {
+  const SegmentKeywords::SampleBlock b = row->block();
+  if (b == SegmentKeywords::sampleBlock(extraTokens)) return extraTokens;
+  if (!b.kind.isEmpty()) {
+    bool ok = false;
+    const double n = b.n.toDouble(&ok);
+    bool sok = true;
+    const double sigma = b.fit ? b.sigma.toDouble(&sok) : 0.0;
+    if (!ok || !(n > 0.0) || !sok || sigma < 0.0) {
+      QMessageBox::warning(parent, QObject::tr("Sample Thickness"),
+                           QObject::tr("The %1 block needs a thickness n > 0 in atoms/barn and a prior sigma >= 0; "
+                                       "the line keeps its old block.").arg(b.kind));
+      return extraTokens;
+    }
+  }
+  return SegmentKeywords::withSampleBlock(extraTokens, b);
+}
+
 namespace {
 // The data segments followed by the measured scattering lengths, numbered straight through: the scattering lengths
 // are rows of the one table rather than a second table under it, so the segments keep all of the box's height
@@ -126,6 +147,7 @@ SegmentsTab::SegmentsTab(QWidget *parent) :
 
   segmentsTestModel = new SegmentsTestModel;
   segmentsTestView = new QTableView;
+  segmentsTestView->setObjectName("segmentsTestView");
   segmentsTestView->setModel(segmentsTestModel);
   segmentsTestView->setItemDelegateForColumn(1, rt);
   segmentsTestView->setColumnHidden(2, true);
@@ -396,6 +418,7 @@ void SegmentsTab::addSegDataLine() {
     newLine.extraTokens = SegmentKeywords::withCovarianceFile(
         SegmentKeywords::withNaturalToken(QString(), aDialog.naturalToken()), aDialog.covarianceFileText->text());
     if (newLine.dataType == 2) newLine.extraTokens = SegmentKeywords::withPhaseSpin(newLine.extraTokens, aDialog.phaseSValueText->text());
+    newLine.extraTokens = withDialogSample(newLine.extraTokens, aDialog.sampleRow, this);
     newLine.extraTokens = withDialogGroups(newLine.extraTokens, aDialog);
     addSegDataLine(newLine);
   }
@@ -508,6 +531,7 @@ void SegmentsTab::addSegTestLine() {
     }
     newLine.extraTokens = SegmentKeywords::withNaturalToken(QString(), aDialog.naturalToken());
     if (newLine.dataType == 2) newLine.extraTokens = SegmentKeywords::withPhaseSpin(newLine.extraTokens, aDialog.phaseSValueText->text());
+    newLine.extraTokens = withDialogSample(newLine.extraTokens, aDialog.sampleRow, this);
     addSegTestLine(newLine);
   }
 }
@@ -654,6 +678,7 @@ void SegmentsTab::editSegDataLine() {
   aDialog.setNaturalToken(SegmentKeywords::naturalSample(extraTokens));
   aDialog.covarianceFileText->setText(SegmentKeywords::covarianceFile(extraTokens));
   aDialog.phaseSValueText->setText(SegmentKeywords::phaseSpin(extraTokens));
+  aDialog.setSampleBlock(SegmentKeywords::sampleBlock(extraTokens));
   offerGroups(aDialog, segmentsDataModel, extraTokens);
   aDialog.entrancePairCombo->setKey(entrancePairIndex);
   aDialog.exitPairCombo->setKey(exitPairIndex);
@@ -837,6 +862,7 @@ void SegmentsTab::editSegDataLine() {
       newExtraTokens = SegmentKeywords::withCovarianceFile(newExtraTokens, aDialog.covarianceFileText->text());
     if (aDialog.phaseSValueText->text().trimmed() != SegmentKeywords::phaseSpin(extraTokens))
       newExtraTokens = SegmentKeywords::withPhaseSpin(newExtraTokens, aDialog.phaseSValueText->text());
+    newExtraTokens = withDialogSample(newExtraTokens, aDialog.sampleRow, this);
     newExtraTokens = withDialogGroups(newExtraTokens, aDialog);
     if (newExtraTokens != extraTokens) segmentsDataModel->setLineExtras(index.row(), newExtraTokens);
   }
@@ -901,6 +927,7 @@ void SegmentsTab::editSegTestLine() {
   aDialog.setWindowTitle(tr("Edit a Segment Without Data"));
   aDialog.setNaturalToken(SegmentKeywords::naturalSample(extraTokens));
   aDialog.phaseSValueText->setText(SegmentKeywords::phaseSpin(extraTokens));
+  aDialog.sampleRow->setBlock(SegmentKeywords::sampleBlock(extraTokens));
   aDialog.entrancePairCombo->setKey(entrancePairIndex);
   aDialog.exitPairCombo->setKey(exitPairIndex);
   aDialog.lowEnergyText->setText(lowEnergy);
@@ -1017,6 +1044,7 @@ void SegmentsTab::editSegTestLine() {
     QString newExtraTokens = SegmentKeywords::withNaturalToken(extraTokens, aDialog.naturalToken());
     if (aDialog.phaseSValueText->text().trimmed() != SegmentKeywords::phaseSpin(extraTokens))
       newExtraTokens = SegmentKeywords::withPhaseSpin(newExtraTokens, aDialog.phaseSValueText->text());
+    newExtraTokens = withDialogSample(newExtraTokens, aDialog.sampleRow, this);
     if (newExtraTokens != extraTokens) segmentsTestModel->setLineExtras(index.row(), newExtraTokens);
   }
 }

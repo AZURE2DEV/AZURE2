@@ -1403,7 +1403,9 @@ class azure2:
         the fitted target densities (``densityfit`` lines and ``densitygroup`` groups),
         added the same way, and ``"doppler"``: the priors ((T - T0)/sigma)^2 of the
         fitted free-gas Doppler temperatures (``doppler T vary sigma [Tmax]`` lines),
-        added the same way.
+        added the same way, and ``"thickness"``: the priors ((n - n0)/sigma)^2 of the fitted sample
+        thicknesses (``transmission n vary sigma`` / ``yield n vary sigma`` segments; none for a
+        ``thicknessgroup`` follower), added the same way.
         """
         x = np.asarray(self.params_rwa if params is None else params, float)
         norm = np.zeros(self.nsegments)
@@ -1519,9 +1521,19 @@ class azure2:
                      else float(p.value))
             value = min(max(value, 0.25 * p.prior_nominal), p.doppler_max)
             doppler += ((value - p.prior_nominal) / p.prior_sigma) ** 2
+        # Fitted sample thicknesses: the prior of each free thickness with a sigma, the same way.  Below 0 the
+        # engine computes at 0; the prior is taken there too.
+        thickness = 0.0
+        for p in self.parameters.thicknesses:
+            if p.fixed or not p.prior_sigma or p.thickness_leader is not None:
+                continue
+            value = (float(x[p.free_index]) if p.free_index is not None and p.free_index < x.size
+                     else float(p.value))
+            value = max(value, 0.0)
+            thickness += ((value - p.prior_nominal) / p.prior_sigma) ** 2
         return {"norm": norm, "shift": shift, "shift_sqrt": shift_sqrt, "shift_fn": shift_fn,
                 "park": park, "abundance": abundance, "scattering_length": scattering_length,
-                "screening": screening, "density": density, "doppler": doppler}
+                "screening": screening, "density": density, "doppler": doppler, "thickness": thickness}
 
     @property
     def nuclei(self):
@@ -1619,7 +1631,7 @@ class azure2:
         return (float(np.sum(self.calculate_chi2_rwa(x)))
                 + float(np.sum(pen["norm"])) + float(np.sum(pen["shift"]))
                 + float(np.sum(pen["shift_sqrt"])) + float(np.sum(pen["shift_fn"]))
-                + pen["screening"] + pen["density"] + pen["doppler"])
+                + pen["screening"] + pen["density"] + pen["doppler"] + pen["thickness"])
 
     def chi2_and_grad(self, params):
         """Value and analytic gradient of the (data) chi-squared.

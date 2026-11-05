@@ -541,3 +541,29 @@ endif()
 add_test(NAME doppler_fitting COMMAND doppler_fitting_test)
 set_tests_properties(doppler_fitting PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+# The fitted sample thickness: the Sample row of the segment dialogs (transmission / yield block, Fit, prior,
+# thickness group), the Segments table, the Fitting tab's Sample Thicknesses rows (a tied thicknessgroup follower)
+# and the written project file.
+add_executable(thickness_fitting_test thickness_fitting_test.cpp)
+set_target_properties(thickness_fitting_test PROPERTIES AUTOMOC OFF)
+target_include_directories(thickness_fitting_test PRIVATE
+    ${AZURE2_SOURCE_DIR}/gui/include
+    ${AZURE2_SOURCE_DIR}/include
+)
+target_compile_definitions(thickness_fitting_test PRIVATE AZURE2_TEST_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+target_link_libraries(thickness_fitting_test PRIVATE
+    ${AZURESETUP_LIBRARIES}
+    ${AZUREAPI_LIBRARIES}
+    AZURE2Core
+    Qt5::Core Qt5::Gui Qt5::Widgets Qt5::Network
+)
+if(USE_QWT)
+    target_link_libraries(thickness_fitting_test PRIVATE ${QWT_LIBRARIES})
+endif()
+if(USE_ERYA)
+    target_link_libraries(thickness_fitting_test PRIVATE pugixml srim_utilities)
+endif()
+add_test(NAME thickness_fitting COMMAND thickness_fitting_test)
+set_tests_properties(thickness_fitting PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen")

@@ -79,6 +79,12 @@ FittingTab::FittingTab(QWidget *parent) :
   setupParameterTable(dopplerParamsTable, "Doppler Temperature Parameters");
   paramTabWidget->addTab(dopplerParamsTable, "Doppler Temperatures");
   paramTabWidget->setTabVisible(paramTabWidget->indexOf(dopplerParamsTable), false);
+  // Shown only when a transmission / yield segment has a fitted sample thickness (updateParameterTables).
+  thicknessParamsTable = new QTableWidget;
+  thicknessParamsTable->setObjectName("thicknessParamsTable");
+  setupParameterTable(thicknessParamsTable, "Sample Thickness Parameters");
+  paramTabWidget->addTab(thicknessParamsTable, "Sample Thicknesses");
+  paramTabWidget->setTabVisible(paramTabWidget->indexOf(thicknessParamsTable), false);
 
   mainLayout->addWidget(paramTabWidget);
 
@@ -172,7 +178,9 @@ void FittingTab::addParameterRow(QTableWidget *table, const FittingParameter &pa
   const QString tip = tr("%1: the engine uses the %2 of the group's first active segment; edit that segment's row, or "
                          "the group in the Segments tab.")
                           .arg(param.tiedTo)
-                          .arg(param.category == "norm" ? tr("normalization") : tr("energy shift"));
+                          .arg(param.category == "norm"        ? tr("normalization")
+                               : param.category == "thickness" ? tr("sample thickness")
+                                                               : tr("energy shift"));
   for (int c = 0; c < table->columnCount(); c++)
     if (QTableWidgetItem *item = table->item(row, c)) {
       item->setFlags(Qt::ItemIsSelectable);  // not enabled: greyed, not editable, not checkable
@@ -188,6 +196,7 @@ void FittingTab::updateParameterTables() {
   screeningParamsTable->setRowCount(0);
   densityParamsTable->setRowCount(0);
   dopplerParamsTable->setRowCount(0);
+  thicknessParamsTable->setRowCount(0);
   normParamsTable->setRowCount(0);
   shiftParamsTable->setRowCount(0);
 
@@ -209,6 +218,8 @@ void FittingTab::updateParameterTables() {
       targetTable = densityParamsTable;
     } else if (param.category == "doppler") {
       targetTable = dopplerParamsTable;
+    } else if (param.category == "thickness") {
+      targetTable = thicknessParamsTable;
     }
 
     if (targetTable) {
@@ -219,6 +230,7 @@ void FittingTab::updateParameterTables() {
   paramTabWidget->setTabVisible(paramTabWidget->indexOf(screeningParamsTable), screeningParamsTable->rowCount() > 0);
   paramTabWidget->setTabVisible(paramTabWidget->indexOf(densityParamsTable), densityParamsTable->rowCount() > 0);
   paramTabWidget->setTabVisible(paramTabWidget->indexOf(dopplerParamsTable), dopplerParamsTable->rowCount() > 0);
+  paramTabWidget->setTabVisible(paramTabWidget->indexOf(thicknessParamsTable), thicknessParamsTable->rowCount() > 0);
 }
 
 void FittingTab::reset() {
@@ -271,6 +283,9 @@ void FittingTab::setTabReferences(LevelsTab *levelsTab, SegmentsTab *segmentsTab
               this, SLOT(onSegmentEnergyShiftVaryChanged(int, bool)));
       // group blocks of the keyword tails (setLineExtras), activations and the leaders' values
       connect(segmentsModel, SIGNAL(dataChanged(QModelIndex, QModelIndex)), this, SLOT(syncSegmentGroups()));
+      // transmission / yield blocks with the fit form (segment_<key>_thickness rows)
+      connect(segmentsModel, SIGNAL(dataChanged(QModelIndex, QModelIndex)), this, SLOT(syncThickness()));
+      connect(segmentsModel, SIGNAL(modelReset()), this, SLOT(syncThickness()));
     }
   }
 
@@ -436,6 +451,7 @@ void FittingTab::populateFromCurrentGUIState() {
   appendScreeningParameters();
   appendDensityParameters();
   appendDopplerParameters();
+  appendThicknessParameters();
 
   assignMinuitIndices();
 
@@ -503,6 +519,11 @@ void FittingTab::assignMinuitIndices() {
                             segments[param.channelIndex].isActive == 1);
       counted = segmentActive &&
           (param.category == "shift" || segments[param.channelIndex].varyNorm == 1);
+    } else if (param.category == "thickness") {
+      // segment_<key>_thickness: emitted for every active line with the fit form, fixed or not, and its "segment"
+      // name makes the engine count it either way (ParameterLimitsManager::BuildIndexMap), as an energy shift.
+      counted = param.channelIndex >= 0 && param.channelIndex < segments.size() &&
+                segments[param.channelIndex].isActive == 1;
     }
     param.minuitIndex = counted ? paramIndex++ : -1;
   }
@@ -548,7 +569,7 @@ bool FittingTab::markTiedSegmentParameters() {
   // active row of each label
   QMap<QString, QVector<QString>> labels;
   QMap<QString, QMap<QString, int>> first;
-  for (const QString &keyword : {QString("normgroup"), QString("shiftgroup")}) {
+  for (const QString &keyword : {QString("normgroup"), QString("shiftgroup"), QString("thicknessgroup")}) {
     QVector<QString> &l = labels[keyword];
     l.resize(segments.size());
     for (int i = 0; i < segments.size(); i++) {
@@ -558,9 +579,17 @@ bool FittingTab::markTiedSegmentParameters() {
     }
   }
   bool changed = false;
+  // the value a row of segment s shows: its norm, its energy shift or the n of its transmission / yield block
+  auto valueOf = [&segments](const FittingParameter &p, int s) {
+    if (p.category == "norm") return segments[s].dataNorm;
+    if (p.category == "shift") return segments[s].energyShift;
+    return SegmentKeywords::sampleBlock(segments[s].extraTokens).n.toDouble();
+  };
   for (FittingParameter &p : fittingParameters) {
-    if (p.category != "norm" && p.category != "shift") continue;
-    const QString keyword = p.category == "norm" ? QString("normgroup") : QString("shiftgroup");
+    if (p.category != "norm" && p.category != "shift" && p.category != "thickness") continue;
+    const QString keyword = p.category == "norm"    ? QString("normgroup")
+                            : p.category == "shift" ? QString("shiftgroup")
+                                                    : QString("thicknessgroup");
     const int seg = p.channelIndex;
     const QString label = (seg >= 0 && seg < segments.size()) ? labels[keyword][seg] : QString();
     int leader = label.isEmpty() ? -1 : first[keyword].value(label, -1);
@@ -568,14 +597,13 @@ bool FittingTab::markTiedSegmentParameters() {
     const QString tiedTo = leader < 0 ? QString() : tr("tied to segment %1 (%2 %3)").arg(leader + 1).arg(keyword).arg(label);
     if (leader != p.tiedLeader || tiedTo != p.tiedTo) {
       // a row that leaves its group shows its own value again
-      if (leader < 0 && p.tiedLeader >= 0 && seg >= 0 && seg < segments.size())
-        p.value = p.category == "norm" ? segments[seg].dataNorm : segments[seg].energyShift;
+      if (leader < 0 && p.tiedLeader >= 0 && seg >= 0 && seg < segments.size()) p.value = valueOf(p, seg);
       p.tiedLeader = leader;
       p.tiedTo = tiedTo;
       changed = true;
     }
     if (leader >= 0) {
-      const double v = p.category == "norm" ? segments[leader].dataNorm : segments[leader].energyShift;
+      const double v = valueOf(p, leader);
       if (v != p.value) {
         p.value = v;
         changed = true;
@@ -817,6 +845,99 @@ void FittingTab::syncDoppler() {
   if (renumber) assignMinuitIndices();
 }
 
+// EData::FillMnParams emits one segment_<key>_thickness (atoms/barn) after the Doppler temperatures for every ACTIVE
+// data segment whose transmission / yield block has the fit form 'n vary sigma', key = the line's place among all
+// <segmentsData> lines.  Value = n, Error = the prior's sigma (0 = none), Nuisance = vary; all three live in the block.
+// A thicknessgroup follower's row is tied to its leader (markTiedSegmentParameters).
+void FittingTab::appendThicknessParameters() {
+  if (!segmentsTab_) return;
+  SegmentsDataModel *model = segmentsTab_->getSegmentsDataModel();
+  if (!model) return;
+  const QList<SegmentsDataData> segments = model->getLines();
+  for (int i = 0; i < segments.size(); i++) {
+    if (segments[i].isActive != 1) continue;
+    const SegmentKeywords::SampleBlock b = SegmentKeywords::sampleBlock(segments[i].extraTokens);
+    if (b.kind.isEmpty() || !b.fit) continue;
+    FittingParameter p;
+    p.name = QString("segment_%1_thickness").arg(i + 1);
+    p.value = b.n.toDouble();
+    p.lowerLimit = 0;
+    p.upperLimit = 0;
+    p.error = std::max(0.0, b.sigma.toDouble());
+    p.fitError = 0.0;
+    p.useAsNuisance = b.vary;
+    p.category = "thickness";
+    p.levelIndex = -1;
+    p.channelIndex = i;  // row in the Segments tab
+    fittingParameters.append(p);
+  }
+}
+
+void FittingTab::writeThickness(const FittingParameter &param) {
+  if (param.category != "thickness" || !param.tiedTo.isEmpty() || !segmentsTab_) return;
+  SegmentsDataModel *model = segmentsTab_->getSegmentsDataModel();
+  if (!model) return;
+  const int row = param.channelIndex;
+  if (row < 0 || row >= model->getLines().size() || !(param.value > 0.0)) return;
+  const QString tail = model->getLines().at(row).extraTokens;
+  SegmentKeywords::SampleBlock b = SegmentKeywords::sampleBlock(tail);
+  if (b.kind.isEmpty()) return;
+  // numbers that did not change keep their text
+  if (b.n.toDouble() != param.value) b.n = QString::number(param.value, 'g', 10);
+  const double sigma = std::max(0.0, param.error);
+  if (!b.fit || b.sigma.toDouble() != sigma) b.sigma = QString::number(sigma, 'g', 10);
+  b.fit = true;
+  b.vary = param.useAsNuisance;
+  const QString updated = SegmentKeywords::withSampleBlock(tail, b);
+  if (updated == tail) return;
+  // Blocked so the write does not come back through syncThickness; the tied rows follow below.
+  const bool old = model->blockSignals(true);
+  model->setLineExtras(row, updated);
+  model->blockSignals(old);
+  if (markTiedSegmentParameters())
+    for (const FittingParameter &p : fittingParameters)
+      if (p.tiedLeader >= 0) updateParameterTableValue(p.name, p.value);
+}
+
+void FittingTab::syncThickness() {
+  if (!segmentsTab_) return;
+  SegmentsDataModel *model = segmentsTab_->getSegmentsDataModel();
+  if (!model) return;
+  const QList<SegmentsDataData> segments = model->getLines();
+  QStringList want;
+  for (int i = 0; i < segments.size(); i++) {
+    if (segments[i].isActive != 1) continue;
+    const SegmentKeywords::SampleBlock b = SegmentKeywords::sampleBlock(segments[i].extraTokens);
+    if (!b.kind.isEmpty() && b.fit) want << QString("segment_%1_thickness").arg(i + 1);
+  }
+  QStringList have;
+  for (const FittingParameter &p : fittingParameters)
+    if (p.category == "thickness") have << p.name;
+  if (want != have) {
+    populateFromCurrentGUIState();
+    return;
+  }
+  for (int i = 0; i < fittingParameters.size(); i++) {
+    FittingParameter &p = fittingParameters[i];
+    if (p.category != "thickness" || !p.tiedTo.isEmpty() || p.channelIndex < 0 || p.channelIndex >= segments.size())
+      continue;
+    const SegmentKeywords::SampleBlock b = SegmentKeywords::sampleBlock(segments[p.channelIndex].extraTokens);
+    const double n = b.n.toDouble(), s = std::max(0.0, b.sigma.toDouble());
+    if (p.value != n) {
+      p.value = n;
+      updateParameterTableValue(p.name, p.value);
+    }
+    if (p.error != s) {
+      p.error = s;
+      updateParameterTableError(p.name, p.error);
+    }
+    if (p.useAsNuisance != b.vary) {
+      p.useAsNuisance = b.vary;
+      updateParameterTableCheckbox(p.name, p.useAsNuisance);
+    }
+  }
+}
+
 // EData::FillMnParams emits one screening_<n> (eV) after the shift-function parameters for each ACTIVE
 // <targetInt> line with a screening block, n its place among the active lines.  Value = U_e, Error = the
 // prior's sigma (0 = none), Nuisance = fitted; all three live on the Experimental Effects line.
@@ -1049,6 +1170,7 @@ void FittingTab::parameterItemChanged(QTableWidgetItem *item) {
       writeScreening(p);
       writeDensity(p);
       writeDoppler(p);
+      writeThickness(p);
     }
 
   } else if (col == 6) {  // Nuisance checkbox
@@ -1061,6 +1183,7 @@ void FittingTab::parameterItemChanged(QTableWidgetItem *item) {
     writeScreening(p);
     writeDensity(p);
     writeDoppler(p);
+    writeThickness(p);
     // Fitting or fixing an abundance, a screening potential, a density or a Doppler temperature changes the Minuit
     // vector, as with a normalization.
     if (p.category == "abundance" || p.category == "screening" || p.category == "density" || p.category == "doppler")
@@ -1266,6 +1389,7 @@ void FittingTab::loadSettings() {
         appendScreeningParameters();
         appendDensityParameters();
         appendDopplerParameters();
+        appendThicknessParameters();
         assignMinuitIndices();
       }
 
@@ -1918,6 +2042,14 @@ void FittingTab::loadSettings() {
           updatedCount++;
           updateParameterInOtherTabs(param.name, param);
         }
+        // A fitted sample thickness goes back to its line's transmission / yield block (its n); the vary flag and
+        // prior stay what the user set.  A thicknessgroup follower's value is its leader's and is not written.
+        if (param.category == "thickness" && param.tiedTo.isEmpty() && savParams.contains(param.name)) {
+          param.value = savParams[param.name].first;
+          param.fitError = savParams[param.name].second;
+          updatedCount++;
+          writeThickness(param);
+        }
       }
 
       // Refresh the parameter tables with ALL parameters (including fixed and non-varying)
@@ -2064,6 +2196,8 @@ void FittingTab::updateParameterInOtherTabs(const QString &paramName, const Fitt
     writeDensity(param);
   } else if (param.category == "doppler") {
     writeDoppler(param);
+  } else if (param.category == "thickness") {
+    writeThickness(param);
   } else if (param.category == "norm" || param.category == "shift") {
     // Update normalization or shift parameters in SegmentsDataModel
     SegmentsDataModel *segmentsModel = segmentsTab_->getSegmentsDataModel();
@@ -2101,6 +2235,7 @@ QTableWidget *FittingTab::tableForParameter(const QString &paramName) const {
   if (paramName.startsWith("screening_")) return screeningParamsTable;
   if (paramName.startsWith("density_")) return densityParamsTable;
   if (paramName.startsWith("doppler_")) return dopplerParamsTable;
+  if (paramName.startsWith("segment_") && paramName.endsWith("_thickness")) return thicknessParamsTable;
   if (paramName.startsWith("segment_") && paramName.contains("shift", Qt::CaseInsensitive)) return shiftParamsTable;
   if (paramName.startsWith("segment_") && paramName.contains("norm", Qt::CaseInsensitive)) return normParamsTable;
   return levelParamsTable;
@@ -2395,6 +2530,8 @@ void FittingTab::updateParameterTableCheckbox(const QString &paramName, bool che
     targetTable = densityParamsTable;
   } else if (paramName.startsWith("doppler_")) {
     targetTable = dopplerParamsTable;
+  } else if (paramName.startsWith("segment_") && paramName.endsWith("_thickness")) {
+    targetTable = thicknessParamsTable;
   } else if (paramName.contains("shift", Qt::CaseInsensitive)) {
     targetTable = shiftParamsTable;
   } else if (paramName.contains("norm", Qt::CaseInsensitive)) {

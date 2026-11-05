@@ -1203,7 +1203,8 @@ vector_r AZUREAPI::CalculateChi2GradRWA(const vector_r &params) const {
     if (fixed_[f]) continue;
     ParamKind kind = pmap.Desc(f).kind;
     if (eg && (kind == ParamKind::LevelEnergy || kind == ParamKind::Gamma || kind == ParamKind::Norm ||
-               kind == ParamKind::Screening || kind == ParamKind::Doppler)) continue;
+               kind == ParamKind::Screening || kind == ParamKind::Doppler || kind == ParamKind::Thickness))
+      continue;
     int packed = pmap.FullToPacked(f);
     if (packed < 0 || packed >= (int)params.size()) continue;
     double x0 = params[packed];
@@ -1536,6 +1537,18 @@ vector_r AZUREAPI::GetParameterInfo() const {
     const TargetEffect *te = data()->GetTargetEffect(data()->GetDopplerEffect(k));
     push(9, -1, -1, 0, -1, te->GetDopplerNominal(), data()->GetDopplerEffect(k), -1, te->GetDopplerLayoutTemperature(),
          -1, -1, -1, te->GetDopplerSigma());
+  }
+
+  // Fitted sample thicknesses (atoms/barn), one per transmission / yield segment line with the fit form 'n vary
+  // sigma': type 10, the segment key in field 13, the line's n (the prior centre) in field 5, its sigma in field 14
+  // (0 = no prior; 0 for a thickness-group follower), 0 = transmission / 1 = yield in field 6, and for a follower the
+  // key of its group's leader in field 7 (-1 otherwise).
+  for (int k = 1; k <= data()->NumThicknessParams(); ++k) {
+    const ESegment *seg = data()->GetSegment(data()->GetThicknessSegment(k));
+    const bool follower = seg->IsThicknessGroupFollower();
+    const double leaderKey = follower ? data()->GetSegments()[seg->GetThicknessLeaderPos()].GetSegmentKey() : -1;
+    push(10, -1, -1, 0, -1, seg->GetNominalThickness(), seg->IsYield() ? 1 : 0, leaderKey, -1, -1, -1,
+         seg->GetSegmentKey(), follower ? 0.0 : seg->GetThicknessSigma());
   }
 
   return info;

@@ -210,6 +210,22 @@ blocks of a file (``temperature``, ``fit``, ``vary``, ``sigma``, ``tmax``, ``max
 it. The fitted temperature travels in the ``.sav``; ``save_fit`` leaves the line's
 value, the prior's centre, as it is.
 
+A fitted sample thickness (``transmission n vary sigma`` or ``yield n vary sigma``
+on a segment line, :doc:`segments`) is a parameter of kind ``"thickness"``
+(``ParameterSet.thicknesses``; :attr:`Parameter.segment_key` is its segment,
+``prior_nominal`` / ``prior_sigma`` its prior, ``sample_kind`` ``"transmission"``
+or ``"yield"``, and ``thickness_leader`` the leader's segment key for a fixed
+``thicknessgroup`` follower). Its gradient entry and Jacobian column are
+analytic. ``penalties()["thickness"]`` is its prior, which ``objective()`` adds.
+``AzrModel.sample_thicknesses`` reads the blocks of a file (``kind``, ``n``,
+``fit``, ``vary``, ``sigma``, ``group``, ``active``),
+``AzrModel.set_sample_thickness(key, n=, vary=, sigma=, group=, kind=)`` writes
+one (giving ``vary`` or ``sigma`` writes the fit form, ``group=""`` removes the
+group), and ``add_data_segment(..., transmission=n or (n, vary, sigma),
+yield_=..., thickness_group=label)`` starts a line with it. The ``Segment``
+objects of :mod:`pyazr.datasets` carry ``thickness``, ``thickness_vary``
+(``None`` for the plain form), ``thickness_sigma`` and ``thickness_group``.
+
 .. warning::
 
    These return the **data** χ² only. AZURE2's own fit objective additionally

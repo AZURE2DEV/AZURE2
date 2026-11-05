@@ -1116,6 +1116,11 @@ std::string createPrettyParameterName(const std::string &paramName) {
     } catch (...) {}
   }
 
+  // Fitted sample thickness: "segment_X_thickness" -> "Segment X Sample Thickness (atoms/b)"
+  if (paramName.find("segment_") == 0 && paramName.size() > 10 &&
+      paramName.compare(paramName.size() - 10, 10, "_thickness") == 0)
+    return "Segment " + paramName.substr(8, paramName.size() - 18) + " Sample Thickness (atoms/b)";
+
   // Segment energy shift: "segment_X_energy_shift" -> "Segment X Energy Shift (keV)"
   if (paramName.find("segment_") == 0 && paramName.find("_energy_shift") != std::string::npos) {
     try {

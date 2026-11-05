@@ -96,6 +96,27 @@ class EData {
   void FillDopplerFromParams(const vector_r &, const Config *configure);
   /// Sum of the Doppler priors ((T - T0)/sigma)^2.
   double DopplerPenalty() const;
+  /*!
+   * Fitted sample thicknesses (ESegment::HasThicknessFit, `transmission n vary sigma` / `yield n vary sigma`).  One
+   * parameter `segment_<key>_thickness` (atoms/barn) per data segment whose line has the fit form, in segment order,
+   * after the Doppler temperatures; a thickness-group follower's is fixed at its leader's value.  None without the
+   * fit form.
+   */
+  int NumThicknessParams() const { return (int)thicknessSegments_.size(); }
+  /// Position (1-based, as GetSegment) of the segment owning thickness parameter k (1-based).
+  int GetThicknessSegment(int k) const { return thicknessSegments_[k - 1]; }
+  int GetThicknessParamOffset() const { return thicknessParamOffset_; }
+  /// The thickness parameter (1-based) whose value segment \p pos (1-based) uses: its own, its group leader's for a
+  /// follower; 0 when that thickness is no parameter.
+  int ThicknessParamOfSegment(int pos) const;
+  /// Set the fitted thicknesses from a parameter vector (a value below 0 is taken as 0); thickness-group followers
+  /// take their leader's.  Called by FillEnergyShiftsFromParams.
+  void FillThicknessFromParams(const vector_r &);
+  /// Sum of the thickness priors ((n - n0)/sigma)^2.
+  double ThicknessPenalty() const;
+  /// Link the thicknessgroup members to the group's first segment in file order; -1 (with an ERROR) when a member has
+  /// no transmission / yield block.  Also lays out the thickness parameters (NumThicknessParams).
+  int ResolveThicknessGroups(const Config &);
   /// Read the target-effects input file and build the TargetEffect objects.
   int ReadTargetEffectsFile(const Config &, CNuc *);
   /// Is this a fit? AZURECalc clones the compound nucleus and data per thread only when it is.
@@ -273,6 +294,8 @@ class EData {
   std::vector<int> densityParamOfEffect_;  // per effect (0-based): its density parameter, 0 = none
   int dopplerParamOffset_ = -1;        // -1 until FillMnParams has laid the vector out
   std::vector<int> dopplerEffects_;    // effect numbers with a fitted Doppler temperature, in order
+  int thicknessParamOffset_ = -1;      // -1 until FillMnParams has laid the vector out
+  std::vector<int> thicknessSegments_;  // positions (1-based) of the segments with a thickness parameter, in order
   /// Group the densityfit / densitygroup lines into parameters (ReadTargetEffectsFile); -1 on an error.
   int SetUpDensityParams(const Config &);
   bool isFit_;

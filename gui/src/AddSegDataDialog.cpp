@@ -446,6 +446,16 @@ AddSegDataDialog::AddSegDataDialog(QWidget *parent) :
   lowerLayout->addWidget(naturalLabel, 10, 0, Qt::AlignRight);
   lowerLayout->addWidget(naturalCombo, 10, 1, 1, 2);
   lowerLayout->addWidget(scatLenBox, 11, 0, 1, 3);
+  // the transmission / self-shielded yield of a thick sample and its thickness group
+  sampleRow = new SampleRow(true);
+  sampleRow->setObjectName("sampleRow");
+  sampleLabel = new QLabel(tr("Sample:"));
+  sampleLabel->setToolTip(sampleRow->kindCombo->toolTip());
+  lowerLayout->addWidget(sampleLabel, 12, 0, Qt::AlignRight);
+  lowerLayout->addWidget(sampleRow, 12, 1, 1, 2);
+  connect(entrancePairCombo, &PairKeyCombo::keyChanged, this, [this](int) { updateSampleRow(); });
+  connect(exitPairCombo, &PairKeyCombo::keyChanged, this, [this](int) { updateSampleRow(); });
+  updateSampleRow();
   connect(entrancePairCombo, SIGNAL(keyChanged(int)), this, SLOT(fillScatteringLengthSpins()));
 
   valueLayout->addLayout(lowerLayout, 2, 0, 1, 2);
@@ -576,6 +586,7 @@ void AddSegDataDialog::dataTypeChanged(int) {
   // Update fixed angle visibility when data type changes
   operationTypeChanged(operationCombo->currentIndex());
   updateNaturalCheck();
+  updateSampleRow();
 }
 
 void AddSegDataDialog::varyNormChanged(int state) {
@@ -769,6 +780,29 @@ void AddSegDataDialog::applyScatteringLengthMode(bool on) {
     naturalLabel->setVisible(pairs && pairs->nuclei().size() > 1);
     naturalCombo->setVisible(pairs && pairs->nuclei().size() > 1);
   }
+  updateSampleRow();
+}
+
+void AddSegDataDialog::setSampleBlock(const SegmentKeywords::SampleBlock &b) {
+  sampleRow->setBlock(b);
+  updateSampleRow();
+}
+
+void AddSegDataDialog::updateSampleRow() {
+  if (!sampleRow || !sampleLabel) return;
+  // The engine takes a transmission / yield block on an angle-integrated (or total-capture) observable of a neutral
+  // entrance pair (EData::FinishTransformedSegment); a line that has one keeps the row in view whatever it is.
+  bool applies = false;
+  const QList<PairsData> list = pairs ? pairs->getPairs() : QList<PairsData>();
+  const int key = entrancePairCombo->key();
+  if (!scatLenMode && key >= 1 && key <= list.size()) {
+    const PairsData &p = list.at(key - 1);
+    const int code = dataTypeCode();
+    applies = p.pairType == 0 && p.lightZ * p.heavyZ == 0 && (code == 0 || code == 3);
+  }
+  const bool show = !scatLenMode && (applies || sampleRow->hasLoadedBlock());
+  sampleLabel->setVisible(show);
+  sampleRow->setVisible(show);
 }
 
 void AddSegDataDialog::fillScatteringLengthSpins() {
@@ -831,6 +865,7 @@ QComboBox *AddSegDataDialog::groupCombo(const QString &keyword) const {
   if (keyword == "normgroup") return normGroupCombo;
   if (keyword == "shiftgroup") return shiftGroupCombo;
   if (keyword == "shiftfngroup") return shiftFnGroupCombo;
+  if (keyword == "thicknessgroup") return sampleRow->groupCombo;
   return nullptr;
 }
 
@@ -850,6 +885,7 @@ void AddSegDataDialog::setGroupChoices(const QString &keyword, const QStringList
 }
 
 QString AddSegDataDialog::groupLabel(const QString &keyword) const {
+  if (keyword == "thicknessgroup") return sampleRow->groupLabel();  // none without a transmission / yield block
   QComboBox *c = groupCombo(keyword);
   return c ? c->currentText().trimmed() : QString();
 }

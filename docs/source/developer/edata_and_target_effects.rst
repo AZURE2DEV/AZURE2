@@ -467,6 +467,24 @@ gradient (``GradTransformedPoint``) back-propagates each term's point or
 sub-point with :math:`f'` times the kernel weight (``TargetEffectWeights``);
 such points are never grouped (``Groupable``).  Test: ``tests/transmission_yield``.
 
+The fitted sample thickness: ``SegLine``'s ``ReadThicknessBlock`` reads the fit
+form ``n vary sigma`` (``ExtrapLine`` reads and ignores it), and
+``ESegment::GetSampleThickness`` is the current :math:`n`, separate from the
+line's (``GetNominalThickness``, the prior centre), so the transform kind never
+depends on the fitted value.  ``EData::ResolveThicknessGroups`` links the
+``thicknessgroup`` members to their first segment (``SetThicknessGroupFollower``)
+and lays out one ``segment_<key>_thickness`` per line with the fit form, after the
+Doppler temperatures in ``FillMnParams`` (a follower's is fixed, and
+``SyncNormGroupParams`` writes it as the leader's value).
+``FillThicknessFromParams`` (from ``FillEnergyShiftsFromParams``) sets the
+thicknesses; ``ThicknessParamOfSegment`` gives the parameter a segment's points
+move (the leader's for a follower), and ``GradTransformedPoint`` adds
+:math:`c_J\,\partial F/\partial n` (``Transmission`` / ``YieldY0``'s ``dTdn`` /
+``dYdn``) at every (sub-)point, kernel weight :math:`c_J` and after the Doppler
+step, into ``GradAccum::thickness`` (``ParamKind::Thickness``).  The prior is
+``ESegment::ThicknessPenalty`` / ``EData::ThicknessPenalty`` and
+``ForEachThicknessPrior`` in ``AZURECalc``; API record type 10.
+
 Point mapping across segments
 -----------------------------
 

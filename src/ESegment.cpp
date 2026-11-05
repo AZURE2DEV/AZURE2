@@ -111,6 +111,11 @@ ESegment::ESegment(SegLine segLine) {
   isTotal_ = segLine.total() == 1;
   transmission_ = segLine.transmission();
   yield_ = segLine.yieldThickness();
+  thickness_ = GetNominalThickness();
+  thicknessFit_ = segLine.thicknessFit();
+  thicknessVary_ = segLine.thicknessVary();
+  thicknessSigma_ = segLine.thicknessSigma();
+  thicknessGroup_ = segLine.thicknessGroup();
   if (segLine.isUPOS() == 1)
     isUPOS_ = true;
   else
@@ -204,6 +209,7 @@ ESegment::ESegment(ExtrapLine extrapLine) {
   isTotal_ = extrapLine.total() == 1;
   transmission_ = extrapLine.transmission();
   yield_ = extrapLine.yieldThickness();
+  thickness_ = GetNominalThickness();  // a test segment has no thickness parameter (ExtrapLine::thicknessFitIgnored)
 
   isUPOS_ = false;
   secondaryDecayL_ = 0;
@@ -1390,9 +1396,10 @@ bool CalculatePoint(EPoint *point, const char *role, CNuc *cnuc, const Config &c
 /*!
  * Transmission of a sample n atoms/barn thick, T = exp(-n s), and dT/ds.
  */
-double ESegment::Transmission(double n, double s, double *dTds) {
+double ESegment::Transmission(double n, double s, double *dTds, double *dTdn) {
   const double t = std::exp(-n * s);
   if (dTds) *dTds = -n * t;
+  if (dTdn) *dTdn = -s * t;
   return t;
 }
 
@@ -1400,7 +1407,8 @@ double ESegment::Transmission(double n, double s, double *dTds) {
  * SAMMY's self-shielded yield Y0 = (s / st)(1 - exp(-n st)) and its partial derivatives.  g(st) = (1 - e^{-n st}) / st
  * tends to n (thin sample: Y0 = n s); below |n st| = 1e-4 its series is used, so a vanishing total is no 0/0.
  */
-double ESegment::YieldY0(double n, double s, double st, double *dYds, double *dYdst) {
+double ESegment::YieldY0(double n, double s, double st, double *dYds, double *dYdst, double *dYdn) {
+  if (dYdn) *dYdn = s * std::exp(-n * st);  // d/dn [(s/st)(1 - e^{-n st})] = s e^{-n st}, also for st -> 0
   const double u = n * st;
   double g, dg;
   if (std::fabs(u) < 1.0e-4) {

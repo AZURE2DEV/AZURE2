@@ -160,6 +160,13 @@ QVariant SegmentsDataModel::data(const QModelIndex &index, int role) const {
     } else if (index.column() == 6)
       return QVariant();
     else if (index.column() == 7) {
+      // a transmission / self-shielded-yield segment: the observable, its thickness and whether it is fitted
+      const SegmentKeywords::SampleBlock sb = SegmentKeywords::sampleBlock(line.extraTokens);
+      if (!sb.kind.isEmpty()) {
+        const QString fit = !sb.fit ? QString() : sb.vary ? tr(", fitted") : tr(", fixed parameter");
+        return QString("<center>%1<br><small>n = %2 atoms/b%3</small></center>")
+            .arg(sb.kind == "transmission" ? tr("Transmission") : tr("Self-Shielded Yield"), sb.n, fit);
+      }
       if (line.dataType == 2) {
         QChar orbital;
         switch (line.phaseL) {
@@ -496,6 +503,7 @@ QStringList SegmentsDataModel::groupLabels(const QString &keyword) const {
 static QString groupShortName(const QString &keyword) {
   if (keyword == "normgroup") return QObject::tr("norm");
   if (keyword == "shiftgroup") return QObject::tr("shift");
+  if (keyword == "thicknessgroup") return QObject::tr("thickness");
   return QObject::tr("shift fn");
 }
 
@@ -515,9 +523,10 @@ QString SegmentsDataModel::groupsToolTip(int row) const {
   for (const QString &keyword : SegmentKeywords::groupKeywords()) {
     const QString label = SegmentKeywords::groupLabel(segDataLineList.at(row).extraTokens, keyword);
     if (label.isEmpty()) continue;
-    const QString what = keyword == "normgroup" ? tr("normalization")
-                         : keyword == "shiftgroup" ? tr("constant energy shift")
-                                                   : tr("shift function (each member keeps its own constant shift)");
+    const QString what = keyword == "normgroup"        ? tr("normalization")
+                         : keyword == "shiftgroup"     ? tr("constant energy shift")
+                         : keyword == "thicknessgroup" ? tr("sample thickness")
+                                                       : tr("shift function (each member keeps its own constant shift)");
     if (segDataLineList.at(row).isActive != 1) {
       lines << tr("%1 %2: inactive, not in the group").arg(keyword, label);
       continue;

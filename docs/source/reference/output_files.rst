@@ -27,9 +27,12 @@ experimental-effect line with a ``screening`` block adds its screening potential
 (eV) as ``screening_<n>`` after the energy-shift parameters, and a fitted target
 density (``densityfit``, one per line or ``densitygroup``) adds ``density_<n>``
 (atoms/cm²) after those, and a fitted Doppler temperature (``doppler T vary sigma``)
-adds ``doppler_<n>`` (K) after the densities.
+adds ``doppler_<n>`` (K) after the densities. A transmission or yield segment
+whose block has the fit form (``transmission n vary sigma``) adds its sample
+thickness ``segment_<k>_thickness`` (atoms/barn) after the Doppler temperatures; a
+``thicknessgroup`` follower's is written as its leader's value.
 
-The ``segment_<k>_*`` lines (normalizations and energy shifts) belong to the
+The ``segment_<k>_*`` lines (normalizations, energy shifts and sample thicknesses) belong to the
 data segments of the fit that wrote the file. A run without data -- an
 extrapolation (**Calculate Segments Without Data**) or a reaction rate --
 numbers its own test grids 1, 2, ... and does not apply those lines (the run

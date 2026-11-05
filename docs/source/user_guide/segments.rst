@@ -709,20 +709,85 @@ out (photon channels have no width in the level matrix), which matters only
 where capture is not small against the total; for a transmission add the
 capture pairs as **Sum** components if it does. The multiple-scattering terms
 of a capture yield (SAMMY's :math:`Y_1`, :math:`Y_2`, ...), which need the
-sample geometry, are not included, nor is a fitted sample thickness: correct
-the data for multiple scattering, and give the thickness its measured value.
+sample geometry, are not included: correct the data for multiple scattering.
 
 The keywords apply to test segments as well (a calculated transmission or
-yield curve), work in pyazr, and have an analytic gradient. The GUI keeps them
-through a load and save but has no control for them yet; a sample segment's
-decomposition file (``AZUREOut_sample_seg=<key>.out``) then notes that its
-total column is the transmission while the nucleus columns stay cross sections.
+yield curve), work in pyazr, and have an analytic gradient. A sample
+segment's decomposition file (``AZUREOut_sample_seg=<key>.out``) notes that
+its total column is the transmission while the nucleus columns stay cross
+sections.
+
+Fitted Sample Thickness
+^^^^^^^^^^^^^^^^^^^^^^^
+
+The thickness can be a fit parameter. The fit form of the block adds a vary
+flag and a prior width to it:
+
+.. code-block:: text
+
+   transmission <n> <vary> <sigma>
+   yield <n> <vary> <sigma>
+
+``vary`` is 0 or 1 and ``sigma`` is the width, in atoms/barn, of a Gaussian
+prior about the line's :math:`n` (0 = no prior). The line then has the
+parameter ``segment_<key>_thickness`` (atoms/barn; ``<key>`` the segment's
+number, as in ``segment_<key>_norm``). It is fixed for ``vary 0``. Its lower
+limit is 0, where :math:`T = 1` and :math:`Y_0 = 0`. With a prior the fit adds
+:math:`\left((n - n_0)/\sigma\right)^2`. chiSquared.out reports the sum of
+these terms as ``Total-Thickness-Chi-Squared``. A plain ``transmission <n>``
+has no parameter and gives exactly the output it gave before the fit form
+existed.
+
+.. code-block:: text
+
+   1 1 1 0.29 0.66 0 180 0 1 0 0 0 0 0 data/trans.dat 0 0 total 1 transmission 0.15 1 0.01
+
+A transmission and a capture yield measured on the same sample share one
+thickness through a **thickness group**, ``thicknessgroup <label>``. It works as
+``normgroup`` does for normalizations: every active segment with the label
+uses the thickness of the group's *first* active segment in file order, that
+is its :math:`n`, vary flag and prior. A later member keeps no free parameter
+of its own. If its line has the fit form, its ``segment_<key>_thickness`` is
+fixed at the leader's value, and param.sav records it so. Each member needs
+its own ``transmission`` or ``yield`` block; a ``thicknessgroup`` on a line
+without one is refused with an error.
+
+.. code-block:: text
+
+   1 1 1 0.29 0.66 0 180 0 1 0 0 0 0 0 data/trans.dat 0 0 total 1 transmission 0.15 1 0 thicknessgroup s
+   1 1 2 0.29 0.66 0 180 0 1 0 0 0 0 0 data/capt.dat 0 0 yield 0.15 thicknessgroup s
+
+The derivative of the observable with respect to :math:`n` is analytic,
+:math:`\partial T/\partial n = -\sigma e^{-n\sigma}` and
+:math:`\partial Y_0/\partial n = \sigma\, e^{-n\sigma_\mathrm{tot}}`. It is
+taken through the resolution kernel and the Doppler step exactly as the cross
+sections' derivatives are, so ``--use-gradient`` and the least-squares drivers
+(``--use-lm``) handle it like any other parameter, and an MCMC run takes the
+line's prior as the parameter's prior. Malformed fit forms are refused with an
+error naming the segment: ``vary`` not 0 or 1, ``sigma`` missing or negative,
+:math:`n \le 0`, or a ``thicknessgroup`` without a label.
+
+On a test segment (mode 3) the fit form is read but has no effect: a test
+segment has no fit parameters, uses its own :math:`n`, and prints a note. A
+``thicknessgroup`` there is skipped the same way. To extrapolate with a fitted
+thickness, copy the fitted value into the test line.
+
+In the GUI, the **Sample** row of the segment dialog sets the block. It holds
+a choice of None, Transmission or Self-shielded yield, the thickness in
+atoms/b, **Fit**, the prior sigma and the thickness group. The Segments table
+shows the observable and :math:`n` in the data-type column and the group in
+the Groups column. The Fitting tab lists the parameters under **Sample
+Thicknesses**, and a thickness-group follower is shown tied to its leader.
 
 .. warning::
 
    An engine older than November 2026 does not know the keywords and ignores
    them silently: it compares the cross section itself with the
-   transmission or yield data.
+   transmission or yield data. The engines of early November 2026 that know
+   ``transmission <n>`` but not its fit form (up to and including the one with
+   the fitted Doppler temperature) read :math:`n` and silently ignore the fit
+   form and ``thicknessgroup``: their keyword loop stops at the first token it
+   does not know, so the thickness stays at :math:`n` and is not fitted.
 
 Segments Without Data
 ---------------------

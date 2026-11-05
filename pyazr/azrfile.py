@@ -1443,6 +1443,97 @@ class AzrModel:
             raise KeyError(f"no <segmentsData> line matches {file_substr!r}.")
         return changed
 
+    # ---- sample thickness of transmission / yield segments ---------------------------------------------------
+
+    @staticmethod
+    def _thickness_block(kind, n, vary=None, sigma=None):
+        """The text of a ``transmission`` / ``yield`` block, checked as the engine checks it: ``kind n`` without
+        ``vary`` / ``sigma``, else the fit form ``kind n vary sigma``."""
+        if kind not in ("transmission", "yield"):
+            raise ValueError("the sample block is 'transmission' or 'yield'")
+        n = float(n)
+        if not n > 0:
+            raise ValueError("the sample thickness n must be > 0 (atoms/barn)")
+        if vary is None and sigma is None:
+            return f"{kind} {_fmt(n)}"
+        sigma = 0.0 if sigma is None else float(sigma)
+        if not sigma >= 0:
+            raise ValueError("the thickness prior sigma must be >= 0 (atoms/barn; 0 = no prior)")
+        return f"{kind} {_fmt(n)} {1 if vary else 0} {_fmt(sigma)}"
+
+    _THICKNESS_RE = re.compile(r"(?<!\S)(transmission|yield)\s+(\S+)(?:\s+([-+]?[0-9.][0-9.eE+-]*)"
+                               r"(?:\s+([-+]?[0-9.][0-9.eE+-]*))?)?(?!\S)")
+    _THICKNESSGROUP_RE = re.compile(r"(?<!\S)thicknessgroup\s+(\S+)")
+
+    def _data_segment_lines(self):
+        """(index into the suffix lines, line) of every non-blank <segmentsData> line; its place is the segment key."""
+        lines = self._suffix.splitlines()
+        if "<segmentsData>" not in lines:
+            return lines, []
+        a, b = lines.index("<segmentsData>"), lines.index("</segmentsData>")
+        return lines, [(i, lines[i]) for i in range(a + 1, b) if lines[i].strip()]
+
+    @property
+    def sample_thicknesses(self):
+        """The transmission / self-shielded-yield segments: ``{key: dict}`` for every data segment line (key = its
+        place among the ``<segmentsData>`` lines, as in ``segment_<key>_thickness``) with a ``transmission`` or
+        ``yield`` block.  Each dict holds ``kind`` ("transmission" / "yield"), ``n`` (atoms/barn), ``fit`` (the
+        fit form ``n vary sigma``, i.e. a parameter ``segment_<key>_thickness``), ``vary``, ``sigma`` (prior
+        width, 0 = none), ``group`` (the ``thicknessgroup`` label or ``None``) and ``active``."""
+        _, dl = self._data_segment_lines()
+        out = {}
+        for key, (_, line) in enumerate(dl, start=1):
+            m = self._THICKNESS_RE.search(line)
+            if not m:
+                continue
+            fit = m.group(3) is not None and m.group(4) is not None
+            g = self._THICKNESSGROUP_RE.search(line)
+            out[key] = dict(kind=m.group(1), n=float(m.group(2)), fit=fit,
+                            vary=fit and int(float(m.group(3))) == 1, sigma=float(m.group(4)) if fit else 0.0,
+                            group=g.group(1) if g else None, active=line.split()[0] == "1")
+        return out
+
+    def set_sample_thickness(self, key, n=None, vary=None, sigma=None, group=None, kind=None):
+        """Set the sample block of data segment ``key`` (its place among the ``<segmentsData>`` lines).
+
+        ``kind`` ("transmission" or "yield") adds the block to a line without one (with ``n``) or changes it;
+        ``n`` is the thickness (atoms/barn).  Giving ``vary`` or ``sigma`` writes the fit form ``kind n vary
+        sigma`` (the parameter ``segment_<key>_thickness``; ``sigma`` the prior width, 0 = none); ``vary=None``
+        and ``sigma=None`` on a fit-form line keep its values, and a plain line stays plain.  ``group`` sets the
+        ``thicknessgroup`` label ("" removes it).  Only these blocks change; every other character of the line is
+        kept.  Returns ``self``.
+        """
+        lines, dl = self._data_segment_lines()
+        if not 1 <= key <= len(dl):
+            raise ValueError(f"no data segment {key} ({len(dl)} segment lines)")
+        i, line = dl[key - 1]
+        old = self.sample_thicknesses.get(key)
+        if old is None and (kind is None or n is None):
+            raise ValueError(f"segment {key} has no transmission / yield block: give kind and n")
+        kind = old["kind"] if kind is None else kind
+        n = old["n"] if n is None else float(n)
+        fit = (old is not None and old["fit"]) or vary is not None or sigma is not None
+        if fit:
+            v = (old["vary"] if old else False) if vary is None else bool(vary)
+            sg = (old["sigma"] if old else 0.0) if sigma is None else float(sigma)
+            block = self._thickness_block(kind, n, v, sg)
+        else:
+            block = self._thickness_block(kind, n)
+        m = self._THICKNESS_RE.search(line)
+        line = (line[:m.start()] + block + line[m.end():]) if m else line.rstrip() + "  " + block
+        if group is not None:
+            label = str(group).strip()
+            if any(c.isspace() or c == '"' for c in label):
+                raise ValueError("thickness group: one token, no blank or quote.")
+            g = self._THICKNESSGROUP_RE.search(line)
+            if g:
+                line = (line[:g.start()] + (f"thicknessgroup {label}" if label else "") + line[g.end():]).rstrip()
+            elif label:
+                line = line.rstrip() + "  thicknessgroup " + label
+        lines[i] = line
+        self._suffix = "\n".join(lines)
+        return self
+
     def engine_level_keys(self):
         """``{(jgroup, level): AzrLevel}`` -- the numbering AZURE2 itself uses.
 
@@ -1735,7 +1826,8 @@ class AzrModel:
                          energy_shift_sqrt_error=0.0, vary_shift_sqrt=False,
                          shift_group=None, shift_fn=None, shift_fn_params=(),
                          natural=False, norm_group=None, covariance=None,
-                         shift_fn_group=None, absolute=False):
+                         shift_fn_group=None, absolute=False, transmission=None,
+                         yield_=None, thickness_group=None):
         """Append one data segment (a ``<segmentsData>`` line).
 
         ``data_file`` is the data file path (relative to the run directory,
@@ -1768,7 +1860,12 @@ class AzrModel:
         ``(value, sigma, vary)`` per parameter a0, a1, ..., writes a
         ``shiftfn`` block: E' = E + shift + f(x).  ``natural=True`` (or a
         sample name) writes a ``sample`` block: every term is weighted by the
-        abundance of its entrance pair's compound nucleus.
+        abundance of its entrance pair's compound nucleus.  ``transmission`` /
+        ``yield_`` (n in atoms/barn, or ``(n, vary, sigma)`` for the fit form: n
+        the parameter ``segment_<key>_thickness``, sigma its prior width, 0 =
+        none) make the segment a sample transmission or self-shielded yield, and
+        ``thickness_group`` (a label) writes a ``thicknessgroup`` block: the
+        segments with one label share the first one's thickness.
 
         Returns ``self`` so calls chain.
         """
@@ -1814,6 +1911,21 @@ class AzrModel:
             if observable != "angular-coefficients":
                 raise ValueError("absolute=True belongs to angular-coefficients segments.")
             toks += ["absolute", 1]
+        if transmission is not None and yield_ is not None:
+            raise ValueError("transmission and yield_: a segment is one or the other.")
+        for kw, spec in (("transmission", transmission), ("yield", yield_)):
+            if spec is None:
+                continue
+            spec = tuple(spec) if isinstance(spec, (tuple, list)) else (spec,)
+            if len(spec) not in (1, 3):
+                raise ValueError(f"{kw}: give n or (n, vary, sigma).")
+            toks += self._thickness_block(kw, *spec).split()
+        if thickness_group:
+            if transmission is None and yield_ is None:
+                raise ValueError("thickness_group needs the segment's own transmission or yield_.")
+            if any(c.isspace() or c == '"' for c in str(thickness_group)):
+                raise ValueError("thickness_group: one token, no blank or quote.")
+            toks += ["thicknessgroup", str(thickness_group)]
         if natural:                           # writers put the sample block last
             toks += ["sample", natural if isinstance(natural, str) else 1]
         line = "  ".join(t if isinstance(t, str) else _fmt(t) for t in toks)

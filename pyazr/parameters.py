@@ -18,7 +18,7 @@ from typing import Optional
 
 # Parameter kinds, indexed by the integer ``type`` code in the C++ record.
 _KINDS = {0: "energy", 1: "width", 2: "norm", 3: "shift", 4: "shift_sqrt", 5: "shift_fn",
-          6: "abundance", 7: "screening", 8: "density", 9: "doppler"}
+          6: "abundance", 7: "screening", 8: "density", 9: "doppler", 10: "thickness"}
 
 
 @dataclass(frozen=True)
@@ -68,7 +68,7 @@ class Parameter:
 
     index: int                      # position among *all* parameters
     name: str                       # raw AZURE2 parameter name
-    kind: str                       # 'energy' | 'width' | 'norm' | 'shift' | 'shift_sqrt' | 'shift_fn' | 'abundance' | 'screening' | 'density' | 'doppler'
+    kind: str                       # 'energy' | 'width' | 'norm' | 'shift' | 'shift_sqrt' | 'shift_fn' | 'abundance' | 'screening' | 'density' | 'doppler' | 'thickness'
     fixed: bool                     # held fixed during the fit?
     value: float                    # current (physical) value
     free_index: Optional[int]       # position among the non-fixed parameters
@@ -119,6 +119,12 @@ class Parameter:
     # sub-point grids and integration windows span (Tmax, else T0 + 3 sigma but at least 1.21 T0, or 2 T0 without
     # a prior; beyond it, or below T0/4, the engine uses the nearest end and warns).
     doppler_max: Optional[float] = None
+    # Fitted sample thickness (atoms/barn) of a data segment with ``transmission n vary sigma`` or ``yield n vary
+    # sigma`` (``segment_key``): ``prior_nominal`` (the line's n) / ``prior_sigma`` as above, ``sample_kind``
+    # ("transmission" or "yield") and, for a ``thicknessgroup`` follower (whose parameter is fixed at its leader's
+    # value and carries no prior), the leader's segment key.
+    sample_kind: Optional[str] = None
+    thickness_leader: Optional[int] = None
 
     @property
     def nucleus(self):
@@ -196,6 +202,18 @@ class Parameter:
                 prior_sigma=float(wigner_limit), doppler_max=float(S),
             )
 
+        if int(round(type_code)) == 10:
+            # a fitted sample thickness (atoms/barn): the segment key, the line's n in the level-energy field, the
+            # prior sigma in the Wigner-limit field, 0/1 (transmission/yield) in the channel field and a follower's
+            # leader key in L (AZUREAPI.h)
+            return cls(
+                index=index, name=name, kind="thickness",
+                fixed=bool(round(fixed)), value=float(value), free_index=free_index,
+                segment_key=int(round(segment_key)), prior_nominal=float(level_energy),
+                prior_sigma=float(wigner_limit), sample_kind="yield" if int(round(channel)) == 1 else "transmission",
+                thickness_leader=int(round(L)) if L >= 1 else None,
+            )
+
         return cls(
             index=index,
             name=name,
@@ -243,6 +261,13 @@ class Parameter:
             bits.append(f"max={self.density_max:.6g}")
         if self.kind == "doppler":
             bits.append(f"max={self.doppler_max:.6g}")
+        if self.kind == "thickness":
+            bits.append(f"segment={self.segment_key}")
+            bits.append(self.sample_kind)
+            if self.prior_sigma:
+                bits.append(f"prior={self.prior_nominal:.6g}+-{self.prior_sigma:.6g}")
+            if self.thickness_leader is not None:
+                bits.append(f"tied to segment {self.thickness_leader}")
         return "Parameter(" + ", ".join(bits) + ")"
 
 
@@ -536,6 +561,12 @@ class ParameterSet(list):
         """The fitted free-gas Doppler temperatures (K), one per <targetInt> line with ``doppler T vary sigma``
         (none otherwise)."""
         return ParameterSet(p for p in self if p.kind == "doppler")
+
+    @property
+    def thicknesses(self):
+        """The fitted sample thicknesses (atoms/barn), one per data segment whose ``transmission`` / ``yield``
+        block has the fit form ``n vary sigma`` (none otherwise); a ``thicknessgroup`` follower's is fixed."""
+        return ParameterSet(p for p in self if p.kind == "thickness")
 
     @property
     def sqrt_shifts(self):

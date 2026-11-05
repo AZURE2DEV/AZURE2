@@ -140,6 +140,7 @@ void GradAccum::Init(CNuc *compound) {
   abundance.assign(compound->NumAbundanceParams(), 0.0);
   screening.clear();
   doppler.clear();
+  thickness.clear();
 }
 
 /*!
@@ -152,6 +153,7 @@ void GradAccum::Zero() {
   std::fill(abundance.begin(), abundance.end(), 0.0);
   std::fill(screening.begin(), screening.end(), 0.0);
   std::fill(doppler.begin(), doppler.end(), 0.0);
+  std::fill(thickness.begin(), thickness.end(), 0.0);
   if (formalUsed) {
     for (auto &row : fe) std::fill(row.begin(), row.end(), 0.0);
     for (auto &lev : fgamma)
@@ -182,6 +184,8 @@ void GradAccum::Add(const GradAccum &o) {
   for (int k = 0; k < (int)o.screening.size(); k++) screening[k] += o.screening[k];
   if (o.doppler.size() > doppler.size()) doppler.resize(o.doppler.size(), 0.0);
   for (int k = 0; k < (int)o.doppler.size(); k++) doppler[k] += o.doppler[k];
+  if (o.thickness.size() > thickness.size()) thickness.resize(o.thickness.size(), 0.0);
+  for (int k = 0; k < (int)o.thickness.size(); k++) thickness[k] += o.thickness[k];
   for (size_t j = 0; j < o.lmUsed.size() && j < lmUsed.size(); j++)
     if (o.lmUsed[j]) {
       if (lmK[j].size() != o.lmK[j].size()) {
@@ -230,6 +234,10 @@ void GradAccum::Scatter(const ParamIndexMap &map, vector_r &gradFull) const {
   for (int k = 0; k < (int)doppler.size(); k++) {
     int di = map.DopplerIndex(k + 1);
     if (di >= 0 && di < (int)gradFull.size()) gradFull[di] += doppler[k];
+  }
+  for (int k = 0; k < (int)thickness.size(); k++) {
+    int ti = map.ThicknessIndex(k + 1);
+    if (ti >= 0 && ti < (int)gradFull.size()) gradFull[ti] += thickness[k];
   }
 }
 
@@ -422,6 +430,18 @@ ParamIndexMap BuildParamIndexMap(CNuc *compound, EData *data,
       map.dopplerIndex_[k] = i;
       ParamDesc d{ParamKind::Doppler, -1, -1, -1, -1, false};
       d.doppler = k;
+      map.desc_.push_back(d);
+      i++;
+    }
+  }
+
+  // --- Fitted sample thicknesses: one per transmission / yield line with the fit form (EData::FillMnParams). ---
+  // Analytic: d/dn of the transform (GradTransformedPoint), GradAccum::AddThickness.
+  if (data) {
+    for (int k = 1; k <= data->NumThicknessParams(); k++) {
+      map.thicknessIndex_[k] = i;
+      ParamDesc d{ParamKind::Thickness, -1, -1, -1, data->GetThicknessSegment(k), false};
+      d.thickness = k;
       map.desc_.push_back(d);
       i++;
     }
@@ -684,18 +704,22 @@ bool GradTransformedPoint(ESegment *segment, EData *data, int i, int pointIdx, C
   const bool yield = segment->IsYield();
   const bool natural = segment->IsNatural();
   const int sample = segment->GetNaturalSample();
+  // A fitted sample thickness (segment_<key>_thickness, its group leader's for a follower): dF/dn at the same values,
+  // dT/dn = -s exp(-n s), dY0/dn = s exp(-n s_t), with the kernel weight c of each (sub-)point.
+  const int thicknessParam = data ? data->ThicknessParamOfSegment(i) : 0;
   auto valueOf = [](EPoint *p, int c) {
     return (c == 1) ? p->GetFitE1CrossSection() : (c == 2) ? p->GetFitE2CrossSection() : p->GetFitCrossSection();
   };
   std::vector<double> v(terms.size());
   // fitBar c dF/d(term q) for the values v, one term's point or sub-point at a time
   auto backProp = [&](double c, auto pointOf) {
-    double sum = 0.0, total = 0.0, dS = 0.0, dT = 0.0;
+    double sum = 0.0, total = 0.0, dS = 0.0, dT = 0.0, dN = 0.0;
     for (size_t q = 0; q < terms.size(); q++) (terms[q].total ? total : sum) += terms[q].weight * v[q];
     if (yield)
-      ESegment::YieldY0(n, sum, total, &dS, &dT);
+      ESegment::YieldY0(n, sum, total, &dS, &dT, &dN);
     else
-      ESegment::Transmission(n, sum, &dS);
+      ESegment::Transmission(n, sum, &dS, &dN);
+    if (thicknessParam > 0) accum.AddThickness(thicknessParam, fitBar * c * dN);
     for (size_t q = 0; q < terms.size(); q++) {
       const double d = fitBar * c * (terms[q].total ? dT : dS);
       if (natural && !terms[q].total)

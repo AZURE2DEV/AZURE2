@@ -123,6 +123,13 @@ class AZUREAPI {
    *                      <targetInt> line with 'doppler T vary sigma
    *                      [Tmax]': as type 8, the layout temperature (the
    *                      largest the sub-point grids span) in field 8
+   *                   10=fitted sample thickness (atoms/barn) of a data
+   *                      segment with 'transmission n vary sigma' or
+   *                      'yield n vary sigma': the segment key in field 13,
+   *                      n (prior centre) in field 5, sigma in field 14
+   *                      (0 = none, and for a thicknessgroup follower),
+   *                      0 transmission / 1 yield in field 6, the group
+   *                      leader's key in field 7 for a follower (else -1)
    *   1  jgroup        1-based J-group index (R-matrix params only)
    *   2  J             total spin of the J-group / level
    *   3  parity        +1 / -1

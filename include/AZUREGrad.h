@@ -40,7 +40,8 @@ enum class ParamKind {
   Abundance,        ///< isotopic abundance of a compound nucleus (projects with an <abundances> block)
   Screening,        ///< electron-screening potential U_e (eV) of a <targetInt> line with a screening block
   Density,          ///< fitted areal density (atoms/cm^2) of a <targetInt> line or density group (densityfit)
-  Doppler           ///< fitted free-gas Doppler temperature (K) of a <targetInt> line ('doppler T vary sigma')
+  Doppler,          ///< fitted free-gas Doppler temperature (K) of a <targetInt> line ('doppler T vary sigma')
+  Thickness         ///< fitted sample thickness (atoms/barn) of a transmission / yield segment ('transmission n vary sigma')
 };
 
 /// Description of one entry in the full (unfiltered) flat parameter vector.
@@ -57,6 +58,7 @@ struct ParamDesc {
   int screening = -1;  ///< 1-based screening parameter (EData::GetScreeningEffect), Screening only, else -1
   int density = -1;    ///< 1-based density parameter (EData::GetDensityEffect), Density only, else -1
   int doppler = -1;    ///< 1-based Doppler parameter (EData::GetDopplerEffect), Doppler only, else -1
+  int thickness = -1;  ///< 1-based thickness parameter (EData::GetThicknessSegment), Thickness only, else -1
 };
 
 /*!
@@ -108,6 +110,11 @@ class ParamIndexMap {
     auto it = dopplerIndex_.find(k);
     return (it == dopplerIndex_.end()) ? -1 : it->second;
   }
+  /// Full index of the 1-based sample-thickness parameter k, or -1.
+  int ThicknessIndex(int k) const {
+    auto it = thicknessIndex_.find(k);
+    return (it == thicknessIndex_.end()) ? -1 : it->second;
+  }
 
   /// Number of entries in the full (unfiltered) parameter vector.
   int NumFull() const { return (int)desc_.size(); }
@@ -147,6 +154,7 @@ class ParamIndexMap {
   std::map<int, int> screeningIndex_;                    ///< screening parameter k -> full idx
   std::map<int, int> densityIndex_;                      ///< density parameter k -> full idx
   std::map<int, int> dopplerIndex_;                      ///< Doppler parameter k -> full idx
+  std::map<int, int> thicknessIndex_;                    ///< thickness parameter k -> full idx
   std::vector<int> fullToPacked_;
   std::vector<int> packedToFull_;
   int numPacked_ = 0;
@@ -180,6 +188,8 @@ struct GradAccum {
   std::vector<double> screening;
   // doppler[k-1]            -> d/dT (K) of Doppler-temperature parameter k (grows on first use)
   std::vector<double> doppler;
+  // thickness[k-1]          -> d/dn (atoms/barn) of sample-thickness parameter k (grows on first use)
+  std::vector<double> thickness;
   /*!
    * Cotangents of the formal energies and widths of the Brune and Park level
    * matrices, fe[j-1][k] and fgamma[j-1][k][ch-1] for formal level k
@@ -238,6 +248,12 @@ struct GradAccum {
     if (k < 1) return;
     if (k > (int)doppler.size()) doppler.resize(k, 0.0);
     doppler[k - 1] += v;
+  }
+  /// Add a contribution to d/dn (atoms/barn) of sample-thickness parameter k (1-based, EData::ThicknessParamOfSegment).
+  void AddThickness(int k, double v) {
+    if (k < 1) return;
+    if (k > (int)thickness.size()) thickness.resize(k, 0.0);
+    thickness[k - 1] += v;
   }
   /// Scatter into the flat (full) gradient vector using the index map.
   void Scatter(const ParamIndexMap &map, vector_r &gradFull) const;

@@ -10,6 +10,10 @@ namespace {
 bool IsEnergyShiftName(const std::string &name) {
   return name.compare(0, 8, "segment_") == 0 && name.find("_energy_shift") != std::string::npos;
 }
+// segment_<key>_thickness (a fitted sample thickness)
+bool IsThicknessName(const std::string &name) {
+  return name.compare(0, 8, "segment_") == 0 && name.size() > 10 && name.compare(name.size() - 10, 10, "_thickness") == 0;
+}
 }  // namespace
 
 /*!
@@ -114,11 +118,12 @@ void AZUREParams::ApplyUserParameterFile(const std::string &filename, std::ostre
         // flag of its .azr segment line, because its penalty does (a freed shift
         // would float with no penalty).  The .sav still sets its value.
         // A screening potential, a fitted target density and a fitted Doppler temperature likewise follow their
-        // <targetInt> vary flags.
+        // <targetInt> vary flags, and a fitted sample thickness the vary flag of its segment line.
         const bool isShift = IsEnergyShiftName(GetMinuitParams().GetName(i)) ||
                              GetMinuitParams().GetName(i).rfind("screening_", 0) == 0 ||
                              GetMinuitParams().GetName(i).rfind("density_", 0) == 0 ||
-                             GetMinuitParams().GetName(i).rfind("doppler_", 0) == 0;
+                             GetMinuitParams().GetName(i).rfind("doppler_", 0) == 0 ||
+                             IsThicknessName(GetMinuitParams().GetName(i));
         if (!isShift && GetMinuitParams().Value(i) == 0.0 && values[ii] != 0.0 &&
             GetMinuitParams().Parameter(i).IsFixed()) GetMinuitParams().Release(i);
         if (!isShift && GetMinuitParams().Value(i) != 0.0 && values[ii] == 0.0 &&

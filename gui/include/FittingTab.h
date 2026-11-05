@@ -111,6 +111,9 @@ class FittingTab : public QWidget {
   void syncSegmentGroups();
   /*! Mirror the Experimental Effects tab's fitted Doppler temperatures into the doppler rows. */
   void syncDoppler();
+  /*! Mirror the Segments tab's fitted sample thicknesses (transmission / yield lines with the fit form) into the
+   *  thickness rows; a changed set of rows rebuilds the list. */
+  void syncThickness();
 
  private:
   void setupParameterTable(QTableWidget *table, const QString &title);
@@ -135,6 +138,12 @@ class FittingTab : public QWidget {
   void appendDopplerParameters();
   /// The temperature, its prior sigma and its fit flag go back to the Experimental Effects tab.
   void writeDoppler(const FittingParameter &param);
+  /// Append segment_<key>_thickness (atoms/barn) for every active data segment whose transmission / yield block has
+  /// the fit form 'n vary sigma', in the engine's order (after the Doppler temperatures).
+  void appendThicknessParameters();
+  /// The thickness, its prior sigma and its fit flag go back to the segment line's transmission / yield block (a
+  /// thicknessgroup follower's row is tied and writes nothing).
+  void writeThickness(const FittingParameter &param);
   void assignMinuitIndices();
   void updateParameterInOtherTabs(const QString &paramName, const FittingParameter &param);
   void writeSegmentColumn(const FittingParameter &param, int column, const QVariant &value);
@@ -160,6 +169,7 @@ class FittingTab : public QWidget {
   QTableWidget *screeningParamsTable;
   QTableWidget *densityParamsTable;
   QTableWidget *dopplerParamsTable;
+  QTableWidget *thicknessParamsTable;
   QTableWidget *normParamsTable;
   QTableWidget *shiftParamsTable;
 

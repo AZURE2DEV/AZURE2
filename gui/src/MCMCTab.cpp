@@ -209,7 +209,7 @@ bool MCMCTab::isAutoPriorCategory(const QString &category) {
   // segment definition, so AZURECalcMCMC::BuildAutoPriors() derives their
   // priors from the data and overrides whatever this table holds.
   return category == "norm" || category == "shift" || category == "abundance" || category == "screening" ||
-         category == "density" || category == "doppler";
+         category == "density" || category == "doppler" || category == "thickness";
 }
 
 QString MCMCTab::categoryFromStoredName(const QString &name) {
@@ -221,6 +221,7 @@ QString MCMCTab::categoryFromStoredName(const QString &name) {
   if (name.contains("screening", Qt::CaseInsensitive)) return "screening";
   if (name.contains("target density", Qt::CaseInsensitive) || name.startsWith("density_")) return "density";
   if (name.contains("doppler", Qt::CaseInsensitive)) return "doppler";
+  if (name.contains("thickness", Qt::CaseInsensitive)) return "thickness";
   if (name.contains("norm", Qt::CaseInsensitive)) return "norm";
   if (name.contains("shift", Qt::CaseInsensitive)) return "shift";
   return "loaded";
@@ -675,6 +676,8 @@ void MCMCTab::loadFromAZUREParams(bool isRWA, std::string filename) {
           param.category = "density";  // likewise (densityfit sigma)
         } else if (paramName.startsWith("doppler_")) {
           param.category = "doppler";  // likewise (the doppler block's sigma)
+        } else if (paramName.startsWith("segment_") && paramName.endsWith("_thickness")) {
+          param.category = "thickness";  // likewise (the transmission / yield block's sigma)
         } else if (paramName.contains("norm", Qt::CaseInsensitive)) {
           param.category = "norm";
         } else if (paramName.contains("shift", Qt::CaseInsensitive)) {
@@ -696,9 +699,10 @@ void MCMCTab::loadFromAZUREParams(bool isRWA, std::string filename) {
             param.useGaussianPrior = (param.priorStd > 0.0);
             param.autoPrior = true;
           }
-        } else if (param.category == "screening" || param.category == "density" || param.category == "doppler") {
-          // The engine takes U_e's, a density's and a Doppler temperature's prior from its <targetInt> line
-          // (AZURECalcMCMC::BuildAutoPriors).
+        } else if (param.category == "screening" || param.category == "density" || param.category == "doppler" ||
+                   param.category == "thickness") {
+          // The engine takes U_e's, a density's and a Doppler temperature's prior from its <targetInt> line, and a
+          // sample thickness's from its segment line (AZURECalcMCMC::BuildAutoPriors).
           param.useGaussianPrior = false;
           param.autoPrior = true;
         } else if (isAutoPriorCategory(param.category)) {

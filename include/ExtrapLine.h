@@ -6,6 +6,7 @@
 #include <sstream>
 #include <vector>
 #include "ComponentList.h"
+#include "SegLine.h"  // ReadThicknessBlock
 
 /// A class to read and store a line from the extrapolation input file.
 
@@ -85,11 +86,18 @@ class ExtrapLine {
             break;
           }
         } else if (keyword == "transmission" || keyword == "yield") {
+          // The fit form "n vary sigma" is read and its vary / sigma ignored: a test segment has no parameter and
+          // uses n (EData::MakePoints notes it).
           double &n = (keyword == "transmission") ? transmission_ : yield_;
-          if (!(advancedStream >> n) || !(n > 0.0)) {
+          bool fit = false;
+          int vary = 0;
+          double sigma = 0.0;
+          parseError_ = ReadThicknessBlock(advancedStream, keyword, n, fit, vary, sigma);
+          if (!parseError_.empty()) {
             stream.setstate(std::ios::failbit);
             break;
           }
+          if (fit) thicknessFitIgnored_ = true;
         } else if (keyword == "covariance") {
           hasCovariance_ = true;  // a data-segment block only: EData::MakePoints refuses the line
           break;
@@ -99,9 +107,11 @@ class ExtrapLine {
           // now they are skipped with their values and the loop goes on.
           std::string a, b, c;
           if (!(advancedStream >> a >> b >> c)) break;
-        } else if (keyword == "shiftgroup" || keyword == "shiftfngroup" || keyword == "normgroup" || keyword == "absolute") {
+        } else if (keyword == "shiftgroup" || keyword == "shiftfngroup" || keyword == "normgroup" || keyword == "absolute" ||
+                   keyword == "thicknessgroup") {
           std::string a;
           if (!(advancedStream >> a)) break;
+          if (keyword == "thicknessgroup") thicknessFitIgnored_ = true;
         } else if (keyword == "shiftfn") {
           std::string expression;
           int numParams = 0;
@@ -206,6 +216,9 @@ class ExtrapLine {
   /// "transmission <n>" / "yield <n>" (SegLine.h): 0 when absent.
   double transmission() const { return transmission_; };
   double yieldThickness() const { return yield_; };
+  /// True when the line carries the fit form "n vary sigma" or a thicknessgroup block: a test segment ignores both
+  /// and uses its own n.
+  bool thicknessFitIgnored() const { return thicknessFitIgnored_; };
   /*!
    * Returns the semicolon-separated list of components.
    */
@@ -255,6 +268,7 @@ class ExtrapLine {
   int total_;
   double transmission_;
   double yield_;
+  bool thicknessFitIgnored_ = false;
   bool hasCovariance_ = false;
   std::string componentsList_;
   int isUPOS_;

@@ -495,6 +495,7 @@ int EData::Fill(const Config &configure, CNuc *theCNuc) {
 
   if (this->ResolveShiftGroups(configure) == -1) return -1;
   this->ResolveNormGroups(configure);
+  if (this->ResolveThicknessGroups(configure) == -1) return -1;
   if (this->ResolveCovarianceGroups(configure) == -1) return -1;
 
   if (this->NumSegments() > 0) {
@@ -563,6 +564,10 @@ int EData::MakePoints(const Config &configure, CNuc *theCNuc) {
             << " segment on the inverse channel instead." << std::endl;
         return -1;
       }
+      if (segment.isActive() == 1 && segment.thicknessFitIgnored())
+        configure.Note("Note: test segment #" + std::to_string(numTotalSegments) +
+                       " carries the fit form of its transmission / yield block or a thicknessgroup; a test segment "
+                       "has no fit parameter and uses its own sample thickness n.");
       if (segment.isActive() == 1) {
         ESegment NewSegment(segment);
         if (theCNuc->IsPairKey(NewSegment.GetEntranceKey())) {
@@ -2205,6 +2210,15 @@ void EData::WriteOutputFiles(const Config &configure, bool isFit, const BandData
       for (int k = 1; k <= this->NumDopplerParams(); k++)
         if (this->GetTargetEffect(this->GetDopplerEffect(k))->GetDopplerSigma() > 0.0) anyPrior = true;
       if (anyPrior) chiOut << " Total-Doppler-Chi-Squared: " << this->DopplerPenalty();
+    }
+    // Fitted sample thicknesses: their priors.
+    if (this->NumThicknessParams() > 0) {
+      bool anyPrior = false;
+      for (int k = 1; k <= this->NumThicknessParams(); k++) {
+        const ESegment *seg = &segments_[this->GetThicknessSegment(k) - 1];
+        if (seg->GetThicknessSigma() > 0.0 && !seg->IsThicknessGroupFollower()) anyPrior = true;
+      }
+      if (anyPrior) chiOut << " Total-Thickness-Chi-Squared: " << this->ThicknessPenalty();
     }
     // Measured scattering lengths (<scatteringLengths>; table in scatteringLengths.out).
     if (scatteringLengthChi2_ != 0.0)
@@ -4229,6 +4243,18 @@ void EData::SyncNormGroupParams(ROOT::Minuit2::MnUserParameters &p) const {
                                                                                      : segments_[lead].GetNorm();
     p.SetValue(index[pos], value);
   }
+  // Thickness-group followers likewise: their (fixed) segment_<key>_thickness is written as the leader's value.
+  if (thicknessParamOffset_ >= 0) {
+    for (int k = 1; k <= this->NumThicknessParams(); k++) {
+      const ESegment &seg = segments_[thicknessSegments_[k - 1] - 1];
+      const int idx = thicknessParamOffset_ + k - 1;
+      if (!seg.IsThicknessGroupFollower() || idx >= (int)p.Params().size()) continue;
+      const int lk = this->ThicknessParamOfSegment(thicknessSegments_[k - 1]);
+      const int lidx = (lk > 0) ? thicknessParamOffset_ + lk - 1 : -1;
+      p.SetValue(idx, (lidx >= 0 && lidx < (int)p.Params().size()) ? p.Value(lidx)
+                                                                     : segments_[seg.GetThicknessLeaderPos()].GetSampleThickness());
+    }
+  }
 }
 
 /*!
@@ -4322,6 +4348,95 @@ void EData::FillMnParams(ROOT::Minuit2::MnUserParameters &p) {
     p.SetLimits(varname, te->GetDopplerMinimum(), te->GetDopplerLayoutTemperature());
     if (!te->IsDopplerVaried()) p.Fix(varname);
   }
+
+  // Fitted sample thicknesses (atoms/barn): one per data segment whose transmission / yield block has the fit form
+  // 'n vary sigma', none otherwise.  A thickness-group follower's is fixed (its value is its leader's).
+  thicknessParamOffset_ = p.Params().size();
+  for (int k = 1; k <= this->NumThicknessParams(); k++) {
+    ESegment *seg = this->GetSegment(this->GetThicknessSegment(k));
+    snprintf(varname, sizeof(varname), "segment_%d_thickness", seg->GetSegmentKey());
+    const double n = seg->GetSampleThickness();
+    p.Add(varname, n, (seg->GetThicknessSigma() > 0.0) ? 0.1 * seg->GetThicknessSigma() : 0.01 * n);
+    p.SetLowerLimit(varname, 0.0);
+    if (!seg->IsThicknessVaried()) p.Fix(varname);
+  }
+}
+
+int EData::ResolveThicknessGroups(const Config &configure) {
+  std::vector<std::pair<std::string, int>> leaders;  // label, leader position (0-based)
+  for (int pos = 0; pos < (int)segments_.size(); pos++) {
+    ESegment &seg = segments_[pos];
+    const std::string label = seg.GetThicknessGroup();
+    if (label.empty()) continue;
+    if (!seg.IsTransformed()) {
+      configure.outStream << "ERROR: segment #" << seg.GetSegmentKey() << ": thicknessgroup '" << label
+                          << "' needs the segment's own transmission or yield block (the group shares the sample "
+                          << "thickness of transmission / yield segments)." << std::endl;
+      return -1;
+    }
+    auto it = std::find_if(leaders.begin(), leaders.end(),
+                           [&label](const std::pair<std::string, int> &e) { return e.first == label; });
+    if (it == leaders.end()) {
+      leaders.push_back({label, pos});
+      continue;
+    }
+    seg.SetThicknessGroupFollower(it->second, segments_[it->second].GetSampleThickness());
+  }
+  for (const auto &g : leaders) {
+    const ESegment &leader = segments_[g.second];
+    std::ostringstream members;
+    int n = 0;
+    for (const ESegment &seg : segments_)
+      if (seg.GetThicknessLeaderPos() == g.second) {
+        members << " " << seg.GetSegmentKey();
+        n++;
+      }
+    if (n == 0) {
+      configure.Note("Note: thickness group '" + g.first + "' has only segment #" +
+                     std::to_string(leader.GetSegmentKey()) + "; nothing is shared.");
+      continue;
+    }
+    configure.Note("Note: thickness group '" + g.first + "': segments #" + std::to_string(leader.GetSegmentKey()) +
+                   " +" + members.str() + " share one sample thickness (segment #" +
+                   std::to_string(leader.GetSegmentKey()) + "'s, " +
+                   (leader.HasThicknessFit() ? "parameter segment_" + std::to_string(leader.GetSegmentKey()) +
+                                                   "_thickness"
+                                             : std::string("fixed")) +
+                   ").");
+  }
+  thicknessSegments_.clear();
+  for (int pos = 0; pos < (int)segments_.size(); pos++)
+    if (segments_[pos].HasThicknessFit()) thicknessSegments_.push_back(pos + 1);
+  return 0;
+}
+
+int EData::ThicknessParamOfSegment(int pos) const {
+  if (pos < 1 || pos > (int)segments_.size()) return 0;
+  const int lead = segments_[pos - 1].GetThicknessLeaderPos();
+  const int owner = (lead >= 0) ? lead + 1 : pos;
+  for (int k = 1; k <= this->NumThicknessParams(); k++)
+    if (thicknessSegments_[k - 1] == owner) return k;
+  return 0;
+}
+
+void EData::FillThicknessFromParams(const vector_r &p) {
+  if (thicknessSegments_.empty() || thicknessParamOffset_ < 0) return;
+  for (int k = 1; k <= this->NumThicknessParams(); k++) {
+    const int idx = thicknessParamOffset_ + k - 1;
+    if (idx < 0 || idx >= (int)p.size()) return;  // a vector without the thickness block
+    ESegment &seg = segments_[thicknessSegments_[k - 1] - 1];
+    if (seg.IsThicknessGroupFollower()) continue;
+    seg.SetSampleThickness(std::max(0.0, p[idx]));
+  }
+  for (ESegment &seg : segments_)
+    if (seg.IsThicknessGroupFollower())
+      seg.SetSampleThickness(segments_[seg.GetThicknessLeaderPos()].GetSampleThickness());
+}
+
+double EData::ThicknessPenalty() const {
+  double chi2 = 0.0;
+  for (int k = 1; k <= this->NumThicknessParams(); k++) chi2 += segments_[thicknessSegments_[k - 1] - 1].ThicknessPenalty();
+  return chi2;
 }
 
 int EData::DopplerParamOfEffect(int n) const {
@@ -4527,6 +4642,8 @@ void EData::FillEnergyShiftsFromParams(const vector_r &p, EData *data, CNuc *the
   if (configure) this->FillDensitiesFromParams(p, *configure);
   // Fitted Doppler temperatures: only the kernel values move (the grids and pieces stay put).
   this->FillDopplerFromParams(p, configure);
+  // Fitted sample thicknesses: the n of the transmission / yield transforms.
+  this->FillThicknessFromParams(p);
   int i = GetEnergyShiftParamOffset();
   int j = GetEnergyShiftSqrtParamOffset();
   int k = 0;
@@ -4795,6 +4912,8 @@ EData *EData::Clone() const {
   dataCopy->densityParamOfEffect_ = this->densityParamOfEffect_;
   dataCopy->dopplerParamOffset_ = this->dopplerParamOffset_;
   dataCopy->dopplerEffects_ = this->dopplerEffects_;
+  dataCopy->thicknessParamOffset_ = this->thicknessParamOffset_;
+  dataCopy->thicknessSegments_ = this->thicknessSegments_;
   dataCopy->isFit_ = this->isFit_;
   dataCopy->isErrorAnalysis_ = this->isErrorAnalysis_;
   dataCopy->targetEffects_ = this->targetEffects_;

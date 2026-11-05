@@ -326,11 +326,12 @@ capture, the exit key being ignored, and now draws a warning saying so.
 A ``<segmentsData>`` line may end with the keyword blocks
 ``sqrtshift <b> <bError> <vary>``, ``sample <1|name>``, ``shiftgroup <label>``,
 ``shiftfngroup <label>``, ``normgroup <label>``, ``covariance <file>``,
-``shiftfn "<f(x)>" N ...``, ``total <0|1>``, ``transmission <n>``,
-``yield <n>`` and ``spin <s>`` (in any order;
+``shiftfn "<f(x)>" N ...``, ``total <0|1>``, ``transmission <n> [<vary> <sigma>]``,
+``yield <n> [<vary> <sigma>]``, ``thicknessgroup <label>`` and ``spin <s>`` (in any order;
 writers put ``sample`` last). A ``<segmentsTest>`` line honours ``sample``,
-``total``, ``transmission``, ``yield`` and ``spin``; the shift, norm and shift-function blocks have no
-meaning without data and are skipped there (before October 2026 they stopped
+``total``, ``transmission``, ``yield`` and ``spin``; the shift, norm, thickness-group and shift-function blocks
+have no meaning without data and are skipped there, as is the fit form of a ``transmission`` / ``yield`` block
+(a test segment uses its :math:`n`) (before October 2026 they stopped
 the keyword reader, so a ``sample`` or ``total`` written after them was lost),
 and ``covariance`` on a test line is refused (:doc:`../user_guide/segments`).
 The three shift fields of a data line (``shift shiftError vary``) are
@@ -365,6 +366,13 @@ e^{-n\sigma_\mathrm{tot}})`; the data file then holds transmissions or yields,
 and under a sub-point target effect the transform comes before the kernel
 (:doc:`../user_guide/segments`, "Sample Transmission and Self-Shielded
 Yield"). An engine older than November 2026 ignores both keywords silently.
+The fit form ``transmission <n> <vary> <sigma>`` (``vary`` 0 or 1, ``sigma`` the
+Gaussian prior width in atoms/barn, 0 = none) makes :math:`n` the fit parameter
+``segment_<key>_thickness``, and ``thicknessgroup <label>`` makes the segments
+with the label share the thickness of the first of them (each member needs its
+own ``transmission`` or ``yield`` block); a malformed fit form is refused. The
+engines of early November 2026 without the fit form read :math:`n` and ignore
+the rest of the block and ``thicknessgroup`` silently.
 ``sample 1`` multiplies the segment's own term and each composite component
 by the abundance of the term's entrance pair's compound nucleus in the
 unnamed sample (or the only sample, if every sample is named);
