@@ -88,6 +88,11 @@ class AddTargetIntDialog : public QDialog {
   QLineEdit *densitySigmaText;
   QLineEdit *densityMaxText;
   QLineEdit *densityGroupText;
+  // Free-gas Doppler broadening (the `doppler T` keyword): the effective temperature of the target atoms, K.
+  QCheckBox *isDopplerCheck;
+  QLineEdit *dopplerTemperatureText;
+  /*! Why the Doppler settings cannot be written (T not a number > 0), or an empty string. */
+  QString dopplerProblem() const;
   /*! Fill the density box from a line (densityMax 0 = the default, shown blank). */
   void setDensityFit(bool fit, bool vary, const QString &sigma, double densityMax, const QString &group);
   /*! Why the density settings cannot be written, or an empty string. */
@@ -141,10 +146,11 @@ class AddTargetIntDialog : public QDialog {
   void udrBrowse();
 
   void screeningCheckChanged(bool checked);
+  void dopplerCheckChanged(bool checked);
   void densityFitCheckChanged(bool checked);
   /// Show the grid maximum the engine would use when the field is left blank.
   void updateDensityDefault();
-  /// Refuses OK while the density settings are malformed (densityFitProblem).
+  /// Refuses OK while the density or Doppler settings are malformed (densityFitProblem, dopplerProblem).
   void accept() override;
   /// Fill U_e with the adiabatic limit of the listed segments' entrance pair.
   void useAdiabaticScreening();
@@ -163,6 +169,7 @@ class AddTargetIntDialog : public QDialog {
   QGroupBox *beamProfileBox;
   QGroupBox *udrBox;
   QGroupBox *screeningBox;
+  QGroupBox *dopplerBox;
   QGroupBox *densityBox;
   QLabel *densityDefaultLabel;
   std::function<double(const QString &)> adiabaticProvider_;

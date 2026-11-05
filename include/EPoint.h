@@ -409,6 +409,28 @@ class EPoint {
   void SetTargetEffectNum(int);
   void AddSubPoint(EPoint);
   void IntegrateTargetEffect(const Config &);
+  /*!
+   * Free-gas Doppler broadening on this point's sub-point grid (TargetEffect::IsDoppler): the weights w with
+   * sigma_D(eCM) = sum w.second * sigma(sub-point w.first), sigma linear in E between sub-points, from the
+   * velocity-space integral of TargetEffect::IsDoppler (4-point Gauss-Legendre on pieces no wider than u/4).
+   * Empty when the effect has no Doppler step or the point no grid.
+   */
+  void DopplerWeights(double eCM, std::vector<std::pair<int, double>> &w) const;
+  /*!
+   * While alive, IntegrateTargetEffect (and TargetEffectWeights) skip the Doppler step: for the
+   * transmission/yield assembly (ESegment::TransformedValue), which broadens the terms itself before the
+   * transform and only then hands the sub-point values to the kernel.
+   */
+  class DopplerAppliedScope {
+   public:
+    explicit DopplerAppliedScope(EPoint *p) : p_(p), prev_(p->doppler_applied_) { p_->doppler_applied_ = true; }
+    ~DopplerAppliedScope() { p_->doppler_applied_ = prev_; }
+    DopplerAppliedScope(const DopplerAppliedScope &) = delete;
+    DopplerAppliedScope &operator=(const DopplerAppliedScope &) = delete;
+   private:
+    EPoint *p_;
+    bool prev_;
+  };
   /// Exact weights c (0-based, one per sub-point) of IntegrateTargetEffect:
   /// yield = sum_i c[i] * (sub-point i's cross-section slot).  False if the
   /// integrator is not a pure linear form for this point.
@@ -452,6 +474,10 @@ class EPoint {
   /// rd(j) supplies sub-point j's value.
   template <class V, class Read>
   V IntegrateTargetEffectImpl(const Config &, Read rd);
+  /// The line's kernels (Gaussian, target integration, UDR, beam profile) on sub-point values rd(j).
+  template <class V, class Read>
+  V IntegrateKernelsImpl(const Config &, Read rd);
+  bool doppler_applied_ = false;  ///< see DopplerAppliedScope
   bool is_differential_;
   bool is_phase_;
   bool is_mapped_;

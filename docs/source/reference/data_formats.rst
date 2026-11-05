@@ -358,7 +358,11 @@ and ``densitygroup <label>`` make a thin target's density a fit parameter
 density), the largest density its sub-point grids span, and a label shared by
 lines that see one target; see :doc:`../user_guide/experimental_effects`. Engines
 older than the feature refuse a line with these keywords; GUIs older than it drop
-them on save.
+them on save. ``doppler T`` is free-gas Doppler broadening of the listed
+segments at the effective temperature T (kelvin), applied to the cross section
+before any ``transmission``/``yield`` transform and before the line's resolution
+kernel; a line may carry it alone. Engines older than November 2026 refuse a line
+with it; older GUIs drop it on save.
 
 .. tip::
 

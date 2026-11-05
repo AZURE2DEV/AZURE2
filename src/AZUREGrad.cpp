@@ -668,9 +668,56 @@ bool GradTransformedPoint(ESegment *segment, EData *data, int i, int pointIdx, C
       return GradAdjointPoint(terms[q].point, terms[q].xsComponent, cot, accum, shiftDeriv, compound, config);
     });
   }
+  const int nsp = base->NumSubPoints();
+  const TargetEffect *effect = base->GetParentData()->GetTargetEffect(base->GetTargetEffectNum());
+  if (effect && effect->IsDoppler()) {
+    // Doppler before the transform: Y = sum_J c_J F(sigma_D at J), sigma_D(J) = sum_k D_Jk sigma_k, J the kernel's
+    // sub-points (c_J its weights without the Doppler step) or, with no kernel after the Doppler step, the point
+    // itself (c = 1).  Term q's sub-point k gets the cotangent sum_J fitBar c_J dF/d(sum) weight_q D_Jk.
+    std::vector<std::vector<double>> raw(terms.size(), std::vector<double>(nsp));
+    for (size_t q = 0; q < terms.size(); q++) {
+      if (terms[q].point->NumSubPoints() != nsp) return false;
+      for (int k = 1; k <= nsp; k++) raw[q][k - 1] = valueOf(terms[q].point->GetSubPoint(k), terms[q].xsComponent);
+    }
+    std::vector<std::pair<double, double>> stage;  // (c.m. energy, kernel weight)
+    if (!effect->HasResolutionStage()) {
+      stage.emplace_back(base->GetCMEnergy(), 1.0);
+    } else {
+      std::vector<double> c;
+      EPoint::DopplerAppliedScope dopplerDone(base);
+      if (!base->TargetEffectWeights(config, c)) return false;
+      for (int j = 1; j <= nsp; j++)
+        if (c[j - 1] != 0.0) stage.emplace_back(base->GetSubPoint(j)->GetCMEnergy(), c[j - 1]);
+    }
+    std::vector<std::vector<double>> cot(terms.size(), std::vector<double>(nsp, 0.0));
+    std::vector<std::pair<int, double>> dw;
+    for (const auto &st : stage) {
+      base->DopplerWeights(st.first, dw);
+      for (size_t q = 0; q < terms.size(); q++) {
+        double s = 0.0;
+        for (const auto &t : dw) s += t.second * raw[q][t.first - 1];
+        v[q] = s;
+      }
+      backProp(st.second, [&](size_t q, double cq) {
+        for (const auto &t : dw) cot[q][t.first - 1] += cq * t.second;
+        return true;
+      });
+    }
+    for (size_t q = 0; q < terms.size(); q++)
+      for (int k = 1; k <= nsp; k++) {
+        if (cot[q][k - 1] == 0.0) continue;
+        EPoint *sp = terms[q].point->GetSubPoint(k);
+        AMatrixFunc amf(compound, config);
+        amf.ClearMatrices();
+        amf.FillMatrices(sp);
+        amf.InvertMatrices();
+        amf.CalculateTMatrix(sp);
+        if (!amf.PointAdjoint(sp, cot[q][k - 1], accum, shiftDeriv, terms[q].xsComponent)) return false;
+      }
+    return true;
+  }
   std::vector<double> c;
   if (!base->TargetEffectWeights(config, c)) return false;  // not a pure linear kernel: finite differences
-  const int nsp = base->NumSubPoints();
   for (int j = 1; j <= nsp; j++) {
     if (c[j - 1] == 0.0) continue;
     for (size_t q = 0; q < terms.size(); q++) {

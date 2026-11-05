@@ -19,9 +19,10 @@ int TargetIntModel::columnCount(const QModelIndex &parent) const {
 }
 
 // Effects that integrate over sub-points (and so use the integration-point
-// count and the adaptive grid).  The attenuation coefficients alone do not.
+// count and the adaptive grid).  The attenuation coefficients alone do not; free-gas Doppler broadening does,
+// with or without a kernel after it (TargetEffect::IsSubPointEffect).
 static bool usesSubPoints(const TargetIntData &t) {
-  return t.isTargetIntegration || t.isConvolution || t.isConvCoefficients || t.isBeamProfile || t.isUdr;
+  return t.isTargetIntegration || t.isConvolution || t.isConvCoefficients || t.isBeamProfile || t.isUdr || t.isDoppler;
 }
 
 // One-line summary of the effect types an entry switches on, for the table.
@@ -35,6 +36,8 @@ static QString effectSummary(const TargetIntData &t) {
   if (t.isBeamProfile) names << QObject::tr("Beam profile");
   if (t.isUdr) names << QObject::tr("User-defined resolution");
   if (t.isQCoefficients) names << QObject::tr("Attenuation coefficients");
+  if (t.isDoppler)
+    names << QObject::tr("Free-gas Doppler broadening, T = %1 K").arg(QString::number(t.dopplerTemperature, 'g', 6));
   if (t.isScreening)
     names << QObject::tr("Electron screening, U_e = %1 eV%2")
                  .arg(QString::number(t.screeningUe, 'g', 6), t.screeningVary ? QObject::tr(" (fitted)") : QString());
@@ -183,6 +186,10 @@ QVariant TargetIntModel::data(const QModelIndex &index, int role) const {
       return targetInt.densityMax;
     else if (index.column() == 43)
       return targetInt.densityGroup;
+    else if (index.column() == 44)
+      return targetInt.isDoppler ? QString(tr("YES")) : QString(tr("NO"));
+    else if (index.column() == 45)
+      return targetInt.dopplerTemperature;
   } else if (role == Qt::EditRole) {
     TargetIntData targetInt = targetIntList.at(index.row());
     if (index.column() == 1) return targetInt.segmentsList;
@@ -227,6 +234,8 @@ QVariant TargetIntModel::data(const QModelIndex &index, int role) const {
     if (index.column() == 41) return targetInt.densitySigma;
     if (index.column() == 42) return targetInt.densityMax;
     if (index.column() == 43) return targetInt.densityGroup;
+    if (index.column() == 44) return targetInt.isDoppler;
+    if (index.column() == 45) return targetInt.dopplerTemperature;
   } else if (role == Qt::CheckStateRole && index.column() == 0) {
     TargetIntData targetInt = targetIntList.at(index.row());
     if (targetInt.isActive == 1)
@@ -249,6 +258,8 @@ QVariant TargetIntModel::headerData(int section, Qt::Orientation orientation, in
       case 20: return tr("Width of the smooth blend at each range edge [MeV]; 0 = hard edges");
       case 21: return tr("Relative tolerance for automatic per-point application; 0 = always apply");
       case 33: return tr("Effect types switched on in this entry; their parameters are in the Edit dialog");
+      case 44: return tr("Free-gas Doppler broadening of the cross section (doppler keyword)");
+      case 45: return tr("Effective temperature of the target atoms for free-gas Doppler broadening [K]");
       default: return QVariant();
     }
   }
@@ -343,6 +354,10 @@ QVariant TargetIntModel::headerData(int section, Qt::Orientation orientation, in
         return tr("Density Grid Maximum");
       case 43:
         return tr("Density Group");
+      case 44:
+        return tr("Doppler?");
+      case 45:
+        return tr("Doppler T [K]");
       default:
         return QVariant();
     }
@@ -441,6 +456,10 @@ bool TargetIntModel::setData(const QModelIndex &index, const QVariant &value, in
       tempData.densityMax = value.toDouble();
     else if (index.column() == 43)
       tempData.densityGroup = value.toString().trimmed();
+    else if (index.column() == 44)
+      tempData.isDoppler = value.toBool();
+    else if (index.column() == 45)
+      tempData.dopplerTemperature = value.toDouble();
     else
       return false;
     targetIntList.replace(row, tempData);

@@ -552,6 +552,32 @@ AddTargetIntDialog::AddTargetIntDialog(QWidget *parent) :
   screeningBox->setLayout(screeningLayout);
   screeningBox->hide();
 
+  // Free-gas Doppler broadening (`doppler T`): the cross section broadened by the thermal motion of the target
+  // atoms before anything else on the line.  It integrates over sub-points, so it keeps the integration-point
+  // count and the adaptive grid enabled even on a line with no convolution or target integration.
+  isDopplerCheck = new QCheckBox(tr("Include Free-Gas Doppler Broadening"));
+  isDopplerCheck->setObjectName("dopplerCheck");
+  isDopplerCheck->setChecked(false);
+  isDopplerCheck->setToolTip(tr("Broaden the cross section of these segments for the thermal motion of the target atoms, "
+                                "taken as a free gas at an effective temperature T (the free-gas model, as in SAMMY). "
+                                "It is applied to the cross section first, before any transmission/yield transform and "
+                                "before the line's resolution kernel (Gaussian, user-defined resolution, target integration, "
+                                "beam profile). A line may carry it alone."));
+  connect(isDopplerCheck, SIGNAL(toggled(bool)), this, SLOT(dopplerCheckChanged(bool)));
+  dopplerTemperatureText = new QLineEdit;
+  dopplerTemperatureText->setObjectName("dopplerTemperature");
+  dopplerTemperatureText->setText("");
+  dopplerTemperatureText->setToolTip(tr("Effective temperature T of the target atoms in kelvin (> 0); "
+                                        "293.6 K is room temperature."));
+  dopplerBox = new QGroupBox(tr("Free-Gas Doppler Broadening"));
+  dopplerBox->setObjectName("dopplerBox");
+  QGridLayout *dopplerLayout = new QGridLayout;
+  dopplerLayout->addWidget(new QLabel(tr("Effective Temperature T [K]:")), 0, 0, Qt::AlignRight);
+  dopplerLayout->addWidget(dopplerTemperatureText, 0, 1);
+  dopplerLayout->setColumnStretch(2, 1);
+  dopplerBox->setLayout(dopplerLayout);
+  dopplerBox->hide();
+
   QHBoxLayout *buttonBox = new QHBoxLayout;
   buttonBox->addWidget(cancelButton);
   buttonBox->addWidget(okButton);
@@ -572,6 +598,8 @@ AddTargetIntDialog::AddTargetIntDialog(QWidget *parent) :
   mainLayout->addWidget(udrBox);
   mainLayout->addWidget(isScreeningCheck);
   mainLayout->addWidget(screeningBox);
+  mainLayout->addWidget(isDopplerCheck);
+  mainLayout->addWidget(dopplerBox);
   mainLayout->addLayout(buttonBox);
 
   setLayout(mainLayout);
@@ -657,9 +685,9 @@ void AddTargetIntDialog::beamProfileCheckChanged(bool checked) {
   } else {
     beamProfileBox->hide();
     numBeamComponentSpin->setEnabled(false);
-    if (!isConvolutionCheck->isChecked() && !isTargetIntegrationCheck->isChecked())
+    if (!isConvolutionCheck->isChecked() && !isTargetIntegrationCheck->isChecked() && !isDopplerCheck->isChecked())
       numPointsSpin->setEnabled(false);
-    if (!isTargetIntegrationCheck->isChecked()) {
+    if (!isTargetIntegrationCheck->isChecked() && !isDopplerCheck->isChecked()) {
       resonanceWidthMultiplierSpin->setEnabled(false);
       pointsPerWidthSpin->setEnabled(false);
     }
@@ -689,7 +717,7 @@ void AddTargetIntDialog::convolutionCheckChanged(bool checked) {
   sigmaText->setEnabled(checked);
   if (checked)
     numPointsSpin->setEnabled(true);
-  else if (!isTargetIntegrationCheck->isChecked())
+  else if (!isTargetIntegrationCheck->isChecked() && !isDopplerCheck->isChecked())
     numPointsSpin->setEnabled(false);
   sigmaModeChanged();
 }
@@ -750,9 +778,9 @@ void AddTargetIntDialog::targetIntCheckChanged(bool checked) {
     energyText->setEnabled(false);
     deltaEText->clear();
     calculateDeltaEButton->setEnabled(false);
-    if (!isConvolutionCheck->isChecked() && !isBeamProfileCheck->isChecked())
+    if (!isConvolutionCheck->isChecked() && !isBeamProfileCheck->isChecked() && !isDopplerCheck->isChecked())
       numPointsSpin->setEnabled(false);
-    if (!isBeamProfileCheck->isChecked()) {
+    if (!isBeamProfileCheck->isChecked() && !isDopplerCheck->isChecked()) {
       resonanceWidthMultiplierSpin->setEnabled(false);
       pointsPerWidthSpin->setEnabled(false);
     }
@@ -885,7 +913,8 @@ void AddTargetIntDialog::udrCheckChanged(bool checked) {
     pointsPerWidthSpin->setEnabled(true);
   } else {
     udrBox->hide();
-    if (!isConvolutionCheck->isChecked() && !isTargetIntegrationCheck->isChecked() && !isBeamProfileCheck->isChecked())
+    if (!isConvolutionCheck->isChecked() && !isTargetIntegrationCheck->isChecked() && !isBeamProfileCheck->isChecked() &&
+        !isDopplerCheck->isChecked())
       numPointsSpin->setEnabled(false);
   }
 }
@@ -947,13 +976,48 @@ QString AddTargetIntDialog::densityFitProblem() const {
   return QString();
 }
 
+QString AddTargetIntDialog::dopplerProblem() const {
+  if (!isDopplerCheck->isChecked()) return QString();
+  bool ok = false;
+  const double t = dopplerTemperatureText->text().trimmed().toDouble(&ok);
+  if (!ok || !(t > 0.0) || !std::isfinite(t))
+    return tr("The Doppler temperature \"%1\" is not a number above 0 in kelvin.").arg(dopplerTemperatureText->text().trimmed());
+  return QString();
+}
+
 void AddTargetIntDialog::accept() {
   const QString problem = densityFitProblem();
   if (!problem.isEmpty()) {
     QMessageBox::warning(this, tr("Fitted Target Density"), problem);
     return;
   }
+  const QString dProblem = dopplerProblem();
+  if (!dProblem.isEmpty()) {
+    QMessageBox::warning(this, tr("Free-Gas Doppler Broadening"), dProblem);
+    return;
+  }
   QDialog::accept();
+}
+
+void AddTargetIntDialog::dopplerCheckChanged(bool checked) {
+  dopplerBox->setVisible(checked);
+  if (checked) {
+    // A new Doppler entry starts at room temperature; an edited line sets its T before the check.
+    if (dopplerTemperatureText->text().trimmed().isEmpty()) dopplerTemperatureText->setText("293.6");
+    // The broadening is an integral over sub-points on the adaptive grid, with or without a kernel after it.
+    numPointsSpin->setEnabled(true);
+    resonanceWidthMultiplierSpin->setEnabled(true);
+    pointsPerWidthSpin->setEnabled(true);
+  } else {
+    if (!isConvolutionCheck->isChecked() && !isTargetIntegrationCheck->isChecked() && !isBeamProfileCheck->isChecked() &&
+        !isUdrCheck->isChecked())
+      numPointsSpin->setEnabled(false);
+    if (!isTargetIntegrationCheck->isChecked() && !isBeamProfileCheck->isChecked() && !isUdrCheck->isChecked()) {
+      resonanceWidthMultiplierSpin->setEnabled(false);
+      pointsPerWidthSpin->setEnabled(false);
+    }
+  }
+  this->adjustSize();
 }
 
 void AddTargetIntDialog::screeningCheckChanged(bool checked) {

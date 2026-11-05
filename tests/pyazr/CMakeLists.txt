@@ -366,3 +366,10 @@ add_test(NAME pyazr_composite_terms
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/composite_terms_test.py)
 set_tests_properties(pyazr_composite_terms PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
+# Free-gas Doppler broadening: add_target_effect(doppler=T) and the engine's Doppler step through the API
+# (tests/doppler_fgm models).
+add_test(NAME pyazr_doppler
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/doppler_test.py)
+set_tests_properties(pyazr_doppler PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")

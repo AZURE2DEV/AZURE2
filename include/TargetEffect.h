@@ -191,6 +191,30 @@ class TargetEffect {
   bool IsBeamProfile() const;
   /// Any effect whose yield is an integral over sub-points.
   bool IsSubPointEffect() const;
+
+  /*!
+   * Free-gas Doppler broadening (SAMMY's FGM, manual section "Free-Gas Model of Doppler Broadening"):
+   * `doppler <T>` on the line, T the effective temperature of the target atoms in kelvin.  The cross section
+   * of every sub-point is first broadened,
+   *   sigma_D(E) = 1/(u sqrt(pi) v^2) int_0^inf [exp(-(v-w)^2/u^2) - exp(-(v+w)^2/u^2)] w^2 sigma(w^2) dw,
+   * v = sqrt(E), w = sqrt(E'), E the lab-equivalent energy (E_cm over the point's c.m./lab factor), u^2 = kT m/M
+   * with m/M the beam/target mass ratio of the entrance pair, and only then are the transmission/yield transform
+   * (ESegment::TransformedValue) and the line's resolution kernel (Gaussian, UDR, target integration, beam
+   * profile) applied: SAMMY's order.  A line with only `doppler` evaluates sigma_D at the point.
+   */
+  bool IsDoppler() const { return isDoppler_; }
+  /// A malformed `doppler` block (missing or non-positive temperature).
+  bool HasDopplerError() const { return dopplerError_; }
+  /// Effective temperature, K.
+  double GetDopplerTemperature() const { return dopplerTemperature_; }
+  /// u = sqrt(kT m/M) in sqrt(MeV) for a pair of c.m./lab factor cmFactor = M/(m+M).
+  double DopplerU(double cmFactor) const;
+  /// The c.m. energy window [lo, hi] beyond which the Doppler kernel at c.m. energy eCM is below
+  /// exp(-convolutionRange^2 / 2), i.e. +-convolutionRange standard deviations in velocity (lo >= 0).
+  void DopplerWindow(double eCM, double cmFactor, double &lo, double &hi) const;
+  /// Does the line also carry a kernel applied after the Doppler step (Gaussian, UDR, target integration,
+  /// beam profile)?  Without one the value is sigma_D at the point.
+  bool HasResolutionStage() const { return IsGaussian() || isTargetIntegration_ || isUdr_ || isBeamProfile_; }
   /// Beam profile weight (sum of the skewed Gaussians) at an energy.
   double BeamProfileWeight(double energy) const;
   /// Energy range outside which the beam profile is negligible.
@@ -240,6 +264,9 @@ class TargetEffect {
     std::vector<std::vector<double> > r;       ///< per microsecond, per energy
     double loadedMin = 0.0, loadedMax = 0.0;   ///< lab MeV range the table covers
   };
+  bool isDoppler_ = false;
+  bool dopplerError_ = false;
+  double dopplerTemperature_ = 0.0;  ///< K
   bool isUdr_ = false;
   std::string udrFile_;
   double udrFlightPath_ = 0.0;   ///< metres

@@ -1026,6 +1026,11 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
                   << std::endl;
         return -1;
       }
+      if (targetEffect.HasDopplerError()) {
+        std::cout << "ERROR: <targetInt> line \"" << line << "\": a doppler block is 'doppler T' with the effective"
+                  << " temperature T > 0 in kelvin" << std::endl;
+        return -1;
+      }
       if (targetEffect.HasDensityFitError()) {
         std::cout << "ERROR: <targetInt> line \"" << line << "\": " << targetEffect.GetDensityFitErrorText() << std::endl;
         return -1;
@@ -1068,6 +1073,12 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
       // the line's energies stay in the lab frame; every point converts them with its own pair's factor
       const int bohrZ1 = (entrancePair->GetPType() == 20) ? 0 : entrancePair->GetZ(1);
       const int bohrZ2 = entrancePair->GetZ(2);
+      if (targetEffect->IsDoppler() && entrancePair->GetPType() != 0) {
+        configure.outStream << "ERROR: segment #" << segment->GetSegmentKey() << ": free-gas Doppler broadening"
+                            << " (doppler) needs a particle entrance pair (a beam on target atoms in thermal motion)"
+                            << std::endl;
+        return -1;
+      }
       if (targetEffect->IsUdr()) {
         double eMin = 1.0e300, eMax = 0.0;
         for (EPointIterator point = segment->GetPoints().begin(); point < segment->GetPoints().end(); point++) {
@@ -1172,6 +1183,15 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
             if (eLowLab <= 0.0 || eLowLab >= point->GetLabEnergy()) eLowLab = point->GetLabEnergy() * 0.9999;
             startEnergy = eHighLab * cmPerLab;
             endEnergy = std::max(eLowLab * cmPerLab, 0.001);
+          }
+          // Free-gas Doppler broadening comes first: every sub-point the kernel above reaches needs its own
+          // Doppler window inside the grid, so the window is widened by the Doppler width at each end.
+          if (targetEffect->IsDoppler()) {
+            double lo, hi, unused;
+            targetEffect->DopplerWindow(startEnergy, cmConversion, unused, hi);
+            targetEffect->DopplerWindow(endEnergy, cmConversion, lo, unused);
+            startEnergy = std::max(startEnergy, hi);
+            endEnergy = std::max(std::min(endEnergy, lo), 0.001);
           }
           std::vector<double> energyGrid;
           int numPoints = targetEffect->NumSubPoints();
@@ -1320,6 +1340,15 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
                 if (eLowLab <= 0.0 || eLowLab >= point->GetLabEnergy()) eLowLab = point->GetLabEnergy() * 0.9999;
                 startEnergy = eHighLab * cmPerLab;
                 endEnergy = std::max(eLowLab * cmPerLab, 0.001);
+              }
+              // Free-gas Doppler broadening comes first: every sub-point the kernel above reaches needs its own
+              // Doppler window inside the grid, so the window is widened by the Doppler width at each end.
+              if (targetEffect->IsDoppler()) {
+                double lo, hi, unused;
+                targetEffect->DopplerWindow(startEnergy, compConversion, unused, hi);
+                targetEffect->DopplerWindow(endEnergy, compConversion, lo, unused);
+                startEnergy = std::max(startEnergy, hi);
+                endEnergy = std::max(std::min(endEnergy, lo), 0.001);
               }
               std::vector<double> energyGrid;
               int numPoints = targetEffect->NumSubPoints();
@@ -1652,10 +1681,8 @@ void EData::PrintData(const Config &configure) {
       } else
         out << std::setw(12) << "Not Mapped"
             << std::setw(18) << data.point()->NumSubPoints();
-      if (data.point()->IsTargetEffect() &&
-          (data.point()->GetParentData()->GetTargetEffect(data.point()->GetTargetEffectNum())->IsConvolution() ||
-           data.point()->GetParentData()->GetTargetEffect(data.point()->GetTargetEffectNum())->IsTargetIntegration() ||
-           data.point()->GetParentData()->GetTargetEffect(data.point()->GetTargetEffectNum())->IsBeamProfile())) {
+      if (data.point()->IsTargetEffect() && data.point()->NumSubPoints() > 0 &&
+          data.point()->GetParentData()->GetTargetEffect(data.point()->GetTargetEffectNum())->IsSubPointEffect()) {
         out << std::setw(18) << data.point()->GetSubPoint(data.point()->NumSubPoints())->GetCMEnergy()
             << std::setw(18) << data.point()->GetSubPoint(1)->GetCMEnergy();
       }

@@ -1495,17 +1495,48 @@ double ESegment::TransformedValue(int pointIndex, CNuc *cnuc, const Config &conf
   for (const TransformTerm &t : terms)
     if (t.point->NumSubPoints() != nsp) return nan;  // refused at load (EData::CheckTransformedSegments)
   std::vector<double> baseRaw(nsp), f(nsp);
-  for (int j = 1; j <= nsp; j++) {
+  // Free-gas Doppler broadening comes before the transform (SAMMY's order): every term's sub-point values are
+  // broadened on the common grid, the broadened values transformed, and the kernel then applied without its own
+  // Doppler step.  A line with no kernel after the Doppler step gives the transform of sigma_D at the point.
+  const TargetEffect *effect = basePoint->GetParentData()->GetTargetEffect(basePoint->GetTargetEffectNum());
+  const bool doppler = effect && effect->IsDoppler();
+  std::vector<std::vector<double>> raw;
+  std::vector<std::pair<int, double>> dw;
+  auto broadenAt = [&](double e) {
+    basePoint->DopplerWeights(e, dw);
     for (size_t q = 0; q < terms.size(); q++) {
-      EPoint *sp = terms[q].point->GetSubPoint(j);
-      v[q] = valueOf(sp, terms[q].xsComponent);
+      double s = 0.0;
+      for (const auto &t : dw) s += t.second * raw[q][t.first - 1];
+      v[q] = s;
+    }
+  };
+  if (doppler) {
+    raw.assign(terms.size(), std::vector<double>(nsp));
+    for (size_t q = 0; q < terms.size(); q++)
+      for (int j = 1; j <= nsp; j++) raw[q][j - 1] = valueOf(terms[q].point->GetSubPoint(j), terms[q].xsComponent);
+    if (!effect->HasResolutionStage()) {
+      broadenAt(basePoint->GetCMEnergy());
+      return transform(v);
+    }
+  }
+  for (int j = 1; j <= nsp; j++) {
+    if (doppler) {
+      broadenAt(basePoint->GetSubPoint(j)->GetCMEnergy());
+    } else {
+      for (size_t q = 0; q < terms.size(); q++) {
+        EPoint *sp = terms[q].point->GetSubPoint(j);
+        v[q] = valueOf(sp, terms[q].xsComponent);
+      }
     }
     f[j - 1] = transform(v);
     baseRaw[j - 1] = basePoint->GetSubPoint(j)->GetFitCrossSection();
   }
   const double baseIntegrated = basePoint->GetFitCrossSection();
   for (int j = 1; j <= nsp; j++) basePoint->GetSubPoint(j)->SetFitCrossSection(f[j - 1]);
-  basePoint->IntegrateTargetEffect(configure);
+  {
+    EPoint::DopplerAppliedScope dopplerDone(basePoint);
+    basePoint->IntegrateTargetEffect(configure);
+  }
   const double value = basePoint->GetFitCrossSection();
   for (int j = 1; j <= nsp; j++) basePoint->GetSubPoint(j)->SetFitCrossSection(baseRaw[j - 1]);
   basePoint->SetFitCrossSection(baseIntegrated);

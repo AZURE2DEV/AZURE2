@@ -1854,7 +1854,8 @@ class AzrModel:
                           photodissociation=False, q_coefficients=None,
                           resonance_width_multiplier=20.0, points_per_width=50.0,
                           udr_file=None, flight_path=None, udr_burst=0.0,
-                          udr_channel=0.0, udr_centred=True, screening=None, active=True):
+                          udr_channel=0.0, udr_centred=True, screening=None, doppler=None,
+                          active=True):
         """Append one experimental effect (a ``<targetInt>`` line).
 
         ``segments`` is the segment-key list as AZURE2 writes it (``"3"``,
@@ -1899,6 +1900,12 @@ class AzrModel:
         ``vary`` U_e is a fit parameter (``screening_<n>``), with a Gaussian prior
         of width ``sigma`` about the value given when ``sigma > 0``.  A line may
         carry screening alone (no other option).
+
+        ``doppler`` is free-gas Doppler broadening at that effective temperature
+        (kelvin, > 0): the cross section of every sub-point is broadened first,
+        then any transmission/yield transform and the kernel above are applied
+        (user guide, "Free-Gas Doppler Broadening").  A line may carry it alone;
+        engines older than November 2026 refuse such a line.
         Returns ``self``.
         """
         if not isinstance(segments, str):
@@ -1938,6 +1945,10 @@ class AzrModel:
             if sigma < 0:
                 raise ValueError("the screening prior sigma must be >= 0")
             toks += ["screening", _fmt(ue), 1 if vary else 0, _fmt(sigma)]
+        if doppler is not None:
+            if not float(doppler) > 0:
+                raise ValueError("the doppler temperature must be > 0 kelvin")
+            toks += ["doppler", _fmt(doppler)]
         line = "  ".join(t if isinstance(t, str) else _fmt(t) for t in toks)
         lines = self._suffix.splitlines()
         if "<targetInt>" in lines:

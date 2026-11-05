@@ -649,7 +649,10 @@ Exponentiating a broadened cross section fills in the dips: on the test model
 (an s-wave resonance with :math:`\Gamma_n = 34` keV, :math:`n\sigma \approx 1`
 at the peak, a 15 keV beam spread) the two differ by 6 % at the resonance.
 Fitting transmission data rather than a total cross section reduced from them
-avoids the problem altogether.
+avoids the problem altogether. Free-gas Doppler broadening (``doppler T`` on the
+``<targetInt>`` line, :doc:`experimental_effects`) acts on the cross section
+itself, so it comes first: Doppler, then the transform, then the resolution
+kernel.
 
 ``transmission``
    The segment's value -- its own term, a **Sum** of terms, or an

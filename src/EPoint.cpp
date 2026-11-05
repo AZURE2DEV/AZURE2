@@ -17,6 +17,8 @@
 #include "TargetEffect.h"
 #include "IntegratedFermiFunc.h"
 #include <iostream>
+#include <map>
+#include <cmath>
 #include <sstream>
 #include <assert.h>
 #include <fstream>
@@ -2174,6 +2176,78 @@ void GridQuadrature(EPoint *point, Read rd, double lo, double hi, bool divideByS
 
 template <class V, class Read>
 V EPoint::IntegrateTargetEffectImpl(const Config &configure, Read rd) {
+  TargetEffect *targetEffect = this->GetParentData()->GetTargetEffect(this->GetTargetEffectNum());
+  if (!targetEffect->IsDoppler() || doppler_applied_) return this->IntegrateKernelsImpl<V>(configure, rd);
+  // Free-gas Doppler broadening first (SAMMY's order), then the line's kernel on the broadened values.
+  const int n = this->NumSubPoints();
+  if (n < 2) return V(0.0);
+  std::vector<std::pair<int, double>> w;
+  auto broaden = [&](double e) {
+    this->DopplerWeights(e, w);
+    V s = 0.0;
+    for (const auto &t : w) s += t.second * rd(t.first);
+    return s;
+  };
+  if (!targetEffect->HasResolutionStage()) return broaden(this->GetCMEnergy());
+  std::vector<V> b(n);
+  for (int j = 1; j <= n; j++) b[j - 1] = broaden(this->GetSubPoint(j)->GetCMEnergy());
+  return this->IntegrateKernelsImpl<V>(configure, [&b](int j) { return b[j - 1]; });
+}
+
+void EPoint::DopplerWeights(double eCM, std::vector<std::pair<int, double>> &w) const {
+  w.clear();
+  const TargetEffect *te = this->GetParentData()->GetTargetEffect(this->GetTargetEffectNum());
+  const int n = this->NumSubPoints();
+  const double c = cm_factor_;
+  const double u = te->DopplerU(c);
+  if (n < 2 || !(u > 0.0) || !(eCM > 0.0)) return;
+  double lo, hi;
+  te->DopplerWindow(eCM, c, lo, hi);
+  const double v = std::sqrt(eCM / c);
+  const double norm = 1.0 / (u * std::sqrt(M_PI) * v * v);
+  // 4-point Gauss-Legendre on [-1, 1]
+  static const double gx[4] = {-0.8611363115940526, -0.3399810435848563, 0.3399810435848563, 0.8611363115940526};
+  static const double gw[4] = {0.3478548451374538, 0.6521451548625461, 0.6521451548625461, 0.3478548451374538};
+  auto energy = [this](int j) { return const_cast<EPoint *>(this)->GetSubPoint(j)->GetCMEnergy(); };
+  // sub-points run from high to low energy: the first interval (j, j+1) whose lower end lies below hi
+  int first = 1, last = n - 1;
+  {
+    int a = 1, b = n;  // energy(a) >= ... >= energy(b)
+    while (b - a > 1) {
+      const int m = (a + b) / 2;
+      (energy(m) > hi ? a : b) = m;
+    }
+    first = a;
+  }
+  std::map<int, double> acc;
+  for (int j = first; j <= last; j++) {
+    const double Ea = energy(j), Eb = energy(j + 1);
+    if (Ea <= lo) break;
+    if (Eb >= hi) continue;
+    const double a = std::min(Ea, hi), b = std::max(Eb, lo);
+    if (!(a > b) || !(Ea > Eb)) continue;
+    const double wa = std::sqrt(a / c), wb = std::sqrt(b / c);
+    const int pieces = std::max(1, static_cast<int>(std::ceil((wa - wb) / (0.25 * u))));
+    const double hw = (wa - wb) / pieces;
+    double toA = 0.0, toB = 0.0;
+    for (int p = 0; p < pieces; p++) {
+      const double mid = wb + (p + 0.5) * hw, half = 0.5 * hw;
+      for (int g = 0; g < 4; g++) {
+        const double x = mid + half * gx[g];
+        const double k = (std::exp(-(v - x) * (v - x) / (u * u)) - std::exp(-(v + x) * (v + x) / (u * u))) * x * x;
+        const double frac = (Ea - c * x * x) / (Ea - Eb);  // 0 at sub-point j, 1 at sub-point j + 1
+        toA += half * gw[g] * k * (1.0 - frac);
+        toB += half * gw[g] * k * frac;
+      }
+    }
+    acc[j] += norm * toA;
+    acc[j + 1] += norm * toB;
+  }
+  w.assign(acc.begin(), acc.end());
+}
+
+template <class V, class Read>
+V EPoint::IntegrateKernelsImpl(const Config &configure, Read rd) {
   V yield = 0.0;
   TargetEffect *targetEffect = this->GetParentData()->GetTargetEffect(this->GetTargetEffectNum());
   const int numPoints = this->NumSubPoints();

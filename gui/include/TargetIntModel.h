@@ -7,9 +7,10 @@
 Q_DECLARE_METATYPE(QList<double>);
 
 struct TargetIntData {
-  static const int SIZE = 44;  // column 33: derived, display-only summary of the effect types; 34: sigmaLab;
+  static const int SIZE = 46;  // column 33: derived, display-only summary of the effect types; 34: sigmaLab;
                                // 35-38: electron screening (on, U_e eV, vary, prior sigma eV);
-                               // 39-43: fitted density (densityfit on, vary, prior sigma, grid maximum, group)
+                               // 39-43: fitted density (densityfit on, vary, prior sigma, grid maximum, group);
+                               // 44-45: free-gas Doppler broadening (doppler on, temperature K)
   int isActive;
   QString segmentsList;
   int numPoints;
@@ -70,6 +71,12 @@ struct TargetIntData {
   QString densitySigma = "0";
   double densityMax = 0.;
   QString densityGroup;
+  // Free-gas Doppler broadening (the `doppler T` keyword, SAMMY's FGM): target atoms in thermal motion at the
+  // effective temperature T (K, > 0).  The engine broadens the cross section first, then applies any
+  // transmission/yield transform and the line's resolution kernel; a line may carry it alone (no convolution,
+  // no target integration), and it integrates over the line's sub-points either way.
+  bool isDoppler = false;
+  double dopplerTemperature = 0.;  // K
 };
 
 /*! The prior width of a densityfit sigma token ("2.3%" of \p density, or atoms/cm^2); -1 if unreadable or negative. */
