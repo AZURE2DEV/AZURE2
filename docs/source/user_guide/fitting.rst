@@ -63,6 +63,17 @@ Normalization Parameters
 Lists the normalization factors for each data segment that has **Vary Norm?**
 enabled. These parameters scale the data yield during fitting.
 
+A member of a normalization group (``normgroup <label>``, set in the
+**Groups** field of the data segment dialog, :doc:`segments`) that is not the
+group's first active segment has no normalization of its own: the engine uses
+the first segment's. Its row is greyed and read-only, has no **Use as
+Nuisance** check box, shows the first segment's value and reads, e.g.,
+"tied to segment 1 (normgroup D)". To fit or fix the shared normalization,
+change the first segment's row; to give the member its own, clear its group in
+the Segments tab. The engine still carries a varied member's
+``segment_<key>_norm`` parameter, fixed at the shared value, so parameter
+numbering does not depend on the groups.
+
 Energy Shift Parameters
 ^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -71,6 +82,12 @@ Shift?** enabled. A segment's :math:`\sqrt{E}` shift coefficient (the
 ``sqrtshift`` block in the input file, see :doc:`segments`) is fitted by the
 engine under the name ``segment_<key>_energy_shift_sqrt`` but is not listed
 here.
+
+A member of a shift group (``shiftgroup <label>``) other than the group's
+first active segment is shown tied to that segment in the same way as a
+normalization-group member above ("tied to segment 1 (shiftgroup A)"). A
+shift-function group (``shiftfngroup``) shares the function only, so its
+members' constant shifts stay parameters of their own.
 
 A shifted capture segment evaluates its external-capture amplitudes at the
 shifted energies, from the same energy tables as every other point

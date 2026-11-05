@@ -185,7 +185,7 @@ appears with the following fields:
    Check this box to allow the normalization factor to be varied as a free
    parameter during fitting.
 
-   **Shared normalization (normalization groups, input file only).** Segments
+   **Shared normalization (normalization groups).** Segments
    that come from one measurement often share one absolute scale -- an
    excitation function and the angular distributions it was integrated from,
    or one data set split into per-angle segments. Ending their lines with the
@@ -205,9 +205,14 @@ appears with the following fields:
    on the groups. ``chiSquared.out`` lists every member's (shared)
    normalization and the penalty on the first member only. The run log notes
    each group and its members. The keyword may be combined with
-   ``shiftgroup``; writers put it before a ``sample`` block. The GUI preserves
-   the block but does not edit it, and its Fitting tab still lists a member's
-   own vary flag.
+   ``shiftgroup``; writers put it before a ``sample`` block. Only active
+   segments are members: the first *active* segment with the label carries
+   the group's value. In the GUI the label is the **Normalization** field of
+   **Groups** in the data segment dialog (below); the table's **Groups**
+   column lists each line's groups, a member's own (unused) normalization is
+   shown in grey, and the Fitting tab shows the member's normalization as
+   tied to the first segment rather than as a parameter of its own
+   (:doc:`fitting`).
 
    **Correlated uncertainties (covariance matrices).** A
    line ending with the keyword block ``covariance <file>`` attaches its
@@ -239,6 +244,27 @@ appears with the following fields:
 
 **Vary Energy Shift?**
    Check this box to allow the energy shift to be varied during fitting.
+
+**Groups** (Normalization, Energy Shift, Shift Function)
+   Ties this segment's normalization, constant energy shift or energy-shift
+   function to other segments: the ``normgroup <label>``,
+   ``shiftgroup <label>`` and ``shiftfngroup <label>`` blocks described
+   under **Vary Norm?** above and the shift entries below. Each field is a
+   drop-down listing the labels the project already uses; pick one, type a
+   new label, or leave the field empty for no group. Every active segment
+   with the same label uses the value of the group's **first active segment
+   in file order** (for a shift-function group: its function, while each
+   segment keeps its own constant shift), so set the shared value, vary flag
+   and uncertainty on that segment. A label is a single word: blanks and
+   double quotes are refused as they are typed. **Energy Shift** and **Shift
+   Function** exclude each other (the engine refuses a segment in both), so
+   while one holds a label the other is disabled. Editing a segment shows the
+   labels of its line; changing or clearing a field rewrites or removes that
+   block only, and every other block at the end of the line (``sqrtshift``,
+   ``shiftfn``, ``covariance``, ``sample``, ...) is written back as read. The
+   **Groups** column of the table lists each line's groups (e.g.
+   ``norm: D, shift: A``); its tooltip names the segment whose value a
+   member uses, or the members that use the first segment's.
 
 **sqrt(E) energy shift** (input file only)
    A second, optional shift term that grows with the beam energy. With it a
@@ -285,8 +311,9 @@ appears with the following fields:
    ``segment_<key>_energy_shift`` entry in ``param.sav`` (fixed, written with
    the shared value), so parameter files stay compatible. The
    :math:`\sqrt{E}` term is not shared (use a shift function for that, below).
-   The run log notes each group and its members. The GUI preserves the block
-   but does not edit it.
+   The run log notes each group and its members. In the GUI the label is the
+   **Energy Shift** field of **Groups** in the data segment dialog (below),
+   and the Fitting tab shows a member's shift as tied to the first segment.
 
 **Energy-shift function** (input file only)
    Different calibration errors shift the energy scale in different ways: an
@@ -341,7 +368,10 @@ appears with the following fields:
    fits four constants and one :math:`\sqrt{E}` coefficient; each
    constant is then that segment's shift at :math:`E_0` = 1.5 MeV. A segment
    may be in a ``shiftgroup`` or a ``shiftfngroup``, not both, and only the
-   first member declares the ``shiftfn``. Members that are single-energy
+   first member declares the ``shiftfn``. In the GUI the label is the
+   **Shift Function** field of **Groups** in the data segment dialog (below);
+   the ``shiftfn`` block itself is written in the input file (the GUI keeps
+   it as read). Members that are single-energy
    angular distributions add nothing to the coefficient: their own constants
    absorb it.
 

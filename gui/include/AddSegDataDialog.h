@@ -95,6 +95,23 @@ class AddSegDataDialog : public QDialog {
   QLabel *energyShiftErrorLabel;
   QCheckBox *varyEnergyShiftCheck;
 
+  /*! Tied systematics, the "normgroup <label>", "shiftgroup <label>" and "shiftfngroup <label>" blocks of the line:
+   *  editable drop-downs listing the labels the project already uses (empty = no group).  Every active segment with
+   *  the same label shares the normalization / constant energy shift / shift function of the group's first active
+   *  segment in file order.  A label is one token (no blank, no double quote). */
+  QLabel *groupsLabel;
+  QWidget *groupsBox;
+  QComboBox *normGroupCombo;
+  QComboBox *shiftGroupCombo;
+  QComboBox *shiftFnGroupCombo;
+  /*! Fill the drop-down of \p keyword ("normgroup", "shiftgroup", "shiftfngroup") with the project's labels; the
+   *  text typed or set stays. */
+  void setGroupChoices(const QString &keyword, const QStringList &labels);
+  /*! The label chosen for \p keyword, trimmed; "" = none. */
+  QString groupLabel(const QString &keyword) const;
+  void setGroupLabel(const QString &keyword, const QString &label);
+  QComboBox *groupCombo(const QString &keyword) const;
+
   /*! "Natural target": the term and each component are weighted by the isotopic abundance of their
    *  entrance pair's compound nucleus in one sample of the <abundances> block (keyword tail
    *  "natural 1" for the default sample, "natural <name>" for a named one).  Shown only when the pairs
@@ -145,6 +162,9 @@ class AddSegDataDialog : public QDialog {
   void removeComponent();
   void uposChanged(int);
   void fillScatteringLengthSpins();
+  /*! A segment is in a shift group or a shift-function group, not both (EData::ResolveShiftFunctions): while one
+   *  is set the other is disabled. */
+  void updateGroupCombos();
 
  protected:
   /*! Sized to the content within the screen on every opening (DialogScrollArea.h). */

@@ -72,7 +72,11 @@ Loading and saving a file without edits must reproduce it. A segment line's
 keyword tail (``sqrtshift``, ``shiftfn``, ``normgroup``, ...) is kept verbatim
 in ``extraTokens``, but only for the keywords listed in
 ``gui/include/SegmentKeywords.h``. A keyword the engine learns must be added
-there. ``tests/consistency`` checks that this list matches the engine's and
+there (and, if its block is not ``keyword value``, to
+``SegmentKeywords::blockLength``). The data segment dialog edits the
+``sample``, ``covariance``, ``spin`` and group blocks through the helpers
+there; each rewrites its own block only, so the rest of the tail is written
+back as read. ``tests/consistency`` checks that this list matches the engine's and
 pyazr's. The GUI tests in ``tests/gui`` run headless
 (``QT_QPA_PLATFORM=offscreen``) on every CI platform.
 

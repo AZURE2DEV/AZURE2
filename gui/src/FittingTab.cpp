@@ -16,6 +16,7 @@
 #include <QDir>
 #include <QRegExp>
 #include <QShowEvent>
+#include <QVector>
 #include <cmath>
 #include <algorithm>
 #include <iostream>
@@ -25,6 +26,7 @@
 #include "InfoDialog.h"
 #include "LevelsTab.h"
 #include "SegmentsTab.h"
+#include "SegmentKeywords.h"
 #include "AbundancesModel.h"
 #include "AZURESetup.h"
 #include "CNuc.h"
@@ -57,10 +59,12 @@ FittingTab::FittingTab(QWidget *parent) :
   setupParameterTable(screeningParamsTable, "Screening Parameters");
 
   normParamsTable = new QTableWidget;
+  normParamsTable->setObjectName("normParamsTable");
   setupParameterTable(normParamsTable, "Normalization Parameters");
   paramTabWidget->addTab(normParamsTable, "Normalization");
 
   shiftParamsTable = new QTableWidget;
+  shiftParamsTable->setObjectName("shiftParamsTable");
   setupParameterTable(shiftParamsTable, "Energy Shift Parameters");
   paramTabWidget->addTab(shiftParamsTable, "Energy Shifts");
   paramTabWidget->addTab(screeningParamsTable, "Screening");
@@ -150,12 +154,29 @@ void FittingTab::addParameterRow(QTableWidget *table, const FittingParameter &pa
 
   // Nuisance checkbox
   QTableWidgetItem *nuisanceItem = new QTableWidgetItem();
-  nuisanceItem->setCheckState(param.useAsNuisance ? Qt::Checked : Qt::Unchecked);
-  nuisanceItem->setFlags(nuisanceItem->flags() & ~Qt::ItemIsEditable);
+  if (param.tiedTo.isEmpty()) {
+    nuisanceItem->setCheckState(param.useAsNuisance ? Qt::Checked : Qt::Unchecked);
+    nuisanceItem->setFlags(nuisanceItem->flags() & ~Qt::ItemIsEditable);
+    table->setItem(row, 6, nuisanceItem);
+    return;
+  }
+  // A normalization or shift tied to another segment's (normgroup / shiftgroup): not a parameter of its own.  No
+  // check box, nothing editable, greyed, and the leader named; its value and vary flag are the leader's row.
+  nuisanceItem->setText(param.tiedTo);
   table->setItem(row, 6, nuisanceItem);
+  const QString tip = tr("%1: the engine uses the %2 of the group's first active segment; edit that segment's row, or "
+                         "the group in the Segments tab.")
+                          .arg(param.tiedTo)
+                          .arg(param.category == "norm" ? tr("normalization") : tr("energy shift"));
+  for (int c = 0; c < table->columnCount(); c++)
+    if (QTableWidgetItem *item = table->item(row, c)) {
+      item->setFlags(Qt::ItemIsSelectable);  // not enabled: greyed, not editable, not checkable
+      item->setToolTip(tip);
+    }
 }
 
 void FittingTab::updateParameterTables() {
+  markTiedSegmentParameters();
   // Clear existing tables
   levelParamsTable->setRowCount(0);
   abundanceParamsTable->setRowCount(0);
@@ -239,6 +260,8 @@ void FittingTab::setTabReferences(LevelsTab *levelsTab, SegmentsTab *segmentsTab
               this, SLOT(onSegmentNormalizationVaryChanged(int, bool)));
       connect(segmentsModel, SIGNAL(energyShiftVaryChanged(int, bool)),
               this, SLOT(onSegmentEnergyShiftVaryChanged(int, bool)));
+      // group blocks of the keyword tails (setLineExtras), activations and the leaders' values
+      connect(segmentsModel, SIGNAL(dataChanged(QModelIndex, QModelIndex)), this, SLOT(syncSegmentGroups()));
     }
   }
 
@@ -497,6 +520,74 @@ void FittingTab::syncSegmentVaryStates() {
   // Freeing or fixing a normalization changes which parameters AZURE2 puts in
   // its Minuit vector, so the recorded indices have to be renumbered with it.
   assignMinuitIndices();
+  syncSegmentGroups();
+}
+
+// A follower of a normalization group ("normgroup <label>") or a shift group ("shiftgroup <label>") takes its
+// leader's value -- the group's first ACTIVE segment in file order (EData::ResolveNormGroups / ResolveShiftGroups);
+// its own value, uncertainty and vary flag are ignored, and a varied follower norm is a FIXED engine parameter.  Its
+// row says so instead of offering a free parameter of its own.  Shift-function groups share the function only (each
+// member keeps its constant shift), so they tie nothing listed here.
+bool FittingTab::markTiedSegmentParameters() {
+  if (!segmentsTab_) return false;
+  SegmentsDataModel *model = segmentsTab_->getSegmentsDataModel();
+  if (!model) return false;
+  const QList<SegmentsDataData> segments = model->getLines();
+  // one pass per keyword (this runs on every change of the segments model): each active row's label, and the first
+  // active row of each label
+  QMap<QString, QVector<QString>> labels;
+  QMap<QString, QMap<QString, int>> first;
+  for (const QString &keyword : {QString("normgroup"), QString("shiftgroup")}) {
+    QVector<QString> &l = labels[keyword];
+    l.resize(segments.size());
+    for (int i = 0; i < segments.size(); i++) {
+      if (segments[i].isActive != 1) continue;
+      l[i] = SegmentKeywords::groupLabel(segments[i].extraTokens, keyword);
+      if (!l[i].isEmpty() && !first[keyword].contains(l[i])) first[keyword][l[i]] = i;
+    }
+  }
+  bool changed = false;
+  for (FittingParameter &p : fittingParameters) {
+    if (p.category != "norm" && p.category != "shift") continue;
+    const QString keyword = p.category == "norm" ? QString("normgroup") : QString("shiftgroup");
+    const int seg = p.channelIndex;
+    const QString label = (seg >= 0 && seg < segments.size()) ? labels[keyword][seg] : QString();
+    int leader = label.isEmpty() ? -1 : first[keyword].value(label, -1);
+    if (leader == seg) leader = -1;  // the group's first segment carries the value
+    const QString tiedTo = leader < 0 ? QString() : tr("tied to segment %1 (%2 %3)").arg(leader + 1).arg(keyword).arg(label);
+    if (leader != p.tiedLeader || tiedTo != p.tiedTo) {
+      // a row that leaves its group shows its own value again
+      if (leader < 0 && p.tiedLeader >= 0 && seg >= 0 && seg < segments.size())
+        p.value = p.category == "norm" ? segments[seg].dataNorm : segments[seg].energyShift;
+      p.tiedLeader = leader;
+      p.tiedTo = tiedTo;
+      changed = true;
+    }
+    if (leader >= 0) {
+      const double v = p.category == "norm" ? segments[leader].dataNorm : segments[leader].energyShift;
+      if (v != p.value) {
+        p.value = v;
+        changed = true;
+      }
+    }
+  }
+  return changed;
+}
+
+void FittingTab::syncSegmentGroups() {
+  // values first, so a rebuild below shows them; the tables are rebuilt only when a row's tie changed
+  QList<int> before;
+  for (const FittingParameter &p : fittingParameters) before << p.tiedLeader;
+  if (!markTiedSegmentParameters()) return;
+  bool relabel = false;
+  for (int i = 0; i < fittingParameters.size(); i++)
+    if (fittingParameters[i].tiedLeader != before[i]) relabel = true;
+  if (relabel) {
+    updateParameterTables();
+    return;
+  }
+  for (const FittingParameter &p : fittingParameters)
+    if (p.tiedLeader >= 0) updateParameterTableValue(p.name, p.value);
 }
 
 void FittingTab::setAbundancesModel(AbundancesModel *model) {
@@ -810,6 +901,8 @@ void FittingTab::parameterItemChanged(QTableWidgetItem *item) {
   }
 
   if (paramIndex == -1) return;  // Parameter not found
+  // a tied row is read-only; the only item changes it sees are the table's own (setItem while it is built)
+  if (!fittingParameters[paramIndex].tiedTo.isEmpty()) return;
 
   // Column mapping: 0=Name, 1=Value, 2=Lower, 3=Upper, 4=Error, 5=Fit Error (read-only), 6=Nuisance
   if (col == 1) {  // Value (reduced width) changed
@@ -1893,22 +1986,20 @@ void FittingTab::updateParameterInOtherTabs(const QString &paramName, const Fitt
   }
 }
 
+// The table a parameter's row is in, by its name.  Norm/shift parameters are named "segment_N_norm" /
+// "segment_N_energy_shift" (before 2026-11-05 the value and error updates looked for "Normalization" / "Energy Shift"
+// and searched the level table, so a value or uncertainty changed in the Segments tab never reached these rows).
+QTableWidget *FittingTab::tableForParameter(const QString &paramName) const {
+  if (paramName.startsWith("abundance_")) return abundanceParamsTable;
+  if (paramName.startsWith("screening_")) return screeningParamsTable;
+  if (paramName.startsWith("density_")) return densityParamsTable;
+  if (paramName.startsWith("segment_") && paramName.contains("shift", Qt::CaseInsensitive)) return shiftParamsTable;
+  if (paramName.startsWith("segment_") && paramName.contains("norm", Qt::CaseInsensitive)) return normParamsTable;
+  return levelParamsTable;
+}
+
 void FittingTab::updateParameterTableValue(const QString &paramName, double value) {
-  // Determine which table the parameter belongs to
-  QTableWidget *targetTable = nullptr;
-  if (paramName.startsWith("abundance_")) {
-    targetTable = abundanceParamsTable;
-  } else if (paramName.startsWith("screening_")) {
-    targetTable = screeningParamsTable;
-  } else if (paramName.startsWith("density_")) {
-    targetTable = densityParamsTable;
-  } else if (paramName.contains("Normalization")) {
-    targetTable = normParamsTable;
-  } else if (paramName.contains("Energy Shift")) {
-    targetTable = shiftParamsTable;
-  } else {
-    targetTable = levelParamsTable;
-  }
+  QTableWidget *targetTable = tableForParameter(paramName);
 
   if (!targetTable) return;
 
@@ -2139,6 +2230,7 @@ void FittingTab::onSegmentNormalizationChanged(int segmentIndex, double value) {
   // Find normalization parameter by segment index stored in channelIndex
   for (int i = 0; i < fittingParameters.size(); i++) {
     if (fittingParameters[i].category == "norm" && fittingParameters[i].channelIndex == segmentIndex) {
+      if (!fittingParameters[i].tiedTo.isEmpty()) break;  // shows its leader's value (syncSegmentGroups)
       fittingParameters[i].value = value;
 
       // Update the corresponding table cell
@@ -2152,6 +2244,7 @@ void FittingTab::onSegmentEnergyShiftChanged(int segmentIndex, double value) {
   // Find energy shift parameter by segment index stored in channelIndex
   for (int i = 0; i < fittingParameters.size(); i++) {
     if (fittingParameters[i].category == "shift" && fittingParameters[i].channelIndex == segmentIndex) {
+      if (!fittingParameters[i].tiedTo.isEmpty()) break;  // shows its leader's value (syncSegmentGroups)
       fittingParameters[i].value = value;
 
       // Update the corresponding table cell
@@ -2162,21 +2255,7 @@ void FittingTab::onSegmentEnergyShiftChanged(int segmentIndex, double value) {
 }
 
 void FittingTab::updateParameterTableError(const QString &paramName, double error) {
-  // Determine which table the parameter belongs to
-  QTableWidget *targetTable = nullptr;
-  if (paramName.startsWith("abundance_")) {
-    targetTable = abundanceParamsTable;
-  } else if (paramName.startsWith("screening_")) {
-    targetTable = screeningParamsTable;
-  } else if (paramName.startsWith("density_")) {
-    targetTable = densityParamsTable;
-  } else if (paramName.contains("Normalization")) {
-    targetTable = normParamsTable;
-  } else if (paramName.contains("Energy Shift")) {
-    targetTable = shiftParamsTable;
-  } else {
-    targetTable = levelParamsTable;
-  }
+  QTableWidget *targetTable = tableForParameter(paramName);
 
   if (!targetTable) return;
 
@@ -2222,7 +2301,8 @@ void FittingTab::updateParameterTableCheckbox(const QString &paramName, bool che
     if (nameItem && nameItem->text() == paramName) {
       // Update the checkbox column (column 6)
       QTableWidgetItem *checkboxItem = targetTable->item(row, 6);
-      if (checkboxItem) {
+      // a tied row has no check box (addParameterRow) and gets none
+      if (checkboxItem && checkboxItem->data(Qt::CheckStateRole).isValid()) {
         // Temporarily disconnect signals to avoid recursion
         targetTable->blockSignals(true);
         checkboxItem->setCheckState(checked ? Qt::Checked : Qt::Unchecked);

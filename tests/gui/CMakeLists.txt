@@ -393,6 +393,31 @@ add_test(NAME density_fitting COMMAND density_fitting_test)
 set_tests_properties(density_fitting PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
+# Tied systematics: the normgroup / shiftgroup / shiftfngroup blocks of a data-segment line in the segment dialog's
+# drop-downs, the Segments tab's Groups column, the Fitting tab's tied rows and the written project file.
+add_executable(segment_groups_test segment_groups_test.cpp)
+set_target_properties(segment_groups_test PROPERTIES AUTOMOC OFF)
+target_include_directories(segment_groups_test PRIVATE
+    ${AZURE2_SOURCE_DIR}/gui/include
+    ${AZURE2_SOURCE_DIR}/include
+)
+target_compile_definitions(segment_groups_test PRIVATE AZURE2_TEST_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+target_link_libraries(segment_groups_test PRIVATE
+    ${AZURESETUP_LIBRARIES}
+    ${AZUREAPI_LIBRARIES}
+    AZURE2Core
+    Qt5::Core Qt5::Gui Qt5::Widgets Qt5::Network
+)
+if(USE_QWT)
+    target_link_libraries(segment_groups_test PRIVATE ${QWT_LIBRARIES})
+endif()
+if(USE_ERYA)
+    target_link_libraries(segment_groups_test PRIVATE pugixml srim_utilities)
+endif()
+add_test(NAME segment_groups COMMAND segment_groups_test)
+set_tests_properties(segment_groups PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
 # The AME2020 mass table the GUI embeds (the file pyazr.masses reads) and what fills from it: the pair dialog's
 # isotope fields and fill button, the S column's tooltip and colour, and the "Masses from AME2020..." dialog.
 add_executable(mass_table_test mass_table_test.cpp)
