@@ -82,9 +82,15 @@ Mass (M)
 Pair Properties
 ^^^^^^^^^^^^^^^
 
-Excitation Energy
+Heavy Excitation
    The excitation energy of the heavy particle (in MeV). This is non-zero for
-   transitions to excited states rather than the ground state.
+   transitions to excited states rather than the ground state. For a
+   (Particle, Gamma) pair it is the energy of the final level the photon feeds.
+
+Light Excitation
+   The excitation energy of the light particle (in MeV), for a (Particle,
+   Particle) pair only (see `Particles in Excited States`_ below). Zero for a
+   light particle in its ground state, which is the usual case.
 
 Separation Energy
    The energy required to separate the compound system (in its ground state) into
@@ -123,10 +129,15 @@ External Capture Multipolarities
 Identical Particles
 -------------------
 
-A (Particle, Particle) pair whose two members have the same Z, mass, spin and
-parity, with the heavy one in its ground state, is treated as a pair of
-identical particles (:math:`\alpha+\alpha`, p+p, d+d, :math:`^3`\ He+\ :math:`^3`\ He,
-:math:`^{12}`\ C+\ :math:`^{12}`\ C, ...). Nothing has to be switched on.
+A (Particle, Particle) pair whose two members have the same per-particle
+inputs -- Z, mass, spin, parity, g-factor **and excitation energy** -- is
+treated as a pair of identical particles (:math:`\alpha+\alpha`, p+p, d+d,
+:math:`^3`\ He+\ :math:`^3`\ He, :math:`^{12}`\ C+\ :math:`^{12}`\ C, and
+mutual-excitation channels such as
+:math:`^{12}\mathrm{C}(2^+)+{}^{12}\mathrm{C}(2^+)`, see below). Nothing has to
+be switched on. Before November 2026 the light particle had no excitation
+energy and the rule required the heavy one to be in its ground state, so a
+pair of two excited nuclei could not be identical.
 
 Allowed channels
    Exchange symmetry admits only channels with :math:`\ell + s` **even**, for
@@ -163,6 +174,48 @@ What is not symmetrized
    only the channel rule above; no exchange factor is applied to their cross
    sections, the same convention as for spin-0 pairs. The vector analyzing
    power is defined for a spin-1/2 beam only (it is zero for d+d).
+
+Particles in Excited States
+---------------------------
+
+Either particle of a (Particle, Particle) pair may be in an excited state: the
+heavy one through **Heavy Excitation** (column 17 of a ``<levels>`` line, as
+always), the light one through **Light Excitation** (the optional 32nd column,
+since November 2026; see :doc:`../reference/data_formats`). This covers
+scattering and reactions of particles in excited states -- in a hot stellar
+plasma, say -- and mutual-excitation channels.
+
+* Give each particle the spin and parity **of the state it is in**: an
+  :math:`\alpha` + :math:`^{12}`\ C(2\ :sup:`+`) channel has heavy
+  :math:`J^\pi = 2^+`; the same channel entered as the excited particle being
+  the light one has light :math:`J^\pi = 2^+`.
+* The masses stay the **ground-state** masses, for either particle (as they
+  always have for the heavy one); the excitation enters through the
+  threshold only.
+* The channel opens at :math:`S + E^*_\text{light} + E^*_\text{heavy}`: every
+  threshold, Q-value and lab/c.m. conversion uses the sum. The R-matrix
+  depends only on that threshold and on the channel spins, so the same
+  excitation on either partner gives the same cross sections when the channel
+  spins are the same (``tests/light_excitation``).
+* A gamma or beta pair cannot have a light excitation (the engine refuses one),
+  nor can a negative value be given. A pair's columns are read from the
+  first line that names it; a different light excitation on another line of
+  the same pair is refused rather than ignored.
+* A secondary-gamma (UPOS) segment describes the decay of the **heavy**
+  partner of its exit pair; it is refused when that pair's light particle is
+  excited.
+
+**Mutual excitation.** Two :math:`^{12}`\ C nuclei both in the 4.439 MeV
+2\ :sup:`+` state form a pair of identical spin-2 bosons. Enter it as light and
+heavy :math:`J^\pi = 2^+`, both masses 12 u, and **both** excitations
+4.43891 MeV (separation energy that of :math:`^{12}`\ C + :math:`^{12}`\ C in
+:math:`^{24}`\ Mg, 13.933 MeV). It is then identical: only channels with
+:math:`\ell + s` even, and an elastic cross section symmetric about
+90\ :sup:`o` c.m. Entered the old way, with the whole 8.878 MeV on the heavy
+particle, it has the same threshold but is **not** identical, and gets the
+:math:`\ell + s` odd channels and the unsymmetrized cross section of two
+distinguishable nuclei. :math:`^{12}`\ C + :math:`^{12}`\ C(2\ :sup:`+`) (one
+particle excited) is never identical.
 
 Several Compound Nuclei in One Project
 --------------------------------------

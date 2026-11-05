@@ -23,7 +23,9 @@ writing a file and launching a fresh instance from it::
 
 The 31 fields of a channel line match ``NucLine`` in the AZURE2 source
 (``include/NucLine.h``); note the file stores ``2*S`` and ``2*L`` as integers,
-which the ``S`` / ``L`` properties convert.
+which the ``S`` / ``L`` properties convert.  An optional 32nd field ``e1`` is the
+light particle's excitation energy (MeV, since 2026-11-05); a 31-field line means
+``e1 = 0`` and is kept at 31 fields.
 """
 
 import os
@@ -37,9 +39,12 @@ _FIELDS = [
     "levelID", "isActive", "channelFix", "gamma", "j1", "pi1", "j2", "pi2",
     "e2", "m1", "m2", "z1", "z2", "entranceSepE", "sepE", "j3", "pi3", "e3",
     "pType", "chRad", "g1", "g2", "ecMultMask",
+    "e1",           # optional: the light particle's excitation energy (MeV)
 ]
 _IDX = {name: i for i, name in enumerate(_FIELDS)}
 _NFIELDS = len(_FIELDS)
+#: A line without the optional 32nd column (e1 = 0) -- every file before 2026-11-05.
+_NFIELDS_MIN = _NFIELDS - 1
 
 
 def _token_spans(line):
@@ -73,7 +78,8 @@ def _fmt(x):
 
 
 class AzrChannel:
-    """One channel line (31 fields).  Level fields are shared by a level's lines.
+    """One channel line (31 fields, or 32 with the light particle's excitation
+    energy).  Level fields are shared by a level's lines.
 
     Keeps the line exactly as it was read, so an untouched channel round-trips
     byte for byte; typed accessors parse on demand and mutators rewrite only the
@@ -81,10 +87,10 @@ class AzrChannel:
     """
 
     def __init__(self, tokens, raw=None):
-        if len(tokens) != _NFIELDS:
+        if len(tokens) not in (_NFIELDS_MIN, _NFIELDS):
             raise ValueError(
-                f"a <levels> line needs {_NFIELDS} fields, got {len(tokens)}: "
-                f"{tokens}")
+                f"a <levels> line needs {_NFIELDS_MIN} fields (or {_NFIELDS} with the "
+                f"light particle's excitation energy), got {len(tokens)}: {tokens}")
         self.tokens = list(tokens)
         #: The line as read, or None for a channel built from tokens alone.
         self._raw = raw
@@ -94,13 +100,23 @@ class AzrChannel:
     # -- typed field access ---------------------------------------------------
 
     def _get(self, name, cast):
-        return cast(self.tokens[_IDX[name]])
+        i = _IDX[name]
+        if i >= len(self.tokens):       # the optional e1 column, absent: 0
+            return cast("0")
+        return cast(self.tokens[i])
 
     def _set(self, name, value):
         formatted = _fmt(value)
-        if self.tokens[_IDX[name]] == formatted:
+        i = _IDX[name]
+        if i >= len(self.tokens):       # the optional e1 column, absent
+            if float(value) == 0.0:
+                return                  # absent already means 0
+            self.tokens.append(formatted)
+            self._dirty.add(name)
+            return
+        if self.tokens[i] == formatted:
             return                      # unchanged: do not disturb the raw line
-        self.tokens[_IDX[name]] = formatted
+        self.tokens[i] = formatted
         self._dirty.add(name)
 
     # channel identity
@@ -222,12 +238,36 @@ class AzrChannel:
 
     @property
     def excitation(self):
-        """Excitation energy of the pair's residual nucleus (MeV).
+        """Total excitation energy of the pair, light + heavy particle (MeV):
+        the channel opens at ``sep_energy + excitation``.
 
-        Zero for a ground-state pair; this is what distinguishes the capture
-        channels of a multi-transition model (gamma_0, gamma_1, ...).
+        Zero for a ground-state pair.  For a gamma pair it is the energy of the
+        final level (``heavy_excitation``), which is what distinguishes the
+        capture channels of a multi-transition model (gamma_0, gamma_1, ...).
         """
+        return self.heavy_excitation + self.light_excitation
+
+    @property
+    def heavy_excitation(self):
+        """Excitation energy of the heavy particle (MeV), column 17 (``e2``)."""
         return self._get("e2", float)
+
+    @property
+    def light_excitation(self):
+        """Excitation energy of the light particle (MeV), the optional 32nd
+        column (``e1``; 0 when the line has 31 fields).  Setting it to 0 drops
+        the column again; the engine refuses a nonzero value on a gamma or beta
+        pair, a negative one, and different values on lines of one pair."""
+        return self._get("e1", float)
+
+    @light_excitation.setter
+    def light_excitation(self, v):
+        v = float(v)
+        if v == 0.0 and len(self.tokens) > _IDX["e1"]:
+            del self.tokens[_IDX["e1"]:]      # written only when nonzero
+            self._dirty.add("e1")
+            return
+        self._set("e1", v)
 
     @property
     def sep_energy(self):
@@ -304,10 +344,18 @@ class AzrChannel:
         if not self._dirty:
             return self._raw
         spans = _token_spans(self._raw)
-        if len(spans) != _NFIELDS:      # not the line we parsed; do not guess
+        if len(spans) not in (_NFIELDS_MIN, _NFIELDS):  # not the line we parsed; do not guess
             return " ".join(self.tokens)
         out = self._raw
+        # the optional last column first (it only appends or cuts at the end)
+        if len(self.tokens) > len(spans):
+            end = spans[-1][1]
+            out = out[:end] + " " + " ".join(self.tokens[len(spans):]) + out[end:]
+        elif len(self.tokens) < len(spans):
+            out = out[:spans[len(self.tokens) - 1][1]] + out[spans[-1][1]:]
         for name in sorted(self._dirty, key=lambda n: -_IDX[n]):
+            if _IDX[name] >= min(len(spans), len(self.tokens)):
+                continue                # appended or cut above
             start, end = spans[_IDX[name]]
             new = self.tokens[_IDX[name]]
             width = end - start

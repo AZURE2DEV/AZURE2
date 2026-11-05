@@ -74,8 +74,9 @@ check("second write identical to the first", model3.to_text() == open(files[0]).
 
 print("\n6. a channel built from tokens, with no raw line, still emits")
 tokens = model.levels[0].channels[0].tokens
+# a full line is 31 fields, or 32 with the light particle's excitation (column 32, 2026-11-05)
 check("emits a full line", len(azrfile.AzrChannel(tokens).to_line().split())
-      == azrfile._NFIELDS)
+      == len(tokens) and len(tokens) in (azrfile._NFIELDS_MIN, azrfile._NFIELDS))
 
 print()
 if failures:

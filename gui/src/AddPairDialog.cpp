@@ -21,8 +21,17 @@ AddPairDialog::AddPairDialog(QWidget *parent) :
   this->setMaximumWidth(420);
   this->setMinimumWidth(420);
 
-  excitationEnergyLabel = new QLabel(tr("Excitation Energy [MeV]:"));
+  excitationEnergyLabel = new QLabel(tr("Heavy Excitation [MeV]:"));
   excitationEnergyText = new QLineEdit;
+  excitationEnergyText->setToolTip(tr("Excitation energy of the heavy particle (for a gamma pair: of the final level)."));
+  lightExcitationLabel = new QLabel(tr("Light Excitation [MeV]:"));
+  lightExcitationText = new QLineEdit;
+  lightExcitationText->setObjectName("lightExcitationText");
+  lightExcitationText->setText("0");
+  lightExcitationText->setToolTip(tr("Excitation energy of the light particle (particle pairs only): a scattering or "
+                                     "reaction of a particle in an excited state.  Give the light particle the J and "
+                                     "parity of that state.  The channel opens at S + heavy + light excitation; two "
+                                     "particles with the same Z, M, J, parity and excitation are identical."));
   seperationEnergyLabel = new QLabel(tr("Separation Energy [MeV]:"));
   seperationEnergyText = new QLineEdit;
   channelRadiusLabel = new QLabel(tr("Channel Radius [fm]:"));
@@ -110,12 +119,14 @@ AddPairDialog::AddPairDialog(QWidget *parent) :
   QGridLayout *channelLayout = new QGridLayout;
   channelLayout->addWidget(excitationEnergyLabel, 0, 0, Qt::AlignRight);
   channelLayout->addWidget(excitationEnergyText, 0, 1);
-  channelLayout->addWidget(seperationEnergyLabel, 1, 0, Qt::AlignRight);
-  channelLayout->addWidget(seperationEnergyText, 1, 1);
-  channelLayout->addWidget(channelRadiusLabel, 2, 0, Qt::AlignRight);
-  channelLayout->addWidget(channelRadiusText, 2, 1);
-  channelLayout->addWidget(fillButton, 3, 0, 1, 2);
-  channelLayout->addWidget(massCheckLabel, 4, 0, 1, 2);
+  channelLayout->addWidget(lightExcitationLabel, 1, 0, Qt::AlignRight);
+  channelLayout->addWidget(lightExcitationText, 1, 1);
+  channelLayout->addWidget(seperationEnergyLabel, 2, 0, Qt::AlignRight);
+  channelLayout->addWidget(seperationEnergyText, 2, 1);
+  channelLayout->addWidget(channelRadiusLabel, 3, 0, Qt::AlignRight);
+  channelLayout->addWidget(channelRadiusText, 3, 1);
+  channelLayout->addWidget(fillButton, 4, 0, 1, 2);
+  channelLayout->addWidget(massCheckLabel, 5, 0, 1, 2);
   channelGroup->setLayout(channelLayout);
 
   QGroupBox *lightGroup = new QGroupBox(tr("Light Particle"));
@@ -306,6 +317,8 @@ void AddPairDialog::updateLightParticle(int index) {
     seperationEnergyText->setText("0.0");
     seperationEnergyText->setEnabled(false);
     excitationEnergyText->setEnabled(true);
+    lightExcitationText->setText("0");
+    lightExcitationText->setEnabled(false);
     channelRadiusText->setText("0");
     channelRadiusText->setEnabled(false);
     multBox->show();
@@ -322,6 +335,8 @@ void AddPairDialog::updateLightParticle(int index) {
     seperationEnergyText->setEnabled(true);
     excitationEnergyText->setEnabled(false);
     excitationEnergyText->setText("0.000");
+    lightExcitationText->setText("0");
+    lightExcitationText->setEnabled(false);
     channelRadiusText->setEnabled(true);
     multBox->hide();
     this->adjustSize();
@@ -333,6 +348,7 @@ void AddPairDialog::updateLightParticle(int index) {
     // lightGText->setEnabled(true);
     seperationEnergyText->setEnabled(true);
     excitationEnergyText->setEnabled(true);
+    lightExcitationText->setEnabled(true);
     channelRadiusText->setEnabled(true);
     multBox->hide();
     this->adjustSize();

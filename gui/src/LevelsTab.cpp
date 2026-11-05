@@ -562,8 +562,13 @@ QList<ChannelsData> LevelsTab::calculateChannels(const LevelsData &level, int le
     // A level with a compound nucleus takes channels from that nucleus's pairs only.
     if (level.hasNucleus() && PairsModel::nucleusOf(pair) != level.nucleus()) continue;
     if (pair.pairType == 0) {
+      // Bose/Fermi symmetry of identical particles (the engine's rule, PPair / CNuc::CheckIdenticalChannels):
+      // only l + s even.  Before 2026-11-05 every (l, s) was offered, and the engine refused a pair with spin
+      // (p+p, d+d, 12C(2+)+12C(2+)) on the l + s odd ones and warned about them for a spin-0 pair.
+      const bool identical = PairsModel::isIdentical(pair);
       for (double s = fabs(pair.heavyJ - pair.lightJ); s <= pair.heavyJ + pair.lightJ; s += 1.0) {
         for (double l = fabs(s - level.jValue); l <= s + level.jValue; l += 1.0) {
+          if (identical && (int(l + 0.5) + int(s + 0.5)) % 2 != 0) continue;
           if (int(l * 2.0) % 2 == 0 && pair.lightPi * pair.heavyPi * pow(-1, int(l)) == level.piValue && int(l) <= maxL) {
             ChannelsData channel = {0, levelIndex, i, s, int(l), 'P', 0.0};
             channels.push_back(channel);
@@ -788,6 +793,9 @@ void LevelsTab::updateDetails(const QItemSelection &selection) {
     if (channel.radType != 'G' && channel.radType != 'F')
       stm << qSetFieldWidth(21) << Qt::right << "Excitation Energy: "
           << qSetFieldWidth(0) << Qt::left << QString("%1").arg(pair.excitationEnergy) << Qt::endl;
+    if (pair.lightExcitation != 0.)
+      stm << qSetFieldWidth(21) << Qt::right << "Light Excitation: "
+          << qSetFieldWidth(0) << Qt::left << QString("%1").arg(pair.lightExcitation) << Qt::endl;
     if (channel.radType != 'M' && channel.radType != 'E') {
       stm << qSetFieldWidth(21) << Qt::right << "Separation Energy: "
           << qSetFieldWidth(0) << Qt::left << QString("%1").arg(pair.seperationEnergy) << Qt::endl;
@@ -796,7 +804,7 @@ void LevelsTab::updateDetails(const QItemSelection &selection) {
     }
     stm.flush();
     channelDetails->details->setText(details);
-    if (level.energy < (pair.seperationEnergy + pair.excitationEnergy) && pair.pairType == 0)
+    if (level.energy < (pair.seperationEnergy + pair.excitationEnergy + pair.lightExcitation) && pair.pairType == 0)
       channelDetails->setNormParam(1);
     else if (pair.pairType == 10 && level.energy == pair.excitationEnergy && level.jValue == pair.heavyJ &&
              level.piValue == pair.heavyPi && channel.radType == 'M' && channel.lValue == 1)
@@ -816,7 +824,7 @@ void LevelsTab::updateDetails(const QItemSelection &selection) {
     double reducedMass = (pair.lightM + pair.heavyM != 0.)
         ? pair.lightM * pair.heavyM / (pair.lightM + pair.heavyM)
         : 0.;
-    double eCm = level.energy - pair.seperationEnergy - pair.excitationEnergy;
+    double eCm = level.energy - pair.seperationEnergy - pair.excitationEnergy - pair.lightExcitation;
     wignerApplicable_ = (channel.radType == 'P') && (eCm > 0.) && (pair.channelRadius > 0.) && (reducedMass > 0.);
     wignerZ1_ = pair.lightZ;
     wignerZ2_ = pair.heavyZ;
@@ -1022,8 +1030,12 @@ bool LevelsTab::writeNuclearFile(QTextStream &outStream) {
                   << qSetFieldWidth(8) << full(pairs.at(channels.at(ch).pairIndex).channelRadius)
                   << qSetFieldWidth(13) << full(pairs.at(channels.at(ch).pairIndex).lightG)
                   << qSetFieldWidth(13) << full(pairs.at(channels.at(ch).pairIndex).heavyG)
-                  << qSetFieldWidth(8) << pairs.at(channels.at(ch).pairIndex).ecMultMask
-                  << qSetFieldWidth(0) << Qt::endl;
+                  << qSetFieldWidth(8) << pairs.at(channels.at(ch).pairIndex).ecMultMask;
+        // Column 32, the light particle's excitation energy, only when it is set: every file without one keeps
+        // its 31 columns (older engines ignore a 32nd silently, older GUIs drop it on save).
+        if (pairs.at(channels.at(ch).pairIndex).lightExcitation != 0.)
+          outStream << qSetFieldWidth(13) << full(pairs.at(channels.at(ch).pairIndex).lightExcitation);
+        outStream << qSetFieldWidth(0) << Qt::endl;
       }
     }
     outStream << Qt::endl;
@@ -1066,6 +1078,7 @@ bool LevelsTab::readNuclearFile(QTextStream &inStream) {
   double dummyDouble;
   int dummyInt;
   int ecMultMask;
+  double lightExcitation;
 
   maxLSpin->blockSignals(true);
   maxMultSpin->blockSignals(true);
@@ -1093,6 +1106,15 @@ bool LevelsTab::readNuclearFile(QTextStream &inStream) {
       if (in.status() != QTextStream::Ok) return false;
       in >> ecMultMask;
       if (in.status() != QTextStream::Ok) ecMultMask = 0;
+      // the optional 32nd column, the light particle's excitation energy (0 when absent)
+      lightExcitation = 0.;
+      if (in.status() == QTextStream::Ok) {
+        in.skipWhiteSpace();
+        if (!in.atEnd()) {
+          in >> lightExcitation;
+          if (in.status() != QTextStream::Ok) return false;
+        }
+      }
       if (firstLine) {
         lastPair = ir;
         firstLine = false;
@@ -1111,7 +1133,8 @@ bool LevelsTab::readNuclearFile(QTextStream &inStream) {
       }
 
       PairsData newPair = {lightJ, lightPi, lightZ, lightM, lightG, heavyJ, heavyPi, heavyZ, heavyM,
-                           heavyG, excitationEnergy, seperationEnergyOut, channelRadius, pairType, ecMultMask};
+                           heavyG, excitationEnergy, seperationEnergyOut, channelRadius, pairType, ecMultMask,
+                           lightExcitation};
       int pairIndex = ir - 1;
       if (pairsModel->numPairs() < ir) {
         emit(readNewPair(newPair, pairIndex, true));

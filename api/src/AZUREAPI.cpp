@@ -1560,6 +1560,8 @@ vector_r AZUREAPI::GetPairsInfo() const {
     info.push_back(pair->GetNucleusZ());
     info.push_back(pair->GetNucleusA());
     info.push_back(nuc->GetAbundance(nuc->DefaultSample(), pair->GetNucleus()));
+    // the light particle's share of exE (column 32 of the <levels> line, 2026-11-05)
+    info.push_back(pair->GetLightExE());
   }
 
   return info;

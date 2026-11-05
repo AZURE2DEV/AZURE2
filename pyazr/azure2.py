@@ -520,6 +520,13 @@ class azure2:
     def _build_pairs(self):
         flat = np.asarray(self.sess.pairs_info(), dtype=float)
         nfields = Pair._NFIELDS
+        # An engine built before 2026-11-05 sends one field less (no
+        # light_excitation); its records still start 1, 2, 3, ...
+        def numbered(n):
+            return (flat.size % n == 0 and
+                    np.array_equal(flat.reshape(-1, n)[:, 0], np.arange(1, flat.size // n + 1)))
+        if not numbered(nfields) and numbered(nfields - 1):
+            nfields -= 1
         records = flat.reshape(-1, nfields)
         return PairSet(Pair.from_record(rec) for rec in records)
 

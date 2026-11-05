@@ -49,7 +49,13 @@ A run, from the command line
 2. ``src/AZUREMain.cpp``, ``AZUREMain::operator()``:
 
    * ``CNuc::Fill`` reads ``<pairs>`` and ``<levels>`` (each level line through
-     ``NucLine``). ``CNuc::Initialize`` builds the channels, the
+     ``NucLine``: 31 columns and an optional 32nd, the light particle's
+     excitation energy -- the layout is in :doc:`../reference/data_formats`).
+     ``PPair`` keeps the light and heavy excitations apart
+     (``GetLightExE`` / ``GetHeavyExE``); ``GetExE`` is their sum, the
+     channel's excitation above the ground-state threshold, which is what a
+     threshold, Q-value or kinematic conversion wants. Use the heavy one only
+     for the heavy partner's own state (a gamma pair's final level). ``CNuc::Initialize`` builds the channels, the
      :math:`J^\pi` groups and the boundary conditions, and transforms the
      input parameters.
    * ``EData::Fill`` reads ``<segmentsData>`` / ``<segmentsTest>`` (through

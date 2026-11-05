@@ -54,10 +54,7 @@ int ScatteringLengthsModel::columnCount(const QModelIndex &parent) const {
 
 // -- pairs and channel spins --------------------------------------------------
 
-bool ScatteringLengthsModel::isIdentical(const PairsData &p) {
-  return p.pairType == 0 && p.lightZ == p.heavyZ && std::fabs(p.lightM - p.heavyM) < 1.0e-6 &&
-         std::fabs(p.lightJ - p.heavyJ) < 1.0e-6 && p.lightPi == p.heavyPi && std::fabs(p.excitationEnergy) < 1.0e-9;
-}
+bool ScatteringLengthsModel::isIdentical(const PairsData &p) { return PairsModel::isIdentical(p); }
 
 QList<double> ScatteringLengthsModel::allowedChannelSpins(const PairsData &p) {
   QList<double> out;

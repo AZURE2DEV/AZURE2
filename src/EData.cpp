@@ -142,6 +142,23 @@ static bool TotalCaptureCodeOk(const ESegment &segment, int key, bool isTest, co
   return true;
 }
 
+/*!
+ * The UPOS coefficient (CNuc, Brune and deBoer 2020 Eq. 22) is written for a secondary gamma ray from the HEAVY
+ * partner of the exit pair: its final-state spin is J2.  With the light particle excited (column 32 of the
+ * <levels> line, 2026-11-05) the gamma ray would come from the light particle, which that formula does not
+ * describe -- refuse instead of computing the heavy partner's correlation silently.
+ */
+static bool UPOSAllowed(CNuc *theCNuc, const ESegment &segment, int key, bool isTest, const Config &configure) {
+  if (!segment.IsUPOS() || !theCNuc->IsPairKey(segment.GetExitKey())) return true;
+  PPair *exitPair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(segment.GetExitKey()));
+  if (exitPair->GetLightExE() == 0.) return true;
+  configure.outStream << "ERROR: " << (isTest ? "test segment #" : "segment #") << key << " (UPOS): exit pair "
+                      << segment.GetExitKey() << " has an excited light particle (column 32, " << exitPair->GetLightExE()
+                      << " MeV); the secondary-gamma correlation is implemented for the decay of the heavy partner only."
+                      << std::endl;
+  return false;
+}
+
 static bool TotalAllowed(CNuc *theCNuc, ESegment &segment, int key, bool isTest, const Config &configure) {
   if (!segment.IsTotal()) return true;
   const char *what = isTest ? "test segment" : "segment";
@@ -317,6 +334,7 @@ int EData::Fill(const Config &configure, CNuc *theCNuc) {
           if (!CoefficientsAllowed(theCNuc, NewSegment, numTotalSegments, configure)) return -1;
           if (!NaturalAllowed(theCNuc, NewSegment, numTotalSegments, false, configure)) return -1;
           if (!TotalAllowed(theCNuc, NewSegment, numTotalSegments, false, configure)) return -1;
+          if (!UPOSAllowed(theCNuc, NewSegment, numTotalSegments, false, configure)) return -1;
           if (!TotalCaptureCodeOk(NewSegment, numTotalSegments, false, configure)) return -1;
           UPOSLabNote(NewSegment, numTotalSegments, false, configure);
           bool isValidTotal = false;
@@ -552,6 +570,7 @@ int EData::MakePoints(const Config &configure, CNuc *theCNuc) {
           if (!AnalyzingPowerAllowed(theCNuc, NewSegment, numTotalSegments, true, configure)) return -1;
           if (!NaturalAllowed(theCNuc, NewSegment, numTotalSegments, true, configure)) return -1;
           if (!TotalAllowed(theCNuc, NewSegment, numTotalSegments, true, configure)) return -1;
+          if (!UPOSAllowed(theCNuc, NewSegment, numTotalSegments, true, configure)) return -1;
           if (!TotalCaptureCodeOk(NewSegment, numTotalSegments, true, configure)) return -1;
           UPOSLabNote(NewSegment, numTotalSegments, true, configure);
           bool isValidTotal = false;
@@ -1164,7 +1183,10 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
             if (high <= low) high = low + 0.001;
             startEnergy = high;
             endEnergy = low;
-            point->SetPhotoKinematics(entrancePair->GetSepE() - exitPair->GetExE(),
+            // Q = E_gamma - E_cm: the entrance pair's threshold (S plus its total excitation, e1 + e2) minus the
+            // energy of the final level the gamma pair feeds (its heavy excitation).  Before 2026-11-05 the
+            // entrance pair's excitation was left out.
+            point->SetPhotoKinematics(entrancePair->GetSepE() + entrancePair->GetExE() - exitPair->GetHeavyExE(),
                                       (entrancePair->GetM(1) + entrancePair->GetM(2)) * uconv);
           }
           if (targetEffect->IsUdr()) {
@@ -1325,7 +1347,7 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
                 if (high <= low) high = low + 0.001;
                 startEnergy = high;
                 endEnergy = low;
-                point->SetPhotoKinematics(compEntrance->GetSepE() - compExit->GetExE(),
+                point->SetPhotoKinematics(compEntrance->GetSepE() + compEntrance->GetExE() - compExit->GetHeavyExE(),
                                           (compEntrance->GetM(1) + compEntrance->GetM(2)) * uconv);
               }
               if (targetEffect->IsUdr()) {
@@ -2520,6 +2542,11 @@ std::string EData::ECSignature(CNuc *theCNuc, const Config &configure) {
     }
     hash.Add(pair->GetSepE());
     hash.Add(pair->GetExE());
+    // the split between the two particles (column 32) only when it is set, so an older cache keeps its signature
+    if (pair->GetLightExE() != 0.) {
+      hash.Add("light excitation");
+      hash.Add(pair->GetLightExE());
+    }
     hash.Add(pair->GetChRad());
     // The hybrid potential bends the Coulomb functions of this pair, and so
     // both the entrance-channel phases and the final-state integrand.

@@ -205,6 +205,76 @@ lines, which a reader that does not know a key skips:
    The pair whose :math:`E(s)` ``relativistic.out`` uses; absent or ``0``: the
    first particle pair of each compound nucleus.
 
+The ``<levels>`` block has one line per channel of a level, 31
+whitespace-separated columns (read by ``NucLine``, ``include/NucLine.h``), and
+optionally a 32nd:
+
+.. list-table::
+   :widths: 12 18 70
+   :header-rows: 1
+
+   * - Column
+     - Name
+     - Meaning
+   * - 1-4
+     - ``J pi E fix``
+     - the level's spin, parity, excitation energy (MeV) and fixed flag
+   * - 5-6
+     - ``aa ir``
+     - entrance key (written as ``1``, not read) and the channel's pair key
+   * - 7-8
+     - ``2s 2l``
+     - twice the channel spin and twice the orbital angular momentum
+   * - 9-11
+     - ``id active chfix``
+     - level ID, level active flag, width fixed flag
+   * - 12
+     - ``gamma``
+     - partial width (eV) of an open channel, ANC (fm\ :sup:`-1/2`) of a closed one
+   * - 13-16
+     - ``j1 pi1 j2 pi2``
+     - spin and parity of the light (1) and heavy (2) particle **in the state
+       the pair has them in**
+   * - 17
+     - ``e2``
+     - excitation energy of the heavy particle (MeV); of the final level for a
+       gamma pair
+   * - 18-21
+     - ``m1 m2 z1 z2``
+     - **ground-state** atomic masses (u) and charges
+   * - 22-23
+     - ``Sin S``
+     - the entrance pair's separation energy (written, not read) and this pair's
+       ground-state separation energy (MeV)
+   * - 24-26
+     - ``j3 pi3 e3``
+     - unused (written as ``0 0 0.0``)
+   * - 27-28
+     - ``type R``
+     - pair type (0 particle, 10 gamma, 20 beta) and channel radius (fm)
+   * - 29-30
+     - ``g1 g2``
+     - g-factors of the two particles
+   * - 31
+     - ``ecmask``
+     - external-capture multipolarity mask
+   * - 32
+     - ``e1``
+     - **optional**: excitation energy of the light particle (MeV), since
+       November 2026. Absent means 0. The pair opens at
+       :math:`S + e_1 + e_2`.
+
+A pair's columns (13-21, 23 and 27-32) are read from the first line that names it.
+Column 32 is written (by the GUI and by pyazr) **only when it is nonzero**, so a
+project without excited light particles keeps its 31 columns and every older
+file reads and writes back byte for byte. An engine or GUI from before
+November 2026 does not know the column: the engine ignores it silently (the
+pair then opens at :math:`S + e_2`), and the GUI drops it when it saves the
+project. The engine refuses a nonzero ``e1`` on a gamma or beta pair, a
+negative one, and two different values on lines of one pair. Two particles of
+a particle pair are identical when Z, mass, spin, parity, g-factor and
+excitation (``e1 = e2``) are all equal (:doc:`../user_guide/particle_pairs`).
+
 Several compound nuclei.  The compound nucleus of a pair is inferred from its
 columns (particle pair :math:`Z = z_1 + z_2`, :math:`A = \mathrm{round}(m_1 +
 m_2)`; gamma pair the heavy particle; beta pair the daughter), and a project

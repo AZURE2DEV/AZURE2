@@ -487,7 +487,7 @@ AdaptiveIntegrationGrid::IdentifyResonances(double startEnergy, double endEnergy
         if (gamma <= 0.0) continue;
         double localEnergy = level->GetE() - chPair->GetExE() - chPair->GetSepE();
         double pene;
-        if (std::abs(level->GetE() - chPair->GetExE()) < 1.0e-3 &&
+        if (std::abs(level->GetE() - chPair->GetHeavyExE()) < 1.0e-3 &&
             jgroup->GetJ() == chPair->GetJ(2) &&
             jgroup->GetPi() == chPair->GetPi(2)) {
           double jValue = jgroup->GetJ();

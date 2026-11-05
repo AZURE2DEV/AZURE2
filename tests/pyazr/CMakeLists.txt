@@ -373,3 +373,12 @@ add_test(NAME pyazr_doppler
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/doppler_test.py)
 set_tests_properties(pyazr_doppler PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
+# The light particle's excitation energy, column 32 of a <levels> line (2026-11-05): AzrModel keeps the column
+# (and adds or drops it only when e1 changes to or from 0), Pair carries light_excitation (and still reads an
+# older engine's 19-field record), and the excitation moved between the partners gives the same cross sections
+# (tests/light_excitation models).
+add_test(NAME pyazr_light_excitation
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/light_excitation_test.py)
+set_tests_properties(pyazr_light_excitation PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")

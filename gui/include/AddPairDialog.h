@@ -33,6 +33,8 @@ class AddPairDialog : public QDialog {
   QLineEdit *heavyMText;
   // QLineEdit *heavyGText;
   QLineEdit *excitationEnergyText;
+  /*! The light particle's excitation energy [MeV] (column 32 of a <levels> line); particle pairs only. */
+  QLineEdit *lightExcitationText;
   QLineEdit *seperationEnergyText;
   QLineEdit *channelRadiusText;
   QComboBox *pairTypeCombo;
@@ -69,6 +71,7 @@ class AddPairDialog : public QDialog {
   QLabel *heavyMLabel;
   // QLabel *heavyGLabel;
   QLabel *excitationEnergyLabel;
+  QLabel *lightExcitationLabel;
   QLabel *seperationEnergyLabel;
   QLabel *channelRadiusLabel;
   QLabel *pairTypeLabel;

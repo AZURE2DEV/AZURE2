@@ -139,7 +139,7 @@ class AZUREAPI {
 
   // Number of numeric fields packed per particle pair by GetPairsInfo().
   // Keep this in sync with pyazr/parameters.py (Pair._NFIELDS).
-  static const int kPairInfoFields = 19;
+  static const int kPairInfoFields = 20;
   /*!
    * Returns structured metadata describing every particle pair, in 1-based
    * pair-number order (the same number stored in field 9 -- "pair" -- of
@@ -160,11 +160,17 @@ class AZUREAPI {
    *   10 Z2            charge number of particle 2
    *   11 M2            mass of particle 2 (amu)
    *   12 sepE          separation energy (MeV)
-   *   13 exE           excitation energy of the pair (MeV)
+   *   13 exE           total excitation energy of the pair, light + heavy
+   *                    particle (MeV): the threshold is sepE + exE
    *   14 chRad         channel radius (fm)
    *   15 i1i2factor    1 / ((2 J1 + 1)(2 J2 + 1)); the entrance pair's value is
    *                    the denominator of the statistical spin factor
    *                    omega = (2 J + 1) * i1i2factor
+   *   16 nucZ          charge number of the compound nucleus the pair forms
+   *   17 nucA          mass number of that nucleus
+   *   18 abundance     its abundance in the default sample (1 without <abundances>)
+   *   19 lightExE      excitation energy of particle 1 (MeV), the optional 32nd
+   *                    column of the <levels> line; exE - lightExE is particle 2's
    */
   vector_r GetPairsInfo() const;
 

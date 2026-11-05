@@ -492,3 +492,27 @@ add_test(NAME file_dialog_policy COMMAND file_dialog_policy_test)
 if(NOT APPLE)
     set_tests_properties(file_dialog_policy PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 endif()
+
+# The light particle's excitation energy (column 32 of a <levels> line, 2026-11-05): the pairs table column,
+# labels, the identical-particle rule, the level-line read/write (32nd column only when nonzero), the pair dialog.
+add_executable(light_excitation_test light_excitation_test.cpp)
+set_target_properties(light_excitation_test PROPERTIES AUTOMOC OFF)
+target_include_directories(light_excitation_test PRIVATE
+    ${AZURE2_SOURCE_DIR}/gui/include
+    ${AZURE2_SOURCE_DIR}/include
+)
+target_link_libraries(light_excitation_test PRIVATE
+    ${AZURESETUP_LIBRARIES}
+    ${AZUREAPI_LIBRARIES}
+    AZURE2Core
+    Qt5::Core Qt5::Gui Qt5::Widgets Qt5::Network
+)
+if(USE_QWT)
+    target_link_libraries(light_excitation_test PRIVATE ${QWT_LIBRARIES})
+endif()
+if(USE_ERYA)
+    target_link_libraries(light_excitation_test PRIVATE pugixml srim_utilities)
+endif()
+add_test(NAME light_excitation_gui COMMAND light_excitation_test)
+set_tests_properties(light_excitation_gui PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen")

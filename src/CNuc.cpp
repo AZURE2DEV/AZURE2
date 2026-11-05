@@ -206,6 +206,7 @@ int CNuc::Fill(const Config &configure, const std::map<int, double> &radii) {
   // Which compound nucleus each level (by its ID, column 9) belongs to: the
   // channel lines of one level must all come from pairs of one nucleus.
   std::map<int, int> levelNucleus;
+  std::map<int, double> lightExcitation;  // pair key -> e1 of the first line naming it
   line = "";
   while (!in.eof() && line != "</levels>") {
     getline(in, line);
@@ -221,6 +222,32 @@ int CNuc::Fill(const Config &configure, const std::map<int, double> &radii) {
       stm.str(line);
       NucLine Line(stm);
       if (stm.rdstate() & (std::stringstream::failbit | std::stringstream::badbit)) return -1;
+      // The light particle's excitation energy, the optional 32nd column (2026-11-05).  A pair's columns are
+      // read from the first line that names it, so a different e1 on a later line of the same pair would be
+      // dropped without a word -- and it is a different threshold and a different identical-particle test, so
+      // refuse it.  A photon or an electron has no excited state.
+      if (Line.e1() < 0.) {
+        configure.outStream << "ERROR: pair " << Line.ir() << " has a negative light-particle excitation energy (column 32), "
+                            << Line.e1() << " MeV." << std::endl;
+        return -1;
+      }
+      if (Line.e1() != 0. && (Line.pType() == 10 || Line.pType() == 20)) {
+        configure.outStream << "ERROR: pair " << Line.ir() << " is a " << (Line.pType() == 10 ? "gamma" : "beta")
+                            << " pair (type " << Line.pType() << ") but has a light-particle excitation energy (column 32) of "
+                            << Line.e1() << " MeV; only a particle pair can have one." << std::endl;
+        return -1;
+      }
+      {
+        std::map<int, double>::const_iterator seen = lightExcitation.find(Line.ir());
+        if (seen == lightExcitation.end()) {
+          lightExcitation[Line.ir()] = Line.e1();
+        } else if (fabs(seen->second - Line.e1()) > 1.0e-9) {
+          configure.outStream << "ERROR: pair " << Line.ir() << " has two light-particle excitation energies (column 32), "
+                              << seen->second << " and " << Line.e1() << " MeV, on different <levels> lines; a pair's "
+                              << "columns must be the same on every line." << std::endl;
+          return -1;
+        }
+      }
       if (Line.l() > maxLValue && Line.pType() == 0) maxLValue = Line.l();
       if (Line.isActive() != 1 && configure.includeAllJPi) {
         // A pair is a property of the system, not of the level that happens to mention it: with every
@@ -722,12 +749,12 @@ int CNuc::ParseExternalCapture(const Config &configure, std::map<int, int> &ecPa
     newJGroup.SetNucleus(exitPair->GetNucleus(), exitPair->GetNucleusZ(), exitPair->GetNucleusA());
     int jGroupNum = this->IsJGroup(newJGroup);
     int levelNum = 0;
-    ALevel probeLevel(exitPair->GetExE());
+    ALevel probeLevel(exitPair->GetHeavyExE());
     if (!jGroupNum || !this->GetJGroup(jGroupNum)->IsLevel(probeLevel)) {
       const bool used = usedExitKeys.count(exitPair->GetPairKey()) > 0;
       configure.outStream << (used ? "ERROR" : "WARNING") << ": external capture into pair " << exitPair->GetPairKey()
                           << " needs its final state, J^pi = " << jValue << (parity > 0 ? "+" : "-") << " at E_x = "
-                          << exitPair->GetExE() << " MeV, as a level of the project (with its ANC and gamma widths); none is listed"
+                          << exitPair->GetHeavyExE() << " MeV, as a level of the project (with its ANC and gamma widths); none is listed"
                           << (jGroupNum ? " within 1 keV in that J^pi group." : " and that J^pi group does not exist.")
                           << (used ? "" : "  No segment uses this pair: external capture into it is switched off for this run.")
                           << std::endl;
@@ -735,7 +762,7 @@ int CNuc::ParseExternalCapture(const Config &configure, std::map<int, int> &ecPa
       continue;
     }
     if (jGroupNum) {
-      ALevel newLevel(exitPair->GetExE());
+      ALevel newLevel(exitPair->GetHeavyExE());
       levelNum = this->GetJGroup(jGroupNum)->IsLevel(newLevel);
       // IsLevel is an energy-only match within 1 keV and returns the first level that fits.  Since e239a12 two
       // levels of one J^pi may sit within 1 keV of each other (different level IDs), so the pair's E_x can match
@@ -743,11 +770,11 @@ int CNuc::ParseExternalCapture(const Config &configure, std::map<int, int> &ecPa
       {
         int matches = 0;
         for (int lv = 1; lv <= this->GetJGroup(jGroupNum)->NumLevels(); lv++)
-          if (fabs(this->GetJGroup(jGroupNum)->GetLevel(lv)->GetE() - exitPair->GetExE()) <= 1.0e-3) matches++;
+          if (fabs(this->GetJGroup(jGroupNum)->GetLevel(lv)->GetE() - exitPair->GetHeavyExE()) <= 1.0e-3) matches++;
         if (matches > 1) {
           configure.outStream << "ERROR: external capture into pair " << exitPair->GetPairKey() << ": " << matches
                               << " levels of J^pi = " << jValue << (parity > 0 ? "+" : "-") << " lie within 1 keV of its final-state energy E_x = "
-                              << exitPair->GetExE() << " MeV, so the final state is ambiguous.  Move the extra level(s) by more than 1 keV"
+                              << exitPair->GetHeavyExE() << " MeV, so the final state is ambiguous.  Move the extra level(s) by more than 1 keV"
                               << " or give the pair the energy of the one it decays to." << std::endl;
           return -1;
         }
@@ -769,11 +796,11 @@ int CNuc::ParseExternalCapture(const Config &configure, std::map<int, int> &ecPa
         double ecConvert = 0.;
         if (theFinalPair->GetPType() == 0) {
           NFIntegral newNFIntegral(theFinalPair);
-          nfIntegralValue = newNFIntegral(this->GetJGroup(jGroupNum)->GetChannel(ch)->GetL(), exitPair->GetExE());
+          nfIntegralValue = newNFIntegral(this->GetJGroup(jGroupNum)->GetChannel(ch)->GetL(), exitPair->GetHeavyExE());
           WhitFunc newWhitFunc(theFinalPair);
           double whitConv = newWhitFunc(this->GetJGroup(jGroupNum)->GetChannel(ch)->GetL(),
                                         theFinalPair->GetChRad(),
-                                        fabs(exitPair->GetExE() - theFinalPair->GetSepE() - theFinalPair->GetExE()));
+                                        fabs(exitPair->GetHeavyExE() - theFinalPair->GetSepE() - theFinalPair->GetExE()));
           ecConvert = sqrt(2.0 * theFinalPair->GetRedMass() * theFinalPair->GetChRad() * uconv / pow(hbarc, 2.0)) / whitConv;
         }
         this->GetJGroup(jGroupNum)->GetLevel(levelNum)->AddNFIntegral(nfIntegralValue);
@@ -782,7 +809,7 @@ int CNuc::ParseExternalCapture(const Config &configure, std::map<int, int> &ecPa
     } else {
       this->AddJGroup(newJGroup);
       jGroupNum = this->IsJGroup(newJGroup);
-      ALevel newLevel(exitPair->GetExE());
+      ALevel newLevel(exitPair->GetHeavyExE());
       this->GetJGroup(jGroupNum)->AddLevel(newLevel);
       levelNum = this->GetJGroup(jGroupNum)->IsLevel(newLevel);
       this->GetJGroup(jGroupNum)->GetLevel(levelNum)->SetECParams(ec->first, ec->second);
@@ -811,10 +838,10 @@ int CNuc::ParseExternalCapture(const Config &configure, std::map<int, int> &ecPa
 
                 this->GetJGroup(jGroupNum)->GetLevel(levelNum)->AddGamma(0.1);
                 NFIntegral newNFIntegral(this->GetPair(ir));
-                double nfIntegralValue = newNFIntegral(chL, exitPair->GetExE());
+                double nfIntegralValue = newNFIntegral(chL, exitPair->GetHeavyExE());
                 WhitFunc newWhitFunc(this->GetPair(ir));
                 double whitConv = newWhitFunc(chL, this->GetPair(ir)->GetChRad(),
-                                              fabs(exitPair->GetExE() - this->GetPair(ir)->GetSepE() - this->GetPair(ir)->GetExE()));
+                                              fabs(exitPair->GetHeavyExE() - this->GetPair(ir)->GetSepE() - this->GetPair(ir)->GetExE()));
                 double ecConvert = sqrt(2.0 * this->GetPair(ir)->GetRedMass() * this->GetPair(ir)->GetChRad() * uconv / pow(hbarc, 2.0)) / whitConv;
                 this->GetJGroup(jGroupNum)->GetLevel(levelNum)->AddNFIntegral(nfIntegralValue);
                 this->GetJGroup(jGroupNum)->GetLevel(levelNum)->AddECConversionFactor(ecConvert);
@@ -1046,8 +1073,11 @@ void CNuc::PrintNuc(const Config &configure) {
           << std::setw(30) << "Heavy Particle M: " << this->GetPair(i)->GetM(2) << std::endl
           << std::setw(30) << "Heavy Particle g: " << this->GetPair(i)->GetG(2) << std::endl
           << std::setw(30) << "Seperation Energy [MeV]: " << this->GetPair(i)->GetSepE() << std::endl
-          << std::setw(30) << "Excitation Energy [MeV]: " << this->GetPair(i)->GetExE() << std::endl
-          << std::setw(30) << "Channel Radius: " << this->GetPair(i)->GetChRad() << std::endl;
+          << std::setw(30) << "Excitation Energy [MeV]: " << this->GetPair(i)->GetHeavyExE() << std::endl;
+      // the light particle's excitation (32nd column) only when it is set, so older outputs are unchanged
+      if (this->GetPair(i)->GetLightExE() != 0.)
+        out << std::setw(30) << "Light Excitation [MeV]: " << this->GetPair(i)->GetLightExE() << std::endl;
+      out << std::setw(30) << "Channel Radius: " << this->GetPair(i)->GetChRad() << std::endl;
       if (this->GetPair(i)->GetPType() == 0)
         out << std::setw(30) << "Pair Type: " << "Particle,Particle" << std::endl;
       else if (this->GetPair(i)->GetPType() == 10)
@@ -1218,7 +1248,7 @@ bool CNuc::TransformIn(const Config &configure) {
                 penes.push_back(tempPene);
               }
             } else if (theChannel->GetRadType() == 'E' || theChannel->GetRadType() == 'M') {
-              if (fabs(theLevel->GetE() - this->GetPair(theChannel->GetPairNum())->GetExE()) < 1.e-3 &&
+              if (fabs(theLevel->GetE() - this->GetPair(theChannel->GetPairNum())->GetHeavyExE()) < 1.e-3 &&
                   theJGroup->GetJ() == this->GetPair(theChannel->GetPairNum())->GetJ(2) &&
                   theJGroup->GetPi() == this->GetPair(theChannel->GetPairNum())->GetPi(2)) {
                 int tempSign;
@@ -2647,7 +2677,7 @@ void CNuc::TransformOut(const Config &configure) {
             tempPene.push_back(pene);
           }
         } else if (theChannel->GetRadType() == 'M' || theChannel->GetRadType() == 'E') {
-          if (fabs(theLevel->GetE() - this->GetPair(theChannel->GetPairNum())->GetExE()) < 1.e-3 &&
+          if (fabs(theLevel->GetE() - this->GetPair(theChannel->GetPairNum())->GetHeavyExE()) < 1.e-3 &&
               theJGroup->GetJ() == this->GetPair(theChannel->GetPairNum())->GetJ(2) &&
               theJGroup->GetPi() == this->GetPair(theChannel->GetPairNum())->GetPi(2)) {
             double jValue = theJGroup->GetJ();
@@ -2752,7 +2782,7 @@ void CNuc::CheckRadiativeWidths(const Config &configure, const vector_r &params)
                 pow(gamma, 2.0);
           } else if (theChannel->GetRadType() == 'M' || theChannel->GetRadType() == 'E') {
             // Ground state transitions parametrize a moment, not a width.
-            if (fabs(theLevel->GetE() - thePair->GetExE()) < 1.e-3 &&
+            if (fabs(theLevel->GetE() - thePair->GetHeavyExE()) < 1.e-3 &&
                 theJGroup->GetJ() == thePair->GetJ(2) &&
                 theJGroup->GetPi() == thePair->GetPi(2)) continue;
             double pene = (configure.paramMask & Config::USE_RMC_FORMALISM) ? 1.0 : pow(fabs(localEnergy) / hbarc, 2.0 * theChannel->GetL() + 1.0);
@@ -2864,14 +2894,14 @@ void CNuc::PrintTransformParams(const Config &configure) {
           if (localEnergy < 0.0 && theChannel->GetRadType() == 'P') {
             out << "  C  = " << std::setw(12) << sqrt(fabs(theLevel->GetBigGamma(ch)))
                 << " fm^(-1/2)";
-          } else if (fabs(theLevel->GetE() - this->GetPair(theChannel->GetPairNum())->GetExE()) < 1.e-3 &&
+          } else if (fabs(theLevel->GetE() - this->GetPair(theChannel->GetPairNum())->GetHeavyExE()) < 1.e-3 &&
                      theJGroup->GetJ() == this->GetPair(theChannel->GetPairNum())->GetJ(2) &&
                      theJGroup->GetPi() == this->GetPair(theChannel->GetPairNum())->GetPi(2) &&
                      theChannel->GetRadType() == 'M' && theChannel->GetL() == 1) {
             int tempSign = (theLevel->GetBigGamma(ch) < 0) ? (-1) : (1);
             out << "  mu = " << std::setw(12) << tempSign * sqrt(fabs(theLevel->GetBigGamma(ch)))
                 << " nm       ";
-          } else if (fabs(theLevel->GetE() - this->GetPair(theChannel->GetPairNum())->GetExE()) < 1.e-3 &&
+          } else if (fabs(theLevel->GetE() - this->GetPair(theChannel->GetPairNum())->GetHeavyExE()) < 1.e-3 &&
                      theJGroup->GetJ() == this->GetPair(theChannel->GetPairNum())->GetJ(2) &&
                      theJGroup->GetPi() == this->GetPair(theChannel->GetPairNum())->GetPi(2) &&
                      theChannel->GetRadType() == 'E' && theChannel->GetL() == 2) {
@@ -2999,13 +3029,13 @@ vector_r CNuc::GetTransformParams(const Config &configure) {
         if (localEnergy < 0.0 && theChannel->GetRadType() == 'P') {
           int tempSign = (theLevel->GetBigGamma(ch) < 0) ? (-1) : (1);
           params.push_back(tempSign * sqrt(fabs(theLevel->GetBigGamma(ch))));
-        } else if (fabs(theLevel->GetE() - this->GetPair(theChannel->GetPairNum())->GetExE()) < 1.e-3 &&
+        } else if (fabs(theLevel->GetE() - this->GetPair(theChannel->GetPairNum())->GetHeavyExE()) < 1.e-3 &&
                    theJGroup->GetJ() == this->GetPair(theChannel->GetPairNum())->GetJ(2) &&
                    theJGroup->GetPi() == this->GetPair(theChannel->GetPairNum())->GetPi(2) &&
                    theChannel->GetRadType() == 'M' && theChannel->GetL() == 1) {
           int tempSign = (theLevel->GetBigGamma(ch) < 0) ? (-1) : (1);
           params.push_back(tempSign * sqrt(fabs(theLevel->GetBigGamma(ch))));
-        } else if (fabs(theLevel->GetE() - this->GetPair(theChannel->GetPairNum())->GetExE()) < 1.e-3 &&
+        } else if (fabs(theLevel->GetE() - this->GetPair(theChannel->GetPairNum())->GetHeavyExE()) < 1.e-3 &&
                    theJGroup->GetJ() == this->GetPair(theChannel->GetPairNum())->GetJ(2) &&
                    theJGroup->GetPi() == this->GetPair(theChannel->GetPairNum())->GetPi(2) &&
                    theChannel->GetRadType() == 'E' && theChannel->GetL() == 2) {

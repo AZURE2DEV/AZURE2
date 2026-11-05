@@ -282,7 +282,9 @@ class Pair:
 
     # Number of doubles per record emitted by AZUREAPI::GetPairsInfo.
     # Must match AZUREAPI::kPairInfoFields.
-    _NFIELDS = 19
+    # 20 since 2026-11-05 (light_excitation); an engine built before then sends
+    # 19, which from_record still accepts (light_excitation = 0).
+    _NFIELDS = 20
 
     number: int             # 1-based pair number (matches Parameter.pair)
     key: int                # user pair key from the .azr file
@@ -297,12 +299,40 @@ class Pair:
     Z2: int
     M2: float
     sep_energy: float       # separation energy (MeV)
-    excitation: float       # pair excitation energy (MeV)
+    excitation: float       # total pair excitation energy, light + heavy (MeV):
+                            #   the channel threshold is sep_energy + excitation
     channel_radius: float   # channel radius (fm)
     i1i2factor: float       # 1 / ((2 J1 + 1)(2 J2 + 1))
     nucleus_Z: int = 0      # the compound nucleus the pair forms (Z1+Z2 for a particle
     nucleus_A: int = 0      #   pair, Z2 for a gamma pair, Z2-Z1 for a beta pair; A = round(M))
     abundance: float = 1.0  # current isotopic abundance of that nucleus (1 unless <abundances>)
+    light_excitation: float = 0.0  # excitation of particle 1 (MeV), column 32 of the <levels> line
+
+    @property
+    def heavy_excitation(self) -> float:
+        """Excitation energy of particle 2 (MeV), column 17 (``e2``): the
+        total :attr:`excitation` less :attr:`light_excitation`."""
+        return self.excitation - self.light_excitation
+
+    @property
+    def threshold(self) -> float:
+        """Excitation energy of the compound nucleus at which this pair's
+        channels open (MeV): ``sep_energy + excitation`` (both particles'
+        excitations included)."""
+        return self.sep_energy + self.excitation
+
+    @property
+    def label(self) -> str:
+        """The two particles' J^pi, an excited one marked with its excitation
+        energy: ``'2+*(4.439 MeV) + 2+*(4.439 MeV)'`` for 12C(2+)+12C(2+),
+        ``'0+ + 2+*(4.439 MeV)'`` for a + 12C(2+)."""
+        def part(J, parity, ex):
+            s = f"{J:g}{'+' if parity > 0 else '-'}"
+            return s + (f"*({ex:.4g} MeV)" if ex else "")
+        if self.is_photon:
+            return f"gamma + {part(self.J2, self.parity2, self.heavy_excitation)}"
+        return (f"{part(self.J1, self.parity1, self.light_excitation)} + "
+                f"{part(self.J2, self.parity2, self.heavy_excitation)}")
 
     @property
     def nucleus(self):
@@ -317,8 +347,12 @@ class Pair:
     @classmethod
     def from_record(cls, record):
         """Build a :class:`Pair` from one ``GET_PAIRS_INFO`` record."""
+        record = list(record)
+        if len(record) == cls._NFIELDS - 1:     # an engine before light_excitation
+            record.append(0.0)
         (number, key, ptype, is_entrance, J1, parity1, Z1, M1, J2, parity2,
-         Z2, M2, sepE, exE, chRad, i1i2factor, nucZ, nucA, abundance) = record
+         Z2, M2, sepE, exE, chRad, i1i2factor, nucZ, nucA, abundance,
+         lightExE) = record
         return cls(
             number=int(round(number)),
             key=int(round(key)),
@@ -332,6 +366,7 @@ class Pair:
             channel_radius=float(chRad), i1i2factor=float(i1i2factor),
             nucleus_Z=int(round(nucZ)), nucleus_A=int(round(nucA)),
             abundance=float(abundance),
+            light_excitation=float(lightExE),
         )
 
     def __repr__(self):
@@ -342,6 +377,8 @@ class Pair:
                 f"{' entrance' if self.is_entrance else ''}"
                 f"{' photon' if self.is_photon else ''}, "
                 f"J1={self.J1:g}, J2={self.J2:g}, "
+                f"{f'light_excitation={self.light_excitation:g}, ' if self.light_excitation else ''}"
+                f"{f'heavy_excitation={self.heavy_excitation:g}, ' if self.heavy_excitation else ''}"
                 f"i1i2factor={self.i1i2factor:g})")
 
 

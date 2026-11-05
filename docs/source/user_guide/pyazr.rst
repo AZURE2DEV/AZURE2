@@ -121,6 +121,17 @@ differ whenever the file numbers its pairs in another order than the engine
 counts them, so match a parameter to a reaction through ``azr.pairs`` rather
 than by reading the key as the number.
 
+``Pair.excitation`` is the pair's **total** excitation, light plus heavy
+particle, so ``Pair.threshold`` = ``sep_energy + excitation`` is where its
+channels open. ``Pair.light_excitation`` is the light particle's share (the
+optional 32nd column of a ``<levels>`` line, November 2026) and
+``Pair.heavy_excitation`` the heavy one's; ``Pair.label`` marks an excited
+particle (``'2+*(4.439 MeV) + 0+'``). In an ``AzrModel`` the same three are
+``AzrChannel.excitation`` / ``light_excitation`` / ``heavy_excitation``;
+setting ``light_excitation`` adds the 32nd column, setting it to 0 removes it
+again, and a line without the column keeps its 31 columns
+(:doc:`../reference/data_formats`).
+
 Filtered views (``.free``, ``.energies``, ``.widths``, ``.norms``,
 ``.shifts``, ``.sqrt_shifts``, ``.fn_shifts``) and lookups (``.by_level(...)``, ``.by_name(...)``,
 ``.by_physical_level()``) are all available. A ``LevelKey`` prints as
