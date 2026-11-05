@@ -611,6 +611,86 @@ also share one level-matrix solution per energy (each term still gets its own
 T-matrix), in the calculation and in the analytic gradient; the results are
 unchanged.
 
+Sample Transmission and Self-Shielded Yield (``transmission``, ``yield``)
+-------------------------------------------------------------------------
+
+A neutron time-of-flight measurement does not measure a cross section. A
+transmission experiment measures the fraction of the beam that crosses a sample
+of :math:`n` atoms/barn,
+
+.. math::
+
+   T = e^{-n\,\sigma_\mathrm{tot}},
+
+and a capture (or reaction) experiment measures a yield that the sample itself
+attenuates (self-shielding),
+
+.. math::
+
+   Y_0 = \frac{\sigma}{\sigma_\mathrm{tot}}\left(1 - e^{-n\,\sigma_\mathrm{tot}}\right),
+
+the first term of SAMMY's capture yield (SAMMY manual, Sec. III.D.1;
+:math:`Y_0 \to n\sigma` for a thin sample). The keywords
+``transmission <n>`` and ``yield <n>`` at the end of a segment line, with
+:math:`n` in atoms/barn, make the segment that observable, and the data in its
+file are then transmissions or yields (dimensionless):
+
+.. code-block:: text
+
+   1 1 1 0.29 0.66 0 180 0 1 0 0 0 0 0 data/trans.dat 0 0 total 1 transmission 0.15
+   1 1 2 0.29 0.66 0 180 0 1 0 0 0 0 0 data/capt.dat 0 0 yield 0.15
+
+The order with resolution matters. A transmission or yield segment under a
+sub-point target effect (Gaussian beam spread, a user-defined resolution
+function, ...) is transformed at every sub-point *before* the kernel, as SAMMY
+does: what the detector averages is :math:`T(E)`, not :math:`\sigma(E)`, and
+:math:`\langle e^{-n\sigma}\rangle \neq e^{-n\langle\sigma\rangle}`.
+Exponentiating a broadened cross section fills in the dips: on the test model
+(an s-wave resonance with :math:`\Gamma_n = 34` keV, :math:`n\sigma \approx 1`
+at the peak, a 15 keV beam spread) the two differ by 6 % at the resonance.
+Fitting transmission data rather than a total cross section reduced from them
+avoids the problem altogether.
+
+``transmission``
+   The segment's value -- its own term, a **Sum** of terms, or an
+   abundance-weighted **sample** sum -- is :math:`\sigma` in
+   :math:`e^{-n\sigma}`. Write ``total 1`` for the total cross section by the
+   optical theorem (Neutron Total Cross Sections, above). A natural sample is
+   one line, the sample sum of the nuclides' totals,
+   :math:`T = e^{-n \sum_i w_i \sigma_{\mathrm{tot},i}}`.
+``yield``
+   The segment is a reaction of its entrance pair (a capture pair, another
+   particle pair, a total capture with exit key ``-1``, or a **Sum** of such
+   exits of the same entrance pair); :math:`\sigma_\mathrm{tot}` is the total
+   cross section of the entrance pair by the optical theorem, computed from the
+   same level-matrix solution.
+
+Both need a neutral entrance pair and an angle-integrated cross section (data
+type 0, or 3 for total capture); neither is allowed on a **Ratio**, and a line
+cannot carry both. Not implemented yet, and refused with an error rather than
+computed wrongly: ``yield`` on a sample segment (the total of a mixture), a
+sample transmission under a sub-point target effect (the nuclides' terms sit on
+different sub-point grids), and a target effect that is blended in at range
+edges or has an automatic tolerance. The optical-theorem total leaves capture
+out (photon channels have no width in the level matrix), which matters only
+where capture is not small against the total; for a transmission add the
+capture pairs as **Sum** components if it does. The multiple-scattering terms
+of a capture yield (SAMMY's :math:`Y_1`, :math:`Y_2`, ...), which need the
+sample geometry, are not included, nor is a fitted sample thickness: correct
+the data for multiple scattering, and give the thickness its measured value.
+
+The keywords apply to test segments as well (a calculated transmission or
+yield curve), work in pyazr, and have an analytic gradient. The GUI keeps them
+through a load and save but has no control for them yet; a sample segment's
+decomposition file (``AZUREOut_sample_seg=<key>.out``) then notes that its
+total column is the transmission while the nucleus columns stay cross sections.
+
+.. warning::
+
+   An engine older than November 2026 does not know the keywords and ignores
+   them silently: it compares the cross section itself with the
+   transmission or yield data.
+
 Segments Without Data
 ---------------------
 

@@ -88,6 +88,8 @@ class SegLine {
     energyShiftSqrtError_ = 0.0;
     natural_ = "0";
     total_ = 0;
+    transmission_ = 0.0;
+    yield_ = 0.0;
     absolute_ = 0;
     varyEnergyShiftSqrt_ = 0;
     // shared constant energy shift: off unless a trailing "shiftgroup" block is present
@@ -282,6 +284,15 @@ class SegLine {
               stream.setstate(std::ios::failbit);
               break;
             }
+          } else if (keyword == "transmission" || keyword == "yield") {
+            // a thick-sample neutron observable of the segment's cross section, n in atoms/barn (ESegment::IsTransformed):
+            // transmission T = exp(-n sigma), capture/reaction yield Y0 = (sigma_x/sigma_t)(1 - exp(-n sigma_t))
+            double &n = (keyword == "transmission") ? transmission_ : yield_;
+            if (!(advancedStream >> n) || !(n > 0.0)) {
+              parseError_ = keyword + " needs the sample thickness n > 0 in atoms/barn";
+              stream.setstate(std::ios::failbit);
+              break;
+            }
           } else if (keyword == "absolute") {
             // angular-coefficient segments (isDiff 9): the data are the absolute
             // A_k (b/sr, dsigma/dOmega = sum_k A_k P_k) instead of a_k = A_k / A_0
@@ -415,6 +426,10 @@ class SegLine {
   const std::string &natural() const { return natural_; };
   /// 1 for "total 1": the total cross section of the entrance pair by the optical theorem (ESegment::IsTotal).
   int total() const { return total_; };
+  /// "transmission <n>": the segment is the transmission exp(-n sigma) of a sample n atoms/barn thick (0: not).
+  double transmission() const { return transmission_; };
+  /// "yield <n>": the segment is the self-shielded yield (sigma/sigma_t)(1 - exp(-n sigma_t)) (0: not).
+  double yieldThickness() const { return yield_; };
   /// "absolute 1": angular-coefficient data are the absolute A_k, not a_k / a_0.
   int absolute() const { return absolute_; };
   /*!
@@ -527,6 +542,8 @@ class SegLine {
   int operationType_;
   std::string natural_;
   int total_;
+  double transmission_;
+  double yield_;
   int absolute_;
   std::string componentsList_;
   int isUPOS_;

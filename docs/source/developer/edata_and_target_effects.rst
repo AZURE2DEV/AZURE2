@@ -443,6 +443,30 @@ equation evaluated at each depth energy.  The latter combination used to fall
 through to pure target integration on a grid sized for the convolution,
 corrupting the yield.
 
+Transmission and yield segments
+-------------------------------
+
+A ``transmission <n>`` or ``yield <n>`` segment (``ESegment::IsTransformed``) is
+a nonlinear function of its cross sections, so it cannot be one more linear
+combination of integrated point values.  Its points, base and components, keep
+the plain cross sections -- they can still be mapped onto other segments' points
+and share their calculations -- and ``ESegment::TransformedValue`` forms the
+observable: the terms (``ESegment::TransformTerms``: weight = component scaling,
+frame factor and sample abundance; a yield's hidden ``total 1`` component,
+``IsYieldTotalTerm``, made by ``EData::FinishTransformedSegment``, is its
+:math:`\sigma_t`) are summed and transformed at the point, or, under a
+sub-point target effect, at every sub-point, and the transformed values are
+swapped into the base point's sub-point slots for one more pass of
+``EPoint::IntegrateTargetEffect``.  ``EData::CheckTransformedSegments`` refuses
+what that cannot express: terms on different sub-point grids (a sample of
+several compound nuclei), and a blended or automatically skipped effect.  Every
+evaluation path assembles a segment through ``CalculateTheoreticalCrossSection``;
+pyazr's branch tests ``ESegment::NeedsAssembly`` (components, sample weights or
+a transform), and the MCMC output snapshot assembles those segments too.  The
+gradient (``GradTransformedPoint``) back-propagates each term's point or
+sub-point with :math:`f'` times the kernel weight (``TargetEffectWeights``);
+such points are never grouped (``Groupable``).  Test: ``tests/transmission_yield``.
+
 Point mapping across segments
 -----------------------------
 

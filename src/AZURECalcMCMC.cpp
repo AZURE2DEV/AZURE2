@@ -874,6 +874,15 @@ void mcmc_iteration_callback(int current_step, int total_steps) {
                 data.point()->Calculate(localCompound, g_mcmc_for_callbacks->configure());
               }
             }
+            // Segments whose value the segment assembles (components, sample weights, transmission / yield): the
+            // iterator above skips composite segments, and a point holds the plain cross section, not the observable.
+            for (int s = 1; s <= localData->NumSegments(); s++) {
+              ESegment *seg = localData->GetSegment(s);
+              if (!seg || !seg->NeedsAssembly()) continue;
+              for (int pid = 0; pid < seg->NumPoints(); pid++)
+                seg->GetPoint(pid + 1)->SetFitCrossSection(
+                    seg->CalculateTheoreticalCrossSection(pid, localCompound, g_mcmc_for_callbacks->configure(), localData));
+            }
 
             localData->WriteOutputFiles(g_mcmc_for_callbacks->configure(), true);
 

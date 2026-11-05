@@ -33,6 +33,8 @@ class ExtrapLine {
     parseWarning_ = "";
     natural_ = "0";
     total_ = 0;
+    transmission_ = 0.0;
+    yield_ = 0.0;
     phaseS_ = -1.0;  // phase-shift channel spin: < 0 = not given ("spin <s>" keyword)
     // Initialize UPOS parameters to defaults
     isUPOS_ = 0;
@@ -79,6 +81,12 @@ class ExtrapLine {
           }
         } else if (keyword == "total") {
           if (!(advancedStream >> total_) || (total_ != 0 && total_ != 1)) {
+            stream.setstate(std::ios::failbit);
+            break;
+          }
+        } else if (keyword == "transmission" || keyword == "yield") {
+          double &n = (keyword == "transmission") ? transmission_ : yield_;
+          if (!(advancedStream >> n) || !(n > 0.0)) {
             stream.setstate(std::ios::failbit);
             break;
           }
@@ -195,6 +203,9 @@ class ExtrapLine {
   const std::string &natural() const { return natural_; };
   /// 1 for "total 1" (SegLine::total).
   int total() const { return total_; };
+  /// "transmission <n>" / "yield <n>" (SegLine.h): 0 when absent.
+  double transmission() const { return transmission_; };
+  double yieldThickness() const { return yield_; };
   /*!
    * Returns the semicolon-separated list of components.
    */
@@ -242,6 +253,8 @@ class ExtrapLine {
   int operationType_;
   std::string natural_;
   int total_;
+  double transmission_;
+  double yield_;
   bool hasCovariance_ = false;
   std::string componentsList_;
   int isUPOS_;

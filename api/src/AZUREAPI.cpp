@@ -324,7 +324,7 @@ int AZUREAPI::UpdateSegments(vector_r &p) {
     std::vector<double> angularDists;
 
     // Handle component segments using the new integrated calculation method
-    if (segments[i].HasComponents() || segments[i].IsNatural()) {
+    if (segments[i].NeedsAssembly()) {
       for (int k = 0; k < data.size(); ++k) {
         // Use the new component-aware calculation method
         double theoreticalValue = segments[i].CalculateTheoreticalCrossSection(k, localCompound, configure(), localData, pre);
@@ -434,7 +434,7 @@ int AZUREAPI::UpdateSegmentsRWA(vector_r &p) {
     std::vector<double> angularDists;
 
     // Handle component segments using the new integrated calculation method
-    if (segments[i].HasComponents() || segments[i].IsNatural()) {
+    if (segments[i].NeedsAssembly()) {
       for (int k = 0; k < data.size(); ++k) {
         // Use the new component-aware calculation method
         double theoreticalValue = segments[i].CalculateTheoreticalCrossSection(k, localCompound, configure(), localData, pre);
@@ -545,7 +545,7 @@ int AZUREAPI::UpdateSegmentsAllRWA(vector_r &p) {
     std::vector<double> angularDists;
 
     // Handle component segments using the new integrated calculation method
-    if (segments[i].HasComponents() || segments[i].IsNatural()) {
+    if (segments[i].NeedsAssembly()) {
       for (int k = 0; k < data.size(); ++k) {
         // Use the new component-aware calculation method
         double theoreticalValue = segments[i].CalculateTheoreticalCrossSection(k, localCompound, configure(), localData, pre);

@@ -212,6 +212,9 @@ static void WriteNaturalDecomposition(const Config &configure, bool isExtrap, in
   if (!out) return;
   out << "# Segment " << segment->GetSegmentKey() << ": abundance-weighted sum over compound nuclei (sample "
       << segment->GetNaturalToken() << ")" << std::endl;
+  if (segment->IsTransmission())
+    out << "# transmission of n = " << segment->GetSampleThickness() << " atoms/b: the total column is exp(-n s), the"
+        << " nucleus columns the abundance-weighted cross sections s_k (b), s = sum_k s_k" << std::endl;
   out << "# E_" << (kinflag ? "lab" : "cm") << " [MeV]   total";
   for (size_t k = 0; k < nucleusLabels.size(); k++) out << "   " << nucleusLabels[k];
   out << std::endl;
@@ -450,6 +453,8 @@ int EData::Fill(const Config &configure, CNuc *theCNuc) {
                 }
                 baseSegment->SetIsTotalCapture(numCapturePairs);
               }
+              if (!this->FinishTransformedSegment(theCNuc, this->GetSegment(thisSegmentNum), numTotalSegments, false, configure))
+                return -1;
             }
           } else {
             if (NewSegment.GetExitKey() == -1) {
@@ -476,6 +481,7 @@ int EData::Fill(const Config &configure, CNuc *theCNuc) {
 
   if (this->NumSegments() > 0) {
     if (this->ReadTargetEffectsFile(configure, theCNuc) == -1) return -1;
+    if (!this->CheckTransformedSegments(configure)) return -1;
     this->MapData(theCNuc);
   }
 
@@ -720,6 +726,8 @@ int EData::MakePoints(const Config &configure, CNuc *theCNuc) {
                 }
                 baseSegment->SetIsTotalCapture(numCapturePairs);
               }
+              if (!this->FinishTransformedSegment(theCNuc, this->GetSegment(thisSegmentNum), numTotalSegments, true, configure))
+                return -1;
             }
           } else {
             if (NewSegment.GetExitKey() == -1) {
@@ -742,6 +750,7 @@ int EData::MakePoints(const Config &configure, CNuc *theCNuc) {
 
   if (this->NumSegments() > 0) {
     if (this->ReadTargetEffectsFile(configure, theCNuc) == -1) return -1;
+    if (!this->CheckTransformedSegments(configure)) return -1;
     this->MapData(theCNuc);
   }
 
@@ -3075,6 +3084,105 @@ bool EData::CheckComponentPairs(CNuc *theCNuc, const ESegment &baseSegment, int 
     return false;
   }
   entrancePair->SetEntrance();
+  return true;
+}
+
+/*!
+ * A transmission or yield segment (ESegment::IsTransformed), once its components exist: refuse what the transform
+ * cannot mean, make every component a plain cross section, and give a yield its hidden total-cross-section term
+ * (entrance pair to itself, "total 1", by the optical theorem), the s_t of Y0 = (s / s_t)(1 - exp(-n s_t)).
+ */
+bool EData::FinishTransformedSegment(CNuc *theCNuc, ESegment *seg, int key, bool isTest, const Config &configure) {
+  if (!seg || !seg->IsTransformed()) return true;
+  const std::string what = std::string(isTest ? "test segment #" : "segment #") + std::to_string(key) + " (" +
+                           (seg->IsTransmission() ? "transmission" : "yield") + "): ";
+  auto refuse = [&](const std::string &why) {
+    configure.outStream << "ERROR: " << what << why << std::endl;
+    return false;
+  };
+  if (seg->IsTransmission() && seg->IsYield()) return refuse("a line is a transmission or a yield, not both.");
+  if (seg->IsDifferential() || seg->IsPhase() || seg->IsAnalyzingPower() || seg->IsAngularDist() || seg->IsUPOS() ||
+      seg->IsCoefficients() || seg->GetCrossSectionComponent() != 0)
+    return refuse("the transform acts on an angle-integrated cross section (data type 0, or 3 for total capture).");
+  if (seg->IsAdvanced() && seg->GetLegacyOperationType() != 0) return refuse("not on a RATIO.");
+  PPair *entrance = theCNuc->GetPair(theCNuc->GetPairNumFromKey(seg->GetEntranceKey()));
+  if (entrance->GetPType() != 0 || entrance->GetZ(1) * entrance->GetZ(2) != 0)
+    return refuse("a sample transmission or self-shielded yield needs a neutral entrance pair (a neutron beam).");
+  for (ESegment *comp : seg->GetComponentSegments())
+    if (comp) comp->ClearTransform();
+  if (seg->IsTransmission()) return true;
+
+  if (seg->IsNatural())
+    return refuse("not on a sample (abundance-weighted) segment: the total of a mixture is not implemented for Y0.");
+  if (seg->GetExitKey() == seg->GetEntranceKey() || seg->IsTotal())
+    return refuse("Y0 is a capture or reaction yield: the exit pair must differ from the entrance pair (no \"total 1\").");
+  for (ESegment *comp : seg->GetComponentSegments()) {
+    if (!comp) continue;
+    if (comp->GetEntranceKey() != seg->GetEntranceKey() || comp->GetExitKey() == comp->GetEntranceKey())
+      return refuse("every term of a yield must be a reaction of the segment's entrance pair (pair " +
+                    std::to_string(seg->GetEntranceKey()) + ") to another exit pair.");
+  }
+  if (entrance->IsIdentical()) return refuse("not for a pair of identical particles.");
+  if (configure.paramMask & Config::USE_RMC_FORMALISM)
+    return refuse("the total cross section of Y0 needs the optical theorem, not available with --use-rmc.");
+  ESegment *total = this->CreateComponentSegment(*seg, seg->GetEntranceKey(), seg->GetEntranceKey());
+  if (!total) return refuse("could not create the total-cross-section term.");
+  total->ClearTransform();
+  total->SetComponentScaling(1.0);
+  total->SetYieldTotalTerm();
+  total->ApplyTotalToPoints();
+  if (!seg->HasComponents()) seg->SetOperationType(SUM);
+  seg->AddComponentSegment(total);
+  return true;
+}
+
+/*!
+ * After the target effects are read: a transmission or yield segment whose points carry a sub-point effect sums its
+ * terms at every sub-point before the transform, so every term must sit on the base point's sub-point grid.  Terms of
+ * one entrance pair do (their grids are laid out alike); the terms of a sample with several compound nuclei do not,
+ * and an effect blended in at range edges or skipped by an automatic tolerance is not one kernel on transformed
+ * values.  Refused here rather than computed wrongly.
+ */
+bool EData::CheckTransformedSegments(const Config &configure) {
+  for (ESegment &seg : this->GetSegments()) {
+    if (!seg.IsTransformed()) continue;
+    const std::string what = "segment #" + std::to_string(seg.GetSegmentKey()) + " (" +
+                             (seg.IsTransmission() ? "transmission" : "yield") + "): ";
+    for (int p = 1; p <= seg.NumPoints(); p++) {
+      EPoint *base = seg.GetPoint(p);
+      if (!ESegment::HasSubPointIntegration(base)) {
+        for (ESegment *comp : seg.GetComponentSegments())
+          if (comp && p <= comp->NumPoints() && ESegment::HasSubPointIntegration(comp->GetPoint(p))) {
+            configure.outStream << "ERROR: " << what << "a term is integrated over sub-points at E_lab "
+                                << base->GetLabEnergy() << " MeV where the segment's own point is not." << std::endl;
+            return false;
+          }
+        continue;
+      }
+      TargetEffect *te = this->GetTargetEffect(base->GetTargetEffectNum());
+      if (base->GetTargetBlendWeight() < 1.0 || (te && te->GetAutoTolerance() > 0.0)) {
+        configure.outStream << "ERROR: " << what << "its target effect blends in at range edges or has an automatic "
+                            << "tolerance; the transform needs the full kernel at every point (drop the blend width "
+                            << "and the tolerance of that <targetInt> line)." << std::endl;
+        return false;
+      }
+      for (ESegment *comp : seg.GetComponentSegments()) {
+        EPoint *cp = (comp && p <= comp->NumPoints()) ? comp->GetPoint(p) : nullptr;
+        bool same = cp && cp->NumSubPoints() == base->NumSubPoints();
+        for (int j = 1; same && j <= base->NumSubPoints(); j++) {
+          const double a = base->GetSubPoint(j)->GetCMEnergy(), b = cp->GetSubPoint(j)->GetCMEnergy();
+          if (std::fabs(a - b) > 1.0e-9 * std::max(1.0, std::fabs(a))) same = false;
+        }
+        if (!same) {
+          configure.outStream << "ERROR: " << what << "its terms do not share the base point's sub-point grid at E_lab "
+                              << base->GetLabEnergy() << " MeV (a sample with several compound nuclei under a "
+                              << "sub-point target effect is not supported yet: the transform needs every term at the "
+                              << "same energies)." << std::endl;
+          return false;
+        }
+      }
+    }
+  }
   return true;
 }
 

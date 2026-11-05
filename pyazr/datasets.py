@@ -99,9 +99,19 @@ _EXTRAP_OBSERVABLE = {
 # Keyword blocks a segment line may end with (SegLine.h), and how many tokens
 # each takes: sqrtshift b bError vary; sample <1|name> (alias natural);
 # shiftgroup <label>; shiftfngroup <label>; normgroup <label>; covariance <file>;
-# total <0|1>; shiftfn takes a variable number (see _split_keyword_tail).
+# total <0|1>; transmission <n>; yield <n>; shiftfn takes a variable number (see _split_keyword_tail).
 _KEYWORDS = {"sqrtshift": 3, "sample": 1, "natural": 1, "shiftgroup": 1, "shiftfngroup": 1,
-             "normgroup": 1, "covariance": 1, "total": 1, "absolute": 1, "spin": 1, "shiftfn": None}
+             "normgroup": 1, "covariance": 1, "total": 1, "absolute": 1, "spin": 1, "shiftfn": None,
+             "transmission": 1, "yield": 1}
+
+
+def _thickness_token(blocks, keyword):
+    """``transmission <n>`` / ``yield <n>``: the sample thickness in atoms/barn, 0.0 when absent."""
+    blk = blocks.get(keyword) or []
+    try:
+        return float(blk[0]) if blk else 0.0
+    except ValueError:
+        return 0.0
 
 
 def _spin_token(blocks):
@@ -226,6 +236,10 @@ class Segment:
     # "total 1": every term whose exit pair is its entrance pair is that (neutral) pair's total
     # cross section, by the optical theorem (one T-matrix per point instead of a SUM over exits)
     total: bool = False
+    # "transmission <n>": the data are the transmission exp(-n sigma) of a sample n atoms/barn thick;
+    # "yield <n>": the self-shielded yield (sigma/sigma_t)(1 - exp(-n sigma_t)); 0.0 = a plain cross section
+    transmission: float = 0.0
+    yield_thickness: float = 0.0
     # "spin <s>" on a phase-shift segment: the channel spin of the partial wave (None = not given;
     # the engine then requires a single channel spin for the segment's J and l)
     phase_S: Optional[float] = None
@@ -408,6 +422,8 @@ class SegmentSet(list):
             norm_group=(blocks.get("normgroup") or [None])[0],
             covariance=(blocks.get("covariance") or [None])[0],
             total=_total_token(blocks),
+            transmission=_thickness_token(blocks, "transmission"),
+            yield_thickness=_thickness_token(blocks, "yield"),
             phase_S=_spin_token(blocks),
             absolute=bool(blocks.get("absolute")) and blocks["absolute"][0] == "1",
             shift_fn=shift_fn, shift_fn_params=tuple(shift_fn_params),
@@ -515,6 +531,8 @@ class TestSegment:
     natural_sample: str = ""               # the sample's name ("" = the unnamed, or only, sample)
     total: bool = False                    # "total 1": the entrance pair's total cross section
     phase_S: Optional[float] = None        # "spin <s>": channel spin of a phase-shift segment
+    transmission: float = 0.0              # "transmission <n>": exp(-n sigma), n in atoms/barn
+    yield_thickness: float = 0.0           # "yield <n>": (sigma/sigma_t)(1 - exp(-n sigma_t))
 
     @property
     def sample(self):
@@ -598,7 +616,9 @@ class TestSegmentSet(list):
             observable=_EXTRAP_OBSERVABLE.get(isDiff, f"code{isDiff}"),
             phase_J=phase_J, phase_L=phase_L, max_ang_dist_order=max_order,
             natural=natural, natural_sample=natural_sample,
-            total=_total_token(blocks), phase_S=_spin_token(blocks))
+            total=_total_token(blocks), phase_S=_spin_token(blocks),
+            transmission=_thickness_token(blocks, "transmission"),
+            yield_thickness=_thickness_token(blocks, "yield"))
 
     # -- views ----------------------------------------------------------------
 

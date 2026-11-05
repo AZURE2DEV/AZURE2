@@ -137,6 +137,10 @@ class EData {
   /// Validates a component's pair keys (both present, one compound nucleus) and flags its entrance pair; false with the error printed otherwise.
   bool CheckComponentPairs(CNuc *, const ESegment &baseSegment, int entranceKey, int exitKey, const Config &);
   ESegment *CreateComponentSegment(const ESegment &baseSegment, int entranceKey, int exitKey);
+  /// A transmission or yield segment after its components exist: checks, plain components, the yield's total term.
+  bool FinishTransformedSegment(CNuc *, ESegment *, int key, bool isTest, const Config &);
+  /// Every term of a transmission or yield segment on the base point's sub-point grid (after the target effects).
+  bool CheckTransformedSegments(const Config &);
   ESegment *CreateComponentSegment(const ESegment &baseSegment, int entranceKey, int exitKey, double fixedAngle);
   /// Map points at equal energies onto one another, so a shared energy is calculated once.
   /// The compound nucleus tells which segments have a particle exit; null is conservative.

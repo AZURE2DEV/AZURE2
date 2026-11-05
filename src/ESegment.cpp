@@ -109,6 +109,8 @@ ESegment::ESegment(SegLine segLine) {
   componentsList_ = segLine.componentsList();
   naturalToken_ = segLine.natural();
   isTotal_ = segLine.total() == 1;
+  transmission_ = segLine.transmission();
+  yield_ = segLine.yieldThickness();
   if (segLine.isUPOS() == 1)
     isUPOS_ = true;
   else
@@ -200,6 +202,8 @@ ESegment::ESegment(ExtrapLine extrapLine) {
   componentsList_ = extrapLine.componentsList();
   naturalToken_ = extrapLine.natural();
   isTotal_ = extrapLine.total() == 1;
+  transmission_ = extrapLine.transmission();
+  yield_ = extrapLine.yieldThickness();
 
   isUPOS_ = false;
   secondaryDecayL_ = 0;
@@ -1384,6 +1388,131 @@ bool CalculatePoint(EPoint *point, const char *role, CNuc *cnuc, const Config &c
 }  // namespace
 
 /*!
+ * Transmission of a sample n atoms/barn thick, T = exp(-n s), and dT/ds.
+ */
+double ESegment::Transmission(double n, double s, double *dTds) {
+  const double t = std::exp(-n * s);
+  if (dTds) *dTds = -n * t;
+  return t;
+}
+
+/*!
+ * SAMMY's self-shielded yield Y0 = (s / st)(1 - exp(-n st)) and its partial derivatives.  g(st) = (1 - e^{-n st}) / st
+ * tends to n (thin sample: Y0 = n s); below |n st| = 1e-4 its series is used, so a vanishing total is no 0/0.
+ */
+double ESegment::YieldY0(double n, double s, double st, double *dYds, double *dYdst) {
+  const double u = n * st;
+  double g, dg;
+  if (std::fabs(u) < 1.0e-4) {
+    g = n * (1.0 - u / 2.0 + u * u / 6.0);
+    dg = n * n * (-0.5 + u / 3.0 - u * u / 8.0);
+  } else {
+    const double oneMinus = -std::expm1(-u);
+    g = oneMinus / st;
+    dg = (n * std::exp(-u) * st - oneMinus) / (st * st);
+  }
+  if (dYds) *dYds = g;
+  if (dYdst) *dYdst = s * dg;
+  return s * g;
+}
+
+bool ESegment::HasSubPointIntegration(EPoint *point) {
+  if (!point || !point->IsTargetEffect() || point->NumSubPoints() <= 0 || !point->GetParentData()) return false;
+  TargetEffect *te = point->GetParentData()->GetTargetEffect(point->GetTargetEffectNum());
+  return te && te->IsSubPointEffect();
+}
+
+bool ESegment::TransformTerms(int pointIndex, CNuc *cnuc, std::vector<TransformTerm> &terms) {
+  terms.clear();
+  EPoint *basePoint = GetPoint(pointIndex + 1);
+  if (!basePoint) return false;
+  const bool natural = this->IsNatural();
+  auto nucleusOf = [&](int entranceKey) { return cnuc->GetPair(cnuc->GetPairNumFromKey(entranceKey))->GetNucleus(); };
+  const int baseNucleus = nucleusOf(this->GetEntranceKey());
+  terms.push_back({basePoint, this, natural ? cnuc->GetAbundance(naturalSample_, baseNucleus) : 1.0, 1.0, baseNucleus,
+                   false, crossSectionComponent_});
+  for (ESegment *comp : componentSegments_) {
+    if (!comp) continue;
+    EPoint *cp = (pointIndex < comp->NumPoints()) ? comp->GetPoint(pointIndex + 1) : nullptr;
+    if (!cp) return false;
+    const int nucleus = nucleusOf(comp->GetEntranceKey());
+    if (comp->IsYieldTotalTerm()) {
+      terms.push_back({cp, comp, 1.0, 1.0, nucleus, true, 0});
+      continue;
+    }
+    const double scale = comp->GetComponentScaling() * TermFrameFactor(basePoint, cp);
+    const double w = natural ? scale * cnuc->GetAbundance(naturalSample_, nucleus) : scale;
+    terms.push_back({cp, comp, w, scale, nucleus, false, comp->GetCrossSectionComponent()});
+  }
+  return true;
+}
+
+/*!
+ * The value of a transmission or yield segment at a point (ESegment.h, IsTransformed).  The points, base and
+ * components, hold plain cross sections; they are summed with their weights into s (and s_t for a yield), at every
+ * sub-point when the point carries a sub-point target effect, transformed there, and only then integrated with the
+ * base point's kernel (EPoint::IntegrateTargetEffect, on the transformed values swapped into its sub-point slots).
+ * EData::CheckTransformedSegments makes sure every term shares the base point's sub-point grid.
+ */
+double ESegment::TransformedValue(int pointIndex, CNuc *cnuc, const Config &configure, bool precalculated) {
+  const double nan = std::numeric_limits<double>::quiet_NaN();
+  EPoint *basePoint = GetPoint(pointIndex + 1);
+  for (ESegment *comp : componentSegments_) {
+    if (!comp || pointIndex >= comp->NumPoints()) continue;
+    EPoint *cp = comp->GetPoint(pointIndex + 1);
+    if (!precalculated && cp && (!cp->IsMapped() || ScopedPointMappingOff::Active()) &&
+        !CalculatePoint(cp, comp->IsYieldTotalTerm() ? "yield total" : "SUM component", cnuc, configure))
+      return nan;
+  }
+  std::vector<TransformTerm> terms;
+  if (!TransformTerms(pointIndex, cnuc, terms)) return nan;
+  const double n = GetSampleThickness();
+  const bool yield = IsYield();
+  auto valueOf = [](EPoint *p, int c) {
+    return (c == 1) ? p->GetFitE1CrossSection() : (c == 2) ? p->GetFitE2CrossSection() : p->GetFitCrossSection();
+  };
+  // the observable from the term values v_q (a point, or one sub-point of every term)
+  auto transform = [&](const std::vector<double> &v) {
+    double sum = 0.0, total = 0.0;
+    for (size_t q = 0; q < terms.size(); q++) (terms[q].total ? total : sum) += terms[q].weight * v[q];
+    return yield ? YieldY0(n, sum, total) : Transmission(n, sum);
+  };
+
+  if (IsNatural()) {
+    std::vector<double> naturalTerms(cnuc->NumNuclei(), 0.0);
+    for (const TransformTerm &t : terms)
+      if (!t.total) naturalTerms[t.nucleus - 1] += t.weight * valueOf(t.point, t.xsComponent);
+    basePoint->SetNaturalTerms(naturalTerms);
+  }
+
+  std::vector<double> v(terms.size());
+  if (!HasSubPointIntegration(basePoint)) {
+    for (size_t q = 0; q < terms.size(); q++) v[q] = valueOf(terms[q].point, terms[q].xsComponent);
+    return transform(v);
+  }
+
+  const int nsp = basePoint->NumSubPoints();
+  for (const TransformTerm &t : terms)
+    if (t.point->NumSubPoints() != nsp) return nan;  // refused at load (EData::CheckTransformedSegments)
+  std::vector<double> baseRaw(nsp), f(nsp);
+  for (int j = 1; j <= nsp; j++) {
+    for (size_t q = 0; q < terms.size(); q++) {
+      EPoint *sp = terms[q].point->GetSubPoint(j);
+      v[q] = valueOf(sp, terms[q].xsComponent);
+    }
+    f[j - 1] = transform(v);
+    baseRaw[j - 1] = basePoint->GetSubPoint(j)->GetFitCrossSection();
+  }
+  const double baseIntegrated = basePoint->GetFitCrossSection();
+  for (int j = 1; j <= nsp; j++) basePoint->GetSubPoint(j)->SetFitCrossSection(f[j - 1]);
+  basePoint->IntegrateTargetEffect(configure);
+  const double value = basePoint->GetFitCrossSection();
+  for (int j = 1; j <= nsp; j++) basePoint->GetSubPoint(j)->SetFitCrossSection(baseRaw[j - 1]);
+  basePoint->SetFitCrossSection(baseIntegrated);
+  return value;
+}
+
+/*!
  * Calculates the theoretical cross section for this segment, including
  * combination with any additional components according to the operation type
  */
@@ -1404,6 +1533,8 @@ double ESegment::CalculateTheoreticalCrossSection(int pointIndex, CNuc *cnuc, co
   if (!precalculated && (!basePoint->IsMapped() || ScopedPointMappingOff::Active()) &&
       !CalculatePoint(basePoint, "base term", cnuc, configure))
     return nan;
+
+  if (IsTransformed()) return TransformedValue(pointIndex, cnuc, configure, precalculated);
 
   // For E1/E2-only segments compare against the corresponding component of the
   // (angle-integrated capture) cross section instead of the full cross section.

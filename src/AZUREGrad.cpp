@@ -623,6 +623,74 @@ bool GradAdjointPoint(EPoint *point, int xsComponent, double fitBar, GradAccum &
   return amf.PointAdjoint(point, fitBar, accum, shiftDeriv, xsComponent);
 }
 
+// Forward + adjoint for one point of a transmission or yield segment (ESegment::IsTransformed).  The model is
+// F(s, s_t) of the weighted sum s of the segment's terms (and, for a yield, its total s_t), at the point or -- under a
+// sub-point target effect -- at every sub-point before the kernel: Y = sum_j c_j F(s_j, s_t,j), c_j the kernel's
+// exact weights (EPoint::TargetEffectWeights).  Each term's point or sub-point is back-propagated with the cotangent
+// fitBar c_j dF/d(its sum) times its weight, and a sample's abundance gets fitBar c_j dF/ds times its unweighted terms.
+bool GradTransformedPoint(ESegment *segment, EData *data, int i, int pointIdx, CNuc *compound, const Config &config,
+                          const vector_matrix_r *shiftDeriv, const FitBarFn &fitBarFn, GradAccum &accum,
+                          double &outModel) {
+  outModel = segment->CalculateTheoreticalCrossSection(pointIdx, compound, config, data);
+  const double fitBar = fitBarFn(segment, i, pointIdx, outModel);
+  if (fitBar == 0.0) return true;
+  std::vector<ESegment::TransformTerm> terms;
+  if (!segment->TransformTerms(pointIdx, compound, terms)) return false;
+  const double n = segment->GetSampleThickness();
+  const bool yield = segment->IsYield();
+  const bool natural = segment->IsNatural();
+  const int sample = segment->GetNaturalSample();
+  auto valueOf = [](EPoint *p, int c) {
+    return (c == 1) ? p->GetFitE1CrossSection() : (c == 2) ? p->GetFitE2CrossSection() : p->GetFitCrossSection();
+  };
+  std::vector<double> v(terms.size());
+  // fitBar c dF/d(term q) for the values v, one term's point or sub-point at a time
+  auto backProp = [&](double c, auto pointOf) {
+    double sum = 0.0, total = 0.0, dS = 0.0, dT = 0.0;
+    for (size_t q = 0; q < terms.size(); q++) (terms[q].total ? total : sum) += terms[q].weight * v[q];
+    if (yield)
+      ESegment::YieldY0(n, sum, total, &dS, &dT);
+    else
+      ESegment::Transmission(n, sum, &dS);
+    for (size_t q = 0; q < terms.size(); q++) {
+      const double d = fitBar * c * (terms[q].total ? dT : dS);
+      if (natural && !terms[q].total)
+        accum.AddAbundance(compound->AbundanceOrdinal(sample, terms[q].nucleus), d * terms[q].scale * v[q]);
+      const double cot = d * terms[q].weight;
+      if (cot != 0.0 && !pointOf(q, cot)) return false;
+    }
+    return true;
+  };
+  EPoint *base = terms[0].point;
+  if (!ESegment::HasSubPointIntegration(base)) {
+    for (size_t q = 0; q < terms.size(); q++) v[q] = valueOf(terms[q].point, terms[q].xsComponent);
+    return backProp(1.0, [&](size_t q, double cot) {
+      return GradAdjointPoint(terms[q].point, terms[q].xsComponent, cot, accum, shiftDeriv, compound, config);
+    });
+  }
+  std::vector<double> c;
+  if (!base->TargetEffectWeights(config, c)) return false;  // not a pure linear kernel: finite differences
+  const int nsp = base->NumSubPoints();
+  for (int j = 1; j <= nsp; j++) {
+    if (c[j - 1] == 0.0) continue;
+    for (size_t q = 0; q < terms.size(); q++) {
+      if (terms[q].point->NumSubPoints() != nsp) return false;
+      v[q] = valueOf(terms[q].point->GetSubPoint(j), terms[q].xsComponent);
+    }
+    const bool ok = backProp(c[j - 1], [&](size_t q, double cot) {
+      EPoint *sp = terms[q].point->GetSubPoint(j);
+      AMatrixFunc amf(compound, config);
+      amf.ClearMatrices();
+      amf.FillMatrices(sp);
+      amf.InvertMatrices();
+      amf.CalculateTMatrix(sp);
+      return amf.PointAdjoint(sp, cot, accum, shiftDeriv, terms[q].xsComponent);
+    });
+    if (!ok) return false;
+  }
+  return true;
+}
+
 // Forward + adjoint for one (segment, point): returns the combined model in
 // `outModel` and accumulates fitBar * d(model)/d(E,gamma) into `accum`, where
 // fitBar = fitBarFn(segment, i, pointIdx, model).  Handles plain points (single
@@ -638,6 +706,8 @@ bool GradOnePoint(ESegment *segment, EData *data, int i, int pointIdx,
   EPoint *point = segment->GetPoint(pointIdx + 1);
   outModel = 0.0;
   if (!point) return true;
+  if (segment->IsTransformed())
+    return GradTransformedPoint(segment, data, i, pointIdx, compound, config, shiftDeriv, fitBarFn, accum, outModel);
 
   int baseComp = segment->GetCrossSectionComponent();
   bool hasComp = segment->HasComponents();
@@ -858,7 +928,7 @@ struct GradItem {
 // A point whose gradient can be taken from a shared T-matrix: no components
 // (SUM/RATIO) and no sub-point target effect.  The others keep GradOnePoint.
 bool Groupable(ESegment *seg, EPoint *pt) {
-  if (seg->HasComponents()) return false;
+  if (seg->HasComponents() || seg->IsTransformed()) return false;
   if (pt->IsTargetEffect()) {
     TargetEffect *te = pt->GetParentData()->GetTargetEffect(pt->GetTargetEffectNum());
     if (te && te->IsSubPointEffect()) return false;

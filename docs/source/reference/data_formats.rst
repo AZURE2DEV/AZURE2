@@ -256,9 +256,10 @@ capture, the exit key being ignored, and now draws a warning saying so.
 A ``<segmentsData>`` line may end with the keyword blocks
 ``sqrtshift <b> <bError> <vary>``, ``sample <1|name>``, ``shiftgroup <label>``,
 ``shiftfngroup <label>``, ``normgroup <label>``, ``covariance <file>``,
-``shiftfn "<f(x)>" N ...``, ``total <0|1>`` and ``spin <s>`` (in any order;
+``shiftfn "<f(x)>" N ...``, ``total <0|1>``, ``transmission <n>``,
+``yield <n>`` and ``spin <s>`` (in any order;
 writers put ``sample`` last). A ``<segmentsTest>`` line honours ``sample``,
-``total`` and ``spin``; the shift, norm and shift-function blocks have no
+``total``, ``transmission``, ``yield`` and ``spin``; the shift, norm and shift-function blocks have no
 meaning without data and are skipped there (before October 2026 they stopped
 the keyword reader, so a ``sample`` or ``total`` written after them was lost),
 and ``covariance`` on a test line is refused (:doc:`../user_guide/segments`).
@@ -287,6 +288,13 @@ such as any spin-0 target, needs no keyword.
 cross section of that (neutral) pair, by the optical theorem
 (:doc:`../user_guide/segments`, "Neutron Total Cross Sections"); an older
 engine ignores it and computes the elastic cross section.
+``transmission <n>`` makes the segment the transmission
+:math:`e^{-n\sigma}` of a sample :math:`n` atoms/barn thick, and ``yield <n>``
+the self-shielded yield :math:`(\sigma/\sigma_\mathrm{tot})(1 -
+e^{-n\sigma_\mathrm{tot}})`; the data file then holds transmissions or yields,
+and under a sub-point target effect the transform comes before the kernel
+(:doc:`../user_guide/segments`, "Sample Transmission and Self-Shielded
+Yield"). An engine older than November 2026 ignores both keywords silently.
 ``sample 1`` multiplies the segment's own term and each composite component
 by the abundance of the term's entrance pair's compound nucleus in the
 unnamed sample (or the only sample, if every sample is named);
