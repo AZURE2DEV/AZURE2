@@ -50,7 +50,20 @@ le() { awk -v a="$1" -v b="$2" -v re="$num" 'BEGIN { exit !(a ~ re && a + 0 <= b
 gt() { awk -v a="$1" -v b="$2" -v re="$num" 'BEGIN { exit !(a ~ re && a + 0 > b + 0) }'; }
 an() { "$PY" -I "$HERE/analyze.py" "$@"; }
 # two run logs alike, apart from the threaded per-segment progress bars (interleaved differently run to run)
-samelog() { cmp -s <(grep -v 'Segment #' "$1") <(grep -v 'Segment #' "$2"); }
+# Byte comparisons in Python: the Windows CI runner has no diff or cmp.
+samelog() {
+  "$PY" -I -c 'import sys
+f = lambda p: [l for l in open(p, "rb").read().splitlines() if b"Segment #" not in l]
+sys.exit(f(sys.argv[1]) != f(sys.argv[2]))' "$1" "$2"
+}
+# same_tree <dir1> <dir2>: the same file names with byte-identical contents
+same_tree() {
+  "$PY" -I -c 'import os, sys
+a, b = sys.argv[1:3]
+na, nb = sorted(os.listdir(a)), sorted(os.listdir(b))
+rd = lambda p: open(p, "rb").read()
+sys.exit(na != nb or any(rd(os.path.join(a, n)) != rd(os.path.join(b, n)) for n in na))' "$1" "$2"
+}
 
 "$PY" -I "$HERE/make_models.py" "$WORK/models" || { bad "models not built"; exit 1; }
 
@@ -70,7 +83,7 @@ for mode in 1 3; do
   run a_zero_$mode "$M/aC_heavy0.azr" $mode
   n="$(ls "$WORK/a_plain_$mode/output" | wc -l)"
   if [ "$n" -lt 3 ]; then bad "(a) mode $mode: only $n output files"; continue; fi
-  if diff -r "$WORK/a_plain_$mode/output" "$WORK/a_zero_$mode/output" > /dev/null &&
+  if same_tree "$WORK/a_plain_$mode/output" "$WORK/a_zero_$mode/output" &&
      samelog "$WORK/a_plain_$mode/run.log" "$WORK/a_zero_$mode/run.log"; then
     ok "(a) alpha + 12C, mode $mode: column 32 = 0 gives byte-identical output ($n files) and log"
   else bad "(a) alpha + 12C, mode $mode: output differs with an explicit column 32 = 0"; fi
@@ -85,7 +98,7 @@ run n13_plain "$WORK/n13/13N.azr" 1
 run n13_zero "$WORK/n13/13N_zero.azr" 1
 n="$(ls "$WORK/n13_plain/output" | wc -l)"
 if [ "$n" -ge 3 ] && [ -s "$WORK/n13_plain/output/chiSquared.out" ] &&
-   diff -r "$WORK/n13_plain/output" "$WORK/n13_zero/output" > /dev/null &&
+   same_tree "$WORK/n13_plain/output" "$WORK/n13_zero/output" &&
    samelog "$WORK/n13_plain/run.log" "$WORK/n13_zero/run.log"; then
   ok "(a) tests/13N, mode 1: column 32 = 0 gives byte-identical output ($n files) and log"
 else bad "(a) tests/13N, mode 1: output differs with an explicit column 32 = 0 (or no output)"; fi
