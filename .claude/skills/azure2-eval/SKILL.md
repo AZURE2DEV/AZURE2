@@ -901,6 +901,36 @@ state plus each bound excited state); the log lists the pairs summed and
 capture pair per energy. Older builds refuse `-1`: there, run each capture pair
 and add the rates (the rate is linear in sigma). `tests/reaction_rate` (f)-(i).
 
+**Sample transmission and self-shielded yield** (dev c3d21f3, 2026-11-04;
+ported from SAMMY): add `transmission <n>` or `yield <n>` to the keyword tail of
+a data or test segment line, n = sample thickness in atoms/barn.
+- `transmission <n>`: the model is T = exp(-n sigma) of the segment's assembled
+  sigma. For neutron TOF transmission data, put it on a `total 1` line (or a
+  natural sum of totals) and fit T itself instead of a sigma_tot inverted from it.
+- `yield <n>`: SAMMY's Y0 = (sigma/sigma_t)(1 - exp(-n sigma_t)) for capture or
+  reaction data from a thick sample. sigma_t is the optical-theorem total of
+  the entrance pair (a hidden `total 1` term), so capture is not in sigma_t.
+- Under a sub-point target effect (Gaussian, UDR, ...) the transform is applied
+  at every sub-point BEFORE the kernel, in SAMMY's order. Transforming the
+  broadened sigma instead is 5-6 % off at n sigma ~ 1.
+- Refused with an ERROR:
+  - both keywords on one line;
+  - data that are not angle-integrated (differential, phase shift, A_y, coefficients);
+  - RATIO;
+  - a charged or non-particle entrance;
+  - blended or auto-tolerance effects, or terms on different sub-point grids
+    (so a natural sum under a spread);
+  - for `yield` only: natural segments, the elastic/total line itself,
+    components with another entrance or an elastic exit, and `--use-rmc`.
+- Not built: Y1/Y2 multiple scattering and a fitted thickness.
+- The `--use-gradient` path is analytic.
+- pyazr: `Segment.transmission` and `.yield_thickness`. The GUI keeps the
+  keywords as written but has no widgets for them.
+- Docs: user_guide/segments.rst; test: `tests/transmission_yield`.
+- **Builds before c3d21f3 IGNORE both keywords silently** and fit plain sigma to
+  the T or Y data, so check the build before trusting such a file.
+  `tests/transmission_yield` fails 15 checks on those builds.
+
 The **external parameter file** prompt: give a saved `output/param.sav` to start
 from those best-fit formal parameters, or leave **blank** to build fresh from
 the `.azr` levels.
