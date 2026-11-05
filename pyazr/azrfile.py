@@ -1264,6 +1264,30 @@ class AzrModel:
         self._prefix = "".join(lines)
 
     @property
+    def prior_covariance(self):
+        """The ``priorCovariance`` config key: the prior parameter covariance file (path relative to the .azr's
+        directory, see :mod:`pyazr.priors`), or None without one."""
+        for line in self._prefix.splitlines():
+            if line.strip().startswith("priorCovariance="):
+                value = line.split("=", 1)[1].split("#")[0].strip()
+                return value or None
+        return None
+
+    @prior_covariance.setter
+    def prior_covariance(self, path):
+        """Set (a path) or remove (None or "") the ``priorCovariance`` config key.  The path is written as given;
+        AZURE2 resolves a relative one against the .azr's directory."""
+        if path and ("#" in str(path) or "\n" in str(path) or str(path) != str(path).strip()):
+            raise ValueError(f"priorCovariance path {path!r}: no '#', line break or leading/trailing blank (the "
+                             f"<config> line is cut there)")
+        lines = self._prefix.splitlines(keepends=True)
+        lines = [ln for ln in lines if not ln.strip().startswith("priorCovariance=")]
+        if path:
+            end = next(i for i, ln in enumerate(lines) if ln.strip() == "</config>")
+            lines.insert(end, f"priorCovariance={path}\n")
+        self._prefix = "".join(lines)
+
+    @property
     def relativistic(self):
         """The ``relativistic`` config key: relativistic two-body kinematics (k, eta, lab <-> c.m. from the
         invariant mass; user guide "Relativistic Kinematics").  False when absent."""

@@ -158,6 +158,17 @@ energy shift, a thickness parameter takes a slot in AZURE2's parameter vector
 whether it is fitted or not. **Load from .sav** sets :math:`n` to the fitted value,
 which is also the centre of its prior.
 
+Prior Parameter Covariance
+^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The **Error** columns above are diagonal priors, one parameter at a time. A
+multivariate Gaussian prior on several parameters at once -- an earlier
+evaluation's parameters and their correlations, SAMMY's sequential update -- is a
+file named under **Configure > Runtime Options** ("Prior Parameter Covariance",
+``priorCovariance=<file>`` in ``<config>``); it has no table here. See
+:doc:`chi_squared`, "Prior parameter covariance", for the file, the workflow with
+``pyazr.prior_from_fit`` and how it combines with the priors of this tab.
+
 Controls
 --------
 

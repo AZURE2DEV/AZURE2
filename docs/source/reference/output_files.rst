@@ -169,6 +169,13 @@ One line per data segment, then a total::
 ``Norm-Chi-Squared`` is the separate penalty on a varied normalization, and
 ``N`` counts data points (not degrees of freedom). The quantity a fit actually
 minimises is the sum of both — see :doc:`../user_guide/chi_squared`.
+The totals line also carries the other prior terms when they apply (energy
+shifts, abundances, screening, densities, Doppler temperatures, thicknesses,
+scattering lengths); with a ``priorCovariance=<file>`` key in ``<config>`` it
+ends with ``Total-Prior-Covariance-Chi-Squared: <value>``, the multivariate
+prior :math:`(\mathbf{p}-\boldsymbol{\mu})^T C^{-1} (\mathbf{p}-\boldsymbol{\mu})`
+at the run's parameters, written with 15 significant digits (the older fields
+keep their 6).
 
 This file is the quickest scalar check that a run succeeded.  After a fit,
 check ``fitStatus.out`` too: ``chiSquared.out`` is written whether or not the
@@ -246,6 +253,26 @@ param.errors
 
 Contains the reduced width amplitudes and their asymmetric uncertainties from a
 MINOS error analysis.
+
+covariance.dat
+^^^^^^^^^^^^^^
+
+Written by a fit (MIGRAD, ``--use-lm``, ``--use-gsl-lm``, MINOS) when the
+cross-section uncertainty band is on (``--covariance-band``, or "y" at the band
+prompt), and read back by a later run's band. It is the covariance of the fit's
+**free level energies and reduced-width amplitudes** only -- the parameters a
+calculated cross section depends on; normalizations, energy shifts and the other
+nuisance parameters are left out -- in parameter-vector order (``param.sav``'s
+order with every fixed and every non-R-matrix parameter dropped) and in
+``param.sav``'s space (Minuit's external parameters: MeV and the reduced-width
+amplitudes of the run's parametrization). MIGRAD's is HESSE's matrix, a
+least-squares fit's :math:`(J^TJ + \text{priors})^{-1}`. With
+``--scale-covariance`` it is multiplied by the reduced χ² when that is above 1.
+The matrix is written one row per line; since 2026-11-05 it is preceded by
+``#columns <name> ...`` (the column parameters' names) and, when scaled,
+``#scaled <factor>`` -- comment lines that ``numpy.loadtxt``, the engine's own
+reader and older builds skip. ``pyazr.prior_from_fit`` turns it and
+``param.sav`` into a prior covariance file (:doc:`../user_guide/chi_squared`).
 
 covariance_matrix.out
 ^^^^^^^^^^^^^^^^^^^^^

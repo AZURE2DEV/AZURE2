@@ -163,6 +163,10 @@ class Config {
   /// Key of the particle pair whose E(s) = (s - m0^2)/(2 m0) relativistic.out uses (the LANL/EDA
   /// level-energy convention); "relativisticReferencePair=<key>" in <config>, 0 = the first pair.
   int relativisticReferencePair;
+  /// Prior parameter covariance (PriorCovariance.h): "priorCovariance=<path>" in the <config> block, the path relative
+  /// to the .azr's directory; empty (the default) = none.  A multivariate Gaussian prior on the listed parameters,
+  /// (p - mu)^T C^-1 (p - mu) added to chi-squared (Total-Prior-Covariance-Chi-Squared).
+  std::string priorCovariance;
   /// The Notes a session has printed (see Note()).  Null -- the CLI and the GUI -- prints every Note; a pyazr
   /// session (AZUREAPI) sets one so that the setup Notes of its rebuilds are printed once: a channel-radius
   /// scan rebuilds the model on every likelihood call, and before 2026-11-04 each rebuild printed every Note

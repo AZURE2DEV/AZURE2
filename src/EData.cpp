@@ -2223,6 +2223,13 @@ void EData::WriteOutputFiles(const Config &configure, bool isFit, const BandData
     // Measured scattering lengths (<scatteringLengths>; table in scatteringLengths.out).
     if (scatteringLengthChi2_ != 0.0)
       chiOut << " Total-Scattering-Length-Chi-Squared: " << scatteringLengthChi2_;
+    // Prior parameter covariance (<config> priorCovariance=): (p - mu)^T C^-1 (p - mu), whenever the key is set.
+    // Written with 15 significant digits (a new field: the older ones keep their 6).
+    if (!configure.priorCovariance.empty()) {
+      const std::streamsize prec = chiOut.precision(15);
+      chiOut << " Total-Prior-Covariance-Chi-Squared: " << priorCovChi2_;
+      chiOut.precision(prec);
+    }
     chiOut << std::endl
            << std::endl;
     chiOut.flush();
@@ -4920,6 +4927,8 @@ EData *EData::Clone() const {
   dataCopy->segments_ = this->segments_;
   dataCopy->componentSegments_ = this->componentSegments_;
   dataCopy->covGroups_ = this->covGroups_;  // shared: one factor (and one frozen model) for all copies
+  dataCopy->priorCov_ = this->priorCov_;    // shared, read-only
+  dataCopy->priorCovChi2_ = this->priorCovChi2_;
 
   // Build a mapping from component segment keys to cloned component segments
   std::unordered_map<int, ESegment *> clonedComponentMap;

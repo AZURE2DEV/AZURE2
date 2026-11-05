@@ -205,6 +205,30 @@ lines, which a reader that does not know a key skips:
    The pair whose :math:`E(s)` ``relativistic.out`` uses; absent or ``0``: the
    first particle pair of each compound nucleus.
 
+``priorCovariance=<file>``
+   A multivariate Gaussian prior :math:`(\mathbf{p}-\boldsymbol{\mu})^T C^{-1}
+   (\mathbf{p}-\boldsymbol{\mu})` on the parameters the file lists
+   (:doc:`../user_guide/chi_squared`, "Prior parameter covariance"). The path is
+   relative to the ``.azr``'s directory (or absolute); everything after the first
+   ``#`` on the line is a comment. Absent or empty: none. The file is plain text
+   with ``#`` comments: an optional ``#parametrization <0|1|2>`` line (as the first
+   line of ``param.sav``), the parameter names (``param.sav``'s), their means, and
+   the :math:`n` rows of the symmetric, positive-definite :math:`n\times n`
+   covariance::
+
+       #parametrization 1
+       width_2_1 segment_4_norm
+       0.8206 1.05
+       5.0e-5 1.0e-6
+       1.0e-6 4.0e-4
+
+   Refused with an ``ERROR`` (nothing is written): an unknown name, a duplicate
+   name, a non-number, a count mismatch, a non-symmetric (1e-10 relative) or
+   non-positive-definite matrix, a tag other than the run's parametrization, a
+   file that cannot be read. Parameters fixed in the run are marginalized. Only a
+   run with data uses it (an extrapolation or a rate ignores the key). Engines
+   older than 2026-11-05 ignore the key silently.
+
 The ``<levels>`` block has one line per channel of a level, 31
 whitespace-separated columns (read by ``NucLine``, ``include/NucLine.h``), and
 optionally a 32nd:

@@ -345,6 +345,17 @@ class AZUREAPI {
   int RefreezeCovariance();
 
   /*!
+   * Prior parameter covariance (<config> priorCovariance=, PriorCovariance.h): the whitened residuals
+   * r = L^-1 (p - mu) at the given non-fixed RWA parameters, one per prior parameter (empty without the key, or in
+   * extrapolation mode).  r.r is the prior's chi2 term, pyazr's penalties()["prior_covariance"]; it is NOT part of
+   * CalculateChi2RWA (pyazr's objective() adds it, as the normalization priors), and CalculateResidualJacobianRWA
+   * appends these rows (Jacobian L^-1) after the data and scattering-length rows.
+   */
+  vector_r PriorCovarianceResidualsRWA(const vector_r &rwaParams) const;
+  /// The names of the prior's parameters, in its row order (after the marginalization of fixed ones).
+  std::vector<std::string> PriorCovarianceNames() const;
+
+  /*!
    * Value and analytic gradient of the (data) chi-squared with respect to the
    * non-fixed RWA parameters.  Input: the non-fixed RWA parameters (energies,
    * reduced widths, normalizations), as for CalculateChi2RWA.  Returns
@@ -436,6 +447,9 @@ class AZUREAPI {
  private:
   /// Shared body of SetRadius and Rebuild: refill from the .azr with every radius override in \p radii.
   bool RebuildImpl(const std::map<int, double> &radii);
+  /// Read and match the prior parameter covariance onto names_ / fixed_ (data mode only) and hand it to the data
+  /// object; false (ERROR printed) when the file is refused.
+  bool SetUpPriorCovariance();
   /// Channel-radius overrides set through SetRadius, applied on every (re)build.
   std::map<int, double> radiusOverrides_;
 

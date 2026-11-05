@@ -9,6 +9,7 @@ QT_BEGIN_NAMESPACE
 class QPushButton;
 class QGroupBox;
 class QCheckBox;
+class QLineEdit;
 
 QT_END_NAMESPACE
 
@@ -33,9 +34,15 @@ class EditOptionsDialog : public QDialog {
   /*! Relativistic two-body kinematics: "relativistic=1" in <config>.  Unlike the switches above it is part of the
    *  project, so the command line and pyazr use it too (before 2026-11-01 it sat below the Particle Pairs table). */
   QCheckBox *relativisticCheck;
+  /*! Prior parameter covariance file: "priorCovariance=<path>" in <config> (empty = none), a path relative to the
+   *  project's directory.  Part of the project like the kinematics: command-line and pyazr runs use it too. */
+  QLineEdit *priorCovarianceEdit;
+  /*! The project's directory: a file chosen inside it is entered relative to it.  Empty = absolute paths. */
+  void setProjectDirectory(const QString &dir) { projectDirectory_ = dir; }
   // QCheckBox* noLongWavelengthCheck;
 
  private slots:
+  void choosePriorCovariance();
   void useBruneCheckChanged(int);
   void useParkCheckChanged(int);
   void useRMCCheckChanged(int);
@@ -43,6 +50,8 @@ class EditOptionsDialog : public QDialog {
  private:
   QPushButton *okButton;
   QPushButton *cancelButton;
+  QPushButton *priorCovarianceButton;
+  QString projectDirectory_;
 };
 
 #endif

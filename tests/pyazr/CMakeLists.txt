@@ -390,3 +390,12 @@ add_test(NAME pyazr_light_excitation
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/light_excitation_test.py)
 set_tests_properties(pyazr_light_excitation PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
+# The prior parameter covariance ("priorCovariance=<file>" in <config>, 2026-11-05): pyazr.priors (write_prior /
+# read_prior, read_covariance_dat, prior_from_fit), AzrModel.prior_covariance, and through the engine
+# penalties()["prior_covariance"], objective(), the residual_jacobian rows L^-1 (p - mu) against central differences,
+# the marginalization of a fixed listed parameter and a refused file (tests/norm_groups model).
+add_test(NAME pyazr_prior_covariance
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/prior_covariance_test.py)
+set_tests_properties(pyazr_prior_covariance PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")

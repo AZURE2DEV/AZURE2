@@ -38,6 +38,7 @@ int main(int argc, char** argv) {
   config.chiVariance = 0.25;
   config.relativistic = true;
   config.relativisticReferencePair = 2;
+  config.priorCovariance = "prior.txt";
   config.ecConvectionCurrent = false;  // default is true: a copied false shows the field is carried over
 
   RunTab tab;
@@ -48,6 +49,7 @@ int main(int argc, char** argv) {
   ok("hard-sphere switch reaches the worker Config", copy.includeAllJPi);
   ok("hard-sphere L limit reaches the worker Config", copy.hardSphereMaxL == 3);
   ok("relativistic kinematics reaches the worker Config", copy.relativistic && copy.relativisticReferencePair == 2);
+  ok("the prior covariance file reaches the worker Config", copy.priorCovariance == "prior.txt");
   ok("EC convection-current switch reaches the worker Config", !copy.ecConvectionCurrent);
 
   std::cout << (fails ? "FAILED" : "PASSED") << std::endl;

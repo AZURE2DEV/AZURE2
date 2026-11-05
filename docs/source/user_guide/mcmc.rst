@@ -81,6 +81,14 @@ Parameters**.
    unbounded uniform prior; the run log lists them by name so nothing is
    unconstrained without you being told.
 
+   A prior parameter covariance (``priorCovariance=<file>`` in ``<config>``,
+   :doc:`chi_squared`, "Prior parameter covariance") enters the log prior as the
+   multivariate Gaussian :math:`-\tfrac12(\mathbf{p}-\boldsymbol{\mu})^T C^{-1}
+   (\mathbf{p}-\boldsymbol{\mu}) - \tfrac12\ln\det(2\pi C)` and replaces the
+   diagonal prior (automatic or from this table) of each parameter it lists; the
+   run log names them. It is defined on the reduced-width amplitudes, so with
+   **Use Reduced Widths** off a prior on a level energy or width is refused.
+
 Sampling settings
 -----------------
 

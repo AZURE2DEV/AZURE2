@@ -226,6 +226,26 @@ yield_=..., thickness_group=label)`` starts a line with it. The ``Segment``
 objects of :mod:`pyazr.datasets` carry ``thickness``, ``thickness_vary``
 (``None`` for the plain form), ``thickness_sigma`` and ``thickness_group``.
 
+A prior parameter covariance (``priorCovariance=<file>`` in ``<config>``,
+:doc:`chi_squared`, "Prior parameter covariance") is set up by the engine when the
+session starts (a refused file makes ``azure2()`` raise; listed parameters fixed in
+the model are marginalized). ``penalties()["prior_covariance"]`` is its term
+:math:`(\mathbf{p}-\boldsymbol{\mu})^T C^{-1}(\mathbf{p}-\boldsymbol{\mu})`, which
+``objective()`` adds (it is not part of ``calculate_chi2_rwa``);
+``prior_covariance_residuals(x)`` returns the whitened residuals
+:math:`L^{-1}(\mathbf{p}-\boldsymbol{\mu})` (:math:`C = LL^T`) in the order of
+``prior_covariance_names``, and ``residual_jacobian`` appends them as its last rows,
+with the constant Jacobian :math:`L^{-1}` on the prior's columns -- so
+:math:`\sum r^2` of ``residual_jacobian`` is ``calculate_chi2_rwa`` plus the prior
+term. ``AzrModel.prior_covariance`` reads and sets the key (``None`` removes it).
+:mod:`pyazr.priors` needs no engine: ``prior_from_fit(sav_path, covariance_path,
+out_path, names=None, columns=None)`` writes the file from a fit's ``param.sav``
+(means, ``#parametrization`` tag) and ``covariance.dat`` (the free level energies and
+widths; ``names`` picks a subset, i.e. the marginal block; ``columns`` names the
+columns of a ``covariance.dat`` from before its ``#columns`` header),
+``write_prior(path, names, mean, cov, basis=None)`` any prior (checked symmetric and
+positive definite), ``read_prior`` and ``read_covariance_dat`` read them back.
+
 .. warning::
 
    These return the **data** χ² only. AZURE2's own fit objective additionally

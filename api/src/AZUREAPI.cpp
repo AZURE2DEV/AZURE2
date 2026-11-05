@@ -16,6 +16,8 @@
 #include "AMatrixFunc.h"
 #include "AZUREGrad.h"
 #include "CovarianceBand.h"
+#include "PriorCovariance.h"
+#include "AZURECalc.h"
 #include "CoulFunc.h"
 #include "ECIntegral.h"
 #include "Profile.h"
@@ -27,6 +29,7 @@
 #include <limits>
 #include <new>
 #include <cmath>
+#include <algorithm>
 
 AZUREAPI::AZUREAPI(Config &configure) : configure_(configure), data_(nullptr), compound_(nullptr) {
   // A session rebuilds its model from the files (SetRadius, potential changes, mode switches): read each
@@ -173,10 +176,51 @@ int AZUREAPI::Initialize() {
   }
 
   UpdateParameters();
+  if (!SetUpPriorCovariance()) return -1;
 
   if (data()->Initialize(compound(), configure()) == -1) return -1;
 
   return 0;
+}
+
+bool AZUREAPI::SetUpPriorCovariance() {
+  std::shared_ptr<const PriorCovariance> prior;
+  if (data() && (configure().paramMask & Config::CALCULATE_WITH_DATA) &&
+      !(configure().paramMask & Config::CALCULATE_REACTION_RATE) &&
+      PriorCovariance::Load(configure(), names_, fixed_, AZUREParams::BasisForConfig(configure()), prior) < 0)
+    return false;
+  if (data()) data()->SetPriorCovariance(prior);
+  // A listed parameter with a diagonal prior of its own gets both (objective() adds both): say so, as the CLI does.
+  if (prior && prior->Size() > 0) {
+    AZURECalc calc(data(), compound(), configure());
+    const std::vector<int> own = calc.IndicesWithOwnPrior();
+    std::string list;
+    for (int f : prior->FullIndex())
+      if (std::binary_search(own.begin(), own.end(), f) && f < (int)names_.size())
+        list += (list.empty() ? "" : ", ") + names_[f];
+    if (!list.empty())
+      configure().Note("Note: prior covariance: " + list + " also carr" +
+                       (list.find(',') == std::string::npos ? "ies" : "y") +
+                       " a prior of its own (normalization error, shift error, sigma or nuisance prior); both are "
+                       "applied, which counts the same information twice if the covariance already holds it.");
+  }
+  return true;
+}
+
+vector_r AZUREAPI::PriorCovarianceResidualsRWA(const vector_r &rwaParams) const {
+  vector_r r;
+  const PriorCovariance *pc = data() ? data()->GetPriorCovariance() : nullptr;
+  if (!pc) return r;
+  vector_r full = all_rwa_;
+  for (int i = 0, k = 0; i < (int)all_rwa_.size(); ++i)
+    if (!fixed_[i] && k < (int)rwaParams.size()) full[i] = rwaParams[k++];
+  pc->Residuals(full, r);
+  return r;
+}
+
+std::vector<std::string> AZUREAPI::PriorCovarianceNames() const {
+  const PriorCovariance *pc = data() ? data()->GetPriorCovariance() : nullptr;
+  return pc ? pc->Names() : std::vector<std::string>();
 }
 
 bool AZUREAPI::UpdateParameters() {
@@ -868,6 +912,7 @@ bool AZUREAPI::RebuildImpl(const std::map<int, double> &radii) {
   // Without this the client keeps the pre-change parameter vector, names,
   // fixed flags and Wigner limits -- silently mismatched with the new model.
   UpdateParameters();
+  if (!SetUpPriorCovariance()) return false;
 
   return true;
 }
@@ -959,6 +1004,9 @@ double AZUREAPI::CalculateChi2RWA(const vector_r &rwaParams) const {
   // Measured scattering lengths (<scatteringLengths>).
   if (localCompound->HasScatteringLengthConstraints())
     chiSquared += ScatteringLength::Chi2(localCompound, configure(), localCompound->ScatteringLengthConstraints());
+  // Prior parameter covariance: not part of this chi2 (pyazr's objective() adds penalties()["prior_covariance"]),
+  // recorded for chiSquared.out (WriteOutputFiles).
+  if (const PriorCovariance *pc = localData->GetPriorCovariance()) localData->SetPriorCovarianceChi2(pc->Chi2(params_));
 
   return chiSquared;
 }
@@ -1305,6 +1353,11 @@ vector_r AZUREAPI::CalculateResidualJacobianRWA(const vector_r &params, const st
       }
     }
   }
+
+  // Prior parameter covariance: its whitened rows L^-1 (p - mu) last, Jacobian L^-1 on its parameters' columns.
+  if (const PriorCovariance *pc = ld->GetPriorCovariance())
+    pc->AppendRows(full, [&](int f) { return f < pmap.NumFull() ? pmap.FullToPacked(f) : -1; }, nCols, residuals,
+                   &jacobian);
 
   vector_r out;
   out.reserve(2 + residuals.size() + jacobian.size());

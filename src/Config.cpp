@@ -47,6 +47,7 @@ void Config::Reset() {
   abundanceSumSigma = 0.0;
   relativistic = false;      // Off unless the <config> block says so: non-relativistic kinematics as before
   relativisticReferencePair = 0;
+  priorCovariance.clear();   // no prior parameter covariance unless the <config> block names a file
 }
 
 void Config::Note(const std::string &line) const {
@@ -189,6 +190,8 @@ int Config::ReadConfigFile() {
       relativistic = (value == "1" || value == "true");
     else if (key == "relativisticReferencePair")
       relativisticReferencePair = atoi(value.c_str());
+    else if (key == "priorCovariance")
+      priorCovariance = value;
   }
   if (line != "</config>") return -1;
   in.close();

@@ -76,10 +76,16 @@ BandCovariance BuildBandCovarianceFromMinuit(const std::vector<double> &covData,
 bool SaveBandCovariance(const std::string &path, const BandCovariance &cov) {
   std::ofstream out(path.c_str());
   if (!out) return false;
-  // Bare N x N matrix, one row per line -- no header, comments, or column
-  // metadata, so the file is trivially readable by external tools.
+  // N x N matrix, one row per line, after '#' header lines (column names, scale
+  // factor) that numpy.loadtxt, LoadBandCovariance and older builds skip.
   const int n = cov.size();
+  if ((int)cov.names.size() == n && n > 0) {
+    out << "#columns";
+    for (const std::string &name : cov.names) out << " " << name;
+    out << "\n";
+  }
   out.precision(17);
+  if (cov.scale != 1.0) out << "#scaled " << cov.scale << "\n";
   out << std::scientific;
   for (int a = 0; a < n; a++) {
     for (int b = 0; b < n; b++) out << cov.M[a][b] << (b + 1 < n ? " " : "");
@@ -94,9 +100,11 @@ bool LoadBandCovariance(const std::string &path, BandCovariance &cov) {
   cov.cols.clear();  // plain matrix carries no column identities
   cov.M.clear();
 
-  // Read every non-empty line as a row of doubles.  The file must be square.
+  // Read every non-empty line as a row of doubles ('#' header lines are skipped).  The file must be square.
   std::string line;
   while (std::getline(in, line)) {
+    const size_t k = line.find_first_not_of(" \t");
+    if (k != std::string::npos && line[k] == '#') continue;
     std::istringstream iss(line);
     std::vector<double> row;
     double v;

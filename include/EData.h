@@ -11,6 +11,7 @@
 #include <ios>
 
 class CNuc;
+class PriorCovariance;
 struct BandData;
 namespace ROOT {
 namespace Minuit2 {
@@ -158,6 +159,13 @@ class EData {
   /// chi2 of the measured scattering lengths (<scatteringLengths>) at the last evaluation.
   void SetScatteringLengthChi2(double chi2) { scatteringLengthChi2_ = chi2; }
   double GetScatteringLengthChi2() const { return scatteringLengthChi2_; }
+  /// The prior parameter covariance of the run (<config> priorCovariance=, PriorCovariance.h), shared by every copy
+  /// (Clone); null without one.  Set by the CLI (AZUREMain) and pyazr (AZUREAPI) once the parameters are known.
+  void SetPriorCovariance(std::shared_ptr<const PriorCovariance> prior) { priorCov_ = std::move(prior); }
+  const PriorCovariance *GetPriorCovariance() const { return priorCov_.get(); }
+  /// Its chi2 term at the last evaluation, reported in chiSquared.out (Total-Prior-Covariance-Chi-Squared).
+  void SetPriorCovarianceChi2(double chi2) { priorCovChi2_ = chi2; }
+  double GetPriorCovarianceChi2() const { return priorCovChi2_; }
   /// External-capture amplitudes for every point that has an EC component.
   int CalculateECAmplitudes(CNuc *, const Config &);
   /// How many external-capture amplitudes this model expects in an intEC file.
@@ -309,6 +317,8 @@ class EData {
   double parkPenalty_ = 0.0;
   double abundancePenalty_ = 0.0;
   double scatteringLengthChi2_ = 0.0;
+  std::shared_ptr<const PriorCovariance> priorCov_;  // shared by every copy (read-only once set up)
+  double priorCovChi2_ = 0.0;
   std::vector<std::string> nucleusLabels_;   // one per compound nucleus, for the natural decomposition file
   // A copy of the compound nucleus that holds the observed level parameters the
   // sub-point grids are laid out from (ReplaceSubPointGrids).  Never shared: a

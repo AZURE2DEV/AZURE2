@@ -643,6 +643,7 @@ bool AZURESetup::readConfig(QTextStream &inStream) {
   fileAbundanceSumSigma = 0.0;
   fileRelativistic = false;
   fileRelativisticReferencePair = 0;
+  GetConfig().priorCovariance.clear();  // a project without the key has no prior covariance
   QString line("");
   while (line.trimmed() != QString("</config>") && !inStream.atEnd()) {
     line = inStream.readLine();
@@ -660,6 +661,8 @@ bool AZURESetup::readConfig(QTextStream &inStream) {
       fileRelativistic = (value == "1" || value == "true");
     else if (key == "relativisticReferencePair")
       fileRelativisticReferencePair = value.toInt();
+    else if (key == "priorCovariance")
+      GetConfig().priorCovariance = value.toStdString();
   }
   if (line.trimmed() != QString("</config>")) return false;
 
@@ -762,6 +765,11 @@ bool AZURESetup::writeFile(QString filename) {
     if (GetConfig().relativisticReferencePair > 0)
       out << "relativisticReferencePair=" << GetConfig().relativisticReferencePair << " #Reference pair of relativistic.out" << Qt::endl;
   }
+  // Prior parameter covariance (Configure > Runtime Options): written only when set.
+  if (!GetConfig().priorCovariance.empty())
+    out << "priorCovariance=" << QString::fromStdString(GetConfig().priorCovariance)
+        << " #Prior parameter covariance file (names, means, covariance), relative to this file's directory"
+        << Qt::endl;
   out << "</config>" << Qt::endl;
 
   // Write potential section after config.  A pair may be switched on while the
@@ -1242,6 +1250,9 @@ void AZURESetup::editOptions() {
 
   aDialog.useAdaptiveGridCheck->setChecked(GetConfig().useAdaptiveGrid);
   aDialog.relativisticCheck->setChecked(GetConfig().relativistic);
+  aDialog.priorCovarianceEdit->setText(QString::fromStdString(GetConfig().priorCovariance));
+  if (!GetConfig().configfile.empty())
+    aDialog.setProjectDirectory(QFileInfo(QString::fromStdString(GetConfig().configfile)).absolutePath());
 
   // if(!(GetConfig().paramMask & Config::USE_LONGWAVELENGTH_APPROX)) aDialog.noLongWavelengthCheck->setChecked(true);
   // else aDialog.noLongWavelengthCheck->setChecked(false);
@@ -1290,6 +1301,7 @@ void AZURESetup::editOptions() {
 
     GetConfig().useAdaptiveGrid = aDialog.useAdaptiveGridCheck->isChecked();
     GetConfig().relativistic = aDialog.relativisticCheck->isChecked();
+    GetConfig().priorCovariance = aDialog.priorCovarianceEdit->text().trimmed().toStdString();
 
     // Update tab visibility based on hybrid method setting
     updateNuclearPotentialTabVisibility();
@@ -1682,6 +1694,7 @@ void AZURESetup::reset() {
 #endif
   setWindowTitle(tr("AZURE2 -- untitled"));
   GetConfig().configfile = "";
+  GetConfig().priorCovariance.clear();
 }
 
 void AZURESetup::showTabInfo() {

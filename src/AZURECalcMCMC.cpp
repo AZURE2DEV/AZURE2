@@ -6,6 +6,7 @@
 #include "EData.h"
 #include "ParameterLimitsManager.h"
 #include "AZUREParams.h"
+#include "PriorCovariance.h"
 #include "GSLException.h"
 #include <iostream>
 #include <iomanip>
@@ -603,12 +604,55 @@ void AZURECalcMCMC::BuildAutoPriors() const {
   configure().outStream.flush();
 }
 
+bool AZURECalcMCMC::SetUpPriorCovariance(bool useRWA) const {
+  useRWA_ = useRWA;
+  priorCov_.reset();
+  if (!(configure().paramMask & Config::CALCULATE_WITH_DATA) || configure().priorCovariance.empty()) return true;
+  const int basis = AZUREParams::BasisForConfig(configure());
+  if (PriorCovariance::Load(configure(), g_param_names, fixed_, basis, priorCov_) < 0) return false;
+  if (!useRWA) {
+    // The prior is in the param.sav space: level energies and reduced-width amplitudes.  A physical-parameter chain
+    // samples partial widths, so a prior on a level parameter would be applied to the wrong quantity.
+    for (const std::string &name : priorCov_->Names())
+      if (name.rfind("energy_", 0) == 0 || name.rfind("width_", 0) == 0) {
+        configure().outStream << "**ERROR: priorCovariance: " << name << " is a level parameter and its prior is on "
+                              << "the reduced-width (RWA) parameters of param.sav; sample with RWA parameters."
+                              << std::endl;
+        priorCov_.reset();
+        return false;
+      }
+  }
+  // The multivariate Gaussian replaces the diagonal prior of each of its parameters.
+  std::vector<int> packedOf(fixed_.size(), -1);
+  for (int i = 0, k = 0; i < (int)fixed_.size(); i++)
+    if (!fixed_[i]) packedOf[i] = k++;
+  std::string replaced;
+  for (size_t a = 0; a < priorCov_->FullIndex().size(); a++) {
+    const int f = priorCov_->FullIndex()[a];
+    const int k = (f >= 0 && f < (int)packedOf.size()) ? packedOf[f] : -1;
+    if (k >= 0 && k < (int)usePriors_.size() && usePriors_[k] && k < (int)priorStds_.size() && priorStds_[k] > 0.0) {
+      usePriors_[k] = false;
+      replaced += (replaced.empty() ? "" : ", ") + priorCov_->Names()[a];
+    }
+  }
+  if (!replaced.empty())
+    configure().Note("Note: prior covariance: its multivariate Gaussian replaces the diagonal prior of " + replaced +
+                     " in the MCMC run (a fit applies both).");
+  return true;
+}
+
 double AZURECalcMCMC::CalculateLogPrior(const std::vector<double> &params) const {
+  // Prior parameter covariance: -0.5 (p - mu)^T C^-1 (p - mu) - 0.5 log det(2 pi C).
+  double covLogPrior = 0.0;
+  if (priorCov_ && priorCov_->Size() > 0) {
+    const vector_r full = useRWA_ ? ReconstructFullParameters(params) : ReconstructFullParametersPhysical(params);
+    covLogPrior = -0.5 * priorCov_->Chi2(full) + priorCov_->LogNormalization();
+  }
   if (priorMeans_.empty() || priorStds_.empty() || usePriors_.empty()) {
-    return 0.0;  // No priors specified - uniform priors
+    return covLogPrior;  // No diagonal priors specified - uniform priors
   }
 
-  double logPrior = 0.0;
+  double logPrior = covLogPrior;
 
   for (size_t i = 0; i < params.size() && i < usePriors_.size(); i++) {
     if (usePriors_[i] && i < priorMeans_.size() && i < priorStds_.size()) {
@@ -1008,6 +1052,11 @@ void AZURECalcMCMC::RunMCMCSampling(int nwalkers, int nsteps, const std::vector<
     // energy-shift priors from the data. Must follow UpdateParameterVectors()
     // (it needs fixed_) and precede any log-probability evaluation.
     BuildAutoPriors();
+    // The prior parameter covariance (after the automatic priors, which it replaces for its parameters).
+    if (!SetUpPriorCovariance(useRWA)) {
+      configure().outStream << "MCMC sampling not started." << std::endl;
+      return;
+    }
 
     if (ndim == 0) {
       configure().outStream << "Error: No parameters provided for MCMC sampling\n";

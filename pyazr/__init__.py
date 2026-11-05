@@ -24,6 +24,7 @@ from .nuclei import (Nucleus, MergeReport, merge_projects, nucleus_of,
 from .bands import (Band, load_covariance, rmatrix_columns, best_fit_params,
                     live_parameters, step_sizes, sensitivities, trimmed_model,
                     uncertainty_bands, extrapolation_bands)
+from .priors import prior_from_fit, read_prior, write_prior, read_covariance_dat
 
 __all__ = ["azure2", "ScatteringLength", "ScatteringLengthLine",
            "angular_distribution",
@@ -46,5 +47,6 @@ __all__ = ["azure2", "ScatteringLength", "ScatteringLengthLine",
            "nucleus_of_pair", "nucleus_of_channel",
            "Band", "load_covariance", "rmatrix_columns", "best_fit_params",
            "live_parameters", "step_sizes", "sensitivities", "trimmed_model",
-           "uncertainty_bands", "extrapolation_bands"]
+           "uncertainty_bands", "extrapolation_bands",
+           "prior_from_fit", "read_prior", "write_prior", "read_covariance_dat"]
 __version__ = '2.9.0'
