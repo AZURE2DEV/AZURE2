@@ -13,6 +13,10 @@
 #     up to the total.
 # The <targetInt> lines are switched off for this run: they fold the test
 # segments with the same numbers as the data segments they name.
+# And on the data segments, folded (23 component segments, about 960,000 sub-point
+# energies): every output file of a calculation on 1 and on 4 threads is
+# byte-identical.  The component segments' energy-dependent values are computed in
+# parallel since 2026-11-05, and a point written by two threads would show here.
 #
 #   ./tests/natural_neon/check.sh path/to/AZURE2
 
@@ -93,6 +97,25 @@ if [ -s "$dec" ]; then
   fi
 else
   bad "no decomposition file AZUREOut_sample_seg=1.extrap"; ls "$dir/output"
+fi
+
+# Data segments with target integration on, calculated on 1 and on 4 threads: the outputs must not
+# depend on the thread count (component segments are set up in parallel).
+for t in 1 4; do
+  d="$WORK/threads$t"
+  mkdir -p "$d/output" "$d/checks"
+  ln -s "$HERE/data" "$d/data"
+  cp "$HERE/natural_neon.azr" "$d/"
+  (cd "$d" && printf '1\n\n\n7\n' | OMP_NUM_THREADS=$t run_limited 900 "$AZURE2_BIN" --no-gui --no-readline natural_neon.azr > run.log 2>&1)
+done
+if [ -s "$WORK/threads1/output/chiSquared.out" ] && [ -s "$WORK/threads4/output/chiSquared.out" ]; then
+  if diff -r "$WORK/threads1/output" "$WORK/threads4/output" > "$WORK/threads.diff" 2>&1; then
+    ok "folded data segments: all $(ls "$WORK/threads1/output" | wc -l | tr -d ' ') output files identical on 1 and 4 threads"
+  else
+    bad "folded data segments: outputs differ between 1 and 4 threads"; head -6 "$WORK/threads.diff"
+  fi
+else
+  bad "folded data segments: a run on 1 or 4 threads wrote no chiSquared.out"; tail -5 "$WORK/threads1/run.log" "$WORK/threads4/run.log"
 fi
 
 if [ "$failures" -eq 0 ]; then echo "PASS: natural neon"; else echo "FAIL: $failures check(s)"; exit 1; fi
