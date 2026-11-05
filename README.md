@@ -53,7 +53,7 @@ inside, so nothing else has to be installed.
 |---|---|---|
 | **Windows** (x86_64) | [`AZURE2-windows-x86_64.zip`](https://github.com/AZURE2DEV/AZURE2/releases/download/continuous-windows/AZURE2-windows-x86_64.zip) | Unzip anywhere, run `AZURE2.exe`. |
 | **macOS** | [`AZURE2-macos.dmg`](https://github.com/AZURE2DEV/AZURE2/releases/download/continuous-windows/AZURE2-macos.dmg) | Open the disk image, drag `AZURE2.app` onto Applications. |
-| **Linux** (x86_64) | build artifact `AZURE2-linux` on any [run page](https://github.com/AZURE2DEV/AZURE2/actions) | An AppImage: `chmod +x AZURE2-x86_64.AppImage` and run it. |
+| **Linux** (x86_64) | [`AZURE2-x86_64.AppImage`](https://github.com/AZURE2DEV/AZURE2/releases/download/continuous-windows/AZURE2-x86_64.AppImage) | `chmod +x AZURE2-x86_64.AppImage` and run it. |
 
 These are rolling builds of the latest `dev` commit, replaced on every push, so
 they are for using the code rather than citing it — for a citable version use a
@@ -67,8 +67,8 @@ it as `./AZURE2-x86_64.AppImage --appimage-extract-and-run` instead, which
 unpacks to a temporary directory and needs no kernel support.
 
 Every push, on any branch, also attaches the Linux, macOS and Windows builds to
-its run under **Actions → build → Artifacts**, and tagging a commit `v*`
-collects them into a draft GitHub release.
+its run under **Actions → build → Artifacts** (for signed-in GitHub users, kept
+7 days), and tagging a commit `v*` collects them into a draft GitHub release.
 
 We deliberately do not ship a snap or a Flatpak. Both sandbox the application,
 and AZURE2 reads `.azr` projects and data from wherever you point it -- an
