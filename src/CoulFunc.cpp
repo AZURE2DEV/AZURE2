@@ -49,8 +49,11 @@ CoulFunc::CoulFunc(PPair *pPair, bool useGSLFunctions) :
   dEShiftParams_.coulFunc = this;
 
   // This pair's potential, falling back to the manager's default when the pair
-  // has no setting of its own.
-  nuclearPotential_ = NuclearPotentialManager::instance().getPotential(pairKey_);
+  // has no setting of its own.  Fetched only for the hybrid method, the only user
+  // of it: a CoulFunc is built per channel and point, and copying the shared_ptr
+  // increments one reference count from every thread -- a contended atomic that
+  // was 15 % of a natural_neon calculation on 12 threads, with no potential in use.
+  if (useHybridMethod_) nuclearPotential_ = NuclearPotentialManager::instance().getPotential(pairKey_);
 
   // The table holds plain Coulomb functions of charged channels: not neutral
   // pairs (eta = 0, already cheap) and not pairs with a nuclear potential.
