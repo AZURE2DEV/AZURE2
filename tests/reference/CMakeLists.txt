@@ -87,3 +87,9 @@ add_test(NAME wigner_limit_reference COMMAND wigner_limit_reference_test)
 add_executable(fermi_endpoint_reference_test fermi_endpoint_reference_test.cpp)
 target_link_libraries(fermi_endpoint_reference_test PRIVATE AZURE2Core)
 add_test(NAME fermi_endpoint_reference COMMAND fermi_endpoint_reference_test)
+
+# InputFiles' cache must not serve a same-size rewrite whose stamp did not change (the Windows CI failure of
+# pyazr_natural_target, 2026-11-05), and must still serve an old, unchanged file from memory.
+add_executable(input_files_cache_test input_files_cache_test.cpp)
+target_link_libraries(input_files_cache_test PRIVATE AZURE2Core)
+add_test(NAME input_files_cache COMMAND input_files_cache_test)
