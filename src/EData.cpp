@@ -4751,11 +4751,17 @@ EData *EData::Clone() const {
     }
   }
 
-  for (EDataIterator data = dataCopy->begin(); data != dataCopy->end(); data++) {
-    data.point()->SetParentData(dataCopy);
-    data.point()->ClearLocalMappedPoints();
-    data.point()->ClearECAmplitudes();
-  }
+  // Every point of every segment, not EDataIterator's: the iterator skips the segments that hold components (SUM,
+  // RATIO, total capture, a yield's total term), whose points before 2026-11-05 kept the ORIGINAL data as their parent
+  // (so a fitted density or Doppler temperature never moved for them in a fit's working copy) and the original's
+  // mapped-point list (so each copy also computed, and wrote, the original's component points).
+  for (ESegment &segment : dataCopy->segments_)
+    for (int j = 1; j <= segment.NumPoints(); j++) {
+      EPoint *point = segment.GetPoint(j);
+      point->SetParentData(dataCopy);
+      point->ClearLocalMappedPoints();
+      point->ClearECAmplitudes();
+    }
   // Also fix parentData for component segment points
   for (size_t i = 0; i < dataCopy->componentSegments_.size(); i++) {
     for (int j = 1; j <= dataCopy->componentSegments_[i].NumPoints(); j++) {
