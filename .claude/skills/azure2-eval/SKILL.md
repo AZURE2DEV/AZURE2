@@ -931,6 +931,32 @@ a data or test segment line, n = sample thickness in atoms/barn.
   the T or Y data, so check the build before trusting such a file.
   `tests/transmission_yield` fails 15 checks on those builds.
 
+**Free-gas Doppler broadening** (dev 25b379e, 2026-11-05; SAMMY's free-gas
+model): put `doppler <T>` at the end of a `<targetInt>` line, with T the
+effective temperature in kelvin.
+- What it does: the cross section of every sub-point is broadened FIRST, then
+  any `transmission`/`yield` transform is applied, then the line's resolution
+  kernel (Gaussian, UDR, target integration, beam profile). That is SAMMY's
+  order. A line may carry `doppler` alone, which gives sigma_D at the point:
+  `1 "1,2" 400 0 0 0 0 "" 0 0 0 0 "" 0 doppler 293.6`.
+- Size of the effect: the full width is Delta_D = sqrt(4 m E kT/M) (63 eV for
+  n+12C at 300 K and 0.46 MeV). It matters for resonances a few hundred eV
+  wide or narrower; it is negligible for ones tens of keV wide.
+- Sub-points: the grid window is widened by the Doppler window, and a narrow
+  resonance needs many sub-points. A 200 eV resonance under a 100 eV Gaussian
+  needed 1000 (with 400 the error was 4e-4).
+- Refused with an ERROR: `doppler 0`, a missing T, and a photon or beta
+  entrance pair. It works for any particle entrance pair (neutrons, and
+  charged beams on gas).
+- The temperature is fixed in this release. The grids stop at 1 keV c.m., as
+  for every effect.
+- The analytic gradient covers it.
+- GUI: "Include Free-Gas Doppler Broadening" in the Add/Edit Experimental
+  Effect dialog. pyazr: `add_target_effect(..., doppler=T)`.
+- Test: `tests/doppler_fgm`.
+- Builds before 25b379e REFUSE the whole `<targetInt>` block ("Could not fill
+  data object from file"). They do not silently ignore the keyword.
+
 The **external parameter file** prompt: give a saved `output/param.sav` to start
 from those best-fit formal parameters, or leave **blank** to build fresh from
 the `.azr` levels.
