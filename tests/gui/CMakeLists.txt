@@ -441,3 +441,29 @@ endif()
 add_test(NAME runtime_options COMMAND runtime_options_test)
 set_tests_properties(runtime_options PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+# File dialogs on macOS are Qt's own (gui/include/FileDialogPolicy.h): the native NSOpenPanel failed for users
+# (2026-11-05).  On macOS the test runs on the cocoa platform, not offscreen: offscreen has no native dialogs, so it
+# could not tell a build with the policy from one without.  Elsewhere offscreen, as for the other GUI tests.
+add_executable(file_dialog_policy_test file_dialog_policy_test.cpp)
+set_target_properties(file_dialog_policy_test PROPERTIES AUTOMOC OFF)
+target_include_directories(file_dialog_policy_test PRIVATE
+    ${AZURE2_SOURCE_DIR}/gui/include
+    ${AZURE2_SOURCE_DIR}/include
+)
+target_link_libraries(file_dialog_policy_test PRIVATE
+    ${AZURESETUP_LIBRARIES}
+    ${AZUREAPI_LIBRARIES}
+    AZURE2Core
+    Qt5::Core Qt5::Gui Qt5::Widgets Qt5::Network
+)
+if(USE_QWT)
+    target_link_libraries(file_dialog_policy_test PRIVATE ${QWT_LIBRARIES})
+endif()
+if(USE_ERYA)
+    target_link_libraries(file_dialog_policy_test PRIVATE pugixml srim_utilities)
+endif()
+add_test(NAME file_dialog_policy COMMAND file_dialog_policy_test)
+if(NOT APPLE)
+    set_tests_properties(file_dialog_policy PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+endif()

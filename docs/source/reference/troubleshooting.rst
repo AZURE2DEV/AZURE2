@@ -135,6 +135,24 @@ existed): every :math:`J^\pi` up to L_max then scatters whether or not a level
 carries it, and the line under the box lists the :math:`J^\pi` that have none.
 Older projects did this with fixed zero-width dummy levels, which still work.
 
+File Dialogs on macOS
+^^^^^^^^^^^^^^^^^^^^^
+
+**Symptom**: on a Mac, a "Choose..." button (parameter file, data file,
+directory) or File > Open does not let you pick a file. This was reported with
+the native macOS file dialog and builds before November 2026.
+
+**Cause**: the native macOS file panel did not work with the Qt 5 build of
+the macOS application. Since November 2026 AZURE2 uses Qt's own file dialog
+for every file and directory choice on macOS. It looks different from the
+Finder dialog (no Finder sidebar or iCloud shortcuts) but works the same way.
+
+**Solution**: use a current build. To try the native dialog anyway, start
+AZURE2 from a terminal with ``AZURE2_NATIVE_DIALOGS=1`` in the environment:
+``AZURE2_NATIVE_DIALOGS=1 /Applications/AZURE2.app/Contents/MacOS/AZURE2``
+(``open -a`` does not pass the variable on). ``AZURE2_NATIVE_DIALOGS=0``
+gives Qt's dialog on Linux and Windows as well.
+
 Getting Help
 ------------
 
