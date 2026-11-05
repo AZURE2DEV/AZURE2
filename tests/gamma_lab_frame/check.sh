@@ -47,7 +47,7 @@ run cm
 if [ ! -s "$WORK/run_cm/$OUT" ]; then bad "c.m. model gave no output"; echo "gamma_lab_frame: FAIL"; exit 1; fi
 
 # boost: output columns E_cm Ex angle sigma ... ; the data file's lab energies are in models/data/cm.dat
-paste "$HERE/models/data/cm.dat" "$WORK/run_cm/$OUT" | awk -v m1=4.002603 -v m2=12.0 -v u=931.494088 '
+paste "$HERE/models/data/cm.dat" "$WORK/run_cm/$OUT" | awk -v m1=4.002603 -v m2=12.0 -v u=931.49410242 '
   NF >= 8 {
     T = $1; ts = $2 * atan2(0, -1) / 180; s = $8
     b = sqrt(T * (T + 2 * m1 * u)) / ((m1 + m2) * u + T)

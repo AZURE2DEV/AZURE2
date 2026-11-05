@@ -48,3 +48,7 @@ group-local shift gradient against full-dataset finite differences on both
 function together with `sqrtshift`, an undeclared or unused parameter, a short
 block, a term with no effect at the group's energies), the degeneracy warning,
 and that a `.sav` value does not free a fixed function parameter.
+
+`expected/chiSquared.out` re-recorded 2026-11-05 for the CODATA 2018 constants (include/Constants.h): the totals
+move by ~3e-6 (952.252 -> 952.249), inside run_tests.sh's 1e-3, but tests/pyazr/shift_fn_test compares the
+segment chi2 with this file to 1e-5.

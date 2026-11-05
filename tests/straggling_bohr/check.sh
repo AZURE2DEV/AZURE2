@@ -42,7 +42,7 @@ bad() { echo "  FAIL  $1"; failures=$((failures + 1)); }
 # Bohr's coefficient for the constant stopping cross section, from the same constants as Constants.h
 EPS=1.8e-20
 DENS=1.1e18
-CB="$(awk -v eps="$EPS" 'BEGIN { pi = 3.141592650; hbarc = 197.32696310; alpha = 1.0 / 137.0359996790;
+CB="$(awk -v eps="$EPS" 'BEGIN { pi = 3.141592653589793; hbarc = 197.3269804; alpha = 1.0 / 137.035999084;
   e2 = alpha * hbarc * 1.0e-13; f = 14.0031 / (1.00783 + 14.0031); z1 = 1; z2 = 7;
   printf "%.6f", sqrt(1000.0 * f * 4.0 * pi * z1 * z1 * z2 * e2 * e2 / eps) }')"
 echo "  Bohr coefficient for p + 14N, epsilon = $EPS MeV cm^2: c_B = $CB keV^1/2 (c.m.)"

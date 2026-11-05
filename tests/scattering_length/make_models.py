@@ -15,7 +15,7 @@ Needs mpmath."""
 import mpmath as mp
 import os
 mp.mp.dps = 30
-hbarc, uconv, fstruc = mp.mpf("197.32696310"), mp.mpf("931.4940880"), 1 / mp.mpf("137.0359996790")
+hbarc, uconv, fstruc = mp.mpf("197.3269804"), mp.mpf("931.49410242"), 1 / mp.mpf("137.035999084")
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 CONFIG = """<config>

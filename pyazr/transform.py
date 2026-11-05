@@ -57,10 +57,10 @@ import mpmath as _mp
 
 # Verbatim from include/Constants.h -- do not "improve" these to CODATA values,
 # the point is to agree with AZURE2 digit for digit.
-HBARC = 197.32696310
-UCONV = 931.4940880
-FSTRUC = 1.00 / 137.0359996790
-NUCLEAR_MAGNETON = 0.105155
+HBARC = 197.3269804              # CODATA 2018, as the engine (include/Constants.h)
+UCONV = 931.49410242
+FSTRUC = 1.00 / 137.035999084
+NUCLEAR_MAGNETON = 0.1051544551
 
 # Energy step for dS/dE.  AZURE2 hands gsl_deriv_central h = 1e-6 MeV, which is
 # small enough that the difference of two shift-function values is dominated by

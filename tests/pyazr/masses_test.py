@@ -5,7 +5,7 @@
    (mass excess in keV, atomic mass in u, the '#' estimated flag).  Mass excess and atomic mass agree to 2e-9 u
    for every measured nuclide, which checks the fixed-width columns are cut where the format says.
 2. Names: shorthands, "12C" / "C12" / "c-12", (Z, A); "h" and unknown symbols are refused.
-3. Separation energies from mass excesses equal (m1 + m2 - M) times the engine's u (931.4940880 MeV) to 5 eV,
+3. Separation energies from mass excesses equal (m1 + m2 - M) times the engine's u (931.49410242 MeV) to 5 eV,
    so a pair filled from the table passes the engine's 1 keV load-time check by five orders of magnitude.
 4. AzrModel.fill_masses on tests/13N/13N.azr (a bare-proton 1.00728 u next to atomic masses, S_p 20 eV high):
    the changes are exactly M1 and S of pair 1 and M2 of the gamma pair; only those columns (and the entrance-S
@@ -51,7 +51,7 @@ REFERENCE = [
     ("16O", 8, 16, -4737.00217, 15.99491461926, False),
     ("3Li", 3, 3, 28667.0, 3.030775, True),
 ]
-U_ENGINE = 931.4940880   # include/Constants.h
+U_ENGINE = 931.49410242   # include/Constants.h
 
 
 def table():
@@ -98,7 +98,7 @@ def separation():
         comp = masses.lookup(pm.compound)
         s_engine = (pm.M1 + pm.M2 - comp.atomic_mass) * U_ENGINE
         worst = max(worst, abs(pm.S - s_engine))
-    check(worst < 5e-6, f"S from mass excesses = (m1 + m2 - M) x 931.4940880 MeV within 5 eV (worst {worst * 1e6:.2f} eV)")
+    check(worst < 5e-6, f"S from mass excesses = (m1 + m2 - M) x 931.49410242 MeV within 5 eV (worst {worst * 1e6:.2f} eV)")
 
 
 def fill():

@@ -100,8 +100,8 @@ void AChannel::SetWignerLimit(double reducedMass, double channelRadius) {
   // Wigner Limit: gamma_W^2 = 3 hbar^2 / (2 mu a^2)
   //
   // Constants:
-  // hbarc = 197.32696310 MeV·fm (from Constants.h)
-  // uconv = 931.4940880 MeV/c² per u (from Constants.h)
+  // hbarc = 197.3269804 MeV·fm (from Constants.h, CODATA 2018)
+  // uconv = 931.49410242 MeV/c² per u (from Constants.h, CODATA 2018)
   //
   // reduced_mass comes in atomic mass units (u), convert to MeV/c² by multiplying by uconv
   // channel_radius is in fm

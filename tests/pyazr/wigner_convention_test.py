@@ -16,8 +16,8 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
-HBARC = 197.32696310      # MeV fm, Constants.h
-UCONV = 931.4940880       # MeV per u, Constants.h
+HBARC = 197.3269804      # MeV fm, Constants.h
+UCONV = 931.49410242       # MeV per u, Constants.h
 
 failures = []
 

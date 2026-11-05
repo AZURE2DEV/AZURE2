@@ -1,12 +1,15 @@
 #include "IntegratedFermiFunc.h"
+#include "Constants.h"
 #include <math.h>
 #include <gsl/gsl_sf_gamma.h>
 #include <gsl/gsl_integration.h>
 
-const double IntegratedFermiFunc::alpha_ = 1. / 137.036;
-const double IntegratedFermiFunc::pi_ = 3.14159;
-const double IntegratedFermiFunc::electronMass_ = 0.51099891;
-const double IntegratedFermiFunc::hbarc_ = 197.327;
+// The engine's CODATA 2018 constants (Constants.h); before 2026-11-05 rounded copies (pi 3.14159, alpha 1/137.036,
+// hbarc 197.327) and the CODATA 2006 electron mass.
+const double IntegratedFermiFunc::alpha_ = fstruc;
+const double IntegratedFermiFunc::pi_ = pi;
+const double IntegratedFermiFunc::electronMass_ = 0.51099895000;
+const double IntegratedFermiFunc::hbarc_ = hbarc;
 
 /*!
  * The constructor for the function takes the charge of the Fermion

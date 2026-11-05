@@ -41,7 +41,7 @@ from sympy.physics.wigner import wigner_3j, wigner_6j
 
 import make_models as mm
 
-HBARC, UCONV, ALPHA = 197.32696310, 931.4940880, 1 / 137.0359996790
+HBARC, UCONV, ALPHA = 197.3269804, 931.49410242, 1 / 137.035999084
 MPROTON = 1.00727638 * UCONV
 X, W = np.polynomial.legendre.leggauss(24)
 
