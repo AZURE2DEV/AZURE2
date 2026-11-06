@@ -78,7 +78,7 @@ try:
     ch.light_excitation = 0
     check("setting it back to 0 drops the column (written only when nonzero)", ch.to_line() == before, repr(ch.to_line()))
     ch.light_excitation = 0
-    check("setting 0 on a 31-field line leaves it alone", ch.to_line() == before and len(ch.tokens) == 31)
+    check("setting 0 on a 31-field line leaves it alone", ch.to_line() == before and len(ch.to_line().split()) == 31)
     ch2 = AzrModel.from_file(os.path.join(tmp, "aC_light.azr")).levels[0].channels[1]   # pair 2, 32 columns
     ch2.gamma = 12345.0
     line = ch2.to_line()
@@ -89,10 +89,15 @@ try:
           ch2.to_line().split()[11] == "12345", ch2.to_line())
     try:
         from pyazr.azrfile import AzrChannel
-        AzrChannel.from_line(" ".join(["0"] * 33))
-        check("a 33-field line is refused", False)
+        # thm: 33 fields are the THM binding energy and width flag, 34 those and e1 (NucLine); 35 is refused
+        AzrChannel.from_line(" ".join(["0"] * 35))
+        check("a 35-field line is refused", False)
     except ValueError:
-        check("a 33-field line is refused", True)
+        check("a 35-field line is refused", True)
+    thm_line = AzrChannel.from_line(" ".join(["0"] * 31 + ["2.2246", "0", "4.43891"]))
+    check("thm: a 34-field line is binding energy, flag and e1",
+          thm_line.binding_energy == 2.2246 and thm_line.light_excitation == 4.43891
+          and len(thm_line.to_line().split()) == 34)
 
     # clone / write / reread keeps e1
     m = AzrModel.from_file(os.path.join(tmp, "aC_light.azr"))
@@ -106,7 +111,7 @@ try:
 
     # --- Pair (no engine) -------------------------------------------------------------------------
     print("2. Pair records")
-    rec = [2, 2, 0, 0, 2.0, 1, 2, 4.0026, 0.0, 1, 6, 12.0, 7.16191, E2P, 5.43, 0.2, 8, 16, 1.0, E2P]
+    rec = [2, 2, 0, 0, 2.0, 1, 2, 4.0026, 0.0, 1, 6, 12.0, 7.16191, E2P, 5.43, 0.2, 8, 16, 1.0, E2P]  # dev's 20
     p = Pair.from_record(rec)
     check("a 20-field record: light_excitation, heavy_excitation, threshold",
           p.light_excitation == E2P and p.heavy_excitation == 0.0 and abs(p.threshold - (7.16191 + E2P)) < 1e-12,
@@ -116,7 +121,10 @@ try:
     old = Pair.from_record(rec[:19])
     check("a 19-field record (older engine) reads, light_excitation = 0, heavy = total",
           old.light_excitation == 0.0 and old.heavy_excitation == E2P, (old.light_excitation, old.heavy_excitation))
-    check("Pair._NFIELDS is 20", Pair._NFIELDS == 20)
+    check("Pair._NFIELDS is 21 (thm: binding_energy last)", Pair._NFIELDS == 21)
+    thm_rec = Pair.from_record(rec + [2.2246])
+    check("a 21-field record: light_excitation and binding_energy",
+          thm_rec.light_excitation == E2P and thm_rec.binding_energy == 2.2246)
 
     # --- engine ----------------------------------------------------------------------------------
     try:

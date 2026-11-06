@@ -172,7 +172,16 @@ appears with the following fields:
    :math:`B(b,a)A`, so it is entered as an **Analyzing Power** segment on the
    inverse channel (entrance :math:`b+B`, exit :math:`a+A`). Data published
    as the product :math:`P\,d\sigma/d\Omega` must be divided by the
-   differential cross section first.
+   differential cross section first. The former observable code 8
+   (Polarization x Cross Section), and 18 on a THM segment, are refused at
+   startup with this advice.
+
+**THM (modified R-matrix)**
+   Shown when **Use Trojan Horse Method (THM)** is ticked in
+   :doc:`configure_menu`, Runtime Options. Ticked, the segment is a Trojan
+   Horse (half-off-shell) measurement (observable code + 10); see "THM
+   Workspace" there. Not offered for phase shifts and angular-distribution
+   coefficients.
 
 **Data Normalization**
    A normalization factor applied to the data yield. Default is ``1.0``.
@@ -543,6 +552,16 @@ Editing and Managing Data Segments
 - Use **Check All** / **Uncheck All** to quickly enable or disable all segments.
 - Use the **entrance** and **exit pair filter** dropdowns to show only segments
   for specific particle pairs.
+
+A segment is referred to by its line number elsewhere in the project: the
+``segment_N_norm`` and ``segment_N_energy_shift`` rows of the fitting settings
+(limits, nuisance flag, prior centre), the segment lists of the experimental
+effects, and the THM experiments and ``weight[k]`` of the ``<thm>`` block.
+When a data segment is moved or deleted, these follow it. The rows of a
+deleted segment are dropped; an experimental effect or a THM experiment left
+without segments is removed, and the status bar says so. Moving a test
+segment renumbers ``weightTest[k]``; the experimental effect lists follow the
+data segments.
 
 .. tip::
 

@@ -99,6 +99,274 @@ add_test(NAME segments_move COMMAND segments_move_test)
 set_tests_properties(segments_move PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
+# The <thm> block has no tab; open + save must carry it verbatim and must not
+# add one to a project that had none.
+add_executable(thm_block_test thm_block_test.cpp)
+set_target_properties(thm_block_test PROPERTIES AUTOMOC OFF)
+target_include_directories(thm_block_test PRIVATE
+    ${AZURE2_SOURCE_DIR}/gui/include
+    ${AZURE2_SOURCE_DIR}/include
+)
+target_compile_definitions(thm_block_test PRIVATE
+    AZURE2_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+target_link_libraries(thm_block_test PRIVATE
+    ${AZURESETUP_LIBRARIES}
+    ${AZUREAPI_LIBRARIES}
+    AZURE2Core
+    Qt5::Core Qt5::Gui Qt5::Widgets Qt5::Network
+)
+if(USE_QWT)
+    target_link_libraries(thm_block_test PRIVATE ${QWT_LIBRARIES})
+endif()
+if(USE_ERYA)
+    target_link_libraries(thm_block_test PRIVATE pugixml srim_utilities)
+endif()
+add_test(NAME thm_block COMMAND thm_block_test)
+# A modal dialog on a failed open would wait forever offscreen; fail instead.
+set_tests_properties(thm_block PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+    TIMEOUT 120)
+
+# THM is opt-in (Configure > Runtime Options), as the nuclear potential is:
+# off for a classic project, on for one with THM content; switching it hides
+# or shows the THM controls and changes no byte of a save.
+add_executable(thm_opt_in_test thm_opt_in_test.cpp)
+set_target_properties(thm_opt_in_test PROPERTIES AUTOMOC OFF)
+target_include_directories(thm_opt_in_test PRIVATE
+    ${AZURE2_SOURCE_DIR}/gui/include
+    ${AZURE2_SOURCE_DIR}/include
+)
+target_compile_definitions(thm_opt_in_test PRIVATE
+    AZURE2_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+target_link_libraries(thm_opt_in_test PRIVATE
+    ${AZURESETUP_LIBRARIES}
+    ${AZUREAPI_LIBRARIES}
+    AZURE2Core
+    Qt5::Core Qt5::Gui Qt5::Widgets Qt5::Network
+)
+if(USE_QWT)
+    target_link_libraries(thm_opt_in_test PRIVATE ${QWT_LIBRARIES})
+endif()
+if(USE_ERYA)
+    target_link_libraries(thm_opt_in_test PRIVATE pugixml srim_utilities)
+endif()
+add_test(NAME thm_opt_in COMMAND thm_opt_in_test)
+# A modal dialog left open would wait forever offscreen; fail instead.
+set_tests_properties(thm_opt_in PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+    TIMEOUT 120)
+
+# Moving, adding or deleting a data segment line: the <thm> experiments and
+# weights, the Experimental Effects lists and the segment_N rows of
+# <parameterSettings> follow the line; a save round-trips.
+add_executable(segments_renumber_test segments_renumber_test.cpp)
+set_target_properties(segments_renumber_test PROPERTIES AUTOMOC OFF)
+target_include_directories(segments_renumber_test PRIVATE
+    ${AZURE2_SOURCE_DIR}/gui/include
+    ${AZURE2_SOURCE_DIR}/include
+)
+target_compile_definitions(segments_renumber_test PRIVATE
+    AZURE2_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+target_link_libraries(segments_renumber_test PRIVATE
+    ${AZURESETUP_LIBRARIES}
+    ${AZUREAPI_LIBRARIES}
+    AZURE2Core
+    Qt5::Core Qt5::Gui Qt5::Widgets Qt5::Network
+)
+if(USE_QWT)
+    target_link_libraries(segments_renumber_test PRIVATE ${QWT_LIBRARIES})
+endif()
+if(USE_ERYA)
+    target_link_libraries(segments_renumber_test PRIVATE pugixml srim_utilities)
+endif()
+add_test(NAME segments_renumber COMMAND segments_renumber_test)
+set_tests_properties(segments_renumber PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+    TIMEOUT 300)
+
+# <parameterSettings> rows name levels and channels the way AZURE2 numbers the
+# saved file, and open + save of the GUI's own output changes nothing.
+add_executable(parameter_settings_test parameter_settings_test.cpp)
+set_target_properties(parameter_settings_test PROPERTIES AUTOMOC OFF)
+target_include_directories(parameter_settings_test PRIVATE
+    ${AZURE2_SOURCE_DIR}/gui/include
+    ${AZURE2_SOURCE_DIR}/include
+)
+target_compile_definitions(parameter_settings_test PRIVATE
+    AZURE2_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+target_link_libraries(parameter_settings_test PRIVATE
+    ${AZURESETUP_LIBRARIES}
+    ${AZUREAPI_LIBRARIES}
+    AZURE2Core
+    Qt5::Core Qt5::Gui Qt5::Widgets Qt5::Network
+)
+if(USE_QWT)
+    target_link_libraries(parameter_settings_test PRIVATE ${QWT_LIBRARIES})
+endif()
+if(USE_ERYA)
+    target_link_libraries(parameter_settings_test PRIVATE pugixml srim_utilities)
+endif()
+add_test(NAME parameter_settings COMMAND parameter_settings_test)
+set_tests_properties(parameter_settings PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+    TIMEOUT 300)
+
+# Open + save must not round the model: every <levels> number comes back
+# exactly, and the engine's chi-squared of the saved file is the original's.
+add_executable(level_precision_test level_precision_test.cpp)
+set_target_properties(level_precision_test PROPERTIES AUTOMOC OFF)
+target_include_directories(level_precision_test PRIVATE
+    ${AZURE2_SOURCE_DIR}/gui/include
+    ${AZURE2_SOURCE_DIR}/include
+)
+target_compile_definitions(level_precision_test PRIVATE
+    AZURE2_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+    AZURE2_BINARY="$<TARGET_FILE:AZURE2>")
+target_link_libraries(level_precision_test PRIVATE
+    ${AZURESETUP_LIBRARIES}
+    ${AZUREAPI_LIBRARIES}
+    AZURE2Core
+    Qt5::Core Qt5::Gui Qt5::Widgets Qt5::Network
+)
+if(USE_QWT)
+    target_link_libraries(level_precision_test PRIVATE ${QWT_LIBRARIES})
+endif()
+if(USE_ERYA)
+    target_link_libraries(level_precision_test PRIVATE pugixml srim_utilities)
+endif()
+add_dependencies(level_precision_test AZURE2)
+add_test(NAME level_precision COMMAND level_precision_test)
+set_tests_properties(level_precision PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+    TIMEOUT 300)
+
+# The THM options editor: options set on the dialog are written as the <thm>
+# block, come back on reopening, an untouched dialog keeps the block byte for
+# byte, and the engine runs the GUI's block (weight file included).
+add_executable(thm_options_dialog_test thm_options_dialog_test.cpp)
+set_target_properties(thm_options_dialog_test PROPERTIES AUTOMOC OFF)
+target_include_directories(thm_options_dialog_test PRIVATE
+    ${AZURE2_SOURCE_DIR}/gui/include
+    ${AZURE2_SOURCE_DIR}/include
+)
+target_compile_definitions(thm_options_dialog_test PRIVATE
+    AZURE2_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+    AZURE2_BINARY="$<TARGET_FILE:AZURE2>")
+target_link_libraries(thm_options_dialog_test PRIVATE
+    ${AZURESETUP_LIBRARIES}
+    ${AZUREAPI_LIBRARIES}
+    AZURE2Core
+    Qt5::Core Qt5::Gui Qt5::Widgets Qt5::Network
+)
+if(USE_QWT)
+    target_link_libraries(thm_options_dialog_test PRIVATE ${QWT_LIBRARIES})
+endif()
+if(USE_ERYA)
+    target_link_libraries(thm_options_dialog_test PRIVATE pugixml srim_utilities)
+endif()
+add_dependencies(thm_options_dialog_test AZURE2)
+add_test(NAME thm_options_dialog COMMAND thm_options_dialog_test)
+set_tests_properties(thm_options_dialog PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+    TIMEOUT 300)
+
+# The THM workspace (Configure > THM Workspace...): its Model, Experiments and
+# Channels pages write the <thm> block and the THM columns of <levels>, come
+# back on reopening, refuse what the engine refuses, leave an untouched
+# project byte for byte, and show the energies the engine prints.
+add_executable(thm_workspace_test thm_workspace_test.cpp)
+set_target_properties(thm_workspace_test PROPERTIES AUTOMOC OFF)
+target_include_directories(thm_workspace_test PRIVATE
+    ${AZURE2_SOURCE_DIR}/gui/include
+    ${AZURE2_SOURCE_DIR}/include
+)
+target_compile_definitions(thm_workspace_test PRIVATE
+    AZURE2_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+    AZURE2_BINARY="$<TARGET_FILE:AZURE2>")
+target_link_libraries(thm_workspace_test PRIVATE
+    ${AZURESETUP_LIBRARIES}
+    ${AZUREAPI_LIBRARIES}
+    AZURE2Core
+    Qt5::Core Qt5::Gui Qt5::Widgets Qt5::Network
+)
+if(USE_QWT)
+    target_link_libraries(thm_workspace_test PRIVATE ${QWT_LIBRARIES})
+endif()
+if(USE_ERYA)
+    target_link_libraries(thm_workspace_test PRIVATE pugixml srim_utilities)
+endif()
+add_dependencies(thm_workspace_test AZURE2)
+add_test(NAME thm_workspace COMMAND thm_workspace_test)
+set_tests_properties(thm_workspace PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+    TIMEOUT 300)
+
+# A pair is its key, as in the engine: examples/c12c12_tumino2018's pairs 1
+# and 6 (12C+12C, with and without the THM binding energy) both open, every
+# channel keeps its pair, open + save changes no number, the GUI's own output
+# saves byte for byte, an edit round-trips, the engine's chi-squared is the
+# original's, and the THM workspace leaves the project alone.
+add_executable(pair_identity_test pair_identity_test.cpp)
+set_target_properties(pair_identity_test PROPERTIES AUTOMOC OFF)
+target_include_directories(pair_identity_test PRIVATE
+    ${AZURE2_SOURCE_DIR}/gui/include
+    ${AZURE2_SOURCE_DIR}/include
+)
+target_compile_definitions(pair_identity_test PRIVATE
+    AZURE2_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+    AZURE2_BINARY="$<TARGET_FILE:AZURE2>")
+target_link_libraries(pair_identity_test PRIVATE
+    ${AZURESETUP_LIBRARIES}
+    ${AZUREAPI_LIBRARIES}
+    AZURE2Core
+    Qt5::Core Qt5::Gui Qt5::Widgets Qt5::Network
+)
+if(USE_QWT)
+    target_link_libraries(pair_identity_test PRIVATE ${QWT_LIBRARIES})
+endif()
+if(USE_ERYA)
+    target_link_libraries(pair_identity_test PRIVATE pugixml srim_utilities)
+endif()
+add_dependencies(pair_identity_test AZURE2)
+add_test(NAME pair_identity COMMAND pair_identity_test)
+# A modal dialog on a failed open would wait forever offscreen; fail instead.
+set_tests_properties(pair_identity PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+    TIMEOUT 300)
+
+# The MCMC tab's parameter list: each varying parameter's kind and automatic
+# prior from its name, as the sampler takes them (the sqrt(E) shift
+# coefficient has its own prior, not the energy shift's).
+if(USE_MCMC)
+    add_executable(mcmc_priors_test mcmc_priors_test.cpp)
+    set_target_properties(mcmc_priors_test PROPERTIES AUTOMOC OFF)
+    target_include_directories(mcmc_priors_test PRIVATE
+        ${AZURE2_SOURCE_DIR}/gui/include
+        ${AZURE2_SOURCE_DIR}/include
+    )
+    target_compile_definitions(mcmc_priors_test PRIVATE
+        AZURE2_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+        AZURE2_BINARY="$<TARGET_FILE:AZURE2>")
+    target_link_libraries(mcmc_priors_test PRIVATE
+        ${AZURESETUP_LIBRARIES}
+        ${AZUREAPI_LIBRARIES}
+        AZURE2Core
+        Qt5::Core Qt5::Gui Qt5::Widgets Qt5::Network
+    )
+    if(USE_QWT)
+        target_link_libraries(mcmc_priors_test PRIVATE ${QWT_LIBRARIES})
+    endif()
+    if(USE_ERYA)
+        target_link_libraries(mcmc_priors_test PRIVATE pugixml srim_utilities)
+    endif()
+    add_dependencies(mcmc_priors_test AZURE2)
+    add_test(NAME mcmc_priors COMMAND mcmc_priors_test)
+    # A modal dialog on a failed open would wait forever offscreen; fail instead.
+    set_tests_properties(mcmc_priors PROPERTIES
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+        TIMEOUT 300)
+endif()
+
 # The Add/Edit Level dialog lists only the J^pi values that give channels under
 # the current pairs and limits, with a fallback when no pairs are defined.
 add_executable(level_dialog_test level_dialog_test.cpp)

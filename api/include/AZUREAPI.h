@@ -4,14 +4,18 @@
 #include "AZUREMain.h"
 
 #include "Constants.h"
+#include "AZUREGrad.h"
 #include <map>
 #include <vector>
+#include "ThmExperiment.h"
+#include "ThmReports.h"
 
 class Config;
 class EData;
 class CNuc;
 class EPoint;
 struct GradAccum;
+class ParamIndexMap;
 
 /// A function class to perform the calculation of the chi-squared value
 
@@ -96,7 +100,7 @@ class AZUREAPI {
   vector_r GetEnergyShiftIndices();
   // Number of numeric fields packed per parameter by GetParameterInfo().
   // Keep this in sync with pyazr/parameters.py (Parameter._NFIELDS).
-  static const int kParamInfoFields = 15;  // unchanged: shift-function and abundance records reuse the fields (types 5, 6)
+  static const int kParamInfoFields = 16;  // field 15: input_is_rwa (thm); shift-function and abundance records reuse the fields (types 5, 6)
   /*!
    * Returns structured metadata describing every parameter, in the same order
    * as params_names() / params_all() / params_fixed().
@@ -130,6 +134,9 @@ class AZUREAPI {
    *                      (0 = none, and for a thicknessgroup follower),
    *                      0 transmission / 1 yield in field 6, the group
    *                      leader's key in field 7 for a follower (else -1)
+   *                   11=THM coherent background (cbkg; cbackground=; was 9
+   *                      before the merge of dev 3264896d, 8 before the
+   *                      merge of 2d97b1f, 7 before 8673c5c)
    *   1  jgroup        1-based J-group index (R-matrix params only)
    *   2  J             total spin of the J-group / level
    *   3  parity        +1 / -1
@@ -145,12 +152,17 @@ class AZUREAPI {
    *   13 segment_key   data-segment key (norm / energy-shift params only)
    *   14 wigner_limit  Wigner limit of the channel reduced width, i.e. the
    *                    bound on |reduced-width amplitude| (width params only)
+   *   15 input_is_rwa  1 if the width's .azr input value was declared as a
+   *                    reduced width amplitude (MeV^(1/2)) rather than a
+   *                    physical partial width/ANC, 0 otherwise; the parameter
+   *                    transformations pass such widths through unconverted
+   *                    (width params only, -1 otherwise)
    */
   vector_r GetParameterInfo() const;
 
   // Number of numeric fields packed per particle pair by GetPairsInfo().
   // Keep this in sync with pyazr/parameters.py (Pair._NFIELDS).
-  static const int kPairInfoFields = 20;
+  static const int kPairInfoFields = 21;
   /*!
    * Returns structured metadata describing every particle pair, in 1-based
    * pair-number order (the same number stored in field 9 -- "pair" -- of
@@ -182,6 +194,9 @@ class AZUREAPI {
    *   18 abundance     its abundance in the default sample (1 without <abundances>)
    *   19 lightExE      excitation energy of particle 1 (MeV), the optional 32nd
    *                    column of the <levels> line; exE - lightExE is particle 2's
+   *   20 bindingE      Trojan Horse binding energy of the pair (MeV); 0 unless
+   *                    the pair is used as a THM entrance channel (field 19
+   *                    before the merge of dev 3264896d)
    */
   vector_r GetPairsInfo() const;
 
@@ -301,9 +316,13 @@ class AZUREAPI {
    */
   vector_r TransformRWAParameters(const vector_r &p) const;
   /*!
-   * Transform all RWA parameters to physical values
+   * Transform all RWA parameters to physical values.  Returns the non-fixed
+   * ones, or with includeFixed every parameter: a fixed width holds its
+   * reduced-width amplitude, so its physical value follows the level's other
+   * widths (the Brune denominator 1 + sum gamma^2 dS/dE) and is only known
+   * from the whole vector.
    */
-  vector_r TransformAllRWAParameters(const vector_r &p) const;
+  vector_r TransformAllRWAParameters(const vector_r &p, bool includeFixed = false) const;
   /// As TransformAllRWAParameters, but returns every R-matrix parameter's
   /// physical value, fixed ones included (the <levels> block of a snapshot).
   vector_r TransformAllRWAParametersFull(const vector_r &p) const;
@@ -380,6 +399,35 @@ class AZUREAPI {
    * bounds, 2026-10-30).  The adjoint columns are always filled.
    */
   vector_r CalculateResidualJacobianRWA(const vector_r &params, const std::vector<int> &skipColumns = {}) const;
+
+  /*!
+   * Standardized residuals only, from one forward pass: the residual vector
+   * of CalculateResidualJacobianRWA (same rows, same order: every point of every
+   * segment, in segment order), without the Jacobian.  sum r_i^2 equals
+   * CalculateChi2RWA.  Never bails: it uses the forward model, not the adjoint.
+   */
+  vector_r CalculateResidualsRWA(const vector_r &params) const;
+
+  /*!
+   * The normalization each segment carries now (one per calculated segment,
+   * collapsed by segment key like UpdateData), as opposed to norms(), which is
+   * the nominal value from the file.  After a chi-squared evaluation a
+   * profiled (free THM) norm holds its optimum n* = S_mm/S_md.
+   */
+  vector_r GetCurrentNorms() const;
+  /// The THM experiments (<thm> experiment[...]) as the last chi^2 evaluation
+  /// profiled them: shared norm, background and their covariance.
+  std::vector<ThmExperimentReport> GetThmExperiments() const;
+  /// The Coulomb line shape of THM experiment `name` (lineshape=on) at the
+  /// c.m. energies `energies`, with the level poles of the current compound
+  /// (the last evaluation's parameters).  False and `why` if unavailable.
+  bool GetThmLineshape(const std::string &name, const vector_r &energies, ThmLineshapeReport &out,
+                       std::string &why);
+  /// The window-averaged THM entrance vertex of experiment `name` (EData::ThmVertexTable).
+  bool GetThmVertex(const std::string &name, const vector_r &energies, ThmVertexReport &out, std::string &why);
+  /// The distortion factor R(E) of experiment `name` (EData::ThmDistortionTable).
+  bool GetThmDistortion(const std::string &name, const vector_r &energies, ThmDistortionReport &out,
+                        std::string &why);
 
   /*!
    * Per-point sensitivities d(model)/d(theta) of the calculated segments, for
@@ -468,6 +516,30 @@ class AZUREAPI {
    */
   bool Chi2GradEGammaNorm(const vector_r &fullParams, vector_r &gradFull,
                           double &chi2Out) const;
+
+  /// Fill the canonical compound/data from a full RWA vector (R-matrix
+  /// parameters, norms, energy shifts, and the Brune shift functions).
+  void FillFromFullRWA(const vector_r &full) const;
+
+  /*!
+   * Forward model and data chi-squared on the already-filled compound/data,
+   * exactly as the CLI's AZURECalc::operator() computes the data term: every
+   * point's model is stored on it, a profiled (free THM) norm is set to its
+   * optimum and contributes S_dd - S_md^2/S_mm, and the per-segment value is
+   * stored on the segment.  No penalties.  If res is given it receives the
+   * standardized residual (m - n d)/(n e) of every point (0 where e = 0), in
+   * the row order of ComputeResidualJacobian -- with the profiled n, so that
+   * sum r^2 is the returned chi-squared.
+   */
+  double EvaluateFilledChi2(vector_r *res) const;
+  /// Park's J > 0 wall, the abundance priors and the scattering-length chi^2 on the filled compound: the terms
+  /// both CalculateChi2RWA and CalculateChi2Physical add to EvaluateFilledChi2.
+  double FilledModelPenalties() const;
+
+  /// Residuals and d r/d(packed parameter) of the points of one THM segment.
+  /// THM (HOES) rows of the residual Jacobian; see ::ComputeTHMRows (AZUREGrad.h).
+  typedef ::THMRows THMRows;
+  std::vector<THMRows> ComputeTHMRows(const vector_r &full, const ParamIndexMap &pmap) const;
 
   // Configuration
   Config &configure_;

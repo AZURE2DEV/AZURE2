@@ -304,7 +304,7 @@ double CoulFunc::thisPEShift(double x, void *p) {
  * angular momentum, radius, and energy in the center of mass system.
  */
 
-double CoulFunc::PEShift_dE(int l, double radius, double energy) {
+double CoulFunc::PEShift_dE(int l, double radius, double energy, double step) {
   double result;
   double error;
 
@@ -332,7 +332,7 @@ double CoulFunc::PEShift_dE(int l, double radius, double energy) {
   F.function = &thisPEShift;
   F.params = &dEShiftParams_;
 
-  gsl_deriv_central(&F, energy, 1e-6, &result, &error);
+  gsl_deriv_central(&F, energy, step, &result, &error);
 
   return result;
 }

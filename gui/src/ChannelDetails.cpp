@@ -17,15 +17,19 @@ ChannelDetails::ChannelDetails(QWidget *parent) :
   reducedWidthText->setMaximumWidth(100);
   normParam = new QLabel;
   normUnits = new QLabel;
+  normParamWhich_ = 0;
 
   // Wigner-limit calculator: a button with its read-only, selectable result
   // field immediately to its right (so the user can copy the value).
   wignerButton = new QPushButton(tr("Wigner Limit"));
-  wignerButton->setToolTip(tr("Physical Wigner limit (single-particle width) for this channel. "
+  wignerButton->setToolTip(tr("Wigner limit (single-particle width) for this channel, quoted in "
+                              "the convention of its width: the reduced width amplitude limit in "
+                              "MeV^1/2 for a channel entered as an amplitude (THM workspace, "
+                              "Channels page), else the partial width limit in eV. "
                               "Available for particle channels only, not radiative capture."));
   wignerLimitText = new QLineEdit;
   wignerLimitText->setReadOnly(true);
-  wignerLimitText->setMaximumWidth(140);
+  wignerLimitText->setMaximumWidth(170);
 
   QGridLayout *reducedWidthLayout = new QGridLayout;
   reducedWidthLayout->addWidget(normParam, 0, 0);
@@ -47,6 +51,7 @@ ChannelDetails::ChannelDetails(QWidget *parent) :
 }
 
 void ChannelDetails::setNormParam(int which) {
+  normParamWhich_ = which;
   if (which == 1) {
     normParam->setText("ANC:");
     normUnits->setText("fm^(-1/2)");
@@ -63,4 +68,13 @@ void ChannelDetails::setNormParam(int which) {
     normParam->setText("Partial Width:");
     normUnits->setText("eV");
   }
+}
+
+void ChannelDetails::setWidthIsAmplitude(bool amplitude) {
+  widthIsAmplitude_ = amplitude;
+  if (amplitude) {
+    normParam->setText("Width:");
+    normUnits->setText("MeV^(1/2)");
+  } else
+    setNormParam(normParamWhich_);
 }

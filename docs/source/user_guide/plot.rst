@@ -24,6 +24,14 @@ in the **Segments** tab:
 Click a segment to select it (the background color changes). Click again to
 deselect. Multiple segments can be selected simultaneously.
 
+A THM segment (observable code 10 or more) is marked **(THM)** in the lists and
+in the legend. It is drawn as AZURE2 writes it to the output file: the data
+scaled by the profiled THM norm (shared by the segments of a THM experiment)
+next to the model plus the experiment's background, if it has one
+(:doc:`../theory/thm_implementation`, "THM experiments"). Its scale is
+arbitrary, whatever the axis title says; the THM workspace
+(:doc:`configure_menu`, "THM Workspace") has its diagnostics.
+
 Drawing Plots
 -------------
 

@@ -46,7 +46,7 @@ try:
     from pyazr import azure2, AzrModel
 except Exception as err:                                   # engine not built
     print(f"skip: engine not available ({type(err).__name__}: {err})")
-    sys.exit(0)
+    sys.exit(77)
 
 with tempfile.TemporaryDirectory() as tmp:
     work = os.path.join(tmp, "13N")

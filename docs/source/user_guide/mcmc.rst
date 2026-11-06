@@ -62,24 +62,41 @@ you wish to impose on each:
        of a project with several compound nuclei (:doc:`particle_pairs`),
        whose prior is taken from the abundance table's value and sigma like a
        normalization's from the segment, and whose sum-to-one term enters the
-       log-likelihood as it enters the chi-squared.
+       log-likelihood as it enters the chi-squared; ``cbkg`` for a THM coherent
+       background.
 
 Populate the table with **Load Physical Parameters** or **Load RWA
-Parameters**.
+Parameters**. The latter reads ``param.par`` of the output directory by
+parameter name, as AZURE2 reads a parameter file (a file in the other of
+Brune's and Park's bases is converted).
 
 .. note::
 
    **Normalizations and energy shifts are not listed, and do not need to be.**
    They are still sampled — AZURE2 builds their priors automatically from the
-   errors quoted in the Segments tab, reproducing exactly the χ² penalties a
-   Minuit fit would apply (see :doc:`chi_squared`). A normalization with no
-   quoted error gets a uniform prior instead of an invented one, and the run
-   log says so.
+   errors quoted in the Segments tab (and, for a :math:`\sqrt{E}` shift
+   coefficient, from its ``sqrtshift`` block), centred where the Minuit
+   penalties are centred, prior centre rows included, so that they reproduce
+   exactly the χ² penalties a Minuit fit would apply (see :doc:`chi_squared`).
+   A normalization with no quoted error gets a uniform prior instead of an
+   invented one, and the run log says so. The free norm of a THM segment is
+   not a parameter at all: it is profiled at every evaluation.
 
    Level energies and widths carry no experimentally implied uncertainty, so
    those are yours to specify. Any left without a prior are sampled with an
    unbounded uniform prior; the run log lists them by name so nothing is
    unconstrained without you being told.
+
+   A THM coherent background (``cbkg_*``) gets no automatic prior either: it
+   is uniform unless you define one, and the run log counts them.
+
+   The sampler tells the kinds apart by the engine's parameter names
+   (``energy_*``, ``width_*``, ``segment_N_norm``, ``segment_N_energy_shift``,
+   ``segment_N_energy_shift_sqrt``, ``density_N``, ``doppler_N``,
+   ``segment_N_thickness``, ``cbkg_*``), and so does the tab when it
+   loads the parameters. If a name is not recognised
+   the run log says so and no automatic prior is set, rather than one being
+   put on the wrong parameter.
 
    A prior parameter covariance (``priorCovariance=<file>`` in ``<config>``,
    :doc:`chi_squared`, "Prior parameter covariance") enters the log prior as the
@@ -154,6 +171,21 @@ The run log additionally reports, at the end:
   not yet a usable posterior; a warning is printed below 0.05.
 - any **walkers that started at zero posterior probability** and therefore
   cannot move — reduce the initial spread or check the priors.
+
+Before the first step the starting ensemble is checked. Under Park's
+parametrization (``--use-park``) a starting point where a level has
+:math:`J = 1-\sum_c\gamma_c^2\,dS_c/dE \le 0` is reported, the level named
+with its :math:`J`: the posterior is zero there (:math:`J<0` is rejected), so
+walkers near it are rejected. If **no** walker of the starting ensemble has a
+finite posterior probability — under Park, typically every walker of the ball
+around such a point — the run is refused ("MCMC not started"): an ensemble
+entirely outside the support carries no information on the posterior, and
+the chain would be the start repeated with acceptance zero. No
+``samples.mcmc`` is written, the GUI shows the report, and the command line
+exits with a non-zero status (as it does for any MCMC run that fails).
+Start from a fit made under ``--use-park`` (its penalty keeps :math:`J>0`), from
+a Brune parameter file (converted on read) or with smaller widths. A start
+from which part of the ensemble is inside the support runs, with the warning.
 
 Output files
 ------------

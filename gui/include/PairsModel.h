@@ -5,7 +5,7 @@
 #include <QList>
 
 struct PairsData {
-  static const int SIZE = 16;
+  static const int SIZE = 17;
   double lightJ;
   int lightPi;
   int lightZ;
@@ -25,6 +25,7 @@ struct PairsData {
    *  (2026-11-05).  excitationEnergy is the heavy particle's; the channel threshold is
    *  seperationEnergy + excitationEnergy + lightExcitation.  Model column 15. */
   double lightExcitation = 0.;
+  double bindingEnergy = 0.;  // THM: transferred-particle binding energy (MeV), model column 16
 };
 
 /*!
@@ -75,6 +76,8 @@ class PairsModel : public QAbstractTableModel {
 
   /*! The model column of PairsData::lightExcitation (after ecMultMask). */
   static const int LightExcitationColumn = 15;
+  /*! The model column of PairsData::bindingEnergy (THM; 15 before the merge of dev 3264896d). */
+  static const int BindingEnergyColumn = 16;
   /*! " *(4.439)" style marker of an excited light particle, empty for one in its ground state. */
   static QString lightExcitationMark(const PairsData &pair);
   /*! The same pair, identical particles by the engine's rule (PPair): a particle pair whose two particles have

@@ -123,6 +123,8 @@ QVariant PairsModel::data(const QModelIndex &index, int role) const {
       return pair.ecMultMask;
     else if (index.column() == LightExcitationColumn)
       return pair.lightExcitation;
+    else if (index.column() == BindingEnergyColumn)
+      return pair.bindingEnergy;
     else if (index.column() == NucleusColumn)
       return nucleusLabel(nucleusOf(pair));
   } else if (role == Qt::EditRole) {
@@ -159,6 +161,8 @@ QVariant PairsModel::data(const QModelIndex &index, int role) const {
       return pair.ecMultMask;
     else if (index.column() == LightExcitationColumn)
       return pair.lightExcitation;
+    else if (index.column() == BindingEnergyColumn)
+      return pair.bindingEnergy;
   } else if (role == Qt::TextAlignmentRole)
     return Qt::AlignCenter;
   else if ((role == Qt::ToolTipRole || role == Qt::ForegroundRole) && index.column() == 11) {
@@ -214,6 +218,8 @@ QVariant PairsModel::headerData(int section, Qt::Orientation orientation, int ro
         return tr("EC\nMultipolarities");
       case LightExcitationColumn:
         return tr("Light\nExcitation");
+      case BindingEnergyColumn:
+        return tr("THM\nBinding");
       case NucleusColumn:
         return tr("Compound\nNucleus");
       default:
@@ -261,6 +267,8 @@ bool PairsModel::setData(const QModelIndex &index, const QVariant &value, int ro
       tempData.ecMultMask = value.toInt();
     else if (index.column() == LightExcitationColumn)
       tempData.lightExcitation = value.toDouble();
+    else if (index.column() == BindingEnergyColumn)
+      tempData.bindingEnergy = value.toDouble();
     else
       return false;
 
@@ -276,7 +284,7 @@ bool PairsModel::insertRows(int position, int rows, const QModelIndex &index) {
   if (rows > 0) {
     beginInsertRows(QModelIndex(), position, position + rows - 1);
     for (int row = 0; row < rows; row++) {
-      PairsData tempData;
+      PairsData tempData = PairsData();  // zeroed: a placeholder row is written as such if nothing fills it
       pairsList.insert(position, tempData);
     }
     endInsertRows();
@@ -315,6 +323,7 @@ int PairsModel::isPair(const PairsData &pair) const {
         tempPair.channelRadius == pair.channelRadius &&
         tempPair.pairType == pair.pairType &&
         tempPair.ecMultMask == pair.ecMultMask &&
+        tempPair.bindingEnergy == pair.bindingEnergy &&
         tempPair.lightExcitation == pair.lightExcitation) {
       foundPair = i;
       break;

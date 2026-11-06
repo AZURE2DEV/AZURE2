@@ -49,7 +49,7 @@ class LevelsTab : public QWidget {
   QList<int> writtenLevelOrder();
   /*!
    * How AZURE2 numbers the parameters of these levels when it reads a file that lists them in `order` (model
-   * rows), following CNuc::Fill and CNuc::FillMnParams: only active levels exist; J-groups (nucleus, J, parity)
+   * rows), following CNuc::Fill and CNuc::FillMnParams: only active levels with at least one channel line exist; J-groups (nucleus, J, parity)
    * are numbered in order of first appearance and an active level's energy is energy_N, N counting the levels
    * group by group; a width is width_N_M, M the channel's position among the channels (pair, l, s) of the
    * level's J-group in order of first appearance.  level[row] = N (0: inactive), channel[channel row] = M

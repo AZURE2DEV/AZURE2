@@ -736,9 +736,11 @@ bool AMatrixFunc::PointTBar(EPoint *point, double fitBar, TMatrixCotangent &bar,
 
   // The angle-integrated cotangent as a function of its own cotangent `bar`: the chain below calls it with
   // fitBar; a normalised Legendre coefficient a_k = N_k / sigma_int calls it with -fitBar a_k / sigma_int.
-  auto integratedBar = [&](double bar) {
+  // symmetryFactor: the (1+delta_12) of an identical entrance pair where the forward value carries it
+  // (the reported cross section), 1 where it does not (sigma_int of the angular coefficients).
+  auto integratedBar = [&](double bar, double symmetryFactor) {
     // ---- Angle-integrated: model = (1/100) sum_k sum_temp w_temp |T_temp|^2,
-    //      w_temp = geom (2J+1) I1I2,  T_temp = sum_m T(k,m) sharing (J,l,l'). ----
+    //      w_temp = geom (2J+1) I1I2 (1+delta_12),  T_temp = sum_m T(k,m) sharing (J,l,l'). ----
     for (int k = 1; k <= nK; k++) {
       // Mirror the angle-integrated UPOS over-counting guard.
       if (aa != exitPairNum && compound()->GetPair(exitPairNum)->GetPType() == 0) {
@@ -783,7 +785,7 @@ bool AMatrixFunc::PointTBar(EPoint *point, double fitBar, TMatrixCotangent &bar,
       }
       std::vector<complex> tBarGroup(groups.size());
       for (int g = 0; g < (int)groups.size(); g++) {
-        double w = geom * (2.0 * groups[g].j + 1.0) * i1i2;
+        double w = geom * (2.0 * groups[g].j + 1.0) * i1i2 * symmetryFactor;
         tBarGroup[g] = bar * (2.0 / 100.0) * w * groups[g].tsum;
       }
       // accumulate (not assign): a normalised Legendre coefficient adds this to its order-k cotangents
@@ -944,7 +946,10 @@ bool AMatrixFunc::PointTBar(EPoint *point, double fitBar, TMatrixCotangent &bar,
         tBar[pm.k - 1][pm.m - 1] += conj(-pm.invExpCP2) * Ubar;
     }
   } else if (!isDiff && (!point->IsCoefficient() || a0Mode)) {
-    integratedBar(a0Mode ? fitBar / (4.0 * pi) : fitBar);
+    // The reported angle-integrated cross section carries (1+delta_12) of an identical entrance pair
+    // (GenMatrixFunc); the A_0 of an angular-coefficient point is the unscaled integral.
+    integratedBar(a0Mode ? fitBar / (4.0 * pi) : fitBar,
+                  a0Mode ? 1.0 : compound()->GetPair(aa)->GetEntranceSymmetryFactor());
   } else {
     // ---- Differential: model = (Re(CT)+Re(RT)+Re(IT))/100. ----
     //   RT = (geom I1I2 rtFactor/pi) Re( sum_{kL,inter} weight T1 conj(T2) P_L )
@@ -954,10 +959,16 @@ bool AMatrixFunc::PointTBar(EPoint *point, double fitBar, TMatrixCotangent &bar,
     // external-capture interferences (RR/ER/RE/EE), and the inelastic-particle
     // UPOS / normal-angular-distribution case.
     PPair *exitPairDiff = compound()->GetPair(exitPairNum);
+    // Identical entrance pair: x4 / x2 for elastic, (1+delta_12) otherwise,
+    // mirroring GenMatrixFunc::CalculateCrossSection.
     double rtFactor = 1.0, itFactor = 1.0;
-    if (aa == exitPairNum && compound()->GetPair(aa)->IsIdentical()) {
-      rtFactor = 4.0;
-      itFactor = 2.0;
+    if (compound()->GetPair(aa)->IsIdentical()) {
+      if (aa == exitPairNum) {
+        rtFactor = 4.0;
+        itFactor = 2.0;
+      } else {
+        rtFactor = compound()->GetPair(aa)->GetEntranceSymmetryFactor();
+      }
     }
     double cR = geom * i1i2 * rtFactor / (pi * 100.0);
     // An angular-coefficient point (ESegment isDiff 9): the forward value is
@@ -1059,7 +1070,7 @@ bool AMatrixFunc::PointTBar(EPoint *point, double fitBar, TMatrixCotangent &bar,
 
     if (coef && !point->GetCoefficientAbsolute()) {
       // a_k = N_k / sigma_int: the sigma_int cotangent through the angle-integrated form
-      integratedBar(-fitBar * point->GetFitCrossSection() / sigmaInt);
+      integratedBar(-fitBar * point->GetFitCrossSection() / sigmaInt, 1.0);
     }
 
     if (!coef && aa == exitPairNum && theDecay->TablesBuilt()) {  // elastic Coulomb-nuclear interference
@@ -1406,9 +1417,12 @@ double AMatrixFunc::InEnergy(EPoint *point) {
  * FillMatrices).
  */
 void AMatrixFunc::LevelMatrixAdjoint(EPoint *energyPoint, int jNum, const matrix_c &Mbar, double inEnergy,
-                                     GradAccum &accum, const vector_matrix_r *shiftDeriv, const complex *lambda) {
+                                     GradAccum &accum, const vector_matrix_r *shiftDeriv, const complex *lambda,
+                                     const std::vector<int> *levelOf) {
   AZUREProfile::Timer profileTimer(AZUREProfile::kGradLevelMatrix);
   EPoint *point = energyPoint;
+  // Active level r (1-based) -> its level number (THM blocks, levelOf), else r.
+  auto lev = [levelOf](int r) -> int { return levelOf ? (*levelOf)[r] : r; };
   const bool brune = (configure().paramMask & Config::USE_BRUNE_FORMALISM);
   const bool park = (configure().paramMask & Config::USE_PARK_FORMALISM);
   JGroup *jg = compound()->GetJGroup(jNum);
@@ -1417,7 +1431,7 @@ void AMatrixFunc::LevelMatrixAdjoint(EPoint *energyPoint, int jNum, const matrix
   // Structural energy gradient.  The (E_r - inE) delta term gives
   //   d M[a][a]/d E_a = 1  ->  dlnL/dE_a += Re(Mbar[a][a]).
   for (int la = 1; la <= n; la++)
-    accum.AddE(jNum, la, std::real(Mbar[la - 1][la - 1]));
+    accum.AddE(jNum, lev(la), std::real(Mbar[la - 1][la - 1]));
 
   // Brune adds explicit E_lambda dependence through the boundary/shift kernel
   //   M[r][c] = ... - sum_{ch P} g_r,ch g_c,ch K_ch[r][c],
@@ -1438,7 +1452,7 @@ void AMatrixFunc::LevelMatrixAdjoint(EPoint *energyPoint, int jNum, const matrix
              compound()->GetPair(jg->GetChannel(d)->GetPairNum())->GetPType() == 0;
     };
     for (int r = 1; r <= n; r++) {
-      ALevel *lr = jg->GetLevel(r);
+      ALevel *lr = jg->GetLevel(lev(r));
       double Er = lr->GetFitE();
       for (int c = 1; c <= n; c++) {
         double reM = std::real(Mbar[r - 1][c - 1]);
@@ -1452,9 +1466,9 @@ void AMatrixFunc::LevelMatrixAdjoint(EPoint *energyPoint, int jNum, const matrix
             dJ -= g2 * lr->GetShiftSecondDerivative(d);
             sumS1 += g2 * lr->GetShiftDerivative(d);
           }
-          accum.AddE(jNum, r, reM * ((lr->GetParkNorm() - 1.0) + (Er - inEnergy) * dJ + sumS1));
+          accum.AddE(jNum, lev(r), reM * ((lr->GetParkNorm() - 1.0) + (Er - inEnergy) * dJ + sumS1));
         } else {
-          ALevel *lc = jg->GetLevel(c);
+          ALevel *lc = jg->GetLevel(lev(c));
           double Ec = lc->GetFitE();
           double den = Er - Ec;
           double Jrc = 0.0, dJdEr = 0.0, dJdEc = 0.0, sumS1 = 0.0;
@@ -1470,8 +1484,8 @@ void AMatrixFunc::LevelMatrixAdjoint(EPoint *energyPoint, int jNum, const matrix
             dJdEc -= g * (-dSc + q) / den;
             sumS1 += g * dSr;
           }
-          accum.AddE(jNum, r, reM * (Jrc + (Er - inEnergy) * dJdEr + sumS1));
-          accum.AddE(jNum, c, reM * (Er - inEnergy) * dJdEc);
+          accum.AddE(jNum, lev(r), reM * (Jrc + (Er - inEnergy) * dJdEr + sumS1));
+          accum.AddE(jNum, lev(c), reM * (Er - inEnergy) * dJdEc);
         }
       }
     }
@@ -1487,13 +1501,13 @@ void AMatrixFunc::LevelMatrixAdjoint(EPoint *energyPoint, int jNum, const matrix
       complex Ld = lambda ? lambda[d - 1] : point->GetLoElement(jNum, d);
       double Bd = (pd && !lambda) ? jg->GetChannel(d)->GetBoundaryCondition() : 0.0;
       for (int a = 1; a <= n; a++) {
-        ALevel *la_ = jg->GetLevel(a);
+        ALevel *la_ = jg->GetLevel(lev(a));
         double Ea = la_->GetFitE();
         double ga = la_->GetFitGamma(d);
         double Sa = pd ? la_->GetShiftFunction(d) : 0.0;
         double grad = 0.0;
         for (int c = 1; c <= n; c++) {
-          ALevel *lc_ = jg->GetLevel(c);
+          ALevel *lc_ = jg->GetLevel(lev(c));
           double gc = lc_->GetFitGamma(d);
           if (c == a) {
             complex Kaa = pd ? (Ld + Bd - Sa) : Ld;
@@ -1513,7 +1527,7 @@ void AMatrixFunc::LevelMatrixAdjoint(EPoint *energyPoint, int jNum, const matrix
             }
           }
         }
-        accum.AddGamma(jNum, a, d, grad);
+        accum.AddGamma(jNum, lev(a), d, grad);
       }
     }
     return;
@@ -1523,8 +1537,36 @@ void AMatrixFunc::LevelMatrixAdjoint(EPoint *energyPoint, int jNum, const matrix
   // flat arrays: the loops below are n^2 per channel, and the accessor calls
   // and divisions they used to make per element dominated the gradient.
   const int nch = jg->NumChannels();
-  // E, G, S, S G and 1/(E_r - E_c) off the diagonal, kept per parameter set.
-  const ChannelSpace::LevelArrays &levelArrays = ChannelSpace::CurrentLevelArrays(jg);
+  // E, G, S, S G and 1/(E_r - E_c) off the diagonal: kept per parameter set
+  // for the whole J-group; gathered here over the active levels when a THM
+  // block leaves levels out of the R matrix (levelOf).
+  const ChannelSpace::LevelArrays *levelArraysPtr;
+  if (levelOf) {
+    ChannelSpace::LevelArrays &la = lma_active_;
+    la.n = n;
+    la.nch = nch;
+    la.E.resize(n);
+    la.G.resize((size_t)n * nch);
+    la.S.resize((size_t)n * nch);
+    la.SG.resize((size_t)n * nch);
+    for (int r = 0; r < n; r++) {
+      ALevel *level = jg->GetLevel(lev(r + 1));
+      la.E[r] = level->GetFitE();
+      for (int ch = 0; ch < nch; ch++) {
+        la.G[(size_t)r * nch + ch] = level->GetFitGamma(ch + 1);
+        la.S[(size_t)r * nch + ch] = level->GetShiftFunction(ch + 1);
+        la.SG[(size_t)r * nch + ch] = la.S[(size_t)r * nch + ch] * la.G[(size_t)r * nch + ch];
+      }
+    }
+    la.inv.assign((size_t)n * n, 0.0);
+    for (int r = 0; r < n; r++)
+      for (int c = 0; c < n; c++)
+        if (r != c) la.inv[(size_t)r * n + c] = 1.0 / (la.E[r] - la.E[c]);
+    levelArraysPtr = &la;
+  } else {
+    levelArraysPtr = &ChannelSpace::CurrentLevelArrays(jg);
+  }
+  const ChannelSpace::LevelArrays &levelArrays = *levelArraysPtr;
   const std::vector<double> &E = levelArrays.E, &G = levelArrays.G, &S = levelArrays.S, &inv = levelArrays.inv;
   std::vector<double> &reSym = lma_resym_, &imSym = lma_imsym_;
   std::vector<char> &bruneP = lma_brunep_;
@@ -1571,7 +1613,7 @@ void AMatrixFunc::LevelMatrixAdjoint(EPoint *energyPoint, int jNum, const matrix
         }
       }
     }
-    for (int r = 0; r < n; r++) accum.AddE(jNum, r + 1, dE[r]);
+    for (int r = 0; r < n; r++) accum.AddE(jNum, lev(r + 1), dE[r]);
   }
 
   // Structural gamma gradient.  M[r][c] = (E_r-inE) delta - sum_ch g_r,ch g_c,ch K_ch[r][c],
@@ -1636,9 +1678,49 @@ void AMatrixFunc::LevelMatrixAdjoint(EPoint *energyPoint, int jNum, const matrix
         const double Sa = S[(size_t)a * nch + d];
         g += Sa * t1[d] - (inEnergy - E[a]) * t2[d] + rs[a] * Sa * G[(size_t)a * nch + d];
       }
-      accum.AddGamma(jNum, a + 1, d + 1, g);
+      accum.AddGamma(jNum, lev(a + 1), d + 1, g);
     }
   }
+}
+
+/*!
+ * Back-propagates the cotangent Abar of the level matrix A of J group jNum
+ * (indexed by the active, in-R-matrix levels) to the level energies and
+ * reduced widths: the inverse lemma Mbar = -A^H Abar A^H (dense), then the
+ * structural part (LevelMatrixAdjoint).  levelOf[r] is the level number of
+ * active level r (1-based); null when every level is in the R matrix.  Used
+ * by the THM (HOES) adjoint, THMMatrixFunc::THMPointAdjoint.
+ */
+void AMatrixFunc::LevelMatrixABarAdjoint(EPoint *point, int jNum, const matrix_c &aBar, double inEnergy,
+                                         const vector_matrix_r *shiftDeriv, GradAccum &accum,
+                                         const std::vector<int> *levelOf) {
+  const matrix_c &A = this->GetAMatrix(jNum);
+  const matrix_c &Ab = aBar;
+  int n = (int)A.size();
+  if (n == 0) return;
+
+  // Conjugate transpose A^H.
+  matrix_c Ah(n, vector_c(n, complex(0.0, 0.0)));
+  for (int r = 0; r < n; r++)
+    for (int c = 0; c < n; c++)
+      Ah[r][c] = conj(A[c][r]);
+
+  // Mbar = -A^H * Abar * A^H.
+  matrix_c tmp(n, vector_c(n, complex(0.0, 0.0)));  // tmp = Abar * A^H
+  for (int r = 0; r < n; r++)
+    for (int c = 0; c < n; c++) {
+      complex s(0.0, 0.0);
+      for (int t = 0; t < n; t++) s += Ab[r][t] * Ah[t][c];
+      tmp[r][c] = s;
+    }
+  matrix_c Mbar(n, vector_c(n, complex(0.0, 0.0)));
+  for (int r = 0; r < n; r++)
+    for (int c = 0; c < n; c++) {
+      complex s(0.0, 0.0);
+      for (int t = 0; t < n; t++) s += Ah[r][t] * tmp[t][c];
+      Mbar[r][c] = -s;
+    }
+  this->LevelMatrixAdjoint(point, jNum, Mbar, inEnergy, accum, shiftDeriv, nullptr, levelOf);
 }
 
 /*!

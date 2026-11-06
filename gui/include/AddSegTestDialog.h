@@ -44,6 +44,7 @@ class AddSegTestDialog : public QDialog {
    *  Coefficients (3), Analyzing Power (7). Each item carries that base isDiff code as item data; look items
    *  up with findData, never by position. */
   QComboBox *dataTypeCombo;
+  QCheckBox *thmCheck;
   /*! Differential only: Lab (isDiff 1) or C.M. (isDiff 5), as item data. */
   QLabel *frameLabel;
   QComboBox *frameCombo;

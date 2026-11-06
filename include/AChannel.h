@@ -35,7 +35,8 @@ class AChannel {
   /// Deferred until the PPair is known; a zero radius leaves the limit zero.
   void SetWignerLimit(double reducedMass, double channelRadius);
   /// Wigner limit on the *reduced width* \f$\gamma^2\f$ in MeV, i.e.
-  /// \f$\hbar^2 / (m_{red} a^2)\f$ -- not a bound on the partial width.
+  /// \f$3\hbar^2 / (2 m_{red} a^2)\f$ (Teichmann-Wigner, with the 3/2 factor)
+  /// -- not a bound on the partial width.
   /// Zero until SetWignerLimit has been called.
   double GetWignerLimit() const;
 

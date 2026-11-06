@@ -23,9 +23,10 @@ try:
     from pyazr.azrfile import AzrModel  # noqa: E402
 except ImportError as e:  # as the other pyazr tests: no package dependencies (e.g. mpmath) -> nothing to test
     print(f"pyazr not importable ({e}); nothing to test")
-    sys.exit(0)
+    sys.exit(77)
 
 failures = []
+engine_skipped = False
 
 
 def check(name, ok, detail=""):
@@ -75,6 +76,7 @@ try:
     except Exception as err:  # engine not built
         print(f"skip engine part: {type(err).__name__}: {err}")
         session = None
+        engine_skipped = True
     else:
         work = os.path.join(tmp, "grad")
         os.makedirs(os.path.join(work, "output"))
@@ -127,4 +129,8 @@ finally:
 if failures:
     print(f"FAIL ({len(failures)}): " + ", ".join(failures))
     sys.exit(1)
+if engine_skipped:
+    # thm's convention (tests/pyazr/CMakeLists.txt): ctest lists the test as Skipped.
+    print("PASS (pure-Python part; engine part skipped)")
+    sys.exit(77)
 print("PASS")

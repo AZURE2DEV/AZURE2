@@ -36,6 +36,7 @@ void Config::Reset() {
   refreezeCovariance = 0;
   maxCalls = 0;
   useAdaptiveGrid = true;   // Default to adaptive grid
+  thm = ThmOptions();
   useCoulombTable = true;   // the universal Coulomb table where it covers a channel (--no-coulomb-table)
   replaceSubPointGrids = true;  // re-place the adaptive sub-point grids (--no-grid-replacement)
   coulombTablePath.clear();
@@ -195,7 +196,10 @@ int Config::ReadConfigFile() {
   }
   if (line != "</config>") return -1;
   in.close();
-  return this->ReadPotentialBlock();
+  // A malformed optional block has already been reported: -2, so the caller
+  // does not add a misleading "could not open" on top.
+  if (this->ReadPotentialBlock() != 0) return -2;
+  return this->ReadThmBlock() != 0 ? -2 : 0;
 }
 
 /*!

@@ -70,6 +70,8 @@ set(AZURESETUP_SOURCES
     AboutAZURE2Dialog.cpp InfoDialog.cpp InTabDocs.cpp
     IAEALevelData.cpp IAEALevelDialog.cpp NuclearPotentialTab.cpp
     ExforData.cpp ExforDialog.cpp PairKeyCombo.cpp AzureTheme.cpp FileDialogPolicy.cpp AbundancesModel.cpp
+    ThmSettings.cpp ThmModelPage.cpp
+    ThmExperimentsPage.cpp ThmChannelsPage.cpp ThmWorkspace.cpp AZURESetupThm.cpp FittingTabThm.cpp
     ScatteringLengthsModel.cpp MassTable.cpp MassCheckDialog.cpp
 )
 
@@ -86,6 +88,9 @@ set(AZURESETUP_HEADERS
     ../include/TextEditBuffer.h ../include/AboutAZURE2Dialog.h ../include/InfoDialog.h
     ../include/IAEALevelData.h ../include/IAEALevelDialog.h ../include/NuclearPotentialTab.h
     ../include/ExforData.h ../include/ExforDialog.h ../include/DialogScrollArea.h ../include/AbundancesModel.h
+    ../include/ThmSettings.h
+    ../include/ThmModelPage.h ../include/ThmExperimentsPage.h ../include/ThmChannelsPage.h
+    ../include/ThmWorkspace.h
     ../include/ScatteringLengthsModel.h ../include/MassTable.h ../include/MassCheckDialog.h
 )
 
@@ -94,6 +99,14 @@ set(AZURESETUP_RCCS AZURESetup.qrc)
 if(USE_QWT)
     list(APPEND AZURESETUP_SOURCES PlotTab.cpp AZUREPlot.cpp)
     list(APPEND AZURESETUP_HEADERS ../include/PlotTab.h ../include/AZUREPlot.h)
+endif()
+
+# The Diagnostics page of the THM workspace runs the engine through AZUREAPI;
+# without it the page is not built (as the Plot tab without Qwt).
+if(USE_API)
+    list(APPEND AZURESETUP_SOURCES ThmPlotWidget.cpp ThmDiagnostics.cpp ThmDiagnosticsPage.cpp)
+    list(APPEND AZURESETUP_HEADERS ../include/ThmPlotWidget.h ../include/ThmDiagnostics.h
+                                   ../include/ThmDiagnosticsPage.h)
 endif()
 
 if(USE_MCMC)
@@ -117,7 +130,14 @@ endif()
 target_include_directories(AZURESetup PRIVATE
     ../include
     ${AZURE2_SOURCE_DIR}/include
+    # The THM workspace's diagnostics drive the engine through AZUREAPI, the
+    # library the executable (and pyazr) already link.
+    ${AZURE2_SOURCE_DIR}/api/include
 )
+
+if(USE_API)
+    target_compile_definitions(AZURESetup PUBLIC AZURE2_THM_DIAGNOSTICS)
+endif()
 
 # Platform definitions
 if(APPLE)

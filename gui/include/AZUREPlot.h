@@ -26,6 +26,12 @@ struct PlotPoint {
   double dataErrorCrossSection;
   double dataSFactor;
   double dataErrorSFactor;
+  // Per-quantity validity (finite, positive, log-scale safe), set by
+  // PlotEntry::readData.  A point may be plottable as a cross section but not
+  // as an S factor (e.g. THM data below threshold, where the S factor is
+  // undefined), so each view filters on its own flag.
+  bool validXSec;
+  bool validSFactor;
   // 1-sigma analytic uncertainty band on the calculation (0 if no band file).
   double fitCrossSectionError;
   double fitSFactorError;

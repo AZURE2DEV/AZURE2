@@ -14,8 +14,9 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 AZURE2_BIN="${1:?usage: check.sh path/to/AZURE2}"
 AZURE2_BIN="$(cd "$(dirname "$AZURE2_BIN")" && pwd)/$(basename "$AZURE2_BIN")"
 export OMP_NUM_THREADS="${OMP_NUM_THREADS:-2}"
-TIMEOUT_CMD="$(command -v timeout || command -v gtimeout || true)"
-run_limited() { if [ -n "$TIMEOUT_CMD" ]; then "$TIMEOUT_CMD" "$@"; else shift; "$@"; fi; }
+# The time limit of tests/lib/guard.sh: timeout, gtimeout or a shell watchdog.
+. "$HERE/../lib/guard.sh"
+run_limited() { local limit="$1"; shift; $(guard_command "$limit") "$@"; }
 PYTHON="$(command -v python3 || command -v python || true)"
 
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/scattering_length.XXXXXX")"

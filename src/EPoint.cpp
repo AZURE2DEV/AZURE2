@@ -1,9 +1,14 @@
 #include "AMatrixFunc.h"
+#include "AdaptiveIntegrationGrid.h"
+#include "ALevel.h"
+#include "JGroup.h"
+#include "PPair.h"
 #include <memory>
 #include "Profile.h"
 #include "AngCoeff.h"
 #include "CNuc.h"
 #include "Config.h"
+#include "ChannelFunc.h"
 #include "CoulFunc.h"
 #include "Kinematics.h"
 #include "DataLine.h"
@@ -15,14 +20,25 @@
 #include "RMatrixFunc.h"
 #include "ScatteringLength.h"
 #include "ShftFunc.h"
+#include "ThmFunc.h"
+#include "ThmLineshape.h"
+#include "THMMatrixFunc.h"
 #include "TargetEffect.h"
 #include "IntegratedFermiFunc.h"
+#include "NuclearPotentialManager.h"
+#include "AChannel.h"
+#include "ThmDistortion.h"
+#include "ThmDwVertex.h"
+#include "ThmAngular.h"
+#include <atomic>
+#include <cstdint>
 #include <iostream>
 #include <map>
 #include <cmath>
 #include <sstream>
 #include <assert.h>
 #include <fstream>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <limits>
@@ -70,6 +86,14 @@ EPoint::EPoint(DataLine dataLine, ESegment *parent) {
   sfactorconv_ = 0.;
   is_differential_ = parent->IsDifferential();
   is_phase_ = parent->IsPhase();
+  is_thm_ = parent->IsTHM();
+  thm_weight_ = parent->GetThmWeight();
+  thm_lineshape_ = parent->GetThmLineshape();
+  thm_window_ = parent->GetThmSpectatorWindow();
+  thm_distortion_ = parent->GetThmDistortion();
+  thm_dw_ = parent->GetThmDwVertex();
+  thm_angle_ = parent->GetThmAngleWindow();
+  thm_coherent_ = parent->GetThmCoherent();
   is_ang_dist_ = parent->IsAngularDist() || parent->IsCoefficients();
   max_ang_dist_order_ = parent->GetMaxAngDistOrder();
   j_value_ = parent->GetJ();
@@ -115,6 +139,14 @@ EPoint::EPoint(double angle, double energy, ESegment *parent) {
   sfactorconv_ = 0.;
   is_differential_ = parent->IsDifferential();
   is_phase_ = parent->IsPhase();
+  is_thm_ = parent->IsTHM();
+  thm_weight_ = parent->GetThmWeight();
+  thm_lineshape_ = parent->GetThmLineshape();
+  thm_window_ = parent->GetThmSpectatorWindow();
+  thm_distortion_ = parent->GetThmDistortion();
+  thm_dw_ = parent->GetThmDwVertex();
+  thm_angle_ = parent->GetThmAngleWindow();
+  thm_coherent_ = parent->GetThmCoherent();
   is_ang_dist_ = parent->IsAngularDist() || parent->IsCoefficients();
   max_ang_dist_order_ = parent->GetMaxAngDistOrder();
   j_value_ = parent->GetJ();
@@ -161,6 +193,7 @@ EPoint::EPoint(double angle, double energy, int entranceKey,
   sfactorconv_ = 0.;
   is_differential_ = isDifferential;
   is_phase_ = isPhase;
+  is_thm_ = false;
   is_ang_dist_ = isAngularDist;
   max_ang_dist_order_ = maxAngDistOrder;
   j_value_ = jValue;
@@ -189,6 +222,14 @@ bool EPoint::IsDifferential() const {
 
 bool EPoint::IsPhase() const {
   return is_phase_;
+}
+
+/*!
+ * Returns true if the point belongs to a THM (modified R-matrix) segment.
+ */
+
+bool EPoint::IsTHM() const {
+  return is_thm_;
 }
 
 /*!
@@ -454,6 +495,36 @@ double EPoint::GetSFactorConversion() const {
 
 double EPoint::GetSqrtPenetrability(int jGroupNum, int channelNum) const {
   return edep_->penetrabilities[edep_->At(jGroupNum, channelNum)];
+}
+
+/*!
+ * Returns the THM entrance transfer form factor M_l = (b-1) j_l - rho dj_l/drho
+ * (+ the external Coulomb term, when stored) for the channel specified by positions in the JGroup and AChannel vectors,
+ * assembled with the given boundary b (the per-level shift function under the
+ * Brune formalism, or the channel boundary constant otherwise). Returns 0 if
+ * not stored (e.g. non-entrance channels, or non-THM points).
+ */
+
+complex EPoint::GetThmFormFactor(int jGroupNum, int channelNum, complex boundary) const {
+  if (!edep_) return 0.0;
+  const EDependentTables &t = *edep_;
+  if (jGroupNum - 1 >= (int)t.thm_jl.size()) return 0.0;
+  if (channelNum - 1 >= (int)t.thm_jl[jGroupNum - 1].size()) return 0.0;
+  return (boundary - 1.0) * t.thm_jl[jGroupNum - 1][channelNum - 1] - t.thm_rhodjl[jGroupNum - 1][channelNum - 1]
+         + t.thm_coul[jGroupNum - 1][channelNum - 1];
+}
+
+complex EPoint::GetThmFormFactor(int jGroupNum, int channelNum, complex boundary, int node) const {
+  const ThmPsTable *t = thm_ps_.get();
+  if (!t || node < 0 || node >= t->nodes) return 0.0;
+  if (jGroupNum < 1 || jGroupNum >= (int)t->offset.size() || channelNum < 1) return 0.0;
+  const int flat = t->offset[jGroupNum - 1] + channelNum - 1;
+  if (flat >= t->offset[jGroupNum]) return 0.0;
+  const int k = t->slot[flat];
+  if (k < 0) return 0.0;
+  const size_t i = (size_t)k * t->nodes + node;
+  const complex coul = t->coul.empty() ? complex(0.0, 0.0) : t->coul[i];
+  return (boundary - 1.0) * t->jl[i] - t->rhodjl[i] + coul;
 }
 
 /*!
@@ -1300,6 +1371,20 @@ void EPoint::CalcLegendreP(int maxL, CNuc *theCNuc, TargetEffect *targetEffect) 
 }
 
 
+namespace {
+/* Below E = -B the half-off-shell momentum is imaginary and the form factor
+   (hence the HOES cross section) is left identically zero.  Physically the QF
+   relative energy satisfies E + B > 0, so points here should only be far
+   Gaussian-tail sub-points.  Reported once per session, so that a wrong
+   binding energy cannot silently null a whole segment. */
+void WarnThmBelowB(const Config &configure, double energy, double bindingE) {
+  if (configure.thm.belowBWarned->exchange(true)) return;
+  configure.outStream << "WARNING: THM point at E_cm = " << energy << " MeV lies below E = -B (B = " << bindingE
+                      << " MeV); the transfer form factor and HOES cross section are set to zero there. Check the "
+                      << "binding energy if this is unexpected. (warning shown once)" << std::endl;
+}
+}  // namespace
+
 /*!
  * This function calculates several energy dependent quantities simultaniously.
  * This includes the geometrical cross section, the s-factor conversion, the \f$ L_o \f$ matrix
@@ -1324,6 +1409,9 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure, bool i
     geofactor = Kinematics::Channel(entrancePair).PiOverK2(this->GetCMEnergy());
     sfactorconv = this->GetCMEnergy() * exp(2 * pi * sqrt(uconv / 2.) * fstruc * entrancePair->GetZ(1) * entrancePair->GetZ(2) * sqrt(entrancePair->GetRedMass() / this->GetCMEnergy()));
   }
+  // THM (HOES) cross sections are in arbitrary units and extend below the
+  // entrance threshold, where the Gamow conversion is undefined (NaN).
+  if (this->IsTHM()) sfactorconv = 1.;
   this->SetGeometricalFactor(geofactor);
   this->SetSFactorConversion(sfactorconv);
   // Electron screening: f = exp(pi eta U_e / E), so d ln f / d U_e = pi eta / E (charged particle pairs only).
@@ -1333,11 +1421,36 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure, bool i
     screen_k_ = pi * eta / this->GetCMEnergy();
   }
 
+  // Every table below is rebuilt from scratch: a second call (a parent
+  // point's CalcEDependentValues reaches its sub-points again, e.g. after an
+  // energy shift) used to append a second copy to the sub-points' tables.
+  // The tables, THM vertex tables included, are emptied in place
+  // (ClearEDependentRows), keeping their storage, as RecalcEDependentValues does.
+  this->ClearEDependentRows();
+  thm_ps_.reset();
+  std::shared_ptr<ThmPsTable> psTable;
+  bool psCoul = false;
+  std::vector<ThmSpectatorWindow::Node> psNodes;
+  // The Coulomb terms C_l at the window nodes depend on l, the energy and the
+  // node only, not on the channel: one set per l for this point (several
+  // channels of the entrance pair share an l; ThmCoulombTerm's small memo
+  // cannot hold them once a window has more than 32 nodes).
+  std::map<int, std::vector<complex>> psCoulByL;
+  if (this->IsTHM() && thm_window_) {
+    // The accepted directions at this point's energy (or, for a folding
+    // sub-point beyond the reach of the window, at the nearest data point).
+    thm_window_->Nodes(this->GetCMEnergy(), psNodes);
+    psTable = std::make_shared<ThmPsTable>();
+    psTable->nodes = (int)psNodes.size();
+    psTable->offset.assign(theCNuc->NumJGroups() + 1, 0);
+    for (const ThmSpectatorWindow::Node &k : psNodes) psTable->weight.push_back(k.weight);
+  }
   // Only the groups of the entrance pair's compound nucleus take part in this
   // point: a group of another nucleus in the file has thresholds on a
   // different energy axis, and its rows stay empty (every consumer skips it).
   const int nucleus = entrancePair->GetNucleus();
   for (int j = 1; j <= theCNuc->NumJGroups(); j++) {
+    if (psTable) psTable->offset[j - 1] = (int)psTable->slot.size();
     if (theCNuc->GetJGroup(j)->IsInRMatrix() && theCNuc->GetJGroup(j)->GetNucleus() == nucleus) {
       JGroup *theJGroup = theCNuc->GetJGroup(j);
       for (int ch = 1; ch <= theJGroup->NumChannels(); ch++) {
@@ -1346,6 +1459,7 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure, bool i
         int lValue = theChannel->GetL();
         double localEnergy = inEnergy - thePair->GetSepE() - thePair->GetExE();
         if (thePair->GetPType() == 0) {
+          ChannelFunc channelFunc(thePair, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
           if (fabs(localEnergy) <= ScatteringLength::kThresholdTolerance) {
             // Exactly at the channel's threshold (the entrance channel of a scattering length):
             // the E -> 0 limit, P = 0 and S_l(0) from the zero-energy Coulomb solutions, in
@@ -1355,9 +1469,15 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure, bool i
             this->AddSqrtPenetrability(j, ch, 0.0);
             this->AddExpCoulombPhase(j, ch, 1.0);
             this->AddExpHardSpherePhase(j, ch, 1.0);
-          } else if (localEnergy < 0.0) {
-            ShftFunc theShiftFunction(thePair);
-            double localShift = theShiftFunction(lValue, inEnergy);
+          } else if (channelFunc.IsClosed(localEnergy)) {
+            // At and below threshold, and just above it where the Coulomb
+            // barrier makes P = 0 to double precision: the shift function
+            // continued through E = 0 (ChannelFunc).  The Coulomb-wave
+            // routines are not usable that close to threshold (NaN, garbage
+            // or seconds per call), and a Gaussian-folding sub-point of a THM
+            // segment -- whose grid crosses E = 0 -- can land at round-off
+            // distance from it.
+            double localShift = channelFunc.Shift(lValue, localEnergy);
             double boundary = theChannel->GetBoundaryCondition();
             complex loElement(localShift - boundary, 0.0);
             this->AddLoElement(j, ch, loElement);
@@ -1416,8 +1536,92 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure, bool i
           this->AddExpCoulombPhase(j, ch, 1.0);
           this->AddExpHardSpherePhase(j, ch, 1.0);
         }
+        // Boundary-independent pieces of the THM entrance transfer form factor
+        // M_l (mrmpy _form_factor). Stored for every channel (0 for non-entrance
+        // channels) so they stay index-aligned with the penetrabilities. M_l
+        // itself is assembled at the entrance vertex (THMMatrixFunc) with the
+        // per-level boundary, which floats with the fit under Brune. The interior
+        // LoElement above is unchanged -- the form factor replaces only the
+        // entrance *vertex*, not the interior.
+        double thmJl = 0.0;
+        double thmRhoDjl = 0.0;
+        complex thmCoul(0.0, 0.0);
+        const ThmSpectatorWindow *window = this->IsTHM() ? thm_window_ : nullptr;
+        if (window) {
+          // Spectator-momentum window (ps=..., ThmLineshape.h): the pieces at
+          // every node p_k of this energy, with T_k = p_k^2/2 mu_sx added to
+          // E + B (a window and spectatorEnergy for the same pair are refused
+          // at startup).  Only the entrance-pair channels are stored
+          // (ThmPsTable: every other channel reads 0); the single-node pieces
+          // stay 0.
+          if (thePair == entrancePair && thePair->GetPType() == 0) {
+            psTable->slot.push_back(psTable->nSlots++);
+            std::vector<complex> *coulOfL = nullptr;
+            bool newL = false;
+            if (configure.thm.coulombIntegral && thePair->GetZ(1) * thePair->GetZ(2) != 0) {
+              auto at = psCoulByL.emplace(lValue, std::vector<complex>(psNodes.size(), complex(0.0, 0.0)));
+              coulOfL = &at.first->second;
+              newL = at.second;
+            }
+            for (size_t k = 0; k < psNodes.size(); k++) {
+              double jl = 0.0, rhoDjl = 0.0;
+              complex coul(0.0, 0.0);
+              double muMeV = thePair->GetRedMass() * uconv;
+              double bindingE = thePair->GetBindingEnergy() + psNodes[k].es;
+              if (!(localEnergy + bindingE > 0.0)) {
+                WarnThmBelowB(configure, localEnergy, bindingE);
+              } else {
+                ThmBesselParts(lValue, muMeV, localEnergy, bindingE, thePair->GetChRad(), jl, rhoDjl);
+                if (coulOfL) {
+                  if (newL)
+                    (*coulOfL)[k] = ThmCoulombTerm(thePair, lValue, localEnergy,
+                                                   ThmRho(muMeV, localEnergy, bindingE, 1.0),
+                                                   !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
+                  coul = (*coulOfL)[k];
+                }
+              }
+              psTable->jl.push_back(jl);
+              psTable->rhodjl.push_back(rhoDjl);
+              psTable->coul.push_back(coul);
+              if (coul != complex(0.0, 0.0)) psCoul = true;
+            }
+          } else {
+            psTable->slot.push_back(-1);
+          }
+        } else if (this->IsTHM() && thePair == entrancePair && thePair->GetPType() == 0) {
+          double muMeV = thePair->GetRedMass() * uconv;
+          // The spectator's kinetic energy raises the half-off-shell momentum
+          // above its quasi-free value (Typel & Baur eq. 11); 0 by default.
+          double bindingE = thePair->GetBindingEnergy() +
+                            configure.thm.SpectatorEnergy(this->GetEntranceKey());
+          if (localEnergy + bindingE > 0.0) {
+            ThmBesselParts(lValue, muMeV, localEnergy, bindingE, thePair->GetChRad(),
+                           thmJl, thmRhoDjl);
+            if (configure.thm.coulombIntegral && thePair->GetZ(1) * thePair->GetZ(2) != 0)
+              thmCoul = ThmCoulombTerm(thePair, lValue, localEnergy,
+                                       ThmRho(muMeV, localEnergy, bindingE, 1.0),
+                                       !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
+          } else {
+            WarnThmBelowB(configure, localEnergy, bindingE);
+          }
+        }
+        // Only a THM point reads them (GetThmFormFactor returns 0 for a
+        // missing entry): a classic point storing three zeros per channel cost
+        // 0.6 GB with dev's hard-sphere groups (includeAllJPi=1,
+        // tests/convolution_unify, 430k sub-points).
+        if (this->IsTHM()) this->AddThmFormFactor(j, ch, thmJl, thmRhoDjl, thmCoul);
       }
     }
+  }
+  if (psTable) psTable->offset.back() = (int)psTable->slot.size();
+  if (psTable && !psTable->slot.empty()) {  // no channel at all: no nodes, as before
+    if (!psCoul) psTable->coul.clear();
+    psTable->slot.shrink_to_fit();
+    psTable->jl.shrink_to_fit();
+    psTable->rhodjl.shrink_to_fit();
+    psTable->coul.shrink_to_fit();
+    psTable->weight.shrink_to_fit();
+    thm_ps_ = psTable;
   }
   // The rows grew channel by channel (push_back): give back the spare capacity,
   // about a quarter of the tables' memory (natural neon: 2.3 GB of 9.6 GB).  A
@@ -1425,7 +1629,7 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure, bool i
   // step refills its rows in place every evaluation and keeps their capacity.
   if (edep_ && edep_.use_count() == 1) {
     EDependentTables &t = MutableEDep();
-    t.ShrinkToFit();
+    t.ShrinkToFit();  // the THM vertex tables too
   }
   if (includeSubPoints) {
     for (int i = 1; i <= this->NumSubPoints(); i++) {
@@ -1447,6 +1651,7 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure, bool i
     mappedPoint->sfactorconv_ = sfactorconv_;
     mappedPoint->screen_k_ = screen_k_;
     mappedPoint->edep_ = edep_;  // shared; either point copies before it writes
+    mappedPoint->thm_ps_ = thm_ps_;
     if (!includeSubPoints) continue;
     for (int ii = 1; ii <= this->NumSubPoints(); ii++) {
       EPoint *subMappedPoint = mappedPoint->GetSubPoint(ii);
@@ -1454,6 +1659,7 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure, bool i
       subMappedPoint->sfactorconv_ = this->GetSubPoint(ii)->sfactorconv_;
       subMappedPoint->screen_k_ = this->GetSubPoint(ii)->screen_k_;
       subMappedPoint->edep_ = this->GetSubPoint(ii)->edep_;
+      subMappedPoint->thm_ps_ = this->GetSubPoint(ii)->thm_ps_;
     }
   }
   eDependentEnergy_ = this->GetCMEnergy();
@@ -1567,6 +1773,7 @@ EPoint::EDependentShare EPoint::ShareEDependentValues() const {
   if (eDependentValid_ && eDependentEnergy_ == this->GetCMEnergy()) {  // else empty: AdoptEDependentValues refuses it
     share.tables = edep_;
     share.legendre = legendreP_;
+    share.thmPs = thm_ps_;
   }
   return share;
 }
@@ -1587,6 +1794,7 @@ bool EPoint::AdoptEDependentValues(const EDependentShare &share) {
   screen_k_ = share.screen_k;
   edep_ = share.tables;
   legendreP_ = share.legendre;
+  thm_ps_ = share.thmPs;
   eDependentEnergy_ = this->GetCMEnergy();
   eDependentValid_ = true;
   return true;
@@ -1609,6 +1817,7 @@ bool EPoint::CopyEDependentValuesFrom(const EPoint &other) {
   sfactorconv_ = other.sfactorconv_;
   screen_k_ = other.screen_k_;
   edep_ = other.edep_;  // shared; either point copies before it writes
+  thm_ps_ = other.thm_ps_;  // immutable, shared like the tables
   eDependentEnergy_ = other.eDependentEnergy_;
   eDependentValid_ = true;
   return true;
@@ -1632,6 +1841,26 @@ void EPoint::AddLoElement(int jGroupNum, int channelNum, complex loElement) {
 void EPoint::AddSqrtPenetrability(int jGroupNum, int channelNum, double sqrtPene) {
   EDependentTables &t = MutableEDep();
   EDependentTables::Put(t.penetrabilities, t.Slot(jGroupNum, channelNum), sqrtPene);
+}
+
+/*!
+ * Adds the boundary-independent pieces j_l(rho) and rho dj_l/drho of the THM
+ * entrance transfer form factor with reference to positions in the JGroup and
+ * subsequent AChannel vectors. Filled in lockstep with the penetrabilities
+ * (one entry per channel), so a non-entrance channel stores 0.
+ */
+
+void EPoint::AddThmFormFactor(int jGroupNum, int channelNum, double jl, double rhoDjl, complex coul) {
+  vector_r d;
+  vector_c dc;
+  EDependentTables &t = MutableEDep();
+  while (jGroupNum > t.thm_jl.size()) t.thm_jl.push_back(d);
+  while (jGroupNum > t.thm_rhodjl.size()) t.thm_rhodjl.push_back(d);
+  while (jGroupNum > t.thm_coul.size()) t.thm_coul.push_back(dc);
+  t.thm_jl[jGroupNum - 1].push_back(jl);
+  t.thm_rhodjl[jGroupNum - 1].push_back(rhoDjl);
+  t.thm_coul[jGroupNum - 1].push_back(coul);
+  assert(channelNum == (int)t.thm_jl[jGroupNum - 1].size());
 }
 
 /*!
@@ -1723,6 +1952,12 @@ void EPoint::SetCoulombAmplitude(complex amplitude) {
 static complex ECPathwayAmplitude(CNuc *theCNuc, const Config &configure, PPair *entrancePair, int j,
                                   double levelEnergy, KGroup *theKGroup, ECMGroup *theECMGroup,
                                   double cmEnergy) {
+  // A closed entrance channel -- at or below threshold, or so close above it
+  // that P = 0 in double precision (ChannelFunc) -- captures nothing: the
+  // amplitude carries the entrance Coulomb wave, whose routines return NaN or
+  // garbage there (e.g. a Gaussian-folding sub-point at E_cm <= 0).
+  if (ChannelFunc(entrancePair, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC)).IsClosed(cmEnergy))
+    return complex(0.0, 0.0);
   double inEnergy = cmEnergy + entrancePair->GetSepE() + entrancePair->GetExE();
   // entrance Phase Calculations;
   CoulFunc theCoulombFunction(entrancePair, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
@@ -1909,6 +2144,34 @@ void EPoint::Calculate(CNuc *theCNuc, const Config &configure, EPoint *parent, i
   const int numMapped = ScopedPointMappingOff::Active() ? 0 : this->NumLocalMappedPoints();
   if (!this->IsTargetEffect() ||
       !this->GetParentData()->GetTargetEffect(this->GetTargetEffectNum())->IsSubPointEffect()) {
+    // THM (modified R-matrix) segments: reuse the shared interior (A-matrix)
+    // but assemble the half-off-shell cross section instead of the standard
+    // T-matrix cross section. Kept fully per-segment so a project may mix THM
+    // and conventional data against the same levels.
+    if (this->IsTHM()) {
+      // Reused across the points of this thread, as the A-matrix function
+      // below: its per-J-group buffers are sized once, then only refilled
+      // (Reset repoints it at this compound and configuration first, so
+      // nothing of an earlier session is read).
+      static thread_local THMMatrixFunc reusableThmFunc(theCNuc, configure);
+      reusableThmFunc.Reset(theCNuc, configure);
+      THMMatrixFunc &thmFunc = reusableThmFunc;
+      thmFunc.ClearMatrices();
+      thmFunc.FillMatrices(this);
+      thmFunc.InvertMatrices();
+      thmFunc.CalculateTHMCrossSection(this);
+      if (subPointNum && parent) {
+        for (int i = 1; i <= parent->NumLocalMappedPoints(); i++) {
+          EPoint *mappedSubPoint = parent->GetLocalMappedPoint(i)->GetSubPoint(subPointNum);
+          thmFunc.CalculateTHMCrossSection(mappedSubPoint);
+        }
+      } else {
+        for (int i = 1; i <= this->NumLocalMappedPoints(); i++)
+          thmFunc.CalculateTHMCrossSection(this->GetLocalMappedPoint(i));
+      }
+      return;
+    }
+
     GenMatrixFunc *theMatrixFunc;
     // The A-matrix function object is reused across the points calculated by
     // this thread.  Its per-JGroup buffers and the level-matrix factorization
@@ -2263,6 +2526,37 @@ void EPoint::ClearLocalMappedPoints() {
 
 void EPoint::SetTargetEffectNum(int targetEffectNum) {
   targetEffectNum_ = targetEffectNum;
+}
+
+/// Sets the line shape of the point and of its sub-points.
+void EPoint::SetThmLineshape(const ThmLineshape *l) {
+  thm_lineshape_ = l;
+  for (EPoint &sub : integrationPoints_) sub.thm_lineshape_ = l;
+}
+
+void EPoint::SetThmSpectatorWindow(const ThmSpectatorWindow *w) {
+  thm_window_ = w;
+  for (EPoint &sub : integrationPoints_) sub.thm_window_ = w;
+}
+
+void EPoint::SetThmDistortion(const ThmDistortion *d) {
+  thm_distortion_ = d;
+  for (EPoint &sub : integrationPoints_) sub.thm_distortion_ = d;
+}
+
+void EPoint::SetThmDwVertex(const ThmDwVertex *v) {
+  thm_dw_ = v;
+  for (EPoint &sub : integrationPoints_) sub.thm_dw_ = v;
+}
+
+void EPoint::SetThmCoherent(const ThmCoherentBackground *c) {
+  thm_coherent_ = c;
+  for (EPoint &sub : integrationPoints_) sub.thm_coherent_ = c;
+}
+
+void EPoint::SetThmAngleWindow(const ThmAngleWindow *w) {
+  thm_angle_ = w;
+  for (EPoint &sub : integrationPoints_) sub.thm_angle_ = w;
 }
 
 /*!

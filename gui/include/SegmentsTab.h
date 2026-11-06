@@ -9,6 +9,7 @@
 #include <QSignalMapper>
 #include <QPointer>
 #include <QComboBox>
+#include <QVector>
 #include <QSortFilterProxyModel>
 #include "SegmentsDataModel.h"
 #include "SegmentsTestModel.h"
@@ -40,15 +41,35 @@ class SegmentsTab : public QWidget {
   bool writeScatteringLengths(QTextStream &outStream);
   /*! Should the file carry a <scatteringLengths> block (at least one row). */
   bool hasScatteringLengths() const;
+  /// THM on (AZURESetup::setThmEnabled): the segment dialogs show their THM tick.
+  void setThmEnabled(bool on) { thmEnabled_ = on; }
+
+  /*! Moves data (test) segment line `from` to `to` (0-based rows) or removes
+      line `row`, as the up/down and delete buttons do, and emits
+      dataSegmentsRenumbered (testSegmentsRenumbered) so that what refers to
+      the lines by number can follow them.  False if the move is refused. */
+  bool moveDataSegment(int from, int to);
+  void deleteDataSegment(int row);
+  bool moveTestSegment(int from, int to);
+  void deleteTestSegment(int row);
+
+ signals:
+  /*! The lines were renumbered: line k (1-based) before is line newNumber[k - 1]
+      now, 0 if it was deleted.  A line added at the end (newNumber covers the
+      lines before it) is signalled too. */
+  void dataSegmentsRenumbered(const QVector<int> &newNumber);
+  void testSegmentsRenumbered(const QVector<int> &newNumber);
   /*QLineEdit *getSegDataFileText() const {return segDataFileText;};
     QLineEdit *getSegTestFileText() const {return segTestFileText;};*/
 
  public slots:
   void addSegDataLine();
+  /// A line added here (dialog, EXFOR): refused as a duplicate of an existing line.
   void addSegDataLine(SegmentsDataData line);
   void addSegTestLine();
   void addSegTestLine(SegmentsTestData line);
-  /// Append a line without the duplicate check (file reader).
+  /// Append a line without the duplicate check (file reader): a line read from the
+  /// project is kept as it is, as the engine reads it.
   void appendSegDataLine(SegmentsDataData line);
   void appendSegTestLine(SegmentsTestData line);
   void editSegDataLine();
@@ -128,6 +149,7 @@ class SegmentsTab : public QWidget {
   QPushButton *infoButton[5];
   static const std::vector<QString> infoText;
   QPointer<InfoDialog> infoDialog[5];
+  bool thmEnabled_ = false;
 };
 
 #endif

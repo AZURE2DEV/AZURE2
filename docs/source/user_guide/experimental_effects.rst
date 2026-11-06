@@ -67,6 +67,9 @@ using:
 - Ranges: ``3-9``
 - Combinations: ``3,6,7-14``
 
+The list follows the data segments when they are moved or deleted in the
+**Segments** tab (see :doc:`segments`).
+
 Integration Points
 ^^^^^^^^^^^^^^^^^^^
 
@@ -89,34 +92,43 @@ settings in the dialog shape it:
    a limit on the number of sub-points: each narrow resonance adds its own.
 
 **Resonance Width Multiplier** (column *Width Mult.*)
-   How far the fine, evenly spaced part of the grid reaches on either side of
-   a resonance, in widths. Beyond it the step grows by 10 % of the distance to
-   the resonance at each sub-point until it reaches the coarse step, so the
-   resonance's tails are resolved too.
+   How far the fine, evenly spaced core of the grid reaches on either side of
+   a resonance, in widths. Beyond it the step grows geometrically, a fixed
+   fraction of the distance to the resonance (0.05 at 50 points per width for
+   a 2-width core, growing as the square root of the core for a wider one),
+   until it reaches the coarse step, so the resonance's tails are resolved
+   too. A pure Gaussian convolution (no target integration, no beam profile)
+   whose ``<targetInt>`` line leaves the multiplier out uses a 2-width core;
+   an explicit value, and target integration, keep 20.
 
 **Points Per Width** (column *Pts/Width*)
-   The step in the fine part is the resonance's particle width (the sum of
-   its open particle-channel widths) divided by this number.
+   The step in the core is the resonance's particle width (the sum of its
+   open particle-channel widths) divided by this number.
 
-All the sub-points around a resonance, fine and graded, are placed relative
-to the resonance energy, so they move with it. With the defaults (20 widths,
-50 points per width) a resonance adds about 2,100 sub-points to every data
-point whose integration range it reaches, and its integral is accurate to
-about 1e-4 of its area, whatever **Integration Points** is.
+Each resonance's lattice (core and tails) is a fixed function of its energy
+and width, never of the integration range, so overlapping ranges sample a
+resonance at the same energies. The anchors are quantized -- the width to a
+power of 1.25 and the energy to a quarter of that width -- so a re-placed grid
+changes only when a level moves by about a quarter width or its width by about
+25 %, and a finite-difference step almost never straddles a change. Where the
+lattices of several resonances overlap, each energy keeps only the points of
+the finest one there; the coarse step fills in where none is finer.
 
 .. note::
 
-   Before 22 October 2026 the fine part ended in a single coarse step whose
-   far end was fixed by the integration range, not by the resonance. For a
-   resonance much narrower than the coarse step (a 0.8 eV level under a
-   10 keV target integration with 50 points) the integral was up to 8 % off.
-   Because the grids are laid out again at every evaluation, that error
-   changed as a fit moved the level: χ² oscillated in the level energy with
-   the period of the coarse step, and its gradient disagreed with finite
-   differences. A larger **Resonance Width Multiplier** or more **Integration
-   Points** reduced the effect. Folded segments of fits made before then can
-   move when recalculated; the test suite's target integration moved by up
-   to 6e-5 relative.
+   This branch (thm) keeps this grid (thm 02ae97b); AZURE2's ``dev`` branch
+   fixed the same narrow-resonance tail error differently, with graded tails
+   that move continuously with the resonance (dev d216517, 22 October 2026).
+   Both resolve the tails; numbers differ between the two branches for
+   segments with target integration or folding near narrow resonances (see
+   ``MERGE_NOTES.md``, section A). Before either fix the fine part ended in a
+   single coarse step whose far end was fixed by the integration range: for a
+   resonance much narrower than the coarse step the integral was up to 8 %
+   (a 0.8 eV level under a 10 keV target integration) to 16-38 % (THM
+   resonances under a Gaussian fold) off, and as the grids are laid out again
+   at every evaluation, that error changed as a fit moved the level.
+   ``tests/reference/adaptive_grid_reference_test`` (dev's) checks the grid
+   against the exact integral of a Lorentzian moved across a fixed window.
 
 The resonances are found from the current level energies and widths, shifted
 by the segment's energy shift. The grids are laid out again at every
@@ -153,8 +165,14 @@ Gaussian distribution of beam energies about each data point,
    Y(E_0) = \frac{\int K(E'; E_0)\, \sigma(E')\, dE'}{\int K(E'; E_0)\, dE'},
    \qquad K \propto \exp\!\left[-\frac{(E' - E_0)^2}{2\,\sigma_b(E_0)^2}\right],
 
-integrated over :math:`E_0 \pm 3\sigma_b` and normalised by the kernel's own
-integral, so a constant cross section is reproduced exactly.
+integrated over :math:`E_0 \pm 5\sigma_b` and normalised by the kernel's own
+integral, so a constant cross section is reproduced exactly. (Before 26
+October 2026 a direct-data segment was integrated over :math:`\pm 3\sigma_b`:
+the 0.27 % of the kernel's weight beyond it was dropped and the rest rescaled,
+which next to a strong resonance lost real cross section, 2-4 % within a few
+:math:`\sigma_b` of it. Every kernel -- beam spread, straggling, energy
+convolution -- now reaches :math:`5\sigma_b`, as the Gaussian fold of a THM
+segment always did.)
 
 **sigma [MeV, lab]**
    The standard deviation :math:`\sigma_b` of the beam energy spread (not the
@@ -206,6 +224,10 @@ a stopping cross section that rises through the target, as it does for every
 ion above the Bragg peak, that put the back edge 2-8 % too shallow for
 targets of 5-20 % energy loss and gave a flat cross section a yield low by
 the same fraction, a distortion that grows towards low energy.)
+
+Target integration does not apply to a THM segment (its energies are
+reconstructed x + A energies, not beam energies in a target), and AZURE2
+refuses it there; use the Gaussian convolution for the THM resolution.
 
 **Active Density** (atoms/cm\ :sup:`2`)
    The areal density of the active target material (the nuclei producing the

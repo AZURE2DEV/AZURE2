@@ -1,3 +1,4 @@
+#include <cmath>
 #include <iostream>
 #include <cmath>
 #include <iomanip>
@@ -16,6 +17,7 @@
 #endif
 #include "ParameterLabel.h"
 #include "Config.h"
+#include "ChannelFunc.h"
 #include "CoulFunc.h"
 #include "EigenFunc.h"
 #include "ECIntegral.h"
@@ -1211,41 +1213,107 @@ bool CNuc::TransformIn(const Config &configure) {
         if (theLevel->IsInRMatrix()) {
           vector_r tempGammas;
           std::vector<bool> isNegative;
+          std::vector<bool> passThrough;
           vector_r penes;
           double denom = 2.0;
+          // channels whose input is already a reduced width amplitude
+          // drop out of denom but their gamma^2 dS/dE still renormalizes
+          // the physical-width channels of the same level
+          // (gamma_b^2 = (Gamma_b/P_b)*numer/denom)
+          double numer = 1.0;
+          // Per-channel share of denom, for the diagnostic below: the term
+          // Gamma_c (dS_c/dE) / P_c that each physical-width particle channel
+          // subtracts from 2, with its P_c and dS_c/dE.
+          struct DenomTerm {
+            int ch;
+            double term, pene, dShift;
+          };
+          std::vector<DenomTerm> denomTerms;
           for (int ch = 1; ch <= theJGroup->NumChannels(); ch++) {
             AChannel *theChannel = theJGroup->GetChannel(ch);
             double localEnergy = theLevel->GetE() - this->GetPair(theChannel->GetPairNum())->GetExE() - this->GetPair(theChannel->GetPairNum())->GetSepE();
             double radius = this->GetPair(theChannel->GetPairNum())->GetChRad();
+            if (theChannel->GetRadType() != 'P' && theLevel->GammaIsRWA(ch))
+              configure.outStream << "WARNING: Reduced width amplitude input flag is only "
+                                  << "supported for particle channels; ignored for J = "
+                                  << theJGroup->GetJ() << " E = " << theLevel->GetE()
+                                  << " MeV channel " << ch << "." << std::endl;
             if (theChannel->GetRadType() == 'P') {
-              if (localEnergy > 0.0) {
+              if (theLevel->GammaIsRWA(ch)) {
+                if (theLevel->GetGamma(ch) < 0.0)
+                  isNegative.push_back(true);
+                else
+                  isNegative.push_back(false);
+                tempGammas.push_back(fabs(theLevel->GetGamma(ch)));
+                penes.push_back(1.0);
+                passThrough.push_back(true);
+                double gammaSq = pow(theLevel->GetGamma(ch), 2.0);
+                numer += gammaSq * ChannelFunc(this->GetPair(theChannel->GetPairNum()), !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC))
+                                       .ShiftDerivative(theChannel->GetL(), localEnergy);
+              } else if (localEnergy > 0.0) {
                 if (theLevel->GetGamma(ch) < 0.0)
                   isNegative.push_back(true);
                 else
                   isNegative.push_back(false);
                 tempGammas.push_back(fabs(theLevel->GetGamma(ch)) / 1e6);
-                CoulFunc theCoulombFunction(this->GetPair(theChannel->GetPairNum()),
-                                            !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
-                double tempPene = theCoulombFunction.Penetrability(theChannel->GetL(),
-                                                                   radius,
-                                                                   localEnergy);
-                denom -= tempGammas[ch - 1] / tempPene *
-                    theCoulombFunction.PEShift_dE(theChannel->GetL(), radius, localEnergy);
+                ChannelFunc channelFunc(this->GetPair(theChannel->GetPairNum()), !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
+                double tempPene = channelFunc.Penetrability(theChannel->GetL(), localEnergy);
+                double dShift = channelFunc.ShiftDerivative(theChannel->GetL(), localEnergy);
+                if (!(tempPene > 0.0)) {
+                  // Just above a Coulomb threshold P = 0 in double precision
+                  // (ChannelFunc): no reduced width gives an observed width
+                  // there, and Gamma/P is not a number.  The channel gets
+                  // gamma = 0 (exact for an input of 0).
+                  if (tempGammas[ch - 1] != 0.0)
+                    configure.outStream << "**WARNING: " << AZURELabel::Level(theJGroup, theLevel, j, la)
+                                        << ", " << AZURELabel::Channel(this, theJGroup, ch)
+                                        << ": the level is " << localEnergy
+                                        << " MeV above the channel threshold, where P = 0 in double precision, "
+                                        << "so its observed width of " << theLevel->GetGamma(ch)
+                                        << " eV cannot be converted; the reduced width is set to 0. "
+                                        << "Give a reduced-width amplitude (gammaIsRWA) for a level at threshold."
+                                        << std::endl;
+                  tempGammas[ch - 1] = 0.0;
+                  tempPene = 1.0;
+                } else {
+                  denom -= tempGammas[ch - 1] / tempPene * dShift;
+                  denomTerms.push_back(DenomTerm{ch, tempGammas[ch - 1] / tempPene * dShift, tempPene, dShift});
+                }
                 penes.push_back(tempPene);
+                passThrough.push_back(false);
               } else {
                 if (theLevel->GetGamma(ch) < 0.0)
                   isNegative.push_back(true);
                 else
                   isNegative.push_back(false);
                 tempGammas.push_back(pow(theLevel->GetGamma(ch), 2.0));
-                ShftFunc theShiftFunction(this->GetPair(theChannel->GetPairNum()));
+                if (localEnergy == 0.0) {
+                  // Exactly at threshold the ANC is not defined (W_l -> 0 for a
+                  // charged pair, and the conversion below would call the
+                  // Whittaker function at zero binding): gamma = 0, the limit
+                  // of a finite ANC just below threshold.
+                  if (tempGammas[ch - 1] != 0.0)
+                    configure.outStream << "**WARNING: " << AZURELabel::Level(theJGroup, theLevel, j, la)
+                                        << ", " << AZURELabel::Channel(this, theJGroup, ch)
+                                        << ": the level sits exactly at the channel threshold, where an ANC "
+                                        << "does not define a reduced width; the reduced width is set to 0. "
+                                        << "Give a reduced-width amplitude (gammaIsRWA) for a level at threshold."
+                                        << std::endl;
+                  tempGammas[ch - 1] = 0.0;
+                  penes.push_back(1.0);
+                  passThrough.push_back(false);
+                  continue;
+                }
                 WhitFunc newWhitFunc(this->GetPair(theChannel->GetPairNum()));
                 double whitConv = newWhitFunc(theChannel->GetL(), radius, fabs(localEnergy));
                 double tempPene = this->GetPair(theChannel->GetPairNum())->GetRedMass() * radius * uconv /
                     pow(hbarc, 2.0) / pow(whitConv, 2.0);
-                denom -= tempGammas[ch - 1] / tempPene *
-                    theShiftFunction.EnergyDerivative(theChannel->GetL(), theLevel->GetE());
+                double dShift = ChannelFunc(this->GetPair(theChannel->GetPairNum()), !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC))
+                                    .ShiftDerivative(theChannel->GetL(), localEnergy);
+                denom -= tempGammas[ch - 1] / tempPene * dShift;
+                denomTerms.push_back(DenomTerm{ch, tempGammas[ch - 1] / tempPene * dShift, tempPene, dShift});
                 penes.push_back(tempPene);
+                passThrough.push_back(false);
               }
             } else if (theChannel->GetRadType() == 'E' || theChannel->GetRadType() == 'M') {
               if (fabs(theLevel->GetE() - this->GetPair(theChannel->GetPairNum())->GetHeavyExE()) < 1.e-3 &&
@@ -1272,6 +1340,7 @@ bool CNuc::TransformIn(const Config &configure) {
                   isNegative.push_back(true);
                 else
                   isNegative.push_back(false);
+                passThrough.push_back(false);
               } else {
                 if (theLevel->GetGamma(ch) < 0.0)
                   isNegative.push_back(true);
@@ -1281,6 +1350,7 @@ bool CNuc::TransformIn(const Config &configure) {
                 double tempPene = (configure.paramMask & Config::USE_RMC_FORMALISM) ? 1.0 : pow(fabs(localEnergy) / hbarc, 2.0 * theChannel->GetL() + 1);
                 if (tempPene < 1e-16) tempPene = 1e-16;
                 penes.push_back(tempPene);
+                passThrough.push_back(false);
               }
             } else if (theChannel->GetRadType() == 'F' || theChannel->GetRadType() == 'G') {
               if (theLevel->GetGamma(ch) < 0.0)
@@ -1289,41 +1359,92 @@ bool CNuc::TransformIn(const Config &configure) {
                 isNegative.push_back(false);
               tempGammas.push_back(fabs(theLevel->GetGamma(ch)));
               penes.push_back(1.0);
+              passThrough.push_back(false);
             }
           }
-          if (park && denom <= 0.) {
+          // Park's J_lambda,lambda = 1 - sum_c gamma_c^2 dS_c/dE over every particle
+          // channel.  An amplitude-input channel (gammaIsRWA) holds Brune's
+          // amplitude in either mode, so that a file means the same model in
+          // both; its Park amplitude is gamma sqrt(J).  With the observed-width
+          // channels contributing denom / 2 = 1 - sum Gamma dS/dE / (2 P) and
+          // the amplitude-input ones J (numer - 1), J = denom / 2 - J (numer - 1),
+          // i.e. J = denom / (2 numer): Brune's 1 / (1 + sum gamma^2 dS/dE).
+          const double parkNorm = denom / (2.0 * numer);
+          if (park && parkNorm <= 0.) {
             // In Brune's parametrization this limit is only reached for an
             // infinite reduced width; in Park's it is an ordinary point of
             // the parameter space, with nothing in the level matrix to stop it.
-            configure.outStream << "**WARNING: Park norm J = 1 - sum gamma^2 dS/dE = " << denom / 2.0
+            configure.outStream << "**WARNING: Park norm J = 1 - sum gamma^2 dS/dE = " << parkNorm
                                 << " is not positive" << std::endl
                                 << "    " << AZURELabel::Level(theJGroup, theLevel, j, la) << std::endl
                                 << "  The widths of this level exceed what the channel radii allow; no"
                                 << std::endl
                                 << "  standard R-matrix (real reduced widths) corresponds to it."
                                 << std::endl;
-          } else if (denom < 0.) {
+          } else if (!park && denom < 0.) {
+            // An observed width Gamma_c = 2 P_c gamma_c^2 / (1 + sum gamma^2 dS/dE)
+            // saturates at 2 P_c / (dS_c/dE) as gamma_c -> infinity, so the
+            // input is out of reach of any reduced width when
+            //   1 - sum_c Gamma_c (dS_c/dE) / (2 P_c) = denom / 2 < 0.
+            // That is a property of the input, not of the transformation --
+            // but the usual cause is input in the wrong units (a reduced-width
+            // amplitude read as a width), so name the channel and the numbers.
             configure.outStream << "**WARNING: Denominator less than zero while transforming"
                                 << std::endl
                                 << "    " << AZURELabel::Level(theJGroup, theLevel, j, la) << std::endl
-                                << "  The transformation may not have been successful for this level."
+                                << "  No reduced width reproduces these observed widths: "
+                                << "1 - sum_c Gamma_c (dS_c/dE)/(2 P_c) = " << denom / 2.0 << " < 0."
+                                << std::endl;
+            const DenomTerm *worst = nullptr;
+            for (const DenomTerm &t : denomTerms)
+              if (!worst || t.term > worst->term) worst = &t;
+            if (worst) {
+              AChannel *wc = theJGroup->GetChannel(worst->ch);
+              bool bound = theLevel->GetE() - this->GetPair(wc->GetPairNum())->GetExE() -
+                      this->GetPair(wc->GetPairNum())->GetSepE() <= 0.0;
+              configure.outStream << "  Largest term: " << AZURELabel::Channel(this, theJGroup, worst->ch)
+                                  << (bound ? " (bound; ANC input)" : "")
+                                  << ": input " << theLevel->GetGamma(worst->ch)
+                                  << (bound ? " fm^(-1/2)" : " eV")
+                                  << ", P = " << worst->pene << ", dS/dE = " << worst->dShift
+                                  << " MeV^-1, Gamma (dS/dE)/(2P) = " << worst->term / 2.0 << "." << std::endl;
+              if (!bound && worst->dShift > 0.0)
+                configure.outStream << "  Even alone, this channel's observed width saturates at 2P/(dS/dE) = "
+                                    << 2.0 * worst->pene / worst->dShift * 1e6 << " eV." << std::endl;
+            }
+            // Orders of magnitude over the limit is the signature of a unit
+            // mistake; a sum just past 1 is a level broader than its channels
+            // allow at these radii.
+            if (-denom / 2.0 > 100.0)
+              configure.outStream << "  So large an excess usually means wrong units: widths in eV (ANCs in fm^-1/2), "
+                                  << "not reduced-width amplitudes -- pyazr's calculate() and calculate_energies() "
+                                  << "take physical values, calculate_rwa() amplitudes." << std::endl;
+            else
+              configure.outStream << "  The level is broader than its channels allow at these radii: "
+                                  << "reduce the widths or enlarge the channel radii." << std::endl;
+            configure.outStream << "  The transformation may not have been successful for this level."
                                 << std::endl;
           }
-          // denom / 2 = 1 - sum_c gamma_obs^2 dS_c/dE is Park's J_lambda,lambda.
-          // The bound-state normalization is defined with Brune's reduced
-          // widths gamma_obs^2 / J, so with Park's amplitudes it becomes
+          // parkNorm is Park's J_lambda,lambda (above).  The bound-state
+          // normalization is defined with Brune's reduced widths
+          // gamma_obs^2 / J, so with Park's amplitudes it becomes
           // 1 / sqrt(J + sum_c A_c gamma_obs^2) -- see CalcShiftFunctions.
-          const double parkNorm = denom / 2.0;
+          // Park's amplitudes are the observed ones: no Brune renormalization.
           if (park) {
             theLevel->SetParkNorm(parkNorm);
             denom = 2.0;
+            numer = 1.0;
           }
           double nFSum = park ? parkNorm : 1.0;
           for (int ch = 1; ch <= theJGroup->NumChannels(); ch++) {
             AChannel *theChannel = theJGroup->GetChannel(ch);
-            if (theChannel->GetRadType() != 'F' && theChannel->GetRadType() != 'G')
-              tempGammas[ch - 1] = sqrt(fabs(tempGammas[ch - 1] / penes[ch - 1] / denom));
-            else if (park)
+            if (theChannel->GetRadType() != 'F' && theChannel->GetRadType() != 'G') {
+              if (!passThrough[ch - 1])
+                tempGammas[ch - 1] = sqrt(fabs(tempGammas[ch - 1] / penes[ch - 1] * numer / denom));
+              else if (park)
+                // Brune's amplitude as read -> Park's (see parkNorm above).
+                tempGammas[ch - 1] *= sqrt(fabs(parkNorm));
+            } else if (park)
               // The input beta-decay feeding amplitude is Brune's.  It rescales
               // with the basis state like every other amplitude of the level,
               // B_Park = sqrt(J) B_Brune.
@@ -1360,18 +1481,10 @@ bool CNuc::TransformIn(const Config &configure) {
             double localEnergy = theLevel->GetE() - this->GetPair(theChannel->GetPairNum())->GetExE() - this->GetPair(theChannel->GetPairNum())->GetSepE();
             double radius = this->GetPair(theChannel->GetPairNum())->GetChRad();
             if (theChannel->GetRadType() == 'P') {
-              if (localEnergy > 0.0) {
-                tempGammas[levelKeys.size() - 1].push_back(theLevel->GetGamma(ch));
-                CoulFunc theCoulombFunction(this->GetPair(theChannel->GetPairNum()),
-                                            !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
-                shifts[levelKeys.size() - 1].push_back(theCoulombFunction.PEShift(theChannel->GetL(),
-                                                                                  radius,
-                                                                                  localEnergy));
-              } else {
-                tempGammas[levelKeys.size() - 1].push_back(theLevel->GetGamma(ch));
-                ShftFunc theShiftFunction(this->GetPair(theChannel->GetPairNum()));
-                shifts[levelKeys.size() - 1].push_back(theShiftFunction(theChannel->GetL(), theLevel->GetE()));
-              }
+              tempGammas[levelKeys.size() - 1].push_back(theLevel->GetGamma(ch));
+              shifts[levelKeys.size() - 1].push_back(
+                  ChannelFunc(this->GetPair(theChannel->GetPairNum()), !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC))
+                      .Shift(theChannel->GetL(), localEnergy));
             } else {
               tempGammas[levelKeys.size() - 1].push_back(theLevel->GetGamma(ch));
               if ((theChannel->GetRadType() == 'E' || theChannel->GetRadType() == 'M') &&
@@ -1878,16 +1991,7 @@ void CNuc::CalcBoundaryConditions(const Config &configure) {
             int lValue = theChannel->GetL();
             double levelEnergy = firstLevel->GetE();
             double resonanceEnergy = levelEnergy - (thePair->GetSepE() + thePair->GetExE());
-            if (resonanceEnergy < 0.0) {
-              ShftFunc theShiftFunction(thePair);
-              theChannel->SetBoundaryCondition(theShiftFunction(lValue, levelEnergy));
-            } else {
-              CoulFunc theCoulombFunction(thePair,
-                                          !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
-              double radius = thePair->GetChRad();
-              double boundary = theCoulombFunction.PEShift(lValue, radius, resonanceEnergy);
-              theChannel->SetBoundaryCondition(boundary);
-            }
+            theChannel->SetBoundaryCondition(ChannelFunc(thePair, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC)).Shift(lValue, resonanceEnergy));
           } else {
             double boundary = theJGroup->GetChannel(1)->GetBoundaryCondition();
             theChannel->SetBoundaryCondition(boundary);
@@ -2367,6 +2471,12 @@ void CNuc::FillMnParams(ROOT::Minuit2::MnUserParameters &p, const Config *config
         // sqrt(gamma_W^2), not gamma_W^2 itself.
         if (config && (config->paramMask & Config::USE_WIGNER_LIMITS)) {
           AChannel *channel = this->GetJGroup(j)->GetChannel(ch);
+          // GetWignerLimit returns gamma^2_W = 3 hbar^2/(2 mu a^2) in MeV -- the
+          // limit on the reduced width *squared*.  The fit parameter is the
+          // reduced width *amplitude* in MeV^(1/2), so the bound is its square
+          // root; using gamma^2_W directly bounds a MeV^(1/2) quantity by a MeV
+          // number and lets theta^2 = gamma^2/gamma^2_W run past 1 by a factor
+          // of gamma^2_W itself.
           double wignerLimit = channel->GetWignerLimit();
           if (channel->GetRadType() == 'P' && wignerLimit > 0.0 && std::isfinite(wignerLimit)) {
             double gammaLimit = sqrt(wignerLimit);
@@ -2503,15 +2613,7 @@ void CNuc::TransformOut(const Config &configure) {
               PPair *exitPair = this->GetPair(theChannel->GetPairNum());
               double localEnergy = tempE[thisLevel] - exitPair->GetSepE() - exitPair->GetExE();
               if (theChannel->GetRadType() == 'P') {
-                if (localEnergy < 0.0) {
-                  ShftFunc theShiftFunction(exitPair);
-                  newBoundary = theShiftFunction(theChannel->GetL(), tempE[thisLevel]);
-                } else {
-                  CoulFunc theCoulombFunction(exitPair,
-                                              !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
-                  double radius = exitPair->GetChRad();
-                  newBoundary = theCoulombFunction.PEShift(theChannel->GetL(), radius, localEnergy);
-                }
+                newBoundary = ChannelFunc(exitPair, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC)).Shift(theChannel->GetL(), localEnergy);
                 boundaryDiff.push_back(newBoundary - tempBoundary[ch - 1]);
                 tempBoundary[ch - 1] = newBoundary;
               } else {
@@ -2656,10 +2758,12 @@ void CNuc::TransformOut(const Config &configure) {
         PPair *exitPair = this->GetPair(theChannel->GetPairNum());
         double localEnergy = theLevel->GetTransformE() - exitPair->GetSepE() - exitPair->GetExE();
         if (theChannel->GetRadType() == 'P') {
+          ChannelFunc channelFunc(exitPair, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
+          normSum += channelFunc.ShiftDerivative(theChannel->GetL(), localEnergy) *
+              pow(theLevel->GetTransformGamma(ch), 2.0);
+          // Exactly at threshold (localEnergy == 0) the open branch: P = 0,
+          // Gamma = 0 (an ANC is not defined there).
           if (localEnergy < 0.0) {
-            ShftFunc theShiftFunction(exitPair);
-            normSum += theShiftFunction.EnergyDerivative(theChannel->GetL(), theLevel->GetTransformE()) *
-                pow(theLevel->GetTransformGamma(ch), 2.0);
             WhitFunc newWhitFunc(exitPair);
             double whitConv = newWhitFunc(theChannel->GetL(),
                                           exitPair->GetChRad(),
@@ -2668,13 +2772,8 @@ void CNuc::TransformOut(const Config &configure) {
                 pow(hbarc, 2.0) / pow(whitConv, 2.0);
             tempPene.push_back(pene);
           } else {
-            CoulFunc theCoulombFunction(exitPair,
-                                        !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
-            double radius = exitPair->GetChRad();
-            normSum += theCoulombFunction.PEShift_dE(theChannel->GetL(), radius, localEnergy) *
-                pow(theLevel->GetTransformGamma(ch), 2.0);
-            double pene = theCoulombFunction.Penetrability(theChannel->GetL(), radius, localEnergy);
-            tempPene.push_back(pene);
+            // P = 0 at E = 0 and just above a Coulomb threshold: Gamma = 0.
+            tempPene.push_back(channelFunc.Penetrability(theChannel->GetL(), localEnergy));
           }
         } else if (theChannel->GetRadType() == 'M' || theChannel->GetRadType() == 'E') {
           if (fabs(theLevel->GetE() - this->GetPair(theChannel->GetPairNum())->GetHeavyExE()) < 1.e-3 &&
@@ -2773,13 +2872,10 @@ void CNuc::CheckRadiativeWidths(const Config &configure, const vector_r &params)
           if (gamma == 0.0) continue;
           double localEnergy = levelEnergy - thePair->GetSepE() - thePair->GetExE();
           if (theChannel->GetRadType() == 'P') {
-            if (localEnergy <= 0.0) continue;
-            CoulFunc theCoulombFunction(thePair, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
-            double radius = thePair->GetChRad();
-            particleWidth += 2.0 * pow(gamma, 2.0) *
-                theCoulombFunction.Penetrability(theChannel->GetL(), radius, localEnergy);
-            normSum += theCoulombFunction.PEShift_dE(theChannel->GetL(), radius, localEnergy) *
-                pow(gamma, 2.0);
+            ChannelFunc channelFunc(thePair, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
+            if (channelFunc.IsClosed(localEnergy)) continue;
+            particleWidth += 2.0 * pow(gamma, 2.0) * channelFunc.Penetrability(theChannel->GetL(), localEnergy);
+            normSum += channelFunc.ShiftDerivative(theChannel->GetL(), localEnergy) * pow(gamma, 2.0);
           } else if (theChannel->GetRadType() == 'M' || theChannel->GetRadType() == 'E') {
             // Ground state transitions parametrize a moment, not a width.
             if (fabs(theLevel->GetE() - thePair->GetHeavyExE()) < 1.e-3 &&
@@ -3016,6 +3112,7 @@ void CNuc::PrintRelativisticParams(const Config &configure) const {
 /* Gets the transformet parameters*/
 
 vector_r CNuc::GetTransformParams(const Config &configure) {
+  const bool park = (configure.paramMask & Config::USE_PARK_FORMALISM);
   vector_r params;
   for (int j = 1; j <= this->NumJGroups(); j++) {
     JGroup *theJGroup = this->GetJGroup(j);
@@ -3026,7 +3123,18 @@ vector_r CNuc::GetTransformParams(const Config &configure) {
         AChannel *theChannel = this->GetJGroup(j)->GetChannel(ch);
         PPair *exitPair = this->GetPair(theChannel->GetPairNum());
         double localEnergy = theLevel->GetTransformE() - exitPair->GetSepE() - exitPair->GetExE();
-        if (localEnergy < 0.0 && theChannel->GetRadType() == 'P') {
+        if (theChannel->GetRadType() == 'P' && theLevel->GammaIsRWA(ch)) {
+          // Input convention for this channel is the reduced width
+          // amplitude: return it as-is (physical-convention internal
+          // amplitude; equals the fit amplitude under Brune) so
+          // saving fitted values never flips the input convention.
+          // That amplitude is Brune's in both modes (TransformIn): under
+          // Park the fit amplitude is gamma_Brune sqrt(J).
+          double gamma = theLevel->GetTransformGamma(ch);
+          if (park && theLevel->IsInRMatrix() && theLevel->GetParkNorm() > 0.0)
+            gamma /= sqrt(theLevel->GetParkNorm());
+          params.push_back(gamma);
+        } else if (localEnergy < 0.0 && theChannel->GetRadType() == 'P') {
           int tempSign = (theLevel->GetBigGamma(ch) < 0) ? (-1) : (1);
           params.push_back(tempSign * sqrt(fabs(theLevel->GetBigGamma(ch))));
         } else if (fabs(theLevel->GetE() - this->GetPair(theChannel->GetPairNum())->GetHeavyExE()) < 1.e-3 &&
@@ -3114,7 +3222,8 @@ const std::size_t kShiftDerivMemoMax = 1 << 16;
  * functions at new level energies when the Brune parametrization is used.
  *
  * In the Park formalism the first and second energy derivatives at the level
- * energies are numerical (CoulFunc::PEShift_dE, PEShift_d2E, ShftFunc), four
+ * energies are numerical (ChannelFunc::ShiftDerivative, CoulFunc::PEShift_d2E,
+ * ShftFunc), four
  * and five more shift functions per channel and level, most of a serial
  * evaluation at new parameters.  They are taken after the shift functions, for
  * all levels at once and in parallel, and without the Coulomb-function memo
@@ -3170,15 +3279,9 @@ void CNuc::CalcShiftFunctions(const Config &configure, bool secondDerivatives) {
               const bool parkP = park && theChannel->GetRadType() == 'P';
               double resonanceEnergy = levelEnergy - (thePair->GetSepE() + thePair->GetExE());
               if (recompute) {
-                if (resonanceEnergy < 0.0) {
-                  ShftFunc theShiftFunction(thePair);
-                  theLevel->SetShiftFunction(ch, theShiftFunction(lValue, levelEnergy));
-                } else {
-                  CoulFunc theCoulombFunction(thePair,
-                                              !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
-                  double radius = thePair->GetChRad();
-                  theLevel->SetShiftFunction(ch, theCoulombFunction.PEShift(lValue, radius, resonanceEnergy));
-                }
+                // S as everywhere else (ChannelFunc: continuous through threshold).
+                ChannelFunc channelFunc(thePair, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
+                theLevel->SetShiftFunction(ch, channelFunc.Shift(lValue, resonanceEnergy));
               }
               if (parkP && (recompute || second)) {
                 // Channels that differ only in the channel spin share the derivative.
@@ -3232,14 +3335,21 @@ void CNuc::CalcShiftFunctions(const Config &configure, bool secondDerivatives) {
         }
       }
       if (!need1 && !need2) continue;
-      if (resonanceEnergy < 0.0) {
-        ShftFunc theShiftFunction(d.pair);
-        if (need1) d.d1 = theShiftFunction.EnergyDerivative(d.l, d.energy);
-        if (need2) d.d2 = theShiftFunction.EnergySecondDerivative(d.l, d.energy);
-      } else {
-        const double radius = d.pair->GetChRad();
-        if (need1) d.d1 = theCoulombFunction.PEShift_dE(d.l, radius, resonanceEnergy);
-        if (need2) d.d2 = theCoulombFunction.PEShift_d2E(d.l, radius, resonanceEnergy);
+      // dS/dE as everywhere else (ChannelFunc, also BuildShiftDerivTable's
+      // under Brune); d^2S/dE^2 from the branch the level is on.  Neither
+      // uses the Coulomb-function memo.
+      if (need1) {
+        ChannelFunc channelFunc(d.pair, gslCoulomb);
+        channelFunc.SetUseGlobalCache(false);
+        d.d1 = channelFunc.ShiftDerivative(d.l, resonanceEnergy);
+      }
+      if (need2) {
+        if (resonanceEnergy < 0.0) {
+          ShftFunc theShiftFunction(d.pair);
+          d.d2 = theShiftFunction.EnergySecondDerivative(d.l, d.energy);
+        } else {
+          d.d2 = theCoulombFunction.PEShift_d2E(d.l, d.pair->GetChRad(), resonanceEnergy);
+        }
       }
       std::lock_guard<std::mutex> lock(g_shiftDerivMutex);
       if (g_shiftDerivMemo.size() >= kShiftDerivMemoMax) g_shiftDerivMemo.clear();
@@ -3331,14 +3441,9 @@ bool CNuc::ConvertAmplitudeBasis(ROOT::Minuit2::MnUserParameters &p, int from, i
         double gamma = p.Value(firstWidth + ch - 1);
         if (gamma == 0.0) continue;
         double resonanceEnergy = levelEnergy - (thePair->GetSepE() + thePair->GetExE());
-        double dS;
-        if (resonanceEnergy < 0.0) {
-          ShftFunc theShiftFunction(thePair);
-          dS = theShiftFunction.EnergyDerivative(theChannel->GetL(), levelEnergy);
-        } else {
-          CoulFunc theCoulombFunction(thePair, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
-          dS = theCoulombFunction.PEShift_dE(theChannel->GetL(), thePair->GetChRad(), resonanceEnergy);
-        }
+        // dS/dE as in TransformIn and CalcShiftFunctions (ChannelFunc).
+        double dS = ChannelFunc(thePair, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC))
+                        .ShiftDerivative(theChannel->GetL(), resonanceEnergy);
         sum += gamma * gamma * dS;
       }
       double factor;

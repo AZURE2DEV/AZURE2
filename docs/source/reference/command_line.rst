@@ -65,6 +65,13 @@ one that read the file prints ``Reading User Parameter File...``, one that did
 not prints ``Creating New param.par File...``.  ``--covariance-band`` answers
 the band question yes without a prompt.
 
+If the input ends at a prompt that needs an answer (the menu, the MINOS
+variance, the reaction-rate and MCMC questions without a default), AZURE2
+stops with ``ERROR: the input ended (end of file) at the prompt ...`` and exit
+status 1. A prompt whose blank answer is its default (the parameter and
+integral file names, the uncertainty-band questions, the MCMC spreads,
+overwriting ``samples.mcmc``) takes that default at end of input.
+
 Available Options
 -----------------
 
@@ -173,9 +180,15 @@ Available Options
    * - ``--no-transform``
      - Do not perform parameter transformations; input formal R-matrix
        parameters directly (equivalent to the GUI option).
-   * - ``--ec-table``, ``--ec-convection-current``, ``--grid-replacement``
-     - The defaults, stated explicitly.  Options are applied in order, so each
-       undoes its ``--no-`` form given earlier.
+   * - ``--ec-table``
+     - The default, stated explicitly: undoes an earlier ``--no-ec-table``
+       (options are applied in order).
+   * - ``--ec-convection-current``
+     - The default, stated explicitly: undoes an earlier
+       ``--no-ec-convection-current``.
+   * - ``--grid-replacement``
+     - The default, stated explicitly: undoes an earlier
+       ``--no-grid-replacement``.
    * - ``--use-gradient``
      - Fit with MIGRAD using the analytic gradient instead of numerical
        derivatives.
@@ -212,6 +225,9 @@ Available Options
    * - ``--use-api``
      - Removed.  AZURE2 no longer serves a socket API and stops with an error;
        drive it from Python with ``from pyazr import azure2``.
+
+``AZURE2 --help`` prints this list as the binary was built
+(``tests/cli_help/check.sh`` keeps the two, and this table, in step).
 
 Options can also be read from a file, one per line, named by the environment
 variable ``AZURE_OPTIONS_FILE``; they are applied after those on the command
@@ -251,9 +267,13 @@ Exit status
 -----------
 
 AZURE2 exits with 0 when the run completed and 1 when it was aborted or
-refused ("Calculation was aborted.", a project that cannot be read, a failed
-MCMC run), so that a script or a job chain can tell.  Before November 2026 it
-exited with 0 in every case.
+refused ("Calculation was aborted.", a project that cannot be read or that
+AZURE2 refuses with ``ERROR: ...`` -- e.g. a malformed ``<thm>`` block or a
+``<thm>`` weight that does not fit the data --, a failed fill, initialization
+or parameter transformation, a failed MCMC run), so that a script or a job
+chain can tell.  Before November 2026 it exited with 0 in every case on
+``dev``, and with -1 (255 on POSIX systems) after a failed run on the ``thm``
+branch.
 
 Brune and Park parametrizations
 -------------------------------
@@ -273,8 +293,13 @@ level are normalized:
 Park's level matrix is Brune's multiplied from both sides by
 :math:`\mathrm{diag}(\sqrt{J_\lambda})`, which leaves the collision matrix
 unchanged, so ``--use-park`` reproduces the default calculation
-(``tests/park_formalism/check.sh``).  What changes is the parameter space the
-minimizer works in:
+(``tests/park_formalism/check.sh``), THM (HOES) segments included: their
+amplitude is bilinear in the reduced widths with level-diagonal factors only
+(:doc:`../theory/thm_implementation`, "Brune and Park";
+``tests/thm_park/check.sh``).  A channel entered as an amplitude
+(``gammaIsRWA``, the 33rd field of a level line) holds Brune's amplitude in
+either mode, so a file is the same model in both.  What changes is the
+parameter space the minimizer works in:
 
 * a Park amplitude is the observed width, :math:`\Gamma_c = 2P_c\gamma_c^2`
   (an ANC for a closed channel), with no factor depending on the other channels
@@ -284,8 +309,10 @@ minimizer works in:
   :math:`J_\lambda > 0`; a level with :math:`J_\lambda \le 0` has no standard
   R-matrix counterpart (its widths exceed what the channel radii allow).  The
   fit objective therefore carries a penalty :math:`\sum_\lambda (J_\lambda/10^{-3})^2`
-  over levels with :math:`J_\lambda < 0`, MCMC rejects such points, and a run
-  that ends there prints a warning naming the level;
+  over levels with :math:`J_\lambda < 0`, MCMC rejects such points (a chain
+  started from such a point is reported, and refused if its whole starting
+  ensemble is outside: :doc:`../user_guide/mcmc`), and a run that ends there
+  prints a warning naming the level;
 * analytic derivatives (``--use-lm``, the analytic-gradient minimizer, the
   covariance band, pyazr's ``chi2_and_grad`` / ``residual_jacobian``) are
   available in both modes;

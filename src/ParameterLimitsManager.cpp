@@ -3,6 +3,7 @@
 #include "CNuc.h"
 #include "EData.h"
 #include "AZUREParams.h"
+#include "ParameterLabel.h"
 #include <fstream>
 #include <sstream>
 #include <iostream>
@@ -240,6 +241,7 @@ std::string ParameterLimitsManager::SettingNameForMinuitName(const std::string &
  */
 static bool SettingFitsParameter(const std::string &setting, const std::string &param) {
   if (setting.compare(0, 8, "segment_") == 0) return false;  // exact Minuit names: matched by name or not at all
+  if (setting.compare(0, 5, "cbkg_") == 0) return false;     // THM coherent background: exact Minuit names too
   if (setting.compare(0, 6, "Level ") != 0) return true;     // unknown format: keep the old behaviour
   const size_t sp = setting.find(' ', 6);
   if (sp == std::string::npos) return true;
@@ -284,6 +286,24 @@ void ParameterLimitsManager::BuildIndexMap(const ROOT::Minuit2::MnUserParameters
         break;
       }
     }
+  }
+
+  // The same association keyed by the full-vector index, for the nuisance
+  // prior.  Norms, shifts, abundances, electron-screening potentials, fitted
+  // target densities, Doppler temperatures and sample thicknesses (dev) are left out, as the chi-squared always
+  // has: they carry their own priors (segment errors, <abundances>, the screening, densityfit, doppler and
+  // transmission / yield blocks).
+  priorByActualIndex_.assign(p.Params().size(), NULL);
+  for (size_t nonFixedIndex = 0; nonFixedIndex < nonFixedToActualIndex.size(); nonFixedIndex++) {
+    ParameterSetting *setting = indexToSetting_[nonFixedIndex];
+    if (!setting || !setting->useAsNuisance) continue;
+    const int actualIndex = nonFixedToActualIndex[nonFixedIndex];
+    const std::string &name = p.Parameter(actualIndex).GetName();
+    if (AZURELabel::IsNormName(name) || AZURELabel::IsEnergyShiftName(name) || name.compare(0, 10, "abundance_") == 0 ||
+        name.compare(0, 10, "screening_") == 0 || name.compare(0, 8, "density_") == 0 ||
+        name.compare(0, 8, "doppler_") == 0 || (name.compare(0, 8, "segment_") == 0 && AZURELabel::EndsWith(name, "_thickness")))
+      continue;
+    priorByActualIndex_[actualIndex] = setting;
   }
 }
 
@@ -351,7 +371,8 @@ void ParameterLimitsManager::ApplyParameterSetting(const std::string &paramName,
     }
 
     // Normalization parameters: paramName="segment_1_norm" should match guiName="segment_1_norm"
-    else if (paramName.find("_norm") != std::string::npos || paramName.find("_energy_shift") != std::string::npos) {
+    else if (paramName.find("_norm") != std::string::npos || paramName.find("_energy_shift") != std::string::npos ||
+             paramName.compare(0, 5, "cbkg_") == 0) {
       if (guiName == paramName) {
         setting = &entry.second;
         matchedName = guiName;
@@ -681,4 +702,16 @@ double ParameterLimitsManager::GetConvertedErrorByIndex(int nonFixedIndex) const
     return setting->errorReduced;  // Return reduced error for width parameters
   // For non-width parameters, use error as-is
   return setting->error;
+}
+
+bool ParameterLimitsManager::NuisancePrior(int actualIndex, double &nominal, double &error) const {
+  if (actualIndex < 0 || actualIndex >= (int)priorByActualIndex_.size()) return false;
+  const ParameterSetting *setting = priorByActualIndex_[actualIndex];
+  if (!setting) return false;
+  const bool isWidth = (setting->name.find("width") != std::string::npos ||
+                        setting->name.find("Width") != std::string::npos) &&
+                       setting->category == "level";
+  nominal = isWidth ? setting->nominalValueReduced : setting->nominalValue;
+  error = isWidth ? setting->errorReduced : setting->error;
+  return error > 0.0;
 }

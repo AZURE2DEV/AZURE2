@@ -235,6 +235,10 @@ or the level route (fill and LU, as before).  The level route is taken
   is ill-conditioned (pivot ratio below :math:`10^{-10}`);
 - with ``AZURE_LEVEL_SPACE=1``, or for an ``AMatrixFunc`` switched to it with
   ``SetLevelSpaceOnly(true)`` (callers that want the level matrix itself).
+  ``THMMatrixFunc`` is always switched to it: the THM (HOES) amplitude reads
+  individual elements of the level matrix over the active levels and its
+  adjoint the whole matrix (``LevelMatrixABarAdjoint``), so every THM point is
+  solved in level space, as before the channel-space route existed.
 
 The two routes agree to about :math:`10^{-13}` of the largest bilinear form
 (``AZURE_CHANNEL_VERIFY=1`` compares them, and both with an extended-precision
@@ -274,7 +278,9 @@ In the Park formalism :math:`S'` and :math:`S''` are numerical derivatives of th
 shift function (Richardson-extrapolated differences of the exact one: four and
 five more Coulomb-function evaluations per open channel; for a charged channel
 the energy derivative of the Coulomb functions has no closed form, the
-:math:`\eta` derivative being an integral).  ``CNuc::CalcShiftFunctions``
+:math:`\eta` derivative being an integral; :math:`S'` is
+``ChannelFunc::ShiftDerivative``, the :math:`dS/dE` of every other caller,
+with its own branches at and below threshold).  ``CNuc::CalcShiftFunctions``
 takes them after the shift functions, for all levels at once and in parallel,
 without the Coulomb-function memo (``CoulFuncCache``: per thread and matching
 energies to :math:`10^{-12}` MeV, it made :math:`S'` depend on the run's history
@@ -290,7 +296,10 @@ differentiated again.  With the rows in place the analytic-gradient minimizer
 takes Park's gradient from the residual Jacobian as for the other formalisms
 (``AZURECalc::GradientFromJacobian``, which adds the gradient of the
 :math:`J > 0` wall when a level is past it): MIGRAD asks for G2 with every
-gradient, so the adjoint pass it took besides is saved.  On the 19-segment
+gradient, so the adjoint pass it took besides is saved.  A project with THM
+(HOES) segments keeps the adjoint gradient in every formalism: their rows are
+not in the residual Jacobian (``ComputeResidualJacobian`` refuses them), so
+``GradientFromJacobian`` declines and ``Gradient`` takes the HOES adjoint.  On the 19-segment
 project of :doc:`edata_and_target_effects` in Park mode (one thread) an
 evaluation at new parameters went from 1.55 s to 1.09 s, the residual Jacobian
 from 5.9 s to 2.2 s and 20 MIGRAD calls from 53 s to 26 s (two threads: an

@@ -30,6 +30,7 @@ class EditOptionsDialog : public QDialog {
   QCheckBox *useRMCCheck;
   QCheckBox *noTransformCheck;
   QCheckBox *useHybridMethodCheck;
+  QCheckBox *useThmCheck;
   QCheckBox *useAdaptiveGridCheck;
   /*! Relativistic two-body kinematics: "relativistic=1" in <config>.  Unlike the switches above it is part of the
    *  project, so the command line and pyazr use it too (before 2026-11-01 it sat below the Particle Pairs table). */

@@ -32,6 +32,7 @@ PairsTab::PairsTab(QWidget *parent) :
   pairsView->setColumnHidden(9, true);
   pairsView->setColumnHidden(13, true);
   pairsView->setColumnHidden(14, true);
+  pairsView->setColumnHidden(15, true);  // THM binding energy: THM workspace
   RichTextDelegate *rt = new RichTextDelegate();
   pairsView->setItemDelegateForColumn(0, rt);
   pairsView->setItemDelegateForColumn(5, rt);
@@ -320,6 +321,7 @@ void PairsTab::addPair() {
       newPair.excitationEnergy = (aDialog.excitationEnergyText->text()).toDouble();
       newPair.lightExcitation = aDialog.pairTypeCombo->currentIndex() == 0 ? aDialog.lightExcitationText->text().toDouble() : 0.;
       newPair.channelRadius = (aDialog.channelRadiusText->text()).toDouble();
+      newPair.bindingEnergy = 0.0;  // THM binding energy: set in the THM workspace
       if (aDialog.pairTypeCombo->currentIndex() == 1)
         newPair.pairType = 10;
       else if (aDialog.pairTypeCombo->currentIndex() == 2)
@@ -340,8 +342,12 @@ void PairsTab::addPair() {
 }
 
 void PairsTab::addPair(PairsData pair, int pairIndex, bool fromFile) {
-  if (pairsModel->isPair(pair) == -1) {
-    pairsModel->insertRows(pairsModel->numPairs(), pairIndex + 1 - pairsModel->numPairs(), QModelIndex());
+  // A pair read from a file is the pair its key names, as in the engine
+  // (CNuc::IsPair compares keys only): two pairs alike in everything may both
+  // be there, e.g. a 12C+12C pair with a THM binding energy and one without.
+  if (fromFile || pairsModel->isPair(pair) == -1) {
+    if (pairIndex + 1 > pairsModel->numPairs())
+      pairsModel->insertRows(pairsModel->numPairs(), pairIndex + 1 - pairsModel->numPairs(), QModelIndex());
 
     QModelIndex index = pairsModel->index(pairIndex, 0, QModelIndex());
     pairsModel->setData(index, pair.lightJ, Qt::EditRole);
@@ -375,6 +381,8 @@ void PairsTab::addPair(PairsData pair, int pairIndex, bool fromFile) {
     pairsModel->setData(index, pair.ecMultMask, Qt::EditRole);
     index = pairsModel->index(pairIndex, PairsModel::LightExcitationColumn, QModelIndex());
     pairsModel->setData(index, pair.lightExcitation, Qt::EditRole);
+    index = pairsModel->index(pairIndex, PairsModel::BindingEnergyColumn, QModelIndex());
+    pairsModel->setData(index, pair.bindingEnergy, Qt::EditRole);
 
     pairsView->resizeRowsToContents();
     if (!fromFile) emit(pairAdded(pairIndex));
@@ -453,6 +461,9 @@ void PairsTab::editPair() {
   i = pairsModel->index(index.row(), 14, QModelIndex());
   var = pairsModel->data(i, Qt::EditRole);
   int ecMultMask = var.toInt();
+  i = pairsModel->index(index.row(), PairsModel::BindingEnergyColumn, QModelIndex());
+  var = pairsModel->data(i, Qt::EditRole);
+  const double bindingEnergy = var.toDouble();  // THM workspace's, kept as it is
   i = pairsModel->index(index.row(), PairsModel::LightExcitationColumn, QModelIndex());
   var = pairsModel->data(i, Qt::EditRole);
   QString lightExcitation = var.toString();
@@ -520,6 +531,7 @@ void PairsTab::editPair() {
       pair.lightExcitation = aDialog.pairTypeCombo->currentIndex() == 0 ? aDialog.lightExcitationText->text().toDouble() : 0.;
       pair.seperationEnergy = aDialog.seperationEnergyText->text().toDouble();
       pair.channelRadius = aDialog.channelRadiusText->text().toDouble();
+      pair.bindingEnergy = bindingEnergy;
       if (aDialog.pairTypeCombo->currentIndex() == 1)
         pair.pairType = 10;
       else if (aDialog.pairTypeCombo->currentIndex() == 2)
@@ -590,6 +602,9 @@ void PairsTab::editPair(PairsData pair, int pairIndex, bool fromFile) {
   i = pairsModel->index(pairIndex, PairsModel::LightExcitationColumn, QModelIndex());
   var = pairsModel->data(i, Qt::EditRole);
   if (pair.lightExcitation != var.toDouble()) pairsModel->setData(i, pair.lightExcitation, Qt::EditRole);
+  i = pairsModel->index(pairIndex, PairsModel::BindingEnergyColumn, QModelIndex());
+  var = pairsModel->data(i, Qt::EditRole);
+  if (pair.bindingEnergy != var.toDouble()) pairsModel->setData(i, pair.bindingEnergy, Qt::EditRole);
 
   if (!fromFile) emit(pairEdited(pairIndex));
 }

@@ -13,9 +13,9 @@
 #
 #   1. mode-1 calculate: same chi2 from the same .azr, different param.par;
 #   2. mode-2 fit (p+p): same minimum and same parameters.out, from
-#      independent MIGRAD runs in each mode's own amplitudes;
-#   2b. param.fit (the mid-fit snapshot a resumed job starts from) is tagged,
-#      and a Park run resumed from it reproduces the chi2 at the snapshot;
+#      independent MIGRAD runs in each mode's own amplitudes; the Park
+#      fit's param.fit (its 100th-evaluation snapshot) read back gives the
+#      snapshot's chi2 in both modes (tagged Park, converted for Brune);
 #   3. parameter files: a Brune-mode param.sav read by a Park-mode run (and
 #      the other way round) is converted on read and reproduces the chi2;
 #   4. a width above the J > 0 bound is reported, and the penalty makes the
@@ -37,6 +37,9 @@ export LC_ALL=C
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 AZURE2_BIN="${1:?usage: check.sh path/to/AZURE2}"
 AZURE2_BIN="$(cd "$(dirname "$AZURE2_BIN")" && pwd)/$(basename "$AZURE2_BIN")"
+# A hang fails the check instead of stalling the suite (tests/lib/guard.sh).
+. "$HERE/../lib/guard.sh"
+RUN="$(guard_command "${TEST_TIMEOUT:-900}")"
 export OMP_NUM_THREADS="${OMP_NUM_THREADS:-2}"
 TOL="${TOL:-1e-5}"
 
@@ -60,9 +63,9 @@ stage() {
 run() {
   local dir="$WORK/$1" proj="$2" mode="$3" pfile="$4" flag="${5:-}"
   if [ "$mode" = fit ]; then
-    (cd "$dir" && printf '2\nn\n%s\n\n7\n' "$pfile" | "$AZURE2_BIN" --no-gui --no-readline $flag "$proj.azr" > run.log 2>&1)
+    (cd "$dir" && printf '2\nn\n%s\n\n7\n' "$pfile" | $RUN "$AZURE2_BIN" --no-gui --no-readline $flag "$proj.azr" > run.log 2>&1)
   else
-    (cd "$dir" && printf '1\n%s\n\n7\n' "$pfile" | "$AZURE2_BIN" --no-gui --no-readline $flag "$proj.azr" > run.log 2>&1)
+    (cd "$dir" && printf '1\n%s\n\n7\n' "$pfile" | $RUN "$AZURE2_BIN" --no-gui --no-readline $flag "$proj.azr" > run.log 2>&1)
   fi
   awk '/^Total-Chi-Squared:/ { print $2 }' "$dir/output/chiSquared.out" 2>/dev/null
 }
@@ -116,24 +119,31 @@ paste <(width_column "$WORK/fit.brune/output/parameters.out") \
 [ $? -eq 0 ] && ok "p+p fit: physical widths agree to 1e-3 in both modes" || bad "p+p fit: physical widths differ between the modes"
 grep -q "^ *#parametrization *2\." "$WORK/fit.park/output/param.sav" && ok "p+p fit: param.sav tagged Park" || bad "p+p fit: param.sav not tagged"
 
-# ---- 2b. a Park fit resumed from its own param.fit --------------------------
-# param.fit is the snapshot a fit writes every 100 objective calls, the file an
-# evicted or interrupted job restarts from.  Before 2026-11-04 it carried no
-# #parametrization line, so a Park run reading it took its Park amplitudes for
-# Brune's and converted them again (here chi2 1696 instead of 103; 11B+a
-# 11-04-26_park_gpSM, 10733 -> 49532).  The resumed calculation must give the
-# chi2 the fit logged at the snapshot's call, with no conversion.
-grep -q "^ *#parametrization *2\." "$WORK/fit.park/output/param.fit" && ok "p+p fit: param.fit tagged Park" || bad "p+p fit: param.fit not tagged"
-snap="$(tr '\r' '\n' < "$WORK/fit.park/run.log" | awk '$1 == "Iteration:" && $2 % 100 == 0 { c = $4 } END { print c }')"
-stage identical_pp_res fit.resume
-cp "$WORK/fit.park/output/param.fit" "$WORK/fit.resume/resume.fit"
-fr="$(run fit.resume identical_pp_res calc resume.fit --use-park)"
-if grep -qE "Converted the parameter file|no parametrization tag" "$WORK/fit.resume/run.log"; then
-  bad "p+p resume: Park run converted its own param.fit"
-else ok "p+p resume: Park run read its own param.fit without conversion"; fi
-if [ -z "$snap" ] || [ -z "$fr" ]; then bad "p+p resume: no chi-squared (snapshot '$snap', resumed '$fr')"
-elif close "$snap" "$fr" 1e-5; then ok "p+p resume: chi2 $fr = the fit's at the last snapshot ($snap)"
-else bad "p+p resume: chi2 $fr, the fit logged $snap at the last snapshot"; fi
+# ---- 2b. param.fit, the snapshot of a running fit, resumes it ---------------
+# Written every 100 evaluations at the point evaluated; the log prints that
+# point's chi2 ("Iteration: N00 Chi-Squared: X").  Without the tag a Park run
+# took the file's Park amplitudes for Brune's and converted them: another model.
+pfit="$WORK/fit.park/output/param.fit"
+snap="$(tr '\r' '\n' < "$WORK/fit.park/run.log" | awk '/Iteration: *[0-9]*00 +Chi-Squared:/ { x = $NF } END { print x }')"
+if [ ! -f "$pfit" ] || [ -z "$snap" ]; then
+  bad "p+p fit: no param.fit or no 100th-evaluation chi2 in the log"
+else
+  grep -q "^ *#parametrization *2\." "$pfit" && ok "p+p fit: param.fit tagged Park" || bad "p+p fit: param.fit not tagged"
+  for mode in park brune; do
+    stage identical_pp_res "resume.$mode"
+    cp "$pfit" "$WORK/resume.$mode/snapshot.fit"
+  done
+  rp="$(run resume.park identical_pp_res calc snapshot.fit --use-park)"
+  rb="$(run resume.brune identical_pp_res calc snapshot.fit)"
+  if grep -q "Converted the parameter file" "$WORK/resume.park/run.log"; then
+    bad "p+p fit: param.fit converted when read back under --use-park"
+  else ok "p+p fit: param.fit read back under --use-park as Park amplitudes"; fi
+  grep -q "Converted the parameter file from Park (observed) to Brune" "$WORK/resume.brune/run.log" && \
+    ok "p+p fit: param.fit converted to Brune on read" || bad "p+p fit: param.fit not converted (Park -> Brune)"
+  if close "$snap" "$rp" "$TOL" && close "$snap" "$rb" "$TOL"; then
+    ok "p+p fit: param.fit gives the snapshot's chi2 $snap (Park $rp, Brune $rb)"
+  else bad "p+p fit: param.fit gives $rp (Park) and $rb (Brune), the snapshot $snap"; fi
+fi
 
 # ---- 4. the J > 0 wall ------------------------------------------------------
 # Multiply the p+p 0+ level's width by 170 (300 keV -> 51 MeV, past the bound

@@ -18,7 +18,7 @@ tests/identical_pp_res:
     without the '#' (files of 2026-10-06) is skipped the same way;
   * a file with no name in common with the model is refused.
 
-Needs the compiled engine; skips cleanly without it.
+Needs numpy and the compiled engine; exits 77 (skipped) without them.
 Run from anywhere:  python3 tests/pyazr/sav_readers_test.py
 """
 import os
@@ -45,7 +45,7 @@ try:
     from pyazr.bands import best_fit_params
 except Exception as err:
     print(f"skip: engine not available ({type(err).__name__}: {err})")
-    sys.exit(0)
+    sys.exit(77)
 
 with tempfile.TemporaryDirectory() as tmp:
     work = os.path.join(tmp, "identical_pp_res")

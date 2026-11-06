@@ -1,0 +1,1084 @@
+#include "ThmExperiment.h"
+#include "ThmOptical.h"
+
+#include <algorithm>
+#include <cctype>
+#include <cmath>
+#include <cstdlib>
+#include <fstream>
+#include <map>
+#include <set>
+#include <sstream>
+
+namespace {
+
+/*!
+ * Light nuclei: AME2020 atomic masses (Wang et al., Chin. Phys. C 45 (2021)
+ * 030003, from the mass excesses) minus Z electron masses plus the electron
+ * binding energy (Lunney, Pearson & Thibault, RMP 75 (2003) 1021, eq. A4),
+ * i.e. nuclear masses in u.
+ */
+const ThmNuclide kNuclides[] = {
+    {"n", 0, 1, 1.0086649159},    {"p", 1, 1, 1.0072764675},    {"d", 1, 2, 2.0135532134},
+    {"t", 1, 3, 3.0155007169},    {"3He", 2, 3, 3.0149322434},  {"4He", 2, 4, 4.0015061756},
+    {"6Li", 3, 6, 6.0134773618},  {"7Li", 3, 7, 7.0143579087},  {"9Be", 4, 9, 9.0099891714},
+    {"10B", 5, 10, 10.0101946866}, {"11B", 5, 11, 11.0065629921}, {"12C", 6, 12, 11.9967096429},
+    {"13C", 6, 13, 13.0000644777}, {"14N", 7, 14, 13.9992355671}, {"15N", 7, 15, 14.9962704619},
+    {"16O", 8, 16, 15.9905282131}, {"17O", 8, 17, 16.9947453497}, {"18O", 8, 18, 17.9947732059},
+    {"19F", 9, 19, 18.9934689019}, {"20Ne", 10, 20, 19.9869581831}, {"23Na", 11, 23, 22.9837396828},
+    {"24Mg", 12, 24, 23.9784646239},
+};
+
+// A whole token as a number (operator>> that must consume everything).
+bool ReadWholeDouble(const std::string &text, double &x) {
+  std::istringstream s(text);
+  std::string rest;
+  return !!(s >> x) && !(s >> rest) && std::isfinite(x);
+}
+bool ReadWholeInt(const std::string &text, int &x) {
+  if (text.empty()) return false;
+  for (size_t i = 0; i < text.size(); i++)
+    if (!std::isdigit((unsigned char)text[i]) && !(i == 0 && (text[i] == '+' || text[i] == '-'))) return false;
+  std::istringstream s(text);
+  return !!(s >> x);
+}
+
+std::vector<std::string> Split(const std::string &text, char sep) {
+  std::vector<std::string> out;
+  std::string item;
+  std::istringstream s(text);
+  while (std::getline(s, item, sep)) out.push_back(item);
+  if (!text.empty() && text.back() == sep) out.push_back("");
+  return out;
+}
+
+// Far above any project's number of segment lines (each is a file).
+static const int kMaxThmSegment = 100000;
+
+// "1,2,5-7" -> {1,2,5,6,7}.  "" or what is wrong.
+std::string ParseSegmentList(const std::string &text, std::vector<int> &out) {
+  out.clear();
+  std::set<int> seen;
+  for (const std::string &item : Split(text, ',')) {
+    int lo, hi;
+    size_t dash = item.find('-', 1);
+    bool ok;
+    if (dash == std::string::npos) {
+      ok = ReadWholeInt(item, lo);
+      hi = lo;
+    } else {
+      ok = ReadWholeInt(item.substr(0, dash), lo) && ReadWholeInt(item.substr(dash + 1), hi) && hi >= lo;
+    }
+    if (!ok || lo < 1) return "segments='" + text + "': expected segment numbers >= 1 like 1,2,4-6";
+    // A bound before the range is expanded: 1-100000000 would fill memory.
+    if (hi > kMaxThmSegment) {
+      std::ostringstream why;
+      why << "segments='" << text << "': segment numbers go up to " << kMaxThmSegment;
+      return why.str();
+    }
+    for (int k = lo; k <= hi; k++) {
+      if (!seen.insert(k).second) {
+        std::ostringstream why;
+        why << "segments='" << text << "': segment " << k << " is listed twice";
+        return why.str();
+      }
+      out.push_back(k);
+    }
+  }
+  std::sort(out.begin(), out.end());
+  return "";
+}
+
+// "pmin-pmax" (MeV/c, 0 <= pmin <= pmax): the '-' whose both sides are numbers.
+bool ReadWindow(const std::string &text, double &lo, double &hi) {
+  for (size_t k = 1; k + 1 < text.size(); k++) {
+    if (text[k] != '-') continue;
+    if (ReadWholeDouble(text.substr(0, k), lo) && ReadWholeDouble(text.substr(k + 1), hi))
+      return lo >= 0.0 && hi >= lo;
+  }
+  return false;
+}
+
+// The value of ps=: "" or what is wrong.
+std::string ParsePs(const std::string &value, ThmExperiment &x) {
+  const std::string usage =
+      "ps='" + value +
+      "': expected delta, hulthen:pmin-pmax, hulthen:a,b:pmin-pmax (a, b in fm^-1), "
+      "gauss:FWHM:pmin-pmax or table:<file> (momenta in MeV/c, 0 <= pmin <= pmax)";
+  x.psA = 0.2317;
+  x.psB = 1.202;
+  x.psFwhm = 0.0;
+  x.psMin = x.psMax = 0.0;
+  x.psTable.clear();
+  if (value == "delta") {
+    x.psKind = ThmExperiment::PS_DELTA;
+    return "";
+  }
+  std::vector<std::string> f = Split(value, ':');
+  if (f.size() >= 2 && f[0] == "table") {
+    x.psKind = ThmExperiment::PS_TABLE;
+    x.psTable = value.substr(6);
+    return x.psTable.empty() ? usage : "";
+  }
+  if (f.size() == 2 && f[0] == "hulthen") {
+    x.psKind = ThmExperiment::PS_HULTHEN;
+    return ReadWindow(f[1], x.psMin, x.psMax) ? "" : usage;
+  }
+  if (f.size() == 3 && f[0] == "hulthen") {
+    x.psKind = ThmExperiment::PS_HULTHEN;
+    std::vector<std::string> ab = Split(f[1], ',');
+    if (ab.size() != 2 || !ReadWholeDouble(ab[0], x.psA) || !ReadWholeDouble(ab[1], x.psB) ||
+        !(x.psA > 0.0) || !(x.psB > x.psA))
+      return "ps='" + value + "': Hulthen a,b in fm^-1 with 0 < a < b (deuteron: 0.2317,1.202)";
+    return ReadWindow(f[2], x.psMin, x.psMax) ? "" : usage;
+  }
+  if (f.size() == 3 && f[0] == "gauss") {
+    x.psKind = ThmExperiment::PS_GAUSS;
+    if (!ReadWholeDouble(f[1], x.psFwhm) || !(x.psFwhm > 0.0))
+      return "ps='" + value + "': the FWHM of |phi(p_s)|^2 must be a number > 0 (MeV/c)";
+    return ReadWindow(f[2], x.psMin, x.psMax) ? "" : usage;
+  }
+  return usage;
+}
+
+// opticalAA= / opticalSF=: plane | coulomb | <global name>[:extrapolate] | V,R,a,W,RW,aW,WD,RD,aD,RC.
+std::string ParseOptical(const std::string &key, const std::string &value, ThmExperiment::Optical &o) {
+  o = ThmExperiment::Optical();
+  if (value == "plane") {
+    o.kind = 0;
+    return "";
+  }
+  if (value == "coulomb") {
+    o.kind = 1;
+    return "";
+  }
+  if (!value.empty() && std::isalpha((unsigned char)value[0])) {
+    const size_t colon = value.find(':');
+    const std::string name = value.substr(0, colon), option = colon == std::string::npos ? "" : value.substr(colon + 1);
+    const int index = ThmGlobalOpticalIndex(name);
+    if (index < 0 || (colon != std::string::npos && option != "extrapolate"))
+      return key + "='" + value + "': expected plane, coulomb, a global optical potential (" +
+             ThmGlobalOpticalNames() + ", optionally :extrapolate) or ten numbers V,R,a,W,RW,aW,WD,RD,aD,RC";
+    o.kind = 3;
+    o.global = index;
+    o.extrapolate = colon != std::string::npos;
+    return "";
+  }
+  std::vector<std::string> f = Split(value, ',');
+  bool ok = f.size() == 10;
+  for (size_t k = 0; ok && k < 10; k++) ok = ReadWholeDouble(f[k], o.p[k]);
+  // Radii and diffusenesses > 0 where their depth is non-zero; RC >= 0.
+  for (int t = 0; ok && t < 3; t++)
+    if (o.p[3 * t] != 0.0 && !(o.p[3 * t + 1] > 0.0 && o.p[3 * t + 2] > 0.0)) ok = false;
+  if (ok && !(o.p[9] >= 0.0)) ok = false;
+  if (!ok)
+    return key + "='" + value +
+           "': expected plane, coulomb or ten numbers V,R,a,W,RW,aW,WD,RD,aD,RC (MeV and fm: real volume, "
+           "imaginary volume and imaginary surface Woods-Saxon, depths > 0 attractive/absorptive, radii and "
+           "diffusenesses > 0 where the depth is not 0, the Coulomb radius RC >= 0, 0 = point charge)";
+  o.kind = 2;
+  return "";
+}
+
+bool ValidName(const std::string &name) {
+  if (name.empty()) return false;
+  for (char c : name)
+    if (!std::isalnum((unsigned char)c) && c != '_' && c != '-' && c != '.' && c != '+') return false;
+  return true;
+}
+
+}  // namespace
+
+std::string ThmNuclide::Parse(const std::string &text, ThmNuclide &out) {
+  for (const ThmNuclide &n : kNuclides)
+    if (text == n.name) {
+      out = n;
+      return "";
+    }
+  std::vector<std::string> f = Split(text, ',');
+  if (f.size() == 3) {
+    int Z, A;
+    double mass;
+    if (ReadWholeInt(f[0], Z) && ReadWholeInt(f[1], A) && ReadWholeDouble(f[2], mass) && Z >= 0 && A >= 1 &&
+        Z <= A && mass > 0.0 && std::fabs(mass - A) < 1.0) {
+      out.name = text;
+      out.Z = Z;
+      out.A = A;
+      out.mass = mass;
+      return "";
+    }
+    return "'" + text + "': expected Z,A,mass with 0 <= Z <= A and the nuclear mass in u (within 1 u of A)";
+  }
+  std::string names;
+  for (const ThmNuclide &n : kNuclides) names += (names.empty() ? "" : " ") + n.name;
+  return "unknown nuclide '" + text + "' (known: " + names + "; or Z,A,mass in u)";
+}
+
+const ThmNuclide *ThmNuclide::Find(int Z, int A) {
+  for (const ThmNuclide &n : kNuclides)
+    if (n.Z == Z && n.A == A) return &n;
+  return nullptr;
+}
+
+const char *ThmExperiment::BackgroundName(int terms) {
+  static const char *names[] = {"none", "const", "linear", "quadratic"};
+  return (terms >= 0 && terms <= 3) ? names[terms] : "?";
+}
+
+namespace {
+// A spin or J: "1/2", "3/2", "0.5", "2" -> a non-negative multiple of 1/2.
+bool ReadSpin(const std::string &text, double &j) {
+  size_t slash = text.find('/');
+  if (slash != std::string::npos) {
+    int num = 0;
+    if (text.substr(slash + 1) != "2" || !ReadWholeInt(text.substr(0, slash), num) || num < 0 || text[0] == '+' ||
+        text[0] == '-')
+      return false;
+    j = num / 2.0;
+    return true;
+  }
+  if (!ReadWholeDouble(text, j) || j < 0.0 || text[0] == '+' || text[0] == '-') return false;
+  return std::fabs(2.0 * j - std::round(2.0 * j)) < 1.0e-9;
+}
+// A start value, optionally followed by 'f' (fixed).
+bool ReadCoherentValue(const std::string &text, double &v, bool &fixed) {
+  std::string t = text;
+  fixed = !t.empty() && t.back() == 'f';
+  if (fixed) t.pop_back();
+  return ReadWholeDouble(t, v);
+}
+// The shortest of 15 or 17 significant digits that reads back as v.
+std::string ValueText(double v) {
+  for (int digits : {15, 17}) {
+    std::ostringstream o;
+    o.precision(digits);
+    o << v;
+    double back = 0.0;
+    if (digits == 17 || (std::istringstream(o.str()) >> back && back == v)) return o.str();
+  }
+  return "";
+}
+}  // namespace
+
+std::string ThmSpinText(double j) {
+  long twice = std::lround(2.0 * j);
+  if (twice % 2 == 0) return std::to_string(twice / 2);
+  return std::to_string(twice) + "/2";
+}
+
+std::string ThmCoherentParamStem(const std::string &experiment, double J, int parity, int exitKey, double s, int l,
+                                 double sp, int lp) {
+  return "cbkg_" + experiment + "_" + ThmSpinText(J) + (parity > 0 ? "+" : "-") + "_" + std::to_string(exitKey) +
+         "_" + ThmSpinText(s) + "," + std::to_string(l) + "," + ThmSpinText(sp) + "," + std::to_string(lp) + "_";
+}
+
+std::string ApplyThmCoherentValues(const std::string &experiment, const std::string &value,
+                                   const std::vector<std::string> &names, const std::map<std::string, double> &values,
+                                   std::string &out) {
+  std::vector<ThmExperiment::CoherentTerm> terms, result;
+  std::string why = ParseThmCoherentBackground(value, terms);
+  if (!why.empty()) return why;
+  static const char *parts[4] = {"re0", "im0", "re1", "im1"};
+  for (const ThmExperiment::CoherentTerm &t : terms) {
+    const std::string prefix = "cbkg_" + experiment + "_" + ThmSpinText(t.J) + (t.parity > 0 ? "+" : "-") + "_" +
+                               std::to_string(t.exitKey) + "_";
+    // The combinations (s,l,s',l') of this term among the names, in order.
+    std::vector<std::string> combos;
+    for (const std::string &n : names) {
+      if (n.compare(0, prefix.size(), prefix) != 0) continue;
+      size_t last = n.rfind('_');
+      if (last == std::string::npos || last < prefix.size()) continue;
+      std::string channels = n.substr(prefix.size(), last - prefix.size());
+      if (t.hasChannels && channels != ThmSpinText(t.s) + "," + std::to_string(t.l) + "," + ThmSpinText(t.sp) + "," +
+                                           std::to_string(t.lp))
+        continue;
+      if (std::find(combos.begin(), combos.end(), channels) == combos.end()) combos.push_back(channels);
+    }
+    if (combos.empty()) {
+      result.push_back(t);
+      continue;
+    }
+    for (const std::string &channels : combos) {
+      ThmExperiment::CoherentTerm c = t;
+      std::vector<std::string> f = Split(channels, ',');
+      if (f.size() != 4 || !ReadSpin(f[0], c.s) || !ReadWholeInt(f[1], c.l) || !ReadSpin(f[2], c.sp) ||
+          !ReadWholeInt(f[3], c.lp))
+        return "cbackground: parameter name with channels '" + channels + "' is not one AZURE2 makes";
+      c.hasChannels = true;
+      c.hasValues = true;
+      for (int k = 0; k < 2 * c.form; k++) {
+        std::map<std::string, double>::const_iterator it = values.find(prefix + channels + "_" + parts[k]);
+        if (it != values.end()) c.value[k] = it->second;
+      }
+      result.push_back(c);
+    }
+  }
+  out = FormatThmCoherentBackground(result);
+  return "";
+}
+
+std::string ParseThmCoherentBackground(const std::string &value, std::vector<ThmExperiment::CoherentTerm> &out) {
+  out.clear();
+  const std::string form =
+      "expected <J><+|->:<exit pair key>[:<s>,<l>,<s'>,<l'>][:const|:linear][=<Re c0>,<Im c0>[,<Re c1>,<Im c1>]] "
+      "terms separated by ';' (a value followed by f is fixed)";
+  for (const std::string &item : Split(value, ';')) {
+    const std::string bad = "cbackground: '" + item + "': ";
+    if (item.empty()) return "cbackground='" + value + "': an empty term; " + form;
+    ThmExperiment::CoherentTerm t;
+    std::string spec = item, values;
+    size_t eq = item.find('=');
+    if (eq != std::string::npos) {
+      spec = item.substr(0, eq);
+      values = item.substr(eq + 1);
+      t.hasValues = true;
+    }
+    std::vector<std::string> f = Split(spec, ':');
+    if (f.size() < 2 || f.size() > 4) return bad + form;
+    // J^pi
+    const std::string &jpi = f[0];
+    if (jpi.size() < 2 || (jpi.back() != '+' && jpi.back() != '-') || !ReadSpin(jpi.substr(0, jpi.size() - 1), t.J))
+      return bad + "J^pi '" + jpi + "': expected e.g. 1/2+ or 2-";
+    t.parity = jpi.back() == '+' ? 1 : -1;
+    if (!ReadWholeInt(f[1], t.exitKey) || t.exitKey < 1 || f[1][0] == '+' || f[1][0] == '-')
+      return bad + "exit pair key '" + f[1] + "': expected a positive whole number";
+    bool haveForm = false;
+    for (size_t k = 2; k < f.size(); k++) {
+      if (f[k] == "const" || f[k] == "linear") {
+        if (haveForm) return bad + form;
+        haveForm = true;
+        t.form = f[k] == "const" ? 1 : 2;
+        continue;
+      }
+      if (t.hasChannels || haveForm) return bad + form;
+      std::vector<std::string> c = Split(f[k], ',');
+      if (c.size() != 4 || !ReadSpin(c[0], t.s) || !ReadWholeInt(c[1], t.l) || t.l < 0 || !ReadSpin(c[2], t.sp) ||
+          !ReadWholeInt(c[3], t.lp) || t.lp < 0 || c[1][0] == '+' || c[3][0] == '+')
+        return bad + "channels '" + f[k] + "': expected <s>,<l>,<s'>,<l'> (entrance and exit channel spin and l)";
+      t.hasChannels = true;
+    }
+    if (t.hasValues) {
+      std::vector<std::string> v = Split(values, ',');
+      if ((int)v.size() != 2 * t.form)
+        return bad + "expected " + std::to_string(2 * t.form) + " values after '=' (" +
+               (t.form == 1 ? "Re c0, Im c0" : "Re c0, Im c0, Re c1, Im c1") + ")";
+      for (size_t k = 0; k < v.size(); k++)
+        if (!ReadCoherentValue(v[k], t.value[k], t.fixed[k]))
+          return bad + "value '" + v[k] + "': expected a number, optionally followed by f (fixed)";
+    }
+    out.push_back(t);
+  }
+  return "";
+}
+
+std::string FormatThmCoherentBackground(const std::vector<ThmExperiment::CoherentTerm> &terms) {
+  std::string s;
+  for (const ThmExperiment::CoherentTerm &t : terms) {
+    if (!s.empty()) s += ";";
+    s += ThmSpinText(t.J) + (t.parity > 0 ? "+" : "-") + ":" + std::to_string(t.exitKey);
+    if (t.hasChannels)
+      s += ":" + ThmSpinText(t.s) + "," + std::to_string(t.l) + "," + ThmSpinText(t.sp) + "," + std::to_string(t.lp);
+    if (t.form == 2) s += ":linear";
+    if (t.hasValues) {
+      s += "=";
+      for (int k = 0; k < 2 * t.form; k++) s += (k ? "," : "") + ValueText(t.value[k]) + (t.fixed[k] ? "f" : "");
+    }
+  }
+  return s;
+}
+
+std::string ThmResolveReaction(const ThmNuclide &b, const ThmNuclide &t, const ThmNuclide &sp, double beamEnergy,
+                               const int Z[2], const double M[2], ThmReactionKinematics &out) {
+  const double amu = 931.49410242;  // MeV/u (CODATA 2018)
+  const int A[2] = {(int)std::lround(M[0]), (int)std::lround(M[1])};
+  // horse: 0 beam, 1 target; other: index of the pair nucleus that is the other one.
+  int horse = -1, other = -1;
+  for (int h = 0; h < 2 && horse < 0; h++) {
+    const ThmNuclide &th = h == 0 ? b : t, &tg = h == 0 ? t : b;
+    for (int k = 0; k < 2; k++)
+      if (tg.Z == Z[k] && tg.A == A[k] && th.Z - sp.Z == Z[1 - k] && th.A - sp.A == A[1 - k]) {
+        horse = h;
+        other = k;
+        break;
+      }
+  }
+  if (horse < 0) {
+    std::ostringstream why;
+    why << "beam " << b.name << " + target " << t.name << " with spectator " << sp.name
+        << " does not give the entrance pair of its segments (Z,A) = (" << Z[0] << "," << A[0] << ") + (" << Z[1]
+        << "," << A[1]
+        << "): one of beam/target must be a nucleus of the pair and the other the second nucleus plus the "
+           "spectator.";
+    return why.str();
+  }
+  const ThmNuclide &th = horse == 0 ? b : t, &nA = horse == 0 ? t : b;
+  const ThmNuclide *tabX = ThmNuclide::Find(th.Z - sp.Z, th.A - sp.A);
+  const double mX = tabX ? tabX->mass : M[1 - other];  // the pair nucleus that is x
+  const double mA = nA.mass;
+  out.horseIsBeam = horse == 0;
+  out.horse = th;
+  out.nucleusA = nA;
+  out.other = other;
+  out.mX = mX;
+  out.bind = (mX + sp.mass - th.mass) * amu;
+  // Quasi-free x + A energy: the spectator keeps the Trojan horse's velocity
+  // (horse = beam) or stays at rest (horse = target).
+  out.exa = horse == 0 ? beamEnergy * mX / th.mass * mA / (mX + mA) : beamEnergy * mX / (mA + mX);
+  return "";
+}
+
+bool ParseThmOptionLine(const std::string &key, const std::string &value, ThmOptionLine &out) {
+  out = ThmOptionLine();
+  if (key == "vertex") {
+    out.kind = ThmOptionLine::VERTEX;
+    out.word = value == "real" ? std::string("perlevel") : value;
+    return out.word == "onshell" || out.word == "constant" || out.word == "perlevel";
+  }
+  if (key == "kinematics") {
+    out.kind = ThmOptionLine::KINEMATICS;
+    out.word = value;
+    return value == "lacognata" || value == "triple" || value == "kf3body" || value == "lambda32";
+  }
+  if (key == "entranceL") {
+    out.kind = ThmOptionLine::ENTRANCE_L;
+    out.word = value;
+    return value == "coherent" || value == "incoherent";
+  }
+  if (key == "coulombIntegral") {
+    out.kind = ThmOptionLine::COULOMB_INTEGRAL;
+    if (value == "1" || value == "true" || value == "on") out.flag = true;
+    else if (value == "0" || value == "false" || value == "off") out.flag = false;
+    else return false;
+    return true;
+  }
+  if (key.compare(0, 15, "spectatorEnergy") == 0) {
+    out.kind = ThmOptionLine::SPECTATOR_ENERGY;
+    std::istringstream vs(value);
+    std::string rest;
+    if (!(vs >> out.energy) || !(out.energy >= 0.0) || (vs >> rest)) return false;  // "0.4junk" is not a number
+    if (key == "spectatorEnergy") return true;
+    if (!(key.size() > 17 && key[15] == '[' && key.back() == ']')) return false;
+    std::istringstream ks(key.substr(16, key.size() - 17));
+    return !!(ks >> out.pairKey);
+  }
+  if (key.compare(0, 6, "weight") == 0) {
+    // weight[<k>]=<file> (k-th <segmentsData> line) or weightTest[<k>]=<file>
+    // (k-th <segmentsTest> line).  Which segments exist, and whether they are
+    // THM, is checked once the data are read (EData::Fill / MakePoints).
+    out.kind = ThmOptionLine::WEIGHT;
+    out.test = key.compare(0, 11, "weightTest[") == 0;
+    const size_t open = out.test ? 10 : 6;
+    if (!(key.size() > open + 2 && key[open] == '[' && key.back() == ']' && !value.empty())) return false;
+    std::istringstream ks(key.substr(open + 1, key.size() - open - 2));
+    std::string rest;
+    if (!(ks >> out.segment) || out.segment < 1 || (ks >> rest)) return false;
+    out.file = value;
+    return true;
+  }
+  return false;
+}
+
+std::string CheckThmBlockLines(const std::vector<std::string> &lines, bool global) {
+  std::vector<ThmExperiment> experiments;
+  bool coulombIntegral = false;
+  for (std::string line : lines) {
+    size_t hash = line.find('#');
+    if (hash != std::string::npos) line = line.substr(0, hash);
+    size_t b = line.find_first_not_of(" \t\r\n");
+    if (b == std::string::npos) continue;
+    size_t e = line.find_last_not_of(" \t\r\n");
+    const std::string trimmed = line.substr(b, e - b + 1);
+    if (trimmed.compare(0, 11, "experiment[") == 0) {
+      std::string why = ParseThmExperimentLine(trimmed, experiments);
+      if (!why.empty()) return "<thm> " + why;
+      continue;
+    }
+    size_t eq = trimmed.find('=');
+    std::string key = trimmed.substr(0, eq);
+    std::string value = eq == std::string::npos ? std::string() : trimmed.substr(eq + 1);
+    key.erase(key.find_last_not_of(" \t") + 1);
+    value.erase(0, value.find_first_not_of(" \t"));
+    ThmOptionLine o;
+    if (eq == std::string::npos || !ParseThmOptionLine(key, value, o))
+      return "<thm> line not understood: '" + trimmed + "'";
+    if (o.kind == ThmOptionLine::COULOMB_INTEGRAL) coulombIntegral = o.flag;
+  }
+  std::string why = CheckThmExperiments(experiments);
+  if (why.empty() && global) why = CheckThmCoulombConsistency(experiments, coulombIntegral);
+  return why.empty() ? why : "<thm> " + why;
+}
+
+std::string ParseThmExperimentLine(const std::string &line, std::vector<ThmExperiment> &experiments) {
+  const std::string head = "experiment[";
+  size_t close = line.find(']');
+  if (line.compare(0, head.size(), head) != 0 || close == std::string::npos)
+    return "expected experiment[<name>] key=value ...";
+  std::string name = line.substr(head.size(), close - head.size());
+  if (!ValidName(name))
+    return "experiment[" + name + "]: a name is letters, digits and _ - . + only";
+  std::string where = "experiment[" + name + "]: ";
+  std::string rest = line.substr(close + 1);
+  if (!rest.empty() && rest[0] != ' ' && rest[0] != '\t')
+    return where + "expected a space after ']'";
+
+  ThmExperiment *x = nullptr;
+  for (ThmExperiment &e : experiments)
+    if (e.name == name) x = &e;
+  ThmExperiment fresh;
+  fresh.name = name;
+  ThmExperiment work = x ? *x : fresh;  // committed only if the whole line is good
+
+  std::istringstream tokens(rest);
+  std::string token;
+  int count = 0;
+  while (tokens >> token) {
+    count++;
+    size_t eq = token.find('=');
+    if (eq == std::string::npos || eq == 0 || eq + 1 == token.size())
+      return where + "'" + token + "' is not key=value";
+    std::string key = token.substr(0, eq), value = token.substr(eq + 1);
+    if (std::find(work.keys.begin(), work.keys.end(), key) != work.keys.end())
+      return where + "key '" + key + "' is given twice";
+    std::string why;
+    if (key == "segments") {
+      why = ParseSegmentList(value, work.segments);
+    } else if (key == "background") {
+      int terms = -1;
+      for (int t = 0; t <= 3; t++)
+        if (value == ThmExperiment::BackgroundName(t)) terms = t;
+      if (terms < 0) why = "background='" + value + "': expected none, const, linear or quadratic";
+      work.backgroundTerms = terms;
+    } else if (key == "beam" || key == "target" || key == "spectator") {
+      ThmNuclide &n = key == "beam" ? work.beam : key == "target" ? work.target : work.spectator;
+      why = ThmNuclide::Parse(value, n);
+      work.hasKinematics = true;
+      if (!why.empty()) why = key + ": " + why;
+    } else if (key == "Ebeam") {
+      if (!ReadWholeDouble(value, work.beamEnergy) || !(work.beamEnergy > 0.0))
+        why = "Ebeam='" + value + "': expected the lab beam energy in MeV, > 0";
+    } else if (key == "lineshape") {
+      if (value == "on")
+        work.lineshape = true;
+      else if (value == "off")
+        work.lineshape = false;
+      else
+        why = "lineshape='" + value + "': expected on or off";
+    } else if (key == "ps") {
+      why = ParsePs(value, work);
+    } else if (key == "psNodes") {
+      if (!ReadWholeInt(value, work.psNodes) || work.psNodes < 1 || work.psNodes > 64)
+        why = "psNodes='" + value + "': expected a whole number of Gauss-Legendre nodes, 1 to 64";
+    } else if (key == "distortion") {
+      work.distortionTable.clear();
+      if (value == "none")
+        work.distortion = ThmExperiment::DIST_NONE;
+      else if (value == "coulomb")
+        work.distortion = ThmExperiment::DIST_COULOMB;
+      else if (value == "optical")
+        work.distortion = ThmExperiment::DIST_OPTICAL;
+      else if (value.compare(0, 6, "table:") == 0 && value.size() > 6) {
+        work.distortion = ThmExperiment::DIST_TABLE;
+        work.distortionTable = value.substr(6);
+      } else
+        why = "distortion='" + value + "': expected none, coulomb, optical or table:<file>";
+    } else if (key == "opticalAA" || key == "opticalSF") {
+      why = ParseOptical(key, value, key == "opticalAA" ? work.opticalAA : work.opticalSF);
+    } else if (key == "spectatorAngle") {
+      double a = 0.0;
+      if (value == "qf") {
+        work.angleKind = 0;
+      } else if (value.compare(0, 3, "cm:") == 0 && ReadWholeDouble(value.substr(3), a) && a >= 0.0 && a <= 180.0) {
+        work.angleKind = 2;
+        work.angle = a;
+      } else if (ReadWholeDouble(value, a) && a >= 0.0 && a <= 180.0) {
+        work.angleKind = 1;
+        work.angle = a;
+      } else
+        why = "spectatorAngle='" + value +
+              "': expected qf, a lab angle in degrees (0-180) or cm:<degrees> (0-180)";
+    } else if (key == "distortionRef") {
+      if (!ReadWholeDouble(value, work.distortionRef))
+        why = "distortionRef='" + value + "': expected the reference energy E_ref in MeV (c.m. of x + A)";
+      work.hasDistortionRef = true;
+    } else if (key == "distortionRatio") {
+      if (value == "dwpw")
+        work.distortionRatioPW = true;
+      else if (value == "dw")
+        work.distortionRatioPW = false;
+      else
+        why = "distortionRatio='" + value + "': expected dwpw or dw";
+    } else if (key == "boundState") {
+      std::vector<std::string> f = Split(value, ':');
+      double rmin = 0.0;
+      bool ok = (f.size() == 1 || f.size() == 2) && (f[0] == "whittaker" || f[0] == "yukawa");
+      if (ok && f.size() == 2) ok = ReadWholeDouble(f[1], rmin) && rmin >= 0.0 && rmin <= 50.0;
+      if (ok) {
+        work.boundYukawa = f[0] == "yukawa";
+        work.boundRmin = rmin;
+      } else
+        why = "boundState='" + value + "': expected whittaker or yukawa, optionally :rmin in fm (0-50)";
+    } else if (key == "theta") {
+      double lo = 0.0, hi = 0.0;
+      if (value == "all") {
+        work.hasTheta = false;
+        work.thetaMin = 0.0;
+        work.thetaMax = 180.0;
+      } else if (ReadWindow(value, lo, hi) && hi <= 180.0) {
+        work.hasTheta = true;
+        work.thetaMin = lo;
+        work.thetaMax = hi;
+      } else
+        why = "theta='" + value +
+              "': expected all or thmin-thmax, the c.m. angles of the exit pair relative to p_xA in "
+              "degrees, 0 <= thmin <= thmax <= 180";
+    } else if (key == "spectatorAngles") {
+      // [cm:]thmin-thmax | [cm:]table:<file>
+      std::string v = value;
+      work.angleCm = v.compare(0, 3, "cm:") == 0;
+      if (work.angleCm) v = v.substr(3);
+      work.angleTable.clear();
+      work.angleTableT.clear();
+      work.angleTableW.clear();
+      double lo = 0.0, hi = 0.0;
+      if (v.compare(0, 6, "table:") == 0 && v.size() > 6) {
+        work.angleWindow = 2;
+        work.angleTable = v.substr(6);
+      } else if (ReadWindow(v, lo, hi) && hi <= 180.0) {
+        work.angleWindow = 1;
+        work.angleMin = lo;
+        work.angleMax = hi;
+      } else
+        why = "spectatorAngles='" + value +
+              "': expected thmin-thmax (lab polar angles of the spectator to the beam, degrees, 0 <= thmin "
+              "<= thmax <= 180), cm:thmin-thmax (c.m.), table:<file> or cm:table:<file> (angle, acceptance)";
+    } else if (key == "spectatorAngleNodes") {
+      if (!ReadWholeInt(value, work.angleNodes) || work.angleNodes < 1 || work.angleNodes > 64)
+        why = "spectatorAngleNodes='" + value + "': expected a whole number of Gauss-Legendre nodes, 1 to 64";
+    } else if (key == "cbackground") {
+      why = ParseThmCoherentBackground(value, work.cbackground);
+    } else if (key == "vertexModel") {
+      if (value == "pw")
+        work.vertexDW = false;
+      else if (value == "dw")
+        work.vertexDW = true;
+      else
+        why = "vertexModel='" + value + "': expected pw or dw";
+    } else {
+      why = "unknown key '" + key +
+            "' (keys: segments, background, beam, target, spectator, Ebeam, lineshape, ps, psNodes, "
+            "distortion, opticalAA, opticalSF, spectatorAngle, distortionRef, distortionRatio, boundState, "
+            "theta, vertexModel, spectatorAngles, spectatorAngleNodes, cbackground)";
+    }
+    if (!why.empty()) return where + why;
+    work.keys.push_back(key);
+  }
+  if (count == 0) return where + "no key=value given";
+  if (x)
+    *x = work;
+  else
+    experiments.push_back(work);
+  return "";
+}
+
+std::string CheckThmExperiments(const std::vector<ThmExperiment> &experiments) {
+  std::map<int, std::string> owner;
+  for (const ThmExperiment &x : experiments) {
+    std::string where = "experiment[" + x.name + "]: ";
+    auto has = [&](const char *key) { return std::find(x.keys.begin(), x.keys.end(), key) != x.keys.end(); };
+    if (!has("segments")) return where + "segments= is required";
+    int kin = has("beam") + has("target") + has("spectator") + has("Ebeam");
+    if (kin != 0 && kin != 4) return where + "beam, target, spectator and Ebeam go together (all four or none)";
+    if (x.lineshape && kin != 4)
+      return where + "lineshape=on needs the kinematics of the reaction: beam, target, spectator and Ebeam";
+    // N_C carries (E_lambda - E - i Gamma/2)^(-i zeta): its energy unit is a
+    // common phase only while every term of the amplitude carries it.  The
+    // background c(E) does not, and zeta varies with E, so the model would
+    // depend on the unit (MeV vs keV moves the relative phase by
+    // zeta(E) ln 1000, ~1.4 rad across the 12C(14N,d) data).
+    if (x.lineshape && !x.cbackground.empty())
+      return where + "lineshape=on and cbackground= cannot be combined: the Coulomb line shape N_C multiplies "
+                     "the level amplitudes only, and its phase (E_lambda - E - i Gamma/2)^(-i zeta) depends on the "
+                     "energy unit unless every term of the amplitude carries it";
+    if (x.psKind != ThmExperiment::PS_DELTA && kin != 4)
+      return where + "a ps window (ps=hulthen|gauss|table) needs the kinematics of the reaction: beam, target, "
+                     "spectator and Ebeam (mu_sx and the spectator momenta reached at each energy)";
+    if (has("psNodes") && x.psKind == ThmExperiment::PS_DELTA)
+      return where + "psNodes= needs a ps window (ps=hulthen|gauss|table)";
+    const bool computed = x.distortion == ThmExperiment::DIST_COULOMB || x.distortion == ThmExperiment::DIST_OPTICAL;
+    if (computed && kin != 4)
+      return where + "distortion=" + (x.distortion == ThmExperiment::DIST_COULOMB ? "coulomb" : "optical") +
+             " needs the kinematics of the reaction: beam, target, spectator and Ebeam";
+    if ((has("opticalAA") || has("opticalSF")) && x.distortion != ThmExperiment::DIST_OPTICAL)
+      return where + "opticalAA= and opticalSF= need distortion=optical";
+    for (const char *key : {"spectatorAngle", "distortionRef", "distortionRatio", "boundState"})
+      if (has(key) && !computed)
+        return where + key + "= needs distortion=coulomb or distortion=optical";
+    if (x.vertexDW) {
+      if (!computed)
+        return where + "vertexModel=dw builds the vertex from the distorted waves of a + A and s + F: it needs "
+                       "distortion=coulomb or distortion=optical (and the kinematics)";
+      for (const char *key : {"distortionRef", "distortionRatio"})
+        if (has(key))
+          return where + key + "= belongs to the distortion factor R(E), which vertexModel=dw replaces (R is "
+                               "not applied; the DW vertex carries the energy dependence)";
+      if (x.hasTheta)
+        return where + "theta= (fixed-angle observable) is not available with vertexModel=dw: the distorted "
+                       "source has every m_l about p_xA, which the fixed-angle sum does not carry";
+    }
+    // The acceptance (docs "Experimental acceptance"): at fixed E the
+    // spectator direction fixes |p_s|, so ps= (a |p_s| cut with the momentum
+    // distribution) and spectatorAngles= (the accepted directions) describe
+    // one set of directions; R(E), the DW vertex and, with a distribution,
+    // the plane-wave vertex are averaged over it.  A ps window alone is every
+    // direction with |p_s| inside it.
+    const bool window = x.angleWindow || x.psKind != ThmExperiment::PS_DELTA;
+    if (window && has("spectatorAngle"))
+      return where + std::string(x.angleWindow ? "spectatorAngle= (one direction) and spectatorAngles= (a window) "
+                                                 "exclude each other"
+                                               : "spectatorAngle= (one direction) and a ps window exclude each "
+                                                 "other: the window accepts every direction whose |p_s| lies in "
+                                                 "it (write spectatorAngles=cm:t-t for one direction with the cut)");
+    if (x.angleWindow) {
+      if (!computed && x.psKind == ThmExperiment::PS_DELTA)
+        return where + "spectatorAngles= averages over the accepted spectator directions the plane-wave vertex "
+                       "(with the momentum distribution of ps=hulthen|gauss|table), or R(E) and the DW vertex "
+                       "(distortion=coulomb|optical); with neither it has nothing to average";
+      if (has("psNodes"))
+        return where + "with spectatorAngles= the nodes are spectatorAngleNodes= (per c.m. interval); psNodes= "
+                       "is the node count of a ps window without spectatorAngles=";
+    } else if (has("spectatorAngleNodes"))
+      return where + "spectatorAngleNodes= needs a spectator-direction window (spectatorAngles=)";
+    // The momentum distribution once: a ps window averages the model with the
+    // event weight |phi(p_s)|^2 d cos(theta_cm) of data divided by |phi|^2; R with
+    // distortionRatio=dw is |M|^2 itself, which carries |phi(q(E))|^2 again.
+    if (computed && !x.vertexDW && x.psKind != ThmExperiment::PS_DELTA && !x.distortionRatioPW)
+      return where + "distortionRatio=dw multiplies the model by |M|^2, which carries the momentum "
+                     "distribution |phi(q)|^2 at the spectator direction; a ps window already weights the "
+                     "model with |phi(p_s)|^2 of data divided by it, so it would count twice. Use "
+                     "distortionRatio=dwpw (the default) with a window";
+    for (int k : x.segments) {
+      auto it = owner.find(k);
+      if (it != owner.end()) {
+        std::ostringstream why;
+        why << where << "segment " << k << " is already in experiment[" << it->second << "]";
+        return why.str();
+      }
+      owner[k] = x.name;
+    }
+  }
+  return "";
+}
+
+std::string CheckThmDwVertexOptions(bool coherentL, double spectatorEnergy, int pairKey) {
+  if (coherentL)
+    return "vertexModel=dw sums the entrance partial waves (and their projections) incoherently, as the "
+           "angle-integrated observable requires; entranceL=coherent cannot be combined with it.";
+  if (spectatorEnergy != 0.0) {
+    std::ostringstream why;
+    why << "with vertexModel=dw the spectator kinematics come from Ebeam and the spectator direction; "
+           "spectatorEnergy for entrance pair "
+        << pairKey << " must be 0.";
+    return why.str();
+  }
+  return "";
+}
+
+std::string CheckThmCoulombConsistency(const std::vector<ThmExperiment> &experiments, bool coulombIntegral,
+                                       std::vector<std::string> *warnings) {
+  if (!coulombIntegral) return "";
+  for (const ThmExperiment &x : experiments) {
+    std::string where = "experiment[" + x.name + "]: ";
+    if (x.vertexDW)
+      return where + "vertexModel=dw is the surface term of the DWBA vertex; its external part (the three-body "
+                     "remnant outside the channel radius, whose plane-wave limit is the Coulomb term C_l) is not "
+                     "computed, so it cannot be combined with coulombIntegral=1.";
+    const bool distortedAA = x.distortion == ThmExperiment::DIST_COULOMB ||
+                             (x.distortion == ThmExperiment::DIST_OPTICAL && x.opticalAA.kind != 0);
+    if (distortedAA)
+      return where + "coulombIntegral=1 adds the x-A Coulomb interaction outside the channel radius (C_l) to "
+                     "the vertex, and the a + A Coulomb wave of the distortion factor R(E) already contains it "
+                     "(Z_a = Z_x + Z_s; in the zero range of R the prior operator V_xA + V_sA - U_aA outside the "
+                     "radius vanishes), so it would be counted twice. Use coulombIntegral=0 with distortion=" +
+             std::string(x.distortion == ThmExperiment::DIST_COULOMB ? "coulomb" : "optical") +
+             ", or opticalAA=plane.";
+    if (x.distortion == ThmExperiment::DIST_TABLE && warnings)
+      warnings->push_back(where + "coulombIntegral=1 with distortion=table: if the table is a DWBA with a "
+                                  "distorted a + A wave, its a + A Coulomb interaction already contains the "
+                                  "x-A Coulomb term C_l, which is then counted twice.");
+  }
+  return "";
+}
+
+std::string ReadThmAngleTable(const std::string &path, std::vector<double> &theta, std::vector<double> &w) {
+  theta.clear();
+  w.clear();
+  std::ifstream in(path.c_str());
+  if (!in) return "cannot read the angle table '" + path + "'";
+  std::string line;
+  int lineNumber = 0;
+  double total = 0.0;
+  while (std::getline(in, line)) {
+    lineNumber++;
+    size_t hash = line.find('#');
+    if (hash != std::string::npos) line = line.substr(0, hash);
+    if (line.find_first_not_of(" \t\r\n") == std::string::npos) continue;
+    std::istringstream ls(line);
+    double tv, wv;
+    std::string extra;
+    std::ostringstream where;
+    where << "'" << path << "' line " << lineNumber << ": ";
+    if (!(ls >> tv >> wv) || (ls >> extra))
+      return where.str() + "expected two numbers, the angle (deg) and the acceptance";
+    if (!std::isfinite(tv) || !std::isfinite(wv) || tv < 0.0 || tv > 180.0 || wv < 0.0)
+      return where.str() + "the angle must be 0-180 deg and the acceptance finite and >= 0";
+    if (!theta.empty() && !(tv > theta.back())) return where.str() + "the angles must be strictly increasing";
+    theta.push_back(tv);
+    w.push_back(wv);
+    total += wv;
+  }
+  if (theta.size() < 2) return "'" + path + "' needs at least two rows (angle acceptance)";
+  if (!(total > 0.0)) return "'" + path + "': every acceptance is zero";
+  return "";
+}
+
+std::string ReadThmPsTable(const std::string &path, std::vector<double> &p, std::vector<double> &w) {
+  p.clear();
+  w.clear();
+  std::ifstream in(path.c_str());
+  if (!in) return "cannot read the ps table '" + path + "'";
+  std::string line;
+  int lineNumber = 0;
+  double total = 0.0;
+  while (std::getline(in, line)) {
+    lineNumber++;
+    size_t hash = line.find('#');
+    if (hash != std::string::npos) line = line.substr(0, hash);
+    if (line.find_first_not_of(" \t\r\n") == std::string::npos) continue;
+    std::istringstream ls(line);
+    double pv, wv;
+    std::string extra;
+    std::ostringstream where;
+    where << "'" << path << "' line " << lineNumber << ": ";
+    if (!(ls >> pv >> wv) || (ls >> extra)) return where.str() + "expected two numbers, p_s (MeV/c) and |phi(p_s)|^2";
+    if (!std::isfinite(pv) || !std::isfinite(wv) || pv < 0.0 || wv < 0.0)
+      return where.str() + "p_s and |phi|^2 must be finite and >= 0";
+    if (!p.empty() && !(pv > p.back())) return where.str() + "p_s must be strictly increasing";
+    p.push_back(pv);
+    w.push_back(wv);
+    total += wv;
+  }
+  if (p.size() < 2) return "'" + path + "' needs at least two rows (p_s |phi|^2)";
+  if (!(total > 0.0)) return "'" + path + "': |phi|^2 is zero in every row";
+  return "";
+}
+
+// ---------------------------------------------------------------------------
+// The linear profile
+
+namespace {
+
+// Inverse of a symmetric positive-definite q x q matrix (q <= 4), by Cholesky
+// on the Jacobi-scaled matrix (unit diagonal), so that the columns' units
+// (the model, 1, E, E^2) do not matter.  False if it is not positive definite
+// to working precision.
+bool InvertSPD(const std::vector<double> &Gin, int q, std::vector<double> &inv) {
+  std::vector<double> dscale(q), G(q * q), L(q * q, 0.0);
+  for (int i = 0; i < q; i++) {
+    if (!(Gin[i * q + i] > 0.0) || !std::isfinite(Gin[i * q + i])) return false;
+    dscale[i] = 1.0 / std::sqrt(Gin[i * q + i]);
+  }
+  for (int i = 0; i < q; i++)
+    for (int j = 0; j < q; j++) G[i * q + j] = Gin[i * q + j] * dscale[i] * dscale[j];
+  for (int j = 0; j < q; j++) {
+    double sum = G[j * q + j];
+    for (int k = 0; k < j; k++) sum -= L[j * q + k] * L[j * q + k];
+    if (!(sum > 1.0e-12)) return false;  // singular (collinear columns) to working precision
+    L[j * q + j] = std::sqrt(sum);
+    for (int i = j + 1; i < q; i++) {
+      double s = G[i * q + j];
+      for (int k = 0; k < j; k++) s -= L[i * q + k] * L[j * q + k];
+      L[i * q + j] = s / L[j * q + j];
+    }
+  }
+  // inv(G) = L^-T L^-1, column by column.
+  inv.assign(q * q, 0.0);
+  for (int c = 0; c < q; c++) {
+    std::vector<double> y(q, 0.0), x(q, 0.0);
+    for (int i = 0; i < q; i++) {
+      double s = (i == c) ? 1.0 : 0.0;
+      for (int k = 0; k < i; k++) s -= L[i * q + k] * y[k];
+      y[i] = s / L[i * q + i];
+    }
+    for (int i = q - 1; i >= 0; i--) {
+      double s = y[i];
+      for (int k = i + 1; k < q; k++) s -= L[k * q + i] * x[k];
+      x[i] = s / L[i * q + i];
+    }
+    for (int i = 0; i < q; i++) inv[i * q + c] = x[i] * dscale[i] * dscale[c];
+  }
+  return true;
+}
+
+// Column j of the design matrix at a point: the model, then 1, E, E^2.
+inline double Column(int j, bool withModel, double m, double energy) {
+  if (withModel) {
+    if (j == 0) return m;
+    j--;
+  }
+  return j == 0 ? 1.0 : j == 1 ? energy : energy * energy;
+}
+
+}  // namespace
+
+double ThmProfile::Background(double energy) const {
+  if (terms == 0) return 0.0;
+  double b = a[0] + (terms > 1 ? a[1] * energy : 0.0) + (terms > 2 ? a[2] * energy * energy : 0.0);
+  return b / s;
+}
+
+double ThmProfile::Residual(double m, double d, double e, double energy) const {
+  if (e == 0.0) return 0.0;
+  return (s * m + s * Background(energy) - d) / e;
+}
+
+void ThmProfile::Reported(double value[4], double covariance[16]) const {
+  value[0] = 1.0 / s;
+  for (int k = 0; k < 3; k++) value[k + 1] = k < terms ? a[k] / s : 0.0;
+  for (int i = 0; i < 16; i++) covariance[i] = 0.0;
+  // Rows of d(n, b0, b1, b2)/d(c), c the profiled coefficients.
+  const int q = (scaleProfiled ? 1 : 0) + (backgroundProfiled ? terms : 0);
+  if (q == 0 || (int)cov.size() != q * q) return;
+  std::vector<double> T(4 * q, 0.0);
+  int col = 0;
+  if (scaleProfiled) {
+    T[0 * q + col] = -1.0 / (s * s);
+    for (int k = 0; k < terms; k++) T[(k + 1) * q + col] = -a[k] / (s * s);
+    col++;
+  }
+  if (backgroundProfiled)
+    for (int k = 0; k < terms; k++) T[(k + 1) * q + col + k] = 1.0 / s;
+  for (int i = 0; i < 4; i++)
+    for (int j = 0; j < 4; j++) {
+      double sum = 0.0;
+      for (int u = 0; u < q; u++)
+        for (int v = 0; v < q; v++) sum += T[i * q + u] * cov[u * q + v] * T[j * q + v];
+      covariance[i * 4 + j] = sum;
+    }
+}
+
+ThmProfile SolveThmProfile(const std::vector<double> &m, const std::vector<double> &d,
+                           const std::vector<double> &e, const std::vector<double> &energy, int terms) {
+  ThmProfile p;
+  p.terms = terms;
+  const size_t n = m.size();
+  for (size_t i = 0; i < n; i++)
+    if (e[i] != 0.0) p.points++;
+
+  // Normal equations over the columns in use; `withModel` includes the model.
+  auto solve = [&](bool withModel, std::vector<double> &c, std::vector<double> &cov) -> bool {
+    const int q = (withModel ? 1 : 0) + terms;
+    if (q == 0) return false;
+    std::vector<double> G(q * q, 0.0), h(q, 0.0), col(q);
+    for (size_t i = 0; i < n; i++) {
+      if (e[i] == 0.0) continue;
+      const double w = 1.0 / (e[i] * e[i]);
+      // Without the model column the target is d - m (s fixed at 1).
+      const double y = withModel ? d[i] : d[i] - m[i];
+      for (int j = 0; j < q; j++) col[j] = Column(j, withModel, m[i], energy[i]);
+      for (int j = 0; j < q; j++) {
+        h[j] += col[j] * y * w;
+        for (int k = 0; k < q; k++) G[j * q + k] += col[j] * col[k] * w;
+      }
+    }
+    if (!InvertSPD(G, q, cov)) return false;
+    c.assign(q, 0.0);
+    for (int j = 0; j < q; j++)
+      for (int k = 0; k < q; k++) c[j] += cov[j * q + k] * h[k];
+    return true;
+  };
+
+  std::vector<double> c, cov;
+  if (terms == 0) {
+    // The model column alone: s = S_md/S_mm, as ESegment::ProfileNormChiSquared.
+    double Smm = 0.0, Smd = 0.0;
+    for (size_t i = 0; i < n; i++) {
+      if (e[i] == 0.0) continue;
+      const double w = 1.0 / (e[i] * e[i]);
+      Smm += m[i] * m[i] * w;
+      Smd += m[i] * d[i] * w;
+    }
+    if (Smd > 0.0 && Smm > 0.0) {
+      p.s = Smd / Smm;
+      p.cov.assign(1, 1.0 / Smm);
+    } else {
+      p.scaleProfiled = false;
+      p.s = 1.0;
+      p.status = "degenerate: no positive model-data overlap, norm left at 1";
+    }
+    p.backgroundProfiled = false;
+  } else if (solve(true, c, cov) && c[0] > 0.0) {
+    p.s = c[0];
+    for (int k = 0; k < terms; k++) p.a[k] = c[k + 1];
+    p.cov = cov;
+  } else {
+    p.scaleProfiled = false;
+    p.s = 1.0;
+    if (solve(false, c, cov)) {
+      for (int k = 0; k < terms; k++) p.a[k] = c[k];
+      p.cov = cov;
+      p.status = "degenerate: model and background cannot both be profiled (singular, or n <= 0); "
+                 "norm left at 1, background profiled";
+    } else {
+      p.backgroundProfiled = false;
+      p.status = "degenerate: too few points or collinear background terms; norm left at 1, no background";
+    }
+  }
+  p.chi2 = 0.0;
+  for (size_t i = 0; i < n; i++) {
+    double r = p.Residual(m[i], d[i], e[i], energy[i]);
+    p.chi2 += r * r;
+  }
+  return p;
+}
+
+void ThmProfileDerivative(const ThmProfile &p, const std::vector<double> &m, const std::vector<double> &d,
+                          const std::vector<double> &e, const std::vector<double> &energy,
+                          const std::vector<double> &Jm, int nCols, std::vector<double> &J,
+                          std::vector<double> &G) {
+  const size_t n = m.size();
+  J.assign(n * nCols, 0.0);
+  G.assign(n * nCols, 0.0);
+  const bool withModel = p.scaleProfiled;
+  const int q = (withModel ? 1 : 0) + (p.backgroundProfiled ? p.terms : 0);
+  // Coefficients in the order of the profiled columns, and the fixed scale.
+  std::vector<double> c;
+  if (withModel) c.push_back(p.s);
+  if (p.backgroundProfiled)
+    for (int k = 0; k < p.terms; k++) c.push_back(p.a[k]);
+  const double s = p.s;
+  std::vector<double> rho(n, 0.0);  // y~ - A~ c = -r
+  for (size_t i = 0; i < n; i++) rho[i] = -p.Residual(m[i], d[i], e[i], energy[i]);
+
+  std::vector<double> v(q), dc(q);
+  for (int col = 0; col < nCols; col++) {
+    // v = (dA~)^T rho - A~^T (dA~) c, dA~ = [Jm/e, 0, ...]; (dA~) c = s Jm/e.
+    std::fill(v.begin(), v.end(), 0.0);
+    for (size_t i = 0; i < n; i++) {
+      if (e[i] == 0.0) continue;
+      const double jt = Jm[i * nCols + col] / e[i];
+      if (withModel) v[0] += jt * rho[i];
+      for (int j = 0; j < q; j++) v[j] -= Column(j, withModel, m[i], energy[i]) / e[i] * s * jt;
+    }
+    for (int j = 0; j < q; j++) {
+      dc[j] = 0.0;
+      for (int k = 0; k < q; k++) dc[j] += p.cov[j * q + k] * v[k];
+    }
+    for (size_t i = 0; i < n; i++) {
+      // d f_i/dp = s Jm_i + sum_j A_ij dc_j (unwhitened), f the curve on the data scale.
+      double df = s * Jm[i * nCols + col];
+      for (int j = 0; j < q; j++) df += Column(j, withModel, m[i], energy[i]) * dc[j];
+      if (e[i] != 0.0) J[i * nCols + col] = df / e[i];
+      G[i * nCols + col] = df / s;
+    }
+  }
+}

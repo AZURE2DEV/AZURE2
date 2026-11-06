@@ -41,7 +41,8 @@ enum class ParamKind {
   Screening,        ///< electron-screening potential U_e (eV) of a <targetInt> line with a screening block
   Density,          ///< fitted areal density (atoms/cm^2) of a <targetInt> line or density group (densityfit)
   Doppler,          ///< fitted free-gas Doppler temperature (K) of a <targetInt> line ('doppler T vary sigma')
-  Thickness         ///< fitted sample thickness (atoms/barn) of a transmission / yield segment ('transmission n vary sigma')
+  Thickness,        ///< fitted sample thickness (atoms/barn) of a transmission / yield segment ('transmission n vary sigma')
+  ThmCoherent       ///< Re or Im of a THM coherent-background amplitude (cbackground=)
 };
 
 /// Description of one entry in the full (unfiltered) flat parameter vector.
@@ -49,7 +50,7 @@ struct ParamDesc {
   ParamKind kind;
   int jGroup;   ///< 1-based JGroup index   (LevelEnergy/Gamma only, else -1)
   int level;    ///< 1-based level index    (LevelEnergy/Gamma only, else -1)
-  int channel;  ///< 1-based channel index  (Gamma only, else -1)
+  int channel;  ///< 1-based channel index  (Gamma; ThmCoherent: its 1-based index in that block; else -1)
   int segment;  ///< 1-based segment index  (Norm/EnergyShift/EnergyShiftSqrt only, else -1)
   bool fixed;   ///< whether this parameter is fixed (excluded from packed vector)
   int nucleus = -1;  ///< 1-based compound nucleus (Abundance only, else -1)
@@ -72,6 +73,7 @@ struct ParamDesc {
  *   - the sqrt(E) energy-shift coefficients (starting at energyShiftSqrtOffset)
  *   - the shift-function parameters a0.. of each segment declaring a "shiftfn" block,
  *     in segment order (starting at energyShiftFnOffset; none without such a block)
+ *   - the THM coherent-background parameters (cbackground=; none without it)
  *
  * "Full" indices run over every entry above (matching the `all_rwa_` vector in
  * AZUREAPI).  The "packed" index is the position within the non-fixed subset
@@ -333,11 +335,17 @@ bool AccumulateEGammaGradient(CNuc *compound, EData *data, const Config &config,
  * finite differences on the residual vector this function returns (see
  * AZUREAPI::CalculateResidualJacobianRWA).  Returns false if any point is
  * outside the supported analytic path.
+ *
+ * THM (HOES) segments are outside it: by default their presence returns false.
+ * With skipTHM their rows are still assigned (in segment order, like every other
+ * row) but left zero, for a caller that fills them itself -- AZUREAPI does, with
+ * the profiled norm (see ComputeTHMRows).
  */
 bool ComputeResidualJacobian(CNuc *compound, EData *data, const Config &config,
                              const ParamIndexMap &pmap,
                              const vector_matrix_r *shiftDeriv,
-                             vector_r &residuals, vector_r &jacobian, int &nCols);
+                             vector_r &residuals, vector_r &jacobian, int &nCols,
+                             bool skipTHM = false);
 
 /// How many energy-shift columns FillShiftColumns differenced, and how.
 struct ShiftColumnCount {
@@ -378,11 +386,64 @@ ShiftColumnCount FillShiftColumns(CNuc *compound, EData *data, const Config &con
  *        (E, gamma) columns are populated (dT/dn = dT/dshift = 0).  Each row is
  *        one adjoint with cotangent 1.  `compound`/`data` must be best-fit-filled.
  *        Returns false (clearing the output) if any point is outside the analytic
- *        path, so the caller can skip the band.
+ *        path, so the caller can skip the band.  With skipTHM the rows of THM
+ *        (HOES) points are left zero for the caller to fill (the adjoint
+ *        differentiates the T-matrix observable, not the HOES one).
  */
 bool ComputeModelGradients(CNuc *compound, EData *data, const Config &config,
                            const ParamIndexMap &pmap,
                            const vector_matrix_r *shiftDeriv,
-                           std::map<EPoint *, vector_r> &gradByPoint);
+                           std::map<EPoint *, vector_r> &gradByPoint,
+                           bool skipTHM = false);
+
+/// True when AZURE2_THM_FD is set (and not empty or "0"): THM (HOES) model
+/// derivatives by central differences, as before the HOES adjoint -- for
+/// testing the analytic path against.
+bool ThmFiniteDifferencesRequested();
+
+/// THM (HOES) rows of one THM segment: model, residuals and their parameter
+/// derivatives with the segment norm profiled (see ComputeTHMRows).
+struct THMRows {
+  int segment = 0;       ///< 1-based segment index
+  int firstRow = 0;      ///< row of its first point in the global residual vector
+  vector_r m;            ///< model per point
+  vector_r r;            ///< standardized residual per point
+  vector_r Jm;           ///< d m / d p, row-major nPoints x nCols (E, gamma columns)
+  vector_r J;            ///< d r / d p, row-major nPoints x nCols
+  double s = 1.0;        ///< scale on the model, 1/n (n* = S_mm/S_md when profiled)
+  bool profiled = false; ///< s follows the parameters (profiled, non-degenerate norm)
+  vector_r ds;           ///< d s / d p per packed column (zero unless profiled)
+  /// Segments of a THM experiment (<thm> experiment[...], profiled jointly
+  /// with a shared norm and background): the band rows d q/d p of the curve
+  /// the output shows, q = f(p)/s(p0), nPoints x nCols (ThmProfileDerivative).
+  /// Empty otherwise, where the band row is J_m + m (ds/dp)/s.  ds is then zero
+  /// and J carries the whole derivative through the profile.
+  vector_r G;
+};
+
+/*!
+ * \brief THM (HOES) rows for every THM segment, at the parameters `full`.
+ *
+ * THM points are outside the T-matrix adjoint; their model Jacobian J_m (level
+ * energies, reduced widths, THM coherent backgrounds) comes from the HOES
+ * adjoint, THMMatrixFunc::THMPointAdjoint, one sweep per point -- or from
+ * central differences (h = 1e-6 (|x| + 1)) with AZURE2_THM_FD=1, or for a
+ * configuration the adjoint does not cover (a THM segment with components, a
+ * target effect with an automatic tolerance, RMC); norm and energy-shift columns are
+ * left zero (a caller differences shifts on the whole residual vector).  The
+ * residual of a point of a profiled segment is r_i = (s m_i - d_i)/e_i with
+ * s = 1/n* = S_md/S_mm, a function of the parameters; its derivative is taken
+ * analytically:
+ *   d r_i/dp = (s J_mi + m_i ds/dp)/e_i,
+ *   ds/dp    = (sum_k d_k J_mk/e_k^2 - 2 s sum_k m_k J_mk/e_k^2) / S_mm.
+ * (A fixed THM norm, or a degenerate profile, has ds/dp = 0.)  The segments
+ * of a THM experiment are profiled together, norm and background, and their J
+ * (and band rows G) come from ThmProfileDerivative.  `full` is the
+ * full (Minuit-ordered) parameter vector of `pmap`.  The compound/data are left
+ * filled at `full`, each THM point's fit cross section set to its model and a
+ * profiled segment's norm to n*.
+ */
+std::vector<THMRows> ComputeTHMRows(CNuc *compound, EData *data, const Config &config,
+                                    const vector_r &full, const ParamIndexMap &pmap);
 
 #endif

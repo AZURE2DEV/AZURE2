@@ -1,5 +1,6 @@
 #include "Kinematics.h"
 #include "ECIntegral.h"
+#include "ChannelFunc.h"
 #include "AngCoeff.h"
 #include "EffectiveCharge.h"
 #include "Config.h"

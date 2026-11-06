@@ -280,6 +280,29 @@ int main(int argc, char** argv) {
     }
   }
 
+  // 13. A sigma or density whose round-trip text fills the 15-wide column (17
+  //     digits, as Python writes 0.1 + 0.2) keeps a space before the next field.
+  QString longNumbers =
+      "1 \"1\" 50 1 0.30000000000000004 1 0.12345678901234566 \"\" 0 0 0 0 \"\" 0 0 0.04 5 50\n</targetInt>\n";
+  // Left-aligned, as AZURESetup::writeConfig leaves the project stream.
+  QString outLong;
+  {
+    tab.reset();
+    QString in(longNumbers);
+    QTextStream inStream(&in);
+    readOk = tab.readFile(inStream);
+    QTextStream outStream(&outLong);
+    outStream.setFieldAlignment(QTextStream::AlignLeft);
+    tab.writeFile(outStream);
+  }
+  ok("read a line with 17-digit numbers", readOk);
+  ok("sigma and the next field stay two tokens", outLong.contains("0.30000000000000004 "), outLong);
+  ok("density and the next field stay two tokens", outLong.contains("0.12345678901234566 "), outLong);
+  bool readOkLong = false;
+  QString outLongB = roundTrip(tab, outLong + "</targetInt>\n", readOkLong);
+  lines = tab.getTargetIntModel()->getLines();
+  ok("re-read: sigma exact", readOkLong && lines.size() == 1 && lines.at(0).sigma == 0.30000000000000004, outLongB);
+
   // Electron screening: the block round-trips wherever it sits (pyazr writes it after udr), is written
   // before the blocks that run to the end of the line, and the adiabatic limit follows NIST binding energies.
   {

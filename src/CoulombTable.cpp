@@ -1,4 +1,5 @@
 #include "CoulombTable.h"
+#include "GSLException.h"
 
 #include <algorithm>
 #include <cmath>
@@ -216,10 +217,12 @@ double CoulombTable::ExactBound(int l, double etaB, double rhoB) {
   const double z = 2.0 * rhoB;
   const double a = l + 1.0 + etaB, b = 2.0 * l + 2.0;
   gsl_sf_result_e10 u0, u1;
-  gsl_error_handler_t *old = gsl_set_error_handler_off();
-  int s0 = gsl_sf_hyperg_U_e10_e(a, b, z, &u0);
-  int s1 = gsl_sf_hyperg_U_e10_e(a + 1.0, b + 1.0, z, &u1);
-  gsl_set_error_handler(old);
+  int s0, s1;
+  {
+    GslQuiet quiet;  // a process-wide handler swap is not thread-safe (GSLException.h)
+    s0 = gsl_sf_hyperg_U_e10_e(a, b, z, &u0);
+    s1 = gsl_sf_hyperg_U_e10_e(a + 1.0, b + 1.0, z, &u1);
+  }
   if (s0 != GSL_SUCCESS || s1 != GSL_SUCCESS || u0.val == 0.0) return std::nan("");
   const double ratio = (u1.val / u0.val) * std::pow(10.0, double(u1.e10 - u0.e10));
   // S = z dlnW/dz with W = exp(-z/2) z^(l+1) U(a, b, z), U' = -a U(a+1, b+1, z)

@@ -28,11 +28,13 @@ struct BandCovariance {
   int size() const { return (int)M.size(); }
 };
 
-/// Packed-column indices of a pmap that correspond to R-matrix parameters (level
-/// energies and reduced widths) -- the only parameters a cross-section band is
-/// sensitive to (dT/dn = dT/dshift = 0).  Normalizations and energy shifts are
-/// excluded, so the band covariance and covariance.dat span just these columns.
-std::vector<int> RMatrixPackedColumns(const ParamIndexMap &pmap);
+/// Packed-column indices of a pmap that the model depends on: the R-matrix
+/// parameters (level energies and reduced widths) and the THM coherent
+/// background (cbackground=, which enters the HOES amplitude).  Normalizations
+/// and energy shifts are excluded (dT/dn = dT/dshift = 0), so the band
+/// covariance and covariance.dat span just these columns -- the R-matrix ones
+/// alone for a project without cbackground=.
+std::vector<int> BandPackedColumns(const ParamIndexMap &pmap);
 
 /// Densify the R-matrix sub-block of Minuit's packed lower-triangular covariance
 /// (Data()) into a BandCovariance, using pmap for the column identities.  Norm
@@ -50,7 +52,7 @@ bool SaveBandCovariance(const std::string &path, const BandCovariance &cov);
 /// Read a covariance matrix from file; false if it cannot be read.
 bool LoadBandCovariance(const std::string &path, BandCovariance &cov);
 
-/// Project a saved covariance onto pmap's R-matrix columns (RMatrixPackedColumns
+/// Project a saved covariance onto pmap's R-matrix columns (BandPackedColumns
 /// order).  If the saved covariance carries column identities (same run) they are
 /// matched by identity, leaving unmatched entries zero.  If it was loaded from
 /// covariance.dat (no identities) its columns are assumed already in R-matrix
@@ -59,7 +61,7 @@ std::vector<std::vector<double>> RemapCovarianceToParamMap(const BandCovariance 
                                                            const ParamIndexMap &pmap);
 
 /// Inputs for the cross-section band: covariance M and per-point sensitivities
-/// grad[point], both in R-matrix column order (RMatrixPackedColumns; norms and
+/// grad[point], both in R-matrix column order (BandPackedColumns; norms and
 /// energy shifts excluded).  dXS(g) = sqrt(g^T M g) (SAMMY Eq. IV E4.2); sum
 /// gradient rows first to combine correlated points.
 struct BandData {
@@ -71,8 +73,14 @@ struct BandData {
 };
 
 /// Build a BandData from savedCov for the current (best-fit-filled) compound/data.
-/// False if the analytic sensitivities are unavailable for this model.
+/// False if the analytic sensitivities are unavailable for this model.  THM
+/// (HOES) points get g = J_m + m (ds/dp)/s from ComputeTHMRows (central
+/// differences of the HOES model plus the profiled scale s = 1/n*): the band of
+/// the model as it lies against the data scaled by n*.
+/// `fixedMask` (Minuit order) is the fixed set of the fit -- including an
+/// external param.par's "fixed" flags; null takes the .azr's alone.
 bool BuildBandData(CNuc *compound, EData *data, const Config &config,
-                   const BandCovariance &savedCov, BandData &out);
+                   const BandCovariance &savedCov, BandData &out,
+                   const std::vector<bool> *fixedMask = nullptr);
 
 #endif

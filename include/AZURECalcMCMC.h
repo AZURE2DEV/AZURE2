@@ -7,6 +7,7 @@
 #include <memory>
 #include <mutex>
 #include <stack>
+#include <string>
 
 class Config;
 class EData;
@@ -63,12 +64,15 @@ class AZURECalcMCMC {
   enum ParamKind { PARAM_ENERGY = 0,
                    PARAM_WIDTH = 1,
                    PARAM_NORM = 2,
-                   PARAM_SHIFT = 3,
-                   PARAM_ABUNDANCE = 5,
-                   PARAM_SCREENING = 7,
-                   PARAM_DENSITY = 8,
-                   PARAM_DOPPLER = 9,
-                   PARAM_THICKNESS = 10 };
+                   PARAM_SHIFT = 3,         // also a shift-function parameter aj (as dev)
+                   PARAM_SHIFT_SQRT = 4,    // sqrt(E) energy-shift coefficient
+                   PARAM_ABUNDANCE = 6,     // isotopic abundance (GetParameterInfo type 6)
+                   PARAM_SCREENING = 7,     // electron-screening U_e (GetParameterInfo type 7, as dev)
+                   PARAM_DENSITY = 8,       // fitted areal density (GetParameterInfo type 8, as dev)
+                   PARAM_DOPPLER = 9,       // fitted Doppler temperature (GetParameterInfo type 9, as dev)
+                   PARAM_THICKNESS = 10,    // fitted sample thickness (GetParameterInfo type 10, as dev)
+                   PARAM_CBKG = 11 };       // THM coherent background (cbkg_*; GetParameterInfo type 11, 9 before
+                                            // the merge of dev 3264896d)
 
   /*!
    * Run MCMC sampling with specified parameters.
@@ -77,8 +81,21 @@ class AZURECalcMCMC {
    * parameters in keV.  Level energies must not be scattered by a percentage of
    * their value the way widths are: a few tens of keV of scatter puts walkers on
    * completely different resonance structures and the ensemble never contracts.
+   *
+   * The start is checked before any step: under Park's parametrization a
+   * level with J <= 0 at the starting point is named in a warning (the prior
+   * excludes J < 0, so walkers near it are rejected), and if no walker of the
+   * initial ensemble has a finite posterior probability the run is refused:
+   * such an ensemble carries no information on the posterior, every walker
+   * stays where it started unless a blind stretch move happens to land inside
+   * the support, and the "chain" would be the start repeated with acceptance
+   * 0.  A refused run writes no samples (a samples.mcmc it created is
+   * removed) and leaves walkers.mcmc alone.
+   *
+   * Returns false when the run was refused or failed, true when it ran
+   * (completed, stopped early on request, or was already complete).
    */
-  void RunMCMCSampling(int nwalkers, int nsteps, const std::vector<double> &initialParams,
+  bool RunMCMCSampling(int nwalkers, int nsteps, const std::vector<double> &initialParams,
                        std::vector<std::vector<double>> &samples, double chainSpreadPercent = 1.0, int nthreads = 1, bool useRWA = false,
                        double energySpreadKeV = 1.0) const;
 
@@ -102,7 +119,14 @@ class AZURECalcMCMC {
    * during a Minuit fit -- ((norm - nominal)/(nominal/100 * normError))^2 and
    * ((shift - nominal)/shiftError)^2 -- so a posterior mode coincides with a
    * fit minimum.  Level energies and widths are left to the user, since no
-   * error on them is implied by the data.
+   * error on them is implied by the data; so are THM coherent backgrounds
+   * (uniform unless the caller set a prior for them).
+   *
+   * Each parameter is classified by its name in the parameter vector
+   * (energy_<n>, width_<n>_<c>, segment_<k>_norm, segment_<k>_energy_shift,
+   * segment_<k>_energy_shift_sqrt, cbkg_...), so the classification has the
+   * vector's length and order whatever blocks it holds: a free THM norm is
+   * profiled and has no entry, a coherent background has one.
    *
    * Requires UpdateParameterVectors() to have run first.
    */
@@ -149,6 +173,13 @@ class AZURECalcMCMC {
   static void SetGUIResultsCallback(void (*callback)(int, int, const std::vector<std::vector<double>> &));
 
   /*!
+   * Set GUI message callback: receives the start-check report of
+   * RunMCMCSampling (a Park start with J <= 0, a refused start), which also
+   * goes to the Config output stream (std::cout in the GUI).
+   */
+  static void SetGUIMessageCallback(void (*callback)(const std::string &));
+
+  /*!
    * Returns a reference to the Config structure.
    */
   const Config &configure() const { return configure_; };
@@ -182,6 +213,16 @@ class AZURECalcMCMC {
   void UpdateParameterVectors(const vector_r &initialParams) const;
 
   /*!
+   * Park's parametrization: the R-matrix levels whose J = 1 - sum gamma^2
+   * dS/dE is not positive at the varying-parameter point \p p (RWA or
+   * physical, as \p useRWA says), each as its label with its J.  \p filled
+   * is false when the point could not be turned into a level matrix at all
+   * (a transformation that fails).
+   */
+  std::vector<std::string> ParkNonPositiveLevels(const std::vector<double> &p, bool useRWA,
+                                                 bool &filled) const;
+
+  /*!
    * Reconstruct full parameter array from varying physical parameters (for output file writing)
    */
   vector_r ReconstructFullParametersPhysical(const std::vector<double> &varyingParams) const;
@@ -213,6 +254,8 @@ class AZURECalcMCMC {
   mutable vector_r all_rwa_;
   mutable vector_r all_indexes;
   mutable std::vector<bool> fixed_;
+  // Name of every parameter (fixed or not), in the order of fixed_
+  mutable std::vector<std::string> paramNames_;
   mutable bool parametersInitialized_;
 
   // Prior information for Bayesian analysis, indexed over varying parameters

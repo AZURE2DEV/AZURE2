@@ -5,11 +5,23 @@
 #include "TargetEffect.h"
 #include "EDataIterator.h"
 #include "NodeTableCache.h"
+#include "ThmExperiment.h"
+#include <memory>
 #include <deque>
 #include <map>
 #include "DataCovariance.h"
 #include <memory>
 #include <ios>
+
+// THM types EData holds by pointer or takes by reference (EDataThm.cpp).
+struct ThmLineshape;
+struct ThmSpectatorWindow;
+struct ThmAngleWindow;
+struct ThmVertexReport;
+struct ThmLineshapeReport;
+struct ThmDistortionReport;
+class ThmDistortion;
+class ThmDwVertex;
 
 class CNuc;
 class PriorCovariance;
@@ -43,19 +55,39 @@ class EData {
   int GetNormParamOffset() const;
   /// Index at which the energy-shift parameters start in the Minuit vector.
   int GetEnergyShiftParamOffset() const;
+  /*!
+   * Explicit prior centres of normalizations and energy shifts: rows
+   *   segment_N_norm prior_centre c
+   *   segment_N_energy_shift prior_centre c
+   * of <parameterSettings> (N the segment key, the 1-based <segmentsData> line
+   * counting inactive lines).  Such a row moves only the centre of that prior
+   * (for a norm also the scale of its percentage width); the norm/shift field
+   * of the segment line stays the start value.  Without a row the field is
+   * both, as it always was.  Three-token rows are skipped by the older
+   * <parameterSettings> readers (engine and GUI), which then fall back to the
+   * field.  Returns -1 on a malformed row.
+   */
+  int ReadPriorCentres(const Config &);
   /// Index at which the sqrt(E) energy-shift coefficients start in the Minuit vector.
   int GetEnergyShiftSqrtParamOffset() const;
   /// Index at which the shift-function parameters start in the Minuit vector (after the sqrt(E)
   /// coefficients): the parameters of each segment that declares a "shiftfn" block, in segment order.
   int GetEnergyShiftFnParamOffset() const;
   /*!
-   * Electron screening.  The target effects with a `screening` block, in effect order, each with one
+   * Electron screening.  The <targetInt> lines with a `screening` block, in line order, each with one
    * parameter `screening_<n>` (n = the effect number: its place among the active <targetInt> lines),
-   * U_e in eV, after the shift-function parameters.  None without a screening block.
+   * U_e in eV, after the shift-function parameters.  None without a screening block.  A line listing
+   * several segments has one copy of its effect per segment (ReadTargetEffectsFile); the parameter is
+   * the line's, shared by every copy.
    */
   int NumScreeningParams() const { return (int)screeningEffects_.size(); }
-  /// Effect number of screening parameter k (1-based).
+  /// Effect number of screening parameter k (1-based): its place among the active <targetInt> lines.
   int GetScreeningEffect(int k) const { return screeningEffects_[k - 1]; }
+  /// The target effect of screening parameter k (the first copy of its line; every copy holds the same U_e).
+  TargetEffect *GetScreeningTargetEffect(int k) { return this->GetTargetEffect(screeningCopies_[k - 1].front()); }
+  const TargetEffect *GetScreeningTargetEffect(int k) const {
+    return const_cast<EData *>(this)->GetTargetEffect(screeningCopies_[k - 1].front());
+  }
   int GetScreeningParamOffset() const { return screeningParamOffset_; }
   /// Push each screening effect's current U_e onto the points and sub-points of its segments.
   void ApplyScreening();
@@ -67,11 +99,18 @@ class EData {
   /*!
    * Fitted target densities (TargetEffect::HasDensityFit).  One parameter `density_<n>` (atoms/cm^2) per
    * ungrouped `densityfit` line and per `densitygroup`, n = the effect number of the line (of the group's first
-   * line), after the screening parameters.  None without a densityfit block.
+   * line: its place among the active <targetInt> lines), after the screening parameters.  None without a
+   * densityfit block.  As for screening, a line listing several segments has one copy of its effect per segment;
+   * the parameter is the line's, shared by every copy.
    */
   int NumDensityParams() const { return (int)densityEffects_.size(); }
   /// Effect number of density parameter k (1-based): the line, or the first line of its group.
   int GetDensityEffect(int k) const { return densityEffects_[k - 1]; }
+  /// The target effect of density parameter k (the first copy of its line; every copy holds the same density).
+  TargetEffect *GetDensityTargetEffect(int k) { return this->GetTargetEffect(densityLeadCopies_[k - 1]); }
+  const TargetEffect *GetDensityTargetEffect(int k) const {
+    return const_cast<EData *>(this)->GetTargetEffect(densityLeadCopies_[k - 1]);
+  }
   int GetDensityParamOffset() const { return densityParamOffset_; }
   /// The density parameter (1-based) effect \p n follows, 0 if its density is not fitted.
   int DensityParamOfEffect(int n) const {
@@ -84,12 +123,18 @@ class EData {
   double DensityPenalty() const;
   /*!
    * Fitted Doppler temperatures (TargetEffect::HasDopplerFit, `doppler T vary sigma [Tmax]`).  One parameter
-   * `doppler_<n>` (K) per such line, n = the effect number of the line (its place among the active <targetInt>
-   * lines, as screening_<n>), after the density parameters.  None without the fit form.
+   * `doppler_<n>` (K) per such line, n = the line number (its place among the active <targetInt> lines, as
+   * screening_<n>), after the density parameters.  None without the fit form.
    */
   int NumDopplerParams() const { return (int)dopplerEffects_.size(); }
-  /// Effect number of Doppler parameter k (1-based).
+  /// Line number of Doppler parameter k (1-based): the n of doppler_<n>.  THM gives every segment a line lists its
+  /// own copy of the effect; the parameter moves all of them (dopplerCopies_), as screening_<n> does.
   int GetDopplerEffect(int k) const { return dopplerEffects_[k - 1]; }
+  /// The first copy of Doppler parameter k's line (its temperature, sigma and range are the line's).
+  TargetEffect *GetDopplerTargetEffect(int k) { return this->GetTargetEffect(dopplerCopies_[k - 1].front()); }
+  const TargetEffect *GetDopplerTargetEffect(int k) const {
+    return const_cast<EData *>(this)->GetTargetEffect(dopplerCopies_[k - 1].front());
+  }
   int GetDopplerParamOffset() const { return dopplerParamOffset_; }
   /// The Doppler parameter (1-based) of effect \p n, 0 if its temperature is not a fit parameter.
   int DopplerParamOfEffect(int n) const;
@@ -265,6 +310,109 @@ class EData {
   /// The segment with this key, or null if there is none.
   ESegment *GetSegmentFromKey(int);
   EData *Clone() const;
+
+  /*!
+   * A THM experiment (<thm> experiment[<name>] ..., ThmExperiment.h) as the
+   * data see it: the segments that share one profiled norm and background.
+   */
+  struct ThmGroup {
+    std::string name;
+    int terms = 0;              ///< background terms, 0..3
+    std::vector<int> segments;  ///< 1-based indices into the segments, ascending
+    /// One segment and no background: exactly the per-segment profile of
+    /// ESegment::ProfileNormChiSquared, which then handles it.
+    bool trivial = false;
+    ThmProfile profile;         ///< the last profile (ProfileThmGroup)
+    /// Coulomb line shape (lineshape=on), or null; shared with its segments.
+    std::shared_ptr<const ThmLineshape> lineshape;
+    /// Spectator-momentum window (ps=hulthen|gauss|table), or null; shared
+    /// with its segments.
+    std::shared_ptr<const ThmSpectatorWindow> window;
+    /// Distortion factor R(E) (distortion=...), or null; shared with its segments.
+    std::shared_ptr<const ThmDistortion> distortion;
+    /// Distorted-wave entrance vertex (vertexModel=dw), or null; shared with
+    /// its segments.  It replaces R(E): distortion is then null.
+    std::shared_ptr<const ThmDwVertex> dwVertex;
+    /// Angular window of the exit pair (theta=thmin-thmax), or null; shared
+    /// with its segments.
+    std::shared_ptr<const ThmAngleWindow> angle;
+    /// Entrance pair key of its segments (0 if they differ).
+    int pairKey = 0;
+    /// Coherent background (cbackground=), or null; shared with its segments.
+    std::shared_ptr<const ThmCoherentBackground> coherent;
+  };
+  /*!
+   * The fit parameters of the THM coherent backgrounds (cbackground=), the
+   * last block of the parameter vector after the energy shifts (none without
+   * the key): Re c0, Im c0 [, Re c1, Im c1] of each combination, in the order
+   * of the experiments and their terms.  `value` is the current value.
+   */
+  struct ThmCoherentParam {
+    std::string name;
+    std::string experiment;
+    double value = 0.0;
+    bool fixed = false;
+  };
+  int NumThmCoherentParams() const { return (int)thmCoherentParams_.size(); }
+  const ThmCoherentParam &GetThmCoherentParam(int k) const { return thmCoherentParams_[k]; }
+  int GetThmCoherentParamOffset() const { return thmCoherentParamOffset_; }
+  /// Reads the coherent-background block of a full parameter vector (if it
+  /// has one) into the parameters and, if given, the compound the HOES model
+  /// reads them from.  Called by FillEnergyShiftsFromParams.
+  void FillThmCoherentFromParams(const vector_r &p, CNuc *theCNuc);
+  int NumThmGroups() const { return (int)thmGroups_.size(); }
+  const ThmGroup &GetThmGroup(int g) const { return thmGroups_[g]; }
+  /// The (non-trivial) THM experiment that profiles segment i jointly with
+  /// others or with a background, or -1: then the segment is handled as
+  /// before (its own profile, or its fixed norm).  Only a segment whose norm
+  /// is profiled (ESegment::IsProfiledNorm) belongs.
+  int ThmGroupOf(int i);
+  /// Is i the last segment of group g, where its profile is taken once the
+  /// models of all its segments are in?
+  bool IsLastOfThmGroup(int g, int i);
+  /*!
+   * Profiles group g from the fit cross sections of its segments' points:
+   * stores the profile, sets every segment's norm to the shared n* and its
+   * chi^2 to that of its own points, and returns the group's chi^2.
+   */
+  double ProfileThmGroup(int g);
+  /// Standardized residuals (f - d)/e of segment i under its group's last profile, one per point.
+  void ThmGroupResiduals(int g, int i, std::vector<double> &out);
+  /// The background (model units) that the output adds to the fit cross
+  /// section of a point of segment i at c.m. energy E; 0 outside a group with one.
+  double ThmBackgroundAt(int i, double energy);
+  /// Profile of every experiment, trivial ones included, for the output and pyazr.
+  std::vector<ThmExperimentReport> ThmExperimentReports();
+  /*!
+   * The Coulomb line shape of THM experiment `name` (lineshape=on) at the
+   * c.m. energies `energies` (MeV, x + A) and the current fit parameters of
+   * `compound`: E_sF, eta_0, and per exit pair of its segments zeta, the
+   * eta_sb estimate and, per level of the J groups coupling entrance and
+   * exit, the pole and |N_C|^2.  False (and `why`) if there is no such
+   * experiment or it has no line shape.
+   */
+  bool ThmLineshapeTable(const std::string &name, const std::vector<double> &energies, CNuc *compound,
+                         const Config &configure, ThmLineshapeReport &out, std::string &why);
+  /*!
+   * The entrance vertex of THM experiment `name` at the c.m. energies
+   * `energies` (MeV, x + A) and the current parameters: the nodes and weights
+   * of its spectator-momentum window (one node for ps=delta), rho = p_xA a/hbar c
+   * per node, and per entrance channel and level the window average of
+   * |M_l|^2 and its quasi-free value (p_s = 0), with the boundary the vertex
+   * uses for that level.  False (and `why`) if there is no such experiment.
+   */
+  bool ThmVertexTable(const std::string &name, const std::vector<double> &energies, CNuc *compound,
+                      const Config &configure, ThmVertexReport &out, std::string &why);
+  /*!
+   * The distortion factor of THM experiment `name` (distortion=coulomb or
+   * optical) at the c.m. energies `energies` (MeV, x + A): E_sF, k_sF,
+   * eta_sF, the spectator angle, q, |M|^2, |M_PW|^2, the l summed, R
+   * evaluated directly and R as the model uses it (interpolated on the grid).
+   * For distortion=table only the model's w(E).  False (and `why`) if there is
+   * no such experiment or it has no distortion.
+   */
+  bool ThmDistortionTable(const std::string &name, const std::vector<double> &energies, ThmDistortionReport &out,
+                          std::string &why);
   TargetEffect *GetTargetEffect(int);
   EDataIterator begin();
   EDataIterator end();
@@ -297,12 +445,15 @@ class EData {
   int energyShiftSqrtParamOffset_;
   int energyShiftFnParamOffset_ = 0;
   int screeningParamOffset_ = -1;  // -1 until FillMnParams has laid the vector out
-  std::vector<int> screeningEffects_;  // effect numbers with a screening block, in order
+  std::vector<int> screeningEffects_;  // line numbers (effect numbers) with a screening block, in order
+  std::vector<std::vector<int>> screeningCopies_;  // per screening parameter: the target effects of its line
   int densityParamOffset_ = -1;        // -1 until FillMnParams has laid the vector out
-  std::vector<int> densityEffects_;    // effect number holding each density parameter, in order
-  std::vector<int> densityParamOfEffect_;  // per effect (0-based): its density parameter, 0 = none
+  std::vector<int> densityEffects_;    // line number (effect number) holding each density parameter, in order
+  std::vector<int> densityLeadCopies_;     // per density parameter: the first target effect (copy) of that line
+  std::vector<int> densityParamOfEffect_;  // per target effect (copy, 0-based): its density parameter, 0 = none
   int dopplerParamOffset_ = -1;        // -1 until FillMnParams has laid the vector out
-  std::vector<int> dopplerEffects_;    // effect numbers with a fitted Doppler temperature, in order
+  std::vector<int> dopplerEffects_;    // line number holding each Doppler parameter, in order (as screening_)
+  std::vector<std::vector<int>> dopplerCopies_;  // per Doppler parameter: the target effects (copies) of its line
   int thicknessParamOffset_ = -1;      // -1 until FillMnParams has laid the vector out
   std::vector<int> thicknessSegments_;  // positions (1-based) of the segments with a thickness parameter, in order
   /// Group the densityfit / densitygroup lines into parameters (ReadTargetEffectsFile); -1 on an error.
@@ -315,6 +466,13 @@ class EData {
   bool ecUsePrevious_;
   std::string ecSignature_;   // Signature of the calculation being set up (see ECSignature)
   std::string ecOutputFile_;  // The intEC file being written, when not reading one back
+  std::vector<ThmGroup> thmGroups_;  // THM experiments (BuildThmGroups), empty without them
+  std::vector<ThmCoherentParam> thmCoherentParams_;  // cbackground= parameters, empty without the key
+  int thmCoherentParamOffset_ = -1;                 // their first index in the parameter vector (FillMnParams)
+  /// Builds thmGroups_ from the <thm> experiments once the segments are read; -1 after an ERROR.
+  int BuildThmGroups(const Config &, CNuc *, int numLines);
+  /// Writes output/thm_experiments.out.
+  void WriteThmExperiments(const Config &);
   double parkPenalty_ = 0.0;
   double abundancePenalty_ = 0.0;
   double scatteringLengthChi2_ = 0.0;

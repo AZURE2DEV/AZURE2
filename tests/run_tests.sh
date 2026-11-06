@@ -32,6 +32,8 @@ set -uo pipefail
 # comparison below would then silently succeed against the wrong value.
 export LC_ALL=C
 
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/guard.sh"
+
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 AZURE2_BIN="${1:-}"
 TOL="${TOL:-1e-3}"
@@ -58,6 +60,42 @@ AZURE2_BIN="$(cd "$(dirname "$AZURE2_BIN")" && pwd)/$(basename "$AZURE2_BIN")"
 
 echo "AZURE2: $AZURE2_BIN"
 echo "relative tolerance: $TOL"
+
+# The newest-binary rule picks the right build only if the builds are kept up
+# to date; say so when they are not.  (The rule itself stays: an argument wins,
+# else the newest.)  mtime in seconds, GNU stat or BSD stat.
+mtime() { stat -c %Y "$1" 2>/dev/null || stat -f %m "$1" 2>/dev/null || echo 0; }
+# GNU date -r takes a file; BSD date -r takes seconds since the epoch.
+stamp() { date -r "$1" '+%Y-%m-%d %H:%M' 2>/dev/null || date -r "$(mtime "$1")" '+%Y-%m-%d %H:%M' 2>/dev/null || echo "?"; }
+bins=()
+for candidate in "$REPO_ROOT"/build*/src/AZURE2 "$REPO_ROOT"/build*/src/AZURE2.exe; do
+  [ -x "$candidate" ] && bins+=("$candidate")
+done
+if [ "${#bins[@]}" -gt 1 ]; then
+  lo="" hi=""
+  for b in "${bins[@]}"; do
+    t="$(mtime "$b")"
+    { [ -z "$lo" ] || [ "$t" -lt "$lo" ]; } && lo="$t"
+    { [ -z "$hi" ] || [ "$t" -gt "$hi" ]; } && hi="$t"
+  done
+  if [ $((hi - lo)) -gt 3600 ]; then
+    echo "WARNING: ${#bins[@]} AZURE2 builds differ in age by $(((hi - lo) / 3600)) h:"
+    for b in "${bins[@]}"; do
+      mark=" "; [ "$b" = "$AZURE2_BIN" ] && mark="*"
+      echo "  $mark $(stamp "$b")  ${b#"$REPO_ROOT"/}"
+    done
+    echo "  (* = tested.)  A stale build is still what the GUI or a script may run;"
+    echo "  rebuild it or remove it."
+  fi
+fi
+# A binary older than the engine sources it is built from tests old code.
+newer_src="$(find "$REPO_ROOT/src" "$REPO_ROOT/include" -type f \( -name '*.cpp' -o -name '*.h' \) \
+               -newer "$AZURE2_BIN" 2>/dev/null | head -3)"
+if [ -n "$newer_src" ]; then
+  echo "WARNING: the tested binary is older than engine sources, e.g.:"
+  echo "$newer_src" | sed "s|^$REPO_ROOT/|    |"
+  echo "  Rebuild it (make in its build directory) or these results test old code."
+fi
 echo
 
 pass=0
@@ -101,12 +139,12 @@ for project_dir in "$REPO_ROOT"/tests/*/; do
 
     # Menu: 1 = Calculate Segments From Data, then the external parameter file
     # and external capture amplitude file prompts (blank = build from the .azr),
-    # then 7 = Exit. The prompt loops spin on EOF, so the output is capped as a
-    # backstop -- SIGPIPE from head then stops the process.
-    # A hang must FAIL, not stall the suite: an unparseable data line once
-    # spun ESegment::Fill forever at 100% CPU with no message.  GNU timeout
-    # is not on every platform (macOS lacks it), so fall back to a bare run.
-    if command -v timeout >/dev/null 2>&1; then RUN="timeout ${TEST_TIMEOUT:-1800}"; else RUN=""; fi
+    # then 7 = Exit. The prompt loops used to spin on EOF (they stop with an
+    # error since tests/cli_eof); the output stays capped as a backstop --
+    # SIGPIPE from head then stops the process.
+    # A hang must FAIL, not stall the suite (tests/lib/guard.sh: GNU timeout,
+    # gtimeout, or a shell watchdog where neither exists, as on macOS).
+    RUN="$(guard_command "${TEST_TIMEOUT:-1800}")"
     printf '1\n\n\n7\n' | $RUN "$AZURE2_BIN" --no-gui --no-readline "$(basename "$azr")" 2>&1 \
       | head -c 2000000 > run.log
   )
@@ -172,15 +210,22 @@ done
 # A test directory can carry an executable check.sh for that: it is run with
 # the binary as its argument, does its own work in a temporary directory, and
 # passes when it exits 0.
+# Its log is check.log: a directory with an .azr as well (18O_p_a_thm) keeps
+# the project's run.log from the loop above.
 for check in "$REPO_ROOT"/tests/*/check.sh; do
-  [ -x "$check" ] || continue
   name="$(basename "$(dirname "$check")")"
+  if [ ! -x "$check" ]; then
+    echo "WARNING: $name/check.sh is not executable; not run"
+    echo
+    continue
+  fi
   echo "=== $name (check.sh) ==="
-  if "$check" "$AZURE2_BIN" > "$(dirname "$check")/run.log" 2>&1; then
-    tail -1 "$(dirname "$check")/run.log"
+  log="$(dirname "$check")/check.log"
+  if "$check" "$AZURE2_BIN" > "$log" 2>&1; then
+    tail -1 "$log"
     pass=$((pass + 1))
   else
-    sed 's/^/  /' "$(dirname "$check")/run.log" | tail -30
+    sed 's/^/  /' "$log" | tail -30
     echo "  FAIL"
     fail=$((fail + 1))
   fi

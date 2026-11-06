@@ -325,27 +325,36 @@ AddSegDataDialog::AddSegDataDialog(QWidget *parent) :
   QGridLayout *lowerLayout = new QGridLayout;
   lowerLayout->addWidget(new QLabel(tr("Data Type:")), 0, 0, Qt::AlignRight);
   lowerLayout->addWidget(dataTypeCombo, 0, 1);
+  thmCheck = new QCheckBox(tr("THM (modified R-matrix)"));
+  thmCheck->setToolTip(tr("Treat this segment as a Trojan Horse Method "
+                          "(half-off-shell) measurement: the entrance vertex "
+                          "uses the transfer form factor instead of the "
+                          "penetrability. Requires the entrance pair's THM "
+                          "binding energy (Configure > THM Workspace, "
+                          "Channels)."));
 
   QGridLayout *phaseLayout = new QGridLayout;
-  // the observable's variant (frame or multipolarity) sits next to it, the phase-shift J and l on the right
+  // the observable's variant (frame or multipolarity) sits next to it, then the
+  // THM tick (shown only with THM on), the phase-shift J and l on the right
   phaseLayout->addWidget(frameLabel, 0, 0, Qt::AlignRight);
   phaseLayout->addWidget(frameCombo, 0, 1);
   phaseLayout->addWidget(multipolarityLabel, 0, 2, Qt::AlignRight);
   phaseLayout->addWidget(multipolarityCombo, 0, 3);
-  phaseLayout->addItem(new QSpacerItem(1, 25), 0, 4);
-  phaseLayout->setColumnStretch(4, 1);
+  phaseLayout->addWidget(thmCheck, 0, 4);
+  phaseLayout->addItem(new QSpacerItem(1, 25), 0, 5);
+  phaseLayout->setColumnStretch(5, 1);
   phaseJValueLabel = new QLabel(tr("J:"));
   phaseJValueLabel->setVisible(false);
-  phaseLayout->addWidget(phaseJValueLabel, 0, 5);
-  phaseLayout->addWidget(phaseJValueText, 0, 6);
+  phaseLayout->addWidget(phaseJValueLabel, 0, 6);
+  phaseLayout->addWidget(phaseJValueText, 0, 7);
   phaseLValueLabel = new QLabel(tr("l:"));
   phaseLValueLabel->setVisible(false);
-  phaseLayout->addWidget(phaseLValueLabel, 0, 7);
-  phaseLayout->addWidget(phaseLValueText, 0, 8);
+  phaseLayout->addWidget(phaseLValueLabel, 0, 8);
+  phaseLayout->addWidget(phaseLValueText, 0, 9);
   phaseSValueLabel = new QLabel(tr("s:"));
   phaseSValueLabel->setVisible(false);
-  phaseLayout->addWidget(phaseSValueLabel, 0, 9);
-  phaseLayout->addWidget(phaseSValueText, 0, 10);
+  phaseLayout->addWidget(phaseSValueLabel, 0, 10);
+  phaseLayout->addWidget(phaseSValueText, 0, 11);
   lowerLayout->addLayout(phaseLayout, 0, 2);
 
   QLabel *dataNormLabel = new QLabel(tr("Data Norm.:"));
@@ -551,6 +560,10 @@ void AddSegDataDialog::dataTypeChanged(int) {
   const int code = dataTypeCode();
   const int observable = observableCode();
   const bool phase = (code == 2);
+  // A phase shift has no THM form: the engine reads the phase J and l only
+  // for an isDiff of exactly 2, so a THM phase-shift line would be misread.
+  thmCheck->setEnabled(!phase);
+  if (phase) thmCheck->setChecked(false);
   phaseJValueLabel->setVisible(phase);
   phaseLValueLabel->setVisible(phase);
   phaseJValueText->setVisible(phase);

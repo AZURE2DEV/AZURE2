@@ -7,8 +7,9 @@
 class PairsModel;
 
 struct SegmentsDataData {
-  /// Columns 0-23 are the fields below; column 24 (SegmentsDataModel::GroupsColumn) is derived from extraTokens.
-  static const int SIZE = 25;
+  /// Columns 0-23 are the fields below; column 24 is isTHM (thm's internal flag); column 25
+  /// (SegmentsDataModel::GroupsColumn) is derived from extraTokens (24 on dev).
+  static const int SIZE = 26;
   int isActive;
   int entrancePairIndex;
   int exitPairIndex;
@@ -34,6 +35,9 @@ struct SegmentsDataData {
   int secondaryDecayL;
   double finalJ;
   double delta;
+  // THM (modified R-matrix / half-off-shell) flag; written as isDiff offset +10.
+  // After the fields existing brace-initializers set, so they default it to 0.
+  int isTHM;
   // Trailing keyword blocks of the line, verbatim: "sqrtshift <b> <bError>
   // <vary>" (sqrt(E) energy-shift term, SegLine.h) and "mixture <w_self> <n>
   // {"file" <w>}..." (natural-abundance targets, MixtureTable.h).  Carried
@@ -66,7 +70,7 @@ class SegmentsDataModel : public QAbstractTableModel {
   /// Store the verbatim keyword blocks of a row (no editable column addresses them).
   void setLineExtras(int row, const QString &tokens);
   /// The read-only column listing a row's groups, "norm: D, shift: A" (normgroup / shiftgroup / shiftfngroup).
-  static const int GroupsColumn = 24;
+  static const int GroupsColumn = 25;  // after thm's isTHM column (24)
   /*! Row of the segment whose \p keyword ("normgroup", "shiftgroup", "shiftfngroup") value \p row takes: the first
    *  ACTIVE row carrying the same label (EData counts active segments only), when that is another row and \p row
    *  is active itself; else -1 (no group, the group's first segment, or an inactive row). */

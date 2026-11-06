@@ -47,7 +47,9 @@ namespace {
 // potential model is on, and construction happens deep inside a calculation.
 // With several live sessions a single global is not enough: this publishes the
 // calling session's Config for the duration of the call and puts back whatever
-// was there before, so sessions cannot silently reconfigure each other.
+// was there before, so sessions cannot silently reconfigure each other.  It is
+// not a lock: calls run with the GIL released, so two Python threads driving
+// sessions at once would race on g_config -- hence "one thread" above.
 struct ConfigScope {
   // Besides the Config, every call swaps in the session's own external-capture
   // amplitude cache.  `g_ecAmplitudeCache` is process-global and its keys
@@ -98,7 +100,15 @@ py::array_t<double> to_array(const vector_r &v) {
 }
 
 // The mirror image: a flat copy of any float64-coercible array.  The engine
-// takes vector_r&, so it needs its own buffer either way.
+// takes vector_r&, so it needs its own buffer either way.  Bindings that
+// release the GIL for the whole call (py::call_guard) take their array by
+// const reference: a by-value py::array is reference-counted inside the
+// GIL-free call (copy in, destroy out), and a temporary converted from a
+// Python list then crashed (segfault on calculate_chi2_rwa([...]), October
+// 2026).  The others convert their argument with the GIL held and release it
+// only around the engine call (an inner block: gil_scoped_release, then
+// ConfigScope, so that the scope ends before the GIL is taken back); they may
+// take the array by value.
 vector_r to_vector(const py::array_t<double, py::array::forcecast> &a) {
   vector_r v(a.size());
   if (a.size() > 0) std::memcpy(v.data(), a.data(), v.size() * sizeof(double));
@@ -180,9 +190,12 @@ class Session {
 
     // The API stub used to guard the CLI's reads against --use-api; the binding
     // is the API, so mirror the checks main() performed for a headless run.
-    if (config_->ReadConfigFile() == -1) {
+    int configStatus = config_->ReadConfigFile();
+    if (configStatus == -1) {
       std::string msg = "Could not open " + configfile + " or no <config> block found.";
       fail(msg);
+    } else if (configStatus < 0) {
+      fail("Malformed <potential> or <thm> block in " + configfile + " (see the ERROR above).");
     }
     // R-matrix route + ignore_externals (the default): A-matrix with a warning, as the CLI and the GUI.  Before
     // 2026-11-01 pyazr ran the R-matrix route and silently kept the internal-capture term ignore_externals drops
@@ -445,13 +458,13 @@ class Session {
     }
     return to_array(out);
   }
-  py::array_t<double> transform_all_rwa(const py::array_t<double, py::array::forcecast> &p) {
+  py::array_t<double> transform_all_rwa(const py::array_t<double, py::array::forcecast> &p, bool include_fixed) {
     vector_r v = to_vector(p), out;
     expect_all(v, "transform_all_rwa");
     {
       py::gil_scoped_release release;
       ConfigScope guard(config_, &ecCache_, &potentials_);
-      out = api_->TransformAllRWAParameters(v);
+      out = api_->TransformAllRWAParameters(v, include_fixed);
     }
     return to_array(out);
   }
@@ -531,6 +544,212 @@ class Session {
     }
     return to_array(out);
   }
+  py::array_t<double> calculate_residuals_rwa(py::array_t<double, py::array::forcecast> p) {
+    vector_r v = to_vector(p), out;
+    {
+      py::gil_scoped_release release;
+      ConfigScope guard(config_, &ecCache_, &potentials_);
+      out = api_->CalculateResidualsRWA(v);
+    }
+    return to_array(out);
+  }
+  py::array_t<double> current_norms() {
+    ConfigScope guard(config_, &ecCache_, &potentials_);
+    return to_array(api_->GetCurrentNorms());
+  }
+  // The THM experiments as the last chi-squared evaluation profiled them.
+  py::list thm_experiments() {
+    ConfigScope guard(config_, &ecCache_, &potentials_);
+    py::list out;
+    for (const ThmExperimentReport &r : api_->GetThmExperiments()) {
+      py::dict d;
+      d["name"] = r.name;
+      d["segments"] = r.segments;
+      d["background"] = r.background;
+      d["points"] = r.points;
+      d["chi2"] = r.chi2;
+      d["status"] = r.status;
+      d["value"] = std::vector<double>(r.value, r.value + 4);
+      d["covariance"] = std::vector<double>(r.covariance, r.covariance + 16);
+      if (!r.coherentNames.empty()) {
+        d["cbkg_names"] = r.coherentNames;
+        d["cbkg_values"] = r.coherentValues;
+      }
+      out.append(d);
+    }
+    return out;
+  }
+  // The Coulomb line shape of a THM experiment at the current parameters.
+  py::dict thm_lineshape(const std::string &name, py::array_t<double, py::array::forcecast> e) {
+    ConfigScope guard(config_, &ecCache_, &potentials_);
+    ThmLineshapeReport r;
+    std::string why;
+    if (!api_->GetThmLineshape(name, to_vector(e), r, why)) throw AZURE2Error(why);
+    py::dict d;
+    d["experiment"] = r.experiment;
+    d["spectator"] = r.spectator;
+    d["Zs"] = r.Zs;
+    d["ZF"] = r.ZF;
+    d["E_aA"] = r.eAA;
+    d["B"] = r.bind;
+    d["E"] = to_array(r.energy);
+    d["E_sF"] = to_array(r.esf);
+    d["eta_0"] = to_array(r.eta0);
+    py::list exits;
+    for (const ThmLineshapeReport::Exit &x : r.exits) {
+      py::dict xd;
+      xd["pair"] = x.pairKey;
+      xd["Zb"] = x.Zb;
+      xd["ZB"] = x.ZB;
+      xd["mb"] = x.mb;
+      xd["mB"] = x.mB;
+      xd["zeta"] = to_array(x.zeta);
+      xd["eta_sb"] = to_array(x.etaSb);
+      py::list levels;
+      for (const ThmLineshapeReport::Level &l : x.levels) {
+        py::dict ld;
+        ld["jgroup"] = l.jgroup;
+        ld["level"] = l.level;
+        ld["J"] = l.J;
+        ld["pi"] = l.pi;
+        ld["E_level"] = l.energy;
+        ld["Gamma"] = l.width;
+        ld["NC2"] = to_array(l.nc2);
+        levels.append(ld);
+      }
+      xd["levels"] = levels;
+      exits.append(xd);
+    }
+    d["exits"] = exits;
+    return d;
+  }
+  // The window-averaged THM entrance vertex of an experiment at the current parameters.
+  py::dict thm_vertex(const std::string &name, py::array_t<double, py::array::forcecast> e) {
+    ThmVertexReport r;
+    std::string why;
+    const vector_r energies = to_vector(e);
+    bool ok;
+    {
+      // The DW vertex and R(E) can take seconds: without the GIL.
+      py::gil_scoped_release release;
+      ConfigScope guard(config_, &ecCache_, &potentials_);
+      ok = api_->GetThmVertex(name, energies, r, why);
+    }
+    if (!ok) throw AZURE2Error(why);
+    py::dict d;
+    d["experiment"] = r.experiment;
+    d["window"] = r.window;
+    d["pair"] = r.pairKey;
+    d["mu_sx"] = r.muSx;
+    d["B"] = r.bind;
+    d["radius"] = r.radius;
+    // The nodes at each energy (they follow the accepted directions): lists
+    // over E of arrays over the nodes; empty lists with the DW vertex.
+    auto rows = [&](const std::vector<std::vector<double>> &v) {
+      py::list l;
+      for (const std::vector<double> &row : v) l.append(to_array(row));
+      return l;
+    };
+    d["p_s"] = rows(r.p);
+    d["weights"] = rows(r.weight);
+    d["T_s"] = rows(r.es);
+    if (!r.theta.empty()) d["theta_cm"] = rows(r.theta);
+    d["E"] = to_array(r.energy);
+    {
+      // Where the window (or the DW grid) does not reach E, the engine uses
+      // the nodes of the nearest data point / grid energy (as for a folding
+      // sub-point): flagged False here.
+      py::array_t<bool> reached(r.reached.size());
+      auto m = reached.mutable_unchecked<1>();
+      for (size_t i = 0; i < r.reached.size(); i++) m(i) = r.reached[i] != 0;
+      d["reached"] = reached;
+    }
+    py::list rho;
+    for (const std::vector<double> &row : r.rho) rho.append(to_array(row));
+    d["rho"] = rho;
+    d["model"] = r.model;
+    if (r.model == "dw") {
+      py::list q, w;
+      for (const std::vector<double> &row : r.dwQ) q.append(to_array(row));
+      for (const std::vector<double> &row : r.dwWeight) w.append(to_array(row));
+      d["dw_q"] = q;
+      d["dw_weights"] = w;
+      d["dw_q_delta"] = to_array(r.dwQDelta);
+      d["dw_p_delta"] = to_array(r.dwPDelta);
+      if (!r.dwTheta.empty()) {
+        py::list th, aq, aw;
+        for (const std::vector<double> &row : r.dwTheta) th.append(to_array(row));
+        for (const std::vector<double> &row : r.dwAngleQ) aq.append(to_array(row));
+        for (const std::vector<double> &row : r.dwAngleWeight) aw.append(to_array(row));
+        d["angle_theta_cm"] = th;
+        d["angle_q"] = aq;
+        d["angle_weights"] = aw;
+      }
+    }
+    py::list channels;
+    for (const ThmVertexReport::Channel &c : r.channels) {
+      py::dict cd;
+      cd["jgroup"] = c.jgroup;
+      cd["channel"] = c.channel;
+      cd["J"] = c.J;
+      cd["pi"] = c.pi;
+      cd["l"] = c.l;
+      cd["s"] = c.s;
+      py::list levels;
+      for (const ThmVertexReport::Level &l : c.levels) {
+        py::dict ld;
+        ld["level"] = l.level;
+        ld["boundary"] = l.boundary;
+        ld["M2"] = to_array(l.m2);
+        ld["M2_qf"] = to_array(l.m2qf);
+        if (!l.m2pw.empty()) ld["M2_pw"] = to_array(l.m2pw);
+        levels.append(ld);
+      }
+      cd["levels"] = levels;
+      channels.append(cd);
+    }
+    d["channels"] = channels;
+    return d;
+  }
+  // The distortion factor R(E) of a THM experiment (distortion=...).
+  py::dict thm_distortion(const std::string &name, py::array_t<double, py::array::forcecast> e) {
+    ThmDistortionReport r;
+    std::string why;
+    const vector_r energies = to_vector(e);
+    bool ok;
+    {
+      py::gil_scoped_release release;
+      ConfigScope guard(config_, &ecCache_, &potentials_);
+      ok = api_->GetThmDistortion(name, energies, r, why);
+    }
+    if (!ok) throw AZURE2Error(why);
+    py::dict d;
+    d["experiment"] = r.experiment;
+    d["kind"] = r.kind;
+    d["description"] = r.description;
+    d["E"] = to_array(r.energy);
+    d["R_model"] = to_array(r.rModel);
+    if (r.kind == "table") return d;
+    d["E_ref"] = r.eRef;
+    d["E_aA"] = r.eAA;
+    d["B"] = r.bind;
+    d["k_aA"] = r.kAA;
+    d["eta_aA"] = r.etaAA;
+    d["kappa"] = r.kappa;
+    d["eta_b"] = r.etaB;
+    d["beta"] = r.beta;
+    d["E_sF"] = to_array(r.esf);
+    d["k_sF"] = to_array(r.ksf);
+    d["eta_sF"] = to_array(r.etasf);
+    d["theta_cm"] = to_array(r.thetaCm);
+    d["x"] = to_array(r.x);
+    d["q"] = to_array(r.q);
+    d["M2"] = to_array(r.m2);
+    d["M2_PW"] = to_array(r.mpw2);
+    d["R"] = to_array(r.r);
+    d["lmax"] = r.lmax;
+    return d;
+  }
   py::array_t<double> calculate_model_gradients_rwa(const py::array_t<double, py::array::forcecast> &p) {
     vector_r v = to_vector(p), out;
     expect_free(v, "calculate_model_gradients_rwa");
@@ -588,6 +807,11 @@ PYBIND11_MODULE(_azure2, m) {
   gsl_set_error_handler(&GSLException::GSLErrorHandler);
 
   py::register_exception<AZURE2Error>(m, "AZURE2Error", PyExc_RuntimeError);
+
+  // The engine's reading of a <thm> block, for AzrModel (pyazr/azrfile.py),
+  // which edits files without a session.  No files are read.
+  m.def("check_thm_block", &CheckThmBlockLines, py::arg("lines"), py::arg("global_rules") = false,
+        "The lines of a <thm> block as AZURE2 reads them: \"\" or the message it reports.");
   py::register_exception<GSLException>(m, "GSLError", PyExc_ArithmeticError);
 
   py::class_<RuntimeOptions>(m, "RuntimeOptions")
@@ -686,7 +910,8 @@ PYBIND11_MODULE(_azure2, m) {
       .def("update_segments_all_rwa", &Session::update_segments_all_rwa,
            py::call_guard<py::gil_scoped_release>(), py::arg("params"))
       .def("transform_rwa", &Session::transform_rwa, py::arg("params"))
-      .def("transform_all_rwa", &Session::transform_all_rwa, py::arg("params"))
+      .def("transform_all_rwa", &Session::transform_all_rwa, py::arg("params"),
+           py::arg("include_fixed") = false)
       .def("transform_all_rwa_full", &Session::transform_all_rwa_full, py::arg("params"),
            "As transform_all_rwa, returning every R-matrix parameter's physical value, fixed ones included.")
       .def("calculate_chi2_rwa", &Session::calculate_chi2_rwa,
@@ -711,6 +936,25 @@ PYBIND11_MODULE(_azure2, m) {
       .def("calculate_residual_jacobian_rwa", &Session::calculate_residual_jacobian_rwa,
            py::arg("params"), py::arg("skip") = std::vector<int>(),
            "Residuals and Jacobian; the free columns listed in skip are not finite-differenced (left zero).")
+      .def("calculate_residuals_rwa", &Session::calculate_residuals_rwa, py::arg("params"),
+           "Standardized residuals (forward pass; THM norms profiled).")
+      .def("current_norms", &Session::current_norms,
+           "Norm each segment carries now (profiled THM norms at their optimum).")
+      .def("thm_experiments", &Session::thm_experiments,
+           "THM experiments (<thm> experiment[...]) as the last chi-squared evaluation "
+           "profiled them: list of dicts (name, segments, background, points, chi2, status, "
+           "value = [norm, b0, b1, b2], covariance = 4x4 row-major).")
+      .def("thm_lineshape", &Session::thm_lineshape, py::arg("name"), py::arg("energies"),
+           "Coulomb line shape of THM experiment `name` (lineshape=on) at c.m. energies, with the "
+           "level poles of the last evaluation's parameters.")
+      .def("thm_vertex", &Session::thm_vertex, py::arg("name"), py::arg("energies"),
+           "THM entrance vertex of experiment `name` at c.m. energies: the spectator-momentum "
+           "window at every energy (nodes p_s, weights, T_s, theta_cm, rho: lists over E) and, per "
+           "entrance channel and level, <|M_l|^2> over the window and |M_l|^2 at p_s = 0.")
+      .def("thm_distortion", &Session::thm_distortion, py::arg("name"), py::arg("energies"),
+           "Distortion factor R(E) of THM experiment `name` (distortion=coulomb|optical|table) at "
+           "c.m. energies: E_sF, eta_sF, the spectator angle, |M|^2, |M_PW|^2, R directly and as the "
+           "model uses it (R_model).")
       .def("calculate_model_gradients_rwa", &Session::calculate_model_gradients_rwa,
            py::arg("params"))
       .def("coulomb_functions", &Session::coulomb_functions, py::arg("request"))

@@ -1,13 +1,7 @@
-build/**
-build-release/**
-build-release-*/
-build-windows/**
-build-linux/**
-build-macos/**
+build*/**
 .DS_Store
 .cache/**
 .vscode/**
-.vscode/settings.json
 azure2
 build.log
 

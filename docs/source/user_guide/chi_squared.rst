@@ -95,6 +95,72 @@ it absorb every discrepancy in the model.
 A segment with **Vary Norm?** enabled but no quoted error has no penalty, and
 its normalization is genuinely unconstrained.
 
+.. _nominal-norm:
+
+The nominal normalization: the column, or an explicit prior centre
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+A segment line has one normalization field, and AZURE2 reads it as
+the *start value* of the fit (or the value a calculation uses) and, in a
+classic file, also as the *centre* :math:`n_s^{\text{nom}}` of the penalty
+above (which also scales its width, :math:`n_s^{\text{nom}}\epsilon_s/100`).
+A fit leaves the column alone and writes the fitted normalizations to
+``param.sav`` and ``normalizations.out``, so the prior stays where it was put.
+Anything that copies fitted values into the column moves the prior with
+them -- unless the centre is held explicitly. A row
+
+.. code-block:: text
+
+   <parameterSettings>
+   ...
+   segment_3_norm prior_centre 1
+   segment_3_energy_shift prior_centre 0
+   </parameterSettings>
+
+centres the prior of segment 3's normalization on 1 (and of its energy shift
+on 0), whatever the Data Norm. (Energy Shift) column holds; the column is then
+only the start value. (The energy-shift prior is centred on 0 anyway since
+25 October 2026, see below; on this branch an explicit
+``segment_N_energy_shift prior_centre c`` row moves that centre to *c*.) ``3`` is the segment key, the line's position in
+``<segmentsData>`` counting inactive lines, as in ``segment_3_norm`` of
+``param.sav``. A normalization centre must be positive; a row naming no
+active segment is reported and ignored. Without a row nothing changes: a file
+that has none behaves exactly as before, and AZURE2 versions without the
+feature skip these three-token rows (the other ``<parameterSettings>`` rows
+have 9, 12 or 14) and centre the prior on the column.
+
+With an explicit centre a file can carry the fitted normalizations *and* the
+experimental priors, so that run on its own it is the best fit (data and
+priors) and a fit started from it is pulled to the experimental values, not
+to its own previous result:
+
+- the Fitting tab shows the centre in the **Prior Centre** column of the
+  Normalization and Energy Shifts tables (empty: the column value for a
+  normalization, 0 for an energy shift) and keeps
+  it when it loads a ``param.sav``; loading one still writes the fitted
+  normalizations into the column, so in a project without explicit centres a
+  fit started from the saved project is centred on them -- type the
+  experimental value (usually 1) into **Prior Centre** first;
+- pyazr's ``save_fit`` (default ``norms="fitted"``) writes the fitted norms
+  and shifts into the columns and, for every normalization prior that thereby
+  leaves its column, the centre the fit used as an explicit row (for a shift,
+  only an explicit non-zero centre); the snapshot run on its own reproduces
+  the fitted data :math:`\chi^2` and priors.
+  ``save_fit(..., norms="nominal")`` keeps the columns and puts the fitted
+  values only in the ``.sav`` (to be given as the parameter file: Run tab,
+  *Parameters File*; CLI "use previous parameters").
+
+The examples are stored this way: every direct normalization with a quoted
+error (``n15_lacognata2007``, ``li7_tumino2006``, ``li6_pizzone2011``,
+``o18_lacognata2010``, ``f19_pag_thm``, ``c12c12_tumino2018``) holds its
+fitted value in the column and ``prior_centre 1``; the file alone gives the
+best-fit total (the "Total Chi-Squared" on the CLI, data plus priors), listed
+in the THM documentation ("Examples"). A fixed normalization pays its
+penalty too when it sits away from an explicit centre (``f19_pag_thm`` and
+``c12c12_tumino2018`` store fitted norms fixed), as it would after a
+``param.sav`` moved it. A shift's penalty is measured from 0 (or from its
+explicit centre), so writing fitted shifts into the column does not move it.
+
 Segments that share one normalization (``normgroup``, :doc:`segments`)
 contribute this term once, with the first member's :math:`n^{\text{nom}}` and
 :math:`\epsilon`; the other members carry no normalization penalty.
@@ -111,7 +177,9 @@ this time with an absolute rather than a percentage error:
    \left(\frac{\Delta E_s}{\delta(\Delta E_s)}\right)^2
 
 measured from **zero**, i.e. from no shift: the value of :math:`\Delta E_s` in
-the input file is only where the fit starts. A segment whose :math:`\sqrt{E}`
+the input file is only where the fit starts. (On this branch an explicit
+``segment_N_energy_shift prior_centre c`` row, above, measures the constant
+term from *c* instead.) A segment whose :math:`\sqrt{E}`
 shift coefficient :math:`b_s` is free (the ``sqrtshift`` block, see
 :doc:`segments`) adds the same kind of term, :math:`(b_s/\delta b_s)^2`, with
 :math:`\delta b_s` in MeV\ :sup:`1/2`, and so does each free parameter
@@ -140,6 +208,30 @@ flagged one in the parameter list (a fixed ground-state energy was enough),
 so MIGRAD pulled another parameter toward the nominal value and a parameter
 sitting at its nominal value still paid a penalty. The least-squares drivers
 were not affected.
+
+THM segments
+------------
+
+A THM (half-off-energy-shell) segment with a free normalization has an
+arbitrary scale. It is not a fit parameter and pays no penalty: at every
+evaluation the scale is profiled out in closed form,
+:math:`n^* = S_{mm}/S_{md}` and
+:math:`\chi^2 = S_{dd} - S_{md}^2/S_{mm}` with the weighted sums of model
+:math:`\times` model, model :math:`\times` data and data :math:`\times`
+data, and the segments of one THM experiment share it (with an optional
+smooth background, profiled with it). The coherent THM background
+(``cbkg_*``) is an ordinary parameter without a penalty. See
+:doc:`../theory/thm_implementation`, "THM experiments" and "Normalization,
+gradients and uncertainty bands".
+
+Park's parametrization
+----------------------
+
+Under ``--use-park`` a level whose overlap :math:`J_\lambda` is negative adds
+:math:`(J_\lambda/10^{-3})^2` to the objective (zero inside the physical
+region), in every minimizer's cost and in the gradient. A calculation reports
+it as ``Total-Park-Chi-Squared`` in ``chiSquared.out``. See
+:doc:`../reference/command_line`, "Brune and Park parametrizations".
 
 What ``chiSquared.out`` actually reports
 ----------------------------------------
@@ -187,9 +279,14 @@ The file separates the two contributions::
   :math:`(\mathbf{p}-\boldsymbol{\mu})^T C^{-1} (\mathbf{p}-\boldsymbol{\mu})`,
   written with 15 significant digits.
 
-The quantity the minimizer actually descends is the sum of all of them. Quoting
+The quantity the minimizer actually descends is the sum of all of them, plus
+the energy-shift and nuisance terms, which the file does not list. Quoting
 ``Total-Chi-Squared`` as "the χ²" of a fit with free normalizations understates
-the objective.
+the objective. A calculation prints the whole objective, data and every prior,
+on the console as ``Total Chi-Squared:`` (twelve significant digits); this is
+the number the examples quote as "file alone"
+(:doc:`../getting_started/examples`). Under ``--use-park`` the total line of
+the file ends with ``Total-Park-Chi-Squared``.
 
 .. note::
 

@@ -28,9 +28,11 @@ export OMP_NUM_THREADS="${OMP_NUM_THREADS:-2}"
 
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/ec_signature.XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
+. "$HERE/../lib/guard.sh"
+. "$HERE/../lib/check_common.sh"
+RUN="$(guard_command "${TEST_TIMEOUT:-900}")"
 
 failures=0
-ok() { echo "  ok    $1"; }
 bad() { echo "  FAIL  $1"; failures=$((failures + 1)); }
 
 # make_variant NAME STRAGGLING RADIUS: a copy of the model with only segment 1
@@ -66,7 +68,7 @@ run() {
   [ -n "$ec" ] && ec="../$(basename "$ec")"
   shift 2 || shift $#
   (cd "$dir" && printf '1\n\n%s\n7\n' "$ec" |
-    "$AZURE2_BIN" --no-gui --no-readline "$@" 13N.azr > run.log 2>&1)
+    $RUN "$AZURE2_BIN" --no-gui --no-readline "$@" 13N.azr > run.log 2>&1)
 }
 
 chi2() { awk '/^Total-Chi-Squared:/ { print $2 }' "$WORK/$1/output/chiSquared.out" 2>/dev/null; }

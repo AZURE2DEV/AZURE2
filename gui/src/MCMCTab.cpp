@@ -1,4 +1,5 @@
 #include "MCMCTab.h"
+#include "RoundTripNumber.h"
 #include "InfoDialog.h"
 #include "LevelsTab.h"
 #include "SegmentsTab.h"
@@ -205,11 +206,53 @@ MCMCTab::MCMCTab(QWidget *parent) :
 }
 
 bool MCMCTab::isAutoPriorCategory(const QString &category) {
-  // Normalizations and energy shifts carry an experimental error in the
-  // segment definition, so AZURECalcMCMC::BuildAutoPriors() derives their
-  // priors from the data and overrides whatever this table holds.
-  return category == "norm" || category == "shift" || category == "abundance" || category == "screening" ||
-         category == "density" || category == "doppler" || category == "thickness";
+  // Normalizations, energy shifts, sqrt(E) shift coefficients and
+  // shift-function parameters carry an experimental error in the segment
+  // definition, isotopic abundances one in the <abundances> block, and
+  // electron-screening potentials, fitted target densities and Doppler
+  // temperatures one on their <targetInt> line, and fitted sample thicknesses
+  // one on their transmission / yield block (dev), so
+  // AZURECalcMCMC::BuildAutoPriors() derives their priors from the data and
+  // overrides whatever this table holds.
+  return category == "norm" || category == "shift" || category == "shift_sqrt" || category == "shift_fn" ||
+         category == "abundance" || category == "screening" || category == "density" || category == "doppler" ||
+         category == "thickness";
+}
+
+QString MCMCTab::categoryOfName(const QString &name, bool isRWA, int *segmentKey) {
+  // By the form of the name, as AZURECalcMCMC::BuildAutoPriors() classifies
+  // (a THM coherent background's name carries its experiment's, which may
+  // hold "norm" or "shift").
+  auto segment = [&](const QString &tail) {
+    if (!name.startsWith("segment_") || !name.endsWith(tail)) return false;
+    bool numeric = false;
+    const int key = name.mid(8, name.size() - 8 - tail.size()).toInt(&numeric);
+    if (numeric && segmentKey) *segmentKey = key;
+    return numeric;
+  };
+  if (name.startsWith("abundance_")) return "abundance";
+  if (name.startsWith("screening_")) return "screening";
+  if (name.startsWith("density_")) return "density";
+  if (name.startsWith("doppler_")) return "doppler";
+  if (segment("_thickness")) return "thickness";
+  {
+    // segment_<key>_energy_shift_fn<j>
+    const int at = name.lastIndexOf("_energy_shift_fn");
+    bool keyOk = false, jOk = false;
+    if (name.startsWith("segment_") && at > 8) {
+      const int key = name.mid(8, at - 8).toInt(&keyOk);
+      name.mid(at + 16).toInt(&jOk);
+      if (keyOk && jOk) {
+        if (segmentKey) *segmentKey = key;
+        return "shift_fn";
+      }
+    }
+  }
+  if (segment("_norm")) return "norm";
+  if (segment("_energy_shift_sqrt")) return "shift_sqrt";
+  if (segment("_energy_shift")) return "shift";
+  if (name.startsWith("cbkg_")) return "cbkg";
+  return isRWA ? "level_rwa" : "level";
 }
 
 QString MCMCTab::categoryFromStoredName(const QString &name) {
@@ -217,7 +260,12 @@ QString MCMCTab::categoryFromStoredName(const QString &name) {
   // ("normalization of segment 3 (data/x.dat)"). Older files carry the
   // previous forms, "Segment N Normalization" or "Parameter
   // (segment_N_norm)"; all of them are recognised here.
+  if (name.startsWith("THM coherent background")) return "cbkg";
   if (name.startsWith("abundance", Qt::CaseInsensitive)) return "abundance";
+  if (name.contains("sqrt(E) energy-shift", Qt::CaseInsensitive) || name.contains("_energy_shift_sqrt"))
+    return "shift_sqrt";
+  if (name.contains("energy-shift function", Qt::CaseInsensitive) || name.contains("_energy_shift_fn"))
+    return "shift_fn";
   if (name.contains("screening", Qt::CaseInsensitive)) return "screening";
   if (name.contains("target density", Qt::CaseInsensitive) || name.startsWith("density_")) return "density";
   if (name.contains("doppler", Qt::CaseInsensitive)) return "doppler";
@@ -578,26 +626,18 @@ void MCMCTab::loadFromAZUREParams(bool isRWA, std::string filename) {
                                 .arg(QString::fromStdString(filename)));
         return;
       }
-      // The second column contains the RWA values
-      std::string line;
-      int i = 0;
-      while (std::getline(paramFile, line)) {
-        std::istringstream iss(line);
-        std::string paramName;
-        double rwaValue;
-        if (!(iss >> paramName >> rwaValue)) {
-          logTextEdit->append(QString("Error: Invalid line in RWA parameter file: %1")
-                                  .arg(QString::fromStdString(line)));
-          continue;
-        }
-        if (i >= (int)azureParams.GetMinuitParams().Params().size()) {
-          logTextEdit->append(QString("Warning: param.par has more entries than expected parameters (%1). Stopping at line %2.")
-                                  .arg(azureParams.GetMinuitParams().Params().size())
-                                  .arg(i));
-          break;
-        }
-        azureParams.GetMinuitParams().SetValue(i, rwaValue);
-        i++;
+      // By name, as AZURE2 reads a parameter file (AZUREMain, AZURECalcMCMC):
+      // the file starts with its #parametrization line and rows are appended
+      // as parameters are added, so a positional read is off by one or more.
+      // A file in the other alternative basis (Brune / Park) is converted.
+      paramFile.close();
+      azureParams.ReadUserParameters(filename);
+      if (!azureParams.ReconcileBasis(compound, config)) {
+        delete compound;
+        delete data;
+        logTextEdit->append(QString("Error: the parameter file %1 holds amplitudes of another parametrization.")
+                                .arg(QString::fromStdString(filename)));
+        return;
       }
     } else {
       compound->FillMnParams(azureParams.GetMinuitParams(), &config);
@@ -611,6 +651,7 @@ void MCMCTab::loadFromAZUREParams(bool isRWA, std::string filename) {
     // Collected before `data` is released.
     QMap<int, QPair<double, double>> autoNormPrior;  // key -> (mean, sigma)
     QMap<int, QPair<double, double>> autoShiftPrior;
+    QMap<int, QPair<double, double>> autoShiftSqrtPrior;
     // Isotopic abundances: the <abundances> block's (value, sigma), keyed by parameter name.
     QMap<QString, QPair<double, double>> autoAbundancePrior;
     for (int k = 1; k <= compound->NumAbundanceParams(); k++) {
@@ -619,6 +660,8 @@ void MCMCTab::loadFromAZUREParams(bool isRWA, std::string filename) {
       const SampleAbundance &e = compound->GetSample(sample)->entries[nucleus - 1];
       autoAbundancePrior[QString::fromStdString(compound->AbundanceParamName(sample, nucleus))] = qMakePair(e.nominal, e.sigma);
     }
+    // Shift-function parameters: the segment line's (value, sigma), keyed by parameter name.
+    QMap<QString, QPair<double, double>> autoShiftFnPrior;
 
     // Physical descriptions of every parameter, gathered here because the
     // compound nucleus and data are released a few lines below.
@@ -635,8 +678,14 @@ void MCMCTab::loadFromAZUREParams(bool isRWA, std::string filename) {
         const double nominalNorm = segments[s].GetNominalNorm();
         autoNormPrior[key] = qMakePair(
             nominalNorm, nominalNorm / 100.0 * segments[s].GetNormError());
-        // centred on no shift, as the fit's penalty (ESegment::AddShiftPenalty, since 2026-10-25)
+        // Energy-shift terms are centred on no shift, as the fit's penalty (ESegment::AddShiftPenalty,
+        // dev 0dd28e5, 2026-10-25): the value on the segment line is only the start.
         autoShiftPrior[key] = qMakePair(0.0, segments[s].GetEnergyShiftError());
+        autoShiftSqrtPrior[key] = qMakePair(0.0, segments[s].GetEnergyShiftSqrtError());
+        if (segments[s].OwnsShiftFn() && segments[s].HasShiftFn())
+          for (int j = 0; j < segments[s].NumShiftFnParams(); j++)
+            autoShiftFnPrior[QString("segment_%1_energy_shift_fn%2").arg(key).arg(j)] =
+                qMakePair(0.0, segments[s].GetShiftFnErrors()[j]);
       }
     }
 
@@ -667,35 +716,17 @@ void MCMCTab::loadFromAZUREParams(bool isRWA, std::string filename) {
         param.useGaussianPrior = false;
         param.autoPrior = false;
 
-        // Determine category based on parameter name
-        if (paramName.startsWith("abundance_")) {
-          param.category = "abundance";
-        } else if (paramName.startsWith("screening_")) {
-          param.category = "screening";  // its prior comes from the <targetInt> line (BuildAutoPriors)
-        } else if (paramName.startsWith("density_")) {
-          param.category = "density";  // likewise (densityfit sigma)
-        } else if (paramName.startsWith("doppler_")) {
-          param.category = "doppler";  // likewise (the doppler block's sigma)
-        } else if (paramName.startsWith("segment_") && paramName.endsWith("_thickness")) {
-          param.category = "thickness";  // likewise (the transmission / yield block's sigma)
-        } else if (paramName.contains("norm", Qt::CaseInsensitive)) {
-          param.category = "norm";
-        } else if (paramName.contains("shift", Qt::CaseInsensitive)) {
-          param.category = "shift";
-        } else {
-          if (isRWA) {
-            param.category = "level_rwa";
-          } else {
-            param.category = "level";
-          }
-        }
-
-        // Parameter names are "segment_<key>_norm" and
-        // "segment_<key>_energy_shift" (see EData::FillMnParams).
-        if (param.category == "abundance") {
-          if (autoAbundancePrior.contains(paramName)) {
-            param.priorMean = autoAbundancePrior[paramName].first;
-            param.priorStd = autoAbundancePrior[paramName].second;
+        // The kind from the name's form, as the engine classifies: names
+        // are "segment_<key>_norm", "segment_<key>_energy_shift" and
+        // "segment_<key>_energy_shift_sqrt" (EData::FillMnParams).
+        int segmentKey = 0;
+        param.category = categoryOfName(paramName, isRWA, &segmentKey);
+        if (param.category == "abundance" || param.category == "shift_fn") {
+          const QMap<QString, QPair<double, double>> &named =
+              param.category == "abundance" ? autoAbundancePrior : autoShiftFnPrior;
+          if (named.contains(paramName)) {
+            param.priorMean = named[paramName].first;
+            param.priorStd = named[paramName].second;
             param.useGaussianPrior = (param.priorStd > 0.0);
             param.autoPrior = true;
           }
@@ -706,14 +737,11 @@ void MCMCTab::loadFromAZUREParams(bool isRWA, std::string filename) {
           param.useGaussianPrior = false;
           param.autoPrior = true;
         } else if (isAutoPriorCategory(param.category)) {
-          const QStringList tokens = paramName.split('_');
-          bool haveKey = false;
-          int segmentKey = tokens.size() > 1 ? tokens[1].toInt(&haveKey) : 0;
+          const QMap<int, QPair<double, double>> &source = param.category == "norm"    ? autoNormPrior
+                                                           : param.category == "shift" ? autoShiftPrior
+                                                                                       : autoShiftSqrtPrior;
 
-          const QMap<int, QPair<double, double>> &source =
-              (param.category == "norm") ? autoNormPrior : autoShiftPrior;
-
-          if (haveKey && source.contains(segmentKey)) {
+          if (source.contains(segmentKey)) {
             param.priorMean = source[segmentKey].first;
             param.priorStd = source[segmentKey].second;
             // A segment with no quoted error gets no prior rather
@@ -876,9 +904,9 @@ bool MCMCTab::writeMCMCSettings(QTextStream &outStream) {
   outStream << "<parameters>\n";
   for (const MCMCParameter &param : mcmcParameters) {
     outStream << param.name << " "
-              << param.value << " "
-              << param.priorMean << " "
-              << param.priorStd << " "
+              << roundTripNumber(param.value) << " "
+              << roundTripNumber(param.priorMean) << " "
+              << roundTripNumber(param.priorStd) << " "
               << (param.useGaussianPrior ? "1" : "0") << "\n";
   }
   outStream << "</parameters>\n";

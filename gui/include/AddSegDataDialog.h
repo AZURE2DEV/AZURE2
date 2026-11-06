@@ -42,6 +42,7 @@ class AddSegDataDialog : public QDialog {
   /*! The observable: Angle Integrated (0), Differential (1), Phase Shift (2), Analyzing Power (7). Each item
    *  carries that base isDiff code as item data; look items up with findData, never by position. */
   QComboBox *dataTypeCombo;
+  QCheckBox *thmCheck;
   /*! Differential only: Lab (isDiff 1) or C.M. (isDiff 4), as item data. */
   QLabel *frameLabel;
   QComboBox *frameCombo;

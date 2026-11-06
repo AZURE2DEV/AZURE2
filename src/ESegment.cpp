@@ -15,6 +15,10 @@
 #include <cstdlib>
 #include "ExtrapLine.h"
 #include "SegLine.h"
+#include "ThmLineshape.h"
+#include "ThmDistortion.h"
+#include "ThmAngular.h"
+#include "ThmDwVertex.h"
 
 /*!
  * This constructor is used if the segment contains actual experimental data.  The segment
@@ -31,19 +35,27 @@ ESegment::ESegment(SegLine segLine) {
   e_step_ = 0.0;
   a_step_ = 0.0;
   segment_chi_squared_ = 0.0;
+  // A THM (modified R-matrix / half-off-shell) segment is flagged by an isDiff
+  // offset of 10: THM is orthogonal to the underlying observable type, so
+  // isDiff>=10 means "THM", and (isDiff-10) is the ordinary observable code
+  // (0 angle-integrated, 1 differential, ...). See docs/THM_IMPLEMENTATION.md.
+  isTHM_ = (segLine.isDiff() >= 10);
+  int diff = isTHM_ ? segLine.isDiff() - 10 : segLine.isDiff();
   // isDiff 7 is the vector analyzing power: differential in the centre-of-mass
   // frame, so it needs the same angular machinery as a differential cross
-  // section even though the quantity itself is a dimensionless ratio.
-  isAnalyzingPower_ = (segLine.isDiff() == 7);
-  if (segLine.isDiff() == 1 || segLine.isDiff() == 4 || segLine.isDiff() == 7)
+  // section even though the quantity itself is a dimensionless ratio. It is
+  // tested against the offset-stripped code, so it composes with THM the way
+  // every other observable does.
+  isAnalyzingPower_ = (diff == 7);
+  if (diff == 1 || diff == 4 || diff == 7)
     isdifferential_ = true;
   else
     isdifferential_ = false;
-  if (segLine.isDiff() == 4 || segLine.isDiff() == 7)
+  if (diff == 4 || diff == 7)
     iscmdifferential_ = true;
   else
     iscmdifferential_ = false;
-  if (segLine.isDiff() == 2) {
+  if (diff == 2) {
     isphase_ = true;
     j_ = segLine.phaseJ();
     l_ = segLine.phaseL();
@@ -53,12 +65,12 @@ ESegment::ESegment(SegLine segLine) {
     j_ = 0.0;
     l_ = 0;
   }
-  isTotalCapture_ = (segLine.isDiff() == 3) ? 1 : 0;
+  isTotalCapture_ = (diff == 3) ? 1 : 0;
   // isDiff 5/6 are angle-integrated capture segments compared only against the
   // E1 or E2 component of the cross section, respectively.
-  if (segLine.isDiff() == 5)
+  if (diff == 5)
     crossSectionComponent_ = 1;
-  else if (segLine.isDiff() == 6)
+  else if (diff == 6)
     crossSectionComponent_ = 2;
   else
     crossSectionComponent_ = 0;
@@ -72,7 +84,10 @@ ESegment::ESegment(SegLine segLine) {
   datafile_ = segLine.dataFile();
   dataNorm_ = dataNormNominal_ = segLine.dataNorm();
   dataNormError_ = segLine.dataNormError();
-  energyShift_ = energyShiftNominal_ = segLine.energyShift();
+  energyShift_ = segLine.energyShift();
+  // The shift prior is centred on no shift (dev 0dd28e5: the line's value is only the start), unless a
+  // "segment_N_energy_shift prior_centre c" row moves it (EData::ReadPriorCentres).
+  energyShiftNominal_ = 0.0;
   lastEnergyShift_ = std::numeric_limits<double>::quiet_NaN();  // the points start unshifted: the first fill always applies the shift
   energyShiftError_ = segLine.energyShiftError();
   if (segLine.varyEnergyShift() == 1)
@@ -148,16 +163,20 @@ ESegment::ESegment(ExtrapLine extrapLine) {
   e_step_ = extrapLine.eStep();
   a_step_ = extrapLine.aStep();
   segment_chi_squared_ = 0.0;
-  isAnalyzingPower_ = (extrapLine.isDiff() == 7);
-  if (extrapLine.isDiff() == 1 || extrapLine.isDiff() == 5 || extrapLine.isDiff() == 7)
+  // THM (modified R-matrix) extrapolation segment: isDiff offset of 10 (see the
+  // SegLine constructor above and docs/THM_IMPLEMENTATION.md).
+  isTHM_ = (extrapLine.isDiff() >= 10);
+  int diff = isTHM_ ? extrapLine.isDiff() - 10 : extrapLine.isDiff();
+  isAnalyzingPower_ = (diff == 7);
+  if (diff == 1 || diff == 5 || diff == 7)
     isdifferential_ = true;
   else
     isdifferential_ = false;
-  if (extrapLine.isDiff() == 5 || extrapLine.isDiff() == 7)
+  if (diff == 5 || diff == 7)
     iscmdifferential_ = true;
   else
     iscmdifferential_ = false;
-  if (extrapLine.isDiff() == 2) {
+  if (diff == 2) {
     isphase_ = true;
     j_ = extrapLine.phaseJ();
     l_ = extrapLine.phaseL();
@@ -167,14 +186,14 @@ ESegment::ESegment(ExtrapLine extrapLine) {
     j_ = 0.0;
     l_ = 0;
   }
-  if (extrapLine.isDiff() == 3) {
+  if (diff == 3) {
     isAngDist_ = true;
     maxAngDistOrder_ = extrapLine.maxAngDistOrder();
   } else {
     isAngDist_ = false;
     maxAngDistOrder_ = 0;
   }
-  isTotalCapture_ = (extrapLine.isDiff() == 4) ? 1 : 0;
+  isTotalCapture_ = (diff == 4) ? 1 : 0;
   crossSectionComponent_ = 0;
   datafile_ = "";
   dataNorm_ = dataNormNominal_ = 1.;
@@ -270,6 +289,65 @@ bool ESegment::IsCMDifferential() const {
 
 bool ESegment::IsPhase() const {
   return isphase_;
+}
+
+/*!
+ * Returns true if this is a THM (modified R-matrix, half-off-shell) segment,
+ * whose entrance vertex uses the transfer form factor instead of the
+ * penetrability and whose cross section is the HOES formula (arbitrary units).
+ */
+
+bool ESegment::IsTHM() const {
+  return isTHM_;
+}
+
+/*!
+ * A THM segment's overall scale is arbitrary (Typel & Baur, Ann. Phys. 305
+ * (2003) 228, Sec. 6.3), so when its norm is declared free it is profiled out
+ * analytically rather than carried as a Minuit parameter -- otherwise it would
+ * trade against the direct-data normalizations and the joint fit could collapse
+ * the direct norm.
+ */
+
+bool ESegment::IsProfiledNorm() const {
+  return isTHM_ && IsVaryNorm();
+}
+
+/*!
+ * With the norm n multiplying the data (residual m - n d, error n e), the
+ * chi^2 = sum ((m - n d)/(n e))^2 is minimized at n* = S_mm / S_md, giving
+ * chi^2_min = S_dd - S_md^2 / S_mm, where S_ab = sum a_i b_i / e_i^2.  Points
+ * must already carry their model values in GetFitCrossSection().
+ */
+
+double ESegment::ProfileNormChiSquared() {
+  double Smm = 0.0, Smd = 0.0, Sdd = 0.0;
+  for (EPointIterator pt = GetPoints().begin(); pt < GetPoints().end(); pt++) {
+    double e = pt->GetCMCrossSectionError();
+    if (e == 0.0) continue;
+    double w = 1.0 / (e * e);
+    double m = pt->GetFitCrossSection();
+    double d = pt->GetCMCrossSection();
+    Smm += m * m * w;
+    Smd += m * d * w;
+    Sdd += d * d * w;
+  }
+  if (Smd > 0.0 && Smm > 0.0) {
+    SetNorm(Smm / Smd);
+    double chi = Sdd - Smd * Smd / Smm;
+    return chi > 0.0 ? chi : 0.0;
+  }
+  // Degenerate (no positive model-data overlap): leave the scale at unity and
+  // report the unscaled chi^2 so the fit still sees a finite, honest value.
+  SetNorm(1.0);
+  double chi = 0.0;
+  for (EPointIterator pt = GetPoints().begin(); pt < GetPoints().end(); pt++) {
+    double e = pt->GetCMCrossSectionError();
+    if (e == 0.0) continue;
+    double r = pt->GetFitCrossSection() - pt->GetCMCrossSection();
+    chi += (r * r) / (e * e);
+  }
+  return chi;
 }
 
 /*!
@@ -861,9 +939,12 @@ void ESegment::CopyShiftFnFrom(const ESegment &other) {
 // Every energy-shift term is penalised from ZERO (no shift): (dE/sigma)^2, (b/sigma)^2, (a_j/sigma)^2.  The value
 // on the segment line is only the starting value.  Before 2026-10-25 the penalty was measured from that value, so
 // a refit seeded from an earlier fit's shifts carried those shifts as its prior centre (DeBoer: "It should measure
-// the penalty from 0").  The normalization penalty is unchanged (measured from the nominal norm).
+// the penalty from 0").  The normalization penalty is unchanged (measured from the nominal norm).  On thm an
+// explicit "segment_N_energy_shift prior_centre c" row of <parameterSettings> moves the constant term's centre
+// to c (GetNominalEnergyShift); without one it is 0, as on dev.
 void ESegment::AddShiftPenalty(double &chi) const {
-  if (varyEnergyShift_ && energyShiftError_ != 0.0) chi += pow(energyShift_ / energyShiftError_, 2.0);
+  if (varyEnergyShift_ && energyShiftError_ != 0.0)
+    chi += pow((energyShift_ - energyShiftNominal_) / energyShiftError_, 2.0);  // nominal: 0 or the prior_centre row
   if (varyEnergyShiftSqrt_ && energyShiftSqrtError_ != 0.0) chi += pow(energyShiftSqrt_ / energyShiftSqrtError_, 2.0);
   // The shift function's parameters are penalised once, on the segment that owns them.
   if (OwnsShiftFn() && hasShiftFn_)
@@ -969,6 +1050,13 @@ void ESegment::UpdatePointGroupEnergyWithShift(int i, CNuc *theCNuc, const Confi
  * concurrently with it: UpdatePointGroupEnergyWithShift.
  */
 void ESegment::UpdatePointEnergyWithShift(int i, CNuc *theCNuc, const Config *configure) {
+  // An ordinary segment's energies are positive and must stay so: points at
+  // E <= 0 are left alone and a shift is floored above zero (ShiftedEnergy).
+  // A THM (HOES) segment has points and folding sub-points below the entrance
+  // threshold, and all of them shift: leaving the sub-points at E <= 0 behind
+  // (as the guard did) tore the fold of every point within its reach of
+  // threshold, and a point below threshold never moved at all.
+  const bool thm = this->IsTHM();
   {
     EPoint *point = GetPoint(i + 1);
     // A point mapped onto an earlier point of this segment (EData::MapData)
@@ -980,9 +1068,10 @@ void ESegment::UpdatePointEnergyWithShift(int i, CNuc *theCNuc, const Config *co
     // refuses (and the values are recomputed) if the host is not at this
     // energy.
     EPoint *host = ShiftHost(i);
-    if (point && point->GetOriginalEnergy() > 0) {
+    if (point && (thm || point->GetOriginalEnergy() > 0)) {
       double originalEnergy = point->GetOriginalEnergy();
-      double shiftedEnergy = ShiftedEnergy(originalEnergy, TotalEnergyShift(originalEnergy));
+      double shiftedEnergy = thm ? originalEnergy + TotalEnergyShift(originalEnergy)
+                                 : ShiftedEnergy(originalEnergy, TotalEnergyShift(originalEnergy));
 
       // Set the shifted energy
       point->SetLabEnergy(shiftedEnergy);
@@ -1049,7 +1138,7 @@ void ESegment::UpdatePointEnergyWithShift(int i, CNuc *theCNuc, const Config *co
         // IMPORTANT: Also apply energy shift to all subpoints (used in convolution/target integration)
         for (int j = 1; j <= point->NumSubPoints(); j++) {
           EPoint *subPoint = point->GetSubPoint(j);
-          if (subPoint && subPoint->GetOriginalEnergy() > 0) {
+          if (subPoint && (thm || subPoint->GetOriginalEnergy() > 0)) {
             double subOriginalEnergy = subPoint->GetOriginalEnergy();
             // Sub-points hold c.m. energies and are the depth / resolution samples
             // of their parent point: they move RIGIDLY with it, by the parent's
@@ -1071,8 +1160,10 @@ void ESegment::UpdatePointEnergyWithShift(int i, CNuc *theCNuc, const Config *co
               cmFactor = (exitPair->GetM(1) + exitPair->GetM(2)) / exitPair->GetM(2);
             else
               cmFactor = (entrancePair->GetM(2)) / (entrancePair->GetM(1) + entrancePair->GetM(2));
+            // A THM segment's shift is not floored (its energies may lie below threshold), as for the point.
             double energyShiftCM = cmFactor * TotalEnergyShift(originalEnergy);
-            double subShiftedEnergy = ShiftedEnergy(subOriginalEnergy, energyShiftCM);
+            double subShiftedEnergy = thm ? subOriginalEnergy + energyShiftCM
+                                          : ShiftedEnergy(subOriginalEnergy, energyShiftCM);
 
             // Set the shifted energy for subpoint
             // Must set both CM and Lab energy since CalcLegendreP uses GetLabEnergy() for Q-coefficients
@@ -1679,4 +1770,34 @@ double ESegment::CalculateTheoreticalCrossSection(int pointIndex, CNuc *cnuc, co
   }
 
   return baseValue;
+}
+
+void ESegment::SetThmLineshape(std::shared_ptr<const ThmLineshape> l) {
+  thmLineshape_ = l;
+  for (EPoint &point : points_) point.SetThmLineshape(l.get());
+}
+
+void ESegment::SetThmDistortion(std::shared_ptr<const ThmDistortion> d) {
+  thmDistortion_ = d;
+  for (EPoint &point : points_) point.SetThmDistortion(d.get());
+}
+
+void ESegment::SetThmDwVertex(std::shared_ptr<const ThmDwVertex> v) {
+  thmDwVertex_ = v;
+  for (EPoint &point : points_) point.SetThmDwVertex(v.get());
+}
+
+void ESegment::SetThmCoherent(std::shared_ptr<const ThmCoherentBackground> c) {
+  thmCoherent_ = c;
+  for (EPoint &point : points_) point.SetThmCoherent(c.get());
+}
+
+void ESegment::SetThmAngleWindow(std::shared_ptr<const ThmAngleWindow> w) {
+  thmAngle_ = w;
+  for (EPoint &point : points_) point.SetThmAngleWindow(w.get());
+}
+
+void ESegment::SetThmSpectatorWindow(std::shared_ptr<const ThmSpectatorWindow> w) {
+  thmWindow_ = w;
+  for (EPoint &point : points_) point.SetThmSpectatorWindow(w.get());
 }

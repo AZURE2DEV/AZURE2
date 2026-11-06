@@ -54,3 +54,130 @@ The profile weight agrees with the closed form to 1e-12 (the named tolerance
 `pi = 3.141592650`, the true value truncated at ten digits (1.14e-9 low); the
 weight carries `1/(omega sqrt(2 pi))` and inherited half of that, so the
 tolerance was 5e-9. The constants are CODATA 2018 at full precision since then.
+
+## thm_coulomb_term_test
+
+The external Coulomb term of the THM entrance vertex, `ThmCoulombTerm`
+(`src/ThmFunc.cpp`, contract in `include/ThmFunc.h`):
+
+    C_l(E) = 2 eta k Int_a^inf dr O_l(k r) / O_l(k a) j_l(p r)
+
+(Tribble et al. 2014 eq. 2.79; Mukhamedzhanov et al. 2017 eq. 27; Typel & Baur
+2003 eq. A.4). For E > 0 the integral converges only conditionally (1/r times
+oscillation), which is what makes it worth an independent check.
+
+The expected values come from `thm_coulomb_term_reference.py` (mpmath, 25
+digits). It shares no numerics with the engine: O_l is `mpmath.whitw`
+(DLMF 33.2.7, H+ ~ W_{-i eta, l+1/2}(-2 i rho)) rather than the library Coulomb
+functions, and the whole integral is taken along two rays into the complex r
+plane starting at the channel radius (j_l = (h1 + h2)/2, each half on the ray
+where it decays) — no real-axis quadrature and no asymptotic expansion. Its
+`--check` option recomputes every value with a real-axis segment a..a+15 fm
+followed by rays, and the two agree to ~1e-14 or better. Regenerating the table takes
+about half an hour:
+
+    python3 tests/reference/thm_coulomb_term_reference.py
+
+The grid: 7Li+p (a = 4 fm, B = 2.2246 MeV), 6Li+d (4.5 fm, 1.4735 MeV),
+12C+12C (6 fm, 10.27 MeV; eta up to 62 at 50 keV, deep below the barrier)
+at E = -1, -0.1, 0, 0.05, 0.3, 1, 3, 6 MeV and l = 0..3, plus 17O+n, which must
+return exactly zero. Tolerance 1e-5 relative + 1e-8 absolute; the observed
+agreement is ~1e-13.
+
+Every case is run with `useGSL` both off and on, which must not matter: the
+engine builds O_l from its asymptotic expansion by inward integration and calls
+no library Coulomb function. (Were it to use GSL's, C_l would inherit their
+errors — G_l and F_l from GSL are off by up to ~2% for l >= 2, eta ~ 2,
+rho ~ 1-4, checked against mpmath.)
+
+It also checks that E <= 0 gives a real result and that C_l is continuous
+through threshold (E = +-1e-4 MeV against the E = 0 limit). `-v` prints every
+value and the time per call (~0.05-1 ms).
+
+## thm_distortion_test
+
+The THM distortion factor (`src/ThmDistortion.cpp`,
+docs/source/theory/thm_implementation.rst, "Distortion factor R(E)"): the
+zero-range DWBA amplitude M = <χ⁻_sF φ_sx χ⁺_aA(βr)> and its plane-wave limit.
+`thm_distortion_reference.py` evaluates both independently -- mpmath's
+Coulomb functions and adaptive quadrature for point Coulomb, scipy's DOP853
+with mpmath matching for a complex Woods-Saxon potential -- and prints the
+table hard-coded in the test (a few minutes; the 18O(3He,d) cases need
+l ≈ 80 and take longest).
+
+What it checks: |M|² and M_PW for 12C(14N,d) at 30 MeV (forward, 90° with a
+Yukawa tail, a 3 fm cutoff, a Woods-Saxon in both channels) and a made-up
+18O(3He,d) at 115 MeV with the Trojan horse as target (forward and 60°);
+plane waves in both channels against 4π/(κ² + q²) (R ≡ 1); an optical
+potential with the nuclear part off against point Coulomb; the interpolated
+weight against R between the grid nodes.
+
+## thm_fixed_angle_test
+
+The fixed-angle THM observable (`include/ThmAngular.h`): the spin-summed
+angular distribution of the exit pair for an entrance with m_l = 0 along
+p_xA, in the Blatt–Biedenharn form the engine uses (GSL 3j/6j symbols,
+Gauss–Legendre window averages), against `thm_fixed_angle_reference.py`,
+which does the literal M-sum
+F = Σ √(2l+1) ⟨s ν l 0|J ν⟩⟨s′ ν′ l′ m′|J ν⟩ x Y_l′^m′(θ, 0) with sympy's
+exact Clebsch–Gordan coefficients and mpmath's spherical harmonics and
+quadrature. The amplitudes x come from a toy two-level R-matrix with two
+entrance l per channel spin (a 7Li+p → α+α-like case and a spin-1/2 case with
+odd L), assembled as `THMMatrixFunc` does.
+
+What it checks: the Legendre coefficients, dσ/dΩ at five angles and five
+window averages (agreement 5e-16, tolerance 1e-12); the 0–180 window equals
+Σ(2J+1)|x|²/4π (the angle-integrated observable); θ = 0 equals the m_l = 0
+amplitude along the axis and small windows approach it as t²; for an α+α
+exit θ = 0 is the Clebsch–Gordan-weighted coherent sum, not the
+`entranceL=coherent` recipe; no odd L and symmetry about 90° for identical
+bosons, asymmetry for the spin-1/2 case.
+
+
+## thm_dw_vertex_test
+
+The distorted-wave THM entrance vertex (`src/ThmDwVertex.cpp`,
+docs/source/theory/thm_implementation.rst, "Distorted-wave entrance vertex"):
+the surface term (B − 1) S_lm(a) − a S′_lm(a) of the source
+S(r) = ∫d³u φ(u) χ⁻*_sF(αr + u) χ⁺_aA(r + βu), summed over m as the Gram matrix
+G of (S_lm(a), a S′_lm(a))/4πφ̃(q). The engine reduces it to partial-wave
+amplitudes h^l_{Ls La}; `thm_dw_vertex_reference.py` does not: it integrates
+S(r) on a three-dimensional grid around r = a with the closed-form Coulomb wave
+e^{−πη/2}Γ(1+iη)e^{ikz}₁F₁(−iη, 1, ik(R − z)) (mpmath, splined in R − z),
+projects on Y_l0 and differentiates by five points (about ten minutes; two
+resolutions, converged to 3e-8).
+
+What it checks: plane waves in both channels give the plane-wave vertex
+M_l = (B − 1)j_l(pa) − pa j_l′(pa) at p = |k_aA − αk_sF| -- the Gram entries
+to 1e-9 and the ratios |M_l/M_0|² for real and complex B to 1e-8 -- for
+19F(d,n) at the quasi-free direction, 12C(14N,d) at 40° (every m enters) and
+a Hulthén window (nodes, weights, q); point Coulomb in d + 19F at 55 MeV
+(l = 0 at 324 keV, l = 1 at 213 keV, a = 5.136 fm) against the direct
+quadrature to 2e-7 of the largest entry; the Clebsch-Gordan coefficients
+against GSL and in orthonormality at L = 60; the Cholesky components against
+c†Gc; the interpolation between grid nodes.
+
+## thm_optical_test
+
+The global optical potentials of the THM distorted waves (`src/ThmOptical.cpp`,
+docs/source/theory/thm_implementation.rst, "Global optical potentials").
+`thm_optical_reference.py` reads the RIPL-3 optical-model library
+(`om-parameter-u.dat`, www-nds.iaea.org/RIPL-3/optical/om-data/; give its path
+on the command line) and evaluates its entries by the library's own
+coefficient formulas -- standard and Koning forms -- for An & Cai (6200),
+Koning & Delaroche (2405, 5405), Becchetti & Greenlees (7100, 8100),
+McFadden & Satchler (9100) and Avrigeanu (9600); Daehnick and Liang come from
+a transcription of the FRONT21 front end of TWOFNR, since RIPL carries only
+nucleus-specific refits of Daehnick's imaginary part (it prints the
+comparison: real depth and imaginary diffuseness agree to 4 digits). It also
+solves d + 40Ca elastic scattering at 56 MeV with Daehnick's potential by
+scipy's DOP853 and mpmath's Coulomb functions (about a minute).
+
+What it checks: the ten numbers of every model at 23 points to 1e-9; the
+engine's S matrix (Numerov + COUL) against DOP853 in the ratio to Rutherford
+at 12 angles to 2e-4, and the measured ratio (Hatanaka et al. 1980, EXFOR
+E0682-022) within 0.2 dex everywhere and 0.08 dex rms; in the distortion
+factor the global s + F potential is re-evaluated at E_sF of each energy (the
+amplitude equals that of its ten numbers written out there), the refusals
+outside the validity range and for a projectile a model does not describe,
+`:extrapolate` with one warning, and the parser.

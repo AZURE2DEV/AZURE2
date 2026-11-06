@@ -28,7 +28,8 @@ Checks (`check.sh path/to/AZURE2`):
 
 - (a) a calculation gives byte-identical output files at 1 and 4 threads;
 - (b) MIGRAD with the analytic gradient, capped at 5 calls, completes at 1 and 4 threads, re-placing grids, with
-  the recorded chi-squared (`expected/chi2_fit`, the same as dev);
+  the recorded chi-squared (`expected/chi2_fit`; thm: 109.250542525, dev: 109.134 -- thm's adaptive
+  sub-point grid, MERGE_NOTES.md section A, row 02ae97b);
 - (c) its output files are byte-identical at 1 and 4 threads;
 - (d) the peak RSS of the 4-thread fit is at most 3.0 times that of the calculation (Linux): 2.5 measured,
   4.7 with a full copy of the data per pooled copy.

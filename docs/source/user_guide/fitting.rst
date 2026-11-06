@@ -8,7 +8,11 @@ and nuisance parameter flags.
 Parameter Tables
 ----------------
 
-Parameters are organized into sub-tabs:
+Parameters are organized into sub-tabs, and one more, *THM Background*,
+when THM is on (:doc:`configure_menu`, Runtime Options) and a THM experiment
+has a coherent background (``cbackground=``, THM Workspace, Experiments
+page): its free ``cbkg_*`` parameters, whose values edited here (or loaded
+from a ``.sav``) go into the ``cbackground=`` key:
 
 Level Parameters
 ^^^^^^^^^^^^^^^^
@@ -63,6 +67,14 @@ Normalization Parameters
 Lists the normalization factors for each data segment that has **Vary Norm?**
 enabled. These parameters scale the data yield during fitting.
 
+The table has one more column, **Prior Centre**: empty, the prior on the
+normalization is centred on its value in the Segments tab (the classic
+behaviour); a number centres it there instead, whatever value the fit starts
+from, so the Segments tab can hold the fitted normalization and the prior
+stays on the experimental one (usually 1). It is saved as a ``prior_centre``
+row of ``<parameterSettings>`` and survives *Load from .sav file*; see
+:ref:`nominal-norm`.
+
 A member of a normalization group (``normgroup <label>``, set in the
 **Groups** field of the data segment dialog, :doc:`segments`) that is not the
 group's first active segment has no normalization of its own: the engine uses
@@ -78,10 +90,10 @@ Energy Shift Parameters
 ^^^^^^^^^^^^^^^^^^^^^^^^
 
 Lists the energy shift parameters for each data segment that has **Vary Energy
-Shift?** enabled. A segment's :math:`\sqrt{E}` shift coefficient (the
-``sqrtshift`` block in the input file, see :doc:`segments`) is fitted by the
-engine under the name ``segment_<key>_energy_shift_sqrt`` but is not listed
-here.
+Shift?** enabled, with the same **Prior Centre** column. A segment's
+:math:`\sqrt{E}` shift coefficient (the ``sqrtshift`` block in the input file,
+see :doc:`segments`) is fitted by the engine under the name
+``segment_<key>_energy_shift_sqrt`` but is not listed here.
 
 A member of a shift group (``shiftgroup <label>``) other than the group's
 first active segment is shown tied to that segment in the same way as a

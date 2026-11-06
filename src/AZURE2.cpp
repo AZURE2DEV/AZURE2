@@ -50,17 +50,6 @@
 #include <algorithm>
 #include <cstdlib>
 
-// Reads one line of stdin for a prompt. At end of input (a closed or empty
-// stdin: nohup without a here-document, a GUI build falling back to this menu
-// on a display that never opened) the prompt can never be answered, so say so
-// and stop rather than re-prompt forever -- that loop once wrote a 748 GB log
-// and filled the group quota (2026-10-11).
-static bool promptLine(const Config &configure, std::string &line) {
-  if (getline(std::cin, line)) return true;
-  configure.outStream << std::endl << "End of input on stdin: exiting." << std::endl;
-  return false;
-}
-
 // Global Config pointer for use across the codebase
 Config *g_config = nullptr;
 
@@ -84,7 +73,7 @@ void welcomeMessage(const Config &configure) {
   if (versionColumn.size() > 25) versionColumn.resize(25);
   configure.outStream << std::endl
                       << "O--------------------------O-------------------------------O" << std::endl
-                      << "| #### #### #  # ###  ####  ##  | " << std::left << std::setw(25) << versionColumn << "|" << std::endl
+                      << "| #### #### #  # ###  ####  ##  | " << std::left << std::setw(25) << versionColumn << std::right << "|" << std::endl
                       << "| #  #    # #  # #  # #    #  # |                          |" << std::endl
                       << "| ####   #  #  # ###  ##     #  |                          |" << std::endl
                       << "| #  #  #   #  # # #  #     #   | Joint Institute for      |" << std::endl
@@ -108,9 +97,12 @@ void exitMessage(const Config &configure) {
  */
 
 void printHelp() {
+  // Every flag parseOptions (and main) accepts, and only those
+  // (tests/cli_help/check.sh compares the two).
   std::cout << "Syntax: AZURE2 <options> configfile" << std::endl
             << std::endl
             << "Options:" << std::endl
+            << std::setw(25) << std::left << "\t--help:" << std::setw(0) << "Print this list and exit." << std::endl
             << std::setw(25) << std::left << "\t--no-gui:" << std::setw(0) << "Do not use graphical setup utility (if built)." << std::endl
             << std::setw(25) << std::left << "\t" << std::setw(0) << "If this flag is not set all other options are ignored," << std::endl
             << std::setw(25) << std::left << "\t" << std::setw(0) << "and configuration occurs within the setup utility." << std::endl
@@ -128,12 +120,13 @@ void printHelp() {
             << std::setw(25) << std::left << "\t--gsl-coul:" << std::setw(0) << "Use GSL Coulomb functions (faster, but less accurate)." << std::endl
             << std::setw(25) << std::left << "\t--coulomb-table[=FILE]:" << std::setw(0) << "Charged channels from the universal Coulomb table (the default; FILE: $AZURE2_COULOMB_TABLE or ~/.azure2/coulomb_table.bin)." << std::endl
             << std::setw(25) << std::left << "\t--no-coulomb-table:" << std::setw(0) << "Exact Coulomb functions everywhere." << std::endl
+            << std::setw(25) << std::left << "\t--ec-table:" << std::setw(0) << "External capture from per-term energy tables (the default; undoes an earlier --no-ec-table)." << std::endl
             << std::setw(25) << std::left << "\t--no-ec-table:" << std::setw(0) << "External capture integrals at every energy (no energy tables); shifted amplitudes interpolated." << std::endl
+            << std::setw(25) << std::left << "\t--ec-convection-current:" << std::setw(0) << "The exact-form convection current (the default; undoes an earlier --no-ec-convection-current)." << std::endl
             << std::setw(25) << std::left << "\t--no-ec-convection-current:" << std::setw(0) << "With --no-long-wavelength: external capture with the charge (extended Siegert) part of the E_L operator only, without its convection-current part." << std::endl
             << std::setw(25) << std::left << "\t--build-coulomb-table[=FILE]:" << std::setw(0) << "Build the Coulomb table (about 5 min on 4 threads, 88 MB; FILE as for --coulomb-table) and exit." << std::endl
+            << std::setw(25) << std::left << "\t--grid-replacement:" << std::setw(0) << "Re-place the adaptive sub-point grids as levels and shifts move (the default)." << std::endl
             << std::setw(25) << std::left << "\t--no-grid-replacement:" << std::setw(0) << "Keep the adaptive sub-point grids placed from the input file's levels (default: re-place them as levels and shifts move)." << std::endl
-            << std::setw(25) << std::left << "\t--ec-table, --ec-convection-current, --grid-replacement:" << std::endl
-            << std::setw(25) << std::left << "\t" << std::setw(0) << "The defaults, stated explicitly; each undoes its --no- form given earlier." << std::endl
 #ifdef USE_NLOPT
             << std::setw(25) << std::left << "\t--use-nlopt:" << std::setw(0) << "Use NLopt minimizer (BOBYQA) instead of Minuit2." << std::endl
 #endif
@@ -143,7 +136,8 @@ void printHelp() {
             << std::setw(25) << std::left << "\t--use-lm:" << std::setw(0) << "Use the Levenberg-Marquardt minimizer (analytic Jacobian; falls back to MIGRAD)." << std::endl
             << std::setw(25) << std::left << "\t--use-gsl-lm:" << std::setw(0) << "Use the GSL trust-region least-squares minimizer with geodesic acceleration (analytic Jacobian; falls back to MIGRAD)." << std::endl
             << std::setw(25) << std::left << "\t--covariance-band:" << std::setw(0) << "Write the cross-section uncertainty band from the parameter covariance, without the interactive prompt." << std::endl
-            << std::setw(25) << std::left << "\t--scale-covariance:" << std::setw(0) << "With --covariance-band after a fit: inflate the covariance by the reduced chi-squared when it exceeds 1 (Birge ratio)." << std::endl;
+            << std::setw(25) << std::left << "\t--scale-covariance:" << std::setw(0) << "With --covariance-band after a fit: inflate the covariance by the reduced chi-squared when it exceeds 1 (Birge ratio)." << std::endl
+            << std::setw(25) << std::left << "\t--use-api:" << std::setw(0) << "Removed (the socket API is gone): exits with a pointer to pyazr." << std::endl;
 }
 
 /*!
@@ -313,8 +307,51 @@ bool parseOptions(int argc, char *argv[], Config &configure) {
 }
 
 /*!
+ * Ends the run when the input is exhausted at a prompt that needs an answer.
+ *
+ * A prompt loop re-asks until it gets a valid answer; at end of file (a piped
+ * script one line short, a closed stdin, Ctrl-D) getline() fails at once on
+ * every pass, so such a loop used to print its prompt forever -- one run wrote
+ * 10 GB of "Number of Threads" prompts.  Prompts whose blank answer is a
+ * documented default (the parameter and integral file names, the band and
+ * overwrite questions, the MCMC spreads) take that default at end of file
+ * instead, as before.
+ */
+
+[[noreturn]] static void inputEnded(const Config &configure, const char *prompt) {
+  configure.outStream << std::endl
+                      << "ERROR: the input ended (end of file) at the prompt \"" << prompt
+                      << "\", which needs an answer.  AZURE2 stops." << std::endl;
+  configure.outStream.flush();
+  std::exit(1);
+}
+
+/*!
+ * One answer from std::cin for the prompt \p prompt (named in the error);
+ * ends the run at end of file (inputEnded).
+ */
+
+static std::string readAnswer(const Config &configure, const char *prompt) {
+  std::string answer;
+  if (!getline(std::cin, answer)) inputEnded(configure, prompt);
+  return answer;
+}
+
+/*!
+ * One answer for a prompt whose blank answer means its default: at end of
+ * file the answer is blank, i.e. the default.
+ */
+
+static std::string readAnswerOrDefault() {
+  std::string answer;
+  if (!getline(std::cin, answer)) answer.clear();
+  return answer;
+}
+
+/*!
  * This function handles the command shell in AZURE2.  The function will not terminate until the user
- * enters a valid integer option.  Upon successful entry, the integer option is returned.
+ * enters a valid integer option, or the input ends (an error).  Upon successful entry, the integer
+ * option is returned.
  */
 
 int commandShell(const Config &configure) {
@@ -339,14 +376,7 @@ int commandShell(const Config &configure) {
   while (command < 1 || command > 6) {
 #endif
     configure.outStream << "azure2: ";
-    std::string inString;
-    if (!promptLine(configure, inString)) {
-#ifdef USE_MCMC
-      return 7;
-#else
-      return 6;
-#endif
-    }
+    std::string inString = readAnswer(configure, "azure2: (menu option)");
     if (inString.empty()) continue;
     std::istringstream in;
     in.str(inString);
@@ -428,8 +458,7 @@ void processCommand(int command, Config &configure) {
     bool goodAnswer = false;
     while (!goodAnswer) {
       configure.outStream << std::setw(30) << "Allowed Chi-Squared Variance: ";
-      std::string inString;
-      if (!promptLine(configure, inString)) std::exit(EXIT_FAILURE);
+      std::string inString = readAnswer(configure, "Allowed Chi-Squared Variance");
       std::istringstream stm;
       stm.str(inString);
       if (!(stm >> configure.chiVariance) || configure.chiVariance < 0.)
@@ -605,8 +634,9 @@ void getTemperatureFile(bool useReadline, Config &configure) {
   if (!useReadline) configure.outStream << std::setw(38) << "Temperature File Name: ";
   while (!validInfile) {
     std::string inFile;
-    // No file name can be obtained at EOF; give up rather than reprompt forever.
-    if (!getInputLine(useReadline, "               Temperature File Name: ", inFile)) return;
+    // No file name can be obtained at EOF, and the rate needs one.
+    if (!getInputLine(useReadline, "               Temperature File Name: ", inFile))
+      inputEnded(configure, "Temperature File Name");
     if (!inFile.empty()) {
       std::ifstream in;
       in.open(inFile.c_str());
@@ -658,8 +688,7 @@ void getMCMCParams(Config &configure, MCMCParams &mcmcParams) {
   // Get number of walkers
   while (mcmcParams.nwalkers < 2 || mcmcParams.nwalkers > 1000) {
     configure.outStream << std::setw(38) << "Number of Walkers (2-1000): ";
-    std::string inString;
-    if (!promptLine(configure, inString)) std::exit(EXIT_FAILURE);
+    std::string inString = readAnswer(configure, "Number of Walkers");
     std::istringstream stm;
     stm.str(inString);
     if (!(stm >> mcmcParams.nwalkers) || mcmcParams.nwalkers < 2 || mcmcParams.nwalkers > 1000)
@@ -669,8 +698,7 @@ void getMCMCParams(Config &configure, MCMCParams &mcmcParams) {
   // Get number of steps
   while (mcmcParams.nsteps < 100 || mcmcParams.nsteps > 10000000) {
     configure.outStream << std::setw(38) << "Number of Steps (100-10000000): ";
-    std::string inString;
-    if (!promptLine(configure, inString)) std::exit(EXIT_FAILURE);
+    std::string inString = readAnswer(configure, "Number of Steps");
     std::istringstream stm;
     stm.str(inString);
     if (!(stm >> mcmcParams.nsteps) || mcmcParams.nsteps < 100 || mcmcParams.nsteps > 10000000)
@@ -680,8 +708,7 @@ void getMCMCParams(Config &configure, MCMCParams &mcmcParams) {
   // Get initial parameter spread percentage
   while (mcmcParams.chainSpread <= 0.0 || mcmcParams.chainSpread > 50.0) {
     configure.outStream << std::setw(38) << "Initial Parameter Spread % (0.001-50) [default=5]: ";
-    std::string inString;
-    if (!promptLine(configure, inString)) std::exit(EXIT_FAILURE);
+    std::string inString = readAnswerOrDefault();
 
     // Allow empty input for default
     if (inString.empty() || inString.find_first_not_of(" \t\n") == std::string::npos) {
@@ -699,8 +726,7 @@ void getMCMCParams(Config &configure, MCMCParams &mcmcParams) {
   // a percentage of the level energy.
   while (mcmcParams.energySpreadKeV <= 0.0 || mcmcParams.energySpreadKeV > kMaxEnergySpreadKeV) {
     configure.outStream << std::setw(38) << "Level Energy Spread keV (0.001-1) [default=1]: ";
-    std::string inString;
-    if (!promptLine(configure, inString)) std::exit(EXIT_FAILURE);
+    std::string inString = readAnswerOrDefault();
 
     // Allow empty input for default
     if (inString.empty() || inString.find_first_not_of(" \t\n") == std::string::npos) {
@@ -720,8 +746,7 @@ void getMCMCParams(Config &configure, MCMCParams &mcmcParams) {
   mcmcParams.nthreads = 0;
   while (mcmcParams.nthreads < 1) {
     configure.outStream << std::setw(38) << "Number of Threads (1 or more): ";
-    std::string inString;
-    if (!promptLine(configure, inString)) std::exit(EXIT_FAILURE);
+    std::string inString = readAnswer(configure, "Number of Threads");
     std::istringstream stm;
     stm.str(inString);
     if (!(stm >> mcmcParams.nthreads) || mcmcParams.nthreads < 1)
@@ -733,7 +758,7 @@ void getMCMCParams(Config &configure, MCMCParams &mcmcParams) {
   std::string rwaAnswer = "";
   while (!goodAnswer) {
     configure.outStream << std::setw(38) << "Use Reduced Width Amplitudes (yes/no): ";
-    getline(std::cin, rwaAnswer);
+    rwaAnswer = readAnswer(configure, "Use Reduced Width Amplitudes");
     std::string trimmedAnswer;
     for (int i = 0; i < rwaAnswer.length(); i++)
       if (rwaAnswer[i] != ' ' && rwaAnswer[i] != '\t' && rwaAnswer[i] != '\n')
@@ -752,7 +777,7 @@ void getMCMCParams(Config &configure, MCMCParams &mcmcParams) {
   std::string overwriteAnswer = "";
   while (!goodAnswer) {
     configure.outStream << std::setw(38) << "Overwrite existing samples.mcmc? (yes/no) [default=no]: ";
-    getline(std::cin, overwriteAnswer);
+    overwriteAnswer = readAnswerOrDefault();
 
     // Allow empty input for default (no)
     if (overwriteAnswer.empty() || overwriteAnswer.find_first_not_of(" \t\n") == std::string::npos) {
@@ -788,8 +813,7 @@ void getRateParams(Config &configure, std::vector<SegPairs> &segPairs, bool useR
   while (configure.rateParams.entrancePair == configure.rateParams.exitPair) {
     while (!configure.rateParams.entrancePair) {
       configure.outStream << std::setw(38) << "Reaction Rate Entrance Pair: ";
-      std::string inString;
-      if (!promptLine(configure, inString)) std::exit(EXIT_FAILURE);
+      std::string inString = readAnswer(configure, "Reaction Rate Entrance Pair");
       std::istringstream stm;
       stm.str(inString);
       if (!(stm >> configure.rateParams.entrancePair) || configure.rateParams.entrancePair == 0)
@@ -797,8 +821,7 @@ void getRateParams(Config &configure, std::vector<SegPairs> &segPairs, bool useR
     }
     while (!configure.rateParams.exitPair) {
       configure.outStream << std::setw(38) << "Reaction Rate Exit Pair: ";
-      std::string inString;
-      if (!promptLine(configure, inString)) std::exit(EXIT_FAILURE);
+      std::string inString = readAnswer(configure, "Reaction Rate Exit Pair");
       std::istringstream stm;
       stm.str(inString);
       // -1: the total radiative capture, summed over every capture pair of the entrance nucleus (the exit
@@ -822,7 +845,7 @@ void getRateParams(Config &configure, std::vector<SegPairs> &segPairs, bool useR
   std::string fileAnswer = "";
   while (!goodAnswer) {
     configure.outStream << std::setw(38) << "Use temperatures from file (yes/no): ";
-    getline(std::cin, fileAnswer);
+    fileAnswer = readAnswer(configure, "Use temperatures from file");
     std::string trimmedAnswer;
     for (int i = 0; i < fileAnswer.length(); i++)
       if (fileAnswer[i] != ' ' && fileAnswer[i] != '\t' && fileAnswer[i] != '\n')
@@ -840,8 +863,7 @@ void getRateParams(Config &configure, std::vector<SegPairs> &segPairs, bool useR
   else {
     while (configure.rateParams.minTemp < 0.) {
       configure.outStream << std::setw(38) << "Reaction Rate Min Temp [GK]: ";
-      std::string inString;
-      if (!promptLine(configure, inString)) std::exit(EXIT_FAILURE);
+      std::string inString = readAnswer(configure, "Reaction Rate Min Temp");
       std::istringstream stm;
       stm.str(inString);
       if (!(stm >> configure.rateParams.minTemp) || configure.rateParams.minTemp < 0.)
@@ -849,8 +871,7 @@ void getRateParams(Config &configure, std::vector<SegPairs> &segPairs, bool useR
     }
     while (configure.rateParams.maxTemp < 0.) {
       configure.outStream << std::setw(38) << "Reaction Rate Max Temp [GK]: ";
-      std::string inString;
-      if (!promptLine(configure, inString)) std::exit(EXIT_FAILURE);
+      std::string inString = readAnswer(configure, "Reaction Rate Max Temp");
       std::istringstream stm;
       stm.str(inString);
       if (!(stm >> configure.rateParams.maxTemp) || configure.rateParams.maxTemp < 0.)
@@ -858,8 +879,7 @@ void getRateParams(Config &configure, std::vector<SegPairs> &segPairs, bool useR
     }
     while (configure.rateParams.tempStep < 0.) {
       configure.outStream << std::setw(38) << "Reaction Rate Temp Step [GK]: ";
-      std::string inString;
-      if (!promptLine(configure, inString)) std::exit(EXIT_FAILURE);
+      std::string inString = readAnswer(configure, "Reaction Rate Temp Step");
       std::istringstream stm;
       stm.str(inString);
       if (!(stm >> configure.rateParams.tempStep) || configure.rateParams.tempStep < 0.)
@@ -903,7 +923,8 @@ bool checkExternalCapture(Config &configure, const std::vector<SegPairs> &segPai
       stm.str(line);
       NucLine tempNucLine(stm);
       if ((stm.rdstate() & (std::stringstream::failbit | std::stringstream::badbit))) {
-        configure.outStream << "Problem reading nuclear information. Check configuration file." << std::endl;
+        configure.outStream << "Problem reading nuclear information. Check configuration file.  The line:\n  "
+                            << line << std::endl;
         return false;
       }
       if (tempNucLine.ecMultMask() != 0) {
@@ -1495,13 +1516,20 @@ int runMCMC(Config &configure, const MCMCParams &mcmcParams) {
 
     // Run MCMC sampling
     std::vector<std::vector<double>> samples;
-    mcmcCalc.RunMCMCSampling(mcmcParams.nwalkers, mcmcParams.nsteps, initialParams,
-                             samples, mcmcParams.chainSpread, mcmcParams.nthreads, mcmcParams.useRWA,
-                             mcmcParams.energySpreadKeV);
+    const bool sampled = mcmcCalc.RunMCMCSampling(mcmcParams.nwalkers, mcmcParams.nsteps, initialParams,
+                                                  samples, mcmcParams.chainSpread, mcmcParams.nthreads,
+                                                  mcmcParams.useRWA, mcmcParams.energySpreadKeV);
 
     // Clear callbacks
     AZURECalcMCMC::SetGUIProgressCallback(nullptr);
     AZURECalcMCMC::SetGUIIterationCallback(nullptr);
+
+    if (!sampled) {
+      if (configure.paramMask & Config::USE_EXTERNAL_CAPTURE) CleanupECAmplitudeCache();
+      delete compound;
+      delete data;
+      return -1;
+    }
 
     configure.outStream << std::endl
                         << std::endl;
@@ -1589,15 +1617,49 @@ int main(int argc, char *argv[]) {
                         << "\tSyntax: AZURE2 <options> configfile" << std::endl;
     return -1;
   }
-  if (configure.ReadConfigFile() == -1) {
+  int configStatus = configure.ReadConfigFile();
+  if (configStatus == -1) {
     configure.outStream << "Could not open " << configure.configfile << ".  Check that file exists."
                         << std::endl;
+    return -1;
+  } else if (configStatus < 0) {
     return -1;
   }
 #ifndef NO_STAT
   else if (configure.CheckForInputFiles() == -1)
     return -1;
 #endif
+  // Joint THM+direct fits couple an arbitrary HOES scale (~1e-4) to widths in
+  // eV; MIGRAD's own numerical differences stall far from the minimum on that
+  // scaling (7Li(p,a) Tumino+Rolfs benchmark: default MIGRAD stops at
+  // chi2 ~1057 with the direct norm dragged to 0.18, while the hybrid
+  // analytic/THM-finite-difference gradient reaches the physical minimum,
+  // chi2 47.9 with the direct norm at 1.000).  A THM segment is any
+  // <segmentsData> line whose observable code (8th field) is >= 10, so scan
+  // the file once and enable the analytic gradient for such projects.
+  if (!(configure.paramMask & Config::USE_ANALYTIC_GRADIENT)) {
+    std::ifstream thmScan(configure.configfile.c_str());
+    std::string line;
+    bool inSegments = false;
+    bool hasTHMSegment = false;
+    while (thmScan && std::getline(thmScan, line) && !hasTHMSegment) {
+      if (line.find("<segmentsData>") != std::string::npos) { inSegments = true; continue; }
+      if (line.find("</segmentsData>") != std::string::npos) inSegments = false;
+      if (!inSegments) continue;
+      std::istringstream fields(line);
+      double f[8];
+      bool ok = true;
+      for (int i = 0; i < 8 && ok; i++)
+        if (!(fields >> f[i])) ok = false;
+      if (ok && f[0] == 1.0 && f[7] >= 10.0) hasTHMSegment = true;
+    }
+    if (hasTHMSegment) {
+      configure.paramMask |= Config::USE_ANALYTIC_GRADIENT;
+      configure.outStream << "THM segments present: enabling the analytic gradient "
+                             "(numerical MIGRAD stalls on joint THM+direct fits)."
+                          << std::endl;
+    }
+  }
   if ((configure.paramMask & Config::USE_RMC_FORMALISM) && (configure.paramMask & Config::USE_BRUNE_FORMALISM)) {
     configure.outStream << "WARNING: --use-brune is incompatible with --use-rmc. Ignoring --use-brune." << std::endl;
     configure.paramMask &= ~Config::USE_BRUNE_FORMALISM;
@@ -1609,8 +1671,9 @@ int main(int argc, char *argv[]) {
   // to ~1e-13); ignore-externals still is not.
   configure.ResolveMatrixRoute();
 
-  // Exit status: 1 when the calculation was aborted or failed ("Calculation was aborted.", a refused project, a
-  // failed MCMC run), so that scripts and job chains can tell; before 2026-11-01 it was 0 whatever happened.
+  // Exit status: 1 when the calculation was aborted or failed ("Calculation was aborted.", a refused project --
+  // e.g. a <thm> weight that does not fit the data --, a failed MCMC run), so that scripts and job chains can
+  // tell; before 2026-11-01 it was 0 whatever happened on dev, and -1 (255) on thm.
   int returnValue = 0;
   {
     // Print welcome message

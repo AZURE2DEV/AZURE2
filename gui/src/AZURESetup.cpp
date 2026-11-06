@@ -11,6 +11,8 @@
 #include <QSettings>
 #include <QTextStream>
 #include <QDesktopServices>
+#include <QStatusBar>
+#include <algorithm>
 #include <QProgressDialog>
 #include <algorithm>
 #include <QCoreApplication>
@@ -121,6 +123,9 @@ AZURESetup::AZURESetup() :
   fittingTab->setAbundancesModel(pairsTab->getAbundancesModel());
   fittingTab->setTargetIntModel(targetIntTab->getTargetIntModel());
   fittingTab->setConfig(&GetConfig());
+  // Segment lines are numbered by position: what names them by number follows a move or a delete.
+  connect(segmentsTab, SIGNAL(dataSegmentsRenumbered(QVector<int>)), this, SLOT(followDataSegments(QVector<int>)));
+  connect(segmentsTab, SIGNAL(testSegmentsRenumbered(QVector<int>)), this, SLOT(followTestSegments(QVector<int>)));
 
   runTab = new RunTab();
   runTab->setPairsModel(pairsTab->getPairsModel());
@@ -158,6 +163,7 @@ AZURESetup::AZURESetup() :
 
   createActions();
   createMenus();
+  setThmEnabled(false);
 
 
   setWindowTitle(tr("AZURE2 -- untitled"));
@@ -222,6 +228,11 @@ void AZURESetup::createActions() {
   editOptionsAction = new QAction(tr("&Runtime Options..."), this);
   connect(editOptionsAction, SIGNAL(triggered()), this, SLOT(editOptions()));
 
+  thmWorkspaceAction = new QAction(tr("&THM Workspace..."), this);
+  thmWorkspaceAction->setToolTip(
+      tr("The Trojan Horse (HOES) observable: model options, experiments, binding energies"));
+  connect(thmWorkspaceAction, SIGNAL(triggered()), this, SLOT(editThmWorkspace()));
+
   buildCoulombTableAction = new QAction(tr("Build &Coulomb Table..."), this);
   buildCoulombTableAction->setStatusTip(tr("Build the table AZURE2 takes charged-particle Coulomb functions from"));
   connect(buildCoulombTableAction, SIGNAL(triggered()), this, SLOT(buildCoulombTable()));
@@ -257,6 +268,7 @@ void AZURESetup::createMenus() {
   configMenu->addAction(editChecksAction);
   configMenu->addAction(editDirsAction);
   configMenu->addAction(editOptionsAction);
+  configMenu->addAction(thmWorkspaceAction);
   configMenu->addAction(buildCoulombTableAction);
 
   helpMenu = menuBar()->addMenu(tr("&Documentation"));
@@ -452,6 +464,8 @@ bool AZURESetup::readFile(QString filename) {
   }
   file2.close();
 
+  if (!readThmContent(filename)) return false;
+
   // The optional <scatteringLengths> block.  The engine scans the whole file for
   // its tag (src/ScatteringLength.cpp), so it may sit anywhere -- after
   // </segmentsData>, after </segmentsTest>, ...; the sequential pass above skips
@@ -485,6 +499,60 @@ bool AZURESetup::readFile(QString filename) {
   updateRecent();
 
   return true;
+}
+
+QString AZURESetup::projectDirectory() {
+  QString file = QString::fromStdString(GetConfig().configfile);
+  return file.isEmpty() ? QDir::currentPath() : QFileInfo(file).absolutePath();
+}
+
+namespace {
+// An Experimental Effects segment list ("1,3-5", TargetEffect::GetSegmentsList)
+// after a renumbering; the text unchanged when its set is, "" when no segment
+// is left, and `ok` false (text unchanged) for a list this does not read.
+QString renumberedSegmentList(const QString &text, const QVector<int> &newNumber, bool &ok) {
+  ok = false;
+  QList<int> before;
+  for (const QString &part : text.split(',', Qt::SkipEmptyParts)) {
+    const QStringList ends = part.split('-');
+    bool a = false, b = true;
+    const int lo = ends[0].trimmed().toInt(&a);
+    const int hi = ends.size() == 2 ? ends[1].trimmed().toInt(&b) : lo;
+    if (!a || !b || ends.size() > 2 || lo < 1 || hi < lo || hi - lo > 100000) return text;
+    for (int k = lo; k <= hi; k++) before << k;
+  }
+  ok = true;
+  QList<int> after;
+  for (int k : before) {
+    const int n = k <= newNumber.size() ? newNumber[k - 1] : k;
+    if (n > 0 && !after.contains(n)) after << n;
+  }
+  std::sort(after.begin(), after.end());
+  std::sort(before.begin(), before.end());
+  if (after == before) return text;
+  return ThmExperimentRecord::segmentsListText(after);
+}
+}  // namespace
+
+void AZURESetup::followDataSegments(const QVector<int> &newNumber) {
+  QStringList notes = followThmSegments(newNumber, false);
+  TargetIntModel *effects = targetIntTab->getTargetIntModel();
+  const QList<TargetIntData> lines = effects->getLines();
+  int dropped = 0;
+  for (int i = lines.size() - 1; i >= 0; i--) {
+    bool ok;
+    const QString list = renumberedSegmentList(lines[i].segmentsList, newNumber, ok);
+    if (!ok || list == lines[i].segmentsList) continue;
+    if (list.isEmpty()) {
+      effects->removeRows(i, 1);
+      dropped++;
+    } else {
+      effects->setData(effects->index(i, 1), list, Qt::EditRole);
+    }
+  }
+  if (dropped) notes << tr("%n experimental effect line(s) removed: no segments left.", "", dropped);
+  fittingTab->followSegments(newNumber);
+  if (!notes.isEmpty()) statusBar()->showMessage(notes.join(' '));
 }
 
 bool AZURESetup::readLastRun(QTextStream &inStream) {
@@ -791,6 +859,18 @@ bool AZURESetup::writeFile(QString filename) {
   QString directory = info.absolutePath();
 
   QTextStream out(&file);
+  if (!this->writeProject(out, directory)) return false;
+
+  GetConfig().configfile = QDir::fromNativeSeparators(info.absoluteFilePath()).toStdString();
+  setWindowTitle(QString("AZURE2 -- %1").arg(QString::fromStdString(GetConfig().configfile)));
+  QDir::setCurrent(directory);
+
+  out.flush();
+  file.close();
+  return true;
+}
+
+bool AZURESetup::writeProject(QTextStream &out, const QString &directory) {
   out << "<config>" << Qt::endl;
   if (!this->writeConfig(out, directory)) return false;
   // The hard-sphere option and its limit live in the file so that --no-gui and pyazr runs agree with the GUI.
@@ -858,6 +938,10 @@ bool AZURESetup::writeFile(QString filename) {
   if (!targetIntTab->writeFile(out)) return false;
   out << "</targetInt>" << Qt::endl;
 
+  // Only if the file that was read had one: a project without the block must
+  // come back without it.
+  if (hasThmBlock) writeThmBlock(out, thmBlockLines);
+
   out << "<parameterSettings>" << Qt::endl;
   if (!fittingTab->writeParameterSettings(out)) return false;
   out << "</parameterSettings>" << Qt::endl;
@@ -869,13 +953,6 @@ bool AZURESetup::writeFile(QString filename) {
 #ifdef USE_MCMC
   if (!mcmcTab->writeMCMCSettings(out)) return false;
 #endif
-
-  GetConfig().configfile = QDir::fromNativeSeparators(info.absoluteFilePath()).toStdString();
-  setWindowTitle(QString("AZURE2 -- %1").arg(QString::fromStdString(GetConfig().configfile)));
-  QDir::setCurrent(directory);
-
-  out.flush();
-  file.close();
   return true;
 }
 
@@ -1293,6 +1370,7 @@ void AZURESetup::editOptions() {
     aDialog.useHybridMethodCheck->setChecked(false);
 
   aDialog.useAdaptiveGridCheck->setChecked(GetConfig().useAdaptiveGrid);
+  aDialog.useThmCheck->setChecked(thmEnabled());
   aDialog.relativisticCheck->setChecked(GetConfig().relativistic);
   aDialog.priorCovarianceEdit->setText(QString::fromStdString(GetConfig().priorCovariance));
   if (!GetConfig().configfile.empty())
@@ -1349,6 +1427,7 @@ void AZURESetup::editOptions() {
 
     // Update tab visibility based on hybrid method setting
     updateNuclearPotentialTabVisibility();
+    applyThmOption(aDialog.useThmCheck->isChecked());
 
     // if(aDialog.noLongWavelengthCheck->isChecked()) GetConfig().paramMask &= ~Config::USE_LONGWAVELENGTH_APPROX;
     // else GetConfig().paramMask |= Config::USE_LONGWAVELENGTH_APPROX;
@@ -1736,6 +1815,9 @@ void AZURESetup::reset() {
 #ifdef USE_QWT
   plotTab->reset();
 #endif
+  hasThmBlock = false;
+  thmBlockLines.clear();
+  setThmEnabled(false);
   setWindowTitle(tr("AZURE2 -- untitled"));
   GetConfig().configfile = "";
   GetConfig().priorCovariance.clear();
@@ -1762,17 +1844,56 @@ void AZURESetup::openWebsite() {
                                 "to visit the website."));
 }
 
+/*!
+ * A Config whose configfile is a snapshot of the *current* GUI state.
+ *
+ * CNuc::Fill reads the .azr from disk, so any conversion built on it sees the
+ * last saved file rather than what the user is looking at.  That is wrong for
+ * anything the conversion depends on -- channel radii, spins -- and badly wrong
+ * for the per-channel "Reduced Width Amplitude" flag, since CNuc::GetTransformParams
+ * uses it to decide whether to convert an amplitude at all.  Toggling that
+ * button and loading a param.sav without saving first would otherwise convert a
+ * value that should have passed through, or pass through one that should have
+ * been converted, changing it by orders of magnitude.
+ *
+ * The snapshot is written to a temporary file that is removed when the returned
+ * guard goes out of scope; the open project (its file name, the window title,
+ * the working directory) is left as it was.  If writing fails the original Config is returned
+ * unchanged, so the conversion degrades to the old behaviour rather than
+ * failing outright.
+ */
+AZURESetup::GuiStateSnapshot::GuiStateSnapshot(AZURESetup *setup) :
+  config(setup->GetConfig()),
+  ok(false) {
+  file.setFileTemplate(QDir::tempPath() + "/azure2_gui_state_XXXXXX.azr");
+  if (!file.open()) return;
+  // writeProject, not writeFile: writeFile makes the file the open project
+  // (configfile, window title, working directory), and this one is deleted
+  // with the guard.  Relative data paths stay relative to the project.
+  QTextStream out(&file);
+  const bool written = setup->writeProject(out, setup->projectDirectory());
+  out.flush();
+  file.close();
+  if (!written) return;
+  config.configfile = file.fileName().toStdString();
+  ok = true;
+}
+
 double AZURESetup::ConvertRWAToPhysical(const QString &paramName, double rwaValue) {
   // Convert RWA parameter to physical value using proper R-Matrix transformation
   // This is the inverse of ParameterLimitsManager::ConvertPhysicalLimitToReduced
 
   try {
+    // Convert against a snapshot of the current GUI state, not the last saved
+    // file -- see GuiStateSnapshot.
+    GuiStateSnapshot snap(this);
+    const Config &cfg = snap.ok ? snap.config : config;
+
     // Create compound nucleus and data objects
     CNuc *compound = new CNuc();
     EData *data = new EData();
 
-    // Fill compound nucleus from current GUI configuration
-    if (compound->Fill(config) == -1) {
+    if (compound->Fill(cfg) == -1) {
       delete compound;
       delete data;
       return rwaValue;  // Return original value if compound creation fails
@@ -1780,13 +1901,13 @@ double AZURESetup::ConvertRWAToPhysical(const QString &paramName, double rwaValu
 
     // Fill data object if needed for parameter context
     if (config.paramMask & Config::CALCULATE_WITH_DATA) {
-      if (data->Fill(config, compound) == -1) {
+      if (data->Fill(cfg, compound) == -1) {
         delete compound;
         delete data;
         return rwaValue;
       }
     } else {
-      if (data->MakePoints(config, compound) == -1) {
+      if (data->MakePoints(cfg, compound) == -1) {
         delete compound;
         delete data;
         return rwaValue;
@@ -1794,11 +1915,11 @@ double AZURESetup::ConvertRWAToPhysical(const QString &paramName, double rwaValu
     }
 
     // Initialize compound nucleus
-    compound->Initialize(config);
+    compound->Initialize(cfg);
 
     // Create parameter objects
     AZUREParams params;
-    compound->FillMnParams(params.GetMinuitParams(), &config);
+    compound->FillMnParams(params.GetMinuitParams(), &cfg);
     data->FillMnParams(params.GetMinuitParams());
 
     // Find the parameter index
@@ -1823,11 +1944,11 @@ double AZURESetup::ConvertRWAToPhysical(const QString &paramName, double rwaValu
 
     // Fill compound with RWA parameters and transform to physical
     compound->FillCompoundFromParams(rwaParams);
-    compound->CalcShiftFunctions(config);
-    compound->TransformOut(config);
+    compound->CalcShiftFunctions(cfg);
+    compound->TransformOut(cfg);
 
     // Get the transformed (physical) parameters
-    vector_r physicalParams = compound->GetTransformParams(config);
+    vector_r physicalParams = compound->GetTransformParams(cfg);
 
     double result = rwaValue;  // Default fallback
     if (paramIndex < physicalParams.size()) {
@@ -1856,12 +1977,15 @@ std::vector<double> AZURESetup::BatchConvertRWAToPhysical(const QStringList &par
   }
 
   try {
+    // Convert against a snapshot of the current GUI state -- see GuiStateSnapshot.
+    GuiStateSnapshot snap(this);
+    const Config &cfg = snap.ok ? snap.config : config;
+
     // Create compound nucleus and data objects ONCE
     CNuc *compound = new CNuc();
     EData *data = new EData();
 
-    // Fill compound nucleus from current GUI configuration
-    if (compound->Fill(config) == -1) {
+    if (compound->Fill(cfg) == -1) {
       delete compound;
       delete data;
       // Return original values if compound creation fails
@@ -1873,7 +1997,7 @@ std::vector<double> AZURESetup::BatchConvertRWAToPhysical(const QStringList &par
 
     // Fill data object if needed for parameter context
     if (config.paramMask & Config::CALCULATE_WITH_DATA) {
-      if (data->Fill(config, compound) == -1) {
+      if (data->Fill(cfg, compound) == -1) {
         delete compound;
         delete data;
         for (double val : rwaValues) {
@@ -1882,7 +2006,7 @@ std::vector<double> AZURESetup::BatchConvertRWAToPhysical(const QStringList &par
         return results;
       }
     } else {
-      if (data->MakePoints(config, compound) == -1) {
+      if (data->MakePoints(cfg, compound) == -1) {
         delete compound;
         delete data;
         for (double val : rwaValues) {
@@ -1893,11 +2017,11 @@ std::vector<double> AZURESetup::BatchConvertRWAToPhysical(const QStringList &par
     }
 
     // Initialize compound nucleus
-    compound->Initialize(config);
+    compound->Initialize(cfg);
 
     // Create parameter objects
     AZUREParams params;
-    compound->FillMnParams(params.GetMinuitParams(), &config);
+    compound->FillMnParams(params.GetMinuitParams(), &cfg);
     data->FillMnParams(params.GetMinuitParams());
 
     // Get current RWA parameters as base
@@ -1925,11 +2049,11 @@ std::vector<double> AZURESetup::BatchConvertRWAToPhysical(const QStringList &par
 
     // Fill compound with ALL RWA parameters and transform to physical ONCE
     compound->FillCompoundFromParams(rwaParams);
-    compound->CalcShiftFunctions(config);
-    compound->TransformOut(config);
+    compound->CalcShiftFunctions(cfg);
+    compound->TransformOut(cfg);
 
     // Get the transformed (physical) parameters
-    vector_r physicalParams = compound->GetTransformParams(config);
+    vector_r physicalParams = compound->GetTransformParams(cfg);
 
     // Extract results for each requested parameter
     for (int i = 0; i < paramIndices.size(); i++) {
@@ -2021,12 +2145,15 @@ std::vector<double> AZURESetup::BatchConvertRWAToPhysicalWithOldStructure(
   }
 
   try {
+    // Convert against a snapshot of the current GUI state -- see GuiStateSnapshot.
+    GuiStateSnapshot snap(this);
+    const Config &cfg = snap.ok ? snap.config : config;
+
     // Create compound nucleus and data objects ONCE
     CNuc *compound = new CNuc();
     EData *data = new EData();
 
-    // Fill compound nucleus from current GUI configuration
-    if (compound->Fill(config) == -1) {
+    if (compound->Fill(cfg) == -1) {
       delete compound;
       delete data;
       // Return original values if compound creation fails
@@ -2037,11 +2164,11 @@ std::vector<double> AZURESetup::BatchConvertRWAToPhysicalWithOldStructure(
     }
 
     // Initialize compound nucleus
-    compound->Initialize(config);
+    compound->Initialize(cfg);
 
     // Create parameter objects using the CURRENT structure
     AZUREParams params;
-    compound->FillMnParams(params.GetMinuitParams(), &config);
+    compound->FillMnParams(params.GetMinuitParams(), &cfg);
     data->FillMnParams(params.GetMinuitParams());
 
     // Get current RWA parameters as base
@@ -2089,11 +2216,11 @@ std::vector<double> AZURESetup::BatchConvertRWAToPhysicalWithOldStructure(
 
     // Fill compound with ALL RWA parameters and transform to physical ONCE
     compound->FillCompoundFromParams(rwaParams);
-    compound->CalcShiftFunctions(config);
-    compound->TransformOut(config);
+    compound->CalcShiftFunctions(cfg);
+    compound->TransformOut(cfg);
 
     // Get the transformed (physical) parameters
-    vector_r physicalParams = compound->GetTransformParams(config);
+    vector_r physicalParams = compound->GetTransformParams(cfg);
 
     // Extract results for each requested parameter
     for (int i = 0; i < paramIndices.size(); i++) {

@@ -22,6 +22,9 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SRC="$HERE/../target_effect_ranges"
 AZURE2_BIN="${1:?usage: check.sh path/to/AZURE2}"
 AZURE2_BIN="$(cd "$(dirname "$AZURE2_BIN")" && pwd)/$(basename "$AZURE2_BIN")"
+# A hang fails the check instead of stalling the suite (tests/lib/guard.sh).
+. "$HERE/../lib/guard.sh"
+RUN="$(guard_command "${TEST_TIMEOUT:-600}")"
 export OMP_NUM_THREADS="${OMP_NUM_THREADS:-2}"
 
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/te_shared.XXXXXX")"
@@ -48,7 +51,7 @@ make_variant() {
     { print }' "$SRC/target_effect_ranges.azr" > "$dir/t.azr"
 }
 
-run() { (cd "$WORK/$1" && printf '1\n\n\n7\n' | "$AZURE2_BIN" --no-gui --no-readline t.azr > run.log 2>&1); }
+run() { (cd "$WORK/$1" && printf '1\n\n\n7\n' | $RUN "$AZURE2_BIN" --no-gui --no-readline t.azr > run.log 2>&1); }
 seg() { awk -F, -v k="$2" '$1 == k { print $2 }' "$WORK/$1/output/chiSquared.out" 2>/dev/null; }
 
 make_variant shared 0

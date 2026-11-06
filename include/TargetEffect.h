@@ -54,6 +54,14 @@ class TargetEffect {
    * sigma > 0.  The line need not carry convolution or target integration.
    */
   bool HasScreening() const { return hasScreening_; }
+  /*!
+   * Its place among the active <targetInt> lines (1-based; 0 until read).  A
+   * line listing several segments gives each segment its own copy of the
+   * effect (EData::ReadTargetEffectsFile), so effect numbers and lines differ;
+   * a screening parameter belongs to the line, shared by its copies.
+   */
+  int GetLineNumber() const { return lineNumber_; }
+  void SetLineNumber(int n) { lineNumber_ = n; }
   /// A `screening` keyword without its three numbers (or a negative sigma).
   bool HasScreeningError() const { return screeningError_; }
   /// Current U_e in eV (the value read, or the fit parameter's).
@@ -195,7 +203,21 @@ class TargetEffect {
   bool HasWindows() const { return !ranges_.empty() || autoWindows_; }
 
   /// The multiple of sigma above and below centroid energy to use as integration range
+  /// (5 since dev 7d24c88: at 3 the 0.27 % of kernel weight beyond the window was dropped and the rest rescaled).
   static constexpr double convolutionRange = 5.;
+  /*Window for THM (HOES) segments: their extremely narrow resonances make
+  the smeared curve in the valleys a pure Gaussian tail of a neighboring spike,
+  so a +-3 sigma cutoff loses up to ~25% there; +-5 sigma keeps the truncation
+  error below ~1e-3.  Equal to convolutionRange since dev 7d24c88; kept as its
+  own name so the THM window is stated where it is used.*/
+  static constexpr double thmConvolutionRange = 5.;
+  /*Numerical floor (in MeV) kept between a target-effect sub-point energy and the
+  channel threshold, since Coulomb functions and penetrabilities are singular at
+  E=0. For ordinary segments this bounds the channel CM energy directly; for THM
+  (HOES) segments, which legitimately probe negative channel CM energies, it
+  instead bounds the compound-system energy (CMEnergy+SepE+ExE) so the floor is
+  applied relative to the physical threshold rather than an arbitrary channel origin.*/
+  static constexpr double minIntegrationEnergy = 0.001;
 
   /// One skewed-Gaussian component of a beam energy profile.
   struct BeamProfileComponent {
@@ -350,6 +372,7 @@ class TargetEffect {
   bool sigmaLab_ = false;        ///< the expression is lab in, lab out (`sigmalab` keyword)
   bool hasScreening_ = false;     ///< `screening` keyword present
   bool screeningError_ = false;   ///< malformed `screening` block
+  int lineNumber_ = 0;
   double screeningUe_ = 0.0;      ///< eV
   double screeningNominal_ = 0.0; ///< eV, as read
   bool screeningVary_ = false;
@@ -369,6 +392,7 @@ class TargetEffect {
 
   // Adaptive integration grid parameters
   double resonanceWidthMultiplier_;
+  bool explicitResonanceWidthMultiplier_ = false;
   double pointsPerWidth_;
 
   // Optional restriction of the effect to lab-energy windows, with a smooth

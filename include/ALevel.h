@@ -42,6 +42,9 @@ class ALevel {
   bool EnergyFixed() const;
   /// Is this channel's reduced width amplitude held fixed during fitting?
   bool ChannelFixed(int) const;
+  /// Does this channel's <levels> gamma field hold a reduced-width amplitude
+  /// directly, rather than a physical width? (The 33-field THM line's flag.)
+  bool GammaIsRWA(int) const;
   /// Is the level a final state for external capture?
   bool IsECLevel() const;
   int NumNFIntegrals() const;
@@ -164,6 +167,9 @@ class ALevel {
   double shift_cache_energy_ = std::numeric_limits<double>::quiet_NaN();
   double shift_d2_energy_ = std::numeric_limits<double>::quiet_NaN();
   std::vector<bool> channelfixed_;
+  /// Per-channel input convention: true = gamma column was a reduced width
+  /// amplitude (MeV^(1/2)), false = physical partial width/ANC (legacy default).
+  std::vector<bool> gamma_is_rwa_;
   vector_r gammas_;
   vector_r fitgammas_;
   vector_r nf_integrals_;

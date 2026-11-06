@@ -24,7 +24,7 @@ J = 1 - sum_c gamma^2 dS_c/dE, so three things have to hold and are pinned here:
 Models: tests/13N (capture with external capture and a bound final state) and
 tests/identical_pp_res (two-channel 3P2-3F2 group, several levels per J^pi).
 
-Needs the compiled engine; skips cleanly without it.
+Needs numpy and the compiled engine; exits 77 (skipped) without them.
 
 Run from anywhere:  python3 tests/pyazr/park_gradient_test.py
 """
@@ -53,7 +53,7 @@ try:
     from pyazr import azure2
 except Exception as err:                                   # engine not built
     print(f"skip: engine not available ({type(err).__name__}: {err})")
-    sys.exit(0)
+    sys.exit(77)
 
 
 def stage(tmp, name, tag=""):

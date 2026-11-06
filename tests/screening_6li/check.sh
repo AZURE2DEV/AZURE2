@@ -18,8 +18,9 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 AZURE2_BIN="${1:?usage: check.sh path/to/AZURE2}"
 AZURE2_BIN="$(cd "$(dirname "$AZURE2_BIN")" && pwd)/$(basename "$AZURE2_BIN")"
 export OMP_NUM_THREADS="${OMP_NUM_THREADS:-2}"
-TIMEOUT_CMD="$(command -v timeout || command -v gtimeout || true)"
-run_limited() { if [ -n "$TIMEOUT_CMD" ]; then "$TIMEOUT_CMD" "$@"; else shift; "$@"; fi; }
+# The time limit of tests/lib/guard.sh: timeout, gtimeout or a shell watchdog.
+. "$HERE/../lib/guard.sh"
+run_limited() { local limit="$1"; shift; $(guard_command "$limit") "$@"; }
 
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/screening_6li.XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
@@ -40,8 +41,9 @@ run() {
   (cd "$dir" && printf "$input" | run_limited 900 "$AZURE2_BIN" $flags --no-gui --no-readline t.azr > run.log 2>&1)
 }
 out() { echo "$WORK/$1/output/AZUREOut_aa=2_R=1.out"; }
-chi() { awk -F, -v s="$2" '$1 == s { print $2; exit }' "$WORK/$1/output/chiSquared.out"; }
-par() { awk -v n="$2" '$1 == n { print $2; exit }' "$WORK/$1/output/param.sav"; }
+# Output files may end their lines with CR (Windows builds): strip it before reading fields.
+chi() { awk -F, -v s="$2" '{ sub(/\r$/, "") } $1 == s { print $2; exit }' "$WORK/$1/output/chiSquared.out"; }
+par() { awk -v n="$2" '{ sub(/\r$/, "") } $1 == n { print $2; exit }' "$WORK/$1/output/param.sav"; }
 # |a/b - 1| <= tol
 close() { awk -v a="$1" -v b="$2" -v t="$3" 'BEGIN { d = a / b - 1; if (d < 0) d = -d; exit !(a != "" && d <= t) }'; }
 # |a - b| <= t
@@ -59,6 +61,7 @@ if [ -s "$(out bare)" ] && [ -s "$(out scr)" ]; then
   # constants (Constants.h) and the pair's masses (1.00782, 6.0151).
   read -r worst nrow <<< "$(paste "$(out bare)" "$(out scr)" | awk -v u1="${UE[0]}" -v u2="${UE[1]}" -v u3="${UE[2]}" '
     BEGIN { pi = 3.141592653589793; uconv = 931.49410242; fs = 1 / 137.035999084; mu = 1.00782 * 6.0151 / 7.02292 }
+    { gsub(/\r/, "") }
     NF >= 8 { r++; m = NF / 2; E = $1; b = $4; s = $(m + 4)
       u = (r <= 9) ? u1 : (r <= 16) ? u2 : u3
       eta = sqrt(uconv / 2) * fs * 3 * sqrt(mu / E)

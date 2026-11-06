@@ -5,6 +5,8 @@
 #include <algorithm>
 
 #include "LevelsTab.h"
+#include <QSet>
+#include "RoundTripNumber.h"
 #include "LevelsHeaderView.h"
 #include "AddLevelDialog.h"
 #include "IAEALevelDialog.h"
@@ -103,6 +105,7 @@ LevelsTab::LevelsTab(QWidget *parent) :
   channelsView->setColumnHidden(1, true);
   channelsView->setColumnHidden(5, true);
   channelsView->setColumnHidden(6, true);
+  channelsView->setColumnHidden(7, true);
   channelsView->setItemDelegateForColumn(2, new RichTextDelegate());
   channelsView->setItemDelegateForColumn(3, new RichTextDelegate());
   channelsView->setItemDelegateForColumn(4, new RichTextDelegate());
@@ -502,11 +505,14 @@ void LevelsTab::updateChannelsLevelEdited(int levelIndex) {
           channels.at(ii).radType == newChannels.at(i).radType) {
         newChannels[i].isFixed = channels.at(ii).isFixed;
         newChannels[i].reducedWidth = channels.at(ii).reducedWidth;
+        newChannels[i].gammaIsRWA = channels.at(ii).gammaIsRWA;
         break;
       }
     }
     index = channelsModel->index(i, 6, QModelIndex());
     channelsModel->setData(index, newChannels.at(i).reducedWidth, Qt::EditRole);
+    index = channelsModel->index(i, 7, QModelIndex());
+    channelsModel->setData(index, newChannels.at(i).gammaIsRWA, Qt::EditRole);
     index = channelsModel->index(i, 0, QModelIndex());
     channelsModel->setData(index, newChannels.at(i).isFixed, Qt::EditRole);
   }
@@ -570,19 +576,19 @@ QList<ChannelsData> LevelsTab::calculateChannels(const LevelsData &level, int le
         for (double l = fabs(s - level.jValue); l <= s + level.jValue; l += 1.0) {
           if (identical && (int(l + 0.5) + int(s + 0.5)) % 2 != 0) continue;
           if (int(l * 2.0) % 2 == 0 && pair.lightPi * pair.heavyPi * pow(-1, int(l)) == level.piValue && int(l) <= maxL) {
-            ChannelsData channel = {0, levelIndex, i, s, int(l), 'P', 0.0};
+            ChannelsData channel = {0, levelIndex, i, s, int(l), 'P', 0.0, 0};
             channels.push_back(channel);
           }
         }
       }
     } else if (pair.pairType == 20) {
       if (fabs(pair.heavyJ - level.jValue) == 0. && pair.heavyPi == level.piValue) {
-        ChannelsData gtChannel = {0, levelIndex, i, 0., 1, 'G', 0.0};
-        ChannelsData fChannel = {0, levelIndex, i, 0., 0, 'F', 0.0};
+        ChannelsData gtChannel = {0, levelIndex, i, 0., 1, 'G', 0.0, 0};
+        ChannelsData fChannel = {0, levelIndex, i, 0., 0, 'F', 0.0, 0};
         channels.push_back(gtChannel);
         channels.push_back(fChannel);
       } else if (fabs(pair.heavyJ - level.jValue) == 1. && pair.heavyPi == level.piValue) {
-        ChannelsData gtChannel = {0, levelIndex, i, 1., 1, 'G', 0.0};
+        ChannelsData gtChannel = {0, levelIndex, i, 1., 1, 'G', 0.0, 0};
         channels.push_back(gtChannel);
       }
     } else {
@@ -605,7 +611,7 @@ QList<ChannelsData> LevelsTab::calculateChannels(const LevelsData &level, int le
             else
               radType = 'E';
           }
-          ChannelsData channel = {0, levelIndex, i, pair.heavyJ, l, radType, 0.0};
+          ChannelsData channel = {0, levelIndex, i, pair.heavyJ, l, radType, 0.0, 0};
           channels.push_back(channel);
           numMult++;
         }
@@ -693,11 +699,14 @@ void LevelsTab::updateChannelsPairAddedEdited() {
             channels.at(ii).radType == newChannels.at(i).radType) {
           newChannels[i].reducedWidth = channels.at(ii).reducedWidth;
           newChannels[i].isFixed = channels.at(ii).isFixed;
+          newChannels[i].gammaIsRWA = channels.at(ii).gammaIsRWA;
           break;
         }
       }
       index = channelsModel->index(i, 6, QModelIndex());
       channelsModel->setData(index, newChannels.at(i).reducedWidth, Qt::EditRole);
+      index = channelsModel->index(i, 7, QModelIndex());
+      channelsModel->setData(index, newChannels.at(i).gammaIsRWA, Qt::EditRole);
       index = channelsModel->index(i, 0, QModelIndex());
       channelsModel->setData(index, newChannels.at(i).isFixed, Qt::EditRole);
     }
@@ -816,6 +825,9 @@ void LevelsTab::updateDetails(const QItemSelection &selection) {
       channelDetails->setNormParam(4);
     else
       channelDetails->setNormParam(0);
+    // A width entered as a reduced width amplitude (THM workspace) is
+    // labelled as one; the flag itself is edited there, not here.
+    channelDetails->setWidthIsAmplitude(channel.radType == 'P' && channel.gammaIsRWA == 1);
     channelDetails->reducedWidthText->setText(QString("%1").arg(channel.reducedWidth));
 
     // Store the inputs for the physical Wigner-limit calculation.  It applies to
@@ -877,17 +889,29 @@ void LevelsTab::calculateWignerLimit() {
   }
 
   double P = rho / denom;
+  // Teichmann-Wigner limit gamma^2_W = 3 hbar^2 / (2 mu a^2), the 1.5 from dev's
+  // formula fix, displayed in the channel's own convention as before.
   double gamma2W = 1.5 * hbarc * hbarc / (wignerRedMass_ * uconv * wignerRadius_ * wignerRadius_);  // MeV
-  double gammaW_eV = 2.0 * P * gamma2W * 1.0e6;                                               // eV
-  double av = std::fabs(gammaW_eV);
+
+  // Report the limit in whichever convention the channel's width is entered in,
+  // so the number can be compared with the value in the table directly. The
+  // stored quantity is gamma^2_W, the limit on the reduced width *squared*: for
+  // an amplitude that means its square root, and for a partial width the usual
+  // Gamma_W = 2 P gamma^2_W.
+  const bool asAmplitude = channelDetails->widthIsAmplitude();
+  double value = asAmplitude ? std::sqrt(gamma2W)          // MeV^(1/2)
+                             : 2.0 * P * gamma2W * 1.0e6;  // eV
+  double av = std::fabs(value);
   QString text = (av != 0. && (av >= 1.e4 || av < 1.e-4))
-      ? QString::number(gammaW_eV, 'e', 4)
-      : QString::number(gammaW_eV, 'f', 4);
+      ? QString::number(value, 'e', 4)
+      : QString::number(value, 'f', 4);
+  text += asAmplitude ? tr(" MeV^1/2") : tr(" eV");
   channelDetails->wignerLimitText->setText(text);
 }
 
 QList<int> LevelsTab::writtenLevelOrder() {
   QList<LevelsData> levels = levelsModel->getLevels();
+
   double lowJ = 0;
   double highJ = 0;
   for (int la = 0; la < levels.size(); la++) {
@@ -900,8 +924,7 @@ QList<int> LevelsTab::writtenLevelOrder() {
     else if (tempJ >= highJ)
       highJ = tempJ;
   }
-  QList<QList<LevelsData>> sortedLevels;
-  QList<QList<int>> levelsMap;
+  QList<int> order;
   // One block per compound nucleus, in order of first appearance, each sorted by J, parity and energy as before
   // (a single-nucleus project is written exactly as it always was).
   QList<Nucleus> nucleusOrder;
@@ -910,35 +933,18 @@ QList<int> LevelsTab::writtenLevelOrder() {
   for (const Nucleus &nucleus : nucleusOrder)
   for (double j = lowJ; j <= highJ; j += 0.5) {
     for (int pi = -1; pi <= 1; pi += 2) {
+      // Insertion by energy within the (J, parity) group; a level is placed
+      // before the first one of equal or higher energy.
+      QList<int> group;
       for (int la = 0; la < levels.size(); la++) {
-        if (levels.at(la).jValue == j && levels.at(la).piValue == pi && levels.at(la).nucleus() == nucleus) {
-          if (sortedLevels.size() == 0 || (sortedLevels.at(sortedLevels.size() - 1).at(0).jValue != j || sortedLevels.at(sortedLevels.size() - 1).at(0).piValue != pi || sortedLevels.at(sortedLevels.size() - 1).at(0).nucleus() != nucleus)) {
-            QList<LevelsData> tempLevelList;
-            sortedLevels.append(tempLevelList);
-            QList<int> tempKeyList;
-            levelsMap.append(tempKeyList);
-          }
-          if (sortedLevels.at(sortedLevels.size() - 1).size() == 0) {
-            sortedLevels[sortedLevels.size() - 1].append(levels.at(la));
-            levelsMap[levelsMap.size() - 1].append(la);
-          } else
-            for (int mu = 0; mu < sortedLevels.at(sortedLevels.size() - 1).size(); mu++) {
-              if (levels.at(la).energy <= sortedLevels.at(sortedLevels.size() - 1).at(mu).energy) {
-                sortedLevels[sortedLevels.size() - 1].insert(mu, levels.at(la));
-                levelsMap[levelsMap.size() - 1].insert(mu, la);
-                break;
-              } else if (mu == sortedLevels.at(sortedLevels.size() - 1).size() - 1) {
-                sortedLevels[sortedLevels.size() - 1].append(levels.at(la));
-                levelsMap[levelsMap.size() - 1].append(la);
-                break;
-              }
-            }
-        }
+        if (levels.at(la).jValue != j || levels.at(la).piValue != pi || levels.at(la).nucleus() != nucleus) continue;
+        int mu = 0;
+        while (mu < group.size() && levels.at(la).energy > levels.at(group.at(mu)).energy) mu++;
+        group.insert(mu, la);
       }
+      order.append(group);
     }
   }
-  QList<int> order;
-  for (const QList<int> &group : levelsMap) order.append(group);
   return order;
 }
 
@@ -958,6 +964,10 @@ LevelsTab::EngineNumbering LevelsTab::engineNumbering(const QList<int> &order) {
   QList<Group> groups;
   for (int row : order) {
     if (row < 0 || row >= levels.size() || levels.at(row).isActive != 1) continue;
+    // A level without channels writes no line (writeNuclearFile), so the engine never sees it.
+    bool hasChannel = false;
+    for (const ChannelsData &c : channels) hasChannel = hasChannel || c.levelIndex == row;
+    if (!hasChannel) continue;
     const LevelsData &l = levels.at(row);
     int g = 0;
     while (g < groups.size() && !(groups[g].nucleus == l.nucleus() && groups[g].j == l.jValue && groups[g].pi == l.piValue)) g++;
@@ -989,52 +999,52 @@ bool LevelsTab::writeNuclearFile(QTextStream &outStream) {
   QList<ChannelsData> channels = channelsModel->getChannels();
 
   outStream.setFieldAlignment(QTextStream::AlignRight);
-  // Level energies, widths, masses, separation energies, radii and g-factors at full precision.  Through the
-  // stream they went out with QTextStream's default 6 significant digits (1.008665 -> 1.00866, against the
-  // full-AME-mass rule; 1.5e-3 on an n+t cross section near a resonance -- found 2026-10-17 by the isospin-levels
-  // session).  Each value carries its own leading space: the field widths below are minimums, and a long number
-  // in a narrow field would otherwise run into its neighbour.
-  auto full = [](double v) { return QStringLiteral(" ") + QString::number(v, 'g', 15); };
+  // Right-aligned columns; a value as wide as its column (a round-trip
+  // number such as 16.499949983821764) gets a space so that it cannot run
+  // into the column before it.
+  auto col = [](int width, const QString &text) { return text.size() >= width ? " " + text : text.rightJustified(width); };
 
   const QList<int> order = this->writtenLevelOrder();
   int levelId = 1;
-  for (int row : order) {
-    const LevelsData &level = levels.at(row);
+  for (int la : order) {
+    const LevelsData &level = levels.at(la);
     for (int ch = 0; ch < channels.size(); ch++) {
-      if (channels.at(ch).levelIndex == row) {
-        outStream << qSetFieldWidth(4) << level.jValue
-                  << qSetFieldWidth(5) << level.piValue
-                  << qSetFieldWidth(13) << full(level.energy)
-                  << qSetFieldWidth(5) << level.isFixed
-                  << qSetFieldWidth(5) << "1"
-                  << qSetFieldWidth(5) << channels.at(ch).pairIndex + 1
-                  << qSetFieldWidth(5) << int(channels.at(ch).sValue * 2)
-                  << qSetFieldWidth(5) << int(channels.at(ch).lValue * 2)
-                  << qSetFieldWidth(5) << levelId
-                  << qSetFieldWidth(5) << level.isActive
-                  << qSetFieldWidth(5) << channels.at(ch).isFixed
-                  << qSetFieldWidth(20) << full(channels.at(ch).reducedWidth)
-                  << qSetFieldWidth(5) << pairs.at(channels.at(ch).pairIndex).lightJ
-                  << qSetFieldWidth(5) << pairs.at(channels.at(ch).pairIndex).lightPi
-                  << qSetFieldWidth(5) << pairs.at(channels.at(ch).pairIndex).heavyJ
-                  << qSetFieldWidth(5) << pairs.at(channels.at(ch).pairIndex).heavyPi
-                  << qSetFieldWidth(13) << full(pairs.at(channels.at(ch).pairIndex).excitationEnergy)
-                  << qSetFieldWidth(8) << full(pairs.at(channels.at(ch).pairIndex).lightM)
-                  << qSetFieldWidth(8) << full(pairs.at(channels.at(ch).pairIndex).heavyM)
-                  << qSetFieldWidth(5) << pairs.at(channels.at(ch).pairIndex).lightZ
-                  << qSetFieldWidth(5) << pairs.at(channels.at(ch).pairIndex).heavyZ
-                  << qSetFieldWidth(13) << full(pairs.at(0).seperationEnergy)
-                  << qSetFieldWidth(13) << full(pairs.at(channels.at(ch).pairIndex).seperationEnergy)
+      if (channels.at(ch).levelIndex == la) {
+        outStream << qSetFieldWidth(0) << col(4, QString("%1").arg(roundTripNumber(level.jValue)))
+                  << col(5, QString("%1").arg(level.piValue))
+                  << col(13, QString("%1").arg(roundTripNumber(level.energy)))
+                  << col(5, QString("%1").arg(level.isFixed))
+                  << col(5, QString("%1").arg("1"))
+                  << col(5, QString("%1").arg(channels.at(ch).pairIndex + 1))
+                  << col(5, QString("%1").arg(int(channels.at(ch).sValue * 2)))
+                  << col(5, QString("%1").arg(int(channels.at(ch).lValue * 2)))
+                  << col(5, QString("%1").arg(levelId))
+                  << col(5, QString("%1").arg(level.isActive))
+                  << col(5, QString("%1").arg(channels.at(ch).isFixed))
+                  << col(20, QString("%1").arg(roundTripNumber(channels.at(ch).reducedWidth)))
+                  << col(5, QString("%1").arg(roundTripNumber(pairs.at(channels.at(ch).pairIndex).lightJ)))
+                  << col(5, QString("%1").arg(pairs.at(channels.at(ch).pairIndex).lightPi))
+                  << col(5, QString("%1").arg(roundTripNumber(pairs.at(channels.at(ch).pairIndex).heavyJ)))
+                  << col(5, QString("%1").arg(pairs.at(channels.at(ch).pairIndex).heavyPi))
+                  << col(13, QString("%1").arg(roundTripNumber(pairs.at(channels.at(ch).pairIndex).excitationEnergy)))
+                  << col(8, QString("%1").arg(roundTripNumber(pairs.at(channels.at(ch).pairIndex).lightM)))
+                  << col(8, QString("%1").arg(roundTripNumber(pairs.at(channels.at(ch).pairIndex).heavyM)))
+                  << col(5, QString("%1").arg(pairs.at(channels.at(ch).pairIndex).lightZ))
+                  << col(5, QString("%1").arg(pairs.at(channels.at(ch).pairIndex).heavyZ))
+                  << col(13, QString("%1").arg(roundTripNumber(pairs.at(0).seperationEnergy)))
+                  << col(13, QString("%1").arg(roundTripNumber(pairs.at(channels.at(ch).pairIndex).seperationEnergy)))
                   << "    0    0          0.0"
-                  << qSetFieldWidth(6) << pairs.at(channels.at(ch).pairIndex).pairType
-                  << qSetFieldWidth(8) << full(pairs.at(channels.at(ch).pairIndex).channelRadius)
-                  << qSetFieldWidth(13) << full(pairs.at(channels.at(ch).pairIndex).lightG)
-                  << qSetFieldWidth(13) << full(pairs.at(channels.at(ch).pairIndex).heavyG)
-                  << qSetFieldWidth(8) << pairs.at(channels.at(ch).pairIndex).ecMultMask;
-        // Column 32, the light particle's excitation energy, only when it is set: every file without one keeps
-        // its 31 columns (older engines ignore a 32nd silently, older GUIs drop it on save).
+                  << col(6, QString("%1").arg(pairs.at(channels.at(ch).pairIndex).pairType))
+                  << col(8, QString("%1").arg(roundTripNumber(pairs.at(channels.at(ch).pairIndex).channelRadius)))
+                  << col(13, QString("%1").arg(roundTripNumber(pairs.at(channels.at(ch).pairIndex).lightG)))
+                  << col(13, QString("%1").arg(roundTripNumber(pairs.at(channels.at(ch).pairIndex).heavyG)))
+                  << col(8, QString("%1").arg(pairs.at(channels.at(ch).pairIndex).ecMultMask))
+                  << col(9, QString("%1").arg(roundTripNumber(pairs.at(channels.at(ch).pairIndex).bindingEnergy)))
+                  << col(4, QString("%1").arg((channels.at(ch).radType == 'P' ? channels.at(ch).gammaIsRWA : 0)));
+        // The light particle's excitation energy (dev, 2026-11-05), only when it is set: after the two THM
+        // columns this GUI always writes, so it is the 34th column (NucLine tells the layouts apart by count).
         if (pairs.at(channels.at(ch).pairIndex).lightExcitation != 0.)
-          outStream << qSetFieldWidth(13) << full(pairs.at(channels.at(ch).pairIndex).lightExcitation);
+          outStream << col(13, QString("%1").arg(roundTripNumber(pairs.at(channels.at(ch).pairIndex).lightExcitation)));
         outStream << qSetFieldWidth(0) << Qt::endl;
       }
     }
@@ -1095,6 +1105,7 @@ bool LevelsTab::readNuclearFile(QTextStream &inStream) {
   int lastPair;
   int currentPair = 0;
   int thisNumMult = 0;
+  QSet<int> readPairKeys;
 
   QString line("");
   while (!inStream.atEnd() && line.trimmed() != QString("</levels>")) {
@@ -1106,13 +1117,32 @@ bool LevelsTab::readNuclearFile(QTextStream &inStream) {
       if (in.status() != QTextStream::Ok) return false;
       in >> ecMultMask;
       if (in.status() != QTextStream::Ok) ecMultMask = 0;
-      // the optional 32nd column, the light particle's excitation energy (0 when absent)
+      // Optional trailing columns, told apart by their number as in the engine (NucLine): one = the light
+      // particle's excitation energy (dev, 2026-11-05); two = the THM binding energy (per pair) and the width
+      // input-convention flag (per channel: 1 = the gamma column is a reduced width amplitude, 0 = physical);
+      // three = both, the excitation energy last.  Legacy files have none.
+      double bindingEnergy = 0.0;
+      int gammaIsRWA = 0;
       lightExcitation = 0.;
-      if (in.status() == QTextStream::Ok) {
-        in.skipWhiteSpace();
-        if (!in.atEnd()) {
-          in >> lightExcitation;
-          if (in.status() != QTextStream::Ok) return false;
+      {
+        QList<double> extra;
+        if (in.status() == QTextStream::Ok) {
+          in.skipWhiteSpace();
+          while (!in.atEnd() && extra.size() < 4) {
+            double x;
+            in >> x;
+            if (in.status() != QTextStream::Ok) return false;
+            extra.append(x);
+            in.skipWhiteSpace();
+          }
+        }
+        if (extra.size() > 3) return false;
+        if (extra.size() == 1) {
+          lightExcitation = extra.at(0);
+        } else if (extra.size() >= 2) {
+          bindingEnergy = extra.at(0);
+          gammaIsRWA = (int)extra.at(1);
+          if (extra.size() == 3) lightExcitation = extra.at(2);
         }
       }
       if (firstLine) {
@@ -1134,12 +1164,18 @@ bool LevelsTab::readNuclearFile(QTextStream &inStream) {
 
       PairsData newPair = {lightJ, lightPi, lightZ, lightM, lightG, heavyJ, heavyPi, heavyZ, heavyM,
                            heavyG, excitationEnergy, seperationEnergyOut, channelRadius, pairType, ecMultMask,
-                           lightExcitation};
+                           lightExcitation, bindingEnergy};
+      // A pair is its key (column 6), as in the engine's CNuc::Fill: the first
+      // line with a key defines that pair, later lines with it only add
+      // channels.  Pairs alike in everything else stay apart.
       int pairIndex = ir - 1;
-      if (pairsModel->numPairs() < ir) {
-        emit(readNewPair(newPair, pairIndex, true));
-      } else if (pairsModel->isPair(newPair) == -1) {
-        emit(readExistingPair(newPair, pairIndex, true));
+      if (ir < 1) return false;
+      if (!readPairKeys.contains(ir)) {
+        readPairKeys.insert(ir);
+        if (pairsModel->numPairs() < ir)
+          emit(readNewPair(newPair, pairIndex, true));
+        else
+          emit(readExistingPair(newPair, pairIndex, true));
       }
       LevelsData newLevel = {levelYN, levelFix, levelJ, levelPi, levelEnergy};
       Nucleus nucleus = PairsModel::nucleusOf(newPair);  // the engine's rule: the level belongs to its channels' nucleus
@@ -1189,6 +1225,8 @@ bool LevelsTab::readNuclearFile(QTextStream &inStream) {
       channelsModel->setData(index, radType, Qt::EditRole);
       index = channelsModel->index(channelIndex, 6, QModelIndex());
       channelsModel->setData(index, channelReducedWidth, Qt::EditRole);
+      index = channelsModel->index(channelIndex, 7, QModelIndex());
+      channelsModel->setData(index, gammaIsRWA, Qt::EditRole);
       channelsView->resizeRowsToContents();
     }
   }
@@ -1410,9 +1448,19 @@ void LevelsTab::exportLatexTable() {
     colSpec += "c";
   }
 
+  // Any channel entered as a reduced width amplitude gets marked in the
+  // table, since a column can mix conventions across levels.
+  bool anyRWA = false;
+  for (const ChannelsData &ch : channels)
+    if (ch.gammaIsRWA == 1 && ch.radType == 'P') anyRWA = true;
+
   out << "\\begin{table}[htbp]\n";
   out << "\\centering\n";
-  out << "\\caption{R-Matrix levels and reduced width amplitudes}\n";
+  out << "\\caption{R-Matrix levels and channel widths";
+  if (anyRWA)
+    out << ". Values marked $(\\gamma)$ are reduced width amplitudes in"
+        << " MeV$^{1/2}$; unmarked values are partial widths (eV) or ANCs";
+  out << "}\n";
   out << "\\begin{tabular}{" << colSpec << "}\n";
   out << "\\hline\\hline\n";
 
@@ -1484,6 +1532,8 @@ void LevelsTab::exportLatexTable() {
             ch.sValue == ct.sValue && ch.lValue == ct.lValue &&
             ch.radType == ct.radType) {
           widthStr = QString::number(ch.reducedWidth, 'g', 5);
+          if (ch.gammaIsRWA == 1 && ch.radType == 'P')
+            widthStr += "$^{(\\gamma)}$";
           break;
         }
       }

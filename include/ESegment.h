@@ -12,6 +12,13 @@ class ExtrapLine;
 class SegLine;
 class CNuc;
 class Config;
+struct ThmWeightTable;
+class ThmDistortion;
+class ThmDwVertex;
+struct ThmAngleWindow;
+struct ThmCoherentBackground;
+struct ThmLineshape;
+struct ThmSpectatorWindow;
 
 enum OperationType {
   SUM = 0,
@@ -39,6 +46,18 @@ class ESegment {
   bool IsCMDifferential() const;
   /// Phase shift?
   bool IsPhase() const;
+  /// Returns true if this is a THM (modified R-matrix, half-off-shell) segment.
+  bool IsTHM() const;
+  /// True when the normalization is profiled (eliminated analytically) rather
+  /// than fitted: a THM segment carries an arbitrary overall scale (Typel &
+  /// Baur 2003), so a free THM norm is set to its closed-form optimum each
+  /// evaluation instead of competing with the direct-data norms as a Minuit
+  /// parameter.
+  bool IsProfiledNorm() const;
+  /// Set the normalization to the value that minimizes this segment's chi^2 at
+  /// the current model (points must already hold their fit cross sections) and
+  /// return that minimum chi^2.  Used for profiled (THM) norms.
+  double ProfileNormChiSquared();
   /// Does the segment carry target effects?
   bool IsTargetEffect() const;
   /// Is the normalization a free fit parameter?
@@ -95,7 +114,8 @@ class ESegment {
   double GetPhaseS() const { return phaseS_; }
   /// Current normalization applied to the data.
   double GetNorm() const;
-  /// Normalization as declared in the input file, the value the fit penalty pulls towards.
+  /// Centre of the normalization prior: the norm field of the input file, or
+  /// its explicit prior_centre in <parameterSettings> when it has one.
   double GetNominalNorm() const;
   /// Fractional systematic uncertainty on the normalization.
   double GetNormError() const;
@@ -107,7 +127,8 @@ class ESegment {
   double GetEnergyShift() const;
   /// Shift last applied, so a change can be undone before applying the new one.
   double GetLastEnergyShift() const;
-  /// Energy shift as declared in the input file.
+  /// Centre of the energy-shift prior: 0 (dev 0dd28e5; the shift field of the input file is only the
+  /// start), or its explicit prior_centre in <parameterSettings>.
   double GetNominalEnergyShift() const;
   /// Uncertainty on the energy shift.
   double GetEnergyShiftError() const;
@@ -225,6 +246,38 @@ class ESegment {
   /// Point the segment at a TargetEffect in the parent EData.
   void SetTargetEffectNum(int);
   void SetSegmentKey(int);
+  /// Move the centre of the normalization prior away from the norm field (an
+  /// explicit "segment_N_norm prior_centre c" row of <parameterSettings>).
+  /// The current normalization (the start value) is left alone.
+  void SetNominalNorm(double norm) { dataNormNominal_ = norm; }
+  /// Same for the energy-shift prior ("segment_N_energy_shift prior_centre c").
+  void SetNominalEnergyShift(double shift) { energyShiftNominal_ = shift; }
+  /// Attach the <thm> weight table of this segment; points created afterwards
+  /// carry it.  The segment keeps the table alive.
+  void SetThmWeight(std::shared_ptr<const ThmWeightTable> w) { thmWeight_ = w; }
+  const ThmWeightTable *GetThmWeight() const { return thmWeight_.get(); }
+  /// Attach the Coulomb line shape of this segment's THM experiment
+  /// (lineshape=on) to the segment and to every point it has (and sub-points
+  /// created afterwards).  The segment keeps it alive.
+  void SetThmLineshape(std::shared_ptr<const ThmLineshape> l);
+  const ThmLineshape *GetThmLineshape() const { return thmLineshape_.get(); }
+  /// Attach the spectator-momentum window of this segment's THM experiment
+  /// (ps=...), as SetThmLineshape.
+  void SetThmSpectatorWindow(std::shared_ptr<const ThmSpectatorWindow> w);
+  const ThmSpectatorWindow *GetThmSpectatorWindow() const { return thmWindow_.get(); }
+  /// Attach the distortion factor R(E) of this segment's THM experiment
+  /// (distortion=...), as SetThmLineshape.
+  void SetThmDistortion(std::shared_ptr<const ThmDistortion> d);
+  const ThmDistortion *GetThmDistortion() const { return thmDistortion_.get(); }
+  void SetThmDwVertex(std::shared_ptr<const ThmDwVertex> v);
+  const ThmDwVertex *GetThmDwVertex() const { return thmDwVertex_.get(); }
+  /// Attach the angular window of this segment's THM experiment
+  /// (theta=thmin-thmax), as SetThmLineshape.
+  void SetThmAngleWindow(std::shared_ptr<const ThmAngleWindow> w);
+  const ThmAngleWindow *GetThmAngleWindow() const { return thmAngle_.get(); }
+  /// THM coherent background (cbackground=), as SetThmLineshape.
+  void SetThmCoherent(std::shared_ptr<const ThmCoherentBackground> c);
+  const ThmCoherentBackground *GetThmCoherent() const { return thmCoherent_.get(); }
   /// Set the normalization applied to the data.
   void SetNorm(double);
   /// Set the energy shift; UpdatePointEnergiesWithShift applies it to the points.
@@ -412,6 +465,14 @@ class ESegment {
   bool isdifferential_;
   bool iscmdifferential_;
   bool isphase_;
+  bool isTHM_;
+  std::shared_ptr<const ThmWeightTable> thmWeight_;
+  std::shared_ptr<const ThmLineshape> thmLineshape_;
+  std::shared_ptr<const ThmSpectatorWindow> thmWindow_;
+  std::shared_ptr<const ThmDistortion> thmDistortion_;
+  std::shared_ptr<const ThmDwVertex> thmDwVertex_;
+  std::shared_ptr<const ThmAngleWindow> thmAngle_;
+  std::shared_ptr<const ThmCoherentBackground> thmCoherent_;
   double phaseS_ = -1.0;
   /// Which cross section component to compare against: 0 = full, 1 = E1 only, 2 = E2 only.
   int crossSectionComponent_;

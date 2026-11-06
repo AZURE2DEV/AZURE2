@@ -163,6 +163,12 @@ AddSegTestDialog::AddSegTestDialog(QWidget *parent) :
   QGridLayout *lowerLayout = new QGridLayout;
   lowerLayout->addWidget(new QLabel(tr("Data Type:")), 0, 0, Qt::AlignRight);
   lowerLayout->addWidget(dataTypeCombo, 0, 1);
+  thmCheck = new QCheckBox(tr("THM (modified R-matrix)"));
+  thmCheck->setToolTip(tr("Compute this segment as a Trojan Horse Method "
+                          "(half-off-shell) cross section. Requires the "
+                          "entrance pair's THM binding energy (Configure > "
+                          "THM Workspace, Channels)."));
+  lowerLayout->addWidget(thmCheck, 0, 2);
   lowerLayout->addItem(new QSpacerItem(1, 25), 0, 2);
   lowerLayout->setColumnStretch(2, 1);
 
@@ -298,6 +304,10 @@ void AddSegTestDialog::dataTypeChanged(int) {
   const int code = dataTypeCode();
   const int observable = observableCode();
   const bool phase = (code == 2), angDist = (code == 3);
+  // Phase shifts and angular-distribution coefficients have no THM form (the
+  // engine reads their extra fields only for an isDiff of exactly 2 or 3).
+  thmCheck->setEnabled(!phase && !angDist);
+  if (phase || angDist) thmCheck->setChecked(false);
   phaseJValueLabel->setVisible(phase);
   phaseLValueLabel->setVisible(phase);
   phaseJValueText->setVisible(phase);

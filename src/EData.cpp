@@ -24,6 +24,7 @@
 #include <atomic>
 #include <chrono>
 #include <cinttypes>
+#include <cmath>
 #include <cstdlib>
 #include <string>
 #include <cstdio>
@@ -258,6 +259,62 @@ static void WriteNaturalDecomposition(const Config &configure, bool isExtrap, in
  * At creation, this attribute is set to 0.
  */
 
+namespace {
+
+/// The <thm> weight table named for segment line `key`, or null.
+std::shared_ptr<const ThmWeightTable> ThmWeightFor(
+    const std::map<int, std::shared_ptr<const ThmWeightTable>> &tables, int key) {
+  auto it = tables.find(key);
+  return it == tables.end() ? nullptr : it->second;
+}
+
+/*!
+ * Checks the <thm> weight[k]= (or weightTest[k]=) keys against the segments
+ * just read: k must be a line of the block, a segment in use must be THM, and
+ * every one of its points must lie inside the table (folding sub-points may
+ * reach beyond it; they get the end value).  A key naming an inactive or
+ * unusable line is ignored with a warning.  Returns -1 after an ERROR line.
+ */
+int CheckThmWeights(const Config &configure,
+                    const std::map<int, std::shared_ptr<const ThmWeightTable>> &tables,
+                    const char *keyName, const char *blockName, int numLines, EData *data) {
+  for (const auto &entry : tables) {
+    const int key = entry.first;
+    const ThmWeightTable &table = *entry.second;
+    if (key > numLines) {
+      configure.outStream << "ERROR: <thm> " << keyName << "[" << key << "]: " << blockName << " has only "
+                          << numLines << " line(s)." << std::endl;
+      return -1;
+    }
+    ESegment *segment = nullptr;
+    for (int s = 1; s <= data->NumSegments(); s++)
+      if (data->GetSegment(s)->GetSegmentKey() == key) segment = data->GetSegment(s);
+    if (!segment) {
+      configure.outStream << "WARNING: <thm> " << keyName << "[" << key << "]: segment line " << key
+                          << " of " << blockName << " is not in use; the weight is ignored." << std::endl;
+      continue;
+    }
+    if (!segment->IsTHM()) {
+      configure.outStream << "ERROR: <thm> " << keyName << "[" << key << "]: segment " << key << " of "
+                          << blockName << " is not a THM segment (isDiff < 10)." << std::endl;
+      return -1;
+    }
+    for (int p = 1; p <= segment->NumPoints(); p++) {
+      double energy = segment->GetPoint(p)->GetCMEnergy();
+      if (!table.Covers(energy)) {
+        configure.outStream << "ERROR: <thm> " << keyName << "[" << key << "]: segment " << key
+                            << " has a point at E_cm = " << energy << " MeV, outside the table '"
+                            << table.name << "' [" << table.e.front() << ", " << table.e.back() << "] MeV."
+                            << std::endl;
+        return -1;
+      }
+    }
+  }
+  return 0;
+}
+
+}  // namespace
+
 EData::EData() {
   iterations_ = 0;
   normParamOffset_ = 0;
@@ -315,11 +372,35 @@ int EData::Fill(const Config &configure, CNuc *theCNuc) {
       if (!segment.parseWarning().empty())
         configure.outStream << "WARNING: Data segment #" << numTotalSegments << ": " << segment.parseWarning() << "."
                             << std::endl;
-      if (segment.isDiff() == 8) {
+      if (segment.isDiff() == 19) {
+        // isDiff 9 + the THM offset: the angular-distribution coefficients are not a THM observable
+        // (ESegment would read 19 as an angle-integrated THM segment).
+        configure.outStream << "ERROR: Data segment #" << numTotalSegments
+                            << " uses isDiff 19 (THM angular-distribution coefficients), which is not supported."
+                            << std::endl;
+        return -1;
+      }
+      if (segment.isDiff() >= 10 && configure.relativistic) {
+        // The THM machinery (vertex, line shape, distortion, the HOES kinematics) is non-relativistic; with
+        // relativistic=1 the R-matrix part of the same amplitude would not be.
+        configure.outStream << "ERROR: Data segment #" << numTotalSegments
+                            << " is a THM segment; THM segments are not supported with relativistic=1." << std::endl;
+        return -1;
+      }
+      if (segment.isDiff() >= 10 && !segment.covarianceFile().empty()) {
+        // A THM segment's chi^2 is its experiment's (profiled norm, EDataThm), not a sum the covariance
+        // correction (EData::CovarianceChi2Correction) could amend.
+        configure.outStream << "ERROR: Data segment #" << numTotalSegments
+                            << " is a THM segment with a covariance block; a data covariance is not supported on"
+                            << " THM segments." << std::endl;
+        return -1;
+      }
+      if (segment.isDiff() == 8 || segment.isDiff() == 18) {
         // Polarization x Cross Section was removed: the outgoing polarization of
-        // A(a,b)B is the analyzing power of the inverse reaction B(b,a)A.
+        // A(a,b)B is the analyzing power of the inverse reaction B(b,a)A.  18 is
+        // the same observable on a THM segment (isDiff offset 10).
         configure.outStream
-            << "ERROR: Data segment #" << numTotalSegments << " uses isDiff 8 (Polarization x"
+            << "ERROR: Data segment #" << numTotalSegments << " uses isDiff " << segment.isDiff() << " (Polarization x"
             << " Cross Section), which is no longer supported." << std::endl
             << "       Divide the data by the differential cross section and enter the"
             << " polarization as an Analyzing Power (isDiff 7) segment on the inverse"
@@ -361,6 +442,7 @@ int EData::Fill(const Config &configure, CNuc *theCNuc) {
           }
           if (isValidTotal || theCNuc->IsPairKey(NewSegment.GetExitKey())) {
             NewSegment.SetSegmentKey(numTotalSegments);
+            if (NewSegment.IsTHM()) NewSegment.SetThmWeight(ThmWeightFor(configure.thm.weightBySegment, numTotalSegments));
             this->AddSegment(NewSegment);
 
             // Fill the segment with data first
@@ -501,12 +583,98 @@ int EData::Fill(const Config &configure, CNuc *theCNuc) {
   if (this->ResolveThicknessGroups(configure) == -1) return -1;
   if (this->ResolveCovarianceGroups(configure) == -1) return -1;
 
+  if (ReadPriorCentres(configure) != 0) return -1;
+
+  if (CheckThmWeights(configure, configure.thm.weightBySegment, "weight", "<segmentsData>",
+                      numTotalSegments, this) != 0)
+    return -1;
+  if (BuildThmGroups(configure, theCNuc, numTotalSegments) != 0) return -1;
+
   if (this->NumSegments() > 0) {
     if (this->ReadTargetEffectsFile(configure, theCNuc) == -1) return -1;
     if (!this->CheckTransformedSegments(configure)) return -1;
     this->MapData(theCNuc);
   }
 
+  return 0;
+}
+
+/*!
+ * Reads the explicit prior centres of <parameterSettings> (see EData.h) and
+ * moves the nominal normalization / energy shift of the segments they name.
+ * Only rows of exactly three tokens whose second token is "prior_centre" are
+ * read; every other row is left to ParameterLimitsManager, as before.  A row
+ * for a segment key with no active segment is reported and ignored (an
+ * inactive line keeps its key); a malformed row, or a normalization centre
+ * that is not positive, fails the run.
+ */
+
+int EData::ReadPriorCentres(const Config &configure) {
+  std::ifstream in(configure.configfile.c_str());
+  if (!in) return 0;
+  std::string line;
+  bool inside = false;
+  while (getline(in, line)) {
+    const size_t a = line.find_first_not_of(" \t\r\n");
+    if (a == std::string::npos) continue;
+    const size_t b = line.find_last_not_of(" \t\r\n");
+    const std::string trimmed = line.substr(a, b - a + 1);
+    if (trimmed == "<parameterSettings>") {
+      inside = true;
+      continue;
+    }
+    if (trimmed[0] == '<') {
+      inside = false;
+      continue;
+    }
+    if (!inside || trimmed[0] == '#') continue;
+    std::istringstream stm(trimmed);
+    std::vector<std::string> tok;
+    std::string t;
+    while (stm >> t) tok.push_back(t);
+    if (tok.size() != 3 || tok[1] != "prior_centre") continue;
+
+    const std::string &name = tok[0];
+    bool isNorm = false;
+    std::string number;
+    const std::string normTail = "_norm", shiftTail = "_energy_shift";
+    if (name.compare(0, 8, "segment_") == 0 && name.size() > 8 + normTail.size() &&
+        name.compare(name.size() - normTail.size(), normTail.size(), normTail) == 0) {
+      isNorm = true;
+      number = name.substr(8, name.size() - 8 - normTail.size());
+    } else if (name.compare(0, 8, "segment_") == 0 && name.size() > 8 + shiftTail.size() &&
+               name.compare(name.size() - shiftTail.size(), shiftTail.size(), shiftTail) == 0) {
+      number = name.substr(8, name.size() - 8 - shiftTail.size());
+    }
+    const bool digits = !number.empty() && number.find_first_not_of("0123456789") == std::string::npos;
+    char *end = NULL;
+    const double centre = strtod(tok[2].c_str(), &end);
+    if (!digits || end == tok[2].c_str() || *end != '\0' || !std::isfinite(centre)) {
+      configure.outStream << "ERROR: <parameterSettings> row \"" << trimmed
+                          << "\" is not \"segment_N_norm prior_centre value\" or "
+                             "\"segment_N_energy_shift prior_centre value\"." << std::endl;
+      return -1;
+    }
+    if (isNorm && centre <= 0.) {
+      configure.outStream << "ERROR: <parameterSettings> row \"" << trimmed
+                          << "\": a normalization prior centre must be positive." << std::endl;
+      return -1;
+    }
+    const int key = atoi(number.c_str());
+    bool found = false;
+    for (int s = 1; s <= this->NumSegments(); s++) {
+      ESegment *segment = this->GetSegment(s);
+      if (segment->GetSegmentKey() != key) continue;
+      found = true;
+      if (isNorm)
+        segment->SetNominalNorm(centre);
+      else
+        segment->SetNominalEnergyShift(centre);
+    }
+    if (!found)
+      configure.outStream << "WARNING: <parameterSettings> row \"" << trimmed
+                          << "\" names no active data segment; ignored." << std::endl;
+  }
   return 0;
 }
 
@@ -554,15 +722,20 @@ int EData::MakePoints(const Config &configure, CNuc *theCNuc) {
                             << std::endl;
         return -1;
       }
-      if (segment.isDiff() == 9) {
+      if (segment.isDiff() >= 10 && configure.relativistic) {
         configure.outStream << "ERROR: Test segment #" << numTotalSegments
-                            << " uses isDiff 9 (angular coefficients), a data-segment type; a test segment"
+                            << " is a THM segment; THM segments are not supported with relativistic=1." << std::endl;
+        return -1;
+      }
+      if (segment.isDiff() == 9 || segment.isDiff() == 19) {
+        configure.outStream << "ERROR: Test segment #" << numTotalSegments
+                            << " uses isDiff " << segment.isDiff() << " (angular coefficients), a data-segment type; a test segment"
                             << " computes the coefficients with isDiff 3 and a maximum order." << std::endl;
         return -1;
       }
-      if (segment.isDiff() == 8) {
+      if (segment.isDiff() == 8 || segment.isDiff() == 18) {
         configure.outStream
-            << "ERROR: Test segment #" << numTotalSegments << " uses isDiff 8 (Polarization x"
+            << "ERROR: Test segment #" << numTotalSegments << " uses isDiff " << segment.isDiff() << " (Polarization x"
             << " Cross Section), which is no longer supported; use an Analyzing Power (isDiff 7)"
             << " segment on the inverse channel instead." << std::endl;
         return -1;
@@ -602,6 +775,7 @@ int EData::MakePoints(const Config &configure, CNuc *theCNuc) {
           }
           if (isValidTotal || theCNuc->IsPairKey(NewSegment.GetExitKey())) {
             NewSegment.SetSegmentKey(numTotalSegments);
+            if (NewSegment.IsTHM()) NewSegment.SetThmWeight(ThmWeightFor(configure.thm.weightByTestSegment, numTotalSegments));
             this->AddSegment(NewSegment);
             ESegment *theSegment = this->GetSegment(this->NumSegments());
 
@@ -774,6 +948,10 @@ int EData::MakePoints(const Config &configure, CNuc *theCNuc) {
 
   if (line != "</segmentsTest>") return -1;
 
+
+  if (CheckThmWeights(configure, configure.thm.weightByTestSegment, "weightTest", "<segmentsTest>",
+                      numTotalSegments, this) != 0)
+    return -1;
 
   if (this->NumSegments() > 0) {
     if (this->ReadTargetEffectsFile(configure, theCNuc) == -1) return -1;
@@ -1281,6 +1459,7 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
   while (line != "<targetInt>" && !in.eof()) getline(in, line);
   if (line != "<targetInt>") return -1;
   line = "";
+  int activeLines = 0;
   while (line != "</targetInt>" && !in.eof()) {
     getline(in, line);
     bool empty = true;
@@ -1309,17 +1488,37 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
       }
       if (stm.rdstate() & (std::stringstream::failbit | std::stringstream::badbit)) return -1;
       if (targetEffect.IsActive()) {
-        this->AddTargetEffect(targetEffect);
-        TargetEffect *thisTargetEffect = this->GetTargetEffect(this->NumTargetEffects());
-        std::vector<int> segmentsList = thisTargetEffect->GetSegmentsList();
+        targetEffect.SetLineNumber(++activeLines);
+        // Every listed segment gets its own copy of the effect.  The effect's
+        // energies (sigma, beam profile) are converted lab -> c.m. below with
+        // the segment's own factor; one object shared by "1,2" was converted
+        // once per listed segment, and both segments were then folded with
+        // the twice-converted sigma (17 keV c.m. became 16.1 keV for 18O+p).
+        // A copy per segment also lets segments of different entrance pairs
+        // share one line.
+        std::vector<int> segmentsList = targetEffect.GetSegmentsList();
         for (int i = 1; i <= segmentsList.size(); i++) {
           if (this->IsSegmentKey(segmentsList[i - 1])) {
             ESegment *segment = this->GetSegmentFromKey(segmentsList[i - 1]);
+            if (segment && segment->IsTHM() && targetEffect.IsTargetIntegration()) {
+              // A THM energy is the x + A energy reconstructed from the
+              // three-body kinematics, not a beam energy slowing down in the
+              // target; its sub-points also go below the entrance threshold,
+              // where a stopping power is evaluated at E < 0 (NaN).
+              configure.outStream << "ERROR: <targetInt>: segment " << segmentsList[i - 1]
+                                  << " is a THM segment: target integration does not apply to it "
+                                     "(use the Gaussian convolution for the THM energy resolution)."
+                                  << std::endl;
+              return -1;
+            }
             if (segment) {
+              this->AddTargetEffect(targetEffect);
               segment->SetTargetEffectNum(this->NumTargetEffects());
-              // If segment has components, set the target effect to these as well
+              // If segment has components, set the target effect to these as
+              // well -- again a copy each, since each is converted below.
               if (segment->HasComponents()) {
                 for (auto component : segment->GetComponentSegments()) {
+                  this->AddTargetEffect(targetEffect);
                   component->SetTargetEffectNum(this->NumTargetEffects());
                 }
               }
@@ -1415,24 +1614,37 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
           }
           // How far the grid reaches above and below the point for this effect (beam spread, target, straggling).
           targetEffect->GridExtent(point->GetCMEnergy(), targetThickness, configure, cmConversion, bohrZ1, bohrZ2, forwardDepth, backwardDepth);
+          // A THM (HOES) segment's Gaussian fold reaches thmConvolutionRange sigma (5; convolutionRange is 5 too
+          // since dev 7d24c88).
+          if (segment->IsTHM() && targetEffect->IsGaussian() && !targetEffect->IsTargetIntegration())
+            forwardDepth = backwardDepth =
+                TargetEffect::thmConvolutionRange * targetEffect->SigmaCM(point->GetCMEnergy(), configure, cmConversion);
 
           // Generate adaptive integration grid
           double startEnergy = point->GetCMEnergy() + forwardDepth;
           double endEnergy;
 
+          /*
+          THM (HOES) segments carry data below the entrance threshold, so their
+          sub-point grids may extend to negative energies as long as the
+          compound-system energy Ecm+SepE+ExE stays positive.
+          */
+          double minSubEnergy = segment->IsTHM() ? TargetEffect::minIntegrationEnergy - (entrancePair->GetSepE() + entrancePair->GetExE()) : TargetEffect::minIntegrationEnergy;
+
           if (targetEffect->IsTargetIntegration()) {
             // the target (or, for a thick target, everything down to 1 keV), plus the spread below it
+            // (never a THM segment: refused above)
             endEnergy = point->GetCMEnergy() - backwardDepth;
             // Safety check: if backwardDepth > energy, set endEnergy to minimum
-            if (endEnergy < 0.001) {
-              endEnergy = 0.001;
+            if (endEnergy < minSubEnergy) {
+              endEnergy = minSubEnergy;
             }
           } else {
             // Convolution or ConvCoefficients - use backward depth
             endEnergy = point->GetCMEnergy() - backwardDepth;
             // Safety check: if backwardDepth > energy, set endEnergy to minimum
-            if (endEnergy < 0.001) {
-              endEnergy = 0.001;
+            if (endEnergy < minSubEnergy) {
+              endEnergy = minSubEnergy;
             }
           }
 
@@ -1444,11 +1656,18 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
             targetEffect->BeamProfileSupport(low, high);  // lab
             low *= cmConversion; high *= cmConversion;
             double s = cmConversion * targetEffect->GetBeamTpcSigma();
+            // The resolution tails: 4 s, or for a THM (HOES) point the 5 s of
+            // its Gaussian fold -- a narrow peak 4-5 s from a point dominates
+            // the tail there (-2 % at 81 keV from a 289 eV level, 18O(p,a) THM).
+            double tails = segment->IsTHM() ? TargetEffect::thmConvolutionRange : 4.0;
             if (point->HasBinWindow()) {
-              low = std::max(low, point->GetBinLowCM() - 4.0 * s);
-              high = std::min(high, point->GetBinHighCM() + 4.0 * s);
+              low = std::max(low, point->GetBinLowCM() - tails * s);
+              high = std::min(high, point->GetBinHighCM() + tails * s);
             }
-            if (low < 0.001) low = 0.001;
+            // The floor of the Gaussian fold: a THM point may sit below the entrance
+            // threshold (this was +1 keV, and the fold of a point at -45 keV came
+            // out 66 times too large).
+            if (low < minSubEnergy) low = minSubEnergy;
             if (high <= low) high = low + 0.001;
             startEnergy = high;
             endEnergy = low;
@@ -1598,23 +1817,37 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
               }
               // How far the grid reaches above and below the point for this effect (beam spread, target, straggling).
               targetEffect->GridExtent(point->GetCMEnergy(), targetThickness, configure, compConversion, bohrZ1, bohrZ2, forwardDepth, backwardDepth);
+              // A THM (HOES) segment's Gaussian fold reaches thmConvolutionRange sigma (5), as above.
+              if (component->IsTHM() && targetEffect->IsGaussian() && !targetEffect->IsTargetIntegration())
+                forwardDepth = backwardDepth =
+                    TargetEffect::thmConvolutionRange * targetEffect->SigmaCM(point->GetCMEnergy(), configure, compConversion);
 
               // Generate adaptive integration grid for component segment
               double startEnergy = point->GetCMEnergy() + forwardDepth;
               double endEnergy;
 
+              /*
+              THM (HOES) segments carry data below the entrance threshold, so their
+              sub-point grids may extend to negative energies as long as the
+              compound-system energy Ecm+SepE+ExE stays positive. Note this uses the
+              component's own entrance pair, since an advanced (sum/ratio) component
+              can have a different entrance channel than its master segment.
+              */
+              PPair *componentEntrancePair = compound->GetPair(compound->GetPairNumFromKey(component->GetEntranceKey()));
+              double minSubEnergy = component->IsTHM() ? TargetEffect::minIntegrationEnergy - (componentEntrancePair->GetSepE() + componentEntrancePair->GetExE()) : TargetEffect::minIntegrationEnergy;
+
               if (targetEffect->IsTargetIntegration()) {
                 endEnergy = point->GetCMEnergy() - backwardDepth;
                 // Safety check: if backwardDepth > energy, set endEnergy to minimum
-                if (endEnergy < 0.001) {
-                  endEnergy = 0.001;
+                if (endEnergy < minSubEnergy) {
+                  endEnergy = minSubEnergy;
                 }
               } else {
                 // Convolution or ConvCoefficients - use backward depth
                 endEnergy = point->GetCMEnergy() - backwardDepth;
                 // Safety check: if backwardDepth > energy, set endEnergy to minimum
-                if (endEnergy < 0.001) {
-                  endEnergy = 0.001;
+                if (endEnergy < minSubEnergy) {
+                  endEnergy = minSubEnergy;
                 }
               }
 
@@ -1623,11 +1856,12 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
                 targetEffect->BeamProfileSupport(low, high);  // lab
                 low *= compConversion; high *= compConversion;
                 double s = compConversion * targetEffect->GetBeamTpcSigma();
+                double tails = component->IsTHM() ? TargetEffect::thmConvolutionRange : 4.0;
                 if (point->HasBinWindow()) {
-                  low = std::max(low, point->GetBinLowCM() - 4.0 * s);
-                  high = std::min(high, point->GetBinHighCM() + 4.0 * s);
+                  low = std::max(low, point->GetBinLowCM() - tails * s);
+                  high = std::min(high, point->GetBinHighCM() + tails * s);
                 }
-                if (low < 0.001) low = 0.001;
+                if (low < minSubEnergy) low = minSubEnergy;  // as above
                 if (high <= low) high = low + 0.001;
                 startEnergy = high;
                 endEnergy = low;
@@ -1693,13 +1927,35 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
       }
     }
   }
+  // One screening parameter per <targetInt> line, shared by the copies of its effect.
   screeningEffects_.clear();
-  for (int n = 1; n <= this->NumTargetEffects(); n++)
-    if (this->GetTargetEffect(n)->HasScreening()) screeningEffects_.push_back(n);
+  screeningCopies_.clear();
+  for (int n = 1; n <= this->NumTargetEffects(); n++) {
+    const TargetEffect *te = this->GetTargetEffect(n);
+    if (!te->HasScreening()) continue;
+    size_t k = 0;
+    while (k < screeningEffects_.size() && screeningEffects_[k] != te->GetLineNumber()) k++;
+    if (k == screeningEffects_.size()) {
+      screeningEffects_.push_back(te->GetLineNumber());
+      screeningCopies_.emplace_back();
+    }
+    screeningCopies_[k].push_back(n);
+  }
   this->ApplyScreening();
+  // One Doppler parameter per <targetInt> line with the fit form, shared by the copies of its effect (as screening).
   dopplerEffects_.clear();
-  for (int n = 1; n <= this->NumTargetEffects(); n++)
-    if (this->GetTargetEffect(n)->HasDopplerFit()) dopplerEffects_.push_back(n);
+  dopplerCopies_.clear();
+  for (int n = 1; n <= this->NumTargetEffects(); n++) {
+    const TargetEffect *te = this->GetTargetEffect(n);
+    if (!te->HasDopplerFit()) continue;
+    size_t k = 0;
+    while (k < dopplerEffects_.size() && dopplerEffects_[k] != te->GetLineNumber()) k++;
+    if (k == dopplerEffects_.size()) {
+      dopplerEffects_.push_back(te->GetLineNumber());
+      dopplerCopies_.emplace_back();
+    }
+    dopplerCopies_[k].push_back(n);
+  }
   return 0;
 }
 
@@ -2257,6 +2513,13 @@ void EData::WriteOutputFiles(const Config &configure, bool isFit, const BandData
   }
   if (kinflag != 0) configure.outStream << "Using alternate output format..." << std::endl;
 
+  // THM experiments: refresh their profile from the models the points hold
+  // (a snapshot written during a fit has not been profiled), so that the norm
+  // and the background written are those of these models.
+  if (configure.paramMask & Config::CALCULATE_WITH_DATA)
+    for (int g = 0; g < NumThmGroups(); g++)
+      if (!thmGroups_[g].trivial) ProfileThmGroup(g);
+
   // When a covariance is available, write a sibling ".band" file per output file,
   // with the same block/point structure so the GUI can pair them.
   bool writeBand = band && (configure.paramMask & Config::CALCULATE_COVARIANCE_BAND) && !band->grad.empty();
@@ -2303,6 +2566,10 @@ void EData::WriteOutputFiles(const Config &configure, bool isFit, const BandData
         buf = output(aa, ir);
     }
     std::ostream out(buf);
+    // A THM experiment with a background: the fitted curve is the model plus b(E).
+    const int segmentIndex = (int)(segment - GetSegments().begin()) + 1;
+    const bool thmBackground = !output.IsExtrap() && ThmGroupOf(segmentIndex) >= 0 &&
+                               thmGroups_[ThmGroupOf(segmentIndex)].terms > 0;
     ESegmentIterator thisSegment = segment;
     if (firstSumIterator != GetSegments().end()) thisSegment = firstSumIterator;
 
@@ -2340,6 +2607,7 @@ void EData::WriteOutputFiles(const Config &configure, bool isFit, const BandData
                                      point->GetCMAngle(), 0., 0., 0.);
         } else {
           double fitCrossSection = point->GetFitCrossSection();
+          if (thmBackground) fitCrossSection += ThmBackgroundAt(segmentIndex, point->GetCMEnergy());
           if (firstSumIterator != GetSegments().end()) {
             int pointIndex = point - segment->GetPoints().begin() + 1;
             for (ESegmentIterator it = firstSumIterator; it < segment; it++)
@@ -2378,7 +2646,9 @@ void EData::WriteOutputFiles(const Config &configure, bool isFit, const BandData
           if (bandOut) WriteBandLine(*bandOut, point->GetLabEnergy(), point->GetExcitationEnergy(),
                                      point->GetLabAngle(), 0., 0., 0.);
         } else {
-          double fitCrossSection = point->GetFitCrossSection() / point->GetCrossSectionKinFactor();
+          double fitCrossSection = (point->GetFitCrossSection() +
+                                    (thmBackground ? ThmBackgroundAt(segmentIndex, point->GetCMEnergy()) : 0.0)) /
+                                   point->GetCrossSectionKinFactor();
           if (firstSumIterator != GetSegments().end()) {
             int pointIndex = point - segment->GetPoints().begin() + 1;
             for (ESegmentIterator it = firstSumIterator; it < segment; it++)
@@ -2474,21 +2744,21 @@ void EData::WriteOutputFiles(const Config &configure, bool isFit, const BandData
     {
       bool anyPrior = false;
       for (int k = 1; k <= this->NumScreeningParams(); k++)
-        if (this->GetTargetEffect(this->GetScreeningEffect(k))->GetScreeningSigma() > 0.0) anyPrior = true;
+        if (this->GetScreeningTargetEffect(k)->GetScreeningSigma() > 0.0) anyPrior = true;
       if (anyPrior) chiOut << " Total-Screening-Chi-Squared: " << this->ScreeningPenalty();
     }
     // Fitted target densities: their priors, and the densities themselves (which param.sav also holds).
     if (this->NumDensityParams() > 0) {
       bool anyPrior = false;
       for (int k = 1; k <= this->NumDensityParams(); k++)
-        if (this->GetTargetEffect(this->GetDensityEffect(k))->GetDensitySigma() > 0.0) anyPrior = true;
+        if (this->GetDensityTargetEffect(k)->GetDensitySigma() > 0.0) anyPrior = true;
       if (anyPrior) chiOut << " Total-Density-Chi-Squared: " << this->DensityPenalty();
     }
     // Fitted Doppler temperatures: their priors.
     if (this->NumDopplerParams() > 0) {
       bool anyPrior = false;
       for (int k = 1; k <= this->NumDopplerParams(); k++)
-        if (this->GetTargetEffect(this->GetDopplerEffect(k))->GetDopplerSigma() > 0.0) anyPrior = true;
+        if (this->GetDopplerTargetEffect(k)->GetDopplerSigma() > 0.0) anyPrior = true;
       if (anyPrior) chiOut << " Total-Doppler-Chi-Squared: " << this->DopplerPenalty();
     }
     // Fitted sample thicknesses: their priors.
@@ -2516,6 +2786,8 @@ void EData::WriteOutputFiles(const Config &configure, bool isFit, const BandData
     chiOut.close();
     if (this->HasCovariance()) this->WriteCovarianceSummary(configure);
   }
+  if (!isFit && (configure.paramMask & Config::CALCULATE_WITH_DATA) && NumThmGroups() > 0)
+    WriteThmExperiments(configure);
   if (isVaryNorm) {
     std::string outputfile = configure.outputdir + "normalizations.out";
     std::ofstream out(outputfile.c_str());
@@ -2625,7 +2897,7 @@ void EData::WriteOutputFiles(const Config &configure, bool isFit, const BandData
         double pen = 0.0, penOwn = 0.0;
         owner.AddShiftPenalty(pen);
         if (owner.IsVaryEnergyShift() && owner.GetEnergyShiftError() != 0.0)
-          penOwn = pow(owner.GetEnergyShift() / owner.GetEnergyShiftError(), 2.0);  // from 0, as AddShiftPenalty
+          penOwn = pow((owner.GetEnergyShift() - owner.GetNominalEnergyShift()) / owner.GetEnergyShiftError(), 2.0);  // as AddShiftPenalty
         out << "# " << owner.GetSegmentKey() << "," << keys.str() << "," << owner.GetShiftFnExpression() << ","
             << owner.GetEnergyShift() << ",";
         for (int q = 0; q < owner.NumShiftFnParams(); q++) out << (q ? " " : "") << owner.GetShiftFnValues()[q];
@@ -3747,7 +4019,8 @@ bool ShiftsAgree(const ShiftForm &a, const ShiftForm &b) {
  * (AZUREGrad.cpp) works on the same groups: one forward solve per group.
  *
  * Segments with components (SUM/RATIO, total capture) are not mapped; a
- * shifted segment without a particle exit (external capture) only within itself.
+ * shifted segment without a particle exit (external capture) and a THM segment
+ * only within themselves.
  * AZURE_NO_POINT_MAPPING=1 in the environment switches mapping off entirely;
  * AZURE_NO_CROSS_SEGMENT_MAPPING=1 keeps it within each segment only.
  */
@@ -3780,6 +4053,17 @@ void EData::MapData(CNuc *theCNuc) {
   // nucleus at hand, every shifted segment is.
   std::vector<char> ownOnly(numSegments, 0);
   for (int s = 0; s < numSegments; s++) {
+    // A THM (HOES) segment is mapped within itself only, and no other point is
+    // mapped onto one of its points.  Its model is THMMatrixFunc's, from the
+    // segment's own options (observable, vertex, kinematics, windows, line
+    // shape, distortion, experiment, coherent background, 5-sigma fold), which
+    // SharesCalculation does not compare; its gradient rows (ComputeTHMRows,
+    // the THM-only differences of AZURECalc::Gradient) calculate THM segments
+    // alone, so a host in another segment would not be up to date there.
+    if (segments[s].IsTHM()) {
+      ownOnly[s] = 1;
+      continue;
+    }
     const ShiftForm &f = shiftForms[s];
     const bool shifted = f.constOwner >= 0 || f.sqrtFree || f.fnOwner >= 0 || f.constShift != 0.0 ||
                          f.sqrtShift != 0.0 || f.hasFn;
@@ -4166,8 +4450,12 @@ int EData::ResolveShiftFunctions(const Config &configure) {
           norm = std::sqrt(norm);
           for (int r = 0; r < m; r++) gsl_matrix_set(A, r, c, cols[c][r] / norm);
         }
-        gsl_set_error_handler_off();
-        if (gsl_linalg_SV_decomp(A, V, S, work) == 0 && gsl_vector_get(S, k - 1) > 0.0)
+        int svd;
+        {
+          GslQuiet quiet;  // scoped: a process-wide handler swap would outlive this check
+          svd = gsl_linalg_SV_decomp(A, V, S, work);
+        }
+        if (svd == 0 && gsl_vector_get(S, k - 1) > 0.0)
           cond = gsl_vector_get(S, 0) / gsl_vector_get(S, k - 1);
         gsl_matrix_free(A);
         gsl_matrix_free(V);
@@ -4564,7 +4852,7 @@ void EData::FillMnParams(ROOT::Minuit2::MnUserParameters &p) {
   SetNormParamOffset(p.Params().size());
   char varname[50];
   for (ESegmentIterator segment = GetSegments().begin(); segment < GetSegments().end(); segment++) {
-    if (segment->IsVaryNorm()) {
+    if (segment->IsVaryNorm() && !segment->IsProfiledNorm()) {
       snprintf(varname, sizeof(varname), "segment_%d_norm", segment->GetSegmentKey());
       p.Add(varname, segment->GetNorm(), segment->GetNorm() * 0.05);
       p.SetLowerLimit(varname, 0.0);
@@ -4616,7 +4904,7 @@ void EData::FillMnParams(ROOT::Minuit2::MnUserParameters &p) {
   // Electron-screening potentials (eV): one per target effect with a "screening" block, none otherwise.
   screeningParamOffset_ = p.Params().size();
   for (int k = 1; k <= this->NumScreeningParams(); k++) {
-    const TargetEffect *te = this->GetTargetEffect(this->GetScreeningEffect(k));
+    const TargetEffect *te = this->GetScreeningTargetEffect(k);
     snprintf(varname, sizeof(varname), "screening_%d", this->GetScreeningEffect(k));
     const double ue = te->GetScreeningUe();
     p.Add(varname, ue, std::max(10.0, 0.05 * std::fabs(ue)));
@@ -4628,7 +4916,7 @@ void EData::FillMnParams(ROOT::Minuit2::MnUserParameters &p) {
   // the density the sub-point grids span (TargetEffect::GetLayoutDensity) and a hundredth of the line's.
   densityParamOffset_ = p.Params().size();
   for (int k = 1; k <= this->NumDensityParams(); k++) {
-    const TargetEffect *te = this->GetTargetEffect(this->GetDensityEffect(k));
+    const TargetEffect *te = this->GetDensityTargetEffect(k);
     snprintf(varname, sizeof(varname), "density_%d", this->GetDensityEffect(k));
     const double n = te->GetDensity();
     p.Add(varname, n, (te->GetDensitySigma() > 0.0) ? 0.1 * te->GetDensitySigma() : 0.01 * n);
@@ -4640,7 +4928,7 @@ void EData::FillMnParams(ROOT::Minuit2::MnUserParameters &p) {
   // Bounded by the temperature the grids span (TargetEffect::GetDopplerLayoutTemperature) and T0/4.
   dopplerParamOffset_ = p.Params().size();
   for (int k = 1; k <= this->NumDopplerParams(); k++) {
-    const TargetEffect *te = this->GetTargetEffect(this->GetDopplerEffect(k));
+    const TargetEffect *te = this->GetDopplerTargetEffect(k);
     snprintf(varname, sizeof(varname), "doppler_%d", this->GetDopplerEffect(k));
     const double t = te->GetDopplerTemperature();
     p.Add(varname, t, (te->GetDopplerSigma() > 0.0) ? 0.1 * te->GetDopplerSigma() : 0.01 * t);
@@ -4658,6 +4946,13 @@ void EData::FillMnParams(ROOT::Minuit2::MnUserParameters &p) {
     p.Add(varname, n, (seg->GetThicknessSigma() > 0.0) ? 0.1 * seg->GetThicknessSigma() : 0.01 * n);
     p.SetLowerLimit(varname, 0.0);
     if (!seg->IsThicknessVaried()) p.Fix(varname);
+  }
+
+  // THM coherent backgrounds (cbackground=): Re/Im of each amplitude, last.
+  thmCoherentParamOffset_ = thmCoherentParams_.empty() ? -1 : (int)p.Params().size();
+  for (const ThmCoherentParam &c : thmCoherentParams_) {
+    p.Add(c.name, c.value, c.value != 0.0 ? 0.1 * std::fabs(c.value) : 0.1);
+    if (c.fixed) p.Fix(c.name);
   }
 }
 
@@ -4740,7 +5035,8 @@ double EData::ThicknessPenalty() const {
 
 int EData::DopplerParamOfEffect(int n) const {
   for (int k = 1; k <= this->NumDopplerParams(); k++)
-    if (dopplerEffects_[k - 1] == n) return k;
+    for (int c : dopplerCopies_[k - 1])
+      if (c == n) return k;
   return 0;
 }
 
@@ -4749,7 +5045,7 @@ void EData::FillDopplerFromParams(const vector_r &p, const Config *configure) {
   for (int k = 1; k <= this->NumDopplerParams(); k++) {
     const int idx = dopplerParamOffset_ + k - 1;
     if (idx < 0 || idx >= (int)p.size()) return;  // a vector without the Doppler block
-    TargetEffect *te = this->GetTargetEffect(this->GetDopplerEffect(k));
+    TargetEffect *te = this->GetDopplerTargetEffect(k);
     double v = p[idx];
     // The grids and the integration windows span the layout temperature; below T0/4 the Gauss-Legendre pieces
     // (laid out for T0) would be too wide for the kernel.
@@ -4764,46 +5060,65 @@ void EData::FillDopplerFromParams(const vector_r &p, const Config *configure) {
             << std::endl;
       v = (v > vMax) ? vMax : vMin;
     }
-    te->SetDopplerTemperature(v);
+    for (int n : dopplerCopies_[k - 1]) this->GetTargetEffect(n)->SetDopplerTemperature(v);
   }
 }
 
 double EData::DopplerPenalty() const {
   double chi2 = 0.0;
   for (int k = 1; k <= this->NumDopplerParams(); k++)
-    chi2 += const_cast<EData *>(this)->GetTargetEffect(this->GetDopplerEffect(k))->DopplerPenalty();
+    chi2 += this->GetDopplerTargetEffect(k)->DopplerPenalty();
   return chi2;
 }
 
+/*!
+ * Groups the densityfit / densitygroup lines into parameters.  ReadTargetEffectsFile gives every segment a line
+ * lists its own copy of the effect (and every component of such a segment one more), so the effects are visited
+ * by line (TargetEffect::GetLineNumber): the first copy of a line decides, the other copies follow it.  A
+ * line that lists no existing segment has no copy and so no parameter (dev makes one that moves nothing).
+ */
 int EData::SetUpDensityParams(const Config &configure) {
   densityEffects_.clear();
+  densityLeadCopies_.clear();
   densityParamOfEffect_.assign(this->NumTargetEffects(), 0);
-  std::map<std::string, int> groupLeader;  // label -> effect number of its first line
+  std::map<int, int> firstCopyOfLine;       // line number -> its first copy (target effect number)
+  std::map<std::string, int> groupLeader;   // label -> first copy of the group's first line
   for (int n = 1; n <= this->NumTargetEffects(); n++) {
     TargetEffect *te = this->GetTargetEffect(n);
+    const int line = te->GetLineNumber();
+    auto seen = firstCopyOfLine.find(line);
+    if (seen != firstCopyOfLine.end()) {
+      // Another copy of a line already grouped: the same parameter, and the group's values if it joined one.
+      const TargetEffect *lineFirst = this->GetTargetEffect(seen->second);
+      if (lineFirst->HasDensityFit()) te->JoinDensityGroup(*lineFirst);
+      densityParamOfEffect_[n - 1] = densityParamOfEffect_[seen->second - 1];
+      continue;
+    }
+    firstCopyOfLine[line] = n;
     const std::string &group = te->GetDensityGroup();
     if (!group.empty()) {
       auto it = groupLeader.find(group);
       if (it != groupLeader.end()) {
         const TargetEffect *lead = this->GetTargetEffect(it->second);
+        const int leadLine = lead->GetLineNumber();
         if (std::fabs(te->GetDensity() - lead->GetDensity()) > 1.0e-9 * lead->GetDensity()) {
           std::ostringstream note;
-          note << "Note: <targetInt> effect " << n << " (density group " << group << ") has density "
+          note << "Note: <targetInt> effect " << line << " (density group " << group << ") has density "
                << te->GetDensity() << "; the group's density is its first line's, " << lead->GetDensity()
-               << " (effect " << it->second << ").";
+               << " (effect " << leadLine << ").";
           configure.Note(note.str());
         }
         if (te->HasDensityFit() && (te->IsDensityVaried() != lead->IsDensityVaried() ||
                                     std::fabs(te->GetDensitySigma() - lead->GetDensitySigma()) > 1.0e-9 * lead->GetDensity()))
-          configure.Note("Note: <targetInt> effect " + std::to_string(n) + " (density group " + group +
+          configure.Note("Note: <targetInt> effect " + std::to_string(line) + " (density group " + group +
                          "): its densityfit block is ignored, the group's is its first line's (effect " +
-                         std::to_string(it->second) + ").");
+                         std::to_string(leadLine) + ").");
         te->JoinDensityGroup(*lead);
         densityParamOfEffect_[n - 1] = densityParamOfEffect_[it->second - 1];
         continue;
       }
       if (!te->HasDensityFit()) {
-        configure.outStream << "ERROR: density group " << group << ": its first <targetInt> line (effect " << n
+        configure.outStream << "ERROR: density group " << group << ": its first <targetInt> line (effect " << line
                             << ") has no 'densityfit vary sigma' block; the group's parameter and prior are read from it."
                             << std::endl;
         return -1;
@@ -4811,7 +5126,8 @@ int EData::SetUpDensityParams(const Config &configure) {
       groupLeader[group] = n;
     }
     if (!te->HasDensityFit()) continue;
-    densityEffects_.push_back(n);
+    densityEffects_.push_back(line);
+    densityLeadCopies_.push_back(n);
     densityParamOfEffect_[n - 1] = (int)densityEffects_.size();
   }
   return 0;
@@ -4824,7 +5140,7 @@ void EData::FillDensitiesFromParams(const vector_r &p, const Config &configure) 
   for (int k = 1; k <= this->NumDensityParams(); k++) {
     const int idx = densityParamOffset_ + k - 1;
     if (idx < 0 || idx >= (int)p.size()) return;  // a vector without the density block
-    const TargetEffect *lead = this->GetTargetEffect(this->GetDensityEffect(k));
+    const TargetEffect *lead = this->GetDensityTargetEffect(k);
     double v = p[idx];
     // The sub-point grids span the layout density: beyond it the depth integral would run off the grid.
     const double vMax = lead->GetLayoutDensity(), vMin = 0.01 * lead->GetDensityNominal();
@@ -4868,14 +5184,15 @@ void EData::FillDensitiesFromParams(const vector_r &p, const Config &configure) 
 double EData::DensityPenalty() const {
   double chi2 = 0.0;
   for (int k = 1; k <= this->NumDensityParams(); k++)
-    chi2 += const_cast<EData *>(this)->GetTargetEffect(this->GetDensityEffect(k))->DensityPenalty();
+    chi2 += this->GetDensityTargetEffect(k)->DensityPenalty();
   return chi2;
 }
 
 void EData::ApplyScreening() {
   if (screeningEffects_.empty()) return;
   std::vector<int> paramOf(this->NumTargetEffects() + 1, 0);
-  for (int k = 1; k <= this->NumScreeningParams(); k++) paramOf[this->GetScreeningEffect(k)] = k;
+  for (int k = 1; k <= this->NumScreeningParams(); k++)
+    for (int n : screeningCopies_[k - 1]) paramOf[n] = k;
   auto apply = [&](ESegment &seg) {
     const int te = seg.GetTargetEffectNum();
     if (te <= 0 || te >= (int)paramOf.size() || paramOf[te] == 0) return;
@@ -4895,7 +5212,7 @@ void EData::FillScreeningFromParams(const vector_r &p) {
   for (int k = 1; k <= this->NumScreeningParams(); k++) {
     const int idx = screeningParamOffset_ + k - 1;
     if (idx < 0 || idx >= (int)p.size()) return;  // a vector without the screening block
-    this->GetTargetEffect(this->GetScreeningEffect(k))->SetScreeningUe(p[idx]);
+    for (int n : screeningCopies_[k - 1]) this->GetTargetEffect(n)->SetScreeningUe(p[idx]);
   }
   this->ApplyScreening();
 }
@@ -4903,7 +5220,7 @@ void EData::FillScreeningFromParams(const vector_r &p) {
 double EData::ScreeningPenalty() const {
   double chi2 = 0.0;
   for (int k = 1; k <= this->NumScreeningParams(); k++)
-    chi2 += const_cast<EData *>(this)->GetTargetEffect(this->GetScreeningEffect(k))->ScreeningPenalty();
+    chi2 += this->GetScreeningTargetEffect(k)->ScreeningPenalty();
   return chi2;
 }
 
@@ -4923,7 +5240,7 @@ void EData::DeleteLastSegment() {
 void EData::FillNormsFromParams(const vector_r &p) {
   int i = GetNormParamOffset();
   for (ESegmentIterator segment = GetSegments().begin(); segment < GetSegments().end(); segment++) {
-    if (segment->IsVaryNorm()) {
+    if (segment->IsVaryNorm() && !segment->IsProfiledNorm()) {
       segment->SetNorm(p[i]);
       i++;
     }
@@ -4939,6 +5256,10 @@ void EData::FillNormsFromParams(const vector_r &p) {
  */
 
 void EData::FillEnergyShiftsFromParams(const vector_r &p, EData *data, CNuc *theCNuc, const Config *configure) {
+  // The THM coherent backgrounds, the block after the shifts (none without
+  // cbackground=): every caller fills the shifts right after the norms, with
+  // the compound the model will run on.
+  FillThmCoherentFromParams(p, theCNuc);
   // Screening first: sub-points rebuilt below (ReplaceSubPointGrids) inherit their parent's U_e.
   this->FillScreeningFromParams(p);
   // Fitted target densities: the thickness of each point of their lines (the grids stay put).
@@ -5210,11 +5531,14 @@ EData *EData::Clone() const {
   dataCopy->energyShiftFnParamOffset_ = this->energyShiftFnParamOffset_;
   dataCopy->screeningParamOffset_ = this->screeningParamOffset_;
   dataCopy->screeningEffects_ = this->screeningEffects_;
+  dataCopy->screeningCopies_ = this->screeningCopies_;
   dataCopy->densityParamOffset_ = this->densityParamOffset_;
   dataCopy->densityEffects_ = this->densityEffects_;
+  dataCopy->densityLeadCopies_ = this->densityLeadCopies_;
   dataCopy->densityParamOfEffect_ = this->densityParamOfEffect_;
   dataCopy->dopplerParamOffset_ = this->dopplerParamOffset_;
   dataCopy->dopplerEffects_ = this->dopplerEffects_;
+  dataCopy->dopplerCopies_ = this->dopplerCopies_;
   dataCopy->thicknessParamOffset_ = this->thicknessParamOffset_;
   dataCopy->thicknessSegments_ = this->thicknessSegments_;
   dataCopy->isFit_ = this->isFit_;
@@ -5222,6 +5546,9 @@ EData *EData::Clone() const {
   dataCopy->targetEffects_ = this->targetEffects_;
   dataCopy->segments_ = this->segments_;
   dataCopy->componentSegments_ = this->componentSegments_;
+  dataCopy->thmGroups_ = this->thmGroups_;
+  dataCopy->thmCoherentParams_ = this->thmCoherentParams_;
+  dataCopy->thmCoherentParamOffset_ = this->thmCoherentParamOffset_;
   dataCopy->covGroups_ = this->covGroups_;  // shared: one factor (and one frozen model) for all copies
   dataCopy->nodeCache_ = this->nodeCache_;  // shared: a re-placed node is computed and held once
   dataCopy->priorCov_ = this->priorCov_;    // shared, read-only

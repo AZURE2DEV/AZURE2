@@ -8,6 +8,8 @@
 #include "AZUREParams.h"
 #include "PriorCovariance.h"
 #include "GSLException.h"
+#include "JGroup.h"
+#include "ALevel.h"
 #include <iostream>
 #include <iomanip>
 #include <cmath>
@@ -17,8 +19,11 @@
 #include <fstream>
 #include <sstream>
 #include <string>
+#include <map>
 #include <thread>
 #include <algorithm>
+#include <cstdlib>
+#include <cstdio>
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
@@ -253,6 +258,7 @@ void AZURECalcMCMC::UpdateParameterVectors(const vector_r &physicalParams) const
   rwa_.clear();
   physical_.clear();
   fixed_.clear();
+  paramNames_.clear();
   g_param_names.clear();
 
   AZUREParams params;
@@ -270,6 +276,7 @@ void AZURECalcMCMC::UpdateParameterVectors(const vector_r &physicalParams) const
   for (int i = 0; i < params.GetMinuitParams().Params().size(); i++) {
     all_rwa_.push_back(params.GetMinuitParams().Parameter(i).Value());
     fixed_.push_back(params.GetMinuitParams().Parameter(i).IsFixed());
+    paramNames_.push_back(params.GetMinuitParams().GetName(i));
     g_param_names.push_back(params.GetMinuitParams().GetName(i));
     // If not fixed, add to rwa
     if (!params.GetMinuitParams().Parameter(i).IsFixed()) {
@@ -392,125 +399,165 @@ void AZURECalcMCMC::BuildAutoPriors() const {
     return;
   }
 
-  // Walk the parameters in exactly the order CNuc::FillMnParams and then
-  // EData::FillMnParams add them, which is the order fixed_ is indexed in:
-  //   per J-group, per level: one energy, then one width per channel
-  //   one isotopic abundance per (sample, nucleus), with an <abundances> block
-  //   one norm per segment with IsVaryNorm()
-  //   one energy shift per segment (all segments)
-  //   one sqrt(E) energy-shift coefficient per segment (all segments)
-  //   the shift-function parameters of each segment declaring a "shiftfn" block
-  //   one electron-screening potential per <targetInt> line with a screening block
-  //   one fitted target density per <targetInt> line with a densityfit block or per density group
-  //   one fitted Doppler temperature per <targetInt> line with 'doppler T vary sigma'
-  //   one fitted sample thickness per data segment with 'transmission n vary sigma' / 'yield n vary sigma' 
-  // AZUREAPI::GetParameterInfo() walks the same sequence.
+  // Classify every parameter by its name in the parameter vector, so that the
+  // classification has the vector's length and order whatever blocks
+  // CNuc::FillMnParams and EData::FillMnParams put in it.  Re-walking the
+  // levels and segments instead (as this did) gave an entry to a free THM norm,
+  // which is profiled and not a parameter, and none to a THM coherent
+  // background: the lengths then differed, and the automatic priors and the
+  // level-energy spread were dropped for the whole run.  Blocks: per
+  // J-group and level one energy and one width per channel; one isotopic
+  // abundance per (sample, nucleus) with an <abundances> block; norms; energy
+  // shifts; sqrt(E) coefficients; shift-function parameters; electron-screening
+  // potentials (screening_<n>); fitted target densities (density_<n>, dev);
+  // fitted Doppler temperatures (doppler_<n>, dev); fitted sample thicknesses
+  // (segment_<k>_thickness, dev); THM cbkg (last).  AZUREAPI::GetParameterInfo() walks the same sequence.
   std::vector<int> allKinds;
   std::vector<double> allAutoMean;
   std::vector<double> allAutoStd;  // <= 0 means "no automatic prior available"
+  std::vector<std::string> unknownNames;
 
+  // segment_<k>_<tail>: the segment of key k, or null.
+  auto segmentOf = [&](const std::string &name, const std::string &tail) -> ESegment * {
+    if (name.compare(0, 8, "segment_") != 0 || !AZURELabel::EndsWith(name, tail)) return nullptr;
+    const std::string key = name.substr(8, name.size() - 8 - tail.size());
+    if (key.empty() || key.find_first_not_of("0123456789") != std::string::npos) return nullptr;
+    if (!data()->IsSegmentKey(std::atoi(key.c_str()))) return nullptr;
+    return data()->GetSegmentFromKey(std::atoi(key.c_str()));
+  };
+
+  // abundance[_<sample>]_<Z>_<A> (CNuc::AbundanceParamName): the <abundances>
+  // line's value and sigma are the prior, as the fit uses them.
   CNuc *nuc = compound();
-  for (int j = 1; j <= nuc->NumJGroups(); ++j) {
-    JGroup *jgroup = nuc->GetJGroup(j);
-    for (int la = 1; la <= jgroup->NumLevels(); ++la) {
-      allKinds.push_back(PARAM_ENERGY);
-      allAutoMean.push_back(0.0);
-      allAutoStd.push_back(-1.0);
-      for (int ch = 1; ch <= jgroup->NumChannels(); ++ch) {
-        allKinds.push_back(PARAM_WIDTH);
-        allAutoMean.push_back(0.0);
-        allAutoStd.push_back(-1.0);
-      }
-    }
-  }
-  // Isotopic abundances (after the level block, CNuc::FillMnParams): the
-  // <abundances> line's value and sigma are the prior, as the fit uses them.
+  std::map<std::string, std::pair<double, double>> abundancePrior;
   for (int k = 1; k <= nuc->NumAbundanceParams(); ++k) {
     int sample, nucleus;
     nuc->AbundanceOf(k, sample, nucleus);
     const SampleAbundance &e = nuc->GetSample(sample)->entries[nucleus - 1];
-    allKinds.push_back(PARAM_ABUNDANCE);
-    allAutoMean.push_back(e.nominal);
-    allAutoStd.push_back(e.sigma);
+    abundancePrior[nuc->AbundanceParamName(sample, nucleus)] = std::make_pair(e.nominal, e.sigma);
   }
+  // segment_<k>_energy_shift_fn<j> (EData::FillMnParams): the segment, j in `term`.
+  auto shiftFnOf = [&](const std::string &name, int &term) -> ESegment * {
+    static const std::string tag = "_energy_shift_fn";
+    if (name.compare(0, 8, "segment_") != 0) return nullptr;
+    const size_t at = name.rfind(tag);
+    if (at == std::string::npos || at <= 8) return nullptr;
+    const std::string key = name.substr(8, at - 8), j = name.substr(at + tag.size());
+    if (key.find_first_not_of("0123456789") != std::string::npos || j.empty() ||
+        j.find_first_not_of("0123456789") != std::string::npos)
+      return nullptr;
+    if (!data()->IsSegmentKey(std::atoi(key.c_str()))) return nullptr;
+    ESegment *s = data()->GetSegmentFromKey(std::atoi(key.c_str()));
+    term = std::atoi(j.c_str());
+    if (!s->OwnsShiftFn() || !s->HasShiftFn() || term >= s->NumShiftFnParams()) return nullptr;
+    return s;
+  };
 
-  std::vector<ESegment> &segments = data()->GetSegments();
+  // density_<n> (EData::FillMnParams): the target effect of density parameter n, or null.
+  auto densityOf = [&](const std::string &name) -> const TargetEffect * {
+    if (name.compare(0, 8, "density_") != 0) return nullptr;
+    const std::string n = name.substr(8);
+    if (n.empty() || n.find_first_not_of("0123456789") != std::string::npos) return nullptr;
+    for (int k = 1; k <= data()->NumDensityParams(); ++k)
+      if (data()->GetDensityEffect(k) == std::atoi(n.c_str())) return data()->GetDensityTargetEffect(k);
+    return nullptr;
+  };
 
-  // Normalizations. GetNormError() is a percentage of the nominal norm; this
-  // reproduces the penalty AZURECalc::operator() adds during a Minuit fit.
-  for (size_t s = 0; s < segments.size(); ++s) {
-    if (segments[s].IsVaryNorm()) {
-      double nominal = segments[s].GetNominalNorm();
-      allKinds.push_back(PARAM_NORM);
-      allAutoMean.push_back(nominal);
-      allAutoStd.push_back(nominal / 100.0 * segments[s].GetNormError());
+  // doppler_<n> (EData::FillMnParams): the first copy of Doppler parameter n's line, or null.
+  auto dopplerOf = [&](const std::string &name) -> const TargetEffect * {
+    if (name.compare(0, 8, "doppler_") != 0) return nullptr;
+    const std::string n = name.substr(8);
+    if (n.empty() || n.find_first_not_of("0123456789") != std::string::npos) return nullptr;
+    for (int k = 1; k <= data()->NumDopplerParams(); ++k)
+      if (data()->GetDopplerEffect(k) == std::atoi(n.c_str())) return data()->GetDopplerTargetEffect(k);
+    return nullptr;
+  };
+
+  // screening_<n> (EData::FillMnParams): the target effect n with a screening block, or null.
+  auto screeningOf = [&](const std::string &name) -> const TargetEffect * {
+    if (name.compare(0, 10, "screening_") != 0) return nullptr;
+    const std::string n = name.substr(10);
+    if (n.empty() || n.find_first_not_of("0123456789") != std::string::npos) return nullptr;
+    for (int k = 1; k <= data()->NumScreeningParams(); ++k)
+      if (data()->GetScreeningEffect(k) == std::atoi(n.c_str()))
+        return data()->GetScreeningTargetEffect(k);
+    return nullptr;
+  };
+
+  for (size_t i = 0; i < paramNames_.size(); ++i) {
+    const std::string &name = paramNames_[i];
+    int kind = -1;
+    double mean = 0.0, std = -1.0;
+    const TargetEffect *te = nullptr;
+    ESegment *seg = nullptr;
+    int term = -1;
+    if (name.compare(0, 7, "energy_") == 0) {
+      kind = PARAM_ENERGY;
+    } else if (name.compare(0, 6, "width_") == 0) {
+      kind = PARAM_WIDTH;
+    } else if ((seg = segmentOf(name, "_norm"))) {
+      // GetNormError() is a percentage of the nominal norm; this reproduces
+      // the penalty AZURECalc::operator() adds during a Minuit fit.
+      kind = PARAM_NORM;
+      mean = seg->GetNominalNorm();
+      std = mean / 100.0 * seg->GetNormError();
+    } else if ((seg = segmentOf(name, "_energy_shift_sqrt"))) {
+      kind = PARAM_SHIFT_SQRT;
+      mean = 0.0;  // shift priors are centred on no shift (dev 0dd28e5, ESegment::AddShiftPenalty)
+      std = seg->GetEnergyShiftSqrtError();
+    } else if ((seg = segmentOf(name, "_energy_shift"))) {
+      kind = PARAM_SHIFT;
+      mean = seg->GetNominalEnergyShift();  // 0, or the explicit prior_centre row
+      std = seg->GetEnergyShiftError();
+    } else if (abundancePrior.count(name)) {
+      kind = PARAM_ABUNDANCE;
+      mean = abundancePrior[name].first;
+      std = abundancePrior[name].second;
+    } else if ((seg = shiftFnOf(name, term))) {
+      // a shift-function parameter: the energy-shift prior rule (as dev)
+      kind = PARAM_SHIFT;
+      mean = 0.0;  // from no shift, as ESegment::AddShiftPenalty
+      std = seg->GetShiftFnErrors()[term];
+    } else if ((te = screeningOf(name))) {
+      // an electron-screening potential (eV): its value and sigma are the
+      // prior, as the fit uses them (as dev)
+      kind = PARAM_SCREENING;
+      mean = te->GetScreeningNominal();
+      std = te->GetScreeningSigma();
+    } else if ((te = densityOf(name))) {
+      // a fitted target density (atoms/cm^2): the line's density and sigma are the prior (as dev)
+      kind = PARAM_DENSITY;
+      mean = te->GetDensityNominal();
+      std = te->GetDensitySigma();
+    } else if ((te = dopplerOf(name))) {
+      // a fitted Doppler temperature (K): the line's T and sigma are the prior (as dev)
+      kind = PARAM_DOPPLER;
+      mean = te->GetDopplerNominal();
+      std = te->GetDopplerSigma();
+    } else if ((seg = segmentOf(name, "_thickness"))) {
+      // a fitted sample thickness (atoms/barn): the line's n and sigma are the prior, none for a
+      // thickness-group follower, whose parameter is fixed (as dev)
+      kind = PARAM_THICKNESS;
+      mean = seg->GetNominalThickness();
+      std = seg->IsThicknessGroupFollower() ? 0.0 : seg->GetThicknessSigma();
+    } else if (name.compare(0, 5, "cbkg_") == 0) {
+      kind = PARAM_CBKG;
+    } else {
+      unknownNames.push_back(name);
     }
+    allKinds.push_back(kind);
+    allAutoMean.push_back(mean);
+    allAutoStd.push_back(std);
   }
 
-  // Energy shifts, one per segment whether it varies or not.
-  for (size_t s = 0; s < segments.size(); ++s) {
-    allKinds.push_back(PARAM_SHIFT);
-    allAutoMean.push_back(0.0);  // shift priors are centred on no shift (ESegment::AddShiftPenalty)
-    allAutoStd.push_back(segments[s].GetEnergyShiftError());
-  }
-
-  // sqrt(E) energy-shift coefficients, one per segment, same prior rule.
-  for (size_t s = 0; s < segments.size(); ++s) {
-    allKinds.push_back(PARAM_SHIFT);
-    allAutoMean.push_back(0.0);
-    allAutoStd.push_back(segments[s].GetEnergyShiftSqrtError());
-  }
-
-  // Shift-function parameters, of the segments that declare a function, same prior rule.
-  for (size_t s = 0; s < segments.size(); ++s) {
-    if (!segments[s].OwnsShiftFn() || !segments[s].HasShiftFn()) continue;
-    for (int j = 0; j < segments[s].NumShiftFnParams(); ++j) {
-      allKinds.push_back(PARAM_SHIFT);
-      allAutoMean.push_back(0.0);
-      allAutoStd.push_back(segments[s].GetShiftFnErrors()[j]);
-    }
-  }
-
-  // Electron-screening potentials (eV), one per <targetInt> line with a screening block: its value and
-  // sigma are the prior, as the fit uses them.
-  for (int k = 1; k <= data()->NumScreeningParams(); ++k) {
-    const TargetEffect *te = data()->GetTargetEffect(data()->GetScreeningEffect(k));
-    allKinds.push_back(PARAM_SCREENING);
-    allAutoMean.push_back(te->GetScreeningNominal());
-    allAutoStd.push_back(te->GetScreeningSigma());
-  }
-
-  // Fitted target densities (atoms/cm^2), one per densityfit line or density group: the line's density and
-  // sigma are the prior, as the fit uses them.
-  for (int k = 1; k <= data()->NumDensityParams(); ++k) {
-    const TargetEffect *te = data()->GetTargetEffect(data()->GetDensityEffect(k));
-    allKinds.push_back(PARAM_DENSITY);
-    allAutoMean.push_back(te->GetDensityNominal());
-    allAutoStd.push_back(te->GetDensitySigma());
-  }
-
-  // Fitted Doppler temperatures (K), one per 'doppler T vary sigma' line: the line's T and sigma are the prior.
-  for (int k = 1; k <= data()->NumDopplerParams(); ++k) {
-    const TargetEffect *te = data()->GetTargetEffect(data()->GetDopplerEffect(k));
-    allKinds.push_back(PARAM_DOPPLER);
-    allAutoMean.push_back(te->GetDopplerNominal());
-    allAutoStd.push_back(te->GetDopplerSigma());
-  }
-
-  // Fitted sample thicknesses (atoms/barn), one per transmission / yield line with the fit form: the line's n and
-  // sigma are the prior (none for a thickness-group follower, whose parameter is fixed).
-  for (int k = 1; k <= data()->NumThicknessParams(); ++k) {
-    const ESegment *seg = data()->GetSegment(data()->GetThicknessSegment(k));
-    allKinds.push_back(PARAM_THICKNESS);
-    allAutoMean.push_back(seg->GetNominalThickness());
-    allAutoStd.push_back(seg->IsThicknessGroupFollower() ? 0.0 : seg->GetThicknessSigma());
-  }
-
-  if (allKinds.size() != fixed_.size()) {
+  if (allKinds.size() != fixed_.size() || !unknownNames.empty()) {
     configure().outStream << "Warning: parameter classification produced "
-                          << allKinds.size() << " entries but there are "
-                          << fixed_.size() << " parameters; automatic priors "
-                          << "skipped to avoid mis-assigning them.\n";
+                          << allKinds.size() << " entries for "
+                          << fixed_.size() << " parameters";
+    if (!unknownNames.empty())
+      configure().outStream << ", " << unknownNames.size() << " not recognised (first: "
+                            << unknownNames[0] << ")";
+    configure().outStream << "; automatic priors skipped to avoid mis-assigning them.\n";
     freeKinds_.clear();
     return;
   }
@@ -539,14 +586,16 @@ void AZURECalcMCMC::BuildAutoPriors() const {
   usePriors_.resize(nfree, false);
 
   int nAutoNorm = 0, nAutoShift = 0, nNoError = 0, nUserNeeded = 0, nUserSet = 0;
+  int nCbkg = 0, nCbkgSet = 0;
   std::vector<std::string> noErrorLabels;
   std::vector<std::string> noPriorLabels;
 
   for (size_t i = 0; i < nfree; ++i) {
     const int kind = freeKinds_[i];
 
-    if (kind == PARAM_NORM || kind == PARAM_SHIFT || kind == PARAM_ABUNDANCE || kind == PARAM_SCREENING ||
-        kind == PARAM_DENSITY || kind == PARAM_DOPPLER || kind == PARAM_THICKNESS) {
+    if (kind == PARAM_NORM || kind == PARAM_SHIFT || kind == PARAM_SHIFT_SQRT || kind == PARAM_ABUNDANCE ||
+        kind == PARAM_SCREENING || kind == PARAM_DENSITY || kind == PARAM_DOPPLER ||
+        kind == PARAM_THICKNESS) {
       // Derived from the data, so it always wins over whatever the GUI holds.
       if (freeAutoStd[i] > 0.0) {
         priorMeans_[i] = freeAutoMean[i];
@@ -563,6 +612,11 @@ void AZURECalcMCMC::BuildAutoPriors() const {
         nNoError++;
         noErrorLabels.push_back(AZURELabel::Parameter(compound(), data(), freeAllIndex[i]));
       }
+    } else if (kind == PARAM_CBKG) {
+      // THM coherent background: nothing in the data quotes an error on it,
+      // so no automatic prior; a prior the caller defined is kept.
+      nCbkg++;
+      if (usePriors_[i] && priorStds_[i] > 0.0) nCbkgSet++;
     } else {
       // Level energies and widths: the user's business.
       nUserNeeded++;
@@ -601,6 +655,11 @@ void AZURECalcMCMC::BuildAutoPriors() const {
       configure().outStream << "      ...and " << (noPriorLabels.size() - maxListed)
                             << " more\n";
   }
+  if (nCbkg > 0)
+    configure().outStream << "  " << nCbkg << " THM coherent-background parameter"
+                          << (nCbkg == 1 ? "" : "s") << ": " << nCbkgSet
+                          << " with a user-defined prior, the others uniform "
+                          << "(no automatic prior)\n";
   configure().outStream.flush();
 }
 
@@ -827,6 +886,7 @@ void mcmc_sample_callback(int current_step,
 static void (*g_gui_progress_callback)(int, int, double, double, double) = nullptr;
 static void (*g_gui_iteration_callback)(int, int) = nullptr;
 static void (*g_gui_results_callback)(int, int, const std::vector<std::vector<double>> &) = nullptr;
+static void (*g_gui_message_callback)(const std::string &) = nullptr;
 static const AZURECalcMCMC *g_mcmc_for_callbacks = nullptr;
 static nu::Mcmc *g_mcmc_sampler = nullptr;
 static bool g_using_rwa_parameters = false;
@@ -1039,7 +1099,54 @@ void AZURECalcMCMC::SetGUIResultsCallback(void (*callback)(int, int, const std::
   g_gui_results_callback = callback;
 }
 
-void AZURECalcMCMC::RunMCMCSampling(int nwalkers, int nsteps, const std::vector<double> &initialParams,
+void AZURECalcMCMC::SetGUIMessageCallback(void (*callback)(const std::string &)) {
+  g_gui_message_callback = callback;
+}
+
+std::vector<std::string> AZURECalcMCMC::ParkNonPositiveLevels(const std::vector<double> &p, bool useRWA,
+                                                             bool &filled) const {
+  std::vector<std::string> labels;
+  filled = false;
+  if (!parametersInitialized_) return labels;
+  if (!pools_initialized_) InitializePools();
+  CNuc *lc = GetPooledCNuc();
+  try {
+    if (useRWA) {
+      lc->FillCompoundFromParams(ReconstructFullParameters(p));
+      filled = true;
+    } else {
+      // As CalculateLogLikelihoodPhysical: observed widths -> Park's amplitudes.
+      lc->FillCompoundFromParamsPhysical(ReconstructFullParametersPhysical(p));
+      if (lc->TransformIn(configure())) {
+        AZUREParams params;
+        lc->FillMnParams(params.GetMinuitParams(), &configure());
+        lc->FillCompoundFromParams(params.GetMinuitParams().Params());
+        filled = true;
+      }
+    }
+    if (filled) {
+      lc->CalcShiftFunctions(configure());
+      for (int j = 1; j <= lc->NumJGroups(); j++) {
+        JGroup *jg = lc->GetJGroup(j);
+        if (!jg->IsInRMatrix()) continue;
+        for (int la = 1; la <= jg->NumLevels(); la++) {
+          ALevel *level = jg->GetLevel(la);
+          if (!level->IsInRMatrix() || level->GetParkNorm() > 0.0) continue;
+          std::ostringstream text;
+          text << AZURELabel::Level(jg, level, j, la) << ": J = " << level->GetParkNorm();
+          labels.push_back(text.str());
+        }
+      }
+    }
+  } catch (...) {
+    filled = false;
+    labels.clear();
+  }
+  ReturnPooledCNuc(lc);
+  return labels;
+}
+
+bool AZURECalcMCMC::RunMCMCSampling(int nwalkers, int nsteps, const std::vector<double> &initialParams,
                                     std::vector<std::vector<double>> &samples, double chainSpreadPercent, int nthreads, bool useRWA,
                                     double energySpreadKeV) const {
   try {
@@ -1055,12 +1162,12 @@ void AZURECalcMCMC::RunMCMCSampling(int nwalkers, int nsteps, const std::vector<
     // The prior parameter covariance (after the automatic priors, which it replaces for its parameters).
     if (!SetUpPriorCovariance(useRWA)) {
       configure().outStream << "MCMC sampling not started." << std::endl;
-      return;
+      return false;
     }
 
     if (ndim == 0) {
       configure().outStream << "Error: No parameters provided for MCMC sampling\n";
-      return;
+      return false;
     }
 
     // Set up CSV file for saving samples with enhanced format
@@ -1096,7 +1203,7 @@ void AZURECalcMCMC::RunMCMCSampling(int nwalkers, int nsteps, const std::vector<
         if (startStep >= nsteps) {
           configure().outStream << "Sampling already completed! Loading existing samples.\n";
           LoadExistingSamples(samplesFile, samples);
-          return;
+          return true;
         }
 
         resuming = true;
@@ -1142,8 +1249,9 @@ void AZURECalcMCMC::RunMCMCSampling(int nwalkers, int nsteps, const std::vector<
       if (kind == PARAM_ENERGY) {
         spread = energySpreadMeV;
         nEnergyCapped++;
-      } else if (kind == PARAM_NORM || kind == PARAM_SHIFT || kind == PARAM_ABUNDANCE || kind == PARAM_SCREENING ||
-        kind == PARAM_DENSITY || kind == PARAM_DOPPLER || kind == PARAM_THICKNESS) {
+      } else if (kind == PARAM_NORM || kind == PARAM_SHIFT || kind == PARAM_SHIFT_SQRT || kind == PARAM_ABUNDANCE ||
+                 kind == PARAM_SCREENING || kind == PARAM_DENSITY || kind == PARAM_DOPPLER ||
+                 kind == PARAM_THICKNESS) {
         // Starting outside the prior only wastes steps walking back into it.
         if (j < (int)priorStds_.size() && j < (int)usePriors_.size() &&
             usePriors_[j] && priorStds_[j] > 0.0 && priorStds_[j] < spread) {
@@ -1187,6 +1295,64 @@ void AZURECalcMCMC::RunMCMCSampling(int nwalkers, int nsteps, const std::vector<
           pos[j] += init_distribution(generator);
         }
         initial_positions.push_back(pos);
+      }
+    }
+
+    // Check the start before any step (see RunMCMCSampling in the header).
+    // The report goes to the output stream and to the GUI's log.
+    auto report = [&](const std::string &text) {
+      configure().outStream << text;
+      configure().outStream.flush();
+      if (g_gui_message_callback) g_gui_message_callback(text);
+    };
+    // The initial ensemble (evaluated first, so that the transformation
+    // warnings of its walkers come before the report).
+    int nFinite = 0;
+    {
+      std::vector<double> startLogP(nwalkers, -std::numeric_limits<double>::infinity());
+#pragma omp parallel for num_threads(std::max(1, nthreads)) schedule(dynamic)
+      for (int k = 0; k < nwalkers; k++) {
+        const std::vector<double> &x = initial_positions[k];
+        const double lp = CalculateLogPrior(x);
+        if (std::isfinite(lp)) startLogP[k] = lp + (useRWA ? LogLikelihood(x) : LogLikelihoodPhysical(x));
+      }
+      for (int k = 0; k < nwalkers; k++)
+        if (std::isfinite(startLogP[k])) nFinite++;
+    }
+    // Park: name the levels with J <= 0 at the starting point.
+    if (configure().paramMask & Config::USE_PARK_FORMALISM) {
+      bool filled = true;
+      std::vector<std::string> badLevels = ParkNonPositiveLevels(initialParams, useRWA, filled);
+      std::ostringstream msg;
+      if (!badLevels.empty()) {
+        msg << "WARNING: the MCMC starting point is outside Park's parameter space: "
+            << badLevels.size() << " level" << (badLevels.size() == 1 ? " has" : "s have")
+            << " J = 1 - sum gamma^2 dS/dE <= 0\n";
+        for (size_t i = 0; i < badLevels.size(); ++i) msg << "    " << badLevels[i] << "\n";
+        msg << "  Their widths exceed what the channel radii allow; the posterior is zero "
+            << "there (J < 0 is rejected), so walkers near this point are rejected.\n"
+            << "  Start from a fit under --use-park (its penalty keeps J > 0), or from a "
+            << "Brune parameter file (converted on read), or reduce these widths.\n";
+      } else if (!filled) {
+        msg << "WARNING: the MCMC starting point could not be transformed to "
+            << "Park's amplitudes; its posterior probability is zero.\n";
+      }
+      if (!msg.str().empty()) report(msg.str());
+    }
+    // Every walker of the initial ensemble outside the support: refuse.
+    {
+      if (nFinite == 0) {
+        std::ostringstream msg;
+        msg << "ERROR: none of the " << nwalkers << " walkers of the initial "
+            << "ensemble has a finite posterior probability";
+        if (configure().paramMask & Config::USE_PARK_FORMALISM)
+          msg << " (under Park, a level with J < 0 is outside the prior)";
+        msg << ".\n  The sampler cannot move from there: every walker would stay "
+            << "at its start with acceptance 0.  MCMC not started.\n";
+        report(msg.str());
+        csvFile.close();
+        if (!resuming) std::remove(samplesFile.c_str());  // only its header was written
+        return false;
       }
     }
 
@@ -1294,7 +1460,7 @@ void AZURECalcMCMC::RunMCMCSampling(int nwalkers, int nsteps, const std::vector<
       configure().outStream << "MCMC sampling stopped early by user request.\n";
     } else if (result != 0) {
       configure().outStream << "MCMC sampling failed with error code: " << result << "\n";
-      return;
+      return false;
     }
 
     // Get samples from the sampler
@@ -1312,6 +1478,7 @@ void AZURECalcMCMC::RunMCMCSampling(int nwalkers, int nsteps, const std::vector<
     configure().outStream << "MCMC sampling completed successfully. Generated "
                           << samples.size() << " total samples.\n";
     configure().outStream << "Samples saved to: " << samplesFile << "\n";
+    return true;
 
   } catch (const std::exception &e) {
     configure().outStream << "Error during MCMC sampling: " << e.what() << "\n";
@@ -1324,6 +1491,7 @@ void AZURECalcMCMC::RunMCMCSampling(int nwalkers, int nsteps, const std::vector<
     g_sample_file = nullptr;
     g_using_rwa_parameters = false;
   }
+  return false;
 }
 
 void AZURECalcMCMC::LoadExistingSamples(const std::string &filename, std::vector<std::vector<double>> &samples) const {

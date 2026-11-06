@@ -10,6 +10,7 @@ independent; drive them from one thread, as the engine is not reentrant.
 
 import copy
 import os
+import re
 import shutil
 import tempfile
 from contextlib import contextmanager
@@ -44,6 +45,26 @@ def _in_dir(path):
     finally:
         os.chdir(previous)
 
+
+_THM_BACKGROUND_TERMS = {"none": 0, "const": 1, "linear": 2, "quadratic": 3}
+
+
+def _config_output_dir(path):
+    """The output directory of a ``.azr``, parsed as Config::ReadConfigFile
+    does: the line after the first one of ``<config>``, cut at its last
+    ``#`` and trimmed ("" if there is none)."""
+    with open(path) as fh:
+        lines = fh.read().splitlines()
+    try:
+        i = next(k for k, line in enumerate(lines) if line == "<config>")
+    except StopIteration:
+        return ""
+    if i + 2 >= len(lines):
+        return ""
+    line = lines[i + 2]
+    if "#" in line:
+        line = line[:line.rindex("#")]
+    return line.strip(" \n\t\r")
 
 class ScatteringLength(NamedTuple):
     """The s-wave scattering length of one channel spin of a particle pair
@@ -217,6 +238,19 @@ class azure2:
     def is_alive(self):
         """Is the engine still open? False once close() has run."""
         return self._sess is not None
+
+    @property
+    def output_dir(self):
+        """The project's output directory, as the engine resolves it.
+
+        The second line of ``<config>`` (up to its ``#`` comment, trimmed),
+        relative to :attr:`cwd` unless absolute -- the directory AZURE2
+        writes ``AZUREOut_*``, ``chiSquared.out`` and ``param.sav`` to.  It is
+        read from the file each time, so a project whose output lives
+        elsewhere than ``output/`` is reported as such.
+        """
+        outdir = _config_output_dir(self.file)
+        return os.path.normpath(os.path.join(self.cwd, outdir)) if outdir else self.cwd
 
     def configure(self):
         """Re-read the parameter, pair and dataset metadata from the engine, after anything that rebuilt the model."""
@@ -857,7 +891,7 @@ class azure2:
         """Reload the run's param.sav (matched by name) into the session --
         fixed level parameters included, see :meth:`load_sav` -- and set
         params_rwa to its free values."""
-        self.load_sav(os.path.join(self.cwd, 'output', 'param.sav'))
+        self.load_sav(os.path.join(self.cwd, self.output_dir, 'param.sav'))
 
     def update_sav_from_rwa_params(self, best):
         """Write a free RWA vector back out to param.sav.new, by name.
@@ -869,9 +903,10 @@ class azure2:
         best = np.asarray(best, float).ravel()
         free = {p.name: float(best[p.free_index]) for p in self.parameters
                 if not p.fixed and p.free_index is not None and p.free_index < best.size}
+        sav = os.path.join(self.output_dir, 'param.sav')
         with _in_dir(self.cwd):
             rows, tag, seen = [], None, set()
-            with open('output/param.sav') as fh:
+            with open(sav) as fh:
                 for line in fh:
                     t = line.split()
                     if not t:
@@ -887,13 +922,14 @@ class azure2:
             for name, value in free.items():
                 if name not in seen:
                     rows.append([name, repr(value), "0.0"])
-            with open('output/param.sav.new', 'w') as f:
+            with open(sav + '.new', 'w') as f:
                 if tag is not None:
                     f.write(" ".join(tag) + "\n")
                 for t in rows:
                     f.write(" ".join(t) + "\n")
 
-    def save_fit(self, path, x=None, param_sav=True, verify=True):
+    def save_fit(self, path, x=None, param_sav=True, verify=True, norms="fitted",
+                 close_session=False):
         """Snapshot a fit as a ``.azr`` you can reopen, plot, or hand over.
 
         ``path`` is required and is written to explicitly -- nothing is ever
@@ -904,15 +940,51 @@ class azure2:
         ``<levels>`` line holds (partial widths in eV, ANCs in fm^-1/2) is done
         here, so a caller cannot forget it.
 
+        **Fixed parameters are written too.** A width marked fixed holds its
+        reduced-width amplitude during a fit -- in pyazr as in the CLI's MIGRAD
+        and LM -- so its *physical* value moves whenever the level's other
+        widths do (the Brune denominator ``1 + sum_c gamma_c^2 dS_c/dE``
+        contains them all).  The snapshot carries the physical value the fit
+        actually had, so the fixed amplitude reads back unchanged.  (Before,
+        the file kept the fixed width as it was read: a fit that tripled a
+        level's free width reloaded as a different model, 4 % off in chi2 on
+        tests/15N_p_a.)
+
         Two things a ``<levels>`` block cannot carry, which is why this is not
         just :meth:`~pyazr.azrfile.AzrModel.apply_fit`:
 
-        - **Normalizations and energy shifts are not in it.** A calculate run
-          on a bare snapshot uses 1.0 for every dataset, so its chi-squared sits
-          above the fit's by whatever the normalizations were absorbing. With
-          ``param_sav`` (the default) a companion ``<name>.sav`` is written
-          beside the file carrying every parameter, free and fixed; hand that to
-          AZURE2 as the external parameter file and the model is whole.
+        - **Normalizations and energy shifts are not in it.** They live in the
+          ``<segmentsData>`` lines, whose norm (and shift) field AZURE2 reads
+          as the *start value* of a fit or calculation and, unless the file
+          has an explicit ``prior_centre`` row for it in
+          ``<parameterSettings>``, also as the *centre of the prior* (the
+          penalty ``((n - n0)/(n0 sigma%/100))^2``, likewise for the shift).
+          ``norms`` chooses:
+
+          ``"fitted"`` (default)
+              the free norms and free shifts of the fit are written into
+              their segment lines, and the centre of every prior that thereby
+              leaves its field is written as an explicit ``prior_centre`` row
+              (the centre the fit used: the loaded field, or the loaded
+              row).  The snapshot run on its own -- CLI calculate, GUI, a
+              fresh pyazr session -- gives the fitted data chi-squared *and*
+              the fit's priors (both checked by ``verify``), and a fit
+              started from it is pulled to the same centres, not to the
+              fitted values.  Before October 2026 this wrote the norms to the
+              ``.sav`` only (a ``_fit.azr`` run alone gave another
+              chi-squared: 18O 2010, 7483 against 1872), and in between
+              without the centre rows (a refit was centred on the fitted
+              norms).  AZURE2 versions before the rows existed skip them and
+              centre the prior on the field.
+          ``"nominal"``
+              the segment lines keep the loaded file's values; the fitted
+              norms and shifts are in the ``.sav`` only (needs
+              ``param_sav``).  Run with that ``.sav`` as the external
+              parameter file (CLI: "use previous parameters"; GUI: Run tab,
+              Parameters File) to reproduce the fit.
+
+          ``param_sav`` (the default) writes the companion ``<name>.sav``
+          beside the file, carrying every parameter, free and fixed.
         - **A written file is not a fit until it reads back as one.** With
           ``verify`` (the default) the result is reopened and checked two
           ways: its physical values transformed back must match, and the
@@ -925,45 +997,74 @@ class azure2:
           value two parameters map onto: the engine returned ``|B|`` for a
           beta-decay amplitude until 2026-10-12, and a snapshot with the
           sign lost passed. See :meth:`_snapshot_mismatch` for why photon
-          channels are judged on physical values only.
-
-        Fixed level parameters are written too, at their *current* observed
-        values. A parameter is fixed in reduced-width space; its observed
-        width or ANC moves with the free widths of the same level (Brune's
-        ``1 + sum gamma^2 dS/dE`` and the external width), so a snapshot that
-        kept the file's old observed values would read back as a different
-        model. On the 12C+alpha evaluation the difference was 21 chi-squared
-        units, with fixed amplitudes drifting by up to 14 % on re-read.
+          channels are judged on physical values only.  With
+          ``norms="fitted"`` (data mode) the reopened file's data chi-squared
+          and its prior terms (:meth:`penalties`) must also equal the fit's
+          (rel. 1e-6; 1e-4 in the standard parametrization, whose transform is
+          inverted iteratively on reading).
 
         A ``.azr`` names its data files and its output directory *relative to
         itself*, so a snapshot only runs from the directory the original did.
         Write it beside the model, or move its ``data/`` with it.
 
+        ``close_session`` closes this session once the files are written and
+        what the check compares with has been computed, *before* the
+        snapshot is reopened: one engine in memory instead of two (a 19F THM
+        session is about 220 MB, 390 MB with the verifying one beside it).
+        The session is unusable afterwards (:meth:`is_alive` is False); use
+        it as the last call of a fit, as ``scripts/thm_model_average.py``
+        does.
+
         Returns ``(azr_path, sav_path_or_None)``.
         """
+        if norms not in ("fitted", "nominal"):
+            raise ValueError(f"norms must be 'fitted' or 'nominal', not {norms!r}.")
+        if norms == "nominal" and not param_sav:
+            raise ValueError("norms='nominal' keeps the fitted norms in the .sav "
+                             "only; it needs param_sav=True.")
         x = np.asarray(self.params_rwa if x is None else x, float).ravel()
-        # Every parameter, with the free ones from x: the fixed ones are fixed
-        # in reduced-width space, and their observed values (what <levels>
-        # holds) move with the free widths of the same level, so a faithful
-        # snapshot writes their current observed values rather than keeping
-        # the file's.  On the 12C+alpha evaluation keeping them moved the
-        # re-read chi-squared by 21 units (fixed amplitudes drifting by up
-        # to 14 % on re-read).
-        full = np.asarray(self.sess.params_all_rwa(), float).copy()
         free = [i for i, p in enumerate(self.parameters) if not p.fixed]
         if x.size != len(free):
             raise ValueError(f"x has {x.size} entries; the session has "
                              f"{len(free)} free parameters.")
-        full[free] = x
-        want = np.asarray(self.transform_all_rwa(full, free_only=False), float)
+        # Every parameter, with the free ones from x, and every parameter's
+        # physical value, fixed ones included (see above).
+        full = self._all_rwa(x)
+        want = np.asarray(self.transform_all_rwa(full, include_fixed=True), float)
 
         path = os.path.abspath(path)
         model = AzrModel.from_file(self.file)
-        model.apply_fit(self.parameters, want, physical=True, include_fixed=True,
-                        pairs=self.pairs)
+        model.apply_fit(self.parameters, want, physical=True, pairs=self.pairs,
+                        include_fixed=True)
         # isotopic abundances (projects with an <abundances> block): the fitted values
         for p in self.parameters.abundances:
             model.set_abundance((p.nucleus_Z, p.nucleus_A), value=float(want[p.index]), sample=p.sample or "")
+        self._save_cbkg(model, np.asarray(full, float))
+        if norms == "fitted":
+            values, centres = {}, {}
+            datasets = self.datasets
+            for p in self.parameters:
+                if p.kind not in ("norm", "shift") or p.fixed or p.free_index is None:
+                    continue
+                n, sh = values.get(p.segment_key, (None, None))
+                v = float(x[p.free_index])
+                values[p.segment_key] = (v, sh) if p.kind == "norm" else (n, v)
+                # Keep the prior where the fit had it: an explicit centre for
+                # every prior whose field now holds another value.
+                d = datasets.by_key(p.segment_key)
+                cn, cs = centres.get(p.segment_key, (None, None))
+                if p.kind == "norm" and d.norm_error and v != d.nominal_norm:
+                    cn = d.nominal_norm
+                elif (p.kind == "shift" and d.vary_shift and d.energy_shift_error
+                      and d.nominal_shift != 0.0):
+                    # an explicit shift centre (the default, 0, needs no row)
+                    cs = d.nominal_shift
+                if cn is not None or cs is not None:
+                    centres[p.segment_key] = (cn, cs)
+            if values:
+                model.set_segment_values(values)
+            if centres:
+                model.set_prior_centres(centres)
         # Electron-screening potentials are not written into the <targetInt> lines: the value there is the
         # prior's centre, and the fitted U_e travels in the .sav, like a normalization.
         model.write(path)
@@ -984,6 +1085,16 @@ class azure2:
                     v = x[next(free)] if not self.fixed_params[i] else allrwa[i]
                     fh.write(f"{p.name:>28s} {float(v): .7e} {0.0: .7e}\n")
 
+        # What the check compares with, from this session before it may close.
+        chi_want = pen_want = None
+        if verify and norms == "fitted" and self.mode == "data":
+            chi_want = self.calculate_chi2_rwa(x)[0]
+            pen_want = self.penalties(x)
+        check_options = {k: v for k, v in self.options.items() if k != "data_mode"}
+        check_options["data_mode"] = self.mode == "data"
+        if close_session:
+            self.close()
+
         if verify:
             # Verify a *copy*, in the session's own directory and with its
             # output redirected. A .azr resolves its data files and output
@@ -998,15 +1109,15 @@ class azure2:
                 fd, probe = tempfile.mkstemp(suffix=".azr", dir=self.cwd)
                 os.close(fd)
                 copy.write(probe)
-                with azure2(probe, cwd=self.cwd,
-                            **{k: v for k, v in self.options.items()
-                               if k != "data_mode"},
-                            data_mode=(self.mode == "data")) as check:
+                with azure2(probe, cwd=self.cwd, **check_options) as check:
                     back_full = np.asarray(check.sess.params_all_rwa(), float)
-                    got = np.asarray(check.transform_all_rwa(back_full,
-                                                             free_only=False), float)
+                    got = np.asarray(check.transform_all_rwa(back_full, include_fixed=True), float)
                     back = {p.name: float(back_full[i])
                             for i, p in enumerate(check.parameters)}
+                    chi_got = None
+                    if chi_want is not None:
+                        chi_got = check.calculate_chi2_rwa(check.params_rwa)[0]
+                        pen_got = check.penalties(check.params_rwa)
             except Exception as err:
                 self._discard(path, sav)
                 raise RuntimeError(
@@ -1025,7 +1136,63 @@ class azure2:
                     f"from ({'; '.join(bad)}); it has been removed. This means "
                     "the .azr and the parameter set do not describe the same "
                     "model.")
+            if chi_got is not None:
+                # The standard parametrization (basis 0) inverts its transform
+                # iteratively on reading (energies to 1e-6 MeV), which leaves
+                # ~1e-5 in the chi-squared of a steep spectrum
+                # (tests/pyazr/beta_sign_test.py); Brune and Park read back
+                # exactly.
+                rtol = 1e-4 if self.basis == 0 else 1e-6
+                if not np.isclose(chi_got, chi_want, rtol=rtol, atol=1e-9):
+                    self._discard(path, sav)
+                    raise RuntimeError(
+                        f"the snapshot run on its own gives chi2 = {chi_got:.10g}, "
+                        f"the fit {chi_want:.10g}; it has been removed.")
+                got_p = sum(float(np.sum(v)) for v in pen_got.values())
+                want_p = sum(float(np.sum(v)) for v in pen_want.values())
+                if not np.isclose(got_p, want_p, rtol=rtol, atol=1e-9):
+                    self._discard(path, sav)
+                    raise RuntimeError(
+                        f"the snapshot's priors give {got_p:.10g}, the fit's "
+                        f"{want_p:.10g}; it has been removed.")
         return path, sav
+
+    _CBKG_NAME = re.compile(r"([0-9/]+[+-])_(\d+)_([^_]+)_(re|im)([01])")
+
+    def _save_cbkg(self, model, values):
+        """Write the THM coherent-background parameters (``cbkg_*``) back into
+        the ``cbackground=`` values of their experiments, one explicit term
+        per (entrance, exit) combination with its values (``f`` for fixed),
+        so the snapshot reads back as the fit.  ``values`` is the full
+        parameter vector in the session's order (the cbkg entries are not
+        transformed)."""
+        cb = [(i, p) for i, p in enumerate(self.parameters) if p.kind == "cbkg"]
+        if not cb:
+            return
+        for name in model.thm_experiments():
+            prefix = f"cbkg_{name}_"
+            combos = {}
+            for i, p in cb:
+                if not p.name.startswith(prefix):
+                    continue
+                m = self._CBKG_NAME.fullmatch(p.name[len(prefix):])
+                if not m:
+                    continue
+                key = (m.group(1), m.group(2), m.group(3))
+                slot = (0 if m.group(4) == "re" else 1) + 2 * int(m.group(5))
+                combos.setdefault(key, {})[slot] = (float(values[i]),
+                                                    bool(self.fixed_params[i]))
+            if not combos:
+                continue
+            terms = []
+            for (jpi, exit_key, chans), v in combos.items():
+                n = 4 if 2 in v or 3 in v else 2
+                vals = ",".join(repr(v.get(k, (0.0, False))[0])
+                                + ("f" if v.get(k, (0.0, False))[1] else "")
+                                for k in range(n))
+                terms.append(f"{jpi}:{exit_key}:{chans}"
+                             + (":linear" if n == 4 else "") + "=" + vals)
+            model.set_thm_cbackground(name, terms)
 
     @staticmethod
     def _discard(*paths):
@@ -1106,23 +1273,32 @@ class azure2:
         """Map a reduced-width-amplitude vector to physical parameters: level energies in MeV, partial widths in eV, ANCs in fm^-1/2."""
         return self.sess.transform_rwa(params)
 
-    def transform_all_rwa(self, params, free_only=True):
+    def transform_all_rwa(self, params, include_fixed=False, free_only=None):
         """As transform_rwa, taking every parameter rather than the free ones.
 
-        Returns the free parameters' physical values, like ``transform_rwa``;
-        with ``free_only=False`` every R-matrix parameter's, fixed ones
-        included, in ``params_all_rwa`` order (the level parameters come
-        first).  The latter is what a snapshot of a fit writes, since a fixed
-        parameter's observed value moves with the free widths of its level.
+        Returns the physical values of the free parameters, or with
+        ``include_fixed`` (equivalently ``free_only=False``) of every
+        parameter, in ``params_all_rwa`` order (the level parameters come
+        first) -- what a snapshot of a fit writes.  A *fixed* width holds its
+        reduced-width amplitude (as in the CLI's fits), so its physical value
+        is not constant: it follows the level's other widths through the
+        Brune denominator ``1 + sum_c gamma_c^2 dS_c/dE``.  Under Park
+        (``use_park``) the amplitude is the observed width and stays put.  A
+        channel entered as an amplitude (``gammaIsRWA``) is returned as
+        Brune's amplitude in both modes, the convention of the .azr.
         """
-        if free_only:
-            return self.sess.transform_all_rwa(params)
-        try:
-            return self.sess.transform_all_rwa_full(params)
-        except AttributeError:
-            raise RuntimeError(
-                "this _azure2 module predates transform_all_rwa_full "
-                "(2026-10-12); rebuild it to snapshot fixed parameters.") from None
+        if free_only is not None:
+            include_fixed = not free_only
+        return self.sess.transform_all_rwa(params, include_fixed=bool(include_fixed))
+
+    def _all_rwa(self, x):
+        """The full RWA vector with the free vector ``x`` in its free slots."""
+        allx = np.asarray(self.sess.params_all_rwa(), float).copy()
+        free = [i for i in range(allx.size) if not self.fixed_params[i]]
+        x = np.asarray(x, float).ravel()
+        for k, i in enumerate(free[:x.size]):
+            allx[i] = x[k]
+        return allx
 
     def transform_physical(self, params):
         """The inverse of transform_rwa: physical parameters back to reduced-width amplitudes."""
@@ -1265,7 +1441,14 @@ class azure2:
     # -- chi-squared ----------------------------------------------------------
 
     def calculate_chi2_rwa(self, params):
-        """Total data chi-squared at a free RWA vector, as a one-element list. Excludes the normalization and energy-shift penalties AZURE2's own objective adds."""
+        """Total data chi-squared at a free RWA vector, as a one-element list.
+
+        Excludes the normalization and energy-shift penalties AZURE2's own
+        objective adds.  A THM segment with a free norm is treated as the CLI
+        treats it: its arbitrary scale is profiled out (n* = S_mm/S_md, chi2 =
+        S_dd - S_md^2/S_mm, no penalty) and is not an entry of ``params`` --
+        see :meth:`segment_norms` for the n* it lands on.
+        """
         return [float(self.sess.calculate_chi2_rwa(params))]
 
     def calculate_chi2(self, params):
@@ -1279,6 +1462,271 @@ class azure2:
         """
         return [float(self.sess.calculate_chi2_physical(params))]
 
+    def segment_norms(self, params=None):
+        """The normalization each segment carries at ``params``.
+
+        One entry per segment, in ``segment_chi2`` order.  For most segments
+        this is the free-vector value (or the fixed one from the file); for a
+        THM segment with a free norm it is the profiled optimum ``n*`` -- which
+        is not a fit parameter, so this is the only way to see it.  The
+        segments of a THM experiment (``<thm>`` ``experiment[...]``) all carry
+        its shared ``n*`` (see :meth:`thm_background`).  Runs a chi-squared
+        evaluation.
+        """
+        x = np.asarray(self.params_rwa if params is None else params, float)
+        self.sess.calculate_chi2_rwa(x)
+        return np.asarray(self.sess.current_norms(), float)
+
+    def thm_experiments(self, params=None):
+        """The THM experiments (``<thm>`` ``experiment[<name>]`` lines) as a
+        chi-squared evaluation at ``params`` profiles them.
+
+        Returns ``{name: report}``; see :meth:`thm_background` for a report.
+        Empty without experiments (or in extrapolation mode).  Runs a
+        chi-squared evaluation.
+        """
+        x = np.asarray(self.params_rwa if params is None else params, float)
+        if self.mode == "data":
+            self.sess.calculate_chi2_rwa(x)
+        out = {}
+        for r in self.sess.thm_experiments():
+            q = 1 + _THM_BACKGROUND_TERMS[r["background"]]
+            cov = np.asarray(r["covariance"], float).reshape(4, 4)[:q, :q]
+            value = np.asarray(r["value"], float)
+            out[r["name"]] = {
+                "segments": list(r["segments"]),
+                "background": r["background"],
+                "points": int(r["points"]),
+                "chi2": float(r["chi2"]),
+                "status": r["status"],
+                "norm": float(value[0]),
+                "b": value[1:q].copy(),
+                "cov": cov,
+                "sigma": np.sqrt(np.maximum(np.diag(cov), 0.0)),
+            }
+            if "cbkg_names" in r:
+                # Coherent background (cbackground=): its fit parameters,
+                # name -> value, as they are in the parameter vector.
+                out[r["name"]]["cbkg"] = dict(zip(r["cbkg_names"],
+                                                  map(float, r["cbkg_values"])))
+        return out
+
+    def thm_background(self, experiment, params=None):
+        """Shared norm and background of one THM experiment at ``params``.
+
+        The segments of ``experiment[<name>]`` share one profiled norm ``n*``
+        (it multiplies the data, as ``segment_norms``) and a background
+        ``b(E) = b0 + b1 E + b2 E^2`` added to the folded HOES model (model
+        units, E the c.m. energy of the THM entrance pair, MeV); both are
+        eliminated by closed-form weighted linear least squares at every
+        evaluation.  Returns a dict:
+
+        ``norm``        n*
+        ``b``           array of the background coefficients (length 0-3)
+        ``cov``         covariance of (norm, b0, ...) from the profile, at fixed
+                        R-matrix parameters (not scaled by chi2/nu)
+        ``sigma``       sqrt(diag(cov))
+        ``chi2``        the experiment's chi-squared, ``points``, ``segments``
+        ``background``  none | const | linear | quadratic
+        ``status``      "profiled", or what a degenerate profile fell back to
+
+        The model at a point, as the output files show it next to the data
+        scaled by n*, is ``calculate_rwa`` plus ``b(E)``.  Runs a chi-squared
+        evaluation.  KeyError for an unknown experiment.
+        """
+        reports = self.thm_experiments(params)
+        if experiment not in reports:
+            raise KeyError(f"no THM experiment {experiment!r} "
+                           f"(have: {', '.join(reports) or 'none'})")
+        return reports[experiment]
+
+    def thm_lineshape(self, experiment, energies, params=None):
+        """The Coulomb line shape N_C of a THM experiment (``lineshape=on``).
+
+        In A + a(x+s) -> s + F*(x+A) -> s + b + B the spectator s leaves in
+        the Coulomb field of F*, and of b and B once F* has decayed; each
+        level's exit amplitude is multiplied by
+        ``N_C = exp(pi zeta/2) (E_l - E - i G_l/2)^(-i zeta)``, so for an
+        isolated level ``|N_C|^2 = exp[2 zeta arctan(2 (E_l - E)/G_l)]``
+        (Mukhamedzhanov, Kadyrov & Pang, EPJA 56 (2020) 233, eqs. 55-62), with
+        ``zeta = eta_sB - eta_0`` (their case 2: B much heavier than s and b,
+        the s-b term eta_sb neglected), ``eta_0 = Z_s Z_F alpha mu_sF/k_sF``,
+        ``eta_sB = Z_s Z_B alpha mu_sB/k_sF`` and ``E_sF = E_aA - B - E``.
+        See docs/source/theory/thm_implementation.rst, "Coulomb line shape".
+
+        ``energies``: c.m. energies E of x + A (MeV).  The level poles
+        (observed energy and total width, Brune) are those of ``params``
+        (default: the current parameters; a chi-squared evaluation is run to
+        load them in data mode).  Returns a dict:
+
+        ``E``, ``E_sF``, ``eta_0``   arrays on the grid
+        ``E_aA``, ``B``, ``Zs``, ``ZF``, ``spectator``
+        ``exits``   one dict per exit pair of the experiment's segments:
+                    ``pair`` (key), ``Zb``/``ZB``, ``mb``/``mB`` (light and
+                    heavy nucleus), ``zeta`` and ``eta_sb`` (the neglected
+                    s-b parameter averaged over the b direction, a validity
+                    check: it should be << 1) on the grid, and ``levels``: per
+                    level of a J group coupling entrance and exit, ``jgroup``,
+                    ``level`` (1-based, as parameters.out), ``J``, ``pi``,
+                    ``E_level`` (c.m. of x + A), ``Gamma`` (MeV) and ``NC2``
+                    (|N_C|^2 on the grid).
+
+        Raises the engine error if the experiment is unknown or has no line
+        shape.
+        """
+        x = np.asarray(self.params_rwa if params is None else params, float)
+        if self.mode == "data":
+            self.sess.calculate_chi2_rwa(x)
+        r = self.sess.thm_lineshape(str(experiment), np.asarray(energies, float).ravel())
+        return r
+
+    def thm_vertex(self, experiment, energies, params=None, strict=False):
+        """The THM entrance vertex of an experiment, averaged over its
+        spectator-momentum window (``ps=`` on the experiment line).
+
+        The off-shell x-A momentum is ``p_xA^2/2mu_xA = E + B + p_s^2/2mu_sx``
+        (Mukhamedzhanov et al., PRC 96 (2017) 024623, eq. 31), so the vertex
+        ``M_l = (B_c - 1) j_l(rho) - rho j_l'(rho) (+ C_l)``, ``rho = p_xA a``,
+        changes with the spectator momentum p_s inside the accepted window.
+        At fixed E the spectator direction fixes |p_s|, and the engine
+        averages the cross section (not the amplitude) over the accepted
+        directions with the fixed-E event weight |phi(q)|^2 d cos(theta_cm),
+        i.e. |phi(q)|^2 q dq over the q = |p_s| the kinematics reach (not the
+        E-integrated |phi|^2 p_s^2 dp_s); this reports the vertex part of it.
+        See docs/source/theory/thm_implementation.rst, "Spectator-momentum
+        window".
+
+        ``energies``: c.m. energies E of x + A (MeV).  The per-level vertex
+        boundaries are those of ``params`` (default: the current parameters;
+        a chi-squared evaluation is run to load them in data mode).  Returns a
+        dict:
+
+        ``window``    description (``"delta"`` without a window)
+        ``p_s``, ``weights``, ``T_s``   lists over E: at each E the nodes
+                      (Gauss-Legendre in cos theta_cm on the directions inside
+                      the window) as |p_s| (MeV/c), their normalized weights
+                      and T_s = p_s^2/2mu_sx (MeV); ``theta_cm`` (deg) their
+                      spectator c.m. angles to the beam.  A delta experiment
+                      has one node at each E, p_s = 0 and T_s the
+                      ``spectatorEnergy`` of its pair
+        ``mu_sx``, ``B``, ``radius``, ``pair``   (MeV, MeV, fm, entrance key)
+        ``E``         the grid; ``rho``: list over E of the rho at each node
+        ``channels``  one dict per entrance channel of every J group:
+                      ``jgroup``, ``channel`` (1-based), ``J``, ``pi``, ``l``,
+                      ``s`` and ``levels``: per level ``level`` (1-based),
+                      ``boundary`` (the vertex boundary B_c for that level;
+                      NaN for ``vertex=onshell``, where it is S(E) + iP(E)),
+                      ``M2`` (<|M_l|^2> over the window) and ``M2_qf``
+                      (|M_l|^2 at p_s = 0) on the grid.
+        ``model``     ``"pw"``, or ``"dw"`` for an experiment with
+                      ``vertexModel=dw``: then the vertex is the surface term of
+                      the prior-form DWBA (docs, "Distorted-wave entrance
+                      vertex"), ``M2`` is its average over the nodes the engine
+                      uses (the reachable part of the ``ps`` window at each E, or
+                      the one ``spectatorAngle`` node), ``M2_qf`` its value at
+                      the ``spectatorAngle`` direction and ``M2_pw`` the
+                      plane-wave |M_l(p)|^2 there, p = |k_aA - alpha k_sF| (what
+                      the DW vertex becomes without distortion); ``rho`` is p a
+                      at each node, ``dw_q``/``dw_weights`` the nodes (q in MeV/c)
+                      and weights per energy, ``dw_q_delta`` (MeV/c) and
+                      ``dw_p_delta`` (fm^-1) those of the ``spectatorAngle``
+                      node.  ``p_s``, ``weights``, ``T_s`` are the nodes of
+                      the line's ``ps`` window (empty lists without one).
+                      With ``spectatorAngles=`` the
+                      vertex is averaged over the accepted spectator
+                      directions (the model is linear in the Gram matrix, so
+                      that is one node with the averaged matrix: ``dw_q`` its
+                      weighted mean q), and ``angle_theta_cm`` (deg, c.m. to
+                      the beam), ``angle_q`` (MeV/c), ``angle_weights`` give
+                      the directions at the grid energy nearest to each E.
+        ``reached``   bool array over E: False where the window (or, for
+                      ``dw``, the vertex grid) does not reach E.  The engine
+                      then uses the nodes and vertex of the nearest data point
+                      (nearest grid energy for ``dw``) -- right for a folding
+                      sub-point next to the data, but the row at such an E is
+                      not the vertex *at* E (several rows can come out
+                      identical).
+
+        Energies out of reach are not silent: a ``UserWarning`` names them,
+        or with ``strict=True`` a ``ValueError`` is raised instead.
+
+        Raises the engine error if the experiment is unknown.
+        """
+        x = np.asarray(self.params_rwa if params is None else params, float)
+        if self.mode == "data":
+            self.sess.calculate_chi2_rwa(x)
+        r = self.sess.thm_vertex(str(experiment), np.asarray(energies, float).ravel())
+        reached = np.asarray(r.get("reached", []), bool)
+        if reached.size and not reached.all():
+            far = np.asarray(r["E"], float)[~reached]
+            shown = ", ".join(f"{e:.6g}" for e in far[:8]) + (" ..." if far.size > 8 else "")
+            where = ("outside the DW vertex grid or beyond the reach of its spectator "
+                     "directions" if r.get("model") == "dw" else
+                     "beyond the reach of the experiment's spectator window")
+            msg = (f"thm_vertex({experiment!r}): {far.size} of {reached.size} energies "
+                   f"are {where} ({r.get('window', '')}); the vertex reported there "
+                   f"is that of the nearest data point / grid energy, not the vertex "
+                   f"at E (E = {shown} MeV; see the 'reached' entry)")
+            if strict:
+                raise ValueError(msg)
+            import warnings
+            warnings.warn(msg, UserWarning, stacklevel=2)
+        return r
+
+    def thm_distortion(self, experiment, energies):
+        """The distortion factor R(E) of a THM experiment (``distortion=`` on
+        its experiment line).
+
+        Zero-range prior-form DWBA (Mukhamedzhanov & Pang, PRC 99 (2019)
+        064618, eqs. 20-24; Mukhamedzhanov, arXiv:2609.04498, eqs. 22-30):
+        ``M(E) = <chi(-)_{k_sF} | phi_sx | chi(+)_{k_aA}(beta r)>``, beta =
+        m_s/m_a, summed over partial waves; ``M_PW`` is its plane-wave limit,
+        the Fourier transform of the s-x bound state at q = |k_sF - beta
+        k_aA|, which the PWA data reduction divides by.  The model is
+        multiplied by ``R(E) = rho(E)/rho(E_ref)`` before the folding, with
+        rho = |M|^2/|M_PW|^2 (``distortionRatio=dwpw``, default) or |M|^2
+        (``dw``, the published convention); equivalently the PWA-extracted
+        S* divided by R.  See docs/source/theory/thm_implementation.rst,
+        "Distortion factor R(E)".  R does not depend on the R-matrix
+        parameters.
+
+        ``energies``: c.m. energies E of x + A (MeV).  Returns a dict:
+
+        ``kind``, ``description``   coulomb | optical | table, the settings
+        ``E``, ``R_model``          the grid and the w(E) the model uses
+                                    (interpolated; the table's for
+                                    ``table:<file>``, then nothing else)
+        ``R``                       R evaluated directly at each E
+        ``M2``, ``M2_PW``           |M|^2 and |M_PW|^2 (fm^6 up to a constant)
+        ``E_sF``, ``k_sF``, ``eta_sF``   the spectator-F channel (MeV, fm^-1)
+        ``theta_cm``, ``x``, ``q``  spectator c.m. angle to the beam (deg),
+                                    cos(k_sF, k_aA), |k_sF - beta k_aA|
+        ``lmax``                    the highest partial wave summed
+
+        With ``spectatorAngles=`` (a window of spectator directions) ``M2``
+        and ``M2_PW`` are the averages over the accepted directions (weight
+        d cos theta_cm x acceptance), R is their ratio (``dwpw``), and
+        ``theta_cm``, ``x``, ``q`` are weighted means.
+        ``E_ref``, ``E_aA``, ``B``, ``k_aA``, ``eta_aA``, ``kappa``,
+        ``eta_b``, ``beta``         scalars of the experiment
+
+        Raises the engine error if the experiment is unknown, has no
+        distortion, or an energy leaves the spectator no energy.
+        """
+        return self.sess.thm_distortion(str(experiment), np.asarray(energies, float).ravel())
+
+    def residuals(self, params=None):
+        """Standardized residuals ``(fit_i - data_i*n)/(cmErr_i*n)``, from a
+        forward pass alone.
+
+        The residual vector of :meth:`residual_jacobian` (same rows, in segment
+        order) without its Jacobian, so it is as cheap as one chi-squared and
+        never refuses a model.  ``sum(r**2) == calculate_chi2_rwa``: THM
+        segments with a free norm use their profiled ``n*``.
+        """
+        x = np.asarray(self.params_rwa if params is None else params, float)
+        return np.asarray(self.sess.calculate_residuals_rwa(x.ravel()), float)
+
     def write_output_files(self, params=None):
         """Write the run's standard output files, as the CLI does at the end.
 
@@ -1291,7 +1739,9 @@ class azure2:
         default), so the files describe the parameters you asked about rather
         than whatever was evaluated last.
 
-        Returns the output directory.
+        Returns the output directory the engine wrote to (:attr:`output_dir`:
+        the ``<config>`` one, relative to :attr:`cwd`), not a fixed
+        ``cwd/output``.
         """
         x = np.asarray(self.params_rwa if params is None else params, float).ravel()
         with _in_dir(self.cwd):
@@ -1309,7 +1759,7 @@ class azure2:
                 self.sess.update_segments_rwa(x)
             if not self.sess.write_output_files():
                 raise RuntimeError("AZURE2 has no data object to write from.")
-        return os.path.join(self.cwd, "output")
+        return self.output_dir
 
     # -- chi-squared, per segment and per dataset -----------------------------
 
@@ -1319,7 +1769,8 @@ class azure2:
         ``calculate_chi2_rwa`` returns only the total, but the standardized
         residuals carry the split: they come back in segment order, so summing
         their squares between the segment boundaries recovers each one.  The
-        sum of this equals ``calculate_chi2_rwa`` exactly.
+        sum of this equals ``calculate_chi2_rwa`` exactly (THM segments with
+        a free norm at their profiled optimum, as in the CLI's chiSquared.out).
 
         Segments with a data covariance (``covariance <file>``) carry whitened
         residuals w = W r (W^T W = M^-1, a mixture of the group's rows), so
@@ -1328,7 +1779,7 @@ class azure2:
         the group's chi-squared.
         """
         x = np.asarray(self.params_rwa if params is None else params, float)
-        r = np.asarray(self.residual_jacobian(x)[0], float)
+        r = self.residuals(x)
         edges = np.cumsum([0] + [len(self.energies[i]) for i in range(self.nsegments)])
         return np.array([float(np.sum(r[edges[i]:edges[i + 1]] ** 2))
                          for i in range(self.nsegments)])
@@ -1392,23 +1843,34 @@ class azure2:
         least-squares fit against :meth:`objective`, not
         :meth:`calculate_chi2_rwa`.
 
+        ``nominal`` is the segment's ``nominal_norm``: the norm field of its
+        ``<segmentsData>`` line, or its explicit ``prior_centre`` row in
+        ``<parameterSettings>`` when it has one (the field is then only the
+        start value).  A fixed norm away from an explicit centre pays its
+        penalty too, as in the engine.  The constant shift's centre is
+        ``nominal_shift``: 0, or its explicit ``prior_centre`` row.
         Note the denominator uses the *nominal* normalization, and that
-        ``norm_error`` is a percentage.  Returns ``{"norm": array, "shift":
-        array, "shift_sqrt": array, "shift_fn": array}``, one entry per segment,
-        and the single numbers ``"park"`` and ``"abundance"`` (isotopic-abundance
-        priors and sum-to-one terms; both already inside the engine's chi-squared),
-        and ``"screening"``: the electron-screening priors ((U_e - nominal)/sigma)^2 of
-        the <targetInt> lines with a ``screening`` block, which :meth:`objective` adds
-        like the normalization terms, and ``"density"``: the priors ((N - N0)/sigma)^2 of
-        the fitted target densities (``densityfit`` lines and ``densitygroup`` groups),
-        added the same way, and ``"doppler"``: the priors ((T - T0)/sigma)^2 of the
-        fitted free-gas Doppler temperatures (``doppler T vary sigma [Tmax]`` lines),
-        added the same way, and ``"thickness"``: the priors ((n - n0)/sigma)^2 of the fitted sample
-        thicknesses (``transmission n vary sigma`` / ``yield n vary sigma`` segments; none for a
-        ``thicknessgroup`` follower), added the same way, and ``"prior_covariance"``: the multivariate Gaussian prior
-        (p - mu)^T C^-1 (p - mu) of the ``priorCovariance=<file>`` config key (0 without it; fixed listed parameters
-        marginalized, see :mod:`pyazr.priors`), computed by the engine from its whitened residuals
-        (:meth:`prior_covariance_residuals`) and added the same way.
+        ``norm_error`` is a percentage.  A THM segment with a free norm has no
+        norm penalty: its scale is profiled out, not a parameter.  Returns
+        ``{"norm": array, "shift": array, "shift_sqrt": array, "shift_fn": array}``,
+        one entry per segment, and the single numbers ``"park"`` and
+        ``"abundance"`` (isotopic-abundance priors and sum-to-one terms; both
+        already inside the engine's chi-squared), and ``"screening"``: the
+        electron-screening priors ((U_e - nominal)/sigma)^2 of the <targetInt>
+        lines with a ``screening`` block, which :meth:`objective` adds like the
+        normalization terms, and ``"density"``: the priors ((N - N0)/sigma)^2 of
+        the fitted target densities (``densityfit`` lines and ``densitygroup``
+        groups), added the same way, and ``"doppler"``: the priors
+        ((T - T0)/sigma)^2 of the fitted free-gas Doppler temperatures
+        (``doppler T vary sigma [Tmax]`` lines), added the same way, and
+        ``"thickness"``: the priors ((n - n0)/sigma)^2 of the fitted sample
+        thicknesses (``transmission n vary sigma`` / ``yield n vary sigma``
+        segments; none for a ``thicknessgroup`` follower), added the same way,
+        and ``"prior_covariance"``: the multivariate Gaussian prior
+        (p - mu)^T C^-1 (p - mu) of the ``priorCovariance=<file>`` config key
+        (0 without it; fixed listed parameters marginalized, see
+        :mod:`pyazr.priors`), computed by the engine from its whitened
+        residuals (:meth:`prior_covariance_residuals`) and added the same way.
         """
         x = np.asarray(self.params_rwa if params is None else params, float)
         norm = np.zeros(self.nsegments)
@@ -1426,12 +1888,12 @@ class azure2:
             value = (float(x[p.free_index])
                      if p is not None and not p.fixed and p.free_index is not None
                      and p.free_index < x.size else d.norm)
-            sigma = d.norm / 100.0 * d.norm_error
+            sigma = d.nominal_norm / 100.0 * d.norm_error
             follower = bool(d.norm_group) and d.norm_group in norm_groups
             if d.norm_group:
                 norm_groups.add(d.norm_group)
             if sigma and not follower:       # a normgroup's penalty is its first member's
-                norm[i] = ((value - d.norm) / sigma) ** 2
+                norm[i] = ((value - d.nominal_norm) / sigma) ** 2
             # A shiftgroup follower's shift is its leader's and its own parameter is fixed: the engine
             # (ESegment::SetShiftGroupFollower, AddShiftPenalty) adds no penalty for it.  Before 2026-10-27
             # a follower whose line kept vary = 1, an error and a value was charged (shift/error)^2 again.
@@ -1443,7 +1905,7 @@ class azure2:
                 sval = (float(x[q.free_index])
                         if q is not None and not q.fixed and q.free_index is not None
                         and q.free_index < x.size else d.energy_shift)
-                shift[i] = (sval / d.energy_shift_error) ** 2
+                shift[i] = ((sval - d.nominal_shift) / d.energy_shift_error) ** 2
             if d.vary_shift_sqrt and d.energy_shift_sqrt_error:
                 q = sqrting.get(d.key)
                 bval = (float(x[q.free_index])
@@ -1671,7 +2133,10 @@ class azure2:
         (float, numpy.ndarray)
             ``(chi2, grad)`` with one gradient entry per input parameter.
             Energies / reduced widths / normalizations are analytic; energy
-            shifts are finite-differenced.  (For a Gaussian log-likelihood use
+            shifts are finite-differenced.  THM (HOES) points are outside the
+            adjoint: their contribution, with the norm profiled, is
+            ``2 J^T r`` over the THM rows of :meth:`residual_jacobian` (model
+            Jacobian from the HOES adjoint, as the CLI's own THM gradient).  (For a Gaussian log-likelihood use
             ``lnL = -0.5*(chi2 + const)`` and ``grad_lnL = -0.5*grad``.)
         """
         resp = np.asarray(
@@ -1704,6 +2169,21 @@ class azure2:
         least-squares driver accepts silently by never moving those
         parameters.)
 
+        THM (HOES) segments: the model Jacobian ``J_m`` of a THM point comes
+        from the reverse-mode adjoint of the HOES observable (level energies,
+        reduced widths, THM coherent backgrounds; one sweep per point).  Set
+        ``AZURE2_THM_FD=1`` in the environment for the former central
+        differences (step ``1e-6 (|x| + 1)``, two THM forward passes per
+        column), e.g. to check one against the other.  With a free norm
+        the scale is profiled: ``r_i = (s m_i - d_i)/e_i`` with
+        ``s = 1/n* = S_md/S_mm`` a function of the parameters, and its
+        dependence is added analytically,
+        ``dr_i/dp = (s J_mi + m_i ds/dp)/e_i``,
+        ``ds/dp = (sum d_k J_mk/e_k^2 - 2 s sum m_k J_mk/e_k^2)/S_mm``.
+        The segments of a THM experiment share the scale and a background,
+        profiled together by linear least squares; ``J`` then carries the
+        exact derivative through that profile (Golub-Pereyra; see
+        docs/source/theory/thm_implementation.rst, "THM experiments").
         With a prior parameter covariance (``priorCovariance=<file>`` in ``<config>``) its whitened rows
         r = L^-1 (p - mu) come last, with the constant Jacobian L^-1 on the prior's columns: ``sum(r**2)`` is then
         ``calculate_chi2_rwa(params) + penalties(params)["prior_covariance"]`` (the other penalties, normalizations
@@ -1737,7 +2217,8 @@ class azure2:
         Returns a list with one ``(npoints, ncols)`` array per calculated
         segment, in the order and point ordering of :meth:`calculate_rwa`.  The
         columns are the free **R-matrix** parameters -- level energies and
-        reduced-width amplitudes, in ``params_rwa`` order -- which is exactly
+        reduced-width amplitudes, in ``params_rwa`` order -- and the THM
+        coherent background (``cbkg``) when there is one, which is exactly
         what ``output/covariance.dat`` spans; normalizations and energy shifts
         are omitted because no calculated observable depends on them.
 
@@ -1747,6 +2228,9 @@ class azure2:
         many parameters the model has -- as against the ``2 * ncols`` forward
         passes a finite-difference estimate would take.  See
         :func:`pyazr.bands.uncertainty_bands`.
+
+        THM (HOES) points have their own adjoint (see
+        :meth:`residual_jacobian`).
 
         Raises ``RuntimeError`` if the model contains a segment outside the
         supported analytic path.
@@ -1874,9 +2358,12 @@ class azure2:
         ``keys``, ``disabled_keys`` and ``threads``.  ``disabled_keys`` counts
         the keys that gave up on their memo because too few of their entries
         were being asked for twice -- which is what happens when a free energy
-        shift moves every point energy at every iteration.  The memo is cleared
-        at every rebuild (set_channel_radius, potential changes) since AZURE2
-        dev 2026-11-04; before, a sampled radius added keys without bound.
+        shift moves every point energy at every iteration.  Such a key keeps
+        its values for the exact same energy only (counted in the totals), so
+        a later session in this process finds them; it drops even those if
+        they fill up without being asked for again.  The memo is cleared at
+        every rebuild (set_channel_radius, potential changes) since AZURE2 dev
+        2026-11-04; before, a sampled radius added keys without bound.
 
         From the same build on, also ``input_files_read`` (input files read from
         disk), ``input_files_served`` (opens answered from memory) and
@@ -1902,21 +2389,50 @@ class azure2:
 
     # -- calculations ---------------------------------------------------------
 
-    def calculate_excitation_energy(self, params):
-        """Compound-nucleus excitation energy per segment -- the one axis every entrance pair shares."""
+    def _geometry_rwa(self, params):
+        """The free RWA vector a geometry query (energies, angles) runs at.
+
+        Point energies and angles do not depend on the R-matrix parameters,
+        only on the energy shifts (and nothing on the norms): so the R-matrix
+        block is the session's own amplitudes, and the rest -- norms, shifts,
+        THM coherent-background terms, identical in the physical and the RWA
+        vector -- is taken from ``params``.  Running the RWA path means no
+        observed-to-formal transformation, which is what used to print
+        "Denominator less than zero while transforming" when a caller handed
+        these methods ``params_rwa``: an amplitude read as a width (or a
+        sub-threshold ANC) that no reduced width reproduces.  The CLI never
+        transforms an RWA vector, so it never printed it.
+        """
+        rwa = np.array(self.params_rwa, float).ravel()
+        if params is None:
+            return rwa
+        p = np.asarray(params, float).ravel()
+        if p.size != rwa.size:
+            raise ValueError(f"expected {rwa.size} free parameters, got {p.size}.")
+        n = self.n_rmatrix
+        rwa[n:] = p[n:]
+        return rwa
+
+    def calculate_excitation_energy(self, params=None):
+        """Compound-nucleus excitation energy per segment -- the one axis every entrance pair shares.
+
+        ``params`` may be the physical or the RWA free vector (or None): only
+        its energy shifts matter (see :meth:`calculate_energies`).
+        """
         s = self.sess
-        nsegments = int(s.update_segments(params))
+        nsegments = int(s.update_segments_rwa(self._geometry_rwa(params)))
         return [s.calculated_excitation_energies(i) for i in range(nsegments)]
 
-    def calculate_angles(self, params):
+    def calculate_angles(self, params=None):
         """Per-segment angles of the calculated points, one array per segment.
 
         The companion to :meth:`calculate_energies`: for a differential segment
         the returned angles are AZURE2's own (center-of-mass) values, which
-        differ from the lab angles declared in the ``.azr`` file.
+        differ from the lab angles declared in the ``.azr`` file.  ``params``
+        as for :meth:`calculate_energies`.
         """
         s = self.sess
-        nsegments = int(s.update_segments(params))
+        nsegments = int(s.update_segments_rwa(self._geometry_rwa(params)))
         return [s.calculated_angles(i) for i in range(nsegments)]
 
     @staticmethod
@@ -2031,9 +2547,31 @@ class azure2:
         obs = self._observables()
         return [self._segment_values(i, obs) for i in range(nsegments)]
 
+    def _mode_free_vector(self, params):
+        """A free RWA vector for the engine's current layout.
+
+        In extrapolation mode a data-mode vector (longer: the data segments'
+        norms and shifts) is accepted, as before the binding refused vectors
+        of the wrong length (dev, 2026-10): its free R-matrix (and abundance)
+        block, which comes first and is the same in both modes (see
+        :meth:`_sync_layout`), is taken, the tail is the session's.  Any other
+        length goes to the engine as given, which refuses it.
+        """
+        x = np.asarray(params, float).ravel()
+        cur = np.asarray(self.params_rwa, float).ravel()
+        if self.mode != "extrap" or x.size <= cur.size:
+            return params
+        info = np.asarray(self.sess.parameter_info(), dtype=float).reshape(-1, Parameter._NFIELDS)
+        kind = np.round(info[:, 0])
+        free = np.round(info[:, 11]) == 0
+        head = int(np.sum(free & ((kind <= 1) | (kind == 6))))
+        y = cur.copy()
+        y[:head] = x[:head]
+        return y
+
     def calculate_rwa(self, params):
         """As calculate, from a free RWA vector. This is the usual entry point."""
-        nsegments = int(self.sess.update_segments_rwa(params))
+        nsegments = int(self.sess.update_segments_rwa(self._mode_free_vector(params)))
         obs = self._observables()
         return [self._segment_values(i, obs) for i in range(nsegments)]
 
@@ -2043,10 +2581,21 @@ class azure2:
         obs = self._observables()
         return [self._segment_values(i, obs) for i in range(nsegments)]
 
-    def calculate_energies(self, params):
-        """Centre-of-mass energies of the calculated points, per segment."""
+    def calculate_energies(self, params=None):
+        """Centre-of-mass energies of the calculated points, per segment.
+
+        The energies do not depend on the R-matrix parameters, only on the
+        segments' energy shifts, so ``params`` may be the physical vector (as
+        :meth:`calculate` takes), the RWA vector (:attr:`params_rwa`) or None
+        (the session's own): its norm/shift tail is used, its R-matrix block
+        is not.  The evaluation runs on the session's amplitudes without the
+        observed-to-formal transformation -- before October 2026 it took the
+        physical path, and ``params_rwa`` passed here was read as widths and
+        ANCs (a sub-threshold ANC channel then printed "Denominator less than
+        zero while transforming", which the CLI never does).
+        """
         s = self.sess
-        nsegments = int(s.update_segments(params))
+        nsegments = int(s.update_segments_rwa(self._geometry_rwa(params)))
         return [s.calculated_energies(i) for i in range(nsegments)]
 
     def calculate_sfactor(self, params):
@@ -2079,6 +2628,43 @@ class azure2:
             self.sess.set_data()
         self.sess.initialize()
         self.mode = "extrap" if extrap else "data"
+        self._sync_layout()
+
+    def _sync_layout(self):
+        """Follow the engine's parameter layout after a mode switch.
+
+        The engine lists one normalization (if varied) and two energy-shift
+        parameters per segment of the *current* segment set, so the
+        ``<segmentsTest>`` grids of extrapolation mode give a different
+        parameter count from the ``<segmentsData>`` segments (e.g. 220 against
+        212 on a 12C+12C model with eight test segments).  The cached
+        ``fixed_params`` used to keep the data-mode layout, so the parameter
+        table (:attr:`parameters`), :meth:`_all_rwa` and :meth:`save_fit` mixed
+        the two: "parameter_info returned 220 parameters but params_fixed
+        reported 212".  Refresh the cached layout from the engine whenever it
+        changed, and carry the free R-matrix block of ``params_rwa`` /
+        ``params`` over -- energies and widths come first and are the same in
+        both modes, so a vector the caller set (``update_rwa_params_from_sav``)
+        is kept; the norm/shift tail is the engine's for the new segment set.
+        """
+        s = self.sess
+        fixed = list(s.params_fixed())
+        if fixed == list(self.fixed_params):
+            return
+        info = np.asarray(s.parameter_info(), dtype=float).reshape(-1, Parameter._NFIELDS)
+        nrm = int(np.sum((np.round(info[:, 0]) <= 1) & (np.round(info[:, 11]) == 0)))
+        rwa = np.asarray(s.params_values_rwa(), float).copy()
+        val = np.asarray(s.params_values(), float).copy()
+        old_rwa = np.asarray(self.params_rwa, float).ravel()
+        old_val = np.asarray(self.params, float).ravel()
+        k = min(nrm, rwa.size, old_rwa.size)
+        rwa[:k] = old_rwa[:k]
+        k = min(nrm, val.size, old_val.size)
+        val[:k] = old_val[:k]
+        self.params_rwa = rwa
+        self.params = val
+        self.fixed_params = fixed
+        self._parameters = None
 
     def extrap_mode(self):
         """Switch to the <segmentsTest> grids. Re-initializes the engine."""

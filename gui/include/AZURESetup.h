@@ -2,6 +2,9 @@
 #define AZURESETUP_H
 
 #include <QMainWindow>
+#include <QTemporaryFile>
+#include <QStringList>
+#include <QTextStream>
 #include <QMap>
 #include <QPair>
 
@@ -10,6 +13,7 @@
 #include "SegmentsTab.h"
 #include "TargetIntTab.h"
 #include "Config.h"
+#include "ThmSettings.h"
 
 class RunTab;
 class FittingTab;
@@ -63,6 +67,22 @@ class AZURESetup : public QMainWindow {
   void saveTabScreenshots(const QString &dir);
 
   // Convert RWA parameter to physical value using proper R-Matrix transformation
+  /*! A Config whose configfile is a snapshot of the current GUI state.
+
+      CNuc::Fill reads the .azr from disk, so a conversion built straight on the
+      live Config sees the last *saved* file.  That matters most for the
+      per-channel reduced-width-amplitude flag, which decides whether a width is
+      converted at all: toggling it without saving would otherwise change the
+      value by orders of magnitude.  Falls back to the unsnapshotted Config if
+      the temporary file cannot be written, so conversion degrades rather than
+      fails. */
+  struct GuiStateSnapshot {
+    explicit GuiStateSnapshot(AZURESetup *setup);
+    QTemporaryFile file;  // removed when this goes out of scope
+    Config config;
+    bool ok;
+  };
+
   double ConvertRWAToPhysical(const QString &paramName, double rwaValue);
 
   // Batch convert multiple RWA parameters to physical values (much more efficient)
@@ -83,8 +103,52 @@ class AZURESetup : public QMainWindow {
 
   // Getter for FittingTab (for MCMCTab access)
   FittingTab *getFittingTab() const { return fittingTab; }
-  TargetIntTab *getTargetIntTab() const { return targetIntTab; }
+  // The tabs whose models the THM workspace reads and edits (getPairsTab and
+  // getSegmentsTab above); getTargetIntTab also serves the Fitting tab's
+  // Screening sub-tab.
   LevelsTab *getLevelsTab() const { return levelsTab; }
+  TargetIntTab *getTargetIntTab() const { return targetIntTab; }
+
+  /*! The optional <thm> block (THM options, read by the engine's
+      Config::ReadThmBlock) is edited in the THM workspace; the GUI keeps its
+      lines verbatim unless they are changed there, so that a save
+      reproduces it.  readThmBlock scans the rest of the stream
+      for the first line starting with <thm>, as the engine does, and stores the
+      lines up to </thm> (comments included).  It sets present = false and
+      returns true when there is no block, and returns false when the block is
+      not terminated -- the engine refuses such a file too.  writeThmBlock
+      writes <thm>, the stored lines and </thm>. */
+  static bool readThmBlock(QTextStream &in, QStringList &lines, bool &present);
+  static void writeThmBlock(QTextStream &out, const QStringList &lines);
+
+  /*! The <thm> block as settings (defaults when the project has none).
+      Returns false, with the reason, if a line of the block is one the
+      engine would refuse; the editor then leaves the block alone. */
+  bool thmSettings(ThmSettings &settings, QString *error = nullptr) const;
+  /*! Installs edited settings.  Settings equal to those read change nothing,
+      so a project whose options were not changed keeps its block byte for
+      byte.  Otherwise the block is recomposed (ThmSettings::compose: comments
+      and unchanged lines kept, defaults dropped, new keys appended), and
+      settings that are all default remove the block, comments included. */
+  void setThmSettings(const ThmSettings &settings);
+  bool hasThmOptionsBlock() const { return hasThmBlock; }
+  /*! THM is opt-in, as the nuclear potential is: off for a new project, on
+      when an opened one has THM content (thmContent), switched with "Use
+      Trojan Horse Method (THM)" in Configure > Runtime Options.  Off hides the
+      THM Workspace entry and the THM controls of the classic tabs; the content
+      itself is kept, saved as read and used by AZURE2.  Not stored in the
+      file: a project with THM content opens with THM on. */
+  bool thmEnabled() const { return thmEnabled_; }
+  void setThmEnabled(bool on);
+  /// The project's THM content, e.g. "a <thm> block, 2 THM segments" ("" if none).
+  QString thmContent() const;
+  const QStringList &thmOptionsLines() const { return thmBlockLines; }
+  /// Directory of the project file, against which relative paths resolve.
+  QString projectDirectory();
+  /*! The project as a save writes it, into `out`, with paths as they would
+      be written in `directory`; writeFile is this plus the file and the
+      window title.  The THM workspace's diagnostics run the engine on it. */
+  bool writeProject(QTextStream &out, const QString &directory);
 
  public slots:
   void SaveAndRun();
@@ -105,6 +169,15 @@ class AZURESetup : public QMainWindow {
   void editChecks();
   void editDirs();
   void editOptions();
+  void editThmWorkspace();
+  /*! What refers to data (test) segment lines by number follows them when
+      they are moved or deleted (SegmentsTab::dataSegmentsRenumbered): the
+      <thm> block's experiment segments= and weight[k] (weightTest[k]), the
+      Experimental Effects lines (data segments) and the segment_N rows of
+      <parameterSettings>.  An experiment or an Experimental Effects line
+      left without segments is removed, and the status bar says so. */
+  void followDataSegments(const QVector<int> &newNumber);
+  void followTestSegments(const QVector<int> &newNumber);
   void buildCoulombTable();
   void showAbout();
   void showTabInfo();
@@ -125,9 +198,21 @@ class AZURESetup : public QMainWindow {
   void createMenus();
   void updateRecent();
   void updateNuclearPotentialTabVisibility();  // Show/hide Nuclear Potential tab based on config
+  /// Reads the <thm> block of `filename` (AZURESetupThm.cpp); false if it is not terminated.
+  bool readThmContent(const QString &filename);
+  /// The <thm> block follows a renumbering of the data (test) segments; the notes for the status bar.
+  QStringList followThmSegments(const QVector<int> &newNumber, bool test);
 
   Config config;
   bool loadedGSLCoulomb_ = false;
+
+  // Verbatim content of the <thm> block of the file last read; written back
+  // only when the file had one (see readThmBlock).
+  bool hasThmBlock = false;
+  QStringList thmBlockLines;
+  bool thmEnabled_ = false;
+  /// The Runtime Options' THM switch: turning it off asks first when the project has THM content.
+  void applyThmOption(bool on);
 
   QAction *aboutAction;
   QAction *resetAction;
@@ -141,6 +226,7 @@ class AZURESetup : public QMainWindow {
   QAction *aMatrixAction;
   QAction *rMatrixAction;
   QAction *editOptionsAction;
+  QAction *thmWorkspaceAction;
   QAction *buildCoulombTableAction;
   QAction *recentSeparator;
   QAction *clearRecentAction;

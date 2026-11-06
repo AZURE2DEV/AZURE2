@@ -18,13 +18,39 @@ class NucLine {
    */
   NucLine(std::istream &stream) {
     stream >> levelJ_ >> levelPi_ >> levelE_ >> levelFix_ >> aa_ >> ir_ >> s_ >> l_ >> levelID_ >> isActive_ >> channelFix_ >> gamma_ >> j1_ >> pi1_ >> j2_ >> pi2_ >> e2_ >> m1_ >> m2_ >> z1_ >> z2_ >> entranceSepE_ >> sepE_ >> j3_ >> pi3_ >> e3_ >> pType_ >> chRad_ >> g1_ >> g2_ >> ecMultMask_;
-    // Optional 32nd column (2026-11-05): the light particle's excitation energy e1 (MeV).  A 31-field line
-    // means e1 = 0, and leaves the stream's state as it was before the column existed (eof, not fail), so
-    // every older file reads exactly as before.  A 32nd token that is not a number sets failbit.
+
+    // Optional trailing columns.  dev's 32nd column (2026-11-05) is the light particle's excitation energy e1
+    // (MeV); thm's two (the Trojan Horse binding energy in MeV and the width input flag, 0 = physical width/ANC,
+    // 1 = reduced width in MeV^(1/2), particle channels only) came first and are columns 32 and 33 of every THM
+    // file.  The number of trailing fields tells them apart: 1 = e1 (dev), 2 = binding energy and flag (thm),
+    // 3 = binding energy, flag and e1.  A 31-field line leaves the stream's state as it was before either
+    // existed (eof, not fail).  A trailing token that is not a number sets failbit (as dev), more than three
+    // trailing fields too.
     e1_ = 0.;
+    bindingE_ = 0.0;
+    gammaIsRWA_ = 0;
     if (!stream.fail() && !stream.eof()) {
+      double v[3];
+      int n = 0;
       stream >> std::ws;
-      if (!stream.eof()) stream >> e1_;
+      while (!stream.eof() && n < 4) {
+        double x;
+        if (!(stream >> x)) break;  // failbit set: reported by the caller
+        if (n < 3) v[n] = x;
+        n++;
+        if (!stream.eof()) stream >> std::ws;  // not at eof: a newer libstdc++'s ws sets failbit there
+      }
+      if (!stream.fail()) {
+        if (n == 1) {
+          e1_ = v[0];
+        } else if (n == 2 || n == 3) {
+          bindingE_ = v[0];
+          gammaIsRWA_ = (int)v[1];
+          if (n == 3) e1_ = v[2];
+        } else if (n > 3) {
+          stream.setstate(std::ios::failbit);
+        }
+      }
     }
     s_ /= 2.;
     l_ /= 2;
@@ -163,9 +189,19 @@ class NucLine {
   double ecMultMask() const { return ecMultMask_; };
   /*!
    * Returns the excitation energy (MeV) of the light particle in the
-   * corresponding pair: the optional 32nd column, 0 when it is absent.
+   * corresponding pair: the last optional column (32nd, or 34th after the THM columns), 0 when absent.
    */
   double e1() const { return e1_; };
+  /*!
+   * Returns the THM binding energy (MeV) of the transferred particle in the
+   * Trojan-Horse nucleus for the corresponding pair (0 if not specified).
+   */
+  double bindingE() const { return bindingE_; };
+  /*!
+   * Returns 1 if the gamma column of this channel line is already a reduced
+   * width amplitude (MeV^(1/2)) rather than a physical partial width/ANC.
+   */
+  int gammaIsRWA() const { return gammaIsRWA_; };
 
  private:
   double levelJ_;
@@ -199,6 +235,8 @@ class NucLine {
   double g1_;
   double g2_;
   unsigned int ecMultMask_;
+  double bindingE_;
+  int gammaIsRWA_;
   double e1_;
 };
 

@@ -7,6 +7,8 @@
 #include <mutex>
 #include <set>
 
+#include "ThmOptions.h"
+
 /// A structure holding the reaction rate calculation configuration
 
 /*!
@@ -125,6 +127,9 @@ class Config {
   unsigned int maxCalls;
   /// Use adaptive integration grid for target effects (false = uniform grid)
   bool useAdaptiveGrid;
+  /// The <thm> block (ThmOptions.h); Config::ThmOptions as before.
+  typedef ::ThmOptions ThmOptions;
+  ThmOptions thm;
   /// Take P, S and the hard-sphere phase of charged channels from the universal Coulomb
   /// table (CoulombTable) where it covers them; on by default (--no-coulomb-table turns it
   /// off).  Without a table file the run warns once and uses the exact routines.
@@ -187,10 +192,13 @@ class Config {
   bool cacheInputFiles = false;
   /// A constant indicating the maximum order of the Legendre polynomials to calculate.
   static const int maxLOrder = 20;
-  /// Read the <config> block, then the optional <potential> block. -1 if the file cannot be read.
+  /// Read the <config> block, then the optional <potential> and <thm> blocks.
+  /// -1 if the file cannot be read, -2 if an optional block is malformed (already reported).
   int ReadConfigFile();
   /// Reads the <potential> block of the configuration file, if it has one.
   int ReadPotentialBlock();
+  /// Reads the optional <thm> block. -1 on an unknown key or an unterminated block.
+  int ReadThmBlock();
   /// The R-matrix route (<config> first line false) implements neither IGNORE_ZERO_WIDTHS (the A-matrix route leaves
   /// the levels whose internal width is zero out of the channel-capture term; RMatrixFunc keeps them) nor Park's
   /// parametrization (RMatrixFunc would read the Park amplitudes as Brune's: tests/13N up to 9x off).  When either is

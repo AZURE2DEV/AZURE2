@@ -44,6 +44,7 @@ AZURE2 itself acts on.
 """
 
 import os
+import re
 from dataclasses import dataclass
 from typing import List, Optional
 
@@ -94,6 +95,20 @@ _EXTRAP_OBSERVABLE = {
     5: "differential-cm",
     7: "analyzing-power",
 }
+
+
+# A Trojan Horse (modified R-matrix, half-off-shell) segment flags itself by
+# adding 10 to whatever observable code it would otherwise carry, so THM is
+# orthogonal to the observable rather than a value of it -- see
+# ESegment::ESegment and docs/THM_IMPLEMENTATION.md.
+_THM_OFFSET = 10
+
+
+def _decode_observable(isDiff, table):
+    """Split a raw isDiff into (observable name, is_thm)."""
+    thm = isDiff >= _THM_OFFSET
+    code = isDiff - _THM_OFFSET if thm else isDiff
+    return table.get(code, f"code{code}"), thm
 
 
 # Keyword blocks a segment line may end with (SegLine.h), and how many tokens
@@ -232,6 +247,7 @@ class Segment:
     energy_shift: float = 0.0      # applied beam-energy shift (MeV)
     energy_shift_error: float = 0.0    # its systematic (MeV)
     vary_shift: bool = False       # is the energy shift a fit parameter?
+    thm: bool = False              # Trojan Horse (half-off-shell) segment?
     energy_shift_sqrt: float = 0.0         # b in E' = E + shift + b*sqrt(E) (MeV^1/2)
     energy_shift_sqrt_error: float = 0.0   # its systematic (MeV^1/2)
     vary_shift_sqrt: bool = False          # is b a fit parameter?
@@ -275,6 +291,20 @@ class Segment:
     shift_fn_params: tuple = ()
     operation: Optional[str] = None    # 'sum' | 'ratio' for a composite segment
     components: tuple = ()             # (entrance, exit, angle, scaling) each
+    # Centres of the norm and shift priors.  The norm field above is the
+    # start value; it is also the centre unless <parameterSettings> has an
+    # explicit "segment_<key>_norm prior_centre c" row.  The shift prior is
+    # centred on 0 (the engine since dev 0dd28e5, 2026-10-25: the shift field
+    # is only the start) unless a "segment_<key>_energy_shift prior_centre c"
+    # row moves it.
+    nominal_norm: Optional[float] = None
+    nominal_shift: Optional[float] = None
+
+    def __post_init__(self):
+        if self.nominal_norm is None:
+            self.nominal_norm = self.norm
+        if self.nominal_shift is None:
+            self.nominal_shift = 0.0
 
 
     @property
@@ -360,6 +390,24 @@ class SegmentSet(list):
                 continue
             key += 1
             segs.append(cls._parse(raw.split(), key))
+        # Explicit prior centres (EData::ReadPriorCentres).
+        prior = re.compile(r"^\s*segment_(\d+)_(norm|energy_shift)\s+prior_centre\s+(\S+)\s*$")
+        inside = False
+        for raw in lines:
+            t = raw.strip()
+            if t == "<parameterSettings>":
+                inside = True
+                continue
+            if t.startswith("<"):
+                inside = False
+            m = prior.match(raw) if inside else None
+            if m:
+                seg = segs.by_key(int(m.group(1)))
+                if seg is not None:
+                    if m.group(2) == "norm":
+                        seg.nominal_norm = float(m.group(3))
+                    else:
+                        seg.nominal_shift = float(m.group(3))
         return segs
 
     @staticmethod
@@ -441,11 +489,12 @@ class SegmentSet(list):
             key=key, active=active, entrance_key=entrance_key,
             exit_key=exit_key, energy_min=eMin, energy_max=eMax,
             angle_min=aMin, angle_max=aMax,
-            observable=_OBSERVABLE.get(isDiff, f"code{isDiff}"),
+            observable=_decode_observable(isDiff, _OBSERVABLE)[0],
             norm=norm, vary_norm=vary_norm,
             norm_error=norm_error, data_file=data_file,
             energy_shift=shift, energy_shift_error=shift_error,
             vary_shift=vary_shift,
+            thm=_decode_observable(isDiff, _OBSERVABLE)[1],
             energy_shift_sqrt=shift_sqrt,
             energy_shift_sqrt_error=shift_sqrt_error,
             vary_shift_sqrt=vary_shift_sqrt,
@@ -527,7 +576,8 @@ class SegmentSet(list):
                  "norm_err%", "vary")]
         for s in self:
             rows.append((
-                str(s.key), s.name, s.reaction(pairs), s.observable,
+                str(s.key), s.name, s.reaction(pairs),
+                s.observable + (" [THM]" if s.thm else ""),
                 f"{s.energy_min:g}-{s.energy_max:g}",
                 f"{s.norm_error:g}", "*" if s.vary_norm else ""))
         w = [max(len(r[c]) for r in rows) for c in range(len(rows[0]))]
@@ -562,6 +612,7 @@ class TestSegment:
     phase_J: Optional[float] = None        # isDiff == 2 only
     phase_L: Optional[int] = None          # isDiff == 2 only
     max_ang_dist_order: Optional[int] = None   # isDiff == 3 only
+    thm: bool = False                      # Trojan Horse (half-off-shell)?
     natural: bool = False                  # sample grid ("sample 1" / "sample <name>", older "natural ...")
     natural_sample: str = ""               # the sample's name ("" = the unnamed, or only, sample)
     total: bool = False                    # "total 1": the entrance pair's total cross section
@@ -648,8 +699,9 @@ class TestSegmentSet(list):
             exit_key=exit_key,
             energy_min=eMin, energy_max=eMax, energy_step=eStep,
             angle_min=aMin, angle_max=aMax, angle_step=aStep,
-            observable=_EXTRAP_OBSERVABLE.get(isDiff, f"code{isDiff}"),
+            observable=_decode_observable(isDiff, _EXTRAP_OBSERVABLE)[0],
             phase_J=phase_J, phase_L=phase_L, max_ang_dist_order=max_order,
+            thm=_decode_observable(isDiff, _EXTRAP_OBSERVABLE)[1],
             natural=natural, natural_sample=natural_sample,
             total=_total_token(blocks), phase_S=_spin_token(blocks),
             transmission=_thickness_token(blocks, "transmission"),

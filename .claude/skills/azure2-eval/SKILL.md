@@ -163,7 +163,8 @@ runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
 - **Input is LAB frame, forward kinematics** (light particle = projectile).
   **All output files and API results are CENTER-OF-MASS.** Never mix them.
   This includes `add_extrapolation(e_min, e_max, e_step)` — those are **lab**
-  energies (multiply c.m. by `(m_beam + m_target)/m_target`), while the energies
+  energies by default (`frame="lab"`; pass `frame="cm"` to give c.m. energies
+  and let it multiply by `(m_beam + m_target)/m_target`), while the energies
   that come *back* from `calculate_energies` are c.m. **The silent-failure mode
   to watch for**: requesting a lab-frame `e_max` and later comparing the
   returned (c.m.-frame) energy column against that same number looks exactly
@@ -2514,6 +2515,93 @@ built to describe — the p+¹²C ENDF/B-VIII.1 file has zero coverage below
 angle ¹²C(p,p) data in this archive's `12C+p/8-9-26_claude_learns_12C+p/`
 does) has no ENDF curve to compare against at all. Check the overlap
 *before* building the plot, not after.
+## Trojan Horse (THM) segments
+
+The modified R-matrix / half-off-shell path. A THM measurement induces the
+reaction with a nucleon bound inside a carrier nucleus, so it proceeds below the
+Coulomb barrier without penetrability suppression, and what is extracted is
+half-off-shell: entrance off the energy shell, exit on it.
+For the analysis procedure (what published THM points are, joint fits with direct data, model-dependence protocol) load the **`azure2-thm`** skill.
+
+**A THM segment adds 10 to its observable code.** THM is orthogonal to the
+observable, so `isDiff >= 10` means THM and `isDiff - 10` is the ordinary code:
+`10` = THM angle-integrated, `11` = THM differential. `ESegment` strips the
+offset before anything else looks at it, so THM composes with every observable
+including the analyzing power.
+
+```python
+for s in m.datasets:
+    print(s.observable, s.thm)      # e.g. 'angle-integrated' True
+print(m.datasets.table())           # marks such segments "[THM]"
+```
+
+**The analytic gradient does not cover THM.** The adjoint differentiates the
+T-matrix observable, not the half-off-shell one, so THM segments are excluded
+from the analytic accumulation and their contribution to the energy, width and
+norm derivatives comes from central differences instead (`AZURECalc::Gradient`,
+guarded by `haveTHM`). Everything else stays analytic.
+
+**Widths may be reduced width amplitudes.** A channel line can carry
+`gammaIsRWA`, in which case its `gamma` column is an amplitude in MeV^(1/2)
+rather than a partial width in eV or an ANC — useful when a level is known only
+from a THM measurement. AZURE2 keeps the convention on output too
+(`CNuc::GetTransformParams` returns the amplitude unchanged for such a channel),
+so a fit written back never flips it.
+
+```python
+ch.gamma_is_rwa            # AzrChannel: is this channel's gamma an amplitude?
+w.input_is_rwa             # Parameter: same thing, from the live API
+p.binding_energy           # Pair: THM binding energy (MeV), 0 if not THM
+```
+
+Two traps:
+
+- **Never convert an rwa-declared width.** `apply_fit(..., transform=...)` is
+  safe because the transform respects the flag, but hand-rolled rwa->physical
+  arithmetic will corrupt the file by orders of magnitude.
+- **`Parameter.wigner_limit` is `gamma^2_W` in MeV**, the limit on the reduced
+  width *squared*. It matches neither convention `value` can be in. Use
+  `pyazr.widths` to form theta^2 rather than dividing by it.
+
+**The `<thm>` block selects the HOES observable variant.** Optional, anywhere
+in the `.azr`, `key=value` per line; an unknown key or value, or a missing
+`</thm>`, makes AZURE2 exit with `ERROR: <thm> ...` before computing anything.
+Keys: `entranceL=incoherent|coherent`, `vertex=constant|perlevel|onshell`,
+`kinematics=lacognata|triple|kf3body|lambda32`, `coulombIntegral=0|1`,
+`spectatorEnergy=<MeV>`, `spectatorEnergy[<pair>]=<MeV>` (defaults first).
+Pick `kinematics=` from what the data paper divided by: full three-body KF ->
+`kf3body`, lambda3/lambda2 -> `lambda32`, only |phi|^2 -> `triple`, La Cognata's
+formula or unknown -> `lacognata`; the wrong one distorts relative resonance
+heights. `vertex=constant` (default since 2026-09-25) is the formal-R-matrix
+vertex at B_c = S_c(E_1) of the lowest level of each J^pi (order-independent), identical with Brune on or off; `vertex=perlevel`
+(alias `real`, the old default, as mrmpy) puts each level's S_c(E_lambda) in
+the vertex and is representation-dependent once levels of one J^pi interfere --
+use it only to reproduce pre-Sep-2026 numbers. Evidence: `tests/18O_p_a_thm`
+reproduces La Cognata et al., ApJ 723 (2010) 1512 with `constant` (5 % rms at
+the peaks) and not with `perlevel` (23 %). Physics, equations and pinned values:
+`docs/source/theory/thm_implementation.rst`; regression: `tests/thm_options`.
+Edit it with `AzrModel`, which applies the engine's/GUI's rules and keeps
+comments and untouched lines: `mdl.thm_options()` (dict of the non-default
+options), `mdl.set_thm_option("kinematics", "kf3body")`,
+`mdl.set_thm_weight(1, "R_of_E.dat")` (segment key counts every
+`<segmentsData>` line; must be THM; table checked; relative path from the
+.azr's directory), `mdl.clear_thm_option(key)` / `clear_thm_weight(k)`; a bad
+value raises ValueError. The GUI edits it under Configure > THM Options.
+(By hand: append `"\n<thm>\n...\n</thm>\n"`, since an `.azr` may lack a final
+newline and `<thm>` must start its own line.) Also `weight[<k>]=<file>` /
+`weightTest[<k>]=<file>`: w(E) multiplying the THM model of that segment.
+And `experiment[<name>] segments=1,2 background=linear`: segments sharing one
+profiled norm plus a profiled background (`mdl.set_thm_experiment`,
+`session.thm_background(name)`, `output/thm_experiments.out`; `tests/thm_experiment`).
+
+Reference cases: `tests/17O` — 17O(n,alpha)14C from Guardo/Sergi *et al.*,
+23 points, one THM segment, chi-squared 96.69 (neutron entrance, RWA widths);
+`tests/7Li_p_a` (2138.51) and `tests/6Li_d` (682.133), charged entrance with
+two entrance l; `tests/18O_p_a_thm` (2191.98 + check.sh against the published
+band), two interfering levels of one J^pi; `tests/thm_rwa_grid` and
+`tests/thm_options` (check.sh). They
+exist because THM shares `ESegment`, `EPoint`, `AZURECalc` and the gradient
+code with the on-shell machinery while diverging at the observable.
 
 ## `.azr` file anatomy
 
@@ -2525,16 +2613,18 @@ Plain-text, section-tagged; prefer the GUI or `AzrModel` over hand edits.
   matrix) wins with many channels and few levels; R-matrix (channel matrix)
   wins with many levels and few channels.
 - `<levels>` — one line **per channel of each level**, 31 fields matching
-  `NucLine` (`include/NucLine.h`). **J is stored as J itself; the channel spin
-  and orbital angular momentum are stored doubled** (`2S`, `2L`). Blank line
-  between levels; `levelID` groups them. Token map (0-based, whitespace split),
-  confirmed against pyazr and `parameters.out` on 12C+alpha: `t0` J, `t1` parity,
-  `t2` level energy, `t3` energy-fixed flag, `t5` pair key (the file's pair key,
-  not pyazr's engine pair number), `t6` 2S, `t7` 2L, `t8` levelID, `t10`
-  channel-fixed flag, `t11` gamma (physical: eV, or ANC for a closed channel).
-  Reading `t0` as 2J turned a 3- level into "3/2-" and cost days of reasoning on
-  the wrong level (12C+alpha, 2026-09). Prefer `AzrModel` (`lv.J`, `lv.parity`,
-  `lv.energy`, `c.pair/L/S`) to hand-parsing.
+  `NucLine` (`include/NucLine.h`), plus the optional THM field 32 (binding
+  energy B) and field 33 (`gammaIsRWA` flag). **J is stored as J itself; the
+  channel spin and orbital angular momentum are stored doubled** (`2S`, `2L`).
+  Blank line between levels; `levelID` groups them. Token map (0-based,
+  whitespace split), confirmed against pyazr and `parameters.out` on
+  12C+alpha: `t0` J, `t1` parity, `t2` level energy, `t3` energy-fixed flag,
+  `t5` pair key (the file's pair key, not pyazr's engine pair number), `t6`
+  2S, `t7` 2L, `t8` levelID, `t10` channel-fixed flag, `t11` gamma (physical:
+  eV, or ANC for a closed channel). Reading `t0` as 2J turned a 3- level into
+  "3/2-" and cost days of reasoning on the wrong level (12C+alpha, 2026-09).
+  Prefer `AzrModel` (`lv.J`, `lv.parity`, `lv.energy`, `c.pair/L/S`) to
+  hand-parsing.
 - `<segmentsData>` — one line per data segment: `isActive entranceKey exitKey
   minE maxE minA maxA isDiff [phaseJ phaseL] dataNorm varyNorm dataNormError
   [energyShift …] dataFile [tail tokens, incl. the optional sqrtshift block]`.
@@ -3540,6 +3630,20 @@ complete:
   (shared line == separate lines, fails on the old binary). Any fit with a multi-segment
   convolution line or a convolved composite segment done with an older binary used the
   narrower kernel; old binary + one line per segment reproduces the fixed result exactly.
+
+## Adaptive cross-section tables
+
+`pyazr.tabulate(azr_file, pairs=[(entrance, exit), ...], e_min, e_max,
+rel_tol=5e-3)` tabulates sigma(E) for any pair combinations on a
+*non-uniform* grid: derivative-free interval bisection keeps refining until
+log-linear interpolation between knots reproduces the engine to `rel_tol`,
+so knots pile up across resonances and thin out in between (a few hundred
+to a few thousand points where a uniform grid of equal fidelity would need
+1e5). Energies are entrance-pair c.m. by default; each returned
+`TabulatedCrossSection` interpolates when called, and `.save(path)` writes
+`E_cm E_lab sigma` columns. Central values only -- combine the knots with
+the analytic parameter Jacobian and a fit covariance yourself if you need
+uncertainty bands.
 
 - 2026-10-07 (22Ne+a/10-6-26_claude_refit) -- CORRECTION to "A norm or shift that is NOT varied
   comes from the .azr field; the .sav value is ignored": for ENERGY SHIFTS that is no longer true

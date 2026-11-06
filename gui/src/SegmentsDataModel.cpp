@@ -313,6 +313,8 @@ QVariant SegmentsDataModel::data(const QModelIndex &index, int role) const {
       return line.finalJ;
     else if (index.column() == 23)
       return line.delta;
+    else if (index.column() == 24)
+      return line.isTHM;
   } else if (role == Qt::CheckStateRole && index.column() == 0) {
     SegmentsDataData line = segDataLineList.at(index.row());
     if (line.isActive == 1)
@@ -438,6 +440,8 @@ bool SegmentsDataModel::setData(const QModelIndex &index, const QVariant &value,
       tempData.finalJ = value.toDouble();
     else if (index.column() == 23)
       tempData.delta = value.toDouble();
+    else if (index.column() == 24)
+      tempData.isTHM = value.toInt();
     else
       return false;
 
@@ -608,6 +612,7 @@ int SegmentsDataModel::isSegDataLine(const SegmentsDataData &line) const {
         tempLine.secondaryDecayL == line.secondaryDecayL &&
         tempLine.finalJ == line.finalJ &&
         tempLine.delta == line.delta &&
+        tempLine.isTHM == line.isTHM &&
         tempLine.extraTokens.simplified() == line.extraTokens.simplified()) {
       foundLine = i;
       break;

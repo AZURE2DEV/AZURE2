@@ -18,7 +18,7 @@ from typing import Optional
 
 # Parameter kinds, indexed by the integer ``type`` code in the C++ record.
 _KINDS = {0: "energy", 1: "width", 2: "norm", 3: "shift", 4: "shift_sqrt", 5: "shift_fn",
-          6: "abundance", 7: "screening", 8: "density", 9: "doppler", 10: "thickness"}
+          6: "abundance", 7: "screening", 8: "density", 9: "doppler", 10: "thickness", 11: "cbkg"}
 
 
 @dataclass(frozen=True)
@@ -64,11 +64,11 @@ class Parameter:
 
     # Number of doubles per record emitted by AZUREAPI::GetParameterInfo.
     # Must match AZUREAPI::kParamInfoFields.
-    _NFIELDS = 15
+    _NFIELDS = 16
 
     index: int                      # position among *all* parameters
     name: str                       # raw AZURE2 parameter name
-    kind: str                       # 'energy' | 'width' | 'norm' | 'shift' | 'shift_sqrt' | 'shift_fn' | 'abundance' | 'screening' | 'density' | 'doppler' | 'thickness'
+    kind: str                       # 'energy' | 'width' | 'norm' | 'shift' | 'shift_sqrt' | 'shift_fn' | 'abundance' | 'screening' | 'density' | 'doppler' | 'thickness' | 'cbkg'
     fixed: bool                     # held fixed during the fit?
     value: float                    # current (physical) value
     free_index: Optional[int]       # position among the non-fixed parameters
@@ -87,11 +87,23 @@ class Parameter:
     pair: Optional[int] = None
     radiation_type: Optional[str] = None   # 'P' (particle), 'E', 'M', ...
 
-    # Wigner limit of the channel's reduced width (width parameters only).
-    # This is the bound AZURE2 places on the reduced-width amplitude when the
-    # Wigner-limit constraint is enabled, in the same units as ``value`` for a
-    # width parameter; ``None`` for non-width parameters.
+    # Wigner limit of the channel's reduced width (width parameters only):
+    # gamma^2_W = 3 hbar^2 / (2 mu a^2) in MeV (AChannel::SetWignerLimit), the
+    # Teichmann-Wigner single-particle sum-rule limit, which carries the factor
+    # 3/2 relative to the hbar^2/(mu a^2) unit some references use (divide by
+    # 1.5 to get that one; theta^2 against it is 1.5x larger).  It is the limit
+    # on the reduced width *squared* -- AZURE2's Wigner-limit bound on the
+    # reduced-width amplitude is its square root -- not on ``value``, and it
+    # matches neither convention ``value`` can be in: a partial width in eV,
+    # nor a reduced width amplitude in MeV^(1/2).  Form theta^2 with
+    # pyazr.widths rather than dividing ``value`` by this.
+    # ``None`` for non-width parameters.
     wigner_limit: Optional[float] = None
+
+    # True if this width's .azr input value was declared as a reduced width
+    # amplitude (MeV^(1/2)) and thus AZURE2 should treat it accordingly.
+    # ``None`` for non-width parameters.
+    input_is_rwa: Optional[bool] = None
 
     # Data-segment information (norm / shift parameters).
     segment_key: Optional[int] = None
@@ -154,7 +166,8 @@ class Parameter:
         returned by ``GET_PARAMS_INFO``.
         """
         (type_code, jgroup, J, parity, level, level_energy, channel, L, S,
-         pair, radtype, fixed, value, segment_key, wigner_limit) = record
+         pair, radtype, fixed, value, segment_key, wigner_limit,
+         input_is_rwa) = record
 
         rad = chr(int(round(radtype))) if radtype != -1 else None
 
@@ -232,6 +245,8 @@ class Parameter:
             pair=_opt(pair, integer=True),
             radiation_type=rad,
             wigner_limit=_opt(wigner_limit),
+            input_is_rwa=(bool(round(input_is_rwa))
+                          if input_is_rwa != -1 else None),
             segment_key=_opt(segment_key, integer=True),
         )
 
@@ -249,10 +264,17 @@ class Parameter:
             bits.append(f"rad={self.radiation_type}")
             if self.wigner_limit is not None:
                 bits.append(f"wigner={self.wigner_limit:.4g}")
+            if self.input_is_rwa:
+                bits.append("input=RWA")
         if self.kind in ("norm", "shift", "shift_sqrt", "shift_fn"):
             bits.append(f"segment={self.segment_key}")
         if self.kind == "shift_fn":
             bits.append(f"a{self.fn_term}")
+        if self.kind == "cbkg":
+            bits.append(f"J^pi={self.jpi}")
+            bits.append(f"L={self.L}")
+            bits.append(f"S={self.S}")
+            bits.append(f"exit pair={self.pair}")
         if self.kind in ("screening", "density", "doppler"):
             bits.append(f"effect={self.effect}")
             if self.prior_sigma:
@@ -323,9 +345,12 @@ class Pair:
 
     # Number of doubles per record emitted by AZUREAPI::GetPairsInfo.
     # Must match AZUREAPI::kPairInfoFields.
-    # 20 since 2026-11-05 (light_excitation); an engine built before then sends
-    # 19, which from_record still accepts (light_excitation = 0).
-    _NFIELDS = 20
+    # 21 since the merge of dev 3264896d into thm: dev's light_excitation (19)
+    # and thm's binding_energy (20; it was 19).  from_record also accepts dev's
+    # 20 (binding_energy = 0) and an older engine's 19 (both 0); a thm engine
+    # from before the merge sent its binding energy as field 19, which is not
+    # told apart (the module is built with its engine).
+    _NFIELDS = 21
 
     number: int             # 1-based pair number (matches Parameter.pair)
     key: int                # user pair key from the .azr file
@@ -379,6 +404,8 @@ class Pair:
     def nucleus(self):
         """``(Z, A)`` of the compound nucleus this pair forms."""
         return (self.nucleus_Z, self.nucleus_A)
+    binding_energy: float = 0.0   # Trojan Horse binding energy (MeV); 0 unless
+                                  # the pair is a THM entrance channel
 
     @property
     def is_photon(self) -> bool:
@@ -389,11 +416,13 @@ class Pair:
     def from_record(cls, record):
         """Build a :class:`Pair` from one ``GET_PAIRS_INFO`` record."""
         record = list(record)
-        if len(record) == cls._NFIELDS - 1:     # an engine before light_excitation
+        if len(record) == cls._NFIELDS - 2:     # an engine before light_excitation (and binding_energy)
+            record += [0.0, 0.0]
+        elif len(record) == cls._NFIELDS - 1:   # dev's 20 fields (light_excitation last), no binding energy
             record.append(0.0)
         (number, key, ptype, is_entrance, J1, parity1, Z1, M1, J2, parity2,
          Z2, M2, sepE, exE, chRad, i1i2factor, nucZ, nucA, abundance,
-         lightExE) = record
+         lightExE, bindingE) = record
         return cls(
             number=int(round(number)),
             key=int(round(key)),
@@ -408,6 +437,7 @@ class Pair:
             nucleus_Z=int(round(nucZ)), nucleus_A=int(round(nucA)),
             abundance=float(abundance),
             light_excitation=float(lightExE),
+            binding_energy=float(bindingE),
         )
 
     def __repr__(self):
@@ -589,6 +619,14 @@ class ParameterSet(list):
         group, its first segment; f applies to every member).
         """
         return ParameterSet(p for p in self if p.kind == "shift_fn")
+
+    @property
+    def cbkg(self):
+        """The THM coherent-background parameters (``cbackground=``): Re and
+        Im of each amplitude, with its J group (``jgroup``, ``J``,
+        ``parity``), entrance channel (``channel``, ``L``, ``S``) and exit
+        pair number (``pair``)."""
+        return ParameterSet(p for p in self if p.kind == "cbkg")
 
     # -- lookups --------------------------------------------------------------
 

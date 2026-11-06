@@ -15,8 +15,13 @@
 #include "TargetEffect.h"
 #include "AMatrixFunc.h"
 #include "Config.h"
+#include "ChannelFunc.h"
 #include "CoulFunc.h"
 #include "ShftFunc.h"
+#include "THMMatrixFunc.h"
+#include <cstdlib>
+#include <cstring>
+#include <iostream>
 #include <cmath>
 #include <algorithm>
 #include <string>
@@ -55,16 +60,8 @@ vector_matrix_r BuildShiftDerivTable(CNuc *compound, const Config &configure) {
         int l = channel->GetL();
         double levelEnergy = level->GetFitE();
         double resonanceEnergy = levelEnergy - (pair->GetSepE() + pair->GetExE());
-        double dS;
-        if (resonanceEnergy < 0.0) {
-          ShftFunc theShiftFunction(pair);
-          dS = theShiftFunction.EnergyDerivative(l, levelEnergy);
-        } else {
-          CoulFunc theCoulombFunction(pair,
-                                      !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
-          double radius = pair->GetChRad();
-          dS = theCoulombFunction.PEShift_dE(l, radius, resonanceEnergy);
-        }
+        double dS = ChannelFunc(pair, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC))
+                        .ShiftDerivative(l, resonanceEnergy);
         tab[j - 1][la - 1][ch - 1] = dS;
       }
     }
@@ -350,7 +347,7 @@ ParamIndexMap BuildParamIndexMap(CNuc *compound, EData *data,
   if (data) {
     for (int s = 1; s <= data->NumSegments(); s++) {
       ESegment *segment = data->GetSegment(s);
-      if (segment && segment->IsVaryNorm()) {
+      if (segment && segment->IsVaryNorm() && !segment->IsProfiledNorm()) {
         map.normIndex_[s] = i;
         map.desc_.push_back(ParamDesc{ParamKind::Norm, -1, -1, -1, s, false});
         i++;
@@ -446,6 +443,13 @@ ParamIndexMap BuildParamIndexMap(CNuc *compound, EData *data,
       i++;
     }
   }
+
+  // --- THM coherent backgrounds (cbackground=): the last block, if any. ---
+  if (data)
+    for (int k = 0; k < data->NumThmCoherentParams(); k++) {
+      map.desc_.push_back(ParamDesc{ParamKind::ThmCoherent, -1, -1, k + 1, -1, false});
+      i++;
+    }
 
   // --- Apply the fixed mask and build packed<->full lookups. ---
   const int nFull = (int)map.desc_.size();
@@ -1031,6 +1035,55 @@ bool GradOnePoint(ESegment *segment, EData *data, int i, int pointIdx,
   }
 }
 
+
+// THM (HOES) model derivative of one point -- a point or a mapped point, with
+// its folding if it has one -- by the HOES adjoint (THMMatrixFunc::
+// THMPointAdjoint): d m/d(E, gamma) into `accum`, d m/d(coherent value k)
+// into coherentBar[k].  A folded point is linear in its sub-point cross
+// sections; the weights come from the combiner as in GradTargetEffectAdjoint,
+// and an edge blend adds (1 - w) times the bare point.  The automatic
+// application of a target effect (a tolerance) switches between the folded
+// and the bare value by a test on the sub-points: not covered (false).
+bool ThmPointModelGradient(EPoint *point, CNuc *compound, const Config &config, const ThmAdjointContext &ctx,
+                           GradAccum &accum, std::vector<double> &coherentBar) {
+  static thread_local THMMatrixFunc reusable(compound, config);
+  reusable.Reset(compound, config);
+  THMMatrixFunc &f = reusable;
+  auto adjoint = [&](EPoint *pt, double weight) -> bool {
+    f.ClearMatrices();
+    f.FillMatrices(pt);
+    f.InvertMatrices();
+    return f.THMPointAdjoint(pt, weight, accum, ctx, &coherentBar);
+  };
+  TargetEffect *te = point->IsTargetEffect()
+      ? point->GetParentData()->GetTargetEffect(point->GetTargetEffectNum())
+      : nullptr;
+  if (!(te && te->IsSubPointEffect())) return adjoint(point, 1.0);
+  if (point->IsAnalyzingPower() || te->GetAutoTolerance() > 0.0) return false;
+  const int nsp = point->NumSubPoints();
+  if (nsp <= 0) return true;
+  std::vector<double> sigma(nsp), c(nsp, 0.0);
+  for (int i = 1; i <= nsp; i++) sigma[i - 1] = point->GetSubPoint(i)->GetFitCrossSection();
+  const double model = point->GetFitCrossSection();
+  for (int i = 1; i <= nsp; i++) {
+    const double s0 = sigma[i - 1], h = 1.0e-3 * (std::fabs(s0) + 1.0);
+    point->GetSubPoint(i)->SetFitCrossSection(s0 + h);
+    point->IntegrateTargetEffect(config);
+    const double yp = point->GetFitCrossSection();
+    point->GetSubPoint(i)->SetFitCrossSection(s0 - h);
+    point->IntegrateTargetEffect(config);
+    const double ym = point->GetFitCrossSection();
+    point->GetSubPoint(i)->SetFitCrossSection(s0);
+    c[i - 1] = (yp - ym) / (2.0 * h);
+  }
+  point->SetFitCrossSection(model);
+  const double blend = point->GetTargetBlendWeight();
+  for (int i = 1; i <= nsp; i++)
+    if (c[i - 1] != 0.0 && !adjoint(point->GetSubPoint(i), blend * c[i - 1])) return false;
+  if (blend < 1.0 && !adjoint(point, 1.0 - blend)) return false;
+  return true;
+}
+
 // ---------------------------------------------------------------------------
 // Energy groups.  Point mapping (EData::MapData) collects the points that share
 // one energy-dependent calculation -- one level matrix and T-matrix -- within a
@@ -1073,7 +1126,14 @@ bool GroupedGradientOff() {
 // The work items of one gradient pass: each groupable host with the groupable
 // points mapped onto it, and every other point on its own.  Largest first, so
 // a big group does not end up last on one thread.
-std::vector<GradItem> BuildGradItems(EData *data) {
+//
+// THM (HOES) segments are left out when `skipTHM` (every caller but a
+// ComputeModelGradients without it): their observable is THMMatrixFunc's, not
+// the T-matrix one differentiated here, and their rows come from the HOES
+// adjoint (ComputeTHMRows) or the THM-only differences of AZURECalc::Gradient.
+// EData::MapData maps a THM point only within its own segment and never maps
+// a classic point onto a THM one, so no group straddles the two.
+std::vector<GradItem> BuildGradItems(EData *data, bool skipTHM) {
   const bool off = GroupedGradientOff();
   std::unordered_map<const EPoint *, std::pair<int, int>> where;
   for (int s = 1; s <= data->NumSegments(); s++) {
@@ -1097,6 +1157,7 @@ std::vector<GradItem> BuildGradItems(EData *data) {
   for (int s = 1; s <= data->NumSegments(); s++) {
     ESegment *seg = data->GetSegment(s);
     if (!seg) continue;
+    if (skipTHM && seg->IsTHM()) continue;
     for (int p = 1; p <= seg->NumPoints(); p++) {
       EPoint *pt = seg->GetPoint(p);
       if (!pt) continue;
@@ -1111,6 +1172,7 @@ std::vector<GradItem> BuildGradItems(EData *data) {
           auto w = where.find(m);
           if (w == where.end()) continue;
           ESegment *ms = data->GetSegment(w->second.first);
+          if (skipTHM && ms->IsTHM()) continue;
           if (Groupable(ms, m) && hostOf(m) == pt) it.members.push_back({ms, w->second.first, w->second.second, m});
         }
       items.push_back(std::move(it));
@@ -1343,6 +1405,14 @@ void ReportBail(const char *what, ESegment *segment, int i) {
 
 }  // namespace
 
+/// AZURE2_THM_FD=1 (any value but empty or 0): THM rows by central
+/// differences, the path before the HOES adjoint (kept for testing).
+bool ThmFiniteDifferencesRequested() {
+  const char *e = std::getenv("AZURE2_THM_FD");
+  return e && *e && std::strcmp(e, "0") != 0;
+}
+
+
 bool AccumulateEGammaGradient(CNuc *compound, EData *data, const Config &config,
                               const ParamIndexMap &pmap,
                               const vector_matrix_r *shiftDeriv,
@@ -1367,7 +1437,12 @@ bool AccumulateEGammaGradient(CNuc *compound, EData *data, const Config &config,
     ta.formal = true;
   }
 
-  const std::vector<GradItem> items = BuildGradItems(data);
+  // THM (HOES) segments are computed by THMMatrixFunc, not the T-matrix
+  // observable this adjoint differentiates; they are left out here. Their
+  // contribution to the gradient is added in AZURECalc::Gradient by the HOES
+  // adjoint or finite differences of a chi^2 restricted to THM segments, so
+  // mixed THM+direct datasets keep the analytic speed-up on the direct part.
+  const std::vector<GradItem> items = BuildGradItems(data, /*skipTHM=*/true);
   bool bail = false;
   int bailSeg = 0;
 #pragma omp parallel shared(bail, bailSeg)
@@ -1465,9 +1540,9 @@ AMatrixFunc::FreeMask BuildFreeMask(CNuc *compound, const ParamIndexMap &pmap) {
 
 template <class FitBarOf, class WriteRow>
 bool ForEachRow(CNuc *compound, EData *data, const Config &config, const vector_matrix_r *shiftDeriv,
-                FitBarOf fitBarOf, WriteRow writeRow, int &bailSeg, int &numGroups,
+                FitBarOf fitBarOf, WriteRow writeRow, int &bailSeg, int &numGroups, bool skipTHM,
                 const AMatrixFunc::FreeMask *mask) {
-  const std::vector<GradItem> items = BuildGradItems(data);
+  const std::vector<GradItem> items = BuildGradItems(data, skipTHM);
   numGroups = 0;
   for (const GradItem &it : items)
     if (it.grouped && it.members.size() > 1) numGroups++;
@@ -1519,11 +1594,21 @@ bool ForEachRow(CNuc *compound, EData *data, const Config &config, const vector_
 bool ComputeResidualJacobian(CNuc *compound, EData *data, const Config &config,
                              const ParamIndexMap &pmap,
                              const vector_matrix_r *shiftDeriv,
-                             vector_r &residuals, vector_r &jacobian, int &nCols) {
+                             vector_r &residuals, vector_r &jacobian, int &nCols,
+                             bool skipTHM) {
   // Columns of J are the non-fixed (packed) parameters; rows are data points.
   nCols = pmap.NumPacked();
   residuals.clear();
   jacobian.clear();
+
+  // THM (HOES) segments are not supported here: the adjoint differentiates
+  // the T-matrix observable and the fast forward path computes the standard
+  // cross section, both wrong for HOES. Bail so the LM caller falls back to
+  // MIGRAD (which handles THM through Gradient()'s hybrid path).  A caller
+  // that fills THM rows itself (AZUREAPI) asks for them to be left zero.
+  if (!skipTHM)
+    for (int i = 1; i <= data->NumSegments(); i++)
+      if (data->GetSegment(i) && data->GetSegment(i)->IsTHM()) return false;
 
   // Each (non-null) point is one independent row, so pre-assign every point a
   // global row index (mirroring the serial null-skip) and pre-size the outputs.
@@ -1580,7 +1665,8 @@ bool ComputeResidualJacobian(CNuc *compound, EData *data, const Config &config,
   };
   int bailSeg = 0, numGroups = 0;
   const AMatrixFunc::FreeMask mask = BuildFreeMask(compound, pmap);
-  const bool ok = ForEachRow(compound, data, config, shiftDeriv, fitBarOf, writeRow, bailSeg, numGroups, &mask);
+  const bool ok = ForEachRow(compound, data, config, shiftDeriv, fitBarOf, writeRow, bailSeg, numGroups,
+                             /*skipTHM=*/true, &mask);
   if (!ok) ReportBail("Jacobian/gradient", data->GetSegment(bailSeg), bailSeg);
 
   if (timing) {
@@ -1605,7 +1691,8 @@ bool ComputeResidualJacobian(CNuc *compound, EData *data, const Config &config,
 bool ComputeModelGradients(CNuc *compound, EData *data, const Config &config,
                            const ParamIndexMap &pmap,
                            const vector_matrix_r *shiftDeriv,
-                           std::map<EPoint *, vector_r> &gradByPoint) {
+                           std::map<EPoint *, vector_r> &gradByPoint,
+                           bool skipTHM) {
   gradByPoint.clear();
   const int nCols = pmap.NumPacked();
   const int nSeg = data->NumSegments();
@@ -1636,10 +1723,292 @@ bool ComputeModelGradients(CNuc *compound, EData *data, const Config &config,
   };
   int bailSeg = 0, numGroups = 0;
   const AMatrixFunc::FreeMask mask = BuildFreeMask(compound, pmap);
-  const bool ok = ForEachRow(compound, data, config, shiftDeriv, fitBarOf, writeRow, bailSeg, numGroups, &mask);
+  // skipTHM: the rows of THM (HOES) points are left zero for the caller.
+  const bool ok = ForEachRow(compound, data, config, shiftDeriv, fitBarOf, writeRow, bailSeg, numGroups, skipTHM,
+                             &mask);
   if (!ok) {
     ReportBail("Jacobian/gradient", data->GetSegment(bailSeg), bailSeg);
     gradByPoint.clear();
   }
   return ok;
+}
+
+// THM (HOES) rows: see the declaration in AZUREGrad.h.  Shared by the API
+// (residual Jacobian, chi2 gradient, model gradients) and the CLI band.
+std::vector<THMRows> ComputeTHMRows(CNuc *lc, EData *ld, const Config &config,
+                                    const vector_r &full, const ParamIndexMap &pmap) {
+  std::vector<THMRows> rows;
+  const bool brune = (config.paramMask & Config::USE_BRUNE_FORMALISM);
+  const int nCols = pmap.NumPacked();
+
+  // Row bookkeeping mirrors ComputeResidualJacobian / EvaluateFilledChi2: one
+  // row per non-null point, segments in order.
+  int row = 0;
+  for (int s = 1; s <= ld->NumSegments(); s++) {
+    ESegment *seg = ld->GetSegment(s);
+    if (!seg) continue;
+    if (seg->IsTHM()) {
+      THMRows tr;
+      tr.segment = s;
+      tr.firstRow = row;
+      rows.push_back(tr);
+    }
+    for (int pid = 0; pid < seg->NumPoints(); pid++)
+      if (seg->GetPoint(pid + 1)) row++;
+  }
+  if (rows.empty()) return rows;
+
+  // Models of every THM point at the currently filled compound.  The points
+  // are independent (as in every other forward pass, the compound is only
+  // read), so they are evaluated in parallel: this runs 2 x (free E and gamma
+  // columns) + 1 times per Jacobian, and serially it left all but one thread
+  // idle -- 280 s for the 230 columns of the 12C+12C THM example against a
+  // 0.67 s forward pass.  A mapped point is filled by its host's calculation,
+  // so the mapped ones are read afterwards.
+  std::vector<std::pair<int, int>> order;  // (row block t, point index pid)
+  for (size_t t = 0; t < rows.size(); t++) {
+    ESegment *seg = ld->GetSegment(rows[t].segment);
+    for (int pid = 0; pid < seg->NumPoints(); pid++)
+      if (seg->GetPoint(pid + 1)) order.push_back(std::make_pair((int)t, pid));
+  }
+  auto models = [&](std::vector<vector_r> &out) {
+    out.assign(rows.size(), vector_r());
+    std::vector<size_t> slot(order.size());
+    for (size_t k = 0; k < order.size(); k++) {
+      slot[k] = out[order[k].first].size();
+      out[order[k].first].push_back(0.0);
+    }
+    const long n = (long)order.size();
+#pragma omp parallel for schedule(dynamic)
+    for (long k = 0; k < n; k++) {
+      ESegment *seg = ld->GetSegment(rows[order[k].first].segment);
+      if (seg->GetPoint(order[k].second + 1)->IsMapped()) continue;
+      out[order[k].first][slot[k]] = seg->CalculateTheoreticalCrossSection(order[k].second, lc, config, ld);
+    }
+    for (long k = 0; k < n; k++) {
+      ESegment *seg = ld->GetSegment(rows[order[k].first].segment);
+      if (seg->GetPoint(order[k].second + 1)->IsMapped())
+        out[order[k].first][slot[k]] = seg->CalculateTheoreticalCrossSection(order[k].second, lc, config, ld);
+    }
+  };
+  auto fillCompound = [&](const vector_r &p) {
+    lc->FillCompoundFromParams(p);
+    if (brune) lc->CalcShiftFunctions(config);
+  };
+
+  // Norms and shifts are the caller's; the THM model depends on the R-matrix
+  // parameters (and the shift already applied to the point energies).
+  ld->FillNormsFromParams(full);
+  ld->FillEnergyShiftsFromParams(full, ld, lc, &config);
+  fillCompound(full);
+  std::vector<vector_r> m0, mp, mm;
+  models(m0);
+  for (size_t t = 0; t < rows.size(); t++) {
+    rows[t].m = m0[t];
+    rows[t].Jm.assign(m0[t].size() * (size_t)nCols, 0.0);
+    rows[t].J.assign(m0[t].size() * (size_t)nCols, 0.0);
+  }
+
+  // d m / d p, E and gamma columns -- and the THM coherent backgrounds
+  // (cbackground=), which only THM points see -- by the HOES adjoint: one
+  // reverse sweep per point (ThmPointModelGradient).  A configuration it does
+  // not cover, or AZURE2_THM_FD=1, takes the central differences below.
+  bool analytic = !ThmFiniteDifferencesRequested();
+  for (size_t t = 0; t < rows.size() && analytic; t++)
+    if (ld->GetSegment(rows[t].segment)->HasComponents()) analytic = false;
+  if (analytic) {
+    vector_matrix_r shiftDeriv;
+    const vector_matrix_r *sdp = nullptr;
+    if (brune) {
+      shiftDeriv = BuildShiftDerivTable(lc, config);
+      sdp = &shiftDeriv;
+    }
+    bool lineshape = false;
+    for (size_t t = 0; t < rows.size(); t++)
+      if (ld->GetSegment(rows[t].segment)->GetThmLineshape()) lineshape = true;
+    const ThmAdjointContext ctx = BuildThmAdjointContext(lc, config, sdp, lineshape);
+    const int nCoherent = ld->NumThmCoherentParams();
+    std::vector<size_t> slot(order.size());
+    {
+      std::vector<size_t> next(rows.size(), 0);
+      for (size_t k = 0; k < order.size(); k++) slot[k] = next[order[k].first]++;
+    }
+    bool bail = false;
+    const long n = (long)order.size();
+#pragma omp parallel
+    {
+      GradAccum accum;
+      accum.Init(lc);
+      vector_r fullRow(pmap.NumFull(), 0.0);
+      std::vector<double> coherentBar(nCoherent, 0.0);
+#pragma omp for schedule(dynamic)
+      for (long k = 0; k < n; k++) {
+        if (bail) continue;
+        ESegment *seg = ld->GetSegment(rows[order[k].first].segment);
+        EPoint *pt = seg->GetPoint(order[k].second + 1);
+        accum.Zero();
+        std::fill(coherentBar.begin(), coherentBar.end(), 0.0);
+        if (!ThmPointModelGradient(pt, lc, config, ctx, accum, coherentBar)) {
+#pragma omp critical
+          bail = true;
+          continue;
+        }
+        std::fill(fullRow.begin(), fullRow.end(), 0.0);
+        accum.Scatter(pmap, fullRow);
+        double *row = &rows[order[k].first].Jm[slot[k] * nCols];
+        for (int c = 0; c < nCols; c++) {
+          const int f = pmap.PackedToFull(c);
+          const ParamDesc &desc = pmap.Desc(f);
+          if (desc.kind == ParamKind::LevelEnergy || desc.kind == ParamKind::Gamma)
+            row[c] = fullRow[f];
+          else if (desc.kind == ParamKind::ThmCoherent && desc.channel >= 1 && desc.channel <= nCoherent)
+            row[c] = coherentBar[desc.channel - 1];
+        }
+      }
+    }
+    if (bail) {
+      analytic = false;
+      for (size_t t = 0; t < rows.size(); t++) std::fill(rows[t].Jm.begin(), rows[t].Jm.end(), 0.0);
+      if (std::getenv("AZURE_GRAD_DEBUG"))
+        std::cerr << "[grad] THM adjoint: a point outside its path (a target effect with an automatic "
+                     "tolerance, RMC, ...) -> central differences for the THM rows" << std::endl;
+    }
+  }
+
+  // Central differences (AZURE2_THM_FD=1, or the adjoint declined).
+  for (int c = 0; c < nCols && !analytic; c++) {
+    const int f = pmap.PackedToFull(c);
+    const ParamKind kind = pmap.Desc(f).kind;
+    if (kind == ParamKind::ThmCoherent) {
+      const double x0 = full[f];
+      const double h = 1.0e-6 * (std::fabs(x0) + 1.0);
+      vector_r pp = full;
+      pp[f] = x0 + h;
+      ld->FillThmCoherentFromParams(pp, lc);
+      models(mp);
+      pp[f] = x0 - h;
+      ld->FillThmCoherentFromParams(pp, lc);
+      models(mm);
+      ld->FillThmCoherentFromParams(full, lc);
+      for (size_t t = 0; t < rows.size(); t++)
+        for (size_t i = 0; i < m0[t].size(); i++)
+          rows[t].Jm[i * nCols + c] = (mp[t][i] - mm[t][i]) / (2.0 * h);
+      continue;
+    }
+    if (kind != ParamKind::LevelEnergy && kind != ParamKind::Gamma) continue;
+    const double x0 = full[f];
+    const double h = 1.0e-6 * (std::fabs(x0) + 1.0);
+    vector_r pp = full;
+    pp[f] = x0 + h;
+    fillCompound(pp);
+    models(mp);
+    pp[f] = x0 - h;
+    fillCompound(pp);
+    models(mm);
+    for (size_t t = 0; t < rows.size(); t++)
+      for (size_t i = 0; i < m0[t].size(); i++)
+        rows[t].Jm[i * nCols + c] = (mp[t][i] - mm[t][i]) / (2.0 * h);
+  }
+  fillCompound(full);
+
+  // Residuals and the chain rule through the profiled scale.
+  for (size_t t = 0; t < rows.size(); t++) {
+    THMRows &tr = rows[t];
+    ESegment *seg = ld->GetSegment(tr.segment);
+    std::vector<double> d, e;
+    for (int pid = 0; pid < seg->NumPoints(); pid++) {
+      EPoint *pt = seg->GetPoint(pid + 1);
+      if (!pt) continue;
+      d.push_back(pt->GetCMCrossSection());
+      e.push_back(pt->GetCMCrossSectionError());
+      pt->SetFitCrossSection(tr.m[d.size() - 1]);
+    }
+    const size_t n = d.size();
+    if (ld->ThmGroupOf(tr.segment) >= 0) continue;  // a THM experiment: below
+    double Smm = 0.0, Smd = 0.0;
+    for (size_t i = 0; i < n; i++) {
+      if (e[i] == 0.0) continue;
+      double w = 1.0 / (e[i] * e[i]);
+      Smm += tr.m[i] * tr.m[i] * w;
+      Smd += tr.m[i] * d[i] * w;
+    }
+    // s multiplies the model (s = 1/n, n the norm on the data).
+    bool varyScale = false;
+    double s;
+    if (seg->IsProfiledNorm()) {
+      seg->ProfileNormChiSquared();  // sets n* (or 1 if degenerate), as the CLI
+      varyScale = (Smd > 0.0 && Smm > 0.0);
+      s = varyScale ? Smd / Smm : 1.0;
+    } else {
+      double norm = seg->GetNorm();
+      s = (norm != 0.0) ? 1.0 / norm : 0.0;
+    }
+    tr.r.assign(n, 0.0);
+    for (size_t i = 0; i < n; i++)
+      if (e[i] != 0.0) tr.r[i] = (s * tr.m[i] - d[i]) / e[i];
+
+    vector_r ds(nCols, 0.0);
+    if (varyScale) {
+      for (int c = 0; c < nCols; c++) {
+        double sdJ = 0.0, smJ = 0.0;
+        for (size_t i = 0; i < n; i++) {
+          if (e[i] == 0.0) continue;
+          double w = 1.0 / (e[i] * e[i]);
+          sdJ += d[i] * tr.Jm[i * nCols + c] * w;
+          smJ += tr.m[i] * tr.Jm[i * nCols + c] * w;
+        }
+        ds[c] = (sdJ - 2.0 * s * smJ) / Smm;
+      }
+    }
+    for (size_t i = 0; i < n; i++) {
+      if (e[i] == 0.0) continue;
+      for (int c = 0; c < nCols; c++)
+        tr.J[i * nCols + c] = (s * tr.Jm[i * nCols + c] + tr.m[i] * ds[c]) / e[i];
+    }
+    tr.s = s;
+    tr.profiled = varyScale;
+    tr.ds = ds;
+  }
+
+  // THM experiments: one linear profile (shared norm, background) over the
+  // points of all their segments, differentiated through the profile.
+  for (int g = 0; g < ld->NumThmGroups(); g++) {
+    std::vector<size_t> members;  // indices into rows
+    for (size_t t = 0; t < rows.size(); t++)
+      if (ld->ThmGroupOf(rows[t].segment) == g) members.push_back(t);
+    if (members.empty()) continue;
+    ld->ProfileThmGroup(g);  // norms and profile from the models set above
+    const ThmProfile &prof = ld->GetThmGroup(g).profile;
+    std::vector<double> m, d, e, energy, Jm;
+    for (size_t t : members) {
+      ESegment *seg = ld->GetSegment(rows[t].segment);
+      size_t i = 0;
+      for (int pid = 0; pid < seg->NumPoints(); pid++) {
+        EPoint *pt = seg->GetPoint(pid + 1);
+        if (!pt) continue;
+        m.push_back(rows[t].m[i]);
+        d.push_back(pt->GetCMCrossSection());
+        e.push_back(pt->GetCMCrossSectionError());
+        energy.push_back(pt->GetCMEnergy());
+        Jm.insert(Jm.end(), rows[t].Jm.begin() + i * nCols, rows[t].Jm.begin() + (i + 1) * nCols);
+        i++;
+      }
+    }
+    std::vector<double> J, G;
+    ThmProfileDerivative(prof, m, d, e, energy, Jm, nCols, J, G);
+    size_t k = 0;
+    for (size_t t : members) {
+      THMRows &tr = rows[t];
+      const size_t n = tr.m.size();
+      tr.r.assign(n, 0.0);
+      for (size_t i = 0; i < n; i++) tr.r[i] = prof.Residual(m[k + i], d[k + i], e[k + i], energy[k + i]);
+      tr.J.assign(J.begin() + k * nCols, J.begin() + (k + n) * nCols);
+      tr.G.assign(G.begin() + k * nCols, G.begin() + (k + n) * nCols);
+      tr.s = prof.s;
+      tr.profiled = false;  // the whole derivative is in J and G
+      tr.ds.assign(nCols, 0.0);
+      k += n;
+    }
+  }
+  return rows;
 }

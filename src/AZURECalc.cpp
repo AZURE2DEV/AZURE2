@@ -133,7 +133,7 @@ void ForEachShiftPenalty(EData *data, const ParamIndexMap &pmap, F f) {
     if (!seg) continue;
     int idx;
     if (seg->IsVaryEnergyShift() && seg->GetEnergyShiftError() != 0.0 && (idx = pmap.EnergyShiftIndex(s)) >= 0)
-      f(idx, 0.0, seg->GetEnergyShiftError());
+      f(idx, seg->GetNominalEnergyShift(), seg->GetEnergyShiftError());  // 0 unless a prior_centre row
     if (seg->IsVaryEnergyShiftSqrt() && seg->GetEnergyShiftSqrtError() != 0.0 &&
         (idx = pmap.EnergyShiftSqrtIndex(s)) >= 0)
       f(idx, 0.0, seg->GetEnergyShiftSqrtError());
@@ -149,7 +149,7 @@ void ForEachShiftPenalty(EData *data, const ParamIndexMap &pmap, F f) {
 template <class F>
 void ForEachScreeningPrior(EData *data, const ParamIndexMap &pmap, F f) {
   for (int k = 1; k <= data->NumScreeningParams(); k++) {
-    const TargetEffect *te = data->GetTargetEffect(data->GetScreeningEffect(k));
+    const TargetEffect *te = data->GetScreeningTargetEffect(k);
     if (te->GetScreeningSigma() <= 0.0) continue;
     const int idx = pmap.ScreeningIndex(k);
     if (idx >= 0) f(idx, te->GetScreeningNominal(), te->GetScreeningSigma());
@@ -161,7 +161,7 @@ void ForEachScreeningPrior(EData *data, const ParamIndexMap &pmap, F f) {
 template <class F>
 void ForEachDensityPrior(EData *data, const ParamIndexMap &pmap, F f) {
   for (int k = 1; k <= data->NumDensityParams(); k++) {
-    const TargetEffect *te = data->GetTargetEffect(data->GetDensityEffect(k));
+    const TargetEffect *te = data->GetDensityTargetEffect(k);
     if (te->GetDensitySigma() <= 0.0) continue;
     const int idx = pmap.DensityIndex(k);
     if (idx >= 0) f(idx, te->GetDensityNominal(), te->GetDensitySigma());
@@ -173,7 +173,7 @@ void ForEachDensityPrior(EData *data, const ParamIndexMap &pmap, F f) {
 template <class F>
 void ForEachDopplerPrior(EData *data, const ParamIndexMap &pmap, F f) {
   for (int k = 1; k <= data->NumDopplerParams(); k++) {
-    const TargetEffect *te = data->GetTargetEffect(data->GetDopplerEffect(k));
+    const TargetEffect *te = data->GetDopplerTargetEffect(k);
     if (te->GetDopplerSigma() <= 0.0) continue;
     const int idx = pmap.DopplerIndex(k);
     if (idx >= 0) f(idx, te->GetDopplerNominal(), te->GetDopplerSigma());
@@ -622,32 +622,47 @@ double AZURECalc::operator()(const vector_r &p) const {
         }
       }
 
-      // Recalculate chi-squared for this segment with components
+      // Recalculate chi-squared for this segment with components.
+      // A THM segment with a free norm has an arbitrary overall scale: during a
+      // fit it is profiled out analytically (n* set to its optimum, no norm
+      // penalty) so it cannot trade against the direct-data normalizations.
       double segmentChiSquared = 0.0;
-      for (int pointIdx = 0; pointIdx < segment->NumPoints(); pointIdx++) {
-        EPoint *point = segment->GetPoint(pointIdx + 1);
-        if (point) {
-          double residual = point->GetFitCrossSection() - point->GetCMCrossSection() * segment->GetNorm();
-          double error = point->GetCMCrossSectionError() * segment->GetNorm();
-          if (error != 0.0) {
-            segmentChiSquared += (residual * residual) / (error * error);
+      // A THM experiment (<thm> experiment[...]) profiles one norm (and a
+      // background) over all of its segments: once, at its last segment, when
+      // the models of all of them are in.  It sets their norms and chi^2.
+      const int thmGroup = localData->ThmGroupOf(i);
+      if (thmGroup >= 0) {
+        if (localData->IsLastOfThmGroup(thmGroup, i)) chiSquared += localData->ProfileThmGroup(thmGroup);
+      } else if (segment->IsProfiledNorm()) {
+        segmentChiSquared = segment->ProfileNormChiSquared();
+      } else {
+        for (int pointIdx = 0; pointIdx < segment->NumPoints(); pointIdx++) {
+          EPoint *point = segment->GetPoint(pointIdx + 1);
+          if (point) {
+            double residual = point->GetFitCrossSection() - point->GetCMCrossSection() * segment->GetNorm();
+            double error = point->GetCMCrossSectionError() * segment->GetNorm();
+            if (error != 0.0) {
+              segmentChiSquared += (residual * residual) / (error * error);
+            }
           }
         }
-      }
 
-      // Add normalization chi-squared contribution
-      double dataNorm = segment->GetNorm();
-      double dataNormNominal = segment->GetNominalNorm();
-      double dataNormError = dataNormNominal / 100. * segment->GetNormError();
-      if (dataNormError != 0.) {
-        chiSquared += pow((dataNorm - dataNormNominal) / dataNormError, 2.0);
+        // Add normalization chi-squared contribution (profiled norms have none).
+        double dataNorm = segment->GetNorm();
+        double dataNormNominal = segment->GetNominalNorm();
+        double dataNormError = dataNormNominal / 100. * segment->GetNormError();
+        if (dataNormError != 0.) {
+          chiSquared += pow((dataNorm - dataNormNominal) / dataNormError, 2.0);
+        }
       }
 
       // Add the energy-shift penalties
       segment->AddShiftPenalty(chiSquared);
 
-      segment->SetSegmentChiSquared(segmentChiSquared);
-      chiSquared += segmentChiSquared;
+      if (thmGroup < 0) {
+        segment->SetSegmentChiSquared(segmentChiSquared);
+        chiSquared += segmentChiSquared;
+      }
     }
   }
   // Data covariance: r^T M^-1 r over each group in place of its points' r_i^2.
@@ -775,47 +790,78 @@ void AZURECalc::WriteIterationOutput(const vector_r &p) const {
   }
 }
 
-bool AZURECalc::PrecalculatePoints(CNuc *lc, EData *ld) const {
+bool AZURECalc::PrecalculatePoints(CNuc *lc, EData *ld, bool thmOnly) const {
+  // thmOnly: the THM segments alone (the THM-only finite differences of Chi2On).
   std::vector<ESegment *> segments;
-  for (int i = 1; i <= ld->NumSegments(); i++) segments.push_back(ld->GetSegment(i));
+  for (int i = 1; i <= ld->NumSegments(); i++) {
+    ESegment *seg = ld->GetSegment(i);
+    if (!seg || (thmOnly && !seg->IsTHM())) continue;
+    segments.push_back(seg);
+  }
   return EData::CalculatePointsInParallel(segments, lc, configure()) >= 0;
 }
 
-double AZURECalc::Chi2On(CNuc *lc, EData *ld, const vector_r &p, std::vector<double> *segChis) const {
+/*!
+ * The chi-squared of p on the working copies lc and ld (mirrors the chi-squared
+ * math of operator()).  With thmOnly, only THM (HOES) segments are computed and
+ * summed: Gradient() finite-differences the THM contribution that way, at a
+ * cost that scales with the THM points alone.  The nuisance, Park and abundance
+ * penalties are left out there: Gradient() adds them analytically.
+ */
+double AZURECalc::Chi2On(CNuc *lc, EData *ld, const vector_r &p, std::vector<double> *segChis, bool thmOnly) const {
   lc->FillCompoundFromParams(p);
   ld->FillNormsFromParams(p);
   ld->FillEnergyShiftsFromParams(p, ld, lc, &configure());
+  // A chi-squared alone: no Park second derivatives (CNuc::CalcShiftFunctions).
   if (configure().paramMask & Config::USE_BRUNE_FORMALISM) lc->CalcShiftFunctions(configure(), false);
-  const bool pre = PrecalculatePoints(lc, ld);
+  const bool pre = PrecalculatePoints(lc, ld, thmOnly);
 
   double chiSquared = 0.0;
   if (segChis) segChis->assign(ld->NumSegments() + 1, 0.0);
   for (int i = 1; i <= ld->NumSegments(); i++) {
     ESegment *segment = ld->GetSegment(i);
     if (!segment) continue;
-    double segChi = 0.0;
+    if (thmOnly && !segment->IsTHM()) continue;
     for (int pid = 0; pid < segment->NumPoints(); pid++) {
       double th = segment->CalculateTheoreticalCrossSection(pid, lc, configure(), ld, pre);
       EPoint *pt = segment->GetPoint(pid + 1);
-      if (pt) {
-        pt->SetFitCrossSection(th);
-        double r = th - pt->GetCMCrossSection() * segment->GetNorm();
-        double err = pt->GetCMCrossSectionError() * segment->GetNorm();
-        if (err != 0.0) segChi += (r * r) / (err * err);
+      if (pt) pt->SetFitCrossSection(th);
+    }
+    double segChi = 0.0;
+    const int thmGroup = ld->ThmGroupOf(i);
+    if (thmGroup >= 0) {
+      // A THM experiment: one profile over its segments, at the last of them.
+      if (ld->IsLastOfThmGroup(thmGroup, i)) segChi = ld->ProfileThmGroup(thmGroup);
+    } else if (segment->IsProfiledNorm()) {
+      // Arbitrary THM scale: profile the norm out (no penalty).
+      segChi = segment->ProfileNormChiSquared();
+    } else {
+      for (int pid = 0; pid < segment->NumPoints(); pid++) {
+        EPoint *pt = segment->GetPoint(pid + 1);
+        if (pt) {
+          double r = pt->GetFitCrossSection() - pt->GetCMCrossSection() * segment->GetNorm();
+          double err = pt->GetCMCrossSectionError() * segment->GetNorm();
+          if (err != 0.0) segChi += (r * r) / (err * err);
+        }
       }
+      double dataNorm = segment->GetNorm();
+      double nom = segment->GetNominalNorm();
+      double nerr = nom / 100.0 * segment->GetNormError();
+      if (nerr != 0.0) chiSquared += pow((dataNorm - nom) / nerr, 2.0);
     }
     if (segChis) (*segChis)[i] = segChi;
-    double dataNorm = segment->GetNorm();
-    double nom = segment->GetNominalNorm();
-    double nerr = nom / 100.0 * segment->GetNormError();
-    if (nerr != 0.0) chiSquared += pow((dataNorm - nom) / nerr, 2.0);
     segment->AddShiftPenalty(chiSquared);
     chiSquared += segChi;
   }
+  if (thmOnly) return chiSquared;
+  // (A THM segment carries no covariance block: EData refuses one.)
   if (ld->HasCovariance()) chiSquared += ld->CovarianceChi2Correction(segChis);
   if (limitsManager_) chiSquared += CalculateNuisanceChiSquared(p);
-  // Park: the J > 0 wall, as operator() adds it.  Without it the finite-difference gradient columns (and the
-  // AZURE_GRAD_CHECK reference) missed the wall's gradient wherever a level is past it.
+  // Park's J > 0 wall, as operator() adds it: the finite-difference fallback of
+  // Gradient() and its columns (and the AZURE_GRAD_CHECK reference)
+  // differentiate this function, and LM / GSL-LM take it as their cost.  Not
+  // in the THM-only part (thmOnly returned above), which adds to an analytic
+  // gradient that has the wall.
   if (configure().paramMask & Config::USE_PARK_FORMALISM) chiSquared += lc->ParkNormPenalty();
   // The working copy lc holds the abundances of p (FillCompoundFromParams above); compound() holds whatever the
   // last full evaluation left there, so using it here froze the abundance prior in the LM/GSL cost and in the
@@ -831,7 +877,7 @@ double AZURECalc::Chi2On(CNuc *lc, EData *ld, const vector_r &p, std::vector<dou
   return chiSquared;
 }
 
-double AZURECalc::Chi2Value(const vector_r &p) const {
+double AZURECalc::Chi2Value(const vector_r &p, bool thmOnly) const {
   // Side-effect-free chi-squared (mirrors the chi-squared math of operator()).
   // Pooled working copies keep their applied energy shifts and mapping between
   // calls; a fresh Clone() re-shifts every shifted segment and rebuilds the
@@ -840,7 +886,7 @@ double AZURECalc::Chi2Value(const vector_r &p) const {
   EData *ld = GetPooledEData();
   std::vector<double> segPooled;
   const bool poolCheck = std::getenv("AZURE_POOL_CHECK") != nullptr;
-  const double chi = Chi2On(lc, ld, p, poolCheck ? &segPooled : nullptr);
+  const double chi = Chi2On(lc, ld, p, poolCheck ? &segPooled : nullptr, thmOnly);
   ReturnPooledCNuc(lc);
   ReturnPooledEData(ld);
   if (poolCheck) {
@@ -850,7 +896,7 @@ double AZURECalc::Chi2Value(const vector_r &p) const {
       EData *fd = data()->Clone();
       std::vector<double> segFresh;
       setEnvVar("AZURE_SERIAL_CHI2", "1");  // reference: per-point (serial) path on a fresh copy
-      const double chiFresh = Chi2On(fc, fd, p, &segFresh);
+      const double chiFresh = Chi2On(fc, fd, p, &segFresh, thmOnly);
       unsetEnvVar("AZURE_SERIAL_CHI2");
       delete fc;
       delete fd;
@@ -1017,6 +1063,10 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
     for (int s = 1; s <= ld->NumSegments(); s++) {  // normalizations
       ESegment *seg = ld->GetSegment(s);
       if (!seg || !seg->IsVaryNorm() || seg->IsNormGroupFollower()) continue;  // a follower's norm is fixed
+      // THM segments never enter the analytic accumulation (their normData
+      // stays 0); their norm gradient -- data term AND penalty -- comes from
+      // the THM-only finite differences below.
+      if (seg->IsTHM()) continue;
       int idx = pmap.NormIndex(s);
       if (idx < 0 || idx >= (int)grad.size()) continue;
       double g = normData[s];
@@ -1029,10 +1079,42 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
 
   // Fixed-parameter mask: Minuit ignores the gradient of fixed parameters, so
   // do not waste finite differences on them (large fits fix most energy shifts).
-  AZUREParams fp;
-  compound()->FillMnParams(fp.GetMinuitParams(), &configure());
-  data()->FillMnParams(fp.GetMinuitParams());
-  const int nMn = fp.GetMinuitParams().Params().size();
+  // The minimizer's flags (FixedMask), not only the file's.
+  const std::vector<bool> fixedMask = FixedMask();
+  const int nMn = (int)fixedMask.size();
+
+  // THM (HOES) segments are excluded from the T-matrix adjoint; their
+  // energy/gamma contribution comes from the HOES adjoint below (their norms,
+  // and everything with AZURE2_THM_FD=1, by central differences of the
+  // THM-only chi^2).
+  bool haveTHM = false;
+  for (int s = 1; s <= data()->NumSegments() && !haveTHM; s++) {
+    ESegment *seg = data()->GetSegment(s);
+    if (seg && seg->IsTHM()) haveTHM = true;
+  }
+
+  // THM rows by the HOES adjoint (ComputeTHMRows): the THM data term of chi^2
+  // is sum_i r_i^2 over its rows, the norm profiled as Chi2Value(.., true)
+  // does, so its energy / reduced-width / coherent-background gradient is
+  // 2 J^T r.  THM norms keep the central differences of the THM-only chi^2
+  // below (they also carry its norm penalty).  AZURE2_THM_FD=1 restores the
+  // differences for every THM column.
+  bool thmAnalytic = false;
+  if (eg && haveTHM && !ThmFiniteDifferencesRequested()) {
+    ParamIndexMap tmap = BuildParamIndexMap(lc, ld, fixedMask);
+    std::vector<THMRows> thm = ComputeTHMRows(lc, ld, configure(), p, tmap);
+    const int nCols = tmap.NumPacked();
+    for (const THMRows &tr : thm)
+      for (int col = 0; col < nCols; col++) {
+        const int f = tmap.PackedToFull(col);
+        const ParamKind kind = tmap.Desc(f).kind;
+        if (kind != ParamKind::LevelEnergy && kind != ParamKind::Gamma && kind != ParamKind::ThmCoherent) continue;
+        double g = 0.0;
+        for (size_t i = 0; i < tr.r.size(); i++) g += tr.r[i] * tr.J[i * nCols + col];
+        if (f < (int)grad.size()) grad[f] += 2.0 * g;
+      }
+    thmAnalytic = true;
+  }
 
   // Segment-local energy-shift gradient is exact only when a shift's effect is
   // confined to its own segments' data term.  Point mapping across segments
@@ -1047,14 +1129,40 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
   // every other one (analytic, or a segment-local shift difference) gets its gradient added below.
   std::vector<char> fdWhole(p.size(), 0);
 
-  // --- Finite differences only for what is left: non-fixed energy shifts, and
-  //     (if the analytic path bailed) the energy/gamma and norm blocks too. ---
+  // --- Finite differences only for what is left: non-fixed energy shifts, the
+  //     THM-segment contribution to energies/gammas/norms, and (if the analytic
+  //     path bailed) the energy/gamma and norm blocks too. ---
   for (int idx = 0; idx < (int)p.size() && idx < pmap.NumFull(); idx++) {
-    if (idx < nMn && fp.GetMinuitParams().Parameter(idx).IsFixed()) continue;
+    if (idx < nMn && fixedMask[idx]) continue;
     ParamKind kind = pmap.Desc(idx).kind;
+    // A THM coherent background (cbackground=) moves THM points only: the
+    // THM-only chi^2 below differentiates it completely.  An electron-screening
+    // potential is analytic (the screening factor of the classic points; a THM
+    // segment carries none).
+    if (eg && (kind == ParamKind::Screening || kind == ParamKind::Doppler || kind == ParamKind::Thickness))
+      continue;  // analytic (dev: Doppler weights, the transmission / yield transform)
     if (eg && (kind == ParamKind::LevelEnergy || kind == ParamKind::Gamma || kind == ParamKind::Norm ||
-               kind == ParamKind::Screening || kind == ParamKind::Doppler || kind == ParamKind::Thickness))
-      continue;  // analytic
+               kind == ParamKind::ThmCoherent)) {
+      if (!haveTHM) continue;  // fully analytic
+      if (thmAnalytic && kind != ParamKind::Norm) continue;  // THM part added above
+      if (kind == ParamKind::Norm) {
+        // A norm belongs to exactly one segment: non-THM norms are fully
+        // analytic (handled above); THM norms are fully finite-difference.
+        ESegment *seg = data()->GetSegment(pmap.Desc(idx).segment);
+        if (!seg || !seg->IsTHM()) continue;
+      }
+      double x0 = p[idx];
+      double h = FdStep(kind, x0, 1.0e-6);
+      vector_r pp = p;
+      pp[idx] = x0 + h;
+      vector_r pm = p;
+      pm[idx] = x0 - h;
+      // += : energies/gammas already carry the analytic non-THM part (a THM
+      // norm's grad entry is still 0). Penalty terms inside the THM-only chi^2
+      // that do not depend on p[idx] cancel in the central difference.
+      grad[idx] += (Chi2Value(pp, true) - Chi2Value(pm, true)) / (2.0 * h);
+      continue;
+    }
     double x0 = p[idx];
     double h = FdStep(kind, x0, 1.0e-6);
 
@@ -1067,9 +1175,14 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
         localShiftOk && pmap.Desc(idx).segment >= 1) {
       const int s = pmap.Desc(idx).segment;
       const ShiftParamTarget target = ShiftTargets(ld, pmap.Desc(idx));
-      bool inCovariance = false;  // a covariance group's chi2 is not a sum over its segments
-      for (int m : target.segs) inCovariance |= ld->GetSegment(m)->GetCovarianceGroup() >= 0;
-      if (!inCovariance && target.Local(ld) && MappingConfined(partners, target.segs)) {
+      // Not for a segment of a THM experiment (its chi^2 is not its own), nor of a covariance group (a group's
+      // chi2 is not a sum over its segments).
+      bool inThmGroup = false, inCovariance = false;
+      for (int m : target.segs) {
+        inThmGroup = inThmGroup || ld->ThmGroupOf(m) >= 0;
+        inCovariance = inCovariance || ld->GetSegment(m)->GetCovarianceGroup() >= 0;
+      }
+      if (!inCovariance && target.Local(ld) && !inThmGroup && MappingConfined(partners, target.segs)) {
         auto groupChi = [&](double v) {
           target.Set(ld, v);
           // Every segment is moved before any is calculated: a host calculates
@@ -1130,11 +1243,10 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
       auto ms = [](auto a, auto b) { return std::chrono::duration<double, std::milli>(b - a).count(); };
       int nfd = 0;
       for (int idx = 0; idx < (int)p.size() && idx < pmap.NumFull(); idx++) {
-        if (idx < nMn && fp.GetMinuitParams().Parameter(idx).IsFixed()) continue;
+        if (idx < nMn && fixedMask[idx]) continue;
         ParamKind kind = pmap.Desc(idx).kind;
-        if (!(eg && (kind == ParamKind::LevelEnergy || kind == ParamKind::Gamma || kind == ParamKind::Norm ||
-                     kind == ParamKind::Screening || kind == ParamKind::Doppler || kind == ParamKind::Thickness)))
-          nfd++;
+        if (!(eg && !haveTHM && (kind == ParamKind::LevelEnergy || kind == ParamKind::Gamma || kind == ParamKind::Norm)) &&
+            !(eg && (kind == ParamKind::Screening || kind == ParamKind::Doppler || kind == ParamKind::Thickness))) nfd++;
       }
       std::cerr << "[grad-timing] call " << c << ": setup+adjoint " << ms(tg0, tg1) << " ms (analytic " << (eg ? "ok" : "BAILED")
                 << "), finite-difference part " << ms(tg1, tg2) << " ms for " << nfd << " parameters" << std::endl;
@@ -1149,7 +1261,7 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
   if (const char *gc = std::getenv("AZURE_GRAD_CHECK")) {
     if (!gradChecked.exchange(true)) {
       static const char *kindName[] = {"energy", "gamma", "norm", "shift", "shift_sqrt", "shift_fn", "abundance", "screening",
-                                       "density", "doppler", "thickness"};
+                                       "density", "doppler", "thickness", "cbkg"};
       struct Row { double score, g, fd; int idx; ParamDesc d; double gj, scoreJ; };
       std::vector<Row> rows;
       constexpr int kNumKinds = sizeof(kindName) / sizeof(kindName[0]);  // one per ParamKind
@@ -1160,7 +1272,7 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
       std::cerr << "[grad-check] one Chi2Value: " << std::chrono::duration<double>(std::chrono::steady_clock::now() - tc0).count() << " s" << std::endl;
       std::vector<int> freeIdx;
       for (int idx = 0; idx < (int)p.size() && idx < pmap.NumFull(); idx++)
-        if (!(idx < nMn && fp.GetMinuitParams().Parameter(idx).IsFixed())) freeIdx.push_back(idx);
+        if (!(idx < nMn && fixedMask[idx])) freeIdx.push_back(idx);
       const char *cn = std::getenv("AZURE_GRAD_CHECK_N");
       const int nCheck = cn ? std::atoi(cn) : 16;
       const int stride = std::max(1, (int)freeIdx.size() / std::max(1, nCheck));
@@ -1253,6 +1365,17 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
   ReturnPooledEData(ld);
 
   return grad;
+}
+
+std::vector<bool> AZURECalc::FixedMask() const {
+  AZUREParams tp;
+  compound()->FillMnParams(tp.GetMinuitParams(), &configure());
+  data()->FillMnParams(tp.GetMinuitParams());
+  const int nMn = tp.GetMinuitParams().Params().size();
+  if ((int)fixedMask_.size() == nMn) return fixedMask_;
+  std::vector<bool> fixed(nMn);
+  for (int i = 0; i < nMn; i++) fixed[i] = tp.GetMinuitParams().Parameter(i).IsFixed();
+  return fixed;
 }
 
 bool AZURECalc::GradientFromJacobian(const std::vector<double> &p, std::vector<double> &grad) const {
@@ -1477,13 +1600,8 @@ bool AZURECalc::ResidualJacobian(const vector_r &full, vector_r &residuals,
     sdp = &shiftDeriv;
   }
 
-  // Fixed-parameter mask, in the Minuit parameter order.
-  AZUREParams tp;
-  compound()->FillMnParams(tp.GetMinuitParams(), &configure());
-  data()->FillMnParams(tp.GetMinuitParams());
-  int nMn = tp.GetMinuitParams().Params().size();
-  std::vector<bool> fixed(nMn);
-  for (int i = 0; i < nMn; i++) fixed[i] = tp.GetMinuitParams().Parameter(i).IsFixed();
+  // Fixed-parameter mask, in the Minuit parameter order: the minimizer's.
+  const std::vector<bool> fixed = FixedMask();
 
   ParamIndexMap pmap = BuildParamIndexMap(lc, ld, fixed);
   int nCols = 0;
@@ -1564,6 +1682,13 @@ double AZURECalc::RunLevenbergMarquardt(AZUREParams &params, int maxIter,
                                         BandCovariance *bandCovOut) const {
   ROOT::Minuit2::MnUserParameters &mp = params.GetMinuitParams();
   const int nFull = mp.Params().size();
+  // Free exactly what MIGRAD would: the fixed flags of these parameters
+  // (param.par "fixed", <parameterSettings>), not a fresh mask from the .azr.
+  {
+    std::vector<bool> fixed(nFull);
+    for (int i = 0; i < nFull; i++) fixed[i] = mp.Parameter(i).IsFixed();
+    SetFixedMask(fixed);
+  }
   vector_r full(nFull);
   for (int i = 0; i < nFull; i++) full[i] = mp.Value(i);
 
@@ -1718,7 +1843,7 @@ int AZURECalc::PrepareFreeParams(const vector_r &full,
     // (x-nominal)/sigma^2 to the gradient.  Norm / shift / nuisance penalties
     // are identified the same way operator()/CalculateNuisanceChiSquared do.
     std::string name = par.GetName();
-    if (name.find("norm") != std::string::npos) {
+    if (AZURELabel::IsNormName(name)) {
       for (int s = 1; s <= data()->NumSegments(); s++) {
         ESegment *seg = data()->GetSegment(s);
         if (!seg || !seg->IsVaryNorm()) continue;
@@ -1734,27 +1859,27 @@ int AZURECalc::PrepareFreeParams(const vector_r &full,
           break;
         }
       }
-    } else if (name.find("shift") != std::string::npos) {
+    } else if (AZURELabel::IsEnergyShiftName(name)) {
       auto it = shiftPrior.find(f);
       if (it != shiftPrior.end()) {
         pen_nom[a] = it->second.first;
         pen_inv2[a] = 1.0 / (it->second.second * it->second.second);
       }
-    } else if (name.find("screening_") == 0) {
+    } else if (name.compare(0, 10, "screening_") == 0) {
       // Electron-screening potential: its prior is a diagonal penalty row.
       for (int k = 1; k <= data()->NumScreeningParams(); k++) {
         if (name != "screening_" + std::to_string(data()->GetScreeningEffect(k))) continue;
-        const TargetEffect *te = data()->GetTargetEffect(data()->GetScreeningEffect(k));
+        const TargetEffect *te = data()->GetScreeningTargetEffect(k);
         if (te->GetScreeningSigma() > 0.0) {
           pen_nom[a] = te->GetScreeningNominal();
           pen_inv2[a] = 1.0 / (te->GetScreeningSigma() * te->GetScreeningSigma());
         }
       }
-    } else if (name.find("density_") == 0) {
+    } else if (name.compare(0, 8, "density_") == 0) {
       // Fitted target density: its prior is a diagonal penalty row.
       for (int k = 1; k <= data()->NumDensityParams(); k++) {
         if (name != "density_" + std::to_string(data()->GetDensityEffect(k))) continue;
-        const TargetEffect *te = data()->GetTargetEffect(data()->GetDensityEffect(k));
+        const TargetEffect *te = data()->GetDensityTargetEffect(k);
         if (te->GetDensitySigma() > 0.0) {
           pen_nom[a] = te->GetDensityNominal();
           pen_inv2[a] = 1.0 / (te->GetDensitySigma() * te->GetDensitySigma());
@@ -1774,13 +1899,13 @@ int AZURECalc::PrepareFreeParams(const vector_r &full,
       // Fitted Doppler temperature: its prior is a diagonal penalty row.
       for (int k = 1; k <= data()->NumDopplerParams(); k++) {
         if (name != "doppler_" + std::to_string(data()->GetDopplerEffect(k))) continue;
-        const TargetEffect *te = data()->GetTargetEffect(data()->GetDopplerEffect(k));
+        const TargetEffect *te = data()->GetDopplerTargetEffect(k);
         if (te->GetDopplerSigma() > 0.0) {
           pen_nom[a] = te->GetDopplerNominal();
           pen_inv2[a] = 1.0 / (te->GetDopplerSigma() * te->GetDopplerSigma());
         }
       }
-    } else if (name.find("abundance_") == 0) {
+    } else if (name.compare(0, 10, "abundance_") == 0) {
       // Isotopic abundance: its <abundances> prior is a diagonal penalty row.
       // The sum-to-one term couples the abundances and is not a per-parameter
       // penalty: the least-squares drivers leave it out (warned once), MIGRAD
@@ -1801,10 +1926,14 @@ int AZURECalc::PrepareFreeParams(const vector_r &full,
       if (anySum && !warnedSum.exchange(true))
         configure().outStream << "WARNING: a sum-to-one width is set for the abundances, but the least-squares fitter applies only "
                               << "the per-nucleus abundance priors; the sum-to-one penalty is carried by MIGRAD only." << std::endl;
-    } else if (limitsManager_ && limitsManager_->IsNuisanceParameterByIndex(a)) {
-      double sig = limitsManager_->GetConvertedErrorByIndex(a);
-      if (sig > 0.0) {
-        pen_nom[a] = limitsManager_->GetConvertedNominalValueByIndex(a);
+    } else if (limitsManager_) {
+      // Looked up by the full-vector index f, not by a: a counts the
+      // parameters free in this Jacobian, the limits manager's non-fixed index
+      // counts those free when it was applied plus every fixed segment
+      // parameter, and the two need not agree.
+      double nom, sig;
+      if (limitsManager_->NuisancePrior(f, nom, sig)) {
+        pen_nom[a] = nom;
         pen_inv2[a] = 1.0 / (sig * sig);
       }
     }
@@ -1951,17 +2080,12 @@ void AZURECalc::FinalizeLeastSquaresCovariance(const vector_r &full,
     // packed free parameters, in the same order as p2f, so we tag them with
     // their parameter identities via a matching index map.
     if (bandCovOut) {
-      AZUREParams tp;
-      compound()->FillMnParams(tp.GetMinuitParams(), &configure());
-      data()->FillMnParams(tp.GetMinuitParams());
-      int nMn = tp.GetMinuitParams().Params().size();
-      std::vector<bool> fixed(nMn);
-      for (int i = 0; i < nMn; i++) fixed[i] = tp.GetMinuitParams().Parameter(i).IsFixed();
-      ParamIndexMap pmap = BuildParamIndexMap(compound(), data(), fixed);
+      ParamIndexMap pmap = BuildParamIndexMap(compound(), data(), FixedMask());
       if (pmap.NumPacked() == nFree) {
-        // Keep only the R-matrix sub-block: the band is insensitive to norms
-        // and energy shifts, so they are dropped from the saved covariance.
-        const std::vector<int> rc = RMatrixPackedColumns(pmap);
+        // Keep only the band columns (R-matrix, THM coherent background): the
+        // band is insensitive to norms and energy shifts, so they are dropped
+        // from the saved covariance.
+        const std::vector<int> rc = BandPackedColumns(pmap);
         const int m = (int)rc.size();
         bandCovOut->cols.resize(m);
         for (int a = 0; a < m; a++) bandCovOut->cols[a] = pmap.Desc(pmap.PackedToFull(rc[a]));
@@ -2102,6 +2226,13 @@ double AZURECalc::RunGSLNonlinear(AZUREParams &params, int maxIter,
                                   BandCovariance *bandCovOut) const {
   ROOT::Minuit2::MnUserParameters &mp = params.GetMinuitParams();
   const int nFull = mp.Params().size();
+  // Free exactly what MIGRAD would: the fixed flags of these parameters
+  // (param.par "fixed", <parameterSettings>), not a fresh mask from the .azr.
+  {
+    std::vector<bool> fixed(nFull);
+    for (int i = 0; i < nFull; i++) fixed[i] = mp.Parameter(i).IsFixed();
+    SetFixedMask(fixed);
+  }
   vector_r full(nFull);
   for (int i = 0; i < nFull; i++) full[i] = mp.Value(i);
 
@@ -2190,89 +2321,31 @@ double AZURECalc::RunGSLNonlinear(AZUREParams &params, int maxIter,
 
 void AZURECalc::AddNuisanceGradient(const vector_r &p, std::vector<double> &grad) const {
   if (!limitsManager_) return;
-
-  AZUREParams tempParams;
-  compound()->FillMnParams(tempParams.GetMinuitParams(), &configure());
-  data()->FillMnParams(tempParams.GetMinuitParams());
-
-  std::vector<int> nonFixedToActualIndex;
-  for (int i = 0; i < tempParams.GetMinuitParams().Params().size(); i++) {
-    if (!tempParams.GetMinuitParams().Parameter(i).IsFixed() ||
-        tempParams.GetMinuitParams().Parameter(i).GetName().find("segment") != std::string::npos) {
-      nonFixedToActualIndex.push_back(i);
-    }
-  }
-
-  for (int nf = 0; nf < (int)nonFixedToActualIndex.size() && nf < (int)p.size(); nf++) {
-    int actualIndex = nonFixedToActualIndex[nf];
-    std::string paramName = tempParams.GetMinuitParams().Parameter(actualIndex).GetName();
-    // Norms, shifts and abundances carry their own priors (segment errors, the <abundances> sigma).
-    if (paramName.find("norm") != std::string::npos || paramName.find("shift") != std::string::npos ||
-        paramName.find("abundance") != std::string::npos || paramName.find("screening") != std::string::npos ||
-        paramName.find("density_") == 0 || paramName.find("doppler_") == 0 ||
-        paramName.find("_thickness") != std::string::npos) continue;
-    if (!limitsManager_->IsNuisanceParameterByIndex(nf)) continue;
-    double nominalValue = limitsManager_->GetConvertedNominalValueByIndex(nf);
-    double paramError = limitsManager_->GetConvertedErrorByIndex(nf);
-    if (paramError > 0.0 && actualIndex < (int)p.size() && actualIndex < (int)grad.size()) {
-      // p and grad are the FULL Minuit vectors (fixed parameters included); nf is the limits manager's index among
-      // the non-fixed ones.  Before 2026-10-27 this read p[nf] and wrote grad[nf], the wrong parameter as soon
-      // as a fixed level parameter preceded the one with the prior (audit item 14).
-      grad[actualIndex] += 2.0 * (p[actualIndex] - nominalValue) / (paramError * paramError);
-    }
+  // p and grad are the full parameter vector (fixed parameters included), and
+  // the prior is looked up by that same full index.
+  const int n = (int)std::min(p.size(), grad.size());
+  for (int f = 0; f < n; f++) {
+    double nominalValue, paramError;
+    if (!limitsManager_->NuisancePrior(f, nominalValue, paramError)) continue;
+    // d/dp of ((p - nominal)/error)^2.
+    grad[f] += 2.0 * (p[f] - nominalValue) / (paramError * paramError);
   }
 }
 
 double AZURECalc::CalculateNuisanceChiSquared(const vector_r &p) const {
+  if (!limitsManager_) return 0.0;
+  // p is the full parameter vector (fixed parameters included), as
+  // CNuc::FillCompoundFromParams reads it; the prior is looked up by the same
+  // full index.  (Indexing p by the limits manager's non-fixed index, as this
+  // once did, evaluates a prior on whatever parameter sits at that position as
+  // soon as a fixed parameter precedes the one carrying it.)
   double nuisanceChiSquared = 0.0;
-
-  // Create temporary AZUREParams to get parameter names
-  AZUREParams tempParams;
-  compound()->FillMnParams(tempParams.GetMinuitParams(), &configure());
-  data()->FillMnParams(tempParams.GetMinuitParams());
-
-  // Build mapping from non-fixed parameter index to actual parameter index
-  std::vector<int> nonFixedToActualIndex;
-  for (int i = 0; i < tempParams.GetMinuitParams().Params().size(); i++) {
-    if (!tempParams.GetMinuitParams().Parameter(i).IsFixed() || tempParams.GetMinuitParams().Parameter(i).GetName().find("segment") != std::string::npos) {
-      nonFixedToActualIndex.push_back(i);
-    }
+  for (int f = 0; f < (int)p.size(); f++) {
+    double nominalValue, paramError;
+    if (!limitsManager_->NuisancePrior(f, nominalValue, paramError)) continue;
+    double deviation = (p[f] - nominalValue) / paramError;
+    nuisanceChiSquared += deviation * deviation;
   }
-
-  // Check each non-fixed parameter to see if it's marked as nuisance
-  for (int nonFixedIndex = 0; nonFixedIndex < nonFixedToActualIndex.size() && nonFixedIndex < p.size(); nonFixedIndex++) {
-    int actualIndex = nonFixedToActualIndex[nonFixedIndex];
-    std::string paramName = tempParams.GetMinuitParams().Parameter(actualIndex).GetName();
-
-    // If norm, shift or abundance in param name, skip: those carry their own priors
-    if (paramName.find("norm") != std::string::npos || paramName.find("shift") != std::string::npos ||
-        paramName.find("abundance") != std::string::npos || paramName.find("screening") != std::string::npos ||
-        paramName.find("density_") == 0 || paramName.find("doppler_") == 0 ||
-        paramName.find("_thickness") != std::string::npos) {
-      continue;
-    }
-
-    // First check if this parameter is marked as nuisance (fast check)
-    if (!limitsManager_->IsNuisanceParameterByIndex(nonFixedIndex)) {
-      continue;  // Skip if not a nuisance parameter
-    }
-
-    // Only do expensive conversions if parameter is marked as nuisance
-    double nominalValue = limitsManager_->GetConvertedNominalValueByIndex(nonFixedIndex);
-    double paramError = limitsManager_->GetConvertedErrorByIndex(nonFixedIndex);
-
-    // If we got valid values (non-zero error means this parameter has valid nuisance settings)
-    if (paramError > 0.0 && actualIndex < (int)p.size()) {
-      // p is the FULL Minuit vector (fixed parameters included): index it with the parameter's actual position,
-      // not with the limits manager's non-fixed index.  Before 2026-10-27 this read p[nonFixedIndex], so a prior
-      // on a level parameter preceded by any fixed level parameter penalized a different parameter (13N: the prior
-      // on energy_3 was evaluated on width_1_1; audit item 14).
-      double paramValue = p[actualIndex];
-      double deviation = (paramValue - nominalValue) / paramError;
-      nuisanceChiSquared += deviation * deviation;
-    }
-  }
-
   return nuisanceChiSquared;
 }
 

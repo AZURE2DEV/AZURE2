@@ -251,6 +251,8 @@ QVariant SegmentsTestModel::data(const QModelIndex &index, int role) const {
       return line.operationType;
     else if (index.column() == 15)
       return line.componentsList;
+    else if (index.column() == 16)
+      return line.isTHM;
   } else if (role == Qt::CheckStateRole && index.column() == 0) {
     SegmentsTestData line = segTestLineList.at(index.row());
     if (line.isActive == 1)
@@ -338,6 +340,8 @@ bool SegmentsTestModel::setData(const QModelIndex &index, const QVariant &value,
       tempData.operationType = value.toInt();
     else if (index.column() == 15)
       tempData.componentsList = value.toString();
+    else if (index.column() == 16)
+      tempData.isTHM = value.toInt();
     else
       return false;
 
@@ -418,6 +422,7 @@ int SegmentsTestModel::isSegTestLine(const SegmentsTestData &line) const {
         tempLine.isAdvanced == line.isAdvanced &&
         tempLine.operationType == line.operationType &&
         tempLine.componentsList == line.componentsList &&
+        tempLine.isTHM == line.isTHM &&
         tempLine.extraTokens.simplified() == line.extraTokens.simplified()) {
       foundLine = i;
       break;

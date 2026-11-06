@@ -24,6 +24,8 @@ A. M. Lane and R. G. Thomas, *Reviews of Modern Physics* **30**, 257 (1958).
    getting_started/installation
    getting_started/overview
    getting_started/capabilities
+   getting_started/examples
+   getting_started/whats_new
 
 .. toctree::
    :maxdepth: 2
@@ -54,6 +56,7 @@ A. M. Lane and R. G. Thomas, *Reviews of Modern Physics* **30**, 257 (1958).
 
    theory/polarization_theory
    theory/polarization_implementation
+   theory/thm_implementation
    theory/scattering_length
    theory/external_capture_operator
 

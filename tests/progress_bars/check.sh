@@ -63,7 +63,8 @@ chi2() { grep -h 'Total Chi-Squared' "$WORK/$1/run.log" | tail -1 | awk '{ print
 analyze() {
   "$PY" -I -c '
 import re, sys
-bar = re.compile(rb"\tSegment #(-?[0-9]+(?: \(Total: [0-9]+\))?) +\[[* ]{25}\] ([0-9]+)%")
+# thm: the segment number is right-aligned in its setw(12) field (dev: left), hence " *".
+bar = re.compile(rb"\tSegment # *(-?[0-9]+(?: \(Total: [0-9]+\))?) +\[[* ]{25}\] ([0-9]+)%")
 chars = set(b"Segment#[]*% \t0123456789():Tola")
 done, bad, stray = [], [], []
 for line in open(sys.argv[1], "rb").read().split(b"\n"):

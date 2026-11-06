@@ -58,6 +58,22 @@ class ParameterLimitsManager {
   // Get converted error by Minuit2 index (physical to reduced for width parameters)
   double GetConvertedErrorByIndex(int nonFixedIndex) const;
 
+  /*!
+   * Gaussian prior on the parameter at position actualIndex of the FULL Minuit
+   * parameter vector (fixed parameters included -- the vector the chi-squared
+   * function, its gradient and CNuc::FillCompoundFromParams all index).
+   * Returns false when that parameter carries no nuisance prior; otherwise sets
+   * nominal and error in fit units (reduced amplitudes for widths).  Segment
+   * normalizations and energy shifts always return false: their priors come
+   * from the segment definition and are added by the segment code.
+   *
+   * Callers that hold a full-vector index should use this rather than the
+   * ...ByIndex() lookups, whose non-fixed numbering follows the fixed flags of
+   * the parameters this manager was applied to (which, with a param.par file,
+   * need not match a freshly filled parameter list).
+   */
+  bool NuisancePrior(int actualIndex, double &nominal, double &error) const;
+
  private:
   const Config *config_;
   CNuc *compound_;
@@ -69,6 +85,9 @@ class ParameterLimitsManager {
   /// that a stale minuit_index in the file cannot attach one parameter's
   /// settings to a different parameter.
   std::vector<ParameterSetting *> indexToSetting_;
+  /// Nuisance-prior settings entry per full-vector parameter index (NULL for
+  /// none, and for segment norms/shifts).  Built by BuildIndexMap().
+  std::vector<ParameterSetting *> priorByActualIndex_;
 
   // Internal functions
   int FindParameterIndex(const std::string &paramName) const;

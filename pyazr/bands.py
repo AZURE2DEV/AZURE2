@@ -134,7 +134,14 @@ def load_covariance(path="output/covariance.dat", ncols=None):
 
 
 _RMATRIX_KINDS = (0, 1)      # GET_PARAMS_INFO type codes: 0 energy, 1 width
-_NFIELDS = 15                # doubles per parameter record
+# What a band spans (the engine's BandPackedColumns): the R-matrix parameters
+# and the THM coherent background (11, cbkg; 9 before the merge of dev
+# 3264896d), which enters the HOES amplitude.  (4 is the sqrt(E) energy-shift
+# coefficient, 5 a shift-function parameter, 6 an isotopic abundance, 7 an
+# electron-screening potential, 8 a fitted target density, 9 a Doppler
+# temperature and 10 a sample thickness: not in the band.)
+_BAND_KINDS = (0, 1, 11)
+_NFIELDS = 16                # doubles per parameter record (kParamInfoFields)
 
 
 def live_parameters(model):
@@ -173,12 +180,13 @@ def rmatrix_columns(model):
     """Packed indices of the free R-matrix parameters, in ``params_rwa`` order.
 
     These are the columns ``covariance.dat`` spans: level energies and reduced
-    width amplitudes.  Normalizations and energy shifts are excluded -- no
-    calculated observable depends on them.  Queried live, so the answer is
+    width amplitudes, and the THM coherent background (``cbackground=``, kind
+    ``cbkg``) when the project has one.  Normalizations and energy shifts are
+    excluded -- no calculated observable depends on them.  Queried live, so the answer is
     right for the mode the session is in now.
     """
     kinds, _ = live_parameters(model)
-    cols = [j for j, k in enumerate(kinds) if k in _RMATRIX_KINDS]
+    cols = [j for j, k in enumerate(kinds) if k in _BAND_KINDS]
     if not cols:
         raise RuntimeError("the model has no free R-matrix parameters.")
     return cols
@@ -522,7 +530,7 @@ def uncertainty_bands(model, segments=None, keys=None, params=None,
         ``{1-based segment key: Band}``.
     """
     kinds, _ = live_parameters(model)
-    cols = [j for j, k in enumerate(kinds) if k in _RMATRIX_KINDS]
+    cols = [j for j, k in enumerate(kinds) if k in _BAND_KINDS]
     if not cols:
         raise RuntimeError("the model has no free R-matrix parameters.")
 

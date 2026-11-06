@@ -26,6 +26,9 @@ struct EnergyMap {
   int point;
 };
 
+#include <memory>
+#include <vector>
+
 class ESegment;
 class EData;
 class CNuc;
@@ -33,6 +36,14 @@ class PPair;
 class TargetEffect;
 class DataLine;
 class Config;
+struct ThmWeightTable;
+class ThmDistortion;
+class ThmDwVertex;
+struct ThmAngleWindow;
+struct ThmCoherentBackground;
+struct ThmLineshape;
+struct ThmSpectatorWindow;
+
 
 /// An AZURE data point
 
@@ -109,6 +120,9 @@ class ScopedPointMappingOff {
 };
 
 class EPoint {
+ private:
+  struct ThmPsTable;  // defined below (private), named by EDependentShare
+
  public:
   /// The energy-dependent channel tables of a point (one row per J group); see edep_.
   /// Packed: one flat array per kind and one row index, five allocations a point
@@ -120,6 +134,12 @@ class EPoint {
     vector_r penetrabilities;
     vector_c coulombphase;
     vector_c hardspherephase;
+    /// THM (HOES) entrance-vertex pieces, empty for a classic point: j_l(rho) and rho dj_l/drho (boundary-independent;
+    /// M_l is assembled at the vertex with the per-level or channel boundary) and the external Coulomb term (0 when
+    /// not used), indexed [jGroup-1][channel-1] in row form (filled per entrance channel, read with bounds checks).
+    matrix_r thm_jl;
+    matrix_r thm_rhodjl;
+    matrix_c thm_coul;
     /// Slot of (J group, channel); rows and channels are filled in order and extended here.
     int Slot(int jGroupNum, int channelNum) {
       while ((int)rowStart.size() < jGroupNum + 1) rowStart.push_back(rowStart.back());
@@ -142,6 +162,9 @@ class EPoint {
       penetrabilities.clear();
       coulombphase.clear();
       hardspherephase.clear();
+      thm_jl.clear();
+      thm_rhodjl.clear();
+      thm_coul.clear();
     }
     void ShrinkToFit() {
       rowStart.shrink_to_fit();
@@ -149,6 +172,12 @@ class EPoint {
       penetrabilities.shrink_to_fit();
       coulombphase.shrink_to_fit();
       hardspherephase.shrink_to_fit();
+      for (auto *m : {&thm_jl, &thm_rhodjl}) {
+        for (auto &row : *m) row.shrink_to_fit();
+        m->shrink_to_fit();
+      }
+      for (auto &row : thm_coul) row.shrink_to_fit();
+      thm_coul.shrink_to_fit();
     }
   };
   /// Everything CalcEDependentValues and CalcLegendreP compute for a point, by
@@ -163,6 +192,7 @@ class EPoint {
     double geofactor = 0.0, sfactorconv = 0.0, screen_k = 0.0;
     std::shared_ptr<const EDependentTables> tables;
     std::shared_ptr<const vector_r> legendre;
+    std::shared_ptr<const ThmPsTable> thmPs;  ///< THM spectator-window table (immutable), empty for a classic point
   };
   /// The point's energy-dependent values, for another point at the same energy (requires them to be valid).
   EDependentShare ShareEDependentValues() const;
@@ -178,6 +208,34 @@ class EPoint {
   bool IsDifferential() const;
   /// Phase shift?
   bool IsPhase() const;
+  /// THM (modified R-matrix, half-off-shell) point?
+  bool IsTHM() const;
+  /// Weight table multiplying the THM model cross section (<thm> weight[k]=),
+  /// or null.  Owned by the parent ESegment.
+  const ThmWeightTable *GetThmWeight() const { return thm_weight_; }
+  /// Coulomb line shape of the point's THM experiment (lineshape=on), or
+  /// null.  Owned by the parent ESegment.
+  const ThmLineshape *GetThmLineshape() const { return thm_lineshape_; }
+  void SetThmLineshape(const ThmLineshape *l);
+  /// Spectator-momentum window of the point's THM experiment (ps=...), or
+  /// null.  Owned by the parent ESegment.
+  const ThmSpectatorWindow *GetThmSpectatorWindow() const { return thm_window_; }
+  void SetThmSpectatorWindow(const ThmSpectatorWindow *w);
+  /// Distortion factor R(E) of the point's THM experiment (distortion=...),
+  /// or null.  Owned by the parent ESegment.
+  const ThmDistortion *GetThmDistortion() const { return thm_distortion_; }
+  void SetThmDistortion(const ThmDistortion *d);
+  /// Distorted-wave entrance vertex of the point's THM experiment
+  /// (vertexModel=dw), or null (the plane-wave vertex).
+  const ThmDwVertex *GetThmDwVertex() const { return thm_dw_; }
+  void SetThmDwVertex(const ThmDwVertex *v);
+  /// Angular window of the point's THM experiment (theta=thmin-thmax), or
+  /// null (the angle-integrated observable).  Owned by the parent ESegment.
+  const ThmAngleWindow *GetThmAngleWindow() const { return thm_angle_; }
+  void SetThmAngleWindow(const ThmAngleWindow *w);
+  /// THM coherent background of the point's experiment (cbackground=), or null.
+  const ThmCoherentBackground *GetThmCoherent() const { return thm_coherent_; }
+  void SetThmCoherent(const ThmCoherentBackground *c);
   /// Is this point calculated by another? Points at equal energies are mapped onto one so the energy-dependent work is done once.
   bool IsMapped() const;
   /// Does the point carry target effects?
@@ -336,6 +394,20 @@ class EPoint {
   double GetSFactorConversion() const;
   /// \f$\sqrt{P_c}\f$ for the channel at (J-group, channel), both 1-based.
   double GetSqrtPenetrability(int, int) const;
+  /// THM entrance transfer form factor M_l = (b-1) j_l - rho dj_l/drho + C_l for
+  /// JGroup/channel, assembled with the given (possibly complex) boundary b;
+  /// C_l is the external Coulomb term, 0 unless requested (0 if not stored).
+  complex GetThmFormFactor(int, int, complex) const;
+  /// The same at node `node` of the point's spectator-momentum window
+  /// (0-based; ps=...).  0 if not stored.
+  complex GetThmFormFactor(int, int, complex, int node) const;
+  /// Number of nodes of the point's spectator-momentum window (0: none).
+  int NumThmPsNodes() const { return thm_ps_ ? thm_ps_->nodes : 0; }
+  /// Normalized weight of node `node` of that window at the point's energy.
+  double GetThmPsWeight(int node) const { return thm_ps_->weight[node]; }
+  /// Bytes held by the point's spectator-window table (0 without one; shared
+  /// tables are counted by every point that refers to them).
+  size_t ThmPsTableBytes() const { return thm_ps_ ? thm_ps_->Bytes() : 0; }
   /// Total spin. Phase-shift points only.
   double GetJ() const;
   /// Channel spin of a phase-shift point (< 0: the segment gave none, so a single spin must match).
@@ -468,6 +540,8 @@ class EPoint {
   void AddLoElement(int, int, complex);
   /// Store a \f$\sqrt{P_c}\f$ at (J-group, channel).
   void AddSqrtPenetrability(int, int, double);
+  /// Store the pieces of the THM form factor at (J-group, channel).
+  void AddThmFormFactor(int, int, double, double, complex = complex(0.0, 0.0));
   /// Store a Coulomb phase factor at (J-group, channel).
   void AddExpCoulombPhase(int, int, complex);
   /// Store a hard-sphere phase factor at (J-group, channel).
@@ -581,6 +655,14 @@ class EPoint {
   bool doppler_applied_ = false;  ///< see DopplerAppliedScope
   bool is_differential_;
   bool is_phase_;
+  bool is_thm_;
+  const ThmWeightTable *thm_weight_ = nullptr;
+  const ThmLineshape *thm_lineshape_ = nullptr;
+  const ThmSpectatorWindow *thm_window_ = nullptr;
+  const ThmDistortion *thm_distortion_ = nullptr;
+  const ThmDwVertex *thm_dw_ = nullptr;
+  const ThmAngleWindow *thm_angle_ = nullptr;
+  const ThmCoherentBackground *thm_coherent_ = nullptr;
   bool is_mapped_;
   bool is_ang_dist_;
   bool is_analyzing_power_ = false;
@@ -672,6 +754,29 @@ class EPoint {
   EDependentTables &MutableEDep();
   /// This point's own, writable Legendre polynomials (copied first if shared).
   vector_r &MutableLegendre();
+  /// With a spectator-momentum window (ps=...): the same three pieces per
+  /// node of the window at the point's energy (the accepted directions,
+  /// ThmSpectatorWindow::Nodes) with its weight, for the entrance-pair channels only
+  /// (every other channel is 0).  One flat, immutable table per point,
+  /// shared by its mapped points; the single-node matrices above are then
+  /// unused (zero).  It used to be [node][jGroup][channel] vectors of every
+  /// channel: ~117 MB per node for the 19F THM model (16 nodes did not fit).
+  struct ThmPsTable {
+    int nodes = 0;
+    int nSlots = 0;                 ///< entrance channels stored (not `slots`: a Qt keyword in the GUI)
+    std::vector<int> offset;        ///< J group j -> first flat index of its channels (j = 1..N, N+1 entries)
+    std::vector<int> slot;          ///< flat (J group, channel) -> slot, -1 when not stored
+    std::vector<double> jl;         ///< [slot * nodes + node]
+    std::vector<double> rhodjl;
+    std::vector<complex> coul;      ///< empty unless an external Coulomb term was computed
+    std::vector<double> weight;     ///< [node], normalized
+    size_t Bytes() const {
+      return sizeof(*this) + offset.capacity() * sizeof(int) + slot.capacity() * sizeof(int) +
+             (jl.capacity() + rhodjl.capacity() + weight.capacity()) * sizeof(double) +
+             coul.capacity() * sizeof(complex);
+    }
+  };
+  std::shared_ptr<const ThmPsTable> thm_ps_;
   // Energy at which CalcEDependentValues last ran: RecalcEDependentValues is
   // a no-op while the point's energy is unchanged (its values depend only on
   // the energy, the angle and the channel radii).

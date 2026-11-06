@@ -66,6 +66,16 @@ bool ALevel::ChannelFixed(int channelNum) const {
 }
 
 /*!
+ * Returns true if the input width for the given channel was specified as a
+ * reduced width amplitude (MeV^(1/2)) rather than a physical partial
+ * width/ANC, so the parameter transformations must not convert it.
+ */
+
+bool ALevel::GammaIsRWA(int channelNum) const {
+  return gamma_is_rwa_[channelNum - 1];
+}
+
+/*!
  * Returns true if the level is a final state for external capture, otherwise returns false.
  */
 
@@ -219,6 +229,7 @@ void ALevel::AddGamma(NucLine nucLine) {
     channelfixed_.push_back(true);
   else
     channelfixed_.push_back(false);
+  gamma_is_rwa_.push_back(nucLine.gammaIsRWA() == 1);
   shifts_.push_back(0.0);
   shift_derivs_.push_back(0.0);
   shift_derivs2_.push_back(0.0);
@@ -233,6 +244,7 @@ void ALevel::PadChannels(int n) {
     big_gammas_.push_back(0.0);
     external_gammas_.push_back(complex(0.0, 0.0));
     channelfixed_.push_back(true);
+    gamma_is_rwa_.push_back(false);  // a padded channel has a zero width: the flag is moot
     shifts_.push_back(0.0);
     shift_derivs_.push_back(0.0);
     shift_derivs2_.push_back(0.0);
@@ -243,6 +255,8 @@ void ALevel::SetGammaFromLine(int channelNum, NucLine nucLine) {
   this->PadChannels(channelNum);
   gammas_[channelNum - 1] = nucLine.gamma();
   channelfixed_[channelNum - 1] = (nucLine.channelFix() == 1);
+  // The THM field 33 (gammaIsRWA) goes with its width to the group channel.
+  gamma_is_rwa_[channelNum - 1] = (nucLine.gammaIsRWA() == 1);
 }
 
 /*!
@@ -258,6 +272,7 @@ void ALevel::AddGamma(double reducedWidth) {
   big_gammas_.push_back(0.0);
   external_gammas_.push_back(complex(0.0, 0.0));
   channelfixed_.push_back(false);
+  gamma_is_rwa_.push_back(false);
   shifts_.push_back(0.0);
   shift_derivs_.push_back(0.0);
   shift_derivs2_.push_back(0.0);

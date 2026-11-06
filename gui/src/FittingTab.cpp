@@ -15,6 +15,7 @@
 #include <QFileInfo>
 #include <QDir>
 #include <QRegExp>
+#include <QRegularExpression>
 #include <QShowEvent>
 #include <QVector>
 #include <cmath>
@@ -22,6 +23,9 @@
 #include <iostream>
 
 #include "FittingTab.h"
+#include <QSignalBlocker>
+#include <QSet>
+#include "RoundTripNumber.h"
 #include "TargetIntModel.h"
 #include "InfoDialog.h"
 #include "LevelsTab.h"
@@ -60,12 +64,12 @@ FittingTab::FittingTab(QWidget *parent) :
 
   normParamsTable = new QTableWidget;
   normParamsTable->setObjectName("normParamsTable");
-  setupParameterTable(normParamsTable, "Normalization Parameters");
+  setupParameterTable(normParamsTable, "Normalization Parameters", true);
   paramTabWidget->addTab(normParamsTable, "Normalization");
 
   shiftParamsTable = new QTableWidget;
   shiftParamsTable->setObjectName("shiftParamsTable");
-  setupParameterTable(shiftParamsTable, "Energy Shift Parameters");
+  setupParameterTable(shiftParamsTable, "Energy Shift Parameters", true);
   paramTabWidget->addTab(shiftParamsTable, "Energy Shifts");
   paramTabWidget->addTab(screeningParamsTable, "Screening");
   paramTabWidget->setTabVisible(paramTabWidget->indexOf(screeningParamsTable), false);
@@ -85,6 +89,10 @@ FittingTab::FittingTab(QWidget *parent) :
   setupParameterTable(thicknessParamsTable, "Sample Thickness Parameters");
   paramTabWidget->addTab(thicknessParamsTable, "Sample Thicknesses");
   paramTabWidget->setTabVisible(paramTabWidget->indexOf(thicknessParamsTable), false);
+
+  // THM coherent backgrounds (cbackground=): a tab only when there are some.
+  cbkgParamsTable = new QTableWidget;
+  setupParameterTable(cbkgParamsTable, "THM Coherent Background");
 
   mainLayout->addWidget(paramTabWidget);
 
@@ -110,11 +118,14 @@ FittingTab::FittingTab(QWidget *parent) :
   setLayout(mainLayout);
 }
 
-void FittingTab::setupParameterTable(QTableWidget *table, const QString &title) {
+void FittingTab::setupParameterTable(QTableWidget *table, const QString &title, bool priorCentreColumn) {
   // Set up columns (removed Fixed column - show only unfixed parameters)
   QStringList headers;
   headers << "Parameter" << "Value" << "Lower Limit" << "Upper Limit"
           << "Error" << "Fit Error" << "Use as Nuisance";
+  // Normalizations and energy shifts: the centre of the prior, when it is not
+  // the Value (an explicit prior_centre row; empty = the Value, as classic).
+  if (priorCentreColumn) headers << "Prior Centre";
 
   table->setColumnCount(headers.size());
   table->setHorizontalHeaderLabels(headers);
@@ -128,6 +139,22 @@ void FittingTab::setupParameterTable(QTableWidget *table, const QString &title) 
   table->setColumnWidth(4, 100);  // Error
   table->setColumnWidth(5, 100);  // Fit Error
   table->setColumnWidth(6, 120);  // Nuisance checkbox
+  if (priorCentreColumn) table->setColumnWidth(7, 100);  // Prior centre
+  // At least as wide as the header and a six-digit number in this font, so
+  // that neither is cut (large fonts, HiDPI).
+  const QFontMetrics fm(table->font());
+  for (int c = 0; c < headers.size(); c++) {
+    int need = fm.horizontalAdvance(headers[c]) + 24;
+    if (c >= 1 && c != 6) need = std::max(need, fm.horizontalAdvance("-0.000123457") + 16);
+    table->setColumnWidth(c, std::max(table->columnWidth(c), need));
+  }
+  if (priorCentreColumn) {
+    table->horizontalHeaderItem(7)->setToolTip(
+        "Centre of the prior on this parameter. Empty: the value in the Segments tab "
+        "is both the start value and the centre (classic). A number keeps the prior "
+        "there whatever value the fit starts from (e.g. 1 for a normalization whose "
+        "fitted value is stored in the Segments tab).");
+  }
 
   table->setAlternatingRowColors(true);
   table->setSelectionBehavior(QAbstractItemView::SelectRows);
@@ -138,6 +165,11 @@ void FittingTab::setupParameterTable(QTableWidget *table, const QString &title) 
 }
 
 void FittingTab::addParameterRow(QTableWidget *table, const FittingParameter &param) {
+  // Filling a row is not an edit.  Unblocked, each setItem emits itemChanged,
+  // and parameterItemChanged read the six-digit display text back as the new
+  // value (or limit, or error) and pushed it into the levels model: merely
+  // opening a project rounded every free level parameter.
+  const QSignalBlocker blocker(table);
   int row = table->rowCount();
   table->insertRow(row);
 
@@ -162,6 +194,11 @@ void FittingTab::addParameterRow(QTableWidget *table, const FittingParameter &pa
   QTableWidgetItem *fitErrorItem = new QTableWidgetItem(QString::number(param.fitError, 'g', 6));
   fitErrorItem->setFlags(fitErrorItem->flags() & ~Qt::ItemIsEditable);
   table->setItem(row, 5, fitErrorItem);
+
+  if (table->columnCount() > 7) {
+    QMap<QString, double>::const_iterator c = priorCentres_.constFind(param.name);
+    table->setItem(row, 7, new QTableWidgetItem(c == priorCentres_.constEnd() ? QString() : roundTripNumber(*c)));
+  }
 
   // Nuisance checkbox
   QTableWidgetItem *nuisanceItem = new QTableWidgetItem();
@@ -199,6 +236,7 @@ void FittingTab::updateParameterTables() {
   thicknessParamsTable->setRowCount(0);
   normParamsTable->setRowCount(0);
   shiftParamsTable->setRowCount(0);
+  cbkgParamsTable->setRowCount(0);
 
   // Populate tables with fitting parameters (only non-fixed ones)
   for (const FittingParameter &param : fittingParameters) {
@@ -216,6 +254,8 @@ void FittingTab::updateParameterTables() {
       targetTable = screeningParamsTable;
     } else if (param.category == "density") {
       targetTable = densityParamsTable;
+    } else if (param.category == "cbkg") {
+      targetTable = cbkgParamsTable;
     } else if (param.category == "doppler") {
       targetTable = dopplerParamsTable;
     } else if (param.category == "thickness") {
@@ -226,6 +266,7 @@ void FittingTab::updateParameterTables() {
       addParameterRow(targetTable, param);
     }
   }
+  showCoherentTab();
   paramTabWidget->setTabVisible(paramTabWidget->indexOf(abundanceParamsTable), abundanceParamsTable->rowCount() > 0);
   paramTabWidget->setTabVisible(paramTabWidget->indexOf(screeningParamsTable), screeningParamsTable->rowCount() > 0);
   paramTabWidget->setTabVisible(paramTabWidget->indexOf(densityParamsTable), densityParamsTable->rowCount() > 0);
@@ -236,6 +277,7 @@ void FittingTab::updateParameterTables() {
 void FittingTab::reset() {
   fittingParameters.clear();
   savedParameterSettings.clear();
+  priorCentres_.clear();
   updateParameterTables();
 }
 
@@ -293,6 +335,47 @@ void FittingTab::setTabReferences(LevelsTab *levelsTab, SegmentsTab *segmentsTab
   populateFromCurrentGUIState();
 }
 
+// The channels of one level, as indices into the channels model, in the order
+// they are written to (and read back from) the file.  AZURE2 numbers a level's
+// widths by this position: width_N_k is the k-th of them.
+static QList<int> channelsOfLevel(const QList<ChannelsData> &channels, int levelIndex) {
+  QList<int> result;
+  for (int ch = 0; ch < channels.size(); ch++)
+    if (channels.at(ch).levelIndex == levelIndex) result.append(ch);
+  return result;
+}
+
+// The levels AZURE2 builds from a file whose <levels> block lists the given
+// model levels in the given order, in the order it numbers them ("Level N",
+// energy_N): LevelsTab::engineNumbering of that order, the numbered (active,
+// with channels) levels sorted by their number.
+QList<int> FittingTab::engineLevelOrder(const QList<int> &fileOrder) {
+  QList<int> rows;
+  if (!levelsTab_) return rows;
+  const LevelsTab::EngineNumbering num = levelsTab_->engineNumbering(fileOrder);
+  for (int r = 0; r < num.level.size(); r++)
+    if (num.level[r] > 0) rows.append(r);
+  std::sort(rows.begin(), rows.end(), [&](int x, int y) { return num.level[x] < num.level[y]; });
+  return rows;
+}
+
+FittingParameter FittingTab::segmentParameter(int i, const SegmentsDataData &segment, bool norm) {
+  FittingParameter param;
+  // Use params.sav naming convention: segment_x_norm, segment_x_energy_shift
+  param.name = QString(norm ? "segment_%1_norm" : "segment_%1_energy_shift").arg(i + 1);
+  param.value = norm ? segment.dataNorm : segment.energyShift;
+  param.lowerLimit = 0;
+  param.upperLimit = 0;
+  param.error = norm ? segment.dataNormError : segment.energyShiftError;
+  param.fitError = 0.0;  // No fit error initially
+  // Active only when the parameter varies
+  param.useAsNuisance = norm ? (segment.varyNorm == 1) : (segment.varyEnergyShift == 1);
+  param.category = norm ? "norm" : "shift";
+  param.levelIndex = -1;
+  param.channelIndex = i;  // Store segment index for reverse lookup
+  return param;
+}
+
 void FittingTab::populateFromCurrentGUIState() {
   if (!levelsTab_ || !segmentsTab_) return;
 
@@ -347,12 +430,16 @@ void FittingTab::populateFromCurrentGUIState() {
 
         if (channel.isFixed == 0 && channel.reducedWidth != 0.0) {
           FittingParameter widthParam;
-          widthParam.name = QString("Level %1 Channel %2 Width (eV)")
+          // Keep "Width" in the name (parameter matching keys on it);
+          // the unit reflects the channel's input convention.
+          widthParam.name = QString("Level %1 Channel %2 Width (%3)")
                                 .arg(num.level[levelIndex])
-                                .arg(num.channel[channelIndex]);
+                                .arg(num.channel[channelIndex])
+                                .arg(channel.gammaIsRWA == 1 ? "MeV^(1/2)" : "eV");
 
-          // LevelsTab already stores physical widths, use them directly
-          widthParam.value = channel.reducedWidth;  // This is actually physical width in the GUI
+          // LevelsTab stores the value in the channel's input convention:
+          // physical width/ANC, or the reduced width amplitude if flagged
+          widthParam.value = channel.reducedWidth;
           widthParam.lowerLimit = 0;
           widthParam.upperLimit = 0;                      // Default upper limit
           widthParam.error = channel.reducedWidth * 0.1;  // Default 10% error
@@ -405,23 +492,8 @@ void FittingTab::populateFromCurrentGUIState() {
       const SegmentsDataData &segment = segments[i];
 
       // Only process active segments
-      if (segment.isActive == 1) {
-        // Always show norm parameter for active segments, but only add to Minuit if varyNorm=1 (like EData)
-        FittingParameter normParam;
-        // Use params.sav naming convention: segment_x_norm
-        normParam.name = QString("segment_%1_norm").arg(i + 1);
-        normParam.value = segment.dataNorm;
-        normParam.lowerLimit = 0;
-        normParam.upperLimit = 0;
-        normParam.error = segment.dataNormError;
-        normParam.fitError = 0.0;  // No fit error initially
-        normParam.useAsNuisance = (segment.varyNorm == 1);
-        normParam.category = "norm";
-        normParam.levelIndex = -1;
-        normParam.channelIndex = i;  // Store segment index for reverse lookup
-
-        fittingParameters.append(normParam);
-      }
+      // Always show norm parameter for active segments, but only add to Minuit if varyNorm=1 (like EData)
+      if (segment.isActive == 1) fittingParameters.append(segmentParameter(i, segment, true));
     }
 
     // Second pass: Add energy shift parameters (only for ACTIVE segments, like EData::FillMnParams)
@@ -429,23 +501,8 @@ void FittingTab::populateFromCurrentGUIState() {
       const SegmentsDataData &segment = segments[i];
 
       // Only process active segments
-      if (segment.isActive == 1) {
-        // Always add energy shift parameter to GUI and Minuit for active segments (like EData), but useAsNuisance depends on varyEnergyShift
-        FittingParameter shiftParam;
-        // Use params.sav naming convention: segment_x_energy_shift
-        shiftParam.name = QString("segment_%1_energy_shift").arg(i + 1);
-        shiftParam.value = segment.energyShift;
-        shiftParam.lowerLimit = 0;
-        shiftParam.upperLimit = 0;
-        shiftParam.error = segment.energyShiftError;
-        shiftParam.fitError = 0.0;                                  // No fit error initially
-        shiftParam.useAsNuisance = (segment.varyEnergyShift == 1);  // Active only when parameter varies
-        shiftParam.category = "shift";
-        shiftParam.levelIndex = -1;
-        shiftParam.channelIndex = i;  // Store segment index for reverse lookup
-
-        fittingParameters.append(shiftParam);
-      }
+      // Always add energy shift parameter to GUI and Minuit for active segments (like EData), but useAsNuisance depends on varyEnergyShift
+      if (segment.isActive == 1) fittingParameters.append(segmentParameter(i, segment, false));
     }
   }
   appendScreeningParameters();
@@ -453,6 +510,7 @@ void FittingTab::populateFromCurrentGUIState() {
   appendDopplerParameters();
   appendThicknessParameters();
 
+  appendCoherentParameters();
   assignMinuitIndices();
 
   // Apply parameter settings from saved configuration (limits, errors, etc.)
@@ -519,6 +577,8 @@ void FittingTab::assignMinuitIndices() {
                             segments[param.channelIndex].isActive == 1);
       counted = segmentActive &&
           (param.category == "shift" || segments[param.channelIndex].varyNorm == 1);
+    } else if (param.category == "cbkg") {
+      counted = true;  // only the free ones are listed (appendCoherentParameters)
     } else if (param.category == "thickness") {
       // segment_<key>_thickness: emitted for every active line with the fit form, fixed or not, and its "segment"
       // name makes the engine count it either way (ParameterLimitsManager::BuildIndexMap), as an energy shift.
@@ -1086,8 +1146,16 @@ double FittingTab::transformRWAParameterToPhysical(const QString &paramName, dou
 void FittingTab::applyParameterSettings() {
   // Apply saved parameter settings (limits, errors, etc.) to current parameters
   for (int i = 0; i < fittingParameters.size(); i++) {
+    const FittingParameter &current = fittingParameters[i];
     for (const FittingParameter &saved : savedParameterSettings) {
-      if (fittingParameters[i].name == saved.name) {
+      // Level entries were tied to a level and channel of the model when the
+      // file was read (see readParameterSettings); their names are numbers
+      // that depend on the order the levels happen to be in.
+      bool same = (current.category == "level" || saved.category == "level")
+                      ? (current.category == saved.category && current.levelIndex == saved.levelIndex &&
+                         current.channelIndex == saved.channelIndex)
+                      : (current.name == saved.name);
+      if (same) {
         // Apply saved settings but keep current value from models
         fittingParameters[i].lowerLimit = saved.lowerLimit;
         fittingParameters[i].upperLimit = saved.upperLimit;
@@ -1138,7 +1206,13 @@ void FittingTab::parameterItemChanged(QTableWidgetItem *item) {
     fittingParameters[paramIndex].value = value;
 
     // Update the corresponding tab with the new value
-    updateParameterInOtherTabs(paramName, fittingParameters[paramIndex]);
+    if (fittingParameters[paramIndex].category == "cbkg") {
+      QMap<QString, double> one;
+      one[paramName] = value;
+      applyCoherentValues(one);  // the cbackground= of its experiment
+    } else {
+      updateParameterInOtherTabs(paramName, fittingParameters[paramIndex]);
+    }
 
   } else if (col >= 2 && col <= 4) {  // Lower limit, upper limit, or error changed
     bool ok;
@@ -1173,6 +1247,25 @@ void FittingTab::parameterItemChanged(QTableWidgetItem *item) {
       writeThickness(p);
     }
 
+  } else if (col == 7) {  // Prior centre (norms and shifts): empty = the Value
+    const QString text = item->text().trimmed();
+    if (text.isEmpty()) {
+      priorCentres_.remove(paramName);
+      return;
+    }
+    bool ok;
+    const double centre = text.toDouble(&ok);
+    const bool norm = fittingParameters[paramIndex].category == "norm";
+    if (!ok || !std::isfinite(centre) || (norm && centre <= 0.0)) {
+      QMessageBox::warning(this, "Invalid Input",
+                           norm ? "Enter a positive number, or leave the cell empty to centre the prior on the Value."
+                                : "Enter a number, or leave the cell empty to centre the prior on the Value.");
+      const QSignalBlocker blocker(table);
+      QMap<QString, double>::const_iterator c = priorCentres_.constFind(paramName);
+      item->setText(c == priorCentres_.constEnd() ? QString() : roundTripNumber(*c));
+      return;
+    }
+    priorCentres_[paramName] = centre;
   } else if (col == 6) {  // Nuisance checkbox
     fittingParameters[paramIndex].useAsNuisance = (item->checkState() == Qt::Checked);
     // Likewise, the user changed the fit freedom, so write only the vary
@@ -1246,6 +1339,18 @@ void FittingTab::loadSettings() {
       }
       file.close();
 
+      // THM coherent backgrounds: their values go into the cbackground= of
+      // their experiments (the <thm> block), not into a tab's model.
+      {
+        QMap<QString, double> coherent;
+        for (const QString &key : savParams.keys())
+          if (key.startsWith("cbkg_")) {
+            coherent[key] = savParams[key].first;
+            savParams.remove(key);
+          }
+        if (!coherent.isEmpty()) applyCoherentValues(coherent);
+      }
+
       // Now populate ALL parameters from the current GUI state (including fixed/non-varying)
       // This is needed for proper RWA conversion of all level parameters
       if (levelsTab_ && segmentsTab_) {
@@ -1284,19 +1389,23 @@ void FittingTab::loadSettings() {
             fittingParameters.append(energyParam);
 
             // Add ALL width parameters for this level (including those with zero width or fixed)
-            for (int channelIndex = 0; channelIndex < channels.size(); channelIndex++) {
+            const QList<int> levelChannels = channelsOfLevel(channels, levelIndex);
+            for (int k = 0; k < levelChannels.size(); k++) {
+              const int channelIndex = levelChannels.at(k);
               const ChannelsData &channel = channels[channelIndex];
 
               // Add ALL widths that belong to this level (including fixed and zero-width)
               if (channel.levelIndex == levelIndex) {
                 FittingParameter widthParam;
                 widthParam.name = num.level[levelIndex] > 0
-                                      ? QString("Level %1 Channel %2 Width (eV)")
+                                      ? QString("Level %1 Channel %2 Width (%3)")
                                             .arg(num.level[levelIndex])
                                             .arg(num.channel[channelIndex])
-                                      : QString("Inactive level (row %1) Channel %2 Width (eV)")
+                                            .arg(channel.gammaIsRWA == 1 ? "MeV^(1/2)" : "eV")
+                                      : QString("Inactive level (row %1) Channel %2 Width (%3)")
                                             .arg(levelIndex + 1)
-                                            .arg(channelIndex + 1);
+                                            .arg(channelIndex + 1)
+                                            .arg(channel.gammaIsRWA == 1 ? "MeV^(1/2)" : "eV");
                 widthParam.engineLevel = num.level[levelIndex];
                 widthParam.engineChannel = num.channel[channelIndex];
 
@@ -1390,6 +1499,7 @@ void FittingTab::loadSettings() {
         appendDensityParameters();
         appendDopplerParameters();
         appendThicknessParameters();
+        appendCoherentParameters();  // with the values just loaded
         assignMinuitIndices();
       }
 
@@ -2292,16 +2402,33 @@ bool FittingTab::writeParameterSettings(QTextStream &outStream) {
 
   for (const FittingParameter &param : fittingParameters) {
     outStream << param.name << " "
-              << param.value << " "
-              << param.lowerLimit << " "
-              << param.upperLimit << " "
-              << param.error << " "
-              << param.fitError << " "
+              << roundTripNumber(param.value) << " "
+              << roundTripNumber(param.lowerLimit) << " "
+              << roundTripNumber(param.upperLimit) << " "
+              << roundTripNumber(param.error) << " "
+              << roundTripNumber(param.fitError) << " "
               << (param.useAsNuisance ? 1 : 0) << " "
               << param.category << " "
               << param.minuitIndex << "\n";
   }
+  const QStringList priorRows = priorCentreRows();
+  if (!priorRows.isEmpty()) {
+    outStream << "# Prior centres: segment_N_norm|segment_N_energy_shift prior_centre value\n";
+    for (const QString &row : priorRows) outStream << row << "\n";
+  }
   return true;
+}
+
+QStringList FittingTab::priorCentreRows() const {
+  const QRegularExpression entry("^segment_(\\d+)_(norm|energy_shift)$");
+  QMap<QPair<int, int>, QString> ordered;  // (segment, 0 norm / 1 shift) -> row
+  for (QMap<QString, double>::const_iterator c = priorCentres_.constBegin(); c != priorCentres_.constEnd(); ++c) {
+    const QRegularExpressionMatch m = entry.match(c.key());
+    if (!m.hasMatch()) continue;
+    ordered[qMakePair(m.captured(1).toInt(), m.captured(2) == "norm" ? 0 : 1)] =
+        c.key() + " prior_centre " + roundTripNumber(c.value());
+  }
+  return ordered.values();
 }
 
 bool FittingTab::readParameterSettings(QTextStream &inStream) {
@@ -2320,6 +2447,8 @@ bool FittingTab::readParameterSettings(QTextStream &inStream) {
   QRegExp segmentEntry("^segment_(\\d+)_(norm|energy_shift)$");
 
   bool marked = false;  // "# level numbering: engine", written by this GUI since 2026-10-21
+  priorCentres_.clear();
+
   QString line;
   while (!inStream.atEnd()) {
     line = inStream.readLine().trimmed();
@@ -2328,7 +2457,15 @@ bool FittingTab::readParameterSettings(QTextStream &inStream) {
     if (line.isEmpty() || line.startsWith("#")) continue;  // Skip empty lines and comments
 
     QStringList parts = line.split(" ", Qt::SkipEmptyParts);
-    if (parts.size() == 9) {
+    if (parts.size() == 3 && parts[1] == "prior_centre") {
+      // An explicit prior centre (EData::ReadPriorCentres); a stale or
+      // malformed one is dropped, as the entries below.
+      bool ok;
+      const double centre = parts[2].toDouble(&ok);
+      if (!ok || segmentEntry.indexIn(parts[0]) == -1) continue;
+      if (numSegments > 0 && segmentEntry.cap(1).toInt() > numSegments) continue;
+      priorCentres_[parts[0]] = centre;
+    } else if (parts.size() == 9) {
       FittingParameter param;
       param.name = parts[0];
       param.value = parts[1].toDouble();  // This will be overridden by current model values
@@ -2339,6 +2476,8 @@ bool FittingTab::readParameterSettings(QTextStream &inStream) {
       param.useAsNuisance = (parts[6].toInt() == 1);
       param.category = parts[7];
       param.minuitIndex = parts[8].toInt();
+      param.levelIndex = -1;
+      param.channelIndex = -1;
       if (numSegments > 0 && segmentEntry.indexIn(param.name) != -1 &&
           segmentEntry.cap(1).toInt() > numSegments) continue;
       savedParameterSettings.append(param);
@@ -2354,9 +2493,7 @@ bool FittingTab::readParameterSettings(QTextStream &inStream) {
       param.useAsNuisance = (parts[9].toInt() == 1);
       param.category = parts[10];
       param.minuitIndex = parts[11].toInt();
-
-      // Set defaults for level-specific parameters
-      param.levelIndex = parts[1].toInt();
+      param.levelIndex = -1;  // translateLevelSettings ties it to a level
       param.channelIndex = -1;
 
       savedParameterSettings.append(param);
@@ -2372,10 +2509,8 @@ bool FittingTab::readParameterSettings(QTextStream &inStream) {
       param.useAsNuisance = (parts[11].toInt() == 1);
       param.category = parts[12];
       param.minuitIndex = parts[13].toInt();
-
-      // Set defaults for level-specific parameters
-      param.levelIndex = parts[1].toInt();
-      param.channelIndex = parts[3].toInt();
+      param.levelIndex = -1;  // translateLevelSettings ties it to a level and channel
+      param.channelIndex = -1;
 
       savedParameterSettings.append(param);
     }
@@ -2408,7 +2543,8 @@ void FittingTab::translateLevelSettings(bool marked) {
   const LevelsTab::EngineNumbering asRead = levelsTab_->engineNumbering(fileOrder);
   const LevelsTab::EngineNumbering written = levelsTab_->engineNumbering(levelsTab_->writtenLevelOrder());
   QRegExp energyRx("^Level (\\d+) Energy \\(MeV\\)$");
-  QRegExp widthRx("^Level (\\d+) Channel (\\d+) Width \\(eV\\)$");
+  // The unit is the channel's input convention: eV, or MeV^(1/2) for a reduced-width amplitude (gammaIsRWA).
+  QRegExp widthRx("^Level (\\d+) Channel (\\d+) Width \\((eV|MeV\\^\\(1/2\\))\\)$");
 
   // The level row and channel row an entry names under either reading (-1: none).
   auto locate = [&](const FittingParameter &param, bool engine, int &row, int &chRow) -> bool {
@@ -2462,7 +2598,10 @@ void FittingTab::translateLevelSettings(bool marked) {
     if (row < 0 || written.level[row] == 0 || (isWidth && chRow < 0)) continue;
     param.levelIndex = row;
     param.channelIndex = isWidth ? chRow : -1;
-    param.name = isWidth ? QString("Level %1 Channel %2 Width (eV)").arg(written.level[row]).arg(written.channel[chRow])
+    param.name = isWidth ? QString("Level %1 Channel %2 Width (%3)")
+                               .arg(written.level[row])
+                               .arg(written.channel[chRow])
+                               .arg(channels[chRow].gammaIsRWA == 1 ? "MeV^(1/2)" : "eV")
                          : QString("Level %1 Energy (MeV)").arg(written.level[row]);
     kept.append(param);
   }
@@ -2650,3 +2789,70 @@ const std::vector<QString> FittingTab::infoText = {
             "These are typically varied during fitting to account for experimental uncertainties."),
     QString("Energy shift parameters correct for energy calibration offsets in data segments. "
             "These parameters shift the energy scale of experimental data points.")};
+
+void FittingTab::followSegments(const QVector<int> &newNumber) {
+  const QRegularExpression entry("^segment_(\\d+)_(norm|energy_shift)$");
+  // The new name of a segment-keyed name, "" if its segment is gone; other names are kept.
+  auto renamed = [&](const QString &name) {
+    const QRegularExpressionMatch m = entry.match(name);
+    if (!m.hasMatch()) return name;
+    const int k = m.captured(1).toInt();
+    if (k < 1 || k > newNumber.size()) return name;
+    return newNumber[k - 1] ? QString("segment_%1_%2").arg(newNumber[k - 1]).arg(m.captured(2)) : QString();
+  };
+  const QSet<QString> coherent = coherentParameterNames();  // the cbkg_* names that still exist
+  // In the order populateFromCurrentGUIState builds: levels, norms and
+  // shifts by segment, then the THM background.
+  QList<FittingParameter> levels, norms, shifts, rest;
+  for (FittingParameter p : fittingParameters) {
+    if (p.category == "norm" || p.category == "shift") {
+      p.name = renamed(p.name);
+      if (p.name.isEmpty()) continue;
+      if (p.channelIndex >= 0 && p.channelIndex < newNumber.size()) p.channelIndex = newNumber[p.channelIndex] - 1;
+      (p.category == "norm" ? norms : shifts) << p;
+    } else if (p.category == "cbkg") {
+      if (coherent.contains(p.name)) rest << p;
+    } else if (p.category == "level") {
+      levels << p;
+    } else {
+      rest << p;
+    }
+  }
+  // A line added at the end (newNumber covers the lines before it) gets its
+  // parameters as populateFromCurrentGUIState gives them, with any saved settings.
+  QList<SegmentsDataData> segments;
+  if (segmentsTab_ && segmentsTab_->getSegmentsDataModel()) segments = segmentsTab_->getSegmentsDataModel()->getLines();
+  for (int i = newNumber.size(); i < segments.size(); i++) {
+    if (segments[i].isActive != 1) continue;
+    for (int norm = 1; norm >= 0; norm--) {
+      FittingParameter p = segmentParameter(i, segments[i], norm);
+      for (const FittingParameter &saved : savedParameterSettings)
+        if (saved.name == p.name) {
+          p.lowerLimit = saved.lowerLimit;
+          p.upperLimit = saved.upperLimit;
+          p.error = saved.error;
+          p.useAsNuisance = saved.useAsNuisance;
+          break;
+        }
+      (norm ? norms : shifts) << p;
+    }
+  }
+  auto bySegment = [](const FittingParameter &a, const FittingParameter &b) { return a.channelIndex < b.channelIndex; };
+  std::stable_sort(norms.begin(), norms.end(), bySegment);
+  std::stable_sort(shifts.begin(), shifts.end(), bySegment);
+  fittingParameters = levels + norms + shifts + rest;
+
+  QList<FittingParameter> saved;
+  for (FittingParameter p : savedParameterSettings) {
+    p.name = renamed(p.name);
+    if (!p.name.isEmpty()) saved << p;
+  }
+  savedParameterSettings = saved;
+  QMap<QString, double> centres;
+  for (auto c = priorCentres_.constBegin(); c != priorCentres_.constEnd(); ++c)
+    if (!renamed(c.key()).isEmpty()) centres[renamed(c.key())] = c.value();
+  priorCentres_ = centres;
+
+  assignMinuitIndices();
+  updateParameterTables();
+}

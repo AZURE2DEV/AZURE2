@@ -1,0 +1,30 @@
+# E_lab(MeV,n+17O) angle HOES(arb) err ; Guardo et al. PRC 95 (2017) 025807: 17O(n,a)14C from the quasi-free 2H(17O,a14C)p,
+# 17O at 41 MeV (LNS) and 43.5 MeV (NSL) on CD2; Trojan horse d = n + p, spectator p, B = 2.2246 MeV, |p_s| <= 40 MeV/c.
+# Angle-integrated HOES cross section in arbitrary units, not penetrability-corrected: the points run below the n threshold and the
+# f-wave 5- (8.125 MeV) peak is comparable with the p-wave 3-. Sergi et al., Front. Astron. Space Sci. 7 (2020) 60, Fig. 11, shows the
+# experiment as d2sigma/dE_cm dOmega_n (arb. units) in 20 keV c.m. bins. Not in EXFOR (23332 holds only Table II).
+# Points as in AZURE2 tests/17O; their energies are read as neutron-lab (peak positions agree with Fig. 11 that way). The fitted THM
+# energy shift -0.6495 keV (c.m.) is applied: E_here = lab(E_cm - shift).
+-0.053311902 -0 17.02619 5.30987
+-0.038487902 -0 36.54033 7.75471
+-0.023664902 -0 89.6338 10.23945
+-0.00884090196 -0 69.26721 13.44522
+0.00598209804 0 78.30222 11.26844
+0.020806098 0 56.62975 11.81433
+0.050453098 0 51.04929 9.86559
+0.065276098 0 69.67924 11.97107
+0.080100098 0 95.58794 13.95456
+0.094923098 0 78.07651 12.2538
+0.124570098 0 29.38554 9.88792
+0.139394098 0 47.75207 9.34123
+0.154217098 0 74.79974 11.47433
+0.169041098 0 124.1919 15.02921
+0.183864098 0 143.37 16.39167
+0.198688098 0 113.5347 15.00947
+0.213512098 0 73.29141 11.76018
+0.228335098 0 70.35027 14.81247
+0.243159098 0 82.91434 13.1144
+0.257982098 0 75.58429 12.33013
+0.272806098 0 40.34531 8.79579
+0.287629098 0 32.13028 8.296
+0.302453098 0 17.84674 5.94891

@@ -24,6 +24,7 @@ PPair::PPair(NucLine nucLine) {
   pair_heavy_ex_e_ = nucLine.e2();
   pair_sep_e_ = nucLine.sepE();
   pair_ch_rad_ = nucLine.chRad();
+  binding_energy_ = nucLine.bindingE();
   pair_ptype_ = nucLine.pType();
   pair_key_ = nucLine.ir();
   red_mass_ = nucLine.m1() * nucLine.m2() / (nucLine.m1() + nucLine.m2());
@@ -250,6 +251,24 @@ void PPair::SetChRad(double radius) {
 }
 
 /*!
+ * Returns the THM binding energy (MeV) of the transferred particle in the
+ * Trojan-Horse nucleus for the particle pair.
+ */
+
+double PPair::GetBindingEnergy() const {
+  return binding_energy_;
+}
+
+/*!
+ * Sets the THM binding energy (MeV) of the transferred particle in the
+ * Trojan-Horse nucleus for the particle pair.
+ */
+
+void PPair::SetBindingEnergy(double bindingEnergy) {
+  binding_energy_ = bindingEnergy;
+}
+
+/*!
  * Returns the reduced mass of the particle pair.
  */
 
@@ -275,6 +294,10 @@ int PPair::GetIdenticalSign() const {
 
 bool PPair::HasSpinDependentExchange() const {
   return is_identical_ && pair_j_[0] > 1.0e-6;
+}
+
+double PPair::GetEntranceSymmetryFactor() const {
+  return is_identical_ ? 2.0 : 1.0;
 }
 
 /*!

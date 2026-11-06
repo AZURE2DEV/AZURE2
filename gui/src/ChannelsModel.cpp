@@ -61,6 +61,8 @@ QVariant ChannelsModel::data(const QModelIndex &index, int role) const {
       return channel.radType;
     else if (index.column() == 6)
       return channel.reducedWidth;
+    else if (index.column() == 7)
+      return channel.gammaIsRWA;
   } else if (role == Qt::EditRole) {
     ChannelsData channel = channelsList.at(index.row());
     if (index.column() == 1)
@@ -75,6 +77,8 @@ QVariant ChannelsModel::data(const QModelIndex &index, int role) const {
       return channel.radType;
     else if (index.column() == 6)
       return channel.reducedWidth;
+    else if (index.column() == 7)
+      return channel.gammaIsRWA;
   } else if (role == Qt::TextAlignmentRole)
     return Qt::AlignCenter;
   else if (role == Qt::CheckStateRole && index.column() == 0) {
@@ -105,6 +109,8 @@ QVariant ChannelsModel::headerData(int section, Qt::Orientation orientation, int
         return tr("radiation type");
       case 6:
         return tr("reduced width");
+      case 7:
+        return tr("RWA input?");
       default:
         return QVariant();
     }
@@ -133,6 +139,8 @@ bool ChannelsModel::setData(const QModelIndex &index, const QVariant &value, int
         tempData.radType = value.toChar();
       else if (index.column() == 6)
         tempData.reducedWidth = value.toDouble();
+      else if (index.column() == 7)
+        tempData.gammaIsRWA = value.toInt();
       else
         return false;
 
@@ -163,7 +171,7 @@ bool ChannelsModel::insertRows(int position, int rows, const QModelIndex &index)
   if (rows > 0) {
     beginInsertRows(QModelIndex(), position, position + rows - 1);
     for (int row = 0; row < rows; row++) {
-      ChannelsData tempData = {0, -1, -1, 0.0, 0, 'P', 0.0};
+      ChannelsData tempData = {0, -1, -1, 0.0, 0, 'P', 0.0, 0};
       channelsList.insert(position, tempData);
     }
     endInsertRows();

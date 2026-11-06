@@ -1,0 +1,30 @@
+<config>
+true                                                                                                #Perform A-Matrix Calculation
+output/                                                                                             #Full Path to Output Directory
+checks/                                                                                             #Full Path to Checks Directory
+none                                                                                                #Compond Nucleus Check
+screen                                                                                              #Boundary Condition Check
+none                                                                                                #Data Check
+none                                                                                                #Lo-Matrix and Penetrability Check
+none                                                                                                #Legendre Polynomial Check
+none                                                                                                #Coulomb Amplitudes Check
+none                                                                                                #Reaction Pathway Check
+none                                                                                                #Angular Distributions Check
+</config>
+<levels>
+0.5 1 8.602600 1 1 1 1 0 1 1 1 -0.4070000 0.5 1 0 1 0 1.00727647 17.99477097 1 8 7.993600 7.993600 0 0 0.0 0 5.1 0 0 0 2.224566 1
+0.5 1 8.602600 1 1 2 1 2 1 1 1 0.2120000 0 1 0.5 -1 0 4.00150618 14.99626884 2 7 7.993600 4.013799 0 0 0.0 0 5.7 0 0 0 0 1
+
+0.5 1 8.805800 1 1 1 1 0 2 1 1 0.4400352 0.5 1 0 1 0 1.00727647 17.99477097 1 8 7.993600 7.993600 0 0 0.0 0 5.1 0 0 0 2.224566 1
+0.5 1 8.805800 1 1 2 1 2 2 1 1 0.0966360 0 1 0.5 -1 0 4.00150618 14.99626884 2 7 7.993600 4.013799 0 0 0.0 0 5.7 0 0 0 0 1
+
+</levels>
+<segmentsData>
+1  1  2  0.5325  0.9460  0  180  10  1.0  1  0  0  0  0  data/lc723_thm_points.dat  0  0
+1  1  2  0.5323  0.9461  0  180  10  1.0  1  0  0  0  0  data/lc723_band_mid.dat  0  0
+</segmentsData>
+<segmentsTest>
+</segmentsTest>
+<targetInt>
+1              "1,2"          50             1              0.017952          0              0               "" 0               0              0               0               "" 0               0 0.04 5 50
+</targetInt>
