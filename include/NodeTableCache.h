@@ -28,6 +28,18 @@
  * polynomials depend on the segment's target effect (Q coefficients).  Holds
  * the tables weakly: it keeps nothing alive, and an entry whose tables no copy
  * uses any more is a miss and is swept out.  Sharded, one mutex per shard.
+ *
+ * A published table must never be written again, by anyone.  Find() takes a
+ * new strong reference (weak_ptr::lock) from another thread at any moment, so
+ * the publishing point's copy-on-write test (use_count() == 1, EPoint.cpp
+ * SoleOwner) may be stale: a write in place would race with that reader for
+ * real, not only in the memory model.  Today this holds because only sub-points
+ * of segments without an energy shift are published, after their tables are
+ * complete (CalcEDependentValues, ShrinkToFit included), and those sub-points
+ * are never re-energised.  A change that refills such a sub-point (a shift
+ * switched on mid-fit, target windows recomputed in place) must give it a fresh
+ * table unconditionally: MutableEDep and ClearEDependentRows decide by
+ * use_count() and are not enough here.
  */
 class NodeTableCache {
  public:
