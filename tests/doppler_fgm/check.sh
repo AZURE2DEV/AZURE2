@@ -35,6 +35,9 @@
 #   [REF_AZURE2=path/to/reference/AZURE2] ./tests/doppler_fgm/check.sh path/to/AZURE2
 
 set -uo pipefail
+# Byte-identical files without cmp (not in every MSYS2 image: the Windows runner has none); \r stripped so a
+# CRLF-writing Windows build compares like the others.
+same_file() { [ -f "$2" ] && [ "$(tr -d '\r' < "$1")" = "$(tr -d '\r' < "$2")" ]; }
 export LC_ALL=C
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -211,7 +214,7 @@ if [ -n "${REF_AZURE2:-}" ]; then
   same=0; diff=0
   for m in dop dopg dopT dopgT; do
     for f in "$WORK/ref_$m"/output/AZUREOut_*.out "$WORK/ref_$m/output/chiSquared.out"; do
-      if cmp -s "$f" "$WORK/$m/output/$(basename "$f")"; then same=$((same + 1)); else diff=$((diff + 1)); fi
+      if same_file "$f" "$WORK/$m/output/$(basename "$f")"; then same=$((same + 1)); else diff=$((diff + 1)); fi
     done
   done
   if [ "$diff" -eq 0 ] && [ "$same" -ge 12 ]; then ok "(j) plain doppler T: $same output files byte-identical to $REF_AZURE2"

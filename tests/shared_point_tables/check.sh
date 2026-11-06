@@ -21,6 +21,9 @@
 #   ./tests/shared_point_tables/check.sh path/to/AZURE2
 
 set -uo pipefail
+# Byte-identical files without cmp (not in every MSYS2 image: the Windows runner has none); \r stripped so a
+# CRLF-writing Windows build compares like the others.
+same_file() { [ -f "$2" ] && [ "$(tr -d '\r' < "$1")" = "$(tr -d '\r' < "$2")" ]; }
 export LC_ALL=C
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 AZURE2_BIN="${1:?usage: check.sh path/to/AZURE2}"
@@ -71,14 +74,14 @@ if [ "$rc1" -ne 0 ] || [ "$rc4" -ne 0 ]; then
 else
   n=0; diff=0
   for f in "$WORK"/calc1/output/*; do
-    n=$((n + 1)); cmp -s "$f" "$WORK/calc4/output/$(basename "$f")" || { diff=$((diff + 1)); echo "        differs: $(basename "$f")"; }
+    n=$((n + 1)); same_file "$f" "$WORK/calc4/output/$(basename "$f")" || { diff=$((diff + 1)); echo "        differs: $(basename "$f")"; }
   done
   if [ "$n" -gt 0 ] && [ "$diff" -eq 0 ]; then ok "(a) calculation: $n output files identical at 1 and 4 threads"; else bad "(a) $diff of $n output files differ between 1 and 4 threads"; fi
 fi
 
 same_outputs() {  # DIR1 DIR2 -> "n d"
   local n=0 d=0 f
-  for f in "$1"/output/*; do n=$((n + 1)); cmp -s "$f" "$2/output/$(basename "$f")" || { d=$((d + 1)); echo "        differs: $(basename "$f")" >&2; }; done
+  for f in "$1"/output/*; do n=$((n + 1)); same_file "$f" "$2/output/$(basename "$f")" || { d=$((d + 1)); echo "        differs: $(basename "$f")" >&2; }; done
   echo "$n $d"
 }
 replaced() { grep -o '[0-9]* re-placed' "$1/run.log" | awk '{ s += $1 } END { print s + 0 }'; }

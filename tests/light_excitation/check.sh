@@ -73,7 +73,7 @@ if a != b:
     print("      %r\n      %r" % (a[i] if i < len(a) else None, b[i] if i < len(b) else None))
     sys.exit(1)' "$1" "$2"
 }
-# same_tree <dir1> <dir2>: the same file names with byte-identical contents
+# same_tree <dir1> <dir2>: the same file names with byte-identical contents (intEC.dat: numbers to 1e-12)
 same_tree() {
   "$PY" -I -c 'import os, sys
 def files(top):
@@ -84,7 +84,34 @@ rd = lambda p: open(p, "rb").read()
 if na != nb:
     print("    same_tree: file lists differ: %s" % sorted(set(na) ^ set(nb)))
     sys.exit(1)
-bad = [n for n in na if rd(os.path.join(a, n)) != rd(os.path.join(b, n))]
+def numeric_same(pa, pb, tol=1e-12):
+    # intEC.dat holds the EC integrals to 17 digits; macOS CI wrote last-digit differences between two runs
+    # that should agree (2026-11-06), every other file byte-identical.  Compare it number by number.
+    ta, tb = rd(pa).split(), rd(pb).split()
+    if len(ta) != len(tb):
+        return False, "token counts %d vs %d" % (len(ta), len(tb))
+    worst = 0.0
+    for x, y in zip(ta, tb):
+        if x == y:
+            continue
+        try:
+            fx, fy = float(x), float(y)
+        except ValueError:
+            return False, "text differs: %r vs %r" % (x, y)
+        d = abs(fx - fy) / max(abs(fx), abs(fy), 1e-300)
+        worst = max(worst, d)
+    return worst <= tol, "largest relative difference %.3g" % worst
+bad = []
+for n in na:
+    pa, pb = os.path.join(a, n), os.path.join(b, n)
+    if rd(pa) == rd(pb):
+        continue
+    if os.path.basename(n) == "intEC.dat":
+        ok, why = numeric_same(pa, pb)
+        print("    same_tree: %s not byte-identical, %s (tolerance 1e-12)" % (n, why))
+        if ok:
+            continue
+    bad.append(n)
 if bad:
     print("    same_tree: contents differ: %s" % bad)
     sys.exit(1)' "$1" "$2"
