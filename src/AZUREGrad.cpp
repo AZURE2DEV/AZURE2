@@ -506,7 +506,10 @@ bool GradTargetEffectAdjoint(EPoint *point, double fitBar, GradAccum &accum,
   // differences.
   {
     TargetEffect *te = point->GetParentData()->GetTargetEffect(point->GetTargetEffectNum());
-    if (point->GetTargetBlendWeight() < 1.0) return false;
+    // A thin-target integration blends with sigma(E_bar) inside its linear kernel (EPoint::TargetFallbackImpl),
+    // so its window edges and the points outside its windows are linear in the sub-point values (2026-11-05).
+    const bool thinTarget = te && te->IsTargetIntegration() && !te->IsThickTarget();
+    if (point->GetTargetBlendWeight() < 1.0 && !thinTarget) return false;
     if (te && te->GetAutoTolerance() > 0.) return false;
   }
 

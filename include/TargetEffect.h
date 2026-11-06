@@ -152,6 +152,12 @@ class TargetEffect {
   double TargetThickness(double, const Config &);
   /// The same for an areal density \p density instead of the current one.
   double TargetThickness(double, const Config &, double density);
+  /// Depth-averaged energy loss (lab MeV) in the target at lab energy E: E - E_bar with
+  /// E_bar = int E' dE'/epsilon / int dE'/epsilon over [E - Delta, E] (Delta = TargetThickness).  The cross section
+  /// at E_bar equals the target average for a cross section linear across the target; the remainder is about
+  /// sigma'' Delta^2 / 24.  It is the single energy a thin-target point is evaluated at outside the windows of an
+  /// energy-restricted target integration (EPoint fallback, 2026-11-05).  0 for a thick target.
+  double MeanEnergyLoss(double, const Config &, double density);
   /// Attenuation coefficient of the given order.
   double GetQCoefficient(int) const;
   /// Convolution coefficient of the given order.

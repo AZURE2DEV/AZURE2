@@ -3382,6 +3382,28 @@ complete:
   gives 2.8 keV at 0.46 MeV and 1.1 keV at 2 MeV. Match the quoted loss at the energy that
   matters (2.0e17 atoms/cm2 = 4.0 ug/cm2 gives 1.5 keV at the 1/2+ resonance) or use
   per-window `<targetInt>` lines with the lab-energy ranges token.
+- 2026-11-06 -- RUN LOGS: TORN "Segment #" PROGRESS BARS BEFORE dev 9fbb82c ARE NOT AN ERROR.
+  Builds before 9fbb82c let every OpenMP thread redraw the external-capture amplitude bars without a lock, so
+  a multi-threaded log can hold fragments like "Segment #\r\tSegment #1111  [****" or a bare "[*****   ] 80%"
+  on a line of its own. Cosmetic in the CLI (results and intEC.dat are byte-identical at 1 and 8 threads);
+  ignore such lines when comparing logs, or use a build at or after 9fbb82c, where one thread at a time draws a
+  whole bar (tests/progress_bars). A script that diffs two run logs should still drop lines holding "\r" or
+  "Segment #" (tests/light_excitation's samelog shows how).
+- 2026-11-06 -- TARGET-INTEGRATION WINDOWS: OUTSIDE THEM A POINT IS sigma(E_bar), NOT sigma(E_beam).
+  A `<targetInt>` line can name lab-energy windows (`"lo-hi,lo-hi"` after the conv fields, then a blend width
+  in MeV and an auto tolerance). Points inside get the full depth integral; since dev 134f6ad a THIN-target point
+  outside is sigma at the depth-averaged energy E_bar = int E dE/eps / int dE/eps over [E0 - Delta, E0] (one
+  evaluation; with `densityfit` three, at E_bar for 0.01 N0, N0 and N_layout, exact at N0). Exact for a linear
+  sigma; the error is |sigma''| Delta^2/24 (12.6 % at 240 keV on the p+14N test: a 25 keV target where sigma
+  moves by e per 16 keV). So a window must cover strongly CURVED regions (low-energy barrier tails), not only
+  narrow resonances. Blend edges mix toward sigma(E_bar) and stay on the analytic gradient; the auto tolerance
+  judges curvature only and lets a point off to sigma(E_bar). Refused: windows on a THICK target (no single
+  equivalent energy) and windows or auto tolerance with `doppler`. Builds aeb54b7..134f6ad used sigma(E_beam)
+  outside the windows (13C+a ND2021r with windows: chi2 421,432; full integration 400,616; now 401,435), so
+  rerun any windowed fit made with them. Lines without windows are byte-identical. rmfit hands target-integration
+  lines to the engine, so it needs nothing. Not built: windows chosen automatically from the level scheme.
+  Test: `tests/target_window_fallback/check.sh` (the old build fails 7 checks); notes in
+  `R-matrix/AZURE2_ideas/windowed_target_integration_2026-11-05/readme`.
 - 2026-09-28 -- COMPOUND TARGETS: THE STOPPING POWER AND THE DENSITY MUST COUNT THE SAME
   THING. Target integration uses epsilon and N only as the product Delta = epsilon*N and as
   1/(N*epsilon) in the integrand (EPoint.cpp, `yield = integral / (density*1e-24)`), so any

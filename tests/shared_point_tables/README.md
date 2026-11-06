@@ -5,8 +5,9 @@ Shared per-point tables, pooled copies and sub-point grid re-placement (2026-11-
 A fit evaluates on `max(4, threads)` copies of the data (`AZURECalc::InitializePools`).  The copies share the
 energy-dependent tables of every point and sub-point (copy on write), and a re-placed sub-point grid keeps the
 tables of the nodes that did not move, so a copy costs a fraction of the data instead of a full copy
-(`tests/natural_neon`: under 1 GB per copy when it is made, instead of 7.7 GB; a fit at four threads starts at
-11.8 GB instead of about 41 GB, and grows as re-placed grids drift from the original's).  See the developer guide, *EData, Data Points, and Target Effects*, "Memory: shared per-point
+(`tests/natural_neon`: about 0.8 GB per copy instead of 7.7 GB; a fit at four threads 7.6 GB at the start and
+9.2 GB after 50 minutes, instead of about 41 GB).  Re-placed nodes are shared between the copies
+(`NodeTableCache`), and the tables are packed into flat arrays.  See the developer guide, *EData, Data Points, and Target Effects*, "Memory: shared per-point
 tables".
 
 Two races made fits with grid re-placement crash at four threads (`malloc(): unaligned tcache chunk detected`,
@@ -27,10 +28,10 @@ Checks (`check.sh path/to/AZURE2`):
 
 - (a) a calculation gives byte-identical output files at 1 and 4 threads;
 - (b) MIGRAD with the analytic gradient, capped at 5 calls, completes at 1 and 4 threads, re-placing grids, with
-  the recorded chi-squared (`expected/chi2_fit`; thm: 109.250542525, dev: 109.136 -- thm's adaptive
+  the recorded chi-squared (`expected/chi2_fit`; thm: 109.250542525, dev: 109.134 -- thm's adaptive
   sub-point grid, MERGE_NOTES.md section A, row 02ae97b);
 - (c) its output files are byte-identical at 1 and 4 threads;
-- (d) the peak RSS of the 4-thread fit is at most 3.0 times that of the calculation (Linux): 2.4 measured,
+- (d) the peak RSS of the 4-thread fit is at most 3.0 times that of the calculation (Linux): 2.5 measured,
   4.7 with a full copy of the data per pooled copy.
 
 About a minute at most.

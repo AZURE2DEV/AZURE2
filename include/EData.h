@@ -4,6 +4,7 @@
 #include "ESegment.h"
 #include "TargetEffect.h"
 #include "EDataIterator.h"
+#include "NodeTableCache.h"
 #include "ThmExperiment.h"
 #include <memory>
 #include <deque>
@@ -489,6 +490,8 @@ class EData {
     ~GridNucleus();
   };
   GridNucleus gridNuc_;
+  // The tables of re-placed sub-point nodes, shared by this EData and its copies (NodeTableCache.h).
+  std::shared_ptr<NodeTableCache> nodeCache_ = std::make_shared<NodeTableCache>();
 };
 
 #endif

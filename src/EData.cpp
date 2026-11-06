@@ -1011,6 +1011,55 @@ int EData::GetEnergyShiftFnParamOffset() const {
  */
 
 namespace {
+/*!
+ * The sub-points of a thin-target point outside the windows of an energy-restricted integration
+ * (EPoint::IsTargetFallbackOnly): one at E_bar = E - D for a fixed density; for a fitted one three, at E_bar of the
+ * smallest density the fit may reach (0.01 N0, EData::FillDensitiesFromParams), of the nominal N0 and of the layout
+ * density, through which the kernel interpolates E_bar(N) -- exact at N0, smooth in N.
+ */
+static void AddTargetFallbackNodes(EPoint *point, TargetEffect *te, double cmConversion, const Config &configure,
+                                   ESegment *segment) {
+  const double e = point->GetCMEnergy();
+  std::vector<double> nodes;
+  if (te->HasDensityFit()) {
+    const double n0 = te->GetDensityNominal(), eLab = point->GetLabEnergy();
+    const double dMin = cmConversion * te->MeanEnergyLoss(eLab, configure, 0.01 * n0);
+    const double d0 = cmConversion * te->MeanEnergyLoss(eLab, configure, n0);
+    double dMax = cmConversion * te->MeanEnergyLoss(eLab, configure, te->GetLayoutDensity());
+    if (!(dMax > d0)) dMax = 1.5 * d0;
+    nodes = {e - std::min(dMin, 0.5 * d0), e - d0, e - dMax};
+  } else {
+    nodes = {e - point->GetTargetFallbackDepth()};
+  }
+  for (double sub : nodes) {
+    EPoint subPoint(point->GetCMAngle(), sub, segment);
+    subPoint.SetCoefficientOrder(point->GetCoefficientOrder());
+    subPoint.SetCoefficientAbsolute(point->GetCoefficientAbsolute());
+    subPoint.SetStoppingPower(cmConversion * te->GetStoppingPowerEq()->Evaluate(configure, sub / cmConversion));
+    point->AddSubPoint(subPoint);
+  }
+}
+
+/*!
+ * Refuses the combinations the sigma(E_bar) fallback of a windowed target integration does not cover.
+ */
+static bool CheckTargetWindows(TargetEffect *te, int segmentKey, std::ostream &out) {
+  if (!te->IsTargetIntegration()) return true;
+  const bool windows = !te->GetRanges().empty();
+  if (te->IsThickTarget() && windows) {
+    out << "ERROR: segment #" << segmentKey << ": energy windows on a THICK-target integration (density 0): a thick-"
+        << "target yield has no single equivalent energy to evaluate outside the windows.  Give the density or "
+        << "drop the windows." << std::endl;
+    return false;
+  }
+  if (te->IsDoppler() && !te->IsThickTarget() && (windows || te->GetAutoTolerance() > 0.)) {
+    out << "ERROR: segment #" << segmentKey << ": energy windows or an automatic tolerance on a target integration "
+        << "with free-gas Doppler broadening (doppler) are not supported." << std::endl;
+    return false;
+  }
+  return true;
+}
+
 EPoint::SubGridSpec MakeSubGridSpec(const AdaptiveIntegrationGrid::GridConfig &gc, double start, double end,
                                     const TargetEffect *effect, double conversion) {
   EPoint::SubGridSpec spec;
@@ -1139,6 +1188,7 @@ int EData::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, const st
   std::atomic<int> changed{0};
   std::atomic<long> newSubPoints{0};
   std::atomic<long> reusedSubPoints{0};
+  std::atomic<long> sharedSubPoints{0};
   // For AZURE_GRID_TIMING: per work item, -1 = a different number of nodes, else the
   // largest node move (MeV) of a grid that changed.
   std::vector<double> moved(work.size(), 0.0);
@@ -1177,7 +1227,7 @@ int EData::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, const st
     // and their tables are usually still shared with the EData this copy was
     // cloned from: a copy re-placing its grids then adds tables only for the
     // nodes that moved.
-    long reused = 0;
+    long reused = 0, fromOtherCopies = 0;
     auto layOut = [&](EPoint *target, ESegment *seg, bool shifted) {
       const EPoint::SubGridSpec &tspec = target->GetSubGridSpec();
       TargetEffect *effect = this->GetTargetEffect(seg->GetTargetEffectNum());
@@ -1201,9 +1251,14 @@ int EData::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, const st
                                effect->GetStoppingPowerEq()->Evaluate(configure, e / tspec.stoppingConversion));
         auto o = std::lower_bound(old.begin(), old.end(), sub.GetCMEnergy(),
                                   [](const EPoint::EDependentShare &x, double v) { return x.energy < v; });
+        EPoint::EDependentShare cached;
         if (o != old.end() && sub.AdoptEDependentValues(*o)) {
           sub.CalcCoulombAmplitude(theCNuc);  // depends on the angle; cheap
           reused++;
+        } else if (!shifted && nodeCache_->Find(seg->GetSegmentKey(), sub.GetCMEnergy(), sub.GetCMAngle(), cached) &&
+                   sub.AdoptEDependentValues(cached)) {
+          sub.CalcCoulombAmplitude(theCNuc);  // another copy placed this node: its tables
+          fromOtherCopies++;
         } else {
           sub.CalcLegendreP(configure.maxLOrder, theCNuc, qEffect);
           // A shifted segment's sub-points are moved and energised by the shift step.
@@ -1212,6 +1267,7 @@ int EData::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, const st
             sub.CalcCoulombAmplitude(theCNuc);
           }
         }
+        if (!shifted) nodeCache_->Store(seg->GetSegmentKey(), sub.ShareEDependentValues());
         target->AddSubPoint(sub);
       }
     };
@@ -1227,6 +1283,7 @@ int EData::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, const st
       }
     }
     reusedSubPoints += reused;
+    sharedSubPoints += fromOtherCopies;
     changed++;
     newSubPoints += (long)grid.size();
   };
@@ -1283,7 +1340,8 @@ int EData::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, const st
       std::cerr << "[grid] call " << c << ": " << work.size() << " grids, " << changed.load() << " re-placed ("
                 << newSubPoints.load() << " sub-points; " << resized << " with a new node count, largest node move "
                 << maxMove * 1.0e6 << " eV otherwise; " << reusedSubPoints.load()
-                << " sub-points kept their tables); observed parameters " << ms(t0, t1) << " ms, grids "
+                << " sub-points kept their tables, " << sharedSubPoints.load()
+                << " took another copy's); observed parameters " << ms(t0, t1) << " ms, grids "
                 << ms(t1, std::chrono::steady_clock::now()) << " ms" << std::endl;
     }
   }
@@ -1398,14 +1456,19 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
         if (eMax > 0.0 && !targetEffect->LoadUdrTable(eMin, eMax, configure.outStream, configure.cacheInputFiles)) return -1;
       }
 
+      if (!CheckTargetWindows(targetEffect, segment->GetSegmentKey(), configure.outStream)) return -1;
+      const bool thinTarget = targetEffect->IsTargetIntegration() && !targetEffect->IsThickTarget();
       for (EPointIterator point = segment->GetPoints().begin(); point < segment->GetPoints().end(); point++) {
         // An effect restricted to energy ranges leaves points outside them
-        // completely untouched: they never receive the effect number, so the
-        // whole downstream machinery treats them as ordinary points.
+        // untouched: they never receive the effect number, so the whole
+        // downstream machinery treats them as ordinary points -- except under a
+        // thin-target integration, whose data carry the beam energy: there a
+        // point outside the windows is evaluated at its depth-averaged energy
+        // E_bar (EPoint::IsTargetFallbackOnly, 2026-11-05).
         double blendWeight = targetEffect->BlendWeight(point->GetLabEnergy());
-        if (blendWeight <= 0.) continue;
+        if (blendWeight <= 0. && !thinTarget) continue;
         point->SetTargetEffectNum(segment->GetTargetEffectNum());
-        point->SetTargetBlendWeight(blendWeight);
+        point->SetTargetBlendWeight(std::max(blendWeight, 0.0));
         point->SetTargetKinematics(cmConversion, bohrZ1, bohrZ2);
 
         if (targetEffect->IsSubPointEffect()) {
@@ -1434,6 +1497,15 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
             point->SetTargetThickness(targetEffect->HasDensityFit()
                                           ? cmConversion * targetEffect->TargetThickness(point->GetLabEnergy(), configure)
                                           : targetThickness);
+          }
+          if (thinTarget) {
+            point->SetTargetFallbackDepth(cmConversion * targetEffect->MeanEnergyLoss(point->GetLabEnergy(), configure,
+                                                                                      targetEffect->GetDensity()));
+            if (blendWeight <= 0.) {
+              point->SetTargetFallbackOnly(true);
+              AddTargetFallbackNodes(&*point, targetEffect, cmConversion, configure, &*segment);
+              continue;
+            }
           }
           // How far the grid reaches above and below the point for this effect (beam spread, target, straggling).
           targetEffect->GridExtent(point->GetCMEnergy(), targetThickness, configure, cmConversion, bohrZ1, bohrZ2, forwardDepth, backwardDepth);
@@ -1593,11 +1665,13 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
             if (eMax > 0.0 && !targetEffect->LoadUdrTable(eMin, eMax, configure.outStream, configure.cacheInputFiles)) return -1;
           }
 
+          if (!CheckTargetWindows(targetEffect, segment->GetSegmentKey(), configure.outStream)) return -1;
+          const bool thinTarget = targetEffect->IsTargetIntegration() && !targetEffect->IsThickTarget();
           for (EPointIterator point = component->GetPoints().begin(); point < component->GetPoints().end(); point++) {
             double blendWeight = targetEffect->BlendWeight(point->GetLabEnergy());
-            if (blendWeight <= 0.) continue;
+            if (blendWeight <= 0. && !thinTarget) continue;  // see the base segment's loop above
             point->SetTargetEffectNum(component->GetTargetEffectNum());
-            point->SetTargetBlendWeight(blendWeight);
+            point->SetTargetBlendWeight(std::max(blendWeight, 0.0));
             point->SetTargetKinematics(compConversion, bohrZ1, bohrZ2);
 
             if (targetEffect->IsSubPointEffect()) {
@@ -1622,6 +1696,15 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
                 point->SetTargetThickness(targetEffect->HasDensityFit()
                                               ? compConversion * targetEffect->TargetThickness(point->GetLabEnergy(), configure)
                                               : targetThickness);
+              }
+              if (thinTarget) {
+                point->SetTargetFallbackDepth(compConversion * targetEffect->MeanEnergyLoss(point->GetLabEnergy(), configure,
+                                                                                            targetEffect->GetDensity()));
+                if (blendWeight <= 0.) {
+                  point->SetTargetFallbackOnly(true);
+                  AddTargetFallbackNodes(&*point, targetEffect, compConversion, configure, component);
+                  continue;
+                }
               }
               // How far the grid reaches above and below the point for this effect (beam spread, target, straggling).
               targetEffect->GridExtent(point->GetCMEnergy(), targetThickness, configure, compConversion, bohrZ1, bohrZ2, forwardDepth, backwardDepth);
@@ -2961,6 +3044,47 @@ std::string EData::ECSignaturePath(const std::string &integralsFile) {
   return integralsFile + ".sig";
 }
 
+namespace {
+
+// The 25-cell bar of the EC amplitude loops (CalculateECAmplitudes, InitializeComponentSegments) after `done` of
+// `total` points: a cell per 4 %, and the percentage of the cells filled.
+std::string ECProgressBar(int done, int total) {
+  std::string progress = " [";
+  double percent = 0.;
+  for (int j = 1; j <= 25; j++) {
+    if (done >= percent * total && percent < 1.) {
+      percent += 0.04;
+      progress += '*';
+    } else
+      progress += ' ';
+  }
+  std::ostringstream text;
+  text << progress << "] " << percent * 100 << '%';
+  return text.str();
+}
+
+// Redraws the bar from inside the OpenMP loop of those two loops.  Every thread finishes points and wants to
+// redraw, so the counter is atomic and the redraw runs under one named critical section (ec_progress, which the
+// loops' error messages share): one thread at a time writes a whole bar, never interleaved with another's.  Up
+// to dev 0119771 the threads wrote their bars piece by piece without a lock ("Segment #\r\tSegment #1111"),
+// tests/progress_bars.
+void ECProgressRedraw(const Config &configure, const char *segmentKeyOut, const std::atomic<int> &pointIndex,
+                      int numPoints, time_t &startTime) {
+#pragma omp critical(ec_progress)
+  {
+    if (difftime(time(NULL), startTime) > 0.25) {
+      startTime = time(NULL);
+      if (!(configure.paramMask & Config::USE_API)) {
+        configure.outStream << "\r\tSegment #" << std::setw(12) << segmentKeyOut << std::setw(0)
+                            << ECProgressBar(pointIndex.load(), numPoints);
+        configure.outStream.flush();
+      }
+    }
+  }
+}
+
+}  // namespace
+
 /*!
  * If external capture amplitudes are to be calculated, EPoint::CalculateECAmplitudes is
  * called for each point with a corresponding external capture component in the EData object.
@@ -3094,10 +3218,10 @@ int EData::CalculateECAmplitudes(CNuc *theCNuc, const Config &configure) {
                   configure.outStream.flush();
                 }
                 int numPoints = segment->NumPoints();
-                int pointIndex = 0;
+                std::atomic<int> pointIndex(0);
                 time_t startTime = time(NULL);
                 bool localStop = false;
-#pragma omp parallel for shared(configure, localStop)
+#pragma omp parallel for shared(configure, localStop, pointIndex, startTime)
                 for (int i = 1; i <= numPoints; i++) {
                   if (configure.stopFlag || localStop) continue;
                   EPoint *point = segment->GetPoint(i);
@@ -3108,7 +3232,7 @@ int EData::CalculateECAmplitudes(CNuc *theCNuc, const Config &configure) {
                     try {
                       point->CalculateECAmplitudes(theCNuc, configure);
                     } catch (GSLException e) {
-#pragma omp critical
+#pragma omp critical(ec_progress)
                       {
                         configure.outStream << e.what() << std::endl;
                         localStop = true;
@@ -3116,23 +3240,7 @@ int EData::CalculateECAmplitudes(CNuc *theCNuc, const Config &configure) {
                     }
                   }
                   ++pointIndex;
-                  if (difftime(time(NULL), startTime) > 0.25) {
-                    startTime = time(NULL);
-                    std::string progress = " [";
-                    double percent = 0.;
-                    for (int j = 1; j <= 25; j++) {
-                      if (pointIndex >= percent * numPoints && percent < 1.) {
-                        percent += 0.04;
-                        progress += '*';
-                      } else
-                        progress += ' ';
-                    }
-                    progress += "] ";
-                    if (!(configure.paramMask & Config::USE_API))
-                      configure.outStream << "\r\tSegment #" << std::setw(12) << segmentKeyOut
-                                          << std::setw(0) << progress << percent * 100 << '%';
-                    configure.outStream.flush();
-                  }
+                  ECProgressRedraw(configure, segmentKeyOut, pointIndex, numPoints, startTime);
                 }
                 if (configure.stopFlag || localStop) {
                   if (out.is_open()) out.close();
@@ -3392,10 +3500,10 @@ int EData::InitializeComponentSegments(CNuc *theCNuc, const Config &configure) {
                     configure.outStream.flush();
                   }
                   int numPoints = componentSegment.NumPoints();
-                  int pointIndex = 0;
+                  std::atomic<int> pointIndex(0);
                   time_t startTime = time(NULL);
                   bool localStop = false;
-#pragma omp parallel for shared(configure, localStop)
+#pragma omp parallel for shared(configure, localStop, pointIndex, startTime)
                   for (int i = 1; i <= numPoints; i++) {
                     if (configure.stopFlag || localStop) continue;
                     EPoint *point = componentSegment.GetPoint(i);
@@ -3403,36 +3511,20 @@ int EData::InitializeComponentSegments(CNuc *theCNuc, const Config &configure) {
                       try {
                         point->CalculateECAmplitudes(theCNuc, configure);
                       } catch (GSLException e) {
-#pragma omp critical
+#pragma omp critical(ec_progress)
                         {
                           configure.outStream << e.what() << std::endl;
                           localStop = true;
                         }
                       } catch (...) {
-#pragma omp critical
+#pragma omp critical(ec_progress)
                         {
                           configure.outStream << "Warning: EC amplitude calculation failed for component segment point" << std::endl;
                         }
                       }
                     }
                     ++pointIndex;
-                    if (difftime(time(NULL), startTime) > 0.25) {
-                      startTime = time(NULL);
-                      std::string progress = " [";
-                      double percent = 0.;
-                      for (int k = 1; k <= 25; k++) {
-                        if (pointIndex >= percent * numPoints && percent < 1.) {
-                          percent += 0.04;
-                          progress += '*';
-                        } else
-                          progress += ' ';
-                      }
-                      progress += "] ";
-                      if (!(configure.paramMask & Config::USE_API))
-                        configure.outStream << "\r\tSegment #" << std::setw(12) << segmentKeyOut
-                                            << std::setw(0) << progress << percent * 100 << '%';
-                      configure.outStream.flush();
-                    }
+                    ECProgressRedraw(configure, segmentKeyOut, pointIndex, numPoints, startTime);
                   }
                   if (configure.stopFlag || localStop) {
                     if (out.is_open()) out.close();
@@ -3612,7 +3704,10 @@ bool EData::CheckTransformedSegments(const Config &configure) {
         continue;
       }
       TargetEffect *te = this->GetTargetEffect(base->GetTargetEffectNum());
-      if (base->GetTargetBlendWeight() < 1.0 || (te && te->GetAutoTolerance() > 0.0)) {
+      // A thin-target integration blends with sigma(E_bar) inside its kernel (EPoint::TargetFallbackImpl), which is
+      // still one linear kernel on the transformed values; other kernels blend with a plain point outside it.
+      const bool thinTarget = te && te->IsTargetIntegration() && !te->IsThickTarget();
+      if ((base->GetTargetBlendWeight() < 1.0 && !thinTarget) || (te && te->GetAutoTolerance() > 0.0)) {
         configure.outStream << "ERROR: " << what << "its target effect blends in at range edges or has an automatic "
                             << "tolerance; the transform needs the full kernel at every point (drop the blend width "
                             << "and the tolerance of that <targetInt> line)." << std::endl;
@@ -4967,6 +5062,10 @@ void EData::FillDensitiesFromParams(const vector_r &p, const Config &configure) 
     for (EPointIterator point = seg.GetPoints().begin(); point < seg.GetPoints().end(); point++) {
       if (point->GetTargetEffectNum() != n || !(point->GetTargetThickness() > 0.0)) continue;
       point->SetTargetThickness(point->GetCMFactor() * te->TargetThickness(point->GetTargetLabEnergy(), configure));
+      // E_bar of the sigma(E_bar) fallback moves with the density too (EPoint::IsTargetFallbackOnly)
+      if (!te->IsThickTarget())
+        point->SetTargetFallbackDepth(point->GetCMFactor() *
+                                      te->MeanEnergyLoss(point->GetTargetLabEnergy(), configure, te->GetDensity()));
     }
   };
   for (ESegment &seg : segments_) update(seg);
@@ -5342,6 +5441,7 @@ EData *EData::Clone() const {
   dataCopy->thmCoherentParams_ = this->thmCoherentParams_;
   dataCopy->thmCoherentParamOffset_ = this->thmCoherentParamOffset_;
   dataCopy->covGroups_ = this->covGroups_;  // shared: one factor (and one frozen model) for all copies
+  dataCopy->nodeCache_ = this->nodeCache_;  // shared: a re-placed node is computed and held once
   dataCopy->priorCov_ = this->priorCov_;    // shared, read-only
   dataCopy->priorCovChi2_ = this->priorCovChi2_;
 

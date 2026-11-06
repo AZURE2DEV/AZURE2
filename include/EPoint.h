@@ -5,6 +5,7 @@
 #include <vector>
 #include <string>
 #include <utility>
+#include <cassert>
 #include <memory>
 
 #include <cstring>
@@ -124,17 +125,60 @@ class EPoint {
 
  public:
   /// The energy-dependent channel tables of a point (one row per J group); see edep_.
+  /// Packed: one flat array per kind and one row index, five allocations a point
+  /// instead of four per J group (natural neon: ~60 a sub-point).  Row j (from 1)
+  /// holds the channels of J group j, at slots [rowStart[j-1], rowStart[j]).
   struct EDependentTables {
-    matrix_c lo_elements;
-    matrix_r penetrabilities;
-    matrix_c coulombphase;
-    matrix_c hardspherephase;
+    std::vector<int> rowStart{0};
+    vector_c lo_elements;
+    vector_r penetrabilities;
+    vector_c coulombphase;
+    vector_c hardspherephase;
     /// THM (HOES) entrance-vertex pieces, empty for a classic point: j_l(rho) and rho dj_l/drho (boundary-independent;
     /// M_l is assembled at the vertex with the per-level or channel boundary) and the external Coulomb term (0 when
-    /// not used), indexed [jGroup-1][channel-1].
+    /// not used), indexed [jGroup-1][channel-1] in row form (filled per entrance channel, read with bounds checks).
     matrix_r thm_jl;
     matrix_r thm_rhodjl;
     matrix_c thm_coul;
+    /// Slot of (J group, channel); rows and channels are filled in order and extended here.
+    int Slot(int jGroupNum, int channelNum) {
+      while ((int)rowStart.size() < jGroupNum + 1) rowStart.push_back(rowStart.back());
+      const int slot = rowStart[jGroupNum - 1] + channelNum - 1;
+      if (slot >= rowStart[jGroupNum]) {
+        assert(jGroupNum + 1 == (int)rowStart.size() && slot == rowStart[jGroupNum]);
+        rowStart[jGroupNum] = slot + 1;
+      }
+      return slot;
+    }
+    int At(int jGroupNum, int channelNum) const { return rowStart[jGroupNum - 1] + channelNum - 1; }
+    template <class V, class T>
+    static void Put(V &v, int slot, const T &x) {
+      if ((int)v.size() <= slot) v.resize(slot + 1);
+      v[slot] = x;
+    }
+    void Clear() {
+      rowStart.assign(1, 0);
+      lo_elements.clear();
+      penetrabilities.clear();
+      coulombphase.clear();
+      hardspherephase.clear();
+      thm_jl.clear();
+      thm_rhodjl.clear();
+      thm_coul.clear();
+    }
+    void ShrinkToFit() {
+      rowStart.shrink_to_fit();
+      lo_elements.shrink_to_fit();
+      penetrabilities.shrink_to_fit();
+      coulombphase.shrink_to_fit();
+      hardspherephase.shrink_to_fit();
+      for (auto *m : {&thm_jl, &thm_rhodjl}) {
+        for (auto &row : *m) row.shrink_to_fit();
+        m->shrink_to_fit();
+      }
+      for (auto &row : thm_coul) row.shrink_to_fit();
+      thm_coul.shrink_to_fit();
+    }
   };
   /// Everything CalcEDependentValues and CalcLegendreP compute for a point, by
   /// reference: the tables are shared, not copied.  These depend only on the
@@ -271,6 +315,28 @@ class EPoint {
   /// 1 everywhere unless the effect declares energy ranges.
   double GetTargetBlendWeight() const { return target_blend_weight_; };
   void SetTargetBlendWeight(double w) { target_blend_weight_ = w; };
+  /// Thin-target integration restricted to energy windows (2026-11-05): outside the windows (blend weight 0) the
+  /// point is evaluated at the single depth-averaged energy E_bar = E - D of its own target instead of being a
+  /// plain point at its data (beam) energy, which was off by the centroid shift ~Delta/2.  Such a point carries
+  /// one sub-point at E_bar (fixed density) or three spanning the range of E_bar a fitted density can reach,
+  /// and IsTargetFallbackOnly() is true.  D (c.m. MeV, TargetEffect::MeanEnergyLoss) is set on every thin-target
+  /// point: edge blending and the automatic decision fall back to sigma(E_bar) as well.
+  bool IsTargetFallbackOnly() const { return target_fallback_only_; }
+  void SetTargetFallbackOnly(bool f) { target_fallback_only_ = f; }
+  double GetTargetFallbackDepth() const { return target_fallback_depth_; }
+  void SetTargetFallbackDepth(double d) { target_fallback_depth_ = d; }
+  /// While alive, the target integration of the point returns sigma(E_bar) from its sub-points (an automatic
+  /// tolerance decided the integration is not needed at this point).
+  class TargetFallbackScope {
+   public:
+    explicit TargetFallbackScope(EPoint *p) : p_(p), prev_(p->target_fallback_now_) { p_->target_fallback_now_ = true; }
+    ~TargetFallbackScope() { p_->target_fallback_now_ = prev_; }
+    TargetFallbackScope(const TargetFallbackScope &) = delete;
+    TargetFallbackScope &operator=(const TargetFallbackScope &) = delete;
+   private:
+    EPoint *p_;
+    bool prev_;
+  };
   /// Highest Legendre order. Angular-distribution points only.
   int GetMaxAngDistOrder() const;
   /// An angular-coefficient data point (segment isDiff 9): the fit value is the Legendre
@@ -486,6 +552,8 @@ class EPoint {
   void AddECAmplitude(int, int, complex, double);
   void ClearECAmplitudes();
   void Calculate(CNuc *, const Config &configure, EPoint *parent = NULL, int subPointNum = 0);
+  /// The sub-point stage of a thin-target integration, with its sigma(E_bar) fallback (see the .cpp).
+  void CalculateThinTarget(CNuc *, const Config &configure, TargetEffect *effect);
   void SetMap(int, int);
   void ClearMapping();
   /// A mapped point that keeps its own energy-dependent values: a component of a SUM, RATIO or total-capture segment
@@ -576,6 +644,10 @@ class EPoint {
   /// The line's kernels (Gaussian, target integration, UDR, beam profile) on sub-point values rd(j).
   template <class V, class Read>
   V IntegrateKernelsImpl(const Config &, Read rd);
+  /// sigma at E_bar = E - D from the sub-point values: the single node, a quadratic through three fallback
+  /// nodes, or a linear interpolation on a full grid.
+  template <class V, class Read>
+  V TargetFallbackImpl(Read rd);
   bool doppler_applied_ = false;  ///< see DopplerAppliedScope
   bool is_differential_;
   bool is_phase_;
@@ -603,6 +675,9 @@ class EPoint {
   int targetEffectNum_;
   int fileRecord_ = 0;
   double target_blend_weight_ = 1.0;
+  bool target_fallback_only_ = false;   ///< see IsTargetFallbackOnly
+  bool target_fallback_now_ = false;    ///< see TargetFallbackScope
+  double target_fallback_depth_ = 0.0;  ///< D = E - E_bar, c.m. MeV (see IsTargetFallbackOnly)
   int max_ang_dist_order_;
   double cm_angle_;
   double lab_angle_;

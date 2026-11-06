@@ -349,6 +349,53 @@ Still open: the merged EPoint is 152 bytes larger than dev's; the three
 convolution_unify models with target integration and a beam spread need more
 than 3.0 GB of address space with either binary (checked here on 21 points).
 
+## Merge of origin/dev 69826014 (November 2026)
+
+dev between 3264896d and 69826014 (6 commits): thin-target integrations
+restricted to energy windows evaluate the points outside the windows at the
+depth-averaged energy E_bar (134f6ad1, tests/target_window_fallback), the EC
+amplitude progress bars drawn one thread at a time (9fbb82c0,
+tests/progress_bars), the light_excitation run-log compare, and the
+cross-copy node cache with packed per-point tables (69826014).  Conflicts
+only where thm extends the per-point tables:
+
+- **Packed `EPoint::EDependentTables`**: dev's classic rows are now one flat
+  array per kind with `rowStart`.  thm's THM vertex tables (`thm_jl`,
+  `thm_rhodjl`, `thm_coul`) stay in row form inside the same struct: they
+  are filled per entrance channel and read with bounds checks, and only THM
+  points carry them.  `Clear()` and `ShrinkToFit()` cover them, so
+  CalcEDependentValues no longer clears them separately (it rebuilds them
+  right after ClearEDependentRows in any case).
+- **NodeTableCache (dev)**: holds the tables and Legendre polynomials weakly;
+  `thmPs` rides in the cached `EDependentShare` as a strong pointer (the
+  spectator-window table is immutable, and an entry is swept once its tables
+  expire).  The key (segment key, c.m. energy, c.m. angle) plus
+  AdoptEDependentValues' exact check covers THM sub-points as well.
+- tests/progress_bars (new from dev): its bar pattern now allows spaces
+  before the segment number.  thm's stream prints the number right-aligned
+  in the setw(12) field (`Segment #           1`), dev's left-aligned
+  (`Segment #1           `); otherwise the same bars, whole at 8 threads.
+  Failed the same way on thm 3ba23e6a + dev 02b0001e without the change.
+- tests/shared_point_tables keeps thm's 109.250542525 (unchanged by this
+  merge, 1 and 4 threads); dev's own pin is now 109.134 (dev's earlier
+  109.136 was stale: dev 02b0001e gives 109.134).
+
+Checked against thm 3ba23e6a merged with dev 02b0001e (everything but the
+node cache and packing): the calculations of examples/ c12c12_tumino2018,
+f19_pag_thm, li6_pizzone2011, li7_tumino2006, n15_lacognata2007,
+o17_guardo2017_fit, o18_lacognata2008, o18_lacognata2010 and
+tests/18O_p_a_thm are byte-identical; capped 4-thread fits (c12c12,
+o17_guardo2017_fit, f19_pag_thm) give identical chi2.  Their param.fit and
+fitStatus.out (call count) differ, but so do two runs of the reference: at
+several threads thm's param.fit records a few parameters at a
+finite-difference step of the last pooled evaluation (~1e-3 off the fitted
+value).  Pre-existing on thm, not on dev (dev's 1- and 4-thread fit outputs
+are identical, tests/shared_point_tables check c); open.
+
+Tests of this merge: ctest -LE slow 91/92 (adaptive_grid_reference, the
+known 1 of 14 below), run_tests.sh 128/128 (with progress_bars as above),
+ctest -L slow 8/8.
+
 ## Merge of origin/dev 3264896d (November 2026)
 
 dev between 2d97b1f0 and 3264896d (18 commits): free-gas Doppler broadening

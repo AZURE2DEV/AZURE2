@@ -350,7 +350,8 @@ this without splitting the data into artificial segments:
 
 - **Apply in Energy Ranges** -- a comma-separated list of laboratory-energy
   windows, for example ``0.42-0.61,1.20-1.35`` (MeV).  Points outside every
-  window are computed as ordinary points; leave the field empty to cover the
+  window are computed as ordinary points at their own energy -- except under a
+  thin-target integration, see below; leave the field empty to cover the
   whole segment.
 - **Blend Width** -- the width (MeV) of a smooth transition at each window
   edge.  With a hard edge (``0``) the modelled curve can show a small step
@@ -362,6 +363,34 @@ this without splitting the data into artificial segments:
   tolerance.  Any discontinuity this introduces is bounded by the tolerance,
   and smooth regions stop paying for integration they do not need.  It can be
   combined with explicit ranges or used on its own.
+
+**Target integration: the effective energy outside the windows.**  The data
+of a target integration carry the *beam* energy :math:`E_0`, and the cross section
+there is not the target average: it is off by the centroid shift, about half the
+energy loss.  So under a thin-target integration a point outside every window is
+evaluated at the depth-averaged energy of its own target,
+
+.. math::
+
+   \bar E = \frac{\int_{E_0-\Delta}^{E_0} E\,dE/\epsilon(E)}{\int_{E_0-\Delta}^{E_0} dE/\epsilon(E)},
+
+one cross-section evaluation instead of the whole sub-point grid.
+:math:`\sigma(\bar E)` equals the target average exactly for a cross section that is
+linear across the target; the rest is about
+:math:`|\sigma''(\bar E)|\,\Delta^2/24` (relative to :math:`\sigma`: the
+:math:`(\Delta/\lambda)^2/24` of a cross section that changes by a factor *e* every
+:math:`\lambda`), and the beam spread and straggling are ignored there (they shift
+nothing to first order).  Put the windows where that is not small: around narrow
+resonances, and wherever the target is thick compared with the scale on which the
+cross section bends (low energies under a Coulomb barrier).  Window edges blend
+with :math:`\sigma(\bar E)`, and the automatic tolerance falls back to it, deciding
+from the curvature alone.  :math:`\bar E` follows a fitted density
+(``densityfit``), and the analytic gradient covers windows and blends.  Refused:
+windows on a thick target (density 0, no single equivalent energy), and windows
+or a tolerance on a line with ``doppler``.  Before November 2026 such a point was
+computed at :math:`E_0`: on the 13C+α ND 2021 data (16 lines, windows around the
+narrow levels) that made the windowed model worse than none, χ² 421,432 against
+400,616 integrated everywhere; with :math:`\bar E` it is 401,435.
 
 In the ``.azr`` file these appear as optional tokens at the end of the
 ``targetInt`` line, for example ``"1.95-2.55" 0.12 0.002``; files that do not

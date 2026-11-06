@@ -3,6 +3,7 @@
 #include "ALevel.h"
 #include "JGroup.h"
 #include "PPair.h"
+#include <memory>
 #include "Profile.h"
 #include "AngCoeff.h"
 #include "CNuc.h"
@@ -493,7 +494,7 @@ double EPoint::GetSFactorConversion() const {
  */
 
 double EPoint::GetSqrtPenetrability(int jGroupNum, int channelNum) const {
-  return edep_->penetrabilities[jGroupNum - 1][channelNum - 1];
+  return edep_->penetrabilities[edep_->At(jGroupNum, channelNum)];
 }
 
 /*!
@@ -581,7 +582,7 @@ double EPoint::GetCrossSectionKinFactor() const {
  */
 
 complex EPoint::GetLoElement(int jGroupNum, int channelNum) const {
-  return edep_->lo_elements[jGroupNum - 1][channelNum - 1];
+  return edep_->lo_elements[edep_->At(jGroupNum, channelNum)];
 }
 
 /*!
@@ -591,7 +592,7 @@ complex EPoint::GetLoElement(int jGroupNum, int channelNum) const {
  */
 
 complex EPoint::GetExpCoulombPhase(int jGroupNum, int channelNum) const {
-  return edep_->coulombphase[jGroupNum - 1][channelNum - 1];
+  return edep_->coulombphase[edep_->At(jGroupNum, channelNum)];
 }
 
 /*!
@@ -601,7 +602,7 @@ complex EPoint::GetExpCoulombPhase(int jGroupNum, int channelNum) const {
  */
 
 complex EPoint::GetExpHardSpherePhase(int jGroupNum, int channelNum) const {
-  return edep_->hardspherephase[jGroupNum - 1][channelNum - 1];
+  return edep_->hardspherephase[edep_->At(jGroupNum, channelNum)];
 }
 
 /*!
@@ -1423,16 +1424,9 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure, bool i
   // Every table below is rebuilt from scratch: a second call (a parent
   // point's CalcEDependentValues reaches its sub-points again, e.g. after an
   // energy shift) used to append a second copy to the sub-points' tables.
-  // The classic per-J-group rows are emptied in place (ClearEDependentRows),
-  // keeping their storage, as RecalcEDependentValues does; the THM tables
-  // (empty for a classic point) are dropped.
+  // The tables, THM vertex tables included, are emptied in place
+  // (ClearEDependentRows), keeping their storage, as RecalcEDependentValues does.
   this->ClearEDependentRows();
-  if (edep_ && !(edep_->thm_jl.empty() && edep_->thm_rhodjl.empty() && edep_->thm_coul.empty())) {
-    EDependentTables &t = MutableEDep();  // our own after ClearEDependentRows: no copy
-    t.thm_jl.clear();
-    t.thm_rhodjl.clear();
-    t.thm_coul.clear();
-  }
   thm_ps_.reset();
   std::shared_ptr<ThmPsTable> psTable;
   bool psCoul = false;
@@ -1635,17 +1629,7 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure, bool i
   // step refills its rows in place every evaluation and keeps their capacity.
   if (edep_ && edep_.use_count() == 1) {
     EDependentTables &t = MutableEDep();
-    auto shrink = [](auto &rows) {
-      for (auto &row : rows) row.shrink_to_fit();
-      rows.shrink_to_fit();
-    };
-    shrink(t.lo_elements);
-    shrink(t.penetrabilities);
-    shrink(t.coulombphase);
-    shrink(t.hardspherephase);
-    shrink(t.thm_jl);
-    shrink(t.thm_rhodjl);
-    shrink(t.thm_coul);
+    t.ShrinkToFit();  // the THM vertex tables too
   }
   if (includeSubPoints) {
     for (int i = 1; i <= this->NumSubPoints(); i++) {
@@ -1683,18 +1667,15 @@ void EPoint::ClearEDependentRows() {
     // Shared with another point: start a table of our own with the same rows,
     // empty, rather than copying values that are about to be replaced.
     auto own = std::make_shared<EDependentTables>();
-    own->lo_elements.resize(edep_->lo_elements.size());
-    own->penetrabilities.resize(edep_->penetrabilities.size());
-    own->coulombphase.resize(edep_->coulombphase.size());
-    own->hardspherephase.resize(edep_->hardspherephase.size());
+    own->rowStart.reserve(edep_->rowStart.size());
+    own->lo_elements.reserve(edep_->lo_elements.size());
+    own->penetrabilities.reserve(edep_->penetrabilities.size());
+    own->coulombphase.reserve(edep_->coulombphase.size());
+    own->hardspherephase.reserve(edep_->hardspherephase.size());
     edep_ = std::move(own);
     return;
   }
-  EDependentTables &t = MutableEDep();
-  for (auto &row : t.lo_elements) row.clear();
-  for (auto &row : t.penetrabilities) row.clear();
-  for (auto &row : t.coulombphase) row.clear();
-  for (auto &row : t.hardspherephase) row.clear();
+  MutableEDep().Clear();  // our own: emptied in place, keeping its storage
 }
 
 /*!
@@ -1838,11 +1819,8 @@ bool EPoint::CopyEDependentValuesFrom(const EPoint &other) {
  */
 
 void EPoint::AddLoElement(int jGroupNum, int channelNum, complex loElement) {
-  vector_c d;
   EDependentTables &t = MutableEDep();
-  while (jGroupNum > t.lo_elements.size()) t.lo_elements.push_back(d);
-  t.lo_elements[jGroupNum - 1].push_back(loElement);
-  assert(channelNum = t.lo_elements[jGroupNum - 1].size());
+  EDependentTables::Put(t.lo_elements, t.Slot(jGroupNum, channelNum), loElement);
 }
 
 /*!
@@ -1851,11 +1829,8 @@ void EPoint::AddLoElement(int jGroupNum, int channelNum, complex loElement) {
  */
 
 void EPoint::AddSqrtPenetrability(int jGroupNum, int channelNum, double sqrtPene) {
-  vector_r d;
   EDependentTables &t = MutableEDep();
-  while (jGroupNum > t.penetrabilities.size()) t.penetrabilities.push_back(d);
-  t.penetrabilities[jGroupNum - 1].push_back(sqrtPene);
-  assert(channelNum = t.penetrabilities[jGroupNum - 1].size());
+  EDependentTables::Put(t.penetrabilities, t.Slot(jGroupNum, channelNum), sqrtPene);
 }
 
 /*!
@@ -1884,11 +1859,8 @@ void EPoint::AddThmFormFactor(int jGroupNum, int channelNum, double jl, double r
  */
 
 void EPoint::AddExpCoulombPhase(int jGroupNum, int channelNum, complex expShift) {
-  vector_c d;
   EDependentTables &t = MutableEDep();
-  while (jGroupNum > t.coulombphase.size()) t.coulombphase.push_back(d);
-  t.coulombphase[jGroupNum - 1].push_back(expShift);
-  assert(channelNum = t.coulombphase[jGroupNum - 1].size());
+  EDependentTables::Put(t.coulombphase, t.Slot(jGroupNum, channelNum), expShift);
 }
 
 /*!
@@ -1897,11 +1869,8 @@ void EPoint::AddExpCoulombPhase(int jGroupNum, int channelNum, complex expShift)
  */
 
 void EPoint::AddExpHardSpherePhase(int jGroupNum, int channelNum, complex expShift) {
-  vector_c d;
   EDependentTables &t = MutableEDep();
-  while (jGroupNum > t.hardspherephase.size()) t.hardspherephase.push_back(d);
-  t.hardspherephase[jGroupNum - 1].push_back(expShift);
-  assert(channelNum = t.hardspherephase[jGroupNum - 1].size());
+  EDependentTables::Put(t.hardspherephase, t.Slot(jGroupNum, channelNum), expShift);
 }
 
 /*!
@@ -2234,6 +2203,10 @@ void EPoint::Calculate(CNuc *theCNuc, const Config &configure, EPoint *parent, i
     }
   } else {
     TargetEffect *effect = this->GetParentData()->GetTargetEffect(this->GetTargetEffectNum());
+    if (effect->IsTargetIntegration() && !effect->IsThickTarget()) {
+      this->CalculateThinTarget(theCNuc, configure, effect);
+      return;
+    }
     const double blend = this->GetTargetBlendWeight();
     const double autoTol = effect->GetAutoTolerance();
     const bool hasMapped = numMapped > 0;
@@ -2336,6 +2309,76 @@ void EPoint::Calculate(CNuc *theCNuc, const Config &configure, EPoint *parent, i
       }
     }
   }
+}
+
+/*!
+ * The sub-point stage of a thin-target integration.  Unlike the other kernels it falls back to sigma at the
+ * depth-averaged energy E_bar = E - D (IsTargetFallbackOnly), never to a plain point at the data energy: the data
+ * of a target integration carry the beam energy, and sigma(E_beam) is off by the centroid shift ~Delta/2 (13C+a
+ * ND2021r with windows around the narrow levels: chi2 420,221 against 402,111 integrated everywhere, 2026-11-05).
+ *  - outside every window: the one to three fallback sub-points, then the kernel (which returns sigma(E_bar));
+ *  - at a window edge: the full grid, blended with sigma(E_bar) inside the kernel;
+ *  - automatic tolerance: the first and last sub-points and the two around E_bar first; if the chord between
+ *    the end nodes stays within the tolerance of sigma(E_bar) (a curvature bound, about three times the error of
+ *    sigma(E_bar) for a box), sigma(E_bar) is used and no other sub-point is evaluated.
+ */
+void EPoint::CalculateThinTarget(CNuc *theCNuc, const Config &configure, TargetEffect *effect) {
+  const int numMapped = ScopedPointMappingOff::Active() ? 0 : this->NumLocalMappedPoints();
+  const bool hasMapped = numMapped > 0;
+  const int n = this->NumSubPoints();
+  auto calcSub = [&](int i) {
+    EPoint *subPoint = this->GetSubPoint(i);
+    if (configure.paramMask & Config::USE_EXTERNAL_CAPTURE) subPoint->RecalcEDependentValues(theCNuc, configure);
+    if (hasMapped)
+      subPoint->Calculate(theCNuc, configure, this, i);
+    else
+      subPoint->Calculate(theCNuc, configure);
+  };
+  auto integrateAll = [&]() {
+    this->IntegrateTargetEffectForObservable(configure);
+    for (int m = 1; m <= numMapped; m++) this->GetLocalMappedPoint(m)->IntegrateTargetEffectForObservable(configure);
+  };
+  const double autoTol = effect->GetAutoTolerance();
+  if (autoTol > 0. && !target_fallback_only_ && n >= 4) {
+    const double eBar = this->GetCMEnergy() - target_fallback_depth_;
+    int jb = 1;  // the sub-points jb, jb + 1 bracket E_bar (descending energies)
+    for (int j = 1; j < n; j++)
+      if (this->GetSubPoint(j + 1)->GetCMEnergy() <= eBar) { jb = j; break; }
+    if (eBar <= this->GetSubPoint(n)->GetCMEnergy()) jb = n - 1;
+    const int probes[4] = {1, jb, jb + 1, n};
+    std::vector<bool> done(n + 1, false);
+    for (int k = 0; k < 4; k++)
+      if (!done[probes[k]]) { calcSub(probes[k]); done[probes[k]] = true; }
+    const double eF = this->GetSubPoint(1)->GetCMEnergy(), eL = this->GetSubPoint(n)->GetCMEnergy();
+    const double ea = this->GetSubPoint(jb)->GetCMEnergy(), eb = this->GetSubPoint(jb + 1)->GetCMEnergy();
+    const double tChord = (eF > eL) ? (eF - eBar) / (eF - eL) : 0.0;
+    const double tBar = (ea > eb) ? std::min(std::max((ea - eBar) / (ea - eb), 0.0), 1.0) : 0.0;
+    bool allPass = true;
+    for (int m = 0; m <= numMapped && allPass; m++) {
+      EPoint *host = (m == 0) ? this : this->GetLocalMappedPoint(m);
+      const double sF = host->GetSubPoint(1)->GetFitCrossSection(), sL = host->GetSubPoint(n)->GetFitCrossSection();
+      const double sBar = (1.0 - tBar) * host->GetSubPoint(jb)->GetFitCrossSection() +
+                          tBar * host->GetSubPoint(jb + 1)->GetFitCrossSection();
+      const double chord = (1.0 - tChord) * sF + tChord * sL;
+      if (std::fabs(chord - sBar) > autoTol * std::max(std::fabs(sBar), 1e-300)) allPass = false;
+    }
+    if (allPass) {
+      // sigma(E_bar) from the two bracketing sub-points, through the one integrator (A_y, coefficients and
+      // capture components keep their own combinations)
+      EPoint::TargetFallbackScope self(this);
+      std::vector<std::unique_ptr<EPoint::TargetFallbackScope>> mapped;
+      for (int m = 1; m <= numMapped; m++)
+        mapped.emplace_back(new EPoint::TargetFallbackScope(this->GetLocalMappedPoint(m)));
+      integrateAll();
+      return;
+    }
+    for (int i = 1; i <= n; i++)
+      if (!done[i]) calcSub(i);
+    integrateAll();
+    return;
+  }
+  for (int i = 1; i <= n; i++) calcSub(i);
+  integrateAll();
 }
 
 /*!
@@ -2688,10 +2731,48 @@ double EPoint::DopplerTemperatureDerivative(const Config &configure, const std::
 }
 
 template <class V, class Read>
+V EPoint::TargetFallbackImpl(Read rd) {
+  const int n = this->NumSubPoints();
+  if (n <= 0) return V(0.0);
+  if (n == 1) return rd(1);
+  const double e = this->GetCMEnergy() - target_fallback_depth_;
+  if (target_fallback_only_ && n == 3) {
+    // three fallback nodes spanning the E_bar a fitted density can reach: the quadratic through them
+    double x[3];
+    for (int k = 0; k < 3; k++) x[k] = this->GetSubPoint(k + 1)->GetCMEnergy();
+    const double lo = std::min(x[0], x[2]), hi = std::max(x[0], x[2]);
+    const double ec = std::min(std::max(e, lo), hi);
+    V v = 0.0;
+    for (int k = 0; k < 3; k++) {
+      double l = 1.0;
+      for (int m = 0; m < 3; m++)
+        if (m != k) l *= (ec - x[m]) / (x[k] - x[m]);
+      v += l * rd(k + 1);
+    }
+    return v;
+  }
+  // a full grid (descending energies): linear between the two nodes around E_bar, the end node outside it
+  if (e >= this->GetSubPoint(1)->GetCMEnergy()) return rd(1);
+  if (e <= this->GetSubPoint(n)->GetCMEnergy()) return rd(n);
+  for (int j = 1; j < n; j++) {
+    const double Ea = this->GetSubPoint(j)->GetCMEnergy(), Eb = this->GetSubPoint(j + 1)->GetCMEnergy();
+    if (e <= Ea && e >= Eb) {
+      const double frac = (Ea > Eb) ? (Ea - e) / (Ea - Eb) : 0.0;
+      return (1.0 - frac) * rd(j) + frac * rd(j + 1);
+    }
+  }
+  return rd(n);
+}
+
+template <class V, class Read>
 V EPoint::IntegrateKernelsImpl(const Config &configure, Read rd) {
   V yield = 0.0;
   TargetEffect *targetEffect = this->GetParentData()->GetTargetEffect(this->GetTargetEffectNum());
   const int numPoints = this->NumSubPoints();
+  // A thin-target point outside the windows of an energy-restricted integration, or one the automatic
+  // tolerance let off: sigma at the depth-averaged energy E_bar (IsTargetFallbackOnly, TargetFallbackScope).
+  const bool thinTarget = targetEffect->IsTargetIntegration() && !targetEffect->IsThickTarget();
+  if (thinTarget && (target_fallback_only_ || target_fallback_now_)) return this->TargetFallbackImpl<V>(rd);
   if (numPoints < 2) return V(0.0);
   const double eHigh = this->GetSubPoint(1)->GetCMEnergy();
   const double eLow = this->GetSubPoint(numPoints)->GetCMEnergy();
@@ -2782,6 +2863,10 @@ V EPoint::IntegrateKernelsImpl(const Config &configure, Read rd) {
     }
     // a thick target (density 0) is the yield per incident particle, not divided by a density
     yield = targetEffect->IsThickTarget() ? outer : outer / (targetEffect->GetDensity() * 1.0e-24);
+    // The smooth edge of a window: blend with sigma(E_bar), not with sigma at the beam energy.  Done here, in
+    // the linear kernel, so the gradient weights (TargetEffectWeights) carry it too.
+    if (thinTarget && target_blend_weight_ < 1.0)
+      yield = target_blend_weight_ * yield + (1.0 - target_blend_weight_) * this->TargetFallbackImpl<V>(rd);
   } else if (targetEffect->IsGaussian()) {
     const double s = targetEffect->SigmaCM(centroid, configure, cm_factor_);
     if (!(s > 0.)) {
