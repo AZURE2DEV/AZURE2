@@ -897,6 +897,28 @@ double TargetEffect::TargetThickness(double energy, const Config &configure, dou
   return delta;
 }
 
+double TargetEffect::MeanEnergyLoss(double energy, const Config &configure, double density) {
+  if (isThickTarget_) return 0.0;
+  const double delta = this->TargetThickness(energy, configure, density);
+  if (!(delta > 0.0) || !(delta <= energy)) return 0.0;
+  auto invEps = [&](double e) {
+    const double eps = stoppingPowerEq_.Evaluate(configure, e);
+    return (eps > 0.0) ? 1.0 / eps : 0.0;
+  };
+  // Simpson on 32 panels: int (E - e)/epsilon de / int 1/epsilon de over [E - Delta, E]
+  const int n = 32;
+  const double h = delta / n;
+  double num = 0.0, den = 0.0;
+  for (int k = 0; k <= n; k++) {
+    const double w = (k == 0 || k == n) ? 1.0 : ((k % 2) ? 4.0 : 2.0);
+    const double depth = k * h;
+    const double ie = invEps(energy - depth);
+    num += w * depth * ie;
+    den += w * ie;
+  }
+  return (den > 0.0) ? num / den : 0.5 * delta;
+}
+
 /*!
  * Makes this line a member of a density group whose first line is \p leader: its density, prior and layout
  * density become the leader's (the group has one parameter, held by the leader).

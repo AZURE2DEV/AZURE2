@@ -437,6 +437,26 @@ window, plus the centroid shift under target integration), using the bare
 value outright when the estimate is below the tolerance.  Points with mapped
 observables skip only when every mapped observable passes its own estimate.
 
+A **thin-target integration** is different (2026-11-05): its data carry the beam
+energy, so neither a plain point nor the bare probe is the right stand-in --
+both give :math:`\sigma(E_0)`, off by the centroid shift.  Its fallback is
+:math:`\sigma(\bar E)` at the depth-averaged energy
+:math:`\bar E = \int E\,dE/\epsilon \big/ \int dE/\epsilon` over the target
+(``TargetEffect::MeanEnergyLoss`` gives :math:`D = E_0 - \bar E`, stored on every
+thin-target point and updated with a fitted density).  A point outside every
+window keeps the effect number with ``IsTargetFallbackOnly()`` set and one
+sub-point at :math:`\bar E` (three, at :math:`\bar E` of 0.01 :math:`N_0`,
+:math:`N_0` and the layout density, under ``densityfit``); edge blending happens
+inside ``IntegrateKernelsImpl`` against ``TargetFallbackImpl`` (linear in the
+sub-point values, so ``TargetEffectWeights`` and the analytic gradient carry it);
+and ``EPoint::CalculateThinTarget`` makes the automatic decision from the end
+sub-points and the two around :math:`\bar E`, comparing the chord with
+:math:`\sigma(\bar E)` (curvature only), and lets the point off through a
+``TargetFallbackScope``.  Windows on a thick target, and windows or a tolerance
+on a line with ``doppler``, are refused (``CheckTargetWindows``).  The total
+capture composite never applies the automatic decision.  Test:
+``tests/target_window_fallback``.
+
 The combined branch of ``EPoint::IntegrateTargetEffect`` accepts either
 convolution flavour: a fixed beam sigma, or the energy-dependent convolution
 equation evaluated at each depth energy.  The latter combination used to fall

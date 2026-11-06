@@ -833,6 +833,55 @@ int EData::GetEnergyShiftFnParamOffset() const {
  */
 
 namespace {
+/*!
+ * The sub-points of a thin-target point outside the windows of an energy-restricted integration
+ * (EPoint::IsTargetFallbackOnly): one at E_bar = E - D for a fixed density; for a fitted one three, at E_bar of the
+ * smallest density the fit may reach (0.01 N0, EData::FillDensitiesFromParams), of the nominal N0 and of the layout
+ * density, through which the kernel interpolates E_bar(N) -- exact at N0, smooth in N.
+ */
+static void AddTargetFallbackNodes(EPoint *point, TargetEffect *te, double cmConversion, const Config &configure,
+                                   ESegment *segment) {
+  const double e = point->GetCMEnergy();
+  std::vector<double> nodes;
+  if (te->HasDensityFit()) {
+    const double n0 = te->GetDensityNominal(), eLab = point->GetLabEnergy();
+    const double dMin = cmConversion * te->MeanEnergyLoss(eLab, configure, 0.01 * n0);
+    const double d0 = cmConversion * te->MeanEnergyLoss(eLab, configure, n0);
+    double dMax = cmConversion * te->MeanEnergyLoss(eLab, configure, te->GetLayoutDensity());
+    if (!(dMax > d0)) dMax = 1.5 * d0;
+    nodes = {e - std::min(dMin, 0.5 * d0), e - d0, e - dMax};
+  } else {
+    nodes = {e - point->GetTargetFallbackDepth()};
+  }
+  for (double sub : nodes) {
+    EPoint subPoint(point->GetCMAngle(), sub, segment);
+    subPoint.SetCoefficientOrder(point->GetCoefficientOrder());
+    subPoint.SetCoefficientAbsolute(point->GetCoefficientAbsolute());
+    subPoint.SetStoppingPower(cmConversion * te->GetStoppingPowerEq()->Evaluate(configure, sub / cmConversion));
+    point->AddSubPoint(subPoint);
+  }
+}
+
+/*!
+ * Refuses the combinations the sigma(E_bar) fallback of a windowed target integration does not cover.
+ */
+static bool CheckTargetWindows(TargetEffect *te, int segmentKey, std::ostream &out) {
+  if (!te->IsTargetIntegration()) return true;
+  const bool windows = !te->GetRanges().empty();
+  if (te->IsThickTarget() && windows) {
+    out << "ERROR: segment #" << segmentKey << ": energy windows on a THICK-target integration (density 0): a thick-"
+        << "target yield has no single equivalent energy to evaluate outside the windows.  Give the density or "
+        << "drop the windows." << std::endl;
+    return false;
+  }
+  if (te->IsDoppler() && !te->IsThickTarget() && (windows || te->GetAutoTolerance() > 0.)) {
+    out << "ERROR: segment #" << segmentKey << ": energy windows or an automatic tolerance on a target integration "
+        << "with free-gas Doppler broadening (doppler) are not supported." << std::endl;
+    return false;
+  }
+  return true;
+}
+
 EPoint::SubGridSpec MakeSubGridSpec(const AdaptiveIntegrationGrid::GridConfig &gc, double start, double end,
                                     const TargetEffect *effect, double conversion) {
   EPoint::SubGridSpec spec;
@@ -1199,14 +1248,19 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
         if (eMax > 0.0 && !targetEffect->LoadUdrTable(eMin, eMax, configure.outStream, configure.cacheInputFiles)) return -1;
       }
 
+      if (!CheckTargetWindows(targetEffect, segment->GetSegmentKey(), configure.outStream)) return -1;
+      const bool thinTarget = targetEffect->IsTargetIntegration() && !targetEffect->IsThickTarget();
       for (EPointIterator point = segment->GetPoints().begin(); point < segment->GetPoints().end(); point++) {
         // An effect restricted to energy ranges leaves points outside them
-        // completely untouched: they never receive the effect number, so the
-        // whole downstream machinery treats them as ordinary points.
+        // untouched: they never receive the effect number, so the whole
+        // downstream machinery treats them as ordinary points -- except under a
+        // thin-target integration, whose data carry the beam energy: there a
+        // point outside the windows is evaluated at its depth-averaged energy
+        // E_bar (EPoint::IsTargetFallbackOnly, 2026-11-05).
         double blendWeight = targetEffect->BlendWeight(point->GetLabEnergy());
-        if (blendWeight <= 0.) continue;
+        if (blendWeight <= 0. && !thinTarget) continue;
         point->SetTargetEffectNum(segment->GetTargetEffectNum());
-        point->SetTargetBlendWeight(blendWeight);
+        point->SetTargetBlendWeight(std::max(blendWeight, 0.0));
         point->SetTargetKinematics(cmConversion, bohrZ1, bohrZ2);
 
         if (targetEffect->IsSubPointEffect()) {
@@ -1235,6 +1289,15 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
             point->SetTargetThickness(targetEffect->HasDensityFit()
                                           ? cmConversion * targetEffect->TargetThickness(point->GetLabEnergy(), configure)
                                           : targetThickness);
+          }
+          if (thinTarget) {
+            point->SetTargetFallbackDepth(cmConversion * targetEffect->MeanEnergyLoss(point->GetLabEnergy(), configure,
+                                                                                      targetEffect->GetDensity()));
+            if (blendWeight <= 0.) {
+              point->SetTargetFallbackOnly(true);
+              AddTargetFallbackNodes(&*point, targetEffect, cmConversion, configure, &*segment);
+              continue;
+            }
           }
           // How far the grid reaches above and below the point for this effect (beam spread, target, straggling).
           targetEffect->GridExtent(point->GetCMEnergy(), targetThickness, configure, cmConversion, bohrZ1, bohrZ2, forwardDepth, backwardDepth);
@@ -1374,11 +1437,13 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
             if (eMax > 0.0 && !targetEffect->LoadUdrTable(eMin, eMax, configure.outStream, configure.cacheInputFiles)) return -1;
           }
 
+          if (!CheckTargetWindows(targetEffect, segment->GetSegmentKey(), configure.outStream)) return -1;
+          const bool thinTarget = targetEffect->IsTargetIntegration() && !targetEffect->IsThickTarget();
           for (EPointIterator point = component->GetPoints().begin(); point < component->GetPoints().end(); point++) {
             double blendWeight = targetEffect->BlendWeight(point->GetLabEnergy());
-            if (blendWeight <= 0.) continue;
+            if (blendWeight <= 0. && !thinTarget) continue;  // see the base segment's loop above
             point->SetTargetEffectNum(component->GetTargetEffectNum());
-            point->SetTargetBlendWeight(blendWeight);
+            point->SetTargetBlendWeight(std::max(blendWeight, 0.0));
             point->SetTargetKinematics(compConversion, bohrZ1, bohrZ2);
 
             if (targetEffect->IsSubPointEffect()) {
@@ -1403,6 +1468,15 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
                 point->SetTargetThickness(targetEffect->HasDensityFit()
                                               ? compConversion * targetEffect->TargetThickness(point->GetLabEnergy(), configure)
                                               : targetThickness);
+              }
+              if (thinTarget) {
+                point->SetTargetFallbackDepth(compConversion * targetEffect->MeanEnergyLoss(point->GetLabEnergy(), configure,
+                                                                                            targetEffect->GetDensity()));
+                if (blendWeight <= 0.) {
+                  point->SetTargetFallbackOnly(true);
+                  AddTargetFallbackNodes(&*point, targetEffect, compConversion, configure, component);
+                  continue;
+                }
               }
               // How far the grid reaches above and below the point for this effect (beam spread, target, straggling).
               targetEffect->GridExtent(point->GetCMEnergy(), targetThickness, configure, compConversion, bohrZ1, bohrZ2, forwardDepth, backwardDepth);
@@ -3340,7 +3414,10 @@ bool EData::CheckTransformedSegments(const Config &configure) {
         continue;
       }
       TargetEffect *te = this->GetTargetEffect(base->GetTargetEffectNum());
-      if (base->GetTargetBlendWeight() < 1.0 || (te && te->GetAutoTolerance() > 0.0)) {
+      // A thin-target integration blends with sigma(E_bar) inside its kernel (EPoint::TargetFallbackImpl), which is
+      // still one linear kernel on the transformed values; other kernels blend with a plain point outside it.
+      const bool thinTarget = te && te->IsTargetIntegration() && !te->IsThickTarget();
+      if ((base->GetTargetBlendWeight() < 1.0 && !thinTarget) || (te && te->GetAutoTolerance() > 0.0)) {
         configure.outStream << "ERROR: " << what << "its target effect blends in at range edges or has an automatic "
                             << "tolerance; the transform needs the full kernel at every point (drop the blend width "
                             << "and the tolerance of that <targetInt> line)." << std::endl;
@@ -4651,6 +4728,10 @@ void EData::FillDensitiesFromParams(const vector_r &p, const Config &configure) 
     for (EPointIterator point = seg.GetPoints().begin(); point < seg.GetPoints().end(); point++) {
       if (point->GetTargetEffectNum() != n || !(point->GetTargetThickness() > 0.0)) continue;
       point->SetTargetThickness(point->GetCMFactor() * te->TargetThickness(point->GetTargetLabEnergy(), configure));
+      // E_bar of the sigma(E_bar) fallback moves with the density too (EPoint::IsTargetFallbackOnly)
+      if (!te->IsThickTarget())
+        point->SetTargetFallbackDepth(point->GetCMFactor() *
+                                      te->MeanEnergyLoss(point->GetTargetLabEnergy(), configure, te->GetDensity()));
     }
   };
   for (ESegment &seg : segments_) update(seg);

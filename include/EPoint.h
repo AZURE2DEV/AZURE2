@@ -222,6 +222,28 @@ class EPoint {
   /// 1 everywhere unless the effect declares energy ranges.
   double GetTargetBlendWeight() const { return target_blend_weight_; };
   void SetTargetBlendWeight(double w) { target_blend_weight_ = w; };
+  /// Thin-target integration restricted to energy windows (2026-11-05): outside the windows (blend weight 0) the
+  /// point is evaluated at the single depth-averaged energy E_bar = E - D of its own target instead of being a
+  /// plain point at its data (beam) energy, which was off by the centroid shift ~Delta/2.  Such a point carries
+  /// one sub-point at E_bar (fixed density) or three spanning the range of E_bar a fitted density can reach,
+  /// and IsTargetFallbackOnly() is true.  D (c.m. MeV, TargetEffect::MeanEnergyLoss) is set on every thin-target
+  /// point: edge blending and the automatic decision fall back to sigma(E_bar) as well.
+  bool IsTargetFallbackOnly() const { return target_fallback_only_; }
+  void SetTargetFallbackOnly(bool f) { target_fallback_only_ = f; }
+  double GetTargetFallbackDepth() const { return target_fallback_depth_; }
+  void SetTargetFallbackDepth(double d) { target_fallback_depth_ = d; }
+  /// While alive, the target integration of the point returns sigma(E_bar) from its sub-points (an automatic
+  /// tolerance decided the integration is not needed at this point).
+  class TargetFallbackScope {
+   public:
+    explicit TargetFallbackScope(EPoint *p) : p_(p), prev_(p->target_fallback_now_) { p_->target_fallback_now_ = true; }
+    ~TargetFallbackScope() { p_->target_fallback_now_ = prev_; }
+    TargetFallbackScope(const TargetFallbackScope &) = delete;
+    TargetFallbackScope &operator=(const TargetFallbackScope &) = delete;
+   private:
+    EPoint *p_;
+    bool prev_;
+  };
   /// Highest Legendre order. Angular-distribution points only.
   int GetMaxAngDistOrder() const;
   /// An angular-coefficient data point (segment isDiff 9): the fit value is the Legendre
@@ -421,6 +443,8 @@ class EPoint {
   void AddECAmplitude(int, int, complex, double);
   void ClearECAmplitudes();
   void Calculate(CNuc *, const Config &configure, EPoint *parent = NULL, int subPointNum = 0);
+  /// The sub-point stage of a thin-target integration, with its sigma(E_bar) fallback (see the .cpp).
+  void CalculateThinTarget(CNuc *, const Config &configure, TargetEffect *effect);
   void SetMap(int, int);
   void ClearMapping();
   /// A mapped point that keeps its own energy-dependent values: a component of a SUM, RATIO or total-capture segment
@@ -511,6 +535,10 @@ class EPoint {
   /// The line's kernels (Gaussian, target integration, UDR, beam profile) on sub-point values rd(j).
   template <class V, class Read>
   V IntegrateKernelsImpl(const Config &, Read rd);
+  /// sigma at E_bar = E - D from the sub-point values: the single node, a quadratic through three fallback
+  /// nodes, or a linear interpolation on a full grid.
+  template <class V, class Read>
+  V TargetFallbackImpl(Read rd);
   bool doppler_applied_ = false;  ///< see DopplerAppliedScope
   bool is_differential_;
   bool is_phase_;
@@ -530,6 +558,9 @@ class EPoint {
   int targetEffectNum_;
   int fileRecord_ = 0;
   double target_blend_weight_ = 1.0;
+  bool target_fallback_only_ = false;   ///< see IsTargetFallbackOnly
+  bool target_fallback_now_ = false;    ///< see TargetFallbackScope
+  double target_fallback_depth_ = 0.0;  ///< D = E - E_bar, c.m. MeV (see IsTargetFallbackOnly)
   int max_ang_dist_order_;
   double cm_angle_;
   double lab_angle_;
