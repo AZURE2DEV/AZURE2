@@ -5,6 +5,7 @@
 #include <vector>
 #include <string>
 #include <utility>
+#include <cassert>
 #include <memory>
 
 #include <cstring>
@@ -110,11 +111,45 @@ class ScopedPointMappingOff {
 class EPoint {
  public:
   /// The energy-dependent channel tables of a point (one row per J group); see edep_.
+  /// Packed: one flat array per kind and one row index, five allocations a point
+  /// instead of four per J group (natural neon: ~60 a sub-point).  Row j (from 1)
+  /// holds the channels of J group j, at slots [rowStart[j-1], rowStart[j]).
   struct EDependentTables {
-    matrix_c lo_elements;
-    matrix_r penetrabilities;
-    matrix_c coulombphase;
-    matrix_c hardspherephase;
+    std::vector<int> rowStart{0};
+    vector_c lo_elements;
+    vector_r penetrabilities;
+    vector_c coulombphase;
+    vector_c hardspherephase;
+    /// Slot of (J group, channel); rows and channels are filled in order and extended here.
+    int Slot(int jGroupNum, int channelNum) {
+      while ((int)rowStart.size() < jGroupNum + 1) rowStart.push_back(rowStart.back());
+      const int slot = rowStart[jGroupNum - 1] + channelNum - 1;
+      if (slot >= rowStart[jGroupNum]) {
+        assert(jGroupNum + 1 == (int)rowStart.size() && slot == rowStart[jGroupNum]);
+        rowStart[jGroupNum] = slot + 1;
+      }
+      return slot;
+    }
+    int At(int jGroupNum, int channelNum) const { return rowStart[jGroupNum - 1] + channelNum - 1; }
+    template <class V, class T>
+    static void Put(V &v, int slot, const T &x) {
+      if ((int)v.size() <= slot) v.resize(slot + 1);
+      v[slot] = x;
+    }
+    void Clear() {
+      rowStart.assign(1, 0);
+      lo_elements.clear();
+      penetrabilities.clear();
+      coulombphase.clear();
+      hardspherephase.clear();
+    }
+    void ShrinkToFit() {
+      rowStart.shrink_to_fit();
+      lo_elements.shrink_to_fit();
+      penetrabilities.shrink_to_fit();
+      coulombphase.shrink_to_fit();
+      hardspherephase.shrink_to_fit();
+    }
   };
   /// Everything CalcEDependentValues and CalcLegendreP compute for a point, by
   /// reference: the tables are shared, not copied.  These depend only on the

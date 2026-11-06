@@ -453,7 +453,7 @@ double EPoint::GetSFactorConversion() const {
  */
 
 double EPoint::GetSqrtPenetrability(int jGroupNum, int channelNum) const {
-  return edep_->penetrabilities[jGroupNum - 1][channelNum - 1];
+  return edep_->penetrabilities[edep_->At(jGroupNum, channelNum)];
 }
 
 /*!
@@ -511,7 +511,7 @@ double EPoint::GetCrossSectionKinFactor() const {
  */
 
 complex EPoint::GetLoElement(int jGroupNum, int channelNum) const {
-  return edep_->lo_elements[jGroupNum - 1][channelNum - 1];
+  return edep_->lo_elements[edep_->At(jGroupNum, channelNum)];
 }
 
 /*!
@@ -521,7 +521,7 @@ complex EPoint::GetLoElement(int jGroupNum, int channelNum) const {
  */
 
 complex EPoint::GetExpCoulombPhase(int jGroupNum, int channelNum) const {
-  return edep_->coulombphase[jGroupNum - 1][channelNum - 1];
+  return edep_->coulombphase[edep_->At(jGroupNum, channelNum)];
 }
 
 /*!
@@ -531,7 +531,7 @@ complex EPoint::GetExpCoulombPhase(int jGroupNum, int channelNum) const {
  */
 
 complex EPoint::GetExpHardSpherePhase(int jGroupNum, int channelNum) const {
-  return edep_->hardspherephase[jGroupNum - 1][channelNum - 1];
+  return edep_->hardspherephase[edep_->At(jGroupNum, channelNum)];
 }
 
 /*!
@@ -1425,14 +1425,7 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure, bool i
   // step refills its rows in place every evaluation and keeps their capacity.
   if (edep_ && edep_.use_count() == 1) {
     EDependentTables &t = MutableEDep();
-    auto shrink = [](auto &rows) {
-      for (auto &row : rows) row.shrink_to_fit();
-      rows.shrink_to_fit();
-    };
-    shrink(t.lo_elements);
-    shrink(t.penetrabilities);
-    shrink(t.coulombphase);
-    shrink(t.hardspherephase);
+    t.ShrinkToFit();
   }
   if (includeSubPoints) {
     for (int i = 1; i <= this->NumSubPoints(); i++) {
@@ -1468,18 +1461,15 @@ void EPoint::ClearEDependentRows() {
     // Shared with another point: start a table of our own with the same rows,
     // empty, rather than copying values that are about to be replaced.
     auto own = std::make_shared<EDependentTables>();
-    own->lo_elements.resize(edep_->lo_elements.size());
-    own->penetrabilities.resize(edep_->penetrabilities.size());
-    own->coulombphase.resize(edep_->coulombphase.size());
-    own->hardspherephase.resize(edep_->hardspherephase.size());
+    own->rowStart.reserve(edep_->rowStart.size());
+    own->lo_elements.reserve(edep_->lo_elements.size());
+    own->penetrabilities.reserve(edep_->penetrabilities.size());
+    own->coulombphase.reserve(edep_->coulombphase.size());
+    own->hardspherephase.reserve(edep_->hardspherephase.size());
     edep_ = std::move(own);
     return;
   }
-  EDependentTables &t = MutableEDep();
-  for (auto &row : t.lo_elements) row.clear();
-  for (auto &row : t.penetrabilities) row.clear();
-  for (auto &row : t.coulombphase) row.clear();
-  for (auto &row : t.hardspherephase) row.clear();
+  MutableEDep().Clear();  // our own: emptied in place, keeping its storage
 }
 
 /*!
@@ -1620,11 +1610,8 @@ bool EPoint::CopyEDependentValuesFrom(const EPoint &other) {
  */
 
 void EPoint::AddLoElement(int jGroupNum, int channelNum, complex loElement) {
-  vector_c d;
   EDependentTables &t = MutableEDep();
-  while (jGroupNum > t.lo_elements.size()) t.lo_elements.push_back(d);
-  t.lo_elements[jGroupNum - 1].push_back(loElement);
-  assert(channelNum = t.lo_elements[jGroupNum - 1].size());
+  EDependentTables::Put(t.lo_elements, t.Slot(jGroupNum, channelNum), loElement);
 }
 
 /*!
@@ -1633,11 +1620,8 @@ void EPoint::AddLoElement(int jGroupNum, int channelNum, complex loElement) {
  */
 
 void EPoint::AddSqrtPenetrability(int jGroupNum, int channelNum, double sqrtPene) {
-  vector_r d;
   EDependentTables &t = MutableEDep();
-  while (jGroupNum > t.penetrabilities.size()) t.penetrabilities.push_back(d);
-  t.penetrabilities[jGroupNum - 1].push_back(sqrtPene);
-  assert(channelNum = t.penetrabilities[jGroupNum - 1].size());
+  EDependentTables::Put(t.penetrabilities, t.Slot(jGroupNum, channelNum), sqrtPene);
 }
 
 /*!
@@ -1646,11 +1630,8 @@ void EPoint::AddSqrtPenetrability(int jGroupNum, int channelNum, double sqrtPene
  */
 
 void EPoint::AddExpCoulombPhase(int jGroupNum, int channelNum, complex expShift) {
-  vector_c d;
   EDependentTables &t = MutableEDep();
-  while (jGroupNum > t.coulombphase.size()) t.coulombphase.push_back(d);
-  t.coulombphase[jGroupNum - 1].push_back(expShift);
-  assert(channelNum = t.coulombphase[jGroupNum - 1].size());
+  EDependentTables::Put(t.coulombphase, t.Slot(jGroupNum, channelNum), expShift);
 }
 
 /*!
@@ -1659,11 +1640,8 @@ void EPoint::AddExpCoulombPhase(int jGroupNum, int channelNum, complex expShift)
  */
 
 void EPoint::AddExpHardSpherePhase(int jGroupNum, int channelNum, complex expShift) {
-  vector_c d;
   EDependentTables &t = MutableEDep();
-  while (jGroupNum > t.hardspherephase.size()) t.hardspherephase.push_back(d);
-  t.hardspherephase[jGroupNum - 1].push_back(expShift);
-  assert(channelNum = t.hardspherephase[jGroupNum - 1].size());
+  EDependentTables::Put(t.hardspherephase, t.Slot(jGroupNum, channelNum), expShift);
 }
 
 /*!

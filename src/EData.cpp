@@ -1010,6 +1010,7 @@ int EData::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, const st
   std::atomic<int> changed{0};
   std::atomic<long> newSubPoints{0};
   std::atomic<long> reusedSubPoints{0};
+  std::atomic<long> sharedSubPoints{0};
   // For AZURE_GRID_TIMING: per work item, -1 = a different number of nodes, else the
   // largest node move (MeV) of a grid that changed.
   std::vector<double> moved(work.size(), 0.0);
@@ -1048,7 +1049,7 @@ int EData::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, const st
     // and their tables are usually still shared with the EData this copy was
     // cloned from: a copy re-placing its grids then adds tables only for the
     // nodes that moved.
-    long reused = 0;
+    long reused = 0, fromOtherCopies = 0;
     auto layOut = [&](EPoint *target, ESegment *seg, bool shifted) {
       const EPoint::SubGridSpec &tspec = target->GetSubGridSpec();
       TargetEffect *effect = this->GetTargetEffect(seg->GetTargetEffectNum());
@@ -1072,9 +1073,14 @@ int EData::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, const st
                                effect->GetStoppingPowerEq()->Evaluate(configure, e / tspec.stoppingConversion));
         auto o = std::lower_bound(old.begin(), old.end(), sub.GetCMEnergy(),
                                   [](const EPoint::EDependentShare &x, double v) { return x.energy < v; });
+        EPoint::EDependentShare cached;
         if (o != old.end() && sub.AdoptEDependentValues(*o)) {
           sub.CalcCoulombAmplitude(theCNuc);  // depends on the angle; cheap
           reused++;
+        } else if (!shifted && nodeCache_->Find(seg->GetSegmentKey(), sub.GetCMEnergy(), sub.GetCMAngle(), cached) &&
+                   sub.AdoptEDependentValues(cached)) {
+          sub.CalcCoulombAmplitude(theCNuc);  // another copy placed this node: its tables
+          fromOtherCopies++;
         } else {
           sub.CalcLegendreP(configure.maxLOrder, theCNuc, qEffect);
           // A shifted segment's sub-points are moved and energised by the shift step.
@@ -1083,6 +1089,7 @@ int EData::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, const st
             sub.CalcCoulombAmplitude(theCNuc);
           }
         }
+        if (!shifted) nodeCache_->Store(seg->GetSegmentKey(), sub.ShareEDependentValues());
         target->AddSubPoint(sub);
       }
     };
@@ -1098,6 +1105,7 @@ int EData::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, const st
       }
     }
     reusedSubPoints += reused;
+    sharedSubPoints += fromOtherCopies;
     changed++;
     newSubPoints += (long)grid.size();
   };
@@ -1154,7 +1162,8 @@ int EData::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, const st
       std::cerr << "[grid] call " << c << ": " << work.size() << " grids, " << changed.load() << " re-placed ("
                 << newSubPoints.load() << " sub-points; " << resized << " with a new node count, largest node move "
                 << maxMove * 1.0e6 << " eV otherwise; " << reusedSubPoints.load()
-                << " sub-points kept their tables); observed parameters " << ms(t0, t1) << " ms, grids "
+                << " sub-points kept their tables, " << sharedSubPoints.load()
+                << " took another copy's); observed parameters " << ms(t0, t1) << " ms, grids "
                 << ms(t1, std::chrono::steady_clock::now()) << " ms" << std::endl;
     }
   }
@@ -5105,6 +5114,7 @@ EData *EData::Clone() const {
   dataCopy->segments_ = this->segments_;
   dataCopy->componentSegments_ = this->componentSegments_;
   dataCopy->covGroups_ = this->covGroups_;  // shared: one factor (and one frozen model) for all copies
+  dataCopy->nodeCache_ = this->nodeCache_;  // shared: a re-placed node is computed and held once
   dataCopy->priorCov_ = this->priorCov_;    // shared, read-only
   dataCopy->priorCovChi2_ = this->priorCovChi2_;
 

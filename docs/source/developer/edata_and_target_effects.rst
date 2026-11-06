@@ -763,44 +763,50 @@ Re-placing a sub-point grid (``EData::ReplaceSubPointGrids``) builds new
 sub-points.  A node that did not move keeps its sub-point's tables
 (``EPoint::ShareEDependentValues`` / ``AdoptEDependentValues``, which require
 the same c.m. energy, angle and pairs, so the values are exactly those
-``CalcEDependentValues`` and ``CalcLegendreP`` would compute); only the nodes
-that moved get new tables.  On natural neon 85-90 % of the re-placed
-sub-points keep their tables, and re-placing the grids of one evaluation went
-from 20-60 s to about 2 s.
+``CalcEDependentValues`` and ``CalcLegendreP`` would compute).  A node that
+moved is looked up in a cache shared by the data and all its copies
+(``NodeTableCache``, keyed by segment, energy and angle bit for bit, holding the
+tables weakly): the copies of a fit evaluate parameter sets that differ in one
+parameter, and a grid's nodes depend only on the levels in its window, so most
+copies place most nodes at the same energies, and the first to compute a node
+hands its tables to the others.  Before the cache every copy kept its own
+tables for every node that had drifted from the data it was cloned from, and
+memory grew towards a full copy per pooled copy (natural neon at four threads:
+11.8 GB at the start of a fit, 16.6 GB after 50 minutes and rising).
 
-The rows of the tables grow channel by channel; ``CalcEDependentValues``
-trims them to their size once filled (2.3 GB of spare capacity on natural
-neon, about a quarter of the tables).
+The tables are packed (``EPoint::EDependentTables``): one flat array per kind
+and a row index (``rowStart``, J group :math:`j` at slots
+``rowStart[j-1]`` to ``rowStart[j]``), five allocations a point instead of four
+per J group, about 60 a natural-neon sub-point; filled in order and trimmed to
+size (``ShrinkToFit``) once filled.
 
-Measured on ``tests/natural_neon``, a fit with grid re-placement at four
-threads (heap in use from ``mallinfo2``, RSS plus swap sampled every 2 s):
+Measured on ``tests/natural_neon``, a fit with grid re-placement (RSS plus swap
+sampled every 2 s):
 
-==========================  ===========================  ===========================
-                            before (dev 2d97b1f0)        after
-==========================  ===========================  ===========================
-data after setup            10.4 GB RSS                  --
-fit, first evaluations      about 41 GB (10.4 + 4 x 7.7; 11.1 GB in use, 11.8 GB RSS
-                            not runnable on a 15 GB      (12.9 GB in use without
-                            machine)                     trimming the rows)
-fit, after 50 minutes       --                           16.6 GB in use, still rising
-==========================  ===========================  ===========================
+================================  =====================  ==========================
+                                  before (dev 2d97b1f0)  after
+================================  =====================  ==========================
+four threads, first evaluations   about 41 GB            7.6 GB
+                                  (10.4 + 4 x 7.7; not
+                                  runnable on a 15 GB
+                                  machine)
+four threads, after 50 minutes    --                     9.2 GB, flat (peak 9.3 GB)
+eight threads, first evaluations  about 72 GB            10.8 GB
+eight threads, after 16 minutes   --                     12.3 GB
+twelve threads                    about 103 GB           ~14 GB just for the copies
+                                                         (stopped at 14 GB on a
+                                                         15 GB machine)
+================================  =====================  ==========================
 
-A copy costs well under 1 GB when it is made.  It then owns the tables of
-every re-placed node that no longer coincides with a node of the data it was
-cloned from.  A re-placed grid with another node count moves most of its
-nodes, not only those at the resonance, so as the levels drift away from the
-start of a fit more of each copy's grids differ and its own tables grow
-(natural neon: from 1.03 to 1.63 million live tables over 420 evaluations).
-The copies evaluate different parameters, whose nodes differ in the last
-digits, so they cannot share these tables.  The bound is a full copy per
-pooled copy, as before; the reduced project of ``tests/shared_point_tables``
-levels off after about 240 evaluations.  Holding the grid's background nodes
-fixed when only the resonance region changes, or recomputing a copy's own
-tables instead of keeping them, would bound it lower.
+Each further thread costs about 0.8 GB: the tables are shared, and what a copy
+still owns is mostly its ``EPoint`` objects themselves (880 bytes each, 956 500
+sub-points).  Sharing those too would need the sub-point vectors to be
+copy-on-write as well.  Fewer allocations also made the fit about 15 % faster
+(590 evaluations in 50 minutes instead of 510 with the cache alone).
 
 All outputs are byte-identical to those before the change.
 ``tests/shared_point_tables`` checks the peak RSS of a four-thread fit against
-that of a calculation (2.4 times; 4.7 with a full copy per pooled copy) and
+that of a calculation (2.5 times; 4.7 with a full copy per pooled copy) and
 identical outputs at one and four threads.
 
 Pooled copies and grid re-placement at several threads

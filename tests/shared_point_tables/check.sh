@@ -16,7 +16,7 @@
 #   (b) the capped fit completes at 1 and at 4 threads, re-placing grids, with the recorded chi-squared;
 #   (c) its output files are byte-identical at 1 and 4 threads;
 #   (d) the peak RSS of the 4-thread fit stays below FACTOR x that of the calculation (Linux only): measured
-#       1795 MB against 755 MB (2.4x); with a full copy of the data per pooled copy (dev 2d97b1f0) 3513 MB (4.7x).
+#       947 MB against 385 MB (2.5x); with a full copy of the data per pooled copy (dev 2d97b1f0) 3513 MB against 751 MB (4.7x).
 #
 #   ./tests/shared_point_tables/check.sh path/to/AZURE2
 
@@ -26,7 +26,7 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 AZURE2_BIN="${1:?usage: check.sh path/to/AZURE2}"
 AZURE2_BIN="$(cd "$(dirname "$AZURE2_BIN")" && pwd)/$(basename "$AZURE2_BIN")"
 SRC="$HERE/../natural_neon"
-FACTOR="${FACTOR:-3.0}"  # measured 2.4 (dev 2d97b1f0, full copies: 4.7)
+FACTOR="${FACTOR:-3.0}"  # measured 2.5 (dev 2d97b1f0, full copies: 4.7)
 CHI2_FIT="$(cat "$HERE/expected/chi2_fit")"
 TIMEOUT_CMD="$(command -v timeout || command -v gtimeout || true)"
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/shared_point_tables.XXXXXX")"
