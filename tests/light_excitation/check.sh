@@ -49,14 +49,29 @@ num='^[-+]?([0-9]+[.]?[0-9]*|[.][0-9]+)([eE][-+]?[0-9]+)?$'
 le() { awk -v a="$1" -v b="$2" -v re="$num" 'BEGIN { exit !(a ~ re && a + 0 <= b + 0) }'; }
 gt() { awk -v a="$1" -v b="$2" -v re="$num" 'BEGIN { exit !(a ~ re && a + 0 > b + 0) }'; }
 an() { "$PY" -I "$HERE/analyze.py" "$@"; }
-# two run logs alike, apart from the threaded per-segment progress bars (interleaved differently run to run)
-# Byte comparisons in Python: the Windows CI runner has no diff or cmp.  Split the logs on \n ONLY, as grep
-# does: the threaded progress bars redraw with \r, and their \r-separated fragments interleave differently
-# run to run (splitlines() would keep a fragment that lacks "Segment #").
+# two run logs alike, apart from the threaded per-segment progress bars.  Several threads draw their bars at
+# once with unsynchronized writes, so the bar text (and the \n that ends each bar) interleaves differently run
+# to run: a fragment such as "[*****   ] 80%" or "11  " can land on a line of its own, after another thread's
+# \n, without "Segment #" (macOS and Windows CI, 016bcfe; it passed by luck on 6868d44).  Ignore every line
+# that holds a \r or "Segment #", is blank, or is made only of characters a bar can contain; compare the rest.
+# Byte comparisons in Python: the Windows CI runner has no diff or cmp.  A mismatch prints the first
+# differing line (samelog) or file (same_tree), so the next CI log says what moved.
 samelog() {
   "$PY" -I -c 'import sys
-f = lambda p: [l for l in open(p, "rb").read().split(b"\n") if b"Segment #" not in l]
-sys.exit(f(sys.argv[1]) != f(sys.argv[2]))' "$1" "$2"
+bar = set(b"Segment#[]*% \t0123456789")
+def f(p):
+    out = []
+    for l in open(p, "rb").read().split(b"\n"):
+        if b"\r" in l or b"Segment #" in l or set(l) <= bar:
+            continue
+        out.append(l)
+    return out
+a, b = f(sys.argv[1]), f(sys.argv[2])
+if a != b:
+    i = next((k for k in range(min(len(a), len(b))) if a[k] != b[k]), min(len(a), len(b)))
+    print("    samelog: %d vs %d lines, first difference at %d:" % (len(a), len(b), i))
+    print("      %r\n      %r" % (a[i] if i < len(a) else None, b[i] if i < len(b) else None))
+    sys.exit(1)' "$1" "$2"
 }
 # same_tree <dir1> <dir2>: the same file names with byte-identical contents
 same_tree() {
@@ -66,7 +81,13 @@ def files(top):
 a, b = sys.argv[1:3]
 na, nb = files(a), files(b)
 rd = lambda p: open(p, "rb").read()
-sys.exit(na != nb or any(rd(os.path.join(a, n)) != rd(os.path.join(b, n)) for n in na))' "$1" "$2"
+if na != nb:
+    print("    same_tree: file lists differ: %s" % sorted(set(na) ^ set(nb)))
+    sys.exit(1)
+bad = [n for n in na if rd(os.path.join(a, n)) != rd(os.path.join(b, n))]
+if bad:
+    print("    same_tree: contents differ: %s" % bad)
+    sys.exit(1)' "$1" "$2"
 }
 
 "$PY" -I "$HERE/make_models.py" "$WORK/models" || { bad "models not built"; exit 1; }
