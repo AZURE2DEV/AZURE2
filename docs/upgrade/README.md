@@ -28,7 +28,8 @@ Read in this order:
 3. `ROADMAP.md` — phases 0–9 with tasks and gates.
 4. `THM.md` — the Trojan horse method in the new structure.
 5. `RULES.md` — rules for code, tests and skills.
-6. `figures/structure.html` — a summary page with the two figures (open locally in a browser). Where it and the `.md` files differ, the `.md` files win.
+6. `STYLE.md` — how documentation is written.
+7. `figures/structure.html` — a summary page with the two figures (open locally in a browser). Where it and the `.md` files differ, the `.md` files win.
 
 For an agent continuing this work: start from `HANDOFF.md`, follow `ROADMAP.md` phase by phase, obey `RULES.md` and
 the "Upgrade" section of the top-level `CLAUDE.md`, and update `HANDOFF.md` and the roadmap ticks at the end of every

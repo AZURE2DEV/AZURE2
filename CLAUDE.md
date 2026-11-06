@@ -33,6 +33,10 @@ below (full text and reasons in `docs/upgrade/RULES.md`):
 - Every physics function is exposed in the binding with array inputs, so the web UI can plot it.
 - Each phase passes the gate in `docs/upgrade/ROADMAP.md` and deletes the code it replaces. Update
   `docs/upgrade/HANDOFF.md` and the roadmap ticks at the end of every session.
+- Documentation follows `docs/upgrade/STYLE.md`: a reaction-theory register for experimentalists; every symbol
+  defined with its unit and frame; conventions and approximations stated with their validity; numbers, not adjectives.
+- Commit small and often (each completed step, at least every hour of work), with HANDOFF updated, so the work can be
+  continued from another machine at any point.
 - THM follows `docs/upgrade/THM.md`: reproduce published analyses first, HOES and OES data kept apart, resolution in
   c.m., no energy shifts to move THM data, no negative backgrounds, DWBA vertices validated against FRESCO.
 
