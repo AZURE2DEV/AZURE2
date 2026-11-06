@@ -2,6 +2,27 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-07 (second session) — branches imported; THM merged in; Phase 0 started
+
+**How to continue on any machine.** Pull `feature/upgrade` and any `feature/upgrade-<phase>-<topic>` branch listed
+below, read this file, then `ROADMAP.md`. Every phase branch is cut from `feature/upgrade` and merged back with
+`--no-ff` when its gate passes. Nothing in the repository depends on the machine it was written on: scripts take the
+engine binary and build directories from arguments or environment variables (`AZURE2_BINARY`, `PYTHONPATH` for the
+pyazr module) and document their defaults. Commits are local until Jakub pushes them; an agent never pushes.
+
+**State.**
+- `feature/upgrade` now contains: the plan (f99661cf); `origin/thm` c6ddb741 merged in (d20718f8), so the rebuild
+  starts from the THM line (which already carries `dev` up to 69826014; the last five `dev` commits, aab1de0d and
+  its four parents, come through the plan commit's base); `fix/edep-cow-acquire` 3fba1192 merged (37978592); an
+  introduction in `README.md` and the `CLAUDE.md` Upgrade section (c1cc92c7).
+- `thm-review` (4882ad04): the uncompiled `vertexModel=ff` GUI code from the analysis machine is applied in the
+  working tree and being built and tested before it is committed; then `origin/thm` is merged into it.
+- Phase 0 work in progress on `feature/upgrade-0-testprojects-t1t3` (T1, T3, identity checks) and
+  `feature/upgrade-0-testprojects-t2` (T2, `scripts/bench_upgrade.sh`). Next: `feature/upgrade-0-rules-skills`.
+
+**Open.** The decisions listed in the entry below are unchanged. The race-fix status of `thm` (a6bc6b9) is resolved on
+this branch by the merge; `origin/thm` itself still lacks it.
+
 ## 2026-11-07 — plan written; branch created; nothing implemented yet
 
 **State.**
