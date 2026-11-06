@@ -50,17 +50,21 @@ le() { awk -v a="$1" -v b="$2" -v re="$num" 'BEGIN { exit !(a ~ re && a + 0 <= b
 gt() { awk -v a="$1" -v b="$2" -v re="$num" 'BEGIN { exit !(a ~ re && a + 0 > b + 0) }'; }
 an() { "$PY" -I "$HERE/analyze.py" "$@"; }
 # two run logs alike, apart from the threaded per-segment progress bars (interleaved differently run to run)
-# Byte comparisons in Python: the Windows CI runner has no diff or cmp.
+# Byte comparisons in Python: the Windows CI runner has no diff or cmp.  Split the logs on \n ONLY, as grep
+# does: the threaded progress bars redraw with \r, and their \r-separated fragments interleave differently
+# run to run (splitlines() would keep a fragment that lacks "Segment #").
 samelog() {
   "$PY" -I -c 'import sys
-f = lambda p: [l for l in open(p, "rb").read().splitlines() if b"Segment #" not in l]
+f = lambda p: [l for l in open(p, "rb").read().split(b"\n") if b"Segment #" not in l]
 sys.exit(f(sys.argv[1]) != f(sys.argv[2]))' "$1" "$2"
 }
 # same_tree <dir1> <dir2>: the same file names with byte-identical contents
 same_tree() {
   "$PY" -I -c 'import os, sys
+def files(top):
+    return sorted(os.path.relpath(os.path.join(d, f), top) for d, _, fs in os.walk(top) for f in fs)
 a, b = sys.argv[1:3]
-na, nb = sorted(os.listdir(a)), sorted(os.listdir(b))
+na, nb = files(a), files(b)
 rd = lambda p: open(p, "rb").read()
 sys.exit(na != nb or any(rd(os.path.join(a, n)) != rd(os.path.join(b, n)) for n in na))' "$1" "$2"
 }
