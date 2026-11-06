@@ -3311,9 +3311,35 @@ complete:
   equivalent energy) and windows or auto tolerance with `doppler`. Builds aeb54b7..134f6ad used sigma(E_beam)
   outside the windows (13C+a ND2021r with windows: chi2 421,432; full integration 400,616; now 401,435), so
   rerun any windowed fit made with them. Lines without windows are byte-identical. rmfit hands target-integration
-  lines to the engine, so it needs nothing. Not built: windows chosen automatically from the level scheme.
+  lines to the engine, so it needs nothing. Windows from the level scheme: "auto" (next entry, dev a20918d).
   Test: `tests/target_window_fallback/check.sh` (the old build fails 7 checks); notes in
   `R-matrix/AZURE2_ideas/windowed_target_integration_2026-11-05/readme`.
+- 2026-11-06 -- AUTOMATIC TARGET-INTEGRATION WINDOWS ("auto"), dev a20918d (installed 2026-11-06 14:45).
+  In the windows token of a THIN-target integration line, `"auto"`, `"auto:tol"` or `"auto:tol:margin"` (defaults
+  0.01 and 3), optionally with listed windows (`"auto,0.48-0.50"`), places the windows from the levels of the
+  segment's entrance pair. A level is narrow when Gamma < Delta/sqrt(3 tol), Delta being the target thickness
+  at the layout density plus twice the beam spread, evaluated at the energy clamped to the data range. Each
+  narrow level gets [E_R - w, E_R + Delta + w] with w = margin * max(Gamma, Delta); particle thresholds of the
+  same compound nucleus get windows too (missing the 16O(6.05) n1 threshold cost 15 %). Every other point is
+  sigma(E_bar) (entry above). Windows are fixed for the session; the run log has one Note per segment with the
+  windows and "I of M points integrated". Refused on a thick target and on a line without target integration;
+  builds before a20918d do NOT understand "auto" (they integrate every point or misread the token: use a
+  current build). 13C+a ND2021r g5: full 400,616; hand windows 401,435 (48 % integrated); auto 400,881 (58 %,
+  largest point shift 0.42 sigma); auto:0.003 400,656 (81 %); auto:0.001:5 400,621 (99 %). Check a windowed fit
+  against the full integration at its endpoint before trusting it: the 13C+a windowed refit (11-06-26_ti_windowed)
+  ended WORSE than the full one because a band anchor reacted to the sigma(E_bar) points far more than the data
+  did. Test: `tests/target_auto_windows/check.sh` (old build fails 10 of 11).
+- 2026-11-06 -- THREADED FITS WITH ENERGY SHIFTS COULD CRASH (use-after-free) ON dev 3264896..6982601.
+  With the shared point tables (dev 3264896, 2026-11-06 morning), re-energising points in parallel let a host
+  point write the table pointer of a point mapped onto it from ANOTHER segment while that segment's thread
+  re-energised the same point: two threads assigning one shared_ptr. Affects threaded runs where segments share
+  energies and shifts (shift groups, shift functions; e.g. 13C+a's T2 group): rare crashes ("Abort trap: 6" on
+  the macOS CI; AddressSanitizer 2 of 26 shift_fn runs at 8 threads; not seen on Linux without a sanitizer).
+  Fixed on dev a6bc6b9 (installed 2026-11-06
+  14:45, with a20918d). A run that finished on an affected build is fine if it did not crash; a crashed fit on
+  one of those builds should be rerun, not suspected of a model problem. Single-thread runs were never affected.
+  Record: `R-matrix/AZURE2_code_audit/10-25-26/shared_tables_race/` (ASan + ThreadSanitizer);
+  test `tests/shared_tables_race` (guards the path; the race is too rare for it to fail the old code reliably).
 - 2026-09-28 -- COMPOUND TARGETS: THE STOPPING POWER AND THE DENSITY MUST COUNT THE SAME
   THING. Target integration uses epsilon and N only as the product Delta = epsilon*N and as
   1/(N*epsilon) in the integrand (EPoint.cpp, `yield = integral / (density*1e-24)`), so any
