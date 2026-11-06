@@ -80,7 +80,18 @@ Reference routines
 
 - Open channels: Michel's routine (``Coulomb_wave_functions_accurate``,
   AZURE2's default). On sampled points it agrees with ``mpmath`` at 30 digits
-  to 1e-9 – 1e-12.
+  to 1e-9 – 1e-12. Where its continued fractions give up (:math:`\eta \gtrsim
+  250`, a few eV to a few keV above a threshold) it falls back to the
+  zero-energy limit, :math:`G \to 2\sqrt{\rho/\pi}\, K_1(z)\, e^{\pi\eta}`
+  with :math:`z = \sqrt{8\eta\rho}` (then the :math:`l` recursion), so the
+  shift there is :math:`S(E \to 0)`; it misses the slope :math:`dS/dE`
+  (~0.4 – 0.7 per MeV), at most 6e-5 relative for α and proton channels and
+  2e-4 for ¹²C+¹²C, where :math:`P \lesssim 10^{-255}`. Before 2026-11-06 the
+  fallback took :math:`K_0` and :math:`K_1` from their power series, which
+  cancel to nothing at :math:`z \gtrsim 15`: for ¹²C+¹²C (:math:`z \approx 20`)
+  and ¹⁶O+¹⁶O (:math:`z \approx 31`) the shift within ~3 keV of the threshold
+  was off by factors of 2 – 30 (+11.2 instead of −9.59; −525 instead of
+  −15.5). Test: ``tests/reference/coulomb_threshold_reference_test.cpp``.
 - Closed channels: :math:`S = -\rho_b + (l+1) - 2 a \rho_b\, U(a+1, b+1, z) /
   U(a, b, z)` with :math:`a = l + 1 + \eta_b`, :math:`b = 2l + 2`, from
   :math:`U' = -a\, U(a+1, b+1, z)` and GSL's scaled ``hyperg_U``. Exact, with

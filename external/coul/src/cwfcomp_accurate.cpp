@@ -1,6 +1,7 @@
 #include "cwfcomp_accurate.H"  // Our wrapper class
 #include "cwfcomp.H"           // Original Coulomb_wave_functions class
 #include <cmath>
+#include <gsl/gsl_sf_bessel.h>
 #include <limits>
 #include <stdexcept>
 #include <iostream>
@@ -201,71 +202,23 @@ void Coulomb_wave_functions_accurate::compute_asymptotic_bessel_solution(double 
                                                                double &F, double &dF, 
                                                                double &G, double &dG) const
 {
-    const double half = 0.5;
-    const double one = 1.0;
     const double two = 2.0;
-    const double euler = 0.577215664901532860606512;
     const double pi = M_PI;
     const double q = two * rho_r * eta_r;
-    const double zhalf = std::sqrt(q);
-    const double z = two * zhalf;
-    const int term_limit = 100;
-    
-    // Calculate modified Bessel functions I_0, I_1, K_0, K_1
-    double bessel_i_0 = one, bessel_k_0 = 0.0, bessel_i_1 = one, bessel_k_1 = 0.0;
-    double a, b, c;
-    int num_terms;
-    
-    // I_0(z) from series
-    a = q;
-    num_terms = 1;
-    while ((num_terms < term_limit) && ((std::abs(bessel_i_0) + std::abs(a)) > std::abs(bessel_i_0))) {
-        double np1_sq = static_cast<double>(num_terms + 1);
-        np1_sq *= np1_sq;
-        bessel_i_0 += a;
-        a *= q / np1_sq;
-        num_terms++;
-    }
-    
-    // K_0(z) from series
-    bessel_k_0 = -(std::log(zhalf) + euler) * bessel_i_0;
-    a = q;
-    b = one;
-    num_terms = 1;
-    while ((num_terms < term_limit) && ((std::abs(bessel_k_0) + std::abs(a * b)) > std::abs(bessel_k_0))) {
-        double np1 = static_cast<double>(num_terms + 1);
-        bessel_k_0 += a * b;
-        b += one / np1;
-        a *= q / (np1 * np1);
-        num_terms++;
-    }
-    
-    // I_1(z) from series
-    a = q / two;
-    num_terms = 1;
-    while ((num_terms < term_limit) && ((std::abs(bessel_i_1) + std::abs(a)) > std::abs(bessel_i_1))) {
-        double np1 = static_cast<double>(num_terms + 1);
-        bessel_i_1 += a;
-        a *= q / (np1 * (np1 + one));
-        num_terms++;
-    }
-    bessel_i_1 *= zhalf;
-    
-    // K_1(z) from series  
-    bessel_k_1 = one / z + (std::log(zhalf) + euler) * bessel_i_1 - half * zhalf;
-    a = zhalf * q / two;
-    b = one;
-    c = half * half;
-    num_terms = 1;
-    while ((num_terms < term_limit) && ((std::abs(bessel_k_1) + std::abs(a * (b + c))) > std::abs(bessel_k_1))) {
-        double np1 = static_cast<double>(num_terms + 1);
-        bessel_k_1 -= a * (b + c);
-        c = half / (np1 + one);
-        b += one / np1;
-        a *= q / (np1 * (np1 + one));
-        num_terms++;
-    }
-    
+    const double z = two * std::sqrt(q);
+    double a, b;
+
+    // I_0, I_1, K_0, K_1 at z = 2 sqrt(2 eta rho).  These used to come from their small-argument power series,
+    // which lose every digit to cancellation once z is large: K_0 = -(ln(z/2) + gamma) I_0 + ... subtracts numbers
+    // of size I_0 ~ e^z / sqrt(2 pi z) to leave K_0 ~ e^-z.  At z ~ 7-10 (alpha and proton channels) that still
+    // left ~1e-7 to 1e-10; at z ~ 20 (12C+12C, eta rho ~ 48) the shift function within ~3 keV of the threshold came
+    // out as +4.6 .. +11.2 instead of -9.594 (Coulomb scan, 2026-11-06).  GSL's routines keep full
+    // precision at any z (K underflows only for z > ~700, eta rho > ~60,000).
+    const double bessel_i_0 = gsl_sf_bessel_I0(z);
+    const double bessel_i_1 = gsl_sf_bessel_I1(z);
+    const double bessel_k_0 = gsl_sf_bessel_K0(z);
+    const double bessel_k_1 = gsl_sf_bessel_K1(z);
+
     // Convert to F, G, F', G' at L=0
     a = std::sqrt(pi * rho_r);
     b = std::sqrt(two * pi * eta_r);

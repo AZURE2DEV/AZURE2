@@ -102,3 +102,9 @@ add_executable(coulfunc_transient_scope_test coulfunc_transient_scope_test.cpp)
 target_link_libraries(coulfunc_transient_scope_test PRIVATE AZURE2Core)
 add_test(NAME coulfunc_transient_scope COMMAND coulfunc_transient_scope_test)
 set_tests_properties(coulfunc_transient_scope PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=4")
+
+# Coulomb functions just above a charged-particle threshold against the exact zero-energy (Bessel) limit,
+# 12C+12C, 16O+16O, alpha+12C (2026-11-06; the heavy-ion fallback used to cancel to nonsense).
+add_executable(coulomb_threshold_reference_test coulomb_threshold_reference_test.cpp)
+target_link_libraries(coulomb_threshold_reference_test PRIVATE AZURE2Core)
+add_test(NAME coulomb_threshold_reference COMMAND coulomb_threshold_reference_test)
