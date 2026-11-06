@@ -57,6 +57,13 @@ class GenMatrixFunc {
    *This virtual function in implemented in the child class.
    */
   virtual void CalculateTMatrix(EPoint *) = 0;
+  /// The T-matrix of another exit pair at the same energy: drops the elements held now (and what was derived from
+  /// them) and builds those of `point`'s exit from the solved level matrix, which does not depend on the exit.  Used
+  /// for points of different exit pairs mapped onto one host (EData::MapData).
+  void RecalculateTMatrix(EPoint *point) {
+    ResetTMatrix();
+    CalculateTMatrix(point);
+  }
   /// The observable of the point from the T-matrix the subclass built, times the electron-screening factor where the
   /// point carries one (CalculateBareCrossSection, then EPoint::ScreeningFactor).
   void CalculateCrossSection(EPoint *);
@@ -151,6 +158,12 @@ class GenMatrixFunc {
   matrix_c ec_tmatrix_;
   /// Forget everything derived from the T-matrix (ClearMatrices).
   void InvalidateTMatrixProducts() { rt_decay_ = nullptr; }
+  /// Drop the T-matrix elements and their products, keeping the solved matrices (RecalculateTMatrix).
+  virtual void ResetTMatrix() {
+    tmatrix_.clear();
+    ec_tmatrix_.clear();
+    InvalidateTMatrixProducts();
+  }
 
  private:
   /// The interference products Z1Z2 T1 conj(T2) of the differential sum,

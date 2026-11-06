@@ -77,6 +77,10 @@ Selecting **Runtime Options...** opens a dialog with the following settings:
      - Use the Brune parameterization for R-matrix parameters
        (C.R. Brune, *Physical Review C* **66**, 044611, 2002). Recommended and
        enabled by default. More numerically stable than the classical approach.
+       With it off, the physical parameters are transformed to formal ones per
+       :math:`J^\pi` group; since 2026-10-27 that transformation keeps each
+       level's identity whatever the order the levels are listed in (see the
+       note in :doc:`levels_channels`).
    * - **Use Park parametrization**
      - Fit Park's amplitudes, which are the observed widths
        (:math:`\Gamma_c = 2P_c\gamma_c^2`), instead of Brune's; implies the
@@ -85,7 +89,11 @@ Selecting **Runtime Options...** opens a dialog with the following settings:
        Fixing or constraining one width then acts on one parameter.
    * - **Ignore external width if internal width is zeroed**
      - When enabled, the external gamma-ray width of a level is set to zero if
-       no total gamma-ray width is specified.
+       no total gamma-ray width is specified.  The R-matrix formalism does not
+       implement it (nor Park's parametrization): the two cannot be selected
+       together, and a calculation with the R-matrix and either option runs
+       the A-matrix with a warning (as the command line and pyazr do; see
+       :doc:`../reference/command_line`).
    * - **Use RMC capture formalism**
      - Enable the Reich-Moore capture formalism. Currently only supported for
        (n, gamma) reactions. Do not use for other reaction types.
@@ -95,7 +103,11 @@ Selecting **Runtime Options...** opens a dialog with the following settings:
        calculation. Note that formal parameters are radius and boundary-condition
        dependent.
    * - **Use Wigner limits for parameter limits**
-     - Automatically apply Wigner limit bounds on fit parameters.
+     - Automatically apply Wigner limit bounds on fit parameters: the
+       reduced-width amplitude of every particle channel is bounded by
+       :math:`\pm\sqrt{3\hbar^2/(2\mu a^2)}`. Photon and beta channels have
+       no such limit (before October 2026 a photon pair with a nonzero channel
+       radius would have produced an infinite one).
    * - **Use Hybrid Coulomb method**
      - Use a hybrid method for Coulomb function calculations that includes a
        nuclear potential (Woods-Saxon or Gaussian). This is the master switch;
@@ -111,6 +123,14 @@ Selecting **Runtime Options...** opens a dialog with the following settings:
        the state is not saved in the file. Unticking it hides the controls
        only: the content stays in the project, is saved as it was read and
        AZURE2 still uses it; the GUI says so and asks first.
+
+Below these, a **Kinematics** box holds the **Relativistic kinematics** check
+box: channel wave numbers, Sommerfeld parameters and lab ↔ c.m. conversions
+from the invariant mass (see :ref:`relativistic-kinematics`).  Unlike the
+options above it is part of the project (``relativistic=1`` in ``<config>``),
+so command-line and pyazr runs of the project use it as well; nothing has to be
+passed on the command line.  Before November 2026 it was a check box below the
+Particle Pairs table.
 
 .. note::
 

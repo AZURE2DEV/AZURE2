@@ -349,6 +349,9 @@ What is implemented covers the vector analyzing power :math:`A_y` for a
 spin-1/2 projectile on a target of **any** spin, in **both** particle and
 capture exit channels — the two by different routes, since the photon exit has
 no amplitude matrix of the form of :eq:`seyler`.
+An analyzing-power segment whose projectile is not spin-1/2 is refused with an
+error (the capture route would otherwise return :math:`3\langle S_y\rangle/(x+1)`,
+which is the Madison :math:`A_y` only for :math:`x = 1/2`).
 
 *Capture channels* use Seyler and Weller [SeylerWeller1979]_, who give the
 Legendre coefficients of the angular distribution directly in the channel-spin
@@ -375,6 +378,19 @@ The structural point is that :math:`a_k` requires :math:`s = s'` while
 information a polarization measurement adds and a cross section cannot carry,
 and they are why the pathway pairs have to be enumerated across channel-spin
 groups rather than within one.
+
+Seyler and Weller couple the channel spin target first,
+:math:`\langle j_2 m_2\, j_1 m_1 | s\,\nu\rangle`, while AZURE2 couples it
+light particle first throughout (:eq:`decompose`, the M1 external-capture spin
+operator, the secondary-gamma coupling). The two differ by
+:math:`(-1)^{j_1+j_2-s}` per channel-spin amplitude, which on the product
+:math:`R R'^*` of a :math:`b_k` term is :math:`(-1)^{s-s'}`; the code applies
+that factor, so the capture and particle analyzing powers of one level share
+one sign convention for its reduced-width amplitudes. (Until October 2026 the
+factor was missing: for a target with spin, fitting the capture :math:`A_y`
+was equivalent to flipping the sign of every width with odd
+:math:`j_1+j_2-s`, inconsistent with the particle :math:`A_y` of the same
+widths. Spin-0 targets, with one channel spin, were never affected.)
 
 Their Eq. (12) carries a :math:`(-1)^M` phase that several earlier treatments
 drop — so their :math:`P_L^M` is the associated Legendre function *without* the

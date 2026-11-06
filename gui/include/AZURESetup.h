@@ -242,6 +242,8 @@ class AZURESetup : public QMainWindow {
   bool fileIncludeAllJPi = false;
   int fileMaxL = -1;
   double fileAbundanceSumSigma = 0.0;
+  bool fileRelativistic = false;
+  int fileRelativisticReferencePair = 0;
   PairsTab *pairsTab;
   LevelsTab *levelsTab;
   SegmentsTab *segmentsTab;

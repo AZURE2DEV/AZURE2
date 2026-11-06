@@ -81,7 +81,16 @@ section over a Maxwell-Boltzmann energy distribution:
 Additional fields appear for this mode:
 
 **Entrance / Exit Pair Keys**
-   Specify the particle pair keys for the reaction.
+   Specify the particle pair keys for the reaction. For the **total radiative
+   capture** rate choose "Total capture (all γ pairs)" as the exit pair (on the
+   command line, exit pair ``-1``, the key a total-capture segment line carries):
+   the rate then integrates the sum of the capture cross sections into every
+   capture (γ, pair type 10) pair of the entrance pair's compound nucleus, e.g.
+   capture to the ground state and to each bound excited state. The run log names
+   the pairs summed, and ``cross_section_grid.dat`` holds the summed cross
+   section. The entrance must be a particle pair. Builds before 2026-11-04 refuse
+   the key; with them, add the rates of the individual capture pairs (the rate is
+   linear in σ).
 
 **Temperature Source**
    Choose between:
@@ -89,14 +98,20 @@ Additional fields appear for this mode:
    - **Grid** -- specify minimum, maximum, and step temperatures (in GK).
    - **File** -- provide a file listing specific temperatures (single column, in GK).
 
-Results are written to ``reactionrates.out``.
+Results are written to ``reactionrates.out``; the cross-section grid the rate
+integrated is written to ``cross_section_grid.dat``.
 
 .. warning::
 
-   Numerical integration is limited to broad resonance structures. If resonances
-   are narrower than approximately 1 keV, the integration may fail. For narrow
-   resonances, calculate the contribution separately using the narrow-resonance
-   approximation.
+   The rate integrates a spline of ln σ against ln E through a grid of 48 points per
+   decade from 0.1 eV to 50 MeV (centre of mass) plus a cluster of points from 1/32
+   to 64 widths around every level of the parameters being evaluated, so narrow
+   resonances are resolved (a 22 eV level to 1e-4 in ``tests/reaction_rate``). The
+   grid is written to ``cross_section_grid.dat``; a resonance outside 0.1 eV to
+   50 MeV, or a level without widths, is not integrated. Builds before 2026-10-26
+   splined σ itself (charged-particle rates about 1 % low at low temperature), set
+   σ = 0 below 1 keV (neutron rates 49 % low at T9 = 0.01) and placed the clusters
+   at the ``.azr`` level energies rather than at the parameters in use.
 
 Minimizer Selection
 -------------------

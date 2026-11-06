@@ -7,6 +7,7 @@
 #include <cmath>
 #include "Constants.h"
 #include "GSLException.h"
+#include "Kinematics.h"
 
 #include <iostream>
 
@@ -27,6 +28,7 @@ class WhitFunc {
     z1_ = pPair->GetZ(1);
     z2_ = pPair->GetZ(2);
     redmass_ = (double)pPair->GetRedMass();
+    kin_ = Kinematics::Channel(pPair);
   };
   /*!
    * Returns the atomic number of the first particle in the pair.
@@ -52,9 +54,10 @@ class WhitFunc {
    * The function returns the value of the Whittaker function.
    */
   double operator()(int l, double radius, double energy) const {
-    const double k = -sqrt(uconv / 2.) * fstruc * z1() * z2() * sqrt(redmass() / energy);
+    // eta_b and z = 2 kappa r at binding energy `energy` (relativistic under "relativistic=1", Kinematics.h)
+    const double k = kin_.rel ? -kin_.EtaBound(energy) : -sqrt(uconv / 2.) * fstruc * z1() * z2() * sqrt(redmass() / energy);
     const double m = l + 0.5;
-    const double z = 2.0 * sqrt(2.0 * uconv) / hbarc * radius * sqrt(redmass() * energy);
+    const double z = kin_.rel ? 2.0 * kin_.RhoBound(radius, energy) : 2.0 * sqrt(2.0 * uconv) / hbarc * radius * sqrt(redmass() * energy);
 
     const double a = m - k + 0.5;
     const double b = 1.0 + 2.0 * m;
@@ -78,9 +81,10 @@ class WhitFunc {
    */
   double Scaled(int l, double radius, double energy, double &log10Scale) const {
     log10Scale = 0.0;
-    const double k = -sqrt(uconv / 2.) * fstruc * z1() * z2() * sqrt(redmass() / energy);
+    // eta_b and z = 2 kappa r at binding energy `energy` (relativistic under "relativistic=1", Kinematics.h)
+    const double k = kin_.rel ? -kin_.EtaBound(energy) : -sqrt(uconv / 2.) * fstruc * z1() * z2() * sqrt(redmass() / energy);
     const double m = l + 0.5;
-    const double z = 2.0 * sqrt(2.0 * uconv) / hbarc * radius * sqrt(redmass() * energy);
+    const double z = kin_.rel ? 2.0 * kin_.RhoBound(radius, energy) : 2.0 * sqrt(2.0 * uconv) / hbarc * radius * sqrt(redmass() * energy);
     const double a = m - k + 0.5;
     const double b = 1.0 + 2.0 * m;
     if (a != a || b != b || z != z || !(z > 0.0)) return 0.0;
@@ -108,6 +112,7 @@ class WhitFunc {
   int z1_;
   int z2_;
   double redmass_;
+  Kinematics::Channel kin_;
 };
 
 #endif

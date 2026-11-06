@@ -102,6 +102,9 @@ else:
     # the file's second channel-pair, and vice versa.
     a_pair, b_pair = targets[0][0], targets[1][0]
     pairs = [pair(number=1, key=b_pair), pair(number=2, key=a_pair)]
+    # the repr shows BOTH numbers, since engine messages and isospin.out name pairs by key (2026-10-27)
+    check("Pair repr shows the engine number and the .azr key",
+          f"Pair(#1 key={b_pair}" in repr(pairs[0]), repr(pairs[0]))
     p = parameter(pair=1, L=targets[1][1], S=targets[1][2])
     model.apply_fit([p], [4.2e3], physical=True, pairs=pairs)
     written = {(c.pair, c.L, c.S): c.gamma for c in level.channels}

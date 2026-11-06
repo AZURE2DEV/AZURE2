@@ -1113,10 +1113,16 @@ class AzrChannel:
         """Mass of the light particle, in u."""
         return self._get("m1", float)
 
+    @M1.setter
+    def M1(self, v):       self._set("m1", float(v))
+
     @property
     def M2(self):
         """Mass of the heavy particle, in u."""
         return self._get("m2", float)
+
+    @M2.setter
+    def M2(self, v):       self._set("m2", float(v))
 
     @property
     def J1(self):
@@ -1151,6 +1157,18 @@ class AzrChannel:
     def sep_energy(self):
         """Separation energy of the pair, in MeV."""
         return self._get("sepE", float)
+
+    @sep_energy.setter
+    def sep_energy(self, v): self._set("sepE", float(v))
+
+    @property
+    def entrance_sep_energy(self):
+        """The line's copy of the entrance pair's separation energy (MeV).  The
+        engine does not read it; the GUI writes pair 1's value on every line."""
+        return self._get("entranceSepE", float)
+
+    @entrance_sep_energy.setter
+    def entrance_sep_energy(self, v): self._set("entranceSepE", float(v))
 
     # level fields (shared across a level's channel lines)
 
@@ -1369,6 +1387,69 @@ def _nuclei_module():
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
         return mod
+
+
+def _masses_module():
+    """``pyazr.masses``, also when this file is loaded standalone by path."""
+    try:
+        from . import masses
+        return masses
+    except ImportError:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "pyazr_masses_standalone", os.path.join(os.path.dirname(os.path.abspath(__file__)), "masses.py"))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+
+
+#: A mass this far from the table (u) is flagged by :meth:`PairMassCheck.describe`: about 1 MeV, beyond any
+#: rounding or older evaluation, so a mass number or a typo (1.08664 for the neutron's 1.00866).
+MASS_FLAG_U = 1e-3
+
+
+class PairMassCheck(NamedTuple):
+    """One pair of a model against the mass table (:meth:`AzrModel.mass_check`).
+
+    ``light`` / ``heavy`` are the table rows the pair's columns identify (by
+    charge and mass rounded to a mass number), ``None`` for a photon, an
+    electron or a nuclide the table lacks.  ``S_table`` is the separation
+    energy from the table, for particle pairs only (a gamma pair's 0 and a
+    beta pair's value are conventions, not checked).  ``dS_kev`` is the file's
+    S minus the table's, in keV.
+    """
+    pair: int
+    ptype: int
+    light: object
+    heavy: object
+    M1: float
+    M2: float
+    S: float
+    M1_table: Optional[float]
+    M2_table: Optional[float]
+    S_table: Optional[float]
+    dS_kev: Optional[float]
+
+    @property
+    def mass_offset(self):
+        """Largest |file mass - table mass| of the pair, in u (0 when nothing was identified)."""
+        d = [abs(m - t) for m, t in ((self.M1, self.M1_table), (self.M2, self.M2_table)) if t is not None]
+        return max(d) if d else 0.0
+
+    def describe(self, tol_kev=1.0):
+        """One line: the pair, its masses and S against the table."""
+        lab = lambda e: e.label if e is not None else "-"
+        parts = [f"pair {self.pair} ({lab(self.light)} + {lab(self.heavy)}, type {self.ptype})"]
+        for name, m, t in (("M1", self.M1, self.M1_table), ("M2", self.M2, self.M2_table)):
+            if t is not None:
+                text = f"{name} {m!r} u" + ("" if abs(m - t) < 5e-10 else f" (table {t!r})")
+                if abs(m - t) > MASS_FLAG_U:
+                    text += "  <-- mass"
+                parts.append(text)
+        if self.S_table is not None:
+            flag = "" if abs(self.dS_kev) <= tol_kev else "  <-- differs"
+            parts.append(f"S {self.S:.6f} MeV (table {self.S_table:.6f}, {self.dS_kev:+.2f} keV){flag}")
+        return ", ".join(parts)
 
 
 class ScatteringLengthLine(NamedTuple):
@@ -1693,6 +1774,107 @@ class AzrModel:
                 f"(radii: {self.channel_radii()}).")
         return changed
 
+    # -- pair masses and separation energies (AME mass table) -----------------
+
+    def pair_lines(self):
+        """``{pair key: first channel line naming it}`` -- the line the engine
+        reads the pair's columns from (inactive lines included)."""
+        out = {}
+        for lv in self.levels:
+            for c in lv.channels:
+                out.setdefault(c.pair, c)
+        return dict(sorted(out.items()))
+
+    def mass_check(self):
+        """Every pair against the mass table (``pyazr.masses``, AME2020):
+        a list of :class:`PairMassCheck`, by pair key.
+
+        >>> for row in AzrModel.from_file("13N.azr").mass_check():
+        ...     print(row.describe())
+        pair 1 (1H + 12C, type 0), M1 1.00728 u (table 1.007825031898), M2 12.0 u, S 1.943510 MeV (table 1.943490, +0.02 keV)
+        pair 2 (- + 13N, type 10), M2 13.0057 u (table 13.005738609)
+        """
+        m = _masses_module()
+        rows = []
+        for key, c in self.pair_lines().items():
+            ptype = c.ptype
+            light = m.identify(c.Z1, c.M1) if ptype == 0 else None
+            heavy = m.identify(c.Z2, c.M2)
+            s_table = None
+            if ptype == 0 and light is not None and heavy is not None:
+                try:
+                    s_table = m.separation_energy((light.Z, light.A), (heavy.Z, heavy.A))
+                except KeyError:
+                    s_table = None
+            rows.append(PairMassCheck(
+                pair=key, ptype=ptype, light=light, heavy=heavy,
+                M1=c.M1, M2=c.M2, S=c.sep_energy,
+                M1_table=light.atomic_mass if light is not None else None,
+                M2_table=heavy.atomic_mass if heavy is not None else None,
+                S_table=s_table,
+                dS_kev=(c.sep_energy - s_table) * 1e3 if s_table is not None else None))
+        return rows
+
+    def fill_masses(self, pairs=None, separation=True):
+        """Set pair masses -- and, with ``separation``, particle-pair separation
+        energies -- from the mass table, on every line of each pair.
+
+        ``pairs`` is an iterable of pair keys (default: every pair).  A particle
+        is identified by its charge and its mass rounded to a mass number, so a
+        file with mass numbers (12, 4) or a bare-proton mass (1.00728) gets the
+        atomic masses of 12C, 4He and 1H.  A gamma pair gets the compound
+        nucleus's mass (its S stays 0), a beta pair its parent's mass; the
+        photon and electron columns are left alone.  With ``separation`` a
+        particle pair's S becomes the table's ``D1 + D2 - Dc``, and the lines
+        whose entrance pair it is get the same value in their entrance-S copy.
+
+        Moving S moves the pair's threshold and therefore the energy scale of
+        every channel of that pair: compare the fit before and after, and refit
+        if the shift matters (more than a few keV next to a narrow resonance).
+        With ``separation=False`` only the masses change, which moves results by
+        about the relative mass change (1e-5 for 1e-4 u at mass 12).
+
+        Returns the list of changes, ``(pair, column, old, new)``; a pair the
+        table cannot identify is skipped and reported as ``(pair, "skipped",
+        reason, None)``.
+        """
+        want = None if pairs is None else {int(p) for p in pairs}
+        checks = {r.pair: r for r in self.mass_check()}
+        if want is not None:
+            missing = sorted(want - set(checks))
+            if missing:
+                raise KeyError(f"no pair with key(s) {missing} in this model (pairs: {sorted(checks)})")
+        changes, new_m1, new_m2, new_s = [], {}, {}, {}
+        for key, r in checks.items():
+            if want is not None and key not in want:
+                continue
+            if r.ptype == 0 and (r.light is None or r.heavy is None):
+                changes.append((key, "skipped", "a particle is not in the mass table", None))
+                continue
+            if r.ptype != 0 and r.heavy is None:
+                changes.append((key, "skipped", "the heavy particle is not in the mass table", None))
+                continue
+            if r.M1_table is not None and r.M1_table != r.M1:
+                new_m1[key] = r.M1_table
+                changes.append((key, "M1", r.M1, r.M1_table))
+            if r.M2_table is not None and r.M2_table != r.M2:
+                new_m2[key] = r.M2_table
+                changes.append((key, "M2", r.M2, r.M2_table))
+            if separation and r.S_table is not None and r.S_table != r.S:
+                new_s[key] = r.S_table
+                changes.append((key, "S", r.S, r.S_table))
+        for lv in self.levels:
+            for c in lv.channels:
+                if c.pair in new_m1:
+                    c.M1 = new_m1[c.pair]
+                if c.pair in new_m2:
+                    c.M2 = new_m2[c.pair]
+                if c.pair in new_s:
+                    c.sep_energy = new_s[c.pair]
+                if c.entrance_key in new_s:
+                    c.entrance_sep_energy = new_s[c.entrance_key]
+        return changes
+
     # -- level activation -----------------------------------------------------
 
     def deactivate_level(self, jpi=None, energy=None, index=None, tol=1e-3):
@@ -1725,7 +1907,7 @@ class AzrModel:
         # Vector analyzing power A_y. Differential in the centre-of-mass frame
         # like code 5, but the quantity is a dimensionless ratio, not a cross
         # section.
-        "analyzing-power": 7,
+        "analyzing-power": 7, "angular-coefficients": 9,
     }
 
     def _splice_segments_test(self, new_lines):
@@ -2032,6 +2214,24 @@ class AzrModel:
         if value and float(value) > 0:
             end = next(i for i, ln in enumerate(lines) if ln.strip() == "</config>")
             lines.insert(end, f"abundanceSumSigma={float(value):g}\n")
+        self._prefix = "".join(lines)
+
+    @property
+    def relativistic(self):
+        """The ``relativistic`` config key: relativistic two-body kinematics (k, eta, lab <-> c.m. from the
+        invariant mass; user guide "Relativistic Kinematics").  False when absent."""
+        for line in self._prefix.splitlines():
+            if line.strip().startswith("relativistic="):
+                return line.split("=", 1)[1].split("#")[0].strip() in ("1", "true")
+        return False
+
+    @relativistic.setter
+    def relativistic(self, value):
+        lines = self._prefix.splitlines(keepends=True)
+        lines = [ln for ln in lines if not ln.strip().startswith("relativistic=")]
+        if value:
+            end = next(i for i, ln in enumerate(lines) if ln.strip() == "</config>")
+            lines.insert(end, "relativistic=1\n")
         self._prefix = "".join(lines)
 
     # -- measured scattering lengths ------------------------------------------
@@ -2648,6 +2848,7 @@ class AzrModel:
         "angle-integrated": 0, "differential": 1, "phase-shift": 2,
         "total-capture": 3, "differential-cm": 4, "angle-integrated-E1": 5,
         "angle-integrated-E2": 6, "analyzing-power": 7,
+        "angular-coefficients": 9,
     }
 
     def add_data_segment(self, data_file, entrance, exit,
@@ -2660,7 +2861,8 @@ class AzrModel:
                          active=True, energy_shift_sqrt=0.0,
                          energy_shift_sqrt_error=0.0, vary_shift_sqrt=False,
                          shift_group=None, shift_fn=None, shift_fn_params=(),
-                         natural=False, norm_group=None):
+                         natural=False, norm_group=None, covariance=None,
+                         shift_fn_group=None, absolute=False):
         """Append one data segment (a ``<segmentsData>`` line).
 
         ``data_file`` is the data file path (relative to the run directory,
@@ -2669,7 +2871,11 @@ class AzrModel:
         summed/total observable).  ``observable`` is one of
         ``angle-integrated``, ``differential``, ``differential-cm``,
         ``total-capture``, ``phase-shift``, ``angle-integrated-E1``,
-        ``angle-integrated-E2``.
+        ``angle-integrated-E2``, ``analyzing-power``, ``angular-coefficients``
+        (rows ``E_lab  k  a_k  error``: the Legendre coefficients a_k = A_k/A_0 of
+        the c.m. angular distribution of a reaction, order k in the angle
+        column; ``absolute=True`` writes ``absolute 1`` and the rows are the
+        absolute A_k in b/sr; normalised coefficients cannot carry a free norm).
 
         ``norm`` is the normalization applied to the data, ``norm_error`` its
         systematic error (percent, as stored in the file), ``energy_shift``
@@ -2679,8 +2885,12 @@ class AzrModel:
         b*sqrt(E/MeV) (b in MeV^1/2), with its ``_error`` and
         ``vary_shift_sqrt``; the block is written only when one of the three
         is set, so a plain segment line is unchanged.  ``shift_group`` (a
-        label) writes a ``shiftgroup`` block and ``norm_group`` a ``normgroup``
-        block (segments with one label share the first one's normalization); ``shift_fn`` (an expression in
+        label) writes a ``shiftgroup`` block, ``shift_fn_group`` a ``shiftfngroup``
+        block (the segments with one label apply the first one's ``shiftfn``, each
+        keeping its own constant shift) and ``norm_group`` a ``normgroup``
+        block (segments with one label share the first one's normalization), ``covariance`` (a
+        file name) a ``covariance`` block (the segments naming one file share its data
+        covariance matrix; format in the data-formats reference); ``shift_fn`` (an expression in
         the lab energy x, MeV, without blanks) with ``shift_fn_params``, one
         ``(value, sigma, vary)`` per parameter a0, a1, ..., writes a
         ``shiftfn`` block: E' = E + shift + f(x).  ``natural=True`` (or a
@@ -2718,8 +2928,17 @@ class AzrModel:
                      _fmt(energy_shift_sqrt_error), 1 if vary_shift_sqrt else 0]
         if shift_group:
             toks += ["shiftgroup", str(shift_group)]
+        if shift_fn_group:
+            if shift_group:
+                raise ValueError("shift_group and shift_fn_group: use one of them "
+                                 "(shiftgroup also shares the constant shift).")
+            toks += ["shiftfngroup", str(shift_fn_group)]
         if norm_group:
             toks += ["normgroup", str(norm_group)]
+        if covariance:
+            if any(c.isspace() for c in str(covariance)):
+                raise ValueError("covariance: a file name without blanks, please.")
+            toks += ["covariance", str(covariance)]
         if shift_fn:
             if any(c.isspace() for c in shift_fn) or not shift_fn_params:
                 raise ValueError("shift_fn needs an expression without blanks and "
@@ -2727,6 +2946,10 @@ class AzrModel:
             toks += ["shiftfn", '"' + shift_fn + '"', len(shift_fn_params)]
             for v, sig, vary in shift_fn_params:
                 toks += [_fmt(v), _fmt(sig), 1 if vary else 0]
+        if absolute:
+            if observable != "angular-coefficients":
+                raise ValueError("absolute=True belongs to angular-coefficients segments.")
+            toks += ["absolute", 1]
         if natural:                           # writers put the sample block last
             toks += ["sample", natural if isinstance(natural, str) else 1]
         line = "  ".join(t if isinstance(t, str) else _fmt(t) for t in toks)
@@ -2842,7 +3065,9 @@ class AzrModel:
         inverse reaction of a photodissociation measurement,
         ``photodissociation=True`` to weight the average with the
         detailed-balance factor.  ``q_coefficients`` are the finite-geometry
-        attenuation coefficients Q_0..Q_n.
+        attenuation coefficients Q_0..Q_n of the detector, i.e. in the LAB frame
+        (for a particle exit AZURE2 applies them to the lab angular distribution
+        since 2026-10-25; user guide, "Attenuation Coefficients").
 
         ``udr_file`` is a user-defined numerical resolution function in
         SAMMY's UDR format (time-of-flight delay distributions, microseconds
@@ -3538,6 +3763,100 @@ class AzrModel:
             raise ValueError("the screening prior sigma must be >= 0")
         block = f"screening {_fmt(ue)} {1 if vary else 0} {_fmt(sigma)}"
         lines[i] = self._SCREENING_RE.sub(block, line) if m else line.rstrip() + "  " + block
+        self._suffix = "\n".join(lines)
+        return self
+
+    _DENSITYFIT_RE = re.compile(r"\bdensityfit\s+(\S+)\s+(\S+)(?:\s+([0-9.][0-9.eE+-]*))?")
+    _DENSITYGROUP_RE = re.compile(r"\bdensitygroup\s+(\S+)")
+
+    @staticmethod
+    def _density_sigma(token, density):
+        """A densityfit sigma token, "2.3%" or atoms/cm^2, in atoms/cm^2."""
+        token = str(token)
+        if token.endswith("%"):
+            return float(token[:-1]) / 100.0 * density
+        return float(token)
+
+    @property
+    def target_densities(self):
+        """Fitted target densities of the <targetInt> lines (``densityfit`` / ``densitygroup`` blocks), as
+        AZURE2 reads them: ``{effect: dict}`` for every ACTIVE line that has either block, keyed by its effect
+        number (place among the active lines, as in ``density_<effect>``).  Each dict holds ``density`` (the
+        line's areal density, atoms/cm^2), ``vary``, ``sigma`` (prior width in atoms/cm^2, a percentage already
+        converted; 0 = none), ``max`` (the largest density the sub-point grids span: the optional fourth field,
+        else N0 + 3 sigma but at least 1.1 N0, or 1.5 N0 without a prior), ``group`` (label or ``None``) and
+        ``leader`` (the effect holding the parameter: itself, or its group's first line, whose density, prior
+        and maximum the group shares)."""
+        _, tl = self._target_int_lines()
+        out, n, leader_of = {}, 0, {}
+        for _, line in tl:
+            tok = line.split()
+            if tok[0] != "1":
+                continue
+            n += 1
+            fit = self._DENSITYFIT_RE.search(line)
+            grp = self._DENSITYGROUP_RE.search(line)
+            if not fit and not grp:
+                continue
+            density = float(tok[6])
+            group = grp.group(1) if grp else None
+            if group is not None and group in leader_of:
+                lead = out[leader_of[group]]
+                out[n] = dict(lead, density=lead["density"], group=group, leader=leader_of[group])
+                continue
+            if not fit:
+                raise ValueError(f"<targetInt> effect {n}: density group {group} starts without a densityfit block")
+            sigma = self._density_sigma(fit.group(2), density)
+            dmax = (float(fit.group(3)) if fit.group(3) else
+                    max(density + 3.0 * sigma, 1.1 * density) if sigma > 0 else 1.5 * density)
+            out[n] = dict(density=density, vary=int(float(fit.group(1))) != 0, sigma=sigma, max=dmax,
+                          group=group, leader=n)
+            if group is not None:
+                leader_of[group] = n
+        return out
+
+    def set_target_density(self, effect, density=None, vary=None, sigma=None, max=None, group=None):
+        """Set the areal density of active <targetInt> line ``effect`` (1-based among the active lines) and its
+        ``densityfit`` block: ``vary``, ``sigma`` (atoms/cm^2, or a string such as ``"2.3%"`` of the line's
+        density), ``max`` (the largest density the grids span; ``None`` keeps the line's, 0 removes it) and
+        ``group`` (a ``densitygroup`` label; ``""`` removes it).  A line without a densityfit block gets one
+        (fixed, no prior) when ``vary``, ``sigma`` or ``max`` is given.  Returns ``self``."""
+        lines, tl = self._target_int_lines()
+        active = [(i, line) for i, line in tl if line.split()[0] == "1"]
+        if not 1 <= effect <= len(active):
+            raise ValueError(f"no active <targetInt> line {effect} ({len(active)} active)")
+        i, line = active[effect - 1]
+        tok = line.split()
+        if tok[5] != "1":
+            raise ValueError(f"<targetInt> effect {effect} has no target integration")
+        if density is not None:
+            if not float(density) > 0:
+                raise ValueError("a fitted density must be > 0 (0 is the thick-target flag)")
+            # the positional density is the 7th field; rewrite it in place, keeping the line's spacing
+            parts = re.split(r"(\s+)", line)
+            words = [k for k, w in enumerate(parts) if w and not w.isspace()]
+            parts[words[6]] = _fmt(float(density))
+            line = "".join(parts)
+        fit = self._DENSITYFIT_RE.search(line)
+        if fit or vary is not None or sigma is not None or max is not None:
+            old_vary = int(float(fit.group(1))) != 0 if fit else False
+            old_sigma = fit.group(2) if fit else "0"
+            old_max = fit.group(3) if fit else None
+            v = old_vary if vary is None else bool(vary)
+            s = old_sigma if sigma is None else (sigma if isinstance(sigma, str) else _fmt(float(sigma)))
+            if (s.endswith("%") and float(s[:-1]) < 0) or (not s.endswith("%") and float(s) < 0):
+                raise ValueError("the density prior sigma must be >= 0")
+            mx = old_max if max is None else (None if not max else _fmt(float(max)))
+            block = f"densityfit {1 if v else 0} {s}" + (f" {mx}" if mx else "")
+            line = self._DENSITYFIT_RE.sub(block, line) if fit else line.rstrip() + "  " + block
+        if group is not None:
+            grp = self._DENSITYGROUP_RE.search(line)
+            if group == "":
+                line = self._DENSITYGROUP_RE.sub("", line).rstrip() if grp else line
+            else:
+                block = f"densitygroup {group}"
+                line = self._DENSITYGROUP_RE.sub(block, line) if grp else line.rstrip() + "  " + block
+        lines[i] = line
         self._suffix = "\n".join(lines)
         return self
 

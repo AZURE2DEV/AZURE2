@@ -29,6 +29,7 @@ class ShftFunc {
     neutral_ = (pPair->GetZ(1) * pPair->GetZ(2) == 0);
     zz_ = pPair->GetZ(1) * pPair->GetZ(2);
     redmass_ = pPair->GetRedMass();
+    kin_ = Kinematics::Channel(pPair);
     table_ = SharedTable(neutral_);
     params_.whitFunc = std::make_unique<WhitFunc>(pPair);
   };
@@ -95,8 +96,13 @@ class ShftFunc {
   bool neutral_;
   int zz_;
   double redmass_;
+  Kinematics::Channel kin_;
   /// The universal Coulomb table for a charged pair when Config::useCoulombTable is set.
   const CoulombTable *table_;
+  /// Set while a difference stencil has a point outside the table: every point then takes the exact route.
+  bool forceExact_ = false;
+  /// Does the table cover the bound state at this energy (eta_b, rho_b of l)?
+  bool BoundTableOk(int l, double energy) const;
   static const CoulombTable *SharedTable(bool neutral);
   /// Charged closed channels from the exact U ratio, unless AZURE_BOUND_SHIFT_NUMERICAL=1.
   static bool UseURatio();

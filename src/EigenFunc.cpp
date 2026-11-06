@@ -1,6 +1,7 @@
 #include "EigenFunc.h"
 #include <gsl/gsl_eigen.h>
 #include <math.h>
+#include <cmath>
 
 /*!
  *  This constructor calculates the eigenvectors and eigenvalues for a real symmetric matrix.
@@ -21,7 +22,7 @@ EigenFunc::EigenFunc(const matrix_r &A) {
   gsl_matrix *evec = gsl_matrix_alloc(A.size(), A.size());
   gsl_eigen_symmv_workspace *w = gsl_eigen_symmv_alloc(A.size());
 
-  gsl_eigen_symmv(m, eval, evec, w);
+  ok_ = (gsl_eigen_symmv(m, eval, evec, w) == 0);
   gsl_eigen_symmv_sort(eval, evec, GSL_EIGEN_SORT_VAL_ASC);
 
   for (int i = 0; i < A.size(); i++) {
@@ -33,6 +34,7 @@ EigenFunc::EigenFunc(const matrix_r &A) {
     }
   }
 
+  for (double e : eigenvalues_) ok_ = ok_ && std::isfinite(e);
   gsl_vector_free(eval);
   gsl_matrix_free(evec);
   gsl_matrix_free(m);
@@ -61,7 +63,7 @@ EigenFunc::EigenFunc(const matrix_r &A, const std::vector<vector_r> &B) {
 
   gsl_eigen_gensymmv_workspace *w = gsl_eigen_gensymmv_alloc(A.size());
 
-  gsl_eigen_gensymmv(n, m, eval, evec, w);
+  ok_ = (gsl_eigen_gensymmv(n, m, eval, evec, w) == 0);
   gsl_eigen_gensymmv_sort(eval, evec, GSL_EIGEN_SORT_VAL_ASC);
 
   for (int i = 0; i < A.size(); i++) {
@@ -73,6 +75,7 @@ EigenFunc::EigenFunc(const matrix_r &A, const std::vector<vector_r> &B) {
     }
   }
 
+  for (double e : eigenvalues_) ok_ = ok_ && std::isfinite(e);
   vector_r tempNormVec;
   for (int i = 0; i < A.size(); i++) tempNormVec.push_back(0.0);
 

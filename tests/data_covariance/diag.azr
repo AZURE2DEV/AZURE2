@@ -1,0 +1,56 @@
+<config>
+true #Perform A-Matrix Calculation
+output/ #Full Path to Output Directory
+checks/ #Full Path to Checks Directory
+none #Compond Nucleus Check
+none #Boundary Condition Check
+none #Data Check
+none #Lo-Matrix and Penetrability Check
+none #Legendre Polynomial Check
+none #Coulomb Amplitudes Check
+none #Reaction Pathway Check
+none #Angular Distributions Check
+includeAllJPi=1
+maxOrbitalMomentum=4
+abundanceSumSigma=0.01
+</config>
+<levels>
+0.5 1 2.365000 0 1 1 1 0 1 1 0 0.6 0.5 1 0 1 0 1.00782 12.0 1 6 1.9435 1.9435 0 0 0.0 0 5.0 0 0 0
+
+1.5 -1 3.502000 0 1 1 1 2 2 1 0 0.25 0.5 1 0 1 0 1.00782 12.0 1 6 1.9435 1.9435 0 0 0.0 0 5.0 0 0 0
+
+2.5 1 3.547000 0 1 1 1 4 3 1 0 0.2 0.5 1 0 1 0 1.00782 12.0 1 6 1.9435 1.9435 0 0 0.0 0 5.0 0 0 0
+
+1 1 8.250600 0 1 2 0 2 4 1 0 0.45 0.5 1 0.5 -1 0 1.00782 13.00335 1 6 7.5506 7.5506 0 0 0.0 0 5.0 0 0 0
+1 1 8.250600 0 1 2 2 2 4 1 0 0.45 0.5 1 0.5 -1 0 1.00782 13.00335 1 6 7.5506 7.5506 0 0 0.0 0 5.0 0 0 0
+
+2 -1 8.800600 0 1 2 0 4 5 1 0 0.6 0.5 1 0.5 -1 0 1.00782 13.00335 1 6 7.5506 7.5506 0 0 0.0 0 5.0 0 0 0
+2 -1 8.800600 0 1 2 2 4 5 1 0 0.6 0.5 1 0.5 -1 0 1.00782 13.00335 1 6 7.5506 7.5506 0 0 0.0 0 5.0 0 0 0
+
+0 1 9.400600 0 1 2 2 2 6 1 0 0.2 0.5 1 0.5 -1 0 1.00782 13.00335 1 6 7.5506 7.5506 0 0 0.0 0 5.0 0 0 0
+
+</levels>
+<abundances>
+7 13 0.95 1 0.02
+7 14 0.05 1 0.01
+</abundances>
+<segmentsData>
+1 1 1 0.3 2.3 0 180 1 1 1 5 0 0 0 data/p12c_60.dat 0 0 covariance cov_diag.txt
+1 1 1 0.3 2.0 0 180 1 1 0 0 0 0 0 data/p12c_90.dat 0 0 covariance cov_diag.txt
+1 1 1 0.3 2.3 115 125 1 1 0 0 0 0 0 data/p12c_120_150.dat 0 0 covariance cov_diag.txt
+1 1 1 0.3 2.3 145 155 1 1 0 0 0 0 0 data/p12c_120_150.dat 0 0 covariance cov_diag.txt
+1 1 1 0.3 2.3 0 180 7 1 0 0 0 0 0 data/p12c_ay100.dat 0 0 covariance cov_diag.txt
+1 1 1 0.3 2.3 0 180 7 1 0 0 0 0 0 data/p12c_ay140.dat 0 0
+1 1 1 0.3 2.3 0 180 1 1 0 0 0 0.01 1 data/p12c_75.dat 0 0 shiftgroup G covariance cov_diag.txt
+1 1 1 0.3 2.3 0 180 1 1 0 0 0 0 0 data/p12c_135.dat 0 0 shiftgroup G covariance cov_diag.txt
+1 1 1 0.3 2.3 0 180 1 1 0 0 0 0 0 data/p12c_105.dat 0 0 sqrtshift 0 0.01 1 covariance cov_diag.txt
+1 1 1 0.3 2.3 0 180 1 1 0 0 0 0 0 data/p12c_165.dat 0 0 shiftfn "a0*(x-1.3)" 1 0 0.01 1
+1 2 2 0.3 2.3 0 180 1 1 1 5 0 0 0 data/p13c_60.dat 0 0 sample 1
+1 2 2 0.3 2.3 0 180 1 1 0 0 0 0 0 data/p13c_120.dat 0 0 sample 1
+1 2 2 0.3 2.3 0 180 1 1 0 0 0 0 0 data/p13c_150.dat 0 0
+1 1 1 0.3 2.3 0 180 1 1 0 0 0.002 0 0 data/p12c_90s.dat 0 0
+</segmentsData>
+<segmentsTest>
+</segmentsTest>
+<targetInt>
+</targetInt>

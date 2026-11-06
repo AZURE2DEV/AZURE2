@@ -6,9 +6,10 @@ something for such a project. The THM machinery itself (HOES cross section,
 `<thm>` keys, experiments, R(E), the DW vertex, the ps and angle windows,
 cbackground=, thm_experiments.out) is new and does nothing unless it is used.
 
-`origin/dev` 0919dcb is merged into `thm` (October 2026; see "Merge of
-origin/dev 0919dcb" below; the previous merges were 8673c5c, 7e6dba8,
-64ed575, 4a93bc1, and 6f3228e, 3628a87), so all of dev is already in `thm`.
+`origin/dev` 2d97b1f is merged into `thm` (November 2026; see "Merge of
+origin/dev 2d97b1f0" below; the previous merges were 0919dcb, 8673c5c,
+7e6dba8, 64ed575, 4a93bc1, and 6f3228e, 3628a87), so all of dev is already
+in `thm`.
 The dev changes merged by 18c49ea, f56c150, da72def, 497548a, e191991 and
 3628a87 are not differences: the Wigner-limit bound, the elastic identical-pair factor
 (7c34992), the adaptive-grid convergence work, target-integration anchoring,
@@ -20,19 +21,19 @@ cache guard.
 | commit | change | reason | re-pinned (tests/*/expected) |
 |---|---|---|---|
 | b6cc41b | ShftFunc below threshold: exact S_l(0) at E = 0; an open channel with eta > 100 is closed (P = 0, S = 2 S(0) - S(-e)); near threshold (outside eta <= 1000 and (eta <= 50 or z >= 0.05)) S is interpolated linearly between S(-bindingMin) and S(0).  Since the merge of 64ed575 the exact value itself is dev's U ratio (`CoulombTable::ExactBound`, dev 441d14f) and the neutral closed form (dev af3075e); dev uses the same values where its table or the U ratio is finite, and the numerical radial derivative (0 or NaN close to threshold) elsewhere | NaN and underflow near threshold; ~1e-9 noise in S became 0.03-0.5 % in dS/dE (Brune transform) | 22c3d03: 13N, 13N_capture_ay, 7Li_p_ay, beam_profile_kernel, data_file_comments, hybrid_potential, polarization_product, target_effect_ranges, thick_target_resonance (all < 1e-3) |
-| 12fe484 | ChannelFunc: one helper for S, P and dS/dE at a channel energy (e < 0, e = 0, eta > 100 closed, Coulomb), used by the CNuc transforms, the boundary conditions, AZUREGrad, the adaptive grid, EPoint and ECIntegral; GSL U trusted only for eta <= 50 or z >= 0.1 | a level at or near threshold aborted the CLI or gave NaN; dS/dE was 0 for a level exactly at threshold | none; a width that cannot be converted (P = 0) becomes gamma = 0 with a WARNING |
+| 12fe484 | ChannelFunc: one helper for S, P and dS/dE at a channel energy (e < 0, e = 0, eta > 100 closed, Coulomb), used by the CNuc transforms, the boundary conditions, AZUREGrad, the adaptive grid, EPoint and ECIntegral; GSL U trusted only for eta <= 50 or z >= 0.1 | a level at or near threshold aborted the CLI or gave NaN; dS/dE was 0 for a level exactly at threshold | none; a width that cannot be converted (P = 0) becomes gamma = 0 with a WARNING  Since the merge of 2d97b1f, ECIntegral near a Coulomb threshold is dev's (3e9b529: channel capture interpolated linearly between the threshold value and eta = 100, continuous at both ends) instead of thm's mirrored energy |
 | ec416de | dS/dE central difference with starting step \|e\|/4 within [1 eV, 1 keV] (was 1 eV).  Since the merge of 64ed575 a stencil wholly above threshold uses dev's Richardson difference (PEShift_dE, 441d14f), as dev; the step rule remains for closed channels (dev: 1 eV) and stencils that cross threshold | round-off dominated: 1.6e-3 in chi2 between compilers | 7Li_p_ay, beam_profile_kernel, data_file_comments, target_effect_ranges; 15bb0a2: 13N, hybrid_potential (< 7e-5) |
-| 02ae97b | adaptive grid: geometric tails beyond the resonance core; anchors quantised (width to 1.25^n, energy to width/4); only the finest of overlapping lattices kept; a pure Gaussian convolution whose `<targetInt>` line omits the multiplier uses a 2-width core (an explicit value, and target integration, keep 20) | narrow resonances folded 16-38 % high; the union of lattices tripled the sub-points | thick_target_resonance 19.0249 -> 30.8444, hybrid_potential (+1.6e-3); tests/convolution_unify (dev's check; its reference_old/ holds dev's grid): plain target integration 6.1e-5 from the reference, the constant-sigma ratio new/old 1.00259-1.00272 instead of 1.0027100 at every energy.  thm's grid is converged there (3e-8 and 2e-7 from a 4x finer grid), dev's is off by 6.3e-5 and 1.1e-4 near the 3.50/3.55 MeV levels; held to 1e-4 and to a 1.5e-4 spread (the median still to 1e-5) |
+| 02ae97b | adaptive grid: geometric tails beyond the resonance core; anchors quantised (width to 1.25^n, energy to width/4); only the finest of overlapping lattices kept; a pure Gaussian convolution whose `<targetInt>` line omits the multiplier uses a 2-width core (an explicit value, and target integration, keep 20) | narrow resonances folded 16-38 % high; the union of lattices tripled the sub-points | thick_target_resonance 19.0249 -> 30.8444, hybrid_potential (+1.6e-3); tests/convolution_unify (dev's check; its reference_old/ holds dev's grid): plain target integration 6.1e-5 from the reference, the constant-sigma ratio new/old 1.00259-1.00272 instead of 1.0027100 at every energy.  thm's grid is converged there (3e-8 and 2e-7 from a 4x finer grid), dev's is off by 6.3e-5 and 1.1e-4 near the 3.50/3.55 MeV levels; held to 1e-4 and to a 1.5e-4 spread (the median still to 1e-5)  dev fixed the same tail error differently (d216517, graded zones moving with E_R); the merge of 2d97b1f keeps thm's grid: dev's tests/reference/adaptive_grid_reference_test then fails 1 of 14 checks (below) |
 | (02ae97b, 528b672) | the thm sub-point grid refresh (EPoint::RefreshSubPointGrid) is gone since the merge of 64ed575: dev re-places every grid at every evaluation (EData::ReplaceSubPointGrids, a163c06, `--no-grid-replacement`), from the observed values of the current parameters (TransformOut on a copy), which serves Brune, formal parameters and Park alike.  No difference from dev left; the quantized anchors of the row above make the re-placed grid piecewise constant | -- | -- |
 | df8c2c8 | (1 + delta_12) = 2 for every cross section out of an identical entrance pair (reactions, capture, differential); none for an identical exit pair; the adjoint gradient follows; a rate run prints a note | dev applied it to elastic only: 12C(12C,a), d(d,p), d(d,g) were a factor 2 low | none (new tests/identical_entrance_reaction) |
-| 76888ad | a `<targetInt>` line listing several segments gives each segment its own copy, so sigma lab -> c.m. is converted once | the shared object was converted once per listed segment | target_effect_ranges 3861.5 -> 3838.66. dev fixed the same bug with a once-only guard (f0444ab, pin 3838.73); both are kept, and the 7e-5 between the pins is the shift-function rows above. A line shared by segments of different entrance pairs still differs: thm converts each copy with its own pair's factor, dev uses the first segment's: tests/natural_neon ("5,6": n+22Ne and n+20Ne) segment 6 247.1 on thm, 246.304 on dev (dev with separate lines: 247.15), total 3346.1 (dev 3345.28); examples/natural_neon shares "10,11", "6,8" and "7,9" the same way (its documented table is dev's; not run here) |
+| 76888ad | a `<targetInt>` line listing several segments gives each segment its own copy, so sigma lab -> c.m. is converted once | the shared object was converted once per listed segment | target_effect_ranges 3861.5 -> 3838.66. dev fixed the same bug with a once-only guard (f0444ab, pin 3838.73); both are kept, and the 7e-5 between the pins is the shift-function rows above. A line shared by segments of different entrance pairs still differs: thm converts each copy with its own pair's factor, dev uses the first segment's: tests/natural_neon ("5,6": n+22Ne and n+20Ne) segment 6 247.1 on thm, 246.304 on dev (dev with separate lines: 247.15), total 3346.1 (dev 3345.28); examples/natural_neon shares "10,11", "6,8" and "7,9" the same way (its documented table is dev's; not run here)  Since the merge of 2d97b1f dev converts every point with its own pair (170ab0c, EPoint::SetTargetKinematics) and so does this branch; the copies stay (screening/density parameters are per line), no conversion is done on them, and the natural_neon difference should be gone (not measured: memory) |
 | 79358bb | EPoint::CalcEDependentValues clears its L_o, P and phase tables before refilling | a second call appended copies; lookups read the stale first copy | none. dev fixed the same doubling in RecalcEDependentValues (797c2ea, rows emptied in place); since the merge both functions use dev's ClearEDependentRows, so no output difference remains |
 | 953486f | nuisance priors looked up by full Minuit index in chi2, gradient and LM setup | a fixed parameter before the prior's moved the prior to another parameter (also on dev) | none (new tests/nuisance_prior) |
 | 178ae16 | AZURECalc::FixedMask from the minimizer: LM, GSL-LM, the band covariance and the FD gradient honour the fixed flags | --use-lm / --use-gsl-lm fitted fixed parameters | none (new tests/fixed_param_par); covariance.dat has one row per free parameter |
 
 ## B. Behaviour and format (no physics change)
 
-- a0cd873: the CLI exits with -1 when a run fails (fill, initialize or transform abort); it always returned 0.
+- a0cd873: the CLI exits with -1 when a run fails (fill, initialize or transform abort); it always returned 0.  Since the merge of 2d97b1f it exits with 1, as dev (2b9ea26).
 - d284224: a malformed `<potential>` block makes ReadConfigFile return -2; the binding refuses the file instead of running with defaults.
 - 953486f: Calculate prints "Total Chi-Squared:" (the total with priors) to 12 significant digits, not 6.
 - a2b8c81: "Denominator less than zero while transforming" names the channel and its saturation width.
@@ -347,6 +348,196 @@ Results that move (no table file; the table changes nothing beyond 1e-8):
 Still open: the merged EPoint is 152 bytes larger than dev's; the three
 convolution_unify models with target integration and a beam spread need more
 than 3.0 GB of address space with either binary (checked here on 21 points).
+
+## Merge of origin/dev 2d97b1f0 (November 2026)
+
+dev between 0919dcb and 2d97b1f (208 commits): the audit fixes (items 3-32 and
+tier 3: shifted sub-points at the parent's angle and moved rigidly with it,
+EC final states that must be listed levels, the M1 EC spin/orbital terms and
+EC signature v4, 5-sigma Gaussian kernels, the reaction rate from ln sigma
+splines, lab-frame SUM terms, RATIO Jacobians, ratio-to-Rutherford lab angles,
+UPOS spin and mixing fixes, physical-parameter objectives with norms and
+penalties, nuisance priors by full index, normalizations.out rows, the
+exact thin-target range integral, per-point lab -> c.m. conversion of a
+shared `<targetInt>` line, Bohr straggling, thick targets as density 0,
+kinematic-limit refusals, table-edge stencils, session-owned potentials,
+exact hybrid derivatives), new features (data covariance matrices, relativistic
+kinematics, angular-coefficient data isDiff 9, fitted target densities
+`densityfit`/`densitygroup`, sample transmission/yield, total capture rate,
+`--max-calls`, AME2020 masses, EC convection current, scattering lengths in
+the segment table, the R-matrix route fixes), the speed-ups (one parallel
+point pass for pyazr, forward-only Jacobian shift columns, parsing once per
+session, setup scaling), shift penalties from zero (0dd28e5), exit status 1,
+docs, skills, CI (artifact retention, AppImage).  All of it is in, with these
+decisions:
+
+- **Sub-point grid: thm's.**  dev fixed the narrow-resonance tail error
+  (d216517: graded zones, step 10 % of the distance, moving with E_R); thm had
+  fixed it in 02ae97b (geometric tails, quantized anchors).  One definition is
+  kept: thm's AdaptiveIntegrationGrid (section A), as the merge rules require.
+  dev's new tests/reference/adaptive_grid_reference_test runs against it and
+  **fails 1 of 14 checks**: "eV level crossing the window edge" swings by
+  1.685e-4 of the area (tolerance 1e-4).  Every accuracy check passes (largest
+  error 1.70e-4 against 2e-4; dev's grid 7.2e-5) and the swing with the level
+  inside the window is 2.2e-7: the failing swing is thm's constant tail bias
+  (~1.7e-4 of the area, r^2 Gamma/(2 pi core), see TailFactor) leaving the
+  window with the level, a smooth function of position (largest jump between
+  neighbouring positions 9.4e-6), not the oscillation the test was written
+  for.  Neither the test nor its tolerance was changed.  To decide: keep thm's
+  grid and relax/split that check, or tighten thm's tailRatio (which moves
+  every THM fold), or take dev's grid (which moves THM outputs).
+- **Gaussian kernels to 5 sigma for every segment (dev 7d24c88).**
+  TargetEffect::thmConvolutionRange stays (also 5).  This is the only change
+  to THM outputs (direct segments of THM projects), see below.
+- **Shared `<targetInt>` lines.**  dev now converts a line's lab energies with
+  each point's own pair (170ab0c); thm's per-segment copies (76888ad) are kept
+  for their bookkeeping but no conversion happens on them any more (the
+  in-place ConvertSigmaToCM is gone with dev's change).  dev's density fit
+  follows thm's screening scheme: `density_<n>` is the line's (n = its place
+  among active lines), shared by every copy (EData::SetUpDensityParams walks
+  the copies by line; GetDensityTargetEffect like GetScreeningTargetEffect);
+  **differs from dev** only for a densityfit line listing no existing segment
+  (no parameter).  Five dev call sites that read `GetTargetEffect(effect
+  number)` (MCMC screening/density priors, labels, LM penalty rows, API
+  records) use the line's first copy instead.
+- **Parameter layout / type codes.**  ..., screening, **density (dev, type
+  8)**, THM cbkg last, **type 9 (was 8)**.  ParamKind Density before
+  ThmCoherent; MCMC PARAM_DENSITY 8, PARAM_CBKG 9; pyazr `_KINDS` 8 density,
+  9 cbkg; `bands._BAND_KINDS = (0, 1, 9)`.  GetParameterInfo pushed density
+  after cbkg (auto-merge) with both type 8 -- fixed.
+- **Shift penalties from zero (dev 0dd28e5)**, with thm's explicit
+  `segment_N_energy_shift prior_centre c` row still honoured: the constant
+  term's centre is 0 unless such a row moves it (ESegment's nominal shift now
+  starts at 0, not at the line's value; AddShiftPenalty, ForEachShiftPenalty,
+  shifts.out, MCMC priors and pyazr `penalties()` / `nominal_shift` follow).
+  sqrt(E) and shift-function terms: from 0 (thm has no centre rows for them).
+  save_fit writes a shift centre row only for an explicit non-zero centre.
+  Norm priors keep thm's prior_centre (`nominal_norm`).
+- **Same bug, two fixes, one kept:** nuisance priors by full index (thm
+  953486f's `NuisancePrior(f)`; dev's ce4462b loops dropped, `density_` added
+  to the skipped names); param.fit `#parametrization` (one line, dev's
+  comment); `--help` keeps thm's complete list (`--use-api` included); exit
+  status 1 (dev; thm returned -1); EC just above a Coulomb threshold (dev's
+  interpolation 3e9b529, with its tests/ec_threshold; thm's mirrored energy
+  dropped); GUI duplicate segment lines (dev ffc86b3, thm's `fromFile` flag
+  dropped; the duplicate test now also compares isTHM); MCMC tab by name
+  (thm, with dev's density category).
+- **AMatrixFunc adjoint:** dev's `integratedBar` refactor takes thm's
+  (1 + delta_12) of an identical entrance pair for the reported
+  angle-integrated cross section and 1 for the angular-coefficient sigma_int
+  (the forward A_0 is unscaled).
+- **ShftFunc:** dev's relativistic eta_b/rho_b (Kinematics) and its table-edge
+  rule (forceExact_ over the whole stencil) on thm's structure (U ratio with
+  the linear continuation to S(0)); EnergyDerivative keeps the caller's step
+  (ChannelFunc's rule for closed channels).
+- **ESegment:** dev's rigid sub-point shift (f56e02a); a THM segment's shift
+  stays unfloored.
+- **EData:** thm's THM floor (minSubEnergy) and 5-sigma THM fold window on
+  dev's per-point GridExtent/SigmaCM; dev removed the zero-thickness branch
+  (thick target = density 0), so thm's copy of it went too.
+- **New refusals (no silent fallbacks):** isDiff 19 (THM + angular
+  coefficients) on a data segment, isDiff 9/19 on a test segment, a
+  covariance block on a THM segment (its chi^2 is the profiled experiment's),
+  and a THM segment with `relativistic=1` (the THM vertex/line shape/HOES
+  kinematics are non-relativistic).
+- **AZURECalc:** PrecalculatePoints is dev's CalculatePointsInParallel (failed
+  point NaN) restricted to THM segments for thmOnly; the covariance
+  correction after thm's thmOnly return; the shift fast path skips THM
+  experiments and covariance groups.
+- **AZUREAPI:** thm's FillFromFullRWA/EvaluateFilledChi2 structure with dev's
+  parallel point pass and covariance correction; CalculateChi2Physical returns
+  +inf for a rejected transform and adds the same Park/abundance/
+  scattering-length terms as CalculateChi2RWA (new FilledModelPenalties; thm
+  added none); calculate_residuals_rwa whitens covariance rows; the residual
+  Jacobian takes dev's FillShiftColumns (with `skip`) unless the project has
+  THM segments, which keep thm's forward differences of EvaluateFilledChi2
+  (THM rows profiled), now also for density columns.  RefreezeCovariance
+  (dev) added; every pybind ConfigScope carries the session's potentials.
+- pyazr 2.9.0 (dev's number; thm's public names were already in 2.8.0).
+- Tests: expected files -- see below.  tests/pyazr/CMakeLists.txt: dev's new
+  tests registered before thm's SKIP_RETURN_CODE block (still last).
+  park_formalism and convolution_unify check.sh: thm's versions (dev's 2b
+  check is a subset of thm's; both hold the grid tolerances with thm's
+  reason).
+- GUI (not compiled here: no Qt/Qwt): both Runtime Options boxes (THM,
+  relativistic), THM tick in the data dialog with dev's l/s widgets moved one
+  column, density and cbkg rows in FittingTab in engine order, MassTable /
+  MassCheckDialog sources, round-trip writer for component angles/scalings.
+- Docs: experimental_effects describes thm's grid (and that dev's graded tails
+  are not used here), 5-sigma kernels, the exact range integral; chi_squared
+  the shift centre rule; pyazr the kind table and bands; command_line the
+  exit status; contributing is dev's page plus thm's test-infrastructure
+  sections.  Sphinx is not installed here: the docs were not built.
+
+Output differences, measured (OMP_NUM_THREADS 1-2, Coulomb table on; merged
+= this tree, thm = 30d3bd9 built in thm-ref, dev = 2d97b1f in dev-ref; 23
+regression projects, 8 THM examples):
+
+- THM regression projects (17O, 18O_p_a_thm, 6Li_d, 7Li_p_a) and the THM
+  examples n15_lacognata2007, o17_guardo, o18_lacognata2008/2010: every
+  output file byte for byte as thm.  f19_pag_thm: identical but for
+  normalizations.out (dev cebec4f: no malformed row per fixed norm).
+  c12c12_tumino2018 111.613 -> 111.661, li6_pizzone2011 157.036 -> 157.041,
+  li7_tumino2006 439.148 -> 439.149: only the direct (non-THM) segments move
+  (c12c12 segments 5-8; THM segments 1-4 identical); a merged build with
+  convolutionRange = 3 gives thm's files byte for byte on all four, so the
+  whole difference is dev's 5-sigma kernel.
+- Classic against thm: identical on 15 projects; differences:
+  13N segments 9/10 1841.85 -> 1875.78, 684.258 -> 676.017 (dev f389d46,
+  photon Jacobian of lab-frame capture; dev's own values exactly), total
+  336454 -> 336480; target_effect_ranges 3838.66 -> 3837.11 (the merged build
+  with convolutionRange = 3 gives thm's files byte for byte); thick_target_
+  resonance 30.8444 -> 30.9094 (dev 3207ae1, exact range integral: the merged
+  build with the first-order loss gives thm's files byte for byte);
+  hybrid_potential segment 3 2239.69 -> 2238.95 and the formal parameters in
+  parameters.out by up to 2.7e-3 (dev 57e31bb, hybrid S on a grid node with an
+  O(dr^4) derivative: parameters.out equals dev's); channel_space
+  normalizations.out (cebec4f); intEC.dat in the 17-digit format (dev
+  479153b, signature v5).
+- Classic against dev (19 classic projects): identical on 9; the rest are section A
+  (13N segments 1/2 814.405 -> 814.349 and 39.7064 -> 39.7053, beam_profile_
+  kernel 40.4396 -> 40.4393, hybrid_potential 2.46215e6 -> 2.46612e6,
+  7Li_p_ay-type parameters.out in the 7th digit, 13N_capture_ay 6e-9,
+  beta_delayed_alpha 9e-9, shift_subpoint_angle 4e-10, intEC.dat node counts),
+  plus thick_target_resonance 30.7201 -> 30.9094 and target_effect_ranges
+  3839.73 -> 3837.11 (thm's grid under dev's kernel and thickness) and
+  natural_neon 3342.46 -> 3342.51 (segments 4 and 6 by 4e-4 and 2.5e-4; the
+  thm pin's segment 6, 247.1, was the 76888ad difference, gone with dev's
+  per-point conversion).
+- Re-pinned (rows explained above, each equal to a measured run):
+  tests/13N (segments 9/10 and the total: dev's values), tests/thick_target_
+  resonance (30.9094, README updated).  **Not re-pinned:** tests/natural_neon
+  keeps thm's pin and fails (3342.51 against 3346.1, 1.07e-3; segment 6
+  245.029 against 247.1): the move is dev's 5-sigma kernel (-0.1 % on dev) and
+  per-point conversion, but it was not isolated by experiment here; proposed
+  new pin = the merged run above.  target_effect_ranges stays within its
+  tolerance of thm's pin (4e-4) and was not touched.
+
+Tests (this machine: GCC, no Qt; another job held ~12 GB, so heavy runs were
+capped at 4.5 GB of address space):
+
+- Build (GCC 11, Release, BUILD_GUI=OFF, pyazr on): no warnings.
+- ctest -LE slow (86 tests, -j 2): 85 passed, 1 failed:
+  adaptive_grid_reference (the window-edge swing above).  The pyazr tests
+  ran their engine parts (pyazr imports, 2.9.0; e.g. target_density,
+  thm_adjoint, thm_park, park_gradient, scattering_length print ok).
+  The slow label was not run.
+- tests/run_tests.sh (all regression projects and check.sh, every engine
+  run under 4.5 GB): 118 passed, 3 failed -- natural_neon (pin, above),
+  convolution_unify (bad_alloc under the cap; it needs more than 3 GB with
+  either binary, as at the previous merges; not run uncapped here because
+  of the other job), cli_help (dev's `--ec-convection-current` was accepted
+  but not printed, and the combined help/docs row for the three positive
+  defaults did not name `--grid-replacement` on its own line: fixed, one
+  line per flag in --help and in command_line.rst; cli_help and the
+  consistency test then pass).  Every THM check.sh passes, as do dev's new
+  ones (covariance, relativistic, transmission_yield, shift_penalty_zero,
+  target_density, ec_threshold, convolution_window, ...).
+- THM check.sh work files were not compared file by file against thm (only
+  pass/fail); the regression projects and the examples were.
+- Not checked: the GUI (Qt/Qwt are not installed: its files were merged by
+  reading only), Sphinx, macOS/Windows, the slow pyazr tests, the 12C+12C
+  best fits outside the repository.
 
 ## Merge of origin/dev 0919dcb (October 2026)
 

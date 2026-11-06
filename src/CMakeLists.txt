@@ -1,14 +1,14 @@
 # Core sources, shared by the AZURE2 executable and the _azure2 Python module.
-set(AZURE2_CORE_SOURCES AChannel.cpp CoulFunc.cpp CoulFuncCache.cpp GenMatrixFunc.cpp
+set(AZURE2_CORE_SOURCES AChannel.cpp CoulFunc.cpp CoulFuncCache.cpp InputFiles.cpp GenMatrixFunc.cpp
 KLGroup.cpp ALevel.cpp Decay.cpp AngCoeff.cpp MGroup.cpp
 AMatrixFunc.cpp  DoubleFactorial.cpp EigenFunc.cpp  NFIntegral.cpp
 ECIntegral.cpp ECTable.cpp ECAmplitudeCache.cpp MatrixInv.cpp LevelMatrixSolver.cpp Profile.cpp ChannelSpace.cpp
 PPair.cpp AZURECalc.cpp
-ECMGroup.cpp ReactionRate.cpp AZUREMain.cpp EData.cpp ShftFunc.cpp ScatteringLength.cpp
+ECMGroup.cpp ReactionRate.cpp AZUREMain.cpp EData.cpp DataCovariance.cpp ShftFunc.cpp ScatteringLength.cpp
 RMatrixFunc.cpp AZUREOutput.cpp  EDataIterator.cpp   TargetEffect.cpp
 AZUREParams.cpp EPoint.cpp Interference.cpp CNuc.cpp Equation.cpp
 JGroup.cpp Config.cpp ESegment.cpp KGroup.cpp IntegratedFermiFunc.cpp
-EffectiveCharge.cpp  GSLException.cpp ParameterLimitsManager.cpp Straggling.cpp
+EffectiveCharge.cpp  GSLException.cpp ParameterLimitsManager.cpp
 AdaptiveIntegrationGrid.cpp NuclearPotentialManager.cpp AZUREGrad.cpp ThmFunc.cpp
 THMMatrixFunc.cpp ThmVertexBoundary.cpp ThmNumerics.cpp EDataThm.cpp ConfigThm.cpp ThmExperiment.cpp ThmLineshape.cpp ThmDistortion.cpp ThmOptical.cpp ThmDwVertex.cpp ThmAngular.cpp CovarianceBand.cpp ParameterLabel.cpp PolarizationFunc.cpp ChannelFunc.cpp CoulombTable.cpp)
 

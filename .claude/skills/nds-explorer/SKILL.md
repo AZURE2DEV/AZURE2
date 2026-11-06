@@ -32,6 +32,7 @@ edits, load the **`azure2-eval`** skill as well — this skill hands data to it.
 | EXFOR search | `https://nds.iaea.org/exfor/x4list` | matching datasets (ID, reaction, points, E/angle range, author, reference) | `search_exfor()` |
 | EXFOR data | `https://nds.iaea.org/exfor/x4get?DatasetID=…&op=csv` | one dataset's numbers with units | `fetch_exfor()` |
 | EXFOR bibliography | `https://nds.iaea.org/exfor/x4get?sub=ENTRY` | title, authors, journal reference | `reference()` |
+| EXFOR master files (local fallback) | a clone of `https://github.com/IAEA-NDS/exfor_master` at `$AZURE2_EXFOR_MASTER` or `~/.azure2/exfor_master` | every entry as raw EXFOR (`exforall/<3 chars>/<entry>.x4`) | `fetch_exfor(source="local")`, `reference(source="local")` |
 | LiveChart levels | `https://www-nds.iaea.org/relnsd/v1/data?fields=levels&nuclides=…` | level scheme CSV | `fetch_levels()` |
 | NNDC ENSDF API (fallback) | `https://www.nndc.bnl.gov/ensdf-api/levels?nuclide=…&document-type=adopted` | the same adopted levels, JSON | `fetch_levels(source="nndc")` |
 | LiveChart gammas | `…?fields=gammas&nuclides=…` | gamma transitions | `fetch_gammas()` |
@@ -90,7 +91,23 @@ the CSV header):
   passes the values through; pass `rutherford=True` to multiply by the Coulomb
   cross section (→ b/sr), or `rutherford=False` to accept the ratio and
   silence the warning. **Check the search result's reaction code** — that is
-  the only place the marker survives.
+  the only place the marker survives. The cross section written is in the
+  frame of the angle column: for a lab `ANG` column `to_azr` converts the
+  angle to the c.m. frame (`elastic_lab_to_cm`, the entrance masses — pass
+  `target_mass`/`projectile_mass` for exact ones) and divides the c.m.
+  Rutherford value by the lab→c.m. Jacobian, so AZURE2 reads back
+  ratio × σ_R,cm(θ_cm). **Before 2026-10-26 (audit item 8) it wrote the c.m.
+  Rutherford at the lab angle** (1.13× off for p+16O, 1.8–2.2× for α+12C) and
+  `_guess_observable` called every angle column `differential-cm`; a lab
+  column is `differential` now, and a ratio is no longer guessed as an
+  analyzing power. Any data file made from a `,,RTH` set with a lab `ANG`
+  column before that date must be regenerated (`tests/pyazr/nds_rutherford_test.py`).
+  Identical particles (ratio to Mott) get a warning and ratio × Rutherford.
+  The GUI's own EXFOR dialog (gui/src/ExforData.cpp, "Retrieve Experimental Data
+  from EXFOR") had the same lab-angle mistake and is fixed the same way (2026-10-27,
+  tests/gui/exfor_rutherford_test); data files it made from a lab-angle `,,RTH`
+  set before that date (12C+p/8-9-26_claude_learns_12C+p: Milne 1954, Jiang 2004,
+  if their EXFOR angle column is `ANG`) need regenerating too.
 - `plus=1` gives computational units (eV, `B*EV`, `B/SR`); `plus=2` the
   universal grid. Not needed for AZURE2; `plus=0` is the default.
 
@@ -253,8 +270,16 @@ as `SIG,,SFC`, is the cheapest possible check and catches both bugs at once.
   uncertainties), written in LiveChart's spellings (`jp` "2+ 1+", `half_life` the bare number), plus
   `Level.width_kev` and `Level.source`.  Only the trailing zeros of a half-life text (LiveChart "4.70",
   NNDC "4.7") and `half_life_sec` at ~1e-7 for width-only levels can differ.  Force a service with
-  `source="livechart"` / `"nndc"`.  `fetch_gammas` / `fetch_ground_state` and the EXFOR calls have no
-  fallback yet (the ENSDF API has `/gammas`; EXFOR has no NNDC equivalent here) -- retry later.  NNDC also
+  `source="livechart"` / `"nndc"`.  `fetch_exfor` and `reference` fall back to a local clone of the
+  EXFOR master files (`$AZURE2_EXFOR_MASTER` or `~/.azure2/exfor_master`; on the CRC cluster
+  `/groups/rdeboer1/user/rdeboer1/exfor_master`, linked from `~/.azure2/exfor_master`, cloned 2026-10-22,
+  refresh with `git pull origin main`).  The fallback warns; `source="local"` skips the web.  It gives
+  plus=0 only, needs the pointer for a multi-dataset subentry (`"C1010003.2"`, the error lists them), and
+  carries the COMMON values (an angle, a per-cent error) as columns as x4get does.  Checked against the
+  dataexplorer API's own parse of 439 entries: 1,596/1,596 tables and 1,663/1,663 reaction codes identical.
+  On 2026-10-22 x4get AND the dataexplorer API were both behind the challenge, so the dataexplorer
+  work-around no longer helps there.  `search_exfor`, `fetch_gammas` and `fetch_ground_state` have no
+  fallback (search the mirror by hand: `grep -l "6-C-13(P,G)" exforall/*/*.x4`) -- retry later.  NNDC also
   serves ENDF evaluations at `https://www.nndc.bnl.gov/endf-api/` (pointwise cross sections; its listed
   SHA-1 for the main GNDS .xml files does not match the served files, the ENDF-6 ones do; 2026-10-15).
 

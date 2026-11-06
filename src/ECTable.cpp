@@ -76,9 +76,13 @@ std::vector<double> TermKey(PPair *pair, const Config &configure, const CoulFunc
           (configure.paramMask & Config::USE_LONGWAVELENGTH_APPROX) ? 1.0 : 0.0,
           (configure.paramMask & Config::USE_GSL_COULOMB_FUNC) ? 1.0 : 0.0,
           RateMode(configure) ? 1.0 : 0.0,  // the rate integrates on a fixed radial grid
+          (configure.ecConvectionCurrent && !(configure.paramMask & Config::USE_LONGWAVELENGTH_APPROX)) ? 1.0 : 0.0,
           configure.useCoulombTable ? 1.0 : 0.0,
           (double)coul.hybridTag(),  // the nuclear potential of a hybrid pair
-          (double)nodesPerDecade};
+          (double)nodesPerDecade,
+          // relativistic kinematics change eta, rho and the flux factor of every node; the table lives for the
+          // whole process, so a pyazr session alternating the switch must not share nodes (checklist t3-25)
+          configure.relativistic ? 1.0 : 0.0};
 }
 
 /*!

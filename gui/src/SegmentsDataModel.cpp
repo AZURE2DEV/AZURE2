@@ -205,6 +205,8 @@ QVariant SegmentsDataModel::data(const QModelIndex &index, int role) const {
         return QString(tr("<center>Angle Integrated (E2)</center>"));
       else if (line.dataType == 7)
         return QString(tr("<center>Analyzing Power</center>"));
+      else if (line.dataType == 9)
+        return QString(tr("<center>Angular Coefficients</center>"));
       else
         return QString(tr("<center>Angle Integrated</center>"));
     } else if (index.column() == 8)
@@ -469,6 +471,8 @@ Qt::ItemFlags SegmentsDataModel::flags(const QModelIndex &index) const {
   return QAbstractTableModel::flags(index);
 }
 
+// Row of a line equal to this one in every field (components, UPOS and keyword blocks included; not the active
+// flag), or -1.  Before 2026-10-31 the components, UPOS fields and keyword blocks were not compared.
 int SegmentsDataModel::isSegDataLine(const SegmentsDataData &line) const {
   int foundLine = -1;
   for (int i = 0; i < segDataLineList.size(); i++) {
@@ -488,7 +492,16 @@ int SegmentsDataModel::isSegDataLine(const SegmentsDataData &line) const {
         tempLine.phaseL == line.phaseL &&
         tempLine.energyShift == line.energyShift &&
         tempLine.energyShiftError == line.energyShiftError &&
-        tempLine.varyEnergyShift == line.varyEnergyShift) {
+        tempLine.varyEnergyShift == line.varyEnergyShift &&
+        tempLine.isAdvanced == line.isAdvanced &&
+        tempLine.operationType == line.operationType &&
+        tempLine.componentsList == line.componentsList &&
+        tempLine.isUPOS == line.isUPOS &&
+        tempLine.secondaryDecayL == line.secondaryDecayL &&
+        tempLine.finalJ == line.finalJ &&
+        tempLine.delta == line.delta &&
+        tempLine.isTHM == line.isTHM &&
+        tempLine.extraTokens.simplified() == line.extraTokens.simplified()) {
       foundLine = i;
       break;
     }

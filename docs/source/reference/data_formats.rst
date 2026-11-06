@@ -47,12 +47,77 @@ Notes on Data Files
 - **Sorting**: data may be entered in any order. However, for plotting purposes
   it is useful to sort by energy (for excitation curves) or by angle (for
   angular distributions).
-- **Frame**: all input data must be in the **laboratory frame** with
-  **forward kinematics** (light particle as projectile, heavy particle as
-  target).
+- **Frame**: energies are always **laboratory** energies in **forward
+  kinematics** (light particle as projectile, heavy particle as target).
+  Angles and cross sections are laboratory values too, except for the
+  **C.M.** differential observable (code 4 in data segments, 5 in test
+  segments) and the analyzing power (code 7), which take centre-of-mass angles
+  and cross sections.  Both frames work for particle and for capture (gamma)
+  exit pairs.  A lab-frame capture point is converted with the photon
+  aberration, :math:`\cos\theta_{cm} = (\cos\theta - \beta)/(1 - \beta\cos\theta)`,
+  and the solid-angle Jacobian
+  :math:`(1 - \beta\cos\theta)^2/(1 - \beta^2)`, where :math:`\beta` is the
+  c.m. velocity.  Many low-energy capture measurements publish lab angles and
+  cross sections without the transformation; with :math:`\beta \approx 0.01`
+  (:sup:`12`\ C(:math:`\alpha,\gamma`) at a few MeV) the difference is a few
+  percent and angle dependent, so enter such data as **Lab**.
 - **Units**: energies in MeV, angles in degrees, cross sections in barns
   (angle-integrated) or barns/sr (differential).
 - **Format**: columns can be separated by spaces or tabs.
+
+Data Covariance Files
+---------------------
+
+A data segment whose line ends with ``covariance <file>`` (see
+:doc:`../user_guide/segments` and :doc:`../user_guide/chi_squared`) takes the
+covariance of its points from ``<file>``, a plain-text file with ``#``
+comments and free-form numbers (any whitespace, line breaks anywhere)::
+
+   # neutron groups of one experiment
+   file data/n0.dat 1173        # rows 1..1173: the data rows of data/n0.dat
+   file data/n1.dat 475         # rows 1174..1648
+   block 3                      # a 3 x 3 symmetric block ...
+     12 40 1180                 #   ... on these rows (1-based, any order)
+     1e-9 2e-10 1e-10  2e-10 3e-9 0  1e-10 0 2e-9
+   diagonal                     # N numbers, added to the diagonal
+     ...
+   vector                       # N numbers v: adds v v^T (repeatable)
+     ...
+   relvector                    # N fractions f: adds (f m)(f m)^T, m = the model
+     ...
+   matrix                       # N x N numbers: adds a full symmetric matrix
+     ...
+
+- The ``file`` lines come first. Each names a data file (path relative to the
+  directory AZURE2 runs in, as on the segment line) and its number of data
+  rows, counted as AZURE2 reads them: lines that are neither blank nor
+  comments. The rows of the matrix are these data rows, file after file; a
+  count that does not match the file is an error. ``size N`` may follow as
+  a check.
+- The terms (``block``, ``diagonal``, ``vector``, ``relvector``,
+  ``matrix``) add up to :math:`C`, in the units of the files' value column
+  (lab frame, as in the data file: (b/sr)\ :sup:`2` for differential cross
+  sections). Blocks may overlap and need not be contiguous; ``block`` and
+  ``matrix`` must be symmetric (to :math:`10^{-6}` relative).
+- ``relvector`` multiplies its fractions by the model :math:`m` (in the
+  data's units), frozen at the first evaluation of the run and written to
+  ``covarianceModel.out``; see :doc:`../user_guide/chi_squared`.
+- Every point of a segment naming the file must be a row of it (its data
+  file listed), and no row may be fitted by two segments (overlapping
+  windows on one file): both are errors. Rows not fitted drop out.
+- AZURE2 never forms :math:`C`. It splits it into :math:`B` (``diagonal``,
+  ``block`` and ``matrix`` terms, factored by connected components) and the
+  rank-one ``vector``/``relvector`` terms, and whitens with
+  :math:`W = (I + V T V^T) L_B^{-1}`, :math:`V = L_B^{-1} U`, at a cost of
+  :math:`O(N k)` per evaluation for :math:`k` rank-one terms (about a
+  millisecond for :math:`N = 14\,000`, :math:`k = 31`). :math:`B` must
+  therefore be positive definite by itself: every fitted row needs a
+  diagonal or block variance of its own. A ``matrix`` term makes one dense
+  component of all rows.
+- The data file's uncertainty column is replaced by :math:`\sqrt{C_{ii}}`
+  (with the data value standing in for :math:`m` in ``relvector`` terms); the
+  run log warns if it differed by more than 1 %. :math:`\chi^2` does not
+  depend on it.
 
 Phase Shift Data
 ^^^^^^^^^^^^^^^^
@@ -60,6 +125,19 @@ Phase Shift Data
 Phase shift data follows the same four-column format, but the third column
 contains the phase shift value (in degrees) and the fourth column contains its
 uncertainty. The convention is :math:`-90° < \theta_\text{lab} < 90°`.
+
+Angular-Coefficient Data
+^^^^^^^^^^^^^^^^^^^^^^^^
+
+A segment of type **Angular Coefficients** (``isDiff`` 9) reads the same
+four columns as ``E_lab  k  a_k  da_k``: the lab energy, the Legendre order
+:math:`k` (an integer, 0-20, in the angle column), the coefficient
+:math:`a_k = A_k/A_0` of :math:`d\sigma/d\Omega_\text{cm} = A_0\,[1 +
+\sum_k a_k P_k(\cos\theta_\text{cm})]` and its uncertainty. Several orders
+at one energy are separate rows. With the segment keyword ``absolute 1`` the
+third column is the absolute :math:`A_k` in b/sr (:math:`A_0 = \sigma/4\pi`).
+A normalised coefficient carries no normalization (the segment's norm must stay
+fixed at 1).
 
 Temperature Files
 ^^^^^^^^^^^^^^^^^
@@ -120,6 +198,16 @@ lines, which a reader that does not know a key skips:
    :math:`((\sum_k w_k - 1)/s)^2` to the chi-squared, :math:`w_k` its
    abundances; absent or ``0`` is off.
 
+``relativistic=1``
+   Relativistic two-body kinematics: channel wave numbers, Sommerfeld
+   parameters, lab <-> c.m. energies, angles and cross sections from the
+   invariant mass (:doc:`../user_guide/particle_pairs`, "Relativistic
+   Kinematics"). Absent or ``0``: non-relativistic, as before.
+
+``relativisticReferencePair=<key>``
+   The pair whose :math:`E(s)` ``relativistic.out`` uses; absent or ``0``: the
+   first particle pair of each compound nucleus.
+
 Several compound nuclei.  The compound nucleus of a pair is inferred from its
 columns (particle pair :math:`Z = z_1 + z_2`, :math:`A = \mathrm{round}(m_1 +
 m_2)`; gamma pair the heavy particle; beta pair the daughter), and a project
@@ -161,10 +249,55 @@ emitted sample by sample (the unnamed one first, in file order) right after
 the level parameters. A sample name is one token without ``:`` or ``#``.
 Stoichiometric weights need not sum to one: give that sample ``sum 0``.
 
-A ``<segmentsData>`` or ``<segmentsTest>`` line may end with the keyword
-blocks ``sqrtshift <b> <bError> <vary>``, ``sample <1|name>`` and
-``shiftgroup <label>`` (in any order; writers put ``sample`` last).  ``natural``
-is the keyword's older name and is still read.
+Total capture is the exit key ``-1`` together with the total-capture data
+type (3 on a data line, 4 on a test line); the reader expands such a segment
+into one term per capture pair. The key without the type is refused (before
+October 2026 the engine read past the start of its pair list for such a line
+and could crash); the type with a real exit key has always meant total
+capture, the exit key being ignored, and now draws a warning saying so.
+
+A ``<segmentsData>`` line may end with the keyword blocks
+``sqrtshift <b> <bError> <vary>``, ``sample <1|name>``, ``shiftgroup <label>``,
+``shiftfngroup <label>``, ``normgroup <label>``, ``covariance <file>``,
+``shiftfn "<f(x)>" N ...``, ``total <0|1>``, ``transmission <n>``,
+``yield <n>`` and ``spin <s>`` (in any order;
+writers put ``sample`` last). A ``<segmentsTest>`` line honours ``sample``,
+``total``, ``transmission``, ``yield`` and ``spin``; the shift, norm and shift-function blocks have no
+meaning without data and are skipped there (before October 2026 they stopped
+the keyword reader, so a ``sample`` or ``total`` written after them was lost),
+and ``covariance`` on a test line is refused (:doc:`../user_guide/segments`).
+The three shift fields of a data line (``shift shiftError vary``) are
+optional: a line may carry one shift value or none before the data file, and
+the reader tells a value from a file name by the whole token, so a file whose
+name starts with digits (``12C_p.dat``) is a file (before October 2026 it was
+read as a 12 MeV shift and the file ``C_p.dat``).
+
+The ``<parameterSettings>`` block (written by the Fitting tab) has one line per
+parameter: a label of several words, then ``value lower upper error fit_error
+nuisance category minuit_index``. The numeric fields accept ``nan`` and
+``inf`` (any case, signed): a fit error written from a singular covariance can
+be either, and before October 2026 the parser threw on them and the
+command-line run ended before any output. The fit error is a report, not an
+input; a limit that is not finite is ignored (no limit).
+``natural`` is the keyword's older name and is still read.
+``spin <s>`` on a phase-shift line (``isDiff`` 2) names the channel spin of
+the partial wave: a phase shift is one (J, l, s) wave, and the engine refuses a
+phase-shift segment whose (J, l) has several channel spins in the level scheme
+unless the line says which (before October 2026 it summed the S-matrix
+elements of all of them and reported half the argument, which is not a phase
+shift of anything; an older engine ignores the keyword). A single-spin (J, l),
+such as any spin-0 target, needs no keyword.
+``total 1`` makes every term whose exit pair is its entrance pair the total
+cross section of that (neutral) pair, by the optical theorem
+(:doc:`../user_guide/segments`, "Neutron Total Cross Sections"); an older
+engine ignores it and computes the elastic cross section.
+``transmission <n>`` makes the segment the transmission
+:math:`e^{-n\sigma}` of a sample :math:`n` atoms/barn thick, and ``yield <n>``
+the self-shielded yield :math:`(\sigma/\sigma_\mathrm{tot})(1 -
+e^{-n\sigma_\mathrm{tot}})`; the data file then holds transmissions or yields,
+and under a sub-point target effect the transform comes before the kernel
+(:doc:`../user_guide/segments`, "Sample Transmission and Self-Shielded
+Yield"). An engine older than November 2026 ignores both keywords silently.
 ``sample 1`` multiplies the segment's own term and each composite component
 by the abundance of the term's entrance pair's compound nucleus in the
 unnamed sample (or the only sample, if every sample is named);
@@ -222,7 +355,13 @@ prior about the value given (0 = none); see
 refuses a line with this keyword, and an older GUI drops it on save. ``sigmalab`` marks an energy-dependent beam-spread
 expression as laboratory in, laboratory out (see
 :doc:`../user_guide/experimental_effects`); an expression without it is read in
-the pre-October-2026 centre-of-mass convention.
+the pre-October-2026 centre-of-mass convention. ``densityfit vary sigma [max]``
+and ``densitygroup <label>`` make a thin target's density a fit parameter
+(``density_<n>``) with an optional prior (atoms/cm², or ``2.3%`` of the line's
+density), the largest density its sub-point grids span, and a label shared by
+lines that see one target; see :doc:`../user_guide/experimental_effects`. Engines
+older than the feature refuse a line with these keywords; GUIs older than it drop
+them on save.
 
 .. tip::
 

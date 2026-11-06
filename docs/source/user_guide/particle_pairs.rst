@@ -65,11 +65,19 @@ Spin (J)
 Parity
    The parity of the particle, selected from the drop-down menu: **+** or **-**.
 
+Isotope
+   Optional. An isotope name (``12C``, ``C12``, ``7Li``) or a shorthand
+   (``p``, ``n``, ``d``, ``t``, ``a``, ``helion``) fills **Z** and **M** from
+   the AME2020 atomic mass table when you leave the field. The field is off for
+   the photon of a (Particle, Gamma) pair.
+
 Proton Number (Z)
    The number of protons in the particle.
 
 Mass (M)
-   The mass number of the particle.
+   The **atomic** mass of the particle in u (electrons included, so 1.007825 u
+   for the proton, not the bare 1.007276 u). The engine rounds it to a mass
+   number wherever it needs one.
 
 Pair Properties
 ^^^^^^^^^^^^^^^
@@ -81,6 +89,16 @@ Excitation Energy
 Separation Energy
    The energy required to separate the compound system (in its ground state) into
    the constituent particle pair (in MeV).
+
+**Fill masses and S from AME2020**
+   Sets both atomic masses and the separation energy
+   :math:`S = m_1 + m_2 - M` of the compound nucleus from the AME2020 table.
+   The particles are identified by Z and by M rounded to a mass number, so a
+   pair typed with mass numbers works too. For a (Particle, Gamma) or Beta
+   Decay pair, only the heavy particle's mass is filled. The line under the
+   button compares what is entered with the table as you type. It turns orange
+   when S differs by more than 1 keV, and it also reports masses that differ
+   from the table.
 
 Channel Radius
    The R-matrix channel radius (in fm). Different particle pairs need not share
@@ -242,3 +260,127 @@ single-nucleus ones.
    n+\ :sup:`22`\ Ne), while the abundance is that of the target isotope
    (:sup:`22`\ Ne). Every label shows both; the parameter name uses the
    compound nucleus, ``abundance_10_23``.
+
+Masses and separation energies
+------------------------------
+
+A pair carries both its two masses and its separation energy, and the two are
+linked: for two particle pairs of the same compound nucleus,
+:math:`S_b - S_a = (m_{1b} + m_{2b} - m_{1a} - m_{2a})\,c^2`. AZURE2 takes the
+thresholds (and so the whole energy scale) from the separation energies and
+uses the masses only in the kinematics (reduced masses, lab-to-c.m.
+conversions), so a mismatch does not change a calculation by more than the
+mass error itself (1e-4 u on a mass of 12 u is 1e-5). It is, however, how a
+typo or a mixed mass convention shows up, and since October 2026 the engine
+reports one when it reads the pairs:
+
+.. code-block:: text
+
+   **WARNING: separation energies and masses disagree: pair 2 (S = 18.8943 MeV,
+   m1 + m2 = 8.025593633 u) and pair 1 (S = 17.2551 MeV, m1 + m2 = 8.023828466 u):
+   the separation energies differ by 1.6392 MeV, the masses by 1.6442 MeV (-5.0 keV). ...
+
+Each particle pair is compared with the first particle pair of its compound
+nucleus; mismatches above 1 keV are listed (the first three, then a count). A
+mismatch within 5 keV of a multiple of the electron mass adds a hint that atomic
+and nuclear masses are mixed, typically a bare-proton mass (1.00728 u) next to
+atomic masses for the rest. Gamma and beta pairs are not compared: their heavy
+mass is only a label. A project that uses mass numbers as masses (12, 4, ...)
+gets one note instead, since its masses carry no Q value. The cure is to take
+the masses from one mass table (AME, atomic masses throughout) and the
+separation energies from the same table: :math:`S = m_1 + m_2 - M` of the
+compound nucleus.
+
+The GUI and pyazr both carry the AME2020 table (``pyazr/data/mass_1.mas20``,
+the Atomic Mass Data Center's file; the GUI embeds the same copy). In the GUI:
+
+- The **Separation Energy** column of the pairs table has a tooltip with the
+  table's S for each particle pair. It turns orange when the pair's S differs
+  by more than 1 keV.
+- **Masses from AME2020...** below the table lists every pair with its masses,
+  its S, the table's S and the difference. Accepting fills the ticked pairs:
+  their atomic masses and, with **Also set the separation energies**, their S.
+  Pairs that differ from the table start ticked. A pair whose particles the
+  table does not know cannot be ticked.
+
+In pyazr, ``pyazr.masses`` gives the table (``atomic_mass("12C")``,
+``separation_energy("p", "12C")``, ``pair_masses("a", "12C")``), and
+``AzrModel.mass_check()`` / ``AzrModel.fill_masses()`` do what the dialog does
+for a file (see the pyazr page).
+
+Filling S moves that pair's threshold, and with it the energy scale of every
+channel of the pair. A typical archive mismatch is a few keV, so compare the
+fit before and after, and refit when the shift matters next to a narrow
+resonance. Filling the masses alone changes results by about the relative mass
+change, which is 1e-5 for 1e-4 u at mass 12.
+
+.. _relativistic-kinematics:
+
+Relativistic Kinematics
+-----------------------
+
+The **Relativistic kinematics** check box under **Configure → Runtime Options**
+(``relativistic=1`` in the ``<config>`` block, so command-line and pyazr runs of
+the project use it too; before November 2026 the check box sat below the pairs
+table) takes every channel's kinematics from the invariant mass :math:`s` instead
+of the non-relativistic relations.  It follows the prescription of the LANL code
+EDA (Haeck, Hale, Paris and Thompson, LA-UR-19-31084, the ENDF ``KRL=1`` flag).
+For a pair of masses :math:`m_1, m_2` (:math:`m = m_1 + m_2`) at centre-of-mass
+kinetic energy :math:`T = \sqrt{s} - m`:
+
+.. math::
+
+   s = m^2 + 2 m_2 E_\text{lab}, \qquad
+   k^2 = \frac{(s - m^2)\,(s - (m_1 - m_2)^2)}{4 s}, \qquad
+   \eta = \frac{Z_1 Z_2 \alpha\,(s - m_1^2 - m_2^2)}{2 k \sqrt{s}},
+
+so the penetrabilities, shift functions, hard-sphere and Coulomb phases, the
+:math:`\pi/k^2` factor and the bound-state decay constants (:math:`k^2 < 0`) all
+use these, and a data point's :math:`T` comes from its lab energy through
+:math:`s` (and, for a beta-delayed particle, from the decay at rest).  Particle
+lab angles and differential cross sections are converted with the exact Lorentz
+boost (:math:`\gamma`-ray data already were). Where two c.m. angles reach one
+lab angle (just above the threshold of an endothermic exit, or a projectile
+heavier than the target) the forward root is taken, and the lab angle has a
+maximum, :math:`\sin\theta_\text{max} = \gamma_3^*/(\gamma\, g)` with
+:math:`g = \beta/\beta_3^*`. That maximum is smaller than the
+non-relativistic one, by 0.3 to 0.6° just above the 7Li(p,n) and 12C(α,p)
+thresholds, and a point beyond it, or below the relativistic threshold, is
+refused (before October 2026 the non-relativistic limits decided, so a point
+between the two maxima was converted with the non-relativistic angle and
+Jacobian without a warning). The conversions agree with the independent
+reaction-kinematics calculator (det-lab) to 1e-7° in angle and 4e-9 in
+:math:`d\Omega_\text{lab}/d\Omega_\text{cm}` for 7Li(p,n), t(d,n)α,
+12C(α,p), p + 4He and 12C + p (inverse kinematics) up to 200 MeV.  At low energy everything reduces
+to the familiar :math:`k^2 = 2\mu T`; threshold quantities (scattering lengths,
+the Wigner limit, ANCs) keep the reduced mass.
+
+What changes, and by how much.  Per channel the corrections are of order
+:math:`T/m`: at :math:`E_\text{lab} = 20` MeV, :math:`k` of n+\ :sup:`4`\ He is
+0.19 % larger, :math:`\eta` of p+\ :sup:`4`\ He 1.6 % larger, and c.m. angles and
+cross sections move by up to 0.2° and 0.7 %.  The larger effect is between
+partitions: the excitation energy of a point is :math:`T + S_c`, and with
+:math:`T` from :math:`s` the energy scales of two pairs with a large Q value no
+longer differ by a constant.  In :sup:`5`\ He (Q = 17.6 MeV) an n+\ :sup:`4`\ He
+point at :math:`E_n = 20` MeV sits 27 keV away from where non-relativistic
+kinematics puts it, relative to d+t.
+
+Level energies.  The R-matrix denominators stay :math:`E_\lambda - E_x`: level
+energies remain excitation energies, comparable with tabulations.  EDA instead
+uses :math:`E(s) = (s - m_0^2)/(2 m_0)` of a reference pair; on the excitation
+scale :math:`E_s = S_0 + T_0 + T_0^2/(2 m_0)`, :math:`T_0 = E_x - S_0`, which is
+43 keV above :math:`E_x` at :math:`T_0 = 20` MeV in A = 5.  ``relativistic.out``
+(:doc:`../reference/output_files`) lists every level in that convention, with
+the widths scaled by :math:`dE_s/dE_x = 1 + T_0/m_0`, for comparison with EDA
+parameters or ENDF ``KRL=1`` evaluations; ``relativisticReferencePair=<key>``
+chooses the reference pair (default: the first particle pair).
+
+Limits.  The hybrid nuclear-potential Coulomb functions (a ``<potential>``
+block) solve a Schrödinger equation inside the channel radius and are refused
+with ``relativistic=1``; they bend the scattering functions only, not the
+bound-state tail, ANC conversion or NF integral of external capture
+(:doc:`pyazr`, "What the potential does not touch").  Target effects (beam spread, target thickness, sub-point
+grids) and energy shifts convert lab energy intervals to the c.m. frame with the
+constant ratio :math:`m_2/m`; the exact ratio :math:`m_2/\sqrt{s}` differs by
+:math:`T/m` of the interval (0.4 % of a few-keV shift at 20 MeV).  Photon
+energies in capture channels do not include the recoil term.

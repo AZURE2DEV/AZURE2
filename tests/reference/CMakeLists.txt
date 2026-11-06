@@ -159,3 +159,22 @@ add_executable(parameter_file_reference_test parameter_file_reference_test.cpp)
 target_link_libraries(parameter_file_reference_test PRIVATE AZURE2Core)
 add_test(NAME parameter_file_reference COMMAND parameter_file_reference_test)
 set_tests_properties(parameter_file_reference PROPERTIES TIMEOUT 10)
+
+# The adaptive sub-point grid of the experimental effects (AdaptiveIntegrationGrid):
+# a Lorentzian moved across a fixed window, the grid laid out again at each position
+# as EData::ReplaceSubPointGrids does, its trapezoid integral against the closed form.
+# Checks the accuracy and that the error does not swing as the level moves.
+add_executable(adaptive_grid_reference_test adaptive_grid_reference_test.cpp)
+target_link_libraries(adaptive_grid_reference_test PRIVATE AZURE2Core)
+add_test(NAME adaptive_grid_reference COMMAND adaptive_grid_reference_test)
+
+# Wigner limit of a channel: the particle formula, and no limit for photon, beta and
+# radius-less channels (a photon pair's mu = 0 gave inf before 2026-10-27, audit item 32).
+add_executable(wigner_limit_reference_test wigner_limit_reference_test.cpp)
+target_link_libraries(wigner_limit_reference_test PRIVATE AZURE2Core)
+add_test(NAME wigner_limit_reference COMMAND wigner_limit_reference_test)
+
+# The integrated Fermi function stays finite down to the beta end point (it was NaN within ~0.2 keV of it).
+add_executable(fermi_endpoint_reference_test fermi_endpoint_reference_test.cpp)
+target_link_libraries(fermi_endpoint_reference_test PRIVATE AZURE2Core)
+add_test(NAME fermi_endpoint_reference COMMAND fermi_endpoint_reference_test)

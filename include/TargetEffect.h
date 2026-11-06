@@ -8,7 +8,6 @@
 #include <iosfwd>
 #include "Constants.h"
 #include "Equation.h"
-#include "Straggling.h"
 #include "UdrKernel.h"
 
 /// An AZURE target effect entry
@@ -79,21 +78,80 @@ class TargetEffect {
     const double r = (screeningUe_ - screeningNominal_) / screeningSigma_;
     return r * r;
   }
-  /// The c.m. beam-spread sigma at c.m. energy \p eCM: the one place every kernel takes its width from.
-  /// A constant sigma was converted lab -> c.m. by ConvertSigmaToCM; a lab expression is evaluated at
-  /// eCM / F and its value scaled by F, the same factor; a legacy expression is used as it stands.
-  double SigmaCM(double eCM, const Config &) const;
+  /*!
+   * Fitted target density (`densityfit vary sigma` on a target-integration line, sigma in atoms/cm^2 or as a
+   * percentage of the line's density, "2.3%"): the areal density is a fit parameter `density_<n>` (EData::
+   * FillMnParams), with a Gaussian prior ((N - N0)/sigma)^2 about the line's value when sigma > 0.  It moves only
+   * the target thickness, dE with int_{E-dE}^{E} dE'/epsilon = N, i.e. the depth window and the straggling with
+   * depth: the yield is the integral over the window divided by the same N, so the depth-averaged cross section
+   * carries no factor of N.  `densitygroup <label>` shares one parameter between lines (one physical target seen
+   * by several detectors); the group's first line holds the parameter and its densityfit block.
+   *
+   * The sub-point grids are laid out once for the largest density the fit is expected to reach
+   * (GetLayoutDensity: N0 + 3 sigma, at least 1.1 N0; 1.5 N0 without a prior) and the depth integral is cut at
+   * E0 - dE(N), so the yield moves smoothly with N and the grids stay put (EPoint::IntegrateTargetEffect).
+   */
+  bool HasDensityFit() const { return hasDensityFit_; }
+  /// A malformed `densityfit` / `densitygroup` block, or one on a line that does not integrate a thin target.
+  bool HasDensityFitError() const { return densityFitError_; }
+  const std::string &GetDensityFitErrorText() const { return densityFitErrorText_; }
+  bool IsDensityVaried() const { return densityVary_; }
+  /// The line's density, the centre of the prior (atoms/cm^2).
+  double GetDensityNominal() const { return densityNominal_; }
+  /// Prior width in atoms/cm^2 (a percentage already converted), 0 = no prior.
+  double GetDensitySigma() const { return densitySigma_; }
+  /// The `densitygroup` label, empty without one.
+  const std::string &GetDensityGroup() const { return densityGroup_; }
+  /// ((N - N0)/sigma)^2, or 0 without a prior.
+  double DensityPenalty() const {
+    if (!hasDensityFit_ || densitySigma_ <= 0.0) return 0.0;
+    const double r = (density_ - densityNominal_) / densitySigma_;
+    return r * r;
+  }
+  /// The density the sub-point grids span (the line's density when it is not fitted).
+  double GetLayoutDensity() const { return (layoutDensity_ > 0.0) ? layoutDensity_ : density_; }
+  void SetLayoutDensity(double n) { layoutDensity_ = n; }
+  /// Join a density group: take its first line's density, prior and layout density.
+  void JoinDensityGroup(const TargetEffect &leader);
+  /// The c.m. beam-spread sigma at c.m. energy \p eCM for a point whose entrance pair has the c.m./lab
+  /// factor \p cmFactor: the one place every kernel takes its width from.  A constant sigma (lab, as read)
+  /// is scaled by the factor; a lab expression is evaluated at eCM / F and its value scaled by F; a legacy
+  /// expression is used as it stands.
+  double SigmaCM(double eCM, const Config &, double cmFactor) const;
   /// The normalised Gaussian kernel exp(-(e - centroid)^2 / 2 sigma^2) / (sigma sqrt(2 pi)).
   static double GaussianKernel(double e, double centroid, double sigma);
-  /// Straggling sigma (c.m. MeV) after an energy loss of \p deltaE (c.m. MeV): coefficient * sqrt(dE[keV]) keV.
+  /// Straggling sigma (c.m. MeV) after an energy loss of \p deltaE (c.m. MeV): c_s * sqrt(dE[keV]) keV.  The
+  /// coefficient c_s (keV^1/2) is a CENTRE-OF-MASS quantity: the width it gives is the c.m. width of the
+  /// energy distribution after a c.m. energy loss, with no frame factor (documented as such 2026-10-27; a
+  /// coefficient describing the beam in the lab has to be multiplied by sqrt(m2/(m1+m2)) first).
   double StragglingSigma(double deltaE) const;
+  /// Straggling on with a coefficient of 0 (the default) means Bohr straggling, computed from the charges
+  /// and the stopping power instead of a coefficient: Omega_lab^2 = 4 pi Z1^2 e^4 Z2 N x, with N x the
+  /// areal density (atoms/cm^2) traversed (int dE / epsilon), Z1 the beam and Z2 the target nucleus of the
+  /// entrance pair, and the c.m. width m2/(m1+m2) Omega_lab.  (Before 2026-10-27 the default coefficient
+  /// was 0.04 keV^1/2, several times below Bohr for light ions in light targets: essentially no straggling.)
+  bool IsBohrStraggling() const { return isStraggling_ && !(stragglingCoefficient_ > 0.0); }
+  /// The Bohr straggling sigma (c.m. MeV) after traversing \p arealDensity atoms/cm^2 of the target, for a
+  /// point whose entrance pair has the c.m./lab factor \p cmFactor and charges \p z1 (beam), \p z2 (target).
+  double BohrStragglingSigma(double arealDensity, double cmFactor, int z1, int z2) const;
   /// How far the sub-point grid of a point at c.m. energy \p eCM must reach above (\p forward) and below
-  /// (\p backward) it for this effect; \p thicknessCM is the point's target thickness (c.m. MeV, 0 if none).
-  void GridExtent(double eCM, double thicknessCM, const Config &, double &forward, double &backward) const;
+  /// (\p backward) it for this effect; \p thicknessCM is the point's target thickness (c.m. MeV, 0 if none),
+  /// \p cmFactor and \p z1, \p z2 the point's entrance-pair factor and charges (Bohr straggling).
+  void GridExtent(double eCM, double thicknessCM, const Config &, double cmFactor, int z1, int z2, double &forward, double &backward) const;
   /// Target density in atoms/cm^2. Target integration only.
   double GetDensity() const;
-  /// Energy loss across the target at a given energy, from the stopping cross section and the density.
+  /// A target integration with a density of 0 is an infinitely THICK target: the yield per incident
+  /// particle, int_0^{E0} sigma(E) / epsilon(E) dE, not divided by a density; every point integrates
+  /// down to 1 keV.  (Before 2026-10-27 this was done by overwriting the effect's density with 1e24
+  /// at the first zero-thickness point, which left that point with a thickness of 0 and a yield of
+  /// exactly 0 under a beam spread or straggling, and also fired for a thin target whose stopping
+  /// cross section came out <= 0; audit item 17.)
+  bool IsThickTarget() const { return isThickTarget_; }
+  /// Energy loss (lab MeV) across the target at lab energy E: Delta with int_{E-Delta}^{E} dE'/epsilon = N, the
+  /// exact range integral (first-order epsilon(E) N before 2026-10-27, 2-8 % off for 5-20 % targets).
   double TargetThickness(double, const Config &);
+  /// The same for an areal density \p density instead of the current one.
+  double TargetThickness(double, const Config &, double density);
   /// Attenuation coefficient of the given order.
   double GetQCoefficient(int) const;
   /// Convolution coefficient of the given order.
@@ -105,7 +163,7 @@ class TargetEffect {
   Equation *GetStoppingPowerEq();
   Equation *GetConvolutionEq();
 
-  // ERYA straggling integration methods
+  // Energy straggling (see StragglingSigma / IsBohrStraggling)
   bool IsStraggling() const;
   double GetStragglingCoefficient() const;
 
@@ -124,11 +182,13 @@ class TargetEffect {
   double BlendWeight(double labEnergy) const;
 
   /// The multiple of sigma above and below centroid energy to use as integration range
-  static constexpr double convolutionRange = 3.;
-  /*Wider window for THM (HOES) segments: their extremely narrow resonances make
+  /// (5 since dev 7d24c88: at 3 the 0.27 % of kernel weight beyond the window was dropped and the rest rescaled).
+  static constexpr double convolutionRange = 5.;
+  /*Window for THM (HOES) segments: their extremely narrow resonances make
   the smeared curve in the valleys a pure Gaussian tail of a neighboring spike,
   so a +-3 sigma cutoff loses up to ~25% there; +-5 sigma keeps the truncation
-  error below ~1e-3.*/
+  error below ~1e-3.  Equal to convolutionRange since dev 7d24c88; kept as its
+  own name so the THM window is stated where it is used.*/
   static constexpr double thmConvolutionRange = 5.;
   /*Numerical floor (in MeV) kept between a target-effect sub-point energy and the
   channel threshold, since Coulomb functions and penetrabilities are singular at
@@ -163,10 +223,12 @@ class TargetEffect {
   double GetBeamTruncation() const;
   /// Weight the integrand by the detailed-balance factor of the inverse reaction.
   bool IsBeamPhotodissociation() const;
-  /// Scale every beam-profile energy (xi, omega, tpc sigma) once, lab -> c.m.
-  void ConvertBeamProfileToCM(double factor);
-  /// Scale the fixed convolution sigma once, lab -> c.m.
-  void ConvertSigmaToCM(double factor);
+  // Every energy the line carries (the Gaussian sigma, a `sigmalab` expression, the beam-profile
+  // components and TPC sigma, the stopping cross section) is kept in the LAB frame of the input file and
+  // converted at the point: each kernel takes the point's own c.m./lab factor (EPoint::SetTargetKinematics).
+  // Up to 2026-10-27 the sigma and the profile were converted once, with the factor of the first segment
+  // on the line, so a line shared by entrance pairs of different mass ratio (natural-target components,
+  // segments of several pairs) used the wrong factor for the others (audit 2026-10-25, tier 3 entry 3).
   const std::vector<BeamProfileComponent> &GetBeamProfile() const;
 
   /// User-defined numerical resolution function (SAMMY's UDR): a file of
@@ -185,7 +247,8 @@ class TargetEffect {
   /// Read the tabulated functions whose energies lie within a decade of
   /// [eMin, eMax] (lab MeV), plus the bracketing ones; merges with what is
   /// already loaded.  Returns false if the file cannot be read.
-  bool LoadUdrTable(double eMinLab, double eMaxLab, std::ostream &log);
+  /// cached: read the file through InputFiles (Config::cacheInputFiles).
+  bool LoadUdrTable(double eMinLab, double eMaxLab, std::ostream &log, bool cached = false);
   /// The kernel for a point at lab energy eLab (MeV) for a projectile of rest
   /// energy mass (MeV): the table interpolated in energy, centred if asked,
   /// convolved with the burst and channel width, normalised.
@@ -215,6 +278,7 @@ class TargetEffect {
   int numIntegrationPoints_;
   double sigma_;
   double density_;
+  bool isThickTarget_ = false;   ///< target integration with density 0 (IsThickTarget)
   Equation stoppingPowerEq_;
   std::string segmentsList_;
   vector_r qCoefficients_;
@@ -228,9 +292,16 @@ class TargetEffect {
   double screeningNominal_ = 0.0; ///< eV, as read
   bool screeningVary_ = false;
   double screeningSigma_ = 0.0;   ///< eV, prior width (0 = none)
-  double cmFactor_ = 1.0;        ///< c.m. / lab energy of the entrance pair, set by ConvertSigmaToCM
+  bool hasDensityFit_ = false;    ///< `densityfit` block present (or joined through a density group)
+  bool densityFitError_ = false;
+  std::string densityFitErrorText_;
+  bool densityVary_ = false;
+  double densityNominal_ = 0.0;   ///< atoms/cm^2, as read
+  double densitySigma_ = 0.0;     ///< atoms/cm^2, prior width (0 = none)
+  std::string densityGroup_;
+  double layoutDensity_ = 0.0;    ///< density the sub-point grids span; 0 = the current density
 
-  // ERYA straggling integration variables
+  // Energy straggling: sigma = c_s sqrt(dE_cm) (c.m. coefficient), or Bohr's formula when c_s = 0.
   bool isStraggling_;
   double stragglingCoefficient_;
 
@@ -252,8 +323,6 @@ class TargetEffect {
   double beamTpcSigma_ = 0.0;
   double beamTruncation_ = 0.0;
   bool beamPhotodissociation_ = false;
-  bool beamProfileConverted_ = false;
-  bool sigmaConverted_ = false;
 };
 
 #endif

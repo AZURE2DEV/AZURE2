@@ -1,0 +1,31 @@
+<config>
+true #Perform A-Matrix Calculation
+output/ #Full Path to Output Directory
+checks/ #Full Path to Checks Directory
+none #Compond Nucleus Check
+none #Boundary Condition Check
+none #Data Check
+none #Lo-Matrix and Penetrability Check
+none #Legendre Polynomial Check
+none #Coulomb Amplitudes Check
+none #Reaction Pathway Check
+none #Angular Distributions Check
+</config>
+<levels>
+1.5 1 7.0971 1 1 1 3 0 1 1 1 5.0 0.5 1 1 1 0 1.007276 13.999234 1 7 7.2971 7.2971 0 0 0.0 0 5 5.5857 0.4038 0
+1.5 1 7.0971 1 1 3 3 2 1 1 1 0 1 1 1.5 1 7.0971 0 15.003066 0 8 7.2971 0 0 0 0.0 10 0 0 0 2
+
+0.5 1 30 1 1 1 1 0 2 1 1 1e-06 0.5 1 1 1 0 1.007276 13.999234 1 7 7.2971 7.2971 0 0 0.0 0 5 5.5857 0.4038 0
+0.5 1 30 1 1 3 3 2 2 1 1 0 1 1 1.5 1 7.0971 0 15.003066 0 8 7.2971 0 0 0 0.0 10 0 0 0 2
+
+1.5 1 30 1 1 1 3 0 3 1 1 1e-06 0.5 1 1 1 0 1.007276 13.999234 1 7 7.2971 7.2971 0 0 0.0 0 5 5.5857 0.4038 0
+1.5 1 30 1 1 3 3 2 3 1 1 0 1 1 1.5 1 7.0971 0 15.003066 0 8 7.2971 0 0 0 0.0 10 0 0 0 2
+
+</levels>
+<segmentsData>
+1 1 3 0.097195 3.225857 0 0 0 1 0 0 0 0 0 data/ecm_p14n.dat 0 0
+</segmentsData>
+<segmentsTest>
+</segmentsTest>
+<targetInt>
+</targetInt>

@@ -23,8 +23,10 @@ The matrix calculation is organized through an inheritance hierarchy:
 
 ``RMatrixFunc`` (channel matrix formalism)
    Works with the R-matrix, a channel-by-channel matrix: the older route
-   without the Brune and Park matrices, caching or gradient, used only when the
-   A-matrix is switched off.
+   (standard and Brune formalisms; no Park matrices, caching or gradient), used
+   only when the A-matrix is switched off, and not even then with
+   ignore-externals or Park on (``Config::ResolveMatrixRoute``, since
+   2026-11-01: the A-matrix is used with a warning).
 
 **Key files:**
 
@@ -124,6 +126,16 @@ On the level route (below) :math:`A^{-1}` is LU-factored with partial
 pivoting (``LevelMatrixSolver``, reusable storage).  The T-matrix needs only
 the bilinear forms :math:`g_c^T A\, g_{c'}`, one triangular solve per channel;
 the full inverse is formed only on request (``GetAMatrixElement``).
+
+A level whose widths are all below the cutoff decouples: its row and column of
+:math:`A^{-1}` are zero but for the diagonal :math:`E_\lambda - E`, which
+vanishes at :math:`E = E_\lambda`.  The level contributes nothing at any
+energy, so ``FillLevelMatrix`` puts a unit diagonal there and the matrix stays
+regular.  Until 2026-10-31 the factorization failed instead and the whole
+J-group was left out at that energy (a zero-width level placed on a data
+energy changed :math:`\chi^2`); the R-matrix route (``RMatrixFunc``) divided
+0 by 0 or failed its GSL inversion.  Any other singular matrix still leaves the
+group out at that energy, with a warning printed once.
 
 Channel-Space Solution (default)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -360,6 +372,28 @@ the T-matrix calculation.
 
 When the Brune formalism is enabled, an intermediate Q-matrix inversion is
 performed at the level stage before building the R-matrix from the result.
+
+**At a pole of R.** :math:`R` is infinite at the energy of every level with a
+width -- the formal energy in the standard formalism; with Brune, the observed
+energy, where that level's row of the real Q-matrix vanishes -- although
+:math:`[1-RL]^{-1}R` is finite there.  When the energy is within 1 eV of such
+a level, ``FillMatrices`` solves the group in the level form
+
+.. math::
+
+   [1-RL]^{-1}R = \gamma^T \left(M - \gamma L \gamma^T\right)^{-1} \gamma,
+   \qquad [1-RL]^{-1} = 1 + [1-RL]^{-1} R L,
+
+(push-through identity; :math:`M` is the matrix whose inverse gives
+:math:`R`, :math:`L` the channels' entries of :math:`[1-RL]`), and
+``InvertMatrices`` takes these in place of inverting :math:`[1-RL]`.  The
+adaptive sub-point grid of a target effect places a node exactly at a level's
+energy, so this happens in ordinary runs: before 2026-11-01 the standard
+formalism gave NaN there and Brune's an ill-conditioned inverse, which the
+convolution carried into the data points around the resonance; at an exact
+pole Brune's Q-matrix is singular and its inversion threw "GSL LU
+decomposition failed" (an error, or a silent 0 in a SUM segment)
+(``tests/pyazr/rmatrix_pole_test.py``).
 
 Cross Section Calculation
 -------------------------

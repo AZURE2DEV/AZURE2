@@ -36,6 +36,9 @@ int main(int argc, char** argv) {
   config.hardSphereMaxL = 3;
   config.useAdaptiveGrid = true;
   config.chiVariance = 0.25;
+  config.relativistic = true;
+  config.relativisticReferencePair = 2;
+  config.ecConvectionCurrent = false;  // default is true: a copied false shows the field is carried over
 
   RunTab tab;
   AZUREMainThread thread(&tab, config);
@@ -44,6 +47,8 @@ int main(int argc, char** argv) {
   ok("existing fields still copied", copy.useAdaptiveGrid && copy.chiVariance == 0.25);
   ok("hard-sphere switch reaches the worker Config", copy.includeAllJPi);
   ok("hard-sphere L limit reaches the worker Config", copy.hardSphereMaxL == 3);
+  ok("relativistic kinematics reaches the worker Config", copy.relativistic && copy.relativisticReferencePair == 2);
+  ok("EC convection-current switch reaches the worker Config", !copy.ecConvectionCurrent);
 
   std::cout << (fails ? "FAILED" : "PASSED") << std::endl;
   return fails ? 1 : 0;

@@ -1,3 +1,4 @@
+#include <QLocale>
 #include <QGridLayout>
 #include <QHBoxLayout>
 #include <QMessageBox>
@@ -18,8 +19,25 @@
 #include "SegmentKeywords.h"
 #include "AbundancesModel.h"
 #include "ScatteringLengthsModel.h"
+#include <QScrollBar>
+#include <QConcatenateTablesProxyModel>
+#include <algorithm>
 
 static bool isSegmentKeyword(const QString &token);
+
+namespace {
+// The data segments followed by the measured scattering lengths, numbered straight through: the scattering lengths
+// are rows of the one table rather than a second table under it, so the segments keep all of the box's height
+// (DeBoer 2026-10-28).  In the file they stay a block of their own after the segments, so no segment number moves.
+class SegmentsDataRows : public QConcatenateTablesProxyModel {
+ public:
+  using QConcatenateTablesProxyModel::QConcatenateTablesProxyModel;
+  QVariant headerData(int section, Qt::Orientation orientation, int role) const override {
+    if (orientation == Qt::Vertical && role == Qt::DisplayRole) return section + 1;
+    return QConcatenateTablesProxyModel::headerData(section, orientation, role);
+  }
+};
+}  // namespace
 
 SegmentsTab::SegmentsTab(QWidget *parent) :
   QWidget(parent) {
@@ -31,8 +49,27 @@ SegmentsTab::SegmentsTab(QWidget *parent) :
   connect(segmentsDataModel, SIGNAL(rowsInserted(QModelIndex, int, int)), this, SLOT(updateFilterComboboxes()));
   connect(segmentsDataModel, SIGNAL(rowsRemoved(QModelIndex, int, int)), this, SLOT(updateFilterComboboxes()));
 
+  // Measured s-wave scattering lengths (the optional <scatteringLengths> block) are rows of the data table after the
+  // segments, in the same columns: "Scattering Length" is a Data Type of the Add Segment From Data dialog.  In the
+  // file they stay a block of their own, so segment numbering (targetInt, norms, parameter names) is unchanged.
+  // Before 2026-10-25 they had a table of their own at the bottom of the tab, then a three-row table under the
+  // segments until 2026-10-28.
+  scatteringLengthsModel = new ScatteringLengthsModel(this);
+  scatteringLengthRows = new ScatteringLengthRowsModel(scatteringLengthsModel, segmentsDataModel->columnCount(QModelIndex()), this);
+  SegmentsDataRows *rows = new SegmentsDataRows(this);
+  rows->addSourceModel(segmentsDataModel);
+  rows->addSourceModel(scatteringLengthRows);
+  segmentsDataRows = rows;
+  connect(scatteringLengthRows, SIGNAL(rowsInserted(QModelIndex, int, int)), this, SLOT(updateScatteringLengthRows()));
+  connect(scatteringLengthRows, SIGNAL(rowsRemoved(QModelIndex, int, int)), this, SLOT(updateScatteringLengthRows()));
+  connect(scatteringLengthRows, SIGNAL(modelReset()), this, SLOT(updateScatteringLengthRows()));
+  connect(scatteringLengthRows, SIGNAL(dataChanged(QModelIndex, QModelIndex)), this, SLOT(updateScatteringLengthRows()));
+  connect(segmentsDataModel, SIGNAL(rowsInserted(QModelIndex, int, int)), this, SLOT(updateScatteringLengthRows()));
+  connect(segmentsDataModel, SIGNAL(rowsRemoved(QModelIndex, int, int)), this, SLOT(updateScatteringLengthRows()));
+
   segmentsDataView = new QTableView;
-  segmentsDataView->setModel(segmentsDataModel);
+  segmentsDataView->setObjectName("segmentsDataView");
+  segmentsDataView->setModel(segmentsDataRows);
   RichTextDelegate *rt = new RichTextDelegate();
   segmentsDataView->setItemDelegateForColumn(1, rt);
   segmentsDataView->setColumnHidden(2, true);
@@ -195,7 +232,7 @@ SegmentsTab::SegmentsTab(QWidget *parent) :
   segDataButtonBox->addWidget(segDataExitFilter);
   segDataButtonBox->addSpacing(kGroupGap);
   segDataButtonBox->addWidget(segDataExforButton);
-  segDataLayout->addLayout(segDataButtonBox, 1, 0);
+  segDataLayout->addLayout(segDataButtonBox, 2, 0);
 
   segDataBox->setLayout(segDataLayout);
 
@@ -221,66 +258,12 @@ SegmentsTab::SegmentsTab(QWidget *parent) :
   segTestLayout->addLayout(segTestButtonBox, 1, 0);
   segTestBox->setLayout(segTestLayout);
 
-  // Measured s-wave scattering lengths (the optional <scatteringLengths> block): a small
-  // table edited in place, like the abundance table of the Particle Pairs tab.
-  scatteringLengthsModel = new ScatteringLengthsModel(this);
-  scatteringLengthsView = new QTableView;
-  scatteringLengthsView->setModel(scatteringLengthsModel);
-  scatteringLengthsView->setItemDelegate(new ScatteringLengthsDelegate(scatteringLengthsView));
-  scatteringLengthsView->verticalHeader()->setVisible(false);
-  scatteringLengthsView->horizontalHeader()->setHighlightSections(false);
-  scatteringLengthsView->setSelectionBehavior(QAbstractItemView::SelectRows);
-  scatteringLengthsView->setSelectionMode(QAbstractItemView::SingleSelection);
-  scatteringLengthsView->setEditTriggers(QAbstractItemView::DoubleClicked | QAbstractItemView::SelectedClicked |
-                                         QAbstractItemView::EditKeyPressed);
-  scatteringLengthsView->setShowGrid(false);
-  scatteringLengthsView->setColumnWidth(ScatteringLengthsModel::ActiveCol, 27);
-  scatteringLengthsView->horizontalHeader()->setSectionResizeMode(ScatteringLengthsModel::ActiveCol, QHeaderView::Fixed);
-  scatteringLengthsView->horizontalHeader()->setSectionResizeMode(ScatteringLengthsModel::PairCol, QHeaderView::Stretch);
-  scatteringLengthsView->setColumnWidth(ScatteringLengthsModel::SpinCol, 130);
-  for (int i = ScatteringLengthsModel::ValueCol; i < ScatteringLengthsModel::NumCols; i++) scatteringLengthsView->setColumnWidth(i, 105);
-  scatteringLengthsView->setMaximumHeight(140);  // about four rows: the table is usually short
-  connect(scatteringLengthsView->selectionModel(), SIGNAL(selectionChanged(QItemSelection, QItemSelection)), this,
-          SLOT(updateScatteringLengthButtons()));
-  connect(scatteringLengthsModel, SIGNAL(modelReset()), this, SLOT(updateScatteringLengthButtons()));
-
-  scatLenAddButton = new QPushButton(tr("+"));
-  scatLenAddButton->setMaximumSize(28, 28);
-  scatLenAddButton->setToolTip(tr("Add a measured scattering length"));
-  scatLenDeleteButton = new QPushButton(tr("-"));
-  scatLenDeleteButton->setMaximumSize(28, 28);
-  scatLenDeleteButton->setEnabled(false);
-  scatLenDeleteButton->setToolTip(tr("Remove the selected scattering length"));
-  connect(scatLenAddButton, SIGNAL(clicked()), this, SLOT(addScatteringLength()));
-  connect(scatLenDeleteButton, SIGNAL(clicked()), this, SLOT(deleteScatteringLength()));
-
-  QGroupBox *scatLenBox = new QGroupBox(tr("Measured Scattering Lengths"));
-  scatLenBox->setToolTip(tr("s-wave scattering lengths a0 at the pair's threshold (Paneru et al., PRC 99, 045807 (2019)); "
-                            "each line adds ((a0 - value)/sigma)^2 to chi2. Computed values for every pair are written "
-                            "to output/scatteringLengths.out."));
-  QGridLayout *scatLenLayout = new QGridLayout;
-  scatLenLayout->addWidget(scatteringLengthsView, 0, 0);
-  QHBoxLayout *scatLenButtonBox = new QHBoxLayout;
-  scatLenButtonBox->setSpacing(0);
-  scatLenButtonBox->addWidget(scatLenAddButton);
-  scatLenButtonBox->addSpacing(kBtnGap);
-  scatLenButtonBox->addWidget(scatLenDeleteButton);
-  scatLenButtonBox->addSpacing(kGroupGap);
-  QLabel *scatLenHint = new QLabel(tr("Each active line adds ((a0 - value)/sigma)^2 to chi2; computed a0 of every pair: "
-                                      "output/scatteringLengths.out"));
-  scatLenHint->setEnabled(false);  // drawn in the muted text colour
-  scatLenButtonBox->addWidget(scatLenHint);
-  scatLenButtonBox->addStretch(1);
-  scatLenLayout->addLayout(scatLenButtonBox, 1, 0);
-  scatLenBox->setLayout(scatLenLayout);
 
   QGridLayout *mainLayout = new QGridLayout;
   mainLayout->addWidget(segDataBox, 0, 0);
   mainLayout->addWidget(segTestBox, 1, 0);
-  mainLayout->addWidget(scatLenBox, 2, 0);
   mainLayout->setRowStretch(0, 1);
   mainLayout->setRowStretch(1, 1);
-  mainLayout->setRowStretch(2, 0);
 
   setLayout(mainLayout);
 }
@@ -332,8 +315,25 @@ bool SegmentsTab::moveTestSegment(int from, int to) {
   return true;
 }
 
+int SegmentsTab::scatteringLengthRowOf(int viewRow) const {
+  const int n = segmentsDataModel->rowCount(QModelIndex());
+  return (viewRow >= n && viewRow < n + scatteringLengthsModel->rowCount()) ? viewRow - n : -1;
+}
+
+int SegmentsTab::selectedSegDataRow() const {
+  const QModelIndexList rows = segmentsDataView->selectionModel()->selectedRows();
+  return rows.isEmpty() ? -1 : rows.first().row();
+}
+
 void SegmentsTab::deleteSegDataLine() {
+  const int scatLenRow = scatteringLengthRowOf(selectedSegDataRow());
+  if (scatLenRow >= 0) {
+    scatteringLengthsModel->removeRows(scatLenRow, 1);
+    updateSegDataButtons(segmentsDataView->selectionModel()->selection());
+    return;
+  }
   QItemSelectionModel *selectionModel = segmentsDataView->selectionModel();
+  if (selectionModel->selectedRows().isEmpty()) return;
   QModelIndexList indexes = selectionModel->selectedRows();
   QModelIndex index = indexes.at(0);
 
@@ -356,6 +356,10 @@ void SegmentsTab::addSegDataLine() {
   aDialog.setPairsModel(pairsModel);
   aDialog.setSamples(abundancesModel ? abundancesModel->samples() : QStringList() << QString());
   if (aDialog.exec()) {
+    if (aDialog.isScatteringLength()) {
+      scatteringLengthsModel->addEntry(aDialog.scatteringLength());
+      return;
+    }
     SegmentsDataData newLine;
     newLine.isActive = 1;
     newLine.entrancePairIndex = aDialog.entrancePairCombo->key();
@@ -409,78 +413,87 @@ void SegmentsTab::addSegDataLine() {
       newLine.finalJ = 0.0;
       newLine.delta = 0.0;
     }
-    newLine.extraTokens = SegmentKeywords::withNaturalToken(QString(), aDialog.naturalToken());
+    newLine.extraTokens = SegmentKeywords::withCovarianceFile(
+        SegmentKeywords::withNaturalToken(QString(), aDialog.naturalToken()), aDialog.covarianceFileText->text());
+    if (newLine.dataType == 2) newLine.extraTokens = SegmentKeywords::withPhaseSpin(newLine.extraTokens, aDialog.phaseSValueText->text());
     addSegDataLine(newLine);
   }
 }
 
-void SegmentsTab::addSegDataLine(SegmentsDataData line, bool fromFile) {
-  QList<SegmentsDataData> lines = segmentsDataModel->getLines();
-  if (fromFile || segmentsDataModel->isSegDataLine(line) == -1) {
-    segmentsDataModel->insertRows(lines.size(), 1, QModelIndex());
-    QModelIndex index = segmentsDataModel->index(lines.size(), 0, QModelIndex());
-    segmentsDataModel->setData(index, line.isActive, Qt::EditRole);
-    index = segmentsDataModel->index(lines.size(), 1, QModelIndex());
-    segmentsDataModel->setData(index, line.entrancePairIndex, Qt::EditRole);
-    index = segmentsDataModel->index(lines.size(), 2, QModelIndex());
-    segmentsDataModel->setData(index, line.exitPairIndex, Qt::EditRole);
-    index = segmentsDataModel->index(lines.size(), 3, QModelIndex());
-    segmentsDataModel->setData(index, line.lowEnergy, Qt::EditRole);
-    index = segmentsDataModel->index(lines.size(), 4, QModelIndex());
-    segmentsDataModel->setData(index, line.highEnergy, Qt::EditRole);
-    index = segmentsDataModel->index(lines.size(), 5, QModelIndex());
-    segmentsDataModel->setData(index, line.lowAngle, Qt::EditRole);
-    index = segmentsDataModel->index(lines.size(), 6, QModelIndex());
-    segmentsDataModel->setData(index, line.highAngle, Qt::EditRole);
-    index = segmentsDataModel->index(lines.size(), 7, QModelIndex());
-    segmentsDataModel->setData(index, line.dataType, Qt::EditRole);
-    index = segmentsDataModel->index(lines.size(), 8, QModelIndex());
-    segmentsDataModel->setData(index, line.dataFile, Qt::EditRole);
-    index = segmentsDataModel->index(lines.size(), 9, QModelIndex());
-    segmentsDataModel->setData(index, line.dataNorm, Qt::EditRole);
-    index = segmentsDataModel->index(lines.size(), 10, QModelIndex());
-    segmentsDataModel->setData(index, line.dataNormError, Qt::EditRole);
-    index = segmentsDataModel->index(lines.size(), 11, QModelIndex());
-    segmentsDataModel->setData(index, line.varyNorm, Qt::EditRole);
-    index = segmentsDataModel->index(lines.size(), 12, QModelIndex());
-    segmentsDataModel->setData(index, line.phaseJ, Qt::EditRole);
-    index = segmentsDataModel->index(lines.size(), 13, QModelIndex());
-    segmentsDataModel->setData(index, line.phaseL, Qt::EditRole);
-    index = segmentsDataModel->index(lines.size(), 14, QModelIndex());
-    segmentsDataModel->setData(index, line.energyShift, Qt::EditRole);
-    index = segmentsDataModel->index(lines.size(), 15, QModelIndex());
-    segmentsDataModel->setData(index, line.energyShiftError, Qt::EditRole);
-    index = segmentsDataModel->index(lines.size(), 16, QModelIndex());
-    segmentsDataModel->setData(index, line.varyEnergyShift, Qt::EditRole);
-    index = segmentsDataModel->index(lines.size(), 17, QModelIndex());
-    segmentsDataModel->setData(index, line.isAdvanced, Qt::EditRole);
-    index = segmentsDataModel->index(lines.size(), 18, QModelIndex());
-    segmentsDataModel->setData(index, line.operationType, Qt::EditRole);
-    index = segmentsDataModel->index(lines.size(), 19, QModelIndex());
-    segmentsDataModel->setData(index, line.componentsList, Qt::EditRole);
-    index = segmentsDataModel->index(lines.size(), 20, QModelIndex());
-    segmentsDataModel->setData(index, line.isUPOS, Qt::EditRole);
-    index = segmentsDataModel->index(lines.size(), 21, QModelIndex());
-    segmentsDataModel->setData(index, line.secondaryDecayL, Qt::EditRole);
-    index = segmentsDataModel->index(lines.size(), 22, QModelIndex());
-    segmentsDataModel->setData(index, line.finalJ, Qt::EditRole);
-    index = segmentsDataModel->index(lines.size(), 23, QModelIndex());
-    segmentsDataModel->setData(index, line.delta, Qt::EditRole);
-    index = segmentsDataModel->index(lines.size(), 24, QModelIndex());
-    segmentsDataModel->setData(index, line.isTHM, Qt::EditRole);
-    // Keyword blocks have no column; without this they were lost on every load.
-    segmentsDataModel->setLineExtras(lines.size(), line.extraTokens);
-    segmentsDataView->resizeRowToContents(lines.size());
-    updateSegDataButtons(segmentsDataView->selectionModel()->selection());
-    if (!fromFile) {
-      // Added at the end: no line is renumbered, but its parameters are new.
-      QVector<int> same;
-      for (int k = 1; k <= lines.size(); k++) same << k;
-      emit dataSegmentsRenumbered(same);
-    }
-  } else {
+// A line added from the dialog: refused when an identical line (every field, components and keyword blocks
+// included) is already there.
+void SegmentsTab::addSegDataLine(SegmentsDataData line) {
+  if (segmentsDataModel->isSegDataLine(line) != -1) {
     QMessageBox::information(this, tr("Duplicate Line"), tr("This line already exists."));
+    return;
   }
+  const int n = segmentsDataModel->getLines().size();
+  appendSegDataLine(line);
+  // Added at the end: no line is renumbered, but its parameters are new.
+  QVector<int> same;
+  for (int k = 1; k <= n; k++) same << k;
+  emit dataSegmentsRenumbered(same);
+}
+
+// Appends without the duplicate check.  The file reader uses it: a line of the file is never dropped (that would
+// renumber the segments every later key refers to) and loading never stops on a message box.
+void SegmentsTab::appendSegDataLine(SegmentsDataData line) {
+  QList<SegmentsDataData> lines = segmentsDataModel->getLines();
+  segmentsDataModel->insertRows(lines.size(), 1, QModelIndex());
+  QModelIndex index = segmentsDataModel->index(lines.size(), 0, QModelIndex());
+  segmentsDataModel->setData(index, line.isActive, Qt::EditRole);
+  index = segmentsDataModel->index(lines.size(), 1, QModelIndex());
+  segmentsDataModel->setData(index, line.entrancePairIndex, Qt::EditRole);
+  index = segmentsDataModel->index(lines.size(), 2, QModelIndex());
+  segmentsDataModel->setData(index, line.exitPairIndex, Qt::EditRole);
+  index = segmentsDataModel->index(lines.size(), 3, QModelIndex());
+  segmentsDataModel->setData(index, line.lowEnergy, Qt::EditRole);
+  index = segmentsDataModel->index(lines.size(), 4, QModelIndex());
+  segmentsDataModel->setData(index, line.highEnergy, Qt::EditRole);
+  index = segmentsDataModel->index(lines.size(), 5, QModelIndex());
+  segmentsDataModel->setData(index, line.lowAngle, Qt::EditRole);
+  index = segmentsDataModel->index(lines.size(), 6, QModelIndex());
+  segmentsDataModel->setData(index, line.highAngle, Qt::EditRole);
+  index = segmentsDataModel->index(lines.size(), 7, QModelIndex());
+  segmentsDataModel->setData(index, line.dataType, Qt::EditRole);
+  index = segmentsDataModel->index(lines.size(), 8, QModelIndex());
+  segmentsDataModel->setData(index, line.dataFile, Qt::EditRole);
+  index = segmentsDataModel->index(lines.size(), 9, QModelIndex());
+  segmentsDataModel->setData(index, line.dataNorm, Qt::EditRole);
+  index = segmentsDataModel->index(lines.size(), 10, QModelIndex());
+  segmentsDataModel->setData(index, line.dataNormError, Qt::EditRole);
+  index = segmentsDataModel->index(lines.size(), 11, QModelIndex());
+  segmentsDataModel->setData(index, line.varyNorm, Qt::EditRole);
+  index = segmentsDataModel->index(lines.size(), 12, QModelIndex());
+  segmentsDataModel->setData(index, line.phaseJ, Qt::EditRole);
+  index = segmentsDataModel->index(lines.size(), 13, QModelIndex());
+  segmentsDataModel->setData(index, line.phaseL, Qt::EditRole);
+  index = segmentsDataModel->index(lines.size(), 14, QModelIndex());
+  segmentsDataModel->setData(index, line.energyShift, Qt::EditRole);
+  index = segmentsDataModel->index(lines.size(), 15, QModelIndex());
+  segmentsDataModel->setData(index, line.energyShiftError, Qt::EditRole);
+  index = segmentsDataModel->index(lines.size(), 16, QModelIndex());
+  segmentsDataModel->setData(index, line.varyEnergyShift, Qt::EditRole);
+  index = segmentsDataModel->index(lines.size(), 17, QModelIndex());
+  segmentsDataModel->setData(index, line.isAdvanced, Qt::EditRole);
+  index = segmentsDataModel->index(lines.size(), 18, QModelIndex());
+  segmentsDataModel->setData(index, line.operationType, Qt::EditRole);
+  index = segmentsDataModel->index(lines.size(), 19, QModelIndex());
+  segmentsDataModel->setData(index, line.componentsList, Qt::EditRole);
+  index = segmentsDataModel->index(lines.size(), 20, QModelIndex());
+  segmentsDataModel->setData(index, line.isUPOS, Qt::EditRole);
+  index = segmentsDataModel->index(lines.size(), 21, QModelIndex());
+  segmentsDataModel->setData(index, line.secondaryDecayL, Qt::EditRole);
+  index = segmentsDataModel->index(lines.size(), 22, QModelIndex());
+  segmentsDataModel->setData(index, line.finalJ, Qt::EditRole);
+  index = segmentsDataModel->index(lines.size(), 23, QModelIndex());
+  segmentsDataModel->setData(index, line.delta, Qt::EditRole);
+  index = segmentsDataModel->index(lines.size(), 24, QModelIndex());
+  segmentsDataModel->setData(index, line.isTHM, Qt::EditRole);
+  // Keyword blocks have no column; without this they were lost on every load.
+  segmentsDataModel->setLineExtras(lines.size(), line.extraTokens);
+  segmentsDataView->resizeRowToContents(lines.size());
+  updateSegDataButtons(segmentsDataView->selectionModel()->selection());
 }
 
 void SegmentsTab::addSegTestLine() {
@@ -522,59 +535,73 @@ void SegmentsTab::addSegTestLine() {
       newLine.componentsList = "";
     }
     newLine.extraTokens = SegmentKeywords::withNaturalToken(QString(), aDialog.naturalToken());
+    if (newLine.dataType == 2) newLine.extraTokens = SegmentKeywords::withPhaseSpin(newLine.extraTokens, aDialog.phaseSValueText->text());
     addSegTestLine(newLine);
   }
 }
 
-void SegmentsTab::addSegTestLine(SegmentsTestData line, bool fromFile) {
-  QList<SegmentsTestData> lines = segmentsTestModel->getLines();
-  if (fromFile || segmentsTestModel->isSegTestLine(line) == -1) {
-    segmentsTestModel->insertRows(lines.size(), 1, QModelIndex());
-    QModelIndex index = segmentsTestModel->index(lines.size(), 0, QModelIndex());
-    segmentsTestModel->setData(index, line.isActive, Qt::EditRole);
-    index = segmentsTestModel->index(lines.size(), 1, QModelIndex());
-    segmentsTestModel->setData(index, line.entrancePairIndex, Qt::EditRole);
-    index = segmentsTestModel->index(lines.size(), 2, QModelIndex());
-    segmentsTestModel->setData(index, line.exitPairIndex, Qt::EditRole);
-    index = segmentsTestModel->index(lines.size(), 3, QModelIndex());
-    segmentsTestModel->setData(index, line.lowEnergy, Qt::EditRole);
-    index = segmentsTestModel->index(lines.size(), 4, QModelIndex());
-    segmentsTestModel->setData(index, line.highEnergy, Qt::EditRole);
-    index = segmentsTestModel->index(lines.size(), 5, QModelIndex());
-    segmentsTestModel->setData(index, line.energyStep, Qt::EditRole);
-    index = segmentsTestModel->index(lines.size(), 6, QModelIndex());
-    segmentsTestModel->setData(index, line.lowAngle, Qt::EditRole);
-    index = segmentsTestModel->index(lines.size(), 7, QModelIndex());
-    segmentsTestModel->setData(index, line.highAngle, Qt::EditRole);
-    index = segmentsTestModel->index(lines.size(), 8, QModelIndex());
-    segmentsTestModel->setData(index, line.angleStep, Qt::EditRole);
-    index = segmentsTestModel->index(lines.size(), 9, QModelIndex());
-    segmentsTestModel->setData(index, line.dataType, Qt::EditRole);
-    index = segmentsTestModel->index(lines.size(), 10, QModelIndex());
-    segmentsTestModel->setData(index, line.phaseJ, Qt::EditRole);
-    index = segmentsTestModel->index(lines.size(), 11, QModelIndex());
-    segmentsTestModel->setData(index, line.phaseL, Qt::EditRole);
-    index = segmentsTestModel->index(lines.size(), 12, QModelIndex());
-    segmentsTestModel->setData(index, line.maxAngDistOrder, Qt::EditRole);
-    index = segmentsTestModel->index(lines.size(), 13, QModelIndex());
-    segmentsTestModel->setData(index, line.isAdvanced, Qt::EditRole);
-    index = segmentsTestModel->index(lines.size(), 14, QModelIndex());
-    segmentsTestModel->setData(index, line.operationType, Qt::EditRole);
-    index = segmentsTestModel->index(lines.size(), 15, QModelIndex());
-    segmentsTestModel->setData(index, line.componentsList, Qt::EditRole);
-    index = segmentsTestModel->index(lines.size(), 16, QModelIndex());
-    segmentsTestModel->setData(index, line.isTHM, Qt::EditRole);
-    segmentsTestModel->setLineExtras(lines.size(), line.extraTokens);
-    segmentsTestView->resizeRowToContents(lines.size());
-    updateSegTestButtons(segmentsTestView->selectionModel()->selection());
-  } else {
+// A line added from the dialog: refused when an identical line (every field, components and keyword blocks
+// included) is already there.
+void SegmentsTab::addSegTestLine(SegmentsTestData line) {
+  if (segmentsTestModel->isSegTestLine(line) != -1) {
     QMessageBox::information(this, tr("Duplicate Line"), tr("This line already exists."));
+    return;
   }
+  appendSegTestLine(line);
+}
+
+// Appends without the duplicate check.  The file reader uses it: a line of the file is never dropped (that would
+// renumber the segments every later key refers to) and loading never stops on a message box.
+void SegmentsTab::appendSegTestLine(SegmentsTestData line) {
+  QList<SegmentsTestData> lines = segmentsTestModel->getLines();
+  segmentsTestModel->insertRows(lines.size(), 1, QModelIndex());
+  QModelIndex index = segmentsTestModel->index(lines.size(), 0, QModelIndex());
+  segmentsTestModel->setData(index, line.isActive, Qt::EditRole);
+  index = segmentsTestModel->index(lines.size(), 1, QModelIndex());
+  segmentsTestModel->setData(index, line.entrancePairIndex, Qt::EditRole);
+  index = segmentsTestModel->index(lines.size(), 2, QModelIndex());
+  segmentsTestModel->setData(index, line.exitPairIndex, Qt::EditRole);
+  index = segmentsTestModel->index(lines.size(), 3, QModelIndex());
+  segmentsTestModel->setData(index, line.lowEnergy, Qt::EditRole);
+  index = segmentsTestModel->index(lines.size(), 4, QModelIndex());
+  segmentsTestModel->setData(index, line.highEnergy, Qt::EditRole);
+  index = segmentsTestModel->index(lines.size(), 5, QModelIndex());
+  segmentsTestModel->setData(index, line.energyStep, Qt::EditRole);
+  index = segmentsTestModel->index(lines.size(), 6, QModelIndex());
+  segmentsTestModel->setData(index, line.lowAngle, Qt::EditRole);
+  index = segmentsTestModel->index(lines.size(), 7, QModelIndex());
+  segmentsTestModel->setData(index, line.highAngle, Qt::EditRole);
+  index = segmentsTestModel->index(lines.size(), 8, QModelIndex());
+  segmentsTestModel->setData(index, line.angleStep, Qt::EditRole);
+  index = segmentsTestModel->index(lines.size(), 9, QModelIndex());
+  segmentsTestModel->setData(index, line.dataType, Qt::EditRole);
+  index = segmentsTestModel->index(lines.size(), 10, QModelIndex());
+  segmentsTestModel->setData(index, line.phaseJ, Qt::EditRole);
+  index = segmentsTestModel->index(lines.size(), 11, QModelIndex());
+  segmentsTestModel->setData(index, line.phaseL, Qt::EditRole);
+  index = segmentsTestModel->index(lines.size(), 12, QModelIndex());
+  segmentsTestModel->setData(index, line.maxAngDistOrder, Qt::EditRole);
+  index = segmentsTestModel->index(lines.size(), 13, QModelIndex());
+  segmentsTestModel->setData(index, line.isAdvanced, Qt::EditRole);
+  index = segmentsTestModel->index(lines.size(), 14, QModelIndex());
+  segmentsTestModel->setData(index, line.operationType, Qt::EditRole);
+  index = segmentsTestModel->index(lines.size(), 15, QModelIndex());
+  segmentsTestModel->setData(index, line.componentsList, Qt::EditRole);
+  index = segmentsTestModel->index(lines.size(), 16, QModelIndex());
+  segmentsTestModel->setData(index, line.isTHM, Qt::EditRole);
+  segmentsTestModel->setLineExtras(lines.size(), line.extraTokens);
+  segmentsTestView->resizeRowToContents(lines.size());
+  updateSegTestButtons(segmentsTestView->selectionModel()->selection());
 }
 
 void SegmentsTab::editSegDataLine() {
+  if (scatteringLengthRowOf(selectedSegDataRow()) >= 0) {
+    editScatteringLength();
+    return;
+  }
   QItemSelectionModel *selectionModel = segmentsDataView->selectionModel();
   QModelIndexList indexes = selectionModel->selectedRows();
+  if (indexes.isEmpty()) return;
   QModelIndex index = indexes[0];
 
   // isTHM is not a table column; fetch it from the full struct.
@@ -657,7 +684,10 @@ void SegmentsTab::editSegDataLine() {
   aDialog.setPairsModel(pairsModel);
   aDialog.setSamples(abundancesModel ? abundancesModel->samples() : QStringList() << QString());
   aDialog.setWindowTitle(tr("Edit a Segment From Data"));
+  aDialog.disallowScatteringLength();
   aDialog.setNaturalToken(SegmentKeywords::naturalSample(extraTokens));
+  aDialog.covarianceFileText->setText(SegmentKeywords::covarianceFile(extraTokens));
+  aDialog.phaseSValueText->setText(SegmentKeywords::phaseSpin(extraTokens));
   aDialog.entrancePairCombo->setKey(entrancePairIndex);
   aDialog.exitPairCombo->setKey(exitPairIndex);
   aDialog.lowEnergyText->setText(lowEnergy);
@@ -841,6 +871,11 @@ void SegmentsTab::editSegDataLine() {
       segmentsDataModel->setData(i, newDelta, Qt::EditRole);
     }
     QString newExtraTokens = SegmentKeywords::withNaturalToken(extraTokens, aDialog.naturalToken());
+    // rewrite the covariance block only when the field changed, so an untouched tail stays as read
+    if (aDialog.covarianceFileText->text().trimmed() != SegmentKeywords::covarianceFile(extraTokens))
+      newExtraTokens = SegmentKeywords::withCovarianceFile(newExtraTokens, aDialog.covarianceFileText->text());
+    if (aDialog.phaseSValueText->text().trimmed() != SegmentKeywords::phaseSpin(extraTokens))
+      newExtraTokens = SegmentKeywords::withPhaseSpin(newExtraTokens, aDialog.phaseSValueText->text());
     if (newExtraTokens != extraTokens) segmentsDataModel->setLineExtras(index.row(), newExtraTokens);
   }
 }
@@ -907,6 +942,7 @@ void SegmentsTab::editSegTestLine() {
   aDialog.setSamples(abundancesModel ? abundancesModel->samples() : QStringList() << QString());
   aDialog.setWindowTitle(tr("Edit a Segment Without Data"));
   aDialog.setNaturalToken(SegmentKeywords::naturalSample(extraTokens));
+  aDialog.phaseSValueText->setText(SegmentKeywords::phaseSpin(extraTokens));
   aDialog.entrancePairCombo->setKey(entrancePairIndex);
   aDialog.exitPairCombo->setKey(exitPairIndex);
   aDialog.lowEnergyText->setText(lowEnergy);
@@ -1027,6 +1063,8 @@ void SegmentsTab::editSegTestLine() {
       segmentsTestModel->setData(i, newComponentsList, Qt::EditRole);
     }
     QString newExtraTokens = SegmentKeywords::withNaturalToken(extraTokens, aDialog.naturalToken());
+    if (aDialog.phaseSValueText->text().trimmed() != SegmentKeywords::phaseSpin(extraTokens))
+      newExtraTokens = SegmentKeywords::withPhaseSpin(newExtraTokens, aDialog.phaseSValueText->text());
     if (newExtraTokens != extraTokens) segmentsTestModel->setLineExtras(index.row(), newExtraTokens);
   }
 }
@@ -1053,7 +1091,7 @@ void SegmentsTab::moveSegDataLine(unsigned int upDown) {
   if (!moveDataSegment(previous, future)) return;
   segmentsDataView->resizeRowToContents(future);
 
-  selectionModel->select(segmentsDataModel->index(future, 0, QModelIndex()),
+  selectionModel->select(segmentsDataView->model()->index(future, 0, QModelIndex()),
                          QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Rows);
 }
 
@@ -1091,6 +1129,10 @@ void SegmentsTab::updateSegDataButtons(const QItemSelection &selection) {
     segDataDeleteButton->setEnabled(false);
     segDataUpButton->setEnabled(false);
     segDataDownButton->setEnabled(false);
+  } else if (scatteringLengthRowOf(indexes.at(0).row()) >= 0) {
+    segDataDeleteButton->setEnabled(true);
+    segDataUpButton->setEnabled(false);  // the rows follow the block's order; they do not move among segments
+    segDataDownButton->setEnabled(false);
   } else {
     segDataDeleteButton->setEnabled(true);
     if (indexes.at(0).row() == 0)
@@ -1125,6 +1167,10 @@ void SegmentsTab::updateSegTestButtons(const QItemSelection &selection) {
 }
 
 void SegmentsTab::checkAllSegData() {
+  for (int r = 0; r < scatteringLengthsModel->rowCount(); r++)
+    if (!segmentsDataView->isRowHidden(segmentsDataModel->rowCount(QModelIndex()) + r))
+      scatteringLengthsModel->setData(scatteringLengthsModel->index(r, ScatteringLengthsModel::ActiveCol), Qt::Checked,
+                                      Qt::CheckStateRole);
   QList<SegmentsDataData> lines = segmentsDataModel->getLines();
   for (int i = 0; i < lines.size(); i++) {
     // Only check visible (non-hidden) rows
@@ -1136,6 +1182,10 @@ void SegmentsTab::checkAllSegData() {
 }
 
 void SegmentsTab::uncheckAllSegData() {
+  for (int r = 0; r < scatteringLengthsModel->rowCount(); r++)
+    if (!segmentsDataView->isRowHidden(segmentsDataModel->rowCount(QModelIndex()) + r))
+      scatteringLengthsModel->setData(scatteringLengthsModel->index(r, ScatteringLengthsModel::ActiveCol), Qt::Unchecked,
+                                      Qt::CheckStateRole);
   QList<SegmentsDataData> lines = segmentsDataModel->getLines();
   for (int i = 0; i < lines.size(); i++) {
     // Only uncheck visible (non-hidden) rows
@@ -1188,6 +1238,11 @@ void SegmentsTab::filterSegDataByPairs() {
     // Show or hide the row
     segmentsDataView->setRowHidden(i, !showRow);
   }
+  // a scattering length's pair is its entrance and its exit pair
+  const QList<ScatteringLengthEntry> entries = scatteringLengthsModel->entries();
+  for (int r = 0; r < entries.size(); r++)
+    segmentsDataView->setRowHidden(lines.size() + r, (entranceFilter > 0 && entries[r].pairKey != entranceFilter) ||
+                                                         (exitFilter > 0 && entries[r].pairKey != exitFilter));
 }
 
 
@@ -1338,8 +1393,8 @@ bool SegmentsTab::readSegDataFile(QTextStream &inStream) {
                       break;
                     }
                     QString component = QString("Entrance: %1, Exit: %2").arg(entrance).arg(exit);
-                    if (angle > -900.0) component += QString(", Angle: %1").arg(angle);
-                    if (scaling > -900.0) component += QString(", Scaling: %1").arg(scaling);
+                    if (angle > -900.0) component += QString(", Angle: %1").arg(QString::number(angle, 'g', QLocale::FloatingPointShortest));
+                    if (scaling > -900.0) component += QString(", Scaling: %1").arg(QString::number(scaling, 'g', QLocale::FloatingPointShortest));
                     components.append(component);
                   }
                   if (fourTokenOk) {
@@ -1366,7 +1421,7 @@ bool SegmentsTab::readSegDataFile(QTextStream &inStream) {
                           if (ok) {
                             QString component;
                             if (angle > -900.0) {  // Check if angle is not the sentinel value
-                              component = QString("Entrance: %1, Exit: %2, Angle: %3").arg(entrance).arg(exit).arg(angle);
+                              component = QString("Entrance: %1, Exit: %2, Angle: %3").arg(entrance).arg(exit).arg(QString::number(angle, 'g', QLocale::FloatingPointShortest));
                             } else {
                               component = QString("Entrance: %1, Exit: %2").arg(entrance).arg(exit);
                             }
@@ -1439,7 +1494,7 @@ bool SegmentsTab::readSegDataFile(QTextStream &inStream) {
       SegmentsDataData newLine = {isActive, entrancePairIndex, exitPairIndex, lowEnergy, highEnergy, lowAngle,
                                   highAngle, dataType, dataFile, dataNorm, dataNormError, varyNorm, phaseJ, phaseL, energyShift, energyShiftError, varyEnergyShift, isAdvanced, operationType, componentsList, isUPOS, secondaryDecayL, finalJ, delta, isTHM};
       newLine.extraTokens = extraTokens;
-      addSegDataLine(newLine, true);
+      appendSegDataLine(newLine);
     }
   }
   if (line.trimmed() != QString("</segmentsData>")) return false;
@@ -1527,7 +1582,7 @@ bool SegmentsTab::writeSegDataFile(QTextStream &outStream) {
             double angle, scaling;
             extractAngleScaling(component, angle, scaling);
             outStream << " " << entrance << " " << exit << " " << roundTripNumber(angle);
-            if (anyScaling) outStream << " " << roundTripNumber(scaling);
+            if (anyScaling) outStream << " " << roundTripNumber(scaling);  // all digits (QTextStream: 6)
           }
         }
       } else {  // Ratio - only 1 component (denominator, main segment is numerator)
@@ -1543,7 +1598,7 @@ bool SegmentsTab::writeSegDataFile(QTextStream &outStream) {
             double angle, scaling;
             extractAngleScaling(components[0], angle, scaling);
             outStream << " " << entrance << " " << exit << " " << roundTripNumber(angle);
-            if (anyScaling) outStream << " " << roundTripNumber(scaling);
+            if (anyScaling) outStream << " " << roundTripNumber(scaling);  // all digits (QTextStream: 6)
           }
         }
       }
@@ -1663,12 +1718,12 @@ bool SegmentsTab::readSegTestFile(QTextStream &inStream) {
                 }
                 QString component;
                 if (angle > -900.0) {  // Check if angle is not the sentinel value
-                  component = QString("Entrance: %1, Exit: %2, Angle: %3").arg(entrance).arg(exit).arg(angle);
+                  component = QString("Entrance: %1, Exit: %2, Angle: %3").arg(entrance).arg(exit).arg(QString::number(angle, 'g', QLocale::FloatingPointShortest));
                 } else {
                   component = QString("Entrance: %1, Exit: %2").arg(entrance).arg(exit);
                 }
                 if (hasScalingToken && scaling > -900.0) {
-                  component += QString(", Scaling: %1").arg(scaling);
+                  component += QString(", Scaling: %1").arg(QString::number(scaling, 'g', QLocale::FloatingPointShortest));
                 }
                 components.append(component);
               } else {
@@ -1706,7 +1761,7 @@ bool SegmentsTab::readSegTestFile(QTextStream &inStream) {
       SegmentsTestData newLine = {isActive, entrancePairIndex, exitPairIndex, lowEnergy, highEnergy, energyStep, lowAngle,
                                   highAngle, angleStep, dataType, phaseJ, phaseL, maxAngDistOrder, isAdvanced, operationType, componentsList, isTHM};
       newLine.extraTokens = extraTokens;
-      addSegTestLine(newLine, true);
+      appendSegTestLine(newLine);
     }
   }
   if (line.trimmed() != QString("</segmentsTest>")) return false;
@@ -1774,7 +1829,7 @@ bool SegmentsTab::writeSegTestFile(QTextStream &outStream) {
             double angle, scaling;
             extractAngleScaling(component, angle, scaling);
             outStream << " " << entrance << " " << exit << " " << roundTripNumber(angle);
-            if (anyScaling) outStream << " " << roundTripNumber(scaling);
+            if (anyScaling) outStream << " " << roundTripNumber(scaling);  // all digits (QTextStream: 6)
           }
         }
       } else {  // Ratio - only 1 component (denominator, main segment is numerator)
@@ -1790,7 +1845,7 @@ bool SegmentsTab::writeSegTestFile(QTextStream &outStream) {
             double angle, scaling;
             extractAngleScaling(components[0], angle, scaling);
             outStream << " " << entrance << " " << exit << " " << roundTripNumber(angle);
-            if (anyScaling) outStream << " " << roundTripNumber(scaling);
+            if (anyScaling) outStream << " " << roundTripNumber(scaling);  // all digits (QTextStream: 6)
           }
         }
       }
@@ -1912,23 +1967,25 @@ void SegmentsTab::reset() {
   scatteringLengthsModel->clear();
 }
 
-void SegmentsTab::addScatteringLength() {
-  scatteringLengthsModel->addDefaultEntry();
-  int row = scatteringLengthsModel->rowCount() - 1;
-  scatteringLengthsView->selectRow(row);
-  scatteringLengthsView->scrollToBottom();
-  updateScatteringLengthButtons();
+void SegmentsTab::editScatteringLength() {
+  const int row = scatteringLengthRowOf(selectedSegDataRow());
+  if (row < 0) return;
+  AddSegDataDialog aDialog;
+  aDialog.setPairsModel(pairsModel);
+  aDialog.setWindowTitle(tr("Edit a Scattering Length"));
+  aDialog.setScatteringLength(scatteringLengthsModel->entries().at(row));
+  if (aDialog.exec()) scatteringLengthsModel->setEntry(row, aDialog.scatteringLength());
 }
 
-void SegmentsTab::deleteScatteringLength() {
-  QModelIndexList rows = scatteringLengthsView->selectionModel()->selectedRows();
-  if (rows.isEmpty()) return;
-  scatteringLengthsModel->removeRows(rows.first().row(), 1);
-  updateScatteringLengthButtons();
-}
-
-void SegmentsTab::updateScatteringLengthButtons() {
-  scatLenDeleteButton->setEnabled(!scatteringLengthsView->selectionModel()->selectedRows().isEmpty());
+void SegmentsTab::updateScatteringLengthRows() {
+  // nothing to place without entries (keeps loading a file of many segments linear)
+  if (scatteringLengthsModel->rowCount() == 0) return;
+  // as tall as their text, like the segment rows (two lines for a long reaction label)
+  const int n = segmentsDataModel->rowCount(QModelIndex());
+  for (int r = 0; r < scatteringLengthsModel->rowCount(); r++) segmentsDataView->resizeRowToContents(n + r);
+  // the pair filter applies to these rows too; rows added or removed shift the ones after them
+  filterSegDataByPairs();
+  updateSegDataButtons(segmentsDataView->selectionModel()->selection());
 }
 
 bool SegmentsTab::readScatteringLengths(QTextStream &inStream) {

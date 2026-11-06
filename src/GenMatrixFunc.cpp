@@ -72,6 +72,8 @@ void GenMatrixFunc::CalculateBareCrossSection(EPoint *point) {
     for (int dp = 1; dp <= compound()->GetPair(aa)->NumDecays(); dp++) {
       if (compound()->GetPair(compound()->GetPair(aa)->GetDecay(dp)->GetPairNum())->GetPType() == 0) {
         for (int k = 1; k <= compound()->GetPair(aa)->GetDecay(dp)->NumKGroups(); k++) {
+          // A cross-spin UPOS group repeats pathways of the equal-spin groups.
+          if (compound()->GetPair(aa)->GetDecay(dp)->GetKGroup(k)->IsCrossSpin()) continue;
           this->ClearTempTMatrices();
           for (int m = 1; m <= compound()->GetPair(aa)->GetDecay(dp)->GetKGroup(k)->NumMGroups(); m++) {
             MGroup *theMGroup = compound()->GetPair(aa)->GetDecay(dp)->GetKGroup(k)->GetMGroup(m);
@@ -98,6 +100,27 @@ void GenMatrixFunc::CalculateBareCrossSection(EPoint *point) {
     // branch below.
     point->SetFitCrossSection(real(sum) / 100. * compound()->GetPair(aa)->GetEntranceSymmetryFactor());
   } else {
+    if (point->IsTotal() && !point->IsPhase()) {
+      // The total cross section of the entrance pair by the optical theorem: with every channel of the J-group in its
+      // level matrix, U is unitary, so sum_c' |T_cc'|^2 over all exit channels is 2 Re T_cc (T = 1 - U for a neutral
+      // pair), and sigma_tot = (pi/k^2) g sum_J (2J+1) sum_c 2 Re T_cc over the entrance channels -- one T-matrix (the
+      // elastic one) instead of one per exit pair.  Photon channels carry no width in the level matrix and external
+      // capture is outside it, so capture is not included (add it as a SUM component).
+      double total = 0.;
+      for (int k = 1; k <= theDecay->NumKGroups(); k++) {
+        if (theDecay->GetKGroup(k)->IsCrossSpin()) continue;
+        for (int m = 1; m <= theDecay->GetKGroup(k)->NumMGroups(); m++) {
+          MGroup *theMGroup = theDecay->GetKGroup(k)->GetMGroup(m);
+          if (theMGroup->GetChNum() != theMGroup->GetChpNum()) continue;
+          const double jValue = compound()->GetJGroup(theMGroup->GetJNum())->GetJ();
+          total += (2. * jValue + 1.) * 2. * real(this->GetTMatrixElement(k, m));
+        }
+      }
+      point->SetFitCrossSection(point->GetGeometricalFactor() * compound()->GetPair(aa)->GetI1I2Factor() * total / 100.);
+      point->SetFitE1CrossSection(0.);
+      point->SetFitE2CrossSection(0.);
+      return;
+    }
     if (!point->IsPhase()) {
       double angleIntegratedXS = 0.;
       double angleIntegratedE1XS = 0.;
@@ -345,7 +368,10 @@ void GenMatrixFunc::CalculateBareCrossSection(EPoint *point) {
               int lOrder = theDecay->GetKLGroup(kL)->GetLOrder();
               double finalL = (double)point->GetSecondaryDecayL();
               double Ic = point->GetIc();
-              double j2f = compound()->GetPair(ir)->GetJ(2);
+              // the residual nucleus of the EXIT PAIR: ir is the decay index within the entrance pair's list,
+              // not a pair number (wrong whenever an earlier pair has no decay from the entrance pair:
+              // another compound nucleus, a beta-delayed pair, ...; audit item 10, tests/upos_pair_index)
+              double j2f = compound()->GetPair(exitPairNum)->GetJ(2);
               double delta = point->GetDelta();
               double R_L = 0.;
               if ((int)lOrder % 2 == 0) {
@@ -354,7 +380,12 @@ void GenMatrixFunc::CalculateBareCrossSection(EPoint *point) {
                   double finalLp = finalL + 1.;
                   double R_LLp = this->GetRk(j2f, finalL, finalLp, Ic, lOrder);
                   double R_LpLp = this->GetRk(j2f, finalLp, finalLp, Ic, lOrder);
-                  if (R_LpLp != 0.) R_L = (R_L + 2. * delta * R_LLp + delta * delta * R_LpLp) / (1. + delta * delta);
+                  // Eq. (7) of Brune and deBoer (2020) unconditionally: every R_k is 0 when its coupling is not
+                  // allowed, and the mixed form is well defined.  Up to 2026-10-27 it was applied only when
+                  // R_L'L' != 0, so at an order k where R_L'L' happens to vanish while R_LL does not (3/2 -> 3/2
+                  // M1/E2, k = 2: R_2(2,2) = 0, R_2(1,2) = 0.77) the 2 delta R_LL' term and the 1/(1 + delta^2)
+                  // were dropped for that k (audit 2026-10-25, checklist t3-24).
+                  R_L = (R_L + 2. * delta * R_LLp + delta * delta * R_LpLp) / (1. + delta * delta);
                 }
               }
               sum += theInterference->GetZ1Z2_UPOS() * T1 * conj(T2) *
@@ -395,6 +426,14 @@ void GenMatrixFunc::CalculateBareCrossSection(EPoint *point) {
       }
       if (point->IsAngularDist()) {
         point->SetAngularDists(angularCoeff);
+        // A_0 = sigma_int / 4 pi (b/sr):  dsigma/dOmega_cm = A_0 [1 + sum_k a_k P_k(cos theta)]
+        point->SetAngDistA0(angleIntegratedXS / (4.0 * pi));
+        if (point->IsCoefficient()) {
+          // an angular-coefficient data point: its fit value is its own order's coefficient
+          const int kOrd = point->GetCoefficientOrder();
+          const double ak = (kOrd >= 0 && kOrd < (int)angularCoeff.size()) ? angularCoeff[kOrd] : 0.0;
+          point->SetFitCrossSection(point->GetCoefficientAbsolute() ? ak * angleIntegratedXS / (4.0 * pi) : ak);
+        }
         return;
       }
       // Identical-particle symmetrization (elastic, aa==ir):
@@ -478,6 +517,10 @@ void GenMatrixFunc::CalculateBareCrossSection(EPoint *point) {
     } else if (aa == exitPairNum) {
       double segmentJ = point->GetJ();
       int segmentL = point->GetL();
+      // The channel spin the phase belongs to ("spin <s>" on the segment line); without it the
+      // segment must have a single spin for its (J, l), which EData::Initialize enforces: summing
+      // the U-matrix elements of two channel spins (as happened up to 2026-10-27) is not a phase.
+      const double segmentS = point->GetPhaseS();
       PPair *entrancePair = compound()->GetPair(aa);
       this->ClearTempTMatrices();
       for (int k = 1; k <= theDecay->NumKGroups(); k++) {
@@ -487,7 +530,8 @@ void GenMatrixFunc::CalculateBareCrossSection(EPoint *point) {
           AChannel *entranceChannel = compound()->GetJGroup(theMGroup->GetJNum())->GetChannel(theMGroup->GetChNum());
           int lValue = entranceChannel->GetL();
           AChannel *exitChannel = compound()->GetJGroup(theMGroup->GetJNum())->GetChannel(theMGroup->GetChpNum());
-          if (jValue == segmentJ && lValue == segmentL && entranceChannel == exitChannel) {
+          if (jValue == segmentJ && lValue == segmentL && entranceChannel == exitChannel &&
+              (segmentS < 0.0 || std::fabs(entranceChannel->GetS() - segmentS) < 1.0e-6)) {
             complex expCoulPhaseSquared = point->GetExpCoulombPhase(theMGroup->GetJNum(), theMGroup->GetChNum()) *
                 point->GetExpCoulombPhase(theMGroup->GetJNum(), theMGroup->GetChNum());
             complex theUMatrix = (expCoulPhaseSquared - this->GetTMatrixElement(k, m)) / expCoulPhaseSquared;
@@ -777,6 +821,8 @@ bool GenMatrixFunc::CalculateAmplitudeMatrix(EPoint *point, double *spinSum,
   Polarization::AmplitudeMatrix M(compound(), point, aaPair, irPair);
 
   for (int k = 1; k <= theDecay->NumKGroups(); k++) {
+    // A cross-spin UPOS group repeats pathways of the equal-spin groups.
+    if (theDecay->GetKGroup(k)->IsCrossSpin()) continue;
     for (int m = 1; m <= theDecay->GetKGroup(k)->NumMGroups(); m++) {
       MGroup *g = theDecay->GetKGroup(k)->GetMGroup(m);
       M.AddPathway(g->GetJNum(), g->GetChNum(), g->GetChpNum(),

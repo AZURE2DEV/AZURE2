@@ -101,6 +101,10 @@ class AMatrixFunc : public GenMatrixFunc {
 
   /// Drop the stored level matrices.
   void ClearMatrices();
+  void ResetTMatrix() override {
+    GenMatrixFunc::ResetTMatrix();
+    tbar_decay_ = nullptr;
+  }
   /// Build \f$A^{-1}\f$ per J-group from the level parameters at this point.
   void FillMatrices(EPoint *);
   /*!
@@ -198,6 +202,14 @@ class AMatrixFunc : public GenMatrixFunc {
    */
   void TBarAdjoint(EPoint *energyPoint, const TMatrixCotangent &bar, GradAccum &accum,
                    const vector_matrix_r *shiftDeriv = nullptr);
+  /*!
+   * TBarAdjoint for the T-matrix cotangents of several points at one energy whose exit pairs may differ (the terms of
+   * a SUM or RATIO segment): bars[q] belongs to points[q]'s decay.  The decays without external capture enter only
+   * through bilinear forms g_c^T A g_c', which do not depend on the exit, so their terms are merged by channel pair
+   * and back-propagated once per J-group; a decay with external capture is back-propagated on its own.
+   */
+  void TBarAdjointMany(const std::vector<EPoint *> &points, const std::vector<TMatrixCotangent> &bars,
+                       GradAccum &accum, const vector_matrix_r *shiftDeriv = nullptr);
   /*!
    * The internal-pathway cotangents of `bar` as bilinear-form terms, per
    * J-group (terms[j-1]), merged by channel pair.  False if the decay has
@@ -377,6 +389,10 @@ class AMatrixFunc : public GenMatrixFunc {
   // Pre-allocated buffers to prevent memory fragmentation
   mutable std::vector<std::vector<double>> levelGammas_;
   mutable std::vector<double> levelEnergies_;
+  /// 1 for a level whose widths are all below the fill's cutoff (FillLevelMatrix).
+  mutable std::vector<char> levelDecoupled_;
+  /// Total energy of the last FillMatrices (for the singular-matrix warning).
+  double lastInEnergy_ = 0.0;
   mutable std::vector<std::vector<double>> shiftFunctions_;
   mutable int cached_max_levels_;
   mutable int cached_max_channels_;

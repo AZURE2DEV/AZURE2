@@ -20,7 +20,7 @@ endif()
 # documentation (docs/source/conf.py reads these lines) all take it from here.
 # Bump it when a release is tagged on GitHub (tags: v1.0, v2.0, ...).
 set(AZURE2_VERSION_MAJOR 2)
-set(AZURE2_VERSION_MINOR 0)
+set(AZURE2_VERSION_MINOR 1)
 set(AZURE2_VERSION_PATCH 0)
 set(AZURE2_VERSION "${AZURE2_VERSION_MAJOR}.${AZURE2_VERSION_MINOR}.${AZURE2_VERSION_PATCH}")
 # What git says about the checkout (tag, commits since it, hash, -dirty), so a
@@ -454,6 +454,7 @@ enable_testing()
 add_subdirectory(tests/gui)
 add_subdirectory(tests/reference)
 add_subdirectory(tests/pyazr)
+add_subdirectory(tests/consistency)
 
 # Install and copy SRIM data file (only if ERYA is enabled)
 if(USE_ERYA)

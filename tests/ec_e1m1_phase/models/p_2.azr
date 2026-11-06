@@ -1,0 +1,37 @@
+<config>
+true                                                                                                #Perform A-Matrix Calculation
+output/                                                                                             #Full Path to Output Directory
+checks/                                                                                             #Full Path to Checks Directory
+none                                                                                                #Compond Nucleus Check
+none                                                                                                #Boundary Condition Check
+none                                                                                                #Data Check
+none                                                                                                #Lo Matrix Check
+none                                                                                                #Legendre Polynomials Check
+none                                                                                                #External Capture Check
+none                                                                                                #Coulomb Amplitude Check
+none                                                                                                #Angular Distribution Check
+</config>
+<levels>
+0.5 -1 0.4996 1 1 1 1 2 1 1 1 20.0 0.5 1 0 1 0 1.007276 15.99053 1 8 0.599607 0.599607 0 0 0.0 0 5 5.5857 0 0
+0.5 -1 0.4996 1 1 3 1 2 1 1 1 0 1 1 0.5 -1 0.4996 0 17.0021 0 9 0.599607 0 0 0 0.0 10 0 0 0 2
+
+0.5 1 30 1 1 1 1 0 2 1 1 1e-06 0.5 1 0 1 0 1.007276 15.99053 1 8 0.599607 0.599607 0 0 0.0 0 5 5.5857 0 0
+0.5 1 30 1 1 3 1 2 2 1 1 0 1 1 0.5 -1 0.4996 0 17.0021 0 9 0.599607 0 0 0 0.0 10 0 0 0 2
+
+1.5 1 30 1 1 1 1 4 3 1 1 1e-06 0.5 1 0 1 0 1.007276 15.99053 1 8 0.599607 0.599607 0 0 0.0 0 5 5.5857 0 0
+1.5 1 30 1 1 3 1 2 3 1 1 0 1 1 0.5 -1 0.4996 0 17.0021 0 9 0.599607 0 0 0 0.0 10 0 0 0 2
+
+0.5 -1 30 1 1 1 1 2 4 1 1 1e-06 0.5 1 0 1 0 1.007276 15.99053 1 8 0.599607 0.599607 0 0 0.0 0 5 5.5857 0 0
+0.5 -1 30 1 1 3 1 2 4 1 1 0 1 1 0.5 -1 0.4996 0 17.0021 0 9 0.599607 0 0 0 0.0 10 0 0 0 2
+
+1.5 -1 30 1 1 1 1 2 5 1 1 1e-06 0.5 1 0 1 0 1.007276 15.99053 1 8 0.599607 0.599607 0 0 0.0 0 5 5.5857 0 0
+1.5 -1 30 1 1 3 1 2 5 1 1 0 1 1 0.5 -1 0.4996 0 17.0021 0 9 0.599607 0 0 0 0.0 10 0 0 0 2
+
+</levels>
+<segmentsData>
+1 1 3 0.1 3.0 0 180 4 1 0 0 0 0 0 data/dsdo.dat 0 0
+</segmentsData>
+<segmentsTest>
+</segmentsTest>
+<targetInt>
+</targetInt>

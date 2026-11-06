@@ -13,19 +13,25 @@ class PPair;
 
 class EffectiveCharge {
  public:
-  EffectiveCharge(PPair *, double, int);
+  /// pair, gamma energy, multipolarity; with li, lf >= 0 the convection-current (tangential) term of the
+  /// relative motion between those orbital momenta is added (see operator()).
+  EffectiveCharge(PPair *, double, int, int li = -1, int lf = -1);
   /// Effective charge for the multipolarity, at a given energy.
   double operator()(double);
 
  private:
-  /// GSL integrand behind it.
+  /// GSL integrand behind it (multipolarities above 2 only).
   static double Integrand(double, void *);
+  /// int_0^y j_L(t)/t dt (closed forms for L = 1, 2).
+  static double IntJlOverT(int L, double y);
   int z1_;
   int z2_;
   int L_;
   double m1_;
   double m2_;
   double energy_;
+  int li_;
+  int lf_;
 };
 
 #endif

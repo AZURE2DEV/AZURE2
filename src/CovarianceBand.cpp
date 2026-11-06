@@ -33,6 +33,7 @@ std::tuple<int, int, int, int> IdentityKey(const ParamDesc &d) {
     case ParamKind::Abundance: return std::make_tuple(kind, d.sample, d.nucleus, -1);
     case ParamKind::ThmCoherent: return std::make_tuple(kind, d.channel, -1, -1);  // channel = its index
     case ParamKind::Screening: return std::make_tuple(kind, d.screening, -1, -1);
+    case ParamKind::Density: return std::make_tuple(kind, d.density, -1, -1);
   }
   return std::make_tuple(kind, -1, -1, -1);
 }

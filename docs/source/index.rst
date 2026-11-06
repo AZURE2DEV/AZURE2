@@ -58,6 +58,7 @@ A. M. Lane and R. G. Thomas, *Reviews of Modern Physics* **30**, 257 (1958).
    theory/polarization_implementation
    theory/thm_implementation
    theory/scattering_length
+   theory/external_capture_operator
 
 .. toctree::
    :maxdepth: 2

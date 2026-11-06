@@ -12,6 +12,7 @@
 #include "PairsModel.h"
 #include "AbundancesModel.h"
 #include <QGroupBox>
+#include <QCheckBox>
 #include <QDoubleSpinBox>
 #include <QTextStream>
 #include "AddPairDialog.h"
@@ -62,6 +63,8 @@ class PairsTab : public QWidget {
   void addSample();
   void removeSample();
   void sampleSumSigmaEdited(double sigma);
+  /*! "Masses from AME2020...": compare every pair with the mass table and fill the ticked ones (MassCheckDialog). */
+  void checkMasses();
 
  signals:
   void pairAdded(int);
@@ -81,6 +84,7 @@ class PairsTab : public QWidget {
   QDoubleSpinBox *sampleSumSigmaSpin;
   QPushButton *addButton;
   QPushButton *deleteButton;
+  QPushButton *massButton;
   QSignalMapper *mapper;
   QPushButton *infoButton[5];
   static const std::vector<QString> infoText;

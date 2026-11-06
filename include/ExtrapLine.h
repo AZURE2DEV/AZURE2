@@ -5,6 +5,7 @@
 #include <string>
 #include <sstream>
 #include <vector>
+#include "ComponentList.h"
 
 /// A class to read and store a line from the extrapolation input file.
 
@@ -28,7 +29,13 @@ class ExtrapLine {
     isAdvanced_ = 0;
     operationType_ = 0;
     componentsList_ = "";
+    parseError_ = "";
+    parseWarning_ = "";
     natural_ = "0";
+    total_ = 0;
+    transmission_ = 0.0;
+    yield_ = 0.0;
+    phaseS_ = -1.0;  // phase-shift channel spin: < 0 = not given ("spin <s>" keyword)
     // Initialize UPOS parameters to defaults
     isUPOS_ = 0;
     secondaryDecayL_ = 0;
@@ -49,45 +56,10 @@ class ExtrapLine {
       if (advancedStream >> tempIsAdvanced && tempIsAdvanced == 1) {
         isAdvanced_ = 1;
         if (advancedStream >> operationType_) {
-          int numComponents;
-          if (advancedStream >> numComponents) {
-            // Marker -1 selects the newer "with scaling" format (see SegLine.h)
-            bool hasScalingToken = false;
-            if (numComponents == -1) {
-              hasScalingToken = true;
-              if (!(advancedStream >> numComponents)) numComponents = 0;
-            }
-            std::vector<std::string> components;
-            for (int i = 0; i < numComponents; i++) {
-              int entrance, exit;
-              double angle;
-              if (advancedStream >> entrance >> exit >> angle) {
-                double scaling = 1.0;
-                if (hasScalingToken) {
-                  if (!(advancedStream >> scaling)) scaling = 1.0;
-                }
-                std::string componentStr = "Entrance: " + std::to_string(entrance) + ", Exit: " + std::to_string(exit);
-                if (angle > -900.0) {
-                  componentStr += ", Angle: " + std::to_string(angle);
-                }
-                if (hasScalingToken && scaling > -900.0) {
-                  componentStr += ", Scaling: " + std::to_string(scaling);
-                }
-                components.push_back(componentStr);
-              } else {
-                // Fallback to old format (entrance, exit only) for backward compatibility
-                advancedStream.clear();
-                if (advancedStream >> entrance >> exit) {
-                  components.push_back("Entrance: " + std::to_string(entrance) + ", Exit: " + std::to_string(exit));
-                }
-              }
-            }
-            if (!components.empty()) {
-              componentsList_ = components[0];
-              for (size_t i = 1; i < components.size(); i++) {
-                componentsList_ += ";" + components[i];
-              }
-            }
+          const std::string componentError = ReadComponentList(advancedStream, componentsList_, parseWarning_);
+          if (!componentError.empty()) {
+            parseError_ = componentError;
+            stream.setstate(std::ios::failbit);
           }
         }
       }
@@ -102,6 +74,49 @@ class ExtrapLine {
             natural_ = "0";
             break;
           }
+        } else if (keyword == "spin") {
+          if (!(advancedStream >> phaseS_) || phaseS_ < 0.0) {
+            stream.setstate(std::ios::failbit);
+            break;
+          }
+        } else if (keyword == "total") {
+          if (!(advancedStream >> total_) || (total_ != 0 && total_ != 1)) {
+            stream.setstate(std::ios::failbit);
+            break;
+          }
+        } else if (keyword == "transmission" || keyword == "yield") {
+          double &n = (keyword == "transmission") ? transmission_ : yield_;
+          if (!(advancedStream >> n) || !(n > 0.0)) {
+            stream.setstate(std::ios::failbit);
+            break;
+          }
+        } else if (keyword == "covariance") {
+          hasCovariance_ = true;  // a data-segment block only: EData::MakePoints refuses the line
+          break;
+        } else if (keyword == "sqrtshift") {
+          // data-segment blocks: a test segment has no shift, norm or shift function.  They used to stop the
+          // keyword loop here, losing a "sample" or "total" written after them (audit 2026-10-25, item 29);
+          // now they are skipped with their values and the loop goes on.
+          std::string a, b, c;
+          if (!(advancedStream >> a >> b >> c)) break;
+        } else if (keyword == "shiftgroup" || keyword == "shiftfngroup" || keyword == "normgroup" || keyword == "absolute") {
+          std::string a;
+          if (!(advancedStream >> a)) break;
+        } else if (keyword == "shiftfn") {
+          std::string expression;
+          int numParams = 0;
+          if (!(advancedStream >> expression)) break;
+          if (expression.size() > 1 && expression[0] == '"' && expression[expression.size() - 1] != '"') {
+            std::string rest;
+            if (std::getline(advancedStream, rest, '"')) expression += rest;
+          }
+          if (!(advancedStream >> numParams)) break;
+          bool okParams = true;
+          for (int j = 0; j < 3 * numParams && okParams; j++) {
+            std::string v;
+            if (!(advancedStream >> v)) okParams = false;
+          }
+          if (!okParams) break;
         } else {
           break;
         }
@@ -112,6 +127,10 @@ class ExtrapLine {
    * Returns non-zero if the line is to be included in the calculation.
    */
   int isActive() const { return isActive_; };
+  /*!
+   * Returns true if the line carries a "covariance" block, which only data segments take.
+   */
+  bool hasCovariance() const { return hasCovariance_; };
   /*!
    * Returns the particle pair key corresponding to the
    * entrance channel for the data segment.
@@ -162,6 +181,10 @@ class ExtrapLine {
    */
   int phaseL() const { return phaseL_; };
   /*!
+   * The channel spin of a phase-shift test segment ("spin <s>" keyword), or -1 when not given.
+   */
+  double phaseS() const { return phaseS_; };
+  /*!
    * Returns the maximum polynomial order if segment is
    * angular distribution.
    */
@@ -178,6 +201,11 @@ class ExtrapLine {
    * Returns the sample token ("sample <t>", alias "natural <t>"): "0" (none), "1" (the default sample) or a sample name.
    */
   const std::string &natural() const { return natural_; };
+  /// 1 for "total 1" (SegLine::total).
+  int total() const { return total_; };
+  /// "transmission <n>" / "yield <n>" (SegLine.h): 0 when absent.
+  double transmission() const { return transmission_; };
+  double yieldThickness() const { return yield_; };
   /*!
    * Returns the semicolon-separated list of components.
    */
@@ -199,7 +227,14 @@ class ExtrapLine {
    */
   double delta() const { return delta_; };
 
+  /// What could not be read when the line failed (empty when it did not, or for an older failure without a message).
+  std::string parseError() const { return parseError_; };
+  /// A note about the line that did not fail it (printed by EData with the segment number).
+  std::string parseWarning() const { return parseWarning_; };
+
  private:
+  std::string parseError_;
+  std::string parseWarning_;
   int isActive_;
   int entranceKey_;
   int exitKey_;
@@ -212,10 +247,15 @@ class ExtrapLine {
   int isDiff_;
   double phaseJ_;
   int phaseL_;
+  double phaseS_;
   int maxAngDistOrder_;
   int isAdvanced_;
   int operationType_;
   std::string natural_;
+  int total_;
+  double transmission_;
+  double yield_;
+  bool hasCovariance_ = false;
   std::string componentsList_;
   int isUPOS_;
   int secondaryDecayL_;

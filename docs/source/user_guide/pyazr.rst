@@ -129,6 +129,13 @@ name like ``width_1_2``:
    for w in azr.parameters.widths.free:
        print(w.name, w.jpi, "L =", w.L, "S =", w.S, "pair", w.pair)
 
+A pair prints as ``Pair(#7 key=8 ...)``: ``#7`` is the engine's internal pair
+number, which ``Parameter.pair`` carries, and ``key=8`` the pair key of the
+``.azr`` file, which the engine's messages and ``isospin.out`` use. The two
+differ whenever the file numbers its pairs in another order than the engine
+counts them, so match a parameter to a reaction through ``azr.pairs`` rather
+than by reading the key as the number.
+
 Filtered views (``.free``, ``.energies``, ``.widths``, ``.norms``,
 ``.shifts``, ``.sqrt_shifts``, ``.fn_shifts``, ``.abundances``, ``.cbkg``) and lookups (``.by_level(...)``,
 ``.by_name(...)``, ``.by_physical_level()``) are all available. A
@@ -148,7 +155,9 @@ code    ``kind``         parameters
                          (``segment_N_energy_shift_fnJ``)
 6       ``abundance``    isotopic abundances (``abundance_*``; after the
                          level block)
-7       ``cbkg``         THM coherent background (``cbkg_*``), last
+7       ``screening``    electron-screening potentials (``screening_<n>``)
+8       ``density``      fitted target densities (``density_<n>``)
+9       ``cbkg``         THM coherent background (``cbkg_*``), last
 ======  ===============  ===================================================
 
 A THM segment's free norm is profiled, not a parameter, and has no entry. A ``LevelKey`` prints as
@@ -164,14 +173,27 @@ Chi-squared and derivatives
    val, g = azr.chi2_and_grad(x)          # analytic gradient
    r, J   = azr.residual_jacobian(x)      # sum(r**2) == chi2
 
+Segments with a data covariance (``covariance <file>``, :doc:`chi_squared`)
+return whitened residuals :math:`w = W r` and their Jacobian, so
+``sum(r**2) == chi2`` still holds and Gauss-Newton fits need no change; the
+whitened rows mix the points of the covariance group. With ``relvector``
+terms the model in them is frozen at the first evaluation;
+``azr.refreeze_covariance()`` makes the next evaluation freeze it again at its
+parameters (fit, refreeze, evaluate at the fit, fit again).
+
 ``residual_jacobian`` computes the level-energy, reduced-width and
 normalization columns for roughly the cost of two forward evaluations, which
 makes Gauss-Newton and Levenberg-Marquardt fits cheap. It also yields the
 per-segment χ² the API does not expose directly, by slicing the residuals by
 segment length.
 
-Energy-shift columns are finite-differenced instead, at two extra residual
-evaluations each. A shift translates the energy axis of a whole segment, so
+Energy-shift columns are finite-differenced instead, from two forward residual
+evaluations each (no adjoint). A shift whose segments are self-contained (no
+components, not a total-capture sum, no point mapping onto other segments) is
+differenced on those segments' points alone; any other shift, and a fitted
+target density, re-evaluates every point, in one parallel pass per side. (Until
+30 October 2026 each side re-solved the whole Jacobian, adjoints included, and
+re-evaluated every point whatever the shift.) A shift translates the energy axis of a whole segment, so
 what is wanted is :math:`\partial\,\mathrm{model}/\partial E`, and AZURE2
 applies a shift by rebuilding every energy-dependent quantity of the affected
 points --- level matrix, penetrabilities, Coulomb and hard-sphere phases,
@@ -180,6 +202,25 @@ with many free shifts is dominated by their columns. This covers the
 :math:`\sqrt{E}` coefficients and the shift-function parameters
 (``kind == "shift_fn"``, :attr:`Parameter.fn_term` = j) as well;
 ``penalties()`` and ``objective()`` include their penalties.
+
+A fit that varies only some of the free parameters can say which of these
+columns it does not need: ``residual_jacobian(x, skip=[...])`` (free-column
+indices) leaves their finite differences out and returns those columns as zero;
+every other column is unchanged. rmfit's ``polish`` passes the columns its
+bounds hold (since 30 October 2026, before which a held shift cost its two
+evaluations on every Jacobian all the same).
+
+A fitted target density (``densityfit`` / ``densitygroup`` on a ``<targetInt>``
+line, :doc:`experimental_effects`) is a parameter of kind ``"density"``
+(``ParameterSet.densities``; :attr:`Parameter.effect` is the line holding it,
+``prior_nominal`` / ``prior_sigma`` its prior and ``density_max`` the largest
+density its grids span). Its column is finite-differenced the same way, and
+``penalties()["density"]`` is its prior, which ``objective()`` adds.
+``AzrModel.target_densities`` reads the blocks of a file and
+``AzrModel.set_target_density(effect, density=, vary=, sigma=, max=, group=)``
+writes them (``sigma`` in atoms/cm² or a string such as ``"2.3%"``). Like a
+normalization, the fitted density travels in the ``.sav``; ``save_fit`` leaves
+the line's value, the prior's centre, as it is.
 
 .. warning::
 
@@ -213,7 +254,7 @@ channel set**. Adding a level to an existing J\ :sup:`π` clones that group's
 channel structure; only a brand-new J\ :sup:`π` lets your channel list define
 the group.
 
-Also available: ``set_channel_radius``, ``set_segment_norm``,
+Also available: ``set_channel_radius``, ``mass_check``, ``fill_masses``, ``set_segment_norm``,
 ``set_segment_active``, ``set_segment_datafile``, ``add_data_segment``,
 ``remove_data_segments``, ``clear_data_segments``, ``set_extrapolations``,
 ``apply_fit``; for a project with several compound nuclei (next section)
@@ -294,7 +335,9 @@ positive from the physical transform until 2026-10-12.)  A fitted isotopic
 abundance is written back into the ``<abundances>`` block. A coherent THM background is written back into
 its ``cbackground=`` key.  A prior whose field now
 holds the fitted value keeps its centre as an explicit ``prior_centre`` row
-of ``<parameterSettings>`` (the centre the fit used), so a fit started from
+of ``<parameterSettings>`` (the centre the fit used; for an energy shift only
+an explicit centre other than 0 is written, since the shift prior is centred
+on 0 by default), so a fit started from
 the snapshot is pulled to the same centres, not to the fitted values;
 ``save_fit(path, x, norms="nominal")`` keeps the loaded file's values in the
 fields and the fitted ones in the ``.sav`` only (run with it as the parameter
@@ -342,8 +385,39 @@ to ``cwd``, as the engine resolves it (not necessarily ``output/``).
 
 ``pyazr.bands`` (``sensitivities``, ``uncertainty_bands``,
 ``extrapolation_bands``) spans the columns the CLI's ``covariance.dat`` spans:
-level energies, reduced widths and THM ``cbkg`` values (kinds 0, 1 and 7);
+level energies, reduced widths and THM ``cbkg`` values (kinds 0, 1 and 9);
 norms and shifts only rescale or move the data and carry no band.
+
+Masses and separation energies
+------------------------------
+
+``pyazr.masses`` reads the AME2020 atomic mass table that ships with pyazr
+(``pyazr/data/mass_1.mas20``, the same file the GUI embeds). Particles are
+named by isotope (``"12C"``, ``"C12"``, ``"c-12"``) or shorthand (``"p"``,
+``"n"``, ``"d"``, ``"t"``, ``"a"``, ``"helion"``):
+
+.. code-block:: python
+
+   from pyazr import masses, AzrModel
+
+   masses.atomic_mass("p")               # 1.007825031898 u, atomic
+   masses.separation_energy("p", "12C")  # 1.943490064 MeV, from the mass excesses
+   masses.pair_masses("a", "12C")        # Z1, M1, Z2, M2, S and the compound (8, 16)
+
+   mdl = AzrModel.from_file("13N.azr")
+   for row in mdl.mass_check():          # every pair against the table
+       print(row.describe())
+   mdl.fill_masses()                     # masses and S of every pair from the table
+   mdl.fill_masses(pairs=[2], separation=False)   # masses of pair 2 only
+   mdl.write("13N_ame.azr")
+
+``fill_masses`` identifies each particle by its charge and its mass rounded
+to a mass number, so mass numbers and a bare-proton mass are recognised. It
+rewrites only the mass and separation-energy columns of the chosen pairs (and
+the entrance-S copy on the lines whose entrance pair changed), and returns the
+list of changes. A gamma pair gets the compound nucleus's mass and keeps its
+S of 0. A beta pair gets its parent's mass. Moving S moves the pair's
+threshold, so compare the fit before and after.
 
 Several compound nuclei (natural targets)
 -----------------------------------------
@@ -453,6 +527,10 @@ holds the measured reaction data; LiveChart/ENSDF the evaluated level schemes.
                     observable="total-capture")       # lab E, barns
    AzrModel.from_file("13N.azr").add_data_segment(**kw).write("13N_new.azr")
 
+   # without the network, or when the IAEA answers with a challenge page:
+   # the same dataset from a local copy of the EXFOR master files
+   data = nds.fetch_exfor("O2599004", source="local")
+
    # level scheme of the compound nucleus, from ENSDF (IAEA LiveChart, or the
    # NNDC ENSDF API when LiveChart cannot be reached; source="nndc" forces it)
    for lv in nds.fetch_levels("14n"):
@@ -475,6 +553,16 @@ analyzing power looks like — and ``x4get`` drops the quantity suffix that
 distinguishes them, so only the *search* result knows. ``to_azr`` warns and
 passes such values through; give it ``rutherford=True`` to multiply by the
 Coulomb cross section, or ``rutherford=False`` once you have checked.
+The cross section written is in the frame of the angle column: a lab ``ANG``
+column is taken to the c.m. frame with the elastic kinematics of the entrance
+masses (``elastic_lab_to_cm``) and the c.m. Rutherford value is divided by
+the lab-to-c.m. Jacobian, so AZURE2 recovers ratio × σ\ :sub:`R,cm`\ (θ\
+:sub:`cm`) from the file; pass ``target_mass`` / ``projectile_mass`` for an
+exact round trip (the default masses are mass numbers). Before October 2026
+the c.m. Rutherford value at the *lab* angle was written (1.13× off for
+p + :sup:`16`\ O, 1.8–2.2× for α + :sup:`12`\ C), and every angle column was
+labelled ``differential-cm`` by the observable guess; a lab column is
+``differential`` now.
 
 The module needs nothing beyond NumPy and the standard library, and doubles as
 a command-line tool::
@@ -482,6 +570,19 @@ a command-line tool::
    python -m pyazr.nds search --target C-13 --reaction p,g --quantity SIG
    python -m pyazr.nds download O2599004 -o data/skowronski.dat
    python -m pyazr.nds reference O2599004
+
+The IAEA services are sometimes unreachable, or answer every request with a
+Cloudflare challenge page. ``fetch_exfor`` and ``reference`` then read the
+entry from a local copy of the EXFOR library, with a warning. The copy is a
+clone of `IAEA-NDS/exfor_master <https://github.com/IAEA-NDS/exfor_master>`_
+(about 1.5 GB; ``git clone --depth 1``, refreshed with ``git pull``) at
+``$AZURE2_EXFOR_MASTER`` or ``~/.azure2/exfor_master``.
+``nds.exfor_master_path()`` says which copy is used. ``source="web"`` or
+``source="local"`` uses only one of the two, and ``python -m pyazr.nds
+download <ID> --source local`` does the same from the command line. The local
+copy gives the original units only (``plus=0``). A subentry holding several
+datasets needs the pointer, as in ``"C1010003.2"``. ``search_exfor`` needs the
+Web-API.
 
 The Qt setup utility has its own EXFOR dialog, backed by
 ``gui/src/ExforData.cpp``. The two are independent implementations of the same
@@ -546,6 +647,27 @@ Data files carry ``E_lab  theta_cm  A_y  dA_y`` -- angles are centre-of-mass,
 unlike an ordinary differential segment. Leave ``vary_norm`` off: a
 normalization factor is meaningless for a ratio.
 
+Angular-distribution coefficients
+---------------------------------
+
+Legendre coefficients of a reaction's c.m. angular distribution are observable
+code 9, ``observable="angular-coefficients"``: data rows ``E_lab  k  a_k  da_k``
+with the order :math:`k` in the angle column, :math:`a_k = A_k/A_0` of
+:math:`d\sigma/d\Omega_\text{cm} = A_0[1 + \sum_k a_k P_k]` (the coefficients an
+``angular-distribution`` test segment computes). ``absolute=True`` writes
+``absolute 1``: the rows are the absolute :math:`A_k` in b/sr. The model's
+coefficient of each row's order comes back from :meth:`~pyazr.azure2.calculate_rwa`
+in the data slot, so :math:`\chi^2`, fitting and the analytic gradient need no
+special handling; target integration folds the absolute :math:`A_k` before the
+ratio. Normalised coefficients cannot carry a free norm (``add_data_segment``
+with ``vary_norm=True`` is refused by the engine); an elastic pair, total
+capture, composites and UPOS segments are refused.
+
+.. code-block:: python
+
+   model.add_data_segment("data/wang_ak.dat", 2, 1, observable="angular-coefficients",
+                          energy_min=0.8, energy_max=1.9)
+
 One trap is worth knowing about: comparing against thin-target data requires
 segments with **no target integration**, because :math:`A_y` averaged over a
 thick target is weighted by the cross section and Rutherford scattering drives
@@ -584,7 +706,10 @@ Dimensionless widths
    [c for c in t.particles if c.theta2 and c.theta2 > 1]   # unphysical
 
 θ² > 1 exceeds the Wigner limit and is unphysical; γ-ray strengths in Weisskopf
-units are the corresponding sanity check for capture.
+units are the corresponding sanity check for capture. AZURE2's Wigner limit
+(``Parameter.wigner_limit``, ``ChannelWidth.wigner_gamma2``) is the
+Teichmann-Wigner sum-rule unit 3ħ²/(2μa²); a θ² quoted against the other
+common unit, ħ²/(μa²) (``lane_thomas_wigner()``), is 1.5 times larger.
 
 The external region, and the caches
 -----------------------------------
@@ -602,13 +727,47 @@ integrate.
    paths = azr.ec_integrals(pair=1, energies=E)         # one entry per EC pathway
    paths[0]["li"], paths[0]["lf"], paths[0]["radiation"], paths[0]["value"]
 
-   azr.cache_stats()   # queries, hits, hit_rate, entries, keys, disabled_keys
+   azr.cache_stats()   # queries, hits, hit_rate, entries, keys, disabled_keys,
+                       # input_files_read, input_files_served, input_files_held
+
+A rebuild of the model (``set_channel_radius``, a nuclear-potential change, a mode switch) clears the
+Coulomb memo, reads no input file that has not changed on disk (the ``input_files_*`` counters, for the
+whole process) and does not print the setup ``Note:`` lines again: a session prints each once. Before
+AZURE2 dev 2026-11-04 a likelihood that sampled a channel radius grew the memo by about 100 kB per new
+radius without bound, re-read the ``.azr`` and every data file at each call, and printed every Note at
+each call.
 
 The Coulomb functions follow the run's own configuration, so the same call
 returns the accurate routine's values, GSL's (``--gsl-coul``), or the Numerov
 solution through a nuclear potential (the hybrid model of the
 ``<potential>`` block). Comparing them is how one sees what those options do to
 the external region.
+
+The hybrid values come from a Numerov integration of H⁺ = G + iF inward from
+the 15 fm matching radius on a grid of about 0.0275 fm, laid so that the
+requested radius is a grid node; the functions and their derivatives are good
+to about 10\ :sup:`−5` there, which is the accuracy of the integration itself.
+Before October 2026 the values were interpolated linearly between nodes and the
+derivatives were the slope of the bracketing cell, a first-order quantity: the
+shift function of a hybrid pair was off by 4·10\ :sup:`−3` (l = 0) to
+4·10\ :sup:`−2` (l = 3) for p + :sup:`12`\ C at 5.4 fm, depending on where the
+radius fell between nodes. A potential of vanishing depth now reproduces the
+plain Coulomb functions (``tests/pyazr/hybrid_derivative_test.py``).
+
+What the potential does not touch (a design limit, audit 2026-10-25 item 27):
+it bends the **scattering** functions F and G of the pair inside the 15 fm
+matching radius, and with them the penetrabilities, shift functions and the
+entrance-channel wave of the external-capture integrand. The **bound-state**
+side of external capture stays pure Coulomb: the final-state tail is the
+Whittaker function :math:`C\,W_{-\eta,l+1/2}(2\kappa r)` normalized by its
+ANC, the ANC-to-reduced-width conversion evaluates that Whittaker function at
+the channel radius, and the NF integral of the Brune normalization integrates
+it. With a potential still of a few MeV at the channel radius (the default
+Woods-Saxon R = 3.6 fm, a = 0.6 fm is 9 % of V₀ at 5 fm) the initial and
+final states of an external-capture integral therefore come from different
+Hamiltonians between the channel radius and the range of the potential. Use
+a channel radius beyond that range, or accept the inconsistency; the
+mismatch is below 10\ :sup:`−3` of the potential's depth beyond R + 5a.
 
 The hybrid nuclear potential, per particle pair
 -----------------------------------------------
@@ -668,6 +827,14 @@ global. The GUI's Nuclear Potential tab edits one pair at a time and writes
 the same block, and ``--no-gui`` reads it through the same parser, so the three
 cannot drift. Worked example: ``pyazr/examples/nuclear_potential.py``;
 ``tests/hybrid_potential`` pins the behaviour.
+
+The potential belongs to the session. Several sessions in one process keep
+their own default and per-pair settings: a second session's ``<potential>``
+block, or ``set_nuclear_potential`` on it, leaves the first session computing
+with the settings it was opened with. (Before October 2026 the manager behind
+the settings was one process-wide object, so the last session to read a
+``<potential>`` block silently reconfigured every other live session;
+``tests/pyazr/potential_sessions_test.py`` pins the isolation.)
 
 External-capture integrals are the most expensive part of a capture
 calculation, which is why the Coulomb functions they need are memoized.
@@ -748,6 +915,15 @@ with ``save_fit(..., close_session=True)``, so one engine is in memory at a
 time; refused variants are skipped with the reason, and ``--dry-run`` lists
 the grid without numpy or the engine. The theory, every option and the
 caveats are in :doc:`../theory/thm_implementation`, "Model averaging".
+
+The transform to physical parameters (``transform_rwa``, ``transform_physical``)
+works at the level energies, which a fit or a sampler moves at every call, and
+evaluates the external part of each radiative width there. It shares Coulomb
+functions within the call but leaves none in the memo afterwards, so a sampler
+that transforms at every step (physical priors, a fixed total gamma width) keeps
+a constant footprint. Before October 2026 every such call added a few thousand
+entries for good: about 4 GB per worker after 17,000 evaluations of a
+12C(α,γ) chain.
 
 Examples
 --------
@@ -830,6 +1006,14 @@ evaluates one χ² per walker:
        return -0.5 * np.sum(azr.calculate_chi2_rwa(theta)) + prior(theta)
 
 See ``pyazr/examples/fit_emcee.py`` and ``fit_zeus.py`` for the full recipe.
+
+Inside one session the engine uses threads: every evaluation (``calculate_chi2_rwa``,
+``calculate_chi2``, ``calculate_rwa``, ``calculate``, ``calculate_all_rwa``) spreads
+its data points over ``OMP_NUM_THREADS`` threads, as the command-line χ² does, and so
+does ``residual_jacobian``. (Before 2026-10-30 the evaluations ran their points one at a
+time on one thread.) With several worker processes, keep workers × ``OMP_NUM_THREADS``
+at or below the cores you have; ``AZURE_SERIAL_CHI2=1`` restores the one-at-a-time
+evaluation. The results agree with it to rounding (a few units in the last place).
 
 The same applies inside ``pyazr`` itself: ``sensitivities``,
 ``uncertainty_bands`` and ``extrapolation_bands`` take ``nprocs=N``, which

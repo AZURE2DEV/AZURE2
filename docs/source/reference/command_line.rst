@@ -32,22 +32,45 @@ available in the GUI are accessible from the command line.
    project file are **not** applied automatically. They must be specified as
    command-line flags each time.
 
-The answers to the prompts can be piped in, one per line, e.g.
-``printf '1\n\n\n7\n' | AZURE2 --no-gui --no-readline project.azr`` (calculate
-with data, parameters and external-capture integrals from the project).  If
-the input ends at a prompt that needs an answer (the menu, the MINOS variance,
-the reaction-rate and MCMC questions without a default), AZURE2 stops with
-``ERROR: the input ended (end of file) at the prompt ...`` and exit status 1.
-A prompt whose blank answer is its default (the parameter and integral file
-names, the uncertainty-band questions, the MCMC spreads, overwriting
-``samples.mcmc``) takes that default at end of input.
+Scripted input
+^^^^^^^^^^^^^^
 
-Exit status: 0 for a run that completed; 1 when the input ended at a prompt
-that needs an answer; non-zero (-1, i.e. 255 on POSIX systems) when a run
-fails -- a project AZURE2 refuses (``ERROR: ...``, e.g. a malformed ``<thm>``
-block), a failed fill, initialization or parameter transformation, and an
-MCMC run that is refused or fails. Scripts can therefore test the status
-instead of parsing the log.
+A run can be scripted by piping the answers to the menu (pass ``--no-readline``).
+The prompts come in this order:
+
+1. the menu choice (1 to 7);
+2. modes 2, 3 and 4 only: "Calculate cross-section uncertainty band? (y/n)";
+   after a yes, the fit modes also ask "Scale covariance to reduced
+   chi-squared = 1? (y/n)" (mode 4 asks for the allowed chi-squared variance
+   before both);
+3. the external parameter file (blank: start from the ``<levels>`` of the
+   project);
+4. the external capture amplitude file (blank: compute them);
+5. the menu again (``7`` exits).
+
+.. code-block:: bash
+
+   printf '1\nfit.sav\n\n7\n'   | AZURE2 --no-gui --no-readline project.azr   # calculate
+   printf '2\nn\nfit.sav\n\n7\n' | AZURE2 --no-gui --no-readline project.azr   # fit from fit.sav
+   printf '3\nn\nfit.sav\n\n7\n' | AZURE2 --no-gui --no-readline project.azr   # calculate without data
+
+A y/n question takes y, yes, 1, t, true or n, no, 0, f, false (any case); a
+blank line is "no".  Any other answer stops a piped run with an error and exit
+status 1 before anything is calculated (at a terminal the question is asked
+again).  Before November 2026 any other answer counted as "no", so a script
+that left out the band line gave the parameter-file name to the y/n question
+and the next line to the parameter-file prompt, and the run used the
+``<levels>`` of the project without an error.  Check the log of an older run:
+one that read the file prints ``Reading User Parameter File...``, one that did
+not prints ``Creating New param.par File...``.  ``--covariance-band`` answers
+the band question yes without a prompt.
+
+If the input ends at a prompt that needs an answer (the menu, the MINOS
+variance, the reaction-rate and MCMC questions without a default), AZURE2
+stops with ``ERROR: the input ended (end of file) at the prompt ...`` and exit
+status 1. A prompt whose blank answer is its default (the parameter and
+integral file names, the uncertainty-band questions, the MCMC spreads,
+overwriting ``samples.mcmc``) takes that default at end of input.
 
 Available Options
 -----------------
@@ -70,7 +93,10 @@ Available Options
        "Use Brune formalism" option).  This is the default.
    * - ``--no-brune``
      - Use the standard Lane-Thomas parameterization (constant boundary
-       conditions) instead of Brune's or Park's.
+       conditions) instead of Brune's or Park's.  The input parameters are
+       transformed to formal ones; a project whose observed widths have no
+       standard equivalent is refused with the J^pi groups concerned (see
+       :doc:`troubleshooting`).
    * - ``--use-park``
      - Use Park's level-dependent boundary conditions (Phys. Rev. C 104,
        064612) in place of Brune's alternative level matrix.  The fit
@@ -79,7 +105,12 @@ Available Options
        default; see the note below.
    * - ``--ignore-externals``
      - Ignore external width if internal width is zeroed (equivalent to the
-       GUI option).
+       GUI option).  This is the default.
+   * - ``--no-ignore-externals``
+     - Keep the external width of a level whose internal width is zero (the
+       GUI option unticked; pyazr ``ignore_externals=False``).  Needed for the
+       R-matrix route, see below.  Before November 2026 the CLI had no way to
+       turn the option off.
    * - ``--use-rmc``
      - Use the RMC capture formalism for neutron capture (equivalent to the
        GUI option).
@@ -105,12 +136,28 @@ Available Options
        threads, write it to ``FILE`` (default as for ``--coulomb-table``),
        report progress in steps of 10 % and exit; no project file is needed.
        The same build as **Configure → Build Coulomb Table...** in the GUI.
-   * - ``--grid-replacement``
-     - Re-place the adaptive sub-point grids on every evaluation (the
-       default; undoes an earlier ``--no-grid-replacement``).
-   * - ``--ec-table``
-     - External-capture amplitudes from the energy tables (the default;
-       undoes an earlier ``--no-ec-table``).
+   * - ``--no-long-wavelength``
+     - Electric external capture without the long-wavelength approximation:
+       the radial operator :math:`\bar e_L r^L` becomes the charge term of the
+       extended Siegert theorem (Friar and Fallieros, Phys. Rev. C 29, 1645
+       (1984)),
+       :math:`L(2L+1)!!\,k_\gamma^{-L}\,[Z_1 g_L(k_\gamma r\,m_2/M) +
+       (-1)^L Z_2 g_L(k_\gamma r\,m_1/M)]`,
+       :math:`g_L(y) = \int_0^y j_L(t)/t\,dt`, which reduces to
+       :math:`\bar e_L r^L` term by term as :math:`k_\gamma \to 0`, plus the
+       convection-current term of the relative motion (the tangential part of
+       the transverse field; see :doc:`../theory/external_capture_operator`).
+       Small for ordinary E1 and E2 (0.1--0.3 % for p + :sup:`16`\ O and
+       :math:`\alpha` + :sup:`12`\ C E2), large where the long-wavelength E1
+       charge nearly vanishes (:math:`\alpha` + :sup:`12`\ C E1: 3.5--4.7 times
+       the amplitude, and +10 % from the convection current).  M1 terms are
+       the same in both modes.  Internal (resonant) photon channels are not
+       affected.  pyazr: ``use_long_wavelength=False``.  Checked against an
+       independent calculation in ``tests/ec_m1_exact``.
+   * - ``--no-ec-convection-current``
+     - With ``--no-long-wavelength``: the charge term alone, without the
+       convection-current term (the exact form before 2026-10-23).  pyazr:
+       ``ec_convection_current=False``.
    * - ``--no-ec-table``
      - Compute every external-capture integral directly, at every data point
        and sub-point, and interpolate the amplitudes of shifted points
@@ -133,42 +180,100 @@ Available Options
    * - ``--no-transform``
      - Do not perform parameter transformations; input formal R-matrix
        parameters directly (equivalent to the GUI option).
-   * - ``--no-long-wavelength``
-     - Do not use the long-wavelength approximation for electric capture.
+   * - ``--ec-table``
+     - The default, stated explicitly: undoes an earlier ``--no-ec-table``
+       (options are applied in order).
+   * - ``--ec-convection-current``
+     - The default, stated explicitly: undoes an earlier
+       ``--no-ec-convection-current``.
+   * - ``--grid-replacement``
+     - The default, stated explicitly: undoes an earlier
+       ``--no-grid-replacement``.
    * - ``--use-gradient``
-     - Fit with MIGRAD and the analytic gradient (default: MIGRAD with
-       numerical derivatives).
+     - Fit with MIGRAD using the analytic gradient instead of numerical
+       derivatives.
+   * - ``--max-calls=N``
+     - Stop a MIGRAD or NLopt fit after about N function calls (MIGRAD checks
+       the limit between its steps, so it overshoots a little).  Default: no
+       limit, MIGRAD's EDM criterion ends the fit.  ``0`` also means no limit.
+       How the fit ended is printed and written to ``fitStatus.out``.  Before
+       2026-10-31 the limit was a fixed 50,000 and reaching it was silent.
+   * - ``--refreeze-covariance[=N]``
+     - For data covariances with ``relvector`` terms, whose model is frozen at
+       the first evaluation of a run (the fit's starting point): rerun MIGRAD
+       up to N times (default 5) with the model re-frozen at the fitted
+       parameters, until the objective stops changing.  Without the option the
+       model is still re-frozen once after the fit, so the outputs match a
+       calculation from ``param.sav``, and a warning is printed when the fit
+       and the re-frozen objective differ.
    * - ``--use-lm``
-     - Fit with the Levenberg-Marquardt minimizer on the analytic Jacobian
-       (falls back to MIGRAD).
+     - Fit with the Levenberg-Marquardt minimizer on the analytic Jacobian;
+       falls back to MIGRAD.
    * - ``--use-gsl-lm``
-     - Fit with GSL's trust-region least squares with geodesic acceleration
-       (analytic Jacobian; falls back to MIGRAD).
-   * - ``--covariance-band``
-     - Compute the cross-section uncertainty band without asking (a fit saves
-       its covariance to ``covariance.dat``; a calculation without data
-       reuses it).
-   * - ``--scale-covariance``
-     - Scale the band's covariance to a reduced chi-squared of 1.
+     - Fit with the GSL trust-region least-squares minimizer with geodesic
+       acceleration (analytic Jacobian); falls back to MIGRAD.
    * - ``--use-nlopt``
-     - Fit with NLopt (BOBYQA) instead of Minuit2. Only in a build configured
-       with ``-DUSE_NLOPT=ON``; elsewhere it is an unknown flag.
+     - Fit with NLopt's BOBYQA instead of Minuit2.  Only in builds configured
+       with ``-DUSE_NLOPT=ON``.
+   * - ``--covariance-band``
+     - Write the cross-section uncertainty band from the parameter covariance.
+       Without the flag, calculate and fit runs ask for it interactively; with
+       it they do not, so scripted runs are deterministic.
+   * - ``--scale-covariance``
+     - With ``--covariance-band`` after a fit: inflate the covariance by the
+       reduced :math:`\chi^2` when it exceeds 1 (Birge ratio).  Never deflates.
    * - ``--use-api``
-     - Removed: AZURE2 no longer serves a socket API. The flag stops the run
-       with an error pointing to ``pyazr`` (:doc:`../user_guide/pyazr`).
+     - Removed.  AZURE2 no longer serves a socket API and stops with an error;
+       drive it from Python with ``from pyazr import azure2``.
 
 ``AZURE2 --help`` prints this list as the binary was built
 (``tests/cli_help/check.sh`` keeps the two, and this table, in step).
 
-Flags can also be put in a file, one per line, named by the environment
-variable ``AZURE_OPTIONS_FILE``; they are applied after those of the command
-line. An unknown flag draws a ``WARNING`` and is ignored.
+Options can also be read from a file, one per line, named by the environment
+variable ``AZURE_OPTIONS_FILE``; they are applied after those on the command
+line.  An unknown option prints a warning and is otherwise ignored.
 
 Multiple options can be combined:
 
 .. code-block:: bash
 
    AZURE2 --no-gui --use-brune --ignore-externals input_file.azr
+
+A-matrix or R-matrix route
+--------------------------
+
+The first line of the ``<config>`` block chooses how the cross sections are
+computed: ``true`` the A-matrix (level matrix), ``false`` the R-matrix (channel
+matrix :math:`[1-RL]^{-1}R`).  The two agree to about :math:`10^{-13}`, with
+Brune's parametrization or without.  The R-matrix route implements neither
+``--ignore-externals``, which is on by default, nor ``--use-park``, so with
+either on an R-matrix request runs the A-matrix and says so::
+
+   WARNING: the R-matrix route (<config> first line false) does not implement
+   ignore-externals, which is on (...).  The A-matrix route will be used.
+
+Add ``--no-ignore-externals`` (and leave out ``--use-park``) to run the
+R-matrix route; the run log then reads "Performing R-Matrix Calculation...".
+pyazr and the GUI's calculations follow the same rule (pyazr's
+``ignore_externals`` is ``True`` by default).  Before November 2026 the CLI
+forced the A-matrix whenever Brune or ignore-externals was on
+("--ignore-externals and --use-brune options require A-Matrix") and so never
+ran the R-matrix route, while pyazr and the GUI ran it with Park's
+parametrization (reading the Park amplitudes as Brune's: ``tests/13N`` up to a
+factor 9 off) and pyazr also with ``ignore_externals=True`` (keeping the terms
+that option drops: up to 4.5 % off).
+
+Exit status
+-----------
+
+AZURE2 exits with 0 when the run completed and 1 when it was aborted or
+refused ("Calculation was aborted.", a project that cannot be read or that
+AZURE2 refuses with ``ERROR: ...`` -- e.g. a malformed ``<thm>`` block or a
+``<thm>`` weight that does not fit the data --, a failed fill, initialization
+or parameter transformation, a failed MCMC run), so that a script or a job
+chain can tell.  Before November 2026 it exited with 0 in every case on
+``dev``, and with -1 (255 on POSIX systems) after a failed run on the ``thm``
+branch.
 
 Brune and Park parametrizations
 -------------------------------
@@ -216,11 +321,16 @@ parameter space the minimizer works in:
 
 Input and output files are the same in both modes: energies, partial widths and
 ANCs in ``<levels>`` and ``parameters.out``.  ``param.par`` / ``param.sav`` /
-``param.fit`` hold the mode's own amplitudes; their first line, ``#parametrization`` (0 standard,
+``param.fit`` / ``param.mcmc`` hold the mode's own amplitudes; their first line, ``#parametrization`` (0 standard,
 1 Brune, 2 Park), says which (a comment line, so ``numpy.loadtxt`` and other
 positional readers are unaffected), and a file written in the other alternative mode
 is converted on read (``gamma_Park = gamma_Brune sqrt(J)``), with a message.  A
-file without the tag (written before it existed) is taken as Brune's.  The GUI
+file without the tag (written before it existed) is taken as Brune's.  Before
+2026-11-04 ``param.fit`` (the snapshot a fit writes every 100 calls, which an
+interrupted job restarts from) and ``param.mcmc`` were written without the tag,
+so a ``--use-park`` fit resumed from its own ``param.fit`` had every amplitude
+converted a second time; give such a file the first line
+``#parametrization 2 0`` before reading it in Park mode.  The GUI
 offers the mode as "Use Park parametrization" under Runtime Options.
 
 Level-matrix solver and profiling

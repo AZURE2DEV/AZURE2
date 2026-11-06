@@ -97,11 +97,12 @@ void AZUREMCMCWorker::run() {
         }
       }
     } else {
-      if (!compound->IsPairKey(config_.rateParams.entrancePair) ||
-          !compound->IsPairKey(config_.rateParams.exitPair)) {
+      const std::string rateProblem =
+          compound->RatePairsProblem(config_.rateParams.entrancePair, config_.rateParams.exitPair);
+      if (!rateProblem.empty()) {
         delete compound;
         delete data;
-        emit samplingError("Reaction rate pairs do not exist in compound nucleus.");
+        emit samplingError(QString::fromStdString(rateProblem));
         return;
       } else {
         compound->GetPair(compound->GetPairNumFromKey(config_.rateParams.entrancePair))->SetEntrance();

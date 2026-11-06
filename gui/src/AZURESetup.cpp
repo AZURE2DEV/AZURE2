@@ -362,6 +362,8 @@ bool AZURESetup::readFile(QString filename) {
   GetConfig().hardSphereMaxL = levelsTab->maxL();
   pairsTab->setAbundanceSumSigma(fileAbundanceSumSigma);
   GetConfig().abundanceSumSigma = fileAbundanceSumSigma;
+  GetConfig().relativistic = fileRelativistic;
+  GetConfig().relativisticReferencePair = fileRelativisticReferencePair;
 
   // The optional <abundances> block sits between </levels> and <segmentsData>.
   line = QString("");
@@ -513,8 +515,9 @@ void AZURESetup::followDataSegments(const QVector<int> &newNumber) {
 bool AZURESetup::readLastRun(QTextStream &inStream) {
   unsigned int paramMask;
   unsigned int useTempFile;
-  unsigned int rateEntrancePair;
-  unsigned int rateExitPair;
+  // Signed: the exit key -1 is the total radiative capture rate.
+  int rateEntrancePair = 0;
+  int rateExitPair = 0;
   QString paramFile;
   QString integralsFile;
   QString temperatureFile;
@@ -706,6 +709,8 @@ bool AZURESetup::readConfig(QTextStream &inStream) {
   fileIncludeAllJPi = false;
   fileMaxL = -1;
   fileAbundanceSumSigma = 0.0;
+  fileRelativistic = false;
+  fileRelativisticReferencePair = 0;
   QString line("");
   while (line.trimmed() != QString("</config>") && !inStream.atEnd()) {
     line = inStream.readLine();
@@ -719,6 +724,10 @@ bool AZURESetup::readConfig(QTextStream &inStream) {
       fileMaxL = value.toInt();
     else if (key == "abundanceSumSigma")
       fileAbundanceSumSigma = value.toDouble();
+    else if (key == "relativistic")
+      fileRelativistic = (value == "1" || value == "true");
+    else if (key == "relativisticReferencePair")
+      fileRelativisticReferencePair = value.toInt();
   }
   if (line.trimmed() != QString("</config>")) return false;
 
@@ -826,6 +835,13 @@ bool AZURESetup::writeProject(QTextStream &out, const QString &directory) {
   GetConfig().abundanceSumSigma = pairsTab->abundanceSumSigma();
   if (pairsTab->abundanceSumSigma() > 0.0)
     out << "abundanceSumSigma=" << pairsTab->abundanceSumSigma() << " #Sum-to-one prior on the isotopic abundances" << Qt::endl;
+  // Relativistic kinematics (Configure > Runtime Options): written only when on, so non-relativistic projects are
+  // unchanged.  Unlike the other runtime options it is read from the file by the command line and pyazr as well.
+  if (GetConfig().relativistic) {
+    out << "relativistic=1 #Relativistic two-body kinematics (k, eta, lab <-> c.m. from the invariant mass)" << Qt::endl;
+    if (GetConfig().relativisticReferencePair > 0)
+      out << "relativisticReferencePair=" << GetConfig().relativisticReferencePair << " #Reference pair of relativistic.out" << Qt::endl;
+  }
   out << "</config>" << Qt::endl;
 
   // Write potential section after config.  A pair may be switched on while the
@@ -1303,6 +1319,7 @@ void AZURESetup::editOptions() {
 
   aDialog.useAdaptiveGridCheck->setChecked(GetConfig().useAdaptiveGrid);
   aDialog.useThmCheck->setChecked(thmEnabled());
+  aDialog.relativisticCheck->setChecked(GetConfig().relativistic);
 
   // if(!(GetConfig().paramMask & Config::USE_LONGWAVELENGTH_APPROX)) aDialog.noLongWavelengthCheck->setChecked(true);
   // else aDialog.noLongWavelengthCheck->setChecked(false);
@@ -1350,6 +1367,7 @@ void AZURESetup::editOptions() {
     }
 
     GetConfig().useAdaptiveGrid = aDialog.useAdaptiveGridCheck->isChecked();
+    GetConfig().relativistic = aDialog.relativisticCheck->isChecked();
 
     // Update tab visibility based on hybrid method setting
     updateNuclearPotentialTabVisibility();

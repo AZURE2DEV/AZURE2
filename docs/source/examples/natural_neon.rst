@@ -531,7 +531,7 @@ the example is the natural sum on a 0.2 keV laboratory grid from 0.01 to
    .. code-block:: console
 
       $ awk '/<targetInt>/{f=1;print;next} /<\/targetInt>/{f=0} f{sub(/^1 /,"0 ")} {print}' natural_neon.azr > bare.azr
-      $ printf '3\nnatural_neon_fit.sav\n\n7\n' | AZURE2 --no-gui --no-readline bare.azr
+      $ printf '3\nn\nnatural_neon_fit.sav\n\n7\n' | AZURE2 --no-gui --no-readline bare.azr
 
 .. figure:: natural_neon_decomposition.png
    :alt: The natural-neon total cross section split into the n+20Ne, n+22Ne

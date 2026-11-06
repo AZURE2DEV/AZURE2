@@ -3,7 +3,9 @@
 
 #include <iostream>
 #include <string>
+#include <cstdlib>
 #include <sstream>
+#include "ComponentList.h"
 #include <vector>
 
 /// A class to read and store a line from the data segments input file.
@@ -23,6 +25,14 @@
  * before, so every existing .azr file keeps parsing identically; only files
  * written with a space in the path use the quoted form.
  */
+/// Is the whole token a number (as strtod reads it, nothing left over)?  "12C_p.dat" is not; "1e-3" is.
+inline bool WholeNumber(const std::string &token, double &value) {
+  if (token.empty()) return false;
+  char *end = 0;
+  value = std::strtod(token.c_str(), &end);
+  return end != token.c_str() && *end == '\0';
+}
+
 inline bool ReadPathToken(std::istream &stream, std::string &path) {
   std::string token;
   if (!(stream >> token)) return false;
@@ -67,6 +77,7 @@ class SegLine {
     isAdvanced_ = 0;
     operationType_ = 0;
     componentsList_ = "";
+    phaseS_ = -1.0;  // phase-shift channel spin: < 0 = not given ("spin <s>" keyword)
     // Initialize UPOS parameters to defaults
     isUPOS_ = 0;
     secondaryDecayL_ = 0;
@@ -76,29 +87,54 @@ class SegLine {
     energyShiftSqrt_ = 0.0;
     energyShiftSqrtError_ = 0.0;
     natural_ = "0";
+    total_ = 0;
+    transmission_ = 0.0;
+    yield_ = 0.0;
+    absolute_ = 0;
     varyEnergyShiftSqrt_ = 0;
     // shared constant energy shift: off unless a trailing "shiftgroup" block is present
     shiftGroup_ = "";
+    // shared shift function with per-segment constants: off unless a "shiftfngroup" block is present
+    shiftFnGroup_ = "";
     // shared normalization: off unless a trailing "normgroup" block is present
     normGroup_ = "";
+    covarianceFile_ = "";
     hasSqrtShift_ = false;
     // energy-shift function: off unless a trailing "shiftfn" block is present
     shiftFn_ = "";
     parseError_ = "";
+    parseWarning_ = "";
 
-    // Try to parse energy shift from the remaining line, default to 0.0 for backward compatibility
+    // The shift fields are optional and came in three layouts: "shift shiftError vary file ...", the older
+    // "shift file ..." and the oldest "file ...".  Decide by the TOKENS, not by whether ">> double" succeeds:
+    // "12C_p.dat" used to be read as a 12 MeV shift with the file "C_p.dat", and "0.002 data/foo.dat" left the
+    // stream failed after the second read and the file empty (audit 2026-10-25, item 29; tests/segline_formats).
     std::istringstream restStream(dummyString);
-    double tempEnergyShift;
-    if (restStream >> tempEnergyShift) {
-      energyShift_ = tempEnergyShift;
-      // Try to read energyShiftError and varyEnergyShift
-      if (restStream >> energyShiftError_ >> varyEnergyShift_) {
-        // Successfully read all three values
+    {
+      energyShift_ = 0.0;
+      energyShiftError_ = 0.0;
+      varyEnergyShift_ = 0;
+      std::streampos start = restStream.tellg();
+      std::string tok1;
+      double v1 = 0.0;
+      if (restStream >> tok1 && WholeNumber(tok1, v1)) {
+        energyShift_ = v1;
+        std::streampos afterShift = restStream.tellg();
+        std::string tok2, tok3;
+        double v2 = 0.0, v3 = 0.0;
+        if (restStream >> tok2 >> tok3 && WholeNumber(tok2, v2) && WholeNumber(tok3, v3)) {
+          energyShiftError_ = v2;
+          varyEnergyShift_ = (int)v3;
+        } else {
+          restStream.clear();
+          restStream.seekg(afterShift);
+        }
       } else {
-        // Only energy shift was available (old format)
-        energyShiftError_ = 0.0;
-        varyEnergyShift_ = 0;
+        restStream.clear();
+        restStream.seekg(start);
       }
+    }
+    {
       // Get remaining string after energy shift parameters
       std::string remainingString;
       getline(restStream, remainingString);
@@ -115,48 +151,10 @@ class SegLine {
         if (advancedStream >> tempIsAdvanced && tempIsAdvanced == 1) {
           isAdvanced_ = 1;
           if (advancedStream >> operationType_) {
-            int numComponents;
-            if (advancedStream >> numComponents) {
-              // A marker value of -1 indicates the newer format that adds a
-              // per-component "scaling" token. In that case the next integer
-              // is the real component count and each component carries
-              // (entrance, exit, angle, scaling) instead of (entrance, exit, angle).
-              bool hasScalingToken = false;
-              if (numComponents == -1) {
-                hasScalingToken = true;
-                if (!(advancedStream >> numComponents)) numComponents = 0;
-              }
-              std::vector<std::string> components;
-              for (int i = 0; i < numComponents; i++) {
-                int entrance, exit;
-                double angle;
-                if (advancedStream >> entrance >> exit >> angle) {
-                  double scaling = 1.0;
-                  if (hasScalingToken) {
-                    if (!(advancedStream >> scaling)) scaling = 1.0;
-                  }
-                  std::string componentStr = "Entrance: " + std::to_string(entrance) + ", Exit: " + std::to_string(exit);
-                  if (angle > -900.0) {
-                    componentStr += ", Angle: " + std::to_string(angle);
-                  }
-                  if (hasScalingToken && scaling > -900.0) {
-                    componentStr += ", Scaling: " + std::to_string(scaling);
-                  }
-                  components.push_back(componentStr);
-                } else {
-                  // Fallback to old format (entrance, exit only) for backward compatibility
-                  advancedStream.clear();
-                  if (advancedStream >> entrance >> exit) {
-                    components.push_back("Entrance: " + std::to_string(entrance) + ", Exit: " + std::to_string(exit));
-                  }
-                }
-              }
-              if (!components.empty()) {
-                componentsList_ = components[0];
-                for (size_t i = 1; i < components.size(); i++) {
-                  componentsList_ += ";" + components[i];
-                }
-              }
+            const std::string componentError = ReadComponentList(advancedStream, componentsList_, parseWarning_);
+            if (!componentError.empty()) {
+              parseError_ = componentError;
+              stream.setstate(std::ios::failbit);
             }
           }
         }
@@ -213,6 +211,20 @@ class SegLine {
         // expression is read by the Equation class (as <targetInt> equations);
         // it is quoted, and blanks inside it are dropped.  On a shift group it
         // goes on the group's first segment and applies to every member.
+        //
+        // A shift-function-group block,
+        //   shiftfngroup <label>
+        // makes every segment carrying the same label apply the shift function
+        // declared (shiftfn) on the first of them, with that segment's
+        // parameters, while each keeps its OWN constant energy shift.  For one
+        // energy-dependent calibration of an experiment whose per-segment
+        // constants differ (e.g. digitization offsets of separate figures).
+        // A data-covariance block,
+        //   covariance <file>
+        // couples the segment's points to every other segment naming the same
+        // file: chi^2 over them is r^T R^-1 r instead of the sum of r_i^2
+        // (EData::ResolveCovarianceGroups; the file format is in
+        // docs/source/reference/data_formats.rst).
         // The blocks may come in any order.
         advancedStream.clear();
         std::string keyword;
@@ -259,14 +271,56 @@ class SegLine {
               natural_ = "0";
               break;
             }
+          } else if (keyword == "spin") {
+            // phase-shift segments: the channel spin s whose partial wave the phase belongs to
+            if (!(advancedStream >> phaseS_) || phaseS_ < 0.0) {
+              parseError_ = "spin needs the channel spin s (>= 0)";
+              stream.setstate(std::ios::failbit);
+              break;
+            }
+          } else if (keyword == "total") {
+            if (!(advancedStream >> total_) || (total_ != 0 && total_ != 1)) {
+              parseError_ = "total needs 0 or 1";
+              stream.setstate(std::ios::failbit);
+              break;
+            }
+          } else if (keyword == "transmission" || keyword == "yield") {
+            // a thick-sample neutron observable of the segment's cross section, n in atoms/barn (ESegment::IsTransformed):
+            // transmission T = exp(-n sigma), capture/reaction yield Y0 = (sigma_x/sigma_t)(1 - exp(-n sigma_t))
+            double &n = (keyword == "transmission") ? transmission_ : yield_;
+            if (!(advancedStream >> n) || !(n > 0.0)) {
+              parseError_ = keyword + " needs the sample thickness n > 0 in atoms/barn";
+              stream.setstate(std::ios::failbit);
+              break;
+            }
+          } else if (keyword == "absolute") {
+            // angular-coefficient segments (isDiff 9): the data are the absolute
+            // A_k (b/sr, dsigma/dOmega = sum_k A_k P_k) instead of a_k = A_k / A_0
+            if (!(advancedStream >> absolute_) || (absolute_ != 0 && absolute_ != 1)) {
+              parseError_ = "absolute needs 0 or 1";
+              stream.setstate(std::ios::failbit);
+              break;
+            }
           } else if (keyword == "shiftgroup") {
             if (!(advancedStream >> shiftGroup_)) {
+              stream.setstate(std::ios::failbit);
+              break;
+            }
+          } else if (keyword == "shiftfngroup") {
+            if (!(advancedStream >> shiftFnGroup_)) {
+              parseError_ = "shiftfngroup needs a label";
               stream.setstate(std::ios::failbit);
               break;
             }
           } else if (keyword == "normgroup") {
             if (!(advancedStream >> normGroup_)) {
               parseError_ = "normgroup needs a label";
+              stream.setstate(std::ios::failbit);
+              break;
+            }
+          } else if (keyword == "covariance") {
+            if (!ReadPathToken(advancedStream, covarianceFile_) || covarianceFile_.empty()) {
+              parseError_ = "covariance needs a file name";
               stream.setstate(std::ios::failbit);
               break;
             }
@@ -284,18 +338,6 @@ class SegLine {
         } else
           dataFile_ = std::string();
       }
-    } else {
-      // No energy shift found, treat entire dummyString as dataFile (backward compatibility)
-      energyShift_ = 0.0;
-      energyShiftError_ = 0.0;
-      varyEnergyShift_ = 0;
-      int p2 = dummyString.find_last_not_of(" \n\t\r");
-      if (p2 != std::string::npos) {
-        int p1 = dummyString.find_first_not_of(" \n\t\r");
-        if (p1 == std::string::npos) p1 = 0;
-        dataFile_ = StripPathQuotes(dummyString.substr(p1, (p2 - p1) + 1));
-      } else
-        dataFile_ = std::string();
     }
   };
   /*!
@@ -359,6 +401,10 @@ class SegLine {
    */
   int phaseL() const { return phaseL_; };
   /*!
+   * The channel spin of a phase-shift segment ("spin <s>" keyword), or -1 when the line does not give one.
+   */
+  double phaseS() const { return phaseS_; };
+  /*!
    * Returns the energy shift value for the segment.
    */
   double energyShift() const { return energyShift_; };
@@ -378,6 +424,14 @@ class SegLine {
    * Returns the sample token ("sample <t>", alias "natural <t>"): "0" (none), "1" (the default sample) or a sample name.
    */
   const std::string &natural() const { return natural_; };
+  /// 1 for "total 1": the total cross section of the entrance pair by the optical theorem (ESegment::IsTotal).
+  int total() const { return total_; };
+  /// "transmission <n>": the segment is the transmission exp(-n sigma) of a sample n atoms/barn thick (0: not).
+  double transmission() const { return transmission_; };
+  /// "yield <n>": the segment is the self-shielded yield (sigma/sigma_t)(1 - exp(-n sigma_t)) (0: not).
+  double yieldThickness() const { return yield_; };
+  /// "absolute 1": angular-coefficient data are the absolute A_k, not a_k / a_0.
+  int absolute() const { return absolute_; };
   /*!
    * Returns the uncertainty of the sqrt(E) energy-shift coefficient (MeV^1/2).
    */
@@ -391,9 +445,17 @@ class SegLine {
    */
   std::string shiftGroup() const { return shiftGroup_; };
   /*!
+   * Returns the shift-function-group label ("" when the segment is in no such group).
+   */
+  std::string shiftFnGroup() const { return shiftFnGroup_; };
+  /*!
    * Returns the normalization-group label ("" when the segment is in no group).
    */
   std::string normGroup() const { return normGroup_; };
+  /*!
+   * Returns the data-covariance file of the line ("" when it has no covariance block).
+   */
+  const std::string &covarianceFile() const { return covarianceFile_; };
   /*!
    * Returns true if the line carries a "sqrtshift" block.
    */
@@ -412,6 +474,8 @@ class SegLine {
    * Returns why the line could not be read ("" if it could, or if the reason is not known).
    */
   std::string parseError() const { return parseError_; };
+  /// A note about the line that did not fail it (printed by EData with the segment number).
+  std::string parseWarning() const { return parseWarning_; };
   /*!
    * Returns non-zero if this is an advanced segment (sum/ratio).
    */
@@ -456,6 +520,7 @@ class SegLine {
   int varyNorm_;
   double phaseJ_;
   int phaseL_;
+  double phaseS_;
   double energyShift_;
   double energyShiftError_;
   int varyEnergyShift_;
@@ -463,16 +528,23 @@ class SegLine {
   double energyShiftSqrtError_;
   int varyEnergyShiftSqrt_;
   std::string shiftGroup_;
+  std::string shiftFnGroup_;
   std::string normGroup_;
+  std::string covarianceFile_;
   bool hasSqrtShift_;
   std::string shiftFn_;
   std::vector<double> shiftFnValues_;
   std::vector<double> shiftFnErrors_;
   std::vector<int> shiftFnVary_;
   std::string parseError_;
+  std::string parseWarning_;
   int isAdvanced_;
   int operationType_;
   std::string natural_;
+  int total_;
+  double transmission_;
+  double yield_;
+  int absolute_;
   std::string componentsList_;
   int isUPOS_;
   int secondaryDecayL_;

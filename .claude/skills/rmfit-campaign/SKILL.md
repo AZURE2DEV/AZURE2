@@ -59,6 +59,50 @@ Prerequisites (do these in the reaction's fit directory, not in the campaign):
    new file: a single negative or spiked cross section can dominate the objective.
 4. Record all of that in the reaction directory's `readme`.
 
+### First fits: build starting parameters before any global fit (DeBoer, 2026-10-25 -- RE-EVALUATE LATER)
+
+**Provisional.** This is DeBoer's general suggestion, written down before it was tried end to end. Re-evaluate it once
+10B+α (the first reaction to use it, `10B+a/10-25-26_Rmatrix_Claude`) has a real fit: record what worked and what
+did not here, and change or drop the procedure accordingly.
+
+DeBoer: "Fix one representative data set's norms but let the others vary. This then provides more of a fixed scale
+for the cross sections initially, but still allows data sets with inconsistent norms but consistent shapes to not
+hinder the fit. In our case, since we have data in every channel, I would suggest we fix our data to begin with and
+let the others vary. Also, we should make sure that we allow the lowest l channels for each particle pair to vary,
+giving it some small non-zero value for every level, even if the literature does not give it a branch to that
+channel. I would also suggest starting at low energy and doing some polishes on one level at a time to see how well
+it can match the data. Then come back and try adding in levels where resonances are clearly present that don't match
+any of the known levels in energy and / or width. I wouldn't try a real fit until you have reasonably good starting
+parameters."
+
+As a procedure:
+1. **Fix the scale with one representative data set.** Fix its norms at 1 (our own data when they cover every
+   channel); let every other set's norm vary. Sets with consistent shapes but a different scale then do not
+   hold the fit back.
+2. **Seed the lowest-L channel of every pair, for every level.** Give it a small non-zero amplitude (0.01 γ_W, set
+   in the engine; physical placeholders tiny, see the 2026-10-25 seeding entry), even where the literature lists no
+   branch to that channel.
+3. **Every channel that opens inside the fit range is in the model -- by default.** Whenever the fit range is
+   extended (a new energy window, or a data set that reaches higher), list every partition open below the TOP of
+   the range: each excited state of each residual nucleus (ENSDF) and the other light-particle partitions (d, t,
+   ³He, ...), with thresholds Ex = sepE + e2. Add a pair for each before fitting, without being asked: the lowest
+   allowed L of each channel spin on every level; seeded per item 2 on levels at or within 0.5 MeV below the
+   threshold and on background poles, inert (0, fixed) elsewhere. Add the new exits to every summed segment
+   (total cross sections, total (n,p), (n,α), ...). Do NOT cap a data window at a threshold instead. A cap is a
+   stop-gap: log it in the readme with the channel that forced it, and list it for the evaluator.
+   (DeBoer 2026-10-30, 11B+α HE extension: the ELBE ¹⁴N+n total cross section had been capped at E_n 5.1 MeV because
+   ¹⁴N(n,n₄) had no pair. That left the top 1.2 MeV of the fit without its strongest constraint, a norm-fixed total.
+   Builder example: `11B+a/10-27-26_HE_claude/model/add_pairs_he.py`, 7 pairs n4 a3 d0 p1 n5 n6 p2.)
+4. **Level by level, from low energy up.** Polish one level at a time (its energy and widths, plus the free norms)
+   against the data around it, and look at how well it can match.
+5. **Then add levels** where a resonance is clearly present and no known level matches it in energy and/or width.
+6. **Only then a real (global) fit**: `init` a campaign on the result.
+
+Why (10B+α stage 1, 2026-10-25): global polishes from a poor start (χ²/N ≈ 200, 2-27-25 levels with new
+channels near zero) traded the missing strength for normalizations. With every norm free, almost all of them fell to
+0.38-0.68 in 150 evaluations. Bounded to 0.7-1.5, eight sat on a bound and the fit stalled at χ²/N 12.7. With
+χ² ~ 10⁵, norm priors of a few percent cost nothing (`10B+a/10-25-26_rmfit_stage1`, `_stage1b`).
+
 Then, in a new dated campaign directory (`<reaction>/<M>-<D>-<YY>_rmfit_campaign/`):
 
 ```bash
@@ -327,6 +371,13 @@ Cost: 11 J^π = 4 node jobs × 6-8 h; the anatomy and the window screen are logi
   chi2/N is far above the rest, or whose removal recovers more than its own chi2 in
   the others, is an evaluation question (normalization, energy calibration, resolution),
   not a fitting question.
+- **Check every fitted norm against the set's fit/data ratio** (the norm multiplies the data and its errors, so at a
+  sensible minimum fit/data ≈ norm). A norm that moved the other way (10B+α stage 1b, 2026-10-25: June ND5U25 norm 1.32
+  with the fit at 0.64 of those data) points to a data-scaled `vector` in that set's covariance acting as a hidden
+  normalization with Peelle's bias, not to an rmfit bug. Scan that one norm with the plain and the covariance χ²; the
+  fix and the numbers are in the `data-covariance` skill's Traps (analysis variants as `relvector`). Also distrust norms
+  sitting on the `norm_range` bounds while χ²/N ≫ 1: the priors are negligible there and the norms absorb shape misfit
+  (see "First fits" in section 2).
 
 ## 5. What the human decides
 
@@ -375,8 +426,51 @@ The GUI review: `printf '1\n<reaction>.sav\n\n7\n' | AZURE2 <flags> --no-gui --n
   is untested since the escalations; run `perturb` on every new reaction before trusting
   the method there.
 - Energy shifts are finite-differenced (kept fixed during exploration, freed in the
-  continuation polish). Norms of split segments are shared across shards correctly;
+  continuation polish); a shift held by polish's bounds is not differenced at all with
+  AZURE2 >= 77cd6b3 (see the 2026-10-30 entry at the end). Norms of split segments are shared across shards correctly;
   segments with target effects are never split.
+- Data covariances (`covariance <file>`), normalization groups (`normgroup <label>`) and
+  shift groups (`shiftgroup <label>`) work in both evaluators since 2026-10-22 (`rmfit/covariance.py`; README section "Data
+  covariances and normalization groups"; tests in `13C+a/10-22-26_rmfit_covariance/`).
+  Workers run the model WITHOUT `covariance` and the evaluator whitens the assembled rows
+  with the engine's algorithm (rows = the engine's `residual_jacobian` rows to 1e-14), so
+  a group split across shards keeps its correlations; shards drop `normgroup` and the
+  evaluator rescales a follower's rows to its leader's norm. Before that, rmfit gave a
+  normgroup follower its own norm (single-session fast path) or its own free norm (shards),
+  and whitened only within a shard. What to know:
+  - Needs a pyazr with data covariances (AZURE2 >= 4b71177). With an older one the engine
+    ignores the keyword silently; `SingleSession` compares its chi2 with an engine session
+    on the model as written at its first evaluation and stops on that mismatch.
+  - `relvector` terms: the model is frozen at the evaluator's FIRST evaluation, and every
+    `rmfit` CLI step is a new process, so each polish starts with the model frozen at its
+    own start (the iterative Chiba-Smith scheme); `ev.refreeze_covariance()` in scripts.
+    Objectives of different steps are therefore not strictly comparable.  Since 2026-10-24
+    `polish` refreezes between passes (`--refreeze-every N`; last section).  That oscillated on 13C+a (2026-10-25
+    warning there) and is superseded by the FIX of 2026-10-25: a campaign made since then scales its relvector terms
+    by ONE reference model (`cov_reference.npz`, saved by `rmfit init`), and `--refreeze-every` defaults to 0.
+  - Row weights (`dataset_weight`, `point_weights`) scale the plain rows before
+    whitening; the Sivia loss is refused. Per-segment chi2 are the engine's partition
+    shares and can be negative; `ev.point_chi2(r)` / `ev.point_residuals(r)` give per-row
+    shares / plain residuals (levelscan and diagnose use them).
+  - Keep covariance files under `data/`: shards need none (the evaluator reads it from the
+    base model's directory) and `single_variant` links one next to the model, but the
+    structure, window and levelscan variants link only `data/`.
+  - `shiftgroup` (2026-10-22): all pieces of a group go to ONE shard, which keeps the
+    keyword (a group with a free shift is one shift-solo unit). `shiftfngroup` (AZURE2 dev
+    62392fc) likewise since 2026-10-24: one shard per group, members never split, the
+    declaring member first (`tests/test_shiftfngroup_sharded.py`; needs a >= 62392fc build).
+  - Free `sqrtshift` and `shiftfn` parameters (2026-10-22; before, rmfit refused to open
+    such a model): keys `shift_sqrt[segK]` / `shift_fn[segK aj]`, penalties as in pyazr's
+    `penalties()`, bounds like constant shifts (fixed unless `shifts_free`); a segment with
+    any free shift term is never split.
+  - Conv pieces only for segments without any shift (before 2026-10-22 a fixed nonzero shift,
+    `sqrtshift`, `shiftfn` or group shift was dropped on the conv grid line).
+  - Worker fast path with energy shifts (fixed 2026-10-22, installed with the above on
+    2026-10-23): the engine converts a reaction segment's data to c.m. at its SHIFTED
+    energy, so the worker now re-reads data and errors of every shifted segment after each
+    evaluation. Before, a shard whose shift started nonzero fell back to the slow
+    `residual_jacobian` on every call, and a free shift starting at 0 carried a small bias.
+    Elastic data never showed it. Previous files: `rmfit/*.bak-2026-10-22`.
 - Cost on 13C+a (35k points, 330 free, 24 shards): objective 0.6-1.5 s, Jacobian ~20 s,
   a 60-iteration polish ~9 min, a sign round 2-4 h, a level test ~1.5 h.
 
@@ -386,6 +480,18 @@ The GUI review: `printf '1\n<reaction>.sav\n\n7\n' | AZURE2 <flags> --no-gui --n
   one process per session and `bake()` verifies in a fresh process. Do not use
   `save_fit` for campaign files. `pyazr` bakes skip inactive levels since 2026-09-05;
   older baked files may have mis-placed values in J-groups with inactive lines.
+- `bake()` writes the FIXED parameters' current physical values too since 2026-10-24 (worker
+  `transform_all` + `apply_fit(include_fixed=True)`, as `save_fit`).  A fixed parameter is fixed in
+  rwa space: its observed width moves with the level's free amplitudes (Brune's 1 + Σγ²dS/dE,
+  closed channels included).  Before, a fixed width kept the seed file's observed value, so an export
+  failed the 1e-4 check whenever a level mixed fixed and moving amplitudes (13C+a
+  10-22-26_merged_non16o_non1_anc: frozen levels with free ANCs, 14 fixed widths off by up to 13 %,
+  649,551 vs 646,800).  Exports made before that date with such levels are a slightly different model;
+  re-export from the ledger vector.  Test `rmfit/tests/test_bake_fixed_13n.py`.  The engine's own
+  conversion round-trips exactly.  Note "fixed" does not freeze a level's observed widths: to keep a
+  "frozen" level's widths, fix its closed-channel amplitudes too (13C+a `fix_frozen_anc.py`).
+- `total 1` (optical-theorem neutron total, AZURE2 dev d37d4e6) is in rmfit's keyword table and in
+  bake's keyword guard; builds before d37d4e6 ignore it silently and compute elastic only.
 - Delete `output/intEC.*` whenever segments change (stale-cache rule of the AZURE2 skill).
 - New levels are appended at the end of the file and levels are removed by
   deactivation, so every existing parameter key stays valid across structures.
@@ -411,11 +517,15 @@ The GUI review: `printf '1\n<reaction>.sav\n\n7\n' | AZURE2 <flags> --no-gui --n
   truncated logs looked like a broken node; it was the quota.
 - **Park-mode campaigns (`"use_park": true`, since 2026-10-06).** (1) The J > 0 wall
   (`sum (J/1e-3)^2` over levels with `J = 1 - sum gamma^2 dS/dE < 0`) is inside the
-  engine's scalar chi2, so the `plain` objective sees it, but the least-squares rows
-  (`rows_objective`, the LM polish) do not: a Park polish can step a saturating level
-  past J = 0 unnoticed. Check `m.park_norms(x)` (or `Total-Park-Chi-Squared` in a mode-1
-  `chiSquared.out`) on every candidate before accepting it; a level there has no
-  R-matrix meaning. Adding the J rows to the residual vector is the fix, not done yet.
+  engine's scalar chi2. **Since 2026-10-24 rmfit carries it as residual rows**
+  (`engine.ParkWall`: one row per level, `min(J, 0)/1e-3`, after the penalty/prior rows,
+  counted in `penalty`; Jacobian rows from the worker's `park_jac`), and in Park mode
+  `objective()` always takes the residual path -- the engine's scalar chi2 already holds
+  the wall, so the old plain path counted it once per shard. Test
+  `tests/test_park_wall_13n.py`. Before that date the LM polish did not see the wall at
+  all; check `m.park_norms(x)` on any Park result from an older rmfit. On the 13C+a merged
+  model 25 broad levels/poles sit at J 0.19-0.43, and a x1.3 amplitude step puts 23 of them
+  past the wall (13C+a/10-24-26_merged_park/readme).
   (2) `--sav` seeds are applied by parameter NAME with no basis conversion: a Brune
   campaign's `.sav` seeded into a Park campaign (or back) gives amplitudes in the wrong
   basis. Convert first: a CLI mode-1 run in the target mode with that `.sav` as the
@@ -539,7 +649,9 @@ The GUI review: `printf '1\n<reaction>.sav\n\n7\n' | AZURE2 <flags> --no-gui --n
 - 2026-09-10 -- `rmfit levelscan` built (rmfit/levelscan.py, test_levelscan_13n.py). Lessons:
   the engine numbers levels inside a J^pi group in its own order (resolve dummy labels from
   `ev.level_energy`, never from file order); pyazr's `deactivate_level` keeps a zero-width
-  level with a free energy in the file (use `remove_level` for a real removal); new J^pi
+  level with a free energy in the file (use `remove_level` for a real removal; before AZURE2
+  dev 63429c2, 2026-10-31, such a level exactly on a data energy dropped its whole J^pi
+  group at that point); new J^pi
   groups add hard-sphere terms; photon channels need their own tiny trial widths; and a
   16-digit energy in an add_level line silently corrupts the model. Not yet run on 13C+a.
 - 2026-09-10 -- `levelscan.review_figure` + `Campaign.review_figure`: written by `relocate`
@@ -1664,7 +1776,8 @@ before putting it in a job.
   (a trustworthy verdict).  Tell: the SAME background-pole keys pinned at the cap in every failed
   attempt, and the worst dataset is the one most sensitive to them.  Ask the evaluator how large a
   background contribution the reaction has historically needed before blaming the code.
-- **`export` can fail `bake`'s 1e-4 verify after a tighten polish.**  Structure 8 (built on a tightened
+- **`export` can fail `bake`'s 1e-4 verify after a tighten polish** (2026-10-24: possibly the fixed-parameter
+  gap fixed in §8, if structure 8 had fixed widths on levels with free amplitudes).  Structure 8 (built on a tightened
   base, background amplitudes near the 100 cap) failed at rel 1.15e-4 / levels-only 1.20e-4, EXACTLY
   reproducible (systematic, not noise).  A direct `bake(..., verify_rtol=5e-4)` passed, and a CLI mode-1
   run with the exported `.sav` reproduced the source objective to 1.7e-6.  `export` has no rtol argument;
@@ -1751,6 +1864,13 @@ import the cp312 pyazr extension.  What works -- the 3.12.13 install still exist
     python3 -c "import sqlite3, sys; sys.path.insert(0, '/users/rdeboer1/AZURE2'); import pyazr._azure2" || exit 1
 The last line is the guard: a job must prove both imports on its own node before the first rmfit step.
 Login-node shells inherit the old module and prove nothing.
+SECOND CORRECTION (2026-10-30, 11B+α HE session): `/software/p/python/3.12.13` is GONE as well, so the PATH above
+points nowhere and the job falls back to Python 3.9.  Use the 3.12.15 install (the cp312 extension loads unchanged)
+and put the cluster's newer SQLite library ahead of `/lib64`, which on compute nodes lacks `sqlite3_deserialize`:
+    module unload python
+    setenv PATH /software/p/python/3.12.15/gcc/11.5.0/bin:${PATH}
+    setenv LD_LIBRARY_PATH /software/p/python/3.12.15/gcc/11.5.0/lib:/software/s/sqlite-libs/3.34.1-11.el9_8/usr/lib64:${LD_LIBRARY_PATH}
+Verified on a compute node (SGE 1655350, d32cepyc nodes): guard passes, rmfit Sharded fit runs.
 
 ## 2026-10-02 — idle-time reviews are part of the process (section 3b); four lessons from the 13C+α merged fit
 - IDLE TIME: while jobs run, audit the input file and the data and read the literature (section 3b, DeBoer's
@@ -1869,7 +1989,8 @@ single session takes only 45 s per objective -- the shards were badly balanced. 
 - a composite "sum" segment (the Cierjacks n-total, 13,129 points summed over 8 exits) was never split and sat alone in one shard.
   plan_pieces now splits sum composites by energy like plain segments, with the cost multiplied by the component count
   (RMFIT_SPLIT_SUM=0 restores the old rule). Objective 25 s -> 3-4.5 s, bit-identical.
-- a free energy shift is finite-differenced in the Jacobian and each step re-evaluates the WHOLE shard (~0.024 s per point per shift),
+- a free energy shift is finite-differenced in the Jacobian and each step re-evaluated the WHOLE shard (~0.024 s per point per shift;
+  since AZURE2 5fbf446, 2026-10-30, a self-contained segment's shift re-evaluates only that segment, forward only),
   so shards holding shifted segments took 28-92 s while the rest took 10-17 s. build_shards now gives each free-shift segment a shard
   of its own while they are no more than half the shards (RMFIT_SHIFT_SOLO=0 restores). Jacobian 115-141 s -> 25-29 s, |J| identical.
 How it was found (reusable): time each shard's eval and Jacobian separately (call each _Worker in turn) -- the slowest shard sets the
@@ -1975,3 +2096,185 @@ lowest L, RMFIT_SEED_OMITTED=1, total floor 25 keV, local release 0.5 MeV, same-
    floor (+617 vs control) or ends worse than the control (-22,675).  A negative level-add result for a level that could be
    alpha-dominated is not trustworthy from an n0-heavy seed alone.  Test running: the same adds from a 2:1 a0:n0 seed
    (10-15-26_recall/<tag>_aseed, plus 1/2+ 7.958 as the cross-check).  Expected rule: run both seeds, keep the better.
+
+## 2026-10-20 — centred parameter priors (`param_priors`), first use an ANC prior
+
+`ObjectiveSpec.param_priors` (campaign.json `objective`, or `rmfit init --objective @objective.json`):
+`[{"key": "g[1/2+#2 p2 L1 S0.5]", "mean": 0.537, "sigma": 0.062}]` appends a Gaussian row `(x - mean)/sigma` per entry to the
+penalty rows (`Penalties.with_param_priors`, called from `_init_objective`, so SingleSession and Sharded both carry it; unweighted
+like the norm rows; it counts in `penalty`, not `chi2`).  `key` is `str(ParamKey)`; the row acts on the free vector itself, i.e.
+on the OBSERVED (Brune) reduced-width amplitude for a width -- the space AZURE2's own `<parameterSettings>` nuisance priors use
+after `ConvertPhysicalLimitToReduced` (those are NOT seen by rmfit, which builds its objective from pyazr rows).  Give the mean
+with the amplitude's sign.  A prior on a key that is not free raises KeyError (a frozen parameter cannot hide a prior); rmfit.mixture
+raises NotImplementedError.  The old zero-centred `Prior` regularizer is unchanged.  Check: 13C+a/10-20-26_merged_ancprior_ng/
+test_param_prior.py (one extra row, +((x-m)/s)^2 exactly, Jacobian 1/s in one column).  engine.py backup .bak-2026-10-20.
+First use: Avila C~^2 = 3.6(7) fm^-1 for the near-threshold 1/2+ of 17O converted to gamma~ = 0.537 (+0.060/-0.063) at a = 5.4 fm
+by the PRC 101, 045802 (2020) method (13C+a/10-20-26_rate_recalc_Claude/anc_convert.py).
+
+## 2026-10-24 — model-scaled (`relvector`) covariance: refreeze between polish passes (`--refreeze-every`)
+
+A `relvector` covariance term is frozen at the model of an evaluator's FIRST evaluation.  One long polish from a poor seed
+therefore minimises chi2 with the systematics scaled by the SEED's model, and the fresh-session verify (frozen at the result)
+disagrees: 13C+a 10-24-26_merged_park/brune_fixanc, polish 759,688 vs verified 789,402 (HAGRiD 6.13 alone +29.8k); the same
+vector in one session gave 760,721 frozen at the seed and 789,402 after `refreeze_covariance()` (refreeze_check/).  Neither
+number was wrong -- they were different objectives -- but the polish had optimised the wrong one.
+Fix (DeBoer: "Let's do 2"): `local.polish_refreeze` -- passes of at most `every` evaluations, each an ordinary least-squares
+run on a FIXED objective (frozen at its start); between passes refreeze at the pass's end and re-score; stop when a pass
+converged and the refreeze jump <= max(tol_abs 1, tol_rel 1e-5 x objective), or the budget is used.  `Campaign.run_polish`
+uses it per stage (`refreeze_every=100`; CLI `rmfit polish --refreeze-every N`, 0 = the old single freeze).  It returns the
+self-consistent objective, so polish result = verify.  Never refreeze INSIDE a least-squares run: TRF's trust region and
+ftol/xtol tests assume a fixed objective, and a covariance that follows the model within a run lets the fit inflate the model
+to grow its own variance.  Without relvector terms (or `every <= 0`) `polish_refreeze` IS `polish`.  Sign rounds and level
+adds keep single polishes (they compare candidates under one freeze -- verify them on fresh sessions as before).
+Test tests/test_refreeze_polish.py (fixture tests/fixtures/relvector_p12c): refreeze jumps 0.83 -> 2.7e-3 -> 6.9e-5 -> 3.7e-7,
+end point 2986.202 = fresh session, BELOW the single polish's fresh value 2986.675.  Install: local/campaign/cli
+.bak-2026-10-24-refreeze, marker rmfit/.installed-2026-10-24-refreeze; regressions campaign/spine pass.
+Seeds far from the data (a new covariance at a seed fitted without it) are where this matters; reading a campaign's
+"polish: a -> b" line with a relvector covariance from before 2026-10-24: b is frozen at the start point, trust the verify.
+
+**WARNING 2026-10-25: the refreeze iteration can OSCILLATE -- use `rmfit polish --refreeze-every 0` on any model with
+relvector terms until the code is fixed (DeBoer decides the fix).**  On the 13C+a merged model (10-24-26_merged_antot_n1cut,
+readme) the refreeze jumps grew instead of shrinking: +3.1k, +44k, -25k, +140k (control) and +3.8k, +116k, -33k, -25k
+(n1cut); the p+12C fixture's contraction does not carry over to a large model.  `polish_refreeze` also returns the LAST pass,
+not the best self-consistent point, so control ended at 924,958, worse than its 851,544 seed (the campaign kept the seed as
+candidate 1).  A polish result from 2026-10-24 23:30 on with relvector terms: check the pass-end objectives in the log, not
+only the final line.  Models without relvector terms are unaffected (plain polish).
+
+### 2026-10-25 — FIX installed: relvector covariance model fixed at a reference (supersedes the refreeze advice)
+DeBoer: "revert the default and use a fixed reference model". `rmfit init` saves the seed's frozen relvector model as
+`cov_reference.npz` (named in campaign.json `objective.cov_reference`). Every evaluator the campaign builds (shards,
+verify, export, level adds, data-off tests) scales the relvector terms by that ONE model. So polish = verify = export is one
+objective, and verify/export also log the self-consistent chi2 (`Score.chi2_self`, frozen at the point itself). To move
+the reference, start the next campaign from the next export, or pass `init --cov-reference <npz>` to share one between a
+control and a variant. `--refreeze-every` now defaults to 0 and is ignored when a reference is set. `polish_refreeze`
+returns its best pass. Old campaigns (made before the change) have no reference and keep the first-evaluation freeze.
+Test: rmfit/tests/test_cov_reference.py. Notes: 13C+a/10-24-26_merged_park/readme. Install: backups
+rmfit/*.bak-2026-10-25-fixedref, marker rmfit/.installed-2026-10-25-fixedref (merged onto the 10:23 shift-penalty-from-zero
+edit of engine.py).
+
+### 2026-10-26 — relvector covariance with a FREE norm: neither reference convention is safe (the 10-25 fix is incomplete)
+- What changed: the 10-25 reference held the relvector model in DATA units. A free norm then ran UP (13C+α
+  refit_from_cut: ND2021r normgroup 0.63 -> 3.08, Peelle-type pull of a constant covariance with large common terms).
+- rmfit was then changed (installed 2026-10-25 23:40, backups *.bak-2026-10-26-covnorm) so the reference is a CROSS
+  SECTION, ref_xs = model x norm, divided by the current norm per row, with exact d(W)/dn Jacobian columns.
+- Result: the same refit (refit_from_cut2, job 1628541) ran the norms DOWN to the 0.2 floor (0.631 -> 0.200). A
+  model-following relative variance grows as 1/n^2 in data units, so lowering n pays (variance-inflation bias).
+- Scan at the start point, ND cov chi2:
+  - following reference: 318.8k at n=0.2, 352.5k at 0.631, 383.0k at 1.0
+  - data-unit reference: 445.6k at 0.2, 351.7k at 1.0
+  - a likelihood ln det term adds only +846 at 0.2
+- Both pulls grow with misfit (chi2/N ~ 25-30 here).
+- Rule: a relvector (model-proportional) covariance plus a free normalization on the same rows is biased under either
+  freeze. Before trusting such a fit: check the norm against its prior; scan the norm with everything else fixed, under
+  both conventions. The AZURE2 engine has the same data-unit freeze (R-matrix/AZURE2_code_audit/10-25-26/readme), so
+  the rule applies to CLI fits with `covariance` + a free norm too.
+- The remedy is DeBoer's call and still open. Options: fix the norm and let C carry the scale; log-space relvector
+  terms (no pull either way); revert.
+- Records: 13C+a/10-25-26_covref_norm/readme (CORRECTION 10-26 04:05) and
+  13C+a/10-24-26_merged_antot_n1cut/refit_from_cut2/diag2.log.
+- The test that missed this, test_cov_reference_norm (g), only checked that RAISING a norm costs more. A norm test must
+  check both directions.
+
+### 2026-10-26 — Jacobian-cost shard balancing (rmfit, installed 00:50, DeBoer approved)
+- What it does: Sharded times each shard's residual and residual+Jacobian evaluation once, fits time = R (alpha + beta k)
+  with k = the shard's finite-differenced shift columns, and repacks greedily (model.pack_jac: shift units first, a shift
+  or shift-function group stays whole).
+- It runs up to 2 correction rounds and caches the plan in <workdir>/jac_balance.json, so later steps start balanced.
+- On by default; RMFIT_JAC_BALANCE=0 turns it off.
+- 13C+α (51,140 pts, 1,226 free, 8 shards): slowest shard 23 s -> 11.7 s; parallel Jacobian 28.3 -> 17.7 s;
+  8-evaluation polish 504 -> 309 s (-39%); results identical to 1e-15; one-time start-up about 4 min.
+- Expect that start-up measurement the first time a new shards directory is used.
+- After this, the TRF svd (~10-12 s per iteration, single thread) is the largest remaining cost.
+- Records: 13C+a/10-26-26_jac_balance/readme; tests/test_jac_balance.py.
+- tests/test_objective_13n.py now joins pieces by e_lo, because a segment can now span several pieces.
+
+### 2026-10-26 — t0 method for free norms on relvector-covariance rows; guard installed (DeBoer: "build the t0 version", "Install the guard once the regression passes")
+- Literature: Ball et al. (NNPDF), "Fitting PDF data with multiplicative normalization uncertainties", JHEP 05 (2010)
+  075, arXiv:0912.2276. A covariance built from the MEASURED values gives the d'Agostini/Peelle bias (fit low); one
+  built from the FITTED values ("self-consistent covmat", their sec. 5) is biased the other way and has a spurious
+  extra stationary point; a free norm with a prior (penalty trick) is unbiased for one data set only if the norm
+  rescales the theory (AZURE2's n*d with n*sigma does), and biased again once several norms are combined. The fix
+  (sec. 6, t0): put the normalization uncertainty INTO the covariance, built from a FIXED prediction t0 of a previous
+  fit, held constant during the fit so chi2 stays quadratic; refresh t0 and refit (one iteration is usually enough).
+  No free norm on those data. Neutron standards (GMA/GMAP) use the same idea via Chiba-Smith (ANL/NDM-121).
+- 13C+a showed both biased cases: the 10-25 data-unit reference ran the ND2021r norm UP (0.63 -> 3.08), and the 10-26
+  norm-following reference ran it DOWN to the 0.2 floor. The relvector terms together span the data vector (run
+  blocks, energy-region terms, efficiency common), so with a free norm, scaling the data to 0 or infinity costs a
+  bounded amount (~1/rel^2 per term), which is cheaper than the shape misfit when chi2/N ~ 25-30.
+- Recipe (13C+a/10-26-26_t0_cov/build_t0.py): set varyNorm 0 at the nominal norm; add one relvector term per former
+  norm parameter to the covariance file, (prior) x 1 over the rows that norm scaled (group prior over the group rows,
+  own prior over a separate segment's rows); keep rmfit's campaign reference (cov_reference.npz = the seed's model) as
+  t0; refresh t0 by starting the next campaign from the export. With the norms fixed, the 10-25 and 10-26 reference
+  conventions coincide, so this needs no special code.
+- Guard (installed 2026-10-26, backups *.bak-2026-10-26-t0guard): Campaign.init (rmfit init) REFUSES a free data
+  normalization on rows of a relvector covariance. The error names the covariance file and segments and gives this
+  recipe. To keep such a norm free on purpose, name the covariance file basename in the objective, e.g.
+  --objective '{"cov_free_norm_ok": ["<cov file>"]}'; init then logs a WARNING. New: ObjectiveSpec.cov_free_norm_ok,
+  Evaluator.free_norms_on_relvector(), tests/test_cov_t0_guard.py. 12/12 regression tests pass.
+- Consequence: 13C+a campaigns that keep HAGRiD's free norms (segments 178-180 on HAGRiD2018_13C_cov_*.dat) now need
+  that file in cov_free_norm_ok, or the t0 treatment for HAGRiD too (planned for the next 13C+a run; prior choice
+  pending with DeBoer).
+
+## 2026-10-25 — physical seeds must be TINY, not 1 eV: the Brune transform can fail and rescale a level (10B+α stage 1)
+
+The 09-18 recipe (a 1 eV physical seed, then `frac · γ_W` in the engine) broke on 10B+α: α₁ (10B 0.718 MeV) L=2 on the
+12.60 MeV 3⁺, 0.26 MeV above its threshold, has P ~ 1e-12, so 1 eV -- and even 1 meV -- is a reduced width far above γ_W.
+AZURE2 printed `**WARNING: Denominator less than zero while transforming J^pi=3+, E=12.5953 MeV`, the level's x0 came
+out wrong, and `bake` wrote that level's UNSEEDED widths back ×2.08 (p₁ −22.8 → −47.5 keV) with a perfect round trip --
+nothing failed, the level was just different.  For a channel closed at the level energy the `.azr` field is an ANC, so
+"1.0" there is no small seed either.  Rules: (1) physical seeds 1e-12 eV (open) / ANC 1e-6 (closed); the real seed is set
+in rwa units; (2) grep the seed job's log for `Denominator less than zero` -- it must be empty; (3) compare every unseeded
+width of the baked file with the input file (`10B+a/10-25-26_Rmatrix_Claude/stage1/seed_stage1.py`, `width_check`: max
+relative change 1.1e-3 after the fix).  Also: a script that opens a `SingleSession` needs an `if __name__ == "__main__"`
+guard (spawn start method: "An attempt has been made to start a new process before the current process has finished its
+bootstrapping phase").
+
+## 2026-10-26 -- a frozen build needs AZURE2_ROOT, not just PYTHONPATH (13C+a session)
+
+`rmfit/__init__.py` reads `AZURE2_ROOT` and, when it is unset, falls back to `/users/rdeboer1/AZURE2` and puts it
+FIRST on `sys.path`.  A job that sets only `PYTHONPATH=<frozen build>:...` therefore imports the frozen pyazr in
+the parent (its own import check passes) but the shard workers, which import rmfit, load ~/AZURE2's pyazr -- the
+shared copy that installs replace under running jobs.  Three 13C+a page-curve jobs did that on 2026-10-26; one died
+with an EOFError when the shared `_azure2` .so was replaced at 22:38-22:43.  Rule for every queue job on a frozen
+build:
+
+```csh
+setenv AZURE2_ROOT /groups/rdeboer1/user/rdeboer1/R-matrix/13C+a/10-26-26_azure2_17d500b
+setenv PYTHONPATH  ${AZURE2_ROOT}:/groups/rdeboer1/user/rdeboer1/R-matrix
+```
+
+and, in the script, `assert pyazr.__file__.startswith(rmfit.AZURE2_ROOT)` (and the .so md5 guard from the frozen
+directory's readme) before any work starts.  Installs into ~/AZURE2 are announced in the audit readme, but a job that
+reaches the shared copy by the fallback is exposed to them without anyone knowing.
+
+## 2026-10-30 -- level labels in models with several compound nuclei carry "@<nucleus>"
+
+The engine numbers levels per (J^pi, compound nucleus), so in a natural-target model two odd-A nuclei both had a
+"1/2-#1" and rmfit's labels collided: `level_energy` kept one of the two energies (wrong width caps, background-pole
+test and floors) and two free energies shared one key (17O+a an6pre, 21Ne + 23Ne).  Since 2026-10-30 (DeBoer
+"go ahead with the rmfit fix") every level of a model with MORE than one compound nucleus is labelled
+"<J^pi>#<n>@<nucleus>", e.g. `E[1/2-#2@21Ne]`, `g[1/2-#2@21Ne p1 L1 S0.5]`; `build_keys` raises on a duplicate key.
+Single-nucleus labels are byte-identical to before.  Checkpoints, ledgers and `param_priors` keys written with the old
+labels for a multi-nucleus model no longer match by name.  Still per J^pi only (documented in rmfit/README.md): sign-round
+groups, `free_mask(jpi=)`, level add and levelscan.  Test `rmfit/tests/test_level_labels_multicn.py` (fails on the old
+code); records R-matrix/AZURE2_code_audit/10-25-26/rmfit_cnlabel/readme.
+
+## 2026-10-30 -- Jacobian shift columns: held ones skipped, the rest forward only (DeBoer: "go ahead with the column mask", "push and install, and do the residuals-only saving too")
+
+The 17O+a an6pre polish (8 held shift/shift-function terms) spent ~16 of ~18 evaluations per Jacobian (41 min each) on
+finite-differenced columns it then discarded, and ran 7.5 h without finishing a step.  Two changes:
+- rmfit (live 2026-10-30, backups *.bak-2026-10-30-jacmask): `Evaluator.residuals(x, jac=True, cols=...)` names the
+  columns wanted; polish and gn_step pass their free ones, and the workers hand the complement to
+  `residual_jacobian(x, skip=)`.  With a pyazr without `skip` the workers compute every column as before.  Held columns
+  come back zero on the data rows; analytic penalty rows keep theirs.  Test rmfit/tests/test_jac_skip_columns.py.
+- AZURE2 (dev 77cd6b3 skip, 5fbf446 forward-only columns; installed 2026-10-30): the columns still differenced no
+  longer re-solve the Jacobian per side; a self-contained segment's shift (no components, not total capture, no point
+  mapping outside its segments) is differenced on its own rows, a density or composite/mapped shift with one forward
+  pass over all points.  Values equal the old columns (tests/pyazr/jacobian_shift_columns_test.py: 0 deviation from
+  differences of the returned residuals).
+What to do: a campaign started before the install keeps its old .so (kept inode) -- restart it, or run on a frozen
+build >= 5fbf446, to get the saving.  Shift columns still cost two evaluations each of the rows they move, so keep
+shifts fixed during exploration as before.  Not yet adapted: Sharded's Jacobian-cost balancing (2026-10-26) models a
+shift column as costing a whole shard (R (alpha + beta k), k counting held shifts too); with this engine a local shift
+costs its own segment and a held one nothing.  Its packing stays valid, only tuned for the old cost, and a cached
+<workdir>/jac_balance.json keeps the old fit -- re-tuning is a candidate, not done.

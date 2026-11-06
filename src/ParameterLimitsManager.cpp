@@ -9,6 +9,8 @@
 #include <iostream>
 #include <cmath>
 #include <regex>
+#include <cctype>
+#include <limits>
 
 inline double custom_stod(const std::string &str, std::size_t *pos = nullptr) {
   std::size_t i = 0;
@@ -29,6 +31,20 @@ inline double custom_stod(const std::string &str, std::size_t *pos = nullptr) {
   } else if (str[i] == '-') {
     sign = -1;
     ++i;
+  }
+
+  // nan / inf (any case, optional sign already consumed): a fitError written from a singular covariance
+  // (audit 2026-10-25, item 30) used to throw here and end the CLI run; they are legal doubles.
+  {
+    std::string rest = str.substr(i);
+    for (std::size_t q = 0; q < rest.size(); q++) rest[q] = (char)std::tolower((unsigned char)rest[q]);
+    if (rest.compare(0, 3, "nan") == 0 || rest.compare(0, 3, "inf") == 0) {
+      const bool isNan = rest.compare(0, 3, "nan") == 0;
+      i += 3;
+      if (!isNan && rest.compare(0, 8, "infinity") == 0) i += 5;
+      if (pos) *pos = i;
+      return isNan ? std::numeric_limits<double>::quiet_NaN() : sign * std::numeric_limits<double>::infinity();
+    }
   }
 
   // Parse integer part
@@ -273,9 +289,9 @@ void ParameterLimitsManager::BuildIndexMap(const ROOT::Minuit2::MnUserParameters
   }
 
   // The same association keyed by the full-vector index, for the nuisance
-  // prior.  Norms, shifts, abundances and electron-screening potentials are
-  // left out, as the chi-squared always has: they carry their own priors
-  // (segment errors, <abundances>, the screening block).
+  // prior.  Norms, shifts, abundances, electron-screening potentials and fitted
+  // target densities are left out, as the chi-squared always has: they carry their
+  // own priors (segment errors, <abundances>, the screening and densityfit blocks).
   priorByActualIndex_.assign(p.Params().size(), NULL);
   for (size_t nonFixedIndex = 0; nonFixedIndex < nonFixedToActualIndex.size(); nonFixedIndex++) {
     ParameterSetting *setting = indexToSetting_[nonFixedIndex];
@@ -283,7 +299,7 @@ void ParameterLimitsManager::BuildIndexMap(const ROOT::Minuit2::MnUserParameters
     const int actualIndex = nonFixedToActualIndex[nonFixedIndex];
     const std::string &name = p.Parameter(actualIndex).GetName();
     if (AZURELabel::IsNormName(name) || AZURELabel::IsEnergyShiftName(name) || name.compare(0, 10, "abundance_") == 0 ||
-        name.compare(0, 10, "screening_") == 0)
+        name.compare(0, 10, "screening_") == 0 || name.compare(0, 8, "density_") == 0)
       continue;
     priorByActualIndex_[actualIndex] = setting;
   }
@@ -368,7 +384,10 @@ void ParameterLimitsManager::ApplyParameterSetting(const std::string &paramName,
   }
 
   // Apply limits if they are not both zero (0,0 means free parameter)
-  if (setting->lowerLimit != 0.0 || setting->upperLimit != 0.0) {
+  // A limit that is not finite (a nan or inf left in the block, which the parser accepts since 2026-10-27) is no limit.
+  if (!std::isfinite(setting->lowerLimit) || !std::isfinite(setting->upperLimit)) {
+    std::cout << "WARNING: <parameterSettings> " << matchedName << ": a limit is not finite; no limit applied." << std::endl;
+  } else if (setting->lowerLimit != 0.0 || setting->upperLimit != 0.0) {
     double lower = setting->lowerLimit;
     double upper = setting->upperLimit;
 

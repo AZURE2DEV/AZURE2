@@ -4,6 +4,7 @@
 #include <QVBoxLayout>
 #include <QPushButton>
 #include <QGroupBox>
+#include <QLabel>
 
 EditOptionsDialog::EditOptionsDialog(QWidget *parent) :
   QDialog(parent) {
@@ -17,6 +18,12 @@ EditOptionsDialog::EditOptionsDialog(QWidget *parent) :
   useAdaptiveGridCheck = new QCheckBox(tr("Use adaptive integration grid\nfor target effects"));
   useThmCheck = new QCheckBox(tr("Use Trojan Horse Method (THM)"));
   useThmCheck->setToolTip(tr("Shows the THM Workspace and the THM controls of the tabs"));
+  relativisticCheck = new QCheckBox(tr("Relativistic kinematics"));
+  relativisticCheck->setObjectName("relativisticCheck");
+  relativisticCheck->setToolTip(tr("Channel wave numbers, Sommerfeld parameters and lab <-> c.m. energies from the invariant mass "
+                                   "(the kinematics of the LANL code EDA, ENDF KRL=1).  Level energies stay excitation energies; "
+                                   "relativistic.out lists them in EDA's E(s) convention.  Saved as relativistic=1 in <config>, "
+                                   "so command-line and pyazr runs of the project use it too."));
   // noLongWavelengthCheck = new QCheckBox(tr("Do not use long wavelength\n"
   //					   "approximation for EL external capture"));
 
@@ -38,6 +45,16 @@ EditOptionsDialog::EditOptionsDialog(QWidget *parent) :
   // optionsLayout->addWidget(noLongWavelengthCheck);
   optionsBox->setLayout(optionsLayout);
 
+  // Kinematics is part of the project (<config>), not a GUI-only switch: its own box says so.
+  QGroupBox *kinematicsBox = new QGroupBox(tr("Kinematics"));
+  kinematicsBox->setObjectName("kinematicsBox");
+  QLabel *kinematicsNote = new QLabel(tr("Saved in the project: command-line and\npyazr runs of it use this setting too."));
+  kinematicsNote->setObjectName("kinematicsNote");
+  QVBoxLayout *kinematicsLayout = new QVBoxLayout;
+  kinematicsLayout->addWidget(relativisticCheck);
+  kinematicsLayout->addWidget(kinematicsNote);
+  kinematicsBox->setLayout(kinematicsLayout);
+
   cancelButton = new QPushButton(tr("Cancel"));
   okButton = new QPushButton(tr("Accept"));
   okButton->setDefault(true);
@@ -49,6 +66,7 @@ EditOptionsDialog::EditOptionsDialog(QWidget *parent) :
   buttonBox->addWidget(okButton);
   QVBoxLayout *mainLayout = new QVBoxLayout;
   mainLayout->addWidget(optionsBox);
+  mainLayout->addWidget(kinematicsBox);
   mainLayout->addLayout(buttonBox);
   setWindowTitle(tr("Edit Options"));
   setLayout(mainLayout);

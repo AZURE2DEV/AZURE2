@@ -5,6 +5,7 @@
 
 #include "Constants.h"
 #include "AZUREGrad.h"
+#include <map>
 #include <vector>
 #include "ThmExperiment.h"
 #include "ThmReports.h"
@@ -31,10 +32,8 @@ class AZUREAPI {
    * The AZUREAPI object is created with reference to an EData and CNuc object.
    *. The runtime configurations are also passed through a Config structure.
    */
-  AZUREAPI(Config &configure) :
-    configure_(configure),
-    data_(nullptr),
-    compound_(nullptr) {};
+  // Defined in the .cpp (Config is incomplete here).
+  AZUREAPI(Config &configure);
 
   // Defined in the .cpp: EData and CNuc are incomplete here, and deleting an
   // incomplete type is undefined.
@@ -66,8 +65,13 @@ class AZUREAPI {
   void SetExtrap();
   // Set the channel radius of particle pair idx (1-based) to r fm and rebuild
   // the compound nucleus, data and parameters.  Returns false if the rebuild
-  // failed, in which case the instance is no longer usable.
+  // failed, in which case the instance is no longer usable.  The override is
+  // kept for the life of the instance: every later rebuild (another SetRadius,
+  // Rebuild after a potential change, Initialize on a mode switch) applies all
+  // of them.  Before 2026-11-02 each rebuild applied only its own call's pair.
   bool SetRadius(int idx, double r);
+  // The channel-radius overrides in force, pair number -> fm.
+  const std::map<int, double> &RadiusOverrides() const { return radiusOverrides_; }
   /*!
    * Rebuild the compound nucleus and the data from the .azr and re-initialize,
    * recomputing the external-capture integrals rather than reading back
@@ -115,7 +119,12 @@ class AZUREAPI {
    *                      line with a screening block: the effect number in
    *                      field 6, the prior centre in field 5, the prior sigma
    *                      in field 14 (0 = none)
-   *                    8=THM coherent background (cbkg; cbackground=)
+   *                    8=fitted target density (atoms/cm^2) of a <targetInt>
+   *                      line with a densityfit block or of a density group:
+   *                      as type 7, plus the largest density the sub-point
+   *                      grids span in field 8
+   *                    9=THM coherent background (cbkg; cbackground=; was 8
+   *                      before the merge of dev 2d97b1f, 7 before 8673c5c)
    *   1  jgroup        1-based J-group index (R-matrix params only)
    *   2  J             total spin of the J-group / level
    *   3  parity        +1 / -1
@@ -333,6 +342,13 @@ class AZUREAPI {
   vector_r ParkNorms(const vector_r &rwaParams) const;
 
   /*!
+   * Data covariances ("covariance <file>" segments): forget the model frozen for their
+   * relvector terms, so the next chi2 evaluation freezes it again at its parameters
+   * (iterative refits).  Returns the number of covariance groups with relvector terms.
+   */
+  int RefreezeCovariance();
+
+  /*!
    * Value and analytic gradient of the (data) chi-squared with respect to the
    * non-fixed RWA parameters.  Input: the non-fixed RWA parameters (energies,
    * reduced widths, normalizations), as for CalculateChi2RWA.  Returns
@@ -349,10 +365,14 @@ class AZUREAPI {
    * Gauss-Newton / Levenberg-Marquardt.  Columns are the non-fixed parameters
    * (input order).  Returns
    *   [ nRes, nCols, r_0..r_{nRes-1}, J row-major (nRes x nCols) ],
-   * or [ -1 ] if a point is outside the supported analytic path.  Energy-shift
-   * columns are left zero.
+   * or [ -1 ] if a point is outside the supported analytic path.  Energy-shift,
+   * sqrt(E)-shift, shift-function and target-density columns are central
+   * differences, two residual evaluations each; a column listed in
+   * \p skipColumns (0-based indices into \p params) is not differenced and
+   * comes back zero, for a caller that holds those parameters (rmfit's fixed
+   * bounds, 2026-10-30).  The adjoint columns are always filled.
    */
-  vector_r CalculateResidualJacobianRWA(const vector_r &params) const;
+  vector_r CalculateResidualJacobianRWA(const vector_r &params, const std::vector<int> &skipColumns = {}) const;
 
   /*!
    * Standardized residuals only, from one forward pass: the residual vector
@@ -447,8 +467,10 @@ class AZUREAPI {
 
 
  private:
-  /// Shared body of SetRadius and Rebuild; idx/r are null for a plain rebuild.
-  bool RebuildImpl(const int *idx, const double *r);
+  /// Shared body of SetRadius and Rebuild: refill from the .azr with every radius override in \p radii.
+  bool RebuildImpl(const std::map<int, double> &radii);
+  /// Channel-radius overrides set through SetRadius, applied on every (re)build.
+  std::map<int, double> radiusOverrides_;
 
 
   /*!
@@ -481,6 +503,9 @@ class AZUREAPI {
    * sum r^2 is the returned chi-squared.
    */
   double EvaluateFilledChi2(vector_r *res) const;
+  /// Park's J > 0 wall, the abundance priors and the scattering-length chi^2 on the filled compound: the terms
+  /// both CalculateChi2RWA and CalculateChi2Physical add to EvaluateFilledChi2.
+  double FilledModelPenalties() const;
 
   /// Residuals and d r/d(packed parameter) of the points of one THM segment.
   /// THM (HOES) rows of the residual Jacobian; see ::ComputeTHMRows (AZUREGrad.h).

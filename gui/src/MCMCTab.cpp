@@ -208,12 +208,13 @@ MCMCTab::MCMCTab(QWidget *parent) :
 bool MCMCTab::isAutoPriorCategory(const QString &category) {
   // Normalizations, energy shifts, sqrt(E) shift coefficients and
   // shift-function parameters carry an experimental error in the segment
-  // definition, isotopic abundances one in the <abundances> block and
-  // electron-screening potentials one on their <targetInt> line, so
+  // definition, isotopic abundances one in the <abundances> block, and
+  // electron-screening potentials and fitted target densities one on their
+  // <targetInt> line, so
   // AZURECalcMCMC::BuildAutoPriors() derives their priors from the data and
   // overrides whatever this table holds.
   return category == "norm" || category == "shift" || category == "shift_sqrt" || category == "shift_fn" ||
-         category == "abundance" || category == "screening";
+         category == "abundance" || category == "screening" || category == "density";
 }
 
 QString MCMCTab::categoryOfName(const QString &name, bool isRWA, int *segmentKey) {
@@ -229,6 +230,7 @@ QString MCMCTab::categoryOfName(const QString &name, bool isRWA, int *segmentKey
   };
   if (name.startsWith("abundance_")) return "abundance";
   if (name.startsWith("screening_")) return "screening";
+  if (name.startsWith("density_")) return "density";
   {
     // segment_<key>_energy_shift_fn<j>
     const int at = name.lastIndexOf("_energy_shift_fn");
@@ -261,6 +263,7 @@ QString MCMCTab::categoryFromStoredName(const QString &name) {
   if (name.contains("energy-shift function", Qt::CaseInsensitive) || name.contains("_energy_shift_fn"))
     return "shift_fn";
   if (name.contains("screening", Qt::CaseInsensitive)) return "screening";
+  if (name.contains("target density", Qt::CaseInsensitive) || name.startsWith("density_")) return "density";
   if (name.contains("norm", Qt::CaseInsensitive)) return "norm";
   if (name.contains("shift", Qt::CaseInsensitive)) return "shift";
   return "loaded";
@@ -669,15 +672,14 @@ void MCMCTab::loadFromAZUREParams(bool isRWA, std::string filename) {
         const double nominalNorm = segments[s].GetNominalNorm();
         autoNormPrior[key] = qMakePair(
             nominalNorm, nominalNorm / 100.0 * segments[s].GetNormError());
-        autoShiftPrior[key] = qMakePair(
-            segments[s].GetNominalEnergyShift(),
-            segments[s].GetEnergyShiftError());
-        autoShiftSqrtPrior[key] = qMakePair(segments[s].GetNominalEnergyShiftSqrt(),
-                                            segments[s].GetEnergyShiftSqrtError());
+        // Energy-shift terms are centred on no shift, as the fit's penalty (ESegment::AddShiftPenalty,
+        // dev 0dd28e5, 2026-10-25): the value on the segment line is only the start.
+        autoShiftPrior[key] = qMakePair(0.0, segments[s].GetEnergyShiftError());
+        autoShiftSqrtPrior[key] = qMakePair(0.0, segments[s].GetEnergyShiftSqrtError());
         if (segments[s].OwnsShiftFn() && segments[s].HasShiftFn())
           for (int j = 0; j < segments[s].NumShiftFnParams(); j++)
             autoShiftFnPrior[QString("segment_%1_energy_shift_fn%2").arg(key).arg(j)] =
-                qMakePair(segments[s].GetNominalShiftFnValues()[j], segments[s].GetShiftFnErrors()[j]);
+                qMakePair(0.0, segments[s].GetShiftFnErrors()[j]);
       }
     }
 
@@ -722,8 +724,8 @@ void MCMCTab::loadFromAZUREParams(bool isRWA, std::string filename) {
             param.useGaussianPrior = (param.priorStd > 0.0);
             param.autoPrior = true;
           }
-        } else if (param.category == "screening") {
-          // The engine takes U_e's prior from its <targetInt> line (AZURECalcMCMC::BuildAutoPriors).
+        } else if (param.category == "screening" || param.category == "density") {
+          // The engine takes U_e's and a density's prior from its <targetInt> line (AZURECalcMCMC::BuildAutoPriors).
           param.useGaussianPrior = false;
           param.autoPrior = true;
         } else if (isAutoPriorCategory(param.category)) {

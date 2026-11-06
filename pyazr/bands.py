@@ -135,10 +135,11 @@ def load_covariance(path="output/covariance.dat", ncols=None):
 
 _RMATRIX_KINDS = (0, 1)      # GET_PARAMS_INFO type codes: 0 energy, 1 width
 # What a band spans (the engine's BandPackedColumns): the R-matrix parameters
-# and the THM coherent background (8, cbkg), which enters the HOES amplitude.
+# and the THM coherent background (9, cbkg), which enters the HOES amplitude.
 # (4 is the sqrt(E) energy-shift coefficient, 5 a shift-function parameter,
-# 6 an isotopic abundance and 7 an electron-screening potential: not in the band.)
-_BAND_KINDS = (0, 1, 8)
+# 6 an isotopic abundance, 7 an electron-screening potential and 8 a fitted
+# target density: not in the band.)
+_BAND_KINDS = (0, 1, 9)
 _NFIELDS = 16                # doubles per parameter record (kParamInfoFields)
 
 

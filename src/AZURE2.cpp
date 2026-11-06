@@ -31,14 +31,23 @@
 #include <sstream>
 #include <cctype>
 #include <vector>
+#include <algorithm>
 #include <map>
 #include <tuple>
 #include <gsl/gsl_errno.h>
+#ifdef _WIN32
+#include <io.h>
+#define AZURE2_ISATTY(fd) _isatty(fd)
+#else
+#include <unistd.h>
+#define AZURE2_ISATTY(fd) isatty(fd)
+#endif
 #ifndef NO_READLINE
 #include <readline/readline.h>
 #include <readline/history.h>
 #endif
 #include <string.h>
+#include <algorithm>
 #include <cstdlib>
 
 // Global Config pointer for use across the codebase
@@ -105,13 +114,16 @@ void printHelp() {
             << std::setw(25) << std::left << "\t--use-brune:" << std::setw(0) << "Use the alternative level matrix of C.R. Brune (the default)." << std::endl
             << std::setw(25) << std::left << "\t--no-brune:" << std::setw(0) << "Use the standard Lane-Thomas parametrization (constant boundary conditions) instead." << std::endl
             << std::setw(25) << std::left << "\t--use-park:" << std::setw(0) << "Fit the observed reduced width amplitudes (T.-S. Park, PRC 104, 064612); implies --use-brune." << std::endl
-            << std::setw(25) << std::left << "\t--ignore-externals:" << std::setw(0) << "Ignore external resonant capture amplitude if internal width is zero." << std::endl
+            << std::setw(25) << std::left << "\t--ignore-externals:" << std::setw(0) << "Ignore external resonant capture amplitude if internal width is zero (the default)." << std::endl
+            << std::setw(25) << std::left << "\t--no-ignore-externals:" << std::setw(0) << "Keep it; needed for the R-matrix route (<config> first line false)." << std::endl
             << std::setw(25) << std::left << "\t--use-rmc:" << std::setw(0) << "Use Reich-Moore approximation for capture (neutron capture only)." << std::endl
             << std::setw(25) << std::left << "\t--gsl-coul:" << std::setw(0) << "Use GSL Coulomb functions (faster, but less accurate)." << std::endl
             << std::setw(25) << std::left << "\t--coulomb-table[=FILE]:" << std::setw(0) << "Charged channels from the universal Coulomb table (the default; FILE: $AZURE2_COULOMB_TABLE or ~/.azure2/coulomb_table.bin)." << std::endl
             << std::setw(25) << std::left << "\t--no-coulomb-table:" << std::setw(0) << "Exact Coulomb functions everywhere." << std::endl
             << std::setw(25) << std::left << "\t--ec-table:" << std::setw(0) << "External capture from per-term energy tables (the default; undoes an earlier --no-ec-table)." << std::endl
             << std::setw(25) << std::left << "\t--no-ec-table:" << std::setw(0) << "External capture integrals at every energy (no energy tables); shifted amplitudes interpolated." << std::endl
+            << std::setw(25) << std::left << "\t--ec-convection-current:" << std::setw(0) << "The exact-form convection current (the default; undoes an earlier --no-ec-convection-current)." << std::endl
+            << std::setw(25) << std::left << "\t--no-ec-convection-current:" << std::setw(0) << "With --no-long-wavelength: external capture with the charge (extended Siegert) part of the E_L operator only, without its convection-current part." << std::endl
             << std::setw(25) << std::left << "\t--build-coulomb-table[=FILE]:" << std::setw(0) << "Build the Coulomb table (about 5 min on 4 threads, 88 MB; FILE as for --coulomb-table) and exit." << std::endl
             << std::setw(25) << std::left << "\t--grid-replacement:" << std::setw(0) << "Re-place the adaptive sub-point grids as levels and shifts move (the default)." << std::endl
             << std::setw(25) << std::left << "\t--no-grid-replacement:" << std::setw(0) << "Keep the adaptive sub-point grids placed from the input file's levels (default: re-place them as levels and shifts move)." << std::endl
@@ -119,10 +131,12 @@ void printHelp() {
             << std::setw(25) << std::left << "\t--use-nlopt:" << std::setw(0) << "Use NLopt minimizer (BOBYQA) instead of Minuit2." << std::endl
 #endif
             << std::setw(25) << std::left << "\t--use-gradient:" << std::setw(0) << "Use Minuit2 (MIGRAD) with the analytic gradient (default: numerical)." << std::endl
+            << std::setw(25) << std::left << "\t--refreeze-covariance[=N]:" << std::setw(0) << "Refit up to N times (default 5) with relvector covariance terms re-frozen at the fitted parameters." << std::endl
+            << std::setw(25) << std::left << "\t--max-calls=N:" << std::setw(0) << "Stop a MIGRAD or NLopt fit after N function calls (default: no limit; the fit ends at convergence)." << std::endl
             << std::setw(25) << std::left << "\t--use-lm:" << std::setw(0) << "Use the Levenberg-Marquardt minimizer (analytic Jacobian; falls back to MIGRAD)." << std::endl
             << std::setw(25) << std::left << "\t--use-gsl-lm:" << std::setw(0) << "Use the GSL trust-region least-squares minimizer with geodesic acceleration (analytic Jacobian; falls back to MIGRAD)." << std::endl
-            << std::setw(25) << std::left << "\t--covariance-band:" << std::setw(0) << "Compute the cross-section uncertainty band without asking (from covariance.dat)." << std::endl
-            << std::setw(25) << std::left << "\t--scale-covariance:" << std::setw(0) << "Scale the band's covariance to a reduced chi-squared of 1." << std::endl
+            << std::setw(25) << std::left << "\t--covariance-band:" << std::setw(0) << "Write the cross-section uncertainty band from the parameter covariance, without the interactive prompt." << std::endl
+            << std::setw(25) << std::left << "\t--scale-covariance:" << std::setw(0) << "With --covariance-band after a fit: inflate the covariance by the reduced chi-squared when it exceeds 1 (Birge ratio)." << std::endl
             << std::setw(25) << std::left << "\t--use-api:" << std::setw(0) << "Removed (the socket API is gone): exits with a pointer to pyazr." << std::endl;
 }
 
@@ -241,12 +255,18 @@ bool parseOptions(int argc, char *argv[], Config &configure) {
       configure.useECTable = true;
     else if (*it == "--no-ec-table")
       configure.useECTable = false;
+    else if (*it == "--ec-convection-current")
+      configure.ecConvectionCurrent = true;
+    else if (*it == "--no-ec-convection-current")
+      configure.ecConvectionCurrent = false;
     else if (*it == "--grid-replacement")
       configure.replaceSubPointGrids = true;
     else if (*it == "--no-grid-replacement")
       configure.replaceSubPointGrids = false;
     else if (*it == "--ignore-externals")
       configure.paramMask |= Config::IGNORE_ZERO_WIDTHS;
+    else if (*it == "--no-ignore-externals")
+      configure.paramMask &= ~Config::IGNORE_ZERO_WIDTHS;
     else if (*it == "--use-rmc")
       configure.paramMask |= Config::USE_RMC_FORMALISM;
     else if (*it == "--use-api")
@@ -261,7 +281,20 @@ bool parseOptions(int argc, char *argv[], Config &configure) {
       configure.paramMask |= Config::USE_GSL_LM_MINIMIZER;
     else if (*it == "--use-gradient")
       configure.paramMask |= Config::USE_ANALYTIC_GRADIENT;
-    else if (*it == "--covariance-band")
+    else if (*it == "--refreeze-covariance")
+      configure.refreezeCovariance = 5;
+    else if (it->compare(0, 22, "--refreeze-covariance=") == 0)
+      configure.refreezeCovariance = std::max(0, std::atoi(it->substr(22).c_str()));
+    else if (it->compare(0, 12, "--max-calls=") == 0) {
+      char *end = nullptr;
+      const std::string v = it->substr(12);
+      const long n = std::strtol(v.c_str(), &end, 10);
+      if (v.empty() || *end != '\0' || n < 0)
+        configure.outStream << "WARNING: --max-calls needs a whole number >= 0 (0 = no limit); " << *it
+                            << " ignored." << std::endl;
+      else
+        configure.maxCalls = static_cast<unsigned int>(std::min(n, 1000000000L));
+    } else if (*it == "--covariance-band")
       configure.paramMask |= Config::CALCULATE_COVARIANCE_BAND;
     else if (*it == "--scale-covariance")
       configure.paramMask |= Config::SCALE_COVARIANCE_BY_CHI2;
@@ -366,14 +399,38 @@ int commandShell(const Config &configure) {
  */
 
 // Read a yes/no answer from stdin; empty/unrecognized input counts as "no".
+/*!
+ * A y/n question of the text menu.  Answers (any case): y, yes, 1, t, true; n, no, 0, f, false; a blank line is "no"
+ * (1 and t were "yes" before, and job scripts answer 1).  Anything else is refused.  From a pipe or a file the run stops with exit status 1: asking again would hand the NEXT scripted line to
+ * this question, and that is how the trap worked -- a script that left out the band question of modes 2 and 3
+ * ('3\nparam.sav\n\n7') gave the parameter-file name to it, which was read as "no", and the blank line after it to
+ * the parameter-file prompt, so the run used the <levels> of the .azr without a word.  At a terminal the question is
+ * asked again.  Before 2026-11-01 any answer not starting with y, 1 or t was "no".
+ */
 static bool askYesNo(Config &configure, const std::string &prompt) {
-  configure.outStream << prompt << " (y/n): ";
-  std::string in;
-  getline(std::cin, in);
-  size_t a = in.find_first_not_of(" \t\r\n");
-  if (a == std::string::npos) return false;
-  char c = (char)std::tolower(in[a]);
-  return (c == 'y' || c == '1' || c == 't');
+  const bool terminal = AZURE2_ISATTY(0) != 0;
+  while (true) {
+    configure.outStream << prompt << " (y/n): ";
+    std::string in;
+    if (!getline(std::cin, in)) return false;  // end of input: the next prompt stops the run
+    const size_t a = in.find_first_not_of(" \t\r\n");
+    if (a == std::string::npos) return false;
+    const size_t b = in.find_last_not_of(" \t\r\n");
+    const std::string answer = in.substr(a, b - a + 1);
+    std::string lower = answer;
+    std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c) { return (char)std::tolower(c); });
+    if (lower == "y" || lower == "yes" || lower == "1" || lower == "t" || lower == "true") return true;
+    if (lower == "n" || lower == "no" || lower == "0" || lower == "f" || lower == "false") return false;
+    configure.outStream << std::endl
+                        << "ERROR: \"" << prompt << "\" takes y or n, not \"" << answer << "\"." << std::endl;
+    if (terminal) continue;
+    configure.outStream << "Modes 2 and 3 ask about the uncertainty band BEFORE the parameter file, so a script answers"
+                        << std::endl
+                        << "it first, e.g. printf '3\\nn\\nparam.sav\\n\\n7\\n' | AZURE2 --no-gui --no-readline project.azr"
+                        << std::endl
+                        << "(--covariance-band answers it yes without a prompt).  Nothing was calculated." << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
 }
 
 // Offer the cross-section uncertainty band (and, for fit modes, the reduced-chi^2
@@ -767,8 +824,14 @@ void getRateParams(Config &configure, std::vector<SegPairs> &segPairs, bool useR
       std::string inString = readAnswer(configure, "Reaction Rate Exit Pair");
       std::istringstream stm;
       stm.str(inString);
-      if (!(stm >> configure.rateParams.exitPair) || configure.rateParams.exitPair == 0)
-        configure.outStream << "Please enter an integer greater than zero." << std::endl;
+      // -1: the total radiative capture, summed over every capture pair of the entrance nucleus (the exit
+      // key a total-capture segment line carries).
+      if (!(stm >> configure.rateParams.exitPair) || configure.rateParams.exitPair == 0 ||
+          configure.rateParams.exitPair < -1) {
+        configure.outStream << "Please enter an integer greater than zero, or -1 for the total radiative capture."
+                            << std::endl;
+        configure.rateParams.exitPair = 0;
+      }
     }
     if (configure.rateParams.entrancePair == configure.rateParams.exitPair) {
       configure.outStream << "Cannot calculate rate for elastic scattering." << std::endl;
@@ -1092,6 +1155,8 @@ std::string createPrettyParameterName(const std::string &paramName) {
 
   // Electron screening: "screening_<n>" -> "Screening U_e (eV), effect n"
   if (paramName.find("screening_") == 0) return "Screening U_e (eV), effect " + paramName.substr(10);
+  // Fitted target density: "density_<n>" -> "Target density (atoms/cm^2), effect n"
+  if (paramName.find("density_") == 0) return "Target density (atoms/cm^2), effect " + paramName.substr(8);
 
   // Isotopic abundance: "abundance[_<sample>]_Z_A" -> "Abundance [sample ..] Z=.. A=.."
   if (paramName.find("abundance_") == 0) {
@@ -1592,17 +1657,16 @@ int main(int argc, char *argv[]) {
     configure.paramMask &= ~Config::USE_BRUNE_FORMALISM;
     configure.paramMask &= ~Config::USE_PARK_FORMALISM;
   }
-  if ((configure.paramMask & Config::USE_BRUNE_FORMALISM) || (configure.paramMask & Config::IGNORE_ZERO_WIDTHS)) {
-    if (!(configure.paramMask & Config::USE_AMATRIX))
-      configure.outStream << "WARNING: R-Matrix specified but --ignore-externals and --use-brune options require A-Matrix.  A-Matrix will be used."
-                          << std::endl;
-    configure.paramMask |= Config::USE_AMATRIX;
-  }
+  // Before 2026-11-01 Brune OR ignore-externals forced the A-matrix ("--ignore-externals and --use-brune options
+  // require A-Matrix"), and as ignore-externals is on by default with no flag to clear it the CLI could never use
+  // the R-matrix route.  Brune has been implemented on the R-matrix route (RMatrixFunc; equal to the A-matrix route
+  // to ~1e-13); ignore-externals still is not.
+  configure.ResolveMatrixRoute();
 
-  // Non-zero when the run failed (a project the engine refused after the
-  // configuration was read, e.g. a <thm> weight that does not fit the data),
-  // so that scripts see the failure as they see a malformed <thm> block.
-  int runStatus = 0;
+  // Exit status: 1 when the calculation was aborted or failed ("Calculation was aborted.", a refused project --
+  // e.g. a <thm> weight that does not fit the data --, a failed MCMC run), so that scripts and job chains can
+  // tell; before 2026-11-01 it was 0 whatever happened on dev, and -1 (255) on thm.
+  int returnValue = 0;
   {
     // Print welcome message
     welcomeMessage(configure);
@@ -1651,21 +1715,24 @@ int main(int argc, char *argv[]) {
 
       configure.outStream << std::endl;
       startMessage(configure);
-      int returnValue = runMCMC(configure, mcmcParams);
+      returnValue = runMCMC(configure, mcmcParams);
 
       if (returnValue != 0) {
         configure.outStream << "MCMC sampling failed." << std::endl;
-        runStatus = returnValue;
       }
     } else {
 #endif
       // Create instance of main AZURE function, print start message,
-      //  and execute
-      AZUREMain azureMain(configure);
+      //  and execute.  On the heap and deliberately never deleted: the process
+      //  ends right after this, and freeing the millions of EPoint objects one by
+      //  one took 2.3-3.7 s of a natural_neon calculation (more with more threads)
+      //  after every output file had been written.  No engine object holds a file
+      //  or another resource its destructor would release; the OS reclaims the
+      //  memory.
+      AZUREMain *azureMain = new AZUREMain(configure);
       configure.outStream << std::endl;
       startMessage(configure);
-      int returnValue = azureMain();
-      runStatus = returnValue;
+      returnValue = (*azureMain)();
 #ifdef USE_MCMC
     }
 #endif
@@ -1683,5 +1750,5 @@ int main(int argc, char *argv[]) {
   CleanupCoulFuncCache();
   CleanupECAmplitudeCache();
 
-  return runStatus != 0 ? -1 : 0;
+  return returnValue != 0 ? 1 : 0;
 }

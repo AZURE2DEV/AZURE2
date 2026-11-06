@@ -24,7 +24,18 @@ parameters for subsequent calculations (extrapolation, reaction rate, etc.).
 In a project with an ``<abundances>`` block the isotopic abundances follow the
 level parameters as ``abundance_<Z>_<A>`` (:doc:`data_formats`). An
 experimental-effect line with a ``screening`` block adds its screening potential
-(eV) as ``screening_<n>`` after the energy-shift parameters.
+(eV) as ``screening_<n>`` after the energy-shift parameters, and a fitted target
+density (``densityfit``, one per line or ``densitygroup``) adds ``density_<n>``
+(atoms/cm²) after those.
+
+The ``segment_<k>_*`` lines (normalizations and energy shifts) belong to the
+data segments of the fit that wrote the file. A run without data -- an
+extrapolation (**Calculate Segments Without Data**) or a reaction rate --
+numbers its own test grids 1, 2, ... and does not apply those lines (the run
+log says so): a test segment's energies are the ones its line asks for. Until
+October 2026 data segment *k*'s fitted shift was handed to test segment *k* by
+name and moved its grid. ``pyazr``'s ``load_sav`` does the same in
+extrapolation mode.
 
 ``param.par`` and ``param.sav`` hold one row per parameter, ``name value
 error``, after a first line ``#parametrization`` with the basis 0, 1 or 2
@@ -52,11 +63,28 @@ Contains the **physical** (observable) parameters resulting from the fit. If
 the user wishes to use these as new starting values, they must be manually
 entered into the **Levels and Channels** tab.
 
+relativistic.out
+^^^^^^^^^^^^^^^^
+
+Written with ``relativistic=1`` (:doc:`../user_guide/particle_pairs`). The
+levels of ``parameters.out`` in the level-energy convention of the LANL code
+EDA (ENDF ``KRL=1``): for each level its excitation energy :math:`E_x`, the
+energy :math:`E_s = S_0 + T_0 + T_0^2/(2 m_0)` (:math:`T_0 = E_x - S_0` on the
+reference pair of mass :math:`m_0`), the difference :math:`E_s - E_x` and the
+factor :math:`dE_s/dE_x = 1 + T_0/m_0`; per particle channel the partial width
+and reduced width amplitude, and the same times :math:`1 + T_0/m_0` and its
+square root. The mapping is exact at each level energy; away from it the two
+energy dependences differ at second order in :math:`T_0/m_0`.
+
 normalizations.out
 ^^^^^^^^^^^^^^^^^^
 
-Contains the fitted normalization factors for data segments where normalization
-was varied. This file is automatically loaded when ``param.sav`` is selected.
+One complete row per data segment whose normalization is fitted (a varied
+normalization, or a member of a ``normgroup``): segment key, data file, angle
+bounds and frame, energy bounds and frame, the fitted normalization and the
+energy shift. It is a report only; the fitted normalizations are carried by
+``param.sav`` and nothing reads this file back. (Before October 2026 every
+other segment also left a row of six fields without key, file or angles.)
 
 shifts.out
 ^^^^^^^^^^
@@ -100,7 +128,10 @@ Nine columns:
    * - 1
      - Center-of-mass energy (MeV)
    * - 2
-     - Excitation energy (MeV)
+     - Excitation energy (MeV): :math:`E_{c.m.} + S + E^*` of the entrance pair
+       (for a beta-delayed segment, of the exit pair); before October 2026 the
+       pair's :math:`E^*` was left out, so the column was low by it for an
+       excited-state pair
    * - 3
      - Center-of-mass angle (degrees)
    * - 4
@@ -137,7 +168,10 @@ as above. Five columns:
    * - 1
      - Center-of-mass energy (MeV)
    * - 2
-     - Excitation energy (MeV)
+     - Excitation energy (MeV): :math:`E_{c.m.} + S + E^*` of the entrance pair
+       (for a beta-delayed segment, of the exit pair); before October 2026 the
+       pair's :math:`E^*` was left out, so the column was low by it for an
+       excited-state pair
    * - 3
      - Center-of-mass angle (degrees)
    * - 4
@@ -176,16 +210,43 @@ Under ``--use-park`` the total line ends with ``Total-Park-Chi-Squared``, the
 :math:`J > 0` penalty. The quantity a fit actually
 minimises is the sum of both — see :doc:`../user_guide/chi_squared`.
 
-This file is the quickest scalar check that a run succeeded.
+This file is the quickest scalar check that a run succeeded.  After a fit,
+check ``fitStatus.out`` too: ``chiSquared.out`` is written whether or not the
+minimizer converged.
+
+fitStatus.out
+^^^^^^^^^^^^^
+
+Written by every MIGRAD or NLopt fit (and removed at the start of a fit, so it
+never describes an earlier one)::
+
+    minimizer   MIGRAD
+    status      converged
+    valid       1
+    edm         6.06159e-08
+    edm_goal    0.0002
+    calls       489
+    call_limit  none
+
+``status`` is ``converged``, ``call_limit`` (stopped at the ``--max-calls``
+limit) or ``invalid`` (MIGRAD's minimum is not valid: EDM above its goal or no
+valid covariance); NLopt writes ``converged_<reason>``, ``call_limit`` or
+``failed_<reason>`` and no EDM lines.  ``calls`` counts objective evaluations as
+the minimizer counts them.  The Levenberg-Marquardt and GSL minimizers do not
+write this file unless they fall back to MIGRAD.
 
 With a ``<scatteringLengths>`` block the totals line ends with
 ``Total-Scattering-Length-Chi-Squared``, the constraint term of
 :doc:`../theory/scattering_length` (also part of the minimised sum).
+The same holds for ``Total-Park-Chi-Squared`` and
+``Total-Abundance-Chi-Squared``; the file written through pyazr's
+``write_output_files`` carries all three evaluated at the parameters it was
+asked for (before October 2026 the API left them at zero or stale).
 
 scatteringLengths.out
 ^^^^^^^^^^^^^^^^^^^^^
 
-Written after every calculation and fit (also printed in the run log): the
+Written after every calculation and fit (the run log only names the file): the
 s-wave scattering length of every channel spin of every particle pair at the
 parameters of the run::
 
@@ -200,6 +261,25 @@ nonzero imaginary part means a channel with a lower threshold is open; a
 channel spin in which no level has a width gets the pure Coulomb (hard-sphere)
 value and the note.  The measured lengths of the ``<scatteringLengths>`` block
 follow, each with its model value and :math:`\chi^2`, and their total.
+
+covariance.out
+^^^^^^^^^^^^^^
+
+Written with ``chiSquared.out`` when data segments carry a ``covariance``
+block (:doc:`data_formats`): one line per covariance file, with the number of
+fitted rows, the rows of the file, the segments, :math:`\chi^2 = r^T M^{-1} r`
+and, for comparison, :math:`\sum r_i^2` (the same points with their
+correlations ignored), and the number of ``relvector`` terms.
+
+covarianceModel.out
+^^^^^^^^^^^^^^^^^^^
+
+For covariance files with ``relvector`` terms: the model :math:`m` they were
+built with, frozen at the first evaluation of the run (and appended again at
+every refreeze from pyazr), one line per fitted row: the row of the
+covariance file, the segment key, the lab energy and angle, the data value,
+:math:`m` and the uncertainty used, all in the units of the data file. With
+it the :math:`\chi^2` of the run can be reproduced.
 
 param.errors
 ^^^^^^^^^^^^
@@ -240,6 +320,10 @@ speed up subsequent calculations, as long as:
   energies the integrals are evaluated at.
 - The Coulomb-function routine (``--gsl-coul``) and the hybrid potential are
   the same.
+- Relativistic kinematics (``relativistic=1`` in ``<config>``) are on or off as
+  before: the switch changes every channel's eta, rho and flux factor (it was
+  missing from the signature before October 2026; a file written with it off is
+  no longer read back by a run with it on).
 
 Energies, widths, and ANCs of the R-matrix levels can be changed freely while
 reusing this file; the energy of an external-capture final state cannot, since
@@ -256,8 +340,11 @@ recomputed once, with a warning, and gets one.
 With the external-capture energy tables (the default, see
 :doc:`../developer/ec_table`) computing the integrals afresh costs seconds even
 with resolution or target integration, so reusing the file saves little.  The
-file stores six significant digits, so a reused file moves segment
-:math:`\chi^2` values by up to about 1e-5 relative to a fresh calculation.
+file stores every digit (17 significant), so a reused file gives the same
+:math:`\chi^2` as the fresh calculation that wrote it.  Before 30 October 2026
+it stored six, which moved segment :math:`\chi^2` values by up to about 1e-5
+relative (the ``tests/13N`` total by 0.62); such files carry an older signature
+and are recomputed once.
 
 intEC.extrap
 ^^^^^^^^^^^^
@@ -270,7 +357,18 @@ reactionrates.out
 
 Contains temperatures (in GK) and calculated reaction rates
 (in cm\ :sup:`3` mol\ :sup:`-1` s\ :sup:`-1`) from the **Calculate Reaction
-Rate** mode.
+Rate** mode. With the exit pair "Total capture" (key ``-1``) the rate is the total
+radiative capture rate, summed over every capture pair of the entrance nucleus.
+
+cross_section_grid.dat
+^^^^^^^^^^^^^^^^^^^^^^
+
+The energy grid the reaction rate integrated: centre-of-mass energy (MeV), the
+angle-integrated cross section (b) and the S-factor (MeV b) at every node (48 per
+decade from 0.1 eV to 50 MeV, plus a cluster around every level of the parameters
+being evaluated). The rate is the integral of a spline of ln σ against ln E
+through these points, so this file is the first thing to plot when a rate looks
+wrong.
 
 samples.mcmc
 ^^^^^^^^^^^^

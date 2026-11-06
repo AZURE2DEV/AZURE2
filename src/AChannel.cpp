@@ -106,7 +106,11 @@ void AChannel::SetWignerLimit(double reducedMass, double channelRadius) {
   // reduced_mass comes in atomic mass units (u), convert to MeV/c² by multiplying by uconv
   // channel_radius is in fm
   // Result will be in MeV
-  if (channelRadius == 0) {
+  // No limit (0, skipped by CNuc::FillMnParams) for a channel without a radius, and for a photon or beta
+  // channel: a photon pair has mu = 0, so the formula gave infinity whenever its radius was nonzero, and
+  // FillMnParams then set Minuit limits (-inf, inf), which its sine transform turns into NaN (audit
+  // 2026-10-25, item 32).  The Wigner limit is a statement about particle channels.
+  if (channelRadius == 0 || !(reducedMass > 0.0) || radtype_ != 'P') {
     wigner_limit_ = 0;
     return;
   }

@@ -7,6 +7,8 @@
 #include "ThmExperiment.h"
 #include <memory>
 #include <deque>
+#include <map>
+#include "DataCovariance.h"
 #include <memory>
 #include <ios>
 
@@ -92,6 +94,31 @@ class EData {
   void FillScreeningFromParams(const vector_r &);
   /// Sum of the screening priors ((U_e - nominal)/sigma)^2.
   double ScreeningPenalty() const;
+  /*!
+   * Fitted target densities (TargetEffect::HasDensityFit).  One parameter `density_<n>` (atoms/cm^2) per
+   * ungrouped `densityfit` line and per `densitygroup`, n = the effect number of the line (of the group's first
+   * line: its place among the active <targetInt> lines), after the screening parameters.  None without a
+   * densityfit block.  As for screening, a line listing several segments has one copy of its effect per segment;
+   * the parameter is the line's, shared by every copy.
+   */
+  int NumDensityParams() const { return (int)densityEffects_.size(); }
+  /// Effect number of density parameter k (1-based): the line, or the first line of its group.
+  int GetDensityEffect(int k) const { return densityEffects_[k - 1]; }
+  /// The target effect of density parameter k (the first copy of its line; every copy holds the same density).
+  TargetEffect *GetDensityTargetEffect(int k) { return this->GetTargetEffect(densityLeadCopies_[k - 1]); }
+  const TargetEffect *GetDensityTargetEffect(int k) const {
+    return const_cast<EData *>(this)->GetTargetEffect(densityLeadCopies_[k - 1]);
+  }
+  int GetDensityParamOffset() const { return densityParamOffset_; }
+  /// The density parameter (1-based) effect \p n follows, 0 if its density is not fitted.
+  int DensityParamOfEffect(int n) const {
+    return (n >= 1 && n <= (int)densityParamOfEffect_.size()) ? densityParamOfEffect_[n - 1] : 0;
+  }
+  /// Set the fitted densities from a parameter vector and recompute the target thickness of every point of
+  /// their lines (called by FillEnergyShiftsFromParams, so every evaluation sees the vector's values).
+  void FillDensitiesFromParams(const vector_r &, const Config &);
+  /// Sum of the density priors ((N - N0)/sigma)^2.
+  double DensityPenalty() const;
   /// Read the target-effects input file and build the TargetEffect objects.
   int ReadTargetEffectsFile(const Config &, CNuc *);
   /// Is this a fit? AZURECalc clones the compound nucleus and data per thread only when it is.
@@ -149,10 +176,16 @@ class EData {
   /// Validates a component's pair keys (both present, one compound nucleus) and flags its entrance pair; false with the error printed otherwise.
   bool CheckComponentPairs(CNuc *, const ESegment &baseSegment, int entranceKey, int exitKey, const Config &);
   ESegment *CreateComponentSegment(const ESegment &baseSegment, int entranceKey, int exitKey);
+  /// A transmission or yield segment after its components exist: checks, plain components, the yield's total term.
+  bool FinishTransformedSegment(CNuc *, ESegment *, int key, bool isTest, const Config &);
+  /// Every term of a transmission or yield segment on the base point's sub-point grid (after the target effects).
+  bool CheckTransformedSegments(const Config &);
   ESegment *CreateComponentSegment(const ESegment &baseSegment, int entranceKey, int exitKey, double fixedAngle);
   /// Map points at equal energies onto one another, so a shared energy is calculated once.
   /// The compound nucleus tells which segments have a particle exit; null is conservative.
   void MapData(CNuc *theCNuc = nullptr);
+  /// The mapping inside segments with components (MapData calls it last).
+  void MapComponentSegments(CNuc *theCNuc);
   /// Append a target-effect definition.
   void AddTargetEffect(TargetEffect);
   void SetNormParamOffset(int);
@@ -171,6 +204,37 @@ class EData {
   void ResolveNormGroups(const Config &);
   /// Set each norm-group follower's (fixed) norm parameter to its leader's value.
   void SyncNormGroupParams(ROOT::Minuit2::MnUserParameters &) const;
+  /// The data covariance file \p path, read on first use (segment Fill); null (with an
+  /// ERROR printed and SetCovarianceError) if it cannot be read.
+  std::shared_ptr<DataCovariance::File> CovarianceFileFor(const std::string &path, const Config &);
+  void SetCovarianceError() { covarianceError_ = true; }
+  /// A data point beyond the kinematic maximum lab angle (ESegment::Fill): the run stops instead of dropping the segment.
+  void SetKinematicsError() { kinematicsError_ = true; }
+  /// Gather the points of the segments carrying "covariance <file>" into one group per
+  /// file and factor each group's matrix (called by Fill).  Returns -1 on an error.
+  int ResolveCovarianceGroups(const Config &);
+  bool HasCovariance() const { return !covGroups_.empty(); }
+  int NumCovarianceGroups() const { return (int)covGroups_.size(); }
+  DataCovariance::Group &GetCovarianceGroup(int g) const { return *covGroups_[g]; }
+  /// From the points' current fit values: the chi2 of every covariance group, r^T M^-1 r,
+  /// minus the sum of r_i^2 the per-point loops counted for those points (so adding the
+  /// return value to their total gives the covariance chi2).  Sets each covariance
+  /// segment's chi2 to the sum over its points of r_i (M^-1 r)_i (also in \p segChis,
+  /// indexed by segment number, when given) and the points' seeds (M^-1 r)_i.
+  double CovarianceChi2Correction(std::vector<double> *segChis = nullptr);
+  /// Whiten the data rows of a residual vector (and of a row-major Jacobian with \p nCols
+  /// columns, when given): r <- W r within every covariance group (W^T W = M^-1).  Rows are the
+  /// points in segment order, as ComputeResidualJacobian lays them out.
+  void WhitenResidualRows(std::vector<double> &residuals, std::vector<double> *jacobian, int nCols);
+  /// covariance.out: each group's chi2 and the diagonal-only sum, at the current fit values.
+  void WriteCovarianceSummary(const Config &);
+  /// Forget the frozen model of the relvector terms; the next evaluation freezes it again.
+  void RefreezeCovariance();
+  /// True when any data-covariance group has relvector terms (a model frozen at the first evaluation).
+  bool HasRelativeCovariance() const;
+  /// Calculate the covariance segments' points at the current parameters and set their
+  /// seeds, for a gradient pass that needs (M^-1 r) before it reaches the points.
+  void PrepareCovarianceSeeds(CNuc *, const Config &);
   /// The segment (1-based) whose norm segment s uses: its norm-group leader, or s itself.
   int NormOwner(int s) const;
   void FillMnParams(ROOT::Minuit2::MnUserParameters &);
@@ -301,12 +365,28 @@ class EData {
   EDataIterator begin();
   EDataIterator end();
   std::vector<ESegment> &GetSegments();
+  /*!
+   * Calculates every point of \p segments and of their component segments in
+   * one OpenMP pass, largest items first.  A host point also fills the points
+   * mapped onto it, so mapped points are not items of their own.  A point whose
+   * calculation throws gets a fit cross section of 0.  Returns the number of
+   * such points, or -1 when nothing was calculated: no OpenMP, already inside a
+   * parallel region, point mapping switched off on this thread, or
+   * AZURE_SERIAL_CHI2 set.  The caller then reads the points with
+   * ESegment::CalculateTheoreticalCrossSection(..., precalculated = true).
+   */
+  static int CalculatePointsInParallel(const std::vector<ESegment *> &segments, CNuc *theCNuc,
+                                       const Config &configure);
 
  private:
   std::vector<TargetEffect> targetEffects_;
   std::vector<ESegment> segments_;
   std::deque<ESegment> componentSegments_;  // Separate storage for component segments (deque avoids pointer invalidation)
-  bool componentError_ = false;              // a component failed CheckComponentPairs
+  bool componentError_ = false;
+  std::map<std::string, std::shared_ptr<DataCovariance::File>> covFiles_;  // only while filling
+  std::vector<std::shared_ptr<DataCovariance::Group>> covGroups_;         // shared by every copy
+  bool covarianceError_ = false;              // a component failed CheckComponentPairs
+  bool kinematicsError_ = false;              // a lab angle beyond the kinematic maximum (audit 2026-10-25, item 31)
   int iterations_;
   int normParamOffset_;
   int energyShiftParamOffset_;
@@ -315,6 +395,12 @@ class EData {
   int screeningParamOffset_ = -1;  // -1 until FillMnParams has laid the vector out
   std::vector<int> screeningEffects_;  // line numbers (effect numbers) with a screening block, in order
   std::vector<std::vector<int>> screeningCopies_;  // per screening parameter: the target effects of its line
+  int densityParamOffset_ = -1;        // -1 until FillMnParams has laid the vector out
+  std::vector<int> densityEffects_;    // line number (effect number) holding each density parameter, in order
+  std::vector<int> densityLeadCopies_;     // per density parameter: the first target effect (copy) of that line
+  std::vector<int> densityParamOfEffect_;  // per target effect (copy, 0-based): its density parameter, 0 = none
+  /// Group the densityfit / densitygroup lines into parameters (ReadTargetEffectsFile); -1 on an error.
+  int SetUpDensityParams(const Config &);
   bool isFit_;
   bool isErrorAnalysis_;
   std::streampos ecReadPos_;  // File offset where component-segment EC integrals begin in the intEC file

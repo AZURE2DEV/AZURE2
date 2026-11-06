@@ -24,6 +24,57 @@ Because both the value and its error are scaled by :math:`n_s`, a normalization
 that is free to move cannot reduce :math:`\chi^2` simply by shrinking the
 uncertainties.
 
+Correlated data: covariance matrices
+------------------------------------
+
+Data whose uncertainties are correlated (a run-by-run fit covariance, a
+detector efficiency common to an excitation function, an analysis systematic
+that moves several observables together) can carry their covariance matrix
+:math:`C`: segments whose lines end with ``covariance <file>``
+(:doc:`segments`; file format in :doc:`../reference/data_formats`) share it, and
+their points enter as
+
+.. math::
+
+   \chi^2_{\text{cov}} = r^{T} M^{-1} r, \qquad
+   r_i = \frac{\sigma^{\text{fit}}_i - n_s\,\sigma^{\text{data}}_i}{n_s\,\delta_i},
+   \qquad M = D^{-1} C D^{-1},
+
+with :math:`r` the same normalized residuals as above and
+:math:`D = \mathrm{diag}(\delta_i)`. This is :math:`v^T C^{-1} v` with
+:math:`v` the model-minus-data differences in the units of the data file, so
+the value does not depend on :math:`\delta_i` (AZURE2 sets it to
+:math:`\sqrt{C_{ii}}`), the matrix scales with the normalization exactly as the
+error column does, and the lab-to-c.m. conversion acts on it as on the error
+column. A diagonal :math:`C = \mathrm{diag}(\delta_i^2)` reproduces the
+uncorrelated sum exactly. The covariance covers only the rows actually fitted:
+points removed by the energy or angle limits drop out of the matrix (the
+marginal distribution). Normalization and energy-shift penalties, normalization
+groups and every fitter (MIGRAD with or without ``--use-gradient``,
+``--use-lm``, ``--use-gsl-lm``, the MCMC likelihood) work unchanged; the
+least-squares fitters see whitened residuals :math:`w = W r` with
+:math:`W^T W = M^{-1}`, so :math:`\sum w_i^2 = \chi^2_{\text{cov}}`.
+
+**Multiplicative uncertainties and Peelle's pertinent puzzle.** A fully
+correlated *relative* uncertainty (an efficiency, a solid angle, an overall
+scale) entered as :math:`(f\,d)(f\,d)^T`, built from the measured values
+:math:`d`, biases a least-squares fit low (Peelle's pertinent puzzle). Two
+remedies: fit the scale as a normalization with its penalty (the usual AZURE2
+way, ``normgroup`` for one scale shared by several segments), or enter it as a
+``relvector`` term, :math:`(f\,m)(f\,m)^T` with :math:`m` the **model** in the
+data's units. AZURE2 freezes :math:`m` at the first evaluation of the run (the
+starting parameters), so :math:`C` stays constant through a minimization, and
+writes it to ``covarianceModel.out``. The iterative scheme (Chiba and Smith)
+refits from the result: run AZURE2 again from the fitted ``param.sav``, or in
+pyazr call ``refreeze_covariance()`` between fits.
+
+``chiSquared.out`` gives a covariance segment the share
+:math:`\sum_{i \in s} r_i (M^{-1} r)_i`; the shares add up to the group's
+:math:`\chi^2` exactly, but a single share is not a goodness of fit of that
+segment alone (it can even be negative). ``covariance.out`` lists each
+covariance file's :math:`\chi^2` next to :math:`\sum r_i^2`, what the same
+points would give with their correlations ignored.
+
 The normalization penalty
 -------------------------
 
@@ -68,7 +119,9 @@ them -- unless the centre is held explicitly. A row
 
 centres the prior of segment 3's normalization on 1 (and of its energy shift
 on 0), whatever the Data Norm. (Energy Shift) column holds; the column is then
-only the start value. ``3`` is the segment key, the line's position in
+only the start value. (The energy-shift prior is centred on 0 anyway since
+25 October 2026, see below; on this branch an explicit
+``segment_N_energy_shift prior_centre c`` row moves that centre to *c*.) ``3`` is the segment key, the line's position in
 ``<segmentsData>`` counting inactive lines, as in ``segment_3_norm`` of
 ``param.sav``. A normalization centre must be positive; a row naming no
 active segment is reported and ignored. Without a row nothing changes: a file
@@ -82,15 +135,17 @@ priors) and a fit started from it is pulled to the experimental values, not
 to its own previous result:
 
 - the Fitting tab shows the centre in the **Prior Centre** column of the
-  Normalization and Energy Shifts tables (empty: the column value) and keeps
+  Normalization and Energy Shifts tables (empty: the column value for a
+  normalization, 0 for an energy shift) and keeps
   it when it loads a ``param.sav``; loading one still writes the fitted
   normalizations into the column, so in a project without explicit centres a
   fit started from the saved project is centred on them -- type the
   experimental value (usually 1) into **Prior Centre** first;
 - pyazr's ``save_fit`` (default ``norms="fitted"``) writes the fitted norms
-  and shifts into the columns and, for every prior that thereby leaves its
-  column, the centre the fit used as an explicit row; the snapshot run on its
-  own reproduces the fitted data :math:`\chi^2` and priors.
+  and shifts into the columns and, for every normalization prior that thereby
+  leaves its column, the centre the fit used as an explicit row (for a shift,
+  only an explicit non-zero centre); the snapshot run on its own reproduces
+  the fitted data :math:`\chi^2` and priors.
   ``save_fit(..., norms="nominal")`` keeps the columns and puts the fitted
   values only in the ``.sav`` (to be given as the parameter file: Run tab,
   *Parameters File*; CLI "use previous parameters").
@@ -103,8 +158,8 @@ best-fit total (the "Total Chi-Squared" on the CLI, data plus priors), listed
 in the THM documentation ("Examples"). A fixed normalization pays its
 penalty too when it sits away from an explicit centre (``f19_pag_thm`` and
 ``c12c12_tumino2018`` store fitted norms fixed), as it would after a
-``param.sav`` moved it. The same holds for the energy-shift column and its
-penalty below.
+``param.sav`` moved it. A shift's penalty is measured from 0 (or from its
+explicit centre), so writing fitted shifts into the column does not move it.
 
 Segments that share one normalization (``normgroup``, :doc:`segments`)
 contribute this term once, with the first member's :math:`n^{\text{nom}}` and
@@ -119,23 +174,40 @@ this time with an absolute rather than a percentage error:
 .. math::
 
    \chi^2_{\text{shift},s} =
-   \left(\frac{\Delta E_s - \Delta E_s^{\text{nom}}}{\delta(\Delta E_s)}\right)^2
+   \left(\frac{\Delta E_s}{\delta(\Delta E_s)}\right)^2
 
-A segment whose :math:`\sqrt{E}` shift coefficient :math:`b_s` is free (the
-``sqrtshift`` block, see :doc:`segments`) adds the same kind of term,
-:math:`((b_s - b_s^{\text{nom}})/\delta b_s)^2`, with :math:`\delta b_s` in
-MeV\ :sup:`1/2`, and so does each free parameter :math:`a_j` of an
-energy-shift function (the ``shiftfn`` block), once, on the segment that
-declares the function: :math:`((a_j - a_j^{\text{nom}})/\delta a_j)^2`, with
-the nominal value the one in the input file. A free shift term with no
-uncertainty has no penalty.
+measured from **zero**, i.e. from no shift: the value of :math:`\Delta E_s` in
+the input file is only where the fit starts. (On this branch an explicit
+``segment_N_energy_shift prior_centre c`` row, above, measures the constant
+term from *c* instead.) A segment whose :math:`\sqrt{E}`
+shift coefficient :math:`b_s` is free (the ``sqrtshift`` block, see
+:doc:`segments`) adds the same kind of term, :math:`(b_s/\delta b_s)^2`, with
+:math:`\delta b_s` in MeV\ :sup:`1/2`, and so does each free parameter
+:math:`a_j` of an energy-shift function (the ``shiftfn`` block), once, on the
+segment that declares the function: :math:`(a_j/\delta a_j)^2`. A free shift
+term with no uncertainty has no penalty.
+
+.. note::
+
+   Before 25 October 2026 these terms were measured from the value in the input
+   file, :math:`((\Delta E_s - \Delta E_s^{\text{file}})/\delta(\Delta E_s))^2`
+   and likewise for :math:`b_s` and :math:`a_j`. A file whose shifts were seeded
+   from an earlier fit therefore centred the penalty on that fit's shifts. Such
+   files now give a larger :math:`\chi^2` (the shift part changes; the data part
+   does not). The normalization penalty is unchanged.
 
 Nuisance parameters
 -------------------
 
 Level energies and widths flagged **Use as Nuisance** in the Fitting tab add a
 Gaussian term of the same shape, using the **Error** column as the width. This
-is how prior knowledge of a resonance energy enters a least-squares fit.
+is how prior knowledge of a resonance energy enters a least-squares fit. The
+term is evaluated on the flagged parameter itself; before 2026-10-27 it was
+evaluated on the wrong parameter whenever a fixed level parameter preceded the
+flagged one in the parameter list (a fixed ground-state energy was enough),
+so MIGRAD pulled another parameter toward the nominal value and a parameter
+sitting at its nominal value still paid a penalty. The least-squares drivers
+were not affected.
 
 THM segments
 ------------
@@ -186,6 +258,8 @@ The file separates the two contributions::
 - **Total-Screening-Chi-Squared**, when an electron-screening potential has a
   prior (:doc:`experimental_effects`), is the sum of
   :math:`((U_e - U_e^{0})/\sigma)^2`.
+- **Total-Density-Chi-Squared**, when a fitted target density has a prior
+  (:doc:`experimental_effects`), is the sum of :math:`((N - N_0)/\sigma)^2`.
 - **Total-Scattering-Length-Chi-Squared**, when the project has a
   ``<scatteringLengths>`` block, is the sum over its active lines of
   :math:`((a_0 - a_{\mathrm{exp}})/\sigma)^2` (real and, if given, imaginary

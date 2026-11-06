@@ -251,12 +251,11 @@ int main() {
   check("the support brackets the profile", lo < 3.5 && hi > 3.5 &&
         single.BeamProfileWeight(lo) < 1e-4 * single.BeamProfileWeight(3.4));
 
-  // lab -> c.m. conversion happens once even when several segments share the effect
+  // the profile stays in the lab frame of the input file; each point converts it with its own pair's
+  // factor (EPoint::SetTargetKinematics), so a line shared by several segments or pairs is never scaled
   TargetEffect shared = makeEffect(configure, targetIntLine(oneComponent));
-  shared.ConvertBeamProfileToCM(0.75);
-  shared.ConvertBeamProfileToCM(0.75);
-  checkClose("the frame conversion is applied once, not once per segment",
-             shared.GetBeamProfile()[0].xi, 3.5 * 0.75, 1e-12);
+  checkClose("the stored profile is the lab one, however many segments share the line",
+             shared.GetBeamProfile()[0].xi, 3.5, 1e-12);
 
   // ------------------------------------------------ 2. the fold
   EData data;

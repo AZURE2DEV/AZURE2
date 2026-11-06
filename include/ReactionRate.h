@@ -6,7 +6,7 @@
 
 class CNuc;
 
-extern std::vector<double> gsl_reactionrate_breakpoints(CNuc *, int);
+extern std::vector<double> gsl_reactionrate_breakpoints(CNuc *, const Config &, int);
 extern double gsl_reactionrate_integration(double, CNuc *, const Config &, int, int,
                                            const std::vector<double> &);
 
@@ -59,7 +59,8 @@ class ReactionRate {
    */
   int entranceKey() const { return entrance_key_; };
   /*!
-   * Returns the exit pair key.
+   * Returns the exit pair key; -1 is the total radiative capture, the sum over every capture
+   * (gamma) pair of the entrance pair's compound nucleus (CNuc::CapturePairKeys).
    */
   int exitKey() const { return exit_key_; };
   /// Reaction rate on the temperature grid, writing reactionrates.out.

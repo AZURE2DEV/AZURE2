@@ -587,6 +587,30 @@ add_test(NAME segment_observable COMMAND segment_observable_test)
 set_tests_properties(segment_observable PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
+# The EXFOR client's ratio-to-Rutherford conversion: a lab ANG column is taken to the centre of mass and
+# divided by the lab-to-c.m. factor; an ANG-CM column is used as is (audit item 8, GUI sibling of pyazr.nds).
+add_executable(exfor_rutherford_test exfor_rutherford_test.cpp)
+set_target_properties(exfor_rutherford_test PROPERTIES AUTOMOC OFF)
+target_include_directories(exfor_rutherford_test PRIVATE
+    ${AZURE2_SOURCE_DIR}/gui/include
+    ${AZURE2_SOURCE_DIR}/include
+)
+target_link_libraries(exfor_rutherford_test PRIVATE
+    ${AZURESETUP_LIBRARIES}
+    ${AZUREAPI_LIBRARIES}
+    AZURE2Core
+    Qt5::Core Qt5::Gui Qt5::Widgets Qt5::Network
+)
+if(USE_QWT)
+    target_link_libraries(exfor_rutherford_test PRIVATE ${QWT_LIBRARIES})
+endif()
+if(USE_ERYA)
+    target_link_libraries(exfor_rutherford_test PRIVATE pugixml srim_utilities)
+endif()
+add_test(NAME exfor_rutherford COMMAND exfor_rutherford_test)
+set_tests_properties(exfor_rutherford PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
 # The Fitting tab's Screening rows: screening_<n> per active Experimental Effects line with electron
 # screening, synced both ways with that tab and written back to the project file.
 add_executable(screening_fitting_test screening_fitting_test.cpp)
@@ -610,4 +634,78 @@ if(USE_ERYA)
 endif()
 add_test(NAME screening_fitting COMMAND screening_fitting_test)
 set_tests_properties(screening_fitting PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+# The Fitting tab's Target Densities rows: density_<n> per line holding a densityfit parameter (a group's first
+# line), synced both ways with the Experimental Effects tab and written back to the project file.
+add_executable(density_fitting_test density_fitting_test.cpp)
+set_target_properties(density_fitting_test PROPERTIES AUTOMOC OFF)
+target_include_directories(density_fitting_test PRIVATE
+    ${AZURE2_SOURCE_DIR}/gui/include
+    ${AZURE2_SOURCE_DIR}/include
+)
+target_compile_definitions(density_fitting_test PRIVATE AZURE2_TEST_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+target_link_libraries(density_fitting_test PRIVATE
+    ${AZURESETUP_LIBRARIES}
+    ${AZUREAPI_LIBRARIES}
+    AZURE2Core
+    Qt5::Core Qt5::Gui Qt5::Widgets Qt5::Network
+)
+if(USE_QWT)
+    target_link_libraries(density_fitting_test PRIVATE ${QWT_LIBRARIES})
+endif()
+if(USE_ERYA)
+    target_link_libraries(density_fitting_test PRIVATE pugixml srim_utilities)
+endif()
+add_test(NAME density_fitting COMMAND density_fitting_test)
+set_tests_properties(density_fitting PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+# The AME2020 mass table the GUI embeds (the file pyazr.masses reads) and what fills from it: the pair dialog's
+# isotope fields and fill button, the S column's tooltip and colour, and the "Masses from AME2020..." dialog.
+add_executable(mass_table_test mass_table_test.cpp)
+set_target_properties(mass_table_test PROPERTIES AUTOMOC OFF)
+target_include_directories(mass_table_test PRIVATE
+    ${AZURE2_SOURCE_DIR}/gui/include
+    ${AZURE2_SOURCE_DIR}/include
+)
+target_link_libraries(mass_table_test PRIVATE
+    ${AZURESETUP_LIBRARIES}
+    ${AZUREAPI_LIBRARIES}
+    AZURE2Core
+    Qt5::Core Qt5::Gui Qt5::Widgets Qt5::Network
+)
+if(USE_QWT)
+    target_link_libraries(mass_table_test PRIVATE ${QWT_LIBRARIES})
+endif()
+if(USE_ERYA)
+    target_link_libraries(mass_table_test PRIVATE pugixml srim_utilities)
+endif()
+add_test(NAME mass_table COMMAND mass_table_test)
+set_tests_properties(mass_table PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+# Relativistic kinematics lives in Configure > Runtime Options (its own "saved in the project" box), not on the
+# Particle Pairs tab; relativistic=1 / relativisticReferencePair round-trip through AZURESetup from the Config.
+add_executable(runtime_options_test runtime_options_test.cpp)
+set_target_properties(runtime_options_test PROPERTIES AUTOMOC OFF)
+target_include_directories(runtime_options_test PRIVATE
+    ${AZURE2_SOURCE_DIR}/gui/include
+    ${AZURE2_SOURCE_DIR}/include
+)
+target_compile_definitions(runtime_options_test PRIVATE AZURE2_TEST_SOURCE_DIR="${AZURE2_SOURCE_DIR}")
+target_link_libraries(runtime_options_test PRIVATE
+    ${AZURESETUP_LIBRARIES}
+    ${AZUREAPI_LIBRARIES}
+    AZURE2Core
+    Qt5::Core Qt5::Gui Qt5::Widgets Qt5::Network
+)
+if(USE_QWT)
+    target_link_libraries(runtime_options_test PRIVATE ${QWT_LIBRARIES})
+endif()
+if(USE_ERYA)
+    target_link_libraries(runtime_options_test PRIVATE pugixml srim_utilities)
+endif()
+add_test(NAME runtime_options COMMAND runtime_options_test)
+set_tests_properties(runtime_options PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen")

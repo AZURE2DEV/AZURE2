@@ -1,6 +1,7 @@
 #ifndef COULFUNCCACHE_H
 #define COULFUNCCACHE_H
 
+#include <atomic>
 #include <cstdint>
 #include <map>
 #include <unordered_map>
@@ -32,6 +33,9 @@ class CoulFuncCache {
     // two pairs sharing z1, z2, redmass and radius but carrying different
     // potentials would silently share a memo.
     long hybridTag;
+    // m1 + m2 (MeV) under relativistic kinematics, where k and eta depend on more than the reduced
+    // mass; 0 otherwise, so non-relativistic keys compare as before.
+    double mtot = 0.0;
 
     // Comparison operator for use as map key
     bool operator<(const CoulFuncKey &other) const {
@@ -42,6 +46,7 @@ class CoulFuncCache {
       if (l != other.l) return l < other.l;
       if (fabs(radius - other.radius) > 1e-10) return radius < other.radius;
       if (hybridTag != other.hybridTag) return hybridTag < other.hybridTag;
+      if (fabs(mtot - other.mtot) > 1e-10) return mtot < other.mtot;
       return false;
     }
   };
@@ -81,6 +86,12 @@ class CoulFuncCache {
   // serialized every Coulomb lookup across threads).
   mutable std::vector<std::map<CoulFuncKey, CoulFuncData>> threadCaches_;
   std::map<CoulFuncKey, CoulFuncData> &localCache() const;
+  // Transient entries (see TransientScope): per thread, discarded when the outermost scope ends.
+  mutable std::vector<std::map<CoulFuncKey, CoulFuncData>> scratchCaches_;
+  std::map<CoulFuncKey, CoulFuncData> &localScratch() const;
+  bool TryGetPermanent(const CoulFuncKey &key, double energy, CoulWaves &out) const;
+  int threadIndex() const;
+  std::atomic<int> transientDepth_{0};
 
  public:
   CoulFuncCache();
@@ -112,6 +123,22 @@ class CoulFuncCache {
    * shift makes the memo useless.  Both are invisible from outside unless the
    * counters are exposed, so they are.
    */
+  /*!
+   * While a TransientScope is alive, new entries go to a per-thread scratch memo that the end of the
+   * (outermost) scope discards; lookups see the permanent memo and the scratch.  For calculations at energies
+   * that never recur -- the transform to physical parameters works at the LEVEL energies, which a sampler moves
+   * at every call -- so that they still share Coulomb functions within the calculation but do not leave them in
+   * the memo for good (12C(a,g) MCMC, 2026-10-28: ~5,000 entries per transform per worker, ~4 GB per worker
+   * after 17,000 evaluations).  Values are the same either way: the memo stores exactly what it computes.
+   */
+  class TransientScope {
+   public:
+    TransientScope();
+    ~TransientScope();
+    TransientScope(const TransientScope &) = delete;
+    TransientScope &operator=(const TransientScope &) = delete;
+  };
+
   struct Stats {
     long queries = 0;       ///< lookups attempted
     long hits = 0;          ///< lookups that found an exact stored energy

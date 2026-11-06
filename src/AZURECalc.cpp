@@ -123,7 +123,8 @@ double SegmentLocalChi2(ESegment *segment, CNuc *lc, const Config &config,
 // that needs a penalty's derivatives rather than its value: d/dx = 2 (x - nominal)
 // / sigma^2, curvature 2 / sigma^2.  Exactly the terms ESegment::AddShiftPenalty
 // adds, so the gradient, G2 and the least-squares priors stay consistent with
-// chi^2.
+// chi^2.  The nominal is 0 for every shift term since 2026-10-25 (the file's value
+// is only the start).
 template <class F>
 void ForEachShiftPenalty(EData *data, const ParamIndexMap &pmap, F f) {
   for (int s = 1; s <= data->NumSegments(); s++) {
@@ -131,14 +132,14 @@ void ForEachShiftPenalty(EData *data, const ParamIndexMap &pmap, F f) {
     if (!seg) continue;
     int idx;
     if (seg->IsVaryEnergyShift() && seg->GetEnergyShiftError() != 0.0 && (idx = pmap.EnergyShiftIndex(s)) >= 0)
-      f(idx, seg->GetNominalEnergyShift(), seg->GetEnergyShiftError());
+      f(idx, seg->GetNominalEnergyShift(), seg->GetEnergyShiftError());  // 0 unless a prior_centre row
     if (seg->IsVaryEnergyShiftSqrt() && seg->GetEnergyShiftSqrtError() != 0.0 &&
         (idx = pmap.EnergyShiftSqrtIndex(s)) >= 0)
-      f(idx, seg->GetNominalEnergyShiftSqrt(), seg->GetEnergyShiftSqrtError());
+      f(idx, 0.0, seg->GetEnergyShiftSqrtError());
     if (seg->OwnsShiftFn() && seg->HasShiftFn())
       for (int j = 0; j < seg->NumShiftFnParams(); j++)
         if (seg->IsVaryShiftFn(j) && seg->GetShiftFnErrors()[j] != 0.0 && (idx = pmap.EnergyShiftFnIndex(s, j)) >= 0)
-          f(idx, seg->GetNominalShiftFnValues()[j], seg->GetShiftFnErrors()[j]);
+          f(idx, 0.0, seg->GetShiftFnErrors()[j]);
   }
 }
 
@@ -151,6 +152,18 @@ void ForEachScreeningPrior(EData *data, const ParamIndexMap &pmap, F f) {
     if (te->GetScreeningSigma() <= 0.0) continue;
     const int idx = pmap.ScreeningIndex(k);
     if (idx >= 0) f(idx, te->GetScreeningNominal(), te->GetScreeningSigma());
+  }
+}
+
+// The fitted-density priors ((N - N0)/sigma)^2, N in atoms/cm^2: f(full index, nominal, sigma) for each density
+// parameter with sigma > 0 (EData::DensityPenalty is their sum).
+template <class F>
+void ForEachDensityPrior(EData *data, const ParamIndexMap &pmap, F f) {
+  for (int k = 1; k <= data->NumDensityParams(); k++) {
+    const TargetEffect *te = data->GetDensityTargetEffect(k);
+    if (te->GetDensitySigma() <= 0.0) continue;
+    const int idx = pmap.DensityIndex(k);
+    if (idx >= 0) f(idx, te->GetDensityNominal(), te->GetDensitySigma());
   }
 }
 
@@ -236,6 +249,189 @@ bool MappingConfined(const std::vector<std::vector<int>> &partners, const std::v
 }
 
 }  // namespace
+
+ShiftColumnCount FillShiftColumns(CNuc *lc, EData *ld, const Config &config, const ParamIndexMap &pmap,
+                                  const std::vector<bool> &fixed, const vector_r &full,
+                                  const std::vector<char> *skipPacked, size_t nRes, int nCols, vector_r &jac) {
+  ShiftColumnCount count;
+
+  // A shift of a self-contained segment (no components, not a total-capture
+  // sum, no point mapping onto other segments) moves only that segment's rows, so
+  // its column is differenced on those rows alone; every other row of a full
+  // re-evaluation would difference to exactly zero.  With 55 free shifts on
+  // 11B+a the full path took over an hour per gradient.  Same criterion as the
+  // segment-local shift gradient in Gradient().
+  bool rowLayoutUnknown = false;
+  const std::vector<std::vector<int>> partners = CrossSegmentPartners(ld);
+  std::vector<int> rowStart(ld->NumSegments() + 2, 0);
+  std::vector<ESegment *> segments;
+  {
+    int row = 0;
+    for (int s = 1; s <= ld->NumSegments(); s++) {
+      rowStart[s] = row;
+      ESegment *seg = ld->GetSegment(s);
+      if (!seg) continue;
+      segments.push_back(seg);
+      for (int pid = 0; pid < seg->NumPoints(); pid++) {
+        EPoint *pt = seg->GetPoint(pid + 1);
+        if (!pt) continue;
+        row++;
+      }
+    }
+    rowStart[ld->NumSegments() + 1] = row;
+    if ((size_t)row != nRes) rowLayoutUnknown = true;  // row layout not understood: use the full path
+  }
+  // Residuals of one segment's rows, in row order, exactly as
+  // ComputeResidualJacobian forms them.
+  auto segmentResiduals = [&](ESegment *seg, vector_r &out, bool parallel) {
+    const int nPts = seg->NumPoints();
+    const double norm = seg->GetNorm();
+    std::vector<double> byPoint(nPts, 0.0);
+    std::vector<char> present(nPts, 0);
+    auto one = [&](int pid) {
+      EPoint *pt = seg->GetPoint(pid + 1);
+      if (!pt) return;
+      present[pid] = 1;
+      const double model = seg->CalculateTheoreticalCrossSection(pid, lc, config, ld);
+      const double denom = pt->GetCMCrossSectionError() * norm;
+      byPoint[pid] = (denom != 0.0) ? (model - pt->GetCMCrossSection() * norm) / denom : 0.0;
+    };
+    // No parallel construct inside an enclosing parallel region (see
+    // CoulFuncCache::localCache).  In parallel each point is calculated on
+    // its own, without point mapping (ScopedPointMappingOff, as in the
+    // AZUREGrad.cpp loops): a mapped point would otherwise read a value its
+    // host may not have calculated yet.  Serially, index order puts every
+    // host first and the sharing is kept.
+    if (parallel && !InParallelRegion()) {
+#pragma omp parallel for schedule(dynamic)
+      for (int pid = 0; pid < nPts; pid++) {
+        ScopedPointMappingOff noPointMapping;
+        one(pid);
+      }
+    } else {
+      for (int pid = 0; pid < nPts; pid++) one(pid);
+    }
+    out.clear();
+    for (int pid = 0; pid < nPts; pid++)
+      if (present[pid]) out.push_back(byPoint[pid]);
+  };
+  // Every row, forward only: one parallel pass over the points (as a
+  // chi-squared evaluation), then the residuals in row order.  If a point
+  // failed in the pass, the combination recalculates point by point.
+  auto allResiduals = [&](vector_r &out) {
+    const bool pre = EData::CalculatePointsInParallel(segments, lc, config) == 0;
+    out.clear();
+    for (ESegment *seg : segments) {
+      const double norm = seg->GetNorm();
+      for (int pid = 0; pid < seg->NumPoints(); pid++) {
+        EPoint *pt = seg->GetPoint(pid + 1);
+        if (!pt) continue;
+        const double model = seg->CalculateTheoreticalCrossSection(pid, lc, config, ld, pre);
+        const double denom = pt->GetCMCrossSectionError() * norm;
+        out.push_back((denom != 0.0) ? (model - pt->GetCMCrossSection() * norm) / denom : 0.0);
+      }
+    }
+  };
+
+  // Local shift columns: a parameter whose segments (its own, plus its shift
+  // group's followers for a group's constant shift or a shift-function
+  // parameter) are all self-contained is differenced on their rows alone.
+  struct LocalShift { int f, packed; ShiftParamTarget target; };
+  std::vector<LocalShift> localCols;
+  std::vector<int> fullShifts;
+  for (int f = 0; f < pmap.NumFull() && f < (int)full.size() && f < (int)fixed.size(); f++) {
+    if (fixed[f]) continue;
+    const ParamKind kind = pmap.Desc(f).kind;
+    if (kind != ParamKind::EnergyShift && kind != ParamKind::EnergyShiftSqrt && kind != ParamKind::EnergyShiftFn &&
+        kind != ParamKind::Density) continue;
+    const int packed = pmap.FullToPacked(f);
+    if (packed < 0 || packed >= nCols) continue;
+    // Columns the caller holds fixed: not differenced.
+    if (skipPacked && packed < (int)skipPacked->size() && (*skipPacked)[packed]) continue;
+    // A fitted target density moves the depth window of every point of its lines: full re-evaluation.
+    if (kind == ParamKind::Density) {
+      fullShifts.push_back(f);
+      continue;
+    }
+    const int sNum = pmap.Desc(f).segment;
+    if (!rowLayoutUnknown && sNum >= 1 && sNum <= ld->NumSegments()) {
+      const ShiftParamTarget target = ShiftTargets(ld, pmap.Desc(f));
+      // Mapping across segments keeps the column local while it stays among
+      // the parameter's segments (MappingConfined): they are all moved, then
+      // all evaluated, below.
+      if (target.Local(ld) && MappingConfined(partners, target.segs)) {
+        localCols.push_back({f, packed, target});
+        continue;
+      }
+    }
+    fullShifts.push_back(f);
+  }
+  // Segments in sequence, each one's points in parallel: re-energising a
+  // point (UpdatePointEnergyWithShift) and evaluating it touch only that
+  // point.  (Parallel over segments instead left the largest segment running
+  // alone at the end.)
+  auto updateSegment = [&](ESegment *seg) {
+    if (!InParallelRegion()) {
+#pragma omp parallel for schedule(dynamic, 1)
+      for (int pid = 0; pid < seg->NumPoints(); pid++) seg->UpdatePointGroupEnergyWithShift(pid, lc, &config);
+    } else {
+      seg->UpdatePointEnergiesWithShift(lc, &config);
+    }
+  };
+  for (const LocalShift &ls : localCols) {
+    AZUREProfile::Timer profileColumn(AZUREProfile::kShiftLocal);
+    const std::vector<int> &segs = ls.target.segs;
+    std::vector<vector_r> rP(segs.size()), rM(segs.size());
+    const double x0 = full[ls.f];
+    const double h = 1.0e-6 * (std::fabs(x0) + 1.0);
+    const double d0 = ls.target.Get(ld);
+    ls.target.Set(ld, x0 + h);
+    for (size_t m = 0; m < segs.size(); m++) updateSegment(ld->GetSegment(segs[m]));
+    for (size_t m = 0; m < segs.size(); m++) segmentResiduals(ld->GetSegment(segs[m]), rP[m], true);
+    ls.target.Set(ld, x0 - h);
+    for (size_t m = 0; m < segs.size(); m++) updateSegment(ld->GetSegment(segs[m]));
+    for (size_t m = 0; m < segs.size(); m++) segmentResiduals(ld->GetSegment(segs[m]), rM[m], true);
+    ls.target.Set(ld, d0);
+    for (size_t m = 0; m < segs.size(); m++) updateSegment(ld->GetSegment(segs[m]));
+    for (size_t m = 0; m < segs.size(); m++) {
+      const int sNum = segs[m];
+      const size_t r0 = (size_t)rowStart[sNum], nSegRows = (size_t)(rowStart[sNum + 1] - rowStart[sNum]);
+      if (rP[m].size() == nSegRows && rM[m].size() == nSegRows)
+        for (size_t r = 0; r < nSegRows; r++)
+          jac[(r0 + r) * (size_t)nCols + (size_t)ls.packed] = (rP[m][r] - rM[m][r]) / (2.0 * h);
+    }
+  }
+  count.local = (int)localCols.size();
+
+  vector_r rPlus, rMinus;
+  for (int f : fullShifts) {
+    AZUREProfile::Timer profileColumn(AZUREProfile::kShiftFull);
+    const int packed = pmap.FullToPacked(f);
+    const double x0 = full[f];
+    // A few eV: far inside any quoted beam-energy calibration uncertainty,
+    // far outside the noise of the forward model.
+    const double h = 1.0e-6 * (std::fabs(x0) + 1.0);
+    count.full++;
+    auto residualsAt = [&](double value, vector_r &out) {
+      vector_r fk = full;
+      fk[f] = value;
+      lc->FillCompoundFromParams(fk);
+      ld->FillNormsFromParams(fk);
+      ld->FillEnergyShiftsFromParams(fk, ld, lc, &config);
+      allResiduals(out);
+    };
+    residualsAt(x0 + h, rPlus);
+    residualsAt(x0 - h, rMinus);
+    if (rPlus.size() == nRes && rMinus.size() == nRes)
+      for (size_t r = 0; r < nRes; r++)
+        jac[r * (size_t)nCols + (size_t)packed] = (rPlus[r] - rMinus[r]) / (2.0 * h);
+  }
+  // Leave the model at the parameters that were asked for.
+  lc->FillCompoundFromParams(full);
+  ld->FillNormsFromParams(full);
+  ld->FillEnergyShiftsFromParams(full, ld, lc, &config);
+  return count;
+}
 
 /*!
  * AZURE_DUMP_NONFINITE=1 (optional threshold: AZURE_DUMP_NONFINITE=<chi2>, default 1e10): whenever a
@@ -443,6 +639,8 @@ double AZURECalc::operator()(const vector_r &p) const {
       }
     }
   }
+  // Data covariance: r^T M^-1 r over each group in place of its points' r_i^2.
+  if (localData->HasCovariance()) chiSquared += localData->CovarianceChi2Correction();
 
   // Add nuisance parameter chi-squared contributions
   if (limitsManager_) {
@@ -454,8 +652,9 @@ double AZURECalc::operator()(const vector_r &p) const {
     chiSquared += parkPenalty;
     localData->SetParkPenalty(parkPenalty);
   }
-  // Electron-screening potentials: their priors.
+  // Electron-screening potentials and fitted target densities: their priors.
   chiSquared += localData->ScreeningPenalty();
+  chiSquared += localData->DensityPenalty();
   // Isotopic abundances: their priors and the sum-to-one term.
   if (localCompound->HasAbundanceBlock()) {
     double abundancePenalty = localCompound->AbundancePenalty(configure().abundanceSumSigma);
@@ -558,52 +757,14 @@ void AZURECalc::WriteIterationOutput(const vector_r &p) const {
 }
 
 bool AZURECalc::PrecalculatePoints(CNuc *lc, EData *ld, bool thmOnly) const {
-#ifdef _OPENMP
-  if (omp_in_parallel()) return false;
-#else
-  return false;
-#endif
-  if (std::getenv("AZURE_SERIAL_CHI2")) return false;
-  std::vector<EPoint *> work;
-  std::set<ESegment *> seen;
-  auto add = [&](ESegment *seg) {
-    if (!seg || !seen.insert(seg).second) return;
-    for (int p = 1; p <= seg->NumPoints(); p++) {
-      EPoint *pt = seg->GetPoint(p);
-      if (pt && !pt->IsMapped()) work.push_back(pt);
-    }
-  };
+  // thmOnly: the THM segments alone (the THM-only finite differences of Chi2On).
+  std::vector<ESegment *> segments;
   for (int i = 1; i <= ld->NumSegments(); i++) {
     ESegment *seg = ld->GetSegment(i);
     if (!seg || (thmOnly && !seg->IsTHM())) continue;
-    add(seg);
-    for (ESegment *comp : seg->GetComponentSegments()) add(comp);
+    segments.push_back(seg);
   }
-  // A host also calculates every point mapped onto it (EData::MapData), so
-  // its work grows with that number: one Fowler-type angular distribution at
-  // a single energy is one item.  Largest items first, one at a time, so such
-  // an item does not end up last on one thread.  Each item is calculated the
-  // same way whatever the order.
-  std::vector<double> cost(work.size());
-  for (size_t k = 0; k < work.size(); k++)
-    cost[k] = (1.0 + work[k]->NumSubPoints()) * (1.0 + work[k]->NumLocalMappedPoints());
-  std::vector<size_t> order(work.size());
-  for (size_t k = 0; k < order.size(); k++) order[k] = k;
-  std::stable_sort(order.begin(), order.end(), [&cost](size_t a, size_t b) { return cost[a] > cost[b]; });
-  std::vector<EPoint *> sorted(work.size());
-  for (size_t k = 0; k < order.size(); k++) sorted[k] = work[order[k]];
-  work.swap(sorted);
-  const Config &cfg = configure();
-  AZUREProfile::Timer profileTimer(AZUREProfile::kPoints);
-#pragma omp parallel for schedule(dynamic, 1)
-  for (int k = 0; k < (int)work.size(); k++) {
-    try {
-      work[k]->Calculate(lc, cfg);
-    } catch (...) {
-      work[k]->SetFitCrossSection(0.0);  // as the per-point path, which returns 0 on failure
-    }
-  }
-  return true;
+  return EData::CalculatePointsInParallel(segments, lc, configure()) >= 0;
 }
 
 /*!
@@ -659,6 +820,8 @@ double AZURECalc::Chi2On(CNuc *lc, EData *ld, const vector_r &p, std::vector<dou
     chiSquared += segChi;
   }
   if (thmOnly) return chiSquared;
+  // (A THM segment carries no covariance block: EData refuses one.)
+  if (ld->HasCovariance()) chiSquared += ld->CovarianceChi2Correction(segChis);
   if (limitsManager_) chiSquared += CalculateNuisanceChiSquared(p);
   // Park's J > 0 wall, as operator() adds it: the finite-difference fallback of
   // Gradient() and its columns (and the AZURE_GRAD_CHECK reference)
@@ -673,6 +836,7 @@ double AZURECalc::Chi2On(CNuc *lc, EData *ld, const vector_r &p, std::vector<dou
   if (lc->HasScatteringLengthConstraints())
     chiSquared += ScatteringLength::Chi2(lc, configure(), lc->ScatteringLengthConstraints());
   chiSquared += ld->ScreeningPenalty();
+  chiSquared += ld->DensityPenalty();
   return chiSquared;
 }
 
@@ -794,6 +958,9 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
   // it needs no extra forward pass:
   //   d(chi2)/d(n_s) = sum_pts [ -2 r data/(cmErr^2 n^2) - 2 r^2/(cmErr^2 n^3) ].
   std::vector<double> normData(ld->NumSegments() + 1, 0.0);
+  // A data covariance couples the points: their cotangent is 2 (M^-1 r)_i / (cmErr n), which
+  // needs every residual of the group first (one forward pass of those points).
+  if (ld->HasCovariance()) ld->PrepareCovarianceSeeds(lc, configure());
   FitBarFn fitBarFn = [&](ESegment *seg, int i, int pid, double model) -> double {
     EPoint *pt = seg->GetPoint(pid + 1);
     if (!pt) return 0.0;
@@ -803,6 +970,18 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
     double r = model - dataval * norm;
     double err = cmErr * norm;
     if (err == 0.0) return 0.0;
+    if (seg->GetCovarianceGroup() >= 0) {
+      // chi2 = r^T M^-1 r with r_i = (model - d n)/(cmErr n): d chi2/d r_i = 2 z_i, z = M^-1 r;
+      // d r_i/d model = 1/(cmErr n), d r_i/d n = -model/(cmErr n^2).
+      const double z = seg->GetCovarianceSeed(pid);
+      const int o = ld->NormOwner(i);
+      if (norm != 0.0 && o >= 1 && o < (int)normData.size() && ld->GetSegment(o)->IsVaryNorm()) {
+        const double dNorm = -2.0 * z * model / (cmErr * norm * norm);
+#pragma omp atomic
+        normData[o] += dNorm;
+      }
+      return 2.0 * z / err;
+    }
     // A norm-group follower's points move its leader's norm (o), the one parameter.
     const int o = ld->NormOwner(i);
     if (norm != 0.0 && o >= 1 && o < (int)normData.size() && ld->GetSegment(o)->IsVaryNorm()) {
@@ -949,10 +1128,14 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
         localShiftOk && pmap.Desc(idx).segment >= 1) {
       const int s = pmap.Desc(idx).segment;
       const ShiftParamTarget target = ShiftTargets(ld, pmap.Desc(idx));
-      // (Not for a segment of a THM experiment: its chi^2 is not its own.)
-      bool inThmGroup = false;
-      for (int m : target.segs) inThmGroup = inThmGroup || ld->ThmGroupOf(m) >= 0;
-      if (target.Local(ld) && !inThmGroup && MappingConfined(partners, target.segs)) {
+      // Not for a segment of a THM experiment (its chi^2 is not its own), nor of a covariance group (a group's
+      // chi2 is not a sum over its segments).
+      bool inThmGroup = false, inCovariance = false;
+      for (int m : target.segs) {
+        inThmGroup = inThmGroup || ld->ThmGroupOf(m) >= 0;
+        inCovariance = inCovariance || ld->GetSegment(m)->GetCovarianceGroup() >= 0;
+      }
+      if (!inCovariance && target.Local(ld) && !inThmGroup && MappingConfined(partners, target.segs)) {
         auto groupChi = [&](double v) {
           target.Set(ld, v);
           // Every segment is moved before any is calculated: a host calculates
@@ -1022,7 +1205,8 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
   static std::atomic<bool> gradChecked{false};
   if (const char *gc = std::getenv("AZURE_GRAD_CHECK")) {
     if (!gradChecked.exchange(true)) {
-      static const char *kindName[] = {"energy", "gamma", "norm", "shift", "shift_sqrt", "shift_fn", "abundance", "screening", "cbkg"};
+      static const char *kindName[] = {"energy", "gamma", "norm", "shift", "shift_sqrt", "shift_fn", "abundance", "screening",
+                                       "density", "cbkg"};
       struct Row { double score, g, fd; int idx; ParamDesc d; double gj, scoreJ; };
       std::vector<Row> rows;
       constexpr int kNumKinds = sizeof(kindName) / sizeof(kindName[0]);  // one per ParamKind
@@ -1189,6 +1373,11 @@ bool AZURECalc::GradientFromJacobian(const std::vector<double> &p, std::vector<d
     grad[idx] += 2.0 * (p[idx] - nominal) / (e * e);
     g2[idx] += 2.0 / (e * e);
   });
+  ForEachDensityPrior(data(), pmap, [&](int idx, double nominal, double e) {
+    if (idx >= (int)p.size()) return;
+    grad[idx] += 2.0 * (p[idx] - nominal) / (e * e);
+    g2[idx] += 2.0 / (e * e);
+  });
   // Isotopic abundances: prior and sum-to-one gradient and (diagonal) curvature.  The sample sums are taken at
   // p: compound() holds the abundances of the last full evaluation, so its AbundanceSum was stale here.
   std::vector<double> sumAtP;
@@ -1257,6 +1446,9 @@ std::vector<double> AZURECalc::G2(const std::vector<double> &p) const {
   ForEachScreeningPrior(data(), pmap, [&](int idx, double, double e) {
     if (idx < (int)g2.size()) g2[idx] += 2.0 / (e * e);
   });
+  ForEachDensityPrior(data(), pmap, [&](int idx, double, double e) {
+    if (idx < (int)g2.size()) g2[idx] += 2.0 / (e * e);
+  });
   if (compound()->HasAbundanceBlock()) {
     for (int k = 1; k <= compound()->NumAbundanceParams(); k++) {
       const int idx = pmap.AbundanceIndex(k);
@@ -1298,7 +1490,8 @@ bool AZURECalc::HasNuisanceParameters() const {
     const std::string &name = mp.GetName();
     if (mp.IsFixed() && name.find("segment") == std::string::npos) continue;
     const bool inert = name.find("norm") != std::string::npos || name.find("shift") != std::string::npos ||
-                       name.find("abundance") != std::string::npos || name.find("screening") != std::string::npos;
+                       name.find("abundance") != std::string::npos || name.find("screening") != std::string::npos ||
+                       name.find("density_") == 0;
     if (!inert && limitsManager_->IsNuisanceParameterByIndex(nf)) {
       if (std::getenv("AZURE_GRAD_DEBUG"))
         std::cerr << "[grad] analytic G2 off: nuisance prior on '" << name << "'" << std::endl;
@@ -1345,162 +1538,16 @@ bool AZURECalc::ResidualJacobian(const vector_r &full, vector_r &residuals,
   const auto tj1 = std::chrono::steady_clock::now();
   int nShiftLocal = 0, nShiftFull = 0;
 
-  // Energy-shift columns by central differences, as AZUREAPI::
-  // CalculateResidualJacobianRWA does for pyazr.  The adjoint does not cover a
+  // Energy-shift columns by central differences (FillShiftColumns, shared with
+  // AZUREAPI::CalculateResidualJacobianRWA).  The adjoint does not cover a
   // shift (it moves the energy of every quantity of the segment), and left as
   // zero the Levenberg-Marquardt and GSL drivers flag the shifts as
-  // data-insensitive and never move them.  Differencing the residual vector
-  // of the same function keeps the rows aligned.
+  // data-insensitive and never move them.
   if (ok) {
-    const size_t nRes = residuals.size();
-    vector_r rPlus, rMinus, jTmp;
-    int nc = 0;
-
-    // A shift of a self-contained segment (no components, not a total-capture
-    // sum, no point mapping onto other segments) moves only that segment's rows, so
-    // its column is differenced on those rows alone; every other row of the
-    // full re-evaluation below would difference to exactly zero.  The full
-    // path re-solved the WHOLE Jacobian, adjoints included, twice per shift:
-    // with 55 free shifts on 11B+a one gradient took over an hour.  Same
-    // criterion as the segment-local shift gradient in Gradient().
-    bool rowLayoutUnknown = false;
-    const std::vector<std::vector<int>> partners = CrossSegmentPartners(ld);
-    std::vector<int> rowStart(ld->NumSegments() + 2, 0);
-    {
-      int row = 0;
-      for (int s = 1; s <= ld->NumSegments(); s++) {
-        rowStart[s] = row;
-        ESegment *seg = ld->GetSegment(s);
-        if (!seg) continue;
-        for (int pid = 0; pid < seg->NumPoints(); pid++) {
-          EPoint *pt = seg->GetPoint(pid + 1);
-          if (!pt) continue;
-          row++;
-        }
-      }
-      rowStart[ld->NumSegments() + 1] = row;
-      if ((size_t)row != nRes) rowLayoutUnknown = true;  // row layout not understood: use the full path
-    }
-    // Residuals of one segment's rows, in row order, exactly as
-    // ComputeResidualJacobian forms them.
-    auto segmentResiduals = [&](ESegment *seg, vector_r &out, bool parallel) {
-      const int nPts = seg->NumPoints();
-      const double norm = seg->GetNorm();
-      std::vector<double> byPoint(nPts, 0.0);
-      std::vector<char> present(nPts, 0);
-      auto one = [&](int pid) {
-        EPoint *pt = seg->GetPoint(pid + 1);
-        if (!pt) return;
-        present[pid] = 1;
-        const double model = seg->CalculateTheoreticalCrossSection(pid, lc, configure(), ld);
-        const double denom = pt->GetCMCrossSectionError() * norm;
-        byPoint[pid] = (denom != 0.0) ? (model - pt->GetCMCrossSection() * norm) / denom : 0.0;
-      };
-      // No parallel construct inside an enclosing parallel region (see
-      // CoulFuncCache::localCache).  In parallel each point is calculated on
-      // its own, without point mapping (ScopedPointMappingOff, as in the
-      // AZUREGrad.cpp loops): a mapped point would otherwise read a value its
-      // host may not have calculated yet.  Serially, index order puts every
-      // host first and the sharing is kept.
-      if (parallel && !InParallelRegion()) {
-#pragma omp parallel for schedule(dynamic)
-        for (int pid = 0; pid < nPts; pid++) {
-          ScopedPointMappingOff noPointMapping;
-          one(pid);
-        }
-      } else {
-        for (int pid = 0; pid < nPts; pid++) one(pid);
-      }
-      out.clear();
-      for (int pid = 0; pid < nPts; pid++)
-        if (present[pid]) out.push_back(byPoint[pid]);
-    };
-
-    // Local shift columns: a parameter whose segments (its own, plus its shift
-    // group's followers for a group's constant shift or a shift-function
-    // parameter) are all self-contained is differenced on their rows alone.
-    struct LocalShift { int f, packed; ShiftParamTarget target; };
-    std::vector<LocalShift> localCols;
-    std::vector<int> fullShifts;
-    for (int f = 0; f < pmap.NumFull() && f < (int)full.size(); f++) {
-      if (fixed[f]) continue;
-      const ParamKind kind = pmap.Desc(f).kind;
-      if (kind != ParamKind::EnergyShift && kind != ParamKind::EnergyShiftSqrt && kind != ParamKind::EnergyShiftFn) continue;
-      const int packed = pmap.FullToPacked(f);
-      if (packed < 0 || packed >= nCols) continue;
-      const int sNum = pmap.Desc(f).segment;
-      if (!rowLayoutUnknown && sNum >= 1 && sNum <= ld->NumSegments()) {
-        const ShiftParamTarget target = ShiftTargets(ld, pmap.Desc(f));
-        // Mapping across segments keeps the column local while it stays among
-        // the parameter's segments (MappingConfined): they are all moved, then
-        // all evaluated, below.
-        if (target.Local(ld) && MappingConfined(partners, target.segs)) {
-          localCols.push_back({f, packed, target});
-          continue;
-        }
-      }
-      fullShifts.push_back(f);
-    }
-    // Segments in sequence, each one's points in parallel: re-energising a
-    // point (UpdatePointEnergyWithShift) and evaluating it touch only that
-    // point.  (Parallel over segments instead left the largest segment running
-    // alone at the end.)
-    auto updateSegment = [&](ESegment *seg) {
-      if (!InParallelRegion()) {
-#pragma omp parallel for schedule(dynamic, 1)
-        for (int pid = 0; pid < seg->NumPoints(); pid++) seg->UpdatePointGroupEnergyWithShift(pid, lc, &configure());
-      } else {
-        seg->UpdatePointEnergiesWithShift(lc, &configure());
-      }
-    };
-    for (const LocalShift &ls : localCols) {
-      const std::vector<int> &segs = ls.target.segs;
-      std::vector<vector_r> rP(segs.size()), rM(segs.size());
-      const double x0 = full[ls.f];
-      const double h = 1.0e-6 * (std::fabs(x0) + 1.0);
-      const double d0 = ls.target.Get(ld);
-      ls.target.Set(ld, x0 + h);
-      for (size_t m = 0; m < segs.size(); m++) updateSegment(ld->GetSegment(segs[m]));
-      for (size_t m = 0; m < segs.size(); m++) segmentResiduals(ld->GetSegment(segs[m]), rP[m], true);
-      ls.target.Set(ld, x0 - h);
-      for (size_t m = 0; m < segs.size(); m++) updateSegment(ld->GetSegment(segs[m]));
-      for (size_t m = 0; m < segs.size(); m++) segmentResiduals(ld->GetSegment(segs[m]), rM[m], true);
-      ls.target.Set(ld, d0);
-      for (size_t m = 0; m < segs.size(); m++) updateSegment(ld->GetSegment(segs[m]));
-      for (size_t m = 0; m < segs.size(); m++) {
-        const int sNum = segs[m];
-        const size_t r0 = (size_t)rowStart[sNum], nSegRows = (size_t)(rowStart[sNum + 1] - rowStart[sNum]);
-        if (rP[m].size() == nSegRows && rM[m].size() == nSegRows)
-          for (size_t r = 0; r < nSegRows; r++)
-            jac[(r0 + r) * (size_t)nCols + (size_t)ls.packed] = (rP[m][r] - rM[m][r]) / (2.0 * h);
-      }
-    }
-    nShiftLocal = (int)localCols.size();
-
-    for (int f : fullShifts) {
-      const int packed = pmap.FullToPacked(f);
-      const double x0 = full[f];
-      const double h = 1.0e-6 * (std::fabs(x0) + 1.0);
-      nShiftFull++;
-      auto residualsAt = [&](double value, vector_r &out) -> bool {
-        vector_r fk = full;
-        fk[f] = value;
-        lc->FillCompoundFromParams(fk);
-        ld->FillNormsFromParams(fk);
-        ld->FillEnergyShiftsFromParams(fk, ld, lc, &configure());
-        out.clear();
-        jTmp.clear();
-        return ComputeResidualJacobian(lc, ld, configure(), pmap, sdp, out, jTmp, nc);
-      };
-      const bool okp = residualsAt(x0 + h, rPlus);
-      const bool okm = residualsAt(x0 - h, rMinus);
-      if (okp && okm && rPlus.size() == nRes && rMinus.size() == nRes)
-        for (size_t r = 0; r < nRes; r++)
-          jac[r * (size_t)nCols + (size_t)packed] = (rPlus[r] - rMinus[r]) / (2.0 * h);
-    }
-    lc->FillCompoundFromParams(full);
-    ld->FillNormsFromParams(full);
-    ld->FillEnergyShiftsFromParams(full, ld, lc, &configure());
+    const ShiftColumnCount cols = FillShiftColumns(lc, ld, configure(), pmap, fixed, full, nullptr,
+                                                   residuals.size(), nCols, jac);
+    nShiftLocal = cols.local;
+    nShiftFull = cols.full;
   }
   if (std::getenv("AZURE_GRAD_TIMING")) {
     static std::atomic<int> rjCalls{0};
@@ -1512,6 +1559,10 @@ bool AZURECalc::ResidualJacobian(const vector_r &full, vector_r &residuals,
                 << " full)" << std::endl;
     }
   }
+
+  // Data covariance: whiten the data rows (and their Jacobian rows, energy-shift columns
+  // included), w = W r per group (W^T W = M^-1), so sum w^2 = r^T M^-1 r.
+  if (ok && ld->HasCovariance()) ld->WhitenResidualRows(residuals, &jac, nCols);
 
   // Measured scattering lengths: one row per constrained part (Re, Im) after the data rows, in the
   // order of ScatteringLength::Residuals, with exact rows from the level-matrix adjoint at each
@@ -1575,6 +1626,9 @@ double AZURECalc::RunLevenbergMarquardt(AZUREParams &params, int maxIter,
   double lambda = 1.0e-3;
 
   std::vector<double> H(nFree * nFree), g(nFree), Hl(nFree * nFree), dx(nFree);
+  std::vector<double> gScale(nFree, 1.0);  // see the convergence test
+  for (int a = 0; a < nFree; a++)
+    if (mp.GetName(p2f[a]).rfind("density_", 0) == 0) gScale[a] = std::max(std::fabs(x[a]), 1.0);
 
   for (int iter = 0; iter < maxIter; iter++) {
     if (iter > 0 && !ResidualJacobian(full, r, J, p2f)) break;
@@ -1605,9 +1659,11 @@ double AZURECalc::RunLevenbergMarquardt(AZUREParams &params, int maxIter,
       }
     }
 
-    // Convergence on the (projected) gradient.
+    // Convergence on the (projected) gradient.  A fitted target density (atoms/cm^2, ~1e17) is judged per
+    // relative change, |g| N: per atom/cm^2 its gradient is ~1e-16 and the absolute test stopped LM before
+    // its first step.  Every other parameter keeps the absolute test.
     double gmax = 0.0;
-    for (int a = 0; a < nFree; a++) gmax = std::max(gmax, std::fabs(g[a]));
+    for (int a = 0; a < nFree; a++) gmax = std::max(gmax, std::fabs(g[a]) * gScale[a]);
     if (gmax < 1.0e-8) break;
 
     // Inner loop: damp until a step decreases the cost.
@@ -1738,6 +1794,16 @@ int AZURECalc::PrepareFreeParams(const vector_r &full,
         if (te->GetScreeningSigma() > 0.0) {
           pen_nom[a] = te->GetScreeningNominal();
           pen_inv2[a] = 1.0 / (te->GetScreeningSigma() * te->GetScreeningSigma());
+        }
+      }
+    } else if (name.compare(0, 8, "density_") == 0) {
+      // Fitted target density: its prior is a diagonal penalty row.
+      for (int k = 1; k <= data()->NumDensityParams(); k++) {
+        if (name != "density_" + std::to_string(data()->GetDensityEffect(k))) continue;
+        const TargetEffect *te = data()->GetDensityTargetEffect(k);
+        if (te->GetDensitySigma() > 0.0) {
+          pen_nom[a] = te->GetDensityNominal();
+          pen_inv2[a] = 1.0 / (te->GetDensitySigma() * te->GetDensitySigma());
         }
       }
     } else if (name.compare(0, 10, "abundance_") == 0) {
@@ -1958,6 +2024,7 @@ bool AZURECalc::ResidualsOnly(const vector_r &full, vector_r &residuals) const {
       residuals.push_back(denom != 0.0 ? (th - pt->GetCMCrossSection() * norm) / denom : 0.0);
     }
   }
+  if (ld->HasCovariance()) ld->WhitenResidualRows(residuals, nullptr, 0);
   // Measured scattering lengths, as the last rows of ResidualJacobian.
   if (lc->HasScatteringLengthConstraints())
     ScatteringLength::Residuals(lc, configure(), lc->ScatteringLengthConstraints(), residuals);
@@ -2270,9 +2337,11 @@ void AZURECalc::WriteParameters(AZUREParams &params, const Config &configure) co
   out.open(filename);
   if (out) {
     out.precision(7);
-    // The basis line of param.par / param.sav (AZUREParams::WriteUserParameters):
-    // without it a --use-park run that reads this file back takes its Park
-    // amplitudes for Brune's and converts them.
+    // The same first line as param.par/param.sav: which amplitudes the file
+    // holds.  Before 2026-11-04 param.fit had none, so a --use-park fit
+    // resumed from it took its Park amplitudes for Brune's and converted
+    // them again (every amplitude times sqrt(J), fixed ones included;
+    // 11B+a 11-04-26_park_gpSM, chi2 10733 -> 49532 after three resumes).
     out << std::setw(20) << "#parametrization"
         << std::scientific << std::setw(20) << (double)AZUREParams::BasisForConfig(configure)
         << std::scientific << std::setw(20) << 0.0 << std::endl;

@@ -71,8 +71,9 @@ double ShftFunc::theWhitFunc(double x, void *p) {
  * threshold.  Returns false if GSL cannot evaluate it.
  */
 bool ShftFunc::WhittakerShift(int l, double binding, double &s) const {
-  const double etaB = sqrt(uconv / 2.) * fstruc * zz_ * sqrt(redmass_ / binding);
-  const double rhoB = sqrt(2. * uconv) / hbarc * radius() * sqrt(redmass_ * binding);
+  const double etaB = kin_.rel ? kin_.EtaBound(binding) : sqrt(uconv / 2.) * fstruc * zz_ * sqrt(redmass_ / binding);
+  const double rhoB = kin_.rel ? kin_.RhoBound(radius(), binding)
+                               : sqrt(2. * uconv) / hbarc * radius() * sqrt(redmass_ * binding);
   s = CoulombTable::ExactBound(l, etaB, rhoB);
   return std::isfinite(s);
 }
@@ -103,13 +104,16 @@ double ShftFunc::operator()(int l, double energy) {
   // Neutral channel: the Whittaker function is rho k_l(rho) up to a constant,
   // whose logarithmic derivative has the closed form below.
   if (neutral_ && UseNeutralClosedForm()) {
-    const double rho = sqrt(2. * uconv) / hbarc * radius() * sqrt(redmass_ * binding);
+    const double rho = kin_.rel ? kin_.RhoBound(radius(), binding)
+                               : sqrt(2. * uconv) / hbarc * radius() * sqrt(redmass_ * binding);
     if (rho > 0.0) return NeutralBoundShift(l, rho);
   }
-  // Charged channel: the table's Whittaker branch, at eta_b and rho_b = kappa a.
-  if (!neutral_ && table_) {
-    const double etaB = sqrt(uconv / 2.) * fstruc * zz_ * sqrt(redmass_ / binding);
-    const double rhoB = sqrt(2. * uconv) / hbarc * radius() * sqrt(redmass_ * binding);
+  // Charged channel: the table's Whittaker branch, at eta_b and rho_b = kappa a (relativistic under
+  // "relativistic=1", Kinematics.h), unless EnergyDerivative's stencil leaves the table (forceExact_).
+  if (!neutral_ && table_ && !forceExact_) {
+    const double etaB = kin_.rel ? kin_.EtaBound(binding) : sqrt(uconv / 2.) * fstruc * zz_ * sqrt(redmass_ / binding);
+    const double rhoB = kin_.rel ? kin_.RhoBound(radius(), binding)
+                                 : sqrt(2. * uconv) / hbarc * radius() * sqrt(redmass_ * binding);
     double s;
     if (table_->LookupBound(l, etaB, rhoB, s)) return s;
   }
@@ -167,6 +171,16 @@ double ShftFunc::NumericalShift() {
   return radius() * result / theWhitFunc(radius(), &params_);
 }
 
+bool ShftFunc::BoundTableOk(int l, double energy) const {
+  if (!table_ || neutral_) return false;
+  const double binding = fabs(energy - totalSepE());  // as operator() sets params_.bindingEnergy
+  if (!(binding > 0.0)) return false;
+  const double etaB = kin_.rel ? kin_.EtaBound(binding) : sqrt(uconv / 2.) * fstruc * zz_ * sqrt(redmass_ / binding);
+  const double rhoB = kin_.rel ? kin_.RhoBound(radius(), binding) : sqrt(2. * uconv) / hbarc * radius() * sqrt(redmass_ * binding);
+  double s;
+  return table_->LookupBound(l, etaB, rhoB, s);
+}
+
 double ShftFunc::EnergyDerivative(int l, double energy, double step) {
   double result;
   double error;
@@ -177,7 +191,14 @@ double ShftFunc::EnergyDerivative(int l, double energy, double step) {
   F.function = &thisShftFunc;
   F.params = this;
 
-  gsl_deriv_central(&F, energy, step, &result, &error);
+  // gsl_deriv_central samples E +- h and E +- h/2: one route for all four (the table only when it covers
+  // every one of them), so the table's edge cannot put a jump into the derivative (dev, audit 2026-10-25,
+  // item 32).  The step is the caller's (ChannelFunc::DerivativeStep for a closed channel; 1 eV by default).
+  const double h = step;
+  forceExact_ = table_ && !(BoundTableOk(l, energy + h) && BoundTableOk(l, energy - h) &&
+                            BoundTableOk(l, energy + 0.5 * h) && BoundTableOk(l, energy - 0.5 * h));
+  gsl_deriv_central(&F, energy, h, &result, &error);
+  forceExact_ = false;
 
   return result;
 }
@@ -188,6 +209,14 @@ double ShftFunc::EnergySecondDerivative(int l, double energy) {
   // stencil when the level is within 4h of it.
   const double h = 1.0e-2;
   double binding = totalSepE() - energy;
+  // The whole stencil by the exact route: the table's Hermite interpolant is C1 across its cells, and a 10 keV
+  // stencil crosses them, which put a kink of the interpolation error into the second difference (audit
+  // 2026-10-25, 03 F8; 2026-10-28).  Five exact bound-state evaluations per level are cheap.
+  struct ExactScope {
+    bool &flag; bool saved;
+    ExactScope(bool &f) : flag(f), saved(f) { flag = true; }
+    ~ExactScope() { flag = saved; }
+  } exact(forceExact_);
   if (binding < 4.0 * h) {
     const double f = 1.0e-3;
     double s0 = operator()(l, energy);

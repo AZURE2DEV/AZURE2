@@ -1,3 +1,4 @@
+#include <QLocale>
 #include "AddSegTestDialog.h"
 
 #include <QPushButton>
@@ -65,6 +66,15 @@ AddSegTestDialog::AddSegTestDialog(QWidget *parent) :
   phaseLValueText->setValidator(intValidator);
   phaseLValueText->setVisible(false);
   phaseLValueText->setMaximumWidth(50);
+  phaseSValueText = new QLineEdit;
+  phaseSValueText->setObjectName("phaseSValueText");
+  phaseSValueText->setValidator(spinValidator);
+  phaseSValueText->setVisible(false);
+  phaseSValueText->setMaximumWidth(50);
+  phaseSValueText->setPlaceholderText(tr("s"));
+  phaseSValueText->setToolTip(tr("Channel spin of the partial wave (\"spin <s>\" on the segment line).\n"
+                                 "Required when the level scheme has several channel spins with this J and l\n"
+                                 "(a target with spin); may be left empty when only one exists."));
 
   advancedModeCheck = new QCheckBox(tr("Advanced Mode (Sum/Ratio)"));
   connect(advancedModeCheck, SIGNAL(stateChanged(int)), this, SLOT(advancedModeChanged(int)));
@@ -173,6 +183,10 @@ AddSegTestDialog::AddSegTestDialog(QWidget *parent) :
   phaseLValueLabel->setVisible(false);
   phaseLayout->addWidget(phaseLValueLabel);
   phaseLayout->addWidget(phaseLValueText);
+  phaseSValueLabel = new QLabel(tr("s:"));
+  phaseSValueLabel->setVisible(false);
+  phaseLayout->addWidget(phaseSValueLabel);
+  phaseLayout->addWidget(phaseSValueText);
   angDistLabel = new QLabel(tr("Maximum Order"));
   angDistSpin = new QSpinBox;
   angDistSpin->setMinimum(0);
@@ -292,6 +306,8 @@ void AddSegTestDialog::dataTypeChanged(int) {
   phaseLValueLabel->setVisible(phase);
   phaseJValueText->setVisible(phase);
   phaseLValueText->setVisible(phase);
+  phaseSValueLabel->setVisible(phase);
+  phaseSValueText->setVisible(phase);
   angDistLabel->setVisible(angDist);
   angDistSpin->setVisible(angDist);
   // lab or C.M. differential, or A_y
@@ -376,7 +392,7 @@ void AddSegTestDialog::addComponent() {
     // For ratio, this is the denominator (only one component needed)
     if (useFixedAngle) {
       double angle = fixedAngleText->text().toDouble();
-      component += QString(", Angle: %1").arg(angle);
+      component += QString(", Angle: %1").arg(QString::number(angle, 'g', QLocale::FloatingPointShortest));
     }
 
     // Only allow one component for ratio
@@ -389,7 +405,7 @@ void AddSegTestDialog::addComponent() {
     bool scalingOk = false;
     double scaling = componentScalingText->text().toDouble(&scalingOk);
     if (scalingOk && scaling != 1.0) {
-      component += QString(", Scaling: %1").arg(scaling);
+      component += QString(", Scaling: %1").arg(QString::number(scaling, 'g', QLocale::FloatingPointShortest));
     }
   }
 

@@ -1,4 +1,6 @@
+#include "InputFiles.h"
 #include "AZUREOutput.h"
+#include "Profile.h"
 #include "CNuc.h"
 #include "Config.h"
 #include "CovarianceBand.h"
@@ -11,6 +13,8 @@
 #include "Minuit2/MnUserParameters.h"
 #include "GSLException.h"
 #include <gsl/gsl_linalg.h>
+#include <map>
+#include <tuple>
 #include <gsl/gsl_matrix.h>
 #include <gsl/gsl_vector.h>
 #include <cmath>
@@ -45,6 +49,123 @@
  * 1 and the token would be silently meaningless, which is exactly what an
  * older build would do with it too.
  */
+
+/*!
+ * An analyzing-power segment (isDiff 7) needs a spin-1/2 projectile: the
+ * particle route (PolarizationFunc) is written for one and returned 0 for any
+ * other, and the capture route (CNuc::CalcCaptureAnalyzingPower) ran for any
+ * projectile spin but returned 3/(x+1) <S_y>, which is the Madison A_y only
+ * at x = 1/2 (for a deuteron 1.5 times Ohlsen's Cartesian A_y).  Both are
+ * refused here instead (2026-10-26, audit item 9); tensor observables and the
+ * spin-1 vector analyzing power are not implemented.
+ */
+/*!
+ * An angular-coefficient segment (isDiff 9) is the Legendre expansion of a reaction's c.m.
+ * angular distribution.  Refused: an elastic pair (the expansion of GenMatrixFunc leaves the
+ * Coulomb amplitude out), total capture, composites, samples, "total", UPOS, and a free
+ * normalization on normalised coefficients (a_k / a_0 has no scale; use "absolute 1" for A_k).
+ */
+static bool CoefficientsAllowed(CNuc *theCNuc, const ESegment &segment, int number, const Config &configure) {
+  if (!segment.IsCoefficients()) return true;
+  std::string why;
+  if (segment.GetExitKey() == -1)
+    why = "total capture has no angular distribution";
+  else if (segment.GetExitKey() == segment.GetEntranceKey())
+    why = "an elastic distribution includes the Coulomb amplitude, which the Legendre expansion leaves out";
+  else if (segment.HasComponents() || segment.IsAdvanced())
+    why = "a composite (SUM / RATIO) is not supported";
+  else if (segment.IsNatural())
+    why = "a sample segment is not supported";
+  else if (segment.IsTotal())
+    why = "\"total 1\" has no angular distribution";
+  else if (segment.IsUPOS())
+    why = "a secondary-gamma (UPOS) distribution is not supported";
+  else if (!segment.IsCoefficientAbsolute() && segment.IsVaryNorm())
+    why = "normalised coefficients a_k / a_0 have no scale: fix the normalization at 1, or give the absolute A_k with \"absolute 1\"";
+  if (why.empty()) return true;
+  configure.outStream << "ERROR: segment #" << number << " (angular coefficients): " << why << "." << std::endl;
+  return false;
+}
+
+static bool AnalyzingPowerAllowed(CNuc *theCNuc, const ESegment &segment, int number, bool isTest,
+                                  const Config &configure) {
+  if (!segment.IsAnalyzingPower()) return true;
+  PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(segment.GetEntranceKey()));
+  if (fabs(entrancePair->GetJ(1) - 0.5) < 1.e-6) return true;
+  configure.outStream << "ERROR: " << (isTest ? "test segment #" : "segment #") << number
+                      << ": an analyzing power needs a spin-1/2 projectile; entrance pair " << segment.GetEntranceKey()
+                      << " has a spin-" << entrancePair->GetJ(1) << " projectile (tensor observables and the spin-1 vector"
+                      << " analyzing power are not implemented)." << std::endl;
+  return false;
+}
+
+/*!
+ * A "total 1" segment is the total cross section of its entrance pair by the optical theorem
+ * (GenMatrixFunc::CalculateBareCrossSection): angle-integrated, its exit pair its entrance pair, and a neutral pair
+ * (the Coulomb total diverges) of distinguishable particles.  The R-matrix-for-capture formalism defines T
+ * differently, so it is refused there.
+ */
+/*!
+ * A UPOS (secondary-gamma) segment given as a lab differential is converted with the kinematics of particle b, the
+ * light ejectile of the exit pair, which is right for a gamma measured in coincidence with it and not otherwise
+ * (segments.rst, UPOS).  Say so instead of converting silently (audit 2026-10-25, item 31).
+ */
+static void UPOSLabNote(const ESegment &segment, int key, bool isTest, const Config &configure) {
+  if (!segment.IsUPOS() || !segment.IsDifferential() || segment.IsCMDifferential() || segment.IsPhase()) return;
+  configure.outStream << "WARNING: " << (isTest ? "test segment #" : "segment #") << key
+                      << " (UPOS, lab differential): the lab angle is converted with the kinematics of particle b, "
+                      << "the light ejectile of the exit pair (not the gamma's); give c.m. angles if that is not meant."
+                      << std::endl;
+}
+
+/*!
+ * Total capture is the exit key -1 together with the total-capture data type (3 on a data line, 4 on a test
+ * line): the reader expands such a segment into one term per capture pair.  Either half alone -- the key -1
+ * with another type, or the type with a real exit pair -- left a segment whose exit pair does not exist:
+ * mode 3 with "1 1 -1 ... 0" read pairs_[-1] and crashed in the external-capture lookup (13N), and a model
+ * without external capture gave meaningless numbers (audit 2026-10-25, item 32).
+ */
+static bool TotalCaptureCodeOk(const ESegment &segment, int key, bool isTest, const Config &configure) {
+  const bool keyTotal = segment.GetExitKey() == -1;
+  const bool codeTotal = segment.IsTotalCapture() != 0;
+  if (keyTotal == codeTotal) return true;
+  const char *what = isTest ? "test segment #" : "segment #";
+  if (keyTotal) {
+    configure.outStream << "ERROR: " << what << key << ": the exit key -1 (total capture) needs the total-capture data type ("
+                        << (isTest ? "4 on a test line" : "3 on a data line") << ")." << std::endl;
+    return false;
+  }
+  // The type with a real exit key has always meant total capture: the expansion below replaces the exit key with
+  // the first capture pair and adds the others as components.  Say so instead of doing it silently.
+  configure.outStream << "WARNING: " << what << key << ": the total-capture data type with exit pair " << segment.GetExitKey()
+                      << ": the exit key is ignored; the segment is the total capture over every capture pair of the "
+                      << "entrance nucleus (write the exit key -1 to say so)." << std::endl;
+  return true;
+}
+
+static bool TotalAllowed(CNuc *theCNuc, ESegment &segment, int key, bool isTest, const Config &configure) {
+  if (!segment.IsTotal()) return true;
+  const char *what = isTest ? "test segment" : "segment";
+  auto refuse = [&](const std::string &why) {
+    configure.outStream << "ERROR: " << what << " #" << key << " (total 1): " << why << std::endl;
+    return false;
+  };
+  if (segment.GetExitKey() != segment.GetEntranceKey())
+    return refuse("the total cross section of a pair needs the segment's exit pair to be its entrance pair.");
+  if (segment.IsDifferential() || segment.IsPhase() || segment.IsAnalyzingPower() || segment.IsAngularDist() ||
+      segment.IsUPOS())
+    return refuse("a total cross section is angle-integrated (data type 0).");
+  if (!theCNuc->IsPairKey(segment.GetEntranceKey())) return true;  // reported where the pair is checked
+  PPair *pair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(segment.GetEntranceKey()));
+  if (pair->GetPType() != 0 || pair->GetZ(1) * pair->GetZ(2) != 0)
+    return refuse("the optical theorem needs a neutral particle pair (the total cross section of charged particles "
+                  "diverges).");
+  if (pair->IsIdentical()) return refuse("not for a pair of identical particles.");
+  if (configure.paramMask & Config::USE_RMC_FORMALISM)
+    return refuse("not with the R-matrix-for-capture formalism (--use-rmc).");
+  return true;
+}
+
 static bool NaturalAllowed(CNuc *theCNuc, ESegment &segment, int key, bool isTest, const Config &configure) {
   const char *what = isTest ? "test segment" : "segment";
   const std::string &token = segment.GetNaturalToken();
@@ -92,6 +213,9 @@ static void WriteNaturalDecomposition(const Config &configure, bool isExtrap, in
   if (!out) return;
   out << "# Segment " << segment->GetSegmentKey() << ": abundance-weighted sum over compound nuclei (sample "
       << segment->GetNaturalToken() << ")" << std::endl;
+  if (segment->IsTransmission())
+    out << "# transmission of n = " << segment->GetSampleThickness() << " atoms/b: the total column is exp(-n s), the"
+        << " nucleus columns the abundance-weighted cross sections s_k (b), s = sum_k s_k" << std::endl;
   out << "# E_" << (kinflag ? "lab" : "cm") << " [MeV]   total";
   for (size_t k = 0; k < nucleusLabels.size(); k++) out << "   " << nucleusLabels[k];
   out << std::endl;
@@ -197,7 +321,8 @@ int EData::NumSegments() const {
  */
 
 int EData::Fill(const Config &configure, CNuc *theCNuc) {
-  std::ifstream in(configure.configfile.c_str());
+  std::unique_ptr<std::istream> inStream = InputFiles::Open(configure.configfile, configure.cacheInputFiles);
+  std::istream &in = *inStream;
   if (!in) return -1;
   std::string line = "";
   while (line != "<segmentsData>" && !in.eof()) getline(in, line);
@@ -224,6 +349,32 @@ int EData::Fill(const Config &configure, CNuc *theCNuc) {
         return -1;
       }
       numTotalSegments++;
+      if (!segment.parseWarning().empty())
+        configure.outStream << "WARNING: Data segment #" << numTotalSegments << ": " << segment.parseWarning() << "."
+                            << std::endl;
+      if (segment.isDiff() == 19) {
+        // isDiff 9 + the THM offset: the angular-distribution coefficients are not a THM observable
+        // (ESegment would read 19 as an angle-integrated THM segment).
+        configure.outStream << "ERROR: Data segment #" << numTotalSegments
+                            << " uses isDiff 19 (THM angular-distribution coefficients), which is not supported."
+                            << std::endl;
+        return -1;
+      }
+      if (segment.isDiff() >= 10 && configure.relativistic) {
+        // The THM machinery (vertex, line shape, distortion, the HOES kinematics) is non-relativistic; with
+        // relativistic=1 the R-matrix part of the same amplitude would not be.
+        configure.outStream << "ERROR: Data segment #" << numTotalSegments
+                            << " is a THM segment; THM segments are not supported with relativistic=1." << std::endl;
+        return -1;
+      }
+      if (segment.isDiff() >= 10 && !segment.covarianceFile().empty()) {
+        // A THM segment's chi^2 is its experiment's (profiled norm, EDataThm), not a sum the covariance
+        // correction (EData::CovarianceChi2Correction) could amend.
+        configure.outStream << "ERROR: Data segment #" << numTotalSegments
+                            << " is a THM segment with a covariance block; a data covariance is not supported on"
+                            << " THM segments." << std::endl;
+        return -1;
+      }
       if (segment.isDiff() == 8 || segment.isDiff() == 18) {
         // Polarization x Cross Section was removed: the outgoing polarization of
         // A(a,b)B is the analyzing power of the inverse reaction B(b,a)A.  18 is
@@ -243,7 +394,12 @@ int EData::Fill(const Config &configure, CNuc *theCNuc) {
         if (theCNuc->IsPairKey(NewSegment.GetEntranceKey())) {
           PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(NewSegment.GetEntranceKey()));
           entrancePair->SetEntrance();
+          if (!AnalyzingPowerAllowed(theCNuc, NewSegment, numTotalSegments, false, configure)) return -1;
+          if (!CoefficientsAllowed(theCNuc, NewSegment, numTotalSegments, configure)) return -1;
           if (!NaturalAllowed(theCNuc, NewSegment, numTotalSegments, false, configure)) return -1;
+          if (!TotalAllowed(theCNuc, NewSegment, numTotalSegments, false, configure)) return -1;
+          if (!TotalCaptureCodeOk(NewSegment, numTotalSegments, false, configure)) return -1;
+          UPOSLabNote(NewSegment, numTotalSegments, false, configure);
           bool isValidTotal = false;
           if (NewSegment.GetExitKey() == -1) {
             // total capture: every capture pair of the ENTRANCE pair's compound nucleus
@@ -270,6 +426,7 @@ int EData::Fill(const Config &configure, CNuc *theCNuc) {
 
             // Fill the segment with data first
             if (this->GetSegment(this->NumSegments())->Fill(theCNuc, this, configure) == -1) {
+              if (covarianceError_ || kinematicsError_) return -1;  // never skipped silently
               configure.outStream << "WARNING: Could Not Fill Segment #" << this->NumSegments()
                                   << " from file." << std::endl;
               this->DeleteLastSegment();
@@ -302,10 +459,12 @@ int EData::Fill(const Config &configure, CNuc *theCNuc) {
 
                       double componentScaling = 1.0;
                       if (scalingPos != std::string::npos) {
-                        try {
+                        try {  // SegLine / ExtrapLine wrote it (ReadComponentList), so a number; 1.0 silently before 2026-11-01
                           componentScaling = std::stod(component.substr(scalingPos + 9));
                         } catch (...) {
-                          componentScaling = 1.0;
+                          configure.outStream << "ERROR: segment #" << numTotalSegments << ": the scaling of component \""
+                                              << component << "\" is not a number." << std::endl;
+                          return -1;
                         }
                       }
 
@@ -376,6 +535,8 @@ int EData::Fill(const Config &configure, CNuc *theCNuc) {
                 }
                 baseSegment->SetIsTotalCapture(numCapturePairs);
               }
+              if (!this->FinishTransformedSegment(theCNuc, this->GetSegment(thisSegmentNum), numTotalSegments, false, configure))
+                return -1;
             }
           } else {
             if (NewSegment.GetExitKey() == -1) {
@@ -395,10 +556,10 @@ int EData::Fill(const Config &configure, CNuc *theCNuc) {
 
   if (line != "</segmentsData>") return -1;
 
-  in.close();
 
   if (this->ResolveShiftGroups(configure) == -1) return -1;
   this->ResolveNormGroups(configure);
+  if (this->ResolveCovarianceGroups(configure) == -1) return -1;
 
   if (ReadPriorCentres(configure) != 0) return -1;
 
@@ -409,6 +570,7 @@ int EData::Fill(const Config &configure, CNuc *theCNuc) {
 
   if (this->NumSegments() > 0) {
     if (this->ReadTargetEffectsFile(configure, theCNuc) == -1) return -1;
+    if (!this->CheckTransformedSegments(configure)) return -1;
     this->MapData(theCNuc);
   }
 
@@ -501,7 +663,8 @@ int EData::ReadPriorCentres(const Config &configure) {
  */
 
 int EData::MakePoints(const Config &configure, CNuc *theCNuc) {
-  std::ifstream in(configure.configfile.c_str());
+  std::unique_ptr<std::istream> inStream = InputFiles::Open(configure.configfile, configure.cacheInputFiles);
+  std::istream &in = *inStream;
   if (!in) return -1;
   std::string line = "";
   while (line != "<segmentsTest>" && !in.eof()) getline(in, line);
@@ -521,8 +684,33 @@ int EData::MakePoints(const Config &configure, CNuc *theCNuc) {
       std::istringstream stm;
       stm.str(line);
       ExtrapLine segment(stm);
-      if (stm.rdstate() & (std::stringstream::failbit | std::stringstream::badbit)) return -1;
+      if (stm.rdstate() & (std::stringstream::failbit | std::stringstream::badbit)) {
+        if (!segment.parseError().empty())
+          configure.outStream << "ERROR: Test segment #" << numTotalSegments + 1 << ": " << segment.parseError() << "."
+                              << std::endl;
+        return -1;
+      }
       numTotalSegments++;
+      if (!segment.parseWarning().empty())
+        configure.outStream << "WARNING: Test segment #" << numTotalSegments << ": " << segment.parseWarning() << "."
+                            << std::endl;
+      if (segment.hasCovariance()) {
+        configure.outStream << "ERROR: Test segment #" << numTotalSegments
+                            << " carries a covariance block; a data covariance belongs on data segments only."
+                            << std::endl;
+        return -1;
+      }
+      if (segment.isDiff() >= 10 && configure.relativistic) {
+        configure.outStream << "ERROR: Test segment #" << numTotalSegments
+                            << " is a THM segment; THM segments are not supported with relativistic=1." << std::endl;
+        return -1;
+      }
+      if (segment.isDiff() == 9 || segment.isDiff() == 19) {
+        configure.outStream << "ERROR: Test segment #" << numTotalSegments
+                            << " uses isDiff " << segment.isDiff() << " (angular coefficients), a data-segment type; a test segment"
+                            << " computes the coefficients with isDiff 3 and a maximum order." << std::endl;
+        return -1;
+      }
       if (segment.isDiff() == 8 || segment.isDiff() == 18) {
         configure.outStream
             << "ERROR: Test segment #" << numTotalSegments << " uses isDiff " << segment.isDiff() << " (Polarization x"
@@ -534,7 +722,11 @@ int EData::MakePoints(const Config &configure, CNuc *theCNuc) {
         ESegment NewSegment(segment);
         if (theCNuc->IsPairKey(NewSegment.GetEntranceKey())) {
           PPair *segEntrance = theCNuc->GetPair(theCNuc->GetPairNumFromKey(NewSegment.GetEntranceKey()));
+          if (!AnalyzingPowerAllowed(theCNuc, NewSegment, numTotalSegments, true, configure)) return -1;
           if (!NaturalAllowed(theCNuc, NewSegment, numTotalSegments, true, configure)) return -1;
+          if (!TotalAllowed(theCNuc, NewSegment, numTotalSegments, true, configure)) return -1;
+          if (!TotalCaptureCodeOk(NewSegment, numTotalSegments, true, configure)) return -1;
+          UPOSLabNote(NewSegment, numTotalSegments, true, configure);
           bool isValidTotal = false;
           if (NewSegment.GetExitKey() == -1) {
             // total capture: every capture pair of the ENTRANCE pair's compound nucleus
@@ -562,7 +754,7 @@ int EData::MakePoints(const Config &configure, CNuc *theCNuc) {
 
             theCNuc->GetPair(theCNuc->GetPairNumFromKey(theSegment->GetEntranceKey()))->SetEntrance();
             PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(theSegment->GetEntranceKey()));
-            PPair *exitPair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(theSegment->GetExitKey()));
+            PPair *exitPair = theCNuc->GetPairFromKey(theSegment->GetExitKey());  // nullptr for total capture (-1)
             double aStep = theSegment->GetAStep();
             double eStep = theSegment->GetEStep();
             for (double angle = theSegment->GetMinAngle();
@@ -573,25 +765,31 @@ int EData::MakePoints(const Config &configure, CNuc *theCNuc) {
                 theSegment->AddPoint(NewPoint);
                 EPoint *thePoint = theSegment->GetPoint(theSegment->NumPoints());
                 thePoint->SetParentData(this);
-                if (entrancePair->GetPType() == 20)
+                if (entrancePair->GetPType() == 20 && exitPair)
                   thePoint->ConvertDecayEnergy(exitPair);
                 else if (!theSegment->IsCMDifferential())
                   thePoint->ConvertLabEnergy(entrancePair);
                 else if (theSegment->IsCMDifferential())
                   thePoint->ConvertLabEnergy(entrancePair);
-                if (exitPair->GetPType() == 0 && theSegment->IsDifferential() &&
+                // A RATIO is dimensionless: no cross-section conversion (as ESegment::Fill for data segments;
+                // the stored factor would otherwise divide the ratio in the lab output, kinflag.dat = 1).
+                const bool isRatio = theSegment->IsAdvanced() && theSegment->GetLegacyOperationType() == 1;
+                if (exitPair && exitPair->GetPType() == 0 && theSegment->IsDifferential() &&
                     !theSegment->IsPhase() && !theSegment->IsAngularDist() && !theSegment->IsCMDifferential()) {
-                  if (theSegment->GetEntranceKey() == theSegment->GetExitKey()) {
-                    thePoint->ConvertLabAngle(entrancePair);
-                  } else {
-                    thePoint->ConvertLabAngle(entrancePair, exitPair, configure);
+                  const bool inRange = (theSegment->GetEntranceKey() == theSegment->GetExitKey())
+                                           ? thePoint->ConvertLabAngle(entrancePair)
+                                           : thePoint->ConvertLabAngle(entrancePair, exitPair, configure);
+                  if (!inRange) {
+                    configure.outStream << "ERROR: " << "test segment #" << theSegment->GetSegmentKey() << ": lab angle " << thePoint->GetLabAngle() << " deg at E_lab = " << thePoint->GetLabEnergy()
+    << " MeV: " << thePoint->GetLabAngleWhy() << "." << std::endl;
+                    return -1;
                   }
-                  thePoint->ConvertCrossSection(entrancePair, exitPair);
+                  if (!isRatio) thePoint->ConvertCrossSection(entrancePair, exitPair);
                 }
-                if (exitPair->GetPType() == 10 && theSegment->IsDifferential() &&
+                if (exitPair && exitPair->GetPType() == 10 && theSegment->IsDifferential() &&
                     !theSegment->IsPhase() && !theSegment->IsAngularDist() && !theSegment->IsCMDifferential()) {
                   thePoint->ConvertLabAngleGammas(entrancePair);
-                  thePoint->ConvertCrossSectionGammas(entrancePair);
+                  if (!isRatio) thePoint->ConvertCrossSectionGammas(entrancePair);
                 }
                 if (eStep == 0.0) break;
               }
@@ -620,10 +818,12 @@ int EData::MakePoints(const Config &configure, CNuc *theCNuc) {
 
                     double componentScaling = 1.0;
                     if (scalingPos != std::string::npos) {
-                      try {
+                      try {  // SegLine / ExtrapLine wrote it (ReadComponentList), so a number; 1.0 silently before 2026-11-01
                         componentScaling = std::stod(component.substr(scalingPos + 9));
                       } catch (...) {
-                        componentScaling = 1.0;
+                        configure.outStream << "ERROR: segment #" << numTotalSegments << ": the scaling of component \""
+                                            << component << "\" is not a number." << std::endl;
+                        return -1;
                       }
                     }
 
@@ -700,6 +900,8 @@ int EData::MakePoints(const Config &configure, CNuc *theCNuc) {
                 }
                 baseSegment->SetIsTotalCapture(numCapturePairs);
               }
+              if (!this->FinishTransformedSegment(theCNuc, this->GetSegment(thisSegmentNum), numTotalSegments, true, configure))
+                return -1;
             }
           } else {
             if (NewSegment.GetExitKey() == -1) {
@@ -719,7 +921,6 @@ int EData::MakePoints(const Config &configure, CNuc *theCNuc) {
 
   if (line != "</segmentsTest>") return -1;
 
-  in.close();
 
   if (CheckThmWeights(configure, configure.thm.weightByTestSegment, "weightTest", "<segmentsTest>",
                       numTotalSegments, this) != 0)
@@ -727,6 +928,7 @@ int EData::MakePoints(const Config &configure, CNuc *theCNuc) {
 
   if (this->NumSegments() > 0) {
     if (this->ReadTargetEffectsFile(configure, theCNuc) == -1) return -1;
+    if (!this->CheckTransformedSegments(configure)) return -1;
     this->MapData(theCNuc);
   }
 
@@ -863,14 +1065,15 @@ int EData::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, const st
     }
     const bool shifted = std::find(shiftActive.begin(), shiftActive.end(), seg) != shiftActive.end();
     PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(seg->GetEntranceKey()));
-    PPair *exitPair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(seg->GetExitKey()));
+    PPair *exitPair = theCNuc->GetPairFromKey(seg->GetExitKey());  // nullptr for total capture (-1)
     // The c.m./lab factor the shift step uses for sub-points (ESegment::UpdatePointEnergyWithShift).
-    const double cmFactor = (entrancePair->GetPType() == 20)
+    const double cmFactor = (entrancePair->GetPType() == 20 && exitPair)
         ? (exitPair->GetM(1) + exitPair->GetM(2)) / exitPair->GetM(2)
         : entrancePair->GetM(2) / (entrancePair->GetM(1) + entrancePair->GetM(2));
     for (int i = 1; i <= seg->NumPoints(); i++) {
       EPoint *point = seg->GetPoint(i);
       if (!point->GetSubGridSpec().valid) continue;
+      // the parent's shift, which is what moves every sub-point (ESegment::UpdatePointEnergyWithShift)
       const double offset = shifted ? cmFactor * seg->TotalEnergyShift(point->GetOriginalEnergy()) : 0.0;
       work.push_back({seg, i, offset, shifted});
     }
@@ -924,6 +1127,8 @@ int EData::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, const st
     subs.clear();
     for (double e : grid) {
       EPoint sub(point->GetCMAngle(), e, it.seg);
+      sub.SetCoefficientOrder(point->GetCoefficientOrder());
+      sub.SetCoefficientAbsolute(point->GetCoefficientAbsolute());
       if (spec.targetIntegration)
         sub.SetStoppingPower(spec.stoppingConversion *
                              effect->GetStoppingPowerEq()->Evaluate(configure, e / spec.stoppingConversion));
@@ -974,7 +1179,8 @@ int EData::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, const st
 }
 
 int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
-  std::ifstream in(configure.configfile.c_str());
+  std::unique_ptr<std::istream> inStream = InputFiles::Open(configure.configfile, configure.cacheInputFiles);
+  std::istream &in = *inStream;
   if (!in) return -1;
   std::string line = "";
   while (line != "<targetInt>" && !in.eof()) getline(in, line);
@@ -997,6 +1203,10 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
       if (targetEffect.HasScreeningError()) {
         std::cout << "ERROR: <targetInt> line \"" << line << "\": a screening block is 'screening Ue_eV vary sigma_eV'"
                   << std::endl;
+        return -1;
+      }
+      if (targetEffect.HasDensityFitError()) {
+        std::cout << "ERROR: <targetInt> line \"" << line << "\": " << targetEffect.GetDensityFitErrorText() << std::endl;
         return -1;
       }
       if (stm.rdstate() & (std::stringstream::failbit | std::stringstream::badbit)) return -1;
@@ -1042,26 +1252,28 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
     }
   }
   if (line != "</targetInt>") return -1;
+  if (this->SetUpDensityParams(configure) == -1) return -1;
   for (ESegmentIterator segment = GetSegments().begin(); segment < GetSegments().end(); segment++) {
     PPair *entrancePair = compound->GetPair(compound->GetPairNumFromKey(segment->GetEntranceKey()));
-    PPair *exitPair = compound->GetPair(compound->GetPairNumFromKey(segment->GetExitKey()));
+    PPair *exitPair = compound->GetPairFromKey(segment->GetExitKey());  // nullptr for total capture (-1)
     double cmConversion;
-    if (entrancePair->GetPType() == 20)
+    if (entrancePair->GetPType() == 20 && exitPair)
       cmConversion = (exitPair->GetM(1) + exitPair->GetM(2)) / exitPair->GetM(2);
     else
       cmConversion = entrancePair->GetM(2) / (entrancePair->GetM(1) + entrancePair->GetM(2));
 
     if (segment->IsTargetEffect()) {
       TargetEffect *targetEffect = this->GetTargetEffect(segment->GetTargetEffectNum());
-      targetEffect->ConvertSigmaToCM(cmConversion);
-      if (targetEffect->IsBeamProfile()) targetEffect->ConvertBeamProfileToCM(cmConversion);
+      // the line's energies stay in the lab frame; every point converts them with its own pair's factor
+      const int bohrZ1 = (entrancePair->GetPType() == 20) ? 0 : entrancePair->GetZ(1);
+      const int bohrZ2 = entrancePair->GetZ(2);
       if (targetEffect->IsUdr()) {
         double eMin = 1.0e300, eMax = 0.0;
         for (EPointIterator point = segment->GetPoints().begin(); point < segment->GetPoints().end(); point++) {
           eMin = std::min(eMin, point->GetLabEnergy());
           eMax = std::max(eMax, point->GetLabEnergy());
         }
-        if (eMax > 0.0 && !targetEffect->LoadUdrTable(eMin, eMax, configure.outStream)) return -1;
+        if (eMax > 0.0 && !targetEffect->LoadUdrTable(eMin, eMax, configure.outStream, configure.cacheInputFiles)) return -1;
       }
 
       for (EPointIterator point = segment->GetPoints().begin(); point < segment->GetPoints().end(); point++) {
@@ -1072,6 +1284,7 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
         if (blendWeight <= 0.) continue;
         point->SetTargetEffectNum(segment->GetTargetEffectNum());
         point->SetTargetBlendWeight(blendWeight);
+        point->SetTargetKinematics(cmConversion, bohrZ1, bohrZ2);
 
         if (targetEffect->IsSubPointEffect()) {
           double forwardDepth = 0.0;
@@ -1079,15 +1292,34 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
 
           double targetThickness = 0.0;
           if (targetEffect->IsTargetIntegration()) {
-            targetThickness = cmConversion * targetEffect->TargetThickness(point->GetLabEnergy(), configure);
-            point->SetTargetThickness(targetThickness);
+            if (targetEffect->IsThickTarget()) {
+              // an infinitely thick target: the point integrates from its energy down to 1 keV
+              targetThickness = std::max(point->GetCMEnergy() - 0.001, 0.0);
+            } else {
+              // the grid spans the target at its layout density (a fitted density's largest expected value)
+              targetThickness = cmConversion * targetEffect->TargetThickness(point->GetLabEnergy(), configure,
+                                                                             targetEffect->GetLayoutDensity());
+              if (!(targetThickness > 0.0)) {
+                configure.outStream << "ERROR: target integration of segment #" << segment->GetSegmentKey()
+                                    << " at E_lab = " << point->GetLabEnergy() << " MeV: the stopping cross section times the"
+                                    << " density is " << targetThickness / cmConversion << " (not positive).  A density of 0"
+                                    << " means an infinitely thick target; otherwise the stopping power must be positive"
+                                    << " at every point." << std::endl;
+                return -1;
+              }
+            }
+            point->SetTargetLabEnergy(point->GetLabEnergy());
+            point->SetTargetThickness(targetEffect->HasDensityFit()
+                                          ? cmConversion * targetEffect->TargetThickness(point->GetLabEnergy(), configure)
+                                          : targetThickness);
           }
           // How far the grid reaches above and below the point for this effect (beam spread, target, straggling).
-          targetEffect->GridExtent(point->GetCMEnergy(), targetThickness, configure, forwardDepth, backwardDepth);
-          // A THM (HOES) segment's Gaussian fold reaches thmConvolutionRange sigma (5), not convolutionRange.
+          targetEffect->GridExtent(point->GetCMEnergy(), targetThickness, configure, cmConversion, bohrZ1, bohrZ2, forwardDepth, backwardDepth);
+          // A THM (HOES) segment's Gaussian fold reaches thmConvolutionRange sigma (5; convolutionRange is 5 too
+          // since dev 7d24c88).
           if (segment->IsTHM() && targetEffect->IsGaussian() && !targetEffect->IsTargetIntegration())
             forwardDepth = backwardDepth =
-                TargetEffect::thmConvolutionRange * targetEffect->SigmaCM(point->GetCMEnergy(), configure);
+                TargetEffect::thmConvolutionRange * targetEffect->SigmaCM(point->GetCMEnergy(), configure, cmConversion);
 
           // Generate adaptive integration grid
           double startEnergy = point->GetCMEnergy() + forwardDepth;
@@ -1100,21 +1332,13 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
           */
           double minSubEnergy = segment->IsTHM() ? TargetEffect::minIntegrationEnergy - (entrancePair->GetSepE() + entrancePair->GetExE()) : TargetEffect::minIntegrationEnergy;
 
-          // Check if target thickness is zero (for convolution-only cases)
           if (targetEffect->IsTargetIntegration()) {
-            double targetThickness = point->GetTargetThickness();
-            if (targetThickness < 1.0e-10) {
-              // Target thickness is effectively zero - integrate down to the floor energy
+            // the target (or, for a thick target, everything down to 1 keV), plus the spread below it
+            // (never a THM segment: refused above)
+            endEnergy = point->GetCMEnergy() - backwardDepth;
+            // Safety check: if backwardDepth > energy, set endEnergy to minimum
+            if (endEnergy < minSubEnergy) {
               endEnergy = minSubEnergy;
-              // Set density to 1e24 to prevent division issues
-              targetEffect->SetDensity(1.0e24);
-            } else {
-              // Normal case - use backward depth
-              endEnergy = point->GetCMEnergy() - backwardDepth;
-              // Safety check: if backwardDepth > energy, set endEnergy to minimum
-              if (endEnergy < minSubEnergy) {
-                endEnergy = minSubEnergy;
-              }
             }
           } else {
             // Convolution or ConvCoefficients - use backward depth
@@ -1130,8 +1354,9 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
             // is, narrowed to the point's energy window (plus the resolution
             // tails) when it has one, not around the point's own energy.
             double low, high;
-            targetEffect->BeamProfileSupport(low, high);
-            double s = targetEffect->GetBeamTpcSigma();
+            targetEffect->BeamProfileSupport(low, high);  // lab
+            low *= cmConversion; high *= cmConversion;
+            double s = cmConversion * targetEffect->GetBeamTpcSigma();
             // The resolution tails: 4 s, or for a THM (HOES) point the 5 s of
             // its Gaussian fold -- a narrow peak 4-5 s from a point dominates
             // the tail there (-2 % at 81 keV from a 289 eV level, 18O(p,a) THM).
@@ -1189,6 +1414,8 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
           for (size_t i = 0; i < energyGrid.size(); i++) {
             double subEnergy = energyGrid[i];
             EPoint subPoint(point->GetCMAngle(), subEnergy, &*segment);
+            subPoint.SetCoefficientOrder(point->GetCoefficientOrder());
+            subPoint.SetCoefficientAbsolute(point->GetCoefficientAbsolute());
             if (targetEffect->IsTargetIntegration()) {
               double stoppingPower = cmConversion * targetEffect->GetStoppingPowerEq()->Evaluate(configure, subEnergy / cmConversion);
               subPoint.SetStoppingPower(stoppingPower);
@@ -1207,9 +1434,9 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
         // energies; convert them for this pair before the grid is laid out
         // (EData::Initialize repeats this, idempotently, from the lab energy).
         PPair *compEntrance = compound->GetPair(compound->GetPairNumFromKey(component->GetEntranceKey()));
-        PPair *compExit = compound->GetPair(compound->GetPairNumFromKey(component->GetExitKey()));
+        PPair *compExit = compound->GetPairFromKey(component->GetExitKey());
         double compConversion;
-        if (compEntrance->GetPType() == 20)
+        if (compEntrance->GetPType() == 20 && compExit)
           compConversion = (compExit->GetM(1) + compExit->GetM(2)) / compExit->GetM(2);
         else
           compConversion = compEntrance->GetM(2) / (compEntrance->GetM(1) + compEntrance->GetM(2));
@@ -1221,15 +1448,15 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
         }
         if (component->IsTargetEffect()) {
           TargetEffect *targetEffect = this->GetTargetEffect(component->GetTargetEffectNum());
-          targetEffect->ConvertSigmaToCM(compConversion);
-          if (targetEffect->IsBeamProfile()) targetEffect->ConvertBeamProfileToCM(compConversion);
+          const int bohrZ1 = (compEntrance->GetPType() == 20) ? 0 : compEntrance->GetZ(1);
+          const int bohrZ2 = compEntrance->GetZ(2);
           if (targetEffect->IsUdr()) {
             double eMin = 1.0e300, eMax = 0.0;
             for (EPointIterator point = component->GetPoints().begin(); point < component->GetPoints().end(); point++) {
               eMin = std::min(eMin, point->GetLabEnergy());
               eMax = std::max(eMax, point->GetLabEnergy());
             }
-            if (eMax > 0.0 && !targetEffect->LoadUdrTable(eMin, eMax, configure.outStream)) return -1;
+            if (eMax > 0.0 && !targetEffect->LoadUdrTable(eMin, eMax, configure.outStream, configure.cacheInputFiles)) return -1;
           }
 
           for (EPointIterator point = component->GetPoints().begin(); point < component->GetPoints().end(); point++) {
@@ -1237,6 +1464,7 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
             if (blendWeight <= 0.) continue;
             point->SetTargetEffectNum(component->GetTargetEffectNum());
             point->SetTargetBlendWeight(blendWeight);
+            point->SetTargetKinematics(compConversion, bohrZ1, bohrZ2);
 
             if (targetEffect->IsSubPointEffect()) {
               double forwardDepth = 0.0;
@@ -1244,15 +1472,29 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
 
               double targetThickness = 0.0;
               if (targetEffect->IsTargetIntegration()) {
-                targetThickness = compConversion * targetEffect->TargetThickness(point->GetLabEnergy(), configure);
-                point->SetTargetThickness(targetThickness);
+                if (targetEffect->IsThickTarget()) {
+                  targetThickness = std::max(point->GetCMEnergy() - 0.001, 0.0);
+                } else {
+                  targetThickness = compConversion * targetEffect->TargetThickness(point->GetLabEnergy(), configure,
+                                                                                   targetEffect->GetLayoutDensity());
+                  if (!(targetThickness > 0.0)) {
+                    configure.outStream << "ERROR: target integration of a component of segment #" << segment->GetSegmentKey()
+                                        << " at E_lab = " << point->GetLabEnergy() << " MeV: the stopping cross section times"
+                                        << " the density is " << targetThickness / compConversion << " (not positive)." << std::endl;
+                    return -1;
+                  }
+                }
+                point->SetTargetLabEnergy(point->GetLabEnergy());
+                point->SetTargetThickness(targetEffect->HasDensityFit()
+                                              ? compConversion * targetEffect->TargetThickness(point->GetLabEnergy(), configure)
+                                              : targetThickness);
               }
               // How far the grid reaches above and below the point for this effect (beam spread, target, straggling).
-              targetEffect->GridExtent(point->GetCMEnergy(), targetThickness, configure, forwardDepth, backwardDepth);
-              // A THM (HOES) segment's Gaussian fold reaches thmConvolutionRange sigma (5), not convolutionRange.
+              targetEffect->GridExtent(point->GetCMEnergy(), targetThickness, configure, compConversion, bohrZ1, bohrZ2, forwardDepth, backwardDepth);
+              // A THM (HOES) segment's Gaussian fold reaches thmConvolutionRange sigma (5), as above.
               if (component->IsTHM() && targetEffect->IsGaussian() && !targetEffect->IsTargetIntegration())
                 forwardDepth = backwardDepth =
-                    TargetEffect::thmConvolutionRange * targetEffect->SigmaCM(point->GetCMEnergy(), configure);
+                    TargetEffect::thmConvolutionRange * targetEffect->SigmaCM(point->GetCMEnergy(), configure, compConversion);
 
               // Generate adaptive integration grid for component segment
               double startEnergy = point->GetCMEnergy() + forwardDepth;
@@ -1268,21 +1510,11 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
               PPair *componentEntrancePair = compound->GetPair(compound->GetPairNumFromKey(component->GetEntranceKey()));
               double minSubEnergy = component->IsTHM() ? TargetEffect::minIntegrationEnergy - (componentEntrancePair->GetSepE() + componentEntrancePair->GetExE()) : TargetEffect::minIntegrationEnergy;
 
-              // Check if target thickness is zero (for convolution-only cases)
               if (targetEffect->IsTargetIntegration()) {
-                double targetThickness = point->GetTargetThickness();
-                if (targetThickness < 1.0e-10) {
-                  // Target thickness is effectively zero - integrate down to the floor energy
+                endEnergy = point->GetCMEnergy() - backwardDepth;
+                // Safety check: if backwardDepth > energy, set endEnergy to minimum
+                if (endEnergy < minSubEnergy) {
                   endEnergy = minSubEnergy;
-                  // Set density to 1e24 to prevent division issues
-                  targetEffect->SetDensity(1.0e24);
-                } else {
-                  // Normal case - use backward depth
-                  endEnergy = point->GetCMEnergy() - backwardDepth;
-                  // Safety check: if backwardDepth > energy, set endEnergy to minimum
-                  if (endEnergy < minSubEnergy) {
-                    endEnergy = minSubEnergy;
-                  }
                 }
               } else {
                 // Convolution or ConvCoefficients - use backward depth
@@ -1295,8 +1527,9 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
 
               if (targetEffect->IsBeamProfile()) {
                 double low, high;
-                targetEffect->BeamProfileSupport(low, high);
-                double s = targetEffect->GetBeamTpcSigma();
+                targetEffect->BeamProfileSupport(low, high);  // lab
+                low *= compConversion; high *= compConversion;
+                double s = compConversion * targetEffect->GetBeamTpcSigma();
                 double tails = component->IsTHM() ? TargetEffect::thmConvolutionRange : 4.0;
                 if (point->HasBinWindow()) {
                   low = std::max(low, point->GetBinLowCM() - tails * s);
@@ -1345,6 +1578,8 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
               for (size_t i = 0; i < energyGrid.size(); i++) {
                 double subEnergy = energyGrid[i];
                 EPoint subPoint(point->GetCMAngle(), subEnergy, &*component);
+                subPoint.SetCoefficientOrder(point->GetCoefficientOrder());
+                subPoint.SetCoefficientAbsolute(point->GetCoefficientAbsolute());
                 if (targetEffect->IsTargetIntegration()) {
                   double stoppingPower = compConversion * targetEffect->GetStoppingPowerEq()->Evaluate(configure, subEnergy / compConversion);
                   subPoint.SetStoppingPower(stoppingPower);
@@ -1490,6 +1725,54 @@ int EData::Initialize(CNuc *compound, const Config &configure) {
                           << "(likely forbidden by Bose/Fermi symmetry, "
                           << "which requires L+S even). The fit will report delta = 0 at every energy."
                           << std::endl;
+    }
+  }
+
+  // A phase-shift segment is one partial wave: (J, l) and the channel spin s.  Up to 2026-10-27 the
+  // diagonal U-matrix elements of every channel spin with the segment's (J, l) were summed and half
+  // the argument reported, which is not a phase shift of anything when two spins contribute (p + 3He
+  // 1P1 and 3P1, p + 7Be J = 1 l = 1 with s = 1 and 2; audit 2026-10-25, tier 3 entry 4).  A segment
+  // whose (J, l) has several channel spins in the level scheme must say which with "spin <s>", and a
+  // given s must exist.
+  for (int s = 1; s <= this->NumSegments(); s++) {
+    ESegment *seg = this->GetSegment(s);
+    if (!seg->IsPhase()) continue;
+    int aa = compound->GetPairNumFromKey(seg->GetEntranceKey());
+    if (aa == 0) continue;
+    std::vector<double> spins;
+    for (int j = 1; j <= compound->NumJGroups(); j++) {
+      JGroup *jg = compound->GetJGroup(j);
+      if (jg->GetJ() != seg->GetJ()) continue;
+      for (int ch = 1; ch <= jg->NumChannels(); ch++) {
+        AChannel *channel = jg->GetChannel(ch);
+        if (channel->GetRadType() != 'P' || channel->GetPairNum() != aa || channel->GetL() != seg->GetL()) continue;
+        bool seen = false;
+        for (double v : spins) if (std::fabs(v - channel->GetS()) < 1.0e-6) seen = true;
+        if (!seen) spins.push_back(channel->GetS());
+      }
+    }
+    const double want = seg->GetPhaseS();
+    if (want >= 0.0) {
+      bool found = false;
+      for (double v : spins) if (std::fabs(v - want) < 1.0e-6) found = true;
+      if (!found) {
+        configure.outStream << "ERROR: phase-shift segment #" << seg->GetSegmentKey() << " (J = " << seg->GetJ() << ", l = " << seg->GetL()
+                            << ") asks for channel spin s = " << want << ", but the level scheme has ";
+        if (spins.empty()) configure.outStream << "no channel of that (J, l) for its entrance pair." << std::endl;
+        else {
+          configure.outStream << "only s =";
+          for (double v : spins) configure.outStream << " " << v;
+          configure.outStream << " for it." << std::endl;
+        }
+        return -1;
+      }
+    } else if (spins.size() > 1) {
+      configure.outStream << "ERROR: phase-shift segment #" << seg->GetSegmentKey() << " (J = " << seg->GetJ() << ", l = " << seg->GetL()
+                          << ") has " << spins.size() << " channel spins in the level scheme (s =";
+      for (double v : spins) configure.outStream << " " << v;
+      configure.outStream << "): a phase shift belongs to one partial wave, so add \"spin <s>\" to the segment line"
+                          << " (older builds summed the S-matrix elements of all of them, which is not a phase shift)." << std::endl;
+      return -1;
     }
   }
 
@@ -2117,6 +2400,13 @@ void EData::WriteOutputFiles(const Config &configure, bool isFit, const BandData
         if (this->GetScreeningTargetEffect(k)->GetScreeningSigma() > 0.0) anyPrior = true;
       if (anyPrior) chiOut << " Total-Screening-Chi-Squared: " << this->ScreeningPenalty();
     }
+    // Fitted target densities: their priors, and the densities themselves (which param.sav also holds).
+    if (this->NumDensityParams() > 0) {
+      bool anyPrior = false;
+      for (int k = 1; k <= this->NumDensityParams(); k++)
+        if (this->GetDensityTargetEffect(k)->GetDensitySigma() > 0.0) anyPrior = true;
+      if (anyPrior) chiOut << " Total-Density-Chi-Squared: " << this->DensityPenalty();
+    }
     // Measured scattering lengths (<scatteringLengths>; table in scatteringLengths.out).
     if (scatteringLengthChi2_ != 0.0)
       chiOut << " Total-Scattering-Length-Chi-Squared: " << scatteringLengthChi2_;
@@ -2124,6 +2414,7 @@ void EData::WriteOutputFiles(const Config &configure, bool isFit, const BandData
            << std::endl;
     chiOut.flush();
     chiOut.close();
+    if (this->HasCovariance()) this->WriteCovarianceSummary(configure);
   }
   if (!isFit && (configure.paramMask & Config::CALCULATE_WITH_DATA) && NumThmGroups() > 0)
     WriteThmExperiments(configure);
@@ -2134,11 +2425,15 @@ void EData::WriteOutputFiles(const Config &configure, bool isFit, const BandData
       out.precision(4);
       out << std::scientific;
       out << "segment_key_#, file_name, low_angle_bound, high_angle_bound, aframe, low_energy_bound, high_energy_bound, eframe, norm, shift" << std::endl;
+      // One complete row per segment whose normalization is varied (a norm-group member keeps its own
+      // flag).  Before 2026-10-27 only the first four fields were conditional, so every other segment
+      // left a row of six fields without key, file or angles.
       for (ESegmentIterator segment = GetSegments().begin(); segment < GetSegments().end(); segment++) {
-        if (segment->IsVaryNorm()) out << segment->GetSegmentKey() << ","
-                                       << segment->GetDataFile() << ","
-                                       << segment->GetMinAngle() << ","
-                                       << segment->GetMaxAngle() << ",";
+        if (!segment->IsVaryNorm()) continue;
+        out << segment->GetSegmentKey() << ","
+            << segment->GetDataFile() << ","
+            << segment->GetMinAngle() << ","
+            << segment->GetMaxAngle() << ",";
         if (segment->IsCMDifferential() == true) {
           out << "CM,";
         } else
@@ -2218,7 +2513,7 @@ void EData::WriteOutputFiles(const Config &configure, bool isFit, const BandData
         std::ostringstream keys;
         double lo = std::numeric_limits<double>::infinity(), hi = -lo;
         for (int m = 0; m < (int)segments_.size(); m++) {
-          if (m != pos && segments_[m].GetShiftLeaderPos() != pos) continue;
+          if (segments_[m].GetShiftFnSourcePos() != pos) continue;
           keys << (m == pos ? "" : " ") << segments_[m].GetSegmentKey();
           for (int pid = 1; pid <= segments_[m].NumPoints(); pid++) {
             EPoint *pt = segments_[m].GetPoint(pid);
@@ -2232,7 +2527,7 @@ void EData::WriteOutputFiles(const Config &configure, bool isFit, const BandData
         double pen = 0.0, penOwn = 0.0;
         owner.AddShiftPenalty(pen);
         if (owner.IsVaryEnergyShift() && owner.GetEnergyShiftError() != 0.0)
-          penOwn = pow((owner.GetEnergyShift() - owner.GetNominalEnergyShift()) / owner.GetEnergyShiftError(), 2.0);
+          penOwn = pow((owner.GetEnergyShift() - owner.GetNominalEnergyShift()) / owner.GetEnergyShiftError(), 2.0);  // as AddShiftPenalty
         out << "# " << owner.GetSegmentKey() << "," << keys.str() << "," << owner.GetShiftFnExpression() << ","
             << owner.GetEnergyShift() << ",";
         for (int q = 0; q < owner.NumShiftFnParams(); q++) out << (q ? " " : "") << owner.GetShiftFnValues()[q];
@@ -2418,10 +2713,26 @@ std::string EData::ECSignature(CNuc *theCNuc, const Config &configure) {
   ECSignatureHash hash;
   // Bump the version if what goes into the signature changes, so files written
   // under the old definition are recomputed rather than wrongly matched.
-  hash.Add("AZURE2 EC signature v1");
+  // v2 (2026-10-23): the long-wavelength switch is part of the signature, and
+  // the M1 amplitudes changed (sqrt(16/3) prefactor, no E1 charge function), so
+  // every v1 file is recomputed once.
+  // v3 (2026-10-26): the M1 spin-term sign for a cluster whose partner has
+  // half-integer spin (ECIntegral.cpp), so every v2 file is recomputed once.
+  // v4 (2026-10-26): the M1 orbital term is dropped on channel-spin-flip pathways (ECIntegral.cpp), so every
+  // v3 file with such pathways is recomputed once.
+  // v5 (2026-10-30): the file holds every digit (17 significant, was 6), so every v4 file is recomputed once.
+  hash.Add("AZURE2 EC signature v5");
   hash.Add((configure.paramMask & Config::USE_GSL_COULOMB_FUNC) ? 1 : 0);
+  hash.Add((configure.paramMask & Config::USE_LONGWAVELENGTH_APPROX) ? 1 : 0);
+  // The convection current changes exact-form electric terms only; long-wavelength signatures stay as in v2.
+  if (configure.ecConvectionCurrent && !(configure.paramMask & Config::USE_LONGWAVELENGTH_APPROX))
+    hash.Add("convection current");
   hash.Add((configure.paramMask & Config::CALCULATE_REACTION_RATE) ? 1 : 0);
   hash.Add(configure.useHybridMethod ? 1 : 0);
+  // Relativistic kinematics (relativistic=1 in <config>) change eta, rho and the flux factor of every amplitude.
+  // Added only when on, so every non-relativistic file keeps its signature and is not recomputed; a relativistic
+  // run no longer reads back a file written without the switch (2026-10-27, checklist t3-25).
+  if (configure.relativistic) hash.Add("relativistic");
 
   std::set<int> pairs;
   hash.Add("data segments");
@@ -2564,6 +2875,9 @@ int EData::CalculateECAmplitudes(CNuc *theCNuc, const Config &configure) {
     std::remove(ECSignaturePath(outputfile).c_str());
     out.open(outputfile.c_str());
     if (!out) configure.outStream << "Could not write to EC Amplitude File." << std::endl;
+    // Every digit (17 significant): the default 6 left a run that reads the file back ~1e-6 off the run that
+    // wrote it (tests/13N chi2 by 0.62, 2026-10-30).
+    out.precision(17);
   }
   int sumSegmentI = 0;
   int numSumSegments = 0;
@@ -2769,10 +3083,12 @@ int EData::InitializeComponentSegments(CNuc *theCNuc, const Config &configure) {
 
         if (exitPair->GetPType() == 0 && componentSegment.IsDifferential() &&
             !componentSegment.IsPhase() && !componentSegment.IsAngularDist() && !componentSegment.IsCMDifferential()) {
-          if (entranceKey == exitKey) {
-            point->ConvertLabAngle(entrancePair);
-          } else {
-            point->ConvertLabAngle(entrancePair, exitPair, configure);
+          const bool inRange = (entranceKey == exitKey) ? point->ConvertLabAngle(entrancePair)
+                                                        : point->ConvertLabAngle(entrancePair, exitPair, configure);
+          if (!inRange) {
+            configure.outStream << "ERROR: " << "component (" << entranceKey << " -> " << exitKey << ") of segment #" << componentSegment.GetSegmentKey() << ": lab angle " << point->GetLabAngle() << " deg at E_lab = " << point->GetLabEnergy()
+    << " MeV: " << point->GetLabAngleWhy() << "." << std::endl;
+            return -1;
           }
           point->ConvertCrossSection(entrancePair, exitPair);
         }
@@ -2782,22 +3098,39 @@ int EData::InitializeComponentSegments(CNuc *theCNuc, const Config &configure) {
           point->ConvertLabAngleGammas(entrancePair);
           point->ConvertCrossSectionGammas(entrancePair);
         }
+        // The sub-points of a target effect were laid out (ReadTargetEffectsFile) from the copied base
+        // point's c.m. angle, before this conversion with the component's own pair; put them at the
+        // converted angle (CalcLegendreP below recurses into them).  Until 2026-10-27 a component with a
+        // different exit pair, or a fixed-angle RATIO denominator (raw lab angle), was integrated at the
+        // wrong angle (audit 2026-10-25, item 32).
+        for (int k = 1; k <= point->NumSubPoints(); k++) {
+          point->GetSubPoint(k)->SetLabAngle(point->GetLabAngle());
+          point->GetSubPoint(k)->SetCMAngle(point->GetCMAngle());
+        }
       }
     }
   }
 
-  // CalcEDependentValues for component segments
+  // CalcEDependentValues for component segments, in parallel as for the data segments
+  // (EData::CalcEDependentValues).  Each point writes only itself, its sub-points and its local
+  // mapped points that do not own their values; those are never computed here (the condition
+  // below) and each has exactly one host, so no two threads write the same point.  Serial, this
+  // loop was 9 of the 17.6 s of a natural_neon calculation on 24 threads.
   for (auto &componentSegment : componentSegments_) {
     bool localStop = false;
+#pragma omp parallel for shared(localStop, configure)
     for (int i = 1; i <= componentSegment.NumPoints(); i++) {
       if (configure.stopFlag || localStop) continue;
       EPoint *point = componentSegment.GetPoint(i);
-      if (!(point->IsMapped())) {
+      if (!(point->IsMapped()) || point->OwnsEDependentValues()) {
         try {
           point->CalcEDependentValues(theCNuc, configure);
         } catch (GSLException e) {
-          configure.outStream << "Component segment calculation error: " << e.what() << std::endl;
-          localStop = true;
+#pragma omp critical
+          {
+            configure.outStream << "Component segment calculation error: " << e.what() << std::endl;
+            localStop = true;
+          }
         }
       }
     }
@@ -2853,6 +3186,7 @@ int EData::InitializeComponentSegments(CNuc *theCNuc, const Config &configure) {
       // Append the component-segment integrals after the regular-segment ones.
       out.open(outputfile.c_str(), std::ios::app);
       if (!out) configure.outStream << "Could not append to EC Amplitude File." << std::endl;
+      out.precision(17);  // as the data-segment amplitudes (CalculateECAmplitudes)
       if (!(configure.paramMask & Config::USE_API))
         configure.outStream << "Calculating EC Amplitudes for Component Segments..." << std::endl;
     }
@@ -2882,7 +3216,7 @@ int EData::InitializeComponentSegments(CNuc *theCNuc, const Config &configure) {
                   for (int i = 1; i <= numPoints; i++) {
                     if (configure.stopFlag || localStop) continue;
                     EPoint *point = componentSegment.GetPoint(i);
-                    if (!(point->IsMapped())) {
+                    if (!(point->IsMapped()) || point->OwnsEDependentValues()) {
                       try {
                         point->CalculateECAmplitudes(theCNuc, configure);
                       } catch (GSLException e) {
@@ -2931,7 +3265,7 @@ int EData::InitializeComponentSegments(CNuc *theCNuc, const Config &configure) {
                 // regular-segment loop in CalculateECAmplitudes exactly.
                 for (EPointIterator point = componentSegment.GetPoints().begin();
                      point < componentSegment.GetPoints().end(); point++) {
-                  if (!(point->IsMapped())) {
+                  if (!(point->IsMapped()) || point->OwnsEDependentValues()) {
                     for (int k = 1; k <= entrancePair->GetDecay(ir)->NumKGroups(); k++) {
                       for (int ecm = 1; ecm <= entrancePair->GetDecay(ir)->GetKGroup(k)->NumECMGroups(); ecm++) {
                         if (!usePrevious) {
@@ -3022,6 +3356,105 @@ bool EData::CheckComponentPairs(CNuc *theCNuc, const ESegment &baseSegment, int 
   return true;
 }
 
+/*!
+ * A transmission or yield segment (ESegment::IsTransformed), once its components exist: refuse what the transform
+ * cannot mean, make every component a plain cross section, and give a yield its hidden total-cross-section term
+ * (entrance pair to itself, "total 1", by the optical theorem), the s_t of Y0 = (s / s_t)(1 - exp(-n s_t)).
+ */
+bool EData::FinishTransformedSegment(CNuc *theCNuc, ESegment *seg, int key, bool isTest, const Config &configure) {
+  if (!seg || !seg->IsTransformed()) return true;
+  const std::string what = std::string(isTest ? "test segment #" : "segment #") + std::to_string(key) + " (" +
+                           (seg->IsTransmission() ? "transmission" : "yield") + "): ";
+  auto refuse = [&](const std::string &why) {
+    configure.outStream << "ERROR: " << what << why << std::endl;
+    return false;
+  };
+  if (seg->IsTransmission() && seg->IsYield()) return refuse("a line is a transmission or a yield, not both.");
+  if (seg->IsDifferential() || seg->IsPhase() || seg->IsAnalyzingPower() || seg->IsAngularDist() || seg->IsUPOS() ||
+      seg->IsCoefficients() || seg->GetCrossSectionComponent() != 0)
+    return refuse("the transform acts on an angle-integrated cross section (data type 0, or 3 for total capture).");
+  if (seg->IsAdvanced() && seg->GetLegacyOperationType() != 0) return refuse("not on a RATIO.");
+  PPair *entrance = theCNuc->GetPair(theCNuc->GetPairNumFromKey(seg->GetEntranceKey()));
+  if (entrance->GetPType() != 0 || entrance->GetZ(1) * entrance->GetZ(2) != 0)
+    return refuse("a sample transmission or self-shielded yield needs a neutral entrance pair (a neutron beam).");
+  for (ESegment *comp : seg->GetComponentSegments())
+    if (comp) comp->ClearTransform();
+  if (seg->IsTransmission()) return true;
+
+  if (seg->IsNatural())
+    return refuse("not on a sample (abundance-weighted) segment: the total of a mixture is not implemented for Y0.");
+  if (seg->GetExitKey() == seg->GetEntranceKey() || seg->IsTotal())
+    return refuse("Y0 is a capture or reaction yield: the exit pair must differ from the entrance pair (no \"total 1\").");
+  for (ESegment *comp : seg->GetComponentSegments()) {
+    if (!comp) continue;
+    if (comp->GetEntranceKey() != seg->GetEntranceKey() || comp->GetExitKey() == comp->GetEntranceKey())
+      return refuse("every term of a yield must be a reaction of the segment's entrance pair (pair " +
+                    std::to_string(seg->GetEntranceKey()) + ") to another exit pair.");
+  }
+  if (entrance->IsIdentical()) return refuse("not for a pair of identical particles.");
+  if (configure.paramMask & Config::USE_RMC_FORMALISM)
+    return refuse("the total cross section of Y0 needs the optical theorem, not available with --use-rmc.");
+  ESegment *total = this->CreateComponentSegment(*seg, seg->GetEntranceKey(), seg->GetEntranceKey());
+  if (!total) return refuse("could not create the total-cross-section term.");
+  total->ClearTransform();
+  total->SetComponentScaling(1.0);
+  total->SetYieldTotalTerm();
+  total->ApplyTotalToPoints();
+  if (!seg->HasComponents()) seg->SetOperationType(SUM);
+  seg->AddComponentSegment(total);
+  return true;
+}
+
+/*!
+ * After the target effects are read: a transmission or yield segment whose points carry a sub-point effect sums its
+ * terms at every sub-point before the transform, so every term must sit on the base point's sub-point grid.  Terms of
+ * one entrance pair do (their grids are laid out alike); the terms of a sample with several compound nuclei do not,
+ * and an effect blended in at range edges or skipped by an automatic tolerance is not one kernel on transformed
+ * values.  Refused here rather than computed wrongly.
+ */
+bool EData::CheckTransformedSegments(const Config &configure) {
+  for (ESegment &seg : this->GetSegments()) {
+    if (!seg.IsTransformed()) continue;
+    const std::string what = "segment #" + std::to_string(seg.GetSegmentKey()) + " (" +
+                             (seg.IsTransmission() ? "transmission" : "yield") + "): ";
+    for (int p = 1; p <= seg.NumPoints(); p++) {
+      EPoint *base = seg.GetPoint(p);
+      if (!ESegment::HasSubPointIntegration(base)) {
+        for (ESegment *comp : seg.GetComponentSegments())
+          if (comp && p <= comp->NumPoints() && ESegment::HasSubPointIntegration(comp->GetPoint(p))) {
+            configure.outStream << "ERROR: " << what << "a term is integrated over sub-points at E_lab "
+                                << base->GetLabEnergy() << " MeV where the segment's own point is not." << std::endl;
+            return false;
+          }
+        continue;
+      }
+      TargetEffect *te = this->GetTargetEffect(base->GetTargetEffectNum());
+      if (base->GetTargetBlendWeight() < 1.0 || (te && te->GetAutoTolerance() > 0.0)) {
+        configure.outStream << "ERROR: " << what << "its target effect blends in at range edges or has an automatic "
+                            << "tolerance; the transform needs the full kernel at every point (drop the blend width "
+                            << "and the tolerance of that <targetInt> line)." << std::endl;
+        return false;
+      }
+      for (ESegment *comp : seg.GetComponentSegments()) {
+        EPoint *cp = (comp && p <= comp->NumPoints()) ? comp->GetPoint(p) : nullptr;
+        bool same = cp && cp->NumSubPoints() == base->NumSubPoints();
+        for (int j = 1; same && j <= base->NumSubPoints(); j++) {
+          const double a = base->GetSubPoint(j)->GetCMEnergy(), b = cp->GetSubPoint(j)->GetCMEnergy();
+          if (std::fabs(a - b) > 1.0e-9 * std::max(1.0, std::fabs(a))) same = false;
+        }
+        if (!same) {
+          configure.outStream << "ERROR: " << what << "its terms do not share the base point's sub-point grid at E_lab "
+                              << base->GetLabEnergy() << " MeV (a sample with several compound nuclei under a "
+                              << "sub-point target effect is not supported yet: the transform needs every term at the "
+                              << "same energies)." << std::endl;
+          return false;
+        }
+      }
+    }
+  }
+  return true;
+}
+
 ESegment *EData::CreateComponentSegment(const ESegment &baseSegment, int entranceKey, int exitKey) {
   // Create a copy of the base segment with different entrance/exit keys
   // Store component segments separately to avoid iterator invalidation
@@ -3042,6 +3475,7 @@ ESegment *EData::CreateComponentSegment(const ESegment &baseSegment, int entranc
   // Clear any existing components to avoid circular references
   componentSegment->ClearComponents();
   componentSegment->SetNatural(false);   // the weighting is the base segment's job
+  componentSegment->ApplyTotalToPoints();
 
   // The component segment now has the same data points as the base segment
   // but with different entrance/exit keys, so it will calculate different
@@ -3081,6 +3515,7 @@ ESegment *EData::CreateComponentSegment(const ESegment &baseSegment, int entranc
   // Clear any existing components to avoid circular references
   componentSegment->ClearComponents();
   componentSegment->SetNatural(false);   // the weighting is the base segment's job
+  componentSegment->ApplyTotalToPoints();
 
   return componentSegment;
 }
@@ -3094,8 +3529,8 @@ namespace {
 // CalculateCrossSection on the point itself (angle, Coulomb amplitude,
 // observable type) may differ.  Whether `a` and `b` may sit in different
 // segments is the caller's question (ShiftsAgree).
-bool SharesCalculation(EPoint &a, EPoint &b) {
-  if (a.GetEntranceKey() != b.GetEntranceKey() || a.GetExitKey() != b.GetExitKey()) return false;
+bool SharesCalculation(EPoint &a, EPoint &b, bool sameExit = true) {
+  if (a.GetEntranceKey() != b.GetEntranceKey() || (sameExit && a.GetExitKey() != b.GetExitKey())) return false;
   if (a.GetOriginalEnergy() != b.GetOriginalEnergy() || a.GetLabEnergy() != b.GetLabEnergy() ||
       a.GetCMEnergy() != b.GetCMEnergy())
     return false;
@@ -3104,6 +3539,8 @@ bool SharesCalculation(EPoint &a, EPoint &b) {
     return false;
   if (a.IsAnalyzingPower() != b.IsAnalyzingPower()) return false;
   if (a.IsAngularDist() != b.IsAngularDist()) return false;
+  if (a.IsCoefficient() != b.IsCoefficient()) return false;
+  if (a.IsCoefficient() && a.GetCoefficientAbsolute() != b.GetCoefficientAbsolute()) return false;
   if (a.NumSubPoints() != b.NumSubPoints()) return false;
   std::vector<EPoint> &sa = a.GetSubPoints();
   std::vector<EPoint> &sb = b.GetSubPoints();
@@ -3208,6 +3645,12 @@ void EData::MapData(CNuc *theCNuc) {
       point->ClearLocalMappedPoints();
     }
   }
+  for (ESegment &component : componentSegments_) {
+    for (EPointIterator point = component.GetPoints().begin(); point < component.GetPoints().end(); point++) {
+      point->ClearMapping();
+      point->ClearLocalMappedPoints();
+    }
+  }
   const char *off = std::getenv("AZURE_NO_POINT_MAPPING");
   if (off && *off && std::string(off) != "0") return;
   const char *crossOff = std::getenv("AZURE_NO_CROSS_SEGMENT_MAPPING");
@@ -3298,6 +3741,50 @@ void EData::MapData(CNuc *theCNuc) {
     }
     start = end;
   }
+
+  MapComponentSegments(theCNuc);
+}
+
+/*!
+ * Point mapping inside a segment with components (SUM, RATIO, total capture): each component's point i is mapped onto
+ * the base segment's point i.  A component has its own exit pair but the base's entrance pair, energies, sub-point
+ * grid and energy shift, so its level matrix is the host's: the host's calculation builds only the component's
+ * T-matrix and observable (EPoint::Calculate).  Before 2026-10-24 every term was a calculation of its own, and a
+ * neutron total cross section summed over nine exit pairs cost nine level-matrix solutions per point (13C+a: 87 % of
+ * an evaluation).
+ *
+ * Such a family is not mapped with other segments.  A component re-energises its own points on an energy shift
+ * (OwnsEDependentValues).  A beta-delayed entrance is left out: its energy-dependent values depend on the exit pair.
+ * AZURE_NO_COMPONENT_MAPPING=1 switches this off (and AZURE_NO_POINT_MAPPING=1 all mapping).
+ */
+void EData::MapComponentSegments(CNuc *theCNuc) {
+  if (!theCNuc) return;
+  const char *off = std::getenv("AZURE_NO_COMPONENT_MAPPING");
+  if (off && *off && std::string(off) != "0") return;
+  std::vector<ESegment> &segments = GetSegments();
+  for (int s = 0; s < (int)segments.size(); s++) {
+    ESegment &seg = segments[s];
+    if (!seg.HasComponents() && !seg.IsTotalCapture()) continue;
+    const int entrancePair = theCNuc->GetPairNumFromKey(seg.GetEntranceKey());
+    if (entrancePair < 1 || theCNuc->GetPair(entrancePair)->GetPType() == 20) continue;
+    std::vector<EPoint> &points = seg.GetPoints();
+    const int n = (int)points.size();
+    // Each component's point i onto the base's point i (components in turn, so a host's mapped points come grouped
+    // by exit and EPoint::Calculate builds each exit's T-matrix once).  The base's points stay unmapped among
+    // themselves, as before: the external-capture amplitudes and their file (intEC.dat) skip mapped points, so
+    // mapping them would change that file's layout.
+    for (ESegment *component : seg.GetComponentSegments()) {
+      if (!component || component->NumPoints() != n) continue;
+      for (int p = 0; p < n; p++) {
+        EPoint &host = points[p];
+        EPoint *cp = component->GetPoint(p + 1);
+        if (!cp || !SharesCalculation(host, *cp, false)) continue;
+        cp->SetMap(s + 1, p + 1);
+        cp->SetOwnsEDependentValues(true);
+        host.AddLocalMappedPoint(cp);
+      }
+    }
+  }
 }
 
 /*!
@@ -3366,14 +3853,14 @@ int EData::ResolveShiftGroups(const Config &configure) {
         n++;
       }
     if (n == 0) {
-      configure.outStream << "Note: shift group '" << g.first << "' has only segment #" << leader.GetSegmentKey()
-                          << "; nothing is shared." << std::endl;
+      configure.Note("Note: shift group '" + g.first + "' has only segment #" +
+                     std::to_string(leader.GetSegmentKey()) + "; nothing is shared.");
       continue;
     }
-    configure.outStream << "Note: shift group '" << g.first << "': segments #" << leader.GetSegmentKey() << " +"
-                        << members.str() << " share one constant energy shift (segment #"
-                        << leader.GetSegmentKey() << "'s parameter, " << (leader.IsVaryEnergyShift() ? "free" : "fixed")
-                        << ")." << std::endl;
+    configure.Note("Note: shift group '" + g.first + "': segments #" + std::to_string(leader.GetSegmentKey()) + " +" +
+                   members.str() + " share one constant energy shift (segment #" +
+                   std::to_string(leader.GetSegmentKey()) + "'s parameter, " +
+                   (leader.IsVaryEnergyShift() ? "free" : "fixed") + ").");
   }
   return ResolveShiftFunctions(configure);
 }
@@ -3403,12 +3890,51 @@ std::set<int> ShiftFnParamRefs(const std::string &expression) {
  * declaring a function (the group's calibration belongs to its first segment), a
  * function together with a sqrt(E) term on any member (two descriptions of one
  * calibration), and an expression referring to an undeclared parameter or leaving a
- * declared one unused.  For each function the free shift terms (a, if varied, and
- * every varied aj) are checked for degeneracy over the group's data energies; a term
- * with no effect there is an error.  One log line per function.
+ * declared one unused.  A shift-function group ("shiftfngroup <label>") also applies
+ * the function of its first segment to every member, but each member keeps its own
+ * constant shift; such a group may not overlap a shift group.  For each function the
+ * free shift terms (each free constant a of its members, and every varied aj) are
+ * checked for degeneracy over the members' data energies; a term with no effect there
+ * is an error.  One log line per function.
  */
 
 int EData::ResolveShiftFunctions(const Config &configure) {
+  // Shift-function groups: the first segment with a label (file order) declares the
+  // function; the others apply it and keep their own constant shifts.
+  std::vector<int> fnGroupLeader(segments_.size(), -1);
+  {
+    std::vector<std::pair<std::string, int>> fnLeaders;  // label, leader position
+    for (int pos = 0; pos < (int)segments_.size(); pos++) {
+      const ESegment &seg = segments_[pos];
+      const std::string label = seg.GetShiftFnGroup();
+      if (label.empty()) continue;
+      if (!seg.GetShiftGroup().empty()) {
+        configure.outStream << "ERROR: Data segment #" << seg.GetSegmentKey() << " is in shift group '"
+                            << seg.GetShiftGroup() << "' and in shift-function group '" << label
+                            << "': use one of them (shiftgroup shares the constant shift as well)." << std::endl;
+        return -1;
+      }
+      auto it = std::find_if(fnLeaders.begin(), fnLeaders.end(),
+                             [&label](const std::pair<std::string, int> &e) { return e.first == label; });
+      if (it == fnLeaders.end()) {
+        fnLeaders.push_back({label, pos});
+        if (!seg.OwnsShiftFn()) {
+          configure.outStream << "ERROR: Data segment #" << seg.GetSegmentKey() << " is the first segment of "
+                              << "shift-function group '" << label << "' but declares no shiftfn: put the "
+                              << "group's shiftfn block on it." << std::endl;
+          return -1;
+        }
+        continue;
+      }
+      if (seg.OwnsShiftFn()) {
+        configure.outStream << "ERROR: Data segment #" << seg.GetSegmentKey() << " declares a shiftfn, but it is not "
+                            << "the first segment of shift-function group '" << label << "' (segment #"
+                            << segments_[it->second].GetSegmentKey() << " is): one function per group." << std::endl;
+        return -1;
+      }
+      fnGroupLeader[pos] = it->second;
+    }
+  }
   int fnStart = 0;
   for (int pos = 0; pos < (int)segments_.size(); pos++) {
     ESegment &owner = segments_[pos];
@@ -3425,7 +3951,7 @@ int EData::ResolveShiftFunctions(const Config &configure) {
     }
     std::vector<int> members{pos};
     for (int f = 0; f < (int)segments_.size(); f++)
-      if (segments_[f].GetShiftLeaderPos() == pos) members.push_back(f);
+      if (segments_[f].GetShiftLeaderPos() == pos || fnGroupLeader[f] == pos) members.push_back(f);
     for (int m : members)
       if (segments_[m].HasSqrtShiftBlock()) {
         configure.outStream << "ERROR: Data segment #" << segments_[m].GetSegmentKey() << " has a sqrtshift block and "
@@ -3452,31 +3978,47 @@ int EData::ResolveShiftFunctions(const Config &configure) {
     owner.SetShiftFnParamStart(fnStart);
     fnStart += n;
 
-    // Degeneracy check: columns = d(dE)/d(term) at the group's distinct original lab energies.
-    std::vector<double> energies;
-    for (int m : members)
+    // Degeneracy check: rows = the members' distinct original lab energies (per member,
+    // since members of a shift-function group have their own constants); columns =
+    // d(dE)/d(term) for every free constant (one per constant owner) and every varied aj.
+    std::vector<std::pair<int, double>> rows;  // constant owner position, energy
+    for (int m : members) {
+      const int constOwner = segments_[m].GetShiftLeaderPos() >= 0 ? segments_[m].GetShiftLeaderPos() : m;
+      std::vector<double> e;
       for (int pid = 1; pid <= segments_[m].NumPoints(); pid++) {
         EPoint *pt = segments_[m].GetPoint(pid);
-        energies.push_back(pt->GetOriginalEnergy() > 0 ? pt->GetOriginalEnergy() : pt->GetLabEnergy());
+        e.push_back(pt->GetOriginalEnergy() > 0 ? pt->GetOriginalEnergy() : pt->GetLabEnergy());
       }
+      std::sort(e.begin(), e.end());
+      e.erase(std::unique(e.begin(), e.end()), e.end());
+      for (double x : e) rows.push_back({constOwner, x});
+    }
+    std::vector<double> energies;
+    for (const auto &r : rows) energies.push_back(r.second);
     std::sort(energies.begin(), energies.end());
     energies.erase(std::unique(energies.begin(), energies.end()), energies.end());
     std::vector<std::string> names;
     std::vector<std::vector<double>> cols;
-    if (owner.IsVaryEnergyShift()) {
-      names.push_back("a");
-      cols.push_back(std::vector<double>(energies.size(), 1.0));
+    std::vector<int> constOwners;
+    for (const auto &r : rows)
+      if (std::find(constOwners.begin(), constOwners.end(), r.first) == constOwners.end()) constOwners.push_back(r.first);
+    for (int c : constOwners) {
+      if (!segments_[c].IsVaryEnergyShift()) continue;
+      names.push_back(constOwners.size() == 1 ? std::string("a") : "a#" + std::to_string(segments_[c].GetSegmentKey()));
+      std::vector<double> col(rows.size());
+      for (size_t r = 0; r < rows.size(); r++) col[r] = (rows[r].first == c) ? 1.0 : 0.0;
+      cols.push_back(col);
     }
     ESegment probe = owner;  // a scratch copy: the owner's own values stay untouched
     for (int j = 0; j < n; j++) {
       if (!owner.IsVaryShiftFn(j)) continue;
       const double v0 = owner.GetShiftFnValues()[j], h = 1.0e-6 * (std::fabs(v0) + 1.0);
-      std::vector<double> c(energies.size());
-      for (size_t e = 0; e < energies.size(); e++) {
+      std::vector<double> c(rows.size());
+      for (size_t r = 0; r < rows.size(); r++) {
         probe.SetShiftFnValue(j, v0 + h);
-        const double fp = probe.ShiftFnTerm(energies[e]);
+        const double fp = probe.ShiftFnTerm(rows[r].second);
         probe.SetShiftFnValue(j, v0 - h);
-        c[e] = (fp - probe.ShiftFnTerm(energies[e])) / (2.0 * h);
+        c[r] = (fp - probe.ShiftFnTerm(rows[r].second)) / (2.0 * h);
       }
       probe.SetShiftFnValue(j, v0);
       double norm = 0.0;
@@ -3493,9 +4035,11 @@ int EData::ResolveShiftFunctions(const Config &configure) {
     std::ostringstream note;
     note << "Note: shift function on segment #" << key;
     if (members.size() > 1) {
-      note << " (group '" << owner.GetShiftGroup() << "', segments #" << key;
+      const bool fnGroup = !owner.GetShiftFnGroup().empty();
+      note << " (" << (fnGroup ? "shift-function group '" + owner.GetShiftFnGroup() : "group '" + owner.GetShiftGroup())
+           << "', segments #" << key;
       for (size_t m = 1; m < members.size(); m++) note << " " << segments_[members[m]].GetSegmentKey();
-      note << ")";
+      note << (fnGroup ? "; each keeps its own constant shift)" : ")");
     }
     note << ": dE = a + " << expression << ", x = lab energy (MeV);";
     for (int j = 0; j < n; j++) {
@@ -3505,7 +4049,7 @@ int EData::ResolveShiftFunctions(const Config &configure) {
                                       : " fixed")
            << (j + 1 < n ? "," : ".");
     }
-    const int m = (int)energies.size(), k = (int)cols.size();
+    const int m = (int)rows.size(), k = (int)cols.size();
     if (k >= 2) {
       // Condition number of the column-normalised matrix (scale-free).
       double cond = std::numeric_limits<double>::infinity();
@@ -3533,15 +4077,15 @@ int EData::ResolveShiftFunctions(const Config &configure) {
       }
       note << " Condition number of the free terms (";
       for (int c = 0; c < k; c++) note << names[c] << (c + 1 < k ? ", " : "");
-      note << ") over " << m << " energ" << (m == 1 ? "y" : "ies") << " " << energies.front() << "-" << energies.back()
+      note << ") over " << m << " member energ" << (m == 1 ? "y" : "ies") << " " << energies.front() << "-" << energies.back()
            << " MeV: " << cond << ".";
-      configure.outStream << note.str() << std::endl;
+      configure.Note(note.str());
       if (!(cond < 1.0e8))
         configure.outStream << "WARNING: shift function on segment #" << key << ": its free terms cannot be told apart "
                             << "over this group's energies (condition number " << cond << "); fix one of them or "
                             << "constrain it with a penalty." << std::endl;
     } else {
-      configure.outStream << note.str() << std::endl;
+      configure.Note(note.str());
     }
   }
   return 0;
@@ -3597,13 +4141,13 @@ void EData::ResolveNormGroups(const Config &configure) {
         n++;
       }
     if (n == 0) {
-      configure.outStream << "Note: normalization group '" << g.first << "' has only segment #"
-                          << leader.GetSegmentKey() << "; nothing is shared." << std::endl;
+      configure.Note("Note: normalization group '" + g.first + "' has only segment #" +
+                     std::to_string(leader.GetSegmentKey()) + "; nothing is shared.");
       continue;
     }
-    configure.outStream << "Note: normalization group '" << g.first << "': segments #" << leader.GetSegmentKey()
-                        << " +" << members.str() << " share one normalization (segment #" << leader.GetSegmentKey()
-                        << "'s, " << (leader.IsVaryNorm() ? "free" : "fixed") << ")." << std::endl;
+    configure.Note("Note: normalization group '" + g.first + "': segments #" + std::to_string(leader.GetSegmentKey()) +
+                   " +" + members.str() + " share one normalization (segment #" +
+                   std::to_string(leader.GetSegmentKey()) + "'s, " + (leader.IsVaryNorm() ? "free" : "fixed") + ").");
   }
 }
 
@@ -3612,6 +4156,272 @@ int EData::NormOwner(int s) const {
   const int lead = segments_[s - 1].GetNormLeaderPos();
   return (lead >= 0) ? lead + 1 : s;
 }
+
+std::shared_ptr<DataCovariance::File> EData::CovarianceFileFor(const std::string &path, const Config &configure) {
+  const std::string key = DataCovariance::CanonicalPath(path);
+  auto it = covFiles_.find(key);
+  if (it != covFiles_.end()) return it->second;
+  std::string err;
+  std::shared_ptr<DataCovariance::File> f = DataCovariance::Read(path, err, configure.cacheInputFiles);
+  if (!f) {
+    configure.outStream << "ERROR: Covariance file: " << err << "." << std::endl;
+    covarianceError_ = true;
+    return nullptr;
+  }
+  configure.outStream << "Covariance file " << path << ": " << f->N << " rows over " << f->files.size()
+                      << " data file(s)" << (f->rel.empty() ? std::string() : ", " + std::to_string(f->rel.size()) +
+                                                                                   " relvector term(s)")
+                      << "." << std::endl;
+  covFiles_[key] = f;
+  return f;
+}
+
+/*!
+ * One group per covariance file: its segments' points in the file's row order, the
+ * absolute part of their submatrix, the relvector fractions on their rows, and the
+ * Cholesky factor of M = D^-1 C D^-1.  Without relvector terms the factor is final here;
+ * with them it is checked here with the data in place of the model and frozen at the
+ * first evaluation (DataCovariance::Group::EnsureFactored).
+ */
+int EData::ResolveCovarianceGroups(const Config &configure) {
+  covGroups_.clear();
+  std::map<std::string, int> groupOf;
+  struct Item { int row, seg, pid; };
+  std::vector<std::vector<Item>> items;
+  std::vector<std::shared_ptr<DataCovariance::File>> files;
+  for (int s = 1; s <= this->NumSegments(); s++) {
+    ESegment *seg = this->GetSegment(s);
+    if (seg->GetCovarianceFile().empty()) continue;
+    const std::string key = DataCovariance::CanonicalPath(seg->GetCovarianceFile());
+    auto fit = covFiles_.find(key);
+    if (fit == covFiles_.end()) return -1;  // Fill reported it
+    auto git = groupOf.find(key);
+    int g;
+    if (git == groupOf.end()) {
+      g = (int)items.size();
+      groupOf[key] = g;
+      items.emplace_back();
+      files.push_back(fit->second);
+      auto grp = std::make_shared<DataCovariance::Group>();
+      grp->path = seg->GetCovarianceFile();
+      covGroups_.push_back(grp);
+    } else {
+      g = git->second;
+    }
+    seg->SetCovarianceGroup(g);
+    covGroups_[g]->numSegments++;
+    const std::string canonicalData = DataCovariance::CanonicalPath(seg->GetDataFile());
+    for (int pid = 0; pid < seg->NumPoints(); pid++) {
+      const int row = fit->second->RowOf(canonicalData, seg->GetPoint(pid + 1)->GetFileRecord());
+      if (row < 0) return -1;  // cannot happen: Fill checked the file and the record count
+      items[g].push_back({row, s, pid});
+    }
+  }
+  if (covGroups_.empty()) {
+    covFiles_.clear();
+    return 0;
+  }
+  const std::string modelFile = configure.outputdir + "covarianceModel.out";
+  bool anyRelative = false;
+  for (size_t g = 0; g < covGroups_.size(); g++) {
+    DataCovariance::Group &grp = *covGroups_[g];
+    const DataCovariance::File &f = *files[g];
+    std::vector<Item> &it = items[g];
+    std::stable_sort(it.begin(), it.end(), [](const Item &a, const Item &b) { return a.row < b.row; });
+    for (size_t k = 1; k < it.size(); k++)
+      if (it[k].row == it[k - 1].row) {
+        configure.outStream << "ERROR: Row " << it[k].row + 1 << " of covariance file " << grp.path
+                            << " is fitted twice, in segments #" << this->GetSegment(it[k - 1].seg)->GetSegmentKey()
+                            << " and #" << this->GetSegment(it[k].seg)->GetSegmentKey()
+                            << " (overlapping energy or angle windows on one data file)." << std::endl;
+        return -1;
+      }
+    const int n = (int)it.size();
+    grp.n = n;
+    grp.N = f.N;
+    grp.members.resize(n);
+    grp.rows.resize(n);
+    grp.sigma.resize(n);
+    grp.data.resize(n);
+    grp.label.resize(n);
+    for (int a = 0; a < n; a++) {
+      grp.members[a] = {it[a].seg, it[a].pid};
+      grp.rows[a] = it[a].row;
+      ESegment *seg = this->GetSegment(it[a].seg);
+      EPoint *pt = seg->GetPoint(it[a].pid + 1);
+      grp.sigma[a] = pt->GetLabCrossSectionError();
+      grp.data[a] = pt->GetLabCrossSection();
+      std::ostringstream lab;
+      lab << seg->GetSegmentKey() << " " << pt->GetLabEnergy() << " " << pt->GetLabAngle();
+      grp.label[a] = lab.str();
+    }
+    grp.modelFile = modelFile;
+    // B (diagonal and blocks) factored by connected components; it must be positive
+    // definite by itself on the fitted rows.
+    const int bad = grp.SetUp(f);
+    if (bad >= 0) {
+      configure.outStream << "ERROR: Covariance file " << grp.path << ": its diagonal and block terms are not positive"
+                          << " definite on the fitted rows (at file row " << grp.rows[bad] + 1
+                          << "). Every fitted row needs a variance of its own from a diagonal or block term;"
+                          << " vector and relvector terms alone are not enough." << std::endl;
+      return -1;
+    }
+    if (grp.HasRelative())
+      anyRelative = true;  // the low-rank part waits for the model of the first evaluation
+    else
+      grp.Factor(grp.data);
+    configure.outStream << "Covariance " << grp.path << ": " << n << " of " << f.N << " rows fitted, in "
+                        << grp.numSegments << " segment(s); " << grp.NumComponents()
+                        << " diagonal/block component(s) (largest " << grp.LargestComponent() << " rows), "
+                        << grp.absolute.size() << " vector term(s)"
+                        << (grp.HasRelative() ? ", " + std::to_string(grp.rel.size()) +
+                                                    " relvector term(s) on the model frozen at the first evaluation"
+                                              : std::string())
+                        << "." << std::endl;
+    if (f.numSigmaMismatch > 0)
+      configure.outStream << "WARNING: " << f.numSigmaMismatch << " point(s) of " << grp.path
+                          << " have an error column more than 1 % from sqrt(C_ii) (worst "
+                          << 100.0 * f.worstSigmaMismatch << " %; first: " << f.firstSigmaMismatch
+                          << "); sqrt(C_ii) is used." << std::endl;
+  }
+  if (anyRelative) std::ofstream(modelFile.c_str(), std::ios::trunc);
+  covFiles_.clear();
+  return 0;
+}
+
+double EData::CovarianceChi2Correction(std::vector<double> *segChis) {
+  double correction = 0.0;
+  std::vector<double> r, z;
+  for (const std::shared_ptr<DataCovariance::Group> &gp : covGroups_) {
+    DataCovariance::Group &g = *gp;
+    r.assign(g.n, 0.0);
+    double diag = 0.0;
+    for (int a = 0; a < g.n; a++) {
+      ESegment *seg = this->GetSegment(g.members[a].first);
+      EPoint *pt = seg->GetPoint(g.members[a].second + 1);
+      const double norm = seg->GetNorm();
+      const double err = pt->GetCMCrossSectionError() * norm;
+      r[a] = err != 0.0 ? (pt->GetFitCrossSection() - pt->GetCMCrossSection() * norm) / err : 0.0;
+      diag += r[a] * r[a];
+    }
+    g.EnsureFactored(r);
+    z = r;
+    g.Whiten(z.data());
+    double q = 0.0;
+    for (int a = 0; a < g.n; a++) q += z[a] * z[a];
+    g.WhitenTranspose(z.data());
+    correction += q - diag;
+    for (int a = 0; a < g.n; a++) {
+      ESegment *seg = this->GetSegment(g.members[a].first);
+      seg->SetCovarianceSeed(g.members[a].second, z[a]);
+    }
+    // Per-segment chi2: the exact partition sum_i r_i (M^-1 r)_i of the group's chi2.
+    std::map<int, double> part;
+    for (int a = 0; a < g.n; a++) part[g.members[a].first] += r[a] * z[a];
+    for (const auto &ps : part) {
+      this->GetSegment(ps.first)->SetSegmentChiSquared(ps.second);
+      if (segChis && ps.first < (int)segChis->size()) (*segChis)[ps.first] = ps.second;
+    }
+  }
+  return correction;
+}
+
+void EData::WhitenResidualRows(std::vector<double> &residuals, std::vector<double> *jacobian, int nCols) {
+  if (covGroups_.empty()) return;
+  std::vector<int> rowStart(this->NumSegments() + 2, 0);
+  int row = 0;
+  for (int s = 1; s <= this->NumSegments(); s++) {
+    rowStart[s] = row;
+    row += this->GetSegment(s)->NumPoints();
+  }
+  if (row > (int)residuals.size()) return;  // not the data-row layout
+  for (const std::shared_ptr<DataCovariance::Group> &gp : covGroups_) {
+    DataCovariance::Group &g = *gp;
+    std::vector<int> rows(g.n);
+    for (int a = 0; a < g.n; a++) rows[a] = rowStart[g.members[a].first] + g.members[a].second;
+    std::vector<double> y(g.n);
+    for (int a = 0; a < g.n; a++) y[a] = residuals[rows[a]];
+    g.EnsureFactored(y);  // the first evaluation of a run with relvector terms freezes the model here
+    g.Whiten(y.data());
+    for (int a = 0; a < g.n; a++) residuals[rows[a]] = y[a];
+    if (!jacobian || nCols <= 0) continue;
+    std::vector<double> &J = *jacobian;
+#pragma omp parallel for schedule(dynamic, 4)
+    for (int c = 0; c < nCols; c++) {
+      std::vector<double> col(g.n);
+      bool any = false;
+      for (int a = 0; a < g.n; a++) any |= (col[a] = J[(size_t)rows[a] * nCols + c]) != 0.0;
+      if (!any) continue;
+      g.Whiten(col.data());
+      for (int a = 0; a < g.n; a++) J[(size_t)rows[a] * nCols + c] = col[a];
+    }
+  }
+}
+
+/*!
+ * covariance.out: per covariance group, the fitted rows, the chi2 r^T M^-1 r of the
+ * current fit values and, for comparison, the sum of r_i^2 (the chi2 the same points
+ * would have without their correlations).
+ */
+void EData::WriteCovarianceSummary(const Config &configure) {
+  std::ofstream out((configure.outputdir + "covariance.out").c_str());
+  if (!out) return;
+  out << "# file, fitted rows, rows, segments, chi2 (r^T M^-1 r), sum of r_i^2 (correlations ignored), relvector terms"
+      << std::endl;
+  out.precision(12);
+  out << std::scientific;
+  std::vector<double> r;
+  for (const std::shared_ptr<DataCovariance::Group> &gp : covGroups_) {
+    DataCovariance::Group &g = *gp;
+    r.assign(g.n, 0.0);
+    double diag = 0.0;
+    for (int a = 0; a < g.n; a++) {
+      ESegment *seg = this->GetSegment(g.members[a].first);
+      EPoint *pt = seg->GetPoint(g.members[a].second + 1);
+      const double norm = seg->GetNorm();
+      const double err = pt->GetCMCrossSectionError() * norm;
+      r[a] = err != 0.0 ? (pt->GetFitCrossSection() - pt->GetCMCrossSection() * norm) / err : 0.0;
+      diag += r[a] * r[a];
+    }
+    g.EnsureFactored(r);
+    g.Whiten(r.data());
+    double q = 0.0;
+    for (int a = 0; a < g.n; a++) q += r[a] * r[a];
+    out << g.path << ", " << g.n << ", " << g.N << ", " << g.numSegments << ", " << q << ", " << diag << ", "
+        << g.rel.size() << std::endl;
+  }
+}
+
+bool EData::HasRelativeCovariance() const {
+  for (const std::shared_ptr<DataCovariance::Group> &gp : covGroups_)
+    if (gp->HasRelative()) return true;
+  return false;
+}
+
+void EData::RefreezeCovariance() {
+  for (const std::shared_ptr<DataCovariance::Group> &gp : covGroups_) gp->Refreeze();
+}
+
+void EData::PrepareCovarianceSeeds(CNuc *theCNuc, const Config &configure) {
+  if (covGroups_.empty()) return;
+  std::vector<std::pair<ESegment *, int>> work;
+  for (int s = 1; s <= this->NumSegments(); s++) {
+    ESegment *seg = this->GetSegment(s);
+    if (seg->GetCovarianceGroup() < 0) continue;
+    for (int pid = 0; pid < seg->NumPoints(); pid++) work.push_back({seg, pid});
+  }
+  // Each point on its own, without point mapping (as the gradient's own point loops): a
+  // mapped point would otherwise read a host value that may not be calculated yet.
+#pragma omp parallel for schedule(dynamic) if (!omp_in_parallel())
+  for (int k = 0; k < (int)work.size(); k++) {
+    ScopedPointMappingOff noPointMapping;
+    ESegment *seg = work[k].first;
+    const double th = seg->CalculateTheoreticalCrossSection(work[k].second, theCNuc, configure, this);
+    seg->GetPoint(work[k].second + 1)->SetFitCrossSection(th);
+  }
+  this->CovarianceChi2Correction();
+}
+
 
 /*!
  * Writes each norm-group follower's (fixed) norm parameter as the value it
@@ -3703,12 +4513,137 @@ void EData::FillMnParams(ROOT::Minuit2::MnUserParameters &p) {
     if (!te->IsScreeningVaried()) p.Fix(varname);
   }
 
+  // Fitted target densities (atoms/cm^2): one per densityfit line or density group, none otherwise.  Bounded by
+  // the density the sub-point grids span (TargetEffect::GetLayoutDensity) and a hundredth of the line's.
+  densityParamOffset_ = p.Params().size();
+  for (int k = 1; k <= this->NumDensityParams(); k++) {
+    const TargetEffect *te = this->GetDensityTargetEffect(k);
+    snprintf(varname, sizeof(varname), "density_%d", this->GetDensityEffect(k));
+    const double n = te->GetDensity();
+    p.Add(varname, n, (te->GetDensitySigma() > 0.0) ? 0.1 * te->GetDensitySigma() : 0.01 * n);
+    p.SetLimits(varname, 0.01 * te->GetDensityNominal(), te->GetLayoutDensity());
+    if (!te->IsDensityVaried()) p.Fix(varname);
+  }
+
   // THM coherent backgrounds (cbackground=): Re/Im of each amplitude, last.
   thmCoherentParamOffset_ = thmCoherentParams_.empty() ? -1 : (int)p.Params().size();
   for (const ThmCoherentParam &c : thmCoherentParams_) {
     p.Add(c.name, c.value, c.value != 0.0 ? 0.1 * std::fabs(c.value) : 0.1);
     if (c.fixed) p.Fix(c.name);
   }
+}
+
+/*!
+ * Groups the densityfit / densitygroup lines into parameters.  ReadTargetEffectsFile gives every segment a line
+ * lists its own copy of the effect (and every component of such a segment one more), so the effects are visited
+ * by line (TargetEffect::GetLineNumber): the first copy of a line decides, the other copies follow it.  A
+ * line that lists no existing segment has no copy and so no parameter (dev makes one that moves nothing).
+ */
+int EData::SetUpDensityParams(const Config &configure) {
+  densityEffects_.clear();
+  densityLeadCopies_.clear();
+  densityParamOfEffect_.assign(this->NumTargetEffects(), 0);
+  std::map<int, int> firstCopyOfLine;       // line number -> its first copy (target effect number)
+  std::map<std::string, int> groupLeader;   // label -> first copy of the group's first line
+  for (int n = 1; n <= this->NumTargetEffects(); n++) {
+    TargetEffect *te = this->GetTargetEffect(n);
+    const int line = te->GetLineNumber();
+    auto seen = firstCopyOfLine.find(line);
+    if (seen != firstCopyOfLine.end()) {
+      // Another copy of a line already grouped: the same parameter, and the group's values if it joined one.
+      const TargetEffect *lineFirst = this->GetTargetEffect(seen->second);
+      if (lineFirst->HasDensityFit()) te->JoinDensityGroup(*lineFirst);
+      densityParamOfEffect_[n - 1] = densityParamOfEffect_[seen->second - 1];
+      continue;
+    }
+    firstCopyOfLine[line] = n;
+    const std::string &group = te->GetDensityGroup();
+    if (!group.empty()) {
+      auto it = groupLeader.find(group);
+      if (it != groupLeader.end()) {
+        const TargetEffect *lead = this->GetTargetEffect(it->second);
+        const int leadLine = lead->GetLineNumber();
+        if (std::fabs(te->GetDensity() - lead->GetDensity()) > 1.0e-9 * lead->GetDensity()) {
+          std::ostringstream note;
+          note << "Note: <targetInt> effect " << line << " (density group " << group << ") has density "
+               << te->GetDensity() << "; the group's density is its first line's, " << lead->GetDensity()
+               << " (effect " << leadLine << ").";
+          configure.Note(note.str());
+        }
+        if (te->HasDensityFit() && (te->IsDensityVaried() != lead->IsDensityVaried() ||
+                                    std::fabs(te->GetDensitySigma() - lead->GetDensitySigma()) > 1.0e-9 * lead->GetDensity()))
+          configure.Note("Note: <targetInt> effect " + std::to_string(line) + " (density group " + group +
+                         "): its densityfit block is ignored, the group's is its first line's (effect " +
+                         std::to_string(leadLine) + ").");
+        te->JoinDensityGroup(*lead);
+        densityParamOfEffect_[n - 1] = densityParamOfEffect_[it->second - 1];
+        continue;
+      }
+      if (!te->HasDensityFit()) {
+        configure.outStream << "ERROR: density group " << group << ": its first <targetInt> line (effect " << line
+                            << ") has no 'densityfit vary sigma' block; the group's parameter and prior are read from it."
+                            << std::endl;
+        return -1;
+      }
+      groupLeader[group] = n;
+    }
+    if (!te->HasDensityFit()) continue;
+    densityEffects_.push_back(line);
+    densityLeadCopies_.push_back(n);
+    densityParamOfEffect_[n - 1] = (int)densityEffects_.size();
+  }
+  return 0;
+}
+
+void EData::FillDensitiesFromParams(const vector_r &p, const Config &configure) {
+  if (densityEffects_.empty() || densityParamOffset_ < 0) return;
+  std::vector<char> changed(this->NumTargetEffects(), 0);
+  bool any = false;
+  for (int k = 1; k <= this->NumDensityParams(); k++) {
+    const int idx = densityParamOffset_ + k - 1;
+    if (idx < 0 || idx >= (int)p.size()) return;  // a vector without the density block
+    const TargetEffect *lead = this->GetDensityTargetEffect(k);
+    double v = p[idx];
+    // The sub-point grids span the layout density: beyond it the depth integral would run off the grid.
+    const double vMax = lead->GetLayoutDensity(), vMin = 0.01 * lead->GetDensityNominal();
+    if (v > vMax || !(v >= vMin)) {
+      static std::atomic<bool> warned{false};
+      if (!warned.exchange(true))
+        configure.outStream << "WARNING: density_" << this->GetDensityEffect(k) << " = " << v << " is outside ["
+                            << vMin << ", " << vMax << "], the range its sub-point grids span; the calculation uses the"
+                            << " nearest end.  Give the line a wider range with 'densityfit vary sigma max'."
+                            << " (Printed once.)" << std::endl;
+      v = (v > vMax) ? vMax : vMin;
+    }
+    for (int n = 1; n <= this->NumTargetEffects(); n++) {
+      if (densityParamOfEffect_[n - 1] != k) continue;
+      TargetEffect *te = this->GetTargetEffect(n);
+      if (te->GetDensity() == v) continue;
+      te->SetDensity(v);
+      changed[n - 1] = 1;
+      any = true;
+    }
+  }
+  if (!any) return;
+  auto update = [&](ESegment &seg) {
+    if (!seg.IsTargetEffect()) return;
+    const int n = seg.GetTargetEffectNum();
+    if (n < 1 || n > (int)changed.size() || !changed[n - 1]) return;
+    TargetEffect *te = this->GetTargetEffect(n);
+    for (EPointIterator point = seg.GetPoints().begin(); point < seg.GetPoints().end(); point++) {
+      if (point->GetTargetEffectNum() != n || !(point->GetTargetThickness() > 0.0)) continue;
+      point->SetTargetThickness(point->GetCMFactor() * te->TargetThickness(point->GetTargetLabEnergy(), configure));
+    }
+  };
+  for (ESegment &seg : segments_) update(seg);
+  for (ESegment &seg : componentSegments_) update(seg);
+}
+
+double EData::DensityPenalty() const {
+  double chi2 = 0.0;
+  for (int k = 1; k <= this->NumDensityParams(); k++)
+    chi2 += this->GetDensityTargetEffect(k)->DensityPenalty();
+  return chi2;
 }
 
 void EData::ApplyScreening() {
@@ -3785,6 +4720,8 @@ void EData::FillEnergyShiftsFromParams(const vector_r &p, EData *data, CNuc *the
   FillThmCoherentFromParams(p, theCNuc);
   // Screening first: sub-points rebuilt below (ReplaceSubPointGrids) inherit their parent's U_e.
   this->FillScreeningFromParams(p);
+  // Fitted target densities: the thickness of each point of their lines (the grids stay put).
+  if (configure) this->FillDensitiesFromParams(p, *configure);
   int i = GetEnergyShiftParamOffset();
   int j = GetEnergyShiftSqrtParamOffset();
   int k = 0;
@@ -4049,6 +4986,10 @@ EData *EData::Clone() const {
   dataCopy->screeningParamOffset_ = this->screeningParamOffset_;
   dataCopy->screeningEffects_ = this->screeningEffects_;
   dataCopy->screeningCopies_ = this->screeningCopies_;
+  dataCopy->densityParamOffset_ = this->densityParamOffset_;
+  dataCopy->densityEffects_ = this->densityEffects_;
+  dataCopy->densityLeadCopies_ = this->densityLeadCopies_;
+  dataCopy->densityParamOfEffect_ = this->densityParamOfEffect_;
   dataCopy->isFit_ = this->isFit_;
   dataCopy->isErrorAnalysis_ = this->isErrorAnalysis_;
   dataCopy->targetEffects_ = this->targetEffects_;
@@ -4057,6 +4998,7 @@ EData *EData::Clone() const {
   dataCopy->thmGroups_ = this->thmGroups_;
   dataCopy->thmCoherentParams_ = this->thmCoherentParams_;
   dataCopy->thmCoherentParamOffset_ = this->thmCoherentParamOffset_;
+  dataCopy->covGroups_ = this->covGroups_;  // shared: one factor (and one frozen model) for all copies
 
   // Build a mapping from component segment keys to cloned component segments
   std::unordered_map<int, ESegment *> clonedComponentMap;
@@ -4115,6 +5057,16 @@ EData *EData::Clone() const {
       dataCopy->GetSegment(pointMap.segment)->GetPoint(pointMap.point)->AddLocalMappedPoint(&*data.point());
     }
   }
+  // Component points mapped onto their base segment's points (MapComponentSegments), in the order MapData added
+  // them: components in turn.
+  for (size_t i = 0; i < dataCopy->segments_.size(); i++)
+    for (ESegment *component : dataCopy->segments_[i].GetComponentSegments())
+      for (int j = 1; component && j <= component->NumPoints(); j++) {
+        EPoint *cp = component->GetPoint(j);
+        if (!cp->IsMapped()) continue;
+        EnergyMap pointMap = cp->GetMap();
+        dataCopy->GetSegment(pointMap.segment)->GetPoint(pointMap.point)->AddLocalMappedPoint(cp);
+      }
 
   return dataCopy;
 }
@@ -4155,4 +5107,65 @@ EDataIterator EData::end() {
 
 std::vector<ESegment> &EData::GetSegments() {
   return segments_;
+}
+
+/*!
+ * One parallel pass over the points of an evaluation, shared by the CLI
+ * (AZURECalc::PrecalculatePoints) and the API's calculations (AZUREAPI).
+ */
+
+int EData::CalculatePointsInParallel(const std::vector<ESegment *> &segments, CNuc *theCNuc,
+                                     const Config &configure) {
+#ifdef _OPENMP
+  if (omp_in_parallel()) return -1;
+#else
+  return -1;
+#endif
+  if (ScopedPointMappingOff::Active()) return -1;
+  if (std::getenv("AZURE_SERIAL_CHI2")) return -1;
+  std::vector<EPoint *> work;
+  std::set<ESegment *> seen;
+  auto add = [&](ESegment *seg) {
+    if (!seg || !seen.insert(seg).second) return;
+    for (int p = 1; p <= seg->NumPoints(); p++) {
+      EPoint *pt = seg->GetPoint(p);
+      if (pt && !pt->IsMapped()) work.push_back(pt);
+    }
+  };
+  for (ESegment *seg : segments) {
+    if (!seg) continue;
+    add(seg);
+    for (ESegment *comp : seg->GetComponentSegments()) add(comp);
+  }
+  // A host also calculates every point mapped onto it (EData::MapData), so
+  // its work grows with that number: one Fowler-type angular distribution at
+  // a single energy is one item.  Largest items first, one at a time, so such
+  // an item does not end up last on one thread.  Each item is calculated the
+  // same way whatever the order.
+  std::vector<double> cost(work.size());
+  for (size_t k = 0; k < work.size(); k++)
+    cost[k] = (1.0 + work[k]->NumSubPoints()) * (1.0 + work[k]->NumLocalMappedPoints());
+  std::vector<size_t> order(work.size());
+  for (size_t k = 0; k < order.size(); k++) order[k] = k;
+  std::stable_sort(order.begin(), order.end(), [&cost](size_t a, size_t b) { return cost[a] > cost[b]; });
+  std::vector<EPoint *> sorted(work.size());
+  for (size_t k = 0; k < order.size(); k++) sorted[k] = work[order[k]];
+  work.swap(sorted);
+  int failed = 0;
+  AZUREProfile::Timer profileTimer(AZUREProfile::kPoints);
+#pragma omp parallel for schedule(dynamic, 1) reduction(+ : failed)
+  for (int k = 0; k < (int)work.size(); k++) {
+    try {
+      work[k]->Calculate(theCNuc, configure);
+    } catch (const std::exception &e) {
+      // NaN on the point and the points mapped onto it, reported once (EPoint::MarkFailed); 0 on the point alone,
+      // silently, before 2026-11-01 -- and the CLI's objective takes these values (PrecalculatePoints).
+      work[k]->MarkFailed("point", configure, e.what());
+      failed++;
+    } catch (...) {
+      work[k]->MarkFailed("point", configure, "unknown exception.");
+      failed++;
+    }
+  }
+  return failed;
 }

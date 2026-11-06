@@ -8,6 +8,7 @@ Opening several ``azure2()`` objects in one interpreter is fine, each is
 independent; drive them from one thread, as the engine is not reentrant.
 """
 
+import copy
 import os
 import re
 import shutil
@@ -114,12 +115,15 @@ class _Engine:
 
 
 class azure2:
+    #: Energy-shift penalties are measured from 0, (dE/sigma)^2, not from the
+    #: .azr value (2026-10-25).  rmfit reads this to match the engine it runs.
+    SHIFT_PENALTY_FROM_ZERO = True
 
     def __init__(self, file, cwd=None, data_mode=True, use_brune=True,
                  ignore_externals=True, transform=True,
                  use_long_wavelength=True, use_gsl_coul=False, use_rmc=False,
                  use_park=False, use_coulomb_table=True, coulomb_table=None,
-                 replace_grids=True, use_ec_table=True):
+                 replace_grids=True, use_ec_table=True, ec_convection_current=True):
         """Build the R-matrix engine for ``file`` in this interpreter.
 
         Parameters
@@ -152,6 +156,11 @@ class azure2:
             ``--no-ec-table``).  Shifted points are then evaluated at their
             shifted energies.  ``False`` integrates at every energy and
             interpolates shifted amplitudes between the segment's points.
+        ec_convection_current : with ``use_long_wavelength=False``, external
+            capture carries the convection-current part of the electric
+            multipole operator as well as its charge (extended Siegert) part
+            (the default; CLI ``--no-ec-convection-current`` turns it off).
+            No effect in the long-wavelength approximation.
         use_rmc : use the R-matrix-with-channels (RMC) formalism instead of
             Brune; mutually exclusive with ``use_brune`` (Brune wins).
         use_park : use Park's level-dependent boundary conditions (Phys. Rev.
@@ -168,6 +177,7 @@ class azure2:
             if the file is missing or the model will not initialize.
         """
         self._sess = None
+        self._azr_cache = {}
         self.file = os.path.abspath(file)
         self.cwd = os.path.abspath(cwd if cwd is not None else (
             os.path.dirname(self.file) or "."))
@@ -184,7 +194,7 @@ class azure2:
             use_gsl_coul=bool(use_gsl_coul), use_rmc=bool(use_rmc),
             use_park=bool(use_park), use_coulomb_table=bool(use_coulomb_table),
             coulomb_table=str(coulomb_table or ""), replace_grids=bool(replace_grids),
-            use_ec_table=bool(use_ec_table))
+            use_ec_table=bool(use_ec_table), ec_convection_current=bool(ec_convection_current))
 
         opts = _azure2.RuntimeOptions()
         for name, value in self.options.items():
@@ -260,6 +270,56 @@ class azure2:
         self.fixed_params = s.params_fixed()
         self._parameters = None
         self._pairs = None
+        self._azr_cache = {}
+
+    # -- the .azr, parsed once per version of the file ------------------------
+
+    def _azr_stamp(self):
+        st = os.stat(self.file)
+        return (st.st_mtime_ns, st.st_ctime_ns, st.st_size, st.st_ino)
+
+    def _parsed(self, kind):
+        """The ``.azr`` parsed as ``kind`` -- ``"datasets"`` (:class:`SegmentSet`),
+        ``"active"`` (its active segments, checked against the engine's count),
+        ``"extrapolations"`` (:class:`TestSegmentSet`) or ``"model"`` (:class:`AzrModel`).
+
+        Parsed once and kept until the file changes on disk (modification time,
+        size or inode) or :meth:`configure` runs.  Before 2026-11-03 every
+        ``calculate_rwa`` call re-read and re-parsed the whole ``.azr`` once per
+        segment (the E1/E2 component check in :meth:`_segment_values`), and
+        every :meth:`penalties`/:meth:`objective` call once more: 83 ms per call
+        instead of 8 ms on the 3H+d model from /groups (NFS), and the reason
+        forked workers there were slow.
+
+        The objects are shared: internal read-only use only.  The public
+        properties (:attr:`datasets`, :attr:`active_datasets`,
+        :attr:`extrapolations`) hand out copies, so a caller who edits what they
+        get cannot change the session's view.
+        """
+        stamp = self._azr_stamp()
+        cache = self.__dict__.setdefault("_azr_cache", {})
+        if cache.get("stamp") != stamp:
+            cache.clear()
+            cache["stamp"] = stamp
+        if kind not in cache:
+            if kind == "datasets":
+                from .datasets import SegmentSet
+                cache[kind] = SegmentSet.from_file(self.file)
+            elif kind == "active":
+                active = self._parsed("datasets").active
+                if len(active) != self.nsegments:
+                    raise RuntimeError(
+                        f"{len(active)} active <segmentsData> lines in {self.file} but "
+                        f"the engine reports {self.nsegments} segments.")
+                cache[kind] = active
+            elif kind == "extrapolations":
+                from .datasets import TestSegmentSet
+                cache[kind] = TestSegmentSet.from_file(self.file)
+            elif kind == "model":
+                cache[kind] = AzrModel.from_file(self.file)
+            else:
+                raise ValueError(kind)
+        return cache[kind]
 
     # -- parameter metadata ---------------------------------------------------
 
@@ -346,6 +406,14 @@ class azure2:
         untouched.  To persist a radius (and to scan several radii, which is
         the safer pattern) use :meth:`pyazr.AzrModel.set_channel_radius` and
         write a new file.
+
+        The radius stays set for the life of the session, through later
+        rebuilds: another pair's ``set_channel_radius``, a nuclear-potential
+        change and :meth:`extrap_mode`/:meth:`data_mode` keep it.  (Before
+        2026-11-02 each rebuild re-read the ``.azr`` with only its own call's
+        radius, so setting pair 2 put pair 1 back to its file value, silently.)
+        The radius read back from the rebuilt model is checked against the
+        request; a mismatch raises ``RuntimeError``.
         """
         pair = int(pair)
         if not any(p.number == pair for p in self.pairs):
@@ -358,7 +426,12 @@ class azure2:
                 f"AZURE2 could not rebuild with pair {pair} at "
                 f"{radius} fm; the session is no longer usable.")
         self.configure()
-        return self.pairs.by_number(pair).channel_radius
+        got = self.pairs.by_number(pair).channel_radius
+        if abs(got - float(radius)) > 1e-9 * float(radius):
+            raise RuntimeError(
+                f"pair {pair}: asked for a channel radius of {radius} fm, the "
+                f"rebuilt model has {got} fm.")
+        return got
 
     # -- hybrid nuclear potential, per particle pair --------------------------
 
@@ -506,9 +579,9 @@ class azure2:
         angle range, observable type, and normalization systematic error.
         ``print(azr.datasets.table())`` gives an overview; ``azr.datasets
         .sys_errors()`` returns the per-segment systematics the fits use.
+        A copy of the session's parse of the file (see :meth:`_parsed`).
         """
-        from .datasets import SegmentSet
-        return SegmentSet.from_file(self.file)
+        return copy.deepcopy(self._parsed("datasets"))
 
     @property
     def extrapolations(self):
@@ -519,9 +592,9 @@ class azure2:
         type.  These describe the segments AZURE2 reports in extrapolation mode
         (:meth:`extrap_mode`), in the same order, so segment ``i`` of this set
         corresponds to index ``i`` of ``calculate``/``calculate_energies``.
+        A copy of the session's parse of the file (see :meth:`_parsed`).
         """
-        from .datasets import TestSegmentSet
-        return TestSegmentSet.from_file(self.file)
+        return copy.deepcopy(self._parsed("extrapolations"))
 
     def _build_parameters(self):
         s = self.sess
@@ -756,6 +829,9 @@ class azure2:
         the engine from the ``.azr`` and discards what this loaded: call it
         again after the switch.  Names are matched against the engine's live
         parameter list, so it works in either mode, as the CLI's reader does.
+        In extrapolation mode the file's ``segment_*`` entries (data-segment
+        normalizations and energy shifts) are not applied: they belong to data
+        segment k, and until 2026-10-26 they moved test segment k's energy grid.
         """
         tag = self.read_sav_basis(path)
         if tag is not None and tag != self.basis:
@@ -771,11 +847,23 @@ class azure2:
         full = np.asarray(s.params_all_rwa(), float).copy()
         vals = self.read_sav(path)
         hit = 0
+        skipped = 0
         for i in range(full.size):
             name = s.params_names(i)
             if name in vals:
+                if self.mode == "extrap" and name.startswith("segment_"):
+                    # A test segment carries no normalization or energy shift of its own; the
+                    # file's segment_<k>_* entries belong to DATA segment k and would move test
+                    # segment k's grid (audit 2026-10-25 item 12; the CLI skips them too).
+                    skipped += 1
+                    continue
                 full[i] = vals[name]
                 hit += 1
+        if skipped:
+            import warnings
+            warnings.warn(f"{path}: {skipped} segment_* entries (data-segment normalizations and "
+                          f"energy shifts) not applied in extrapolation mode; a test segment's grid "
+                          f"is the one its line asks for.")
         if hit == 0:
             raise ValueError(f"{path}: no parameter name matches this model "
                              f"(is it a file from another project?)")
@@ -961,7 +1049,8 @@ class azure2:
                 if p.kind == "norm" and d.norm_error and v != d.nominal_norm:
                     cn = d.nominal_norm
                 elif (p.kind == "shift" and d.vary_shift and d.energy_shift_error
-                      and v != d.nominal_shift):
+                      and d.nominal_shift != 0.0):
+                    # an explicit shift centre (the default, 0, needs no row)
                     cs = d.nominal_shift
                 if cn is not None or cs is not None:
                     centres[p.segment_key] = (cn, cs)
@@ -1356,7 +1445,14 @@ class azure2:
         return [float(self.sess.calculate_chi2_rwa(params))]
 
     def calculate_chi2(self, params):
-        """As calculate_chi2_rwa, taking the physical parameter vector instead."""
+        """As calculate_chi2_rwa, taking the physical parameter vector instead.
+
+        The vector is ``transform_rwa`` of the free level block followed by the
+        free normalizations, shifts and screening potentials, which are the
+        same in both bases.  Before 2026-10-26 the normalization entries were
+        ignored (the segments kept the norms of the previous call) and the
+        Park, abundance and scattering-length terms were left out.
+        """
         return [float(self.sess.calculate_chi2_physical(params))]
 
     def segment_norms(self, params=None):
@@ -1668,6 +1764,12 @@ class azure2:
         their squares between the segment boundaries recovers each one.  The
         sum of this equals ``calculate_chi2_rwa`` exactly (THM segments with
         a free norm at their profiled optimum, as in the CLI's chiSquared.out).
+
+        Segments with a data covariance (``covariance <file>``) carry whitened
+        residuals w = W r (W^T W = M^-1, a mixture of the group's rows), so
+        their split is that of the whitened rows.  It differs from the
+        engine's ``chiSquared.out`` split, sum r_i (M^-1 r)_i; both add up to
+        the group's chi-squared.
         """
         x = np.asarray(self.params_rwa if params is None else params, float)
         r = self.residuals(x)
@@ -1685,7 +1787,7 @@ class azure2:
         """
         seg = self.segment_chi2(params)
         out = {}
-        for i, d in enumerate(self.active_datasets):
+        for i, d in enumerate(self._parsed("active")):
             name = d.name
             chi2, n, k = out.get(name, (0.0, 0, 0))
             out[name] = (chi2 + float(seg[i]), n + len(self.energies[i]), k + 1)
@@ -1703,12 +1805,7 @@ class azure2:
         that indexed it that way dropped the normalization penalty of every
         active segment past the active count.
         """
-        active = self.datasets.active
-        if len(active) != self.nsegments:
-            raise RuntimeError(
-                f"{len(active)} active <segmentsData> lines in {self.file} but "
-                f"the engine reports {self.nsegments} segments.")
-        return active
+        return copy.deepcopy(self._parsed("active"))
 
     # -- AZURE2's own objective -----------------------------------------------
 
@@ -1721,14 +1818,17 @@ class azure2:
             ((norm - nominal) / (nominal/100 * norm_error))^2
 
         (once per ``normgroup``, on its first member) and, for a segment whose
-        energy shift is free,
+        energy shift is free (once per ``shiftgroup``, on its first member),
 
-            ((shift - nominal_shift) / shift_error)^2
+            (shift / shift_error)^2
 
         and the same again for a free sqrt(E) shift coefficient (the b of
         E' = E + shift + b*sqrt(E), key ``"shift_sqrt"``) and, summed per
         segment, for each free parameter aj of a shift function declared on the
-        segment (``shiftfn``, key ``"shift_fn"``).
+        segment (``shiftfn``, key ``"shift_fn"``).  Every shift term is
+        penalised from zero; the value in the .azr is only the starting value
+        (since 2026-10-25, :attr:`SHIFT_PENALTY_FROM_ZERO`; before, the penalty
+        was measured from that value).
 
         Minimize the bare chi-squared instead and the normalizations drift to
         absorb every discrepancy -- a "better" number AZURE2 would never have
@@ -1736,11 +1836,12 @@ class azure2:
         least-squares fit against :meth:`objective`, not
         :meth:`calculate_chi2_rwa`.
 
-        ``nominal`` is the segment's ``nominal_norm`` (``nominal_shift``): the
-        norm (shift) field of its ``<segmentsData>`` line, or its explicit
-        ``prior_centre`` row in ``<parameterSettings>`` when it has one (the
-        field is then only the start value).  A fixed norm away from an
-        explicit centre pays its penalty too, as in the engine.
+        ``nominal`` is the segment's ``nominal_norm``: the norm field of its
+        ``<segmentsData>`` line, or its explicit ``prior_centre`` row in
+        ``<parameterSettings>`` when it has one (the field is then only the
+        start value).  A fixed norm away from an explicit centre pays its
+        penalty too, as in the engine.  The constant shift's centre is
+        ``nominal_shift``: 0, or its explicit ``prior_centre`` row.
         Note the denominator uses the *nominal* normalization, and that
         ``norm_error`` is a percentage.  A THM segment with a free norm has no
         norm penalty: its scale is profiled out, not a parameter.  Returns
@@ -1750,7 +1851,9 @@ class azure2:
         already inside the engine's chi-squared), and ``"screening"``: the
         electron-screening priors ((U_e - nominal)/sigma)^2 of the <targetInt>
         lines with a ``screening`` block, which :meth:`objective` adds like the
-        normalization terms.
+        normalization terms, and ``"density"``: the priors ((N - N0)/sigma)^2 of
+        the fitted target densities (``densityfit`` lines and ``densitygroup``
+        groups), added the same way.
         """
         x = np.asarray(self.params_rwa if params is None else params, float)
         norm = np.zeros(self.nsegments)
@@ -1762,7 +1865,8 @@ class azure2:
         shift_fn = np.zeros(self.nsegments)
         fn_par = {(p.segment_key, p.fn_term): p for p in self.parameters.fn_shifts}
         norm_groups = set()                  # labels whose first member has been seen
-        for i, d in enumerate(self.active_datasets):
+        shift_groups = set()                 # the same for shiftgroup (the shift belongs to the first member)
+        for i, d in enumerate(self._parsed("active")):
             p = current.get(d.key)
             value = (float(x[p.free_index])
                      if p is not None and not p.fixed and p.free_index is not None
@@ -1773,7 +1877,13 @@ class azure2:
                 norm_groups.add(d.norm_group)
             if sigma and not follower:       # a normgroup's penalty is its first member's
                 norm[i] = ((value - d.nominal_norm) / sigma) ** 2
-            if d.vary_shift and d.energy_shift_error:
+            # A shiftgroup follower's shift is its leader's and its own parameter is fixed: the engine
+            # (ESegment::SetShiftGroupFollower, AddShiftPenalty) adds no penalty for it.  Before 2026-10-27
+            # a follower whose line kept vary = 1, an error and a value was charged (shift/error)^2 again.
+            shift_follower = bool(d.shift_group) and d.shift_group in shift_groups
+            if d.shift_group:
+                shift_groups.add(d.shift_group)
+            if d.vary_shift and d.energy_shift_error and not shift_follower:
                 q = shifting.get(d.key)
                 sval = (float(x[q.free_index])
                         if q is not None and not q.fixed and q.free_index is not None
@@ -1784,8 +1894,7 @@ class azure2:
                 bval = (float(x[q.free_index])
                         if q is not None and not q.fixed and q.free_index is not None
                         and q.free_index < x.size else d.energy_shift_sqrt)
-                shift_sqrt[i] = ((bval - d.energy_shift_sqrt)
-                                 / d.energy_shift_sqrt_error) ** 2
+                shift_sqrt[i] = (bval / d.energy_shift_sqrt_error) ** 2
             for j, (nominal, sigma, vary) in enumerate(d.shift_fn_params):
                 if not (vary and sigma):
                     continue
@@ -1793,7 +1902,7 @@ class azure2:
                 aval = (float(x[q.free_index])
                         if q is not None and not q.fixed and q.free_index is not None
                         and q.free_index < x.size else nominal)
-                shift_fn[i] += ((aval - nominal) / sigma) ** 2
+                shift_fn[i] += (aval / sigma) ** 2
         # Park formalism: the J > 0 wall, sum (J/1e-3)^2 over levels with J < 0.
         # The engine adds it to calculate_chi2_rwa itself (it is part of what
         # AZURE2 minimizes), so objective() does not add it again; it is
@@ -1811,7 +1920,7 @@ class azure2:
         abundance = 0.0
         abund = self.parameters.abundances
         if abund:
-            model = AzrModel.from_file(self.file)
+            model = self._parsed("model")
             samples = model.samples
             totals = {}
             for p in abund:
@@ -1840,9 +1949,19 @@ class azure2:
             value = (float(x[p.free_index]) if p.free_index is not None and p.free_index < x.size
                      else float(p.value))
             screening += ((value - p.prior_nominal) / p.prior_sigma) ** 2
+        # Fitted target densities: the prior of each free density with a sigma, the same way.  Beyond the largest
+        # density its grids span the engine computes at that density (and warns); the prior is taken there too.
+        density = 0.0
+        for p in self.parameters.densities:
+            if p.fixed or not p.prior_sigma:
+                continue
+            value = (float(x[p.free_index]) if p.free_index is not None and p.free_index < x.size
+                     else float(p.value))
+            value = min(max(value, 0.01 * p.prior_nominal), p.density_max)
+            density += ((value - p.prior_nominal) / p.prior_sigma) ** 2
         return {"norm": norm, "shift": shift, "shift_sqrt": shift_sqrt, "shift_fn": shift_fn,
                 "park": park, "abundance": abundance, "scattering_length": scattering_length,
-                "screening": screening}
+                "screening": screening, "density": density}
 
     @property
     def nuclei(self):
@@ -1883,7 +2002,7 @@ class azure2:
         """chi-squared of the measured scattering lengths (``<scatteringLengths>``)
         at a free RWA vector: the term the engine adds inside
         :meth:`calculate_chi2_rwa`, recomputed from :meth:`scattering_lengths`."""
-        lines = [e for e in AzrModel.from_file(self.file).scattering_lengths if e.active]
+        lines = [e for e in self._parsed("model").scattering_lengths if e.active]
         if not lines:
             return 0.0
         values = self.scattering_lengths(params)
@@ -1915,6 +2034,17 @@ class azure2:
         x = np.asarray(self.params_rwa if params is None else params, float)
         return np.asarray(self.sess.park_norms(x), float)
 
+    def refreeze_covariance(self):
+        """Data covariances with ``relvector`` terms: forget the model frozen for them.
+
+        The model m in the multiplicative terms (f m)(f m)^T is frozen at the first
+        chi-squared evaluation, so the covariance stays constant through a minimization.
+        After this call the next evaluation freezes it again at its parameters: the
+        iterative scheme is fit, ``refreeze_covariance()``, evaluate at the best fit,
+        fit again.  Returns the number of covariance groups with relvector terms.
+        """
+        return int(self.sess.refreeze_covariance())
+
     def objective(self, params=None):
         """What AZURE2's own fit minimizes: chi-squared plus the penalties.
 
@@ -1929,7 +2059,7 @@ class azure2:
         return (float(np.sum(self.calculate_chi2_rwa(x)))
                 + float(np.sum(pen["norm"])) + float(np.sum(pen["shift"]))
                 + float(np.sum(pen["shift_sqrt"])) + float(np.sum(pen["shift_fn"]))
-                + pen["screening"])
+                + pen["screening"] + pen["density"])
 
     def chi2_and_grad(self, params):
         """Value and analytic gradient of the (data) chi-squared.
@@ -1955,7 +2085,7 @@ class azure2:
             dtype=float)
         return float(resp[0]), np.asarray(resp[1:], dtype=float)
 
-    def residual_jacobian(self, params):
+    def residual_jacobian(self, params, skip=None):
         """Standardized residuals and their Jacobian.
 
         ``r_i = (fit_i - data_i*n)/(cmErr_i*n)`` so ``sum(r_i**2) == chi2``.
@@ -1995,10 +2125,20 @@ class azure2:
         profiled together by linear least squares; ``J`` then carries the
         exact derivative through that profile (Golub-Pereyra; see
         docs/source/theory/thm_implementation.rst, "THM experiments").
+
+        ``skip``: free-column indices (into ``params``) the caller holds fixed.
+        Their finite differences are not computed and the columns come back
+        zero; every other column is unchanged.  A fit that varies only some of
+        the free parameters saves two residual evaluations per skipped shift,
+        shift-function or density column (2026-10-30; rmfit's polish passes the
+        columns its bounds fix).
         """
-        resp = np.asarray(
-            self.sess.calculate_residual_jacobian_rwa(
-                np.asarray(params, float).ravel()), dtype=float)
+        x = np.asarray(params, float).ravel()
+        if skip is None or len(skip) == 0:
+            resp = self.sess.calculate_residual_jacobian_rwa(x)
+        else:
+            resp = self.sess.calculate_residual_jacobian_rwa(x, skip=[int(c) for c in skip])
+        resp = np.asarray(resp, dtype=float)
         if resp.size == 1 and resp[0] == -1.0:
             raise RuntimeError("residual_jacobian: an analytically-unsupported "
                                "segment/config is present.")
@@ -2149,7 +2289,7 @@ class azure2:
         return self
 
     def cache_stats(self):
-        """Coulomb-function cache counters, summed over threads.
+        """Coulomb-function cache counters, summed over threads, and the input-file counters.
 
         Returns a dict with ``queries``, ``hits``, ``hit_rate``, ``entries``,
         ``keys``, ``disabled_keys`` and ``threads``.  ``disabled_keys`` counts
@@ -2158,11 +2298,19 @@ class azure2:
         shift moves every point energy at every iteration.  Such a key keeps
         its values for the exact same energy only (counted in the totals), so
         a later session in this process finds them; it drops even those if
-        they fill up without being asked for again.
+        they fill up without being asked for again.  The memo is cleared at
+        every rebuild (set_channel_radius, potential changes) since AZURE2 dev
+        2026-11-04; before, a sampled radius added keys without bound.
+
+        From the same build on, also ``input_files_read`` (input files read from
+        disk), ``input_files_served`` (opens answered from memory) and
+        ``input_files_held``, for the whole process: a session reads the .azr and
+        its data files once and again only when a file changes on disk, so a
+        rebuild normally reads nothing.
         """
         resp = np.asarray(self.sess.cache_stats(), dtype=float)
         q, h = float(resp[0]), float(resp[1])
-        return {
+        out = {
             "queries": int(q),
             "hits": int(h),
             "hit_rate": (h / q) if q else 0.0,
@@ -2171,6 +2319,10 @@ class azure2:
             "disabled_keys": int(resp[4]),
             "threads": int(resp[5]),
         }
+        if len(resp) >= 9:
+            out.update(input_files_read=int(resp[6]), input_files_served=int(resp[7]),
+                       input_files_held=int(resp[8]))
+        return out
 
     # -- calculations ---------------------------------------------------------
 
@@ -2291,7 +2443,18 @@ class azure2:
         return [self._unpack_angular_dists(s.calculated_angular_dists(i))
                 for i in range(nsegments)]
 
-    def _segment_values(self, i):
+    def _observables(self):
+        """The observable of each result segment in data mode (``None`` in
+        extrapolation mode, or when the file's active segments do not match the
+        engine's), for :meth:`_segment_values`."""
+        if self.mode != "data":
+            return None
+        try:
+            return [d.observable for d in self._parsed("active")]
+        except Exception:
+            return None
+
+    def _segment_values(self, i, observables=None):
         """The calculated observable of result segment ``i`` -- the E1 or E2
         component for an ``angle-integrated-E1`` / ``-E2`` data segment, which is
         what its chi-squared and residuals are built from, the total otherwise.
@@ -2299,14 +2462,14 @@ class azure2:
         The engine stores the total and the two multipole components side by
         side; until 2026-10-07 this returned the total for every segment, so
         ``calculate_rwa`` and ``residual_jacobian`` disagreed on component
-        segments (8Be+alpha photodisintegration E2 data).
+        segments (8Be+alpha photodisintegration E2 data).  ``observables`` is
+        :meth:`_observables`, looked up once per call by the callers.
         """
         s = self.sess
         if self.mode == "data":
-            try:
-                obs = self.active_datasets[i].observable
-            except Exception:
-                obs = ""
+            if observables is None:
+                observables = self._observables()
+            obs = observables[i] if observables is not None and i < len(observables) else ""
             if obs == "angle-integrated-E1":
                 return s.calculated_segments_e1(i)
             if obs == "angle-integrated-E2":
@@ -2318,7 +2481,8 @@ class azure2:
         Cross sections are centre-of-mass, in b or b/sr; an E1/E2 component
         segment gets its component (see :meth:`_segment_values`)."""
         nsegments = int(self.sess.update_segments(params))
-        return [self._segment_values(i) for i in range(nsegments)]
+        obs = self._observables()
+        return [self._segment_values(i, obs) for i in range(nsegments)]
 
     def _mode_free_vector(self, params):
         """A free RWA vector for the engine's current layout.
@@ -2345,12 +2509,14 @@ class azure2:
     def calculate_rwa(self, params):
         """As calculate, from a free RWA vector. This is the usual entry point."""
         nsegments = int(self.sess.update_segments_rwa(self._mode_free_vector(params)))
-        return [self._segment_values(i) for i in range(nsegments)]
+        obs = self._observables()
+        return [self._segment_values(i, obs) for i in range(nsegments)]
 
     def calculate_all_rwa(self, params):
         """As calculate_rwa, taking every parameter rather than the free ones."""
         nsegments = int(self.sess.update_segments_all_rwa(params))
-        return [self._segment_values(i) for i in range(nsegments)]
+        obs = self._observables()
+        return [self._segment_values(i, obs) for i in range(nsegments)]
 
     def calculate_energies(self, params=None):
         """Centre-of-mass energies of the calculated points, per segment.

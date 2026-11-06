@@ -128,7 +128,23 @@ straggling width at the back of the target:
 
    \sigma_\text{straggling} = c_s \sqrt{\Delta E_\text{target}}
 
-where :math:`c_s` is the straggling coefficient (in keV units).
+where :math:`c_s` is the straggling coefficient in keV\ :sup:`1/2` and
+:math:`\Delta E_\text{target}` the energy loss in keV, **both in the centre of
+mass**: the coefficient is a c.m. quantity and no frame factor is applied
+(``TargetEffect::StragglingSigma``). With a coefficient of 0 the width is
+Bohr's instead (``TargetEffect::BohrStragglingSigma``),
+
+.. math::
+
+   \sigma_\text{straggling} = \frac{m_2}{m_1 + m_2}\,
+   \sqrt{4\pi Z_1^2 e^4 Z_2\, N x},
+
+with :math:`N x` the areal density of target atoms traversed, the charges
+those of the point's entrance pair (``EPoint::SetTargetKinematics``, set by
+``EData::ReadTargetEffectsFile`` with the point's own c.m./lab factor), and
+:math:`e^2 = \alpha\hbar c`. For the grid extent
+:math:`N x` is the line's density (a thick target: the thickness over the
+stopping cross section at the surface).
 
 Adaptive Grid Generation
 ^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -314,11 +330,18 @@ beam energy distribution at each depth.
 
       \sigma_\text{eff} = \sqrt{\sigma_b^2 + \sigma_\text{straggling}^2}
 
-   The straggling contribution grows with depth:
+   The straggling contribution grows with depth (c.m. energies and a c.m.
+   coefficient):
 
    .. math::
 
       \sigma_\text{straggling} = c_s \sqrt{E_\text{surface} - E_d}
+
+   or, with :math:`c_s = 0`, Bohr's width for the areal density between the
+   surface and :math:`E_d`, :math:`N x = \int_{E_d}^{E_\text{surface}}
+   dE/\epsilon(E)`, accumulated over the sub-points (trapezoid in
+   :math:`1/\epsilon`; a node with a non-positive stopping cross section adds
+   nothing).
 
 Target Integration + Straggling (no beam convolution)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -340,8 +363,11 @@ Key Helper Functions
    a user-provided equation).
 
 ``TargetEffect::TargetThickness(energy, config)``
-   Returns :math:`\epsilon(E) \cdot \rho` -- the product of stopping power
-   and density.
+   Returns the energy loss :math:`\Delta` across the target at lab energy
+   :math:`E`, the solution of :math:`\int_{E-\Delta}^{E} dE'/\epsilon(E') = N`
+   (Newton from the first-order :math:`\epsilon(E)\,N`, Simpson on 16
+   intervals; exact for a constant :math:`\epsilon`). Up to 2026-10-27 it
+   returned the first-order product itself.
 
 ``TargetEffect::GetStoppingPowerEq()``
    Returns the ``Equation`` object for the parametrized stopping cross section
@@ -394,13 +420,15 @@ skewed-Gaussian components ``BeamProfileComponent {xi, omega, alpha, weight}``,
 a detector resolution ``beamTpcSigma_``, a truncation and a
 detailed-balance flag, parsed from the ``beamprofile`` keyword block at the
 end of the ``targetInt`` line (older readers stop in front of the keyword).
-``EData::ReadTargetEffectsFile`` converts its energies lab → c.m. once
-(``ConvertBeamProfileToCM``) and sizes the sub-point grid from
-``BeamProfileSupport`` intersected with the point's window ± 4 s (± 5 s,
-the Gaussian fold's range, for a THM point), down to the same floor as the
-Gaussian fold: 1 keV, or for a THM segment 1 keV above the compound
-threshold, so a HOES point below the entrance threshold is folded over its
-whole window (``tests/thm_beam_profile``).  The window
+The profile is stored in the lab frame of the input file and converted at
+each point with that point's own entrance-pair factor (``EPoint::SetTargetKinematics``;
+up to October 2026 the line was converted once with the first segment's
+factor, wrong for other pairs sharing it), and ``EData::ReadTargetEffectsFile``
+sizes the sub-point grid from ``BeamProfileSupport`` (scaled by the factor)
+intersected with the point's window ± 4 s (± 5 s, the Gaussian fold's range,
+for a THM point), down to the same floor as the Gaussian fold: 1 keV, or for
+a THM segment 1 keV above the compound threshold, so a HOES point below the
+entrance threshold is folded over its whole window (``tests/thm_beam_profile``).  The window
 comes from ``DataLine`` extras (columns 5–6, ``EPoint::HasBinWindow``), is
 converted with the point in ``ConvertLabEnergy`` and stored unshifted; the
 branch in ``EPoint::IntegrateTargetEffect`` shifts it by the segment's current
@@ -454,6 +482,30 @@ equation evaluated at each depth energy.  The latter combination used to fall
 through to pure target integration on a grid sized for the convolution,
 corrupting the yield.
 
+Transmission and yield segments
+-------------------------------
+
+A ``transmission <n>`` or ``yield <n>`` segment (``ESegment::IsTransformed``) is
+a nonlinear function of its cross sections, so it cannot be one more linear
+combination of integrated point values.  Its points, base and components, keep
+the plain cross sections -- they can still be mapped onto other segments' points
+and share their calculations -- and ``ESegment::TransformedValue`` forms the
+observable: the terms (``ESegment::TransformTerms``: weight = component scaling,
+frame factor and sample abundance; a yield's hidden ``total 1`` component,
+``IsYieldTotalTerm``, made by ``EData::FinishTransformedSegment``, is its
+:math:`\sigma_t`) are summed and transformed at the point, or, under a
+sub-point target effect, at every sub-point, and the transformed values are
+swapped into the base point's sub-point slots for one more pass of
+``EPoint::IntegrateTargetEffect``.  ``EData::CheckTransformedSegments`` refuses
+what that cannot express: terms on different sub-point grids (a sample of
+several compound nuclei), and a blended or automatically skipped effect.  Every
+evaluation path assembles a segment through ``CalculateTheoreticalCrossSection``;
+pyazr's branch tests ``ESegment::NeedsAssembly`` (components, sample weights or
+a transform), and the MCMC output snapshot assembles those segments too.  The
+gradient (``GradTransformedPoint``) back-propagates each term's point or
+sub-point with :math:`f'` times the kernel weight (``TargetEffectWeights``);
+such points are never grouped (``Groupable``).  Test: ``tests/transmission_yield``.
+
 Point mapping across segments
 -----------------------------
 
@@ -485,14 +537,17 @@ segments mapped onto each other are then at the same energy whatever a fit or
 a finite-difference step does to the shifts; segments whose shifts only
 coincide at the current values are not mapped.  Every change of a shift or of
 a sub-point grid rebuilds the mapping (``EData::FillEnergyShiftsFromParams``).
-The segment-local energy-shift derivatives of ``AZURECalc::Gradient`` and
-``AZURECalc::ResidualJacobian`` stay local as long as a parameter's segments
+The segment-local energy-shift derivatives of ``AZURECalc::Gradient`` and of
+the residual Jacobian (``FillShiftColumns``, shared by
+``AZURECalc::ResidualJacobian`` and pyazr's ``residual_jacobian``) stay local as long as a parameter's segments
 are mapped only among themselves; they move all of them before calculating
 any.
 
 The host is calculated first by every loop over the whole data set, and
 calculates the observables of the points mapped onto it
-(``EPoint::Calculate``); ``AZURECalc::PrecalculatePoints`` hands out hosts
+(``EPoint::Calculate``); the parallel pass over an evaluation's points,
+``EData::CalculatePointsInParallel`` (the CLI's ``AZURECalc::PrecalculatePoints``
+and, since 2026-10-30, the API calls behind pyazr), hands out hosts
 only.  The angle-independent products :math:`Z_1Z_2\,T_1T_2^*` of the
 differential sum are formed once per T-matrix and summed by Legendre order
 (``GenMatrixFunc::CalculateCrossSection``, from the flat interference table of
@@ -551,6 +606,15 @@ so points with different screening may share a calculation.  In the adjoint
 bilinear-basis rows of ``GroupRows``, which do not back-propagate the
 member, add it to the member's row directly.
 
+A fitted target density (``densityfit`` / ``densitygroup``, ``EData::SetUpDensityParams``)
+is not in the adjoint: ``EData::FillDensitiesFromParams`` sets the density of the
+group's lines and recomputes each point's target thickness at the lab energy it
+was laid out at (``EPoint::GetTargetLabEnergy``), and the gradient, the Jacobian
+column and the LM / GSL rows difference it like an energy shift.  The sub-point
+grids are laid out for ``TargetEffect::GetLayoutDensity`` and
+``EPoint::IntegrateTargetEffect`` cuts the depth integral at :math:`E_0 - T(N)`,
+so no grid moves with the parameter.
+
 The cotangent of the level matrix is a sum of rank-one terms,
 :math:`\bar M = -\sum_t \beta_t\, \overline{A g_c}\,\overline{A g_{c'}}^T`,
 formed from the solves :math:`A g_c` in :math:`O(n^2)` per term instead of the
@@ -581,7 +645,31 @@ solves :math:`u = A g` its derivative is :math:`O(n)` per free parameter
 (``AMatrixFunc::LevelAdjoint``, ``LevelBasis``; standard, Brune and Park
 level matrices).
 Points with components or sub-point target effects are still differentiated
-one by one (``GradOnePoint``), with the same back-propagation.  The gradient
+one by one (``GradOnePoint``), with the same back-propagation.  For a SUM or
+RATIO point without a sub-point target effect, ``GradOnePoint`` solves the
+level matrix once at the base point and takes each term's T-matrix and
+cotangent from it; the terms without external capture enter only through the
+bilinear forms :math:`g_c^T A g_{c'}`, which do not depend on the exit pair,
+so their cotangents are merged by channel pair and back-propagated once
+(``AMatrixFunc::TBarAdjointMany``).
+
+Segments with components (SUM, RATIO, total capture) are mapped as well, since
+October 2026 (``EData::MapComponentSegments``): each component's point is
+mapped onto the base segment's point at the same energy.  A component has its
+own exit pair, so the host's calculation builds the component's T-matrix from
+the solved level matrix (``GenMatrixFunc::RecalculateTMatrix``) before its
+observable; the mapped points of a host come grouped by exit, so each exit's
+T-matrix is built once.  A component keeps and re-energises its own
+energy-dependent values and external-capture amplitudes
+(``EPoint::OwnsEDependentValues``): its segment is shifted in parallel with the
+base segment.  A family is not mapped with other segments, and the base's
+points stay unmapped among themselves (the external-capture file layout
+depends on which points are mapped).  On the 13C+alpha project of
+``13C+a/10-22-26_merged_non16o_non1``, whose neutron total cross section sums
+nine exit pairs over 13 129 points, one evaluation went from 13.1 s to 4.4 s
+(136 136 level-matrix solutions to 23 203) and one residual Jacobian from
+517 s to 141 s (four threads), every output identical and the Jacobian equal
+to :math:`2 \times 10^{-13}`.  The gradient
 equals the point-by-point one to rounding (about :math:`10^{-14}` of its
 largest component on such a project).
 
@@ -604,6 +692,9 @@ Environment switches
 ``AZURE_NO_POINT_MAPPING=1``
    No point mapping at all: every point calculates its own energy-dependent
    values and T-matrix.
+``AZURE_NO_COMPONENT_MAPPING=1``
+   Every term of a SUM, RATIO or total-capture segment is its own calculation,
+   in the evaluation and in the gradient, as before October 2026.
 ``AZURE_NO_GROUPED_GRADIENT=1``
    Differentiate every point on its own (``GradOnePoint``), as before.
 ``AZURE_GRAD_DENSE=1``
@@ -615,3 +706,27 @@ Environment switches
 
 None of them changes a result beyond rounding; they exist to check that and
 to time the alternatives.
+
+``AZURE_TEST_FAIL_E=<lab energy>`` (with ``AZURE_TEST_FAIL_EXIT=<pair key>``)
+   A test hook, not a switch: the calculation of a point at that lab energy
+   (of that exit pair) throws, to exercise the handling of failed points
+   below (``tests/failed_point``, ``tests/pyazr/failed_point_test.py``).
+
+Failed points
+^^^^^^^^^^^^^
+
+A point whose calculation throws (a singular matrix, a Coulomb function out of
+range, ...) is marked failed (``EPoint::MarkFailed``): its cross sections and
+those of the points mapped onto it are NaN, and a warning naming the segment,
+the energy and the error is printed the first time in a run.  Both evaluation
+paths do this, the parallel pre-pass (``EData::CalculatePointsInParallel``,
+whose values the CLI's objective takes) and the per-point path
+(``ESegment::CalculateTheoreticalCrossSection``); a SUM or RATIO segment with a
+failed or non-finite term is NaN at that point.  :math:`\chi^2` is then NaN,
+so a failed evaluation cannot pass for a result.  Before 2026-11-01 a failed
+point was 0, a failed or non-finite SUM term was left out and a failed RATIO
+denominator gave 0, all silently (the natural SUM segments of
+``tests/natural_neon`` on the R-matrix route came back 0 at 84 points).  A RATIO
+whose denominator is exactly 0 is NaN too, with its own one-time warning, but
+only that term: the base point and the points mapped onto it keep their values
+(before 2026-11-01: 0).

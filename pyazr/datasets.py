@@ -21,7 +21,8 @@ Layout of a ``<segmentsData>`` line (see ``include/SegLine.h``)::
 The trailing keyword blocks (any order): ``sqrtshift b bError varyB`` adds a
 sqrt(E) term to the segment's energy shift, E' = E + energyShift + b*sqrt(E/MeV),
 b in MeV^1/2; ``shiftgroup <label>`` makes the segments with one label share one
-constant shift (the first one's); ``normgroup <label>`` does the same for the
+constant shift (the first one's); ``shiftfngroup <label>`` makes them apply the
+``shiftfn`` of the first one while each keeps its own constant shift; ``normgroup <label>`` does the same for the
 normalization (the first one's norm, vary flag and penalty); ``shiftfn "<f(x)>" N v0 s0 vary0 ...`` adds
 f(x; a0..a(N-1)) at the original lab energy x (MeV), on a group's first segment
 for the whole group; ``sample 1`` / ``sample <name>`` (alias ``natural``) weights
@@ -81,6 +82,7 @@ _OBSERVABLE = {
     5: "angle-integrated-E1",
     6: "angle-integrated-E2",
     7: "analyzing-power",
+    9: "angular-coefficients",
 }
 
 # isDiff codes for <segmentsTest> -- ESegment::ESegment(ExtrapLine).
@@ -111,10 +113,32 @@ def _decode_observable(isDiff, table):
 
 # Keyword blocks a segment line may end with (SegLine.h), and how many tokens
 # each takes: sqrtshift b bError vary; sample <1|name> (alias natural);
-# shiftgroup <label>; normgroup <label>; shiftfn takes a variable number (see
-# _split_keyword_tail).
-_KEYWORDS = {"sqrtshift": 3, "sample": 1, "natural": 1, "shiftgroup": 1, "normgroup": 1,
-             "shiftfn": None}
+# shiftgroup <label>; shiftfngroup <label>; normgroup <label>; covariance <file>;
+# total <0|1>; transmission <n>; yield <n>; shiftfn takes a variable number (see _split_keyword_tail).
+_KEYWORDS = {"sqrtshift": 3, "sample": 1, "natural": 1, "shiftgroup": 1, "shiftfngroup": 1,
+             "normgroup": 1, "covariance": 1, "total": 1, "absolute": 1, "spin": 1, "shiftfn": None,
+             "transmission": 1, "yield": 1}
+
+
+def _thickness_token(blocks, keyword):
+    """``transmission <n>`` / ``yield <n>``: the sample thickness in atoms/barn, 0.0 when absent."""
+    blk = blocks.get(keyword) or []
+    try:
+        return float(blk[0]) if blk else 0.0
+    except ValueError:
+        return 0.0
+
+
+def _spin_token(blocks):
+    """``spin <s>``: the channel spin of a phase-shift segment, or ``None``."""
+    blk = blocks.get("spin") or []
+    return float(blk[0]) if blk else None
+
+
+def _total_token(blocks):
+    """``total 1``: the total cross section of the entrance pair (optical theorem)."""
+    blk = blocks.get("total") or []
+    return bool(blk) and blk[0] == "1"
 
 
 def _split_keyword_tail(tokens):
@@ -159,7 +183,7 @@ def _split_keyword_tail(tokens):
             k = end
             continue
         n = _KEYWORDS[kw]
-        if kw in ("shiftgroup", "normgroup") and k + 1 >= len(tokens):
+        if kw in ("shiftgroup", "shiftfngroup", "normgroup", "covariance") and k + 1 >= len(tokens):
             raise ValueError(kw + " without a label: " + " ".join(tokens))
         blocks[kw] = tokens[k + 1:k + 1 + n]
         k += 1 + n
@@ -217,9 +241,26 @@ class Segment:
     # segments with the same label share ONE constant energy shift: the first
     # of them (file order) owns the parameter, the others take its value
     shift_group: Optional[str] = None
+    # segments with the same label apply the shift function (shiftfn) of the first
+    # of them, with its parameters, but each keeps its own constant shift
+    shift_fn_group: Optional[str] = None
     # segments with the same label share ONE normalization: the first of them
     # (file order) owns the norm, its vary flag and its penalty
     norm_group: Optional[str] = None
+    # data covariance file ("covariance <file>"): segments naming one file share one matrix
+    covariance: Optional[str] = None
+    # "total 1": every term whose exit pair is its entrance pair is that (neutral) pair's total
+    # cross section, by the optical theorem (one T-matrix per point instead of a SUM over exits)
+    total: bool = False
+    # "transmission <n>": the data are the transmission exp(-n sigma) of a sample n atoms/barn thick;
+    # "yield <n>": the self-shielded yield (sigma/sigma_t)(1 - exp(-n sigma_t)); 0.0 = a plain cross section
+    transmission: float = 0.0
+    yield_thickness: float = 0.0
+    # "spin <s>" on a phase-shift segment: the channel spin of the partial wave (None = not given;
+    # the engine then requires a single channel spin for the segment's J and l)
+    phase_S: Optional[float] = None
+    # "absolute 1" on an angular-coefficients segment: the data are the absolute A_k (b/sr), not a_k / a_0
+    absolute: bool = False
     # energy-shift function f(x; a0..) added at the original lab energy x (MeV):
     # the expression, and (value, sigma, vary) per parameter aj; on a shift
     # group it is declared on the first segment and applies to all members
@@ -227,9 +268,12 @@ class Segment:
     shift_fn_params: tuple = ()
     operation: Optional[str] = None    # 'sum' | 'ratio' for a composite segment
     components: tuple = ()             # (entrance, exit, angle, scaling) each
-    # Centres of the norm and shift priors.  The norm / shift field above is
-    # the start value; it is also the centre unless <parameterSettings> has
-    # an explicit "segment_<key>_norm prior_centre c" (..._energy_shift) row.
+    # Centres of the norm and shift priors.  The norm field above is the
+    # start value; it is also the centre unless <parameterSettings> has an
+    # explicit "segment_<key>_norm prior_centre c" row.  The shift prior is
+    # centred on 0 (the engine since dev 0dd28e5, 2026-10-25: the shift field
+    # is only the start) unless a "segment_<key>_energy_shift prior_centre c"
+    # row moves it.
     nominal_norm: Optional[float] = None
     nominal_shift: Optional[float] = None
 
@@ -237,7 +281,7 @@ class Segment:
         if self.nominal_norm is None:
             self.nominal_norm = self.norm
         if self.nominal_shift is None:
-            self.nominal_shift = self.energy_shift
+            self.nominal_shift = 0.0
 
 
     @property
@@ -368,7 +412,9 @@ class SegmentSet(list):
         #   sqrtshift b bError vary      the sqrt(E) energy-shift term
         #   sample 1 | sample <name>     an abundance-weighted (sample) segment; alias natural
         #   shiftgroup <label>           segments sharing one constant energy shift
+        #   shiftfngroup <label>         segments sharing one shift function, own constants
         #   normgroup <label>            segments sharing one normalization
+        #   covariance <file>            segments sharing one data covariance matrix
         #   shiftfn "<f(x)>" N v s vary  a shift function f(x; a0..a(N-1))
         # Split them off first so the positional composite parse never sees them.
         shift_sqrt = shift_sqrt_error = 0.0
@@ -421,7 +467,14 @@ class SegmentSet(list):
             vary_shift_sqrt=vary_shift_sqrt,
             natural=natural, natural_sample=natural_sample,
             shift_group=(blocks.get("shiftgroup") or [None])[0],
+            shift_fn_group=(blocks.get("shiftfngroup") or [None])[0],
             norm_group=(blocks.get("normgroup") or [None])[0],
+            covariance=(blocks.get("covariance") or [None])[0],
+            total=_total_token(blocks),
+            transmission=_thickness_token(blocks, "transmission"),
+            yield_thickness=_thickness_token(blocks, "yield"),
+            phase_S=_spin_token(blocks),
+            absolute=bool(blocks.get("absolute")) and blocks["absolute"][0] == "1",
             shift_fn=shift_fn, shift_fn_params=tuple(shift_fn_params),
             operation=operation, components=tuple(components))
 
@@ -527,6 +580,10 @@ class TestSegment:
     thm: bool = False                      # Trojan Horse (half-off-shell)?
     natural: bool = False                  # sample grid ("sample 1" / "sample <name>", older "natural ...")
     natural_sample: str = ""               # the sample's name ("" = the unnamed, or only, sample)
+    total: bool = False                    # "total 1": the entrance pair's total cross section
+    phase_S: Optional[float] = None        # "spin <s>": channel spin of a phase-shift segment
+    transmission: float = 0.0              # "transmission <n>": exp(-n sigma), n in atoms/barn
+    yield_thickness: float = 0.0           # "yield <n>": (sigma/sigma_t)(1 - exp(-n sigma_t))
 
     @property
     def sample(self):
@@ -610,7 +667,10 @@ class TestSegmentSet(list):
             observable=_decode_observable(isDiff, _EXTRAP_OBSERVABLE)[0],
             phase_J=phase_J, phase_L=phase_L, max_ang_dist_order=max_order,
             thm=_decode_observable(isDiff, _EXTRAP_OBSERVABLE)[1],
-            natural=natural, natural_sample=natural_sample)
+            natural=natural, natural_sample=natural_sample,
+            total=_total_token(blocks), phase_S=_spin_token(blocks),
+            transmission=_thickness_token(blocks, "transmission"),
+            yield_thickness=_thickness_token(blocks, "yield"))
 
     # -- views ----------------------------------------------------------------
 

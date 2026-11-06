@@ -12,6 +12,12 @@ copies a fit evaluates hold no external-capture amplitudes, which used to crash
 every fit of a project with external capture (fixed in 2dcb846), and the check
 covers every parameter of the model on both gradient paths.
 
+**Re-baselined 2026-10-23.** Segments 9 and 10 are the Kettner 0 and 55 degree capture yields, given in the lab
+frame. Their conversion to the c.m. frame used the wrong photon solid-angle Jacobian. The new factor,
+(1 - beta cos theta)^2/(1 - beta^2), replaces (1 - beta)^2/(1 - beta cos theta); see `../gamma_lab_frame`. Segment 9 moved
+from 1841.85 to 1875.78, segment 10 from 684.258 to 676.017, and the total from 336,454 to 336,480. Every other
+segment is unchanged to better than 3e-5 (gas-target integration noise in 1 and 2).
+
 **Re-baselined 2026-09-11.** Segments 1 and 2 carry the gas-target integration,
 and their reference was recorded at a resonance-width multiplier of 5, which
 does not converge the integral: the fine lattice has to span enough energy for

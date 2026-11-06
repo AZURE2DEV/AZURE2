@@ -123,6 +123,8 @@ double AZURECalcMCMC::CalculateLogLikelihood(const vector_r &p) const {
       chiSquared += segmentChiSquared;
     }
   }
+  // Data covariance: r^T M^-1 r over each group in place of its points' r_i^2.
+  if (localData->HasCovariance()) chiSquared += localData->CovarianceChi2Correction();
 
   // Isotopic abundances: priors and the sum-to-one term, part of the posterior as of the fit.
   if (localCompound->HasAbundanceBlock()) chiSquared += localCompound->AbundanceSumPenalty(configure().abundanceSumSigma);  // per-nucleus priors: CalculateLogPrior
@@ -177,6 +179,12 @@ double AZURECalcMCMC::CalculateLogLikelihoodPhysical(const vector_r &params_) co
   localCompound->FillMnParams(params.GetMinuitParams(), &configure());
   localData->FillMnParams(params.GetMinuitParams());
   localCompound->FillCompoundFromParams(params.GetMinuitParams().Params());
+  // The tail of the physical vector (normalizations, energy shifts, screening)
+  // is the same in both bases.  The norms were never copied out of it, so the
+  // pooled EData kept its starting norms: the sampler moved the norm
+  // parameters under their priors while the likelihood never saw them (norm
+  // posterior = prior, R-matrix posterior at frozen norms; 2026-10-26).
+  localData->FillNormsFromParams(params_);
   // After the compound: the sub-point grids are laid out from its fit values.
   localData->FillEnergyShiftsFromParams(params_, localData, localCompound, &configure());
 
@@ -224,6 +232,8 @@ double AZURECalcMCMC::CalculateLogLikelihoodPhysical(const vector_r &params_) co
       chiSquared += segmentChiSquared;
     }
   }
+  // Data covariance: r^T M^-1 r over each group in place of its points' r_i^2.
+  if (localData->HasCovariance()) chiSquared += localData->CovarianceChi2Correction();
 
   // Isotopic abundances: priors and the sum-to-one term, part of the posterior as of the fit.
   if (localCompound->HasAbundanceBlock()) chiSquared += localCompound->AbundanceSumPenalty(configure().abundanceSumSigma);  // per-nucleus priors: CalculateLogPrior
@@ -398,7 +408,8 @@ void AZURECalcMCMC::BuildAutoPriors() const {
   // J-group and level one energy and one width per channel; one isotopic
   // abundance per (sample, nucleus) with an <abundances> block; norms; energy
   // shifts; sqrt(E) coefficients; shift-function parameters; electron-screening
-  // potentials (screening_<n>); THM cbkg (last).
+  // potentials (screening_<n>); fitted target densities (density_<n>, dev);
+  // THM cbkg (last).  AZUREAPI::GetParameterInfo() walks the same sequence.
   std::vector<int> allKinds;
   std::vector<double> allAutoMean;
   std::vector<double> allAutoStd;  // <= 0 means "no automatic prior available"
@@ -440,6 +451,16 @@ void AZURECalcMCMC::BuildAutoPriors() const {
     return s;
   };
 
+  // density_<n> (EData::FillMnParams): the target effect of density parameter n, or null.
+  auto densityOf = [&](const std::string &name) -> const TargetEffect * {
+    if (name.compare(0, 8, "density_") != 0) return nullptr;
+    const std::string n = name.substr(8);
+    if (n.empty() || n.find_first_not_of("0123456789") != std::string::npos) return nullptr;
+    for (int k = 1; k <= data()->NumDensityParams(); ++k)
+      if (data()->GetDensityEffect(k) == std::atoi(n.c_str())) return data()->GetDensityTargetEffect(k);
+    return nullptr;
+  };
+
   // screening_<n> (EData::FillMnParams): the target effect n with a screening block, or null.
   auto screeningOf = [&](const std::string &name) -> const TargetEffect * {
     if (name.compare(0, 10, "screening_") != 0) return nullptr;
@@ -470,11 +491,11 @@ void AZURECalcMCMC::BuildAutoPriors() const {
       std = mean / 100.0 * seg->GetNormError();
     } else if ((seg = segmentOf(name, "_energy_shift_sqrt"))) {
       kind = PARAM_SHIFT_SQRT;
-      mean = seg->GetNominalEnergyShiftSqrt();
+      mean = 0.0;  // shift priors are centred on no shift (dev 0dd28e5, ESegment::AddShiftPenalty)
       std = seg->GetEnergyShiftSqrtError();
     } else if ((seg = segmentOf(name, "_energy_shift"))) {
       kind = PARAM_SHIFT;
-      mean = seg->GetNominalEnergyShift();
+      mean = seg->GetNominalEnergyShift();  // 0, or the explicit prior_centre row
       std = seg->GetEnergyShiftError();
     } else if (abundancePrior.count(name)) {
       kind = PARAM_ABUNDANCE;
@@ -483,7 +504,7 @@ void AZURECalcMCMC::BuildAutoPriors() const {
     } else if ((seg = shiftFnOf(name, term))) {
       // a shift-function parameter: the energy-shift prior rule (as dev)
       kind = PARAM_SHIFT;
-      mean = seg->GetNominalShiftFnValues()[term];
+      mean = 0.0;  // from no shift, as ESegment::AddShiftPenalty
       std = seg->GetShiftFnErrors()[term];
     } else if ((te = screeningOf(name))) {
       // an electron-screening potential (eV): its value and sigma are the
@@ -491,6 +512,11 @@ void AZURECalcMCMC::BuildAutoPriors() const {
       kind = PARAM_SCREENING;
       mean = te->GetScreeningNominal();
       std = te->GetScreeningSigma();
+    } else if ((te = densityOf(name))) {
+      // a fitted target density (atoms/cm^2): the line's density and sigma are the prior (as dev)
+      kind = PARAM_DENSITY;
+      mean = te->GetDensityNominal();
+      std = te->GetDensitySigma();
     } else if (name.compare(0, 5, "cbkg_") == 0) {
       kind = PARAM_CBKG;
     } else {
@@ -545,7 +571,7 @@ void AZURECalcMCMC::BuildAutoPriors() const {
     const int kind = freeKinds_[i];
 
     if (kind == PARAM_NORM || kind == PARAM_SHIFT || kind == PARAM_SHIFT_SQRT || kind == PARAM_ABUNDANCE ||
-        kind == PARAM_SCREENING) {
+        kind == PARAM_SCREENING || kind == PARAM_DENSITY) {
       // Derived from the data, so it always wins over whatever the GUI holds.
       if (freeAutoStd[i] > 0.0) {
         priorMeans_[i] = freeAutoMean[i];
@@ -880,9 +906,16 @@ void mcmc_iteration_callback(int current_step, int total_steps) {
               localCompound->FillMnParams(params.GetMinuitParams(), &g_mcmc_for_callbacks->configure());
               localData->FillMnParams(params.GetMinuitParams());
               localCompound->FillCompoundFromParams(params.GetMinuitParams().Params());
+              localData->FillNormsFromParams(fullParams);
               // After the compound: the sub-point grids are laid out from its fit values.
               localData->FillEnergyShiftsFromParams(fullParams, localData, localCompound, &g_mcmc_for_callbacks->configure());
               rwaFullParams = params.GetMinuitParams().Params();  // RWA params after TransformIn
+              // FillMnParams read the clone's starting norms and shifts; the
+              // sample's are in the tail of the physical vector, the same in
+              // both bases from the first data parameter on, so param.mcmc
+              // gets the sampled values rather than the start (2026-10-26).
+              for (size_t i = (size_t)localData->GetNormParamOffset(); i < rwaFullParams.size() && i < fullParams.size(); i++)
+                rwaFullParams[i] = fullParams[i];
 
               if (g_mcmc_for_callbacks->configure().paramMask & Config::USE_BRUNE_FORMALISM) {
                 localCompound->CalcShiftFunctions(g_mcmc_for_callbacks->configure());
@@ -896,6 +929,15 @@ void mcmc_iteration_callback(int current_step, int total_steps) {
               if (!data.point()->IsMapped()) {
                 data.point()->Calculate(localCompound, g_mcmc_for_callbacks->configure());
               }
+            }
+            // Segments whose value the segment assembles (components, sample weights, transmission / yield): the
+            // iterator above skips composite segments, and a point holds the plain cross section, not the observable.
+            for (int s = 1; s <= localData->NumSegments(); s++) {
+              ESegment *seg = localData->GetSegment(s);
+              if (!seg || !seg->NeedsAssembly()) continue;
+              for (int pid = 0; pid < seg->NumPoints(); pid++)
+                seg->GetPoint(pid + 1)->SetFitCrossSection(
+                    seg->CalculateTheoreticalCrossSection(pid, localCompound, g_mcmc_for_callbacks->configure(), localData));
             }
 
             localData->WriteOutputFiles(g_mcmc_for_callbacks->configure(), true);
@@ -911,6 +953,11 @@ void mcmc_iteration_callback(int current_step, int total_steps) {
               std::ofstream paramOut(paramMCMCFile);
               if (paramOut) {
                 paramOut.precision(7);
+                // Tagged like param.sav (the amplitudes are this run's basis);
+                // untagged before 2026-11-04, see AZURECalc::WriteParameters.
+                paramOut << std::setw(20) << "#parametrization" << std::scientific << std::setw(20)
+                         << (double)AZUREParams::BasisForConfig(g_mcmc_for_callbacks->configure())
+                         << std::scientific << std::setw(20) << 0.0 << std::endl;
                 for (size_t i = 0; i < rwaFullParams.size(); i++) {
                   paramOut << std::setw(20) << g_param_names[i]
                            << std::scientific << std::setw(20) << rwaFullParams[i]
@@ -1131,7 +1178,7 @@ bool AZURECalcMCMC::RunMCMCSampling(int nwalkers, int nsteps, const std::vector<
         spread = energySpreadMeV;
         nEnergyCapped++;
       } else if (kind == PARAM_NORM || kind == PARAM_SHIFT || kind == PARAM_SHIFT_SQRT || kind == PARAM_ABUNDANCE ||
-                 kind == PARAM_SCREENING) {
+                 kind == PARAM_SCREENING || kind == PARAM_DENSITY) {
         // Starting outside the prior only wastes steps walking back into it.
         if (j < (int)priorStds_.size() && j < (int)usePriors_.size() &&
             usePriors_[j] && priorStds_[j] > 0.0 && priorStds_[j] < spread) {

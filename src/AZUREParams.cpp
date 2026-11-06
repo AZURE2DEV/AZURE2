@@ -28,7 +28,11 @@ ROOT::Minuit2::MnUserParameters &AZUREParams::GetMinuitParams() {
  */
 
 void AZUREParams::ReadUserParameters(const Config &configure) {
-  ApplyUserParameterFile(configure.paramfile, configure.outStream);
+  // A run without data (extrapolation, reaction rates) numbers its <segmentsTest> grids 1..N and emits
+  // segment_<k>_* parameters for them, so a param.sav written by a fit would hand DATA segment k's fitted
+  // normalization and energy shift to TEST segment k by name and move the requested grid (audit 2026-10-25,
+  // item 12; tests/extrap_sav_segments).  Test segments carry no shift: those entries are skipped.
+  ApplyUserParameterFile(configure.paramfile, configure.outStream, (configure.paramMask & Config::CALCULATE_WITH_DATA) != 0);
 }
 
 void AZUREParams::ReadUserParameters(const std::string &filename) {
@@ -48,8 +52,9 @@ void AZUREParams::ReadUserParameters(const std::string &filename) {
  * parameter's step size as it was; a line without a readable value is skipped
  * with a warning.
  */
-void AZUREParams::ApplyUserParameterFile(const std::string &filename, std::ostream &out) {
+void AZUREParams::ApplyUserParameterFile(const std::string &filename, std::ostream &out, bool segmentEntries) {
   std::vector<std::string> names;
+  int segmentSkipped = 0;
   vector_r values;
   vector_r errors;
   std::vector<bool> fixed;
@@ -86,11 +91,20 @@ void AZUREParams::ApplyUserParameterFile(const std::string &filename, std::ostre
       continue;
     }
     if (!number(errorToken, error)) error = std::nan("");
+    if (!segmentEntries && name.compare(0, 8, "segment_") == 0) {
+      segmentSkipped++;
+      continue;
+    }
     names.push_back(name);
     values.push_back(value);
     errors.push_back(error);
     fixed.push_back(rest == "fixed");
   }
+
+  if (segmentSkipped > 0)
+    out << "Note: " << segmentSkipped << " segment_* entries of " << filename
+        << " (data-segment normalizations and energy shifts) are not applied: this run has no data segments,"
+        << " and a test segment's grid is the one its line asks for." << std::endl;
 
   for (int i = 0; i < GetMinuitParams().Params().size(); i++) {
     for (int ii = 0; ii < names.size(); ii++) {
@@ -99,9 +113,10 @@ void AZUREParams::ApplyUserParameterFile(const std::string &filename, std::ostre
         // free one fixed by a zero.  An energy shift is not: it follows the vary
         // flag of its .azr segment line, because its penalty does (a freed shift
         // would float with no penalty).  The .sav still sets its value.
-        // A screening potential likewise follows its <targetInt> vary flag.
+        // A screening potential and a fitted target density likewise follow their <targetInt> vary flags.
         const bool isShift = IsEnergyShiftName(GetMinuitParams().GetName(i)) ||
-                             GetMinuitParams().GetName(i).rfind("screening_", 0) == 0;
+                             GetMinuitParams().GetName(i).rfind("screening_", 0) == 0 ||
+                             GetMinuitParams().GetName(i).rfind("density_", 0) == 0;
         if (!isShift && GetMinuitParams().Value(i) == 0.0 && values[ii] != 0.0 &&
             GetMinuitParams().Parameter(i).IsFixed()) GetMinuitParams().Release(i);
         if (!isShift && GetMinuitParams().Value(i) != 0.0 && values[ii] == 0.0 &&
@@ -195,7 +210,8 @@ bool AZUREParams::ReconcileBasis(CNuc *compound, const Config &configure) {
     // that wrote them, which could not have been Park's.
     if (mode != kBasisPark) return true;
     configure.outStream << "The parameter file carries no parametrization tag; taking its amplitudes as Brune's."
-                        << std::endl;
+                        << "  (A param.fit or param.mcmc written by a --use-park run before 2026-11-04 is untagged but"
+                        << " holds Park amplitudes: give it the first line '#parametrization 2 0'.)" << std::endl;
     tag = kBasisBrune;
   }
   if (tag == mode) return true;

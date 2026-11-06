@@ -67,7 +67,8 @@ class AZURECalcMCMC {
                    PARAM_SHIFT_SQRT = 4,    // sqrt(E) energy-shift coefficient
                    PARAM_ABUNDANCE = 6,     // isotopic abundance (GetParameterInfo type 6)
                    PARAM_SCREENING = 7,     // electron-screening U_e (GetParameterInfo type 7, as dev)
-                   PARAM_CBKG = 8 };        // THM coherent background (cbkg_*; GetParameterInfo type 8)
+                   PARAM_DENSITY = 8,       // fitted areal density (GetParameterInfo type 8, as dev)
+                   PARAM_CBKG = 9 };        // THM coherent background (cbkg_*; GetParameterInfo type 9)
 
   /*!
    * Run MCMC sampling with specified parameters.

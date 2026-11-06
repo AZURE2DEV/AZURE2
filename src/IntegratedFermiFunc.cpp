@@ -64,16 +64,23 @@ double IntegratedFermiFunc::Integrand(double x, void *p) {
   Params_ *params = (Params_ *)p;
 
   double W = (params->charge < 0) ? x - params->V0 * alpha_ * alpha_ * pow(params->Z, 4. / 3.) : x + params->V0 * alpha_ * alpha_ * pow(params->Z, 4. / 3.);
-  double eta = (params->charge < 0) ? alpha_ * params->Z * W / sqrt(W * W - 1.) : -alpha_ * params->Z * W / sqrt(W * W - 1.);
+  // No electron momentum (or a screened total energy below the rest mass): nothing to integrate.
+  const double p2 = W * W - 1.;
+  if (!(p2 > 0.)) return 0.;
+  const double pe = sqrt(p2);
+  double eta = (params->charge < 0) ? alpha_ * params->Z * W / pe : -alpha_ * params->Z * W / pe;
   gsl_sf_result GammaNumValue;
   gsl_sf_result GammaNumArg;
   gsl_sf_lngamma_complex_e(params->gamma0, eta, &GammaNumValue, &GammaNumArg);
-  double GammaNum2 = exp(2. * GammaNumValue.val);
 
-  double result =
-      2. * (1. + params->gamma0) *
-      exp(pi_ * eta - 2. * (1. - params->gamma0) * log(2. * electronMass_ * params->radius * sqrt(W * W - 1.) / hbarc_)) *
-      GammaNum2 / params->GammaDenom2 * sqrt(W * W - 1.) * W * (params->W0 - W) * (params->W0 - W);
+  // exp(pi eta) |Gamma(gamma0 + i eta)|^2 in one exponent.  Taken apart, the first factor overflows and the second
+  // underflows once eta > ~225 (electron momenta below ~2.6e-4 m_e c for Z = 8), and inf * 0 made the integrand NaN.
+  // The quadrature samples momenta that small whenever the end point is within ~0.2 keV of zero, so a beta-delayed
+  // spectrum point (or a resolution sub-point) that close to the decay's upper end came out NaN (12C(a,g) MCMC,
+  // 2026-10-29: a 5 sigma window put a sub-point 0.1 keV below the 16N end point).
+  const double logFactor = pi_ * eta + 2. * GammaNumValue.val -
+                           2. * (1. - params->gamma0) * log(2. * electronMass_ * params->radius * pe / hbarc_);
+  double result = 2. * (1. + params->gamma0) * exp(logFactor) / params->GammaDenom2 * pe * W * (params->W0 - W) * (params->W0 - W);
 
   if (params->V0 != 0.) {
     result *= sqrt((W * W - 1.) / (x * x - 1.)) * W / x;
