@@ -2763,6 +2763,47 @@ std::string EData::ECSignaturePath(const std::string &integralsFile) {
   return integralsFile + ".sig";
 }
 
+namespace {
+
+// The 25-cell bar of the EC amplitude loops (CalculateECAmplitudes, InitializeComponentSegments) after `done` of
+// `total` points: a cell per 4 %, and the percentage of the cells filled.
+std::string ECProgressBar(int done, int total) {
+  std::string progress = " [";
+  double percent = 0.;
+  for (int j = 1; j <= 25; j++) {
+    if (done >= percent * total && percent < 1.) {
+      percent += 0.04;
+      progress += '*';
+    } else
+      progress += ' ';
+  }
+  std::ostringstream text;
+  text << progress << "] " << percent * 100 << '%';
+  return text.str();
+}
+
+// Redraws the bar from inside the OpenMP loop of those two loops.  Every thread finishes points and wants to
+// redraw, so the counter is atomic and the redraw runs under one named critical section (ec_progress, which the
+// loops' error messages share): one thread at a time writes a whole bar, never interleaved with another's.  Up
+// to dev 0119771 the threads wrote their bars piece by piece without a lock ("Segment #\r\tSegment #1111"),
+// tests/progress_bars.
+void ECProgressRedraw(const Config &configure, const char *segmentKeyOut, const std::atomic<int> &pointIndex,
+                      int numPoints, time_t &startTime) {
+#pragma omp critical(ec_progress)
+  {
+    if (difftime(time(NULL), startTime) > 0.25) {
+      startTime = time(NULL);
+      if (!(configure.paramMask & Config::USE_API)) {
+        configure.outStream << "\r\tSegment #" << std::setw(12) << segmentKeyOut << std::setw(0)
+                            << ECProgressBar(pointIndex.load(), numPoints);
+        configure.outStream.flush();
+      }
+    }
+  }
+}
+
+}  // namespace
+
 /*!
  * If external capture amplitudes are to be calculated, EPoint::CalculateECAmplitudes is
  * called for each point with a corresponding external capture component in the EData object.
@@ -2896,10 +2937,10 @@ int EData::CalculateECAmplitudes(CNuc *theCNuc, const Config &configure) {
                   configure.outStream.flush();
                 }
                 int numPoints = segment->NumPoints();
-                int pointIndex = 0;
+                std::atomic<int> pointIndex(0);
                 time_t startTime = time(NULL);
                 bool localStop = false;
-#pragma omp parallel for shared(configure, localStop)
+#pragma omp parallel for shared(configure, localStop, pointIndex, startTime)
                 for (int i = 1; i <= numPoints; i++) {
                   if (configure.stopFlag || localStop) continue;
                   EPoint *point = segment->GetPoint(i);
@@ -2910,7 +2951,7 @@ int EData::CalculateECAmplitudes(CNuc *theCNuc, const Config &configure) {
                     try {
                       point->CalculateECAmplitudes(theCNuc, configure);
                     } catch (GSLException e) {
-#pragma omp critical
+#pragma omp critical(ec_progress)
                       {
                         configure.outStream << e.what() << std::endl;
                         localStop = true;
@@ -2918,23 +2959,7 @@ int EData::CalculateECAmplitudes(CNuc *theCNuc, const Config &configure) {
                     }
                   }
                   ++pointIndex;
-                  if (difftime(time(NULL), startTime) > 0.25) {
-                    startTime = time(NULL);
-                    std::string progress = " [";
-                    double percent = 0.;
-                    for (int j = 1; j <= 25; j++) {
-                      if (pointIndex >= percent * numPoints && percent < 1.) {
-                        percent += 0.04;
-                        progress += '*';
-                      } else
-                        progress += ' ';
-                    }
-                    progress += "] ";
-                    if (!(configure.paramMask & Config::USE_API))
-                      configure.outStream << "\r\tSegment #" << std::setw(12) << segmentKeyOut
-                                          << std::setw(0) << progress << percent * 100 << '%';
-                    configure.outStream.flush();
-                  }
+                  ECProgressRedraw(configure, segmentKeyOut, pointIndex, numPoints, startTime);
                 }
                 if (configure.stopFlag || localStop) {
                   if (out.is_open()) out.close();
@@ -3194,10 +3219,10 @@ int EData::InitializeComponentSegments(CNuc *theCNuc, const Config &configure) {
                     configure.outStream.flush();
                   }
                   int numPoints = componentSegment.NumPoints();
-                  int pointIndex = 0;
+                  std::atomic<int> pointIndex(0);
                   time_t startTime = time(NULL);
                   bool localStop = false;
-#pragma omp parallel for shared(configure, localStop)
+#pragma omp parallel for shared(configure, localStop, pointIndex, startTime)
                   for (int i = 1; i <= numPoints; i++) {
                     if (configure.stopFlag || localStop) continue;
                     EPoint *point = componentSegment.GetPoint(i);
@@ -3205,36 +3230,20 @@ int EData::InitializeComponentSegments(CNuc *theCNuc, const Config &configure) {
                       try {
                         point->CalculateECAmplitudes(theCNuc, configure);
                       } catch (GSLException e) {
-#pragma omp critical
+#pragma omp critical(ec_progress)
                         {
                           configure.outStream << e.what() << std::endl;
                           localStop = true;
                         }
                       } catch (...) {
-#pragma omp critical
+#pragma omp critical(ec_progress)
                         {
                           configure.outStream << "Warning: EC amplitude calculation failed for component segment point" << std::endl;
                         }
                       }
                     }
                     ++pointIndex;
-                    if (difftime(time(NULL), startTime) > 0.25) {
-                      startTime = time(NULL);
-                      std::string progress = " [";
-                      double percent = 0.;
-                      for (int k = 1; k <= 25; k++) {
-                        if (pointIndex >= percent * numPoints && percent < 1.) {
-                          percent += 0.04;
-                          progress += '*';
-                        } else
-                          progress += ' ';
-                      }
-                      progress += "] ";
-                      if (!(configure.paramMask & Config::USE_API))
-                        configure.outStream << "\r\tSegment #" << std::setw(12) << segmentKeyOut
-                                            << std::setw(0) << progress << percent * 100 << '%';
-                      configure.outStream.flush();
-                    }
+                    ECProgressRedraw(configure, segmentKeyOut, pointIndex, numPoints, startTime);
                   }
                   if (configure.stopFlag || localStop) {
                     if (out.is_open()) out.close();
