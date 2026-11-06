@@ -2,6 +2,12 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-06 (evening, EST) — Phase 0: T1 and T3, golden outputs (branch `feature/upgrade-0-testprojects-t1t3`)
+
+**State (in progress).** Committed: 63c08471 T1 and T3 projects with generators, data and READMEs, and
+`tests/upgrade/recover.py`; 3b48a101 golden outputs (`tests/upgrade/golden/`, engine c1cc92c7) and
+`tests/upgrade/check.sh`. Next on this branch: the identity tests (ARCHITECTURE §10) in `tests/pyazr/`.
+
 ## 2026-11-07 (second session) — branches imported; THM merged in; Phase 0 started
 
 **How to continue on any machine.** Pull `feature/upgrade` and any `feature/upgrade-<phase>-<topic>` branch listed
