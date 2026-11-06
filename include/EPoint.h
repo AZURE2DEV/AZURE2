@@ -109,6 +109,30 @@ class ScopedPointMappingOff {
 
 class EPoint {
  public:
+  /// The energy-dependent channel tables of a point (one row per J group); see edep_.
+  struct EDependentTables {
+    matrix_c lo_elements;
+    matrix_r penetrabilities;
+    matrix_c coulombphase;
+    matrix_c hardspherephase;
+  };
+  /// Everything CalcEDependentValues and CalcLegendreP compute for a point, by
+  /// reference: the tables are shared, not copied.  These depend only on the
+  /// point's c.m. energy, angle and pairs, never on a fit parameter, so a
+  /// re-placed sub-point at an unchanged node takes them from the sub-point it
+  /// replaces (EData::ReplaceSubPointGrids).
+  struct EDependentShare {
+    double energy = 0.0;
+    double angle = 0.0;
+    int entranceKey = 0, exitKey = 0;
+    double geofactor = 0.0, sfactorconv = 0.0, screen_k = 0.0;
+    std::shared_ptr<const EDependentTables> tables;
+    std::shared_ptr<const vector_r> legendre;
+  };
+  /// The point's energy-dependent values, for another point at the same energy (requires them to be valid).
+  EDependentShare ShareEDependentValues() const;
+  /// Takes a share made at exactly this point's energy, angle and pairs; returns false and changes nothing otherwise.
+  bool AdoptEDependentValues(const EDependentShare &);
   /// Build from a line of a data file, taking its conventions from the parent segment.
   EPoint(DataLine, ESegment *);
   /// Build at a given energy and angle, for a segment generated from a grid.
@@ -557,15 +581,27 @@ class EPoint {
   bool spinDependentCoulomb_ = false;
   complex coulombdirect_ = complex(0., 0.);
   complex coulombexchange_ = complex(0., 0.);
-  vector_r legendreP_;
+  // The Legendre polynomials P_l(cos theta) of the point, by order.  Filled at
+  // setup and on an energy shift; shared between EData clones (see
+  // EDependentTables below) and written only through MutableLegendre().
+  std::shared_ptr<const vector_r> legendreP_;
   vector_r angularDists_;
   int coefficient_order_ = -1;
   bool coefficient_absolute_ = false;
   double ang_dist_a0_ = 0.0;
-  matrix_c lo_elements_;
-  matrix_r penetrabilities_;
-  matrix_c coulombphase_;
-  matrix_c hardspherephase_;
+  // The energy-dependent channel tables, one row per J group: L_o elements,
+  // square roots of the penetrabilities, Coulomb and hard-sphere phase factors.
+  // They are filled at setup and rewritten only when the point's energy or grid
+  // changes, so the EData clones of a fit (AZURECalc::InitializePools, one per
+  // thread) share them instead of deep-copying them: a clone of a folded
+  // project with ~10^6 sub-points held ~7 GB of these rows.  Copying an EPoint
+  // copies the pointer; every writer goes through MutableEDep(), which gives
+  // the point its own copy first if the tables are shared (copy-on-write).
+  std::shared_ptr<const EDependentTables> edep_;
+  /// This point's own, writable tables (copied first if shared with another point).
+  EDependentTables &MutableEDep();
+  /// This point's own, writable Legendre polynomials (copied first if shared).
+  vector_r &MutableLegendre();
   // Energy at which CalcEDependentValues last ran: RecalcEDependentValues is
   // a no-op while the point's energy is unchanged (its values depend only on
   // the energy, the angle and the channel radii).

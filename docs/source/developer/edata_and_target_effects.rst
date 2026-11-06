@@ -714,3 +714,108 @@ denominator gave 0, all silently (the natural SUM segments of
 whose denominator is exactly 0 is NaN too, with its own one-time warning, but
 only that term: the base point and the points mapped onto it keep their values
 (before 2026-11-01: 0).
+
+Memory: shared per-point tables
+-------------------------------
+
+A fit evaluates the objective on private copies of the data, one per thread
+and at least four (``AZURECalc::InitializePools``, ``EData::Clone``).  Most of
+an ``EData`` is the energy-dependent tables of its points and sub-points: per
+J-group row, the :math:`L^0` elements, penetrabilities, Coulomb and hard-sphere
+phases (``EPoint::EDependentTables``) and the Legendre polynomials.  On
+``tests/natural_neon`` (6 271 points, 956 500 sub-points) they are about 6 GB
+of the 10.4 GB after setup, in some 59 million allocations; a copy of the data
+cost about 7.7 GB, so a fit at four threads needed about 41 GB.
+
+Since November 2026 these tables are held by ``std::shared_ptr<const ...>``
+and shared, not copied: a clone points at the tables of the data it was
+cloned from, a mapped point at its host's (``EPoint::CalcEDependentValues``,
+``EPoint::CopyEDependentValuesFrom``).  Every write goes through one accessor
+per table (``EPoint::MutableEDep``, ``EPoint::MutableLegendre``) that makes a
+private copy first if the table is shared, so a point that recomputes its
+values (a shifted segment moving its sub-points, an API call refilling a
+point) never changes another point's or another copy's tables.  The getters
+are unchanged.  The shared tables are only read during an evaluation; each
+``shared_ptr`` object belongs to one point of one copy, and only the thread
+working on that copy touches it.
+
+Re-placing a sub-point grid (``EData::ReplaceSubPointGrids``) builds new
+sub-points.  A node that did not move keeps its sub-point's tables
+(``EPoint::ShareEDependentValues`` / ``AdoptEDependentValues``, which require
+the same c.m. energy, angle and pairs, so the values are exactly those
+``CalcEDependentValues`` and ``CalcLegendreP`` would compute); only the nodes
+that moved get new tables.  On natural neon 85-90 % of the re-placed
+sub-points keep their tables, and re-placing the grids of one evaluation went
+from 20-60 s to about 2 s.
+
+The rows of the tables grow channel by channel; ``CalcEDependentValues``
+trims them to their size once filled (2.3 GB of spare capacity on natural
+neon, about a quarter of the tables).
+
+Measured on ``tests/natural_neon``, a fit with grid re-placement at four
+threads (heap in use from ``mallinfo2``, RSS plus swap sampled every 2 s):
+
+==========================  ===========================  ===========================
+                            before (dev 2d97b1f0)        after
+==========================  ===========================  ===========================
+data after setup            10.4 GB RSS                  --
+fit, first evaluations      about 41 GB (10.4 + 4 x 7.7; 11.1 GB in use, 11.8 GB RSS
+                            not runnable on a 15 GB      (12.9 GB in use without
+                            machine)                     trimming the rows)
+fit, after 50 minutes       --                           16.6 GB in use, still rising
+==========================  ===========================  ===========================
+
+A copy costs well under 1 GB when it is made.  It then owns the tables of
+every re-placed node that no longer coincides with a node of the data it was
+cloned from.  A re-placed grid with another node count moves most of its
+nodes, not only those at the resonance, so as the levels drift away from the
+start of a fit more of each copy's grids differ and its own tables grow
+(natural neon: from 1.03 to 1.63 million live tables over 420 evaluations).
+The copies evaluate different parameters, whose nodes differ in the last
+digits, so they cannot share these tables.  The bound is a full copy per
+pooled copy, as before; the reduced project of ``tests/shared_point_tables``
+levels off after about 240 evaluations.  Holding the grid's background nodes
+fixed when only the resonance region changes, or recomputing a copy's own
+tables instead of keeping them, would bound it lower.
+
+All outputs are byte-identical to those before the change.
+``tests/shared_point_tables`` checks the peak RSS of a four-thread fit against
+that of a calculation (2.4 times; 4.7 with a full copy per pooled copy) and
+identical outputs at one and four threads.
+
+Pooled copies and grid re-placement at several threads
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Fits that re-place sub-point grids crashed at four threads
+(``malloc(): unaligned tcache chunk detected``, segmentation faults; natural
+neon, in dev 2d97b1f0 too).  Two races, both fixed on 2026-11-05:
+
+``EData::Clone``
+   reset the parent and the mapped points only of the points ``EDataIterator``
+   visits, and the iterator skips segments with components.  The base points
+   of natural-target and SUM segments kept mapping the *original's* component
+   points (134 such pointers per copy on natural neon with every 16th point),
+   so every pooled copy also filled the original's component points -- from
+   every thread at once.  ``Clone`` now resets every point of every segment and
+   checks that every mapped point belongs to the copy (it throws otherwise).
+``CoulFuncCache::TransientScope``
+   (``CNuc::TransformOut``, which ``ReplaceSubPointGrids`` calls on every
+   evaluation) counted its depth for all threads together, and the end of the
+   last scope on any thread cleared every thread's scratch memo while the other
+   threads were reading or inserting into theirs.  The depth is now per thread
+   and a thread clears only its own scratch (``tests/reference/
+   coulfunc_transient_scope_test.cpp``).  While another thread held a scope, a
+   thread outside any scope also put its entries in its scratch, where they were
+   lost; they are now permanent, as intended.
+
+A mapped point is also re-placed together with its host, on the host's grid,
+rather than on its own: point mapping requires the two grids to be identical
+(``SharesCalculation``), and the host fills the mapped point's sub-points node
+by node.  A host whose mapped point cannot be re-placed (a segment with
+external capture) keeps its grid.  After every re-placement the grids of hosts
+and mapped points are compared, and a mismatch throws.
+
+None of this changes a result: the copies' own points were always filled
+correctly (the stray writes went to the original's points), and the outputs of
+``tests/shared_point_tables`` are byte-identical to dev 2d97b1f0 and at one and
+four threads.

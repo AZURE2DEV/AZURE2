@@ -277,7 +277,7 @@ int EPoint::GetExitKey() const {
  */
 
 int EPoint::GetMaxLOrder() const {
-  return legendreP_.size() - 1;
+  return legendreP_ ? (int)legendreP_->size() - 1 : -1;
 }
 
 /*!
@@ -379,7 +379,7 @@ double EPoint::GetOriginalEnergy() const {
  */
 
 double EPoint::GetLegendreP(int lOrder) const {
-  return legendreP_[lOrder];
+  return (*legendreP_)[lOrder];
 }
 
 /*!
@@ -452,7 +452,7 @@ double EPoint::GetSFactorConversion() const {
  */
 
 double EPoint::GetSqrtPenetrability(int jGroupNum, int channelNum) const {
-  return penetrabilities_[jGroupNum - 1][channelNum - 1];
+  return edep_->penetrabilities[jGroupNum - 1][channelNum - 1];
 }
 
 /*!
@@ -510,7 +510,7 @@ double EPoint::GetCrossSectionKinFactor() const {
  */
 
 complex EPoint::GetLoElement(int jGroupNum, int channelNum) const {
-  return lo_elements_[jGroupNum - 1][channelNum - 1];
+  return edep_->lo_elements[jGroupNum - 1][channelNum - 1];
 }
 
 /*!
@@ -520,7 +520,7 @@ complex EPoint::GetLoElement(int jGroupNum, int channelNum) const {
  */
 
 complex EPoint::GetExpCoulombPhase(int jGroupNum, int channelNum) const {
-  return coulombphase_[jGroupNum - 1][channelNum - 1];
+  return edep_->coulombphase[jGroupNum - 1][channelNum - 1];
 }
 
 /*!
@@ -530,7 +530,7 @@ complex EPoint::GetExpCoulombPhase(int jGroupNum, int channelNum) const {
  */
 
 complex EPoint::GetExpHardSpherePhase(int jGroupNum, int channelNum) const {
-  return hardspherephase_[jGroupNum - 1][channelNum - 1];
+  return edep_->hardspherephase[jGroupNum - 1][channelNum - 1];
 }
 
 /*!
@@ -1046,7 +1046,7 @@ double EPoint::CalculateCrossSectionGammaConversionFactor(PPair *entrancePair) {
  */
 
 void EPoint::AddLegendreP(double polynomial) {
-  legendreP_.push_back(polynomial);
+  MutableLegendre().push_back(polynomial);
 }
 
 /*!
@@ -1055,7 +1055,11 @@ void EPoint::AddLegendreP(double polynomial) {
  */
 
 void EPoint::ClearLegendrePolynomials() {
-  legendreP_.clear();
+  // An empty list needs no copy of a shared one.
+  if (legendreP_ && legendreP_.use_count() > 1)
+    legendreP_.reset();
+  else if (legendreP_)
+    MutableLegendre().clear();
 }
 
 /*!
@@ -1414,6 +1418,21 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure, bool i
       }
     }
   }
+  // The rows grew channel by channel (push_back): give back the spare capacity,
+  // about a quarter of the tables' memory (natural neon: 2.3 GB of 9.6 GB).  A
+  // point is filled here once per energy (setup, grid re-placement); the shift
+  // step refills its rows in place every evaluation and keeps their capacity.
+  if (edep_ && edep_.use_count() == 1) {
+    EDependentTables &t = MutableEDep();
+    auto shrink = [](auto &rows) {
+      for (auto &row : rows) row.shrink_to_fit();
+      rows.shrink_to_fit();
+    };
+    shrink(t.lo_elements);
+    shrink(t.penetrabilities);
+    shrink(t.coulombphase);
+    shrink(t.hardspherephase);
+  }
   if (includeSubPoints) {
     for (int i = 1; i <= this->NumSubPoints(); i++) {
       this->GetSubPoint(i)->CalcEDependentValues(theCNuc, configure);
@@ -1425,20 +1444,14 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure, bool i
     mappedPoint->geofactor_ = geofactor_;
     mappedPoint->sfactorconv_ = sfactorconv_;
     mappedPoint->screen_k_ = screen_k_;
-    mappedPoint->lo_elements_ = lo_elements_;
-    mappedPoint->penetrabilities_ = penetrabilities_;
-    mappedPoint->coulombphase_ = coulombphase_;
-    mappedPoint->hardspherephase_ = hardspherephase_;
+    mappedPoint->edep_ = edep_;  // shared; either point copies before it writes
     if (!includeSubPoints) continue;
     for (int ii = 1; ii <= this->NumSubPoints(); ii++) {
       EPoint *subMappedPoint = mappedPoint->GetSubPoint(ii);
       subMappedPoint->geofactor_ = this->GetSubPoint(ii)->geofactor_;
       subMappedPoint->sfactorconv_ = this->GetSubPoint(ii)->sfactorconv_;
       subMappedPoint->screen_k_ = this->GetSubPoint(ii)->screen_k_;
-      subMappedPoint->lo_elements_ = this->GetSubPoint(ii)->lo_elements_;
-      subMappedPoint->penetrabilities_ = this->GetSubPoint(ii)->penetrabilities_;
-      subMappedPoint->coulombphase_ = this->GetSubPoint(ii)->coulombphase_;
-      subMappedPoint->hardspherephase_ = this->GetSubPoint(ii)->hardspherephase_;
+      subMappedPoint->edep_ = this->GetSubPoint(ii)->edep_;
     }
   }
   eDependentEnergy_ = this->GetCMEnergy();
@@ -1449,10 +1462,23 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure, bool i
  * Empties the per-JGroup rows of the energy-dependent arrays, keeping their storage.
  */
 void EPoint::ClearEDependentRows() {
-  for (auto &row : lo_elements_) row.clear();
-  for (auto &row : penetrabilities_) row.clear();
-  for (auto &row : coulombphase_) row.clear();
-  for (auto &row : hardspherephase_) row.clear();
+  if (!edep_) return;
+  if (edep_.use_count() > 1) {
+    // Shared with another point: start a table of our own with the same rows,
+    // empty, rather than copying values that are about to be replaced.
+    auto own = std::make_shared<EDependentTables>();
+    own->lo_elements.resize(edep_->lo_elements.size());
+    own->penetrabilities.resize(edep_->penetrabilities.size());
+    own->coulombphase.resize(edep_->coulombphase.size());
+    own->hardspherephase.resize(edep_->hardspherephase.size());
+    edep_ = std::move(own);
+    return;
+  }
+  EDependentTables &t = MutableEDep();
+  for (auto &row : t.lo_elements) row.clear();
+  for (auto &row : t.penetrabilities) row.clear();
+  for (auto &row : t.coulombphase) row.clear();
+  for (auto &row : t.hardspherephase) row.clear();
 }
 
 /*!
@@ -1495,6 +1521,77 @@ void EPoint::RecalcEDependentValues(CNuc *theCNuc, const Config &configure, bool
 }
 
 /*!
+ * This point's energy-dependent tables, writable.  The tables are shared
+ * between copies of the point (EData clones, the points mapped onto it); if
+ * another point still holds them, this point gets its own copy first, so a
+ * write never changes what another point -- another thread's clone -- reads.
+ * The object behind edep_ is always created non-const here, so the const_cast
+ * below is well defined.
+ */
+
+EPoint::EDependentTables &EPoint::MutableEDep() {
+  if (!edep_)
+    edep_ = std::make_shared<EDependentTables>();
+  else if (edep_.use_count() > 1)
+    edep_ = std::make_shared<EDependentTables>(*edep_);
+  return const_cast<EDependentTables &>(*edep_);
+}
+
+/*!
+ * This point's Legendre polynomials, writable (copy-on-write, as MutableEDep).
+ */
+
+vector_r &EPoint::MutableLegendre() {
+  if (!legendreP_)
+    legendreP_ = std::make_shared<vector_r>();
+  else if (legendreP_.use_count() > 1)
+    legendreP_ = std::make_shared<vector_r>(*legendreP_);
+  return const_cast<vector_r &>(*legendreP_);
+}
+
+/*!
+ * The point's energy-dependent values (CalcEDependentValues, CalcLegendreP) as
+ * a share: the tables by pointer, the scalars by value.
+ */
+
+EPoint::EDependentShare EPoint::ShareEDependentValues() const {
+  EDependentShare share;
+  share.energy = this->GetCMEnergy();
+  share.angle = this->GetCMAngle();
+  share.entranceKey = this->GetEntranceKey();
+  share.exitKey = this->GetExitKey();
+  share.geofactor = geofactor_;
+  share.sfactorconv = sfactorconv_;
+  share.screen_k = screen_k_;
+  if (eDependentValid_ && eDependentEnergy_ == this->GetCMEnergy()) {  // else empty: AdoptEDependentValues refuses it
+    share.tables = edep_;
+    share.legendre = legendreP_;
+  }
+  return share;
+}
+
+/*!
+ * Takes the values of a share made by a point at exactly the same c.m. energy,
+ * c.m. angle and pairs -- what CalcEDependentValues and CalcLegendreP would have
+ * computed here.  Returns false, and changes nothing, if any of them differ or
+ * the share is empty.
+ */
+
+bool EPoint::AdoptEDependentValues(const EDependentShare &share) {
+  if (!share.tables || !share.legendre || share.energy != this->GetCMEnergy() || share.angle != this->GetCMAngle() ||
+      share.entranceKey != this->GetEntranceKey() || share.exitKey != this->GetExitKey())
+    return false;
+  geofactor_ = share.geofactor;
+  sfactorconv_ = share.sfactorconv;
+  screen_k_ = share.screen_k;
+  edep_ = share.tables;
+  legendreP_ = share.legendre;
+  eDependentEnergy_ = this->GetCMEnergy();
+  eDependentValid_ = true;
+  return true;
+}
+
+/*!
  * Copies the energy-dependent values (geometrical factor, S-factor conversion,
  * L_o elements, penetrabilities, Coulomb and hard-sphere phases) from another
  * point at exactly the same c.m. energy and with the same entrance pair --
@@ -1510,10 +1607,7 @@ bool EPoint::CopyEDependentValuesFrom(const EPoint &other) {
   geofactor_ = other.geofactor_;
   sfactorconv_ = other.sfactorconv_;
   screen_k_ = other.screen_k_;
-  lo_elements_ = other.lo_elements_;
-  penetrabilities_ = other.penetrabilities_;
-  coulombphase_ = other.coulombphase_;
-  hardspherephase_ = other.hardspherephase_;
+  edep_ = other.edep_;  // shared; either point copies before it writes
   eDependentEnergy_ = other.eDependentEnergy_;
   eDependentValid_ = true;
   return true;
@@ -1526,9 +1620,10 @@ bool EPoint::CopyEDependentValuesFrom(const EPoint &other) {
 
 void EPoint::AddLoElement(int jGroupNum, int channelNum, complex loElement) {
   vector_c d;
-  while (jGroupNum > lo_elements_.size()) lo_elements_.push_back(d);
-  lo_elements_[jGroupNum - 1].push_back(loElement);
-  assert(channelNum = lo_elements_[jGroupNum - 1].size());
+  EDependentTables &t = MutableEDep();
+  while (jGroupNum > t.lo_elements.size()) t.lo_elements.push_back(d);
+  t.lo_elements[jGroupNum - 1].push_back(loElement);
+  assert(channelNum = t.lo_elements[jGroupNum - 1].size());
 }
 
 /*!
@@ -1538,9 +1633,10 @@ void EPoint::AddLoElement(int jGroupNum, int channelNum, complex loElement) {
 
 void EPoint::AddSqrtPenetrability(int jGroupNum, int channelNum, double sqrtPene) {
   vector_r d;
-  while (jGroupNum > penetrabilities_.size()) penetrabilities_.push_back(d);
-  penetrabilities_[jGroupNum - 1].push_back(sqrtPene);
-  assert(channelNum = penetrabilities_[jGroupNum - 1].size());
+  EDependentTables &t = MutableEDep();
+  while (jGroupNum > t.penetrabilities.size()) t.penetrabilities.push_back(d);
+  t.penetrabilities[jGroupNum - 1].push_back(sqrtPene);
+  assert(channelNum = t.penetrabilities[jGroupNum - 1].size());
 }
 
 /*!
@@ -1550,9 +1646,10 @@ void EPoint::AddSqrtPenetrability(int jGroupNum, int channelNum, double sqrtPene
 
 void EPoint::AddExpCoulombPhase(int jGroupNum, int channelNum, complex expShift) {
   vector_c d;
-  while (jGroupNum > coulombphase_.size()) coulombphase_.push_back(d);
-  coulombphase_[jGroupNum - 1].push_back(expShift);
-  assert(channelNum = coulombphase_[jGroupNum - 1].size());
+  EDependentTables &t = MutableEDep();
+  while (jGroupNum > t.coulombphase.size()) t.coulombphase.push_back(d);
+  t.coulombphase[jGroupNum - 1].push_back(expShift);
+  assert(channelNum = t.coulombphase[jGroupNum - 1].size());
 }
 
 /*!
@@ -1562,9 +1659,10 @@ void EPoint::AddExpCoulombPhase(int jGroupNum, int channelNum, complex expShift)
 
 void EPoint::AddExpHardSpherePhase(int jGroupNum, int channelNum, complex expShift) {
   vector_c d;
-  while (jGroupNum > hardspherephase_.size()) hardspherephase_.push_back(d);
-  hardspherephase_[jGroupNum - 1].push_back(expShift);
-  assert(channelNum = hardspherephase_[jGroupNum - 1].size());
+  EDependentTables &t = MutableEDep();
+  while (jGroupNum > t.hardspherephase.size()) t.hardspherephase.push_back(d);
+  t.hardspherephase[jGroupNum - 1].push_back(expShift);
+  assert(channelNum = t.hardspherephase[jGroupNum - 1].size());
 }
 
 /*!

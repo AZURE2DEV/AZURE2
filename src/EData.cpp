@@ -36,7 +36,10 @@
 #include <omp.h>
 #endif
 #include <time.h>
+#include <mutex>
+#include <stdexcept>
 #include <unordered_map>
+#include <unordered_set>
 
 /*!
  * A sample segment ("sample <1|name>", alias "natural") adds abundance-weighted terms of
@@ -898,8 +901,14 @@ int EData::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, const st
 
   struct Item { ESegment *seg; int i; double offset; bool shifted; };
   std::vector<Item> work;
+  struct Owner { ESegment *seg; bool shifted; bool replaceable; };
+  std::unordered_map<const EPoint *, Owner> mappedSegment;  // the segment of each mapped point
   static std::atomic<bool> ecNoted{false};
   auto collect = [&](ESegment *seg) {
+    // Mapped points are registered first, also in segments whose grids are not
+    // re-placed: a host with such a mapped point keeps its grid too.
+    for (int i = 1; i <= seg->NumPoints(); i++)
+      if (seg->GetPoint(i)->IsMapped()) mappedSegment[seg->GetPoint(i)] = {seg, false, false};
     bool any = false;
     for (int i = 1; i <= seg->NumPoints() && !any; i++) any = seg->GetPoint(i)->GetSubGridSpec().valid;
     if (!any) return;
@@ -919,6 +928,13 @@ int EData::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, const st
     for (int i = 1; i <= seg->NumPoints(); i++) {
       EPoint *point = seg->GetPoint(i);
       if (!point->GetSubGridSpec().valid) continue;
+      // A mapped point keeps its host's grid: the mapping (MapData, MapComponentSegments) was made because the
+      // two grids are identical, and the host's calculation fills the mapped point's sub-points node by node
+      // (EPoint::Calculate).  It is re-placed with its host below, never on its own.
+      if (point->IsMapped()) {
+        mappedSegment[point] = {seg, shifted, true};
+        continue;
+      }
       // the parent's shift, which is what moves every sub-point (ESegment::UpdatePointEnergyWithShift)
       const double offset = shifted ? cmFactor * seg->TotalEnergyShift(point->GetOriginalEnergy()) : 0.0;
       work.push_back({seg, i, offset, shifted});
@@ -944,9 +960,12 @@ int EData::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, const st
 
   std::atomic<int> changed{0};
   std::atomic<long> newSubPoints{0};
+  std::atomic<long> reusedSubPoints{0};
   // For AZURE_GRID_TIMING: per work item, -1 = a different number of nodes, else the
   // largest node move (MeV) of a grid that changed.
   std::vector<double> moved(work.size(), 0.0);
+  std::mutex reshiftMutex;
+  std::vector<ESegment *> mappedShifted;  // shifted segments of mapped points re-placed with their hosts
   auto replace = [&](const Item &it, size_t q) {
     EPoint *point = it.seg->GetPoint(it.i);
     const EPoint::SubGridSpec &spec = point->GetSubGridSpec();
@@ -958,6 +977,10 @@ int EData::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, const st
     gc.resonanceWidthMultiplier = spec.resonanceWidthMultiplier;
     gc.pointsPerWidth = spec.pointsPerWidth;
     gc.resonanceOffset = it.offset;
+    for (int m = 1; m <= point->NumLocalMappedPoints(); m++) {
+      auto own = mappedSegment.find(point->GetLocalMappedPoint(m));
+      if (own == mappedSegment.end() || !own->second.replaceable) return;  // its mapped point keeps the grid
+    }
     std::vector<double> grid = AdaptiveIntegrationGrid(gc).GenerateGrid(spec.startEnergy, spec.endEnergy, g);
     std::vector<EPoint> &subs = point->GetSubPoints();
     bool same = (subs.size() == grid.size());
@@ -968,24 +991,64 @@ int EData::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, const st
       moved[q] = -1.0;
     else
       for (size_t k = 0; k < grid.size(); k++) moved[q] = std::max(moved[q], std::fabs(subs[k].GetOriginalEnergy() - grid[k]));
-    TargetEffect *effect = this->GetTargetEffect(it.seg->GetTargetEffectNum());
-    TargetEffect *qEffect = effect->IsQCoefficients() ? effect : nullptr;
-    subs.clear();
-    for (double e : grid) {
-      EPoint sub(point->GetCMAngle(), e, it.seg);
-      sub.SetCoefficientOrder(point->GetCoefficientOrder());
-      sub.SetCoefficientAbsolute(point->GetCoefficientAbsolute());
-      if (spec.targetIntegration)
-        sub.SetStoppingPower(spec.stoppingConversion *
-                             effect->GetStoppingPowerEq()->Evaluate(configure, e / spec.stoppingConversion));
-      sub.CalcLegendreP(configure.maxLOrder, theCNuc, qEffect);
-      // A shifted segment's sub-points are moved and energised by the shift step.
-      if (!it.shifted) {
-        sub.CalcEDependentValues(theCNuc, configure);
-        sub.CalcCoulombAmplitude(theCNuc);
+    // Lays a point's sub-points out on the grid.  Nodes that stay where they were
+    // keep their sub-point's energy-dependent values: the new sub-point shares the
+    // old one's tables (EPoint::AdoptEDependentValues requires the same energy,
+    // angle and pairs, so the values are exactly what CalcEDependentValues and
+    // CalcLegendreP would compute).  Most nodes of a re-placed grid do not move,
+    // and their tables are usually still shared with the EData this copy was
+    // cloned from: a copy re-placing its grids then adds tables only for the
+    // nodes that moved.
+    long reused = 0;
+    auto layOut = [&](EPoint *target, ESegment *seg, bool shifted) {
+      const EPoint::SubGridSpec &tspec = target->GetSubGridSpec();
+      TargetEffect *effect = this->GetTargetEffect(seg->GetTargetEffectNum());
+      TargetEffect *qEffect = effect->IsQCoefficients() ? effect : nullptr;
+      std::vector<EPoint> &tsubs = target->GetSubPoints();
+      std::vector<EPoint::EDependentShare> old;
+      if (!shifted) {
+        old.reserve(tsubs.size());
+        for (const EPoint &sp : tsubs) old.push_back(sp.ShareEDependentValues());
+        std::sort(old.begin(), old.end(),
+                  [](const EPoint::EDependentShare &x, const EPoint::EDependentShare &y) { return x.energy < y.energy; });
       }
-      point->AddSubPoint(sub);
+      tsubs.clear();
+      for (size_t k = 0; k < grid.size(); k++) {
+        const double e = grid[k];
+        EPoint sub(target->GetCMAngle(), e, seg);
+        sub.SetCoefficientOrder(target->GetCoefficientOrder());
+        sub.SetCoefficientAbsolute(target->GetCoefficientAbsolute());
+        if (tspec.targetIntegration)
+          sub.SetStoppingPower(tspec.stoppingConversion *
+                               effect->GetStoppingPowerEq()->Evaluate(configure, e / tspec.stoppingConversion));
+        auto o = std::lower_bound(old.begin(), old.end(), sub.GetCMEnergy(),
+                                  [](const EPoint::EDependentShare &x, double v) { return x.energy < v; });
+        if (o != old.end() && sub.AdoptEDependentValues(*o)) {
+          sub.CalcCoulombAmplitude(theCNuc);  // depends on the angle; cheap
+          reused++;
+        } else {
+          sub.CalcLegendreP(configure.maxLOrder, theCNuc, qEffect);
+          // A shifted segment's sub-points are moved and energised by the shift step.
+          if (!shifted) {
+            sub.CalcEDependentValues(theCNuc, configure);
+            sub.CalcCoulombAmplitude(theCNuc);
+          }
+        }
+        target->AddSubPoint(sub);
+      }
+    };
+    layOut(point, it.seg, it.shifted);
+    for (int m = 1; m <= point->NumLocalMappedPoints(); m++) {
+      EPoint *mp = point->GetLocalMappedPoint(m);
+      auto own = mappedSegment.find(mp);  // present and replaceable: checked above
+      layOut(mp, own->second.seg, own->second.shifted);
+      newSubPoints += (long)grid.size();
+      if (own->second.shifted) {
+        std::lock_guard<std::mutex> lock(reshiftMutex);
+        mappedShifted.push_back(own->second.seg);
+      }
     }
+    reusedSubPoints += reused;
     changed++;
     newSubPoints += (long)grid.size();
   };
@@ -1003,7 +1066,31 @@ int EData::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, const st
   if (changed > 0)
     for (const Item &it : work)
       if (it.shifted && std::find(reshift.begin(), reshift.end(), it.seg) == reshift.end()) reshift.push_back(it.seg);
+  for (ESegment *seg : mappedShifted)
+    if (std::find(reshift.begin(), reshift.end(), seg) == reshift.end()) reshift.push_back(seg);
 
+  // The invariant point mapping rests on (SharesCalculation): a host and its
+  // mapped points have the same sub-point grid, which EPoint::Calculate fills
+  // node by node.  Before 2026-11-05 every grid was re-placed on its own and a
+  // component's grid could come out with another node count than its host's:
+  // the host then wrote past the end of the component's sub-points (heap
+  // corruption, natural neon fits at 4 threads) or filled nodes at other
+  // energies.  Fail loudly rather than calculate on mismatched grids.
+  if (changed > 0)
+    for (const Item &it : work) {
+      EPoint *host = it.seg->GetPoint(it.i);
+      const std::vector<EPoint> &hs = host->GetSubPoints();
+      for (int m = 1; m <= host->NumLocalMappedPoints(); m++) {
+        const std::vector<EPoint> &ms = host->GetLocalMappedPoint(m)->GetSubPoints();
+        bool same = ms.size() == hs.size();
+        for (size_t k = 0; same && k < hs.size(); k++) same = ms[k].GetOriginalEnergy() == hs[k].GetOriginalEnergy();
+        if (!same)
+          throw std::logic_error("EData::ReplaceSubPointGrids: segment " + std::to_string(it.seg->GetSegmentKey()) +
+                                 " point " + std::to_string(it.i) + " and a point mapped onto it have different "
+                                 "sub-point grids (" + std::to_string(hs.size()) + " and " +
+                                 std::to_string(ms.size()) + " nodes)");
+      }
+    }
   if (std::getenv("AZURE_GRID_TIMING")) {
     static std::atomic<int> calls{0};
     const int c = ++calls;
@@ -1017,7 +1104,8 @@ int EData::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, const st
       }
       std::cerr << "[grid] call " << c << ": " << work.size() << " grids, " << changed.load() << " re-placed ("
                 << newSubPoints.load() << " sub-points; " << resized << " with a new node count, largest node move "
-                << maxMove * 1.0e6 << " eV otherwise); observed parameters " << ms(t0, t1) << " ms, grids "
+                << maxMove * 1.0e6 << " eV otherwise; " << reusedSubPoints.load()
+                << " sub-points kept their tables); observed parameters " << ms(t0, t1) << " ms, grids "
                 << ms(t1, std::chrono::steady_clock::now()) << " ms" << std::endl;
     }
   }
@@ -5003,7 +5091,20 @@ EData *EData::Clone() const {
         EnergyMap pointMap = cp->GetMap();
         dataCopy->GetSegment(pointMap.segment)->GetPoint(pointMap.point)->AddLocalMappedPoint(cp);
       }
-
+  // Every point a host of the copy calculates must be a point of the copy: a
+  // pointer into the original would have the copy's calculations write into
+  // the original's points (from every pooled thread at once in a fit).
+  {
+    std::unordered_set<const EPoint *> own;
+    for (ESegment &segment : dataCopy->segments_)
+      for (int j = 1; j <= segment.NumPoints(); j++) own.insert(segment.GetPoint(j));
+    for (ESegment &segment : dataCopy->componentSegments_)
+      for (int j = 1; j <= segment.NumPoints(); j++) own.insert(segment.GetPoint(j));
+    for (const EPoint *p : own)
+      for (int m = 1; m <= p->NumLocalMappedPoints(); m++)
+        if (!own.count(p->GetLocalMappedPoint(m)))
+          throw std::logic_error("EData::Clone: a point of the copy maps a point that is not part of the copy");
+  }
   return dataCopy;
 }
 
