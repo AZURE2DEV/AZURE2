@@ -3292,6 +3292,13 @@ complete:
   gives 2.8 keV at 0.46 MeV and 1.1 keV at 2 MeV. Match the quoted loss at the energy that
   matters (2.0e17 atoms/cm2 = 4.0 ug/cm2 gives 1.5 keV at the 1/2+ resonance) or use
   per-window `<targetInt>` lines with the lab-energy ranges token.
+- 2026-11-06 -- RUN LOGS: TORN "Segment #" PROGRESS BARS BEFORE dev 9fbb82c ARE NOT AN ERROR.
+  Builds before 9fbb82c let every OpenMP thread redraw the external-capture amplitude bars without a lock, so
+  a multi-threaded log can hold fragments like "Segment #\r\tSegment #1111  [****" or a bare "[*****   ] 80%"
+  on a line of its own. Cosmetic in the CLI (results and intEC.dat are byte-identical at 1 and 8 threads);
+  ignore such lines when comparing logs, or use a build at or after 9fbb82c, where one thread at a time draws a
+  whole bar (tests/progress_bars). A script that diffs two run logs should still drop lines holding "\r" or
+  "Segment #" (tests/light_excitation's samelog shows how).
 - 2026-11-06 -- TARGET-INTEGRATION WINDOWS: OUTSIDE THEM A POINT IS sigma(E_bar), NOT sigma(E_beam).
   A `<targetInt>` line can name lab-energy windows (`"lo-hi,lo-hi"` after the conv fields, then a blend width
   in MeV and an auto tolerance). Points inside get the full depth integral; since dev 134f6ad a THIN-target point
