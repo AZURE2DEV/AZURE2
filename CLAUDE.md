@@ -12,6 +12,11 @@ and `docs/source/developer/architecture.rst`. Directory-specific rules are in
 
 ## Upgrade (branch `feature/upgrade`)
 
+The engine computes one chain: level parameters → collision matrix → observables → apparatus fold → χ². The
+upgrade rebuilds the code so that each stage of that chain is one module that depends only on the stages before it,
+and so that every change can be checked against synthetic projects with known parameters and against the present
+engine's results. Why, and in what order: `docs/upgrade/README.md`.
+
 This branch carries the staged rebuild described in `docs/upgrade/` (start with `docs/upgrade/HANDOFF.md`). On it,
 and on the phase branches cut from it (`feature/upgrade-<phase>-<topic>`), these rules apply on top of everything
 below (full text and reasons in `docs/upgrade/RULES.md`):

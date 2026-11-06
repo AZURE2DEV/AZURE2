@@ -1,8 +1,25 @@
 # AZURE2 upgrade
 
-A staged rebuild of the AZURE2 engine into a structure shaped like the physics: fast C++, one-way module
-dependencies, one evaluation chain shared by every reaction and apparatus, a simple THM with DWBA vertices, AZURE2's
-own stopping and straggling, Coulomb functions from pycoulomb, pyazr 3.0 and a local web UI that replaces Qt.
+AZURE2 computes cross sections, angular distributions, polarisation observables and astrophysical S factors from a
+multi-level, multi-channel R-matrix description of the compound nucleus, and fits that description to measured data
+corrected for the experimental apparatus. Every result it produces passes through the same chain: level parameters
+determine the collision matrix at each energy; the collision matrix determines the observables; the apparatus
+(target thickness, stopping and straggling, resolution, Doppler broadening) folds those observables into the
+quantities actually measured; and the χ² compares them with the data. The present engine implements this chain
+correctly but not visibly: one datum, its channel tables, its computed results and the apparatus corrections share a
+single object, and parallel evaluation copies and re-shares that object. About 55 % of the roughly 126 fixes made
+on `dev` between August and November 2026 touched those objects, and at least 21 repaired defects introduced by
+earlier performance changes; the physics itself was rarely at fault.
+
+The upgrade rebuilds the engine so that its structure follows the chain itself. Each stage computes one quantity and
+depends only on the stages before it: `physics/` (levels, channels, collision matrix, observables), `experiment/`
+(measurements, materials, stopping, the apparatus kernel), `inference/` (parameters, the objective, the fitter) and
+`io/` (projects and nuclear-data libraries). The calculation is written in three lines (`ARCHITECTURE.md` §1), and a
+new reaction, observable or apparatus effect enters at one stated place and is tested against synthetic projects
+whose true parameters are known. The rebuild is staged: every phase must reproduce the results of the present
+engine, or explain each difference, before the code it replaces is removed. It also adds what the present code
+lacks: a Trojan-horse (THM) observable with DWBA vertices, AZURE2's own stopping and straggling evaluation, Coulomb
+functions from pycoulomb, pyazr 3.0 and a local web interface in place of Qt.
 
 Read in this order:
 
