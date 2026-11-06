@@ -120,6 +120,60 @@ AddSegDataDialog::AddSegDataDialog(QWidget *parent) :
   energyShiftErrorLabel = new QLabel(tr("Energy Shift Error [MeV]:"));
   varyEnergyShiftCheck = new QCheckBox(tr("Vary Energy Shift?"));
 
+  // Tied systematics: the group blocks of the line's keyword tail.  A label is one token (the engine reads it with
+  // >>), so blanks and double quotes are refused as they are typed.
+  groupsBox = new QWidget;
+  groupsBox->setObjectName("groupsBox");
+  groupsLabel = new QLabel(tr("Groups:"));
+  groupsBox->setToolTip(tr("Segments of one measurement often share one absolute scale or one energy calibration.\n"
+                           "Give them the same label here: the group's first active segment in file order carries\n"
+                           "the shared value (with its vary flag, uncertainty and penalty); the others use it."));
+  QValidator *labelValidator = new QRegExpValidator(QRegExp("[^\\s\"]*"), this);
+  normGroupCombo = new QComboBox;
+  normGroupCombo->setObjectName("normGroupCombo");
+  normGroupCombo->setToolTip(tr("Normalization group (\"normgroup <label>\" on the segment line).\n"
+                                "Every active segment with this label uses ONE normalization: that of the group's\n"
+                                "first active segment in file order (its value, vary flag, uncertainty and penalty).\n"
+                                "The other members' own norm, uncertainty and vary flag are ignored.\n"
+                                "Empty = no group."));
+  shiftGroupCombo = new QComboBox;
+  shiftGroupCombo->setObjectName("shiftGroupCombo");
+  shiftGroupCombo->setToolTip(tr("Energy-shift group (\"shiftgroup <label>\" on the segment line).\n"
+                                 "Every active segment with this label uses ONE constant energy shift: that of the\n"
+                                 "group's first active segment in file order (its value, uncertainty, vary flag and\n"
+                                 "penalty); the others' own shift values are ignored.  The sqrt(E) term is not shared.\n"
+                                 "Empty = no group."));
+  shiftFnGroupCombo = new QComboBox;
+  shiftFnGroupCombo->setObjectName("shiftFnGroupCombo");
+  shiftFnGroupCombo->setToolTip(tr("Shift-function group (\"shiftfngroup <label>\" on the segment line).\n"
+                                   "Every active segment with this label applies the shift function (\"shiftfn\" block)\n"
+                                   "declared on the group's first active segment in file order, with its parameters,\n"
+                                   "and keeps its OWN constant energy shift.  The shiftfn block itself is written in the\n"
+                                   "input file.  A segment is in an energy-shift group or a shift-function group, not both.\n"
+                                   "Empty = no group."));
+  for (QComboBox *c : {normGroupCombo, shiftGroupCombo, shiftFnGroupCombo}) {
+    c->setEditable(true);
+    c->setInsertPolicy(QComboBox::NoInsert);
+    c->setValidator(labelValidator);
+    c->lineEdit()->setPlaceholderText(tr("none"));
+    c->setMinimumContentsLength(8);
+    c->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
+    connect(c, SIGNAL(editTextChanged(QString)), this, SLOT(updateGroupCombos()));
+  }
+  groupsLabel->setToolTip(groupsBox->toolTip());
+  // one row, no frame: the dialog is at the screen's height on small displays already
+  QHBoxLayout *groupsLayout = new QHBoxLayout;
+  groupsLayout->setContentsMargins(0, 0, 0, 0);
+  groupsLayout->addWidget(new QLabel(tr("Normalization:")));
+  groupsLayout->addWidget(normGroupCombo, 1);
+  groupsLayout->addSpacing(8);
+  groupsLayout->addWidget(new QLabel(tr("Energy Shift:")));
+  groupsLayout->addWidget(shiftGroupCombo, 1);
+  groupsLayout->addSpacing(8);
+  groupsLayout->addWidget(new QLabel(tr("Shift Function:")));
+  groupsLayout->addWidget(shiftFnGroupCombo, 1);
+  groupsBox->setLayout(groupsLayout);
+
   // UPOS (Unobserved Primary, Observed Secondary) widgets
   uposCheck = new QCheckBox(tr("Unobserved Primary, Observed Secondary (UPOS)"));
   connect(uposCheck, SIGNAL(stateChanged(int)), this, SLOT(uposChanged(int)));
@@ -330,7 +384,7 @@ AddSegDataDialog::AddSegDataDialog(QWidget *parent) :
   lowerLayout->addWidget(covarianceLabel, 3, 0, Qt::AlignRight);
   segmentOnly << covarianceLabel << covarianceFileText << chooseCovarianceButton;
   segmentOnly << energyShiftLabel << energyShiftText << varyEnergyShiftCheck << energyShiftErrorLabel
-              << energyShiftErrorText << uposCheck << advancedModeCheck;
+              << energyShiftErrorText << groupsLabel << groupsBox << uposCheck << advancedModeCheck;
   QGridLayout *covarianceLayout = new QGridLayout;
   covarianceLayout->addWidget(covarianceFileText, 0, 0);
   covarianceLayout->addWidget(chooseCovarianceButton, 0, 1);
@@ -349,8 +403,12 @@ AddSegDataDialog::AddSegDataDialog(QWidget *parent) :
   energyShiftErrorLayout->addWidget(energyShiftErrorText, 0, 2);
   lowerLayout->addLayout(energyShiftErrorLayout, 4, 2);
 
+  // the groups that tie the normalization and the energy shift above to other segments
+  lowerLayout->addWidget(groupsLabel, 5, 0, Qt::AlignRight);
+  lowerLayout->addWidget(groupsBox, 5, 1, 1, 2);
+
   // UPOS row
-  lowerLayout->addWidget(uposCheck, 5, 0, 1, 3);
+  lowerLayout->addWidget(uposCheck, 6, 0, 1, 3);
   QGridLayout *uposParamLayout = new QGridLayout;
   uposParamLayout->addItem(new QSpacerItem(1, 0, QSizePolicy::Expanding, QSizePolicy::Minimum), 0, 0);
   uposParamLayout->setColumnStretch(0, 1);
@@ -360,9 +418,9 @@ AddSegDataDialog::AddSegDataDialog(QWidget *parent) :
   uposParamLayout->addWidget(finalJText, 0, 4);
   uposParamLayout->addWidget(deltaLabel, 0, 5, Qt::AlignRight);
   uposParamLayout->addWidget(deltaText, 0, 6);
-  lowerLayout->addLayout(uposParamLayout, 6, 0, 1, 3);
+  lowerLayout->addLayout(uposParamLayout, 7, 0, 1, 3);
 
-  lowerLayout->addWidget(advancedModeCheck, 7, 0, 1, 3);
+  lowerLayout->addWidget(advancedModeCheck, 8, 0, 1, 3);
 
   QGridLayout *advancedLayout = new QGridLayout;
   advancedLayout->addWidget(new QLabel(tr("Operation:")), 0, 0);
@@ -393,10 +451,20 @@ AddSegDataDialog::AddSegDataDialog(QWidget *parent) :
   advancedLayout->addLayout(buttonLayout, 6, 2, 1, 2);
   advancedModeBox->setLayout(advancedLayout);
 
-  lowerLayout->addWidget(advancedModeBox, 8, 0, 1, 3);
-  lowerLayout->addWidget(naturalLabel, 9, 0, Qt::AlignRight);
-  lowerLayout->addWidget(naturalCombo, 9, 1, 1, 2);
-  lowerLayout->addWidget(scatLenBox, 10, 0, 1, 3);
+  lowerLayout->addWidget(advancedModeBox, 9, 0, 1, 3);
+  lowerLayout->addWidget(naturalLabel, 10, 0, Qt::AlignRight);
+  lowerLayout->addWidget(naturalCombo, 10, 1, 1, 2);
+  lowerLayout->addWidget(scatLenBox, 11, 0, 1, 3);
+  // the transmission / self-shielded yield of a thick sample and its thickness group
+  sampleRow = new SampleRow(true);
+  sampleRow->setObjectName("sampleRow");
+  sampleLabel = new QLabel(tr("Sample:"));
+  sampleLabel->setToolTip(sampleRow->kindCombo->toolTip());
+  lowerLayout->addWidget(sampleLabel, 12, 0, Qt::AlignRight);
+  lowerLayout->addWidget(sampleRow, 12, 1, 1, 2);
+  connect(entrancePairCombo, &PairKeyCombo::keyChanged, this, [this](int) { updateSampleRow(); });
+  connect(exitPairCombo, &PairKeyCombo::keyChanged, this, [this](int) { updateSampleRow(); });
+  updateSampleRow();
   connect(entrancePairCombo, SIGNAL(keyChanged(int)), this, SLOT(fillScatteringLengthSpins()));
 
   valueLayout->addLayout(lowerLayout, 2, 0, 1, 2);
@@ -531,6 +599,7 @@ void AddSegDataDialog::dataTypeChanged(int) {
   // Update fixed angle visibility when data type changes
   operationTypeChanged(operationCombo->currentIndex());
   updateNaturalCheck();
+  updateSampleRow();
 }
 
 void AddSegDataDialog::varyNormChanged(int state) {
@@ -724,6 +793,29 @@ void AddSegDataDialog::applyScatteringLengthMode(bool on) {
     naturalLabel->setVisible(pairs && pairs->nuclei().size() > 1);
     naturalCombo->setVisible(pairs && pairs->nuclei().size() > 1);
   }
+  updateSampleRow();
+}
+
+void AddSegDataDialog::setSampleBlock(const SegmentKeywords::SampleBlock &b) {
+  sampleRow->setBlock(b);
+  updateSampleRow();
+}
+
+void AddSegDataDialog::updateSampleRow() {
+  if (!sampleRow || !sampleLabel) return;
+  // The engine takes a transmission / yield block on an angle-integrated (or total-capture) observable of a neutral
+  // entrance pair (EData::FinishTransformedSegment); a line that has one keeps the row in view whatever it is.
+  bool applies = false;
+  const QList<PairsData> list = pairs ? pairs->getPairs() : QList<PairsData>();
+  const int key = entrancePairCombo->key();
+  if (!scatLenMode && key >= 1 && key <= list.size()) {
+    const PairsData &p = list.at(key - 1);
+    const int code = dataTypeCode();
+    applies = p.pairType == 0 && p.lightZ * p.heavyZ == 0 && (code == 0 || code == 3);
+  }
+  const bool show = !scatLenMode && (applies || sampleRow->hasLoadedBlock());
+  sampleLabel->setVisible(show);
+  sampleRow->setVisible(show);
 }
 
 void AddSegDataDialog::fillScatteringLengthSpins() {
@@ -780,6 +872,54 @@ void AddSegDataDialog::setScatteringLength(const ScatteringLengthEntry &e) {
 void AddSegDataDialog::disallowScatteringLength() {
   const int i = dataTypeCombo->findData(ScatteringLengthCode);
   if (i >= 0) dataTypeCombo->removeItem(i);
+}
+
+QComboBox *AddSegDataDialog::groupCombo(const QString &keyword) const {
+  if (keyword == "normgroup") return normGroupCombo;
+  if (keyword == "shiftgroup") return shiftGroupCombo;
+  if (keyword == "shiftfngroup") return shiftFnGroupCombo;
+  if (keyword == "thicknessgroup") return sampleRow->groupCombo;
+  return nullptr;
+}
+
+void AddSegDataDialog::setGroupChoices(const QString &keyword, const QStringList &labels) {
+  QComboBox *c = groupCombo(keyword);
+  if (!c) return;
+  const QString keep = c->currentText();
+  c->blockSignals(true);
+  c->clear();
+  c->addItem(QString());  // no group
+  for (const QString &label : labels)
+    if (!label.isEmpty()) c->addItem(label);
+  c->setCurrentIndex(0);
+  c->setEditText(keep);
+  c->blockSignals(false);
+  updateGroupCombos();
+}
+
+QString AddSegDataDialog::groupLabel(const QString &keyword) const {
+  if (keyword == "thicknessgroup") return sampleRow->groupLabel();  // none without a transmission / yield block
+  QComboBox *c = groupCombo(keyword);
+  return c ? c->currentText().trimmed() : QString();
+}
+
+void AddSegDataDialog::setGroupLabel(const QString &keyword, const QString &label) {
+  QComboBox *c = groupCombo(keyword);
+  if (!c) return;
+  const int i = c->findText(label);
+  if (i >= 0)
+    c->setCurrentIndex(i);
+  else
+    c->setEditText(label);
+  updateGroupCombos();
+}
+
+void AddSegDataDialog::updateGroupCombos() {
+  const bool shift = !shiftGroupCombo->currentText().trimmed().isEmpty();
+  const bool shiftFn = !shiftFnGroupCombo->currentText().trimmed().isEmpty();
+  // a line read with both keeps both enabled, so either can be cleared
+  shiftGroupCombo->setEnabled(!shiftFn || shift);
+  shiftFnGroupCombo->setEnabled(!shift || shiftFn);
 }
 
 void AddSegDataDialog::showEvent(QShowEvent *event) {

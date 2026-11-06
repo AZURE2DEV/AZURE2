@@ -23,6 +23,7 @@ class ThmDistortion;
 class ThmDwVertex;
 
 class CNuc;
+class PriorCovariance;
 struct BandData;
 namespace ROOT {
 namespace Minuit2 {
@@ -119,6 +120,49 @@ class EData {
   void FillDensitiesFromParams(const vector_r &, const Config &);
   /// Sum of the density priors ((N - N0)/sigma)^2.
   double DensityPenalty() const;
+  /*!
+   * Fitted Doppler temperatures (TargetEffect::HasDopplerFit, `doppler T vary sigma [Tmax]`).  One parameter
+   * `doppler_<n>` (K) per such line, n = the line number (its place among the active <targetInt> lines, as
+   * screening_<n>), after the density parameters.  None without the fit form.
+   */
+  int NumDopplerParams() const { return (int)dopplerEffects_.size(); }
+  /// Line number of Doppler parameter k (1-based): the n of doppler_<n>.  THM gives every segment a line lists its
+  /// own copy of the effect; the parameter moves all of them (dopplerCopies_), as screening_<n> does.
+  int GetDopplerEffect(int k) const { return dopplerEffects_[k - 1]; }
+  /// The first copy of Doppler parameter k's line (its temperature, sigma and range are the line's).
+  TargetEffect *GetDopplerTargetEffect(int k) { return this->GetTargetEffect(dopplerCopies_[k - 1].front()); }
+  const TargetEffect *GetDopplerTargetEffect(int k) const {
+    return const_cast<EData *>(this)->GetTargetEffect(dopplerCopies_[k - 1].front());
+  }
+  int GetDopplerParamOffset() const { return dopplerParamOffset_; }
+  /// The Doppler parameter (1-based) of effect \p n, 0 if its temperature is not a fit parameter.
+  int DopplerParamOfEffect(int n) const;
+  /// Set the fitted temperatures from a parameter vector (clamped to [T0/4, layout temperature], with a warning
+  /// printed once), called by FillEnergyShiftsFromParams so every evaluation sees the vector's values.
+  void FillDopplerFromParams(const vector_r &, const Config *configure);
+  /// Sum of the Doppler priors ((T - T0)/sigma)^2.
+  double DopplerPenalty() const;
+  /*!
+   * Fitted sample thicknesses (ESegment::HasThicknessFit, `transmission n vary sigma` / `yield n vary sigma`).  One
+   * parameter `segment_<key>_thickness` (atoms/barn) per data segment whose line has the fit form, in segment order,
+   * after the Doppler temperatures; a thickness-group follower's is fixed at its leader's value.  None without the
+   * fit form.
+   */
+  int NumThicknessParams() const { return (int)thicknessSegments_.size(); }
+  /// Position (1-based, as GetSegment) of the segment owning thickness parameter k (1-based).
+  int GetThicknessSegment(int k) const { return thicknessSegments_[k - 1]; }
+  int GetThicknessParamOffset() const { return thicknessParamOffset_; }
+  /// The thickness parameter (1-based) whose value segment \p pos (1-based) uses: its own, its group leader's for a
+  /// follower; 0 when that thickness is no parameter.
+  int ThicknessParamOfSegment(int pos) const;
+  /// Set the fitted thicknesses from a parameter vector (a value below 0 is taken as 0); thickness-group followers
+  /// take their leader's.  Called by FillEnergyShiftsFromParams.
+  void FillThicknessFromParams(const vector_r &);
+  /// Sum of the thickness priors ((n - n0)/sigma)^2.
+  double ThicknessPenalty() const;
+  /// Link the thicknessgroup members to the group's first segment in file order; -1 (with an ERROR) when a member has
+  /// no transmission / yield block.  Also lays out the thickness parameters (NumThicknessParams).
+  int ResolveThicknessGroups(const Config &);
   /// Read the target-effects input file and build the TargetEffect objects.
   int ReadTargetEffectsFile(const Config &, CNuc *);
   /// Is this a fit? AZURECalc clones the compound nucleus and data per thread only when it is.
@@ -160,6 +204,13 @@ class EData {
   /// chi2 of the measured scattering lengths (<scatteringLengths>) at the last evaluation.
   void SetScatteringLengthChi2(double chi2) { scatteringLengthChi2_ = chi2; }
   double GetScatteringLengthChi2() const { return scatteringLengthChi2_; }
+  /// The prior parameter covariance of the run (<config> priorCovariance=, PriorCovariance.h), shared by every copy
+  /// (Clone); null without one.  Set by the CLI (AZUREMain) and pyazr (AZUREAPI) once the parameters are known.
+  void SetPriorCovariance(std::shared_ptr<const PriorCovariance> prior) { priorCov_ = std::move(prior); }
+  const PriorCovariance *GetPriorCovariance() const { return priorCov_.get(); }
+  /// Its chi2 term at the last evaluation, reported in chiSquared.out (Total-Prior-Covariance-Chi-Squared).
+  void SetPriorCovarianceChi2(double chi2) { priorCovChi2_ = chi2; }
+  double GetPriorCovarianceChi2() const { return priorCovChi2_; }
   /// External-capture amplitudes for every point that has an EC component.
   int CalculateECAmplitudes(CNuc *, const Config &);
   /// How many external-capture amplitudes this model expects in an intEC file.
@@ -399,6 +450,11 @@ class EData {
   std::vector<int> densityEffects_;    // line number (effect number) holding each density parameter, in order
   std::vector<int> densityLeadCopies_;     // per density parameter: the first target effect (copy) of that line
   std::vector<int> densityParamOfEffect_;  // per target effect (copy, 0-based): its density parameter, 0 = none
+  int dopplerParamOffset_ = -1;        // -1 until FillMnParams has laid the vector out
+  std::vector<int> dopplerEffects_;    // line number holding each Doppler parameter, in order (as screening_)
+  std::vector<std::vector<int>> dopplerCopies_;  // per Doppler parameter: the target effects (copies) of its line
+  int thicknessParamOffset_ = -1;      // -1 until FillMnParams has laid the vector out
+  std::vector<int> thicknessSegments_;  // positions (1-based) of the segments with a thickness parameter, in order
   /// Group the densityfit / densitygroup lines into parameters (ReadTargetEffectsFile); -1 on an error.
   int SetUpDensityParams(const Config &);
   bool isFit_;
@@ -419,6 +475,8 @@ class EData {
   double parkPenalty_ = 0.0;
   double abundancePenalty_ = 0.0;
   double scatteringLengthChi2_ = 0.0;
+  std::shared_ptr<const PriorCovariance> priorCov_;  // shared by every copy (read-only once set up)
+  double priorCovChi2_ = 0.0;
   std::vector<std::string> nucleusLabels_;   // one per compound nucleus, for the natural decomposition file
   // A copy of the compound nucleus that holds the observed level parameters the
   // sub-point grids are laid out from (ReplaceSubPointGrids).  Never shared: a

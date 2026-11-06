@@ -23,6 +23,7 @@ Run from anywhere:  python3 tests/pyazr/rebuild_resources_test.py
 """
 import contextlib
 import os
+import time
 import shutil
 import sys
 import tempfile
@@ -100,6 +101,13 @@ def main():
             chi_ref = chi2(r)
 
         d, azr = project("main")
+        # The copies were written just now; InputFiles re-reads a file modified within 3 s of being read (a later
+        # same-size write in that window could keep its stamp, 2026-11-05), so date them back an hour, as the data
+        # files of a real project are, for the "read once" checks of section 3.
+        old = time.time() - 3600.0
+        for root, _, files in os.walk(d):
+            for name in files:
+                os.utime(os.path.join(root, name), (old, old))
         out = []
         with captured_stdout(out):
             m = azure2(azr, cwd=d, use_coulomb_table=False)

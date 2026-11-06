@@ -10,7 +10,7 @@ Each is written twice: <name>.azr (non-relativistic) and <name>_rel.azr (relativ
 """
 import os
 HERE = os.path.dirname(os.path.abspath(__file__))
-U = 931.4940880
+U = 931.49410242
 M = dict(n=1.00866491595, p=1.00782503207, d=2.01410177812, t=3.0160492779, a=4.00260325413,
          li7=7.016003434, be7=7.016928717)
 

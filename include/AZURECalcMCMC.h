@@ -12,6 +12,7 @@
 class Config;
 class EData;
 class CNuc;
+class PriorCovariance;
 
 /// A function class to perform MCMC Bayesian calculation of parameters
 
@@ -68,7 +69,10 @@ class AZURECalcMCMC {
                    PARAM_ABUNDANCE = 6,     // isotopic abundance (GetParameterInfo type 6)
                    PARAM_SCREENING = 7,     // electron-screening U_e (GetParameterInfo type 7, as dev)
                    PARAM_DENSITY = 8,       // fitted areal density (GetParameterInfo type 8, as dev)
-                   PARAM_CBKG = 9 };        // THM coherent background (cbkg_*; GetParameterInfo type 9)
+                   PARAM_DOPPLER = 9,       // fitted Doppler temperature (GetParameterInfo type 9, as dev)
+                   PARAM_THICKNESS = 10,    // fitted sample thickness (GetParameterInfo type 10, as dev)
+                   PARAM_CBKG = 11 };       // THM coherent background (cbkg_*; GetParameterInfo type 11, 9 before
+                                            // the merge of dev 3264896d)
 
   /*!
    * Run MCMC sampling with specified parameters.
@@ -261,6 +265,14 @@ class AZURECalcMCMC {
 
   // ParamKind of each varying parameter, filled by BuildAutoPriors()
   mutable std::vector<int> freeKinds_;
+
+  // Prior parameter covariance (<config> priorCovariance=): a multivariate Gaussian on its parameters, which replaces
+  // their own diagonal (automatic or user) priors; set up by SetUpPriorCovariance() at the start of a run.
+  mutable std::shared_ptr<const PriorCovariance> priorCov_;
+  mutable bool useRWA_ = true;
+  /// Read and match the prior covariance; false (ERROR printed) when it is refused, or names a level parameter in a
+  /// physical-parameter run (the prior is in the param.sav space, the RWA one).
+  bool SetUpPriorCovariance(bool useRWA) const;
 
   // Object pools for memory reuse
   mutable std::stack<std::unique_ptr<CNuc>> cnuc_pool_;

@@ -5,6 +5,10 @@
 //   3. a project with relativistic=1 and relativisticReferencePair=2 reads into the Config and is written back
 //      with both keys; switching it off in the Config (what the dialog does) drops both keys from the file;
 //      a plain project read afterwards is non-relativistic.
+//   4. the prior parameter covariance file (2026-11-05): the dialog's "Prior Parameter Covariance" box holds the
+//      file field and its Choose... button; priorCovariance=<path> reads into the Config (comment stripped, a blank
+//      inside the path kept), is written back and read by the engine's own <config> reader; cleared, the key is
+//      dropped; a plain project has none.
 // Before 2026-11-01 the check box sat below the pairs table and the file was written from it, so (1) and (2) and
 // the switch-off in (3) fail on older builds.
 //
@@ -17,6 +21,8 @@
 #include <QFile>
 #include <QGroupBox>
 #include <QLabel>
+#include <QLineEdit>
+#include <QPushButton>
 #include <QSettings>
 #include <QTemporaryDir>
 #include <QTextStream>
@@ -117,6 +123,39 @@ int main(int argc, char **argv) {
     ok("plain project is non-relativistic", !setup.GetConfig().relativistic);
     ok("plain project written", setup.writeProjectFile(c));
     ok("plain project written without the key", !hasKey(readText(c), "relativistic"));
+  }
+
+  // 4. The prior parameter covariance file (priorCovariance=<path> in <config>, 2026-11-05).
+  {
+    EditOptionsDialog dialog;
+    QLineEdit *edit = dialog.findChild<QLineEdit *>("priorCovarianceEdit");
+    QPushButton *choose = dialog.findChild<QPushButton *>("priorCovarianceChoose");
+    QGroupBox *box = dialog.findChild<QGroupBox *>("priorCovarianceBox");
+    ok("Runtime Options dialog has the prior covariance file field and its Choose... button",
+       edit && choose && box && box->isAncestorOf(edit) && box->isAncestorOf(choose) && choose->text() == "Choose...");
+  }
+  {
+    QString withPrior = source;
+    withPrior.replace("</config>", "priorCovariance=priors/fit A.txt #a comment\n</config>");
+    const QString pin = dir + "/prior.azr", pa = dir + "/pa.azr", pb = dir + "/pb.azr", pc = dir + "/pc.azr";
+    ok("prior fixture written", writeText(pin, withPrior));
+    AZURESetup setup;
+    ok("project with priorCovariance read", setup.readProjectFile(pin));
+    ok("priorCovariance reaches the Config (comment stripped, inner blank kept)",
+       setup.GetConfig().priorCovariance == "priors/fit A.txt");
+    ok("written", setup.writeProjectFile(pa));
+    const QString out = readText(pa);
+    ok("priorCovariance written back", out.contains("priorCovariance=priors/fit A.txt #"));
+    Config check(std::cout);
+    check.configfile = pa.toStdString();
+    ok("the engine's reader reads the written key", check.ReadConfigFile() == 0 && check.priorCovariance == "priors/fit A.txt");
+    setup.GetConfig().priorCovariance.clear();  // what clearing the field in Runtime Options does
+    ok("written after clearing it", setup.writeProjectFile(pb));
+    ok("cleared: no priorCovariance key", !hasKey(readText(pb), "priorCovariance"));
+    ok("plain project read in the same window", setup.readProjectFile(plain));
+    ok("plain project has no prior covariance", setup.GetConfig().priorCovariance.empty());
+    ok("plain project written", setup.writeProjectFile(pc));
+    ok("plain project written without the key", !hasKey(readText(pc), "priorCovariance"));
   }
 
   if (failures) {

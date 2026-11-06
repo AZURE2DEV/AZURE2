@@ -661,6 +661,31 @@ add_test(NAME density_fitting COMMAND density_fitting_test)
 set_tests_properties(density_fitting PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
+# Tied systematics: the normgroup / shiftgroup / shiftfngroup blocks of a data-segment line in the segment dialog's
+# drop-downs, the Segments tab's Groups column, the Fitting tab's tied rows and the written project file.
+add_executable(segment_groups_test segment_groups_test.cpp)
+set_target_properties(segment_groups_test PROPERTIES AUTOMOC OFF)
+target_include_directories(segment_groups_test PRIVATE
+    ${AZURE2_SOURCE_DIR}/gui/include
+    ${AZURE2_SOURCE_DIR}/include
+)
+target_compile_definitions(segment_groups_test PRIVATE AZURE2_TEST_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+target_link_libraries(segment_groups_test PRIVATE
+    ${AZURESETUP_LIBRARIES}
+    ${AZUREAPI_LIBRARIES}
+    AZURE2Core
+    Qt5::Core Qt5::Gui Qt5::Widgets Qt5::Network
+)
+if(USE_QWT)
+    target_link_libraries(segment_groups_test PRIVATE ${QWT_LIBRARIES})
+endif()
+if(USE_ERYA)
+    target_link_libraries(segment_groups_test PRIVATE pugixml srim_utilities)
+endif()
+add_test(NAME segment_groups COMMAND segment_groups_test)
+set_tests_properties(segment_groups PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
 # The AME2020 mass table the GUI embeds (the file pyazr.masses reads) and what fills from it: the pair dialog's
 # isotope fields and fill button, the S column's tooltip and colour, and the "Masses from AME2020..." dialog.
 add_executable(mass_table_test mass_table_test.cpp)
@@ -708,4 +733,105 @@ if(USE_ERYA)
 endif()
 add_test(NAME runtime_options COMMAND runtime_options_test)
 set_tests_properties(runtime_options PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+# File dialogs on macOS are Qt's own (gui/include/FileDialogPolicy.h): the native NSOpenPanel failed for users
+# (2026-11-05).  On macOS the test runs on the cocoa platform, not offscreen: offscreen has no native dialogs, so it
+# could not tell a build with the policy from one without.  Elsewhere offscreen, as for the other GUI tests.
+add_executable(file_dialog_policy_test file_dialog_policy_test.cpp)
+set_target_properties(file_dialog_policy_test PROPERTIES AUTOMOC OFF)
+target_include_directories(file_dialog_policy_test PRIVATE
+    ${AZURE2_SOURCE_DIR}/gui/include
+    ${AZURE2_SOURCE_DIR}/include
+)
+target_link_libraries(file_dialog_policy_test PRIVATE
+    ${AZURESETUP_LIBRARIES}
+    ${AZUREAPI_LIBRARIES}
+    AZURE2Core
+    Qt5::Core Qt5::Gui Qt5::Widgets Qt5::Network
+)
+if(USE_QWT)
+    target_link_libraries(file_dialog_policy_test PRIVATE ${QWT_LIBRARIES})
+endif()
+if(USE_ERYA)
+    target_link_libraries(file_dialog_policy_test PRIVATE pugixml srim_utilities)
+endif()
+add_test(NAME file_dialog_policy COMMAND file_dialog_policy_test)
+if(NOT APPLE)
+    set_tests_properties(file_dialog_policy PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+endif()
+
+# The light particle's excitation energy (column 32 of a <levels> line, 2026-11-05): the pairs table column,
+# labels, the identical-particle rule, the level-line read/write (32nd column only when nonzero), the pair dialog.
+add_executable(light_excitation_test light_excitation_test.cpp)
+set_target_properties(light_excitation_test PROPERTIES AUTOMOC OFF)
+target_include_directories(light_excitation_test PRIVATE
+    ${AZURE2_SOURCE_DIR}/gui/include
+    ${AZURE2_SOURCE_DIR}/include
+)
+target_link_libraries(light_excitation_test PRIVATE
+    ${AZURESETUP_LIBRARIES}
+    ${AZUREAPI_LIBRARIES}
+    AZURE2Core
+    Qt5::Core Qt5::Gui Qt5::Widgets Qt5::Network
+)
+if(USE_QWT)
+    target_link_libraries(light_excitation_test PRIVATE ${QWT_LIBRARIES})
+endif()
+if(USE_ERYA)
+    target_link_libraries(light_excitation_test PRIVATE pugixml srim_utilities)
+endif()
+add_test(NAME light_excitation_gui COMMAND light_excitation_test)
+set_tests_properties(light_excitation_gui PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+# The Fitting tab's Doppler Temperatures rows: doppler_<n> per line with the fit form 'doppler T vary sigma [Tmax]',
+# synced both ways with the Experimental Effects tab and written back to the project file.
+add_executable(doppler_fitting_test doppler_fitting_test.cpp)
+set_target_properties(doppler_fitting_test PROPERTIES AUTOMOC OFF)
+target_include_directories(doppler_fitting_test PRIVATE
+    ${AZURE2_SOURCE_DIR}/gui/include
+    ${AZURE2_SOURCE_DIR}/include
+)
+target_compile_definitions(doppler_fitting_test PRIVATE AZURE2_TEST_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+target_link_libraries(doppler_fitting_test PRIVATE
+    ${AZURESETUP_LIBRARIES}
+    ${AZUREAPI_LIBRARIES}
+    AZURE2Core
+    Qt5::Core Qt5::Gui Qt5::Widgets Qt5::Network
+)
+if(USE_QWT)
+    target_link_libraries(doppler_fitting_test PRIVATE ${QWT_LIBRARIES})
+endif()
+if(USE_ERYA)
+    target_link_libraries(doppler_fitting_test PRIVATE pugixml srim_utilities)
+endif()
+add_test(NAME doppler_fitting COMMAND doppler_fitting_test)
+set_tests_properties(doppler_fitting PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+# The fitted sample thickness: the Sample row of the segment dialogs (transmission / yield block, Fit, prior,
+# thickness group), the Segments table, the Fitting tab's Sample Thicknesses rows (a tied thicknessgroup follower)
+# and the written project file.
+add_executable(thickness_fitting_test thickness_fitting_test.cpp)
+set_target_properties(thickness_fitting_test PROPERTIES AUTOMOC OFF)
+target_include_directories(thickness_fitting_test PRIVATE
+    ${AZURE2_SOURCE_DIR}/gui/include
+    ${AZURE2_SOURCE_DIR}/include
+)
+target_compile_definitions(thickness_fitting_test PRIVATE AZURE2_TEST_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+target_link_libraries(thickness_fitting_test PRIVATE
+    ${AZURESETUP_LIBRARIES}
+    ${AZUREAPI_LIBRARIES}
+    AZURE2Core
+    Qt5::Core Qt5::Gui Qt5::Widgets Qt5::Network
+)
+if(USE_QWT)
+    target_link_libraries(thickness_fitting_test PRIVATE ${QWT_LIBRARIES})
+endif()
+if(USE_ERYA)
+    target_link_libraries(thickness_fitting_test PRIVATE pugixml srim_utilities)
+endif()
+add_test(NAME thickness_fitting COMMAND thickness_fitting_test)
+set_tests_properties(thickness_fitting PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen")

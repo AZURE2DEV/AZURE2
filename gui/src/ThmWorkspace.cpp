@@ -226,7 +226,7 @@ bool ThmWorkspace::projectSnapshot(QString &text, QString *error) {
   const QList<PairsData> pairsAfter = pairs->getPairs();
   for (int i = 0; i < pairsBefore.size() && i < pairsAfter.size(); i++)
     if (pairsAfter[i].bindingEnergy != pairsBefore[i].bindingEnergy)
-      pairs->setData(pairs->index(i, 15), pairsBefore[i].bindingEnergy, Qt::EditRole);
+      pairs->setData(pairs->index(i, PairsModel::BindingEnergyColumn), pairsBefore[i].bindingEnergy, Qt::EditRole);
   const QList<ChannelsData> channelsAfter = channels->getChannels();
   for (int i = 0; i < channelsBefore.size() && i < channelsAfter.size(); i++)
     if (channelsAfter[i].gammaIsRWA != channelsBefore[i].gammaIsRWA)

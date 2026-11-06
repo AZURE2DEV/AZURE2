@@ -51,8 +51,15 @@ class PPair {
   double GetG(int) const;
   /// Intrinsic spin of particle 1 or 2.
   double GetJ(int) const;
-  /// Excitation energy of the residual nucleus (MeV); nonzero for an excited-state pair.
+  /// Total excitation energy of the pair (MeV), e1 + e2 -- light plus heavy
+  /// particle.  The channel threshold is GetSepE() + GetExE().
   double GetExE() const;
+  /// Excitation energy of the light particle (MeV), the optional 32nd column
+  /// of a <levels> line (e1; 0 when absent).  Always 0 for gamma / beta pairs.
+  double GetLightExE() const;
+  /// Excitation energy of the heavy particle (MeV), column 17 (e2); for a
+  /// gamma pair the energy of the final level.
+  double GetHeavyExE() const;
   /// Separation energy of the pair (MeV). Subtract it, and the excitation
   /// energy, from a level's energy to get that channel's centre-of-mass energy.
   double GetSepE() const;
@@ -72,7 +79,8 @@ class PPair {
   /// \f$1/[(2I_1+1)(2I_2+1)]\f$, the spin-statistics denominator of the entrance channel.
   double GetI1I2Factor() const;
   /// Returns true if the two particles in the pair are identical
-  /// (same Z, mass, intrinsic spin, parity, and excitation energy).
+  /// (same Z, mass, intrinsic spin, parity, g-factor and excitation energy,
+  /// e1 = e2), for a particle pair only.
   /// Detected automatically in the constructor.
   bool IsIdentical() const;
   /// Boson/fermion sign: +1 for identical bosons (2j even), -1 for
@@ -120,7 +128,8 @@ class PPair {
   double pair_m_[2];
   double pair_g_[2];
   double pair_j_[2];
-  double pair_ex_e_;
+  double pair_light_ex_e_;
+  double pair_heavy_ex_e_;
   double pair_sep_e_;
   double pair_ch_rad_;
   double binding_energy_;

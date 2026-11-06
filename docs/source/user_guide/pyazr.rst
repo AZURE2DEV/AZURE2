@@ -136,6 +136,17 @@ differ whenever the file numbers its pairs in another order than the engine
 counts them, so match a parameter to a reaction through ``azr.pairs`` rather
 than by reading the key as the number.
 
+``Pair.excitation`` is the pair's **total** excitation, light plus heavy
+particle, so ``Pair.threshold`` = ``sep_energy + excitation`` is where its
+channels open. ``Pair.light_excitation`` is the light particle's share (the
+optional 32nd column of a ``<levels>`` line, November 2026) and
+``Pair.heavy_excitation`` the heavy one's; ``Pair.label`` marks an excited
+particle (``'2+*(4.439 MeV) + 0+'``). In an ``AzrModel`` the same three are
+``AzrChannel.excitation`` / ``light_excitation`` / ``heavy_excitation``;
+setting ``light_excitation`` adds the 32nd column, setting it to 0 removes it
+again, and a line without the column keeps its 31 columns
+(:doc:`../reference/data_formats`).
+
 Filtered views (``.free``, ``.energies``, ``.widths``, ``.norms``,
 ``.shifts``, ``.sqrt_shifts``, ``.fn_shifts``, ``.abundances``, ``.cbkg``) and lookups (``.by_level(...)``,
 ``.by_name(...)``, ``.by_physical_level()``) are all available. A
@@ -221,6 +232,56 @@ density its grids span). Its column is finite-differenced the same way, and
 writes them (``sigma`` in atoms/cm² or a string such as ``"2.3%"``). Like a
 normalization, the fitted density travels in the ``.sav``; ``save_fit`` leaves
 the line's value, the prior's centre, as it is.
+
+A fitted free-gas Doppler temperature (``doppler T vary sigma [Tmax]``,
+:doc:`experimental_effects`) is a parameter of kind ``"doppler"``
+(``ParameterSet.dopplers``; :attr:`Parameter.effect` is its line,
+``prior_nominal`` / ``prior_sigma`` its prior and ``doppler_max`` the layout
+temperature its grids span). Unlike a density its gradient entry and Jacobian
+column are analytic, through the Doppler weights. ``penalties()["doppler"]`` is
+its prior, which ``objective()`` adds. ``AzrModel.dopplers`` reads the ``doppler``
+blocks of a file (``temperature``, ``fit``, ``vary``, ``sigma``, ``tmax``, ``max``),
+``AzrModel.set_doppler(effect, T=, vary=, sigma=, tmax=)`` writes one (giving
+``vary``, ``sigma`` or ``tmax`` writes the fit form; ``tmax=0`` removes Tmax), and
+``add_target_effect(..., doppler=(T, vary, sigma[, tmax]))`` starts a line with
+it. The fitted temperature travels in the ``.sav``; ``save_fit`` leaves the line's
+value, the prior's centre, as it is.
+
+A fitted sample thickness (``transmission n vary sigma`` or ``yield n vary sigma``
+on a segment line, :doc:`segments`) is a parameter of kind ``"thickness"``
+(``ParameterSet.thicknesses``; :attr:`Parameter.segment_key` is its segment,
+``prior_nominal`` / ``prior_sigma`` its prior, ``sample_kind`` ``"transmission"``
+or ``"yield"``, and ``thickness_leader`` the leader's segment key for a fixed
+``thicknessgroup`` follower). Its gradient entry and Jacobian column are
+analytic. ``penalties()["thickness"]`` is its prior, which ``objective()`` adds.
+``AzrModel.sample_thicknesses`` reads the blocks of a file (``kind``, ``n``,
+``fit``, ``vary``, ``sigma``, ``group``, ``active``),
+``AzrModel.set_sample_thickness(key, n=, vary=, sigma=, group=, kind=)`` writes
+one (giving ``vary`` or ``sigma`` writes the fit form, ``group=""`` removes the
+group), and ``add_data_segment(..., transmission=n or (n, vary, sigma),
+yield_=..., thickness_group=label)`` starts a line with it. The ``Segment``
+objects of :mod:`pyazr.datasets` carry ``thickness``, ``thickness_vary``
+(``None`` for the plain form), ``thickness_sigma`` and ``thickness_group``.
+
+A prior parameter covariance (``priorCovariance=<file>`` in ``<config>``,
+:doc:`chi_squared`, "Prior parameter covariance") is set up by the engine when the
+session starts (a refused file makes ``azure2()`` raise; listed parameters fixed in
+the model are marginalized). ``penalties()["prior_covariance"]`` is its term
+:math:`(\mathbf{p}-\boldsymbol{\mu})^T C^{-1}(\mathbf{p}-\boldsymbol{\mu})`, which
+``objective()`` adds (it is not part of ``calculate_chi2_rwa``);
+``prior_covariance_residuals(x)`` returns the whitened residuals
+:math:`L^{-1}(\mathbf{p}-\boldsymbol{\mu})` (:math:`C = LL^T`) in the order of
+``prior_covariance_names``, and ``residual_jacobian`` appends them as its last rows,
+with the constant Jacobian :math:`L^{-1}` on the prior's columns -- so
+:math:`\sum r^2` of ``residual_jacobian`` is ``calculate_chi2_rwa`` plus the prior
+term. ``AzrModel.prior_covariance`` reads and sets the key (``None`` removes it).
+:mod:`pyazr.priors` needs no engine: ``prior_from_fit(sav_path, covariance_path,
+out_path, names=None, columns=None)`` writes the file from a fit's ``param.sav``
+(means, ``#parametrization`` tag) and ``covariance.dat`` (the free level energies and
+widths; ``names`` picks a subset, i.e. the marginal block; ``columns`` names the
+columns of a ``covariance.dat`` from before its ``#columns`` header),
+``write_prior(path, names, mean, cov, basis=None)`` any prior (checked symmetric and
+positive definite), ``read_prior`` and ``read_covariance_dat`` read them back.
 
 .. warning::
 

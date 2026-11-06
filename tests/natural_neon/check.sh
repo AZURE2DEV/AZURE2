@@ -109,10 +109,23 @@ for t in 1 4; do
   (cd "$d" && printf '1\n\n\n7\n' | OMP_NUM_THREADS=$t run_limited 900 "$AZURE2_BIN" --no-gui --no-readline natural_neon.azr > run.log 2>&1)
 done
 if [ -s "$WORK/threads1/output/chiSquared.out" ] && [ -s "$WORK/threads4/output/chiSquared.out" ]; then
-  if diff -r "$WORK/threads1/output" "$WORK/threads4/output" > "$WORK/threads.diff" 2>&1; then
-    ok "folded data segments: all $(ls "$WORK/threads1/output" | wc -l | tr -d ' ') output files identical on 1 and 4 threads"
+  # Compared without diff/cmp (neither is in every MSYS2 image: the Windows runner has neither, 2026-11-05):
+  # the same file names under both, and each file's content equal (\r stripped, as tests/angle_mapping).
+  same_file() { [ -f "$2" ] && [ "$(tr -d '\r' < "$1")" = "$(tr -d '\r' < "$2")" ]; }
+  names1="$(cd "$WORK/threads1/output" && find . -type f | sort)"
+  names4="$(cd "$WORK/threads4/output" && find . -type f | sort)"
+  differ=""
+  if [ "$names1" != "$names4" ]; then
+    differ="the file lists differ"
   else
-    bad "folded data segments: outputs differ between 1 and 4 threads"; head -6 "$WORK/threads.diff"
+    while IFS= read -r f; do
+      same_file "$WORK/threads1/output/$f" "$WORK/threads4/output/$f" || { differ="$f"; break; }
+    done <<< "$names1"
+  fi
+  if [ -z "$differ" ]; then
+    ok "folded data segments: all $(echo "$names1" | grep -c .) output files identical on 1 and 4 threads"
+  else
+    bad "folded data segments: outputs differ between 1 and 4 threads ($differ)"
   fi
 else
   bad "folded data segments: a run on 1 or 4 threads wrote no chiSquared.out"; tail -5 "$WORK/threads1/run.log" "$WORK/threads4/run.log"

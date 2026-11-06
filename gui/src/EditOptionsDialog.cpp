@@ -5,6 +5,10 @@
 #include <QPushButton>
 #include <QGroupBox>
 #include <QLabel>
+#include <QLineEdit>
+#include <QHBoxLayout>
+#include <QFileDialog>
+#include <QDir>
 
 EditOptionsDialog::EditOptionsDialog(QWidget *parent) :
   QDialog(parent) {
@@ -55,6 +59,29 @@ EditOptionsDialog::EditOptionsDialog(QWidget *parent) :
   kinematicsLayout->addWidget(kinematicsNote);
   kinematicsBox->setLayout(kinematicsLayout);
 
+  // Prior parameter covariance (a fit starts from an earlier evaluation's parameters and covariance): a file, no
+  // editor -- pyazr.prior_from_fit writes one from a fit's param.sav and covariance.dat.
+  QGroupBox *priorBox = new QGroupBox(tr("Prior Parameter Covariance"));
+  priorBox->setObjectName("priorCovarianceBox");
+  priorCovarianceEdit = new QLineEdit;
+  priorCovarianceEdit->setObjectName("priorCovarianceEdit");
+  priorCovarianceEdit->setPlaceholderText(tr("none"));
+  priorCovarianceEdit->setToolTip(tr("Multivariate Gaussian prior (p - mu)^T C^-1 (p - mu) on the parameters the file "
+                                     "lists (names, means, covariance; see the user guide, \"Prior parameter "
+                                     "covariance\").  Saved as priorCovariance=<path> in <config>, relative to the "
+                                     "project's directory; empty = none."));
+  priorCovarianceButton = new QPushButton(tr("Choose..."));
+  priorCovarianceButton->setObjectName("priorCovarianceChoose");
+  connect(priorCovarianceButton, SIGNAL(clicked()), this, SLOT(choosePriorCovariance()));
+  QHBoxLayout *priorRow = new QHBoxLayout;
+  priorRow->addWidget(priorCovarianceEdit);
+  priorRow->addWidget(priorCovarianceButton);
+  QLabel *priorNote = new QLabel(tr("Saved in the project: command-line and\npyazr runs of it use this file too."));
+  QVBoxLayout *priorLayout = new QVBoxLayout;
+  priorLayout->addLayout(priorRow);
+  priorLayout->addWidget(priorNote);
+  priorBox->setLayout(priorLayout);
+
   cancelButton = new QPushButton(tr("Cancel"));
   okButton = new QPushButton(tr("Accept"));
   okButton->setDefault(true);
@@ -67,6 +94,7 @@ EditOptionsDialog::EditOptionsDialog(QWidget *parent) :
   QVBoxLayout *mainLayout = new QVBoxLayout;
   mainLayout->addWidget(optionsBox);
   mainLayout->addWidget(kinematicsBox);
+  mainLayout->addWidget(priorBox);
   mainLayout->addLayout(buttonBox);
   setWindowTitle(tr("Edit Options"));
   setLayout(mainLayout);
@@ -107,4 +135,15 @@ void EditOptionsDialog::useRMCCheckChanged(int state) {
     useBruneCheck->setEnabled(true);
     useParkCheck->setEnabled(true);
   }
+}
+
+void EditOptionsDialog::choosePriorCovariance() {
+  QString file = QFileDialog::getOpenFileName(this, tr("Prior Parameter Covariance File"),
+                                              projectDirectory_.isEmpty() ? QString() : projectDirectory_);
+  if (file.isEmpty()) return;
+  if (!projectDirectory_.isEmpty()) {
+    const QString rel = QDir(projectDirectory_).relativeFilePath(file);
+    if (!rel.startsWith("..")) file = rel;  // inside the project's directory: relative, as the data files
+  }
+  priorCovarianceEdit->setText(file);
 }

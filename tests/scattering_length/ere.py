@@ -11,7 +11,7 @@ blocks separated by blank lines; BLOCK is 1-based.  Prints a0 in fm.  Standard l
 import math
 import sys
 
-HBARC, UCONV, ALPHA = 197.32696310, 931.4940880, 1.0 / 137.0359996790
+HBARC, UCONV, ALPHA = 197.3269804, 931.49410242, 1.0 / 137.035999084
 
 
 def h_function(eta):

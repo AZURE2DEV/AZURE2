@@ -23,7 +23,10 @@ writing a file and launching a fresh instance from it::
 
 The 31 fields of a channel line match ``NucLine`` in the AZURE2 source
 (``include/NucLine.h``); note the file stores ``2*S`` and ``2*L`` as integers,
-which the ``S`` / ``L`` properties convert.
+which the ``S`` / ``L`` properties convert.  Optional trailing fields: the
+light particle's excitation energy ``e1`` (MeV, dev 2026-11-05) alone is a 32nd
+field; the THM binding energy and width flag are fields 32 and 33, and ``e1``
+then follows as the 34th.  A line without them keeps its length.
 """
 
 import decimal
@@ -33,23 +36,27 @@ import re
 import tempfile
 from typing import List, NamedTuple, Optional
 
-# Field order of a <levels> channel line, matching NucLine's read order.
+# Field order of a <levels> channel line, matching NucLine's read order: 31
+# mandatory fields, then optional trailing ones.  dev's optional 32nd column is
+# the light particle's excitation energy e1 (2026-11-05); thm's two optional
+# columns (binding energy, and a flag saying the gamma column holds a reduced
+# width amplitude rather than a partial width or ANC) came first.  The engine
+# tells them apart by the number of trailing fields (NucLine): 1 = e1 (dev),
+# 2 = binding energy and flag (thm), 3 = binding energy, flag and e1.  Here the
+# fields are kept in that logical order; to_line() writes the layout back.
 _FIELDS = [
     "levelJ", "levelPi", "levelE", "levelFix", "aa", "ir", "s2", "l2",
     "levelID", "isActive", "channelFix", "gamma", "j1", "pi1", "j2", "pi2",
     "e2", "m1", "m2", "z1", "z2", "entranceSepE", "sepE", "j3", "pi3", "e3",
     "pType", "chRad", "g1", "g2", "ecMultMask",
 ]
-# Two fields were appended later (binding energy, and a flag saying the gamma
-# column holds a reduced width amplitude rather than a partial width or ANC).
-# Files written before they existed have 31 fields and must keep loading, so
-# they are optional and a short line is padded on read rather than rejected.
-_OPTIONAL_FIELDS = ["bindingEnergy", "gammaIsRWA"]
-_FIELDS_ALL = _FIELDS + _OPTIONAL_FIELDS
+_THM_FIELDS = ["bindingEnergy", "gammaIsRWA"]
+_FIELDS_ALL = _FIELDS + _THM_FIELDS + ["e1"]
 _IDX = {name: i for i, name in enumerate(_FIELDS_ALL)}
 _NFIELDS = len(_FIELDS)
 _NFIELDS_MAX = len(_FIELDS_ALL)
-_OPTIONAL_DEFAULTS = ["0", "0"]
+#: Trailing fields -> (thm columns present, e1 present).
+_LAYOUTS = {0: (False, False), 1: (False, True), 2: (True, False), 3: (True, True)}
 
 
 def _token_spans(line):
@@ -992,7 +999,8 @@ def _thm_read_weight_table(path):
 
 
 class AzrChannel:
-    """One channel line (31 fields).  Level fields are shared by a level's lines.
+    """One channel line (31 fields, plus e1 and/or the THM binding energy and
+    width flag).  Level fields are shared by a level's lines.
 
     Keeps the line exactly as it was read, so an untouched channel round-trips
     byte for byte; typed accessors parse on demand and mutators rewrite only the
@@ -1000,20 +1008,34 @@ class AzrChannel:
     """
 
     def __init__(self, tokens, raw=None):
-        if not (_NFIELDS <= len(tokens) <= _NFIELDS_MAX):
+        extra = len(tokens) - _NFIELDS
+        if extra not in _LAYOUTS:
             raise ValueError(
-                f"a <levels> line needs {_NFIELDS} to {_NFIELDS_MAX} fields, "
-                f"got {len(tokens)}: {tokens}")
-        self.tokens = list(tokens)
+                f"a <levels> line needs {_NFIELDS} fields, plus the light particle's "
+                f"excitation energy (dev, 1 field), the THM binding energy and width "
+                f"flag (thm, 2), or both (3), got {len(tokens)}: {tokens}")
+        thm, e1 = _LAYOUTS[extra]
+        logical = list(tokens[:_NFIELDS])
+        logical += list(tokens[_NFIELDS:_NFIELDS + 2]) if thm else ["0", "0"]
+        logical += [tokens[-1]] if e1 else ["0"]
+        self.tokens = logical
         #: The line as read, or None for a channel built from tokens alone.
         self._raw = raw
         #: Field names whose token no longer matches ``_raw``.
         self._dirty = set()
-        # Remember whether the line carried the optional (THM) fields, so a
-        # file that did not have them is written back without them.
-        self._n_written = len(tokens)
-        while len(self.tokens) < _NFIELDS_MAX:
-            self.tokens.append(_OPTIONAL_DEFAULTS[len(self.tokens) - _NFIELDS])
+        # Which optional columns the line carries (and the raw line carried):
+        # a file that did not have them is written back without them.
+        self._has_thm, self._has_e1 = thm, e1
+        self._raw_layout = (thm, e1)
+
+    def _out_tokens(self):
+        """The line's fields in file order: the 31, then [binding energy, flag], then [e1]."""
+        out = self.tokens[:_NFIELDS]
+        if self._has_thm:
+            out += self.tokens[_NFIELDS:_NFIELDS + 2]
+        if self._has_e1:
+            out.append(self.tokens[_IDX["e1"]])
+        return out
 
     # -- typed field access ---------------------------------------------------
 
@@ -1022,9 +1044,16 @@ class AzrChannel:
 
     def _set(self, name, value):
         formatted = _fmt(value)
-        if self.tokens[_IDX[name]] == formatted:
+        i = _IDX[name]
+        if name == "e1" and not self._has_e1:
+            if float(value) == 0.0:
+                return                  # absent already means 0
+            self._has_e1 = True
+        elif name in _THM_FIELDS and not self._has_thm:
+            self._has_thm = True        # the field must now be emitted
+        elif self.tokens[i] == formatted:
             return                      # unchanged: do not disturb the raw line
-        self.tokens[_IDX[name]] = formatted
+        self.tokens[i] = formatted
         self._dirty.add(name)
 
     # channel identity
@@ -1146,12 +1175,37 @@ class AzrChannel:
 
     @property
     def excitation(self):
-        """Excitation energy of the pair's residual nucleus (MeV).
+        """Total excitation energy of the pair, light + heavy particle (MeV):
+        the channel opens at ``sep_energy + excitation``.
 
-        Zero for a ground-state pair; this is what distinguishes the capture
-        channels of a multi-transition model (gamma_0, gamma_1, ...).
+        Zero for a ground-state pair.  For a gamma pair it is the energy of the
+        final level (``heavy_excitation``), which is what distinguishes the
+        capture channels of a multi-transition model (gamma_0, gamma_1, ...).
         """
+        return self.heavy_excitation + self.light_excitation
+
+    @property
+    def heavy_excitation(self):
+        """Excitation energy of the heavy particle (MeV), column 17 (``e2``)."""
         return self._get("e2", float)
+
+    @property
+    def light_excitation(self):
+        """Excitation energy of the light particle (MeV), the optional 32nd
+        column (``e1``; 0 when the line has 31 fields).  Setting it to 0 drops
+        the column again; the engine refuses a nonzero value on a gamma or beta
+        pair, a negative one, and different values on lines of one pair."""
+        return self._get("e1", float)
+
+    @light_excitation.setter
+    def light_excitation(self, v):
+        v = float(v)
+        if v == 0.0 and self._has_e1:
+            self.tokens[_IDX["e1"]] = "0"
+            self._has_e1 = False              # written only when nonzero
+            self._dirty.add("e1")
+            return
+        self._set("e1", v)
 
     @property
     def sep_energy(self):
@@ -1210,7 +1264,9 @@ class AzrChannel:
         The raw line comes with it, so a cloned channel whose couplings are then
         changed keeps the column layout of the one it was cloned from.
         """
-        copy = AzrChannel(self.tokens[:self._n_written], self._raw)
+        copy = AzrChannel.__new__(AzrChannel)
+        copy.__dict__.update(self.__dict__)
+        copy.tokens = list(self.tokens)
         copy._dirty = set(self._dirty)
         return copy
 
@@ -1226,26 +1282,42 @@ class AzrChannel:
         optional columns, since there is no column to substitute into.
         """
         if self._raw is None:
-            return " ".join(self.tokens[:self._n_written])
-        if not self._dirty:
+            return " ".join(self._out_tokens())
+        layout = (self._has_thm, self._has_e1)
+        if not self._dirty and layout == self._raw_layout:
             return self._raw
         spans = _token_spans(self._raw)
-        if len(spans) < self._n_written:  # not the line we parsed; do not guess
-            return " ".join(self.tokens[:self._n_written])
-        out = self._raw
-        appended = self._n_written > len(spans)
-        for name in sorted(self._dirty, key=lambda n: -_IDX[n]):
+        rthm, re1 = self._raw_layout
+        if len(spans) != _NFIELDS + 2 * rthm + re1:  # not the line we parsed; do not guess
+            return " ".join(self._out_tokens())
+        # file column of a field in the raw line, None if the raw line lacks it
+        def column(name):
             i = _IDX[name]
-            if i >= len(spans):
-                appended = True
-                continue                  # no column in the raw line: append below
-            start, end = spans[i]
-            new = self.tokens[i]
+            if i < _NFIELDS:
+                return i
+            if name in _THM_FIELDS:
+                return i if rthm else None
+            return _NFIELDS + 2 * rthm if re1 else None
+        out = self._raw
+        if layout == self._raw_layout:
+            edits = sorted(((column(n), n) for n in self._dirty), reverse=True)
+        else:
+            # the optional columns change: rewrite them after the 31st field,
+            # substitute the edited mandatory fields in place
+            tail = self._out_tokens()[_NFIELDS:]
+            last = spans[-1][1]
+            end31 = spans[_NFIELDS - 1][1]
+            # dev appends e1 alone with one space, thm its columns with two
+            sep = " " if (tail and not self._has_thm) else "  "
+            out = out[:end31] + (sep + sep.join(tail) if tail else "") + out[last:]
+            edits = sorted(((column(n), n) for n in self._dirty if _IDX[n] < _NFIELDS), reverse=True)
+        for col, name in edits:
+            if col is None:
+                continue
+            start, end = spans[col]
+            new = self.tokens[_IDX[name]]
             width = end - start
             out = out[:start] + (new.rjust(width) if len(new) <= width else new) + out[end:]
-        if appended:
-            out = out.rstrip() + "  " + "  ".join(
-                self.tokens[len(spans):self._n_written])
         return out
 
     # -- the optional trailing fields ----------------------------------------
@@ -1263,7 +1335,6 @@ class AzrChannel:
     @gamma_is_rwa.setter
     def gamma_is_rwa(self, v):
         self._set("gammaIsRWA", 1 if v else 0)
-        self._n_written = _NFIELDS_MAX      # the field must now be emitted
 
     @property
     def binding_energy(self):
@@ -1274,7 +1345,6 @@ class AzrChannel:
     @binding_energy.setter
     def binding_energy(self, v):
         self._set("bindingEnergy", float(v))
-        self._n_written = _NFIELDS_MAX      # the field must now be emitted
 
     @classmethod
     def from_line(cls, line):
@@ -2217,6 +2287,30 @@ class AzrModel:
         self._prefix = "".join(lines)
 
     @property
+    def prior_covariance(self):
+        """The ``priorCovariance`` config key: the prior parameter covariance file (path relative to the .azr's
+        directory, see :mod:`pyazr.priors`), or None without one."""
+        for line in self._prefix.splitlines():
+            if line.strip().startswith("priorCovariance="):
+                value = line.split("=", 1)[1].split("#")[0].strip()
+                return value or None
+        return None
+
+    @prior_covariance.setter
+    def prior_covariance(self, path):
+        """Set (a path) or remove (None or "") the ``priorCovariance`` config key.  The path is written as given;
+        AZURE2 resolves a relative one against the .azr's directory."""
+        if path and ("#" in str(path) or "\n" in str(path) or str(path) != str(path).strip()):
+            raise ValueError(f"priorCovariance path {path!r}: no '#', line break or leading/trailing blank (the "
+                             f"<config> line is cut there)")
+        lines = self._prefix.splitlines(keepends=True)
+        lines = [ln for ln in lines if not ln.strip().startswith("priorCovariance=")]
+        if path:
+            end = next(i for i, ln in enumerate(lines) if ln.strip() == "</config>")
+            lines.insert(end, f"priorCovariance={path}\n")
+        self._prefix = "".join(lines)
+
+    @property
     def relativistic(self):
         """The ``relativistic`` config key: relativistic two-body kinematics (k, eta, lab <-> c.m. from the
         invariant mass; user guide "Relativistic Kinematics").  False when absent."""
@@ -2566,6 +2660,97 @@ class AzrModel:
         self._set_suffix_lines(lines)
         return self
 
+    # ---- sample thickness of transmission / yield segments ---------------------------------------------------
+
+    @staticmethod
+    def _thickness_block(kind, n, vary=None, sigma=None):
+        """The text of a ``transmission`` / ``yield`` block, checked as the engine checks it: ``kind n`` without
+        ``vary`` / ``sigma``, else the fit form ``kind n vary sigma``."""
+        if kind not in ("transmission", "yield"):
+            raise ValueError("the sample block is 'transmission' or 'yield'")
+        n = float(n)
+        if not n > 0:
+            raise ValueError("the sample thickness n must be > 0 (atoms/barn)")
+        if vary is None and sigma is None:
+            return f"{kind} {_fmt(n)}"
+        sigma = 0.0 if sigma is None else float(sigma)
+        if not sigma >= 0:
+            raise ValueError("the thickness prior sigma must be >= 0 (atoms/barn; 0 = no prior)")
+        return f"{kind} {_fmt(n)} {1 if vary else 0} {_fmt(sigma)}"
+
+    _THICKNESS_RE = re.compile(r"(?<!\S)(transmission|yield)\s+(\S+)(?:\s+([-+]?[0-9.][0-9.eE+-]*)"
+                               r"(?:\s+([-+]?[0-9.][0-9.eE+-]*))?)?(?!\S)")
+    _THICKNESSGROUP_RE = re.compile(r"(?<!\S)thicknessgroup\s+(\S+)")
+
+    def _data_segment_lines(self):
+        """(index into the suffix lines, line) of every non-blank <segmentsData> line; its place is the segment key."""
+        lines = self._suffix.splitlines()
+        if "<segmentsData>" not in lines:
+            return lines, []
+        a, b = lines.index("<segmentsData>"), lines.index("</segmentsData>")
+        return lines, [(i, lines[i]) for i in range(a + 1, b) if lines[i].strip()]
+
+    @property
+    def sample_thicknesses(self):
+        """The transmission / self-shielded-yield segments: ``{key: dict}`` for every data segment line (key = its
+        place among the ``<segmentsData>`` lines, as in ``segment_<key>_thickness``) with a ``transmission`` or
+        ``yield`` block.  Each dict holds ``kind`` ("transmission" / "yield"), ``n`` (atoms/barn), ``fit`` (the
+        fit form ``n vary sigma``, i.e. a parameter ``segment_<key>_thickness``), ``vary``, ``sigma`` (prior
+        width, 0 = none), ``group`` (the ``thicknessgroup`` label or ``None``) and ``active``."""
+        _, dl = self._data_segment_lines()
+        out = {}
+        for key, (_, line) in enumerate(dl, start=1):
+            m = self._THICKNESS_RE.search(line)
+            if not m:
+                continue
+            fit = m.group(3) is not None and m.group(4) is not None
+            g = self._THICKNESSGROUP_RE.search(line)
+            out[key] = dict(kind=m.group(1), n=float(m.group(2)), fit=fit,
+                            vary=fit and int(float(m.group(3))) == 1, sigma=float(m.group(4)) if fit else 0.0,
+                            group=g.group(1) if g else None, active=line.split()[0] == "1")
+        return out
+
+    def set_sample_thickness(self, key, n=None, vary=None, sigma=None, group=None, kind=None):
+        """Set the sample block of data segment ``key`` (its place among the ``<segmentsData>`` lines).
+
+        ``kind`` ("transmission" or "yield") adds the block to a line without one (with ``n``) or changes it;
+        ``n`` is the thickness (atoms/barn).  Giving ``vary`` or ``sigma`` writes the fit form ``kind n vary
+        sigma`` (the parameter ``segment_<key>_thickness``; ``sigma`` the prior width, 0 = none); ``vary=None``
+        and ``sigma=None`` on a fit-form line keep its values, and a plain line stays plain.  ``group`` sets the
+        ``thicknessgroup`` label ("" removes it).  Only these blocks change; every other character of the line is
+        kept.  Returns ``self``.
+        """
+        lines, dl = self._data_segment_lines()
+        if not 1 <= key <= len(dl):
+            raise ValueError(f"no data segment {key} ({len(dl)} segment lines)")
+        i, line = dl[key - 1]
+        old = self.sample_thicknesses.get(key)
+        if old is None and (kind is None or n is None):
+            raise ValueError(f"segment {key} has no transmission / yield block: give kind and n")
+        kind = old["kind"] if kind is None else kind
+        n = old["n"] if n is None else float(n)
+        fit = (old is not None and old["fit"]) or vary is not None or sigma is not None
+        if fit:
+            v = (old["vary"] if old else False) if vary is None else bool(vary)
+            sg = (old["sigma"] if old else 0.0) if sigma is None else float(sigma)
+            block = self._thickness_block(kind, n, v, sg)
+        else:
+            block = self._thickness_block(kind, n)
+        m = self._THICKNESS_RE.search(line)
+        line = (line[:m.start()] + block + line[m.end():]) if m else line.rstrip() + "  " + block
+        if group is not None:
+            label = str(group).strip()
+            if any(c.isspace() or c == '"' for c in label):
+                raise ValueError("thickness group: one token, no blank or quote.")
+            g = self._THICKNESSGROUP_RE.search(line)
+            if g:
+                line = (line[:g.start()] + (f"thicknessgroup {label}" if label else "") + line[g.end():]).rstrip()
+            elif label:
+                line = line.rstrip() + "  thicknessgroup " + label
+        lines[i] = line
+        self._set_suffix_lines(lines)
+        return self
+
     def engine_level_keys(self):
         """``{(jgroup, level): AzrLevel}`` -- the numbering AZURE2 itself uses.
 
@@ -2862,7 +3047,8 @@ class AzrModel:
                          energy_shift_sqrt_error=0.0, vary_shift_sqrt=False,
                          shift_group=None, shift_fn=None, shift_fn_params=(),
                          natural=False, norm_group=None, covariance=None,
-                         shift_fn_group=None, absolute=False):
+                         shift_fn_group=None, absolute=False, transmission=None,
+                         yield_=None, thickness_group=None):
         """Append one data segment (a ``<segmentsData>`` line).
 
         ``data_file`` is the data file path (relative to the run directory,
@@ -2895,7 +3081,12 @@ class AzrModel:
         ``(value, sigma, vary)`` per parameter a0, a1, ..., writes a
         ``shiftfn`` block: E' = E + shift + f(x).  ``natural=True`` (or a
         sample name) writes a ``sample`` block: every term is weighted by the
-        abundance of its entrance pair's compound nucleus.
+        abundance of its entrance pair's compound nucleus.  ``transmission`` /
+        ``yield_`` (n in atoms/barn, or ``(n, vary, sigma)`` for the fit form: n
+        the parameter ``segment_<key>_thickness``, sigma its prior width, 0 =
+        none) make the segment a sample transmission or self-shielded yield, and
+        ``thickness_group`` (a label) writes a ``thicknessgroup`` block: the
+        segments with one label share the first one's thickness.
 
         Returns ``self`` so calls chain.
         """
@@ -2950,6 +3141,21 @@ class AzrModel:
             if observable != "angular-coefficients":
                 raise ValueError("absolute=True belongs to angular-coefficients segments.")
             toks += ["absolute", 1]
+        if transmission is not None and yield_ is not None:
+            raise ValueError("transmission and yield_: a segment is one or the other.")
+        for kw, spec in (("transmission", transmission), ("yield", yield_)):
+            if spec is None:
+                continue
+            spec = tuple(spec) if isinstance(spec, (tuple, list)) else (spec,)
+            if len(spec) not in (1, 3):
+                raise ValueError(f"{kw}: give n or (n, vary, sigma).")
+            toks += self._thickness_block(kw, *spec).split()
+        if thickness_group:
+            if transmission is None and yield_ is None:
+                raise ValueError("thickness_group needs the segment's own transmission or yield_.")
+            if any(c.isspace() or c == '"' for c in str(thickness_group)):
+                raise ValueError("thickness_group: one token, no blank or quote.")
+            toks += ["thicknessgroup", str(thickness_group)]
         if natural:                           # writers put the sample block last
             toks += ["sample", natural if isinstance(natural, str) else 1]
         line = "  ".join(t if isinstance(t, str) else _fmt(t) for t in toks)
@@ -3039,7 +3245,8 @@ class AzrModel:
                           photodissociation=False, q_coefficients=None,
                           resonance_width_multiplier=20.0, points_per_width=50.0,
                           udr_file=None, flight_path=None, udr_burst=0.0,
-                          udr_channel=0.0, udr_centred=True, screening=None, active=True):
+                          udr_channel=0.0, udr_centred=True, screening=None, doppler=None,
+                          active=True):
         """Append one experimental effect (a ``<targetInt>`` line).
 
         ``segments`` is the segment-key list as AZURE2 writes it (``"3"``,
@@ -3084,6 +3291,16 @@ class AzrModel:
         ``vary`` U_e is a fit parameter (``screening_<n>``), with a Gaussian prior
         of width ``sigma`` about the value given when ``sigma > 0``.  A line may
         carry screening alone (no other option).
+
+        ``doppler`` is free-gas Doppler broadening at that effective temperature
+        (kelvin, > 0): the cross section of every sub-point is broadened first,
+        then any transmission/yield transform and the kernel above are applied
+        (user guide, "Free-Gas Doppler Broadening").  A line may carry it alone;
+        engines older than November 2026 refuse such a line.  A tuple
+        ``(T, vary, sigma[, tmax])`` makes T the fit parameter ``doppler_<n>``
+        (``doppler T vary sigma [Tmax]``): a Gaussian prior of width ``sigma`` K
+        about T when ``sigma > 0``, and the sub-point grids laid out for ``tmax``
+        (default T + 3 sigma but at least 1.21 T, or 2 T without a prior).
         Returns ``self``.
         """
         if not isinstance(segments, str):
@@ -3123,6 +3340,8 @@ class AzrModel:
             if sigma < 0:
                 raise ValueError("the screening prior sigma must be >= 0")
             toks += ["screening", _fmt(ue), 1 if vary else 0, _fmt(sigma)]
+        if doppler is not None:
+            toks += self._doppler_block(*(doppler if isinstance(doppler, (tuple, list)) else (doppler,))).split()
         line = "  ".join(t if isinstance(t, str) else _fmt(t) for t in toks)
         lines = self._suffix.splitlines()
         if "<targetInt>" in lines:
@@ -3763,6 +3982,84 @@ class AzrModel:
             raise ValueError("the screening prior sigma must be >= 0")
         block = f"screening {_fmt(ue)} {1 if vary else 0} {_fmt(sigma)}"
         lines[i] = self._SCREENING_RE.sub(block, line) if m else line.rstrip() + "  " + block
+        self._suffix = "\n".join(lines)
+        return self
+
+    # "doppler T" or "doppler T vary sigma [Tmax]" (the numbers; a following keyword starts with a letter)
+    _DOPPLER_RE = re.compile(r"\bdoppler(?:\s+([-+0-9.]\S*))?(?:\s+([-+0-9.]\S*)\s+([-+0-9.]\S*)(?:\s+([-+0-9.]\S*))?)?")
+
+    @staticmethod
+    def _doppler_block(T, vary=None, sigma=None, tmax=None):
+        """The text of a ``doppler`` block, checked as the engine checks it: ``doppler T`` without ``vary`` /
+        ``sigma``, else ``doppler T vary sigma [Tmax]``."""
+        T = float(T)
+        if not T > 0:
+            raise ValueError("the doppler temperature must be > 0 kelvin")
+        if vary is None and sigma is None and tmax is None:
+            return f"doppler {_fmt(T)}"
+        sigma = 0.0 if sigma is None else float(sigma)
+        if sigma < 0:
+            raise ValueError("the doppler prior sigma must be >= 0 (kelvin; 0 = no prior)")
+        block = f"doppler {_fmt(T)} {1 if vary else 0} {_fmt(sigma)}"
+        if tmax:
+            if not float(tmax) > T:
+                raise ValueError("the doppler grid maximum Tmax must be above T")
+            block += f" {_fmt(float(tmax))}"
+        return block
+
+    @property
+    def dopplers(self):
+        """Free-gas Doppler broadening of the <targetInt> lines, as AZURE2 reads it: ``{effect: dict}`` for every
+        ACTIVE line with a ``doppler`` block, keyed by its effect number (place among the active lines, as in
+        ``doppler_<effect>``).  Each dict holds ``temperature`` (K), ``fit`` (the line has the fit form
+        ``doppler T vary sigma [Tmax]``, i.e. a parameter ``doppler_<effect>``), ``vary``, ``sigma`` (prior width in
+        K, 0 = none), ``tmax`` (the optional Tmax field, else ``None``) and ``max`` (the layout temperature its
+        sub-point grids span: Tmax, else T + 3 sigma but at least 1.21 T, or 2 T without a prior; T for a fixed
+        line)."""
+        _, tl = self._target_int_lines()
+        out, n = {}, 0
+        for _, line in tl:
+            if line.split()[0] != "1":
+                continue
+            n += 1
+            m = self._DOPPLER_RE.search(line)
+            if not m or m.group(1) is None:
+                continue
+            T = float(m.group(1))
+            fit = m.group(2) is not None
+            vary = fit and int(float(m.group(2))) != 0
+            sigma = float(m.group(3)) if fit else 0.0
+            tmax = float(m.group(4)) if fit and m.group(4) else None
+            layout = (tmax if tmax else (max(T + 3.0 * sigma, 1.21 * T) if sigma > 0 else 2.0 * T)) if fit else T
+            out[n] = dict(temperature=T, fit=fit, vary=vary, sigma=sigma, tmax=tmax, max=layout)
+        return out
+
+    def set_doppler(self, effect, T=None, vary=None, sigma=None, tmax=None):
+        """Set (or add) free-gas Doppler broadening on active <targetInt> line ``effect`` (1-based among the
+        active lines, as in ``doppler_<effect>``).  ``T`` is the temperature (K; required for a line without a
+        ``doppler`` block).  Giving ``vary``, ``sigma`` or ``tmax`` writes the fit form ``doppler T vary sigma
+        [Tmax]`` (a parameter ``doppler_<effect>``; ``sigma`` K the prior width, 0 = none; ``tmax`` the largest
+        temperature the grids span, 0 removes it); arguments left ``None`` keep the line's values, and a plain
+        ``doppler T`` stays plain.  Returns ``self``."""
+        lines, tl = self._target_int_lines()
+        active = [(i, line) for i, line in tl if line.split()[0] == "1"]
+        if not 1 <= effect <= len(active):
+            raise ValueError(f"no active <targetInt> line {effect} ({len(active)} active)")
+        i, line = active[effect - 1]
+        m = self._DOPPLER_RE.search(line)
+        old = self.dopplers.get(effect) if m else None
+        if old is None and T is None:
+            raise ValueError(f"<targetInt> effect {effect} has no doppler block: give T")
+        T = old["temperature"] if T is None else float(T)
+        fit = (old is not None and old["fit"]) or vary is not None or sigma is not None or bool(tmax)
+        if fit:
+            v = (old["vary"] if old else False) if vary is None else bool(vary)
+            sg = (old["sigma"] if old else 0.0) if sigma is None else float(sigma)
+            tm = (old["tmax"] if old else None) if tmax is None else (float(tmax) if tmax else None)
+            block = self._doppler_block(T, v, sg, tm)
+        else:
+            block = self._doppler_block(T)
+        lines[i] = (line[:m.start()] + block + line[m.end():]) if m else line.rstrip() + "  " + block
         self._suffix = "\n".join(lines)
         return self
 

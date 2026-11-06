@@ -32,6 +32,8 @@
 #include <atomic>
 #include <cstdint>
 #include <iostream>
+#include <map>
+#include <cmath>
 #include <sstream>
 #include <assert.h>
 #include <fstream>
@@ -316,7 +318,7 @@ int EPoint::GetExitKey() const {
  */
 
 int EPoint::GetMaxLOrder() const {
-  return legendreP_.size() - 1;
+  return legendreP_ ? (int)legendreP_->size() - 1 : -1;
 }
 
 /*!
@@ -418,7 +420,7 @@ double EPoint::GetOriginalEnergy() const {
  */
 
 double EPoint::GetLegendreP(int lOrder) const {
-  return legendreP_[lOrder];
+  return (*legendreP_)[lOrder];
 }
 
 /*!
@@ -491,7 +493,7 @@ double EPoint::GetSFactorConversion() const {
  */
 
 double EPoint::GetSqrtPenetrability(int jGroupNum, int channelNum) const {
-  return penetrabilities_[jGroupNum - 1][channelNum - 1];
+  return edep_->penetrabilities[jGroupNum - 1][channelNum - 1];
 }
 
 /*!
@@ -503,10 +505,12 @@ double EPoint::GetSqrtPenetrability(int jGroupNum, int channelNum) const {
  */
 
 complex EPoint::GetThmFormFactor(int jGroupNum, int channelNum, complex boundary) const {
-  if (jGroupNum - 1 >= (int)thm_jl_.size()) return 0.0;
-  if (channelNum - 1 >= (int)thm_jl_[jGroupNum - 1].size()) return 0.0;
-  return (boundary - 1.0) * thm_jl_[jGroupNum - 1][channelNum - 1] - thm_rhodjl_[jGroupNum - 1][channelNum - 1]
-         + thm_coul_[jGroupNum - 1][channelNum - 1];
+  if (!edep_) return 0.0;
+  const EDependentTables &t = *edep_;
+  if (jGroupNum - 1 >= (int)t.thm_jl.size()) return 0.0;
+  if (channelNum - 1 >= (int)t.thm_jl[jGroupNum - 1].size()) return 0.0;
+  return (boundary - 1.0) * t.thm_jl[jGroupNum - 1][channelNum - 1] - t.thm_rhodjl[jGroupNum - 1][channelNum - 1]
+         + t.thm_coul[jGroupNum - 1][channelNum - 1];
 }
 
 complex EPoint::GetThmFormFactor(int jGroupNum, int channelNum, complex boundary, int node) const {
@@ -577,7 +581,7 @@ double EPoint::GetCrossSectionKinFactor() const {
  */
 
 complex EPoint::GetLoElement(int jGroupNum, int channelNum) const {
-  return lo_elements_[jGroupNum - 1][channelNum - 1];
+  return edep_->lo_elements[jGroupNum - 1][channelNum - 1];
 }
 
 /*!
@@ -587,7 +591,7 @@ complex EPoint::GetLoElement(int jGroupNum, int channelNum) const {
  */
 
 complex EPoint::GetExpCoulombPhase(int jGroupNum, int channelNum) const {
-  return coulombphase_[jGroupNum - 1][channelNum - 1];
+  return edep_->coulombphase[jGroupNum - 1][channelNum - 1];
 }
 
 /*!
@@ -597,7 +601,7 @@ complex EPoint::GetExpCoulombPhase(int jGroupNum, int channelNum) const {
  */
 
 complex EPoint::GetExpHardSpherePhase(int jGroupNum, int channelNum) const {
-  return hardspherephase_[jGroupNum - 1][channelNum - 1];
+  return edep_->hardspherephase[jGroupNum - 1][channelNum - 1];
 }
 
 /*!
@@ -1113,7 +1117,7 @@ double EPoint::CalculateCrossSectionGammaConversionFactor(PPair *entrancePair) {
  */
 
 void EPoint::AddLegendreP(double polynomial) {
-  legendreP_.push_back(polynomial);
+  MutableLegendre().push_back(polynomial);
 }
 
 /*!
@@ -1122,7 +1126,11 @@ void EPoint::AddLegendreP(double polynomial) {
  */
 
 void EPoint::ClearLegendrePolynomials() {
-  legendreP_.clear();
+  // An empty list needs no copy of a shared one.
+  if (legendreP_ && legendreP_.use_count() > 1)
+    legendreP_.reset();
+  else if (legendreP_)
+    MutableLegendre().clear();
 }
 
 /*!
@@ -1419,9 +1427,12 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure, bool i
   // keeping their storage, as RecalcEDependentValues does; the THM tables
   // (empty for a classic point) are dropped.
   this->ClearEDependentRows();
-  thm_jl_.clear();
-  thm_rhodjl_.clear();
-  thm_coul_.clear();
+  if (edep_ && !(edep_->thm_jl.empty() && edep_->thm_rhodjl.empty() && edep_->thm_coul.empty())) {
+    EDependentTables &t = MutableEDep();  // our own after ClearEDependentRows: no copy
+    t.thm_jl.clear();
+    t.thm_rhodjl.clear();
+    t.thm_coul.clear();
+  }
   thm_ps_.reset();
   std::shared_ptr<ThmPsTable> psTable;
   bool psCoul = false;
@@ -1618,6 +1629,24 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure, bool i
     psTable->weight.shrink_to_fit();
     thm_ps_ = psTable;
   }
+  // The rows grew channel by channel (push_back): give back the spare capacity,
+  // about a quarter of the tables' memory (natural neon: 2.3 GB of 9.6 GB).  A
+  // point is filled here once per energy (setup, grid re-placement); the shift
+  // step refills its rows in place every evaluation and keeps their capacity.
+  if (edep_ && edep_.use_count() == 1) {
+    EDependentTables &t = MutableEDep();
+    auto shrink = [](auto &rows) {
+      for (auto &row : rows) row.shrink_to_fit();
+      rows.shrink_to_fit();
+    };
+    shrink(t.lo_elements);
+    shrink(t.penetrabilities);
+    shrink(t.coulombphase);
+    shrink(t.hardspherephase);
+    shrink(t.thm_jl);
+    shrink(t.thm_rhodjl);
+    shrink(t.thm_coul);
+  }
   if (includeSubPoints) {
     for (int i = 1; i <= this->NumSubPoints(); i++) {
       this->GetSubPoint(i)->CalcEDependentValues(theCNuc, configure);
@@ -1629,28 +1658,16 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure, bool i
     mappedPoint->geofactor_ = geofactor_;
     mappedPoint->sfactorconv_ = sfactorconv_;
     mappedPoint->screen_k_ = screen_k_;
-    mappedPoint->lo_elements_ = lo_elements_;
-    mappedPoint->penetrabilities_ = penetrabilities_;
-    mappedPoint->thm_jl_ = thm_jl_;
-    mappedPoint->thm_rhodjl_ = thm_rhodjl_;
-    mappedPoint->thm_coul_ = thm_coul_;
+    mappedPoint->edep_ = edep_;  // shared; either point copies before it writes
     mappedPoint->thm_ps_ = thm_ps_;
-    mappedPoint->coulombphase_ = coulombphase_;
-    mappedPoint->hardspherephase_ = hardspherephase_;
     if (!includeSubPoints) continue;
     for (int ii = 1; ii <= this->NumSubPoints(); ii++) {
       EPoint *subMappedPoint = mappedPoint->GetSubPoint(ii);
       subMappedPoint->geofactor_ = this->GetSubPoint(ii)->geofactor_;
       subMappedPoint->sfactorconv_ = this->GetSubPoint(ii)->sfactorconv_;
       subMappedPoint->screen_k_ = this->GetSubPoint(ii)->screen_k_;
-      subMappedPoint->lo_elements_ = this->GetSubPoint(ii)->lo_elements_;
-      subMappedPoint->penetrabilities_ = this->GetSubPoint(ii)->penetrabilities_;
-      subMappedPoint->thm_jl_ = this->GetSubPoint(ii)->thm_jl_;
-      subMappedPoint->thm_rhodjl_ = this->GetSubPoint(ii)->thm_rhodjl_;
-      subMappedPoint->thm_coul_ = this->GetSubPoint(ii)->thm_coul_;
+      subMappedPoint->edep_ = this->GetSubPoint(ii)->edep_;
       subMappedPoint->thm_ps_ = this->GetSubPoint(ii)->thm_ps_;
-      subMappedPoint->coulombphase_ = this->GetSubPoint(ii)->coulombphase_;
-      subMappedPoint->hardspherephase_ = this->GetSubPoint(ii)->hardspherephase_;
     }
   }
   eDependentEnergy_ = this->GetCMEnergy();
@@ -1661,10 +1678,23 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure, bool i
  * Empties the per-JGroup rows of the energy-dependent arrays, keeping their storage.
  */
 void EPoint::ClearEDependentRows() {
-  for (auto &row : lo_elements_) row.clear();
-  for (auto &row : penetrabilities_) row.clear();
-  for (auto &row : coulombphase_) row.clear();
-  for (auto &row : hardspherephase_) row.clear();
+  if (!edep_) return;
+  if (edep_.use_count() > 1) {
+    // Shared with another point: start a table of our own with the same rows,
+    // empty, rather than copying values that are about to be replaced.
+    auto own = std::make_shared<EDependentTables>();
+    own->lo_elements.resize(edep_->lo_elements.size());
+    own->penetrabilities.resize(edep_->penetrabilities.size());
+    own->coulombphase.resize(edep_->coulombphase.size());
+    own->hardspherephase.resize(edep_->hardspherephase.size());
+    edep_ = std::move(own);
+    return;
+  }
+  EDependentTables &t = MutableEDep();
+  for (auto &row : t.lo_elements) row.clear();
+  for (auto &row : t.penetrabilities) row.clear();
+  for (auto &row : t.coulombphase) row.clear();
+  for (auto &row : t.hardspherephase) row.clear();
 }
 
 /*!
@@ -1707,6 +1737,79 @@ void EPoint::RecalcEDependentValues(CNuc *theCNuc, const Config &configure, bool
 }
 
 /*!
+ * This point's energy-dependent tables, writable.  The tables are shared
+ * between copies of the point (EData clones, the points mapped onto it); if
+ * another point still holds them, this point gets its own copy first, so a
+ * write never changes what another point -- another thread's clone -- reads.
+ * The object behind edep_ is always created non-const here, so the const_cast
+ * below is well defined.
+ */
+
+EPoint::EDependentTables &EPoint::MutableEDep() {
+  if (!edep_)
+    edep_ = std::make_shared<EDependentTables>();
+  else if (edep_.use_count() > 1)
+    edep_ = std::make_shared<EDependentTables>(*edep_);
+  return const_cast<EDependentTables &>(*edep_);
+}
+
+/*!
+ * This point's Legendre polynomials, writable (copy-on-write, as MutableEDep).
+ */
+
+vector_r &EPoint::MutableLegendre() {
+  if (!legendreP_)
+    legendreP_ = std::make_shared<vector_r>();
+  else if (legendreP_.use_count() > 1)
+    legendreP_ = std::make_shared<vector_r>(*legendreP_);
+  return const_cast<vector_r &>(*legendreP_);
+}
+
+/*!
+ * The point's energy-dependent values (CalcEDependentValues, CalcLegendreP) as
+ * a share: the tables by pointer, the scalars by value.
+ */
+
+EPoint::EDependentShare EPoint::ShareEDependentValues() const {
+  EDependentShare share;
+  share.energy = this->GetCMEnergy();
+  share.angle = this->GetCMAngle();
+  share.entranceKey = this->GetEntranceKey();
+  share.exitKey = this->GetExitKey();
+  share.geofactor = geofactor_;
+  share.sfactorconv = sfactorconv_;
+  share.screen_k = screen_k_;
+  if (eDependentValid_ && eDependentEnergy_ == this->GetCMEnergy()) {  // else empty: AdoptEDependentValues refuses it
+    share.tables = edep_;
+    share.legendre = legendreP_;
+    share.thmPs = thm_ps_;
+  }
+  return share;
+}
+
+/*!
+ * Takes the values of a share made by a point at exactly the same c.m. energy,
+ * c.m. angle and pairs -- what CalcEDependentValues and CalcLegendreP would have
+ * computed here.  Returns false, and changes nothing, if any of them differ or
+ * the share is empty.
+ */
+
+bool EPoint::AdoptEDependentValues(const EDependentShare &share) {
+  if (!share.tables || !share.legendre || share.energy != this->GetCMEnergy() || share.angle != this->GetCMAngle() ||
+      share.entranceKey != this->GetEntranceKey() || share.exitKey != this->GetExitKey())
+    return false;
+  geofactor_ = share.geofactor;
+  sfactorconv_ = share.sfactorconv;
+  screen_k_ = share.screen_k;
+  edep_ = share.tables;
+  legendreP_ = share.legendre;
+  thm_ps_ = share.thmPs;
+  eDependentEnergy_ = this->GetCMEnergy();
+  eDependentValid_ = true;
+  return true;
+}
+
+/*!
  * Copies the energy-dependent values (geometrical factor, S-factor conversion,
  * L_o elements, penetrabilities, Coulomb and hard-sphere phases) from another
  * point at exactly the same c.m. energy and with the same entrance pair --
@@ -1722,15 +1825,8 @@ bool EPoint::CopyEDependentValuesFrom(const EPoint &other) {
   geofactor_ = other.geofactor_;
   sfactorconv_ = other.sfactorconv_;
   screen_k_ = other.screen_k_;
-  lo_elements_ = other.lo_elements_;
-  penetrabilities_ = other.penetrabilities_;
-  coulombphase_ = other.coulombphase_;
-  hardspherephase_ = other.hardspherephase_;
-  // THM (HOES) tables, empty for a classic point; a mapped point is in its host's segment, with the same window.
-  thm_jl_ = other.thm_jl_;
-  thm_rhodjl_ = other.thm_rhodjl_;
-  thm_coul_ = other.thm_coul_;
-  thm_ps_ = other.thm_ps_;
+  edep_ = other.edep_;  // shared; either point copies before it writes
+  thm_ps_ = other.thm_ps_;  // immutable, shared like the tables
   eDependentEnergy_ = other.eDependentEnergy_;
   eDependentValid_ = true;
   return true;
@@ -1743,9 +1839,10 @@ bool EPoint::CopyEDependentValuesFrom(const EPoint &other) {
 
 void EPoint::AddLoElement(int jGroupNum, int channelNum, complex loElement) {
   vector_c d;
-  while (jGroupNum > lo_elements_.size()) lo_elements_.push_back(d);
-  lo_elements_[jGroupNum - 1].push_back(loElement);
-  assert(channelNum = lo_elements_[jGroupNum - 1].size());
+  EDependentTables &t = MutableEDep();
+  while (jGroupNum > t.lo_elements.size()) t.lo_elements.push_back(d);
+  t.lo_elements[jGroupNum - 1].push_back(loElement);
+  assert(channelNum = t.lo_elements[jGroupNum - 1].size());
 }
 
 /*!
@@ -1755,9 +1852,10 @@ void EPoint::AddLoElement(int jGroupNum, int channelNum, complex loElement) {
 
 void EPoint::AddSqrtPenetrability(int jGroupNum, int channelNum, double sqrtPene) {
   vector_r d;
-  while (jGroupNum > penetrabilities_.size()) penetrabilities_.push_back(d);
-  penetrabilities_[jGroupNum - 1].push_back(sqrtPene);
-  assert(channelNum = penetrabilities_[jGroupNum - 1].size());
+  EDependentTables &t = MutableEDep();
+  while (jGroupNum > t.penetrabilities.size()) t.penetrabilities.push_back(d);
+  t.penetrabilities[jGroupNum - 1].push_back(sqrtPene);
+  assert(channelNum = t.penetrabilities[jGroupNum - 1].size());
 }
 
 /*!
@@ -1770,13 +1868,14 @@ void EPoint::AddSqrtPenetrability(int jGroupNum, int channelNum, double sqrtPene
 void EPoint::AddThmFormFactor(int jGroupNum, int channelNum, double jl, double rhoDjl, complex coul) {
   vector_r d;
   vector_c dc;
-  while (jGroupNum > thm_jl_.size()) thm_jl_.push_back(d);
-  while (jGroupNum > thm_rhodjl_.size()) thm_rhodjl_.push_back(d);
-  while (jGroupNum > thm_coul_.size()) thm_coul_.push_back(dc);
-  thm_jl_[jGroupNum - 1].push_back(jl);
-  thm_rhodjl_[jGroupNum - 1].push_back(rhoDjl);
-  thm_coul_[jGroupNum - 1].push_back(coul);
-  assert(channelNum == (int)thm_jl_[jGroupNum - 1].size());
+  EDependentTables &t = MutableEDep();
+  while (jGroupNum > t.thm_jl.size()) t.thm_jl.push_back(d);
+  while (jGroupNum > t.thm_rhodjl.size()) t.thm_rhodjl.push_back(d);
+  while (jGroupNum > t.thm_coul.size()) t.thm_coul.push_back(dc);
+  t.thm_jl[jGroupNum - 1].push_back(jl);
+  t.thm_rhodjl[jGroupNum - 1].push_back(rhoDjl);
+  t.thm_coul[jGroupNum - 1].push_back(coul);
+  assert(channelNum == (int)t.thm_jl[jGroupNum - 1].size());
 }
 
 /*!
@@ -1786,9 +1885,10 @@ void EPoint::AddThmFormFactor(int jGroupNum, int channelNum, double jl, double r
 
 void EPoint::AddExpCoulombPhase(int jGroupNum, int channelNum, complex expShift) {
   vector_c d;
-  while (jGroupNum > coulombphase_.size()) coulombphase_.push_back(d);
-  coulombphase_[jGroupNum - 1].push_back(expShift);
-  assert(channelNum = coulombphase_[jGroupNum - 1].size());
+  EDependentTables &t = MutableEDep();
+  while (jGroupNum > t.coulombphase.size()) t.coulombphase.push_back(d);
+  t.coulombphase[jGroupNum - 1].push_back(expShift);
+  assert(channelNum = t.coulombphase[jGroupNum - 1].size());
 }
 
 /*!
@@ -1798,9 +1898,10 @@ void EPoint::AddExpCoulombPhase(int jGroupNum, int channelNum, complex expShift)
 
 void EPoint::AddExpHardSpherePhase(int jGroupNum, int channelNum, complex expShift) {
   vector_c d;
-  while (jGroupNum > hardspherephase_.size()) hardspherephase_.push_back(d);
-  hardspherephase_[jGroupNum - 1].push_back(expShift);
-  assert(channelNum = hardspherephase_[jGroupNum - 1].size());
+  EDependentTables &t = MutableEDep();
+  while (jGroupNum > t.hardspherephase.size()) t.hardspherephase.push_back(d);
+  t.hardspherephase[jGroupNum - 1].push_back(expShift);
+  assert(channelNum = t.hardspherephase[jGroupNum - 1].size());
 }
 
 /*!
@@ -2477,6 +2578,117 @@ void GridQuadrature(EPoint *point, Read rd, double lo, double hi, bool divideByS
 
 template <class V, class Read>
 V EPoint::IntegrateTargetEffectImpl(const Config &configure, Read rd) {
+  TargetEffect *targetEffect = this->GetParentData()->GetTargetEffect(this->GetTargetEffectNum());
+  if (!targetEffect->IsDoppler() || doppler_applied_) return this->IntegrateKernelsImpl<V>(configure, rd);
+  // Free-gas Doppler broadening first (SAMMY's order), then the line's kernel on the broadened values.
+  const int n = this->NumSubPoints();
+  if (n < 2) return V(0.0);
+  std::vector<std::pair<int, double>> w;
+  auto broaden = [&](double e) {
+    this->DopplerWeights(e, w);
+    V s = 0.0;
+    for (const auto &t : w) s += t.second * rd(t.first);
+    return s;
+  };
+  if (!targetEffect->HasResolutionStage()) return broaden(this->GetCMEnergy());
+  std::vector<V> b(n);
+  for (int j = 1; j <= n; j++) b[j - 1] = broaden(this->GetSubPoint(j)->GetCMEnergy());
+  return this->IntegrateKernelsImpl<V>(configure, [&b](int j) { return b[j - 1]; });
+}
+
+void EPoint::DopplerWeights(double eCM, std::vector<std::pair<int, double>> &w,
+                            std::vector<std::pair<int, double>> *dwdT) const {
+  w.clear();
+  if (dwdT) dwdT->clear();
+  const TargetEffect *te = this->GetParentData()->GetTargetEffect(this->GetTargetEffectNum());
+  const int n = this->NumSubPoints();
+  const double c = cm_factor_;
+  const double u = te->DopplerU(c);
+  if (n < 2 || !(u > 0.0) || !(eCM > 0.0)) return;
+  // The window (layout temperature) and the pieces (nominal temperature) do not move with T: only the kernel
+  // values below do, so sigma_D is smooth in a fitted T.  For a fixed line both are the line's T.
+  const double u0 = te->DopplerUAt(c, te->GetDopplerNominal());
+  double lo, hi;
+  te->DopplerWindow(eCM, c, lo, hi);
+  const double v = std::sqrt(eCM / c);
+  const double norm = 1.0 / (u * std::sqrt(M_PI) * v * v);
+  // 4-point Gauss-Legendre on [-1, 1]
+  static const double gx[4] = {-0.8611363115940526, -0.3399810435848563, 0.3399810435848563, 0.8611363115940526};
+  static const double gw[4] = {0.3478548451374538, 0.6521451548625461, 0.6521451548625461, 0.3478548451374538};
+  auto energy = [this](int j) { return const_cast<EPoint *>(this)->GetSubPoint(j)->GetCMEnergy(); };
+  // sub-points run from high to low energy: the first interval (j, j+1) whose lower end lies below hi
+  int first = 1, last = n - 1;
+  {
+    int a = 1, b = n;  // energy(a) >= ... >= energy(b)
+    while (b - a > 1) {
+      const int m = (a + b) / 2;
+      (energy(m) > hi ? a : b) = m;
+    }
+    first = a;
+  }
+  std::map<int, double> acc, dacc;
+  // d(norm k)/dT = norm [-k/u + dk/du] du/dT, du/dT = u/(2T)
+  const double T = te->GetDopplerTemperature();
+  const double dudT = (T > 0.0) ? 0.5 * u / T : 0.0;
+  const double u2 = u * u, u3 = u2 * u;
+  for (int j = first; j <= last; j++) {
+    const double Ea = energy(j), Eb = energy(j + 1);
+    if (Ea <= lo) break;
+    if (Eb >= hi) continue;
+    const double a = std::min(Ea, hi), b = std::max(Eb, lo);
+    if (!(a > b) || !(Ea > Eb)) continue;
+    const double wa = std::sqrt(a / c), wb = std::sqrt(b / c);
+    const int pieces = std::max(1, static_cast<int>(std::ceil((wa - wb) / (0.25 * u0))));
+    const double hw = (wa - wb) / pieces;
+    double toA = 0.0, toB = 0.0, dToA = 0.0, dToB = 0.0;
+    for (int p = 0; p < pieces; p++) {
+      const double mid = wb + (p + 0.5) * hw, half = 0.5 * hw;
+      for (int g = 0; g < 4; g++) {
+        const double x = mid + half * gx[g];
+        const double k = (std::exp(-(v - x) * (v - x) / (u * u)) - std::exp(-(v + x) * (v + x) / (u * u))) * x * x;
+        const double frac = (Ea - c * x * x) / (Ea - Eb);  // 0 at sub-point j, 1 at sub-point j + 1
+        toA += half * gw[g] * k * (1.0 - frac);
+        toB += half * gw[g] * k * frac;
+        if (dwdT) {
+          const double dm2 = (v - x) * (v - x), dp2 = (v + x) * (v + x);
+          const double dk = -k / u + x * x * 2.0 * (dm2 * std::exp(-dm2 / u2) - dp2 * std::exp(-dp2 / u2)) / u3;
+          dToA += half * gw[g] * dk * (1.0 - frac);
+          dToB += half * gw[g] * dk * frac;
+        }
+      }
+    }
+    acc[j] += norm * toA;
+    acc[j + 1] += norm * toB;
+    if (dwdT) {
+      dacc[j] += norm * dToA * dudT;
+      dacc[j + 1] += norm * dToB * dudT;
+    }
+  }
+  w.assign(acc.begin(), acc.end());
+  if (dwdT) dwdT->assign(dacc.begin(), dacc.end());
+}
+
+double EPoint::DopplerTemperatureDerivative(const Config &configure, const std::vector<double> &values) {
+  TargetEffect *targetEffect = this->GetParentData()->GetTargetEffect(this->GetTargetEffectNum());
+  if (!targetEffect->IsDoppler() || doppler_applied_) return 0.0;
+  const int n = this->NumSubPoints();
+  if (n < 2 || (int)values.size() < n) return 0.0;
+  std::vector<std::pair<int, double>> w, dw;
+  auto dBroaden = [&](double e) {
+    this->DopplerWeights(e, w, &dw);
+    double s = 0.0;
+    for (const auto &t : dw) s += t.second * values[t.first - 1];
+    return s;
+  };
+  if (!targetEffect->HasResolutionStage()) return dBroaden(this->GetCMEnergy());
+  // The kernel after the Doppler step is linear in its sub-point values: apply it to d(sigma_D)/dT.
+  std::vector<double> b(n);
+  for (int j = 1; j <= n; j++) b[j - 1] = dBroaden(this->GetSubPoint(j)->GetCMEnergy());
+  return this->IntegrateKernelsImpl<double>(configure, [&b](int j) { return b[j - 1]; });
+}
+
+template <class V, class Read>
+V EPoint::IntegrateKernelsImpl(const Config &configure, Read rd) {
   V yield = 0.0;
   TargetEffect *targetEffect = this->GetParentData()->GetTargetEffect(this->GetTargetEffectNum());
   const int numPoints = this->NumSubPoints();

@@ -209,12 +209,14 @@ bool MCMCTab::isAutoPriorCategory(const QString &category) {
   // Normalizations, energy shifts, sqrt(E) shift coefficients and
   // shift-function parameters carry an experimental error in the segment
   // definition, isotopic abundances one in the <abundances> block, and
-  // electron-screening potentials and fitted target densities one on their
-  // <targetInt> line, so
+  // electron-screening potentials, fitted target densities and Doppler
+  // temperatures one on their <targetInt> line, and fitted sample thicknesses
+  // one on their transmission / yield block (dev), so
   // AZURECalcMCMC::BuildAutoPriors() derives their priors from the data and
   // overrides whatever this table holds.
   return category == "norm" || category == "shift" || category == "shift_sqrt" || category == "shift_fn" ||
-         category == "abundance" || category == "screening" || category == "density";
+         category == "abundance" || category == "screening" || category == "density" || category == "doppler" ||
+         category == "thickness";
 }
 
 QString MCMCTab::categoryOfName(const QString &name, bool isRWA, int *segmentKey) {
@@ -231,6 +233,8 @@ QString MCMCTab::categoryOfName(const QString &name, bool isRWA, int *segmentKey
   if (name.startsWith("abundance_")) return "abundance";
   if (name.startsWith("screening_")) return "screening";
   if (name.startsWith("density_")) return "density";
+  if (name.startsWith("doppler_")) return "doppler";
+  if (segment("_thickness")) return "thickness";
   {
     // segment_<key>_energy_shift_fn<j>
     const int at = name.lastIndexOf("_energy_shift_fn");
@@ -264,6 +268,8 @@ QString MCMCTab::categoryFromStoredName(const QString &name) {
     return "shift_fn";
   if (name.contains("screening", Qt::CaseInsensitive)) return "screening";
   if (name.contains("target density", Qt::CaseInsensitive) || name.startsWith("density_")) return "density";
+  if (name.contains("doppler", Qt::CaseInsensitive)) return "doppler";
+  if (name.contains("thickness", Qt::CaseInsensitive)) return "thickness";
   if (name.contains("norm", Qt::CaseInsensitive)) return "norm";
   if (name.contains("shift", Qt::CaseInsensitive)) return "shift";
   return "loaded";
@@ -724,8 +730,10 @@ void MCMCTab::loadFromAZUREParams(bool isRWA, std::string filename) {
             param.useGaussianPrior = (param.priorStd > 0.0);
             param.autoPrior = true;
           }
-        } else if (param.category == "screening" || param.category == "density") {
-          // The engine takes U_e's and a density's prior from its <targetInt> line (AZURECalcMCMC::BuildAutoPriors).
+        } else if (param.category == "screening" || param.category == "density" || param.category == "doppler" ||
+                   param.category == "thickness") {
+          // The engine takes U_e's, a density's and a Doppler temperature's prior from its <targetInt> line, and a
+          // sample thickness's from its segment line (AZURECalcMCMC::BuildAutoPriors).
           param.useGaussianPrior = false;
           param.autoPrior = true;
         } else if (isAutoPriorCategory(param.category)) {

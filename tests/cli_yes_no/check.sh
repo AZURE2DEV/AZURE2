@@ -79,7 +79,10 @@ run one_name '3\n1x\nfit.par\n\n7\n'
 said one_name 'takes y or n, not "1x"' && [ "$rc" = 1 ] \
   && ok "'1x' is refused (only whole answers count)" || bad "'1x': exit $rc"
 
-[ -n "$(extrap right)" ] && cmp -s "$(extrap right)" "$(extrap upper)" && cmp -s "$(extrap right)" "$(extrap blank)" \
+# Byte-identical files without cmp (not in every MSYS2 image: the Windows runner had none, 2026-11-05);
+# \r stripped so a CRLF-writing Windows build compares like the others.
+same_file() { [ -f "$2" ] && [ "$(tr -d '\r' < "$1")" = "$(tr -d '\r' < "$2")" ]; }
+[ -n "$(extrap right)" ] && same_file "$(extrap right)" "$(extrap upper)" && same_file "$(extrap right)" "$(extrap blank)" \
   && ok "  ... 'n', ' No ' and blank give the same .extrap" || bad "  ... the .extrap files differ"
 
 echo

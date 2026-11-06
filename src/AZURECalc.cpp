@@ -1,4 +1,5 @@
 #include "AZURECalc.h"
+#include "PriorCovariance.h"
 #include "Profile.h"
 #include "ScatteringLength.h"
 #include <algorithm>
@@ -164,6 +165,31 @@ void ForEachDensityPrior(EData *data, const ParamIndexMap &pmap, F f) {
     if (te->GetDensitySigma() <= 0.0) continue;
     const int idx = pmap.DensityIndex(k);
     if (idx >= 0) f(idx, te->GetDensityNominal(), te->GetDensitySigma());
+  }
+}
+
+// The fitted-Doppler-temperature priors ((T - T0)/sigma)^2, T in K: f(full index, nominal, sigma) for each Doppler
+// parameter with sigma > 0 (EData::DopplerPenalty is their sum).
+template <class F>
+void ForEachDopplerPrior(EData *data, const ParamIndexMap &pmap, F f) {
+  for (int k = 1; k <= data->NumDopplerParams(); k++) {
+    const TargetEffect *te = data->GetDopplerTargetEffect(k);
+    if (te->GetDopplerSigma() <= 0.0) continue;
+    const int idx = pmap.DopplerIndex(k);
+    if (idx >= 0) f(idx, te->GetDopplerNominal(), te->GetDopplerSigma());
+  }
+}
+
+// The fitted-sample-thickness priors ((n - n0)/sigma)^2, n in atoms/barn: f(full index, nominal, sigma) for each
+// thickness parameter with sigma > 0 that owns its value (EData::ThicknessPenalty is their sum; a thickness-group
+// follower's parameter is fixed and carries no prior).
+template <class F>
+void ForEachThicknessPrior(EData *data, const ParamIndexMap &pmap, F f) {
+  for (int k = 1; k <= data->NumThicknessParams(); k++) {
+    const ESegment *seg = data->GetSegment(data->GetThicknessSegment(k));
+    if (seg->GetThicknessSigma() <= 0.0 || seg->IsThicknessGroupFollower()) continue;
+    const int idx = pmap.ThicknessIndex(k);
+    if (idx >= 0) f(idx, seg->GetNominalThickness(), seg->GetThicknessSigma());
   }
 }
 
@@ -655,6 +681,8 @@ double AZURECalc::operator()(const vector_r &p) const {
   // Electron-screening potentials and fitted target densities: their priors.
   chiSquared += localData->ScreeningPenalty();
   chiSquared += localData->DensityPenalty();
+  chiSquared += localData->DopplerPenalty();
+  chiSquared += localData->ThicknessPenalty();
   // Isotopic abundances: their priors and the sum-to-one term.
   if (localCompound->HasAbundanceBlock()) {
     double abundancePenalty = localCompound->AbundancePenalty(configure().abundanceSumSigma);
@@ -666,6 +694,12 @@ double AZURECalc::operator()(const vector_r &p) const {
     double slChi2 = ScatteringLength::Chi2(localCompound, configure(), localCompound->ScatteringLengthConstraints());
     chiSquared += slChi2;
     localData->SetScatteringLengthChi2(slChi2);
+  }
+  // Prior parameter covariance (<config> priorCovariance=): (p - mu)^T C^-1 (p - mu).
+  if (const PriorCovariance *pc = localData->GetPriorCovariance()) {
+    const double pcChi2 = pc->Chi2(p);
+    chiSquared += pcChi2;
+    localData->SetPriorCovarianceChi2(pcChi2);
   }
 
   if (std::getenv("AZURE_DUMP_NONFINITE")) DumpNonFinite(p, chiSquared, localCompound, localData);
@@ -837,6 +871,9 @@ double AZURECalc::Chi2On(CNuc *lc, EData *ld, const vector_r &p, std::vector<dou
     chiSquared += ScatteringLength::Chi2(lc, configure(), lc->ScatteringLengthConstraints());
   chiSquared += ld->ScreeningPenalty();
   chiSquared += ld->DensityPenalty();
+  chiSquared += ld->DopplerPenalty();
+  chiSquared += ld->ThicknessPenalty();
+  if (const PriorCovariance *pc = ld->GetPriorCovariance()) chiSquared += pc->Chi2(p);
   return chiSquared;
 }
 
@@ -1017,6 +1054,12 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
     ForEachScreeningPrior(ld, pmap, [&](int idx, double nominal, double e) {  // screening priors
       if (idx < (int)grad.size()) grad[idx] += 2.0 * (p[idx] - nominal) / (e * e);
     });
+    ForEachDopplerPrior(ld, pmap, [&](int idx, double nominal, double e) {  // Doppler-temperature priors
+      if (idx < (int)grad.size()) grad[idx] += 2.0 * (p[idx] - nominal) / (e * e);
+    });
+    ForEachThicknessPrior(ld, pmap, [&](int idx, double nominal, double e) {  // sample-thickness priors
+      if (idx < (int)grad.size()) grad[idx] += 2.0 * (p[idx] - nominal) / (e * e);
+    });
     for (int s = 1; s <= ld->NumSegments(); s++) {  // normalizations
       ESegment *seg = ld->GetSegment(s);
       if (!seg || !seg->IsVaryNorm() || seg->IsNormGroupFollower()) continue;  // a follower's norm is fixed
@@ -1082,6 +1125,9 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
   // global chi^2, so disable the local path when one is active.
   const std::vector<std::vector<int>> partners = CrossSegmentPartners(ld);
   const bool localShiftOk = !HasNuisanceParameters();
+  // Components taken by a finite difference of the whole chi2 (Chi2Value) already hold the prior-covariance term;
+  // every other one (analytic, or a segment-local shift difference) gets its gradient added below.
+  std::vector<char> fdWhole(p.size(), 0);
 
   // --- Finite differences only for what is left: non-fixed energy shifts, the
   //     THM-segment contribution to energies/gammas/norms, and (if the analytic
@@ -1093,7 +1139,8 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
     // THM-only chi^2 below differentiates it completely.  An electron-screening
     // potential is analytic (the screening factor of the classic points; a THM
     // segment carries none).
-    if (eg && kind == ParamKind::Screening) continue;  // analytic
+    if (eg && (kind == ParamKind::Screening || kind == ParamKind::Doppler || kind == ParamKind::Thickness))
+      continue;  // analytic (dev: Doppler weights, the transmission / yield transform)
     if (eg && (kind == ParamKind::LevelEnergy || kind == ParamKind::Gamma || kind == ParamKind::Norm ||
                kind == ParamKind::ThmCoherent)) {
       if (!haveTHM) continue;  // fully analytic
@@ -1178,6 +1225,14 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
     vector_r pm = p;
     pm[idx] = x0 - h;
     grad[idx] = (Chi2Value(pp) - Chi2Value(pm)) / (2.0 * h);
+    fdWhole[idx] = 1;
+  }
+  // Prior parameter covariance: 2 C^-1 (p - mu) on its parameters.
+  if (const PriorCovariance *pc = ld->GetPriorCovariance()) {
+    std::vector<double> pg(p.size(), 0.0);
+    pc->AddGradient(p, pg);
+    for (size_t i = 0; i < grad.size() && i < pg.size(); i++)
+      if (!fdWhole[i]) grad[i] += pg[i];
   }
 
   const auto tg2 = std::chrono::steady_clock::now();
@@ -1191,7 +1246,7 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
         if (idx < nMn && fixedMask[idx]) continue;
         ParamKind kind = pmap.Desc(idx).kind;
         if (!(eg && !haveTHM && (kind == ParamKind::LevelEnergy || kind == ParamKind::Gamma || kind == ParamKind::Norm)) &&
-            !(eg && kind == ParamKind::Screening)) nfd++;
+            !(eg && (kind == ParamKind::Screening || kind == ParamKind::Doppler || kind == ParamKind::Thickness))) nfd++;
       }
       std::cerr << "[grad-timing] call " << c << ": setup+adjoint " << ms(tg0, tg1) << " ms (analytic " << (eg ? "ok" : "BAILED")
                 << "), finite-difference part " << ms(tg1, tg2) << " ms for " << nfd << " parameters" << std::endl;
@@ -1206,7 +1261,7 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
   if (const char *gc = std::getenv("AZURE_GRAD_CHECK")) {
     if (!gradChecked.exchange(true)) {
       static const char *kindName[] = {"energy", "gamma", "norm", "shift", "shift_sqrt", "shift_fn", "abundance", "screening",
-                                       "density", "cbkg"};
+                                       "density", "doppler", "thickness", "cbkg"};
       struct Row { double score, g, fd; int idx; ParamDesc d; double gj, scoreJ; };
       std::vector<Row> rows;
       constexpr int kNumKinds = sizeof(kindName) / sizeof(kindName[0]);  // one per ParamKind
@@ -1378,6 +1433,16 @@ bool AZURECalc::GradientFromJacobian(const std::vector<double> &p, std::vector<d
     grad[idx] += 2.0 * (p[idx] - nominal) / (e * e);
     g2[idx] += 2.0 / (e * e);
   });
+  ForEachDopplerPrior(data(), pmap, [&](int idx, double nominal, double e) {
+    if (idx >= (int)p.size()) return;
+    grad[idx] += 2.0 * (p[idx] - nominal) / (e * e);
+    g2[idx] += 2.0 / (e * e);
+  });
+  ForEachThicknessPrior(data(), pmap, [&](int idx, double nominal, double e) {
+    if (idx >= (int)p.size()) return;
+    grad[idx] += 2.0 * (p[idx] - nominal) / (e * e);
+    g2[idx] += 2.0 / (e * e);
+  });
   // Isotopic abundances: prior and sum-to-one gradient and (diagonal) curvature.  The sample sums are taken at
   // p: compound() holds the abundances of the last full evaluation, so its AbundanceSum was stale here.
   std::vector<double> sumAtP;
@@ -1449,6 +1514,12 @@ std::vector<double> AZURECalc::G2(const std::vector<double> &p) const {
   ForEachDensityPrior(data(), pmap, [&](int idx, double, double e) {
     if (idx < (int)g2.size()) g2[idx] += 2.0 / (e * e);
   });
+  ForEachDopplerPrior(data(), pmap, [&](int idx, double, double e) {
+    if (idx < (int)g2.size()) g2[idx] += 2.0 / (e * e);
+  });
+  ForEachThicknessPrior(data(), pmap, [&](int idx, double, double e) {
+    if (idx < (int)g2.size()) g2[idx] += 2.0 / (e * e);
+  });
   if (compound()->HasAbundanceBlock()) {
     for (int k = 1; k <= compound()->NumAbundanceParams(); k++) {
       const int idx = pmap.AbundanceIndex(k);
@@ -1491,7 +1562,8 @@ bool AZURECalc::HasNuisanceParameters() const {
     if (mp.IsFixed() && name.find("segment") == std::string::npos) continue;
     const bool inert = name.find("norm") != std::string::npos || name.find("shift") != std::string::npos ||
                        name.find("abundance") != std::string::npos || name.find("screening") != std::string::npos ||
-                       name.find("density_") == 0;
+                       name.find("density_") == 0 || name.find("doppler_") == 0 ||
+                       name.find("_thickness") != std::string::npos;
     if (!inert && limitsManager_->IsNuisanceParameterByIndex(nf)) {
       if (std::getenv("AZURE_GRAD_DEBUG"))
         std::cerr << "[grad] analytic G2 off: nuisance prior on '" << name << "'" << std::endl;
@@ -1590,6 +1662,13 @@ bool AZURECalc::ResidualJacobian(const vector_r &full, vector_r &residuals,
       }
     }
   }
+
+  // Prior parameter covariance: its n whitened rows L^-1 (p - mu) last, Jacobian L^-1 on its parameters' columns.
+  // The least-squares drivers (LM, GSL), the Jacobian-path gradient and G2 take the prior from these rows.
+  if (ok)
+    if (const PriorCovariance *pc = ld->GetPriorCovariance())
+      pc->AppendRows(full, [&](int f) { return f < pmap.NumFull() ? pmap.FullToPacked(f) : -1; }, nCols, residuals,
+                     &jac);
 
   packedToFull.resize(pmap.NumPacked());
   for (int a = 0; a < pmap.NumPacked(); a++) packedToFull[a] = pmap.PackedToFull(a);
@@ -1804,6 +1883,26 @@ int AZURECalc::PrepareFreeParams(const vector_r &full,
         if (te->GetDensitySigma() > 0.0) {
           pen_nom[a] = te->GetDensityNominal();
           pen_inv2[a] = 1.0 / (te->GetDensitySigma() * te->GetDensitySigma());
+        }
+      }
+    } else if (name.find("segment_") == 0 && name.size() > 10 && name.compare(name.size() - 10, 10, "_thickness") == 0) {
+      // Fitted sample thickness: its prior is a diagonal penalty row (none for a thickness-group follower).
+      for (int k = 1; k <= data()->NumThicknessParams(); k++) {
+        const ESegment *seg = data()->GetSegment(data()->GetThicknessSegment(k));
+        if (name != "segment_" + std::to_string(seg->GetSegmentKey()) + "_thickness") continue;
+        if (seg->GetThicknessSigma() > 0.0 && !seg->IsThicknessGroupFollower()) {
+          pen_nom[a] = seg->GetNominalThickness();
+          pen_inv2[a] = 1.0 / (seg->GetThicknessSigma() * seg->GetThicknessSigma());
+        }
+      }
+    } else if (name.find("doppler_") == 0) {
+      // Fitted Doppler temperature: its prior is a diagonal penalty row.
+      for (int k = 1; k <= data()->NumDopplerParams(); k++) {
+        if (name != "doppler_" + std::to_string(data()->GetDopplerEffect(k))) continue;
+        const TargetEffect *te = data()->GetDopplerTargetEffect(k);
+        if (te->GetDopplerSigma() > 0.0) {
+          pen_nom[a] = te->GetDopplerNominal();
+          pen_inv2[a] = 1.0 / (te->GetDopplerSigma() * te->GetDopplerSigma());
         }
       }
     } else if (name.compare(0, 10, "abundance_") == 0) {
@@ -2028,6 +2127,9 @@ bool AZURECalc::ResidualsOnly(const vector_r &full, vector_r &residuals) const {
   // Measured scattering lengths, as the last rows of ResidualJacobian.
   if (lc->HasScatteringLengthConstraints())
     ScatteringLength::Residuals(lc, configure(), lc->ScatteringLengthConstraints(), residuals);
+  // Prior parameter covariance, as the last rows of ResidualJacobian.
+  if (const PriorCovariance *pc = ld->GetPriorCovariance())
+    pc->AppendRows(full, [](int) { return -1; }, 0, residuals, nullptr);
   ReturnPooledCNuc(lc);
   ReturnPooledEData(ld);
   return true;
@@ -2354,4 +2456,52 @@ void AZURECalc::WriteParameters(AZUREParams &params, const Config &configure) co
     out.close();
   } else
     configure.outStream << "Could not save param.fit file." << std::endl;
+}
+
+std::vector<int> AZURECalc::IndicesWithOwnPrior() const {
+  // The parameters that carry a diagonal prior of their own, as the objective adds them: a norm's normError (on the
+  // group leader), the energy-shift / sqrt / shift-function errors, screening, density, Doppler and thickness sigmas,
+  // the <abundances> sigma, and a nuisance prior of the limits manager (CalculateNuisanceChiSquared's indexing).
+  std::vector<int> out;
+  ParamIndexMap pmap = BuildParamIndexMap(compound(), data(), std::vector<bool>());
+  for (int s = 1; s <= data()->NumSegments(); s++) {
+    ESegment *seg = data()->GetSegment(s);
+    if (!seg || !seg->IsVaryNorm() || seg->IsNormGroupFollower()) continue;
+    const int idx = pmap.NormIndex(s);
+    if (idx >= 0 && seg->GetNominalNorm() / 100.0 * seg->GetNormError() != 0.0) out.push_back(idx);
+  }
+  auto add = [&](int idx, double, double) { out.push_back(idx); };
+  ForEachShiftPenalty(data(), pmap, add);
+  ForEachScreeningPrior(data(), pmap, add);
+  ForEachDensityPrior(data(), pmap, add);
+  ForEachDopplerPrior(data(), pmap, add);
+  ForEachThicknessPrior(data(), pmap, add);
+  for (int k = 1; k <= compound()->NumAbundanceParams(); k++) {
+    int sample, nucleus;
+    compound()->AbundanceOf(k, sample, nucleus);
+    const int idx = pmap.AbundanceIndex(k);
+    if (idx >= 0 && compound()->GetSample(sample)->entries[nucleus - 1].sigma > 0.0) out.push_back(idx);
+  }
+  if (limitsManager_) {
+    AZUREParams tp;
+    compound()->FillMnParams(tp.GetMinuitParams(), &configure());
+    data()->FillMnParams(tp.GetMinuitParams());
+    int nonFixed = 0;
+    for (int i = 0; i < (int)tp.GetMinuitParams().Params().size(); i++) {
+      const ROOT::Minuit2::MinuitParameter &mp = tp.GetMinuitParams().Parameter(i);
+      if (mp.IsFixed() && mp.GetName().find("segment") == std::string::npos) continue;
+      const std::string &name = mp.GetName();
+      const bool own = name.find("norm") != std::string::npos || name.find("shift") != std::string::npos ||
+                       name.find("abundance") != std::string::npos || name.find("screening") != std::string::npos ||
+                       name.find("density_") == 0 || name.find("doppler_") == 0 ||
+                       name.find("_thickness") != std::string::npos;
+      if (!own && limitsManager_->IsNuisanceParameterByIndex(nonFixed) &&
+          limitsManager_->GetConvertedErrorByIndex(nonFixed) > 0.0)
+        out.push_back(i);
+      nonFixed++;
+    }
+  }
+  std::sort(out.begin(), out.end());
+  out.erase(std::unique(out.begin(), out.end()), out.end());
+  return out;
 }

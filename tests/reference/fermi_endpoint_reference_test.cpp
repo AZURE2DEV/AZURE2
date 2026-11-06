@@ -36,7 +36,9 @@ int main() {
   }
   check(finite, "finite and positive for T0 = 1e-7 keV to 1 MeV (NaN below ~0.2 keV before)");
   check(increasing, "increasing with the end-point energy");
-  const struct { double keV, value; } ref[] = {{0.3, 2.542379e-11}, {1.0, 9.423127e-10}, {10.0, 9.791124e-07},
+  // Re-recorded 2026-11-05 for the CODATA 2018 constants (Constants.h; the function had its own pi = 3.14159, so
+  // exp(pi eta) moved by up to 1.5e-5 at 0.3 keV; was 2.542379e-11, 9.423127e-10, 9.791124e-07).
+  const struct { double keV, value; } ref[] = {{0.3, 2.5424158e-11}, {1.0, 9.4231994e-10}, {10.0, 9.7911480e-07},
                                                {100.0, 1.440678e-03}, {1000.0, 5.646789e+00}};
   bool same = true;
   for (const auto &r : ref) {

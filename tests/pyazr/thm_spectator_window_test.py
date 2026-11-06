@@ -83,7 +83,7 @@ def fresh_copy(dst):
 # Independent kinematics: mu_sx from the built-in nuclear masses of p and n
 # (AMU as the engine's table), mu_xA from the .azr pair (the engine's uconv,
 # hbar c: include/Constants.h).
-AMU, UCONV, HBARC = 931.49410242, 931.4940880, 197.32696310
+AMU, UCONV, HBARC = 931.49410242, 931.49410242, 197.3269804  # CODATA 2018 since the merge of dev 3264896d
 MU_SX = 1.0072764675 * 1.0086649159 / (1.0072764675 + 1.0086649159) * AMU
 MU_XA = 1.00727647 * 17.99477097 / (1.00727647 + 17.99477097) * UCONV
 B, RADIUS = 2.224566, 5.1

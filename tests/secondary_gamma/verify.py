@@ -46,7 +46,9 @@ def main(work):
         ref = np.loadtxt(os.path.join(HERE, "expected", "twolevel_pre_fix.out"), ndmin=2)
         ref = ref[ref[:, 0] > 0]
         dev = np.max(np.abs(d[:, 3] - ref[:, 3]) / np.abs(ref[:, 3]))
-        if d.shape == ref.shape and dev < 1e-9:
+        # 1e-9 until 2026-11-05; the CODATA 2018 constants (include/Constants.h) moved every cross section by ~1e-6
+        # since the reference was recorded on the pre-fix engine (dev 6c6932d), which cannot be re-run with them.
+        if d.shape == ref.shape and dev < 5e-6:
             print(f"  ok    twolevel: one exit channel spin, unchanged from the pre-fix engine (max rel. {dev:.1e})")
         else:
             print(f"  FAIL  twolevel: differs from the pre-fix engine, max rel. {dev:.3e}")

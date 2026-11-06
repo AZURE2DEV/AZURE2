@@ -166,6 +166,9 @@ class LevelScheme:
             kind = "photon  " if p.is_photon else "particle"
             flags = " [entrance]" if p.is_entrance else ""
             nucleus = ""
+            # an excited light particle (column 32); the pair opens at Sep + both excitations
+            light = (f"   E*(light)={p.light_excitation:.4g} MeV"
+                     if getattr(p, "light_excitation", 0.0) else "")
             if several:
                 from .nuclei import Nucleus
                 nucleus = f"   -> {Nucleus(p.nucleus_Z, p.nucleus_A).label}"
@@ -175,7 +178,7 @@ class LevelScheme:
                 f" & {_fmt_spin(p.J2)}{'+' if p.parity2 > 0 else '-'}"
                 f"   Z={p.Z1}+{p.Z2}"
                 f"   Sep={p.sep_energy:.4g} MeV   r={p.channel_radius:g} fm"
-                f"{nucleus}{flags}")
+                f"{light}{nucleus}{flags}")
         return lines
 
     def format(self, widths=True):

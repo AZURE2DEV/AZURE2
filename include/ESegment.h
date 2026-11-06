@@ -348,10 +348,40 @@ class ESegment {
   bool IsTransmission() const { return transmission_ > 0.0; }
   bool IsYield() const { return yield_ > 0.0; }
   bool IsTransformed() const { return transmission_ > 0.0 || yield_ > 0.0; }
-  /// n in atoms/barn of a transmission or yield segment, 0 otherwise.
-  double GetSampleThickness() const { return transmission_ > 0.0 ? transmission_ : yield_; }
+  /// n in atoms/barn of a transmission or yield segment, 0 otherwise: the value the transform uses -- the line's n,
+  /// a thickness group's leader's (EData::ResolveThicknessGroups), or the fit parameter segment_<key>_thickness
+  /// (EData::FillThicknessFromParams).
+  double GetSampleThickness() const { return IsTransformed() ? thickness_ : 0.0; }
+  void SetSampleThickness(double n) { thickness_ = n; }
+  /// The line's own n (the prior centre of the fit form), 0 for a segment without the transform.
+  double GetNominalThickness() const { return transmission_ > 0.0 ? transmission_ : yield_; }
+  /// The fit form "transmission n vary sigma" / "yield n vary sigma": the line has a parameter
+  /// segment_<key>_thickness (fixed for vary 0, and for a thickness-group follower), sigma its prior width (0 = none).
+  bool HasThicknessFit() const { return thicknessFit_; }
+  bool IsThicknessVaried() const { return thicknessFit_ && thicknessVary_ == 1 && thicknessLeaderPos_ < 0; }
+  double GetThicknessSigma() const { return thicknessSigma_; }
+  /// "thicknessgroup <label>" ("" = none); the follower's leader position in EData's segment list (-1: none).
+  const std::string &GetThicknessGroup() const { return thicknessGroup_; }
+  int GetThicknessLeaderPos() const { return thicknessLeaderPos_; }
+  bool IsThicknessGroupFollower() const { return thicknessLeaderPos_ >= 0; }
+  void SetThicknessGroupFollower(int pos, double n) {
+    thicknessLeaderPos_ = pos;
+    thickness_ = n;
+  }
+  /// The prior ((n - n0)/sigma)^2 of a thickness parameter that owns its value (no follower), 0 otherwise.
+  double ThicknessPenalty() const {
+    if (!thicknessFit_ || thicknessLeaderPos_ >= 0 || !(thicknessSigma_ > 0.0)) return 0.0;
+    const double d = (thickness_ - GetNominalThickness()) / thicknessSigma_;
+    return d * d;
+  }
   /// Components are plain cross sections (the base segment applies the transform).
-  void ClearTransform() { transmission_ = 0.0; yield_ = 0.0; }
+  void ClearTransform() {
+    transmission_ = 0.0;
+    yield_ = 0.0;
+    thickness_ = 0.0;
+    thicknessFit_ = false;
+    thicknessGroup_.clear();
+  }
   /// The total-cross-section term of a yield segment (entrance pair to itself, "total 1"): it enters Y0 as s_t and
   /// is not part of the segment's sum (EData::AddYieldTotalComponent).
   bool IsYieldTotalTerm() const { return yieldTotalTerm_; }
@@ -360,8 +390,10 @@ class ESegment {
   /// sample's abundance weights or a transmission / yield transform.
   bool NeedsAssembly() const { return HasComponents() || IsNatural() || IsTransformed(); }
   /// The transforms and their derivatives (n in atoms/barn, cross sections in barns).
-  static double Transmission(double n, double s, double *dTds = nullptr);
-  static double YieldY0(double n, double s, double st, double *dYds = nullptr, double *dYdst = nullptr);
+  /// dTdn / dYdn: the derivatives with respect to the thickness n (the parameter segment_<key>_thickness).
+  static double Transmission(double n, double s, double *dTds = nullptr, double *dTdn = nullptr);
+  static double YieldY0(double n, double s, double st, double *dYds = nullptr, double *dYdst = nullptr,
+                        double *dYdn = nullptr);
   /// One term of a transmission or yield segment at a point: its point, its weight in the segment's sum (component
   /// scaling, frame factor, abundance), its compound nucleus, whether it is the yield's s_t, its E1/E2 selector.
   struct TransformTerm {
@@ -511,6 +543,12 @@ class ESegment {
   bool isTotal_ = false;  // IsTotal
   double transmission_ = 0.0;  // IsTransmission
   double yield_ = 0.0;         // IsYield
+  double thickness_ = 0.0;     // GetSampleThickness
+  bool thicknessFit_ = false;  // HasThicknessFit
+  int thicknessVary_ = 0;
+  double thicknessSigma_ = 0.0;
+  std::string thicknessGroup_;
+  int thicknessLeaderPos_ = -1;  // IsThicknessGroupFollower
   bool yieldTotalTerm_ = false;  // IsYieldTotalTerm
   bool isCoefficients_ = false;
   bool coefficientsAbsolute_ = false;

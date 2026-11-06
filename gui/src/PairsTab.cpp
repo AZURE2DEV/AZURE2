@@ -319,6 +319,7 @@ void PairsTab::addPair() {
       newPair.heavyG = 0.;  //(aDialog.heavyGText->text()).toDouble();
       newPair.seperationEnergy = (aDialog.seperationEnergyText->text()).toDouble();
       newPair.excitationEnergy = (aDialog.excitationEnergyText->text()).toDouble();
+      newPair.lightExcitation = aDialog.pairTypeCombo->currentIndex() == 0 ? aDialog.lightExcitationText->text().toDouble() : 0.;
       newPair.channelRadius = (aDialog.channelRadiusText->text()).toDouble();
       newPair.bindingEnergy = 0.0;  // THM binding energy: set in the THM workspace
       if (aDialog.pairTypeCombo->currentIndex() == 1)
@@ -378,7 +379,9 @@ void PairsTab::addPair(PairsData pair, int pairIndex, bool fromFile) {
     pairsModel->setData(index, pair.pairType, Qt::EditRole);
     index = pairsModel->index(pairIndex, 14, QModelIndex());
     pairsModel->setData(index, pair.ecMultMask, Qt::EditRole);
-    index = pairsModel->index(pairIndex, 15, QModelIndex());
+    index = pairsModel->index(pairIndex, PairsModel::LightExcitationColumn, QModelIndex());
+    pairsModel->setData(index, pair.lightExcitation, Qt::EditRole);
+    index = pairsModel->index(pairIndex, PairsModel::BindingEnergyColumn, QModelIndex());
     pairsModel->setData(index, pair.bindingEnergy, Qt::EditRole);
 
     pairsView->resizeRowsToContents();
@@ -458,9 +461,12 @@ void PairsTab::editPair() {
   i = pairsModel->index(index.row(), 14, QModelIndex());
   var = pairsModel->data(i, Qt::EditRole);
   int ecMultMask = var.toInt();
-  i = pairsModel->index(index.row(), 15, QModelIndex());
+  i = pairsModel->index(index.row(), PairsModel::BindingEnergyColumn, QModelIndex());
   var = pairsModel->data(i, Qt::EditRole);
   const double bindingEnergy = var.toDouble();  // THM workspace's, kept as it is
+  i = pairsModel->index(index.row(), PairsModel::LightExcitationColumn, QModelIndex());
+  var = pairsModel->data(i, Qt::EditRole);
+  QString lightExcitation = var.toString();
 
 
   AddPairDialog aDialog;
@@ -482,6 +488,7 @@ void PairsTab::editPair() {
   aDialog.heavyMText->setText(heavyM);
   // aDialog.heavyGText->setText(heavyG);
   aDialog.excitationEnergyText->setText(excitationEnergy);
+  aDialog.lightExcitationText->setText(lightExcitation);
   aDialog.seperationEnergyText->setText(seperationEnergy);
   aDialog.channelRadiusText->setText(channelRadius);
   if (pairType == 10)
@@ -521,6 +528,7 @@ void PairsTab::editPair() {
       pair.heavyM = aDialog.heavyMText->text().toDouble();
       pair.heavyG = 0.;  // aDialog.heavyGText->text().toDouble();
       pair.excitationEnergy = aDialog.excitationEnergyText->text().toDouble();
+      pair.lightExcitation = aDialog.pairTypeCombo->currentIndex() == 0 ? aDialog.lightExcitationText->text().toDouble() : 0.;
       pair.seperationEnergy = aDialog.seperationEnergyText->text().toDouble();
       pair.channelRadius = aDialog.channelRadiusText->text().toDouble();
       pair.bindingEnergy = bindingEnergy;
@@ -588,8 +596,13 @@ void PairsTab::editPair(PairsData pair, int pairIndex, bool fromFile) {
   if (pair.pairType != var.toInt()) pairsModel->setData(i, pair.pairType, Qt::EditRole);
   i = pairsModel->index(pairIndex, 14, QModelIndex());
   var = pairsModel->data(i, Qt::EditRole);
+  // compared the pair type with the stored mask before 2026-11-05, so an edited mask was dropped whenever the
+  // pair type equalled the old mask (a particle pair, type 0, with mask 0)
   if (pair.ecMultMask != var.toInt()) pairsModel->setData(i, pair.ecMultMask, Qt::EditRole);
-  i = pairsModel->index(pairIndex, 15, QModelIndex());
+  i = pairsModel->index(pairIndex, PairsModel::LightExcitationColumn, QModelIndex());
+  var = pairsModel->data(i, Qt::EditRole);
+  if (pair.lightExcitation != var.toDouble()) pairsModel->setData(i, pair.lightExcitation, Qt::EditRole);
+  i = pairsModel->index(pairIndex, PairsModel::BindingEnergyColumn, QModelIndex());
   var = pairsModel->data(i, Qt::EditRole);
   if (pair.bindingEnergy != var.toDouble()) pairsModel->setData(i, pair.bindingEnergy, Qt::EditRole);
 

@@ -18,6 +18,8 @@
 #include "AMatrixFunc.h"
 #include "AZUREGrad.h"
 #include "CovarianceBand.h"
+#include "PriorCovariance.h"
+#include "AZURECalc.h"
 #include "CoulFunc.h"
 #include "ECIntegral.h"
 #include "Profile.h"
@@ -29,6 +31,7 @@
 #include <limits>
 #include <new>
 #include <cmath>
+#include <algorithm>
 
 AZUREAPI::AZUREAPI(Config &configure) : configure_(configure), data_(nullptr), compound_(nullptr) {
   // A session rebuilds its model from the files (SetRadius, potential changes, mode switches): read each
@@ -175,10 +178,51 @@ int AZUREAPI::Initialize() {
   }
 
   UpdateParameters();
+  if (!SetUpPriorCovariance()) return -1;
 
   if (data()->Initialize(compound(), configure()) == -1) return -1;
 
   return 0;
+}
+
+bool AZUREAPI::SetUpPriorCovariance() {
+  std::shared_ptr<const PriorCovariance> prior;
+  if (data() && (configure().paramMask & Config::CALCULATE_WITH_DATA) &&
+      !(configure().paramMask & Config::CALCULATE_REACTION_RATE) &&
+      PriorCovariance::Load(configure(), names_, fixed_, AZUREParams::BasisForConfig(configure()), prior) < 0)
+    return false;
+  if (data()) data()->SetPriorCovariance(prior);
+  // A listed parameter with a diagonal prior of its own gets both (objective() adds both): say so, as the CLI does.
+  if (prior && prior->Size() > 0) {
+    AZURECalc calc(data(), compound(), configure());
+    const std::vector<int> own = calc.IndicesWithOwnPrior();
+    std::string list;
+    for (int f : prior->FullIndex())
+      if (std::binary_search(own.begin(), own.end(), f) && f < (int)names_.size())
+        list += (list.empty() ? "" : ", ") + names_[f];
+    if (!list.empty())
+      configure().Note("Note: prior covariance: " + list + " also carr" +
+                       (list.find(',') == std::string::npos ? "ies" : "y") +
+                       " a prior of its own (normalization error, shift error, sigma or nuisance prior); both are "
+                       "applied, which counts the same information twice if the covariance already holds it.");
+  }
+  return true;
+}
+
+vector_r AZUREAPI::PriorCovarianceResidualsRWA(const vector_r &rwaParams) const {
+  vector_r r;
+  const PriorCovariance *pc = data() ? data()->GetPriorCovariance() : nullptr;
+  if (!pc) return r;
+  vector_r full = all_rwa_;
+  for (int i = 0, k = 0; i < (int)all_rwa_.size(); ++i)
+    if (!fixed_[i] && k < (int)rwaParams.size()) full[i] = rwaParams[k++];
+  pc->Residuals(full, r);
+  return r;
+}
+
+std::vector<std::string> AZUREAPI::PriorCovarianceNames() const {
+  const PriorCovariance *pc = data() ? data()->GetPriorCovariance() : nullptr;
+  return pc ? pc->Names() : std::vector<std::string>();
 }
 
 bool AZUREAPI::UpdateParameters() {
@@ -903,6 +947,7 @@ bool AZUREAPI::RebuildImpl(const std::map<int, double> &radii) {
   // Without this the client keeps the pre-change parameter vector, names,
   // fixed flags and Wigner limits -- silently mismatched with the new model.
   UpdateParameters();
+  if (!SetUpPriorCovariance()) return false;
 
   return true;
 }
@@ -1031,7 +1076,11 @@ double AZUREAPI::FilledModelPenalties() const {
 double AZUREAPI::CalculateChi2RWA(const vector_r &rwaParams) const {
   // One request at a time: operate on the canonical compound/data in place
   // (re-filled here from these parameters) instead of cloning.
-  FillFromFullRWA(MapPackedToFull(rwaParams, all_rwa_, fixed_));
+  const vector_r full = MapPackedToFull(rwaParams, all_rwa_, fixed_);
+  FillFromFullRWA(full);
+  // Prior parameter covariance (dev b7e77292): not part of this chi2 (pyazr's objective() adds
+  // penalties()["prior_covariance"]), recorded for chiSquared.out (WriteOutputFiles).
+  if (const PriorCovariance *pc = data()->GetPriorCovariance()) data()->SetPriorCovarianceChi2(pc->Chi2(full));
   return EvaluateFilledChi2(nullptr) + FilledModelPenalties();
 }
 
@@ -1120,6 +1169,7 @@ double AZUREAPI::CalculateChi2Physical(const vector_r &physicalParams) const {
   localData->FillEnergyShiftsFromParams(params_, localData, localCompound, &configure());
   if (configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure());
 
+  if (const PriorCovariance *pc = localData->GetPriorCovariance()) localData->SetPriorCovarianceChi2(pc->Chi2(params_));
   // The same terms CalculateChi2RWA adds: the two bases must give one objective (dev 7284d09).
   return EvaluateFilledChi2(nullptr) + FilledModelPenalties();
 }
@@ -1279,7 +1329,8 @@ vector_r AZUREAPI::CalculateChi2GradRWA(const vector_r &params) const {
     ParamKind kind = pmap.Desc(f).kind;
     // THM coherent backgrounds (cbackground=) are columns of the THM rows above.
     if (eg && (kind == ParamKind::LevelEnergy || kind == ParamKind::Gamma || kind == ParamKind::Norm ||
-               kind == ParamKind::Screening || kind == ParamKind::ThmCoherent))
+               kind == ParamKind::Screening || kind == ParamKind::Doppler || kind == ParamKind::Thickness ||
+               kind == ParamKind::ThmCoherent))
       continue;
     int packed = pmap.FullToPacked(f);
     if (packed < 0 || packed >= (int)params.size()) continue;
@@ -1441,6 +1492,11 @@ vector_r AZUREAPI::CalculateResidualJacobianRWA(const vector_r &params, const st
       }
     }
   }
+
+  // Prior parameter covariance: its whitened rows L^-1 (p - mu) last, Jacobian L^-1 on its parameters' columns.
+  if (const PriorCovariance *pc = ld->GetPriorCovariance())
+    pc->AppendRows(full, [&](int f) { return f < pmap.NumFull() ? pmap.FullToPacked(f) : -1; }, nCols, residuals,
+                   &jacobian);
 
   vector_r out;
   out.reserve(2 + residuals.size() + jacobian.size());
@@ -1692,7 +1748,28 @@ vector_r AZUREAPI::GetParameterInfo() const {
   }
 
 
-  // THM coherent backgrounds (cbackground=), last: Re c0, Im c0 [, Re c1,
+  // Fitted Doppler temperatures (K), one per 'doppler T vary sigma [Tmax]' line: type 9, the effect number in field 6,
+  // the prior centre in field 5, its sigma in field 14 (0 = no prior) and the layout temperature (the largest the
+  // sub-point grids span) in field 8 (the S field).
+  for (int k = 1; k <= data()->NumDopplerParams(); ++k) {
+    const TargetEffect *te = data()->GetDopplerTargetEffect(k);
+    push(9, -1, -1, 0, -1, te->GetDopplerNominal(), data()->GetDopplerEffect(k), -1, te->GetDopplerLayoutTemperature(),
+         -1, -1, -1, te->GetDopplerSigma(), -1);
+  }
+
+  // Fitted sample thicknesses (atoms/barn), one per transmission / yield segment line with the fit form 'n vary
+  // sigma': type 10, the segment key in field 13, the line's n (the prior centre) in field 5, its sigma in field 14
+  // (0 = no prior; 0 for a thickness-group follower), 0 = transmission / 1 = yield in field 6, and for a follower the
+  // key of its group's leader in field 7 (-1 otherwise).
+  for (int k = 1; k <= data()->NumThicknessParams(); ++k) {
+    const ESegment *seg = data()->GetSegment(data()->GetThicknessSegment(k));
+    const bool follower = seg->IsThicknessGroupFollower();
+    const double leaderKey = follower ? data()->GetSegments()[seg->GetThicknessLeaderPos()].GetSegmentKey() : -1;
+    push(10, -1, -1, 0, -1, seg->GetNominalThickness(), seg->IsYield() ? 1 : 0, leaderKey, -1, -1, -1,
+         seg->GetSegmentKey(), follower ? 0.0 : seg->GetThicknessSigma(), -1);
+  }
+
+  // THM coherent backgrounds (cbackground=), last (type 11; 9 before the merge of dev 3264896d): Re c0, Im c0 [, Re c1,
   // Im c1] per combination, with its J group, entrance channel (channel, L,
   // S) and exit pair number (pair).
   for (int g = 0; g < data()->NumThmGroups(); ++g) {
@@ -1702,7 +1779,7 @@ vector_r AZUREAPI::GetParameterInfo() const {
       JGroup *jg = nuc->GetJGroup(c.jGroup);
       AChannel *in = jg->GetChannel(c.entrance);
       for (int k = 0; k < 2 * c.form; ++k)
-        push(9, c.jGroup, jg->GetJ(), jg->GetPi(), -1, 0, c.entrance, in->GetL(), in->GetS(),
+        push(11, c.jGroup, jg->GetJ(), jg->GetPi(), -1, 0, c.entrance, in->GetL(), in->GetS(),
              jg->GetChannel(c.exit)->GetPairNum(), -1, -1, -1, -1);
     }
   }
@@ -1738,7 +1815,9 @@ vector_r AZUREAPI::GetPairsInfo() const {
     info.push_back(pair->GetNucleusZ());
     info.push_back(pair->GetNucleusA());
     info.push_back(nuc->GetAbundance(nuc->DefaultSample(), pair->GetNucleus()));
-    // field 19: the binding energy of the pair's composite projectile (THM)
+    // the light particle's share of exE (column 32 of the <levels> line, 2026-11-05)
+    info.push_back(pair->GetLightExE());
+    // field 20: the binding energy of the pair's composite projectile (THM)
     info.push_back(pair->GetBindingEnergy());
   }
 

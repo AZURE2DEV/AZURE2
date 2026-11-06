@@ -168,9 +168,14 @@ TargetEffect::TargetEffect(std::istream &stream, const Config &configure) {
     //   densityfit vary sigma [max]    (sigma in atoms/cm^2, or "<p>%" of the line's density; max: the largest
     //                                   density the sub-point grids must span, atoms/cm^2)
     //   densitygroup <label>
+    //   doppler T_K                    (free-gas Doppler broadening, effective temperature in kelvin)
+    //   doppler T_K vary sigma_K [Tmax_K]   (a fitted temperature: parameter doppler_<n>, prior sigma about T,
+    //                                        Tmax the largest temperature the sub-point grids must span)
     std::string densitySigmaToken;
     bool densityFitRead = false;
     double densityMaxRead = 0.0;
+    std::string dopplerVaryToken, dopplerSigmaToken, dopplerMaxToken;
+    bool dopplerFitRead = false;
     while (stream.good()) {
       stream >> std::ws;
       if (!(stream.good() && std::isalpha(stream.peek()))) break;
@@ -229,6 +234,36 @@ TargetEffect::TargetEffect(std::istream &stream, const Config &configure) {
           densityFitError_ = true;
           densityFitErrorText_ = "a densitygroup block is 'densitygroup <label>'";
           stream.setstate(std::ios_base::failbit);
+        }
+      } else if (keyword == "doppler") {
+        stream >> dopplerTemperature_;
+        if (stream.fail() || !(dopplerTemperature_ > 0.0)) {
+          dopplerError_ = true;  // flagged as well as failed: at the end of the line the fail bit is cleared below
+          dopplerErrorText_ = "a doppler block is 'doppler T' or 'doppler T vary sigma [Tmax]' with the effective"
+                              " temperature T > 0 in kelvin";
+          stream.setstate(std::ios_base::failbit);
+        } else {
+          isDoppler_ = true;
+          // optional fit form: vary sigma [Tmax], numbers (a following keyword starts with a letter)
+          auto numberToken = [&](std::string &tok) {
+            if (stream.good()) stream >> std::ws;
+            if (!stream.good()) return false;
+            const int c = stream.peek();
+            if (!(std::isdigit(c) || c == '.' || c == '-' || c == '+')) return false;
+            stream >> tok;
+            return !stream.fail();
+          };
+          if (numberToken(dopplerVaryToken)) {
+            dopplerFitRead = true;
+            if (!numberToken(dopplerSigmaToken)) {
+              dopplerError_ = true;
+              dopplerErrorText_ = "a doppler block is 'doppler T' or 'doppler T vary sigma [Tmax]': the fit form needs"
+                                  " both vary (0 or 1) and sigma (the prior width in K, 0 = none)";
+              stream.setstate(std::ios_base::failbit);
+            } else {
+              numberToken(dopplerMaxToken);
+            }
+          }
         }
       } else if (keyword == "udr") {
         stream >> std::ws;
@@ -318,6 +353,35 @@ TargetEffect::TargetEffect(std::istream &stream, const Config &configure) {
         }
       }
     }
+    if (dopplerFitRead && !dopplerError_) {
+      auto number = [](const std::string &tok, double &v) {
+        char *end = nullptr;
+        v = std::strtod(tok.c_str(), &end);
+        return !tok.empty() && end != tok.c_str() && *end == '\0' && std::isfinite(v);
+      };
+      const std::string form = "a doppler block is 'doppler T' or 'doppler T vary sigma [Tmax]': ";
+      double vary = -1.0, sigma = -1.0, tmax = 0.0;
+      if (!number(dopplerVaryToken, vary) || !(vary == 0.0 || vary == 1.0)) {
+        dopplerError_ = true;
+        dopplerErrorText_ = form + "vary \"" + dopplerVaryToken + "\" is not 0 or 1";
+      } else if (!number(dopplerSigmaToken, sigma) || !(sigma >= 0.0)) {
+        dopplerError_ = true;
+        dopplerErrorText_ = form + "sigma \"" + dopplerSigmaToken + "\" is not a non-negative number (K)";
+      } else if (!dopplerMaxToken.empty() && (!number(dopplerMaxToken, tmax) || !(tmax > dopplerTemperature_))) {
+        dopplerError_ = true;
+        dopplerErrorText_ = form + "Tmax \"" + dopplerMaxToken + "\" must be a temperature above T (K)";
+      } else {
+        dopplerFit_ = true;
+        dopplerVary_ = (vary == 1.0);
+        dopplerNominal_ = dopplerTemperature_;
+        dopplerSigma_ = sigma;
+        // the grids span the largest temperature the fit is expected to reach (see HasDopplerFit)
+        dopplerLayout_ = (sigma > 0.0) ? std::max(dopplerNominal_ + 3.0 * sigma, 1.21 * dopplerNominal_)
+                                       : 2.0 * dopplerNominal_;
+        if (tmax > 0.0) dopplerLayout_ = tmax;
+      }
+    }
+    if (dopplerError_) isDoppler_ = false;
     if (isTargetIntegration_) {
       stoppingPowerEq_.Initialize(stoppingPowerEq, numParameters, configure);
       for (int i = 0; i < numParameters; i++) {
@@ -375,7 +439,25 @@ bool TargetEffect::IsBeamProfile() const {
  */
 
 bool TargetEffect::IsSubPointEffect() const {
-  return isConvolution_ || isTargetIntegration_ || isConvCoefficients_ || isBeamProfile_ || isUdr_;
+  return isConvolution_ || isTargetIntegration_ || isConvCoefficients_ || isBeamProfile_ || isUdr_ || isDoppler_;
+}
+
+double TargetEffect::DopplerU(double cmFactor) const { return this->DopplerUAt(cmFactor, dopplerTemperature_); }
+
+double TargetEffect::DopplerUAt(double cmFactor, double temperature) const {
+  if (!isDoppler_ || !(cmFactor > 0.0) || !(cmFactor < 1.0)) return 0.0;
+  const double kT = 8.617333262e-11 * temperature;     // MeV
+  return std::sqrt(kT * (1.0 - cmFactor) / cmFactor);  // m/M = (1 - c)/c for c = M/(m+M)
+}
+
+void TargetEffect::DopplerWindow(double eCM, double cmFactor, double &lo, double &hi) const {
+  lo = hi = eCM;
+  const double u = this->DopplerUAt(cmFactor, this->GetDopplerLayoutTemperature());
+  if (!(u > 0.0) || !(eCM > 0.0)) return;
+  // the kernel is a Gaussian in velocity, exp(-(v-w)^2/u^2): standard deviation u/sqrt(2)
+  const double v = std::sqrt(eCM / cmFactor), dv = convolutionRange * u / std::sqrt(2.0);
+  hi = cmFactor * (v + dv) * (v + dv);
+  lo = (v > dv) ? cmFactor * (v - dv) * (v - dv) : 0.0;
 }
 
 bool TargetEffect::IsUdr() const { return isUdr_; }

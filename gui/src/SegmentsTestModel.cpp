@@ -163,6 +163,11 @@ QVariant SegmentsTestModel::data(const QModelIndex &index, int role) const {
     else if (index.column() == 8)
       return line.angleStep;
     else if (index.column() == 9) {
+      // a transmission / self-shielded-yield curve: the observable and its thickness
+      const SegmentKeywords::SampleBlock sb = SegmentKeywords::sampleBlock(line.extraTokens);
+      if (!sb.kind.isEmpty())
+        return QString("<center>%1<br><small>n = %2 atoms/b</small></center>")
+            .arg(sb.kind == "transmission" ? tr("Transmission") : tr("Self-Shielded Yield"), sb.n);
       if (line.dataType == 3)
         return QString(tr("<center>Angular Distribution</center>"));
       else if (line.dataType == 2) {

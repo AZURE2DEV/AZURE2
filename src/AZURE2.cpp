@@ -923,7 +923,8 @@ bool checkExternalCapture(Config &configure, const std::vector<SegPairs> &segPai
       stm.str(line);
       NucLine tempNucLine(stm);
       if ((stm.rdstate() & (std::stringstream::failbit | std::stringstream::badbit))) {
-        configure.outStream << "Problem reading nuclear information. Check configuration file." << std::endl;
+        configure.outStream << "Problem reading nuclear information. Check configuration file.  The line:\n  "
+                            << line << std::endl;
         return false;
       }
       if (tempNucLine.ecMultMask() != 0) {
@@ -1136,6 +1137,11 @@ std::string createPrettyParameterName(const std::string &paramName) {
     } catch (...) {}
   }
 
+  // Fitted sample thickness: "segment_X_thickness" -> "Segment X Sample Thickness (atoms/b)"
+  if (paramName.find("segment_") == 0 && paramName.size() > 10 &&
+      paramName.compare(paramName.size() - 10, 10, "_thickness") == 0)
+    return "Segment " + paramName.substr(8, paramName.size() - 18) + " Sample Thickness (atoms/b)";
+
   // Segment energy shift: "segment_X_energy_shift" -> "Segment X Energy Shift (keV)"
   if (paramName.find("segment_") == 0 && paramName.find("_energy_shift") != std::string::npos) {
     try {
@@ -1157,6 +1163,8 @@ std::string createPrettyParameterName(const std::string &paramName) {
   if (paramName.find("screening_") == 0) return "Screening U_e (eV), effect " + paramName.substr(10);
   // Fitted target density: "density_<n>" -> "Target density (atoms/cm^2), effect n"
   if (paramName.find("density_") == 0) return "Target density (atoms/cm^2), effect " + paramName.substr(8);
+  // Fitted Doppler temperature: "doppler_<n>" -> "Doppler temperature (K), effect n"
+  if (paramName.find("doppler_") == 0) return "Doppler temperature (K), effect " + paramName.substr(8);
 
   // Isotopic abundance: "abundance[_<sample>]_Z_A" -> "Abundance [sample ..] Z=.. A=.."
   if (paramName.find("abundance_") == 0) {

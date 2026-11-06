@@ -86,9 +86,9 @@ _DEFAULT_REL_ERROR = 0.05
 
 # Constants matching include/Constants.h, so a converted S-factor or Rutherford
 # ratio reproduces what AZURE2 computes internally.
-_UCONV = 931.4940880
-_FSTRUC = 1.00 / 137.0359996790
-_HBARC = 197.32696310
+_UCONV = 931.49410242            # CODATA 2018, as the engine (include/Constants.h)
+_FSTRUC = 1.00 / 137.035999084
+_HBARC = 197.3269804
 
 
 def _http_get(url, params=None, timeout=60):

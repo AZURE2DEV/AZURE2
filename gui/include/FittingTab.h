@@ -41,6 +41,11 @@ struct FittingParameter {
   // (LevelsTab::engineNumbering of the order the project is written in); 0 = not a parameter of the engine.
   int engineLevel = 0;
   int engineChannel = 0;
+  // A normalization or energy shift tied to another segment's by a normgroup / shiftgroup block: the row of the
+  // group's first active segment (-1 = independent) and the text the table shows,
+  // "tied to segment <key> (normgroup <label>)".  The row is greyed and read-only, its Value is the leader's.
+  int tiedLeader = -1;
+  QString tiedTo;
 };
 
 QT_BEGIN_NAMESPACE
@@ -117,12 +122,23 @@ class FittingTab : public QWidget {
   void syncScreening();
   /*! Mirror the Experimental Effects tab's fitted target densities into the density rows. */
   void syncDensity();
+  /*! Mark the norm and shift rows tied by normgroup / shiftgroup blocks (the Segments tab's keyword tails), give
+   *  them their leader's value, and rebuild the tables when a row became tied or independent. */
+  void syncSegmentGroups();
+  /*! Mirror the Experimental Effects tab's fitted Doppler temperatures into the doppler rows. */
+  void syncDoppler();
+  /*! Mirror the Segments tab's fitted sample thicknesses (transmission / yield lines with the fit form) into the
+   *  thickness rows; a changed set of rows rebuilds the list. */
+  void syncThickness();
 
  private:
   void setupParameterTable(QTableWidget *table, const QString &title, bool priorCentreColumn = false);
   void addParameterRow(QTableWidget *table, const FittingParameter &param);
   void updateParameterFromTable(const QString &paramName, int column, const QVariant &value);
   void syncSegmentVaryStates();
+  /// Set tiedLeader / tiedTo (and a tied row's value) of every norm and shift parameter; true when any changed.
+  bool markTiedSegmentParameters();
+  QTableWidget *tableForParameter(const QString &paramName) const;
   void writeAbundance(const FittingParameter &param);
   /// Append screening_<n> (eV) for every active <targetInt> line with screening, in the engine's order.
   void appendScreeningParameters();
@@ -133,6 +149,17 @@ class FittingTab : public QWidget {
   /// The density, its prior sigma and its fit flag go back to the Experimental Effects tab (the density to every
   /// line of its group).
   void writeDensity(const FittingParameter &param);
+  /// Append doppler_<n> (K) for every active line with the fit form 'doppler T vary sigma [Tmax]', in the
+  /// engine's order (after the densities).
+  void appendDopplerParameters();
+  /// The temperature, its prior sigma and its fit flag go back to the Experimental Effects tab.
+  void writeDoppler(const FittingParameter &param);
+  /// Append segment_<key>_thickness (atoms/barn) for every active data segment whose transmission / yield block has
+  /// the fit form 'n vary sigma', in the engine's order (after the Doppler temperatures).
+  void appendThicknessParameters();
+  /// The thickness, its prior sigma and its fit flag go back to the segment line's transmission / yield block (a
+  /// thicknessgroup follower's row is tied and writes nothing).
+  void writeThickness(const FittingParameter &param);
   void assignMinuitIndices();
   void updateParameterInOtherTabs(const QString &paramName, const FittingParameter &param);
   void writeSegmentColumn(const FittingParameter &param, int column, const QVariant &value);
@@ -174,6 +201,8 @@ class FittingTab : public QWidget {
   QTableWidget *abundanceParamsTable;
   QTableWidget *screeningParamsTable;
   QTableWidget *densityParamsTable;
+  QTableWidget *dopplerParamsTable;
+  QTableWidget *thicknessParamsTable;
   QTableWidget *normParamsTable;
   QTableWidget *shiftParamsTable;
   QTableWidget *cbkgParamsTable;  ///< THM coherent background; its tab only when there are some

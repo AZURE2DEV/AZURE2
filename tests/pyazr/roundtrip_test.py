@@ -75,9 +75,10 @@ check("second write identical to the first", model3.to_text() == open(files[0]).
 print("\n6. a channel built from tokens, with no raw line, still emits")
 tokens = model.levels[0].channels[0].tokens
 n = len(azrfile.AzrChannel(tokens).to_line().split())
-# 31 fields for a conventional line, up to 33 with the optional THM columns.
+# 31 fields for a conventional line, 32 with dev's light-particle excitation
+# (column 32), 33 with the optional THM columns, 34 with both.
 check("emits a full line",
-      azrfile._NFIELDS <= n <= azrfile._NFIELDS_MAX, f"{n} fields")
+      n == len(tokens) and n - azrfile._NFIELDS in azrfile._LAYOUTS, f"{n} fields")
 
 print("\n7. a <thm> options block survives edits wherever it sits")
 # The engine reads <thm> from anywhere in the file (Config::ReadThmBlock);

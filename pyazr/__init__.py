@@ -28,6 +28,7 @@ from .bands import (Band, load_covariance, rmatrix_columns, best_fit_params,
 from .modelavg import (Variant, Averaged, ModelAverage, model_average,
                        parameter_label, azr_parameter_slots,
                        write_averaged_azr)
+from .priors import prior_from_fit, read_prior, write_prior, read_covariance_dat
 
 __all__ = ["azure2", "ScatteringLength", "ScatteringLengthLine",
            "tabulate", "TabulatedCrossSection",
@@ -53,5 +54,6 @@ __all__ = ["azure2", "ScatteringLength", "ScatteringLengthLine",
            "live_parameters", "step_sizes", "sensitivities", "trimmed_model",
            "uncertainty_bands", "extrapolation_bands",
            "Variant", "Averaged", "ModelAverage", "model_average",
-           "parameter_label", "azr_parameter_slots", "write_averaged_azr"]
+           "parameter_label", "azr_parameter_slots", "write_averaged_azr",
+           "prior_from_fit", "read_prior", "write_prior", "read_covariance_dat"]
 __version__ = '2.9.0'

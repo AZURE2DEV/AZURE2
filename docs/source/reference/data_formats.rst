@@ -208,6 +208,100 @@ lines, which a reader that does not know a key skips:
    The pair whose :math:`E(s)` ``relativistic.out`` uses; absent or ``0``: the
    first particle pair of each compound nucleus.
 
+``priorCovariance=<file>``
+   A multivariate Gaussian prior :math:`(\mathbf{p}-\boldsymbol{\mu})^T C^{-1}
+   (\mathbf{p}-\boldsymbol{\mu})` on the parameters the file lists
+   (:doc:`../user_guide/chi_squared`, "Prior parameter covariance"). The path is
+   relative to the ``.azr``'s directory (or absolute); everything after the first
+   ``#`` on the line is a comment. Absent or empty: none. The file is plain text
+   with ``#`` comments: an optional ``#parametrization <0|1|2>`` line (as the first
+   line of ``param.sav``), the parameter names (``param.sav``'s), their means, and
+   the :math:`n` rows of the symmetric, positive-definite :math:`n\times n`
+   covariance::
+
+       #parametrization 1
+       width_2_1 segment_4_norm
+       0.8206 1.05
+       5.0e-5 1.0e-6
+       1.0e-6 4.0e-4
+
+   Refused with an ``ERROR`` (nothing is written): an unknown name, a duplicate
+   name, a non-number, a count mismatch, a non-symmetric (1e-10 relative) or
+   non-positive-definite matrix, a tag other than the run's parametrization, a
+   file that cannot be read. Parameters fixed in the run are marginalized. Only a
+   run with data uses it (an extrapolation or a rate ignores the key). Engines
+   older than 2026-11-05 ignore the key silently.
+
+The ``<levels>`` block has one line per channel of a level, 31
+whitespace-separated columns (read by ``NucLine``, ``include/NucLine.h``), and
+optionally a 32nd:
+
+.. list-table::
+   :widths: 12 18 70
+   :header-rows: 1
+
+   * - Column
+     - Name
+     - Meaning
+   * - 1-4
+     - ``J pi E fix``
+     - the level's spin, parity, excitation energy (MeV) and fixed flag
+   * - 5-6
+     - ``aa ir``
+     - entrance key (written as ``1``, not read) and the channel's pair key
+   * - 7-8
+     - ``2s 2l``
+     - twice the channel spin and twice the orbital angular momentum
+   * - 9-11
+     - ``id active chfix``
+     - level ID, level active flag, width fixed flag
+   * - 12
+     - ``gamma``
+     - partial width (eV) of an open channel, ANC (fm\ :sup:`-1/2`) of a closed one
+   * - 13-16
+     - ``j1 pi1 j2 pi2``
+     - spin and parity of the light (1) and heavy (2) particle **in the state
+       the pair has them in**
+   * - 17
+     - ``e2``
+     - excitation energy of the heavy particle (MeV); of the final level for a
+       gamma pair
+   * - 18-21
+     - ``m1 m2 z1 z2``
+     - **ground-state** atomic masses (u) and charges
+   * - 22-23
+     - ``Sin S``
+     - the entrance pair's separation energy (written, not read) and this pair's
+       ground-state separation energy (MeV)
+   * - 24-26
+     - ``j3 pi3 e3``
+     - unused (written as ``0 0 0.0``)
+   * - 27-28
+     - ``type R``
+     - pair type (0 particle, 10 gamma, 20 beta) and channel radius (fm)
+   * - 29-30
+     - ``g1 g2``
+     - g-factors of the two particles
+   * - 31
+     - ``ecmask``
+     - external-capture multipolarity mask
+   * - 32
+     - ``e1``
+     - **optional**: excitation energy of the light particle (MeV), since
+       November 2026. Absent means 0. The pair opens at
+       :math:`S + e_1 + e_2`.
+
+A pair's columns (13-21, 23 and 27-32) are read from the first line that names it.
+Column 32 is written (by the GUI and by pyazr) **only when it is nonzero**, so a
+project without excited light particles keeps its 31 columns and every older
+file reads and writes back byte for byte. An engine or GUI from before
+November 2026 does not know the column: the engine ignores it silently (the
+pair then opens at :math:`S + e_2`), and the GUI drops it when it saves the
+project. The engine refuses a nonzero ``e1`` on a gamma or beta pair, a
+negative one, and two different values on lines of one pair. Two particles of
+a particle pair are identical when Z, mass, spin, parity, g-factor and
+excitation (``e1 = e2``) are all equal (:doc:`../user_guide/particle_pairs`).
+
 Several compound nuclei.  The compound nucleus of a pair is inferred from its
 columns (particle pair :math:`Z = z_1 + z_2`, :math:`A = \mathrm{round}(m_1 +
 m_2)`; gamma pair the heavy particle; beta pair the daughter), and a project
@@ -259,11 +353,12 @@ capture, the exit key being ignored, and now draws a warning saying so.
 A ``<segmentsData>`` line may end with the keyword blocks
 ``sqrtshift <b> <bError> <vary>``, ``sample <1|name>``, ``shiftgroup <label>``,
 ``shiftfngroup <label>``, ``normgroup <label>``, ``covariance <file>``,
-``shiftfn "<f(x)>" N ...``, ``total <0|1>``, ``transmission <n>``,
-``yield <n>`` and ``spin <s>`` (in any order;
+``shiftfn "<f(x)>" N ...``, ``total <0|1>``, ``transmission <n> [<vary> <sigma>]``,
+``yield <n> [<vary> <sigma>]``, ``thicknessgroup <label>`` and ``spin <s>`` (in any order;
 writers put ``sample`` last). A ``<segmentsTest>`` line honours ``sample``,
-``total``, ``transmission``, ``yield`` and ``spin``; the shift, norm and shift-function blocks have no
-meaning without data and are skipped there (before October 2026 they stopped
+``total``, ``transmission``, ``yield`` and ``spin``; the shift, norm, thickness-group and shift-function blocks
+have no meaning without data and are skipped there, as is the fit form of a ``transmission`` / ``yield`` block
+(a test segment uses its :math:`n`) (before October 2026 they stopped
 the keyword reader, so a ``sample`` or ``total`` written after them was lost),
 and ``covariance`` on a test line is refused (:doc:`../user_guide/segments`).
 The three shift fields of a data line (``shift shiftError vary``) are
@@ -298,6 +393,13 @@ e^{-n\sigma_\mathrm{tot}})`; the data file then holds transmissions or yields,
 and under a sub-point target effect the transform comes before the kernel
 (:doc:`../user_guide/segments`, "Sample Transmission and Self-Shielded
 Yield"). An engine older than November 2026 ignores both keywords silently.
+The fit form ``transmission <n> <vary> <sigma>`` (``vary`` 0 or 1, ``sigma`` the
+Gaussian prior width in atoms/barn, 0 = none) makes :math:`n` the fit parameter
+``segment_<key>_thickness``, and ``thicknessgroup <label>`` makes the segments
+with the label share the thickness of the first of them (each member needs its
+own ``transmission`` or ``yield`` block); a malformed fit form is refused. The
+engines of early November 2026 without the fit form read :math:`n` and ignore
+the rest of the block and ``thicknessgroup`` silently.
 ``sample 1`` multiplies the segment's own term and each composite component
 by the abundance of the term's entrance pair's compound nucleus in the
 unnamed sample (or the only sample, if every sample is named);
@@ -361,7 +463,17 @@ and ``densitygroup <label>`` make a thin target's density a fit parameter
 density), the largest density its sub-point grids span, and a label shared by
 lines that see one target; see :doc:`../user_guide/experimental_effects`. Engines
 older than the feature refuse a line with these keywords; GUIs older than it drop
-them on save.
+them on save. ``doppler T`` is free-gas Doppler broadening of the listed
+segments at the effective temperature T (kelvin), applied to the cross section
+before any ``transmission``/``yield`` transform and before the line's resolution
+kernel; a line may carry it alone. Engines older than November 2026 refuse a line
+with it; older GUIs drop it on save. ``doppler T vary sigma [Tmax]`` makes T the fit
+parameter ``doppler_<n>`` (vary 0 or 1, a prior of width sigma kelvin about T, 0 =
+none, and the largest temperature the sub-point grids span, by default
+max(T + 3 sigma, 1.21 T), or 2 T without a prior); see
+:doc:`../user_guide/experimental_effects`. Engines older than November 2026 refuse
+it; a build that knows only ``doppler T`` ignores the numbers after T (a fixed
+temperature, no parameter) and its GUI misreads the line.
 
 .. tip::
 

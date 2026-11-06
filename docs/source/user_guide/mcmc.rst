@@ -92,10 +92,19 @@ Brune's and Park's bases is converted).
 
    The sampler tells the kinds apart by the engine's parameter names
    (``energy_*``, ``width_*``, ``segment_N_norm``, ``segment_N_energy_shift``,
-   ``segment_N_energy_shift_sqrt``, ``cbkg_*``), and so does the tab when it
+   ``segment_N_energy_shift_sqrt``, ``density_N``, ``doppler_N``,
+   ``segment_N_thickness``, ``cbkg_*``), and so does the tab when it
    loads the parameters. If a name is not recognised
    the run log says so and no automatic prior is set, rather than one being
    put on the wrong parameter.
+
+   A prior parameter covariance (``priorCovariance=<file>`` in ``<config>``,
+   :doc:`chi_squared`, "Prior parameter covariance") enters the log prior as the
+   multivariate Gaussian :math:`-\tfrac12(\mathbf{p}-\boldsymbol{\mu})^T C^{-1}
+   (\mathbf{p}-\boldsymbol{\mu}) - \tfrac12\ln\det(2\pi C)` and replaces the
+   diagonal prior (automatic or from this table) of each parameter it lists; the
+   run log names them. It is defined on the reduced-width amplitudes, so with
+   **Use Reduced Widths** off a prior on a level energy or width is refused.
 
 Sampling settings
 -----------------

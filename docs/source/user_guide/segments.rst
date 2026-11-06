@@ -194,7 +194,7 @@ appears with the following fields:
    Check this box to allow the normalization factor to be varied as a free
    parameter during fitting.
 
-   **Shared normalization (normalization groups, input file only).** Segments
+   **Shared normalization (normalization groups).** Segments
    that come from one measurement often share one absolute scale -- an
    excitation function and the angular distributions it was integrated from,
    or one data set split into per-angle segments. Ending their lines with the
@@ -214,9 +214,14 @@ appears with the following fields:
    on the groups. ``chiSquared.out`` lists every member's (shared)
    normalization and the penalty on the first member only. The run log notes
    each group and its members. The keyword may be combined with
-   ``shiftgroup``; writers put it before a ``sample`` block. The GUI preserves
-   the block but does not edit it, and its Fitting tab still lists a member's
-   own vary flag.
+   ``shiftgroup``; writers put it before a ``sample`` block. Only active
+   segments are members: the first *active* segment with the label carries
+   the group's value. In the GUI the label is the **Normalization** field of
+   **Groups** in the data segment dialog (below); the table's **Groups**
+   column lists each line's groups, a member's own (unused) normalization is
+   shown in grey, and the Fitting tab shows the member's normalization as
+   tied to the first segment rather than as a parameter of its own
+   (:doc:`fitting`).
 
    **Correlated uncertainties (covariance matrices).** A
    line ending with the keyword block ``covariance <file>`` attaches its
@@ -248,6 +253,27 @@ appears with the following fields:
 
 **Vary Energy Shift?**
    Check this box to allow the energy shift to be varied during fitting.
+
+**Groups** (Normalization, Energy Shift, Shift Function)
+   Ties this segment's normalization, constant energy shift or energy-shift
+   function to other segments: the ``normgroup <label>``,
+   ``shiftgroup <label>`` and ``shiftfngroup <label>`` blocks described
+   under **Vary Norm?** above and the shift entries below. Each field is a
+   drop-down listing the labels the project already uses; pick one, type a
+   new label, or leave the field empty for no group. Every active segment
+   with the same label uses the value of the group's **first active segment
+   in file order** (for a shift-function group: its function, while each
+   segment keeps its own constant shift), so set the shared value, vary flag
+   and uncertainty on that segment. A label is a single word: blanks and
+   double quotes are refused as they are typed. **Energy Shift** and **Shift
+   Function** exclude each other (the engine refuses a segment in both), so
+   while one holds a label the other is disabled. Editing a segment shows the
+   labels of its line; changing or clearing a field rewrites or removes that
+   block only, and every other block at the end of the line (``sqrtshift``,
+   ``shiftfn``, ``covariance``, ``sample``, ...) is written back as read. The
+   **Groups** column of the table lists each line's groups (e.g.
+   ``norm: D, shift: A``); its tooltip names the segment whose value a
+   member uses, or the members that use the first segment's.
 
 **sqrt(E) energy shift** (input file only)
    A second, optional shift term that grows with the beam energy. With it a
@@ -294,8 +320,9 @@ appears with the following fields:
    ``segment_<key>_energy_shift`` entry in ``param.sav`` (fixed, written with
    the shared value), so parameter files stay compatible. The
    :math:`\sqrt{E}` term is not shared (use a shift function for that, below).
-   The run log notes each group and its members. The GUI preserves the block
-   but does not edit it.
+   The run log notes each group and its members. In the GUI the label is the
+   **Energy Shift** field of **Groups** in the data segment dialog (below),
+   and the Fitting tab shows a member's shift as tied to the first segment.
 
 **Energy-shift function** (input file only)
    Different calibration errors shift the energy scale in different ways: an
@@ -350,7 +377,10 @@ appears with the following fields:
    fits four constants and one :math:`\sqrt{E}` coefficient; each
    constant is then that segment's shift at :math:`E_0` = 1.5 MeV. A segment
    may be in a ``shiftgroup`` or a ``shiftfngroup``, not both, and only the
-   first member declares the ``shiftfn``. Members that are single-energy
+   first member declares the ``shiftfn``. In the GUI the label is the
+   **Shift Function** field of **Groups** in the data segment dialog (below);
+   the ``shiftfn`` block itself is written in the input file (the GUI keeps
+   it as read). Members that are single-energy
    angular distributions add nothing to the coefficient: their own constants
    absorb it.
 
@@ -668,7 +698,10 @@ Exponentiating a broadened cross section fills in the dips: on the test model
 (an s-wave resonance with :math:`\Gamma_n = 34` keV, :math:`n\sigma \approx 1`
 at the peak, a 15 keV beam spread) the two differ by 6 % at the resonance.
 Fitting transmission data rather than a total cross section reduced from them
-avoids the problem altogether.
+avoids the problem altogether. Free-gas Doppler broadening (``doppler T`` on the
+``<targetInt>`` line, :doc:`experimental_effects`) acts on the cross section
+itself, so it comes first: Doppler, then the transform, then the resolution
+kernel.
 
 ``transmission``
    The segment's value -- its own term, a **Sum** of terms, or an
@@ -695,20 +728,85 @@ out (photon channels have no width in the level matrix), which matters only
 where capture is not small against the total; for a transmission add the
 capture pairs as **Sum** components if it does. The multiple-scattering terms
 of a capture yield (SAMMY's :math:`Y_1`, :math:`Y_2`, ...), which need the
-sample geometry, are not included, nor is a fitted sample thickness: correct
-the data for multiple scattering, and give the thickness its measured value.
+sample geometry, are not included: correct the data for multiple scattering.
 
 The keywords apply to test segments as well (a calculated transmission or
-yield curve), work in pyazr, and have an analytic gradient. The GUI keeps them
-through a load and save but has no control for them yet; a sample segment's
-decomposition file (``AZUREOut_sample_seg=<key>.out``) then notes that its
-total column is the transmission while the nucleus columns stay cross sections.
+yield curve), work in pyazr, and have an analytic gradient. A sample
+segment's decomposition file (``AZUREOut_sample_seg=<key>.out``) notes that
+its total column is the transmission while the nucleus columns stay cross
+sections.
+
+Fitted Sample Thickness
+^^^^^^^^^^^^^^^^^^^^^^^
+
+The thickness can be a fit parameter. The fit form of the block adds a vary
+flag and a prior width to it:
+
+.. code-block:: text
+
+   transmission <n> <vary> <sigma>
+   yield <n> <vary> <sigma>
+
+``vary`` is 0 or 1 and ``sigma`` is the width, in atoms/barn, of a Gaussian
+prior about the line's :math:`n` (0 = no prior). The line then has the
+parameter ``segment_<key>_thickness`` (atoms/barn; ``<key>`` the segment's
+number, as in ``segment_<key>_norm``). It is fixed for ``vary 0``. Its lower
+limit is 0, where :math:`T = 1` and :math:`Y_0 = 0`. With a prior the fit adds
+:math:`\left((n - n_0)/\sigma\right)^2`. chiSquared.out reports the sum of
+these terms as ``Total-Thickness-Chi-Squared``. A plain ``transmission <n>``
+has no parameter and gives exactly the output it gave before the fit form
+existed.
+
+.. code-block:: text
+
+   1 1 1 0.29 0.66 0 180 0 1 0 0 0 0 0 data/trans.dat 0 0 total 1 transmission 0.15 1 0.01
+
+A transmission and a capture yield measured on the same sample share one
+thickness through a **thickness group**, ``thicknessgroup <label>``. It works as
+``normgroup`` does for normalizations: every active segment with the label
+uses the thickness of the group's *first* active segment in file order, that
+is its :math:`n`, vary flag and prior. A later member keeps no free parameter
+of its own. If its line has the fit form, its ``segment_<key>_thickness`` is
+fixed at the leader's value, and param.sav records it so. Each member needs
+its own ``transmission`` or ``yield`` block; a ``thicknessgroup`` on a line
+without one is refused with an error.
+
+.. code-block:: text
+
+   1 1 1 0.29 0.66 0 180 0 1 0 0 0 0 0 data/trans.dat 0 0 total 1 transmission 0.15 1 0 thicknessgroup s
+   1 1 2 0.29 0.66 0 180 0 1 0 0 0 0 0 data/capt.dat 0 0 yield 0.15 thicknessgroup s
+
+The derivative of the observable with respect to :math:`n` is analytic,
+:math:`\partial T/\partial n = -\sigma e^{-n\sigma}` and
+:math:`\partial Y_0/\partial n = \sigma\, e^{-n\sigma_\mathrm{tot}}`. It is
+taken through the resolution kernel and the Doppler step exactly as the cross
+sections' derivatives are, so ``--use-gradient`` and the least-squares drivers
+(``--use-lm``) handle it like any other parameter, and an MCMC run takes the
+line's prior as the parameter's prior. Malformed fit forms are refused with an
+error naming the segment: ``vary`` not 0 or 1, ``sigma`` missing or negative,
+:math:`n \le 0`, or a ``thicknessgroup`` without a label.
+
+On a test segment (mode 3) the fit form is read but has no effect: a test
+segment has no fit parameters, uses its own :math:`n`, and prints a note. A
+``thicknessgroup`` there is skipped the same way. To extrapolate with a fitted
+thickness, copy the fitted value into the test line.
+
+In the GUI, the **Sample** row of the segment dialog sets the block. It holds
+a choice of None, Transmission or Self-shielded yield, the thickness in
+atoms/b, **Fit**, the prior sigma and the thickness group. The Segments table
+shows the observable and :math:`n` in the data-type column and the group in
+the Groups column. The Fitting tab lists the parameters under **Sample
+Thicknesses**, and a thickness-group follower is shown tied to its leader.
 
 .. warning::
 
    An engine older than November 2026 does not know the keywords and ignores
    them silently: it compares the cross section itself with the
-   transmission or yield data.
+   transmission or yield data. The engines of early November 2026 that know
+   ``transmission <n>`` but not its fit form (up to and including the one with
+   the fitted Doppler temperature) read :math:`n` and silently ignore the fit
+   form and ``thicknessgroup``: their keyword loop stops at the first token it
+   does not know, so the thickness stays at :math:`n` and is not fitted.
 
 Segments Without Data
 ---------------------

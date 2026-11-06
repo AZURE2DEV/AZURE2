@@ -91,7 +91,6 @@ class CoulFuncCache {
   std::map<CoulFuncKey, CoulFuncData> &localScratch() const;
   bool TryGetPermanent(const CoulFuncKey &key, double energy, CoulWaves &out) const;
   int threadIndex() const;
-  std::atomic<int> transientDepth_{0};
 
  public:
   CoulFuncCache();

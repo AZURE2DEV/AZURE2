@@ -18,7 +18,7 @@ from typing import Optional
 
 # Parameter kinds, indexed by the integer ``type`` code in the C++ record.
 _KINDS = {0: "energy", 1: "width", 2: "norm", 3: "shift", 4: "shift_sqrt", 5: "shift_fn",
-          6: "abundance", 7: "screening", 8: "density", 9: "cbkg"}
+          6: "abundance", 7: "screening", 8: "density", 9: "doppler", 10: "thickness", 11: "cbkg"}
 
 
 @dataclass(frozen=True)
@@ -68,7 +68,7 @@ class Parameter:
 
     index: int                      # position among *all* parameters
     name: str                       # raw AZURE2 parameter name
-    kind: str                       # 'energy' | 'width' | 'norm' | 'shift' | 'shift_sqrt' | 'shift_fn' | 'abundance' | 'screening' | 'density' | 'cbkg'
+    kind: str                       # 'energy' | 'width' | 'norm' | 'shift' | 'shift_sqrt' | 'shift_fn' | 'abundance' | 'screening' | 'density' | 'doppler' | 'thickness' | 'cbkg'
     fixed: bool                     # held fixed during the fit?
     value: float                    # current (physical) value
     free_index: Optional[int]       # position among the non-fixed parameters
@@ -126,6 +126,17 @@ class Parameter:
     # ``densitygroup`` (``effect`` = its first line): ``prior_nominal`` / ``prior_sigma`` as above, and the largest
     # density its sub-point grids span (beyond it the engine uses this value and warns).
     density_max: Optional[float] = None
+    # Fitted free-gas Doppler temperature (K) of a <targetInt> line with ``doppler T vary sigma [Tmax]``:
+    # ``prior_nominal`` (the line's T) / ``prior_sigma`` as above, and the layout temperature, the largest its
+    # sub-point grids and integration windows span (Tmax, else T0 + 3 sigma but at least 1.21 T0, or 2 T0 without
+    # a prior; beyond it, or below T0/4, the engine uses the nearest end and warns).
+    doppler_max: Optional[float] = None
+    # Fitted sample thickness (atoms/barn) of a data segment with ``transmission n vary sigma`` or ``yield n vary
+    # sigma`` (``segment_key``): ``prior_nominal`` (the line's n) / ``prior_sigma`` as above, ``sample_kind``
+    # ("transmission" or "yield") and, for a ``thicknessgroup`` follower (whose parameter is fixed at its leader's
+    # value and carries no prior), the leader's segment key.
+    sample_kind: Optional[str] = None
+    thickness_leader: Optional[int] = None
 
     @property
     def nucleus(self):
@@ -195,6 +206,27 @@ class Parameter:
                 prior_sigma=float(wigner_limit), density_max=float(S),
             )
 
+        if int(round(type_code)) == 9:
+            # a fitted Doppler temperature (K): as a density, the layout temperature in S
+            return cls(
+                index=index, name=name, kind="doppler",
+                fixed=bool(round(fixed)), value=float(value), free_index=free_index,
+                effect=int(round(channel)), prior_nominal=float(level_energy),
+                prior_sigma=float(wigner_limit), doppler_max=float(S),
+            )
+
+        if int(round(type_code)) == 10:
+            # a fitted sample thickness (atoms/barn): the segment key, the line's n in the level-energy field, the
+            # prior sigma in the Wigner-limit field, 0/1 (transmission/yield) in the channel field and a follower's
+            # leader key in L (AZUREAPI.h)
+            return cls(
+                index=index, name=name, kind="thickness",
+                fixed=bool(round(fixed)), value=float(value), free_index=free_index,
+                segment_key=int(round(segment_key)), prior_nominal=float(level_energy),
+                prior_sigma=float(wigner_limit), sample_kind="yield" if int(round(channel)) == 1 else "transmission",
+                thickness_leader=int(round(L)) if L >= 1 else None,
+            )
+
         return cls(
             index=index,
             name=name,
@@ -243,12 +275,21 @@ class Parameter:
             bits.append(f"L={self.L}")
             bits.append(f"S={self.S}")
             bits.append(f"exit pair={self.pair}")
-        if self.kind in ("screening", "density"):
+        if self.kind in ("screening", "density", "doppler"):
             bits.append(f"effect={self.effect}")
             if self.prior_sigma:
                 bits.append(f"prior={self.prior_nominal:.6g}+-{self.prior_sigma:.6g}")
         if self.kind == "density":
             bits.append(f"max={self.density_max:.6g}")
+        if self.kind == "doppler":
+            bits.append(f"max={self.doppler_max:.6g}")
+        if self.kind == "thickness":
+            bits.append(f"segment={self.segment_key}")
+            bits.append(self.sample_kind)
+            if self.prior_sigma:
+                bits.append(f"prior={self.prior_nominal:.6g}+-{self.prior_sigma:.6g}")
+            if self.thickness_leader is not None:
+                bits.append(f"tied to segment {self.thickness_leader}")
         return "Parameter(" + ", ".join(bits) + ")"
 
 
@@ -304,7 +345,12 @@ class Pair:
 
     # Number of doubles per record emitted by AZUREAPI::GetPairsInfo.
     # Must match AZUREAPI::kPairInfoFields.
-    _NFIELDS = 20
+    # 21 since the merge of dev 3264896d into thm: dev's light_excitation (19)
+    # and thm's binding_energy (20; it was 19).  from_record also accepts dev's
+    # 20 (binding_energy = 0) and an older engine's 19 (both 0); a thm engine
+    # from before the merge sent its binding energy as field 19, which is not
+    # told apart (the module is built with its engine).
+    _NFIELDS = 21
 
     number: int             # 1-based pair number (matches Parameter.pair)
     key: int                # user pair key from the .azr file
@@ -319,12 +365,40 @@ class Pair:
     Z2: int
     M2: float
     sep_energy: float       # separation energy (MeV)
-    excitation: float       # pair excitation energy (MeV)
+    excitation: float       # total pair excitation energy, light + heavy (MeV):
+                            #   the channel threshold is sep_energy + excitation
     channel_radius: float   # channel radius (fm)
     i1i2factor: float       # 1 / ((2 J1 + 1)(2 J2 + 1))
     nucleus_Z: int = 0      # the compound nucleus the pair forms (Z1+Z2 for a particle
     nucleus_A: int = 0      #   pair, Z2 for a gamma pair, Z2-Z1 for a beta pair; A = round(M))
     abundance: float = 1.0  # current isotopic abundance of that nucleus (1 unless <abundances>)
+    light_excitation: float = 0.0  # excitation of particle 1 (MeV), column 32 of the <levels> line
+
+    @property
+    def heavy_excitation(self) -> float:
+        """Excitation energy of particle 2 (MeV), column 17 (``e2``): the
+        total :attr:`excitation` less :attr:`light_excitation`."""
+        return self.excitation - self.light_excitation
+
+    @property
+    def threshold(self) -> float:
+        """Excitation energy of the compound nucleus at which this pair's
+        channels open (MeV): ``sep_energy + excitation`` (both particles'
+        excitations included)."""
+        return self.sep_energy + self.excitation
+
+    @property
+    def label(self) -> str:
+        """The two particles' J^pi, an excited one marked with its excitation
+        energy: ``'2+*(4.439 MeV) + 2+*(4.439 MeV)'`` for 12C(2+)+12C(2+),
+        ``'0+ + 2+*(4.439 MeV)'`` for a + 12C(2+)."""
+        def part(J, parity, ex):
+            s = f"{J:g}{'+' if parity > 0 else '-'}"
+            return s + (f"*({ex:.4g} MeV)" if ex else "")
+        if self.is_photon:
+            return f"gamma + {part(self.J2, self.parity2, self.heavy_excitation)}"
+        return (f"{part(self.J1, self.parity1, self.light_excitation)} + "
+                f"{part(self.J2, self.parity2, self.heavy_excitation)}")
 
     @property
     def nucleus(self):
@@ -341,8 +415,14 @@ class Pair:
     @classmethod
     def from_record(cls, record):
         """Build a :class:`Pair` from one ``GET_PAIRS_INFO`` record."""
+        record = list(record)
+        if len(record) == cls._NFIELDS - 2:     # an engine before light_excitation (and binding_energy)
+            record += [0.0, 0.0]
+        elif len(record) == cls._NFIELDS - 1:   # dev's 20 fields (light_excitation last), no binding energy
+            record.append(0.0)
         (number, key, ptype, is_entrance, J1, parity1, Z1, M1, J2, parity2,
-         Z2, M2, sepE, exE, chRad, i1i2factor, nucZ, nucA, abundance, bindingE) = record
+         Z2, M2, sepE, exE, chRad, i1i2factor, nucZ, nucA, abundance,
+         lightExE, bindingE) = record
         return cls(
             number=int(round(number)),
             key=int(round(key)),
@@ -356,6 +436,7 @@ class Pair:
             channel_radius=float(chRad), i1i2factor=float(i1i2factor),
             nucleus_Z=int(round(nucZ)), nucleus_A=int(round(nucA)),
             abundance=float(abundance),
+            light_excitation=float(lightExE),
             binding_energy=float(bindingE),
         )
 
@@ -367,6 +448,8 @@ class Pair:
                 f"{' entrance' if self.is_entrance else ''}"
                 f"{' photon' if self.is_photon else ''}, "
                 f"J1={self.J1:g}, J2={self.J2:g}, "
+                f"{f'light_excitation={self.light_excitation:g}, ' if self.light_excitation else ''}"
+                f"{f'heavy_excitation={self.heavy_excitation:g}, ' if self.heavy_excitation else ''}"
                 f"i1i2factor={self.i1i2factor:g})")
 
 
@@ -502,6 +585,18 @@ class ParameterSet(list):
         """The fitted target densities (atoms/cm^2), one per <targetInt> line with a ``densityfit`` block or
         per ``densitygroup`` (none otherwise)."""
         return ParameterSet(p for p in self if p.kind == "density")
+
+    @property
+    def dopplers(self):
+        """The fitted free-gas Doppler temperatures (K), one per <targetInt> line with ``doppler T vary sigma``
+        (none otherwise)."""
+        return ParameterSet(p for p in self if p.kind == "doppler")
+
+    @property
+    def thicknesses(self):
+        """The fitted sample thicknesses (atoms/barn), one per data segment whose ``transmission`` / ``yield``
+        block has the fit form ``n vary sigma`` (none otherwise); a ``thicknessgroup`` follower's is fixed."""
+        return ParameterSet(p for p in self if p.kind == "thickness")
 
     @property
     def sqrt_shifts(self):

@@ -6,6 +6,7 @@
 #include "AZUREParams.h"
 #include "Config.h"
 #include "CovarianceBand.h"
+#include "PriorCovariance.h"
 #include "ReactionRate.h"
 #include "ParameterLimitsManager.h"
 #include "ECAmplitudeCache.h"
@@ -132,13 +133,31 @@ int AZUREMain::operator()() {
   AZUREParams params;
   compound()->FillMnParams(params.GetMinuitParams(), &configure());
   data()->FillMnParams(params.GetMinuitParams());
-  if (!(configure().paramMask & Config::USE_PREVIOUS_PARAMETERS)) {
-    configure().outStream << "Creating New param.par File..." << std::endl;
-    params.WriteUserParameters(configure(), false);
-  } else {
+  if (configure().paramMask & Config::USE_PREVIOUS_PARAMETERS) {
     configure().outStream << "Reading User Parameter File..." << std::endl;
     params.ReadUserParameters(configure());
     if (!params.ReconcileBasis(compound(), configure())) return -1;
+  }
+  // Prior parameter covariance (<config> priorCovariance=): matched onto the parameter vector as it stands now (a
+  // parameter file can fix or free level parameters), before anything is written, so a refused file leaves no
+  // output.  Only a run with data has a chi-squared to add it to.
+  std::shared_ptr<const PriorCovariance> priorCov;
+  if ((configure().paramMask & Config::CALCULATE_WITH_DATA) &&
+      !(configure().paramMask & Config::CALCULATE_REACTION_RATE) && !configure().priorCovariance.empty()) {
+    const ROOT::Minuit2::MnUserParameters &mp = params.GetMinuitParams();
+    std::vector<std::string> names;
+    std::vector<bool> fixedFlags;
+    for (unsigned int i = 0; i < mp.Params().size(); i++) {
+      names.push_back(mp.GetName(i));
+      fixedFlags.push_back(mp.Parameter(i).IsFixed());
+    }
+    if (PriorCovariance::Load(configure(), names, fixedFlags, AZUREParams::BasisForConfig(configure()), priorCov) < 0)
+      return -1;
+  }
+  data()->SetPriorCovariance(priorCov);
+  if (!(configure().paramMask & Config::USE_PREVIOUS_PARAMETERS)) {
+    configure().outStream << "Creating New param.par File..." << std::endl;
+    params.WriteUserParameters(configure(), false);
   }
 
   if (!(configure().paramMask & Config::CALCULATE_REACTION_RATE)) {
@@ -171,6 +190,19 @@ int AZUREMain::operator()() {
 
     // Declare a new instance of FCNBase
     AZURECalc theFunc(data(), compound(), configure(), &limitsManager);
+    // A prior-covariance parameter that also carries a diagonal prior of its own gets both (on purpose or not).
+    if (priorCov && priorCov->Size() > 0) {
+      const std::vector<int> own = theFunc.IndicesWithOwnPrior();
+      std::string list;
+      for (int f : priorCov->FullIndex())
+        if (std::binary_search(own.begin(), own.end(), f))
+          list += (list.empty() ? "" : ", ") + params.GetMinuitParams().GetName(f);
+      if (!list.empty())
+        configure().Note("Note: prior covariance: " + list + " also carr" +
+                         (list.find(',') == std::string::npos ? "ies" : "y") +
+                         " a prior of its own (normalization error, shift error, sigma or nuisance prior); both are "
+                         "applied, which counts the same information twice if the covariance already holds it.");
+    }
     // theFunc.InitializePools();
     theFunc.SetErrorDef(1.0);
     // The fixed flags the minimizers and the band honour: the .azr's, then an
@@ -747,11 +779,24 @@ int AZUREMain::operator()() {
             const int nMat = bandCov.size();
             for (int a = 0; a < nMat; a++)
               for (int b = 0; b < nMat; b++) bandCov.M[a][b] *= factor;
+            bandCov.scale = factor;
             configure().outStream << "Covariance scaled by " << factor << "." << std::endl;
           } else {
             configure().outStream << "Reduced chi-squared <= 1; covariance left unscaled."
                                   << std::endl;
           }
+        }
+        // Name the columns ("#columns" header, which LoadBandCovariance and numpy.loadtxt skip): the free level
+        // energies and reduced-width amplitudes in parameter order, as param.sav holds them (pyazr.prior_from_fit).
+        {
+          const ROOT::Minuit2::MnUserParameters &mp = params.GetMinuitParams();
+          std::vector<std::string> names;
+          for (unsigned int i = 0; i < mp.Params().size(); i++) {
+            const std::string &nm = mp.GetName(i);
+            if (!mp.Parameter(i).IsFixed() && (nm.rfind("energy_", 0) == 0 || nm.rfind("width_", 0) == 0))
+              names.push_back(nm);
+          }
+          if ((int)names.size() == bandCov.size()) bandCov.names = names;
         }
         if (SaveBandCovariance(covPath, bandCov))
           configure().outStream << "Saved parameter covariance for cross-section bands." << std::endl;

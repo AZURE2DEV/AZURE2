@@ -40,7 +40,8 @@ fi
 s1="$(seg "$WORK/calc" 1)"; s2="$(seg "$WORK/calc" 2)"; s3="$(seg "$WORK/calc" 3)"; s4="$(seg "$WORK/calc" 4)"; s5="$(seg "$WORK/calc" 5)"
 if relclose "$s1" "$s2" 1e-8; then ok "a + b*sqrt(E) shift == pre-shifted data, cross section (chi2 $s1 vs $s2)"; else bad "cross section: shifted $s1 != pre-shifted $s2"; fi
 if relclose "$s3" "$s4" 1e-8; then ok "b*sqrt(E) shift == pre-shifted data, analyzing power (chi2 $s3 vs $s4)"; else bad "analyzing power: shifted $s3 != pre-shifted $s4"; fi
-if relclose "$s5" 24 1e-6; then ok "untouched segment unchanged (chi2 $s5)"; else bad "untouched segment moved: $s5 (expected 24)"; fi
+# 24 with the CODATA 2006 constants; 23.9995 since 2026-11-05 (CODATA 2018, include/Constants.h)
+if relclose "$s5" 23.9995 1e-6; then ok "untouched segment unchanged (chi2 $s5)"; else bad "untouched segment moved: $s5 (expected 23.9995)"; fi
 if relclose "$s1" 24 1e-2; then bad "shift had no effect on segment 1 (chi2 $s1 = pristine 24)"; else ok "shift changes segment 1 (chi2 $s1 vs pristine 24)"; fi
 
 # ---- 2. recover (a, b) by fitting -----------------------------------------

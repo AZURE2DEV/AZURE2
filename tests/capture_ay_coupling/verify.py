@@ -34,7 +34,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import make_models as M  # noqa: E402
 
-HBARC, UCONV = 197.32696310, 931.4940880   # include/Constants.h
+HBARC, UCONV = 197.3269804, 931.49410242   # include/Constants.h
 
 
 def R(x):

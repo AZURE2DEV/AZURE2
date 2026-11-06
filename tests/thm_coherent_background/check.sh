@@ -102,7 +102,7 @@ echo "(c) toy model: the closed form |M (g_f g_c A + c(E))|^2"
 # (column 4) from the closed form; RATIO=1: of m(c)/m(0) (FILE0 the c = 0 run)
 formula() {
   tr -d '\r' < "$5" | awk -v cr0="$1" -v ci0="$2" -v cr1="$3" -v ci1="$4" -v ref="${6:-}" '
-    BEGIN { hc = 197.32696310; u = 931.4940880; mn = 1.00866492
+    BEGIN { hc = 197.3269804; u = 931.49410242; mn = 1.00866492   # CODATA 2018 (include/Constants.h) since the merge of dev 3264896d
             mi = mn * 15.99052821 / (mn + 15.99052821) * u; mf = mn * 15.99052821 / (mn + 15.99052821) * u
             if (ref != "") while ((getline line < ref) > 0) { split(line, f, " "); if (f[4] != "") m0[++k] = f[4] } }
     NF > 3 { E = $1; n++

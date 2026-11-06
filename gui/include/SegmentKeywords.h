@@ -9,9 +9,10 @@
 /*!
  * The keyword blocks a segment line may end with (SegLine.h / ExtrapLine.h):
  * "sqrtshift <b> <bError> <vary>", "sample <1|name>" (alias "natural", the keyword before
- * samples existed), "shiftgroup <label>", "shiftfngroup <label>", "normgroup <label>", "covariance <file>", "total <0|1>", "transmission <n>", "yield <n>" (a sample transmission or self-shielded yield, n in atoms/barn), "absolute <0|1>" (angular-coefficient data are the absolute A_k) and "shiftfn \"<f(x)>\" N v s vary ...".  The GUI keeps the tail verbatim in
- * SegmentsDataData::extraTokens / SegmentsTestData::extraTokens and edits only the sample
- * token through these helpers, so a block it does not know survives a load/save untouched.
+ * samples existed), "shiftgroup <label>", "shiftfngroup <label>", "normgroup <label>", "covariance <file>", "total <0|1>", "transmission <n> [<vary> <sigma>]", "yield <n> [<vary> <sigma>]" (a sample transmission or self-shielded yield, n in atoms/barn; with vary and sigma n is the fit parameter segment_<key>_thickness), "thicknessgroup <label>", "absolute <0|1>" (angular-coefficient data are the absolute A_k) and "shiftfn \"<f(x)>\" N v s vary ...".  The GUI keeps the tail verbatim in
+ * SegmentsDataData::extraTokens / SegmentsTestData::extraTokens and edits only the sample, covariance, spin,
+ * transmission / yield and group (normgroup / shiftgroup / shiftfngroup / thicknessgroup) blocks through these
+ * helpers, so a block it does not know survives a load/save untouched.
  */
 namespace SegmentKeywords {
 
@@ -33,6 +34,7 @@ inline bool isKeyword(const QString &token) {
          token.compare("spin", Qt::CaseInsensitive) == 0 ||
          token.compare("transmission", Qt::CaseInsensitive) == 0 ||
          token.compare("yield", Qt::CaseInsensitive) == 0 ||
+         token.compare("thicknessgroup", Qt::CaseInsensitive) == 0 ||
          token.compare("mixture", Qt::CaseInsensitive) == 0;
 }
 
@@ -170,6 +172,166 @@ inline QString withCovarianceFile(const QString &extras, const QString &file) {
     tokens.insert(at, f.contains(' ') ? '"' + f + '"' : f);
     tokens.insert(at, "covariance");
   }
+  return tokens.join(' ');
+}
+
+/*! The group keywords of a data-segment line, each followed by one label (SegLine.h, EData::ResolveNormGroups /
+ *  ResolveShiftGroups / ResolveShiftFunctions): every active segment with the same label shares the normalization
+ *  (normgroup), the constant energy shift (shiftgroup) or the shift function (shiftfngroup) of the group's first
+ *  active segment in file order. */
+inline QStringList groupKeywords() {
+  return QStringList() << "normgroup" << "shiftgroup" << "shiftfngroup" << "thicknessgroup";
+}
+
+/*! True when \p token reads as a number (the engine's WholeNumber). */
+inline bool isNumberToken(const QString &token) {
+  bool ok = false;
+  token.toDouble(&ok);
+  return ok;
+}
+
+/*! Tokens of the keyword block that starts at tokens[i], the keyword included: 4 for sqrtshift, 3 + 3N for
+ *  "shiftfn "<f>" N ...", 3 + 2n for the retired "mixture <w_self> <n> {"file" <w>}...", 4 for the fit form
+ *  "transmission n vary sigma" / "yield n vary sigma" (a number after n), 2 for every other keyword, 1 for a token
+ *  that is no keyword (never past the end).  Walking the tail block by block keeps a label
+ *  or a value that happens to read like a keyword from being taken for one. */
+inline int blockLength(const QStringList &tokens, int i) {
+  const int left = tokens.size() - i;
+  if (left <= 0) return 0;
+  const QString k = tokens[i].toLower();
+  int n = 1;
+  if (k == "sqrtshift") {
+    n = 4;
+  } else if (k == "shiftfn") {
+    bool ok = false;
+    const int params = (i + 2 < tokens.size()) ? tokens[i + 2].toInt(&ok) : 0;
+    n = 3 + (ok && params > 0 ? 3 * params : 0);
+  } else if (k == "mixture") {
+    bool ok = false;
+    const int files = (i + 2 < tokens.size()) ? tokens[i + 2].toInt(&ok) : 0;
+    n = 3 + (ok && files > 0 ? 2 * files : 0);
+  } else if (k == "transmission" || k == "yield") {
+    n = (i + 2 < tokens.size() && isNumberToken(tokens[i + 2])) ? 4 : 2;
+  } else if (isKeyword(tokens[i])) {
+    n = 2;
+  }
+  return std::min(n, left);
+}
+
+/*! Index of the token that starts the \p keyword block among the tail's tokens, or -1.  The engine reads the
+ *  lower-case keyword only, so the match is exact. */
+inline int blockIndex(const QStringList &tokens, const QString &keyword) {
+  for (int i = 0; i < tokens.size(); i += std::max(1, blockLength(tokens, i)))
+    if (tokens[i] == keyword) return i;
+  return -1;
+}
+
+/*! The label of the tail's \p keyword block ("normgroup", "shiftgroup" or "shiftfngroup"); "" when none. */
+inline QString groupLabel(const QString &extras, const QString &keyword) {
+  const QStringList tokens = tailTokens(extras);
+  const int i = blockIndex(tokens, keyword);
+  return (i >= 0 && i + 1 < tokens.size()) ? tokens[i + 1] : QString();
+}
+
+/*! True when \p label can be written as a group label: one token, no blank and no double quote. */
+inline bool isValidGroupLabel(const QString &label) {
+  for (const QChar c : label)
+    if (c.isSpace() || c == '"') return false;
+  return true;
+}
+
+/*! The tail with its \p keyword block set to \p label or removed (empty \p label).  An existing block has its label
+ *  replaced where it stands; a new one goes before a sample block (the engine's writers put that last) or at the
+ *  end (the engine reads the blocks in any order).  Every other token is kept as it was. */
+inline QString withGroupLabel(const QString &extras, const QString &keyword, const QString &label) {
+  QStringList tokens = tailTokens(extras);
+  const QString v = label.trimmed();
+  const int at = blockIndex(tokens, keyword);
+  if (at >= 0) {
+    const int n = blockLength(tokens, at);
+    if (v.isEmpty())
+      tokens.erase(tokens.begin() + at, tokens.begin() + at + n);
+    else if (n >= 2)
+      tokens[at + 1] = v;
+    else
+      tokens.insert(at + 1, v);  // a bare keyword at the end of the tail: give it its label
+    return tokens.join(' ');
+  }
+  if (v.isEmpty()) return tokens.join(' ');
+  int where = tokens.size();
+  for (int i = 0; i < tokens.size(); i += std::max(1, blockLength(tokens, i)))
+    if (isSampleKeyword(tokens[i])) {
+      where = i;
+      break;
+    }
+  tokens.insert(where, v);
+  tokens.insert(where, keyword);
+  return tokens.join(' ');
+}
+
+/*!
+ * The transmission / self-shielded-yield block of a segment line ("transmission n [vary sigma]", "yield n [vary
+ * sigma]", SegLine.h ReadThicknessBlock): kind "" (none), "transmission" or "yield", the thickness n (atoms/barn) as
+ * written, and the fit form (vary 0/1 and the prior width sigma, atoms/barn, 0 = none), which makes n the fit parameter
+ * segment_<key>_thickness.  Texts are kept as written, so an untouched block compares equal and is not rewritten.
+ */
+struct SampleBlock {
+  QString kind;
+  QString n;
+  bool fit = false;
+  bool vary = false;
+  QString sigma;
+  bool operator==(const SampleBlock &o) const {
+    return kind == o.kind && n == o.n && fit == o.fit && (!fit || (vary == o.vary && sigma == o.sigma));
+  }
+  bool operator!=(const SampleBlock &o) const { return !(*this == o); }
+};
+
+/*! The tail's transmission / yield block (kind "" when there is none). */
+inline SampleBlock sampleBlock(const QString &extras) {
+  const QStringList tokens = tailTokens(extras);
+  SampleBlock b;
+  for (const QString kw : {QString("transmission"), QString("yield")}) {
+    const int i = blockIndex(tokens, kw);
+    if (i < 0) continue;
+    b.kind = kw;
+    b.n = (i + 1 < tokens.size()) ? tokens[i + 1] : QString();
+    if (blockLength(tokens, i) >= 4) {
+      b.fit = true;
+      b.vary = tokens[i + 2].toDouble() == 1.0;
+      b.sigma = tokens[i + 3];
+    }
+    return b;
+  }
+  return b;
+}
+
+/*! The tail with its transmission / yield block set to \p b, or removed (empty kind).  An existing block is replaced
+ *  where it stands; a new one goes before a sample block (the engine's writers put that last) or at the end.  Every
+ *  other token is kept as it was. */
+inline QString withSampleBlock(const QString &extras, const SampleBlock &b) {
+  QStringList tokens = tailTokens(extras);
+  int at = -1;
+  for (const QString kw : {QString("transmission"), QString("yield")}) {
+    const int i = blockIndex(tokens, kw);
+    if (i < 0) continue;
+    const int n = blockLength(tokens, i);
+    tokens.erase(tokens.begin() + i, tokens.begin() + i + n);
+    if (at < 0) at = i;
+  }
+  if (b.kind.isEmpty()) return tokens.join(' ');
+  QStringList block;
+  block << b.kind << b.n.trimmed();
+  if (b.fit) block << (b.vary ? "1" : "0") << (b.sigma.trimmed().isEmpty() ? QString("0") : b.sigma.trimmed());
+  if (at < 0) {
+    at = tokens.size();
+    for (int i = 0; i < tokens.size(); i += std::max(1, blockLength(tokens, i)))
+      if (isSampleKeyword(tokens[i])) {
+        at = i;
+        break;
+      }
+  }
+  for (int k = block.size() - 1; k >= 0; k--) tokens.insert(at, block[k]);
   return tokens.join(' ');
 }
 

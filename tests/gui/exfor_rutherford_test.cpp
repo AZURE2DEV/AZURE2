@@ -30,7 +30,7 @@ static bool close(double a, double b, double tol) { return std::fabs(a - b) <= t
 
 int main(int argc, char **argv) {
   QCoreApplication app(argc, argv);
-  const double kPi = 3.141592650, kFstruc = 1.0 / 137.0359996790, kHbarc = 197.32696310;
+  const double kPi = 3.141592653589793, kFstruc = 1.0 / 137.035999084, kHbarc = 197.3269804;
   const double z1 = 1, z2 = 6, m1 = 1.00728, m2 = 12.0;   // p + 12C
   const double eLab = 2.0, eCm = eLab * m2 / (m1 + m2);
   auto rutherford = [&](double thetaDeg) {

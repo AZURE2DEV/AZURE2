@@ -37,7 +37,10 @@
 #include <omp.h>
 #endif
 #include <time.h>
+#include <mutex>
+#include <stdexcept>
 #include <unordered_map>
+#include <unordered_set>
 
 /*!
  * A sample segment ("sample <1|name>", alias "natural") adds abundance-weighted terms of
@@ -141,6 +144,23 @@ static bool TotalCaptureCodeOk(const ESegment &segment, int key, bool isTest, co
                       << ": the exit key is ignored; the segment is the total capture over every capture pair of the "
                       << "entrance nucleus (write the exit key -1 to say so)." << std::endl;
   return true;
+}
+
+/*!
+ * The UPOS coefficient (CNuc, Brune and deBoer 2020 Eq. 22) is written for a secondary gamma ray from the HEAVY
+ * partner of the exit pair: its final-state spin is J2.  With the light particle excited (column 32 of the
+ * <levels> line, 2026-11-05) the gamma ray would come from the light particle, which that formula does not
+ * describe -- refuse instead of computing the heavy partner's correlation silently.
+ */
+static bool UPOSAllowed(CNuc *theCNuc, const ESegment &segment, int key, bool isTest, const Config &configure) {
+  if (!segment.IsUPOS() || !theCNuc->IsPairKey(segment.GetExitKey())) return true;
+  PPair *exitPair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(segment.GetExitKey()));
+  if (exitPair->GetLightExE() == 0.) return true;
+  configure.outStream << "ERROR: " << (isTest ? "test segment #" : "segment #") << key << " (UPOS): exit pair "
+                      << segment.GetExitKey() << " has an excited light particle (column 32, " << exitPair->GetLightExE()
+                      << " MeV); the secondary-gamma correlation is implemented for the decay of the heavy partner only."
+                      << std::endl;
+  return false;
 }
 
 static bool TotalAllowed(CNuc *theCNuc, ESegment &segment, int key, bool isTest, const Config &configure) {
@@ -398,6 +418,7 @@ int EData::Fill(const Config &configure, CNuc *theCNuc) {
           if (!CoefficientsAllowed(theCNuc, NewSegment, numTotalSegments, configure)) return -1;
           if (!NaturalAllowed(theCNuc, NewSegment, numTotalSegments, false, configure)) return -1;
           if (!TotalAllowed(theCNuc, NewSegment, numTotalSegments, false, configure)) return -1;
+          if (!UPOSAllowed(theCNuc, NewSegment, numTotalSegments, false, configure)) return -1;
           if (!TotalCaptureCodeOk(NewSegment, numTotalSegments, false, configure)) return -1;
           UPOSLabNote(NewSegment, numTotalSegments, false, configure);
           bool isValidTotal = false;
@@ -559,6 +580,7 @@ int EData::Fill(const Config &configure, CNuc *theCNuc) {
 
   if (this->ResolveShiftGroups(configure) == -1) return -1;
   this->ResolveNormGroups(configure);
+  if (this->ResolveThicknessGroups(configure) == -1) return -1;
   if (this->ResolveCovarianceGroups(configure) == -1) return -1;
 
   if (ReadPriorCentres(configure) != 0) return -1;
@@ -718,6 +740,10 @@ int EData::MakePoints(const Config &configure, CNuc *theCNuc) {
             << " segment on the inverse channel instead." << std::endl;
         return -1;
       }
+      if (segment.isActive() == 1 && segment.thicknessFitIgnored())
+        configure.Note("Note: test segment #" + std::to_string(numTotalSegments) +
+                       " carries the fit form of its transmission / yield block or a thicknessgroup; a test segment "
+                       "has no fit parameter and uses its own sample thickness n.");
       if (segment.isActive() == 1) {
         ESegment NewSegment(segment);
         if (theCNuc->IsPairKey(NewSegment.GetEntranceKey())) {
@@ -725,6 +751,7 @@ int EData::MakePoints(const Config &configure, CNuc *theCNuc) {
           if (!AnalyzingPowerAllowed(theCNuc, NewSegment, numTotalSegments, true, configure)) return -1;
           if (!NaturalAllowed(theCNuc, NewSegment, numTotalSegments, true, configure)) return -1;
           if (!TotalAllowed(theCNuc, NewSegment, numTotalSegments, true, configure)) return -1;
+          if (!UPOSAllowed(theCNuc, NewSegment, numTotalSegments, true, configure)) return -1;
           if (!TotalCaptureCodeOk(NewSegment, numTotalSegments, true, configure)) return -1;
           UPOSLabNote(NewSegment, numTotalSegments, true, configure);
           bool isValidTotal = false;
@@ -1052,8 +1079,14 @@ int EData::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, const st
 
   struct Item { ESegment *seg; int i; double offset; bool shifted; };
   std::vector<Item> work;
+  struct Owner { ESegment *seg; bool shifted; bool replaceable; };
+  std::unordered_map<const EPoint *, Owner> mappedSegment;  // the segment of each mapped point
   static std::atomic<bool> ecNoted{false};
   auto collect = [&](ESegment *seg) {
+    // Mapped points are registered first, also in segments whose grids are not
+    // re-placed: a host with such a mapped point keeps its grid too.
+    for (int i = 1; i <= seg->NumPoints(); i++)
+      if (seg->GetPoint(i)->IsMapped()) mappedSegment[seg->GetPoint(i)] = {seg, false, false};
     bool any = false;
     for (int i = 1; i <= seg->NumPoints() && !any; i++) any = seg->GetPoint(i)->GetSubGridSpec().valid;
     if (!any) return;
@@ -1073,6 +1106,13 @@ int EData::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, const st
     for (int i = 1; i <= seg->NumPoints(); i++) {
       EPoint *point = seg->GetPoint(i);
       if (!point->GetSubGridSpec().valid) continue;
+      // A mapped point keeps its host's grid: the mapping (MapData, MapComponentSegments) was made because the
+      // two grids are identical, and the host's calculation fills the mapped point's sub-points node by node
+      // (EPoint::Calculate).  It is re-placed with its host below, never on its own.
+      if (point->IsMapped()) {
+        mappedSegment[point] = {seg, shifted, true};
+        continue;
+      }
       // the parent's shift, which is what moves every sub-point (ESegment::UpdatePointEnergyWithShift)
       const double offset = shifted ? cmFactor * seg->TotalEnergyShift(point->GetOriginalEnergy()) : 0.0;
       work.push_back({seg, i, offset, shifted});
@@ -1098,9 +1138,12 @@ int EData::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, const st
 
   std::atomic<int> changed{0};
   std::atomic<long> newSubPoints{0};
+  std::atomic<long> reusedSubPoints{0};
   // For AZURE_GRID_TIMING: per work item, -1 = a different number of nodes, else the
   // largest node move (MeV) of a grid that changed.
   std::vector<double> moved(work.size(), 0.0);
+  std::mutex reshiftMutex;
+  std::vector<ESegment *> mappedShifted;  // shifted segments of mapped points re-placed with their hosts
   auto replace = [&](const Item &it, size_t q) {
     EPoint *point = it.seg->GetPoint(it.i);
     const EPoint::SubGridSpec &spec = point->GetSubGridSpec();
@@ -1112,6 +1155,10 @@ int EData::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, const st
     gc.resonanceWidthMultiplier = spec.resonanceWidthMultiplier;
     gc.pointsPerWidth = spec.pointsPerWidth;
     gc.resonanceOffset = it.offset;
+    for (int m = 1; m <= point->NumLocalMappedPoints(); m++) {
+      auto own = mappedSegment.find(point->GetLocalMappedPoint(m));
+      if (own == mappedSegment.end() || !own->second.replaceable) return;  // its mapped point keeps the grid
+    }
     std::vector<double> grid = AdaptiveIntegrationGrid(gc).GenerateGrid(spec.startEnergy, spec.endEnergy, g);
     std::vector<EPoint> &subs = point->GetSubPoints();
     bool same = (subs.size() == grid.size());
@@ -1122,24 +1169,64 @@ int EData::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, const st
       moved[q] = -1.0;
     else
       for (size_t k = 0; k < grid.size(); k++) moved[q] = std::max(moved[q], std::fabs(subs[k].GetOriginalEnergy() - grid[k]));
-    TargetEffect *effect = this->GetTargetEffect(it.seg->GetTargetEffectNum());
-    TargetEffect *qEffect = effect->IsQCoefficients() ? effect : nullptr;
-    subs.clear();
-    for (double e : grid) {
-      EPoint sub(point->GetCMAngle(), e, it.seg);
-      sub.SetCoefficientOrder(point->GetCoefficientOrder());
-      sub.SetCoefficientAbsolute(point->GetCoefficientAbsolute());
-      if (spec.targetIntegration)
-        sub.SetStoppingPower(spec.stoppingConversion *
-                             effect->GetStoppingPowerEq()->Evaluate(configure, e / spec.stoppingConversion));
-      sub.CalcLegendreP(configure.maxLOrder, theCNuc, qEffect);
-      // A shifted segment's sub-points are moved and energised by the shift step.
-      if (!it.shifted) {
-        sub.CalcEDependentValues(theCNuc, configure);
-        sub.CalcCoulombAmplitude(theCNuc);
+    // Lays a point's sub-points out on the grid.  Nodes that stay where they were
+    // keep their sub-point's energy-dependent values: the new sub-point shares the
+    // old one's tables (EPoint::AdoptEDependentValues requires the same energy,
+    // angle and pairs, so the values are exactly what CalcEDependentValues and
+    // CalcLegendreP would compute).  Most nodes of a re-placed grid do not move,
+    // and their tables are usually still shared with the EData this copy was
+    // cloned from: a copy re-placing its grids then adds tables only for the
+    // nodes that moved.
+    long reused = 0;
+    auto layOut = [&](EPoint *target, ESegment *seg, bool shifted) {
+      const EPoint::SubGridSpec &tspec = target->GetSubGridSpec();
+      TargetEffect *effect = this->GetTargetEffect(seg->GetTargetEffectNum());
+      TargetEffect *qEffect = effect->IsQCoefficients() ? effect : nullptr;
+      std::vector<EPoint> &tsubs = target->GetSubPoints();
+      std::vector<EPoint::EDependentShare> old;
+      if (!shifted) {
+        old.reserve(tsubs.size());
+        for (const EPoint &sp : tsubs) old.push_back(sp.ShareEDependentValues());
+        std::sort(old.begin(), old.end(),
+                  [](const EPoint::EDependentShare &x, const EPoint::EDependentShare &y) { return x.energy < y.energy; });
       }
-      point->AddSubPoint(sub);
+      tsubs.clear();
+      for (size_t k = 0; k < grid.size(); k++) {
+        const double e = grid[k];
+        EPoint sub(target->GetCMAngle(), e, seg);
+        sub.SetCoefficientOrder(target->GetCoefficientOrder());
+        sub.SetCoefficientAbsolute(target->GetCoefficientAbsolute());
+        if (tspec.targetIntegration)
+          sub.SetStoppingPower(tspec.stoppingConversion *
+                               effect->GetStoppingPowerEq()->Evaluate(configure, e / tspec.stoppingConversion));
+        auto o = std::lower_bound(old.begin(), old.end(), sub.GetCMEnergy(),
+                                  [](const EPoint::EDependentShare &x, double v) { return x.energy < v; });
+        if (o != old.end() && sub.AdoptEDependentValues(*o)) {
+          sub.CalcCoulombAmplitude(theCNuc);  // depends on the angle; cheap
+          reused++;
+        } else {
+          sub.CalcLegendreP(configure.maxLOrder, theCNuc, qEffect);
+          // A shifted segment's sub-points are moved and energised by the shift step.
+          if (!shifted) {
+            sub.CalcEDependentValues(theCNuc, configure);
+            sub.CalcCoulombAmplitude(theCNuc);
+          }
+        }
+        target->AddSubPoint(sub);
+      }
+    };
+    layOut(point, it.seg, it.shifted);
+    for (int m = 1; m <= point->NumLocalMappedPoints(); m++) {
+      EPoint *mp = point->GetLocalMappedPoint(m);
+      auto own = mappedSegment.find(mp);  // present and replaceable: checked above
+      layOut(mp, own->second.seg, own->second.shifted);
+      newSubPoints += (long)grid.size();
+      if (own->second.shifted) {
+        std::lock_guard<std::mutex> lock(reshiftMutex);
+        mappedShifted.push_back(own->second.seg);
+      }
     }
+    reusedSubPoints += reused;
     changed++;
     newSubPoints += (long)grid.size();
   };
@@ -1157,7 +1244,31 @@ int EData::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, const st
   if (changed > 0)
     for (const Item &it : work)
       if (it.shifted && std::find(reshift.begin(), reshift.end(), it.seg) == reshift.end()) reshift.push_back(it.seg);
+  for (ESegment *seg : mappedShifted)
+    if (std::find(reshift.begin(), reshift.end(), seg) == reshift.end()) reshift.push_back(seg);
 
+  // The invariant point mapping rests on (SharesCalculation): a host and its
+  // mapped points have the same sub-point grid, which EPoint::Calculate fills
+  // node by node.  Before 2026-11-05 every grid was re-placed on its own and a
+  // component's grid could come out with another node count than its host's:
+  // the host then wrote past the end of the component's sub-points (heap
+  // corruption, natural neon fits at 4 threads) or filled nodes at other
+  // energies.  Fail loudly rather than calculate on mismatched grids.
+  if (changed > 0)
+    for (const Item &it : work) {
+      EPoint *host = it.seg->GetPoint(it.i);
+      const std::vector<EPoint> &hs = host->GetSubPoints();
+      for (int m = 1; m <= host->NumLocalMappedPoints(); m++) {
+        const std::vector<EPoint> &ms = host->GetLocalMappedPoint(m)->GetSubPoints();
+        bool same = ms.size() == hs.size();
+        for (size_t k = 0; same && k < hs.size(); k++) same = ms[k].GetOriginalEnergy() == hs[k].GetOriginalEnergy();
+        if (!same)
+          throw std::logic_error("EData::ReplaceSubPointGrids: segment " + std::to_string(it.seg->GetSegmentKey()) +
+                                 " point " + std::to_string(it.i) + " and a point mapped onto it have different "
+                                 "sub-point grids (" + std::to_string(hs.size()) + " and " +
+                                 std::to_string(ms.size()) + " nodes)");
+      }
+    }
   if (std::getenv("AZURE_GRID_TIMING")) {
     static std::atomic<int> calls{0};
     const int c = ++calls;
@@ -1171,7 +1282,8 @@ int EData::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, const st
       }
       std::cerr << "[grid] call " << c << ": " << work.size() << " grids, " << changed.load() << " re-placed ("
                 << newSubPoints.load() << " sub-points; " << resized << " with a new node count, largest node move "
-                << maxMove * 1.0e6 << " eV otherwise); observed parameters " << ms(t0, t1) << " ms, grids "
+                << maxMove * 1.0e6 << " eV otherwise; " << reusedSubPoints.load()
+                << " sub-points kept their tables); observed parameters " << ms(t0, t1) << " ms, grids "
                 << ms(t1, std::chrono::steady_clock::now()) << " ms" << std::endl;
     }
   }
@@ -1203,6 +1315,10 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
       if (targetEffect.HasScreeningError()) {
         std::cout << "ERROR: <targetInt> line \"" << line << "\": a screening block is 'screening Ue_eV vary sigma_eV'"
                   << std::endl;
+        return -1;
+      }
+      if (targetEffect.HasDopplerError()) {
+        std::cout << "ERROR: <targetInt> line \"" << line << "\": " << targetEffect.GetDopplerErrorText() << std::endl;
         return -1;
       }
       if (targetEffect.HasDensityFitError()) {
@@ -1267,6 +1383,12 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
       // the line's energies stay in the lab frame; every point converts them with its own pair's factor
       const int bohrZ1 = (entrancePair->GetPType() == 20) ? 0 : entrancePair->GetZ(1);
       const int bohrZ2 = entrancePair->GetZ(2);
+      if (targetEffect->IsDoppler() && entrancePair->GetPType() != 0) {
+        configure.outStream << "ERROR: segment #" << segment->GetSegmentKey() << ": free-gas Doppler broadening"
+                            << " (doppler) needs a particle entrance pair (a beam on target atoms in thermal motion)"
+                            << std::endl;
+        return -1;
+      }
       if (targetEffect->IsUdr()) {
         double eMin = 1.0e300, eMax = 0.0;
         for (EPointIterator point = segment->GetPoints().begin(); point < segment->GetPoints().end(); point++) {
@@ -1372,7 +1494,10 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
             if (high <= low) high = low + 0.001;
             startEnergy = high;
             endEnergy = low;
-            point->SetPhotoKinematics(entrancePair->GetSepE() - exitPair->GetExE(),
+            // Q = E_gamma - E_cm: the entrance pair's threshold (S plus its total excitation, e1 + e2) minus the
+            // energy of the final level the gamma pair feeds (its heavy excitation).  Before 2026-11-05 the
+            // entrance pair's excitation was left out.
+            point->SetPhotoKinematics(entrancePair->GetSepE() + entrancePair->GetExE() - exitPair->GetHeavyExE(),
                                       (entrancePair->GetM(1) + entrancePair->GetM(2)) * uconv);
           }
           if (targetEffect->IsUdr()) {
@@ -1391,6 +1516,15 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
             if (eLowLab <= 0.0 || eLowLab >= point->GetLabEnergy()) eLowLab = point->GetLabEnergy() * 0.9999;
             startEnergy = eHighLab * cmPerLab;
             endEnergy = std::max(eLowLab * cmPerLab, 0.001);
+          }
+          // Free-gas Doppler broadening comes first: every sub-point the kernel above reaches needs its own
+          // Doppler window inside the grid, so the window is widened by the Doppler width at each end.
+          if (targetEffect->IsDoppler()) {
+            double lo, hi, unused;
+            targetEffect->DopplerWindow(startEnergy, cmConversion, unused, hi);
+            targetEffect->DopplerWindow(endEnergy, cmConversion, lo, unused);
+            startEnergy = std::max(startEnergy, hi);
+            endEnergy = std::max(std::min(endEnergy, lo), 0.001);
           }
           std::vector<double> energyGrid;
           int numPoints = targetEffect->NumSubPoints();
@@ -1539,7 +1673,7 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
                 if (high <= low) high = low + 0.001;
                 startEnergy = high;
                 endEnergy = low;
-                point->SetPhotoKinematics(compEntrance->GetSepE() - compExit->GetExE(),
+                point->SetPhotoKinematics(compEntrance->GetSepE() + compEntrance->GetExE() - compExit->GetHeavyExE(),
                                           (compEntrance->GetM(1) + compEntrance->GetM(2)) * uconv);
               }
               if (targetEffect->IsUdr()) {
@@ -1554,6 +1688,15 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
                 if (eLowLab <= 0.0 || eLowLab >= point->GetLabEnergy()) eLowLab = point->GetLabEnergy() * 0.9999;
                 startEnergy = eHighLab * cmPerLab;
                 endEnergy = std::max(eLowLab * cmPerLab, 0.001);
+              }
+              // Free-gas Doppler broadening comes first: every sub-point the kernel above reaches needs its own
+              // Doppler window inside the grid, so the window is widened by the Doppler width at each end.
+              if (targetEffect->IsDoppler()) {
+                double lo, hi, unused;
+                targetEffect->DopplerWindow(startEnergy, compConversion, unused, hi);
+                targetEffect->DopplerWindow(endEnergy, compConversion, lo, unused);
+                startEnergy = std::max(startEnergy, hi);
+                endEnergy = std::max(std::min(endEnergy, lo), 0.001);
               }
               std::vector<double> energyGrid;
               int numPoints = targetEffect->NumSubPoints();
@@ -1607,6 +1750,20 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
     screeningCopies_[k].push_back(n);
   }
   this->ApplyScreening();
+  // One Doppler parameter per <targetInt> line with the fit form, shared by the copies of its effect (as screening).
+  dopplerEffects_.clear();
+  dopplerCopies_.clear();
+  for (int n = 1; n <= this->NumTargetEffects(); n++) {
+    const TargetEffect *te = this->GetTargetEffect(n);
+    if (!te->HasDopplerFit()) continue;
+    size_t k = 0;
+    while (k < dopplerEffects_.size() && dopplerEffects_[k] != te->GetLineNumber()) k++;
+    if (k == dopplerEffects_.size()) {
+      dopplerEffects_.push_back(te->GetLineNumber());
+      dopplerCopies_.emplace_back();
+    }
+    dopplerCopies_[k].push_back(n);
+  }
   return 0;
 }
 
@@ -1897,10 +2054,8 @@ void EData::PrintData(const Config &configure) {
       } else
         out << std::setw(12) << "Not Mapped"
             << std::setw(18) << data.point()->NumSubPoints();
-      if (data.point()->IsTargetEffect() &&
-          (data.point()->GetParentData()->GetTargetEffect(data.point()->GetTargetEffectNum())->IsConvolution() ||
-           data.point()->GetParentData()->GetTargetEffect(data.point()->GetTargetEffectNum())->IsTargetIntegration() ||
-           data.point()->GetParentData()->GetTargetEffect(data.point()->GetTargetEffectNum())->IsBeamProfile())) {
+      if (data.point()->IsTargetEffect() && data.point()->NumSubPoints() > 0 &&
+          data.point()->GetParentData()->GetTargetEffect(data.point()->GetTargetEffectNum())->IsSubPointEffect()) {
         out << std::setw(18) << data.point()->GetSubPoint(data.point()->NumSubPoints())->GetCMEnergy()
             << std::setw(18) << data.point()->GetSubPoint(1)->GetCMEnergy();
       }
@@ -2407,9 +2562,32 @@ void EData::WriteOutputFiles(const Config &configure, bool isFit, const BandData
         if (this->GetDensityTargetEffect(k)->GetDensitySigma() > 0.0) anyPrior = true;
       if (anyPrior) chiOut << " Total-Density-Chi-Squared: " << this->DensityPenalty();
     }
+    // Fitted Doppler temperatures: their priors.
+    if (this->NumDopplerParams() > 0) {
+      bool anyPrior = false;
+      for (int k = 1; k <= this->NumDopplerParams(); k++)
+        if (this->GetDopplerTargetEffect(k)->GetDopplerSigma() > 0.0) anyPrior = true;
+      if (anyPrior) chiOut << " Total-Doppler-Chi-Squared: " << this->DopplerPenalty();
+    }
+    // Fitted sample thicknesses: their priors.
+    if (this->NumThicknessParams() > 0) {
+      bool anyPrior = false;
+      for (int k = 1; k <= this->NumThicknessParams(); k++) {
+        const ESegment *seg = &segments_[this->GetThicknessSegment(k) - 1];
+        if (seg->GetThicknessSigma() > 0.0 && !seg->IsThicknessGroupFollower()) anyPrior = true;
+      }
+      if (anyPrior) chiOut << " Total-Thickness-Chi-Squared: " << this->ThicknessPenalty();
+    }
     // Measured scattering lengths (<scatteringLengths>; table in scatteringLengths.out).
     if (scatteringLengthChi2_ != 0.0)
       chiOut << " Total-Scattering-Length-Chi-Squared: " << scatteringLengthChi2_;
+    // Prior parameter covariance (<config> priorCovariance=): (p - mu)^T C^-1 (p - mu), whenever the key is set.
+    // Written with 15 significant digits (a new field: the older ones keep their 6).
+    if (!configure.priorCovariance.empty()) {
+      const std::streamsize prec = chiOut.precision(15);
+      chiOut << " Total-Prior-Covariance-Chi-Squared: " << priorCovChi2_;
+      chiOut.precision(prec);
+    }
     chiOut << std::endl
            << std::endl;
     chiOut.flush();
@@ -2754,6 +2932,11 @@ std::string EData::ECSignature(CNuc *theCNuc, const Config &configure) {
     }
     hash.Add(pair->GetSepE());
     hash.Add(pair->GetExE());
+    // the split between the two particles (column 32) only when it is set, so an older cache keeps its signature
+    if (pair->GetLightExE() != 0.) {
+      hash.Add("light excitation");
+      hash.Add(pair->GetLightExE());
+    }
     hash.Add(pair->GetChRad());
     // The hybrid potential bends the Coulomb functions of this pair, and so
     // both the entrance-channel phases and the final-state integrand.
@@ -4443,6 +4626,18 @@ void EData::SyncNormGroupParams(ROOT::Minuit2::MnUserParameters &p) const {
                                                                                      : segments_[lead].GetNorm();
     p.SetValue(index[pos], value);
   }
+  // Thickness-group followers likewise: their (fixed) segment_<key>_thickness is written as the leader's value.
+  if (thicknessParamOffset_ >= 0) {
+    for (int k = 1; k <= this->NumThicknessParams(); k++) {
+      const ESegment &seg = segments_[thicknessSegments_[k - 1] - 1];
+      const int idx = thicknessParamOffset_ + k - 1;
+      if (!seg.IsThicknessGroupFollower() || idx >= (int)p.Params().size()) continue;
+      const int lk = this->ThicknessParamOfSegment(thicknessSegments_[k - 1]);
+      const int lidx = (lk > 0) ? thicknessParamOffset_ + lk - 1 : -1;
+      p.SetValue(idx, (lidx >= 0 && lidx < (int)p.Params().size()) ? p.Value(lidx)
+                                                                     : segments_[seg.GetThicknessLeaderPos()].GetSampleThickness());
+    }
+  }
 }
 
 /*!
@@ -4525,12 +4720,151 @@ void EData::FillMnParams(ROOT::Minuit2::MnUserParameters &p) {
     if (!te->IsDensityVaried()) p.Fix(varname);
   }
 
+  // Fitted Doppler temperatures (K): one per line with the fit form 'doppler T vary sigma [Tmax]', none otherwise.
+  // Bounded by the temperature the grids span (TargetEffect::GetDopplerLayoutTemperature) and T0/4.
+  dopplerParamOffset_ = p.Params().size();
+  for (int k = 1; k <= this->NumDopplerParams(); k++) {
+    const TargetEffect *te = this->GetDopplerTargetEffect(k);
+    snprintf(varname, sizeof(varname), "doppler_%d", this->GetDopplerEffect(k));
+    const double t = te->GetDopplerTemperature();
+    p.Add(varname, t, (te->GetDopplerSigma() > 0.0) ? 0.1 * te->GetDopplerSigma() : 0.01 * t);
+    p.SetLimits(varname, te->GetDopplerMinimum(), te->GetDopplerLayoutTemperature());
+    if (!te->IsDopplerVaried()) p.Fix(varname);
+  }
+
+  // Fitted sample thicknesses (atoms/barn): one per data segment whose transmission / yield block has the fit form
+  // 'n vary sigma', none otherwise.  A thickness-group follower's is fixed (its value is its leader's).
+  thicknessParamOffset_ = p.Params().size();
+  for (int k = 1; k <= this->NumThicknessParams(); k++) {
+    ESegment *seg = this->GetSegment(this->GetThicknessSegment(k));
+    snprintf(varname, sizeof(varname), "segment_%d_thickness", seg->GetSegmentKey());
+    const double n = seg->GetSampleThickness();
+    p.Add(varname, n, (seg->GetThicknessSigma() > 0.0) ? 0.1 * seg->GetThicknessSigma() : 0.01 * n);
+    p.SetLowerLimit(varname, 0.0);
+    if (!seg->IsThicknessVaried()) p.Fix(varname);
+  }
+
   // THM coherent backgrounds (cbackground=): Re/Im of each amplitude, last.
   thmCoherentParamOffset_ = thmCoherentParams_.empty() ? -1 : (int)p.Params().size();
   for (const ThmCoherentParam &c : thmCoherentParams_) {
     p.Add(c.name, c.value, c.value != 0.0 ? 0.1 * std::fabs(c.value) : 0.1);
     if (c.fixed) p.Fix(c.name);
   }
+}
+
+int EData::ResolveThicknessGroups(const Config &configure) {
+  std::vector<std::pair<std::string, int>> leaders;  // label, leader position (0-based)
+  for (int pos = 0; pos < (int)segments_.size(); pos++) {
+    ESegment &seg = segments_[pos];
+    const std::string label = seg.GetThicknessGroup();
+    if (label.empty()) continue;
+    if (!seg.IsTransformed()) {
+      configure.outStream << "ERROR: segment #" << seg.GetSegmentKey() << ": thicknessgroup '" << label
+                          << "' needs the segment's own transmission or yield block (the group shares the sample "
+                          << "thickness of transmission / yield segments)." << std::endl;
+      return -1;
+    }
+    auto it = std::find_if(leaders.begin(), leaders.end(),
+                           [&label](const std::pair<std::string, int> &e) { return e.first == label; });
+    if (it == leaders.end()) {
+      leaders.push_back({label, pos});
+      continue;
+    }
+    seg.SetThicknessGroupFollower(it->second, segments_[it->second].GetSampleThickness());
+  }
+  for (const auto &g : leaders) {
+    const ESegment &leader = segments_[g.second];
+    std::ostringstream members;
+    int n = 0;
+    for (const ESegment &seg : segments_)
+      if (seg.GetThicknessLeaderPos() == g.second) {
+        members << " " << seg.GetSegmentKey();
+        n++;
+      }
+    if (n == 0) {
+      configure.Note("Note: thickness group '" + g.first + "' has only segment #" +
+                     std::to_string(leader.GetSegmentKey()) + "; nothing is shared.");
+      continue;
+    }
+    configure.Note("Note: thickness group '" + g.first + "': segments #" + std::to_string(leader.GetSegmentKey()) +
+                   " +" + members.str() + " share one sample thickness (segment #" +
+                   std::to_string(leader.GetSegmentKey()) + "'s, " +
+                   (leader.HasThicknessFit() ? "parameter segment_" + std::to_string(leader.GetSegmentKey()) +
+                                                   "_thickness"
+                                             : std::string("fixed")) +
+                   ").");
+  }
+  thicknessSegments_.clear();
+  for (int pos = 0; pos < (int)segments_.size(); pos++)
+    if (segments_[pos].HasThicknessFit()) thicknessSegments_.push_back(pos + 1);
+  return 0;
+}
+
+int EData::ThicknessParamOfSegment(int pos) const {
+  if (pos < 1 || pos > (int)segments_.size()) return 0;
+  const int lead = segments_[pos - 1].GetThicknessLeaderPos();
+  const int owner = (lead >= 0) ? lead + 1 : pos;
+  for (int k = 1; k <= this->NumThicknessParams(); k++)
+    if (thicknessSegments_[k - 1] == owner) return k;
+  return 0;
+}
+
+void EData::FillThicknessFromParams(const vector_r &p) {
+  if (thicknessSegments_.empty() || thicknessParamOffset_ < 0) return;
+  for (int k = 1; k <= this->NumThicknessParams(); k++) {
+    const int idx = thicknessParamOffset_ + k - 1;
+    if (idx < 0 || idx >= (int)p.size()) return;  // a vector without the thickness block
+    ESegment &seg = segments_[thicknessSegments_[k - 1] - 1];
+    if (seg.IsThicknessGroupFollower()) continue;
+    seg.SetSampleThickness(std::max(0.0, p[idx]));
+  }
+  for (ESegment &seg : segments_)
+    if (seg.IsThicknessGroupFollower())
+      seg.SetSampleThickness(segments_[seg.GetThicknessLeaderPos()].GetSampleThickness());
+}
+
+double EData::ThicknessPenalty() const {
+  double chi2 = 0.0;
+  for (int k = 1; k <= this->NumThicknessParams(); k++) chi2 += segments_[thicknessSegments_[k - 1] - 1].ThicknessPenalty();
+  return chi2;
+}
+
+int EData::DopplerParamOfEffect(int n) const {
+  for (int k = 1; k <= this->NumDopplerParams(); k++)
+    for (int c : dopplerCopies_[k - 1])
+      if (c == n) return k;
+  return 0;
+}
+
+void EData::FillDopplerFromParams(const vector_r &p, const Config *configure) {
+  if (dopplerEffects_.empty() || dopplerParamOffset_ < 0) return;
+  for (int k = 1; k <= this->NumDopplerParams(); k++) {
+    const int idx = dopplerParamOffset_ + k - 1;
+    if (idx < 0 || idx >= (int)p.size()) return;  // a vector without the Doppler block
+    TargetEffect *te = this->GetDopplerTargetEffect(k);
+    double v = p[idx];
+    // The grids and the integration windows span the layout temperature; below T0/4 the Gauss-Legendre pieces
+    // (laid out for T0) would be too wide for the kernel.
+    const double vMax = te->GetDopplerLayoutTemperature(), vMin = te->GetDopplerMinimum();
+    if (v > vMax || !(v >= vMin)) {
+      static std::atomic<bool> warned{false};
+      if (!warned.exchange(true))
+        (configure ? configure->outStream : std::cout)
+            << "WARNING: doppler_" << this->GetDopplerEffect(k) << " = " << v << " K is outside [" << vMin << ", "
+            << vMax << "] K, the range its sub-point grids and integration pieces span; the calculation uses the"
+            << " nearest end.  Give the line a wider range with 'doppler T vary sigma Tmax'. (Printed once.)"
+            << std::endl;
+      v = (v > vMax) ? vMax : vMin;
+    }
+    for (int n : dopplerCopies_[k - 1]) this->GetTargetEffect(n)->SetDopplerTemperature(v);
+  }
+}
+
+double EData::DopplerPenalty() const {
+  double chi2 = 0.0;
+  for (int k = 1; k <= this->NumDopplerParams(); k++)
+    chi2 += this->GetDopplerTargetEffect(k)->DopplerPenalty();
+  return chi2;
 }
 
 /*!
@@ -4722,6 +5056,10 @@ void EData::FillEnergyShiftsFromParams(const vector_r &p, EData *data, CNuc *the
   this->FillScreeningFromParams(p);
   // Fitted target densities: the thickness of each point of their lines (the grids stay put).
   if (configure) this->FillDensitiesFromParams(p, *configure);
+  // Fitted Doppler temperatures: only the kernel values move (the grids and pieces stay put).
+  this->FillDopplerFromParams(p, configure);
+  // Fitted sample thicknesses: the n of the transmission / yield transforms.
+  this->FillThicknessFromParams(p);
   int i = GetEnergyShiftParamOffset();
   int j = GetEnergyShiftSqrtParamOffset();
   int k = 0;
@@ -4990,6 +5328,11 @@ EData *EData::Clone() const {
   dataCopy->densityEffects_ = this->densityEffects_;
   dataCopy->densityLeadCopies_ = this->densityLeadCopies_;
   dataCopy->densityParamOfEffect_ = this->densityParamOfEffect_;
+  dataCopy->dopplerParamOffset_ = this->dopplerParamOffset_;
+  dataCopy->dopplerEffects_ = this->dopplerEffects_;
+  dataCopy->dopplerCopies_ = this->dopplerCopies_;
+  dataCopy->thicknessParamOffset_ = this->thicknessParamOffset_;
+  dataCopy->thicknessSegments_ = this->thicknessSegments_;
   dataCopy->isFit_ = this->isFit_;
   dataCopy->isErrorAnalysis_ = this->isErrorAnalysis_;
   dataCopy->targetEffects_ = this->targetEffects_;
@@ -4999,6 +5342,8 @@ EData *EData::Clone() const {
   dataCopy->thmCoherentParams_ = this->thmCoherentParams_;
   dataCopy->thmCoherentParamOffset_ = this->thmCoherentParamOffset_;
   dataCopy->covGroups_ = this->covGroups_;  // shared: one factor (and one frozen model) for all copies
+  dataCopy->priorCov_ = this->priorCov_;    // shared, read-only
+  dataCopy->priorCovChi2_ = this->priorCovChi2_;
 
   // Build a mapping from component segment keys to cloned component segments
   std::unordered_map<int, ESegment *> clonedComponentMap;
@@ -5038,11 +5383,17 @@ EData *EData::Clone() const {
     }
   }
 
-  for (EDataIterator data = dataCopy->begin(); data != dataCopy->end(); data++) {
-    data.point()->SetParentData(dataCopy);
-    data.point()->ClearLocalMappedPoints();
-    data.point()->ClearECAmplitudes();
-  }
+  // Every point of every segment, not EDataIterator's: the iterator skips the segments that hold components (SUM,
+  // RATIO, total capture, a yield's total term), whose points before 2026-11-05 kept the ORIGINAL data as their parent
+  // (so a fitted density or Doppler temperature never moved for them in a fit's working copy) and the original's
+  // mapped-point list (so each copy also computed, and wrote, the original's component points).
+  for (ESegment &segment : dataCopy->segments_)
+    for (int j = 1; j <= segment.NumPoints(); j++) {
+      EPoint *point = segment.GetPoint(j);
+      point->SetParentData(dataCopy);
+      point->ClearLocalMappedPoints();
+      point->ClearECAmplitudes();
+    }
   // Also fix parentData for component segment points
   for (size_t i = 0; i < dataCopy->componentSegments_.size(); i++) {
     for (int j = 1; j <= dataCopy->componentSegments_[i].NumPoints(); j++) {
@@ -5067,7 +5418,20 @@ EData *EData::Clone() const {
         EnergyMap pointMap = cp->GetMap();
         dataCopy->GetSegment(pointMap.segment)->GetPoint(pointMap.point)->AddLocalMappedPoint(cp);
       }
-
+  // Every point a host of the copy calculates must be a point of the copy: a
+  // pointer into the original would have the copy's calculations write into
+  // the original's points (from every pooled thread at once in a fit).
+  {
+    std::unordered_set<const EPoint *> own;
+    for (ESegment &segment : dataCopy->segments_)
+      for (int j = 1; j <= segment.NumPoints(); j++) own.insert(segment.GetPoint(j));
+    for (ESegment &segment : dataCopy->componentSegments_)
+      for (int j = 1; j <= segment.NumPoints(); j++) own.insert(segment.GetPoint(j));
+    for (const EPoint *p : own)
+      for (int m = 1; m <= p->NumLocalMappedPoints(); m++)
+        if (!own.count(p->GetLocalMappedPoint(m)))
+          throw std::logic_error("EData::Clone: a point of the copy maps a point that is not part of the copy");
+  }
   return dataCopy;
 }
 

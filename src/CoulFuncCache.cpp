@@ -73,13 +73,22 @@ std::map<CoulFuncCache::CoulFuncKey, CoulFuncCache::CoulFuncData> &CoulFuncCache
   return scratchCaches_[threadIndex()];
 }
 
+// The depth of TransientScope on THIS thread.  A scope and everything it
+// calculates stay on the thread that opened it (CNuc::TransformOut has no
+// parallel region), so each thread decides for itself and clears only its own
+// scratch.  Until 2026-11-05 the depth was one counter for all threads and the
+// end of the last scope on ANY thread cleared EVERY thread's scratch while the
+// other threads were reading or inserting into theirs: heap corruption whenever
+// several pooled copies transformed at once (grid re-placement calls
+// TransformOut on every evaluation: natural neon fits at 4 threads).
+static thread_local int tlsTransientDepth = 0;
+
 CoulFuncCache::TransientScope::TransientScope() {
-  if (g_coulFuncCache) ++g_coulFuncCache->transientDepth_;
+  ++tlsTransientDepth;
 }
 
 CoulFuncCache::TransientScope::~TransientScope() {
-  if (g_coulFuncCache && --g_coulFuncCache->transientDepth_ == 0)
-    for (auto &c : g_coulFuncCache->scratchCaches_) c.clear();
+  if (--tlsTransientDepth == 0 && g_coulFuncCache) g_coulFuncCache->localScratch().clear();
 }
 
 std::map<CoulFuncCache::CoulFuncKey, CoulFuncCache::CoulFuncData> &CoulFuncCache::localCache() const {
@@ -127,7 +136,7 @@ void CleanupCoulFuncCache() {
  * sorted.  Subject to the two guards described at the top of this file.
  */
 void CoulFuncCache::AddCoulWaves(const CoulFuncKey &key, double energy, const CoulWaves &waves) {
-  if (transientDepth_ > 0) {  // TransientScope: keep it for this calculation only
+  if (tlsTransientDepth > 0) {  // TransientScope: keep it for this calculation only
     CoulFuncData &scratch = localScratch()[key];
     auto it = std::lower_bound(scratch.energies.begin(), scratch.energies.end(), energy);
     if (it != scratch.energies.end() && fabs(*it - energy) < 1e-12) return;
@@ -202,7 +211,7 @@ void CoulFuncCache::AddCoulWaves(const CoulFuncKey &key, double energy, const Co
  */
 bool CoulFuncCache::TryGetCoulWaves(const CoulFuncKey &key, double energy, CoulWaves &out) const {
   if (TryGetPermanent(key, energy, out)) return true;
-  if (transientDepth_ == 0) return false;
+  if (tlsTransientDepth == 0) return false;
   std::map<CoulFuncKey, CoulFuncData> &scratch = localScratch();
   auto sk = scratch.find(key);
   if (sk == scratch.end()) return false;

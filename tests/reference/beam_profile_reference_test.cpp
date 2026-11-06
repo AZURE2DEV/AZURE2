@@ -51,13 +51,10 @@ Config *g_config = nullptr;
 namespace {
 
 // Tolerance for anything compared against a closed form evaluated with the
-// machine's own pi.  Constants.h defines `pi = 3.141592650`, which is the true
-// value truncated at ten digits, a relative error of 1.14e-9; the profile
-// weight carries 1/(omega sqrt(2 pi)) and so is off by half of that, 5.7e-10.
-// It cancels in the fold itself, where numerator and denominator share it,
-// which is why the identities below hold to 1e-12.  Give the constant its full
-// precision and this tolerance can go to 1e-12 as well.
-const double kPiTolerance = 5.0e-9;
+// machine's own pi.  Until 2026-11-05 Constants.h defined pi = 3.141592650 (1.14e-9
+// low), so the profile weight's 1/(omega sqrt(2 pi)) was off by 5.7e-10 and this was
+// 5e-9; with the full-precision constant it is 1e-12, like the identities below.
+const double kPiTolerance = 1.0e-12;
 
 int failures = 0;
 int checks = 0;

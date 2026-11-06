@@ -473,7 +473,7 @@ AdaptiveIntegrationGrid::LevelResonances(CNuc *compound) {
         if (gamma <= 0.0) continue;
         double localEnergy = levelEnergy(level) - chPair->GetExE() - chPair->GetSepE();
         double pene;
-        if (std::abs(levelEnergy(level) - chPair->GetExE()) < 1.0e-3 &&
+        if (std::abs(levelEnergy(level) - chPair->GetHeavyExE()) < 1.0e-3 &&
             jgroup->GetJ() == chPair->GetJ(2) &&
             jgroup->GetPi() == chPair->GetPi(2)) {
           double jValue = jgroup->GetJ();

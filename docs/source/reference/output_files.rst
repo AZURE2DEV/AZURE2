@@ -26,9 +26,13 @@ level parameters as ``abundance_<Z>_<A>`` (:doc:`data_formats`). An
 experimental-effect line with a ``screening`` block adds its screening potential
 (eV) as ``screening_<n>`` after the energy-shift parameters, and a fitted target
 density (``densityfit``, one per line or ``densitygroup``) adds ``density_<n>``
-(atoms/cm²) after those.
+(atoms/cm²) after those, and a fitted Doppler temperature (``doppler T vary sigma``)
+adds ``doppler_<n>`` (K) after the densities. A transmission or yield segment
+whose block has the fit form (``transmission n vary sigma``) adds its sample
+thickness ``segment_<k>_thickness`` (atoms/barn) after the Doppler temperatures; a
+``thicknessgroup`` follower's is written as its leader's value.
 
-The ``segment_<k>_*`` lines (normalizations and energy shifts) belong to the
+The ``segment_<k>_*`` lines (normalizations, energy shifts and sample thicknesses) belong to the
 data segments of the fit that wrote the file. A run without data -- an
 extrapolation (**Calculate Segments Without Data**) or a reaction rate --
 numbers its own test grids 1, 2, ... and does not apply those lines (the run
@@ -209,6 +213,13 @@ segment is its profiled scale (shared by the segments of a THM experiment).
 Under ``--use-park`` the total line ends with ``Total-Park-Chi-Squared``, the
 :math:`J > 0` penalty. The quantity a fit actually
 minimises is the sum of both — see :doc:`../user_guide/chi_squared`.
+The totals line also carries the other prior terms when they apply (energy
+shifts, abundances, screening, densities, Doppler temperatures, thicknesses,
+scattering lengths); with a ``priorCovariance=<file>`` key in ``<config>`` it
+ends with ``Total-Prior-Covariance-Chi-Squared: <value>``, the multivariate
+prior :math:`(\mathbf{p}-\boldsymbol{\mu})^T C^{-1} (\mathbf{p}-\boldsymbol{\mu})`
+at the run's parameters, written with 15 significant digits (the older fields
+keep their 6).
 
 This file is the quickest scalar check that a run succeeded.  After a fit,
 check ``fitStatus.out`` too: ``chiSquared.out`` is written whether or not the
@@ -286,6 +297,26 @@ param.errors
 
 Contains the reduced width amplitudes and their asymmetric uncertainties from a
 MINOS error analysis.
+
+covariance.dat
+^^^^^^^^^^^^^^
+
+Written by a fit (MIGRAD, ``--use-lm``, ``--use-gsl-lm``, MINOS) when the
+cross-section uncertainty band is on (``--covariance-band``, or "y" at the band
+prompt), and read back by a later run's band. It is the covariance of the fit's
+**free level energies and reduced-width amplitudes** only -- the parameters a
+calculated cross section depends on; normalizations, energy shifts and the other
+nuisance parameters are left out -- in parameter-vector order (``param.sav``'s
+order with every fixed and every non-R-matrix parameter dropped) and in
+``param.sav``'s space (Minuit's external parameters: MeV and the reduced-width
+amplitudes of the run's parametrization). MIGRAD's is HESSE's matrix, a
+least-squares fit's :math:`(J^TJ + \text{priors})^{-1}`. With
+``--scale-covariance`` it is multiplied by the reduced χ² when that is above 1.
+The matrix is written one row per line; since 2026-11-05 it is preceded by
+``#columns <name> ...`` (the column parameters' names) and, when scaled,
+``#scaled <factor>`` -- comment lines that ``numpy.loadtxt``, the engine's own
+reader and older builds skip. ``pyazr.prior_from_fit`` turns it and
+``param.sav`` into a prior covariance file (:doc:`../user_guide/chi_squared`).
 
 covariance_matrix.out
 ^^^^^^^^^^^^^^^^^^^^^

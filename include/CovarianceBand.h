@@ -18,6 +18,12 @@ class Config;
 struct BandCovariance {
   std::vector<ParamDesc> cols;  ///< empty when loaded from a plain covariance.dat
   std::vector<std::vector<double>> M;
+  /// Parameter names of the columns (param.sav names), written as the "#columns" header of covariance.dat when they
+  /// are known (a fit of this build); empty otherwise.
+  std::vector<std::string> names;
+  /// Factor the covariance was multiplied by (the reduced chi^2 of --scale-covariance), 1 = unscaled; written as a
+  /// "#scaled" header line when not 1.
+  double scale = 1.0;
   bool empty() const { return M.empty(); }
   int size() const { return (int)M.size(); }
 };
@@ -36,10 +42,12 @@ std::vector<int> BandPackedColumns(const ParamIndexMap &pmap);
 BandCovariance BuildBandCovarianceFromMinuit(const std::vector<double> &covData,
                                              const ParamIndexMap &pmap);
 
-/// Write/read a BandCovariance to/from a plain text file: the bare N x N matrix,
-/// one row per line, no header or column metadata.  False on I/O error.  A
-/// loaded covariance therefore has no column identities (cov.cols is empty), so
-/// its columns are taken to be in the current packed parameter order.
+/// Write/read a BandCovariance to/from a plain text file: the N x N matrix, one row
+/// per line, after optional '#' header lines -- "#columns <name> ..." (the column
+/// parameters' names, since 2026-11-05) and "#scaled <factor>" -- which the reader,
+/// numpy.loadtxt and an older build skip.  False on I/O error.  A loaded covariance
+/// has no column identities (cov.cols is empty), so its columns are taken to be in
+/// the current packed parameter order.
 bool SaveBandCovariance(const std::string &path, const BandCovariance &cov);
 /// Read a covariance matrix from file; false if it cannot be read.
 bool LoadBandCovariance(const std::string &path, BandCovariance &cov);

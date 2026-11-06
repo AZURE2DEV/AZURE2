@@ -119,7 +119,41 @@ class ScopedPointMappingOff {
 };
 
 class EPoint {
+ private:
+  struct ThmPsTable;  // defined below (private), named by EDependentShare
+
  public:
+  /// The energy-dependent channel tables of a point (one row per J group); see edep_.
+  struct EDependentTables {
+    matrix_c lo_elements;
+    matrix_r penetrabilities;
+    matrix_c coulombphase;
+    matrix_c hardspherephase;
+    /// THM (HOES) entrance-vertex pieces, empty for a classic point: j_l(rho) and rho dj_l/drho (boundary-independent;
+    /// M_l is assembled at the vertex with the per-level or channel boundary) and the external Coulomb term (0 when
+    /// not used), indexed [jGroup-1][channel-1].
+    matrix_r thm_jl;
+    matrix_r thm_rhodjl;
+    matrix_c thm_coul;
+  };
+  /// Everything CalcEDependentValues and CalcLegendreP compute for a point, by
+  /// reference: the tables are shared, not copied.  These depend only on the
+  /// point's c.m. energy, angle and pairs, never on a fit parameter, so a
+  /// re-placed sub-point at an unchanged node takes them from the sub-point it
+  /// replaces (EData::ReplaceSubPointGrids).
+  struct EDependentShare {
+    double energy = 0.0;
+    double angle = 0.0;
+    int entranceKey = 0, exitKey = 0;
+    double geofactor = 0.0, sfactorconv = 0.0, screen_k = 0.0;
+    std::shared_ptr<const EDependentTables> tables;
+    std::shared_ptr<const vector_r> legendre;
+    std::shared_ptr<const ThmPsTable> thmPs;  ///< THM spectator-window table (immutable), empty for a classic point
+  };
+  /// The point's energy-dependent values, for another point at the same energy (requires them to be valid).
+  EDependentShare ShareEDependentValues() const;
+  /// Takes a share made at exactly this point's energy, angle and pairs; returns false and changes nothing otherwise.
+  bool AdoptEDependentValues(const EDependentShare &);
   /// Build from a line of a data file, taking its conventions from the parent segment.
   EPoint(DataLine, ESegment *);
   /// Build at a given energy and angle, for a segment generated from a grid.
@@ -464,6 +498,38 @@ class EPoint {
   void SetTargetEffectNum(int);
   void AddSubPoint(EPoint);
   void IntegrateTargetEffect(const Config &);
+  /*!
+   * Free-gas Doppler broadening on this point's sub-point grid (TargetEffect::IsDoppler): the weights w with
+   * sigma_D(eCM) = sum w.second * sigma(sub-point w.first), sigma linear in E between sub-points, from the
+   * velocity-space integral of TargetEffect::IsDoppler (4-point Gauss-Legendre on pieces no wider than u/4).
+   * Empty when the effect has no Doppler step or the point no grid.  The integration window is the one at the
+   * layout temperature and the pieces are those of the nominal temperature (TargetEffect::HasDopplerFit), so
+   * only the kernel values depend on the current T; \p dwdT, if given, receives dw/dT (per K) on the same nodes.
+   */
+  void DopplerWeights(double eCM, std::vector<std::pair<int, double>> &w,
+                      std::vector<std::pair<int, double>> *dwdT = nullptr) const;
+  /*!
+   * d/dT of the integrated value (IntegrateTargetEffect) for the sub-point values \p values (0-based): the
+   * line's kernel applied to the T-derivatives of the Doppler-broadened values, or the derivative of sigma_D
+   * at the point for a line without a kernel.  0 when the line has no Doppler step or it is applied elsewhere
+   * (DopplerAppliedScope).  For the analytic gradient of a fitted temperature (doppler_<n>).
+   */
+  double DopplerTemperatureDerivative(const Config &, const std::vector<double> &values);
+  /*!
+   * While alive, IntegrateTargetEffect (and TargetEffectWeights) skip the Doppler step: for the
+   * transmission/yield assembly (ESegment::TransformedValue), which broadens the terms itself before the
+   * transform and only then hands the sub-point values to the kernel.
+   */
+  class DopplerAppliedScope {
+   public:
+    explicit DopplerAppliedScope(EPoint *p) : p_(p), prev_(p->doppler_applied_) { p_->doppler_applied_ = true; }
+    ~DopplerAppliedScope() { p_->doppler_applied_ = prev_; }
+    DopplerAppliedScope(const DopplerAppliedScope &) = delete;
+    DopplerAppliedScope &operator=(const DopplerAppliedScope &) = delete;
+   private:
+    EPoint *p_;
+    bool prev_;
+  };
   /// Exact weights c (0-based, one per sub-point) of IntegrateTargetEffect:
   /// yield = sum_i c[i] * (sub-point i's cross-section slot).  False if the
   /// integrator is not a pure linear form for this point.
@@ -507,6 +573,10 @@ class EPoint {
   /// rd(j) supplies sub-point j's value.
   template <class V, class Read>
   V IntegrateTargetEffectImpl(const Config &, Read rd);
+  /// The line's kernels (Gaussian, target integration, UDR, beam profile) on sub-point values rd(j).
+  template <class V, class Read>
+  V IntegrateKernelsImpl(const Config &, Read rd);
+  bool doppler_applied_ = false;  ///< see DopplerAppliedScope
   bool is_differential_;
   bool is_phase_;
   bool is_thm_;
@@ -584,20 +654,27 @@ class EPoint {
   bool spinDependentCoulomb_ = false;
   complex coulombdirect_ = complex(0., 0.);
   complex coulombexchange_ = complex(0., 0.);
-  vector_r legendreP_;
+  // The Legendre polynomials P_l(cos theta) of the point, by order.  Filled at
+  // setup and on an energy shift; shared between EData clones (see
+  // EDependentTables below) and written only through MutableLegendre().
+  std::shared_ptr<const vector_r> legendreP_;
   vector_r angularDists_;
   int coefficient_order_ = -1;
   bool coefficient_absolute_ = false;
   double ang_dist_a0_ = 0.0;
-  matrix_c lo_elements_;
-  matrix_r penetrabilities_;
-  /// Boundary-independent THM form-factor pieces j_l(rho) and rho dj_l/drho,
-  /// indexed [jGroup-1][channel-1]. M_l is assembled at the entrance vertex
-  /// with the per-level boundary (Brune) or the channel boundary constant.
-  matrix_r thm_jl_;
-  matrix_r thm_rhodjl_;
-  /// External Coulomb term of the THM vertex, same indexing (0 when not used).
-  matrix_c thm_coul_;
+  // The energy-dependent channel tables, one row per J group: L_o elements,
+  // square roots of the penetrabilities, Coulomb and hard-sphere phase factors.
+  // They are filled at setup and rewritten only when the point's energy or grid
+  // changes, so the EData clones of a fit (AZURECalc::InitializePools, one per
+  // thread) share them instead of deep-copying them: a clone of a folded
+  // project with ~10^6 sub-points held ~7 GB of these rows.  Copying an EPoint
+  // copies the pointer; every writer goes through MutableEDep(), which gives
+  // the point its own copy first if the tables are shared (copy-on-write).
+  std::shared_ptr<const EDependentTables> edep_;
+  /// This point's own, writable tables (copied first if shared with another point).
+  EDependentTables &MutableEDep();
+  /// This point's own, writable Legendre polynomials (copied first if shared).
+  vector_r &MutableLegendre();
   /// With a spectator-momentum window (ps=...): the same three pieces per
   /// node of the window at the point's energy (the accepted directions,
   /// ThmSpectatorWindow::Nodes) with its weight, for the entrance-pair channels only
@@ -621,8 +698,6 @@ class EPoint {
     }
   };
   std::shared_ptr<const ThmPsTable> thm_ps_;
-  matrix_c coulombphase_;
-  matrix_c hardspherephase_;
   // Energy at which CalcEDependentValues last ran: RecalcEDependentValues is
   // a no-op while the point's energy is unchanged (its values depend only on
   // the energy, the angle and the channel radii).

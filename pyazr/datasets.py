@@ -114,10 +114,11 @@ def _decode_observable(isDiff, table):
 # Keyword blocks a segment line may end with (SegLine.h), and how many tokens
 # each takes: sqrtshift b bError vary; sample <1|name> (alias natural);
 # shiftgroup <label>; shiftfngroup <label>; normgroup <label>; covariance <file>;
-# total <0|1>; transmission <n>; yield <n>; shiftfn takes a variable number (see _split_keyword_tail).
+# total <0|1>; transmission <n> [vary sigma]; yield <n> [vary sigma]; thicknessgroup <label>; shiftfn and the
+# transmission / yield fit form take a variable number (see _split_keyword_tail).
 _KEYWORDS = {"sqrtshift": 3, "sample": 1, "natural": 1, "shiftgroup": 1, "shiftfngroup": 1,
              "normgroup": 1, "covariance": 1, "total": 1, "absolute": 1, "spin": 1, "shiftfn": None,
-             "transmission": 1, "yield": 1}
+             "transmission": 1, "yield": 1, "thicknessgroup": 1}
 
 
 def _thickness_token(blocks, keyword):
@@ -127,6 +128,19 @@ def _thickness_token(blocks, keyword):
         return float(blk[0]) if blk else 0.0
     except ValueError:
         return 0.0
+
+
+def _thickness_fit(blocks):
+    """The fit form of a ``transmission`` / ``yield`` block, ``transmission n vary sigma``: ``(vary, sigma)``
+    (bool, atoms/barn; 0 = no prior), or ``(None, 0.0)`` for the plain form (n fixed, no parameter)."""
+    for kw in ("transmission", "yield"):
+        blk = blocks.get(kw) or []
+        if len(blk) >= 3:
+            try:
+                return int(float(blk[1])) == 1, float(blk[2])
+            except ValueError:
+                pass
+    return None, 0.0
 
 
 def _spin_token(blocks):
@@ -183,7 +197,9 @@ def _split_keyword_tail(tokens):
             k = end
             continue
         n = _KEYWORDS[kw]
-        if kw in ("shiftgroup", "shiftfngroup", "normgroup", "covariance") and k + 1 >= len(tokens):
+        if kw in ("transmission", "yield") and k + 2 < len(tokens) and _isfloat(tokens[k + 2]):
+            n = 3                               # the fit form "n vary sigma" (SegLine.h, ReadThicknessBlock)
+        if kw in ("shiftgroup", "shiftfngroup", "normgroup", "covariance", "thicknessgroup") and k + 1 >= len(tokens):
             raise ValueError(kw + " without a label: " + " ".join(tokens))
         blocks[kw] = tokens[k + 1:k + 1 + n]
         k += 1 + n
@@ -256,6 +272,13 @@ class Segment:
     # "yield <n>": the self-shielded yield (sigma/sigma_t)(1 - exp(-n sigma_t)); 0.0 = a plain cross section
     transmission: float = 0.0
     yield_thickness: float = 0.0
+    # the fit form "transmission n vary sigma" / "yield n vary sigma": n is the parameter segment_<key>_thickness
+    # (fixed for vary 0), sigma its Gaussian prior width in atoms/barn (0 = none); None = the plain form
+    thickness_vary: Optional[bool] = None
+    thickness_sigma: float = 0.0
+    # "thicknessgroup <label>": segments with the same label share ONE sample thickness, that of the first of them
+    # (file order, active) -- its n, vary flag and prior
+    thickness_group: Optional[str] = None
     # "spin <s>" on a phase-shift segment: the channel spin of the partial wave (None = not given;
     # the engine then requires a single channel spin for the segment's J and l)
     phase_S: Optional[float] = None
@@ -283,6 +306,16 @@ class Segment:
         if self.nominal_shift is None:
             self.nominal_shift = 0.0
 
+
+    @property
+    def thickness(self):
+        """The sample thickness n (atoms/barn) of a transmission or yield segment, 0.0 otherwise."""
+        return self.transmission or self.yield_thickness
+
+    @property
+    def thickness_fit(self):
+        """True when the transmission / yield block has the fit form (a parameter ``segment_<key>_thickness``)."""
+        return self.thickness_vary is not None
 
     @property
     def sample(self):
@@ -473,6 +506,8 @@ class SegmentSet(list):
             total=_total_token(blocks),
             transmission=_thickness_token(blocks, "transmission"),
             yield_thickness=_thickness_token(blocks, "yield"),
+            thickness_vary=_thickness_fit(blocks)[0], thickness_sigma=_thickness_fit(blocks)[1],
+            thickness_group=(blocks.get("thicknessgroup") or [None])[0],
             phase_S=_spin_token(blocks),
             absolute=bool(blocks.get("absolute")) and blocks["absolute"][0] == "1",
             shift_fn=shift_fn, shift_fn_params=tuple(shift_fn_params),

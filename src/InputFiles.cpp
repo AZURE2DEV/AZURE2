@@ -48,7 +48,21 @@ bool StampOf(const std::string &path, Stamp &s) {
 struct Entry {
   Stamp stamp;
   std::shared_ptr<const std::string> text;
+  long long readAt = 0;  // file_clock ticks when the text was read
 };
+
+// A file modified within this window of the moment it was read is "racily clean" (git's term): a later write in the
+// same clock tick can leave every part of the stamp unchanged -- on Windows the stamp is size + modification time
+// only, and two same-size writes in quick succession share it -- so its stamp is not trusted and the file is read
+// again.  3 s covers file systems with 2 s timestamps (FAT).  Before 2026-11-05 a matching stamp was always trusted:
+// pyazr served a rewritten data file with its previous contents (Windows CI, pyazr_natural_target).
+long long RacyWindowTicks() {
+  return std::chrono::duration_cast<std::filesystem::file_time_type::duration>(std::chrono::seconds(3)).count();
+}
+long long FileClockNow() {
+  return static_cast<long long>(std::filesystem::file_time_type::clock::now().time_since_epoch().count());
+}
+bool Trusted(const Entry &e) { return e.stamp.mtime + RacyWindowTicks() < e.readAt; }
 
 // Keyed by the absolute path (relative paths resolved against the working directory at the time of
 // the open, so sessions in different directories do not evict each other's "data/x.dat"); the stamp
@@ -80,12 +94,13 @@ std::unique_ptr<std::istream> Open(const std::string &path, bool cached) {
   {
     std::lock_guard<std::mutex> lock(g_mutex);
     auto it = g_files.find(key);
-    if (it != g_files.end() && it->second.stamp == now) {
+    if (it != g_files.end() && it->second.stamp == now && Trusted(it->second)) {
       g_stats.served++;
       return std::unique_ptr<std::istream>(new std::istringstream(*it->second.text));
     }
   }
   // Text mode, as the plain ifstream reads it (line endings on Windows).
+  const long long readAt = FileClockNow();
   std::ifstream in(path.c_str());
   if (!in) return std::unique_ptr<std::istream>(new std::ifstream(path.c_str()));
   std::ostringstream buf;
@@ -107,7 +122,7 @@ std::unique_ptr<std::istream> Open(const std::string &path, bool cached) {
         g_files.clear();
         g_bytes = 0;
       }
-      g_files[key] = Entry{now, text};
+      g_files[key] = Entry{now, text, readAt};
       g_bytes += text->size();
     }
   }

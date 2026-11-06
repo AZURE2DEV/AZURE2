@@ -123,8 +123,20 @@ class AZUREAPI {
    *                      line with a densityfit block or of a density group:
    *                      as type 7, plus the largest density the sub-point
    *                      grids span in field 8
-   *                    9=THM coherent background (cbkg; cbackground=; was 8
-   *                      before the merge of dev 2d97b1f, 7 before 8673c5c)
+   *                    9=fitted free-gas Doppler temperature (K) of a
+   *                      <targetInt> line with 'doppler T vary sigma
+   *                      [Tmax]': as type 8, the layout temperature (the
+   *                      largest the sub-point grids span) in field 8
+   *                   10=fitted sample thickness (atoms/barn) of a data
+   *                      segment with 'transmission n vary sigma' or
+   *                      'yield n vary sigma': the segment key in field 13,
+   *                      n (prior centre) in field 5, sigma in field 14
+   *                      (0 = none, and for a thicknessgroup follower),
+   *                      0 transmission / 1 yield in field 6, the group
+   *                      leader's key in field 7 for a follower (else -1)
+   *                   11=THM coherent background (cbkg; cbackground=; was 9
+   *                      before the merge of dev 3264896d, 8 before the
+   *                      merge of 2d97b1f, 7 before 8673c5c)
    *   1  jgroup        1-based J-group index (R-matrix params only)
    *   2  J             total spin of the J-group / level
    *   3  parity        +1 / -1
@@ -150,7 +162,7 @@ class AZUREAPI {
 
   // Number of numeric fields packed per particle pair by GetPairsInfo().
   // Keep this in sync with pyazr/parameters.py (Pair._NFIELDS).
-  static const int kPairInfoFields = 20;
+  static const int kPairInfoFields = 21;
   /*!
    * Returns structured metadata describing every particle pair, in 1-based
    * pair-number order (the same number stored in field 9 -- "pair" -- of
@@ -171,17 +183,20 @@ class AZUREAPI {
    *   10 Z2            charge number of particle 2
    *   11 M2            mass of particle 2 (amu)
    *   12 sepE          separation energy (MeV)
-   *   13 exE           excitation energy of the pair (MeV)
+   *   13 exE           total excitation energy of the pair, light + heavy
+   *                    particle (MeV): the threshold is sepE + exE
    *   14 chRad         channel radius (fm)
    *   15 i1i2factor    1 / ((2 J1 + 1)(2 J2 + 1)); the entrance pair's value is
    *                    the denominator of the statistical spin factor
    *                    omega = (2 J + 1) * i1i2factor
-   *   16 nucleusZ      Z of the compound nucleus the pair forms
-   *   17 nucleusA      A of that compound nucleus
-   *   18 abundance     its isotopic abundance in the default sample (1 without
-   *                    an <abundances> block)
-   *   19 bindingE      Trojan Horse binding energy of the pair (MeV); 0 unless
-   *                    the pair is used as a THM entrance channel
+   *   16 nucZ          charge number of the compound nucleus the pair forms
+   *   17 nucA          mass number of that nucleus
+   *   18 abundance     its abundance in the default sample (1 without <abundances>)
+   *   19 lightExE      excitation energy of particle 1 (MeV), the optional 32nd
+   *                    column of the <levels> line; exE - lightExE is particle 2's
+   *   20 bindingE      Trojan Horse binding energy of the pair (MeV); 0 unless
+   *                    the pair is used as a THM entrance channel (field 19
+   *                    before the merge of dev 3264896d)
    */
   vector_r GetPairsInfo() const;
 
@@ -349,6 +364,17 @@ class AZUREAPI {
   int RefreezeCovariance();
 
   /*!
+   * Prior parameter covariance (<config> priorCovariance=, PriorCovariance.h): the whitened residuals
+   * r = L^-1 (p - mu) at the given non-fixed RWA parameters, one per prior parameter (empty without the key, or in
+   * extrapolation mode).  r.r is the prior's chi2 term, pyazr's penalties()["prior_covariance"]; it is NOT part of
+   * CalculateChi2RWA (pyazr's objective() adds it, as the normalization priors), and CalculateResidualJacobianRWA
+   * appends these rows (Jacobian L^-1) after the data and scattering-length rows.
+   */
+  vector_r PriorCovarianceResidualsRWA(const vector_r &rwaParams) const;
+  /// The names of the prior's parameters, in its row order (after the marginalization of fixed ones).
+  std::vector<std::string> PriorCovarianceNames() const;
+
+  /*!
    * Value and analytic gradient of the (data) chi-squared with respect to the
    * non-fixed RWA parameters.  Input: the non-fixed RWA parameters (energies,
    * reduced widths, normalizations), as for CalculateChi2RWA.  Returns
@@ -469,6 +495,9 @@ class AZUREAPI {
  private:
   /// Shared body of SetRadius and Rebuild: refill from the .azr with every radius override in \p radii.
   bool RebuildImpl(const std::map<int, double> &radii);
+  /// Read and match the prior parameter covariance onto names_ / fixed_ (data mode only) and hand it to the data
+  /// object; false (ERROR printed) when the file is refused.
+  bool SetUpPriorCovariance();
   /// Channel-radius overrides set through SetRadius, applied on every (re)build.
   std::map<int, double> radiusOverrides_;
 

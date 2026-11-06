@@ -23,6 +23,11 @@
 #include <QHeaderView>
 #include <QTableWidget>
 #include <QSpinBox>
+#include <QDoubleSpinBox>
+#include <QGroupBox>
+#include <QTableView>
+#include <QItemSelectionModel>
+#include <QTimer>
 #include <cstdlib>
 #include "TargetIntModel.h"
 #include "ElectronBinding.h"
@@ -416,6 +421,282 @@ int main(int argc, char** argv) {
       dlg.show(); QApplication::processEvents(); dlg.adjustSize(); QApplication::processEvents();
       dlg.grab().save(QString("%1_density.png").arg(stem));
     }
+  }
+
+  // Free-gas Doppler broadening: `doppler <T>` read into the line, written back with the rest of the line
+  // unchanged, a line without it gains nothing, and the dialog adds and edits it (Doppler-only lines included).
+  {
+    const QString dopOnly = "1 \"1,2\" 400 0 0 0 0 \"\" 0 0 0 0 \"\" 0 doppler 300\n";
+    const QString dopGauss = "1 \"1,2\" 1000 1 0.0001 0 0 \"\" 0 0 0 0 \"\" 0 doppler 300\n";
+    bool readP = false;
+    QString outP = roundTrip(tab, dopOnly + dopGauss + "</targetInt>\n", readP);
+    ok("read a Doppler-only line and a Doppler + Gaussian line", readP);
+    QList<TargetIntData> pl = tab.getTargetIntModel()->getLines();
+    ok("two Doppler rows", pl.size() == 2, outP);
+    if (pl.size() == 2) {
+      ok("Doppler-only: flagged, T = 300 K, no convolution, no target integration",
+         pl.at(0).isDoppler && pl.at(0).dopplerTemperature == 300. && !pl.at(0).isConvolution && !pl.at(0).isTargetIntegration);
+      ok("Doppler-only: 400 sub-points kept", pl.at(0).numPoints == 400);
+      ok("Doppler + Gaussian: flagged, T = 300 K, Gaussian 0.0001",
+         pl.at(1).isDoppler && pl.at(1).dopplerTemperature == 300. && pl.at(1).isConvolution && pl.at(1).sigma == 0.0001);
+      TargetIntModel *m = tab.getTargetIntModel();
+      ok("model columns 44/45 carry the flag and T",
+         m->data(m->index(0, 44), Qt::EditRole).toBool() && m->data(m->index(0, 45), Qt::EditRole).toDouble() == 300.);
+      ok("Doppler-only line shows its sub-point count (not N/A)",
+         m->data(m->index(0, 2), Qt::DisplayRole).toString() == "400", m->data(m->index(0, 2), Qt::DisplayRole).toString());
+      const QString sum0 = m->data(m->index(0, 33), Qt::DisplayRole).toString();
+      ok("summary names the Doppler broadening", sum0 == "Free-gas Doppler broadening, T = 300 K", sum0);
+      const QString sum1 = m->data(m->index(1, 33), Qt::DisplayRole).toString();
+      ok("summary of the Gaussian line names both", sum1.contains("Gaussian convolution") && sum1.contains("Doppler"), sum1);
+      ok("header names", m->headerData(44, Qt::Horizontal, Qt::DisplayRole).toString() == "Doppler?" &&
+                         m->headerData(45, Qt::Horizontal, Qt::DisplayRole).toString() == "Doppler T [K]");
+    }
+    const QStringList outLines = outP.split('\n', Qt::SkipEmptyParts);
+    ok("both lines written with ' doppler 300' at the end", outLines.size() == 2 && outLines.at(0).endsWith(" doppler 300") &&
+       outLines.at(1).endsWith(" doppler 300"), outP);
+    // The rest of each line is what the same line without the keyword writes.
+    QString without = dopOnly;
+    without.replace(" doppler 300", "");
+    QString without2 = dopGauss;
+    without2.replace(" doppler 300", "");
+    bool readW = false;
+    const QString outW = roundTrip(tab, without + without2 + "</targetInt>\n", readW);
+    ok("lines without doppler gain no block", readW && !outW.contains("doppler"), outW);
+    QString stripped = outP;
+    stripped.replace(" doppler 300", "");
+    ok("rest of each line unchanged", stripped == outW, stripped + " | " + outW);
+    bool readP2 = false;
+    const QString outP2 = roundTrip(tab, outP + "</targetInt>\n", readP2);
+    ok("second round trip identical", readP2 && outP2 == outP, outP2);
+    // Full precision, and beside the other keyword blocks.
+    const QString mixed = "1 \"3\" 200 0 0 0 0 \"\" 0 0 0 0 \"\" 0 0 0.04 20 50 screening 934.7 1 200 doppler 293.61234567 "
+                          "beamprofile 1 2.5 0.3 -1.5 1 0.07 0 1\n</targetInt>\n";
+    const QString outM = roundTrip(tab, mixed, readP);
+    pl = tab.getTargetIntModel()->getLines();
+    ok("doppler read between screening and a beam profile", readP && pl.size() == 1 && pl.at(0).isDoppler &&
+       pl.at(0).dopplerTemperature == 293.61234567 && pl.at(0).isScreening && pl.at(0).isBeamProfile &&
+       pl.at(0).resonanceWidthMultiplier == 20. && pl.at(0).pointsPerWidth == 50., outM);
+    ok("written before the beam profile, all digits kept",
+       outM.contains(" screening 934.7 1 200 doppler 293.61234567 beamprofile 1 "), outM);
+    const QString bad = roundTrip(tab, "1 \"3\" 200 0 0 0 0 \"\" 0 0 0 0 \"\" 0 0 0.04 20 50 doppler -5\n</targetInt>\n", readP);
+    pl = tab.getTargetIntModel()->getLines();
+    ok("a non-positive temperature is not taken as a Doppler block", pl.size() == 1 && !pl.at(0).isDoppler &&
+       pl.at(0).pointsPerWidth == 50., bad);
+    const QString noDop = roundTrip(tab, legacy, readP);
+    ok("a legacy line gains no doppler block", !noDop.contains("doppler"), noDop);
+
+    // The dialog on its own: hidden box, default T, sub-points enabled for a Doppler-only line, validation.
+    {
+      AddTargetIntDialog dlg;
+      QGroupBox *box = dlg.findChild<QGroupBox*>("dopplerBox");
+      ok("Doppler box hidden until checked", box && !box->isVisibleTo(&dlg));
+      ok("sub-points disabled with nothing checked", !dlg.numPointsSpin->isEnabled());
+      dlg.isDopplerCheck->setChecked(true);
+      ok("Doppler box shown when checked", box && box->isVisibleTo(&dlg));
+      ok("T defaults to 293.6 K", dlg.dopplerTemperatureText->text() == "293.6", dlg.dopplerTemperatureText->text());
+      ok("Doppler alone enables the sub-points and the adaptive grid", dlg.numPointsSpin->isEnabled() &&
+         dlg.resonanceWidthMultiplierSpin->isEnabled() && dlg.pointsPerWidthSpin->isEnabled());
+      dlg.isConvolutionCheck->setChecked(true);
+      dlg.isConvolutionCheck->setChecked(false);
+      dlg.isTargetIntegrationCheck->setChecked(true);
+      dlg.isTargetIntegrationCheck->setChecked(false);
+      dlg.isBeamProfileCheck->setChecked(true);
+      dlg.isBeamProfileCheck->setChecked(false);
+      dlg.isUdrCheck->setChecked(true);
+      dlg.isUdrCheck->setChecked(false);
+      ok("other effects switched off again leave them enabled", dlg.numPointsSpin->isEnabled() &&
+         dlg.resonanceWidthMultiplierSpin->isEnabled() && dlg.pointsPerWidthSpin->isEnabled());
+      ok("293.6 K passes", dlg.dopplerProblem().isEmpty(), dlg.dopplerProblem());
+      dlg.dopplerTemperatureText->setText("0");
+      ok("0 K is refused", !dlg.dopplerProblem().isEmpty());
+      dlg.dopplerTemperatureText->setText("-10");
+      ok("a negative T is refused", !dlg.dopplerProblem().isEmpty());
+      dlg.dopplerTemperatureText->setText("warm");
+      ok("a non-number is refused", !dlg.dopplerProblem().isEmpty());
+      dlg.isDopplerCheck->setChecked(false);
+      ok("unchecked: no problem, sub-points disabled again", dlg.dopplerProblem().isEmpty() && !dlg.numPointsSpin->isEnabled() &&
+         !dlg.resonanceWidthMultiplierSpin->isEnabled());
+      if (const char* stem = std::getenv("AZURE2_TARGET_INT_PNG")) {
+        dlg.dopplerTemperatureText->setText("300");
+        dlg.isDopplerCheck->setChecked(true);
+        dlg.show(); QApplication::processEvents(); dlg.adjustSize(); QApplication::processEvents();
+        dlg.grab().save(QString("%1_doppler.png").arg(stem));
+      }
+    }
+
+    // Through the tab: Add opens the dialog, which is filled and accepted as a user would.
+    tab.reset();
+    bool sawDialog = false;
+    QTimer::singleShot(0, [&]() {
+      AddTargetIntDialog *d = qobject_cast<AddTargetIntDialog*>(QApplication::activeModalWidget());
+      if (!d) return;
+      sawDialog = true;
+      d->segmentsListText->setText("5");
+      d->isDopplerCheck->setChecked(true);
+      d->numPointsSpin->setValue(250);
+      d->dopplerTemperatureText->setText("300");
+      d->accept();
+    });
+    tab.addLine();
+    ok("Add opened the dialog", sawDialog);
+    pl = tab.getTargetIntModel()->getLines();
+    ok("dialog-added Doppler-only line in the model", pl.size() == 1 && pl.at(0).isDoppler &&
+       pl.at(0).dopplerTemperature == 300. && pl.at(0).numPoints == 250 && !pl.at(0).isConvolution && !pl.at(0).isTargetIntegration);
+    QString added;
+    QTextStream addedStream(&added);
+    tab.writeFile(addedStream);
+    ok("dialog-added line written with ' doppler 300'", added.trimmed().endsWith(" doppler 300") && added.contains(" 250"), added);
+
+    // Edit: the dialog comes up with the line's T, keeps the sub-points enabled, and a new T is written.
+    QTableView *view = tab.findChild<QTableView*>();
+    bool editSaw = false, editT = false, editPoints = false;
+    if (view) {
+      view->selectionModel()->select(tab.getTargetIntModel()->index(0, 1),
+                                     QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Rows);
+      QTimer::singleShot(0, [&]() {
+        AddTargetIntDialog *d = qobject_cast<AddTargetIntDialog*>(QApplication::activeModalWidget());
+        if (!d) return;
+        editSaw = true;
+        editT = d->isDopplerCheck->isChecked() && d->dopplerTemperatureText->text() == "300";
+        editPoints = d->numPointsSpin->isEnabled() && d->numPointsSpin->value() == 250;
+        d->dopplerTemperatureText->setText("77.5");
+        d->accept();
+      });
+      tab.editLine();
+    }
+    ok("Edit opened the dialog", editSaw);
+    ok("edit dialog shows Doppler on at 300 K", editT);
+    ok("edit dialog keeps the 250 sub-points enabled", editPoints);
+    pl = tab.getTargetIntModel()->getLines();
+    ok("edited T in the model", pl.size() == 1 && pl.at(0).isDoppler && pl.at(0).dopplerTemperature == 77.5);
+    QString edited;
+    QTextStream editedStream(&edited);
+    tab.writeFile(editedStream);
+    ok("edited line written with ' doppler 77.5'", edited.trimmed().endsWith(" doppler 77.5"), edited);
+
+    // Switching it off in the edit dialog removes the block.
+    QTimer::singleShot(0, [&]() {
+      AddTargetIntDialog *d = qobject_cast<AddTargetIntDialog*>(QApplication::activeModalWidget());
+      if (!d) return;
+      d->isDopplerCheck->setChecked(false);
+      d->accept();
+    });
+    if (view) tab.editLine();
+    QString off;
+    QTextStream offStream(&off);
+    tab.writeFile(offStream);
+    ok("unchecked in the edit dialog: no doppler block written", !off.contains("doppler"), off);
+  }
+
+  // The fitted temperature, `doppler T vary sigma [Tmax]` (parameter doppler_<n>): read into columns 46-49, written
+  // back as read (the plain form stays plain, `0 sigma` stays the fit form), and set from the dialog.
+  {
+    bool readP = false;
+    const QString fitA = "1 \"1,2\" 400 0 0 0 0 \"\" 0 0 0 0 \"\" 0 doppler 300 1 20 900\n";
+    const QString fitB = "1 \"3,4\" 1000 1 0.0001 0 0 \"\" 0 0 0 0 \"\" 0 doppler 310 0 0\n";
+    const QString plain = "1 \"5\" 400 0 0 0 0 \"\" 0 0 0 0 \"\" 0 doppler 320\n";
+    const QString outP = roundTrip(tab, fitA + fitB + plain + "</targetInt>\n", readP);
+    QList<TargetIntData> pl = tab.getTargetIntModel()->getLines();
+    ok("read two fit-form lines and a plain one", readP && pl.size() == 3, outP);
+    if (pl.size() == 3) {
+      ok("fit form with Tmax: T 300, fitted, sigma 20, max 900",
+         pl.at(0).isDoppler && pl.at(0).dopplerTemperature == 300. && pl.at(0).dopplerFit && pl.at(0).dopplerVary &&
+         pl.at(0).dopplerSigma == 20. && pl.at(0).dopplerMax == 900.);
+      ok("fit form 'vary 0 sigma 0': a fixed parameter, no Tmax, Gaussian kept",
+         pl.at(1).isDoppler && pl.at(1).dopplerTemperature == 310. && pl.at(1).dopplerFit && !pl.at(1).dopplerVary &&
+         pl.at(1).dopplerSigma == 0. && pl.at(1).dopplerMax == 0. && pl.at(1).isConvolution && pl.at(1).sigma == 0.0001);
+      ok("plain line: no fit form", pl.at(2).isDoppler && pl.at(2).dopplerTemperature == 320. && !pl.at(2).dopplerFit);
+      TargetIntModel *m = tab.getTargetIntModel();
+      ok("columns 46-49 carry the fit form (edit role)",
+         m->data(m->index(0, 46), Qt::EditRole).toBool() && m->data(m->index(0, 47), Qt::EditRole).toBool() &&
+         m->data(m->index(0, 48), Qt::EditRole).toDouble() == 20. && m->data(m->index(0, 49), Qt::EditRole).toDouble() == 900.);
+      ok("header names", m->headerData(46, Qt::Horizontal, Qt::DisplayRole).toString() == "Doppler T Parameter?" &&
+                         m->headerData(49, Qt::Horizontal, Qt::DisplayRole).toString() == "Doppler Grid Maximum [K]");
+      const QString sum0 = m->data(m->index(0, 33), Qt::DisplayRole).toString();
+      ok("summary says the temperature is fitted", sum0.contains("T = 300 K (fitted)"), sum0);
+      ok("defaultDopplerMax: max(T + 3 sigma, 1.21 T) / 2 T", defaultDopplerMax(300, 20) == 363. &&
+         defaultDopplerMax(300, 0) == 600. && std::fabs(defaultDopplerMax(300, 5) - 363.) < 1e-9);
+    }
+    const QStringList outLines = outP.split('\n', Qt::SkipEmptyParts);
+    ok("written back as read: ' doppler 300 1 20 900', ' doppler 310 0 0', ' doppler 320'",
+       outLines.size() == 3 && outLines.at(0).endsWith(" doppler 300 1 20 900") &&
+       outLines.at(1).endsWith(" doppler 310 0 0") && outLines.at(2).endsWith(" doppler 320"), outP);
+    const QString mixed = roundTrip(tab, "1 \"3\" 200 0 0 0 0 \"\" 0 0 0 0 \"\" 0 0 0.04 20 50 doppler 293.6 1 15 screening 934.7 1 200\n"
+                                         "</targetInt>\n", readP);
+    pl = tab.getTargetIntModel()->getLines();
+    ok("a fit form followed by another keyword: both read, both written",
+       readP && pl.size() == 1 && pl.at(0).dopplerFit && pl.at(0).dopplerSigma == 15. && pl.at(0).isScreening &&
+       mixed.contains(" screening 934.7 1 200") && mixed.contains(" doppler 293.6 1 15") && !mixed.contains("doppler 293.6 1 15 9"),
+       mixed);
+
+    // The dialog: the fields follow the 'Temperature Is a Fit Parameter' box; the default maximum is shown; refusals.
+    {
+      AddTargetIntDialog dlg;
+      dlg.isDopplerCheck->setChecked(true);
+      dlg.dopplerTemperatureText->setText("300");
+      ok("fit fields disabled until the fit box is checked",
+         !dlg.dopplerVaryCheck->isEnabled() && !dlg.dopplerSigmaText->isEnabled() && !dlg.dopplerMaxText->isEnabled());
+      dlg.dopplerFitCheck->setChecked(true);
+      ok("enabled with it", dlg.dopplerVaryCheck->isEnabled() && dlg.dopplerSigmaText->isEnabled() &&
+         dlg.dopplerMaxText->isEnabled());
+      dlg.dopplerSigmaText->setText("20");
+      ok("blank maximum shows the default 363", dlg.dopplerMaxText->placeholderText() == "363",
+         dlg.dopplerMaxText->placeholderText());
+      dlg.dopplerSigmaText->setText("0");
+      ok("without a prior the default is 2 T = 600", dlg.dopplerMaxText->placeholderText() == "600",
+         dlg.dopplerMaxText->placeholderText());
+      ok("a valid fit form passes", dlg.dopplerProblem().isEmpty(), dlg.dopplerProblem());
+      dlg.dopplerSigmaText->setText("-1");
+      ok("a negative prior sigma is refused", !dlg.dopplerProblem().isEmpty());
+      dlg.dopplerSigmaText->setText("20");
+      dlg.dopplerMaxText->setText("250");
+      ok("a grid maximum not above T is refused", !dlg.dopplerProblem().isEmpty());
+      dlg.dopplerMaxText->setText("900");
+      ok("a grid maximum above T passes", dlg.dopplerProblem().isEmpty(), dlg.dopplerProblem());
+      dlg.dopplerFitCheck->setChecked(false);
+      dlg.dopplerMaxText->setText("250");
+      ok("the fit fields are not checked without the fit box", dlg.dopplerProblem().isEmpty(), dlg.dopplerProblem());
+      if (const char* stem = std::getenv("AZURE2_TARGET_INT_PNG")) {
+        dlg.dopplerFitCheck->setChecked(true);
+        dlg.dopplerMaxText->setText("");
+        dlg.show(); QApplication::processEvents(); dlg.adjustSize(); QApplication::processEvents();
+        dlg.grab().save(QString("%1_doppler_fit.png").arg(stem));
+      }
+    }
+
+    // Through the tab: edit the plain line into the fit form, then the dialog comes back with it.
+    roundTrip(tab, plain + "</targetInt>\n", readP);
+    QTableView *view = tab.findChild<QTableView*>();
+    bool sawFit = false, backFit = false;
+    if (view) {
+      view->selectionModel()->select(tab.getTargetIntModel()->index(0, 1),
+                                     QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Rows);
+      QTimer::singleShot(0, [&]() {
+        AddTargetIntDialog *d = qobject_cast<AddTargetIntDialog*>(QApplication::activeModalWidget());
+        if (!d) return;
+        sawFit = !d->dopplerFitCheck->isChecked();
+        d->dopplerFitCheck->setChecked(true);
+        d->dopplerVaryCheck->setChecked(true);
+        d->dopplerSigmaText->setText("25");
+        d->dopplerMaxText->setText("1000");
+        d->accept();
+      });
+      tab.editLine();
+      QTimer::singleShot(0, [&]() {
+        AddTargetIntDialog *d = qobject_cast<AddTargetIntDialog*>(QApplication::activeModalWidget());
+        if (!d) return;
+        backFit = d->dopplerFitCheck->isChecked() && d->dopplerVaryCheck->isChecked() &&
+                  d->dopplerSigmaText->text() == "25" && d->dopplerMaxText->text() == "1000";
+        d->reject();
+      });
+      tab.editLine();
+    }
+    ok("the edit dialog opened on the plain line without the fit form", sawFit);
+    ok("and comes back with the fit form it was given", backFit);
+    QString fitOut;
+    QTextStream fitStream(&fitOut);
+    tab.writeFile(fitStream);
+    ok("edited line written with ' doppler 320 1 25 1000'", fitOut.trimmed().endsWith(" doppler 320 1 25 1000"), fitOut);
   }
 
   std::cout << (fails ? "FAILED" : "PASSED") << std::endl;

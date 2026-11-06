@@ -289,9 +289,10 @@ void ParameterLimitsManager::BuildIndexMap(const ROOT::Minuit2::MnUserParameters
   }
 
   // The same association keyed by the full-vector index, for the nuisance
-  // prior.  Norms, shifts, abundances, electron-screening potentials and fitted
-  // target densities are left out, as the chi-squared always has: they carry their
-  // own priors (segment errors, <abundances>, the screening and densityfit blocks).
+  // prior.  Norms, shifts, abundances, electron-screening potentials, fitted
+  // target densities, Doppler temperatures and sample thicknesses (dev) are left out, as the chi-squared always
+  // has: they carry their own priors (segment errors, <abundances>, the screening, densityfit, doppler and
+  // transmission / yield blocks).
   priorByActualIndex_.assign(p.Params().size(), NULL);
   for (size_t nonFixedIndex = 0; nonFixedIndex < nonFixedToActualIndex.size(); nonFixedIndex++) {
     ParameterSetting *setting = indexToSetting_[nonFixedIndex];
@@ -299,7 +300,8 @@ void ParameterLimitsManager::BuildIndexMap(const ROOT::Minuit2::MnUserParameters
     const int actualIndex = nonFixedToActualIndex[nonFixedIndex];
     const std::string &name = p.Parameter(actualIndex).GetName();
     if (AZURELabel::IsNormName(name) || AZURELabel::IsEnergyShiftName(name) || name.compare(0, 10, "abundance_") == 0 ||
-        name.compare(0, 10, "screening_") == 0 || name.compare(0, 8, "density_") == 0)
+        name.compare(0, 10, "screening_") == 0 || name.compare(0, 8, "density_") == 0 ||
+        name.compare(0, 8, "doppler_") == 0 || (name.compare(0, 8, "segment_") == 0 && AZURELabel::EndsWith(name, "_thickness")))
       continue;
     priorByActualIndex_[actualIndex] = setting;
   }

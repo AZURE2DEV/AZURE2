@@ -108,7 +108,10 @@ fi
 # The band covariance of an LM fit spans the free R-matrix parameters only.
 if fit lmband "2\nfix.par\n\n7\n" --use-lm --covariance-band; then
   cov="$WORK/lmband/output/covariance.dat"
-  if [ -f "$cov" ] && awk 'NF { r++; if (NF != 2) bad = 1 } END { exit !(r == 2 && !bad) }' "$cov"; then
+  # dev's "#columns" header (2026-11-05) names the columns; numpy.loadtxt and LoadBandCovariance skip it.
+  if [ -f "$cov" ] && awk '/^#columns/ { named = ($2 == "energy_1" && $3 == "width_1_2" && NF == 3); next }
+                           /^#/ { next } NF { r++; if (NF != 2) bad = 1 }
+                           END { exit !(r == 2 && !bad && named) }' "$cov"; then
     echo "  ok    LM band covariance is 2x2 (energy_1, width_1_2)"
   else
     echo "  FAIL  LM band covariance is not 2x2"; cat "$cov" 2>/dev/null | head -4; fail=1

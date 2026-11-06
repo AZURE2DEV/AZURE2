@@ -6,6 +6,7 @@
 #include "EData.h"
 #include "ParameterLimitsManager.h"
 #include "AZUREParams.h"
+#include "PriorCovariance.h"
 #include "GSLException.h"
 #include "JGroup.h"
 #include "ALevel.h"
@@ -409,7 +410,8 @@ void AZURECalcMCMC::BuildAutoPriors() const {
   // abundance per (sample, nucleus) with an <abundances> block; norms; energy
   // shifts; sqrt(E) coefficients; shift-function parameters; electron-screening
   // potentials (screening_<n>); fitted target densities (density_<n>, dev);
-  // THM cbkg (last).  AZUREAPI::GetParameterInfo() walks the same sequence.
+  // fitted Doppler temperatures (doppler_<n>, dev); fitted sample thicknesses
+  // (segment_<k>_thickness, dev); THM cbkg (last).  AZUREAPI::GetParameterInfo() walks the same sequence.
   std::vector<int> allKinds;
   std::vector<double> allAutoMean;
   std::vector<double> allAutoStd;  // <= 0 means "no automatic prior available"
@@ -458,6 +460,16 @@ void AZURECalcMCMC::BuildAutoPriors() const {
     if (n.empty() || n.find_first_not_of("0123456789") != std::string::npos) return nullptr;
     for (int k = 1; k <= data()->NumDensityParams(); ++k)
       if (data()->GetDensityEffect(k) == std::atoi(n.c_str())) return data()->GetDensityTargetEffect(k);
+    return nullptr;
+  };
+
+  // doppler_<n> (EData::FillMnParams): the first copy of Doppler parameter n's line, or null.
+  auto dopplerOf = [&](const std::string &name) -> const TargetEffect * {
+    if (name.compare(0, 8, "doppler_") != 0) return nullptr;
+    const std::string n = name.substr(8);
+    if (n.empty() || n.find_first_not_of("0123456789") != std::string::npos) return nullptr;
+    for (int k = 1; k <= data()->NumDopplerParams(); ++k)
+      if (data()->GetDopplerEffect(k) == std::atoi(n.c_str())) return data()->GetDopplerTargetEffect(k);
     return nullptr;
   };
 
@@ -517,6 +529,17 @@ void AZURECalcMCMC::BuildAutoPriors() const {
       kind = PARAM_DENSITY;
       mean = te->GetDensityNominal();
       std = te->GetDensitySigma();
+    } else if ((te = dopplerOf(name))) {
+      // a fitted Doppler temperature (K): the line's T and sigma are the prior (as dev)
+      kind = PARAM_DOPPLER;
+      mean = te->GetDopplerNominal();
+      std = te->GetDopplerSigma();
+    } else if ((seg = segmentOf(name, "_thickness"))) {
+      // a fitted sample thickness (atoms/barn): the line's n and sigma are the prior, none for a
+      // thickness-group follower, whose parameter is fixed (as dev)
+      kind = PARAM_THICKNESS;
+      mean = seg->GetNominalThickness();
+      std = seg->IsThicknessGroupFollower() ? 0.0 : seg->GetThicknessSigma();
     } else if (name.compare(0, 5, "cbkg_") == 0) {
       kind = PARAM_CBKG;
     } else {
@@ -571,7 +594,8 @@ void AZURECalcMCMC::BuildAutoPriors() const {
     const int kind = freeKinds_[i];
 
     if (kind == PARAM_NORM || kind == PARAM_SHIFT || kind == PARAM_SHIFT_SQRT || kind == PARAM_ABUNDANCE ||
-        kind == PARAM_SCREENING || kind == PARAM_DENSITY) {
+        kind == PARAM_SCREENING || kind == PARAM_DENSITY || kind == PARAM_DOPPLER ||
+        kind == PARAM_THICKNESS) {
       // Derived from the data, so it always wins over whatever the GUI holds.
       if (freeAutoStd[i] > 0.0) {
         priorMeans_[i] = freeAutoMean[i];
@@ -639,12 +663,55 @@ void AZURECalcMCMC::BuildAutoPriors() const {
   configure().outStream.flush();
 }
 
+bool AZURECalcMCMC::SetUpPriorCovariance(bool useRWA) const {
+  useRWA_ = useRWA;
+  priorCov_.reset();
+  if (!(configure().paramMask & Config::CALCULATE_WITH_DATA) || configure().priorCovariance.empty()) return true;
+  const int basis = AZUREParams::BasisForConfig(configure());
+  if (PriorCovariance::Load(configure(), g_param_names, fixed_, basis, priorCov_) < 0) return false;
+  if (!useRWA) {
+    // The prior is in the param.sav space: level energies and reduced-width amplitudes.  A physical-parameter chain
+    // samples partial widths, so a prior on a level parameter would be applied to the wrong quantity.
+    for (const std::string &name : priorCov_->Names())
+      if (name.rfind("energy_", 0) == 0 || name.rfind("width_", 0) == 0) {
+        configure().outStream << "**ERROR: priorCovariance: " << name << " is a level parameter and its prior is on "
+                              << "the reduced-width (RWA) parameters of param.sav; sample with RWA parameters."
+                              << std::endl;
+        priorCov_.reset();
+        return false;
+      }
+  }
+  // The multivariate Gaussian replaces the diagonal prior of each of its parameters.
+  std::vector<int> packedOf(fixed_.size(), -1);
+  for (int i = 0, k = 0; i < (int)fixed_.size(); i++)
+    if (!fixed_[i]) packedOf[i] = k++;
+  std::string replaced;
+  for (size_t a = 0; a < priorCov_->FullIndex().size(); a++) {
+    const int f = priorCov_->FullIndex()[a];
+    const int k = (f >= 0 && f < (int)packedOf.size()) ? packedOf[f] : -1;
+    if (k >= 0 && k < (int)usePriors_.size() && usePriors_[k] && k < (int)priorStds_.size() && priorStds_[k] > 0.0) {
+      usePriors_[k] = false;
+      replaced += (replaced.empty() ? "" : ", ") + priorCov_->Names()[a];
+    }
+  }
+  if (!replaced.empty())
+    configure().Note("Note: prior covariance: its multivariate Gaussian replaces the diagonal prior of " + replaced +
+                     " in the MCMC run (a fit applies both).");
+  return true;
+}
+
 double AZURECalcMCMC::CalculateLogPrior(const std::vector<double> &params) const {
+  // Prior parameter covariance: -0.5 (p - mu)^T C^-1 (p - mu) - 0.5 log det(2 pi C).
+  double covLogPrior = 0.0;
+  if (priorCov_ && priorCov_->Size() > 0) {
+    const vector_r full = useRWA_ ? ReconstructFullParameters(params) : ReconstructFullParametersPhysical(params);
+    covLogPrior = -0.5 * priorCov_->Chi2(full) + priorCov_->LogNormalization();
+  }
   if (priorMeans_.empty() || priorStds_.empty() || usePriors_.empty()) {
-    return 0.0;  // No priors specified - uniform priors
+    return covLogPrior;  // No diagonal priors specified - uniform priors
   }
 
-  double logPrior = 0.0;
+  double logPrior = covLogPrior;
 
   for (size_t i = 0; i < params.size() && i < usePriors_.size(); i++) {
     if (usePriors_[i] && i < priorMeans_.size() && i < priorStds_.size()) {
@@ -1092,6 +1159,11 @@ bool AZURECalcMCMC::RunMCMCSampling(int nwalkers, int nsteps, const std::vector<
     // energy-shift priors from the data. Must follow UpdateParameterVectors()
     // (it needs fixed_) and precede any log-probability evaluation.
     BuildAutoPriors();
+    // The prior parameter covariance (after the automatic priors, which it replaces for its parameters).
+    if (!SetUpPriorCovariance(useRWA)) {
+      configure().outStream << "MCMC sampling not started." << std::endl;
+      return false;
+    }
 
     if (ndim == 0) {
       configure().outStream << "Error: No parameters provided for MCMC sampling\n";
@@ -1178,7 +1250,8 @@ bool AZURECalcMCMC::RunMCMCSampling(int nwalkers, int nsteps, const std::vector<
         spread = energySpreadMeV;
         nEnergyCapped++;
       } else if (kind == PARAM_NORM || kind == PARAM_SHIFT || kind == PARAM_SHIFT_SQRT || kind == PARAM_ABUNDANCE ||
-                 kind == PARAM_SCREENING || kind == PARAM_DENSITY) {
+                 kind == PARAM_SCREENING || kind == PARAM_DENSITY || kind == PARAM_DOPPLER ||
+                 kind == PARAM_THICKNESS) {
         // Starting outside the prior only wastes steps walking back into it.
         if (j < (int)priorStds_.size() && j < (int)usePriors_.size() &&
             usePriors_[j] && priorStds_[j] > 0.0 && priorStds_[j] < spread) {

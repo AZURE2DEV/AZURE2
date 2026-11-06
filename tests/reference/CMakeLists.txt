@@ -178,3 +178,18 @@ add_test(NAME wigner_limit_reference COMMAND wigner_limit_reference_test)
 add_executable(fermi_endpoint_reference_test fermi_endpoint_reference_test.cpp)
 target_link_libraries(fermi_endpoint_reference_test PRIVATE AZURE2Core)
 add_test(NAME fermi_endpoint_reference COMMAND fermi_endpoint_reference_test)
+
+# InputFiles' cache must not serve a same-size rewrite whose stamp did not change (the Windows CI failure of
+# pyazr_natural_target, 2026-11-05), and must still serve an old, unchanged file from memory.
+add_executable(input_files_cache_test input_files_cache_test.cpp)
+target_link_libraries(input_files_cache_test PRIVATE AZURE2Core)
+add_test(NAME input_files_cache COMMAND input_files_cache_test)
+
+# CoulFuncCache::TransientScope opened and closed on several threads at once:
+# every thread must find its own transient entries until its scope ends
+# (until 2026-11-05 the end of any thread's scope cleared every thread's
+# scratch memo, corrupting the heap in multithreaded fits).
+add_executable(coulfunc_transient_scope_test coulfunc_transient_scope_test.cpp)
+target_link_libraries(coulfunc_transient_scope_test PRIVATE AZURE2Core)
+add_test(NAME coulfunc_transient_scope COMMAND coulfunc_transient_scope_test)
+set_tests_properties(coulfunc_transient_scope PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=4")

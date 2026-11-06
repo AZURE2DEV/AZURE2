@@ -554,6 +554,13 @@ class azure2:
     def _build_pairs(self):
         flat = np.asarray(self.sess.pairs_info(), dtype=float)
         nfields = Pair._NFIELDS
+        # An engine built before 2026-11-05 sends one field less (no
+        # light_excitation); its records still start 1, 2, 3, ...
+        def numbered(n):
+            return (flat.size % n == 0 and
+                    np.array_equal(flat.reshape(-1, n)[:, 0], np.arange(1, flat.size // n + 1)))
+        if not numbered(nfields) and numbered(nfields - 1):
+            nfields -= 1
         records = flat.reshape(-1, nfields)
         return PairSet(Pair.from_record(rec) for rec in records)
 
@@ -1853,7 +1860,17 @@ class azure2:
         lines with a ``screening`` block, which :meth:`objective` adds like the
         normalization terms, and ``"density"``: the priors ((N - N0)/sigma)^2 of
         the fitted target densities (``densityfit`` lines and ``densitygroup``
-        groups), added the same way.
+        groups), added the same way, and ``"doppler"``: the priors
+        ((T - T0)/sigma)^2 of the fitted free-gas Doppler temperatures
+        (``doppler T vary sigma [Tmax]`` lines), added the same way, and
+        ``"thickness"``: the priors ((n - n0)/sigma)^2 of the fitted sample
+        thicknesses (``transmission n vary sigma`` / ``yield n vary sigma``
+        segments; none for a ``thicknessgroup`` follower), added the same way,
+        and ``"prior_covariance"``: the multivariate Gaussian prior
+        (p - mu)^T C^-1 (p - mu) of the ``priorCovariance=<file>`` config key
+        (0 without it; fixed listed parameters marginalized, see
+        :mod:`pyazr.priors`), computed by the engine from its whitened
+        residuals (:meth:`prior_covariance_residuals`) and added the same way.
         """
         x = np.asarray(self.params_rwa if params is None else params, float)
         norm = np.zeros(self.nsegments)
@@ -1959,9 +1976,50 @@ class azure2:
                      else float(p.value))
             value = min(max(value, 0.01 * p.prior_nominal), p.density_max)
             density += ((value - p.prior_nominal) / p.prior_sigma) ** 2
+        # Fitted Doppler temperatures: the prior of each free temperature with a sigma, the same way.  Outside
+        # [T0/4, the layout temperature] the engine computes at the nearest end (and warns); the prior is taken there.
+        doppler = 0.0
+        for p in self.parameters.dopplers:
+            if p.fixed or not p.prior_sigma:
+                continue
+            value = (float(x[p.free_index]) if p.free_index is not None and p.free_index < x.size
+                     else float(p.value))
+            value = min(max(value, 0.25 * p.prior_nominal), p.doppler_max)
+            doppler += ((value - p.prior_nominal) / p.prior_sigma) ** 2
+        # Fitted sample thicknesses: the prior of each free thickness with a sigma, the same way.  Below 0 the
+        # engine computes at 0; the prior is taken there too.
+        thickness = 0.0
+        for p in self.parameters.thicknesses:
+            if p.fixed or not p.prior_sigma or p.thickness_leader is not None:
+                continue
+            value = (float(x[p.free_index]) if p.free_index is not None and p.free_index < x.size
+                     else float(p.value))
+            value = max(value, 0.0)
+            thickness += ((value - p.prior_nominal) / p.prior_sigma) ** 2
+        # Prior parameter covariance (<config> priorCovariance=): r.r, r = L^-1 (p - mu) from the engine.
+        prior_covariance = float(np.sum(self.prior_covariance_residuals(x) ** 2))
         return {"norm": norm, "shift": shift, "shift_sqrt": shift_sqrt, "shift_fn": shift_fn,
                 "park": park, "abundance": abundance, "scattering_length": scattering_length,
-                "screening": screening, "density": density}
+                "screening": screening, "density": density, "doppler": doppler, "thickness": thickness,
+                "prior_covariance": prior_covariance}
+
+    def prior_covariance_residuals(self, params=None):
+        """Whitened residuals r = L^-1 (p - mu) of the prior parameter covariance (``priorCovariance=<file>`` in
+        ``<config>``, C = L L^T), one per prior parameter in :attr:`prior_covariance_names` order; empty without
+        the key (or in extrapolation mode).  ``sum(r**2)`` is ``penalties()["prior_covariance"]``, and
+        :meth:`residual_jacobian` appends these rows (Jacobian L^-1 on the prior's columns) last."""
+        x = np.asarray(self.params_rwa if params is None else params, float).ravel()
+        if not hasattr(self.sess, "prior_covariance_residuals"):    # an engine older than 2026-11-05
+            return np.zeros(0)
+        return np.asarray(self.sess.prior_covariance_residuals(x), float)
+
+    @property
+    def prior_covariance_names(self):
+        """The prior parameter covariance's parameter names, in its row order, after the engine marginalized the
+        listed parameters that are fixed in this model; empty without the ``priorCovariance`` key."""
+        if not hasattr(self.sess, "prior_covariance_names"):
+            return []
+        return list(self.sess.prior_covariance_names())
 
     @property
     def nuclei(self):
@@ -2059,7 +2117,8 @@ class azure2:
         return (float(np.sum(self.calculate_chi2_rwa(x)))
                 + float(np.sum(pen["norm"])) + float(np.sum(pen["shift"]))
                 + float(np.sum(pen["shift_sqrt"])) + float(np.sum(pen["shift_fn"]))
-                + pen["screening"] + pen["density"])
+                + pen["screening"] + pen["density"] + pen["doppler"] + pen["thickness"]
+                + pen["prior_covariance"])
 
     def chi2_and_grad(self, params):
         """Value and analytic gradient of the (data) chi-squared.
@@ -2125,6 +2184,10 @@ class azure2:
         profiled together by linear least squares; ``J`` then carries the
         exact derivative through that profile (Golub-Pereyra; see
         docs/source/theory/thm_implementation.rst, "THM experiments").
+        With a prior parameter covariance (``priorCovariance=<file>`` in ``<config>``) its whitened rows
+        r = L^-1 (p - mu) come last, with the constant Jacobian L^-1 on the prior's columns: ``sum(r**2)`` is then
+        ``calculate_chi2_rwa(params) + penalties(params)["prior_covariance"]`` (the other penalties, normalizations
+        and the like, are not rows).
 
         ``skip``: free-column indices (into ``params``) the caller holds fixed.
         Their finite differences are not computed and the columns come back

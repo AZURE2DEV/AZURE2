@@ -96,9 +96,10 @@ try:
         fit = azure2(os.path.join(work, "be7p_fit.azr"))
         x = np.asarray(fit.params_rwa, float)
         pen = fit.penalties(x)["scattering_length"]
-        check("penalties()['scattering_length'] = 48.3471 (the CLI's)", close(pen, 48.3471155, 1e-6), pen)
+        # CODATA 2018 constants since 2026-11-05 (were 48.3471155 and 275.3872387 with the CODATA 2006 ones)
+        check("penalties()['scattering_length'] = 48.3472 (the CLI's)", close(pen, 48.3471861, 1e-6), pen)
         total = float(np.sum(fit.calculate_chi2_rwa(x)))
-        check("calculate_chi2_rwa includes it (275.3872)", close(total, 275.3872387, 1e-7), total)
+        check("calculate_chi2_rwa includes it (275.3878)", close(total, 275.3878019, 1e-7), total)
         check("objective = calculate_chi2_rwa (no norm/shift terms here)", close(fit.objective(x), total, 1e-12))
 
         value, grad = fit.chi2_and_grad(x)

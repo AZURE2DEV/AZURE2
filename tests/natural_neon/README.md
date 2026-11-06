@@ -38,19 +38,24 @@ About 55 s on two threads.
 |---|---|---|---|---|
 | 1 | Vaughn et al., Phys. Rev. 118, 683 (1960) (11106003) | natural Ne | natural sum over the three nuclei | 835.555 (76) |
 | 2 | Almeida & Käppeler, ApJ 265, 417 (1983), low-energy run (21808) | natural Ne | natural sum | 559.24 (376) |
-| 3 | Almeida & Käppeler 1983, low-energy run (21808) | ²¹Ne, 95.4 % | ²¹Ne only, folded σ = 1 keV | 433.353 (255) |
-| 4 | Almeida & Käppeler 1983, low-energy run (21808) | ²²Ne, 99.8 % | ²²Ne only, folded σ = 1 keV | 295.392 (259) |
-| 5 | Sikkema 1958 (20203) | ²²Ne, 98.1 % | ²²Ne only, folded 10.6 keV | 27.9777 (35) |
-| 6 | Sikkema 1958 (20261) | ²⁰Ne | ²⁰Ne only, folded 10.6 keV | 247.1 on thm, 246.304 on dev (35; see below) |
-| 7 | Junghans et al., EPJ Web Conf. 239, 01006 (2020) (23755005), E_lab 0.84–1.26 MeV | natural Ne | natural sum, folded with the energy-dependent nELBE resolution | 947.456 (272) |
+| 3 | Almeida & Käppeler 1983, low-energy run (21808) | ²¹Ne, 95.4 % | ²¹Ne only, folded σ = 1 keV | 433.279 (255) |
+| 4 | Almeida & Käppeler 1983, low-energy run (21808) | ²²Ne, 99.8 % | ²²Ne only, folded σ = 1 keV | 295.394 (259) |
+| 5 | Sikkema 1958 (20203) | ²²Ne, 98.1 % | ²²Ne only, folded 10.6 keV | 27.9437 (35) |
+| 6 | Sikkema 1958 (20261) | ²⁰Ne | ²⁰Ne only, folded 10.6 keV | 245.029 (35; see below) |
+| 7 | Junghans et al., EPJ Web Conf. 239, 01006 (2020) (23755005), E_lab 0.84–1.26 MeV | natural Ne | natural sum, folded with the energy-dependent nELBE resolution | 946.069 (272) |
 
 Segments 5 and 6 share one `<targetInt>` line ("5,6") but have different
 entrance pairs (n+²²Ne and n+²⁰Ne).  dev converts the shared lab sigma to
 c.m. once, with the first segment's pair (22/23), and folds segment 6 with
 that kernel too; thm gives every listed segment its own copy, converted with
 its own pair (20/21 for segment 6; MERGE_NOTES.md section A, row 76888ad).
-On thm segment 6 is therefore pinned at 247.1 (dev 246.304; dev with "5"
-and "6" on separate lines gives 247.15), and the total at 3346.1.
+On thm segment 6 was therefore pinned at 247.1 (dev 246.304; dev with "5"
+and "6" on separate lines gives 247.15), and the total at 3346.1.  Since dev
+converts every point with its own pair (170ab0c, merged into thm with dev
+2d97b1f) and folds with 5-sigma kernels (7d24c88), the difference is gone:
+the pin is 3342.51 since the merge of dev 3264896d (segment 6 245.029; dev
+3342.46, segment 6 245.09; the rest is thm's sub-point grid, segments 4-6 by
+up to 4e-4).
 
 The Almeida resolution is not tabulated; σ = 1 keV stands for the 1 % FWHM
 assumed in the fit. Sikkema is folded with 25 keV FWHM.

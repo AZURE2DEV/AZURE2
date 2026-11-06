@@ -195,7 +195,7 @@ void ThmChannelsPage::apply() {
     if (edit->text().trimmed() == edit->property("shown").toString()) continue;  // exactly as read
     double x;
     if (!ThmText::readWholeDouble(edit->text(), x)) continue;
-    pairs_->setData(pairs_->index(pairRows_.at(row) - 1, 15), x, Qt::EditRole);
+    pairs_->setData(pairs_->index(pairRows_.at(row) - 1, PairsModel::BindingEnergyColumn), x, Qt::EditRole);
   }
   const QList<ChannelsData> channelList = channels_->getChannels();
   for (int row = 0; row < channelRows_.size(); row++) {

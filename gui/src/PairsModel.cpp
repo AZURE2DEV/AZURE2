@@ -2,6 +2,7 @@
 #include "ElementMap.h"
 #include "MassTable.h"
 #include <math.h>
+#include <cmath>
 #include <QBrush>
 #include <QColor>
 #include <QRegularExpression>
@@ -67,6 +68,17 @@ QString PairsModel::nucleusLongLabel(const Nucleus &nucleus) const {
   return nucleusLabel(nucleus, false);
 }
 
+QString PairsModel::lightExcitationMark(const PairsData &pair) {
+  if (pair.lightExcitation == 0.) return QString();
+  return QString("*(%1)").arg(pair.lightExcitation, 0, 'f', 3);
+}
+
+bool PairsModel::isIdentical(const PairsData &p) {
+  return p.pairType == 0 && p.lightZ == p.heavyZ && std::fabs(p.lightM - p.heavyM) < 1.0e-6 &&
+         std::fabs(p.lightJ - p.heavyJ) < 1.0e-6 && p.lightPi == p.heavyPi && std::fabs(p.lightG - p.heavyG) < 1.0e-9 &&
+         std::fabs(p.lightExcitation - p.excitationEnergy) < 1.0e-9;
+}
+
 QVariant PairsModel::data(const QModelIndex &index, int role) const {
   if (!index.isValid()) return QVariant();
 
@@ -109,7 +121,9 @@ QVariant PairsModel::data(const QModelIndex &index, int role) const {
         return "Particle, Particle";
     } else if (index.column() == 14)
       return pair.ecMultMask;
-    else if (index.column() == 15)
+    else if (index.column() == LightExcitationColumn)
+      return pair.lightExcitation;
+    else if (index.column() == BindingEnergyColumn)
       return pair.bindingEnergy;
     else if (index.column() == NucleusColumn)
       return nucleusLabel(nucleusOf(pair));
@@ -145,7 +159,9 @@ QVariant PairsModel::data(const QModelIndex &index, int role) const {
       return pair.pairType;
     else if (index.column() == 14)
       return pair.ecMultMask;
-    else if (index.column() == 15)
+    else if (index.column() == LightExcitationColumn)
+      return pair.lightExcitation;
+    else if (index.column() == BindingEnergyColumn)
       return pair.bindingEnergy;
   } else if (role == Qt::TextAlignmentRole)
     return Qt::AlignCenter;
@@ -191,7 +207,7 @@ QVariant PairsModel::headerData(int section, Qt::Orientation orientation, int ro
       case 9:
         return tr("Heavy\ng-Factor");
       case 10:
-        return tr("Excitation\nEnergy");
+        return tr("Heavy\nExcitation");
       case 11:
         return tr("Separation\nEnergy");
       case 12:
@@ -200,7 +216,9 @@ QVariant PairsModel::headerData(int section, Qt::Orientation orientation, int ro
         return tr("Pair\nType");
       case 14:
         return tr("EC\nMultipolarities");
-      case 15:
+      case LightExcitationColumn:
+        return tr("Light\nExcitation");
+      case BindingEnergyColumn:
         return tr("THM\nBinding");
       case NucleusColumn:
         return tr("Compound\nNucleus");
@@ -247,7 +265,9 @@ bool PairsModel::setData(const QModelIndex &index, const QVariant &value, int ro
       tempData.pairType = value.toInt();
     else if (index.column() == 14)
       tempData.ecMultMask = value.toInt();
-    else if (index.column() == 15)
+    else if (index.column() == LightExcitationColumn)
+      tempData.lightExcitation = value.toDouble();
+    else if (index.column() == BindingEnergyColumn)
       tempData.bindingEnergy = value.toDouble();
     else
       return false;
@@ -303,7 +323,8 @@ int PairsModel::isPair(const PairsData &pair) const {
         tempPair.channelRadius == pair.channelRadius &&
         tempPair.pairType == pair.pairType &&
         tempPair.ecMultMask == pair.ecMultMask &&
-        tempPair.bindingEnergy == pair.bindingEnergy) {
+        tempPair.bindingEnergy == pair.bindingEnergy &&
+        tempPair.lightExcitation == pair.lightExcitation) {
       foundPair = i;
       break;
     }
@@ -330,17 +351,18 @@ QString PairsModel::getParticleLabel(const PairsData &pair, int which) const {
         tempZ = pair.heavyZ;
         tempM = round(pair.heavyM);
       }
+      const QString mark = which == 0 ? lightExcitationMark(pair) : QString();
       std::map<int, QString>::const_iterator it = elementMap.find(tempZ);
       if (it != elementMap.end()) {
         if (tempM == 1) {
           if (tempZ == 1)
-            return "<center><i>p</i></center>";
+            return QString("<center><i>p</i>%1</center>").arg(mark);
           else
-            return QString("<center><i>%1</i></center>").arg(it->second);
+            return QString("<center><i>%1</i>%2</center>").arg(it->second).arg(mark);
         } else if (tempZ == 2 && tempM == 4)
-          return "<center>&alpha;</center>";
+          return QString("<center>&alpha;%1</center>").arg(mark);
         else
-          return QString("<center><sup>%1</sup>%2</center>").arg(tempM).arg(it->second);
+          return QString("<center><sup>%1</sup>%2%3</center>").arg(tempM).arg(it->second).arg(mark);
       } else
         return "?";
     }
@@ -366,6 +388,7 @@ QString PairsModel::getParticleLabel(const PairsData &pair, int which) const {
         lightLabel = QString("<sup>%1</sup>%2").arg(round(pair.lightM)).arg(it->second);
     } else
       lightLabel = "?";
+    lightLabel += lightExcitationMark(pair);
     QString heavyLabel;
     it = elementMap.find(pair.heavyZ);
     if (it != elementMap.end()) {
@@ -429,6 +452,8 @@ QString PairsModel::getReactionLabel(const PairsData &firstPair, const PairsData
       lightLabel[1] = QString("<sup>%1</sup>%2").arg(round(secondPair.lightM)).arg(it->second);
   } else
     lightLabel[1] = "?";
+  lightLabel[0] += lightExcitationMark(firstPair);
+  lightLabel[1] += lightExcitationMark(secondPair);
   QString heavyLabel[2];
   it = elementMap.find(firstPair.heavyZ);
   if (it != elementMap.end()) {
@@ -484,6 +509,7 @@ QString PairsModel::getReactionLabelTotalCapture(const PairsData &firstPair) {
       lightLabel[0] = QString("<sup>%1</sup>%2").arg(round(firstPair.lightM)).arg(it->second);
   } else
     lightLabel[0] = "?";
+  lightLabel[0] += lightExcitationMark(firstPair);
   lightLabel[1] = "&gamma;";
   QString heavyLabel[2];
   it = elementMap.find(firstPair.heavyZ);

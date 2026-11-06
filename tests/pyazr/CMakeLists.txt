@@ -540,6 +540,39 @@ add_test(NAME pyazr_composite_terms
                  ${CMAKE_CURRENT_SOURCE_DIR}/composite_terms_test.py)
 set_tests_properties(pyazr_composite_terms PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
+# Free-gas Doppler broadening: add_target_effect(doppler=T) and the engine's Doppler step through the API
+# (tests/doppler_fgm models).
+add_test(NAME pyazr_doppler
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/doppler_test.py)
+set_tests_properties(pyazr_doppler PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
+# The fitted sample thickness of transmission / yield segments ("transmission n vary sigma", thicknessgroup):
+# AzrModel helpers, type-10 records, penalties()["thickness"], chi2_and_grad and residual_jacobian columns
+# (tests/transmission_yield models).
+add_test(NAME pyazr_thickness
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/thickness_test.py)
+set_tests_properties(pyazr_thickness PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
+# The light particle's excitation energy, column 32 of a <levels> line (2026-11-05): AzrModel keeps the column
+# (and adds or drops it only when e1 changes to or from 0), Pair carries light_excitation (and still reads an
+# older engine's 19-field record), and the excitation moved between the partners gives the same cross sections
+# (tests/light_excitation models).
+add_test(NAME pyazr_light_excitation
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/light_excitation_test.py)
+set_tests_properties(pyazr_light_excitation PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
+# The prior parameter covariance ("priorCovariance=<file>" in <config>, 2026-11-05): pyazr.priors (write_prior /
+# read_prior, read_covariance_dat, prior_from_fit), AzrModel.prior_covariance, and through the engine
+# penalties()["prior_covariance"], objective(), the residual_jacobian rows L^-1 (p - mu) against central differences,
+# the marginalization of a fixed listed parameter and a refused file (tests/norm_groups model).
+add_test(NAME pyazr_prior_covariance
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/prior_covariance_test.py)
+set_tests_properties(pyazr_prior_covariance PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
 # A test that cannot run its engine part -- numpy, scipy or the compiled
 # _azure2 module missing (pybind11 absent at configure time builds no module),
 # or no AZURE2 binary -- exits 77 after whatever pure-Python checks it has, so

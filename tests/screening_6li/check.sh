@@ -60,7 +60,7 @@ if [ -s "$(out bare)" ] && [ -s "$(out scr)" ]; then
   # Rows in segment order: metal (9), insulator (7), PdLi (7).  exp(pi eta Ue/E), eta of p + 6Li with AZURE2's
   # constants (Constants.h) and the pair's masses (1.00782, 6.0151).
   read -r worst nrow <<< "$(paste "$(out bare)" "$(out scr)" | awk -v u1="${UE[0]}" -v u2="${UE[1]}" -v u3="${UE[2]}" '
-    BEGIN { pi = 3.141592653589793; uconv = 931.4940880; fs = 1 / 137.0359996790; mu = 1.00782 * 6.0151 / 7.02292 }
+    BEGIN { pi = 3.141592653589793; uconv = 931.49410242; fs = 1 / 137.035999084; mu = 1.00782 * 6.0151 / 7.02292 }
     { gsub(/\r/, "") }
     NF >= 8 { r++; m = NF / 2; E = $1; b = $4; s = $(m + 4)
       u = (r <= 9) ? u1 : (r <= 16) ? u2 : u3

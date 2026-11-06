@@ -58,8 +58,10 @@ r="$(maxrel "$(out tgt_fixed)" "$(out tgt_lab_const)")";    if le "$r" 1e-12; th
 r="$(maxrel "$(out tgt_fixed)" "$(out tgt_legacy_const)")"; if le "$r" 1e-9;  then ok "under target integration: constant == legacy c.m. ($r)"; else bad "target + constant vs target + legacy c.m. differ ($r)"; fi
 
 # 2. what did not change. The references were recorded on Linux; another platform's libm differs
-#    from it at ~1e-11, so these are held to 1e-8 -- five orders below the smallest change in part 3.
-r="$(maxrel "$(out bare)" "$HERE/reference_old/bare.extrap")"; if le "$r" 1e-8; then ok "no effect: unchanged ($r)"; else bad "bare calculation moved ($r)"; fi
+#    from it at ~1e-11, so these were held to 1e-8 -- five orders below the smallest change in part 3.  Since
+#    2026-11-05 the CODATA 2018 constants (include/Constants.h) move the bare calculation by 1.2e-7 against
+#    these pre-unification references, so it is held to 1e-6, still three orders below part 3.
+r="$(maxrel "$(out bare)" "$HERE/reference_old/bare.extrap")"; if le "$r" 1e-6; then ok "no effect: unchanged ($r)"; else bad "bare calculation moved ($r)"; fi
 #    thm: the references hold dev's sub-point grid; thm's adaptive grid (MERGE_NOTES.md section A, row
 #    02ae97b: geometric tails, quantised anchors) is converged where dev's is not -- tgt at the default grid
 #    is 3e-8 from a 4x finer one on thm and 6.3e-5 on dev, near the 3.50/3.55 MeV levels -- so target

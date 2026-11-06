@@ -923,7 +923,7 @@ a data or test segment line, n = sample thickness in atoms/barn.
     (so a natural sum under a spread);
   - for `yield` only: natural segments, the elastic/total line itself,
     components with another entrance or an elastic exit, and `--use-rmc`.
-- Not built: Y1/Y2 multiple scattering and a fitted thickness.
+- Not built: Y1/Y2 multiple scattering. The thickness can be fitted (below).
 - The `--use-gradient` path is analytic.
 - pyazr: `Segment.transmission` and `.yield_thickness`. The GUI keeps the
   keywords as written but has no widgets for them.
@@ -931,6 +931,78 @@ a data or test segment line, n = sample thickness in atoms/barn.
 - **Builds before c3d21f3 IGNORE both keywords silently** and fit plain sigma to
   the T or Y data, so check the build before trusting such a file.
   `tests/transmission_yield` fails 15 checks on those builds.
+
+**Free-gas Doppler broadening** (dev 25b379e, 2026-11-05; SAMMY's free-gas
+model): put `doppler <T>` at the end of a `<targetInt>` line, with T the
+effective temperature in kelvin.
+- What it does: the cross section of every sub-point is broadened FIRST, then
+  any `transmission`/`yield` transform is applied, then the line's resolution
+  kernel (Gaussian, UDR, target integration, beam profile). That is SAMMY's
+  order. A line may carry `doppler` alone, which gives sigma_D at the point:
+  `1 "1,2" 400 0 0 0 0 "" 0 0 0 0 "" 0 doppler 293.6`.
+- Size of the effect: the full width is Delta_D = sqrt(4 m E kT/M) (63 eV for
+  n+12C at 300 K and 0.46 MeV). It matters for resonances a few hundred eV
+  wide or narrower; it is negligible for ones tens of keV wide.
+- Sub-points: the grid window is widened by the Doppler window, and a narrow
+  resonance needs many sub-points. A 200 eV resonance under a 100 eV Gaussian
+  needed 1000 (with 400 the error was 4e-4).
+- Refused with an ERROR: `doppler 0`, a missing T, and a photon or beta
+  entrance pair. It works for any particle entrance pair (neutrons, and
+  charged beams on gas).
+- The temperature can be fitted (below). The grids stop at 1 keV c.m., as
+  for every effect.
+- The analytic gradient covers it.
+- GUI: "Include Free-Gas Doppler Broadening" in the Add/Edit Experimental
+  Effect dialog. pyazr: `add_target_effect(..., doppler=T)`.
+- Test: `tests/doppler_fgm`.
+- Builds before 25b379e REFUSE the whole `<targetInt>` block ("Could not fill
+  data object from file"). They do not silently ignore the keyword.
+
+**Fitted Doppler temperature, fitted sample thickness, prior covariance,
+excited light particle, CODATA 2018** (dev, 2026-11-05; builds from before
+then lack them, mostly silently, so check the build date first).
+- **Fitted Doppler T**: `doppler T vary sigma [Tmax]` on a `<targetInt>` line
+  makes T the parameter `doppler_<n>` (n = the line's place among the active
+  lines; prior of width sigma K about T, 0 = none). The sub-point grids are laid
+  out once for Tmax (default max(T + 3 sigma, 1.21 T), 2 T without a prior), so
+  the gradient is exact. MIGRAD keeps T in [T/4, Tmax]; a fit that ends at
+  Tmax wants a larger Tmax. pyazr: `AzrModel.set_doppler(effect, T=, vary=,
+  sigma=, tmax=)`, kind "doppler". A build that knows only `doppler T` ignores
+  the numbers after T (fixed temperature, no warning).
+- **Fitted thickness**: `transmission n vary sigma` / `yield n vary sigma`
+  (n atoms/barn, sigma the prior width) gives `segment_<key>_thickness`;
+  `thicknessgroup <label>` ties segments to the first one's thickness (each
+  member keeps its own transmission/yield block). pyazr:
+  `AzrModel.set_sample_thickness(key, n=, vary=, sigma=, group=)`, kind
+  "thickness". Builds of early Nov 2026 without the fit form read n and ignore
+  the rest silently.
+- **rmfit**: the doppler and thickness (and density, screening) kinds run under
+  SingleSession only, not Sharded.
+- **Prior covariance (SAMMY PUP / sequential Bayesian update)**:
+  `priorCovariance=<file>` in `<config>` adds (p - mu)^T C^-1 (p - mu) to chi2 for
+  the parameters the file lists (param.sav names, means, then the covariance
+  rows; optional `#parametrization` tag must match the run). Fixed parameters
+  are marginalized; malformed files are an ERROR. Workflow: fit A with the
+  uncertainty band on (`--covariance-band`; covariance.dat is written ONLY then,
+  and holds only the free level energies and widths, with a `#columns`
+  header), then `pyazr.priors.prior_from_fit("output/param.sav",
+  "output/covariance.dat", "prior.dat")` and fit B with
+  `priorCovariance=prior.dat`. A per-parameter prior on the same parameter is
+  ADDED in a fit and REPLACED in MCMC (a note is printed). pyazr `objective()`
+  includes it, `calculate_chi2_rwa()` does not. Older engines ignore the key
+  silently.
+- **Excited light particle**: level-line column 32 is e1, the light particle's
+  excitation energy (written only when nonzero); the pair's total excitation is
+  e1 + e2. Identical particles = same Z, mass, J, parity, g-factor AND
+  excitation; so alpha + alpha* is not identical, and e1 = e2 is. A UPOS
+  (secondary gamma) segment needs the excitation on the heavy partner. Older
+  engines read 31 columns and ignore column 32 silently (wrong threshold).
+  Test: `tests/light_excitation`.
+- **CODATA 2018 constants** (pi was 3.141592650; hbarc 197.3269804 MeV fm, u
+  931.49410242 MeV, alpha 1/137.035999084, m_e 0.51099895 MeV): results move by
+  1e-9..1e-5 relative, more near a kinematic edge. A rerun of an archived fit on
+  this build does not reproduce chi2 to the last digit; that is expected, not a
+  model change.
 
 The **external parameter file** prompt: give a saved `output/param.sav` to start
 from those best-fit formal parameters, or leave **blank** to build fresh from

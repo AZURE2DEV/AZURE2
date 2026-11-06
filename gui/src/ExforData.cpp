@@ -18,10 +18,11 @@ static const char *kExforBase = "https://nds.iaea.org/exfor";
 // the Rutherford-ratio conversion below; AZURE2 itself has no native "ratio
 // to Rutherford" data mode, so that conversion is new functionality here,
 // not a port of existing behaviour.
-static const double kPi = 3.141592650;
-static const double kUconv = 931.4940880;
-static const double kFstruc = 1.00 / 137.0359996790;
-static const double kHbarc = 197.32696310;
+// The engine's CODATA 2018 values (include/Constants.h).
+static const double kPi = 3.14159265358979323846;
+static const double kUconv = 931.49410242;
+static const double kFstruc = 1.00 / 137.035999084;
+static const double kHbarc = 197.3269804;
 
 // Coulomb (Rutherford) differential cross section in the c.m. frame, for
 // point charges z1/z2 at c.m. energy eCm (MeV) and c.m. angle angleDeg

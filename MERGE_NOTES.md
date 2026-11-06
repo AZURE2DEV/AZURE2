@@ -6,10 +6,10 @@ something for such a project. The THM machinery itself (HOES cross section,
 `<thm>` keys, experiments, R(E), the DW vertex, the ps and angle windows,
 cbackground=, thm_experiments.out) is new and does nothing unless it is used.
 
-`origin/dev` 2d97b1f is merged into `thm` (November 2026; see "Merge of
-origin/dev 2d97b1f0" below; the previous merges were 0919dcb, 8673c5c,
-7e6dba8, 64ed575, 4a93bc1, and 6f3228e, 3628a87), so all of dev is already
-in `thm`.
+`origin/dev` 3264896d is merged into `thm` (November 2026; see "Merge of
+origin/dev 3264896d" below; the previous merges were 2d97b1f, 0919dcb,
+8673c5c, 7e6dba8, 64ed575, 4a93bc1, and 6f3228e, 3628a87), so all of dev is
+already in `thm`.
 The dev changes merged by 18c49ea, f56c150, da72def, 497548a, e191991 and
 3628a87 are not differences: the Wigner-limit bound, the elastic identical-pair factor
 (7c34992), the adaptive-grid convergence work, target-integration anchoring,
@@ -348,6 +348,104 @@ Results that move (no table file; the table changes nothing beyond 1e-8):
 Still open: the merged EPoint is 152 bytes larger than dev's; the three
 convolution_unify models with target integration and a beam spread need more
 than 3.0 GB of address space with either binary (checked here on 21 points).
+
+## Merge of origin/dev 3264896d (November 2026)
+
+dev between 2d97b1f0 and 3264896d (18 commits): free-gas Doppler broadening
+and its fitted temperature (`doppler <T>`, `doppler T vary sigma [Tmax]`),
+the fitted sample thickness of transmission / yield segments
+(`transmission n vary sigma`, `thicknessgroup`), the prior parameter
+covariance (`priorCovariance=<file>`, pyazr.priors), the light particle of a
+pair in an excited state (`e1`), full-precision pi and CODATA 2018 constants,
+the InputFiles cache fix, the GUI's tied systematics and macOS file dialogs,
+the EData::Clone fix for segments with components (d2c10ac5), and the shared
+per-point tables with the CoulFuncCache::TransientScope race fix (3264896d).
+All of it is in, with these decisions:
+
+- **`<levels>` trailing columns: told apart by their number.**  dev's
+  optional 32nd column is `e1`; thm's columns 32 and 33 are the THM binding
+  energy and the width flag, in every THM file.  NucLine (and pyazr's
+  AzrChannel, the GUI's reader) now read the trailing fields by count:
+  1 = `e1` (dev), 2 = binding energy and flag (thm), 3 = binding energy,
+  flag and `e1`; more is refused.  Every existing dev and thm file reads as
+  before.  Written: pyazr keeps a line's layout and adds `e1` (34th after the
+  THM columns, 32nd without them) only when nonzero; the GUI always writes the
+  two THM columns and then `e1` when nonzero.  A thm file whose line carried
+  the binding energy alone (32 fields) would now read it as `e1`: none in
+  tests/ or examples/ (all 33), and thm's writers always wrote both.  A
+  trailing token that is not a number now fails the line (as dev; thm
+  ignored it).  To decide when thm goes into dev: this layout, or the THM
+  columns moved behind `e1`.
+- **GetPairsInfo: 21 fields.**  19 = dev's light excitation, 20 = the THM
+  binding energy (field 19 before); `kPairInfoFields` 21, pyazr `Pair`
+  reads 21, dev's 20 (binding energy 0) and an older engine's 19.
+- **Parameter vector order and type codes.**  dev's Doppler temperatures and
+  sample thicknesses follow the densities (as on dev); thm's coherent
+  backgrounds stay last.  GetParameterInfo types: 9 Doppler, 10 thickness (as
+  dev), **11 cbkg (was 9)**; pyazr `_KINDS`, `bands._BAND_KINDS` (0, 1, 11),
+  `AZURECalcMCMC::PARAM_*`, ParamKind (Doppler, Thickness, ThmCoherent),
+  ParameterLabel, the GUI's fitting / MCMC tabs follow.
+- **One Doppler parameter per `<targetInt>` line.**  thm gives every segment
+  a line lists its own copy of the effect; dev made one `doppler_<n>` per
+  effect.  As thm's screening and density parameters, `doppler_<n>` is now one
+  per line (n = the line), moving all its copies (EData::dopplerCopies_,
+  GetDopplerTargetEffect); dev's call sites use the first copy.  With one
+  segment per line (dev's tests) nothing changes.
+- **Nuisance priors** leave `doppler_*` and `segment_<k>_thickness` out
+  (ParameterLimitsManager, as dev's name filter); analytic gradient for both
+  (the THM finite-difference block skips them: a THM point has neither).
+- **Shared per-point tables (3264896d)**: thm's THM vertex tables
+  (`thm_jl`, `thm_rhodjl`, `thm_coul`) live in `EPoint::EDependentTables` and
+  are shared by the copies like the classic rows; `thm_ps_` stays an
+  immutable shared pointer and is carried by `EDependentShare` (a re-placed
+  sub-point at an unchanged node keeps it); the row trimming also trims the
+  THM rows.
+- **Prior covariance in the API**: thm's EvaluateFilledChi2 has no parameter
+  vector, so CalculateChi2RWA / CalculateChi2Physical record its chi2 for
+  chiSquared.out (dev did it in its chi2 function).
+- **GUI**: pairs model columns 15 = light excitation (dev), 16 = THM binding
+  energy (`PairsModel::BindingEnergyColumn`, was 15), 17 = nucleus; segments
+  model 24 = isTHM, 25 = Groups (`GroupsColumn`, 24 on dev).  Not built here
+  (no Qt).
+- **AdaptiveIntegrationGrid**: thm's level energy with dev's heavy-only
+  excitation (GetHeavyExE) for the ground-transition test.
+- AZURE2.cpp prints the `<levels>` line it cannot read.  NucLine does not
+  call `std::ws` at eof (a newer libstdc++'s sentry sets failbit there).
+- Tests: tests/convolution_unify keeps thm's grid tolerance for target
+  integration and takes dev's 1e-6 for the bare calculation (CODATA 2018);
+  tests/pyazr/light_excitation_test adapted to the layouts above;
+  tests/pyazr/thm_spectator_window_test mirrors the CODATA 2018 uconv and
+  hbar c.  The reference tables of tests/reference/thm_*_reference.py and
+  tests/thm_coherent_background/check.sh still use the CODATA 2006 constants
+  (they pass at their tolerances; not regenerated).
+- adaptive_grid_reference_test still fails 1 of 14 checks (thm's tail bias,
+  see the 2d97b1f0 merge below).
+
+Re-pinned (each equal to a measured run of this merge):
+- tests/natural_neon 3346.1 -> **3342.51** (segment 6 247.1 -> 245.029,
+  3 433.353 -> 433.279, 5 27.9777 -> 27.9437, 7 947.456 -> 946.069; dev
+  3342.46, segment 6 245.09).  The thm-only difference (76888ad, section A)
+  is gone with dev's per-point conversion and 5-sigma kernels; the rest is
+  thm's grid (segments 4-6 by up to 4e-4).  The same value the 2d97b1f merge
+  measured and proposed; README updated.
+- tests/shared_point_tables (new from dev) expected/chi2_fit 109.136 (dev)
+  -> **109.250542525**: thm's adaptive grid.  On its 1/16 natural-neon project
+  the calculation differs from dev only in the folded segments 3-6, by 1e-4
+  to 2e-4 (131.190625 against 131.196); five MIGRAD calls take that to 1e-3.
+  Its 1- and 4-thread outputs are identical (check c).
+- Test mirrors of changed formats/constants (no pinned value moved):
+  tests/thm_coherent_background (closed form: CODATA 2018 hbar c and u; it
+  was off by 4e-6), tests/pyazr/thm_spectator_window_test (the same),
+  tests/fixed_param_par (dev's `#columns` header of covariance.dat,
+  b7e77292), tests/pyazr/light_excitation_test (the column layouts above).
+
+Tests (this machine, GCC 11 headless):
+- `ctest -LE slow`: 91 of 92 pass; adaptive_grid_reference fails 1 of 14
+  checks as before (thm's tail bias).
+- `tests/run_tests.sh`: 122 of 126 at first; the four failures are the
+  re-pins and mirrors above (natural_neon, shared_point_tables,
+  thm_coherent_background, fixed_param_par), each passing after it.
+- `ctest -L slow` (one at a time): 8 of 8 pass.
 
 ## Merge of origin/dev 2d97b1f0 (November 2026)
 

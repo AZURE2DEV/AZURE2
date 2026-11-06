@@ -505,6 +505,16 @@ class Session {
     expect_free(v, "park_norms");
     return to_array(api_->ParkNorms(v));
   }
+  py::array_t<double> prior_covariance_residuals(const py::array_t<double, py::array::forcecast> &p) {
+    ConfigScope guard(config_, &ecCache_, &potentials_);
+    vector_r v = to_vector(p);
+    expect_free(v, "prior_covariance_residuals");
+    return to_array(api_->PriorCovarianceResidualsRWA(v));
+  }
+  std::vector<std::string> prior_covariance_names() {
+    ConfigScope guard(config_, &ecCache_, &potentials_);
+    return api_->PriorCovarianceNames();
+  }
   int refreeze_covariance() {
     ConfigScope guard(config_, &ecCache_, &potentials_);
     return api_->RefreezeCovariance();
@@ -911,6 +921,11 @@ PYBIND11_MODULE(_azure2, m) {
            "(pair key, channel spin, parity, Re a0 fm, Im a0 fm, has-levels flag).")
       .def("park_norms", &Session::park_norms, py::arg("params"),
            "Park overlap J of every R-matrix level (1 in Brune mode).")
+      .def("prior_covariance_residuals", &Session::prior_covariance_residuals, py::arg("params"),
+           "Prior parameter covariance (<config> priorCovariance=): the whitened residuals L^-1 (p - mu) at the free "
+           "RWA parameters (empty without one); their squared sum is the prior's chi2 term.")
+      .def("prior_covariance_names", &Session::prior_covariance_names,
+           "The prior covariance's parameter names, in its row order (fixed ones marginalized); empty without one.")
       .def("refreeze_covariance", &Session::refreeze_covariance,
            "Data covariances: forget the model frozen for the relvector terms; the next chi2 evaluation "
            "freezes it at its parameters.  Returns the number of covariance groups with relvector terms.")
