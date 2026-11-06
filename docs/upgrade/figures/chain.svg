@@ -1,0 +1,63 @@
+<svg viewBox="0 0 1170 332" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="One AZURE2 evaluation: fixed tables feed a chain from parameters to chi-squared"><defs><marker id="ahchain" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ahp"/></marker></defs><text x="20" y="24" class="bl">fixed for a fit stage · built once, then read-only</text>
+<g class="bx ex"><rect x="250" y="34" width="210" height="64" rx="6"/>
+<text x="262" y="56" class="bt">Energy grid E_n</text>
+<text x="262" y="74" class="bs">channel functions P, S, φ per (α, l)</text>
+<text x="262" y="89" class="bs">capture integrals per E_n</text>
+</g>
+<g class="bx ph"><rect x="480" y="34" width="210" height="64" rx="6"/>
+<text x="492" y="56" class="bt">Angular coupling</text>
+<text x="492" y="74" class="bs">coefficients per reaction</text>
+<text x="492" y="89" class="bs">Coulomb amplitude f_C(θ)</text>
+</g>
+<g class="bx ex"><rect x="710" y="34" width="210" height="64" rx="6"/>
+<text x="722" y="56" class="bt">Kernels K</text>
+<text x="722" y="74" class="bs">targets, stopping, straggling,</text>
+<text x="722" y="89" class="bs">resolution, Doppler, shifts</text>
+</g>
+<g class="bx in"><rect x="940" y="34" width="210" height="64" rx="6"/>
+<text x="952" y="56" class="bt">Data d, covariance C</text>
+<text x="952" y="74" class="bs">from the project</text>
+</g>
+<path d="M355,98 V158" class="ar " marker-end="url(#ahchain)"/>
+<path d="M585,98 V158" class="ar " marker-end="url(#ahchain)"/>
+<path d="M815,98 V158" class="ar " marker-end="url(#ahchain)"/>
+<path d="M1045,98 V158" class="ar " marker-end="url(#ahchain)"/>
+<text x="20" y="150" class="bl">every evaluation · depends only on θ, ν</text>
+<g class="bx ph"><rect x="20" y="160" width="210" height="72" rx="6"/>
+<text x="32" y="182" class="bt">Level parameters</text>
+<text x="32" y="200" class="bs">E_λ, γ_λc from θ</text>
+<text x="32" y="215" class="bs">Brune, Park; conventions</text>
+</g>
+<g class="bx ph"><rect x="250" y="160" width="210" height="72" rx="6"/>
+<text x="262" y="182" class="bt">Collision matrix U(E_n)</text>
+<text x="262" y="200" class="bs">level matrix per Jπ block,</text>
+<text x="262" y="215" class="bs">one solve per grid energy</text>
+</g>
+<g class="bx ph"><rect x="480" y="160" width="210" height="72" rx="6"/>
+<text x="492" y="182" class="bt">Observables O_n</text>
+<text x="492" y="200" class="bs">σ, Legendre coefficients,</text>
+<text x="492" y="215" class="bs">nuclear amplitudes</text>
+</g>
+<g class="bx ex"><rect x="710" y="160" width="210" height="72" rx="6"/>
+<text x="722" y="182" class="bt">Apparatus</text>
+<text x="722" y="200" class="bs">m = s · K(ν) · O</text>
+<text x="722" y="215" class="bs">per measurement</text>
+</g>
+<g class="bx in"><rect x="940" y="160" width="210" height="72" rx="6"/>
+<text x="952" y="182" class="bt">χ² and priors</text>
+<text x="952" y="200" class="bs">(m − d)ᵀ C⁻¹ (m − d)</text>
+<text x="952" y="215" class="bs">+ priors on θ, ν</text>
+</g>
+<path d="M230,196 H248" class="ar " marker-end="url(#ahchain)"/>
+<path d="M460,196 H478" class="ar " marker-end="url(#ahchain)"/>
+<path d="M690,196 H708" class="ar " marker-end="url(#ahchain)"/>
+<path d="M920,196 H938" class="ar " marker-end="url(#ahchain)"/>
+<g class="bx in"><rect x="940" y="272" width="210" height="48" rx="6"/>
+<text x="952" y="294" class="bt">Fitter</text>
+<text x="952" y="312" class="bs">Minuit2 or LM</text>
+</g>
+<path d="M1045,232 V270" class="ar " marker-end="url(#ahchain)"/>
+<path d="M940,296 H125 V234" class="ar " marker-end="url(#ahchain)"/>
+<text x="300" y="290" class="al">new θ</text>
+<path d="M815,296 V234" class="ar " marker-end="url(#ahchain)"/>
+<text x="821" y="262" class="al">new ν</text></svg>

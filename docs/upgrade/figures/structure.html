@@ -1,0 +1,465 @@
+<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AZURE2 Core Structure</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Source+Serif+4:opsz,wght@8..60,500;8..60,600&display=swap">
+<style>
+/* Layout: one reading column for text, the diagram allowed wider in its own scroller. */
+:root {
+  --bg: #f7f8f6; --fg: #1d2326; --muted: #5b666b; --rule: #d5dad6; --card: #ffffff;
+  --ph: #2f5f9e; --ph-t: #e6eef8;   /* physics */
+  --ex: #2c7a63; --ex-t: #e3f2ec;   /* experiment */
+  --in: #a5631c; --in-t: #f8eddf;   /* inference */
+  --io: #5d5a8c; --io-t: #ecebf5;   /* io */
+  --fe: #55606a; --fe-t: #eef0f1;   /* front ends, support */
+  --line: #3d474c;
+  --f-display: "Source Serif 4", Georgia, serif;
+  --f-body: "IBM Plex Sans", system-ui, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #14181a; --fg: #e3e7e8; --muted: #9aa5aa; --rule: #2e3538; --card: #1b2023;
+  --ph: #8db4ea; --ph-t: #1b2838; --ex: #74c9ab; --ex-t: #17291f; --in: #e2a564; --in-t: #2e2316;
+  --io: #b0acdf; --io-t: #23223a; --fe: #a9b3ba; --fe-t: #20262a; --line: #b8c2c6; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #14181a; --fg: #e3e7e8; --muted: #9aa5aa; --rule: #2e3538; --card: #1b2023;
+  --ph: #8db4ea; --ph-t: #1b2838; --ex: #74c9ab; --ex-t: #17291f; --in: #e2a564; --in-t: #2e2316;
+  --io: #b0acdf; --io-t: #23223a; --fe: #a9b3ba; --fe-t: #20262a; --line: #b8c2c6; color-scheme: dark }
+body { background: var(--bg); color: var(--fg); font: 15px/1.6 var(--f-body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 32px 64px; }
+main { max-width: 1240px; margin: 0 auto; display: grid; gap: 40px; }
+.prose { max-width: 70ch; }
+h1 { font: 600 2.1rem/1.15 var(--f-display); margin: 0 0 10px; text-wrap: balance; }
+h2 { font: 600 1.35rem/1.25 var(--f-display); margin: 0 0 12px; text-wrap: balance; }
+p { margin: 0 0 10px; }
+.eyebrow { font: 500 .75rem var(--f-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
+code { font: .88em var(--f-mono); }
+.fig { overflow-x: auto; background: var(--card); border: 1px solid var(--rule); border-radius: 10px; padding: 12px; }
+.fig svg { display: block; min-width: 900px; width: 100%; height: auto; }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: .85rem; color: var(--muted); margin-top: 10px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.sw { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+/* svg */
+.pn { stroke-width: 1; } .pn.ph { fill: var(--ph-t); stroke: var(--ph); stroke-opacity: .35 }
+.pn.ex { fill: var(--ex-t); stroke: var(--ex); stroke-opacity: .35 } .pn.in { fill: var(--in-t); stroke: var(--in); stroke-opacity: .35 }
+.pn.io { fill: var(--io-t); stroke: var(--io); stroke-opacity: .35 } .pn.su, .pn.fe { fill: var(--fe-t); stroke: var(--fe); stroke-opacity: .35 }
+.pl { font: 600 15px var(--f-mono); } .pl.ph { fill: var(--ph) } .pl.ex { fill: var(--ex) } .pl.in { fill: var(--in) } .pl.io { fill: var(--io) } .pl.su, .pl.fe { fill: var(--fe) }
+.ps { font: 400 13px var(--f-body); fill: var(--muted); }
+.bx rect { fill: var(--card); stroke-width: 1.4; }
+.bx.ph rect { stroke: var(--ph) } .bx.ex rect { stroke: var(--ex) } .bx.in rect { stroke: var(--in) } .bx.io rect { stroke: var(--io) } .bx.fe rect { stroke: var(--fe) }
+.bt { font: 600 13.5px var(--f-body); fill: var(--fg); } .bs { font: 400 11px var(--f-body); fill: var(--muted); }
+.band { fill: var(--fe-t); stroke: var(--rule); } .bl { font: 600 12.5px var(--f-mono); fill: var(--muted); letter-spacing: .02em; }
+.grp { fill: none; stroke: var(--ex); stroke-dasharray: 6 4; stroke-width: 1.2; } .gt { font: 600 13px var(--f-body); fill: var(--ex); }
+.ar { fill: none; stroke: var(--line); stroke-width: 1.3; } .ar.dash { stroke-dasharray: 4 3; }
+.ahp { fill: var(--line); } .al { font: italic 11.5px var(--f-body); fill: var(--muted); }
+.st { font: 12.5px var(--f-mono); fill: var(--muted); }
+/* flow */
+.flow { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 4px; }
+.chip { font: 500 .88rem var(--f-mono); padding: 6px 10px; border-radius: 6px; border: 1px solid var(--rule); background: var(--card); }
+.chip.ph { border-color: var(--ph); } .chip.ex { border-color: var(--ex); } .chip.in { border-color: var(--in); }
+.to { color: var(--muted); padding: 0 2px; }
+.note { font-size: .9rem; color: var(--muted); margin-top: 10px; max-width: 75ch; }
+/* tables */
+.tw { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: .9rem; min-width: 720px; }
+th, td { text-align: left; vertical-align: top; padding: 8px 10px; border-bottom: 1px solid var(--rule); }
+th { font: 600 .75rem var(--f-mono); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+td:first-child { font-weight: 600; white-space: nowrap; }
+.tag { font: 500 .72rem var(--f-mono); padding: 2px 6px; border-radius: 4px; white-space: nowrap; }
+.tag.ph { background: var(--ph-t); color: var(--ph) } .tag.ex { background: var(--ex-t); color: var(--ex) } .tag.in { background: var(--in-t); color: var(--in) } .tag.su { background: var(--fe-t); color: var(--fe) }
+.cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 24px; }
+.cols > div { min-width: 0; }
+ul, ol { margin: 0; padding-left: 1.2em; } li { margin-bottom: 6px; }
+h3 { font: 600 1rem var(--f-body); margin: 0 0 8px; }
+
+.eq { font: 1.02rem/1.9 var(--f-mono); background: var(--card); border: 1px solid var(--rule); border-radius: 10px; padding: 14px 18px; overflow-x: auto; white-space: nowrap; }
+.eq b { color: var(--ph); font-weight: 500; } .eq i { color: var(--ex); font-style: normal; } .eq u { color: var(--in); text-decoration: none; }
+.toc { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: .88rem; }
+.toc a { color: var(--muted); }
+</style>
+
+<main>
+<header class="prose">
+  <div class="eyebrow">AZURE2 · target structure · draft 7, 2026-11-07</div>
+  <h1>AZURE2 Core Structure</h1>
+  <p>AZURE2 stays a C++ code built for speed. This page describes it the way a physicist would: as the three lines it computes, the modules that compute each symbol, and the one direction in which they depend on each other. Python is used only to set projects up, for the web UI and for your own scripts.</p>
+  <nav class="toc" aria-label="Contents"><a href="#equation">The calculation</a><a href="#modules">Modules</a><a href="#chain">What runs when</a><a href="#adding">Adding new physics</a><a href="#coulomb">Coulomb functions</a><a href="#tests">Tests</a><a href="#libraries">Libraries</a><a href="#stopping">Stopping</a><a href="#conventions">Conventions</a><a href="#python">Python and web UI</a><a href="#skills">Skills</a><a href="#rules">Rules</a><a href="#order">Order of work</a><a href="#review">Physics review notes</a></nav>
+</header>
+
+<section id="equation">
+  <h2>The whole calculation in three lines</h2>
+  <div class="eq">
+    <b>O<sub>n</sub>(θ)</b> = observables at the grid energy E<sub>n</sub> from the collision matrix U(E<sub>n</sub>; E<sub>λ</sub>(θ), γ<sub>λc</sub>(θ))<br>
+    <i>m<sub>i</sub>(θ, ν)</i> = s<sub>k</sub>(ν) · Σ<sub>n</sub> K<sub>in</sub>(ν) · O<sub>n</sub>(θ)<br>
+    <u>χ²(θ, ν)</u> = (m − d)<sup>T</sup> C<sup>−1</sup> (m − d) + Σ priors(θ, ν)
+  </div>
+  <div class="tw" style="margin-top:14px"><table>
+    <thead><tr><th>Symbol</th><th>What it is</th><th>Module</th><th>Computed</th></tr></thead>
+    <tbody>
+      <tr><td>θ</td><td>the fitted level parameters (observed energies and widths, or ANCs)</td><td><span class="tag in">inference</span></td><td>set by the fitter</td></tr>
+      <tr><td>E<sub>λ</sub>, γ<sub>λc</sub></td><td>formal level parameters, in one internal convention</td><td><span class="tag ph">physics</span></td><td>each evaluation</td></tr>
+      <tr><td>E<sub>n</sub></td><td>grid of compound-nucleus energies covering every data point and its target and resolution window</td><td><span class="tag ex">experiment</span></td><td>once per fit stage</td></tr>
+      <tr><td>U(E<sub>n</sub>)</td><td>collision matrix: one level-matrix solve per Jπ block per grid energy, shared by every reaction and angle</td><td><span class="tag ph">physics</span></td><td>each evaluation</td></tr>
+      <tr><td>O<sub>n</sub></td><td>observables at E<sub>n</sub>: integrated σ, Legendre coefficients, nuclear amplitudes for Coulomb interference</td><td><span class="tag ph">physics</span></td><td>each evaluation</td></tr>
+      <tr><td>K(ν)</td><td>apparatus kernel, a sparse matrix: target, stopping and straggling, resolution, Doppler, energy shift, angle weights</td><td><span class="tag ex">experiment</span></td><td>when ν changes</td></tr>
+      <tr><td>ν, s<sub>k</sub></td><td>nuisances: normalizations, shifts, target density, stopping scale, Doppler temperature</td><td><span class="tag in">inference</span></td><td>set by the fitter</td></tr>
+      <tr><td>d, C</td><td>data and their covariance</td><td><span class="tag ex">experiment</span></td><td>once</td></tr>
+    </tbody>
+  </table></div>
+  <p class="note">The gradient is the same three lines differentiated: ∂m/∂θ = s · K · ∂O/∂θ and ∂m/∂ν from K(ν). No new machinery.</p>
+</section>
+
+<section id="modules">
+  <h2>Who may use whom</h2>
+  <div class="fig"><svg viewBox="0 0 1010 450" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="AZURE2 modules and which may use which"><defs><marker id="ahdeps" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ahp"/></marker></defs><g class="bx fe"><rect x="250" y="20" width="500" height="62" rx="6"/>
+<text x="262" y="42" class="bt">Front ends</text>
+<text x="262" y="60" class="bs">azure2 CLI · pyazr · web UI · your scripts</text>
+</g>
+<g class="bx in"><rect x="150" y="130" width="330" height="70" rx="6"/>
+<text x="162" y="152" class="bt">inference/</text>
+<text x="162" y="170" class="bs">parameters θ, ν · χ² and priors</text>
+<text x="162" y="185" class="bs">fitter</text>
+</g>
+<g class="bx io"><rect x="520" y="130" width="330" height="70" rx="6"/>
+<text x="532" y="152" class="bt">io/</text>
+<text x="532" y="170" class="bs">project file · ENSDF, AME, EXFOR readers</text>
+<text x="532" y="185" class="bs">measured stopping data</text>
+</g>
+<g class="bx ex"><rect x="150" y="248" width="530" height="70" rx="6"/>
+<text x="162" y="270" class="bt">experiment/</text>
+<text x="162" y="288" class="bs">measurements · materials and targets</text>
+<text x="162" y="303" class="bs">apparatus kernels K · energy grid E_n</text>
+</g>
+<g class="bx ph"><rect x="150" y="366" width="700" height="70" rx="6"/>
+<text x="162" y="388" class="bt">physics/</text>
+<text x="162" y="406" class="bs">system: partitions, channels, Jπ blocks · channel functions</text>
+<text x="162" y="421" class="bs">collision matrix U · observables</text>
+</g>
+<path d="M380,82 V128" class="ar " marker-end="url(#ahdeps)"/>
+<path d="M620,82 V128" class="ar " marker-end="url(#ahdeps)"/>
+<path d="M315,200 V246" class="ar " marker-end="url(#ahdeps)"/>
+<path d="M600,200 V246" class="ar " marker-end="url(#ahdeps)"/>
+<path d="M800,200 V364" class="ar " marker-end="url(#ahdeps)"/>
+<path d="M415,318 V364" class="ar " marker-end="url(#ahdeps)"/>
+<path d="M150,165 H118 V401 H148" class="ar " marker-end="url(#ahdeps)"/>
+<text x="880" y="160" class="al">arrow = may use</text>
+<text x="880" y="178" class="al">nothing points up</text>
+<text x="880" y="196" class="al">physics uses nothing</text></svg></div>
+  <div class="cols" style="margin-top:16px">
+    <div class="prose">
+      <h3>Why this is not spaghetti</h3>
+      <p>Interconnection is not the problem; every physics code is connected. Spaghetti is three specific things: dependencies that go in circles, state that several parts write, and effects you cannot see from the call. The structure removes all three.</p>
+      <ul>
+        <li><b>Dependencies point one way.</b> physics uses nothing; experiment uses physics (masses, kinematics); inference uses both; front ends use inference and io. Each module is its own library in the build and may link only the ones below it, so a wrong dependency does not compile.</li>
+        <li><b>One feedback loop.</b> Only the fitter writes θ and ν. During an evaluation everything else is read-only, so no two parts can step on each other, in any number of threads.</li>
+        <li><b>Each module computes one symbol.</b> To know what changes m, read one line of the equation.</li>
+      </ul>
+    </div>
+    <div class="prose">
+      <h3>What today's code does instead</h3>
+      <p>A data point (<code>EPoint</code>) holds the measurement, its channel tables, its results and pointers to other points; a host point writes into the points mapped onto it; every thread copies the whole data set and then shares parts of it back. That is a cycle through shared, writable state, and it is where the races and the memory growth of the last three months came from.</p>
+      <h3>Where the speed comes from</h3>
+      <ul>
+        <li>One collision-matrix solve per grid energy, used by every reaction, angle and target window.</li>
+        <li>Channel functions per (α, l, E), not per Jπ × channel.</li>
+        <li>Levels and channels as arrays (E[λ], γ[λ, c]) per Jπ block.</li>
+        <li>The apparatus as one sparse matrix product per measurement.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section id="chain">
+  <h2>What runs when</h2>
+  <div class="fig"><svg viewBox="0 0 1170 332" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="One AZURE2 evaluation: fixed tables feed a chain from parameters to chi-squared"><defs><marker id="ahchain" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ahp"/></marker></defs><text x="20" y="24" class="bl">fixed for a fit stage · built once, then read-only</text>
+<g class="bx ex"><rect x="250" y="34" width="210" height="64" rx="6"/>
+<text x="262" y="56" class="bt">Energy grid E_n</text>
+<text x="262" y="74" class="bs">channel functions P, S, φ per (α, l)</text>
+<text x="262" y="89" class="bs">capture integrals per E_n</text>
+</g>
+<g class="bx ph"><rect x="480" y="34" width="210" height="64" rx="6"/>
+<text x="492" y="56" class="bt">Angular coupling</text>
+<text x="492" y="74" class="bs">coefficients per reaction</text>
+<text x="492" y="89" class="bs">Coulomb amplitude f_C(θ)</text>
+</g>
+<g class="bx ex"><rect x="710" y="34" width="210" height="64" rx="6"/>
+<text x="722" y="56" class="bt">Kernels K</text>
+<text x="722" y="74" class="bs">targets, stopping, straggling,</text>
+<text x="722" y="89" class="bs">resolution, Doppler, shifts</text>
+</g>
+<g class="bx in"><rect x="940" y="34" width="210" height="64" rx="6"/>
+<text x="952" y="56" class="bt">Data d, covariance C</text>
+<text x="952" y="74" class="bs">from the project</text>
+</g>
+<path d="M355,98 V158" class="ar " marker-end="url(#ahchain)"/>
+<path d="M585,98 V158" class="ar " marker-end="url(#ahchain)"/>
+<path d="M815,98 V158" class="ar " marker-end="url(#ahchain)"/>
+<path d="M1045,98 V158" class="ar " marker-end="url(#ahchain)"/>
+<text x="20" y="150" class="bl">every evaluation · depends only on θ, ν</text>
+<g class="bx ph"><rect x="20" y="160" width="210" height="72" rx="6"/>
+<text x="32" y="182" class="bt">Level parameters</text>
+<text x="32" y="200" class="bs">E_λ, γ_λc from θ</text>
+<text x="32" y="215" class="bs">Brune, Park; conventions</text>
+</g>
+<g class="bx ph"><rect x="250" y="160" width="210" height="72" rx="6"/>
+<text x="262" y="182" class="bt">Collision matrix U(E_n)</text>
+<text x="262" y="200" class="bs">level matrix per Jπ block,</text>
+<text x="262" y="215" class="bs">one solve per grid energy</text>
+</g>
+<g class="bx ph"><rect x="480" y="160" width="210" height="72" rx="6"/>
+<text x="492" y="182" class="bt">Observables O_n</text>
+<text x="492" y="200" class="bs">σ, Legendre coefficients,</text>
+<text x="492" y="215" class="bs">nuclear amplitudes</text>
+</g>
+<g class="bx ex"><rect x="710" y="160" width="210" height="72" rx="6"/>
+<text x="722" y="182" class="bt">Apparatus</text>
+<text x="722" y="200" class="bs">m = s · K(ν) · O</text>
+<text x="722" y="215" class="bs">per measurement</text>
+</g>
+<g class="bx in"><rect x="940" y="160" width="210" height="72" rx="6"/>
+<text x="952" y="182" class="bt">χ² and priors</text>
+<text x="952" y="200" class="bs">(m − d)ᵀ C⁻¹ (m − d)</text>
+<text x="952" y="215" class="bs">+ priors on θ, ν</text>
+</g>
+<path d="M230,196 H248" class="ar " marker-end="url(#ahchain)"/>
+<path d="M460,196 H478" class="ar " marker-end="url(#ahchain)"/>
+<path d="M690,196 H708" class="ar " marker-end="url(#ahchain)"/>
+<path d="M920,196 H938" class="ar " marker-end="url(#ahchain)"/>
+<g class="bx in"><rect x="940" y="272" width="210" height="48" rx="6"/>
+<text x="952" y="294" class="bt">Fitter</text>
+<text x="952" y="312" class="bs">Minuit2 or LM</text>
+</g>
+<path d="M1045,232 V270" class="ar " marker-end="url(#ahchain)"/>
+<path d="M940,296 H125 V234" class="ar " marker-end="url(#ahchain)"/>
+<text x="300" y="290" class="al">new θ</text>
+<path d="M815,296 V234" class="ar " marker-end="url(#ahchain)"/>
+<text x="821" y="262" class="al">new ν</text></svg></div>
+  <p class="note">The top row is built once per fit stage and never written again. The bottom row depends only on θ and ν. The fitter is the only thing that feeds back.</p>
+</section>
+
+<section id="adding">
+  <h2>Adding new physics</h2>
+  <div class="tw"><table>
+    <thead><tr><th>You add</th><th>It changes</th><th>You write</th><th>Tested in</th></tr></thead>
+    <tbody>
+      <tr><td>an observable</td><td>O</td><td>how it follows from U</td><td>the test project with that observable</td></tr>
+      <tr><td>an apparatus effect</td><td>K</td><td>its kernel weights on the grid</td><td>T2</td></tr>
+      <tr><td>a parameterization or convention</td><td>E<sub>λ</sub>, γ<sub>λc</sub></td><td>the map from θ, with its derivative</td><td>all three (observables unchanged)</td></tr>
+      <tr><td>a channel type</td><td>channel functions</td><td>P, S, φ for it (photon, β, potential)</td><td>T1 or T3</td></tr>
+      <tr><td>a prior</td><td>χ²</td><td>its value and gradient</td><td>T2</td></tr>
+      <tr><td>a data source</td><td>d, C, or the system</td><td>a reader with provenance</td><td>a fixture from that library</td></tr>
+      <tr><td>a file keyword</td><td>the project</td><td>one field</td><td>round trip of the three projects</td></tr>
+    </tbody>
+  </table></div>
+  <p class="note">One file, one symbol, one test project. Nothing else moves.</p>
+</section>
+
+<section id="coulomb">
+  <h2>Coulomb functions: pycoulomb</h2>
+  <div class="cols">
+    <div class="prose">
+      <p>The physics module takes its Coulomb functions from your pycoulomb C++ library directly, pinned to a tagged version. One implementation then serves AZURE2 and pycoulomb's Python users, and it replaces <code>external/coul</code>, <code>CoulFunc</code>, <code>CoulFuncCache</code> and the hybrid-potential code (pycoulomb's Numerov hybrid).</p>
+      <p>Its several methods (<code>coul</code>, <code>coulsm</code>, <code>coulfg</code>, GSL) become an identity test: they must agree where their domains overlap.</p>
+    </div>
+    <div class="prose">
+      <h3>To do in pycoulomb first</h3>
+      <ul>
+        <li>Add the licence file the README points to (it is missing), compatible with AZURE2's GPL-3; state the origin and terms of the SAMMY-derived <code>coulsm</code> code.</li>
+        <li>A library target that builds and installs without Python.</li>
+        <li>A stateless, thread-safe call F, G, F′, G′, σ<sub>l</sub> = f(l, η, ρ); today the class keeps η, ρ and the results in the object.</li>
+        <li>Whittaker functions for closed channels (AZURE2's <code>WhitFunc</code> moves there).</li>
+        <li>Remove the committed build products (<code>.so</code>, <code>libcoulfg.a</code>, <code>cmake_install.cmake</code>, <code>.DS_Store</code>); tests against mpmath.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section id="tests">
+  <h2>Three test projects</h2>
+  <p class="note" style="margin:0 0 14px">Each is small, runs in seconds, and is built from synthetic data generated with a known parameter set, so a fit must recover the truth. Together they cover every observable, channel type and apparatus effect at least once, and the risky combinations on purpose.</p>
+  <div class="tw"><table>
+    <thead><tr><th>Project</th><th>System</th><th>Covers</th></tr></thead>
+    <tbody>
+      <tr><td>T1 Capture and scattering</td><td>p + <sup>12</sup>C → <sup>13</sup>N</td><td>elastic dσ/dΩ at lab angles, (p,γ) to ground and excited states with external capture E1/E2/M1, A<sub>y</sub>, phase shifts, S factor, reaction rate, Brune / Park / formal round trip, extrapolation grid</td></tr>
+      <tr><td>T2 Reactions through an apparatus</td><td>p + <sup>15</sup>N → <sup>16</sup>O</td><td>(p,α) integrated and differential; thick target with stopping and straggling tables, beam resolution and profile, Doppler; energy shifts (constant, √E, f(E), groups); normalization groups and priors; data covariance; SUM and RATIO; natural target; THM fold; S-factor fold of OES points; all of these together at 8 threads</td></tr>
+      <tr><td>T3 Neutrons, identical particles, special channels</td><td><sup>8</sup>Be: α + α, p + <sup>7</sup>Li, n + <sup>7</sup>Be</td><td>identical bosons, a neutron channel, β-delayed α spectrum, total cross section (optical theorem), scattering length, hybrid potential channel, several partitions in one level matrix</td></tr>
+    </tbody>
+  </table></div>
+  <div class="cols" style="margin-top:16px">
+    <div><h3>Identity checks, no data needed</h3><ul>
+      <li>Coulomb functions against mpmath; Wronskian F′G − FG′ = 1</li>
+      <li>U unitary when only elastic channels are open; optical theorem</li>
+      <li>One narrow isolated level reproduces the Breit–Wigner area</li>
+      <li>A constant σ survives every response operator; Gaussian ∘ Gaussian is Gaussian</li>
+      <li>Brune ↔ formal ↔ Park round trip; gradient equals finite differences; results independent of thread count</li>
+    </ul></div>
+    <div><h3>During the migration</h3><ul>
+      <li>The old engine computes golden outputs for T1–T3; the new one must match them, or the difference must be explained by the quadrature estimate.</li>
+      <li>The ~96 current test folders stay as extra oracles until the phase that replaces their code is merged, then retire.</li>
+      <li>A benchmark (time and peak memory) runs on T2 at 1 and 8 threads.</li>
+    </ul></div>
+  </div>
+</section>
+<section id="libraries">
+  <h2>Reading the nuclear-data libraries</h2>
+  <p class="note" style="margin:0 0 14px">pyazr's readers take records from local copies of the libraries when a project is set up; the engine core then reads only the project. No web service at run time, so a fit runs offline and on a cluster, and gives the same answer next year. Each reader turns a library record into the same project objects a .azr line produces, and attaches its provenance: library, file, record, library version and checksum. Downloading or updating a library is a separate command, not part of a run.</p>
+  <div class="tw"><table>
+    <thead><tr><th>Library</th><th>Reads</th><th>Produces</th><th>Care points</th></tr></thead>
+    <tbody>
+      <tr><td>AME / NUBASE</td><td>the mass-table files</td><td>partition masses and thresholds (atomic → nuclear)</td><td>one mass source for the engine, pyazr and the web UI</td></tr>
+      <tr><td>ENSDF</td><td>ENSDF 80-column files</td><td>level suggestions: E<sub>x</sub>, Jπ, Γ, branchings, references</td><td>suggestions, never adopted silently; tentative and ranged Jπ stay flagged</td></tr>
+      <tr><td>EXFOR</td><td>X4 files from the IAEA master library</td><td>measurements: reaction, quantity, data in MeV, b and sr, frame, statistical and systematic errors as covariance terms, DOI</td><td>an unknown quantity or unit is refused, not guessed; monitor renormalizations are reported</td></tr>
+      <tr><td>Measured stopping (IAEA)</td><td>the IAEA database of measured electronic stopping</td><td>the data AZURE2's own stopping evaluation is fitted to and validated against (next section)</td><td>used to build and check the evaluation; no SRIM data anywhere in AZURE2</td></tr>
+    </tbody>
+  </table></div>
+  <p class="note">A project can name records instead of copying them (for example a segment from an EXFOR subentry, level seeds from ENSDF), with the library locations in one user setting. When a record is adopted, its converted values are written into the project together with the provenance, so the project stays reproducible after the library changes. Each reader is tested on a few-kilobyte fixture from its library. This replaces the web lookups and the X4 parser in pyazr's <code>nds.py</code>, and the GUI's own EXFOR code and mass table.</p>
+</section>
+<section id="stopping">
+  <h2>Stopping and straggling in AZURE2</h2>
+  <p class="note" style="margin:0 0 14px">Today AZURE2 takes stopping either as a formula typed by the user or from ERYA, which ships SRIM's coefficient file <code>SRIM2013.xml</code> (SRIM's non-commercial terms, inside a GPL code). Straggling is c·√ΔE or plain Bohr, without the low-energy correction and without propagation through the target. The plan replaces both with a module of AZURE2's own, built from published formulas and fitted to measured data, with a stated uncertainty that the fit can use.</p>
+  <div class="cols">
+    <div>
+      <h3>Stopping</h3>
+      <ul>
+        <li><b>Material</b>, a physical object: elements with stoichiometry, density, phase (solid or gas), and a composition profile in depth for implanted targets. Stoichiometry, density and profile can be nuisance parameters.</li>
+        <li><b>Electronic stopping, protons and α</b>: AZURE2's own evaluation per element, in the ICRU 49 functional form (velocity-proportional at low energy, Bethe with shell, Barkas and Bloch corrections at high energy, joined smoothly), with coefficients and their covariance fitted to the measured data of the IAEA stopping database. Gas and solid phases separately where data exist (He, N, Ne, Ar, Kr; C, Ta, Ti, W, Si, Mo, …).</li>
+        <li><b>Other light ions</b> by scaling at the same velocity: d and t from protons, <sup>3</sup>He from α. Heavier beams (C, N, O, Ne in inverse kinematics) by effective-charge scaling, marked with a larger uncertainty.</li>
+        <li><b>Nuclear stopping</b>: the ZBL universal formula.</li>
+        <li><b>Compounds</b>: Bragg additivity of the elements, plus a core-and-bond correction where measured compound data show one (oxides, nitrides, water, Mylar).</li>
+        <li><b>Uncertainty used, not hidden</b>: each table carries its evaluation uncertainty, which becomes the prior of a stopping-scale nuisance per material in the fit.</li>
+      </ul>
+    </div>
+    <div>
+      <h3>Straggling and the target</h3>
+      <ul>
+        <li><b>Energy-loss straggling</b>: Bohr with Chu's low-energy correction and the charge-state term, in the empirical form of Yang, O'Connor and Wang (1991).</li>
+        <li><b>Propagation through the target</b>: the width at depth x follows σ²(x) = S(E(x))² ∫ (dΩ²/dx′) / S(E(x′))² dx′ (Tschalär), so a wide spread shrinks or grows with the slope of the stopping as it should. Beam energy spread adds in quadrature at each depth.</li>
+        <li><b>Targets</b>: layers with tilt, dead layers, implanted profiles, extended gas targets with pressure and temperature. The Target response builder turns all of this into weights on the nodes, rebuilt in milliseconds when a nuisance moves.</li>
+        <li><b>Your own numbers</b>: a measured stopping table or formula for a material, with provenance, overrides the evaluation.</li>
+        <li><b>Tests</b>: identities (a thin layer loses S·Δx; σ tends to Bohr at high energy; weights conserve probability; Bragg sum of elements equals the compound without correction) and validation (the evaluation against the IAEA measurements per ion and element, residuals within the stated uncertainty, committed as a table). T2 uses a solid, an implanted and a gas target.</li>
+        <li><b>Licence</b>: published formulas plus coefficients we fit ourselves are GPL-clean. Before any third-party table is shipped (NIST PSTAR/ASTAR, the IAEA database itself), its redistribution terms are checked; until then they are used for fitting and comparison only.</li>
+      </ul>
+    </div>
+  </div>
+  <p class="note">Order inside this module: material and target geometry, ZBL nuclear stopping, Bethe with corrections, straggling with propagation and user tables first; then the fitted low-energy evaluation for protons and α in the elements and gases used in nuclear astrophysics; then compounds and heavier ions.</p>
+</section>
+<section id="conventions">
+  <h2>Angular-momentum conventions</h2>
+  <div class="cols">
+    <div class="prose">
+      <p>Today the conventions are implicit: channels are coupled as (l, s) with channel spin s = j<sub>1</sub> + j<sub>2</sub> (the 2S and 2L fields of the .azr file), with Lane–Thomas phases, and the signs of fitted widths, external-capture amplitudes and Coulomb phases follow from the code rather than from a stated rule. Comparing with other codes (rmfit, SAMMY, GNDS evaluations, Descouvemont-type calculations) then means guessing signs.</p>
+      <p>In this structure the fix is small. The core computes in one internal convention, written down once in the docs. A <b>Convention</b> record in the System states what a project's parameters mean, and the Parameterization stage converts them at the boundary:</p>
+      <ul>
+        <li><b>coupling scheme</b>: channel spin (l, s) or jj (j = l + j<sub>1</sub>, then J = j + j<sub>2</sub>). The change is an orthogonal matrix of 6j symbols per (α, l, J) acting on the γ columns of a Jπ block: γ′ = γ · C.</li>
+        <li><b>coupling order</b> j<sub>1</sub> + j<sub>2</sub> or j<sub>2</sub> + j<sub>1</sub>: a sign (−1)<sup>j<sub>1</sub>+j<sub>2</sub>−s</sup> per channel.</li>
+        <li><b>phase conventions</b>: i<sup>l</sup> factors, the sign of reduced widths, Coulomb-phase reference, and E/M multipole phases of photon channels, each a diagonal of ±1 or a phase.</li>
+      </ul>
+    </div>
+    <div class="prose">
+      <p><b>How hard.</b> The conversion itself is a few hundred lines: 6j symbols, a sign table, and their derivatives for the gradient, all applied as one block matrix in the Parameterization stage. Nothing downstream changes, because amplitudes, coefficients and responses only ever see internal-convention γ.</p>
+      <p><b>Where the care goes.</b> Interference signs. Between levels of one Jπ and between a level and external capture, the observable depends on relative signs, so the photon-channel phases and the EC amplitude phase must be pinned by tests, not by reading the code.</p>
+      <p><b>The test that makes it safe.</b> Observables are invariant under a change of convention when the full set of channels of an (α, l, J) is present. So every test project is run in every supported convention, and the observables must agree to rounding while only the parameter values change. A missing channel in jj ↔ (l, s) recoupling is reported, not silently dropped.</p>
+      <p><b>What it buys.</b> Parameters can be read from and written to other codes' conventions, translations to GNDS become a table instead of a skill, and the sign questions that keep coming up in evaluations get one answer.</p>
+    </div>
+  </div>
+</section>
+<section id="python">
+  <h2>pyazr and the web UI</h2>
+  <div class="cols">
+    <div>
+      <h3>pyazr: the core, in Python</h3>
+      <ul>
+        <li><b>One package, modules named like the core.</b> <code>project</code> (load, edit, save, provenance), <code>system</code> (partitions, Jπ blocks as numpy arrays, conventions, parameterization), <code>data</code> (measurements, apparatus, response previews), <code>objective</code> (value, gradient, residuals, Jacobian, terms, the named parameter vector), <code>evaluate</code> (observables at any E and θ, extrapolation, rates, decomposition), <code>sources</code> (AME, ENSDF, EXFOR, measured stopping), <code>bands</code>, <code>plot</code>.</li>
+        <li><b>Arrays without copies.</b> Setup data are read-only numpy views of the core; an evaluation returns arrays.</li>
+        <li><b>No fitting framework.</b> pyazr gives the objective with its gradient and Jacobian; fits and samplers are your scripts. The docs show short recipes for iminuit, scipy and emcee.</li>
+        <li><b>No physics in Python</b> except reading the libraries and presenting results; any Python formula is tested against the core.</li>
+        <li><b>One command</b>: <code>pyazr ui</code>, <code>pyazr import exfor|ensdf</code>, <code>pyazr stopping</code> (tables and plots from AZURE2's stopping module), <code>pyazr libraries update</code> (the only command that uses the network).</li>
+        <li><b>Installed with pip.</b> Wheels for Linux, macOS and Windows carry the compiled core and the <code>azure2</code> CLI. They replace the Qt installers.</li>
+        <li><b>pyazr 3.0.</b> Today's <code>azure2()</code> session stays for one release as a shim that warns and maps onto the new objects.</li>
+      </ul>
+    </div>
+    <div>
+      <h3>Web UI: a small local web app</h3>
+      <ul>
+        <li><b>Local and offline.</b> <code>pyazr ui project.azr</code> starts FastAPI and uvicorn (the <code>pyazr[web]</code> extra) and serves one static page with plotly.js copied in (the stack of your LunaSRIM web app, without depending on it); on a cluster, <code>--host</code> and an ssh tunnel.</li>
+        <li><b>A thin <code>/api</code></b> that maps one to one onto pyazr objects. The server and the browser hold no physics and parse no files.</li>
+        <li><b>Long jobs</b> (fits, extrapolations, imports) run in worker processes, one engine per project, with progress and a stop button, and a limit on concurrent jobs.</li>
+        <li><b>The project is the state.</b> Every edit goes through <code>Project</code> and is saved as .azr; undo is the project history; closing the browser loses nothing.</li>
+        <li><b>Tabs follow the physics.</b> Project (files, libraries, provenance, conventions) · Nucleus (partitions, channels, Jπ blocks, levels, with ENSDF suggestions beside them) · Data (measurements, EXFOR import, frames, targets with their stopping and straggling, resolution, Doppler, shifts, normalizations, covariance) · Fit (parameters, priors, run, χ² per measurement, pulls, correlations) · Results (curves at any E and θ, S factor, rates with bands, decomposition) · THM only when the project enables it.</li>
+        <li><b>Tested without a browser</b>: pytest on <code>/api</code> with T1–T3, plus a few browser smoke tests, and the Qt parity checklist before Qt is removed.</li>
+        <li><b>Later, maybe</b>: a browser-only version (Pyodide), if the core compiles to WebAssembly.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+<section id="skills">
+  <h2>Skills for using AZURE2</h2>
+  <p class="note" style="margin:0 0 14px">Skills teach an agent how to <i>use</i> AZURE2 for one kind of task; the docs say how it behaves; CLAUDE.md says how to change it. One skill per task, each under 500 lines, linking the docs instead of repeating them, with no commit history inside. The eleven current repo skills (two of them 2,300 and 3,600 lines, mostly history) become this set.</p>
+  <div class="tw"><table>
+    <thead><tr><th>Skill</th><th>Use it to</th><th>Holds</th><th>Replaces</th></tr></thead>
+    <tbody>
+      <tr><td>azure2-setup</td><td>build a project</td><td>levels from ENSDF, masses from AME, data from EXFOR, conventions, channel radii, first checks of the project</td><td>azr-project-builder, nds-explorer, parts of azure2-eval</td></tr>
+      <tr><td>azure2-calculate</td><td>evaluate a model</td><td>observables at any E and θ, extrapolation, S(0), reaction rates, decomposition into levels, interference and external capture</td><td>parts of azure2-eval</td></tr>
+      <tr><td>azure2-fit</td><td>fit a model to data</td><td>free and fixed parameters, staged fits, nuisances (normalizations, shifts, stopping scale), priors, multiple starts, convergence, editing levels and background poles</td><td>parts of azure2-eval, azure2-legacy-params, azure2-drop-dataset</td></tr>
+      <tr><td>azure2-check</td><td>decide whether a result can be trusted</td><td>pulls and structured residuals, χ²/ν, parameters at limits, widths against the Wigner limit, radius and background-pole sensitivity, node-density convergence, thread independence, frames and units of the data</td><td>scattered "golden rules"</td></tr>
+      <tr><td>azure2-uncertainty</td><td>quote uncertainties</td><td>Hessian, profile likelihood and sampling on the objective's gradient; bands on observables and rates; systematic axes (radius, background poles, level-scheme alternatives, normalization and stopping nuisances) and how to combine them</td><td>data-covariance, parts of azure2-eval</td></tr>
+      <tr><td>azure2-plot</td><td>make publication figures</td><td>excitation functions with pulls, angular distributions, S factor with bands and decomposition, rate ratios; the house figure style</td><td>plotting notes spread over several skills</td></tr>
+      <tr><td>azure2-targets</td><td>describe the apparatus</td><td>materials, solid, implanted and gas targets, stopping and straggling choices, resolution, Doppler, when to fit the stopping scale</td><td>target notes in azure2-eval</td></tr>
+      <tr><td>azure2-thm</td><td>analyse Trojan-horse data</td><td>HOES and OES data, the THM fold, vertex models, normalization; only for projects that enable THM</td><td>THM notes outside the repo</td></tr>
+      <tr><td>azure2-resonance-search</td><td>find missing or misassigned levels</td><td>the gated search procedure on residual structure</td><td>repo resonance-search (renamed, so it no longer collides with the user-level skill)</td></tr>
+      <tr><td>azure2-exchange</td><td>move parameters between codes</td><td>conventions, GNDS and ENDF export, reading rmfit and SAMMY parameters</td><td>ferdinand-gnds</td></tr>
+    </tbody>
+  </table></div>
+  <p class="note">Kept outside this set: <code>rmfit-campaign</code> (a different code, trimmed to its procedure), and the general skills that these link to rather than copy (uncertainty audit, figure style, data audit, physics referee). A check script in CI enforces the size limit, the missing history, the docs links and unique names and descriptions across repo and user skills.</p>
+</section>
+<section id="rules">
+  <h2>Rules for CLAUDE.md</h2>
+  <div class="cols">
+    <div><h3>Shape</h3><ul>
+      <li>Modules use only the modules below them (figure 1). Each is its own library target, so a wrong include does not compile.</li>
+      <li>New physics goes in at one of the places in “Adding new physics” and changes one symbol of the three lines.</li>
+      <li>Data are arrays, indexed, not objects with pointers. Physics stages are functions.</li>
+      <li>The core computes in one stated angular-momentum and phase convention; conversions happen only at the Parameterization boundary.</li>
+      <li>One implementation of each formula and file format, in C++. A Python copy needs a test against it.</li>
+      <li>Front ends own no physics and no parsing.</li>
+      <li>No network access in the engine. Every imported number carries its provenance.</li>
+    </ul></div>
+    <div><h3>Performance and threads</h3><ul>
+      <li>Setup state is read-only after the stage starts; parallel code writes only its own slice or scratch.</li>
+      <li>No caches beyond the stage tables. A new cache needs a written reason, a complete key and a size test.</li>
+      <li>A perf change states time and peak memory on the T2 benchmark and passes TSan and ASan at 8 threads.</li>
+    </ul></div>
+    <div><h3>Tests and skills</h3><ul>
+      <li>Every feature appears in T1, T2 or T3 and has an identity check where one exists.</li>
+      <li>A reference value changes only with an independent reason written in the commit.</li>
+      <li>Skills link the docs, stay under 500 lines, carry no commit history, and follow the ten-skill set above: one skill per task.</li>
+    </ul></div>
+  </div>
+</section>
+<section id="order" class="prose">
+  <h2>Order of work</h2>
+  <ol>
+    <li>Build T1–T3 and the identity checks; record golden outputs from today's engine; sanitizers and benchmark in CI; rewrite the skills into the ten-skill set; write the rules.</li>
+    <li>System and Jπ blocks as arrays; channel functions per (α, l, E) from pycoulomb; the internal convention written down and the Convention record added.</li>
+    <li>One objective with one list of terms.</li>
+    <li>One project model: a single .azr parser and writer, plus the library readers (AME, ENSDF, EXFOR).</li>
+    <li>Stopping and straggling module (next to the response operators): materials, nuclear and high-energy stopping, straggling with propagation, then the fitted low-energy evaluation; ERYA and SRIM2013.xml removed.</li>
+    <li>Node set on E<sub>x</sub>, amplitudes per node, coefficients B per reaction.</li>
+    <li>Response operators, including shifts, THM and S-factor folds.</li>
+    <li>Kernel without per-thread copies; remove mapping, clones and caches.</li>
+    <li>pyazr 3.0 on the new binding: the modules above, wheels for three platforms, the old session as a shim.</li>
+    <li>Web UI on pyazr 3.0 (a read-only project viewer can come right after step 4 to collect feedback); Qt parity checklist; one release with both; then remove Qt, ERYA and numcmc from the tree.</li>
+  </ol>
+</section>
+<section id="review" class="prose">
+  <h2>Physics review notes</h2>
+  <p class="note" style="margin:0 0 12px">Points a referee would raise against the earlier drafts, and how this one handles them.</p>
+  <ul>
+    <li><b>Elastic scattering is not a finite Legendre series.</b> Rutherford scattering and Coulomb–nuclear interference are not. O<sub>n</sub> keeps the nuclear amplitudes per (l, s, J); the kernel row carries the Coulomb amplitude f<sub>C</sub>(θ) at the point's angle. It stays linear.</li>
+    <li><b>Narrow resonances.</b> The grid is planned from the current levels and resolves each width. Rates of narrow resonances add the analytic narrow-resonance term instead of relying on the grid alone.</li>
+    <li><b>Brune basis.</b> Shift functions at E<sub>λ</sub> move with θ. They are evaluated in the level-parameter step, a few per evaluation, not taken from the grid tables.</li>
+    <li><b>Spin–orbit in hybrid-potential channels</b> makes the channel functions depend on j; those are indexed (α, l, j).</li>
+    <li><b>Ratios such as A<sub>y</sub></b> fold numerator and denominator separately before dividing.</li>
+  </ul>
+</section>
+</main>

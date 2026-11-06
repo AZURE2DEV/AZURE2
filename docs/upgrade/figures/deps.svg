@@ -1,0 +1,34 @@
+<svg viewBox="0 0 1010 450" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="AZURE2 modules and which may use which"><defs><marker id="ahdeps" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ahp"/></marker></defs><g class="bx fe"><rect x="250" y="20" width="500" height="62" rx="6"/>
+<text x="262" y="42" class="bt">Front ends</text>
+<text x="262" y="60" class="bs">azure2 CLI · pyazr · web UI · your scripts</text>
+</g>
+<g class="bx in"><rect x="150" y="130" width="330" height="70" rx="6"/>
+<text x="162" y="152" class="bt">inference/</text>
+<text x="162" y="170" class="bs">parameters θ, ν · χ² and priors</text>
+<text x="162" y="185" class="bs">fitter</text>
+</g>
+<g class="bx io"><rect x="520" y="130" width="330" height="70" rx="6"/>
+<text x="532" y="152" class="bt">io/</text>
+<text x="532" y="170" class="bs">project file · ENSDF, AME, EXFOR readers</text>
+<text x="532" y="185" class="bs">measured stopping data</text>
+</g>
+<g class="bx ex"><rect x="150" y="248" width="530" height="70" rx="6"/>
+<text x="162" y="270" class="bt">experiment/</text>
+<text x="162" y="288" class="bs">measurements · materials and targets</text>
+<text x="162" y="303" class="bs">apparatus kernels K · energy grid E_n</text>
+</g>
+<g class="bx ph"><rect x="150" y="366" width="700" height="70" rx="6"/>
+<text x="162" y="388" class="bt">physics/</text>
+<text x="162" y="406" class="bs">system: partitions, channels, Jπ blocks · channel functions</text>
+<text x="162" y="421" class="bs">collision matrix U · observables</text>
+</g>
+<path d="M380,82 V128" class="ar " marker-end="url(#ahdeps)"/>
+<path d="M620,82 V128" class="ar " marker-end="url(#ahdeps)"/>
+<path d="M315,200 V246" class="ar " marker-end="url(#ahdeps)"/>
+<path d="M600,200 V246" class="ar " marker-end="url(#ahdeps)"/>
+<path d="M800,200 V364" class="ar " marker-end="url(#ahdeps)"/>
+<path d="M415,318 V364" class="ar " marker-end="url(#ahdeps)"/>
+<path d="M150,165 H118 V401 H148" class="ar " marker-end="url(#ahdeps)"/>
+<text x="880" y="160" class="al">arrow = may use</text>
+<text x="880" y="178" class="al">nothing points up</text>
+<text x="880" y="196" class="al">physics uses nothing</text></svg>

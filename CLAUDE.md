@@ -10,6 +10,27 @@ Human-readable versions of this file: `docs/source/developer/contributing.rst`
 and `docs/source/developer/architecture.rst`. Directory-specific rules are in
 `tests/CLAUDE.md`, `pyazr/CLAUDE.md` and `gui/CLAUDE.md`.
 
+## Upgrade (branch `feature/upgrade`)
+
+This branch carries the staged rebuild described in `docs/upgrade/` (start with `docs/upgrade/HANDOFF.md`). On it,
+and on the phase branches cut from it (`feature/upgrade-<phase>-<topic>`), these rules apply on top of everything
+below (full text and reasons in `docs/upgrade/RULES.md`):
+
+- Code is shaped like the physics: `physics/`, `experiment/`, `inference/`, `io/`, plus `support/` for plumbing.
+  Modules use only the modules below them; each is its own CMake target, so a wrong dependency does not compile.
+- The engine computes three lines (`docs/upgrade/ARCHITECTURE.md` §1). New physics enters at one extension point,
+  changes one symbol, and appears in one of the test projects T1–T3 (`tests/upgrade/`).
+- Setup state is read-only once a fit stage starts; parallel code writes only its own slice or scratch; no caches
+  beyond the per-stage tables; results independent of thread count.
+- One implementation per formula and format, in C++ (Coulomb functions from pycoulomb). Library readers live in pyazr
+  `sources/`; the core reads only the project. No network in the engine; imported numbers carry provenance.
+- One internal angular-momentum and phase convention; conversions only in `level_parameters`.
+- Every physics function is exposed in the binding with array inputs, so the web UI can plot it.
+- Each phase passes the gate in `docs/upgrade/ROADMAP.md` and deletes the code it replaces. Update
+  `docs/upgrade/HANDOFF.md` and the roadmap ticks at the end of every session.
+- THM follows `docs/upgrade/THM.md`: reproduce published analyses first, HOES and OES data kept apart, resolution in
+  c.m., no energy shifts to move THM data, no negative backgrounds, DWBA vertices validated against FRESCO.
+
 ## Branches (hard rule)
 
 - **`main` and `qt5` (the GitHub default) are human-only.** Never commit to,
