@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="1024" height="1024">
+  <title>AZURE2</title>
+  <!-- AZURE2 logo (2026-11-06): seven nucleons (translucent red protons, green neutrons) behind
+       the A-matrix symbol (A), at the proportions of the 2015 logo.  The default logo: source of
+       azure2_icon.png, azure2.ico and azure2.icns (gui/images/make_icons.py).
+       azure2_logo_polarized.svg adds the polarization vector over the A. -->
+  <g fill-opacity="0.62">
+    <circle cx="100" cy="50" r="34" fill="#D1453B"/>
+    <circle cx="56.7" cy="75" r="34" fill="#2F9E5A"/>
+    <circle cx="143.3" cy="75" r="34" fill="#2F9E5A"/>
+    <circle cx="56.7" cy="125" r="34" fill="#D1453B"/>
+    <circle cx="143.3" cy="125" r="34" fill="#D1453B"/>
+    <circle cx="100" cy="150" r="34" fill="#2F9E5A"/>
+    <circle cx="100" cy="100" r="36" fill="#2F9E5A"/>
+  </g>
+  <g fill="#FFFFFF" stroke="#FFFFFF" stroke-width="6" stroke-linejoin="round" fill-rule="evenodd">
+    <path d="M50 36 Q8 100 50 164 L57 161 Q22 100 57 39 Z"/>
+    <path d="M150 36 Q192 100 150 164 L143 161 Q178 100 143 39 Z"/>
+    <path d="M93 58 L107 58 L142 142 L130 142 L122.1 123 L77.9 123 L70 142 L58 142 Z M100 70 L118.3 114 L81.7 114 Z"/>
+  </g>
+  <g fill="#1D4E9E" fill-rule="evenodd">
+    <path d="M50 36 Q8 100 50 164 L57 161 Q22 100 57 39 Z"/>
+    <path d="M150 36 Q192 100 150 164 L143 161 Q178 100 143 39 Z"/>
+    <path d="M93 58 L107 58 L142 142 L130 142 L122.1 123 L77.9 123 L70 142 L58 142 Z M100 70 L118.3 114 L81.7 114 Z"/>
+  </g>
+</svg>

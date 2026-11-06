@@ -467,6 +467,30 @@ add_test(NAME runtime_options COMMAND runtime_options_test)
 set_tests_properties(runtime_options PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
+# The logo shows the polarization arrow while a segment is an analyzing power (2026-11-06).
+add_executable(polarized_logo_test polarized_logo_test.cpp)
+set_target_properties(polarized_logo_test PROPERTIES AUTOMOC OFF)
+target_include_directories(polarized_logo_test PRIVATE
+    ${AZURE2_SOURCE_DIR}/gui/include
+    ${AZURE2_SOURCE_DIR}/include
+)
+target_compile_definitions(polarized_logo_test PRIVATE AZURE2_TEST_SOURCE_DIR="${AZURE2_SOURCE_DIR}")
+target_link_libraries(polarized_logo_test PRIVATE
+    ${AZURESETUP_LIBRARIES}
+    ${AZUREAPI_LIBRARIES}
+    AZURE2Core
+    Qt5::Core Qt5::Gui Qt5::Widgets Qt5::Network
+)
+if(USE_QWT)
+    target_link_libraries(polarized_logo_test PRIVATE ${QWT_LIBRARIES})
+endif()
+if(USE_ERYA)
+    target_link_libraries(polarized_logo_test PRIVATE pugixml srim_utilities)
+endif()
+add_test(NAME polarized_logo COMMAND polarized_logo_test)
+set_tests_properties(polarized_logo PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
 # The GUI warns when a project was last run with the GSL Coulomb functions (2026-11-06).
 add_executable(gsl_coulomb_warning_test gsl_coulomb_warning_test.cpp)
 set_target_properties(gsl_coulomb_warning_test PROPERTIES AUTOMOC OFF)

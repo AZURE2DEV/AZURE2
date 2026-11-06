@@ -29,6 +29,7 @@ class QMenu;
 class QAction;
 class QActionGroup;
 class QTextEdit;
+class QToolButton;
 
 QT_END_NAMESPACE
 
@@ -125,6 +126,11 @@ class AZURESetup : public QMainWindow {
   void createMenus();
   void updateRecent();
   void updateNuclearPotentialTabVisibility();  // Show/hide Nuclear Potential tab based on config
+  /// The logo with the polarization arrow while a data or test segment is a polarization observable
+  /// (analyzing power), the plain logo otherwise: logo button, window and application icon.
+  void updateLogo();
+  QToolButton *logoButton_ = nullptr;
+  bool polarizedLogo_ = false;
 
   Config config;
   bool loadedGSLCoulomb_ = false;

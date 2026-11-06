@@ -14,6 +14,9 @@
 #include <QProgressDialog>
 #include <algorithm>
 #include <QCoreApplication>
+#include <QApplication>
+#include <QAbstractItemModel>
+#include <QToolButton>
 #include <QFileInfo>
 #include <QElapsedTimer>
 #include <atomic>
@@ -77,7 +80,8 @@ AZURESetup::AZURESetup() :
 
   tabWidget = new QTabWidget();
   // The logo at the right end of the tab bar; clicking it opens the About box.
-  QToolButton *logoButton = new QToolButton;
+  QToolButton *logoButton = logoButton_ = new QToolButton;
+  logoButton->setObjectName("logoButton");
   logoButton->setIcon(QIcon(":/azure-icon.png"));
   logoButton->setIconSize(QSize(26, 26));
   logoButton->setText("AZURE2");
@@ -87,7 +91,7 @@ AZURESetup::AZURESetup() :
   logoButton->setToolTip(tr("AZURE2 -- about this program"));
   logoButton->setStyleSheet("QToolButton { border: none; padding: 0 8px; color: #1f4f8f; font-weight: bold; }"
                             "QToolButton:hover { background: #e3edf8; border-radius: 4px; }");
-  connect(logoButton, &QToolButton::clicked, this, [this]() { AboutAZURE2Dialog about(this); about.exec(); });
+  connect(logoButton, &QToolButton::clicked, this, [this]() { AboutAZURE2Dialog about(this, polarizedLogo_); about.exec(); });
   tabWidget->setCornerWidget(logoButton, Qt::TopRightCorner);
 
   pairsTab = new PairsTab;
@@ -106,6 +110,15 @@ AZURESetup::AZURESetup() :
 
   targetIntTab = new TargetIntTab;
   targetIntTab->setModels(segmentsTab->getSegmentsDataModel(), pairsTab->getPairsModel());
+  // The logo follows the segments: with the polarization arrow while any of them is an analyzing power.
+  for (QAbstractItemModel *m : {static_cast<QAbstractItemModel *>(segmentsTab->getSegmentsDataModel()),
+                                static_cast<QAbstractItemModel *>(segmentsTab->getSegmentsTestModel())}) {
+    connect(m, &QAbstractItemModel::rowsInserted, this, &AZURESetup::updateLogo);
+    connect(m, &QAbstractItemModel::rowsRemoved, this, &AZURESetup::updateLogo);
+    connect(m, &QAbstractItemModel::dataChanged, this, &AZURESetup::updateLogo);
+    connect(m, &QAbstractItemModel::modelReset, this, &AZURESetup::updateLogo);
+    connect(m, &QAbstractItemModel::layoutChanged, this, &AZURESetup::updateLogo);
+  }
 
   nuclearPotentialTab = new NuclearPotentialTab();
   // The tab edits one particle pair at a time, so it needs the pair list.  The
@@ -306,6 +319,27 @@ void AZURESetup::open(QString filename) {
       warnIfGSLCoulomb();
     }
   }
+}
+
+/*!
+ * The logo follows the project (2026-11-06): the plain logo by default, the one with the polarization
+ * vector over the A while any data or test segment is a polarization observable.  Data type 7 (analyzing
+ * power, particle or capture) is the only one on this branch; the spin observables of the A = 4 work
+ * (feature/spin-observables) belong here when they are merged.
+ */
+void AZURESetup::updateLogo() {
+  auto polarization = [](int dataType) { return dataType == 7; };
+  bool polarized = false;
+  for (const SegmentsDataData &line : segmentsTab->getSegmentsDataModel()->getLines())
+    if (polarization(line.dataType)) polarized = true;
+  for (const SegmentsTestData &line : segmentsTab->getSegmentsTestModel()->getLines())
+    if (polarization(line.dataType)) polarized = true;
+  if (polarized == polarizedLogo_) return;
+  polarizedLogo_ = polarized;
+  const QIcon icon(polarized ? ":/azure-icon-polarized.png" : ":/azure-icon.png");
+  if (logoButton_) logoButton_->setIcon(icon);
+  setWindowIcon(icon);
+  qApp->setWindowIcon(icon);  // the dock / task bar
 }
 
 QString AZURESetup::gslCoulombWarningText() {

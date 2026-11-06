@@ -342,14 +342,14 @@ jobs:
         if: matrix.name == 'linux'
         run: |
           mkdir -p dist AppDir/usr/bin AppDir/usr/share/applications \
-                   AppDir/usr/share/icons/hicolor/128x128/apps
+                   AppDir/usr/share/icons/hicolor/256x256/apps
 
           cmake --install build --prefix AppDir/usr 2>/dev/null || \
             cp build/src/AZURE2 AppDir/usr/bin/
           [ -f AppDir/usr/bin/AZURE2 ] || cp build/src/AZURE2 AppDir/usr/bin/
 
           cp gui/images/azure2_icon.png \
-            AppDir/usr/share/icons/hicolor/128x128/apps/azure2.png
+            AppDir/usr/share/icons/hicolor/256x256/apps/azure2.png
 
           cat > AppDir/usr/share/applications/azure2.desktop <<'DESKTOP'
           [Desktop Entry]
@@ -391,7 +391,7 @@ jobs:
             --plugin qt \
             --output appimage \
             --desktop-file AppDir/usr/share/applications/azure2.desktop \
-            --icon-file AppDir/usr/share/icons/hicolor/128x128/apps/azure2.png
+            --icon-file AppDir/usr/share/icons/hicolor/256x256/apps/azure2.png
 
           mv AZURE2*.AppImage dist/ 2>/dev/null || mv ./*.AppImage dist/
           chmod +x dist/*.AppImage
