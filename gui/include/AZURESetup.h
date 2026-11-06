@@ -116,6 +116,10 @@ class AZURESetup : public QMainWindow {
   bool writeFile(QString filename);
   bool writeConfig(QTextStream &outStream, QString directory);
   bool readLastRun(QTextStream &inStream);
+  /// After open(): a non-modal warning (object name "gslCoulombWarning") when the project's last run used the
+  /// GSL Coulomb functions (bit USE_GSL_COULOMB_FUNC in <lastRun>).
+  void warnIfGSLCoulomb();
+  static QString gslCoulombWarningText();
   bool writeLastRun(QTextStream &outStream);
   void createActions();
   void createMenus();
@@ -123,6 +127,7 @@ class AZURESetup : public QMainWindow {
   void updateNuclearPotentialTabVisibility();  // Show/hide Nuclear Potential tab based on config
 
   Config config;
+  bool loadedGSLCoulomb_ = false;
 
   QAction *aboutAction;
   QAction *resetAction;

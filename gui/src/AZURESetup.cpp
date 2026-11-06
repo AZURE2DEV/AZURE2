@@ -1,5 +1,6 @@
 #include <QTextEdit>
 #include <QMessageBox>
+#include <QPushButton>
 #include <QScrollBar>
 #include <QFileDialog>
 #include <QMenu>
@@ -288,6 +289,8 @@ void AZURESetup::open() {
       QMessageBox::information(this,
                                tr("Can't Access File"),
                                tr("An error was encountered while reading the file."));
+    } else {
+      warnIfGSLCoulomb();
     }
   }
 }
@@ -299,8 +302,47 @@ void AZURESetup::open(QString filename) {
       QMessageBox::information(this,
                                tr("Can't Access File"),
                                tr("An error was encountered while reading the file."));
+    } else {
+      warnIfGSLCoulomb();
     }
   }
+}
+
+QString AZURESetup::gslCoulombWarningText() {
+  return tr("This project was last run with the GSL Coulomb functions "
+            "(Configure > Runtime Options > Use GSL Coulomb functions), and the GUI will use them again.\n\n"
+            "They are faster but less accurate than the default functions: penetrabilities and shift "
+            "functions can be wrong by several percent for 0.1 < eta < 10 and 1 < rho < 10, and just above a "
+            "charged-particle threshold the shift function can be NaN. The default functions (with the "
+            "Coulomb table) are accurate to about 1e-10.\n\n"
+            "The command line uses the default functions unless --gsl-coul is given, so a GUI calculation "
+            "of this project can differ from a command-line one.");
+}
+
+/*!
+ * After a project is opened: a non-modal warning when its last run used the GSL Coulomb functions
+ * (2026-11-06; older projects often have the option set, as a speed compromise before the Coulomb
+ * table and the threaded engine).  "Use the default functions" clears the option (saved with the
+ * project); "Keep GSL" leaves it.  Non-modal, so a headless or screenshot run is not blocked.
+ */
+void AZURESetup::warnIfGSLCoulomb() {
+  if (!loadedGSLCoulomb_) return;
+  if (QMessageBox *old = findChild<QMessageBox *>("gslCoulombWarning")) old->close();
+  QMessageBox *box = new QMessageBox(QMessageBox::Warning, tr("GSL Coulomb Functions"), gslCoulombWarningText(),
+                                     QMessageBox::NoButton, this);
+  box->setObjectName("gslCoulombWarning");
+  box->setAttribute(Qt::WA_DeleteOnClose);
+  box->setModal(false);
+  QPushButton *useDefault = box->addButton(tr("Use the default functions"), QMessageBox::AcceptRole);
+  useDefault->setObjectName("gslCoulombUseDefault");
+  QPushButton *keep = box->addButton(tr("Keep GSL"), QMessageBox::RejectRole);
+  keep->setObjectName("gslCoulombKeep");
+  box->setDefaultButton(useDefault);
+  connect(useDefault, &QPushButton::clicked, this, [this]() {
+    GetConfig().paramMask &= ~Config::USE_GSL_COULOMB_FUNC;
+    loadedGSLCoulomb_ = false;
+  });
+  box->show();
 }
 
 void AZURESetup::openRecent() {
@@ -323,6 +365,7 @@ bool AZURESetup::readFile(QString filename) {
   QString directory = info.absolutePath();
 
   reset();
+  loadedGSLCoulomb_ = false;
 
   QTextStream in(&file);
   QString line("");
@@ -517,6 +560,7 @@ bool AZURESetup::readLastRun(QTextStream &inStream) {
     GetConfig().paramMask |= Config::USE_GSL_COULOMB_FUNC;
   else
     GetConfig().paramMask &= ~Config::USE_GSL_COULOMB_FUNC;
+  loadedGSLCoulomb_ = (paramMask & Config::USE_GSL_COULOMB_FUNC) != 0;
 
   if (paramMask & Config::USE_BRUNE_FORMALISM)
     GetConfig().paramMask |= Config::USE_BRUNE_FORMALISM;

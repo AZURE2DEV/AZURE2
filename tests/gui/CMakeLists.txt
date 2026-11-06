@@ -467,6 +467,30 @@ add_test(NAME runtime_options COMMAND runtime_options_test)
 set_tests_properties(runtime_options PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
+# The GUI warns when a project was last run with the GSL Coulomb functions (2026-11-06).
+add_executable(gsl_coulomb_warning_test gsl_coulomb_warning_test.cpp)
+set_target_properties(gsl_coulomb_warning_test PROPERTIES AUTOMOC OFF)
+target_include_directories(gsl_coulomb_warning_test PRIVATE
+    ${AZURE2_SOURCE_DIR}/gui/include
+    ${AZURE2_SOURCE_DIR}/include
+)
+target_compile_definitions(gsl_coulomb_warning_test PRIVATE AZURE2_TEST_SOURCE_DIR="${AZURE2_SOURCE_DIR}")
+target_link_libraries(gsl_coulomb_warning_test PRIVATE
+    ${AZURESETUP_LIBRARIES}
+    ${AZUREAPI_LIBRARIES}
+    AZURE2Core
+    Qt5::Core Qt5::Gui Qt5::Widgets Qt5::Network
+)
+if(USE_QWT)
+    target_link_libraries(gsl_coulomb_warning_test PRIVATE ${QWT_LIBRARIES})
+endif()
+if(USE_ERYA)
+    target_link_libraries(gsl_coulomb_warning_test PRIVATE pugixml srim_utilities)
+endif()
+add_test(NAME gsl_coulomb_warning COMMAND gsl_coulomb_warning_test)
+set_tests_properties(gsl_coulomb_warning PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
 # File dialogs on macOS are Qt's own (gui/include/FileDialogPolicy.h): the native NSOpenPanel failed for users
 # (2026-11-05).  On macOS the test runs on the cocoa platform, not offscreen: offscreen has no native dialogs, so it
 # could not tell a build with the policy from one without.  Elsewhere offscreen, as for the other GUI tests.

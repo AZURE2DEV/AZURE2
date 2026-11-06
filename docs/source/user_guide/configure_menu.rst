@@ -72,7 +72,11 @@ Selecting **Runtime Options...** opens a dialog with the following settings:
    * - **Use GSL Coulomb functions**
      - Use the GNU Scientific Library routines for Coulomb function calculations.
        Faster but potentially less accurate than the default method of N. Michel,
-       *Computer Physics Communications* **176**, 232 (2007).
+       *Computer Physics Communications* **176**, 232 (2007): :math:`P` and
+       :math:`S` can be wrong by several percent, and the shift function is NaN
+       just above a charged-particle threshold. Saved in the project
+       (``<lastRun>``); since 2026-11-06 the GUI warns when it opens a project
+       with this option set and offers to switch to the default functions.
    * - **Use Brune formalism**
      - Use the Brune parameterization for R-matrix parameters
        (C.R. Brune, *Physical Review C* **66**, 044611, 2002). Recommended and
