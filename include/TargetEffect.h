@@ -178,6 +178,21 @@ class TargetEffect {
   /// Blend weight in [0,1] at the given lab energy: 1 = effect fully applied,
   /// 0 = point untouched.  Always 1 when no ranges are given.
   double BlendWeight(double labEnergy) const;
+  /// The same for a given window list: the line's own ranges together with the automatic windows of one
+  /// segment (EData, IsAutoWindows).  An empty list is "no window": 1 without "auto", 0 with it (no level
+  /// asked for a window, so every point takes the effect's fallback).
+  double BlendWeight(double labEnergy, const std::vector<std::pair<double, double> > &windows) const;
+  /// "auto" in the windows token (2026-11-06): each segment of a thin-target integration gets windows placed
+  /// from the level scheme, around every resonance narrow enough for the sigma(E_bar) fallback to miss it by
+  /// more than GetAutoWindowTolerance() at its peak (Delta^2/(3 Gamma^2) for a Lorentzian of total width
+  /// Gamma under a target of thickness Delta), reaching GetAutoWindowMargin() x max(Gamma, Delta) beyond the
+  /// points whose target holds the resonance.  "auto:<tol>" and "auto:<tol>:<margin>" set them; explicit
+  /// ranges in the same token are added.  Older engines read no range from it and integrate everywhere.
+  bool IsAutoWindows() const { return autoWindows_; }
+  double GetAutoWindowTolerance() const { return autoWindowTolerance_; }
+  double GetAutoWindowMargin() const { return autoWindowMargin_; }
+  /// Any window at all, explicit or automatic.
+  bool HasWindows() const { return !ranges_.empty() || autoWindows_; }
 
   /// The multiple of sigma above and below centroid energy to use as integration range
   static constexpr double convolutionRange = 5.;
@@ -362,6 +377,9 @@ class TargetEffect {
   std::vector<std::pair<double, double> > ranges_;
   double transitionWidth_;
   double autoTolerance_;
+  bool autoWindows_ = false;            ///< "auto" in the windows token (IsAutoWindows)
+  double autoWindowTolerance_ = 0.01;   ///< peak error of the fallback a resonance may have outside a window
+  double autoWindowMargin_ = 3.0;       ///< window reach beyond the target, in units of max(Gamma, Delta)
 
   // Beam-profile kernel (see IsBeamProfile).
   bool isBeamProfile_ = false;

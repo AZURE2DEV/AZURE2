@@ -52,7 +52,7 @@ AddTargetIntDialog::AddTargetIntDialog(QWidget *parent) :
   segmentsListText = new QLineEdit;
   applyRangesText = new QLineEdit;
   applyRangesText->setPlaceholderText(tr("empty = whole segment"));
-  applyRangesText->setToolTip(tr("Optional lab-energy windows the effect is applied in, e.g. 0.42-0.61,1.20-1.35 (MeV). Leave empty to apply it to the whole segment. Outside the windows a thin-target integration evaluates each point once, at the depth-averaged energy of its target (the data carry the beam energy); other effects leave the point at its own energy. Not allowed on a thick target or with Doppler broadening."));
+  applyRangesText->setToolTip(tr("Optional lab-energy windows the effect is applied in, e.g. 0.42-0.61,1.20-1.35 (MeV). Leave empty to apply it to the whole segment. \"auto\" places the windows from the level scheme around narrow resonances and particle thresholds (\"auto:<tolerance>:<margin>\", defaults 0.01 and 3; explicit ranges may follow, \"auto,1.20-1.35\"); thin-target integrations only. Outside the windows a thin-target integration evaluates each point once, at the depth-averaged energy of its target (the data carry the beam energy); other effects leave the point at its own energy. Not allowed on a thick target or with Doppler broadening."));
   transitionWidthText = new QLineEdit;
   transitionWidthText->setText("0");
   transitionWidthText->setToolTip(tr("Width (MeV) of the smooth blend between the convolved and the bare curve at each range edge. 0 switches the effect on and off abruptly."));

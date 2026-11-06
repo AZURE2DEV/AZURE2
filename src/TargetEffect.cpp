@@ -131,6 +131,17 @@ TargetEffect::TargetEffect(std::istream &stream, const Config &configure) {
         std::istringstream rs(rangesToken);
         std::string item;
         while (std::getline(rs, item, ',')) {
+          if (item.compare(0, 4, "auto") == 0) {
+            // "auto", "auto:<tol>", "auto:<tol>:<margin>": windows from the level scheme (IsAutoWindows)
+            autoWindows_ = true;
+            std::istringstream as(item.substr(4));
+            char colon = 0;
+            double v = 0.0;
+            if (as >> colon && colon == ':' && as >> v && v > 0.) autoWindowTolerance_ = v;
+            colon = 0;
+            if (as >> colon && colon == ':' && as >> v && v > 0.) autoWindowMargin_ = v;
+            continue;
+          }
           size_t dash = item.find('-', 1);  // energies are positive; skip a leading sign
           if (dash == std::string::npos) continue;
           double lo = atof(item.substr(0, dash).c_str());
@@ -1104,8 +1115,13 @@ double TargetEffect::GetAutoTolerance() const {
 
 double TargetEffect::BlendWeight(double labEnergy) const {
   if (ranges_.empty()) return 1.0;
+  return BlendWeight(labEnergy, ranges_);
+}
+
+double TargetEffect::BlendWeight(double labEnergy, const std::vector<std::pair<double, double> > &windows) const {
+  if (windows.empty()) return autoWindows_ ? 0.0 : 1.0;
   double weight = 0.0;
-  for (std::vector<std::pair<double, double> >::const_iterator r = ranges_.begin(); r != ranges_.end(); r++) {
+  for (std::vector<std::pair<double, double> >::const_iterator r = windows.begin(); r != windows.end(); r++) {
     double w;
     if (transitionWidth_ <= 0.) {
       w = (labEnergy >= r->first && labEnergy <= r->second) ? 1.0 : 0.0;

@@ -866,8 +866,13 @@ static void AddTargetFallbackNodes(EPoint *point, TargetEffect *te, double cmCon
  * Refuses the combinations the sigma(E_bar) fallback of a windowed target integration does not cover.
  */
 static bool CheckTargetWindows(TargetEffect *te, int segmentKey, std::ostream &out) {
+  if (te->IsAutoWindows() && (!te->IsTargetIntegration() || te->IsThickTarget())) {
+    out << "ERROR: segment #" << segmentKey << ": automatic energy windows (\"auto\") need a THIN-target integration: "
+        << "they decide where the depth-averaged energy is good enough, and only a thin target has one." << std::endl;
+    return false;
+  }
   if (!te->IsTargetIntegration()) return true;
-  const bool windows = !te->GetRanges().empty();
+  const bool windows = te->HasWindows();
   if (te->IsThickTarget() && windows) {
     out << "ERROR: segment #" << segmentKey << ": energy windows on a THICK-target integration (density 0): a thick-"
         << "target yield has no single equivalent energy to evaluate outside the windows.  Give the density or "
@@ -880,6 +885,104 @@ static bool CheckTargetWindows(TargetEffect *te, int segmentKey, std::ostream &o
     return false;
   }
   return true;
+}
+
+/*!
+ * The lab-energy windows of one segment (or component) of a target-effect line: the line's own ranges, plus,
+ * with "auto" (TargetEffect::IsAutoWindows, 2026-11-06), windows placed from the level scheme of the
+ * segment's entrance pair.
+ *
+ * Outside a window a thin-target point is sigma at its depth-averaged energy E_bar, whose error is about
+ * |sigma''| Delta^2 / 24.  For a resonance of total width Gamma (a Lorentzian) that is Delta^2 / (3 Gamma^2) of
+ * the peak, so a resonance is "narrow" -- it needs the integration -- when Gamma < Delta / sqrt(3 tol), with
+ * Delta the target thickness at the resonance (lab, at the layout density) plus twice the beam spread.  A point
+ * at E0 samples [E0 - Delta, E0]; its window reaches margin x max(Gamma, Delta) beyond the points whose target
+ * holds the resonance: [E_R - w, E_R + Delta + w].  The widths are the observed total widths the sub-point
+ * grids are laid out with (AdaptiveIntegrationGrid::GetResonances, from the parameters the session starts
+ * from).  The windows are fixed for the session: a fit that moves a narrow level by more than w leaves it
+ * outside; a new session from the fitted file places them again.
+ */
+static std::vector<std::pair<double, double> > TargetWindowsFor(TargetEffect *te, CNuc *compound, ESegment *segment,
+                                                                 double cmConversion, const Config &configure,
+                                                                 int reportKey, bool report) {
+  std::vector<std::pair<double, double> > windows = te->GetRanges();
+  if (!te->IsAutoWindows() || !compound || segment->NumPoints() == 0) return windows;
+  double eLo = 1.0e300, eHi = 0.0;
+  for (EPointIterator point = segment->GetPoints().begin(); point < segment->GetPoints().end(); point++) {
+    eLo = std::min(eLo, point->GetLabEnergy());
+    eHi = std::max(eHi, point->GetLabEnergy());
+  }
+  AdaptiveIntegrationGrid::GridConfig gc;
+  gc.entranceKey = segment->GetEntranceKey();
+  gc.inputWidthsArePhysical = (configure.paramMask & Config::TRANSFORM_PARAMETERS) && !compound->IsTransformedIn();
+  AdaptiveIntegrationGrid finder(gc);
+  // every level up to well above the data: a window reaches below its resonance only by w
+  const std::vector<AdaptiveIntegrationGrid::ResonanceInfo> resonances =
+      finder.GetResonances(cmConversion * eHi + 10.0, 0.0, compound);
+  const double tol = te->GetAutoWindowTolerance(), margin = te->GetAutoWindowMargin();
+  std::vector<std::pair<double, double> > found;
+  int narrow = 0;
+  for (const auto &r : resonances) {
+    const double eR = r.energy / cmConversion;
+    if (!(eR > 0.0) || !(r.totalWidth > 0.0)) continue;
+    // the target and the spread as the segment's own points see them: the stopping power is an input fit over
+    // the data's energies and means nothing far outside them
+    const double eAt = std::min(std::max(eR, eLo), eHi);
+    double delta = te->TargetThickness(eAt, configure, te->GetLayoutDensity());
+    if (!(delta > 0.0) || !(delta < eAt)) continue;
+    if (te->IsGaussian()) delta += 2.0 * te->SigmaCM(cmConversion * eAt, configure, cmConversion) / cmConversion;
+    const double gamma = r.totalWidth / cmConversion;
+    if (!(gamma < delta / std::sqrt(3.0 * tol))) continue;
+    const double w = margin * std::max(gamma, delta);
+    const double lo = eR - w, hi = eR + delta + w;
+    if (hi < eLo || lo > eHi) continue;
+    narrow++;
+    found.push_back(std::make_pair(lo, hi));
+  }
+  // Particle thresholds of the same compound nucleus: a target that straddles one sees the cusp of the channel
+  // opening, which no single energy reproduces (13C+alpha ND2021r: 15 % at the 16O(6.05) n1 threshold).
+  int thresholds = 0;
+  PPair *entrance = compound->GetPairFromKey(segment->GetEntranceKey());
+  if (entrance) {
+    const double eEntrance = entrance->GetSepE() + entrance->GetExE();
+    for (int i = 1; i <= compound->NumPairs(); i++) {
+      PPair *pair = compound->GetPair(i);
+      if (pair == entrance || pair->GetPType() != 0 || pair->GetNucleus() != entrance->GetNucleus()) continue;
+      const double eTh = (pair->GetSepE() + pair->GetExE() - eEntrance) / cmConversion;
+      if (!(eTh > 0.0)) continue;
+      const double eAt = std::min(std::max(eTh, eLo), eHi);
+      double delta = te->TargetThickness(eAt, configure, te->GetLayoutDensity());
+      if (!(delta > 0.0) || !(delta < eAt)) continue;
+      if (te->IsGaussian()) delta += 2.0 * te->SigmaCM(cmConversion * eAt, configure, cmConversion) / cmConversion;
+      const double lo = eTh - margin * delta, hi = eTh + delta + margin * delta;
+      if (hi < eLo || lo > eHi) continue;
+      thresholds++;
+      found.push_back(std::make_pair(lo, hi));
+    }
+  }
+  windows.insert(windows.end(), found.begin(), found.end());
+  std::sort(windows.begin(), windows.end());
+  std::vector<std::pair<double, double> > merged;
+  for (const auto &w : windows) {
+    if (!merged.empty() && w.first <= merged.back().second)
+      merged.back().second = std::max(merged.back().second, w.second);
+    else
+      merged.push_back(w);
+  }
+  int inside = 0;
+  for (EPointIterator point = segment->GetPoints().begin(); point < segment->GetPoints().end(); point++)
+    if (te->BlendWeight(point->GetLabEnergy(), merged) > 0.0) inside++;
+  std::ostringstream note;
+  note << "Note: segment #" << reportKey << ": automatic target-integration windows (tolerance " << tol
+       << ", margin " << margin << "): " << narrow << " narrow level(s), " << thresholds << " threshold(s), " << inside << " of " << segment->NumPoints()
+       << " points integrated";
+  if (!merged.empty()) {
+    note << "; windows (lab MeV)";
+    for (size_t i = 0; i < merged.size(); i++)
+      note << (i ? ", " : " ") << std::setprecision(6) << merged[i].first << "-" << merged[i].second;
+  }
+  if (report) configure.Note(note.str());
+  return merged;
 }
 
 EPoint::SubGridSpec MakeSubGridSpec(const AdaptiveIntegrationGrid::GridConfig &gc, double start, double end,
@@ -1259,6 +1362,8 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
 
       if (!CheckTargetWindows(targetEffect, segment->GetSegmentKey(), configure.outStream)) return -1;
       const bool thinTarget = targetEffect->IsTargetIntegration() && !targetEffect->IsThickTarget();
+      const std::vector<std::pair<double, double> > windows =
+          TargetWindowsFor(targetEffect, compound, &*segment, cmConversion, configure, segment->GetSegmentKey(), true);
       for (EPointIterator point = segment->GetPoints().begin(); point < segment->GetPoints().end(); point++) {
         // An effect restricted to energy ranges leaves points outside them
         // untouched: they never receive the effect number, so the whole
@@ -1266,7 +1371,7 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
         // thin-target integration, whose data carry the beam energy: there a
         // point outside the windows is evaluated at its depth-averaged energy
         // E_bar (EPoint::IsTargetFallbackOnly, 2026-11-05).
-        double blendWeight = targetEffect->BlendWeight(point->GetLabEnergy());
+        double blendWeight = targetEffect->BlendWeight(point->GetLabEnergy(), windows);
         if (blendWeight <= 0. && !thinTarget) continue;
         point->SetTargetEffectNum(segment->GetTargetEffectNum());
         point->SetTargetBlendWeight(std::max(blendWeight, 0.0));
@@ -1448,8 +1553,12 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
 
           if (!CheckTargetWindows(targetEffect, segment->GetSegmentKey(), configure.outStream)) return -1;
           const bool thinTarget = targetEffect->IsTargetIntegration() && !targetEffect->IsThickTarget();
+          // a component's windows come from its own entrance pair's level scheme
+          const std::vector<std::pair<double, double> > windows =
+              TargetWindowsFor(targetEffect, compound, component, compConversion, configure, segment->GetSegmentKey(),
+                               false);
           for (EPointIterator point = component->GetPoints().begin(); point < component->GetPoints().end(); point++) {
-            double blendWeight = targetEffect->BlendWeight(point->GetLabEnergy());
+            double blendWeight = targetEffect->BlendWeight(point->GetLabEnergy(), windows);
             if (blendWeight <= 0. && !thinTarget) continue;  // see the base segment's loop above
             point->SetTargetEffectNum(component->GetTargetEffectNum());
             point->SetTargetBlendWeight(std::max(blendWeight, 0.0));

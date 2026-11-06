@@ -457,6 +457,24 @@ on a line with ``doppler``, are refused (``CheckTargetWindows``).  The total
 capture composite never applies the automatic decision.  Test:
 ``tests/target_window_fallback``.
 
+With ``"auto"`` in the windows token (``TargetEffect::IsAutoWindows``,
+2026-11-06) the windows are placed per segment in ``ReadTargetEffectsFile``,
+before any grid is laid out: ``TargetWindowsFor`` takes the resonances the grid
+generator would see for that segment's entrance pair
+(``AdaptiveIntegrationGrid::GetResonances``, observed energies and total widths
+from the starting parameters) and the particle thresholds of the same compound
+nucleus, keeps a resonance when :math:`\Gamma < \Delta/\sqrt{3\,\mathrm{tol}}`
+(the peak error of :math:`\sigma(\bar E)` for a Lorentzian), and gives each kept
+resonance or threshold the lab window
+:math:`[E_R - w, E_R + \Delta + w]`, :math:`w = \mathrm{margin}\times\max(\Gamma, \Delta)`,
+with :math:`\Delta` the target thickness at the layout density plus twice the
+beam spread, evaluated at the resonance energy clamped into the segment's data
+range (the stopping power is a fit over the data's energies).  The windows are
+merged with the line's own ranges and passed to the two-argument
+``TargetEffect::BlendWeight``; everything downstream is the fallback machinery
+above.  The decision is made once per session and the windows do not follow a
+level that a fit moves.  Test: ``tests/target_auto_windows``.
+
 The combined branch of ``EPoint::IntegrateTargetEffect`` accepts either
 convolution flavour: a fixed beam sigma, or the energy-dependent convolution
 equation evaluated at each depth energy.  The latter combination used to fall

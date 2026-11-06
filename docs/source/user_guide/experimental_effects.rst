@@ -370,6 +370,66 @@ computed at :math:`E_0`: on the 13C+α ND 2021 data (16 lines, windows around th
 narrow levels) that made the windowed model worse than none, χ² 421,432 against
 400,616 integrated everywhere; with :math:`\bar E` it is 401,435.
 
+**Automatic windows from the level scheme.**  The windows token ``"auto"``
+lets AZURE2 place the windows itself, segment by segment from the segment's own
+entrance pair (the components of a composite segment from theirs):
+
+- around every resonance narrow enough for :math:`\sigma(\bar E)` to miss its
+  peak by more than a tolerance.  For a resonance of total width
+  :math:`\Gamma` under a target of thickness :math:`\Delta` (the energy loss
+  plus twice the beam spread) that error is :math:`\Delta^2/(3\Gamma^2)`, so
+  a level is narrow when :math:`\Gamma < \Delta/\sqrt{3\,\mathrm{tol}}`;
+- around every particle threshold of the same compound nucleus: a target that
+  straddles a threshold sees the cusp of the channel opening, which no single
+  energy reproduces (15 % at the 16O(6.05 MeV) n\ :sub:`1` threshold in the
+  13C+α data).
+
+A point at :math:`E_0` samples :math:`[E_0-\Delta, E_0]`; its window reaches
+*margin* × max(:math:`\Gamma`, :math:`\Delta`) beyond the points whose target
+holds the resonance or threshold, i.e. :math:`[E_R - w, E_R + \Delta + w]`.
+``"auto:<tol>"`` and ``"auto:<tol>:<margin>"`` set the two numbers (defaults
+0.01 and 3); explicit ranges in the same token are added (``"auto,1.20-1.35"``),
+and the blend width that follows the token applies to every edge.  A Note per
+segment lists the levels, thresholds, windows and the number of points
+integrated.  The widths are the observed total widths the sub-point grids are
+laid out with, from the parameters the session starts from; the windows stay
+fixed for the session, so a fit that moves a narrow level by more than *w*
+leaves it outside, and a new session from the fitted file places them again.
+Only a thin-target integration takes ``"auto"`` (a thick target or a line
+without a target integration is refused).  On the 13C+α ND 2021 data:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 30 20 25 25
+
+   * - windows
+     - χ²
+     - points integrated
+     - largest point shift
+   * - none (full integration)
+     - 400,616
+     - 100 %
+     - —
+   * - by hand (30 October)
+     - 401,435
+     - 48 %
+     - —
+   * - ``"auto"``
+     - 400,881
+     - 58 %
+     - 0.42 σ
+   * - ``"auto:0.003"``
+     - 400,656
+     - 81 %
+     - 0.20 σ
+   * - ``"auto:0.001:5"``
+     - 400,621
+     - 99 %
+     - 0.03 σ
+
+An engine from before November 2026 reads no range from ``"auto"`` and
+integrates every point: the right answer, at the full cost.
+
 In the ``.azr`` file these appear as optional tokens at the end of the
 ``targetInt`` line, for example ``"1.95-2.55" 0.12 0.002``; files that do not
 use them are written exactly as before, and remain readable by older versions
