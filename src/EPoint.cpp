@@ -1307,7 +1307,7 @@ void EPoint::CalcLegendreP(int maxL, CNuc *theCNuc, TargetEffect *targetEffect) 
  * and hard sphere phase shfits.
  */
 
-void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure, bool includeSubPoints) {
+void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure, bool includeSubPoints, bool shareWithMapped) {
   AZUREProfile::Timer profileTimer(AZUREProfile::kEDependent);
   PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetEntranceKey()));
   PPair *exitPair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetExitKey()));
@@ -1432,7 +1432,15 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure, bool i
       this->GetSubPoint(i)->CalcEDependentValues(theCNuc, configure);
     }
   }
-  for (int i = 1; i <= this->NumLocalMappedPoints(); i++) {
+  // The points mapped onto this one share its tables -- at setup and on a grid
+  // re-placement, where nothing else writes them meanwhile.  Not on an energy
+  // shift (RecalcEDependentValues, shareWithMapped false): there every mapped
+  // point is re-energised by its own segment, a point mapped from another
+  // segment possibly on another thread at the same moment
+  // (EData::FillEnergyShiftsFromParams), and two threads assigning the same
+  // shared_ptr freed the tables under the other's copy-on-write
+  // (heap-use-after-free, AddressSanitizer 2026-11-06; macOS CI aborts).
+  for (int i = 1; shareWithMapped && i <= this->NumLocalMappedPoints(); i++) {
     EPoint *mappedPoint = this->GetLocalMappedPoint(i);
     if (mappedPoint->OwnsEDependentValues()) continue;
     mappedPoint->geofactor_ = geofactor_;
@@ -1504,8 +1512,10 @@ void EPoint::RecalcEDependentValues(CNuc *theCNuc, const Config &configure, bool
   if (includeSubPoints)
     for (int i = 1; i <= this->NumSubPoints(); i++) this->GetSubPoint(i)->ClearEDependentRows();
 
-  // Recalculate with current energy
-  this->CalcEDependentValues(theCNuc, configure, includeSubPoints);
+  // Recalculate with current energy.  The points mapped onto this one are not
+  // touched: each is re-energised itself, from its host's values
+  // (CopyEDependentValuesFrom) or anew (ESegment::UpdatePointEnergyWithShift).
+  this->CalcEDependentValues(theCNuc, configure, includeSubPoints, false);
 
   // Also recalculate Coulomb amplitude with current energy
   this->CalcCoulombAmplitude(theCNuc, includeSubPoints);

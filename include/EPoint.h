@@ -453,8 +453,12 @@ class EPoint {
   void CalcLegendreP(int, CNuc *, TargetEffect *);
   /// Compute the geometrical factor, S-factor conversion, \f$L_o\f$ elements, penetrabilities and phases together.
   /// With includeSubPoints false the sub-points are left alone (their energies are updated, and their values recomputed, separately).
-  void CalcEDependentValues(CNuc *, const Config &, bool includeSubPoints = true);
-  /// Recompute those at the current, possibly shifted, energy.
+  /// With shareWithMapped true (setup, grid re-placement) the points mapped onto this one (EData::MapData) are given
+  /// the same tables; RecalcEDependentValues passes false (see there).
+  void CalcEDependentValues(CNuc *, const Config &, bool includeSubPoints = true, bool shareWithMapped = true);
+  /// Recompute those at the current, possibly shifted, energy.  Writes this point (and its sub-points) only, never the
+  /// points mapped onto it: on an energy shift each of those is re-energised on its own (ESegment::
+  /// UpdatePointEnergyWithShift), possibly at the same time on another thread.
   void RecalcEDependentValues(CNuc *, const Config &, bool includeSubPoints = true);
   /// Take the energy-dependent values (not the angle-dependent Coulomb amplitude) from a point at the same energy; false if the energies differ.
   bool CopyEDependentValuesFrom(const EPoint &);
