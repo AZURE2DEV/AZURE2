@@ -1,0 +1,3 @@
+engine commit c1cc92c7
+projects T1 T3
+run: OMP_NUM_THREADS=2, flags --no-coulomb-table, modes calc extrap rate

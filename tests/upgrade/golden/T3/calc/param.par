@@ -1,0 +1,42 @@
+    #parametrization       1.0000000e+00       0.0000000e+00
+            energy_1       3.0300000e+00       3.0300000e-01
+           width_1_1       7.4617705e-01       7.4617705e-02
+           width_1_2       1.0000000e+00       1.0000000e-01
+           width_1_3       0.0000000e+00       0.0000000e+00
+           width_1_4       0.0000000e+00       0.0000000e+00
+            energy_2       2.2000000e+01       2.2000000e+00
+           width_2_1       5.3503561e-01       5.3503561e-02
+           width_2_2      -5.0000000e-01      -5.0000000e-02
+           width_2_3       6.7502829e-01       6.7502829e-02
+           width_2_4       7.3775361e-01       7.3775361e-02
+            energy_3       1.1350000e+01       1.1350000e+00
+           width_3_1       7.1231917e-01       7.1231917e-02
+            energy_4       1.7640000e+01       1.7640000e+00
+           width_4_1       6.3058866e-01       6.3058866e-02
+           width_4_2       1.9012964e-01       1.9012964e-02
+            energy_5       1.9000000e+01       1.9000000e+00
+           width_5_1       2.7418940e-01       2.7418940e-02
+           width_5_2       3.3942623e-01       3.3942623e-02
+            energy_6       2.5000000e+01       2.5000000e+00
+           width_6_1       7.7304926e-01       7.7304926e-02
+            energy_7       2.2000000e+01       2.2000000e+00
+           width_7_1       7.9296962e-01       7.9296962e-02
+           width_7_2       8.3385156e-01       8.3385156e-02
+segment_1_energy_shift       0.0000000e+00       5.0000000e-04
+segment_2_energy_shift       0.0000000e+00       5.0000000e-04
+segment_3_energy_shift       0.0000000e+00       5.0000000e-04
+segment_4_energy_shift       0.0000000e+00       5.0000000e-04
+segment_5_energy_shift       0.0000000e+00       5.0000000e-04
+segment_6_energy_shift       0.0000000e+00       5.0000000e-04
+segment_7_energy_shift       0.0000000e+00       5.0000000e-04
+segment_8_energy_shift       0.0000000e+00       5.0000000e-04
+segment_9_energy_shift       0.0000000e+00       5.0000000e-04
+segment_1_energy_shift_sqrt       0.0000000e+00       5.0000000e-04
+segment_2_energy_shift_sqrt       0.0000000e+00       5.0000000e-04
+segment_3_energy_shift_sqrt       0.0000000e+00       5.0000000e-04
+segment_4_energy_shift_sqrt       0.0000000e+00       5.0000000e-04
+segment_5_energy_shift_sqrt       0.0000000e+00       5.0000000e-04
+segment_6_energy_shift_sqrt       0.0000000e+00       5.0000000e-04
+segment_7_energy_shift_sqrt       0.0000000e+00       5.0000000e-04
+segment_8_energy_shift_sqrt       0.0000000e+00       5.0000000e-04
+segment_9_energy_shift_sqrt       0.0000000e+00       5.0000000e-04
