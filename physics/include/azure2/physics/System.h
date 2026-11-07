@@ -5,6 +5,7 @@
 #include <cstddef>
 #include <vector>
 
+#include "azure2/physics/Convention.h"
 #include "azure2/physics/JpiBlock.h"
 
 namespace azure2 {
@@ -32,21 +33,15 @@ namespace physics {
  *    fixed by the parities, so the same (alpha, L, s) can be an E-channel in one block and an M-channel in another.
  *  - The compound nuclei are listed (Z, A), and each partition and block names its nucleus: a project with several
  *    compound nuclei has a level matrix block-diagonal in the nucleus.
- *  - The level parameters are stored in the basis the project uses (basis()), not converted: conversions belong to
- *    level_parameters (ARCHITECTURE.md section 5), which does not exist yet.
+ *  - The level parameters are stored in the basis the project uses (basis()), not converted.  The System carries
+ *    the project's Convention record (Convention.h), whose basis field is that basis; the conversions to the
+ *    internal convention are level_parameters' (LevelParameters.h, ARCHITECTURE.md section 5).
  *
- * Not included yet (docs/upgrade/physics_system.md lists them): the Convention record, external-capture final states
- * and their ANCs, hybrid-potential (alpha, l, j) channels, the THM binding energy of a Trojan-horse partition.
+ * Not included yet (docs/upgrade/physics_system.md lists them): external-capture final states and their ANCs,
+ * hybrid-potential (alpha, l, j) channels, the THM binding energy of a Trojan-horse partition.
  *
  * The constructor checks every index and the consistency of kinds and throws std::invalid_argument when one fails.
  */
-
-/// What the level energies E_lambda and amplitudes gamma_{lambda c} of the blocks are.
-enum class LevelBasis {
-  Formal,  ///< formal R-matrix parameters (Lane and Thomas), with the blocks' boundary values B_c
-  Brune,   ///< Brune's alternative parameters (PRC 66, 044611 (2002)): observed energies, B_c = S_c(E_lambda)
-  Park     ///< Park's observed-amplitude parameters (PRC 104, 064612 (2021)), on Brune's level energies
-};
 
 /// A compound nucleus: charge number Z and mass number A.
 struct Nucleus {
@@ -100,10 +95,17 @@ struct Channel {
 
 class System {
  public:
+  /// A System in the internal convention with the given parameter basis.
   System(LevelBasis basis, std::vector<Nucleus> nuclei, std::vector<Partition> partitions,
          std::vector<Channel> channels, std::vector<JpiBlock> blocks);
+  /// A System whose parameters are in the convention (and basis) of the record.
+  System(Convention convention, std::vector<Nucleus> nuclei, std::vector<Partition> partitions,
+         std::vector<Channel> channels, std::vector<JpiBlock> blocks);
 
-  LevelBasis basis() const { return basis_; }
+  /// The basis of the blocks' parameters: convention().basis.
+  LevelBasis basis() const { return convention_.basis; }
+  /// What the project's parameters mean (Convention.h).
+  const Convention &convention() const { return convention_; }
 
   std::size_t num_nuclei() const { return nuclei_.size(); }
   std::size_t num_partitions() const { return partitions_.size(); }
@@ -126,7 +128,7 @@ class System {
   int find_channel(int partition, ChannelKind kind, int l, int two_s) const;
 
  private:
-  LevelBasis basis_;
+  Convention convention_;
   std::vector<Nucleus> nuclei_;
   std::vector<Partition> partitions_;
   std::vector<Channel> channels_;
