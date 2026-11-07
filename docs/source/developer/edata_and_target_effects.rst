@@ -473,7 +473,12 @@ range (the stopping power is a fit over the data's energies).  The windows are
 merged with the line's own ranges and passed to the two-argument
 ``TargetEffect::BlendWeight``; everything downstream is the fallback machinery
 above.  The decision is made once per session and the windows do not follow a
-level that a fit moves.  Test: ``tests/target_auto_windows``.
+level that a fit moves.  Points of a charged-particle entrance pair whose
+Gamow-factor estimate of the fallback error, :math:`|g''+g'^2|\Delta_{cm}^2/24`
+with :math:`g' = (\pi\eta-1)/E`, :math:`g'' = (1-1.5\pi\eta)/E^2` at the
+depth-averaged c.m. energy (``Kinematics::Eta``), exceeds the tolerance get one
+more window, from the lowest such point to the highest plus one target
+thickness (2026-11-06).  Test: ``tests/target_auto_windows`` (check (j)).
 
 The combined branch of ``EPoint::IntegrateTargetEffect`` accepts either
 convolution flavour: a fixed beam sigma, or the energy-dependent convolution

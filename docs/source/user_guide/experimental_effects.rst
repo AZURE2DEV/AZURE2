@@ -382,7 +382,17 @@ entrance pair (the components of a composite segment from theirs):
 - around every particle threshold of the same compound nucleus: a target that
   straddles a threshold sees the cusp of the channel opening, which no single
   energy reproduces (15 % at the 16O(6.05 MeV) n\ :sub:`1` threshold in the
-  13C+α data).
+  13C+α data);
+- over the steep end of a charged-particle cross section below the Coulomb
+  barrier.  Locally :math:`\sigma \propto e^{g(E)}`, and the depth average
+  exceeds :math:`\sigma(\bar E)` by :math:`(g'' + g'^2)\Delta^2/24`; with the
+  Gamow factor of the entrance pair, :math:`\sigma \propto e^{-2\pi\eta}/E`,
+  :math:`g' = (\pi\eta - 1)/E` and :math:`g'' = (1 - 1.5\pi\eta)/E^2`.  Every
+  point where this exceeds the tolerance is integrated (the 13C+α ND 2021
+  thick target at :math:`E_\alpha` = 0.675 MeV: :math:`\sigma(\bar E)` was 5-8 %
+  low).  The estimate covers the Gamow factor only, so a resonance tail can
+  make the true error larger; the Note gives the points as "sub-barrier
+  curvature".
 
 A point at :math:`E_0` samples :math:`[E_0-\Delta, E_0]`; its window reaches
 *margin* × max(:math:`\Gamma`, :math:`\Delta`) beyond the points whose target

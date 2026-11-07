@@ -10,6 +10,7 @@
 #include "ExtrapLine.h"
 #include "SegLine.h"
 #include "AdaptiveIntegrationGrid.h"
+#include "Kinematics.h"
 #include "Minuit2/MnUserParameters.h"
 #include "GSLException.h"
 #include <gsl/gsl_linalg.h>
@@ -900,7 +901,9 @@ static bool CheckTargetWindows(TargetEffect *te, int segmentKey, std::ostream &o
  * holds the resonance: [E_R - w, E_R + Delta + w].  The widths are the observed total widths the sub-point
  * grids are laid out with (AdaptiveIntegrationGrid::GetResonances, from the parameters the session starts
  * from).  The windows are fixed for the session: a fit that moves a narrow level by more than w leaves it
- * outside; a new session from the fitted file places them again.
+ * outside; a new session from the fitted file places them again.  Below the Coulomb barrier the non-resonant cross
+ * section itself is curved enough under a thick target: points where the Gamow-factor estimate of the fallback error,
+ * (g'' + g'^2) Delta^2 / 24, exceeds the tolerance get a window too (2026-11-06).
  */
 static std::vector<std::pair<double, double> > TargetWindowsFor(TargetEffect *te, CNuc *compound, ESegment *segment,
                                                                  double cmConversion, const Config &configure,
@@ -960,6 +963,34 @@ static std::vector<std::pair<double, double> > TargetWindowsFor(TargetEffect *te
       found.push_back(std::make_pair(lo, hi));
     }
   }
+  // The steep end of a charged-particle cross section below the barrier (2026-11-06, 13C+alpha ND2021r thick6: the
+  // E_bar fallback 5-8 % low at E_lab 0.675 MeV, below the first window).  Locally sigma ~ exp(g(E)), and the depth
+  // average over a target Delta (c.m.) exceeds sigma(E_bar) by (g'' + g'^2) Delta^2 / 24.  With the Gamow factor of the
+  // entrance pair, sigma ~ exp(-2 pi eta) / E: g' = (pi eta - 1) / E, g'' = (1 - 1.5 pi eta) / E^2.  Every point above
+  // the tolerance is integrated; the window covers them and one target thickness beyond.
+  int steep = 0;
+  double steepHi = -1.0, steepLo = 1.0e300;
+  if (entrance && entrance->GetPType() == 0) {
+    const double m1 = entrance->GetM(1) * uconv, m2 = entrance->GetM(2) * uconv;
+    const double z1z2 = double(entrance->GetZ(1)) * double(entrance->GetZ(2));
+    for (EPointIterator point = segment->GetPoints().begin(); point < segment->GetPoints().end(); point++) {
+      const double e0 = point->GetLabEnergy();
+      double delta = te->TargetThickness(e0, configure, te->GetLayoutDensity());
+      if (!(delta > 0.0) || !(delta < e0)) continue;
+      if (te->IsGaussian()) delta += 2.0 * te->SigmaCM(cmConversion * e0, configure, cmConversion) / cmConversion;
+      const double eCM = cmConversion * (e0 - 0.5 * std::min(delta, e0));
+      if (!(eCM > 0.0)) continue;
+      const double pe = pi * Kinematics::Eta(z1z2, m1, m2, eCM);
+      const double g1 = (pe - 1.0) / eCM, g2 = (1.0 - 1.5 * pe) / (eCM * eCM);
+      const double dCM = cmConversion * delta;
+      if (std::fabs(g2 + g1 * g1) * dCM * dCM / 24.0 > tol) {
+        steep++;
+        steepLo = std::min(steepLo, e0);
+        steepHi = std::max(steepHi, e0 + delta);
+      }
+    }
+    if (steep) found.push_back(std::make_pair(steepLo - 1.0e-6, steepHi));
+  }
   windows.insert(windows.end(), found.begin(), found.end());
   std::sort(windows.begin(), windows.end());
   std::vector<std::pair<double, double> > merged;
@@ -976,6 +1007,7 @@ static std::vector<std::pair<double, double> > TargetWindowsFor(TargetEffect *te
   note << "Note: segment #" << reportKey << ": automatic target-integration windows (tolerance " << tol
        << ", margin " << margin << "): " << narrow << " narrow level(s), " << thresholds << " threshold(s), " << inside << " of " << segment->NumPoints()
        << " points integrated";
+  if (steep) note << "; sub-barrier curvature: " << steep << " point(s) " << std::setprecision(6) << steepLo << "-" << steepHi << " MeV";
   if (!merged.empty()) {
     note << "; windows (lab MeV)";
     for (size_t i = 0; i < merged.size(); i++)

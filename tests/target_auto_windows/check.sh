@@ -17,16 +17,20 @@
 #   (b) the output is byte-identical to the same line with the windows the Note lists written out (the windows are
 #       applied as reported); the points inside are the full integration to every digit;
 #   (c) every point within the tolerance (1e-2) of the full integration;
-#   (d) "auto:0.001:1": the Note reports them, and the narrower margin integrates fewer points;
+#   (d) "auto:0.01:1": the Note reports them, and the narrower margin integrates fewer points (the tolerance alone
+#       is tested in (j): a tighter one also integrates the sub-barrier points);
 #   (e) a particle threshold (a pair whose heavy partner is excited by 0.42 MeV, zero ANC, so the cross section does
 #       not change): one threshold and a window over it;
 #   (f) "auto,0.48-0.50": the explicit range is added to the automatic ones;
 #   (g) data far from every level (0.40-0.52 MeV only): no window, every point at E_bar (equal to a line whose only
 #       window lies outside the data);
 #   (h) with a fitted density and a 10 keV blend the gradient check stays on the analytic block, no disagreement;
-#   (i) refused with an ERROR and no output: "auto" on a thick target and on a line without a target integration.
-# Older builds ignore "auto" and integrate every point: they fail 10 checks, all but (c), which they pass trivially
-# (every point is the full integration).
+#   (i) refused with an ERROR and no output: "auto" on a thick target and on a line without a target integration;
+#   (j) the sub-barrier curvature criterion (2026-11-06): data 0.40-0.52 MeV far from the level, a 41 keV target,
+#       "auto:0.001:1": the Note reports sub-barrier points, and every point is within 1e-3 of the full integration
+#       (without the criterion no window is placed and the E_bar fallback is ~0.4 % low).
+# Builds before the "auto" token (a20918d) ignore it and integrate every point: they fail 10 checks of (a)-(i), all
+# but (c); builds with "auto" but without the curvature criterion fail (j) only.
 #
 #   ./tests/target_auto_windows/check.sh path/to/AZURE2
 
@@ -107,11 +111,11 @@ if awk -v w="$worst" 'BEGIN { exit !(w <= 1e-2) }'; then ok "(c) every point wit
 else bad "(c) a point is $worst off the full integration at $at MeV (tolerance 1e-2)"; fi
 
 # (d) tolerance and margin
-model tight "$LINE  \"auto:0.001:1\"  0"; run tight 1 ""
+model tight "$LINE  \"auto:0.01:1\"  0"; run tight 1 ""
 nt="$(inside tight)"
-if note tight | grep -q "tolerance 0.001, margin 1)" && [ -n "$nt" ] && [ -n "$nin" ] && [ "$nt" -lt "$nin" ]; then
-  ok "(d) \"auto:0.001:1\": reported, $nt points integrated (default: $nin)"
-else bad "(d) \"auto:0.001:1\": Note '$(note tight)'"; fi
+if note tight | grep -q "tolerance 0.01, margin 1)" && [ -n "$nt" ] && [ -n "$nin" ] && [ "$nt" -lt "$nin" ]; then
+  ok "(d) \"auto:0.01:1\": reported, $nt points integrated (default: $nin)"
+else bad "(d) \"auto:0.01:1\": Note '$(note tight)'"; fi
 
 # (e) a threshold of the same compound nucleus
 model thr "$LINE  \"auto\"  0" 0.240 0.520 1; run thr 1 ""
@@ -149,6 +153,15 @@ else bad "(i) \"auto\" on a thick target was not refused"; tail -2 "$WORK/thick/
 model conv "1  \"1\"  50  1  0.002  0  0  \"\"  0  0  0  0  \"\"  0  0  0  20  50  \"auto\"  0"; run conv 1 ""
 if grep -q "ERROR.*auto.*THIN-target" "$WORK/conv/run.log" && [ ! -s "$WORK/conv/output/$OUTNAME" ]; then ok "(i) \"auto\" without a target integration: refused, no output"
 else bad "(i) \"auto\" on a convolution-only line was not refused"; tail -2 "$WORK/conv/run.log"; fi
+
+# (j) sub-barrier curvature: thicker target, data away from the level, tolerance 1e-3, margin 1
+LINED="1  \"1\"  200  0  0  1  2.5e18  \"a0/x^a1\"  2  $A0  $A1  0  0  0  \"\"  0  0  0  20  50"
+model steep "$LINED  \"auto:0.001:1\"  0" 0.400 0.520; run steep 1 ""
+model steepfull "$LINED" 0.400 0.520; run steepfull 1 ""
+read -r worst at <<< "$(paste <(y steepfull) <(y steep) <(awk '{print $1}' "$WORK/steep/data/thin.dat") | awk '{ r = $2 / $1 - 1; if (r < 0) r = -r; if (r > w) { w = r; e = $3 } } END { printf "%.3e %s", w, e }')"
+if note steep | grep -q "sub-barrier curvature: [0-9]* point(s)" && awk -v w="$worst" 'BEGIN { exit !(w <= 1e-3) }'; then
+  ok "(j) sub-barrier curvature: $(note steep | sed -n 's/.*\(sub-barrier curvature: [^;]*\).*/\1/p'); every point within $worst of the full integration"
+else bad "(j) sub-barrier curvature: Note '$(note steep)'; worst $worst at $at MeV (tolerance 1e-3)"; fi
 
 if [ "$failures" -ne 0 ]; then echo "target_auto_windows: $failures check(s) FAILED"; exit 1; fi
 echo "target_auto_windows: all checks passed"
