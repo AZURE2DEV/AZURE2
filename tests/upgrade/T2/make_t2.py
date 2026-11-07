@@ -120,8 +120,8 @@ SEGMENTS = [
               "with shiftfn a0*(x-0.8), covariance cov_diff.txt"),
     dict(key=3, name="s03_diff150", exit=2, isdiff=1, angle=150.0, E=np.linspace(0.25, 1.35, 30), rel=0.04,
          what="(p,a0) dsigma/dOmega lab 150 deg, as segment 2 (same groups and covariance)"),
-    dict(key=4, name="s04_thick", exit=2, isdiff=0, angle=0.0, E=np.linspace(0.25, 1.35, 40), rel=0.03,
-         what="(p,a0) thick-target yield (density 0), 1 keV beam spread; norm (3 %), sqrt(E) shift"),
+    dict(key=4, name="s04_thick", exit=2, isdiff=0, angle=0.0, E=np.linspace(0.25, 1.35, 30), rel=0.03,
+         what="(p,a0) thick-target yield (density 0), no beam spread; norm (3 %), sqrt(E) shift"),
     dict(key=5, name="s05_implanted", exit=2, isdiff=0, angle=0.0, E=np.linspace(1.17, 1.27, 26), rel=0.03,
          what="(p,a0) across the narrow 3- level, 15N implanted in Ta (stopping per 15N atom), fitted "
               "areal density (10 % prior), straggling 0.6 keV^1/2"),
@@ -152,6 +152,7 @@ PROFILE_WINDOWS = [(a, a + 0.015) for a in np.arange(0.27, 0.42, 0.015)]
 STOP_TIN = '"a0*x^a1" 2 1.6e-20 -0.45'      # p in TiN, MeV cm^2 per N atom (lab x in MeV)
 STOP_TA = '"a0*x^a1" 2 6.0e-20 -0.30'       # p in Ta with implanted 15N, per 15N atom
 STOP_GAS = '"a0*x^a1" 2 0.9e-20 -0.50'      # p in N2 gas, per N atom
+GRID = "10 20"                               # resonance-width multiplier, points per width (sub-point grids)
 SIGMA_THM_CM = 0.020                         # THM resolution, c.m. MeV
 SIGMA_THM_LAB = SIGMA_THM_CM * LAB           # the <targetInt> line takes lab (converted back by m2/(m1+m2))
 
@@ -265,15 +266,15 @@ def target_lines(fit):
     q = "1 5 1 0.995 0.98 0.96 0.93"
     p = PROFILE
     rows = [
-        f'1 "1" 30 1 0.001 1 5e17 {STOP_TIN} 0 0 0 "" 0 1 0',                         # thin + spread + Bohr
+        f'1 "1" 20 1 0.001 1 5e17 {STOP_TIN} 0 0 0 "" 0 1 0 {GRID}',                         # thin + spread + Bohr
         f'1 "2,3" 20 1 0.002 0 0 "" 0 {q} 0 "" 0',                                     # resolution + Q
-        f'1 "4" 100 1 0.001 1 0 {STOP_TIN} 0 0 0 "" 0',                                # thick target
-        f'1 "5" 40 1 0.0008 1 {dens:.6g} {STOP_TA} 0 0 0 "" 0 1 0.6{dfit}',            # implanted
+        f'1 "4" 40 0 0 1 0 {STOP_TIN} 0 0 0 "" 0 0 0 {GRID}',                                     # thick target
+        f'1 "5" 40 1 0.0008 1 {dens:.6g} {STOP_TA} 0 0 0 "" 0 1 0.6 {GRID}{dfit}',            # implanted
         f'1 "6" 40 0 0 1 1e18 {STOP_GAS} 0 0 1 "a0*x" 1 0.004 0 sigmalab doppler 300',  # gas + Doppler
         f'1 "7" 60 0 0 0 0 "" 0 0 0 0 "" 0 0 0 20 50 beamprofile 1 {p["xi"]} {p["omega"]} {p["alpha"]} '
         f'{p["w"]} {p["s"]} 0 0',                                                      # beam profile
         f'1 "8" 20 1 0.002 0 0 "" 0 0 0 0 "" 0',                                       # SUM resolution
-        f'1 "11,12" 50 1 {SIGMA_THM_LAB:.6f} 0 0 "" 0 0 0 0 "" 0',                      # THM resolution
+        f'1 "11,12" 30 1 {SIGMA_THM_LAB:.6f} 0 0 "" 0 0 0 0 "" 0',                      # THM resolution
     ]
     return "<targetInt>\n" + "\n".join(rows) + "\n</targetInt>\n"
 
