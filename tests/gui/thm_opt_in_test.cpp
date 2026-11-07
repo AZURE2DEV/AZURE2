@@ -209,7 +209,7 @@ int main(int argc, char** argv) {
     // A binding energy only, set on the classic project and saved.
     w.open(classicPath);
     PairsModel* pairs = w.getPairsTab()->getPairsModel();
-    pairs->setData(pairs->index(0, 15), 2.2246, Qt::EditRole);
+    pairs->setData(pairs->index(0, PairsModel::BindingEnergyColumn), 2.2246, Qt::EditRole);
     const QString path = work.filePath("binding.azr");
     w.saveProject();  // to classic.azr
     spit(path, slurp(classicPath));
