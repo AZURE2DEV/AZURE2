@@ -66,7 +66,7 @@ rewrite() {
 rewrite tot > "$WORK/total.azr"
 rewrite ela > "$WORK/elast.azr"
 [ "$(grep -c ' total 1' "$WORK/total.azr")" = 11 ] || { bad "models not built ($(grep -c ' total 1' "$WORK/total.azr") total lines)"; exit 1; }
-# The extrapolation copies: target effects off (they would fold the test segments, see the azure2-eval skill).
+# The extrapolation copies: target effects off (they would fold the test segments, see the azure2-calculate skill).
 for m in sum total elast; do
   awk '/<targetInt>/ { f = 1; print; next } /<\/targetInt>/ { f = 0 } f { $1 = 0 } { print }' "$WORK/$m.azr" > "$WORK/x$m.azr"
 done

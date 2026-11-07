@@ -104,6 +104,6 @@ Gate: ported pyazr tests pass; wheels install and run T1–T3 on three platforms
       and stop; tabs Project, Nucleus, Data, Fit, Results, Physics, THM (opt-in).
 - [ ] Physics tab plots every exposed physics function (`ARCHITECTURE.md` §8, `THM.md` §4).
 - [ ] pytest on `/api` with T1–T3; browser smoke tests; Qt parity checklist from today's Qt features and
-      `azure2-gui-review`.
+      the GUI review in `azure2-plot` and `gui/CLAUDE.md`.
 - [ ] One release with both UIs; then remove `gui/`, `numcmc/`, `external/erya`, readline menus, the GSL fitter.
 Gate: parity checklist signed off by Jakub; release notes.
