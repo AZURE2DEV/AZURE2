@@ -2,6 +2,39 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-07 (`feature/upgrade-1-physics-system`) — `physics/` target, `System` and `JpiBlock` (Phase 1, first step)
+
+Branch `feature/upgrade-1-physics-system` from `feature/upgrade` f8b7bf22, not merged. Commits: the physics target,
+the CNuc adapter with its test, the docs.
+
+**State.** `physics/` is its own CMake target `azure2_physics` (headers `physics/include/azure2/physics/`, sources
+`physics/src/`, tests `physics/tests/`); it links nothing and is added before the global GSL/OpenMP/Minuit2 include
+directories. `System` (nuclei, partitions α, channels c = (α, l, s) with a_c, Jπ blocks, the level basis) and
+`JpiBlock` (2J, π, nucleus, channel index list, B_c, E[λ], γ[λ n_c + k]) are immutable values with 0-based indices
+and doubled spins; the choices and their reasons are in the header comments and `physics_system.md`. The adapter
+`BuildSystemFromCNuc` (`include/CNucSystem.h`, `src/CNucSystem.cpp`, in AZURE2Core) builds a System from a CNuc
+after `Initialize`; nothing in the engine calls it. Checked on Condor (GCC 11.5, GUI off, pyazr on):
+`physics_system_from_cnuc` compares 2540 numbers of T1, T2, T3 in the Brune, Park and formal bases with the CNuc
+accessors, all equal, and the structure with the `<levels>` lines (5 mutations of the adapter each fail it);
+`physics_system_unit` and `physics_standalone` pass (an `#include "CNuc.h"` in physics/ fails the latter);
+`repo_consistency` now also refuses non-standard includes in physics/ (a `<gsl/gsl_math.h>` fails it);
+`tests/upgrade/check.sh` PASS (golden T1, T3 largest difference 0.0, T2 calc_start/calc_truth ok, recovery ok);
+`ctest -LE slow -j8` 102/103, the one failure `adaptive_grid_reference`, as before.
+
+**Open (proposed default in brackets).**
+- B_c is stored per block because the engine sets it per J-group from the first level; ARCHITECTURE §3 lists it with
+  the channel. [Keep it in the block; `level_parameters` may later want B_c = S_c(E_λ) per level, which is a block
+  quantity too.]
+- The blocks hold the parameters of the project's basis (Brune by default), not formal ones; `System::basis()` says
+  which. [Keep until `level_parameters` exists; it then fills the blocks in the internal convention and the basis
+  tag moves to the `Convention` record.]
+- External-capture final states that are not R-matrix levels, hybrid (α, l, j) channels and the THM binding energy
+  are not in the System. [Add with the items that need them: external capture with `channel_functions`, hybrid
+  channels with pycoulomb, B_THM with the THM vertex.]
+- The adapter reads `ALevel::GetE/GetGamma` (the loaded parameters), not the moving fit values. [Right for setup
+  state; per-evaluation E, γ come from `level_parameters`.]
+
+**Next.** `channel_functions(α, l, E)` on the System's partitions; then split `CNuc` (ROADMAP Phase 1).
 ## 2026-11-07 (`feature/upgrade-1-conventions`) — conventions page, documentation part (ROADMAP Phase 1)
 
 Branch `feature/upgrade-1-conventions` from `feature/upgrade` f8b7bf22, merged 655c5634. Commits: 754ac7d7 (test

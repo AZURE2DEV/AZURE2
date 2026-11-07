@@ -71,17 +71,20 @@ for flag in sorted(set(re.findall(r"\\t(--[a-z0-9-]+)", help_text))):
 
 # 2. Every test source is registered with CTest.  An unregistered test is never
 #    run, by CI or anyone else, and looks exactly like a passing one.
-def check_registered(directory, pattern):
-    cmake = read(os.path.join(directory, "CMakeLists.txt"))
+def check_registered(directory, pattern, cmake_dir=None):
+    cmake_dir = cmake_dir or directory
+    cmake = read(os.path.join(cmake_dir, "CMakeLists.txt"))
     for name in sorted(os.listdir(os.path.join(ROOT, directory))):
         if re.fullmatch(pattern, name) and name not in cmake:
-            problems.append(f"{directory}/{name}: not registered in {directory}/CMakeLists.txt")
+            problems.append(f"{directory}/{name}: not registered in {cmake_dir}/CMakeLists.txt")
 
 
 check_registered("tests/pyazr", r".+_test\.py")
 check_registered("tests/reference", r".+_test\.cpp")
 check_registered("tests/gui", r".+_test\.cpp")
 check_registered("tests/consistency", r".+_test\.py")
+check_registered("tests/upgrade", r".+_test\.cpp")
+check_registered("physics/tests", r".+_test\.cpp", "physics")
 
 
 # 3. Every regression directory is actually exercised by tests/run_tests.sh:
@@ -166,6 +169,23 @@ if not engine_kw:
 # 7. The repository carries its licence.
 if os.path.getsize(os.path.join(ROOT, "LICENSE")) < 1000:
     problems.append("LICENSE: empty or truncated (README and pyproject.toml declare GPL-3.0)")
+
+
+# 8. physics/ uses nothing (docs/upgrade/ARCHITECTURE.md section 2): its sources include only its own headers
+#    ("azure2/physics/...") and the C++ standard library (<vector>, <cmath>: lower-case names, no path, no ".h").
+#    The ctest physics_standalone builds physics/ alone and catches an AZURE2 header or library; a header that
+#    happens to be on the system include path (GSL, Qt, omp.h) compiles there, so it is caught here.
+for dirpath, _, files in os.walk(os.path.join(ROOT, "physics")):
+    for name in sorted(files):
+        if not name.endswith((".h", ".hpp", ".cpp")):
+            continue
+        rel = os.path.relpath(os.path.join(dirpath, name), ROOT)
+        for inc in re.findall(r'^\s*#\s*include\s*([<"][^>"]+[>"])', read(rel), re.M):
+            if inc.startswith('"') and inc[1:-1].startswith("azure2/physics/"):
+                continue
+            if inc.startswith("<") and re.fullmatch(r"[a-z_]+", inc[1:-1]):
+                continue
+            problems.append(f"{rel}: includes {inc}; physics/ may include only azure2/physics/ headers and the C++ standard library")
 
 
 if problems:

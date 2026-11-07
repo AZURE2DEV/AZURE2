@@ -58,6 +58,9 @@ awaits decision 8 (`HANDOFF.md`); the other four inherited failures are fixed (m
       `coulomb(l, eta, rho) -> F, G, Fp, Gp, sigma_l`; Whittaker functions (move AZURE2's `WhitFunc`); remove committed
       build products (`.so`, `libcoulfg.a`, `cmake_install.cmake`, `.DS_Store`); tests against mpmath; tag a release.
 - [ ] `physics/` library target. `System`, `JpiBlock` (E[λ], γ[λ, c] arrays), partitions, channels.
+      First step done on `feature/upgrade-1-physics-system` (not merged): the `azure2_physics` target, `System` and
+      `JpiBlock` as values (`physics_system.md`), the `CNuc` → System adapter `src/CNucSystem.cpp`, tests
+      `physics_system_unit`, `physics_standalone`, `physics_system_from_cnuc`. The engine does not use them yet.
 - [ ] `channel_functions(α, l, E)` from pycoulomb, tables per (α, l, E); replaces `external/coul`, `CoulFunc`,
       `CoulFuncCache`, `WhitFunc`. Cross-method identity test (coul, coulsm, coulfg, GSL).
 - [ ] Split `CNuc`: nucleus data → `System`; boundary conditions, shift functions, Brune/Park transforms, angular
