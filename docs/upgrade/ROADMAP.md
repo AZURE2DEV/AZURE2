@@ -32,7 +32,13 @@ Tick boxes as work lands; put the commit hash after each tick.
       `tests/upgrade/README.md`, each to be added with its module.
 - [x] Benchmark: `scripts/bench_upgrade.sh` → time and peak RSS for T2 at 1 and 8 threads; stored per commit.
       345bbb69, 5a9426fd (script), f51f8d18 (first entry, `tests/upgrade/bench/T2.tsv`).
-- [ ] CI: nightly clang TSan and ASan at 8 threads on T1–T3 and the mapping/shift/target tests.
+- [x] CI: nightly clang TSan and ASan at 8 threads on T1–T3 and the mapping/shift/target tests.
+      Branch `feature/upgrade-0-sanitizers`: 557bb0ba, 16309cf8 (`AZURE2_SANITIZE`, TSan ignorelist), cfd281ab
+      (`scripts/sanitize_upgrade.sh`, suppressions), 8572b21c (`.github/workflows/upgrade-sanitizers.yml`), 635b0a1a
+      (`sanitizer_findings.md`). ASan clean (clang, GCC); TSan reports two AZURE2 sites, §4.1 (iteration counter,
+      real) and §4.2 (copy-on-write ownership test, TSan-blind fence), to be fixed on `fix/` branches; the TSan job is
+      red until then. The workflow has not run on GitHub; the nightly fires only once the file is on the default
+      branch.
 - [x] Rules into `CLAUDE.md` (`RULES.md`), replacing the "date an entry (`dev 0dd28e5`)" skill rule.
 - [x] Skills rewritten into the ten-skill set (`RULES.md` §3) and `tools/check_skills.py` in CI.
 - [ ] Merge the race fixes everywhere: `a6bc6b9` is on `dev` only (missing on `thm`); the acquire-fence fix
