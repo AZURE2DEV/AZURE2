@@ -18,8 +18,14 @@ Tick boxes as work lands; put the commit hash after each tick.
       `HANDOFF.md` is open.
 - [ ] Test projects T1, T2, T3 (`ARCHITECTURE.md` §10) under `tests/upgrade/T1..T3/`: generator script with the true
       parameters, synthetic data with noise, `.azr`, README stating what each covers and the truth.
+      T1 and T3 done: 63c08471 (branch `feature/upgrade-0-testprojects-t1t3`); recovery check `tests/upgrade/recover.py`.
+      T2: branch `feature/upgrade-0-testprojects-t2`. Tick when T2 lands.
 - [ ] Golden outputs of today's engine for T1–T3 (`tests/upgrade/golden/`), with the engine commit recorded.
-- [ ] Identity checks (no data) as unit tests: list in `ARCHITECTURE.md` §10.
+      T1 and T3 done: 3b48a101 (engine c1cc92c7, `golden/golden.py`, rtol 1e-6). T2 to add.
+- [x] Identity checks (no data) as unit tests: list in `ARCHITECTURE.md` §10. fbad9b6a, bf5f1713: every identity
+      the present engine can express (Coulomb/mpmath/Wronskian, unitarity, optical theorem, Breit–Wigner area,
+      Brune/formal/Park, gradient, threads). Pending on Phases 1, 5, 7 (kernels, stopping, THM, conventions): listed in
+      `tests/upgrade/README.md`, each to be added with its module.
 - [ ] Benchmark: `scripts/bench_upgrade.sh` → time and peak RSS for T2 at 1 and 8 threads; stored per commit.
 - [ ] CI: nightly clang TSan and ASan at 8 threads on T1–T3 and the mapping/shift/target tests.
 - [x] Rules into `CLAUDE.md` (`RULES.md`), replacing the "date an entry (`dev 0dd28e5`)" skill rule.
