@@ -2,6 +2,39 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-07 (third session) — Phase 0: rules into CLAUDE.md; ten-skill set; skill checker
+
+**Branch** `feature/upgrade-0-rules-skills` (from `feature/upgrade` ff75fc28), local, not pushed.
+
+**Done.**
+- `CLAUDE.md` "Skills" section replaced by `RULES.md` §3 (use / behaviour / change; sizes; no history except
+  expiring version notes; one owner; descriptions ≤ 600; no personal paths; the checker). The "date an entry" rule
+  is gone; the frames-and-units pointer now names `azure2-check`.
+- `.claude/skills/` is the ten-skill set plus `rmfit-campaign` (2,280 → 358 lines + three references). The ten old
+  skills are deleted. `docs/upgrade/skills_migration.md` maps every section of every old skill (by line range in the
+  ff75fc28 files) to its new location or a reason for dropping it (498 rows; coverage checked by script).
+- `tools/check_skills.py` (R4, R5, R6, R7, R8, docs/reference/script links), its unit test
+  `tests/consistency/check_skills_test.py` (12 cases), ctest `check_skills_unit` and `check_skills`, a local
+  `.pre-commit-config.yaml` hook and `.github/workflows/skills.yml` (runs on push/PR touching skills or docs). The
+  checker exits 0 on the branch, also with `--strict`.
+- Developer content from the skills moved to `tests/CLAUDE.md` (CI portability, regression vs reference, m-scheme
+  traps) and `gui/CLAUDE.md` (headless dialog checks). `reference/command_line.rst` gained the gradient-diagnostic
+  and `AZURE_DUMP_NONFINITE` variables.
+
+**Not checked.** `sphinx-build -W` (Sphinx is not installed on the analysis machine; the two RST edits were read by
+eye). The CI workflow has not run (nothing is pushed).
+
+**Open.**
+- Version notes in the skills expire on 2027-02-01; the checker then fails until each is removed or renewed.
+- The user-level `~/.claude/skills/azure2` must narrow its description so it does not load next to the repo skills
+  (`RULES.md` §3, outside the repository).
+- `pyazr/azrfile.py` (a docstring near line 3255) still says "see the azure2-eval skill"; left alone because this
+  branch changes no engine or pyazr code. The owner is now `azure2-calculate`.
+- Corrections made while moving content (reviewer please confirm): masses in the old project builder were called
+  nuclear (they are atomic); `nuclear_mass()` and `zero_all_widths()` cited by old skills do not exist in pyazr; the
+  CLI band prompt is asked in modes 2, 3 and 4; the level-merge rule follows `levels_channels.rst`; in
+  `azure2-resonance-search` the gain is "control minus add" (positive = improvement).
+
 ## 2026-11-07 (second session) — branches imported; THM merged in; Phase 0 started
 
 **How to continue on any machine.** Pull `feature/upgrade` and any `feature/upgrade-<phase>-<topic>` branch listed
