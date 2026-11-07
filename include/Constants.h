@@ -4,12 +4,16 @@
 #include <complex>
 #include <vector>
 
+#include "azure2/physics/Constants.h"
+
 // Physical constants: CODATA 2018 (since 2026-11-05; before, pi was rounded to 3.141592650 -- 1.1e-9 low -- and
 // hbarc, uconv, fstruc, the Avogadro number and the nuclear magneton were CODATA 2006 or rounded).
 const double pi = 3.14159265358979323846;
-const double hbarc = 197.3269804;           // MeV fm (exact in the 2019 SI)
-const double uconv = 931.49410242;          // MeV per u
-const double fstruc = 1.00 / 137.035999084;
+// hbar c, the atomic mass unit and alpha are physics/'s (azure2/physics/Constants.h), so that the channel kinematics
+// of physics/ and of the engine use one set of values.
+const double hbarc = azure2::physics::kHbarC_MeV_fm;  // MeV fm (exact in the 2019 SI)
+const double uconv = azure2::physics::kAtomicMassUnit_MeV;  // MeV per u
+const double fstruc = azure2::physics::kFineStructure;
 const double boltzConst = 8.617333262e-2;  // MeV/GK (CODATA 2018); was 8.6171e-2, 2.7e-5 low
 const double lightSpeedInCmPerS = 29979245800.;
 const double avagadroNum = 6.02214076e23;  // exact in the 2019 SI

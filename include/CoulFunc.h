@@ -6,6 +6,7 @@
 #include <memory>
 #include <gsl/gsl_sf_coulomb.h>
 #include "Kinematics.h"
+#include "azure2/physics/ChannelFunctions.h"
 
 class PPair;
 class CoulFuncCache;
@@ -40,13 +41,11 @@ CoulWaves CoulombWavesAt(int l, double eta, double rho);
  * returns 0 instead of a unit phase; the scaled form (hypot) is used only then,
  * so every value the plain formula gets right is unchanged to the bit.
  */
-inline std::complex<double> CoulombHardSpherePhase(const CoulWaves &c) {
-  const double s = std::sqrt(std::pow(c.F, 2.0) + std::pow(c.G, 2.0));
-  const double re = c.G / s, im = -c.F / s;
-  if (std::isfinite(re) && std::isfinite(im) && std::isfinite(s) && s > 0.0) return std::complex<double>(re, im);
-  const double h = std::hypot(c.F, c.G);
-  return std::complex<double>(c.G / h, -c.F / h);
+/// The engine's Coulomb waves as physics/'s (same numbers; physics/ formulas take them).
+inline azure2::physics::coulomb::CoulombWaves PhysicsWaves(const CoulWaves &c) {
+  return azure2::physics::coulomb::CoulombWaves{c.F, c.dF, c.G, c.dG, 0.0, azure2::physics::coulomb::Status::ok};
 }
+inline std::complex<double> CoulombHardSpherePhase(const CoulWaves &c) { return azure2::physics::exp_minus_i_phi(PhysicsWaves(c)); }
 
 /// A function class to calculate Coulomb functions for positive energy channels
 
