@@ -18,7 +18,9 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
 endif()
 
 add_library(azure2_physics STATIC
+  src/AngularCoupling.cpp
   src/JpiBlock.cpp
+  src/SymmetricEigen.cpp
   src/System.cpp)
 add_library(azure2::physics ALIAS azure2_physics)
 target_include_directories(azure2_physics PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
@@ -35,6 +37,18 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
   target_compile_options(physics_system_unit_test PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 add_test(NAME physics_system_unit COMMAND physics_system_unit_test)
+
+# The eigensolvers against their defining identities.
+# (Sources named in full: repo_consistency checks that every tests/*_test.cpp is named here.)
+foreach(_src symmetric_eigen_test.cpp)
+  string(REPLACE "_test.cpp" "" _t ${_src})
+  add_executable(physics_${_t}_test tests/${_src})
+  target_link_libraries(physics_${_t}_test PRIVATE azure2_physics)
+  if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(physics_${_t}_test PRIVATE -Wall -Wextra -Wpedantic)
+  endif()
+  add_test(NAME physics_${_t} COMMAND physics_${_t}_test)
+endforeach()
 
 if(NOT AZURE2_PHYSICS_STANDALONE)
   # physics/ configured, built and tested on its own, in a fresh build tree under this one.
