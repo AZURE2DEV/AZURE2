@@ -573,6 +573,25 @@ add_test(NAME pyazr_prior_covariance
                  ${CMAKE_CURRENT_SOURCE_DIR}/prior_covariance_test.py)
 set_tests_properties(pyazr_prior_covariance PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
+# Upgrade identity checks (docs/upgrade/ARCHITECTURE.md section 10; list and status in tests/upgrade/README.md).
+# They use the test projects tests/upgrade/T1, T3 or small models built by tests/upgrade/lib, on temporary copies.
+#   coulomb_identity: F, G, F', G' of the engine against mpmath, the Wronskian, P, S and the hard-sphere phase.
+#   unitarity: one open channel (n + 16O): the optical-theorem total equals the elastic cross section.
+#   optical_theorem: T3 n + 7Be total = elastic + (n,p) + (n,alpha alpha).
+#   breit_wigner: an isolated narrow 12C(p,gamma) level integrates to the Breit-Wigner area.
+add_test(NAME pyazr_upgrade_coulomb_identity
+         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/upgrade_coulomb_identity_test.py)
+set_tests_properties(pyazr_upgrade_coulomb_identity PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+add_test(NAME pyazr_upgrade_unitarity
+         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/upgrade_unitarity_test.py)
+set_tests_properties(pyazr_upgrade_unitarity PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2;AZURE2_BIN=$<TARGET_FILE:AZURE2>")
+add_test(NAME pyazr_upgrade_optical_theorem
+         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/upgrade_optical_theorem_test.py)
+set_tests_properties(pyazr_upgrade_optical_theorem PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2;AZURE2_BIN=$<TARGET_FILE:AZURE2>")
+add_test(NAME pyazr_upgrade_breit_wigner
+         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/upgrade_breit_wigner_test.py)
+set_tests_properties(pyazr_upgrade_breit_wigner PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2;AZURE2_BIN=$<TARGET_FILE:AZURE2>")
+
 # A test that cannot run its engine part -- numpy, scipy or the compiled
 # _azure2 module missing (pybind11 absent at configure time builds no module),
 # or no AZURE2 binary -- exits 77 after whatever pure-Python checks it has, so
@@ -584,4 +603,3 @@ set_tests_properties(pyazr_prior_covariance PROPERTIES ENVIRONMENT "OMP_NUM_THRE
 # sav_readers, added after it, went without it until October 2026).
 get_property(_pyazr_tests DIRECTORY PROPERTY TESTS)
 set_tests_properties(${_pyazr_tests} PROPERTIES SKIP_RETURN_CODE 77)
-

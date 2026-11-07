@@ -266,6 +266,19 @@ def write_data(path, rows, seg, header=""):
 # ----------------------------------------------------------------------------- engine
 
 
+def project_copy(name, work):
+    """Copy tests/upgrade/<name> (the .azr files, data/, temperatures.dat) into work, with output/ and checks/;
+    returns the path of <name>.azr there.  Tests run on such copies and never write into the source tree."""
+    src = os.path.join(REPO, "tests", "upgrade", name)
+    for f in os.listdir(src):
+        if f.endswith(".azr") or f == "temperatures.dat":
+            shutil.copy(os.path.join(src, f), work)
+    shutil.copytree(os.path.join(src, "data"), os.path.join(work, "data"))
+    os.makedirs(os.path.join(work, "output"), exist_ok=True)
+    os.makedirs(os.path.join(work, "checks"), exist_ok=True)
+    return os.path.join(work, name + ".azr")
+
+
 def find_binary(arg=None):
     """The AZURE2 CLI: the argument, $AZURE2_BIN, $AZURE2_BINARY, else the newest build*/src/AZURE2."""
     for cand in (arg, os.environ.get("AZURE2_BIN"), os.environ.get("AZURE2_BINARY")):
