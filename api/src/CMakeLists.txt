@@ -25,7 +25,7 @@ set (AZUREAPI_LIBRARIES ${TEMP_VAR} PARENT_SCOPE)
 # ---------------------------------------------------------------------------
 find_package(pybind11 CONFIG QUIET)
 if(NOT pybind11_FOUND)
-    # pyazr cannot run without the module, but the CLI/GUI still can; build
+    # pyazr cannot run without the module, but the CLI still can; build
     # those and tell the user what is missing rather than failing outright.
     message(WARNING "pybind11 not found -- skipping the _azure2 Python module. "
                     "Install pybind11 (e.g. pip install pybind11) and reconfigure "

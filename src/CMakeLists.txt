@@ -13,11 +13,6 @@ AdaptiveIntegrationGrid.cpp NuclearPotentialManager.cpp AZUREGrad.cpp ThmFunc.cp
 THMMatrixFunc.cpp ThmVertexBoundary.cpp ThmNumerics.cpp EDataThm.cpp ConfigThm.cpp ThmExperiment.cpp ThmLineshape.cpp ThmDistortion.cpp ThmOptical.cpp ThmDwVertex.cpp ThmAngular.cpp CovarianceBand.cpp PriorCovariance.cpp ParameterLabel.cpp PolarizationFunc.cpp ChannelFunc.cpp CoulombTable.cpp
 CNucSystem.cpp CNucLevelParameters.cpp)
 
-# Add GUI stub when GUI is not enabled
-if(NOT BUILD_GUI)
-    list(APPEND AZURE2_CORE_SOURCES gui_stub.cpp)
-endif()
-
 # Add MCMC sources when MCMC is enabled
 if(USE_MCMC)
     list(APPEND AZURE2_CORE_SOURCES AZURECalcMCMC.cpp)
@@ -25,17 +20,12 @@ endif()
 
 include_directories(${AZURE2_SOURCE_DIR}/include)
 
-# The engine as a library, so both the CLI/GUI binary and the _azure2 Python
+# The engine as a library, so both the CLI binary and the _azure2 Python
 # module link the same compiled code.  POSITION_INDEPENDENT_CODE lets the
 # static objects be pulled into the Python extension.
 add_library(AZURE2Core STATIC ${AZURE2_CORE_SOURCES})
 target_include_directories(AZURE2Core PUBLIC ${AZURE2_SOURCE_DIR}/include)
 set_target_properties(AZURE2Core PROPERTIES POSITION_INDEPENDENT_CODE ON)
-
-# macOS Bundle properties (set from parent CMakeLists.txt)
-if(BUILD_MACOS_BUNDLE AND APPLE)
-    set(AZURE2_PROPERTIES MACOSX_BUNDLE)
-endif()
 
 if(NOT NO_READLINE)
     if(CROSS_COMPILE_WINDOWS)
@@ -82,11 +72,11 @@ endif (${CMAKE_SYSTEM_NAME} MATCHES "Windows")
 if (BUILD_LIBRARY) 
 add_library(AZURE2 STATIC ${AZURE2_CORE_SOURCES} ${AZURE2_EXEC_SOURCES})
 else (BUILD_LIBRARY)
-add_executable (AZURE2 ${AZURE2_PROPERTIES} ${AZURE2_EXEC_SOURCES})
+add_executable (AZURE2 ${AZURE2_EXEC_SOURCES})
 endif (BUILD_LIBRARY)
 
 # The engine's own dependencies, declared on the engine and PUBLIC so that
-# everything linking it -- the executable, the GUI, the Python module -- gets
+# everything linking it -- the executable and the Python module -- gets
 # them placed *after* it automatically.
 #
 # This has to be derived rather than hand-written.  A static archive only
@@ -111,35 +101,9 @@ if(USE_NLOPT)
     target_link_libraries(AZURE2Core PUBLIC nlopt)
 endif()
 
-# AZURESetup (the GUI) calls into the engine, so it precedes it; AZUREAPI in
-# turn pulls AZURE2Core in as a PUBLIC dependency of its own.  Everything else
-# follows from the graph above.
-target_link_libraries(AZURE2 ${AZURESETUP_LIBRARIES} ${AZUREAPI_LIBRARIES} AZURE2Core)
-
-# Apply macOS bundle properties if building bundle
-if(BUILD_MACOS_BUNDLE AND APPLE AND DEFINED AZURE2_BUNDLE_PROPERTIES)
-    set_target_properties(AZURE2 PROPERTIES ${AZURE2_BUNDLE_PROPERTIES})
-    
-    # Set RPATH for better dependency management
-    set_target_properties(AZURE2 PROPERTIES
-        MACOSX_RPATH TRUE
-        BUILD_WITH_INSTALL_RPATH FALSE
-        INSTALL_RPATH "@loader_path/../Libraries;@loader_path/../Frameworks;@executable_path/../Libraries;@executable_path/../Frameworks"
-        INSTALL_RPATH_USE_LINK_PATH TRUE)
-    
-    # Copy icon file to Resources during build
-    if(EXISTS "${AZURE2_ICON_PATH}")
-        add_custom_command(TARGET AZURE2 POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_BUNDLE_DIR:AZURE2>/Contents/Resources"
-            COMMAND ${CMAKE_COMMAND} -E copy "${AZURE2_ICON_PATH}" "$<TARGET_BUNDLE_DIR:AZURE2>/Contents/Resources/"
-            COMMENT "Copying icon to bundle Resources")
-    endif()
-    
-    # Create Libraries directory for bundled dependencies
-    add_custom_command(TARGET AZURE2 POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_BUNDLE_DIR:AZURE2>/Contents/Libraries"
-        COMMENT "Creating Libraries directory for dependencies")
-endif()
+# AZUREAPI pulls AZURE2Core in as a PUBLIC dependency of its own.  Everything
+# else follows from the graph above.
+target_link_libraries(AZURE2 ${AZUREAPI_LIBRARIES} AZURE2Core)
 
 # Windows DLL bundling for libraries that can't be statically linked
 if(CROSS_COMPILE_WINDOWS)
@@ -169,49 +133,8 @@ if(CROSS_COMPILE_WINDOWS)
     copy_dll_if_exists(AZURE2 "libreadline8.dll" "${MINGW_DLL_PATH}/libreadline8.dll")
     copy_dll_if_exists(AZURE2 "libhistory8.dll" "${MINGW_DLL_PATH}/libhistory8.dll")
     
-    # Qt5 DLLs (these are always dynamically linked in MinGW)
-    if(BUILD_GUI)
-        copy_dll_if_exists(AZURE2 "Qt5Core.dll" "${MINGW_DLL_PATH}/Qt5Core.dll")
-        copy_dll_if_exists(AZURE2 "Qt5Gui.dll" "${MINGW_DLL_PATH}/Qt5Gui.dll")
-        copy_dll_if_exists(AZURE2 "Qt5Widgets.dll" "${MINGW_DLL_PATH}/Qt5Widgets.dll")
-        copy_dll_if_exists(AZURE2 "Qt5PrintSupport.dll" "${MINGW_DLL_PATH}/Qt5PrintSupport.dll")
-        copy_dll_if_exists(AZURE2 "Qt5OpenGL.dll" "${MINGW_DLL_PATH}/Qt5OpenGL.dll")
-        copy_dll_if_exists(AZURE2 "Qt5Svg.dll" "${MINGW_DLL_PATH}/Qt5Svg.dll")
-        
-        # Qt5 dependency DLLs (required by Qt5Core.dll and Qt5Gui.dll)
-        copy_dll_if_exists(AZURE2 "iconv.dll" "${MINGW_DLL_PATH}/iconv.dll")
-        copy_dll_if_exists(AZURE2 "libiconv-2.dll" "${MINGW_DLL_PATH}/libiconv-2.dll")
-        copy_dll_if_exists(AZURE2 "libpcre2-16-0.dll" "${MINGW_DLL_PATH}/libpcre2-16-0.dll")
-        copy_dll_if_exists(AZURE2 "libpcre2-8-0.dll" "${MINGW_DLL_PATH}/libpcre2-8-0.dll")
-        copy_dll_if_exists(AZURE2 "zlib1.dll" "${MINGW_DLL_PATH}/zlib1.dll")
-        copy_dll_if_exists(AZURE2 "libharfbuzz-0.dll" "${MINGW_DLL_PATH}/libharfbuzz-0.dll")
-        copy_dll_if_exists(AZURE2 "libpng16-16.dll" "${MINGW_DLL_PATH}/libpng16-16.dll")
-        copy_dll_if_exists(AZURE2 "libfreetype-6.dll" "${MINGW_DLL_PATH}/libfreetype-6.dll")
-        copy_dll_if_exists(AZURE2 "libglib-2.0-0.dll" "${MINGW_DLL_PATH}/libglib-2.0-0.dll")
-        copy_dll_if_exists(AZURE2 "libintl-8.dll" "${MINGW_DLL_PATH}/libintl-8.dll")
-        copy_dll_if_exists(AZURE2 "libgraphite2.dll" "${MINGW_DLL_PATH}/libgraphite2.dll")
-        copy_dll_if_exists(AZURE2 "libbz2-1.dll" "${MINGW_DLL_PATH}/libbz2-1.dll")
-        
-        # Additional readline dependency DLL
-        copy_dll_if_exists(AZURE2 "libtermcap-0.dll" "${MINGW_DLL_PATH}/libtermcap-0.dll")
-        
-        # QWT DLL
-        if(USE_QWT)
-            copy_dll_if_exists(AZURE2 "qwt-qt5.dll" "${MINGW_DLL_PATH}/qwt-qt5.dll")
-        endif()
-        
-        # Qt5 platform plugins (required for Qt GUI)
-        add_custom_command(TARGET AZURE2 POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E echo "=== COPYING QT5 PLATFORM PLUGIN ==="
-            COMMAND ${CMAKE_COMMAND} -E echo "FROM: ${MINGW_DLL_PATH}/../lib/qt5/plugins/platforms/qwindows.dll"
-            COMMAND ${CMAKE_COMMAND} -E echo "TO: $<TARGET_FILE_DIR:AZURE2>/platforms/"
-            COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:AZURE2>/platforms"
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "${MINGW_DLL_PATH}/../lib/qt5/plugins/platforms/qwindows.dll"
-            "$<TARGET_FILE_DIR:AZURE2>/platforms/"
-            COMMAND ${CMAKE_COMMAND} -E echo "=== QT5 PLATFORM PLUGIN COPY COMPLETED ==="
-            COMMENT "Copying Qt5 platform plugin")
-    endif()
+    # Readline's own dependency
+    copy_dll_if_exists(AZURE2 "libtermcap-0.dll" "${MINGW_DLL_PATH}/libtermcap-0.dll")
     
     add_custom_command(TARGET AZURE2 POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E echo "=== WINDOWS BUILD SUMMARY ==="
@@ -223,11 +146,4 @@ if(CROSS_COMPILE_WINDOWS)
         COMMENT "Windows executable with DLLs built")
 endif()
 
-# Install target with proper bundle handling
-if(BUILD_MACOS_BUNDLE AND APPLE)
-    install(TARGETS AZURE2 
-            BUNDLE DESTINATION "."
-            RUNTIME DESTINATION "bin")
-else()
-    install(TARGETS AZURE2 DESTINATION ${CMAKE_INSTALL_DIR})
-endif()
+install(TARGETS AZURE2 DESTINATION ${CMAKE_INSTALL_DIR})

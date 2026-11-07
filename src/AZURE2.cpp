@@ -53,9 +53,6 @@
 // Global Config pointer for use across the codebase
 Config *g_config = nullptr;
 
-#ifdef GUI_BUILD
-extern int start_gui(int argc, char *argv[]);
-#endif
 struct SegPairs {
   int firstPair;
   int secondPair;
@@ -103,9 +100,8 @@ void printHelp() {
             << std::endl
             << "Options:" << std::endl
             << std::setw(25) << std::left << "\t--help:" << std::setw(0) << "Print this list and exit." << std::endl
-            << std::setw(25) << std::left << "\t--no-gui:" << std::setw(0) << "Do not use graphical setup utility (if built)." << std::endl
-            << std::setw(25) << std::left << "\t" << std::setw(0) << "If this flag is not set all other options are ignored," << std::endl
-            << std::setw(25) << std::left << "\t" << std::setw(0) << "and configuration occurs within the setup utility." << std::endl
+            << std::setw(25) << std::left << "\t--no-gui:" << std::setw(0) << "Accepted and ignored, so that older scripts keep working;" << std::endl
+            << std::setw(25) << std::left << "\t" << std::setw(0) << "this build has no graphical setup utility." << std::endl
 #ifndef NO_READLINE
             << std::setw(25) << std::left << "\t--no-readline:" << std::setw(0) << "Do not use readline package." << std::endl
 #endif
@@ -426,7 +422,7 @@ static bool askYesNo(Config &configure, const std::string &prompt) {
     if (terminal) continue;
     configure.outStream << "Modes 2 and 3 ask about the uncertainty band BEFORE the parameter file, so a script answers"
                         << std::endl
-                        << "it first, e.g. printf '3\\nn\\nparam.sav\\n\\n7\\n' | AZURE2 --no-gui --no-readline project.azr"
+                        << "it first, e.g. printf '3\\nn\\nparam.sav\\n\\n7\\n' | AZURE2 --no-readline project.azr"
                         << std::endl
                         << "(--covariance-band answers it yes without a prompt).  Nothing was calculated." << std::endl;
     std::exit(EXIT_FAILURE);
@@ -1578,7 +1574,7 @@ int main(int argc, char *argv[]) {
   // Set GSL Error Handler
   gsl_set_error_handler(&GSLException::GSLErrorHandler);
 
-  // --build-coulomb-table[=FILE] builds the table and exits, GUI build or not
+  // --build-coulomb-table[=FILE] builds the table and exits
   for (int i = 1; i < argc; i++) {
     const std::string arg = argv[i];
     if (arg == "--build-coulomb-table") return buildCoulombTable("");
@@ -1588,14 +1584,6 @@ int main(int argc, char *argv[]) {
   // Initialize caches for performance optimization
   InitializeCoulFuncCache();
   InitializeECAmplitudeCache();
-
-  // If GUI is built, look for --no-gui option.  If not set, hand control to GUI.
-#ifdef GUI_BUILD
-  bool useGUI = true;
-  for (int i = 1; i < argc; i++)
-    if (strcmp(argv[i], "--no-gui") == 0 || strcmp(argv[i], "--use-api") == 0) useGUI = false;
-  if (useGUI) return start_gui(argc, argv);
-#endif
 
   // Create new configuration structure, and parse the command line parameters
   Config configure(std::cout);
