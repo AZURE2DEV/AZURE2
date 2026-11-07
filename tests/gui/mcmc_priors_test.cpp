@@ -15,7 +15,10 @@
 // itself on every form.  The two shift priors are centred on no shift, as the
 // fit's penalty (ESegment::AddShiftPenalty, dev 0dd28e5) and the sampler's
 // (AZURECalcMCMC::BuildAutoPriors): 0 +- 0.002 MeV and 0 +- 0.001; the start
-// value on the segment line is not the centre.
+// value on the segment line is not the centre.  A <parameterSettings> row
+// "segment_1_energy_shift prior_centre 0.004" moves the shift's centre to
+// 0.004 in all three (EData::ReadPriorCentres); before 2026-11-07 the tab kept
+// 0 there.
 // With Use Reduced Widths the tab reads param.par: by name, as AZURE2 does
 // (a positional read took the #parametrization line for a parameter).
 //
@@ -132,6 +135,28 @@ int main(int argc, char** argv) {
     ok("norm: its 5 % prior", normPrior);
     ok("energy shift: 0 +- 0.002 MeV (centred on no shift, not on the start value)", shiftPrior);
     ok("sqrt(E) coefficient: its own prior, 0 +- 0.001", sqrtPrior);
+  }
+
+  // 2b. An explicit prior centre for the shift moves the tab's centre, as it moves the engine's.
+  {
+    const QString centred = work.filePath("centred.azr");
+    spit(centred, text + "<parameterSettings>\nsegment_1_energy_shift prior_centre 0.004\n</parameterSettings>\n");
+    AZURESetup wc;
+    wc.open(centred);
+    wc.GetConfig().paramMask |= Config::CALCULATE_WITH_DATA;
+    MCMCTab* tc = wc.findChild<MCMCTab*>();
+    bool shiftCentred = false, sqrtZero = false;
+    if(tc) {
+      QMetaObject::invokeMethod(tc, "loadFromPhysical");
+      for(const MCMCParameter& p : tc->parameters()) {
+        if(p.category == "shift")
+          shiftCentred = p.autoPrior && p.useGaussianPrior && p.priorMean == 0.004 && p.priorStd == 0.002;
+        else if(p.category == "shift_sqrt")
+          sqrtZero = p.autoPrior && p.useGaussianPrior && p.priorMean == 0.0 && p.priorStd == 0.001;
+      }
+    }
+    ok("prior_centre row: energy shift 0.004 +- 0.002 MeV", tc && shiftCentred);
+    ok("prior_centre row: the sqrt(E) coefficient stays 0 +- 0.001", tc && sqrtZero);
   }
 
   // 3. Use Reduced Widths: param.par read by name, as AZURE2 reads it.  The
