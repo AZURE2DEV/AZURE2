@@ -129,10 +129,14 @@ recoupling is reported. Care goes into interference signs (level–level, level�
 
 ## 6. Coulomb functions: pycoulomb
 
-`physics/` takes F, G, F′, G′ and σ_l from Jakub's **pycoulomb** C++ sources (github.com/skowrons94/pycoulomb),
-copied into the tree with the source commit recorded (decision 6, 2026-11-07); one interface, the algorithm
-selectable, replacing `external/coul`, `CoulFunc`, `CoulFuncCache`, `WhitFunc` and the hybrid-potential code.
-Its methods (`coul` = AZURE2's, `coulsm` = SAMMY's, `coulfg`, GSL) cross-check each other as an identity test.
+The Coulomb functions are physics, not an external dependency: they live in `physics/coulomb/`, part of the
+`physics/` target, taken from Jakub's **pycoulomb** C++ sources (github.com/skowrons94/pycoulomb, source commit
+recorded in the directory's README; decision 6, 2026-11-07). One interface, `coulomb(l, η, ρ, method)` → F, F′, G,
+G′, σ_l, and the Whittaker functions for bound channels; each algorithm one file behind it (`coulsm` = AZURE2 since
+2025-09, the default; `coul` = AZURE2 before; `coulfg`; COULCC when its C++ version is done). `channel_functions`
+builds P, S, φ on it. It replaces `external/coul`, `CoulFunc`, `CoulFuncCache`, `WhitFunc` and the hybrid-potential
+code; `external/coul` is deleted. The GSL algorithm is not in `physics/` (no GSL there); it stays a cross-check in
+the tests. The algorithms cross-check each other as an identity test.
 Prerequisites in pycoulomb (owner: Jakub; see `ROADMAP.md` Phase 1): licence file, library target without Python,
 stateless thread-safe call, Whittaker functions, no committed build products, tests against mpmath.
 

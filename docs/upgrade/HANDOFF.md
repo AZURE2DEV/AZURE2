@@ -58,7 +58,8 @@ open neutral-F item of the T1 session. `coulfg`: JWKB inside the turning point, 
 
 **For Jakub.** Add the LLNL BSD-3 COPYRIGHT text next to `coulfg2.c` (its header refers to a missing file); choose
 the repository licence; push and tag. Whether to fix `coulsm` at η = 0 [keep: AZURE2 stays bit-identical; P, S, φ
-unaffected]. **Next.** After the CNuc split: vendor `libcoulomb/` as `external/pycoulomb/` and build
+unaffected]. **Next.** After the CNuc split: take `libcoulomb/`'s sources into `physics/coulomb/` (not `external/`:
+ Jakub, 2026-11-07, the Coulomb functions are physics) and build
 `channel_functions` on it (replacing `external/coul`, `CoulFunc`, `CoulFuncCache`, `WhitFunc`), bit-identical with
 `coulsm`; COULCC added as a method when `coulcc-cpp` is done. The host must keep GSL's error handler off (`GslQuiet`).
 
