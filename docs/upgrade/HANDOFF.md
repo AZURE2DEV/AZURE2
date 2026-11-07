@@ -539,7 +539,9 @@ out of any repository).
 5. Whether pyazr keeps a pure-Python `.azr` reader after Phase 3 (plan: no).
 6. pycoulomb licence and the origin of `coulsm` (Jakub, owner). 2026-11-07: Jakub says to take pycoulomb from
    github.com/skowrons94/pycoulomb (his); cloned at 9fee957. Still open: its LICENSE and the origin and terms of
-   `coulsm` (SAMMY) and `coulcc` (CPC program library), before either enters this repository.
+   `coulsm` (SAMMY) and `coulcc` (CPC program library), before either enters this repository. **Decided 2026-11-07
+   (Jakub): pycoulomb's C++ sources may be taken directly into AZURE2; permission for them obtained (incl. from Carl).
+   Their purpose here is to switch between Coulomb algorithms.** The Fortran `coulcc` is not taken (C++ only).
 7. Redistribution terms of any stopping table before shipping one.
 8. (Added 2026-11-07.) The criterion of `adaptive_grid_reference` for a level crossing the window edge: thm's grid
    overcounts a level's area by 1.69 × 10⁻⁴ by design, so the swing equals that offset and exceeds the 10⁻⁴

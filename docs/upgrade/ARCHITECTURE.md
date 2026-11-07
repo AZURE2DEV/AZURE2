@@ -129,8 +129,9 @@ recoupling is reported. Care goes into interference signs (level–level, level�
 
 ## 6. Coulomb functions: pycoulomb
 
-`physics/` takes F, G, F′, G′ and σ_l from Jakub's **pycoulomb** C++ library (github.com/skowrons94/pycoulomb),
-pinned to a tag, replacing `external/coul`, `CoulFunc`, `CoulFuncCache`, `WhitFunc` and the hybrid-potential code.
+`physics/` takes F, G, F′, G′ and σ_l from Jakub's **pycoulomb** C++ sources (github.com/skowrons94/pycoulomb),
+copied into the tree with the source commit recorded (decision 6, 2026-11-07); one interface, the algorithm
+selectable, replacing `external/coul`, `CoulFunc`, `CoulFuncCache`, `WhitFunc` and the hybrid-potential code.
 Its methods (`coul` = AZURE2's, `coulsm` = SAMMY's, `coulfg`, GSL) cross-check each other as an identity test.
 Prerequisites in pycoulomb (owner: Jakub; see `ROADMAP.md` Phase 1): licence file, library target without Python,
 stateless thread-safe call, Whittaker functions, no committed build products, tests against mpmath.
