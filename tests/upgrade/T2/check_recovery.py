@@ -4,8 +4,11 @@
 Runs, in a temporary directory:
   1. a calculation of T2_true.azr (the truth), to read the true level parameters in the units of
      param.sav (Brune basis: E in MeV, reduced-width amplitudes in MeV^1/2);
-  2. the fit of T2.azr (menu 2, MIGRAD; the CLI switches the analytic gradient on because T2 has
-     THM segments), started off the truth;
+  2. the fit of T2.azr (menu 2) with --use-lm, started off the truth.  T2's THM segments have no
+     analytic residual Jacobian in today's engine, so --use-lm falls back to MIGRAD with Minuit's
+     numerical gradient (about 1300 calls).  Without a flag the CLI switches on the analytic-gradient
+     MIGRAD for a project with THM segments; on T2 that path spends minutes per gradient call and
+     did not converge in 10 min at 8 threads (2026-11-06), so it is not used here;
 and compares every free parameter p with its true value t through the pull (p - t)/dp, dp the
 fit's own uncertainty in param.sav.
 
@@ -67,12 +70,12 @@ def chi2_total(path):
     raise RuntimeError("no Total-Chi-Squared in " + path)
 
 
-def run(binary, workdir, azr, menu, threads):
+def run(binary, workdir, azr, menu, threads, extra=()):
     for d in ("output", "checks"):
         os.makedirs(os.path.join(workdir, d), exist_ok=True)
     env = dict(os.environ, OMP_NUM_THREADS=str(threads), LC_ALL="C")
     t0 = time.time()
-    r = subprocess.run([binary, "--no-gui", "--no-readline", azr], input=menu, cwd=workdir, env=env,
+    r = subprocess.run([binary, "--no-gui", "--no-readline", *extra, azr], input=menu, cwd=workdir, env=env,
                        capture_output=True, text=True, timeout=3600)
     open(os.path.join(workdir, azr + ".log"), "w").write(r.stdout + r.stderr)
     return time.time() - t0
@@ -84,6 +87,7 @@ def main():
     ap.add_argument("--asimov", action="store_true", help="fit noiseless data (made by make_t2.py --asimov)")
     ap.add_argument("--threads", type=int, default=8)
     ap.add_argument("--keep", help="copy the work directory here")
+    ap.add_argument("--engine-arg", action="append", default=[], help="extra AZURE2 option for the fit (repeatable)")
     ap.add_argument("--json", help="write the numbers to this file")
     args = ap.parse_args()
     if not args.binary or not os.access(args.binary, os.X_OK):
@@ -111,7 +115,7 @@ def main():
                 src = os.path.join(work, f)
                 (shutil.copytree if os.path.isdir(src) else shutil.copy)(src, os.path.join(d, f))
         run(binary, truthdir, "T2_true.azr", "1\n\n\n7\n", args.threads)
-        t_fit = run(binary, fitdir, "T2.azr", "2\nn\n\n\n7\n", args.threads)
+        t_fit = run(binary, fitdir, "T2.azr", "2\nn\n\n\n7\n", args.threads, ["--use-lm"] + args.engine_arg)
         truth_lv = read_params(os.path.join(truthdir, "output", "param.par"))
         nuis = json.load(open(os.path.join(HERE, "truth.json")))["nuisance"]
         sav = os.path.join(fitdir, "output", "param.sav")

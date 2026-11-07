@@ -5,8 +5,8 @@ Three runs of tests/upgrade/T2, each from a clean copy of the project:
   calc_start  menu 1 on T2.azr       (the fit project at its start values: every observable and
                                        apparatus effect of T2 evaluated once, chi2 per segment)
   calc_truth  menu 1 on T2_true.azr  (the truth)
-  fit         menu 2 on T2.azr       (MIGRAD with the analytic gradient, as the CLI chooses for a
-                                       project with THM segments)
+  fit         menu 2 on T2.azr with --use-lm (falls back to MIGRAD with the numerical gradient: the
+                                       THM segments have no analytic Jacobian; see check_recovery.py)
 All runs use --no-coulomb-table (exact Coulomb functions), so the result does not depend on whether a
 Coulomb table exists on the machine, and OMP_NUM_THREADS from --threads (results must not depend on it).
 
@@ -21,7 +21,7 @@ A difference outside these is a change of the engine's numbers, to be explained 
     AZURE2_BINARY=/path/to/AZURE2 python3 tests/upgrade/golden/T2/regen_compare.py --regenerate --commit <hash>
 
 --regenerate overwrites the golden files and ENGINE (the engine commit, given with --commit, and the
-date).  Standard library only.  About 3 s for the calculations and 1-3 min for the fit at 8 threads.
+date).  Standard library only.  About 3 s for the calculations and 6 min for the fit at 8 threads.
 """
 import argparse
 import datetime
@@ -36,9 +36,9 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 T2 = os.path.normpath(os.path.join(HERE, "..", "..", "T2"))
 PROJECT = ["T2.azr", "T2_true.azr", "cov_diff.txt", "prior_cov.txt", "data"]
 RUNS = {
-    "calc_start": ("T2.azr", "1\n\n\n7\n", 1e-5),
-    "calc_truth": ("T2_true.azr", "1\n\n\n7\n", 1e-5),
-    "fit": ("T2.azr", "2\nn\n\n\n7\n", 1e-3),
+    "calc_start": ("T2.azr", "1\n\n\n7\n", 1e-5, []),
+    "calc_truth": ("T2_true.azr", "1\n\n\n7\n", 1e-5, []),
+    "fit": ("T2.azr", "2\nn\n\n\n7\n", 1e-3, ["--use-lm"]),
 }
 KEEP = re.compile(r"^(chiSquared\.out|AZUREOut_.*\.out|thm_experiments\.out|parameters\.out|param\.sav|"
                   r"normalizations\.out|shifts\.out)$")
@@ -70,7 +70,7 @@ def compare(a, b, rtol):
 
 
 def run(binary, threads, name, work):
-    azr, menu, _ = RUNS[name]
+    azr, menu, _, extra = RUNS[name]
     d = os.path.join(work, name)
     os.makedirs(d)
     for f in PROJECT:
@@ -79,7 +79,7 @@ def run(binary, threads, name, work):
     for sub in ("output", "checks"):
         os.makedirs(os.path.join(d, sub))
     env = dict(os.environ, OMP_NUM_THREADS=str(threads), LC_ALL="C")
-    r = subprocess.run([binary, "--no-gui", "--no-readline", "--no-coulomb-table", azr], input=menu, cwd=d,
+    r = subprocess.run([binary, "--no-gui", "--no-readline", "--no-coulomb-table", *extra, azr], input=menu, cwd=d,
                        env=env, capture_output=True, text=True, timeout=3600)
     if not os.path.isfile(os.path.join(d, "output", "chiSquared.out")):
         sys.exit(f"{name}: no chiSquared.out\n{(r.stdout + r.stderr)[-3000:]}")

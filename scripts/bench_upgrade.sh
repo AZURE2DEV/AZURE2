@@ -16,7 +16,8 @@
 #
 # What is measured, per thread count:
 #   calc  menu 1 (calculate with data) of T2.azr: all 13 segments, 340 points, every apparatus kernel once;
-#   fit   menu 2 (MIGRAD, analytic gradient) of T2.azr from its start values to convergence.
+#   fit   menu 2 of T2.azr with --use-lm from its start values to convergence (the THM segments have no analytic
+#         Jacobian, so this is MIGRAD with Minuit's numerical gradient, as in tests/upgrade/T2/check_recovery.py).
 # Both run with --no-coulomb-table (exact Coulomb functions), so a Coulomb table on one machine and not on
 # another does not change the timing by its factor of about 4.  Peak RSS is that of the AZURE2 process,
 # from GNU time (-v, Linux) or BSD time (-l, macOS); without either it is recorded as "na".
@@ -69,7 +70,7 @@ mkdir -p "$(dirname "$RESULTS")"
 if [ ! -s "$RESULTS" ]; then
   {
     echo "# T2 benchmark (scripts/bench_upgrade.sh): wall time and peak RSS of AZURE2 on tests/upgrade/T2"
-    echo "# calc = menu 1, fit = menu 2 (MIGRAD to convergence); --no-coulomb-table; compare same host/threads"
+    echo "# calc = menu 1, fit = menu 2 --use-lm (numerical MIGRAD to convergence); --no-coulomb-table; compare same host/threads"
     printf 'date_utc\tcommit\thost\tncpu\tthreads\trun\twall_s\tpeak_rss_MB\tchi2\tN\tnote\n'
   } > "$RESULTS"
 fi
@@ -80,10 +81,10 @@ for th in $THREADS; do
     d="$WORK/$run-$th"
     mkdir -p "$d/output" "$d/checks"
     cp -r "$T2/T2.azr" "$T2/cov_diff.txt" "$T2/prior_cov.txt" "$T2/data" "$d/"
-    menu='1\n\n\n7\n'; [ "$run" = fit ] && menu='2\nn\n\n\n7\n'
+    menu='1\n\n\n7\n'; extra=""; [ "$run" = fit ] && { menu='2\nn\n\n\n7\n'; extra="--use-lm"; }
     printf "$menu" > "$d/menu"
     ( cd "$d" && OMP_NUM_THREADS="$th" time_cmd "$d/meas" \
-        "$BIN" --no-gui --no-readline --no-coulomb-table T2.azr < "$d/menu" > "$d/log" 2>&1 )
+        "$BIN" --no-gui --no-readline --no-coulomb-table $extra T2.azr < "$d/menu" > "$d/log" 2>&1 )
     chi2="$(awk '/^Total-Chi-Squared:/ { print $2 }' "$d/output/chiSquared.out" 2>/dev/null)"
     n="$(awk '/^Total-Chi-Squared:/ { for (i = 1; i < NF; i++) if ($i == "Total-N:") print $(i + 1) }' \
           "$d/output/chiSquared.out" 2>/dev/null)"
