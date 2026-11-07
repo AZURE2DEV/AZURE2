@@ -1,6 +1,12 @@
 // physics/ level_parameters against the engine's own transformation (CNuc::TransformIn, CalcBoundaryConditions,
 // TransformOut), on the upgrade test projects T1, T2, T3 (docs/upgrade/level_parameters.md section 7).
 //
+// Since those three CNuc members call level_parameters themselves (docs/upgrade/cnuc_split.md, step 1), the Brune,
+// Park and B_c comparisons of (a) check the wiring of the engine (the System and channel map, the channel-energy
+// order, the external-capture order), not the arithmetic: that was checked against the engine's own code before the
+// move, and the move by comparing every output file of the engine before and after (cnuc_split.md section 6).  The
+// formal comparisons still compare two eigensolvers: the engine passes GSL's, this test uses SymmetricEigen.h's.
+//
 // For each project the <levels> values are read from a CNuc after CNuc::Fill (the file's widths and ANCs), the channel
 // functions and external-capture amplitudes from the engine (src/CNucLevelParameters.cpp), and level_parameters'
 // results are compared with a CNuc after CNuc::Initialize in the same basis:
