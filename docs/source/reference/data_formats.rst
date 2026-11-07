@@ -234,7 +234,7 @@ lines, which a reader that does not know a key skips:
 
 The ``<levels>`` block has one line per channel of a level, 31
 whitespace-separated columns (read by ``NucLine``, ``include/NucLine.h``), and
-optionally a 32nd:
+optionally one, two or three more:
 
 .. list-table::
    :widths: 12 18 70
@@ -285,19 +285,25 @@ optionally a 32nd:
    * - 31
      - ``ecmask``
      - external-capture multipolarity mask
-   * - 32
-     - ``e1``
-     - **optional**: excitation energy of the light particle (MeV), since
-       November 2026. Absent means 0. The pair opens at
-       :math:`S + e_1 + e_2`.
+   * - 32-34
+     - ``B rwa e1``
+     - **optional**, told apart by their number: one trailing field is
+       ``e1``; two are ``B rwa``; three are ``B rwa e1``. ``B`` is the THM
+       binding energy of the transferred particle (MeV, per pair), ``rwa``
+       the width flag of the channel (1: column 12 is a reduced-width
+       amplitude in MeV\ :sup:`1/2`; 0: a physical width or ANC), and ``e1``
+       the excitation energy of the light particle (MeV), since November
+       2026. Absent means 0. The pair opens at :math:`S + e_1 + e_2`.
 
-A pair's columns (13-21, 23 and 27-32) are read from the first line that names it.
-Column 32 is written (by the GUI and by pyazr) **only when it is nonzero**, so a
-project without excited light particles keeps its 31 columns and every older
-file reads and writes back byte for byte. An engine or GUI from before
-November 2026 does not know the column: the engine ignores it silently (the
-pair then opens at :math:`S + e_2`), and the GUI drops it when it saves the
-project. The engine refuses a nonzero ``e1`` on a gamma or beta pair, a
+A pair's columns (13-21, 23, 27-31, ``B`` and ``e1``) are read from the first
+line that names it. ``e1`` is written **only when it is nonzero**. pyazr keeps
+the layout of each line (31 or 33 columns) and appends ``e1`` to it; the GUI
+always writes ``B`` and ``rwa`` (33 columns, both 0 for a project without THM
+content) and appends ``e1`` as column 34. A project without excited light
+particles therefore keeps its 31 columns through pyazr, and has 33 after a GUI
+save. An engine or GUI from before November 2026 does not know ``e1``: the
+engine ignores it silently (the pair then opens at :math:`S + e_2`), and the
+GUI drops it when it saves the project. The engine refuses a nonzero ``e1`` on a gamma or beta pair, a
 negative one, and two different values on lines of one pair. Two particles of
 a particle pair are identical when Z, mass, spin, parity, g-factor and
 excitation (``e1 = e2``) are all equal (:doc:`../user_guide/particle_pairs`).
