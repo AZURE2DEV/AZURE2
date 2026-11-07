@@ -1,3 +1,11 @@
+import os as _os
+
+# A build configured with -DPYAZR_OUTPUT_DIR=<dir> writes the engine module
+# _azure2 to <dir>, not to this directory; PYAZR_ENGINE_DIR=<dir> makes the
+# package find it there (ctest sets it for the tests in tests/pyazr).
+if _os.environ.get("PYAZR_ENGINE_DIR"):
+    __path__.append(_os.environ["PYAZR_ENGINE_DIR"])
+
 from .azure2 import azure2, ScatteringLength
 from .parameters import (Pair, PairSet, Parameter, ParameterSet, LevelKey,
                          NuclearPotential)
