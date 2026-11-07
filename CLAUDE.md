@@ -35,6 +35,8 @@ below (full text and reasons in `docs/upgrade/RULES.md`):
   `docs/upgrade/HANDOFF.md` and the roadmap ticks at the end of every session.
 - Documentation follows `docs/upgrade/STYLE.md`: a reaction-theory register for experimentalists; every symbol
   defined with its unit and frame; conventions and approximations stated with their validity; numbers, not adjectives.
+- Golden outputs of the present engine live in `tests/upgrade/golden/` (generated files allowed there, like
+  `tests/*/expected/`); regenerate them only with `tests/upgrade/golden/golden.py --write` and a commit that states why.
 - Commit small and often (each completed step, at least every hour of work), with HANDOFF updated, so the work can be
   continued from another machine at any point.
 - THM follows `docs/upgrade/THM.md`: reproduce published analyses first, HOES and OES data kept apart, resolution in
