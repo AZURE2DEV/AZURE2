@@ -615,3 +615,9 @@ set_tests_properties(pyazr_upgrade_gradient PROPERTIES ENVIRONMENT "OMP_NUM_THRE
 # sav_readers, added after it, went without it until October 2026).
 get_property(_pyazr_tests DIRECTORY PROPERTY TESTS)
 set_tests_properties(${_pyazr_tests} PROPERTIES SKIP_RETURN_CODE 77)
+# A build with -DPYAZR_OUTPUT_DIR outside pyazr/ (sanitizer and scratch builds)
+# keeps _azure2 out of the checkout; PYAZR_ENGINE_DIR points the package at it,
+# so these tests run the module this build made instead of skipping.
+if(PYAZR_OUTPUT_DIR)
+    set_property(TEST ${_pyazr_tests} APPEND PROPERTY ENVIRONMENT "PYAZR_ENGINE_DIR=${PYAZR_OUTPUT_DIR}")
+endif()

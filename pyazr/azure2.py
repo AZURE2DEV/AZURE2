@@ -24,7 +24,8 @@ except ImportError as err:                            # pragma: no cover
     raise ImportError(
         "the AZURE2 engine module (pyazr._azure2) is not built.  It is a C++ "
         "extension, not pure Python: configure with CMake (USE_API=ON, the "
-        "default) and build -- the module lands in pyazr/."
+        "default) and build -- the module lands in pyazr/, or in "
+        "PYAZR_OUTPUT_DIR when that is set; then export PYAZR_ENGINE_DIR=<it>."
     ) from err
 
 from .parameters import (NuclearPotential, Pair, PairSet, Parameter,

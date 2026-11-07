@@ -18,8 +18,12 @@ import tempfile
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 sys.path.insert(0, ROOT)
-from pyazr import AzrModel  # noqa: E402
-from pyazr.datasets import SegmentSet  # noqa: E402
+try:
+    from pyazr import AzrModel  # noqa: E402
+    from pyazr.datasets import SegmentSet  # noqa: E402
+except Exception as err:                                   # engine not built: the package does not import
+    print(f"skip: pyazr not importable ({type(err).__name__}: {err})")
+    sys.exit(77)
 
 failures = []
 
