@@ -191,9 +191,10 @@ TAIL = """<lastRun>
 
 
 # A level's widths are entered as observed partial widths at the level's energy, but what the fit holds fixed is the
-# reduced-width amplitude gamma (MeV^1/2) of the Brune basis (param.sav).  For a level whose energy starts off the
-# truth, the fixed widths that give the true gamma at the start energy differ from the true widths; match_fixed()
-# finds them with the engine and keeps them here, (level, channel) -> width in eV at the start energy.
+# reduced-width amplitude gamma (MeV^1/2) of the Brune basis (param.sav).  The observed width of channel c is
+# Gamma_c = 2 P_c gamma_c^2 / (1 + sum_c' gamma_c'^2 dS_c'/dE) at the level energy, so for a level whose energy or
+# one of whose widths starts off the truth, the fixed widths that give the true gammas differ from the true widths;
+# match_fixed() finds them with the engine and keeps them here, (level, channel) -> width in eV at the start.
 FIXED_AT_START = {}
 
 
@@ -405,13 +406,13 @@ def param_par(binary, workdir, azr_text):
 
 
 def match_fixed(binary, tmp):
-    """Fixed widths of the levels that start off their true energy, so that their gammas are the true ones."""
+    """Fixed widths of the levels with a free parameter, such that their gammas at the start are the true ones."""
     truth = param_par(binary, tmp, project(fit=False))
     for it in range(10):
         start = param_par(binary, tmp, project(fit=True, cov=False))
         worst = 0.0
         for lid, lev in enumerate(TRUTH, start=1):
-            if lev["Estart"] is None:
+            if lev["Estart"] is None and all(c[4] is None for c in lev["ch"]):
                 continue
             for ci, (pair, s2, l2, width, st) in enumerate(lev["ch"], start=1):
                 name = f"width_{lid}_{ci}"
