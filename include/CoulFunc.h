@@ -120,6 +120,11 @@ class CoulFunc {
   // channel radius).  For external-capture integrals the radius is the
   // integration variable, so the cache never hits and its per-call mutex lock
   // serializes the OpenMP threads.  Disable it for those instances.
+  /// The external-capture integrals ask for F, G at the radii the adaptive quadrature chooses, the same radii for
+  /// every term of one entrance l and energy.  With this on, operator() keeps the waves of the last 16 (pair, l,
+  /// energy) blocks of the calling thread, keyed by the exact radius: a thread-private scratch whose values are what
+  /// recomputing gives (docs/upgrade/channel_table.md section 3).
+  void SetRadialScratch(bool use) { radialScratch_ = use; }
   void SetUseGlobalCache(bool use) { useGlobalCache_ = use; }
   bool GetUseGlobalCache() const { return useGlobalCache_; }
 
@@ -138,6 +143,7 @@ class CoulFunc {
   bool useGSLFunctions_;
   bool useHybridMethod_;
   bool useGlobalCache_ = true;
+  bool radialScratch_ = false;
   int pairKey_;
   /// Identifies the nuclear potential these waves were computed under; part of
   /// the Coulomb memo key.  0 means the plain Coulomb solution.

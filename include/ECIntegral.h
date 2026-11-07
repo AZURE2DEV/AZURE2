@@ -55,6 +55,8 @@ class ECIntegral {
     // channel radii and the cache is a large speed-up, so it stays enabled.
     if (configure.paramMask & Config::CALCULATE_REACTION_RATE)
       params_.coulFunc->SetUseGlobalCache(false);
+    else
+      params_.coulFunc->SetRadialScratch(true);  // the terms of one l_i and energy share their radii
     params_.whitFunc = std::make_unique<WhitFunc>(pPair);
     params_.useLongWavelengthApprox = !!(configure.paramMask & Config::USE_LONGWAVELENGTH_APPROX);
     params_.useChargeFunction = false;  // set per term in CalculateDirect
