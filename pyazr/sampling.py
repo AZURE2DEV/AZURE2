@@ -309,6 +309,7 @@ def nuts(logp_and_grad: Callable, x0, n_draws=1000, n_warmup=1000, inv_metric=No
         raise ValueError("nuts: the start x0 has no finite log posterior")
     cur = _Point(q, None, g, lp)
     metric = _Metric(inv_metric, n)
+    have_metric = inv_metric is not None
     if not dense and metric.dense:
         metric = _Metric(np.diag(metric.inv).copy(), n)
     eps = step_size or _find_step(logp_and_grad, cur, metric, rng)
@@ -340,14 +341,25 @@ def nuts(logp_and_grad: Callable, x0, n_draws=1000, n_warmup=1000, inv_metric=No
                 w = np.array(window)
                 k = w.shape[0]
                 if k > 2:
+                    # shrink the window estimate toward the metric in use, weight k/(k+n): a 25-draw window cannot
+                    # estimate a dense n x n covariance (n = 54 on 7Be sent the tree depth from 4 to 9), and a good
+                    # starting metric (Laplace) should only be refined.  Without a starting metric the first window
+                    # shrinks toward its own diagonal.
+                    alpha = k / (k + float(n))
                     if dense:
                         cov = np.atleast_2d(np.cov(w, rowvar=False))
-                        cov = (k / (k + 5.0)) * cov + 1e-3 * (5.0 / (k + 5.0)) * np.diag(np.diag(cov))
+                        if have_metric:
+                            tgt = metric.inv if metric.dense else np.diag(metric.inv)
+                        else:
+                            tgt = np.diag(np.diag(cov))
+                        cov = alpha * cov + (1.0 - alpha) * tgt
                     else:
                         v = w.var(axis=0, ddof=1)
-                        cov = (k / (k + 5.0)) * v + 1e-3 * (5.0 / (k + 5.0)) * v
+                        tgt = (np.diag(metric.inv) if metric.dense else metric.inv) if have_metric else v
+                        cov = alpha * v + (1.0 - alpha) * tgt
                     try:
                         metric = _Metric(cov, n)
+                        have_metric = True
                     except ValueError:
                         warnings.warn("nuts: adapted covariance not positive definite; metric kept")
                 window = []

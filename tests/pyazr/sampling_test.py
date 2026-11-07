@@ -49,6 +49,19 @@ for label, kw in (("adapted metric", {}), ("exact covariance metric", dict(inv_m
     check(f"Gaussian, {label}: no divergences ({int(r.stats['divergent'].sum())}), min ESS {e.min():.0f} > 300",
           r.stats["divergent"].sum() == 0 and e.min() > 300)
 
+# a good starting metric must survive warm-up adaptation in dimension > window size (25 draws, n = 40): before the
+# shrinkage toward the current metric, the 7Be run (n = 54) went from ~22 to ~800 leapfrog steps per draw
+d2 = 40
+Q2, _ = np.linalg.qr(rng.standard_normal((d2, d2)))
+C2 = Q2 @ np.diag(np.logspace(-2, 2, d2)) @ Q2.T
+P2 = np.linalg.inv(C2)
+g2 = lambda x: (-0.5 * x @ P2 @ x, -P2 @ x)
+fixed = S.nuts(g2, np.zeros(d2), n_draws=300, n_warmup=300, inv_metric=C2, adapt_metric=False, seed=4)
+adapt = S.nuts(g2, np.zeros(d2), n_draws=300, n_warmup=300, inv_metric=C2, adapt_metric=True, seed=4)
+lf, la = fixed.stats["n_leapfrog"].mean(), adapt.stats["n_leapfrog"].mean()
+check(f"Laplace metric kept through adaptation (n = {d2}): {la:.1f} leapfrog steps per draw vs {lf:.1f} unadapted (< 2.5x; 5.5x before the fix)",
+      la < 2.5 * lf)
+
 iid = rng.standard_normal((4, 2000, 2))
 check(f"ess of iid draws {S.ess(iid).min():.0f} within 6000..10000", 6000 < S.ess(iid).min() < 10000)
 check(f"split R-hat of iid draws {S.split_rhat(iid).max():.3f} < 1.01", S.split_rhat(iid).max() < 1.01)
