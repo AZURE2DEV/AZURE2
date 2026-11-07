@@ -19,6 +19,7 @@ endif()
 
 add_library(azure2_physics STATIC
   src/AngularCoupling.cpp
+  src/ChannelFunctions.cpp
   src/JpiBlock.cpp
   src/LevelParameters.cpp
   src/Recoupling.cpp
@@ -67,6 +68,15 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
   target_compile_options(physics_coulomb_test PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 add_test(NAME physics_coulomb COMMAND physics_coulomb_test ${CMAKE_CURRENT_SOURCE_DIR}/tests/data/coulomb.csv)
+
+# channel_functions: neutral closed forms, P, S, phi against mpmath's Coulomb functions, S' against another
+# algorithm's difference, the kinematics (docs/upgrade/coulomb.md section 5).
+add_executable(physics_channel_functions_test tests/channel_functions_test.cpp)
+target_link_libraries(physics_channel_functions_test PRIVATE azure2_physics)
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+  target_compile_options(physics_channel_functions_test PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+add_test(NAME physics_channel_functions COMMAND physics_channel_functions_test ${CMAKE_CURRENT_SOURCE_DIR}/tests/data/coulomb.csv)
 
 if(NOT AZURE2_PHYSICS_STANDALONE)
   # physics/ configured, built and tested on its own, in a fresh build tree under this one.
