@@ -1,12 +1,15 @@
 // The light particle's excitation energy (column 32 of a <levels> line, 2026-11-05), GUI side (headless):
-//   1. PairsData::lightExcitation is model column 15 (PairsModel::LightExcitationColumn), the compound-nucleus
-//      column moved to 16; header text; setData/data round trip;
+//   1. PairsData::lightExcitation is model column 15 (PairsModel::LightExcitationColumn), the THM binding energy
+//      column 16 (PairsModel::BindingEnergyColumn), the compound-nucleus column 17; header text; setData/data
+//      round trip;
 //   2. labels: an excited light particle is marked "*(E)" in the pair and reaction labels;
 //   3. identical particles (PairsModel::isIdentical, used by the scattering-lengths table and the level
 //      channels): all per-particle inputs equal, including excitation -- 12C(2+)+12C(2+) entered as e1 = e2 is,
 //      e1 = 0 / e2 = 2E* is not; a level of an identical pair is offered l + s even channels only;
-//   4. LevelsTab reads a 32nd column into the pair and writes it back only when it is nonzero: a project
-//      without it is written with 31 columns, one with it keeps it on that pair's lines only;
+//   4. LevelsTab reads a 32nd column into the pair and writes it back only when it is nonzero.  The GUI always
+//      writes the two THM columns (32: binding energy, 33: gammaIsRWA) and then e1 as column 34 (the layout
+//      of the merge of dev 3264896d into thm, MERGE_NOTES.md; NucLine tells 1, 2 and 3 trailing fields
+//      apart): a project without e1 is written with 33 columns, one with it has 34 on that pair's lines only;
 //   5. the Add/Edit Pair dialog has the field (disabled for gamma and beta pairs), and PairsTab::editPair
 //      stores it -- and the EC multipolarity mask, which before 2026-11-05 was compared against the pair type;
 //   6. the mass-table check of a pair does not depend on the excitation.
@@ -73,11 +76,12 @@ int main(int argc, char** argv) {
   // ---- 1. the model column -------------------------------------------------
   PairsTab pairsTab;
   PairsModel& pairs = *pairsTab.getPairsModel();
-  ok("PairsData::SIZE is 16, light excitation column 15, nucleus column 16",
-     PairsData::SIZE == 16 && PairsModel::LightExcitationColumn == 15 && PairsModel::NucleusColumn == 16);
+  ok("PairsData::SIZE is 17, light excitation column 15, binding energy column 16, nucleus column 17",
+     PairsData::SIZE == 17 && PairsModel::LightExcitationColumn == 15 && PairsModel::BindingEnergyColumn == 16 &&
+         PairsModel::NucleusColumn == 17);
   pairsTab.addPair(pair(0, 1, 2, 4.0026, 0, 1, 6, 12., 0., 7.16191, 0.), 0, true);
   pairsTab.addPair(pair(2, 1, 2, 4.0026, 0, 1, 6, 12., 0., 7.16191, E2P), 1, true);
-  ok("columnCount includes the new column", pairs.columnCount(QModelIndex()) == 17);
+  ok("columnCount includes the new column", pairs.columnCount(QModelIndex()) == 18);
   ok("header", pairs.headerData(PairsModel::LightExcitationColumn, Qt::Horizontal, Qt::DisplayRole).toString() == "Light\nExcitation" &&
      pairs.headerData(10, Qt::Horizontal, Qt::DisplayRole).toString() == "Heavy\nExcitation");
   ok("addPair(PairsData) stores the light excitation",
@@ -162,10 +166,27 @@ int main(int argc, char** argv) {
     QList<QStringList> lines = levelLines(out);
     bool layout = lines.size() == 4;
     for (const QStringList& t : lines) {
-      if (t.at(5) == "1") layout &= t.size() == 31;
-      else layout &= t.size() == 32 && std::fabs(t.at(31).toDouble() - E2P) < 1e-12;
+      layout &= t.size() >= 33 && t.at(31).toDouble() == 0. && t.at(32) == "0";  // the THM columns, 0 here
+      if (t.at(5) == "1") layout &= t.size() == 33;
+      else layout &= t.size() == 34 && std::fabs(t.at(33).toDouble() - E2P) < 1e-12;
     }
-    ok("written back: 32 columns on pair 2's lines only (an explicit 0 is not written)", layout, out);
+    ok("written back: e1 as column 34 on pair 2's lines only (an explicit 0 is not written)", layout, out);
+    {
+      // ... and that output read back (three trailing fields: binding energy, flag, e1) gives the same pairs.
+      PairsTab backTab;
+      LevelsTab backLevels;
+      backLevels.setPairsModel(backTab.getPairsModel());
+      QObject::connect(&backLevels, SIGNAL(readNewPair(PairsData, int, bool)), &backTab, SLOT(addPair(PairsData, int, bool)));
+      QObject::connect(&backLevels, SIGNAL(readExistingPair(PairsData, int, bool)), &backTab, SLOT(editPair(PairsData, int, bool)));
+      QString again = out + "</levels>\n";
+      QTextStream againStream(&again);
+      bool read = backLevels.readNuclearFile(againStream);
+      QList<PairsData> back = backTab.getPairsModel()->getPairs();
+      ok("the 33/34-column output reads back: e1 on pair 2, binding energy 0",
+         read && back.size() == 2 && back.at(0).lightExcitation == 0. && back.at(1).lightExcitation == E2P &&
+             back.at(0).bindingEnergy == 0. && back.at(1).bindingEnergy == 0.,
+         QString("%1 pairs").arg(back.size()));
+    }
 
     PairsTab plainTab;
     LevelsTab plainLevels;
@@ -181,9 +202,9 @@ int main(int argc, char** argv) {
     QString out2;
     QTextStream outStream2(&out2);
     plainLevels.writeNuclearFile(outStream2);
-    bool all31 = true;
-    for (const QStringList& t : levelLines(out2)) all31 &= t.size() == 31;
-    ok("and written with 31 columns", all31 && levelLines(out2).size() == 2, out2);
+    bool all33 = true;
+    for (const QStringList& t : levelLines(out2)) all33 &= t.size() == 33;
+    ok("and written with 33 columns (the two THM columns, no e1)", all33 && levelLines(out2).size() == 2, out2);
   }
 
   // ---- 5. the pair dialog and editPair ---------------------------------------------
