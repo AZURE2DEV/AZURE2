@@ -12,7 +12,7 @@
 # It works as a subdirectory of AZURE2 and as a top-level project (cmake -S physics -B build-physics).
 cmake_minimum_required(VERSION 3.16...4.0)
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
-  project(azure2_physics LANGUAGES CXX)
+  project(azure2_physics LANGUAGES C CXX)
   set(AZURE2_PHYSICS_STANDALONE ON)
   enable_testing()
 endif()
@@ -31,6 +31,9 @@ set_target_properties(azure2_physics PROPERTIES POSITION_INDEPENDENT_CODE ON CXX
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
   target_compile_options(azure2_physics PRIVATE -Wall -Wextra -Wpedantic)
 endif()
+
+# The Coulomb functions (docs/upgrade/coulomb.md): sources from pycoulomb, one directory per algorithm.
+include(coulomb/coulomb.cmake)
 
 # Unit test of the types themselves (construction, validation, index conventions); links physics only.
 add_executable(physics_system_unit_test tests/system_unit_test.cpp)
@@ -54,6 +57,16 @@ foreach(_src angular_coupling_test.cpp symmetric_eigen_test.cpp level_parameters
   endif()
   add_test(NAME physics_${_t} COMMAND physics_${_t}_test)
 endforeach()
+
+# The Coulomb functions against mpmath (tests/data/coulomb.csv, pycoulomb's reference set), the Wronskian, the
+# algorithms against each other, sigma_l, argument checks and thread independence (docs/upgrade/coulomb.md section 5).
+find_package(Threads REQUIRED)
+add_executable(physics_coulomb_test tests/coulomb_test.cpp)
+target_link_libraries(physics_coulomb_test PRIVATE azure2_physics Threads::Threads)
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+  target_compile_options(physics_coulomb_test PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+add_test(NAME physics_coulomb COMMAND physics_coulomb_test ${CMAKE_CURRENT_SOURCE_DIR}/tests/data/coulomb.csv)
 
 if(NOT AZURE2_PHYSICS_STANDALONE)
   # physics/ configured, built and tested on its own, in a fresh build tree under this one.

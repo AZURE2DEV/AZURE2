@@ -169,6 +169,7 @@ if os.path.getsize(os.path.join(ROOT, "LICENSE")) < 1000:
 #    ("azure2/physics/...") and the C++ standard library (<vector>, <cmath>: lower-case names, no path, no ".h").
 #    The ctest physics_standalone builds physics/ alone and catches an AZURE2 header or library; a header that
 #    happens to be on the system include path (GSL, Qt, omp.h) compiles there, so it is caught here.
+COULOMB_HEADERS = {n for _, _, fs in os.walk(os.path.join(ROOT, "physics", "coulomb")) for n in fs if n.endswith((".h", ".H"))}
 for dirpath, _, files in os.walk(os.path.join(ROOT, "physics")):
     for name in sorted(files):
         if not name.endswith((".h", ".hpp", ".cpp")):
@@ -176,6 +177,10 @@ for dirpath, _, files in os.walk(os.path.join(ROOT, "physics")):
         rel = os.path.relpath(os.path.join(dirpath, name), ROOT)
         for inc in re.findall(r'^\s*#\s*include\s*([<"][^>"]+[>"])', read(rel), re.M):
             if inc.startswith('"') and inc[1:-1].startswith("azure2/physics/"):
+                continue
+            # physics/coulomb/: the algorithms taken from pycoulomb include their own headers by bare name
+            # (docs/upgrade/coulomb.md section 1.3); a name that is a file of physics/coulomb/ is allowed there.
+            if rel.startswith(os.path.join("physics", "coulomb") + os.sep) and inc.startswith('"') and inc[1:-1] in COULOMB_HEADERS:
                 continue
             if inc.startswith("<") and re.fullmatch(r"[a-z_]+", inc[1:-1]):
                 continue
