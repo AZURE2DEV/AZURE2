@@ -104,6 +104,10 @@ if(AZURE2_SANITIZE)
     add_compile_options(-fsanitize=${AZURE2_SANITIZE} -fno-omit-frame-pointer
                         -fno-optimize-sibling-calls -g)
     add_link_options(-fsanitize=${AZURE2_SANITIZE})
+    # Third-party races that a run-time suppression cannot silence without hiding AZURE2's own (see the file).
+    if(AZURE2_SANITIZE STREQUAL "thread" AND CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+        add_compile_options(-fsanitize-ignorelist=${CMAKE_SOURCE_DIR}/scripts/sanitizers/tsan.ignorelist)
+    endif()
     message(STATUS "Sanitizer build: -fsanitize=${AZURE2_SANITIZE}")
 endif()
 
