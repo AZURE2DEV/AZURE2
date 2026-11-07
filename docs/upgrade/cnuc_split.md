@@ -233,3 +233,54 @@ GUI off (decision 3), GCC 11.5, Condor: no compiler warnings; `tests/upgrade/che
 
 Steps 2–7 of section 3. Next: the observed widths from total amplitudes (step 2), which removes the five copies of the
 γ → Γ conversion and lets `ConvertAmplitudeBasis` call `park_from_brune`.
+
+## 7. Step 1b: design
+
+Step 1b makes the formal basis follow one rule and the adapter compute the channel functions in one way. It changes
+no observable beyond rounding; it changes the formal parameters of a block (E_λ in MeV, γ_λc in MeV^½) by the choice of
+B_c and by the overall sign of a level. What each part becomes:
+
+**Boundary values** (`boundary_values`). B_c = S_c(Ẽ_low), Ẽ_low the lowest Brune energy of the block's R-matrix
+levels (MeV, E_x). The rule is not an option: `BoundaryRule` and `Convention::boundary` are deleted. With it the formal
+parameters of a block no longer depend on the order in which the file lists its levels: a permutation of the listing
+permutes the formal levels and changes nothing else (to rounding). The lowest level's formal energy equals its Brune
+energy, since Ẽ_λ is an eigenvalue of the formal level matrix with B_c = S_c(Ẽ_λ) (Brune 2002).
+
+**Sign of a formal level** (`formal_from_brune`). The amplitude of largest |γ_λc| of each formal level is positive; of
+two equal magnitudes the first channel of the block decides. The eigenproblem leaves the sign free and observables are
+even in it, so the rule replaces the eigensolver's choice. `FormalSignRule` and `Convention::formal_sign` are deleted.
+The Brune amplitudes that `brune_from_formal` returns carry the formal level's sign: each iteration's eigenvector is
+dominated by the level itself, whose component `symmetric_eigen` makes positive.
+
+**Eigensolvers.** `formal_from_brune` and `brune_from_formal` use `SymmetricEigen.h` only. The solver options
+(`GeneralizedEigenSolver`, `SymmetricEigenSolver`, `FormalToBruneOptions::solver`) and the adapter's
+`GslGeneralizedEigen`, `GslSymmetricEigen` are deleted.
+
+**Channel energy.** One formula, E_c = (E_x − S_α) − e (MeV, c.m.), with S_α the separation energy of partition α and
+e = e₁ + e₂ the excitation energies of the pair: E_x − S_α is the energy above the partition's ground-state
+threshold, and e is then the energy the pair holds in excitation. It is the order of the collision matrix at a data
+point (`EPoint.cpp`, `inEnergy - GetSepE() - GetExE()`) and of `CNuc::CalcShiftFunctions` and `TransformOut`'s widths,
+so a level energy and a data point at the same E_x give the same E_c to the bit. `level_parameters`' own E_c (which
+branch, above or below threshold, a column takes) uses the same formula. `ChannelEnergyOrder` is deleted.
+
+**Channel functions** (`ChannelFunctionsFromCNuc`). Every call returns S_c, S′_c and P_c of a particle channel,
+evaluated on one `ChannelFunc` in the order S, P, S′ (P from `WhitFunc` below threshold). `ChannelQuantities` is deleted.
+The extra evaluations (S where only P and S′ are read, at setup; S′ where only S is read, in the formal iteration)
+cost nothing measurable in a Brune fit, which calls the adapter only at setup; the T2 benchmark checks it. Because the
+Coulomb memo (`CoulFuncCache`, energies matched to 10⁻¹² MeV) now sees another sequence of calls, Brune and Park
+outputs may move at the 10⁻¹³ level (section 5); that is accepted and reported.
+
+**Compatibility.** Formal parameters given as input — `--no-transform` with `--no-brune`, or a parameter file
+(`param.sav`, `param.par`) written by an earlier build in the formal basis — were defined with B_c at the first listed
+level. For a block whose first listed level is not its lowest they now describe another R-matrix. At load, in the
+formal basis, the engine prints one note per such block with both energies. No project in `tests/` reads formal
+input for such a block except `transform_level_order`, which writes its own parameter file with the same build.
+
+**Tests.** `physics_level_parameters_unit`: B_c at the lowest level; the formal parameters of the block listed in two
+orders agree to 10⁻¹³; the lowest level's formal energy equals its Brune energy; the largest |γ| of each formal level is
+positive; widths too large for the radii are refused. `physics_level_parameters_from_cnuc`: `level_parameters` against
+the engine without the level-sign allowance (same solver, same rule), so a sign or B_c that differs fails it.
+`transform_level_order` (b): the formal parameters of `asc` and `desc` are the same levels. Engine before (4bf7aa06)
+and after on all 179 `.azr` under `tests/` in three bases, every changed output file classified: (a) formal parameters
+(B_c, sign), observables ≤ 10⁻¹⁰ relative; (b) last digits from the channel-energy order and the call sequence; (c)
+anything else stops the step.
