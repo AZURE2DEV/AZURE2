@@ -1,6 +1,13 @@
 Segments Tab
 ============
 
+.. note::
+
+   This page describes the ``.azr`` content through the fields of the Qt setup
+   utility of the released versions. This version has no setup utility;
+   :doc:`graphical_interface` says how to do the same from the command line and
+   with ``pyazr``.
+
 The **Segments** tab defines the energies and angles at which cross sections are
 calculated. It is divided into two halves:
 

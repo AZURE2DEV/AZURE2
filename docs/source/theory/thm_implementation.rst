@@ -31,7 +31,8 @@ AZURE2 without THM (``MERGE_NOTES.md`` in the repository lists what the
 branch changes for classic projects). The engine and ``pyazr`` need no
 switch -- a segment with observable code 10 or more is a THM segment, and
 the ``<thm>`` block is optional, every key off or at its default when it is
-absent. In the GUI the THM controls are hidden until *Configure > Runtime
+absent. In the Qt setup utility of the released versions (this version has
+none) the THM controls are hidden until *Configure > Runtime
 Options > Use Trojan Horse Method (THM)* is ticked; a project with THM
 content opens with it ticked, and the setting is not stored in the file
 (:doc:`../user_guide/configure_menu`, "Runtime Options" and "THM
@@ -93,7 +94,8 @@ would refuse raises ``ValueError`` and leaves the model unchanged; a project
 whose block the engine refuses raises on any of them. Without an edit the
 block is carried through a save unchanged.
 
-The GUI edits the block under *Configure > THM Workspace...*, page *Model*
+The Qt setup utility of the released versions edits the block under
+*Configure > THM Workspace...*, page *Model*
 (:doc:`../user_guide/configure_menu`, "THM Workspace"): the four global
 choices, the spectator energy, a table of per-pair spectator energies and a
 table of per-segment weight files (with a file chooser; a file inside the
@@ -104,13 +106,13 @@ own reader) before it accepts; whether a weighted segment exists, is THM and
 has its points inside the table is checked by the engine at startup. The GUI
 writes the block after ``</targetInt>``. A project whose options are not
 changed in the dialog keeps its block byte for byte
-(``tests/gui/thm_block_test``). When they are changed, only non-default keys
+(``tests/gui/thm_block_test`` on ``dev``). When they are changed, only non-default keys
 are written: comment and blank lines of the block stay where they were, a
 line whose value did not change is kept verbatim, a changed one is rewritten
 keeping its indentation and inline comment, a key that returns to its default
 is removed, and new keys are appended. Options that are all default remove
 the block, comments included, since an empty block and no block are the same
-to the engine (``tests/gui/thm_options_dialog_test``). A block with a line the
+to the engine (``tests/gui/thm_options_dialog_test`` on ``dev``). A block with a line the
 engine would refuse is not opened in the editor (it is kept as it is).
 
 ``entranceL`` — interference between entrance orbital momenta
@@ -2269,8 +2271,8 @@ amplitude at :math:`E` equals the one with the ten numbers written out at
 the parser. ``tests/thm_distortion`` (CLI): ``opticalAA=ancai06`` equals its
 ten numbers at :math:`E_{aA}` in the model, ``kd03:extrapolate`` for n + 19F
 is warned and reported at both ends, four refusals.
-``tests/pyazr/thm_distortion_test.py`` and ``tests/gui/thm_workspace_test``:
-the same checks in ``AzrModel`` and on the page, round trips byte for byte.
+``tests/pyazr/thm_distortion_test.py`` (and ``tests/gui/thm_workspace_test`` on
+``dev``): the same checks in ``AzrModel`` (and on the page), round trips byte for byte.
 
 *Size: the spread of standard choices, 19F(p,αγ)16O.* ``examples/f19_pag_thm``
 (19F + d at 55 MeV, :math:`a_p` = 5.136 fm, ``vertex=constant``, as in the

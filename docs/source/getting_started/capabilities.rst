@@ -71,8 +71,7 @@ the Coulomb line shape, the spectator-momentum window and angular
 acceptance, the distortion factor :math:`R(E)` and a distorted-wave entrance
 vertex with global optical potentials, a fixed-angle observable, under
 Brune's or Park's parametrization. THM is opt-in: a project without THM
-content is unaffected, and the GUI shows the THM controls only when
-*Use Trojan Horse Method (THM)* is ticked (:doc:`../user_guide/configure_menu`).
+content is unaffected (:doc:`../user_guide/configure_menu`, "Runtime Options").
 The model dependence of THM results is quoted from model averages over
 refitted variants (``scripts/thm_model_average.py``, ``pyazr.modelavg``).
 Theory and every option: :doc:`../theory/thm_implementation`; worked
@@ -139,9 +138,8 @@ and get slower as it grew. Each cache therefore watches its own hit rate and,
 if too few of its entries are earning their keep, stops storing for nearby
 energies — degrading to the uncached speed rather than past it. It keeps the
 values at exactly the energies it has seen, in a bounded table (32 768 per
-key), so a second session in the same process (``pyazr``, the GUI's THM
-diagnostics) finds them: the 12C+12C THM example opens in 2.6 s instead of
-24.5 s the second time, for 13 MB of memory. Values from such a table are
+key), so a second session in the same process (``pyazr``) finds them: a
+second session of the 12C+12C THM example starts in 2.6 s instead of 24.5 s, for 13 MB of memory. Values from such a table are
 what recomputing gives, bit for bit.
 
 Interfaces
@@ -153,10 +151,7 @@ Interfaces
 
    * - Interface
      - Use it for
-   * - **GUI**
-     - Building and inspecting a model, running fits, plotting. The natural
-       place to start.
-   * - **Console** (``--no-gui``)
+   * - **Console**
      - Scripted or remote runs, batch jobs, HPC
        (:doc:`../reference/command_line`).
    * - **Python** (``pyazr``)

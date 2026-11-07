@@ -1,10 +1,10 @@
 Installation
 ============
 
-AZURE2 is built with CMake. The command-line engine, the Qt graphical setup
-utility and the ``pyazr`` Python module come from one source tree; the
-README of the repository has the platform-specific package lists and the
-ready-built downloads.
+AZURE2 is built with CMake. The command-line program and the ``pyazr``
+Python module come from one source tree; the README of the repository has the
+platform-specific package lists. This version has no graphical setup utility
+(:doc:`../user_guide/graphical_interface`).
 
 Dependencies
 ------------
@@ -13,8 +13,7 @@ Dependencies
 
 - a C++ compiler with **OpenMP** (GCC or Clang; on macOS Homebrew's
   ``libomp``)
-- **CMake** 3.16 or later, and ``pkg-config`` (CMake finds GSL and Qwt
-  through it)
+- **CMake** 3.16 or later, and ``pkg-config`` (CMake finds GSL through it)
 - **GNU Scientific Library (GSL)** (https://www.gnu.org/software/gsl/)
 
 Minuit2, the Coulomb-function library, the SRIM stopping-power utilities,
@@ -24,10 +23,6 @@ them.
 
 **Optional:**
 
-- **Qt5** (``Core``, ``Widgets``, ``Svg``, ``Script``) -- the graphical
-  interface (``BUILD_GUI``)
-- **Qwt** built for Qt5 -- the Plot tab (``USE_QWT``; the THM Workspace
-  draws its plots without it)
 - **Readline** -- line editing at the command-line prompts
   (``USE_READLINE``)
 - **pybind11** -- the ``_azure2`` module that ``pyazr`` drives
@@ -49,9 +44,9 @@ rebuild ``_azure2``, and a stale module reproduces engine behaviour that the
 current source no longer has. Build both (the default target does) after an
 engine change. On a machine with little memory keep the parallel jobs low.
 
-Platform scripts that detect Qwt and set the options live in ``scripts/``
-(``build_linux.sh``, ``build_macos.sh``, ``build_windows.sh``,
-``build_docker.sh``).
+Platform scripts that set the options live in ``scripts/``
+(``build_linux.sh``, ``build_windows.sh``, ``build_docker.sh``,
+``build_crc.csh``).
 
 5. Build the Coulomb-function table once (recommended):
 
@@ -65,9 +60,8 @@ Platform scripts that detect Qwt and set the options live in ``scripts/``
    table is not distributed with AZURE2. The build takes about 5 minutes on
    four threads and writes 88 MB to ``~/.azure2/coulomb_table.bin`` (or to the
    file named by the environment variable ``AZURE2_COULOMB_TABLE``). Without
-   it, AZURE2 says so once per run and computes the functions directly. The
-   GUI builds it too (**Configure → Build Coulomb Table...**), which is the way
-   for the ready-built downloads. See :doc:`../user_guide/configure_menu`.
+   it, AZURE2 says so once per run and computes the functions directly. See
+   :doc:`../user_guide/configure_menu`.
 
 CMake Options
 ^^^^^^^^^^^^^
@@ -81,16 +75,10 @@ The following options can be passed to CMake as ``-D<OPTION>=ON|OFF``:
    * - Option
      - Default
      - Description
-   * - ``BUILD_GUI``
-     - ON
-     - Build the graphical setup utility.
-   * - ``USE_QWT``
-     - ON
-     - Build the Plot tab (needs Qwt).
    * - ``USE_API``
      - ON
      - Build the ``AZUREAPI`` library and the pybind11 ``_azure2`` module
-       (``pyazr``; the THM Workspace's Diagnostics page needs it too).
+       (``pyazr``).
    * - ``USE_MCMC``
      - ON
      - MCMC Bayesian sampling with the bundled ``numcmc``.
@@ -109,9 +97,6 @@ The following options can be passed to CMake as ``-D<OPTION>=ON|OFF``:
    * - ``BUILD_LIBRARY``
      - OFF
      - Build AZURE2 as a library.
-   * - ``BUILD_MACOS_BUNDLE``
-     - OFF
-     - Build a macOS ``.app`` bundle.
    * - ``CROSS_COMPILE_WINDOWS``
      - OFF
      - Cross-compile a Windows binary with MinGW.
@@ -124,7 +109,7 @@ The following options can be passed to CMake as ``-D<OPTION>=ON|OFF``:
        every target, for ``scripts/sanitize_upgrade.sh`` (developers only;
        ThreadSanitizer needs clang with LLVM's libomp and libarcher).
 
-If GSL or Qwt are installed in a non-standard location, point CMake at them
+If GSL is installed in a non-standard location, point CMake at it
 with ``-DCMAKE_PREFIX_PATH=/path/to/prefix``.
 
 The Python package
@@ -145,15 +130,15 @@ Tests
 
 ``tests/run_tests.sh [path/to/AZURE2]`` runs every project in ``tests/``
 against its recorded :math:`\chi^2` and every ``tests/*/check.sh``;
-``ctest --test-dir build`` runs the unit, GUI and ``pyazr`` tests.
+``ctest --test-dir build`` runs the unit, reference and ``pyazr`` tests.
 :doc:`../developer/contributing` describes the conventions.
 
 Docker
 ------
 
 ``scripts/build_docker.sh`` builds an image from
-``packaging/docker/Dockerfile.azure2``; ``examples/run_gui.sh`` starts the GUI
-in it. For HPC systems the image can be converted to Singularity/Apptainer:
+``packaging/docker/Dockerfile.azure2``; ``examples/run_mcmc.sh`` runs a
+script in it. For HPC systems the image can be converted to Singularity/Apptainer:
 
 .. code-block:: bash
 

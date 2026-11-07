@@ -1,6 +1,13 @@
 Fitting Tab
 ===========
 
+.. note::
+
+   This page describes the ``.azr`` content through the fields of the Qt setup
+   utility of the released versions. This version has no setup utility;
+   :doc:`graphical_interface` says how to do the same from the command line and
+   with ``pyazr``.
+
 The **Fitting** tab provides a centralized view and control over all parameters
 that enter the R-matrix fit. It allows setting initial values, parameter limits,
 and nuisance parameter flags.

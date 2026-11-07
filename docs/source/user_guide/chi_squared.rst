@@ -1,6 +1,12 @@
 How the Chi-Squared Is Built
 ============================
 
+.. note::
+
+   Where this page names a tab or field, it is one of the Qt setup utility of
+   the released versions; the value it sets is in the ``.azr`` file. This
+   version has no setup utility (:doc:`graphical_interface`).
+
 Everything AZURE2 fits or samples is driven by one objective function. It is
 worth knowing exactly what goes into it, because the number reported in
 ``chiSquared.out`` is *not* the whole objective, and the difference matters as

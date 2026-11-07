@@ -5,7 +5,7 @@ AZURE2's results are used in publications and nuclear-data evaluations, so the
 standard for a change is that it can be *shown* to be correct, not only that
 it compiles and runs. This page is for people. The same rules, written for AI
 coding assistants, are in ``CLAUDE.md`` at the repository root, with shorter
-files in ``tests/``, ``pyazr/`` and ``gui/``.
+files in ``tests/`` and ``pyazr/``.
 
 Branches
 --------
@@ -47,12 +47,12 @@ pass. The test suites are:
      - Quantities computed a second way, from closed forms or independent
        implementations. These are the tests that show a number is *right*,
        not only unchanged.
-   * - ``tests/gui/``, ``tests/pyazr/``
-     - The ``.azr`` round trip through each front end, and pyazr against the
+   * - ``tests/pyazr/``
+     - The ``.azr`` round trip through pyazr, and pyazr against the
        engine. Tests labelled ``slow`` run with ``ctest -L slow``.
    * - ``tests/consistency/``
      - Command-line flags against ``--help`` and :doc:`../reference/command_line`,
-       the segment keywords of the engine, GUI and pyazr, test registration,
+       the segment keywords of the engine and pyazr, test registration,
        and ``check.sh`` permissions.
 
 What a finished change contains
@@ -63,8 +63,8 @@ What a finished change contains
    independent of the code: a closed form, an independent calculation (for
    example ``mpmath`` or a magnetic-substate sum, as in
    ``tests/ec_m1_exact/truth.py``), a published value, or an exact identity.
-2. **Every front end.** A user-visible feature reaches the engine, the GUI and
-   pyazr together (see the checklist below).
+2. **Every front end.** A user-visible feature reaches the engine, the
+   command line and pyazr together (see the checklist below).
 3. **Documentation.** The page of this site that describes the behaviour is
    updated in the same branch. Claude Code skills in ``.claude/skills`` that
    describe the old behaviour are corrected; skills teach use and link this
@@ -77,7 +77,7 @@ What a finished change contains
 Adding an ``.azr`` keyword or option
 ------------------------------------
 
-The project file is read by three independent parsers
+The project file is read by two independent parsers
 (:doc:`architecture`), so a new keyword touches:
 
 #. the engine parser (``SegLine.h``, ``NucLine.h`` or ``Config.cpp``), the
@@ -87,8 +87,6 @@ The project file is read by three independent parsers
    gradient checked against finite differences;
 #. for a command-line flag: ``parseOptions``, ``printHelp`` and
    :doc:`../reference/command_line`;
-#. the GUI: reading, writing and editing it, ``SegmentKeywords.h`` for segment
-   keywords, and a round-trip test in ``tests/gui``;
 #. pyazr: ``datasets.py`` / ``azrfile.py``, and ``azure2.py`` if it changes
    :math:`\chi^2`, with a test in ``tests/pyazr`` registered in its
    ``CMakeLists.txt``;
@@ -156,8 +154,7 @@ Running the suites
 ``ctest --test-dir build``
    ``tests/reference`` (C++ checks against closed forms or independent
    implementations, several with a Python reference script beside them;
-   its ``README.md`` lists what each one checks), ``tests/gui`` (headless
-   Qt tests, ``QT_QPA_PLATFORM=offscreen``, built with the GUI) and
+   its ``README.md`` lists what each one checks) and
    ``tests/pyazr`` (``pyazr_*``, the Python module against the engine and
    the CLI binary of the same build, passed as ``AZURE2_BIN``).
 

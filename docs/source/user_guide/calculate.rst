@@ -1,6 +1,13 @@
 Calculate Tab
 =============
 
+.. note::
+
+   This page describes the ``.azr`` content through the fields of the Qt setup
+   utility of the released versions. This version has no setup utility;
+   :doc:`graphical_interface` says how to do the same from the command line and
+   with ``pyazr``.
+
 The **Calculate** tab controls the execution of AZURE2 calculations. Select a
 calculation type from the drop-down menu and click **Save and Run** to execute.
 
