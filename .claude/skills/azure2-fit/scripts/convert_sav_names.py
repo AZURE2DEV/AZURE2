@@ -2,7 +2,7 @@
 """Rename an old-format AZURE2 parameter file (param.sav/.par/.fit) to the
 current parameter names, and optionally check the result against the model.
 
-Builds before dcfdb34 (2025-08-01) named level parameters
+Old builds (before the level parameters were renamed in CNuc::FillMnParams) named level parameters
     j=<J>_la=<L>_energy      and   j=<J>_la=<L>_ch=<C>_rwa
 Current builds (CNuc::FillMnParams) name them
     energy_<N>               and   width_<N>_<C>
