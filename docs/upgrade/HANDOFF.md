@@ -532,7 +532,9 @@ out of any repository).
 **Decisions open (Jakub, then James deBoer's group).**
 1. Agree the structure and the phase order; who owns which phase.
 2. The Phase 0 freeze on perf work in the point model and on new Qt features.
-3. Retiring Qt for the web UI after one release with both.
+3. Retiring Qt for the web UI after one release with both. **Decided 2026-11-07 (Jakub): no Qt GUI in the upgrade.**
+   Builds and checks run with `-DBUILD_GUI=OFF`; `gui/` and `tests/gui/` are removed on their own branch; the web UI
+   (Phase 9) is the only graphical front end. Qt stays on `dev`/`qt5` for released versions.
 4. The quadrature tolerance rule for Phase 5.
 5. Whether pyazr keeps a pure-Python `.azr` reader after Phase 3 (plan: no).
 6. pycoulomb licence and the origin of `coulsm` (Jakub, owner).

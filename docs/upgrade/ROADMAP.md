@@ -89,7 +89,7 @@ Gate: bit-identical χ², gradients = finite differences; pyazr no longer comput
 
 ## Phase 3 — One project model; library readers
 
-- [ ] `io/Project`: one `.azr` reader/writer; engine, Qt GUI and pyazr read through it; old files keep loading.
+- [ ] `io/Project`: one `.azr` reader/writer; engine and pyazr read through it; old files keep loading.
 - [ ] Round trip of the archive of 48,922 `.azr` files (the sweep used for the parser hardening).
 - [ ] pyazr `sources/`: AME/NUBASE, ENSDF, EXFOR (X4 master files), IAEA measured stopping; provenance records;
       fixtures of a few kB per library; `pyazr libraries update` as the only networked command.
@@ -144,5 +144,6 @@ Gate: ported pyazr tests pass; wheels install and run T1–T3 on three platforms
 - [ ] Physics tab plots every exposed physics function (`ARCHITECTURE.md` §8, `THM.md` §4).
 - [ ] pytest on `/api` with T1–T3; browser smoke tests; Qt parity checklist from today's Qt features and
       the GUI review in `azure2-plot` and `gui/CLAUDE.md`.
-- [ ] One release with both UIs; then remove `gui/`, `numcmc/`, `external/erya`, readline menus, the GSL fitter.
+- [ ] Remove `numcmc/`, `external/erya`, readline menus, the GSL fitter. (`gui/` is removed now, not after a release
+      with both UIs: decision 3, 2026-11-07.)
 Gate: parity checklist signed off by Jakub; release notes.

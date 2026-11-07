@@ -110,8 +110,9 @@ makes runs about 4× faster and does not change results.
 A change is finished when all of these are true, and the commit message says
 how each was checked:
 
-1. **It builds** with the GUI and pyazr enabled, and adds no compiler warnings
-   in the files it touches.
+1. **It builds** with pyazr enabled, and adds no compiler warnings in the files
+   it touches. On `feature/upgrade` the Qt GUI is not built (`-DBUILD_GUI=OFF`):
+   decision 3 in `docs/upgrade/HANDOFF.md` retires it; the web UI replaces it.
 2. **The tests pass**: `ctest -LE slow` and `tests/run_tests.sh`. If a
    reference χ² moved, see the next section first.
 3. **It is tested.** A bug fix comes with a test that fails on the old build
@@ -178,8 +179,9 @@ reports it the same way:
 3. CLI: the flag in `parseOptions`, `printHelp`, and
    `docs/source/reference/command_line.rst`. The consistency test enforces all
    three.
-4. GUI: read, write and edit it (`gui/include/SegmentKeywords.h` for segment
-   tails), plus a round-trip test in `tests/gui/`.
+4. GUI: not on `feature/upgrade` (decision 3); on `dev`, read, write and edit it
+   (`gui/include/SegmentKeywords.h` for segment tails), plus a round-trip test in
+   `tests/gui/`.
 5. pyazr: `datasets.py` / `azrfile.py` read and write, and `azure2.py` when it
    affects χ² or penalties, plus a test in `tests/pyazr/` registered in its
    `CMakeLists.txt`.
