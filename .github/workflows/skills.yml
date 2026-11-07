@@ -1,0 +1,29 @@
+name: skills
+
+# Rules for the Claude Code skills (docs/upgrade/RULES.md §3): sizes, no history
+# or personal paths, unique owners, descriptions, docs links. Pure Python, seconds.
+on:
+  push:
+    paths: ['.claude/skills/**', 'docs/source/**', 'tools/check_skills.py',
+            'tests/consistency/check_skills_test.py', '.github/workflows/skills.yml']
+  pull_request:
+    paths: ['.claude/skills/**', 'docs/source/**', 'tools/check_skills.py',
+            'tests/consistency/check_skills_test.py', '.github/workflows/skills.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check-skills:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Unit test of the checker
+        run: python3 tests/consistency/check_skills_test.py
+      - name: Check the skills
+        run: python3 tools/check_skills.py --user-skills none
