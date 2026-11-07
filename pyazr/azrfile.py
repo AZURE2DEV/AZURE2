@@ -3252,7 +3252,7 @@ class AzrModel:
         ``segments`` is the segment-key list as AZURE2 writes it (``"3"``,
         ``"3-5"``, ``"3,7-9"`` or an iterable of ints).  Keys count *every*
         ``<segmentsData>`` line, active or not, and a ``<segmentsTest>`` line
-        with the same key gets the effect too (see the azure2-eval skill).
+        with the same key gets the effect too (see the azure2-targets skill).
 
         ``gaussian_sigma`` (lab MeV) is the beam-energy Gaussian convolution
         with a constant width.  ``sigma_expression`` gives the same width as
