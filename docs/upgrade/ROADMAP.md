@@ -64,6 +64,11 @@ awaits decision 8 (`HANDOFF.md`); the other four inherited failures are fixed (m
       coefficients → functions of the System.
 - [ ] Internal convention written in `docs/source/theory/conventions.rst`; `Convention` record; recoupling (6j) and
       phase conversions in `level_parameters`; convention-invariance test on T1–T3.
+      *Documentation part done on `feature/upgrade-1-conventions` (2026-11-07, not merged): the page states the
+      present engine's conventions with file:line references, lists where existing docs contradict the code, and
+      sketches the record (planned); `tests/coulomb_nuclear_sign` pins the Coulomb–nuclear interference sign. Open:
+      the record, `level_parameters`, the invariance test, and an independent check of the internal–external
+      capture sign.*
 Gate: bit-identical outputs (except the deliberate convention test cases); Coulomb functions agree with mpmath.
 
 ## Phase 2 — One objective

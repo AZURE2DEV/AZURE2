@@ -2,6 +2,47 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-07 (`feature/upgrade-1-conventions`) — conventions page, documentation part (ROADMAP Phase 1)
+
+Branch `feature/upgrade-1-conventions` from `feature/upgrade` f8b7bf22, not merged. Commits: 754ac7d7 (test
+`tests/coulomb_nuclear_sign`), 8faa430d (`docs/source/theory/conventions.rst` + Theory toctree), and this
+HANDOFF/ROADMAP commit. No C++ changed.
+
+**State.** The page states the present engine's conventions, each with file:line: s = j1 + j2 light first (LT
+III.2a), J = s + l in the spin-amplitude route, Condon–Shortley CG/Racah; no i^l on particle channels (only the
+E external-capture amplitude carries −i i^(l+L−lf), M1 +i); φ = arctan(F/G), ω = σ_l − σ_0, U = ΩΩ[1 + 2iP^½γAγP^½],
+T = e^{2iω} − U; B_c = S_c(E of the first listed level) in the formal basis; sign of γ = sign of the input Γ/ANC/
+amplitude (Brune, Park; photon total width with EC; static-moment sign flip for half-integer J); photon widths
+never in the level matrix except --use-rmc; Blatt–Biedenharn z = (−1)^(s'−s) Z Z / 4 (photon: (−1)^(1+s−jf));
+elastic Coulomb term with C_α = +(4π)^−½ η csc² e^{−2iη ln sin} and Re[i C T*]; identical-particle factors; the
+planned Convention record (marked planned). `tests/coulomb_nuclear_sign/check.sh`: p+12C hard sphere vs an
+mpmath partial-wave sum, 30 points, A- and R-matrix, Brune and --no-brune, max rel diff 8.4e-11 (Condor 16122);
+the interference reversed moves the truth by 7–74 %. Sphinx not built (not installed on CRC; labels and :doc:
+targets checked by script).
+
+**Existing docs that contradict the code (not changed here).**
+- `docs/source/developer/level_matrix.rst`: "L_c = L_0(c) is the shift function" (code: L⁰ = S − B + iP); U
+  written without Ω_cΩ_c'; T_cc = e^{2iω} − e^{iω}e^{iφ}(1+U) and T_cc' = −e^{iω_c}e^{iφ_c'}U (code: Ω_cΩ_c' with
+  e^{−iφ} on both channels); "ω_c = σ_l" (code: σ_l − σ_0); [1−RL] = δ − iRP (code: 1 − RL⁰ in the standard
+  formalism); interference "(i/√π) g f_C* T P_l + c.c." (code: Re[(i/√π)(π/k²) g C_α T* P_l], opposite sign and
+  half the size if f_C means C_α).
+- `docs/source/reference/data_formats.rst` (phase-shift data): "−90° < θ_lab < 90°" names the wrong quantity; the
+  phase shift is in (−90°, 90°], and in [0°, 180°) for identical pairs (`GenMatrixFunc.cpp:555-564`).
+
+**Open (proposed default in brackets).**
+- Sign of internal relative to external capture: fixed by the code's formulas, checked by no independent
+  calculation. [An m-scheme or potential-model truth for one resonance + EC, as `tests/ec_e1m1_phase`.]
+- The orbital–spin order is pinned only relative to the Blatt–Biedenharn route (polarization Gate 1). [Accept;
+  the invariance test of the record will cover it.]
+- LT and DB were not re-read (no PDF reader on CRC); the page says which comparisons rest on the code's citations.
+  [Re-read LT VII–VIII and DB §2–3 on a machine with a PDF reader and add equation numbers.]
+- Formal basis: B_c = S_c(first listed level) makes the formal parameters depend on level order, and GSL's
+  eigenvector sign makes a formal level's overall sign arbitrary. Observables are unaffected. [Fix both in
+  `level_parameters`: B_c from the lowest level, sign so that the largest |γ| of a level is positive.]
+- Fix the two contradicting pages. [Separate `docs/` commit, by the director's choice.]
+
+**Next.** Convention record and `level_parameters` (code part of the ROADMAP item).
+
 ## 2026-11-07 (`fix/edep-ownership-tsan`) — copy-on-write ownership TSan can see (sanitizer_findings.md §4.2)
 
 Branch `fix/edep-ownership-tsan` from `feature/upgrade` 5b021003, not merged. Commits: c556f052 (the fix), and the
