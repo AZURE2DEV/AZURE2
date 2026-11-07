@@ -3,7 +3,10 @@
 # The upgrade test projects T1 and T3 (tests/upgrade/T1, T3) against today's engine:
 #   (a) golden/golden.py: the calculate, extrapolate and rate outputs equal the golden files to 1e-6 relative;
 #   (b) recover.py: a MIGRAD fit from the moved start model returns the true parameters (|pull| <= 4 on the
-#       committed noisy data, <= 0.05 on noise-free data) with chi2(fit) <= chi2(truth).
+#       committed noisy data, <= 0.05 on noise-free data) with chi2(fit) <= chi2(truth);
+#   (c) golden/T2/regen_compare.py: the T2 calculations at the start values and at the truth equal the golden
+#       files (about 3 s). The T2 fit (about 10 min with exact Coulomb functions) is not run here; see
+#       tests/upgrade/T2/README.md.
 # Needs python3 with numpy; without them it says so and passes (as the pyazr tests skip).
 #
 #   ./tests/upgrade/check.sh path/to/AZURE2
@@ -20,4 +23,6 @@ fi
 failures=0
 "$PY" "$HERE/golden/golden.py" || failures=$((failures + 1))
 "$PY" "$HERE/recover.py" || failures=$((failures + 1))
-if [ "$failures" -eq 0 ]; then echo "upgrade T1/T3: ok"; else echo "upgrade T1/T3: FAIL"; exit 1; fi
+"$PY" "$HERE/golden/T2/regen_compare.py" --binary "$AZURE2_BIN" --threads "$OMP_NUM_THREADS" \
+  --only calc_start --only calc_truth || failures=$((failures + 1))
+if [ "$failures" -eq 0 ]; then echo "upgrade T1-T3: ok"; else echo "upgrade T1-T3: FAIL"; exit 1; fi
