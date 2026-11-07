@@ -544,6 +544,9 @@ out of any repository).
    [Proposed: (a).]
 9. (Added 2026-11-07.) The nightly sanitizer schedule fires only from the default branch (`qt5`). [Keep the file on
    `feature/upgrade`; push trigger and manual dispatch until the PI decides.]
+10. (Added 2026-11-07.) Formal basis: B_c from the lowest level instead of the first listed, and each formal
+   level's largest |γ| positive. Both exist as `Convention` options, off (`level_parameters.md`). [Turn both on when
+   the engine switches to `level_parameters`, with a formal-basis golden re-baseline.]
 
 **Next actions.**
 1. Push `feature/upgrade` (and, if wanted, `thm-review` and `fix/edep-cow-acquire`) from a machine with GitHub access.
