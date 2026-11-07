@@ -75,6 +75,7 @@ the same LLVM release and passed with `-resource-dir` and `-L`/`-rpath` (`CFLAGS
 | GCC 15.2 ASan (43 min) | 54 | 1 (the same) | none |
 | clang 23.1.4 TSan, no suppressions (50 min) | 54 | 13 | 10 distinct report sites in 34 report files: §4.1–§4.4 |
 | clang 23.1.4 TSan, with `tsan.supp` and `tsan.ignorelist` (49 min) | 54 | 5: T3-fit, T2-fit30, `shared_tables_race`, pyazr `shift_fn` (reports), `adaptive_grid_reference` (§4.6) | 8 distinct report sites in 25 report files: §4.1 (48 reports) and §4.2 (80) only |
+| clang 23.1.4 TSan, as above, on 5b021003 with the fixes of §4.1 (fecf4924) and §4.2 (c556f052), 2026-11-07 (54 min) | 54 | 2: `shared_point_tables` (peak RSS limit (d) under TSan, §4.2; no report), `adaptive_grid_reference` (§4.6) | none |
 | clang 23.1.4 ASan + LeakSanitizer, `upgrade` section | 10 | 10 (exit 1 from LSan) | one direct leak per run, §4.5 |
 
 ASan is silent on every step with both compilers: no heap or stack overflow, use after free, or double free in T1–T3,
@@ -118,7 +119,7 @@ in `EData::Clone` (`EData.cpp:5527`). Print the progress line under a mutex (the
 second), or only from the thread that holds `omp_get_thread_num() == 0`. Test: TSan on T3-fit reports nothing at
 `EData.cpp` or `AZURECalc.cpp:709`; the progress line count of a T2 fit of N calls is ⌊N/10⌋.
 
-### 4.2 Copy-on-write ownership test of the point tables (AZURE2; not a race under the C++ memory model, invisible to TSan)
+### 4.2 Copy-on-write ownership test of the point tables (AZURE2; not a race under the C++ memory model, invisible to TSan; fixed)
 
 TSan, in every run that re-energises points in parallel (`shared_tables_race`, `shift_fn`, `shift_fn_groups`,
 `shift_groups`, `pyazr shift_fn`; five reports per occurrence, one per member of `EDependentTables`):
@@ -161,6 +162,33 @@ this, so the copies and drops cannot be missed. Phase 6 removes the copy-on-writ
 `shared_tables_race` and `shift_fn` reports nothing at `EPoint.h:160-164`; the race test still passes at 8 threads.
 A check that the fix branch has not made a real race invisible: remove the acquire on the new counter and see TSan
 report the pair again.
+
+**Fixed** by c556f052 (`fix/edep-ownership-tsan`). `edep_` and `legendreP_` are held through `SharedTable<T>`
+(`include/SharedTable.h`): a `std::shared_ptr` for the lifetime, and a count of holders in the table itself. A copy
+of a handle increments the count (relaxed), a dropped handle decrements it with release order after its last access
+to the table, and `SoleOwner()` loads it with acquire order. A load that reads 1 reads the last read-modify-write in
+the count's modification order; each earlier release decrement heads a release sequence that continues through every
+later read-modify-write on the count ([intro.races]), so the load synchronizes with the decrement of every former
+holder, and the reads of those holders happen before the sole holder's write. These are release and acquire
+operations on one atomic object, which TSan models. The weak references of `NodeTableCache` are
+`SharedTable<T>::Weak`; `lock()` counts a new holder, as `weak_ptr::lock` did, and a published table is still never
+written again.
+
+Results, clang 23.1.4 TSan at 8 threads, on a temporary branch with this fix and §4.1's (`feature/upgrade` 5b021003
++ fecf4924 + c556f052): 54 steps, no report file (before: 25 files, 128 reports at 8 distinct AZURE2 sites, §3).
+The control asked for above: with the acquire load replaced by a relaxed one, the `checks` section (25 steps) gives
+5 report files with 75 reports, all at `EDependentTables::Clear` (`shift_fn`, `shift_fn_groups`, `shift_groups`),
+the pair of this section; TSan therefore sees the ordering through the new count and only through it.
+
+The change adds 8 bytes per table (the count) and one relaxed increment per copied handle. The peak RSS of the
+4-thread fit of `shared_point_tables` (d), a sixteenth of `natural_neon`, in plain GCC builds: 306 and 311 MB on
+`feature/upgrade` (no GUI), 324 and 326 MB on this branch, 329 and 332 MB on `fix/fit-iteration-counter`, which does
+not touch the tables (both with the GUI); this branch adds no measurable memory. The check's limit, 3.0 times the
+calculation's peak RSS, is near the measured ratio: the calculation took 103 MB in one run and 119 MB in the next on
+the same binary, and the 332 MB run failed (d) once in plain builds. Under TSan the fit used 1133 MB before and 1162
+and 1164 MB in two runs after (TSan keeps a synchronization record for each atomic object on which a release is done,
+one more per table), above 3.0 × 383 MB = 1149 MB; that step fails under TSan without a report. In plain builds both
+branches pass `tests/run_tests.sh` (131 of 131, `shared_point_tables` included).
 
 ### 4.3 Minuit2 call counter (third party; real race; compile-time ignorelist)
 
