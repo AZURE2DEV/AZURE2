@@ -1,0 +1,7 @@
+# T2 benchmark (scripts/bench_upgrade.sh): wall time and peak RSS of AZURE2 on tests/upgrade/T2
+# calc = menu 1, fit = menu 2 --use-lm --max-calls=N (numerical MIGRAD, N calls); --no-coulomb-table; compare same host/threads
+date_utc	commit	host	ncpu	threads	run	wall_s	peak_rss_MB	chi2	N	note
+2026-11-07T01:24:08Z	5a9426fd	d12chas062	24	1	calc	2.67	60.8	10899.8	330	HTCondor slot, request_cpus=8; binary: feature/upgrade c1cc92c7 build (engine sources = 37978592)
+2026-11-07T01:26:58Z	5a9426fd	d12chas062	24	1	fit200	170.11	238.4	691.608	330	HTCondor slot, request_cpus=8; binary: feature/upgrade c1cc92c7 build (engine sources = 37978592)
+2026-11-07T01:27:00Z	5a9426fd	d12chas062	24	8	calc	1.77	62.6	10899.8	330	HTCondor slot, request_cpus=8; binary: feature/upgrade c1cc92c7 build (engine sources = 37978592)
+2026-11-07T01:28:37Z	5a9426fd	d12chas062	24	8	fit200	96.70	475.2	691.608	330	HTCondor slot, request_cpus=8; binary: feature/upgrade c1cc92c7 build (engine sources = 37978592)
