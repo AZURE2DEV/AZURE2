@@ -1,0 +1,62 @@
+    #parametrization       1.0000000e+00       0.0000000e+00
+            energy_1       1.2420936e+01       1.8287288e-04
+           width_1_1       4.6354874e-01       4.6354874e-02
+           width_1_2       0.0000000e+00       0.0000000e+00
+           width_1_3       1.3373559e-01       2.8514580e-04
+           width_1_4       3.8862395e-01       3.8862395e-02
+            energy_2       1.3105000e+01       1.3105000e+00
+           width_2_1       3.5942756e-01       1.6198411e-03
+           width_2_2       0.0000000e+00       0.0000000e+00
+           width_2_3      -3.9193754e-01      -3.9193754e-02
+           width_2_4       5.8901461e-01       6.8132973e-03
+            energy_3       1.7000000e+01       1.7000000e+00
+           width_3_1       1.5791076e+00       1.5791076e-01
+           width_3_2       0.0000000e+00       0.0000000e+00
+           width_3_3      -5.9291674e-01      -5.9291674e-02
+           width_3_4       0.0000000e+00       0.0000000e+00
+            energy_4       1.3073400e+01       1.3073400e+00
+           width_4_1       8.0522254e-01       8.0522254e-02
+           width_4_2       0.0000000e+00       0.0000000e+00
+           width_4_3       1.1945725e-01       1.1945725e-02
+           width_4_4       3.0074258e-01       3.0074258e-02
+            energy_5       1.3269543e+01       1.7547980e-04
+           width_5_1       2.9034436e-01       2.9034436e-02
+           width_5_2       0.0000000e+00       0.0000000e+00
+           width_5_3       5.6033649e-02       5.2601105e-04
+           width_5_4       0.0000000e+00       0.0000000e+00
+ abundance_natN_8_16       3.7001583e-03       5.4585376e-05
+      segment_1_norm       1.0380039e+00       7.6651112e-03
+      segment_2_norm       9.5366826e-01       6.2570483e-03
+      segment_4_norm       9.8446413e-01       6.7626415e-03
+      segment_6_norm       1.0138430e+00       8.1553471e-03
+      segment_7_norm       9.6210038e-01       8.5906533e-03
+      segment_8_norm       1.0438150e+00       8.8343850e-03
+     segment_13_norm       7.2608917e-01       1.7899681e-02
+segment_1_energy_shift       2.1981969e-03       2.6035001e-04
+segment_2_energy_shift      -9.6435326e-04       2.4887434e-04
+segment_3_energy_shift      -9.6435326e-04       5.0000000e-04
+segment_4_energy_shift       0.0000000e+00       5.0000000e-04
+segment_5_energy_shift       0.0000000e+00       5.0000000e-04
+segment_6_energy_shift       0.0000000e+00       5.0000000e-04
+segment_7_energy_shift       0.0000000e+00       5.0000000e-04
+segment_8_energy_shift       0.0000000e+00       5.0000000e-04
+segment_9_energy_shift       0.0000000e+00       5.0000000e-04
+segment_10_energy_shift       0.0000000e+00       5.0000000e-04
+segment_11_energy_shift       0.0000000e+00       5.0000000e-04
+segment_12_energy_shift       0.0000000e+00       5.0000000e-04
+segment_13_energy_shift       0.0000000e+00       5.0000000e-04
+segment_1_energy_shift_sqrt       0.0000000e+00       5.0000000e-04
+segment_2_energy_shift_sqrt       0.0000000e+00       5.0000000e-04
+segment_3_energy_shift_sqrt       0.0000000e+00       5.0000000e-04
+segment_4_energy_shift_sqrt       1.8667773e-03       6.9610766e-04
+segment_5_energy_shift_sqrt       0.0000000e+00       5.0000000e-04
+segment_6_energy_shift_sqrt       0.0000000e+00       5.0000000e-04
+segment_7_energy_shift_sqrt       0.0000000e+00       5.0000000e-04
+segment_8_energy_shift_sqrt       0.0000000e+00       5.0000000e-04
+segment_9_energy_shift_sqrt       0.0000000e+00       5.0000000e-04
+segment_10_energy_shift_sqrt       0.0000000e+00       5.0000000e-04
+segment_11_energy_shift_sqrt       0.0000000e+00       5.0000000e-04
+segment_12_energy_shift_sqrt       0.0000000e+00       5.0000000e-04
+segment_13_energy_shift_sqrt       0.0000000e+00       5.0000000e-04
+segment_2_energy_shift_fn0       3.0886813e-03       5.6393955e-04
+           density_4       2.0827526e+17       7.9699344e+15

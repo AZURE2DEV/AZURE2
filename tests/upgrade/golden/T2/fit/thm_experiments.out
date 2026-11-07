@@ -1,0 +1,16 @@
+# THM experiments (<thm> experiment[<name>] lines): segments sharing one profiled norm and
+# a background b(E) = b0 + b1 E + b2 E^2 added to the folded model (model units, E the c.m.
+# energy of the entrance pair in MeV).  norm multiplies the data, as the segment norms of
+# normalizations.out.  Uncertainties and covariance are those of the closed-form profile
+# at fixed R-matrix parameters (inverse normal matrix of the linear least squares, not
+# scaled by chi2/nu).
+
+experiment: LC09
+segments: 11,12
+background: none
+points: 58
+chi2: 5.9921686312e+01
+status: profiled
+norm    2.0411841732e-03  1.8537642211e-05
+covariance:
+norm    3.4364417876e-10
