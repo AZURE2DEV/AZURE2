@@ -17,6 +17,17 @@ and how to keep the references honest.
 A new feature usually needs a regression project or `check.sh`, a pyazr test
 and a GUI round trip. A new formula needs a reference test.
 
+A regression reference is not a correctness check: `tests/run_tests.sh` pins
+each project's χ² against a number this code produced, so it catches a change
+and nothing else. `tests/reference/beam_profile_reference_test.cpp` is the
+pattern for an integrator: it drives `EPoint::IntegrateTargetEffect` with
+hand-chosen sub-point cross sections, needs no model, runs in 0.1 s, and rests
+on an identity (a constant cross section folds back to itself exactly, whatever
+the profile, window and detailed-balance weight, because numerator and
+denominator share the kernel). Mutation-test such a check: forcing the window
+shift to zero, or dropping the detailed-balance factor, each fails exactly one
+case.
+
 ## Writing one
 
 - Follow the house pattern. A docstring or header comment says what is
@@ -30,6 +41,12 @@ and a GUI round trip. A new formula needs a reference test.
 - Use independent truth where possible: `truth.py` with `mpmath`, m-scheme
   sums, brute-force quadrature, published numbers with a citation. A value
   printed by the code under test is a regression reference, not a truth.
+- An m-scheme truth for capture interference (as `tests/ec_e1m1_phase`) has
+  three traps: with a spin-0 target and unpolarized beam, E1 and a pure
+  spin-flip M1 (s-wave final state) do not interfere, so such a case cannot
+  test the phase; the final state is the |(l_f s)J_f⟩ level, not every product
+  state of the orbital; and the ANC must be physical for the channel radius,
+  or the cross section stops scaling as ANC².
 - `check.sh` works in `mktemp -d` with `trap 'rm -rf "$WORK"' EXIT`, sets
   `LC_ALL=C` (awk number parsing) and `OMP_NUM_THREADS=2`, and never writes
   into the source tree.
@@ -40,6 +57,25 @@ and a GUI round trip. A new formula needs a reference test.
   read the test output and confirm it says `ok`.
 - A test directory gets a `README.md` when the model or data need explaining:
   where the data came from, and why this model.
+
+## Portability (CI runs Linux, macOS and Windows/MinGW)
+
+CI builds and tests with numpy and pybind11 on all three, so the pyazr tests
+run there too. Before pushing:
+
+1. No `setenv`/`unsetenv` in C++ (MinGW lacks them); use `setEnvVar` /
+   `unsetEnvVar` at the top of `src/AZURECalc.cpp` (`_putenv` on Windows).
+2. No GNU-only shell in tests (`sed -i` without a suffix, `sed '0,/re/'`,
+   `grep -P`); macOS runs BSD tools. awk and perl are portable.
+3. A pyazr test imports numpy and pyazr inside its skip guard
+   (`try: ... except: print("skip: ..."); sys.exit(0)`).
+4. CI runs `ctest -LE slow`. A test that takes minutes gets `LABELS slow` in
+   `tests/pyazr/CMakeLists.txt`; run `ctest -L slow` locally (the longest,
+   `park_gradient`, takes about 40 min) when the pyazr or engine paths those
+   tests cover change.
+
+Job logs need a GitHub token; annotations are public but capped at 10 per step.
+Pushing a change to `.github/workflows/` needs the token's `workflow` scope.
 
 ## Re-baselining (`expected/`, tolerances, reference numbers)
 

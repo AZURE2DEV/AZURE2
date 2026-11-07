@@ -77,7 +77,7 @@ below (full text and reasons in `docs/upgrade/RULES.md`):
 | `external/` | Vendored Minuit2, coul, erya/pugixml | **Do not edit**; it is upstream code |
 | `tests/` | All tests | See `tests/CLAUDE.md` |
 | `docs/source/` | Sphinx site, built with `-W` | The user-facing source of truth |
-| `.claude/skills/` | How to *use* AZURE2 | See "Skills" below |
+| `.claude/skills/` | How to *use* AZURE2 | See "Skills" below; `tools/check_skills.py` |
 
 ## Build and verify
 
@@ -154,8 +154,8 @@ how each was checked:
   eV, not a reduced-width amplitude, and closed channels carry an ANC in
   fm^-1/2. Name the
   frame and unit in every new variable, keyword, column header and docstring
-  where it could be ambiguous. The full list of conventions is in the
-  `azure2-eval` skill's "Golden rules".
+  where it could be ambiguous. The working list of frames and units is in the
+  `azure2-check` skill.
 - **Determinism.** Results must not depend on thread count, on which file a
   session started from, or on the order of levels and channels. Tests run with
   `OMP_NUM_THREADS=2`. Differences across GCC, Clang and MinGW stay near 1e-5.
@@ -235,13 +235,30 @@ Commit generated outputs only under `tests/*/expected/`. Never commit `build*/`,
 
 ## Skills
 
-`.claude/skills/` teaches how to **use** AZURE2 (evaluations, fits, data
-handling). This file teaches how to **change** it. When code behaviour changes,
-the Sphinx docs are updated first, as the source of truth. Skills then point
-to the docs, and carry only workflow advice and pitfalls. Do not make the skill
-the only place a behaviour is documented: `azure2-eval/SKILL.md` is already
-about 2800 lines. Date an entry that records a behaviour change
-(`dev 0dd28e5, 2026-10-25`), so a reader can tell which builds it applies to.
+The rules are `docs/upgrade/RULES.md` §3; `tools/check_skills.py` enforces items 4, 5, 6 and 8 and checks that
+every docs link resolves (pre-commit and CI).
+
+- **Three places, three jobs.** `.claude/skills/` teaches how to **use** AZURE2; the Sphinx docs (`docs/source/`)
+  say how it **behaves**; this file says how to **change** it. When behaviour changes, the Sphinx page is updated
+  first; a skill links to it and carries only workflow, recipes and pitfalls. A skill is never the only place a
+  behaviour is documented.
+- **Size.** A `SKILL.md` has at most 500 lines (hard limit 800). Detail goes in `references/*.md` of at most 300
+  lines each.
+- **No history in skills.** No commit hashes, job IDs, session narratives, quotes or "fixed on" notes. The only
+  dated text is a version note for users of older builds, written as `builds before vX.Y` or
+  `builds before YYYY-MM-DD`, with `expires: YYYY-MM-DD` at most 90 days ahead; the checker fails on an expired
+  note, so it is removed or renewed.
+- **One owner skill per task.** Other skills link to the owner by name instead of repeating it. Repository and
+  user-level skills never share a name or a description.
+- **Descriptions** are at most 600 characters, name their triggers, and say when to use a sibling skill instead.
+- **No personal absolute paths** (`/groups/...`, `/Users/...`, home directories). Use environment variables
+  (`$AZURE2_BINARY`, `$AZURE2_SRC`, `$RMFIT_HOME`, `$CAMPAIGN_ROOT`, rmfit's own
+  `$AZURE2_ROOT`, `$FERDINAND_HOME`) and say what they hold.
+
+The skill set: `azure2-setup`, `azure2-calculate`, `azure2-fit`, `azure2-check`, `azure2-uncertainty`,
+`azure2-plot`, `azure2-targets`, `azure2-thm`, `azure2-resonance-search`, `azure2-exchange`, plus
+`rmfit-campaign` (the table in `docs/upgrade/RULES.md` §3 says which task each owns). Run
+`python3 tools/check_skills.py` before committing a skill change.
 
 ## When to stop and ask
 

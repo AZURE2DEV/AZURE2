@@ -20,8 +20,8 @@ Tick boxes as work lands; put the commit hash after each tick.
 - [ ] Identity checks (no data) as unit tests: list in `ARCHITECTURE.md` §10.
 - [ ] Benchmark: `scripts/bench_upgrade.sh` → time and peak RSS for T2 at 1 and 8 threads; stored per commit.
 - [ ] CI: nightly clang TSan and ASan at 8 threads on T1–T3 and the mapping/shift/target tests.
-- [ ] Rules into `CLAUDE.md` (`RULES.md`), replacing the "date an entry (`dev 0dd28e5`)" skill rule.
-- [ ] Skills rewritten into the ten-skill set (`RULES.md` §3) and `tools/check_skills.py` in CI.
+- [x] Rules into `CLAUDE.md` (`RULES.md`), replacing the "date an entry (`dev 0dd28e5`)" skill rule.
+- [x] Skills rewritten into the ten-skill set (`RULES.md` §3) and `tools/check_skills.py` in CI.
 - [ ] Merge the race fixes everywhere: `a6bc6b9` is on `dev` only (missing on `thm`); the acquire-fence fix
       (local branch `fix/edep-cow-acquire`, 3fba1192, analysis machine) still to push and merge.
 Gate: T1–T3 run in seconds and recover their truth with today's engine; golden files committed.
@@ -104,6 +104,6 @@ Gate: ported pyazr tests pass; wheels install and run T1–T3 on three platforms
       and stop; tabs Project, Nucleus, Data, Fit, Results, Physics, THM (opt-in).
 - [ ] Physics tab plots every exposed physics function (`ARCHITECTURE.md` §8, `THM.md` §4).
 - [ ] pytest on `/api` with T1–T3; browser smoke tests; Qt parity checklist from today's Qt features and
-      `azure2-gui-review`.
+      the GUI review in `azure2-plot` and `gui/CLAUDE.md`.
 - [ ] One release with both UIs; then remove `gui/`, `numcmc/`, `external/erya`, readline menus, the GSL fitter.
 Gate: parity checklist signed off by Jakub; release notes.
