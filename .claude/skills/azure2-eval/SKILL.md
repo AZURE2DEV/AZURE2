@@ -3329,8 +3329,11 @@ complete:
   current build). 13C+a ND2021r g5: full 400,616; hand windows 401,435 (48 % integrated); auto 400,881 (58 %,
   largest point shift 0.42 sigma); auto:0.003 400,656 (81 %); auto:0.001:5 400,621 (99 %). Check a windowed fit
   against the full integration at its endpoint before trusting it: the 13C+a windowed refit (11-06-26_ti_windowed)
-  ended WORSE than the full one because a band anchor reacted to the sigma(E_bar) points far more than the data
-  did. Test: `tests/target_auto_windows/check.sh` (old build fails 10 of 11).
+  ended WORSE than the full one. Cause (found 11-06 evening): ONE point in a deep angular minimum (E_lab 5.51,
+  150 deg) where sigma(E_bar) can reach the node (fit 6e-11) while the depth average cannot (3e-5); the rmfit band
+  anchor, a mean of log(fit/ref), turned that into 48-65 sigma and the fit used it as a lever. Any objective term
+  in log(model) needs a floor; the fallback also understates steep sub-barrier cross sections by 5-8 % below the
+  first window (13C+a E_lab 0.68). Test: `tests/target_auto_windows/check.sh` (old build fails 10 of 11).
 - 2026-11-06 -- THREADED FITS WITH ENERGY SHIFTS COULD CRASH (use-after-free) ON dev 3264896..6982601.
   With the shared point tables (dev 3264896, 2026-11-06 morning), re-energising points in parallel let a host
   point write the table pointer of a point mapped onto it from ANOTHER segment while that segment's thread
