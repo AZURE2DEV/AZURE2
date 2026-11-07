@@ -2,6 +2,52 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-06 (sanitizer session) — Phase 0: TSan and ASan at 8 threads, script, CI, findings
+
+Branch `feature/upgrade-0-sanitizers` (from `feature/upgrade` 356c6770), local, not pushed. Commits: c692bb8b
+(cherry-pick of 189f3023 from `ai-r/dev`: `PYAZR_OUTPUT_DIR`), 557bb0ba (`AZURE2_SANITIZE`), cfd281ab
+(`scripts/sanitize_upgrade.sh`, `scripts/sanitizers/`), 16309cf8 (TSan ignorelist), 8572b21c (workflow), 635b0a1a
+(`sanitizer_findings.md`, installation option row), and the roadmap/HANDOFF commit.
+
+**State.**
+- `-DAZURE2_SANITIZE=thread|address|address,undefined` instruments every target, Minuit2 and coul included.
+- `scripts/sanitize_upgrade.sh thread|address`: 54 steps at 8 threads (T1/T3 calc, extrap, rate, gradient fit; T2
+  calc and a 30-call fit; 26 mapping/shift/target `check.sh`; 3 regression projects; 4 integrator reference tests;
+  12 pyazr tests in-process). Exit 1 on a report, 2 on a failure without one, 3 on setup.
+- `.github/workflows/upgrade-sanitizers.yml`: clang 18 + libomp/libarcher on Ubuntu 24.04, nightly, dispatch, and on
+  a push touching the workflow/script/suppressions.
+- Runs on Condor (`sanitizer_findings.md` §3): ASan clean with clang 23.1.4 and GCC 15.2. TSan, after the two
+  third-party entries (libomp suspend/resume, suppressed; Minuit2 call counter, ignorelisted): 25 report files,
+  all at two AZURE2 sites.
+
+**Findings for `fix/` branches (not fixed here; details, stacks and proposed fixes in `sanitizer_findings.md` §4).**
+1. §4.1 `fix/fit-iteration-counter` — real race: `EData::iterations_` read and incremented, and the progress line
+   written to `std::cout`, from every thread of Minuit2's numerical gradient (`AZURECalc.cpp:565-713`). No fit value
+   depends on it. Fix: atomic counter with `fetch_add` returning the iteration, progress line under a mutex.
+2. §4.2 `fix/edep-ownership-tsan` — the copy-on-write ownership test `SoleOwner` (relaxed `use_count()` + acquire
+   fence, 3fba1192) is ordered under the C++ memory model; TSan does not model standalone fences and reports
+   `EDependentTables::Clear` against `ClearEDependentRows` (`shared_tables_race`, `shift_fn*`, pyazr `shift_fn`).
+   Fix: an ownership count TSan can see (atomic holders count, acquire load), or wait for Phase 6, which removes the
+   tables. The TSan job stays red until one of the two lands.
+3. Third party, recorded only: Minuit2's `fNumCall++` from the parallel gradient is a real race (call count and
+   `--max-calls` approximate under threads).
+4. Not a sanitizer finding: `adaptive_grid_reference` fails on every build of 356c6770, plain GCC 11.5 included
+   ("eV level crossing the window edge", swing 1.685e-4 > 1e-4). Needs its own branch.
+
+**Not done / not verified.** The workflow has never run on GitHub (no push from here): the apt layout (runtime names,
+`libarcher.so` and `omp.h` locations) is handled by lookups, not tested. The cluster's clang module carries no
+compiler-rt and no libomp; the runs used both built from the LLVM 23.1.4 sources in scratch (outside the repository).
+GCC TSan was not run: with libgomp it cannot be correct (§2 of the findings).
+
+**Open (proposed default in brackets).**
+- GitHub fires the schedule only from the default branch (`qt5`, human-only). [Leave the file on `feature/upgrade`;
+  rely on the push trigger and manual dispatch until the upgrade merges, or the PI adds the file to the default
+  branch.]
+- Should the TSan job be green before §4.2 is fixed? [No suppression of AZURE2 code: take `fix/edep-ownership-tsan`
+  next, a small change in `EPoint`; it also removes the last fence-based argument from the copy-on-write code.]
+- The ASan job warns, not fails, on `adaptive_grid_reference` (exit 2 is a warning in the workflow). [Keep: build.yml
+  gates test failures.]
+
 ## 2026-11-07 (T2 session) — test project T2, its golden outputs and the benchmark
 
 Branch `feature/upgrade-0-testprojects-t2` (from `feature/upgrade` ff75fc28), commits 3184b1ee … 8870504f, not

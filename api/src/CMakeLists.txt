@@ -39,6 +39,10 @@ else()
 
     # Build directly into the pyazr package so ``import pyazr._azure2`` resolves
     # without any path fiddling.
+    # PYAZR_OUTPUT_DIR redirects it (a build that must not replace the module
+    # a running session has loaded); the default is the package directory.
+    set(PYAZR_OUTPUT_DIR "${CMAKE_SOURCE_DIR}/pyazr" CACHE PATH
+        "Directory the _azure2 Python module is written to")
     set_target_properties(_azure2 PROPERTIES
-        LIBRARY_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/pyazr)
+        LIBRARY_OUTPUT_DIRECTORY ${PYAZR_OUTPUT_DIR})
 endif()

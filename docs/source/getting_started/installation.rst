@@ -118,6 +118,11 @@ The following options can be passed to CMake as ``-D<OPTION>=ON|OFF``:
    * - ``CODE_COVERAGE``, ``USE_GCOV``
      - OFF
      - Coverage builds.
+   * - ``AZURE2_SANITIZE``
+     - (empty)
+     - ``thread``, ``address`` or ``address,undefined``: a sanitizer build of
+       every target, for ``scripts/sanitize_upgrade.sh`` (developers only;
+       ThreadSanitizer needs clang with LLVM's libomp and libarcher).
 
 If GSL or Qwt are installed in a non-standard location, point CMake at them
 with ``-DCMAKE_PREFIX_PATH=/path/to/prefix``.

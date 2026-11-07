@@ -66,6 +66,51 @@ option(USE_MCMC "Use MCMC Bayesian sampling OFF" ON)
 option(USE_GCOV "Create a GCov-enabled build." OFF)
 option(CODE_COVERAGE "Enable coverage reporting" OFF)
 
+# ---------------------------------------------------------------- sanitizers
+# AZURE2_SANITIZE=thread | address | address,undefined builds every target, the
+# vendored Minuit2 and coul included, with that -fsanitize= list.  Used by
+# scripts/sanitize_upgrade.sh and the nightly upgrade-sanitizers workflow
+# (docs/upgrade/sanitizer_findings.md says what they run and why).  Set before
+# any add_subdirectory so that the third-party targets are instrumented too:
+# ThreadSanitizer reports races only on instrumented accesses and misses the
+# synchronization of uninstrumented code, so a half-instrumented build gives both
+# false reports and missed races.
+#
+# OpenMP under ThreadSanitizer: libgomp synchronizes its barriers and reductions
+# through raw futexes that TSan cannot see, so a GCC build reports every
+# parallel region as racing with the code after its barrier.  Use clang with
+# LLVM's libomp and run with its OMPT tool libarcher (OMP_TOOL_LIBRARIES), which
+# tells TSan the happens-before order of OpenMP barriers, tasks and reductions;
+# the script finds libarcher and refuses a TSan run without it.
+#
+# The _azure2 Python module is a shared object: clang does not link the
+# sanitizer runtime into it, so python must be started with the runtime in
+# LD_PRELOAD (the script does this).
+set(AZURE2_SANITIZE "" CACHE STRING
+    "Sanitizer build: thread, address, or address,undefined (empty: none)")
+set_property(CACHE AZURE2_SANITIZE PROPERTY STRINGS "" thread address "address,undefined")
+if(AZURE2_SANITIZE)
+    if(MSVC OR CROSS_COMPILE_WINDOWS)
+        message(FATAL_ERROR "AZURE2_SANITIZE: sanitizer builds are supported with GCC or clang on Linux and macOS only")
+    endif()
+    if(AZURE2_SANITIZE MATCHES "thread" AND AZURE2_SANITIZE MATCHES "address")
+        message(FATAL_ERROR "AZURE2_SANITIZE: thread and address cannot be combined (got '${AZURE2_SANITIZE}')")
+    endif()
+    if(NOT AZURE2_SANITIZE MATCHES "^(thread|address|address,undefined|undefined)$")
+        message(FATAL_ERROR "AZURE2_SANITIZE: expected thread, address, address,undefined or undefined (got '${AZURE2_SANITIZE}')")
+    endif()
+    # Frame pointers and line tables for readable stacks; no tail calls, so that
+    # every frame of a report is a real caller.
+    add_compile_options(-fsanitize=${AZURE2_SANITIZE} -fno-omit-frame-pointer
+                        -fno-optimize-sibling-calls -g)
+    add_link_options(-fsanitize=${AZURE2_SANITIZE})
+    # Third-party races that a run-time suppression cannot silence without hiding AZURE2's own (see the file).
+    if(AZURE2_SANITIZE STREQUAL "thread" AND CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+        add_compile_options(-fsanitize-ignorelist=${CMAKE_SOURCE_DIR}/scripts/sanitizers/tsan.ignorelist)
+    endif()
+    message(STATUS "Sanitizer build: -fsanitize=${AZURE2_SANITIZE}")
+endif()
+
 # ---------------------------------------------------------------- macOS/Homebrew
 # Homebrew needs help that a Linux build never does, and without it a plain
 # "cmake -S . -B build" fails on macOS for two unrelated reasons:

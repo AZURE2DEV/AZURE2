@@ -1,0 +1,14 @@
+# Compile-time ThreadSanitizer ignorelist (clang -fsanitize-ignorelist; CMakeLists.txt adds it to a clang
+# AZURE2_SANITIZE=thread build).  Memory accesses in the listed functions are not instrumented; everything they
+# call still is.  It exists for third-party races that a run-time suppression (tsan.supp) cannot silence
+# narrowly: a run-time `race:` entry matches any frame of either stack, so suppressing a Minuit2 frame would
+# also hide every AZURE2 race in the objective function Minuit2 calls.  Same rule as tsan.supp: third-party code
+# only, each entry with its reason.  Format: https://clang.llvm.org/docs/SanitizerSpecialCaseList.html
+[thread]
+
+# Minuit2 MnUserFcn::operator() increments its call counter (mutable int MnFcn::fNumCall, MnUserFcn.cxx:21)
+# from every thread of the OpenMP numerical gradient (Numerical2PGradientCalculator.cxx:116-163) without
+# synchronization.  A real race in Minuit2 (vendored, not edited here: root CLAUDE.md): increments can be lost, so
+# the call count Minuit2 reports, and the --max-calls bound that uses it, are approximate under threads.  It does
+# not touch any value the fit computes.  Seen in T1-fit and T3-fit (MIGRAD, Hesse), clang 23.1.4, 8 threads.
+fun:_ZNK4ROOT7Minuit29MnUserFcnclERKNS0_8LAVectorE

@@ -1,0 +1,6 @@
+# AddressSanitizer suppressions for scripts/sanitize_upgrade.sh.
+#
+# ASan can suppress only reports raised inside an interceptor (interceptor_via_fun:, interceptor_via_lib:) and
+# ODR violations (odr_violation:); a heap or stack error in instrumented code cannot be suppressed and is a
+# finding.  Only reports traced to third-party code (Minuit2, GSL, the OpenMP runtime) may be listed here, each
+# with its reason above it.

@@ -1,0 +1,15 @@
+# ThreadSanitizer suppressions for scripts/sanitize_upgrade.sh.
+#
+# Only reports traced to third-party code (Minuit2, GSL, the OpenMP runtime) may be suppressed, never a report
+# whose racing accesses are in AZURE2's own sources: those are findings (docs/upgrade/sanitizer_findings.md) and
+# are fixed on a fix/ branch.  Each entry carries, above it, the report it silences and why that report is not an
+# AZURE2 race.  Format: https://github.com/google/sanitizers/wiki/ThreadSanitizerSuppressions
+
+# LLVM libomp, worker suspend/resume.  A worker initializes its own suspend mutex (pthread_mutex_init in
+# __kmp_suspend_initialize_thread) and the thread that wakes it locks that mutex (__kmp_resume_template); the
+# order between the two is set by libomp's internal atomic flags, which TSan does not see because libomp is
+# not instrumented (libarcher annotates OpenMP constructs, not the runtime's own bookkeeping).  Both stacks are
+# entirely inside libomp; AZURE2 appears only as the frame that opened the parallel region.  Seen on every run
+# (T1 calculation, clang 23.1.4, libomp 23.1.4, 8 threads).
+race:__kmp_suspend_initialize_thread
+race:__kmp_resume_template
