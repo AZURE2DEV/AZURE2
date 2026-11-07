@@ -542,6 +542,9 @@ out of any repository).
    `coulsm` (SAMMY) and `coulcc` (CPC program library), before either enters this repository. **Decided 2026-11-07
    (Jakub): pycoulomb's C++ sources may be taken directly into AZURE2; permission for them obtained (incl. from Carl).
    Their purpose here is to switch between Coulomb algorithms.** The Fortran `coulcc` is not taken (C++ only).
+   Checked by diff: pycoulomb `coulsm/` is AZURE2's present `external/coul` (the SAMMY-side patch, `cwfcomp_accurate`,
+   in AZURE2 since 17fd9ded, 2025-09-05) up to a namespace and comments; pycoulomb `coul/` is AZURE2's coul before
+   that patch. The default algorithm is therefore `coulsm`, and it must reproduce today's numbers bit for bit.
 7. Redistribution terms of any stopping table before shipping one.
 8. (Added 2026-11-07.) The criterion of `adaptive_grid_reference` for a level crossing the window edge: thm's grid
    overcounts a level's area by 1.69 × 10⁻⁴ by design, so the swing equals that offset and exceeds the 10⁻⁴
