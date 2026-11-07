@@ -75,8 +75,8 @@ What E_λ and γ_λc are depends on the parameter basis of the project, stated o
 The numbers are the project's parameters after the engine's input transformation (`CNuc::TransformIn`): partial
 widths Γ (eV) and ANCs (fm^−½) of the file are converted to amplitudes before the System is built. For photon and β
 channels γ is in the engine's own normalization of those channels (for β channels, the amplitude B of the file). Converting between bases and to the one internal convention is the job of
-`level_parameters` (`ARCHITECTURE.md` §5), which does not exist yet; until then the System records the basis and does
-not convert.
+`level_parameters` (`ARCHITECTURE.md` §5; `level_parameters.md`), which the System does not call: it records the basis
+in its `Convention` record (`System::convention()`, `Convention.h`) and stores the parameters unconverted.
 
 ## 4. Index conventions
 
@@ -93,8 +93,6 @@ not convert.
 
 ## 5. Not included yet
 
-- the `Convention` record (`ARCHITECTURE.md` §5: coupling scheme and order, iˡ factors, sign of reduced widths,
-  Coulomb-phase reference); with it, the conversions of `level_parameters`;
 - external-capture final states that are not R-matrix levels (`ALevel::IsInRMatrix()` false) and J^π groups that
   exist only to hold them; their ANCs and the external reduced widths;
 - spin–orbit (α, l, j) channels of the hybrid-potential model, and the nuclear potential itself;
@@ -117,5 +115,5 @@ On the `feature/upgrade-1-physics-system` build (GCC 11.5) it compares 2540 numb
 deliberate errors in the adapter (one radius for all channels, e_0 and e_1 swapped, γ stored column-major, B_c of
 the first channel for all, one J-group dropped) fails it with 12 to 194 mismatches.
 
-Code: `physics/include/azure2/physics/{System,JpiBlock}.h`, `physics/src/`, adapter `include/CNucSystem.h`,
+Code: `physics/include/azure2/physics/{System,JpiBlock,Convention}.h`, `physics/src/`, adapter `include/CNucSystem.h`,
 `src/CNucSystem.cpp`.

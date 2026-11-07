@@ -2,6 +2,50 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-07 (`feature/upgrade-1-level-parameters`) — `Convention` record and `level_parameters` (Phase 1, code part)
+
+Branch `feature/upgrade-1-level-parameters` from `feature/upgrade` e54e6fcc, not merged. Commits: the record
+(fbda8bf5), 3j/6j and eigensolvers (becc8bfe), `level_parameters` with its physics tests (45443582), the `CNuc`
+adapter and T1–T3 test (7bd0e1e9), the docs (89061935), this entry.
+
+**State.** `physics/` has the `Convention` record (`Convention.h`; the System carries one, `basis()` reads it) and
+`level_parameters` (`LevelParameters.h`, `level_parameters.md`): observed ↔ Brune/Park, B_c (first listed or lowest
+level), external-capture subtraction, Brune ↔ formal (own Cholesky + Jacobi; the engine's fixed-point inverse),
+Brune ↔ Park, and the convention matrix T on the γ columns (LS orders, jj by 6j, iˡ as (−1)^⌊l/2⌋, E/M signs), with
+`recoupling_gaps` reporting missing channels. Channel functions are an input (`ChannelFunctions`); the adapter
+`src/CNucLevelParameters.cpp` supplies them from `ChannelFunc`/`WhitFunc`. Nothing in the engine calls the new code.
+Checked on Condor (GCC 11.5, GUI on, pyazr on): no warnings; `tests/upgrade/check.sh` PASS (goldens unchanged);
+`ctest -LE slow -j8` 137/138, the one failure `adaptive_grid_reference` (decision 8). Against `CNuc` on T1–T3: Brune
+and Park amplitudes, Park's J and B_c bit-identical; formal E ≤ 6.6e-16, formal γ ≤ 1.0e-14 (up to the level's sign,
+which differs from GSL's on 3 of 19 levels); formal → Brune vs `TransformOut` ≤ 6.9e-14; six conventions give the
+same formal parameters to 1.5e-15 (parameter level; the engine reads no convention). Physics tests: 10 512 recoupling
+coefficients vs m-scheme to 8.9e-16; formal vs Brune level matrix identity 4.4e-15. Six mutations each fail at least
+one test (`level_parameters.md` §7).
+
+**Found.** T3's 2⁺ block lists only s = 2 of the two channel spins J = 2 allows for p + ⁷Li and n + ⁷Be at l = 1, so
+T3 has no jj form for that block (reported, as intended). In the formal basis `CNuc::TransformIn` evaluates external
+capture after earlier groups were made formal, so a final state in an earlier multi-level group would enter with
+formal E, γ; on T1–T3 this changes nothing (T1's 14 non-zero external amplitudes go to the single-level ground-state
+group). It does not explain the 54 % T1 formal-basis capture difference of `tests/upgrade/README.md`.
+
+**Open (proposed default in brackets).**
+- The two proposals (B_c from the lowest level; largest |γ| positive) are options, off. [PI decides; keep off until
+  the engine switches to `level_parameters`, then turn both on together with a golden re-baseline of formal-basis
+  outputs only.]
+- iˡ is represented by the real signs (−1)^⌊l/2⌋ (both i^l and i^−l); no code with that convention was compared.
+  [Compare with one external code's amplitudes (SAMMY or FRESCO output for one level) before a project uses it.]
+- jj means j = l + j_x with x = light by default (`spin_order` picks the particle); the final coupling J = j + j_y is
+  fixed. [Enough for nucleon + target; add a field only when a source needs (j_y, j).]
+- External-capture order in the formal basis (above). [Decide whether to compute every γ^ext from Brune final states
+  when the engine switches to `level_parameters`; not changed here.]
+- E2 static moments scale the input as v × (100 (αħc)^½), the engine as (v × 100) × (αħc)^½: possibly 1 ulp apart.
+  [None in T1–T3; accept.]
+- No `.azr` keyword, binding or GUI for the record. [Add with `io/Project` and the binding of `level_parameters`
+  once `channel_functions` exists.]
+
+**Next.** Split `CNuc`: the engine's TransformIn/TransformOut/CalcBoundaryConditions call `level_parameters`
+(bit-identical for Brune/Park shown here; formal to 1e-14, so formal-basis goldens move at that level).
+
 ## 2026-11-07 (director) — Phase 1 merges; ignored headers recovered
 
 **Merged into `feature/upgrade`.** `feature/upgrade-1-conventions` (655c5634), `feature/upgrade-1-physics-system`

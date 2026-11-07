@@ -24,13 +24,28 @@ PartitionKind PartitionKindOf(ChannelKind kind) {
 
 }  // namespace
 
+namespace {
+Convention WithBasis(LevelBasis basis) {
+  Convention c;
+  c.basis = basis;
+  return c;
+}
+}  // namespace
+
 System::System(LevelBasis basis, std::vector<Nucleus> nuclei, std::vector<Partition> partitions,
                std::vector<Channel> channels, std::vector<JpiBlock> blocks) :
-  basis_(basis),
+  System(WithBasis(basis), std::move(nuclei), std::move(partitions), std::move(channels), std::move(blocks)) {}
+
+System::System(Convention convention, std::vector<Nucleus> nuclei, std::vector<Partition> partitions,
+               std::vector<Channel> channels, std::vector<JpiBlock> blocks) :
+  convention_(convention),
   nuclei_(std::move(nuclei)),
   partitions_(std::move(partitions)),
   channels_(std::move(channels)),
   blocks_(std::move(blocks)) {
+  if ((convention_.electric_sign != 1 && convention_.electric_sign != -1) ||
+      (convention_.magnetic_sign != 1 && convention_.magnetic_sign != -1))
+    throw std::invalid_argument("System: the convention's photon-channel signs must be +1 or -1");
   const int nNuclei = (int)nuclei_.size();
   const int nPartitions = (int)partitions_.size();
   const int nChannels = (int)channels_.size();

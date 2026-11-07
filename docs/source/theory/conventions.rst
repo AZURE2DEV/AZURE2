@@ -10,9 +10,9 @@ with those of another code or of a structure calculation, to set the relative
 signs of interfering levels by hand, and to know which parameter values are
 equivalent. Where the engine departs from Lane and Thomas, Rev. Mod. Phys. 30
 (1958) 257 (LT below), or from Descouvemont and Baye, Rep. Prog. Phys. 73
-(2010) 036301 (DB below), the difference is stated. The last section sketches
-the ``Convention`` record that the upgrade will add. The record is not yet
-implemented.
+(2010) 036301 (DB below), the difference is stated. The last section describes
+the ``Convention`` record of the upgrade's ``physics/`` library and the
+conversions that use it. The engine does not use the record yet.
 
 All energies are in MeV and lengths in fm. :math:`E` is the c.m. energy of the
 entrance pair plus its threshold, i.e. the excitation energy of the compound
@@ -472,20 +472,23 @@ were not re-read for this page.
   carry no :math:`i^l`. Whether DB use the same order and phase was not
   checked.
 
-Convention record (planned)
----------------------------
+Convention record
+-----------------
 
 .. note::
 
-   Planned for Phase 1 of the upgrade (``docs/upgrade/ARCHITECTURE.md`` §5).
-   It is not implemented. Today the engine has the single convention
-   described above, and nothing in a project file states it.
+   Implemented in the upgrade's ``physics/`` library
+   (``physics/include/azure2/physics/Convention.h``,
+   ``LevelParameters.h``; ``docs/upgrade/level_parameters.md``). The engine
+   does not use it yet: it computes in the single convention described above,
+   and nothing in a project file states a convention.
 
-A ``Convention`` record in the ``System`` will state what a project's level
-parameters mean. ``level_parameters`` will convert from it to the internal
-convention above. The conversion is an orthogonal block matrix of 6j symbols
-and signs on the :math:`\gamma` columns, with its derivative. Sketch of the
-fields:
+A ``Convention`` record in the ``System`` states what a project's level
+parameters mean. ``level_parameters`` converts from it to the internal
+convention above. On the :math:`\gamma` columns of a :math:`J^\pi` block the
+conversion is an orthogonal block matrix of 6j symbols and signs; it does not
+depend on the parameters, so it is its own derivative. The fields, their
+values and the internal value:
 
 .. list-table::
    :widths: 25 35 40
@@ -494,41 +497,64 @@ fields:
    * - Field
      - Values
      - Internal value (this page)
-   * - ``coupling_scheme``
-     - ``ls`` (channel spin), ``jj``
-     - ``ls``
+   * - ``coupling``
+     - ``LS`` (channel spin), ``JJ``
+     - ``LS``
    * - ``spin_order``
-     - ``light_first``, ``heavy_first``
-     - ``light_first``: :math:`(j_1 m_1 j_2 m_2|s\nu)`
+     - ``LightFirst``, ``HeavyFirst`` (jj: the particle whose spin couples
+       with :math:`l`)
+     - ``LightFirst``: :math:`(j_1 m_1 j_2 m_2|s\nu)`
    * - ``orbital_order``
-     - ``s_then_l``, ``l_then_s``
-     - ``s_then_l``: :math:`(s\nu\,l m|JM)`
-   * - ``il_factor``
-     - ``none``, ``i^l``, ``i^-l``
-     - ``none`` on particle channels
-   * - ``width_sign``
-     - ``sign_of_input``, ``positive``
-     - ``sign_of_input`` (Γ, ANC or amplitude)
+     - ``SpinFirst``, ``OrbitalFirst``
+     - ``SpinFirst``: :math:`(s\nu\,l m|JM)`
+   * - ``orbital_phase``
+     - ``None``, ``IPowL``, ``IPowMinusL``
+     - ``None`` on particle channels
+   * - ``electric_sign``, ``magnetic_sign``
+     - :math:`\pm 1` on the E or M photon amplitudes
+     - :math:`+1` (the phases of Eqs. :eq:`conv-ec-e`, :eq:`conv-ec-m`)
+   * - ``coulomb_phase``
+     - ``SigmaLMinusSigma0``, ``SigmaL``
+     - ``SigmaLMinusSigma0`` (no change of :math:`\gamma`)
    * - ``basis``
-     - ``formal``, ``brune``, ``park``
-     - ``brune``
+     - ``Formal``, ``Brune``, ``Park``
+     - ``Brune``
    * - ``boundary``
-     - ``first_level_shift``, ``constant`` (value per channel), ``none``
-     - ``first_level_shift`` (formal basis only)
-   * - ``coulomb_phase_reference``
-     - ``sigma_l - sigma_0``, ``sigma_l``
-     - ``sigma_l - sigma_0``
-   * - ``photon_multipole_phase``
-     - E: ``-i i^(l+L-lf)``; M: ``+i``; alternatives per source
-     - as Eqs. :eq:`conv-ec-e`, :eq:`conv-ec-m`
-   * - ``provenance``
-     - free text: code or paper the parameters come from
-     - —
+     - ``FirstListedLevel``, ``LowestLevel``
+     - ``FirstListedLevel`` (formal basis only)
+   * - ``formal_sign``
+     - ``AsComputed``, ``LargestPositive``
+     - ``AsComputed`` (the eigensolver's sign)
 
-The planned test runs every test project (T1–T3) in every supported
-convention and requires identical observables to rounding; only the
-parameter values change. A channel missing from a jj ↔ (l, s) recoupling is
-reported.
+The proposals of this page (B\ :sub:`c` from the lowest level; the largest
+:math:`|\gamma|` of a formal level positive) are the options ``LowestLevel``
+and ``LargestPositive``. They are off by default and change no result of the
+engine. The width sign (the sign of the input :math:`\Gamma`, ANC or
+amplitude becomes the sign of the amplitude) is not an option: it is the
+definition of a signed width. A width written in another code's convention
+of signs is converted through the amplitudes (``electric_sign``,
+``magnetic_sign``, ``orbital_phase``).
+
+For jj coupling the recoupling coefficient is
+
+.. math::
+
+   \langle ((j_1 j_2)s, l)J \,|\, ((j_x l)j, j_y)J \rangle
+   = (-1)^{4j_x + 3j_y + 3l - s - j}\,\hat s\,\hat j\,
+   \begin{Bmatrix} j_x & j_y & s\\ J & l & j \end{Bmatrix}
+
+with a further :math:`(-1)^{j_1+j_2-s}` when :math:`x` is the heavy particle
+and :math:`(-1)^{l+j_x-j}` for the order :math:`(l\,j_x)j`; the
+:math:`i^l` convention is represented by the sign :math:`(-1)^{\lfloor
+l/2\rfloor}` (``docs/upgrade/level_parameters.md`` §5).
+``physics_angular_coupling`` checks every coefficient against an m-scheme
+overlap of Clebsch–Gordan products. ``physics_level_parameters_from_cnuc``
+runs T1–T3 in six conventions: the formal parameters agree with those of the
+internal convention to :math:`1.5\times10^{-15}` relative. This is a test at
+the parameter level; the engine reads no convention yet. A channel missing
+from a jj ↔ (l, s) recoupling is reported: T3's :math:`2^+` block lists only
+:math:`s = 2` of the two channel spins its p + :sup:`7`\ Li and
+n + :sup:`7`\ Be :math:`l = 1` channels allow, and has no jj form.
 
 Not established
 ---------------

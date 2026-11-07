@@ -72,6 +72,12 @@ awaits decision 8 (`HANDOFF.md`); the other four inherited failures are fixed (m
       sketches the record (planned); `tests/coulomb_nuclear_sign` pins the Coulomb–nuclear interference sign. Open:
       the record, `level_parameters`, the invariance test, and an independent check of the internal–external
       capture sign.*
+      *Code part done on `feature/upgrade-1-level-parameters` (2026-11-07, not merged): the `Convention` record in the
+      System; `level_parameters` (observed ↔ Brune/Park, Brune ↔ formal, B_c, external-capture subtraction, LS ↔ jj
+      by 6j, order and iˡ signs, an orthogonal T with its Jacobian), own 3j/6j and eigensolvers
+      (`level_parameters.md`). Against `CNuc` on T1–T3: Brune and Park amplitudes and B_c bit-identical, formal to
+      1e-14; invariance in six conventions at the parameter level. Open: the engine does not call it (with the `CNuc`
+      split), no `.azr` keyword states a convention, the binding, the internal–external capture sign.*
 Gate: bit-identical outputs (except the deliberate convention test cases); Coulomb functions agree with mpmath.
 
 ## Phase 2 — One objective
