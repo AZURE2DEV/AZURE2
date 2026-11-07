@@ -18,6 +18,8 @@
 #include "ParameterLabel.h"
 #include "Config.h"
 #include "ChannelFunc.h"
+#include "CNucLevelParameters.h"
+#include "CNucSystem.h"
 #include "CoulFunc.h"
 #include "EigenFunc.h"
 #include "ECIntegral.h"
@@ -1973,32 +1975,28 @@ void CNuc::PrintPathways(const Config &configure) {
  */
 
 void CNuc::CalcBoundaryConditions(const Config &configure) {
-  for (int j = 1; j <= this->NumJGroups(); j++) {
-    if (this->GetJGroup(j)->IsInRMatrix()) {
-      JGroup *theJGroup = this->GetJGroup(j);
-      if (theJGroup->NumLevels() == 0) {
-        // A hard-sphere group: with no levels its R-matrix is zero and the boundary condition drops out
-        // of the collision matrix, so any value serves. Zero keeps the Lo matrix finite.
-        for (int ch = 1; ch <= theJGroup->NumChannels(); ch++) theJGroup->GetChannel(ch)->SetBoundaryCondition(0.0);
-        continue;
-      }
-      ALevel *firstLevel = theJGroup->GetLevel(1);
-      if (firstLevel->IsInRMatrix()) {
-        for (int ch = 1; ch <= theJGroup->NumChannels(); ch++) {
-          AChannel *theChannel = theJGroup->GetChannel(ch);
-          PPair *thePair = this->GetPair(theChannel->GetPairNum());
-          if (thePair->GetPType() == 0) {
-            int lValue = theChannel->GetL();
-            double levelEnergy = firstLevel->GetE();
-            double resonanceEnergy = levelEnergy - (thePair->GetSepE() + thePair->GetExE());
-            theChannel->SetBoundaryCondition(ChannelFunc(thePair, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC)).Shift(lValue, resonanceEnergy));
-          } else {
-            double boundary = theJGroup->GetChannel(1)->GetBoundaryCondition();
-            theChannel->SetBoundaryCondition(boundary);
-          }
-        }
-      }
+  // B_c = S_c(E of the group's first R-matrix level) for every particle channel; a non-particle channel copies channel
+  // 1's value (it never enters the level matrix); a group without R-matrix levels gets 0, where B_c drops out of the
+  // collision matrix (physics/ boundary_values, docs/upgrade/level_parameters.md Eq. 3.1).
+  try {
+    const CNucSystem structure = BuildSystemFromCNuc(*this, configure, CNucSystemContent::Structure);
+    const azure2::physics::ChannelFunctions cf =
+        ChannelFunctionsFromCNuc(*this, structure.map, configure, ChannelEnergyOrder::SumFirst, ChannelQuantities::Shift);
+    for (std::size_t b = 0; b < structure.system.num_blocks(); b++) {
+      JGroup *theJGroup = this->GetJGroup(structure.map.groupOfBlock[b]);
+      std::vector<double> energies;
+      for (int la : structure.map.levelOfBlockLevel[b]) energies.push_back(theJGroup->GetLevel(la)->GetE());
+      const std::vector<double> B = azure2::physics::boundary_values(structure.system, b, energies,
+                                                                     azure2::physics::BoundaryRule::FirstListedLevel, cf);
+      const std::vector<int> &channels = structure.map.channelOfBlockChannel[b];
+      for (std::size_t k = 0; k < channels.size(); k++) theJGroup->GetChannel(channels[k])->SetBoundaryCondition(B[k]);
     }
+  } catch (const GSLException &) {
+    throw;
+  } catch (const std::exception &e) {
+    // The System refuses what it cannot represent (a spin that is not a multiple of 1/2, an unknown pair type):
+    // stop as for any other failure of the initialization.
+    throw GSLException(std::string("Boundary conditions: ") + e.what());
   }
 }
 

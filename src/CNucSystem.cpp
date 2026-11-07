@@ -126,12 +126,6 @@ CNucSystem BuildSystemFromCNuc(CNuc &compound, const Config &configure, CNucSyst
       boundary.push_back(withParameters ? channel->GetBoundaryCondition() : 0.0);
     }
 
-    // CNuc::CalcBoundaryConditions sets B_c from the group's first level when that level is in the R-matrix, and
-    // to zero for a group without levels; any other group would carry an unset B_c.
-    if (withParameters && group->NumLevels() > 0 && !group->GetLevel(1)->IsInRMatrix())
-      throw std::runtime_error("BuildSystemFromCNuc: " + what + " is in the R-matrix but its first level is not, "
-                               "so its boundary conditions were never set");
-
     std::vector<double> energies, gammas;
     std::vector<int> groupLevels;
     for (int la = 1; la <= group->NumLevels(); la++) {
