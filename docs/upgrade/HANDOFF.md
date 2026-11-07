@@ -2,6 +2,15 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-07 (director) — state after the step-1b and Qt-removal merges: two pyazr THM checks fail
+
+`feature/upgrade` 160439ba, fresh build, GCC 11.5, no Qt (Condor 16205, 16206): no warnings; `tests/upgrade/check.sh`
+ok; `tests/run_tests.sh` 131/132, the failure the known `shared_point_tables` (d) peak-RSS ratio (305 MB > 3 × 90 MB;
+the limit has no margin). `ctest -LE slow` 105/107: `pyazr_thm_profiled` and `pyazr_thm_fixed_angle` each fail one
+check, "write_output_files: AZUREOut_aa=5_R=4.out identical to the CLI's" (χ² agrees to 10⁻⁹; the other output
+files are identical). Both passed on each parent of the merges. Under diagnosis on `fix/thm-pyazr-cli-identity`;
+the Coulomb-function step waits for it. Decisions 11 (exact energies) and 12 (data as model expressions) added.
+
 ## 2026-11-07 (`feature/upgrade-1-cnuc-split-1b`) — split `CNuc`, step 1b: decision 10 on, one solver, one channel energy
 
 Branch `feature/upgrade-1-cnuc-split-1b` from `feature/upgrade` 4bf7aa06, not merged. Commits: the design
