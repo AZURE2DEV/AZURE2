@@ -120,7 +120,7 @@ returns arrays; it reads no other part's state. `CNuc` reaches them only through
 | `brune_from_formal` | System, b, formal E, γ, B_c, channel functions, tolerance (MeV) | Ẽ, γ̃, iterations, status, last step (MeV), last ΔB_c | `CNuc::TransformOut` (step 1) |
 | observed widths (step 2) | System, b, E, internal γ, γ^ext, basis, channel functions | Γ (eV), C (fm^−½), μ, Q, B per (λ, c) | `parameters.out`, `GetTransformParams`, `CheckRadiativeWidths` |
 | `park_from_brune`, `brune_from_park` | System, b, E, γ, channel functions | γ in the other basis, J | `ConvertAmplitudeBasis` (step 2), Park norm (step 3) |
-| `channel_functions` (step 3) | partition α, l, E_c (MeV, c.m.) arrays | P, S, S′ (MeV^−1), φ, σ_l | the level-parameter functions, collision matrix |
+| `channel_functions` (step 3, open channels; 3b all E_c and the table) | channel kinematics, l, a_c (fm), E_c (MeV, c.m.) | P, S, S′ (MeV^−1), e^{−iφ}, σ_l | `CoulFunc` (step 3); the level-parameter functions, collision matrix (3b) |
 | `external_capture` (step 4) | System, final state (E, γ, N_f), photon channel, E grid | γ^ext (complex, MeV^½), N_f^½ | level parameters, collision matrix |
 | coupling coefficients (step 5) | System, reaction (entrance α, exit α′), L_max | Z̄₁Z̄₂ and analyzing-power coefficients per pathway pair | observables |
 | `io/Project` (Phase 3) | `.azr` text | System, project levels, measurements, priors | front ends |
@@ -149,10 +149,22 @@ returns S, S′ and P (sections 5, 7).
 2. **Observed widths and the basis switch.** One physics function for Γ_λc (and C_λc, μ, Q) from the total amplitude
    γ^int + γ^ext; `TransformOut`'s second loop, `GetTransformParams`, `PrintTransformParams`, `CheckRadiativeWidths`
    read it. `ConvertAmplitudeBasis` calls `park_from_brune`/`brune_from_park` on the parameter vector.
-3. **Channel functions** (after the pycoulomb prerequisites, ROADMAP Phase 1): `CalcShiftFunctions` becomes tables
-   of `channel_functions(α, l, E)` per fit stage; the process-wide memo goes; the adapters' `ChannelFunc` and `WhitFunc`
-   calls are replaced. The channel energy is already one formula (step 1b); the memo's 10⁻¹² MeV tolerance and the
-   non-smooth last digits of S and S′ (section 5) go here, with a re-baseline if an output moves.
+3. **Channel functions** (design `coulomb.md`; done, section 6): the Coulomb functions from `physics/coulomb`
+   (pycoulomb's algorithms, `external/coul` deleted); P, S, φ, S′ and η, ρ of an open channel as
+   `channel_functions` in physics/, which `CoulFunc` and `Kinematics` call. The process-wide memo (`CoulFuncCache`,
+   10⁻¹² MeV tolerance) stays: deleting it was built and measured (3–17× slower, a test past its time limit) and moved
+   to step 3b.
+3b. **Channel functions, rest** (`coulomb.md` §1.4, §2.3, §6): (i) the Whittaker functions in `physics/coulomb`
+   without GSL (proposed: COULCC at imaginary argument, against mpmath and GSL), then `ShftFunc`, `WhitFunc` and
+   `ChannelFunc`'s bound branch replaced by `channel_functions` for all E_c, and the adapter
+   `ChannelFunctionsFromCNuc` calling it; (ii) the per-stage table of P, S, S′, φ, σ_l per (α, l, a_c, E_n) in place
+   of the Coulomb rows of `EPoint::EDependentTables` and of `g_shiftDerivMemo`, and a per-integral table of F, G at
+   the quadrature radii for the external-capture integrals — this gives back the speed the memo bought (section 6,
+   step 3); then (ii′) `CoulFuncCache` deleted: the branch `feature/upgrade-1-coulomb-nomemo` (commit c3dc22e5 and
+   its docs, on top of step 3) is re-cut on the table, its output comparison repeated and its timings required near
+   those of step 3; (iii) the hybrid-potential channels as (α, l, j) entries; (iv) `CoulombTable` (an opt-in interpolation
+   of the same functions) and `--gsl-coul`: keep, remap to a `coulomb::Method`, or retire (user-visible; to decide).
+   The non-smooth last digits of S and S′ (section 5) remain until (i)–(ii): `coulsm` is good to 10⁻¹⁰ only.
 4. **External capture**: `CalcExternalWidth` and the bound-state normalization N_f^½ (`SqrtNFFactor`, now in five
    places) into `physics/external_capture`.
 5. **Coupling coefficients**: `SortPathways`, `CalcAngularDists`, `CalcCaptureAnalyzingPower` into `observables`,
@@ -278,9 +290,37 @@ engine failed once (308 MB > 3 × 67 MB) and the engine before passed 3/3, with 
 calc 1.16 / 1.21 s (1 thread), 0.39 / 0.39 s (8); fit200 78.54 / 78.53 s, 34.30 / 34.36 s; peak RSS within 1 %
 (`tests/upgrade/bench/T2.tsv`).
 
+### Step 3 (branch `feature/upgrade-1-coulomb`, 2026-11-07)
+
+Done, each in its own commit after the design (`coulomb.md`, alone): `physics/coulomb` (coulsm, coul, coulfg, coulcc
+from pycoulomb azure2-prereqs 7adef98 and coulcc-cpp 37f0f9b, tests against mpmath and GSL); the engine's five
+direct calls of `cwfcomp` replaced by `CoulombWavesAt` → `coulomb(l, η, ρ, coulsm)` and `external/coul` deleted
+(4053 lines); `channel_functions` and the channel kinematics in physics/, called by `CoulFunc` and `Kinematics`.
+Built and moved to `feature/upgrade-1-coulomb-nomemo` (step 3b): `CoulFuncCache` deleted (457 lines, two reference
+tests, every `SetUseGlobalCache`, the `TransientScope`).
+
+**Evidence.** The engine before (f549fa23) and after steps 3 (cd1dc9ad), 3-kinematics (the `channel_functions`
+routing) and, on `-nomemo`, 3-memo, GCC 11.5, Release, GUI off, every `.azr` under `tests/` (179), menu 1, one thread, three bases,
+every file compared number by number (`classify.py`, step-1b harness):
+
+| comparison | Brune | formal | Park | changed |
+|---|---|---|---|---|
+| before → routing | 682/689 identical | 652/662 | 682/689 | hybrid-potential projects only (`T3`, `T3_start`, `hybrid_potential`): observables ≤ 9.9 × 10⁻¹¹; one formal-basis width 5000.000255 → 5000.000006 keV (input 5000 keV; the formal → Brune iteration); 1 log 1.9 × 10⁻¹² |
+| routing → `channel_functions` | 689/689 | 662/662 | 689/689 | none |
+| `channel_functions` → memo deleted (`-nomemo` only) | 486/689 | 458/662 | 486/689 | observables ≤ 7.0 × 10⁻¹¹ (`energy_shift_sqrt`, `relativistic` he5, T1), except an exact zero's rounding residue (`ec_e1m1_phase` s_1, E1 at 0° and 180°, 1.5 → 3.0 × 10⁻²⁵ against 1.2 × 10⁻⁹ at 60°); 20 `intEC.dat` ≤ 4.0 × 10⁻¹¹ of the line's largest value; χ² of `energy_shift_sqrt` and `shift_fn` in the 12th digit; every log without the "Cleared Coulomb function cache" line |
+
+Why the routing moved the hybrid channels: `cwfcomp` returns complex F, G whose imaginary parts are not exactly 0
+for real arguments (a probe: 7 of 125 points, up to 1.0 × 10⁻¹⁵ relative); the hybrid model built H⁺ = G + iF from
+the complex values, `coulomb()` returns real parts. On `-nomemo` the memo's deletion moved the others: it returned the
+functions of an energy within 10⁻¹² MeV of the one asked for. Every change is ≤ 10⁻¹⁰ relative on observables or the explained
+residue; no golden and no `tests/*/expected/` file is re-baselined. `intEC.dat` changes at 4 × 10⁻¹¹, below its
+use; its signature is not bumped (an old file stays valid to that level).
+
+Checks and speed: HANDOFF, 2026-11-07, `feature/upgrade-1-coulomb`; speed in `coulomb.md` §7.
+
 ### Remaining steps
 
-Steps 2–7 of section 3. Next: the observed widths from total amplitudes (step 2), which removes the five copies of the
+Steps 2, 3b and 4–7 of section 3. Next: the observed widths from total amplitudes (step 2), which removes the five copies of the
 γ → Γ conversion and lets `ConvertAmplitudeBasis` call `park_from_brune`. Step 2 or 4 should also settle how the formal
 basis evaluates external capture (the final state's formal or Brune amplitude, and the order of `TransformIn`), which
 the comparison above shows differs from the Brune basis.

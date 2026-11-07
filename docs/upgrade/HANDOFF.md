@@ -2,6 +2,59 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-07 (`feature/upgrade-1-coulomb`) — split `CNuc`, step 3: Coulomb functions from pycoulomb (memo kept)
+
+Branch `feature/upgrade-1-coulomb` from `feature/upgrade` f549fa23, not merged. Commits: the design (`coulomb.md`,
+alone), `physics/coulomb`, the GSL cross-check, the engine routed and `external/coul` deleted, `channel_functions`
+in physics/, the engine calling it, these docs. The memo's deletion (c3dc22e5, with its docs) is on
+`feature/upgrade-1-coulomb-nomemo`, to be re-cut on the per-stage table (director's decision; `cnuc_split.md` §3,
+step 3b ii′).
+
+**State.** `physics/coulomb`: `coulomb(l, η, ρ, method)` → F, F′, G, G′, σ_l, pure, NaN with a status on failure;
+methods coulsm (default; AZURE2's former `external/coul`), coul, coulfg, coulcc, one adaptor file each, sources
+byte for byte from pycoulomb azure2-prereqs 7adef98 and coulcc-cpp 37f0f9b (`physics/coulomb/README.md`).
+`physics/ChannelFunctions`: P, S, e^{−iφ}, S′ (Richardson), σ_l of an open channel and η, ρ (non-relativistic and
+relativistic) with the constants; the engine's `Kinematics`, `Constants.h` and `CoulFunc` call them, and every
+Coulomb evaluation goes through `CoulombWavesAt` → `coulomb(…, coulsm)`, behind the unchanged `CoulFuncCache`.
+Deleted: `external/coul` (8 files, 4053 lines). Not done (step 3b): Whittaker functions without GSL (`WhitFunc`,
+`ShftFunc`, `ChannelFunc`'s bound branch stay), the per-stage table, then the memo's deletion; hybrid channels,
+`CoulombTable`, `--gsl-coul`.
+
+**Evidence** (`cnuc_split.md` §6, step 3). 179 `.azr` × 3 bases. Routing: identical except the hybrid-potential
+projects (cwfcomp's 10⁻¹⁵ imaginary parts no longer enter the hybrid H⁺): observables ≤ 9.9 × 10⁻¹¹, one formal
+width 5.0 × 10⁻⁸. `channel_functions`: bit-identical (2040 files). No re-baseline. physics_coulomb (mpmath, 1296
+points): coulsm/coul ≤ 8.3 × 10⁻¹⁰ where the functions oscillate, coulfg 6.3 × 10⁻¹⁴, coulcc 1.5 × 10⁻¹²
+everywhere; identity 8.3 × 10⁻¹⁰; σ_l 7.1 × 10⁻¹⁵; 8 threads bit-identical. GSL cross-check 4.6 × 10⁻¹⁰ (448
+points). physics_channel_functions: neutral closed forms 6.0 × 10⁻¹⁰, P/S/φ against mpmath ≤ 7.5 × 10⁻⁹, S′ against
+coulcc 1.8 × 10⁻⁷.
+Checks (GCC 11.5, GUI off, Condor, build of 08516cfb): no compiler warnings; `tests/upgrade/check.sh` PASS (goldens
+unchanged); `ctest -LE slow` 110/110 — `pyazr_thm_profiled` and `pyazr_thm_fixed_angle` included, and both also pass
+on f549fa23 in 2 of 2 repeats on the same host, so their failure in the director's run is intermittent (the memo is
+per thread and call-order dependent); `tests/run_tests.sh` 131/132, the failure the known `shared_point_tables` (d)
+peak-RSS ratio (316 MB > 3 × 105 MB). 1 vs 8 threads: T2 and T3 outputs byte-identical; T1 and 13N identical except
+`intEC.dat` (≤ 3.4 × 10⁻¹⁴ and ≤ 5.1 × 10⁻¹² of the line's largest value): the memo's per-thread caches, gone on
+`-nomemo`, where all four were byte-identical.
+
+**Speed** (T2.tsv rows; `coulomb.md` §7). host d32cepyc086, mean of two, before (f549fa23) → this branch: T2 calc 1.56 → 1.36 s (1 thread; one
+f549fa23 run at 1.89 s), 0.44 → 0.42 s (8); T2 fit200 80.5 → 81.9 s (1 thread), 36.5 → 37.0 s (8); menu-1
+calculation, one thread, `13N` 10.05 → 10.16 s, `natural_neon` 12.35 → 12.45 s; `convolution_unify` `tgt_fixed`
+(2 threads) 29.9 → 30.6 s. The routing costs at most 2 % (fit and `tgt_fixed`), within the run-to-run spread of the
+calculations; peak RSS within 2 %.
+
+**Measured on `-nomemo`** (`coulomb.md` §7): outputs ≤ 7.0 × 10⁻¹¹ (one exact zero's residue), the two THM checks
+pass (their failure is the memo's call-order dependence), but 3–17× slower (T2 calc 1.37 → 6.16 s, `natural_neon`
+12.3 → 105.6 s) and `convolution_unify` `tgt_fixed` 84 → 1414 s, past its 600 s limit.
+
+**Open (proposed default in brackets).**
+- The THM identity checks and the 1-vs-8-thread `intEC.dat` differences are intermittent memo effects. [Accept until
+  `-nomemo` is re-cut on the table; there both are deterministic by construction.]
+- Whittaker functions without GSL. [COULCC at imaginary argument in `physics/coulomb`, against mpmath and GSL; bound
+  outputs will move in their last digits and are classified like this step.]
+- `--gsl-coul`, `CoulombTable`. [Add `--coulomb-method=coulsm|coul|coulfg|coulcc` and retire `--gsl-coul` with a
+  message; keep `CoulombTable` until the per-stage table is measured against it.]
+- coulfg's BSD-3 text (the LLNL COPYRIGHT file) is not in pycoulomb. [Jakub adds it in pycoulomb; copied here then.]
+
+**Next.** Step 3b (ii), the per-stage table, then `-nomemo` re-cut on it; or step 2, which does not depend on it.
 ## 2026-11-07 (director) — state after the step-1b and Qt-removal merges: two pyazr THM checks fail
 
 `feature/upgrade` 160439ba, fresh build, GCC 11.5, no Qt (Condor 16205, 16206): no warnings; `tests/upgrade/check.sh`

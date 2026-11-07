@@ -136,7 +136,7 @@ per-point energies (Phase 4, `EnergyGrid`), and is not part of this branch (sect
 |---|---|---|
 | `external/coul` (`cwfcomp`, `cwfcomp_accurate`) | the Coulomb routine | `physics/coulomb/coulsm/` (and `coul/`); deleted |
 | direct `Coulomb_wave_functions_accurate` calls in `CoulFunc` (three: plain, hybrid boundary values, hybrid fallbacks), `CoulombTable::ExactOpen`, `ThmDistortion` | five copies of one call | `coulomb::coulomb(l, η, ρ, coulsm)` |
-| `CoulFuncCache` (process-wide, per-thread memo; energies matched to 10⁻¹² MeV) | speed | deleted, no replacement in this branch; the table (§2.3) later |
+| `CoulFuncCache` (process-wide, per-thread memo; energies matched to 10⁻¹² MeV) | speed | stays in this branch; deleted together with the table (§2.3) that replaces it, branch `feature/upgrade-1-coulomb-nomemo` re-cut on step 3b (§7) |
 | `CoulFunc::Penetrability`, `PEShift`, `HardSpherePhase`, `PEShift_dE` | Eq. (4) | thin calls of `channel_functions` (the Coulomb-table and hybrid paths stay in `CoulFunc`) |
 | `Kinematics::Channel::Eta`, `Rho` | η, ρ | call physics/ |
 | `WhitFunc`, `ShftFunc` | bound channels | stay (section 1.4) |
@@ -144,17 +144,16 @@ per-point energies (Phase 4, `EnergyGrid`), and is not part of this branch (sect
 | `g_shiftDerivMemo` (exact-argument memo of S′, S″ at level energies) | speed | stays; becomes the per-stage table of level energies with step 3b |
 
 The memo's tolerance makes the engine's last digits depend on the order of the calls: an energy within 10⁻¹² MeV of
-one computed earlier in the same thread gets the earlier one's functions. Without it every point gets its own values,
-so outputs may move at the level allowed by S (10⁻¹⁰) and S′ (10⁻⁸) for an energy change of 10⁻¹² MeV, and the
-pyazr/CLI identity checks of THM (HANDOFF, director's entry of 2026-11-07), which suspect this call-order dependence,
-are expected to pass.
+one computed earlier in the same thread gets the earlier one's functions. Deleting it lets every point get its own
+values; outputs then move at the level allowed by S (10⁻¹⁰) and S′ (10⁻⁸) for an energy change of 10⁻¹² MeV, and the
+pyazr/CLI identity checks of THM (HANDOFF, director's entry of 2026-11-07) pass. It is also most of the engine's speed
+where energies recur, so it is deleted only with the table that replaces it (§7).
 
 ## 4. Engine and front ends
 
 The engine always calls `Method::coulsm` in this branch: no new option. `--gsl-coul` keeps its present meaning (GSL's
 routine, called from `CoulFunc`, which may use GSL), because removing or remapping a CLI flag is a user-visible change
-to be decided (section 6). pyazr's `cache_stats()` keeps its keys; the six Coulomb-memo counters are 0, since there is
-no memo, and its docstring says so.
+to be decided (section 6). The memo stays in front of `CoulombWavesAt` as before, so `cache_stats()` is unchanged.
 
 ## 5. Tests
 
@@ -171,9 +170,8 @@ no memo, and its docstring says so.
 - `coulomb_gsl_crosscheck` (outside physics/, links GSL): `coulsm` against `gsl_sf_coulomb_wave_FG_e` where GSL is
   accurate.
 - Engine: every `.azr` under `tests/` (179) in the Brune, formal (`--no-brune`) and Park (`--use-park`) bases, before
-  and after, every output file compared number by number. The routing commit must be bit-identical; the memo's
-  removal may move numbers at ≤ 10⁻⁹ relative on observables, each changed file classified; anything else stops the
-  step. `tests/upgrade/check.sh`, `ctest -LE slow`, `tests/run_tests.sh`, 1 vs 8 threads identical, T2 benchmark.
+  and after, every output file compared number by number. The routing commits must be bit-identical (each changed file
+  classified otherwise; anything above 10⁻⁹ relative on observables, unexplained, stops the step). `tests/upgrade/check.sh`, `ctest -LE slow`, `tests/run_tests.sh`, 1 vs 8 threads identical, T2 benchmark.
 
 Code: `physics/coulomb/` (sources, adaptors, `Coulomb.h`), `physics/src/ChannelFunctions.cpp`,
 `physics/include/azure2/physics/ChannelFunctions.h`, `physics/tests/coulomb_*`, `src/CoulFunc.cpp`, `include/Kinematics.h`.
@@ -182,8 +180,46 @@ Code: `physics/coulomb/` (sources, adaptors, `Coulomb.h`), `physics/src/ChannelF
 
 1. This note. 2. `physics/coulomb/` with its tests. 3. The engine calls it; `external/coul` deleted (bit-identical).
 4. `channel_functions` and the kinematics in physics/; `CoulFunc` calls them (bit-identical). 5. `CoulFuncCache`
-deleted (outputs classified). Left for step 3b (`cnuc_split.md` §3): the Whittaker functions without GSL and the
+deleted (outputs classified) — moved to step 3b, after the table (§7). Left for step 3b (`cnuc_split.md` §3): the Whittaker functions without GSL and the
 deletion of `WhitFunc`, `ShftFunc` and `ChannelFunc` (bound branch into `channel_functions`); the table of §2.3 in
 place of the `EDependentTables` rows and `g_shiftDerivMemo`; the hybrid-potential channels ((α, l, j) entries of the
 table); `CoulombTable` (an interpolation of these same functions, opt-in) and `--gsl-coul`, which are user-visible
 options to keep, remap to a `Method`, or retire.
+
+## 7. As built (branch `feature/upgrade-1-coulomb`, 2026-11-07)
+
+Steps 1–4 of section 6 are done, one commit each. Step 5 (the memo's deletion) was built and measured, and moved to
+the branch `feature/upgrade-1-coulomb-nomemo`, to be re-cut on top of the per-stage table (step 3b): without the
+memo the engine is 3–17× slower and `convolution_unify` exceeds its time limit (below).
+
+**Outputs.** Engine before (f549fa23) and after each step, GCC 11.5, Release, one thread, every `.azr` under
+`tests/` (179) in three bases, every output file compared number by number (`cnuc_split.md` §6, step 3):
+
+- Routing to `physics/coulomb` (step 3): identical except the projects with a hybrid-potential channel (`T3`,
+  `T3_start`, `hybrid_potential`): observables ≤ 9.9 × 10⁻¹¹, one width in `parameters.out` 5.0 × 10⁻⁸ (formal
+  basis, the formal → Brune iteration). Cause: `cwfcomp` returns F and G as complex numbers whose imaginary parts
+  are not exactly 0 for real arguments (7 of 125 probe points, up to 1.0 × 10⁻¹⁵ relative); the hybrid model formed
+  H⁺ = G + iF from the complex values and so carried them into the Numerov boundary values, `coulomb()` returns the
+  real parts. Plain Coulomb channels never used the imaginary parts.
+- `channel_functions` and the kinematics in physics/ (step 4): bit-identical to step 3 (2040 files).
+
+**Speed of this branch** against f549fa23, one Condor host, both engines alternately, `--no-coulomb-table`, mean of
+two: host d32cepyc086, mean of two, before (f549fa23) → this branch: T2 calc 1.56 → 1.36 s (1 thread; one
+f549fa23 run at 1.89 s), 0.44 → 0.42 s (8); T2 fit200 80.5 → 81.9 s (1 thread), 36.5 → 37.0 s (8); menu-1
+calculation, one thread, `13N` 10.05 → 10.16 s, `natural_neon` 12.35 → 12.45 s; `convolution_unify` `tgt_fixed`
+(2 threads) 29.9 → 30.6 s. The routing costs at most 2 % (fit and `tgt_fixed`), within the run-to-run spread of the
+calculations; peak RSS within 2 %.
+
+**The memo's deletion, measured (branch `-nomemo`, c3dc22e5).** Observables ≤ 7.0 × 10⁻¹¹ relative, except the
+rounding residue of an exact zero (E1 capture at θ = 0°, 1.5 × 10⁻²⁵ → 3.0 × 10⁻²⁵ beside 1.2 × 10⁻⁹ at 60°);
+`intEC.dat` of 20 projects ≤ 4.0 × 10⁻¹¹; the THM checks `pyazr_thm_profiled` and `pyazr_thm_fixed_angle` pass (the
+memo's call-order dependence was their failure). Speed (host qa-a10-001, same method): T2 calc 1.37 → 6.16 s
+(1 thread), 0.46 → 1.40 s (8); fit200 93.1 → 114.4 s, 42.7 → 48.1 s; menu-1 calculation, one thread, `13N` 10.0 →
+32.1 s, `beam_profile_kernel` 52.6 → 114.9 s, `natural_neon` 12.3 → 105.6 s, `18O_p_a_thm` 0.14 → 1.39 s;
+`convolution_unify` `tgt_fixed` (2 threads) 84 → 1414 s, past its 600 s limit. The memo returned stored functions
+wherever an energy recurred: shared point energies, target and resolution sub-points, external-capture radii, a
+second pyazr session.
+
+**Next (step 3b).** The table of section 2.3, one evaluation per (α, l, a_c, E_c) of the run's evaluation energies,
+shared read-only, and a per-integral table of F, G at the quadrature radii for the external-capture integrals; then
+the `-nomemo` commits re-cut on it, with the timings above repeated (they must come back near those of this branch).

@@ -63,6 +63,12 @@ in 47c119e4, `fix/adaptive-grid-criterion`]; the other four inherited failures a
       `physics_system_unit`, `physics_standalone`, `physics_system_from_cnuc`. The engine does not use them yet.
 - [ ] `channel_functions(α, l, E)` from pycoulomb, tables per (α, l, E); replaces `external/coul`, `CoulFunc`,
       `CoulFuncCache`, `WhitFunc`. Cross-method identity test (coul, coulsm, coulfg, GSL).
+      *First part done on `feature/upgrade-1-coulomb` (2026-11-07, not merged; design `coulomb.md`):
+      `physics/coulomb` (coulsm, coul, coulfg, coulcc; mpmath, Wronskian, identity, threads; GSL cross-check),
+      `external/coul` deleted, open-channel `channel_functions` and the kinematics in physics/ called by the engine;
+      bit-identical outputs except hybrid channels (≤ 9.9 × 10⁻¹¹, explained). `CoulFuncCache` kept: its deletion
+      (branch `-nomemo`) costs 3–17× and waits for the per-stage table. Open (step 3b): Whittaker functions without
+      GSL, the per-stage table, then the memo; hybrid channels, `CoulombTable`, `--gsl-coul`.*
 - [ ] Split `CNuc`: nucleus data → `System`; boundary conditions, shift functions, Brune/Park transforms, angular
       coefficients → functions of the System.
       *Step 1 done on `feature/upgrade-1-cnuc-split` (2026-11-07, not merged): plan `cnuc_split.md`;

@@ -81,10 +81,32 @@ all of them (``PolarizationFunc.cpp:125-126``).
 Channel functions
 -----------------
 
+The Coulomb functions :math:`F_l(\eta, \rho)`, :math:`G_l(\eta, \rho)` are
+the regular and irregular solutions of
+:math:`u'' + [1 - 2\eta/\rho - l(l+1)/\rho^2]\,u = 0` normalised as in
+Abramowitz and Stegun ch. 14: :math:`F_l \sim \sin\theta_l`,
+:math:`G_l \sim \cos\theta_l` for large :math:`\rho`, with
+:math:`\theta_l = \rho - \eta\ln 2\rho - l\pi/2 + \sigma_l` and the
+Wronskian :math:`F_l' G_l - F_l G_l' = 1` (primes: :math:`d/d\rho`);
+:math:`\sigma_l = \arg\Gamma(l + 1 + i\eta)`. They come from
+``physics/coulomb`` (``coulomb(l, eta, rho, method)``; ``docs/upgrade/coulomb.md``),
+by N. Michel's ``cwfcomp`` with the SAMMY-side patch (``coulsm``, the engine's
+routine since 2025-09), accurate to about :math:`10^{-9}` against mpmath; the
+other algorithms of that directory (``coul``, ``coulfg``, ``coulcc``) agree
+with it to :math:`8.3 \times 10^{-10}` where all are accurate, and GSL's to
+:math:`4.6 \times 10^{-10}` (tests ``physics_coulomb``,
+``physics_coulomb_gsl_crosscheck``). The engine keeps them in a process-wide
+memo (``CoulFuncCache``) that returns the stored functions for an energy within
+:math:`10^{-12}` MeV of a stored one, so the last digits of a result (about
+:math:`10^{-11}` relative) can depend on the order of the calls and on what the
+process computed before; the memo goes with the per-stage tables of
+``docs/upgrade/coulomb.md``. :math:`\eta` and :math:`\rho` at a
+channel energy (non-relativistic, or the relativistic forms under
+``relativistic=1``) are ``physics/src/ChannelFunctions.cpp``'s.
+
 For a particle channel with :math:`E_c > 0`, at the channel radius
-:math:`a_c` (fm, one per partition), with :math:`\rho = k_c a_c`,
-:math:`\eta` the Sommerfeld parameter and :math:`F_l, G_l` the regular and
-irregular Coulomb functions,
+:math:`a_c` (fm, one per partition), with :math:`\rho = k_c a_c` and
+:math:`\eta` the Sommerfeld parameter,
 
 .. math::
    :label: conv-ps
@@ -93,7 +115,12 @@ irregular Coulomb functions,
    S_c = \rho\,\frac{F_l F_l' + G_l G_l'}{F_l^2 + G_l^2}, \qquad
    L^0_c = S_c - B_c + i P_c
 
-(``CoulFunc.cpp:252-291``; ``EPoint.cpp:1496-1500``). Below threshold,
+(``physics/src/ChannelFunctions.cpp``, ``penetrability`` and ``shift``, with an
+overflow guard used only where :math:`F_l^2 + G_l^2` overflows,
+:math:`\eta \gtrsim 110`; ``EPoint.cpp:1496-1500``). The energy derivative
+:math:`S_c'` (Brune and Park bases) is the Richardson-extrapolated central
+difference of :math:`S_c` with step :math:`10^{-3} E_c` (``shift_derivative``),
+good to about :math:`10^{-8}` relative. Below threshold,
 :math:`P_c = 0` and :math:`S_c = \rho\,W'/W` with the Whittaker function
 :math:`W_{-\eta,l+1/2}(2\kappa r)` (``ShftFunc.cpp:61-78``). Just above a
 charged-particle threshold, where :math:`P_c` vanishes in double precision
@@ -110,7 +137,7 @@ The phases are
    = e^{i(\sigma_l - \sigma_0)}, \qquad
    \Omega_c = e^{i(\omega_c - \phi_c)}
 
-(``CoulFunc.h:39-45``; ``EPoint.cpp:1505-1508``).
+(``physics/src/ChannelFunctions.cpp``, ``exp_minus_i_phi``; ``EPoint.cpp:1505-1508``).
 
 - **Hard-sphere phase.** :math:`\phi_c = \arctan(F_l/G_l)` at
   :math:`\rho`, as in LT. The hard-sphere phase *shift* is :math:`-\phi_c`;
