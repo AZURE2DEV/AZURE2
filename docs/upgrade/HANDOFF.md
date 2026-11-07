@@ -339,6 +339,13 @@ out of any repository).
 5. Whether pyazr keeps a pure-Python `.azr` reader after Phase 3 (plan: no).
 6. pycoulomb licence and the origin of `coulsm` (Jakub, owner).
 7. Redistribution terms of any stopping table before shipping one.
+8. (Added 2026-11-07.) The criterion of `adaptive_grid_reference` for a level crossing the window edge: thm's grid
+   overcounts a level's area by 1.69 × 10⁻⁴ by design, so the swing equals that offset and exceeds the 10⁻⁴
+   tolerance. Options (a) test the variation beyond the net change, (b) finer tail steps (moves every fold by about
+   10⁻⁴, regenerates the goldens), (c) take dev's grid. Analysis in the `fix/adaptive-grid-edge-swing` entry.
+   [Proposed: (a).]
+9. (Added 2026-11-07.) The nightly sanitizer schedule fires only from the default branch (`qt5`). [Keep the file on
+   `feature/upgrade`; push trigger and manual dispatch until the PI decides.]
 
 **Next actions.**
 1. Push `feature/upgrade` (and, if wanted, `thm-review` and `fix/edep-cow-acquire`) from a machine with GitHub access.
