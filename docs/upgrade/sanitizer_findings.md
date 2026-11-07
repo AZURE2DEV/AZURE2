@@ -240,6 +240,11 @@ failure of the present engine's sub-point grid (`d216517d`, graded tails), not a
 its own branch (`fix/adaptive-grid-window-edge`): either the grid near a window edge or the test's tolerance with a
 written reason, decided by the author of `d216517d`'s test.
 
+Resolved by decision 8 (a), commit 47c119e4 on `fix/adaptive-grid-criterion`: the swing was the grid's tail bias
+leaving the window with the level (a one-way drift), so for the two crossing cases the test now bounds the variation of
+the error beyond its net change, by √3/(2π ppw²) + 10⁻⁴ = 2.10 × 10⁻⁴ (the Euler–Maclaurin end term of the core
+lattice at a fixed edge plus the in-window smoothness tolerance; derivation in the test). The grid is unchanged.
+
 ## 5. Running it
 
 ```bash

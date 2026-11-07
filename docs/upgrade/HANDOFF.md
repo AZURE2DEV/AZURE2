@@ -2,6 +2,36 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-07 — `fix/adaptive-grid-criterion`: decision 8 (a) in `adaptive_grid_reference`
+
+Branch `fix/adaptive-grid-criterion` from `feature/upgrade` e5dd8ae7, not merged. Commits: the test (47c119e4), this
+entry and the notes in `ROADMAP.md` and `sanitizer_findings.md` §4.6. No engine change; the grid is thm's, unchanged.
+
+**Criterion.** The two cases "eV/keV level crossing the window edge" check the total variation of the trapezoid
+error over the scan minus |net change| (relative to the area πΓ/2) instead of its swing; the accuracy check (2 × 10⁻⁴)
+and the five other cases are unchanged. A one-way drift, here the tail bias (+1.69 × 10⁻⁴) leaving the window with
+the level, costs nothing; each back-and-forth excursion of size d costs 2d. Tolerance, both cases:
+√3/(2π ppw²) + 10⁻⁴ = 2.10 × 10⁻⁴ at 50 points per width.
+- √3/(2π ppw²) = 1.10 × 10⁻⁴: a lattice of pitch h = Γ/ppw cut by a fixed edge has the Euler–Maclaurin end term
+  (h²/12) f′(edge); as the peak crosses, f′(edge) runs 0 → −max → +max → 0 (max |f′| = 3√3/(4Γ) at Γ/(2√3) from
+  E_R), a variation of 4 max|f′| with no net change. Measured 1.102 × 10⁻⁴ (eV level, scan of 0.00125 Γ steps across
+  the edge); in the keV case the cells from 20 Γ below E_R upward give 1.102 × 10⁻⁴. It changes the slope of the
+  in-window area in E_R by at most 2/(3 ppw²) = 3 × 10⁻⁴ of itself, so it cannot reverse a gradient.
+- 10⁻⁴: the smoothness tolerance of the in-window cases, here for the sum of all other reversals. keV case:
+  7.3 × 10⁻⁵ from the cells below the 20-width core (graded tail meeting the fixed 5 keV coarse lattice), a ripple of
+  6.8 × 10⁻⁶ peak to peak; the in-window keV case has the same ripple (swing 2.4 × 10⁻⁵).
+A sampled scan shows at most the excess of the continuous curve, so the bound holds for any scan step. Values
+(2000 / 200 000 steps): eV 1.96 × 10⁻⁵ / 1.14 × 10⁻⁴ (its 1 eV step, 1.25 Γ, samples the edge term coarsely; net
+change −1.685 × 10⁻⁴), keV 1.79 × 10⁻⁴ / 1.83 × 10⁻⁴ (net 4 × 10⁻⁷).
+
+**Detection.** The test built against the grid before the graded tails (dev 07581f03, through a scratch shim that
+feeds it the resonance list) reproduces the 17O+α failure: in-window eV case max error 7.85 × 10⁻², swing
+3.53 × 10⁻². The new crossing check fails on it: variation beyond the net change 2.87 × 10⁻¹ against 2.10 × 10⁻⁴
+(net −7.49 × 10⁻², swing 7.87 × 10⁻²); 7 checks fail there, none on the current grid.
+
+**Verified.** Condor 16150/16152, GCC 11.5, `-DBUILD_GUI=OFF`, pyazr on: no warnings in the
+rebuild; `adaptive_grid_reference` all checks pass; `ctest -LE slow -j8` 107/107 pass; `tests/upgrade/check.sh` PASS.
+
 ## 2026-11-07 (`feature/upgrade-1-level-parameters`) — `Convention` record and `level_parameters` (Phase 1, code part)
 
 Branch `feature/upgrade-1-level-parameters` from `feature/upgrade` e54e6fcc, not merged. Commits: the record
@@ -550,7 +580,8 @@ out of any repository).
    overcounts a level's area by 1.69 × 10⁻⁴ by design, so the swing equals that offset and exceeds the 10⁻⁴
    tolerance. Options (a) test the variation beyond the net change, (b) finer tail steps (moves every fold by about
    10⁻⁴, regenerates the goldens), (c) take dev's grid. Analysis in the `fix/adaptive-grid-edge-swing` entry.
-   [Proposed: (a).] **Decided 2026-11-07 (Jakub): (a).**
+   [Proposed: (a).] **Decided 2026-11-07 (Jakub): (a).** **Implemented by 47c119e4** (`fix/adaptive-grid-criterion`): variation
+   beyond the net change, tolerance √3/(2π ppw²) + 10⁻⁴.
 9. (Added 2026-11-07.) The nightly sanitizer schedule fires only from the default branch (`qt5`). [Keep the file on
    `feature/upgrade`; push trigger and manual dispatch until the PI decides.]
 10. (Added 2026-11-07.) Formal basis: B_c from the lowest level instead of the first listed, and each formal
