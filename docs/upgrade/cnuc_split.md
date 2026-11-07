@@ -122,20 +122,67 @@ declaration moves with its users (`ECIntegral`, `EffectiveCharge`).
 
 `formal_from_brune` and `brune_from_formal` solve N a = E M a and the symmetric problem of the iteration. With
 `SymmetricEigen.h`'s solver the formal energies agree with GSL's to 6.6 × 10⁻¹⁶ relative and the amplitudes to
-1.0 × 10⁻¹⁴, and the overall sign of a formal level differs from GSL's on 3 of 19 levels of T1–T3
-(`level_parameters.md` §7). Both functions take the eigensolver as an option (`GeneralizedEigenSolver`,
-`FormalToBruneOptions::solver`); the engine passes GSL's (`GslGeneralizedEigen`, `GslSymmetricEigen` in
-`src/CNucLevelParameters.cpp`), so the formal basis runs through `level_parameters` with the engine's arithmetic. The
-switch to the own solver goes together with decision 10 (the sign rule makes the solver's sign irrelevant) and a
-re-baseline of formal-basis outputs; section 6 records what it would change.
+1.0 × 10⁻¹⁴, and the overall sign of a formal level can differ from GSL's (`level_parameters.md` §7). Both functions
+take the eigensolver as an option (`GeneralizedEigenSolver`, `FormalToBruneOptions::solver`); the engine passes GSL's
+(`GslGeneralizedEigen`, `GslSymmetricEigen` in `src/CNucLevelParameters.cpp`), so the formal basis runs through
+`level_parameters` with the engine's arithmetic and its outputs stay bit-identical. With the own solver they do not
+(section 6). The switch to the own solver goes together with decision 10 (the sign rule makes the solver's sign
+irrelevant) and a re-baseline of formal-basis outputs.
 
-## 5. Channel energy
+## 5. Channel energy and the Coulomb memo
 
 The engine forms the channel energy in three orders: E − e − S (`TransformIn`), E − (S + e) (`CalcBoundaryConditions`),
-E − S − e (`TransformOut`), with e = e₁ + e₂ the excitation energies of the pair and S its separation energy. They
-agree whenever e = 0 and may differ by one ulp otherwise. The adapter `ChannelFunctionsFromCNuc` uses E − e − S. Section
-6 states whether any output moved.
+E − S − e (`TransformOut`), with e = e₁ + e₂ the excitation energies of the pair and S its separation energy. They agree
+whenever e = 0 and may differ by one ulp otherwise. The Coulomb memo (`CoulFuncCache`) returns a stored value for any
+energy within 10⁻¹² MeV of a stored one, so which of two energies one ulp apart is evaluated first decides the value
+both receive: the engine's numbers depend on the order of its Coulomb-function calls at the 10⁻¹³ level. The adapter
+therefore takes the order of E_c and the quantities to compute from its caller (`ChannelEnergyOrder`,
+`ChannelQuantities`) and evaluates each on its own `ChannelFunc` in the engine's call sequence. A first version that
+computed S, dS/dE and P at every call, in one order, moved the Brune amplitudes of `tests/channel_space` by 10⁻¹³,
+flipped the GSL sign of 6 of its formal levels, and moved two `secondary_gamma` outputs in the last printed digit. Both
+the three orders and the memo's tolerance go when `channel_functions` replaces the adapter (step 3), with a re-baseline
+at that level if an output moves.
 
 ## 6. Record
 
-(Filled in as the moves are made.)
+### Step 1 (branch `feature/upgrade-1-cnuc-split`, 2026-11-07)
+
+Moved, each in its own commit, old code deleted:
+
+- `CalcBoundaryConditions` → `boundary_values` (rule `FirstListedLevel`, order E − (S + e)). A group whose first
+  listed level is not an R-matrix level (an external-capture final state listed first) used to keep B_c uninitialized;
+  it now takes the first R-matrix level, or 0. No project in `tests/` has one.
+- `TransformIn` → `amplitudes_from_observed`, `subtract_external_capture`, `formal_from_brune` (GSL's solver), in all
+  three bases. `CNuc` keeps the wording of its warnings (from the diagnostics the functions now return: D/2, each
+  column's term, column notes, the entries whose |Im γ^ext| exceeds the total), Park's J on the level, and the
+  bound-state normalization N_f^½ (step 4). Groups are still made formal one after the other (external capture in
+  the engine's order, `level_parameters.md` §6). Two levels of a group at one energy (`--no-brune`) are now refused
+  with a message instead of giving NaN.
+- `TransformOut`, the formal → Brune iteration → `brune_from_formal` (GSL's solver, order E − S − e). The warning for a
+  level that does not converge now reports the last energy step; the old code printed the difference after the update,
+  always 0. The observed-width loop stays (step 2).
+
+`CNuc.cpp` went from 3628 to 3311 lines.
+
+**Evidence.** The engine before (93f8cbc5) and after (this branch), same compiler (GCC 11.5, Release), were run on
+every `.azr` file under `tests/` (179 projects, including T1, T1_start, T2, T2_true, T3, T3_start), menu 1, one
+thread, in each basis, and every file written was compared byte for byte (progress-bar lines of the log excluded):
+
+| basis | runs | output files | identical | differing |
+|---|---|---|---|---|
+| Brune (default) | 179 | 510 (80 `parameters.out`) | 510 | 0 |
+| formal (`--no-brune`) | 179 | 483 (75 `parameters.out`) | 483 | 0 |
+| Park (`--use-park`) | 179 | 510 (80 `parameters.out`) | 510 | 0 |
+
+The logs (`run.log`) are identical except the three of `tests/screening_6li` (`--no-brune`), whose non-converging
+levels now report the steps 118.45, 40.9187 and 85.4476 MeV instead of 0. The same comparison with
+`level_parameters`' own eigensolver in place of GSL's (formal basis only) changes 53 output files: 20 `param.par` (698
+formal amplitudes change sign), 25 `parameters.out` (last printed digit of widths), 7 observable files (up to
+2.2 × 10⁻¹¹ relative, T1) and `covariance.out` of T2; that switch therefore waits for decision 10.
+
+`tests/upgrade/check.sh` passes (goldens unchanged); `ctest -LE slow` and `tests/run_tests.sh`: see HANDOFF.
+
+### Remaining steps
+
+Steps 2–7 of section 3. Next: the observed widths from total amplitudes (step 2), which removes the five copies of the
+γ → Γ conversion and lets `ConvertAmplitudeBasis` call `park_from_brune`.

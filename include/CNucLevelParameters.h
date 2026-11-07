@@ -12,8 +12,9 @@ class Config;
 
 /*!
  * The engine's side of physics/ level_parameters (docs/upgrade/level_parameters.md): what the physics functions take
- * as input and physics/ cannot compute itself yet.  Nothing in the engine's calculation calls these; the test
- * tests/upgrade/level_parameters_from_cnuc_test.cpp does.  Block and channel indices are the System's (0-based), turned
+ * as input and physics/ cannot compute itself yet.  CNuc::CalcBoundaryConditions, CNuc::TransformIn and
+ * CNuc::TransformOut call level_parameters through these (docs/upgrade/cnuc_split.md); so does the test
+ * tests/upgrade/level_parameters_from_cnuc_test.cpp.  Block and channel indices are the System's (0-based), turned
  * into CNuc's through the CNucSystemMap of BuildSystemFromCNuc.
  */
 
