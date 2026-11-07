@@ -88,7 +88,7 @@ rate of ¹²C(p,γ₀) is computed at T₉ = 0.01–3 (`temperatures.dat`).
 | phase shifts | data (s1/2); test segments (s1/2, p3/2) |
 | S factor | column 5 of the `.extrap` and `.out` files; golden outputs |
 | reaction rate | menu 5; golden output `rate/reactionrates.out` |
-| Brune ↔ formal ↔ Park round trip | identity test `tests/pyazr/upgrade_parametrization_roundtrip_test.py` |
+| Brune ↔ formal ↔ Park round trip | identity test `tests/pyazr/upgrade_parametrization_roundtrip_test.py`: Park equal; formal equal except capture with external capture (up to 54 %, open question in `docs/upgrade/HANDOFF.md`) |
 | convention round trip | **TODO (Phase 1)**: the `Convention` record and the conversions in `level_parameters` do not exist yet |
 | extrapolation | test segments to E_lab = 20 keV |
 

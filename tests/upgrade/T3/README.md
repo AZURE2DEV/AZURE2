@@ -75,7 +75,7 @@ noise of 0.1 fm (seed 1008), with σ = 0.1 fm on both parts.
 
 χ² of the true parameters: 509.7 for N = 494 data points, plus 9.0 from the four scattering-length terms.
 
-The `<segmentsTest>` lines compute, for E_lab(n) = 0.01–0.40 MeV, the n + ⁷Be total cross section and its three
+The `<segmentsTest>` lines compute, for E_lab(n) = 0.01–0.39 MeV (step 0.01 MeV), the n + ⁷Be total cross section and its three
 parts (elastic, (n,p), (n,α)) for the optical-theorem identity test, the α + α phase shifts for l = 0, 2, 4, an α + α
 angular distribution at E_lab = 4 MeV (10°–170°, symmetric about 90°), and the β-delayed α spectrum for E_α = 0.1–7.5
 MeV. The rate of ⁷Li(p,α)α is computed at T₉ = 0.01–3.

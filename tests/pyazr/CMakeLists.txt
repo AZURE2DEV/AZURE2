@@ -591,6 +591,18 @@ set_tests_properties(pyazr_upgrade_optical_theorem PROPERTIES ENVIRONMENT "OMP_N
 add_test(NAME pyazr_upgrade_breit_wigner
          COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/upgrade_breit_wigner_test.py)
 set_tests_properties(pyazr_upgrade_breit_wigner PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2;AZURE2_BIN=$<TARGET_FILE:AZURE2>")
+#   parametrization_roundtrip: T1, T3 observables equal in the Brune, formal (--no-brune) and Park bases.
+#   thread_independence: T1, T3 calculate / extrapolate / rate / fit at 1 and 4 threads.
+#   gradient: analytic chi^2 gradient of T1, T3 = Richardson central differences.
+add_test(NAME pyazr_upgrade_parametrization_roundtrip
+         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/upgrade_parametrization_roundtrip_test.py)
+set_tests_properties(pyazr_upgrade_parametrization_roundtrip PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2;AZURE2_BIN=$<TARGET_FILE:AZURE2>")
+add_test(NAME pyazr_upgrade_thread_independence
+         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/upgrade_thread_independence_test.py)
+set_tests_properties(pyazr_upgrade_thread_independence PROPERTIES ENVIRONMENT "AZURE2_BIN=$<TARGET_FILE:AZURE2>" LABELS slow)
+add_test(NAME pyazr_upgrade_gradient
+         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/upgrade_gradient_test.py)
+set_tests_properties(pyazr_upgrade_gradient PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
 # A test that cannot run its engine part -- numpy, scipy or the compiled
 # _azure2 module missing (pybind11 absent at configure time builds no module),
