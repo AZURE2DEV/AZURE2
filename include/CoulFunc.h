@@ -30,6 +30,10 @@ struct CoulWaves {
   double dG;
 };
 
+/// F, F', G, G' at (l, eta, rho) from physics/coulomb (docs/upgrade/coulomb.md) by the engine's algorithm, coulsm;
+/// throws std::runtime_error when the evaluation fails (the library returns NaN with a status, never a number).
+CoulWaves CoulombWavesAt(int l, double eta, double rho);
+
 /*!
  * exp(i phi) of the hard-sphere phase, (G - i F)/sqrt(F^2 + G^2).  Just above a
  * charged-particle threshold (eta >~ 110) G^2 overflows and the plain formula

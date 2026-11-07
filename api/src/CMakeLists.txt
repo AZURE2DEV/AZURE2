@@ -33,7 +33,7 @@ if(NOT pybind11_FOUND)
 else()
     pybind11_add_module(_azure2 pybind_api.cpp)
     # AZUREAPI carries AZURE2Core, which carries the engine's own dependencies
-    # (Minuit2, GSL, BLAS, coul, OpenMP) in the right link order -- see
+    # (Minuit2, GSL, BLAS, OpenMP) in the right link order -- see
     # src/CMakeLists.txt.  Repeating them here would only risk contradicting it.
     target_link_libraries(_azure2 PRIVATE AZUREAPI)
 

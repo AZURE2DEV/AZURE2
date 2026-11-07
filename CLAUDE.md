@@ -81,7 +81,7 @@ below (full text and reasons in `docs/upgrade/RULES.md`):
 | `api/` | `AZUREAPI` + pybind11 module `_azure2` | Builds `pyazr/_azure2*.so` in place |
 | `pyazr/` | Python package | In-process engine plus a pure-Python `.azr` reader/writer (`azrfile.py`, `datasets.py`) |
 | `numcmc/` | Ensemble MCMC sampler | |
-| `external/` | Vendored Minuit2, coul, erya/pugixml | **Do not edit**; it is upstream code |
+| `external/` | Vendored Minuit2, erya/pugixml (Coulomb functions: `physics/coulomb/`, from pycoulomb) | **Do not edit**; it is upstream code |
 | `tests/` | All tests | See `tests/CLAUDE.md` |
 | `docs/source/` | Sphinx site, built with `-W` | The user-facing source of truth |
 | `.claude/skills/` | How to *use* AZURE2 | See "Skills" below; `tools/check_skills.py` |

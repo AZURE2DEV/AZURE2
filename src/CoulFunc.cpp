@@ -2,7 +2,6 @@
 #include "CoulFuncCache.h"
 #include "PPair.h"
 #include <iostream>
-#include "cwfcomp_accurate.H"
 #include <gsl/gsl_sf_coulomb.h>
 #include <gsl/gsl_deriv.h>
 #include <vector>
@@ -201,18 +200,7 @@ CoulWaves CoulFunc::operator()(int l, double radius, double energy) {
   if (useHybridMethod_ && nuclearPotential_) {
     newResult = computeHybrid(l, radius, energy);
   } else if (!useGSLFunctions_) {
-    std::complex<double> eta(kin_.Eta(energy), 0.);
-    std::complex<double> rho(kin_.Rho(radius, energy), 0.);
-    std::complex<double> lValue((double)l, 0.);
-    Coulomb_wave_functions_accurate coul(true, lValue, eta);
-    std::complex<double> c_F, c_dF, c_G, c_dG;
-    // coul.F_dF(rho,c_F,c_dF);
-    // coul.G_dG(rho,c_G,c_dG);
-    coul.compute(rho, c_F, c_dF, c_G, c_dG);
-    newResult.F = real(c_F);
-    newResult.dF = real(c_dF);
-    newResult.G = real(c_G);
-    newResult.dG = real(c_dG);
+    newResult = CoulombWavesAt(l, kin_.Eta(energy), kin_.Rho(radius, energy));
   } else {
     double eta = kin_.Eta(energy);
     double rho = kin_.Rho(radius, energy);
@@ -391,16 +379,7 @@ CoulWaves CoulFunc::computeHybrid(int l, double radius, double energy) {
     if (rMatch_ <= r_min || radius > rMatch_ || radius < r_min || drNumerov_ <= 0.0) {
       // Fall back to standard Coulomb calculation
       if (!useGSLFunctions_) {
-        std::complex<double> eta(kin_.Eta(energy), 0.);
-        std::complex<double> rho(kin_.Rho(radius, energy), 0.);
-        std::complex<double> lValue((double)l, 0.);
-        Coulomb_wave_functions_accurate coul(true, lValue, eta);
-        std::complex<double> c_F, c_dF, c_G, c_dG;
-        coul.compute(rho, c_F, c_dF, c_G, c_dG);
-        result.F = real(c_F);
-        result.dF = real(c_dF);
-        result.G = real(c_G);
-        result.dG = real(c_dG);
+        result = CoulombWavesAt(l, kin_.Eta(energy), kin_.Rho(radius, energy));
       } else {
         double eta = kin_.Eta(energy);
         double rho = kin_.Rho(radius, energy);
@@ -426,11 +405,9 @@ CoulWaves CoulFunc::computeHybrid(int l, double radius, double energy) {
     // Lambda to compute H+ = G + iF from rho using Coulomb boundary conditions
     auto compute_H_plus = [&](double rho_val) -> std::complex<double> {
       if (!useGSLFunctions_) {
-        // Use COUL (coulsm) for boundary conditions
-        Coulomb_wave_functions_accurate coul(true, lValue, eta);
-        std::complex<double> F, dF, G, dG;
-        coul.compute(std::complex<double>(rho_val, 0.0), F, dF, G, dG);
-        return G + std::complex<double>(0.0, 1.0) * F;
+        // physics/coulomb (coulsm) for the boundary conditions
+        const CoulWaves w = CoulombWavesAt(l, eta.real(), rho_val);
+        return std::complex<double>(w.G, 0.0) + std::complex<double>(0.0, 1.0) * std::complex<double>(w.F, 0.0);
       } else {
         // Use GSL for boundary conditions
         double eta_val = eta.real();
@@ -521,16 +498,7 @@ CoulWaves CoulFunc::computeHybrid(int l, double radius, double energy) {
     std::cerr << "Falling back to standard Coulomb calculation." << std::endl;
     // Fall back to standard calculation
     if (!useGSLFunctions_) {
-      std::complex<double> eta(kin_.Eta(energy), 0.);
-      std::complex<double> rho(kin_.Rho(radius, energy), 0.);
-      std::complex<double> lValue((double)l, 0.);
-      Coulomb_wave_functions_accurate coul(true, lValue, eta);
-      std::complex<double> c_F, c_dF, c_G, c_dG;
-      coul.compute(rho, c_F, c_dF, c_G, c_dG);
-      result.F = real(c_F);
-      result.dF = real(c_dF);
-      result.G = real(c_G);
-      result.dG = real(c_dG);
+      result = CoulombWavesAt(l, kin_.Eta(energy), kin_.Rho(radius, energy));
     } else {
       double eta = kin_.Eta(energy);
       double rho = kin_.Rho(radius, energy);
