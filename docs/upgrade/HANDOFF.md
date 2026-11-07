@@ -2,6 +2,27 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-07 — `fix/c12c12-kernel-pin`: pair_identity and the THM examples' chi-squared
+
+**Cause.** `pair_identity` pinned the engine total of `examples/c12c12_tumino2018` at 112.0376 (data 111.613 +
+priors 0.4248), the value of the merge of dev 64ed575. The merge of dev 2d97b1f0 brought dev 7d24c88: Gaussian
+resolution kernels to 5σ instead of 3σ. MERGE_NOTES.md measured the move (data 111.613 → 111.661, direct segments
+5-8 only; convolutionRange = 3 restores thm's files byte for byte) but the GUI test was not built and the
+documented totals were not updated.
+
+**Why the new value is right.** A Gaussian cut at ±kσ and renormalised has variance
+σ²[1 − 2kφ(k)/(2Φ(k) − 1)]: 0.9733 σ² at k = 3 (the fold used a resolution 1.3 % narrower than stated),
+1 − 1.5 × 10⁻⁵ at k = 5.
+
+**Change.** f0981b53: the pin is 112.0856 (tolerance 0.01 unchanged). bb1bd4f0: examples.rst,
+thm_implementation.rst and the azure2-thm calibration table carry the measured totals (build-upgrade, 4 threads):
+c12c12 112.086 (111.661; THM segments 1-4 61.02, unchanged), li7_tumino2006 448.620 (439.149), li6_pizzone2011
+158.967 (157.041). The other five THM examples give their documented values.
+
+**Verified.** The four `fix/` branches of this session merged on 5b021003 (scratch, detached), GUI on, GCC 11.5,
+Condor 16112/16113: `ctest -LE slow` 130 of 131 pass, only `adaptive_grid_reference` fails; `tests/upgrade/check.sh`
+PASS (no engine code changed). The failing tests of this branch failed on origin/thm c6ddb741 (plain GUI build).
+
 ## 2026-11-07 (fourth session) — Phase 0 merged; failures inherited from origin/thm
 
 **State.** `feature/upgrade` carries all Phase 0 branches: rules and skills (09379840), T1/T3 (a80352e6), T2
