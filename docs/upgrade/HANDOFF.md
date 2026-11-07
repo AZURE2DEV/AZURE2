@@ -771,8 +771,7 @@ out of any repository).
    the engine switches to `level_parameters`, with a formal-basis golden re-baseline.] **Decided 2026-11-07 (Jakub):
    as proposed.** Implemented 2026-11-07 (`feature/upgrade-1-cnuc-split-1b`) with B_c from the lowest level; the sign
    rule as built is the orientation of the Brune level, because "largest |γ| positive" changed external-capture
-   observables (step-1b entry, Found 1). [PI to confirm.]
-   as proposed.**
+   observables (step-1b entry, Found 1). **Confirmed 2026-11-07 (Jakub): keep the Brune orientation.**
 11. (Added and decided 2026-11-07, Jakub.) Exact energies by default: observables are calculated at the data
    energies, shifted energies and fold nodes, as AZURE2 does today; interpolation on a fixed mesh only as an opt-in,
    checked mode (`ARCHITECTURE.md` §1, §3, §4).
