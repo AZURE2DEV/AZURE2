@@ -41,6 +41,12 @@ case.
 - Use independent truth where possible: `truth.py` with `mpmath`, m-scheme
   sums, brute-force quadrature, published numbers with a citation. A value
   printed by the code under test is a regression reference, not a truth.
+- An m-scheme truth for capture interference (as `tests/ec_e1m1_phase`) has
+  three traps: with a spin-0 target and unpolarized beam, E1 and a pure
+  spin-flip M1 (s-wave final state) do not interfere, so such a case cannot
+  test the phase; the final state is the |(l_f s)J_f⟩ level, not every product
+  state of the orbital; and the ANC must be physical for the channel radius,
+  or the cross section stops scaling as ANC².
 - `check.sh` works in `mktemp -d` with `trap 'rm -rf "$WORK"' EXIT`, sets
   `LC_ALL=C` (awk number parsing) and `OMP_NUM_THREADS=2`, and never writes
   into the source tree.

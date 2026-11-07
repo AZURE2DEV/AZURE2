@@ -67,7 +67,9 @@ What a finished change contains
    pyazr together (see the checklist below).
 3. **Documentation.** The page of this site that describes the behaviour is
    updated in the same branch. Claude Code skills in ``.claude/skills`` that
-   describe the old behaviour are corrected.
+   describe the old behaviour are corrected; skills teach use and link this
+   site for behaviour, and ``tools/check_skills.py`` checks their rules
+   (``docs/upgrade/RULES.md`` §3).
 4. **A commit message that carries the evidence.** It says what was wrong, how
    it was tested, whether the test fails on the old build, and the numbers
    before and after where results moved.
