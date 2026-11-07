@@ -46,8 +46,8 @@ Tick boxes as work lands; put the commit hash after each tick.
       `dev` is the PI's.
 Gate: T1–T3 run in seconds and recover their truth with today's engine; golden files committed.
 Gate status (2026-11-07): met except (a) the T2 fit, which takes minutes, not seconds (its calculation, 3 s, is in
-`tests/upgrade/check.sh`; the fit is for nightly CI), (b) the TSan job, red until §4.1 and §4.2 of
-`sanitizer_findings.md` are fixed, and (c) `adaptive_grid_reference`, inherited from origin/thm c6ddb741, which
+`tests/upgrade/check.sh`; the fit is for nightly CI), (b) [fixed: §4.1 and §4.2 merged a2392e40, f8b7bf22; TSan 0
+reports] and (c) `adaptive_grid_reference`, inherited from origin/thm c6ddb741, which
 awaits decision 8 (`HANDOFF.md`); the other four inherited failures are fixed (merges 05e08e06, 1d35e1d4, 22214e14;
 `ctest -LE slow` 130/131). The freeze awaits decision 2.
 

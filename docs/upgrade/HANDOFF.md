@@ -160,6 +160,19 @@ tests; ctest now sets `PYAZR_ENGINE_DIR`, which the package adds to its search p
 74/74 passed, none skipped (Condor 16114). The four tests outside `tests/pyazr` that import pyazr
 (`beta_delayed_alpha`, `consistency`, `electron_screening`, `hybrid_potential`) do not get the variable yet.
 
+**TSan fixes merged.** `fix/fit-iteration-counter` (a2392e40) and `fix/edep-ownership-tsan` (f8b7bf22): clang TSan on
+both, 54 steps at 8 threads, 0 report files (before: 25 files, 128 reports, 8 sites). Merged `feature/upgrade`
+f8b7bf22, GCC 11.5 with GUI, Condor 16120: `tests/upgrade/check.sh` PASS; `ctest -LE slow` 130/131, the one failure
+`adaptive_grid_reference` (decision 8).
+
+**Open (proposed default in brackets).**
+- `shared_point_tables` check (d), a 4-thread fit's peak memory below 3.0 × the calculation's, fails under TSan
+  (1163 MB against 1149 MB) with no report, and failed once in six plain runs. [Factor 3.5 under
+  `sanitize_upgrade.sh` only, with the reason in the script; PI to confirm, since it is a test limit.]
+- `pyazr_upgrade_thread_independence` failed once: the T3 fit's χ² differed by 2.3 × 10⁻⁵ relative between 1 and 4
+  threads, fitted parameters equal; twelve reruns on three branches passed. Cause not found. [Watch; investigate if
+  it recurs.]
+
 ## 2026-11-06 (sanitizer session) — Phase 0: TSan and ASan at 8 threads, script, CI, findings
 
 Branch `feature/upgrade-0-sanitizers` (from `feature/upgrade` 356c6770), local, not pushed. Commits: c692bb8b
