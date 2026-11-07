@@ -537,18 +537,21 @@ out of any repository).
    (Phase 9) is the only graphical front end. Qt stays on `dev`/`qt5` for released versions.
 4. The quadrature tolerance rule for Phase 5.
 5. Whether pyazr keeps a pure-Python `.azr` reader after Phase 3 (plan: no).
-6. pycoulomb licence and the origin of `coulsm` (Jakub, owner).
+6. pycoulomb licence and the origin of `coulsm` (Jakub, owner). 2026-11-07: Jakub says to take pycoulomb from
+   github.com/skowrons94/pycoulomb (his); cloned at 9fee957. Still open: its LICENSE and the origin and terms of
+   `coulsm` (SAMMY) and `coulcc` (CPC program library), before either enters this repository.
 7. Redistribution terms of any stopping table before shipping one.
 8. (Added 2026-11-07.) The criterion of `adaptive_grid_reference` for a level crossing the window edge: thm's grid
    overcounts a level's area by 1.69 × 10⁻⁴ by design, so the swing equals that offset and exceeds the 10⁻⁴
    tolerance. Options (a) test the variation beyond the net change, (b) finer tail steps (moves every fold by about
    10⁻⁴, regenerates the goldens), (c) take dev's grid. Analysis in the `fix/adaptive-grid-edge-swing` entry.
-   [Proposed: (a).]
+   [Proposed: (a).] **Decided 2026-11-07 (Jakub): (a).**
 9. (Added 2026-11-07.) The nightly sanitizer schedule fires only from the default branch (`qt5`). [Keep the file on
    `feature/upgrade`; push trigger and manual dispatch until the PI decides.]
 10. (Added 2026-11-07.) Formal basis: B_c from the lowest level instead of the first listed, and each formal
    level's largest |γ| positive. Both exist as `Convention` options, off (`level_parameters.md`). [Turn both on when
-   the engine switches to `level_parameters`, with a formal-basis golden re-baseline.]
+   the engine switches to `level_parameters`, with a formal-basis golden re-baseline.] **Decided 2026-11-07 (Jakub):
+   as proposed.**
 
 **Next actions.**
 1. Push `feature/upgrade` (and, if wanted, `thm-review` and `fix/edep-cow-acquire`) from a machine with GitHub access.
