@@ -67,7 +67,11 @@ in 47c119e4, `fix/adaptive-grid-criterion`]; the other four inherited failures a
       coefficients → functions of the System.
       *Step 1 done on `feature/upgrade-1-cnuc-split` (2026-11-07, not merged): plan `cnuc_split.md`;
       `CalcBoundaryConditions`, `TransformIn` (all bases) and `TransformOut`'s formal iteration call `level_parameters`;
-      1503 output files bit-identical in three bases. Next: step 1b (decision 10 on), then steps 2–7.*
+      1503 output files bit-identical in three bases.*
+      *Step 1b done on `feature/upgrade-1-cnuc-split-1b` (2026-11-07, not merged): B_c from the lowest level, formal
+      levels oriented like their Brune levels (not "largest |γ| positive", which changed capture observables), own
+      eigensolvers, one channel energy; every changed output of 179 projects × 3 bases classified, no re-baseline.
+      Next: step 2, then 3–7.*
 - [ ] Internal convention written in `docs/source/theory/conventions.rst`; `Convention` record; recoupling (6j) and
       phase conversions in `level_parameters`; convention-invariance test on T1–T3.
       *Documentation part done on `feature/upgrade-1-conventions` (2026-11-07, not merged): the page states the
