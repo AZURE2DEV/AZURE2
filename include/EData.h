@@ -1,6 +1,7 @@
 #ifndef EDATA_H
 #define EDATA_H
 
+#include "ChannelTable.h"
 #include "ESegment.h"
 #include "TargetEffect.h"
 #include "EDataIterator.h"
@@ -494,6 +495,10 @@ class EData {
   GridNucleus gridNuc_;
   // The tables of re-placed sub-point nodes, shared by this EData and its copies (NodeTableCache.h).
   std::shared_ptr<NodeTableCache> nodeCache_ = std::make_shared<NodeTableCache>();
+  /// The stage's channel table (docs/upgrade/channel_table.md): built by CalcEDependentValues and
+  /// InitializeComponentSegments before their point loops, read-only afterwards, replaced, never written.
+  std::shared_ptr<const ChannelTable> channelTable_;
+  std::shared_ptr<const ChannelTable> BuildChannelTable(CNuc *, const Config &, const std::vector<EPoint *> &points);
 };
 
 #endif

@@ -33,3 +33,15 @@ add_executable(coulomb_gsl_crosscheck_test coulomb_gsl_crosscheck_test.cpp)
 target_link_libraries(coulomb_gsl_crosscheck_test PRIVATE azure2_physics ${GSL_LIBRARIES})
 target_include_directories(coulomb_gsl_crosscheck_test PRIVATE ${GSL_INCLUDE_DIRS})
 add_test(NAME physics_coulomb_gsl_crosscheck COMMAND coulomb_gsl_crosscheck_test)
+
+# The per-stage channel table (docs/upgrade/channel_table.md): rows depend on their exact key only, not on the order,
+# the duplicates or the thread count; a previous table is reused only for the same system.
+add_executable(channel_table_test channel_table_test.cpp)
+target_link_libraries(channel_table_test PRIVATE AZURE2Core)
+add_test(NAME channel_table_unit
+         COMMAND channel_table_test
+                 ${CMAKE_CURRENT_SOURCE_DIR}/T1/T1.azr
+                 ${CMAKE_CURRENT_SOURCE_DIR}/T2/T2.azr
+                 ${CMAKE_CURRENT_SOURCE_DIR}/T3/T3.azr
+         WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+set_tests_properties(channel_table_unit PROPERTIES TIMEOUT 300)
