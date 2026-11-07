@@ -60,9 +60,10 @@ phys::LevelBasis BasisOf(const Config &configure) {
 
 }  // namespace
 
-CNucSystem BuildSystemFromCNuc(CNuc &compound, const Config &configure) {
+CNucSystem BuildSystemFromCNuc(CNuc &compound, const Config &configure, CNucSystemContent content) {
+  const bool withParameters = (content == CNucSystemContent::Parameters);
   // Before TransformIn the level gammas are the file's partial widths (eV) and ANCs, not amplitudes.
-  if ((configure.paramMask & Config::TRANSFORM_PARAMETERS) && !compound.IsTransformedIn())
+  if (withParameters && (configure.paramMask & Config::TRANSFORM_PARAMETERS) && !compound.IsTransformedIn())
     throw std::runtime_error("BuildSystemFromCNuc: the compound nucleus has not been initialized "
                              "(CNuc::Initialize): its level parameters are still the input widths");
 
@@ -122,12 +123,12 @@ CNucSystem BuildSystemFromCNuc(CNuc &compound, const Config &configure) {
       }
       blockChannels.push_back(index);
       groupChannels.push_back(ch);
-      boundary.push_back(channel->GetBoundaryCondition());
+      boundary.push_back(withParameters ? channel->GetBoundaryCondition() : 0.0);
     }
 
     // CNuc::CalcBoundaryConditions sets B_c from the group's first level when that level is in the R-matrix, and
     // to zero for a group without levels; any other group would carry an unset B_c.
-    if (group->NumLevels() > 0 && !group->GetLevel(1)->IsInRMatrix())
+    if (withParameters && group->NumLevels() > 0 && !group->GetLevel(1)->IsInRMatrix())
       throw std::runtime_error("BuildSystemFromCNuc: " + what + " is in the R-matrix but its first level is not, "
                                "so its boundary conditions were never set");
 
@@ -136,9 +137,10 @@ CNucSystem BuildSystemFromCNuc(CNuc &compound, const Config &configure) {
     for (int la = 1; la <= group->NumLevels(); la++) {
       ALevel *level = group->GetLevel(la);
       if (!level->IsInRMatrix()) continue;
+      groupLevels.push_back(la);
+      if (!withParameters) continue;
       energies.push_back(level->GetE());
       for (int ch = 1; ch <= group->NumChannels(); ch++) gammas.push_back(level->GetGamma(ch));
-      groupLevels.push_back(la);
     }
 
     blocks.push_back(phys::JpiBlock(TwiceSpin(group->GetJ(), what + " J"), group->GetPi(), group->GetNucleus() - 1,

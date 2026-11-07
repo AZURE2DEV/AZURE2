@@ -30,10 +30,21 @@ struct CNucSystem {
   CNucSystemMap map;
 };
 
+/// What BuildSystemFromCNuc puts in the blocks besides their channels.
+enum class CNucSystemContent {
+  /// The level parameters and B_c the CNuc holds; the CNuc must have been initialized (below).
+  Parameters,
+  /// The structure only: every block with its channels, B_c = 0 and no levels; the map still lists the block's
+  /// R-matrix levels.  Any state after CNuc::Fill.  This is what CNuc::CalcBoundaryConditions and CNuc::TransformIn
+  /// hand to physics/ level_parameters, which takes the level values as separate arguments.
+  Structure
+};
+
 /*!
  * Builds the System from a CNuc after CNuc::Fill and CNuc::Initialize (boundary conditions set and, unless
- * --no-transform, the input parameters transformed in).  Reads only; the CNuc is not modified (its accessors are not
- * const, hence the non-const reference).  Nothing in the engine's calculation uses the result yet.
+ * --no-transform, the input parameters transformed in); with CNucSystemContent::Structure, after CNuc::Fill alone.
+ * Reads only; the CNuc is not modified (its accessors are not const, hence the non-const reference).  The engine
+ * uses the structure (CNuc::CalcBoundaryConditions, CNuc::TransformIn); the full System is used by the tests.
  *
  * What is taken, and from where:
  *  - nuclei: CNuc::GetNucleus (Z, A), in CNuc order;
@@ -47,10 +58,11 @@ struct CNucSystem {
  *    are the formal/Brune/Park amplitudes in MeV^1/2, not the widths in eV of the file).  The fitted values
  *    (GetFitE, GetFitGamma), which move during a fit, are not read.
  *
- * Throws std::runtime_error when the CNuc is not in that state (parameters still the file's widths), when a spin is
- * not a multiple of 1/2, or for a pair type or radiation type the System has no kind for;
- * std::invalid_argument from the System's own checks.
+ * Throws std::runtime_error when the CNuc is not in that state (CNucSystemContent::Parameters and the parameters
+ * still the file's widths), when a spin is not a multiple of 1/2, or for a pair type or radiation type the System has
+ * no kind for; std::invalid_argument from the System's own checks.
  */
-CNucSystem BuildSystemFromCNuc(CNuc &compound, const Config &configure);
+CNucSystem BuildSystemFromCNuc(CNuc &compound, const Config &configure,
+                               CNucSystemContent content = CNucSystemContent::Parameters);
 
 #endif
