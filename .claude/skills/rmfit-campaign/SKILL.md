@@ -414,7 +414,7 @@ The GUI review: `printf '1\n<reaction>.sav\n\n7\n' | AZURE2 <flags> --no-gui --n
   separates "finding the pattern" from "reaching the basin from the pattern".
 - `diagnose.dataset_table`, `theta2_table`, `residual_runs`, `compare` feed `report`.
 
-## 7. Known limits (September 2026)
+## 7. Known limits (September 2026; see the 2026-11-07 note at the end of this section)
 
 - Validated only on 13C+a (particle channels only, `ignore_externals`). With photon
   channels: the pair-flip symmetry and the shard machinery (`intEC.*` per shard output
@@ -473,6 +473,23 @@ The GUI review: `printf '1\n<reaction>.sav\n\n7\n' | AZURE2 <flags> --no-gui --n
     Elastic data never showed it. Previous files: `rmfit/*.bak-2026-10-22`.
 - Cost on 13C+a (35k points, 330 free, 24 shards): objective 0.6-1.5 s, Jacobian ~20 s,
   a 60-iteration polish ~9 min, a sign round 2-4 h, a level test ~1.5 h.
+
+**2026-11-07 (retrospective, `R-matrix/agentic/11-7-26_claude/readme`; design `R-matrix/rmfit/DESIGN.md`).** The list
+above is stale: since September rmfit has run 202 campaigns on 13C+a, 10B+a, 11B+a and 12C+a (photon channels, covariances,
+normgroups, Park mode included), so "validated only on 13C+a" no longer holds. What IS still true: every step other than
+`round --rounds N` is chosen by a session by hand; the decisions about the objective (data sets, anchors, systematics,
+window, frozen block, caps) are made in chat, not declared up front; the checks DeBoer makes by eye in the GUI
+(average-vs-narrow structure, norm trends, target-integration grid exploitation, spurious narrow levels) have no automated
+counterpart; density/Doppler/thickness/screening kinds are single-session only; multi-compound-nucleus models are not
+handled by sign rounds / levelscan. The roadmap (spec per campaign, `rmfit audit`, `rmfit review`, `rmfit drive`, a
+benchmark suite) is in DESIGN.md. **Since 2026-11-07 rmfit is under git** (`R-matrix/rmfit/.git`; commit, do not write
+`.bak` files) **and every new campaign is pinned to one engine**: `init` records the imported engine in
+`campaign.json["engine"]`; polish/round/structure/... refuse to open on another engine (`EnginePinMismatch`) unless
+`RMFIT_ALLOW_ENGINE_CHANGE=1`, which is then noted in the readme; `rmfit <dir> engine` shows the pin; the job template
+sets `AZURE2_ROOT` from it and checks the `.so` md5 before Python starts. Campaigns made earlier (no pin) are never
+refused. The shared `~/AZURE2/pyazr` and `~/bin/AZURE2` change only through `~/AZURE2/scripts/install_shared.sh`
+(refuses while a job or process uses the shared build; weekly releases, DeBoer 2026-11-07); pin a frozen clone under
+`~/AZURE2_work/`, never `~/AZURE2`.
 
 ## 8. Gotchas
 
