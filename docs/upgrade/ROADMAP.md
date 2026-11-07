@@ -106,6 +106,10 @@ Gate: byte-identical round trips; one mass table in the whole code.
 
 - [ ] `experiment/` target: `Measurement` arrays converted to c.m. at load; results in per-evaluation arrays, not in
       points; hosts no longer write into peers.
+- [ ] Model expressions (decision 12, `ARCHITECTURE.md` §3): `Observable` leaves with amplitude filters (multipole,
+      Jπ, l, s, internal/external) and nodes `Sum`, `Ratio`, `Scale`, `Weighted`; design note first; today's segment
+      types (isDiff codes, SUM/RATIO composites, multipolarity masks, natural targets) read into them. Test: every
+      test project's χ² unchanged; an E1-only and an E2-only fit of T1 against a closed form.
 Gate: bit-identical.
 
 ## Phase 5 — Energy grid, kernels, stopping, THM observable

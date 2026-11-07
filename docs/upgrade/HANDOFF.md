@@ -775,6 +775,9 @@ out of any repository).
 11. (Added and decided 2026-11-07, Jakub.) Exact energies by default: observables are calculated at the data
    energies, shifted energies and fold nodes, as AZURE2 does today; interpolation on a fixed mesh only as an opt-in,
    checked mode (`ARCHITECTURE.md` §1, §3, §4).
+12. (Added and decided 2026-11-07, Jakub.) Data must be easy to adapt (sums, ratios, yields, E1/E2 parts, …): a
+   measurement's prediction is a model expression of observable selectors and combining nodes (`ARCHITECTURE.md`
+   §3 experiment/, §9). Designed in Phase 4 with `io/Project` reading today's segment types into it.
 
 **Next actions.**
 1. Push `feature/upgrade` (and, if wanted, `thm-review` and `fix/edep-cow-acquire`) from a machine with GitHub access.

@@ -93,8 +93,24 @@ fixes touched `EData`/`EPoint`/`ESegment`; at least 21 fixes repaired bugs intro
   narrow-resonance term for resonances narrower than the grid can follow.
 
 ### experiment/
-- `Measurement`: data arrays (E, θ, y, δy) already converted to c.m. at load (frames are a load-time function),
-  observable kind, reaction, apparatus settings, provenance.
+- `Measurement`: data arrays (E, θ, y, δy) already converted to c.m. at load (frames are a load-time function), the
+  **model expression** that predicts them (below), apparatus settings, provenance.
+- **Model expressions (decision 12, Jakub, 2026-11-07): what a data set measures is written, not coded.** A
+  measurement's prediction is a small expression tree, so a new kind of data is a new combination, not new engine code.
+  - Leaves are `Observable` selectors: a reaction (entrance → exit partition, exit excitation), an observable kind
+    (σ, dσ/dΩ, Legendre coefficient a_L, A_y, phase shift, S factor, β-delayed spectrum, THM yield), and an optional
+    **amplitude filter** — multipolarity (E1, E2, M1, …), Jπ, l, channel spin, internal or external part. A filter
+    selects amplitudes *before* they are squared: "E1 only" is |Σ_{E1} T|², with the E1 interferences kept and the
+    E1–E2 cross term excluded; a sum of filtered leaves is therefore not the unfiltered observable, and the docs and
+    tests say so.
+  - Nodes combine leaves: `Sum` (incoherent, e.g. several final states or γ lines), `Ratio`, `Scale` (fixed factors,
+    branching ratios), `Weighted` (isotopic abundances of a natural target), and the apparatus folds `Yield` (target
+    thickness and stopping), `Resolution`, `Doppler`, `Shift`, each a kernel on its sub-expression.
+  - The same tree gives the value and, by the chain rule through each node, the gradient; each node is one class with
+    `value` and `derivative`, tested alone.
+  - Today's `.azr` segment types (isDiff codes, SUM/RATIO composites, multipolarity masks, natural targets) are read
+    by `io/` into these trees, so old projects load unchanged; a new data type needs at most one new leaf filter or
+    node.
 - `Material`: elements and stoichiometry, density, phase (solid/gas), depth profile (implanted targets).
 - `stopping/`: AZURE2's own electronic-stopping evaluation and straggling (§7).
 - `EnergyGrid`: the evaluation energies E_n (§1, exact energies): data energies, shifted energies (updated when a
@@ -192,6 +208,7 @@ distorted waves, stopping and straggling versus E and depth, kernel rows K_i(E_n
 | a prior | χ² | value and gradient | T2 |
 | a data source | d, C or the System | a reader with provenance | a fixture from that library |
 | a file keyword | the project | one field | round trip of the test projects |
+| a kind of data (sum, ratio, yield, E1 part, …) | a model expression | one leaf filter or node, if not a combination of existing ones | the test project with that data |
 
 ## 10. Tests
 
