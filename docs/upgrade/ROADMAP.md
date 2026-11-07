@@ -16,9 +16,15 @@ Tick boxes as work lands; put the commit hash after each tick.
 - [ ] Freeze: no perf work on `EData`/`EPoint`/`ESegment`; no new Qt features (announce in `dev`'s CLAUDE.md).
 - [ ] Test projects T1, T2, T3 (`ARCHITECTURE.md` §10) under `tests/upgrade/T1..T3/`: generator script with the true
       parameters, synthetic data with noise, `.azr`, README stating what each covers and the truth.
+      - [x] T2 (branch `feature/upgrade-0-testprojects-t2`): 3184b1ee, 10ec535a, dc898924, 52340da3, 425fbc8c
+            (generator, data, fixes), 7ece1045 (README); recovery check 345bbb69, 599e6bee. Recovers its truth:
+            max |pull| 2.15 (noisy), 0.38 (Asimov). Not seconds-scale: the fit takes 585 s at 8 threads (72 s with
+            a Coulomb table); the calculation 1.8 s.
 - [ ] Golden outputs of today's engine for T1–T3 (`tests/upgrade/golden/`), with the engine commit recorded.
+      - [x] T2: 8870504f (`tests/upgrade/golden/T2`, engine sources 37978592), compare script 345bbb69.
 - [ ] Identity checks (no data) as unit tests: list in `ARCHITECTURE.md` §10.
-- [ ] Benchmark: `scripts/bench_upgrade.sh` → time and peak RSS for T2 at 1 and 8 threads; stored per commit.
+- [x] Benchmark: `scripts/bench_upgrade.sh` → time and peak RSS for T2 at 1 and 8 threads; stored per commit.
+      345bbb69, 5a9426fd (script), f51f8d18 (first entry, `tests/upgrade/bench/T2.tsv`).
 - [ ] CI: nightly clang TSan and ASan at 8 threads on T1–T3 and the mapping/shift/target tests.
 - [ ] Rules into `CLAUDE.md` (`RULES.md`), replacing the "date an entry (`dev 0dd28e5`)" skill rule.
 - [ ] Skills rewritten into the ten-skill set (`RULES.md` §3) and `tools/check_skills.py` in CI.

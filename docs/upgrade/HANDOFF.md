@@ -2,6 +2,41 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-07 (T2 session) — test project T2, its golden outputs and the benchmark
+
+Branch `feature/upgrade-0-testprojects-t2` (from `feature/upgrade` ff75fc28), commits 3184b1ee … 8870504f, not
+merged.
+
+**State.**
+- `tests/upgrade/T2/`: p + ¹⁵N → ¹⁶O through an apparatus, 13 segments, 330 points, 19 free parameters (6 level,
+  13 nuisance): thin, thick, implanted (fitted density) and gas (Doppler, E-dependent resolution) targets with stopping
+  and straggling; beam profile; Q attenuation; constant, √E and f(E) shifts with groups; a norm group; norm,
+  shift, density, abundance and covariance priors; a data covariance; SUM and RATIO through α₁; a natural-target
+  sample; THM HOES (two runs, one profiled scale, 20 keV c.m. fold) and OES points. `make_t2.py` holds the truth and
+  makes the data with the engine (seed 20261106); README states coverage, truth and TODOs.
+- Recovery (`check_recovery.py`, HTCondor 8 threads): noisy χ² 294.17/330, max |pull| 2.15; Asimov χ² 0.17,
+  max |pull| 0.38. Golden outputs in `tests/upgrade/golden/T2` (1e-5 calculations, 1e-3 fit;
+  `regen_compare.py`). Benchmark `scripts/bench_upgrade.sh`, first row in `tests/upgrade/bench/T2.tsv`:
+  calc 2.67 s / 1.77 s, 200-call fit 170 s / 96.7 s, peak RSS 238 / 475 MB at 1 / 8 threads.
+
+**Findings for later phases.**
+- With THM segments the CLI forces the analytic-gradient MIGRAD; on T2 it spends > 3 min per gradient call and
+  did not converge in 10 min. THM has no analytic residual Jacobian, so `--use-lm` falls back to numerical MIGRAD
+  (1082 calls, 585 s). The T2 scripts use `--use-lm`. Phase 2/5: a THM Jacobian.
+- Exact Coulomb functions at re-placed sub-points are about 2/3 of a fit evaluation; a Coulomb table makes the T2
+  fit 8× faster (72 s) with the same parameters to 8 digits.
+- Fit speed-up from 1 to 8 threads is 1.76 and peak memory doubles (the 200-call benchmark).
+- In the Brune basis the fit fixes γ, but the `.azr` enters Γ at the level energy: moving a level's energy or a
+  free width in the file changes the γ of its fixed channels. A synthetic project must write the fixed Γ that give
+  the true γ at the start values (`make_t2.py` `match_fixed`); T1 and T3 need the same care.
+
+**Not done.** S(E) fold of the OES points (no engine support; README TODO); a fitted Doppler temperature (¹⁶O has
+no resonance narrow enough); a two-nucleus natural target (¹⁴N(p,α) closed); TSan/ASan runs; T2 is not wired into
+CTest or `run_tests.sh` (its fit takes 10 min).
+
+**Next.** Merge the branch; decide whether the T2 recovery runs in nightly CI (10 min at 8 threads, or 72 s with a
+Coulomb table built in the job).
+
 ## 2026-11-07 (second session) — branches imported; THM merged in; Phase 0 started
 
 **How to continue on any machine.** Pull `feature/upgrade` and any `feature/upgrade-<phase>-<topic>` branch listed
