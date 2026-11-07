@@ -252,7 +252,8 @@ every docs link resolves (pre-commit and CI).
   user-level skills never share a name or a description.
 - **Descriptions** are at most 600 characters, name their triggers, and say when to use a sibling skill instead.
 - **No personal absolute paths** (`/groups/...`, `/Users/...`, home directories). Use environment variables
-  (`$AZURE2_BINARY`, `$AZURE2_SRC`, `$RMFIT_HOME`, `$CAMPAIGN_ROOT`) and say what they hold.
+  (`$AZURE2_BINARY`, `$AZURE2_SRC`, `$RMFIT_HOME`, `$CAMPAIGN_ROOT`, rmfit's own
+  `$AZURE2_ROOT`, `$FERDINAND_HOME`) and say what they hold.
 
 The skill set: `azure2-setup`, `azure2-calculate`, `azure2-fit`, `azure2-check`, `azure2-uncertainty`,
 `azure2-plot`, `azure2-targets`, `azure2-thm`, `azure2-resonance-search`, `azure2-exchange`, plus
