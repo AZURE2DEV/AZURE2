@@ -41,9 +41,14 @@ Tick boxes as work lands; put the commit hash after each tick.
       branch.
 - [x] Rules into `CLAUDE.md` (`RULES.md`), replacing the "date an entry (`dev 0dd28e5`)" skill rule.
 - [x] Skills rewritten into the ten-skill set (`RULES.md` §3) and `tools/check_skills.py` in CI.
-- [ ] Merge the race fixes everywhere: `a6bc6b9` is on `dev` only (missing on `thm`); the acquire-fence fix
-      (local branch `fix/edep-cow-acquire`, 3fba1192, analysis machine) still to push and merge.
+- [x] Merge the race fixes everywhere: `a6bc6b9e` (via origin/thm c6ddb741, merged d20718f8) and the acquire-fence
+      fix 3fba1192 (`fix/edep-cow-acquire`, merged 37978592) are both on `feature/upgrade`. Pushing them to `thm` and
+      `dev` is the PI's.
 Gate: T1–T3 run in seconds and recover their truth with today's engine; golden files committed.
+Gate status (2026-11-07): met except (a) the T2 fit, which takes minutes, not seconds (its calculation, 3 s, is in
+`tests/upgrade/check.sh`; the fit is for nightly CI), (b) the TSan job, red until §4.1 and §4.2 of
+`sanitizer_findings.md` are fixed, and (c) five ctest failures inherited from origin/thm c6ddb741 (HANDOFF,
+2026-11-07 fourth session). The freeze awaits decision 2.
 
 ## Phase 1 — Physics core as arrays; pycoulomb; conventions
 

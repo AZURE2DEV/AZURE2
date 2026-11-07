@@ -2,6 +2,30 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-07 (fourth session) — Phase 0 merged; failures inherited from origin/thm
+
+**State.** `feature/upgrade` carries all Phase 0 branches: rules and skills (09379840), T1/T3 (a80352e6), T2
+(356c6770), sanitizers (73290ee2). `tests/upgrade/check.sh` runs T1, T3 and the two T2 calculations against the
+golden outputs (e4cadf51); Condor 16086 at 8 threads: PASS. Both race fixes are on `feature/upgrade` (ROADMAP item
+ticked).
+
+**Five ctest failures come from origin/thm, not from the upgrade.** A plain build of origin/thm c6ddb741 (GCC 11.5,
+Qt GUI on) fails the same five tests as `thm-review` 1174fdb2:
+
+| test | failing check |
+|---|---|
+| `thm_opt_in` | "binding energy: THM on" |
+| `pair_identity` | 112.0856 against the expected 112.0376 |
+| `mcmc_priors` | energy shift 0.004 ± 0.002 MeV and the sqrt(E) coefficient prior 0.003 ± 0.001 |
+| `light_excitation_gui` | `PairsData::SIZE` 16 and the 31/32-column pair lines |
+| `adaptive_grid_reference` | "eV level crossing the window edge": swing 1.685 × 10⁻⁴ of the area, tolerance 10⁻⁴ |
+
+The log is in the scratch build directory of the analysis machine; the commands are `ctest -j8` on a GUI build.
+None of the five touches the THM form-factor GUI added on `thm-review` (7c543690). Each needs a `fix/` branch.
+
+**Next.** `fix/fit-iteration-counter` and `fix/edep-ownership-tsan` (TSan green); `fix/` branches for the five
+inherited failures; then Phase 1.
+
 ## 2026-11-06 (sanitizer session) — Phase 0: TSan and ASan at 8 threads, script, CI, findings
 
 Branch `feature/upgrade-0-sanitizers` (from `feature/upgrade` 356c6770), local, not pushed. Commits: c692bb8b
