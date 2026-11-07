@@ -80,7 +80,7 @@ REP="${SAN_REPORT_DIR:-$WORK/reports}"
 mkdir -p "$REP"
 case "$REP" in /*) ;; *) REP="$PWD/$REP" ;; esac
 keep=0
-cleanup() { [ "$keep" = 1 ] || [ -n "${SAN_REPORT_DIR:-}" ] || rm -rf "$WORK"; }
+cleanup() { { [ "$keep" = 1 ] && [ -z "${SAN_REPORT_DIR:-}" ]; } || rm -rf "$WORK"; }   # reports outside WORK survive
 trap cleanup EXIT
 export OMP_NUM_THREADS="$THREADS"
 export AZURE2_BIN="$BIN"
