@@ -117,6 +117,9 @@ BasisAmplitudes amplitudes_from_observed(const System &system, std::size_t b, co
   BasisAmplitudes out;
   out.gamma.assign(levels.value.size(), 0.0);
   out.park_norm.assign(levels.E.size(), 1.0);
+  out.half_denominator.assign(levels.E.size(), 1.0);
+  out.denominator_terms.assign(levels.value.size(), DenominatorTerm());
+  out.notes.assign(levels.value.size(), ColumnNote::None);
   // CNuc.cpp TransformIn, first loop (lines 1200-1460 at e54e6fcc).
   for (std::size_t la = 0; la < levels.E.size(); la++) {
     const double E = levels.E[la];
@@ -143,21 +146,26 @@ BasisAmplitudes amplitudes_from_observed(const System &system, std::size_t b, co
           double P = f.P;
           if (!(P > 0.0)) {
             // Just above a Coulomb threshold P = 0 in double precision: gamma = 0 (exact for an input of 0).
-            if (tg[m] != 0.0)
+            if (tg[m] != 0.0) {
+              out.notes[la * n + m] = ColumnNote::ZeroPenetrability;
               out.warnings.push_back(Label(system, b, la) + ", column " + std::to_string(m) +
                                      ": P = 0 at the level energy; the observed width cannot be converted, gamma = 0");
+            }
             tg[m] = 0.0;
             P = 1.0;
           } else {
             denom -= tg[m] / P * f.dS_dE;
+            out.denominator_terms[la * n + m] = DenominatorTerm{true, tg[m] / P * f.dS_dE, P, f.dS_dE};
           }
           pene[m] = P;
         } else {
           tg[m] = v * v;  // ANC^2 (fm^-1)
           if (Ec == 0.0) {
-            if (tg[m] != 0.0)
+            if (tg[m] != 0.0) {
+              out.notes[la * n + m] = ColumnNote::AtThreshold;
               out.warnings.push_back(Label(system, b, la) + ", column " + std::to_string(m) +
                                      ": the level is at the channel threshold, where an ANC defines no width; gamma = 0");
+            }
             tg[m] = 0.0;
             pene[m] = 1.0;
             continue;
@@ -165,11 +173,14 @@ BasisAmplitudes amplitudes_from_observed(const System &system, std::size_t b, co
           const ChannelValues f = cf(b, fk[m], E);
           pene[m] = f.P;
           denom -= tg[m] / pene[m] * f.dS_dE;
+          out.denominator_terms[la * n + m] = DenominatorTerm{true, tg[m] / pene[m] * f.dS_dE, pene[m], f.dS_dE};
         }
       } else if (IsPhoton(col.kind)) {
-        if (rwa)
+        if (rwa) {
+          out.notes[la * n + m] = ColumnNote::AmplitudeFlagIgnored;
           out.warnings.push_back(Label(system, b, la) + ", column " + std::to_string(m) +
                                  ": an amplitude input is supported for particle channels only; read as a width");
+        }
         const ChannelValues f = cf(b, fk[m], E);
         if (f.static_moment) {
           // A static moment: the input is the moment itself; its sign is reversed for half-integer J.
@@ -186,6 +197,11 @@ BasisAmplitudes amplitudes_from_observed(const System &system, std::size_t b, co
           pene[m] = P;
         }
       } else {  // beta: the input is the feeding amplitude
+        if (rwa) {
+          out.notes[la * n + m] = ColumnNote::AmplitudeFlagIgnored;
+          out.warnings.push_back(Label(system, b, la) + ", column " + std::to_string(m) +
+                                 ": an amplitude input is supported for particle channels only; ignored");
+        }
         tg[m] = std::fabs(v);
         pene[m] = 1.0;
       }
@@ -193,6 +209,7 @@ BasisAmplitudes amplitudes_from_observed(const System &system, std::size_t b, co
     // Park's J = 1 - sum gamma_Park^2 dS/dE = denom / (2 numer) (CNuc.cpp, comment before parkNorm).
     const double parkNorm = denom / (2.0 * numer);
     out.park_norm[la] = parkNorm;
+    out.half_denominator[la] = denom / 2.0;
     if (park && parkNorm <= 0.0) {
       std::ostringstream o;
       o << Label(system, b, la) << ": Park norm J = " << parkNorm << " is not positive";
@@ -310,7 +327,7 @@ std::vector<double> boundary_values(const System &system, std::size_t b, const s
 
 void subtract_external_capture(const System &system, std::size_t b, std::vector<double> &gamma,
                                const std::vector<ExternalWidth> &ext, bool ignore_zero_widths,
-                               std::vector<std::string> &warnings) {
+                               std::vector<std::string> &warnings, std::vector<std::size_t> *exceeded) {
   const JpiBlock &blk = system.block(b);
   const std::size_t nc = blk.num_channels();
   if (gamma.size() % (nc ? nc : 1) != 0 || ext.size() != gamma.size())
@@ -328,6 +345,7 @@ void subtract_external_capture(const System &system, std::size_t b, std::vector<
       } else {
         warnings.push_back(Label(system, b, la) + ", channel " + std::to_string(k) +
                            ": imaginary part of the external amplitude exceeds the total; internal amplitude = -Re");
+        if (exceeded) exceeded->push_back(la * nc + k);
         g = -re;
       }
     }
@@ -337,7 +355,7 @@ void subtract_external_capture(const System &system, std::size_t b, std::vector<
 
 LevelSet formal_from_brune(const System &system, std::size_t b, const std::vector<double> &E,
                            const std::vector<double> &gamma, const std::vector<double> &B, const ChannelFunctions &cf,
-                           FormalSignRule sign) {
+                           FormalSignRule sign, const GeneralizedEigenSolver &solver) {
   const JpiBlock &blk = system.block(b);
   const std::size_t nc = blk.num_channels();
   CheckLayout(system, b, nc, E, gamma, "formal_from_brune");
@@ -383,7 +401,7 @@ LevelSet formal_from_brune(const System &system, std::size_t b, const std::vecto
         Nm[mu * n + la] = nSum;
       }
     }
-  const EigenResult eig = generalized_symmetric_eigen(Nm, Mm, n);
+  const EigenResult eig = solver ? solver(Nm, Mm, n) : generalized_symmetric_eigen(Nm, Mm, n);
   if (!eig.ok) {
     std::ostringstream o;
     o << "No standard R-matrix (constant boundary conditions) corresponds to the levels of J^pi = " << blk.two_J()
@@ -429,6 +447,9 @@ LevelSet brune_from_formal(const System &system, std::size_t b, const std::vecto
   out.E.assign(n, 0.0);
   out.gamma.assign(n * nc, 0.0);
   out.iterations.assign(n, 0);
+  out.status.assign(n, LevelSet::Status::Converged);
+  out.residual_MeV.assign(n, 0.0);
+  out.boundary_shift.assign(n * nc, 0.0);
   const std::vector<int> rank = AscendingRanks(E);
   // CNuc.cpp TransformOut (lines 2563-2745 at e54e6fcc), one level at a time.
   for (std::size_t lev = 0; lev < n; lev++) {
@@ -450,6 +471,7 @@ LevelSet brune_from_formal(const System &system, std::size_t b, const std::vecto
           diff[k] = newB - tempB[k];
           tempB[k] = newB;
         }
+      for (std::size_t k = 0; k < nc; k++) out.boundary_shift[lev * nc + k] = diff[k];
       std::vector<double> C(n * n);
       for (std::size_t mu = 0; mu < n; mu++)
         for (std::size_t mup = 0; mup < n; mup++) {
@@ -458,15 +480,17 @@ LevelSet brune_from_formal(const System &system, std::size_t b, const std::vecto
             if (particle[k]) chanSum += diff[k] * tempG[mu * nc + k] * tempG[mup * nc + k];
           C[mu * n + mup] = (mu == mup) ? tempE[mu] - chanSum : -chanSum;
         }
-      const EigenResult eig = symmetric_eigen(C, n);
+      const EigenResult eig = options.solver ? options.solver(C, n) : symmetric_eigen(C, n);
       if (!eig.ok) {
         out.warnings.push_back(Label(system, b, lev) + ": could not transform the level (eigenvalue problem failed); "
                                                        "the formal values are kept");
+        out.status[lev] = LevelSet::Status::EigenFailed;
         tempE[me] = E[lev];
         for (std::size_t k = 0; k < nc; k++) tempG[me * nc + k] = gamma[lev * nc + k];
         break;
       }
-      if (std::fabs(eig.values[me] - tempE[me]) <= options.energy_tolerance_MeV) done = true;
+      const double step = std::fabs(eig.values[me] - tempE[me]);  // MeV
+      if (step <= options.energy_tolerance_MeV) done = true;
       std::vector<double> newG(n * nc);
       for (std::size_t mu = 0; mu < n; mu++)
         for (std::size_t k = 0; k < nc; k++) {
@@ -482,6 +506,8 @@ LevelSet brune_from_formal(const System &system, std::size_t b, const std::vecto
           o << Label(system, b, lev) << ": not transformed after " << options.max_iterations
             << " iterations; the formal values are kept";
           out.warnings.push_back(o.str());
+          out.status[lev] = LevelSet::Status::NotConverged;
+          out.residual_MeV[lev] = step;
           tempE[me] = E[lev];
           for (std::size_t k = 0; k < nc; k++) tempG[me * nc + k] = gamma[lev * nc + k];
         }
