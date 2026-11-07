@@ -190,6 +190,13 @@ TAIL = """<lastRun>
 """
 
 
+# A level's widths are entered as observed partial widths at the level's energy, but what the fit holds fixed is the
+# reduced-width amplitude gamma (MeV^1/2) of the Brune basis (param.sav).  For a level whose energy starts off the
+# truth, the fixed widths that give the true gamma at the start energy differ from the true widths; match_fixed()
+# finds them with the engine and keeps them here, (level, channel) -> width in eV at the start energy.
+FIXED_AT_START = {}
+
+
 def level_lines(fit):
     """The <levels> block.  fit=True: free parameters at their start values, the others fixed."""
     out = []
@@ -197,12 +204,14 @@ def level_lines(fit):
         E, fixE = lev["E"], 1
         if fit and lev["Estart"] is not None:
             E, fixE = lev["Estart"], 0
-        for (pair, s2, l2, width, start) in lev["ch"]:
+        for ci, (pair, s2, l2, width, start) in enumerate(lev["ch"], start=1):
             p = PAIRS[pair]
             g, chfix = width, 1
             if fit and start is not None:
                 g, chfix = start, 0
-            out.append(f"{lev['J']} {lev['pi']} {E:.6f} {fixE} 1 {pair} {s2} {l2} {lid} 1 {chfix} {g:.6g} "
+            elif fit:
+                g = FIXED_AT_START.get((lid, ci), width)
+            out.append(f"{lev['J']} {lev['pi']} {E:.6f} {fixE} 1 {pair} {s2} {l2} {lid} 1 {chfix} {g:.12g} "
                        f"{p['j1']} {p['pi1']} {p['j2']} {p['pi2']} {p['e2']} {p['m1']} {p['m2']} {p['z1']} "
                        f"{p['z2']} {SIN} {p['S']} 0 0 0.0 0 {p['R']} 0 0 0" + (f" {p['thm']}" if p['thm'] else ""))
         out.append("")
@@ -378,6 +387,44 @@ def model_lab(binary, tmp):
     return out
 
 
+def param_par(binary, workdir, azr_text):
+    """param.par of a calculation of azr_text: name -> value (Brune basis: E in MeV, gamma in MeV^1/2)."""
+    if os.path.isdir(os.path.join(workdir, "output")):
+        shutil.rmtree(os.path.join(workdir, "output"))
+    open(os.path.join(workdir, "p.azr"), "w").write(azr_text)
+    log = run_engine(binary, workdir, "p.azr")
+    path = os.path.join(workdir, "output", "param.par")
+    if not os.path.isfile(path):
+        sys.exit("no param.par\n" + log[-3000:])
+    out = {}
+    for line in open(path):
+        f = line.split()
+        if len(f) >= 2 and f[0].startswith(("width_", "energy_")):
+            out[f[0]] = float(f[1])
+    return out
+
+
+def match_fixed(binary, tmp):
+    """Fixed widths of the levels that start off their true energy, so that their gammas are the true ones."""
+    truth = param_par(binary, tmp, project(fit=False))
+    for it in range(10):
+        start = param_par(binary, tmp, project(fit=True, cov=False))
+        worst = 0.0
+        for lid, lev in enumerate(TRUTH, start=1):
+            if lev["Estart"] is None:
+                continue
+            for ci, (pair, s2, l2, width, st) in enumerate(lev["ch"], start=1):
+                name = f"width_{lid}_{ci}"
+                if st is not None or truth[name] == 0.0:
+                    continue
+                r = truth[name] / start[name]
+                worst = max(worst, abs(r - 1.0))
+                FIXED_AT_START[(lid, ci)] = FIXED_AT_START.get((lid, ci), width) * r * r
+        if worst < 1e-6:            # param.par carries 8 significant digits; the iteration ends near 2e-7
+            return it
+    sys.exit(f"fixed widths at the start energies did not converge (worst gamma ratio {worst:.3g})")
+
+
 def covariance(m2, m3, E2, E3):
     """cov_diff.txt terms: 4 % diagonal and one fully correlated energy-dependent 3 % tilt."""
     m = np.concatenate([m2, m3])
@@ -408,6 +455,7 @@ def main():
     tmp = tempfile.mkdtemp(prefix="t2gen.")
     try:
         model = model_lab(binary, tmp)
+        match_fixed(binary, os.path.join(tmp, "run1"))
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
@@ -454,6 +502,7 @@ def main():
     if not asimov:
         open(os.path.join(HERE, "T2_true.azr"), "w").write(project(fit=False))
         truth = dict(seed=SEED, levels=TRUTH, nuisance=NUISANCE, prior_cov_mean=list(mean),
+                     fixed_widths_at_start={f"level {k[0]} channel {k[1]}": v for k, v in FIXED_AT_START.items()},
                      profile=PROFILE, sigma_thm_cm=SIGMA_THM_CM)
         json.dump(truth, open(os.path.join(HERE, "truth.json"), "w"), indent=1, default=float)
     print("wrote", root)
