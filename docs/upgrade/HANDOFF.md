@@ -71,7 +71,9 @@ pass (their failure is the memo's call-order dependence), but 3–17× slower (T
   C++, bit-identical to the Fortran). Jakub: add the LLNL BSD-3 COPYRIGHT for coulfg, choose the licence, push, tag.
 
 **Next steps, in order.**
-1. Merge `feature/upgrade-1-coulomb` after the timing shows the routing costs nothing.
+1. ~~Merge `feature/upgrade-1-coulomb`~~ Done (a9cd42c3): routing costs ≤ 2 % (within spread); outputs identical
+   except hybrid rounding; `ctest -LE slow` 110/110. The two pyazr THM byte checks are intermittent (the per-thread
+   memo's call order), not a merge defect; they become deterministic with step 3b.
 2. Step 3b (`cnuc_split.md` §3, `coulomb.md` §6): the per-stage channel-function table — P, S, S′, φ, σ_l per
    (α, l, channel energy) over the evaluation energies (decision 11, exact energies), read-only during an evaluation,
    replaced when a free shift moves; replaces the `EDependentTables` Coulomb rows, `g_shiftDerivMemo` and the memo.
