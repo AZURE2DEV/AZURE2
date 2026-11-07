@@ -15,13 +15,15 @@
 # listed ascending (asc) and with the 3.791 level first (desc); truth = asc with the free level at 3.471.
 #
 #   (a) mode 3 with --no-brune: asc and desc give the same cross sections (labels do not matter);
-#   (b) desc: param.par's energy_1 belongs to the first-listed level (3.791, the boundary-condition
-#       reference, so its formal energy is 3.791 exactly) and energy_2 is the formal energy of 3.491;
+#   (b) desc: param.par's energy_1 belongs to the first-listed level and energy_2 to the 3.491 level, and they are
+#       asc's two formal levels exchanged: the boundary condition is set at the lowest level (3.491, whose formal
+#       energy is therefore 3.491 exactly) whatever the listing order (HANDOFF decision 10, 2026-11-07);
 #   (c) desc: parameters.out lists the levels in file order (3.791 then 3.491);
 #   (d) a --no-brune fit of desc_fit (data from truth, one free parameter: the 3.491 level's energy)
 #       moves the free level to 3.471 and leaves the fixed one at 3.791, chi2 ~ 0.
 #   Old build: (b) energy_1 = 3.4888, (c) 3.491 first, (d) the fixed flag sits on the 3.491 level and
-#   the fit moves the 3.791 level instead.
+#   the fit moves the 3.791 level instead.  Builds from 2026-10-27 to 2026-11-07 set the boundary condition at the
+#   first-listed level: (b) desc energy_1 = 3.791, energy_2 = 3.4888, not asc's levels.
 #
 #   ./tests/transform_level_order/check.sh path/to/AZURE2
 
@@ -56,23 +58,22 @@ else bad "(a) asc and desc differ: $w"; fi
 
 # ---- (b) the formal energies belong to the listed levels
 e1="$(param desc energy_1)"; e2="$(param desc energy_2)"
-if near "$e1" 3.791 1e-6 && awk -v e="$e2" 'BEGIN { exit !(e + 0 > 3.4 && e + 0 < 3.6) }'; then ok "(b) desc: energy_1 = $e1 is the first-listed (fixed) 3.791 level, energy_2 = $e2 the 3.491 level"
-else bad "(b) desc: energy_1 = $e1, energy_2 = $e2 (expected 3.791 and ~3.489: the first-listed level got the lowest eigenvalue)"; fi
 a1="$(param asc energy_1)"; a2="$(param asc energy_2)"
 if near "$a1" 3.491 1e-6 && near "$a2" 3.7921077 1e-5; then ok "(b) asc unchanged: energy_1 = $a1, energy_2 = $a2"; else bad "(b) asc: energy_1 = $a1, energy_2 = $a2"; fi
+if near "$e1" "$a2" 1e-7 && near "$e2" "$a1" 1e-7; then ok "(b) desc: energy_1 = $e1 (the first-listed 3.791 level) and energy_2 = $e2 (the 3.491 level) are asc's levels exchanged"
+else bad "(b) desc: energy_1 = $e1, energy_2 = $e2 (expected asc's $a2 and $a1: the formal levels must not depend on the listing order)"; fi
 
 # ---- (c) parameters.out in file order
 es="$(energies desc)"
 if [ "$es" = "3.7910 3.4910 " ]; then ok "(c) desc: parameters.out lists the levels in file order ($es)"; else bad "(c) desc: parameters.out order '$es', expected '3.7910 3.4910 '"; fi
 
 # ---- (d) a fit varies the level whose energy is free
-# Truth: desc itself with the 3.491 level's formal energy (3.4888353 under the boundary condition of the
-# first-listed level, whichever name a build gives it) lowered by 0.02 MeV through a parameter file, so the
-# truth lies in the fit's own one-parameter space on every build.  The fit has one free parameter, the
-# energy of the 3.491 level, and must reach it.
+# Truth: desc itself with the 3.491 level's formal energy (3.491, the boundary-condition reference, whichever
+# name a build gives it) lowered by 0.02 MeV through a parameter file, so the truth lies in the fit's own
+# one-parameter space.  The fit has one free parameter, the energy of the 3.491 level, and must reach it.
 prep truth desc.azr
-awk '$1 ~ /^energy_/ && $2 + 0 > 3.48 && $2 + 0 < 3.50 { $2 = "3.4688353e+00"; print; next } { print }' "$WORK/desc/output/param.par" > "$WORK/truth/truth.sav"
-grep -q "3.4688353e+00" "$WORK/truth/truth.sav" || { bad "(d) no formal energy near 3.4888 in desc's param.par"; cat "$WORK/desc/output/param.par"; exit 1; }
+awk '$1 ~ /^energy_/ && $2 + 0 > 3.48 && $2 + 0 < 3.50 { $2 = "3.4710000e+00"; print; next } { print }' "$WORK/desc/output/param.par" > "$WORK/truth/truth.sav"
+grep -q "3.4710000e+00" "$WORK/truth/truth.sav" || { bad "(d) no formal energy near 3.491 in desc's param.par"; cat "$WORK/desc/output/param.par"; exit 1; }
 (cd "$WORK/truth" && printf '3\nn\ntruth.sav\n\n7\n' | run_limited 300 "$AZURE2_BIN" --no-brune --no-gui --no-readline t.azr > run.log 2>&1)
 te="$(energies truth | tr ' ' '\n' | sort -g | head -1)"       # the moved level's physical energy
 prep fit desc_fit.azr; mkdir -p "$WORK/fit/data"

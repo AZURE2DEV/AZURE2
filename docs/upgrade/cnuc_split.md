@@ -20,7 +20,8 @@ run with the binary before and after, in the Brune basis (default), the formal b
 (`--use-park`), and every file of `output/` compared byte for byte; plus `tests/upgrade/check.sh`, `ctest -LE slow` and
 `tests/run_tests.sh`. A move that cannot meet this (a different eigensolver, a different order of operations) is
 either made with the engine's arithmetic injected (section 4) or left for a deliberate re-baseline with its own
-commit. The `Convention` options of HANDOFF decision 10 (B_c from the lowest level, largest |γ| positive) stay off.
+commit. Step 1 kept the `Convention` options of HANDOFF decision 10 off; step 1b turned the formal basis to its rules
+and deliberately changed outputs, each change classified (sections 6, 7).
 
 ## 2. Classification
 
@@ -115,8 +116,8 @@ returns arrays; it reads no other part's state. `CNuc` reaches them only through
 | `boundary_values` | System, block b, E_λ (MeV, E_x, listed order), rule, channel functions | B_c (dimensionless) per block channel | `CNuc::CalcBoundaryConditions` (step 1) |
 | `amplitudes_from_observed` | System, b, columns, Γ (eV) / C (fm^−½) / γ̃ (MeV^½) with flags, basis, channel functions | γ̃ or γ^P (MeV^½), Park J, diagnostics D/2, terms, notes | `CNuc::TransformIn` (step 1) |
 | `subtract_external_capture` | System, b, total photon γ (MeV^½), γ^ext (complex, MeV^½) | internal γ, entries where \|Im γ^ext\| > γ | `CNuc::TransformIn` (step 1) |
-| `formal_from_brune` | System, b, Ẽ_λ, γ̃, B_c, channel functions, sign rule, eigensolver | formal E_λ (MeV), γ (MeV^½) | `CNuc::TransformIn` (step 1) |
-| `brune_from_formal` | System, b, formal E, γ, B_c, channel functions, tolerance (MeV), eigensolver | Ẽ, γ̃, iterations, status, last step (MeV), last ΔB_c | `CNuc::TransformOut` (step 1) |
+| `formal_from_brune` | System, b, Ẽ_λ, γ̃, B_c, channel functions | formal E_λ (MeV), γ (MeV^½), each level oriented like its Brune level | `CNuc::TransformIn` (step 1) |
+| `brune_from_formal` | System, b, formal E, γ, B_c, channel functions, tolerance (MeV) | Ẽ, γ̃, iterations, status, last step (MeV), last ΔB_c | `CNuc::TransformOut` (step 1) |
 | observed widths (step 2) | System, b, E, internal γ, γ^ext, basis, channel functions | Γ (eV), C (fm^−½), μ, Q, B per (λ, c) | `parameters.out`, `GetTransformParams`, `CheckRadiativeWidths` |
 | `park_from_brune`, `brune_from_park` | System, b, E, γ, channel functions | γ in the other basis, J | `ConvertAmplitudeBasis` (step 2), Park norm (step 3) |
 | `channel_functions` (step 3) | partition α, l, E_c (MeV, c.m.) arrays | P, S, S′ (MeV^−1), φ, σ_l | the level-parameter functions, collision matrix |
@@ -132,9 +133,8 @@ them through `ChannelFunctionsFromCNuc`.
 and levels (spins, masses, energies, radii, flags; level E and γ only for `CNucSystemContent::Parameters`).
 `ChannelFunctionsFromCNuc` reads a channel's pair and l and evaluates `ChannelFunc`/`WhitFunc`;
 `ProjectLevelsFromCNuc` reads the `<levels>` values of a filled `CNuc`; `ExternalWidthsFromCNuc` calls
-`CNuc::CalcExternalWidth`. Nothing else. The adapter carries two options that exist only to reproduce the engine's
-history (section 5): the order of E_c and the quantities to compute. They change no meaning elsewhere and go with the
-adapter in step 3.
+`CNuc::CalcExternalWidth`. Nothing else. Since step 1b the adapter has no options: one channel energy, and every call
+returns S, S′ and P (sections 5, 7).
 
 ## 3. Order of the moves
 
@@ -142,16 +142,17 @@ adapter in step 3.
    the formal → Brune iteration of `TransformOut`. They call `level_parameters`, which was shown bit-identical for the
    Brune and Park amplitudes and B_c, so the engine's numbers can stay identical; the formal basis keeps the engine's
    GSL eigensolver (section 4).
-1b. **Decision 10 on** (formal basis): `BoundaryRule::LowestLevel` and `FormalSignRule::LargestPositive` in the
-   engine's calls, `level_parameters`' own eigensolvers, the GSL adapters deleted; formal-basis goldens re-baselined
-   in their own commit (observables unchanged to ~10⁻¹¹, formal parameters change by B_c and sign).
+1b. **Decision 10 on** (formal basis; done, section 6): B_c from the lowest level and one sign rule as the only rules
+   of `level_parameters` (the `Convention` options deleted), its own eigensolvers (the GSL adapters deleted), one
+   channel energy and one adapter call for S, S′, P. The sign rule is the orientation of the Brune level, not "largest
+   |γ| positive", which changes external-capture observables (section 6).
 2. **Observed widths and the basis switch.** One physics function for Γ_λc (and C_λc, μ, Q) from the total amplitude
    γ^int + γ^ext; `TransformOut`'s second loop, `GetTransformParams`, `PrintTransformParams`, `CheckRadiativeWidths`
    read it. `ConvertAmplitudeBasis` calls `park_from_brune`/`brune_from_park` on the parameter vector.
 3. **Channel functions** (after the pycoulomb prerequisites, ROADMAP Phase 1): `CalcShiftFunctions` becomes tables
    of `channel_functions(α, l, E)` per fit stage; the process-wide memo goes; the adapters' `ChannelFunc` and `WhitFunc`
-   calls are replaced. Here the three orders of the channel energy (section 5) are unified, with a re-baseline at the
-   10⁻¹⁶ level if any output moves.
+   calls are replaced. The channel energy is already one formula (step 1b); the memo's 10⁻¹² MeV tolerance and the
+   non-smooth last digits of S and S′ (section 5) go here, with a re-baseline if an output moves.
 4. **External capture**: `CalcExternalWidth` and the bound-state normalization N_f^½ (`SqrtNFFactor`, now in five
    places) into `physics/external_capture`.
 5. **Coupling coefficients**: `SortPathways`, `CalcAngularDists`, `CalcCaptureAnalyzingPower` into `observables`,
@@ -163,30 +164,27 @@ adapter in step 3.
 
 ## 4. The formal basis and the eigensolver
 
-`formal_from_brune` and `brune_from_formal` solve N a = E M a and the symmetric problem of the iteration. With
-`SymmetricEigen.h`'s solver the formal energies agree with GSL's to 6.6 × 10⁻¹⁶ relative and the amplitudes to
-1.0 × 10⁻¹⁴, and the overall sign of a formal level can differ from GSL's (`level_parameters.md` §7). Both functions
-take the eigensolver as an option (`GeneralizedEigenSolver`, `FormalToBruneOptions::solver`); the engine passes GSL's
-(`GslGeneralizedEigen`, `GslSymmetricEigen` in `src/CNucLevelParameters.cpp`), so the formal basis runs through
-`level_parameters` with the engine's arithmetic and its outputs stay bit-identical. With the own solver they do not
-(section 6). Decision 10 is taken: B_c from the lowest level and the largest |γ| of each formal level positive, both
-on when the engine runs through `level_parameters`, with a re-baseline of the formal-basis goldens. That is the step
-after this one (step 1b): the sign rule makes the solver's sign irrelevant, so the GSL option and its adapter go in
-the same commit.
+`formal_from_brune` and `brune_from_formal` solve N a = E M a and the symmetric problem of the iteration with
+`SymmetricEigen.h`'s solvers. In step 1 they took the eigensolver as an option and the engine passed GSL's, so that the
+formal basis stayed bit-identical; with the own solvers the formal energies agree with GSL's to 6.6 × 10⁻¹⁶ relative
+and the amplitudes to 1.0 × 10⁻¹⁴, but the overall sign of a formal level could differ. Step 1b removed the option: the
+sign of each formal level is fixed by a rule, so the solver's choice no longer reaches an output. Decision 10 proposed
+"largest |γ| positive"; the comparison of step 1b showed that this rule changes external-capture observables in the
+formal basis (section 6), and the rule taken is the orientation of the Brune level (`level_parameters.md` §4).
 
 ## 5. Channel energy and the Coulomb memo
 
-The engine forms the channel energy in three orders: E − e − S (`TransformIn`), E − (S + e) (`CalcBoundaryConditions`),
-E − S − e (`TransformOut`), with e = e₁ + e₂ the excitation energies of the pair and S its separation energy. They agree
-whenever e = 0 and may differ by one ulp otherwise. The Coulomb memo (`CoulFuncCache`) returns a stored value for any
-energy within 10⁻¹² MeV of a stored one, so which of two energies one ulp apart is evaluated first decides the value
-both receive: the engine's numbers depend on the order of its Coulomb-function calls at the 10⁻¹³ level. The adapter
-therefore takes the order of E_c and the quantities to compute from its caller (`ChannelEnergyOrder`,
-`ChannelQuantities`) and evaluates each on its own `ChannelFunc` in the engine's call sequence. A first version that
-computed S, dS/dE and P at every call, in one order, moved the Brune amplitudes of `tests/channel_space` by 10⁻¹³,
-flipped the GSL sign of 6 of its formal levels, and moved two `secondary_gamma` outputs in the last printed digit. Both
-the three orders and the memo's tolerance go when `channel_functions` replaces the adapter (step 3), with a re-baseline
-at that level if an output moves.
+Before step 1b the engine formed the channel energy in three orders: E − e − S (`TransformIn`), E − (S + e)
+(`CalcBoundaryConditions`), E − S − e (`TransformOut`), with e = e₁ + e₂ the excitation energies of the pair and S its
+separation energy. They agree whenever e = 0 and may differ by one ulp otherwise. Since step 1b there is one, E_c =
+(E_x − S) − e, the order of the collision matrix at a data point (section 7). Two properties of the engine's channel
+functions make the last digits of its numbers depend on such details. (1) The Coulomb memo (`CoulFuncCache`) returns a
+stored value for any energy within 10⁻¹² MeV of a stored one, so the order of the Coulomb-function calls decides
+which of two nearby energies sets the value. (2) S from `coulsm` is accurate to about 10⁻¹⁰ and S′, a Richardson
+difference of S with step 10⁻³ E_c, to about 10⁻⁸; neither is smooth below that level, so moving E_c by one ulp
+re-draws those digits. Step 1 kept every caller's order and call sequence and stayed bit-identical; step 1b gives up
+both, and the outputs move at the level these two properties allow (section 6). Both go when `channel_functions`
+replaces the adapter (step 3).
 
 ## 6. Record
 
@@ -229,7 +227,115 @@ GUI off (decision 3), GCC 11.5, Condor: no compiler warnings; `tests/upgrade/che
 `ctest -LE slow` 106/107, the one failure `adaptive_grid_reference` (known, decision 8); `tests/run_tests.sh` 132/132. T2 benchmark, both engines on one host (d32cepyc138), wall time after/before: calc 1.17/1.19 s (1 thread),
 0.42/0.41 s (8 threads); fit200 79.32/80.10 s, 36.16/36.28 s; peak RSS within 1 % (`tests/upgrade/bench/T2.tsv`).
 
+### Step 1b (branch `feature/upgrade-1-cnuc-split-1b`, 2026-11-07)
+
+Done, each in its own commit after the design (section 7): B_c at the lowest level and the formal sign as rules of
+`level_parameters`, the `Convention` options `BoundaryRule`, `FormalSignRule` and the eigensolver options with the
+GSL adapters deleted; one channel energy (E_x − S) − e and one adapter call returning S, S′, P, the options
+`ChannelEnergyOrder`, `ChannelQuantities` deleted; the sign rule changed from "largest |γ| positive" to the orientation
+of the Brune level after the comparison below; a strongly mixed test block. In the formal basis the engine prints a
+note for each J^π group whose first listed level is not its lowest (formal input from earlier builds does not apply).
+
+**Evidence.** The engine before (4bf7aa06) and after (7f4af9d7; the later commits change tests and documents only),
+GCC 11.5, Release, GUI off, were run on every `.azr` under `tests/` (179 projects), menu 1, one thread, in each basis,
+and every file written was compared number by number (`classify.py`; each nested test folder in a private copy: the
+step-1 harness let `X` and `X/models` share a work tree, which lost one run of `shift_subpoint_angle` here).
+Printed numbers carry 11 significant digits in `AZUREOut`, 6 decimals in `parameters.out`, so a printed difference
+of 10⁻¹¹–10⁻¹⁰ can come from a smaller change; the full-precision values of five projects were compared through pyazr.
+Classes: (a) formal basis, B_c or sign; (b) last digits, from the order of E_c and the call sequence (section 5);
+(c) anything else.
+
+| basis | files | identical | changed, by class (largest relative change) |
+|---|---|---|---|
+| Brune | 689 | 670 | (b) 8 observable files, printed ≤ 9.8 × 10⁻¹¹, full precision ≤ 3.6 × 10⁻¹¹ (`channel_space`), 2.0 × 10⁻¹¹ (`7Li_p_ay`); 5 `parameters.out` (last printed digit of the 0⁺ background level of the ⁷Li + p models, full precision 6.3 × 10⁻⁹); 6 `run.log` (numbers in warnings, ≤ 1.7 × 10⁻¹¹) |
+| Park | 689 | 685 | (b) 3 observable files, printed ≤ 6.7 × 10⁻¹¹ (`secondary_gamma` twolevel; full precision 3.9 × 10⁻¹¹ with the amplitudes bit-identical: the call sequence through the memo); 1 `run.log` (1.1 × 10⁻¹²) |
+| formal | 662 | 595 | (a) 21 `param.par`: formal levels reversed (GSL's sign → orientation) with magnitudes unchanged to 1.3 × 10⁻¹⁵ of the level's largest amplitude (exact zeros become ≤ 2 × 10⁻¹⁷), new B_c in `natural_neon` (5 groups) and `be7p_fit` (1), an energy 0 → −8.8 × 10⁻³³ MeV in `screening_6li`; 25 `parameters.out`: reported signs, B_c (iterations, energies), the formal → Brune iteration's last digits (≤ 5.8 × 10⁻⁹; 4.5 × 10⁻⁷ for the non-converging levels of `screening_6li`), and in `beam_profile_kernel` one photon width with external capture, 0.000149 → 0.000053 meV, because `TransformOut` now gives its final state the orientation of its input; 5 observable files, ≤ 8.5 × 10⁻¹¹ (`natural_neon`, `T1`, `T2_true`); `covariance.out` of T2, 5.0 × 10⁻¹³; 10 `run.log` (the notes, 16 groups in 7 projects, and warning numbers). (b) 3 observable files of `channel_space`, ≤ 9.1 × 10⁻¹¹ (as in the Brune basis) |
+
+No file is in class (c) with the rule as built. With decision 10's "largest |γ| positive" one was: on
+`tests/beam_profile_kernel` the rule reversed the 6.917 MeV 2⁺ final state (its largest formal amplitude is the E2
+photon one), and the formal-basis ¹²C(α,γ) capture to it, extrapolated over 111 energies, changed by up to 4.51
+relative (E_c.m. = 4.50 MeV), the Brune basis unchanged; the menu-1 runs of `tests/` contain no such capture output, so
+the classification above did not see it. With the orientation rule the five captures of that project are
+identical to those of the engine before in both bases (5 × 111 printed values). That project also shows that the formal and Brune bases disagree in capture with external capture,
+before and after this step: by 1.5 × 10⁻² to 9.1 relative over its five final states (`level_parameters.md` §6).
+
+The Brune and Park outputs move by more than the 10⁻¹² expected. A variant with the old channel-energy order and the
+new call sequence leaves the Brune and Park amplitudes of the five probed projects bit-identical and their observables
+within 5 × 10⁻¹⁴, except the Park `secondary_gamma` case (3.9 × 10⁻¹¹); the order of E_c therefore causes the amplitude
+changes, through the non-smooth last digits of S and S′ (section 5), and the 0⁺ level of the ⁷Li + p models, whose
+Brune denominator is negative (the engine warns that its widths are out of reach), turns them into 6.3 × 10⁻⁹.
+
+Goldens: the T1, T3 (`golden.py --write`) and T2 calculation goldens (`regen_compare.py --regenerate`), regenerated
+with both engines, are byte-identical; the T2 fit differs by ≤ 3.0 × 10⁻⁷ (`param.sav`), less than the engine before
+differs from its own committed fit (6.3 × 10⁻⁷, a run-to-run spread of the 8-thread MIGRAD end point). No golden and no
+`tests/*/expected/` file is re-baselined. `transform_level_order` (b) states the new rule (commit of decision 10).
+
+Checks (GCC 11.5, GUI off, Condor): no compiler warnings; `tests/upgrade/check.sh` PASS; `ctest -LE slow` 107/107;
+`tests/run_tests.sh` 131/132, the one failure `shared_point_tables` (d), the peak-RSS ratio without margin
+(HANDOFF, step 1): fit at 4 threads 316 MB > 3 × the calculation's; in three repeats of each engine the step-1b
+engine failed once (308 MB > 3 × 67 MB) and the engine before passed 3/3, with the fit at 301–308 MB (step 1b) and
+310–312 MB (before): the calculation's peak RSS varies from 67 to 105 MB between runs, not the fit's. T2 benchmark, both engines alternately on one host (d32cepyc147), mean of two:
+calc 1.16 / 1.21 s (1 thread), 0.39 / 0.39 s (8); fit200 78.54 / 78.53 s, 34.30 / 34.36 s; peak RSS within 1 %
+(`tests/upgrade/bench/T2.tsv`).
+
 ### Remaining steps
 
 Steps 2–7 of section 3. Next: the observed widths from total amplitudes (step 2), which removes the five copies of the
-γ → Γ conversion and lets `ConvertAmplitudeBasis` call `park_from_brune`.
+γ → Γ conversion and lets `ConvertAmplitudeBasis` call `park_from_brune`. Step 2 or 4 should also settle how the formal
+basis evaluates external capture (the final state's formal or Brune amplitude, and the order of `TransformIn`), which
+the comparison above shows differs from the Brune basis.
+
+## 7. Step 1b: design
+
+Step 1b makes the formal basis follow one rule and the adapter compute the channel functions in one way. It changes
+no observable beyond rounding; it changes the formal parameters of a block (E_λ in MeV, γ_λc in MeV^½) by the choice of
+B_c and by the overall sign of a level. What each part becomes:
+
+**Boundary values** (`boundary_values`). B_c = S_c(Ẽ_low), Ẽ_low the lowest Brune energy of the block's R-matrix
+levels (MeV, E_x). The rule is not an option: `BoundaryRule` and `Convention::boundary` are deleted. With it the formal
+parameters of a block no longer depend on the order in which the file lists its levels: a permutation of the listing
+permutes the formal levels and changes nothing else (to rounding). The lowest level's formal energy equals its Brune
+energy, since Ẽ_λ is an eigenvalue of the formal level matrix with B_c = S_c(Ẽ_λ) (Brune 2002).
+
+**Sign of a formal level** (`formal_from_brune`). *As designed:* the amplitude of largest |γ_λc| of each formal level
+positive (decision 10). *As built, after the comparison (section 6):* each formal level keeps the orientation of the
+Brune level it comes from, a_λ,k(λ) > 0 for the eigenvector of rank k(λ), and `brune_from_formal` orients the
+eigenvectors of its iteration the same way. The design's premise, that observables are even in a level's sign, holds
+within the R-matrix but not for an external-capture final state f: the photon amplitudes of the levels that decay to f
+and the external-capture amplitude ∝ γ_f carry f's sign together, and "largest |γ| positive" reversed one such state
+of `tests/beam_profile_kernel` and changed its capture by a factor of up to 4.5. Both rules are independent of the
+eigensolver. `FormalSignRule` and `Convention::formal_sign` are deleted.
+
+**Eigensolvers.** `formal_from_brune` and `brune_from_formal` use `SymmetricEigen.h` only. The solver options
+(`GeneralizedEigenSolver`, `SymmetricEigenSolver`, `FormalToBruneOptions::solver`) and the adapter's
+`GslGeneralizedEigen`, `GslSymmetricEigen` are deleted.
+
+**Channel energy.** One formula, E_c = (E_x − S_α) − e (MeV, c.m.), with S_α the separation energy of partition α and
+e = e₁ + e₂ the excitation energies of the pair: E_x − S_α is the energy above the partition's ground-state
+threshold, and e is then the energy the pair holds in excitation. It is the order of the collision matrix at a data
+point (`EPoint.cpp`, `inEnergy - GetSepE() - GetExE()`) and of `CNuc::CalcShiftFunctions` and `TransformOut`'s widths,
+so a level energy and a data point at the same E_x give the same E_c to the bit. `level_parameters`' own E_c (which
+branch, above or below threshold, a column takes) uses the same formula. `ChannelEnergyOrder` is deleted.
+
+**Channel functions** (`ChannelFunctionsFromCNuc`). Every call returns S_c, S′_c and P_c of a particle channel,
+evaluated on one `ChannelFunc` in the order S, P, S′ (P from `WhitFunc` below threshold). `ChannelQuantities` is deleted.
+The extra evaluations (S where only P and S′ are read, at setup; S′ where only S is read, in the formal iteration)
+cost nothing measurable in a Brune fit, which calls the adapter only at setup; the T2 benchmark checks it. Because the
+Coulomb memo (`CoulFuncCache`, energies matched to 10⁻¹² MeV) now sees another sequence of calls, Brune and Park
+outputs may move at the 10⁻¹³ level (section 5); that is accepted and reported.
+
+**Compatibility.** Formal parameters given as input — `--no-transform` with `--no-brune`, or a parameter file
+(`param.sav`, `param.par`) written by an earlier build in the formal basis — were defined with B_c at the first listed
+level. For a block whose first listed level is not its lowest they now describe another R-matrix. At load, in the
+formal basis, the engine prints one note per such block with both energies. No project in `tests/` reads formal
+input for such a block except `transform_level_order`, which writes its own parameter file with the same build.
+
+**Tests.** `physics_level_parameters_unit`: B_c at the lowest level; the formal parameters of the block listed in two
+orders agree to 10⁻¹³; the lowest level's formal energy equals its Brune energy; the sign rule (as built: each formal
+level points the way of its Brune level, also in a strongly mixed block where the eigensolver's sign does not); widths
+too large for the radii are refused. `physics_level_parameters_from_cnuc`: `level_parameters` against
+the engine without the level-sign allowance (same solver, same rule), so a sign or B_c that differs fails it.
+`transform_level_order` (b): the formal parameters of `asc` and `desc` are the same levels. Engine before (4bf7aa06)
+and after on all 179 `.azr` under `tests/` in three bases, every changed output file classified: (a) formal parameters
+(B_c, sign), observables ≤ 10⁻¹⁰ relative; (b) last digits from the channel-energy order and the call sequence; (c)
+anything else stops the step.

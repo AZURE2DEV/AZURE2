@@ -8,7 +8,6 @@
 #include <vector>
 
 #include "azure2/physics/Convention.h"
-#include "azure2/physics/SymmetricEigen.h"
 #include "azure2/physics/System.h"
 
 namespace azure2 {
@@ -20,7 +19,7 @@ namespace physics {
  * docs/upgrade/level_parameters.md.  Every function works on one J^pi block b of a System; the System gives the
  * channels' partitions, spins and thresholds and is not modified.
  *
- * Basis conversions (reproducing CNuc::TransformIn, CNuc::CalcBoundaryConditions, CNuc::TransformOut and
+ * Basis conversions (called by CNuc::TransformIn, CNuc::CalcBoundaryConditions, CNuc::TransformOut; reproducing
  * CNuc::ConvertAmplitudeBasis):
  *   amplitudes_from_observed   observed widths (eV), ANCs (fm^-1/2), amplitudes -> Brune or Park amplitudes
  *   observed_from_amplitudes   the inverse
@@ -139,11 +138,12 @@ ProjectLevels observed_from_amplitudes(const System &system, std::size_t b, cons
                                        const std::vector<unsigned char> &is_amplitude, LevelBasis basis,
                                        const ChannelFunctions &cf);
 
-/// B_c of the block's channels for the formal basis: S_c at the first listed level (rule FirstListedLevel, the
-/// engine's) or at the lowest level (LowestLevel).  Non-particle channels take the value of block channel 0 (0 when
-/// channel 0 is not a particle channel), as the engine does; they do not enter the level matrix.  No levels: 0.
+/// B_c of the block's channels for the formal basis: S_c at the lowest of the level energies E (MeV, E_x; the first of
+/// equal ones), so that the formal parameters do not depend on the order in which the levels are listed (HANDOFF
+/// decision 10).  Non-particle channels take the value of block channel 0 (0 when channel 0 is not a particle
+/// channel), as the engine does; they do not enter the level matrix.  No levels: 0.
 std::vector<double> boundary_values(const System &system, std::size_t b, const std::vector<double> &E,
-                                    BoundaryRule rule, const ChannelFunctions &cf);
+                                    const ChannelFunctions &cf);
 
 /// Photon channels: total amplitude -> internal one, gamma_int = sign(gamma) (gamma^2 - Im^2)^1/2 - Re of the
 /// external amplitude (CNuc.cpp, TransformIn, second loop).  ext has the layout of gamma; entries not present are
@@ -152,17 +152,6 @@ std::vector<double> boundary_values(const System &system, std::size_t b, const s
 void subtract_external_capture(const System &system, std::size_t b, std::vector<double> &gamma,
                                const std::vector<ExternalWidth> &ext, bool ignore_zero_widths,
                                std::vector<std::string> &warnings, std::vector<std::size_t> *exceeded = nullptr);
-
-/*!
- * Eigensolvers with the contract of SymmetricEigen.h (ascending eigenvalues, eigenvectors as columns, row-major, M-
- * normalized for the generalized problem).  The Brune <-> formal conversions take one as an option; empty means
- * SymmetricEigen.h's.  The sign of an eigenvector is the solver's, so the formal parameters depend on the choice by
- * the overall sign of a level (observables do not); the engine passes GSL's (src/CNucLevelParameters.cpp) until the
- * formal sign rule is decided (FormalSignRule; docs/upgrade/HANDOFF.md, decision 10).
- */
-using SymmetricEigenSolver = std::function<EigenResult(const std::vector<double> &A, std::size_t n)>;
-using GeneralizedEigenSolver =
-    std::function<EigenResult(const std::vector<double> &N, const std::vector<double> &M, std::size_t n)>;
 
 struct LevelSet {
   std::vector<double> E;      ///< MeV
@@ -180,24 +169,27 @@ struct LevelSet {
 };
 
 /*!
- * Brune -> formal with constant B (CNuc.cpp, TransformIn, second loop).  Level lambda keeps its position: it
- * receives the eigenvalue of the rank of its Brune energy.  Throws std::domain_error when M is not positive definite
- * (no formal parameters correspond) and std::invalid_argument for two levels at the same energy.
+ * Brune -> formal with constant B (CNuc.cpp, TransformIn, second loop), by generalized_symmetric_eigen.  Level lambda
+ * keeps its position: it receives the eigenvalue of the rank of its Brune energy, and the orientation of its Brune
+ * level: of the two signs of the eigenvector, the one whose component on the level's own Brune state is positive.  So
+ * the result does not depend on the eigensolver, the formal amplitudes keep the input signs where levels mix weakly,
+ * and an external-capture final state keeps the sign the photon amplitudes of other levels refer to
+ * (level_parameters.md section 4).  Throws std::domain_error when M is not positive definite (no formal parameters
+ * correspond) and std::invalid_argument for two levels at the same energy.
  */
 LevelSet formal_from_brune(const System &system, std::size_t b, const std::vector<double> &E,
-                           const std::vector<double> &gamma, const std::vector<double> &B, const ChannelFunctions &cf,
-                           FormalSignRule sign = FormalSignRule::AsComputed,
-                           const GeneralizedEigenSolver &solver = GeneralizedEigenSolver());
+                           const std::vector<double> &gamma, const std::vector<double> &B, const ChannelFunctions &cf);
 
 struct FormalToBruneOptions {
   double energy_tolerance_MeV = 1e-6;  ///< the engine's (CNuc::TransformOut)
   int max_iterations = 1000;           ///< the engine's
-  SymmetricEigenSolver solver;         ///< empty: symmetric_eigen
 };
 
 /// Formal -> Brune by the engine's iteration (CNuc::TransformOut): per level, B_c moved to S_c(E) and the matrix
-/// E - sum_c (S_c - B_c) gamma gamma rediagonalized until the level's energy moves by <= the tolerance.  A level
-/// that does not converge keeps its formal values, with a warning, as in the engine.
+/// E - sum_c (S_c - B_c) gamma gamma rediagonalized (symmetric_eigen) until the level's energy moves by <= the
+/// tolerance.  A level that does not converge keeps its formal values, with a warning, as in the engine.  Each
+/// eigenvector is oriented as in formal_from_brune (its component on its own level positive), so formal -> Brune ->
+/// formal and Brune -> formal -> Brune return the signs they started from.
 LevelSet brune_from_formal(const System &system, std::size_t b, const std::vector<double> &E,
                            const std::vector<double> &gamma, const std::vector<double> &B, const ChannelFunctions &cf,
                            const FormalToBruneOptions &options = FormalToBruneOptions());
@@ -278,8 +270,8 @@ struct LevelParameterOptions {
 /*!
  * A project's parameters of block b, in the convention of the record and with the given columns, -> the internal
  * formal parameters.  Observed form: widths -> Brune (or Park) amplitudes in the project's columns; recoupling to
- * the block's channels; external capture subtracted; B_c by the record's rule; Park -> Brune; Brune -> formal with
- * the record's sign rule.  Amplitudes form in the formal basis: recoupling only.
+ * the block's channels; external capture subtracted; B_c (boundary_values); Park -> Brune; Brune -> formal
+ * (formal_from_brune).  Amplitudes form in the formal basis: recoupling only.
  */
 InternalParameters level_parameters(const System &system, std::size_t b, const Convention &convention,
                                     const std::vector<ProjectChannel> &columns, const ProjectLevels &levels,

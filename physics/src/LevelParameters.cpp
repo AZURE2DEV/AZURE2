@@ -1,6 +1,7 @@
 // Basis conversions of level_parameters (LevelParameters.h; docs/upgrade/level_parameters.md sections 2-4).  Each
-// function reproduces the engine's arithmetic, in the engine's order of operations, with the file and line it follows
-// named in a comment; the eigenproblems are SymmetricEigen.h's instead of GSL's.
+// function reproduces the arithmetic of the engine code it replaced, with the file and line it follows (at e54e6fcc)
+// named in a comment; the eigenproblems are SymmetricEigen.h's.  The formal basis takes B_c at the lowest level and
+// orients each formal level like its Brune level (HANDOFF decision 10; cnuc_split.md section 7).
 #include "azure2/physics/LevelParameters.h"
 
 #include <algorithm>
@@ -27,11 +28,12 @@ bool IsParticle(const System &s, int c) {
   return ch.kind == ChannelKind::Particle && s.partition(ch.partition).kind == PartitionKind::Particle;
 }
 
-// E_c = E_x - (e_0 + e_1) - S_alpha (MeV, c.m.), in the engine's order: CNuc.cpp TransformIn,
-// theLevel->GetE() - pair->GetExE() - pair->GetSepE(), with GetExE() = e_light + e_heavy.
+// E_c = (E_x - S_alpha) - (e_0 + e_1) (MeV, c.m.): the energy above the partition's ground-state threshold less the
+// excitation of the pair, in the order the engine forms it at a data point (EPoint.cpp, inEnergy - GetSepE() -
+// GetExE(), GetExE() = e_light + e_heavy) and in the adapter's channel functions (cnuc_split.md section 7).
 double ChannelEnergy(const System &s, int partition, double E) {
   const Partition &p = s.partition(partition);
-  return E - (p.excitation_MeV[0] + p.excitation_MeV[1]) - p.separation_MeV;
+  return E - p.separation_MeV - (p.excitation_MeV[0] + p.excitation_MeV[1]);
 }
 
 std::string Label(const System &s, std::size_t b, std::size_t lambda) {
@@ -303,20 +305,19 @@ ProjectLevels observed_from_amplitudes(const System &system, std::size_t b, cons
 // --------------------------------------------------------------------------------------------- boundary values
 
 std::vector<double> boundary_values(const System &system, std::size_t b, const std::vector<double> &E,
-                                    BoundaryRule rule, const ChannelFunctions &cf) {
+                                    const ChannelFunctions &cf) {
   const JpiBlock &blk = system.block(b);
   const std::size_t nc = blk.num_channels();
   std::vector<double> B(nc, 0.0);
   if (E.empty()) return B;  // a hard-sphere block: B drops out (CNuc.cpp CalcBoundaryConditions)
-  std::size_t first = 0;
-  if (rule == BoundaryRule::LowestLevel)
-    for (std::size_t la = 1; la < E.size(); la++)
-      if (E[la] < E[first]) first = la;
-  // CNuc.cpp CalcBoundaryConditions (lines 1975-2003 at e54e6fcc): S_c at the chosen level for particle channels;
-  // a non-particle channel copies channel 0's value at that point (it is never used).
+  std::size_t lowest = 0;
+  for (std::size_t la = 1; la < E.size(); la++)
+    if (E[la] < E[lowest]) lowest = la;
+  // CNuc.cpp CalcBoundaryConditions (lines 1975-2003 at e54e6fcc), at the lowest level instead of the first listed:
+  // S_c there for particle channels; a non-particle channel copies channel 0's value (it is never used).
   for (std::size_t k = 0; k < nc; k++) {
     if (system.partition(system.channel(blk.channel(k)).partition).kind == PartitionKind::Particle)
-      B[k] = cf(b, k, E[first]).S;
+      B[k] = cf(b, k, E[lowest]).S;
     else
       B[k] = B[0];
   }
@@ -354,8 +355,7 @@ void subtract_external_capture(const System &system, std::size_t b, std::vector<
 // ------------------------------------------------------------------------------------------- Brune <-> formal
 
 LevelSet formal_from_brune(const System &system, std::size_t b, const std::vector<double> &E,
-                           const std::vector<double> &gamma, const std::vector<double> &B, const ChannelFunctions &cf,
-                           FormalSignRule sign, const GeneralizedEigenSolver &solver) {
+                           const std::vector<double> &gamma, const std::vector<double> &B, const ChannelFunctions &cf) {
   const JpiBlock &blk = system.block(b);
   const std::size_t nc = blk.num_channels();
   CheckLayout(system, b, nc, E, gamma, "formal_from_brune");
@@ -401,7 +401,7 @@ LevelSet formal_from_brune(const System &system, std::size_t b, const std::vecto
         Nm[mu * n + la] = nSum;
       }
     }
-  const EigenResult eig = solver ? solver(Nm, Mm, n) : generalized_symmetric_eigen(Nm, Mm, n);
+  const EigenResult eig = generalized_symmetric_eigen(Nm, Mm, n);
   if (!eig.ok) {
     std::ostringstream o;
     o << "No standard R-matrix (constant boundary conditions) corresponds to the levels of J^pi = " << blk.two_J()
@@ -409,27 +409,24 @@ LevelSet formal_from_brune(const System &system, std::size_t b, const std::vecto
       << "): the matrix 1 - sum gamma gamma' dS/dE of the transformation is not positive definite";
     throw std::domain_error(o.str());
   }
-  // Each level keeps its position and receives the eigenvalue of the rank of its Brune energy (CNuc.cpp 1565-1600).
+  // Each level keeps its position and receives the eigenvalue of the rank of its Brune energy (CNuc.cpp 1565-1600),
+  // and the orientation of its Brune level: the eigenproblem leaves the sign of an eigenvector free, and the one taken
+  // makes the coefficient a_{lambda k} of the level's own Brune state positive.  The formal amplitudes then carry the
+  // signs of the input wherever the levels mix weakly, and a level that other levels' photon channels end on (an
+  // external-capture final state) keeps the sign those amplitudes were given relative to it.
   const std::vector<int> rank = AscendingRanks(E);
   out.E.assign(n, 0.0);
   out.gamma.assign(n * nc, 0.0);
   for (std::size_t la = 0; la < n; la++) {
     const std::size_t k = (std::size_t)rank[la];
+    const double orientation = (eig.vectors[la * n + k] < 0.0) ? -1.0 : 1.0;
     out.E[la] = eig.values[k];
     for (std::size_t c = 0; c < nc; c++) {
       double sum = 0.0;
       for (std::size_t mu = 0; mu < n; mu++) sum += eig.vectors[mu * n + k] * gamma[mu * nc + c];
-      out.gamma[la * nc + c] = sum;
+      out.gamma[la * nc + c] = orientation * sum;
     }
   }
-  if (sign == FormalSignRule::LargestPositive)
-    for (std::size_t la = 0; la < n; la++) {
-      std::size_t big = 0;
-      for (std::size_t c = 1; c < nc; c++)
-        if (std::fabs(out.gamma[la * nc + c]) > std::fabs(out.gamma[la * nc + big])) big = c;
-      if (nc > 0 && out.gamma[la * nc + big] < 0.0)
-        for (std::size_t c = 0; c < nc; c++) out.gamma[la * nc + c] = -out.gamma[la * nc + c];
-    }
   return out;
 }
 
@@ -480,7 +477,7 @@ LevelSet brune_from_formal(const System &system, std::size_t b, const std::vecto
             if (particle[k]) chanSum += diff[k] * tempG[mu * nc + k] * tempG[mup * nc + k];
           C[mu * n + mup] = (mu == mup) ? tempE[mu] - chanSum : -chanSum;
         }
-      const EigenResult eig = options.solver ? options.solver(C, n) : symmetric_eigen(C, n);
+      const EigenResult eig = symmetric_eigen(C, n);
       if (!eig.ok) {
         out.warnings.push_back(Label(system, b, lev) + ": could not transform the level (eigenvalue problem failed); "
                                                        "the formal values are kept");
@@ -491,13 +488,16 @@ LevelSet brune_from_formal(const System &system, std::size_t b, const std::vecto
       }
       const double step = std::fabs(eig.values[me] - tempE[me]);  // MeV
       if (step <= options.energy_tolerance_MeV) done = true;
+      // Each eigenvector oriented like formal_from_brune's: its component on its own level positive.
       std::vector<double> newG(n * nc);
-      for (std::size_t mu = 0; mu < n; mu++)
+      for (std::size_t mu = 0; mu < n; mu++) {
+        const double orientation = (eig.vectors[mu * n + mu] < 0.0) ? -1.0 : 1.0;
         for (std::size_t k = 0; k < nc; k++) {
           double s = 0.0;
           for (std::size_t mup = 0; mup < n; mup++) s += eig.vectors[mup * n + mu] * tempG[mup * nc + k];
-          newG[mu * nc + k] = s;
+          newG[mu * nc + k] = orientation * s;
         }
+      }
       tempE = eig.values;
       tempG.swap(newG);
       if (!done) {
@@ -607,11 +607,11 @@ InternalParameters level_parameters(const System &system, std::size_t b, const C
   std::vector<double> g = identity ? projectGamma
                                    : convention_transform(system, b, convention, columns).to_internal(projectGamma, nl);
 
-  // 3. External capture, 4. B_c.
+  // 3. External capture, 4. B_c (lowest level).
   if (options.external) subtract_external_capture(system, b, g, *options.external, options.ignore_zero_widths, out.warnings);
   out.basis_E = levels.E;
   out.basis_gamma = g;
-  out.B = boundary_values(system, b, levels.E, convention.boundary, cf);
+  out.B = boundary_values(system, b, levels.E, cf);
 
   // 5. Formal parameters.
   if (!options.formal) return out;
@@ -621,7 +621,7 @@ InternalParameters level_parameters(const System &system, std::size_t b, const C
     return out;
   }
   const std::vector<double> brune = (out.basis == LevelBasis::Park) ? brune_from_park(system, b, levels.E, g, cf) : g;
-  LevelSet f = formal_from_brune(system, b, levels.E, brune, out.B, cf, convention.formal_sign);
+  LevelSet f = formal_from_brune(system, b, levels.E, brune, out.B, cf);
   out.E.swap(f.E);
   out.gamma.swap(f.gamma);
   return out;

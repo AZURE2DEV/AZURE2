@@ -4,8 +4,9 @@
 // Since those three CNuc members call level_parameters themselves (docs/upgrade/cnuc_split.md, step 1), the Brune,
 // Park and B_c comparisons of (a) check the wiring of the engine (the System and channel map, the channel-energy
 // order, the external-capture order), not the arithmetic: that was checked against the engine's own code before the
-// move, and the move by comparing every output file of the engine before and after (cnuc_split.md section 6).  The
-// formal comparisons still compare two eigensolvers: the engine passes GSL's, this test uses SymmetricEigen.h's.
+// move, and the move by comparing every output file of the engine before and after (cnuc_split.md section 6).  Since
+// step 1b the formal basis has one rule (B_c at the lowest level, largest |gamma| of a formal level positive) and one
+// eigensolver, so the formal comparisons need no allowance for the sign of a level: a wrong B_c or sign fails them.
 //
 // For each project the <levels> values are read from a CNuc after CNuc::Fill (the file's widths and ANCs), the channel
 // functions and external-capture amplitudes from the engine (src/CNucLevelParameters.cpp), and level_parameters'
@@ -13,8 +14,7 @@
 //
 //  (a) Brune: amplitudes and B_c, which should be bit-identical (same arithmetic in the same order);
 //      Park: amplitudes and Park's J;
-//      formal (--no-brune): E_lambda, gamma_{lambda c} up to the sign of a level (the eigenvector sign is GSL's in the
-//      engine and SymmetricEigen's here), B_c;
+//      formal (--no-brune): E_lambda, gamma_{lambda c} with their signs, B_c;
 //      Park -> formal (via Park -> Brune): particle-channel amplitudes and energies against the formal CNuc;
 //      formal -> Brune (brune_from_formal) against CNuc::TransformOut of the formal CNuc.
 //  (b) round trips on the same parameters: observed -> Brune -> observed against the file values; Brune -> Park ->
@@ -116,13 +116,6 @@ bool IsPhoton(const phys::System &s, int c) {
   return s.channel(c).kind == phys::ChannelKind::Electric || s.channel(c).kind == phys::ChannelKind::Magnetic;
 }
 
-// Overall sign that brings row la of a closest to row la of b.
-double RowSign(const std::vector<double> &a, const std::vector<double> &b, std::size_t la, std::size_t nc) {
-  double dot = 0.0;
-  for (std::size_t k = 0; k < nc; k++) dot += a[la * nc + k] * b[la * nc + k];
-  return dot < 0.0 ? -1.0 : 1.0;
-}
-
 // Amplitudes of a block as the CNuc's levels hold them.
 std::vector<double> CNucGamma(CNuc &cn, const CNucSystemMap &map, std::size_t b, bool transformOut) {
   JGroup *g = cn.GetJGroup(map.groupOfBlock[b]);
@@ -190,7 +183,7 @@ void CheckProject(const std::string &name, const std::string &azr) {
 
   Stat bruneG, bruneB, parkG, parkJ, formalE, formalG, formalB, parkFormalE, parkFormalG, outE, outG;
   Stat rtObs, rtPark, rtFormalE, rtFormalG, photonShift;
-  long signFlips = 0, levels = 0, staticMoments = 0, nonzeroExt = 0, movedExt = 0;
+  long levels = 0, staticMoments = 0, nonzeroExt = 0, movedExt = 0;
   int maxIterMine = 0, maxIterCNuc = 0;
   std::vector<std::vector<double> > preEC(sys.num_blocks());  // Brune amplitudes before external capture
 
@@ -255,9 +248,7 @@ void CheckProject(const std::string &name, const std::string &azr) {
     for (std::size_t la = 0; la < nl; la++) {
       levels++;
       formalE.add(pf.E[la], EF[la], std::fabs(EF[la]));
-      const double s = RowSign(pf.gamma, gF, la, nc);
-      if (s < 0.0) signFlips++;
-      for (std::size_t k = 0; k < nc; k++) formalG.add(s * pf.gamma[la * nc + k], gF[la * nc + k], scaleF);
+      for (std::size_t k = 0; k < nc; k++) formalG.add(pf.gamma[la * nc + k], gF[la * nc + k], scaleF);
     }
     CompareB(builtF.system, b, pf.B, formalB);
     {  // the same with the Brune final states throughout: how much the engine's order moves the photon amplitudes
@@ -271,8 +262,7 @@ void CheckProject(const std::string &name, const std::string &azr) {
       for (std::size_t la = 0; la < nl; la++)
         for (std::size_t k = 0; k < nc; k++)
           if (IsPhoton(sys, blk.channel(k))) {
-            const double s = RowSign(alt.gamma, pf.gamma, la, nc);
-            photonShift.add(s * alt.gamma[la * nc + k], pf.gamma[la * nc + k], std::fmax(std::fabs(pf.gamma[la * nc + k]), 1e-300));
+            photonShift.add(alt.gamma[la * nc + k], pf.gamma[la * nc + k], std::fmax(std::fabs(pf.gamma[la * nc + k]), 1e-300));
           }
     }
     // emul: group b becomes formal for the later groups.
@@ -291,9 +281,8 @@ void CheckProject(const std::string &name, const std::string &azr) {
       const phys::LevelSet f = phys::formal_from_brune(sys, b, in.E, brune, pf.B, cf);
       for (std::size_t la = 0; la < nl; la++) {
         parkFormalE.add(f.E[la], EF[la], std::fabs(EF[la]));
-        const double s = RowSign(f.gamma, gF, la, nc);
         for (std::size_t k = 0; k < nc; k++)
-          if (!IsPhoton(sys, blk.channel(k))) parkFormalG.add(s * f.gamma[la * nc + k], gF[la * nc + k], scaleF);
+          if (!IsPhoton(sys, blk.channel(k))) parkFormalG.add(f.gamma[la * nc + k], gF[la * nc + k], scaleF);
       }
 
       // (a) formal -> Brune against CNuc::TransformOut.
@@ -303,8 +292,7 @@ void CheckProject(const std::string &name, const std::string &azr) {
       JGroup *g = refF->compound.GetJGroup(map.groupOfBlock[b]);
       for (std::size_t la = 0; la < nl; la++) {
         outE.add(back.E[la], EOut[la], std::fabs(EOut[la]));
-        const double s = RowSign(back.gamma, gOut, la, nc);
-        for (std::size_t k = 0; k < nc; k++) outG.add(s * back.gamma[la * nc + k], gOut[la * nc + k], scaleO);
+        for (std::size_t k = 0; k < nc; k++) outG.add(back.gamma[la * nc + k], gOut[la * nc + k], scaleO);
         maxIterMine = std::max(maxIterMine, back.iterations[la]);
         maxIterCNuc = std::max(maxIterCNuc, g->GetLevel(map.levelOfBlockLevel[b][la])->GetTransformIterations());
       }
@@ -325,8 +313,7 @@ void CheckProject(const std::string &name, const std::string &azr) {
       const double sc = MaxAbs(pf.gamma);
       for (std::size_t la = 0; la < nl; la++) {
         rtFormalE.add(f3.E[la], pf.E[la], std::fabs(pf.E[la]));
-        const double s = RowSign(f3.gamma, pf.gamma, la, nc);
-        for (std::size_t k = 0; k < nc; k++) rtFormalG.add(s * f3.gamma[la * nc + k], pf.gamma[la * nc + k], sc);
+        for (std::size_t k = 0; k < nc; k++) rtFormalG.add(f3.gamma[la * nc + k], pf.gamma[la * nc + k], sc);
       }
     }
   }
@@ -335,19 +322,18 @@ void CheckProject(const std::string &name, const std::string &azr) {
   report("(a) Park amplitudes vs CNuc (--use-park)", parkG, 0.0);
   report("(a) Park's J vs CNuc", parkJ, 0.0);
   report("(a) formal E vs CNuc (--no-brune)", formalE, 1e-12);
-  report("(a) formal gamma vs CNuc, up to level sign (rel. to max |gamma|)", formalG, 1e-12);
+  report("(a) formal gamma vs CNuc, signs included (rel. to max |gamma|)", formalG, 1e-12);
   report("(a) formal B_c vs CNuc", formalB, 1e-15);
   report("(a) Park -> formal: E vs CNuc (--no-brune)", parkFormalE, 1e-12);
-  report("(a) Park -> formal: particle gamma vs CNuc, up to level sign", parkFormalG, 1e-12);
+  report("(a) Park -> formal: particle gamma vs CNuc, signs included", parkFormalG, 1e-12);
   report("(a) formal -> Brune: E vs CNuc::TransformOut", outE, 1e-12);
-  report("(a) formal -> Brune: gamma vs CNuc::TransformOut, up to level sign", outG, 1e-10);
-  std::printf("       formal levels whose overall sign differs from GSL's: %ld of %ld; static moments: %ld; "
-              "iterations of formal -> Brune: at most %d here, %d in CNuc\n",
-              signFlips, levels, staticMoments, maxIterMine, maxIterCNuc);
+  report("(a) formal -> Brune: gamma vs CNuc::TransformOut, signs included", outG, 1e-10);
+  std::printf("       formal levels: %ld; static moments: %ld; iterations of formal -> Brune: at most %d here, %d in "
+              "CNuc\n", levels, staticMoments, maxIterMine, maxIterCNuc);
   report("(b) observed -> Brune -> observed (file values)", rtObs, 1e-13);
   report("(b) Brune -> Park -> Brune", rtPark, 1e-15);
   report("(b) formal -> Brune -> formal: E", rtFormalE, 1e-12);
-  report("(b) formal -> Brune -> formal: gamma, up to level sign", rtFormalG, 1e-10);
+  report("(b) formal -> Brune -> formal: gamma, signs included", rtFormalG, 1e-10);
   std::printf("  info external amplitudes in the formal basis: %ld non-zero, %ld differ between the engine's order and "
               "Brune final states throughout; internal photon amplitudes: %ld numbers, largest rel. change %.3g\n",
               nonzeroExt, movedExt, photonShift.n, photonShift.worst);
@@ -396,13 +382,12 @@ void CheckProject(const std::string &name, const std::string &azr) {
       const double scaleF = MaxAbs(ref.gamma);
       for (std::size_t la = 0; la < nl; la++) {
         fE.add(ip.E[la], ref.E[la], std::fabs(ref.E[la]));
-        const double s = RowSign(ip.gamma, ref.gamma, la, nc);
-        for (std::size_t k = 0; k < nc; k++) fG.add(s * ip.gamma[la * nc + k], ref.gamma[la * nc + k], scaleF);
+        for (std::size_t k = 0; k < nc; k++) fG.add(ip.gamma[la * nc + k], ref.gamma[la * nc + k], scaleF);
       }
     }
     report("(c) " + nc_.first + ": Brune amplitudes vs CNuc", amp, 1e-14);
     report("(c) " + nc_.first + ": formal E vs internal columns", fE, 1e-13);
-    report("(c) " + nc_.first + ": formal gamma vs internal, level sign", fG, 1e-12);
+    report("(c) " + nc_.first + ": formal gamma vs internal, signs included", fG, 1e-12);
     if (gapsBlocks) std::printf("       %ld block(s) not convertible, e.g. %s\n", gapsBlocks, firstGap.c_str());
   }
 }

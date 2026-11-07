@@ -137,13 +137,19 @@ In the standard (``--no-brune``) parametrization, every particle channel of a
 
    B_c = S_c(E_1),
 
-where :math:`E_1` is the energy of the **first level listed** in the file for
-that :math:`J^\pi` that is an R-matrix level (``boundary_values``,
-``physics/src/LevelParameters.cpp:305-324``, called by ``CNuc::CalcBoundaryConditions``). A group without levels has
+where :math:`E_1` is the energy of the **lowest** R-matrix level of that
+:math:`J^\pi` (``boundary_values``,
+``physics/src/LevelParameters.cpp:307-325``, called by ``CNuc::CalcBoundaryConditions``). A group without levels has
 :math:`B_c = 0`, which then has no effect on the result. Observables do not
 depend on :math:`B_c` as long as the transformation of the parameters
-(below) is exact. The formal parameters do depend on :math:`B_c`, so they
-depend on the order of the levels in the file. In the Brune and Park
+(below) is exact. The formal parameters do depend on :math:`B_c`; with the
+lowest level they do not depend on the order in which the file lists the
+levels, and the lowest level's formal energy equals its observed one.
+Builds before 2026-11-07 took the **first level listed**: formal parameters
+written by them (``param.sav``, ``param.par``, ``--no-transform`` input) for a
+group listed out of energy order belong to that other :math:`B_c`, and in the
+standard parametrization the engine prints a note naming both energies for
+each such group. In the Brune and Park
 parametrizations :math:`B_c` cancels from the level matrix
 (``AMatrixFunc.cpp:302-311``). LT leave :math:`B_c` free. DB usually take
 :math:`B_c = 0` in their examples; the R-matrix is defined the same way.
@@ -183,7 +189,7 @@ default) it is
    \qquad
    \operatorname{sign}\tilde\gamma_{\lambda c} = \operatorname{sign}\Gamma_{\lambda c}
 
-(``amplitudes_from_observed``, ``LevelParameters.cpp:103-242``). Here :math:`\Gamma_{\lambda c}` is the signed
+(``amplitudes_from_observed``, ``LevelParameters.cpp:105-244``). Here :math:`\Gamma_{\lambda c}` is the signed
 input (eV; the code divides it by :math:`10^6` to MeV), :math:`S' = dS/dE` (MeV\ :sup:`-1`), the
 sums run over particle channels only, and "rwa" denotes the channels flagged
 ``gammaIsRWA`` (``input_is_rwa`` in the API's parameter records). The input of
@@ -196,36 +202,41 @@ with its sign.
   channel). The input is a signed ANC :math:`C` (fm\ :sup:`-1/2`). In
   Eq. :eq:`conv-brune` it is converted with
   :math:`|\Gamma|/(2P) \to \hbar^2 C^2 W_l^2(2\kappa a)/(2\mu a)`
-  (``LevelParameters.cpp:161-176``). The sign of :math:`C` becomes the sign of
+  (``LevelParameters.cpp:163-178``). The sign of :math:`C` becomes the sign of
   :math:`\tilde\gamma`.
 - **Photon channel.** The input is a signed :math:`\Gamma_\gamma` (eV), with
   :math:`P = (E_\gamma/\hbar c)^{2L+1}` and the same particle-channel factor
-  of Eq. :eq:`conv-brune` (``LevelParameters.cpp:178-198``). When external capture is
+  of Eq. :eq:`conv-brune` (``LevelParameters.cpp:180-200``). When external capture is
   on, the input is the total amplitude: the internal amplitude is
   :math:`\gamma^{\rm int} = \operatorname{sign}(\Gamma)\,[\tilde\gamma^2 -
   (\mathrm{Im}\,\gamma^{\rm ext})^2]^{1/2} - \mathrm{Re}\,\gamma^{\rm ext}`
-  (``subtract_external_capture``, ``LevelParameters.cpp:328-352``), with :math:`\gamma^{\rm ext}` from
+  (``subtract_external_capture``, ``LevelParameters.cpp:329-353``), with :math:`\gamma^{\rm ext}` from
   ``CNuc::CalcExternalWidth`` (``CNuc.cpp:3196-3278``).
 - **Static moments.** A photon channel of a level at the energy and
   :math:`J^\pi` of the final state carries a static moment (M1 or E2 only):
   a penetrability factor of its own applies (:math:`3J/[4(J+1)\mu_N^2]` for
   M1), and the sign is reversed for half-integer :math:`J`
-  (``LevelParameters.cpp:185-195``).
+  (``LevelParameters.cpp:187-197``).
 - **β-decay channels** (F, GT). The input is the amplitude itself.
 - **Park basis** (``--use-park``). The amplitudes are the observed ones,
   :math:`\Gamma = 2P\gamma^2`. The same sign rule applies; a ``gammaIsRWA``
   input is read as Brune's amplitude and multiplied by :math:`\sqrt{J}`
-  (``LevelParameters.cpp:210-240``).
+  (``LevelParameters.cpp:212-242``).
 - **Formal basis** (``--no-brune``). The Brune amplitudes are transformed to
   formal ones by the generalized eigenproblem :math:`N a = E M a` of Brune,
-  PRC 66, 044611 (2002) (``formal_from_brune``, ``LevelParameters.cpp:356-434``; the
-  engine passes GSL's eigensolver). GSL fixes the sign of each
-  eigenvector, so the overall sign of a formal level's amplitude vector is
-  arbitrary. The relative signs of the channels of one level are preserved,
-  and observables are even in the overall sign of a level
-  (:math:`\gamma^T A \gamma` is invariant under it). pyazr's ``save_fit``
-  check accordingly compares amplitudes "up to a common sign of the level"
-  (:doc:`../user_guide/pyazr`).
+  PRC 66, 044611 (2002) (``formal_from_brune``, ``LevelParameters.cpp:357-431``).
+  The eigenproblem leaves the sign of each eigenvector free; the one taken
+  gives each formal level the orientation of the observed level it comes
+  from (the eigenvector's component on that level is positive), so the
+  formal amplitudes keep the signs of the input where levels mix weakly and
+  do not depend on the eigensolver. Within the R-matrix observables are even
+  in the overall sign of a level (:math:`\gamma^T A \gamma` is invariant),
+  but external capture ties the sign of a final state to the photon
+  amplitudes of the levels that decay to it; the orientation keeps that link
+  (``docs/upgrade/level_parameters.md`` section 4). Builds before 2026-11-07
+  took GSL's eigenvector signs. pyazr's ``save_fit`` check compares
+  amplitudes "up to a common sign of the level" (:doc:`../user_guide/pyazr`),
+  which this rule makes unnecessary but not wrong.
 - **No transformation** (``--no-transform``). The ``<levels>`` values are
   used as :math:`E_\lambda` and :math:`\gamma_{\lambda c}` directly.
 
@@ -459,8 +470,8 @@ were not re-read for this page.
   (i) the default parameters are Brune's (and optionally Park's), not LT's
   formal ones. The input is a signed observed width or ANC, and the sign of
   the input defines the sign of the amplitude;
-  (ii) :math:`B_c = S_c(E_1)` at the first listed level (Eq. :eq:`conv-bc`),
-  not a free constant;
+  (ii) :math:`B_c = S_c(E_1)` at the lowest level of the group
+  (Eq. :eq:`conv-bc`), not a free constant;
   (iii) photon channels have :math:`L^0 = 0` and do not enter :math:`A`
   except with ``--use-rmc``;
   (iv) external capture is added outside the R-matrix (Eq. :eq:`conv-ext`),
@@ -522,17 +533,12 @@ values and the internal value:
    * - ``basis``
      - ``Formal``, ``Brune``, ``Park``
      - ``Brune``
-   * - ``boundary``
-     - ``FirstListedLevel``, ``LowestLevel``
-     - ``FirstListedLevel`` (formal basis only)
-   * - ``formal_sign``
-     - ``AsComputed``, ``LargestPositive``
-     - ``AsComputed`` (the eigensolver's sign)
 
-The proposals of this page (B\ :sub:`c` from the lowest level; the largest
-:math:`|\gamma|` of a formal level positive) are the options ``LowestLevel``
-and ``LargestPositive``. They are off by default and change no result of the
-engine. The width sign (the sign of the input :math:`\Gamma`, ANC or
+The formal basis is not a field of the record: :math:`B_c` is taken at the
+lowest level of a group (Eq. :eq:`conv-bc`) and each formal level has the
+orientation of its observed level (above). Formal parameters from another
+code, defined with other boundary values, need those values themselves, which
+no field states yet. The width sign (the sign of the input :math:`\Gamma`, ANC or
 amplitude becomes the sign of the amplitude) is not an option: it is the
 definition of a signed width. A width written in another code's convention
 of signs is converted through the amplitudes (``electric_sign``,

@@ -35,23 +35,12 @@ enum class OrbitalPhase { None, IPowL, IPowMinusL };
 /// U by a phase common to each partition and no reduced width amplitude; the conversion of gamma is the identity.
 enum class CoulombPhaseReference { SigmaLMinusSigma0, SigmaL };
 
-/// Where the constant boundary value B_c of a J^pi block of the formal basis is taken.
-enum class BoundaryRule {
-  FirstListedLevel,  ///< B_c = S_c(E of the first level listed in the block): the engine's rule (default)
-  LowestLevel        ///< B_c = S_c(E of the lowest level of the block): proposal, conventions.rst; OFF by default
-};
-
-/// Sign of each formal level's amplitude vector, which the eigenproblem of the Brune transform leaves free.
-enum class FormalSignRule {
-  AsComputed,      ///< the eigensolver's choice (SymmetricEigen.h: largest eigenvector component positive) (default)
-  LargestPositive  ///< the amplitude of largest |gamma| of each formal level is positive: proposal; OFF by default
-};
-
 /*!
  * What a project's level parameters mean (docs/upgrade/ARCHITECTURE.md section 5; docs/source/theory/conventions.rst,
  * "Convention record").  The engine computes in one internal convention, the default-constructed record: channel-spin
  * coupling s = j1 + j2 with the light particle first, J = s + l, no i^l, the engine's photon multipole phases,
- * omega_c = sigma_l - sigma_0, the Brune basis, B_c from the first listed level, formal signs as computed.
+ * omega_c = sigma_l - sigma_0, the Brune basis.  The formal basis is not a choice of the record: B_c is S_c at the
+ * lowest level of the block and the largest |gamma| of each formal level is positive (level_parameters.md section 4).
  * level_parameters (LevelParameters.h) converts a project's parameters from its convention to the internal one; that
  * is the only place a conversion happens (docs/upgrade/RULES.md section 1.6).
  */
@@ -67,12 +56,10 @@ struct Convention {
   int magnetic_sign = 1;
   CoulombPhaseReference coulomb_phase = CoulombPhaseReference::SigmaLMinusSigma0;
   LevelBasis basis = LevelBasis::Brune;
-  BoundaryRule boundary = BoundaryRule::FirstListedLevel;
-  FormalSignRule formal_sign = FormalSignRule::AsComputed;
 };
 
-/// True when the record differs from the internal convention only in the parameter basis and the two proposals
-/// (boundary, formal_sign): the gamma columns need no recoupling or sign change.
+/// True when the record differs from the internal convention only in the parameter basis: the gamma columns need no
+/// recoupling or sign change.
 inline bool is_internal_coupling(const Convention &c) {
   return c.coupling == CouplingScheme::LS && c.spin_order == SpinOrder::LightFirst &&
       c.orbital_order == OrbitalOrder::SpinFirst && c.orbital_phase == OrbitalPhase::None && c.electric_sign == 1 &&

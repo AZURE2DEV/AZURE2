@@ -9,7 +9,8 @@ with constant boundary values B_c, Lane–Thomas phases, channel-spin coupling s
 J = s + l (`docs/source/theory/conventions.rst`). It is the only place in the code where a conversion between bases or
 conventions happens (`RULES.md` §1.6). This page gives the equations of each conversion, their validity, the
 tolerances, and what each test would detect. The engine calls it: `CNuc::CalcBoundaryConditions`, `CNuc::TransformIn`
-and the formal → Brune iteration of `CNuc::TransformOut` delegate to these functions (`cnuc_split.md`); the
+and the formal → Brune iteration of `CNuc::TransformOut` delegate to these functions (`cnuc_split.md`), with this
+page's rules for the formal basis (B_c at the lowest level, orientation of the Brune level) and its own eigensolvers; the
 convention conversions (section 5) are not used by the engine yet, which reads no convention record. The `CNuc.cpp`
 line numbers below are those of e54e6fcc, the code these functions were checked against before the move.
 
@@ -18,7 +19,7 @@ line numbers below are those of e54e6fcc, the code these functions were checked 
 | symbol | unit | meaning |
 |---|---|---|
 | E_λ, Ẽ_λ | MeV | formal and observed (Brune) level energy, E_x of the compound nucleus |
-| E_c = E − (e₀ + e₁) − S_α | MeV | channel energy, c.m.; S_α separation energy, e₀, e₁ excitation energies of the pair |
+| E_c = (E − S_α) − (e₀ + e₁) | MeV | channel energy, c.m.; S_α separation energy, e₀, e₁ excitation energies of the pair |
 | γ_λc, γ̃_λc, γ^P_λc | MeV^½ | formal, Brune and Park reduced width amplitudes |
 | Γ_λc | eV | observed partial width (signed: the sign of the amplitude) |
 | C_λc | fm^−½ | asymptotic normalization coefficient of a bound channel (signed) |
@@ -31,8 +32,11 @@ line numbers below are those of e54e6fcc, the code these functions were checked 
 
 The channel functions P, S, S′ are an input of every function (`ChannelFunctions`): `physics/` has no Coulomb
 functions until `channel_functions` exists (pycoulomb, `ROADMAP.md` Phase 1). The engine's adapter
-(`src/CNucLevelParameters.cpp`) supplies them from `ChannelFunc` and `WhitFunc`, with E_c in the order of
-`CNuc::TransformIn`.
+(`src/CNucLevelParameters.cpp`) supplies them from `ChannelFunc` and `WhitFunc`: every call returns S, P and S′ of the
+channel, with E_c formed as in the table, in the order the collision matrix forms it at a data point (`EPoint.cpp`).
+The engine's S is accurate to about 10⁻¹⁰ (`coulsm`) and its S′, a Richardson difference of S with step 10⁻³ E_c, to
+about 10⁻⁸; neither is smooth below that level, so a change of E_c by one ulp can move them there (`cnuc_split.md`
+section 6, step 1b).
 
 ## 2. Observed widths → Brune and Park amplitudes
 
@@ -63,11 +67,14 @@ A level exactly at a channel threshold, or just above a Coulomb threshold where 
 
 In the formal basis every particle channel of a block has the constant
 
-    B_c = S_c(Ẽ_ref),     Ẽ_ref = energy of the first level listed (engine; `BoundaryRule::FirstListedLevel`)   (3.1)
+    B_c = S_c(Ẽ_low),     Ẽ_low = the lowest level energy of the block (MeV, E_x)                                (3.1)
 
-or of the lowest level (`BoundaryRule::LowestLevel`, the proposal of `conventions.rst`, off by default). Observables do
-not depend on B_c; the formal parameters do, so with the engine's rule they depend on the order of the levels in the
-file. A block without levels has B_c = 0. Non-particle channels copy channel 0's value, as in
+(HANDOFF decision 10; the first of equal energies). Observables do not depend on B_c; the formal parameters do, and with
+Ẽ_low they do not depend on the order in which the file lists the levels: a permutation of the listing permutes the
+formal levels. Because Ẽ_λ is an eigenvalue of the formal level matrix with B_c = S_c(Ẽ_λ), the lowest level's formal
+energy equals its Brune energy. Builds before 2026-11-07 took the first level listed; formal parameters they wrote for
+a block listed out of energy order belong to that other B_c, and the engine says so at load in the formal basis
+(`cnuc_split.md` section 7). A block without levels has B_c = 0. Non-particle channels copy channel 0's value, as in
 `CNuc::CalcBoundaryConditions` (`CNuc.cpp:1975-2003`); they never enter the level matrix.
 
 When external capture is on, the photon amplitude of the file is the total one; the internal amplitude is
@@ -91,18 +98,23 @@ k(λ), the rank of Ẽ_λ among the block's energies (`formal_from_brune`, `CNuc
 definite; otherwise no formal parameters with constant B_c exist and the function throws, as the engine stops.
 Distinct Ẽ_λ are required.
 
-The overall sign of each formal level's amplitude vector is the eigenvector's, which the eigenproblem leaves free.
-`SymmetricEigen.h` fixes each eigenvector's largest component positive; GSL makes another choice. The eigensolver is an
-option of `formal_from_brune` and `brune_from_formal` (`GeneralizedEigenSolver`, `FormalToBruneOptions::solver`); the
-engine passes GSL's, so its formal parameters keep GSL's signs (`cnuc_split.md` section 4). Observables
-are even in that sign (γ^T A γ is invariant). The rule "largest |γ_λc| of a level positive" (the proposal of
-`conventions.rst`) is `FormalSignRule::LargestPositive`, off by default.
+The eigenproblem leaves the sign of each eigenvector free. Of the two, `formal_from_brune` takes the one whose
+coefficient on the level's own Brune state is positive, a_λ,k(λ) > 0: each formal level keeps the orientation of the
+Brune level it comes from. The rule does not depend on the eigensolver (`SymmetricEigen.h`'s is the only one), and
+where the levels of a block mix weakly (a ≈ 1) the formal amplitudes carry the signs of the input. Within the R-matrix
+a level's sign is free (γ^T A γ is invariant), but external capture is not: the photon amplitudes of other levels
+that end on a final state f, and the external-capture amplitude ∝ γ_f, carry f's sign together. The rule "largest
+|γ_λc| of each formal level positive" (the proposal of decision 10) breaks that link: on `tests/beam_profile_kernel`
+it reverses the 6.917 MeV 2⁺ final state, whose largest formal amplitude is a photon one, and the formal-basis capture
+to that state changes by a factor of up to 4.5 (`cnuc_split.md` section 6, step 1b). The orientation rule leaves it
+unchanged.
 
 The inverse (`brune_from_formal`) is the engine's fixed-point iteration (`CNuc::TransformOut`, `CNuc.cpp:2563-2745`):
 for each level, B_c is moved to S_c at the current energy of that level, the matrix
 E_μ δ_μμ' − Σ_c ΔB_c γ_μc γ_μ'c is diagonalized, and the iteration stops when the level's energy moves by less than
 the tolerance, 10⁻⁶ MeV in the engine (an option here). A level that has not converged after 1000 iterations keeps its
-formal values, with a warning.
+formal values, with a warning. Each eigenvector is oriented as in `formal_from_brune` (its component on its own level
+positive), so Brune → formal → Brune returns the input signs.
 
 ## 5. Conventions: the matrix on the γ columns
 
@@ -153,7 +165,12 @@ bases the loop reads only the final state's particle amplitudes, which it does n
 None of T1–T3 has one: T1's 14 non-zero external amplitudes all go to the ground state, alone in its group, whose
 formal and Brune parameters are identical (B_c = S_c(E_1) for a single level), and they are the same in either order
 (`physics_level_parameters_from_cnuc` prints the count). The test computes γ^ext in the engine's order, so it reproduces
-the engine either way. Whether the engine's order is intended is a decision (HANDOFF); it is not changed here.
+the engine either way. Whether the engine's order is intended is a decision (HANDOFF); it is not changed here. The sign
+of the final state is not part of the effect: the orientation rule of section 4 gives a final state the sign of its
+Brune level in either order. Independently of the order, the formal basis treats external capture differently from
+the Brune basis (the cross section takes the final state's formal amplitude, Γ_γ the Brune one): on
+`tests/beam_profile_kernel` the two bases differ by 1.5 × 10⁻² to 9.1 relative (largest over 111 energies) in the
+capture to its five final states, before and after step 1b (`cnuc_split.md` section 6).
 
 ## 7. Tests and what they detect
 
@@ -173,39 +190,40 @@ normalization ≤ 1.7 × 10⁻¹⁴.
 `physics_level_parameters_unit` (synthetic 8Be-like block, non-linear S_c): (1) the identity behind section 4, that
 the formal level matrix with constant B_c and Brune's level matrix give the same γ^T A γ at every energy; an error in
 N, M, the rank assignment or B_c fails it at > 10⁻³. (2) Round trips observed → Brune → observed, Brune → Park →
-Brune, formal → Brune → formal. (3) Convention invariance on six conventions; (4) reported gaps; (5) the proposals.
-Identity (1) to 4.4 × 10⁻¹⁵ relative (3.9 × 10⁻¹⁵ with B_c from the lowest
-level); observed → Brune → observed 1.5 × 10⁻¹⁶ and observed → Park → observed 1.9 × 10⁻¹⁶ element-wise; Brune → Park
-→ Brune 1.5 × 10⁻¹⁷; formal → Brune → formal 3.1 × 10⁻¹⁴ (E) and 3.4 × 10⁻¹⁴ (γ) with the iteration tolerance at
-10⁻¹³ MeV, while the engine's 10⁻⁶ MeV leaves 2.4 × 10⁻⁸ relative in E; in six conventions T T^T = 1 to 3.3 × 10⁻¹⁶
-and the formal parameters from the project's widths equal the internal ones to 4.5 × 10⁻¹⁶.
+Brune, formal → Brune → formal, signs included. (3) Convention invariance on six conventions; (4) reported gaps; (5)
+the formal-basis rules: B_c at the lowest level (listed second), the lowest level's formal energy equal to its Brune
+energy, the block listed in energy order giving the same formal levels permuted (with B_c at the first listed level
+this fails), each formal level oriented like its Brune level, and widths too large for the radii refused. Results
+(2026-11-07, GCC 11.5): identity (1) to 3.9 × 10⁻¹⁵ relative; lowest level's formal E = Brune E exactly; listing
+order 1.8 × 10⁻¹⁶ (E), 3.6 × 10⁻¹⁶ (γ, signs included); observed → Brune → observed 1.5 × 10⁻¹⁶ and observed → Park →
+observed 1.9 × 10⁻¹⁶ element-wise; Brune → Park → Brune 1.5 × 10⁻¹⁷; Brune → formal → Brune 2.2 × 10⁻¹⁵ (E), 1.8 ×
+10⁻¹⁵ (γ, signs included) and formal → Brune → formal 2.7 × 10⁻¹⁵ (E, γ) with the iteration tolerance at 10⁻¹³ MeV,
+while the engine's 10⁻⁶ MeV leaves 3.8 × 10⁻⁹ relative in E; in six conventions T T^T = 1 to 3.3 × 10⁻¹⁶ and the
+formal parameters from the project's widths equal the internal ones to 3.6 × 10⁻¹⁶.
 
 `physics_level_parameters_from_cnuc` (`tests/upgrade/level_parameters_from_cnuc_test.cpp`) on T1, T2, T3: (a) the
 file's widths through `level_parameters` against `CNuc` after `Initialize` in the Brune, Park and formal bases, Park →
 formal against the formal `CNuc`, formal → Brune against `CNuc::TransformOut`; (b) round trips; (c) every block in six
 conventions, written as widths in the project's columns and converted back; (d) T3's 2⁺ block in jj with one p + ⁷Li
-channel removed. An error in any conversion step, a channel attached to the wrong column or a wrong B_c fails (a).
-Results (GCC 11.5, relative differences; "identical" counts bit-equal numbers):
+channel removed. An error in any conversion step, a channel attached to the wrong column, a wrong B_c or a wrong
+level sign fails (a): since step 1b the engine and the test use one eigensolver and one sign rule, so the formal
+comparisons allow no sign. Results (2026-11-07, GCC 11.5, relative differences; "identical" counts bit-equal numbers):
 
 | comparison | T1 | T2 | T3 |
 |---|---|---|---|
 | (a) Brune γ̃ vs `CNuc` (Brune) | 21/21 identical | 20/20 identical | 16/16 identical |
 | (a) B_c vs `CalcBoundaryConditions` | 10/10 identical | 8/8 identical | 12/12 identical |
 | (a) Park γ^P and J vs `CNuc` (`--use-park`) | identical | identical | identical |
-| (a) formal E vs `CNuc` (`--no-brune`) | 3.6 × 10⁻¹⁶ | 6.6 × 10⁻¹⁶ | 2.8 × 10⁻¹⁶ |
-| (a) formal γ vs `CNuc`, up to level sign (of max \|γ\|) | 9.3 × 10⁻¹⁷ | 1.0 × 10⁻¹⁴ | 1.1 × 10⁻¹⁶ |
-| (a) Park → formal, particle γ | 1.9 × 10⁻¹⁶ | 1.0 × 10⁻¹⁴ | 1.6 × 10⁻¹⁶ |
-| (a) formal → Brune vs `TransformOut`: E, γ | 1.6 × 10⁻¹⁴, 3.8 × 10⁻¹⁴ | 5.5 × 10⁻¹⁴, 6.9 × 10⁻¹⁴ | identical |
+| (a) formal E vs `CNuc` (`--no-brune`) | 7/7 identical | 5/5 identical | 7/7 identical |
+| (a) formal γ vs `CNuc`, signs included | 21/21 identical | 20/20 identical | 16/16 identical |
+| (a) Park → formal, particle γ | 1.9 × 10⁻¹⁶ | 3.7 × 10⁻¹⁶ | 1.6 × 10⁻¹⁶ |
+| (a) formal → Brune vs `TransformOut`: E, γ | identical | identical | identical |
 | (b) observed → Brune → observed | 3.1 × 10⁻¹⁶ | 3.6 × 10⁻¹⁶ | 2.4 × 10⁻¹⁶ |
 | (b) Brune → Park → Brune | 2.1 × 10⁻¹⁶ | 1.9 × 10⁻¹⁶ | 2.1 × 10⁻¹⁶ |
-| (b) formal → Brune → formal (10⁻¹³ MeV): E, γ | 3.0 × 10⁻¹⁵, 5.6 × 10⁻¹⁵ | 6.4 × 10⁻¹⁴, 4.3 × 10⁻¹⁴ | 3.0 × 10⁻¹⁵, 3.9 × 10⁻¹⁶ |
+| (b) formal → Brune → formal (10⁻¹³ MeV): E, γ | 2.4 × 10⁻¹⁵, 5.3 × 10⁻¹⁵ | 2.3 × 10⁻¹⁴, 1.9 × 10⁻¹⁴ | 3.1 × 10⁻¹⁵, 5.0 × 10⁻¹⁶ |
 | (c) six conventions: formal γ vs internal columns | ≤ 1.1 × 10⁻¹⁵ | ≤ 1.5 × 10⁻¹⁵ | ≤ 2.7 × 10⁻¹⁶ (jj: 2⁺ block reported, (d)) |
 
-The formal level vectors whose overall sign differs from GSL's: 1 of 7 (T1), 2 of 5 (T2), 0 of 7 (T3). The
-formal → Brune iteration takes the same number of steps as the engine's (at most 6, 13, 7). B_c is bit-identical
-although `CalcBoundaryConditions` forms E_c as E − (S + e) and the adapter as E − e − S: on T1–T3 the two orders round
-alike. The formal basis, which goes through a different eigensolver, agrees to ≤ 1.0 × 10⁻¹⁴ (the bit-for-bit default
-holds for Brune, Park and B_c; ≤ 10⁻¹² relative for formal parameters, as promised).
+The formal → Brune iteration takes the same number of steps as the engine's (at most 6, 13, 7).
 
 Mutations (each applied alone, all three test programs rebuilt): B_c dropped from N — unit and T1–T3 tests fail; the
 6j arguments j_x ↔ j_y — all three fail; the Brune factor N/D inverted — unit and T1–T3 fail; B_c from the last level

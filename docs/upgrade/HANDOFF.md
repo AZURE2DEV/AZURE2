@@ -2,6 +2,55 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-07 (`feature/upgrade-1-cnuc-split-1b`) — split `CNuc`, step 1b: decision 10 on, one solver, one channel energy
+
+Branch `feature/upgrade-1-cnuc-split-1b` from `feature/upgrade` 4bf7aa06, not merged. Commits: the design
+(`cnuc_split.md` §7, alone), decision 10 with the options deleted, the channel energy and adapter, the sign rule
+corrected, a strongly mixed test, the docs, the benchmark rows, this entry.
+
+**State.** The formal basis has two rules and no options: B_c = S_c at the lowest level of each J^π group, and each
+formal level oriented like the Brune level it comes from (`level_parameters.md` §3, §4; `conventions.rst`).
+`level_parameters` uses its own eigensolvers only; `BoundaryRule`, `FormalSignRule`, the solver options and
+`GslGeneralizedEigen`/`GslSymmetricEigen` are deleted. The adapter forms E_c = (E_x − S) − e, as at a data point, and
+returns S, P, S′ at every call (`ChannelEnergyOrder`, `ChannelQuantities` deleted). In the formal basis the engine
+prints a note for each group whose first listed level is not its lowest.
+
+**Evidence** (`cnuc_split.md` §6, step 1b). 179 `.azr` × 3 bases, 4bf7aa06 vs 7f4af9d7: Brune 670/689 files
+identical, Park 685/689, formal 595/662. Class (a), formal basis: 21 `param.par` (sign, B_c in `natural_neon` and
+`be7p_fit`), 25 `parameters.out`, observables ≤ 8.5 × 10⁻¹¹. Class (b), last digits from the E_c order: Brune
+observables ≤ 9.8 × 10⁻¹¹ printed (3.6 × 10⁻¹¹ full precision), Park ≤ 6.7 × 10⁻¹¹; Brune amplitudes up to 6.3 × 10⁻⁹ in
+the ⁷Li + p models' 0⁺ background level (negative Brune denominator). No class (c). Goldens and `expected/` unchanged
+(T2 fit within its own run-to-run spread); no re-baseline. GUI off, Condor: no warnings; `check.sh` PASS;
+`ctest -LE slow` 107/107; `run_tests.sh` 131/132 (`shared_point_tables` (d), the flaky peak-RSS ratio of the step-1
+entry: the calculation's RSS varies 67–105 MB between runs; fit RSS 301–308 MB here vs 310–312 MB before; 3 repeats:
+1 failure here, 0 before). T2 bench, same host, mean of two: fit200 78.54 vs 78.53 s
+(1 thread), 34.30 vs 34.36 s (8); calc 1.16 vs 1.21 s, 0.39 vs 0.39 s.
+
+**Found.** (1) Decision 10's "largest |γ| positive" changes observables: it reversed the 6.917 MeV 2⁺ external-capture
+final state of `beam_profile_kernel` (largest formal amplitude a photon one) and the formal-basis capture to it changed
+by up to 4.51 relative. A final state's sign is shared with the photon amplitudes that end on it and with the
+external-capture amplitude, so it is not free. Built instead: the orientation rule, also solver-independent. (2) The
+formal and Brune bases disagree in capture with external capture, before and after: 1.5 × 10⁻² to 9.1 relative on
+`beam_profile_kernel`'s five final states (the cross section takes the final state's formal amplitude, Γ_γ its Brune
+one; with the group order of `TransformIn`, `level_parameters.md` §6); reported formal-basis photon widths with external
+capture do not reproduce the input there. (3) The engine's S (about 10⁻¹⁰) and S′ (about 10⁻⁸) are not smooth in their
+last digits, so a one-ulp change of E_c moves Brune amplitudes by 10⁻¹¹, more where a level's Brune denominator is
+near 0 or negative; the 10⁻¹² expectation for Brune/Park was not met. (4) The step-1 harness ran `X` and `X/models` in
+one work tree concurrently; one run of `shift_subpoint_angle` was lost here (fixed in the step-1b harness).
+
+**Open (proposed default in brackets).**
+- Sign rule: orientation of the Brune level instead of decision 10's "largest |γ| positive". [Keep the orientation
+  rule; PI to confirm. The alternative needs the sign of every final state carried to the photon channels of all
+  levels that decay to it, across blocks.]
+- Formal-basis external capture differs from the Brune basis (Found 2). [Decide in step 2 or 4: compute γ^ext and the
+  capture normalization from the final state's Brune (observed) amplitude in every basis.]
+- Formal input written by earlier builds (`param.sav`, `--no-transform`) for out-of-order groups now means another
+  R-matrix; the engine notes it. [Accept; no converter. A project that needs explicit B_c values gets a keyword with
+  `io/Project`.]
+- Brune/Park last digits depend on E_c order and the memo at 10⁻¹¹ (10⁻⁹ in ill-conditioned levels). [Accept until
+  `channel_functions` (step 3) gives smooth S, S′.]
+
+**Next.** Step 2 (observed widths from total amplitudes), with the external-capture question above.
 ## 2026-11-07 (`feature/upgrade-remove-qt`) — the Qt GUI removed (decision 3); parity checklist
 
 Branch `feature/upgrade-remove-qt` from `feature/upgrade` 4bf7aa06, not merged. Commits: the parity checklist
@@ -720,6 +769,9 @@ out of any repository).
 10. (Added 2026-11-07.) Formal basis: B_c from the lowest level instead of the first listed, and each formal
    level's largest |γ| positive. Both exist as `Convention` options, off (`level_parameters.md`). [Turn both on when
    the engine switches to `level_parameters`, with a formal-basis golden re-baseline.] **Decided 2026-11-07 (Jakub):
+   as proposed.** Implemented 2026-11-07 (`feature/upgrade-1-cnuc-split-1b`) with B_c from the lowest level; the sign
+   rule as built is the orientation of the Brune level, because "largest |γ| positive" changed external-capture
+   observables (step-1b entry, Found 1). [PI to confirm.]
    as proposed.**
 11. (Added and decided 2026-11-07, Jakub.) Exact energies by default: observables are calculated at the data
    energies, shifted energies and fold nodes, as AZURE2 does today; interpolation on a fixed mesh only as an opt-in,
