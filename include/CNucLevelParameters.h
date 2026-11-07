@@ -19,36 +19,17 @@ class Config;
  */
 
 /*!
- * Channel functions of the blocks at any level energy E (MeV, E_x), from the engine's ChannelFunc and WhitFunc, as
- * CNuc::TransformIn evaluates them: E_c = E - GetExE() - GetSepE() (in the given order); particle channels S, dS/dE (ChannelFunc), P above
- * threshold (ChannelFunc::Penetrability) and mu a / (hbar^2 W^2) below it (WhitFunc); photon channels
- * (E_gamma/hbar c)^(2L+1) (1 with --use-rmc), or the static-moment factor and E2 scale; beta channels 1.
+ * Channel functions of the blocks at any level energy E (MeV, E_x), from the engine's ChannelFunc and WhitFunc, with
+ * the channel energy E_c = (E - S) - e (MeV, c.m.; S = GetSepE(), e = GetExE()), the order in which the collision
+ * matrix forms it at a data point (EPoint.cpp) and CNuc::CalcShiftFunctions at a level, so that a level and a data
+ * point at the same E_x see the same E_c.  Every call returns all values of the channel: particle channels S, dS/dE
+ * and P, evaluated on one ChannelFunc in that order (P = ChannelFunc::Penetrability above threshold and
+ * mu a / (hbar^2 W^2) from WhitFunc below it, 0 at threshold); photon channels (E_gamma/hbar c)^(2L+1) (1 with
+ * --use-rmc), or the static-moment factor and E2 scale; beta channels 1 (docs/upgrade/cnuc_split.md section 7).
  * The CNuc must outlive the returned function; it is read, not modified.
  */
-/*!
- * The order in which the engine forms the channel energy E_c from the level energy E (MeV, E_x), the excitation
- * energy e = GetExE() of the pair and its separation energy S.  The three orders agree when e = 0 and may differ by
- * one ulp otherwise; each engine caller keeps its own so that its numbers stay bit-identical
- * (docs/upgrade/cnuc_split.md section 5).  They become one when channel_functions replaces this adapter.
- */
-enum class ChannelEnergyOrder {
-  ExcitationFirst,  ///< (E - e) - S: CNuc::TransformIn
-  SumFirst,         ///< E - (S + e): CNuc::CalcBoundaryConditions
-  SeparationFirst   ///< (E - S) - e: CNuc::TransformOut
-};
-
-/*!
- * Which particle-channel values the returned function computes (the others are left 0): every one, only S_c (what
- * boundary_values, formal_from_brune and brune_from_formal read), or only P_c and dS_c/dE (what
- * amplitudes_from_observed reads).  The engine asks for what each caller reads, so that it evaluates the Coulomb
- * functions it evaluated before the move, in the same order, and no more.
- */
-enum class ChannelQuantities { All, Shift, WidthFactors };
-
 azure2::physics::ChannelFunctions ChannelFunctionsFromCNuc(CNuc &compound, const CNucSystemMap &map,
-                                                           const Config &configure,
-                                                           ChannelEnergyOrder order = ChannelEnergyOrder::ExcitationFirst,
-                                                           ChannelQuantities what = ChannelQuantities::All);
+                                                           const Config &configure);
 
 /*!
  * The <levels> values of block b as the file gives them (form Observed): E_lambda, the widths (eV), ANCs (fm^-1/2),

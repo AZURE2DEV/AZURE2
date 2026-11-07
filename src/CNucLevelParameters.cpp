@@ -10,46 +10,32 @@
 
 namespace phys = azure2::physics;
 
-phys::ChannelFunctions ChannelFunctionsFromCNuc(CNuc &compound, const CNucSystemMap &map, const Config &configure,
-                                                ChannelEnergyOrder order, ChannelQuantities what) {
+phys::ChannelFunctions ChannelFunctionsFromCNuc(CNuc &compound, const CNucSystemMap &map, const Config &configure) {
   CNuc *cn = &compound;
   const bool gsl = !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC);
   const bool rmc = !!(configure.paramMask & Config::USE_RMC_FORMALISM);
   const CNucSystemMap m = map;
-  return [cn, gsl, rmc, m, order, what](std::size_t b, std::size_t k, double E) {
+  return [cn, gsl, rmc, m](std::size_t b, std::size_t k, double E) {
     JGroup *group = cn->GetJGroup(m.groupOfBlock.at(b));
     AChannel *channel = group->GetChannel(m.channelOfBlockChannel.at(b).at(k));
     PPair *pair = cn->GetPair(channel->GetPairNum());
-    double Ec;
-    switch (order) {
-      case ChannelEnergyOrder::SumFirst: Ec = E - (pair->GetSepE() + pair->GetExE()); break;
-      case ChannelEnergyOrder::SeparationFirst: Ec = E - pair->GetSepE() - pair->GetExE(); break;
-      default: Ec = E - pair->GetExE() - pair->GetSepE(); break;
-    }
+    const double Ec = E - pair->GetSepE() - pair->GetExE();  // (E_x - S) - e, as at a data point
     const int l = channel->GetL();
     phys::ChannelValues v;
     const char type = channel->GetRadType();
     if (type == 'P') {
-      // The engine's sequence of Coulomb-function calls, each on its own ChannelFunc as in the code these values
-      // replace: the Coulomb memo (CoulFuncCache) matches energies to 1e-12 MeV, so the order in which nearby
-      // energies are first evaluated can change a value in its last bits.
-      if (what != ChannelQuantities::WidthFactors) v.S = ChannelFunc(pair, gsl).Shift(l, Ec);
-      if (what != ChannelQuantities::Shift) {
-        if (Ec > 0.0) {
-          ChannelFunc cf(pair, gsl);
-          v.P = cf.Penetrability(l, Ec);
-          v.dS_dE = cf.ShiftDerivative(l, Ec);
-        } else {
-          if (Ec < 0.0) {
-            // CNuc.cpp TransformIn: the ANC conversion factor mu a / (hbar^2 W_l(2 kappa a)^2).
-            const double radius = pair->GetChRad();
-            WhitFunc whit(pair);
-            const double W = whit(l, radius, std::fabs(Ec));
-            v.P = pair->GetRedMass() * radius * uconv / std::pow(hbarc, 2.0) / std::pow(W, 2.0);
-          }
-          v.dS_dE = ChannelFunc(pair, gsl).ShiftDerivative(l, Ec);
-        }
+      ChannelFunc cf(pair, gsl);
+      v.S = cf.Shift(l, Ec);
+      if (Ec > 0.0) {
+        v.P = cf.Penetrability(l, Ec);
+      } else if (Ec < 0.0) {
+        // The ANC conversion factor mu a / (hbar^2 W_l(2 kappa a)^2) (level_parameters.md section 1).
+        const double radius = pair->GetChRad();
+        WhitFunc whit(pair);
+        const double W = whit(l, radius, std::fabs(Ec));
+        v.P = pair->GetRedMass() * radius * uconv / std::pow(hbarc, 2.0) / std::pow(W, 2.0);
       }
+      v.dS_dE = cf.ShiftDerivative(l, Ec);
     } else if (type == 'E' || type == 'M') {
       if (std::fabs(E - pair->GetHeavyExE()) < 1.e-3 && group->GetJ() == pair->GetJ(2) && group->GetPi() == pair->GetPi(2)) {
         // A static moment (CNuc.cpp TransformIn, "Static moments" in conventions.rst).

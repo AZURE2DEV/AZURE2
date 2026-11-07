@@ -1202,11 +1202,7 @@ bool CNuc::TransformIn(const Config &configure) {
     const CNucSystem structure = BuildSystemFromCNuc(*this, configure, CNucSystemContent::Structure);
     const phys::System &system = structure.system;
     const CNucSystemMap &map = structure.map;
-    // Pass 1 reads P_c and dS_c/dE, pass 2 (formal parameters) S_c, in the engine's order E - e - S.
-    const phys::ChannelFunctions widths =
-        ChannelFunctionsFromCNuc(*this, map, configure, ChannelEnergyOrder::ExcitationFirst, ChannelQuantities::WidthFactors);
-    const phys::ChannelFunctions shifts =
-        ChannelFunctionsFromCNuc(*this, map, configure, ChannelEnergyOrder::ExcitationFirst, ChannelQuantities::Shift);
+    const phys::ChannelFunctions cf = ChannelFunctionsFromCNuc(*this, map, configure);
 
     // 1. Observed widths, ANCs and amplitudes -> Brune or Park amplitudes (Eqs. 2.1-2.3).
     for (std::size_t b = 0; b < system.num_blocks(); b++) {
@@ -1216,7 +1212,7 @@ bool CNuc::TransformIn(const Config &configure) {
       const std::size_t nc = theJGroup->NumChannels();
       const phys::ProjectLevels in = ProjectLevelsFromCNuc(*this, map, b);
       const phys::BasisAmplitudes amp = phys::amplitudes_from_observed(
-          system, b, phys::internal_channels(system, b), in, park ? phys::LevelBasis::Park : phys::LevelBasis::Brune, widths);
+          system, b, phys::internal_channels(system, b), in, park ? phys::LevelBasis::Park : phys::LevelBasis::Brune, cf);
       for (std::size_t lb = 0; lb < levels.size(); lb++) {
         const int la = levels[lb];
         ALevel *theLevel = theJGroup->GetLevel(la);
@@ -1236,7 +1232,7 @@ bool CNuc::TransformIn(const Config &configure) {
               PPair *pair = this->GetPair(theChannel->GetPairNum());
               configure.outStream << "**WARNING: " << AZURELabel::Level(theJGroup, theLevel, j, la)
                                   << ", " << AZURELabel::Channel(this, theJGroup, ch)
-                                  << ": the level is " << theLevel->GetE() - pair->GetExE() - pair->GetSepE()
+                                  << ": the level is " << theLevel->GetE() - pair->GetSepE() - pair->GetExE()
                                   << " MeV above the channel threshold, where P = 0 in double precision, "
                                   << "so its observed width of " << input
                                   << " eV cannot be converted; the reduced width is set to 0. "
@@ -1285,8 +1281,8 @@ bool CNuc::TransformIn(const Config &configure) {
           if (worst > 0) {
             const phys::DenominatorTerm &t = amp.denominator_terms[lb * nc + worst - 1];
             AChannel *wc = theJGroup->GetChannel(worst);
-            bool bound = theLevel->GetE() - this->GetPair(wc->GetPairNum())->GetExE() -
-                    this->GetPair(wc->GetPairNum())->GetSepE() <= 0.0;
+            bool bound = theLevel->GetE() - this->GetPair(wc->GetPairNum())->GetSepE() -
+                    this->GetPair(wc->GetPairNum())->GetExE() <= 0.0;
             configure.outStream << "  Largest term: " << AZURELabel::Channel(this, theJGroup, worst)
                                 << (bound ? " (bound; ANC input)" : "")
                                 << ": input " << in.value[lb * nc + worst - 1]
@@ -1366,7 +1362,7 @@ bool CNuc::TransformIn(const Config &configure) {
           // Each level keeps its position and receives the eigenvalue of the rank of its Brune energy, so a level
           // listed first (a background pole, say) keeps its own energy, widths and fix flags.  TransformOut uses the
           // same rank mapping in the other direction.
-          f = phys::formal_from_brune(system, b, E, gamma, B, shifts);
+          f = phys::formal_from_brune(system, b, E, gamma, B, cf);
         } catch (const std::domain_error &) {
           // N a = E M a has a real solution only for a positive-definite M (Brune, PRC 66, 044611 (2002)); M is
           // 1 - sum_c gamma gamma' dS_c/dE, so widths too large for the channel radii make it indefinite.
@@ -1765,8 +1761,7 @@ void CNuc::CalcBoundaryConditions(const Config &configure) {
   const bool formal = !(configure.paramMask & Config::USE_BRUNE_FORMALISM);
   try {
     const CNucSystem structure = BuildSystemFromCNuc(*this, configure, CNucSystemContent::Structure);
-    const azure2::physics::ChannelFunctions cf =
-        ChannelFunctionsFromCNuc(*this, structure.map, configure, ChannelEnergyOrder::SumFirst, ChannelQuantities::Shift);
+    const azure2::physics::ChannelFunctions cf = ChannelFunctionsFromCNuc(*this, structure.map, configure);
     for (std::size_t b = 0; b < structure.system.num_blocks(); b++) {
       JGroup *theJGroup = this->GetJGroup(structure.map.groupOfBlock[b]);
       std::vector<double> energies;
@@ -2367,9 +2362,7 @@ void CNuc::TransformOut(const Config &configure) {
           theLevel->SetTransformGamma(ch, theLevel->GetFitGamma(ch));
       }
     const CNucSystem structure = BuildSystemFromCNuc(*this, configure, CNucSystemContent::Structure);
-    const phys::ChannelFunctions cf =
-        ChannelFunctionsFromCNuc(*this, structure.map, configure, ChannelEnergyOrder::SeparationFirst,
-                                 ChannelQuantities::Shift);
+    const phys::ChannelFunctions cf = ChannelFunctionsFromCNuc(*this, structure.map, configure);
     for (std::size_t b = 0; b < structure.system.num_blocks(); b++) {
       const int j = structure.map.groupOfBlock[b];
       JGroup *theJGroup = this->GetJGroup(j);

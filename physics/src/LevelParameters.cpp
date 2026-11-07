@@ -28,11 +28,12 @@ bool IsParticle(const System &s, int c) {
   return ch.kind == ChannelKind::Particle && s.partition(ch.partition).kind == PartitionKind::Particle;
 }
 
-// E_c = E_x - (e_0 + e_1) - S_alpha (MeV, c.m.), in the engine's order: CNuc.cpp TransformIn,
-// theLevel->GetE() - pair->GetExE() - pair->GetSepE(), with GetExE() = e_light + e_heavy.
+// E_c = (E_x - S_alpha) - (e_0 + e_1) (MeV, c.m.): the energy above the partition's ground-state threshold less the
+// excitation of the pair, in the order the engine forms it at a data point (EPoint.cpp, inEnergy - GetSepE() -
+// GetExE(), GetExE() = e_light + e_heavy) and in the adapter's channel functions (cnuc_split.md section 7).
 double ChannelEnergy(const System &s, int partition, double E) {
   const Partition &p = s.partition(partition);
-  return E - (p.excitation_MeV[0] + p.excitation_MeV[1]) - p.separation_MeV;
+  return E - p.separation_MeV - (p.excitation_MeV[0] + p.excitation_MeV[1]);
 }
 
 std::string Label(const System &s, std::size_t b, std::size_t lambda) {
