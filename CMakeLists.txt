@@ -111,6 +111,13 @@ if(AZURE2_SANITIZE)
     message(STATUS "Sanitizer build: -fsanitize=${AZURE2_SANITIZE}")
 endif()
 
+# ---------------------------------------------------------------- physics/
+# The physics library (docs/upgrade/ARCHITECTURE.md section 2: it uses nothing).  Added here, after the sanitizer
+# flags (which it should get) and before the global GSL, OpenMP, Minuit2 and coul include directories and flags
+# (which it must not see): a subdirectory inherits the directory properties as they stand when it is added.
+enable_testing()  # before the subdirectory, so that its tests are registered (repeated below for the rest)
+add_subdirectory(physics)
+
 # ---------------------------------------------------------------- macOS/Homebrew
 # Homebrew needs help that a Linux build never does, and without it a plain
 # "cmake -S . -B build" fails on macOS for two unrelated reasons:
