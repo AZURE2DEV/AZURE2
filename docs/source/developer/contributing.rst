@@ -236,7 +236,7 @@ is taken from a run you trust and changed only with the reason in the commit.
 A local build may use instructions the CI runners do not (FMA on an
 x86-64-v3 build), so quantities sensitive to round-off can differ in
 the last digits between a local run and CI; pin with a tolerance that covers
-that, and compare results of several sessions in one process to
-:math:`10^{-12}` rather than bit for bit (the Coulomb-function memo takes
-energies within :math:`10^{-12}` MeV as equal). Run one engine process at a
+that. Several sessions in one process give the bits of a fresh process (there
+is no Coulomb-function memo since ``docs/upgrade/coulomb.md``; builds before it
+agreed only to :math:`10^{-12}`). Run one engine process at a
 time on a small machine: a realistic THM session takes 0.2-2 GB.

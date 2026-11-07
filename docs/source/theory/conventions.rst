@@ -95,12 +95,11 @@ routine since 2025-09), accurate to about :math:`10^{-9}` against mpmath; the
 other algorithms of that directory (``coul``, ``coulfg``, ``coulcc``) agree
 with it to :math:`8.3 \times 10^{-10}` where all are accurate, and GSL's to
 :math:`4.6 \times 10^{-10}` (tests ``physics_coulomb``,
-``physics_coulomb_gsl_crosscheck``). The engine keeps them in a process-wide
-memo (``CoulFuncCache``) that returns the stored functions for an energy within
-:math:`10^{-12}` MeV of a stored one, so the last digits of a result (about
-:math:`10^{-11}` relative) can depend on the order of the calls and on what the
-process computed before; the memo goes with the per-stage tables of
-``docs/upgrade/coulomb.md``. :math:`\eta` and :math:`\rho` at a
+``physics_coulomb_gsl_crosscheck``). No memo returns a value computed at a
+nearby energy: the channel functions of the evaluation energies are computed
+once per pair, :math:`l` and exact channel energy in a table built before the
+point loops, and the radial waves of the external-capture integrals once per
+exact radius (``docs/upgrade/channel_table.md``). :math:`\eta` and :math:`\rho` at a
 channel energy (non-relativistic, or the relativistic forms under
 ``relativistic=1``) are ``physics/src/ChannelFunctions.cpp``'s.
 

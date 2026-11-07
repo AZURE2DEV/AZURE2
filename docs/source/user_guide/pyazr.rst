@@ -788,12 +788,12 @@ integrate.
    paths = azr.ec_integrals(pair=1, energies=E)         # one entry per EC pathway
    paths[0]["li"], paths[0]["lf"], paths[0]["radiation"], paths[0]["value"]
 
-   azr.cache_stats()   # queries, hits, hit_rate, entries, keys, disabled_keys,
-                       # input_files_read, input_files_served, input_files_held
+   azr.cache_stats()   # input_files_read, input_files_served, input_files_held (and six
+                       # Coulomb-memo counters of earlier builds, now always 0)
 
-A rebuild of the model (``set_channel_radius``, a nuclear-potential change, a mode switch) clears the
-Coulomb memo, reads no input file that has not changed on disk (the ``input_files_*`` counters, for the
-whole process) and does not print the setup ``Note:`` lines again: a session prints each once. Before
+A rebuild of the model (``set_channel_radius``, a nuclear-potential change, a mode switch) reads no input
+file that has not changed on disk (the ``input_files_*`` counters, for the whole process) and does not
+print the setup ``Note:`` lines again: a session prints each once. Before
 AZURE2 dev 2026-11-04 a likelihood that sampled a channel radius grew the memo by about 100 kB per new
 radius without bound, re-read the ``.azr`` and every data file at each call, and printed every Note at
 each call.
@@ -896,24 +896,17 @@ the settings was one process-wide object, so the last session to read a
 ``<potential>`` block silently reconfigured every other live session;
 ``tests/pyazr/potential_sessions_test.py`` pins the isolation.)
 
-External-capture integrals are the most expensive part of a capture
-calculation, which is why the Coulomb functions they need are memoized.
-``cache_stats`` makes that visible: asking for the same integrals twice on
-``16O(p,gamma)17F`` takes 14.9 s and then 0.44 s, with the hit rate rising from
-82% to 91%. ``disabled_keys`` counts the memos that have given up because too
-few of their entries were being asked for twice --- which is what a *varying*
-energy shift produces, since it moves every point energy at every iteration.
-Such a key keeps its values for the bit-identical energy only (a hit is what
-recomputing gives), so a second session in the same process finds them: the
-12C+12C THM example opens in 2.6 s instead of 24.5 s the second time (49 s
-the first), and the GUI's THM diagnostics recompute it in 1-3 s instead of
-37 s.  Those are dropped too if they fill up (32 768 per key) without being
-asked for again. The table costs memory: 13 MB of peak resident memory on the
-12C+12C example. The memo itself takes energies within
-:math:`10^{-12}` MeV as equal, so a second session in one process can differ
-from a fresh process in the last digits (``tests/6Li_d``: 682.1465248015013
-against 682.1465248016414); compare multi-session results to
-:math:`10^{-12}`, not bit for bit.
+The Coulomb functions are computed at every call: there is no process-wide
+memo (``docs/upgrade/coulomb.md``). Earlier builds kept one, which took
+energies within :math:`10^{-12}` MeV as equal, so that a second session in one
+process could differ from a fresh process in the last digits; now every session
+gives the bits of a fresh process. The price is speed where the memo found
+repeated energies: external-capture integrals (``tests/13N``: 10 s before,
+32 s now, one thread), target and resolution sub-points (``tests/natural_neon``:
+12 s before, 105 s now), a second session of a THM project. The per-stage
+tables of channel functions planned in ``docs/upgrade/coulomb.md`` (section 2.3)
+are to give the speed back without history; until then the Coulomb table
+(``--build-coulomb-table``) remains the way to make P, S and the phases fast.
 
 Model averaging
 ---------------

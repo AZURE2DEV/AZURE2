@@ -68,9 +68,9 @@ not. Use the profile when the χ² surface is visibly non-parabolic or the inter
 - Discard burn-in and check the integrated autocorrelation time (a chain shorter than about 50 autocorrelation times
   is not quoted) before using a posterior (`docs/source/user_guide/mcmc.rst`, "Analysing the chain").
 - **Memory in long chains.** A sampler that calls `transform_rwa` per step (e.g. with a fixed total γ width) or that
-  samples a_c (a new radius per sample) must stay flat in memory. Diagnose with `m.cache_stats()["entries"]` before
-  and after one call; growth per call means the Coulomb-function memo is accumulating, and
-  `input_files_read/served/held` show whether input files are re-read per rebuild.
+  samples a_c (a new radius per sample) must stay flat in memory. Diagnose with `m.cache_stats()`:
+  `input_files_read/served/held` show whether input files are re-read per rebuild (the engine keeps no Coulomb
+  memo, so its counters are 0).
   Builds before 2026-10-28 (expires: 2027-02-01): `transform_rwa` kept every Coulomb function at the moving level
   energies, about 5,000 entries per call per worker (4 GB per worker after 1,400 steps of a 12C(α,γ) chain).
   Builds before 2026-11-04 (expires: 2027-02-01): every new radius added about 100 kB to the memo and every rebuild
