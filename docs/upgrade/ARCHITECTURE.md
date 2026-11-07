@@ -58,9 +58,11 @@ fixes touched `EData`/`EPoint`/`ESegment`; at least 21 fixes repaired bugs intro
 ## 3. Module contents (physical objects; physics stages are functions, not classes)
 
 ### physics/
-- `System`: partitions α (masses, charges, spins, separation energies), channels c = (α, l, s) with radius a_c and
-  boundary value B_c, Jπ blocks. Immutable after loading.
-- `JpiBlock`: arrays E[λ], γ[λ, c] (no Level/Channel objects with pointers). Contiguous, cheap to copy.
+- `System`: partitions α (masses, charges, spins, separation energies), channels c = (α, kind, l, s) with radius
+  a_c, Jπ blocks. Immutable after loading.
+- `JpiBlock`: arrays E[λ], γ[λ, c] (no Level/Channel objects with pointers), and the boundary value B_c of each of
+  its channels: the engine sets B_c = S_c(E_1) per Jπ group, so one (α, l, s) carries a different B_c in each block
+  (`physics_system.md`). Contiguous, cheap to copy.
 - `channel_functions(α, l, E)` → P, S, φ, and Coulomb phase σ_l; from **pycoulomb** (Jakub's library, see §6).
   Indexed by (α, l), not by Jπ × channel (today's `EDependentTables::Slot(jGroup, channel)` stores the same numbers
   several times). Spin–orbit hybrid-potential channels are indexed (α, l, j).
