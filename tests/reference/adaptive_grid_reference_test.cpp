@@ -67,6 +67,8 @@ struct Result {
   double maxErr = 0.0;     // max |trapezoid - exact| / area over the scan
   double swing = 0.0;      // max - min of (trapezoid - exact) / area over the scan
   double maxStepErr = 0.0; // max |change of the error between neighbouring positions| / area
+  double net = 0.0;        // error at the last position minus the error at the first / area
+  double excess = 0.0;     // total variation of the error minus |net|: what is not a one-way drift / area
   size_t maxNodes = 0;
 };
 
@@ -82,7 +84,7 @@ Result Scan(double lo, double hi, int numPoints, double g, double mult, double p
   AdaptiveIntegrationGrid grid(gc);
   const double area = M_PI * 0.5 * g;
   Result r;
-  double emin = 1e300, emax = -1e300, prev = 0.0;
+  double emin = 1e300, emax = -1e300, prev = 0.0, first = 0.0, variation = 0.0;
   for (int i = 0; i <= steps; i++) {
     const double eR = from + (to - from) * i / steps;
     std::vector<AdaptiveIntegrationGrid::ResonanceInfo> res(1);
@@ -95,10 +97,14 @@ Result Scan(double lo, double hi, int numPoints, double g, double mult, double p
     emin = std::min(emin, err);
     emax = std::max(emax, err);
     if (i > 0) r.maxStepErr = std::max(r.maxStepErr, std::fabs(err - prev));
+    if (i > 0) variation += std::fabs(err - prev);
+    if (i == 0) first = err;
     prev = err;
     r.maxNodes = std::max(r.maxNodes, nodes.size());
   }
   r.swing = emax - emin;
+  r.net = prev - first;
+  r.excess = variation - std::fabs(r.net);
   return r;
 }
 
@@ -108,8 +114,9 @@ void Case(const char *name, double window, int numPoints, double g, double mult,
   const double lo = 10.0, hi = 10.0 + window;
   Result r = Scan(lo, hi, numPoints, g, mult, ppw, lo + from * window, lo + to * window, 2000);
   std::printf("%s: G = %.3g eV, window %.3g keV, %d points, mult %g, ppw %g -> max error %.2e, swing %.2e, "
-              "largest jump %.2e, up to %zu nodes\n",
-              name, g * 1e6, window * 1e3, numPoints, mult, ppw, r.maxErr, r.swing, r.maxStepErr, r.maxNodes);
+              "net change %+.2e, variation beyond it %.2e, largest jump %.2e, up to %zu nodes\n",
+              name, g * 1e6, window * 1e3, numPoints, mult, ppw, r.maxErr, r.swing, r.net, r.excess, r.maxStepErr,
+              r.maxNodes);
   char label[256];
   std::snprintf(label, sizeof label, "%s: integral within %.0e of the exact area", name, tolErr);
   check(label, r.maxErr < tolErr, "max error %.3e of the area (tolerance %.0e)", r.maxErr, tolErr);
