@@ -23,6 +23,12 @@ below (full text and reasons in `docs/upgrade/RULES.md`):
 
 - Code is shaped like the physics: `physics/`, `experiment/`, `inference/`, `io/`, plus `support/` for plumbing.
   Modules use only the modules below them; each is its own CMake target, so a wrong dependency does not compile.
+- Design before code. Each piece of physics (a channel type, a basis or convention, an observable, a kernel, a
+  prior) is a self-contained part with a stated interface, its inputs and outputs in physical units, and one test
+  that would fail if it were wrong; parts fit together only through those interfaces (`ARCHITECTURE.md` §9), never by
+  reaching into each other's state. A new convention or feature starts as a short design note in `docs/upgrade/`
+  (what it is physically, where it plugs in, what it replaces, how it is tested), reviewed before the code. No
+  special cases threaded through unrelated code, no flags that change meaning elsewhere, no copy of a formula.
 - The engine computes three lines (`docs/upgrade/ARCHITECTURE.md` §1). New physics enters at one extension point,
   changes one symbol, and appears in one of the test projects T1–T3 (`tests/upgrade/`).
 - Setup state is read-only once a fit stage starts; parallel code writes only its own slice or scratch; no caches
