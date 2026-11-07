@@ -13,7 +13,7 @@ Writes, from the true parameters in TRUTH / NUISANCE below:
                      param.sav, for check_recovery.py
 
 The noiseless model at every data point is computed by the engine itself (today's AZURE2) from
-T2_true.azr: one run per segment with only that segment active, the model read from the
+T2_true.azr: one run per segment (or per group of segments that share a parameter), the model read from the
 AZUREOut_*.out file and taken back to the lab frame with the data's own lab->c.m. factor
 (column 6 over the datum).  So T2 checks that a fit through the apparatus recovers the parameters
 the data were made with (identifiability and the fit machinery), not that the engine's physics is
@@ -23,7 +23,7 @@ right; the identity checks and tests/reference do that.
 
 --asimov OUTDIR writes the noiseless data (and the covariance built from them) to OUTDIR/data
 and OUTDIR/cov_diff.txt instead of the committed files, for the Asimov recovery check.
-numpy only.  Runs in about 10 s (13 small engine runs).
+numpy only.  Runs in about 30 s on one core (11 small engine runs).
 """
 import argparse
 import json
@@ -147,6 +147,7 @@ SEGMENTS = [
 ]
 # Segment 7: one skewed-Gaussian beam (lab MeV) and the reconstructed-energy windows of its points.
 PROFILE = dict(xi=0.34, omega=0.035, alpha=1.5, w=1.0, s=0.004)
+RUNS = [(1,), (2, 3), (4,), (5,), (6,), (7,), (8,), (9,), (10,), (11, 12), (13,)]
 PROFILE_WINDOWS = [(a, a + 0.015) for a in np.arange(0.27, 0.42, 0.015)]
 
 STOP_TIN = '"a0*x^a1" 2 1.6e-20 -0.45'      # p in TiN, MeV cm^2 per N atom (lab x in MeV)
@@ -214,12 +215,12 @@ def nz(name, fit):
 
 
 def segment_lines(fit, only=None, data_dir="data", cov=True):
-    """The <segmentsData> block.  only=k: every other segment inactive (truth runs, one at a time)."""
+    """The <segmentsData> block.  only=(k, ...): every other segment inactive (the truth runs)."""
     v = 1 if fit else 0                     # vary flags only in the fit project
     rows = []
     for s in SEGMENTS:
         k = s["key"]
-        act = 1 if (only is None or only == k) else 0
+        act = 1 if (only is None or k in only) else 0
         lo, hi = seg_range(s)
         th = (s["angle"], s["angle"]) if s["isdiff"] == 1 else (0, 180)
         f = f"{data_dir}/{s['name']}.dat"
@@ -354,20 +355,26 @@ def model_lab(binary, tmp):
         n = len(grid(s))
         write_data(os.path.join(tmp, "data", s["name"] + ".dat"), s, np.ones(n), 0.1 * np.ones(n))
     out = {}
-    for s in SEGMENTS:
-        k = s["key"]
-        d = os.path.join(tmp, f"run{k}")
+    # Segments that share a parameter are computed together: 2-3 (normgroup D, shiftgroup G and its shiftfn,
+    # all declared on segment 2's line) and 11-12 (one profiled THM scale).  Alone, a follower would take its
+    # own line's norm and shift, and each THM run its own scale.
+    for group in RUNS:
+        d = os.path.join(tmp, "run" + "_".join(map(str, group)))
         os.makedirs(d)
         shutil.copytree(os.path.join(tmp, "data"), os.path.join(d, "data"))
-        open(os.path.join(d, "true.azr"), "w").write(project(fit=False, only=k))
+        open(os.path.join(d, "true.azr"), "w").write(project(fit=False, only=group))
         log = run_engine(binary, d, "true.azr")
         files = [f for f in os.listdir(os.path.join(d, "output")) if re.match(r"AZUREOut_aa=\d+_R=\d+\.out$", f)]
         if len(files) != 1:
-            sys.exit(f"segment {k}: expected one AZUREOut file, found {files}\n{log[-3000:]}")
+            sys.exit(f"segments {group}: expected one AZUREOut file, found {files}\n{log[-3000:]}")
         rows = read_out(os.path.join(d, "output", files[0]))
-        if len(rows) != len(grid(s)):
-            sys.exit(f"segment {k}: {len(rows)} output rows for {len(grid(s))} points\n{log[-3000:]}")
-        out[k] = rows[:, 3] / rows[:, 5]                # fit_cm * (datum_lab / datum_cm), datum_lab = 1
+        sizes = [len(grid(SEGMENTS[k - 1])) for k in group]
+        if len(rows) != sum(sizes):
+            sys.exit(f"segments {group}: {len(rows)} output rows for {sum(sizes)} points\n{log[-3000:]}")
+        i = 0
+        for k, n in zip(group, sizes):                 # rows come segment by segment in key order
+            out[k] = rows[i:i + n, 3] / rows[i:i + n, 5]   # fit_cm * (datum_lab / datum_cm), datum_lab = 1
+            i += n
     return out
 
 
