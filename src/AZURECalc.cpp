@@ -322,8 +322,7 @@ ShiftColumnCount FillShiftColumns(CNuc *lc, EData *ld, const Config &config, con
       const double denom = pt->GetCMCrossSectionError() * norm;
       byPoint[pid] = (denom != 0.0) ? (model - pt->GetCMCrossSection() * norm) / denom : 0.0;
     };
-    // No parallel construct inside an enclosing parallel region (see
-    // CoulFuncCache::localCache).  In parallel each point is calculated on
+    // No parallel construct inside an enclosing parallel region.  In parallel each point is calculated on
     // its own, without point mapping (ScopedPointMappingOff, as in the
     // AZUREGrad.cpp loops): a mapped point would otherwise read a value its
     // host may not have calculated yet.  Serially, index order puts every

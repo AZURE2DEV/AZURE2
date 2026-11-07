@@ -15,7 +15,6 @@
 #include "SegLine.h"
 #include "ExtrapLine.h"
 #include "GSLException.h"
-#include "CoulFuncCache.h"
 #include "ECAmplitudeCache.h"
 #include "CoulombTable.h"
 #include <atomic>
@@ -1582,7 +1581,6 @@ int main(int argc, char *argv[]) {
   }
 
   // Initialize caches for performance optimization
-  InitializeCoulFuncCache();
   InitializeECAmplitudeCache();
 
   // Create new configuration structure, and parse the command line parameters
@@ -1743,7 +1741,6 @@ int main(int argc, char *argv[]) {
 #endif
 
   // Cleanup caches
-  CleanupCoulFuncCache();
   CleanupECAmplitudeCache();
 
   return returnValue != 0 ? 1 : 0;

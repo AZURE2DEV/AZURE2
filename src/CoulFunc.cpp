@@ -1,5 +1,4 @@
 #include "CoulFunc.h"
-#include "CoulFuncCache.h"
 #include "PPair.h"
 #include <iostream>
 #include <gsl/gsl_sf_coulomb.h>
@@ -223,25 +222,7 @@ CoulWaves CoulFunc::operator()(int l, double radius, double energy) {
     }
   }
 
-  // Try to use the global cache if available
-  if (!block && g_coulFuncCache && useGlobalCache_) {
-    CoulFuncCache::CoulFuncKey key;
-    key.z1 = z1();
-    key.z2 = z2();
-    key.redmass = redmass();
-    key.l = l;
-    key.radius = radius;
-    key.hybridTag = hybridTag_;
-    key.mtot = kin_.rel ? kin_.m1 + kin_.m2 : 0.0;
-
-    // Single-pass cached lookup (acceptance + interpolation in one map traversal)
-    if (g_coulFuncCache->TryGetCoulWaves(key, energy, result)) {
-      setLast(l, radius, energy, result);
-      return result;
-    }
-  }
-
-  // If cache miss, compute directly
+  // Otherwise computed at every call: there is no process-wide memo (docs/upgrade/coulomb.md section 3).
   struct CoulWaves newResult;
 
   // Check if hybrid method should be used
@@ -266,19 +247,6 @@ CoulWaves CoulFunc::operator()(int l, double radius, double energy) {
   if (block) {
     block->emplace(radius, newResult);
     t_radialSize++;
-  }
-
-  // Add computed result to global cache for future use
-  if (!block && g_coulFuncCache && useGlobalCache_) {
-    CoulFuncCache::CoulFuncKey key;
-    key.z1 = z1();
-    key.z2 = z2();
-    key.redmass = redmass();
-    key.l = l;
-    key.radius = radius;
-    key.hybridTag = hybridTag_;
-    key.mtot = kin_.rel ? kin_.m1 + kin_.m2 : 0.0;
-    g_coulFuncCache->AddCoulWaves(key, energy, newResult);
   }
 
   return result;

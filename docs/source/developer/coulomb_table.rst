@@ -99,10 +99,10 @@ Tensor-product Lagrange interpolation through 8 nodes per axis (orders 6 and
 bicubic Hermite are kept for comparison, ``--order``). It uses only the node
 values, so the file stores nothing else. A lookup is a pure function of
 :math:`(\eta, \rho, l)` and of the table file; it never depends on earlier
-evaluations. That matters: ``CoulFuncCache`` once interpolated between energies
-it had happened to cache, and was made exact-match because those
-history-dependent values broke the adaptive quadrature of the reaction rate
-(``CoulFuncCache.cpp``).
+evaluations. That matters: the former Coulomb memo (``CoulFuncCache``, since
+deleted) once interpolated between energies it had happened to cache, and was
+made exact-match because those history-dependent values broke the adaptive
+quadrature of the reaction rate.
 
 The energy derivatives of the shift function (``CoulFunc::PEShift_dE``,
 ``ShftFunc::EnergyDerivative``) are finite differences, and every point of a

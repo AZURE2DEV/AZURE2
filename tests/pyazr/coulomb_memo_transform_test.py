@@ -6,7 +6,8 @@ of every radiative width, an external-capture radial integral at the level energ
 energies at every call, so the (l, radius, energy) entries it stored never recurred: each transform_rwa added ~5,000
 entries per worker for good in the 12C(a,g) MCMC chains of 2026-10-26 (--fix-gamma-total calls it once or more per
 log-probability), ~4 GB per worker after 17,000 evaluations.  The transform now runs inside a
-CoulFuncCache::TransientScope: it shares Coulomb functions within the call and keeps none afterwards.
+CoulFuncCache::TransientScope; since docs/upgrade/coulomb.md there is no Coulomb memo at all (the entry count is 0,
+so (1) holds trivially; (2) and (3) keep their meaning).
 
 Checks on tests/13N (12C + p with external capture), Brune and Park:
   (1) 20 transform_rwa calls at level energies moved by ~1 keV leave the memo's entry count unchanged;

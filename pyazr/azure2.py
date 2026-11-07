@@ -2353,20 +2353,16 @@ class azure2:
         return self
 
     def cache_stats(self):
-        """Coulomb-function cache counters, summed over threads, and the input-file counters.
+        """Input-file counters of the process (and the former Coulomb-memo counters, now always 0).
 
         Returns a dict with ``queries``, ``hits``, ``hit_rate``, ``entries``,
-        ``keys``, ``disabled_keys`` and ``threads``.  ``disabled_keys`` counts
-        the keys that gave up on their memo because too few of their entries
-        were being asked for twice -- which is what happens when a free energy
-        shift moves every point energy at every iteration.  Such a key keeps
-        its values for the exact same energy only (counted in the totals), so
-        a later session in this process finds them; it drops even those if
-        they fill up without being asked for again.  The memo is cleared at
-        every rebuild (set_channel_radius, potential changes) since AZURE2 dev
-        2026-11-04; before, a sampled radius added keys without bound.
+        ``keys``, ``disabled_keys`` and ``threads``: the counters of the
+        process-wide Coulomb-function memo of earlier builds.  The engine has
+        no such memo any more (the Coulomb functions are computed at every
+        call; docs/upgrade/coulomb.md), so they are 0; the keys are kept so
+        that scripts reading them keep working.
 
-        From the same build on, also ``input_files_read`` (input files read from
+        Also ``input_files_read`` (input files read from
         disk), ``input_files_served`` (opens answered from memory) and
         ``input_files_held``, for the whole process: a session reads the .azr and
         its data files once and again only when a file changes on disk, so a

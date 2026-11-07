@@ -33,7 +33,6 @@
 #include "CNuc.h"
 #include "CNucSystem.h"
 #include "Config.h"
-#include "CoulFuncCache.h"
 #include "ECAmplitudeCache.h"
 
 Config *g_config = nullptr;  // defined by the executable; the library reads it
@@ -151,7 +150,6 @@ bool Load(Loaded &m, const std::string &azr, Basis basis, bool initialize) {
   g_config = &m.cfg;
   if (m.cfg.ReadConfigFile() < 0) return false;
   m.cfg.ResolveMatrixRoute();
-  InitializeCoulFuncCache();
   InitializeECAmplitudeCache();
   if (m.compound.Fill(m.cfg) == -1) return false;
   if (initialize) m.compound.Initialize(m.cfg);

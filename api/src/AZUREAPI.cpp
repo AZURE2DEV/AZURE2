@@ -5,7 +5,6 @@
 
 #include "GSLException.h"
 #include "ParameterLabel.h"
-#include "CoulFuncCache.h"
 #include "ECAmplitudeCache.h"
 
 #include "Config.h"
@@ -78,7 +77,6 @@ static std::vector<ESegment *> AllSegments(EData *ld) {
 
 int AZUREAPI::Initialize() {
   // Initialize caches for performance
-  InitializeCoulFuncCache();
   InitializeECAmplitudeCache();
 
   configure().paramMask |= Config::USE_EXTERNAL_CAPTURE;
@@ -908,10 +906,6 @@ bool AZUREAPI::Rebuild() {
 // goes to CNuc::Fill, so a rebuild for one reason (a potential change, another
 // pair's radius) does not undo an earlier SetRadius.
 bool AZUREAPI::RebuildImpl(const std::map<int, double> &radii) {
-  // The Coulomb memo is keyed on the channel radius (and the potential): what the old model put there is of no use
-  // to the new one, and kept, it grew by one set of keys per new radius without bound (3H+d free-radius MCMC,
-  // 2026-11-03).  Values are unaffected either way: the memo only stores exact results.
-  if (g_coulFuncCache) g_coulFuncCache->Clear();
   if (compound_ != nullptr) delete compound_;
   if (data_ != nullptr) delete data_;
 
@@ -1987,7 +1981,7 @@ vector_r AZUREAPI::GetECIntegrals(const vector_r &request) const {
 }
 
 /*!
- * Coulomb-function cache counters, aggregated over threads, then the input-file counters of the process
+ * Six zeros (the counters of the deleted Coulomb memo), then the input-file counters of the process
  * (InputFiles: files read from disk, opens served from memory, files held).
  */
 vector_r AZUREAPI::GetCacheStats() const {
@@ -1996,13 +1990,7 @@ vector_r AZUREAPI::GetCacheStats() const {
   out[6] = static_cast<double>(in.reads);
   out[7] = static_cast<double>(in.served);
   out[8] = static_cast<double>(in.files);
-  if (!g_coulFuncCache) return out;
-  CoulFuncCache::Stats s = g_coulFuncCache->GetStats();
-  out[0] = static_cast<double>(s.queries);
-  out[1] = static_cast<double>(s.hits);
-  out[2] = static_cast<double>(s.entries);
-  out[3] = static_cast<double>(s.keys);
-  out[4] = static_cast<double>(s.disabledKeys);
-  out[5] = static_cast<double>(s.threads);
+  // out[0..5] were the counters of the process-wide Coulomb memo (CoulFuncCache), deleted with
+  // docs/upgrade/coulomb.md: they stay 0, so that the layout and pyazr's cache_stats() keys do not change.
   return out;
 }

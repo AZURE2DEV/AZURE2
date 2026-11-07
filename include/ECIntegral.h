@@ -48,15 +48,8 @@ class ECIntegral {
    */
   ECIntegral(PPair *pPair, const Config &configure) {
     params_.coulFunc = std::make_unique<CoulFunc>(pPair, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
-    // Disable the global Coulomb cache ONLY for the reaction rate.  There the
-    // energies never recur, so the radial-integral lookups (keyed on radius,
-    // the integration variable) only miss and grow the cache without bound.
-    // In normal fit/extrapolation calculations the energies recur at fixed
-    // channel radii and the cache is a large speed-up, so it stays enabled.
-    if (configure.paramMask & Config::CALCULATE_REACTION_RATE)
-      params_.coulFunc->SetUseGlobalCache(false);
-    else
-      params_.coulFunc->SetRadialScratch(true);  // the terms of one l_i and energy share their radii
+    // The terms of one l_i and energy share their radii (not in the reaction-rate mode, whose energies never recur).
+    if (!(configure.paramMask & Config::CALCULATE_REACTION_RATE)) params_.coulFunc->SetRadialScratch(true);
     params_.whitFunc = std::make_unique<WhitFunc>(pPair);
     params_.useLongWavelengthApprox = !!(configure.paramMask & Config::USE_LONGWAVELENGTH_APPROX);
     params_.useChargeFunction = false;  // set per term in CalculateDirect

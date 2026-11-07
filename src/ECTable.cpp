@@ -134,10 +134,8 @@ complex ECTable::Integral(PPair *finalPair, const Config &configure,
   const double threshold = finalPair->GetSepE() + finalPair->GetExE();
   const double outEnergy = inEnergy - threshold;
   CoulFunc coul(finalPair, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
-  if (RateMode(configure))
-    coul.SetUseGlobalCache(false);  // rate energies never recur
-  else
-    coul.SetRadialScratch(true);  // sqrt(P) at a_c: one more radius of the (l_i, E) block of the integrals
+  // sqrt(P) at a_c: one more radius of the (l_i, E) block of the integrals (not in the rate mode: energies never recur)
+  if (!RateMode(configure)) coul.SetRadialScratch(true);
   complex reduction;
   if (!(outEnergy > 0.0) || !Reduction(finalPair, coul, li, outEnergy, isChannelCapture, reduction)) {
     ++g_direct;

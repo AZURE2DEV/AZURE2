@@ -23,7 +23,6 @@
 #include "CNucSystem.h"
 #include "CoulFunc.h"
 #include "ECIntegral.h"
-#include "CoulFuncCache.h"
 #include "GSLException.h"
 #include "NucLine.h"
 #include "Minuit2/MnUserParameters.h"
@@ -2326,9 +2325,6 @@ void CNuc::FillCompoundFromParams(const vector_r &p) {
  */
 
 void CNuc::TransformOut(const Config &configure) {
-  // Everything here is evaluated at the level energies, which a fit or a sampler moves at every call: share
-  // Coulomb functions within this transform, keep none of them (CoulFuncCache::TransientScope).
-  CoulFuncCache::TransientScope transientCoulomb;
   // Park (2021): the fit parameters already are the observed reduced width
   // amplitudes, so Gamma = 2 P gamma^2 with no 1 + sum gamma^2 dS/dE factor.
   // Refresh J and the bound-state normalization for the current parameters.
@@ -2912,10 +2908,9 @@ const std::size_t kShiftDerivMemoMax = 1 << 16;
  * ShftFunc), four
  * and five more shift functions per channel and level, most of a serial
  * evaluation at new parameters.  They are taken after the shift functions, for
- * all levels at once and in parallel, and without the Coulomb-function memo
- * (CoulFuncCache, per thread and matching energies to 1e-12 MeV, so what it
- * returned depended on the thread and the run's history): the values do not
- * depend on the number of threads.  Channels of a level that differ only in
+ * all levels at once and in parallel; the Coulomb functions are computed at
+ * every call (physics/coulomb, no memo), so the values do not depend on the
+ * number of threads.  Channels of a level that differ only in
  * the channel spin share one derivative, and the working copies of a fit share
  * them through an exact-argument memo (g_shiftDerivMemo).
  */
@@ -3001,7 +2996,6 @@ void CNuc::CalcShiftFunctions(const Config &configure, bool secondDerivatives) {
       const double threshold = d.pair->GetSepE() + d.pair->GetExE();
       const double resonanceEnergy = d.energy - threshold;
       CoulFunc theCoulombFunction(d.pair, gslCoulomb);
-      theCoulombFunction.SetUseGlobalCache(false);
       const ShiftDerivKey key{d.pair->GetZ(1), d.pair->GetZ(2), d.l, gslCoulomb, theCoulombFunction.hybridTag(),
                               theCoulombFunction.UsesTable(), Kinematics::Relativistic(), d.pair->GetRedMass(),
                               d.pair->GetM(1) + d.pair->GetM(2), d.pair->GetChRad(), threshold, d.energy};
@@ -3022,11 +3016,9 @@ void CNuc::CalcShiftFunctions(const Config &configure, bool secondDerivatives) {
       }
       if (!need1 && !need2) continue;
       // dS/dE as everywhere else (ChannelFunc, also BuildShiftDerivTable's
-      // under Brune); d^2S/dE^2 from the branch the level is on.  Neither
-      // uses the Coulomb-function memo.
+      // under Brune); d^2S/dE^2 from the branch the level is on.
       if (need1) {
         ChannelFunc channelFunc(d.pair, gslCoulomb);
-        channelFunc.SetUseGlobalCache(false);
         d.d1 = channelFunc.ShiftDerivative(d.l, resonanceEnergy);
       }
       if (need2) {

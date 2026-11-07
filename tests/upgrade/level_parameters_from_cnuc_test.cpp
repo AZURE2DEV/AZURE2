@@ -46,7 +46,6 @@
 #include "CNucLevelParameters.h"
 #include "CNucSystem.h"
 #include "Config.h"
-#include "CoulFuncCache.h"
 #include "ECAmplitudeCache.h"
 
 Config *g_config = nullptr;  // defined by the executable; the library reads it
@@ -99,7 +98,6 @@ std::unique_ptr<Loaded> Load(const std::string &azr, Basis basis, bool initializ
   g_config = &m->cfg;
   if (m->cfg.ReadConfigFile() < 0) throw std::runtime_error("cannot read " + azr);
   m->cfg.ResolveMatrixRoute();
-  InitializeCoulFuncCache();
   InitializeECAmplitudeCache();
   if (m->compound.Fill(m->cfg) == -1) throw std::runtime_error("CNuc::Fill failed for " + azr);
   if (initialize) m->compound.Initialize(m->cfg);

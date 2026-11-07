@@ -34,14 +34,6 @@ target_link_libraries(gsl_quiet_test PRIVATE AZURE2Core)
 add_test(NAME gsl_quiet COMMAND gsl_quiet_test)
 set_tests_properties(gsl_quiet PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=4")
 
-# CoulFuncCache: a memo key given up on keeps exact energies only, and is
-# dropped when that fills without hits.
-add_executable(coul_func_cache_test coul_func_cache_test.cpp)
-target_link_libraries(coul_func_cache_test PRIVATE AZURE2Core)
-
-add_test(NAME coul_func_cache COMMAND coul_func_cache_test)
-set_tests_properties(coul_func_cache PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1")
-
 # Reference calculation for the THM distortion factor (ThmDistortion): the
 # zero-range DWBA amplitude against mpmath / scipy values from
 # thm_distortion_reference.py, its plane-wave limit against the closed form.
@@ -185,11 +177,3 @@ add_executable(input_files_cache_test input_files_cache_test.cpp)
 target_link_libraries(input_files_cache_test PRIVATE AZURE2Core)
 add_test(NAME input_files_cache COMMAND input_files_cache_test)
 
-# CoulFuncCache::TransientScope opened and closed on several threads at once:
-# every thread must find its own transient entries until its scope ends
-# (until 2026-11-05 the end of any thread's scope cleared every thread's
-# scratch memo, corrupting the heap in multithreaded fits).
-add_executable(coulfunc_transient_scope_test coulfunc_transient_scope_test.cpp)
-target_link_libraries(coulfunc_transient_scope_test PRIVATE AZURE2Core)
-add_test(NAME coulfunc_transient_scope COMMAND coulfunc_transient_scope_test)
-set_tests_properties(coulfunc_transient_scope PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=4")
