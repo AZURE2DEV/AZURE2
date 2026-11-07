@@ -85,15 +85,20 @@ evaluation for all working copies (ARCHITECTURE.md §3), and is not changed here
 
 ## 3. The radial Coulomb waves of external capture (kind 3)
 
-The node integrals of `ECTable` (converged to 10⁻¹⁰) and the direct integrals of `ECIntegral` evaluate F_{l_i}(η, kr),
-G_{l_i}(η, kr) at the radii r that `qagiu` chooses. A thread-private scratch, `RadialCoulombWaves`, holds them per
-block (Coulomb identity of the pair — Z₁, Z₂, μ, total mass if relativistic, hybrid tag, GSL route — l_i, E_c), each
-block a map from the exact r to (F, F′, G, G′), and keeps the last 16 blocks a thread has used; the reduction √P at
-r = a_c is one more radius in the same block. It is not shared between threads and nothing else reads it. Its values
-are those `CoulFunc` computes at the same exact arguments, so no result depends on what the thread computed before,
-on the thread count or on the session, which is what the rule against caches (RULES §2.3) guards. Its size is bounded
-(16 blocks of the radii of one integral each). The alternative, a fixed radial quadrature shared by all terms, would
-change every external-capture integral at the 10⁻¹⁰ level of the node tolerance; it is left as an open question.
+The node integrals of `ECTable` (converged to 10⁻¹⁰), the direct integrals of `ECIntegral`, the reduction √P at
+r = a_c and the entrance hard-sphere phase factor of each capture pathway evaluate F_l(η, kr), G_l(η, kr) at radii the
+caller or the adaptive `qagiu` chooses. A thread-private scratch (`CoulFunc::SetRadialScratch`, set by these callers
+only, not in the reaction-rate mode) holds them per block — Coulomb identity of the pair (Z₁, Z₂, μ, total mass if
+relativistic, hybrid tag, GSL route), l, E_c — each block a hash map from the exact radius r to (F, F′, G, G′). At most
+2²⁰ radii are held per thread; the scratch is emptied when full. It is not shared between threads and nothing else
+reads it. Its values are those `CoulFunc` computes at the same exact arguments, so no result depends on what the
+thread computed before, on the thread count or on the session, which is what the rule against caches (RULES §2.3)
+guards.
+
+A scratch of the last 16 blocks only (the first version) left 13N at 408 705 evaluations; the whole run needs 226 925
+distinct (block, r); the bounded hash map reaches that number. The alternative, a fixed radial quadrature shared by
+all terms, would change every external-capture integral at the 10⁻¹⁰ level of the node tolerance; it is left as an
+open question.
 
 ## 4. What is deleted
 
@@ -115,4 +120,62 @@ change every external-capture integral at the 10⁻¹⁰ level of the node toler
   slower than the memo base on the same host.
 
 Code: `include/ChannelTable.h`, `src/ChannelTable.cpp`, `EPoint::ChannelKeys`, `EPoint::CalcEDependentValues`,
-`EData::CalcEDependentValues`, `EData::InitializeComponentSegments`, `src/ECIntegral.cpp`, `src/ECTable.cpp`.
+`EData::CalcEDependentValues`, `EData::InitializeComponentSegments`, `CoulFunc::SetRadialScratch` and its callers in
+`include/ECIntegral.h`, `src/ECTable.cpp`, `ECPathwayAmplitude` (`src/EPoint.cpp`).
+
+## 6. As built (branch `feature/upgrade-1-channel-table`, 2026-11-07)
+
+The table and the scratch as above, with two changes found by measurement: the scratch holds every block of the
+thread up to 2²⁰ radii (16 blocks were not enough, §3), and it also serves the entrance phase factor of each capture
+pathway (13N: 590 326 → 230 686 Coulomb evaluations). `EData::Initialize` releases the table after the component
+segments, since nothing reads it until the energies change. `CoulFuncCache` is deleted (the `-nomemo` commits re-cut).
+
+**Outputs.** 179 `.azr` × three bases, menu 1, one thread, every file compared number by number against the memo
+base (feature/upgrade 815d9b5f, engine = 08516cfb): 486/689 (Brune), 458/662 (formal), 486/689 (Park) files
+identical; observables ≤ 7.0 × 10⁻¹¹ relative (`energy_shift_sqrt`, `relativistic` he5 and he5_rel, T1 formal),
+except the rounding residue of an exact zero (`ec_e1m1_phase` s_1, E1 at 0° and 180°, 1.5 × 10⁻²⁵ → 3.0 × 10⁻²⁵ beside
+1.2 × 10⁻⁹ at 60°); 20 `intEC.dat` ≤ 4.0 × 10⁻¹¹ of the line's largest value; χ² of `energy_shift_sqrt` and
+`shift_fn` in the 12th digit; every log without the memo's line. Against `-nomemo` (c3dc22e5) in the Brune basis:
+689/689 files byte-identical, as it must be, since the table and the scratch return the values recomputation gives.
+No golden and no `expected/` file is re-baselined.
+
+**Checks** (GCC 11.5, GUI off, Condor): no compiler warnings; `channel_table_unit` passes; `tests/upgrade/check.sh`
+PASS; `ctest -LE slow` 109/109; `tests/run_tests.sh` 132/132 (`shared_point_tables` (d) included); the pyazr THM byte
+checks `pyazr_thm_profiled` and `pyazr_thm_fixed_angle` 5/5 each; 1 vs 8 threads byte-identical on T1, T2, T3 and
+13N (all output files, `intEC.dat` included); ThreadSanitizer (clang 23, archer), section `upgrade` (T1–T3 calc,
+extrapolation, rate, fit; T2 fit30), 8 threads: 0 reports.
+
+**Speed** (host qa-xp-021, the memo base and this branch alternately, three repeats, `--no-coulomb-table`; mean and
+range; rows in `tests/upgrade/bench/T2.tsv`):
+
+| run | memo base | this branch | change |
+|---|---|---|---|
+| T2 calc, 1 thread | 5.21 s (4.77–5.54) | 4.86 s (4.50–5.18) | −7 % |
+| T2 calc, 8 threads | 1.91 s (1.75–2.08) | 0.87 s (0.82–0.92) | −55 % |
+| T2 fit200, 1 thread | 198.0 s (175.7–219.7) | 211.2 s (196.6–230.3) | **+7 %**, slower in each pair |
+| T2 fit200, 8 threads | 118.5 s (111.8–130.7) | 105.7 s (102.8–108.3) | −11 % |
+| 13N, 1 thread | 32.4 s (27.6–37.0) | 35.8 s (34.5–36.6) | +10 % (host noise ±15 %); a paired run on a quieter slot: 13.3 → 14.0 s, +5 % |
+| natural_neon, 1 thread | 40.1 s (33.5–47.2) | 32.6 s (24.8–42.2) | −19 % |
+| `convolution_unify` `tgt_fixed`, 2 threads | 97.2 s (87.8–105.9) | 97.3 s (90.8–102.3) | 0 % |
+
+Peak RSS: T2 fit200 at 8 threads 481 → 425 MB; 13N 163 → 176 MB; natural_neon 1437 → 1484 MB; `tgt_fixed` 7668 →
+7939 MB (+3.5 %).
+
+**The gate is not met** for T2 fit200 at one thread (+7 %) and, within the noise, for 13N (+5 %). Where the time
+goes (`perf`, one thread):
+
+- T2 fit (60 calls): 72 % of the run in the Coulomb functions of `EData::FillEnergyShiftsFromParams` →
+  `ESegment::UpdatePointEnergyWithShift` → `EPoint::RecalcEDependentValues` (memo base: 54 %). Each change of a free
+  shift ν refills the rows of its points at the new energies, as decision 11 prescribes; the numerical gradient steps
+  ν to ν ± h and back, and the memo found the energies of an earlier ν again. These points are filled outside the
+  table (§2, "A point without a table") and share only within the point.
+- 13N: about 20 % more samples in `coulsm` and 2 % in the scratch's hash lookups. The memo shared F, G at a_c
+  between the point rows and the external-capture calls at the same channel energy (`Reduction`, the entrance phase
+  factor), which the table and the scratch keep apart.
+
+Proposed (next step): (1) the shift step sets the energies of a segment's points and sub-points first, builds
+`Build(keys, previous)` from the segment's tables of its last two or three shift states (kept by the segment, not by
+a process-wide memo), then refills the rows from it; (2) the external-capture callers read √P and e^{−iφ} at a_c from
+the point's channel table where the key is present (the entrance and final pair of a capture are table pairs, with
+E_c formed by the table's expression).
+

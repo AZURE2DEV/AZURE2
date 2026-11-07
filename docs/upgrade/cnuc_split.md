@@ -318,6 +318,18 @@ use; its signature is not bumped (an old file stays valid to that level).
 
 Checks and speed: HANDOFF, 2026-11-07, `feature/upgrade-1-coulomb`; speed in `coulomb.md` §7.
 
+### Step 3b (ii), (ii′) (branch `feature/upgrade-1-channel-table`, 2026-11-07)
+
+Done, design first (`channel_table.md`, alone): the per-stage channel table (P, S, e^{−iφ}, e^{i(σ_l − σ_0)} per
+exact (α, l, E_c), built by `EData` before the point loops, read-only, released after setup), a thread-private
+exact-argument scratch of the radial Coulomb waves of external capture, and `CoulFuncCache` deleted (the `-nomemo`
+commits re-cut). Outputs against the memo base: as on `-nomemo` (≤ 7.0 × 10⁻¹¹ on observables, one exact zero's
+residue, `intEC.dat` ≤ 4.0 × 10⁻¹¹), and byte-identical to `-nomemo` in all 689 Brune-basis files. The THM byte checks
+pass 5/5; 1 vs 8 threads byte-identical (T1, T2, T3, 13N). Speed: faster at setup and at 8 threads, but T2 fit200 at
+one thread +7 % and 13N +5 %: the speed gate is not met (`channel_table.md` §6, with the profile and the proposed next
+step). Not done: (i) the Whittaker functions, (iii) hybrid (α, l, j) rows, (iv) `CoulombTable`/`--gsl-coul`; the
+per-slot rows of `EDependentTables` and `g_shiftDerivMemo` stay (`channel_table.md` §2).
+
 ### Remaining steps
 
 Steps 2, 3b and 4–7 of section 3. Next: the observed widths from total amplitudes (step 2), which removes the five copies of the

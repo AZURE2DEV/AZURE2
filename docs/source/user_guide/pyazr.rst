@@ -900,13 +900,15 @@ The Coulomb functions are computed at every call: there is no process-wide
 memo (``docs/upgrade/coulomb.md``). Earlier builds kept one, which took
 energies within :math:`10^{-12}` MeV as equal, so that a second session in one
 process could differ from a fresh process in the last digits; now every session
-gives the bits of a fresh process. The price is speed where the memo found
-repeated energies: external-capture integrals (``tests/13N``: 10 s before,
-32 s now, one thread), target and resolution sub-points (``tests/natural_neon``:
-12 s before, 105 s now), a second session of a THM project. The per-stage
-tables of channel functions planned in ``docs/upgrade/coulomb.md`` (section 2.3)
-are to give the speed back without history; until then the Coulomb table
-(``--build-coulomb-table``) remains the way to make P, S and the phases fast.
+gives the bits of a fresh process. In its place the channel functions of the
+evaluation energies are computed once per pair, :math:`l` and exact channel
+energy, in a table built before the point loops, and the radial Coulomb waves of
+the external-capture integrals once per exact radius in a per-thread scratch
+(``docs/upgrade/channel_table.md``); neither depends on what was computed
+before. A fit that moves a free energy shift recomputes the channel functions of
+that measurement at each move (one thread, ``tests/upgrade/T2`` 200 calls: 7 %
+slower than with the memo). The Coulomb table (``--build-coulomb-table``)
+remains the way to make P, S and the phases fast.
 
 Model averaging
 ---------------

@@ -69,6 +69,10 @@ in 47c119e4, `fix/adaptive-grid-criterion`]; the other four inherited failures a
       bit-identical outputs except hybrid channels (≤ 9.9 × 10⁻¹¹, explained). `CoulFuncCache` kept: its deletion
       (branch `-nomemo`) costs 3–17× and waits for the per-stage table. Open (step 3b): Whittaker functions without
       GSL, the per-stage table, then the memo; hybrid channels, `CoulombTable`, `--gsl-coul`.*
+      *Step 3b (ii) on `feature/upgrade-1-channel-table` (2026-11-07, not merged; design `channel_table.md`): the
+      per-stage channel table and the radial scratch, `CoulFuncCache` deleted; outputs as on `-nomemo`, THM checks
+      and thread identity deterministic; speed gate not met (T2 fit200 one thread +7 %, 13N +5 %; free-shift
+      refills, `channel_table.md` §6).*
 - [ ] Split `CNuc`: nucleus data → `System`; boundary conditions, shift functions, Brune/Park transforms, angular
       coefficients → functions of the System.
       *Step 1 done on `feature/upgrade-1-cnuc-split` (2026-11-07, not merged): plan `cnuc_split.md`;
