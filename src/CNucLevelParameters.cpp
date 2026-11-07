@@ -6,35 +6,50 @@
 #include "ChannelFunc.h"
 #include "Config.h"
 #include "Constants.h"
+#include "EigenFunc.h"
 #include "WhitFunc.h"
 
 namespace phys = azure2::physics;
 
-phys::ChannelFunctions ChannelFunctionsFromCNuc(CNuc &compound, const CNucSystemMap &map, const Config &configure) {
+phys::ChannelFunctions ChannelFunctionsFromCNuc(CNuc &compound, const CNucSystemMap &map, const Config &configure,
+                                                ChannelEnergyOrder order, ChannelQuantities what) {
   CNuc *cn = &compound;
   const bool gsl = !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC);
   const bool rmc = !!(configure.paramMask & Config::USE_RMC_FORMALISM);
   const CNucSystemMap m = map;
-  return [cn, gsl, rmc, m](std::size_t b, std::size_t k, double E) {
+  return [cn, gsl, rmc, m, order, what](std::size_t b, std::size_t k, double E) {
     JGroup *group = cn->GetJGroup(m.groupOfBlock.at(b));
     AChannel *channel = group->GetChannel(m.channelOfBlockChannel.at(b).at(k));
     PPair *pair = cn->GetPair(channel->GetPairNum());
-    const double Ec = E - pair->GetExE() - pair->GetSepE();  // CNuc::TransformIn's order
+    double Ec;
+    switch (order) {
+      case ChannelEnergyOrder::SumFirst: Ec = E - (pair->GetSepE() + pair->GetExE()); break;
+      case ChannelEnergyOrder::SeparationFirst: Ec = E - pair->GetSepE() - pair->GetExE(); break;
+      default: Ec = E - pair->GetExE() - pair->GetSepE(); break;
+    }
     const int l = channel->GetL();
     phys::ChannelValues v;
     const char type = channel->GetRadType();
     if (type == 'P') {
-      ChannelFunc cf(pair, gsl);
-      v.S = cf.Shift(l, Ec);
-      v.dS_dE = cf.ShiftDerivative(l, Ec);
-      if (Ec > 0.0) {
-        v.P = cf.Penetrability(l, Ec);
-      } else if (Ec < 0.0) {
-        // CNuc.cpp TransformIn: the ANC conversion factor mu a / (hbar^2 W_l(2 kappa a)^2).
-        const double radius = pair->GetChRad();
-        WhitFunc whit(pair);
-        const double W = whit(l, radius, std::fabs(Ec));
-        v.P = pair->GetRedMass() * radius * uconv / std::pow(hbarc, 2.0) / std::pow(W, 2.0);
+      // The engine's sequence of Coulomb-function calls, each on its own ChannelFunc as in the code these values
+      // replace: the Coulomb memo (CoulFuncCache) matches energies to 1e-12 MeV, so the order in which nearby
+      // energies are first evaluated can change a value in its last bits.
+      if (what != ChannelQuantities::WidthFactors) v.S = ChannelFunc(pair, gsl).Shift(l, Ec);
+      if (what != ChannelQuantities::Shift) {
+        if (Ec > 0.0) {
+          ChannelFunc cf(pair, gsl);
+          v.P = cf.Penetrability(l, Ec);
+          v.dS_dE = cf.ShiftDerivative(l, Ec);
+        } else {
+          if (Ec < 0.0) {
+            // CNuc.cpp TransformIn: the ANC conversion factor mu a / (hbar^2 W_l(2 kappa a)^2).
+            const double radius = pair->GetChRad();
+            WhitFunc whit(pair);
+            const double W = whit(l, radius, std::fabs(Ec));
+            v.P = pair->GetRedMass() * radius * uconv / std::pow(hbarc, 2.0) / std::pow(W, 2.0);
+          }
+          v.dS_dE = ChannelFunc(pair, gsl).ShiftDerivative(l, Ec);
+        }
       }
     } else if (type == 'E' || type == 'M') {
       if (std::fabs(E - pair->GetHeavyExE()) < 1.e-3 && group->GetJ() == pair->GetJ(2) && group->GetPi() == pair->GetPi(2)) {
@@ -86,9 +101,38 @@ std::vector<phys::ExternalWidth> ExternalWidthsFromCNuc(CNuc &compound, const CN
     for (std::size_t k = 0; k < channels.size(); k++) {
       AChannel *channel = group->GetChannel(channels[k]);
       if (channel->GetRadType() != 'E' && channel->GetRadType() != 'M') continue;
+      // The engine skips a zero amplitude when zero widths are ignored (CalcExternalWidth is not evaluated).
+      if ((configure.paramMask & Config::IGNORE_ZERO_WIDTHS) &&
+          std::fabs(group->GetLevel(levels[la])->GetGamma(channels[k])) < 1.0e-8) continue;
       out[la * channels.size() + k].present = true;
       out[la * channels.size() + k].value =
           compound.CalcExternalWidth(group, group->GetLevel(levels[la]), channel, true, configure);
     }
   return out;
+}
+
+namespace {
+matrix_r ToMatrix(const std::vector<double> &A, std::size_t n) {
+  matrix_r m(n, vector_r(n));
+  for (std::size_t i = 0; i < n; i++)
+    for (std::size_t j = 0; j < n; j++) m[i][j] = A[i * n + j];
+  return m;
+}
+phys::EigenResult FromEigenFunc(const EigenFunc &e, std::size_t n) {
+  phys::EigenResult r;
+  r.ok = e.ok();
+  r.values = e.eigenvalues();
+  r.vectors.assign(n * n, 0.0);
+  for (std::size_t i = 0; i < n; i++)
+    for (std::size_t k = 0; k < n; k++) r.vectors[i * n + k] = e.eigenvectors()[i][k];
+  return r;
+}
+}  // namespace
+
+phys::EigenResult GslSymmetricEigen(const std::vector<double> &A, std::size_t n) {
+  return FromEigenFunc(EigenFunc(ToMatrix(A, n)), n);
+}
+
+phys::EigenResult GslGeneralizedEigen(const std::vector<double> &N, const std::vector<double> &M, std::size_t n) {
+  return FromEigenFunc(EigenFunc(ToMatrix(N, n), ToMatrix(M, n)), n);
 }

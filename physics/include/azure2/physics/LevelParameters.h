@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "azure2/physics/Convention.h"
+#include "azure2/physics/SymmetricEigen.h"
 #include "azure2/physics/System.h"
 
 namespace azure2 {
@@ -94,10 +95,33 @@ std::vector<ProjectChannel> internal_channels(const System &system, std::size_t 
 
 // ---------------------------------------------------------------------------------------------------- bases
 
+/// Why amplitudes_from_observed did not convert a column's input as a width (one per level and column).
+enum class ColumnNote : unsigned char {
+  None,
+  ZeroPenetrability,     ///< particle channel just above a Coulomb threshold, P = 0 in double precision: gamma = 0
+  AtThreshold,           ///< particle channel exactly at threshold, where an ANC defines no width: gamma = 0
+  AmplitudeFlagIgnored   ///< the amplitude flag (gammaIsRWA) on a photon or beta column: read as for no flag
+};
+
+/// One column's share of Brune's denominator D_lambda (Eq. 2.1 of level_parameters.md): the term |Gamma_c| S'_c / P_c
+/// (|Gamma_c| in MeV; C_c^2 and P^b_c for a bound channel) with the P_c and S'_c (MeV^-1) it was formed from.
+struct DenominatorTerm {
+  bool present = false;  ///< false for columns that add nothing to D (amplitude input, photon, beta, P = 0)
+  double term = 0.0;
+  double P = 0.0;
+  double dS_dE = 0.0;
+};
+
 struct BasisAmplitudes {
   std::vector<double> gamma;      ///< row-major [lambda * n_columns + m], MeV^1/2 (Brune or Park)
   std::vector<double> park_norm;  ///< Park's J_lambda (Eq. 28 of Park 2021) per level
   std::vector<std::string> warnings;
+  /// Diagnostics, so that a caller can word its own messages: D_lambda / 2 per level (negative: no reduced width
+  /// reproduces the widths), and per (level, column), row-major, each column's term of D and its ColumnNote.  A note
+  /// ZeroPenetrability or AtThreshold is set only when the input was not 0 (an input of 0 gives gamma = 0 exactly).
+  std::vector<double> half_denominator;
+  std::vector<DenominatorTerm> denominator_terms;
+  std::vector<ColumnNote> notes;
 };
 
 /*!
@@ -124,15 +148,35 @@ std::vector<double> boundary_values(const System &system, std::size_t b, const s
 /// Photon channels: total amplitude -> internal one, gamma_int = sign(gamma) (gamma^2 - Im^2)^1/2 - Re of the
 /// external amplitude (CNuc.cpp, TransformIn, second loop).  ext has the layout of gamma; entries not present are
 /// left alone, and so are |gamma| < 1e-8 when ignore_zero_widths.
+/// exceeded, if given, receives the index (lambda * n_c + k) of every entry where |Im| exceeded the total amplitude.
 void subtract_external_capture(const System &system, std::size_t b, std::vector<double> &gamma,
                                const std::vector<ExternalWidth> &ext, bool ignore_zero_widths,
-                               std::vector<std::string> &warnings);
+                               std::vector<std::string> &warnings, std::vector<std::size_t> *exceeded = nullptr);
+
+/*!
+ * Eigensolvers with the contract of SymmetricEigen.h (ascending eigenvalues, eigenvectors as columns, row-major, M-
+ * normalized for the generalized problem).  The Brune <-> formal conversions take one as an option; empty means
+ * SymmetricEigen.h's.  The sign of an eigenvector is the solver's, so the formal parameters depend on the choice by
+ * the overall sign of a level (observables do not); the engine passes GSL's (src/CNucLevelParameters.cpp) until the
+ * formal sign rule is decided (FormalSignRule; docs/upgrade/HANDOFF.md, decision 10).
+ */
+using SymmetricEigenSolver = std::function<EigenResult(const std::vector<double> &A, std::size_t n)>;
+using GeneralizedEigenSolver =
+    std::function<EigenResult(const std::vector<double> &N, const std::vector<double> &M, std::size_t n)>;
 
 struct LevelSet {
   std::vector<double> E;      ///< MeV
   std::vector<double> gamma;  ///< row-major, block channels
   std::vector<int> iterations;  ///< brune_from_formal: iterations per level (0 for the others)
   std::vector<std::string> warnings;
+  /// brune_from_formal only, so that a caller can word its own messages.  Per level: status (Converged, or the
+  /// formal values kept because the eigenproblem failed or the iteration did not converge), the last energy step
+  /// |e_k - E_k| (MeV) when it did not converge; per (level, block channel), row-major, the boundary-value shift
+  /// S_c(E) - B_c of the last iteration (0 for non-particle channels).
+  enum class Status : unsigned char { Converged, EigenFailed, NotConverged };
+  std::vector<Status> status;
+  std::vector<double> residual_MeV;
+  std::vector<double> boundary_shift;
 };
 
 /*!
@@ -142,11 +186,13 @@ struct LevelSet {
  */
 LevelSet formal_from_brune(const System &system, std::size_t b, const std::vector<double> &E,
                            const std::vector<double> &gamma, const std::vector<double> &B, const ChannelFunctions &cf,
-                           FormalSignRule sign = FormalSignRule::AsComputed);
+                           FormalSignRule sign = FormalSignRule::AsComputed,
+                           const GeneralizedEigenSolver &solver = GeneralizedEigenSolver());
 
 struct FormalToBruneOptions {
   double energy_tolerance_MeV = 1e-6;  ///< the engine's (CNuc::TransformOut)
   int max_iterations = 1000;           ///< the engine's
+  SymmetricEigenSolver solver;         ///< empty: symmetric_eigen
 };
 
 /// Formal -> Brune by the engine's iteration (CNuc::TransformOut): per level, B_c moved to S_c(E) and the matrix

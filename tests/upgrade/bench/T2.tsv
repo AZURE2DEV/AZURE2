@@ -5,3 +5,11 @@ date_utc	commit	host	ncpu	threads	run	wall_s	peak_rss_MB	chi2	N	note
 2026-11-07T01:26:58Z	5a9426fd	d12chas062	24	1	fit200	170.11	238.4	691.608	330	HTCondor slot, request_cpus=8; binary: feature/upgrade c1cc92c7 build (engine sources = 37978592)
 2026-11-07T01:27:00Z	5a9426fd	d12chas062	24	8	calc	1.77	62.6	10899.8	330	HTCondor slot, request_cpus=8; binary: feature/upgrade c1cc92c7 build (engine sources = 37978592)
 2026-11-07T01:28:37Z	5a9426fd	d12chas062	24	8	fit200	96.70	475.2	691.608	330	HTCondor slot, request_cpus=8; binary: feature/upgrade c1cc92c7 build (engine sources = 37978592)
+2026-11-07T09:48:40Z	af784f9a	d32cepyc138	64	1	calc	1.17	62.0	10899.8	330	HTCondor slot, request_cpus=8; GUI off; binary: feature/upgrade-1-cnuc-split
+2026-11-07T09:49:59Z	af784f9a	d32cepyc138	64	1	fit200	79.32	240.5	691.608	330	HTCondor slot, request_cpus=8; GUI off; binary: feature/upgrade-1-cnuc-split
+2026-11-07T09:50:00Z	af784f9a	d32cepyc138	64	8	calc	0.42	61.5	10899.8	330	HTCondor slot, request_cpus=8; GUI off; binary: feature/upgrade-1-cnuc-split
+2026-11-07T09:50:36Z	af784f9a	d32cepyc138	64	8	fit200	36.16	483.7	691.608	330	HTCondor slot, request_cpus=8; GUI off; binary: feature/upgrade-1-cnuc-split
+2026-11-07T09:50:37Z	93f8cbc5	d32cepyc138	64	1	calc	1.19	61.5	10899.8	330	HTCondor slot, request_cpus=8; GUI off; binary: feature/upgrade 93f8cbc5 (before the split)
+2026-11-07T09:51:57Z	93f8cbc5	d32cepyc138	64	1	fit200	80.10	240.0	691.608	330	HTCondor slot, request_cpus=8; GUI off; binary: feature/upgrade 93f8cbc5 (before the split)
+2026-11-07T09:51:58Z	93f8cbc5	d32cepyc138	64	8	calc	0.41	61.5	10899.8	330	HTCondor slot, request_cpus=8; GUI off; binary: feature/upgrade 93f8cbc5 (before the split)
+2026-11-07T09:52:34Z	93f8cbc5	d32cepyc138	64	8	fit200	36.28	486.2	691.608	330	HTCondor slot, request_cpus=8; GUI off; binary: feature/upgrade 93f8cbc5 (before the split)

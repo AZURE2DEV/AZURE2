@@ -5,7 +5,9 @@ An R-matrix calculation is made for a stated set of partitions, channels and lev
 and parity with their reduced width amplitudes as contiguous arrays. Every later stage of `physics/` (channel
 functions, level parameters, collision matrix, observables; `ARCHITECTURE.md` §3) reads them and writes nothing back.
 This page states what each entry is, in which unit, and how the entries are indexed. At present the engine still
-computes from `CNuc`; the System is built from a loaded `CNuc` and compared with it, number for number.
+computes from `CNuc`; the System is built from a loaded `CNuc` and compared with it, number for number. Its structure
+(partitions, channels, blocks without levels; `CNucSystemContent::Structure`) is what `CNuc` hands to
+`level_parameters` for the boundary values and the parameter transformations (`cnuc_split.md`).
 
 ## 1. Partitions
 

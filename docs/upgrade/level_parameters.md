@@ -8,8 +8,10 @@ amplitudes, coupled in some angular-momentum scheme with some phase convention. 
 with constant boundary values B_c, Lane–Thomas phases, channel-spin coupling s = j₁ + j₂ (light particle first),
 J = s + l (`docs/source/theory/conventions.rst`). It is the only place in the code where a conversion between bases or
 conventions happens (`RULES.md` §1.6). This page gives the equations of each conversion, their validity, the
-tolerances, and what each test would detect. At present nothing in the engine calls the code: the engine still
-transforms with `CNuc`, and the tests compare the two.
+tolerances, and what each test would detect. The engine calls it: `CNuc::CalcBoundaryConditions`, `CNuc::TransformIn`
+and the formal → Brune iteration of `CNuc::TransformOut` delegate to these functions (`cnuc_split.md`); the
+convention conversions (section 5) are not used by the engine yet, which reads no convention record. The `CNuc.cpp`
+line numbers below are those of e54e6fcc, the code these functions were checked against before the move.
 
 ## 1. Symbols
 
@@ -89,8 +91,10 @@ k(λ), the rank of Ẽ_λ among the block's energies (`formal_from_brune`, `CNuc
 definite; otherwise no formal parameters with constant B_c exist and the function throws, as the engine stops.
 Distinct Ẽ_λ are required.
 
-The overall sign of each formal level's amplitude vector is the eigenvector's, which the eigenproblem leaves free; the
-engine takes GSL's, this code fixes each eigenvector's largest component positive (`SymmetricEigen.h`). Observables
+The overall sign of each formal level's amplitude vector is the eigenvector's, which the eigenproblem leaves free.
+`SymmetricEigen.h` fixes each eigenvector's largest component positive; GSL makes another choice. The eigensolver is an
+option of `formal_from_brune` and `brune_from_formal` (`GeneralizedEigenSolver`, `FormalToBruneOptions::solver`); the
+engine passes GSL's, so its formal parameters keep GSL's signs (`cnuc_split.md` section 4). Observables
 are even in that sign (γ^T A γ is invariant). The rule "largest |γ_λc| of a level positive" (the proposal of
 `conventions.rst`) is `FormalSignRule::LargestPositive`, off by default.
 

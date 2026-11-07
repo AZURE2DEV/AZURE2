@@ -12,14 +12,16 @@
 #include "CNuc.h"
 #include <mutex>
 #include <exception>
+#include <stdexcept>
 #ifdef _OPENMP
 #include <omp.h>
 #endif
 #include "ParameterLabel.h"
 #include "Config.h"
 #include "ChannelFunc.h"
+#include "CNucLevelParameters.h"
+#include "CNucSystem.h"
 #include "CoulFunc.h"
-#include "EigenFunc.h"
 #include "ECIntegral.h"
 #include "CoulFuncCache.h"
 #include "GSLException.h"
@@ -1177,434 +1179,218 @@ void CNuc::PrintCompoundFromParams() {
   }
 }
 
-/*!
- * The rank of each entry of `energies` in ascending order (ties keep their
- * file order), so that `energies[i]` is the `rank[i]`-th smallest.  Used to hand
- * the ascending eigenvalues of the parameter transformations to the levels by
- * energy rather than by their position in the file.
- */
-
-static std::vector<int> AscendingRanks(const vector_r &energies) {
-  std::vector<int> order(energies.size());
-  for (int i = 0; i < (int)order.size(); i++) order[i] = i;
-  std::stable_sort(order.begin(), order.end(), [&](int a, int b) { return energies[a] < energies[b]; });
-  std::vector<int> rank(energies.size());
-  for (int k = 0; k < (int)order.size(); k++) rank[order[k]] = k;
-  return rank;
-}
+namespace phys = azure2::physics;
 
 /*!
- * Performs the initial parameter transformations from physical to formal parameters.
+ * Performs the initial parameter transformations from physical to formal parameters: the observed widths, ANCs and
+ * amplitudes of the levels become Brune's (or Park's) reduced width amplitudes, the external-capture amplitude is
+ * subtracted from the photon channels, and, with the Brune parametrization off, the levels become formal ones.  The
+ * arithmetic is physics/ level_parameters' (docs/upgrade/level_parameters.md sections 2-4), with the engine's channel
+ * functions (ChannelFunctionsFromCNuc) and, for the formal parameters, GSL's eigensolver (docs/upgrade/cnuc_split.md
+ * section 4).  This function words the warnings and keeps the bound-state normalization of external capture.
  */
 
 bool CNuc::TransformIn(const Config &configure) {
   transformedIn_ = true;
   transformError_.clear();
-  // Park (2021): the fit parameter is the observed reduced width amplitude,
-  // Gamma = 2 P gamma^2 (Eqs. 31-33), so the 1 - sum gamma^2 dS/dE factor that
-  // turns an observed width into Brune's reduced width is not applied.  It is
-  // still accumulated, because it is Park's J (Eq. 28) and must stay positive.
+  // Park (2021): the fit parameter is the observed reduced width amplitude, Gamma = 2 P gamma^2 (Eqs. 31-33), so the
+  // factor that turns an observed width into Brune's reduced width is not applied; its J (Eq. 28) must stay positive.
   const bool park = (configure.paramMask & Config::USE_PARK_FORMALISM);
-  for (int j = 1; j <= this->NumJGroups(); j++) {
-    JGroup *theJGroup = this->GetJGroup(j);
-    if (theJGroup->IsInRMatrix()) {
-      for (int la = 1; la <= theJGroup->NumLevels(); la++) {
+  const bool formal = !(configure.paramMask & Config::USE_BRUNE_FORMALISM);
+  try {
+    const CNucSystem structure = BuildSystemFromCNuc(*this, configure, CNucSystemContent::Structure);
+    const phys::System &system = structure.system;
+    const CNucSystemMap &map = structure.map;
+    // Pass 1 reads P_c and dS_c/dE, pass 2 (formal parameters) S_c, in the engine's order E - e - S.
+    const phys::ChannelFunctions widths =
+        ChannelFunctionsFromCNuc(*this, map, configure, ChannelEnergyOrder::ExcitationFirst, ChannelQuantities::WidthFactors);
+    const phys::ChannelFunctions shifts =
+        ChannelFunctionsFromCNuc(*this, map, configure, ChannelEnergyOrder::ExcitationFirst, ChannelQuantities::Shift);
+
+    // 1. Observed widths, ANCs and amplitudes -> Brune or Park amplitudes (Eqs. 2.1-2.3).
+    for (std::size_t b = 0; b < system.num_blocks(); b++) {
+      const int j = map.groupOfBlock[b];
+      JGroup *theJGroup = this->GetJGroup(j);
+      const std::vector<int> &levels = map.levelOfBlockLevel[b];
+      const std::size_t nc = theJGroup->NumChannels();
+      const phys::ProjectLevels in = ProjectLevelsFromCNuc(*this, map, b);
+      const phys::BasisAmplitudes amp = phys::amplitudes_from_observed(
+          system, b, phys::internal_channels(system, b), in, park ? phys::LevelBasis::Park : phys::LevelBasis::Brune, widths);
+      for (std::size_t lb = 0; lb < levels.size(); lb++) {
+        const int la = levels[lb];
         ALevel *theLevel = theJGroup->GetLevel(la);
-        if (theLevel->IsInRMatrix()) {
-          vector_r tempGammas;
-          std::vector<bool> isNegative;
-          std::vector<bool> passThrough;
-          vector_r penes;
-          double denom = 2.0;
-          // channels whose input is already a reduced width amplitude
-          // drop out of denom but their gamma^2 dS/dE still renormalizes
-          // the physical-width channels of the same level
-          // (gamma_b^2 = (Gamma_b/P_b)*numer/denom)
-          double numer = 1.0;
-          // Per-channel share of denom, for the diagnostic below: the term
-          // Gamma_c (dS_c/dE) / P_c that each physical-width particle channel
-          // subtracts from 2, with its P_c and dS_c/dE.
-          struct DenomTerm {
-            int ch;
-            double term, pene, dShift;
-          };
-          std::vector<DenomTerm> denomTerms;
-          for (int ch = 1; ch <= theJGroup->NumChannels(); ch++) {
-            AChannel *theChannel = theJGroup->GetChannel(ch);
-            double localEnergy = theLevel->GetE() - this->GetPair(theChannel->GetPairNum())->GetExE() - this->GetPair(theChannel->GetPairNum())->GetSepE();
-            double radius = this->GetPair(theChannel->GetPairNum())->GetChRad();
-            if (theChannel->GetRadType() != 'P' && theLevel->GammaIsRWA(ch))
+        for (std::size_t k = 0; k < nc; k++) {
+          const int ch = (int)k + 1;
+          AChannel *theChannel = theJGroup->GetChannel(ch);
+          const double input = in.value[lb * nc + k];
+          switch (amp.notes[lb * nc + k]) {
+            case phys::ColumnNote::None: break;
+            case phys::ColumnNote::AmplitudeFlagIgnored:
               configure.outStream << "WARNING: Reduced width amplitude input flag is only "
                                   << "supported for particle channels; ignored for J = "
                                   << theJGroup->GetJ() << " E = " << theLevel->GetE()
                                   << " MeV channel " << ch << "." << std::endl;
-            if (theChannel->GetRadType() == 'P') {
-              if (theLevel->GammaIsRWA(ch)) {
-                if (theLevel->GetGamma(ch) < 0.0)
-                  isNegative.push_back(true);
-                else
-                  isNegative.push_back(false);
-                tempGammas.push_back(fabs(theLevel->GetGamma(ch)));
-                penes.push_back(1.0);
-                passThrough.push_back(true);
-                double gammaSq = pow(theLevel->GetGamma(ch), 2.0);
-                numer += gammaSq * ChannelFunc(this->GetPair(theChannel->GetPairNum()), !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC))
-                                       .ShiftDerivative(theChannel->GetL(), localEnergy);
-              } else if (localEnergy > 0.0) {
-                if (theLevel->GetGamma(ch) < 0.0)
-                  isNegative.push_back(true);
-                else
-                  isNegative.push_back(false);
-                tempGammas.push_back(fabs(theLevel->GetGamma(ch)) / 1e6);
-                ChannelFunc channelFunc(this->GetPair(theChannel->GetPairNum()), !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
-                double tempPene = channelFunc.Penetrability(theChannel->GetL(), localEnergy);
-                double dShift = channelFunc.ShiftDerivative(theChannel->GetL(), localEnergy);
-                if (!(tempPene > 0.0)) {
-                  // Just above a Coulomb threshold P = 0 in double precision
-                  // (ChannelFunc): no reduced width gives an observed width
-                  // there, and Gamma/P is not a number.  The channel gets
-                  // gamma = 0 (exact for an input of 0).
-                  if (tempGammas[ch - 1] != 0.0)
-                    configure.outStream << "**WARNING: " << AZURELabel::Level(theJGroup, theLevel, j, la)
-                                        << ", " << AZURELabel::Channel(this, theJGroup, ch)
-                                        << ": the level is " << localEnergy
-                                        << " MeV above the channel threshold, where P = 0 in double precision, "
-                                        << "so its observed width of " << theLevel->GetGamma(ch)
-                                        << " eV cannot be converted; the reduced width is set to 0. "
-                                        << "Give a reduced-width amplitude (gammaIsRWA) for a level at threshold."
-                                        << std::endl;
-                  tempGammas[ch - 1] = 0.0;
-                  tempPene = 1.0;
-                } else {
-                  denom -= tempGammas[ch - 1] / tempPene * dShift;
-                  denomTerms.push_back(DenomTerm{ch, tempGammas[ch - 1] / tempPene * dShift, tempPene, dShift});
-                }
-                penes.push_back(tempPene);
-                passThrough.push_back(false);
-              } else {
-                if (theLevel->GetGamma(ch) < 0.0)
-                  isNegative.push_back(true);
-                else
-                  isNegative.push_back(false);
-                tempGammas.push_back(pow(theLevel->GetGamma(ch), 2.0));
-                if (localEnergy == 0.0) {
-                  // Exactly at threshold the ANC is not defined (W_l -> 0 for a
-                  // charged pair, and the conversion below would call the
-                  // Whittaker function at zero binding): gamma = 0, the limit
-                  // of a finite ANC just below threshold.
-                  if (tempGammas[ch - 1] != 0.0)
-                    configure.outStream << "**WARNING: " << AZURELabel::Level(theJGroup, theLevel, j, la)
-                                        << ", " << AZURELabel::Channel(this, theJGroup, ch)
-                                        << ": the level sits exactly at the channel threshold, where an ANC "
-                                        << "does not define a reduced width; the reduced width is set to 0. "
-                                        << "Give a reduced-width amplitude (gammaIsRWA) for a level at threshold."
-                                        << std::endl;
-                  tempGammas[ch - 1] = 0.0;
-                  penes.push_back(1.0);
-                  passThrough.push_back(false);
-                  continue;
-                }
-                WhitFunc newWhitFunc(this->GetPair(theChannel->GetPairNum()));
-                double whitConv = newWhitFunc(theChannel->GetL(), radius, fabs(localEnergy));
-                double tempPene = this->GetPair(theChannel->GetPairNum())->GetRedMass() * radius * uconv /
-                    pow(hbarc, 2.0) / pow(whitConv, 2.0);
-                double dShift = ChannelFunc(this->GetPair(theChannel->GetPairNum()), !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC))
-                                    .ShiftDerivative(theChannel->GetL(), localEnergy);
-                denom -= tempGammas[ch - 1] / tempPene * dShift;
-                denomTerms.push_back(DenomTerm{ch, tempGammas[ch - 1] / tempPene * dShift, tempPene, dShift});
-                penes.push_back(tempPene);
-                passThrough.push_back(false);
-              }
-            } else if (theChannel->GetRadType() == 'E' || theChannel->GetRadType() == 'M') {
-              if (fabs(theLevel->GetE() - this->GetPair(theChannel->GetPairNum())->GetHeavyExE()) < 1.e-3 &&
-                  theJGroup->GetJ() == this->GetPair(theChannel->GetPairNum())->GetJ(2) &&
-                  theJGroup->GetPi() == this->GetPair(theChannel->GetPairNum())->GetPi(2)) {
-                int tempSign;
-                if (theLevel->GetGamma(ch) < 0)
-                  tempSign = -1;
-                else
-                  tempSign = 1;
-                double jValue = theJGroup->GetJ();
-                if (int(2. * jValue) % 2 != 0) tempSign = -tempSign;
-                double tempPene = 1e-10;
-                double tempGamma = theLevel->GetGamma(ch);
-                if (theChannel->GetRadType() == 'M' && theChannel->GetL() == 1) {
-                  tempPene = 3.0 * jValue / 4.0 / (jValue + 1.) / nuclearMagneton / nuclearMagneton;
-                } else if (theChannel->GetRadType() == 'E' && theChannel->GetL() == 2) {
-                  tempPene = 60.0 * jValue * (2. * jValue - 1.) / (jValue + 1.) / (2. * jValue + 3.);
-                  tempGamma = tempGamma * 100 * sqrt(fstruc * hbarc);
-                }
-                tempGammas.push_back(pow(tempGamma, 2.0));
-                penes.push_back(tempPene);
-                if (tempSign < 0)
-                  isNegative.push_back(true);
-                else
-                  isNegative.push_back(false);
-                passThrough.push_back(false);
-              } else {
-                if (theLevel->GetGamma(ch) < 0.0)
-                  isNegative.push_back(true);
-                else
-                  isNegative.push_back(false);
-                tempGammas.push_back(fabs(theLevel->GetGamma(ch)) / 1e6);
-                double tempPene = (configure.paramMask & Config::USE_RMC_FORMALISM) ? 1.0 : pow(fabs(localEnergy) / hbarc, 2.0 * theChannel->GetL() + 1);
-                if (tempPene < 1e-16) tempPene = 1e-16;
-                penes.push_back(tempPene);
-                passThrough.push_back(false);
-              }
-            } else if (theChannel->GetRadType() == 'F' || theChannel->GetRadType() == 'G') {
-              if (theLevel->GetGamma(ch) < 0.0)
-                isNegative.push_back(true);
-              else
-                isNegative.push_back(false);
-              tempGammas.push_back(fabs(theLevel->GetGamma(ch)));
-              penes.push_back(1.0);
-              passThrough.push_back(false);
+              break;
+            case phys::ColumnNote::ZeroPenetrability: {
+              PPair *pair = this->GetPair(theChannel->GetPairNum());
+              configure.outStream << "**WARNING: " << AZURELabel::Level(theJGroup, theLevel, j, la)
+                                  << ", " << AZURELabel::Channel(this, theJGroup, ch)
+                                  << ": the level is " << theLevel->GetE() - pair->GetExE() - pair->GetSepE()
+                                  << " MeV above the channel threshold, where P = 0 in double precision, "
+                                  << "so its observed width of " << input
+                                  << " eV cannot be converted; the reduced width is set to 0. "
+                                  << "Give a reduced-width amplitude (gammaIsRWA) for a level at threshold."
+                                  << std::endl;
+              break;
             }
+            case phys::ColumnNote::AtThreshold:
+              configure.outStream << "**WARNING: " << AZURELabel::Level(theJGroup, theLevel, j, la)
+                                  << ", " << AZURELabel::Channel(this, theJGroup, ch)
+                                  << ": the level sits exactly at the channel threshold, where an ANC "
+                                  << "does not define a reduced width; the reduced width is set to 0. "
+                                  << "Give a reduced-width amplitude (gammaIsRWA) for a level at threshold."
+                                  << std::endl;
+              break;
           }
-          // Park's J_lambda,lambda = 1 - sum_c gamma_c^2 dS_c/dE over every particle
-          // channel.  An amplitude-input channel (gammaIsRWA) holds Brune's
-          // amplitude in either mode, so that a file means the same model in
-          // both; its Park amplitude is gamma sqrt(J).  With the observed-width
-          // channels contributing denom / 2 = 1 - sum Gamma dS/dE / (2 P) and
-          // the amplitude-input ones J (numer - 1), J = denom / 2 - J (numer - 1),
-          // i.e. J = denom / (2 numer): Brune's 1 / (1 + sum gamma^2 dS/dE).
-          const double parkNorm = denom / (2.0 * numer);
-          if (park && parkNorm <= 0.) {
-            // In Brune's parametrization this limit is only reached for an
-            // infinite reduced width; in Park's it is an ordinary point of
-            // the parameter space, with nothing in the level matrix to stop it.
-            configure.outStream << "**WARNING: Park norm J = 1 - sum gamma^2 dS/dE = " << parkNorm
-                                << " is not positive" << std::endl
-                                << "    " << AZURELabel::Level(theJGroup, theLevel, j, la) << std::endl
-                                << "  The widths of this level exceed what the channel radii allow; no"
-                                << std::endl
-                                << "  standard R-matrix (real reduced widths) corresponds to it."
-                                << std::endl;
-          } else if (!park && denom < 0.) {
-            // An observed width Gamma_c = 2 P_c gamma_c^2 / (1 + sum gamma^2 dS/dE)
-            // saturates at 2 P_c / (dS_c/dE) as gamma_c -> infinity, so the
-            // input is out of reach of any reduced width when
-            //   1 - sum_c Gamma_c (dS_c/dE) / (2 P_c) = denom / 2 < 0.
-            // That is a property of the input, not of the transformation --
-            // but the usual cause is input in the wrong units (a reduced-width
-            // amplitude read as a width), so name the channel and the numbers.
-            configure.outStream << "**WARNING: Denominator less than zero while transforming"
-                                << std::endl
-                                << "    " << AZURELabel::Level(theJGroup, theLevel, j, la) << std::endl
-                                << "  No reduced width reproduces these observed widths: "
-                                << "1 - sum_c Gamma_c (dS_c/dE)/(2 P_c) = " << denom / 2.0 << " < 0."
-                                << std::endl;
-            const DenomTerm *worst = nullptr;
-            for (const DenomTerm &t : denomTerms)
-              if (!worst || t.term > worst->term) worst = &t;
-            if (worst) {
-              AChannel *wc = theJGroup->GetChannel(worst->ch);
-              bool bound = theLevel->GetE() - this->GetPair(wc->GetPairNum())->GetExE() -
-                      this->GetPair(wc->GetPairNum())->GetSepE() <= 0.0;
-              configure.outStream << "  Largest term: " << AZURELabel::Channel(this, theJGroup, worst->ch)
-                                  << (bound ? " (bound; ANC input)" : "")
-                                  << ": input " << theLevel->GetGamma(worst->ch)
-                                  << (bound ? " fm^(-1/2)" : " eV")
-                                  << ", P = " << worst->pene << ", dS/dE = " << worst->dShift
-                                  << " MeV^-1, Gamma (dS/dE)/(2P) = " << worst->term / 2.0 << "." << std::endl;
-              if (!bound && worst->dShift > 0.0)
-                configure.outStream << "  Even alone, this channel's observed width saturates at 2P/(dS/dE) = "
-                                    << 2.0 * worst->pene / worst->dShift * 1e6 << " eV." << std::endl;
-            }
-            // Orders of magnitude over the limit is the signature of a unit
-            // mistake; a sum just past 1 is a level broader than its channels
-            // allow at these radii.
-            if (-denom / 2.0 > 100.0)
-              configure.outStream << "  So large an excess usually means wrong units: widths in eV (ANCs in fm^-1/2), "
-                                  << "not reduced-width amplitudes -- pyazr's calculate() and calculate_energies() "
-                                  << "take physical values, calculate_rwa() amplitudes." << std::endl;
-            else
-              configure.outStream << "  The level is broader than its channels allow at these radii: "
-                                  << "reduce the widths or enlarge the channel radii." << std::endl;
-            configure.outStream << "  The transformation may not have been successful for this level."
-                                << std::endl;
-          }
-          // parkNorm is Park's J_lambda,lambda (above).  The bound-state
-          // normalization is defined with Brune's reduced widths
-          // gamma_obs^2 / J, so with Park's amplitudes it becomes
-          // 1 / sqrt(J + sum_c A_c gamma_obs^2) -- see CalcShiftFunctions.
-          // Park's amplitudes are the observed ones: no Brune renormalization.
-          if (park) {
-            theLevel->SetParkNorm(parkNorm);
-            denom = 2.0;
-            numer = 1.0;
-          }
-          double nFSum = park ? parkNorm : 1.0;
-          for (int ch = 1; ch <= theJGroup->NumChannels(); ch++) {
-            AChannel *theChannel = theJGroup->GetChannel(ch);
-            if (theChannel->GetRadType() != 'F' && theChannel->GetRadType() != 'G') {
-              if (!passThrough[ch - 1])
-                tempGammas[ch - 1] = sqrt(fabs(tempGammas[ch - 1] / penes[ch - 1] * numer / denom));
-              else if (park)
-                // Brune's amplitude as read -> Park's (see parkNorm above).
-                tempGammas[ch - 1] *= sqrt(fabs(parkNorm));
-            } else if (park)
-              // The input beta-decay feeding amplitude is Brune's.  It rescales
-              // with the basis state like every other amplitude of the level,
-              // B_Park = sqrt(J) B_Brune.
-              tempGammas[ch - 1] *= sqrt(fabs(parkNorm));
-            if (isNegative[ch - 1]) tempGammas[ch - 1] = -tempGammas[ch - 1];
-            theLevel->SetGamma(ch, tempGammas[ch - 1]);
-            if (ch <= theLevel->NumNFIntegrals()) nFSum += 2.0 *
-                this->GetPair(theChannel->GetPairNum())->GetChRad() *
-                this->GetPair(theChannel->GetPairNum())->GetRedMass() *
-                uconv / pow(hbarc, 2.0) * pow(tempGammas[ch - 1], 2.0) * theLevel->GetNFIntegral(ch);
-          }
-          theLevel->SetSqrtNFFactor(1.0 / sqrt(nFSum));
         }
+        const double parkNorm = amp.park_norm[lb];
+        const double halfDenom = amp.half_denominator[lb];
+        if (park && parkNorm <= 0.) {
+          // In Brune's parametrization this limit is only reached for an infinite reduced width; in Park's it is an
+          // ordinary point of the parameter space, with nothing in the level matrix to stop it.
+          configure.outStream << "**WARNING: Park norm J = 1 - sum gamma^2 dS/dE = " << parkNorm
+                              << " is not positive" << std::endl
+                              << "    " << AZURELabel::Level(theJGroup, theLevel, j, la) << std::endl
+                              << "  The widths of this level exceed what the channel radii allow; no"
+                              << std::endl
+                              << "  standard R-matrix (real reduced widths) corresponds to it."
+                              << std::endl;
+        } else if (!park && halfDenom < 0.) {
+          // An observed width Gamma_c = 2 P_c gamma_c^2 / (1 + sum gamma^2 dS/dE) saturates at 2 P_c / (dS_c/dE) as
+          // gamma_c -> infinity, so the input is out of reach of any reduced width when
+          // 1 - sum_c Gamma_c (dS_c/dE) / (2 P_c) < 0.  The usual cause is input in the wrong units (a reduced-width
+          // amplitude read as a width), so name the channel and the numbers.
+          configure.outStream << "**WARNING: Denominator less than zero while transforming"
+                              << std::endl
+                              << "    " << AZURELabel::Level(theJGroup, theLevel, j, la) << std::endl
+                              << "  No reduced width reproduces these observed widths: "
+                              << "1 - sum_c Gamma_c (dS_c/dE)/(2 P_c) = " << halfDenom << " < 0."
+                              << std::endl;
+          int worst = 0;  // channel number of the largest term, first of equal ones
+          for (std::size_t k = 0; k < nc; k++) {
+            const phys::DenominatorTerm &t = amp.denominator_terms[lb * nc + k];
+            if (t.present && (worst == 0 || t.term > amp.denominator_terms[lb * nc + worst - 1].term)) worst = (int)k + 1;
+          }
+          if (worst > 0) {
+            const phys::DenominatorTerm &t = amp.denominator_terms[lb * nc + worst - 1];
+            AChannel *wc = theJGroup->GetChannel(worst);
+            bool bound = theLevel->GetE() - this->GetPair(wc->GetPairNum())->GetExE() -
+                    this->GetPair(wc->GetPairNum())->GetSepE() <= 0.0;
+            configure.outStream << "  Largest term: " << AZURELabel::Channel(this, theJGroup, worst)
+                                << (bound ? " (bound; ANC input)" : "")
+                                << ": input " << in.value[lb * nc + worst - 1]
+                                << (bound ? " fm^(-1/2)" : " eV")
+                                << ", P = " << t.P << ", dS/dE = " << t.dS_dE
+                                << " MeV^-1, Gamma (dS/dE)/(2P) = " << t.term / 2.0 << "." << std::endl;
+            if (!bound && t.dS_dE > 0.0)
+              configure.outStream << "  Even alone, this channel's observed width saturates at 2P/(dS/dE) = "
+                                  << 2.0 * t.P / t.dS_dE * 1e6 << " eV." << std::endl;
+          }
+          // Orders of magnitude over the limit is the signature of a unit mistake; a sum just past 1 is a level
+          // broader than its channels allow at these radii.
+          if (-halfDenom > 100.0)
+            configure.outStream << "  So large an excess usually means wrong units: widths in eV (ANCs in fm^-1/2), "
+                                << "not reduced-width amplitudes -- pyazr's calculate() and calculate_energies() "
+                                << "take physical values, calculate_rwa() amplitudes." << std::endl;
+          else
+            configure.outStream << "  The level is broader than its channels allow at these radii: "
+                                << "reduce the widths or enlarge the channel radii." << std::endl;
+          configure.outStream << "  The transformation may not have been successful for this level."
+                              << std::endl;
+        }
+        // The bound-state normalization of an external-capture final state is defined with Brune's reduced widths
+        // gamma_obs^2 / J, so with Park's amplitudes it becomes 1 / sqrt(J + sum_c A_c gamma_obs^2) (see
+        // CalcShiftFunctions).
+        if (park) theLevel->SetParkNorm(parkNorm);
+        double nFSum = park ? parkNorm : 1.0;
+        for (std::size_t k = 0; k < nc; k++) {
+          const int ch = (int)k + 1;
+          AChannel *theChannel = theJGroup->GetChannel(ch);
+          const double gamma = amp.gamma[lb * nc + k];
+          theLevel->SetGamma(ch, gamma);
+          if (ch <= theLevel->NumNFIntegrals()) nFSum += 2.0 *
+              this->GetPair(theChannel->GetPairNum())->GetChRad() *
+              this->GetPair(theChannel->GetPairNum())->GetRedMass() *
+              uconv / pow(hbarc, 2.0) * pow(gamma, 2.0) * theLevel->GetNFIntegral(ch);
+        }
+        theLevel->SetSqrtNFFactor(1.0 / sqrt(nFSum));
       }
     }
-  }
-  for (int j = 1; j <= this->NumJGroups(); j++) {
-    JGroup *theJGroup = this->GetJGroup(j);
-    if (theJGroup->IsInRMatrix()) {
-      std::vector<int> levelKeys;
-      vector_r tempEnergies;
-      matrix_r tempGammas;
-      matrix_r shifts;
-      for (int la = 1; la <= theJGroup->NumLevels(); la++) {
-        ALevel *theLevel = theJGroup->GetLevel(la);
-        if (theLevel->IsInRMatrix()) {
-          levelKeys.push_back(la);
-          tempEnergies.push_back(theLevel->GetE());
-          vector_r tempChanVector;
-          tempGammas.push_back(tempChanVector);
-          shifts.push_back(tempChanVector);
-          for (int ch = 1; ch <= theJGroup->NumChannels(); ch++) {
-            AChannel *theChannel = theJGroup->GetChannel(ch);
-            double localEnergy = theLevel->GetE() - this->GetPair(theChannel->GetPairNum())->GetExE() - this->GetPair(theChannel->GetPairNum())->GetSepE();
-            double radius = this->GetPair(theChannel->GetPairNum())->GetChRad();
-            if (theChannel->GetRadType() == 'P') {
-              tempGammas[levelKeys.size() - 1].push_back(theLevel->GetGamma(ch));
-              shifts[levelKeys.size() - 1].push_back(
-                  ChannelFunc(this->GetPair(theChannel->GetPairNum()), !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC))
-                      .Shift(theChannel->GetL(), localEnergy));
-            } else {
-              tempGammas[levelKeys.size() - 1].push_back(theLevel->GetGamma(ch));
-              if ((theChannel->GetRadType() == 'E' || theChannel->GetRadType() == 'M') &&
-                  (configure.paramMask & Config::USE_EXTERNAL_CAPTURE) &&
-                  !(fabs(theLevel->GetGamma(ch)) < 1.0e-8 &&
-                    (configure.paramMask & Config::IGNORE_ZERO_WIDTHS))) {
-                complex externalWidth =
-                    CalcExternalWidth(theJGroup, theLevel, theChannel, true, configure);
-                if (pow(tempGammas[levelKeys.size() - 1][ch - 1], 2.0) >= pow(imag(externalWidth), 2.0)) {
-                  if (tempGammas[levelKeys.size() - 1][ch - 1] < 0.0)
-                    tempGammas[levelKeys.size() - 1][ch - 1] = -sqrt(pow(tempGammas[levelKeys.size() - 1][ch - 1], 2.0) -
-                                                                     pow(imag(externalWidth), 2.0)) -
-                        real(externalWidth);
-                  else
-                    tempGammas[levelKeys.size() - 1][ch - 1] = sqrt(pow(tempGammas[levelKeys.size() - 1][ch - 1], 2.0) -
-                                                                    pow(imag(externalWidth), 2.0)) -
-                        real(externalWidth);
-                } else {
-                  configure.outStream << "**WARNING: Imaginary portion of the external width is greater "
-                                      << "than the total width" << std::endl
-                                      << "    "
-                                      << AZURELabel::LevelAndChannel(this, theJGroup, theLevel, j, la, ch)
-                                      << std::endl
-                                      << "    [j=" << j << " la=" << la << " ch=" << ch << "]"
-                                      << std::endl;
-                  tempGammas[levelKeys.size() - 1][ch - 1] = -real(externalWidth);
-                }
-              }
-              // A radiative or beta channel has no shift function.  This entry
-              // exists only to keep `shifts` indexed by channel number, and
-              // every reader of it is guarded by RadType == 'P', so the value
-              // is never used.  It used to copy channel 1's shift, which read
-              // off the end of an empty vector whenever channel 1 was itself
-              // not a particle channel -- a segfault on a file whose <levels>
-              // simply lists its photon channel first.
-              shifts[levelKeys.size() - 1].push_back(0.0);
-            }
-          }
-        }
+
+    // 2. Group by group: external capture subtracted from the photon amplitudes (Eq. 3.2), then, without the Brune
+    // parametrization, the formal parameters (Eq. 4.1).  The groups are made formal one after the other, so the
+    // external capture of a later group sees the formal parameters of a final state in an earlier one
+    // (level_parameters.md section 6).
+    const bool ignoreZero = !!(configure.paramMask & Config::IGNORE_ZERO_WIDTHS);
+    for (std::size_t b = 0; b < system.num_blocks(); b++) {
+      const int j = map.groupOfBlock[b];
+      JGroup *theJGroup = this->GetJGroup(j);
+      const std::vector<int> &levels = map.levelOfBlockLevel[b];
+      const std::size_t nc = theJGroup->NumChannels();
+      std::vector<double> E, gamma;
+      for (int la : levels) {
+        E.push_back(theJGroup->GetLevel(la)->GetE());
+        for (std::size_t k = 0; k < nc; k++) gamma.push_back(theJGroup->GetLevel(la)->GetGamma((int)k + 1));
       }
-      // A hard-sphere group (includeAllJPi) has channels but no levels: there
-      // is nothing to transform, and a 0 x 0 eigenproblem would hand GSL a
-      // null workspace (a segfault on opening a pyazr session, whose default
-      // is the transform route).
-      if (!(configure.paramMask & Config::USE_BRUNE_FORMALISM) && !tempEnergies.empty()) {
-        matrix_r nMatrix;
-        matrix_r mMatrix;
-        for (int mu = 0; mu < tempEnergies.size(); mu++) {
-          vector_r tempLevelVector;
-          nMatrix.push_back(tempLevelVector);
-          mMatrix.push_back(tempLevelVector);
-          for (int la = 0; la < tempEnergies.size(); la++) {
-            if (la == mu) {
-              mMatrix[mu].push_back(1.0);
-              double sum = tempEnergies[la];
-              for (int ch = 1; ch <= theJGroup->NumChannels(); ch++) {
-                if (theJGroup->GetChannel(ch)->GetRadType() == 'P')
-                  sum += (shifts[la][ch - 1] - theJGroup->GetChannel(ch)->GetBoundaryCondition()) *
-                      pow(tempGammas[la][ch - 1], 2.0);
-              }
-              nMatrix[mu].push_back(sum);
-            } else {
-              double mSum = 0.0;
-              double nSum = 0.0;
-              for (int ch = 1; ch <= theJGroup->NumChannels(); ch++) {
-                if (theJGroup->GetChannel(ch)->GetRadType() == 'P') {
-                  mSum += (shifts[mu][ch - 1] - shifts[la][ch - 1]) / (tempEnergies[mu] - tempEnergies[la]) *
-                      tempGammas[la][ch - 1] * tempGammas[mu][ch - 1];
-                  nSum += ((tempEnergies[mu] * shifts[la][ch - 1] - tempEnergies[la] * shifts[mu][ch - 1]) /
-                               (tempEnergies[mu] - tempEnergies[la]) -
-                           theJGroup->GetChannel(ch)->GetBoundaryCondition()) *
-                      tempGammas[la][ch - 1] * tempGammas[mu][ch - 1];
-                }
-              }
-              mMatrix[mu].push_back(-mSum);
-              nMatrix[mu].push_back(nSum);
-            }
-          }
-        }
-        // solve eigenvalue problem.  The eigenvalues come back in ascending
-        // order, so they are handed to the levels by the rank of their
-        // physical energy, not by their position in the file: a level listed
-        // first (a background pole, say) keeps its own energy, widths and fix
-        // flags.  TransformOut uses the same rank mapping in the other direction.
-        EigenFunc eigenFunc(nMatrix, mMatrix);
-        if (!eigenFunc.ok()) {
+      const std::vector<phys::ExternalWidth> ext = ExternalWidthsFromCNuc(*this, map, b, configure);
+      std::vector<std::string> warnings;
+      std::vector<std::size_t> exceeded;
+      phys::subtract_external_capture(system, b, gamma, ext, ignoreZero, warnings, &exceeded);
+      for (std::size_t i : exceeded) {
+        const int la = levels[i / nc], ch = (int)(i % nc) + 1;
+        configure.outStream << "**WARNING: Imaginary portion of the external width is greater "
+                            << "than the total width" << std::endl
+                            << "    "
+                            << AZURELabel::LevelAndChannel(this, theJGroup, theJGroup->GetLevel(la), j, la, ch)
+                            << std::endl
+                            << "    [j=" << j << " la=" << la << " ch=" << ch << "]"
+                            << std::endl;
+      }
+      // A hard-sphere group (includeAllJPi) has channels but no levels: nothing to transform.
+      if (formal && !E.empty()) {
+        std::vector<double> B(nc);
+        for (std::size_t k = 0; k < nc; k++) B[k] = theJGroup->GetChannel((int)k + 1)->GetBoundaryCondition();
+        phys::LevelSet f;
+        try {
+          // Each level keeps its position and receives the eigenvalue of the rank of its Brune energy, so a level
+          // listed first (a background pole, say) keeps its own energy, widths and fix flags.  TransformOut uses the
+          // same rank mapping in the other direction.
+          f = phys::formal_from_brune(system, b, E, gamma, B, shifts, phys::FormalSignRule::AsComputed, GslGeneralizedEigen);
+        } catch (const std::domain_error &) {
           // N a = E M a has a real solution only for a positive-definite M (Brune, PRC 66, 044611 (2002)); M is
-          // 1 - sum_c gamma gamma' dS_c/dE, so widths too large for the channel radii make it indefinite.  Before
-          // 2026-11-01 the unset eigenvalues were used (formal energies ~1e-320): NaN, and a crash in TransformOut
-          // ("z is not finite in log_Gamma", tests/7Li_p_ay with --no-brune).
+          // 1 - sum_c gamma gamma' dS_c/dE, so widths too large for the channel radii make it indefinite.
           std::ostringstream msg;
           msg << "No standard R-matrix (constant boundary conditions) corresponds to the levels of J^pi = "
               << theJGroup->GetJ() << (theJGroup->GetPi() > 0 ? "+" : "-")
               << ": the observed widths are too large for the channel radii (the matrix 1 - sum gamma gamma' dS/dE "
               << "of the transformation is not positive definite).  Use the Brune parametrization (the default; "
               << "drop --no-brune) or smaller widths for these levels:";
-          for (int la : levelKeys)
+          for (int la : levels)
             msg << std::endl
                 << "    " << AZURELabel::Level(theJGroup, theJGroup->GetLevel(la), j, la);
           transformError_ = msg.str();
           return false;
         }
-        const std::vector<int> rank = AscendingRanks(tempEnergies);
-        for (int la = 0; la < tempEnergies.size(); la++) {
-          const int k = rank[la];
-          theJGroup->GetLevel(levelKeys[la])->SetE(eigenFunc.eigenvalues()[k]);
-          for (int ch = 1; ch <= theJGroup->NumChannels(); ch++) {
-            double sum = 0.0;
-            for (int mu = 0; mu < tempEnergies.size(); mu++) {
-              sum += eigenFunc.eigenvectors()[mu][k] * tempGammas[mu][ch - 1];
-            }
-            theJGroup->GetLevel(levelKeys[la])->SetGamma(ch, sum);
-          }
-        }
-      } else {
-        for (int la = 0; la < tempEnergies.size(); la++)
-          for (int ch = 1; ch <= theJGroup->NumChannels(); ch++)
-            theJGroup->GetLevel(levelKeys[la])->SetGamma(ch, tempGammas[la][ch - 1]);
+        E.swap(f.E);
+        gamma.swap(f.gamma);
+        for (std::size_t lb = 0; lb < levels.size(); lb++) theJGroup->GetLevel(levels[lb])->SetE(E[lb]);
       }
+      for (std::size_t lb = 0; lb < levels.size(); lb++)
+        for (std::size_t k = 0; k < nc; k++) theJGroup->GetLevel(levels[lb])->SetGamma((int)k + 1, gamma[lb * nc + k]);
     }
+  } catch (const std::exception &e) {
+    transformError_ = std::string("Parameter transformation: ") + e.what();
+    return false;
   }
   return true;
 }
@@ -1973,32 +1759,28 @@ void CNuc::PrintPathways(const Config &configure) {
  */
 
 void CNuc::CalcBoundaryConditions(const Config &configure) {
-  for (int j = 1; j <= this->NumJGroups(); j++) {
-    if (this->GetJGroup(j)->IsInRMatrix()) {
-      JGroup *theJGroup = this->GetJGroup(j);
-      if (theJGroup->NumLevels() == 0) {
-        // A hard-sphere group: with no levels its R-matrix is zero and the boundary condition drops out
-        // of the collision matrix, so any value serves. Zero keeps the Lo matrix finite.
-        for (int ch = 1; ch <= theJGroup->NumChannels(); ch++) theJGroup->GetChannel(ch)->SetBoundaryCondition(0.0);
-        continue;
-      }
-      ALevel *firstLevel = theJGroup->GetLevel(1);
-      if (firstLevel->IsInRMatrix()) {
-        for (int ch = 1; ch <= theJGroup->NumChannels(); ch++) {
-          AChannel *theChannel = theJGroup->GetChannel(ch);
-          PPair *thePair = this->GetPair(theChannel->GetPairNum());
-          if (thePair->GetPType() == 0) {
-            int lValue = theChannel->GetL();
-            double levelEnergy = firstLevel->GetE();
-            double resonanceEnergy = levelEnergy - (thePair->GetSepE() + thePair->GetExE());
-            theChannel->SetBoundaryCondition(ChannelFunc(thePair, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC)).Shift(lValue, resonanceEnergy));
-          } else {
-            double boundary = theJGroup->GetChannel(1)->GetBoundaryCondition();
-            theChannel->SetBoundaryCondition(boundary);
-          }
-        }
-      }
+  // B_c = S_c(E of the group's first R-matrix level) for every particle channel; a non-particle channel copies channel
+  // 1's value (it never enters the level matrix); a group without R-matrix levels gets 0, where B_c drops out of the
+  // collision matrix (physics/ boundary_values, docs/upgrade/level_parameters.md Eq. 3.1).
+  try {
+    const CNucSystem structure = BuildSystemFromCNuc(*this, configure, CNucSystemContent::Structure);
+    const azure2::physics::ChannelFunctions cf =
+        ChannelFunctionsFromCNuc(*this, structure.map, configure, ChannelEnergyOrder::SumFirst, ChannelQuantities::Shift);
+    for (std::size_t b = 0; b < structure.system.num_blocks(); b++) {
+      JGroup *theJGroup = this->GetJGroup(structure.map.groupOfBlock[b]);
+      std::vector<double> energies;
+      for (int la : structure.map.levelOfBlockLevel[b]) energies.push_back(theJGroup->GetLevel(la)->GetE());
+      const std::vector<double> B = azure2::physics::boundary_values(structure.system, b, energies,
+                                                                     azure2::physics::BoundaryRule::FirstListedLevel, cf);
+      const std::vector<int> &channels = structure.map.channelOfBlockChannel[b];
+      for (std::size_t k = 0; k < channels.size(); k++) theJGroup->GetChannel(channels[k])->SetBoundaryCondition(B[k]);
     }
+  } catch (const GSLException &) {
+    throw;
+  } catch (const std::exception &e) {
+    // The System refuses what it cannot represent (a spin that is not a multiple of 1/2, an unknown pair type):
+    // stop as for any other failure of the initialization.
+    throw GSLException(std::string("Boundary conditions: ") + e.what());
   }
 }
 
@@ -2561,180 +2343,81 @@ void CNuc::TransformOut(const Config &configure) {
       }
   }
   if (!(configure.paramMask & Config::USE_BRUNE_FORMALISM)) {
-    int maxIterations = 1000;
-    double energyTolerance = 1e-6;
-    for (int j = 1; j <= this->NumJGroups(); j++) {
+    // Formal -> Brune by the fixed-point iteration of physics/ brune_from_formal (level_parameters.md section 4), on
+    // the fit values, with GSL's eigensolver (cnuc_split.md section 4).  A level not in the R-matrix keeps its values.
+    phys::FormalToBruneOptions options;  // the engine's 1e-6 MeV and 1000 iterations
+    options.solver = GslSymmetricEigen;
+    for (int j = 1; j <= this->NumJGroups(); j++)
       for (int la = 1; la <= this->GetJGroup(j)->NumLevels(); la++) {
         ALevel *theLevel = this->GetJGroup(j)->GetLevel(la);
-        if (theLevel->IsInRMatrix()) {
-          int iteration = 1;
-          int thisLevel = 0;
-          bool done = false;
-          vector_r tempE;
-          vector_r tempBoundary;
-          matrix_r tempGamma;
-          for (int lap = 1; lap <= this->GetJGroup(j)->NumLevels(); lap++) {
-            if (this->GetJGroup(j)->GetLevel(lap)->IsInRMatrix()) {
-              tempE.push_back(this->GetJGroup(j)->GetLevel(lap)->GetFitE());
-              // The iteration below re-sorts the energies ascending at every
-              // step, so this level is followed by the rank of its formal
-              // energy among the group's, the inverse of the mapping in
-              // TransformIn (not by its position in the file).
-              if (this->GetJGroup(j)->GetLevel(lap) == theLevel) thisLevel = tempE.size() - 1;
-              vector_r tempChanVector;
-              tempGamma.push_back(tempChanVector);
-              for (int ch = 1; ch <= this->GetJGroup(j)->NumChannels(); ch++) {
-                tempGamma[tempE.size() - 1].push_back(this->GetJGroup(j)->GetLevel(lap)->GetFitGamma(ch));
-                if (tempE.size() == 1) tempBoundary.push_back(this->GetJGroup(j)->GetChannel(ch)->GetBoundaryCondition());
-              }
+        if (theLevel->IsInRMatrix() && this->GetJGroup(j)->IsInRMatrix()) continue;
+        theLevel->SetTransformE(theLevel->GetFitE());
+        theLevel->SetTransformIterations(0);
+        for (int ch = 1; ch <= this->GetJGroup(j)->NumChannels(); ch++)
+          theLevel->SetTransformGamma(ch, theLevel->GetFitGamma(ch));
+      }
+    const CNucSystem structure = BuildSystemFromCNuc(*this, configure, CNucSystemContent::Structure);
+    const phys::ChannelFunctions cf =
+        ChannelFunctionsFromCNuc(*this, structure.map, configure, ChannelEnergyOrder::SeparationFirst,
+                                 ChannelQuantities::Shift);
+    for (std::size_t b = 0; b < structure.system.num_blocks(); b++) {
+      const int j = structure.map.groupOfBlock[b];
+      JGroup *theJGroup = this->GetJGroup(j);
+      const std::vector<int> &levels = structure.map.levelOfBlockLevel[b];
+      const std::size_t nc = theJGroup->NumChannels();
+      std::vector<double> E, gamma, B(nc);
+      for (int la : levels) {
+        E.push_back(theJGroup->GetLevel(la)->GetFitE());
+        for (std::size_t k = 0; k < nc; k++) gamma.push_back(theJGroup->GetLevel(la)->GetFitGamma((int)k + 1));
+      }
+      for (std::size_t k = 0; k < nc; k++) B[k] = theJGroup->GetChannel((int)k + 1)->GetBoundaryCondition();
+      const phys::LevelSet out = phys::brune_from_formal(structure.system, b, E, gamma, B, cf, options);
+      for (std::size_t lb = 0; lb < levels.size(); lb++) {
+        const int la = levels[lb];
+        ALevel *theLevel = theJGroup->GetLevel(la);
+        if (out.status[lb] == phys::LevelSet::Status::EigenFailed) {
+          configure.outStream << "**WARNING: Could not transform level (eigenvalue problem failed)" << std::endl
+                              << "    " << AZURELabel::Level(theJGroup, theLevel, j, la) << std::endl
+                              << "  The input energy and widths are kept for this level; its "
+                              << "transformed values are unreliable." << std::endl;
+        } else if (out.status[lb] == phys::LevelSet::Status::NotConverged) {
+          // The iteration chases the energy eigenvalue while each channel's boundary condition moves with it, so the
+          // channel whose boundary condition is still shifting most is the one holding up convergence -- name it,
+          // since that is the width to look at.
+          int worstChannel = 0;
+          double worstDiff = 0.0;
+          for (std::size_t k = 0; k < nc; k++)
+            if (std::fabs(out.boundary_shift[lb * nc + k]) >= worstDiff) {
+              worstDiff = std::fabs(out.boundary_shift[lb * nc + k]);
+              worstChannel = (int)k + 1;
             }
-          }
-          {
-            // Put the group's levels in ascending formal energy (the order the
-            // eigen solver returns them in), so that tempE[thisLevel] is this
-            // level's own energy from the first iteration on.  For a file that
-            // lists its levels in energy order this is the identity.
-            const std::vector<int> rank = AscendingRanks(tempE);
-            vector_r sortedE(tempE.size());
-            matrix_r sortedGamma(tempE.size());
-            for (int i = 0; i < (int)tempE.size(); i++) {
-              sortedE[rank[i]] = tempE[i];
-              sortedGamma[rank[i]] = tempGamma[i];
-            }
-            thisLevel = rank[thisLevel];
-            tempE.swap(sortedE);
-            tempGamma.swap(sortedGamma);
-          }
-          while (iteration <= maxIterations && !done) {
-            vector_r boundaryDiff;
-            for (int ch = 1; ch <= this->GetJGroup(j)->NumChannels(); ch++) {
-              double newBoundary = 0.0;
-              AChannel *theChannel = this->GetJGroup(j)->GetChannel(ch);
-              PPair *exitPair = this->GetPair(theChannel->GetPairNum());
-              double localEnergy = tempE[thisLevel] - exitPair->GetSepE() - exitPair->GetExE();
-              if (theChannel->GetRadType() == 'P') {
-                newBoundary = ChannelFunc(exitPair, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC)).Shift(theChannel->GetL(), localEnergy);
-                boundaryDiff.push_back(newBoundary - tempBoundary[ch - 1]);
-                tempBoundary[ch - 1] = newBoundary;
-              } else {
-                // Same as in TransformIn: a non-particle channel has no
-                // boundary condition, the entry only keeps `boundaryDiff`
-                // indexed by channel, and every reader is guarded by
-                // RadType == 'P'.  Copying channel 1's value read off the end
-                // of an empty vector when channel 1 was not a particle
-                // channel.  Reached only with the Brune formalism off, which
-                // is why it has not been seen.
-                boundaryDiff.push_back(0.0);
-              }
-            }
-            matrix_r cMatrix;
-            for (int mu = 0; mu < tempE.size(); mu++) {
-              vector_r tempRow;
-              cMatrix.push_back(tempRow);
-              for (int mup = 0; mup < tempE.size(); mup++) {
-                double chanSum = 0.0;
-                for (int ch = 1; ch <= this->GetJGroup(j)->NumChannels(); ch++) {
-                  if (this->GetJGroup(j)->GetChannel(ch)->GetRadType() == 'P')
-                    chanSum += boundaryDiff[ch - 1] * tempGamma[mu][ch - 1] *
-                        tempGamma[mup][ch - 1];
-                }
-                if (mu == mup)
-                  cMatrix[mu].push_back(tempE[mu] - chanSum);
-                else
-                  cMatrix[mu].push_back(-chanSum);
-              }
-            }
-            EigenFunc eigenFunc(cMatrix);
-            if (!eigenFunc.ok()) {
-              // As for a level that does not converge (below): keep the input values, say so.
-              configure.outStream << "**WARNING: Could not transform level (eigenvalue problem failed)" << std::endl
-                                  << "    " << AZURELabel::Level(this->GetJGroup(j), theLevel, j, la) << std::endl
-                                  << "  The input energy and widths are kept for this level; its "
-                                  << "transformed values are unreliable." << std::endl;
-              tempE[thisLevel] = theLevel->GetFitE();
-              for (int ch = 1; ch <= this->GetJGroup(j)->NumChannels(); ch++)
-                tempGamma[thisLevel][ch - 1] = theLevel->GetFitGamma(ch);
-              break;
-            }
-            if (fabs(eigenFunc.eigenvalues()[thisLevel] - tempE[thisLevel]) <= energyTolerance)
-              done = true;
-            matrix_r newGamma;
-            for (int mu = 0; mu < tempE.size(); mu++) {
-              vector_r tempChanVector;
-              newGamma.push_back(tempChanVector);
-              for (int ch = 1; ch <= this->GetJGroup(j)->NumChannels(); ch++) {
-                double gammaSum = 0.0;
-                for (int mup = 0; mup < tempE.size(); mup++) {
-                  gammaSum += eigenFunc.eigenvectors()[mup][mu] * tempGamma[mup][ch - 1];
-                }
-                newGamma[mu].push_back(gammaSum);
-              }
-            }
-            for (int mu = 0; mu < tempE.size(); mu++) {
-              tempE[mu] = eigenFunc.eigenvalues()[mu];
-              for (int ch = 1; ch <= this->GetJGroup(j)->NumChannels(); ch++) {
-                tempGamma[mu][ch - 1] = newGamma[mu][ch - 1];
-              }
-            }
-            if (!done) {
-              if (iteration == maxIterations) {
-                // The iteration chases the energy eigenvalue while each channel's
-                // boundary condition moves with it, so the channel whose boundary
-                // condition is still shifting most is the one holding up
-                // convergence -- name it, since that is the width to look at.
-                int worstChannel = 0;
-                double worstDiff = 0.0;
-                for (int ch = 1; ch <= (int)boundaryDiff.size(); ch++) {
-                  if (fabs(boundaryDiff[ch - 1]) >= worstDiff) {
-                    worstDiff = fabs(boundaryDiff[ch - 1]);
-                    worstChannel = ch;
-                  }
-                }
-
-                configure.outStream << "**WARNING: Could not transform level after "
-                                    << maxIterations << " iterations" << std::endl
-                                    << "    "
-                                    << AZURELabel::Level(this->GetJGroup(j), theLevel, j, la)
-                                    << std::endl
-                                    << "  Energy residual "
-                                    << fabs(eigenFunc.eigenvalues()[thisLevel] - tempE[thisLevel])
-                                    << " MeV, tolerance " << energyTolerance << " MeV."
-                                    << std::endl;
-                if (worstChannel > 0)
-                  configure.outStream << "  Least converged channel (largest boundary-condition shift, "
-                                      << worstDiff << "):" << std::endl
-                                      << "    "
-                                      << AZURELabel::Channel(this, this->GetJGroup(j), worstChannel)
-                                      << std::endl;
-                configure.outStream << "  The input energy and widths are kept for this level; its "
-                                    << "transformed values are unreliable." << std::endl;
-                tempE[thisLevel] = theLevel->GetFitE();
-                for (int ch = 1; ch <= this->GetJGroup(j)->NumChannels(); ch++)
-                  tempGamma[thisLevel][ch - 1] = theLevel->GetFitGamma(ch);
-              }
-              iteration++;
-            }
-          }
-
-          theLevel->SetTransformE(tempE[thisLevel]);
-          theLevel->SetTransformIterations(iteration);
-          double nFSum = 1.0;
-          for (int ch = 1; ch <= this->GetJGroup(j)->NumChannels(); ch++) {
-            AChannel *theChannel = this->GetJGroup(j)->GetChannel(ch);
-            theLevel->SetTransformGamma(ch, tempGamma[thisLevel][ch - 1]);
-            if (ch <= theLevel->NumNFIntegrals()) nFSum += 2.0 *
-                this->GetPair(theChannel->GetPairNum())->GetChRad() *
-                this->GetPair(theChannel->GetPairNum())->GetRedMass() *
-                uconv / pow(hbarc, 2.0) * pow(tempGamma[thisLevel][ch - 1], 2.0) *
-                theLevel->GetNFIntegral(ch);
-          }
-          theLevel->SetSqrtNFFactor(1.0 / sqrt(nFSum));
-        } else {
-          theLevel->SetTransformE(theLevel->GetFitE());
-          theLevel->SetTransformIterations(0);
-          for (int ch = 1; ch <= this->GetJGroup(j)->NumChannels(); ch++)
-            theLevel->SetTransformGamma(ch, theLevel->GetFitGamma(ch));
+          configure.outStream << "**WARNING: Could not transform level after "
+                              << options.max_iterations << " iterations" << std::endl
+                              << "    " << AZURELabel::Level(theJGroup, theLevel, j, la) << std::endl
+                              << "  Energy residual " << out.residual_MeV[lb]
+                              << " MeV, tolerance " << options.energy_tolerance_MeV << " MeV." << std::endl;
+          if (worstChannel > 0)
+            configure.outStream << "  Least converged channel (largest boundary-condition shift, "
+                                << worstDiff << "):" << std::endl
+                                << "    " << AZURELabel::Channel(this, theJGroup, worstChannel) << std::endl;
+          configure.outStream << "  The input energy and widths are kept for this level; its "
+                              << "transformed values are unreliable." << std::endl;
         }
+        theLevel->SetTransformE(out.E[lb]);
+        theLevel->SetTransformIterations(out.iterations[lb]);
+        double nFSum = 1.0;
+        for (std::size_t k = 0; k < nc; k++) {
+          const int ch = (int)k + 1;
+          AChannel *theChannel = theJGroup->GetChannel(ch);
+          const double g = out.gamma[lb * nc + k];
+          theLevel->SetTransformGamma(ch, g);
+          if (ch <= theLevel->NumNFIntegrals()) nFSum += 2.0 *
+              this->GetPair(theChannel->GetPairNum())->GetChRad() *
+              this->GetPair(theChannel->GetPairNum())->GetRedMass() *
+              uconv / pow(hbarc, 2.0) * pow(g, 2.0) *
+              theLevel->GetNFIntegral(ch);
+        }
+        theLevel->SetSqrtNFFactor(1.0 / sqrt(nFSum));
       }
     }
   } else {

@@ -36,14 +36,14 @@ A particle channel is :math:`c = (\alpha, l, s)`, coupled as
    |(j_1 j_2) s\,\nu\rangle = \sum_{m_1 m_2} (j_1 m_1\, j_2 m_2 | s\,\nu)\,|j_1 m_1\rangle |j_2 m_2\rangle ,
 
 with :math:`s` running from :math:`|j_1 - j_2|` to :math:`j_1 + j_2`
-(``CNuc.cpp:1654``, ``PolarizationFunc.cpp:50-59``).
+(``CNuc.cpp:1440``, ``PolarizationFunc.cpp:50-59``).
 
 - **Channel spin, light particle first.** The engine couples particle 1 first.
   This is the order of LT Sec. III.2a, which the code quotes
   (``PolarizationFunc.cpp:333-343``; ``ParticleCG``, lines 21-38). The same
   order enters the M1 spin operator of external capture
   (``ECIntegral.cpp:436-452``) and the secondary-:math:`\gamma` (UPOS)
-  coefficients (``CNuc.cpp:2136-2155``, whose comment records that Eq. (22) of
+  coefficients (``CNuc.cpp:1918-1937``, whose comment records that Eq. (22) of
   Brune and deBoer, PRC 102, 024628 (2020), as printed, couples the heavy
   particle first). Coupling the other way multiplies every amplitude of
   channel spin :math:`s` by :math:`(-1)^{j_1+j_2-s}`.
@@ -138,7 +138,8 @@ In the standard (``--no-brune``) parametrization, every particle channel of a
    B_c = S_c(E_1),
 
 where :math:`E_1` is the energy of the **first level listed** in the file for
-that :math:`J^\pi` (``CNuc.cpp:1975-2003``). A group without levels has
+that :math:`J^\pi` that is an R-matrix level (``boundary_values``,
+``physics/src/LevelParameters.cpp:305-324``, called by ``CNuc::CalcBoundaryConditions``). A group without levels has
 :math:`B_c = 0`, which then has no effect on the result. Observables do not
 depend on :math:`B_c` as long as the transformation of the parameters
 (below) is exact. The formal parameters do depend on :math:`B_c`, so they
@@ -168,7 +169,8 @@ Park's overlap :math:`J` (lines 294-301 and 313-317).
 
 Which basis the numbers in ``<levels>`` belong to is set on the command line
 (:doc:`../reference/command_line`). The conversion at start-up is
-``CNuc::TransformIn`` (``CNuc.cpp:1200-1614``). For the Brune basis (the
+``CNuc::TransformIn``, which calls ``level_parameters``
+(``physics/src/LevelParameters.cpp``; ``docs/upgrade/level_parameters.md``). For the Brune basis (the
 default) it is
 
 .. math::
@@ -181,7 +183,7 @@ default) it is
    \qquad
    \operatorname{sign}\tilde\gamma_{\lambda c} = \operatorname{sign}\Gamma_{\lambda c}
 
-(``CNuc.cpp:1242-1452``). Here :math:`\Gamma_{\lambda c}` is the signed
+(``amplitudes_from_observed``, ``LevelParameters.cpp:103-242``). Here :math:`\Gamma_{\lambda c}` is the signed
 input (eV; the code divides it by :math:`10^6` to MeV), :math:`S' = dS/dE` (MeV\ :sup:`-1`), the
 sums run over particle channels only, and "rwa" denotes the channels flagged
 ``gammaIsRWA`` (``input_is_rwa`` in the API's parameter records). The input of
@@ -194,29 +196,30 @@ with its sign.
   channel). The input is a signed ANC :math:`C` (fm\ :sup:`-1/2`). In
   Eq. :eq:`conv-brune` it is converted with
   :math:`|\Gamma|/(2P) \to \hbar^2 C^2 W_l^2(2\kappa a)/(2\mu a)`
-  (``CNuc.cpp:1284-1317``). The sign of :math:`C` becomes the sign of
+  (``LevelParameters.cpp:161-176``). The sign of :math:`C` becomes the sign of
   :math:`\tilde\gamma`.
 - **Photon channel.** The input is a signed :math:`\Gamma_\gamma` (eV), with
   :math:`P = (E_\gamma/\hbar c)^{2L+1}` and the same particle-channel factor
-  of Eq. :eq:`conv-brune` (``CNuc.cpp:1344-1354``). When external capture is
+  of Eq. :eq:`conv-brune` (``LevelParameters.cpp:178-198``). When external capture is
   on, the input is the total amplitude: the internal amplitude is
   :math:`\gamma^{\rm int} = \operatorname{sign}(\Gamma)\,[\tilde\gamma^2 -
   (\mathrm{Im}\,\gamma^{\rm ext})^2]^{1/2} - \mathrm{Re}\,\gamma^{\rm ext}`
-  (lines 1490-1515), with :math:`\gamma^{\rm ext}` from
-  ``CNuc::CalcExternalWidth`` (lines 3513-3593).
+  (``subtract_external_capture``, ``LevelParameters.cpp:328-352``), with :math:`\gamma^{\rm ext}` from
+  ``CNuc::CalcExternalWidth`` (``CNuc.cpp:3196-3278``).
 - **Static moments.** A photon channel of a level at the energy and
   :math:`J^\pi` of the final state carries a static moment (M1 or E2 only):
   a penetrability factor of its own applies (:math:`3J/[4(J+1)\mu_N^2]` for
   M1), and the sign is reversed for half-integer :math:`J`
-  (``CNuc.cpp:1319-1343``).
+  (``LevelParameters.cpp:185-195``).
 - **β-decay channels** (F, GT). The input is the amplitude itself.
 - **Park basis** (``--use-park``). The amplitudes are the observed ones,
   :math:`\Gamma = 2P\gamma^2`. The same sign rule applies; a ``gammaIsRWA``
   input is read as Brune's amplitude and multiplied by :math:`\sqrt{J}`
-  (lines 1433-1452).
+  (``LevelParameters.cpp:210-240``).
 - **Formal basis** (``--no-brune``). The Brune amplitudes are transformed to
   formal ones by the generalized eigenproblem :math:`N a = E M a` of Brune,
-  PRC 66, 044611 (2002) (lines 1532-1601). GSL fixes the sign of each
+  PRC 66, 044611 (2002) (``formal_from_brune``, ``LevelParameters.cpp:356-434``; the
+  engine passes GSL's eigensolver). GSL fixes the sign of each
   eigenvector, so the overall sign of a formal level's amplitude vector is
   arbitrary. The relative signs of the channels of one level are preserved,
   and observables are even in the overall sign of a level
@@ -228,7 +231,7 @@ with its sign.
 
 On output (``CNuc::TransformOut``) the reported width carries the sign of the
 amplitude, and for photon channels with external capture the sign of the real
-part of the total amplitude (``CNuc.cpp:2800-2816``).
+part of the total amplitude (``CNuc.cpp:2483-2499``).
 
 Collision matrix and T-matrix
 -----------------------------
@@ -372,7 +375,7 @@ where the inner sum adds internal and external amplitudes with the same
 :math:`\sigma_{\rm tot} = (\pi/k^2)\,g_I\sum (2J+1)\,2\,\mathrm{Re}\,T_{cc}`
 (lines 103-123).
 
-Angular distributions (Blatt–Biedenharn; ``CNuc.cpp:2051-2200``,
+Angular distributions (Blatt–Biedenharn; ``CNuc.cpp:1833-1982``,
 ``GenMatrixFunc.cpp:261-426``):
 
 .. math::
@@ -394,11 +397,11 @@ for a particle exit pair. For a photon exit,
 \,W(L_1J_1L_2J_2; j_fL)`, where :math:`j_f` is the final spin. The orders
 allowed are those with :math:`l_1+l_2+L` even and
 :math:`l'_1+l'_2+w_1+w_2+L` even, where :math:`w = 1` for E and 0 for M and
-particle exits (lines 2121-2134). Angular-distribution segments report
+particle exits (``CNuc.cpp:1903-1916``). Angular-distribution segments report
 :math:`a_k` in :math:`d\sigma/d\Omega = (\sigma/4\pi)[1+\sum_k a_kP_k]`
 (``GenMatrixFunc.cpp:427-438``). Secondary-γ (UPOS) coefficients follow Brune
 and deBoer (2020) Eq. (22) in the coupling order of Eq. :eq:`conv-coupling`
-(``CNuc.cpp:2136-2155``).
+(``CNuc.cpp:1918-1937``).
 
 Elastic scattering adds the Coulomb amplitude and its interference
 (``EPoint.cpp:1890-1934``, ``GenMatrixFunc.cpp:439-516``):
@@ -429,7 +432,7 @@ Reversing the interference term changes the cross section by 7–74 % on that
 grid.
 
 **Identical particles.** Channels with :math:`l + s` odd are refused for
-pairs with spin and warned about for spin 0 (``CNuc.cpp:669-726, 945-978``).
+pairs with spin and warned about for spin 0 (``CNuc.cpp:671-728, 947-980``).
 In elastic scattering the nuclear term is multiplied by 4 and the
 interference by 2. The Coulomb amplitude of channel spin :math:`s` is
 :math:`C_\alpha(\theta) + (-1)^s C_\alpha(\pi-\theta)`; for spin-0 bosons it

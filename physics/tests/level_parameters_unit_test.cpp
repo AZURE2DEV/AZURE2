@@ -363,6 +363,80 @@ int main() {
     check("LS heavy-first on the incomplete block: no gap", recoupling_gaps(lack, 0, heavy, project_channels(lack, 0, heavy)).empty());
   }
 
+  std::printf("6. diagnostics for callers; the eigensolver option\n");
+  {
+    // No amplitude-input column, so N = 1 and Park's J = D/2 for every level (Eq. 2.3).
+    double worst = 0.0;
+    bool layout = brune.half_denominator.size() == nl && brune.denominator_terms.size() == nl * nc;
+    for (std::size_t l = 0; l < nl && layout; l++) {
+      worst = std::fmax(worst, std::fabs(brune.half_denominator[l] - brune.park_norm[l]));
+      double sum = 0.0;
+      for (std::size_t k = 0; k < nc; k++) {
+        const DenominatorTerm &t = brune.denominator_terms[l * nc + k];
+        layout = layout && t.present == (k < 3) && brune.notes[l * nc + k] == ColumnNote::None;
+        if (t.present) {
+          sum += t.term;
+          layout = layout && t.P > 0.0;
+        }
+      }
+      worst = std::fmax(worst, std::fabs(brune.half_denominator[l] - (1.0 - sum / 2.0)));
+    }
+    check("denominator terms: particle width and ANC columns only, no notes", layout);
+    report("D/2 = 1 - sum of the terms / 2 = Park's J (no amplitude input)", worst, 1e-15);
+    ProjectLevels flagged = obs;
+    flagged.is_amplitude.assign(observed.size(), 0);
+    flagged.is_amplitude[3] = 1;  // the M1 column of level 18.15
+    const BasisAmplitudes f = amplitudes_from_observed(sys, 0, own, flagged, LevelBasis::Brune, cf);
+    check("amplitude flag on a photon column: noted and read as a width",
+          f.notes[3] == ColumnNote::AmplitudeFlagIgnored && f.gamma == brune.gamma && f.warnings.size() == 1);
+
+    FormalToBruneOptions one;
+    one.energy_tolerance_MeV = 1e-13;
+    one.max_iterations = 1;
+    const LevelSet stuck = brune_from_formal(sys, 0, formal.E, formal.gamma, B, cf, one);
+    // Level 0 is the first listed one, where B_c = S_c(E): its formal and Brune energies coincide, the first
+    // iteration moves nothing and it converges at once.  The other two stop after one iteration.
+    bool kept = stuck.status[0] == LevelSet::Status::Converged && stuck.residual_MeV[0] == 0.0, shifts = true;
+    for (std::size_t l = 1; l < nl; l++)
+      kept = kept && stuck.status[l] == LevelSet::Status::NotConverged && stuck.residual_MeV[l] > 1e-13 &&
+          stuck.E[l] == formal.E[l];
+    for (std::size_t l = 0; l < nl; l++)
+      for (std::size_t k = 0; k < nc; k++)
+        shifts = shifts && ((l > 0 && k < 3) == (stuck.boundary_shift[l * nc + k] != 0.0));
+    check("not converged: status, step > tolerance, formal values kept (levels 1, 2; level 0 converged)", kept);
+    check("boundary shifts of the last iteration: particle channels of the moving levels only", shifts);
+    const LevelSet b3 = brune_from_formal(sys, 0, formal.E, formal.gamma, B, cf);
+    bool converged = true;
+    for (std::size_t l = 0; l < nl; l++) converged = converged && b3.status[l] == LevelSet::Status::Converged;
+    check("converged levels report Converged", converged);
+
+    int calls = 0;
+    const GeneralizedEigenSolver counting = [&](const std::vector<double> &N, const std::vector<double> &M, std::size_t n) {
+      calls++;
+      return generalized_symmetric_eigen(N, M, n);
+    };
+    const LevelSet viaOption = formal_from_brune(sys, 0, E, brune.gamma, B, cf, FormalSignRule::AsComputed, counting);
+    check("solver option: called once, same result bit for bit", calls == 1 && viaOption.E == formal.E && viaOption.gamma == formal.gamma);
+    const GeneralizedEigenSolver failing = [](const std::vector<double> &, const std::vector<double> &, std::size_t) {
+      return EigenResult();
+    };
+    bool threw = false;
+    try {
+      formal_from_brune(sys, 0, E, brune.gamma, B, cf, FormalSignRule::AsComputed, failing);
+    } catch (const std::domain_error &) {
+      threw = true;
+    }
+    check("solver option: a failed solve is refused (domain_error)", threw);
+    FormalToBruneOptions viaSym;
+    int symCalls = 0;
+    viaSym.solver = [&](const std::vector<double> &A, std::size_t n) {
+      symCalls++;
+      return symmetric_eigen(A, n);
+    };
+    const LevelSet b4 = brune_from_formal(sys, 0, formal.E, formal.gamma, B, cf, viaSym);
+    check("symmetric solver option: used, same result bit for bit", symCalls > 0 && b4.E == b3.E && b4.gamma == b3.gamma);
+  }
+
   std::printf("%s: %ld checks, %d failure(s)\n", failures ? "FAIL" : "PASS", checks, failures);
   return failures ? 1 : 0;
 }
