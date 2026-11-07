@@ -2,6 +2,45 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-07 (`feature/upgrade-1-cnuc-split`) — split `CNuc`, step 1: the engine calls `level_parameters`
+
+Branch `feature/upgrade-1-cnuc-split` from `feature/upgrade` 93f8cbc5, not merged. Commits: the plan
+(`cnuc_split.md`, alone), the physics diagnostics and eigensolver option, the adapters, then one commit per moved
+function (`CalcBoundaryConditions`, `TransformIn`, `TransformOut`'s formal iteration), the docs, this entry.
+
+**State.** `cnuc_split.md` classifies all CNuc members (nucleus data, physics functions, parsing, reporting,
+parameter vector), states the interface of each target part, and orders the moves (steps 1, 1b, 2–7). Step 1 is done:
+B_c, observed → Brune/Park amplitudes, the external-capture subtraction, Brune → formal (GSL's eigensolver passed as
+an option) and the formal → Brune iteration of `parameters.out` are `level_parameters`' code; the old bodies are
+deleted (`CNuc.cpp` 3628 → 3311 lines). `CNuc` keeps the wording of its warnings, Park's J on the level and N_f^½.
+
+**Evidence.** Engine before (93f8cbc5) vs after, all 179 `.azr` under `tests/` (T1–T3 included) × Brune, `--no-brune`,
+`--use-park`: 1503 output files byte-identical; logs identical except `screening_6li` (`--no-brune`), whose warning now
+gives the last energy step (118.45, 40.9187, 85.4476 MeV) instead of 0. With the own eigensolver the formal basis
+would change 53 files (698 sign flips in `param.par`, observables ≤ 2.2e-11), so it stays on GSL until step 1b.
+GUI off, Condor: no warnings; `check.sh` PASS; `ctest -LE slow` 106/107 (`adaptive_grid_reference`, decision 8);
+`run_tests.sh` 132/132 (GUI on earlier: 131/132, `shared_point_tables` (d), see Found). T2 bench same host: fit200 79.32 vs 80.10 s (1 thread), 36.16 vs 36.28 s (8); calc 1.17
+vs 1.19 s, 0.42 vs 0.41 s; no slowdown beyond one 10 ms tick.
+
+**Found.** (1) The Coulomb memo matches energies within 1e-12 MeV, so the engine's numbers depend on the order of
+its Coulomb-function calls at 1e-13; with the three orders of E_c (E − e − S, E − (S + e), E − S − e) this decided
+bit-identity (`cnuc_split.md` §5). The adapter reproduces each caller's order and call sequence. (2) A group whose first
+listed level is not an R-matrix level had B_c uninitialized; it now takes the first R-matrix level (none in tests/).
+(3) `tests/shared_point_tables` (d) peak-RSS ratio sits at 2.9–3.0 against its limit 3.0 for both engines: it failed
+once in `run_tests.sh` (GUI build) and once in 3 repeats of the new GUI-off engine (316 > 315 MB), the old engine
+passed 3/3 at 305–311 MB; same RSS ranges, so a flaky margin, not this change.
+
+**Open (proposed default in brackets).**
+- The adapter options `ChannelEnergyOrder` and `ChannelQuantities` exist only to reproduce the memo history. [Keep
+  until step 3; or drop them in step 1b, whose formal re-baseline could absorb a 1e-13 change of the other bases too —
+  director's choice.]
+- The FACTOR 3.0 of `shared_point_tables` (d) has no margin. [Measure the ratio on 10 runs and set the limit with a
+  written reason, separate commit.]
+- `CNuc::TransformOut`'s observed widths, `GetTransformParams`, `PrintTransformParams`, `CheckRadiativeWidths` still
+  each convert γ → Γ. [Step 2: one observed-width function with γ^ext.]
+
+**Next.** Step 1b (decision 10 on, own eigensolvers, GSL adapters deleted, formal goldens re-baselined), then step 2.
+
 ## 2026-11-07 (`feature/upgrade-1-level-parameters`) — `Convention` record and `level_parameters` (Phase 1, code part)
 
 Branch `feature/upgrade-1-level-parameters` from `feature/upgrade` e54e6fcc, not merged. Commits: the record

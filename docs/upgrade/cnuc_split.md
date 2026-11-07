@@ -96,12 +96,55 @@ reports read one function's output.
 `DoubleFactorial` is declared in `CNuc.h` but defined in `src/DoubleFactorial.cpp` and not used by `CNuc`; its
 declaration moves with its users (`ECIntegral`, `EffectiveCharge`).
 
+### 2.6 GUI callers
+
+The Qt GUI is removed from the upgrade (HANDOFF decision 3). Its calls into `CNuc` (`gui/src/AZURESetup.cpp`,
+`AZUREMCMCThread.cpp`, `MCMCTab.cpp`, `ThmDiagnostics.cpp`; `tests/gui/`) go with it and constrain no move. No member is
+used only by `gui/`, so none is classified "GUI, to be deleted"; `RatePairsProblem` and `Fill` keep their CLI and API
+callers.
+
+### 2.7 Interfaces of the target parts
+
+Each part below is self-contained: it receives the System (or arrays from it) and plain arrays in physical units, and
+returns arrays; it reads no other part's state. `CNuc` reaches them only through the two adapters, whose reach into
+`CNuc` is fixed here.
+
+| part (module) | inputs | outputs | callers |
+|---|---|---|---|
+| `System` (`physics/`) | partitions α (Z, mass in u, 2j, π, g, e₁, e₂ and S in MeV), channels (α, kind, l, 2s, a_c in fm), blocks (2J, π, nucleus, channel list) | immutable value | everything below |
+| `boundary_values` | System, block b, E_λ (MeV, E_x, listed order), rule, channel functions | B_c (dimensionless) per block channel | `CNuc::CalcBoundaryConditions` (step 1) |
+| `amplitudes_from_observed` | System, b, columns, Γ (eV) / C (fm^−½) / γ̃ (MeV^½) with flags, basis, channel functions | γ̃ or γ^P (MeV^½), Park J, diagnostics D/2, terms, notes | `CNuc::TransformIn` (step 1) |
+| `subtract_external_capture` | System, b, total photon γ (MeV^½), γ^ext (complex, MeV^½) | internal γ, entries where \|Im γ^ext\| > γ | `CNuc::TransformIn` (step 1) |
+| `formal_from_brune` | System, b, Ẽ_λ, γ̃, B_c, channel functions, sign rule, eigensolver | formal E_λ (MeV), γ (MeV^½) | `CNuc::TransformIn` (step 1) |
+| `brune_from_formal` | System, b, formal E, γ, B_c, channel functions, tolerance (MeV), eigensolver | Ẽ, γ̃, iterations, status, last step (MeV), last ΔB_c | `CNuc::TransformOut` (step 1) |
+| observed widths (step 2) | System, b, E, internal γ, γ^ext, basis, channel functions | Γ (eV), C (fm^−½), μ, Q, B per (λ, c) | `parameters.out`, `GetTransformParams`, `CheckRadiativeWidths` |
+| `park_from_brune`, `brune_from_park` | System, b, E, γ, channel functions | γ in the other basis, J | `ConvertAmplitudeBasis` (step 2), Park norm (step 3) |
+| `channel_functions` (step 3) | partition α, l, E_c (MeV, c.m.) arrays | P, S, S′ (MeV^−1), φ, σ_l | the level-parameter functions, collision matrix |
+| `external_capture` (step 4) | System, final state (E, γ, N_f), photon channel, E grid | γ^ext (complex, MeV^½), N_f^½ | level parameters, collision matrix |
+| coupling coefficients (step 5) | System, reaction (entrance α, exit α′), L_max | Z̄₁Z̄₂ and analyzing-power coefficients per pathway pair | observables |
+| `io/Project` (Phase 3) | `.azr` text | System, project levels, measurements, priors | front ends |
+| `inference/` terms (Phase 2) | parameter vector θ | χ² terms (abundance, Park wall, scattering lengths) | the Objective |
+
+Channel functions are an input of every level-parameter function until `channel_functions` exists; the engine supplies
+them through `ChannelFunctionsFromCNuc`.
+
+**What the adapters read from `CNuc`.** `BuildSystemFromCNuc` reads the public accessors of pairs, J-groups, channels
+and levels (spins, masses, energies, radii, flags; level E and γ only for `CNucSystemContent::Parameters`).
+`ChannelFunctionsFromCNuc` reads a channel's pair and l and evaluates `ChannelFunc`/`WhitFunc`;
+`ProjectLevelsFromCNuc` reads the `<levels>` values of a filled `CNuc`; `ExternalWidthsFromCNuc` calls
+`CNuc::CalcExternalWidth`. Nothing else. The adapter carries two options that exist only to reproduce the engine's
+history (section 5): the order of E_c and the quantities to compute. They change no meaning elsewhere and go with the
+adapter in step 3.
+
 ## 3. Order of the moves
 
 1. **Level-parameter conversions in the engine** (this branch): `CalcBoundaryConditions`, `TransformIn` (all bases),
    the formal → Brune iteration of `TransformOut`. They call `level_parameters`, which was shown bit-identical for the
    Brune and Park amplitudes and B_c, so the engine's numbers can stay identical; the formal basis keeps the engine's
    GSL eigensolver (section 4).
+1b. **Decision 10 on** (formal basis): `BoundaryRule::LowestLevel` and `FormalSignRule::LargestPositive` in the
+   engine's calls, `level_parameters`' own eigensolvers, the GSL adapters deleted; formal-basis goldens re-baselined
+   in their own commit (observables unchanged to ~10⁻¹¹, formal parameters change by B_c and sign).
 2. **Observed widths and the basis switch.** One physics function for Γ_λc (and C_λc, μ, Q) from the total amplitude
    γ^int + γ^ext; `TransformOut`'s second loop, `GetTransformParams`, `PrintTransformParams`, `CheckRadiativeWidths`
    read it. `ConvertAmplitudeBasis` calls `park_from_brune`/`brune_from_park` on the parameter vector.
@@ -126,8 +169,10 @@ declaration moves with its users (`ECIntegral`, `EffectiveCharge`).
 take the eigensolver as an option (`GeneralizedEigenSolver`, `FormalToBruneOptions::solver`); the engine passes GSL's
 (`GslGeneralizedEigen`, `GslSymmetricEigen` in `src/CNucLevelParameters.cpp`), so the formal basis runs through
 `level_parameters` with the engine's arithmetic and its outputs stay bit-identical. With the own solver they do not
-(section 6). The switch to the own solver goes together with decision 10 (the sign rule makes the solver's sign
-irrelevant) and a re-baseline of formal-basis outputs.
+(section 6). Decision 10 is taken: B_c from the lowest level and the largest |γ| of each formal level positive, both
+on when the engine runs through `level_parameters`, with a re-baseline of the formal-basis goldens. That is the step
+after this one (step 1b): the sign rule makes the solver's sign irrelevant, so the GSL option and its adapter go in
+the same commit.
 
 ## 5. Channel energy and the Coulomb memo
 
@@ -180,7 +225,9 @@ levels now report the steps 118.45, 40.9187 and 85.4476 MeV instead of 0. The sa
 formal amplitudes change sign), 25 `parameters.out` (last printed digit of widths), 7 observable files (up to
 2.2 × 10⁻¹¹ relative, T1) and `covariance.out` of T2; that switch therefore waits for decision 10.
 
-`tests/upgrade/check.sh` passes (goldens unchanged); `ctest -LE slow` and `tests/run_tests.sh`: see HANDOFF.
+GUI off (decision 3), GCC 11.5, Condor: no compiler warnings; `tests/upgrade/check.sh` passes (goldens unchanged);
+`ctest -LE slow` 106/107, the one failure `adaptive_grid_reference` (known, decision 8); `tests/run_tests.sh` 132/132. T2 benchmark, both engines on one host (d32cepyc138), wall time after/before: calc 1.17/1.19 s (1 thread),
+0.42/0.41 s (8 threads); fit200 79.32/80.10 s, 36.16/36.28 s; peak RSS within 1 % (`tests/upgrade/bench/T2.tsv`).
 
 ### Remaining steps
 
