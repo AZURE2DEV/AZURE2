@@ -1960,6 +1960,8 @@ static complex ECPathwayAmplitude(CNuc *theCNuc, const Config &configure, PPair 
   double inEnergy = cmEnergy + entrancePair->GetSepE() + entrancePair->GetExE();
   // entrance Phase Calculations;
   CoulFunc theCoulombFunction(entrancePair, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
+  // Every pathway of this point with the same l asks for the same exp(-i phi) at a_c (CoulFunc::SetRadialScratch).
+  if (!(configure.paramMask & Config::CALCULATE_REACTION_RATE)) theCoulombFunction.SetRadialScratch(true);
 
   double eta = Kinematics::Channel(entrancePair).Eta(cmEnergy);
   complex expCP(1.0, 0.0);
