@@ -183,6 +183,17 @@ readme; read both before the next step.
 (`diagnose.residual_runs`) in the fit's worst segments. Omitted channels are seeded at a
 small fraction of the Wigner limit.
 
+**Default J^pi of `levelscan` / `structure add` (fixed 2026-11-04).** With no `--jpi` (or `"jpi": null`)
+these now use the model's OWN active J^pi groups (`structure.default_jpis`), and any requested J^pi that no
+particle pair can couple to raises (`structure.resolve_jpis`; e.g. 1/2+ on 10B+alpha). The log names the
+list and warns about any NEW group: its channels are partial waves the model lacks, and their hard-sphere
+terms change the elastic channels even at zero width. BEFORE the fix the default was the half-integer
+13C+alpha list (1/2+ ... 11/2-), unphysical for integer-J compound nuclei (14N, 16O, 20Ne, ...) without
+any warning. **A campaign's `run_snapshot/` copied before 2026-11-04 still has the old default: pass
+`--jpi` explicitly there** (e.g. `--jpi 0+ 0- 1+ 1- 2+ 2- 3+ 3- 4+ 4- 5+ 5- 6+ 6-`). In every case, check
+the template screen's log line `template screen at Ex ...: incumbent <obj>`: it must equal the
+campaign's verified incumbent. Details in the dated entry of 2026-11-04 at the end.
+
 Residual-driven level search (Phase 7, `rmfit levelscan [--ex E ...] [--top K] [--gamma keV]
 [--scales 0.5,1,2] [--ex-offsets -0.04,0,0.04] [--jpi ...] [--refit N]`): candidate energies
 from the incumbent's residual runs clustered in Ex across segments (plus dispersion-shaped
@@ -510,6 +521,9 @@ refused. The shared `~/AZURE2/pyazr` and `~/bin/AZURE2` change only through `~/A
 - `total 1` (optical-theorem neutron total, AZURE2 dev d37d4e6) is in rmfit's keyword table and in
   bake's keyword guard; builds before d37d4e6 ignore it silently and compute elastic only.
 - Delete `output/intEC.*` whenever segments change (stale-cache rule of the AZURE2 skill).
+- Since 2026-11-04 `levelscan` / `structure add` default to the model's own J^pi groups and raise on a J^pi no
+  pair can couple to; run_snapshots copied before that still default to the half-integer 13C+alpha list, so pass
+  `--jpi` with them (section 3, and the 2026-11-04 entry at the end).
 - New levels are appended at the end of the file and levels are removed by
   deactivation, so every existing parameter key stays valid across structures.
 - A released polish lets amplitudes cross zero: sign patterns are not preserved by
@@ -2295,3 +2309,35 @@ shifts fixed during exploration as before.  Not yet adapted: Sharded's Jacobian-
 shift column as costing a whole shard (R (alpha + beta k), k counting held shifts too); with this engine a local shift
 costs its own segment and a held one nothing.  Its packing stays valid, only tuned for the old cost, and a cached
 <workdir>/jac_balance.json keeps the old fit -- re-tuning is a candidate, not done.
+## 2026-11-04 -- levelscan / structure add default to HALF-INTEGER J^pi: integer-spin systems must pass --jpi
+
+`rmfit/structure.py` `JPI_GROUPS = ["1/2+", ..., "11/2-"]` is the default J^pi list of `levelscan` (`template_variant`,
+`template_screen`), `structure add` and `scan_jpi_on_window` whenever `--jpi` is not given or a candidate has
+`"jpi": null`.  It was written for 13C+alpha (17O, half-integer J).  On 10B+alpha (14N, integer J; 10B is 3+, every pair
+of the model couples to integer J) `levelscan --top 5 --gamma auto` without `--jpi` (`10B+a/11-4-26_s4_levelscan`, SGE
+1678736, 2 h) built dummy levels with J = 1/2 ... 11/2 (e.g. J = 0.5 with alpha0 l = 6, s = 3:
+`variants/levelscan_E12p729/templates_E12p729.azr`), and reported J^pi labels such as 11/2-, 9/2-, 3/2- without any
+warning.  Second symptom, worth checking on any template screen: every screen started from "incumbent 29709.0"
+against the campaign's verified 28,504.3, the same +1,205 at every candidate energy.  The dummies of a NEW J^pi group
+get the lowest waves into pairs 1-3, partial waves the model did not have, and those add hard-sphere (potential)
+terms to the elastic channels even at zero width.  So all of the screen's "gains" were measured from the wrong
+reference (every best candidate still ended above the real incumbent).  The residual-run candidate list does not depend
+on J^pi and stays valid.
+How to apply: for integer-spin compound nuclei pass the model's own groups, e.g.
+`levelscan ... --jpi 0+ 0- 1+ 1- 2+ 2- 3+ 3- 4+ 4- 5+ 5- 6+ 6-`, and for `structure add` give `--jpi` or a
+`"jpi"` in `candidates.json`.  Prefer groups that already hold a level (a background pole at 30 MeV counts), so the
+dummy reuses that group's channels and adds no partial wave.  A brand-new group adds channels, and the hard-sphere
+offset comes back.  Then confirm that the first `template screen at Ex ...: incumbent` line equals the campaign
+incumbent.  Rerun with integer J: `10B+a/11-4-26_s4_levelscan/run_crc_lscan2` (SGE 1680292), whose result is recorded in
+`10B+a/10-25-26_Rmatrix_Claude/readme`.
+CODE FIX, same day (DeBoer: "go ahead with the rmfit code fix"; backups `rmfit/{structure,levelscan,campaign}.py.bak-2026-11-04`):
+- `structure.lowest_L` now requires J - S to be an integer.  The old triangle-only test gave 1/2- on alpha + 10B the wave
+  L = 3, S = 3, which is how the unphysical lines were written.  Every couplable case is unchanged.
+- New in `structure`: `model_pairs`, `jpi_allowed`, `default_jpis` (the model's active groups, by J then parity) and
+  `resolve_jpis(model, jpis, log)` (`jpis` or the default; ValueError naming the pair spins if a J^pi cannot couple;
+  one log line with the list and any NEW group).
+- `levelscan.template_variant`, `structure.scan_jpi_on_window`, `structure.add_level_variant` and
+  `Campaign.run_levelscan` / `_run_level_add` go through it.  `JPI_GROUPS` stays, for explicit use only.
+- Test `rmfit/tests/test_jpi_default.py` (pure python, seconds; fixture `tests/fixtures/jpi_integer/10Ba_c8.azr`).  It
+  cannot import from the old code; run there, the old default wrote the 12 half-integer dummies.
+- Frozen `run_snapshot/` copies made before this date keep the old behaviour, so give them `--jpi`.
