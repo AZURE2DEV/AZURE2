@@ -2,6 +2,59 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-07 (`feature/upgrade-remove-qt`) — the Qt GUI removed (decision 3); parity checklist
+
+Branch `feature/upgrade-remove-qt` from `feature/upgrade` 4bf7aa06, not merged. Commits: the parity checklist
+(alone, before the removal), the build removal, the GUI-only engine entry points, packaging/CI, the Sphinx docs, the
+skills, CLAUDE.md files and README, this entry with ROADMAP.
+
+**State.** `docs/upgrade/qt_parity.md` lists what the Qt setup utility did at 4bf7aa06 (201 items in 15 sections:
+.azr blocks and columns, keyword whitelist, round-trip guarantees, each tab, the THM workspace, network fetches,
+environment hooks; 32 lines, one per `tests/gui` file); the Phase 9 web UI is checked against it. Removed: `gui/`
+(124 files) and `tests/gui/` (33), 47,651 lines; `BUILD_GUI`, `USE_QWT`, `BUILD_MACOS_BUNDLE`, every Qt/Qwt
+find_package, `FindQwt.cmake`, `GUI_BUILD`/`start_gui`/`gui_stub.cpp`, the Qt DLL copies, Qt/Qwt in CI (apt, brew,
+MSYS2, windeployqt, linuxdeploy's Qt plugin), both Dockerfiles, `build_linux.sh`, `build_windows.sh`,
+`build_crc.csh`; `build_macos.sh` (it built the Qt .app/.dmg) and `examples/run_gui.sh` deleted. Engine entry points
+only the GUI called, each with no caller left: `AZURECalcMCMC::RequestStop/ClearStop/SetGUIResultsCallback/
+SetGUIMessageCallback` (and the pointers only they fed), `NuclearPotentialManager` getters (7 functions,
+`currentType_`), `AdaptiveIntegrationGrid::GetConfig`. Docs: new `user_guide/graphical_interface.rst`; `file_menu`,
+`plot`, `gui_structure` pages deleted; tab-framed user-guide pages keep their content (it documents the file) under a
+note. Skills, CLAUDE.md (two .azr parsers, not three; no GUI step), tests/CLAUDE.md, pyazr/CLAUDE.md, README,
+repo_consistency (no tests/gui, no SegmentKeywords.h) follow.
+
+**Kept, and why.** `--no-gui` is accepted and ignored (scripts, `tests/upgrade` and the goldens' runners pass it).
+`ThmDistortion::GlobalEnds` (unused now; the THM Diagnostics page drew it): a physics function the Phase 9 Physics/THM
+tab needs through the binding. The Windows icon and the AppImage icon moved to `packaging/icons/`. The rolling
+pre-release job (dev only) is unchanged but for the Windows BUILD-INFO text; macOS CI now uploads a tar.gz of the bare
+executables and the job keeps the previous .dmg. `docs/upgrade` history (`cnuc_split.md`, `skills_migration.md`,
+`THM.md`, `MERGE_NOTES.md`) and the "files written by the Qt GUI" notes in skills are left as written.
+
+**Evidence.** Condor (cluster 16179), modules python + gsl only (no qt, no qwt), fresh configure of 5f09a5ce: the
+`--trace-expand` log has 0 find_package/find_library calls for Qt or Qwt, CMakeCache 0 Qt/Qwt entries, `ldd AZURE2`
+0 Qt libraries; the 7 CMake warnings are all in `external/` and `numcmc/`, which this branch does not touch; build: 0 compiler warnings.
+`tests/upgrade/check.sh` PASS; `ctest -LE slow` 107/107 (check_skills failed in that run because the skills were not
+yet edited; 3/3 of check_skills and the consistency tests pass at a90474d4); `tests/run_tests.sh` 131/132, the one
+failure `light_excitation` (a), see Found; `tools/check_skills.py` 0 errors. Docs: every :doc:, toctree entry, :ref:
+and image of the 37 pages resolves (script; Sphinx is not installed). The engine's sources changed only by deletions
+and the `--no-gui` help text, so no output is expected to move.
+
+**Found.** (1) `tests/light_excitation` (a) is flaky on `feature/upgrade` itself: `intEC.dat` of two runs differs at
+5 × 10⁻¹¹ relative (tolerance 10⁻¹²). Same host, 4bf7aa06 build vs this branch: 8 threads 3/3 vs 3/3 failures,
+2 threads 4/10 vs 4/10. The EC integrals depend on thread scheduling at that level (determinism rule). (2) pyazr's
+`AzrModel` cannot create a particle pair (skill azr-levels §1); without the GUI a new compound nucleus is set up by
+writing `<levels>` lines. (3) From the parity review: the Pairs table hid the light-E_x column (column 15) and Ctrl+D
+help indices predate two tabs; recorded in qt_parity.md, not fixed (Qt stays on dev).
+
+**Open (proposed default in brackets).**
+- A self-contained macOS package of the CLI. [Leave the tar.gz until Phase 9's wheels; no .dmg.]
+- If this merges into `dev` before the upgrade is released, the dev pre-release stops refreshing the macOS .dmg and
+  the GUI downloads. [The upgrade does not merge into dev before Phase 9; the director confirms.]
+- `light_excitation` flake. [A fix/ branch: fixed reduction order in the EC integrals or a tolerance with a written
+  reason, after finding which loop is scheduled.]
+- `ThmDistortion::GlobalEnds` in the binding. [Phase 9, with the Physics tab.]
+
+**Next.** The director merges; Phase 9 checks the web UI against `qt_parity.md`.
+
 ## 2026-11-07 (`feature/upgrade-1-cnuc-split`) — split `CNuc`, step 1: the engine calls `level_parameters`
 
 Branch `feature/upgrade-1-cnuc-split` from `feature/upgrade` 93f8cbc5, not merged. Commits: the plan

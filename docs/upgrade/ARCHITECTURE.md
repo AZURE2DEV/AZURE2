@@ -101,7 +101,7 @@ fixes touched `EData`/`EPoint`/`ESegment`; at least 21 fixes repaired bugs intro
   scripts on the objective's value and gradient (pyazr does not own fitting).
 
 ### io/
-- `Project`: the single `.azr` reader/writer (today three exist: engine, Qt GUI, pyazr). Old files keep loading.
+- `Project`: the single `.azr` reader/writer (today two exist: engine, pyazr; the Qt GUI's is gone, decision 3). Old files keep loading.
 - Library readers live in pyazr `sources/` (Python, run at project setup; the C++ core reads only the project):
   AME/NUBASE (masses), ENSDF (level suggestions, tentative Jπ flagged), EXFOR X4 master files (measurements with
   units, frames, error split into covariance terms, DOI; unknown quantities refused), IAEA measured stopping (for the
@@ -213,11 +213,12 @@ the phase that replaces their code is merged.
   plotly.js vendored for offline use (the stack of Jakub's LunaSRIM web app, without depending on it); thin `/api`
   mapping one-to-one onto pyazr objects; long jobs in worker processes with progress and stop; the project is the state
   (saved as `.azr`, undo = history). Tabs: Project · Nucleus · Data · Fit · Results · Physics (§8) · THM (only when the
-  project enables it). Tested with pytest on `/api` on T1–T3, a few browser smoke tests, and a Qt parity checklist.
+  project enables it). Tested with pytest on `/api` on T1–T3, a few browser smoke tests, and the Qt parity checklist
+  (`docs/upgrade/qt_parity.md`).
 - **CLI**: `azure2` takes flags and a run file; no readline menus.
 
 ## 12. Out of the tree at the end
 
-Qt/Qwt GUI, ERYA (and `SRIM2013.xml`), numcmc, readline menus, the GSL fitter, per-thread `EData`/`CNuc` clones,
+Qt/Qwt GUI (removed already, decision 3), ERYA (and `SRIM2013.xml`), numcmc, readline menus, the GSL fitter, per-thread `EData`/`CNuc` clones,
 point mapping, copy-on-write tables, `NodeTableCache`, process-wide memos, `external/coul` (→ pycoulomb). Kept
 externals: Minuit2, GSL (quadrature and special functions only), pybind11, pycoulomb.
