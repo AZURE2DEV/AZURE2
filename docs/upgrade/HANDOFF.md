@@ -2,6 +2,28 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-07 (director) — pycoulomb prerequisites done (in Jakub's repo, local branch)
+
+Decision 8 (a) merged (409fef62): `ctest -LE slow` 107/107 with GUI off. pycoulomb, local branch `azure2-prereqs` of
+`~/AI-R-scratch/pycoulomb-src/pycoulomb` (from 9fee957; commits 7e3c834 … 7adef98; not pushed, not tagged):
+build products removed; `DESIGN.md`; `libcoulomb/`, one CMake target `pycoulomb::coulomb` without Python, the
+vendorable set; pure, thread-safe API `coulomb(l, η, ρ, Method)` → {F, F′, G, G′, σ_l, status}, `coulomb_range`,
+`coulomb_phase`, `whittaker`, `whittaker_scaled`; methods `coul` (AZURE2 before 2025-09), `coulsm` (AZURE2 now,
+default), `coulfg`, `gsl`. Parity with AZURE2 on 7150 points: 0 bit differences (`coulsm` vs `external/coul`, gsl vs
+`CoulFunc`, Whittaker vs `WhitFunc`/`CoulombTable`). Threads: 0 bit mismatches at 8 threads; TSan clean.
+
+**Accuracy against mpmath (40 digits; 1296 points, l 0–8, η 0–20, ρ 10⁻³–50).** `coul`/`coulsm`: ≤ 10⁻⁹ for η > 0
+(their built-in precision 10⁻¹⁰). `coulsm` at η = 0: F_l from unstable upward recurrence is wrong for l ≥ 2 at
+small ρ (G exact), but P, S, φ depend on F only through F/G, absolute error ≤ 1.4 × 10⁻¹⁶ on the grid; this is the
+open neutral-F item of the T1 session. `coulfg`: JWKB inside the turning point, wrong where G > 300. `gsl`: errors to
+2.5 × 10⁻² inside the turning point for η ≥ 2. All four agree to 8.3 × 10⁻¹⁰ in the oscillating region.
+
+**For Jakub.** Add the LLNL BSD-3 COPYRIGHT text next to `coulfg2.c` (its header refers to a missing file); choose
+the repository licence; push and tag. Whether to fix `coulsm` at η = 0 [keep: AZURE2 stays bit-identical; P, S, φ
+unaffected]. **Next.** After the CNuc split: vendor `libcoulomb/` as `external/pycoulomb/` and build
+`channel_functions` on it (replacing `external/coul`, `CoulFunc`, `CoulFuncCache`, `WhitFunc`), bit-identical with
+`coulsm`; COULCC added as a method when `coulcc-cpp` is done. The host must keep GSL's error handler off (`GslQuiet`).
+
 ## 2026-11-07 — `fix/adaptive-grid-criterion`: decision 8 (a) in `adaptive_grid_reference`
 
 Branch `fix/adaptive-grid-criterion` from `feature/upgrade` e5dd8ae7, not merged. Commits: the test (47c119e4), this
