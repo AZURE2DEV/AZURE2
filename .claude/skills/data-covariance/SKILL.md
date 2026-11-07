@@ -13,7 +13,7 @@ segment without one is either given one before the fit is built, or the readme s
 only for a plot, or an alternative view of points already in the fit). This file says how. The engine side
 (the `covariance` keyword, its terms, `relvector`, `covariance.out`) is in the `azure2-eval` skill,
 `.azr` anatomy, "`covariance <file>`"; read that bullet first. Campaign handling of `relvector` terms (one
-fixed reference model, `cov_reference.npz`) is in `rmfit-campaign`, log entries of 2026-10-24/25.
+fixed reference model, `cov_reference.npz`) is in the `rmfit-campaign` skill (rmfit repository since 2026-11-07), log entries of 2026-10-24/25.
 
 ## 1. Inventory first: which segments have a matrix?
 

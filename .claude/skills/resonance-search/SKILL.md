@@ -10,7 +10,7 @@ level?*  The tools it calls are documented elsewhere and are not repeated here:
 
 | need | where |
 |---|---|
-| running a campaign, polish, sign rounds, `levelscan`, `structure add`, ledger | `rmfit-campaign` skill (§3 loop, §3c width-floor recipe, §9 log) |
+| running a campaign, polish, sign rounds, `levelscan`, `structure add`, ledger | `rmfit-campaign` skill, in the rmfit repository since 2026-11-07 (§3 loop, §3c width-floor recipe, §9 log) |
 | AZURE2 CLI / pyazr, frames, output files, extrapolation traps | `azure2-eval` skill |
 | what a level, channel, partial width, interference pattern means | `r-matrix-analysis` skill |
 | ENSDF / TUNL level lists, EXFOR | `nds-explorer` skill (`pyazr.nds.fetch_levels`) |
