@@ -94,9 +94,13 @@ Available Options
    * - ``--no-brune``
      - Use the standard Lane-Thomas parameterization (constant boundary
        conditions) instead of Brune's or Park's.  The input parameters are
-       transformed to formal ones; a project whose observed widths have no
-       standard equivalent is refused with the J^pi groups concerned (see
-       :doc:`troubleshooting`).
+       transformed to formal ones, with the boundary condition of each J^pi
+       group set at its lowest level and each formal level oriented like its
+       observed level (:doc:`../theory/conventions`); a project whose observed
+       widths have no standard equivalent is refused with the J^pi groups
+       concerned (see :doc:`troubleshooting`).  Builds before 2026-11-07 set
+       the boundary condition at the first level listed; a note at start-up
+       names each group where that differs.
    * - ``--use-park``
      - Use Park's level-dependent boundary conditions (Phys. Rev. C 104,
        064612) in place of Brune's alternative level matrix.  The fit

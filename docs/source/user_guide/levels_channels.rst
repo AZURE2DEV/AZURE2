@@ -142,7 +142,10 @@ Fix Width
    listed the group in ascending order rather than the file's, and a fit that
    fixed the pole's energy varied the low level instead. The cross sections
    were never affected (the set of levels is the same whatever the labels).
-   The Brune parametrization, the default, never had the problem.
+   The Brune parametrization, the default, never had the problem. Since
+   2026-11-07 the boundary condition of the standard parametrization is set at
+   the lowest level of the group, not the first listed, so the formal
+   parameters themselves no longer depend on the listing order.
 
 Channel Configuration
 ---------------------

@@ -105,7 +105,10 @@ Selecting **Runtime Options...** opens a dialog with the following settings:
      - Input R-matrix formal widths and pole energies directly, without
        transforming from physical parameters. Useful when starting from an older
        calculation. Note that formal parameters are radius and boundary-condition
-       dependent.
+       dependent: the boundary condition is the shift function at the lowest
+       level of each J^pi group (before 2026-11-07, at the first level listed;
+       formal values from those builds belong to that choice where a group is
+       listed out of energy order).
    * - **Use Wigner limits for parameter limits**
      - Automatically apply Wigner limit bounds on fit parameters: the
        reduced-width amplitude of every particle channel is bounded by

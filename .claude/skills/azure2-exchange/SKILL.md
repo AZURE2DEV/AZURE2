@@ -26,7 +26,7 @@ and `docs/source/user_guide/levels_channels.rst`.
 
 | Basis | CLI / pyazr | Parameters | Boundary condition |
 |---|---|---|---|
-| standard (formal, Lane and Thomas) | `--no-brune`, `use_brune=False` | formal E_λ, γ_λc; transformed from the observed inputs | constant B_c chosen at the level energies |
+| standard (formal, Lane and Thomas) | `--no-brune`, `use_brune=False` | formal E_λ, γ_λc; transformed from the observed inputs | constant B_c = S_c at the lowest level of each J^π group (`docs/source/theory/conventions.rst`) |
 | Brune (default) | `--use-brune` | observed E_λ, γ_λc^Brune | none needed (Brune, Phys. Rev. C 66 (2002) 044611) |
 | Park | `--use-park`, `use_park=True` | observed E_λ, γ_λc^Park = γ_λc^Brune √J_λ | none needed (Park, Phys. Rev. C 104 (2021) 064612) |
 
