@@ -7,6 +7,7 @@
 #include "NodeTableCache.h"
 #include "ThmExperiment.h"
 #include <memory>
+#include <atomic>
 #include <deque>
 #include <map>
 #include "DataCovariance.h"
@@ -174,8 +175,9 @@ class EData {
   bool IsSegmentKey(int);
   void SetFit(bool);
   void SetErrorAnalysis(bool);
-  /// Count one more fit iteration.
-  void Iterate();
+  /// Count one more objective evaluation. Returns the count before this one (0 for the first), taken in one atomic
+  /// operation, so concurrent callers (Minuit2's OpenMP numerical gradient) each get a distinct number.
+  int Iterate();
   /// Reset the iteration counter to zero.
   void ResetIterations();
   /// Initialize every point: EPoint::Initialize over the whole data set.
@@ -439,7 +441,7 @@ class EData {
   std::vector<std::shared_ptr<DataCovariance::Group>> covGroups_;         // shared by every copy
   bool covarianceError_ = false;              // a component failed CheckComponentPairs
   bool kinematicsError_ = false;              // a lab angle beyond the kinematic maximum (audit 2026-10-25, item 31)
-  int iterations_;
+  std::atomic<int> iterations_{0};  // objective evaluations; incremented from every thread of a parallel gradient
   int normParamOffset_;
   int energyShiftParamOffset_;
   int energyShiftSqrtParamOffset_;

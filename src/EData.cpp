@@ -316,7 +316,6 @@ int CheckThmWeights(const Config &configure,
 }  // namespace
 
 EData::EData() {
-  iterations_ = 0;
   normParamOffset_ = 0;
   energyShiftParamOffset_ = 0;
   energyShiftSqrtParamOffset_ = 0;
@@ -967,7 +966,7 @@ int EData::MakePoints(const Config &configure, CNuc *theCNuc) {
  */
 
 int EData::Iterations() const {
-  return iterations_;
+  return iterations_.load(std::memory_order_relaxed);
 }
 
 /*!
@@ -2016,11 +2015,13 @@ void EData::SetErrorAnalysis(bool errorAnalysis) {
 }
 
 /*!
- * This function updates the number of fit iterations per iteration during the fitting process.
+ * This function counts one more evaluation of the objective and returns the count before it. The read and the
+ * increment are one atomic operation, so evaluations made concurrently from the threads of Minuit2's numerical
+ * gradient each receive a distinct number. Relaxed order suffices: the counter orders no other memory.
  */
 
-void EData::Iterate() {
-  iterations_++;
+int EData::Iterate() {
+  return iterations_.fetch_add(1, std::memory_order_relaxed);
 }
 
 /*!
@@ -2028,7 +2029,7 @@ void EData::Iterate() {
  */
 
 void EData::ResetIterations() {
-  iterations_ = 0;
+  iterations_.store(0, std::memory_order_relaxed);
 }
 
 /*!
@@ -5524,7 +5525,7 @@ EData *EData::Clone() const {
   EData *dataCopy = new EData();
 
   // Explicitly copy all member variables
-  dataCopy->iterations_ = this->iterations_;
+  dataCopy->iterations_.store(this->iterations_.load(std::memory_order_relaxed), std::memory_order_relaxed);
   dataCopy->normParamOffset_ = this->normParamOffset_;
   dataCopy->energyShiftParamOffset_ = this->energyShiftParamOffset_;
   dataCopy->energyShiftSqrtParamOffset_ = this->energyShiftSqrtParamOffset_;

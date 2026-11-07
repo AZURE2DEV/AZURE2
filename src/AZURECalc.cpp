@@ -562,8 +562,8 @@ void AZURECalc::DumpNonFinite(const vector_r &p, double chi, CNuc *lc, EData *ld
 double AZURECalc::operator()(const vector_r &p) const {
   AZUREProfile::ScopedReport profileReport("evaluation");
   AZUREProfile::Timer profileTimer(AZUREProfile::kEvaluation);
-  int thisIteration = data()->Iterations();
-  data()->Iterate();
+  // One atomic read-and-increment: this evaluation's number, distinct across the threads of a parallel gradient.
+  const int thisIteration = data()->Iterate();
   bool isFit = data()->IsFit();
 
   CNuc *localCompound = NULL;
@@ -705,10 +705,15 @@ double AZURECalc::operator()(const vector_r &p) const {
   if (std::getenv("AZURE_DUMP_NONFINITE")) DumpNonFinite(p, chiSquared, localCompound, localData);
 
   if (!localData->IsErrorAnalysis() && thisIteration != 0) {
-    if (thisIteration % 10 == 0) configure().outStream
-        << "\r\tIteration: " << std::setw(6) << thisIteration
-        << " Chi-Squared: " << chiSquared;
-    configure().outStream.flush();
+    {
+      // The stream (its width state and buffer) is shared by every thread that evaluates the objective.
+      static std::mutex progressMutex;
+      std::lock_guard<std::mutex> lk(progressMutex);
+      if (thisIteration % 10 == 0) configure().outStream
+          << "\r\tIteration: " << std::setw(6) << thisIteration
+          << " Chi-Squared: " << chiSquared;
+      configure().outStream.flush();
+    }
 
     if (thisIteration % kOutputInterval == 0) WriteIterationOutput(p);
   }
