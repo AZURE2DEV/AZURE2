@@ -66,7 +66,8 @@ import re, sys
 bar = re.compile(rb"\tSegment #(-?[0-9]+(?: \(Total: [0-9]+\))?) +\[[* ]{25}\] ([0-9]+)%")
 chars = set(b"Segment#[]*% \t0123456789():Tola")
 done, bad, stray = [], [], []
-for line in open(sys.argv[1], "rb").read().split(b"\n"):
+# Windows writes the log in text mode (CRLF): every line then ended in \r and counted as a garbled bar.
+for line in open(sys.argv[1], "rb").read().replace(b"\r\n", b"\n").split(b"\n"):
     if b"\r" in line or line.startswith(b"\tSegment #"):
         frags = line.split(b"\r")
         ms = [bar.fullmatch(f) for f in frags]

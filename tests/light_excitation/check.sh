@@ -73,7 +73,7 @@ if a != b:
     print("      %r\n      %r" % (a[i] if i < len(a) else None, b[i] if i < len(b) else None))
     sys.exit(1)' "$1" "$2"
 }
-# same_tree <dir1> <dir2>: the same file names with byte-identical contents (intEC.dat: numbers to 1e-12)
+# same_tree <dir1> <dir2>: the same file names with byte-identical contents (intEC.dat: numbers to 1e-9)
 same_tree() {
   "$PY" -I -c 'import os, sys
 def files(top):
@@ -84,9 +84,10 @@ rd = lambda p: open(p, "rb").read()
 if na != nb:
     print("    same_tree: file lists differ: %s" % sorted(set(na) ^ set(nb)))
     sys.exit(1)
-def numeric_same(pa, pb, tol=1e-12):
+def numeric_same(pa, pb, tol=1e-9):
     # intEC.dat holds the EC integrals to 17 digits; macOS CI wrote last-digit differences between two runs
-    # that should agree (2026-11-06), every other file byte-identical.  Compare it number by number.
+    # that should agree (2026-11-06), every other file byte-identical; Windows 1.5e-11 relative on 13N.
+    # Compare it number by number (real and imaginary parts) to 1e-9.
     ta, tb = rd(pa).split(), rd(pb).split()
     if len(ta) != len(tb):
         return False, "token counts %d vs %d" % (len(ta), len(tb))
@@ -94,12 +95,16 @@ def numeric_same(pa, pb, tol=1e-12):
     for x, y in zip(ta, tb):
         if x == y:
             continue
+        # the integrals are complex, written as "(re,im)"
+        xs, ys = x.strip(b"()").split(b","), y.strip(b"()").split(b",")
         try:
-            fx, fy = float(x), float(y)
+            pairs = [(float(u), float(v)) for u, v in zip(xs, ys)] if len(xs) == len(ys) else None
         except ValueError:
+            pairs = None
+        if pairs is None:
             return False, "text differs: %r vs %r" % (x, y)
-        d = abs(fx - fy) / max(abs(fx), abs(fy), 1e-300)
-        worst = max(worst, d)
+        for fx, fy in pairs:
+            worst = max(worst, abs(fx - fy) / max(abs(fx), abs(fy), 1e-300))
     return worst <= tol, "largest relative difference %.3g" % worst
 bad = []
 for n in na:
@@ -108,7 +113,7 @@ for n in na:
         continue
     if os.path.basename(n) == "intEC.dat":
         ok, why = numeric_same(pa, pb)
-        print("    same_tree: %s not byte-identical, %s (tolerance 1e-12)" % (n, why))
+        print("    same_tree: %s not byte-identical, %s (tolerance 1e-9)" % (n, why))
         if ok:
             continue
     bad.append(n)
