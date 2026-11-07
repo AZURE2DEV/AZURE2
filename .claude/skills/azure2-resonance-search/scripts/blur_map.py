@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""Broad-structure locator: where does the BLURRED data differ from the equally blurred fit?  (resonance-search skill, section 1b;
-DeBoer 2026-10-11: "blur the image of the cross section so only the broad levels are left visible")
+"""Broad-structure locator: where does the BLURRED data differ from the equally blurred fit?  (azure2-resonance-search skill,
+section "Broad structure")
 Input: the per-point table of a fit (dump_residuals.py).  Per detector curve (one lab angle of one segment, >= MIN_PTS energies) and
 blur width D (Gaussian kernel regression, sigma = D, points within 1.5 D of the curve ends dropped):
     data  n*d = fit * d / (d + r*e)    (r = (fit - n d)/(n e) from the table, so the data carry their fitted normalization)
@@ -106,7 +106,8 @@ def read_levels(par, azr):
         if m and cur is not None:
             cur["g"] += abs(float(m.group(1)))
     if azr:
-        sys.path.insert(0, "/users/rdeboer1/AZURE2")
+        import os
+        if os.environ.get("AZURE2_SRC"): sys.path.insert(0, os.environ["AZURE2_SRC"])  # repo checkout holding pyazr/
         from pyazr import AzrModel
         fx = [(l.jpi, l.energy, l.fixed) for l in AzrModel.from_file(azr).levels if l.active]
         for L in lev:

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Figure for DeBoer's blur idea (2026-10-11): data, full fit, broad-only model (levels < 50 keV switched off) and the same three
+"""Figure for the blur method: data, full fit, broad-only model (levels < 50 keV switched off) and the same three
 blurred (Gaussian kernel regression, sigma D) for three excitation functions.  Data drawn x fitted normalization:
 n*d = fit*d/(d + r*e) with r = (fit - n d)/(n e) from the dump.  Broad levels (Gamma >= 150 keV) of the incumbent marked on top.
 usage: blur_figure.py full.npz broad.npz parameters.out out.png [D_MeV=0.1] --panel "dataset:angle:ex_lo:ex_hi:title" ...

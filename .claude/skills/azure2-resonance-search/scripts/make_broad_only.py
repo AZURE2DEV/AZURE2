@@ -3,7 +3,7 @@
 and fixed (energy fixed too), so the free parameters read from the .sav by name never touch it.
 usage: make_broad_only.py fit.azr parameters.out out.azr [GMAX_keV=50]"""
 import sys, os, re
-sys.path.insert(0, "/users/rdeboer1/AZURE2")
+if os.environ.get("AZURE2_SRC"): sys.path.insert(0, os.environ["AZURE2_SRC"])  # repo checkout holding pyazr/
 from pyazr import AzrModel
 azr, par, out = sys.argv[1:4]; gmax = float(sys.argv[4]) if len(sys.argv) > 4 else 50.0
 lev, cur = [], None

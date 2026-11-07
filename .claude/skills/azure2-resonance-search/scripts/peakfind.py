@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Data-only resonance candidates: peaks, dips and dispersion shapes in every excitation function, clustered in Ex.
 
-For a reaction with NO R-matrix calculation yet (resonance-search skill, section 1a).  Input = the per-point table written by
+For a reaction with NO R-matrix calculation yet (azure2-resonance-search skill, "Starting from nothing").  Input = the per-point table written by
 dump_residuals.py (only key, name, ex, ang, dat, err are used; the fit columns are ignored, so any .azr with the pairs and the data
 segments will do -- its levels do not matter).  For each excitation function (one angle of one segment, >= MIN_PTS points):
   1. baseline b(E) = running median over a window of W MeV, for each W in SCALES (a structure is seen at the scales wider than it);
@@ -12,7 +12,7 @@ segments will do -- its levels do not matter).  For each excitation function (on
   4. an adjacent peak and dip of the same curve closer than the larger of their widths form one DISPERSION candidate at the midpoint.
 Detections from all curves go into an Ex density map (each a unit-area Gaussian of its own FWHM, min 3 keV, weight min(z, ZCAP)); the
 map's peaks (prominence >= MAP_PROM x its maximum) are the candidates, each collecting the detections inside its half-maximum width.
-(Interval clustering chains dense multi-angle data into one multi-MeV cluster -- first try, 2026-10-11.)  Each candidate lists the number of
+(Interval clustering chains dense multi-angle data into one multi-MeV cluster)  Each candidate lists the number of
 distinct data sets, channels (exit pairs from the segment name) and curves that see it, the median width, the summed capped
 significance (min(z, ZCAP) per curve, so one 20-angle set cannot outvote everything) and the peak / dip / dispersion mix.
 Ranked by distinct data sets, then by score.  Optional: --levels parameters.out to score the list blind against a known level set.

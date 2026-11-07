@@ -1,6 +1,6 @@
 # Calibration: what the cross-checks found (Stages 6–7)
 
-Results of the full evaluations of the repository's THM examples (October 2026). Each is
+Results of the full evaluations of the repository's THM examples. Each is
 a model average over full refits, quoted as mean ± stat ± model and classified by the
 robustness rule. Use them to judge whether a new result is plausible and which axis to
 expect to dominate.

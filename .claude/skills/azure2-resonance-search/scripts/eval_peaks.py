@@ -3,7 +3,7 @@
 of 50-300 keV, same count and spacing).  usage: eval_peaks.py peaks.txt parameters.out"""
 import sys, re
 import numpy as np
-sys.path.insert(0, "/users/rdeboer1/AZURE2/.claude/skills/resonance-search/scripts")
+sys.path.insert(0, __import__("os").path.dirname(__import__("os").path.abspath(__file__)))
 from peakfind import read_levels
 rows = []
 for line in open(sys.argv[1]):

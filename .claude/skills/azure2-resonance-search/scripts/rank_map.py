@@ -77,7 +77,9 @@ regions.sort(key=lambda g: -g["tot"])
 levels = []
 if len(sys.argv) > 4:
     import re
-    sys.path.insert(0, "/users/rdeboer1/AZURE2"); from pyazr import AzrModel
+    import os
+    if os.environ.get("AZURE2_SRC"): sys.path.insert(0, os.environ["AZURE2_SRC"])  # repo checkout holding pyazr/
+    from pyazr import AzrModel
     fixed = [(l.jpi, l.energy, l.fixed) for l in AzrModel.from_file(sys.argv[4]).levels if l.active]
     cur = None
     for line in open(sys.argv[3]):

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""Does blurring the cross section remove the narrow levels and leave the broad ones?  (DeBoer 2026-10-11: "blur the image of the
-cross section so only the broad levels are left visible")
+"""Does blurring the cross section remove the narrow levels and leave the broad ones?
+(Validity check of the blur method of the azure2-resonance-search skill.)
 Inputs: the full fit's and the broad-only model's per-point tables (dump_residuals.py; same rows).  Per excitation function (one angle
 of one segment, >= 12 energies), Gaussian kernel regression with sigma = D at the data energies, points within 1.5 D of either end
 dropped.  Per data set and D, point-weighted rms of relative differences (normalised by |blur(full)|):
