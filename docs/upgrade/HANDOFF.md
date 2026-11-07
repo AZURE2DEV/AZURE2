@@ -717,6 +717,9 @@ out of any repository).
    beyond the net change, tolerance √3/(2π ppw²) + 10⁻⁴.
 9. (Added 2026-11-07.) The nightly sanitizer schedule fires only from the default branch (`qt5`). [Keep the file on
    `feature/upgrade`; push trigger and manual dispatch until the PI decides.]
+11. (Added and decided 2026-11-07, Jakub.) Exact energies by default: observables are calculated at the data
+   energies, shifted energies and fold nodes, as AZURE2 does today; interpolation on a fixed mesh only as an opt-in,
+   checked mode (`ARCHITECTURE.md` §1, §3, §4).
 10. (Added 2026-11-07.) Formal basis: B_c from the lowest level instead of the first listed, and each formal
    level's largest |γ| positive. Both exist as `Convention` options, off (`level_parameters.md`). [Turn both on when
    the engine switches to `level_parameters`, with a formal-basis golden re-baseline.] **Decided 2026-11-07 (Jakub):

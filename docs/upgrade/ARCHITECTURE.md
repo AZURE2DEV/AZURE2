@@ -28,6 +28,17 @@ m_i(θ, ν)  = s_k(ν) · Σ_n K_in(ν) · O_n(θ)
 
 The gradient is the same three lines differentiated: ∂m/∂θ = s·K·∂O/∂θ, and ∂m/∂ν from K(ν). Nothing else.
 
+**Exact energies (decision, Jakub, 2026-11-07).** As in AZURE2 today, every observable is calculated at the energy
+where it is compared with data; nothing is interpolated by default. The grid E_n is therefore the set of evaluation
+energies, not a mesh: (i) the data energies themselves, so a point without shift or fold has K_in = δ at its own
+energy; (ii) for a free energy shift, the shifted energies, which move with ν — when the fitter changes a shift, the
+channel functions of that measurement's energies are recomputed (they depend on the channel energy only, not on θ),
+and ∂m/∂ν comes from S′, P′ and dO/dE at those energies; (iii) for a fold (target, resolution, Doppler, THM),
+quadrature nodes placed around each level as `AdaptiveIntegrationGrid` does now, with the tolerance stated and
+tested. An **interpolated mode** (observables on a fixed mesh, shifts and folds as interpolation weights) is an
+opt-in speed-up for large data sets or sampling; it runs only with a check that reports its largest difference from
+the exact mode on the project's own data, and T2 pins the two modes against each other.
+
 ## 2. Modules and the one-way rule
 
 ```
@@ -86,11 +97,12 @@ fixes touched `EData`/`EPoint`/`ESegment`; at least 21 fixes repaired bugs intro
   observable kind, reaction, apparatus settings, provenance.
 - `Material`: elements and stoichiometry, density, phase (solid/gas), depth profile (implanted targets).
 - `stopping/`: AZURE2's own electronic-stopping evaluation and straggling (§7).
-- `EnergyGrid`: E_n from data energies, kernel windows and the current levels (each width resolved); fixed within a fit
-  stage, re-planned between stages.
+- `EnergyGrid`: the evaluation energies E_n (§1, exact energies): data energies, shifted energies (updated when a
+  shift moves; only that measurement's channel functions are recomputed), and fold quadrature nodes around the
+  current levels (each width resolved), re-planned between stages. The interpolated mode adds a fixed mesh.
 - Kernel builders, each returning sparse weights on E_n: target (thick/thin/implanted/gas, with straggling propagation),
-  resolution (Gaussian, beam profile, UDR), Doppler (thermal, FGM), energy shift (constant, √E, f(E), groups, as
-  interpolation weights on the fixed grid, so χ² is smooth in the shift), composites (SUM, RATIO, natural targets as
+  resolution (Gaussian, beam profile, UDR), Doppler (thermal, FGM), energy shift (constant, √E, f(E), groups: by
+  default the shifted energies are evaluation points; in the interpolated mode, interpolation weights on the mesh), composites (SUM, RATIO, natural targets as
   rows), S-factor conversion (diagonal), THM fold (`THM.md`).
 
 ### inference/
@@ -113,6 +125,9 @@ fixes touched `EData`/`EPoint`/`ESegment`; at least 21 fixes repaired bugs intro
 - Once per run: `System`, `Measurement`s, d, C.
 - Once per fit stage (read-only afterwards): E_n, channel functions on E_n, angular coupling, capture unit
   amplitudes, THM vertex tables, kernel builders' fixed parts.
+- When a free shift ν changes (before the evaluation, single-threaded hand-over): the shifted energies of that
+  measurement and their channel functions are recomputed into a new table, which then replaces the old one; no table is
+  written while an evaluation reads it.
 - Each evaluation (depends only on θ, ν): level parameters → U(E_n) → O_n → m = s·K(ν)·O → χ².
 - Threads split the grid energies into blocks; each block writes only its slice of O. Reductions in fixed order
   (results independent of thread count).
