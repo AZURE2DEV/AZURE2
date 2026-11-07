@@ -13,14 +13,15 @@
 #
 # Model: tests/thick_target_resonance (p+14N, the 278 keV lab 1/2+ resonance), 57 points 0.240-0.520 MeV lab on one
 # capture pair, density 1e18, stopping a0/x^0.8 (the model of tests/target_window_fallback).
-#   (a) "auto": the Note reports tolerance 0.01, margin 3, one narrow level, no threshold, and some points left out;
+#   (a) "auto": the Note reports tolerance 0.01, margin 5 (max(3, 1/(2 sqrt(tol))), 2026-11-07), one narrow level, no
+#       threshold, and some points left out;
 #   (b) the output is byte-identical to the same line with the windows the Note lists written out (the windows are
 #       applied as reported); the points inside are the full integration to every digit;
 #   (c) every point within the tolerance (1e-2) of the full integration;
 #   (d) "auto:0.01:1": the Note reports them, and the narrower margin integrates fewer points (the tolerance alone
 #       is tested in (j): a tighter one also integrates the sub-barrier points);
 #   (e) a particle threshold (a pair whose heavy partner is excited by 0.42 MeV, zero ANC, so the cross section does
-#       not change): one threshold and a window over it;
+#       not change): one threshold and a window over it (margin 3, so that some points stay outside);
 #   (f) "auto,0.48-0.50": the explicit range is added to the automatic ones;
 #   (g) data far from every level (0.40-0.52 MeV only): no window, every point at E_bar (equal to a line whose only
 #       window lies outside the data);
@@ -29,8 +30,10 @@
 #   (j) the sub-barrier curvature criterion (2026-11-06): data 0.40-0.52 MeV far from the level, a 41 keV target,
 #       "auto:0.001:1": the Note reports sub-barrier points, and every point is within 1e-3 of the full integration
 #       (without the criterion no window is placed and the E_bar fallback is ~0.4 % low).
+#   (k) the default margin follows the tolerance: "auto" (margin 5) integrates more points than "auto:0.01:3" and is at
+#       least as close to the full integration.
 # Builds before the "auto" token (a20918d) ignore it and integrate every point: they fail 10 checks of (a)-(i), all
-# but (c); builds with "auto" but without the curvature criterion fail (j) only.
+# but (c); builds with "auto" but without the curvature criterion and the tolerance-tied margin fail (a) and (j).
 #
 #   ./tests/target_auto_windows/check.sh path/to/AZURE2
 
@@ -92,7 +95,7 @@ model auto "$LINE  \"auto\"  0";       run auto 1 ""
 
 # (a) the Note
 n="$(note auto)"; nin="$(inside auto)"
-if echo "$n" | grep -q "tolerance 0.01, margin 3): 1 narrow level(s), 0 threshold(s), [0-9]* of 57 points" && [ "${nin:-57}" -lt 57 ] && [ "${nin:-0}" -gt 5 ]; then
+if echo "$n" | grep -q "tolerance 0.01, margin 5): 1 narrow level(s), 0 threshold(s), [0-9]* of 57 points" && [ "${nin:-57}" -lt 57 ] && [ "${nin:-0}" -gt 5 ]; then
   ok "(a) \"auto\": one narrow level, no threshold, $nin of 57 points integrated, windows $(windows auto)"
 else bad "(a) \"auto\": Note '${n:-none}'"; tail -3 "$WORK/auto/run.log"; fi
 
@@ -118,7 +121,7 @@ if note tight | grep -q "tolerance 0.01, margin 1)" && [ -n "$nt" ] && [ -n "$ni
 else bad "(d) \"auto:0.01:1\": Note '$(note tight)'"; fi
 
 # (e) a threshold of the same compound nucleus
-model thr "$LINE  \"auto\"  0" 0.240 0.520 1; run thr 1 ""
+model thr "$LINE  \"auto:0.01:3\"  0" 0.240 0.520 1; run thr 1 ""   # margin 3: with 5 the windows cover every point
 F="$(awk 'BEGIN { printf "%.10f", 14.0031 / (1.00783 + 14.0031) }')"
 eth="$(awk -v f="$F" 'BEGIN { printf "%.4f", 0.42 / f }')"
 covered="$(windows thr | tr ',' '\n' | awk -F- -v e="$eth" '$1 < e && $2 > e { c = 1 } END { print c + 0 }')"
@@ -162,6 +165,15 @@ read -r worst at <<< "$(paste <(y steepfull) <(y steep) <(awk '{print $1}' "$WOR
 if note steep | grep -q "sub-barrier curvature: [0-9]* point(s)" && awk -v w="$worst" 'BEGIN { exit !(w <= 1e-3) }'; then
   ok "(j) sub-barrier curvature: $(note steep | sed -n 's/.*\(sub-barrier curvature: [^;]*\).*/\1/p'); every point within $worst of the full integration"
 else bad "(j) sub-barrier curvature: Note '$(note steep)'; worst $worst at $at MeV (tolerance 1e-3)"; fi
+
+# (k) the default margin follows the tolerance
+model m3 "$LINE  \"auto:0.01:3\"  0"; run m3 1 ""
+n3="$(inside m3)"
+w3="$(paste <(y full) <(y m3) | awk '{ r = $2 / $1 - 1; if (r < 0) r = -r; if (r > w) w = r } END { printf "%.3e", w }')"
+wd="$(paste <(y full) <(y auto) | awk '{ r = $2 / $1 - 1; if (r < 0) r = -r; if (r > w) w = r } END { printf "%.3e", w }')"
+if [ -n "$n3" ] && [ -n "$nin" ] && [ "$nin" -gt "$n3" ] && awk -v a="$wd" -v b="$w3" 'BEGIN { exit !(a <= b) }'; then
+  ok "(k) default margin 5: $nin points integrated, worst $wd; margin 3: $n3 points, worst $w3"
+else bad "(k) default margin: $nin points (worst $wd) vs margin 3: ${n3:-?} points (worst $w3)"; fi
 
 if [ "$failures" -ne 0 ]; then echo "target_auto_windows: $failures check(s) FAILED"; exit 1; fi
 echo "target_auto_windows: all checks passed"

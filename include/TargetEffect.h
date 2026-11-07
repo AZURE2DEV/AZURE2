@@ -3,6 +3,8 @@
 
 #include <string>
 #include <fstream>
+#include <algorithm>
+#include <cmath>
 #include <vector>
 #include <memory>
 #include <iosfwd>
@@ -190,7 +192,12 @@ class TargetEffect {
   /// ranges in the same token are added.  Older engines read no range from it and integrate everywhere.
   bool IsAutoWindows() const { return autoWindows_; }
   double GetAutoWindowTolerance() const { return autoWindowTolerance_; }
-  double GetAutoWindowMargin() const { return autoWindowMargin_; }
+  /// The margin: as given ("auto:<tol>:<margin>"), else max(3, 1/(2 sqrt(tol))) -- a window edge at d from a Lorentzian
+  /// leaves the E_bar fallback a relative tail error of about Delta^2/(4 d^2), so d >= Delta/(2 sqrt(tol)) keeps it within
+  /// the tolerance (5 at the default 0.01; 13C+alpha ND2021r 2026-11-07: margin 3 left 120 points > 1 % just outside edges).
+  double GetAutoWindowMargin() const {
+    return autoWindowMargin_ > 0.0 ? autoWindowMargin_ : std::max(3.0, 0.5 / std::sqrt(autoWindowTolerance_));
+  }
   /// Any window at all, explicit or automatic.
   bool HasWindows() const { return !ranges_.empty() || autoWindows_; }
 
@@ -379,7 +386,7 @@ class TargetEffect {
   double autoTolerance_;
   bool autoWindows_ = false;            ///< "auto" in the windows token (IsAutoWindows)
   double autoWindowTolerance_ = 0.01;   ///< peak error of the fallback a resonance may have outside a window
-  double autoWindowMargin_ = 3.0;       ///< window reach beyond the target, in units of max(Gamma, Delta)
+  double autoWindowMargin_ = 0.0;       ///< window reach beyond the target, in units of max(Gamma, Delta); 0 = from the tolerance
 
   // Beam-profile kernel (see IsBeamProfile).
   bool isBeamProfile_ = false;

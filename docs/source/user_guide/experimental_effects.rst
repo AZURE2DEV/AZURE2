@@ -398,7 +398,11 @@ A point at :math:`E_0` samples :math:`[E_0-\Delta, E_0]`; its window reaches
 *margin* × max(:math:`\Gamma`, :math:`\Delta`) beyond the points whose target
 holds the resonance or threshold, i.e. :math:`[E_R - w, E_R + \Delta + w]`.
 ``"auto:<tol>"`` and ``"auto:<tol>:<margin>"`` set the two numbers (defaults
-0.01 and 3); explicit ranges in the same token are added (``"auto,1.20-1.35"``),
+0.01 and max(3, 1/(2√tol)) = 5: a window edge at a distance *d* leaves the
+fallback a relative error of about :math:`\Delta^2/(4d^2)` in the resonance's
+tail, so :math:`d \ge \Delta/(2\sqrt{\mathrm{tol}})` keeps it within the
+tolerance; on the 13C+α ND 2021 data margin 3 left 120 points more than 1 %
+off just outside the edges, margin 5 63, for 20 % more integrated points); explicit ranges in the same token are added (``"auto,1.20-1.35"``),
 and the blend width that follows the token applies to every edge.  A Note per
 segment lists the levels, thresholds, windows and the number of points
 integrated.  The widths are the observed total widths the sub-point grids are

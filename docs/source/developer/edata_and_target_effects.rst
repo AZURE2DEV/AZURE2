@@ -466,7 +466,8 @@ from the starting parameters) and the particle thresholds of the same compound
 nucleus, keeps a resonance when :math:`\Gamma < \Delta/\sqrt{3\,\mathrm{tol}}`
 (the peak error of :math:`\sigma(\bar E)` for a Lorentzian), and gives each kept
 resonance or threshold the lab window
-:math:`[E_R - w, E_R + \Delta + w]`, :math:`w = \mathrm{margin}\times\max(\Gamma, \Delta)`,
+:math:`[E_R - w, E_R + \Delta + w]`, :math:`w = \mathrm{margin}\times\max(\Gamma, \Delta)`
+(``GetAutoWindowMargin``: the given margin, else :math:`\max(3, 1/(2\sqrt{\mathrm{tol}}))`),
 with :math:`\Delta` the target thickness at the layout density plus twice the
 beam spread, evaluated at the resonance energy clamped into the segment's data
 range (the stopping power is a fit over the data's energies).  The windows are
