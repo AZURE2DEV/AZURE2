@@ -73,6 +73,8 @@ targets checked by script).
   eigenvector sign makes a formal level's overall sign arbitrary. Observables are unaffected. [Fix both in
   `level_parameters`: B_c from the lowest level, sign so that the largest |γ| of a level is positive.]
 - Fix the two contradicting pages. [Separate `docs/` commit, by the director's choice.]
+  Done by 57bcd03d on `docs/upgrade-1-fix-contradictions` (not merged): all listed contradictions confirmed
+  and fixed; also the Reich–Moore sign on the A⁻¹ diagonal (`+= iγ²`, code `−= iγ²`).
 
 **Next.** Convention record and `level_parameters` (code part of the ROADMAP item).
 
