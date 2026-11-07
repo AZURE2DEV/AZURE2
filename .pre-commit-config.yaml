@@ -1,0 +1,10 @@
+# pre-commit hooks (https://pre-commit.com): `pip install pre-commit && pre-commit install`.
+repos:
+  - repo: local
+    hooks:
+      - id: check-skills
+        name: check .claude/skills against docs/upgrade/RULES.md §3
+        entry: python3 tools/check_skills.py
+        language: system
+        pass_filenames: false
+        files: ^(\.claude/skills/|docs/source/|tools/check_skills\.py$)

@@ -1,0 +1,12 @@
+s-wave scattering lengths at each particle pair's threshold
+(a0 = -a [M/(x^2 K1^2) - 2 I1/(x^2 K1)], M = gamma^T A gamma at E = 0; Paneru et al., PRC 99, 045807 (2019), Eq. 7)
+  Pair  Particles     J^pi           x      Re a0 (fm)      Im a0 (fm)  note
+     1  4He+4He       0+        3.4833    2.241330e+02   -0.000000e+00
+     2  p+7Li         1-        1.7071    1.253040e+01   -0.000000e+00
+     2  p+7Li         2-        1.7071    1.469253e+01   -0.000000e+00
+     3  n+7Be         1-        0.0000    3.137375e+00   -1.314648e-01
+     3  n+7Be         2-        0.0000    5.662319e-01   -1.935850e+00
+Constraints (<scatteringLengths>):
+  line 2: pair 3, s = 1: model 3.13738 - 0.131465 i fm, measured 3.09573 +- 0.1, Im -0.229578 +- 0.1 fm, chi2 1.13604
+  line 3: pair 3, s = 2: model 0.566232 - 1.93585 i fm, measured 0.794247 +- 0.1, Im -1.77171 +- 0.1 fm, chi2 7.89333
+  total scattering-length chi2 9.02937

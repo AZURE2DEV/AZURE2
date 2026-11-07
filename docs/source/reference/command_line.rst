@@ -368,6 +368,30 @@ level matrix and reports the largest difference seen so far;
 ``AZURE_CHANNEL_DEBUG=1`` reports the formal representation of each group
 (and why a group has none).
 
+Analytic-gradient diagnostics (``--use-gradient`` and the pyazr Jacobian):
+``AZURE_GRAD_CHECK=1`` compares sampled analytic derivatives, and the residual
+Jacobian, with central finite differences computed from the single-threaded
+:math:`\chi^2` (``AZURE_GRAD_CHECK=exit`` stops after the check;
+``AZURE_GRAD_CHECK_N``, ``AZURE_GRAD_CHECK_IDX``, ``AZURE_GRAD_CHECK_SEGS`` and
+``AZURE_GRAD_CHECK_H`` choose the number of sampled parameters, which
+parameters or segments, and the step); ``AZURE_GRAD_TIMING=1`` reports the time
+per gradient call; ``AZURE_GRAD_DEBUG=1`` names the segment and the reason when
+the adjoint gradient is unavailable and the fit falls back to finite
+differences; ``AZURE_GRAD_ADJOINT=1`` forces the adjoint gradient instead of the
+Jacobian path; ``AZURE_TE_WEIGHTS_CHECK=1`` and ``AZURE_TE_WEIGHTS_FD=1`` check
+the target-effect combiner weights; ``AZURE_POOL_CHECK=1`` compares the pooled,
+parallel :math:`\chi^2` with a fresh serial one; ``AZURE_SERIAL_CHI2=1``
+evaluates every :math:`\chi^2` serially.
+
+``AZURE_DUMP_NONFINITE=1`` (or ``=<threshold>``, default :math:`10^{10}`):
+whenever a :math:`\chi^2` evaluation is non-finite or above the threshold,
+append to ``nonfinite_dump.txt`` in the working directory the parameters that
+moved most since the last gradient point, the segments with the largest or
+non-finite contributions, and their offending points, including non-finite
+target-effect sub-points (at most 20 dumps per run).  A non-finite
+:math:`\chi^2`, or one above :math:`10^{100}`, is handed to Minuit2 as
+:math:`10^{100}`.
+
 Examples
 --------
 

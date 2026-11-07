@@ -434,27 +434,28 @@ it runs here:
   the places a new `.azr` keyword has to reach, and the rules that keep the test
   references trustworthy. The human-readable version is the
   [contributing guide](https://azure2dev.github.io/AZURE2/developer/contributing.html).
-- **`.claude/skills/`** — how to *use* the code: `azure2-eval` drives AZURE2
-  (the CLI menu modes, the `pyazr` API, adding and removing levels, decomposing
-  cross sections, and the conventions that are easy to get wrong), and the
-  others cover building projects, dropping data sets, covariances, resonance
-  searches and fitting campaigns.
+- **`.claude/skills/`** — how to *use* the code: one owner skill per task
+  (below). Skills link to this documentation for how the code behaves;
+  `tools/check_skills.py` checks their rules (`docs/upgrade/RULES.md` §3).
 
 Editing these files is the way to teach Claude something new about the
 project. Personal notes go in `CLAUDE.local.md`, which is not committed.
 
-The skills most used for evaluations:
+The skills:
 
 | Skill | Covers |
 |---|---|
-| `azure2-eval` | Driving AZURE2: the CLI menu modes, the `pyazr` API, adding and removing levels, decomposing cross sections, and the conventions that are easy to get wrong (frames, segment indexing, the external-capture caches). |
+| `azure2-setup` | A new project: particle pairs and masses, levels and channels, segments, ENSDF levels and EXFOR data, conventions, first checks. |
+| `azure2-calculate` | Observables at any energy and angle, extrapolation, S(0), reaction rates, decomposition; the CLI menu and pyazr sessions. |
+| `azure2-fit` | Free and fixed parameters, staged fits, nuisances and priors, convergence, editing levels and background poles, parameter files, dropping data sets. |
+| `azure2-check` | Whether a result can be trusted: pulls, residual structure, limits, radius and background-pole sensitivity, frames and units. |
+| `azure2-uncertainty` | Data covariance, parameter covariance, profile likelihood, sampling, bands, systematic axes. |
+| `azure2-plot` | Publication figures and showing a result in the GUI. |
+| `azure2-targets` | Targets, stopping and straggling, resolution, Doppler, transmission and self-shielding. |
 | `azure2-thm` | A complete THM evaluation, from vetting published THM data to model-averaged results. |
-| `azr-project-builder` | A new `.azr` project without the GUI. |
-| `azure2-drop-dataset` | Removing or restoring data segments without corrupting the model. |
-| `r-matrix-analysis` | The R-matrix picture behind resonance selection and interference. |
-| `rmfit-campaign` | Global R-matrix fitting campaigns with AZURE2. |
-| `data-covariance` | A covariance matrix for every data set in an R-matrix fit. |
-| `nds-explorer` | Finding data in EXFOR and the IAEA NDS services. |
+| `azure2-resonance-search` | Gated search for missing or misassigned levels. |
+| `azure2-exchange` | Conventions and bases, GNDS/ENDF translation, comparison with evaluations. |
+| `rmfit-campaign` | Global R-matrix fitting campaigns with rmfit. |
 
 ---
 

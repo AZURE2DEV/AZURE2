@@ -32,5 +32,5 @@ log's "Total Chi-Squared" includes the penalty; `chiSquared.out` does not):
 
 dev 89fa22f: (a) +12,460 instead of +4 (the prior was evaluated on width_1_1 = 1.2719 in reduced units),
 (b) +56 (on energy_1 = 0), (c) +12,018 and (e) +273,466 by the same mechanism.  The 2026-09-13 observation in the
-azure2-eval skill (nuisance entries on ANCs and gamma widths at their nominal values adding 316, 3,306 and
+azure2-eval skill, now azure2-fit (nuisance entries on ANCs and gamma widths at their nominal values adding 316, 3,306 and
 3.3e9 to the 12C+alpha total) was this index mistake, not the physical-to-reduced conversion.

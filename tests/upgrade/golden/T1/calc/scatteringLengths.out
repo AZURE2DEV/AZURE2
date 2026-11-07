@@ -1,0 +1,4 @@
+s-wave scattering lengths at each particle pair's threshold
+(a0 = -a [M/(x^2 K1^2) - 2 I1/(x^2 K1)], M = gamma^T A gamma at E = 0; Paneru et al., PRC 99, 045807 (2019), Eq. 7)
+  Pair  Particles     J^pi           x      Re a0 (fm)      Im a0 (fm)  note
+     1  p+12C         1/2+      2.3525   -2.914668e+02   -0.000000e+00

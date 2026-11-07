@@ -605,7 +605,7 @@ Frames and units are handled automatically: ``EN-CM`` energies are converted
 to lab, ``B*KEV`` S-factors to barns via the Sommerfeld factor, ``NB/SR``
 differentials to b/sr.  Pick ``observable`` to match the data's angle frame
 (EXFOR ``ANG-CM`` → ``"differential-cm"`` or ``"analyzing-power"``; lab
-``ANG`` → ``"differential"``).  See the ``nds-explorer`` skill for the full
+``ANG`` → ``"differential"``).  See the ``azure2-setup`` skill for the full
 quantity/unit reference and failure modes.
 
 One case cannot be decided automatically. Ratio-to-Rutherford data

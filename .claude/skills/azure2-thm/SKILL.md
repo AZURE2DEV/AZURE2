@@ -1,16 +1,16 @@
 ---
 name: azure2-thm
-description: Step-by-step procedure for a complete Trojan Horse Method (THM) evaluation with AZURE2, from published THM spectra and direct data to model-averaged results with a stated model dependence. Covers vetting what published THM points are (HOES yields vs penetrability-corrected on-shell-equivalent values, carrier, binding energy, kinematic-factor convention, resolution, subtracted background, digitised error bars), building the project (THM opt-in, THM segments, experiment lines, binding energy, prior centres), choosing the baseline model (vertex, kinematics, line shape, distortion R(E), DW vertex, spectator window and acceptance, fixed angle, backgrounds, Brune vs Park), staged joint THM + direct fits, deriving strengths through the anchor formula, the model-averaging driver scripts/thm_model_average.py with Akaike/flat weights and the robustness rule, cross-checks, and reporting. Use for any THM fit, HOES data, modified R-matrix, Trojan Horse analysis, THM-derived strengths, S factors or rates, or the model (theory) dependence of THM results. Generic AZURE2 mechanics are in azure2-eval; new compound nuclei in azr-project-builder.
+description: Procedure for a Trojan Horse Method (THM) evaluation with AZURE2, from published THM spectra and direct data to model-averaged results with a stated model dependence. Covers reading the published points (HOES or on-shell-equivalent, carrier, B_xs, KF convention, resolution, background), the <thm> block and THM segments, baseline model choices, staged joint fits, strengths via the anchor formula, model averaging and reporting. Use for any THM fit, HOES data or THM-derived strength, S factor or rate. Project building: azure2-setup; generic fitting: azure2-fit.
 ---
 
 # THM evaluation with AZURE2
 
 The procedure for turning published THM material into an evaluated, model-averaged
-result. Mechanics of segments and files: **`azure2-eval`** ("Trojan Horse (THM)
-segments"). Equations and option reference:
-`docs/source/theory/thm_implementation.rst` (cited below as *impl*, "Section").
-Level schemes and formalism: **`r-matrix-analysis`**. Data fetching: **`nds-explorer`**.
-New compound nucleus: **`azr-project-builder`**. Detailed checklists:
+result. Mechanics of THM segments, the `<thm>` block and its pyazr editors:
+`references/thm-block.md`. Equations and option reference:
+`docs/source/theory/thm_implementation.rst` (cited below as *impl*, "Section"). The plan the
+THM code follows: `docs/upgrade/THM.md`. Level schemes, data fetching and new compound
+nuclei: azure2-setup. Generic fitting mechanics: azure2-fit. Detailed checklists:
 `references/` in this skill folder.
 
 What THM data can and cannot give (the lesson of every cross-check so far):
@@ -23,6 +23,28 @@ What THM data can and cannot give (the lesson of every cross-check so far):
   strengths come from peak areas against an anchor of different l or far away in ρ,
   they move by 20 % to factors of 100. Quote that spread with every number.
 
+Rules that hold throughout (`docs/upgrade/THM.md` §2–3):
+
+- **Reproduce first.** A published THM analysis is reproduced with its own settings
+  (Stage 7, `references/reproduction.md`) before it is re-analysed or replaced.
+- **HOES and on-shell-equivalent (OES) data are two kinds, never mixed silently.** HOES
+  excitation functions (arbitrary units) are fitted with σ_HOES; OES S-factor points
+  (penetrability already divided out) are compared with the on-shell S(E). Each THM
+  measurement states which it is (Stage 1).
+- **Resolution is stated in the c.m. frame of x + A.** A lab value is converted, and the
+  record says which frame the paper gave (Stage 2, step 5).
+- **For OES points a resolution fold acts on S(E), not σ(E).** Folding σ below the barrier
+  inflates the result (×182 at 50 keV for a 20 keV fold). The present `<targetInt>` fold
+  acts on σ: do not put it on OES segments.
+- **No energy shifts to move THM data onto direct data.** Do not free an energy shift on a
+  THM segment; a misalignment is a frame, calibration or reading error to be found in Stage 1.
+- **No negative backgrounds.** A background term is non-negative by construction; a
+  profiled `background=` that goes below zero anywhere in the data window is reduced in
+  order or removed, not reported.
+- **DWBA vertices are validated against FRESCO** (form factors and angular distributions
+  to 1 % for the system analysed) before a `vertexModel=dw` variant counts as more than a
+  check. Without that benchmark, label DW results as checks.
+
 ## When to use
 - A fit that includes THM points (HOES or penetrability-corrected), alone or with direct data.
 - A strength, S(0), rate or ANC derived from a THM spectrum.
@@ -31,7 +53,7 @@ What THM data can and cannot give (the lesson of every cross-check so far):
 
 Prerequisites:
 
-1. AZURE2 built from the `thm` branch, with **both** targets current: the CLI
+1. AZURE2 built from a branch that carries the THM code, with **both** targets current: the CLI
    (`build/src/AZURE2`) and the pyazr module `_azure2`. They are separate CMake
    targets; `make AZURE2` does not rebuild `_azure2`, and a stale module reproduces
    engine bugs that are already fixed. Build with `make -j2` at most on small machines.
@@ -77,7 +99,7 @@ Fill in the per-dataset record of `references/provenance-checklist.md` first.
 5. **Check the scatter.** Fit a smooth model (for example one Gaussian per peak) to the
    THM points with the published bars. If χ²/ν ≫ 1, the bars are smaller than the
    scatter (statistical only). Note the factor; Stage 4 uses it.
-6. **Collect the direct data.** Use EXFOR (`nds-explorer`, `pyazr.nds`) and the
+6. **Collect the direct data.** Use EXFOR (`pyazr.nds`, azure2-setup) and the
    published tables. Record units, lab or c.m. frame, systematic (norm) errors, and
    whether per-point errors are given or assigned. Put the source in the data file's
    `#` header.
@@ -117,7 +139,7 @@ Pitfalls met:
 
 ### Stage 2. Build the project
 
-Start with **`azr-project-builder`** (pairs, levels, channels) or an existing `.azr`.
+Start with azure2-setup (pairs, levels, channels) or an existing `.azr`.
 Then:
 
 1. **Enable THM.** In the GUI, tick *Configure > Runtime Options > Use Trojan Horse
@@ -146,9 +168,9 @@ Then:
      with the norm. Results are in `output/thm_experiments.out` and
      `session.thm_background(name)`.
    - pyazr: `AzrModel.set_thm_experiment(name, segments, ...)`.
-5. **Resolution.** Use one `<targetInt>` Gaussian per THM segment. Its σ is a
-   **lab** standard deviation: convert c.m. σ by ×(m₁+m₂)/m₂, and convert FWHM to σ
-   (÷2.355). Example: 17 keV c.m. gives ≈ 0.01795 MeV for p+18O. Without a stated value,
+5. **Resolution.** Record σ_E in the c.m. frame of x + A. The present input is one
+   `<targetInt>` Gaussian per HOES segment, whose σ is a **lab** standard deviation:
+   convert c.m. σ by ×(m₁+m₂)/m₂, and convert FWHM to σ (÷2.355). Example: 17 keV c.m. gives ≈ 0.01795 MeV for p+18O. Without a stated value,
    start at σ ≈ 30 keV c.m. and fit or scan it. pyazr: `add_target_effect(segments,
    gaussian_sigma=...)`.
 6. **Direct-data norms.** Give each direct segment a norm error equal to its quoted
@@ -181,8 +203,8 @@ grid of Stage 6. Details and effect sizes: `references/model-choices.md`.
 | choice | key | default / when to change |
 |---|---|---|
 | entrance l coherence | `entranceL=` | `incoherent`: exact for 4π, spin-summed data. For a restricted angular range use `theta=` (below), not `coherent` |
-| vertex boundary | `vertex=` | `constant` (B_c = S_c(E₁) of the lowest level of each Jπ): representation-invariant. `onshell` (S+iP) as a variant. `perlevel` only to reproduce pre-Sep-2026 numbers (18O band 23 % vs 5 % peak rms) |
-| kinematic factor | `kinematics=` | Match what the data divided by: full three-body KF → `kf3body`; λ₃/λ₂ → `lambda32`; \|φ\|² only → `triple`; La Cognata's formula or unknown → `lacognata`. λ₃/λ₂ leaves 1/k_i (×7 over 0.02–1 MeV) |
+| vertex boundary | `vertex=` | `constant` (B_c = S_c(E₁) of the lowest level of each Jπ): representation-invariant. `onshell` (S+iP) as a variant. `perlevel` (the former default) only to reproduce numbers made with it (18O band 23 % vs 5 % peak rms) |
+| kinematic factor | `kinematics=` | Match what the data divided by: full three-body KF → `kf3body`; λ₃/λ₂ → `lambda32`; \|φ\|² only → `triple`; La Cognata's formula or unknown → `lacognata` (the default; the other three are legacy forms kept to match data divided by them). λ₃/λ₂ leaves 1/k_i (×7 over 0.02–1 MeV) |
 | entrance vertex model | `vertexModel=` | `pw` default. Make `dw` (with `distortion=coulomb\|optical`, `opticalAA=`, `opticalSF=`) a variant whenever peak areas of different l, or levels far apart in ρ, become strengths |
 | Coulomb integral C_l | `coulombIntegral=` | `0` (no published analysis uses it). `1` only with a plane a+A wave (refused with `dw` or a distorted R(E)); ×3–4 run time |
 | Coulomb line shape N_C | `lineshape=on` | Charged spectator only (N_C ≡ 1 for a neutron). Off in published fits; make it a variant (17O, p spectator: +10–17 % on strengths). Refused with `cbackground=` |
@@ -190,7 +212,7 @@ grid of Stage 6. Details and effect sizes: `references/model-choices.md`.
 | spectator window | `ps=hulthen:0-40`, `gauss:...`, `table:<file>` | Average over the accepted \|p_s\| when the vertex is not smooth over it (near nodes). Excludes `spectatorEnergy` for that pair |
 | acceptance | `spectatorAngles=[cm:]a-b`, `table:<file>` | Accepted spectator directions; with `ps` one acceptance (19F: `spectatorAngles=cm:135-180`) |
 | fixed angle | `theta=50-70` | Data in a restricted c.m. angular range of the exit pair (7Li θ_cm 50–70°: shape 14 % rms) |
-| backgrounds | `background=`, background pole, `cbackground=` | Physics also in direct data → background pole (broad level, same Jπ). Non-quasi-free residue → `background=` (incoherent). `cbackground=` (interfering, THM-only) is a diagnostic, not a model |
+| backgrounds | `background=`, background pole, `cbackground=` | Physics also in direct data → background pole (broad level, same Jπ). Non-quasi-free residue → `background=` (incoherent, must stay ≥ 0). `cbackground=` (interfering, THM-only) is a diagnostic, not a model |
 | parametrization | CLI `--use-park` / `--no-brune`, pyazr `use_park=True` | Brune (default). Park gives the same THM model (`tests/thm_park`, ≤ 1e-8) and is preferable when single partial widths are fixed, bounded or given priors |
 
 Rules that the engine enforces (*impl*, "Coulomb effects: what each option contains"):
@@ -215,6 +237,7 @@ HOES), with the profiled scale included exactly.
    2. Fit THM only, to see what shape it wants (absolute widths will be wrong).
    3. Fit jointly, freeing the few parameters both constrain.
    4. Free the rest step by step. Carry the parameter vector between steps.
+   5. Leave the energy shifts of THM segments fixed at zero.
 2. **Joint fit rules.**
    - The THM scale is profiled; the absolute scale comes only from the direct data
      (norm priors) or from penalty rows of measured strengths.
@@ -407,7 +430,11 @@ the cross-checks are in `references/calibration.md`.
 - [ ] `vertex=perlevel` used for new work (representation-dependent).
 - [ ] `coherent` used as a fixed-angle observable (use `theta=`).
 - [ ] Prior or penalty rows counted in N for ν; AIC weights without `--rescale best` at χ²/ν ≫ 1.
-- [ ] Several radius variants fitted in one process (`--in-process`). An engine memo once leaked B_c between sessions (fixed in 49b6c30; `tests/pyazr/thm_vertex_memo_sessions_test.py`).
+- [ ] Several radius variants fitted in one process (`--in-process`). Keep one variant per process; the B_c memo between sessions is tested by `tests/pyazr/thm_vertex_memo_sessions_test.py`.
+- [ ] HOES and OES points mixed in one segment or one reading; a σ fold applied to OES points.
+- [ ] An energy shift freed on a THM segment; a profiled background below zero.
+- [ ] A DW-vertex result reported as final without a FRESCO benchmark of the vertex.
+- [ ] An rwa-declared (`gammaIsRWA`) width converted by hand (`references/thm-block.md`).
 - [ ] Stale `_azure2` after an engine change; stale `output/intEC.dat`/`intEC.extrap` before an extrapolation with external capture (delete them).
 - [ ] Old snapshot files run without checking that the "file alone" χ² reproduces the fit.
 - [ ] `thm_vertex` read at an energy the window cannot reach (use `strict=True`).
@@ -440,6 +467,8 @@ the cross-checks are in `references/calibration.md`.
 | worked examples | `examples/o18_lacognata2008` (narrow, anchor), `examples/o18_lacognata2010` (doublet, DW, authors' background), `examples/o17_guardo2017_fit` (n entrance, p spectator), `examples/f19_pag_thm` (HOES + direct, linear background, direct strengths), `examples/c12c12_tumino2018` (four channels, one experiment, identical nuclei), `examples/li7_tumino2006`, `examples/li6_pizzone2011`, `examples/n15_lacognata2007` (on-shell-equivalent) |
 | classic-project differences of the branch | `MERGE_NOTES.md` |
 | detailed checklists | `references/provenance-checklist.md`, `references/model-choices.md`, `references/calibration.md`, `references/reproduction.md` |
+| THM segments, `<thm>` keys, `AzrModel` editors, reference test χ² | `references/thm-block.md` |
+| THM in the upgrade (observable, kernel, DWBA validation) | `docs/upgrade/THM.md` |
 
 ## Memory and process discipline (small machines)
 

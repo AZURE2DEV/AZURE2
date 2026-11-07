@@ -1,0 +1,49 @@
+    #parametrization       1.0000000e+00       0.0000000e+00
+            energy_1       0.0000000e+00       0.0000000e+00
+           width_1_1       1.5148368e+00       1.5148368e-01
+            energy_2       1.0000000e+00       1.0000000e-01
+           width_2_1       1.2009121e+00       1.2009121e-01
+           width_2_2       0.0000000e+00       0.0000000e+00
+           width_2_3       0.0000000e+00       0.0000000e+00
+           width_2_4      -0.0000000e+00      -0.0000000e+00
+            energy_3       3.5020000e+00       3.5020000e-01
+           width_3_1       5.0395408e-01       5.0395408e-02
+           width_3_2       2.6222126e-01       2.6222126e-02
+           width_3_3       0.0000000e+00       0.0000000e+00
+           width_3_4       3.0042937e-01       3.0042937e-02
+            energy_4       1.5000000e+01       1.5000000e+00
+           width_4_1       6.8268156e-01       6.8268156e-02
+           width_4_2       0.0000000e+00       0.0000000e+00
+           width_4_3       0.0000000e+00       0.0000000e+00
+           width_4_4       0.0000000e+00       0.0000000e+00
+            energy_5       2.3650000e+00       2.3650000e-01
+           width_5_1       2.3951073e+00       2.3951073e-01
+           width_5_2       1.8069565e+00       1.8069565e-01
+           width_5_3      -7.4793271e-01      -7.4793271e-02
+            energy_6       1.5000000e+01       1.5000000e+00
+           width_6_1       7.7600569e-01       7.7600569e-02
+           width_6_2       0.0000000e+00       0.0000000e+00
+           width_6_3       0.0000000e+00       0.0000000e+00
+            energy_7       3.5470000e+00       3.5470000e-01
+           width_7_1       1.8623630e+00       1.8623630e-01
+           width_7_2      -4.4308029e-01      -4.4308029e-02
+segment_1_energy_shift       0.0000000e+00       5.0000000e-04
+segment_2_energy_shift       0.0000000e+00       5.0000000e-04
+segment_3_energy_shift       0.0000000e+00       5.0000000e-04
+segment_4_energy_shift       0.0000000e+00       5.0000000e-04
+segment_5_energy_shift       0.0000000e+00       5.0000000e-04
+segment_6_energy_shift       0.0000000e+00       5.0000000e-04
+segment_7_energy_shift       0.0000000e+00       5.0000000e-04
+segment_8_energy_shift       0.0000000e+00       5.0000000e-04
+segment_9_energy_shift       0.0000000e+00       5.0000000e-04
+segment_10_energy_shift       0.0000000e+00       5.0000000e-04
+segment_1_energy_shift_sqrt       0.0000000e+00       5.0000000e-04
+segment_2_energy_shift_sqrt       0.0000000e+00       5.0000000e-04
+segment_3_energy_shift_sqrt       0.0000000e+00       5.0000000e-04
+segment_4_energy_shift_sqrt       0.0000000e+00       5.0000000e-04
+segment_5_energy_shift_sqrt       0.0000000e+00       5.0000000e-04
+segment_6_energy_shift_sqrt       0.0000000e+00       5.0000000e-04
+segment_7_energy_shift_sqrt       0.0000000e+00       5.0000000e-04
+segment_8_energy_shift_sqrt       0.0000000e+00       5.0000000e-04
+segment_9_energy_shift_sqrt       0.0000000e+00       5.0000000e-04
+segment_10_energy_shift_sqrt       0.0000000e+00       5.0000000e-04

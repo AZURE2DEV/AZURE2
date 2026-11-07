@@ -21,8 +21,8 @@ raise `ValueError` on a refusal.
   sum, and the HOES amplitude is the same in every R-matrix representation (Brune and
   formal agree to 2e-11).
 - `perlevel` puts S_c(E_λ) inside the sum. It is representation-dependent once two levels
-  of one Jπ interfere (18O ApJ 723 band: 23 % against 5 % peak rms). Use it only to
-  reproduce pre-Sep-2026 numbers.
+  of one Jπ interfere (18O ApJ 723 band: 23 % against 5 % peak rms). Use it (the former
+  default) only to reproduce numbers made with it.
 - `onshell` (L = S + iP) is boundary-free and complex. It differs near and above the
   barrier. Use it as a variant.
 
@@ -79,7 +79,7 @@ everything below except `theta`, `background` and `cbackground`.
 `table:<file>`) with **`psNodes=`**
 - Averages the HOES cross section over the accepted spectator directions at fixed E.
 - The weight is |φ(q)|² d cos θ_cm = |φ|² q dq over the reachable q only. It is not the
-  isotropic q² dq measure that AZURE2 used before Oct 2026; refits made with the old
+  isotropic q² dq measure that older builds used; refits made with the old
   measure are superseded.
 - Matters where M_l has a node inside the window: the window fills the nodes.
 - `session.thm_vertex(name, E, strict=True)` raises instead of silently returning the
@@ -184,8 +184,8 @@ everything below except `theta`, `background` and `cbackground`.
 
 ## Identical nuclei
 
-- (1+δ₁₂) = 2 multiplies every cross section out of an identical entrance pair (since
-  df8c2c8). Identical exit pairs get no factor.
+- (1+δ₁₂) = 2 multiplies every cross section out of an identical entrance pair.
+  Identical exit pairs get no factor.
 - Two identical 0⁺ bosons fuse only through even-J natural-parity levels. THM can
   populate odd-J or unnatural-parity levels by transfer (12C+12C 0.877 MeV 1⁻).
   - AZURE2 keeps l = J with a Bose-symmetry warning and cannot average l = J ± 1.

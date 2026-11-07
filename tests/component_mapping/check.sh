@@ -59,7 +59,7 @@ awk '/<segmentsData>/ { f = 1; n = 0; print; next }
 # hide the other composites in the gradient check.
 awk '/<segmentsData>/ { f = 1; n = 0; print; next } /<\/segmentsData>/ { f = 0 }
      f { n++; if (n == 4) { NF = 15; $0 = $0 " 0 0" } } { print }' "$WORK/t.azr" > "$WORK/g.azr"
-# The extrapolation copy: target effects off (they would fold the test segment, see the azure2-eval skill).
+# The extrapolation copy: target effects off (they would fold the test segment, see the azure2-calculate skill).
 awk '/<targetInt>/ { f = 1; print; next } /<\/targetInt>/ { f = 0 } f { $1 = 0 } { print }' "$WORK/t.azr" > "$WORK/x.azr"
 
 # run NAME MODEL MODE [ENV...] -> $WORK/NAME
