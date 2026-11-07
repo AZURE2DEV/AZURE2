@@ -789,6 +789,39 @@ a constant footprint. Before October 2026 every such call added a few thousand
 entries for good: about 4 GB per worker after 17,000 evaluations of a
 12C(α,γ) chain.
 
+Posterior sampling with gradients (NUTS)
+----------------------------------------
+
+``pyazr.sampling`` samples a posterior with the No-U-Turn sampler (NUTS), a self-tuning form of Hamiltonian Monte
+Carlo.  It follows the gradient of the log posterior, which AZURE2 computes analytically
+(:meth:`azure2.chi2_and_grad`, about two to three evaluations for all level parameters), so one draw crosses the
+posterior in a few tens of evaluations instead of the hundreds to thousands of steps an ensemble or random-walk sampler
+needs when 50-400 parameters are strongly correlated.  Start the mass matrix from the Laplace covariance and the
+correlations stop mattering::
+
+    from pyazr.sampling import AzurePosterior, sample
+
+    post = AzurePosterior("7Be.azr", flags={"use_brune": True, "ignore_externals": True},
+                          sample=names, x_template=x_fit, workdir="work")   # sample a subset, hold the rest
+    theta0 = post.x0
+    cov = post.laplace_covariance(theta0)              # Gauss-Newton Laplace: (J^T J + penalty Hessian)^-1
+    res = sample(post, theta0, n_chains=4, n_warmup=1000, n_draws=2000, inv_metric=cov)
+    print(res.summary(post.names))                     # mean, sd, split R-hat, ESS; divergences, tree depth, E-BFMI
+
+``AzurePosterior`` is exp(-objective/2) (data chi-squared, optionally divided by ``temper``, plus AZURE2's
+normalization and shift penalties) times optional Gaussian ``priors`` in reduced-width space.  For a posterior of your
+own (marginalized normalizations, physical-width priors, ...) pass any ``theta -> (log p, gradient)`` to
+:func:`pyazr.sampling.nuts` (one chain) or a picklable factory returning it to :func:`pyazr.sampling.sample` (chains in
+parallel processes).
+
+- The flags are CLI-only, as for every pyazr session: take them from the fit's job script.
+- Watch ``divergent`` in the summary.  Divergences mean the step size is too large for the curvature somewhere and the
+  draws are biased there; raise ``target_accept`` (0.9-0.95) or reparameterize.  A forbidden point (``-inf``) counts
+  as divergent.
+- Draws are in the RWA parameterization; convert to physical widths afterwards
+  (:meth:`azure2.transform_rwa`).  A flat prior in RWA is not flat in widths.
+- ``ess`` and ``split_rhat`` (Vehtari et al. 2021) work on any (chains, draws, dim) array, emcee chains included.
+
 Examples
 --------
 

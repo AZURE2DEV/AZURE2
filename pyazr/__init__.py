@@ -25,6 +25,7 @@ from .bands import (Band, load_covariance, rmatrix_columns, best_fit_params,
                     live_parameters, step_sizes, sensitivities, trimmed_model,
                     uncertainty_bands, extrapolation_bands)
 from .priors import prior_from_fit, read_prior, write_prior, read_covariance_dat
+from .sampling import nuts, sample, NUTSResult, ess, split_rhat, AzurePosterior
 
 __all__ = ["azure2", "ScatteringLength", "ScatteringLengthLine",
            "angular_distribution",
@@ -48,5 +49,6 @@ __all__ = ["azure2", "ScatteringLength", "ScatteringLengthLine",
            "Band", "load_covariance", "rmatrix_columns", "best_fit_params",
            "live_parameters", "step_sizes", "sensitivities", "trimmed_model",
            "uncertainty_bands", "extrapolation_bands",
-           "prior_from_fit", "read_prior", "write_prior", "read_covariance_dat"]
-__version__ = '2.9.0'
+           "prior_from_fit", "read_prior", "write_prior", "read_covariance_dat",
+           "nuts", "sample", "NUTSResult", "ess", "split_rhat", "AzurePosterior"]
+__version__ = '2.10.0'

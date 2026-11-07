@@ -399,3 +399,10 @@ add_test(NAME pyazr_prior_covariance
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/prior_covariance_test.py)
 set_tests_properties(pyazr_prior_covariance PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
+# pyazr.sampling: NUTS on Gaussians (exact moments), ESS / R-hat, and the AZURE2 posterior's gradient
+# against central differences on tests/shift_fn.
+add_test(NAME pyazr_sampling
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/sampling_test.py)
+set_tests_properties(pyazr_sampling PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
