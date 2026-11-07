@@ -10,7 +10,8 @@ AZUREParams.cpp EPoint.cpp Interference.cpp CNuc.cpp Equation.cpp
 JGroup.cpp Config.cpp ESegment.cpp KGroup.cpp IntegratedFermiFunc.cpp
 EffectiveCharge.cpp  GSLException.cpp ParameterLimitsManager.cpp
 AdaptiveIntegrationGrid.cpp NuclearPotentialManager.cpp AZUREGrad.cpp ThmFunc.cpp
-THMMatrixFunc.cpp ThmVertexBoundary.cpp ThmNumerics.cpp EDataThm.cpp ConfigThm.cpp ThmExperiment.cpp ThmLineshape.cpp ThmDistortion.cpp ThmOptical.cpp ThmDwVertex.cpp ThmAngular.cpp CovarianceBand.cpp PriorCovariance.cpp ParameterLabel.cpp PolarizationFunc.cpp ChannelFunc.cpp CoulombTable.cpp)
+THMMatrixFunc.cpp ThmVertexBoundary.cpp ThmNumerics.cpp EDataThm.cpp ConfigThm.cpp ThmExperiment.cpp ThmLineshape.cpp ThmDistortion.cpp ThmOptical.cpp ThmDwVertex.cpp ThmAngular.cpp CovarianceBand.cpp PriorCovariance.cpp ParameterLabel.cpp PolarizationFunc.cpp ChannelFunc.cpp CoulombTable.cpp
+CNucSystem.cpp)
 
 # Add GUI stub when GUI is not enabled
 if(NOT BUILD_GUI)
@@ -93,7 +94,10 @@ endif (BUILD_LIBRARY)
 # Minuit2 or GSL before AZURE2Core leaves the engine's references to them
 # unresolved on GNU ld (Linux and MinGW).  macOS's linker rescans archives and
 # hides the mistake, which is why the hand-written order looked fine.
+# azure2_physics (physics/) is below the engine: the engine may use it, never the reverse.  Only the
+# CNuc -> System adapter (CNucSystem.cpp) uses it so far.
 target_link_libraries(AZURE2Core PUBLIC
+    azure2_physics
     Minuit2::Minuit2
     ${GSL_LIBRARIES}
     ${BLAS_LIBRARIES}
