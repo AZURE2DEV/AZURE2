@@ -4,7 +4,7 @@ Update this file at the end of every work session: what changed, what is next, w
 
 ## 2026-11-07 (`feature/upgrade-1-conventions`) — conventions page, documentation part (ROADMAP Phase 1)
 
-Branch `feature/upgrade-1-conventions` from `feature/upgrade` f8b7bf22, not merged. Commits: 754ac7d7 (test
+Branch `feature/upgrade-1-conventions` from `feature/upgrade` f8b7bf22, merged 655c5634. Commits: 754ac7d7 (test
 `tests/coulomb_nuclear_sign`), 8faa430d (`docs/source/theory/conventions.rst` + Theory toctree), and this
 HANDOFF/ROADMAP commit. No C++ changed.
 
