@@ -82,7 +82,7 @@ the 26 checks, the regression projects, the reference tests or the pyazr tests a
 
 ## 4. Findings
 
-### 4.1 Fit iteration counter and progress line written from every thread (AZURE2; real race)
+### 4.1 Fit iteration counter and progress line written from every thread (AZURE2; real race; fixed)
 
 TSan, in every fit that calls the objective from Minuit2's numerical gradient (T3-fit, in its Hesse step; T2-fit30;
 the fits of `shared_tables_race`, `shift_fn`, `shift_fn_groups`, `energy_shift_sqrt`, `natural_target`):
@@ -110,6 +110,15 @@ Effect: increments are lost and two threads can read the same counter value, so 
 choice of which evaluations print a progress line and which write the snapshot are not deterministic; concurrent
 writes to `std::cout` may interleave or garble the progress line. No χ², parameter or output file of the fit result
 depends on the counter.
+
+**Fixed** by fecf4924 (`fix/fit-iteration-counter`). `iterations_` is a `std::atomic<int>`; `EData::Iterate()`
+returns the value it replaced (`fetch_add`, relaxed: the counter orders no other memory), and `AZURECalc::operator()`
+takes its number from that one call. The progress line and the flush after it are written under a mutex local to
+`operator()`; `WriteIterationOutput` keeps its own. The clang 23.1.4 TSan run of the branch merged with §4.2's fix
+(54 steps, 8 threads; §3) reports nothing: the 48 reports at `EData.cpp:970`, `EData.cpp:2023` and
+`AZURECalc.cpp:709` of the run before are gone, and T3-fit and T2-fit30 pass. A T1 fit from the start model with
+Minuit2's numerical gradient (73 progress lines) prints the same lines, the same iteration numbers and the same χ²
+as the build before at one thread; at eight threads the numbers printed are exactly 10, 20, …, 730, each once.
 
 Proposed fix (`fix/fit-iteration-counter`): make `iterations_` a `std::atomic<int>`, let `EData::Iterate()` return
 the value it replaced (`fetch_add(1, std::memory_order_relaxed)`), so that each evaluation gets a unique number from
