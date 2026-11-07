@@ -11,6 +11,7 @@
 #include <cstring>
 #include "Constants.h"
 #include "UdrKernel.h"
+#include "SharedTable.h"
 
 /// A container structure for a reference to a data point.
 
@@ -190,8 +191,8 @@ class EPoint {
     double angle = 0.0;
     int entranceKey = 0, exitKey = 0;
     double geofactor = 0.0, sfactorconv = 0.0, screen_k = 0.0;
-    std::shared_ptr<const EDependentTables> tables;
-    std::shared_ptr<const vector_r> legendre;
+    SharedTable<EDependentTables> tables;
+    SharedTable<vector_r> legendre;
     std::shared_ptr<const ThmPsTable> thmPs;  ///< THM spectator-window table (immutable), empty for a classic point
   };
   /// The point's energy-dependent values, for another point at the same energy (requires them to be valid).
@@ -736,7 +737,7 @@ class EPoint {
   // The Legendre polynomials P_l(cos theta) of the point, by order.  Filled at
   // setup and on an energy shift; shared between EData clones (see
   // EDependentTables below) and written only through MutableLegendre().
-  std::shared_ptr<const vector_r> legendreP_;
+  SharedTable<vector_r> legendreP_;
   vector_r angularDists_;
   int coefficient_order_ = -1;
   bool coefficient_absolute_ = false;
@@ -749,7 +750,7 @@ class EPoint {
   // project with ~10^6 sub-points held ~7 GB of these rows.  Copying an EPoint
   // copies the pointer; every writer goes through MutableEDep(), which gives
   // the point its own copy first if the tables are shared (copy-on-write).
-  std::shared_ptr<const EDependentTables> edep_;
+  SharedTable<EDependentTables> edep_;
   /// This point's own, writable tables (copied first if shared with another point).
   EDependentTables &MutableEDep();
   /// This point's own, writable Legendre polynomials (copied first if shared).

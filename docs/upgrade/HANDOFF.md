@@ -2,6 +2,31 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-07 (`fix/edep-ownership-tsan`) — copy-on-write ownership TSan can see (sanitizer_findings.md §4.2)
+
+Branch `fix/edep-ownership-tsan` from `feature/upgrade` 5b021003, not merged. Commits: c556f052 (the fix), and the
+findings/HANDOFF commit.
+
+**State.** `EPoint::edep_` and `legendreP_` are `SharedTable<T>` (`include/SharedTable.h`): a shared_ptr plus an
+atomic holder count (relaxed increment, release decrement, acquire load in `SoleOwner`); the use_count() + fence test
+is gone. Checked on Condor: GCC 11.5 build with GUI and pyazr; `tests/upgrade/check.sh` PASS at 8 threads (golden
+outputs unchanged); `tests/run_tests.sh` 131/131; `ctest -j8` 135/140, the five failures inherited from origin/thm.
+clang TSan on a temporary branch with this fix and `fix/fit-iteration-counter` (`feature/upgrade` + fecf4924 +
+c556f052): 54 steps, no report file (before: 25 files, 128 reports, 8 AZURE2 sites). Control: the acquire load made
+relaxed brings back 75 reports at `EDependentTables::Clear` (checks section).
+
+**Open (proposed default in brackets).**
+- Under TSan, `shared_point_tables` (d) now fails without a report: peak RSS 1162/1164 MB against the limit 1149 MB
+  (1133 MB before), from TSan's per-atomic synchronization records; plain builds are unaffected and the ratio is
+  near the limit in plain builds too (one failure in six runs, on the branch that does not touch the tables).
+  [Run that check under TSan with `FACTOR=3.5` from `sanitize_upgrade.sh`, with the reason in the script; the
+  plain-build limit stays 3.0. Not done here: it changes a test limit, which is the director's call.]
+- `pyazr_upgrade_thread_independence` failed once in a full `ctest -j8` on this branch (T3 fit `param.fit`, 2.3e-5
+  relative, 1 vs 4 threads; parameters equal); four isolated repeats on this branch, on `fix/fit-iteration-counter`
+  and on `feature/upgrade` all pass. [Cause not found; not reproduced. Rerun the test
+  a few times under load before the next merge.]
+
+**Next.** Merge with `fix/fit-iteration-counter` (both add a HANDOFF entry here: keep both).
 ## 2026-11-07 (`fix/fit-iteration-counter`) — fit iteration counter atomic (sanitizer_findings.md §4.1)
 
 Branch `fix/fit-iteration-counter` from `feature/upgrade` 5b021003, not merged. Commits: fecf4924 (the fix), and the
