@@ -30,16 +30,16 @@
  * uses any more is a miss and is swept out.  Sharded, one mutex per shard.
  *
  * A published table must never be written again, by anyone.  Find() takes a
- * new strong reference (weak_ptr::lock) from another thread at any moment, so
- * the publishing point's copy-on-write test (use_count() == 1, EPoint.cpp
- * SoleOwner) may be stale: a write in place would race with that reader for
+ * new holder (SharedTable::Weak::lock) from another thread at any moment, so
+ * the publishing point's copy-on-write test (SharedTable::SoleOwner) may be
+ * stale: a write in place would race with that reader for
  * real, not only in the memory model.  Today this holds because only sub-points
  * of segments without an energy shift are published, after their tables are
  * complete (CalcEDependentValues, ShrinkToFit included), and those sub-points
  * are never re-energised.  A change that refills such a sub-point (a shift
  * switched on mid-fit, target windows recomputed in place) must give it a fresh
- * table unconditionally: MutableEDep and ClearEDependentRows decide by
- * use_count() and are not enough here.
+ * table unconditionally: MutableEDep and ClearEDependentRows decide by the
+ * holder count and are not enough here.
  */
 class NodeTableCache {
  public:
@@ -50,7 +50,7 @@ class NodeTableCache {
     auto it = s.map.find(key);
     if (it == s.map.end()) return false;
     out = it->second.share;
-    out.tables = it->second.tables.lock();
+    out.tables = it->second.tables.lock();  // a new holder of each table
     out.legendre = it->second.legendre.lock();
     return out.tables && out.legendre;
   }
@@ -61,8 +61,8 @@ class NodeTableCache {
     e.share = share;
     e.share.tables.reset();
     e.share.legendre.reset();
-    e.tables = share.tables;
-    e.legendre = share.legendre;
+    e.tables = SharedTable<EPoint::EDependentTables>::Weak(share.tables);
+    e.legendre = SharedTable<vector_r>::Weak(share.legendre);
     Shard &s = shards_[ShardOf(key)];
     std::lock_guard<std::mutex> lock(s.mutex);
     s.map[key] = std::move(e);
@@ -88,8 +88,8 @@ class NodeTableCache {
   };
   struct Entry {
     EPoint::EDependentShare share;  ///< without its pointers
-    std::weak_ptr<const EPoint::EDependentTables> tables;
-    std::weak_ptr<const vector_r> legendre;
+    SharedTable<EPoint::EDependentTables>::Weak tables;
+    SharedTable<vector_r>::Weak legendre;
   };
   struct Shard {
     mutable std::mutex mutex;

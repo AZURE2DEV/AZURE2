@@ -47,25 +47,6 @@
 #include <cstdlib>
 #include <algorithm>
 
-namespace {
-/*!
- * True if this point is the only owner of a copy-on-write table (edep_,
- * legendreP_), so it may write it in place.  use_count() is a relaxed read and
- * orders nothing by itself: the acquire fence pairs it with the release in the
- * other owners' decrements, so their last reads of the table (the copy in
- * MutableEDep, the row sizes in ClearEDependentRows) happen before our write.
- * Without it the write races with those reads under the C++ memory model
- * (ThreadSanitizer, tests/shared_tables_race, 2026-11-06), even though x86 and
- * ARM do not reorder them in practice.  Rust's Arc::get_mut does the same.
- */
-template <class T>
-bool SoleOwner(const std::shared_ptr<T> &p) {
-  if (p.use_count() != 1) return false;
-  std::atomic_thread_fence(std::memory_order_acquire);
-  return true;
-}
-}  // namespace
-
 /*!
  * This constructor is used if the data point is to be created from a line in a data file.
  * A pointer to the parent segment is passed to the constructor for the intialization of
@@ -1147,7 +1128,7 @@ void EPoint::AddLegendreP(double polynomial) {
 
 void EPoint::ClearLegendrePolynomials() {
   // An empty list needs no copy of a shared one.
-  if (legendreP_ && !SoleOwner(legendreP_))
+  if (legendreP_ && !legendreP_.SoleOwner())
     legendreP_.reset();
   else if (legendreP_)
     MutableLegendre().clear();
@@ -1646,7 +1627,7 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure, bool i
   // about a quarter of the tables' memory (natural neon: 2.3 GB of 9.6 GB).  A
   // point is filled here once per energy (setup, grid re-placement); the shift
   // step refills its rows in place every evaluation and keeps their capacity.
-  if (edep_ && SoleOwner(edep_)) {
+  if (edep_ && edep_.SoleOwner()) {
     EDependentTables &t = MutableEDep();
     t.ShrinkToFit();  // the THM vertex tables too
   }
@@ -1690,16 +1671,17 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure, bool i
  */
 void EPoint::ClearEDependentRows() {
   if (!edep_) return;
-  if (!SoleOwner(edep_)) {
+  if (!edep_.SoleOwner()) {
     // Shared with another point: start a table of our own with the same rows,
     // empty, rather than copying values that are about to be replaced.
-    auto own = std::make_shared<EDependentTables>();
-    own->rowStart.reserve(edep_->rowStart.size());
-    own->lo_elements.reserve(edep_->lo_elements.size());
-    own->penetrabilities.reserve(edep_->penetrabilities.size());
-    own->coulombphase.reserve(edep_->coulombphase.size());
-    own->hardspherephase.reserve(edep_->hardspherephase.size());
-    edep_ = std::move(own);
+    auto own = SharedTable<EDependentTables>::Make();
+    EDependentTables &t = own.Mutable();
+    t.rowStart.reserve(edep_->rowStart.size());
+    t.lo_elements.reserve(edep_->lo_elements.size());
+    t.penetrabilities.reserve(edep_->penetrabilities.size());
+    t.coulombphase.reserve(edep_->coulombphase.size());
+    t.hardspherephase.reserve(edep_->hardspherephase.size());
+    edep_ = std::move(own);  // drops the shared table (release; SharedTable.h)
     return;
   }
   MutableEDep().Clear();  // our own: emptied in place, keeping its storage
@@ -1751,16 +1733,15 @@ void EPoint::RecalcEDependentValues(CNuc *theCNuc, const Config &configure, bool
  * between copies of the point (EData clones, the points mapped onto it); if
  * another point still holds them, this point gets its own copy first, so a
  * write never changes what another point -- another thread's clone -- reads.
- * The object behind edep_ is always created non-const here, so the const_cast
- * below is well defined.
+ * SharedTable::SoleOwner orders the other holders' reads before the write.
  */
 
 EPoint::EDependentTables &EPoint::MutableEDep() {
   if (!edep_)
-    edep_ = std::make_shared<EDependentTables>();
-  else if (!SoleOwner(edep_))
-    edep_ = std::make_shared<EDependentTables>(*edep_);
-  return const_cast<EDependentTables &>(*edep_);
+    edep_ = SharedTable<EDependentTables>::Make();
+  else if (!edep_.SoleOwner())
+    edep_ = SharedTable<EDependentTables>::Make(*edep_);
+  return edep_.Mutable();
 }
 
 /*!
@@ -1769,10 +1750,10 @@ EPoint::EDependentTables &EPoint::MutableEDep() {
 
 vector_r &EPoint::MutableLegendre() {
   if (!legendreP_)
-    legendreP_ = std::make_shared<vector_r>();
-  else if (!SoleOwner(legendreP_))
-    legendreP_ = std::make_shared<vector_r>(*legendreP_);
-  return const_cast<vector_r &>(*legendreP_);
+    legendreP_ = SharedTable<vector_r>::Make();
+  else if (!legendreP_.SoleOwner())
+    legendreP_ = SharedTable<vector_r>::Make(*legendreP_);
+  return legendreP_.Mutable();
 }
 
 /*!
