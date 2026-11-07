@@ -142,15 +142,11 @@ Pitfalls met:
 Start with azure2-setup (pairs, levels, channels) or an existing `.azr`.
 Then:
 
-1. **Enable THM.** In the GUI, tick *Configure > Runtime Options > Use Trojan Horse
-   Method (THM)*. It is off for a new project and turns on by itself for a project
-   with THM content; it is not stored in the file. All THM editing is in
-   *Configure > THM Workspace...* (pages Model, Experiments, Channels, Diagnostics).
-   pyazr and the CLI need no switch.
+1. **Enable THM.** Nothing to switch: pyazr and the CLI treat a segment with
+   observable code 10 or more as THM, and the `<thm>` block is optional.
 2. **Segments.**
    - HOES data become a THM segment: observable code + 10 (10 angle-integrated,
-     11 differential). In the GUI, tick *THM* in the segment dialog; in pyazr,
-     `AzrModel.add_data_segment(..., thm=True)`. Free norm, no norm error: AZURE2
+     11 differential). In pyazr, `AzrModel.add_data_segment(..., thm=True)`. Free norm, no norm error: AZURE2
      profiles it analytically, n* = S_mm/S_md, with no parameter and no penalty.
    - On-shell-equivalent points become an ordinary segment (σ or dσ/dΩ, converted
      from S if needed) with a free norm. None of the THM options acts on them.
@@ -175,8 +171,8 @@ Then:
    gaussian_sigma=...)`.
 6. **Direct-data norms.** Give each direct segment a norm error equal to its quoted
    systematic. Centre the prior on the nominal scale with
-   `segment_N_norm prior_centre 1` in `<parameterSettings>` (GUI: Fitting tab,
-   *Prior Centre* column; pyazr `AzrModel.set_prior_centres`). Without the row, the
+   `segment_N_norm prior_centre 1` in `<parameterSettings>` (pyazr
+   `AzrModel.set_prior_centres`). Without the row, the
    norm column is both start value and prior centre. A saved fit then re-centres every
    later refit on its own result (15N S(0) 70.7 → 74).
 7. **Level scheme.** Take it from ENSDF and direct R-matrix analyses, not from the THM
@@ -458,7 +454,7 @@ the cross-checks are in `references/calibration.md`.
 | Brune and Park | same, "Brune and Park"; `tests/thm_park` |
 | example pins ("file alone") | same, "Examples" |
 | model averaging | same, "Model averaging"; `docs/source/user_guide/pyazr.rst`, "Model averaging"; `scripts/thm_model_average.py --help`; `pyazr/modelavg.py`; `tests/pyazr/thm_model_average_test.py` |
-| GUI opt-in, THM Workspace | `docs/source/user_guide/configure_menu.rst`, "THM Workspace" |
+| THM opt-in; the released builds' THM Workspace | `docs/source/user_guide/configure_menu.rst`, "THM Workspace" |
 | prior centres | `docs/source/user_guide/chi_squared.rst` (nominal-norm); `docs/source/user_guide/fitting.rst`; `tests/prior_centre` |
 | pyazr THM calls | `docs/source/user_guide/pyazr.rst` (`set_thm_experiment`, `thm_vertex`, `thm_distortion`, `thm_lineshape`, `thm_background`, `save_fit`) |
 | option regression, reproduction | `tests/thm_options`, `tests/18O_p_a_thm` (ApJ 723 band) |
@@ -472,8 +468,8 @@ the cross-checks are in `references/calibration.md`.
 
 ## Memory and process discipline (small machines)
 
-- Run **one engine process at a time**: the CLI, a pyazr session, the GUI's
-  Diagnostics and builds all count. Check `ps` for AZURE2, make or python first.
+- Run **one engine process at a time**: the CLI, a pyazr session and builds
+  all count. Check `ps` for AZURE2, make or python first.
   Parallel refits (1–2 GB each) have triggered the OOM killer.
 - Run every engine job under a cap: `prlimit --as=1600000000 -- <command>`.
 - Set `OMP_NUM_THREADS=1` before the first numpy import; the driver does this itself.

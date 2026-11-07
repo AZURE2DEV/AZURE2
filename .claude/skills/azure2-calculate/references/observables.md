@@ -56,7 +56,7 @@ For papers that publish only a_k = A_k/A_0 of dσ/dΩ_c.m. = A_0 [1 + Σ_k a_k P
 ## Phase shifts
 
 A phase-shift segment is one (J, l, s) wave. For a target with spin, give the channel spin with `spin <s>` after the
-shift fields (GUI: field **s**; pyazr `Segment.phase_S`). A run stops with "phase-shift segment #k (J, l) has N channel
+shift fields (pyazr `Segment.phase_S`). A run stops with "phase-shift segment #k (J, l) has N channel
 spins" when the scheme has several spins for that (J, l) and none is given. Spin-0 targets need nothing. Older
 engines ignore the keyword and report half the argument of the summed diagonal elements, which is the phase of no
 single wave.
@@ -69,7 +69,7 @@ single wave.
 - A lab-frame differential RATIO is base/denominator in the lab, each term with its own Jacobian.
 - A RATIO whose denominator is exactly 0 is NaN, with one warning per run.
 - A SUM component's `Scaling` keeps all digits; a non-numeric scaling refuses the project.
-- Old-GUI component lists with entrance/exit keys only (no angle) are read as the GUI reads them; too few numbers for
+- Component lists from old Qt GUI saves, with entrance/exit keys only (no angle), are read in that layout; too few numbers for
   the count gives a WARNING and the line is read as a plain segment.
 - Two segment lines that share a data file are not summed (use SUM; azure2-setup).
 
@@ -106,8 +106,7 @@ level has a width in that channel spin. Formalism: `docs/source/theory/scatterin
   Each line is a χ² term in every fitter, the MCMC likelihood and `calculate_chi2_rwa`; `chiSquared.out` gains
   `Total-Scattering-Length-Chi-Squared`.
 - pyazr: `m.scattering_lengths(x)`, `m.penalties()["scattering_length"]`, `AzrModel.scattering_lengths`,
-  `add_scattering_length`, `set_scattering_lengths`. GUI: data type "Scattering Length" in Add Segment From Data
-  (listed after the last data segment; display numbers only, the file keeps the block).
+  `add_scattering_length`, `set_scattering_lengths`.
 - Trap when entering published Brune widths γ̃: the `.azr` width is the observed width
   Γ = 2P γ̃² / (1 + Σ γ̃² dS/dE), not 2P γ̃²; dropping the denominator moved a ³He+⁴He a_0 by 0.6 %
   (check `g_int` in `parameters.out`).

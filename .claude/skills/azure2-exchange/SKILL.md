@@ -49,7 +49,7 @@ correlated (one p + p test: parabolic errors 0.4 % against 1.3 % in Brune).
   ¹⁷O model).
 - **Gradient checks resolve about 10⁻⁵ in Park, 10⁻⁷ in Brune**: dS/dE in the level matrix is differentiated
   numerically. This is expected, not a defect.
-- GUI: "Use Park parametrization" (Runtime Options) implies Brune and greys out RMC. Physical widths of a Park
+- Park (`--use-park`, pyazr `use_park=True`) implies Brune and excludes RMC. Physical widths of a Park
   vector: `pyazr.transform.transform_out(..., park=True)`. Park-mode MCMC and covariance bands share Brune's code
   paths and are not separately tested.
 

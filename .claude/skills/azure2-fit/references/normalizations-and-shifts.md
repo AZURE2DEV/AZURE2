@@ -36,11 +36,11 @@ builds before 2026-10-27 (expires: 2027-02-01): pyazr `penalties()` charged each
   reference onto the fitted value: the blank-file run prints `Total-Norm-Chi-Squared 0`, and a refit from that file
   minimizes a different objective. Baking is harmless only for unpenalized norms.
 - **Audit the nominals.** They should be the data's own scale: 1.0 for an absolutely normalized set, or the published
-  scale factor. An `.azr` that has been through GUI saves or old snapshots can carry a previous fit's norms as
+  scale factor. An `.azr` that has been through Qt GUI saves or old snapshots can carry a previous fit's norms as
   nominals (one master file had 0 of its 27 penalized segments at 1.0, values 0.74–1.71), so its 5–30 % systematic
   errors penalize deviations from an arbitrary earlier fit. List `dataNorm` against `normErr` for every penalized
   segment before trusting any `Total-Norm-Chi-Squared`, and say so in the readme when they are not 1.
-- **Plotting and the GUI.** The GUI's segment table shows the nominals; its plots come from `output/`. Data scaled "by
+- **Plotting.** The `.azr` holds the nominals; plots come from `output/`. Data scaled "by
   the fit norm" use the `.sav` value (`normalizations.out` prints it), not the `.azr` field.
 - **A norm that is not varied comes from the `.azr` field; its `.sav` value is ignored.** Fixed level parameters do
   take the `.sav` value. To freeze norms at a fit's values (a local refit of a few level parameters with everything

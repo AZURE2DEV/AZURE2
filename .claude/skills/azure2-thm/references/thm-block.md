@@ -64,11 +64,10 @@ AZURE2 exit with `ERROR: <thm> ...` before computing anything.
 - `experiment[<name>]`: the listed segments share one profiled norm plus a profiled background; results in
   `output/thm_experiments.out` and `session.thm_background(name)`; test `tests/thm_experiment`. Per-experiment keys:
   `references/model-choices.md`.
-- The GUI edits the block under Configure > THM Options and the THM Workspace.
 
 ### Editing it from Python
 
-`AzrModel` applies the engine's and the GUI's rules and keeps comments and untouched lines:
+`AzrModel` applies the engine's rules and keeps comments and untouched lines:
 
 ```python
 mdl.thm_options()                          # dict of the non-default options

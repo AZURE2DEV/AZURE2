@@ -106,9 +106,9 @@ IDs: the second level's channels became the first's, its parameters disappeared 
 and read back had a different level count. A fit that drives two same-J^π levels within 1 keV on such a build cannot
 round-trip through a `.azr`; rmfit's bake guard reports it as lost keys.
 
-## Limits and priors written by the GUI
+## Limits and priors written by the Qt GUI
 
-The Fitting tab's `<parameterSettings>` names `Level N` as `energy_N` and `Level N Channel M` as `width_N_M` in the
+The `<parameterSettings>` of the Fitting tab of released builds' Qt GUI names `Level N` as `energy_N` and `Level N Channel M` as `width_N_M` in the
 engine's numbering, and marks the block `# level numbering: engine` (`docs/source/user_guide/fitting.rst`).
 builds before 2026-10-21 (expires: 2027-02-01) numbered GUI settings by model row (inactive levels counted, widths by
 global channel row) while the engine read engine numbers, so after a GUI save of a file not sorted by J, parity and

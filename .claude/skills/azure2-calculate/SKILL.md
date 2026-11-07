@@ -21,7 +21,7 @@ interference and external-capture parts.
 | move parameters (fits, free/fixed, priors, editing levels, `.sav` names) | azure2-fit |
 | decide whether a result can be trusted (pulls, χ²/ν, Wigner limits, radius) | azure2-check |
 | uncertainty bands, covariance, sampling | azure2-uncertainty |
-| figures, and showing a result in the GUI | azure2-plot |
+| figures, and showing a result to a person | azure2-plot |
 | target integration, resolution, Doppler, transmission | azure2-targets |
 | THM (HOES) segments | azure2-thm |
 
@@ -50,9 +50,9 @@ Runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
    Brune is the default; `--use-park` selects Park's observed amplitudes; `--no-brune` the Lane–Thomas basis with
    constant boundary conditions; `--use-rmc` the Reich–Moore formalism (switches Brune and Park off; for (n,γ) only).
    Conventions and conversions between bases: azure2-exchange.
-2. **Write the flags out.** zsh does not word-split an unquoted variable: `F="--no-gui --no-readline"; AZURE2 $F x.azr`
-   passes one argument, `--no-gui` is never seen, and a GUI build opens a window (or, headless, hangs with no
-   output). Use a zsh array (`F=(--no-gui --no-readline)`) or `${=F}`; csh job scripts with literal flags are fine.
+2. **Write the flags out.** zsh does not word-split an unquoted variable: `F="--no-readline --use-brune"; AZURE2 $F x.azr`
+   passes one argument, which AZURE2 reports as an unknown option and ignores, so the run uses other physics. Use a
+   zsh array (`F=(--no-readline --use-brune)`) or `${=F}`; csh job scripts with literal flags are fine.
 3. **Create `checks/` and `output/`** in a new run directory. A missing `checks/` stops the run before it starts
    ("Could not find checks directory"), and the job still ends normally with no output.
 4. **Answer the prompts in order** (`docs/source/reference/command_line.rst`, "Scripted input"):
@@ -268,8 +268,7 @@ interference = (full - off) - (only - bare)
   `useAdaptiveGrid=0` in `<potential>` selects the older per-temperature quadrature (slower, same rate to 10⁻⁵).
   Behaviour: `docs/source/user_guide/calculate.rst`, troubleshooting in
   `docs/source/reference/troubleshooting.rst`. Apply the extrapolation rules above (no `<targetInt>`, fresh caches).
-- **Total radiative capture rate**: give the exit pair `-1` at the "Reaction Rate Exit Pair" prompt (GUI: "Total
-  capture (all γ pairs)"). The rate integrates the sum over every capture pair (pType 10) of the entrance pair's
+- **Total radiative capture rate**: give the exit pair `-1` at the "Reaction Rate Exit Pair" prompt. The rate integrates the sum over every capture pair (pType 10) of the entrance pair's
   compound nucleus; the log lists the pairs. Builds before 2026-11-04 (expires: 2027-02-01) refuse `-1`: run each
   capture pair and add the rates (the rate is linear in σ).
 - **In Python**, for a rate per posterior sample or per level: `pyazr/examples/reaction_rate.py`. Its grid must

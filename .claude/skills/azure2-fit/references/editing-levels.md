@@ -35,8 +35,8 @@ Rules:
   allowed channels. Only for a new J^π do your channels define the group.
 - `remove_channel(jpi, pair, L, S)` removes that channel from every level of the group; removing it from one level
   makes the engine reject the file.
-- `add_level`/`add_channel` reference only a pair that already exists in the file; new particle pairs are added in the
-  GUI or by building the project (`azure2-setup`).
+- `add_level`/`add_channel` reference only a pair that already exists in the file; new particle pairs are added by writing
+  their level lines or by building the project (`azure2-setup`).
 - `gamma` in the file is the width input (Γ in eV for an open channel, an ANC in fm^-1/2 for a closed one; see
   `docs/source/user_guide/levels_channels.rst`), not a reduced-width amplitude. Seed a new channel with a small nonzero
   value and set `fixed=False`: a width of exactly 0 is fixed whatever its flag says (SKILL.md, "Free and fixed").

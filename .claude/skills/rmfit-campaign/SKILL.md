@@ -1,6 +1,6 @@
 ---
 name: rmfit-campaign
-description: Drive, resume or judge an rmfit campaign -- the resumable global R-matrix fitting procedure on top of pyazr (sharded evaluation, bound-tightening polish, interference-sign rounds, crossover, level add/remove/relocate, levelscan, dataset-off tests, ledger, STATUS.md, export for GUI review) and the idle-time audits run while its jobs run. Use when the task names rmfit, a campaign directory, STATUS.md, a sign round, a tightening polish or levelscan. For hand-driven fits use azure2-fit; for the search logic for missing levels use azure2-resonance-search.
+description: Drive, resume or judge an rmfit campaign -- the resumable global R-matrix fitting procedure on top of pyazr (sharded evaluation, bound-tightening polish, interference-sign rounds, crossover, level add/remove/relocate, levelscan, dataset-off tests, ledger, STATUS.md, export for review) and the idle-time audits run while its jobs run. Use when the task names rmfit, a campaign directory, STATUS.md, a sign round, a tightening polish or levelscan. For hand-driven fits use azure2-fit; for the search logic for missing levels use azure2-resonance-search.
 ---
 
 # The rmfit process
@@ -28,7 +28,7 @@ suffice. Detail lives in three references:
 Siblings: hand-driven fits, MIGRAD, starting parameters before a first global fit, `.sav` handling: `azure2-fit`.
 Where to look for missing levels and the width-floor recipe for a feature no search finds: `azure2-resonance-search`.
 Whether a result can be trusted (pulls, Wigner limits, radius): `azure2-check`. Data covariances: `azure2-uncertainty`.
-Looking at a result in the GUI: `azure2-plot`.
+Figures of a result for a person: `azure2-plot`.
 
 ## 1. Read the state, never recompute it
 
@@ -45,7 +45,7 @@ A campaign directory carries everything a fresh session needs:
   `verified` score (a fresh single-session evaluation of the full model). Sharded numbers rank; verified numbers are
   reported.
 - `campaign.json` -- base model, engine flags, shard count, bounds policy, search and objective configuration.
-- `<reaction>.azr` + `.sav` -- the GUI-reviewable export of the incumbent.
+- `<reaction>.azr` + `.sav` -- the reviewable export of the incumbent.
 - `variants/` -- shard files, window models, with/without-level files (disposable).
 
 Check the queue first (`qstat -u $USER`, and other users' jobs on the same campaign). One campaign command at a time
@@ -57,7 +57,7 @@ campaign, name one owner of the jobs; the other only reads.
 
 Prerequisites, done in the reaction's fit directory, not in the campaign:
 
-1. A `.azr` that opens in the GUI, with `data/`, an `output/` directory and a `readme`. Know the CLI flags the
+1. A `.azr` that runs with the CLI, with `data/`, an `output/` directory and a `readme`. Know the CLI flags the
    reaction uses (`--use-brune`, `--ignore-externals`, `--no-long-wavelength`, ...): they are not stored in the
    `.azr`, they differ per reaction (see the reaction directory's notes), and rmfit needs them as `--flags` JSON.
 2. Reproduce the last finished fit before building on it: load its `param.sav` by name in pyazr, confirm that the
@@ -118,7 +118,7 @@ one). Every step ends by rewriting `STATUS.md` and appending to the readme; read
 | 5 | `structure dataset-off --file <substr>` for the worst χ²/N sets | deactivate and refit; reports the extra recovery of the other sets beyond the set's own χ² | a table for the evaluator |
 | 6 | `round --rounds 2` after any structure change | signs change with the structure | as in 2 |
 | 6b | `crossover --donor <cid> [--donor-dir <campaign>]` | apply another good fit's sign pattern per channel, J^π group or all, and polish every proposal | every donor pattern polished; union verified |
-| 7 | `export`, then GUI review | bake the incumbent to `<reaction>.azr` + `.sav`, verified in a fresh process | CLI mode 1 with the `.sav` as external file reproduces the totals |
+| 7 | `export`, then review | bake the incumbent to `<reaction>.azr` + `.sav`, verified in a fresh process | CLI mode 1 with the `.sav` as external file reproduces the totals |
 
 Other commands: `relocate --level 9/2+#1 --ex 8.4654 [--window 5]` kicks an existing level's energy to `--ex` (MeV),
 re-polishes with that energy confined to ±window (keV), and adopts if it beats the control by τ -- for a narrow level
@@ -286,8 +286,8 @@ rmfit hands these to the evaluator:
   narrow or broad verdict;
 - error-bar corrections (record each in the readme with the formula, statistics before/after and file checksums).
 
-GUI review: `printf '1\n<reaction>.sav\n\n7\n' | $AZURE2_BINARY <flags> --no-gui --no-readline <reaction>.azr` fills
-`output/` with the fit (the `.sav` carries the fitted norms); then open the GUI on that `.azr` (`azure2-plot`).
+Review: `printf '1\n<reaction>.sav\n\n7\n' | $AZURE2_BINARY <flags> --no-readline <reaction>.azr` fills
+`output/` with the fit (the `.sav` carries the fitted norms); then make the figures from it (`azure2-plot`).
 
 ## 6. Diagnostics and benchmarks
 

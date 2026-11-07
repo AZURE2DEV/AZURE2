@@ -28,8 +28,7 @@ must follow, and the checks that show it is what was intended.
    photon pairs (one per final state reached by capture). Fetch the adopted level scheme and ground-state data with
    `pyazr.nds` (references/nds-exfor.md §5).
 2. **Pairs: masses and separation energies from one table.** Enter atomic masses (u, electrons included) from
-   AME2020 and S = m₁ + m₂ − M(compound) from the same table: `AzrModel.fill_masses()` or the GUI pair dialog
-   ("Fill masses and S from AME2020"). Then `AzrModel.mass_check()` (§ Rules, "Masses").
+   AME2020 and S = m₁ + m₂ − M(compound) from the same table: `AzrModel.fill_masses()`. Then `AzrModel.mass_check()` (§ Rules, "Masses").
 3. **Channels and radii.** Enumerate the allowed (L, S) for each J^π (references/azr-levels.md §5). Start the
    channel radius at a_c = 1.4 (A₁^⅓ + A₂^⅓) fm. a_c is a model parameter to be scanned (azure2-check), not a
    physical radius.
@@ -56,7 +55,7 @@ must follow, and the checks that show it is what was intended.
 
 ### Masses and separation energies
 
-- **Particle masses are atomic masses in u, not mass numbers.** The GUI field labelled "Mass (M)" is a double in u;
+- **Particle masses are atomic masses in u, not mass numbers.** The mass columns of `<levels>` are doubles in u;
   the reduced mass, lab↔c.m. conversion, penetrabilities and phase space all use it. An integer mass (`4` for an α
   instead of 4.002602) degrades every kinematic quantity of the fit.
 - **Masses and S are checked against each other at load.** For two particle pairs of one compound nucleus,
@@ -66,13 +65,13 @@ must follow, and the checks that show it is what was intended.
   among atomic masses), and prints one note for projects with mass numbers as masses. γ and β pairs are skipped.
   In an archive of 5,705 projects with two or more particle pairs, 1,138 agreed to 0.1 keV; 4-decimal masses give
   tens of keV. Test: `tests/mass_separation_check`.
-- **AME2020 is shipped.** `pyazr/data/mass_1.mas20` (the GUI embeds the same file): `pyazr.masses.atomic_mass("12C")`,
+- **AME2020 is shipped.** `pyazr/data/mass_1.mas20`: `pyazr.masses.atomic_mass("12C")`,
   `separation_energy("p", "12C")`, `pair_masses("a", "12C")`. `AzrModel.fill_masses(pairs=None, separation=True)`
   rewrites only the m₁, m₂ and S columns (and the entrance-S copy); particles are identified by Z and round(M), so
   mass numbers and bare protons are recognised; γ pairs get M(compound) and keep S = 0.
 - **Filling S moves thresholds.** Never fill an archived fit in place: copy it, fill, compare χ², and leave any refit
   to the evaluator.
-- Behaviour and GUI: `docs/source/user_guide/particle_pairs.rst`.
+- Behaviour: `docs/source/user_guide/particle_pairs.rst`.
 
 ### Frames, units and directories
 
@@ -96,8 +95,7 @@ must follow, and the checks that show it is what was intended.
 
 ### Kinematics: non-relativistic unless `relativistic=1`
 
-- Without the `<config>` key the kinematics is non-relativistic. With `relativistic=1` (GUI: Configure > Runtime
-  Options > Kinematics; pyazr `AzrModel.relativistic`) k, η, lab↔c.m. energies, lab angles and cross sections come
+- Without the `<config>` key the kinematics is non-relativistic. With `relativistic=1` (pyazr `AzrModel.relativistic`) k, η, lab↔c.m. energies, lab angles and cross sections come
   from the invariant mass (the LANL/EDA prescription, ENDF KRL = 1; `include/Kinematics.h`). Level energies stay
   excitation energies; `output/relativistic.out` lists them in EDA's E(s) convention (E_s − E_x = T₀²/(2m₀), 43 keV
   at T₀ = 20 MeV for A = 5).
@@ -131,7 +129,7 @@ must follow, and the checks that show it is what was intended.
   e1 = e2 is). A UPOS segment needs the excitation on the heavy partner. Engines that read 31 columns ignore column
   32 silently and use the wrong threshold. pyazr: `Pair.light_excitation`. Test: `tests/light_excitation`.
 - **J is stored as J; channel spin and l are stored doubled** (2S, 2L) (references/azr-levels.md §2).
-- **All levels of one J^π share one channel set**; the GUI and the line format otherwise refuse the file.
+- **All levels of one J^π share one channel set**; the line format otherwise refuses the file.
 
 ### Segments and data
 
