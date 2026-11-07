@@ -2158,6 +2158,9 @@ int EData::Initialize(CNuc *compound, const Config &configure) {
   if (!(configure.paramMask & Config::USE_API))
     configure.outStream << "Initializing Component Segments..." << std::endl;
   if (this->InitializeComponentSegments(compound, configure) == -1) return -1;
+  // Every point of this stage has its rows now; nothing reads the channel table until the energies change, and the
+  // table (about 64 bytes a row) is not kept beside the rows it filled (docs/upgrade/channel_table.md section 2).
+  channelTable_.reset();
 
   return 0;
 }
@@ -2331,9 +2334,18 @@ void EData::PrintLegendreP(const Config &configure) {
  */
 std::shared_ptr<const ChannelTable> EData::BuildChannelTable(CNuc *theCNuc, const Config &configure,
                                                              const std::vector<EPoint *> &points) {
-  std::vector<ChannelTable::Key> keys;
-  for (EPoint *point : points) point->ChannelKeys(theCNuc, keys);
-  const std::size_t requested = keys.size();
+  // Each point's keys are made unique before they are added: its slots repeat (pair, l, E_c) once per channel spin
+  // and J^pi block, and the full list was the peak memory of the build (natural_neon: 11 M keys).
+  std::vector<ChannelTable::Key> keys, own;
+  std::size_t requested = 0;
+  for (EPoint *point : points) {
+    own.clear();
+    point->ChannelKeys(theCNuc, own);
+    requested += own.size();
+    std::sort(own.begin(), own.end());
+    own.erase(std::unique(own.begin(), own.end()), own.end());
+    keys.insert(keys.end(), own.begin(), own.end());
+  }
   std::shared_ptr<const ChannelTable> table = ChannelTable::Build(theCNuc, configure, std::move(keys), channelTable_.get());
   if (std::getenv("AZURE_PROFILE"))
     configure.outStream << "Channel table: " << requested << " rows asked for, " << table->Size() << " distinct, "
