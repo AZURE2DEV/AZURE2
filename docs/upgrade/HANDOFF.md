@@ -2,6 +2,35 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-07 — `fix/gui-pair-columns`: thm_opt_in and light_excitation_gui after the merge of dev 3264896d
+
+**Cause.** The merge of dev 3264896d into thm (made without Qt; MERGE_NOTES.md) added dev's light-particle
+excitation e1 to `PairsData` and kept thm's THM columns: pairs model column 15 is e1, 16 the THM binding energy
+B (`PairsModel::BindingEnergyColumn`, 15 before), 17 the compound nucleus; the GUI always writes B and the width
+flag (columns 32, 33) and e1 as column 34 when it is nonzero; NucLine tells 1, 2 and 3 trailing fields apart. Two
+GUI tests were never built against that layout. `thm_opt_in` wrote B into column 15, so it set e1 = 2.2246 MeV and
+the project rightly opened with THM off. `light_excitation_gui` (from dev) expected 16 fields and 31/32 columns.
+The code is right in both cases; the tests were out of date.
+
+**Change.** `thm_opt_in` uses `BindingEnergyColumn`. `light_excitation_gui` checks SIZE 17, the three named
+columns, 33 columns written for a pair without e1 and 34 with it, a 31-column dev file written with 33, and (new)
+the 33/34-column output read back with e1 on pair 2 only. `reference/data_formats.rst` now states the
+trailing-field rule (it described dev's 32nd column only).
+
+**Verified.** The four `fix/` branches of this session merged on 5b021003 (scratch, detached), GUI on, GCC 11.5,
+Condor 16112/16113: `ctest -LE slow` 130 of 131 pass, only `adaptive_grid_reference` fails; `tests/upgrade/check.sh`
+PASS (no engine code changed). The failing tests of this branch failed on origin/thm c6ddb741 (plain GUI build).
+
+**Open.** The GUI turns a 31-column classic file into 33 columns on save; the engine and pyazr read both. Whether
+the THM columns move behind e1 when thm goes into dev is the decision MERGE_NOTES.md already lists. [Keep the
+present layout until that merge.]
+
+- With `build.sh` the pyazr module lands in `BUILD/pyazr-out/` (`PYAZR_OUTPUT_DIR`), but ctest imports
+  `pyazr` from the source tree: 31 pyazr tests print `skip` and `pyazr_angular_coefficients` fails at import (it
+  has no skip guard). The counts above are with the module copied into the scratch tree's `pyazr/`. [Have ctest
+  put `PYAZR_OUTPUT_DIR` on `PYTHONPATH`, and give `angular_coefficients_test.py` the skip guard; own `fix/`
+  branch.]
+
 ## 2026-11-07 (fourth session) — Phase 0 merged; failures inherited from origin/thm
 
 **State.** `feature/upgrade` carries all Phase 0 branches: rules and skills (09379840), T1/T3 (a80352e6), T2
