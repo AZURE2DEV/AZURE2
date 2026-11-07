@@ -816,10 +816,12 @@ runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
   Q = 1. Photon, UPOS, A_y and charged-particle elastic data keep Q as entered.
   Give coefficients beyond the highest c.m. order when g = v_cm/v3* is large.
   Test: `tests/q_attenuation`.
-- `--gsl-coul` is a real speed/accuracy tradeoff, not just a flag name: the
-  default Coulomb-function method (Michel 2007) is more accurate but visibly
-  slower than GSL's. Reach for `--gsl-coul` if a fit is too slow and the
-  accuracy loss is acceptable, not by default.
+- `--gsl-coul` (GUI: Runtime Options, the GSL Coulomb box, stored as bit 4096 of `<lastRun>`) is the old
+  speed/accuracy compromise. The default route (Michel 2007, plus the Coulomb table) agrees with mpmath to
+  1e-9 in P and 5e-8 in S and is now fast enough; GSL is off by up to 3-6 % (0.1 <= eta < 10). Do not use it
+  for new work; DeBoer 2026-11-06: "hopefully we won't really need to use GSL any more". 1,164 archive .azr
+  files carry the GSL bit; the GUI warns when it opens one (dev 46bf10a). The CLI never
+  reads the bit: a CLI run uses GSL only with the flag.
 
 ## Showing a result in the GUI
 
@@ -3340,6 +3342,21 @@ complete:
   one of those builds should be rerun, not suspected of a model problem. Single-thread runs were never affected.
   Record: `R-matrix/AZURE2_code_audit/10-25-26/shared_tables_race/` (ASan + ThreadSanitizer);
   test `tests/shared_tables_race` (guards the path; the race is too rare for it to fail the old code reliably).
+- 2026-11-06 -- HEAVY-ION COULOMB FUNCTIONS JUST ABOVE THRESHOLD WERE WRONG BEFORE dev 56512d6.
+  Where cwfcomp gives up (eta >~ 250) AZURE2 falls back on the E -> 0 Bessel limit, z = sqrt(8 eta rho). Its
+  hand-written power series for I/K lost all accuracy at large z: 12C+12C l=0 at 1 eV gave S = +11 against the
+  exact -9.6, and 10 of 15 (system, l) cases of 12C+12C, 16O+16O, alpha+12C between 1 eV and 2.5 keV were
+  wrong. Fixed with GSL's Bessel functions (gsl_sf_bessel_I0/I1/K0/K1); installed 2026-11-06. Only points
+  that far below the barrier use it (12C+12C below ~3 keV c.m., sub-threshold extrapolations, the
+  E -> 0 end of rate integrals for heavy ions); the 12C+12C Tang fit's chi2 is unchanged (1376.09). The
+  default route elsewhere: mpmath scan of 1,782 points (seven channels, l = 0-6, eta <= 250) max 1.0e-9
+  in P, 4.6e-8 in S. Record `R-matrix/AZURE2_code_audit/10-25-26/coulomb_scan/` (readme); test
+  `coulomb_threshold_reference` (ctest; old code fails 10 of 15).
+- 2026-11-06 -- GUI: NEW LOGO; IT CARRIES A POLARIZATION ARROW WHILE THE PROJECT HAS A_y SEGMENTS (dev b4be050).
+  Window icon, the Configure-tab button and the About box show the arrow whenever any data or test segment
+  has data type 7 (analyzing power), and switch back when the last one goes. Cosmetic, nothing else changes.
+  Sources gui/images/azure2_logo{,_polarized}.svg; `python3 gui/images/make_icons.py` regenerates the png,
+  .ico and .icns. Test `polarized_logo` (ctest).
 - 2026-09-28 -- COMPOUND TARGETS: THE STOPPING POWER AND THE DENSITY MUST COUNT THE SAME
   THING. Target integration uses epsilon and N only as the product Delta = epsilon*N and as
   1/(N*epsilon) in the integrand (EPoint.cpp, `yield = integral / (density*1e-24)`), so any
