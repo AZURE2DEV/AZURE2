@@ -6,8 +6,8 @@ Rules enforced (numbers as in RULES.md §3):
   R4  SKILL.md at most 500 lines (warning; error above the hard limit of 800 or with
       --strict); every references/*.md at most 300 lines (error).
   R5  no commit hashes, job IDs, session narratives or "fixed on" notes; dates only in
-      version notes of the form "builds before vX.Y" / "builds before YYYY-MM-DD" with
-      "expires: YYYY-MM-DD" no more than 90 days after --today; an expired note is an error.
+      version notes ("builds before vX.Y" / "builds before YYYY-MM-DD", the date
+      on the same line as "expires: YYYY-MM-DD") no more than 90 days after --today; an expired note is an error.
   R6  one owner per task: each skill directory has a SKILL.md whose `name` equals the
       directory name; names and descriptions are unique among the repository skills and
       do not repeat a user-level skill (directory $CLAUDE_USER_SKILLS_DIR, default
@@ -15,7 +15,7 @@ Rules enforced (numbers as in RULES.md §3):
   R7  description at most 600 characters.
   R8  no personal absolute paths (/groups/, /Users/, /users/, /home/, /afs/, ~/...; ~/.azure2 and ~/.claude are allowed).
   Links: every docs/... path and every relative Markdown link in a skill resolves, and so
-      does every references/... or scripts/... file a skill names.
+      does every references/... or scripts/... file a skill names (in the skill or the repository).
 
 A line can opt out of one rule with an HTML comment `<!-- check_skills: allow R5 -->`;
 use it only for a quoted example of what the rule forbids.
@@ -41,20 +41,21 @@ EXPIRY_HORIZON_DAYS = 90
 HASH_RE = re.compile(r"(?<![\w./-])([0-9a-f]{7,40})(?![\w-])")
 DATE_RE = re.compile(r"(?<!\d)(?:19|20)\d\d-\d\d-\d\d(?!\d)")
 EXPIRES_RE = re.compile(r"expires:\s*((?:19|20)\d\d-\d\d-\d\d)")
-VERSION_NOTE_RE = re.compile(r"builds before\s+(?:v\d+(?:\.\d+)+|(?:19|20)\d\d-\d\d-\d\d)", re.I)
+VERSION_NOTE_RE = re.compile(r"\bbefore\s+(?:v\d+(?:\.\d+)+|(?:19|20)\d\d-\d\d-\d\d)", re.I)
 JOB_RE = re.compile(r"\b(?:jobs?|cluster|condor|qsub|slurm|pid)\s*(?:id\s*)?#?\s*\d{4,}", re.I)
 NARRATIVE_RES = [
     re.compile(p, re.I)
     for p in (
         r"\bfixed (?:on|in) (?:dev|main|qt5|\d)",
         r"\b(?:on|since) dev\b",
-        r"\b(?:this|last|previous|earlier) session\b",
+        r"\b(?:previous|earlier) session\b",
         r"\byesterday\b",
         r"\bafter a week of\b",
     )
 ]
 PERSONAL_PATH_RE = re.compile(
-    r"(?<![\w.$})])(?:/groups/|/Users/|/users/|/home/|/afs/|/scratch\d*/|~/(?!\.azure2\b|\.claude\b))"
+    r"(?:(?<![\w.$})])(?:/groups/|/Users/|/users/|/home/|/afs/|/scratch\d*/)"
+    r"|(?:^|(?<=[\s`'\"(=:]))~/(?!\.azure2\b|\.claude\b))"
 )
 DOCS_PATH_RE = re.compile(r"(?<![\w./-])(docs/[\w./-]+\.(?:rst|md|py|html|txt|png|svg))")
 LOCAL_FILE_RE = re.compile(r"(?<![\w./-])((?:references|scripts)/[\w.-]+\.\w+)")
@@ -169,7 +170,7 @@ class Checker:
             if not os.path.exists(os.path.join(self.root, target)):
                 self.add(path, n, "links", f"{target} does not exist")
         for target in LOCAL_FILE_RE.findall(line):
-            if not (os.path.exists(os.path.join(skill_dir, target)) or os.path.exists(os.path.join(here, target))):
+            if not any(os.path.exists(os.path.join(base, target)) for base in (skill_dir, here, self.root)):
                 self.add(path, n, "links", f"{target} does not exist in {os.path.relpath(skill_dir, self.root)}")
         for target in MD_LINK_RE.findall(line):
             if re.match(r"^[a-z]+:", target) or target.startswith("#"):

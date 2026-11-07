@@ -117,7 +117,7 @@ class CheckSkillsTest(unittest.TestCase):
             with self.subTest(line=line):
                 self.t.skill("s", line + "\n")
                 self.assertEqual(self.rules(self.t.run()), ["R8"])
-        self.t.skill("s", "The table is in ~/.azure2/ and $RMFIT_HOME/rmfit.\n")
+        self.t.skill("s", "The table is in ~/.azure2/ and $RMFIT_HOME/rmfit; awk 's!~/^ *0/' and t[i]~/x/.\n")
         self.assertEqual(self.t.run(), [])
 
     def test_r8_scripts(self):
@@ -130,6 +130,12 @@ class CheckSkillsTest(unittest.TestCase):
             with self.subTest(line=line):
                 self.t.skill("s", line + "\n")
                 self.assertEqual(self.rules(self.t.run()), ["links"])
+
+    def test_links_to_repository_files(self):
+        os.makedirs(os.path.join(self.t.root, "scripts"))
+        open(os.path.join(self.t.root, "scripts", "tool.py"), "w").close()
+        self.t.skill("s", "Run scripts/tool.py.\n")
+        self.assertEqual(self.t.run(), [])
 
     def test_main_exit_status(self):
         self.t.skill("s")
