@@ -15,8 +15,8 @@
 //     as the internal columns.
 //  4. Gaps: a jj column dropped, and a block that lacks a channel spin, are reported and refused.
 //  5. The formal basis (HANDOFF decision 10): B_c from the lowest level, so the formal parameters do not depend on the
-//     listing order and the lowest level's formal energy is its Brune energy; the largest |gamma| of each formal level
-//     positive; widths too large for the radii refused.
+//     listing order and the lowest level's formal energy is its Brune energy; each formal level oriented like its
+//     Brune level (formal -> Brune returns the input signs); widths too large for the radii refused.
 #include <cmath>
 #include <complex>
 #include <cstdio>
@@ -192,18 +192,6 @@ double MaxElemRel(const std::vector<double> &a, const std::vector<double> &b) {
   return d;
 }
 
-// Largest difference up to a common sign of each level (row).
-double MaxRelUpToLevelSign(const std::vector<double> &a, const std::vector<double> &b, std::size_t nc) {
-  std::vector<double> c = a;
-  for (std::size_t l = 0; l < a.size() / nc; l++) {
-    double dot = 0.0;
-    for (std::size_t k = 0; k < nc; k++) dot += a[l * nc + k] * b[l * nc + k];
-    if (dot < 0.0)
-      for (std::size_t k = 0; k < nc; k++) c[l * nc + k] = -c[l * nc + k];
-  }
-  return MaxRel(c, b);
-}
-
 }  // namespace
 
 int main() {
@@ -233,14 +221,13 @@ int main() {
   {
     // B_c = S_c(E~_low) makes E~_low an eigenvalue of the formal problem (Brune 2002): the level keeps its energy.
     report("lowest level: formal E = Brune E (relative)", std::fabs(formal.E[1] - E[1]) / E[1], 1e-14);
-    bool positive = true;
+    bool oriented = true;
     for (std::size_t l = 0; l < nl; l++) {
-      std::size_t big = 0;
-      for (std::size_t k = 1; k < nc; k++)
-        if (std::fabs(formal.gamma[l * nc + k]) > std::fabs(formal.gamma[l * nc + big])) big = k;
-      positive = positive && formal.gamma[l * nc + big] > 0.0;
+      double dot = 0.0;
+      for (std::size_t k = 0; k < nc; k++) dot += formal.gamma[l * nc + k] * brune.gamma[l * nc + k];
+      oriented = oriented && dot > 0.0;
     }
-    check("largest |gamma| of each formal level is positive", positive);
+    check("each formal level points the way of its Brune level (gamma . gamma~ > 0)", oriented);
     // The same block listed in energy order (16.63, 18.15, 19.07): the same formal levels, permuted.  With B_c at the
     // first listed level the formal energies differ.
     const std::vector<std::size_t> order = {1, 0, 2};
@@ -291,7 +278,7 @@ int main() {
     tight.energy_tolerance_MeV = 1e-13;
     const LevelSet b2 = brune_from_formal(sys, 0, formal.E, formal.gamma, B, cf, tight);
     report("formal -> Brune: energies", MaxRel(b2.E, E), 1e-13);
-    report("formal -> Brune: amplitudes (up to the sign of a level)", MaxRelUpToLevelSign(b2.gamma, brune.gamma, nc), 1e-11);
+    report("formal -> Brune: amplitudes, signs included", MaxRel(b2.gamma, brune.gamma), 1e-11);
     const LevelSet f2 = formal_from_brune(sys, 0, b2.E, b2.gamma, B, cf);
     report("formal -> Brune -> formal: energies", MaxRel(f2.E, formal.E), 1e-12);
     report("formal -> Brune -> formal: amplitudes, signs included", MaxRel(f2.gamma, formal.gamma), 1e-11);
@@ -387,7 +374,7 @@ int main() {
     check("LS heavy-first on the incomplete block: no gap", recoupling_gaps(lack, 0, heavy, project_channels(lack, 0, heavy)).empty());
   }
 
-  std::printf("6. diagnostics for callers; the eigensolver option\n");
+  std::printf("6. diagnostics for callers\n");
   {
     // No amplitude-input column, so N = 1 and Park's J = D/2 for every level (Eq. 2.3).
     double worst = 0.0;

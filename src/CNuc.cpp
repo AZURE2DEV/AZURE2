@@ -1186,9 +1186,9 @@ namespace phys = azure2::physics;
  * amplitudes of the levels become Brune's (or Park's) reduced width amplitudes, the external-capture amplitude is
  * subtracted from the photon channels, and, with the Brune parametrization off, the levels become formal ones.  The
  * arithmetic is physics/ level_parameters' (docs/upgrade/level_parameters.md sections 2-4), with the engine's channel
- * functions (ChannelFunctionsFromCNuc); the formal parameters take B_c at the lowest level of a group and the largest
- * |gamma| of a level positive (HANDOFF decision 10, cnuc_split.md section 7).  This function words the warnings and
- * keeps the bound-state normalization of external capture.
+ * functions (ChannelFunctionsFromCNuc); the formal parameters take B_c at the lowest level of a group, and each formal
+ * level the orientation of its Brune level (HANDOFF decision 10, cnuc_split.md section 7).  This function words the
+ * warnings and keeps the bound-state normalization of external capture.
  */
 
 bool CNuc::TransformIn(const Config &configure) {

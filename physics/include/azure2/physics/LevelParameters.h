@@ -170,9 +170,11 @@ struct LevelSet {
 
 /*!
  * Brune -> formal with constant B (CNuc.cpp, TransformIn, second loop), by generalized_symmetric_eigen.  Level lambda
- * keeps its position: it receives the eigenvalue of the rank of its Brune energy.  The overall sign of a formal level,
- * which the eigenproblem leaves free, is fixed so that its amplitude of largest |gamma| is positive (the first channel
- * of equal ones; HANDOFF decision 10).  Throws std::domain_error when M is not positive definite (no formal parameters
+ * keeps its position: it receives the eigenvalue of the rank of its Brune energy, and the orientation of its Brune
+ * level: of the two signs of the eigenvector, the one whose component on the level's own Brune state is positive.  So
+ * the result does not depend on the eigensolver, the formal amplitudes keep the input signs where levels mix weakly,
+ * and an external-capture final state keeps the sign the photon amplitudes of other levels refer to
+ * (level_parameters.md section 4).  Throws std::domain_error when M is not positive definite (no formal parameters
  * correspond) and std::invalid_argument for two levels at the same energy.
  */
 LevelSet formal_from_brune(const System &system, std::size_t b, const std::vector<double> &E,
@@ -185,9 +187,9 @@ struct FormalToBruneOptions {
 
 /// Formal -> Brune by the engine's iteration (CNuc::TransformOut): per level, B_c moved to S_c(E) and the matrix
 /// E - sum_c (S_c - B_c) gamma gamma rediagonalized (symmetric_eigen) until the level's energy moves by <= the
-/// tolerance.  A level that does not converge keeps its formal values, with a warning, as in the engine.  The Brune
-/// amplitudes keep the formal level's sign: the level's own component of each eigenvector is its largest, and
-/// symmetric_eigen makes it positive.
+/// tolerance.  A level that does not converge keeps its formal values, with a warning, as in the engine.  Each
+/// eigenvector is oriented as in formal_from_brune (its component on its own level positive), so formal -> Brune ->
+/// formal and Brune -> formal -> Brune return the signs they started from.
 LevelSet brune_from_formal(const System &system, std::size_t b, const std::vector<double> &E,
                            const std::vector<double> &gamma, const std::vector<double> &B, const ChannelFunctions &cf,
                            const FormalToBruneOptions &options = FormalToBruneOptions());

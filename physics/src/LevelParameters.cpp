@@ -1,7 +1,7 @@
 // Basis conversions of level_parameters (LevelParameters.h; docs/upgrade/level_parameters.md sections 2-4).  Each
 // function reproduces the arithmetic of the engine code it replaced, with the file and line it follows (at e54e6fcc)
 // named in a comment; the eigenproblems are SymmetricEigen.h's.  The formal basis takes B_c at the lowest level and
-// the largest |gamma| of a formal level positive (HANDOFF decision 10).
+// orients each formal level like its Brune level (HANDOFF decision 10; cnuc_split.md section 7).
 #include "azure2/physics/LevelParameters.h"
 
 #include <algorithm>
@@ -409,27 +409,23 @@ LevelSet formal_from_brune(const System &system, std::size_t b, const std::vecto
       << "): the matrix 1 - sum gamma gamma' dS/dE of the transformation is not positive definite";
     throw std::domain_error(o.str());
   }
-  // Each level keeps its position and receives the eigenvalue of the rank of its Brune energy (CNuc.cpp 1565-1600).
+  // Each level keeps its position and receives the eigenvalue of the rank of its Brune energy (CNuc.cpp 1565-1600),
+  // and the orientation of its Brune level: the eigenproblem leaves the sign of an eigenvector free, and the one taken
+  // makes the coefficient a_{lambda k} of the level's own Brune state positive.  The formal amplitudes then carry the
+  // signs of the input wherever the levels mix weakly, and a level that other levels' photon channels end on (an
+  // external-capture final state) keeps the sign those amplitudes were given relative to it.
   const std::vector<int> rank = AscendingRanks(E);
   out.E.assign(n, 0.0);
   out.gamma.assign(n * nc, 0.0);
   for (std::size_t la = 0; la < n; la++) {
     const std::size_t k = (std::size_t)rank[la];
+    const double orientation = (eig.vectors[la * n + k] < 0.0) ? -1.0 : 1.0;
     out.E[la] = eig.values[k];
     for (std::size_t c = 0; c < nc; c++) {
       double sum = 0.0;
       for (std::size_t mu = 0; mu < n; mu++) sum += eig.vectors[mu * n + k] * gamma[mu * nc + c];
-      out.gamma[la * nc + c] = sum;
+      out.gamma[la * nc + c] = orientation * sum;
     }
-  }
-  // The eigenproblem leaves each level's overall sign free (observables are even in it): its amplitude of largest
-  // |gamma| is made positive, the first channel of equal ones.
-  for (std::size_t la = 0; la < n; la++) {
-    std::size_t big = 0;
-    for (std::size_t c = 1; c < nc; c++)
-      if (std::fabs(out.gamma[la * nc + c]) > std::fabs(out.gamma[la * nc + big])) big = c;
-    if (nc > 0 && out.gamma[la * nc + big] < 0.0)
-      for (std::size_t c = 0; c < nc; c++) out.gamma[la * nc + c] = -out.gamma[la * nc + c];
   }
   return out;
 }
@@ -492,13 +488,16 @@ LevelSet brune_from_formal(const System &system, std::size_t b, const std::vecto
       }
       const double step = std::fabs(eig.values[me] - tempE[me]);  // MeV
       if (step <= options.energy_tolerance_MeV) done = true;
+      // Each eigenvector oriented like formal_from_brune's: its component on its own level positive.
       std::vector<double> newG(n * nc);
-      for (std::size_t mu = 0; mu < n; mu++)
+      for (std::size_t mu = 0; mu < n; mu++) {
+        const double orientation = (eig.vectors[mu * n + mu] < 0.0) ? -1.0 : 1.0;
         for (std::size_t k = 0; k < nc; k++) {
           double s = 0.0;
           for (std::size_t mup = 0; mup < n; mup++) s += eig.vectors[mup * n + mu] * tempG[mup * nc + k];
-          newG[mu * nc + k] = s;
+          newG[mu * nc + k] = orientation * s;
         }
+      }
       tempE = eig.values;
       tempG.swap(newG);
       if (!done) {
