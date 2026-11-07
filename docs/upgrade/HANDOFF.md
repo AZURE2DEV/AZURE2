@@ -2,6 +2,36 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-07 (director, end of session) — where to continue
+
+**Branches (local, bundled in `azure2-upgrade.bundle`; pycoulomb branches in `pycoulomb.bundle`).**
+- `feature/upgrade`: Phases 0 and 1 so far — test projects T1–T3, goldens, sanitizers, `physics/` (System, JpiBlock,
+  Convention, level_parameters), CNuc split steps 1 and 1b, Qt removed, decisions 1–12 recorded below.
+- `feature/upgrade-1-coulomb` (not merged): pycoulomb's C++ in `physics/coulomb/` (coulsm default, coul, coulfg,
+  coulcc), `channel_functions`, engine routed through them, `external/coul` deleted; output-identical except the
+  hybrid-potential rounding (≤ 9.9 × 10⁻¹¹). Its docs/timing commit may be missing if the session ended first: check
+  `git log`; if the head is 08516cfb, add the docs (coulomb.md describes the memo as still present) and time T2,
+  13N, natural_neon, convolution_unify against f549fa23 before merging.
+- `feature/upgrade-1-coulomb-nomemo` (hold): deletes `CoulFuncCache`; correct (≤ 7 × 10⁻¹¹, fixes the two pyazr THM
+  byte checks) but 3–17× slower until the per-stage table exists. Re-cut on top of step 3b.
+- pycoulomb (Jakub's repo): `azure2-prereqs` (libcoulomb, tests, LICENSING_NOTES.md) and `coulcc-cpp` (COULCC in
+  C++, bit-identical to the Fortran). Jakub: add the LLNL BSD-3 COPYRIGHT for coulfg, choose the licence, push, tag.
+
+**Next steps, in order.**
+1. Merge `feature/upgrade-1-coulomb` after the timing shows the routing costs nothing.
+2. Step 3b (`cnuc_split.md` §3, `coulomb.md` §6): the per-stage channel-function table — P, S, S′, φ, σ_l per
+   (α, l, channel energy) over the evaluation energies (decision 11, exact energies), read-only during an evaluation,
+   replaced when a free shift moves; replaces the `EDependentTables` Coulomb rows, `g_shiftDerivMemo` and the memo.
+   Gate: outputs ≤ 10⁻⁹ or explained; T2 and `convolution_unify` faster than with the memo. Then re-cut and merge
+   `-nomemo`.
+3. Whittaker functions without GSL (COULCC at imaginary argument); `--coulomb-method`; retire `--gsl-coul`.
+4. Remaining CNuc split steps (`cnuc_split.md` §3), then Phase 2.
+
+**Known open items.** `shared_point_tables` (d) peak-RSS limit has no margin; `light_excitation` (a) external-capture
+integrals depend on thread scheduling at 5 × 10⁻¹¹; formal basis with external capture disagrees with Brune (step-1b
+entry, item 2); Sphinx never built on CRC (`sphinx-build -W docs/source` before pushing). Agent brief:
+`~/AI-R-scratch/upgrade-work/AGENT_BRIEF.md` on CRC (rules are also in CLAUDE.md).
+
 ## 2026-11-07 (director) — state after the step-1b and Qt-removal merges: two pyazr THM checks fail
 
 `feature/upgrade` 160439ba, fresh build, GCC 11.5, no Qt (Condor 16205, 16206): no warnings; `tests/upgrade/check.sh`
