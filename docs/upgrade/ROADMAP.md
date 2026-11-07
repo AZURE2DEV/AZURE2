@@ -14,6 +14,8 @@ Tick boxes as work lands; put the commit hash after each tick.
 ## Phase 0 — Stabilise, measure, test projects, rules, skills
 
 - [ ] Freeze: no perf work on `EData`/`EPoint`/`ESegment`; no new Qt features (announce in `dev`'s CLAUDE.md).
+      Drafted on branch `docs/upgrade-freeze` (a7345b80, cut from `origin/dev` aab1de0d); not merged: decision 2 in
+      `HANDOFF.md` is open.
 - [ ] Test projects T1, T2, T3 (`ARCHITECTURE.md` §10) under `tests/upgrade/T1..T3/`: generator script with the true
       parameters, synthetic data with noise, `.azr`, README stating what each covers and the truth.
 - [ ] Golden outputs of today's engine for T1–T3 (`tests/upgrade/golden/`), with the engine commit recorded.
