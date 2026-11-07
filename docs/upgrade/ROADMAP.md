@@ -16,17 +16,22 @@ Tick boxes as work lands; put the commit hash after each tick.
 - [ ] Freeze: no perf work on `EData`/`EPoint`/`ESegment`; no new Qt features (announce in `dev`'s CLAUDE.md).
       Drafted on branch `docs/upgrade-freeze` (a7345b80, cut from `origin/dev` aab1de0d); not merged: decision 2 in
       `HANDOFF.md` is open.
-- [ ] Test projects T1, T2, T3 (`ARCHITECTURE.md` §10) under `tests/upgrade/T1..T3/`: generator script with the true
+- [x] Test projects T1, T2, T3 (`ARCHITECTURE.md` §10) under `tests/upgrade/T1..T3/`: generator script with the true
       parameters, synthetic data with noise, `.azr`, README stating what each covers and the truth.
       T1 and T3 done: 63c08471 (branch `feature/upgrade-0-testprojects-t1t3`); recovery check `tests/upgrade/recover.py`.
-      T2: branch `feature/upgrade-0-testprojects-t2`. Tick when T2 lands.
-- [ ] Golden outputs of today's engine for T1–T3 (`tests/upgrade/golden/`), with the engine commit recorded.
-      T1 and T3 done: 3b48a101 (engine c1cc92c7, `golden/golden.py`, rtol 1e-6). T2 to add.
+      T2 done (branch `feature/upgrade-0-testprojects-t2`): 3184b1ee, 10ec535a, dc898924, 52340da3, 425fbc8c
+      (generator, data, fixes), 7ece1045 (README); recovery check 345bbb69, 599e6bee
+      (`tests/upgrade/T2/check_recovery.py`): max |pull| 2.15 (noisy), 0.38 (Asimov). Not seconds-scale: the T2
+      fit takes 585 s at 8 threads (72 s with a Coulomb table); its calculation 1.8 s.
+- [x] Golden outputs of today's engine for T1–T3 (`tests/upgrade/golden/`), with the engine commit recorded.
+      T1 and T3: 3b48a101 (engine c1cc92c7, `golden/golden.py`, rtol 1e-6). T2: 8870504f (`golden/T2`, engine
+      sources 37978592, `golden/T2/regen_compare.py`, rtol 1e-5 calculations, 1e-3 fit).
 - [x] Identity checks (no data) as unit tests: list in `ARCHITECTURE.md` §10. fbad9b6a, bf5f1713: every identity
       the present engine can express (Coulomb/mpmath/Wronskian, unitarity, optical theorem, Breit–Wigner area,
       Brune/formal/Park, gradient, threads). Pending on Phases 1, 5, 7 (kernels, stopping, THM, conventions): listed in
       `tests/upgrade/README.md`, each to be added with its module.
-- [ ] Benchmark: `scripts/bench_upgrade.sh` → time and peak RSS for T2 at 1 and 8 threads; stored per commit.
+- [x] Benchmark: `scripts/bench_upgrade.sh` → time and peak RSS for T2 at 1 and 8 threads; stored per commit.
+      345bbb69, 5a9426fd (script), f51f8d18 (first entry, `tests/upgrade/bench/T2.tsv`).
 - [ ] CI: nightly clang TSan and ASan at 8 threads on T1–T3 and the mapping/shift/target tests.
 - [x] Rules into `CLAUDE.md` (`RULES.md`), replacing the "date an entry (`dev 0dd28e5`)" skill rule.
 - [x] Skills rewritten into the ten-skill set (`RULES.md` §3) and `tools/check_skills.py` in CI.

@@ -1,0 +1,6 @@
+engine commit: 37978592 (feature/upgrade; engine sources identical through 5a9426fd of feature/upgrade-0-testprojects-t2)
+binary: CLI build (Release, no GUI) of feature/upgrade c1cc92c7, GCC 11.5, Linux x86-64
+project: tests/upgrade/T2 as of 5a9426fd (data seed 20261106)
+generated: 2026-11-07 (UTC) with --no-coulomb-table, OMP_NUM_THREADS=8, on an HTCondor slot (regen_compare.py --regenerate)
+runs: calc_start, calc_truth (menu 1), fit (menu 2, --use-lm: numerical MIGRAD, 1082 calls)
+check: calc_start and calc_truth regenerated at OMP_NUM_THREADS=1 agree with these files within 1e-5 (regen_compare.py)

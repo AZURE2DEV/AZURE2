@@ -1,0 +1,7 @@
+segment_key_#, file_name, low_angle_bound, high_angle_bound, aframe, low_energy_bound, high_energy_bound, eframe, norm, shift, sqrt_shift
+2,data/s02_diff090.dat,9.0000e+01,9.0000e+01,Lab,2.5000e-01,1.3500e+00,Lab,9.5000e-01,-1.5000e-03,0.0000e+00
+3,data/s03_diff150.dat,1.5000e+02,1.5000e+02,Lab,2.5000e-01,1.3500e+00,Lab,9.5000e-01,-1.5000e-03,0.0000e+00
+# shift functions: dE(x) = shift + f(x), x = original lab energy of a point (MeV), dE in MeV
+# segment_key_#, member_keys, f(x), shift, a0 a1 ..., x_low, x_high, dE(x_low), dE(x_high), penalty
+# 2,2 3,a0*(x-0.8),-1.5000e-03,4.0000e-03,2.5000e-01,1.3500e+00,-3.7000e-03,7.0000e-04,0.0000e+00
+# Total-Shift-Chi-Squared: 0.0000e+00
