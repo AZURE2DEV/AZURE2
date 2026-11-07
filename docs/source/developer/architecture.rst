@@ -24,8 +24,6 @@ Repository layout
    * - ``pyazr/``
      - The Python package: the in-process driver, an ``.azr`` reader/writer,
        width transformations, uncertainty bands, and the EXFOR/ENSDF client.
-   * - ``gui/``
-     - The Qt5/Qwt setup utility (see :doc:`gui_structure`).
    * - ``numcmc/``
      - The affine-invariant ensemble MCMC sampler.
    * - ``external/``
@@ -41,8 +39,7 @@ A run, from the command line
 ----------------------------
 
 1. ``src/AZURE2.cpp``, ``main``: handles ``--help`` and
-   ``--build-coulomb-table``, starts the GUI unless ``--no-gui`` is given,
-   parses the remaining flags into ``Config`` (``parseOptions``), reads the
+   ``--build-coulomb-table``, parses the remaining flags into ``Config`` (``parseOptions``), reads the
    ``<config>`` block, and pre-scans the file for the segment pairs and
    external capture. It then shows the menu and runs ``AZUREMain`` for the
    chosen mode.
@@ -99,16 +96,14 @@ The ``.azr`` file is parsed independently by:
 * the engine: ``Config.cpp`` (``<config>``), ``CNuc.cpp`` with ``NucLine.h``
   (``<levels>``), ``EData.cpp`` with ``SegLine.h`` / ``ExtrapLine.h``
   (segments and experimental effects), plus the pre-scans in ``AZURE2.cpp``;
-* the GUI: ``AZURESetup.cpp`` (``readFile`` / ``writeFile``) and the tab
-  models, with the segment keyword list in ``gui/include/SegmentKeywords.h``;
 * pyazr: ``pyazr/azrfile.py`` (``AzrModel``) and ``pyazr/datasets.py``
   (``SegmentSet``).
 
-A new keyword or field is therefore implemented three times. The GUI and pyazr
-must also write the file back unchanged, including blocks they do not
-understand. ``tests/gui/segments_roundtrip_test`` and
-``tests/pyazr/roundtrip_test`` check the round trip, and ``tests/consistency``
-checks that the three segment-keyword lists agree. The full list of places a
+A new keyword or field is therefore implemented twice. pyazr must also write
+the file back unchanged, including blocks it does not understand.
+``tests/pyazr/roundtrip_test`` checks the round trip, and ``tests/consistency``
+checks that the two segment-keyword lists agree. (The Qt setup utility of the
+released versions is a third reader, on ``dev``; this version has none.) The full list of places a
 feature touches is in :doc:`contributing`.
 
 Caches and their signatures

@@ -13,6 +13,5 @@ wish to understand, modify, or extend the code.
    physics_core
    coulomb_table
    ec_table
-   gui_structure
    api
    contributing

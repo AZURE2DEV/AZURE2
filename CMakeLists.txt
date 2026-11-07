@@ -46,11 +46,8 @@ endif()
 
 # Options
 option(CROSS_COMPILE_WINDOWS "Cross-compile for Windows" OFF)
-option(BUILD_MACOS_BUNDLE "Build macOS application bundle" OFF)
 option(BUILD_LIBRARY "Build AZURE2 as a library" OFF)
-option(BUILD_GUI "Build AZURE2 with graphical setup program" ON)
 option(USE_STAT "Use stat() function (not for Windows)" ON)
-option(USE_QWT "Use Qwt to build Plot tab." ON)
 option(USE_API "Use API version." ON)
 if(USE_API)
     # The _azure2 pybind11 module (api/src/CMakeLists.txt) is a shared object
@@ -126,19 +123,19 @@ add_subdirectory(physics)
 #     "-Xpreprocessor -fopenmp", the runtime comes from the separate libomp
 #     formula, and FindOpenMP cannot infer either for AppleClang -- so
 #     find_package(OpenMP REQUIRED) below fails outright.
-#   * qt@5 and qwt-qt5 are keg-only: Homebrew deliberately leaves them out of
-#     the default prefix, so find_package(Qt5) does not see them.
+#   * readline is keg-only (macOS ships libedit in its place): Homebrew
+#     leaves it out of the default prefix, so the linker does not see it.
 #
 # Everything here is derived by asking brew, and every value is overridable
 # from the command line, so an explicit -D or a conda/MacPorts toolchain (which
-# has none of these problems, having its own compiler and Qt in one prefix)
+# has none of these problems, having its own compiler and libraries in one prefix)
 # still wins.
 if(APPLE AND NOT CROSS_COMPILE_WINDOWS)
     find_program(BREW_EXECUTABLE brew)
     if(BREW_EXECUTABLE)
         # Keg-only or not, adding the prefix is harmless and makes the build
         # independent of what the user has linked into /opt/homebrew.
-        foreach(_formula qt@5 qwt-qt5 qwt readline gsl libomp)
+        foreach(_formula readline gsl libomp)
             execute_process(COMMAND ${BREW_EXECUTABLE} --prefix ${_formula}
                             OUTPUT_VARIABLE _prefix
                             OUTPUT_STRIP_TRAILING_WHITESPACE
@@ -158,7 +155,7 @@ if(APPLE AND NOT CROSS_COMPILE_WINDOWS)
         # MacPorts toolchain brings its own, and must not be overridden.
     else()
         message(STATUS "Homebrew not found; assuming a self-contained toolchain "
-                       "(conda/MacPorts) that provides OpenMP and Qt5 itself.")
+                       "(conda/MacPorts) that provides OpenMP itself.")
     endif()
 endif()
 
@@ -174,11 +171,10 @@ if(CROSS_COMPILE_WINDOWS)
     set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
 
     # Configure proper static linking for MinGW runtime libraries
-    # Note: Full static linking with Qt5 is not possible, so we use selective static linking
     set(CMAKE_C_FLAGS "-static-libgcc")
     set(CMAKE_CXX_FLAGS "-static-libgcc -static-libstdc++")
     
-    # Use advanced static linking approach for winpthread while allowing dynamic Qt5
+    # Link winpthread statically; GSL and readline stay dynamic (DLLs copied next to the executable)
     set(CMAKE_CXX_STANDARD_LIBRARIES "-static-libgcc -static-libstdc++ -lwsock32 -lws2_32 ${CMAKE_CXX_STANDARD_LIBRARIES}")
     set(CMAKE_EXE_LINKER_FLAGS "-Wl,-Bstatic,--whole-archive -lwinpthread -Wl,--no-whole-archive,-Bdynamic")
     set(CMAKE_SHARED_LINKER_FLAGS "-static-libgcc -static-libstdc++")
@@ -415,95 +411,15 @@ else()
     message(STATUS "MCMC Bayesian sampling disabled")
 endif()
 
-# GUI and core modules
+# Python module
 if(USE_API)
     add_subdirectory(api)
-endif()
-
-# Qt5 setup for cross-compilation
-if(BUILD_GUI)
-    if(CROSS_COMPILE_WINDOWS)
-        # For Windows cross-compilation, set Qt5 paths manually
-        set(Qt5_DIR "/usr/x86_64-w64-mingw32/sys-root/mingw/lib/cmake/Qt5")
-        set(CMAKE_PREFIX_PATH "/usr/x86_64-w64-mingw32/sys-root/mingw")
-        
-        # Add explicit paths for Qt5 dependency libraries to help linker
-        link_directories("/usr/x86_64-w64-mingw32/sys-root/mingw/lib")
-        
-        # Find Qt5 components needed for Windows
-        find_package(Qt5 REQUIRED COMPONENTS Core Widgets)
-        
-        # Explicitly link Qt5 dependency libraries to ensure they're found
-        # This helps with the DLL loading issue by ensuring import libraries are linked
-        find_library(ICONV_LIB NAMES iconv PATHS "/usr/x86_64-w64-mingw32/sys-root/mingw/lib" NO_DEFAULT_PATH)
-        find_library(PCRE2_LIB NAMES pcre2-16 PATHS "/usr/x86_64-w64-mingw32/sys-root/mingw/lib" NO_DEFAULT_PATH)
-        find_library(ZLIB_LIB NAMES z PATHS "/usr/x86_64-w64-mingw32/sys-root/mingw/lib" NO_DEFAULT_PATH)
-        find_library(HARFBUZZ_LIB NAMES harfbuzz PATHS "/usr/x86_64-w64-mingw32/sys-root/mingw/lib" NO_DEFAULT_PATH)
-        find_library(PNG_LIB NAMES png16 PATHS "/usr/x86_64-w64-mingw32/sys-root/mingw/lib" NO_DEFAULT_PATH)
-        
-        if(ICONV_LIB)
-            message(STATUS "Found iconv library: ${ICONV_LIB}")
-            set(EXTRA_LIBS ${EXTRA_LIBS} ${ICONV_LIB})
-        endif()
-        if(PCRE2_LIB)
-            message(STATUS "Found pcre2-16 library: ${PCRE2_LIB}")
-            set(EXTRA_LIBS ${EXTRA_LIBS} ${PCRE2_LIB})
-        endif()
-        if(ZLIB_LIB)
-            message(STATUS "Found zlib library: ${ZLIB_LIB}")
-            set(EXTRA_LIBS ${EXTRA_LIBS} ${ZLIB_LIB})
-        endif()
-        if(HARFBUZZ_LIB)
-            message(STATUS "Found harfbuzz library: ${HARFBUZZ_LIB}")
-            set(EXTRA_LIBS ${EXTRA_LIBS} ${HARFBUZZ_LIB})
-        endif()
-        if(PNG_LIB)
-            message(STATUS "Found png library: ${PNG_LIB}")
-            set(EXTRA_LIBS ${EXTRA_LIBS} ${PNG_LIB})
-        endif()
-        
-        # Handle QWT for Windows if enabled
-        if(USE_QWT)
-            set(QWT_INCLUDE_DIRS "/usr/x86_64-w64-mingw32/sys-root/mingw/include/qt5/qwt")
-            set(QWT_LIBRARIES "qwt-qt5")
-        endif()
-    else()
-        # Native Linux/macOS QWT configuration
-        if(USE_QWT)
-            # Set the CMake module path to find our custom FindQwt.cmake
-            list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/Modules")
-            
-            # Find QWT using our custom module
-            find_package(Qwt REQUIRED)
-            
-            if(Qwt_FOUND)
-                message(STATUS "Found QWT: ${QWT_LIBRARIES}")
-                message(STATUS "QWT include directories: ${QWT_INCLUDE_DIR}")
-                
-                # Set variables for use in subdirectories
-                set(QWT_INCLUDE_DIRS ${QWT_INCLUDE_DIR})
-                set(QWT_LIBRARIES ${QWT_LIBRARY})
-                
-                # Add to global include directories
-                include_directories(${QWT_INCLUDE_DIR})
-            else()
-                message(FATAL_ERROR "QWT library not found. Please install libqwt-qt5-dev or disable USE_QWT")
-            endif()
-        endif()
-    endif()
-    
-    add_subdirectory(gui)
-    add_definitions(-DGUI_BUILD)
 endif()
 
 add_subdirectory(external/coul)
 add_subdirectory(src)
 
-# Headless GUI tests. After src/, because they link the same libraries the
-# AZURE2 executable does; the subdirectory returns immediately unless the GUI
-# is being built.
 enable_testing()
-add_subdirectory(tests/gui)
 add_subdirectory(tests/reference)
 add_subdirectory(tests/pyazr)
 add_subdirectory(tests/consistency)
@@ -540,27 +456,6 @@ endif()
 
 # Packaging
 include(InstallRequiredSystemLibraries)
-
-if(BUILD_MACOS_BUNDLE AND APPLE)
-    set(CPACK_GENERATOR "DragNDrop")
-    set(CPACK_DMG_FORMAT "UDBZ")
-    set(CPACK_DMG_VOLUME_NAME "AZURE2")
-    set(CPACK_SYSTEM_NAME "macOS")
-    set(MACOSX_BUNDLE_ICON_FILE azure2.icns)
-    set(AZURE2_ICON_PATH "${CMAKE_CURRENT_SOURCE_DIR}/gui/images/azure2.icns")
-    install(FILES ${AZURE2_ICON_PATH} DESTINATION "AZURE2.app/Contents/Resources" COMPONENT Runtime)
-
-    set(AZURE2_BUNDLE_PROPERTIES
-        MACOSX_BUNDLE TRUE
-        MACOSX_BUNDLE_INFO_STRING "AZURE2 R-Matrix Analysis Software"
-        MACOSX_BUNDLE_BUNDLE_NAME "AZURE2"
-        MACOSX_BUNDLE_BUNDLE_VERSION "${AZURE2_VERSION}"
-        MACOSX_BUNDLE_SHORT_VERSION_STRING "${AZURE2_VERSION}"
-        MACOSX_BUNDLE_LONG_VERSION_STRING "Version ${AZURE2_VERSION}"
-        MACOSX_BUNDLE_ICON_FILE "azure2.icns"
-        MACOSX_BUNDLE_GUI_IDENTIFIER "org.azure2.rmatrix"
-        MACOSX_BUNDLE_COPYRIGHT "University of Notre Dame")
-endif()
 
 if(CROSS_COMPILE_WINDOWS)
     set(CPACK_GENERATOR "NSIS")

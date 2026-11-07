@@ -148,36 +148,14 @@ class AZURECalcMCMC {
   void LoadExistingSamples(const std::string &filename, std::vector<std::vector<double>> &samples) const;
 
   /*!
-   * Request stop for currently running MCMC
-   */
-  static void RequestStop();
-
-  /*!
-   * Clear stop flag for new MCMC run
-   */
-  static void ClearStop();
-
-  /*!
-   * Set GUI progress callback function
+   * Set the progress callback (the CLI's progress line)
    */
   static void SetGUIProgressCallback(void (*callback)(int, int, double, double, double));
 
   /*!
-   * Set GUI iteration callback function (called every iteration)
+   * Set the iteration callback (called every iteration; the CLI's progress line)
    */
   static void SetGUIIterationCallback(void (*callback)(int, int));
-
-  /*!
-   * Set GUI results callback function (called every 100 iterations for results update)
-   */
-  static void SetGUIResultsCallback(void (*callback)(int, int, const std::vector<std::vector<double>> &));
-
-  /*!
-   * Set GUI message callback: receives the start-check report of
-   * RunMCMCSampling (a Park start with J <= 0, a refused start), which also
-   * goes to the Config output stream (std::cout in the GUI).
-   */
-  static void SetGUIMessageCallback(void (*callback)(const std::string &));
 
   /*!
    * Returns a reference to the Config structure.

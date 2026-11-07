@@ -6,9 +6,9 @@ This file says which is which, how pyazr computes them, and how γ-ray strengths
 
 ## The two forms of the Wigner limit
 
-1. **Width form (GUI, `ChannelWidth.wigner_width`), in eV.** Γ_W = 2 P_l(E_r) γ²_W, with P_l the penetrability of
+1. **Width form (`ChannelWidth.wigner_width`), in eV.** Γ_W = 2 P_l(E_r) γ²_W, with P_l the penetrability of
    orbital angular momentum l at the resonance energy E_r (c.m.). It depends on energy. θ² = Γ/Γ_W, with Γ the
-   observed partial width. Prefer this form: it can be checked one channel at a time in the GUI.
+   observed partial width. Prefer this form: it can be checked one channel at a time.
 2. **Amplitude form (API, `Parameter.wigner_limit`, `ChannelWidth.wigner_gamma2`), in MeV.**
    γ²_W = 3ħ²/(2μ a_c²), with μ the reduced mass of the channel; already squared and independent of energy.
    θ²_formal = γ²_formal/γ²_W, with γ_formal the formal reduced-width amplitude (`g_int` in `parameters.out`,
@@ -30,7 +30,7 @@ limit ħ²/(μa²); the value was always 3ħ²/(2μa²).
 Γ_W needs P_l(E_r), which the API does not expose. `wigner_widths` obtains it from AZURE2 itself: it transforms a
 probe vector with every reduced-width amplitude set to a small ε, so the shift denominator is 1 and
 Γ_c(ε) = 2 P_c ε². This costs one extra `TRANSFORM_RWA` at AZURE2's own radii and Coulomb functions, and reproduces
-the GUI's Γ_W (³He+α, 7/2⁻ level at E_x = 4.57 MeV: Γ_W = 3.487 × 10⁵ eV, θ² = 0.494).
+Γ_W of the width form (³He+α, 7/2⁻ level at E_x = 4.57 MeV: Γ_W = 3.487 × 10⁵ eV, θ² = 0.494).
 
 ## γ-ray strengths
 

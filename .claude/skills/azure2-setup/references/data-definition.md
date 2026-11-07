@@ -76,8 +76,6 @@ share one level-matrix solution per point; `AZURE_NO_COMPONENT_MAPPING=1` restor
   `<targetInt>`; `<parameterSettings>` and `<mcmc>` are dropped. Edit with `AzrModel.samples`,
   `set_abundance(..., sample=)`, `set_sample_sum_sigma`, `set_natural(key, "name")`; read
   `parameters.abundances` and `penalties()["abundance"]`.
-- **GUI**: the Pairs tab shows the nucleus column and abundance table once the pairs form two nuclei; each level
-  belongs to one nucleus; segment dialogs have a "Natural target" box; the Fitting tab an "Abundances" sub-tab.
 - **Cross-check a merge against its members**: each nucleus alone (other nuclei's components removed, abundances
   1/0/0) reproduces its standalone project's χ² to 1e-10 (`tests/natural_target/check.sh`). The real-data reference
   model is `tests/natural_neon` (three nuclei, EXFOR data).

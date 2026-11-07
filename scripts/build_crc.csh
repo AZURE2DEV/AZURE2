@@ -1,17 +1,17 @@
 #!/bin/tcsh
 #
-# Build AZURE2 (GUI + CLI + pyazr) on the Notre Dame CRC cluster.
+# Build AZURE2 (CLI + pyazr) on the Notre Dame CRC cluster.
 #
 # Usage:
 #   cd ~/AZURE2          (wherever you cloned https://github.com/AZURE2DEV/AZURE2.git)
 #   source scripts/build_crc.csh
 #
 # What this does:
-#   1. Loads the CRC modules AZURE2 needs (Python, Qt5, GSL, CMake, Qwt).
+#   1. Loads the CRC modules AZURE2 needs (Python, GSL, CMake).
 #   2. Installs pybind11/numpy into your own ~/.local if missing (needed to
 #      build the pyazr `_azure2` extension).
-#   3. Configures a Release build in ./build with the GUI, pyazr, MCMC,
-#      ERYA (SRIM stopping powers), Qwt plotting and readline all enabled.
+#   3. Configures a Release build in ./build with pyazr, MCMC,
+#      ERYA (SRIM stopping powers) and readline all enabled.
 #   4. Builds with `make -jN`.
 #   5. Copies the resulting executable to ~/bin/AZURE2 (creating ~/bin if
 #      needed).
@@ -20,8 +20,8 @@
 #   - readline headers: system-wide (readline-devel), no module for it.
 #   - Minuit2, the Coulomb-wavefunction library, and the SRIM stopping-power
 #     utilities: vendored under external/, built in-tree automatically.
-#   - GSL/Qt5/Qwt install *paths*: once the modules below are loaded, CMake
-#     finds all three automatically via pkg-config / their CMake config
+#   - The GSL install path: once the modules below are loaded, CMake
+#     finds it automatically via pkg-config / its CMake config
 #     files -- no -DGSL_PATH, -DMINUIT_PATH or -DCMAKE_PREFIX_PATH needed.
 #
 # Safe to re-run any time (e.g. after `git pull`) to rebuild.
@@ -30,10 +30,8 @@ set BUILD_DIR = build
 
 echo "Loading modules..."
 module load python/3.12.13
-module load qt/5.15.19
 module load gsl/gcc/2.8
 module load cmake/4.1.0
-module load /groups/nsl/nslmodule/qwt/6.3.0/gcc/11.5.0
 
 echo "Checking Python build deps (pybind11, numpy)..."
 python3 -c "import pybind11" >& /dev/null
@@ -60,9 +58,7 @@ echo "pybind11 cmake dir: $PYBIND11_DIR"
 echo "Configuring CMake ($BUILD_DIR)..."
 cmake -S . -B $BUILD_DIR \
     -DCMAKE_BUILD_TYPE=Release \
-    -DBUILD_GUI=ON \
     -DUSE_API=ON \
-    -DUSE_QWT=ON \
     -DUSE_MCMC=ON \
     -DUSE_ERYA=ON \
     -DUSE_READLINE=ON \

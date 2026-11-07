@@ -43,7 +43,7 @@ SKIP_BUILD=false
 if [ "$SKIP_BUILD" = false ]; then
     # Build image (targeting builder stage to get build environment)
     echo -e "${GREEN}Building Windows compilation Docker image...${NC}"
-    echo -e "${YELLOW}Building with GUI and QWT support for Windows${NC}"
+    echo -e "${YELLOW}Building the command-line program for Windows${NC}"
     docker build -f packaging/docker/Dockerfile.windows --target builder -t azure2-windows-builder --label dockerfile_hash="$DOCKERFILE_HASH" . 2>&1 | tee build.log
 
     if [ ${PIPESTATUS[0]} -ne 0 ]; then
@@ -51,7 +51,7 @@ if [ "$SKIP_BUILD" = false ]; then
         echo -e "${YELLOW}Common issues and solutions:${NC}"
         echo "1. Missing packages: Check if all mingw64-* packages are available"
         echo "2. CMake configuration: Verify CMakeLists.txt cross-compilation settings"
-        echo "3. Library linking: Check Qt5 and QWT library paths"
+        echo "3. Library linking: Check the GSL and MinGW library paths"
         echo "4. Compilation errors: Review C++ source compatibility with MinGW"
         exit 1
     fi
@@ -112,7 +112,7 @@ fi
 echo -e "${YELLOW}Copying DLL files...${NC}"
 
 # List specific DLL files that should be copied
-EXPECTED_DLLS="libgsl-0.dll libgslcblas-0.dll libreadline8.dll libhistory8.dll Qt5Core.dll Qt5Gui.dll Qt5Widgets.dll Qt5PrintSupport.dll Qt5OpenGL.dll Qt5Svg.dll Qt5Network.dll qwt-qt5.dll libgcc_s_seh-1.dll libstdc++-6.dll libwinpthread-1.dll libgomp-1.dll libcrypto-3-x64.dll libssl-3-x64.dll iconv.dll libiconv-2.dll libpcre2-16-0.dll libpcre2-8-0.dll zlib1.dll libharfbuzz-0.dll libpng16-16.dll libfreetype-6.dll libglib-2.0-0.dll libintl-8.dll libgraphite2.dll libbz2-1.dll libtermcap-0.dll"
+EXPECTED_DLLS="libgsl-0.dll libgslcblas-0.dll libreadline8.dll libhistory8.dll libtermcap-0.dll libgcc_s_seh-1.dll libstdc++-6.dll libwinpthread-1.dll libgomp-1.dll"
 
 for dll in $EXPECTED_DLLS; do
     DLL_FOUND=false
@@ -129,21 +129,6 @@ for dll in $EXPECTED_DLLS; do
         echo "DLL not found in any location: $dll"
     fi
 done
-
-# Copy platforms directory from multiple possible locations
-PLATFORMS_FOUND=false
-for platforms_path in "/workspace/build-windows/src/platforms" "/workspace/build-windows/platforms" "/usr/local/bin/platforms"; do
-    if docker exec "$CONTAINER_ID" test -d "$platforms_path" 2>/dev/null; then
-        echo -e "${YELLOW}Copying Qt5 platforms directory from: $platforms_path${NC}"
-        mkdir -p "$OUTPUT_DIR/platforms"
-        docker cp "$CONTAINER_ID:$platforms_path/." "$OUTPUT_DIR/platforms/" 2>/dev/null && PLATFORMS_FOUND=true
-        break
-    fi
-done
-
-if [ "$PLATFORMS_FOUND" = false ]; then
-    echo "Platforms directory not found in any expected location"
-fi
 
 # Cleanup
 echo -e "${YELLOW}Cleaning up Docker image...${NC}"

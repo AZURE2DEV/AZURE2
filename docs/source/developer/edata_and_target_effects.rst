@@ -450,16 +450,6 @@ formula. Unlike ``tests/beam_profile_kernel``, which pins a chi-squared this
 code produced, it can tell you the answer is right rather than merely
 unchanged. It needs no model and runs in milliseconds.
 
-On the GUI side the block lives in ``TargetIntData`` (``gui/include/TargetIntModel.h``,
-columns 22-26 of the table model) and is parsed and emitted by
-``TargetIntTab::readFile``/``writeFile``.  The reader splits the block off at
-its keyword *before* the quoted ranges token is handled, so the older numeric
-chain parses exactly as it did; the writer emits it last and only when the
-effect declares one, and formats the numbers with ``QString::number(v, 'g', 12)``
-because ``QTextStream``'s default of six significant digits would round a
-profile location of a few MeV on every save.  A block that declares more
-components than it supplies is dropped rather than half-applied.
-
 Energy ranges, blending and the automatic decision
 --------------------------------------------------
 

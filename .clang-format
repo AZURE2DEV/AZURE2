@@ -1,4 +1,4 @@
-# Formatting for the AZURE2 core, API and GUI sources.  external/ is vendored
+# Formatting for the AZURE2 core and API sources.  external/ is vendored
 # (Minuit2, coul, erya, pugixml) and is left exactly as upstream wrote it.
 #
 # The settings follow what the majority of the existing code already did, so

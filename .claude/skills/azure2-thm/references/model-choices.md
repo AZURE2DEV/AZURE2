@@ -2,8 +2,8 @@
 
 Every key below is documented in `docs/source/theory/thm_implementation.rst`, cited here
 as *impl*. Global keys go in `<thm>`; per-experiment keys go on an
-`experiment[<name>]` line. Edit them in the GUI (THM Workspace) or with
-`AzrModel.set_thm_option` / `set_thm_experiment`. Both apply the engine's rules and
+`experiment[<name>]` line. Edit them with
+`AzrModel.set_thm_option` / `set_thm_experiment`, which apply the engine's rules and
 raise `ValueError` on a refusal.
 
 ## Global options
@@ -172,7 +172,7 @@ everything below except `theta`, `background` and `cbackground`.
   formal calculation.
 - Brune fails when γ²dS/dE is large ("Denominator less than zero"; 12C+12C θ² = 26 at
   6.41 fm). Use a larger radius or smaller seeds.
-- Park (`--use-park`, GUI "Use Park parametrization", pyazr `use_park=True`):
+- Park (`--use-park`, pyazr `use_park=True`):
   - It gives the same THM model as Brune (`tests/thm_park`: every example and option,
     ≤ 1e-8), and fits land on the same minimum.
   - The fit amplitude is the observed width (Γ = 2Pγ²), so fixing, bounding or putting

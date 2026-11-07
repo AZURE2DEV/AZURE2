@@ -63,8 +63,8 @@ On clusters where submission needs a Kerberos/AFS token:
   calling shell's own command line kills that shell. Find the pid with a fixed-string match
   (`ps -eo pid,cmd | grep -F "<name>"`) or escape the plus, kill by pid, confirm with `kill -0 <pid>` failing, and only
   then remove its log.
-- **Launch background programs with `< /dev/null` and a size cap** (`2>&1 | head -c 200000 > log`). A GUI that falls
-  back to its text menu prints its prompt forever; a log deleted under a live process keeps growing as a hidden
+- **Launch background programs with `< /dev/null` and a size cap** (`2>&1 | head -c 200000 > log`). An AZURE2 that
+  reads its text menu from an open stdin prints its prompt forever; a log deleted under a live process keeps growing as a hidden
   `.nfs...` file (one reached 748 GB and filled a 5 TB group quota, killing every job writing there). `ls -la` shows
   the `.nfs` file's size; `ls -l /proc/<pid>/fd` finds the holder.
 - **When a batch of jobs dies at once, check the group quota first** (the group's own quota, not the size of the whole

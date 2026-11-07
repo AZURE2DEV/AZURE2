@@ -261,10 +261,6 @@ void AdaptiveIntegrationGrid::SetConfig(const GridConfig &config) {
   config_ = config;
 }
 
-AdaptiveIntegrationGrid::GridConfig AdaptiveIntegrationGrid::GetConfig() const {
-  return config_;
-}
-
 /*!
  * \brief The levels within 20 widths of an energy range, unquantized (for the
  * reaction-rate breakpoints).

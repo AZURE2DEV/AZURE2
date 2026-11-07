@@ -84,7 +84,7 @@ if [ "${#bins[@]}" -gt 1 ]; then
       mark=" "; [ "$b" = "$AZURE2_BIN" ] && mark="*"
       echo "  $mark $(stamp "$b")  ${b#"$REPO_ROOT"/}"
     done
-    echo "  (* = tested.)  A stale build is still what the GUI or a script may run;"
+    echo "  (* = tested.)  A stale build is still what a script or pyazr may run;"
     echo "  rebuild it or remove it."
   fi
 fi

@@ -81,7 +81,6 @@ def check_registered(directory, pattern, cmake_dir=None):
 
 check_registered("tests/pyazr", r".+_test\.py")
 check_registered("tests/reference", r".+_test\.cpp")
-check_registered("tests/gui", r".+_test\.cpp")
 check_registered("tests/consistency", r".+_test\.py")
 check_registered("tests/upgrade", r".+_test\.cpp")
 check_registered("physics/tests", r".+_test\.cpp", "physics")
@@ -144,20 +143,15 @@ if all_match:
         problems.append(f"pyazr.__all__: listed twice: {', '.join(duplicates)}")
 
 
-# 6. The segment-line keyword blocks are the same set in all three .azr
-#    readers.  The GUI keeps a tail verbatim only for keywords it knows
-#    (SegmentKeywords.h), and pyazr splits the tail by its own table, so a
-#    keyword the engine learns and either front end does not is mangled by a
-#    load and save there.
+# 6. The segment-line keyword blocks are the same set in both .azr readers.
+#    pyazr splits the tail by its own table, so a keyword the engine learns and
+#    pyazr does not is mangled by a load and save there.
 engine_kw = set()
 for header in ("include/SegLine.h", "include/ExtrapLine.h"):
     engine_kw |= set(re.findall(r'keyword == "([a-z]+)"', read(header)))
-gui_src = read("gui/include/SegmentKeywords.h")
-gui_kw = set(re.findall(r'token\.compare\("([a-z]+)"', function_body(gui_src, "inline bool isKeyword(")))
-gui_kw -= {"mixture"}   # retired block, still carried through an old file's load/save
 py_match = re.search(r"_KEYWORDS\s*=\s*\{(.*?)\}", read("pyazr/datasets.py"), re.S)
 py_kw = set(re.findall(r'"([a-z]+)"\s*:', py_match.group(1))) if py_match else set()
-for name, kw in (("gui/include/SegmentKeywords.h", gui_kw), ("pyazr/datasets.py _KEYWORDS", py_kw)):
+for name, kw in (("pyazr/datasets.py _KEYWORDS", py_kw),):
     for k in sorted(engine_kw - kw):
         problems.append(f"segment keyword '{k}': read by the engine (SegLine.h/ExtrapLine.h), unknown to {name}")
     for k in sorted(kw - engine_kw):

@@ -882,13 +882,10 @@ void mcmc_sample_callback(int current_step,
   g_current_step = absStep + 1;
 }
 
-// Global pointer to the GUI progress handler
+// The progress handlers set by the CLI (AZURE2.cpp)
 static void (*g_gui_progress_callback)(int, int, double, double, double) = nullptr;
 static void (*g_gui_iteration_callback)(int, int) = nullptr;
-static void (*g_gui_results_callback)(int, int, const std::vector<std::vector<double>> &) = nullptr;
-static void (*g_gui_message_callback)(const std::string &) = nullptr;
 static const AZURECalcMCMC *g_mcmc_for_callbacks = nullptr;
-static nu::Mcmc *g_mcmc_sampler = nullptr;
 static bool g_using_rwa_parameters = false;
 
 // Custom robust string-to-double parser for scientific notation
@@ -1048,18 +1045,7 @@ void mcmc_iteration_callback(int current_step, int total_steps) {
 void mcmc_progress_callback(int current_step, int total_steps, double log_prob) {
   g_current_step = current_step;
 
-  // No longer call g_gui_progress_callback here - let the iteration callback handle all GUI updates
-  // This prevents double updates and flickering values
-
-  // Call results callback every 10 steps for results tab updates
-  if (g_gui_results_callback && g_mcmc_sampler && (current_step % 10 == 0 || current_step == total_steps)) {
-    try {
-      auto current_samples = g_mcmc_sampler->get_chain();
-      g_gui_results_callback(current_step, total_steps, current_samples);
-    } catch (const std::exception &e) {
-      // Ignore errors in results callback to not interrupt sampling
-    }
-  }
+  // The progress line is drawn by the iteration callback, not here.
 
   // Output file writing moved to iteration callback to ensure it runs
 }
@@ -1069,38 +1055,13 @@ bool mcmc_should_stop() {
   return g_stop_requested;
 }
 
-// Functions to control the stop flag
-void mcmc_request_stop() {
-  g_stop_requested = true;
-}
-
-void mcmc_clear_stop() {
-  g_stop_requested = false;
-}
-
 // Static methods for external access
-void AZURECalcMCMC::RequestStop() {
-  mcmc_request_stop();
-}
-
-void AZURECalcMCMC::ClearStop() {
-  mcmc_clear_stop();
-}
-
 void AZURECalcMCMC::SetGUIProgressCallback(void (*callback)(int, int, double, double, double)) {
   g_gui_progress_callback = callback;
 }
 
 void AZURECalcMCMC::SetGUIIterationCallback(void (*callback)(int, int)) {
   g_gui_iteration_callback = callback;
-}
-
-void AZURECalcMCMC::SetGUIResultsCallback(void (*callback)(int, int, const std::vector<std::vector<double>> &)) {
-  g_gui_results_callback = callback;
-}
-
-void AZURECalcMCMC::SetGUIMessageCallback(void (*callback)(const std::string &)) {
-  g_gui_message_callback = callback;
 }
 
 std::vector<std::string> AZURECalcMCMC::ParkNonPositiveLevels(const std::vector<double> &p, bool useRWA,
@@ -1299,11 +1260,9 @@ bool AZURECalcMCMC::RunMCMCSampling(int nwalkers, int nsteps, const std::vector<
     }
 
     // Check the start before any step (see RunMCMCSampling in the header).
-    // The report goes to the output stream and to the GUI's log.
     auto report = [&](const std::string &text) {
       configure().outStream << text;
       configure().outStream.flush();
-      if (g_gui_message_callback) g_gui_message_callback(text);
     };
     // The initial ensemble (evaluated first, so that the transformation
     // warnings of its walkers come before the report).
@@ -1376,7 +1335,6 @@ bool AZURECalcMCMC::RunMCMCSampling(int nwalkers, int nsteps, const std::vector<
     // Deterministic given the starting step, so a run is reproducible while a
     // resumed run still draws a fresh stretch of the random stream.
     mcmc_sampler.set_seed(0x9E3779B97F4A7C15ull ^ (std::uint64_t)(startStep + 1));
-    g_mcmc_sampler = &mcmc_sampler;
 
     configure().outStream << "Starting MCMC sampling with enhanced progress tracking";
     if (nthreads > 1) {
@@ -1450,7 +1408,6 @@ bool AZURECalcMCMC::RunMCMCSampling(int nwalkers, int nsteps, const std::vector<
     g_mcmc_calc = nullptr;
     g_sample_file = nullptr;
     g_mcmc_for_callbacks = nullptr;
-    g_mcmc_sampler = nullptr;
     g_samples_written_to_file = 0;   // Reset sample counter
     g_using_rwa_parameters = false;  // Reset parameter type flag
 

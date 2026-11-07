@@ -76,8 +76,8 @@ A thin-target point is the depth average Y(E_0) = (1/N) ∫_{E_0−Δ}^{E_0} σ(
   per active atom enter c_s = √(f · 4π Z₁² e⁴ Z_entity / ε) yourself, with ε in MeV cm², e² = 1.44 × 10⁻¹³ MeV cm,
   f = m₂/(m₁+m₂). A coefficient of 0.04 keV^½ is 5–10 times below Bohr, i.e. no straggling.
 - **Expressions without `sigmalab` are the legacy convention**: evaluated at E_c.m. and taken as the c.m. width.
-  A lab TOF derivation written that way is off by the mass ratio on both axes. Use the GUI's "Convert to lab
-  form" (σ_lab(x) = σ_cm(F x)/F, F = m_t/(m_p+m_t)) or write new lines with `sigmalab`.
+  A lab TOF derivation written that way is off by the mass ratio on both axes. Convert to the lab form,
+  σ_lab(x) = σ_cm(F x)/F with F = m_t/(m_p+m_t), or write new lines with `sigmalab`.
 - **Equation coefficients are bound in ascending order**: the first number is a0, the coefficient of the lowest
   power. Written in descending order the line applies a different resolution without any message (a 20 % wider σ
   changed a fitted Γ_n from 0.61 to 0.44 keV in one case). Evaluate σ_b at one known energy before fitting.
@@ -88,12 +88,12 @@ The yield uses ε and N only through Δ = εN and 1/(Nε), so ε and N must coun
 
 | Normalization of N | ε for A_xB_y with A active |
 |---|---|
-| active atoms cm⁻² (the GUI's "Active Density") | ε_A + (y/x) ε_B |
+| active atoms cm⁻² ("active density") | ε_A + (y/x) ε_B |
 | molecules cm⁻² | x ε_A + y ε_B |
 | all atoms cm⁻² | (x ε_A + y ε_B)/(x+y) |
 
 Pure-element ε_A with the active density misses (y/x) ε_B; the average-atom ε with the active density is too small
-by (x+y)/x. The GUI's "Fetch from ERYA" with an "Active Element" writes the per-active-atom form. When a paper
+by (x+y)/x. When a paper
 quotes the energy loss in keV, choose ε(E_0) N to reproduce it and skip the stoichiometry; for a 10–20 % target
 N ≈ Δ/ε(E_0) holds only to first order (a few per cent).
 
@@ -162,8 +162,7 @@ changes by a factor e per 16 keV). Therefore:
   optical-theorem total of the entrance pair; capture is not in it. Refused: both keywords on one line,
   non-angle-integrated data, RATIO, charged or non-particle entrance, terms on different sub-point grids; for
   `yield` also natural segments, the elastic/total line, other entrances or elastic exits, and `--use-rmc`.
-  Multiple-scattering yields Y₁/Y₂ are not built. pyazr: `Segment.transmission`, `Segment.yield_thickness`; the
-  GUI keeps but does not edit the keywords.
+  Multiple-scattering yields Y₁/Y₂ are not built. pyazr: `Segment.transmission`, `Segment.yield_thickness`.
 - builds before 2026-11-04 (expires: 2027-02-01) ignore `transmission`/`yield` without a message and fit plain σ
   to T or Y data; check the build before trusting such a file.
 - **`doppler <T>`** (T in K) broadens σ first, then applies `transmission`/`yield`, then the resolution (SAMMY's
@@ -192,7 +191,7 @@ active `<targetInt>` lines.
   multiplied by N. Refused: no target integration, thick target, `beamprofile`/`udr`, a group without a
   `densityfit` leader.
 - **Screening acts on cross sections only** (phase shifts, A_y and ratios are untouched; neutral pairs f = 1). The
-  GUI's "Adiabatic Limit" gives B(Z₁+Z₂) − B(Z₁) − B(Z₂) from NIST total binding energies (α + ¹³C 934.7 eV,
+  adiabatic limit is B(Z₁+Z₂) − B(Z₁) − B(Z₂) from NIST total binding energies (α + ¹³C 934.7 eV,
   p + ¹²C 442.4 eV). Check the energy frame of screening data: EXFOR entry O1282 tags c.m. energies as lab (EN),
   which, read as lab, puts the metal-target U_e 26–27 % low.
 - rmfit runs these kinds (doppler, thickness, density, screening) under the single-session evaluator only
@@ -241,7 +240,7 @@ for particle exits, a few per cent off, and changed results even with every Q = 
   builds before 2026-09-13 (expires: 2027-02-01) recomputed sub-point Coulomb functions every evaluation when
   external capture was on. To find such costs on any build, switch data groups off in copies of the model and time
   `calculate_chi2_rwa`, then sample stacks.
-- **The GUI writes beam-profile numbers with 12 significant digits, pyazr with 17**: harmless, but visible in a diff.
+- **The Qt GUI wrote beam-profile numbers with 12 significant digits, pyazr writes 17**: harmless, but visible in a diff.
 
 ## Pointers
 

@@ -9,43 +9,23 @@ AZURE2 is designed with two main modes of operation:
    at user-specified energies and angles, without fitting to data. This mode can
    also be used to extrapolate or interpolate results from a previous fit.
 
-GUI Organization
-----------------
+How a project is set up and run
+-------------------------------
 
-The graphical interface is organized into tabs, ordered from left to right in
-the sequence that information should be entered:
-
-1. **Particle Pairs** -- define the reaction participants
-2. **Levels and Channels** -- define compound nucleus levels and reaction channels
-3. **Segments** -- specify experimental data and calculation regions
-4. **Experimental Effects** -- configure target integration, convolution, and other corrections
-5. **Fitting** -- manage fit parameters and their limits
-6. **Calculate** -- select and execute the calculation
-7. **Plot** -- visualize results (requires QWT)
-8. **MCMC** -- Bayesian parameter inference via Markov Chain Monte Carlo (if enabled)
-
-.. tip::
-
-   Always start by entering information in the **Particle Pairs** tab. AZURE2
-   automatically calculates allowed channels and other quantities based on the
-   particle pair information. Changes in any tab are automatically propagated to
-   all other tabs.
-
-Menus
------
-
-In addition to the tabs, three menus are available from the menu bar:
-
-- **File** -- open, save, and manage project files
-- **Configure** -- set the R-matrix formalism, check files, directories, and runtime options
-- **Documentation** -- access in-app help for the current tab
+A project is one ``.azr`` file (:doc:`../reference/data_formats`), written with
+``pyazr`` (:doc:`../user_guide/pyazr`) or a text editor, and run from the
+command line (:doc:`../reference/command_line`) or from Python. The user-guide
+pages follow the blocks of the file in the order they are entered: particle
+pairs, levels and channels, segments, experimental effects, fitting, the
+calculation. This version has no graphical setup utility
+(:doc:`../user_guide/graphical_interface`).
 
 Project Files
 -------------
 
 All setup information for an AZURE2 calculation is stored in a single **Input File**.
 This file can have any name, but the convention is to use the ``.azr`` extension.
-The file is a text-formatted file that is normally created and edited through the GUI.
+The file is a text file.
 
 The recommended project directory structure is::
 

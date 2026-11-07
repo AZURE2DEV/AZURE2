@@ -2,11 +2,16 @@
 
 AZURE2 is a software package for performing multi-channel, multi-level
 [R-matrix](https://en.wikipedia.org/wiki/R-matrix) analyses of low-energy
-nuclear reaction and scattering data. It provides a Qt graphical setup utility,
-a fast C++ calculation engine, parameter fitting via Minuit2, optional Bayesian
+nuclear reaction and scattering data. It provides a fast C++ calculation engine
+run from the command line, parameter fitting via Minuit2, optional Bayesian
 (MCMC) sampling, and an in-process Python interface (`pyazr`, built on pybind11)
 for scripting and external samplers. The `thm` branch adds the Trojan Horse
 Method (see [Trojan Horse Method](#trojan-horse-method-thm) below).
+
+> **This branch (`feature/upgrade`) has no graphical setup utility.** The Qt GUI
+> of the released versions (`dev`, `qt5`) is not part of the upgrade; a browser
+> interface served by `pyazr` replaces it (`docs/upgrade/ROADMAP.md`, Phase 9),
+> checked against the capability list in `docs/upgrade/qt_parity.md`.
 
 **Documentation:** <https://azure2dev.github.io/AZURE2/> — user guide, the
 physics and conventions, and the C++ API reference at
@@ -23,16 +28,15 @@ Upstream project: <https://azure.nd.edu/> · Source:
 |----------------|-------------|
 | `src/`         | Core C++ R-matrix engine (`CNuc`, `EData`, cross-section/χ² calculation, output). |
 | `include/`     | Public headers for the core engine. |
-| `gui/`         | Qt5 graphical setup utility (`AZURESetup`). |
 | `api/`         | Python bindings: `AZUREAPI` C++ API + the pybind11 `_azure2` module. |
 | `numcmc/`      | Affine-invariant ensemble MCMC sampler (`USE_MCMC`). |
 | `pyazr/`       | Python package that drives AZURE2 in-process via the `_azure2` module. |
 | `external/`    | Vendored third-party code, built in-tree: `minuit2/` (ROOT Minuit2), `coul/` (Coulomb wave functions), `erya/` (SRIM stopping powers + pugixml). |
 | `tests/`       | Physics regression suite — reference evaluations and the runner. |
-| `cmake/`       | Custom CMake find-modules (e.g. `FindQwt.cmake`) and toolchains. |
-| `packaging/`   | Distribution: `docker/` images; the AppImage, Windows and macOS packaging live in the CI workflow. |
-| `scripts/`     | Convenience build scripts (Linux, macOS, Windows, Docker). |
-| `examples/`    | Example THM evaluations (`<name>.azr`, `data/`), and Docker run scripts for the GUI and MCMC. |
+| `cmake/`       | Custom CMake find-modules (GSL, Minuit2). |
+| `packaging/`   | Distribution: `docker/` images and `icons/`; the AppImage, Windows and macOS packaging live in the CI workflow. |
+| `scripts/`     | Convenience build scripts (Linux, Windows, Docker, the CRC cluster). |
+| `examples/`    | Example THM evaluations (`<name>.azr`, `data/`), and a Docker run script for MCMC. |
 | `docs/`        | Documentation sources: Sphinx under `source/`, Doxygen via `Doxyfile`. |
 | `.github/`     | Continuous integration. |
 | `.claude/`     | [Claude Code](https://claude.com/claude-code) project skills (see below). |
@@ -47,8 +51,9 @@ Upstream project: <https://azure.nd.edu/> · Source:
 ## Ready-built downloads
 
 If you only want to *run* AZURE2, take one of these instead of building it.
-Each is self-contained: Qt, Qwt, GSL, readline and the OpenMP runtime are
-inside, so nothing else has to be installed.
+They are builds of the released line (`dev`), with its Qt setup utility, not of
+this branch. Each is self-contained: Qt, Qwt, GSL, readline and the OpenMP
+runtime are inside, so nothing else has to be installed.
 
 | Platform | Download | How to run it |
 |---|---|---|
@@ -95,13 +100,11 @@ bundled in-tree.
 **Build tools**
 - A C++ compiler with OpenMP support (GCC or Clang)
 - [CMake](https://cmake.org/) ≥ 3.16
-- `pkg-config` — CMake locates GSL and Qwt through it, so configuring fails
-  without it even when both libraries are installed
+- `pkg-config` — CMake locates GSL through it, so configuring fails without it
+  even when the library is installed
 
 **Libraries**
 - [GSL](https://www.gnu.org/software/gsl/) — GNU Scientific Library (math routines)
-- [Qt5](https://www.qt.io/) — `Core`, `Widgets`, `Svg`, `Script` (for the GUI; `BUILD_GUI`)
-- [Qwt](https://qwt.sourceforge.io/) (Qt5 build) — for the in-app plotting tab (`USE_QWT`)
 - [Readline](https://tiswww.case.edu/php/chet/readline/rltop.html) — for CLI input (`USE_READLINE`)
 
 **For the Python client (`pyazr`)**
@@ -116,30 +119,22 @@ bundled in-tree.
 ```bash
 sudo apt-get update
 sudo apt-get install build-essential cmake pkg-config libgsl-dev libreadline-dev \
-    qtscript5-dev libqwt-qt5-dev libqt5svg5-dev qtwebengine5-dev \
     python3 python3-numpy
 ```
 
 **macOS (Homebrew)**
 ```bash
-brew install cmake pkg-config gsl readline libomp qt@5 qwt-qt5
+brew install cmake pkg-config gsl readline libomp
 ```
 
-Three Homebrew-specific notes, none of which apply to a conda/miniforge
-toolchain (which ships its own compiler, OpenMP and Qt in a single prefix):
+Two Homebrew-specific notes, neither of which applies to a conda/miniforge
+toolchain (which ships its own compiler and OpenMP in a single prefix):
 
 - **`libomp` is required.** Apple's clang understands no `-fopenmp` and ships
   no OpenMP runtime, so without it CMake stops at `find_package(OpenMP)`.
-- **`qt@5` and `qwt-qt5` are keg-only**, meaning Homebrew deliberately leaves
-  them off the default search path. CMake asks `brew` for their locations
-  automatically, so a plain `cmake -S . -B build` works; you only need
-  `-DCMAKE_PREFIX_PATH="$(brew --prefix qt@5);$(brew --prefix qwt-qt5)"` if
-  `brew` is not on your `PATH`.
-- The plotting tab needs **`qwt-qt5`**, not `qwt` — plain `qwt` is the Qt6
-  build and will not link against a Qt5 GUI.
-
-Both Qt5 formulae are deprecated upstream and Homebrew will disable them on
-2027-05-19, which is the real deadline for a Qt6 migration.
+- **`readline` is keg-only**, meaning Homebrew deliberately leaves it off the
+  default search path. CMake asks `brew` for its location automatically, so a
+  plain `cmake -S . -B build` works.
 
 ---
 
@@ -152,8 +147,7 @@ cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --parallel
 ```
 
-The resulting executable is `build/src/AZURE2` (the GUI is built into it with
-`BUILD_GUI=ON`), and the `_azure2` module for `pyazr` lands in `pyazr/`. The
+The resulting executable is `build/src/AZURE2`, and the `_azure2` module for `pyazr` lands in `pyazr/`. The
 two are separate targets: `cmake --build build --target AZURE2` does not
 rebuild `_azure2`, so build both after an engine change. `CMAKE_BUILD_TYPE`
 defaults to `Release`; set it to `Debug` explicitly if you want an unoptimized
@@ -164,8 +158,8 @@ build with symbols.
 AZURE2 takes the Coulomb functions of charged-particle channels from a table
 when it finds one: the results are the same and a calculation is several times
 faster (about four times for the natural-neon example). The table is not
-distributed; build it once, from the GUI (**Configure → Build Coulomb
-Table...**) or from the command line, with a ready-built AZURE2 or your own:
+distributed; build it once from the command line, with a ready-built AZURE2 or
+your own:
 
 ```bash
 ./build/src/AZURE2 --build-coulomb-table
@@ -177,12 +171,10 @@ Without it AZURE2 says so once per run and computes the functions directly.
 
 ### Convenience scripts
 
-Platform build scripts that auto-detect Qwt and set sensible options live in
-`scripts/`:
+Platform build scripts that set sensible options live in `scripts/`:
 
 ```bash
 source scripts/build_linux.sh     # Linux       -> build-linux/
-source scripts/build_macos.sh     # macOS .app  -> build-macos/
 source scripts/build_windows.sh   # Windows cross-compile (MinGW)
 source scripts/build_docker.sh    # Docker image
 ```
@@ -194,8 +186,6 @@ Pass options to CMake with `-D<OPTION>=ON|OFF` (or edit them interactively with
 
 | Option                  | Default | Description |
 |-------------------------|:-------:|-------------|
-| `BUILD_GUI`             | ON      | Build and link the Qt graphical setup utility. |
-| `USE_QWT`               | ON      | Include the built-in plotting tab (needs Qwt). |
 | `USE_API`               | ON      | Build the `AZUREAPI` library and the pybind11 `_azure2` module (required for `pyazr`). |
 | `USE_MCMC`              | ON      | Enable MCMC Bayesian sampling via the bundled `numcmc`. |
 | `USE_ERYA`              | ON      | Enable the SRIM stopping-power utilities. |
@@ -203,10 +193,9 @@ Pass options to CMake with `-D<OPTION>=ON|OFF` (or edit them interactively with
 | `USE_STAT`              | ON      | Use `stat()` for directory checks (turn OFF on Windows). |
 | `USE_NLOPT`             | OFF     | Use NLopt as an alternative minimizer (expects an `nlopt/` tree). |
 | `BUILD_LIBRARY`         | OFF     | Build AZURE2 as a library. |
-| `BUILD_MACOS_BUNDLE`    | OFF     | Produce a macOS `.app` bundle / DMG. |
 | `CROSS_COMPILE_WINDOWS` | OFF     | Cross-compile a Windows binary with MinGW. |
 
-If GSL or Qwt are installed in a non-standard location, point CMake at them with
+If GSL is installed in a non-standard location, point CMake at it with
 `-DCMAKE_PREFIX_PATH=/path/to/prefix`.
 
 ---
@@ -216,21 +205,18 @@ If GSL or Qwt are installed in a non-standard location, point CMake at them with
 AZURE2 reads a `.azr` configuration file describing the compound nucleus,
 channels, levels, and data segments.
 
-**Graphical mode** (default — opens the setup utility):
 ```bash
 ./build/src/AZURE2 path/to/config.azr
 ```
 
-**Console mode** (no GUI):
-```bash
-./build/src/AZURE2 --no-gui path/to/config.azr
-```
+AZURE2 prints its menu (calculate, fit, extrapolate, rate, MCMC) and runs the
+chosen mode; `pyazr` runs the same engine from Python.
 
 Useful flags (`AZURE2 --help` for the full list):
 
 | Flag                  | Effect |
 |-----------------------|--------|
-| `--no-gui`            | Run without the graphical setup utility. |
+| `--no-gui`            | Accepted and ignored (builds with the Qt GUI need it for text mode). |
 | `--use-brune`         | Use the alternative level matrix of C. R. Brune (the default). |
 | `--no-brune`          | Use the standard Lane–Thomas parametrization instead. |
 | `--use-park`          | Fit Park's amplitudes (the observed widths); same cross sections as Brune's. |
@@ -258,12 +244,10 @@ acceptance, the distortion factor R(E), a distorted-wave entrance vertex with
 global optical potentials, the Coulomb line shape, a coherent background, a
 fixed-angle observable, Brune's and Park's parametrizations, and model
 averaging over refitted variants (`scripts/thm_model_average.py`). THM is
-opt-in: a project without THM content is unaffected, and the GUI shows the THM
-controls only after *Configure > Runtime Options > Use Trojan Horse Method
-(THM)* (ticked by itself for a project with THM content).
+opt-in: a project without THM content is unaffected; a segment with observable
+code 10 or more is a THM segment, and the `<thm>` block is optional.
 
 - Theory and every option: `docs/source/theory/thm_implementation.rst`
-- The GUI: `docs/source/user_guide/configure_menu.rst`, "THM Workspace"
 - Worked projects with their file-alone chi-squared:
   `docs/source/getting_started/examples.rst` and `examples/`
 - What the branch changes, also for classic projects:
@@ -345,9 +329,7 @@ python -m pyazr.nds search --target C-13 --reaction p,g --quantity SIG
 python -m pyazr.nds download O2599004 -o data/skowronski.dat
 ```
 
-The Qt setup utility has its own EXFOR dialog backed by `gui/src/ExforData.cpp`;
-the two are independent implementations of the same Web-API, so a parsing rule
-learned by either belongs in both. See `pyazr/examples/exfor_fetch.py`.
+See `pyazr/examples/exfor_fetch.py`.
 
 ---
 
@@ -357,7 +339,7 @@ learned by either belongs in both. See `pyazr/examples/exfor_fetch.py`.
 defined in `packaging/docker/Dockerfile.azure2`:
 ```bash
 source scripts/build_docker.sh
-source examples/run_gui.sh      # run the GUI from the container
+source examples/run_mcmc.sh     # run an MCMC script in the container
 ```
 
 **Singularity / Apptainer** — for HPC environments, convert the Docker image:
@@ -373,7 +355,7 @@ Copy the resulting `AZURE2.sif` to your HPC resource.
 Four kinds of test, all run by CI on Linux, macOS and Windows:
 
 ```bash
-ctest --test-dir build -LE slow --output-on-failure   # unit, reference, GUI, pyazr, consistency
+ctest --test-dir build -LE slow --output-on-failure   # unit, reference, pyazr, consistency
 ctest --test-dir build -L slow                         # the long pyazr tests (5-40 min each)
 ./tests/run_tests.sh                                   # physics regression, newest build*/src/AZURE2
 ./tests/run_tests.sh path/to/AZURE2                    # ... or an explicit binary
@@ -390,8 +372,8 @@ TOL=1e-4 ./tests/run_tests.sh                          # tighter tolerance
 - **Reference** (`tests/reference/`). Quantities computed a second way — from
   a closed form or an independent implementation — rather than against an
   earlier run of this code. See `tests/reference/README.md`.
-- **GUI and pyazr** (`tests/gui/`, `tests/pyazr/`). Round trips of the `.azr`
-  file through each front end, and pyazr against the engine.
+- **pyazr** (`tests/pyazr/`). Round trips of the `.azr` file through pyazr, and
+  pyazr against the engine.
 - **Consistency** (`tests/consistency/`). Command-line flags against `--help`
   and the documentation, every test registered, every `check.sh` executable.
 
@@ -402,7 +384,7 @@ covers the total χ², each segment's χ², and each segment's point count (that
 one exactly — a change there means data was dropped or misread).
 
 The runner also runs every executable `tests/*/check.sh`, and `ctest
---test-dir build` runs the reference, GUI and `pyazr` tests. The conventions
+--test-dir build` runs the reference and `pyazr` tests. The conventions
 (time guard, shared check helpers, exit status 77 for a skipped test, what CI
 requires) are in `docs/source/developer/contributing.rst`.
 
@@ -429,7 +411,7 @@ Much of AZURE2's development is done with [Claude Code](https://claude.com/claud
 Two kinds of file in the repository steer it, and are read automatically when
 it runs here:
 
-- **`CLAUDE.md`** (with shorter ones in `tests/`, `pyazr/` and `gui/`) — how to
+- **`CLAUDE.md`** (with shorter ones in `tests/` and `pyazr/`) — how to
   *develop* the code: build and test commands, what "done" means for a change,
   the places a new `.azr` keyword has to reach, and the rules that keep the test
   references trustworthy. The human-readable version is the
@@ -450,7 +432,7 @@ The skills:
 | `azure2-fit` | Free and fixed parameters, staged fits, nuisances and priors, convergence, editing levels and background poles, parameter files, dropping data sets. |
 | `azure2-check` | Whether a result can be trusted: pulls, residual structure, limits, radius and background-pole sensitivity, frames and units. |
 | `azure2-uncertainty` | Data covariance, parameter covariance, profile likelihood, sampling, bands, systematic axes. |
-| `azure2-plot` | Publication figures and showing a result in the GUI. |
+| `azure2-plot` | Publication figures and showing a result to a person. |
 | `azure2-targets` | Targets, stopping and straggling, resolution, Doppler, transmission and self-shielding. |
 | `azure2-thm` | A complete THM evaluation, from vetting published THM data to model-averaged results. |
 | `azure2-resonance-search` | Gated search for missing or misassigned levels. |

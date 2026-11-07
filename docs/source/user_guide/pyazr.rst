@@ -5,9 +5,9 @@ pyazr — the Python Interface
 into a pybind11 extension module (``_azure2``) and a session is a real C++
 ``AZUREAPI`` object living in the interpreter. There are no subprocesses, no
 sockets and no port bookkeeping — the full R-matrix engine, the same code the
-GUI uses, becomes callable from a script.
+command-line program runs, becomes callable from a script.
 
-This is the route to anything the GUI does not offer directly: custom
+This is the route to anything the command-line menu does not offer directly: custom
 minimizers, external samplers, parameter scans, systematic studies over many
 model variants, and publication figures built from the model rather than from
 exported files.
@@ -95,7 +95,7 @@ the only one with analytic derivatives. Default to these.
    azr.residual_jacobian(x)     # residuals + analytic Jacobian
 
 **Physical parameters** (level energies in MeV, partial widths in eV) are what
-``parameters.out`` reports and what the GUI shows.
+``parameters.out`` reports.
 
 .. code-block:: python
 
@@ -453,7 +453,7 @@ Masses and separation energies
 ------------------------------
 
 ``pyazr.masses`` reads the AME2020 atomic mass table that ships with pyazr
-(``pyazr/data/mass_1.mas20``, the same file the GUI embeds). Particles are
+(``pyazr/data/mass_1.mas20``). Particles are
 named by isotope (``"12C"``, ``"C12"``, ``"c-12"``) or shorthand (``"p"``,
 ``"n"``, ``"d"``, ``"t"``, ``"a"``, ``"helion"``):
 
@@ -645,9 +645,9 @@ copy gives the original units only (``plus=0``). A subentry holding several
 datasets needs the pointer, as in ``"C1010003.2"``. ``search_exfor`` needs the
 Web-API.
 
-The Qt setup utility has its own EXFOR dialog, backed by
-``gui/src/ExforData.cpp``. The two are independent implementations of the same
-Web-API, so a parsing rule learned by either belongs in both.
+The Qt setup utility of the released versions has its own EXFOR reader
+(``gui/src/ExforData.cpp`` on ``dev``), an independent implementation of the
+same Web-API.
 
 Angular distributions
 ---------------------
@@ -884,9 +884,8 @@ from it:
    </potential>
 
 A file with no ``pair=`` line reads exactly as it did when the model was
-global. The GUI's Nuclear Potential tab edits one pair at a time and writes
-the same block, and ``--no-gui`` reads it through the same parser, so the three
-cannot drift. Worked example: ``pyazr/examples/nuclear_potential.py``;
+global. The command-line program reads the block through the same parser,
+so the two cannot drift. Worked example: ``pyazr/examples/nuclear_potential.py``;
 ``tests/hybrid_potential`` pins the behaviour.
 
 The potential belongs to the session. Several sessions in one process keep

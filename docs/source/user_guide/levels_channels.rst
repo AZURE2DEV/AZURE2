@@ -1,6 +1,13 @@
 Levels and Channels Tab
 =======================
 
+.. note::
+
+   This page describes the ``.azr`` content through the fields of the Qt setup
+   utility of the released versions. This version has no setup utility;
+   :doc:`graphical_interface` says how to do the same from the command line and
+   with ``pyazr``.
+
 The **Levels and Channels** tab is used to enter the compound nucleus level
 information. It uses the particle pair definitions from the **Particle Pairs**
 tab to automatically calculate all allowed R-matrix channels.

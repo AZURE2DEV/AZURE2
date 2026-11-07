@@ -28,33 +28,11 @@ cd $BUILD_DIR
 
 echo -e "${GREEN}Configuring for Linux...${NC}"
 
-# Auto-detect QWT installation
-QWT_CMAKE_ARGS=""
-if command -v pkg-config &> /dev/null && pkg-config --exists Qt5Qwt6 &> /dev/null; then
-    echo -e "${YELLOW}Found QWT via pkg-config${NC}"
-    QWT_CMAKE_ARGS="-DUSE_QWT=ON"
-elif [ -n "$CONDA_PREFIX" ] && [ -f "$CONDA_PREFIX/lib/libqwt.so" ]; then
-    echo -e "${YELLOW}Found QWT in conda environment: $CONDA_PREFIX${NC}"
-    QWT_CMAKE_ARGS="-DUSE_QWT=ON -DCMAKE_PREFIX_PATH=$CONDA_PREFIX"
-elif [ -f "/usr/local/lib/libqwt.so" ]; then
-    echo -e "${YELLOW}Found QWT in /usr/local${NC}"
-    QWT_CMAKE_ARGS="-DUSE_QWT=ON -DCMAKE_PREFIX_PATH=/usr/local"
-elif [ -f "/usr/lib/x86_64-linux-gnu/libqwt-qt5.so" ]; then
-    echo -e "${YELLOW}Found QWT in system libraries${NC}"
-    QWT_CMAKE_ARGS="-DUSE_QWT=ON"
-else
-    echo -e "${YELLOW}QWT not found - building without plotting support${NC}"
-    QWT_CMAKE_ARGS="-DUSE_QWT=OFF"
-fi
-
 # Configure with CMake for Linux
 cmake .. \
-    -DBUILD_GUI=ON \
     -DUSE_API=ON \
-    -DUSE_QWT=ON \
     -DCMAKE_BUILD_TYPE=Release \
-    -DCMAKE_INSTALL_PREFIX=/usr/local \
-    $QWT_CMAKE_ARGS
+    -DCMAKE_INSTALL_PREFIX=/usr/local
 
 echo -e "${GREEN}Building AZURE2 for Linux...${NC}"
 make -j$(nproc) VERBOSE=1
@@ -64,4 +42,3 @@ make install
 
 echo -e "${GREEN}Linux build completed successfully!${NC}"
 echo "Executable: ${PWD}/src/AZURE2"
-echo "GUI executable: ${PWD}/gui/AZURE2Setup"

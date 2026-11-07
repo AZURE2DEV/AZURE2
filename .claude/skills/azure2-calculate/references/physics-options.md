@@ -7,7 +7,7 @@ scripts; a calculation under different flags is a different model.
 ## Route: A-matrix or R-matrix (`<config>` first line)
 
 - The R-matrix route implements neither ignore-externals (on by default) nor Park. With either on, every front end
-  (CLI, pyazr, GUI) runs the A-matrix and warns "the R-matrix route ... does not implement ...".
+  (CLI, pyazr) runs the A-matrix and warns "the R-matrix route ... does not implement ...".
 - To run the R-matrix route: `--no-ignore-externals` (pyazr `ignore_externals=False`) and no `--use-park`. It equals the
   A-matrix route to ~10⁻¹³ in the Brune or standard basis.
 - Builds before 2026-11-01 (expires: 2027-02-01): the CLI never ran the R-matrix route; pyazr and the GUI ran it with
@@ -47,7 +47,7 @@ scripts; a calculation under different flags is a different model.
 
 - The universal Coulomb table is on by default (`--no-coulomb-table`, pyazr `use_coulomb_table=False` turns it off):
   P, S and the hard-sphere phase of charged channels, open and closed. Build it once with `AZURE2 --build-coulomb-table`
-  (GUI: Configure → Build Coulomb Table) into `~/.azure2/coulomb_table.bin` or `$AZURE2_COULOMB_TABLE`; without the file
+  into `~/.azure2/coulomb_table.bin` or `$AZURE2_COULOMB_TABLE`; without the file
   the log says "Coulomb table: none at ..." and the exact routines run. Not tabulated: neutral pairs, pairs with a
   nuclear potential, the EC integrals. Design and validation: `docs/source/developer/coulomb_table.rst`.
 - Closed neutral channels use the closed form S₀ = −ρ, S_l = −ρ²/(l − S_{l−1}) − l, ρ = κa (agrees with the numerical

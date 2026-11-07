@@ -1,36 +1,28 @@
 Command-Line Usage
 ==================
 
-While AZURE2 is primarily used through the GUI, it can also be executed from the
-command line. This is useful for batch processing, remote execution on HPC
-clusters, and automation.
-
-Launching the GUI
------------------
-
-.. code-block:: bash
-
-   AZURE2 [input_file.azr]
-
-The Input file argument is optional. If provided, AZURE2 opens the GUI with the
-specified project loaded.
+AZURE2 runs a project from the command line, or from Python through ``pyazr``
+(:doc:`../user_guide/pyazr`). This version has no graphical setup utility
+(:doc:`../user_guide/graphical_interface`).
 
 Command-Line Mode
 -----------------
 
 .. code-block:: bash
 
-   AZURE2 --no-gui [options] input_file.azr
+   AZURE2 [options] input_file.azr
 
-The ``--no-gui`` flag launches AZURE2 in text-mode, with an interactive
-interface similar to the original FORTRAN version. All calculation types
-available in the GUI are accessible from the command line.
+AZURE2 starts in text mode, with an interactive menu similar to that of the
+original FORTRAN version; every calculation type is reached from it.
+Builds with the Qt setup utility need ``--no-gui`` for text mode; here it is
+accepted and has no effect, so scripts written for those builds run
+unchanged.
 
 .. important::
 
-   When running in command-line mode, the **Runtime Options** saved in the
-   project file are **not** applied automatically. They must be specified as
-   command-line flags each time.
+   The **Runtime Options** that the setup utility of the released versions
+   saves with a project are **not** applied in command-line mode. They must
+   be specified as command-line flags each time.
 
 Scripted input
 ^^^^^^^^^^^^^^
@@ -85,7 +77,8 @@ Available Options
      - List all available command-line options. This is the only flag that
        can be used without specifying an Input file.
    * - ``--no-gui``
-     - Run in command-line (text) mode.
+     - Accepted and ignored: this build has no graphical setup utility. Builds
+       with the Qt setup utility need it to run in text mode.
    * - ``--no-readline``
      - Disable readline support for command-line input.
    * - ``--use-brune``

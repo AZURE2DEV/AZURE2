@@ -78,7 +78,7 @@ data sets without corrupting the parameter files. Behaviour reference: `docs/sou
   `shiftgroup`/`shiftfngroup` (`references/normalizations-and-shifts.md`).
 - **Nuisance priors on level parameters** (`<parameterSettings>`, nuisance 1) add ((p − p₀)/σ)² in physical units; on
   builds before 2026-10-27 (expires: 2027-02-01) they hit the wrong parameter (`references/running-fits.md`).
-  `<parameterSettings>` written by the GUI use the engine's level numbering (`references/parameters-and-sav.md`).
+  `<parameterSettings>` written by the Qt GUI of released builds use the engine's level numbering (`references/parameters-and-sav.md`).
 - **Target and resolution nuisances** (fitted density, thickness, Doppler temperature, screening): `azure2-targets`.
 - **Data covariance** (correlated errors, `covariance <file>`): `azure2-uncertainty`.
 - **Alternative objectives** (per-data-set reduced χ², Sivia's outlier-tolerant loss) are campaign options of rmfit

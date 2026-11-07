@@ -4,10 +4,8 @@ Examples
 The projects in ``examples/`` are Trojan Horse (THM) evaluations, each with
 the direct data it is fitted with. A project folder holds ``<name>.azr`` (the
 best fit), ``data/`` (every file names its source and what its points are in
-``#`` header lines) and empty ``checks/`` and ``output/`` directories. Open
-the ``.azr`` in the GUI (THM is switched on by itself for these projects:
-:doc:`../user_guide/configure_menu`, "Runtime Options") or run it from the
-command line. The THM options are described in
+``#`` header lines) and empty ``checks/`` and ``output/`` directories. Run
+the ``.azr`` from the command line or with ``pyazr``. The THM options are described in
 :doc:`../theory/thm_implementation`.
 
 "File alone" is the CLI calculation of the file as stored,
@@ -123,6 +121,5 @@ points?").
      - the same reading for a second Li reaction
      - 158.967 (157.041 + 1.927) / 132
 
-``examples/run_gui.sh`` and ``examples/run_mcmc.sh`` start the GUI and an
-MCMC script in the Docker image of ``packaging/docker`` (README.md,
+``examples/run_mcmc.sh`` starts an MCMC script in the Docker image of ``packaging/docker`` (README.md,
 "Containers").

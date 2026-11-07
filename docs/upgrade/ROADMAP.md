@@ -145,8 +145,11 @@ Gate: ported pyazr tests pass; wheels install and run T1–T3 on three platforms
 - [ ] `pyazr ui`: FastAPI + uvicorn, static page, plotly.js vendored; `/api` one-to-one with pyazr; jobs with progress
       and stop; tabs Project, Nucleus, Data, Fit, Results, Physics, THM (opt-in).
 - [ ] Physics tab plots every exposed physics function (`ARCHITECTURE.md` §8, `THM.md` §4).
-- [ ] pytest on `/api` with T1–T3; browser smoke tests; Qt parity checklist from today's Qt features and
-      the GUI review in `azure2-plot` and `gui/CLAUDE.md`.
-- [ ] Remove `numcmc/`, `external/erya`, readline menus, the GSL fitter. (`gui/` is removed now, not after a release
-      with both UIs: decision 3, 2026-11-07.)
+- [ ] pytest on `/api` with T1–T3; browser smoke tests; every item of the Qt parity checklist
+      (`docs/upgrade/qt_parity.md`) ticked or dropped with a written reason.
+- [x] Qt parity checklist written from the Qt code before its removal (`docs/upgrade/qt_parity.md`, 201 items and 32
+      test lines, from `4bf7aa06:gui/` and `tests/gui/`).
+- [x] `gui/`, `tests/gui/`, `BUILD_GUI`/`USE_QWT`/`BUILD_MACOS_BUNDLE`, Qt/Qwt in CMake, CI, Docker and build scripts
+      removed (decision 3, 2026-11-07; branch `feature/upgrade-remove-qt`); `--no-gui` kept, accepted and ignored.
+- [ ] Remove `numcmc/`, `external/erya`, readline menus, the GSL fitter.
 Gate: parity checklist signed off by Jakub; release notes.

@@ -79,7 +79,7 @@ ones are a defect to report.
   width at its nominal paid +273,466). On such builds do not use nuisance entries on level parameters. Test on any
   build: mode 1 with the external parameter file, and compare the log's `Total Chi-Squared` (with penalties) with
   `chiSquared.out` (data only); `tests/nuisance_level_index` guards it.
-- Limits and priors written by the GUI, and their level numbering: `references/parameters-and-sav.md`.
+- Limits and priors written by the Qt GUI, and their level numbering: `references/parameters-and-sav.md`.
 
 ## Long fits on a batch cluster
 

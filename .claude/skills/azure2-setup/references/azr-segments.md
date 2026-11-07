@@ -17,10 +17,10 @@ norms and shifts is azure2-fit; covariance files are azure2-uncertainty.
 - `<parameterSettings>`: limits, errors, nuisance priors, category, Minuit index. "Level N Energy (MeV)" and
   "Level N Channel M Width (eV)" are the engine's `energy_N` and `width_N_M` of the same file (active levels J-group
   by J-group, M the channel within the J-group); a block written with the line `# level numbering: engine` uses that
-  numbering. Older GUI saves placed limits and priors on other levels (azure2-fit).
+  numbering. Older Qt GUI saves placed limits and priors on other levels (azure2-fit).
 - `<mcmc>`: walkers, steps, threads.
 
-Prefer the GUI or `AzrModel` to hand edits.
+Prefer `AzrModel` to hand edits.
 
 ## 2. The segment line
 
@@ -33,8 +33,8 @@ tail = isAdvanced [operationType nComp {entrance exit angle [scaling]}...] isUPO
 Parser: `include/SegLine.h`. Energies E_lab (MeV), angles θ_lab (deg) unless the observable code says c.m.
 `isDiff + 10` marks a THM (HOES) segment (azure2-thm).
 
-- **Formatting.** The engine tokenizes on any whitespace, but the GUI segment editor expects each field at its own
-  column offset and mis-displays a tab-joined line. Match the padding of an unmodified neighbour and diff the two.
+- **Formatting.** The engine tokenizes on any whitespace, but the Qt GUI's segment editor (released builds) expects
+  each field at its own column offset and mis-displays a tab-joined line. Match the padding of an unmodified neighbour and diff the two.
 - **Old layouts.** The three shift fields before the file are optional; the reader decides the layout by whole
   tokens (`tests/segline_formats`). A misspelt keyword (`normgruop`) is ignored by engine and pyazr by design (older
   engines must ignore newer keywords): when a keyword seems to do nothing, read the segment summary in the run log.

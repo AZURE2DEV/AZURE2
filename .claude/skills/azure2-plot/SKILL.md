@@ -1,6 +1,6 @@
 ---
 name: azure2-plot
-description: Make figures of AZURE2 results and show them to a person -- excitation functions with pulls, angular distributions, S factors with uncertainty bands and level/interference decomposition, rate ratios -- and open the AZURE2 GUI on a freshly recalculated fit ("show me in the GUI", "plot the fit", "make the S-factor figure"). Use prc-figures for figure style; azure2-calculate for the numbers; azure2-uncertainty for the bands themselves; azure2-check to judge what the figure shows.
+description: Make figures of AZURE2 results and show them to a person -- excitation functions with pulls, angular distributions, S factors with uncertainty bands and level/interference decomposition, rate ratios -- from a freshly recalculated fit ("show me the fit", "plot the fit", "make the S-factor figure"). Use prc-figures for figure style; azure2-calculate for the numbers; azure2-uncertainty for the bands themselves; azure2-check to judge what the figure shows.
 ---
 
 # Figures and visual review of AZURE2 results
@@ -9,7 +9,8 @@ A figure of an R-matrix fit is a comparison of AZURE2's c.m. observable with dat
 shifted. It is correct only if the curve is the curve AZURE2 computed (the fit column of `AZUREOut_*.out`, or the same
 pyazr call), the data are drawn as AZURE2 compares them (multiplied by the fitted norm n, at the fitted energy shift),
 and the grid resolves every structure. This skill covers publication figures from pyazr and the output files, and
-showing a result to a person in the Qt GUI.
+showing a result to a person. This version of AZURE2 has no graphical front end
+(`docs/source/user_guide/graphical_interface.rst`): a result is shown as figures made from fresh output.
 
 ## When to use, and when a sibling instead
 
@@ -33,7 +34,7 @@ showing a result to a person in the Qt GUI.
     matter.
 - **Draw the data as AZURE2 compares them**: multiplied by the fitted norm n and at the fitted energy shift. A fixed
   non-unity norm lives only in the `.azr`, a fitted one only in the `.sav`; pyazr's `m.segment_norms(x)` returns the
-  norm each segment carries at `x`. The GUI draws the same thing.
+  norm each segment carries at `x`.
 - **State the frame and unit on every axis**: E_c.m. or E_lab (MeV or keV), E_x for plots across entrance channels
   (the only common axis), θ_c.m. or θ_lab (deg), σ (b), dσ/dΩ_c.m. (b/sr), S (keV b or MeV b), N_A⟨σv⟩
   (cm³ mol⁻¹ s⁻¹).
@@ -54,54 +55,34 @@ Code for each figure type is in `references/recipes.md`:
 | S factor with band and decomposition | `extrapolation_bands(..., quantity="sfactor")`, `m.sfactor`, `without_level`/`only_level` |
 | rate ratio | `reactionrates.out` or `pyazr/examples/reaction_rate.py`, divided by a reference rate on the same T9 grid |
 
-## Showing a result in the GUI
+## Showing a result to a person
 
-The GUI's plot tab reads the `AZUREOut_*.out` files in the output directory, not the `.azr`. Its segment and level tabs
-update from the `.azr` at once, so a GUI opened on an edited project shows the previous run's curves beside the new
-segment list, with no warning. Recalculate before opening it, every time.
+Figures made from `output/` show the last run, not the `.azr`. After any edit, recalculate before drawing, every time.
 
 1. Finish every `.azr` edit.
-2. Close any running GUI. A GUI left open holds its own copy of the project and can write it back over your edit on
-   exit; it also keeps the binary mapped, so replacing the binary fails with "Text file busy".
-3. Run a mode-1 calculate with the project's flags and the right parameter file.
-4. Confirm fresh output: `grep Total-Chi output/chiSquared.out` and the `AZUREOut_*.out` timestamps.
-5. Open the GUI.
+2. Run a mode-1 calculate with the project's flags and the right parameter file.
+3. Confirm fresh output: `grep Total-Chi output/chiSquared.out` and the `AZUREOut_*.out` timestamps.
+4. Draw the figures (Recipes) and check each curve against the fit column (Rules).
 
 ```bash
 cd <fit directory>
-# 2. close any GUI by pid, then verify (pkill -f takes a regular expression: the + in "11B+a" matches nothing)
-pid=$(ps -eo pid,cmd | grep "[A]ZURE2 <name>.azr" | grep -v "zsh -c" | awk '{print $1}')
-[ -n "$pid" ] && kill $pid; sleep 1
-ps -eo pid,cmd | grep "[A]ZURE2 <name>.azr" | grep -v "zsh -c" || echo "GUI closed"
-
-# 3. calculate: menu 1, external parameter file, blank EC file, exit
-$AZURE2_BINARY <project flags> --no-gui --no-readline <name>.azr <<EOF
+# 2. calculate: menu 1, external parameter file, blank EC file, exit
+$AZURE2_BINARY <project flags> --no-readline <name>.azr <<EOF
 1
 output/param.sav
 
 7
 EOF
-
-# 4. confirm
+# 3. confirm
 grep Total-Chi output/chiSquared.out
 ls -la output/AZUREOut_*.out | head            # timestamps from just now
-
-# 5. open, stdin closed and the log capped in case it falls back to the text menu
-(nohup $AZURE2_BINARY <name>.azr < /dev/null 2>&1 | head -c 200000 > azure2_gui.log) &
-sleep 5; ps -eo pid,cmd | grep "[A]ZURE2 <name>.azr" | grep -v "zsh -c"; wc -c azure2_gui.log
 ```
 
-`pgrep -f`/`pkill -f` match your own shell wrapper and treat the pattern as a regular expression; the
-`ps -eo pid,cmd | grep "[A]ZURE2 ..."` check (minus `zsh -c` wrapper lines) tells whether the GUI is alive, and
-`kill <pid>` stops it. Do not delete a log until that check comes back empty.
+### Things that make the picture wrong without a warning
 
-### Things that make the GUI picture wrong without a warning
-
-- **The project's own CLI flags.** The CLI does not read the Runtime Options stored in the `.azr`. Take `--use-brune`,
+- **The project's own CLI flags.** The CLI does not read Runtime Options saved with a project. Take `--use-brune`,
   `--ignore-externals`, `--no-long-wavelength` and the rest from the project's job script; a calculate under other
   flags draws different physics.
-- **The same binary.** The calculate and the GUI must be the same build. Say which build (`ls -la $AZURE2_BINARY`)
-  when handing over.
 - **The right parameter file.** A blank parameter file uses `<levels>` with the nominal `dataNorm`/`energyShift`
   fields of `<segmentsData>` (not n = 1); `output/param.sav` uses the fitted values, including norms and shifts. The
   two can differ by a large factor in χ² (127,588 against 96,811 on one model). Blank is right only to verify what
@@ -110,21 +91,6 @@ sleep 5; ps -eo pid,cmd | grep "[A]ZURE2 <name>.azr" | grep -v "zsh -c"; wc -c a
   the calculate overwrites `chiSquared.out`, `normalizations.out`, `parameters.out` and every `AZUREOut_*.out`.
   Copy them to a sibling directory (~1 MB). A data-mode calculate leaves `.extrap` and `.acoeff` files alone.
 
-### Open it on the screen the person is looking at
-
-A session inside tmux keeps the `DISPLAY` it started with. After the person logs in again that X forwarding is gone,
-and the GUI dies at once with "The X11 connection broke (error 1)" in its log; `nohup` hides it. Find the display of
-the login that shows this session and pass it explicitly:
-
-```bash
-tmux list-clients -F '#{client_tty} #{session_name}'      # which login tty shows which session
-p=$(ps -t pts/0 -o pid= | head -1)                          # the shell on that tty
-tr '\0' '\n' < /proc/$p/environ | grep '^DISPLAY='          # its DISPLAY
-ss -ltn | grep 127.0.0.1:60                                 # live forwards: port 60NN = localhost:NN
-DISPLAY=localhost:NN.0 nohup $AZURE2_BINARY <name>.azr > azure2_gui.log 2>&1 &
-sleep 5; cat azure2_gui.log                                 # no X11 errors
-```
-
 ### Budget the time
 
 A mode-1 calculate on a large multichannel model with target integrations is slow. On one model (107 segments,
@@ -132,14 +98,14 @@ A mode-1 calculate on a large multichannel model with target integrations is slo
 `output/`, ~5 min in a live directory. Tell the person the calculate is running, and send it to the batch system
 rather than a login node: such runs use several GB and effectively one core regardless of `OMP_NUM_THREADS`.
 
-### Before handing the window over
+### Before handing the figures over
 
-Say what the person is looking at, because the GUI does not:
+Say what the person is looking at:
 
 - which `.azr`, and what changed in it since the last review;
 - which binary (date) and which parameter file the curves come from;
 - the total χ² of the calculate just run;
-- which tabs are worth checking for this change.
+- which segments are worth checking for this change.
 
 If `<segmentsData>` changed, name the segment keys touched and the data file each holds. A key is the 1-based position
 among all `<segmentsData>` lines, inactive ones included: the key `<targetInt>` binds to and `chiSquared.out` and
@@ -147,5 +113,6 @@ among all `<segmentsData>` lines, inactive ones included: the key `<targetInt>` 
 
 ## Pointers
 
-- GUI plot tab: `docs/source/user_guide/plot.rst`. Output columns: `docs/source/reference/output_files.rst`.
+- No graphical front end: `docs/source/user_guide/graphical_interface.rst`. Output columns:
+  `docs/source/reference/output_files.rst`.
 - `references/recipes.md`: figure code. Style: prc-figures (user-level skill).

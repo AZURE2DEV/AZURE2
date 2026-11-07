@@ -8,7 +8,6 @@ NuclearPotentialManager &NuclearPotentialManager::instance() {
 }
 
 NuclearPotentialManager::NuclearPotentialManager() :
-  currentType_("WoodsSaxon"),
   defaultTag_(1),
   tagCounter_(1) {
   // Initialize with default Woods-Saxon potential (V=150 MeV, R=3.6 fm, a=0.6 fm)
@@ -28,14 +27,9 @@ std::shared_ptr<NuclearPotential> NuclearPotentialManager::getPotential() const 
   return potential_;
 }
 
-std::string NuclearPotentialManager::getCurrentPotentialType() const {
-  return currentType_;
-}
-
 void NuclearPotentialManager::setWoodsSaxonPotential(double V0, double R, double a) {
   try {
     potential_ = std::make_shared<WoodsSaxonPotential>(V0, R, a);
-    currentType_ = "WoodsSaxon";
     defaultSetting_.type = "WoodsSaxon";
     defaultSetting_.V0 = V0;
     defaultSetting_.R = R;
@@ -47,21 +41,9 @@ void NuclearPotentialManager::setWoodsSaxonPotential(double V0, double R, double
   }
 }
 
-bool NuclearPotentialManager::getWoodsSaxonParameters(double &V0, double &R, double &a) const {
-  auto ws = std::dynamic_pointer_cast<WoodsSaxonPotential>(potential_);
-  if (!ws) {
-    return false;
-  }
-  V0 = ws->get_V0();
-  R = ws->get_R();
-  a = ws->get_a();
-  return true;
-}
-
 void NuclearPotentialManager::setGaussianPotential(double V0, double r0) {
   try {
     potential_ = std::make_shared<GaussianPotential>(V0, r0);
-    currentType_ = "Gaussian";
     defaultSetting_.type = "Gaussian";
     defaultSetting_.V0 = V0;
     defaultSetting_.r0 = r0;
@@ -69,16 +51,6 @@ void NuclearPotentialManager::setGaussianPotential(double V0, double r0) {
   } catch (const std::exception &e) {
     throw std::runtime_error(std::string("Failed to set Gaussian potential: ") + e.what());
   }
-}
-
-bool NuclearPotentialManager::getGaussianParameters(double &V0, double &r0) const {
-  auto gauss = std::dynamic_pointer_cast<GaussianPotential>(potential_);
-  if (!gauss) {
-    return false;
-  }
-  V0 = gauss->get_V0();
-  r0 = gauss->get_r0();
-  return true;
 }
 
 NuclearPotentialManager::State NuclearPotentialManager::exportState() const {
@@ -93,7 +65,6 @@ NuclearPotentialManager::State NuclearPotentialManager::exportState() const {
 void NuclearPotentialManager::importState(const State &state) {
   defaultSetting_ = state.defaultSetting;
   potential_ = build(defaultSetting_);
-  currentType_ = defaultSetting_.type;
   pairSettings_ = state.pairSettings;
   pairPotentials_.clear();
   for (std::map<int, NuclearPotentialSetting>::const_iterator it = pairSettings_.begin();
@@ -109,7 +80,6 @@ void NuclearPotentialManager::importState(const State &state) {
 void NuclearPotentialManager::resetToDefault() {
   defaultSetting_ = NuclearPotentialSetting();
   potential_ = build(defaultSetting_);
-  currentType_ = "WoodsSaxon";
   pairSettings_.clear();
   pairPotentials_.clear();
   pairTags_.clear();
@@ -144,39 +114,10 @@ NuclearPotentialManager::getPotential(int pairKey) const {
   return potential_;
 }
 
-std::string NuclearPotentialManager::getCurrentPotentialType(int pairKey) const {
-  std::map<int, NuclearPotentialSetting>::const_iterator it = pairSettings_.find(pairKey);
-  if (it != pairSettings_.end()) return it->second.type;
-  return currentType_;
-}
-
-bool NuclearPotentialManager::getWoodsSaxonParameters(int pairKey, double &V0,
-                                                      double &R, double &a) const {
-  auto ws = std::dynamic_pointer_cast<WoodsSaxonPotential>(getPotential(pairKey));
-  if (!ws) return false;
-  V0 = ws->get_V0();
-  R = ws->get_R();
-  a = ws->get_a();
-  return true;
-}
-
-bool NuclearPotentialManager::getGaussianParameters(int pairKey, double &V0,
-                                                    double &r0) const {
-  auto gauss = std::dynamic_pointer_cast<GaussianPotential>(getPotential(pairKey));
-  if (!gauss) return false;
-  V0 = gauss->get_V0();
-  r0 = gauss->get_r0();
-  return true;
-}
-
 // -- activation --------------------------------------------------------------
 
 void NuclearPotentialManager::setDefaultEnabled(bool enabled) {
   defaultSetting_.enabled = enabled;
-}
-
-bool NuclearPotentialManager::getDefaultEnabled() const {
-  return defaultSetting_.enabled;
 }
 
 void NuclearPotentialManager::setPairEnabled(int pairKey, bool enabled) {
@@ -233,7 +174,6 @@ void NuclearPotentialManager::setDefaultSetting(const NuclearPotentialSetting &s
   }
   defaultSetting_ = setting;
   potential_ = built;
-  currentType_ = setting.type;
   defaultTag_ = ++tagCounter_;
 }
 

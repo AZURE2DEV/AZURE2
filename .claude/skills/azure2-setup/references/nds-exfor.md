@@ -3,8 +3,8 @@
 This reference covers the two IAEA services that supply experimental data and level schemes for an evaluation, and
 the conversion of their records into AZURE2 data files and segments. Everything is wrapped in `pyazr.nds`
 (`from pyazr import nds as N`), which calls the web APIs directly: no local database, a network connection, no
-dependency beyond NumPy. `gui/src/ExforData.cpp` is an independent client of the same Web API inside the Qt GUI; a
-parsing rule learned in one belongs in both. Worked example: `pyazr/examples/exfor_fetch.py`. Command line:
+dependency beyond NumPy. The Qt GUI of released builds has an independent client of the same Web API
+(`gui/src/ExforData.cpp` on `dev`). Worked example: `pyazr/examples/exfor_fetch.py`. Command line:
 `python -m pyazr.nds search --target C-13 --reaction p,g --quantity SIG`, `... download <DatasetID> -o file.dat`,
 `... reference <DatasetID>`. API manual: `https://nds.iaea.org/exfor/x4guide/API/`.
 
@@ -92,7 +92,7 @@ AzrModel.from_file("13N.azr").add_data_segment(**kw).write("13N_new.azr")
   accepts the ratio. For a lab `ANG` column `to_azr` converts the angle to c.m. (`elastic_lab_to_cm`, entrance
   masses; pass `target_mass`/`projectile_mass` for exact ones) and divides the c.m. Rutherford value by the lab→c.m.
   Jacobian, so AZURE2 reads back ratio × σ_R,c.m.(θ_c.m.). Identical particles (ratio to Mott) get a warning and
-  ratio × Rutherford. Test: `tests/pyazr/nds_rutherford_test.py`; the GUI dialog: `tests/gui/exfor_rutherford_test.cpp`.
+  ratio × Rutherford. Test: `tests/pyazr/nds_rutherford_test.py`.
 - builds before 2026-10-27 (expires: 2027-02-01): `to_azr` and the GUI EXFOR dialog multiplied a `,,RTH` ratio by
   the c.m. Rutherford cross section at the **lab** angle (1.13× off for p+¹⁶O, 1.8–2.2× for α+¹²C) and called every
   angle column c.m. Regenerate data files made from a lab-angle `,,RTH` set with such a build.

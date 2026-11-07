@@ -70,11 +70,6 @@ class NuclearPotentialManager {
   std::shared_ptr<NuclearPotential> getPotential() const;
 
   /*!
-   * @brief Get the default potential type name
-   */
-  std::string getCurrentPotentialType() const;
-
-  /*!
    * @brief Set the default Woods-Saxon potential
    * @param V0 Potential depth in MeV
    * @param R Nuclear radius in fm
@@ -83,21 +78,11 @@ class NuclearPotentialManager {
   void setWoodsSaxonPotential(double V0, double R, double a);
 
   /*!
-   * @brief Get the default Woods-Saxon parameters
-   */
-  bool getWoodsSaxonParameters(double &V0, double &R, double &a) const;
-
-  /*!
    * @brief Set the default Gaussian potential
    * @param V0 Potential depth in MeV
    * @param r0 Gaussian width parameter in fm
    */
   void setGaussianPotential(double V0, double r0);
-
-  /*!
-   * @brief Get the default Gaussian parameters
-   */
-  bool getGaussianParameters(double &V0, double &r0) const;
 
   /*!
    * @brief Reset to default Woods-Saxon potential (V=150, R=3.6, a=0.6) and
@@ -124,23 +109,6 @@ class NuclearPotentialManager {
    */
   std::shared_ptr<NuclearPotential> getPotential(int pairKey) const;
 
-  /*!
-   * @brief Get the type name that applies to a pair
-   */
-  std::string getCurrentPotentialType(int pairKey) const;
-
-  /*!
-   * @brief Get the Woods-Saxon parameters that apply to a pair.  False if the
-   * potential in force for it is not a Woods-Saxon.
-   */
-  bool getWoodsSaxonParameters(int pairKey, double &V0, double &R, double &a) const;
-
-  /*!
-   * @brief Get the Gaussian parameters that apply to a pair.  False if the
-   * potential in force for it is not a Gaussian.
-   */
-  bool getGaussianParameters(int pairKey, double &V0, double &r0) const;
-
   // -- activation -----------------------------------------------------------
 
   /*!
@@ -148,11 +116,6 @@ class NuclearPotentialManager {
    * of their own
    */
   void setDefaultEnabled(bool enabled);
-
-  /*!
-   * @brief Is the hybrid model on by default?
-   */
-  bool getDefaultEnabled() const;
 
   /*!
    * @brief Turn the hybrid model on or off for one pair.  Giving a pair an
@@ -252,7 +215,6 @@ class NuclearPotentialManager {
 
   NuclearPotentialSetting defaultSetting_;
   std::shared_ptr<NuclearPotential> potential_;
-  std::string currentType_;
   std::map<int, NuclearPotentialSetting> pairSettings_;
   std::map<int, std::shared_ptr<NuclearPotential>> pairPotentials_;
   std::map<int, long> pairTags_;

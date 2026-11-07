@@ -1,17 +1,15 @@
 # The `<levels>` block: pairs, levels and channels
 
 This reference gives the line format of the `<levels>` block of an `.azr` project and the rules the engine applies
-to it, so that a project can be written or audited without the Qt GUI. The authoritative column table is
-`docs/source/reference/data_formats.rst` ("Project Files"); the GUI writer (`gui/src/LevelsTab.cpp`) is the
-authority on field order and widths.
+to it, so that a project can be written or audited by hand. The authoritative column table is
+`docs/source/reference/data_formats.rst` ("Project Files"); `pyazr/azrfile.py` writes the same field order.
 
 ## 1. There is no pairs section
 
 Every channel line repeats the full particle-pair description. `CNuc::Fill` rebuilds the pair list by
 de-duplicating those repeats (`CNuc::IsPair`). Writing correct level lines therefore creates the pairs.
 `pyazr.AzrModel` edits an existing project (levels, channels, data segments, extrapolation grids) but cannot create a
-particle pair; a compound nucleus that has never been set up is reached either through the GUI or by writing level
-lines directly.
+particle pair; a compound nucleus that has never been set up is reached by writing level lines directly.
 
 An external helper module, `azrbuild.py` (kept in the evaluation tree, not in this repository), implements
 `Particle`, `Pair`, `Channel`, `Level`, `AzrProject`, `particle_pair()`, `gamma_pair()`, `make_level()`,
@@ -33,7 +31,7 @@ pType chRad g1 g2 ecMultMask
 | `levelJ` | J itself (not 2J) | reading it as 2J turns a 3⁻ level into "3/2⁻" |
 | `levelE` | compound-nucleus excitation energy E_x (MeV) | not the resonance energy in a channel |
 | `levelFix` | 1 = energy fixed, 0 = fit parameter | per level, repeated on each of its lines |
-| `aa` | legacy entrance key | the GUI writes `1`; `CNuc` never reads it |
+| `aa` | legacy entrance key | the Qt GUI wrote `1`; `CNuc` never reads it |
 | `ir` | this channel's pair key | what `entrance`/`exit` of a segment refer to |
 | `2S`, `2L` | doubled channel spin and orbital momentum | integers; `NucLine` halves them on read |
 | `channelFix` | 1 = width fixed | per channel |
@@ -43,7 +41,7 @@ pType chRad g1 g2 ecMultMask
 | `m1 m2` | **atomic** masses (u), AME | a bare proton (1.00728 u) among atomic masses draws the electron-mass hint |
 | `entranceSepE` | separation energy of the first pair (MeV) | the same value on every line of the file |
 | `sepE` | this pair's separation energy (MeV) | 0 for a photon pair |
-| `j3 pi3 e3` | unused for particle and photon pairs | the GUI writes `0 0 0.0` |
+| `j3 pi3 e3` | unused for particle and photon pairs | the Qt GUI wrote `0 0 0.0` |
 | `pType` | 0 particle+particle, 10 particle+γ, 20 β decay | `src/CNuc.cpp` |
 | `chRad` | channel radius a_c (fm) | 0 for a photon pair |
 | `g1 g2` | nuclear g-factors | used only for M1 external capture |
@@ -74,8 +72,8 @@ channel-fixed flag, `t11` gamma. Prefer `AzrModel` (`lv.J`, `lv.parity`, `lv.ene
   which (L, S) survive: enumerate all channels and let AZURE2 drop what it must.
 - **`<parameterSettings>` may be empty.** It carries limits, errors and nuisance flags only; free versus fixed comes
   from `levelFix` and `channelFix`.
-- **Level ordering.** The GUI sorts by J, then parity (− before +), then energy, and numbers `levelID` in that
-  order. AZURE2 does not require it; matching it keeps `levelID`, `param.sav` names and the GUI display consistent.
+- **Level ordering.** The Qt GUI sorted by J, then parity (− before +), then energy, and numbered `levelID` in that
+  order. AZURE2 does not require it; matching it keeps `levelID` and `param.sav` names consistent with files it saved.
 - **Energies written by a program**: round E_x to at most 8 decimals; a 16-significant-digit token in an added
   level line has made the engine misread the model.
 

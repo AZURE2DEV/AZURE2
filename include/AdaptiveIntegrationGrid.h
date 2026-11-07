@@ -159,7 +159,6 @@ class AdaptiveIntegrationGrid {
   }
 
   void SetConfig(const GridConfig &config);
-  GridConfig GetConfig() const;
 
  private:
   GridConfig config_;  ///< Grid generation configuration
