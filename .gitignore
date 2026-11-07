@@ -2,7 +2,7 @@ build*/**
 .DS_Store
 .cache/**
 .vscode/**
-azure2
+/azure2
 build.log
 
 # Personal Claude Code notes; the shared CLAUDE.md files are committed.
