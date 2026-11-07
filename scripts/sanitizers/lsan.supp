@@ -1,0 +1,2 @@
+# LeakSanitizer suppressions (used only with SAN_LEAKS=1).  Same rule as asan.supp: third-party code only, each
+# entry with its reason.
