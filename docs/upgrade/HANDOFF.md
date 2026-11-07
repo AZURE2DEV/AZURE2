@@ -2,6 +2,26 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-07 (director) — COULCC in C++, bit-identical to the Fortran (pycoulomb, local branch `coulcc-cpp`)
+
+COULCC (Thompson and Barnett, Comput. Phys. Commun. 36 (1985) 363) translated to structured C++17 in Jakub's
+pycoulomb clone, branch `coulcc-cpp` (from 9fee957; e378a33 … 37f0f9b; not pushed). One function per Fortran routine,
+COMMON blocks as members of a per-call object, no mutable global state. Against gfortran (-O2/-O3, x86-64, GCC 11.5)
+on 12 814 cases (real, complex ρ/η/λ, Bessel kinds, all MODE1 × KFN): 618 988 values, every IFAIL, RERR and
+diagnostic counter bit-identical. Bit identity needed gfortran's complex semantics (mixed real/complex promotion,
+Smith division) and REAL*16 as `__float128`; elsewhere a double-double, equal to rounding. The literal goto port it
+replaces had 39 IFAIL mismatches, sign errors of J_ν, Y_ν at negative real ρ, and a data race.
+
+**Algorithm limits found (same in the Fortran; to report to I. J. Thompson).** (1) 2λ non-integer, ρ < ½: G from
+the reflection formula divides by sin χ, which cancels (−2.2 × 10⁻¹⁴ at η = 5, λ = 2.7, ρ = 0.1), G 1.3 % wrong with
+IFAIL 0; the Wronskian cannot see it. (2) 2λ integer, ρ < ½: the logarithmic origin series loses accuracy to
+8 × 10⁻¹¹, not reported in RERR. (3) Re λ_min ≤ −1 (outside the stated domain): Wronskian wrong by up to 54 % with
+IFAIL 0. Real-argument accuracy against mpmath otherwise ≤ 7 × 10⁻¹² (CF2), Bessel ≤ 3.4 × 10⁻¹⁴.
+
+**Next.** Merge `coulcc-cpp` with `azure2-prereqs` and add COULCC as a libcoulomb method (one adaptor; complex
+arguments through `coulomb_complex()`); then it comes into `physics/coulomb/` with the rest. Not used as AZURE2's
+default (`coulsm` stays). Pushing both branches is Jakub's.
+
 ## 2026-11-07 (`feature/upgrade-1-cnuc-split`) — split `CNuc`, step 1: the engine calls `level_parameters`
 
 Branch `feature/upgrade-1-cnuc-split` from `feature/upgrade` 93f8cbc5, not merged. Commits: the plan
