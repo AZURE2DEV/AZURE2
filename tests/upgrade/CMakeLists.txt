@@ -26,3 +26,10 @@ add_test(NAME physics_level_parameters_from_cnuc
                  ${CMAKE_CURRENT_SOURCE_DIR}/T3/T3.azr
          WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
 set_tests_properties(physics_level_parameters_from_cnuc PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1" TIMEOUT 600)
+
+# physics/coulomb's default algorithm against GSL's Coulomb functions, an independent algorithm physics/ does not
+# link (docs/upgrade/coulomb.md section 5).
+add_executable(coulomb_gsl_crosscheck_test coulomb_gsl_crosscheck_test.cpp)
+target_link_libraries(coulomb_gsl_crosscheck_test PRIVATE azure2_physics ${GSL_LIBRARIES})
+target_include_directories(coulomb_gsl_crosscheck_test PRIVATE ${GSL_INCLUDE_DIRS})
+add_test(NAME physics_coulomb_gsl_crosscheck COMMAND coulomb_gsl_crosscheck_test)
