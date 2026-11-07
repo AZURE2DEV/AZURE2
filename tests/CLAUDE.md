@@ -10,12 +10,11 @@ and how to keep the references honest.
 | Physics regression | `tests/<name>/<name>.azr` + `data/` + `expected/chiSquared.out` | Pinning a whole evaluation's total χ², per-segment χ² and point counts | Automatic (`tests/run_tests.sh` finds every `.azr`) |
 | Behavioural check | `tests/<name>/check.sh` (must be executable) | Sequences of runs, caches, CLI modes, error messages, fits that must recover known parameters, gradients vs finite differences | Automatic, *only if* `chmod +x` (`git update-index --chmod=+x`) |
 | Reference | `tests/reference/<x>_test.cpp` | A quantity computed a second way: a closed form or an independent implementation. **The only kind that shows a number is right, not just unchanged.** | `tests/reference/CMakeLists.txt` |
-| GUI | `tests/gui/<x>_test.cpp` | `.azr` round trips through the Qt models, dialogs, keyword whitelist | `tests/gui/CMakeLists.txt` (offscreen) |
 | pyazr | `tests/pyazr/<x>_test.py` | Python reader/writer round trips; pyazr against the engine | `tests/pyazr/CMakeLists.txt` (`LABELS slow` if > 1 min) |
 | Consistency | `tests/consistency/` | Repository drift: CLI flags vs help/docs, test registration, modes | `tests/consistency/CMakeLists.txt` |
 
-A new feature usually needs a regression project or `check.sh`, a pyazr test
-and a GUI round trip. A new formula needs a reference test.
+A new feature usually needs a regression project or `check.sh` and a pyazr
+test (with a round trip). A new formula needs a reference test.
 
 A regression reference is not a correctness check: `tests/run_tests.sh` pins
 each project's χ² against a number this code produced, so it catches a change

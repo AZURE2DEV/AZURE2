@@ -3,12 +3,12 @@
 AZURE2 is a multi-level, multi-channel R-matrix code for nuclear reactions and
 scattering. Physicists use its numbers in publications and evaluations, so a
 wrong number that looks right is the worst possible bug. Optimise for
-**correctness you can show**, then for keeping the GUI, CLI and Python API in
+**correctness you can show**, then for keeping the CLI and the Python API in
 step, then for speed.
 
 Human-readable versions of this file: `docs/source/developer/contributing.rst`
 and `docs/source/developer/architecture.rst`. Directory-specific rules are in
-`tests/CLAUDE.md`, `pyazr/CLAUDE.md` and `gui/CLAUDE.md`.
+`tests/CLAUDE.md` and `pyazr/CLAUDE.md`.
 
 ## Upgrade (branch `feature/upgrade`)
 
@@ -80,7 +80,6 @@ below (full text and reasons in `docs/upgrade/RULES.md`):
 | `src/`, `include/` | C++ engine | `AZURE2.cpp` (main, CLI flags) → `AZUREMain` → `CNuc` (levels, channels) + `EData` (segments, data, experimental effects) → `AZURECalc` (χ²), `AZUREGrad` (gradients), `AZURECalcMCMC` |
 | `api/` | `AZUREAPI` + pybind11 module `_azure2` | Builds `pyazr/_azure2*.so` in place |
 | `pyazr/` | Python package | In-process engine plus a pure-Python `.azr` reader/writer (`azrfile.py`, `datasets.py`) |
-| `gui/` | Qt5 + Qwt setup utility | Its own `.azr` reader/writer (`AZURESetup.cpp`, per-tab models) |
 | `numcmc/` | Ensemble MCMC sampler | |
 | `external/` | Vendored Minuit2, coul, erya/pugixml | **Do not edit**; it is upstream code |
 | `tests/` | All tests | See `tests/CLAUDE.md` |
@@ -99,7 +98,7 @@ cmake --build build --parallel
 What `scripts/check.sh` runs, and what to run by hand when iterating:
 
 ```bash
-ctest --test-dir build -LE slow --output-on-failure   # unit, reference, GUI, pyazr, consistency (minutes)
+ctest --test-dir build -LE slow --output-on-failure   # unit, reference, pyazr, consistency (minutes)
 ./tests/run_tests.sh build/src/AZURE2                 # physics regression: χ² of every tests/<name>/ (tens of minutes)
 ctest --test-dir build -R <name> --output-on-failure  # a single test
 ctest --test-dir build -L slow                        # long pyazr tests: run when you change pyazr fitting/bands
@@ -117,8 +116,9 @@ A change is finished when all of these are true, and the commit message says
 how each was checked:
 
 1. **It builds** with pyazr enabled, and adds no compiler warnings in the files
-   it touches. On `feature/upgrade` the Qt GUI is not built (`-DBUILD_GUI=OFF`):
-   decision 3 in `docs/upgrade/HANDOFF.md` retires it; the web UI replaces it.
+   it touches. `feature/upgrade` has no Qt GUI (decision 3 in
+   `docs/upgrade/HANDOFF.md`); the web UI of Phase 9 replaces it, checked against
+   `docs/upgrade/qt_parity.md`.
 2. **The tests pass**: `ctest -LE slow` and `tests/run_tests.sh`. If a
    reference χ² moved, see the next section first.
 3. **It is tested.** A bug fix comes with a test that fails on the old build
@@ -128,7 +128,7 @@ how each was checked:
    identity such as a constant cross section surviving a fold. Agreeing with
    itself is not a check.
 4. **Every front end agrees.** A user-visible feature reaches the engine, the
-   GUI, pyazr and the docs in the same branch (see the checklist below). If one
+   CLI, pyazr and the docs in the same branch (see the checklist below). If one
    front end is deliberately left out, say so in the docs.
 5. **Docs and skills are true.** The Sphinx page that describes the behaviour
    is updated in the same branch. A skill that states the old behaviour is
@@ -171,9 +171,9 @@ how each was checked:
 
 ## A new `.azr` keyword or option touches all of these
 
-The `.azr` file is parsed independently by the engine, the GUI and pyazr, so a
-feature is not finished until each one reads it, writes it back unchanged and
-reports it the same way:
+The `.azr` file is parsed independently by the engine and pyazr, so a feature
+is not finished until both read it, pyazr writes it back unchanged, and both
+report it the same way:
 
 1. Engine: `include/SegLine.h` / `NucLine.h` / `Config.cpp` (parse), the
    owning class (`ESegment`, `EData`, `CNuc`, ...), and start-up error
@@ -185,15 +185,12 @@ reports it the same way:
 3. CLI: the flag in `parseOptions`, `printHelp`, and
    `docs/source/reference/command_line.rst`. The consistency test enforces all
    three.
-4. GUI: not on `feature/upgrade` (decision 3); on `dev`, read, write and edit it
-   (`gui/include/SegmentKeywords.h` for segment tails), plus a round-trip test in
-   `tests/gui/`.
-5. pyazr: `datasets.py` / `azrfile.py` read and write, and `azure2.py` when it
+4. pyazr: `datasets.py` / `azrfile.py` read and write, and `azure2.py` when it
    affects χ² or penalties, plus a test in `tests/pyazr/` registered in its
    `CMakeLists.txt`.
-6. Docs: the user-guide page and `reference/data_formats.rst` or
+5. Docs: the user-guide page and `reference/data_formats.rst` or
    `output_files.rst`. Then the affected skills.
-7. Tests: a `tests/<name>/` project (`expected/chiSquared.out` and/or
+6. Tests: a `tests/<name>/` project (`expected/chiSquared.out` and/or
    `check.sh`) with a README that says what is checked and against what.
 
 Reference implementations to copy: `git show --stat 062b1bfe` (segment keyword

@@ -11,15 +11,15 @@ public names are a contract.
   pybind11 found) writes `pyazr/_azure2*.so` here. That file is git-ignored;
   never commit it.
 - `azrfile.py` (`AzrModel`) and `datasets.py` (`SegmentSet`) read and write the
-  `.azr` file in pure Python, independently of the engine and the GUI. They
+  `.azr` file in pure Python, independently of the engine. They
   must round-trip every file the engine accepts **unchanged**, including
   inactive lines, unknown keyword tails and comments.
 - `transform.py` is a Python port of the engine's `TransformOut`, and
   `widths.py` and `bands.py` re-derive engine quantities. Any such duplicate
   needs a test against the engine (see `tests/pyazr/`). Where possible, call
   through `_azure2` instead of adding another copy.
-- `nds.py` (EXFOR/ENSDF client) shares its parsing rules with
-  `gui/src/ExforData.cpp`. A rule learned by one belongs in both.
+- `nds.py` (EXFOR/ENSDF client) is the only EXFOR reader on this branch (the
+  Qt GUI's `gui/src/ExforData.cpp` exists on `dev` only).
 
 ## Rules
 
