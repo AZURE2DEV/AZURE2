@@ -678,9 +678,11 @@ void MCMCTab::loadFromAZUREParams(bool isRWA, std::string filename) {
         const double nominalNorm = segments[s].GetNominalNorm();
         autoNormPrior[key] = qMakePair(
             nominalNorm, nominalNorm / 100.0 * segments[s].GetNormError());
-        // Energy-shift terms are centred on no shift, as the fit's penalty (ESegment::AddShiftPenalty,
-        // dev 0dd28e5, 2026-10-25): the value on the segment line is only the start.
-        autoShiftPrior[key] = qMakePair(0.0, segments[s].GetEnergyShiftError());
+        // Energy-shift terms are centred as the fit's penalty (ESegment::AddShiftPenalty, dev 0dd28e5,
+        // 2026-10-25) and the sampler (AZURECalcMCMC::BuildAutoPriors): on no shift, or on the segment's
+        // explicit prior_centre row of <parameterSettings> (EData::ReadPriorCentres); the value on the segment
+        // line is only the start.  The sqrt(E) coefficient has no prior_centre row: always 0.
+        autoShiftPrior[key] = qMakePair(segments[s].GetNominalEnergyShift(), segments[s].GetEnergyShiftError());
         autoShiftSqrtPrior[key] = qMakePair(0.0, segments[s].GetEnergyShiftSqrtError());
         if (segments[s].OwnsShiftFn() && segments[s].HasShiftFn())
           for (int j = 0; j < segments[s].NumShiftFnParams(); j++)
