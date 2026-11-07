@@ -73,7 +73,8 @@ System MakeSystem(const std::vector<int> &channels, const std::vector<double> &E
                               {1, ChannelKind::Particle, 2, 0, 5.0},   // c2: alpha, l = 2
                               {2, ChannelKind::Magnetic, 1, 4, 0.0},   // c3: M1 to the 2+ state
                               {0, ChannelKind::Particle, 3, 2, 4.5},   // c4: p, l = 3, s = 1
-                              {0, ChannelKind::Particle, 3, 4, 4.5}};  // c5: p, l = 3, s = 2
+                              {0, ChannelKind::Particle, 3, 4, 4.5},   // c5: p, l = 3, s = 2
+                              {1, ChannelKind::Particle, 0, 0, 5.0}};  // c6: alpha, l = 0
   std::vector<double> B(channels.size(), 0.0);
   JpiBlock blk(4, 1, 0, channels, B, E, gamma);
   return System(LevelBasis::Brune, nuclei, {p, a, g}, all, {blk});
@@ -255,6 +256,24 @@ int main() {
       threw = true;
     }
     check("widths too large for the radii (M indefinite): refused (domain_error)", threw);
+  }
+  {
+    // Strong mixing: two alpha channels (l = 2, 0), levels at 17.0, 18.0 and 18.05 MeV, the upper two with large
+    // widths.  Here the eigenvector of the 18.05 MeV level has its largest component on another level, so taking the
+    // eigensolver's sign (largest component positive) reverses that formal level; checked by applying that mutation.
+    const std::vector<double> Em = {17.0, 18.0, 18.05}, gm = {0.3, 0.1, 0.8, 0.2, -0.3, 0.5};
+    const System sm = MakeSystem({2, 6}, Em, std::vector<double>(6, 0.0));
+    const ChannelFunctions cm = Synthetic(sm);
+    const std::vector<double> Bm = boundary_values(sm, 0, Em, cm);
+    const LevelSet fm = formal_from_brune(sm, 0, Em, gm, Bm, cm);
+    bool oriented = true;
+    for (std::size_t l = 0; l < 3; l++) oriented = oriented && fm.gamma[2 * l] * gm[2 * l] + fm.gamma[2 * l + 1] * gm[2 * l + 1] > 0.0;
+    check("strong mixing: each formal level points the way of its Brune level", oriented);
+    report("strong mixing: G(E) formal vs Brune (relative)", GDiff(sm, cm, Em, gm, fm.E, fm.gamma, Bm), 1e-12);
+    FormalToBruneOptions tightm;
+    tightm.energy_tolerance_MeV = 1e-13;
+    const LevelSet bm = brune_from_formal(sm, 0, fm.E, fm.gamma, Bm, cm, tightm);
+    report("strong mixing: Brune -> formal -> Brune, signs included", MaxRel(bm.gamma, gm) + MaxRel(bm.E, Em), 1e-11);
   }
   {
     const BasisAmplitudes park = amplitudes_from_observed(sys, 0, own, obs, LevelBasis::Park, cf);
