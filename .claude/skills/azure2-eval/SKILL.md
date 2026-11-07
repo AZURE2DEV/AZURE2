@@ -3332,8 +3332,10 @@ complete:
   ended WORSE than the full one. Cause (found 11-06 evening): ONE point in a deep angular minimum (E_lab 5.51,
   150 deg) where sigma(E_bar) can reach the node (fit 6e-11) while the depth average cannot (3e-5); the rmfit band
   anchor, a mean of log(fit/ref), turned that into 48-65 sigma and the fit used it as a lever. Any objective term
-  in log(model) needs a floor; the fallback also understates steep sub-barrier cross sections by 5-8 % below the
-  first window (13C+a E_lab 0.68). Test: `tests/target_auto_windows/check.sh` (old build fails 10 of 11).
+  in log(model) needs a floor. With the band scale as a GLS ratio, log(sum w fit / sum w ref), w = ref/sigma^2
+  (13C+a/11-06-26_ti_windowed_gls), the windowed fit ended BETTER than the full one in both models (176,150 vs
+  177,440 in the full model) and every band agreed between the models to < 2 sigma. The 5-8 % sub-barrier error
+  at E_lab 0.68 was a gap in the HAND windows; "auto" already integrates those points. Test: `tests/target_auto_windows/check.sh` (old build fails 10 of 11).
 - 2026-11-06 -- THREADED FITS WITH ENERGY SHIFTS COULD CRASH (use-after-free) ON dev 3264896..6982601.
   With the shared point tables (dev 3264896, 2026-11-06 morning), re-energising points in parallel let a host
   point write the table pointer of a point mapped onto it from ANOTHER segment while that segment's thread
