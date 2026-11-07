@@ -6,7 +6,8 @@ Runs, in a temporary directory:
      param.sav (Brune basis: E in MeV, reduced-width amplitudes in MeV^1/2);
   2. the fit of T2.azr (menu 2) with --use-lm, started off the truth.  T2's THM segments have no
      analytic residual Jacobian in today's engine, so --use-lm falls back to MIGRAD with Minuit's
-     numerical gradient (about 1300 calls).  Without a flag the CLI switches on the analytic-gradient
+     numerical gradient (about 1100 calls: 585 s at 8 threads with exact Coulomb functions, 72 s with a
+     Coulomb table, the same parameters to the digits of param.sav).  Without a flag the CLI switches on the analytic-gradient
      MIGRAD for a project with THM segments; on T2 that path spends minutes per gradient call and
      did not converge in 10 min at 8 threads (2026-11-06), so it is not used here;
 and compares every free parameter p with its true value t through the pull (p - t)/dp, dp the

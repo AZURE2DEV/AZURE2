@@ -21,7 +21,7 @@ A difference outside these is a change of the engine's numbers, to be explained 
     AZURE2_BINARY=/path/to/AZURE2 python3 tests/upgrade/golden/T2/regen_compare.py --regenerate --commit <hash>
 
 --regenerate overwrites the golden files and ENGINE (the engine commit, given with --commit, and the
-date).  Standard library only.  About 3 s for the calculations and 6 min for the fit at 8 threads.
+date).  Standard library only.  About 3 s for the calculations and 10 min for the fit at 8 threads.
 """
 import argparse
 import datetime
