@@ -52,7 +52,7 @@ option(USE_API "Use API version." ON)
 if(USE_API)
     # The _azure2 pybind11 module (api/src/CMakeLists.txt) is a shared object
     # that statically links AZUREAPI plus its dependencies (AZURE2Core,
-    # Minuit2, coul). All of those must be position-independent for the
+    # Minuit2). All of those must be position-independent for the
     # link to succeed, so default every target to PIC before their
     # subdirectories are added.
     set(CMAKE_POSITION_INDEPENDENT_CODE ON)
@@ -65,7 +65,7 @@ option(CODE_COVERAGE "Enable coverage reporting" OFF)
 
 # ---------------------------------------------------------------- sanitizers
 # AZURE2_SANITIZE=thread | address | address,undefined builds every target, the
-# vendored Minuit2 and coul included, with that -fsanitize= list.  Used by
+# vendored Minuit2 and physics/coulomb included, with that -fsanitize= list.  Used by
 # scripts/sanitize_upgrade.sh and the nightly upgrade-sanitizers workflow
 # (docs/upgrade/sanitizer_findings.md says what they run and why).  Set before
 # any add_subdirectory so that the third-party targets are instrumented too:
@@ -110,7 +110,7 @@ endif()
 
 # ---------------------------------------------------------------- physics/
 # The physics library (docs/upgrade/ARCHITECTURE.md section 2: it uses nothing).  Added here, after the sanitizer
-# flags (which it should get) and before the global GSL, OpenMP, Minuit2 and coul include directories and flags
+# flags (which it should get) and before the global GSL, OpenMP and Minuit2 include directories and flags
 # (which it must not see): a subdirectory inherits the directory properties as they stand when it is added.
 enable_testing()  # before the subdirectory, so that its tests are registered (repeated below for the rest)
 add_subdirectory(physics)
@@ -312,14 +312,13 @@ endif()
 
 # Extra includes/libs
 set(AZURE2_SOURCE_DIR ${CMAKE_BUILD_DIRECTORY})
-include_directories(${AZURE2_SOURCE_DIR}/external/coul/include)
 # OpenMP_LIBRARIES is not a variable FindOpenMP sets -- the per-language
 # OpenMP_CXX_LIBRARIES is -- so this list silently carried nothing.  That went
 # unnoticed wherever the compiler driver links the runtime itself from
 # -fopenmp (GCC, and clang outside Apple's), but AppleClang is driven with
 # -Xpreprocessor -fopenmp, which is a preprocessor flag only: nothing links
 # libomp, and the build fails at the link step on undefined _omp_* symbols.
-set(EXTRA_LIBS coul pugixml ${OpenMP_CXX_LIBRARIES})
+set(EXTRA_LIBS pugixml ${OpenMP_CXX_LIBRARIES})
 
 # Windows DLL bundling function (define before subdirectories)
 function(copy_dll_if_exists target_name dll_name dll_path)
@@ -416,7 +415,6 @@ if(USE_API)
     add_subdirectory(api)
 endif()
 
-add_subdirectory(external/coul)
 add_subdirectory(src)
 
 enable_testing()

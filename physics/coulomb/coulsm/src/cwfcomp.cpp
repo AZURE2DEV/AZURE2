@@ -2,6 +2,8 @@
 #include <string>
 #include <complex>
 
+namespace coulsm {
+
 // Calculation of h(omega) = H(omega)'/H(omega) with a continued fraction.
 // -----------------------------------------------------------------------
 // One calculates the ratio h = H'/H with the continued fraction of the
@@ -2064,3 +2066,5 @@ void ODE_integration::operator()(const std::complex<double>& r0,
     u  = u_extrapolated_next;
     du = du_extrapolated_next;
 }
+
+} // namespace coulsm

@@ -1,26 +1,8 @@
 #include <complex>
 #include <string>
 #include "complex_functions.H"
-#define _USE_MATH_DEFINES
-#include<cmath>
 
-#ifndef M_PI
-    #define M_PI 3.14159265358979323846
-#endif
-
-#ifndef M_PI_2
-    #define M_PI_2 1.57079632679489661923
-#endif
-
-// Usually called M_LN2 (Natural Log of 2)
-#ifndef M_LN2
-    #define M_LN2 0.69314718055994530942
-#endif
-
-// Usually called M_LN10 (Natural Log of 10)
-#ifndef M_LN10
-    #define M_LN10 2.30258509299404568402
-#endif
+namespace coulsm {
 
 // Precise evaluation of exp[z]-1 for z complex
 // --------------------------------------------
@@ -35,10 +17,10 @@ std::complex<double> expm1(const std::complex<double>& z)
     const double x = real(z), y = imag(z);
 
     if ((std::abs(x) >= 1.0) || (std::abs(y) >= 1.0))
-        return (exp(z) - 1.0);
+        return (std::exp(z) - 1.0);
 
-    const double expm1_x = expm1(x), exp_x = 1.0 + expm1_x,
-                 sin_y_over_two = sin(0.5 * y), sin_y = sin(y);
+    const double expm1_x = std::expm1(x), exp_x = 1.0 + expm1_x,
+                 sin_y_over_two = std::sin(0.5 * y), sin_y = std::sin(y);
 
     return std::complex<double>(
         expm1_x - 2.0 * exp_x * sin_y_over_two * sin_y_over_two, exp_x * sin_y);
@@ -60,12 +42,12 @@ std::complex<double> log1p(const std::complex<double>& z)
     const double xp1 = 1.0 + x, abs_x = std::abs(x), abs_y = std::abs(y);
 
     if ((abs_x >= 1.0) || (abs_y >= 1.0))
-        return log(1.0 + z);
+        return std::log(1.0 + z);
 
     const double y_over_xp1 = y / xp1;
 
     return std::complex<double>(
-        log1p(x) + 0.5 * log1p(y_over_xp1 * y_over_xp1), atan2(y, xp1));
+        std::log1p(x) + 0.5 * std::log1p(y_over_xp1 * y_over_xp1), std::atan2(y, xp1));
 }
 
 // Logarithm of Gamma[z], z anywhere in the complex plane except in the Gamma
@@ -127,7 +109,7 @@ std::complex<double> log_Gamma(const std::complex<double>& z)
         sum *= sqrt_2Pi;
 
         const std::complex<double> log_Gamma_z
-            = log(sum) - log(z) + z_p_0p5 * log(z_p_5p5) - z_p_5p5;
+            = std::log(sum) - std::log(z) + z_p_0p5 * std::log(z_p_5p5) - z_p_5p5;
 
         return log_Gamma_z;
     }
@@ -143,7 +125,7 @@ std::complex<double> log_Gamma(const std::complex<double>& z)
             = z - n,
             log_sin_Pi_z
             = (y > 110) ? (-i_Pi * z + log_const)
-                        : (log(sin(M_PI * eps)) - i_Pi * n);
+                        : (std::log(std::sin(M_PI * eps)) - i_Pi * n);
         const std::complex<double> log_Gamma_z = log_Pi - log_sin_Pi_z
                                                  - log_Gamma(1.0 - z);
 
@@ -266,14 +248,14 @@ std::complex<double> log_cut_constant_AS_calc(const int omega,
 
     if (real(two_I_Pi_eps) > -0.1)
     {
-        const std::complex<double> log_cut_constant = log(expm1(-two_I_Pi_eps))
+        const std::complex<double> log_cut_constant = std::log(expm1(-two_I_Pi_eps))
                                                       + two_I_Pi_eps;
 
         return log_cut_constant;
     }
     else
     {
-        const std::complex<double> log_cut_constant = log1p(-exp(two_I_Pi_eps));
+        const std::complex<double> log_cut_constant = log1p(-std::exp(two_I_Pi_eps));
 
         return log_cut_constant;
     }
@@ -330,14 +312,14 @@ std::complex<double> log_cut_constant_CFa_calc(const bool is_it_normalized,
     if (real(two_I_Pi_eps) < 0.1)
     {
         const std::complex<double> log_cut_constant
-            = log_two_I_omega + log(expm1(two_I_Pi_eps)) + log_norm;
+            = log_two_I_omega + std::log(expm1(two_I_Pi_eps)) + log_norm;
 
         return log_cut_constant;
     }
     else
     {
         const std::complex<double> log_cut_constant
-            = log_two_I_omega + log1p(-exp(-two_I_Pi_eps)) + two_I_Pi_eps
+            = log_two_I_omega + log1p(-std::exp(-two_I_Pi_eps)) + two_I_Pi_eps
               + log_norm;
 
         return log_cut_constant;
@@ -416,7 +398,7 @@ sin_chi_calc(const std::complex<double>& l, const std::complex<double>& eta)
 
     const std::complex<double> sin_chi
         = -(2 * l + 1)
-          * exp(log_Cl_eta_calc(l, eta) + log_Cl_eta_calc(-l - 1, eta));
+          * std::exp(log_Cl_eta_calc(l, eta) + log_Cl_eta_calc(-l - 1, eta));
 
     return sin_chi;
 }
@@ -458,19 +440,21 @@ std::complex<double> exp_I_omega_chi_calc(const int                   omega,
 
     if (std::abs(sin_chi) > 0.5)
     {
-        const std::complex<double> exp_I_omega_chi = exp(I_omega * chi);
+        const std::complex<double> exp_I_omega_chi = std::exp(I_omega * chi);
 
         return exp_I_omega_chi;
     }
     else
     {
         int sign = 1;
-        if (real(cos(chi)) < 0)
+        if (real(std::cos(chi)) < 0)
             sign = -sign;
         const std::complex<double> cos_chi
-            = sign * sqrt(1.0 - sin_chi * sin_chi),
+            = sign * std::sqrt(1.0 - sin_chi * sin_chi),
             exp_I_omega_chi = cos_chi + I_omega * sin_chi;
 
         return exp_I_omega_chi;
     }
 }
+
+} // namespace coulsm

@@ -6,6 +6,7 @@
 #include "Config.h"
 #include "Constants.h"
 #include "PPair.h"
+#include "azure2/physics/ChannelFunctions.h"
 
 /*!
  * Two-body kinematics of a particle pair: the channel wave number k and Sommerfeld
@@ -35,21 +36,17 @@ namespace Kinematics {
 /// Is relativistic kinematics on for this run?
 inline bool Relativistic() { return g_config && g_config->relativistic; }
 
+// The relativistic k and eta, and Channel's eta and rho below, are physics/'s (azure2/physics/ChannelFunctions.h):
+// one formula for the engine and physics/.
+
 /// k^2 (fm^-2) at c.m. kinetic energy T (MeV); negative below threshold.
-inline double K2(double m1, double m2, double T) {
-  const double m = m1 + m2;
-  return T * (T + 2.0 * m) * (T + 2.0 * m1) * (T + 2.0 * m2) / (4.0 * (m + T) * (m + T)) / (hbarc * hbarc);
-}
+inline double K2(double m1, double m2, double T) { return azure2::physics::relativistic_k2(m1, m2, T); }
 
 /// |k| (fm^-1): the wave number above threshold, the decay constant kappa below.
-inline double K(double m1, double m2, double T) { return std::sqrt(std::fabs(K2(m1, m2, T))); }
+inline double K(double m1, double m2, double T) { return azure2::physics::relativistic_k(m1, m2, T); }
 
 /// eta at T (above threshold), or eta_b = Z1 Z2 alpha mu_eff / kappa below it (T < 0).
-inline double Eta(double z1z2, double m1, double m2, double T) {
-  const double m = m1 + m2;
-  const double p = K(m1, m2, T) * hbarc;  // MeV
-  return z1z2 * fstruc * (2.0 * m1 * m2 + 2.0 * m * T + T * T) / (2.0 * p * (m + T));
-}
+inline double Eta(double z1z2, double m1, double m2, double T) { return azure2::physics::relativistic_eta(z1z2, m1, m2, T); }
 
 /// c.m. kinetic energy from the lab kinetic energy of particle 1 on particle 2 at rest.
 inline double CMFromLab(double m1, double m2, double eLab) {
@@ -84,26 +81,16 @@ struct Channel {
   Channel(int z1_, int z2_, double redmass_, double m1u, double m2u, bool relativistic)
       : z1(z1_), z2(z2_), redmass(redmass_), m1(m1u * uconv), m2(m2u * uconv), rel(relativistic) {}
 
+  /// The same constants as physics/ takes them.
+  azure2::physics::ChannelKinematics Physics() const { return azure2::physics::ChannelKinematics{z1, z2, redmass, m1, m2, rel}; }
   /// eta at c.m. kinetic energy E > 0.
-  double Eta(double energy) const {
-    if (!rel) return sqrt(uconv / 2.) * fstruc * z1 * z2 * sqrt(redmass / energy);
-    return Kinematics::Eta((double)z1 * z2, m1, m2, energy);
-  }
+  double Eta(double energy) const { return azure2::physics::eta(Physics(), energy); }
   /// rho = k a at c.m. kinetic energy E > 0.
-  double Rho(double radius, double energy) const {
-    if (!rel) return sqrt(2. * uconv) / hbarc * radius * sqrt(redmass * energy);
-    return Kinematics::K(m1, m2, energy) * radius;
-  }
+  double Rho(double radius, double energy) const { return azure2::physics::rho(Physics(), radius, energy); }
   /// eta_b at binding energy B > 0 (the channel's T = -B).
-  double EtaBound(double binding) const {
-    if (!rel) return sqrt(uconv / 2.) * fstruc * z1 * z2 * sqrt(redmass / binding);
-    return Kinematics::Eta((double)z1 * z2, m1, m2, -binding);
-  }
+  double EtaBound(double binding) const { return azure2::physics::eta_bound(Physics(), binding); }
   /// kappa a at binding energy B > 0.
-  double RhoBound(double radius, double binding) const {
-    if (!rel) return sqrt(2. * uconv) / hbarc * radius * sqrt(redmass * binding);
-    return Kinematics::K(m1, m2, -binding) * radius;
-  }
+  double RhoBound(double radius, double binding) const { return azure2::physics::rho_bound(Physics(), radius, binding); }
   /// (c / v)^(1/2), v the relative velocity at c.m. kinetic energy E > 0: the unit-flux factor of the
   /// external-capture overlap (non-relativistically (mu c^2 / 2E)^(1/4)).
   double FluxFactor(double energy) const {

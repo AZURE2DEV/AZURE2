@@ -1,12 +1,14 @@
 #ifndef COULOMB_WF_COMPLEX_H
 #define COULOMB_WF_COMPLEX_H
-#define _USE_MATH_DEFINES
+
 #include<complex>
 #include<algorithm>
 #include <vector>
-#include<cmath>
+#include<math.h>
 
 #include "complex_functions.H"
+
+namespace coulsm {
 
 // Define constants locally instead of using ScaleUtils
 namespace ScaleUtils {
@@ -311,5 +313,6 @@ private:
   const double prec_first_order_expansion; // prec_first_order_expansion : 0.1*sqrt_precision. It is the precision used for first_order_expansions.
 };
 
+} // namespace coulsm
 
 #endif //end of COULOMB_WF_COMPLEX_H

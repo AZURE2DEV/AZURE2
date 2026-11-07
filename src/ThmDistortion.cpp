@@ -4,7 +4,7 @@
 #include "ThmExperiment.h"
 #include "ThmNumerics.h"
 #include "ThmOptical.h"
-#include "cwfcomp_accurate.H"
+#include "CoulFunc.h"
 
 #include <algorithm>
 #include <cmath>
@@ -32,8 +32,8 @@
  * solution is the growing one under a barrier, so the outward integration is
  * stable).  Beyond the potential and the turning point
  * (eta + sqrt(eta^2 + l(l+1)))/k it is matched at two nodes a quarter
- * wavelength apart to c1 F_l + c2 G_l, with F_l, G_l from COUL
- * (Coulomb_wave_functions_accurate, as CoulFunc), and divided by
+ * wavelength apart to c1 F_l + c2 G_l, with F_l, G_l from physics/coulomb
+ * (coulsm, as CoulFunc), and divided by
  * N = c1 - i c2, which normalizes it to F_l + T_l H_l^+ (for point Coulomb
  * c2 = 0 up to the Numerov error, and u = F_l).
  *
@@ -69,11 +69,9 @@ double SurfaceShape(double r, double R, double a) {
 
 // F_l, G_l at rho (eta real).
 void CoulombFG(int l, double eta, double rho, double &F, double &G) {
-  Coulomb_wave_functions_accurate coul(true, complex((double)l, 0.0), complex(eta, 0.0));
-  complex f, df, g, dg;
-  coul.compute(complex(rho, 0.0), f, df, g, dg);
-  F = f.real();
-  G = g.real();
+  const CoulWaves w = CoulombWavesAt(l, eta, rho);
+  F = w.F;
+  G = w.G;
 }
 
 }  // namespace

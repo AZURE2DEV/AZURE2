@@ -1,6 +1,5 @@
 #ifndef COMPLEX_FUNCTIONS_H
 #define COMPLEX_FUNCTIONS_H
-#define _USE_MATH_DEFINES
 #include<complex>
 #include<string>
 // Remove external dependencies - define locally
@@ -10,8 +9,9 @@ namespace sammy {
         ResonanceException(const std::string& msg) : std::runtime_error(msg) {}
     };
 }
-#include<cmath>
+#include<math.h>
 
+namespace coulsm {
 
 
 // Infinite norm of a complex number.
@@ -415,5 +415,7 @@ std::complex<double> sin_chi_calc (const std::complex<double> &l,const std::comp
 // exp_I_omega_chi : exp[i.omega.chi], returned result.
 
 std::complex<double> exp_I_omega_chi_calc (const int omega,const std::complex<double> &l,const std::complex<double> &eta);
+
+} // namespace coulsm
 
 #endif //end of COMPLEX_FUNCTIONS_H

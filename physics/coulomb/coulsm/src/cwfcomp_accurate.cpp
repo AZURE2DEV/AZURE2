@@ -5,6 +5,8 @@
 #include <stdexcept>
 #include <iostream>
 
+namespace coulsm {
+
 // Value for which e^max_exponent is representable as double
 const double NUMERICAL_MAX_EXPONENT = std::log(std::numeric_limits<double>::max());
 
@@ -31,30 +33,33 @@ void Coulomb_wave_functions_accurate::F_dF_init(const std::complex<double> &z,
     // For compatibility - not used in accurate_cwf approach
 }
 
-// Calculate F and dF using accurate_cwf method
+// Calculate F and dF - now uses coulsm version as fallback
 void Coulomb_wave_functions_accurate::F_dF(const std::complex<double> &z,
                                   std::complex<double> &F,
                                   std::complex<double> &dF)
 {
+    // Use solve_cwf which now falls back to coulsm version
     std::complex<double> G, dG;
     solve_cwf(z, F, dF, G, dG);
 }
 
-// Calculate G and dG using accurate_cwf method  
+// Calculate G and dG - now uses coulsm version as fallback
 void Coulomb_wave_functions_accurate::G_dG(const std::complex<double> &z,
                                   std::complex<double> &G,
                                   std::complex<double> &dG)
 {
+    // Use solve_cwf which now falls back to coulsm version
     std::complex<double> F, dF;
     solve_cwf(z, F, dF, G, dG);
 }
 
-// Calculate H and dH using accurate_cwf method
+// Calculate H and dH - now uses coulsm version as fallback
 void Coulomb_wave_functions_accurate::H_dH(const int omega,
                                   const std::complex<double> &z,
                                   std::complex<double> &H,
                                   std::complex<double> &dH)
 {
+    // Use solve_cwf which now falls back to coulsm version
     std::complex<double> F, dF, G, dG;
     solve_cwf(z, F, dF, G, dG);
     
@@ -120,9 +125,9 @@ void Coulomb_wave_functions_accurate::solve_cwf(const std::complex<double> &rho_
     }
     else {
         // Charged particle case and/or complex rho/eta
-        // Try continued fraction method first
-        // initialize CWF solver
-        class Coulomb_wave_functions cwf(true, l, eta); 
+        // Try continued fraction method first using coulsm version
+        // initialize CWF solver - now uses coulsm namespace version!
+        coulsm::Coulomb_wave_functions cwf(true, l, eta); 
 
         // local variables for Hp, dHp, and square-root of minus 1
         std::complex<double> Hp,dHp, imag_I(0.0,1.0);
@@ -154,7 +159,7 @@ void Coulomb_wave_functions_accurate::solve_cwf(const std::complex<double> &rho_
                     dG = std::complex<double>(dG_r, 0.0);
                     return;
                 } catch (const std::exception &e2) {
-                    std::cerr << "Asymptotic solution also failed" << std::endl;
+                
                 }
             }
             
@@ -649,3 +654,5 @@ double Coulomb_wave_functions_accurate::inf_norm(const std::complex<double> &z) 
 {
     return std::max(std::abs(z.real()), std::abs(z.imag()));
 }
+
+} // namespace coulsm

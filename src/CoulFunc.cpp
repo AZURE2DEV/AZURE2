@@ -2,7 +2,6 @@
 #include "CoulFuncCache.h"
 #include "PPair.h"
 #include <iostream>
-#include "cwfcomp_accurate.H"
 #include <gsl/gsl_sf_coulomb.h>
 #include <gsl/gsl_deriv.h>
 #include <vector>
@@ -201,18 +200,7 @@ CoulWaves CoulFunc::operator()(int l, double radius, double energy) {
   if (useHybridMethod_ && nuclearPotential_) {
     newResult = computeHybrid(l, radius, energy);
   } else if (!useGSLFunctions_) {
-    std::complex<double> eta(kin_.Eta(energy), 0.);
-    std::complex<double> rho(kin_.Rho(radius, energy), 0.);
-    std::complex<double> lValue((double)l, 0.);
-    Coulomb_wave_functions_accurate coul(true, lValue, eta);
-    std::complex<double> c_F, c_dF, c_G, c_dG;
-    // coul.F_dF(rho,c_F,c_dF);
-    // coul.G_dG(rho,c_G,c_dG);
-    coul.compute(rho, c_F, c_dF, c_G, c_dG);
-    newResult.F = real(c_F);
-    newResult.dF = real(c_dF);
-    newResult.G = real(c_G);
-    newResult.dG = real(c_dG);
+    newResult = CoulombWavesAt(l, kin_.Eta(energy), kin_.Rho(radius, energy));
   } else {
     double eta = kin_.Eta(energy);
     double rho = kin_.Rho(radius, energy);
@@ -252,8 +240,7 @@ CoulWaves CoulFunc::operator()(int l, double radius, double energy) {
 double CoulFunc::Penetrability(int l, double radius, double energy) {
   if (table_ && TableLookup(l, radius, energy)) return tP_;
   struct CoulWaves coul = this->operator()(l, radius, energy);
-  double rho = kin_.Rho(radius, energy);
-  return rho / (pow(coul.F, 2.0) + pow(coul.G, 2.0));
+  return azure2::physics::penetrability(PhysicsWaves(coul), kin_.Rho(radius, energy));
 }
 
 /*!
@@ -267,27 +254,10 @@ double CoulFunc::PEShift(int l, double radius, double energy) {
 }
 
 double CoulFunc::PEShiftExact(int l, double radius, double energy) {
+  // physics/ChannelFunctions: S with the overflow guard just above a charged threshold (eta >~ 110; 11B+alpha
+  // within ~1 keV, where a band of bare cross sections of 1e26-1e37 b once came from the unguarded formula).
   struct CoulWaves coul = this->operator()(l, radius, energy);
-  double rho = kin_.Rho(radius, energy);
-  double shift;
-  if (pow(coul.F, 2.0) == 0. && coul.F * coul.dF == 0.)
-    shift = rho * (coul.dG / coul.G);
-  else
-    shift = rho / (pow(coul.F, 2.0) + pow(coul.G, 2.0)) *
-        (coul.F * coul.dF + coul.G * coul.dG);
-  // Just above a charged-particle threshold (eta >~ 110; 11B+alpha within ~1 keV)
-  // the products overflow: G^2 or G G' is inf, and with F F' a denormal rather
-  // than exactly 0 the formula above returns NaN or -inf.  For 11B+a that made a
-  // ~50 eV band 0.5 keV above the alpha threshold give bare cross sections of
-  // 1e26-1e37 b, which any target-effect sub-point landing there folded into the
-  // data (Henderson 14C(p,p), key 76; --use-gradient fit 1526734 stopped on it).
-  // Scaling by hypot(F, G) avoids the overflow; it is used only when the plain
-  // formula failed, so every value that formula got right is unchanged.
-  if (!std::isfinite(shift)) {
-    const double h = std::hypot(coul.F, coul.G);
-    shift = rho * ((coul.F / h) * (coul.dF / h) + (coul.G / h) * (coul.dG / h));
-  }
-  return shift;
+  return azure2::physics::shift(PhysicsWaves(coul), kin_.Rho(radius, energy));
 }
 
 double CoulFunc::thisPEShift(double x, void *p) {
@@ -320,9 +290,8 @@ double CoulFunc::PEShift_dE(int l, double radius, double energy, double step) {
     // the table's edge put a jump of order 1e-7 / (2 h) into the derivative (audit 2026-10-25, item 32).
     const bool viaTable = table_ && TableLookup(l, radius, energy + h) && TableLookup(l, radius, energy - h) &&
                           TableLookup(l, radius, energy + 0.5 * h) && TableLookup(l, radius, energy - 0.5 * h);
-    auto s = [&](double e) { return viaTable ? PEShift(l, radius, e) : PEShiftExact(l, radius, e); };
-    auto cd = [&](double hh) { return (s(energy + hh) - s(energy - hh)) / (2.0 * hh); };
-    return (4.0 * cd(0.5 * h) - cd(h)) / 3.0;
+    // The difference itself is physics/'s (shift_derivative), with S from the route chosen here.
+    return azure2::physics::shift_derivative([&](double e) { return viaTable ? PEShift(l, radius, e) : PEShiftExact(l, radius, e); }, energy);
   }
 
   dEShiftParams_.radius = radius;
@@ -391,16 +360,7 @@ CoulWaves CoulFunc::computeHybrid(int l, double radius, double energy) {
     if (rMatch_ <= r_min || radius > rMatch_ || radius < r_min || drNumerov_ <= 0.0) {
       // Fall back to standard Coulomb calculation
       if (!useGSLFunctions_) {
-        std::complex<double> eta(kin_.Eta(energy), 0.);
-        std::complex<double> rho(kin_.Rho(radius, energy), 0.);
-        std::complex<double> lValue((double)l, 0.);
-        Coulomb_wave_functions_accurate coul(true, lValue, eta);
-        std::complex<double> c_F, c_dF, c_G, c_dG;
-        coul.compute(rho, c_F, c_dF, c_G, c_dG);
-        result.F = real(c_F);
-        result.dF = real(c_dF);
-        result.G = real(c_G);
-        result.dG = real(c_dG);
+        result = CoulombWavesAt(l, kin_.Eta(energy), kin_.Rho(radius, energy));
       } else {
         double eta = kin_.Eta(energy);
         double rho = kin_.Rho(radius, energy);
@@ -426,11 +386,9 @@ CoulWaves CoulFunc::computeHybrid(int l, double radius, double energy) {
     // Lambda to compute H+ = G + iF from rho using Coulomb boundary conditions
     auto compute_H_plus = [&](double rho_val) -> std::complex<double> {
       if (!useGSLFunctions_) {
-        // Use COUL (coulsm) for boundary conditions
-        Coulomb_wave_functions_accurate coul(true, lValue, eta);
-        std::complex<double> F, dF, G, dG;
-        coul.compute(std::complex<double>(rho_val, 0.0), F, dF, G, dG);
-        return G + std::complex<double>(0.0, 1.0) * F;
+        // physics/coulomb (coulsm) for the boundary conditions
+        const CoulWaves w = CoulombWavesAt(l, eta.real(), rho_val);
+        return std::complex<double>(w.G, 0.0) + std::complex<double>(0.0, 1.0) * std::complex<double>(w.F, 0.0);
       } else {
         // Use GSL for boundary conditions
         double eta_val = eta.real();
@@ -521,16 +479,7 @@ CoulWaves CoulFunc::computeHybrid(int l, double radius, double energy) {
     std::cerr << "Falling back to standard Coulomb calculation." << std::endl;
     // Fall back to standard calculation
     if (!useGSLFunctions_) {
-      std::complex<double> eta(kin_.Eta(energy), 0.);
-      std::complex<double> rho(kin_.Rho(radius, energy), 0.);
-      std::complex<double> lValue((double)l, 0.);
-      Coulomb_wave_functions_accurate coul(true, lValue, eta);
-      std::complex<double> c_F, c_dF, c_G, c_dG;
-      coul.compute(rho, c_F, c_dF, c_G, c_dG);
-      result.F = real(c_F);
-      result.dF = real(c_dF);
-      result.G = real(c_G);
-      result.dG = real(c_dG);
+      result = CoulombWavesAt(l, kin_.Eta(energy), kin_.Rho(radius, energy));
     } else {
       double eta = kin_.Eta(energy);
       double rho = kin_.Rho(radius, energy);

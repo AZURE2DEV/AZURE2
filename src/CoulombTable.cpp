@@ -18,7 +18,7 @@
 #include <gsl/gsl_errno.h>
 #include <gsl/gsl_sf_hyperg.h>
 
-#include "cwfcomp_accurate.H"
+#include "CoulFunc.h"
 
 #ifdef _OPENMP
 #include <omp.h>
@@ -195,10 +195,8 @@ double CoulombTable::LogGamow(double eta) {
 }
 
 CoulombTable::Open CoulombTable::ExactOpen(int l, double eta, double rho) {
-  Coulomb_wave_functions_accurate coul(true, std::complex<double>(l, 0.), std::complex<double>(eta, 0.));
-  std::complex<double> cF, cdF, cG, cdG;
-  coul.compute(std::complex<double>(rho, 0.), cF, cdF, cG, cdG);
-  const double F = std::real(cF), dF = std::real(cdF), G = std::real(cG), dG = std::real(cdG);
+  const CoulWaves w = CoulombWavesAt(l, eta, rho);
+  const double F = w.F, dF = w.dF, G = w.G, dG = w.dG;
   Open o;
   double d = F * F + G * G;
   if (std::isfinite(d) && d > 0) {
