@@ -124,7 +124,21 @@ Phase Shift Data
 
 Phase shift data follows the same four-column format, but the third column
 contains the phase shift value (in degrees) and the fourth column contains its
-uncertainty. The convention is :math:`-90° < \theta_\text{lab} < 90°`.
+uncertainty. The segment line names the elastic partial wave :math:`(J, l)`,
+and its channel spin :math:`s` where needed (``spin <s>``, below). The quantity
+is the nuclear phase shift of that wave,
+
+.. math::
+
+   \delta = \tfrac12 \arg\big(U_{cc}\,e^{-2i\omega_c}\big),
+
+measured from the Coulomb phase :math:`\sigma_l` and including the
+hard-sphere part :math:`-\phi_c` (:math:`U`, :math:`\omega_c` and
+:math:`\phi_c` as in :doc:`../theory/conventions`). The engine reports it in
+:math:`-90° < \delta \le 90°`, and in :math:`0° \le \delta < 180°` when the
+two particles of the pair are identical (``GenMatrixFunc.cpp:553-564``). The
+residual is the plain difference of data and model, not reduced modulo
+180°, so the data must be given in the same range.
 
 Angular-Coefficient Data
 ^^^^^^^^^^^^^^^^^^^^^^^^

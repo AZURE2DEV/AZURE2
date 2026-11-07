@@ -72,13 +72,18 @@ excitation energies of the entrance pair.
 .. math::
 
    A^{-1}_{\lambda\lambda'} = (E_\lambda - E_\text{in})\,\delta_{\lambda\lambda'}
-   - \sum_c \gamma_{\lambda c}\,\gamma_{\lambda' c}\,L_c
+   - \sum_c \gamma_{\lambda c}\,\gamma_{\lambda' c}\,L^0_c
 
 where:
 
-- :math:`E_\lambda` is the resonance energy of level :math:`\lambda`
+- :math:`E_\lambda` is the resonance energy of level :math:`\lambda` (MeV)
 - :math:`\gamma_{\lambda c}` is the reduced width amplitude of level :math:`\lambda` in channel :math:`c`
-- :math:`L_c = L_0(c)` is the shift function (Blatt-Biedenharn) evaluated at the data point energy
+- :math:`L^0_c = S_c - B_c + iP_c` at the energy of the data point, with
+  :math:`S_c` the shift function, :math:`P_c` the penetrability and
+  :math:`B_c` the boundary condition of channel :math:`c`
+  (``GetLoElement``, ``EPoint.cpp:1496-1500``; Eq. :eq:`conv-ps` of
+  :doc:`../theory/conventions`). Photon and β-decay channels have
+  :math:`L^0_c = 0`.
 - The sum runs over all channels in the :math:`J^\pi` group
 
 **Brune parameterization** (``USE_BRUNE_FORMALISM``):
@@ -90,7 +95,7 @@ channel sum for penetrability-type channels (``radType == 'P'``):
 
    A^{-1}_{\lambda\lambda'} = (E_\lambda - E_\text{in})\,\delta_{\lambda\lambda'}
    - \sum_c \gamma_{\lambda c}\,\gamma_{\lambda' c}
-   \left[L_c + B_c - S_c(\lambda, \lambda')\right]
+   \left[L^0_c + B_c - S_c(\lambda, \lambda')\right]
 
 where:
 
@@ -107,11 +112,16 @@ where:
 **RMC formalism** (``USE_RMC_FORMALISM``):
 
 For radiative channels (``radType == 'M'`` or ``'E'``), an imaginary term is
-added to the diagonal elements:
+subtracted from the diagonal elements (``AMatrixFunc.cpp:290-293``, then
+line 320):
 
 .. math::
 
-   A^{-1}_{\lambda\lambda} \mathrel{+}= i\,\gamma_{\lambda c}^2
+   A^{-1}_{\lambda\lambda} \mathrel{-}= i\,\gamma_{\lambda c}^2
+
+The diagonal element then carries :math:`-i\sum_\gamma
+\gamma_{\lambda\gamma}^2`, i.e. :math:`-i` times half the radiative width,
+since :math:`P_\gamma = 1` with ``--use-rmc`` (Reich and Moore).
 
 **Implementation detail:** Only active levels are stored in the matrix.
 An index map (``level_active_index_``) translates original level indices to
@@ -153,7 +163,7 @@ the :math:`n \times c` reduced widths and :math:`\Lambda` diagonal in the
 channels (``include/ChannelSpace.h``):
 
 - standard: :math:`K = \mathrm{diag}(E_\lambda)`, :math:`N = 1`,
-  :math:`\Lambda_c = L_c = S_c - B_c + iP_c`;
+  :math:`\Lambda_c = L^0_c = S_c - B_c + iP_c`;
 - Brune: :math:`K_{\lambda\mu} = \tilde E_\lambda \delta_{\lambda\mu}
   + \sum_c \gamma_{\lambda c}\gamma_{\mu c}\, s^0_{\lambda\mu c}` and
   :math:`N_{\lambda\mu} = \delta_{\lambda\mu} - \sum_c \gamma_{\lambda c}\gamma_{\mu c}\,
@@ -319,31 +329,50 @@ with finite differences, including a level 0.5 keV above the threshold.
 T-Matrix Calculation: ``AMatrixFunc::CalculateTMatrix()``
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-The collision matrix element :math:`U` is computed from the A-matrix:
+The collision matrix is computed from the A-matrix in Lane and Thomas's
+level-matrix form (Eq. :eq:`conv-u` of :doc:`../theory/conventions`):
 
 .. math::
 
-   U_{cc'} = 2i\,\sqrt{P_c}\,\sqrt{P_{c'}} \sum_{\lambda,\lambda'}
-   \gamma_{\lambda c}\,\gamma_{\lambda' c'}\,A_{\lambda\lambda'}
+   U_{cc'} = \Omega_c\,\Omega_{c'}\Big[\delta_{cc'} + 2i\,P_c^{1/2} P_{c'}^{1/2}
+   \sum_{\lambda,\lambda'} \gamma_{\lambda c}\,\gamma_{\lambda' c'}\,A_{\lambda\lambda'}\Big],
+   \qquad
+   T_{cc'} = e^{2i\omega_c}\,\delta_{cc'} - U_{cc'},
 
-where :math:`P_c` is the penetrability of channel :math:`c`.
+where :math:`P_c` is the penetrability of channel :math:`c` and
 
-The T-matrix is then:
+.. math::
+
+   \Omega_c = e^{i(\omega_c - \phi_c)}, \qquad
+   \omega_c = \sigma_l - \sigma_0 = \sum_{n=1}^{l} \arctan\frac{\eta}{n}, \qquad
+   \phi_c = \arctan\frac{F_l(\rho)}{G_l(\rho)} .
+
+:math:`\omega_c` is the Coulomb phase of partial wave :math:`l` relative to
+that of :math:`l = 0`, so every amplitude is relative to the common factor
+:math:`e^{2i\sigma_0}`. :math:`\phi_c` is the hard-sphere phase of Lane and
+Thomas at :math:`\rho = k_c a_c`; the hard-sphere phase *shift* is
+:math:`-\phi_c`. Written out,
 
 - **Elastic scattering** (:math:`c = c'`):
 
   .. math::
 
-     T_{cc} = e^{2i\omega_c} - e^{i\omega_c}\,e^{i\phi_c}\,(1 + U_{cc})
+     T_{cc} = e^{2i\omega_c} - \Omega_c^2\,\big(1 + 2i P_c\,\gamma_c^T A\,\gamma_c\big)
 
-- **Transfer reactions** (:math:`c \neq c'`):
+- **Reactions** (:math:`c \neq c'`):
 
   .. math::
 
-     T_{cc'} = -e^{i\omega_c}\,e^{i\phi_{c'}}\,U_{cc'}
+     T_{cc'} = -\Omega_c\,\Omega_{c'}\; 2i P_c^{1/2} P_{c'}^{1/2}\,\gamma_c^T A\,\gamma_{c'}
 
-where :math:`\omega_c = \sigma_l` is the Coulomb phase shift and
-:math:`\phi_c` is the hard-sphere phase shift.
+with :math:`\gamma_c` the column of reduced widths of channel :math:`c`. In
+the code (``AMatrixFunc.cpp:536-556``) ``umatrix`` is the bracket without
+:math:`\delta_{cc'}`, ``uphase`` is :math:`\Omega_c\Omega_{c'}`, and
+``GetExpCoulombPhase`` and ``GetExpHardSpherePhase`` return
+:math:`e^{i\omega_c}` and :math:`e^{-i\phi_c}`. Photon and β-decay channels
+have :math:`\Omega_c = 1`. With ``--use-rmc`` the capture element is
+:math:`-i \cdot 2i P_c^{1/2} P_{c'}^{1/2}\,\gamma_c^T A\,\gamma_{c'}`, without
+the phases :math:`\Omega`.
 
 Phase factors, penetrabilities, and Coulomb amplitudes are pre-computed and
 cached on the ``EPoint`` object.
@@ -360,13 +389,27 @@ The R-matrix formalism (``RMatrixFunc``) works with the channel matrix instead.
    R_{cc'} = \sum_\lambda \frac{\gamma_{\lambda c}\,\gamma_{\lambda c'}}
    {E_\lambda - E_\text{in}}
 
-**The [1 - RL] matrix** is then constructed:
+in the standard formalism (``RMatrixFunc.cpp:244-258``). With ``--use-rmc``
+the denominator is
+:math:`E_\lambda - E_\text{in} - i\sum_\gamma \gamma_{\lambda\gamma}^2`.
+
+**The [1 - RL] matrix** is then constructed. In the standard formalism
+
+.. math::
+
+   [1 - RL]_{cc'} = \delta_{cc'} - R_{cc'}\,L^0_{c'}
+
+with :math:`L^0_{c'} = S_{c'} - B_{c'} + iP_{c'}` as in the level matrix
+(``RMatrixFunc.cpp:261-265``). In the Brune formalism the R-matrix built
+from the Q-matrix (below) already contains the energy-dependent shift, and
 
 .. math::
 
    [1 - RL]_{cc'} = \delta_{cc'} - i\,R_{cc'}\,P_{c'}
 
-This matrix is inverted using the same GSL LU decomposition, and then
+with :math:`P_{c'} = 0` for channels other than particle channels
+(``RMatrixFunc.cpp:217-224``). This matrix is inverted using the same GSL
+LU decomposition, and then
 multiplied by the R-matrix to obtain :math:`[1-RL]^{-1}R`, which enters
 the T-matrix calculation.
 
@@ -411,18 +454,50 @@ between internal and external capture pathways:
 
    \sigma = \frac{1}{100} \sum_{J,l,l'} g\,(2J+1)\,I_{12}\,|T_{J,l,l'}|^2
 
-where :math:`g` is the geometrical factor and :math:`I_{12}` is the channel
-spin statistical factor.
+where :math:`g = \pi/k^2` (fm\ :sup:`2`) is the geometrical factor, with
+:math:`k` the entrance wave number, :math:`I_{12} = [(2j_1+1)(2j_2+1)]^{-1}`
+is the spin factor of the entrance pair, and the factor :math:`1/100`
+converts fm\ :sup:`2` to b. An identical entrance pair multiplies the result
+by 2 (Eq. :eq:`conv-sigma` of :doc:`../theory/conventions`).
 
 **Differential cross section (with Coulomb):**
 
 When the entrance and exit channels are the same particle pair, the full
-Coulomb + nuclear + interference cross section is computed:
+Coulomb + nuclear + interference cross section is computed
+(``GenMatrixFunc.cpp:439-516``). The code does not store the physical Coulomb
+amplitude but the dimensionless
 
 .. math::
 
-   \frac{d\sigma}{d\Omega} = |f_C|^2 + |f_N|^2
-   + \frac{i}{\sqrt{\pi}}\,g\,f_C^* \cdot T \cdot P_l(\cos\theta) + \text{c.c.}
+   C_\alpha(\theta) = \frac{\eta}{2\sqrt\pi}\,\csc^2\frac\theta2\,
+   \exp\Big(-2i\eta\ln\sin\frac\theta2\Big)
+
+(``EPoint.cpp:1890-1902``; :math:`\theta` is the c.m. angle, :math:`\eta`
+the Sommerfeld parameter). The point-Coulomb amplitude relative to
+:math:`e^{2i\sigma_0}` is :math:`f_C = -(\sqrt\pi/k)\,C_\alpha` (fm). With
+:math:`T` as above,
+
+.. math::
+
+   \frac{d\sigma}{d\Omega} = g\,|C_\alpha|^2 + |f_N|^2
+   + g\,\frac{1}{\sqrt{\pi}}\,
+   \mathrm{Re}\Big[i\,C_\alpha(\theta) \sum_{J s l} (2J+1)\,I_{12}\,
+   T_{cc}^*\,P_l(\cos\theta)\Big],
+   \qquad g = \frac{\pi}{k^2},
+
+where the sum runs over the elastic channels :math:`c = (l, s)` of each
+:math:`J^\pi` and :math:`|f_N|^2` is the Blatt–Biedenharn sum
+(Eq. :eq:`conv-ad` of :doc:`../theory/conventions`). The first term is :math:`|f_C|^2`. The last is
+:math:`2\,\mathrm{Re}[f_C^* f_N]`: for spinless particles
+:math:`f_N = (i/2k)\sum_l (2l+1)\,T_l\,P_l(\cos\theta)`, and substituting
+:math:`f_C` and :math:`f_N` gives the term above. In terms of :math:`C_\alpha`
+the interference is therefore :math:`+\mathrm{Re}[i\,C_\alpha T^*]`, which
+equals :math:`-\mathrm{Re}[i\,C_\alpha^* T]`. ``tests/coulomb_nuclear_sign``
+checks the sign and the size of this term against an independent partial-wave
+sum (:doc:`../theory/conventions`, Eqs. :eq:`conv-elastic` and
+:eq:`conv-coulomb`). For identical particles the Coulomb amplitude is
+symmetrized per channel spin and the nuclear and interference terms are
+multiplied by 4 and 2 (same page, "Identical particles").
 
 Type Definitions
 ----------------
