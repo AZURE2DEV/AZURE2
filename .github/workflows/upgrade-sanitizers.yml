@@ -1,0 +1,105 @@
+name: upgrade-sanitizers
+
+# ThreadSanitizer and AddressSanitizer at 8 OpenMP threads on the upgrade test projects T1-T3 and on the tests of
+# point mapping, energy shifts and target integration (docs/upgrade/ROADMAP.md, Phase 0; RULES.md §2.4).  The
+# work is scripts/sanitize_upgrade.sh; this file only installs the toolchain and calls it.  What runs and the
+# findings so far: docs/upgrade/sanitizer_findings.md.
+#
+# GitHub runs a schedule only from the workflow file on the default branch.  Until this file is there, the
+# nightly does not fire; a push that changes the script, its suppressions or this file runs it on that branch,
+# and so does a manual dispatch.  The nightly checks out feature/upgrade, the branch the upgrade lives on.
+on:
+  schedule:
+    - cron: '23 4 * * *'
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/upgrade-sanitizers.yml'
+      - 'scripts/sanitize_upgrade.sh'
+      - 'scripts/sanitizers/**'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  sanitize:
+    name: ${{ matrix.sanitizer }}
+    runs-on: ubuntu-24.04
+    # An instrumented T2 fit and the shift and target checks take tens of minutes under TSan.
+    timeout-minutes: 240
+    strategy:
+      fail-fast: false
+      matrix:
+        sanitizer: [thread, address]
+    env:
+      LLVM: '18'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'schedule' && 'feature/upgrade' || github.ref }}
+
+      # Clang with LLVM's libomp: under TSan the OpenMP runtime must be libomp with its OMPT tool libarcher, which
+      # tells TSan the order of barriers and reductions (libgomp's futex barriers are invisible to it, and every
+      # parallel region would be reported).  libclang-rt-N-dev holds the sanitizer runtimes, libomp-N-dev libomp
+      # and libarcher.
+      - name: Install toolchain and dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            clang-$LLVM libclang-rt-$LLVM-dev libomp-$LLVM-dev \
+            cmake ninja-build pkg-config libgsl-dev python3-dev python3-venv
+          python3 -m venv "$RUNNER_TEMP/venv"
+          PY="$RUNNER_TEMP/venv/bin/python"
+          "$PY" -m pip install --quiet --upgrade pip
+          "$PY" -m pip install --quiet pybind11 numpy scipy mpmath
+          echo "SAN_PYTHON=$PY" >> "$GITHUB_ENV"
+          echo "CC=clang-$LLVM" >> "$GITHUB_ENV"
+          echo "CXX=clang++-$LLVM" >> "$GITHUB_ENV"
+          echo "CMAKE_GENERATOR=Ninja" >> "$GITHUB_ENV"
+          ARCHER="$(find /usr/lib/llvm-$LLVM -name libarcher.so 2>/dev/null | head -1)"
+          echo "libarcher: ${ARCHER:-not found}"
+          [ -n "$ARCHER" ] && echo "SAN_ARCHER=$ARCHER" >> "$GITHUB_ENV"
+          # omp.h: CMakeLists.txt checks that it is on the include path.  Debian links it into clang's resource
+          # directory; if it is only under the LLVM tree, add that directory.
+          RES="$(clang++-$LLVM -print-resource-dir)"
+          if [ ! -f "$RES/include/omp.h" ]; then
+            OMPH="$(find /usr/lib/llvm-$LLVM /usr/include -name omp.h 2>/dev/null | head -1)"
+            echo "omp.h: ${OMPH:-not found}"
+            [ -n "$OMPH" ] && echo "CXXFLAGS=-I$(dirname "$OMPH")" >> "$GITHUB_ENV" \
+                           && echo "CFLAGS=-I$(dirname "$OMPH")" >> "$GITHUB_ENV"
+          fi
+          clang++-$LLVM --version | head -1
+
+      # TSan maps its shadow memory at fixed addresses; the 32 bits of mmap randomization of the 24.04 runner
+      # kernels collide with it ("unexpected memory mapping").  28 bits is the value before that kernel change.
+      - name: Address-space randomization for TSan
+        if: matrix.sanitizer == 'thread'
+        run: sudo sysctl -w vm.mmap_rnd_bits=28
+
+      - name: Build and run under ${{ matrix.sanitizer }}
+        run: |
+          set +e   # the default shell is bash -e; the exit status is examined below
+          SAN_REPORT_DIR="$RUNNER_TEMP/san-reports" \
+            scripts/sanitize_upgrade.sh ${{ matrix.sanitizer }} build-san 2>&1 | tee sanitize.log
+          rc=${PIPESTATUS[0]}
+          # Job logs need a token; annotations are public.  Exit 1: sanitizer reports (the job fails).  Exit 2: a
+          # test failed without a report; build.yml gates test failures, so here it is a warning, one per step.
+          # Exit 3: the toolchain or build is broken (the job fails).
+          sev=error; [ "$rc" -eq 2 ] && sev=warning
+          grep -E '^  FAIL' sanitize.log | head -8 | while read -r l; do echo "::$sev::${{ matrix.sanitizer }}: $l"; done
+          grep -m2 -E '^(SUMMARY: (Thread|Address)Sanitizer|==[0-9]+==ERROR)' sanitize.log | while read -r l; do echo "::error::$l"; done
+          grep -m1 '^sanitize_upgrade:' sanitize.log | while read -r l; do echo "::error::$l"; done
+          [ "$rc" -eq 2 ] && exit 0
+          exit "$rc"
+
+      - name: Upload reports and logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sanitizer-${{ matrix.sanitizer }}
+          path: |
+            ${{ runner.temp }}/san-reports
+            sanitize.log
+          if-no-files-found: ignore
+          retention-days: 14
