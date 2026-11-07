@@ -22,7 +22,6 @@
 #include "CNucLevelParameters.h"
 #include "CNucSystem.h"
 #include "CoulFunc.h"
-#include "EigenFunc.h"
 #include "ECIntegral.h"
 #include "CoulFuncCache.h"
 #include "GSLException.h"
@@ -1178,22 +1177,6 @@ void CNuc::PrintCompoundFromParams() {
       }
     }
   }
-}
-
-/*!
- * The rank of each entry of `energies` in ascending order (ties keep their
- * file order), so that `energies[i]` is the `rank[i]`-th smallest.  Used to hand
- * the ascending eigenvalues of the parameter transformations to the levels by
- * energy rather than by their position in the file.
- */
-
-static std::vector<int> AscendingRanks(const vector_r &energies) {
-  std::vector<int> order(energies.size());
-  for (int i = 0; i < (int)order.size(); i++) order[i] = i;
-  std::stable_sort(order.begin(), order.end(), [&](int a, int b) { return energies[a] < energies[b]; });
-  std::vector<int> rank(energies.size());
-  for (int k = 0; k < (int)order.size(); k++) rank[order[k]] = k;
-  return rank;
 }
 
 namespace phys = azure2::physics;
@@ -2360,180 +2343,81 @@ void CNuc::TransformOut(const Config &configure) {
       }
   }
   if (!(configure.paramMask & Config::USE_BRUNE_FORMALISM)) {
-    int maxIterations = 1000;
-    double energyTolerance = 1e-6;
-    for (int j = 1; j <= this->NumJGroups(); j++) {
+    // Formal -> Brune by the fixed-point iteration of physics/ brune_from_formal (level_parameters.md section 4), on
+    // the fit values, with GSL's eigensolver (cnuc_split.md section 4).  A level not in the R-matrix keeps its values.
+    phys::FormalToBruneOptions options;  // the engine's 1e-6 MeV and 1000 iterations
+    options.solver = GslSymmetricEigen;
+    for (int j = 1; j <= this->NumJGroups(); j++)
       for (int la = 1; la <= this->GetJGroup(j)->NumLevels(); la++) {
         ALevel *theLevel = this->GetJGroup(j)->GetLevel(la);
-        if (theLevel->IsInRMatrix()) {
-          int iteration = 1;
-          int thisLevel = 0;
-          bool done = false;
-          vector_r tempE;
-          vector_r tempBoundary;
-          matrix_r tempGamma;
-          for (int lap = 1; lap <= this->GetJGroup(j)->NumLevels(); lap++) {
-            if (this->GetJGroup(j)->GetLevel(lap)->IsInRMatrix()) {
-              tempE.push_back(this->GetJGroup(j)->GetLevel(lap)->GetFitE());
-              // The iteration below re-sorts the energies ascending at every
-              // step, so this level is followed by the rank of its formal
-              // energy among the group's, the inverse of the mapping in
-              // TransformIn (not by its position in the file).
-              if (this->GetJGroup(j)->GetLevel(lap) == theLevel) thisLevel = tempE.size() - 1;
-              vector_r tempChanVector;
-              tempGamma.push_back(tempChanVector);
-              for (int ch = 1; ch <= this->GetJGroup(j)->NumChannels(); ch++) {
-                tempGamma[tempE.size() - 1].push_back(this->GetJGroup(j)->GetLevel(lap)->GetFitGamma(ch));
-                if (tempE.size() == 1) tempBoundary.push_back(this->GetJGroup(j)->GetChannel(ch)->GetBoundaryCondition());
-              }
+        if (theLevel->IsInRMatrix() && this->GetJGroup(j)->IsInRMatrix()) continue;
+        theLevel->SetTransformE(theLevel->GetFitE());
+        theLevel->SetTransformIterations(0);
+        for (int ch = 1; ch <= this->GetJGroup(j)->NumChannels(); ch++)
+          theLevel->SetTransformGamma(ch, theLevel->GetFitGamma(ch));
+      }
+    const CNucSystem structure = BuildSystemFromCNuc(*this, configure, CNucSystemContent::Structure);
+    const phys::ChannelFunctions cf =
+        ChannelFunctionsFromCNuc(*this, structure.map, configure, ChannelEnergyOrder::SeparationFirst,
+                                 ChannelQuantities::Shift);
+    for (std::size_t b = 0; b < structure.system.num_blocks(); b++) {
+      const int j = structure.map.groupOfBlock[b];
+      JGroup *theJGroup = this->GetJGroup(j);
+      const std::vector<int> &levels = structure.map.levelOfBlockLevel[b];
+      const std::size_t nc = theJGroup->NumChannels();
+      std::vector<double> E, gamma, B(nc);
+      for (int la : levels) {
+        E.push_back(theJGroup->GetLevel(la)->GetFitE());
+        for (std::size_t k = 0; k < nc; k++) gamma.push_back(theJGroup->GetLevel(la)->GetFitGamma((int)k + 1));
+      }
+      for (std::size_t k = 0; k < nc; k++) B[k] = theJGroup->GetChannel((int)k + 1)->GetBoundaryCondition();
+      const phys::LevelSet out = phys::brune_from_formal(structure.system, b, E, gamma, B, cf, options);
+      for (std::size_t lb = 0; lb < levels.size(); lb++) {
+        const int la = levels[lb];
+        ALevel *theLevel = theJGroup->GetLevel(la);
+        if (out.status[lb] == phys::LevelSet::Status::EigenFailed) {
+          configure.outStream << "**WARNING: Could not transform level (eigenvalue problem failed)" << std::endl
+                              << "    " << AZURELabel::Level(theJGroup, theLevel, j, la) << std::endl
+                              << "  The input energy and widths are kept for this level; its "
+                              << "transformed values are unreliable." << std::endl;
+        } else if (out.status[lb] == phys::LevelSet::Status::NotConverged) {
+          // The iteration chases the energy eigenvalue while each channel's boundary condition moves with it, so the
+          // channel whose boundary condition is still shifting most is the one holding up convergence -- name it,
+          // since that is the width to look at.
+          int worstChannel = 0;
+          double worstDiff = 0.0;
+          for (std::size_t k = 0; k < nc; k++)
+            if (std::fabs(out.boundary_shift[lb * nc + k]) >= worstDiff) {
+              worstDiff = std::fabs(out.boundary_shift[lb * nc + k]);
+              worstChannel = (int)k + 1;
             }
-          }
-          {
-            // Put the group's levels in ascending formal energy (the order the
-            // eigen solver returns them in), so that tempE[thisLevel] is this
-            // level's own energy from the first iteration on.  For a file that
-            // lists its levels in energy order this is the identity.
-            const std::vector<int> rank = AscendingRanks(tempE);
-            vector_r sortedE(tempE.size());
-            matrix_r sortedGamma(tempE.size());
-            for (int i = 0; i < (int)tempE.size(); i++) {
-              sortedE[rank[i]] = tempE[i];
-              sortedGamma[rank[i]] = tempGamma[i];
-            }
-            thisLevel = rank[thisLevel];
-            tempE.swap(sortedE);
-            tempGamma.swap(sortedGamma);
-          }
-          while (iteration <= maxIterations && !done) {
-            vector_r boundaryDiff;
-            for (int ch = 1; ch <= this->GetJGroup(j)->NumChannels(); ch++) {
-              double newBoundary = 0.0;
-              AChannel *theChannel = this->GetJGroup(j)->GetChannel(ch);
-              PPair *exitPair = this->GetPair(theChannel->GetPairNum());
-              double localEnergy = tempE[thisLevel] - exitPair->GetSepE() - exitPair->GetExE();
-              if (theChannel->GetRadType() == 'P') {
-                newBoundary = ChannelFunc(exitPair, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC)).Shift(theChannel->GetL(), localEnergy);
-                boundaryDiff.push_back(newBoundary - tempBoundary[ch - 1]);
-                tempBoundary[ch - 1] = newBoundary;
-              } else {
-                // Same as in TransformIn: a non-particle channel has no
-                // boundary condition, the entry only keeps `boundaryDiff`
-                // indexed by channel, and every reader is guarded by
-                // RadType == 'P'.  Copying channel 1's value read off the end
-                // of an empty vector when channel 1 was not a particle
-                // channel.  Reached only with the Brune formalism off, which
-                // is why it has not been seen.
-                boundaryDiff.push_back(0.0);
-              }
-            }
-            matrix_r cMatrix;
-            for (int mu = 0; mu < tempE.size(); mu++) {
-              vector_r tempRow;
-              cMatrix.push_back(tempRow);
-              for (int mup = 0; mup < tempE.size(); mup++) {
-                double chanSum = 0.0;
-                for (int ch = 1; ch <= this->GetJGroup(j)->NumChannels(); ch++) {
-                  if (this->GetJGroup(j)->GetChannel(ch)->GetRadType() == 'P')
-                    chanSum += boundaryDiff[ch - 1] * tempGamma[mu][ch - 1] *
-                        tempGamma[mup][ch - 1];
-                }
-                if (mu == mup)
-                  cMatrix[mu].push_back(tempE[mu] - chanSum);
-                else
-                  cMatrix[mu].push_back(-chanSum);
-              }
-            }
-            EigenFunc eigenFunc(cMatrix);
-            if (!eigenFunc.ok()) {
-              // As for a level that does not converge (below): keep the input values, say so.
-              configure.outStream << "**WARNING: Could not transform level (eigenvalue problem failed)" << std::endl
-                                  << "    " << AZURELabel::Level(this->GetJGroup(j), theLevel, j, la) << std::endl
-                                  << "  The input energy and widths are kept for this level; its "
-                                  << "transformed values are unreliable." << std::endl;
-              tempE[thisLevel] = theLevel->GetFitE();
-              for (int ch = 1; ch <= this->GetJGroup(j)->NumChannels(); ch++)
-                tempGamma[thisLevel][ch - 1] = theLevel->GetFitGamma(ch);
-              break;
-            }
-            if (fabs(eigenFunc.eigenvalues()[thisLevel] - tempE[thisLevel]) <= energyTolerance)
-              done = true;
-            matrix_r newGamma;
-            for (int mu = 0; mu < tempE.size(); mu++) {
-              vector_r tempChanVector;
-              newGamma.push_back(tempChanVector);
-              for (int ch = 1; ch <= this->GetJGroup(j)->NumChannels(); ch++) {
-                double gammaSum = 0.0;
-                for (int mup = 0; mup < tempE.size(); mup++) {
-                  gammaSum += eigenFunc.eigenvectors()[mup][mu] * tempGamma[mup][ch - 1];
-                }
-                newGamma[mu].push_back(gammaSum);
-              }
-            }
-            for (int mu = 0; mu < tempE.size(); mu++) {
-              tempE[mu] = eigenFunc.eigenvalues()[mu];
-              for (int ch = 1; ch <= this->GetJGroup(j)->NumChannels(); ch++) {
-                tempGamma[mu][ch - 1] = newGamma[mu][ch - 1];
-              }
-            }
-            if (!done) {
-              if (iteration == maxIterations) {
-                // The iteration chases the energy eigenvalue while each channel's
-                // boundary condition moves with it, so the channel whose boundary
-                // condition is still shifting most is the one holding up
-                // convergence -- name it, since that is the width to look at.
-                int worstChannel = 0;
-                double worstDiff = 0.0;
-                for (int ch = 1; ch <= (int)boundaryDiff.size(); ch++) {
-                  if (fabs(boundaryDiff[ch - 1]) >= worstDiff) {
-                    worstDiff = fabs(boundaryDiff[ch - 1]);
-                    worstChannel = ch;
-                  }
-                }
-
-                configure.outStream << "**WARNING: Could not transform level after "
-                                    << maxIterations << " iterations" << std::endl
-                                    << "    "
-                                    << AZURELabel::Level(this->GetJGroup(j), theLevel, j, la)
-                                    << std::endl
-                                    << "  Energy residual "
-                                    << fabs(eigenFunc.eigenvalues()[thisLevel] - tempE[thisLevel])
-                                    << " MeV, tolerance " << energyTolerance << " MeV."
-                                    << std::endl;
-                if (worstChannel > 0)
-                  configure.outStream << "  Least converged channel (largest boundary-condition shift, "
-                                      << worstDiff << "):" << std::endl
-                                      << "    "
-                                      << AZURELabel::Channel(this, this->GetJGroup(j), worstChannel)
-                                      << std::endl;
-                configure.outStream << "  The input energy and widths are kept for this level; its "
-                                    << "transformed values are unreliable." << std::endl;
-                tempE[thisLevel] = theLevel->GetFitE();
-                for (int ch = 1; ch <= this->GetJGroup(j)->NumChannels(); ch++)
-                  tempGamma[thisLevel][ch - 1] = theLevel->GetFitGamma(ch);
-              }
-              iteration++;
-            }
-          }
-
-          theLevel->SetTransformE(tempE[thisLevel]);
-          theLevel->SetTransformIterations(iteration);
-          double nFSum = 1.0;
-          for (int ch = 1; ch <= this->GetJGroup(j)->NumChannels(); ch++) {
-            AChannel *theChannel = this->GetJGroup(j)->GetChannel(ch);
-            theLevel->SetTransformGamma(ch, tempGamma[thisLevel][ch - 1]);
-            if (ch <= theLevel->NumNFIntegrals()) nFSum += 2.0 *
-                this->GetPair(theChannel->GetPairNum())->GetChRad() *
-                this->GetPair(theChannel->GetPairNum())->GetRedMass() *
-                uconv / pow(hbarc, 2.0) * pow(tempGamma[thisLevel][ch - 1], 2.0) *
-                theLevel->GetNFIntegral(ch);
-          }
-          theLevel->SetSqrtNFFactor(1.0 / sqrt(nFSum));
-        } else {
-          theLevel->SetTransformE(theLevel->GetFitE());
-          theLevel->SetTransformIterations(0);
-          for (int ch = 1; ch <= this->GetJGroup(j)->NumChannels(); ch++)
-            theLevel->SetTransformGamma(ch, theLevel->GetFitGamma(ch));
+          configure.outStream << "**WARNING: Could not transform level after "
+                              << options.max_iterations << " iterations" << std::endl
+                              << "    " << AZURELabel::Level(theJGroup, theLevel, j, la) << std::endl
+                              << "  Energy residual " << out.residual_MeV[lb]
+                              << " MeV, tolerance " << options.energy_tolerance_MeV << " MeV." << std::endl;
+          if (worstChannel > 0)
+            configure.outStream << "  Least converged channel (largest boundary-condition shift, "
+                                << worstDiff << "):" << std::endl
+                                << "    " << AZURELabel::Channel(this, theJGroup, worstChannel) << std::endl;
+          configure.outStream << "  The input energy and widths are kept for this level; its "
+                              << "transformed values are unreliable." << std::endl;
         }
+        theLevel->SetTransformE(out.E[lb]);
+        theLevel->SetTransformIterations(out.iterations[lb]);
+        double nFSum = 1.0;
+        for (std::size_t k = 0; k < nc; k++) {
+          const int ch = (int)k + 1;
+          AChannel *theChannel = theJGroup->GetChannel(ch);
+          const double g = out.gamma[lb * nc + k];
+          theLevel->SetTransformGamma(ch, g);
+          if (ch <= theLevel->NumNFIntegrals()) nFSum += 2.0 *
+              this->GetPair(theChannel->GetPairNum())->GetChRad() *
+              this->GetPair(theChannel->GetPairNum())->GetRedMass() *
+              uconv / pow(hbarc, 2.0) * pow(g, 2.0) *
+              theLevel->GetNFIntegral(ch);
+        }
+        theLevel->SetSqrtNFFactor(1.0 / sqrt(nFSum));
       }
     }
   } else {
