@@ -6,7 +6,6 @@
 #include "ChannelFunc.h"
 #include "Config.h"
 #include "Constants.h"
-#include "EigenFunc.h"
 #include "WhitFunc.h"
 
 namespace phys = azure2::physics;
@@ -109,30 +108,4 @@ std::vector<phys::ExternalWidth> ExternalWidthsFromCNuc(CNuc &compound, const CN
           compound.CalcExternalWidth(group, group->GetLevel(levels[la]), channel, true, configure);
     }
   return out;
-}
-
-namespace {
-matrix_r ToMatrix(const std::vector<double> &A, std::size_t n) {
-  matrix_r m(n, vector_r(n));
-  for (std::size_t i = 0; i < n; i++)
-    for (std::size_t j = 0; j < n; j++) m[i][j] = A[i * n + j];
-  return m;
-}
-phys::EigenResult FromEigenFunc(const EigenFunc &e, std::size_t n) {
-  phys::EigenResult r;
-  r.ok = e.ok();
-  r.values = e.eigenvalues();
-  r.vectors.assign(n * n, 0.0);
-  for (std::size_t i = 0; i < n; i++)
-    for (std::size_t k = 0; k < n; k++) r.vectors[i * n + k] = e.eigenvectors()[i][k];
-  return r;
-}
-}  // namespace
-
-phys::EigenResult GslSymmetricEigen(const std::vector<double> &A, std::size_t n) {
-  return FromEigenFunc(EigenFunc(ToMatrix(A, n)), n);
-}
-
-phys::EigenResult GslGeneralizedEigen(const std::vector<double> &N, const std::vector<double> &M, std::size_t n) {
-  return FromEigenFunc(EigenFunc(ToMatrix(N, n), ToMatrix(M, n)), n);
 }

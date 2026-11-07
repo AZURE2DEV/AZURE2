@@ -1186,8 +1186,9 @@ namespace phys = azure2::physics;
  * amplitudes of the levels become Brune's (or Park's) reduced width amplitudes, the external-capture amplitude is
  * subtracted from the photon channels, and, with the Brune parametrization off, the levels become formal ones.  The
  * arithmetic is physics/ level_parameters' (docs/upgrade/level_parameters.md sections 2-4), with the engine's channel
- * functions (ChannelFunctionsFromCNuc) and, for the formal parameters, GSL's eigensolver (docs/upgrade/cnuc_split.md
- * section 4).  This function words the warnings and keeps the bound-state normalization of external capture.
+ * functions (ChannelFunctionsFromCNuc); the formal parameters take B_c at the lowest level of a group and the largest
+ * |gamma| of a level positive (HANDOFF decision 10, cnuc_split.md section 7).  This function words the warnings and
+ * keeps the bound-state normalization of external capture.
  */
 
 bool CNuc::TransformIn(const Config &configure) {
@@ -1365,7 +1366,7 @@ bool CNuc::TransformIn(const Config &configure) {
           // Each level keeps its position and receives the eigenvalue of the rank of its Brune energy, so a level
           // listed first (a background pole, say) keeps its own energy, widths and fix flags.  TransformOut uses the
           // same rank mapping in the other direction.
-          f = phys::formal_from_brune(system, b, E, gamma, B, shifts, phys::FormalSignRule::AsComputed, GslGeneralizedEigen);
+          f = phys::formal_from_brune(system, b, E, gamma, B, shifts);
         } catch (const std::domain_error &) {
           // N a = E M a has a real solution only for a positive-definite M (Brune, PRC 66, 044611 (2002)); M is
           // 1 - sum_c gamma gamma' dS_c/dE, so widths too large for the channel radii make it indefinite.
@@ -1754,14 +1755,14 @@ void CNuc::PrintPathways(const Config &configure) {
 }
 
 /*!
- * Calculates the boundary conditions.  Boundary conditions for each channel are evaluated at the energy of the
- * first level read from the nuclear input file in the \f$ J^\pi \f$ group.
+ * Calculates the boundary conditions: B_c = S_c at the lowest R-matrix level of each \f$ J^\pi \f$ group.
  */
 
 void CNuc::CalcBoundaryConditions(const Config &configure) {
-  // B_c = S_c(E of the group's first R-matrix level) for every particle channel; a non-particle channel copies channel
+  // B_c = S_c(E of the group's lowest R-matrix level) for every particle channel; a non-particle channel copies channel
   // 1's value (it never enters the level matrix); a group without R-matrix levels gets 0, where B_c drops out of the
-  // collision matrix (physics/ boundary_values, docs/upgrade/level_parameters.md Eq. 3.1).
+  // collision matrix (physics/ boundary_values, docs/upgrade/level_parameters.md Eq. 3.1; HANDOFF decision 10).
+  const bool formal = !(configure.paramMask & Config::USE_BRUNE_FORMALISM);
   try {
     const CNucSystem structure = BuildSystemFromCNuc(*this, configure, CNucSystemContent::Structure);
     const azure2::physics::ChannelFunctions cf =
@@ -1770,10 +1771,20 @@ void CNuc::CalcBoundaryConditions(const Config &configure) {
       JGroup *theJGroup = this->GetJGroup(structure.map.groupOfBlock[b]);
       std::vector<double> energies;
       for (int la : structure.map.levelOfBlockLevel[b]) energies.push_back(theJGroup->GetLevel(la)->GetE());
-      const std::vector<double> B = azure2::physics::boundary_values(structure.system, b, energies,
-                                                                     azure2::physics::BoundaryRule::FirstListedLevel, cf);
+      const std::vector<double> B = azure2::physics::boundary_values(structure.system, b, energies, cf);
       const std::vector<int> &channels = structure.map.channelOfBlockChannel[b];
       for (std::size_t k = 0; k < channels.size(); k++) theJGroup->GetChannel(channels[k])->SetBoundaryCondition(B[k]);
+      // Builds before 2026-11-07 took B_c at the first listed level: formal parameters they wrote for a group listed
+      // out of energy order (param.sav, param.par, --no-transform input) belong to another B_c.
+      if (formal && !energies.empty()) {
+        const double lowest = *std::min_element(energies.begin(), energies.end());
+        if (lowest < energies[0])
+          configure.outStream << "Note: J = " << theJGroup->GetJ() << (theJGroup->GetPi() > 0 ? "+" : "-")
+                              << ": the boundary condition is set at the lowest level, E = " << lowest
+                              << " MeV, not at the first listed one, E = " << energies[0]
+                              << " MeV (builds before 2026-11-07); formal parameters written by those builds for this "
+                              << "group (param.sav, param.par, --no-transform input) do not apply." << std::endl;
+      }
     }
   } catch (const GSLException &) {
     throw;
@@ -2344,9 +2355,8 @@ void CNuc::TransformOut(const Config &configure) {
   }
   if (!(configure.paramMask & Config::USE_BRUNE_FORMALISM)) {
     // Formal -> Brune by the fixed-point iteration of physics/ brune_from_formal (level_parameters.md section 4), on
-    // the fit values, with GSL's eigensolver (cnuc_split.md section 4).  A level not in the R-matrix keeps its values.
-    phys::FormalToBruneOptions options;  // the engine's 1e-6 MeV and 1000 iterations
-    options.solver = GslSymmetricEigen;
+    // the fit values.  A level not in the R-matrix keeps its values.
+    const phys::FormalToBruneOptions options;  // the engine's 1e-6 MeV and 1000 iterations
     for (int j = 1; j <= this->NumJGroups(); j++)
       for (int la = 1; la <= this->GetJGroup(j)->NumLevels(); la++) {
         ALevel *theLevel = this->GetJGroup(j)->GetLevel(la);

@@ -64,16 +64,6 @@ azure2::physics::ProjectLevels ProjectLevelsFromCNuc(CNuc &filled, const CNucSys
  * CNuc's levels hold at the time of the call (the level's own particle amplitudes and the final state's): CNuc's
  * TransformIn calls it with the Brune (Park) amplitudes of the level after its first loop.
  */
-/*!
- * GSL's eigensolvers (EigenFunc: gsl_eigen_symmv, gsl_eigen_gensymmv, ascending, M-normalized) in the form
- * level_parameters takes them (SymmetricEigenSolver, GeneralizedEigenSolver).  The engine passes these to
- * formal_from_brune and brune_from_formal so that its formal parameters keep GSL's eigenvector signs until the
- * formal sign rule is decided (docs/upgrade/cnuc_split.md section 4).
- */
-azure2::physics::EigenResult GslSymmetricEigen(const std::vector<double> &A, std::size_t n);
-azure2::physics::EigenResult GslGeneralizedEigen(const std::vector<double> &N, const std::vector<double> &M,
-                                                 std::size_t n);
-
 std::vector<azure2::physics::ExternalWidth> ExternalWidthsFromCNuc(CNuc &compound, const CNucSystemMap &map,
                                                                    std::size_t b, const Config &configure);
 

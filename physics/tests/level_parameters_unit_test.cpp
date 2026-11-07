@@ -7,14 +7,16 @@
 //     s_c(l, l) = S_c(E~_l) and s_c(l, m) = [S_c(E~_l)(E - E~_m) - S_c(E~_m)(E - E~_l)]/(E~_l - E~_m), give the same
 //     G(E) = g^T A g at every energy E (Brune, PRC 66, 044611 (2002)); the shift function is non-linear in E.  An
 //     error in N or M, in the rank assignment or in B_c fails it at > 1e-3.  Also for levels listed out of energy
-//     order, for B_c from the lowest level, and for Park input.
+//     order and for Park input.
 //  2. Round trips: observed -> Brune -> observed; Brune -> Park -> Brune; formal -> Brune -> formal (iteration
 //     tolerance 1e-13 MeV).
 //  3. Convention invariance: internal amplitudes -> each convention's columns -> back; the convention matrix is
 //     orthogonal; observed widths written in jj columns give, through level_parameters, the same formal parameters
 //     as the internal columns.
 //  4. Gaps: a jj column dropped, and a block that lacks a channel spin, are reported and refused.
-//  5. The proposals (B_c from the lowest level; largest |gamma| positive) do what they say and are off by default.
+//  5. The formal basis (HANDOFF decision 10): B_c from the lowest level, so the formal parameters do not depend on the
+//     listing order and the lowest level's formal energy is its Brune energy; the largest |gamma| of each formal level
+//     positive; widths too large for the radii refused.
 #include <cmath>
 #include <complex>
 #include <cstdio>
@@ -224,26 +226,48 @@ int main() {
   std::printf("1. Brune -> formal against the level-matrix identity\n");
   const BasisAmplitudes brune = amplitudes_from_observed(sys, 0, own, obs, LevelBasis::Brune, cf);
   check("no warnings", brune.warnings.empty());
-  const std::vector<double> B = boundary_values(sys, 0, E, BoundaryRule::FirstListedLevel, cf);
-  report("B_c = S_c(first listed level)", std::fabs(B[0] - cf(0, 0, E[0]).S) + std::fabs(B[3] - B[0]), 0.0);
+  const std::vector<double> B = boundary_values(sys, 0, E, cf);
+  report("B_c = S_c(lowest level, 16.63, listed second)", std::fabs(B[0] - cf(0, 0, 16.63).S) + std::fabs(B[3] - B[0]), 0.0);
   const LevelSet formal = formal_from_brune(sys, 0, E, brune.gamma, B, cf);
   report("G(E) formal vs Brune, 5 energies (relative)", GDiff(sys, cf, E, brune.gamma, formal.E, formal.gamma, B), 1e-12);
-  const std::vector<double> Blow = boundary_values(sys, 0, E, BoundaryRule::LowestLevel, cf);
-  report("B_c lowest level = S_c(16.63)", std::fabs(Blow[0] - cf(0, 0, 16.63).S), 0.0);
-  const LevelSet formalLow = formal_from_brune(sys, 0, E, brune.gamma, Blow, cf, FormalSignRule::LargestPositive);
-  report("G(E) with B_c from the lowest level", GDiff(sys, cf, E, brune.gamma, formalLow.E, formalLow.gamma, Blow), 1e-12);
-  check("formal energies depend on B (the proposal changes parameters)", std::fabs(formalLow.E[0] - formal.E[0]) > 1e-6);
   {
+    // B_c = S_c(E~_low) makes E~_low an eigenvalue of the formal problem (Brune 2002): the level keeps its energy.
+    report("lowest level: formal E = Brune E (relative)", std::fabs(formal.E[1] - E[1]) / E[1], 1e-14);
     bool positive = true;
     for (std::size_t l = 0; l < nl; l++) {
       std::size_t big = 0;
       for (std::size_t k = 1; k < nc; k++)
-        if (std::fabs(formalLow.gamma[l * nc + k]) > std::fabs(formalLow.gamma[l * nc + big])) big = k;
-      positive = positive && formalLow.gamma[l * nc + big] > 0.0;
+        if (std::fabs(formal.gamma[l * nc + k]) > std::fabs(formal.gamma[l * nc + big])) big = k;
+      positive = positive && formal.gamma[l * nc + big] > 0.0;
     }
-    check("LargestPositive: largest |gamma| of each formal level is positive", positive);
-    Convention def;
-    check("proposals off by default", def.boundary == BoundaryRule::FirstListedLevel && def.formal_sign == FormalSignRule::AsComputed);
+    check("largest |gamma| of each formal level is positive", positive);
+    // The same block listed in energy order (16.63, 18.15, 19.07): the same formal levels, permuted.  With B_c at the
+    // first listed level the formal energies differ.
+    const std::vector<std::size_t> order = {1, 0, 2};
+    std::vector<double> Es(nl), gs(nl * nc);
+    for (std::size_t l = 0; l < nl; l++) {
+      Es[l] = E[order[l]];
+      for (std::size_t k = 0; k < nc; k++) gs[l * nc + k] = brune.gamma[order[l] * nc + k];
+    }
+    const std::vector<double> Bs = boundary_values(sys, 0, Es, cf);
+    const LevelSet fs = formal_from_brune(sys, 0, Es, gs, Bs, cf);
+    std::vector<double> back(nl * nc), backE(nl);
+    for (std::size_t l = 0; l < nl; l++) {
+      backE[order[l]] = fs.E[l];
+      for (std::size_t k = 0; k < nc; k++) back[order[l] * nc + k] = fs.gamma[l * nc + k];
+    }
+    report("listing order: B_c unchanged", MaxRel(Bs, B), 0.0);
+    report("listing order: formal energies (relative)", MaxRel(backE, formal.E), 1e-13);
+    report("listing order: formal amplitudes, signs included (relative to max)", MaxRel(back, formal.gamma), 1e-13);
+    std::vector<double> wide = brune.gamma;
+    for (double &g : wide) g *= 30.0;
+    bool threw = false;
+    try {
+      formal_from_brune(sys, 0, E, wide, B, cf);
+    } catch (const std::domain_error &) {
+      threw = true;
+    }
+    check("widths too large for the radii (M indefinite): refused (domain_error)", threw);
   }
   {
     const BasisAmplitudes park = amplitudes_from_observed(sys, 0, own, obs, LevelBasis::Park, cf);
@@ -270,7 +294,7 @@ int main() {
     report("formal -> Brune: amplitudes (up to the sign of a level)", MaxRelUpToLevelSign(b2.gamma, brune.gamma, nc), 1e-11);
     const LevelSet f2 = formal_from_brune(sys, 0, b2.E, b2.gamma, B, cf);
     report("formal -> Brune -> formal: energies", MaxRel(f2.E, formal.E), 1e-12);
-    report("formal -> Brune -> formal: amplitudes (up to level sign)", MaxRelUpToLevelSign(f2.gamma, formal.gamma, nc), 1e-11);
+    report("formal -> Brune -> formal: amplitudes, signs included", MaxRel(f2.gamma, formal.gamma), 1e-11);
     const LevelSet b3 = brune_from_formal(sys, 0, formal.E, formal.gamma, B, cf);  // the engine's tolerance 1e-6 MeV
     report("formal -> Brune at the engine's tolerance (1e-6 MeV): energies", MaxRel(b3.E, E), 1e-6);
   }
@@ -319,7 +343,7 @@ int main() {
     const InternalParameters ip = level_parameters(sys, 0, withBasis, cols, pobs, cf);
     report(nc_.first + ": Brune amplitudes from the project's widths", MaxRel(ip.basis_gamma, brune.gamma), 1e-14);
     report(nc_.first + ": formal energies", MaxRel(ip.E, formal.E), 1e-13);
-    report(nc_.first + ": formal amplitudes (up to level sign)", MaxRelUpToLevelSign(ip.gamma, formal.gamma, nc), 1e-12);
+    report(nc_.first + ": formal amplitudes, signs included", MaxRel(ip.gamma, formal.gamma), 1e-12);
     if (conv.coupling == CouplingScheme::JJ) {
       double mixed = 0.0;
       for (std::size_t m = 0; m < T.num_project(); m++)
@@ -394,47 +418,21 @@ int main() {
     one.energy_tolerance_MeV = 1e-13;
     one.max_iterations = 1;
     const LevelSet stuck = brune_from_formal(sys, 0, formal.E, formal.gamma, B, cf, one);
-    // Level 0 is the first listed one, where B_c = S_c(E): its formal and Brune energies coincide, the first
-    // iteration moves nothing and it converges at once.  The other two stop after one iteration.
-    bool kept = stuck.status[0] == LevelSet::Status::Converged && stuck.residual_MeV[0] == 0.0, shifts = true;
-    for (std::size_t l = 1; l < nl; l++)
+    // Level 1 is the lowest one, where B_c = S_c(E): its formal and Brune energies coincide, the first iteration
+    // moves it by rounding only and it converges at once.  The other two stop after one iteration.
+    bool kept = stuck.status[1] == LevelSet::Status::Converged && stuck.residual_MeV[1] == 0.0, shifts = true;
+    for (std::size_t l : {std::size_t(0), std::size_t(2)})
       kept = kept && stuck.status[l] == LevelSet::Status::NotConverged && stuck.residual_MeV[l] > 1e-13 &&
           stuck.E[l] == formal.E[l];
     for (std::size_t l = 0; l < nl; l++)
       for (std::size_t k = 0; k < nc; k++)
-        shifts = shifts && ((l > 0 && k < 3) == (stuck.boundary_shift[l * nc + k] != 0.0));
-    check("not converged: status, step > tolerance, formal values kept (levels 1, 2; level 0 converged)", kept);
+        shifts = shifts && ((l != 1 && k < 3) == (stuck.boundary_shift[l * nc + k] != 0.0));
+    check("not converged: status, step > tolerance, formal values kept (levels 0, 2; level 1 converged)", kept);
     check("boundary shifts of the last iteration: particle channels of the moving levels only", shifts);
     const LevelSet b3 = brune_from_formal(sys, 0, formal.E, formal.gamma, B, cf);
     bool converged = true;
     for (std::size_t l = 0; l < nl; l++) converged = converged && b3.status[l] == LevelSet::Status::Converged;
     check("converged levels report Converged", converged);
-
-    int calls = 0;
-    const GeneralizedEigenSolver counting = [&](const std::vector<double> &N, const std::vector<double> &M, std::size_t n) {
-      calls++;
-      return generalized_symmetric_eigen(N, M, n);
-    };
-    const LevelSet viaOption = formal_from_brune(sys, 0, E, brune.gamma, B, cf, FormalSignRule::AsComputed, counting);
-    check("solver option: called once, same result bit for bit", calls == 1 && viaOption.E == formal.E && viaOption.gamma == formal.gamma);
-    const GeneralizedEigenSolver failing = [](const std::vector<double> &, const std::vector<double> &, std::size_t) {
-      return EigenResult();
-    };
-    bool threw = false;
-    try {
-      formal_from_brune(sys, 0, E, brune.gamma, B, cf, FormalSignRule::AsComputed, failing);
-    } catch (const std::domain_error &) {
-      threw = true;
-    }
-    check("solver option: a failed solve is refused (domain_error)", threw);
-    FormalToBruneOptions viaSym;
-    int symCalls = 0;
-    viaSym.solver = [&](const std::vector<double> &A, std::size_t n) {
-      symCalls++;
-      return symmetric_eigen(A, n);
-    };
-    const LevelSet b4 = brune_from_formal(sys, 0, formal.E, formal.gamma, B, cf, viaSym);
-    check("symmetric solver option: used, same result bit for bit", symCalls > 0 && b4.E == b3.E && b4.gamma == b3.gamma);
   }
 
   std::printf("%s: %ld checks, %d failure(s)\n", failures ? "FAIL" : "PASS", checks, failures);

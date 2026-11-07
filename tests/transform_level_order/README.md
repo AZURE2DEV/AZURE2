@@ -36,13 +36,20 @@ every width fixed):
 
 - (a) `asc` and `desc` give the same total capture cross section (51 energies, 1e-10);
 - (b) `desc`: `param.par`'s `energy_1` is the first-listed level's formal energy
-  (3.791 exactly, since the boundary condition is set at the first-listed
-  level) and `energy_2` the 3.491 level's (3.4888); `asc` unchanged;
+  and `energy_2` the 3.491 level's, and they equal `asc`'s two formal energies
+  exchanged (3.7921077 and 3.491, to the 10⁻⁷ MeV printed): the boundary
+  condition is set at the lowest level whatever the listing order (HANDOFF
+  decision 10), so the lowest level's formal energy is 3.491 exactly; `asc`
+  unchanged;
 - (c) `desc`: `parameters.out` lists the levels in file order;
 - (d) a fit of `desc_fit` against data made from `desc` with the 3.491 level's
   formal energy lowered by 0.02 MeV (through a parameter file, so the truth
   lies in the fit's own one-parameter space on every build) moves the free
   level to the truth (3.4712) and keeps the fixed one at 3.791, chi2 ~ 1e-8.
+
+Builds from 2026-10-27 to 2026-11-07 set the boundary condition at the
+first-listed level: (b) `energy_1` = 3.791, `energy_2` = 3.4888, not `asc`'s
+levels; (d) took its truth at 3.4688.
 
 Old build: (b) `energy_1` = 3.4888, (c) 3.491 listed first, (d) the fixed flag
 sat on the 3.491 level, the fit moved the 3.791 level to 3.7912 and chi2
