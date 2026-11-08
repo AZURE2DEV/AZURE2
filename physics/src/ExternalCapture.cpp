@@ -8,12 +8,15 @@
 namespace azure2 {
 namespace physics {
 
+double bound_state_coefficient(double radius_fm, double reduced_mass_u) {
+  return 2.0 * radius_fm * reduced_mass_u * kAtomicMassUnit_MeV / std::pow(kHbarC_MeV_fm, 2.0);
+}
+
 double bound_state_normalization(double n0, const std::vector<BoundChannel> &channels) {
   // Eq. (1), in the engine's order of operations (CNuc.cpp, the six copies before step 4).
   double n = n0;
   for (const BoundChannel &c : channels)
-    n += 2.0 * c.radius_fm * c.reduced_mass_u * kAtomicMassUnit_MeV / std::pow(kHbarC_MeV_fm, 2.0) *
-        std::pow(c.gamma, 2.0) * c.nf_integral_fm;
+    n += bound_state_coefficient(c.radius_fm, c.reduced_mass_u) * std::pow(c.gamma, 2.0) * c.nf_integral_fm;
   return n;
 }
 

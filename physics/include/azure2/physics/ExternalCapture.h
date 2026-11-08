@@ -30,6 +30,10 @@ struct BoundChannel {
   double nf_integral_fm = 0.0;   ///< I_fc = int_a^inf [W(2 kappa r) / W(2 kappa a)]^2 dr (fm); 0 for a channel without
 };
 
+/// 2 mu_c a_c / hbar^2 (MeV^-1 fm^-1) of a channel of radius a_c (fm) and reduced mass mu_c (u): the coefficient of
+/// gamma_fc^2 I_fc in N_f, so dN_f / d(gamma_fc) = 2 bound_state_coefficient gamma_fc I_fc.
+double bound_state_coefficient(double radius_fm, double reduced_mass_u);
+
 /// N_f = n0 + sum_c (2 mu_c a_c / hbar^2) gamma_fc^2 I_fc (dimensionless); n0 = 1 (Brune) or Park's J_f.
 double bound_state_normalization(double n0, const std::vector<BoundChannel> &channels);
 

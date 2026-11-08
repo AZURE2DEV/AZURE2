@@ -190,7 +190,6 @@ class CNuc {
   /// unit of chi-squared, so the wall is steep on the scale of J but smooth.
   static constexpr double kParkNormScale = 1.0e-3;
   /// External reduced width amplitude for one channel.
-  complex CalcExternalWidth(JGroup *, ALevel *, AChannel *, bool, const Config &);
 
   // -- parameter transformations --------------------------------------------
   /// Observed widths and energies to formal R-matrix parameters. Returns false

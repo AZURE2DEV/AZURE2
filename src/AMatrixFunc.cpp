@@ -8,6 +8,7 @@
 #include "AZUREGrad.h"
 #include "Decay.h"
 #include "KGroup.h"
+#include "azure2/physics/ExternalCapture.h"
 #include "KLGroup.h"
 #include "MGroup.h"
 #include "Interference.h"
@@ -1257,7 +1258,7 @@ void AMatrixFunc::TBarAdjoint(EPoint *energyPoint, const TMatrixCotangent &bar, 
         accum.AddGamma(jf, lf, fc, std::real(conj(eb) * (sqrtNF * conv * effAmp)));
 
         // sqrtNF couples to every NF channel d of the final level:
-        //   nFSum = 1 + sum_d A_d gamma_d^2,  A_d = 2 chRad redMass uconv/hbarc^2 NF_d,
+        //   nFSum = 1 + sum_d A_d gamma_d^2,  A_d = 2 chRad redMass uconv/hbarc^2 NF_d (physics/ExternalCapture.h),
         //   sqrtNF = nFSum^{-1/2},  d sqrtNF / d gamma_d = -A_d gamma_d sqrtNF^3.
         // Park: sqrtNF = (J + sum_d A_d gamma_d^2)^{-1/2} with J = 1 - sum_d gamma_d^2 S'_d
         // over the particle channels (CNuc::CalcShiftFunctions), so every particle
@@ -1269,7 +1270,8 @@ void AMatrixFunc::TBarAdjoint(EPoint *energyPoint, const TMatrixCotangent &bar, 
         int numD = parkFinal ? jgf->NumChannels() : numNF;
         for (int d = 1; d <= numD; d++) {
           PPair *pd = compound()->GetPair(jgf->GetChannel(d)->GetPairNum());
-          double Ad = (d <= numNF) ? 2.0 * pd->GetChRad() * pd->GetRedMass() * uconv / (hbarc * hbarc) * finalLevel->GetNFIntegral(d)
+          double Ad = (d <= numNF) ? azure2::physics::bound_state_coefficient(pd->GetChRad(), pd->GetRedMass()) *
+                                         finalLevel->GetNFIntegral(d)
                                    : 0.0;
           if (parkFinal && jgf->GetChannel(d)->GetRadType() == 'P' && pd->GetPType() == 0)
             Ad -= finalLevel->GetShiftDerivative(d);
