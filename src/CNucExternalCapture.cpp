@@ -110,14 +110,16 @@ void CNuc::SetUpECFinalBlocks(const Config &configure) {
   for (std::size_t b = 0; b < record->structure.system.num_blocks(); b++) {
     const std::vector<int> &levels = record->structure.map.levelOfBlockLevel[b];
     // The lowest level of a block (B_c = S_c at its energy) has formal parameters equal to its Brune ones: the
-    // iteration of brune_from_formal moves B_c by S_c(E) - B_c = 0 (level_parameters.md section 3).  So does the only
-    // level of a block.  Only a final state above the lowest level of its block needs its Brune amplitude.
+    // iteration of brune_from_formal moves B_c by S_c(E) - B_c = 0 (level_parameters.md section 3), as long as its
+    // energy stays there.  So does the only level of a block.
     JGroup *group = this->GetJGroup(record->structure.map.groupOfBlock[b]);
     std::size_t lowest = 0;
     for (std::size_t lb = 1; lb < levels.size(); lb++)
       if (group->GetLevel(levels[lb])->GetE() < group->GetLevel(levels[lowest])->GetE()) lowest = lb;
+    // A lowest-level final state whose energy a fit may move leaves the energy where B_c was taken, and its formal
+    // amplitude then differs from its Brune one at second order: it is recomputed too (external_capture.md section 4).
     for (std::size_t lb = 0; lb < levels.size(); lb++)
-      if (lb != lowest && group->GetLevel(levels[lb])->IsECLevel()) {
+      if ((lb != lowest || !group->GetLevel(levels[lb])->EnergyFixed()) && group->GetLevel(levels[lb])->IsECLevel()) {
         record->blocks.push_back(b);
         break;
       }
