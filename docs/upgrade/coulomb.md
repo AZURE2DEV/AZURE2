@@ -119,9 +119,14 @@ eight threads; `invalid_argument` cases. Outside physics/, a reference test comp
 value) and times both. Speed decides the engine part: `ECIntegral` spends about 85 % of its time in GSL's U.
 
 **Engine (step 3b (i), second part, after the timing).** `WhitFunc` becomes a thin adapter over `whittaker` /
-`whittaker_scaled` (it keeps η_b and ρ from `Kinematics`); `ShftFunc`'s bound branch takes ρW′/W instead of a
-numerical derivative of W; `CoulombTable`, `ThmNumerics` and `ThmFunc` call the same function; GSL's U leaves the
-engine. Bound-state outputs (ANC ↔ γ conversions, N_f, external capture to bound states, sub-threshold shifts) move
+`whittaker_scaled` (it keeps η_b and ρ from `Kinematics`); `ShftFunc`'s bound branch takes ρW′/W in place of
+`CoulombTable::ExactBound` (GSL's U ratio, trusted for η_b ≤ 1000 and η_b ≤ 50 or z ≥ 0.05, linearly interpolated
+to S(0) closer to threshold; the numerical derivative of W is only the opt-in `AZURE_BOUND_SHIFT_NUMERICAL` route).
+The new function holds 10⁻¹² over that band and below it, so whether the interpolation band narrows (outputs near
+threshold move) is decided with its own comparison. `CoulombTable`, `ThmNumerics` and `ThmFunc` call the same
+function; GSL's U leaves the engine. In the data path `ECIntegral` evaluates W at every radius its adaptive rule
+samples (13× GSL's time per call); the rate path already tabulates the final-state W once per pathway on a fixed
+grid, and the per-integral table of step 3b (ii) does the same for the data path. Bound-state outputs (ANC ↔ γ conversions, N_f, external capture to bound states, sub-threshold shifts) move
 in their last digits; the 179-project comparison classifies every change, and the T1–T3 truth checks must hold.
 
 ## 2. Channel functions
