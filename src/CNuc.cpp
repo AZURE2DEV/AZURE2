@@ -3153,10 +3153,15 @@ void CNuc::SetUpECFinalBlocks(const Config &configure) {
       !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC), !!(configure.paramMask & Config::USE_RMC_FORMALISM)});
   for (std::size_t b = 0; b < record->structure.system.num_blocks(); b++) {
     const std::vector<int> &levels = record->structure.map.levelOfBlockLevel[b];
-    if (levels.size() < 2) continue;  // one level: its formal amplitude is its Brune one (a 1 x 1 eigenproblem)
+    // The lowest level of a block (B_c = S_c at its energy) has formal parameters equal to its Brune ones: the
+    // iteration of brune_from_formal moves B_c by S_c(E) - B_c = 0 (level_parameters.md section 3).  So does the only
+    // level of a block.  Only a final state above the lowest level of its block needs its Brune amplitude.
     JGroup *group = this->GetJGroup(record->structure.map.groupOfBlock[b]);
-    for (int la : levels)
-      if (group->GetLevel(la)->IsECLevel()) {
+    std::size_t lowest = 0;
+    for (std::size_t lb = 1; lb < levels.size(); lb++)
+      if (group->GetLevel(levels[lb])->GetE() < group->GetLevel(levels[lowest])->GetE()) lowest = lb;
+    for (std::size_t lb = 0; lb < levels.size(); lb++)
+      if (lb != lowest && group->GetLevel(levels[lb])->IsECLevel()) {
         record->blocks.push_back(b);
         break;
       }
