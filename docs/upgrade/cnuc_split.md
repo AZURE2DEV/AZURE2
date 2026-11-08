@@ -393,3 +393,89 @@ the engine without the level-sign allowance (same solver, same rule), so a sign 
 and after on all 179 `.azr` under `tests/` in three bases, every changed output file classified: (a) formal parameters
 (B_c, sign), observables ≤ 10⁻¹⁰ relative; (b) last digits from the channel-energy order and the call sequence; (c)
 anything else stops the step.
+
+## 8. Step 2: design
+
+Step 2 gives the observed quantities of a level one definition, computed from its total amplitudes, and settles which
+amplitude of an external-capture final state the formal basis uses. It changes no observable in the Brune and Park
+bases beyond rounding; in the formal basis it changes the external-capture observables of projects whose final state
+shares its J^π group with other levels (below).
+
+**The quantities.** For a level λ of block b with Brune (or Park) energy Ẽ_λ (MeV, E_x) and, in each channel c, the
+total amplitude γ^tot_λc = γ^int_λc + γ^ext_λc (MeV^½; γ^ext complex, non-zero only for a photon channel with external
+capture, from `CNuc::CalcExternalWidth` until step 4), with N_λ = 1 + Σ_{c particle} (γ^int_λc)² S′_c(Ẽ_λ) (Brune) or
+N_λ = 1 (Park):
+
+    W_λc = s_λc · 2 P_c(Ẽ_λ) |γ^tot_λc|² / N_λ,      s_λc = sign Re γ^tot_λc                                       (8.1)
+
+with P_c the width factor of `ChannelValues` (`level_parameters.md` §1). What W is, and the value reported in the
+`<levels>` form (the form `amplitudes_from_observed` reads back):
+
+| channel | W | reported value |
+|---|---|---|
+| particle, E_c > 0 | Γ_λc (MeV) | Γ (eV) = 10⁶ W, signed |
+| particle, E_c < 0 | C²_λc (fm⁻¹), P = P^b | C (fm^−½) = s |W|^½ |
+| particle, E_c = 0 or P = 0 | 0 | 0 |
+| particle with the amplitude flag (gammaIsRWA) | as above | γ̃ (MeV^½): γ^int (Brune), γ^int / J^½ (Park) |
+| photon | Γ_γ (MeV), P = (E_γ/ħc)^{2L+1} (1 with `--use-rmc`) | Γ_γ (eV), signed |
+| photon to the level's own state, M1 / E2 (static moment) | μ² (μ_N²) / (Q · 100 (αħc)^½)², sign reversed for half-integer J | μ (μ_N) / Q (b), signed |
+| beta (Fermi, Gamow–Teller) | B = Re γ^tot (Brune), Re γ^tot / J^½ (Park) | B |
+
+This is Eq. (2.1)–(2.2) of `level_parameters.md` read backwards, with the external part added inside the square.
+Function: `observed_levels(System, b, Ẽ, γ^int, γ^ext, is_amplitude, basis, cf)` in `level_parameters` → per (λ, c)
+the kind of the row, W, the reported value; per level N_λ. `observed_from_amplitudes` (the inverse used by the tests)
+becomes the same function with γ^ext = 0. Validity as in §2: N_λ > 0 (Brune), J_λ > 0 (Park).
+
+**The five copies and where each goes.**
+
+| copy (`CNuc.cpp` at 9d50667f) | what it computes | after step 2 |
+|---|---|---|
+| `TransformIn` | Γ, C, μ, Q → γ̃ | already `amplitudes_from_observed` (step 1); unchanged |
+| `TransformOut`, second loop (2423–2516) | W per channel (`SetBigGamma`), γ^ext (`SetExternalGamma`) | `CNuc::ObservedWidths` calls `observed_levels`; stores W and the reported value |
+| `GetTransformParams` (2796–2881) | the reported values from W (√, signs, μ, Q, 10⁶) | reads the stored reported values |
+| `PrintTransformParams` (2630–2711) | the same, printed | reads W and the stored values; prints as today (C unsigned) |
+| `CheckRadiativeWidths` (2523–2624) | Γ_p and Γ_γ from the fit amplitudes (formal amplitudes read as Brune; no N in Γ_γ; no external part) | the Brune values of the start parameters (as `TransformOut`, without its messages), then `ObservedWidths`; the ratio from the stored W |
+
+`ConvertAmplitudeBasis` (3100–3150) computes Park's J a sixth time; it calls `park_from_brune` / `brune_from_park` on
+each block's (E, γ) of the parameter vector and scales the errors by the J^½ these return. `TransformOut` is split into
+the Brune values (`brune_from_formal`, with the messages) and `ObservedWidths`. Levels outside the R-matrix (an
+external-capture final state in a group of its own) have no block of the R-matrix System; the adapter gets a content
+`CNucSystemContent::AllGroups` that lists every group and level, used only for the observed quantities.
+
+**External capture in the formal basis.** The capture amplitude to a final state f is proportional to f's asymptotic
+normalization, C_f ∝ γ_fc N_f^{−½} with N_f the bound-state normalization (`SqrtNFFactor`), because outside a_c the
+bound state is C_f W_l(2κr). That relation holds for the amplitude of f's own pole: Brune's γ̃_fc (B_c = S_c(Ẽ_f)) is
+the residue of the full R-matrix at Ẽ_f, so C_f follows from γ̃_f in every basis. A formal amplitude γ_fc (constant
+B_c = S_c(Ẽ_low)) equals γ̃_fc only when f is the only level of its block (then the eigenproblem is 1 × 1); in a block of
+several levels it is a mixture of the block's poles, and using it for C_f describes a different bound state. The
+engine today takes γ_f as the cross section's final-state amplitude in each basis: the formal one in the formal basis
+(`AMatrixFunc.cpp` 560, 1193; `RMatrixFunc.cpp` 392; N_f from the same amplitude), and in `TransformIn` γ^ext of a later
+group sees the formal amplitude of a final state in an earlier one (`level_parameters.md` §6), while `TransformOut`
+uses the Brune one. On `tests/beam_profile_kernel` the 0⁺ ground state and 6.049 MeV state share a group of four
+levels, and the 2⁺ 6.917 MeV state one of several: the two bases disagree by 1.5 × 10⁻² to 9.1 in those captures.
+
+Decision: **the final state enters external capture with its Brune (observed) amplitude in every basis**, which is what
+the Brune and Park bases already do. In the formal basis this needs Brune's γ̃_f at the current formal parameters of
+f's block, i.e. `brune_from_formal` of that block at each evaluation; its own amplitude γ̃_f and N_f computed from it
+replace γ_f and its N_f in the three cross-section sites and in `CalcExternalWidth`. It is stored on the final state
+(`ALevel::ECGamma`, set where the fit parameters are set, `FillCompoundFromParams`; equal to the fit amplitude in the
+Brune and Park bases and for a final state alone in its block, so those stay bit-identical), from a read-only setup
+record of the blocks that hold a final state (built in `Initialize`, shared by the clones). `TransformIn` computes γ^ext
+of every group before any group is made formal. The formal parameters of a block (E, γ, B) are unchanged; only what the
+capture term reads from the final state changes.
+
+**Tests.** (1) `physics_level_parameters_unit`: `observed_levels` against hand values for each row of the table (a
+level with a bound channel, a static M1 and E2 moment at half-integer J, a beta channel, an external part with
+Re and Im), and observed → Brune → observed and observed → Park → observed with γ^ext = 0 (as before). A wrong N, a
+dropped |·|² of the complex amplitude or a wrong sign rule fails it at order 1. (2) Brune vs formal: on
+`tests/beam_profile_kernel` the five captures (111 energies each) and the `parameters.out` photon widths agree between
+`--no-brune` and the default to ≤ 10⁻⁹ relative after the change (they differ by up to 9.1 before) — the independent
+check, since the two bases are different parametrizations of one R-matrix; a ctest runs it (two engine runs, 41
+energies). (3) Engine before (9d50667f) and after on all 179 `.azr` × three bases: Brune and Park ≤ 10⁻⁹ or explained;
+formal: (a) external capture to a final state that shares its group, expected to move, each listed; (b) rounding;
+(c) anything else stops the step. `run.log` of `CheckRadiativeWidths` changes where a flagged level's ratio now
+includes N_λ and γ^ext (listed).
+
+**Not in step 2.** N_f^½ itself and γ^ext stay engine code (step 4); the formal-basis evaluation pays one
+`brune_from_formal` per final-state block per evaluation (measured on T1–T3, which have no such block, and on
+`beam_profile_kernel`).
