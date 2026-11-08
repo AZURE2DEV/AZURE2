@@ -13,10 +13,13 @@ here is fetched at build time.
 | `src/Coulomb.cpp`, `src/methods.h`, `src/method_coulsm.cpp`, `src/method_coul.cpp`, `src/method_coulfg.cpp` | same | `libcoulomb/src/coulomb.cpp`, `methods.h`, `method_*.cpp`, adapted (below) |
 | `coulcc/include/coulcc.h`, `coulcc/src/` | `coulcc-cpp`, 37f0f9b4d40c7dcfaf1827890d16cd14d50b37d1 (2026-11-07) | `coulcc/include/`, `coulcc/src/`, byte for byte |
 | `src/method_coulcc.cpp` | — | written here (adaptor) |
+| `include/azure2/physics/coulomb/Whittaker.h`, `src/Whittaker.cpp` | — | written here (2026-11-08; `docs/upgrade/coulomb.md` §1.4) |
+| `../tests/data/whittaker.csv`, `../tests/data/make_whittaker_reference.py` | — | written here (mpmath 1.4.1, 40 digits) |
 | `../tests/data/coulomb.csv`, `../tests/data/make_reference.py` | `azure2-prereqs`, as above | `tests/data/coulomb.csv`, `tests/make_reference.py` (mpmath 1.4.1, 40 digits) |
 
 Not taken: pycoulomb's GSL method and its Whittaker functions (both need GSL, which physics/ does not link;
-`docs/upgrade/coulomb.md` §1.3–1.4), `coulomb_range`, the Python module, the Numerov hybrid model, `coulcc.f`.
+`docs/upgrade/coulomb.md` §1.3–1.4; the Whittaker functions here are written anew from the integral representation
+of U, with pycoulomb's interface), `coulomb_range`, the Python module, the Numerov hybrid model, `coulcc.f`.
 
 ## Local changes
 
@@ -49,6 +52,14 @@ agree to 3.0 × 10⁻¹³. σ_l agrees with mpmath to 7.1 × 10⁻¹⁵ rad. Eig
 orders give the same bits as one thread. COULCC's own limits (found when it was translated; HANDOFF 2026-11-07): for
 non-integer 2λ and ρ < ½, G loses accuracy (not reachable here, λ = l), and for integer 2λ and ρ < ½ the origin series
 is good to 8 × 10⁻¹¹.
+
+## Accuracy of the Whittaker functions (physics_whittaker, whittaker_gsl tests)
+
+W_l(ρ) = W_{−η_b, l+½}(2ρ) and ρW′/W against mpmath at 40 digits on 1162 points (l = 0–10; η_b = 0–1000;
+ρ = 10⁻⁴–200 with η_b ρ ≤ 2000), GCC 11.5, x86-64, `-O3`: W 2.1 × 10⁻¹² (scaled form at η_b = 1000, where ε |ln W|
+is the limit; 1.4 × 10⁻¹³ on the 1057 points inside the double range), ρW′/W 3.3 × 10⁻¹³. GSL's U as the engine
+calls it (`gsl_sf_hyperg_U_e10_e`): 6.9 × 10⁻⁹, no value at 10 points. Time per call on l = 0–3, η_b = 0–20,
+ρ = 0.1–20: 4.8 µs (W and ρW′/W), GSL 0.36 µs (W only).
 
 ## Licensing (facts, from pycoulomb's `LICENSING_NOTES.md`)
 
