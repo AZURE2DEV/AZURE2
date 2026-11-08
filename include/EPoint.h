@@ -529,10 +529,11 @@ class EPoint {
   /// With includeSubPoints false the sub-points are left alone (their energies are updated, and their values recomputed, separately).
   /// With shareWithMapped true (setup, grid re-placement) the points mapped onto this one (EData::MapData) are given
   /// the same tables; RecalcEDependentValues passes false (see there).
-  /// The rows of the open and closed particle channels are read from `table` (docs/upgrade/channel_table.md) when it
-  /// holds them, and otherwise computed (ChannelTable::Compute), once per (pair, l, E_c) of the point.
+  /// The rows of the open and closed particle channels are read from the tables of `rows` (docs/upgrade/
+  /// channel_table.md) when one holds them, and otherwise computed (ChannelTable::Compute), once per (pair, l, E_c)
+  /// of the point; rows->used, when set, receives every row used.
   void CalcEDependentValues(CNuc *, const Config &, bool includeSubPoints = true, bool shareWithMapped = true,
-                            const ChannelTable *table = nullptr);
+                            const ChannelRowSource *rows = nullptr);
   /// The keys (pair, l, E_c) of the channel-table rows CalcEDependentValues reads for this point and, with
   /// includeSubPoints, its sub-points: the same blocks, channels and channel energies.
   void ChannelKeys(CNuc *, std::vector<ChannelTable::Key> &, bool includeSubPoints = true);
@@ -541,7 +542,7 @@ class EPoint {
   /// Recompute those at the current, possibly shifted, energy.  Writes this point (and its sub-points) only, never the
   /// points mapped onto it: on an energy shift each of those is re-energised on its own (ESegment::
   /// UpdatePointEnergyWithShift), possibly at the same time on another thread.
-  void RecalcEDependentValues(CNuc *, const Config &, bool includeSubPoints = true);
+  void RecalcEDependentValues(CNuc *, const Config &, bool includeSubPoints = true, const ChannelRowSource *rows = nullptr);
   /// Take the energy-dependent values (not the angle-dependent Coulomb amplitude) from a point at the same energy; false if the energies differ.
   bool CopyEDependentValuesFrom(const EPoint &);
   /// Empties the per-JGroup rows of the energy-dependent arrays, keeping their storage.

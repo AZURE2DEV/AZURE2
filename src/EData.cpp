@@ -2366,7 +2366,9 @@ int EData::CalcEDependentValues(CNuc *theCNuc, const Config &configure) {
       return -1;
     }
   }
-  const ChannelTable *table = channelTable_.get();
+  ChannelRowSource rows;
+  rows.tables.push_back(channelTable_.get());
+  const ChannelRowSource *table = &rows;
   for (ESegmentIterator segment = GetSegments().begin(); segment < GetSegments().end(); segment++) {
     bool localStop = false;
 #pragma omp parallel for shared(localStop, configure)
@@ -3573,7 +3575,9 @@ int EData::InitializeComponentSegments(CNuc *theCNuc, const Config &configure) {
       }
     }
   }
-  const ChannelTable *componentTable = channelTable_.get();
+  ChannelRowSource componentRows;
+  if (channelTable_) componentRows.tables.push_back(channelTable_.get());
+  const ChannelRowSource *componentTable = &componentRows;
   for (auto &componentSegment : componentSegments_) {
     bool localStop = false;
 #pragma omp parallel for shared(localStop, configure)
@@ -5452,6 +5456,8 @@ void EData::FillEnergyShiftsFromParams(const vector_r &p, EData *data, CNuc *the
     }
 
     if (!toUpdate.empty()) {
+      if (theCNuc && configure)
+        for (ESegment *s : toUpdate) s->BeginShiftRefill(theCNuc, *configure);
       // One work item per point (with its sub-points), largest first, so a
       // segment with thousands of sub-points per point does not serialize.
       // A point mapped onto another (EData::MapData) copies its values from
@@ -5483,6 +5489,8 @@ void EData::FillEnergyShiftsFromParams(const vector_r &p, EData *data, CNuc *the
 #pragma omp parallel for schedule(dynamic, 1)
         for (int q = 0; q < (int)work.size(); q++) work[q].seg->UpdatePointGroupEnergyWithShift(work[q].i, theCNuc, configure);
       }
+      if (theCNuc && configure)
+        for (ESegment *s : toUpdate) s->CommitShiftTable(theCNuc, *configure);
     }
 
     // Critical fix: Rebuild energy-based mapping system after energy shifts

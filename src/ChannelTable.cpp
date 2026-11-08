@@ -100,6 +100,26 @@ std::shared_ptr<const ChannelTable> ChannelTable::Build(CNuc *cnuc, const Config
   return table;
 }
 
+std::shared_ptr<const ChannelTable> ChannelTable::FromRows(CNuc *cnuc, const Config &configure,
+                                                           std::vector<std::pair<Key, Row>> rows) {
+  auto table = std::make_shared<ChannelTable>();
+  std::sort(rows.begin(), rows.end(), [](const std::pair<Key, Row> &a, const std::pair<Key, Row> &b) { return a.first < b.first; });
+  rows.erase(std::unique(rows.begin(), rows.end(), [](const std::pair<Key, Row> &a, const std::pair<Key, Row> &b) { return a.first == b.first; }),
+             rows.end());
+  table->keys_.reserve(rows.size());
+  table->rows_.reserve(rows.size());
+  for (const auto &kr : rows) {
+    table->keys_.push_back(kr.first);
+    table->rows_.push_back(kr.second);
+  }
+  table->pairSignatures_ = PairSignatures(cnuc, configure);
+  return table;
+}
+
+bool ChannelTable::SameSystem(CNuc *cnuc, const Config &configure) const {
+  return pairSignatures_ == PairSignatures(cnuc, configure);
+}
+
 const ChannelTable::Row *ChannelTable::Find(int pair, int l, double energy) const {
   const Key k{pair, l, energy};
   auto it = std::lower_bound(keys_.begin(), keys_.end(), k);

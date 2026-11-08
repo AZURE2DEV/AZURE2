@@ -1000,6 +1000,41 @@ void ESegment::UpdatePointEnergiesWithShift(CNuc *theCNuc, const Config *configu
   for (int i = 0; i < NumPoints(); i++) UpdatePointEnergyWithShift(i, theCNuc, configure);
 }
 
+std::vector<double> ESegment::ShiftState() const {
+  std::vector<double> state{this->GetEnergyShift(), this->GetEnergyShiftSqrt()};
+  state.insert(state.end(), this->GetShiftFnValues().begin(), this->GetShiftFnValues().end());
+  return state;
+}
+
+void ESegment::BeginShiftRefill(CNuc *theCNuc, const Config &configure) {
+  // Tables of another system (a session that changed a radius or the Coulomb route) are dropped.
+  if (!shiftTables_.empty() && !shiftTables_.front().table->SameSystem(theCNuc, configure)) shiftTables_.clear();
+  shiftRows_.assign(this->NumPoints(), {});
+}
+
+void ESegment::CommitShiftTable(CNuc *theCNuc, const Config &configure) {
+  if ((int)shiftRows_.size() != this->NumPoints()) return;  // no refill since BeginShiftRefill
+  std::vector<std::pair<ChannelTable::Key, ChannelTable::Row>> all;
+  for (auto &v : shiftRows_) all.insert(all.end(), v.begin(), v.end());
+  shiftRows_.clear();
+  if (all.empty()) return;
+  const std::vector<double> state = ShiftState();
+  for (auto it = shiftTables_.begin(); it != shiftTables_.end(); ++it)
+    if (it->state == state) {
+      shiftTables_.erase(it);
+      break;
+    }
+  shiftTables_.insert(shiftTables_.begin(), ShiftTable{state, ChannelTable::FromRows(theCNuc, configure, std::move(all))});
+  if (shiftTables_.size() > kShiftTables) shiftTables_.resize(kShiftTables);
+}
+
+ChannelRowSource ESegment::ShiftRowSource(int i) {
+  ChannelRowSource rows;
+  for (const ShiftTable &t : shiftTables_) rows.tables.push_back(t.table.get());
+  if (i >= 0 && i < (int)shiftRows_.size()) rows.used = &shiftRows_[i];
+  return rows;
+}
+
 /*!
  * The earlier point of this segment that point i (0-based) is mapped onto
  * (EData::MapData), or NULL -- also for a point mapped onto a point of another
@@ -1130,10 +1165,11 @@ void ESegment::UpdatePointEnergyWithShift(int i, CNuc *theCNuc, const Config *co
           point->CalcLegendreP(configure->maxLOrder, theCNuc, effect);
         }
         // The sub-points are moved and recalculated below, one by one.
+        const ChannelRowSource rows = ShiftRowSource(i);
         if (host && point->CopyEDependentValuesFrom(*host))
           point->CalcCoulombAmplitude(theCNuc, false);
         else
-          point->RecalcEDependentValues(theCNuc, *configure, false);
+          point->RecalcEDependentValues(theCNuc, *configure, false, &rows);
 
         // IMPORTANT: Also apply energy shift to all subpoints (used in convolution/target integration)
         for (int j = 1; j <= point->NumSubPoints(); j++) {
@@ -1214,7 +1250,7 @@ void ESegment::UpdatePointEnergyWithShift(int i, CNuc *theCNuc, const Config *co
             if (host && subPoint->CopyEDependentValuesFrom(*host->GetSubPoint(j)))
               subPoint->CalcCoulombAmplitude(theCNuc);
             else
-              subPoint->RecalcEDependentValues(theCNuc, *configure);
+              subPoint->RecalcEDependentValues(theCNuc, *configure, true, &rows);
           }
         }
       }

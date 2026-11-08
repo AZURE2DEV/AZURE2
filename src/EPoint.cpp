@@ -1422,7 +1422,7 @@ void EPoint::ChannelKeys(CNuc *theCNuc, std::vector<ChannelTable::Key> &keys, bo
 }
 
 void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure, bool includeSubPoints, bool shareWithMapped,
-                                  const ChannelTable *table) {
+                                  const ChannelRowSource *rows) {
   AZUREProfile::Timer profileTimer(AZUREProfile::kEDependent);
   PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetEntranceKey()));
   PPair *exitPair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetExitKey()));
@@ -1481,13 +1481,18 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure, bool i
   const int nucleus = entrancePair->GetNucleus();
   std::vector<std::pair<ChannelTable::Key, ChannelTable::Row>> ownRows;  // this point's rows not in the table
   auto channelRow = [&](int pairNum, PPair *pair, int l, double e) -> ChannelTable::Row {
-    if (table)
-      if (const ChannelTable::Row *r = table->Find(pairNum, l, e)) return *r;
     const ChannelTable::Key key{pairNum, l, e};
-    for (const auto &kr : ownRows)
-      if (kr.first == key) return kr.second;
-    ownRows.emplace_back(key, ChannelTable::Compute(pair, l, e, configure));
-    return ownRows.back().second;
+    const ChannelTable::Row *r = rows ? rows->Find(pairNum, l, e) : nullptr;
+    if (!r)
+      for (const auto &kr : ownRows)
+        if (kr.first == key) r = &kr.second;
+    if (!r) {
+      ownRows.emplace_back(key, ChannelTable::Compute(pair, l, e, configure));
+      r = &ownRows.back().second;
+    }
+    const ChannelTable::Row row = *r;
+    if (rows && rows->used) rows->used->emplace_back(key, row);
+    return row;
   };
   for (int j = 1; j <= theCNuc->NumJGroups(); j++) {
     if (psTable) psTable->offset[j - 1] = (int)psTable->slot.size();
@@ -1632,7 +1637,7 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure, bool i
   }
   if (includeSubPoints) {
     for (int i = 1; i <= this->NumSubPoints(); i++) {
-      this->GetSubPoint(i)->CalcEDependentValues(theCNuc, configure, true, true, table);
+      this->GetSubPoint(i)->CalcEDependentValues(theCNuc, configure, true, true, rows);
     }
   }
   // The points mapped onto this one share its tables -- at setup and on a grid
@@ -1690,7 +1695,8 @@ void EPoint::ClearEDependentRows() {
  * Recalculates energy-dependent values using the current (possibly shifted) energy.
  * This is needed when energy shifts are applied after initialization.
  */
-void EPoint::RecalcEDependentValues(CNuc *theCNuc, const Config &configure, bool includeSubPoints) {
+void EPoint::RecalcEDependentValues(CNuc *theCNuc, const Config &configure, bool includeSubPoints,
+                                    const ChannelRowSource *rows) {
   // Nothing to do while the energy is the one the values were computed at.
   // Every sub-point of a target-effect point used to pay for this on every
   // evaluation whenever external capture was in use (Coulomb and Whittaker
@@ -1721,7 +1727,7 @@ void EPoint::RecalcEDependentValues(CNuc *theCNuc, const Config &configure, bool
   // Recalculate with current energy.  The points mapped onto this one are not
   // touched: each is re-energised itself, from its host's values
   // (CopyEDependentValuesFrom) or anew (ESegment::UpdatePointEnergyWithShift).
-  this->CalcEDependentValues(theCNuc, configure, includeSubPoints, false);
+  this->CalcEDependentValues(theCNuc, configure, includeSubPoints, false, rows);
 
   // Also recalculate Coulomb amplitude with current energy
   this->CalcCoulombAmplitude(theCNuc, includeSubPoints);

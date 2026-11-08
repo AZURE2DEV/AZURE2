@@ -4,6 +4,7 @@
 #include <complex>
 #include <cstddef>
 #include <memory>
+#include <utility>
 #include <vector>
 
 class CNuc;
@@ -47,6 +48,14 @@ class ChannelTable {
   static std::shared_ptr<const ChannelTable> Build(CNuc *cnuc, const Config &configure, std::vector<Key> keys,
                                                    const ChannelTable *previous = nullptr);
 
+  /// The table of rows already computed (a free-shift refill records the rows its points used): sorted, duplicates
+  /// removed (a row is a pure function of its key, so duplicates are equal).
+  static std::shared_ptr<const ChannelTable> FromRows(CNuc *cnuc, const Config &configure,
+                                                      std::vector<std::pair<Key, Row>> rows);
+
+  /// True when the table was built for the present pairs (charges, masses, radii, thresholds, Coulomb route).
+  bool SameSystem(CNuc *cnuc, const Config &configure) const;
+
   /// The row of a key, or nullptr when the table does not hold it.
   const Row *Find(int pair, int l, double energy) const;
 
@@ -58,6 +67,18 @@ class ChannelTable {
   std::vector<Row> rows_;
   std::vector<std::vector<double>> pairSignatures_;
   std::size_t computed_ = 0;
+};
+
+/// Where a point takes its rows from (EPoint::CalcEDependentValues): the tables, searched in order by exact key, then
+/// ChannelTable::Compute once per (pair, l, E_c) of the point; `used`, when set, receives every row the point used.
+struct ChannelRowSource {
+  std::vector<const ChannelTable *> tables;
+  std::vector<std::pair<ChannelTable::Key, ChannelTable::Row>> *used = nullptr;
+  const ChannelTable::Row *Find(int pair, int l, double energy) const {
+    for (const ChannelTable *t : tables)
+      if (const ChannelTable::Row *r = t->Find(pair, l, energy)) return r;
+    return nullptr;
+  }
 };
 
 #endif
