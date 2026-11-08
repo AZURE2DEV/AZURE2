@@ -3135,7 +3135,9 @@ std::string EData::ECSignature(CNuc *theCNuc, const Config &configure) {
   // v4 (2026-10-26): the M1 orbital term is dropped on channel-spin-flip pathways (ECIntegral.cpp), so every
   // v3 file with such pathways is recomputed once.
   // v5 (2026-10-30): the file holds every digit (17 significant, was 6), so every v4 file is recomputed once.
-  hash.Add("AZURE2 EC signature v5");
+  // v6 (2026-11-09): the Whittaker function of the final state is physics/coulomb's whittaker, not GSL's U
+  // (coulomb.md section 1.4); the integrals move at ~1e-10 relative, so every v5 file is recomputed once.
+  hash.Add("AZURE2 EC signature v6");
   hash.Add((configure.paramMask & Config::USE_GSL_COULOMB_FUNC) ? 1 : 0);
   hash.Add((configure.paramMask & Config::USE_LONGWAVELENGTH_APPROX) ? 1 : 0);
   // The convection current changes exact-form electric terms only; long-wavelength signatures stay as in v2.

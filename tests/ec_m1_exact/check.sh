@@ -128,4 +128,15 @@ else
   bad "(p) intEC.dat from before the M1 orbital-term fix was reused"
 fi
 
+# (s) an intEC.dat written with GSL's Whittaker function (models/stale_v5: case (k) by feature/upgrade-1-whittaker
+# bf8622e2, signature v5) is refused and recomputed; its integrals differ from the new ones by ~1e-10, so only the
+# signature catches it
+mkdir -p "$WORK/p14n_stale5/output" && cp "$HERE/models/stale_v5/intEC.dat" "$HERE/models/stale_v5/intEC.dat.sig" "$WORK/p14n_stale5/output/"
+run p14n_stale5 p14n_s1 "" output/intEC.dat
+if grep -q "$SIGWARN" "$WORK/p14n_stale5/run.log" && same4 "$WORK/p14n_s1/$OUT" "$WORK/p14n_stale5/$OUT"; then
+  ok "(s) intEC.dat from before the GSL-free Whittaker function is refused and recomputed"
+else
+  bad "(s) intEC.dat from before the GSL-free Whittaker function was reused"
+fi
+
 if [ "$failures" -eq 0 ]; then echo "ec_m1_exact: PASS"; else echo "ec_m1_exact: FAIL ($failures)"; exit 1; fi
