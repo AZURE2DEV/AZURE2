@@ -656,6 +656,13 @@ std::shared_ptr<const UdrKernel> TargetEffect::BuildUdrKernel(double eLab, doubl
   size_t a = 0, b = k->r.size() - 1;
   while (a < b && k->r[a] <= 1.0e-9 * peak) a++;
   while (b > a && k->r[b] <= 1.0e-9 * peak) b--;
+  // The kernel is piecewise linear: it is nonzero up to the zero-valued nodes
+  // that bracket the first and last significant ones, so the support includes
+  // them.  Without this a narrow tabulated function (a one-node spike) had
+  // tauMin == tauMax, the sub-point window fell back to +-1e-4 of the energy
+  // and the weights were all zero (2026-11-07).
+  if (a > 0) a--;
+  if (b + 1 < k->r.size()) b++;
   k->tauMin = k->tau[a];
   k->tauMax = k->tau[b];
   double norm = 0.0;

@@ -1473,7 +1473,14 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
             if (eHighLab <= point->GetLabEnergy()) eHighLab = point->GetLabEnergy() * 1.0001;
             if (eLowLab <= 0.0 || eLowLab >= point->GetLabEnergy()) eLowLab = point->GetLabEnergy() * 0.9999;
             startEnergy = eHighLab * cmPerLab;
-            endEnergy = std::max(eLowLab * cmPerLab, 0.001);
+            // No absolute floor here: a neutron point can sit at thermal energy, and a
+            // kernel wide in time reaches far below 1 keV.  Clamping the low edge to
+            // 0.001 MeV inverted the grid for every such point (sub-points from the
+            // point UP to 1 keV), which left the kernel's support on one side of the
+            // first hat interval: a bias of half the channel width on a 1/v cross
+            // section, or exactly zero when the support ended at the first sub-point
+            // (Koehler 17O(n,a) thermal points, 2026-11-07).  Keep a relative floor only.
+            endEnergy = std::max(eLowLab * cmPerLab, 1.0e-6 * point->GetCMEnergy());
           }
           // Free-gas Doppler broadening comes first: every sub-point the kernel above reaches needs its own
           // Doppler window inside the grid, so the window is widened by the Doppler width at each end.
@@ -1482,7 +1489,7 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
             targetEffect->DopplerWindow(startEnergy, cmConversion, unused, hi);
             targetEffect->DopplerWindow(endEnergy, cmConversion, lo, unused);
             startEnergy = std::max(startEnergy, hi);
-            endEnergy = std::max(std::min(endEnergy, lo), 0.001);
+            endEnergy = std::max(std::min(endEnergy, lo), targetEffect->IsUdr() ? 1.0e-6 * point->GetCMEnergy() : 0.001);
           }
           std::vector<double> energyGrid;
           int numPoints = targetEffect->NumSubPoints();
@@ -1645,7 +1652,8 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
                 if (eHighLab <= point->GetLabEnergy()) eHighLab = point->GetLabEnergy() * 1.0001;
                 if (eLowLab <= 0.0 || eLowLab >= point->GetLabEnergy()) eLowLab = point->GetLabEnergy() * 0.9999;
                 startEnergy = eHighLab * cmPerLab;
-                endEnergy = std::max(eLowLab * cmPerLab, 0.001);
+                // Relative floor only (see the data-segment branch above).
+                endEnergy = std::max(eLowLab * cmPerLab, 1.0e-6 * point->GetCMEnergy());
               }
               // Free-gas Doppler broadening comes first: every sub-point the kernel above reaches needs its own
               // Doppler window inside the grid, so the window is widened by the Doppler width at each end.
@@ -1654,7 +1662,7 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
                 targetEffect->DopplerWindow(startEnergy, compConversion, unused, hi);
                 targetEffect->DopplerWindow(endEnergy, compConversion, lo, unused);
                 startEnergy = std::max(startEnergy, hi);
-                endEnergy = std::max(std::min(endEnergy, lo), 0.001);
+                endEnergy = std::max(std::min(endEnergy, lo), targetEffect->IsUdr() ? 1.0e-6 * point->GetCMEnergy() : 0.001);
               }
               std::vector<double> energyGrid;
               int numPoints = targetEffect->NumSubPoints();

@@ -28,7 +28,6 @@
 #include <limits>
 #include <atomic>
 #include <stdexcept>
-#include <cstdlib>
 #include <algorithm>
 
 /*!
@@ -2615,9 +2614,12 @@ V EPoint::IntegrateKernelsImpl(const Config &configure, Read rd) {
     // Simpson's rule evaluates it exactly.
     const UdrKernel *kernel = this->GetUdrKernel();
     int numPoints = this->NumSubPoints();
-    if (!kernel || kernel->tau.size() < 2 || numPoints < 2) {
+    if (!kernel || kernel->tau.size() < 2 || numPoints < 1) {
       return V(0.0);
     }
+    // A window the grid could not split (the kernel narrower than the grid's
+    // resolution) is the point itself, not zero.
+    if (numPoints == 1) return rd(1);
     const double mass = this->GetUdrProjectileMass();
     const double path = targetEffect->GetUdrFlightPath();
     const double cmPerLab = (lab_energy_ != 0.0) ? cm_energy_ / lab_energy_ : 1.0;
