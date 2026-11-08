@@ -623,7 +623,8 @@ complex EPoint::GetCoulombAmplitude(double s) const {
   return coulombdirect_ + sign * coulombexchange_;
 }
 
-static complex ECPathwayAmplitude(CNuc *, const Config &, PPair *, int, double, KGroup *, ECMGroup *, double);
+static complex ECPathwayAmplitude(CNuc *, const Config &, PPair *, int, double, KGroup *, ECMGroup *, double,
+                                  const ChannelTable *table = nullptr);
 
 /*!
  * Returns the external capture amplitude for a given external reaction pathway
@@ -1956,7 +1957,8 @@ void EPoint::SetCoulombAmplitude(complex amplitude) {
  */
 static complex ECPathwayAmplitude(CNuc *theCNuc, const Config &configure, PPair *entrancePair, int j,
                                   double levelEnergy, KGroup *theKGroup, ECMGroup *theECMGroup,
-                                  double cmEnergy) {
+                                  double cmEnergy,
+                                  const ChannelTable *table) {
   // A closed entrance channel -- at or below threshold, or so close above it
   // that P = 0 in double precision (ChannelFunc) -- captures nothing: the
   // amplitude carries the entrance Coulomb wave, whose routines return NaN or
@@ -1974,7 +1976,16 @@ static complex ECPathwayAmplitude(CNuc *theCNuc, const Config &configure, PPair 
   for (int ll = 1; ll <= theECMGroup->GetL(); ll++)
     expCP *= complex((double)ll / sqrt(pow((double)ll, 2.0) + pow(eta, 2.0)),
                      eta / sqrt(pow((double)ll, 2.0) + pow(eta, 2.0)));
-  complex expHSP = theCoulombFunction.HardSpherePhase(theECMGroup->GetL(), entrancePair->GetChRad(), cmEnergy);
+  // exp(-i phi) at a_c from the point's channel table where it holds the open channel, at E_c = (E - S) - e
+  // (the table's expression; within one ulp of cmEnergy); otherwise computed.
+  int entranceNum = 0;
+  for (int p = 1; p <= theCNuc->NumPairs() && !entranceNum; p++)
+    if (theCNuc->GetPair(p) == entrancePair) entranceNum = p;
+  const ChannelTable::Row *row = table ? table->Find(entranceNum, theECMGroup->GetL(),
+                                                     (inEnergy - entrancePair->GetSepE()) - entrancePair->GetExE())
+                                       : nullptr;
+  complex expHSP = (row && row->P > 0.0) ? row->expHSP
+                                         : theCoulombFunction.HardSpherePhase(theECMGroup->GetL(), entrancePair->GetChRad(), cmEnergy);
 
   double sqrtGammaPene = pow((inEnergy - levelEnergy) / hbarc, theECMGroup->GetMult() + 0.5);
 
@@ -1997,7 +2008,8 @@ static complex ECPathwayAmplitude(CNuc *theCNuc, const Config &configure, PPair 
                                   theInitialSValue, theFinalChannel->GetS(),
                                   theECMGroup->GetJ(), theCNuc->GetJGroup(j)->GetJ(),
                                   theECMGroup->GetMult(), theECMGroup->GetRadType(),
-                                  inEnergy, levelEnergy, theECMGroup->IsChannelCapture());
+                                  inEnergy, levelEnergy, theECMGroup->IsChannelCapture(), table,
+                                  theFinalChannel->GetPairNum());
   } else {
     ECIntegral theECIntegral(theFinalPair, configure);
     integrals = theECIntegral(theInitialLValue, theFinalChannel->GetL(),
@@ -2018,7 +2030,7 @@ static complex ECPathwayAmplitude(CNuc *theCNuc, const Config &configure, PPair 
  * entrance and exit pairs.
  */
 
-void EPoint::CalculateECAmplitudes(CNuc *theCNuc, const Config &configure) {
+void EPoint::CalculateECAmplitudes(CNuc *theCNuc, const Config &configure, const ChannelTable *table) {
   int aa = theCNuc->GetPairNumFromKey(this->GetEntranceKey());
   if (theCNuc->GetPair(aa)->GetPType() == 20) return;
   if (theCNuc->GetPair(aa)->IsEntrance()) {
@@ -2034,7 +2046,7 @@ void EPoint::CalculateECAmplitudes(CNuc *theCNuc, const Config &configure) {
               for (int ecm = 1; ecm <= theKGroup->NumECMGroups(); ecm++) {
                 ECMGroup *theECMGroup = theKGroup->GetECMGroup(ecm);
                 complex ecAmplitude = ECPathwayAmplitude(theCNuc, configure, entrancePair, j, ecLevel->GetE(),
-                                                         theKGroup, theECMGroup, this->GetCMEnergy());
+                                                         theKGroup, theECMGroup, this->GetCMEnergy(), table);
                 this->AddECAmplitude(k, ecm, ecAmplitude);
               }
             }
@@ -2044,7 +2056,7 @@ void EPoint::CalculateECAmplitudes(CNuc *theCNuc, const Config &configure) {
     }
   }
   for (int i = 1; i <= this->NumSubPoints(); i++) {
-    this->GetSubPoint(i)->CalculateECAmplitudes(theCNuc, configure);
+    this->GetSubPoint(i)->CalculateECAmplitudes(theCNuc, configure, table);
   }
 }
 

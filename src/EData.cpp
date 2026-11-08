@@ -3383,7 +3383,7 @@ int EData::CalculateECAmplitudes(CNuc *theCNuc, const Config &configure) {
                   // then has the same layout with and without point mapping.
                   {
                     try {
-                      point->CalculateECAmplitudes(theCNuc, configure);
+                      point->CalculateECAmplitudes(theCNuc, configure, channelTable_.get());
                     } catch (GSLException e) {
 #pragma omp critical(ec_progress)
                       {
@@ -3680,7 +3680,7 @@ int EData::InitializeComponentSegments(CNuc *theCNuc, const Config &configure) {
                     EPoint *point = componentSegment.GetPoint(i);
                     if (!(point->IsMapped()) || point->OwnsEDependentValues()) {
                       try {
-                        point->CalculateECAmplitudes(theCNuc, configure);
+                        point->CalculateECAmplitudes(theCNuc, configure, channelTable_.get());
                       } catch (GSLException e) {
 #pragma omp critical(ec_progress)
                         {

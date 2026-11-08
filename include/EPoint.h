@@ -562,7 +562,8 @@ class EPoint {
   /// Set the Coulomb amplitude directly.
   void SetCoulombAmplitude(complex);
   /// Compute the external-capture amplitudes for every matching pathway.
-  void CalculateECAmplitudes(CNuc *, const Config &);
+  /// `table`: the stage's channel table, for sqrt(P) and exp(-i phi) at a_c (null: computed).
+  void CalculateECAmplitudes(CNuc *, const Config &, const ChannelTable *table = nullptr);
   void AddECAmplitude(int, int, complex);
   void AddECAmplitude(int, int, complex, double);
   void ClearECAmplitudes();
