@@ -9,8 +9,11 @@ Checks:
   (a) beam_profile_kernel: the free parameters of the formal basis (--no-brune) are those of the Brune basis, by name;
   (b) tests/13N with the photon width of the 20 MeV 1/2+ level set to 0 and --no-ignore-externals (where the
       amplitude is gamma^int = -Re gamma^ext, not 0): that parameter is fixed, in the Brune and formal bases;
-  (c) apply_fit in strict mode, fixed parameters included, places a formal-basis vector of beam_profile_kernel (it
-      skipped only an exact 0 for a channel the level does not list).
+  (c) apply_fit in strict mode, fixed parameters included, places the formal-basis vector save_fit writes for
+      beam_profile_kernel.  This guards the round trip only: no test project has a fixed width on a channel its level
+      does not list (scan of the 75 projects that load in the formal basis, 2026-11-08), so the azrfile.py branch
+      that skips such a width whatever its value is not exercised here, and (c) passes on a18fe89e too; that branch
+      is tested in apply_fit_test.py ("fixed 5, no line").
 
 Run from anywhere:  python3 tests/pyazr/zero_width_fixed_test.py
 """
@@ -55,9 +58,10 @@ def worker(project, brune, ignore, out):
                                  if p.kind in ("energy", "width") and not p.fixed)
             res["fixed"] = sorted(p.name for p in a.parameters if p.kind == "width" and p.fixed)
             if project == "beam_profile_kernel" and brune == "0":
-                x = np.array(a.params_rwa, float)
+                # the vector save_fit writes: every parameter, physical (apply_fit refuses include_fixed with transform=)
+                want = np.asarray(a.transform_all_rwa(a._all_rwa(np.array(a.params_rwa, float)), include_fixed=True), float)
                 try:
-                    AzrModel.from_file(azr).apply_fit(a.parameters, x, transform=a.transform_rwa, strict=True,
+                    AzrModel.from_file(azr).apply_fit(a.parameters, want, physical=True, pairs=a.pairs, strict=True,
                                                       include_fixed=True)
                     res["apply_fit"] = "ok"
                 except Exception as err:
