@@ -122,3 +122,29 @@ order 1. (2) `tests/beam_profile_kernel/check.sh` runs the formal and Brune base
 captures must agree to 10⁻⁹ (they differ by 9.7 × 10⁻² before). (3) A continuity check on `tests/13N`: a masked
 photon channel's file width set to 10⁻²⁰ eV keeps its external part (unit test of the mask's definition through the
 CLI is left to pyazr's `ignore_externals` test of 5b83249a, ported if it fits the time).
+
+## 7. The adjoint and the formal-basis masks (addendum, 2026-11-08)
+
+**Why.** As first built, every formal-basis block with channel capture and several levels made the residual Jacobian
+and the model gradients fall back to finite differences, masked level or not, while the χ² gradient
+(`AccumulateEGammaGradient`, used by Minuit and pyazr `chi2_and_grad`) had no fallback at all and returned an analytic
+gradient without the dependence of Π on the parameters: on `beam_profile_kernel` (formal basis) one component came out
+0.103 against −0.394 from central differences, and 1.5 × 10⁻² relative on `tests/13N` with a masked 1/2⁺ level that has
+a proton width. The step-2 final-state blocks (`HasFormalECFinalBlocks`) had the same gap on the χ² path. And
+`pyazr_zero_width_level` lost its analytic Jacobian in the formal basis for a level whose widths are all zero, where Π
+is exactly P.
+
+**Rule.** (a) A masked level whose particle amplitudes are all zero at the current parameters is decoupled: no
+element of the level shift matrix links it to another level, so T has e_m as its row and column and Π = P exactly.
+When every masked level of a slot is decoupled, no projector is computed and P is used, as in the Brune basis.
+(b) The adjoint covers a slot when it has no projector and no masked level has a free particle amplitude; a free
+amplitude at zero gives dΠ = [P, dT] ≠ 0 although Π = P at the point. Otherwise, and whenever a formal-basis
+final-state block exists, every adjoint entry point (χ² gradient, residual Jacobian, model gradients) falls back to
+finite differences through one test (`FormalPartsOutsideAdjoint`, `src/AZUREGrad.cpp`), which asks
+`CNuc::FormalCaptureMasksOutsideAdjoint` with the free-parameter map. A block with no masked level keeps the analytic
+path (Π = 1).
+
+**Expected.** Outputs of menu 1 unchanged against the branch head except where a decoupled masked level's projector
+was used (P instead of a numerically equal Π: differences at the 10⁻¹² level at most). Analytic gradients: unchanged
+in the Brune and Park bases; in the formal basis equal to central differences on the probes above (the fallback), and
+`pyazr_zero_width_level` passes again (analytic, Π = P).
