@@ -458,6 +458,53 @@ int main() {
     bool converged = true;
     for (std::size_t l = 0; l < nl; l++) converged = converged && b3.status[l] == LevelSet::Status::Converged;
     check("converged levels report Converged", converged);
+
+    // Inside an evaluation (level_parameters.md section 9): never the formal values.  The first iterate itself, as
+    // the converged branch returns it with a tolerance no step can exceed, is the reference for "the last iterate".
+    FormalToBruneOptions first = one;
+    first.energy_tolerance_MeV = 1e30;
+    first.want_transform = true;
+    const LevelSet iterate = brune_from_formal(sys, 0, formal.E, formal.gamma, B, cf, first);
+    FormalToBruneOptions floor = one;
+    floor.evaluation = true;
+    floor.rounding_bound_MeV = 1.0;  // above the first step of every level
+    floor.want_transform = true;
+    const LevelSet atFloor = brune_from_formal(sys, 0, formal.E, formal.gamma, B, cf, floor);
+    bool last = atFloor.status[1] == LevelSet::Status::Converged;
+    for (std::size_t l : {std::size_t(0), std::size_t(2)})
+      last = last && atFloor.status[l] == LevelSet::Status::RoundingLimited && atFloor.E[l] != formal.E[l];
+    check("evaluation, last step within the rounding bound: the last iterate, status RoundingLimited (levels 0, 2)",
+          last && atFloor.E == iterate.E && atFloor.gamma == iterate.gamma && atFloor.transform == iterate.transform);
+    FormalToBruneOptions fail = floor;
+    fail.rounding_bound_MeV = 1e-15;  // below the first step
+    const LevelSet failed = brune_from_formal(sys, 0, formal.E, formal.gamma, B, cf, fail);
+    bool undefined = failed.status[1] == LevelSet::Status::Converged && std::isfinite(failed.E[1]);
+    for (std::size_t l : {std::size_t(0), std::size_t(2)}) {
+      undefined = undefined && failed.status[l] == LevelSet::Status::NotConverged && std::isnan(failed.E[l]);
+      for (std::size_t k = 0; k < nc; k++) undefined = undefined && std::isnan(failed.gamma[l * nc + k]);
+      for (std::size_t m = 0; m < nl; m++) undefined = undefined && std::isnan(failed.transform[l * nl + m]);
+    }
+    for (std::size_t m = 0; m < nl; m++) undefined = undefined && std::isfinite(failed.transform[1 * nl + m]);
+    check("evaluation, last step above the bound: NaN energy, amplitudes and row of T (levels 0, 2), level 1 finite",
+          undefined && failed.warnings.size() == 2);
+
+    // Relative tolerance: max(absolute, relative |E|).  A loose one stops sooner, within it of the tight result.
+    FormalToBruneOptions rel;
+    rel.energy_tolerance_MeV = 0.0;
+    rel.relative_tolerance = 1e-3;
+    const LevelSet loose = brune_from_formal(sys, 0, formal.E, formal.gamma, B, cf, rel);
+    FormalToBruneOptions tight13;
+    tight13.energy_tolerance_MeV = 1e-13;
+    const LevelSet sharp = brune_from_formal(sys, 0, formal.E, formal.gamma, B, cf, tight13);
+    bool sooner = true, within = true;
+    for (std::size_t l = 0; l < nl; l++) {
+      sooner = sooner && loose.status[l] == LevelSet::Status::Converged && loose.iterations[l] <= sharp.iterations[l];
+      within = within && std::fabs(loose.E[l] - sharp.E[l]) <= 1e-2 * std::fabs(sharp.E[l]);
+    }
+    bool fewer = false;
+    for (std::size_t l = 0; l < nl; l++) fewer = fewer || loose.iterations[l] < sharp.iterations[l];
+    check("relative tolerance 1e-3: converged, no more iterations than at 1e-13 MeV, fewer for some level", sooner && fewer);
+    check("relative tolerance 1e-3: energies within 1e-2 |E| of the tight ones", within);
   }
 
   std::printf("7. observed quantities from total amplitudes (observed_levels, cnuc_split.md section 8)\n");

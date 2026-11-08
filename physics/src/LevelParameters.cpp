@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <numeric>
 #include <sstream>
 #include <stdexcept>
@@ -455,6 +456,17 @@ LevelSet formal_from_brune(const System &system, std::size_t b, const std::vecto
 }
 
 namespace {
+/// brune_from_formal in an evaluation, a level that cannot be transformed: NaN energy, amplitudes and row of T, so that
+/// every observable that uses it is not finite (level_parameters.md section 9).
+void UndefinedLevel(std::vector<double> &tempE, std::vector<double> &tempG, std::vector<double> &W, std::size_t n,
+                    std::size_t nc, std::size_t me) {
+  const double nan = std::numeric_limits<double>::quiet_NaN();
+  tempE[me] = nan;
+  for (std::size_t k = 0; k < nc; k++) tempG[me * nc + k] = nan;
+  if (!W.empty())
+    for (std::size_t q = 0; q < n; q++) W[me * n + q] = nan;
+}
+
 // A level whose formal values are kept is its own formal level: its row of the transform is a unit vector.
 void KeepFormalRow(std::vector<double> &W, std::size_t n, std::size_t me) {
   for (std::size_t q = 0; q < n; q++) W[me * n + q] = (q == me) ? 1.0 : 0.0;
@@ -518,16 +530,22 @@ LevelSet brune_from_formal(const System &system, std::size_t b, const std::vecto
         }
       const EigenResult eig = symmetric_eigen(C, n);
       if (!eig.ok) {
-        out.warnings.push_back(Label(system, b, lev) + ": could not transform the level (eigenvalue problem failed); "
-                                                       "the formal values are kept");
         out.status[lev] = LevelSet::Status::EigenFailed;
-        tempE[me] = E[lev];
-        for (std::size_t k = 0; k < nc; k++) tempG[me * nc + k] = gamma[lev * nc + k];
-        if (!W.empty()) KeepFormalRow(W, n, me);
+        if (options.evaluation) {
+          out.warnings.push_back(Label(system, b, lev) + ": could not transform the level (eigenvalue problem failed); "
+                                                         "the model is undefined here (NaN)");
+          UndefinedLevel(tempE, tempG, W, n, nc, me);
+        } else {
+          out.warnings.push_back(Label(system, b, lev) + ": could not transform the level (eigenvalue problem failed); "
+                                                         "the formal values are kept");
+          tempE[me] = E[lev];
+          for (std::size_t k = 0; k < nc; k++) tempG[me * nc + k] = gamma[lev * nc + k];
+          if (!W.empty()) KeepFormalRow(W, n, me);
+        }
         break;
       }
       const double step = std::fabs(eig.values[me] - tempE[me]);  // MeV
-      if (step <= options.energy_tolerance_MeV) done = true;
+      if (step <= std::max(options.energy_tolerance_MeV, options.relative_tolerance * std::fabs(tempE[me]))) done = true;
       // Each eigenvector oriented like formal_from_brune's: its component on its own level positive.
       std::vector<double> newG(n * nc);
       for (std::size_t mu = 0; mu < n; mu++) {
@@ -554,15 +572,26 @@ LevelSet brune_from_formal(const System &system, std::size_t b, const std::vecto
       tempG.swap(newG);
       if (!done) {
         if (iteration == options.max_iterations) {
-          std::ostringstream o;
-          o << Label(system, b, lev) << ": not transformed after " << options.max_iterations
-            << " iterations; the formal values are kept";
-          out.warnings.push_back(o.str());
-          out.status[lev] = LevelSet::Status::NotConverged;
           out.residual_MeV[lev] = step;
-          tempE[me] = E[lev];
-          for (std::size_t k = 0; k < nc; k++) tempG[me * nc + k] = gamma[lev * nc + k];
-          if (!W.empty()) KeepFormalRow(W, n, me);
+          std::ostringstream o;
+          o << Label(system, b, lev) << ": not transformed after " << options.max_iterations << " iterations (last step "
+            << step << " MeV)";
+          if (options.evaluation && step <= options.rounding_bound_MeV) {
+            // At the rounding floor: the last iterate is accurate to the step and continuous in the parameters.
+            out.status[lev] = LevelSet::Status::RoundingLimited;
+            o << "; the last iterate is used";
+          } else if (options.evaluation) {
+            out.status[lev] = LevelSet::Status::NotConverged;
+            o << "; the model is undefined here (NaN)";
+            UndefinedLevel(tempE, tempG, W, n, nc, me);
+          } else {
+            out.status[lev] = LevelSet::Status::NotConverged;
+            o << "; the formal values are kept";
+            tempE[me] = E[lev];
+            for (std::size_t k = 0; k < nc; k++) tempG[me * nc + k] = gamma[lev * nc + k];
+            if (!W.empty()) KeepFormalRow(W, n, me);
+          }
+          out.warnings.push_back(o.str());
         }
         iteration++;
       }

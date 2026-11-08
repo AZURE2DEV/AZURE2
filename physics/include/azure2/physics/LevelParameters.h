@@ -198,7 +198,9 @@ struct LevelSet {
   /// formal values kept because the eigenproblem failed or the iteration did not converge), the last energy step
   /// |e_k - E_k| (MeV) when it did not converge; per (level, block channel), row-major, the boundary-value shift
   /// S_c(E) - B_c of the last iteration (0 for non-particle channels).
-  enum class Status : unsigned char { Converged, EigenFailed, NotConverged };
+  /// RoundingLimited (FormalToBruneOptions::evaluation only): the tolerance was not met in the iterations, but the
+  /// last step is within rounding_bound_MeV, and the last iterate is returned.
+  enum class Status : unsigned char { Converged, EigenFailed, NotConverged, RoundingLimited };
   std::vector<Status> status;
   std::vector<double> residual_MeV;
   std::vector<double> boundary_shift;
@@ -223,13 +225,21 @@ LevelSet formal_from_brune(const System &system, std::size_t b, const std::vecto
 
 struct FormalToBruneOptions {
   double energy_tolerance_MeV = 1e-6;  ///< the engine's (CNuc::TransformOut)
+  /// Converged when the step is <= max(energy_tolerance_MeV, relative_tolerance |E|); 0: the absolute test alone.
+  double relative_tolerance = 0.0;
   int max_iterations = 1000;           ///< the engine's
   bool want_transform = false;         ///< fill LevelSet::transform
+  /// Inside an evaluation (level_parameters.md section 9): a level that does not meet the tolerance takes its last
+  /// iterate if the last step is <= rounding_bound_MeV (status RoundingLimited), else NaN energy, amplitudes and row
+  /// of T; never its formal values.  false: the formal values are kept, with a warning (the report iteration).
+  bool evaluation = false;
+  double rounding_bound_MeV = 1e-9;
 };
 
 /// Formal -> Brune by the engine's iteration (CNuc::TransformOut): per level, B_c moved to S_c(E) and the matrix
 /// E - sum_c (S_c - B_c) gamma gamma rediagonalized (symmetric_eigen) until the level's energy moves by <= the
-/// tolerance.  A level that does not converge keeps its formal values, with a warning, as in the engine.  Each
+/// tolerance.  A level that does not converge keeps its formal values, with a warning, as in the engine (with
+/// FormalToBruneOptions::evaluation: its last iterate or NaN, level_parameters.md section 9).  Each
 /// eigenvector is oriented as in formal_from_brune (its component on its own level positive), so formal -> Brune ->
 /// formal and Brune -> formal -> Brune return the signs they started from.
 LevelSet brune_from_formal(const System &system, std::size_t b, const std::vector<double> &E,
