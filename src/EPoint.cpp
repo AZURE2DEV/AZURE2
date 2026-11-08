@@ -1480,20 +1480,15 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure, bool i
   // point: a group of another nucleus in the file has thresholds on a
   // different energy axis, and its rows stay empty (every consumer skips it).
   const int nucleus = entrancePair->GetNucleus();
-  std::vector<std::pair<ChannelTable::Key, ChannelTable::Row>> ownRows;  // this point's rows not in the table
+  std::vector<std::pair<ChannelTable::Key, ChannelTable::Row>> ownRows;
+  // ownRows: the distinct rows this point used, from the tables or computed; rows->used receives them once.
   auto channelRow = [&](int pairNum, PPair *pair, int l, double e) -> ChannelTable::Row {
     const ChannelTable::Key key{pairNum, l, e};
+    for (const auto &kr : ownRows)
+      if (kr.first == key) return kr.second;
     const ChannelTable::Row *r = rows ? rows->Find(pairNum, l, e) : nullptr;
-    if (!r)
-      for (const auto &kr : ownRows)
-        if (kr.first == key) r = &kr.second;
-    if (!r) {
-      ownRows.emplace_back(key, ChannelTable::Compute(pair, l, e, configure));
-      r = &ownRows.back().second;
-    }
-    const ChannelTable::Row row = *r;
-    if (rows && rows->used) rows->used->emplace_back(key, row);
-    return row;
+    ownRows.emplace_back(key, r ? *r : ChannelTable::Compute(pair, l, e, configure));
+    return ownRows.back().second;
   };
   for (int j = 1; j <= theCNuc->NumJGroups(); j++) {
     if (psTable) psTable->offset[j - 1] = (int)psTable->slot.size();
@@ -1632,6 +1627,7 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure, bool i
   // about a quarter of the tables' memory (natural neon: 2.3 GB of 9.6 GB).  A
   // point is filled here once per energy (setup, grid re-placement); the shift
   // step refills its rows in place every evaluation and keeps their capacity.
+  if (rows && rows->used) rows->used->insert(rows->used->end(), ownRows.begin(), ownRows.end());
   if (edep_ && edep_.SoleOwner()) {
     EDependentTables &t = MutableEDep();
     t.ShrinkToFit();  // the THM vertex tables too
