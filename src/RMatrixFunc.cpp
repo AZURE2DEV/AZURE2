@@ -390,7 +390,7 @@ void RMatrixFunc::CalculateTMatrix(EPoint *point) {
       for (int m = 1; m <= theDecay->GetKGroup(k)->NumECMGroups(); m++) {
         ECMGroup *theECMGroup = theDecay->GetKGroup(k)->GetECMGroup(m);
         ALevel *finalLevel = compound()->GetJGroup(theECMGroup->GetJGroupNum())->GetLevel(theECMGroup->GetLevelNum());
-        double ecNormParam = finalLevel->GetFitGamma(theECMGroup->GetFinalChannel()) *
+        double ecNormParam = finalLevel->GetECGamma(theECMGroup->GetFinalChannel()) *
             finalLevel->GetSqrtNFFactor() * finalLevel->GetECConversionFactor(theECMGroup->GetFinalChannel());
         // Use energy-shift aware EC amplitude calculation if energy shifts are active
         complex ecAmplitude;

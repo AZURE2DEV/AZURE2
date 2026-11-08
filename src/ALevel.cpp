@@ -222,8 +222,11 @@ void ALevel::AddGamma(NucLine nucLine) {
   double b = nucLine.gamma();
   gammas_.push_back(b);
   fitgammas_.push_back(0.0);
+  ec_gammas_.push_back(0.0);
   transform_gammas_.push_back(0.0);
   big_gammas_.push_back(0.0);
+  observed_values_.push_back(0.0);
+  observed_kinds_.push_back(0);
   external_gammas_.push_back(complex(0.0, 0.0));
   if (nucLine.channelFix() == 1)
     channelfixed_.push_back(true);
@@ -240,8 +243,14 @@ void ALevel::PadChannels(int n) {
   while ((int)gammas_.size() < n) {
     gammas_.push_back(0.0);
     fitgammas_.push_back(0.0);
+    ec_gammas_.push_back(0.0);
+  ec_gammas_.push_back(0.0);
     transform_gammas_.push_back(0.0);
     big_gammas_.push_back(0.0);
+    observed_values_.push_back(0.0);
+    observed_kinds_.push_back(0);
+  observed_values_.push_back(0.0);
+  observed_kinds_.push_back(0);
     external_gammas_.push_back(complex(0.0, 0.0));
     channelfixed_.push_back(true);
     gamma_is_rwa_.push_back(false);  // a padded channel has a zero width: the flag is moot
@@ -268,8 +277,11 @@ void ALevel::AddGamma(double reducedWidth) {
   stamp_ = NewStamp();
   gammas_.push_back(reducedWidth);
   fitgammas_.push_back(0.0);
+  ec_gammas_.push_back(0.0);
   transform_gammas_.push_back(0.0);
   big_gammas_.push_back(0.0);
+  observed_values_.push_back(0.0);
+  observed_kinds_.push_back(0);
   external_gammas_.push_back(complex(0.0, 0.0));
   channelfixed_.push_back(false);
   gamma_is_rwa_.push_back(false);
@@ -360,6 +372,49 @@ void ALevel::SetTransformE(double energy) {
 
 void ALevel::SetBigGamma(int channelNum, double partialWidth) {
   big_gammas_[channelNum - 1] = partialWidth;
+}
+
+/*!
+ * Sets the observed value of a channel as a <levels> line gives it, and its kind (physics/ ObservedKind).
+ */
+
+/*!
+ * The amplitude with which this level enters external capture as a final state: its Brune (Park) amplitude, the
+ * fit amplitude except in the formal basis (CNuc::FillCompoundFromParams; cnuc_split.md section 8).
+ */
+
+double ALevel::GetECGamma(int channelNum) const {
+  return ec_gammas_[channelNum - 1];
+}
+
+void ALevel::SetECGamma(int channelNum, double reducedWidth) {
+  ec_gammas_[channelNum - 1] = reducedWidth;
+}
+
+/*!
+ * The energy (MeV, E_x) with which this level enters external capture as a final state: its Brune energy at setup
+ * (CNuc::SetUpECFinalBlocks), the input energy except in the formal basis.
+ */
+
+double ALevel::GetECEnergy() const {
+  return ec_energy_;
+}
+
+void ALevel::SetECEnergy(double energy) {
+  ec_energy_ = energy;
+}
+
+void ALevel::SetObserved(int channelNum, double value, unsigned char kind) {
+  observed_values_[channelNum - 1] = value;
+  observed_kinds_[channelNum - 1] = kind;
+}
+
+double ALevel::GetObservedValue(int channelNum) const {
+  return observed_values_[channelNum - 1];
+}
+
+unsigned char ALevel::GetObservedKind(int channelNum) const {
+  return observed_kinds_[channelNum - 1];
 }
 
 /*!

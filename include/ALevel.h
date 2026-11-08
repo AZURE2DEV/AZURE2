@@ -74,6 +74,10 @@ class ALevel {
   double GetTransformE() const;
   /// Observed partial width \f$\Gamma\f$ for a channel (Breit-Wigner).
   double GetBigGamma(int) const;
+  /// The observed value of a channel as a <levels> line gives it (Gamma in eV, C in fm^-1/2, mu, Q, B, or the
+  /// Brune amplitude of a gammaIsRWA column), and its kind (azure2::physics::ObservedKind), from TransformOut.
+  double GetObservedValue(int) const;
+  unsigned char GetObservedKind(int) const;
 
   // -- external capture ------------------------------------------------------
   /// Channel integral in the denominator of \f$N_f^{1/2}\f$,
@@ -81,6 +85,11 @@ class ALevel {
   double GetNFIntegral(int) const;
   /// The \f$N_f^{1/2}\f$ normalization of the bound-state wave function.
   double GetSqrtNFFactor() const;
+  /// The amplitude with which this level enters external capture as a final state, with which N_f^1/2 is formed:
+  /// its Brune (Park) amplitude in every basis (cnuc_split.md section 8); the fit amplitude except in the formal basis.
+  double GetECGamma(int) const;
+  /// The energy (MeV, E_x) with which it enters external capture: its Brune energy at setup (cnuc_split.md section 8).
+  double GetECEnergy() const;
   /// Factor converting this channel's reduced width amplitude to an ANC.
   double GetECConversionFactor(int) const;
   /// External part of the reduced width amplitude for a channel.
@@ -117,10 +126,13 @@ class ALevel {
   void SetFitE(double);
   void AddNFIntegral(double);
   void SetSqrtNFFactor(double);
+  void SetECGamma(int, double);
+  void SetECEnergy(double);
   void AddECConversionFactor(double);
   void SetTransformGamma(int, double);
   void SetTransformE(double);
   void SetBigGamma(int, double);
+  void SetObserved(int, double, unsigned char);
   void SetTransformIterations(int);
   void SetExternalGamma(int, complex);
   void SetShiftFunction(int, double);
@@ -172,10 +184,14 @@ class ALevel {
   std::vector<bool> gamma_is_rwa_;
   vector_r gammas_;
   vector_r fitgammas_;
+  vector_r ec_gammas_;
+  double ec_energy_ = 0.0;
   vector_r nf_integrals_;
   vector_r ec_conv_factors_;
   vector_r transform_gammas_;
   vector_r big_gammas_;
+  vector_r observed_values_;
+  std::vector<unsigned char> observed_kinds_;
   vector_r shifts_;
   vector_r shift_derivs_;
   vector_r shift_derivs2_;

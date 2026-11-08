@@ -243,62 +243,88 @@ BasisAmplitudes amplitudes_from_observed(const System &system, std::size_t b, co
   return out;
 }
 
+ObservedLevels observed_levels(const System &system, std::size_t b, const std::vector<ProjectChannel> &columns,
+                               const std::vector<double> &E, const std::vector<double> &gamma,
+                               const std::vector<ExternalWidth> &ext, const std::vector<unsigned char> &is_amplitude,
+                               LevelBasis basis, const ChannelFunctions &cf) {
+  if (basis == LevelBasis::Formal) throw std::invalid_argument("observed_levels: give Brune or Park amplitudes");
+  const std::size_t n = columns.size();
+  CheckLayout(system, b, n, E, gamma, "observed_levels");
+  if (!is_amplitude.empty() && is_amplitude.size() != gamma.size())
+    throw std::invalid_argument("observed_levels: is_amplitude has the wrong size");
+  if (!ext.empty() && ext.size() != gamma.size()) throw std::invalid_argument("observed_levels: ext has the wrong size");
+  const std::vector<std::size_t> fk = FunctionChannels(system, b, columns);
+  const bool park = (basis == LevelBasis::Park);
+  const bool halfIntegerJ = (system.block(b).two_J() % 2 != 0);
+  ObservedLevels out;
+  out.kind.assign(gamma.size(), ObservedKind::Width);
+  out.W.assign(gamma.size(), 0.0);
+  out.value.assign(gamma.size(), 0.0);
+  out.norm.assign(E.size(), 1.0);
+  // cnuc_split.md section 8, Eq. (8.1); the arithmetic of CNuc::TransformOut's second loop (9d50667f, 2423-2516).
+  for (std::size_t la = 0; la < E.size(); la++) {
+    double sum = 0.0;  // sum over particle columns of gamma_int^2 dS/dE
+    double J = 1.0;    // Park's J, accumulated as CNuc::CalcShiftFunctions does
+    std::vector<ChannelValues> f(n);
+    for (std::size_t m = 0; m < n; m++) {
+      f[m] = cf(b, fk[m], E[la]);
+      if (columns[m].kind == ChannelKind::Particle) {
+        const double g = gamma[la * n + m];
+        sum += f[m].dS_dE * (g * g);
+        J -= (g * g) * f[m].dS_dE;
+      }
+    }
+    const double N = park ? 1.0 : 1.0 + sum;
+    out.norm[la] = park ? J : N;
+    for (std::size_t m = 0; m < n; m++) {
+      const std::size_t i = la * n + m;
+      const ProjectChannel &col = columns[m];
+      const double g = gamma[i];
+      const std::complex<double> tot = (!ext.empty() && ext[i].present) ? g + ext[i].value : std::complex<double>(g, 0.0);
+      const double s = (tot.real() < 0.0) ? -1.0 : 1.0;
+      const double mod2 = tot.real() * tot.real() + tot.imag() * tot.imag();
+      const bool rwa = !is_amplitude.empty() && is_amplitude[i];
+      if (IsBeta(col.kind)) {
+        out.kind[i] = ObservedKind::Beta;
+        out.W[i] = park ? tot.real() / std::sqrt(std::fabs(J)) : tot.real();
+        out.value[i] = out.W[i];
+        continue;
+      }
+      double P = f[m].P, sign = s;
+      if (col.kind == ChannelKind::Particle) {
+        const double Ec = ChannelEnergy(system, col.partition, E[la]);
+        out.kind[i] = (Ec < 0.0) ? ObservedKind::ANC : ObservedKind::Width;
+      } else if (f[m].static_moment) {
+        if (halfIntegerJ) sign = -sign;  // the engine's static-moment factor changes sign for half-integer J
+        if (col.kind == ChannelKind::Magnetic && col.l == 1) out.kind[i] = ObservedKind::MagneticMoment;
+        else if (col.kind == ChannelKind::Electric && col.l == 2) out.kind[i] = ObservedKind::QuadrupoleMoment;
+      }
+      const double W = sign * 2.0 * mod2 * P / N;
+      out.W[i] = W;
+      const double r = (W < 0.0) ? -std::sqrt(std::fabs(W)) : std::sqrt(std::fabs(W));
+      switch (out.kind[i]) {
+        case ObservedKind::Width: out.value[i] = W * kEVPerMeV; break;
+        case ObservedKind::ANC:
+        case ObservedKind::MagneticMoment: out.value[i] = r; break;
+        case ObservedKind::QuadrupoleMoment: out.value[i] = r / f[m].input_scale; break;
+        case ObservedKind::Beta: break;
+      }
+      // A column given as an amplitude is reported as one, in Brune's normalization.
+      if (rwa && col.kind == ChannelKind::Particle) out.value[i] = (park && J > 0.0) ? g / std::sqrt(J) : g;
+    }
+  }
+  return out;
+}
+
 ProjectLevels observed_from_amplitudes(const System &system, std::size_t b, const std::vector<ProjectChannel> &columns,
                                        const std::vector<double> &E, const std::vector<double> &gamma,
                                        const std::vector<unsigned char> &is_amplitude, LevelBasis basis,
                                        const ChannelFunctions &cf) {
-  if (basis == LevelBasis::Formal) throw std::invalid_argument("observed_from_amplitudes: give Brune or Park amplitudes");
-  const std::size_t n = columns.size();
-  CheckLayout(system, b, n, E, gamma, "observed_from_amplitudes");
-  if (!is_amplitude.empty() && is_amplitude.size() != gamma.size())
-    throw std::invalid_argument("observed_from_amplitudes: is_amplitude has the wrong size");
-  const std::vector<std::size_t> fk = FunctionChannels(system, b, columns);
-  const bool park = (basis == LevelBasis::Park);
-  const bool halfIntegerJ = (system.block(b).two_J() % 2 != 0);
   ProjectLevels out;
   out.form = ProjectLevels::Form::Observed;
   out.E = E;
-  out.value.assign(gamma.size(), 0.0);
+  out.value = observed_levels(system, b, columns, E, gamma, {}, is_amplitude, basis, cf).value;
   out.is_amplitude = is_amplitude;
-  for (std::size_t la = 0; la < E.size(); la++) {
-    // Brune: N = 1 + sum_c gamma_c^2 dS_c/dE, Gamma_c = 2 P_c gamma_c^2 / N.  Park: J = 1 - sum gamma^2 dS/dE,
-    // Gamma_c = 2 P_c gamma_c^2, and an amplitude-form or beta column is reported as Brune's, gamma / sqrt(J).
-    double sum = 0.0;
-    std::vector<ChannelValues> f(n);
-    for (std::size_t m = 0; m < n; m++) {
-      f[m] = cf(b, fk[m], E[la]);
-      if (columns[m].kind == ChannelKind::Particle) sum += gamma[la * n + m] * gamma[la * n + m] * f[m].dS_dE;
-    }
-    const double N = park ? 1.0 : 1.0 + sum;
-    const double J = 1.0 - sum;
-    if (park && !(J > 0.0)) throw std::domain_error(Label(system, b, la) + ": Park norm J is not positive");
-    for (std::size_t m = 0; m < n; m++) {
-      const double g = gamma[la * n + m];
-      const double sign = (g < 0.0) ? -1.0 : 1.0;
-      const bool rwa = !is_amplitude.empty() && is_amplitude[la * n + m];
-      double v = 0.0;
-      if (columns[m].kind == ChannelKind::Particle) {
-        const double Ec = ChannelEnergy(system, columns[m].partition, E[la]);
-        if (rwa)
-          v = park ? g / std::sqrt(J) : g;
-        else if (Ec > 0.0)
-          v = (f[m].P > 0.0) ? sign * 2.0 * f[m].P * g * g / N * kEVPerMeV : 0.0;
-        else if (Ec < 0.0)
-          v = sign * std::sqrt(2.0 * f[m].P * g * g / N);
-      } else if (IsPhoton(columns[m].kind)) {
-        if (f[m].static_moment) {
-          const double s = halfIntegerJ ? -sign : sign;
-          v = s * std::sqrt(2.0 * f[m].P * g * g / N) / f[m].input_scale;
-        } else {
-          const double P = (f[m].P < 1e-16) ? 1e-16 : f[m].P;
-          v = sign * 2.0 * P * g * g / N * kEVPerMeV;
-        }
-      } else {
-        v = park ? g / std::sqrt(J) : g;
-      }
-      out.value[la * n + m] = v;
-    }
-  }
   return out;
 }
 

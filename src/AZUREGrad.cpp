@@ -1544,6 +1544,13 @@ bool ForEachRow(CNuc *compound, EData *data, const Config &config, const vector_
                 const AMatrixFunc::FreeMask *mask) {
   const std::vector<GradItem> items = BuildGradItems(data, skipTHM);
   numGroups = 0;
+  // Formal basis with an external-capture final state that shares its block: its capture amplitude is its Brune
+  // amplitude, an iteration on the formal parameters of the block (CNuc::ECFinalStatesFromFormal) that the adjoint
+  // does not differentiate.  Finite differences.
+  if (compound->HasFormalECFinalBlocks() && data->NumSegments() > 0) {
+    bailSeg = 1;
+    return false;
+  }
   for (const GradItem &it : items)
     if (it.grouped && it.members.size() > 1) numGroups++;
   bool bail = false;

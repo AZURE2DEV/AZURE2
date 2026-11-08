@@ -81,8 +81,13 @@ in 47c119e4, `fix/adaptive-grid-criterion`]; the other four inherited failures a
       1503 output files bit-identical in three bases.*
       *Step 1b done on `feature/upgrade-1-cnuc-split-1b` (2026-11-07, not merged): B_c from the lowest level, formal
       levels oriented like their Brune levels (not "largest |γ| positive", which changed capture observables), own
-      eigensolvers, one channel energy; every changed output of 179 projects × 3 bases classified, no re-baseline.
-      Next: step 2, then 3–7.*
+      eigensolvers, one channel energy; every changed output of 179 projects × 3 bases classified, no re-baseline.*
+      *Step 2 done on `feature/upgrade-1-cnuc-split-2` (2026-11-08, not merged): `observed_levels` is the one
+      definition of Γ, C, μ, Q, B from γ^int + γ^ext (five copies deleted); `ConvertAmplitudeBasis` through
+      `park_from_brune`; external capture takes the final state's Brune amplitude and energy in every basis (formal ↔
+      Brune capture to `beam_profile_kernel`'s 6.049 MeV state 0.81 → agree; `tests/beam_profile_kernel/check.sh`);
+      Brune and Park outputs identical, formal changes classified. Next: step 4 (external capture, with the
+      `--ignore-externals` mask on Brune amplitudes), 3b (i), 5–7.*
 - [ ] Internal convention written in `docs/source/theory/conventions.rst`; `Convention` record; recoupling (6j) and
       phase conversions in `level_parameters`; convention-invariance test on T1–T3.
       *Documentation part done on `feature/upgrade-1-conventions` (2026-11-07, not merged): the page states the
