@@ -202,6 +202,11 @@ struct LevelSet {
   std::vector<Status> status;
   std::vector<double> residual_MeV;
   std::vector<double> boundary_shift;
+  /// brune_from_formal with FormalToBruneOptions::want_transform: T (n x n, row-major, input level order), the Brune
+  /// amplitudes as combinations of the formal ones, gamma~_lambda c = sum_mu T_lambda mu gamma_mu c; row lambda is the
+  /// unit eigenvector of lambda's last problem (a unit vector for a level whose formal values are kept).  Empty
+  /// otherwise.  The masked channel capture of the formal basis uses it (external_capture.md section 3).
+  std::vector<double> transform;
 };
 
 /*!
@@ -219,6 +224,7 @@ LevelSet formal_from_brune(const System &system, std::size_t b, const std::vecto
 struct FormalToBruneOptions {
   double energy_tolerance_MeV = 1e-6;  ///< the engine's (CNuc::TransformOut)
   int max_iterations = 1000;           ///< the engine's
+  bool want_transform = false;         ///< fill LevelSet::transform
 };
 
 /// Formal -> Brune by the engine's iteration (CNuc::TransformOut): per level, B_c moved to S_c(E) and the matrix

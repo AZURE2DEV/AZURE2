@@ -456,6 +456,13 @@ LevelSet formal_from_brune(const System &system, std::size_t b, const std::vecto
   return out;
 }
 
+namespace {
+// A level whose formal values are kept is its own formal level: its row of the transform is a unit vector.
+void KeepFormalRow(std::vector<double> &W, std::size_t n, std::size_t me) {
+  for (std::size_t q = 0; q < n; q++) W[me * n + q] = (q == me) ? 1.0 : 0.0;
+}
+}  // namespace
+
 LevelSet brune_from_formal(const System &system, std::size_t b, const std::vector<double> &E,
                            const std::vector<double> &gamma, const std::vector<double> &B, const ChannelFunctions &cf,
                            const FormalToBruneOptions &options) {
@@ -473,6 +480,7 @@ LevelSet brune_from_formal(const System &system, std::size_t b, const std::vecto
   out.status.assign(n, LevelSet::Status::Converged);
   out.residual_MeV.assign(n, 0.0);
   out.boundary_shift.assign(n * nc, 0.0);
+  if (options.want_transform) out.transform.assign(n * n, 0.0);
   const std::vector<int> rank = AscendingRanks(E);
   // CNuc.cpp TransformOut (lines 2563-2745 at e54e6fcc), one level at a time.
   for (std::size_t lev = 0; lev < n; lev++) {
@@ -483,6 +491,13 @@ LevelSet brune_from_formal(const System &system, std::size_t b, const std::vecto
       for (std::size_t k = 0; k < nc; k++) tempG[rank[i] * nc + k] = gamma[i * nc + k];
     }
     const std::size_t me = (std::size_t)rank[lev];
+    // W: the rows of tempG as combinations of the formal levels in rank order (tempG = W gamma_ranked), carried only
+    // when the transform is asked for (external_capture.md section 3).
+    std::vector<double> W;
+    if (options.want_transform) {
+      W.assign(n * n, 0.0);
+      for (std::size_t i = 0; i < n; i++) W[i * n + i] = 1.0;
+    }
     std::vector<double> tempB = B;
     int iteration = 1;
     bool done = false;
@@ -510,6 +525,7 @@ LevelSet brune_from_formal(const System &system, std::size_t b, const std::vecto
         out.status[lev] = LevelSet::Status::EigenFailed;
         tempE[me] = E[lev];
         for (std::size_t k = 0; k < nc; k++) tempG[me * nc + k] = gamma[lev * nc + k];
+        if (!W.empty()) KeepFormalRow(W, n, me);
         break;
       }
       const double step = std::fabs(eig.values[me] - tempE[me]);  // MeV
@@ -524,6 +540,18 @@ LevelSet brune_from_formal(const System &system, std::size_t b, const std::vecto
           newG[mu * nc + k] = orientation * s;
         }
       }
+      if (!W.empty()) {
+        std::vector<double> newW(n * n);
+        for (std::size_t mu = 0; mu < n; mu++) {
+          const double orientation = (eig.vectors[mu * n + mu] < 0.0) ? -1.0 : 1.0;
+          for (std::size_t q = 0; q < n; q++) {
+            double s = 0.0;
+            for (std::size_t mup = 0; mup < n; mup++) s += eig.vectors[mup * n + mu] * W[mup * n + q];
+            newW[mu * n + q] = orientation * s;
+          }
+        }
+        W.swap(newW);
+      }
       tempE = eig.values;
       tempG.swap(newG);
       if (!done) {
@@ -536,6 +564,7 @@ LevelSet brune_from_formal(const System &system, std::size_t b, const std::vecto
           out.residual_MeV[lev] = step;
           tempE[me] = E[lev];
           for (std::size_t k = 0; k < nc; k++) tempG[me * nc + k] = gamma[lev * nc + k];
+          if (!W.empty()) KeepFormalRow(W, n, me);
         }
         iteration++;
       }
@@ -543,6 +572,8 @@ LevelSet brune_from_formal(const System &system, std::size_t b, const std::vecto
     out.E[lev] = tempE[me];
     for (std::size_t k = 0; k < nc; k++) out.gamma[lev * nc + k] = tempG[me * nc + k];
     out.iterations[lev] = iteration;
+    if (!W.empty())
+      for (std::size_t i = 0; i < n; i++) out.transform[lev * n + i] = W[me * n + (std::size_t)rank[i]];
   }
   return out;
 }
