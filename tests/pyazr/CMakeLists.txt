@@ -518,6 +518,14 @@ add_test(NAME pyazr_formal_capture_mask
                  ${CMAKE_CURRENT_SOURCE_DIR}/formal_capture_mask_test.py)
 set_tests_properties(pyazr_formal_capture_mask PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
+# A width given as 0 is not fitted, in every basis (docs/upgrade/external_capture.md section 9): the formal basis frees
+# the Brune basis's parameters (it freed rounding-valued ones), --no-ignore-externals keeps a zero photon width fixed,
+# and apply_fit places a formal-basis vector in strict mode.
+add_test(NAME pyazr_zero_width_fixed
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/zero_width_fixed_test.py)
+set_tests_properties(pyazr_zero_width_fixed PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
 # The R-matrix route (<config> first line false) at a pole of the R-matrix: tests/13N's thick-target capture puts a
 # sub-point exactly at a level's energy (NaN / 1.2 % off before 2026-11-01); identical_pp_res and natural_neon hit an
 # exact pole with Brune (LU failure / 84 points 0).  ~4 min.

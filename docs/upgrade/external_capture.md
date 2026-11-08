@@ -208,7 +208,9 @@ where the input is the parameter, the value test stays. A zero input means "this
 channel" (section 3), so the parameter is not fitted unless the user frees it by giving a non-zero start.
 `ChannelFixed` still fixes the others. pyazr's `apply_fit` skips a fixed parameter of a channel the level does not
 list whatever its value (it skipped only an exact 0, so a formal-basis fit with a rounding value there could not be
-applied in strict mode).
+applied in strict mode). A `param.sav` still frees a fixed width whose current value is 0 when it gives a non-zero
+value (`AZUREParams.cpp`); in the formal basis a zero-input width whose formal value is not 0 is not freed that way
+(it stays fixed at the `.sav` value), and a `.sav` written by an older build that lists it as free does not free it.
 
 **Expected.** Brune and Park with the default flags: the same free parameters (a zero input already gives 0).
 Formal basis: the parameters of zero inputs become fixed, rounding-valued or not, and the free set is the Brune

@@ -120,7 +120,13 @@ represents:
 
 Fix Width
    The **Fix?** checkbox in the channels list prevents the width parameter from
-   varying during a fit. A width left at zero is automatically held fixed.
+   varying during a fit. A width given as zero in the project file is held
+   fixed in every parameter basis: also with ``--no-brune``, where its formal
+   amplitude is a mixture of the other levels' and need not be zero, and with
+   ``--no-ignore-externals``, where a zero photon width has the internal
+   amplitude :math:`-\mathrm{Re}\,\gamma^{\rm ext}`. Give a non-zero start
+   value to fit it. (Builds before 2026-11-08 tested the transformed amplitude,
+   so in the formal basis rounding decided which of these were free.)
 
 .. note::
 

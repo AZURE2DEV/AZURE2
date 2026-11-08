@@ -2256,7 +2256,10 @@ void CNuc::FillMnParams(ROOT::Minuit2::MnUserParameters &p, const Config *config
         snprintf(varname, sizeof(varname), "width_%d_%d", energyIndex, widthIndex);
         widthIndex++;
         p.Add(varname, level->GetGamma(ch), 0.1 * level->GetGamma(ch));
-        if (level->GetGamma(ch) == 0.0) p.Fix(varname);
+        // A width given as 0 is not fitted, in every basis: the input decides, not the transformed amplitude, which
+        // in the formal basis is 0 or rounding by the order of the sums (external_capture.md section 9).  Without a
+        // transformation the input is the parameter.
+        if (this->IsTransformedIn() ? level->ZeroInputWidth(ch) : level->GetGamma(ch) == 0.0) p.Fix(varname);
         if (level->ChannelFixed(ch) && !p.Parameter(p.Index(varname)).IsFixed()) p.Fix(varname);
         // Apply Wigner Limit bounds if flag is enabled.  GetWignerLimit()
         // returns gamma_W^2 (MeV); the fit parameter at this point is the

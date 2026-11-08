@@ -2920,8 +2920,9 @@ class AzrModel:
                     written += 1
                     break
             else:
-                if p.fixed and v == 0.0:
-                    continue        # a channel this level does not list: the engine's zero, fixed width
+                if p.fixed:
+                    continue        # a channel this level does not list: the engine's fixed width of a zero input
+                                    # (in the formal basis its value is 0 or rounding, external_capture.md section 9)
                 unplaced.append(
                     f"{p.name} (no channel pair={want_pair} L={p.L} S={p.S} "
                     f"in {lv.jpi} at {lv.energy} MeV)")
