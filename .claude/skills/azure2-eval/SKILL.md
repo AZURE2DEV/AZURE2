@@ -832,8 +832,9 @@ runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
   Cut the case down to one segment and a few levels (start from a copy of
   `~/AZURE2/tests/13N`), run it through the CLI and the GUI, and compare with a hand
   calculation or `pyazr`. Three "bugs" reported in 2026 -- the 7Be A_y prompt order, the
-  ODeSA Q coefficient, the mode-3 "n" prompt -- were the session's own input errors; the
-  real ones (ten fixed since August) all reproduced on a small input.
+  ODeSA Q coefficient, the mode-3 "n" prompt -- were the session's own input errors. Real
+  bugs are common (ten long-standing errors with archive exposure, and about thirty fixes
+  from the 2026-10-25 code audit); the small input is what tells the two apart.
 - **A copied `.azr` keeps its parent's ABSOLUTE output and checks paths.** `<config>`
   lines 3-4 ("Full Path to Output Directory" / "Checks Directory") are honoured wherever
   the copy runs; on 2026-10-26 a copy written for an audit put 21 files into another
