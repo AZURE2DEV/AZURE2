@@ -5,6 +5,7 @@
 #include <string>
 
 class PPair;
+class ChannelTable;
 class Config;
 
 /*!
@@ -44,7 +45,7 @@ class ECTable {
   static complex Integral(PPair *finalPair, const Config &configure,
                           int li, int lf, double si, double sf, double ji, double jf,
                           int multL, char radType, double inEnergy, double levelEnergy,
-                          bool isChannelCapture);
+                          bool isChannelCapture, const ChannelTable *table = nullptr, int finalPairNum = 0);
   /// Node values (exact integrals) computed so far, over all terms.
   static long long NodesComputed();
   /// Integrals answered from the table, and directly (sub-threshold or failed nodes).

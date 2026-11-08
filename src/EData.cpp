@@ -2158,6 +2158,9 @@ int EData::Initialize(CNuc *compound, const Config &configure) {
   if (!(configure.paramMask & Config::USE_API))
     configure.outStream << "Initializing Component Segments..." << std::endl;
   if (this->InitializeComponentSegments(compound, configure) == -1) return -1;
+  // Every point of this stage has its rows now; nothing reads the channel table until the energies change, and the
+  // table (about 64 bytes a row) is not kept beside the rows it filled (docs/upgrade/channel_table.md section 2).
+  channelTable_.reset();
 
   return 0;
 }
@@ -2325,7 +2328,47 @@ void EData::PrintLegendreP(const Config &configure) {
  * Calls EPoint::CalcEDependentValues for each point in the entire EData object.
  */
 
+/*!
+ * The channel table of the given points and their sub-points, built before the threads that fill them start
+ * (docs/upgrade/channel_table.md).  Rows the current table holds are copied from it.
+ */
+std::shared_ptr<const ChannelTable> EData::BuildChannelTable(CNuc *theCNuc, const Config &configure,
+                                                             const std::vector<EPoint *> &points) {
+  // Each point's keys are made unique before they are added: its slots repeat (pair, l, E_c) once per channel spin
+  // and J^pi block, and the full list was the peak memory of the build (natural_neon: 11 M keys).
+  std::vector<ChannelTable::Key> keys, own;
+  std::size_t requested = 0;
+  for (EPoint *point : points) {
+    own.clear();
+    point->ChannelKeys(theCNuc, own);
+    requested += own.size();
+    std::sort(own.begin(), own.end());
+    own.erase(std::unique(own.begin(), own.end()), own.end());
+    keys.insert(keys.end(), own.begin(), own.end());
+  }
+  std::shared_ptr<const ChannelTable> table = ChannelTable::Build(theCNuc, configure, std::move(keys), channelTable_.get());
+  if (std::getenv("AZURE_PROFILE"))
+    configure.outStream << "Channel table: " << requested << " rows asked for, " << table->Size() << " distinct, "
+                        << table->Computed() << " computed" << std::endl;
+  return table;
+}
+
 int EData::CalcEDependentValues(CNuc *theCNuc, const Config &configure) {
+  {
+    std::vector<EPoint *> points;
+    for (ESegmentIterator segment = GetSegments().begin(); segment < GetSegments().end(); segment++)
+      for (int i = 1; i <= segment->NumPoints(); i++)
+        if (!segment->GetPoint(i)->IsMapped()) points.push_back(segment->GetPoint(i));
+    try {
+      channelTable_ = BuildChannelTable(theCNuc, configure, points);
+    } catch (std::exception &e) {
+      configure.outStream << "Channel functions: " << e.what() << std::endl;
+      return -1;
+    }
+  }
+  ChannelRowSource rows;
+  rows.tables.push_back(channelTable_.get());
+  const ChannelRowSource *table = &rows;
   for (ESegmentIterator segment = GetSegments().begin(); segment < GetSegments().end(); segment++) {
     bool localStop = false;
 #pragma omp parallel for shared(localStop, configure)
@@ -2334,7 +2377,7 @@ int EData::CalcEDependentValues(CNuc *theCNuc, const Config &configure) {
       EPoint *point = segment->GetPoint(i);
       if (!(point->IsMapped())) {
         try {
-          point->CalcEDependentValues(theCNuc, configure);
+          point->CalcEDependentValues(theCNuc, configure, true, true, table);
         } catch (GSLException e) {
 #pragma omp critical
           {
@@ -3340,7 +3383,7 @@ int EData::CalculateECAmplitudes(CNuc *theCNuc, const Config &configure) {
                   // then has the same layout with and without point mapping.
                   {
                     try {
-                      point->CalculateECAmplitudes(theCNuc, configure);
+                      point->CalculateECAmplitudes(theCNuc, configure, channelTable_.get());
                     } catch (GSLException e) {
 #pragma omp critical(ec_progress)
                       {
@@ -3517,6 +3560,24 @@ int EData::InitializeComponentSegments(CNuc *theCNuc, const Config &configure) {
   // mapped points that do not own their values; those are never computed here (the condition
   // below) and each has exactly one host, so no two threads write the same point.  Serial, this
   // loop was 9 of the 17.6 s of a natural_neon calculation on 24 threads.
+  {
+    std::vector<EPoint *> points;
+    for (auto &componentSegment : componentSegments_)
+      for (int i = 1; i <= componentSegment.NumPoints(); i++)
+        if (!(componentSegment.GetPoint(i)->IsMapped()) || componentSegment.GetPoint(i)->OwnsEDependentValues())
+          points.push_back(componentSegment.GetPoint(i));
+    if (!points.empty()) {
+      try {
+        channelTable_ = BuildChannelTable(theCNuc, configure, points);
+      } catch (std::exception &e) {
+        configure.outStream << "Channel functions: " << e.what() << std::endl;
+        return -1;
+      }
+    }
+  }
+  ChannelRowSource componentRows;
+  if (channelTable_) componentRows.tables.push_back(channelTable_.get());
+  const ChannelRowSource *componentTable = &componentRows;
   for (auto &componentSegment : componentSegments_) {
     bool localStop = false;
 #pragma omp parallel for shared(localStop, configure)
@@ -3525,7 +3586,7 @@ int EData::InitializeComponentSegments(CNuc *theCNuc, const Config &configure) {
       EPoint *point = componentSegment.GetPoint(i);
       if (!(point->IsMapped()) || point->OwnsEDependentValues()) {
         try {
-          point->CalcEDependentValues(theCNuc, configure);
+          point->CalcEDependentValues(theCNuc, configure, true, true, componentTable);
         } catch (GSLException e) {
 #pragma omp critical
           {
@@ -3619,7 +3680,7 @@ int EData::InitializeComponentSegments(CNuc *theCNuc, const Config &configure) {
                     EPoint *point = componentSegment.GetPoint(i);
                     if (!(point->IsMapped()) || point->OwnsEDependentValues()) {
                       try {
-                        point->CalculateECAmplitudes(theCNuc, configure);
+                        point->CalculateECAmplitudes(theCNuc, configure, channelTable_.get());
                       } catch (GSLException e) {
 #pragma omp critical(ec_progress)
                         {
@@ -5395,6 +5456,8 @@ void EData::FillEnergyShiftsFromParams(const vector_r &p, EData *data, CNuc *the
     }
 
     if (!toUpdate.empty()) {
+      if (theCNuc && configure)
+        for (ESegment *s : toUpdate) s->BeginShiftRefill(theCNuc, *configure);
       // One work item per point (with its sub-points), largest first, so a
       // segment with thousands of sub-points per point does not serialize.
       // A point mapped onto another (EData::MapData) copies its values from
@@ -5426,6 +5489,8 @@ void EData::FillEnergyShiftsFromParams(const vector_r &p, EData *data, CNuc *the
 #pragma omp parallel for schedule(dynamic, 1)
         for (int q = 0; q < (int)work.size(); q++) work[q].seg->UpdatePointGroupEnergyWithShift(work[q].i, theCNuc, configure);
       }
+      if (theCNuc && configure)
+        for (ESegment *s : toUpdate) s->CommitShiftTable(theCNuc, *configure);
     }
 
     // Critical fix: Rebuild energy-based mapping system after energy shifts

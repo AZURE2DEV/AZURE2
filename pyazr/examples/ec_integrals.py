@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Plot the external-capture radial integrals, and show what caching them buys.
+"""Plot the external-capture radial integrals, and time them.
 
 External capture is the non-resonant part of a radiative-capture cross section:
 the particle radiates from the external region straight into a bound state,
@@ -13,10 +13,11 @@ over Coulomb functions and a Whittaker function.  There is one of these for
 every (l_i, l_f, s_i, s_f, L, E/M) pathway the compound nucleus allows -- for a
 typical capture model, tens of them -- and each is an adaptive quadrature over
 expensive special functions.  They are the single most costly thing in a capture
-calculation, and they are why AZURE3 caches Coulomb functions at all.
+calculation.  The engine keeps no Coulomb memo (docs/upgrade/coulomb.md), so
+asking twice costs about the same; the second pass is timed to show that.
 
-This script asks for them over an energy grid, plots them, and then asks a
-second time to show the cache doing its job.
+This script asks for them over an energy grid, plots them, and asks a second
+time.
 
 Usage:
     python3 ec_integrals.py <file.azr> [--pair 1] [--top 8]
@@ -64,19 +65,15 @@ def main() -> int:
     energies = np.linspace(args.emin, args.emax, args.npoints)
 
     with azure2(str(args.azr)) as azr:
-        before = azr.cache_stats()
 
         t0 = time.perf_counter()
         paths = azr.ec_integrals(args.pair, energies)
         t_cold = time.perf_counter() - t0
-        mid = azr.cache_stats()
 
-        # Exactly the same request again.  Every Coulomb function it needs is
-        # now memoized at exactly the energies and radii it asks for.
+        # Exactly the same request again: recomputed, the same numbers.
         t0 = time.perf_counter()
         azr.ec_integrals(args.pair, energies)
         t_warm = time.perf_counter() - t0
-        after = azr.cache_stats()
 
     if not paths:
         sys.exit(f"no external-capture pathways from pair {args.pair} "
@@ -84,13 +81,7 @@ def main() -> int:
 
     print(f"{len(paths)} external-capture pathways, {args.npoints} energies")
     print(f"  first pass  {t_cold:6.2f} s")
-    print(f"  second pass {t_warm:6.2f} s   ({t_cold / max(t_warm, 1e-9):.1f}x faster)")
-    print(f"\nCoulomb cache")
-    for name, s in (("before", before), ("after first pass", mid),
-                    ("after second", after)):
-        print(f"  {name:17s} {s['queries']:9d} queries  {s['hits']:9d} hits  "
-              f"({100 * s['hit_rate']:5.1f}%)  {s['entries']:7d} entries  "
-              f"{s['disabled_keys']} keys given up on")
+    print(f"  second pass {t_warm:6.2f} s")
 
     order = np.argsort([-np.max(np.abs(p["value"])) for p in paths])
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4))

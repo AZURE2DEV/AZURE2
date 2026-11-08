@@ -291,10 +291,11 @@ the energy derivative of the Coulomb functions has no closed form, the
 :math:`\eta` derivative being an integral; :math:`S'` is
 ``ChannelFunc::ShiftDerivative``, the :math:`dS/dE` of every other caller,
 with its own branches at and below threshold).  ``CNuc::CalcShiftFunctions``
-takes them after the shift functions, for all levels at once and in parallel,
-without the Coulomb-function memo (``CoulFuncCache``: per thread and matching
-energies to :math:`10^{-12}` MeV, it made :math:`S'` depend on the run's history
-by up to :math:`10^{-11}`), so that they do not depend on the number of threads;
+takes them after the shift functions, for all levels at once and in parallel;
+the Coulomb functions are computed at every call (``physics/coulomb``, no memo
+since the process-wide one, which matched energies to :math:`10^{-12}` MeV and
+made :math:`S'` depend on the run's history by up to :math:`10^{-11}`, was
+deleted), so that they do not depend on the number of threads;
 channels of a level that differ only in the channel spin share one, and the
 working copies of a fit share them through a memo by exact argument.  It computes
 :math:`S''`, which only the gradient needs, only when asked: a chi-squared

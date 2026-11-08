@@ -12,6 +12,7 @@
 #include "Constants.h"
 #include "UdrKernel.h"
 #include "SharedTable.h"
+#include "ChannelTable.h"
 
 /// A container structure for a reference to a data point.
 
@@ -528,11 +529,20 @@ class EPoint {
   /// With includeSubPoints false the sub-points are left alone (their energies are updated, and their values recomputed, separately).
   /// With shareWithMapped true (setup, grid re-placement) the points mapped onto this one (EData::MapData) are given
   /// the same tables; RecalcEDependentValues passes false (see there).
-  void CalcEDependentValues(CNuc *, const Config &, bool includeSubPoints = true, bool shareWithMapped = true);
+  /// The rows of the open and closed particle channels are read from the tables of `rows` (docs/upgrade/
+  /// channel_table.md) when one holds them, and otherwise computed (ChannelTable::Compute), once per (pair, l, E_c)
+  /// of the point; rows->used, when set, receives every row used.
+  void CalcEDependentValues(CNuc *, const Config &, bool includeSubPoints = true, bool shareWithMapped = true,
+                            const ChannelRowSource *rows = nullptr);
+  /// The keys (pair, l, E_c) of the channel-table rows CalcEDependentValues reads for this point and, with
+  /// includeSubPoints, its sub-points: the same blocks, channels and channel energies.
+  void ChannelKeys(CNuc *, std::vector<ChannelTable::Key> &, bool includeSubPoints = true);
+  /// The compound-nucleus energy E_x (MeV) at which CalcEDependentValues evaluates the channels.
+  double CompoundEnergy(CNuc *);
   /// Recompute those at the current, possibly shifted, energy.  Writes this point (and its sub-points) only, never the
   /// points mapped onto it: on an energy shift each of those is re-energised on its own (ESegment::
   /// UpdatePointEnergyWithShift), possibly at the same time on another thread.
-  void RecalcEDependentValues(CNuc *, const Config &, bool includeSubPoints = true);
+  void RecalcEDependentValues(CNuc *, const Config &, bool includeSubPoints = true, const ChannelRowSource *rows = nullptr);
   /// Take the energy-dependent values (not the angle-dependent Coulomb amplitude) from a point at the same energy; false if the energies differ.
   bool CopyEDependentValuesFrom(const EPoint &);
   /// Empties the per-JGroup rows of the energy-dependent arrays, keeping their storage.
@@ -552,7 +562,8 @@ class EPoint {
   /// Set the Coulomb amplitude directly.
   void SetCoulombAmplitude(complex);
   /// Compute the external-capture amplitudes for every matching pathway.
-  void CalculateECAmplitudes(CNuc *, const Config &);
+  /// `table`: the stage's channel table, for sqrt(P) and exp(-i phi) at a_c (null: computed).
+  void CalculateECAmplitudes(CNuc *, const Config &, const ChannelTable *table = nullptr);
   void AddECAmplitude(int, int, complex);
   void AddECAmplitude(int, int, complex, double);
   void ClearECAmplitudes();

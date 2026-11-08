@@ -2,6 +2,46 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-07 (`feature/upgrade-1-channel-table`) — step 3b: the per-stage channel table; memo deleted
+
+Branch `feature/upgrade-1-channel-table` from `feature/upgrade` 815d9b5f, not merged. Commits: the design
+(`channel_table.md`, alone, with the `perf` measurement of where `-nomemo` spent its time), the table, the radial
+scratch, the `-nomemo` commits re-cut (c3dc22e5, 37a3637b), the entrance phase through the scratch, keys unique per
+point and the table released after setup, the first docs; then (director's answers) the free-shift tables, the
+capture amplitude from the table, distinct recorded rows, these docs.
+
+**State.** `ChannelTable` (src/): exact keys (pair α, l, E_c), rows P, S, e^{−iφ}, e^{i(σ_l − σ_0)} from one function
+(`ChannelTable::Compute`), built by `EData` before the point loops (keys from `EPoint::ChannelKeys`), one thread per
+row, read-only, released after setup; at setup the capture amplitude reads √P and the entrance phase at a_c from it.
+Free-shift refills: each segment keeps the tables of its last three shift states (key: the shift values bitwise;
+`BeginShiftRefill`/`CommitShiftTable` single-threaded around the parallel loop; replaced, never edited) — interim,
+deleted when the objective has the analytic shift derivative (Phase 2). `CoulFunc::SetRadialScratch`: thread-private
+exact-argument scratch for the capture integrals (accepted under RULES §2.3, `channel_table.md` §3).
+`CoulFuncCache` deleted. Stay: the per-slot rows of `EDependentTables` (Phase 4), `g_shiftDerivMemo` (until
+`level_parameters` computes S, S′, S″ at E_λ).
+
+**Evidence** (`channel_table.md` §6). 179 `.azr` × 3 bases against the memo base: observables ≤ 7.0 × 10⁻¹¹ (one
+exact zero's residue), `intEC.dat` ≤ 4.0 × 10⁻¹¹; against `-nomemo` 670/689 byte-identical, 19 `intEC.dat`
+≤ 2.8 × 10⁻¹³ (one ulp of E_c). T2 fit200 (1 thread) byte-identical to `-nomemo`. No re-baseline. No warnings;
+`channel_table_unit`; check.sh PASS; `ctest -LE slow` 109/109; `run_tests.sh` 132/132; THM
+byte checks 5/5; 1 vs 8 threads byte-identical on T1, T2, T3, 13N (menu 1); TSan (upgrade section) 0 reports (first
+build).
+
+**Speed** (qa-xp-003, alternating, three repeats; base → branch): T2 calc 2.29 → 2.30 s (1 thread), 0.68 → 0.37 s
+(8); fit200 140.1 → 121.7 s (1), 68.8 → 53.3 s (8); 13N 15.52 → 15.76 s; natural_neon 21.48 → 18.66 s; `tgt_fixed`
+57.65 → 57.41 s. 13N is slower in each of five pairs (+1 to +9 %) but inside the base's spread. Peak RSS of a T2 fit
++13 % (1 thread), +30 % (8): the shift tables.
+
+**Open (proposed default in brackets).**
+- 13N +1–9 % per pair. [Accept; the rest goes with step 4 (`physics/external_capture`, unit amplitudes per grid
+  energy).]
+- Fit peak RSS +30 % at 8 threads (three shift tables per segment and working copy). [Accept until Phase 2 removes
+  them; or keep two states, which loses the return to ν₀ after ν₀ ± h.]
+- A fit at 1 and 8 threads differs in χ²'s 8th digit — on the memo base and `-nomemo` too. [Separate item for the
+  Phase 2 objective (fixed-order reductions in the numerical gradient).]
+
+**Next.** Merge, then step 3b (i), (iii), (iv) or step 2.
+
 ## 2026-11-07 (`feature/upgrade-1-coulomb`) — split `CNuc`, step 3: Coulomb functions from pycoulomb (memo kept)
 
 Branch `feature/upgrade-1-coulomb` from `feature/upgrade` f549fa23, not merged. Commits: the design (`coulomb.md`,

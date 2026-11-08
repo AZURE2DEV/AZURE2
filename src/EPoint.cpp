@@ -623,7 +623,8 @@ complex EPoint::GetCoulombAmplitude(double s) const {
   return coulombdirect_ + sign * coulombexchange_;
 }
 
-static complex ECPathwayAmplitude(CNuc *, const Config &, PPair *, int, double, KGroup *, ECMGroup *, double);
+static complex ECPathwayAmplitude(CNuc *, const Config &, PPair *, int, double, KGroup *, ECMGroup *, double,
+                                  const ChannelTable *table = nullptr);
 
 /*!
  * Returns the external capture amplitude for a given external reaction pathway
@@ -1392,7 +1393,37 @@ void WarnThmBelowB(const Config &configure, double energy, double bindingE) {
  * and hard sphere phase shfits.
  */
 
-void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure, bool includeSubPoints, bool shareWithMapped) {
+double EPoint::CompoundEnergy(CNuc *theCNuc) {
+  PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetEntranceKey()));
+  PPair *exitPair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetExitKey()));
+  if (entrancePair->GetPType() == 20) return this->GetCMEnergy() + exitPair->GetSepE() + exitPair->GetExE();
+  return this->GetCMEnergy() + entrancePair->GetSepE() + entrancePair->GetExE();
+}
+
+void EPoint::ChannelKeys(CNuc *theCNuc, std::vector<ChannelTable::Key> &keys, bool includeSubPoints) {
+  // The walk of CalcEDependentValues: the blocks of the entrance pair's compound nucleus, their particle channels,
+  // E_c by the same expression; the exact threshold of a scattering length is not a row.
+  PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetEntranceKey()));
+  const double inEnergy = this->CompoundEnergy(theCNuc);
+  const int nucleus = entrancePair->GetNucleus();
+  for (int j = 1; j <= theCNuc->NumJGroups(); j++) {
+    JGroup *theJGroup = theCNuc->GetJGroup(j);
+    if (!theJGroup->IsInRMatrix() || theJGroup->GetNucleus() != nucleus) continue;
+    for (int ch = 1; ch <= theJGroup->NumChannels(); ch++) {
+      AChannel *theChannel = theJGroup->GetChannel(ch);
+      PPair *thePair = theCNuc->GetPair(theChannel->GetPairNum());
+      if (thePair->GetPType() != 0) continue;
+      double localEnergy = inEnergy - thePair->GetSepE() - thePair->GetExE();
+      if (fabs(localEnergy) <= ScatteringLength::kThresholdTolerance) continue;
+      keys.push_back({theChannel->GetPairNum(), theChannel->GetL(), localEnergy});
+    }
+  }
+  if (includeSubPoints)
+    for (int i = 1; i <= this->NumSubPoints(); i++) this->GetSubPoint(i)->ChannelKeys(theCNuc, keys, true);
+}
+
+void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure, bool includeSubPoints, bool shareWithMapped,
+                                  const ChannelRowSource *rows) {
   AZUREProfile::Timer profileTimer(AZUREProfile::kEDependent);
   PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetEntranceKey()));
   PPair *exitPair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetExitKey()));
@@ -1401,11 +1432,11 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure, bool i
   double geofactor;
   double sfactorconv;
   if (theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetEntranceKey()))->GetPType() == 20) {
-    inEnergy = this->GetCMEnergy() + exitPair->GetSepE() + exitPair->GetExE();
+    inEnergy = this->CompoundEnergy(theCNuc);
     geofactor = 1.;
     sfactorconv = 1.;
   } else {
-    inEnergy = this->GetCMEnergy() + entrancePair->GetSepE() + entrancePair->GetExE();
+    inEnergy = this->CompoundEnergy(theCNuc);
     geofactor = Kinematics::Channel(entrancePair).PiOverK2(this->GetCMEnergy());
     sfactorconv = this->GetCMEnergy() * exp(2 * pi * sqrt(uconv / 2.) * fstruc * entrancePair->GetZ(1) * entrancePair->GetZ(2) * sqrt(entrancePair->GetRedMass() / this->GetCMEnergy()));
   }
@@ -1449,6 +1480,16 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure, bool i
   // point: a group of another nucleus in the file has thresholds on a
   // different energy axis, and its rows stay empty (every consumer skips it).
   const int nucleus = entrancePair->GetNucleus();
+  std::vector<std::pair<ChannelTable::Key, ChannelTable::Row>> ownRows;
+  // ownRows: the distinct rows this point used, from the tables or computed; rows->used receives them once.
+  auto channelRow = [&](int pairNum, PPair *pair, int l, double e) -> ChannelTable::Row {
+    const ChannelTable::Key key{pairNum, l, e};
+    for (const auto &kr : ownRows)
+      if (kr.first == key) return kr.second;
+    const ChannelTable::Row *r = rows ? rows->Find(pairNum, l, e) : nullptr;
+    ownRows.emplace_back(key, r ? *r : ChannelTable::Compute(pair, l, e, configure));
+    return ownRows.back().second;
+  };
   for (int j = 1; j <= theCNuc->NumJGroups(); j++) {
     if (psTable) psTable->offset[j - 1] = (int)psTable->slot.size();
     if (theCNuc->GetJGroup(j)->IsInRMatrix() && theCNuc->GetJGroup(j)->GetNucleus() == nucleus) {
@@ -1459,7 +1500,6 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure, bool i
         int lValue = theChannel->GetL();
         double localEnergy = inEnergy - thePair->GetSepE() - thePair->GetExE();
         if (thePair->GetPType() == 0) {
-          ChannelFunc channelFunc(thePair, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
           if (fabs(localEnergy) <= ScatteringLength::kThresholdTolerance) {
             // Exactly at the channel's threshold (the entrance channel of a scattering length):
             // the E -> 0 limit, P = 0 and S_l(0) from the zero-energy Coulomb solutions, in
@@ -1469,55 +1509,15 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure, bool i
             this->AddSqrtPenetrability(j, ch, 0.0);
             this->AddExpCoulombPhase(j, ch, 1.0);
             this->AddExpHardSpherePhase(j, ch, 1.0);
-          } else if (channelFunc.IsClosed(localEnergy)) {
-            // At and below threshold, and just above it where the Coulomb
-            // barrier makes P = 0 to double precision: the shift function
-            // continued through E = 0 (ChannelFunc).  The Coulomb-wave
-            // routines are not usable that close to threshold (NaN, garbage
-            // or seconds per call), and a Gaussian-folding sub-point of a THM
-            // segment -- whose grid crosses E = 0 -- can land at round-off
-            // distance from it.
-            double localShift = channelFunc.Shift(lValue, localEnergy);
-            double boundary = theChannel->GetBoundaryCondition();
-            complex loElement(localShift - boundary, 0.0);
-            this->AddLoElement(j, ch, loElement);
-            this->AddSqrtPenetrability(j, ch, 0.0);
-            this->AddExpCoulombPhase(j, ch, 1.0);
-            this->AddExpHardSpherePhase(j, ch, 1.0);
-            //            if(ch==1){
-            //            std::ofstream coul_check;
-            //            coul_check.open("coul_check_neg.chk",std::ios::app);
-            //            coul_check << this->GetCMEnergy() << "  " << lValue << "  " << eta << "  " << coul.F << "  " << coul.dF << "  " << coul.G << "  " << coul.dG << std::endl;
-            //            coul_check << this->GetEntranceKey() << "," << this->GetCMEnergy() << "," << lValue << "," << 0.0 << "," << localShift << std::endl;
-            //            coul_check.close();
-            //	    }
           } else {
-            CoulFunc theCoulombFunction(thePair, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
-            double radius = thePair->GetChRad();
-            double localPene = theCoulombFunction.Penetrability(lValue, radius, localEnergy);
-            double localShift = theCoulombFunction.PEShift(lValue, radius, localEnergy);
-            double boundary = theChannel->GetBoundaryCondition();
-            complex loElement(localShift - boundary, localPene);
-            const Kinematics::Channel kin(thePair);
-            double eta = kin.Eta(localEnergy);
-            double rho = kin.Rho(radius, localEnergy);
-            complex expCP(1.0, 0.0);
-            for (int ll = 1; ll <= theChannel->GetL(); ll++)
-              expCP *= complex((double)ll / sqrt(pow(eta, 2.0) + pow((double)ll, 2.0)),
-                               eta / sqrt(pow(eta, 2.0) + pow((double)ll, 2.0)));
-            complex expHSP = theCoulombFunction.HardSpherePhase(lValue, radius, localEnergy);
+            // P, S, exp(-i phi), exp(i(sigma_l - sigma_0)) of (pair, l, E_c): from the stage's channel table, or
+            // computed once per (pair, l, E_c) of this point (docs/upgrade/channel_table.md).
+            const ChannelTable::Row row = channelRow(theChannel->GetPairNum(), thePair, lValue, localEnergy);
+            complex loElement(row.S - theChannel->GetBoundaryCondition(), row.P);
             this->AddLoElement(j, ch, loElement);
-            this->AddSqrtPenetrability(j, ch, sqrt(localPene));
-            this->AddExpCoulombPhase(j, ch, expCP);
-            this->AddExpHardSpherePhase(j, ch, expHSP);
-            //            if(ch==1){
-            //            std::ofstream coul_check;
-            //            coul_check.open("coul_check_pos.chk",std::ios::app);
-            //            coul_check << this->GetLabEnergy() << "  " << lValue << "  " << rho << "  " << eta << "  "
-            //                       << coul.F << "  " << coul.dF << "  " << coul.G << "  " << coul.dG << std::endl;
-            //            coul_check << this->GetEntranceKey() << "," << this->GetCMEnergy() << "," << lValue << "," << expHSP << "," << localShift << std::endl;
-            //            coul_check.close();
-            //            }
+            this->AddSqrtPenetrability(j, ch, sqrt(row.P));
+            this->AddExpCoulombPhase(j, ch, row.expCP);
+            this->AddExpHardSpherePhase(j, ch, row.expHSP);
           }
         } else if (thePair->GetPType() == 10) {
           complex loElement = complex(0.0, 0.0);
@@ -1627,13 +1627,14 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure, bool i
   // about a quarter of the tables' memory (natural neon: 2.3 GB of 9.6 GB).  A
   // point is filled here once per energy (setup, grid re-placement); the shift
   // step refills its rows in place every evaluation and keeps their capacity.
+  if (rows && rows->used) rows->used->insert(rows->used->end(), ownRows.begin(), ownRows.end());
   if (edep_ && edep_.SoleOwner()) {
     EDependentTables &t = MutableEDep();
     t.ShrinkToFit();  // the THM vertex tables too
   }
   if (includeSubPoints) {
     for (int i = 1; i <= this->NumSubPoints(); i++) {
-      this->GetSubPoint(i)->CalcEDependentValues(theCNuc, configure);
+      this->GetSubPoint(i)->CalcEDependentValues(theCNuc, configure, true, true, rows);
     }
   }
   // The points mapped onto this one share its tables -- at setup and on a grid
@@ -1691,7 +1692,8 @@ void EPoint::ClearEDependentRows() {
  * Recalculates energy-dependent values using the current (possibly shifted) energy.
  * This is needed when energy shifts are applied after initialization.
  */
-void EPoint::RecalcEDependentValues(CNuc *theCNuc, const Config &configure, bool includeSubPoints) {
+void EPoint::RecalcEDependentValues(CNuc *theCNuc, const Config &configure, bool includeSubPoints,
+                                    const ChannelRowSource *rows) {
   // Nothing to do while the energy is the one the values were computed at.
   // Every sub-point of a target-effect point used to pay for this on every
   // evaluation whenever external capture was in use (Coulomb and Whittaker
@@ -1722,7 +1724,7 @@ void EPoint::RecalcEDependentValues(CNuc *theCNuc, const Config &configure, bool
   // Recalculate with current energy.  The points mapped onto this one are not
   // touched: each is re-energised itself, from its host's values
   // (CopyEDependentValuesFrom) or anew (ESegment::UpdatePointEnergyWithShift).
-  this->CalcEDependentValues(theCNuc, configure, includeSubPoints, false);
+  this->CalcEDependentValues(theCNuc, configure, includeSubPoints, false, rows);
 
   // Also recalculate Coulomb amplitude with current energy
   this->CalcCoulombAmplitude(theCNuc, includeSubPoints);
@@ -1951,7 +1953,8 @@ void EPoint::SetCoulombAmplitude(complex amplitude) {
  */
 static complex ECPathwayAmplitude(CNuc *theCNuc, const Config &configure, PPair *entrancePair, int j,
                                   double levelEnergy, KGroup *theKGroup, ECMGroup *theECMGroup,
-                                  double cmEnergy) {
+                                  double cmEnergy,
+                                  const ChannelTable *table) {
   // A closed entrance channel -- at or below threshold, or so close above it
   // that P = 0 in double precision (ChannelFunc) -- captures nothing: the
   // amplitude carries the entrance Coulomb wave, whose routines return NaN or
@@ -1961,13 +1964,24 @@ static complex ECPathwayAmplitude(CNuc *theCNuc, const Config &configure, PPair 
   double inEnergy = cmEnergy + entrancePair->GetSepE() + entrancePair->GetExE();
   // entrance Phase Calculations;
   CoulFunc theCoulombFunction(entrancePair, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
+  // Every pathway of this point with the same l asks for the same exp(-i phi) at a_c (CoulFunc::SetRadialScratch).
+  if (!(configure.paramMask & Config::CALCULATE_REACTION_RATE)) theCoulombFunction.SetRadialScratch(true);
 
   double eta = Kinematics::Channel(entrancePair).Eta(cmEnergy);
   complex expCP(1.0, 0.0);
   for (int ll = 1; ll <= theECMGroup->GetL(); ll++)
     expCP *= complex((double)ll / sqrt(pow((double)ll, 2.0) + pow(eta, 2.0)),
                      eta / sqrt(pow((double)ll, 2.0) + pow(eta, 2.0)));
-  complex expHSP = theCoulombFunction.HardSpherePhase(theECMGroup->GetL(), entrancePair->GetChRad(), cmEnergy);
+  // exp(-i phi) at a_c from the point's channel table where it holds the open channel, at E_c = (E - S) - e
+  // (the table's expression; within one ulp of cmEnergy); otherwise computed.
+  int entranceNum = 0;
+  for (int p = 1; p <= theCNuc->NumPairs() && !entranceNum; p++)
+    if (theCNuc->GetPair(p) == entrancePair) entranceNum = p;
+  const ChannelTable::Row *row = table ? table->Find(entranceNum, theECMGroup->GetL(),
+                                                     (inEnergy - entrancePair->GetSepE()) - entrancePair->GetExE())
+                                       : nullptr;
+  complex expHSP = (row && row->P > 0.0) ? row->expHSP
+                                         : theCoulombFunction.HardSpherePhase(theECMGroup->GetL(), entrancePair->GetChRad(), cmEnergy);
 
   double sqrtGammaPene = pow((inEnergy - levelEnergy) / hbarc, theECMGroup->GetMult() + 0.5);
 
@@ -1990,7 +2004,8 @@ static complex ECPathwayAmplitude(CNuc *theCNuc, const Config &configure, PPair 
                                   theInitialSValue, theFinalChannel->GetS(),
                                   theECMGroup->GetJ(), theCNuc->GetJGroup(j)->GetJ(),
                                   theECMGroup->GetMult(), theECMGroup->GetRadType(),
-                                  inEnergy, levelEnergy, theECMGroup->IsChannelCapture());
+                                  inEnergy, levelEnergy, theECMGroup->IsChannelCapture(), table,
+                                  theFinalChannel->GetPairNum());
   } else {
     ECIntegral theECIntegral(theFinalPair, configure);
     integrals = theECIntegral(theInitialLValue, theFinalChannel->GetL(),
@@ -2011,7 +2026,7 @@ static complex ECPathwayAmplitude(CNuc *theCNuc, const Config &configure, PPair 
  * entrance and exit pairs.
  */
 
-void EPoint::CalculateECAmplitudes(CNuc *theCNuc, const Config &configure) {
+void EPoint::CalculateECAmplitudes(CNuc *theCNuc, const Config &configure, const ChannelTable *table) {
   int aa = theCNuc->GetPairNumFromKey(this->GetEntranceKey());
   if (theCNuc->GetPair(aa)->GetPType() == 20) return;
   if (theCNuc->GetPair(aa)->IsEntrance()) {
@@ -2027,7 +2042,7 @@ void EPoint::CalculateECAmplitudes(CNuc *theCNuc, const Config &configure) {
               for (int ecm = 1; ecm <= theKGroup->NumECMGroups(); ecm++) {
                 ECMGroup *theECMGroup = theKGroup->GetECMGroup(ecm);
                 complex ecAmplitude = ECPathwayAmplitude(theCNuc, configure, entrancePair, j, ecLevel->GetE(),
-                                                         theKGroup, theECMGroup, this->GetCMEnergy());
+                                                         theKGroup, theECMGroup, this->GetCMEnergy(), table);
                 this->AddECAmplitude(k, ecm, ecAmplitude);
               }
             }
@@ -2037,7 +2052,7 @@ void EPoint::CalculateECAmplitudes(CNuc *theCNuc, const Config &configure) {
     }
   }
   for (int i = 1; i <= this->NumSubPoints(); i++) {
-    this->GetSubPoint(i)->CalculateECAmplitudes(theCNuc, configure);
+    this->GetSubPoint(i)->CalculateECAmplitudes(theCNuc, configure, table);
   }
 }
 

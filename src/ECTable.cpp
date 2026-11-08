@@ -1,4 +1,5 @@
 #include "ECTable.h"
+#include "ChannelTable.h"
 #include "ECIntegral.h"
 #include "CoulFunc.h"
 #include "Config.h"
@@ -130,13 +131,19 @@ complex Converged(PPair *pair, const Config &configure, int li, int lf, double s
 complex ECTable::Integral(PPair *finalPair, const Config &configure,
                           int li, int lf, double si, double sf, double ji, double jf,
                           int multL, char radType, double inEnergy, double levelEnergy,
-                          bool isChannelCapture) {
+                          bool isChannelCapture, const ChannelTable *table, int finalPairNum) {
   const double threshold = finalPair->GetSepE() + finalPair->GetExE();
-  const double outEnergy = inEnergy - threshold;
+  // The channel energy by the channel table's expression, (E - S) - e (docs/upgrade/channel_table.md).
+  const double outEnergy = (inEnergy - finalPair->GetSepE()) - finalPair->GetExE();
   CoulFunc coul(finalPair, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
-  if (RateMode(configure)) coul.SetUseGlobalCache(false);  // rate energies never recur
+  // sqrt(P) at a_c: one more radius of the (l_i, E) block of the integrals (not in the rate mode: energies never recur)
+  if (!RateMode(configure)) coul.SetRadialScratch(true);
   complex reduction;
-  if (!(outEnergy > 0.0) || !Reduction(finalPair, coul, li, outEnergy, isChannelCapture, reduction)) {
+  // sqrt(P) or exp(-i phi) at a_c from the point's channel table where it holds the open channel (same function).
+  const ChannelTable::Row *row = table ? table->Find(finalPairNum, li, outEnergy) : nullptr;
+  if (row && row->P > 0.0)
+    reduction = isChannelCapture ? row->expHSP : complex(sqrt(row->P), 0.0);
+  else if (!(outEnergy > 0.0) || !Reduction(finalPair, coul, li, outEnergy, isChannelCapture, reduction)) {
     ++g_direct;
     return Direct(finalPair, configure, li, lf, si, sf, ji, jf, multL, radType, inEnergy, levelEnergy,
                   isChannelCapture);

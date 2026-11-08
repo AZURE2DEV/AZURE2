@@ -10,8 +10,8 @@ Before 2026-11-04, sampling a channel radius in a likelihood (3H+d free-radius M
 
 Checks, on tests/angle_mapping/angle_mapping.azr (p+12C and p+13C, a shift group and a shift function),
 without the Coulomb table (which covers these channels and would leave the memo unused):
-  1. 40 rebuilds at random radii of pair 1: the memo holds no more keys than after one calculation at one
-     radius, and chi2 at a radius equals a fresh session on an .azr with that radius written in (rel 1e-12);
+  1. 40 rebuilds at random radii of pair 1: no Coulomb memo holds anything (since docs/upgrade/coulomb.md there
+     is none; before, it had to hold no more keys than after one calculation at one radius), and chi2 at a radius equals a fresh session on an .azr with that radius written in (rel 1e-12);
   2. the Notes of the session's first build are not printed again by rebuilds, and a new session prints them;
   3. rebuilds read no input file from disk; an edited data file is read again (only it) and its new values
      are used (chi2 equals a fresh session on the edited file).
@@ -118,7 +118,7 @@ def main():
                   notes(first, what_fn) == 1 and notes(first, what_grp) == 1,
                   f"{notes(first, what_fn)} / {notes(first, what_grp)}")
 
-            print("1. Coulomb memo across rebuilds")
+            print("1. No Coulomb memo across rebuilds")
             chi2(m)
             k0 = m.cache_stats()["keys"]
             rng = np.random.default_rng(20261104)
@@ -128,7 +128,9 @@ def main():
                     m.set_channel_radius(1, 4.0 + 1.5 * rng.random())
                     chi2(m)
             k40 = m.cache_stats()["keys"]
-            check("keys after 40 random radii <= keys after one radius", 0 < k40 <= k0, f"{k0} -> {k40}")
+            # The process-wide Coulomb memo whose growth this bounded was deleted (docs/upgrade/coulomb.md): nothing
+            # is kept across rebuilds, so its counters stay 0 (a memo coming back would show here).
+            check("no Coulomb memo: keys 0 after one radius and after 40 random radii", k0 == 0 and k40 == 0, f"{k0} -> {k40}")
             m.set_channel_radius(1, R_STAR)
             c = chi2(m)
             check("chi2 at a radius == fresh session with it in the file", rel(c, chi_ref) <= 1e-12,

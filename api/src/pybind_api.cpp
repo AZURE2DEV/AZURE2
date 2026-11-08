@@ -23,7 +23,6 @@
 #include "AZUREAPI.h"
 #include "Config.h"
 #include "GSLException.h"
-#include "CoulFuncCache.h"
 #include "ECAmplitudeCache.h"
 #include "NuclearPotentialManager.h"
 #include <gsl/gsl_errno.h>
@@ -202,7 +201,6 @@ class Session {
     // (13N capture 3e-5 off the A-matrix route).
     config_->ResolveMatrixRoute();
 
-    InitializeCoulFuncCache();
     InitializeECAmplitudeCache();
 
     api_ = new AZUREAPI(*config_);

@@ -83,10 +83,8 @@ def main() -> int:
     fig.savefig(args.out, dpi=150)
     print(f"wrote {args.out}")
 
-    print(f"\nCoulomb cache after {args.npoints * len(args.L)} evaluations:")
-    print(f"  {stats['queries']} queries, {stats['hits']} hits "
-          f"({100 * stats['hit_rate']:.1f}%), {stats['entries']} entries "
-          f"over {stats['keys']} keys")
+    print(f"\nInput files: {stats['input_files_read']} read, {stats['input_files_served']} served from memory "
+          f"(the engine keeps no Coulomb memo: its counters are 0)")
     return 0
 
 

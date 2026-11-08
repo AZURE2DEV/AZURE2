@@ -66,9 +66,6 @@ class ChannelFunc {
   /// Starting step of the dS/dE central difference at e: |e|/4 within
   /// [kStep, kMaxStep], so the stencil stays on its side of threshold.
   static double DerivativeStep(double e);
-  /// Whether the Coulomb functions use the process-wide memo (CoulFuncCache,
-  /// on by default); CNuc::CalcShiftFunctions turns it off for Park's dS/dE.
-  void SetUseGlobalCache(bool use);
 
  private:
   CoulFunc &coul();
@@ -80,7 +77,6 @@ class ChannelFunc {
   double threshold_;
   double radius_;
   int lDeriv_ = 0;
-  bool useGlobalCache_ = true;
   std::unique_ptr<CoulFunc> coul_;
   std::unique_ptr<ShftFunc> shft_;
 };

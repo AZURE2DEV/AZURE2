@@ -136,12 +136,12 @@ per-point energies (Phase 4, `EnergyGrid`), and is not part of this branch (sect
 |---|---|---|
 | `external/coul` (`cwfcomp`, `cwfcomp_accurate`) | the Coulomb routine | `physics/coulomb/coulsm/` (and `coul/`); deleted |
 | direct `Coulomb_wave_functions_accurate` calls in `CoulFunc` (three: plain, hybrid boundary values, hybrid fallbacks), `CoulombTable::ExactOpen`, `ThmDistortion` | five copies of one call | `coulomb::coulomb(l, η, ρ, coulsm)` |
-| `CoulFuncCache` (process-wide, per-thread memo; energies matched to 10⁻¹² MeV) | speed | stays in this branch; deleted together with the table (§2.3) that replaces it, branch `feature/upgrade-1-coulomb-nomemo` re-cut on step 3b (§7) |
+| `CoulFuncCache` (process-wide, per-thread memo; energies matched to 10⁻¹² MeV) | speed | deleted in step 3b, replaced by the channel table and the radial scratch (`channel_table.md`) |
 | `CoulFunc::Penetrability`, `PEShift`, `HardSpherePhase`, `PEShift_dE` | Eq. (4) | thin calls of `channel_functions` (the Coulomb-table and hybrid paths stay in `CoulFunc`) |
 | `Kinematics::Channel::Eta`, `Rho` | η, ρ | call physics/ |
 | `WhitFunc`, `ShftFunc` | bound channels | stay (section 1.4) |
-| `EDependentTables` Coulomb rows | per-point store | stay (section 2.3) |
-| `g_shiftDerivMemo` (exact-argument memo of S′, S″ at level energies) | speed | stays; becomes the per-stage table of level energies with step 3b |
+| `EDependentTables` Coulomb rows | per-point store | filled from the channel table (step 3b); the rows themselves stay until `EnergyGrid` (section 2.3) |
+| `g_shiftDerivMemo` (exact-argument memo of S′, S″ at level energies) | speed | stays: level energies are fit parameters, not evaluation energies (`channel_table.md` §2) |
 
 The memo's tolerance makes the engine's last digits depend on the order of the calls: an energy within 10⁻¹² MeV of
 one computed earlier in the same thread gets the earlier one's functions. Deleting it lets every point get its own

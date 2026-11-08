@@ -141,7 +141,7 @@ with tempfile.TemporaryDirectory() as tmp:
         values.append((chi2(c), other["6Li_d"][1]))
     # To the bit within a session (the Coulomb functions are on the points);
     # against a fresh process to 1e-12: the process-wide Coulomb memo
-    # (CoulFuncCache, classic) takes an energy within 1e-12 MeV of one it holds
+    # (CoulFuncCache, deleted with docs/upgrade/coulomb.md) took an energy within 1e-12 MeV of one it held
     # as that one, so a warm memo moves the last digits (6Li_d after any session
     # with its pairs: 682.1465248015013 against 682.1465248016414 fresh, with
     # or without the reuse).

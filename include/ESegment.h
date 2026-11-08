@@ -461,7 +461,24 @@ class ESegment {
   double CalculateTheoreticalCrossSection(int pointIndex, CNuc *cnuc, const Config &configure, EData *edata,
                                           bool precalculated = false);
 
+  /// Free-shift refills (docs/upgrade/channel_table.md section 2.1, interim until the objective has the analytic
+  /// shift derivative): BeginShiftRefill, single-threaded before the parallel re-energise loop, keeps the tables of
+  /// the segment's last kShiftTables shift states for UpdatePointEnergyWithShift to read (exact keys) and has every
+  /// point record the rows it used; CommitShiftTable, single-threaded after the loop, turns those rows into the table
+  /// of the present state (the shift values, bitwise), replacing the oldest; nothing writes a stored table.
+  void BeginShiftRefill(CNuc *, const Config &);
+  void CommitShiftTable(CNuc *, const Config &);
+  static constexpr std::size_t kShiftTables = 3;
+
  private:
+  struct ShiftTable {
+    std::vector<double> state;  ///< energy shift, sqrt shift, shift-function values
+    std::shared_ptr<const ChannelTable> table;
+  };
+  std::vector<ShiftTable> shiftTables_;  ///< most recent first
+  std::vector<std::vector<std::pair<ChannelTable::Key, ChannelTable::Row>>> shiftRows_;  ///< per point, during a refill
+  ChannelRowSource ShiftRowSource(int i);
+  std::vector<double> ShiftState() const;
   bool isdifferential_;
   bool iscmdifferential_;
   bool isphase_;
