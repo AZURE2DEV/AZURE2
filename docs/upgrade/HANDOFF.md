@@ -2,6 +2,15 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-07 (director) — step 3b merged (4a8ecf02)
+
+Per-stage channel table and the Coulomb memo's deletion are on `feature/upgrade`. Accepted as interim, with the
+reason: 13N +1–9 % per pair (inside the base's spread; revisit in step 4, `physics/external_capture`); T2 fit peak
+memory +30 % at 8 threads from the three shift-state tables per segment (gone with Phase 2's analytic shift
+derivative); the χ² of a fit differs in the 8th digit between 1 and 8 threads, already so on the base (Phase 2:
+fixed-order reductions in the numerical gradient). Next: step 2 (observed widths from the total amplitude), step 4
+(external capture), then the Whittaker functions without GSL and `--coulomb-method`.
+
 ## 2026-11-07 (`feature/upgrade-1-channel-table`) — step 3b: the per-stage channel table; memo deleted
 
 Branch `feature/upgrade-1-channel-table` from `feature/upgrade` 815d9b5f, not merged. Commits: the design
