@@ -325,9 +325,11 @@ exact (α, l, E_c), built by `EData` before the point loops, read-only, released
 exact-argument scratch of the radial Coulomb waves of external capture, and `CoulFuncCache` deleted (the `-nomemo`
 commits re-cut). Outputs against the memo base: as on `-nomemo` (≤ 7.0 × 10⁻¹¹ on observables, one exact zero's
 residue, `intEC.dat` ≤ 4.0 × 10⁻¹¹), and byte-identical to `-nomemo` in all 689 Brune-basis files. The THM byte checks
-pass 5/5; 1 vs 8 threads byte-identical (T1, T2, T3, 13N). Speed: faster at setup and at 8 threads, but T2 fit200 at
-one thread +7 % and 13N +5 %: the speed gate is not met (`channel_table.md` §6, with the profile and the proposed next
-step). Not done: (i) the Whittaker functions, (iii) hybrid (α, l, j) rows, (iv) `CoulombTable`/`--gsl-coul`; the
+pass 5/5; 1 vs 8 threads byte-identical (T1, T2, T3, 13N). Then, on the director's answers: free-shift refills read
+the segment's tables of its last three shift states (interim until the analytic shift derivative), and the capture
+amplitude reads √P and the entrance phase at a_c from the table. Speed against the memo base on one host: T2 fit200
+−13 % (1 thread), −23 % (8), calc equal or faster, natural_neon −13 %, `tgt_fixed` equal, 13N +1.5 % (+1 to +9 % over
+five pairs, inside the base's spread); peak RSS of a fit +13 % (1 thread), +30 % (8) (`channel_table.md` §6). Not done: (i) the Whittaker functions, (iii) hybrid (α, l, j) rows, (iv) `CoulombTable`/`--gsl-coul`; the
 per-slot rows of `EDependentTables` and `g_shiftDerivMemo` stay (`channel_table.md` §2).
 
 ### Remaining steps

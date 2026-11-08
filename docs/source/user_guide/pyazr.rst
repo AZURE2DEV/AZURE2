@@ -905,9 +905,9 @@ evaluation energies are computed once per pair, :math:`l` and exact channel
 energy, in a table built before the point loops, and the radial Coulomb waves of
 the external-capture integrals once per exact radius in a per-thread scratch
 (``docs/upgrade/channel_table.md``); neither depends on what was computed
-before. A fit that moves a free energy shift recomputes the channel functions of
-that measurement at each move (one thread, ``tests/upgrade/T2`` 200 calls: 7 %
-slower than with the memo). The Coulomb table (``--build-coulomb-table``)
+before. A fit that moves a free energy shift keeps the tables of the
+measurement's last three shift states, so the gradient's steps back to an
+earlier shift do not recompute them. The Coulomb table (``--build-coulomb-table``)
 remains the way to make P, S and the phases fast.
 
 Model averaging

@@ -67,10 +67,27 @@ table in this step, they share their repeated (α, l, E_c) within the point (bel
 owns the evaluation energies, such a move builds `Build(new keys, current)` single-threaded between evaluations and
 swaps the pointer, as ARCHITECTURE.md §4 states.
 
-**A point without a table.** A point filled outside these two loops (an energy shift, a re-placed sub-grid, the
+**A point without a table.** A point filled outside these two loops and the free-shift refill (§2.1) (a re-placed sub-grid, the
 reaction-rate grid, a pyazr helper) computes its rows with `Compute`, sharing a repeated (α, l, E_c) among its own slots
 (a list local to the call). The same function gives the same bits; only the time differs. The table counts its rows,
 its lookups and the lookups it did not hold (`AZURE_PROFILE`), so a path that misses is visible.
+
+### 2.1 Free-shift refills (interim)
+
+A free energy shift ν moves the energies of its measurement at every change, and the rows of those points are
+recomputed there (decision 11). The fitter's numerical gradient steps ν to ν + h, ν − h and back, so the same
+energies come back within a few evaluations. Each segment therefore keeps the tables of its last three shift
+states: `EData::FillEnergyShiftsFromParams` calls `ESegment::BeginShiftRefill` before its parallel re-energise loop
+(single-threaded; every point gets its own slot for the rows it uses), the points read the stored tables by exact key
+(`ChannelRowSource`) and compute what none holds, and `ESegment::CommitShiftTable` after the loop turns the
+recorded rows into the table of the present state (`ChannelTable::FromRows`), keyed by the shift values bitwise
+(constant shift, √E shift, shift-function values), in place of the oldest. A stored table is never edited; a change of
+system (radius, Coulomb route; `SameSystem`) drops them. Memory: at most three tables of one measurement's rows per
+segment and working copy.
+
+This is interim. It exists only because the gradient with respect to ν is a difference of evaluations; when the
+objective has the analytic shift derivative (Phase 2: ∂m/∂ν from S′, P′ and dO/dE at the shifted energies,
+ARCHITECTURE.md §1), the ±h steps disappear, and the shift tables are deleted with them.
 
 **Readers.** `EPoint::CalcEDependentValues` takes its four numbers per slot from the row and forms the slot's values
 as before: L⁰_c = S − B_c + iP (B_c is the block's), √P, and the two phase factors. The per-slot rows of
@@ -94,6 +111,11 @@ relativistic, hybrid tag, GSL route), l, E_c — each block a hash map from the 
 reads it. Its values are those `CoulFunc` computes at the same exact arguments, so no result depends on what the
 thread computed before, on the thread count or on the session, which is what the rule against caches (RULES §2.3)
 guards.
+
+**Under RULES §2.3** (no caches beyond the per-stage tables; director's ruling, 2026-11-07): the scratch is accepted
+because its arguments are exact (no tolerance, so a value is never a neighbour's), it is thread-private (no shared
+mutable state, nothing to synchronise, results independent of the thread count) and bounded (2²⁰ radii per thread).
+Any further cache must meet the same three conditions or be a per-stage table.
 
 A scratch of the last 16 blocks only (the first version) left 13N at 408 705 evaluations; the whole run needs 226 925
 distinct (block, r); the bounded hash map reaches that number. The alternative, a fixed radial quadrature shared by
@@ -145,37 +167,33 @@ checks `pyazr_thm_profiled` and `pyazr_thm_fixed_angle` 5/5 each; 1 vs 8 threads
 13N (all output files, `intEC.dat` included); ThreadSanitizer (clang 23, archer), section `upgrade` (T1–T3 calc,
 extrapolation, rate, fit; T2 fit30), 8 threads: 0 reports.
 
-**Speed** (host qa-xp-021, the memo base and this branch alternately, three repeats, `--no-coulomb-table`; mean and
-range; rows in `tests/upgrade/bench/T2.tsv`):
+**Shift tables and the capture amplitude** (§2.1; 68353dcb, 139b77ca). Against the memo base the comparison is
+unchanged (same files, same largest differences). Against `-nomemo` (Brune basis): 670/689 files byte-identical; the
+19 others are `intEC.dat` files, ≤ 2.8 × 10⁻¹³ of the line's largest value, from the channel energy of
+`ECTable::Integral` formed as (E − S) − e (one ulp). T2 fit200 (one thread) outputs are byte-identical to `-nomemo`
+(14 files), so the shift tables return what recomputation gives. A fit at 1 and at 8 threads differs in the 8th digit
+of χ² (706.422394874 / 706.422414376) as it does on the memo base (706.422393438 / 706.422415313) and on `-nomemo`:
+not introduced here (calculations, menu 1, are byte-identical at 1 and 8 threads).
+
+**Speed** (memo base and this branch alternately, three repeats, `--no-coulomb-table`; mean and range; rows in
+`tests/upgrade/bench/T2.tsv`). Host qa-xp-003, branch 68353dcb:
 
 | run | memo base | this branch | change |
 |---|---|---|---|
-| T2 calc, 1 thread | 5.21 s (4.77–5.54) | 4.86 s (4.50–5.18) | −7 % |
-| T2 calc, 8 threads | 1.91 s (1.75–2.08) | 0.87 s (0.82–0.92) | −55 % |
-| T2 fit200, 1 thread | 198.0 s (175.7–219.7) | 211.2 s (196.6–230.3) | **+7 %**, slower in each pair |
-| T2 fit200, 8 threads | 118.5 s (111.8–130.7) | 105.7 s (102.8–108.3) | −11 % |
-| 13N, 1 thread | 32.4 s (27.6–37.0) | 35.8 s (34.5–36.6) | +10 % (host noise ±15 %); a paired run on a quieter slot: 13.3 → 14.0 s, +5 % |
-| natural_neon, 1 thread | 40.1 s (33.5–47.2) | 32.6 s (24.8–42.2) | −19 % |
-| `convolution_unify` `tgt_fixed`, 2 threads | 97.2 s (87.8–105.9) | 97.3 s (90.8–102.3) | 0 % |
+| T2 calc, 1 thread | 2.29 s (2.10–2.65) | 2.30 s (1.95–3.01) | 0 % |
+| T2 calc, 8 threads | 0.68 s (0.67–0.71) | 0.37 s (0.37–0.38) | −45 % |
+| T2 fit200, 1 thread | 140.1 s (140.0–140.2) | 121.7 s (121.7–121.8) | −13 % |
+| T2 fit200, 8 threads | 68.8 s (64.0–77.7) | 53.3 s (53.0–53.7) | −23 % |
+| 13N, 1 thread | 15.52 s (15.10–15.85) | 15.76 s (15.37–16.15) | +1.5 % |
+| natural_neon, 1 thread | 21.48 s (20.94–21.89) | 18.66 s (18.30–18.93) | −13 % |
+| `convolution_unify` `tgt_fixed`, 2 threads | 57.65 s (56.26–58.95) | 57.41 s (56.89–58.00) | 0 % |
 
-Peak RSS: T2 fit200 at 8 threads 481 → 425 MB; 13N 163 → 176 MB; natural_neon 1437 → 1484 MB; `tgt_fixed` 7668 →
-7939 MB (+3.5 %).
+Host d32cepyc138, branch 139b77ca: T2 fit200 80.8 → 71.3 s (1 thread), 35.7 → 31.1 s (8); 13N 10.26 → 10.92 s
+(two pairs, +8.5 % and +4.6 %; base range 9.65–10.87 s).
 
-**The gate is not met** for T2 fit200 at one thread (+7 %) and, within the noise, for 13N (+5 %). Where the time
-goes (`perf`, one thread):
+13N is slower in each of the five pairs (+1 % to +9 %), inside the base's run-to-run range (about ±6 %): the scratch's
+hash lookups (2 % of the run) and the Coulomb functions the memo shared between calls that neither the table nor the
+scratch connects. Every other case is equal or faster.
 
-- T2 fit (60 calls): 72 % of the run in the Coulomb functions of `EData::FillEnergyShiftsFromParams` →
-  `ESegment::UpdatePointEnergyWithShift` → `EPoint::RecalcEDependentValues` (memo base: 54 %). Each change of a free
-  shift ν refills the rows of its points at the new energies, as decision 11 prescribes; the numerical gradient steps
-  ν to ν ± h and back, and the memo found the energies of an earlier ν again. These points are filled outside the
-  table (§2, "A point without a table") and share only within the point.
-- 13N: about 20 % more samples in `coulsm` and 2 % in the scratch's hash lookups. The memo shared F, G at a_c
-  between the point rows and the external-capture calls at the same channel energy (`Reduction`, the entrance phase
-  factor), which the table and the scratch keep apart.
-
-Proposed (next step): (1) the shift step sets the energies of a segment's points and sub-points first, builds
-`Build(keys, previous)` from the segment's tables of its last two or three shift states (kept by the segment, not by
-a process-wide memo), then refills the rows from it; (2) the external-capture callers read √P and e^{−iφ} at a_c from
-the point's channel table where the key is present (the entrance and final pair of a capture are table pairs, with
-E_c formed by the table's expression).
-
+Peak RSS: T2 fit200 242 → 274 MB (1 thread), 481 → 626 MB (8 threads): the three shift tables per shifted segment and
+working copy (§2.1); calc unchanged; 13N 163 → 171 MB; natural_neon 1437 → 1484 MB; `tgt_fixed` 7668 → 7940 MB.
