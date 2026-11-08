@@ -263,6 +263,28 @@ with its sign.
   took GSL's eigenvector signs. pyazr's ``save_fit`` check compares
   amplitudes "up to a common sign of the level" (:doc:`../user_guide/pyazr`),
   which this rule makes unnecessary but not wrong.
+- **External-capture final states in every basis.** A final state :math:`f`
+  enters external capture through its asymptotic normalization, which follows
+  from the residue of its own pole: its observed (Brune) amplitude
+  :math:`\tilde\gamma_{fc}` and energy :math:`\tilde E_f`. All three bases use
+  these. In the formal basis a final state above the lowest level of its
+  :math:`J^\pi` group has a formal amplitude that mixes the group's poles
+  (the lowest level's formal parameters are its observed ones, since
+  :math:`B_c` is taken there); for it the engine computes
+  :math:`\tilde\gamma_{fc}` from the formal parameters at each evaluation
+  (``brune_from_formal``, to :math:`10^{-12}` MeV, and the analytic gradient
+  falls back to finite differences) and :math:`\tilde E_f` once at setup; the external
+  part of each level's photon amplitude is subtracted from the input with the
+  observed amplitudes of all levels, before any group is made formal. Builds
+  before 2026-11-08 used the formal amplitude and energy, and the
+  ¹²C(α,γ) capture of ``tests/beam_profile_kernel`` to its 6.049 MeV
+  :math:`0^+` state at 90° differed between ``--no-brune`` and the default by up
+  to 81 % (:math:`E_\alpha` = 1.0–6.5 MeV, ``--no-ignore-externals``); now by
+  :math:`1.5\times10^{-11}` (``tests/beam_profile_kernel/check.sh``).
+  With ``--ignore-externals`` (the default) the bases still differ: that
+  option drops the external capture of a level whose internal photon
+  amplitude is zero, and which levels those are depends on the basis
+  (``docs/upgrade/cnuc_split.md`` section 8).
 - **No transformation** (``--no-transform``). The ``<levels>`` values are
   used as :math:`E_\lambda` and :math:`\gamma_{\lambda c}` directly.
 

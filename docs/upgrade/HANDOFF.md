@@ -2,6 +2,49 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-08 (`feature/upgrade-1-cnuc-split-2`) — split `CNuc`, step 2: observed quantities; formal-basis external capture
+
+Branch `feature/upgrade-1-cnuc-split-2` from `feature/upgrade` 9d50667f, not merged. Commits: the design
+(`cnuc_split.md` §8, alone), `observed_levels` and its callers, the formal-basis external-capture fix with its test,
+the restriction to final states above the lowest level, these docs.
+
+**State.** `level_parameters::observed_levels` is the one definition of the observed quantities from total amplitudes
+γ^int + γ^ext: W = s 2P|γ^tot|²/N and the `<levels>` value (Γ eV, C fm^−½, μ, Q, B, or the Brune amplitude of a
+`gammaIsRWA` column) with its kind. `TransformOut` = `TransformToBrune` + `ObservedWidths`; `GetTransformParams`,
+`PrintTransformParams`, `CheckRadiativeWidths` read the stored values (the last now with N and the external part);
+`ConvertAmplitudeBasis` calls `park_from_brune`/`brune_from_park`. The five γ → Γ copies are deleted. External capture
+takes the final state's Brune amplitude and energy in every basis (`ALevel::ECGamma`, `ECEnergy`; formal basis: a
+read-only setup record of the blocks with a final state above their lowest level, `brune_from_formal` to 10⁻¹² MeV in
+`FillCompoundFromParams`; γ^ext subtracted before any group is made formal); the intEC signature hashes the energy
+used. How the parts stay apart: `level_parameters` gets arrays (E, γ, γ^ext, flags, channel functions) and returns
+arrays; the engine only gathers and stores; external capture still supplies γ^ext from `CNuc` (step 4).
+
+**Evidence** (`cnuc_split.md` §6, step 2). 179 `.azr` × 3 bases against 9d50667f: Brune 689/689, Park 689/689
+identical; formal 649/662, every change classified (8 `parameters.out` μ/Q instead of G = 0, 3 `screening_6li` logs
+lose a warning built on formal amplitudes, `beam_profile_kernel` `param.par` and `parameters.out` whose photon widths
+to the 6.049 MeV state now reproduce the input, e.g. 0.000053 → 0.000330 meV for 0.33). No re-baseline. Formal ↔ Brune
+capture on `beam_profile_kernel` (111 energies, `--no-ignore-externals`): 6.049 MeV state 0.808 → 1.5 × 10⁻¹¹; the other
+four final states 0 before and after. New `tests/beam_profile_kernel/check.sh` (fails on 9d50667f, 0.448). No warnings;
+`check.sh` PASS; `ctest -LE slow` 109/109; `run_tests.sh` 133/133; 1 vs 8 threads byte-identical (T1–T3, three bases);
+T2 bench (mean of three, same host) fit200 133.1 → 131.8 s (1 thread), 55.8 → 56.2 s (8, +0.7 %); calc 2.45 → 2.22 s,
+0.42 → 0.44 s.
+
+**Open (proposed default in brackets).**
+- `--ignore-externals` (the default) drops the external resonant capture of levels whose internal photon amplitude is
+  < 10⁻⁸ in the basis in use, so formal and Brune still differ by default (9.7 × 10⁻² on the `beam_profile_kernel`
+  data). [Step 4: define the mask on the Brune amplitudes in every basis.]
+- A formal-basis fit that moves the energy of a lowest-level final state: its Brune amplitude then differs from the
+  formal one at second order and is not recomputed. [Accept until step 4; or record every block with a final state
+  whose energy is free.]
+- Formal basis with a final state above the lowest level: the analytic gradient falls back to finite differences.
+  [Accept; the derivative of `brune_from_formal` is a Phase 2 item.]
+- The reports (`parameters.out`) of the formal basis keep `TransformOut`'s 10⁻⁶ MeV iteration; deeply bound channels
+  amplify it (an ANC input 0 reported as 38.65 fm^−½ in `beam_profile_kernel`, as before). [Tighten to 10⁻¹⁰ MeV in a
+  later step, with its own comparison.]
+- `ThmLevelWidth` (THM line shape) has its own total-width formula. [Phase 5 with THM.]
+
+**Next.** Merge; then step 4 (`physics/external_capture`) or step 3b (i).
+
 ## 2026-11-07 (director) — step 3b merged (4a8ecf02)
 
 Per-stage channel table and the Coulomb memo's deletion are on `feature/upgrade`. Accepted as interim, with the

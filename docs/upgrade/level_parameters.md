@@ -8,8 +8,9 @@ amplitudes, coupled in some angular-momentum scheme with some phase convention. 
 with constant boundary values B_c, Lane–Thomas phases, channel-spin coupling s = j₁ + j₂ (light particle first),
 J = s + l (`docs/source/theory/conventions.rst`). It is the only place in the code where a conversion between bases or
 conventions happens (`RULES.md` §1.6). This page gives the equations of each conversion, their validity, the
-tolerances, and what each test would detect. The engine calls it: `CNuc::CalcBoundaryConditions`, `CNuc::TransformIn`
-and the formal → Brune iteration of `CNuc::TransformOut` delegate to these functions (`cnuc_split.md`), with this
+tolerances, and what each test would detect. The engine calls it: `CNuc::CalcBoundaryConditions`, `CNuc::TransformIn`,
+the formal → Brune iteration and the observed widths of `CNuc::TransformOut`, `CNuc::ConvertAmplitudeBasis` and the
+external-capture final states of the formal basis delegate to these functions (`cnuc_split.md`), with this
 page's rules for the formal basis (B_c at the lowest level, orientation of the Brune level) and its own eigensolvers; the
 convention conversions (section 5) are not used by the engine yet, which reads no convention record. The `CNuc.cpp`
 line numbers below are those of e54e6fcc, the code these functions were checked against before the move.
@@ -154,23 +155,30 @@ column that is not allowed or has no counterpart, and duplicates; `convention_tr
 A block that lists one channel spin of two allowed ones (a model in which the other carries no width) has no jj form
 without that channel: the missing one would also add its hard-sphere scattering.
 
-## 6. The engine's formal basis and external capture: an ordering effect
+## 6. External capture in the formal basis
 
-`CNuc::TransformIn` converts the J^π groups one after the other and replaces each group's levels by their formal
-parameters before the next group is treated (`CNuc.cpp:1464-1607`). The external-capture amplitude γ^ext of a photon
-channel (Eq. 3.2) is computed in that loop from the final state's E and γ as they stand: a final state in an earlier
-group enters with its formal parameters, one in the same or a later group with its Brune ones. In the Brune and Park
-bases the loop reads only the final state's particle amplitudes, which it does not change, so the effect is confined to
-`--no-brune` with external capture and a final state in a group of several levels listed before the capturing group.
-None of T1–T3 has one: T1's 14 non-zero external amplitudes all go to the ground state, alone in its group, whose
-formal and Brune parameters are identical (B_c = S_c(E_1) for a single level), and they are the same in either order
-(`physics_level_parameters_from_cnuc` prints the count). The test computes γ^ext in the engine's order, so it reproduces
-the engine either way. Whether the engine's order is intended is a decision (HANDOFF); it is not changed here. The sign
-of the final state is not part of the effect: the orientation rule of section 4 gives a final state the sign of its
-Brune level in either order. Independently of the order, the formal basis treats external capture differently from
-the Brune basis (the cross section takes the final state's formal amplitude, Γ_γ the Brune one): on
-`tests/beam_profile_kernel` the two bases differ by 1.5 × 10⁻² to 9.1 relative (largest over 111 energies) in the
-capture to its five final states, before and after step 1b (`cnuc_split.md` section 6).
+A final state f enters external capture through its asymptotic normalization C_f ∝ γ̃_fc N_f^{−½}, the residue of its
+own pole: its Brune amplitude γ̃_fc and energy Ẽ_f (`cnuc_split.md` §8). In the formal basis a final state that shares
+its J^π group with other levels has a formal amplitude γ_fc that mixes the group's poles, except the lowest level of
+the group: with B_c = S_c(Ẽ_low) its formal parameters are its Brune ones (the iteration of §4 moves B_c by 0). Since
+2026-11-08 the engine uses γ̃_f and Ẽ_f in every basis: `CNuc::TransformIn` subtracts γ^ext (Eq. 3.2) of every group
+while all levels hold their Brune amplitudes, before any group is made formal (until then a later group saw the formal
+amplitude of a final state in an earlier one); in the formal basis a final state above the lowest level of its group
+enters the capture term with `brune_from_formal` of its group at each evaluation (to 10⁻¹² MeV) and the capture
+integrals with its Brune energy at setup. On `tests/beam_profile_kernel` the capture to the 6.049 MeV 0⁺ state (second
+of four 0⁺ levels) differed between the bases by up to 0.45 relative and now agrees to the printed 11 digits
+(`tests/beam_profile_kernel/check.sh`, with `--no-ignore-externals`). Not covered: a formal-basis fit that moves the
+energy of a lowest-level final state away from its setup value (its Brune amplitude then differs from the formal one
+at second order); the default `--ignore-externals`, which drops the external capture of a level whose internal photon
+amplitude is below 10⁻⁸ MeV^½ in the basis in use and so selects different terms in the two bases.
+
+## 6a. Observed quantities
+
+`observed_levels` (Eq. 8.1 of `cnuc_split.md`) gives, from the Brune (Park) energies and total amplitudes
+γ^int + γ^ext of a block's levels, the signed W = 2P|γ^tot|²/N per channel and the value a `<levels>` line holds
+(Γ in eV, C in fm^−½, μ, Q, B, or the Brune amplitude of a `gammaIsRWA` column). It is Eq. (2.2) read backwards and
+the one definition of these quantities: `CNuc::TransformOut` (`parameters.out`), `GetTransformParams` and
+`CheckRadiativeWidths` read it, and `observed_from_amplitudes` is its value without external capture.
 
 ## 7. Tests and what they detect
 
