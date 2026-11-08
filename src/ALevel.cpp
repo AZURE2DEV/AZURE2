@@ -224,6 +224,8 @@ void ALevel::AddGamma(NucLine nucLine) {
   fitgammas_.push_back(0.0);
   transform_gammas_.push_back(0.0);
   big_gammas_.push_back(0.0);
+  observed_values_.push_back(0.0);
+  observed_kinds_.push_back(0);
   external_gammas_.push_back(complex(0.0, 0.0));
   if (nucLine.channelFix() == 1)
     channelfixed_.push_back(true);
@@ -242,6 +244,10 @@ void ALevel::PadChannels(int n) {
     fitgammas_.push_back(0.0);
     transform_gammas_.push_back(0.0);
     big_gammas_.push_back(0.0);
+    observed_values_.push_back(0.0);
+    observed_kinds_.push_back(0);
+  observed_values_.push_back(0.0);
+  observed_kinds_.push_back(0);
     external_gammas_.push_back(complex(0.0, 0.0));
     channelfixed_.push_back(true);
     gamma_is_rwa_.push_back(false);  // a padded channel has a zero width: the flag is moot
@@ -270,6 +276,8 @@ void ALevel::AddGamma(double reducedWidth) {
   fitgammas_.push_back(0.0);
   transform_gammas_.push_back(0.0);
   big_gammas_.push_back(0.0);
+  observed_values_.push_back(0.0);
+  observed_kinds_.push_back(0);
   external_gammas_.push_back(complex(0.0, 0.0));
   channelfixed_.push_back(false);
   gamma_is_rwa_.push_back(false);
@@ -360,6 +368,23 @@ void ALevel::SetTransformE(double energy) {
 
 void ALevel::SetBigGamma(int channelNum, double partialWidth) {
   big_gammas_[channelNum - 1] = partialWidth;
+}
+
+/*!
+ * Sets the observed value of a channel as a <levels> line gives it, and its kind (physics/ ObservedKind).
+ */
+
+void ALevel::SetObserved(int channelNum, double value, unsigned char kind) {
+  observed_values_[channelNum - 1] = value;
+  observed_kinds_[channelNum - 1] = kind;
+}
+
+double ALevel::GetObservedValue(int channelNum) const {
+  return observed_values_[channelNum - 1];
+}
+
+unsigned char ALevel::GetObservedKind(int channelNum) const {
+  return observed_kinds_[channelNum - 1];
 }
 
 /*!

@@ -244,6 +244,11 @@ class CNuc {
   void SetThmCoherentValues(const std::vector<double> &v) { thmCoherentValues_ = v; }
 
  private:
+  /// TransformOut, first part: the Brune (Park) E and gamma of the fit parameters in the levels' transform slots
+  /// (formal basis: physics/ brune_from_formal); report prints the warnings of levels that do not convert.
+  void TransformToBrune(const Config &, bool report);
+  /// TransformOut, second part: the observed quantities from the transform slots (physics/ observed_levels).
+  void ObservedWidths(const Config &);
   std::string transformError_;
   /// 1-based index of the nucleus with this (Z, A), appending it if new.
   int FindOrAddNucleus(int z, int a);

@@ -83,6 +83,7 @@ struct ProjectLevels {
   std::vector<unsigned char> is_amplitude;  ///< gammaIsRWA flags, same layout (Observed form only; may be empty)
 };
 
+
 /// External-capture amplitude of one (level, photon channel), supplied by the caller (CNuc::CalcExternalWidth).
 struct ExternalWidth {
   bool present = false;
@@ -131,8 +132,43 @@ struct BasisAmplitudes {
 BasisAmplitudes amplitudes_from_observed(const System &system, std::size_t b, const std::vector<ProjectChannel> &columns,
                                          const ProjectLevels &levels, LevelBasis basis, const ChannelFunctions &cf);
 
+/// What the observed value of a (level, column) is (cnuc_split.md section 8, the table).
+enum class ObservedKind : unsigned char {
+  Width,             ///< W = Gamma (MeV): open particle channel (0 at threshold or for P = 0), photon channel
+  ANC,               ///< W = C^2 (fm^-1): particle channel below threshold
+  MagneticMoment,    ///< W = mu^2 (mu_N^2): static M1 moment (photon channel to the level's own state)
+  QuadrupoleMoment,  ///< W = (Q 100 (alpha hbar c)^1/2)^2: static E2 moment
+  Beta               ///< W = B: beta-decay feeding amplitude (Brune normalization)
+};
+
+/// The observed quantities of the levels of a block (observed_levels).  Row-major [lambda * n_columns + m].
+struct ObservedLevels {
+  std::vector<ObservedKind> kind;
+  /// W_lambda,m = s 2 P |gamma_tot|^2 / N, s = sign Re gamma_tot (reversed for a static moment of half-integer J);
+  /// for a beta column Re gamma_tot (/ J^1/2 in Park's basis).  Units by kind (above).
+  std::vector<double> W;
+  /// The value as a <levels> line gives it: Gamma (eV), C (fm^-1/2), mu (mu_N), Q (b), B, all signed; the Brune
+  /// amplitude (MeV^1/2) of a column flagged is_amplitude.  amplitudes_from_observed reads it back.
+  std::vector<double> value;
+  /// Per level: N_lambda = 1 + sum_c gamma_c^2 dS_c/dE (Brune), or Park's J_lambda = 1 - sum_c gamma_c^2 dS_c/dE.
+  std::vector<double> norm;
+};
+
+/*!
+ * The observed quantities of the levels of block b from their total amplitudes gamma_int + gamma_ext (cnuc_split.md
+ * section 8, Eq. 8.1): E are the Brune (Park) energies (MeV, E_x), gamma the internal Brune (Park) amplitudes
+ * (MeV^1/2, row-major over columns), ext the external-capture amplitudes in the same layout (empty: none; entries not
+ * present count 0).  The normalization N sums the internal particle amplitudes only.  The one definition of
+ * Gamma, C, mu, Q and B from amplitudes; observed_from_amplitudes is its value with ext empty.
+ */
+ObservedLevels observed_levels(const System &system, std::size_t b, const std::vector<ProjectChannel> &columns,
+                               const std::vector<double> &E, const std::vector<double> &gamma,
+                               const std::vector<ExternalWidth> &ext, const std::vector<unsigned char> &is_amplitude,
+                               LevelBasis basis, const ChannelFunctions &cf);
+
 /// Brune or Park amplitudes -> the observed form (the inverse of amplitudes_from_observed; is_amplitude marks
-/// the columns to report as Brune amplitudes).  Returns a ProjectLevels in Form::Observed.
+/// the columns to report as Brune amplitudes): observed_levels(...).value without external capture.  Returns a
+/// ProjectLevels in Form::Observed.
 ProjectLevels observed_from_amplitudes(const System &system, std::size_t b, const std::vector<ProjectChannel> &columns,
                                        const std::vector<double> &E, const std::vector<double> &gamma,
                                        const std::vector<unsigned char> &is_amplitude, LevelBasis basis,

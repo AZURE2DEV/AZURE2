@@ -37,7 +37,11 @@ enum class CNucSystemContent {
   /// The structure only: every block with its channels, B_c = 0 and no levels; the map still lists the block's
   /// R-matrix levels.  Any state after CNuc::Fill.  This is what CNuc::CalcBoundaryConditions and CNuc::TransformIn
   /// hand to physics/ level_parameters, which takes the level values as separate arguments.
-  Structure
+  Structure,
+  /// As Structure, but with every J-group and level, also those outside the R-matrix (a group made only to hold an
+  /// external-capture final state): the observed quantities (CNuc::ObservedWidths) are reported for all of them.
+  /// Not for the R-matrix conversions, which see only R-matrix blocks and levels.
+  AllGroups
 };
 
 /*!

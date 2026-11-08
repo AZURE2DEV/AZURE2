@@ -62,6 +62,7 @@ phys::LevelBasis BasisOf(const Config &configure) {
 
 CNucSystem BuildSystemFromCNuc(CNuc &compound, const Config &configure, CNucSystemContent content) {
   const bool withParameters = (content == CNucSystemContent::Parameters);
+  const bool allGroups = (content == CNucSystemContent::AllGroups);
   // Before TransformIn the level gammas are the file's partial widths (eV) and ANCs, not amplitudes.
   if (withParameters && (configure.paramMask & Config::TRANSFORM_PARAMETERS) && !compound.IsTransformedIn())
     throw std::runtime_error("BuildSystemFromCNuc: the compound nucleus has not been initialized "
@@ -100,7 +101,7 @@ CNucSystem BuildSystemFromCNuc(CNuc &compound, const Config &configure, CNucSyst
   std::vector<phys::JpiBlock> blocks;
   for (int j = 1; j <= compound.NumJGroups(); j++) {
     JGroup *group = compound.GetJGroup(j);
-    if (!group->IsInRMatrix()) continue;  // a group made only to hold an external-capture final state
+    if (!group->IsInRMatrix() && !allGroups) continue;  // a group made only to hold an external-capture final state
     const std::string what = "J-group " + std::to_string(j);
 
     std::vector<int> blockChannels, groupChannels;
@@ -130,7 +131,7 @@ CNucSystem BuildSystemFromCNuc(CNuc &compound, const Config &configure, CNucSyst
     std::vector<int> groupLevels;
     for (int la = 1; la <= group->NumLevels(); la++) {
       ALevel *level = group->GetLevel(la);
-      if (!level->IsInRMatrix()) continue;
+      if (!level->IsInRMatrix() && !allGroups) continue;
       groupLevels.push_back(la);
       if (!withParameters) continue;
       energies.push_back(level->GetE());

@@ -17,6 +17,9 @@
 //  5. The formal basis (HANDOFF decision 10): B_c from the lowest level, so the formal parameters do not depend on the
 //     listing order and the lowest level's formal energy is its Brune energy; each formal level oriented like its
 //     Brune level (formal -> Brune returns the input signs); widths too large for the radii refused.
+//  7. observed_levels against hand values: Gamma, C with an external part inside |.|^2 (one turning the sign), the
+//     amplitude flag, N (Brune) and J (Park), a static M1 moment.
+#include <algorithm>
 #include <cmath>
 #include <complex>
 #include <cstdio>
@@ -439,6 +442,59 @@ int main() {
     bool converged = true;
     for (std::size_t l = 0; l < nl; l++) converged = converged && b3.status[l] == LevelSet::Status::Converged;
     check("converged levels report Converged", converged);
+  }
+
+  std::printf("7. observed quantities from total amplitudes (observed_levels, cnuc_split.md section 8)\n");
+  {
+    // Hand values: N = 1 + sum_particle g^2 S', W = s 2 P |g + g_ext|^2 / N, s = sign Re(g + g_ext); value by kind.
+    const std::vector<double> g = {0.31, -0.12, 0.45, 0.004,    // 18.15
+                                   0.20, -0.09, 0.15, 0.002,    // 16.63: p channels bound
+                                   -0.28, 0.17, 0.52, -0.003};  // 19.07
+    std::vector<ExternalWidth> ext(g.size());
+    ext[3] = {true, cplx(-0.0015, 0.0021)};
+    ext[11] = {true, cplx(0.0040, -0.0007)};  // turns the sign of the total: Re(-0.003 + 0.004) > 0
+    std::vector<unsigned char> rwa(g.size(), 0);
+    rwa[2] = 1;  // the alpha channel of 18.15 given as an amplitude
+    double worst = 0.0;
+    bool kinds = true;
+    for (LevelBasis basis : {LevelBasis::Brune, LevelBasis::Park}) {
+      const ObservedLevels o = observed_levels(sys, 0, own, E, g, ext, rwa, basis, cf);
+      for (std::size_t l = 0; l < nl; l++) {
+        double sum = 0.0;
+        for (std::size_t k = 0; k < 3; k++) sum += g[l * nc + k] * g[l * nc + k] * cf(0, k, E[l]).dS_dE;
+        const double N = (basis == LevelBasis::Park) ? 1.0 : 1.0 + sum, J = 1.0 - sum;
+        worst = std::max(worst, std::fabs(o.norm[l] - ((basis == LevelBasis::Park) ? J : N)));
+        for (std::size_t k = 0; k < nc; k++) {
+          const std::size_t i = l * nc + k;
+          const cplx tot = g[i] + (ext[i].present ? ext[i].value : cplx(0.0, 0.0));
+          const double s = tot.real() < 0.0 ? -1.0 : 1.0;
+          const double W = s * 2.0 * cf(0, k, E[l]).P * std::norm(tot) / N;
+          const bool bound = (k < 2 && E[l] < 17.255);
+          double v = bound ? s * std::sqrt(std::fabs(W)) : W * 1e6;
+          if (rwa[i]) v = (basis == LevelBasis::Park) ? g[i] / std::sqrt(J) : g[i];
+          kinds = kinds && o.kind[i] == (bound ? ObservedKind::ANC : ObservedKind::Width);
+          worst = std::max(worst, std::fabs(o.W[i] - W) / std::fabs(W));
+          worst = std::max(worst, std::fabs(o.value[i] - v) / std::fabs(v));
+        }
+      }
+    }
+    report("Gamma, C, gamma_ext inside |.|^2, N and J vs hand values (relative)", worst, 1e-15);
+    check("kinds: ANC below the p threshold, Width above and for the photon", kinds);
+    // A static M1 moment (photon channel to the level's own state): mu = s (2 P g^2 / N)^1/2.
+    const ChannelFunctions moment = [&](std::size_t b, std::size_t k, double En) {
+      ChannelValues v = cf(b, k, En);
+      if (k == 3) {
+        v.static_moment = true;
+        v.P = 1.7;
+      }
+      return v;
+    };
+    const ObservedLevels m = observed_levels(sys, 0, own, E, g, {}, {}, LevelBasis::Brune, moment);
+    double sum = 0.0;
+    for (std::size_t k = 0; k < 3; k++) sum += g[k] * g[k] * cf(0, k, E[0]).dS_dE;
+    const double mu = std::sqrt(2.0 * 1.7 * g[3] * g[3] / (1.0 + sum));
+    check("static M1: kind MagneticMoment", m.kind[3] == ObservedKind::MagneticMoment);
+    report("static M1: mu vs hand value (relative)", std::fabs(m.value[3] - mu) / mu, 1e-15);
   }
 
   std::printf("%s: %ld checks, %d failure(s)\n", failures ? "FAIL" : "PASS", checks, failures);

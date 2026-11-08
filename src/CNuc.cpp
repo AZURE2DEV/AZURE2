@@ -2325,6 +2325,16 @@ void CNuc::FillCompoundFromParams(const vector_r &p) {
  */
 
 void CNuc::TransformOut(const Config &configure) {
+  this->TransformToBrune(configure, true);
+  this->ObservedWidths(configure);
+}
+
+/*!
+ * The Brune (Park) values of the fit parameters, E and gamma, in the level's transform slots: in the formal basis by
+ * physics/ brune_from_formal, otherwise a copy.  report: print the warnings for levels that do not convert.
+ */
+
+void CNuc::TransformToBrune(const Config &configure, bool report) {
   // Park (2021): the fit parameters already are the observed reduced width
   // amplitudes, so Gamma = 2 P gamma^2 with no 1 + sum gamma^2 dS/dE factor.
   // Refresh J and the bound-state normalization for the current parameters.
@@ -2334,7 +2344,7 @@ void CNuc::TransformOut(const Config &configure) {
     for (int j = 1; j <= this->NumJGroups(); j++)
       for (int la = 1; la <= this->GetJGroup(j)->NumLevels(); la++) {
         ALevel *theLevel = this->GetJGroup(j)->GetLevel(la);
-        if (theLevel->IsInRMatrix() && theLevel->GetParkNorm() <= 0.0)
+        if (report && theLevel->IsInRMatrix() && theLevel->GetParkNorm() <= 0.0)
           configure.outStream << "**WARNING: Park norm J = " << theLevel->GetParkNorm() << " is not positive"
                               << std::endl
                               << "    " << AZURELabel::Level(this->GetJGroup(j), theLevel, j, la) << std::endl
@@ -2374,7 +2384,8 @@ void CNuc::TransformOut(const Config &configure) {
       for (std::size_t lb = 0; lb < levels.size(); lb++) {
         const int la = levels[lb];
         ALevel *theLevel = theJGroup->GetLevel(la);
-        if (out.status[lb] == phys::LevelSet::Status::EigenFailed) {
+        if (!report) {
+        } else if (out.status[lb] == phys::LevelSet::Status::EigenFailed) {
           configure.outStream << "**WARNING: Could not transform level (eigenvalue problem failed)" << std::endl
                               << "    " << AZURELabel::Level(theJGroup, theLevel, j, la) << std::endl
                               << "  The input energy and widths are kept for this level; its "
@@ -2429,75 +2440,54 @@ void CNuc::TransformOut(const Config &configure) {
       }
   }
 
-  for (int j = 1; j <= this->NumJGroups(); j++) {
-    JGroup *theJGroup = this->GetJGroup(j);
-    for (int la = 1; la <= this->GetJGroup(j)->NumLevels(); la++) {
-      ALevel *theLevel = this->GetJGroup(j)->GetLevel(la);
-      double normSum = 0.0;
-      vector_r tempPene;
-      for (int ch = 1; ch <= this->GetJGroup(j)->NumChannels(); ch++) {
-        AChannel *theChannel = this->GetJGroup(j)->GetChannel(ch);
-        PPair *exitPair = this->GetPair(theChannel->GetPairNum());
-        double localEnergy = theLevel->GetTransformE() - exitPair->GetSepE() - exitPair->GetExE();
-        if (theChannel->GetRadType() == 'P') {
-          ChannelFunc channelFunc(exitPair, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
-          normSum += channelFunc.ShiftDerivative(theChannel->GetL(), localEnergy) *
-              pow(theLevel->GetTransformGamma(ch), 2.0);
-          // Exactly at threshold (localEnergy == 0) the open branch: P = 0,
-          // Gamma = 0 (an ANC is not defined there).
-          if (localEnergy < 0.0) {
-            WhitFunc newWhitFunc(exitPair);
-            double whitConv = newWhitFunc(theChannel->GetL(),
-                                          exitPair->GetChRad(),
-                                          fabs(localEnergy));
-            double pene = exitPair->GetRedMass() * exitPair->GetChRad() * uconv /
-                pow(hbarc, 2.0) / pow(whitConv, 2.0);
-            tempPene.push_back(pene);
-          } else {
-            // P = 0 at E = 0 and just above a Coulomb threshold: Gamma = 0.
-            tempPene.push_back(channelFunc.Penetrability(theChannel->GetL(), localEnergy));
-          }
-        } else if (theChannel->GetRadType() == 'M' || theChannel->GetRadType() == 'E') {
-          if (fabs(theLevel->GetE() - this->GetPair(theChannel->GetPairNum())->GetHeavyExE()) < 1.e-3 &&
-              theJGroup->GetJ() == this->GetPair(theChannel->GetPairNum())->GetJ(2) &&
-              theJGroup->GetPi() == this->GetPair(theChannel->GetPairNum())->GetPi(2)) {
-            double jValue = theJGroup->GetJ();
-            double pene = 1e-10;
-            if (theChannel->GetRadType() == 'M' && theChannel->GetL() == 1)
-              pene = 3.0 * jValue / 4.0 / (jValue + 1.) / nuclearMagneton / nuclearMagneton;
-            else if (theChannel->GetRadType() == 'E' && theChannel->GetL() == 2)
-              pene = 60.0 * jValue * (2. * jValue - 1.) / (jValue + 1.) / (2. * jValue + 3.);
-            if ((int)(2 * jValue) % 2 != 0) pene *= -1.;
-            tempPene.push_back(pene);
-          } else {
-            double pene = (configure.paramMask & Config::USE_RMC_FORMALISM) ? 1.0 : pow(fabs(localEnergy) / hbarc, 2.0 * theChannel->GetL() + 1);
-            tempPene.push_back(pene);
-          }
-        } else
-          tempPene.push_back(1.0);
-      }
-      for (int ch = 1; ch <= this->GetJGroup(j)->NumChannels(); ch++) {
-        AChannel *theChannel = this->GetJGroup(j)->GetChannel(ch);
+}
+
+/*!
+ * The observed quantities of every level (cnuc_split.md section 8) from its Brune (Park) values in the transform
+ * slots (TransformToBrune) and, with external capture, the external part of its photon amplitudes: physics/
+ * observed_levels.  Sets the external amplitude, W (SetBigGamma) and the reported value with its kind.
+ */
+
+void CNuc::ObservedWidths(const Config &configure) {
+  const bool park = (configure.paramMask & Config::USE_PARK_FORMALISM);
+  const bool external = (configure.paramMask & Config::USE_EXTERNAL_CAPTURE);
+  const bool ignoreZero = (configure.paramMask & Config::IGNORE_ZERO_WIDTHS);
+  const CNucSystem all = BuildSystemFromCNuc(*this, configure, CNucSystemContent::AllGroups);
+  const phys::ChannelFunctions cf = ChannelFunctionsFromCNuc(*this, all.map, configure);
+  for (std::size_t b = 0; b < all.system.num_blocks(); b++) {
+    JGroup *theJGroup = this->GetJGroup(all.map.groupOfBlock[b]);
+    const std::vector<int> &levels = all.map.levelOfBlockLevel[b];
+    const std::size_t nc = theJGroup->NumChannels();
+    std::vector<double> E, gamma;
+    std::vector<unsigned char> rwa;
+    std::vector<phys::ExternalWidth> ext(levels.size() * nc);
+    for (std::size_t lb = 0; lb < levels.size(); lb++) {
+      ALevel *theLevel = theJGroup->GetLevel(levels[lb]);
+      E.push_back(theLevel->GetTransformE());
+      for (std::size_t k = 0; k < nc; k++) {
+        const int ch = (int)k + 1;
+        AChannel *theChannel = theJGroup->GetChannel(ch);
+        gamma.push_back(theLevel->GetTransformGamma(ch));
+        rwa.push_back(theLevel->GammaIsRWA(ch) ? 1 : 0);
         complex externalWidth(0.0, 0.0);
-        if ((theChannel->GetRadType() == 'M' || theChannel->GetRadType() == 'E') &&
-            theLevel->IsInRMatrix() && (configure.paramMask & Config::USE_EXTERNAL_CAPTURE) &&
-            !(fabs(theLevel->GetTransformGamma(ch)) < 1.0e-8 && (configure.paramMask & Config::IGNORE_ZERO_WIDTHS)))
-          externalWidth = CalcExternalWidth(this->GetJGroup(j), theLevel,
-                                            this->GetJGroup(j)->GetChannel(ch), false, configure);
+        if ((theChannel->GetRadType() == 'M' || theChannel->GetRadType() == 'E') && theLevel->IsInRMatrix() &&
+            external && !(fabs(theLevel->GetTransformGamma(ch)) < 1.0e-8 && ignoreZero)) {
+          externalWidth = CalcExternalWidth(theJGroup, theLevel, theChannel, false, configure);
+          ext[lb * nc + k].present = true;
+          ext[lb * nc + k].value = externalWidth;
+        }
         theLevel->SetExternalGamma(ch, externalWidth);
-        complex totalWidth = theLevel->GetTransformGamma(ch) + externalWidth;
-        int tempSign = (real(totalWidth) < 0.) ? (-1) : (1);
-        double bigGamma;
-        if (theChannel->GetRadType() != 'F' && theChannel->GetRadType() != 'G')
-          bigGamma = tempSign * 2.0 * real(totalWidth * conj(totalWidth)) * tempPene[ch - 1] /
-              (park ? 1.0 : (1.0 + normSum));
-        else
-          // Beta-decay feeding amplitudes are reported in Brune's normalization
-          // in both parametrizations (the inverse of the step in TransformIn).
-          bigGamma = park ? real(totalWidth) / sqrt(fabs(theLevel->GetParkNorm())) : real(totalWidth);
-        theLevel->SetBigGamma(ch, bigGamma);
       }
     }
+    const phys::ObservedLevels obs =
+        phys::observed_levels(all.system, b, phys::internal_channels(all.system, b), E, gamma, ext, rwa,
+                              park ? phys::LevelBasis::Park : phys::LevelBasis::Brune, cf);
+    for (std::size_t lb = 0; lb < levels.size(); lb++)
+      for (std::size_t k = 0; k < nc; k++) {
+        ALevel *theLevel = theJGroup->GetLevel(levels[lb]);
+        theLevel->SetBigGamma((int)k + 1, obs.W[lb * nc + k]);
+        theLevel->SetObserved((int)k + 1, obs.value[lb * nc + k], (unsigned char)obs.kind[lb * nc + k]);
+      }
   }
 }
 
@@ -2510,19 +2500,30 @@ void CNuc::TransformOut(const Config &configure) {
  * \f$ \Gamma_\gamma \gtrsim 0.1 \Gamma_{particle} \f$ is outside the range in which
  * the calculated cross section can be trusted.
  *
- * The widths are estimated from the parameters passed in (the same vector that is
- * handed to the calculation), following CNuc::TransformOut: the particle widths are
- * \f$ 2\gamma^2 P_l \f$ level-shift normalised by \f$ 1+\sum\gamma^2 dS/dE \f$, and
- * the radiative widths are \f$ 2\gamma^2 (E_\gamma/\hbar c)^{2L+1} \f$.  External
- * capture contributions are not included, so the ratio is indicative only -- the
- * exact widths are those written to parameters.out.  Channels of a level that are
- * closed (and levels with no open particle channel, e.g. subthreshold states) carry
- * no observed width and are skipped.
+ * The widths are the observed widths of the parameters passed in (the same vector that is
+ * handed to the calculation), as parameters.out reports them (CNuc::ObservedWidths): open
+ * particle channels and photon channels, with the level's normalization and the external
+ * part of the photon amplitude.  Bound channels and static moments carry no width and are
+ * skipped; levels with no open particle channel are not checked.
  */
 
 void CNuc::CheckRadiativeWidths(const Config &configure, const vector_r &params) {
   static const double warningRatio = 0.1;
 
+  this->FillCompoundFromParams(params);
+  // The observed widths of the start parameters, as parameters.out reports them (TransformOut without its
+  // messages; the final TransformOut prints them): particle and photon widths with the level's normalization and,
+  // with external capture, the external part of the photon amplitude (physics/ observed_levels).
+  try {
+    this->TransformToBrune(configure, false);
+    this->ObservedWidths(configure);
+  } catch (const std::exception &) {
+    // The widths are only needed for this diagnostic: skip it rather than abort the calculation.
+    this->FillCompoundFromParams(params);
+    return;
+  }
+  // TransformToBrune also set the bound-state normalizations from the Brune values: back to the fit state the
+  // calculation starts from.
   this->FillCompoundFromParams(params);
 
   // Every flagged level, worst first. Reporting only the worst one hid how many
@@ -2541,39 +2542,16 @@ void CNuc::CheckRadiativeWidths(const Config &configure, const vector_r &params)
     for (int la = 1; la <= theJGroup->NumLevels(); la++) {
       ALevel *theLevel = theJGroup->GetLevel(la);
       if (!theLevel->IsInRMatrix()) continue;
-      double levelEnergy = theLevel->GetFitE();
-
       double particleWidth = 0.0;
       double radiativeWidth = 0.0;
-      double normSum = 0.0;
-      try {
-        for (int ch = 1; ch <= theJGroup->NumChannels(); ch++) {
-          AChannel *theChannel = theJGroup->GetChannel(ch);
-          PPair *thePair = this->GetPair(theChannel->GetPairNum());
-          double gamma = theLevel->GetFitGamma(ch);
-          if (gamma == 0.0) continue;
-          double localEnergy = levelEnergy - thePair->GetSepE() - thePair->GetExE();
-          if (theChannel->GetRadType() == 'P') {
-            ChannelFunc channelFunc(thePair, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
-            if (channelFunc.IsClosed(localEnergy)) continue;
-            particleWidth += 2.0 * pow(gamma, 2.0) * channelFunc.Penetrability(theChannel->GetL(), localEnergy);
-            normSum += channelFunc.ShiftDerivative(theChannel->GetL(), localEnergy) * pow(gamma, 2.0);
-          } else if (theChannel->GetRadType() == 'M' || theChannel->GetRadType() == 'E') {
-            // Ground state transitions parametrize a moment, not a width.
-            if (fabs(theLevel->GetE() - thePair->GetHeavyExE()) < 1.e-3 &&
-                theJGroup->GetJ() == thePair->GetJ(2) &&
-                theJGroup->GetPi() == thePair->GetPi(2)) continue;
-            double pene = (configure.paramMask & Config::USE_RMC_FORMALISM) ? 1.0 : pow(fabs(localEnergy) / hbarc, 2.0 * theChannel->GetL() + 1.0);
-            radiativeWidth += 2.0 * pow(gamma, 2.0) * pene;
-          }
-        }
-      } catch (GSLException e) {
-        // The widths are only needed for this diagnostic: skip the level rather
-        // than abort the calculation.
-        continue;
+      for (int ch = 1; ch <= theJGroup->NumChannels(); ch++) {
+        if (static_cast<phys::ObservedKind>(theLevel->GetObservedKind(ch)) != phys::ObservedKind::Width) continue;
+        const char type = theJGroup->GetChannel(ch)->GetRadType();
+        if (type == 'P')
+          particleWidth += fabs(theLevel->GetBigGamma(ch));
+        else if (type == 'M' || type == 'E')
+          radiativeWidth += fabs(theLevel->GetBigGamma(ch));
       }
-      if (!(configure.paramMask & Config::USE_PARK_FORMALISM) && 1.0 + normSum > 0.0)
-        particleWidth /= (1.0 + normSum);
       if (particleWidth <= 0.0 || radiativeWidth <= 0.0) continue;
 
       double ratio = radiativeWidth / particleWidth;
@@ -2655,7 +2633,6 @@ void CNuc::PrintTransformParams(const Config &configure) {
         for (int ch = 1; ch <= this->GetJGroup(j)->NumChannels(); ch++) {
           AChannel *theChannel = this->GetJGroup(j)->GetChannel(ch);
           PPair *exitPair = this->GetPair(theChannel->GetPairNum());
-          double localEnergy = theLevel->GetTransformE() - exitPair->GetSepE() - exitPair->GetExE();
           out << "  R = " << std::setw(2) << exitPair->GetPairKey();
           if (theChannel->GetRadType() == 'P')
             out << "  l = " << std::setw(3) << theChannel->GetL();
@@ -2669,36 +2646,29 @@ void CNuc::PrintTransformParams(const Config &configure) {
           if (theChannel->GetRadType() != 'G' && theChannel->GetRadType() != 'F')
             out << "  s = " << std::setw(4) << theChannel->GetS();
           out.precision(6);
-          if (localEnergy < 0.0 && theChannel->GetRadType() == 'P') {
-            out << "  C  = " << std::setw(12) << sqrt(fabs(theLevel->GetBigGamma(ch)))
-                << " fm^(-1/2)";
-          } else if (fabs(theLevel->GetE() - this->GetPair(theChannel->GetPairNum())->GetHeavyExE()) < 1.e-3 &&
-                     theJGroup->GetJ() == this->GetPair(theChannel->GetPairNum())->GetJ(2) &&
-                     theJGroup->GetPi() == this->GetPair(theChannel->GetPairNum())->GetPi(2) &&
-                     theChannel->GetRadType() == 'M' && theChannel->GetL() == 1) {
-            int tempSign = (theLevel->GetBigGamma(ch) < 0) ? (-1) : (1);
-            out << "  mu = " << std::setw(12) << tempSign * sqrt(fabs(theLevel->GetBigGamma(ch)))
-                << " nm       ";
-          } else if (fabs(theLevel->GetE() - this->GetPair(theChannel->GetPairNum())->GetHeavyExE()) < 1.e-3 &&
-                     theJGroup->GetJ() == this->GetPair(theChannel->GetPairNum())->GetJ(2) &&
-                     theJGroup->GetPi() == this->GetPair(theChannel->GetPairNum())->GetPi(2) &&
-                     theChannel->GetRadType() == 'E' && theChannel->GetL() == 2) {
-            int tempSign = (theLevel->GetBigGamma(ch) < 0) ? (-1) : (1);
-            out << "  Q  = " << std::setw(12) << tempSign * sqrt(fabs(theLevel->GetBigGamma(ch))) / 100.0 / sqrt(fstruc * hbarc)
-                << " b        ";
-          } else if (theChannel->GetRadType() == 'F' || theChannel->GetRadType() == 'G') {
-            out << "  B  = " << std::setw(12) << theLevel->GetBigGamma(ch)
-                << "          ";
-          } else {
-            if (fabs(theLevel->GetBigGamma(ch)) >= 1e-3)
-              out << "  G  = " << std::setw(12) << fabs(theLevel->GetBigGamma(ch)) * 1e3
-                  << " keV      ";
-            else if (fabs(theLevel->GetBigGamma(ch)) >= 1e-6)
-              out << "  G  = " << std::setw(12) << fabs(theLevel->GetBigGamma(ch)) * 1e6
-                  << " eV       ";
-            else
-              out << "  G  = " << std::setw(12) << fabs(theLevel->GetBigGamma(ch)) * 1e9
-                  << " meV      ";
+          // The observed quantities of TransformOut (physics/ observed_levels): W and the reported value by kind.
+          const double W = theLevel->GetBigGamma(ch);
+          switch (static_cast<phys::ObservedKind>(theLevel->GetObservedKind(ch))) {
+            case phys::ObservedKind::ANC:
+              out << "  C  = " << std::setw(12) << sqrt(fabs(W)) << " fm^(-1/2)";
+              break;
+            case phys::ObservedKind::MagneticMoment:
+              out << "  mu = " << std::setw(12) << theLevel->GetObservedValue(ch) << " nm       ";
+              break;
+            case phys::ObservedKind::QuadrupoleMoment:
+              out << "  Q  = " << std::setw(12) << theLevel->GetObservedValue(ch) << " b        ";
+              break;
+            case phys::ObservedKind::Beta:
+              out << "  B  = " << std::setw(12) << W << "          ";
+              break;
+            case phys::ObservedKind::Width:
+              if (fabs(W) >= 1e-3)
+                out << "  G  = " << std::setw(12) << fabs(W) * 1e3 << " keV      ";
+              else if (fabs(W) >= 1e-6)
+                out << "  G  = " << std::setw(12) << fabs(W) * 1e6 << " eV       ";
+              else
+                out << "  G  = " << std::setw(12) << fabs(W) * 1e9 << " meV      ";
+              break;
           }
           out << "  g_int = " << std::setw(12) << theLevel->GetTransformGamma(ch);
           if (theChannel->GetRadType() != 'G' && theChannel->GetRadType() != 'F')
@@ -2793,58 +2763,16 @@ void CNuc::PrintRelativisticParams(const Config &configure) const {
 
 /* Gets the transformet parameters*/
 
-vector_r CNuc::GetTransformParams(const Config &configure) {
-  const bool park = (configure.paramMask & Config::USE_PARK_FORMALISM);
+vector_r CNuc::GetTransformParams(const Config &) {
+  // The observed values TransformOut computed (physics/ observed_levels, cnuc_split.md section 8): Gamma (eV),
+  // C (fm^-1/2), mu, Q, B and the Brune amplitude of a gammaIsRWA column, signed, as a <levels> line holds them.
   vector_r params;
   for (int j = 1; j <= this->NumJGroups(); j++) {
     JGroup *theJGroup = this->GetJGroup(j);
-    for (int la = 1; la <= this->GetJGroup(j)->NumLevels(); la++) {
-      ALevel *theLevel = this->GetJGroup(j)->GetLevel(la);
+    for (int la = 1; la <= theJGroup->NumLevels(); la++) {
+      ALevel *theLevel = theJGroup->GetLevel(la);
       params.push_back(theLevel->GetTransformE());
-      for (int ch = 1; ch <= this->GetJGroup(j)->NumChannels(); ch++) {
-        AChannel *theChannel = this->GetJGroup(j)->GetChannel(ch);
-        PPair *exitPair = this->GetPair(theChannel->GetPairNum());
-        double localEnergy = theLevel->GetTransformE() - exitPair->GetSepE() - exitPair->GetExE();
-        if (theChannel->GetRadType() == 'P' && theLevel->GammaIsRWA(ch)) {
-          // Input convention for this channel is the reduced width
-          // amplitude: return it as-is (physical-convention internal
-          // amplitude; equals the fit amplitude under Brune) so
-          // saving fitted values never flips the input convention.
-          // That amplitude is Brune's in both modes (TransformIn): under
-          // Park the fit amplitude is gamma_Brune sqrt(J).
-          double gamma = theLevel->GetTransformGamma(ch);
-          if (park && theLevel->IsInRMatrix() && theLevel->GetParkNorm() > 0.0)
-            gamma /= sqrt(theLevel->GetParkNorm());
-          params.push_back(gamma);
-        } else if (localEnergy < 0.0 && theChannel->GetRadType() == 'P') {
-          int tempSign = (theLevel->GetBigGamma(ch) < 0) ? (-1) : (1);
-          params.push_back(tempSign * sqrt(fabs(theLevel->GetBigGamma(ch))));
-        } else if (fabs(theLevel->GetE() - this->GetPair(theChannel->GetPairNum())->GetHeavyExE()) < 1.e-3 &&
-                   theJGroup->GetJ() == this->GetPair(theChannel->GetPairNum())->GetJ(2) &&
-                   theJGroup->GetPi() == this->GetPair(theChannel->GetPairNum())->GetPi(2) &&
-                   theChannel->GetRadType() == 'M' && theChannel->GetL() == 1) {
-          int tempSign = (theLevel->GetBigGamma(ch) < 0) ? (-1) : (1);
-          params.push_back(tempSign * sqrt(fabs(theLevel->GetBigGamma(ch))));
-        } else if (fabs(theLevel->GetE() - this->GetPair(theChannel->GetPairNum())->GetHeavyExE()) < 1.e-3 &&
-                   theJGroup->GetJ() == this->GetPair(theChannel->GetPairNum())->GetJ(2) &&
-                   theJGroup->GetPi() == this->GetPair(theChannel->GetPairNum())->GetPi(2) &&
-                   theChannel->GetRadType() == 'E' && theChannel->GetL() == 2) {
-          int tempSign = (theLevel->GetBigGamma(ch) < 0) ? (-1) : (1);
-          params.push_back(tempSign * sqrt(fabs(theLevel->GetBigGamma(ch))) / 100.0 / sqrt(fstruc * hbarc));
-        } else if (theChannel->GetRadType() == 'F' || theChannel->GetRadType() == 'G') {
-          // A beta-decay feeding amplitude is already the value the <levels>
-          // line holds (Brune normalization, TransformOut), sign included.
-          // Multiplying by its own sign, as was done here, returned |B| and
-          // so a negative amplitude came back positive from every consumer
-          // of this vector: the GUI's level write-back, the MCMC physical
-          // vector and pyazr's save_fit snapshots, which then described a
-          // different beta-delayed spectrum (12C+a, 2026-10-12).
-          params.push_back(theLevel->GetBigGamma(ch));
-        } else {
-          int tempSign = (theLevel->GetBigGamma(ch) < 0) ? (-1) : (1);
-          params.push_back(tempSign * fabs(theLevel->GetBigGamma(ch)) * 1e6);
-        }
-      }
+      for (int ch = 1; ch <= theJGroup->NumChannels(); ch++) params.push_back(theLevel->GetObservedValue(ch));
     }
   }
   // Abundances are the same in both bases; they follow the level block as in FillMnParams.
@@ -3101,46 +3029,43 @@ bool CNuc::ConvertAmplitudeBasis(ROOT::Minuit2::MnUserParameters &p, int from, i
   if (from == to) return true;
   const bool toPark = (to == 2);
   if (!((from == 1 && to == 2) || (from == 2 && to == 1))) return false;
+  // Index of each level's energy in the parameter vector (E, then one amplitude per channel, group by group).
+  std::map<std::pair<int, int>, int> energyIndex;
   int i = 0;
-  for (int j = 1; j <= this->NumJGroups(); j++) {
-    JGroup *theJGroup = this->GetJGroup(j);
-    for (int la = 1; la <= theJGroup->NumLevels(); la++) {
-      ALevel *theLevel = theJGroup->GetLevel(la);
-      const int energyIndex = i++;
-      const int firstWidth = i;
-      i += theJGroup->NumChannels();
-      if (!theJGroup->IsInRMatrix() || !theLevel->IsInRMatrix()) continue;
-      const double levelEnergy = p.Value(energyIndex);
-      double sum = 0.0;  // sum_c gamma_c^2 dS_c/dE at the level energy
-      for (int ch = 1; ch <= theJGroup->NumChannels(); ch++) {
-        AChannel *theChannel = theJGroup->GetChannel(ch);
-        PPair *thePair = this->GetPair(theChannel->GetPairNum());
-        if (theChannel->GetRadType() != 'P' || thePair->GetPType() != 0) continue;
-        double gamma = p.Value(firstWidth + ch - 1);
-        if (gamma == 0.0) continue;
-        double resonanceEnergy = levelEnergy - (thePair->GetSepE() + thePair->GetExE());
-        // dS/dE as in TransformIn and CalcShiftFunctions (ChannelFunc).
-        double dS = ChannelFunc(thePair, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC))
-                        .ShiftDerivative(theChannel->GetL(), resonanceEnergy);
-        sum += gamma * gamma * dS;
-      }
-      double factor;
-      if (toPark) {
-        factor = sqrt(1.0 / (1.0 + sum));  // sqrt(J) from Brune amplitudes
-      } else {
-        double parkNorm = 1.0 - sum;
-        if (parkNorm <= 0.0) {
-          configure.outStream << "**ERROR: Park norm J = " << parkNorm << " is not positive for" << std::endl
-                              << "    " << AZURELabel::Level(theJGroup, theLevel, j, la) << std::endl
-                              << "  No Brune (or standard) parameters correspond to these widths." << std::endl;
-          return false;
-        }
-        factor = 1.0 / sqrt(parkNorm);
-      }
-      for (int ch = 1; ch <= theJGroup->NumChannels(); ch++) {
-        int idx = firstWidth + ch - 1;
-        p.SetValue(idx, p.Value(idx) * factor);
-        p.SetError(idx, p.Error(idx) * factor);
+  for (int j = 1; j <= this->NumJGroups(); j++)
+    for (int la = 1; la <= this->GetJGroup(j)->NumLevels(); la++) {
+      energyIndex[{j, la}] = i;
+      i += 1 + this->GetJGroup(j)->NumChannels();
+    }
+  // physics/ park_from_brune, brune_from_park on each R-matrix block (level_parameters.md Eq. 2.3); the errors
+  // scale with the amplitudes, by J^1/2 or J^-1/2.
+  const CNucSystem structure = BuildSystemFromCNuc(*this, configure, CNucSystemContent::Structure);
+  const phys::ChannelFunctions cf = ChannelFunctionsFromCNuc(*this, structure.map, configure);
+  for (std::size_t b = 0; b < structure.system.num_blocks(); b++) {
+    const int j = structure.map.groupOfBlock[b];
+    const std::vector<int> &levels = structure.map.levelOfBlockLevel[b];
+    const int nc = this->GetJGroup(j)->NumChannels();
+    std::vector<double> E, gamma, J;
+    for (int la : levels) {
+      const int e = energyIndex[{j, la}];
+      E.push_back(p.Value(e));
+      for (int ch = 1; ch <= nc; ch++) gamma.push_back(p.Value(e + ch));
+    }
+    std::vector<double> out;
+    try {
+      out = toPark ? phys::park_from_brune(structure.system, b, E, gamma, cf, &J)
+                   : phys::brune_from_park(structure.system, b, E, gamma, cf, &J);
+    } catch (const std::domain_error &error) {
+      configure.outStream << "**ERROR: " << error.what() << std::endl
+                          << "  No Brune (or standard) parameters correspond to these widths." << std::endl;
+      return false;
+    }
+    for (std::size_t lb = 0; lb < levels.size(); lb++) {
+      const int e = energyIndex[{j, levels[lb]}];
+      const double factor = toPark ? std::sqrt(J[lb]) : 1.0 / std::sqrt(J[lb]);
+      for (int ch = 1; ch <= nc; ch++) {
+        p.SetValue(e + ch, out[lb * nc + ch - 1]);
+        p.SetError(e + ch, p.Error(e + ch) * factor);
       }
     }
   }
