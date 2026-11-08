@@ -12,6 +12,7 @@ from .parameters import (Pair, PairSet, Parameter, ParameterSet, LevelKey,
 from .scheme import LevelScheme, SchemeLevel, SchemeChannel
 from .azrfile import AzrModel, AzrLevel, AzrChannel, ScatteringLengthLine, PairMassCheck
 from . import masses
+from .physics import whittaker_wave
 from .datasets import (Segment, SegmentSet, TestSegment, TestSegmentSet,
                        fitted_norms)
 # nds also defines a Level, but transform.Level owns the name here; reach the
@@ -38,7 +39,7 @@ from .modelavg import (Variant, Averaged, ModelAverage, model_average,
                        write_averaged_azr)
 from .priors import prior_from_fit, read_prior, write_prior, read_covariance_dat
 
-__all__ = ["azure2", "ScatteringLength", "ScatteringLengthLine",
+__all__ = ["azure2", "ScatteringLength", "ScatteringLengthLine", "whittaker_wave",
            "tabulate", "TabulatedCrossSection",
            "angular_distribution",
            "Pair", "PairSet", "Parameter", "ParameterSet", "LevelKey",
@@ -64,4 +65,4 @@ __all__ = ["azure2", "ScatteringLength", "ScatteringLengthLine",
            "Variant", "Averaged", "ModelAverage", "model_average",
            "parameter_label", "azr_parameter_slots", "write_averaged_azr",
            "prior_from_fit", "read_prior", "write_prior", "read_covariance_dat"]
-__version__ = '2.9.0'
+__version__ = '2.10.0'

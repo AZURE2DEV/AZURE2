@@ -791,6 +791,21 @@ integrate.
    azr.cache_stats()   # input_files_read, input_files_served, input_files_held (and six
                        # Coulomb-memo counters of earlier builds, now always 0)
 
+The bound-channel Whittaker function needs no session: ``pyazr.whittaker_wave(l, eta_b, rho)`` returns
+:math:`W_{-\eta_b,l+1/2}(2\rho)` (unit ANC, :math:`W \sim e^{-\rho}(2\rho)^{-\eta_b}`) on broadcast arrays of the
+dimensionless :math:`l`, :math:`\eta_b = Z_1Z_2e^2\mu/(\hbar^2\kappa)` and :math:`\rho = \kappa r`, as
+``mantissa`` and ``log10_scale`` (the value leaves the double range just below a charged threshold), ``log10_W``,
+``W`` and ``rho_dlog`` (:math:`\rho W'/W`, the shift function of a closed channel at :math:`\rho = \kappa a`). It
+is the engine's GSL-free function (physics/coulomb), good to :math:`10^{-12}` against mpmath for
+:math:`l \le 10`, :math:`\eta_b \le 1000`, :math:`10^{-4} \le \rho \le 200`; an invalid argument raises
+``ValueError`` naming the element. ``pyazr.whittaker`` (pair, radius and binding energy in MeV) is the older Python
+copy of the engine's GSL path.
+
+.. code-block:: python
+
+   w = pyazr.whittaker_wave(1, eta_b=2.3, rho=np.linspace(0.1, 10, 100))
+   w["W"], w["rho_dlog"]
+
 A rebuild of the model (``set_channel_radius``, a nuclear-potential change, a mode switch) reads no input
 file that has not changed on disk (the ``input_files_*`` counters, for the whole process) and does not
 print the setup ``Note:`` lines again: a session prints each once. Before

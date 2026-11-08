@@ -177,3 +177,10 @@ add_executable(input_files_cache_test input_files_cache_test.cpp)
 target_link_libraries(input_files_cache_test PRIVATE AZURE2Core)
 add_test(NAME input_files_cache COMMAND input_files_cache_test)
 
+
+# physics/coulomb's GSL-free Whittaker function against the engine's GSL path (gsl_sf_hyperg_U_e10_e) on the mpmath
+# grid of physics/tests/data/whittaker.csv: agreement within GSL's own error; prints both errors and the time per
+# call (docs/upgrade/coulomb.md section 1.4).
+add_executable(whittaker_gsl_test whittaker_gsl_test.cpp)
+target_link_libraries(whittaker_gsl_test PRIVATE AZURE2Core)
+add_test(NAME whittaker_gsl COMMAND whittaker_gsl_test ${CMAKE_SOURCE_DIR}/physics/tests/data/whittaker.csv)
