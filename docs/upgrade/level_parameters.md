@@ -254,3 +254,38 @@ convention record and no jj project; that needs the project reader (`io/`) to ca
 Code: `physics/include/azure2/physics/{Convention,LevelParameters,AngularCoupling,SymmetricEigen}.h`,
 `physics/src/{LevelParameters,Recoupling,AngularCoupling,SymmetricEigen}.cpp`; adapter `include/CNucLevelParameters.h`,
 `src/CNucLevelParameters.cpp`.
+
+## 9. The formal → Brune iteration inside an evaluation (design, 2026-11-08)
+
+**What.** `brune_from_formal` iterates, per level, B_c ← S_c(E) and the rediagonalization of
+E − Σ_c (S_c − B_c) γγᵀ until the level's energy moves by at most a tolerance; a level that does not converge in
+1000 iterations, or whose eigenproblem fails, keeps its formal values (unit row of T). That is the engine's report
+iteration (`TransformOut`, 10⁻⁶ MeV) and stays so. Since step 2 the same function runs inside every formal-basis
+evaluation (`ECFinalStatesFromFormal`, `FormalCaptureMasksFromParams`, and `SetUpECFinalBlocks` at setup), at
+10⁻¹² MeV. There the iteration can stall at its rounding floor: on `beam_profile_kernel` the 1⁻ level with Brune
+energy 20.0 MeV ends at steps of 7.7 × 10⁻¹² MeV (3.9 × 10⁻¹³ relative, about 1700 ε: the rounding of E is amplified
+by the slope of the shift function) after a 10⁻⁶ change of one width, its formal values are kept, the capture mask
+changes and χ² jumps 40.44 → 42.93 (`external_capture.md` §8). Keeping the formal values is right for a report that
+warns; inside a fit it is a silent, discontinuous substitute.
+
+**Rule** (options of `FormalToBruneOptions`; the defaults keep the report iteration unchanged):
+1. `relative_tolerance`: converged when the step is at most max(`energy_tolerance_MeV`, `relative_tolerance`·|E|).
+   The evaluation callers use 10⁻¹² MeV and 10⁻¹² relative (about 4500 ε): the stall above converges, and the
+   formal ↔ Brune capture agreement stays at 10⁻¹¹.
+2. `evaluation = true`: a level that has not met the tolerance after the iterations, but whose last step is at most
+   `rounding_bound_MeV` (10⁻⁹ MeV), takes its last iterate (status `RoundingLimited`; continuous in the parameters,
+   accurate to that step). A level whose eigenproblem fails, or whose last step is larger, gets NaN energy and
+   amplitudes (status as now, row of T NaN): the model is undefined there, so the observables and χ² are not finite —
+   MCMC rejects the point (its log-probability is tested with `isfinite`), Minuit and pyazr see a failed evaluation.
+   No formal values are substituted. The engine warns once per process on stderr with the level and the step.
+   At setup (`SetUpECFinalBlocks`) a failure stops the run (`GSLException`), as `TransformIn` does.
+
+**Where.** `physics/` (`brune_from_formal`, `FormalToBruneOptions`, `LevelSet::Status`); the three callers in
+`src/CNucExternalCapture.cpp` set the options through one function. Nothing else changes.
+
+**Tests.** `level_parameters_unit_test`: with `max_iterations` = 1, `evaluation` and a rounding bound above the first
+step, the last iterate is returned (not the formal values) with status `RoundingLimited`; with a bound below it, NaN;
+without `evaluation`, the formal values as before; a relative tolerance of 10⁻³ converges in fewer iterations to an
+energy within 10⁻³|E| of the tight one. A pyazr test on `beam_profile_kernel` (formal basis): χ² at the start and
+±10⁻⁶ relative on `width_9_2` is smooth (the second difference is below 10⁻³ of the first). Expected outputs: menu 1
+of the 179 projects unchanged in Brune and Park; formal at most in the last printed digits, every change classified.
