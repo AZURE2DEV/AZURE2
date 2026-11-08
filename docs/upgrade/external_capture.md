@@ -190,3 +190,31 @@ values and gives the level a unit row of T. The projector of every 1⁻ capture 
 42.7212, 42.7218). The step-2 final-state amplitudes (`ECFinalStatesFromFormal`, merged) use the same call with the
 same tolerance and the same silent fallback to the formal values. Not changed here; the choice (tolerance relative to
 the rounding of E, or an error instead of the formal values) is open in HANDOFF.
+
+## 9. Width parameters fixed by the input (design, 2026-11-08)
+
+**What.** At setup every reduced-width amplitude becomes a fit parameter with step 0.1 × its value, and one whose
+value is exactly zero is fixed (`CNuc.cpp`, the Minuit parameter list; a zero step could not move it anyway). The
+value tested is the amplitude in the basis in use, after `TransformIn`. In the Brune and Park bases a width given as
+0 gives an amplitude 0, except a photon channel with `--no-ignore-externals`, where γ^int = −Re γ^ext. In the formal
+basis the amplitudes are mixtures of the Brune ones, and a zero input comes out as 0 or as rounding (10⁻¹⁵ … 10⁻⁴⁰)
+depending on the order of the sums: `beam_profile_kernel` frees 35 such parameters on 5055bec0 and 48 on a18fe89e
+(8df95d22 reordered the N_f sums), each with a step of 10⁻¹⁶ or less. Which parameters a fit varies then depends
+on rounding.
+
+**Rule.** A width parameter is fixed when its input is zero (`ALevel::ZeroInputWidth`, recorded by `TransformIn`
+for every channel, section 3), in every basis and with either `--ignore-externals` setting; with `--no-transform`,
+where the input is the parameter, the value test stays. A zero input means "this level does not decay through this
+channel" (section 3), so the parameter is not fitted unless the user frees it by giving a non-zero start.
+`ChannelFixed` still fixes the others. pyazr's `apply_fit` skips a fixed parameter of a channel the level does not
+list whatever its value (it skipped only an exact 0, so a formal-basis fit with a rounding value there could not be
+applied in strict mode).
+
+**Expected.** Brune and Park with the default flags: the same free parameters (a zero input already gives 0).
+Formal basis: the parameters of zero inputs become fixed, rounding-valued or not, and the free set is the Brune
+basis's (`beam_profile_kernel`: 134 → 67 free). `--no-ignore-externals`, any basis: an input-0 photon channel becomes fixed at γ^int = −Re γ^ext (was free).
+Menu-1 outputs that print the number of free parameters or χ²/ν change accordingly; the observables do not.
+
+**Tests.** A pyazr test: `beam_profile_kernel` in the formal basis has no free width whose input is zero, and the
+same free set as in the Brune basis; 13N with a photon width 0 and `--no-ignore-externals` has that parameter fixed;
+`apply_fit` in strict mode on a formal-basis vector succeeds.
