@@ -92,6 +92,8 @@ in 47c119e4, `fix/adaptive-grid-criterion`]; the other four inherited failures a
       adjoint test for the formal-basis parts; Brune and Park outputs identical, formal changes classified. Open before
       merge: `brune_from_formal`'s 10⁻¹² MeV tolerance at the rounding limit (`external_capture.md` §8). Next: 3b (i),
       5–7.*
+      *Lectures (PI, 2026-11-08): an R-matrix lecture series in Notion-ready Markdown, later slides, from the code's
+      own definitions (`docs/lectures/PLAN.md`); lecture 1 (external region) has its figures, text to write.*
 - [ ] Internal convention written in `docs/source/theory/conventions.rst`; `Convention` record; recoupling (6j) and
       phase conversions in `level_parameters`; convention-invariance test on T1–T3.
       *Documentation part done on `feature/upgrade-1-conventions` (2026-11-07, not merged): the page states the

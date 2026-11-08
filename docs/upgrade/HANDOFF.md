@@ -2,6 +2,12 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-08, end of session — lectures added to the plan; work stopped here
+
+The PI asked for R-matrix lectures (Notion Markdown, figures, later slides): plan and lecture 1's figures in
+`docs/lectures/` (`PLAN.md`). Lecture 1's text is not written. Everything else is as in the entry below: four
+branches, the three on top of step 4 BUILD-PENDING (Condor schedd on crcfe02 down).
+
 ## 2026-11-08, later — three branches on top of `feature/upgrade-1-external-capture`; builds pending
 
 The PI accepted step 4's fixes and its two proposed defaults (2026-11-08). Each is a branch cut from
