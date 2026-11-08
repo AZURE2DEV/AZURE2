@@ -823,6 +823,24 @@ runnable projects: `tests/13N`, `tests/13N_capture_ay`, `tests/hybrid_potential`
   files carry the GSL bit; the GUI warns when it opens one (dev 46bf10a). The CLI never
   reads the bit: a CLI run uses GSL only with the flag.
 
+- **Levels are excitation energies Ex; question that before any mechanism.** A level
+  entered as E_cm (or a data file in the wrong frame) produces a fit that "almost" works
+  and an investigation of the wrong thing (40Ca+p/8-25-26: the frame assumption "was never
+  itself questioned until the user raised it"). When a resonance sits at the wrong place
+  or a channel will not open where it should, recompute Ex = E_cm + S for the pair first.
+- **A suspected AZURE2 bug must reproduce on a minimal input before it is reported.**
+  Cut the case down to one segment and a few levels (start from a copy of
+  `~/AZURE2/tests/13N`), run it through the CLI and the GUI, and compare with a hand
+  calculation or `pyazr`. Three "bugs" reported in 2026 -- the 7Be A_y prompt order, the
+  ODeSA Q coefficient, the mode-3 "n" prompt -- were the session's own input errors; the
+  real ones (ten fixed since August) all reproduced on a small input.
+- **A copied `.azr` keeps its parent's ABSOLUTE output and checks paths.** `<config>`
+  lines 3-4 ("Full Path to Output Directory" / "Checks Directory") are honoured wherever
+  the copy runs; on 2026-10-26 a copy written for an audit put 21 files into another
+  campaign's `output/`. Before running any `.azr` outside its own directory, grep it for
+  `/groups` or `/users` and set the paths to `output/` and `checks/`
+  (`AzrModel.set_output_dir`); `rmfit audit` flags it (`output-path`).
+
 ## Showing a result in the GUI
 
 **Recalculate before opening the GUI.** The GUI's plot tab reads the
