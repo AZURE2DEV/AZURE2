@@ -86,8 +86,12 @@ in 47c119e4, `fix/adaptive-grid-criterion`]; the other four inherited failures a
       definition of Γ, C, μ, Q, B from γ^int + γ^ext (five copies deleted); `ConvertAmplitudeBasis` through
       `park_from_brune`; external capture takes the final state's Brune amplitude and energy in every basis (formal ↔
       Brune capture to `beam_profile_kernel`'s 6.049 MeV state 0.81 → agree; `tests/beam_profile_kernel/check.sh`);
-      Brune and Park outputs identical, formal changes classified. Next: step 4 (external capture, with the
-      `--ignore-externals` mask on Brune amplitudes), 3b (i), 5–7.*
+      Brune and Park outputs identical, formal changes classified.*
+      *Step 4 done on `feature/upgrade-1-external-capture` (2026-11-08, not merged): `physics/external_capture` (N_f,
+      γ^ext, the multipole rule, the projector Π); `--ignore-externals` on the input, the same in every basis; one
+      adjoint test for the formal-basis parts; Brune and Park outputs identical, formal changes classified. Open before
+      merge: `brune_from_formal`'s 10⁻¹² MeV tolerance at the rounding limit (`external_capture.md` §8). Next: 3b (i),
+      5–7.*
 - [ ] Internal convention written in `docs/source/theory/conventions.rst`; `Convention` record; recoupling (6j) and
       phase conversions in `level_parameters`; convention-invariance test on T1–T3.
       *Documentation part done on `feature/upgrade-1-conventions` (2026-11-07, not merged): the page states the

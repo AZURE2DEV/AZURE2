@@ -123,6 +123,37 @@ captures must agree to 10⁻⁹ (they differ by 9.7 × 10⁻² before). (3) A co
 photon channel's file width set to 10⁻²⁰ eV keeps its external part (unit test of the mask's definition through the
 CLI is left to pyazr's `ignore_externals` test of 5b83249a, ported if it fits the time).
 
+## 6. As built (branch `feature/upgrade-1-external-capture`, 2026-11-08)
+
+As designed, with these details. `bound_state_coefficient` (2μa/ħ²) is a function of its own, because the adjoint
+(`AMatrixFunc::TBarAdjoint`) needs it for dN_f/dγ; that was a seventh copy. The engine keeps 1/√N_f without a check of
+N_f > 0 (`SqrtNFFactor` in the adapter; the physics function `inverse_sqrt_normalization` throws), as before. The
+final-state code of step 2 (`SetUpECFinalBlocks`, `ECFinalStatesFromFormal`) moved from `CNuc.cpp` to the adapter
+file with the new mask code (`SetUpFormalCaptureMasks`, `FormalCaptureMasksFromParams`, `FormalCaptureMask`);
+`CNuc.cpp` 3349 → 3132 lines. `subtract_external_capture` lost its `ignore_zero_widths` argument: the caller leaves a
+masked entry absent. The mask's setup is skipped with `--no-transform`, where P is used.
+
+**Evidence.** Engine before (5055bec0) and after, GCC 11.5, Release, GUI off, 179 `.azr` under `tests/`, menu 1, one
+thread, three bases, every file compared number by number (`classify.py`):
+
+| basis | files | identical | changed |
+|---|---|---|---|
+| Brune | 689 | 689 | none |
+| Park | 689 | 689 | none |
+| formal | 662 | 650 | `upgrade/T1` (`T1.azr`, `T1_start.azr`): the two capture observables (R = 2, 3) by up to 0.30 and 0.54 relative, χ² 0.94 relative (8 files); `beam_profile_kernel`: ground-state capture (R = 4) by 9.7 × 10⁻², χ² (2 files), and `parameters.out`, where three E2 widths with input 0 (R = 5, 6, 7) lose the external part they had (0.75, 339.4, 1.66 meV → 0). Each changed formal output now equals the Brune output to the printed digits (largest relative difference 0 over all columns); before, they differed by those amounts. |
+
+No golden and no `tests/*/expected/` file changed: the goldens and the reference χ² are in the Brune basis. No input of
+`tests/` has a photon width that is not zero but below 10⁻⁸ MeV^½, so the definition's other change shows nowhere.
+`tests/beam_profile_kernel/check.sh` with the default flags: R = 8 and R = 4, formal against Brune, 3.8 × 10⁻¹ and
+3.3 × 10⁻² on 5055bec0, 0 (11 digits) here; with `--no-ignore-externals` 0 and 2.4 × 10⁻¹¹ on both.
+
+**After the addendum (section 7).** The guard commit leaves every menu-1 output of the 179 projects byte-identical
+to the branch head before it (689 + 662 + 689 files, three bases): no project of `tests/` has a slot whose masked
+levels are all decoupled. The χ² gradient against central differences, formal basis: `tests/13N` with a masked,
+coupled 1/2⁺ level at 4.5 MeV 1.7 × 10⁻³ → 1.4 × 10⁻⁷ (Brune 1.1 × 10⁻⁷; `tests/pyazr/formal_capture_mask_test.py`,
+which fails on e205038e and on 5055bec0 in other checks); `pyazr_zero_width_level` passes again (analytic Jacobian,
+Π = P). `beam_profile_kernel` (formal basis) remains wrong on one component, for the reason of section 8.
+
 ## 7. The adjoint and the formal-basis masks (addendum, 2026-11-08)
 
 **Why.** As first built, every formal-basis block with channel capture and several levels made the residual Jacobian
@@ -148,3 +179,14 @@ path (Π = 1).
 was used (P instead of a numerically equal Π: differences at the 10⁻¹² level at most). Analytic gradients: unchanged
 in the Brune and Park bases; in the formal basis equal to central differences on the probes above (the fallback), and
 `pyazr_zero_width_level` passes again (analytic, Π = P).
+
+## 8. Open: `brune_from_formal` at 10⁻¹² MeV is at the rounding limit
+
+On `beam_profile_kernel`, formal basis, the 1⁻ level with Brune energy 20.0 MeV (formal 25.99 MeV) converges at the
+start parameters (26 iterations) but not after `width_9_2` = 1730 is raised by 1.7 × 10⁻³ (10⁻⁶ relative): after 1001
+iterations the last step is 7.7 × 10⁻¹² MeV, above the 10⁻¹² MeV tolerance, so `brune_from_formal` keeps the formal
+values and gives the level a unit row of T. The projector of every 1⁻ capture slot then changes and χ² jumps from
+40.4394 to 42.9348 (the step down gives 40.4394). The base (5055bec0), without projectors, is smooth (42.7207,
+42.7212, 42.7218). The step-2 final-state amplitudes (`ECFinalStatesFromFormal`, merged) use the same call with the
+same tolerance and the same silent fallback to the formal values. Not changed here; the choice (tolerance relative to
+the rounding of E, or an error instead of the formal values) is open in HANDOFF.
