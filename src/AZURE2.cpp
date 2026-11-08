@@ -109,7 +109,7 @@ void printHelp() {
             << std::setw(25) << std::left << "\t--use-brune:" << std::setw(0) << "Use the alternative level matrix of C.R. Brune (the default)." << std::endl
             << std::setw(25) << std::left << "\t--no-brune:" << std::setw(0) << "Use the standard Lane-Thomas parametrization (constant boundary conditions) instead." << std::endl
             << std::setw(25) << std::left << "\t--use-park:" << std::setw(0) << "Fit the observed reduced width amplitudes (T.-S. Park, PRC 104, 064612); implies --use-brune." << std::endl
-            << std::setw(25) << std::left << "\t--ignore-externals:" << std::setw(0) << "Ignore external resonant capture amplitude if internal width is zero (the default)." << std::endl
+            << std::setw(25) << std::left << "\t--ignore-externals:" << std::setw(0) << "Ignore the external capture of a photon channel whose input width is exactly zero (the default)." << std::endl
             << std::setw(25) << std::left << "\t--no-ignore-externals:" << std::setw(0) << "Keep it; needed for the R-matrix route (<config> first line false)." << std::endl
             << std::setw(25) << std::left << "\t--use-rmc:" << std::setw(0) << "Use Reich-Moore approximation for capture (neutron capture only)." << std::endl
             << std::setw(25) << std::left << "\t--gsl-coul:" << std::setw(0) << "Use GSL Coulomb functions (faster, but less accurate)." << std::endl

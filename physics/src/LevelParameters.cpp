@@ -353,8 +353,7 @@ std::vector<double> boundary_values(const System &system, std::size_t b, const s
 // ---------------------------------------------------------------------------------------------- external capture
 
 void subtract_external_capture(const System &system, std::size_t b, std::vector<double> &gamma,
-                               const std::vector<ExternalWidth> &ext, bool ignore_zero_widths,
-                               std::vector<std::string> &warnings, std::vector<std::size_t> *exceeded) {
+                               const std::vector<ExternalWidth> &ext, std::vector<std::string> &warnings, std::vector<std::size_t> *exceeded) {
   const JpiBlock &blk = system.block(b);
   const std::size_t nc = blk.num_channels();
   if (gamma.size() % (nc ? nc : 1) != 0 || ext.size() != gamma.size())
@@ -365,7 +364,6 @@ void subtract_external_capture(const System &system, std::size_t b, std::vector<
     for (std::size_t k = 0; k < nc; k++) {
       if (!IsPhoton(system.channel(blk.channel(k)).kind) || !ext[la * nc + k].present) continue;
       double &g = gamma[la * nc + k];
-      if (ignore_zero_widths && std::fabs(g) < 1.0e-8) continue;
       const double re = ext[la * nc + k].value.real(), im = ext[la * nc + k].value.imag();
       if (g * g >= im * im) {
         g = (g < 0.0) ? -std::sqrt(g * g - im * im) - re : std::sqrt(g * g - im * im) - re;
@@ -665,7 +663,7 @@ InternalParameters level_parameters(const System &system, std::size_t b, const C
                                    : convention_transform(system, b, convention, columns).to_internal(projectGamma, nl);
 
   // 3. External capture, 4. B_c (lowest level).
-  if (options.external) subtract_external_capture(system, b, g, *options.external, options.ignore_zero_widths, out.warnings);
+  if (options.external) subtract_external_capture(system, b, g, *options.external, out.warnings);
   out.basis_E = levels.E;
   out.basis_gamma = g;
   out.B = boundary_values(system, b, levels.E, cf);

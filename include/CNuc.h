@@ -205,6 +205,20 @@ class CNuc {
   /// Formal basis with external capture to a final state that shares its J^pi block with other levels: the final
   /// state's capture amplitude is its Brune amplitude, recomputed with the fit parameters (cnuc_split.md section 8).
   bool HasFormalECFinalBlocks() const { return ecFinalBlocks_ != nullptr; }
+  /// The --ignore-externals mask of a channel capture in the formal basis (external_capture.md section 3): the
+  /// projector Pi = T^-1 P T over the R-matrix levels `levels` of group `group`, for the photon channel `channel`,
+  /// at the current fit parameters.  The masked entrance and exit vectors are Pi gamma.
+  struct CaptureMask {
+    int group = 0, channel = 0;
+    std::vector<int> levels;
+    std::vector<double> projector;  ///< row-major, levels x levels; empty: no level masked
+  };
+  /// The formal-basis mask of (group, photon channel), or nullptr: the mask is then diagonal, a level whose input
+  /// width in the channel is zero (ALevel::ZeroInputWidth) is left out (Brune, Park, a block of one level).
+  const CaptureMask *FormalCaptureMask(int group, int channel) const;
+  /// Formal basis, --ignore-externals, channel capture through a block of several levels: the masks are recomputed
+  /// with the fit parameters, which the adjoint does not differentiate.
+  bool HasFormalCaptureMasks() const { return captureMaskSetup_ != nullptr; }
   /// Formal parameters back to observed energies and partial widths, for
   /// reporting. Under Brune the two are the same and this is a near no-op.
   void TransformOut(const Config &);
@@ -253,6 +267,14 @@ class CNuc {
   /// Their final states' external-capture amplitudes and N_f^1/2 from the current fit values (FillCompoundFromParams).
   void ECFinalStatesFromFormal();
   std::shared_ptr<const ECFinalBlocks> ecFinalBlocks_;
+  struct CaptureMaskSetup;
+  /// Formal basis with --ignore-externals: the (block, photon channel) pairs of channel capture (Initialize, after
+  /// the pathways are sorted).
+  void SetUpFormalCaptureMasks(const Config &);
+  /// Their projectors from the current fit values (FillCompoundFromParams).
+  void FormalCaptureMasksFromParams();
+  std::shared_ptr<const CaptureMaskSetup> captureMaskSetup_;
+  std::vector<CaptureMask> captureMasks_;
   /// TransformOut, first part: the Brune (Park) E and gamma of the fit parameters in the levels' transform slots
   /// (formal basis: physics/ brune_from_formal); report prints the warnings of levels that do not convert.
   void TransformToBrune(const Config &, bool report);

@@ -90,9 +90,10 @@ std::vector<phys::ExternalWidth> ExternalWidthsFromCNuc(CNuc &compound, const CN
     for (std::size_t k = 0; k < channels.size(); k++) {
       AChannel *channel = group->GetChannel(channels[k]);
       if (channel->GetRadType() != 'E' && channel->GetRadType() != 'M') continue;
-      // The engine skips a zero amplitude when zero widths are ignored (gamma^ext is not evaluated).
-      if ((configure.paramMask & Config::IGNORE_ZERO_WIDTHS) &&
-          std::fabs(group->GetLevel(levels[la])->GetGamma(channels[k])) < 1.0e-8) continue;
+      // --ignore-externals: a channel whose input width is zero has no external part (external_capture.md
+      // section 3); gamma^ext is not evaluated.
+      if ((configure.paramMask & Config::IGNORE_ZERO_WIDTHS) && group->GetLevel(levels[la])->ZeroInputWidth(channels[k]))
+        continue;
       out[la * channels.size() + k].present = true;
       out[la * channels.size() + k].value =
           ExternalReducedWidth(compound, group, group->GetLevel(levels[la]), channel, true, configure);

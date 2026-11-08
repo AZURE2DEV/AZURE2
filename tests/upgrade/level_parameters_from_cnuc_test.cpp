@@ -177,7 +177,6 @@ void CheckProject(const std::string &name, const std::string &azr) {
   const phys::System &sys = built.system;
   const CNucSystemMap &map = built.map;
   const phys::ChannelFunctions cf = ChannelFunctionsFromCNuc(filled->compound, map, filled->cfg);
-  const bool ignoreZero = !!(refB->cfg.paramMask & Config::IGNORE_ZERO_WIDTHS);
 
   Stat bruneG, bruneB, parkG, parkJ, formalE, formalG, formalB, parkFormalE, parkFormalG, outE, outG;
   Stat rtObs, rtPark, rtFormalE, rtFormalG, photonShift;
@@ -210,8 +209,7 @@ void CheckProject(const std::string &name, const std::string &azr) {
     const std::vector<phys::ExternalWidth> extB = ExternalWidthsFromCNuc(refB->compound, map, b, refB->cfg);
     phys::LevelParameterOptions opt;
     opt.external = &extB;
-    opt.ignore_zero_widths = ignoreZero;
-    opt.formal = false;
+        opt.formal = false;
     phys::Convention conv;
     const phys::InternalParameters pb = phys::level_parameters(sys, b, conv, own, in, cf, opt);
     preEC[b] = phys::amplitudes_from_observed(sys, b, own, in, phys::LevelBasis::Brune, cf).gamma;
@@ -369,8 +367,7 @@ void CheckProject(const std::string &name, const std::string &azr) {
       const std::vector<phys::ExternalWidth> extB = ExternalWidthsFromCNuc(refB->compound, map, b, refB->cfg);
       phys::LevelParameterOptions opt;
       opt.external = &extB;
-      opt.ignore_zero_widths = ignoreZero;
-      const phys::InternalParameters ip = phys::level_parameters(sys, b, conv, cols, pin, cf, opt);
+            const phys::InternalParameters ip = phys::level_parameters(sys, b, conv, cols, pin, cf, opt);
       const std::vector<double> gB = CNucGamma(refB->compound, map, b, false);
       const double scale = MaxAbs(gB);
       for (std::size_t i = 0; i < gB.size(); i++) amp.add(ip.basis_gamma[i], gB[i], scale);

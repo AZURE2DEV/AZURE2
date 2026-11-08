@@ -1546,8 +1546,9 @@ bool ForEachRow(CNuc *compound, EData *data, const Config &config, const vector_
   numGroups = 0;
   // Formal basis with an external-capture final state that shares its block: its capture amplitude is its Brune
   // amplitude, an iteration on the formal parameters of the block (CNuc::ECFinalStatesFromFormal) that the adjoint
-  // does not differentiate.  Finite differences.
-  if (compound->HasFormalECFinalBlocks() && data->NumSegments() > 0) {
+  // does not differentiate; so is the --ignore-externals projector of a channel capture (CNuc::FormalCaptureMask,
+  // external_capture.md section 3).  Finite differences.
+  if ((compound->HasFormalECFinalBlocks() || compound->HasFormalCaptureMasks()) && data->NumSegments() > 0) {
     bailSeg = 1;
     return false;
   }

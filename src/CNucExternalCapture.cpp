@@ -8,6 +8,10 @@
 #include "CNuc.h"
 #include "CNucLevelParameters.h"
 #include "CNucSystem.h"
+#include "Decay.h"
+#include "ECMGroup.h"
+#include "KGroup.h"
+#include "MGroup.h"
 #include "Config.h"
 #include "ECIntegral.h"
 #include "JGroup.h"
@@ -171,3 +175,95 @@ void CNuc::ECFinalStatesFromFormal() {
   }
 }
 
+/*!
+ * Formal basis with --ignore-externals: every (block, photon channel) through which channel capture runs, for a block
+ * of more than one level (external_capture.md section 3).  Setup state, shared by the clones; the projectors
+ * themselves are recomputed with the fit parameters (FormalCaptureMasksFromParams).
+ */
+struct CNuc::CaptureMaskSetup {
+  CNucSystem structure;
+  struct Slot {
+    std::size_t block;
+    int group, channel;
+  };
+  std::vector<Slot> slots;
+  bool gslCoulomb = false, rmc = false;
+};
+
+void CNuc::SetUpFormalCaptureMasks(const Config &configure) {
+  captureMaskSetup_.reset();
+  captureMasks_.clear();
+  if ((configure.paramMask & Config::USE_BRUNE_FORMALISM) || !(configure.paramMask & Config::IGNORE_ZERO_WIDTHS) ||
+      !(configure.paramMask & Config::TRANSFORM_PARAMETERS))
+    return;
+  auto setup = std::make_shared<CaptureMaskSetup>(CaptureMaskSetup{
+      BuildSystemFromCNuc(*this, configure, CNucSystemContent::Structure), {},
+      !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC), !!(configure.paramMask & Config::USE_RMC_FORMALISM)});
+  const CNucSystemMap &map = setup->structure.map;
+  for (int p = 1; p <= this->NumPairs(); p++)
+    for (int d = 1; d <= this->GetPair(p)->NumDecays(); d++)
+      for (int k = 1; k <= this->GetPair(p)->GetDecay(d)->NumKGroups(); k++) {
+        KGroup *kg = this->GetPair(p)->GetDecay(d)->GetKGroup(k);
+        for (int m = 1; m <= kg->NumECMGroups(); m++) {
+          ECMGroup *ec = kg->GetECMGroup(m);
+          if (!ec->IsChannelCapture() || !ec->GetIntChannelNum()) continue;
+          MGroup *chan = this->GetPair(p)->GetDecay(ec->GetChanCapDecay())->GetKGroup(ec->GetChanCapKGroup())->GetMGroup(ec->GetChanCapMGroup());
+          const int group = chan->GetJNum(), channel = ec->GetIntChannelNum();
+          for (std::size_t b = 0; b < map.groupOfBlock.size(); b++) {
+            if (map.groupOfBlock[b] != group || map.levelOfBlockLevel[b].size() < 2) continue;
+            bool known = false;
+            for (const CaptureMaskSetup::Slot &s : setup->slots) known = known || (s.group == group && s.channel == channel);
+            if (!known) setup->slots.push_back({b, group, channel});
+          }
+        }
+      }
+  if (setup->slots.empty()) return;
+  captureMaskSetup_ = setup;
+  for (const CaptureMaskSetup::Slot &s : setup->slots) {
+    CaptureMask mask;
+    mask.group = s.group;
+    mask.channel = s.channel;
+    mask.levels = map.levelOfBlockLevel[s.block];
+    captureMasks_.push_back(mask);
+  }
+}
+
+/*!
+ * The projector Pi = T^-1 P T of each slot at the current fit parameters (physics/ capture_mask, Eq. 5), T from
+ * brune_from_formal to 1e-12 MeV as for the final states; empty when no level of the block is masked.
+ */
+void CNuc::FormalCaptureMasksFromParams() {
+  const CaptureMaskSetup &r = *captureMaskSetup_;
+  const phys::ChannelFunctions cf = ChannelFunctionsFromCNuc(*this, r.structure.map, r.gslCoulomb, r.rmc);
+  phys::FormalToBruneOptions options;
+  options.energy_tolerance_MeV = 1e-12;
+  options.want_transform = true;
+  for (std::size_t i = 0; i < r.slots.size(); i++) {
+    const CaptureMaskSetup::Slot &s = r.slots[i];
+    CaptureMask &mask = captureMasks_[i];
+    JGroup *group = this->GetJGroup(s.group);
+    const std::size_t n = mask.levels.size(), nc = group->NumChannels();
+    std::vector<unsigned char> masked(n, 0);
+    bool any = false;
+    for (std::size_t lb = 0; lb < n; lb++) {
+      masked[lb] = group->GetLevel(mask.levels[lb])->ZeroInputWidth(s.channel) ? 1 : 0;
+      any = any || masked[lb];
+    }
+    mask.projector.clear();
+    if (!any) continue;
+    std::vector<double> E, gamma, B(nc);
+    for (int la : mask.levels) {
+      E.push_back(group->GetLevel(la)->GetFitE());
+      for (std::size_t k = 0; k < nc; k++) gamma.push_back(group->GetLevel(la)->GetFitGamma((int)k + 1));
+    }
+    for (std::size_t k = 0; k < nc; k++) B[k] = group->GetChannel((int)k + 1)->GetBoundaryCondition();
+    const phys::LevelSet brune = phys::brune_from_formal(r.structure.system, s.block, E, gamma, B, cf, options);
+    mask.projector = phys::capture_mask(brune.transform, n, masked);
+  }
+}
+
+const CNuc::CaptureMask *CNuc::FormalCaptureMask(int group, int channel) const {
+  for (const CaptureMask &m : captureMasks_)
+    if (m.group == group && m.channel == channel) return &m;
+  return nullptr;
+}

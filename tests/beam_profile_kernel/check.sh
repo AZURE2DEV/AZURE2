@@ -11,9 +11,10 @@
 #   E_alpha = 1.0-2.8 MeV, calculated without data in the Brune basis and with --no-brune; the cross sections
 #   must agree to 1e-9 relative (printed with 11 digits).
 #
-# --no-ignore-externals: the default drops the external resonant capture of a level whose internal photon amplitude
-# is zero, which is defined on the levels of the basis in use and so differs between the bases (an open item of
-# step 2, HANDOFF).
+# Both with --no-ignore-externals and with the default --ignore-externals, which drops the channel capture through a
+# level whose photon width to the final state is given as zero.  That mask is defined on the input (Brune) levels and
+# carried to the formal levels by the projector T^-1 P T (docs/upgrade/external_capture.md section 3); before step 4
+# it was a test |gamma| < 1e-8 on the amplitudes of the basis in use, and the default flags differed by 9.7e-2.
 #
 #   ./tests/beam_profile_kernel/check.sh path/to/AZURE2
 
@@ -34,34 +35,38 @@ failures=0
 ok() { echo "  ok    $1"; }
 bad() { echo "  FAIL  $1"; failures=$((failures + 1)); }
 
+for ext in no-ignore-externals ignore-externals; do
 for basis in brune no-brune; do
-  mkdir -p "$WORK/$basis/output" "$WORK/$basis/checks"
-  cp -r "$HERE/data" "$WORK/$basis/"
+  D="$WORK/$ext/$basis"
+  mkdir -p "$D/output" "$D/checks"
+  cp -r "$HERE/data" "$D/"
   awk '/<segmentsTest>/ { print; print "1 1 8 1.0 3.0 0.2 90 90 0 1"; print "1 1 4 1.0 3.0 0.2 90 90 0 1"; skip = 1; next }
-       /<\/segmentsTest>/ { skip = 0 } !skip' "$HERE/beam_profile_kernel.azr" > "$WORK/$basis/t.azr"
+       /<\/segmentsTest>/ { skip = 0 } !skip' "$HERE/beam_profile_kernel.azr" > "$D/t.azr"
   flag=""
   [ "$basis" = no-brune ] && flag=--no-brune
-  (cd "$WORK/$basis" && printf '3\nn\n\n\n7\n' |
-    run_limited 600 "$AZURE2_BIN" --no-gui --no-readline --no-ignore-externals $flag t.azr > run.log 2>&1)
+  (cd "$D" && printf '3\nn\n\n\n7\n' |
+    run_limited 600 "$AZURE2_BIN" --no-gui --no-readline --$ext $flag t.azr > run.log 2>&1)
 done
 
 for r in 8 4; do
   f="AZUREOut_aa=1_R=$r.extrap"
-  if [ ! -s "$WORK/brune/output/$f" ] || [ ! -s "$WORK/no-brune/output/$f" ]; then
-    bad "R=$r: no output (see run.log)"
+  B="$WORK/$ext/brune/output/$f"; F="$WORK/$ext/no-brune/output/$f"
+  if [ ! -s "$B" ] || [ ! -s "$F" ]; then
+    bad "--$ext R=$r: no output (see run.log)"
     continue
   fi
-  rel=$(paste "$WORK/brune/output/$f" "$WORK/no-brune/output/$f" | awk -v n="$(awk 'NR==1{print NF}' "$WORK/brune/output/$f")" '
+  rel=$(paste "$B" "$F" | awk -v n="$(awk 'NR==1{print NF}' "$B")" '
     NF == 0 { next }
     { a = $4; b = $(n + 4); d = a - b; if (d < 0) d = -d; m = (a < 0 ? -a : a); k++
       if (m > 0 && d / m > w) w = d / m; else if (m == 0 && d > 0) w = 1 }
     END { printf "%.2e %d", w, k }')
   read -r worst count <<< "$rel"
   if [ "${count:-0}" -ge 10 ] && awk -v w="$worst" 'BEGIN { exit !(w <= 1e-9) }'; then
-    ok "R=$r: formal and Brune capture agree, largest relative difference $worst over $count energies"
+    ok "--$ext R=$r: formal and Brune capture agree, largest relative difference $worst over $count energies"
   else
-    bad "R=$r: formal and Brune capture differ by $worst (relative) over $count energies"
+    bad "--$ext R=$r: formal and Brune capture differ by $worst (relative) over $count energies"
   fi
+done
 done
 
 [ "$failures" -eq 0 ] && echo "PASS" || echo "FAIL ($failures)"

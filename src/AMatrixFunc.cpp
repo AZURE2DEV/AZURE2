@@ -445,8 +445,8 @@ complex AMatrixFunc::GetUBilinear(int jGroupNum, int chNum, int chpNum) {
 }
 
 /*!
- * Channel capture excludes levels with a negligible width in the internal
- * channel from both indices, which is a mask on the level set rather than the
+ * Channel capture with --ignore-externals excludes the levels whose input width in the internal (photon) channel is
+ * zero from both indices (external_capture.md section 3), which is a mask on the level set rather than the
  * per-channel cutoff, so this path builds its vectors fresh.  Results are
  * memoized because the same pathway recurs across k-groups.
  */
@@ -467,14 +467,32 @@ complex AMatrixFunc::GetChannelCaptureBilinear(int jGroupNum, int chNum, int chp
     const int n = (int)active_levels_[jGroupNum - 1].size();
     chan_cap_entrance_.assign(n, complex(0.0, 0.0));
     chan_cap_exit_.assign(n, complex(0.0, 0.0));
-    for (int la = 1; la < (int)map.size(); la++) {
-      const int row = map[la];
-      if (row == 0) continue;
-      ALevel *level = jGroup->GetLevel(la);
-      if (maskChannel && fabs(level->GetFitGamma(maskChannel)) < 1.0e-8) continue;
-      chan_cap_entrance_[row - 1] = level->GetFitGamma(chNum);
-      chan_cap_exit_[row - 1] = level->GetFitGamma(chpNum);
-    }
+    // The --ignore-externals mask (external_capture.md section 3): in the formal basis the projector T^-1 P T of
+    // the Brune levels whose input width in the photon channel is zero; otherwise those levels are left out.
+    const CNuc::CaptureMask *formal = maskChannel ? compound()->FormalCaptureMask(jGroupNum, maskChannel) : nullptr;
+    if (formal && !formal->projector.empty()) {
+      const std::size_t nl = formal->levels.size();
+      for (std::size_t i = 0; i < nl; i++) {
+        const int row = map[formal->levels[i]];
+        if (row == 0) continue;
+        double en = 0.0, ex = 0.0;
+        for (std::size_t j = 0; j < nl; j++) {
+          ALevel *level = jGroup->GetLevel(formal->levels[j]);
+          en += formal->projector[i * nl + j] * level->GetFitGamma(chNum);
+          ex += formal->projector[i * nl + j] * level->GetFitGamma(chpNum);
+        }
+        chan_cap_entrance_[row - 1] = en;
+        chan_cap_exit_[row - 1] = ex;
+      }
+    } else
+      for (int la = 1; la < (int)map.size(); la++) {
+        const int row = map[la];
+        if (row == 0) continue;
+        ALevel *level = jGroup->GetLevel(la);
+        if (maskChannel && level->ZeroInputWidth(maskChannel)) continue;
+        chan_cap_entrance_[row - 1] = level->GetFitGamma(chNum);
+        chan_cap_exit_[row - 1] = level->GetFitGamma(chpNum);
+      }
     value = channel ? this->ChannelBilinear(jGroupNum, chan_cap_entrance_.data(), chan_cap_exit_.data())
                     : solvers_[jGroupNum - 1].Bilinear(chan_cap_entrance_, chan_cap_exit_);
   }
@@ -1219,11 +1237,11 @@ void AMatrixFunc::TBarAdjoint(EPoint *energyPoint, const TMatrixCotangent &bar, 
           for (int la = 1; la <= ccLevels; la++) {
             if (!jgcc->GetLevel(la)->IsInRMatrix()) continue;
             if (internalChannel && ignoreZero &&
-                std::fabs(jgcc->GetLevel(la)->GetFitGamma(internalChannel)) < 1.0e-8) continue;
+                jgcc->GetLevel(la)->ZeroInputWidth(internalChannel)) continue;
             for (int lap = 1; lap <= ccLevels; lap++) {
               if (!jgcc->GetLevel(lap)->IsInRMatrix()) continue;
               if (internalChannel && ignoreZero &&
-                  std::fabs(jgcc->GetLevel(lap)->GetFitGamma(internalChannel)) < 1.0e-8) continue;
+                  jgcc->GetLevel(lap)->ZeroInputWidth(internalChannel)) continue;
               umatrix_cc += I2 * sqrtPcc *
                   jgcc->GetLevel(la)->GetFitGamma(ccChN) *
                   jgcc->GetLevel(lap)->GetFitGamma(ccChpN) *
@@ -1238,12 +1256,12 @@ void AMatrixFunc::TBarAdjoint(EPoint *energyPoint, const TMatrixCotangent &bar, 
           for (int la = 1; la <= ccLevels; la++) {
             if (!jgcc->GetLevel(la)->IsInRMatrix()) continue;
             if (internalChannel && ignoreZero &&
-                std::fabs(jgcc->GetLevel(la)->GetFitGamma(internalChannel)) < 1.0e-8) continue;
+                jgcc->GetLevel(la)->ZeroInputWidth(internalChannel)) continue;
             double gEn = jgcc->GetLevel(la)->GetFitGamma(ccChN);
             for (int lap = 1; lap <= ccLevels; lap++) {
               if (!jgcc->GetLevel(lap)->IsInRMatrix()) continue;
               if (internalChannel && ignoreZero &&
-                  std::fabs(jgcc->GetLevel(lap)->GetFitGamma(internalChannel)) < 1.0e-8) continue;
+                  jgcc->GetLevel(lap)->ZeroInputWidth(internalChannel)) continue;
               double gEx = jgcc->GetLevel(lap)->GetFitGamma(ccChpN);
               complex Aval = this->GetAMatrixElement(jcc, la, lap);
               complex w = I2 * sqrtPcc * gEn * gEx;  // weight of A[la][lap]

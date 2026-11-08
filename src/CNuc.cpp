@@ -999,6 +999,7 @@ void CNuc::Initialize(const Config &configure) {
   if (!(configure.paramMask & Config::USE_API))
     configure.outStream << "Sorting Reaction Pathways..." << std::endl;
   this->SortPathways(configure);
+  this->SetUpFormalCaptureMasks(configure);
   if ((configure.fileCheckMask | configure.screenCheckMask) & Config::CHECK_PATHWAYS)
     this->PrintPathways(configure);
 
@@ -1218,6 +1219,8 @@ bool CNuc::TransformIn(const Config &configure) {
           const int ch = (int)k + 1;
           AChannel *theChannel = theJGroup->GetChannel(ch);
           const double input = in.value[lb * nc + k];
+          // The --ignore-externals mask is a property of the input (external_capture.md section 3).
+          theLevel->SetZeroInputWidth(ch, input == 0.0);
           switch (amp.notes[lb * nc + k]) {
             case phys::ColumnNote::None: break;
             case phys::ColumnNote::AmplitudeFlagIgnored:
@@ -1317,7 +1320,6 @@ bool CNuc::TransformIn(const Config &configure) {
     // holds its Brune (Park) amplitudes: the final state enters external capture with its own pole's amplitude in
     // every basis (cnuc_split.md section 8).  The subtraction changes photon amplitudes only, which no other
     // level's external capture reads.
-    const bool ignoreZero = !!(configure.paramMask & Config::IGNORE_ZERO_WIDTHS);
     for (std::size_t b = 0; b < system.num_blocks(); b++) {
       const int j = map.groupOfBlock[b];
       JGroup *theJGroup = this->GetJGroup(j);
@@ -1331,7 +1333,7 @@ bool CNuc::TransformIn(const Config &configure) {
       const std::vector<phys::ExternalWidth> ext = ExternalWidthsFromCNuc(*this, map, b, configure);
       std::vector<std::string> warnings;
       std::vector<std::size_t> exceeded;
-      phys::subtract_external_capture(system, b, gamma, ext, ignoreZero, warnings, &exceeded);
+      phys::subtract_external_capture(system, b, gamma, ext, warnings, &exceeded);
       for (std::size_t i : exceeded) {
         const int la = levels[i / nc], ch = (int)(i % nc) + 1;
         configure.outStream << "**WARNING: Imaginary portion of the external width is greater "
@@ -2321,6 +2323,7 @@ void CNuc::FillCompoundFromParams(const vector_r &p) {
     for (unsigned int s = 0; s < samples_.size(); s++)
       for (unsigned int k = 0; k < nuclei_.size(); k++) samples_[s].entries[k].abundance = p[i++];
   if (ecFinalBlocks_) this->ECFinalStatesFromFormal();
+  if (captureMaskSetup_) this->FormalCaptureMasksFromParams();
 }
 
 /*!
@@ -2464,7 +2467,7 @@ void CNuc::ObservedWidths(const Config &configure) {
         rwa.push_back(theLevel->GammaIsRWA(ch) ? 1 : 0);
         complex externalWidth(0.0, 0.0);
         if ((theChannel->GetRadType() == 'M' || theChannel->GetRadType() == 'E') && theLevel->IsInRMatrix() &&
-            external && !(fabs(theLevel->GetTransformGamma(ch)) < 1.0e-8 && ignoreZero)) {
+            external && !(ignoreZero && theLevel->ZeroInputWidth(ch))) {
           externalWidth = ExternalReducedWidth(*this, theJGroup, theLevel, theChannel, false, configure);
           ext[lb * nc + k].present = true;
           ext[lb * nc + k].value = externalWidth;
