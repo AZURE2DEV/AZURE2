@@ -253,6 +253,12 @@ void CNuc::FormalCaptureMasksFromParams() {
     }
     mask.projector.clear();
     if (!any) continue;
+    // A masked level whose particle amplitudes are all zero is decoupled: no shift-matrix element links it to another
+    // level, so T is the identity on its row and column and Pi = P exactly (external_capture.md section 7).
+    bool coupled = false;
+    for (std::size_t lb = 0; lb < n && !coupled; lb++)
+      if (masked[lb]) coupled = MaskedLevelCoupled(group, mask.levels[lb]);
+    if (!coupled) continue;
     std::vector<double> E, gamma, B(nc);
     for (int la : mask.levels) {
       E.push_back(group->GetLevel(la)->GetFitE());
@@ -262,6 +268,31 @@ void CNuc::FormalCaptureMasksFromParams() {
     const phys::LevelSet brune = phys::brune_from_formal(r.structure.system, s.block, E, gamma, B, cf, options);
     mask.projector = phys::capture_mask(brune.transform, n, masked);
   }
+}
+
+/*!
+ * Does the adjoint miss a dependence of a formal-basis capture mask on the fit parameters?  It does when a slot has a
+ * projector (T depends on the parameters), or when a masked level is decoupled now but one of its particle amplitudes
+ * is free: P is exact at the point, but dPi = [P, dT] is not zero there (external_capture.md section 7).
+ */
+bool CNuc::FormalCaptureMasksOutsideAdjoint(const std::function<bool(int, int, int)> &freeGamma) {
+  for (const CaptureMask &mask : captureMasks_) {
+    if (!mask.projector.empty()) return true;
+    JGroup *group = this->GetJGroup(mask.group);
+    for (int la : mask.levels) {
+      if (!group->GetLevel(la)->ZeroInputWidth(mask.channel)) continue;
+      for (int ch = 1; ch <= group->NumChannels(); ch++)
+        if (group->GetChannel(ch)->GetRadType() == 'P' && freeGamma(mask.group, la, ch)) return true;
+    }
+  }
+  return false;
+}
+
+/// Has level `la` of `group` a particle amplitude other than zero (current fit values)?
+bool CNuc::MaskedLevelCoupled(JGroup *group, int la) const {
+  for (int ch = 1; ch <= group->NumChannels(); ch++)
+    if (group->GetChannel(ch)->GetRadType() == 'P' && group->GetLevel(la)->GetFitGamma(ch) != 0.0) return true;
+  return false;
 }
 
 const CNuc::CaptureMask *CNuc::FormalCaptureMask(int group, int channel) const {

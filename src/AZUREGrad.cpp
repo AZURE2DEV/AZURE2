@@ -1403,6 +1403,18 @@ void ReportBail(const char *what, ESegment *segment, int i) {
             << ")" << std::endl;
 }
 
+// The formal-basis parts that the adjoint does not differentiate: the Brune amplitude of an external-capture final
+// state that shares its block (CNuc::ECFinalStatesFromFormal, an iteration on the block's formal parameters) and the
+// --ignore-externals projector of a channel capture (CNuc::FormalCaptureMasksOutsideAdjoint, external_capture.md
+// section 7).  Every adjoint entry point asks this and falls back to finite differences.
+bool FormalPartsOutsideAdjoint(CNuc *compound, const ParamIndexMap &pmap) {
+  if (compound->HasFormalECFinalBlocks()) return true;
+  return compound->FormalCaptureMasksOutsideAdjoint([&pmap](int j, int la, int ch) {
+    const int full = pmap.GammaIndexFlat(j, la, ch);
+    return full >= 0 && full < pmap.NumFull() && pmap.FullToPacked(full) >= 0;
+  });
+}
+
 }  // namespace
 
 /// AZURE2_THM_FD=1 (any value but empty or 0): THM rows by central
@@ -1442,6 +1454,7 @@ bool AccumulateEGammaGradient(CNuc *compound, EData *data, const Config &config,
   // contribution to the gradient is added in AZURECalc::Gradient by the HOES
   // adjoint or finite differences of a chi^2 restricted to THM segments, so
   // mixed THM+direct datasets keep the analytic speed-up on the direct part.
+  if (FormalPartsOutsideAdjoint(compound, pmap)) return false;
   const std::vector<GradItem> items = BuildGradItems(data, /*skipTHM=*/true);
   bool bail = false;
   int bailSeg = 0;
@@ -1541,14 +1554,10 @@ AMatrixFunc::FreeMask BuildFreeMask(CNuc *compound, const ParamIndexMap &pmap) {
 template <class FitBarOf, class WriteRow>
 bool ForEachRow(CNuc *compound, EData *data, const Config &config, const vector_matrix_r *shiftDeriv,
                 FitBarOf fitBarOf, WriteRow writeRow, int &bailSeg, int &numGroups, bool skipTHM,
-                const AMatrixFunc::FreeMask *mask) {
+                const ParamIndexMap &pmap, const AMatrixFunc::FreeMask *mask) {
   const std::vector<GradItem> items = BuildGradItems(data, skipTHM);
   numGroups = 0;
-  // Formal basis with an external-capture final state that shares its block: its capture amplitude is its Brune
-  // amplitude, an iteration on the formal parameters of the block (CNuc::ECFinalStatesFromFormal) that the adjoint
-  // does not differentiate; so is the --ignore-externals projector of a channel capture (CNuc::FormalCaptureMask,
-  // external_capture.md section 3).  Finite differences.
-  if ((compound->HasFormalECFinalBlocks() || compound->HasFormalCaptureMasks()) && data->NumSegments() > 0) {
+  if (FormalPartsOutsideAdjoint(compound, pmap) && data->NumSegments() > 0) {
     bailSeg = 1;
     return false;
   }
@@ -1674,7 +1683,7 @@ bool ComputeResidualJacobian(CNuc *compound, EData *data, const Config &config,
   int bailSeg = 0, numGroups = 0;
   const AMatrixFunc::FreeMask mask = BuildFreeMask(compound, pmap);
   const bool ok = ForEachRow(compound, data, config, shiftDeriv, fitBarOf, writeRow, bailSeg, numGroups,
-                             /*skipTHM=*/true, &mask);
+                             /*skipTHM=*/true, pmap, &mask);
   if (!ok) ReportBail("Jacobian/gradient", data->GetSegment(bailSeg), bailSeg);
 
   if (timing) {
@@ -1733,7 +1742,7 @@ bool ComputeModelGradients(CNuc *compound, EData *data, const Config &config,
   const AMatrixFunc::FreeMask mask = BuildFreeMask(compound, pmap);
   // skipTHM: the rows of THM (HOES) points are left zero for the caller.
   const bool ok = ForEachRow(compound, data, config, shiftDeriv, fitBarOf, writeRow, bailSeg, numGroups, skipTHM,
-                             &mask);
+                             pmap, &mask);
   if (!ok) {
     ReportBail("Jacobian/gradient", data->GetSegment(bailSeg), bailSeg);
     gradByPoint.clear();

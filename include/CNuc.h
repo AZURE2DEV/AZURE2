@@ -2,6 +2,7 @@
 #define CNUC_H
 
 #include <string>
+#include <functional>
 #include <memory>
 #include <vector>
 #include <map>
@@ -211,14 +212,15 @@ class CNuc {
   struct CaptureMask {
     int group = 0, channel = 0;
     std::vector<int> levels;
-    std::vector<double> projector;  ///< row-major, levels x levels; empty: no level masked
+    std::vector<double> projector;  ///< row-major, levels x levels; empty: Pi = P (no masked level, or all decoupled)
   };
   /// The formal-basis mask of (group, photon channel), or nullptr: the mask is then diagonal, a level whose input
   /// width in the channel is zero (ALevel::ZeroInputWidth) is left out (Brune, Park, a block of one level).
   const CaptureMask *FormalCaptureMask(int group, int channel) const;
   /// Formal basis, --ignore-externals, channel capture through a block of several levels: the masks are recomputed
-  /// with the fit parameters, which the adjoint does not differentiate.
-  bool HasFormalCaptureMasks() const { return captureMaskSetup_ != nullptr; }
+  /// with the fit parameters.  True when the adjoint does not differentiate that dependence: a slot has a projector,
+  /// or a masked level has a free particle amplitude (freeGamma(group, level, channel), 1-based).
+  bool FormalCaptureMasksOutsideAdjoint(const std::function<bool(int, int, int)> &freeGamma);
   /// Formal parameters back to observed energies and partial widths, for
   /// reporting. Under Brune the two are the same and this is a near no-op.
   void TransformOut(const Config &);
@@ -273,6 +275,7 @@ class CNuc {
   void SetUpFormalCaptureMasks(const Config &);
   /// Their projectors from the current fit values (FillCompoundFromParams).
   void FormalCaptureMasksFromParams();
+  bool MaskedLevelCoupled(JGroup *, int) const;
   std::shared_ptr<const CaptureMaskSetup> captureMaskSetup_;
   std::vector<CaptureMask> captureMasks_;
   /// TransformOut, first part: the Brune (Park) E and gamma of the fit parameters in the levels' transform slots
