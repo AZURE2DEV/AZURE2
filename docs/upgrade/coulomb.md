@@ -129,6 +129,33 @@ samples (13× GSL's time per call); the rate path already tabulates the final-st
 grid, and the per-integral table of step 3b (ii) does the same for the data path. Bound-state outputs (ANC ↔ γ conversions, N_f, external capture to bound states, sub-threshold shifts) move
 in their last digits; the 179-project comparison classifies every change, and the T1–T3 truth checks must hold.
 
+**Engine part as built (2026-11-09, branch `feature/upgrade-1-whittaker-engine`).** Every call of GSL's U in the
+engine goes through the two physics functions, with the engine's η_b and ρ = κr unchanged (non-relativistic or
+`Kinematics` relativistic forms):
+
+| engine call | was | becomes |
+|---|---|---|
+| `WhitFunc::operator()` | e^{−z/2} z^{l+1} `gsl_sf_hyperg_U` (z = 2κr) | `whittaker(l, η_b, κr).W`; outside the double range mantissa × 10^scale of `whittaker_scaled`, i.e. 0 on underflow and inf on overflow (IEEE), never a GSL error |
+| `WhitFunc::Scaled` | `gsl_sf_hyperg_U_e10_e` | `whittaker_scaled` (mantissa, power of ten) |
+| `CoulombTable::ExactBound` (ρW′/W; `ShftFunc`'s bound branch and the table's bound sheet) | ratio of two `gsl_sf_hyperg_U_e10_e` | `whittaker_scaled(...).rho_dlog` |
+| `ThmBoundStateTail` | 2κ e^{−κr} `gsl_sf_hyperg_U_e`(1 + η_b, 2, 2κr) | `whittaker(0, η_b, κr).W / r` (same function: W_0/r) |
+
+Invalid arguments (NaN η_b or ρ, ρ ≤ 0) keep the engine's present answer, 0 (the `WhitFunc` FIXME and `Scaled`'s
+guard); they are not new failure modes. `ShftFunc`'s interpolation band near threshold (η_b ≤ 1000, and η_b ≤ 50 or
+z ≥ 0.05) is kept unchanged here, so that this step changes only the function; narrowing it is a separate,
+measured step. `ZeroEnergyLimit` (Bessel K) and the opt-in numerical route stay on GSL: they are not U.
+
+The Coulomb table's bound sheet is filled from `ExactBound`, so its contents change: the table format becomes 2
+(`kFormat`), and a format-1 file is refused with the existing warning ("table format 1, this build reads 2") and the
+exact functions are used until a table is built. No file is overwritten.
+
+**Comparison for this step.** Reference: the head of `feature/upgrade-1-whittaker` (engine identical to step 4).
+Both builds run the 179 projects × 3 bases without a Coulomb table (`AZURE2_COULOMB_TABLE` pointing to a missing
+file), so the difference is the function alone; the new build then also with a table of format 2 against itself
+without it. Every changed file is classified; bound-state quantities (ANC ↔ γ, N_f, external capture to bound
+states, sub-threshold S) are expected to move at ≲ 10⁻⁸ relative (GSL's error, measured above), anything larger is
+explained. Timing: `ECIntegral`'s data path on a capture project (T1 or 13N), calc, one thread, before and after.
+
 ## 2. Channel functions
 
 ### 2.1 Definition
