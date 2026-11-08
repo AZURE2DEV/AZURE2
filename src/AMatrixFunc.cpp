@@ -558,7 +558,7 @@ void AMatrixFunc::CalculateTMatrix(EPoint *point) {
       for (int m = 1; m <= theDecay->GetKGroup(k)->NumECMGroups(); m++) {
         ECMGroup *theECMGroup = theDecay->GetKGroup(k)->GetECMGroup(m);
         ALevel *finalLevel = compound()->GetJGroup(theECMGroup->GetJGroupNum())->GetLevel(theECMGroup->GetLevelNum());
-        double ecNormParam = finalLevel->GetFitGamma(theECMGroup->GetFinalChannel()) *
+        double ecNormParam = finalLevel->GetECGamma(theECMGroup->GetFinalChannel()) *
             finalLevel->GetSqrtNFFactor() * finalLevel->GetECConversionFactor(theECMGroup->GetFinalChannel());
         // Use energy-shift aware EC amplitude calculation if energy shifts are active
         complex ecAmplitude;
@@ -1196,7 +1196,7 @@ void AMatrixFunc::TBarAdjoint(EPoint *energyPoint, const TMatrixCotangent &bar, 
                               : point->GetECAmplitude(k, m);
 
         // base = gamma_fc * sqrtNF * conv * ecAmp  (the part without umatrix_cc).
-        double gamma_fc = finalLevel->GetFitGamma(fc);
+        double gamma_fc = finalLevel->GetECGamma(fc);  // the final state's Brune amplitude (cnuc_split.md section 8)
         complex base = gamma_fc * sqrtNF * conv * ecAmp;
 
         // "effective amplitude" carrying the umatrix_cc factor for the
@@ -1274,7 +1274,7 @@ void AMatrixFunc::TBarAdjoint(EPoint *energyPoint, const TMatrixCotangent &bar, 
           if (parkFinal && jgf->GetChannel(d)->GetRadType() == 'P' && pd->GetPType() == 0)
             Ad -= finalLevel->GetShiftDerivative(d);
           if (Ad == 0.0) continue;
-          double gd = finalLevel->GetFitGamma(d);
+          double gd = finalLevel->GetECGamma(d);
           double dSqrtNF = -Ad * gd * sqrtNF3;
           accum.AddGamma(jf, lf, d, std::real(conj(eb) * (pre * dSqrtNF)));
         }

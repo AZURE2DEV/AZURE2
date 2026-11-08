@@ -672,7 +672,7 @@ complex EPoint::GetECAmplitudeWithShift(int kGroupNum, int ecMGroupNum, CNuc *th
     ECMGroup *theECMGroup = theKGroup->GetECMGroup(ecMGroupNum);
     int j = theECMGroup->GetJGroupNum();
     if (!memo.hasLevelEnergy) {
-      memo.levelEnergy = theCNuc->GetJGroup(j)->GetLevel(theECMGroup->GetLevelNum())->GetE();
+      memo.levelEnergy = theCNuc->GetJGroup(j)->GetLevel(theECMGroup->GetLevelNum())->GetECEnergy();
       memo.hasLevelEnergy = true;
     }
     memo.amplitude = ECPathwayAmplitude(theCNuc, configure, entrancePair, j, memo.levelEnergy, theKGroup,
@@ -2041,7 +2041,7 @@ void EPoint::CalculateECAmplitudes(CNuc *theCNuc, const Config &configure, const
               KGroup *theKGroup = entrancePair->GetDecay(ir)->GetKGroup(k);
               for (int ecm = 1; ecm <= theKGroup->NumECMGroups(); ecm++) {
                 ECMGroup *theECMGroup = theKGroup->GetECMGroup(ecm);
-                complex ecAmplitude = ECPathwayAmplitude(theCNuc, configure, entrancePair, j, ecLevel->GetE(),
+                complex ecAmplitude = ECPathwayAmplitude(theCNuc, configure, entrancePair, j, ecLevel->GetECEnergy(),
                                                          theKGroup, theECMGroup, this->GetCMEnergy(), table);
                 this->AddECAmplitude(k, ecm, ecAmplitude);
               }

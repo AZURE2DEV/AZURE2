@@ -30,6 +30,9 @@ class Config;
  */
 azure2::physics::ChannelFunctions ChannelFunctionsFromCNuc(CNuc &compound, const CNucSystemMap &map,
                                                            const Config &configure);
+/// The same, with the two settings it reads from the Config given directly: GSL Coulomb functions, --use-rmc.
+azure2::physics::ChannelFunctions ChannelFunctionsFromCNuc(CNuc &compound, const CNucSystemMap &map, bool gslCoulomb,
+                                                           bool rmc);
 
 /*!
  * The <levels> values of block b as the file gives them (form Observed): E_lambda, the widths (eV), ANCs (fm^-1/2),

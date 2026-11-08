@@ -992,6 +992,8 @@ void CNuc::Initialize(const Config &configure) {
     if (!this->TransformIn(configure)) throw GSLException(this->TransformError());
   }
 
+  this->SetUpECFinalBlocks(configure);
+
   // Sort reaction pathways
   if (!(configure.paramMask & Config::USE_API))
     configure.outStream << "Sorting Reaction Pathways..." << std::endl;
@@ -1323,10 +1325,10 @@ bool CNuc::TransformIn(const Config &configure) {
       }
     }
 
-    // 2. Group by group: external capture subtracted from the photon amplitudes (Eq. 3.2), then, without the Brune
-    // parametrization, the formal parameters (Eq. 4.1).  The groups are made formal one after the other, so the
-    // external capture of a later group sees the formal parameters of a final state in an earlier one
-    // (level_parameters.md section 6).
+    // 2. External capture subtracted from the photon amplitudes (Eq. 3.2) of every group, while every level still
+    // holds its Brune (Park) amplitudes: the final state enters external capture with its own pole's amplitude in
+    // every basis (cnuc_split.md section 8).  The subtraction changes photon amplitudes only, which no other
+    // level's external capture reads.
     const bool ignoreZero = !!(configure.paramMask & Config::IGNORE_ZERO_WIDTHS);
     for (std::size_t b = 0; b < system.num_blocks(); b++) {
       const int j = map.groupOfBlock[b];
@@ -1352,8 +1354,22 @@ bool CNuc::TransformIn(const Config &configure) {
                             << "    [j=" << j << " la=" << la << " ch=" << ch << "]"
                             << std::endl;
       }
+      for (std::size_t lb = 0; lb < levels.size(); lb++)
+        for (std::size_t k = 0; k < nc; k++) theJGroup->GetLevel(levels[lb])->SetGamma((int)k + 1, gamma[lb * nc + k]);
+    }
+    // 3. Without the Brune parametrization, the formal parameters (Eq. 4.1), group by group.
+    for (std::size_t b = 0; b < system.num_blocks() && formal; b++) {
+      const int j = map.groupOfBlock[b];
+      JGroup *theJGroup = this->GetJGroup(j);
+      const std::vector<int> &levels = map.levelOfBlockLevel[b];
+      const std::size_t nc = theJGroup->NumChannels();
+      std::vector<double> E, gamma;
+      for (int la : levels) {
+        E.push_back(theJGroup->GetLevel(la)->GetE());
+        for (std::size_t k = 0; k < nc; k++) gamma.push_back(theJGroup->GetLevel(la)->GetGamma((int)k + 1));
+      }
       // A hard-sphere group (includeAllJPi) has channels but no levels: nothing to transform.
-      if (formal && !E.empty()) {
+      if (!E.empty()) {
         std::vector<double> B(nc);
         for (std::size_t k = 0; k < nc; k++) B[k] = theJGroup->GetChannel((int)k + 1)->GetBoundaryCondition();
         phys::LevelSet f;
@@ -2306,6 +2322,7 @@ void CNuc::FillCompoundFromParams(const vector_r &p) {
       double nFSum = 1.0;
       for (int ch = 1; ch <= this->GetJGroup(j)->NumChannels(); ch++) {
         level->SetFitGamma(ch, p[i]);
+        level->SetECGamma(ch, p[i]);
         if (ch <= level->NumNFIntegrals()) nFSum += 2.0 *
             this->GetPair(this->GetJGroup(j)->GetChannel(ch)->GetPairNum())->GetChRad() *
             this->GetPair(this->GetJGroup(j)->GetChannel(ch)->GetPairNum())->GetRedMass() *
@@ -2318,6 +2335,7 @@ void CNuc::FillCompoundFromParams(const vector_r &p) {
   if (hasAbundanceBlock_)
     for (unsigned int s = 0; s < samples_.size(); s++)
       for (unsigned int k = 0; k < nuclei_.size(); k++) samples_[s].entries[k].abundance = p[i++];
+  if (ecFinalBlocks_) this->ECFinalStatesFromFormal();
 }
 
 /*!
@@ -3107,6 +3125,101 @@ double CNuc::ParkNormPenalty() {
     }
   }
   return penalty;
+}
+
+/*!
+ * The R-matrix blocks of the formal basis that hold an external-capture final state with other levels
+ * (cnuc_split.md section 8): in them the final state's formal amplitude is a mixture of the block's poles, and its
+ * Brune amplitude, the residue of its own pole, is what external capture needs.  Setup state, shared by the clones.
+ */
+struct CNuc::ECFinalBlocks {
+  CNucSystem structure;
+  std::vector<std::size_t> blocks;
+  bool gslCoulomb = false, rmc = false;
+};
+
+void CNuc::SetUpECFinalBlocks(const Config &configure) {
+  ecFinalBlocks_.reset();
+  // The final state's energy in external capture (the photon energy, the bound-state wave): its Brune energy, the
+  // level energy now except in the formal basis (below).
+  for (int j = 1; j <= this->NumJGroups(); j++)
+    for (int la = 1; la <= this->GetJGroup(j)->NumLevels(); la++)
+      if (this->GetJGroup(j)->GetLevel(la)->IsECLevel())
+        this->GetJGroup(j)->GetLevel(la)->SetECEnergy(this->GetJGroup(j)->GetLevel(la)->GetE());
+  if ((configure.paramMask & Config::USE_BRUNE_FORMALISM) || !(configure.paramMask & Config::USE_EXTERNAL_CAPTURE))
+    return;
+  auto record = std::make_shared<ECFinalBlocks>(ECFinalBlocks{
+      BuildSystemFromCNuc(*this, configure, CNucSystemContent::Structure), {},
+      !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC), !!(configure.paramMask & Config::USE_RMC_FORMALISM)});
+  for (std::size_t b = 0; b < record->structure.system.num_blocks(); b++) {
+    const std::vector<int> &levels = record->structure.map.levelOfBlockLevel[b];
+    if (levels.size() < 2) continue;  // one level: its formal amplitude is its Brune one (a 1 x 1 eigenproblem)
+    JGroup *group = this->GetJGroup(record->structure.map.groupOfBlock[b]);
+    for (int la : levels)
+      if (group->GetLevel(la)->IsECLevel()) {
+        record->blocks.push_back(b);
+        break;
+      }
+  }
+  if (record->blocks.empty()) return;
+  ecFinalBlocks_ = record;
+  // The Brune energies of their final states, from the formal parameters (iteration to 1e-12 MeV).
+  const phys::ChannelFunctions cf = ChannelFunctionsFromCNuc(*this, record->structure.map, record->gslCoulomb, record->rmc);
+  phys::FormalToBruneOptions options;
+  options.energy_tolerance_MeV = 1e-12;
+  for (std::size_t b : record->blocks) {
+    JGroup *group = this->GetJGroup(record->structure.map.groupOfBlock[b]);
+    const std::vector<int> &levels = record->structure.map.levelOfBlockLevel[b];
+    const std::size_t nc = group->NumChannels();
+    std::vector<double> E, gamma, B(nc);
+    for (int la : levels) {
+      E.push_back(group->GetLevel(la)->GetE());
+      for (std::size_t k = 0; k < nc; k++) gamma.push_back(group->GetLevel(la)->GetGamma((int)k + 1));
+    }
+    for (std::size_t k = 0; k < nc; k++) B[k] = group->GetChannel((int)k + 1)->GetBoundaryCondition();
+    const phys::LevelSet brune = phys::brune_from_formal(record->structure.system, b, E, gamma, B, cf, options);
+    for (std::size_t lb = 0; lb < levels.size(); lb++)
+      if (group->GetLevel(levels[lb])->IsECLevel()) group->GetLevel(levels[lb])->SetECEnergy(brune.E[lb]);
+  }
+}
+
+/*!
+ * Formal basis: the Brune amplitudes of the final states in ecFinalBlocks_ at the current fit parameters (physics/
+ * brune_from_formal), as their external-capture amplitude, with N_f^1/2 formed from them.  The iteration's tolerance
+ * is 1e-12 MeV, so that the capture agrees with the Brune basis to rounding (the reports use the engine's 1e-6 MeV).
+ */
+void CNuc::ECFinalStatesFromFormal() {
+  const ECFinalBlocks &r = *ecFinalBlocks_;
+  const phys::ChannelFunctions cf = ChannelFunctionsFromCNuc(*this, r.structure.map, r.gslCoulomb, r.rmc);
+  phys::FormalToBruneOptions options;
+  options.energy_tolerance_MeV = 1e-12;
+  for (std::size_t b : r.blocks) {
+    JGroup *group = this->GetJGroup(r.structure.map.groupOfBlock[b]);
+    const std::vector<int> &levels = r.structure.map.levelOfBlockLevel[b];
+    const std::size_t nc = group->NumChannels();
+    std::vector<double> E, gamma, B(nc);
+    for (int la : levels) {
+      E.push_back(group->GetLevel(la)->GetFitE());
+      for (std::size_t k = 0; k < nc; k++) gamma.push_back(group->GetLevel(la)->GetFitGamma((int)k + 1));
+    }
+    for (std::size_t k = 0; k < nc; k++) B[k] = group->GetChannel((int)k + 1)->GetBoundaryCondition();
+    const phys::LevelSet brune = phys::brune_from_formal(r.structure.system, b, E, gamma, B, cf, options);
+    for (std::size_t lb = 0; lb < levels.size(); lb++) {
+      ALevel *level = group->GetLevel(levels[lb]);
+      if (!level->IsECLevel()) continue;
+      double nFSum = 1.0;
+      for (std::size_t k = 0; k < nc; k++) {
+        const int ch = (int)k + 1;
+        const double g = brune.gamma[lb * nc + k];
+        level->SetECGamma(ch, g);
+        if (ch <= level->NumNFIntegrals()) nFSum += 2.0 *
+            this->GetPair(group->GetChannel(ch)->GetPairNum())->GetChRad() *
+            this->GetPair(group->GetChannel(ch)->GetPairNum())->GetRedMass() *
+            uconv / pow(hbarc, 2.0) * pow(g, 2.0) * level->GetNFIntegral(ch);
+      }
+      level->SetSqrtNFFactor(1.0 / sqrt(nFSum));
+    }
+  }
 }
 
 /*!

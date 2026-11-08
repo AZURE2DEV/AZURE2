@@ -2,6 +2,7 @@
 #define CNUC_H
 
 #include <string>
+#include <memory>
 #include <vector>
 #include <map>
 #include "JGroup.h"
@@ -202,6 +203,9 @@ class CNuc {
   /// widths in eV), not reduced width amplitudes -- consumers that need to
   /// estimate a resonance width before initialisation completes must check.
   bool IsTransformedIn() const { return transformedIn_; };
+  /// Formal basis with external capture to a final state that shares its J^pi block with other levels: the final
+  /// state's capture amplitude is its Brune amplitude, recomputed with the fit parameters (cnuc_split.md section 8).
+  bool HasFormalECFinalBlocks() const { return ecFinalBlocks_ != nullptr; }
   /// Formal parameters back to observed energies and partial widths, for
   /// reporting. Under Brune the two are the same and this is a near no-op.
   void TransformOut(const Config &);
@@ -244,6 +248,12 @@ class CNuc {
   void SetThmCoherentValues(const std::vector<double> &v) { thmCoherentValues_ = v; }
 
  private:
+  struct ECFinalBlocks;
+  /// Formal basis with external capture: the blocks whose final states need their Brune amplitude (Initialize).
+  void SetUpECFinalBlocks(const Config &);
+  /// Their final states' external-capture amplitudes and N_f^1/2 from the current fit values (FillCompoundFromParams).
+  void ECFinalStatesFromFormal();
+  std::shared_ptr<const ECFinalBlocks> ecFinalBlocks_;
   /// TransformOut, first part: the Brune (Park) E and gamma of the fit parameters in the levels' transform slots
   /// (formal basis: physics/ brune_from_formal); report prints the warnings of levels that do not convert.
   void TransformToBrune(const Config &, bool report);

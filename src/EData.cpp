@@ -3028,7 +3028,7 @@ long long WalkECAmplitudes(Segments &segments, CNuc *theCNuc, ECSignatureHash *h
           hash->Add(segment->GetEntranceKey());
           hash->Add(segment->GetExitKey());
           hash->Add(theCNuc->GetJGroup(j)->GetJ());
-          hash->Add(ecLevel->GetE());
+          hash->Add(ecLevel->GetECEnergy());  // the energy the integrals use (Brune; cnuc_split.md section 8)
           pairs->insert(aa);
           for (int k = 1; k <= decay->NumKGroups(); k++) {
             KGroup *theKGroup = decay->GetKGroup(k);
