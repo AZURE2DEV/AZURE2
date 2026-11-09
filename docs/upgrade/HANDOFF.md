@@ -2,6 +2,35 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-09 (late) — Phase 2 (one objective) merged; band and bound channel functions merged
+
+**Merged into `feature/upgrade`:**
+- `shift-band`: ShftFunc interpolates only beyond η_b = 1000; one number moved, 1.2 × 10⁻¹¹ (`coulomb.md` §1.4).
+- `bound-functions`: S(0) from its own Bessel K (2 × 10⁻¹⁵ against mpmath); GSL's central derivative ported bit for
+  bit; outputs identical.
+- `upgrade-2-objective`: **Phase 2**, design and record in `objective.md`. One ordered list of terms (`Objective`)
+  for the FCN, the finite-difference and LM cost, the MCMC likelihood (data part) and the API.
+  - One enumeration of the diagonal priors serves the gradients, G2, the least-squares rows and the MCMC; no
+    parameter is matched by name any more.
+  - pyazr computes no prior (`objective()`, `penalties()` and the new `objective_and_grad()` call the engine;
+    pyazr 2.11.0).
+  - The PI accepted **D1–D7** and decided that **the MCMC shares the fit's configuration**. As built:
+    - D1: the MCMC profiles THM norms;
+    - D2, D7: Park's wall and the abundance sum-to-one are least-squares rows;
+    - D3: the prior covariance replaces its parameters' own priors;
+    - D4: no norm prior for a profiled THM norm;
+    - D5: a fixed parameter pays no prior;
+    - D6: nuisance priors in the API, pyazr, the writer and the MCMC.
+  - Every changed output and test is classified in `objective.md` §4. Of note, D1 corrects a diverging THM chain
+    (level energy −3.2 × 10⁷ MeV before, 6.29 MeV after).
+
+**Mistake and fix this session:** a new pyazr test was written over the existing `tests/pyazr/objective_test.py`
+(86ac2970); it is restored byte-identical (e8468cdc), and the new test is `objective_terms_test.py`.
+
+**Next.** (1) Phase 2 leftovers (`objective.md` §4): the writer from the terms instead of stored totals; `inference/` as
+its own library once Phase 4 makes the data values. (2) Phase 3 (`io/Project`: one `.azr` reader/writer). (3) Step 6b
+with the observables. (4) Lecture 2.
+
 ## 2026-11-09 (night) — six branches merged; step 6a merged; band step under verification
 
 **PI (2026-11-09): "go on with the steps and you can merge yourself, no need for my review."** Merged into
