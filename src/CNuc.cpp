@@ -2,12 +2,12 @@
 #include <iostream>
 #include <cmath>
 #include <iomanip>
+#include <initializer_list>
 #include <sstream>
 #include <algorithm>
 #include <set>
 #include <map>
 #include <tuple>
-#include "InputFiles.h"
 #include "CNuc.h"
 #include <mutex>
 #include <exception>
@@ -208,12 +208,12 @@ int CNuc::Fill(const Config &configure, const std::map<int, double> &radii) {
   int maxLValue = 0;
   std::map<std::pair<int, int>, std::vector<int> > channelsListed;  // (group, level) -> group channel numbers, in line order
   std::map<std::pair<int, int>, std::set<int> > levelIDs;  // (group, level) -> level IDs of the lines that built it
-  std::unique_ptr<std::istream> inStream = InputFiles::Open(configure.configfile, configure.cacheInputFiles);
+  // The <levels> section of the project (Config::SectionStream: io::Document, whole-line tags).
+  std::unique_ptr<std::istream> inStream = configure.SectionStream("levels");
+  if (!inStream) return -1;
   std::istream &in = *inStream;
-  if (!in) return -1;
   std::string line = "";
-  while (line != "<levels>" && !in.eof()) getline(in, line);
-  if (line != "<levels>") return -1;
+  getline(in, line);  // <levels>
   std::map<int, int> ecPairs;
   // Which compound nucleus each level (by its ID, column 9) belongs to: the
   // channel lines of one level must all come from pairs of one nucleus.
@@ -448,12 +448,12 @@ int CNuc::Fill(const Config &configure, const std::map<int, double> &radii) {
 int CNuc::ReadAbundances(const Config &configure) {
   hasAbundanceBlock_ = false;
   samples_.clear();
-  std::unique_ptr<std::istream> inStream = InputFiles::Open(configure.configfile, configure.cacheInputFiles);
+  // The <abundances> section of the project (Config::SectionStream: io::Document, whole-line tags).
+  std::unique_ptr<std::istream> inStream = configure.SectionStream("abundances");
+  if (!inStream) return 0;
   std::istream &in = *inStream;
-  if (!in) return -1;
   std::string line = "";
-  while (line != "<abundances>" && !in.eof()) getline(in, line);
-  if (line != "<abundances>") return 0;
+  getline(in, line);  // <abundances>
   hasAbundanceBlock_ = true;
   // A sample is created the first time its name appears; the unnamed sample is "".
   auto sampleOf = [&](const std::string &name) -> AbundanceSample & {
@@ -716,8 +716,15 @@ int CNuc::CheckIdenticalChannels(const Config &configure) {
  */
 static std::set<int> ExitPairKeysInFile(const Config &configure) {
   std::set<int> keys;
-  std::unique_ptr<std::istream> inStream = InputFiles::Open(configure.configfile, configure.cacheInputFiles);
-  std::istream &in = *inStream;
+  // The <segmentsData> and <segmentsTest> sections (Config::SectionStream: io::Document, whole-line tags).
+  std::string text;
+  for (const char *name : {"segmentsData", "segmentsTest"})
+    if (std::unique_ptr<std::istream> section = configure.SectionStream(name)) {
+      std::ostringstream s;
+      s << section->rdbuf();
+      text += s.str();
+    }
+  std::istringstream in(text);
   std::string line;
   bool inSegments = false;
   while (std::getline(in, line)) {

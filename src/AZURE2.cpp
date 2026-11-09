@@ -554,13 +554,29 @@ void getParameterFile(bool useReadline, Config &configure) {
 }
 
 /*!
+ * The section <name> of the project as a stream over its text (Config::SectionStream: io::Document, whole-line
+ * tags; docs/upgrade/project.md), or a stream in the fail state when there is no such section.
+ */
+static std::istringstream SectionText(const Config &configure, const std::string &name) {
+  std::istringstream in;
+  if (std::unique_ptr<std::istream> section = configure.SectionStream(name)) {
+    std::ostringstream text;
+    text << section->rdbuf();
+    in.str(text.str());
+  } else {
+    in.setstate(std::ios::failbit);
+  }
+  return in;
+}
+
+/*!
  * This function reads the segment file, and stores the active entrance and exit pair keys
  * for cross reference with the External capture file.  Only if an active external capture segment
  * is required is the user prompted for an external integrals file.
  */
 
 bool readSegmentFile(const Config &configure, std::vector<SegPairs> &segPairs) {
-  std::ifstream in;
+  std::istringstream in;
   std::string startTag, stopTag;
   if (configure.paramMask & Config::CALCULATE_WITH_DATA) {
     startTag = "<segmentsData>";
@@ -569,7 +585,7 @@ bool readSegmentFile(const Config &configure, std::vector<SegPairs> &segPairs) {
     startTag = "<segmentsTest>";
     stopTag = "</segmentsTest>";
   }
-  in.open(configure.configfile.c_str());
+  in = SectionText(configure, startTag.substr(1, startTag.size() - 2));
   if (in) {
     std::string line = "";
     while (line != startTag && !in.eof()) getline(in, line);
@@ -610,7 +626,6 @@ bool readSegmentFile(const Config &configure, std::vector<SegPairs> &segPairs) {
       configure.outStream << "Problem reading segments. Check configuration file." << std::endl;
       return false;
     }
-    in.close();
   } else {
     configure.outStream << "Cannot read segments. Check configuration file." << std::endl;
     return false;
@@ -890,8 +905,7 @@ void getRateParams(Config &configure, std::vector<SegPairs> &segPairs, bool useR
  */
 
 bool checkExternalCapture(Config &configure, const std::vector<SegPairs> &segPairs) {
-  std::ifstream in;
-  in.open(configure.configfile.c_str());
+  std::istringstream in = SectionText(configure, "levels");
   if (!in) {
     configure.outStream << "Cannot read nuclear information. Check configuration file." << std::endl;
     return false;
@@ -932,7 +946,6 @@ bool checkExternalCapture(Config &configure, const std::vector<SegPairs> &segPai
       }
     }
   }
-  in.close();
   in.clear();
   if ((configure.paramMask & Config::USE_EXTERNAL_CAPTURE) && (configure.paramMask & Config::USE_RMC_FORMALISM)) {
     configure.outStream << "WARNING: External capture is not compatible with Reich-Moore.  Ignoring external capture." << std::endl;
@@ -1315,7 +1328,7 @@ int runMCMC(Config &configure, const MCMCParams &mcmcParams) {
 
     // Read priors from AZURE2 file if they exist
     std::map<std::string, std::tuple<double, double, bool>> priorMap;  // paramName -> (priorMean, priorStd, usePrior)
-    std::ifstream priorFile(configure.configfile.c_str());
+    std::istringstream priorFile = SectionText(configure, "mcmc");
     if (priorFile.good()) {
       std::string line;
       bool inMCMCSection = false;
@@ -1388,7 +1401,6 @@ int runMCMC(Config &configure, const MCMCParams &mcmcParams) {
           }
         }
       }
-      priorFile.close();
     }
 
     // Build prior vectors for MCMC calculator (matching GUI approach)
@@ -1624,7 +1636,7 @@ int main(int argc, char *argv[]) {
   // <segmentsData> line whose observable code (8th field) is >= 10, so scan
   // the file once and enable the analytic gradient for such projects.
   if (!(configure.paramMask & Config::USE_ANALYTIC_GRADIENT)) {
-    std::ifstream thmScan(configure.configfile.c_str());
+    std::istringstream thmScan = SectionText(configure, "segmentsData");
     std::string line;
     bool inSegments = false;
     bool hasTHMSegment = false;
