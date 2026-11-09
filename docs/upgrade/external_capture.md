@@ -190,3 +190,44 @@ values and gives the level a unit row of T. The projector of every 1⁻ capture 
 42.7212, 42.7218). The step-2 final-state amplitudes (`ECFinalStatesFromFormal`, merged) use the same call with the
 same tolerance and the same silent fallback to the formal values. Not changed here; the choice (tolerance relative to
 the rounding of E, or an error instead of the formal values) is open in HANDOFF.
+
+## 9. Width parameters fixed by the input (design, 2026-11-08)
+
+**What.** At setup every reduced-width amplitude becomes a fit parameter with step 0.1 × its value, and one whose
+value is exactly zero is fixed (`CNuc.cpp`, the Minuit parameter list; a zero step could not move it anyway). The
+value tested is the amplitude in the basis in use, after `TransformIn`. In the Brune and Park bases a width given as
+0 gives an amplitude 0, except a photon channel with `--no-ignore-externals`, where γ^int = −Re γ^ext. In the formal
+basis the amplitudes are mixtures of the Brune ones, and a zero input comes out as 0 or as rounding (10⁻¹⁵ … 10⁻⁴⁰)
+depending on the order of the sums: `beam_profile_kernel` frees 35 such parameters on 5055bec0 and 48 on a18fe89e
+(8df95d22 reordered the N_f sums), each with a step of 10⁻¹⁶ or less. Which parameters a fit varies then depends
+on rounding.
+
+**Rule.** A width parameter is fixed when its input is zero (`ALevel::ZeroInputWidth`, recorded by `TransformIn`
+for every channel, section 3), in every basis and with either `--ignore-externals` setting; with `--no-transform`,
+where the input is the parameter, the value test stays. A zero input means "this level does not decay through this
+channel" (section 3), so the parameter is not fitted unless the user frees it by giving a non-zero start.
+`ChannelFixed` still fixes the others. pyazr's `apply_fit` skips a fixed parameter of a channel the level does not
+list whatever its value (it skipped only an exact 0, so a formal-basis fit with a rounding value there could not be
+applied in strict mode). A `param.sav` still frees a fixed width whose current value is 0 when it gives a non-zero
+value (`AZUREParams.cpp`); in the formal basis a zero-input width whose formal value is not 0 is not freed that way
+(it stays fixed at the `.sav` value), and a `.sav` written by an older build that lists it as free does not free it.
+
+**Expected.** Brune and Park with the default flags: the same free parameters (a zero input already gives 0).
+Formal basis: the parameters of zero inputs become fixed, rounding-valued or not, and the free set is the Brune
+basis's (`beam_profile_kernel`: 134 → 67 free). `--no-ignore-externals`, any basis: an input-0 photon channel becomes fixed at γ^int = −Re γ^ext (was free).
+Menu-1 outputs that print the number of free parameters or χ²/ν change accordingly; the observables do not.
+
+**Tests.** A pyazr test: `beam_profile_kernel` in the formal basis has no free width whose input is zero, and the
+same free set as in the Brune basis; 13N with a photon width 0 and `--no-ignore-externals` has that parameter fixed;
+`apply_fit` in strict mode on a formal-basis vector succeeds.
+
+**Verified (2026-11-09; build of 70ab5323 + afd8ee6a, GCC 11.5 Release, pyazr on).** No warnings. `ctest -LE slow`
+112/112 after two test corrections (1a491286: check (c) of `pyazr_zero_width_fixed` called `apply_fit` with
+`transform=` and `include_fixed`, which `apply_fit` refuses; afd8ee6a: `apply_fit_test.py` required the opposite of
+the rule above for a fixed non-zero width on an unlisted channel — changed to the rule, for the PI's review, and it
+is now the test of the `azrfile.py` change: it fails with a18fe89e's `azrfile.py`). `pyazr_zero_width_fixed`: (a)
+67 = 67 free, (b) ×2 fixed; on a18fe89e (a) 134 vs 67 and (b) fail. `run_tests.sh` 133/133 (1193 s); 1 vs 8 threads
+byte-identical (T1–T3, 13N, three bases). The 179 projects × 3 bases against a18fe89e: 2040/2040 files identical —
+menu 1 prints neither the free-parameter count nor χ²/ν, so "Expected" above shows only in fits and in pyazr. No
+test project has a fixed width on a channel its level does not list (scan of the 75 that load in the formal basis),
+so the 179-project comparison cannot exercise the `azrfile.py` branch; `apply_fit_test.py` does.
