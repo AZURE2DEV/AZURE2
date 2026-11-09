@@ -394,6 +394,16 @@ and the SUM/RATIO blocks cannot write (after Phase 5). M10 (b), section name `<m
 folded kind is `quantity yield … target <name>`. **Pending:** M11 until the thread-dependence diagnosis reports
 (`fit_threads.md`).
 
+**From the maintainer, 2026-11-09 (overrides M12 and the "old projects load unchanged" clauses of this note and of
+`data_kinds.md` §5.1):** backward compatibility of the `.azr` is not required; a converter from the old format is.
+The engine therefore reads one grammar only (format 3, `project_format3.md`): named quantities, named targets,
+`<modelData>`. The integer isDiff codes, the positional segment columns and the `<targetInt>` index lists are known
+to the converter (`io/src/Convert.cpp`, `AZURE2 --convert`, `pyazr.convert_azr`) and to nothing else; an old file
+given to the engine is refused with a message naming the converter. The gate changes accordingly: the outputs of the
+converted test projects are bit-identical to those of the originals on the previous engine. The format must read
+naturally in the GUI and in Python: the same field names in the file, in the pyazr call and in the form, all taken
+from one table of quantities exported by the engine.
+
 **M1. Where `experiment/` lives.** (a) A standalone CMake target on `physics/` from the first step, with an engine
 adapter; (b) inside `src/` first, split later. Recommendation (a): the one-way rule is then enforced by the linker
 from the start, as for `io/` and `physics/`, and the nodes and frames are testable without an engine.
