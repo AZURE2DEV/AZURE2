@@ -194,6 +194,14 @@ entrance energy and stays `Scaled`. `AZURE_PROFILE` reports hits and misses.
 the cost measured again (13N, T1, one thread, calc). If the hit rate is low (the trees of different energies share
 few subintervals), the fallback is the fixed grid, as its own design with a comparison.
 
+**Step 3b (ii) verified (2026-11-09; build of 82ca0985, GCC 11.5 Release, pyazr on).** No warnings. 179 × 3 against
+5ed85322 (this branch before the memo): with a format-2 table 2040/2040 identical; without a table 1977/2040, the
+63 others being `intEC.dat.sig` alone (the reference run without a table was made by 48fb454f, before the v6 bump;
+the memo build's signatures equal the v6 build's, with and without a table). 1 vs 8 threads byte-identical (T1–T3,
+13N, three bases); `ctest -LE slow` 114/114. Memo on T1 (calc): 394980 hits, 870 computed (99.8 %); 13N 394965 and
+495. **Cost** (one thread, calc, mean of three, each build with its own table): T1 2.89 s (`-whittaker` head, GSL)
+→ 5.14 s (engine switch) → 2.77 s (memo); 13N 7.60 → 9.71 → 7.08 s. The engine switch no longer costs time.
+
 ## 2. Channel functions
 
 ### 2.1 Definition
