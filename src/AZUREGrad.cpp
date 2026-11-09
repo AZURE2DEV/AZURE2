@@ -109,7 +109,7 @@ void AddAbundancePenaltyGradient(CNuc *compound, const Config &configure, GradAc
     const double s = compound->SampleSumSigma(sample, configure.abundanceSumSigma);
     double g = (s > 0.0) ? 2.0 * (compound->AbundanceSum(sample) - 1.0) / (s * s) : 0.0;
     const SampleAbundance &e = compound->GetSample(sample)->entries[nucleus - 1];
-    if (e.sigma > 0.0) g += 2.0 * (e.abundance - e.nominal) / (e.sigma * e.sigma);
+    if (e.sigma > 0.0 && !e.priorReplaced) g += 2.0 * (e.abundance - e.nominal) / (e.sigma * e.sigma);
     accum.AddAbundance(k, g);
   }
 }

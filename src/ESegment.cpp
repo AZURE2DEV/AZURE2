@@ -943,13 +943,14 @@ void ESegment::CopyShiftFnFrom(const ESegment &other) {
 // explicit "segment_N_energy_shift prior_centre c" row of <parameterSettings> moves the constant term's centre
 // to c (GetNominalEnergyShift); without one it is 0, as on dev.
 void ESegment::AddShiftPenalty(double &chi) const {
-  if (varyEnergyShift_ && energyShiftError_ != 0.0)
+  // A prior the prior covariance replaces is not added (objective.md D3).
+  if (varyEnergyShift_ && energyShiftError_ != 0.0 && !shiftPriorReplaced_)
     chi += pow((energyShift_ - energyShiftNominal_) / energyShiftError_, 2.0);  // nominal: 0 or the prior_centre row
-  if (varyEnergyShiftSqrt_ && energyShiftSqrtError_ != 0.0) chi += pow(energyShiftSqrt_ / energyShiftSqrtError_, 2.0);
+  if (varyEnergyShiftSqrt_ && energyShiftSqrtError_ != 0.0 && !shiftSqrtPriorReplaced_) chi += pow(energyShiftSqrt_ / energyShiftSqrtError_, 2.0);
   // The shift function's parameters are penalised once, on the segment that owns them.
   if (OwnsShiftFn() && hasShiftFn_)
     for (int j = 0; j < (int)shiftFnValues_.size(); j++)
-      if (shiftFnVary_[j] && shiftFnError_[j] != 0.0) chi += pow(shiftFnValues_[j] / shiftFnError_[j], 2.0);
+      if (shiftFnVary_[j] && shiftFnError_[j] != 0.0 && !IsShiftFnPriorReplaced(j)) chi += pow(shiftFnValues_[j] / shiftFnError_[j], 2.0);
 }
 
 void ESegment::SetEnergyShiftSqrt(double energyShiftSqrt) {

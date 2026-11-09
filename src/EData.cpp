@@ -2731,7 +2731,8 @@ void EData::WriteOutputFiles(const Config &configure, bool isFit, const BandData
       // parameter: the fit adds no prior for it (D4).
       double normChiSquared = 0.;
       double normError = thisSegment->GetNominalNorm() / 100. * thisSegment->GetNormError();
-      if (normError != 0. && thisSegment->IsVaryNorm() && !thisSegment->IsProfiledNorm()) normChiSquared =
+      if (normError != 0. && thisSegment->IsVaryNorm() && !thisSegment->IsProfiledNorm() &&
+          !thisSegment->IsNormPriorReplaced()) normChiSquared =
                                pow((thisSegment->GetNorm() - thisSegment->GetNominalNorm()) / normError, 2.0);
       totalChiSquared += (thisSegment->GetSegmentChiSquared());
       totalNormChiSquared += normChiSquared;

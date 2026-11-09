@@ -62,6 +62,26 @@ class ESegment {
   bool IsTargetEffect() const;
   /// Is the normalization a free fit parameter?
   bool IsVaryNorm() const;
+  /*!
+   * The diagonal priors of this segment's parameters that the prior covariance (<config> priorCovariance=) replaces:
+   * its multivariate Gaussian takes their place (docs/upgrade/objective.md D3), set once at set-up
+   * (ReplaceDiagonalPriors, Objective.h).
+   */
+  void ReplaceNormPrior() { normPriorReplaced_ = true; }
+  bool IsNormPriorReplaced() const { return normPriorReplaced_; }
+  void ReplaceShiftPrior() { shiftPriorReplaced_ = true; }
+  bool IsShiftPriorReplaced() const { return shiftPriorReplaced_; }
+  void ReplaceShiftSqrtPrior() { shiftSqrtPriorReplaced_ = true; }
+  bool IsShiftSqrtPriorReplaced() const { return shiftSqrtPriorReplaced_; }
+  void ReplaceShiftFnPrior(int j) {
+    if (j >= 0) {
+      if ((int)shiftFnPriorReplaced_.size() <= j) shiftFnPriorReplaced_.resize(j + 1, false);
+      shiftFnPriorReplaced_[j] = true;
+    }
+  }
+  bool IsShiftFnPriorReplaced(int j) const { return j >= 0 && j < (int)shiftFnPriorReplaced_.size() && shiftFnPriorReplaced_[j]; }
+  void ReplaceThicknessPrior() { thicknessPriorReplaced_ = true; }
+  bool IsThicknessPriorReplaced() const { return thicknessPriorReplaced_; }
   /// Angular distribution (Legendre coefficients)?
   bool IsAngularDist() const;
   /*!
@@ -371,7 +391,7 @@ class ESegment {
   /// The prior ((n - n0)/sigma)^2 of a free thickness parameter that owns its value (no follower), 0 otherwise (a
   /// fixed parameter pays no prior, docs/upgrade/objective.md D5).
   double ThicknessPenalty() const {
-    if (!IsThicknessVaried() || !(thicknessSigma_ > 0.0)) return 0.0;
+    if (!IsThicknessVaried() || thicknessPriorReplaced_ || !(thicknessSigma_ > 0.0)) return 0.0;
     const double d = (thickness_ - GetNominalThickness()) / thicknessSigma_;
     return d * d;
   }
@@ -546,6 +566,9 @@ class ESegment {
   std::vector<double> shiftFnNominal_;
   std::vector<double> shiftFnError_;
   std::vector<bool> shiftFnVary_;
+  bool normPriorReplaced_ = false, shiftPriorReplaced_ = false, shiftSqrtPriorReplaced_ = false;
+  bool thicknessPriorReplaced_ = false;
+  std::vector<bool> shiftFnPriorReplaced_;
   // ... and the one applied to the points (own or the group leader's).
   bool hasShiftFn_;
   Equation shiftFn_;

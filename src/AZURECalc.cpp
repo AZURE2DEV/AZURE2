@@ -899,7 +899,7 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
       double g = normData[s];
       double n0 = seg->GetNominalNorm();
       double nerr = n0 / 100.0 * seg->GetNormError();
-      if (nerr != 0.0) g += 2.0 * (seg->GetNorm() - n0) / (nerr * nerr);
+      if (nerr != 0.0 && !seg->IsNormPriorReplaced()) g += 2.0 * (seg->GetNorm() - n0) / (nerr * nerr);
       grad[idx] = g;
     }
   }
@@ -1630,7 +1630,7 @@ int AZURECalc::PrepareFreeParams(const vector_r &full,
       // a: a counts the parameters free in this Jacobian, the limits manager's non-fixed index counts those free
       // when it was applied plus every fixed segment parameter, and the two need not agree.
       double nom, sig;
-      if (limitsManager_->NuisancePrior(f, nom, sig)) {
+      if (NuisancePriorOf(f, nom, sig)) {
         pen_nom[a] = nom;
         pen_inv2[a] = 1.0 / (sig * sig);
       }
@@ -2023,6 +2023,21 @@ double AZURECalc::RunGSLNonlinear(AZUREParams &params, int maxIter,
   return cost;
 }
 
+bool AZURECalc::CoveredByPriorCovariance(int f) const {
+  const PriorCovariance *pc = data()->GetPriorCovariance();
+  if (!pc) return false;
+  const std::vector<int> &listed = pc->FullIndex();
+  return std::find(listed.begin(), listed.end(), f) != listed.end();
+}
+
+bool AZURECalc::NuisancePriorOf(int f, double &nominal, double &sigma) const {
+  if (!limitsManager_) return false;
+  // A parameter of the prior covariance has no diagonal prior of its own: the multivariate Gaussian replaces it
+  // (docs/upgrade/objective.md D3).
+  if (CoveredByPriorCovariance(f)) return false;
+  return limitsManager_->NuisancePrior(f, nominal, sigma);
+}
+
 void AZURECalc::AddNuisanceGradient(const vector_r &p, std::vector<double> &grad) const {
   if (!limitsManager_) return;
   // p and grad are the full parameter vector (fixed parameters included), and
@@ -2030,7 +2045,7 @@ void AZURECalc::AddNuisanceGradient(const vector_r &p, std::vector<double> &grad
   const int n = (int)std::min(p.size(), grad.size());
   for (int f = 0; f < n; f++) {
     double nominalValue, paramError;
-    if (!limitsManager_->NuisancePrior(f, nominalValue, paramError)) continue;
+    if (!NuisancePriorOf(f, nominalValue, paramError)) continue;
     // d/dp of ((p - nominal)/error)^2.
     grad[f] += 2.0 * (p[f] - nominalValue) / (paramError * paramError);
   }
@@ -2046,7 +2061,7 @@ double AZURECalc::CalculateNuisanceChiSquared(const vector_r &p) const {
   double nuisanceChiSquared = 0.0;
   for (int f = 0; f < (int)p.size(); f++) {
     double nominalValue, paramError;
-    if (!limitsManager_->NuisancePrior(f, nominalValue, paramError)) continue;
+    if (!NuisancePriorOf(f, nominalValue, paramError)) continue;
     double deviation = (p[f] - nominalValue) / paramError;
     nuisanceChiSquared += deviation * deviation;
   }
@@ -2162,28 +2177,3 @@ void AZURECalc::WriteParameters(AZUREParams &params, const Config &configure) co
     configure.outStream << "Could not save param.fit file." << std::endl;
 }
 
-std::vector<int> AZURECalc::IndicesWithOwnPrior() const {
-  // The parameters that carry a diagonal prior of their own, as the objective adds them: a norm's normError (on the
-  // group leader), the energy-shift / sqrt / shift-function errors, screening, density, Doppler and thickness sigmas,
-  // the <abundances> sigma, and a nuisance prior of the limits manager (CalculateNuisanceChiSquared's indexing).
-  std::vector<int> out;
-  ParamIndexMap pmap = BuildParamIndexMap(compound(), data(), std::vector<bool>());
-  ForEachDiagonalPrior(data(), compound(), pmap, [&](int idx, double, double) { out.push_back(idx); });
-  if (limitsManager_) {
-    AZUREParams tp;
-    compound()->FillMnParams(tp.GetMinuitParams(), &configure());
-    data()->FillMnParams(tp.GetMinuitParams());
-    int nonFixed = 0;
-    for (int i = 0; i < (int)tp.GetMinuitParams().Params().size(); i++) {
-      const ROOT::Minuit2::MinuitParameter &mp = tp.GetMinuitParams().Parameter(i);
-      if (mp.IsFixed() && mp.GetName().find("segment") == std::string::npos) continue;
-      if (!HasOwnPriorKind(pmap, i) && limitsManager_->IsNuisanceParameterByIndex(nonFixed) &&
-          limitsManager_->GetConvertedErrorByIndex(nonFixed) > 0.0)
-        out.push_back(i);
-      nonFixed++;
-    }
-  }
-  std::sort(out.begin(), out.end());
-  out.erase(std::unique(out.begin(), out.end()), out.end());
-  return out;
-}

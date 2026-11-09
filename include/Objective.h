@@ -87,14 +87,16 @@ inline void ForEachShiftPenalty(EData *data, const ParamIndexMap &pmap, F f) {
     ESegment *seg = data->GetSegment(s);
     if (!seg) continue;
     int idx;
-    if (seg->IsVaryEnergyShift() && seg->GetEnergyShiftError() != 0.0 && (idx = pmap.EnergyShiftIndex(s)) >= 0)
+    if (seg->IsVaryEnergyShift() && seg->GetEnergyShiftError() != 0.0 && !seg->IsShiftPriorReplaced() &&
+        (idx = pmap.EnergyShiftIndex(s)) >= 0)
       f(idx, seg->GetNominalEnergyShift(), seg->GetEnergyShiftError());  // 0 unless a prior_centre row
-    if (seg->IsVaryEnergyShiftSqrt() && seg->GetEnergyShiftSqrtError() != 0.0 &&
+    if (seg->IsVaryEnergyShiftSqrt() && seg->GetEnergyShiftSqrtError() != 0.0 && !seg->IsShiftSqrtPriorReplaced() &&
         (idx = pmap.EnergyShiftSqrtIndex(s)) >= 0)
       f(idx, 0.0, seg->GetEnergyShiftSqrtError());
     if (seg->OwnsShiftFn() && seg->HasShiftFn())
       for (int j = 0; j < seg->NumShiftFnParams(); j++)
-        if (seg->IsVaryShiftFn(j) && seg->GetShiftFnErrors()[j] != 0.0 && (idx = pmap.EnergyShiftFnIndex(s, j)) >= 0)
+        if (seg->IsVaryShiftFn(j) && seg->GetShiftFnErrors()[j] != 0.0 && !seg->IsShiftFnPriorReplaced(j) &&
+            (idx = pmap.EnergyShiftFnIndex(s, j)) >= 0)
           f(idx, 0.0, seg->GetShiftFnErrors()[j]);
   }
 }
@@ -105,7 +107,7 @@ template <class F>
 inline void ForEachScreeningPrior(EData *data, const ParamIndexMap &pmap, F f) {
   for (int k = 1; k <= data->NumScreeningParams(); k++) {
     const TargetEffect *te = data->GetScreeningTargetEffect(k);
-    if (te->GetScreeningSigma() <= 0.0 || !te->IsScreeningVaried()) continue;
+    if (te->GetScreeningSigma() <= 0.0 || !te->IsScreeningVaried() || te->IsScreeningPriorReplaced()) continue;
     const int idx = pmap.ScreeningIndex(k);
     if (idx >= 0) f(idx, te->GetScreeningNominal(), te->GetScreeningSigma());
   }
@@ -117,7 +119,7 @@ template <class F>
 inline void ForEachDensityPrior(EData *data, const ParamIndexMap &pmap, F f) {
   for (int k = 1; k <= data->NumDensityParams(); k++) {
     const TargetEffect *te = data->GetDensityTargetEffect(k);
-    if (te->GetDensitySigma() <= 0.0 || !te->IsDensityVaried()) continue;
+    if (te->GetDensitySigma() <= 0.0 || !te->IsDensityVaried() || te->IsDensityPriorReplaced()) continue;
     const int idx = pmap.DensityIndex(k);
     if (idx >= 0) f(idx, te->GetDensityNominal(), te->GetDensitySigma());
   }
@@ -129,7 +131,7 @@ template <class F>
 inline void ForEachDopplerPrior(EData *data, const ParamIndexMap &pmap, F f) {
   for (int k = 1; k <= data->NumDopplerParams(); k++) {
     const TargetEffect *te = data->GetDopplerTargetEffect(k);
-    if (te->GetDopplerSigma() <= 0.0 || !te->IsDopplerVaried()) continue;
+    if (te->GetDopplerSigma() <= 0.0 || !te->IsDopplerVaried() || te->IsDopplerPriorReplaced()) continue;
     const int idx = pmap.DopplerIndex(k);
     if (idx >= 0) f(idx, te->GetDopplerNominal(), te->GetDopplerSigma());
   }
@@ -142,7 +144,7 @@ template <class F>
 inline void ForEachThicknessPrior(EData *data, const ParamIndexMap &pmap, F f) {
   for (int k = 1; k <= data->NumThicknessParams(); k++) {
     const ESegment *seg = data->GetSegment(data->GetThicknessSegment(k));
-    if (seg->GetThicknessSigma() <= 0.0 || !seg->IsThicknessVaried()) continue;
+    if (seg->GetThicknessSigma() <= 0.0 || !seg->IsThicknessVaried() || seg->IsThicknessPriorReplaced()) continue;
     const int idx = pmap.ThicknessIndex(k);
     if (idx >= 0) f(idx, seg->GetNominalThickness(), seg->GetThicknessSigma());
   }
@@ -155,7 +157,7 @@ inline void ForEachDiagonalPrior(EData *data, CNuc *compound, const ParamIndexMa
   for (int s = 1; s <= data->NumSegments(); s++) {
     ESegment *seg = data->GetSegment(s);
     int idx;
-    if (!seg || !seg->IsVaryNorm() || (idx = pmap.NormIndex(s)) < 0) continue;
+    if (!seg || !seg->IsVaryNorm() || seg->IsNormPriorReplaced() || (idx = pmap.NormIndex(s)) < 0) continue;
     const double n0 = seg->GetNominalNorm(), nerr = n0 / 100.0 * seg->GetNormError();
     if (nerr != 0.0) f(idx, n0, nerr);
   }
@@ -171,8 +173,17 @@ inline void ForEachDiagonalPrior(EData *data, CNuc *compound, const ParamIndexMa
       int sample, nucleus;
       compound->AbundanceOf(k, sample, nucleus);
       const SampleAbundance &e = compound->GetSample(sample)->entries[nucleus - 1];
-      if (e.sigma > 0.0) f(idx, e.nominal, e.sigma);
+      if (e.sigma > 0.0 && !e.priorReplaced) f(idx, e.nominal, e.sigma);
     }
 }
+
+/*!
+ * The prior covariance (<config> priorCovariance=) replaces the diagonal prior of each of its parameters
+ * (docs/upgrade/objective.md D3): marks those priors on the segments, target effects and abundances (nuisance priors
+ * are skipped by index, AZURECalc::NuisancePriorOf).  Returns the names of the parameters whose own prior it
+ * replaced, for a note.  Call once, after the covariance is set (EData::SetPriorCovariance).
+ */
+class PriorCovariance;
+std::vector<std::string> ReplaceDiagonalPriors(CNuc *compound, EData *data, const PriorCovariance &pc);
 
 #endif

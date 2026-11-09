@@ -70,12 +70,19 @@ class TargetEffect {
   /// U_e as read from the line, the centre of the prior, eV.
   double GetScreeningNominal() const { return screeningNominal_; }
   bool IsScreeningVaried() const { return screeningVary_; }
+  /// The prior covariance replaces the screening, density or Doppler prior (docs/upgrade/objective.md D3).
+  void ReplaceScreeningPrior() { screeningPriorReplaced_ = true; }
+  bool IsScreeningPriorReplaced() const { return screeningPriorReplaced_; }
+  void ReplaceDensityPrior() { densityPriorReplaced_ = true; }
+  bool IsDensityPriorReplaced() const { return densityPriorReplaced_; }
+  void ReplaceDopplerPrior() { dopplerPriorReplaced_ = true; }
+  bool IsDopplerPriorReplaced() const { return dopplerPriorReplaced_; }
   /// Prior width in eV, 0 = no prior.
   double GetScreeningSigma() const { return screeningSigma_; }
   /// ((U_e - nominal) / sigma)^2, or 0 without a prior or when U_e is fixed (a fixed parameter pays no prior,
   /// docs/upgrade/objective.md D5).
   double ScreeningPenalty() const {
-    if (!hasScreening_ || !screeningVary_ || screeningSigma_ <= 0.0) return 0.0;
+    if (!hasScreening_ || !screeningVary_ || screeningPriorReplaced_ || screeningSigma_ <= 0.0) return 0.0;
     const double r = (screeningUe_ - screeningNominal_) / screeningSigma_;
     return r * r;
   }
@@ -105,7 +112,7 @@ class TargetEffect {
   const std::string &GetDensityGroup() const { return densityGroup_; }
   /// ((N - N0)/sigma)^2, or 0 without a prior or when N is fixed (objective.md D5).
   double DensityPenalty() const {
-    if (!hasDensityFit_ || !densityVary_ || densitySigma_ <= 0.0) return 0.0;
+    if (!hasDensityFit_ || !densityVary_ || densityPriorReplaced_ || densitySigma_ <= 0.0) return 0.0;
     const double r = (density_ - densityNominal_) / densitySigma_;
     return r * r;
   }
@@ -275,7 +282,7 @@ class TargetEffect {
   double GetDopplerMinimum() const { return 0.25 * this->GetDopplerNominal(); }
   /// ((T - T0)/sigma)^2, or 0 without a prior or when T is fixed (objective.md D5).
   double DopplerPenalty() const {
-    if (!dopplerFit_ || !dopplerVary_ || dopplerSigma_ <= 0.0) return 0.0;
+    if (!dopplerFit_ || !dopplerVary_ || dopplerPriorReplaced_ || dopplerSigma_ <= 0.0) return 0.0;
     const double r = (dopplerTemperature_ - dopplerNominal_) / dopplerSigma_;
     return r * r;
   }
@@ -377,6 +384,7 @@ class TargetEffect {
   double screeningUe_ = 0.0;      ///< eV
   double screeningNominal_ = 0.0; ///< eV, as read
   bool screeningVary_ = false;
+  bool screeningPriorReplaced_ = false, densityPriorReplaced_ = false, dopplerPriorReplaced_ = false;
   double screeningSigma_ = 0.0;   ///< eV, prior width (0 = none)
   bool hasDensityFit_ = false;    ///< `densityfit` block present (or joined through a density group)
   bool densityFitError_ = false;

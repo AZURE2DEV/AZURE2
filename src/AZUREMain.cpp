@@ -1,6 +1,7 @@
 #include <cmath>
 #include "AZURECalc.h"
 #include "AZUREMain.h"
+#include "Objective.h"
 #include "ScatteringLength.h"
 #include "ParameterLabel.h"
 #include "AZUREParams.h"
@@ -181,18 +182,15 @@ int AZUREMain::operator()() {
 
     // Declare a new instance of FCNBase
     AZURECalc theFunc(data(), compound(), configure(), &limitsManager);
-    // A prior-covariance parameter that also carries a diagonal prior of its own gets both (on purpose or not).
+    // The prior covariance replaces the diagonal prior of each of its parameters (docs/upgrade/objective.md D3).
     if (priorCov && priorCov->Size() > 0) {
-      const std::vector<int> own = theFunc.IndicesWithOwnPrior();
+      const std::vector<std::string> replaced = ReplaceDiagonalPriors(compound(), data(), *priorCov);
       std::string list;
-      for (int f : priorCov->FullIndex())
-        if (std::binary_search(own.begin(), own.end(), f))
-          list += (list.empty() ? "" : ", ") + params.GetMinuitParams().GetName(f);
+      for (const std::string &name : replaced) list += (list.empty() ? "" : ", ") + name;
       if (!list.empty())
-        configure().Note("Note: prior covariance: " + list + " also carr" +
-                         (list.find(',') == std::string::npos ? "ies" : "y") +
-                         " a prior of its own (normalization error, shift error, sigma or nuisance prior); both are "
-                         "applied, which counts the same information twice if the covariance already holds it.");
+        configure().Note("Note: prior covariance: its multivariate Gaussian replaces the prior of " + list +
+                         " of its own (normalization error, shift error or sigma); a nuisance prior on a listed "
+                         "parameter is not applied either.");
     }
     // theFunc.InitializePools();
     theFunc.SetErrorDef(1.0);
