@@ -73,6 +73,37 @@ struct OpenChannelValues {
 OpenChannelValues channel_functions(const ChannelKinematics &kin, int l, double a_fm, double E_MeV,
                                     coulomb::Method method = coulomb::Method::coulsm);
 
+/// e^x K_n(x), integer n >= 0, x > 0: the trapezoid rule on int_0^inf e^(-x (cosh t - 1)) cosh(n t) dt in long
+/// double (docs/upgrade/coulomb.md section 1.4, "Bound channel functions"); NaN for invalid arguments.
+double bessel_k_scaled(int n, double x);
+
+/*!
+ * S_l(0), the limit of the shift function at threshold from either side: with c = eta k = Z1 Z2 alpha mu c^2 / hbar c
+ * (fm^-1) and x = (8 c a)^(1/2), S_l(0) = -l - (x/2) K_2l(x) / K_2l+1(x) (the decaying solution sqrt(r) K_2l+1((8 c
+ * r)^(1/2)) of the Coulomb equation at E = 0); -l without Coulomb (c = 0) or if K_2l+1 underflows.
+ */
+double zero_energy_shift(double c_fm, double a_fm, int l);
+
+/// The bound-channel shift function of a neutral channel, S = rho k_l'(rho)/k_l(rho) + 1 by its recurrence
+/// (S_0 = -rho, S_l = -rho^2 / (l - S_l-1) - l).
+double neutral_bound_shift(int l, double rho);
+
+/// What coulomb_bound_shift needs of a charged bound channel: its eta_b and rho = kappa a at a binding B (MeV), as
+/// the caller's kinematics computes them, and c = eta k (fm^-1) and mu c^2 (MeV) for the threshold band.
+struct BoundShiftArgs {
+  std::function<void(double B_MeV, double &eta_b, double &rho)> eta_rho;
+  double c_fm = 0.0;
+  double mu_MeV = 0.0;
+  double a_fm = 0.0;
+};
+
+/*!
+ * S of a charged channel at binding B > 0: rho W'/W from whittaker_scaled where eta_b <= 1000 (B >= B_min, the binding
+ * at eta_b = 1000), and closer to threshold the linear interpolation S(0) + (S(B_min) - S(0)) B / B_min, so S is
+ * smooth through threshold.  S(0) where whittaker_scaled fails.
+ */
+double coulomb_bound_shift(int l, double B_MeV, const BoundShiftArgs &args);
+
 }  // namespace physics
 }  // namespace azure2
 
