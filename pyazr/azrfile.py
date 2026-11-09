@@ -1001,19 +1001,22 @@ def _thm_read_weight_table(path):
 
 
 
+def _package_module(name):
+    """The module ``pyazr.<name>``.  A module loaded by file path, outside its package (tests that import
+    azrfile.py alone), takes it from the package next to its own file."""
+    import importlib
+    if __package__:
+        return importlib.import_module(f"{__package__}.{name}")
+    import sys
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    if root not in sys.path:
+        sys.path.insert(0, root)
+    return importlib.import_module(f"pyazr.{name}")
+
+
 def _engine_module():
-    """The compiled engine module (``pyazr._azure2``).  A module loaded by file path, outside its package (tests that
-    import azrfile.py or datasets.py alone), takes it from the package next to its own file."""
-    try:
-        from . import _azure2
-        return _azure2
-    except ImportError:
-        import importlib
-        import sys
-        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        if root not in sys.path:
-            sys.path.insert(0, root)
-        return importlib.import_module("pyazr._azure2")
+    """The compiled engine module (``pyazr._azure2``)."""
+    return _package_module("_azure2")
 
 def _document(text):
     """The engine's lossless document of a project's text (``_azure2.Document``; docs/upgrade/project.md): the one
@@ -1682,14 +1685,14 @@ class AzrModel:
         if not path.endswith("/"):
             path += "/"
         os.makedirs(path, exist_ok=True)
-        lines = self._prefix.splitlines(keepends=True)
-        for i, line in enumerate(lines):
-            if line.rstrip().endswith("#Full Path to Output Directory"):
-                comment = line[line.index("#"):]
-                lines[i] = f"{path:<100}{comment}"
-                break
-        else:
+        # The engine's output directory is the second line inside <config> (Config::ReadConfigFile), whatever its
+        # comment says (project.md P2); the comment, if any, is kept.
+        lines, a, b = self._config_lines()
+        if a + 1 >= b:
             raise ValueError("no output-directory line in the <config> block.")
+        line = lines[a + 1]
+        comment = line[line.index("#"):] if "#" in line else "\n"
+        lines[a + 1] = f"{path:<100}{comment}" if "#" in line else f"{path}{comment}"
         self._prefix = "".join(lines)
         return self
 
@@ -2247,10 +2250,17 @@ class AzrModel:
             if not t:
                 continue
             out.setdefault(name, dict(defaults))
+            # As the engine reads the line (CNuc::ReadAbundances), and refuses what it refuses (project.md P3):
+            # "[<sample>:] sum <sigma>" or "[<sample>:] Z A value vary sigma".
             if t[0] == "sum":
+                if len(t) < 2 or not _isfloat(t[1]):
+                    raise ValueError(f'<abundances> line "{line.strip()}" is not "[<sample>:] sum <sigma>" '
+                                     f"(AZURE2 refuses it)")
                 continue
-            if len(t) >= 5:
-                out[name][Nucleus(int(t[0]), int(t[1]))] = (float(t[2]), int(float(t[3])) == 1, float(t[4]))
+            if len(t) < 5 or not all(_isfloat(x) for x in t[:5]):
+                raise ValueError(f'<abundances> line "{line.strip()}" is not "[<sample>:] Z A value vary sigma" '
+                                 f"(AZURE2 refuses it)")
+            out[name][Nucleus(int(t[0]), int(t[1]))] = (float(t[2]), int(float(t[3])) == 1, float(t[4]))
         if not out:
             out[""] = dict(defaults)
         return out
@@ -2338,32 +2348,53 @@ class AzrModel:
         self._suffix = "\n".join(lines) + "\n"
         return self
 
+    def _config_lines(self):
+        """The prefix's lines and the index range (a, b) of the lines strictly inside ``<config>``."""
+        lines = self._prefix.splitlines(keepends=True)
+        a = _tag_index(lines, "<config>")
+        b = _tag_index(lines, "</config>")
+        return lines, a + 1, b
+
+    def _config_value(self, key):
+        """The value of ``key=value`` in ``<config>`` as the engine reads it (Config::ReadConfigFile): only lines
+        between the tags, the comment after '#' dropped, key and value trimmed, the last line of the key winning;
+        None when absent (project.md P2)."""
+        lines, a, b = self._config_lines()
+        value = None
+        for ln in lines[a:b]:
+            entry = ln.split("#", 1)[0]
+            if "=" not in entry:
+                continue
+            k, v = entry.split("=", 1)
+            if k.strip() == key:
+                value = v.strip()
+        return value
+
+    def _set_config_value(self, key, value):
+        """Remove every ``key=`` line of ``<config>`` and, unless ``value`` is None, add ``key=value`` as its last
+        line."""
+        lines, a, b = self._config_lines()
+        keep = [ln for ln in lines[a:b]
+                if not ("=" in ln.split("#", 1)[0] and ln.split("#", 1)[0].split("=", 1)[0].strip() == key)]
+        if value is not None:
+            keep.append(f"{key}={value}\n")
+        self._prefix = "".join(lines[:a] + keep + lines[b:])
+
     @property
     def abundance_sum_sigma(self):
         """The ``abundanceSumSigma`` config key (0 = no sum-to-one penalty)."""
-        for line in self._prefix.splitlines():
-            if line.strip().startswith("abundanceSumSigma="):
-                return float(line.split("=", 1)[1].split("#")[0])
-        return 0.0
+        v = self._config_value("abundanceSumSigma")
+        return float(v) if v else 0.0
 
     @abundance_sum_sigma.setter
     def abundance_sum_sigma(self, value):
-        lines = self._prefix.splitlines(keepends=True)
-        lines = [ln for ln in lines if not ln.strip().startswith("abundanceSumSigma=")]
-        if value and float(value) > 0:
-            end = next(i for i, ln in enumerate(lines) if ln.strip() == "</config>")
-            lines.insert(end, f"abundanceSumSigma={float(value):g}\n")
-        self._prefix = "".join(lines)
+        self._set_config_value("abundanceSumSigma", f"{float(value):g}" if value and float(value) > 0 else None)
 
     @property
     def prior_covariance(self):
         """The ``priorCovariance`` config key: the prior parameter covariance file (path relative to the .azr's
         directory, see :mod:`pyazr.priors`), or None without one."""
-        for line in self._prefix.splitlines():
-            if line.strip().startswith("priorCovariance="):
-                value = line.split("=", 1)[1].split("#")[0].strip()
-                return value or None
-        return None
+        return self._config_value("priorCovariance") or None
 
     @prior_covariance.setter
     def prior_covariance(self, path):
@@ -2372,30 +2403,17 @@ class AzrModel:
         if path and ("#" in str(path) or "\n" in str(path) or str(path) != str(path).strip()):
             raise ValueError(f"priorCovariance path {path!r}: no '#', line break or leading/trailing blank (the "
                              f"<config> line is cut there)")
-        lines = self._prefix.splitlines(keepends=True)
-        lines = [ln for ln in lines if not ln.strip().startswith("priorCovariance=")]
-        if path:
-            end = next(i for i, ln in enumerate(lines) if ln.strip() == "</config>")
-            lines.insert(end, f"priorCovariance={path}\n")
-        self._prefix = "".join(lines)
+        self._set_config_value("priorCovariance", str(path) if path else None)
 
     @property
     def relativistic(self):
         """The ``relativistic`` config key: relativistic two-body kinematics (k, eta, lab <-> c.m. from the
         invariant mass; user guide "Relativistic Kinematics").  False when absent."""
-        for line in self._prefix.splitlines():
-            if line.strip().startswith("relativistic="):
-                return line.split("=", 1)[1].split("#")[0].strip() in ("1", "true")
-        return False
+        return self._config_value("relativistic") in ("1", "true")
 
     @relativistic.setter
     def relativistic(self, value):
-        lines = self._prefix.splitlines(keepends=True)
-        lines = [ln for ln in lines if not ln.strip().startswith("relativistic=")]
-        if value:
-            end = next(i for i, ln in enumerate(lines) if ln.strip() == "</config>")
-            lines.insert(end, "relativistic=1\n")
-        self._prefix = "".join(lines)
+        self._set_config_value("relativistic", "1" if value else None)
 
     # -- measured scattering lengths ------------------------------------------
 
@@ -2546,7 +2564,7 @@ class AzrModel:
             elif inside and s and file_substr in line:
                 t = line.split()
                 isDiff = int(float(t[7]))
-                i = 8 + (2 if isDiff % 10 == 2 else 0)   # dataNorm index
+                i = 8 + (2 if isDiff == 2 else 0)   # dataNorm index
                 if vary is not None:
                     t[i + 1] = "1" if vary else "0"
                 if sys_error is not None:
@@ -2583,7 +2601,7 @@ class AzrModel:
                 key += 1
                 t = line.split()
                 isDiff = int(float(t[7]))
-                out[key] = (t, 8 + (2 if isDiff % 10 == 2 else 0))
+                out[key] = (t, 8 + (2 if isDiff == 2 else 0))
         return out
 
     def set_segment_values(self, values):
@@ -2618,7 +2636,7 @@ class AzrModel:
             norm, shift = values[key]
             spans = _token_spans(line)
             t = [line[a:b] for a, b in spans]
-            i = 8 + (2 if int(float(t[7])) % 10 == 2 else 0)
+            i = 8 + (2 if int(float(t[7])) == 2 else 0)
             edits = {}
             if norm is not None:
                 edits[i] = repr(float(norm))
@@ -2652,15 +2670,15 @@ class AzrModel:
         Without a row the field is both, as in every classic file.  Only the
         keys with a row are listed; the other entry of a pair is None.
         """
+        prior_centre_row = _package_module("datasets").prior_centre_row
         out = {}
         for line in self._parameter_settings_lines():
-            m = _PRIOR_ROW.match(line)
-            if not m:
+            row = prior_centre_row(line)  # the engine's reading and its refusals (datasets.prior_centre_row)
+            if row is None:
                 continue
-            key = int(m.group(1))
+            key, kind, v = row
             n, sh = out.get(key, (None, None))
-            v = float(m.group(3))
-            out[key] = (v, sh) if m.group(2) == "norm" else (n, v)
+            out[key] = (v, sh) if kind == "norm" else (n, v)
         return out
 
     def _parameter_settings_lines(self):

@@ -20,6 +20,7 @@
 #include <iostream>
 #include <string>
 
+#include "ExtrapLine.h"
 #include "SegLine.h"
 
 #include <cstdio>
@@ -963,6 +964,37 @@ PYBIND11_MODULE(_azure2, m) {
         return d;
       },
       py::arg("line"), "One <segmentsData> line as AZURE2 reads it (SegLine).");
+  // One <segmentsTest> line as the engine reads it (ExtrapLine), for pyazr's TestSegmentSet (project.md section 5).
+  m.def(
+      "parse_extrapolation_line",
+      [](const std::string &line) {
+        std::istringstream in(line);
+        ExtrapLine el(in);
+        py::dict d;
+        d["active"] = el.isActive();
+        d["entrance_key"] = el.entranceKey();
+        d["exit_key"] = el.exitKey();
+        d["energy_min"] = el.minE();
+        d["energy_max"] = el.maxE();
+        d["energy_step"] = el.eStep();
+        d["angle_min"] = el.minA();
+        d["angle_max"] = el.maxA();
+        d["angle_step"] = el.aStep();
+        d["is_diff"] = el.isDiff();
+        d["phase_J"] = el.phaseJ();
+        d["phase_L"] = el.phaseL();
+        d["phase_S"] = el.phaseS();
+        d["max_order"] = el.maxAngDistOrder();
+        d["natural"] = el.natural();
+        d["total"] = el.total();
+        d["transmission"] = el.transmission();
+        d["yield_thickness"] = el.yieldThickness();
+        d["is_advanced"] = el.isAdvanced();
+        d["parse_error"] = el.parseError();
+        d["parse_warning"] = el.parseWarning();
+        return d;
+      },
+      py::arg("line"), "One <segmentsTest> line as AZURE2 reads it (ExtrapLine).");
   // The level of a <levels> line (io::LevelGrouper): the rule of CNuc::Fill, for pyazr's AzrModel.  assign returns
   // (level, kind, other level, its first level ID); kind: "joined", "new", "same_energy", "new_nearby".
   {

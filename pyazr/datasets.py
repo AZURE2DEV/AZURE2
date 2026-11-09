@@ -43,6 +43,7 @@ from ``ESegment``'s two constructors (``src/ESegment.cpp``), which is what
 AZURE2 itself acts on.
 """
 
+import math
 import os
 import re
 from dataclasses import dataclass
@@ -242,6 +243,29 @@ def _engine_module():
             sys.path.insert(0, root)
         return importlib.import_module("pyazr._azure2")
 
+
+_PRIOR_CENTRE = re.compile(r"^\s*segment_(\d+)_(norm|energy_shift)\s+prior_centre\s+(\S+)\s*$")
+
+
+def prior_centre_row(line):
+    """A ``segment_<key>_norm|energy_shift prior_centre <c>`` row of ``<parameterSettings>`` as the engine reads it
+    (EData::ReadPriorCentres): ``(key, "norm" or "energy_shift", centre)``, or None for any other row.  The engine
+    refuses a centre that is not a finite number, and a norm centre <= 0 (project.md P3): ValueError here."""
+    m = _PRIOR_CENTRE.match(line)
+    if not m:
+        return None
+    try:
+        v = float(m.group(3))
+    except ValueError:
+        v = float("nan")
+    if not math.isfinite(v):
+        raise ValueError(f'<parameterSettings> row "{line.strip()}": the centre is not a finite number '
+                         f"(AZURE2 refuses it)")
+    if m.group(2) == "norm" and v <= 0.0:
+        raise ValueError(f'<parameterSettings> row "{line.strip()}": a normalization centre must be > 0 '
+                         f"(AZURE2 refuses it)")
+    return int(m.group(1)), m.group(2), v
+
 def _tag_index(lines, tag):
     """The index of the first line that is ``tag`` once trimmed (a tag is a whole line, any spaces and line ending
     around it; docs/upgrade/project.md, P2); ValueError when there is none."""
@@ -415,7 +439,6 @@ class SegmentSet(list):
             key += 1
             segs.append(cls._parse(raw, key))
         # Explicit prior centres (EData::ReadPriorCentres).
-        prior = re.compile(r"^\s*segment_(\d+)_(norm|energy_shift)\s+prior_centre\s+(\S+)\s*$")
         inside = False
         for raw in lines:
             t = raw.strip()
@@ -424,14 +447,14 @@ class SegmentSet(list):
                 continue
             if t.startswith("<"):
                 inside = False
-            m = prior.match(raw) if inside else None
-            if m:
-                seg = segs.by_key(int(m.group(1)))
+            row = prior_centre_row(raw) if inside else None
+            if row:
+                seg = segs.by_key(row[0])
                 if seg is not None:
-                    if m.group(2) == "norm":
-                        seg.nominal_norm = float(m.group(3))
+                    if row[1] == "norm":
+                        seg.nominal_norm = row[2]
                     else:
-                        seg.nominal_shift = float(m.group(3))
+                        seg.nominal_shift = row[2]
         return segs
 
     @staticmethod
@@ -645,37 +668,35 @@ class TestSegmentSet(list):
             if not raw.strip():
                 continue
             key += 1
-            segs.append(cls._parse(raw.split(), key))
+            segs.append(cls._parse(raw, key))
         return segs
 
     @staticmethod
-    def _parse(t, key):
-        active = int(float(t[0])) == 1
-        entrance_key = int(float(t[1]))
-        exit_key = int(float(t[2]))
-        eMin, eMax, eStep = float(t[3]), float(t[4]), float(t[5])
-        aMin, aMax, aStep = float(t[6]), float(t[7]), float(t[8])
-        isDiff = int(float(t[9]))
-        phase_J = phase_L = max_order = None
-        i = 10
-        if isDiff == 2:                 # phase shift carries J, L
-            phase_J = float(t[i]); phase_L = int(float(t[i + 1])); i += 2
-        elif isDiff == 3:               # angular distribution carries its order
-            max_order = int(float(t[i])); i += 1
-        _, blocks = _split_keyword_tail(t[i:])
-        natural, natural_sample = _natural_token(blocks)
+    def _parse(raw, key):
+        """One <segmentsTest> line as AZURE2 reads it: the engine's ExtrapLine, through
+        ``_azure2.parse_extrapolation_line`` (docs/upgrade/project.md section 5).  A line the engine refuses raises
+        ValueError with its message."""
+        if not isinstance(raw, str):  # the token list of the former parser
+            raw = " ".join(raw)
+        e = _engine_module().parse_extrapolation_line(raw)
+        if e["parse_error"]:
+            raise ValueError(f"extrapolation segment {key}: {e['parse_error']}")
+        observable, thm = _decode_observable(e["is_diff"], _EXTRAP_OBSERVABLE)
+        two = e["is_diff"] == 2
         return TestSegment(
-            key=key, active=active, entrance_key=entrance_key,
-            exit_key=exit_key,
-            energy_min=eMin, energy_max=eMax, energy_step=eStep,
-            angle_min=aMin, angle_max=aMax, angle_step=aStep,
-            observable=_decode_observable(isDiff, _EXTRAP_OBSERVABLE)[0],
-            phase_J=phase_J, phase_L=phase_L, max_ang_dist_order=max_order,
-            thm=_decode_observable(isDiff, _EXTRAP_OBSERVABLE)[1],
-            natural=natural, natural_sample=natural_sample,
-            total=_total_token(blocks), phase_S=_spin_token(blocks),
-            transmission=_thickness_token(blocks, "transmission"),
-            yield_thickness=_thickness_token(blocks, "yield"))
+            key=key, active=e["active"] == 1, entrance_key=e["entrance_key"],
+            exit_key=e["exit_key"],
+            energy_min=e["energy_min"], energy_max=e["energy_max"], energy_step=e["energy_step"],
+            angle_min=e["angle_min"], angle_max=e["angle_max"], angle_step=e["angle_step"],
+            observable=observable,
+            phase_J=e["phase_J"] if two else None, phase_L=e["phase_L"] if two else None,
+            max_ang_dist_order=e["max_order"] if e["is_diff"] == 3 else None,
+            thm=thm,
+            natural=e["natural"] not in ("", "0"),
+            natural_sample="" if e["natural"] in ("", "0", "1") else e["natural"],
+            total=e["total"] == 1, phase_S=None if e["phase_S"] < 0 else e["phase_S"],
+            transmission=e["transmission"],
+            yield_thickness=e["yield_thickness"])
 
     # -- views ----------------------------------------------------------------
 
