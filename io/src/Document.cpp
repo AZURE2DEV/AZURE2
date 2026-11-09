@@ -103,6 +103,17 @@ void Document::FindSections() {
   for (std::size_t k : open)
     problems_.push_back("line " + std::to_string(sections_[k].open + 1) + ": <" + sections_[k].name +
                         "> is not closed");
+  // An unclosed section holds no sections: those opened after it belong to its parent, so one missing closing tag
+  // does not hide the rest of the file (each reader then reports its own unterminated block).
+  for (std::size_t k : open) {
+    for (Section &s : sections_) {
+      if (s.parent != k) continue;
+      s.parent = sections_[k].parent;
+    }
+  }
+  for (Section &s : sections_) {  // depths from the corrected parents (parents precede their children)
+    s.depth = (s.parent == Section::npos) ? 0 : sections_[s.parent].depth + 1;
+  }
   // A top-level section given twice: only the first is read.
   for (std::size_t a = 0; a < sections_.size(); a++)
     for (std::size_t b = a + 1; b < sections_.size(); b++)

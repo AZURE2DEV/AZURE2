@@ -62,6 +62,11 @@ int main() {
     check("closing without opening reported", Document::Parse("1\n</levels>\n").Problems().size() == 1);
     Document d = Document::Parse("<a>\n<b>\n</a>\n</b>\n");
     check("crossing reported", !d.Problems().empty());
+    {
+      Document u = Document::Parse("<thm>\nx\n<levels>\n1\n</levels>\n");
+      check("an unclosed section does not hide the sections after it",
+            u.Find("levels") != nullptr && u.Find("thm") != nullptr && u.Find("thm")->close == Document::Section::npos);
+    }
     check("a repeated top-level section reported", Document::Parse("<a>\n</a>\n<a>\n</a>\n").Problems().size() == 1);
   }
   {

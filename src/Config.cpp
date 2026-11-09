@@ -112,7 +112,8 @@ int Config::ReadConfigFile() {
     std::unique_ptr<std::istream> file = InputFiles::Open(configfile, cacheInputFiles);
     std::ostringstream bytes;
     if (file && *file) bytes << file->rdbuf();
-    for (const std::string &problem : azure2::io::Document::Parse(bytes.str()).Problems())
+    const azure2::io::Document doc = azure2::io::Document::Parse(bytes.str());  // kept alive for the loop
+    for (const std::string &problem : doc.Problems())
       outStream << "WARNING: " << configfile << ": " << problem << std::endl;
   }
   std::istream &in = *section;
