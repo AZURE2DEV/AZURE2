@@ -5,14 +5,13 @@
 #include <algorithm>
 #include <cmath>
 
-#include "AngCoeff.h"
+#include "azure2/physics/ObservableCoupling.h"
 
 namespace {
 
-// Zb(l1 J1 l2 J2; s L) as CNuc::CalcAngularDists writes it.
+// Zb(l1 J1 l2 J2; s L) of physics/ (docs/upgrade/cnuc_split.md section 9).
 double Zbar(int l1, double J1, int l2, double J2, double s, int L) {
-  return std::sqrt((2.0 * l1 + 1.0) * (2.0 * l2 + 1.0) * (2.0 * J1 + 1.0) * (2.0 * J2 + 1.0)) *
-         AngCoeff::ClebGord(l1, l2, L, 0.0, 0.0, 0.0) * AngCoeff::Racah(l1, J1, l2, J2, s, L);
+  return azure2::physics::z_bar(l1, (int)std::lround(2.0 * J1), l2, (int)std::lround(2.0 * J2), (int)std::lround(2.0 * s), L);
 }
 
 struct Term {

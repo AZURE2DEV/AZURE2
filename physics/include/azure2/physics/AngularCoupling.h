@@ -29,6 +29,13 @@ double clebsch_gordan(int two_j1, int two_m1, int two_j2, int two_m2, int two_J,
 /// Wigner 6j symbol {j1 j2 j3; j4 j5 j6}.
 double wigner_6j(int two_j1, int two_j2, int two_j3, int two_j4, int two_j5, int two_j6);
 
+/// Racah W(a b c d; e f) = (-1)^(a + b + c + d) {a b e; d c f} (Edmonds 6.2.13); 0 when the 6j is.
+double racah_w(int two_a, int two_b, int two_c, int two_d, int two_e, int two_f);
+
+/// Wigner 9j symbol {j1 j2 j3; j4 j5 j6; j7 j8 j9}, as the sum over x of three 6j (Edmonds 6.4.3).
+double wigner_9j(int two_j1, int two_j2, int two_j3, int two_j4, int two_j5, int two_j6, int two_j7, int two_j8,
+                 int two_j9);
+
 /// True when a, b, c satisfy the triangle condition |a - b| <= c <= a + b with a + b + c an integer.
 bool triangle(int two_a, int two_b, int two_c);
 

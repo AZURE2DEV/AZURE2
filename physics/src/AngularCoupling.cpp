@@ -129,5 +129,44 @@ double wigner_6j(int tj1, int tj2, int tj3, int tj4, int tj5, int tj6) {
   return (double)(std::sqrt(norm) * sum);
 }
 
+double racah_w(int ta, int tb, int tc, int td, int te, int tf) {
+  const double sixj = wigner_6j(ta, tb, te, td, tc, tf);
+  if (sixj == 0.0) return 0.0;
+  // a + b + c + d is an integer when the 6j is not zero: (a b e) and (c d e) are triads.
+  return (((ta + tb + tc + td) / 2) % 2 == 0) ? sixj : -sixj;
+}
+
+double wigner_9j(int tj1, int tj2, int tj3, int tj4, int tj5, int tj6, int tj7, int tj8, int tj9) {
+  CheckRange(tj1);
+  CheckRange(tj2);
+  CheckRange(tj3);
+  CheckRange(tj4);
+  CheckRange(tj5);
+  CheckRange(tj6);
+  CheckRange(tj7);
+  CheckRange(tj8);
+  CheckRange(tj9);
+  // Rows and columns are triads.
+  if (!triangle(tj1, tj2, tj3) || !triangle(tj4, tj5, tj6) || !triangle(tj7, tj8, tj9) ||
+      !triangle(tj1, tj4, tj7) || !triangle(tj2, tj5, tj8) || !triangle(tj3, tj6, tj9))
+    return 0.0;
+  // Edmonds 6.4.3:
+  // {j1 j2 j3; j4 j5 j6; j7 j8 j9} = sum_x (-1)^(2x) (2x+1) {j1 j4 j7; j8 j9 x} {j2 j5 j8; j4 x j6} {j3 j6 j9; x j1 j2}
+  // with x running over the values allowed by (j1 j9 x), (j8 j4 x) and (j6 j2 x).
+  int txmin = std::abs(tj1 - tj9);
+  if (std::abs(tj8 - tj4) > txmin) txmin = std::abs(tj8 - tj4);
+  if (std::abs(tj6 - tj2) > txmin) txmin = std::abs(tj6 - tj2);
+  int txmax = tj1 + tj9;
+  if (tj8 + tj4 < txmax) txmax = tj8 + tj4;
+  if (tj6 + tj2 < txmax) txmax = tj6 + tj2;
+  long double sum = 0.0L;
+  for (int tx = txmin; tx <= txmax; tx += 2) {
+    const long double term = (long double)(tx + 1) * wigner_6j(tj1, tj4, tj7, tj8, tj9, tx) *
+        wigner_6j(tj2, tj5, tj8, tj4, tx, tj6) * wigner_6j(tj3, tj6, tj9, tx, tj1, tj2);
+    sum += (tx % 2 == 0) ? term : -term;
+  }
+  return (double)sum;
+}
+
 }  // namespace physics
 }  // namespace azure2
