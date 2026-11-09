@@ -135,6 +135,79 @@ samples (13× GSL's time per call); the rate path already tabulates the final-st
 grid, and the per-integral table of step 3b (ii) does the same for the data path. Bound-state outputs (ANC ↔ γ conversions, N_f, external capture to bound states, sub-threshold shifts) move
 in their last digits; the 179-project comparison classifies every change, and the T1–T3 truth checks must hold.
 
+**Engine part as built (2026-11-09, branch `feature/upgrade-1-whittaker-engine`).** Every call of GSL's U in the
+engine goes through the two physics functions, with the engine's η_b and ρ = κr unchanged (non-relativistic or
+`Kinematics` relativistic forms):
+
+| engine call | was | becomes |
+|---|---|---|
+| `WhitFunc::operator()` | e^{−z/2} z^{l+1} `gsl_sf_hyperg_U` (z = 2κr) | `whittaker(l, η_b, κr).W`; outside the double range mantissa × 10^scale of `whittaker_scaled`, i.e. 0 on underflow and inf on overflow (IEEE), never a GSL error |
+| `WhitFunc::Scaled` | `gsl_sf_hyperg_U_e10_e` | `whittaker_scaled` (mantissa, power of ten) |
+| `CoulombTable::ExactBound` (ρW′/W; `ShftFunc`'s bound branch and the table's bound sheet) | ratio of two `gsl_sf_hyperg_U_e10_e` | `whittaker_scaled(...).rho_dlog` |
+| `ThmBoundStateTail` | 2κ e^{−κr} `gsl_sf_hyperg_U_e`(1 + η_b, 2, 2κr) | `whittaker(0, η_b, κr).W / r` (same function: W_0/r) |
+
+Invalid arguments (NaN η_b or ρ, ρ ≤ 0) keep the engine's present answer, 0 (the `WhitFunc` FIXME and `Scaled`'s
+guard); they are not new failure modes. `ShftFunc`'s interpolation band near threshold (η_b ≤ 1000, and η_b ≤ 50 or
+z ≥ 0.05) is kept unchanged here, so that this step changes only the function; narrowing it is a separate,
+measured step. `ZeroEnergyLimit` (Bessel K) and the opt-in numerical route stay on GSL: they are not U.
+
+The Coulomb table's bound sheet is filled from `ExactBound`, so its contents change: the table format becomes 2
+(`kFormat`), and a format-1 file is refused with the existing warning ("table format 1, this build reads 2") and the
+exact functions are used until a table is built. No file is overwritten.
+
+**Comparison for this step.** Reference: the head of `feature/upgrade-1-whittaker` (engine identical to step 4).
+Both builds run the 179 projects × 3 bases without a Coulomb table (`AZURE2_COULOMB_TABLE` pointing to a missing
+file), so the difference is the function alone; the new build then also with a table of format 2 against itself
+without it. Every changed file is classified; bound-state quantities (ANC ↔ γ, N_f, external capture to bound
+states, sub-threshold S) are expected to move at ≲ 10⁻⁸ relative (GSL's error, measured above), anything larger is
+explained. Timing: `ECIntegral`'s data path on a capture project (T1 or 13N), calc, one thread, before and after.
+
+**Engine part verified (2026-11-09; build of 5ed85322, GCC 11.5 Release, pyazr on).** No warnings; no engine file
+includes `gsl_sf_hyperg.h`. Without a table, against bf8622e2: Brune 595/689, formal 559/662, Park 605/689 files
+identical; every changed observable within 2.2 × 10⁻⁹ of its column's largest value (worst: `relativistic/he5`);
+`param.par`/`parameters.out` at most 9 × 10⁻⁸ relative in printed digits, larger relative changes only for values at
+rounding (formal zero-input widths 10⁻¹⁸–10⁻³⁷; cross sections of 10⁻²² at 0° and 180° where they vanish), one
+photon width of 0.99999999 eV printed as 1000 meV (`ec_threshold/ng`), and signs of −0.000000; all 20 `intEC.dat`
+files change (every token, ~10⁻¹⁰), hence EC signature v6 with the stale-file case (s) of `tests/ec_m1_exact`
+(fails without the bump). With a table built by each build (format 1 by bf8622e2, format 2 by this one), the
+table-vs-exact differences are of the same size for both (worst `c12c12`, 5.7 and 7.6 × 10⁻⁵, interpolation), and
+`c12c12` is identical between the two builds. `ctest -LE slow` 114/114 with a format-2 table (`pyazr_park_dsde`
+compares a table session with an exact one and fails when the only table on the machine is refused);
+`ec_m1_exact` PASS; `run_tests.sh` 133/133 (1421 s, 11 threads, format-2 table); 1 vs 8 threads byte-identical
+(T1–T3, 13N, three bases). **Cost** (one thread, calc, mean of three, own table): 13N 7.10 → 9.14 s, T1 2.62 →
+4.73 s; `AZURE_PROFILE` puts it all in set-up (the external-capture table: 1176 integrals, 1320 node values in T1,
+recomputed every run, even with `intEC.dat` present), evaluation ~1 ms in both. This is the 13× cost per W call in
+`ECIntegral`'s data path; the per-integral W table (step 3b (ii)) removes it and should come before merging.
+
+**Step 3b (ii): the final-state W of the data path, memoized (design, 2026-11-09).** The cost above is the
+final-state factor W_{l_f}(κ_f r) of `ECIntegral`: `fgEvaluate` (FW, GW) and the outgoing factor of `WWIntegrand`
+evaluate it at every radius GSL's `qagiu` samples, for every node energy of every `ECTable` term, although it does
+not depend on the entrance energy. The rate path's fixed Laguerre grid would remove it, but it changes the quadrature
+of the data path (outputs move). Instead: `qagiu` maps [a, ∞) to t ∈ (0, 1] and bisects; a subinterval it creates is
+the same bits whatever the integrand, and so are its 21 Gauss–Kronrod radii. The integrals of one final state at
+different entrance energies therefore sample largely the same radii, and a memo keyed on the exact arguments returns
+the bits a new evaluation would.
+
+*Rule.* `WhitFunc::ScaledMemo(l, r, E_b, log10Scale)`: η_b and ρ formed as in `Scaled`, then a thread-local table
+keyed on (l, η_b, ρ) — the arguments of `whittaker_scaled` themselves, so no key can be stale and no model or pair
+identity enters — returns the stored (mantissa, scale) or computes and stores them. `whittaker_scaled` is a pure
+function (same arguments, same bits, any thread), so results are bit-identical to `Scaled`. The table holds at most
+2¹⁷ entries per thread (about 10 MB) and is cleared when full. It is used for the final-state factor in
+`fgEvaluate` and in `WWIntegrand` (outgoing factor) only; the entrance factor of `WWIntegrand` depends on the
+entrance energy and stays `Scaled`. `AZURE_PROFILE` reports hits and misses.
+
+*Expected.* 179 × 3 byte-identical (with and without a table, against the head of this branch); threads identical;
+the cost measured again (13N, T1, one thread, calc). If the hit rate is low (the trees of different energies share
+few subintervals), the fallback is the fixed grid, as its own design with a comparison.
+
+**Step 3b (ii) verified (2026-11-09; build of 82ca0985, GCC 11.5 Release, pyazr on).** No warnings. 179 × 3 against
+5ed85322 (this branch before the memo): with a format-2 table 2040/2040 identical; without a table 1977/2040, the
+63 others being `intEC.dat.sig` alone (the reference run without a table was made by 48fb454f, before the v6 bump;
+the memo build's signatures equal the v6 build's, with and without a table). 1 vs 8 threads byte-identical (T1–T3,
+13N, three bases); `ctest -LE slow` 114/114. Memo on T1 (calc): 394980 hits, 870 computed (99.8 %); 13N 394965 and
+495. **Cost** (one thread, calc, mean of three, each build with its own table): T1 2.89 s (`-whittaker` head, GSL)
+→ 5.14 s (engine switch) → 2.77 s (memo); 13N 7.60 → 9.71 → 7.08 s. The engine switch no longer costs time.
+
 ## 2. Channel functions
 
 ### 2.1 Definition

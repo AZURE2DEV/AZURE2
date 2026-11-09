@@ -1,4 +1,5 @@
 #include "CoulombTable.h"
+#include "azure2/physics/coulomb/Whittaker.h"
 #include "GSLException.h"
 
 #include <algorithm>
@@ -16,7 +17,6 @@
 #include <set>
 
 #include <gsl/gsl_errno.h>
-#include <gsl/gsl_sf_hyperg.h>
 
 #include "CoulFunc.h"
 
@@ -27,10 +27,12 @@
 namespace {
 
 const char kMagic[8] = {'A', 'Z', 'C', 'T', 'A', 'B', '1', '\0'};
-const std::int32_t kFormat = 1;
+// 2: the bound sheet from physics/coulomb's whittaker_scaled, not GSL's U ratio (coulomb.md section 1.4); a format-1
+// file is refused, not reused.
+const std::int32_t kFormat = 2;
 // Identifies the exact routine the values came from; a table from another
 // generator is still readable, the engine decides what to do with it.
-const char kGenerator[] = "Michel cwfcomp_accurate (open), GSL hyperg_U ratio (bound)";
+const char kGenerator[] = "Michel cwfcomp_accurate (open), physics whittaker_scaled (bound)";
 
 // Weights of the first derivative at node k of the 7 equally spaced nodes
 // 0..6 (unit spacing), from Lagrange interpolation: exact to degree 6.
@@ -212,19 +214,11 @@ CoulombTable::Open CoulombTable::ExactOpen(int l, double eta, double rho) {
 }
 
 double CoulombTable::ExactBound(int l, double etaB, double rhoB) {
-  const double z = 2.0 * rhoB;
-  const double a = l + 1.0 + etaB, b = 2.0 * l + 2.0;
-  gsl_sf_result_e10 u0, u1;
-  int s0, s1;
-  {
-    GslQuiet quiet;  // a process-wide handler swap is not thread-safe (GSLException.h)
-    s0 = gsl_sf_hyperg_U_e10_e(a, b, z, &u0);
-    s1 = gsl_sf_hyperg_U_e10_e(a + 1.0, b + 1.0, z, &u1);
-  }
-  if (s0 != GSL_SUCCESS || s1 != GSL_SUCCESS || u0.val == 0.0) return std::nan("");
-  const double ratio = (u1.val / u0.val) * std::pow(10.0, double(u1.e10 - u0.e10));
-  // S = z dlnW/dz with W = exp(-z/2) z^(l+1) U(a, b, z), U' = -a U(a+1, b+1, z)
-  return -rhoB + (l + 1.0) - a * z * ratio;
+  // S = rho W'/W of W_l(rho) = W_{-eta_b, l+1/2}(2 rho), from physics/coulomb (docs/upgrade/coulomb.md section 1.4):
+  // finite where W itself under- or overflows; NaN if the arguments are invalid.
+  namespace co = azure2::physics::coulomb;
+  const co::WhittakerScaled ws = co::whittaker_scaled(l, etaB, rhoB);
+  return ws.status == co::Status::ok ? ws.rho_dlog : std::nan("");
 }
 
 bool CoulombTable::Build(const BuildSpec &spec) {

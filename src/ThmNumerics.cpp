@@ -4,7 +4,7 @@
 #include <sstream>
 #include <gsl/gsl_errno.h>
 #include <gsl/gsl_sf_gamma.h>
-#include <gsl/gsl_sf_hyperg.h>
+#include "azure2/physics/coulomb/Whittaker.h"
 
 std::vector<complex> ThmCoulombPhases(double eta, int lmax) {
   std::vector<complex> out(lmax + 1, complex(1.0, 0.0));
@@ -28,7 +28,11 @@ std::string ThmNumberText(double x) {
 
 double ThmBoundStateTail(double r, double kappa, double etaB, bool yukawa) {
   if (yukawa || etaB == 0.0) return std::exp(-kappa * r) / r;
-  gsl_sf_result U;
-  int status = gsl_sf_hyperg_U_e(1.0 + etaB, 2.0, 2.0 * kappa * r, &U);
-  return status == GSL_SUCCESS || status == GSL_EUNDRFLW ? 2.0 * kappa * std::exp(-kappa * r) * U.val : 0.0;
+  // W_{-eta_b, 1/2}(2 kappa r) / r = 2 kappa e^{-kappa r} U(1 + eta_b, 2, 2 kappa r) (physics/coulomb, no GSL); outside
+  // the double range the IEEE value of the scaled form (0 on underflow), 0 for invalid arguments.
+  namespace co = azure2::physics::coulomb;
+  const co::WhittakerWave w = co::whittaker(0, etaB, kappa * r);
+  if (w.status == co::Status::ok) return w.W / r;
+  const co::WhittakerScaled ws = co::whittaker_scaled(0, etaB, kappa * r);
+  return ws.status == co::Status::ok ? ws.mantissa * std::pow(10.0, (double)ws.log10_scale) / r : 0.0;
 }

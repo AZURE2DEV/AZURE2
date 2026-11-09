@@ -47,7 +47,7 @@ static FGMemoEntry fgEvaluate(double x, ECIntegral::Params *params) {
   if (it != g_fgMemo.end()) return it->second;
   struct CoulWaves coul = params->coulFunc->operator()(params->liValue, x, params->pairEnergy);
   double sOut;
-  double mOut = params->whitFunc->Scaled(params->lfValue, x, params->bindingEnergy, sOut);
+  double mOut = params->whitFunc->ScaledMemo(params->lfValue, x, params->bindingEnergy, sOut);
   double exponent = sOut - params->log10RefOut;
   double whit = (exponent < -280.0) ? 0.0 : mOut * pow(10.0, exponent);
   FGMemoEntry e = {coul.F, coul.G, whit};
@@ -86,7 +86,7 @@ double ECIntegral::WWIntegrand(double x, void *p) {
     // common scale is put back by the caller.
     double sIn, sOut;
     double mIn = theWhitFunc->Scaled(liValue, x, fabs(pairEnergy), sIn);
-    double mOut = theWhitFunc->Scaled(lfValue, x, fabs(bindingEnergy), sOut);
+    double mOut = theWhitFunc->ScaledMemo(lfValue, x, fabs(bindingEnergy), sOut);  // final state: memo (3b (ii))
     double exponent = sIn + sOut - params->log10RefIn - params->log10RefOut;
     if (exponent < -280.0) return 0.0;  // genuinely negligible
     returnValue = mIn * mOut * pow(10.0, exponent) * pow(x, multLValue);

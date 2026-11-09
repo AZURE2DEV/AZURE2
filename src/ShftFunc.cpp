@@ -10,7 +10,6 @@
 #include <gsl/gsl_deriv.h>
 #include <gsl/gsl_errno.h>
 #include <gsl/gsl_sf_bessel.h>
-#include <gsl/gsl_sf_hyperg.h>
 
 double ShftFunc::thisShftFunc(double x, void *p) {
   ShftFunc *shift = (ShftFunc *)p;
@@ -64,11 +63,12 @@ double ShftFunc::theWhitFunc(double x, void *p) {
  *
  *   S = l + 1 - z/2 - a z U(a+1, b+1, z) / U(a, b, z)
  *
- * (CoulombTable::ExactBound), with the powers of ten of the two U's carried
- * separately (gsl_sf_hyperg_U_e10_e).  No large terms cancel, unlike the
+ * (CoulombTable::ExactBound, now physics/coulomb's whittaker_scaled, which
+ * forms the ratio from its quadrature sums in logarithms, docs/upgrade/
+ * coulomb.md section 1.4).  No large terms cancel, unlike the
  * U(a-1, b, z)/U(a, b, z) form used on thm before the merge of October 2026
  * (z/2 + eta - ratio, both ~eta), which was 10-100 times less accurate near
- * threshold.  Returns false if GSL cannot evaluate it.
+ * threshold.  Returns false if the arguments are invalid.
  */
 bool ShftFunc::WhittakerShift(int l, double binding, double &s) const {
   const double etaB = kin_.rel ? kin_.EtaBound(binding) : sqrt(uconv / 2.) * fstruc * zz_ * sqrt(redmass_ / binding);
@@ -90,8 +90,8 @@ bool ShftFunc::WhittakerShift(int l, double binding, double &s) const {
  *
  * Now, in order: S(0) at exactly zero binding; the closed form of a neutral
  * channel (NeutralBoundShift); the Coulomb table's bound sheet when a table is
- * in use and covers (eta_b, rho_b); the exact U ratio (WhittakerShift) where
- * GSL's U is trusted (bindingMin below), and closer to threshold a linear
+ * in use and covers (eta_b, rho_b); the exact U ratio (WhittakerShift) inside
+ * the band where GSL's U was trusted (bindingMin below), and closer to threshold a linear
  * interpolation between S(-bindingMin) and S(0), so S is smooth through
  * threshold.
  */
@@ -122,7 +122,9 @@ double ShftFunc::operator()(int l, double energy) {
   // wrong by 3e-4 - 4e-3 (p+12C); for comparisons only.
   if (!UseURatio()) return NumericalShift();
 
-  // Where GSL's U is trusted (the exact U ratio, WhittakerShift): eta <= 1000,
+  // The band kept from GSL's U (coulomb.md section 1.4: unchanged in the step that replaced GSL by
+  // whittaker_scaled, which holds 1e-12 inside and outside it; narrowing it is a separate step).
+  // Where GSL's U was trusted (the exact U ratio, WhittakerShift): eta <= 1000,
   // and either eta <= 50 or z = 2 kappa a >= 0.05.  Against mpmath (October
   // 2026; p+p, p+7Li, 6Li+d, p+12C, p+18O, a+12C, a+16O, 12C+12C, l = 0-3,
   // binding 1e-10 - 3 MeV) the ratio is good to ~1e-9 there, and outside it it
