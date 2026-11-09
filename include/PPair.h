@@ -109,6 +109,8 @@ class PPair {
   /// a further 2 of its own (GenMatrixFunc).
   double GetEntranceSymmetryFactor() const;
   void AddDecay(Decay);
+  /// Removes every Decay (tests/upgrade/pathways_from_cnuc_test.cpp rebuilds the trees with the code before step 6a).
+  void ClearDecays();
   void SetEntrance();
   /// Decay \p i, 1-based.
   Decay *GetDecay(int);
