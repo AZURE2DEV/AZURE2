@@ -24,6 +24,9 @@ Update this file at the end of every work session: what changed, what is next, w
   - Every changed output and test is classified in `objective.md` §4. Of note, D1 corrects a diverging THM chain
     (level energy −3.2 × 10⁷ MeV before, 6.29 MeV after).
 
+**Merged head 8f015075 verified as a whole:** 179 × 3 identical to the objective branch's head; ctest 132/132 with the
+slow tests; `run_tests.sh` 133/133; 1 vs 8 threads identical.
+
 **Mistake and fix this session:** a new pyazr test was written over the existing `tests/pyazr/objective_test.py`
 (86ac2970); it is restored byte-identical (e8468cdc), and the new test is `objective_terms_test.py`.
 
