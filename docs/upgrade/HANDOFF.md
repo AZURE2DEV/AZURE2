@@ -2,6 +2,34 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-09 (night) — six branches merged; step 6a merged; band step under verification
+
+**PI (2026-11-09): "go on with the steps and you can merge yourself, no need for my review."** Merged into
+`feature/upgrade` (not pushed): `external-capture` (step 4), `zero-width-fixed`, `whittaker`, `brune-iteration`,
+`whittaker-engine`, `coupling` (step 5), in that order. Conflicts: test lists in `tests/pyazr/CMakeLists.txt` (all
+kept) and pyazr's version (2.10.0). **After this merge everyone rebuilds the Coulomb table (format 2).** The merged head
+db972c84 was verified as a whole:
+- 179 × 3 against the `whittaker-engine` run (format-2 table): the only changes are those the branches recorded
+  (step 5's two rounding files, `screening_6li` formal, the `brune-iteration` formal run.log and 10⁻¹¹ changes);
+- ctest 127/127 including the slow tests; `run_tests.sh` 133/133; 1 vs 8 threads identical.
+
+**Step 6a** (`feature/upgrade-1-pathways`, merged 87721b0c; `cnuc_split.md` §10 and §6). Step 6 as planned would
+rewrite about 730 accessor calls in 23 files, which is Phase 2's work, so it is split. 6a moves the pathway
+enumeration (`SortPathways`) into `physics/Pathways` (`reaction_pathways` of the System and the external-capture
+final states); the engine's trees are filled from it. Evidence:
+- the trees match a verbatim copy of the old code on all 179 `.azr` in two bases (51524 nodes);
+- 179 × 3 bit-identical; ctest 119/119, run_tests 133/133, threads identical.
+
+`CNuc.cpp` is down to 2913 lines. 6b (the consumers of the trees) goes with Phase 2's observables.
+
+**ShftFunc band** (`feature/upgrade-1-shift-band`, not merged; design in `coulomb.md` §1.4, "The interpolation band
+near threshold"). Measured: `whittaker_scaled` is fine near threshold but scatters at 10⁻⁹ beyond η_b ≈ 10⁴. So the
+η_b ≤ 1000 limit stays, and the GSL-only condition (η_b > 50 with z < 0.05) is dropped. B_min for p+¹²C goes from
+3.3 × 10⁻⁴ to 8.2 × 10⁻⁷ MeV. Verification is running (179 × 3 with and without a table, ctest, threads, run_tests).
+
+**Next.** (1) Band: classify, merge. (2) The rest of `CNuc`'s physics: `CalcShiftFunctions` (Park's numerical S′ and
+S″, `g_shiftDerivMemo`) onto `channel_functions`. (3) Phase 2 (`inference/` objective) and 6b.
+
 ## 2026-11-09 (evening) — split `CNuc`, step 5: coupling coefficients of the observables
 
 Branch `feature/upgrade-1-coupling` from 9be284f0 (step 4), not merged. Commits: design (`cnuc_split.md` §9,
