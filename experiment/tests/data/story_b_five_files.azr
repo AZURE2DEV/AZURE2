@@ -1,0 +1,41 @@
+# User story (b), docs/upgrade/project_format3.md section 9.2, last paragraph: the five angles in five files share
+# one norm record (one parameter, one prior).
+<data>
+normalization aC
+    value          1 fit prior 1 3%
+dataset aC_030
+    reaction       12C(a,a)12C
+    quantity       ratio_to_rutherford
+    unit           1
+    file           data/aC_030.dat
+    columns        E_lab[MeV] theta_lab[deg] value error
+    norm           aC
+dataset aC_060
+    reaction       12C(a,a)12C
+    quantity       ratio_to_rutherford
+    unit           1
+    file           data/aC_060.dat
+    columns        E_lab[MeV] theta_lab[deg] value error
+    norm           aC
+dataset aC_090
+    reaction       12C(a,a)12C
+    quantity       ratio_to_rutherford
+    unit           1
+    file           data/aC_090.dat
+    columns        E_lab[MeV] theta_lab[deg] value error
+    norm           aC
+dataset aC_120
+    reaction       12C(a,a)12C
+    quantity       ratio_to_rutherford
+    unit           1
+    file           data/aC_120.dat
+    columns        E_lab[MeV] theta_lab[deg] value error
+    norm           aC
+dataset aC_150
+    reaction       12C(a,a)12C
+    quantity       ratio_to_rutherford
+    unit           1
+    file           data/aC_150.dat
+    columns        E_lab[MeV] theta_lab[deg] value error
+    norm           aC
+</data>

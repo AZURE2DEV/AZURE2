@@ -1,0 +1,3264 @@
+{
+ "schema_version": "3.0",
+ "sections": {
+  "data": ["dataset", "normalization", "energy_scale"],
+  "targets": ["target", "beam", "detector"],
+  "extrapolations": ["extrapolation"],
+  "modelData": ["datum"]
+ },
+ "value_types": {
+  "number": {
+   "grammar": "<number>",
+   "doc": "a real number, kept as written"
+  },
+  "integer": {
+   "grammar": "<integer>",
+   "doc": "an integer"
+  },
+  "unit": {
+   "grammar": "<unit>",
+   "doc": "one unit token of the unit table"
+  },
+  "number_with_unit": {
+   "grammar": "<number> <unit>",
+   "doc": "a number and its unit"
+  },
+  "range": {
+   "grammar": "<lo> <hi> <unit>",
+   "doc": "a low and a high number and their unit"
+  },
+  "nuisance": {
+   "grammar": "<value> [<unit>] fixed|fit [prior <centre> <width>[%]] [grid_max <value>]",
+   "doc": "a value with its mode; 'fit' without 'prior' is a free parameter; a width with % is relative to the centre; grid_max is the largest value the sub-point grids must span"
+  },
+  "enum": {
+   "grammar": "<one word of the field's list>",
+   "doc": "one word of a closed list"
+  },
+  "reference": {
+   "grammar": "<name of a >",
+   "doc": "the name of another record of the project"
+  },
+  "name": {
+   "grammar": "<name>",
+   "doc": "a name [A-Za-z][A-Za-z0-9_-]* that is not a record"
+  },
+  "path": {
+   "grammar": "<path>",
+   "doc": "a file path, relative to the project; quoted when it holds blanks"
+  },
+  "text": {
+   "grammar": "<text>",
+   "doc": "free text, never read by the physics"
+  },
+  "formula": {
+   "grammar": "\"<expression in x>\" [<name>=<number> ...]",
+   "doc": "a quoted expression in x and its parameters"
+  },
+  "number_list": {
+   "grammar": "<number> ...",
+   "doc": "one or more numbers"
+  },
+  "spin": {
+   "grammar": "<J>",
+   "doc": "a spin: 0, 1, 3/2, ..."
+  },
+  "spin_parity": {
+   "grammar": "<J><parity>",
+   "doc": "a spin and parity: 0+, 3-, 1/2+, ..."
+  },
+  "nucleus": {
+   "grammar": "<A><Symbol>",
+   "doc": "a nuclide <A><Symbol>"
+  },
+  "pair": {
+   "grammar": "<particle>+<nucleus>[<E_x>]",
+   "doc": "a particle pair, light particle first"
+  },
+  "composition": {
+   "grammar": "<Symbol> <atoms> ...",
+   "doc": "element symbols with their atoms per formula unit"
+  },
+  "reaction_expr": {
+   "grammar": "<reaction> { + <reaction> } | <reaction> / <reaction>",
+   "doc": "reactions <A><X>(<a>,<b>)<A><Y>[<E_x>|total], a sum or a ratio of two, scaled terms <c>*<reaction>, terms at a fixed angle '@ <angle> <unit> lab|cm'"
+  },
+  "columns": {
+   "grammar": "<role> <role> ... | from_file",
+   "doc": "the role of each column of the data file, energy and angle roles with their unit"
+  },
+  "grid": {
+   "grammar": "range <lo> <hi> <unit> lab|cm step <s> | range <lo> <hi> <unit> lab|cm points <n> [log] | list <v> ... <unit> lab|cm | file <path> <unit> lab|cm | adaptive <lo> <hi> <unit> lab|cm tolerance <t> max_points <n> start_step <s>",
+   "doc": "an energy or angle grid; range: E_k = lo + k step (F10)"
+  },
+  "windows": {
+   "grammar": "<lo>-<hi> ... <unit> | auto[:<tolerance>[:<margin>]]",
+   "doc": "lab-energy windows of a fold"
+  },
+  "structured": {
+   "doc": "a structured value: a leading keyword chooses the alternative, then its parts"
+  }
+ },
+ "records": {
+  "dataset": {
+   "title": "Data set",
+   "doc": "Measured values of one quantity in one data file (section 3.4).",
+   "sections": ["data"],
+   "fields": {
+    "reaction": {
+     "title": "Reaction",
+     "type": "reaction_expr",
+     "grammar": "<reaction> { + <reaction> } | <reaction> / <reaction>",
+     "required": true,
+     "doc": "the reaction expression (section 3.5)"
+    },
+    "quantity": {
+     "title": "Quantity",
+     "type": "enum",
+     "grammar": "sigma|sigma_total|dsigma_domega|sfactor|ratio_to_rutherford|ratio_to_mott|legendre|analyzing_power|phase_shift|yield|transmission|neutron_yield|beta_delayed_spectrum",
+     "required": true,
+     "values": ["sigma", "sigma_total", "dsigma_domega", "sfactor", "ratio_to_rutherford", "ratio_to_mott", "legendre", "analyzing_power", "phase_shift", "yield", "transmission", "neutron_yield", "beta_delayed_spectrum"],
+     "aliases": {
+      "cross_section": "sigma",
+      "dsdo": "dsigma_domega",
+      "rth": "ratio_to_rutherford",
+      "ay": "analyzing_power"
+     },
+     "doc": "what the numbers are (section 7.2)"
+    },
+    "unit": {
+     "title": "Unit",
+     "type": "unit",
+     "grammar": "<unit of the quantity>",
+     "required": true,
+     "dimension": "@quantity",
+     "doc": "unit of the value and error columns"
+    },
+    "file": {
+     "title": "Data file",
+     "type": "path",
+     "grammar": "<path>",
+     "required": true,
+     "doc": "the data file, relative to the project"
+    },
+    "columns": {
+     "title": "Columns",
+     "type": "columns",
+     "grammar": "<role> <role> ... | from_file",
+     "required": true,
+     "doc": "role of each column (section 3.4.1)"
+    },
+    "energy_window": {
+     "title": "Energy window",
+     "type": "range",
+     "grammar": "<lo> <hi> <energy unit>",
+     "required": false,
+     "dimension": "energy",
+     "units": ["MeV", "keV", "eV", "meV", "ueV"],
+     "doc": "rows outside are not used; the frame is the energy column's"
+    },
+    "angle_window": {
+     "title": "Angle window",
+     "type": "range",
+     "grammar": "<lo> <hi> <angle unit>",
+     "applies_when": {
+      "if": "angle_axis",
+      "text": "the record has an angle axis (a theta column or an angle grid)"
+     },
+     "required": false,
+     "dimension": "angle",
+     "units": ["deg", "rad"],
+     "doc": "rows outside are not used"
+    },
+    "norm": {
+     "title": "Normalization",
+     "type": "nuisance",
+     "grammar": "<value> fixed|fit [prior <centre> <width>[%]] [grid_max <value>] | profiled | <name of a normalization>",
+     "required": true,
+     "or_refers_to": ["normalization"],
+     "profiled": true,
+     "doc": "the normalization nuisance, or the name of a shared normalization record"
+    },
+    "shift": {
+     "title": "Energy shift",
+     "type": "structured",
+     "grammar": "offset <value> <energy unit> fixed|fit [prior <centre> <width>[%]] [grid_max <value>] | sqrt <value> <sqrt_energy unit> fixed|fit [prior <centre> <width>[%]] [grid_max <value>] | <name of a energy_scale>",
+     "required": false,
+     "repeatable": true,
+     "alternatives": [
+      {
+       "keyword": "offset",
+       "parts": [
+        {
+         "name": "value",
+         "keyword": false,
+         "type": "nuisance",
+         "grammar": "<value> <energy unit> fixed|fit [prior <centre> <width>[%]] [grid_max <value>]",
+         "optional": false,
+         "dimension": "energy",
+         "units": ["MeV", "keV", "eV", "meV", "ueV"]
+        }
+       ],
+       "doc": "E' = E + offset"
+      },
+      {
+       "keyword": "sqrt",
+       "parts": [
+        {
+         "name": "value",
+         "keyword": false,
+         "type": "nuisance",
+         "grammar": "<value> <sqrt_energy unit> fixed|fit [prior <centre> <width>[%]] [grid_max <value>]",
+         "optional": false,
+         "dimension": "sqrt_energy",
+         "units": ["MeV^1/2", "keV^1/2"]
+        }
+       ],
+       "doc": "E' = E + b sqrt(E), b in MeV^1/2 with E in MeV"
+      },
+      {
+       "keyword": "",
+       "parts": [
+        {
+         "name": "scale",
+         "keyword": false,
+         "type": "reference",
+         "grammar": "<name of a energy_scale>",
+         "optional": false,
+         "refers_to": ["energy_scale"]
+        }
+       ],
+       "doc": "the terms of a shared energy_scale record"
+      }
+     ],
+     "doc": "a term of the energy shift; terms add"
+    },
+    "covariance": {
+     "title": "Covariance file",
+     "type": "path",
+     "grammar": "<path>",
+     "required": false,
+     "doc": "data_formats.rst, covariance files"
+    },
+    "active": {
+     "title": "Active",
+     "type": "enum",
+     "grammar": "yes|no",
+     "required": false,
+     "default": "yes",
+     "values": ["yes", "no"],
+     "doc": "an inactive data set is not used"
+    },
+    "target": {
+     "title": "Target",
+     "type": "reference",
+     "grammar": "<name of a target>[@<epoch>]",
+     "by_quantity": true,
+     "refers_to": ["target"],
+     "epoch": true,
+     "doc": "the target record (and epoch) the beam passed through"
+    },
+    "beam": {
+     "title": "Beam",
+     "type": "reference",
+     "grammar": "<name of a beam>",
+     "by_quantity": true,
+     "refers_to": ["beam"],
+     "doc": "the beam record: energy spread or profile"
+    },
+    "detector": {
+     "title": "Detector",
+     "type": "reference",
+     "grammar": "<name of a detector>",
+     "by_quantity": true,
+     "refers_to": ["detector"],
+     "doc": "the detector record: Q_k, resolution, UDR"
+    },
+    "quadrature": {
+     "title": "Quadrature",
+     "type": "structured",
+     "grammar": "points <integer >= 1> [width_multiplier <number > 0>] [per_width <number > 0>]",
+     "applies_when": {
+      "if": "fold",
+      "text": "the record is folded (a target layer, infinite target or sample, a Doppler-broadening target, a beam, or a detector resolution)"
+     },
+     "required": true,
+     "alternatives": [
+      {
+       "keyword": "",
+       "parts": [
+        {
+         "name": "points",
+         "keyword": true,
+         "type": "integer",
+         "grammar": "<integer >= 1>",
+         "optional": false,
+         "min": 1,
+         "doc": "sub-points of the fold; no default (every <targetInt> line states it)"
+        },
+        {
+         "name": "width_multiplier",
+         "keyword": true,
+         "type": "number",
+         "grammar": "<number > 0>",
+         "optional": true,
+         "default": "20",
+         "positive": true,
+         "doc": "resonance-width multiplier of the adaptive grid"
+        },
+        {
+         "name": "per_width",
+         "keyword": true,
+         "type": "number",
+         "grammar": "<number > 0>",
+         "optional": true,
+         "default": "50",
+         "positive": true,
+         "doc": "points per resonance width"
+        }
+       ]
+      }
+     ],
+     "doc": "sub-point grid of the fold"
+    },
+    "fold_windows": {
+     "title": "Fold windows",
+     "type": "structured",
+     "grammar": "<lo>-<hi> ... <energy unit> | auto[:<tolerance>[:<margin>]] [blend <number> <energy unit>] [auto_tolerance <number > 0>]",
+     "applies_when": {
+      "if": "fold",
+      "text": "the record is folded (a target layer, infinite target or sample, a Doppler-broadening target, a beam, or a detector resolution)"
+     },
+     "required": false,
+     "alternatives": [
+      {
+       "keyword": "",
+       "parts": [
+        {
+         "name": "windows",
+         "keyword": false,
+         "type": "windows",
+         "grammar": "<lo>-<hi> ... <energy unit> | auto[:<tolerance>[:<margin>]]",
+         "optional": false,
+         "dimension": "energy",
+         "units": ["MeV", "keV", "eV", "meV", "ueV"],
+         "doc": "lab-energy windows, or auto[:tolerance[:margin]]"
+        },
+        {
+         "name": "blend",
+         "keyword": true,
+         "type": "number_with_unit",
+         "grammar": "<number> <energy unit>",
+         "optional": true,
+         "dimension": "energy",
+         "units": ["MeV", "keV", "eV", "meV", "ueV"],
+         "doc": "blend width at a window edge"
+        },
+        {
+         "name": "auto_tolerance",
+         "keyword": true,
+         "type": "number",
+         "grammar": "<number > 0>",
+         "optional": true,
+         "positive": true,
+         "doc": "tolerance of the automatic windows"
+        }
+       ]
+      }
+     ],
+     "doc": "lab-energy windows of the fold"
+    },
+    "J": {
+     "title": "J",
+     "type": "spin",
+     "grammar": "<J>",
+     "by_quantity": true,
+     "doc": "total spin of the phase shift"
+    },
+    "l": {
+     "title": "l",
+     "type": "integer",
+     "grammar": "<integer >= 0>",
+     "by_quantity": true,
+     "min": 0,
+     "doc": "orbital angular momentum of the phase shift"
+    },
+    "s": {
+     "title": "s",
+     "type": "spin",
+     "grammar": "<J>",
+     "by_quantity": true,
+     "doc": "channel spin of the phase shift"
+    },
+    "expansion": {
+     "title": "Legendre expansion",
+     "type": "enum",
+     "grammar": "a_over_a0|absolute|rsl|2l2|4pi",
+     "by_quantity": true,
+     "values": ["a_over_a0", "absolute", "rsl", "2l2", "4pi"],
+     "doc": "the normalisation of the Legendre coefficients (data_kinds.md section 5.2)"
+    },
+    "multipole": {
+     "title": "Multipole",
+     "type": "enum",
+     "grammar": "E1|E2",
+     "by_quantity": true,
+     "values": ["E1", "E2"],
+     "doc": "the photon multipole the cross section is filtered to (M8)"
+    },
+    "secondary_gamma": {
+     "title": "Secondary gamma",
+     "type": "structured",
+     "grammar": "L <integer >= 1> Ic <J> delta <number>",
+     "by_quantity": true,
+     "alternatives": [
+      {
+       "keyword": "",
+       "parts": [
+        {
+         "name": "L",
+         "keyword": true,
+         "type": "integer",
+         "grammar": "<integer >= 1>",
+         "optional": false,
+         "min": 1,
+         "doc": "multipolarity"
+        },
+        {
+         "name": "Ic",
+         "keyword": true,
+         "type": "spin",
+         "grammar": "<J>",
+         "optional": false,
+         "doc": "spin of the intermediate state"
+        },
+        {
+         "name": "delta",
+         "keyword": true,
+         "type": "number",
+         "grammar": "<number>",
+         "optional": false,
+         "doc": "mixing ratio"
+        }
+       ],
+       "doc": "unobserved primary, observed secondary photon (UPOS)"
+      }
+     ],
+     "doc": "UPOS: L, Ic, delta"
+    },
+    "charge_state": {
+     "title": "Charge state",
+     "type": "integer",
+     "grammar": "<integer >= 1>",
+     "by_quantity": true,
+     "min": 1,
+     "doc": "the beam's charge state q; per-charge units need it (F8)"
+    },
+    "efficiency": {
+     "title": "Efficiency x branching",
+     "type": "nuisance",
+     "grammar": "<value> fixed|fit [prior <centre> <width>[%]] [grid_max <value>]",
+     "by_quantity": true,
+     "doc": "detection efficiency times branching of counted photons (F9)"
+    },
+    "thm": {
+     "title": "THM experiment",
+     "type": "name",
+     "grammar": "<name>",
+     "by_quantity": true,
+     "doc": "the experiment[<name>] of <thm>, or global"
+    },
+    "thm_weight": {
+     "title": "THM weight file",
+     "type": "path",
+     "grammar": "<path>",
+     "applies_when": {
+      "if": "field_present",
+      "field": "thm",
+      "text": "thm is given"
+     },
+     "required": false,
+     "doc": "the weight table of <thm> weight[k]"
+    },
+    "source": {
+     "title": "Source",
+     "type": "text",
+     "grammar": "<text>",
+     "required": false,
+     "doc": "where the numbers come from; never read by the physics"
+    },
+    "exfor": {
+     "title": "EXFOR",
+     "type": "text",
+     "grammar": "<text>",
+     "required": false,
+     "doc": "the EXFOR entry and subentry"
+    },
+    "doi": {
+     "title": "DOI",
+     "type": "text",
+     "grammar": "<text>",
+     "required": false,
+     "doc": "the DOI of the publication"
+    }
+   }
+  },
+  "normalization": {
+   "title": "Shared normalization",
+   "doc": "One normalization shared by the data sets that name it (F6).",
+   "sections": ["data"],
+   "fields": {
+    "value": {
+     "title": "Value",
+     "type": "nuisance",
+     "grammar": "<value> fixed|fit [prior <centre> <width>[%]] [grid_max <value>]",
+     "required": true,
+     "doc": "the normalization nuisance"
+    }
+   }
+  },
+  "energy_scale": {
+   "title": "Shared energy scale",
+   "doc": "Energy-shift terms shared by the data sets that name it (F6); summed in the order offset, sqrt, function.",
+   "sections": ["data"],
+   "fields": {
+    "offset": {
+     "title": "Offset",
+     "type": "nuisance",
+     "grammar": "<value> <energy unit> fixed|fit [prior <centre> <width>[%]] [grid_max <value>]",
+     "required": false,
+     "dimension": "energy",
+     "units": ["MeV", "keV", "eV", "meV", "ueV"],
+     "doc": "E' = E + offset"
+    },
+    "sqrt": {
+     "title": "sqrt(E) term",
+     "type": "nuisance",
+     "grammar": "<value> <sqrt_energy unit> fixed|fit [prior <centre> <width>[%]] [grid_max <value>]",
+     "required": false,
+     "dimension": "sqrt_energy",
+     "units": ["MeV^1/2", "keV^1/2"],
+     "doc": "E' = E + b sqrt(E)"
+    },
+    "function": {
+     "title": "Function",
+     "type": "structured",
+     "grammar": "\"<expression in x>\" [<name>=<number> ...] <energy unit>",
+     "required": false,
+     "alternatives": [
+      {
+       "keyword": "",
+       "parts": [
+        {
+         "name": "expression",
+         "keyword": false,
+         "type": "formula",
+         "grammar": "\"<expression in x>\" [<name>=<number> ...]",
+         "optional": false,
+         "doc": "x = E_lab of the point in MeV"
+        },
+        {
+         "name": "unit",
+         "keyword": false,
+         "type": "unit",
+         "grammar": "<energy unit>",
+         "optional": false,
+         "dimension": "energy",
+         "units": ["MeV", "keV", "eV", "meV", "ueV"]
+        }
+       ],
+       "doc": "a shift term function(x) in the stated unit; its parameters are 'param' fields"
+      }
+     ],
+     "doc": "E' = E + f(x), x = E_lab/MeV"
+    },
+    "param": {
+     "title": "Parameter",
+     "type": "structured",
+     "grammar": "<name> <value> fixed|fit [prior <centre> <width>[%]] [grid_max <value>]",
+     "applies_when": {
+      "if": "field_present",
+      "field": "function",
+      "text": "function is given"
+     },
+     "required": false,
+     "repeatable": true,
+     "alternatives": [
+      {
+       "keyword": "",
+       "parts": [
+        {
+         "name": "name",
+         "keyword": false,
+         "type": "name",
+         "grammar": "<name>",
+         "optional": false
+        },
+        {
+         "name": "value",
+         "keyword": false,
+         "type": "nuisance",
+         "grammar": "<value> fixed|fit [prior <centre> <width>[%]] [grid_max <value>]",
+         "optional": false
+        }
+       ]
+      }
+     ],
+     "doc": "a parameter of the function"
+    }
+   },
+   "one_of": [
+    ["offset", "sqrt", "function"]
+   ]
+  },
+  "extrapolation": {
+   "title": "Extrapolation",
+   "doc": "Model values on a grid, without data (section 3.8, F20).",
+   "sections": ["extrapolations"],
+   "fields": {
+    "reaction": {
+     "title": "Reaction",
+     "type": "reaction_expr",
+     "grammar": "<reaction> { + <reaction> } | <reaction> / <reaction>",
+     "required": true,
+     "doc": "the reaction expression (section 3.5)"
+    },
+    "quantity": {
+     "title": "Quantity",
+     "type": "enum",
+     "grammar": "sigma|sigma_total|dsigma_domega|sfactor|ratio_to_rutherford|ratio_to_mott|legendre|analyzing_power|phase_shift|yield|transmission|neutron_yield|beta_delayed_spectrum",
+     "required": true,
+     "values": ["sigma", "sigma_total", "dsigma_domega", "sfactor", "ratio_to_rutherford", "ratio_to_mott", "legendre", "analyzing_power", "phase_shift", "yield", "transmission", "neutron_yield", "beta_delayed_spectrum"],
+     "aliases": {
+      "cross_section": "sigma",
+      "dsdo": "dsigma_domega",
+      "rth": "ratio_to_rutherford",
+      "ay": "analyzing_power"
+     },
+     "doc": "what is computed (section 7.2)"
+    },
+    "unit": {
+     "title": "Unit",
+     "type": "unit",
+     "grammar": "<unit of the quantity>",
+     "required": true,
+     "dimension": "@quantity",
+     "doc": "unit of the output values"
+    },
+    "energies": {
+     "title": "Energies",
+     "type": "grid",
+     "grammar": "range <lo> <hi> <energy unit> lab|cm step <s> | range <lo> <hi> <energy unit> lab|cm points <n> [log] | list <v> ... <energy unit> lab|cm | file <path> <energy unit> lab|cm | adaptive <lo> <hi> <energy unit> lab|cm tolerance <t> max_points <n> start_step <s>",
+     "required": true,
+     "dimension": "energy",
+     "units": ["MeV", "keV", "eV", "meV", "ueV"],
+     "doc": "the energy grid (F10: E_k = lo + k step)"
+    },
+    "angles": {
+     "title": "Angles",
+     "type": "grid",
+     "grammar": "range <lo> <hi> <angle unit> lab|cm step <s> | range <lo> <hi> <angle unit> lab|cm points <n> [log] | list <v> ... <angle unit> lab|cm | file <path> <angle unit> lab|cm | adaptive <lo> <hi> <angle unit> lab|cm tolerance <t> max_points <n> start_step <s> | none",
+     "required": false,
+     "dimension": "angle",
+     "units": ["deg", "rad"],
+     "doc": "the angle grid; required for quantities with an angle"
+    },
+    "active": {
+     "title": "Active",
+     "type": "enum",
+     "grammar": "yes|no",
+     "required": false,
+     "default": "yes",
+     "values": ["yes", "no"],
+     "doc": "an inactive extrapolation is not computed"
+    },
+    "orders": {
+     "title": "Legendre orders",
+     "type": "structured",
+     "grammar": "<integer >= 0> <integer >= 0>",
+     "by_quantity": true,
+     "alternatives": [
+      {
+       "keyword": "",
+       "parts": [
+        {
+         "name": "first",
+         "keyword": false,
+         "type": "integer",
+         "grammar": "<integer >= 0>",
+         "optional": false,
+         "min": 0
+        },
+        {
+         "name": "last",
+         "keyword": false,
+         "type": "integer",
+         "grammar": "<integer >= 0>",
+         "optional": false,
+         "min": 0
+        }
+       ],
+       "doc": "the Legendre orders first..last"
+      }
+     ],
+     "doc": "the Legendre orders computed"
+    },
+    "target": {
+     "title": "Target",
+     "type": "reference",
+     "grammar": "<name of a target>[@<epoch>]",
+     "by_quantity": true,
+     "refers_to": ["target"],
+     "epoch": true,
+     "doc": "the target record (and epoch) the beam passed through"
+    },
+    "beam": {
+     "title": "Beam",
+     "type": "reference",
+     "grammar": "<name of a beam>",
+     "by_quantity": true,
+     "refers_to": ["beam"],
+     "doc": "the beam record: energy spread or profile"
+    },
+    "detector": {
+     "title": "Detector",
+     "type": "reference",
+     "grammar": "<name of a detector>",
+     "by_quantity": true,
+     "refers_to": ["detector"],
+     "doc": "the detector record: Q_k, resolution, UDR"
+    },
+    "quadrature": {
+     "title": "Quadrature",
+     "type": "structured",
+     "grammar": "points <integer >= 1> [width_multiplier <number > 0>] [per_width <number > 0>]",
+     "applies_when": {
+      "if": "fold",
+      "text": "the record is folded (a target layer, infinite target or sample, a Doppler-broadening target, a beam, or a detector resolution)"
+     },
+     "required": true,
+     "alternatives": [
+      {
+       "keyword": "",
+       "parts": [
+        {
+         "name": "points",
+         "keyword": true,
+         "type": "integer",
+         "grammar": "<integer >= 1>",
+         "optional": false,
+         "min": 1,
+         "doc": "sub-points of the fold; no default (every <targetInt> line states it)"
+        },
+        {
+         "name": "width_multiplier",
+         "keyword": true,
+         "type": "number",
+         "grammar": "<number > 0>",
+         "optional": true,
+         "default": "20",
+         "positive": true,
+         "doc": "resonance-width multiplier of the adaptive grid"
+        },
+        {
+         "name": "per_width",
+         "keyword": true,
+         "type": "number",
+         "grammar": "<number > 0>",
+         "optional": true,
+         "default": "50",
+         "positive": true,
+         "doc": "points per resonance width"
+        }
+       ]
+      }
+     ],
+     "doc": "sub-point grid of the fold"
+    },
+    "fold_windows": {
+     "title": "Fold windows",
+     "type": "structured",
+     "grammar": "<lo>-<hi> ... <energy unit> | auto[:<tolerance>[:<margin>]] [blend <number> <energy unit>] [auto_tolerance <number > 0>]",
+     "applies_when": {
+      "if": "fold",
+      "text": "the record is folded (a target layer, infinite target or sample, a Doppler-broadening target, a beam, or a detector resolution)"
+     },
+     "required": false,
+     "alternatives": [
+      {
+       "keyword": "",
+       "parts": [
+        {
+         "name": "windows",
+         "keyword": false,
+         "type": "windows",
+         "grammar": "<lo>-<hi> ... <energy unit> | auto[:<tolerance>[:<margin>]]",
+         "optional": false,
+         "dimension": "energy",
+         "units": ["MeV", "keV", "eV", "meV", "ueV"],
+         "doc": "lab-energy windows, or auto[:tolerance[:margin]]"
+        },
+        {
+         "name": "blend",
+         "keyword": true,
+         "type": "number_with_unit",
+         "grammar": "<number> <energy unit>",
+         "optional": true,
+         "dimension": "energy",
+         "units": ["MeV", "keV", "eV", "meV", "ueV"],
+         "doc": "blend width at a window edge"
+        },
+        {
+         "name": "auto_tolerance",
+         "keyword": true,
+         "type": "number",
+         "grammar": "<number > 0>",
+         "optional": true,
+         "positive": true,
+         "doc": "tolerance of the automatic windows"
+        }
+       ]
+      }
+     ],
+     "doc": "lab-energy windows of the fold"
+    },
+    "J": {
+     "title": "J",
+     "type": "spin",
+     "grammar": "<J>",
+     "by_quantity": true,
+     "doc": "total spin of the phase shift"
+    },
+    "l": {
+     "title": "l",
+     "type": "integer",
+     "grammar": "<integer >= 0>",
+     "by_quantity": true,
+     "min": 0,
+     "doc": "orbital angular momentum of the phase shift"
+    },
+    "s": {
+     "title": "s",
+     "type": "spin",
+     "grammar": "<J>",
+     "by_quantity": true,
+     "doc": "channel spin of the phase shift"
+    },
+    "expansion": {
+     "title": "Legendre expansion",
+     "type": "enum",
+     "grammar": "a_over_a0|absolute|rsl|2l2|4pi",
+     "by_quantity": true,
+     "values": ["a_over_a0", "absolute", "rsl", "2l2", "4pi"],
+     "doc": "the normalisation of the Legendre coefficients (data_kinds.md section 5.2)"
+    },
+    "multipole": {
+     "title": "Multipole",
+     "type": "enum",
+     "grammar": "E1|E2",
+     "by_quantity": true,
+     "values": ["E1", "E2"],
+     "doc": "the photon multipole the cross section is filtered to (M8)"
+    },
+    "secondary_gamma": {
+     "title": "Secondary gamma",
+     "type": "structured",
+     "grammar": "L <integer >= 1> Ic <J> delta <number>",
+     "by_quantity": true,
+     "alternatives": [
+      {
+       "keyword": "",
+       "parts": [
+        {
+         "name": "L",
+         "keyword": true,
+         "type": "integer",
+         "grammar": "<integer >= 1>",
+         "optional": false,
+         "min": 1,
+         "doc": "multipolarity"
+        },
+        {
+         "name": "Ic",
+         "keyword": true,
+         "type": "spin",
+         "grammar": "<J>",
+         "optional": false,
+         "doc": "spin of the intermediate state"
+        },
+        {
+         "name": "delta",
+         "keyword": true,
+         "type": "number",
+         "grammar": "<number>",
+         "optional": false,
+         "doc": "mixing ratio"
+        }
+       ],
+       "doc": "unobserved primary, observed secondary photon (UPOS)"
+      }
+     ],
+     "doc": "UPOS: L, Ic, delta"
+    },
+    "charge_state": {
+     "title": "Charge state",
+     "type": "integer",
+     "grammar": "<integer >= 1>",
+     "by_quantity": true,
+     "min": 1,
+     "doc": "the beam's charge state q; per-charge units need it (F8)"
+    },
+    "efficiency": {
+     "title": "Efficiency x branching",
+     "type": "nuisance",
+     "grammar": "<value> fixed|fit [prior <centre> <width>[%]] [grid_max <value>]",
+     "by_quantity": true,
+     "doc": "detection efficiency times branching of counted photons (F9)"
+    },
+    "thm": {
+     "title": "THM experiment",
+     "type": "name",
+     "grammar": "<name>",
+     "by_quantity": true,
+     "doc": "the experiment[<name>] of <thm>, or global"
+    },
+    "thm_weight": {
+     "title": "THM weight file",
+     "type": "path",
+     "grammar": "<path>",
+     "applies_when": {
+      "if": "field_present",
+      "field": "thm",
+      "text": "thm is given"
+     },
+     "required": false,
+     "doc": "the weight table of <thm> weight[k]"
+    }
+   },
+   "refused": {
+    "file": "an extrapolation has no data file (F20)",
+    "columns": "an extrapolation has no data file (F20)",
+    "norm": "an extrapolation has no normalization (F20)",
+    "shift": "an extrapolation has no energy shift (F20)",
+    "covariance": "an extrapolation has no data (F20)",
+    "energy_window": "the grid is the extrapolation's energy range (F20)",
+    "angle_window": "the grid is the extrapolation's angle range (F20)"
+   }
+  },
+  "target": {
+   "title": "Target",
+   "doc": "The target the beam passes through: thickness, stopping, straggling, isotopes, Doppler, screening (F7).",
+   "sections": ["targets"],
+   "fields": {
+    "kind": {
+     "title": "Kind",
+     "type": "enum",
+     "grammar": "layer|infinite|sample|none",
+     "required": true,
+     "values": ["layer", "infinite", "sample", "none"],
+     "doc": "layer: finite areal density; infinite: thick target; sample: neutron sample (atoms/b); none: isotopes only"
+    },
+    "active": {
+     "title": "Active nucleus",
+     "type": "nucleus",
+     "grammar": "<A><Symbol>",
+     "applies_when": {
+      "if": "field_is",
+      "field": "kind",
+      "in": ["layer", "infinite", "sample"],
+      "text": "kind is layer or infinite or sample"
+     },
+     "required": true,
+     "doc": "the nucleus the areal density and the stopping count"
+    },
+    "composition": {
+     "title": "Composition",
+     "type": "composition",
+     "grammar": "<Symbol> <atoms> ...",
+     "applies_when": {
+      "if": "field_is",
+      "field": "kind",
+      "in": ["layer", "infinite"],
+      "text": "kind is layer or infinite"
+     },
+     "required_when": {
+      "if": "field_is",
+      "field": "stopping",
+      "in": ["evaluation"],
+      "text": "stopping is evaluation"
+     },
+     "doc": "element stoichiometry; needed by 'stopping evaluation'"
+    },
+    "areal_density": {
+     "title": "Areal density",
+     "type": "nuisance",
+     "grammar": "<value> <areal_density unit> fixed|fit [prior <centre> <width>[%]] [grid_max <value>]",
+     "applies_when": {
+      "if": "field_is",
+      "field": "kind",
+      "in": ["layer", "sample"],
+      "text": "kind is layer or sample"
+     },
+     "required": true,
+     "dimension": "areal_density",
+     "units": ["atoms/cm2", "atoms/b"],
+     "doc": "areal density of the active nucleus"
+    },
+    "epoch": {
+     "title": "Epoch",
+     "type": "structured",
+     "grammar": "<name> areal_density <value> <areal_density unit> fixed|fit [prior <centre> <width>[%]] [grid_max <value>]",
+     "applies_when": {
+      "if": "field_present",
+      "field": "areal_density",
+      "text": "areal_density is given"
+     },
+     "required": false,
+     "repeatable": true,
+     "alternatives": [
+      {
+       "keyword": "",
+       "parts": [
+        {
+         "name": "name",
+         "keyword": false,
+         "type": "name",
+         "grammar": "<name>",
+         "optional": false
+        },
+        {
+         "name": "areal_density",
+         "keyword": true,
+         "type": "nuisance",
+         "grammar": "<value> <areal_density unit> fixed|fit [prior <centre> <width>[%]] [grid_max <value>]",
+         "optional": false,
+         "dimension": "areal_density",
+         "units": ["atoms/cm2", "atoms/b"]
+        }
+       ],
+       "doc": "the areal density of the target in one epoch of a campaign (data sets name target@epoch)"
+      }
+     ],
+     "doc": "the areal density in one epoch (K5)"
+    },
+    "stopping": {
+     "title": "Stopping",
+     "type": "structured",
+     "grammar": "formula \"<expression in x>\" [<name>=<number> ...] <stopping unit> | evaluation scale <value> fixed|fit [prior <centre> <width>[%]] [grid_max <value>]",
+     "applies_when": {
+      "if": "field_is",
+      "field": "kind",
+      "in": ["layer", "infinite"],
+      "text": "kind is layer or infinite"
+     },
+     "required": true,
+     "alternatives": [
+      {
+       "keyword": "formula",
+       "parts": [
+        {
+         "name": "expression",
+         "keyword": false,
+         "type": "formula",
+         "grammar": "\"<expression in x>\" [<name>=<number> ...]",
+         "optional": false,
+         "doc": "x = E_lab/MeV"
+        },
+        {
+         "name": "unit",
+         "keyword": false,
+         "type": "unit",
+         "grammar": "<stopping unit>",
+         "optional": false,
+         "dimension": "stopping",
+         "units": ["MeV*cm2/atom", "keV*cm2/atom", "eV*cm2/atom"]
+        }
+       ],
+       "doc": "stopping cross section per active atom"
+      },
+      {
+       "keyword": "evaluation",
+       "parts": [
+        {
+         "name": "scale",
+         "keyword": true,
+         "type": "nuisance",
+         "grammar": "<value> fixed|fit [prior <centre> <width>[%]] [grid_max <value>]",
+         "optional": false
+        }
+       ],
+       "doc": "the evaluated stopping of the composition (Phase 5), scaled"
+      }
+     ],
+     "doc": "stopping cross section"
+    },
+    "straggling": {
+     "title": "Straggling",
+     "type": "structured",
+     "grammar": "none | bohr | coefficient <number> <sqrt_energy unit> cm",
+     "applies_when": {
+      "if": "field_is",
+      "field": "kind",
+      "in": ["layer", "infinite"],
+      "text": "kind is layer or infinite"
+     },
+     "required": true,
+     "alternatives": [
+      {
+       "keyword": "none",
+       "parts": [],
+       "doc": "no straggling"
+      },
+      {
+       "keyword": "bohr",
+       "parts": [],
+       "doc": "Bohr straggling from the entrance charges and the stopping"
+      },
+      {
+       "keyword": "coefficient",
+       "parts": [
+        {
+         "name": "value",
+         "keyword": false,
+         "type": "number_with_unit",
+         "grammar": "<number> <sqrt_energy unit>",
+         "optional": false,
+         "dimension": "sqrt_energy",
+         "units": ["MeV^1/2", "keV^1/2"],
+         "positive": true
+        },
+        {
+         "name": "frame",
+         "keyword": false,
+         "type": "enum",
+         "grammar": "cm",
+         "optional": false,
+         "values": ["cm"]
+        }
+       ],
+       "doc": "sigma = c sqrt(dE) with c and dE in the c.m. frame"
+      }
+     ],
+     "doc": "energy straggling in the target"
+    },
+    "phase": {
+     "title": "Phase",
+     "type": "enum",
+     "grammar": "solid|gas",
+     "applies_when": {
+      "if": "field_is",
+      "field": "stopping",
+      "in": ["evaluation"],
+      "text": "stopping is evaluation"
+     },
+     "required": true,
+     "values": ["solid", "gas"],
+     "doc": "solid or gas stopping (with 'stopping evaluation')"
+    },
+    "isotope": {
+     "title": "Isotope",
+     "type": "structured",
+     "grammar": "<A><Symbol> <value> fixed|fit [prior <centre> <width>[%]] [grid_max <value>]",
+     "required": false,
+     "repeatable": true,
+     "alternatives": [
+      {
+       "keyword": "",
+       "parts": [
+        {
+         "name": "nucleus",
+         "keyword": false,
+         "type": "nucleus",
+         "grammar": "<A><Symbol>",
+         "optional": false
+        },
+        {
+         "name": "abundance",
+         "keyword": false,
+         "type": "nuisance",
+         "grammar": "<value> fixed|fit [prior <centre> <width>[%]] [grid_max <value>]",
+         "optional": false
+        }
+       ],
+       "doc": "abundance weight of a target nucleus"
+      }
+     ],
+     "doc": "abundance weight of a target nucleus"
+    },
+    "isotope_sum": {
+     "title": "Isotope sum",
+     "type": "structured",
+     "grammar": "none | prior <number> <number > 0>",
+     "applies_when": {
+      "if": "field_present",
+      "field": "isotope",
+      "text": "isotope is given"
+     },
+     "required": false,
+     "alternatives": [
+      {
+       "keyword": "none",
+       "parts": [],
+       "doc": "no constraint on the sum of the abundances"
+      },
+      {
+       "keyword": "prior",
+       "parts": [
+        {
+         "name": "centre",
+         "keyword": false,
+         "type": "number",
+         "grammar": "<number>",
+         "optional": false
+        },
+        {
+         "name": "width",
+         "keyword": false,
+         "type": "number",
+         "grammar": "<number > 0>",
+         "optional": false,
+         "positive": true
+        }
+       ],
+       "doc": "a Gaussian prior on the sum of the abundances"
+      }
+     ],
+     "doc": "constraint on the sum of the abundances"
+    },
+    "doppler": {
+     "title": "Doppler",
+     "type": "structured",
+     "grammar": "free_gas <value> <temperature unit> fixed|fit [prior <centre> <width>[%]] [grid_max <value>]",
+     "required": false,
+     "alternatives": [
+      {
+       "keyword": "free_gas",
+       "parts": [
+        {
+         "name": "temperature",
+         "keyword": false,
+         "type": "nuisance",
+         "grammar": "<value> <temperature unit> fixed|fit [prior <centre> <width>[%]] [grid_max <value>]",
+         "optional": false,
+         "dimension": "temperature",
+         "units": ["K"]
+        }
+       ],
+       "doc": "free-gas Doppler broadening of the target atoms"
+      }
+     ],
+     "doc": "free-gas Doppler broadening"
+    },
+    "screening": {
+     "title": "Electron screening",
+     "type": "nuisance",
+     "grammar": "<value> <energy unit> fixed|fit [prior <centre> <width>[%]] [grid_max <value>]",
+     "required": false,
+     "dimension": "energy",
+     "units": ["MeV", "keV", "eV", "meV", "ueV"],
+     "doc": "the screening potential U_e"
+    }
+   }
+  },
+  "beam": {
+   "title": "Beam",
+   "doc": "The beam's energy distribution (F7).",
+   "sections": ["targets"],
+   "fields": {
+    "spread": {
+     "title": "Energy spread",
+     "type": "structured",
+     "grammar": "<number> <energy unit> lab|cm | formula \"<expression in x>\" [<name>=<number> ...] <energy unit> lab|cm",
+     "required": false,
+     "alternatives": [
+      {
+       "keyword": "",
+       "parts": [
+        {
+         "name": "sigma",
+         "keyword": false,
+         "type": "number_with_unit",
+         "grammar": "<number> <energy unit>",
+         "optional": false,
+         "dimension": "energy",
+         "units": ["MeV", "keV", "eV", "meV", "ueV"]
+        },
+        {
+         "name": "frame",
+         "keyword": false,
+         "type": "enum",
+         "grammar": "lab|cm",
+         "optional": false,
+         "values": ["lab", "cm"]
+        }
+       ],
+       "doc": "a constant Gaussian sigma"
+      },
+      {
+       "keyword": "formula",
+       "parts": [
+        {
+         "name": "expression",
+         "keyword": false,
+         "type": "formula",
+         "grammar": "\"<expression in x>\" [<name>=<number> ...]",
+         "optional": false,
+         "doc": "x = E_lab/MeV"
+        },
+        {
+         "name": "unit",
+         "keyword": false,
+         "type": "unit",
+         "grammar": "<energy unit>",
+         "optional": false,
+         "dimension": "energy",
+         "units": ["MeV", "keV", "eV", "meV", "ueV"]
+        },
+        {
+         "name": "frame",
+         "keyword": false,
+         "type": "enum",
+         "grammar": "lab|cm",
+         "optional": false,
+         "values": ["lab", "cm"]
+        }
+       ],
+       "doc": "sigma(E_lab); 'cm' is the convention before 2026-10"
+      }
+     ],
+     "doc": "Gaussian energy spread"
+    },
+    "profile": {
+     "title": "Profile",
+     "type": "structured",
+     "grammar": "skewed_gaussian xi <number> <energy unit> omega <number> <energy unit> alpha <number> weight <number > 0>",
+     "required": false,
+     "repeatable": true,
+     "alternatives": [
+      {
+       "keyword": "skewed_gaussian",
+       "parts": [
+        {
+         "name": "xi",
+         "keyword": true,
+         "type": "number_with_unit",
+         "grammar": "<number> <energy unit>",
+         "optional": false,
+         "dimension": "energy",
+         "units": ["MeV", "keV", "eV", "meV", "ueV"]
+        },
+        {
+         "name": "omega",
+         "keyword": true,
+         "type": "number_with_unit",
+         "grammar": "<number> <energy unit>",
+         "optional": false,
+         "dimension": "energy",
+         "units": ["MeV", "keV", "eV", "meV", "ueV"],
+         "positive": true
+        },
+        {
+         "name": "alpha",
+         "keyword": true,
+         "type": "number",
+         "grammar": "<number>",
+         "optional": false
+        },
+        {
+         "name": "weight",
+         "keyword": true,
+         "type": "number",
+         "grammar": "<number > 0>",
+         "optional": false,
+         "positive": true
+        }
+       ],
+       "doc": "one skewed Gaussian of the beam energy distribution"
+      }
+     ],
+     "doc": "a component of the beam energy distribution"
+    },
+    "truncation": {
+     "title": "Truncation",
+     "type": "number",
+     "grammar": "<number>",
+     "applies_when": {
+      "if": "field_present",
+      "field": "profile",
+      "text": "profile is given"
+     },
+     "required": true,
+     "doc": "truncation of the profile"
+    },
+    "detailed_balance": {
+     "title": "Detailed balance",
+     "type": "enum",
+     "grammar": "yes|no",
+     "applies_when": {
+      "if": "field_present",
+      "field": "profile",
+      "text": "profile is given"
+     },
+     "required": true,
+     "values": ["yes", "no"],
+     "doc": "the profile kernel by detailed balance"
+    }
+   },
+   "one_of": [
+    ["spread", "profile"]
+   ]
+  },
+  "detector": {
+   "title": "Detector",
+   "doc": "Finite solid angle, energy resolution, time-of-flight resolution (F7).",
+   "sections": ["targets"],
+   "fields": {
+    "attenuation": {
+     "title": "Attenuation Q_k",
+     "type": "number_list",
+     "grammar": "<number> ...",
+     "required": false,
+     "doc": "Q_0 ... Q_k, lab"
+    },
+    "energy_resolution": {
+     "title": "Energy resolution",
+     "type": "structured",
+     "grammar": "<number> <energy unit> lab|cm",
+     "required": false,
+     "alternatives": [
+      {
+       "keyword": "",
+       "parts": [
+        {
+         "name": "sigma",
+         "keyword": false,
+         "type": "number_with_unit",
+         "grammar": "<number> <energy unit>",
+         "optional": false,
+         "dimension": "energy",
+         "units": ["MeV", "keV", "eV", "meV", "ueV"]
+        },
+        {
+         "name": "frame",
+         "keyword": false,
+         "type": "enum",
+         "grammar": "lab|cm",
+         "optional": false,
+         "values": ["lab", "cm"]
+        }
+       ],
+       "doc": "a Gaussian energy resolution"
+      }
+     ],
+     "doc": "resolution of a reconstructed energy"
+    },
+    "udr": {
+     "title": "UDR",
+     "type": "structured",
+     "grammar": "file <path> flight_path <number> <length unit> burst <number> <time unit> channel <number> <time unit> centred yes|no",
+     "required": false,
+     "alternatives": [
+      {
+       "keyword": "",
+       "parts": [
+        {
+         "name": "file",
+         "keyword": true,
+         "type": "path",
+         "grammar": "<path>",
+         "optional": false
+        },
+        {
+         "name": "flight_path",
+         "keyword": true,
+         "type": "number_with_unit",
+         "grammar": "<number> <length unit>",
+         "optional": false,
+         "dimension": "length",
+         "units": ["fm", "m"],
+         "positive": true
+        },
+        {
+         "name": "burst",
+         "keyword": true,
+         "type": "number_with_unit",
+         "grammar": "<number> <time unit>",
+         "optional": false,
+         "dimension": "time",
+         "units": ["ns", "ps", "us"]
+        },
+        {
+         "name": "channel",
+         "keyword": true,
+         "type": "number_with_unit",
+         "grammar": "<number> <time unit>",
+         "optional": false,
+         "dimension": "time",
+         "units": ["ns", "ps", "us"]
+        },
+        {
+         "name": "centred",
+         "keyword": true,
+         "type": "enum",
+         "grammar": "yes|no",
+         "optional": false,
+         "values": ["yes", "no"]
+        }
+       ],
+       "doc": "SAMMY's time-of-flight resolution (UDR)"
+      }
+     ],
+     "doc": "time-of-flight resolution"
+    }
+   },
+   "one_of": [
+    ["attenuation", "energy_resolution", "udr"]
+   ]
+  },
+  "datum": {
+   "title": "Model datum",
+   "doc": "A literature value of a level property (section 3.10, M10).",
+   "sections": ["modelData"],
+   "fields": {
+    "quantity": {
+     "title": "Quantity",
+     "type": "enum",
+     "grammar": "resonance_strength|resonance_energy|total_width|partial_width|branching_ratio|anc|scattering_length",
+     "required": true,
+     "values": ["resonance_strength", "resonance_energy", "total_width", "partial_width", "branching_ratio", "anc", "scattering_length"],
+     "doc": "what the value is (section 7.2)"
+    },
+    "level": {
+     "title": "Level",
+     "type": "integer",
+     "grammar": "<integer >= 0>",
+     "by_quantity": true,
+     "min": 0,
+     "doc": "the level ID of <levels> (column 9)"
+    },
+    "J": {
+     "title": "J^pi",
+     "type": "spin_parity",
+     "grammar": "<J><parity>",
+     "by_quantity": true,
+     "doc": "must equal the level's J^pi (F13)"
+    },
+    "reaction": {
+     "title": "Reaction",
+     "type": "reaction_expr",
+     "grammar": "<reaction> { + <reaction> } | <reaction> / <reaction>",
+     "by_quantity": true,
+     "doc": "entrance and exit"
+    },
+    "frame": {
+     "title": "Frame",
+     "type": "enum",
+     "grammar": "E_x|E_cm|E_lab",
+     "by_quantity": true,
+     "values": ["E_x", "E_cm", "E_lab"],
+     "doc": "frame of a resonance energy"
+    },
+    "pair": {
+     "title": "Pair",
+     "type": "pair",
+     "grammar": "<particle>+<nucleus>[<E_x>]",
+     "by_quantity": true,
+     "doc": "the particle pair"
+    },
+    "l": {
+     "title": "l",
+     "type": "integer",
+     "grammar": "<integer >= 0>",
+     "by_quantity": true,
+     "min": 0,
+     "doc": "orbital angular momentum"
+    },
+    "s": {
+     "title": "s",
+     "type": "structured",
+     "grammar": "coherent | <J>",
+     "by_quantity": true,
+     "alternatives": [
+      {
+       "keyword": "coherent",
+       "parts": [],
+       "doc": "the coherent scattering length"
+      },
+      {
+       "keyword": "",
+       "parts": [
+        {
+         "name": "spin",
+         "keyword": false,
+         "type": "spin",
+         "grammar": "<J>",
+         "optional": false
+        }
+       ],
+       "doc": "the channel spin"
+      }
+     ],
+     "doc": "channel spin, or coherent"
+    },
+    "value": {
+     "title": "Value",
+     "type": "number_with_unit",
+     "grammar": "<number> <unit of the quantity>",
+     "required": true,
+     "dimension": "@quantity",
+     "doc": "the value"
+    },
+    "error": {
+     "title": "Error",
+     "type": "number_with_unit",
+     "grammar": "<number> <unit of the quantity>",
+     "required": true,
+     "dimension": "@quantity",
+     "positive": true,
+     "doc": "its 1 sigma uncertainty"
+    },
+    "imag": {
+     "title": "Imaginary part",
+     "type": "number_with_unit",
+     "grammar": "<number> <unit of the quantity>",
+     "by_quantity": true,
+     "dimension": "@quantity",
+     "doc": "Im of a scattering length"
+    },
+    "imag_error": {
+     "title": "Imaginary part error",
+     "type": "number_with_unit",
+     "grammar": "<number> <unit of the quantity>",
+     "by_quantity": true,
+     "dimension": "@quantity",
+     "positive": true,
+     "doc": "its 1 sigma uncertainty"
+    },
+    "source": {
+     "title": "Source",
+     "type": "text",
+     "grammar": "<text>",
+     "required": false,
+     "doc": "where the numbers come from; never read by the physics"
+    },
+    "exfor": {
+     "title": "EXFOR",
+     "type": "text",
+     "grammar": "<text>",
+     "required": false,
+     "doc": "the EXFOR entry and subentry"
+    },
+    "doi": {
+     "title": "DOI",
+     "type": "text",
+     "grammar": "<text>",
+     "required": false,
+     "doc": "the DOI of the publication"
+    }
+   }
+  }
+ },
+ "quantities": {
+  "sigma": {
+   "title": "Cross section",
+   "doc": "Angle-integrated cross section sigma(E) of the reaction; on a thin layer target the target-averaged sigma (data_kinds.md eq. 2).",
+   "aliases": ["cross_section"],
+   "record_kinds": ["dataset", "extrapolation"],
+   "engine_unit": "b",
+   "units": {
+    "b": 1,
+    "mb": 0.001,
+    "ub": 1e-06,
+    "nb": 1e-09,
+    "1": null,
+    "arbitrary": null
+   },
+   "unit_conditions": [
+    {
+     "unit": "1",
+     "when": {
+      "if": "ratio_reaction",
+      "text": "the reaction is a ratio"
+     }
+    }
+   ],
+   "columns": {
+    "energy": ["E_lab", "E_cm", "E_decay"],
+    "angle": [],
+    "angle_axis": "none",
+    "order": false,
+    "windows": true
+   },
+   "reaction": {
+    "rule": "sums and ratios; no charged-particle elastic",
+    "flags": ["sum", "ratio", "no_charged_elastic"]
+   },
+   "fields": {
+    "target": {
+     "required": false,
+     "when": {
+      "if": "field_present",
+      "field": "thm",
+      "not": true,
+      "text": "thm is not given"
+     }
+    },
+    "beam": {
+     "required": false
+    },
+    "detector": {
+     "required": false
+    },
+    "multipole": {
+     "required": false,
+     "when": {
+      "if": "gamma_exit",
+      "text": "the reaction has a photon exit"
+     }
+    },
+    "secondary_gamma": {
+     "required": false
+    },
+    "thm": {
+     "required": false
+    }
+   },
+   "target_kinds": ["layer", "none"],
+   "tree": "Sigma(r) [amplitude filter]; Sum/Scale/Ratio from the reaction; Weighted if the target has isotopes; folds inside the leaf (M4)",
+   "exfor": [",SIG", "PAR,SIG", ",SIG,,TTA"],
+   "refusals": [
+    {
+     "code": "E_REACTION_NOT_ALLOWED",
+     "rule": "charged_elastic",
+     "message": "the angle-integrated elastic cross section of charged particles is infinite: give dsigma_domega or ratio_to_rutherford (LEXFOR p. S.2)",
+     "checked_by": "validate"
+    },
+    {
+     "code": "E_FIELD_NOT_APPLICABLE",
+     "rule": "multipole with a particle exit",
+     "message": "a multipole filter selects photon multipoles",
+     "checked_by": "validate"
+    },
+    {
+     "code": "E_TARGET_KIND",
+     "rule": "target kind infinite",
+     "message": "a thick (infinite) target gives a yield: use quantity yield",
+     "checked_by": "validate"
+    }
+   ]
+  },
+  "sigma_total": {
+   "title": "Total cross section",
+   "doc": "Total cross section of a neutral projectile, from the optical theorem.",
+   "record_kinds": ["dataset", "extrapolation"],
+   "engine_unit": "b",
+   "units": {
+    "b": 1,
+    "mb": 0.001,
+    "ub": 1e-06,
+    "nb": 1e-09
+   },
+   "columns": {
+    "energy": ["E_lab", "E_cm"],
+    "angle": [],
+    "angle_axis": "none",
+    "order": false,
+    "windows": false
+   },
+   "reaction": {
+    "rule": "elastic, neutral entrance",
+    "flags": ["elastic", "neutral_entrance"]
+   },
+   "fields": {
+    "target": {
+     "required": false
+    },
+    "beam": {
+     "required": false
+    },
+    "detector": {
+     "required": false
+    }
+   },
+   "target_kinds": ["layer", "none"],
+   "tree": "SigmaTotal(a -> a) by the optical theorem (GM 103-119)",
+   "exfor": [",SIG (SF3 TOT)"],
+   "refusals": [
+    {
+     "code": "E_REACTION_NOT_ALLOWED",
+     "rule": "charged_entrance",
+     "message": "the total cross section of charged particles is infinite",
+     "checked_by": "validate"
+    }
+   ]
+  },
+  "dsigma_domega": {
+   "title": "Differential cross section",
+   "doc": "dsigma/dOmega at the angle of the angle column; the value's frame is the angle's (theta_cm: c.m. value).",
+   "aliases": ["dsdo"],
+   "record_kinds": ["dataset", "extrapolation"],
+   "engine_unit": "b/sr",
+   "units": {
+    "b/sr": 1,
+    "mb/sr": 0.001,
+    "ub/sr": 1e-06,
+    "nb/sr": 1e-09,
+    "1": null
+   },
+   "unit_conditions": [
+    {
+     "unit": "1",
+     "when": {
+      "if": "ratio_reaction",
+      "text": "the reaction is a ratio"
+     }
+    }
+   ],
+   "columns": {
+    "energy": ["E_lab", "E_cm"],
+    "angle": ["theta_lab", "theta_cm"],
+    "angle_axis": "required",
+    "order": false,
+    "windows": false
+   },
+   "reaction": {
+    "rule": "sums and ratios; no [total] exit",
+    "flags": ["sum", "ratio", "no_total"]
+   },
+   "fields": {
+    "target": {
+     "required": false,
+     "when": {
+      "if": "field_present",
+      "field": "thm",
+      "not": true,
+      "text": "thm is not given"
+     }
+    },
+    "beam": {
+     "required": false
+    },
+    "detector": {
+     "required": false
+    },
+    "secondary_gamma": {
+     "required": false
+    },
+    "thm": {
+     "required": false
+    }
+   },
+   "target_kinds": ["layer", "none"],
+   "tree": "dsdo_cm(r, theta); lab data converted at load",
+   "exfor": [",DA", "PAR,DA"],
+   "refusals": [
+    {
+     "code": "E_REACTION_NOT_ALLOWED",
+     "rule": "total",
+     "message": "[total] sums angle-integrated photon cross sections: use quantity sigma",
+     "checked_by": "validate"
+    },
+    {
+     "code": "E_MODE_NOT_ALLOWED",
+     "rule": ",DA,,REL without norm fit",
+     "message": "relative data need a fitted normalization",
+     "checked_by": "importer"
+    }
+   ]
+  },
+  "sfactor": {
+   "title": "Astrophysical S factor",
+   "doc": "S(E) = E sigma(E) exp(2 pi eta) with the engine's eta and atomic masses (data_kinds.md section 4.1).",
+   "record_kinds": ["dataset", "extrapolation"],
+   "engine_unit": "MeV*b",
+   "units": {
+    "MeV*b": 1,
+    "keV*b": 0.001,
+    "eV*b": 1e-06
+   },
+   "columns": {
+    "energy": ["E_cm", "E_lab"],
+    "angle": [],
+    "angle_axis": "none",
+    "order": false,
+    "windows": false
+   },
+   "reaction": {
+    "rule": "charged entrance",
+    "flags": ["charged_entrance"]
+   },
+   "fields": {
+    "multipole": {
+     "required": false,
+     "when": {
+      "if": "gamma_exit",
+      "text": "the reaction has a photon exit"
+     }
+    }
+   },
+   "tree": "Scale_SF(E) o Sigma(r)",
+   "exfor": [",SIG,,SFC", "PAR,SIG,,SFC", "EP/PAR,SIG,,SFC"],
+   "refusals": [
+    {
+     "code": "E_REACTION_NOT_ALLOWED",
+     "rule": "neutral",
+     "message": "the S factor is defined for charged particles (Gamow factor)",
+     "checked_by": "validate"
+    }
+   ]
+  },
+  "ratio_to_rutherford": {
+   "title": "Ratio to Rutherford",
+   "doc": "dsigma/dOmega(c.m.) divided by the Rutherford cross section at the same c.m. angle.",
+   "aliases": ["rth"],
+   "record_kinds": ["dataset", "extrapolation"],
+   "engine_unit": "1",
+   "units": {
+    "1": 1
+   },
+   "columns": {
+    "energy": ["E_lab", "E_cm"],
+    "angle": ["theta_lab", "theta_cm"],
+    "angle_axis": "required",
+    "order": false,
+    "windows": false
+   },
+   "reaction": {
+    "rule": "elastic, charged, not identical",
+    "flags": ["elastic", "charged_entrance", "not_identical"]
+   },
+   "fields": {
+    "target": {
+     "required": false
+    },
+    "beam": {
+     "required": false
+    },
+    "detector": {
+     "required": false
+    }
+   },
+   "target_kinds": ["layer", "none"],
+   "tree": "Ratio(Fold[dsdo_cm(r)], Fold[rutherford(r)])",
+   "exfor": [",DA,,RTH", "PAR,DA,,RTH"],
+   "refusals": [
+    {
+     "code": "E_REACTION_NOT_ALLOWED",
+     "rule": "identical",
+     "message": "has identical particles; the Coulomb reference is Mott-symmetrised: use quantity 'ratio_to_mott' (K2)",
+     "checked_by": "validate"
+    },
+    {
+     "code": "E_REACTION_NOT_ALLOWED",
+     "rule": "neutral",
+     "message": "has no Coulomb scattering: give dsigma_domega",
+     "checked_by": "validate"
+    },
+    {
+     "code": "E_REACTION_NOT_ALLOWED",
+     "rule": "inelastic",
+     "message": "the ratio to Rutherford is not defined: give dsigma_domega",
+     "checked_by": "validate"
+    }
+   ]
+  },
+  "ratio_to_mott": {
+   "title": "Ratio to Mott",
+   "doc": "dsigma/dOmega(c.m.) of identical particles divided by the Mott cross section.",
+   "record_kinds": ["dataset", "extrapolation"],
+   "engine_unit": "1",
+   "units": {
+    "1": 1
+   },
+   "columns": {
+    "energy": ["E_lab", "E_cm"],
+    "angle": ["theta_lab", "theta_cm"],
+    "angle_axis": "required",
+    "order": false,
+    "windows": false
+   },
+   "reaction": {
+    "rule": "elastic, identical particles",
+    "flags": ["elastic", "charged_entrance", "identical"]
+   },
+   "fields": {
+    "target": {
+     "required": false
+    },
+    "beam": {
+     "required": false
+    },
+    "detector": {
+     "required": false
+    }
+   },
+   "target_kinds": ["layer", "none"],
+   "tree": "Ratio(Fold[dsdo_cm(r)], Fold[mott(r)])",
+   "exfor": [",DA,,MOT"],
+   "refusals": [
+    {
+     "code": "E_REACTION_NOT_ALLOWED",
+     "rule": "non_identical",
+     "message": "has no identical particles: use quantity 'ratio_to_rutherford'",
+     "checked_by": "validate"
+    },
+    {
+     "code": "E_REACTION_NOT_ALLOWED",
+     "rule": "inelastic",
+     "message": "the ratio to Mott is not defined: give dsigma_domega",
+     "checked_by": "validate"
+    }
+   ]
+  },
+  "legendre": {
+   "title": "Legendre coefficients",
+   "doc": "c.m. Legendre coefficients of the angular distribution, in the expansion named by 'expansion' (data_kinds.md section 5.2; 2l2 in b/sr as LEG/2L2 is in EXFOR).",
+   "record_kinds": ["dataset", "extrapolation"],
+   "engine_unit": "1",
+   "units": {
+    "1": 1,
+    "b/sr": null,
+    "mb/sr": null,
+    "ub/sr": null,
+    "nb/sr": null,
+    "b": null,
+    "mb": null,
+    "ub": null,
+    "nb": null
+   },
+   "unit_conditions": [
+    {
+     "unit": "1",
+     "when": {
+      "if": "field_is",
+      "field": "expansion",
+      "in": ["a_over_a0", "rsl"],
+      "text": "expansion is a_over_a0 or rsl"
+     }
+    },
+    {
+     "dimension": "diff_cross_section",
+     "when": {
+      "if": "field_is",
+      "field": "expansion",
+      "in": ["absolute", "2l2"],
+      "text": "expansion is absolute or 2l2"
+     }
+    },
+    {
+     "dimension": "cross_section",
+     "when": {
+      "if": "field_is",
+      "field": "expansion",
+      "in": ["4pi"],
+      "text": "expansion is 4pi"
+     }
+    }
+   ],
+   "columns": {
+    "energy": ["E_lab", "E_cm"],
+    "angle": [],
+    "angle_axis": "none",
+    "order": true,
+    "windows": false
+   },
+   "reaction": {
+    "rule": "",
+    "flags": []
+   },
+   "fields": {
+    "expansion": {
+     "required": true
+    },
+    "orders": {
+     "required": true
+    }
+   },
+   "norm_rules": [
+    {
+     "when": {
+      "if": "field_is",
+      "field": "expansion",
+      "in": ["a_over_a0", "rsl"],
+      "text": "expansion is a_over_a0 or rsl"
+     },
+     "modes": ["fixed"],
+     "prior": true,
+     "message": "normalised coefficients carry no normalization: norm is fixed (data_formats.rst, Legendre data)"
+    }
+   ],
+   "tree": "linear maps of the c.m. coefficient leaves A_L",
+   "exfor": [",DA,,LEG", "LEG/RS", "LEG/RSL", "LEG/2L2", "LEG/4PI"],
+   "refusals": [
+    {
+     "code": "E_ROLE_NOT_ALLOWED",
+     "rule": "lab-frame coefficients",
+     "message": "Legendre coefficients are c.m. quantities",
+     "checked_by": "importer"
+    },
+    {
+     "code": "E_NOT_IN_LIST",
+     "rule": "RSD, RS0, 1K2, LEG/RTH",
+     "message": "not supported (K3)",
+     "checked_by": "importer"
+    }
+   ]
+  },
+  "analyzing_power": {
+   "title": "Analyzing power",
+   "doc": "A_y of a spin-1/2 projectile; folded as A_y sigma over sigma.",
+   "aliases": ["ay"],
+   "record_kinds": ["dataset", "extrapolation"],
+   "engine_unit": "1",
+   "units": {
+    "1": 1
+   },
+   "columns": {
+    "energy": ["E_lab", "E_cm"],
+    "angle": ["theta_lab", "theta_cm"],
+    "angle_axis": "required",
+    "order": false,
+    "windows": false
+   },
+   "reaction": {
+    "rule": "spin-1/2 projectile",
+    "flags": ["spin_half_projectile"]
+   },
+   "fields": {
+    "target": {
+     "required": false
+    },
+    "beam": {
+     "required": false
+    },
+    "detector": {
+     "required": false
+    }
+   },
+   "target_kinds": ["layer", "none"],
+   "tree": "A_y(r, theta), folded as A_y sigma over sigma",
+   "exfor": [",POL/DA,,ANA"],
+   "refusals": [
+    {
+     "code": "E_REACTION_NOT_ALLOWED",
+     "rule": "spin",
+     "message": "A_y is the vector analysing power of a spin-1/2 projectile (n, p, t, h); tensor analysing powers are not supported",
+     "checked_by": "validate"
+    }
+   ]
+  },
+  "phase_shift": {
+   "title": "Phase shift",
+   "doc": "The elastic phase shift delta_{J l s} (data_formats.rst, phase shifts).",
+   "record_kinds": ["dataset", "extrapolation"],
+   "engine_unit": "deg",
+   "units": {
+    "deg": 1,
+    "rad": 57.2957795130823
+   },
+   "columns": {
+    "energy": ["E_lab", "E_cm"],
+    "angle": [],
+    "angle_axis": "none",
+    "order": false,
+    "windows": false
+   },
+   "reaction": {
+    "rule": "elastic",
+    "flags": ["elastic"]
+   },
+   "fields": {
+    "J": {
+     "required": true
+    },
+    "l": {
+     "required": true
+    },
+    "s": {
+     "required": true
+    }
+   },
+   "tree": "delta_{J l s}(r)",
+   "exfor": [],
+   "refusals": [
+    {
+     "code": "E_REACTION_NOT_ALLOWED",
+     "rule": "inelastic",
+     "message": "a phase shift is an elastic quantity",
+     "checked_by": "validate"
+    },
+    {
+     "code": "E_FIELD_NOT_APPLICABLE",
+     "rule": "(J, l, s) not allowed by the pair",
+     "message": "checked against <levels>",
+     "checked_by": "build"
+    }
+   ]
+  },
+  "yield": {
+   "title": "Yield",
+   "doc": "Reactions (or detected counts) per incident particle or per unit of beam charge, on a target layer or an infinite target (data_kinds.md eqs. 3, 6).",
+   "record_kinds": ["dataset", "extrapolation"],
+   "engine_unit": "1/particle",
+   "units": {
+    "1/particle": 1,
+    "1/particle/sr": null,
+    "1/uC": null,
+    "1/mC": null,
+    "1/C": null,
+    "counts/uC": null,
+    "counts/mC": null,
+    "counts/C": null,
+    "arbitrary": null
+   },
+   "unit_conditions": [
+    {
+     "dimension": "yield",
+     "when": {
+      "if": "angle_axis",
+      "not": true,
+      "text": "the record has no angle axis (a theta column or an angle grid)"
+     }
+    },
+    {
+     "dimension": "yield_per_sr",
+     "when": {
+      "if": "angle_axis",
+      "text": "the record has an angle axis (a theta column or an angle grid)"
+     }
+    }
+   ],
+   "columns": {
+    "energy": ["E_lab"],
+    "angle": ["theta_lab"],
+    "angle_axis": "optional",
+    "order": false,
+    "windows": false
+   },
+   "reaction": {
+    "rule": "",
+    "flags": []
+   },
+   "fields": {
+    "target": {
+     "required": true
+    },
+    "beam": {
+     "required": false
+    },
+    "detector": {
+     "required": false
+    },
+    "charge_state": {
+     "required": true,
+     "when": {
+      "if": "unit_dimension",
+      "in": ["per_charge", "counts_per_charge"],
+      "text": "the unit is per_charge or counts_per_charge"
+     }
+    },
+    "efficiency": {
+     "required": true,
+     "when": {
+      "if": "unit_dimension",
+      "in": ["counts_per_charge"],
+      "text": "the unit is counts_per_charge"
+     }
+    }
+   },
+   "target_kinds": ["layer", "infinite"],
+   "tree": "Fold_target o sigma (or dsdo) x N 1e-24 for a layer, integral sigma/epsilon for an infinite target; x 1e-6 C/(q e) per uC; x efficiency for counts",
+   "exfor": [",MLT,,TT", ",PY,,TT", "TT/CH", "PAR,MLT,G,TT/CH"],
+   "refusals": [
+    {
+     "code": "E_TARGET_KIND",
+     "rule": "target kind none or sample",
+     "message": "a yield needs a target with a thickness (layer) or a thick (infinite) target",
+     "checked_by": "validate"
+    },
+    {
+     "code": "E_FIELD_REQUIRED",
+     "rule": "per-charge unit without charge_state",
+     "message": "the number of beam particles per uC depends on the charge state q",
+     "checked_by": "validate"
+    },
+    {
+     "code": "E_NOT_IN_LIST",
+     "rule": "TTY activation yields",
+     "message": "not supported (K9)",
+     "checked_by": "importer"
+    }
+   ]
+  },
+  "transmission": {
+   "title": "Transmission",
+   "doc": "Neutron transmission T = exp(-n sigma) through a sample of thickness n (atoms/b).",
+   "record_kinds": ["dataset", "extrapolation"],
+   "engine_unit": "1",
+   "units": {
+    "1": 1
+   },
+   "columns": {
+    "energy": ["E_lab"],
+    "angle": [],
+    "angle_axis": "none",
+    "order": false,
+    "windows": false
+   },
+   "reaction": {
+    "rule": "neutral entrance; sums",
+    "flags": ["sum", "neutral_entrance"]
+   },
+   "fields": {
+    "target": {
+     "required": true
+    },
+    "beam": {
+     "required": false
+    },
+    "detector": {
+     "required": false
+    }
+   },
+   "target_kinds": ["sample"],
+   "tree": "Transform_T(n; Sum) (data_model.md section 3)",
+   "exfor": [",TRN"],
+   "refusals": [
+    {
+     "code": "E_REACTION_NOT_ALLOWED",
+     "rule": "charged_entrance",
+     "message": "transmission is a neutron quantity",
+     "checked_by": "validate"
+    }
+   ]
+  },
+  "neutron_yield": {
+   "title": "Neutron-sample yield",
+   "doc": "The self-shielded yield of a neutron sample (SAMMY's yield).",
+   "record_kinds": ["dataset", "extrapolation"],
+   "engine_unit": "1",
+   "units": {
+    "1": 1
+   },
+   "columns": {
+    "energy": ["E_lab"],
+    "angle": [],
+    "angle_axis": "none",
+    "order": false,
+    "windows": false
+   },
+   "reaction": {
+    "rule": "neutral entrance; sums",
+    "flags": ["sum", "neutral_entrance"]
+   },
+   "fields": {
+    "target": {
+     "required": true
+    },
+    "beam": {
+     "required": false
+    },
+    "detector": {
+     "required": false
+    }
+   },
+   "target_kinds": ["sample"],
+   "tree": "Transform_Y(n; ...)",
+   "exfor": [],
+   "refusals": [
+    {
+     "code": "E_REACTION_NOT_ALLOWED",
+     "rule": "charged_entrance",
+     "message": "the sample yield is a neutron quantity",
+     "checked_by": "validate"
+    }
+   ]
+  },
+  "beta_delayed_spectrum": {
+   "title": "beta-delayed particle spectrum",
+   "doc": "The spectrum of particles emitted after beta decay, in arbitrary units.",
+   "record_kinds": ["dataset", "extrapolation"],
+   "engine_unit": "arbitrary",
+   "units": {
+    "arbitrary": null
+   },
+   "columns": {
+    "energy": ["E_decay"],
+    "angle": [],
+    "angle_axis": "none",
+    "order": false,
+    "windows": false
+   },
+   "reaction": {
+    "rule": "beta entrance pair (step 3)",
+    "flags": []
+   },
+   "fields": {
+    "detector": {
+     "required": false
+    }
+   },
+   "tree": "the leaves with EnergyIn = DecayLab",
+   "exfor": [],
+   "refusals": [
+    {
+     "code": "E_REACTION_NOT_ALLOWED",
+     "rule": "non-beta entrance",
+     "message": "needs a beta entrance pair",
+     "checked_by": "build"
+    }
+   ]
+  },
+  "resonance_strength": {
+   "title": "Resonance strength",
+   "doc": "omega gamma of a level from observed widths at E_r (data_kinds.md section 4.7, eq. 8).",
+   "record_kinds": ["datum"],
+   "engine_unit": "eV",
+   "units": {
+    "eV": 1,
+    "meV": 0.001,
+    "ueV": 1e-06,
+    "keV": 1e+03
+   },
+   "columns": {
+    "energy": [],
+    "angle": [],
+    "angle_axis": "none",
+    "order": false,
+    "windows": false
+   },
+   "reaction": {
+    "rule": "one reaction",
+    "flags": []
+   },
+   "fields": {
+    "level": {
+     "required": true
+    },
+    "J": {
+     "required": true
+    },
+    "reaction": {
+     "required": true
+    }
+   },
+   "tree": "omega Gamma_a Gamma_b / Gamma at E_r",
+   "exfor": [",WID/STR", "PAR,WID/STR"],
+   "refusals": [
+    {
+     "code": "E_OUT_OF_RANGE",
+     "rule": "E_r < 0",
+     "message": "a subthreshold level has no strength: use anc",
+     "checked_by": "build"
+    }
+   ]
+  },
+  "resonance_energy": {
+   "title": "Resonance energy",
+   "doc": "The observed level energy in the stated frame.",
+   "record_kinds": ["datum"],
+   "engine_unit": "MeV",
+   "units": {
+    "MeV": 1,
+    "keV": 0.001,
+    "eV": 1e-06
+   },
+   "columns": {
+    "energy": [],
+    "angle": [],
+    "angle_axis": "none",
+    "order": false,
+    "windows": false
+   },
+   "reaction": {
+    "rule": "",
+    "flags": []
+   },
+   "fields": {
+    "level": {
+     "required": true
+    },
+    "J": {
+     "required": true
+    },
+    "frame": {
+     "required": true
+    },
+    "pair": {
+     "required": true,
+     "when": {
+      "if": "field_is",
+      "field": "frame",
+      "in": ["E_cm", "E_lab"],
+      "text": "frame is E_cm or E_lab"
+     }
+    }
+   },
+   "tree": "E_lambda (observed) in the frame",
+   "exfor": [",EN"],
+   "refusals": []
+  },
+  "total_width": {
+   "title": "Total width",
+   "doc": "The observed total width at E_r.",
+   "record_kinds": ["datum"],
+   "engine_unit": "eV",
+   "units": {
+    "eV": 1,
+    "keV": 1e+03,
+    "MeV": 1e+06
+   },
+   "columns": {
+    "energy": [],
+    "angle": [],
+    "angle_axis": "none",
+    "order": false,
+    "windows": false
+   },
+   "reaction": {
+    "rule": "",
+    "flags": []
+   },
+   "fields": {
+    "level": {
+     "required": true
+    },
+    "J": {
+     "required": true
+    }
+   },
+   "tree": "Gamma (observed) at E_r",
+   "exfor": [",WID"],
+   "refusals": []
+  },
+  "partial_width": {
+   "title": "Partial width",
+   "doc": "The observed partial width of a pair at E_r.",
+   "record_kinds": ["datum"],
+   "engine_unit": "eV",
+   "units": {
+    "eV": 1,
+    "keV": 1e+03,
+    "MeV": 1e+06
+   },
+   "columns": {
+    "energy": [],
+    "angle": [],
+    "angle_axis": "none",
+    "order": false,
+    "windows": false
+   },
+   "reaction": {
+    "rule": "",
+    "flags": []
+   },
+   "fields": {
+    "level": {
+     "required": true
+    },
+    "J": {
+     "required": true
+    },
+    "pair": {
+     "required": true
+    }
+   },
+   "tree": "Gamma_c (observed) at E_r",
+   "exfor": ["PAR,WID"],
+   "refusals": [
+    {
+     "code": "E_NOT_IN_LIST",
+     "rule": ",WID,,G and ,WID,,2G",
+     "message": "unless the importer removes g",
+     "checked_by": "importer"
+    }
+   ]
+  },
+  "branching_ratio": {
+   "title": "Branching ratio",
+   "doc": "Gamma_b / Gamma of a level.",
+   "record_kinds": ["datum"],
+   "engine_unit": "1",
+   "units": {
+    "1": 1,
+    "%": 0.01
+   },
+   "columns": {
+    "energy": [],
+    "angle": [],
+    "angle_axis": "none",
+    "order": false,
+    "windows": false
+   },
+   "reaction": {
+    "rule": "",
+    "flags": []
+   },
+   "fields": {
+    "level": {
+     "required": true
+    },
+    "J": {
+     "required": true
+    },
+    "reaction": {
+     "required": true
+    }
+   },
+   "tree": "Gamma_b / Gamma",
+   "exfor": [],
+   "refusals": []
+  },
+  "anc": {
+   "title": "Asymptotic normalization coefficient",
+   "doc": "C of a bound level from its reduced width through the Whittaker function at a_c.",
+   "record_kinds": ["datum"],
+   "engine_unit": "fm^-1/2",
+   "units": {
+    "fm^-1/2": 1
+   },
+   "columns": {
+    "energy": [],
+    "angle": [],
+    "angle_axis": "none",
+    "order": false,
+    "windows": false
+   },
+   "reaction": {
+    "rule": "",
+    "flags": []
+   },
+   "fields": {
+    "level": {
+     "required": true
+    },
+    "J": {
+     "required": true
+    },
+    "pair": {
+     "required": true
+    },
+    "l": {
+     "required": true
+    },
+    "s": {
+     "required": true
+    }
+   },
+   "tree": "C from the reduced width through W(a_c)",
+   "exfor": [],
+   "refusals": [
+    {
+     "code": "E_FIELD_NOT_APPLICABLE",
+     "rule": "open channel",
+     "message": "an ANC belongs to a closed channel",
+     "checked_by": "build"
+    }
+   ]
+  },
+  "scattering_length": {
+   "title": "Scattering length",
+   "doc": "Re and Im of the scattering length of a neutral pair (include/ScatteringLength.h).",
+   "record_kinds": ["datum"],
+   "engine_unit": "fm",
+   "units": {
+    "fm": 1
+   },
+   "columns": {
+    "energy": [],
+    "angle": [],
+    "angle_axis": "none",
+    "order": false,
+    "windows": false
+   },
+   "reaction": {
+    "rule": "neutral pair",
+    "flags": ["neutral_pair"]
+   },
+   "fields": {
+    "pair": {
+     "required": true
+    },
+    "s": {
+     "required": true
+    },
+    "imag": {
+     "required": false
+    },
+    "imag_error": {
+     "required": true,
+     "when": {
+      "if": "field_present",
+      "field": "imag",
+      "text": "imag is given"
+     }
+    }
+   },
+   "tree": "a_0 (Re, Im)",
+   "exfor": [",AMP", "COH,AMP"],
+   "refusals": [
+    {
+     "code": "E_REACTION_NOT_ALLOWED",
+     "rule": "charged_pair",
+     "message": "the scattering length is defined for a neutral pair",
+     "checked_by": "validate"
+    }
+   ]
+  }
+ },
+ "general_norm_rules": [
+  {
+   "when": {
+    "if": "unit_dimension",
+    "in": ["arbitrary"],
+    "text": "the unit is arbitrary"
+   },
+   "modes": ["fit", "profiled"],
+   "prior": false,
+   "message": "the value is in arbitrary units: its normalization is free (fit without a prior) or profiled"
+  }
+ ],
+ "units": {
+  "MeV": {
+   "dimension": "energy",
+   "factor": 1,
+   "engine_unit": "MeV"
+  },
+  "keV": {
+   "dimension": "energy",
+   "factor": 0.001,
+   "engine_unit": "MeV"
+  },
+  "eV": {
+   "dimension": "energy",
+   "factor": 1e-06,
+   "engine_unit": "MeV"
+  },
+  "meV": {
+   "dimension": "energy",
+   "factor": 1e-09,
+   "engine_unit": "MeV"
+  },
+  "ueV": {
+   "dimension": "energy",
+   "factor": 1e-12,
+   "engine_unit": "MeV",
+   "aliases": ["µeV"]
+  },
+  "MeV^1/2": {
+   "dimension": "sqrt_energy",
+   "factor": 1,
+   "engine_unit": "MeV^1/2"
+  },
+  "keV^1/2": {
+   "dimension": "sqrt_energy",
+   "factor": 0.03162277660168379,
+   "engine_unit": "MeV^1/2"
+  },
+  "deg": {
+   "dimension": "angle",
+   "factor": 1,
+   "engine_unit": "deg"
+  },
+  "rad": {
+   "dimension": "angle",
+   "factor": 57.29577951308232,
+   "engine_unit": "deg"
+  },
+  "b": {
+   "dimension": "cross_section",
+   "factor": 1,
+   "engine_unit": "b"
+  },
+  "mb": {
+   "dimension": "cross_section",
+   "factor": 0.001,
+   "engine_unit": "b"
+  },
+  "ub": {
+   "dimension": "cross_section",
+   "factor": 1e-06,
+   "engine_unit": "b",
+   "aliases": ["µb"]
+  },
+  "nb": {
+   "dimension": "cross_section",
+   "factor": 1e-09,
+   "engine_unit": "b"
+  },
+  "b/sr": {
+   "dimension": "diff_cross_section",
+   "factor": 1,
+   "engine_unit": "b/sr"
+  },
+  "mb/sr": {
+   "dimension": "diff_cross_section",
+   "factor": 0.001,
+   "engine_unit": "b/sr"
+  },
+  "ub/sr": {
+   "dimension": "diff_cross_section",
+   "factor": 1e-06,
+   "engine_unit": "b/sr",
+   "aliases": ["µb/sr"]
+  },
+  "nb/sr": {
+   "dimension": "diff_cross_section",
+   "factor": 1e-09,
+   "engine_unit": "b/sr"
+  },
+  "MeV*b": {
+   "dimension": "sfactor",
+   "factor": 1,
+   "engine_unit": "MeV*b"
+  },
+  "keV*b": {
+   "dimension": "sfactor",
+   "factor": 0.001,
+   "engine_unit": "MeV*b"
+  },
+  "eV*b": {
+   "dimension": "sfactor",
+   "factor": 1e-06,
+   "engine_unit": "MeV*b"
+  },
+  "1": {
+   "dimension": "dimensionless",
+   "factor": 1,
+   "engine_unit": "1"
+  },
+  "%": {
+   "dimension": "dimensionless",
+   "factor": 0.01,
+   "engine_unit": "1"
+  },
+  "atoms/cm2": {
+   "dimension": "areal_density",
+   "factor": 1,
+   "engine_unit": "atoms/cm2"
+  },
+  "atoms/b": {
+   "dimension": "areal_density",
+   "factor": 1e+24,
+   "engine_unit": "atoms/cm2"
+  },
+  "MeV*cm2/atom": {
+   "dimension": "stopping",
+   "factor": 1,
+   "engine_unit": "MeV*cm2/atom"
+  },
+  "keV*cm2/atom": {
+   "dimension": "stopping",
+   "factor": 0.001,
+   "engine_unit": "MeV*cm2/atom"
+  },
+  "eV*cm2/atom": {
+   "dimension": "stopping",
+   "factor": 1e-06,
+   "engine_unit": "MeV*cm2/atom"
+  },
+  "K": {
+   "dimension": "temperature",
+   "factor": 1,
+   "engine_unit": "K"
+  },
+  "fm": {
+   "dimension": "length",
+   "factor": 1,
+   "engine_unit": "fm"
+  },
+  "m": {
+   "dimension": "length",
+   "factor": 1e+15,
+   "engine_unit": "fm"
+  },
+  "ns": {
+   "dimension": "time",
+   "factor": 1,
+   "engine_unit": "ns"
+  },
+  "ps": {
+   "dimension": "time",
+   "factor": 0.001,
+   "engine_unit": "ns"
+  },
+  "us": {
+   "dimension": "time",
+   "factor": 1e+03,
+   "engine_unit": "ns",
+   "aliases": ["µs"]
+  },
+  "fm^-1/2": {
+   "dimension": "anc",
+   "factor": 1,
+   "engine_unit": "fm^-1/2"
+  },
+  "1/particle": {
+   "dimension": "yield",
+   "factor": 1,
+   "engine_unit": "1/particle"
+  },
+  "1/particle/sr": {
+   "dimension": "yield_per_sr",
+   "factor": 1,
+   "engine_unit": "1/particle/sr"
+  },
+  "1/uC": {
+   "dimension": "per_charge",
+   "factor": 1e+06,
+   "engine_unit": "1/C",
+   "aliases": ["1/µC"]
+  },
+  "1/mC": {
+   "dimension": "per_charge",
+   "factor": 1e+03,
+   "engine_unit": "1/C"
+  },
+  "1/C": {
+   "dimension": "per_charge",
+   "factor": 1,
+   "engine_unit": "1/C"
+  },
+  "counts/uC": {
+   "dimension": "counts_per_charge",
+   "factor": 1e+06,
+   "engine_unit": "counts/C",
+   "aliases": ["counts/µC"]
+  },
+  "counts/mC": {
+   "dimension": "counts_per_charge",
+   "factor": 1e+03,
+   "engine_unit": "counts/C"
+  },
+  "counts/C": {
+   "dimension": "counts_per_charge",
+   "factor": 1,
+   "engine_unit": "counts/C"
+  },
+  "arbitrary": {
+   "dimension": "arbitrary",
+   "factor": 1,
+   "engine_unit": "arbitrary"
+  }
+ },
+ "dimensions": {
+  "energy": {
+   "engine_unit": "MeV",
+   "doc": "energies, widths, U_e, energy scales"
+  },
+  "sqrt_energy": {
+   "engine_unit": "MeV^1/2",
+   "doc": "the coefficient b of an energy shift b sqrt(E), and of straggling c sqrt(dE)"
+  },
+  "angle": {
+   "engine_unit": "deg",
+   "doc": "detection angles"
+  },
+  "cross_section": {
+   "engine_unit": "b",
+   "doc": "angle-integrated cross sections"
+  },
+  "diff_cross_section": {
+   "engine_unit": "b/sr",
+   "doc": "differential cross sections"
+  },
+  "sfactor": {
+   "engine_unit": "MeV*b",
+   "doc": "astrophysical S factors"
+  },
+  "dimensionless": {
+   "engine_unit": "1",
+   "doc": "ratios, normalizations, abundances, efficiencies"
+  },
+  "areal_density": {
+   "engine_unit": "atoms/cm2",
+   "doc": "areal densities of a target's active nucleus"
+  },
+  "stopping": {
+   "engine_unit": "MeV*cm2/atom",
+   "doc": "stopping cross sections per active atom"
+  },
+  "temperature": {
+   "engine_unit": "K",
+   "doc": "target temperatures (free-gas Doppler broadening)"
+  },
+  "length": {
+   "engine_unit": "fm",
+   "doc": "scattering lengths, flight paths"
+  },
+  "time": {
+   "engine_unit": "ns",
+   "doc": "time-of-flight resolution"
+  },
+  "anc": {
+   "engine_unit": "fm^-1/2",
+   "doc": "asymptotic normalization coefficients"
+  },
+  "yield": {
+   "engine_unit": "1/particle",
+   "doc": "reactions per incident beam particle"
+  },
+  "yield_per_sr": {
+   "engine_unit": "1/particle/sr",
+   "doc": "reactions per incident particle per steradian"
+  },
+  "per_charge": {
+   "engine_unit": "1/C",
+   "doc": "reactions per unit of beam charge (needs the charge state q)"
+  },
+  "counts_per_charge": {
+   "engine_unit": "counts/C",
+   "doc": "detected counts per unit of beam charge (needs q and the efficiency)"
+  },
+  "arbitrary": {
+   "engine_unit": "arbitrary",
+   "doc": "arbitrary units: the normalization is free (no prior) or profiled"
+  }
+ },
+ "column_roles": {
+  "E_lab": {
+   "unit": "energy"
+  },
+  "E_cm": {
+   "unit": "energy"
+  },
+  "E_x": {
+   "unit": "energy"
+  },
+  "E_decay": {
+   "unit": "energy"
+  },
+  "theta_lab": {
+   "unit": "angle"
+  },
+  "theta_cm": {
+   "unit": "angle"
+  },
+  "order": {
+   "unit": null
+  },
+  "value": {
+   "unit": null
+  },
+  "error": {
+   "unit": null
+  },
+  "error_percent": {
+   "unit": null
+  },
+  "window_lo": {
+   "unit": null
+  },
+  "window_hi": {
+   "unit": null
+  },
+  "_": {
+   "unit": null
+  }
+ },
+ "lists": {
+  "frames": ["lab", "cm"],
+  "nuisance_modes": ["fixed", "fit", "profiled"],
+  "light_particles": ["n", "p", "d", "t", "h", "a", "g", "e-", "b-", "b+"],
+  "grid_kinds": ["range", "list", "file", "adaptive", "none"],
+  "elements": ["n", "H", "He", "Li", "Be", "B", "C", "N", "O", "F", "Ne", "Na", "Mg", "Al", "Si", "P", "S", "Cl", "Ar", "K", "Ca", "Sc", "Ti", "V", "Cr", "Mn", "Fe", "Co", "Ni", "Cu", "Zn", "Ga", "Ge", "As", "Se", "Br", "Kr", "Rb", "Sr", "Y", "Zr", "Nb", "Mo", "Tc", "Ru", "Rh", "Pd", "Ag", "Cd", "In", "Sn", "Sb", "Te", "I", "Xe", "Cs", "Ba", "La", "Ce", "Pr", "Nd", "Pm", "Sm", "Eu", "Gd", "Tb", "Dy", "Ho", "Er", "Tm", "Yb", "Lu", "Hf", "Ta", "W", "Re", "Os", "Ir", "Pt", "Au", "Hg", "Tl", "Pb", "Bi", "Po", "At", "Rn", "Fr", "Ra", "Ac", "Th", "Pa", "U", "Np", "Pu", "Am", "Cm", "Bk", "Cf", "Es", "Fm", "Md", "No", "Lr", "Rf", "Db", "Sg", "Bh", "Hs", "Mt", "Ds", "Rg", "Cn", "Nh", "Fl", "Mc", "Lv", "Ts", "Og"]
+ },
+ "diagnostic_codes": {
+  "E_UNTERMINATED_QUOTE": {
+   "severity": "error",
+   "meaning": "a quoted token has no closing quote on its line"
+  },
+  "E_QUOTE_IN_TOKEN": {
+   "severity": "error",
+   "meaning": "a quote inside a token, or text right after a closing quote"
+  },
+  "E_UNKNOWN_KIND": {
+   "severity": "error",
+   "meaning": "a line that should start a record names no record kind of its section"
+  },
+  "E_HEADER_NAME": {
+   "severity": "error",
+   "meaning": "a header without a name, or with more than '<kind> <name>' on its line"
+  },
+  "E_KEY_SYNTAX": {
+   "severity": "error",
+   "meaning": "a field key that is not a letter followed by letters, digits and '_'"
+  },
+  "E_WRONG_SECTION": {
+   "severity": "error",
+   "meaning": "a record in a section that does not hold its kind"
+  },
+  "E_BAD_NAME": {
+   "severity": "error",
+   "meaning": "a name that is not [A-Za-z][A-Za-z0-9_-]*"
+  },
+  "E_DUPLICATE_NAME": {
+   "severity": "error",
+   "meaning": "a name used by two records (one namespace, F3)"
+  },
+  "E_UNKNOWN_FIELD": {
+   "severity": "error",
+   "meaning": "a key that is no field of the record's kind (fix: the nearest key)"
+  },
+  "E_FIELD_TWICE": {
+   "severity": "error",
+   "meaning": "a field that is not repeatable, given twice"
+  },
+  "E_FIELD_REQUIRED": {
+   "severity": "error",
+   "meaning": "a required or conditionally required field is missing (fix: the field with '?')"
+  },
+  "E_FIELD_NOT_APPLICABLE": {
+   "severity": "error",
+   "meaning": "a field that does not apply to the record's kind, quantity or other fields"
+  },
+  "E_VALUE_MISSING": {
+   "severity": "error",
+   "meaning": "a key without a value"
+  },
+  "E_PLACEHOLDER": {
+   "severity": "error",
+   "meaning": "a value that is '?': a value is needed (F18)"
+  },
+  "E_TOO_FEW_TOKENS": {
+   "severity": "error",
+   "meaning": "the value stops before its grammar is complete"
+  },
+  "E_TOO_MANY_TOKENS": {
+   "severity": "error",
+   "meaning": "tokens after a complete value"
+  },
+  "E_NOT_A_NUMBER": {
+   "severity": "error",
+   "meaning": "a token that must be a number"
+  },
+  "E_NOT_AN_INTEGER": {
+   "severity": "error",
+   "meaning": "a token that must be an integer"
+  },
+  "E_OUT_OF_RANGE": {
+   "severity": "error",
+   "meaning": "a number or integer outside its allowed range"
+  },
+  "E_EMPTY_RANGE": {
+   "severity": "error",
+   "meaning": "a range or window whose low end is above its high end"
+  },
+  "E_NOT_IN_LIST": {
+   "severity": "error",
+   "meaning": "a word that is not one of the closed list allowed here"
+  },
+  "E_UNKNOWN_UNIT": {
+   "severity": "error",
+   "meaning": "a token that is no unit (fix: the unit whose spelling differs only in case)"
+  },
+  "E_UNIT_MISSING": {
+   "severity": "error",
+   "meaning": "a dimensioned value without its unit (there is no default unit)"
+  },
+  "E_UNIT_NOT_ALLOWED": {
+   "severity": "error",
+   "meaning": "a unit of another dimension, or one the quantity does not allow"
+  },
+  "E_NUISANCE_MODE": {
+   "severity": "error",
+   "meaning": "a nuisance without its mode fixed or fit"
+  },
+  "E_MODE_NOT_ALLOWED": {
+   "severity": "error",
+   "meaning": "a nuisance mode or prior the quantity or field does not allow"
+  },
+  "E_PRIOR_SYNTAX": {
+   "severity": "error",
+   "meaning": "a prior that is not 'prior <centre> <width>[%]' with a width > 0"
+  },
+  "E_PART_MISSING": {
+   "severity": "error",
+   "meaning": "a structured value without one of its required keywords"
+  },
+  "E_PART_TWICE": {
+   "severity": "error",
+   "meaning": "a keyword given twice in a structured value"
+  },
+  "E_FORMULA_SYNTAX": {
+   "severity": "error",
+   "meaning": "a formula that is not quoted, or a parameter that is not <name>=<number>"
+  },
+  "E_SPIN_SYNTAX": {
+   "severity": "error",
+   "meaning": "a spin that is not 0, 1, 3/2, ... (with + or - where a parity is needed)"
+  },
+  "E_NUCLEUS_SYNTAX": {
+   "severity": "error",
+   "meaning": "a nuclide that is not <A><Symbol>, or with A < Z"
+  },
+  "E_UNKNOWN_ELEMENT": {
+   "severity": "error",
+   "meaning": "an element symbol that is not in the table (physics/Elements.h)"
+  },
+  "E_PAIR_SYNTAX": {
+   "severity": "error",
+   "meaning": "a particle pair that is not <particle>+<nucleus>[<E_x>]"
+  },
+  "E_WINDOW_SYNTAX": {
+   "severity": "error",
+   "meaning": "fold windows that are not <lo>-<hi> ... <unit> or auto[:tol[:margin]]"
+  },
+  "E_REACTION_SYNTAX": {
+   "severity": "error",
+   "meaning": "a reaction expression that does not follow section 3.5"
+  },
+  "E_REACTION_ORDINAL": {
+   "severity": "error",
+   "meaning": "an ordinal particle label (a1, p2): name the state by its excitation energy (F4)"
+  },
+  "E_REACTION_BALANCE": {
+   "severity": "error",
+   "meaning": "a reaction that does not conserve Z and A"
+  },
+  "E_REACTION_NOT_ALLOWED": {
+   "severity": "error",
+   "meaning": "a reaction (or pair) the quantity is not defined for"
+  },
+  "E_UNKNOWN_ROLE": {
+   "severity": "error",
+   "meaning": "a column role that is not in the role table"
+  },
+  "E_ROLE_UNIT": {
+   "severity": "error",
+   "meaning": "an energy or angle role without its unit in brackets, or a unit on a role without one"
+  },
+  "E_ROLE_TWICE": {
+   "severity": "error",
+   "meaning": "a column role given twice"
+  },
+  "E_ROLE_REQUIRED": {
+   "severity": "error",
+   "meaning": "a column the quantity requires is missing"
+  },
+  "E_ROLE_NOT_ALLOWED": {
+   "severity": "error",
+   "meaning": "a column role the quantity does not take"
+  },
+  "E_UNKNOWN_REFERENCE": {
+   "severity": "error",
+   "meaning": "a name that no record has (fix: the nearest name of the right kind)"
+  },
+  "E_REFERENCE_KIND": {
+   "severity": "error",
+   "meaning": "a name of a record of another kind than the field needs"
+  },
+  "E_UNKNOWN_EPOCH": {
+   "severity": "error",
+   "meaning": "target@epoch where the target has no such epoch"
+  },
+  "E_TARGET_KIND": {
+   "severity": "error",
+   "meaning": "a target whose kind the quantity does not take"
+  },
+  "E_DEGENERATE_NUISANCE": {
+   "severity": "error",
+   "meaning": "efficiency and norm both free without a prior (F9)"
+  }
+ }
+}

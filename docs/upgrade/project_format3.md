@@ -78,6 +78,10 @@ ends at the next header line or at the section's closing tag. Indentation is not
 spaces). `#` starts a comment anywhere outside quotes. Tokens are separated by blanks; a token with blanks is quoted
 (`"data/run 1.dat"`). Keys are lower case with underscores; record kinds and field keys are disjoint sets, so a line is
 a header or a field by its first token alone.
+**[Correction, step 2 (2026-11-10): the note's own records break both rules. `norm`, `target`, `beam` and `detector` are record kinds and
+also data-set fields, and `J` is an upper-case key. Implemented: kinds and keys are disjoint *within a section*
+(checked by `experiment_schema`), each section is read with its own kinds, and the shared-normalization record is
+renamed `normalization` (it lives in `<data>` beside the field `norm`); keys are `[A-Za-z][A-Za-z0-9_]*`.]**
 
 Why records and not today's one-line keyword lists:
 
@@ -98,7 +102,7 @@ form. A record block inside today's sections keeps one document model and one ta
 
 | section | record kinds | replaces |
 |---|---|---|
-| `<data>` | `dataset`, `norm`, `energy_scale` | `<segmentsData>`, the group keywords |
+| `<data>` | `dataset`, `normalization` (§3.1 correction), `energy_scale` | `<segmentsData>`, the group keywords |
 | `<extrapolations>` | `extrapolation` | `<segmentsTest>` |
 | `<targets>` | `target`, `beam`, `detector` | `<targetInt>`, `<abundances>`, `transmission`/`yield` sample thicknesses |
 | `<modelData>` | `datum` | `<scatteringLengths>`; new: ωγ, E_r, Γ, branching, ANC (M10) |
@@ -121,6 +125,9 @@ listed for their kind.
   ```
   <value> [<unit>] fixed|fit|profiled [prior <centre> <width>[%]] [grid_max <value>]
   ```
+
+  **[Correction, step 2 (2026-11-10): T2's THM data sets write `norm profiled` without a value (§3.9, §3.11). Implemented:
+  `<value> [<unit>] fixed|fit [prior …] [grid_max …] | profiled`, `profiled` alone.]**
 
   The mode is required. `prior` always states its centre (today's `prior_centre` rows of `<parameterSettings>` become
   the centre, `data_formats.rst:189`); a width with `%` is relative to the centre. `fit` without `prior` is a free
@@ -164,7 +171,7 @@ dataset <name>
 |---|---|---|
 | `E_lab` | beam energy of the light particle on the heavy one at rest (forward kinematics) | in the role: `E_lab[MeV]` |
 | `E_cm` | entrance-channel c.m. energy | `E_cm[keV]` … |
-| `E_x` | excitation energy of the compound nucleus | |
+| `E_x` | excitation energy of the compound nucleus [step 2: no quantity row of §7.2 accepts it; kept as a role] | |
 | `E_decay` | lab energy of the detected particle of a decay at rest (β-delayed) | |
 | `theta_lab`, `theta_cm` | detection angle | `theta_cm[deg]`, `[rad]` |
 | `order` | Legendre order k (integer) | — |
@@ -211,6 +218,9 @@ reaction  12C(p,p)12C / 12C(p,p)12C @ 90 deg cm            # denominator at a fi
 reaction  20Ne(n,n)20Ne + 0.5*20Ne(n,a)17O                 # a scaled term
 ```
 
+**[Correction, step 2 (2026-11-10): the third example is a ratio of differential cross sections, quantity `dsigma_domega` in unit `1`, which
+the `dsigma_domega` row of §7.2 did not allow. Implemented: that row takes `1` with a ratio reaction, as `sigma` does.]**
+
 No parentheses and no ratio of sums: the tree has `Sum`, `Scale`, `Ratio(base, t1)` (`data_model.md` §2.3), and the
 grammar writes exactly those. The first term is the base term whose frame the others are converted to (today's rule,
 `ESegment.cpp:1487-1493` via `data_model.md` §1.5).
@@ -227,6 +237,10 @@ energy_scale G
     function   "a0*(x-0.8)"                                  # x = E_lab of the point (MeV)
     param      a0 0 fit prior 0 0.01                          # repeatable, one per parameter
 ```
+
+**[Correction, step 2 (2026-11-10): the record kind is `normalization D` (§3.1 correction); the function states the unit of its result,
+`function "a0*(x-0.8)" MeV` (principle 5); with b in MeV^1/2 the sqrt term is E' = E + b sqrt(E), E in MeV (b sqrt(E/MeV)
+would make b an energy; `include/SegLine.h:214` has the same comment).]**
 
 A data set says `norm D` or `shift G`. The value lives in one place; no data set carries a copy that is ignored.
 `shiftgroup G` (shared offset and function) is `shift G` on each member; `shiftfngroup F` (shared function, own
@@ -270,6 +284,7 @@ target C13A
     #  or          evaluation scale 1 fit prior 1 4%           (Phase 5 stopping, ARCHITECTURE.md §7)
     straggling     bohr                                      # none | bohr | coefficient <c> keV^1/2 cm
     phase          solid                                     # solid | gas; only with 'stopping evaluation'
+    #              [Correction, step 2: refused here, since this target's stopping is a formula; fixture without it]
     isotope        13C 0.99 fixed                            # repeatable; abundance weights of Weighted
     doppler        free_gas 300 K fixed
     screening      1000 eV fit prior 1000 200
@@ -424,7 +439,7 @@ target tgt_s06_gas                              # line 5
     straggling     none
     doppler        free_gas 300 K fixed
 beam beam_s06_gas
-    spread         formula "a0*x" a0=0.004 lab
+    spread         formula "a0*x" a0=0.004 lab          # [Correction, step 2: ... a0=0.004 MeV lab, the unit of sigma]
 beam beam_s07_profile                           # line 6
     profile        skewed_gaussian xi 0.34 MeV omega 0.035 MeV alpha 1.5 weight 1.0
     truncation     0
@@ -446,7 +461,7 @@ norm D                                          # normgroup D, value of s02 (s03
     value          1 fit prior 1 8%
 energy_scale G                                  # shiftgroup G, from s02 (s03's 0 0 0 was ignored)
     offset         0 MeV fit prior 0 0.003
-    function       "a0*(x-0.8)"
+    function       "a0*(x-0.8)"                 # [Correction, step 2: "a0*(x-0.8)" MeV; the record is 'normalization D']
     param          a0 0 fit prior 0 0.01
 
 dataset s01_int_thin
@@ -668,7 +683,7 @@ at once in a form it can act on, and to check what a record means before computi
 
 ```json
 {"schema_version": "3.0", "engine_version": "2.2.0",
- "sections": {"data": ["dataset", "norm", "energy_scale"], "targets": ["target", "beam", "detector"],
+ "sections": {"data": ["dataset", "normalization", "energy_scale"], "targets": ["target", "beam", "detector"],
               "extrapolations": ["extrapolation"], "modelData": ["datum"]},
  "value_types": {"nuisance": {"grammar": "<value> [<unit>] fixed|fit|profiled [prior <centre> <width>[%]] [grid_max <value>]"}, "...": {}},
  "records": {"dataset": {"fields": {
@@ -687,6 +702,8 @@ at once in a form it can act on, and to check what a record means before computi
 Everything a front end needs is in it: record kinds, fields with types, units and allowed values, required and
 conditional fields, which fields apply to which quantity, refusals, diagnostic codes. It is versioned
 (`schema_version`); a golden copy is committed and a change needs a version bump (check 21).
+**[Correction, step 2 (2026-11-10): `engine_version` is left out of the document: the committed copy would change with every engine version
+without a change of the table, which check 21 cannot tell apart; the engine version is the binary's own.]**
 
 ### 6.2 Validate
 
@@ -1008,7 +1025,7 @@ branching ε.
 
 | | (a) |
 |---|---|
-| file | `target C13A` `kind layer`, `active 13C`, `composition C 1`, `areal_density 1.2e18 atoms/cm2 fit prior 1.2e18 15%`, `stopping evaluation scale 1 fit prior 1 4%`, `straggling bohr`; `beam pbeam` `spread 0.3 keV lab`; `dataset Y_curve` `reaction 13C(p,g)14N`, `quantity yield`, `unit counts/uC`, `charge_state 1`, `efficiency 0.0182 fit prior 0.0182 3%`, `file data/yield_curve.dat`, `columns E_lab[keV] value error`, `norm 1 fixed`, `target C13A`, `beam pbeam`; `dataset Y_scan` the same with its file and `efficiency 0.0175 fit prior 0.0175 3%` |
+| file | `target C13A` `kind layer`, `active 13C`, `composition C 1`, `areal_density 1.2e18 atoms/cm2 fit prior 1.2e18 15%`, `stopping evaluation scale 1 fit prior 1 4%`, `straggling bohr` [correction, step 2: and `phase solid`, required with `stopping evaluation`]; `beam pbeam` `spread 0.3 keV lab`; `dataset Y_curve` `reaction 13C(p,g)14N`, `quantity yield`, `unit counts/uC`, `charge_state 1`, `efficiency 0.0182 fit prior 0.0182 3%`, `file data/yield_curve.dat`, `columns E_lab[keV] value error`, `norm 1 fixed`, `target C13A`, `beam pbeam` [correction, step 2: and `quadrature points <n>`, required on a folded data set, §7.2]; `dataset Y_scan` the same with its file and `efficiency 0.0175 fit prior 0.0175 3%` |
 | Python | `p.add_target("C13A", kind="layer", active="13C", composition="C 1", areal_density="1.2e18 atoms/cm2 fit prior 1.2e18 15%", stopping="evaluation scale 1 fit prior 1 4%", straggling="bohr")`; `p.add_beam("pbeam", spread="0.3 keV lab")`; `p.add_dataset("Y_curve", reaction="13C(p,g)14N", quantity="yield", unit="counts/uC", charge_state=1, efficiency="0.0182 fit prior 0.0182 3%", file="data/yield_curve.dat", columns="E_lab[keV] value error", norm="1 fixed", target="C13A", beam="pbeam")`; without `charge_state` the error of §4.2 |
 | GUI | Data → "+ Data set": reaction p + ¹³C → γ + ¹⁴N (g.s.); quantity "Yield"; unit drop-down → "counts/µC" makes "Charge state q" and "Efficiency × branching" appear; Target "+ New target…" opens the target form (kind "Layer" shows active nucleus, composition, areal density with Fit and prior, stopping, straggling, phase); the second data set picks C13A from the drop-down. Preview: "yield of ¹³C(p,γ)¹⁴N(g.s.) over target C13A (layer of ¹³C, N fitted, prior 15 %, stopping evaluation with scale fitted), beam spread 0.3 keV, × 10⁻⁶ C/(1·e) × ε (fitted, prior 3 %) → counts/µC; parameters C13A.areal_density, C13A.stopping.scale, Y_curve.efficiency" |
 | agent | reads `quantities.yield` in `--schema` (requires target; `counts/uC` ⇒ `charge_state`, `efficiency`); writes the three records; `--validate --json` → `[]`; `--describe --record Y_curve --json` → `Scale(1e-6/(q e)) · Scale(ε) · Fold_layer(C13A)[sigma(13C(p,g)14N)]` |
@@ -1026,7 +1043,7 @@ the window (`TargetEffect.h:89-101`).
 | GUI | reaction α + ¹²C → α + ¹²C; quantity list shows "Ratio to Rutherford" (enabled: elastic, charged, non-identical); column roles from the file preview; the form reports "5 angles: 30, 60, 90, 120, 150 deg (lab)". Preview: "ratio of dσ/dΩ(c.m.) of ¹²C(α,α)¹²C to the Rutherford cross section at the same c.m. angle; lab angles converted with α + ¹²C elastic kinematics; no apparatus; normalization fitted, prior 1 ± 3 % (one parameter for all five angles: aC_RTH.norm)" |
 | agent | `--describe` returns `Ratio(dsdo_cm(12C(a,a)12C), rutherford(12C(a,a)12C))`, value unit 1, angles lab → c.m. |
 
-If the five angles are five files, five data sets name one `norm aC` record (`value 1 fit prior 1 3%`): one parameter,
+If the five angles are five files, five data sets name one `normalization aC` record (§3.1 correction) (`value 1 fit prior 1 3%`): one parameter,
 one prior.
 
 ### 9.3 (c) ωγ and E_r of one level from the literature

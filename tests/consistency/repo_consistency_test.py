@@ -205,21 +205,27 @@ for dirpath, _, files in os.walk(os.path.join(ROOT, "io")):
 
 
 
-# 9b. experiment/ uses physics/ only (docs/upgrade/data_model.md section 2.5, decision M1): its own headers
-#     ("azure2/experiment/..."), physics/'s ("azure2/physics/...") and the C++ standard library.  An engine header
-#     (EPoint.h, Config.h), io/ or a system library makes the module depend on what it must not.
+# 9b. experiment/ uses physics/ and io/'s plain record structs only (docs/upgrade/data_model.md section 2.5, decision
+#     M1; docs/upgrade/project_format3.md section 7.3, the director's decision of 2026-11-09): its own headers
+#     ("azure2/experiment/..."), physics/'s ("azure2/physics/..."), the one header "azure2/io/Record.h" (header-only
+#     structs) and the C++ standard library.  Its tests may also include io/'s reader ("azure2/io/..."): they read
+#     their fixtures as the engine will.  An engine header (EPoint.h, Config.h), another io/ header in the library
+#     or a system library makes the module depend on what it must not.
 for dirpath, _, files in os.walk(os.path.join(ROOT, "experiment")):
     for name in sorted(files):
         if not name.endswith((".h", ".hpp", ".cpp")):
             continue
         rel = os.path.relpath(os.path.join(dirpath, name), ROOT)
+        in_tests = rel.startswith(os.path.join("experiment", "tests") + os.sep)
         for inc in re.findall(r'^\s*#\s*include\s*([<"][^>"]+[>"])', read(rel), re.M):
             if inc.startswith('"') and inc[1:-1].startswith(("azure2/experiment/", "azure2/physics/")):
                 continue
+            if inc == '"azure2/io/Record.h"' or (in_tests and inc.startswith('"azure2/io/')):
+                continue
             if inc.startswith("<") and re.fullmatch(r"[a-z_]+", inc[1:-1]):
                 continue
-            problems.append(f"{rel}: includes {inc}; experiment/ may include only azure2/experiment/ and azure2/physics/ "
-                            "headers and the C++ standard library")
+            problems.append(f"{rel}: includes {inc}; experiment/ may include only azure2/experiment/, azure2/physics/ "
+                            "and azure2/io/Record.h headers (its tests also azure2/io/) and the C++ standard library")
 
 
 # 10. One set of physical constants (docs/upgrade/project.md section 5, step 5): physics/'s Constants.h holds u, hbar c,

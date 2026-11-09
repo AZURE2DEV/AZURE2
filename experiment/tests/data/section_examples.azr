@@ -1,0 +1,229 @@
+# The examples of docs/upgrade/project_format3.md sections 3.5-3.10 and 8.1 as records that validate.  Corrections to
+# the note, marked there: the target of section 3.7 has no 'phase' (only with 'stopping evaluation'); the formulas of
+# 'spread' and the energy_scale 'function' state their unit; the ratio of differential cross sections of section 3.5
+# is quantity dsigma_domega with unit 1.
+<targets>
+target C13B                                     # section 3.7
+    kind           layer
+    active         13C
+    composition    C 1
+    areal_density  1.2e18 atoms/cm2 fit prior 1.2e18 15%
+    epoch          run2 areal_density 1.0e18 atoms/cm2 fit prior 1.2e18 15%
+    stopping       formula "a0*x^a1" a0=1.6e-20 a1=-0.45 MeV*cm2/atom   # per active atom, x = E_lab/MeV
+    straggling     bohr
+    isotope        13C 0.99 fixed
+    doppler        free_gas 300 K fixed
+    screening      1000 eV fit prior 1000 200
+beam B1
+    spread         1 keV lab
+    profile        skewed_gaussian xi 0.34 MeV omega 0.035 MeV alpha 1.5 weight 1
+    truncation     0
+    detailed_balance no
+beam B2
+    spread         formula "a0*x" a0=0.004 MeV lab
+detector D90
+    attenuation    1 0.995 0.98 0.96 0.93
+    energy_resolution 4 keV lab
+    udr            file "res.udr" flight_path 20 m burst 5 ns channel 1 ns centred yes
+target natNe                                    # section 8.1, natural_neon
+    kind           none
+    isotope        20Ne 0.9048 fixed
+    isotope        22Ne 0.0925 fixed
+    isotope        21Ne 0.0027 fixed
+    isotope_sum    prior 1 0.01
+target tgt_artemov                              # section 8.1, tests/13N
+    kind           infinite
+    active         12C
+    stopping       formula "a0+a1*x" a0=1e-14 a1=2e-15 MeV*cm2/atom
+    straggling     none
+target sampleNe
+    kind           sample
+    active         20Ne
+    areal_density  0.05 atoms/b fit prior 0.05 2%
+</targets>
+<data>
+energy_scale G                                  # section 3.6
+    offset         0 MeV fit prior 0 0.003
+    sqrt           0 MeV^1/2 fixed
+    function       "a0*(x-0.8)" MeV
+    param          a0 0 fit prior 0 0.01
+dataset sum_scaled                              # section 3.5
+    reaction       20Ne(n,n)20Ne + 0.5*20Ne(n,a)17O
+    quantity       sigma
+    unit           b
+    file           data/sum.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+dataset ratio_fixed_angle                       # section 3.5
+    reaction       12C(p,p)12C / 12C(p,p)12C @ 90 deg cm
+    quantity       dsigma_domega
+    unit           1
+    file           data/ratio.dat
+    columns        E_lab[MeV] theta_cm[deg] value error
+    norm           1 fixed
+dataset Vaughn_ntot                             # section 8.1
+    reaction       20Ne(n,n)20Ne + 20Ne(n,a)17O + 20Ne(n,n)20Ne[1.634] + 22Ne(n,n)22Ne + 22Ne(n,n)22Ne[1.275] + 21Ne(n,n)21Ne + 21Ne(n,n)21Ne[0.351]
+    quantity       sigma
+    unit           b
+    file           data/Vaughn_ntot.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    target         natNe
+dataset artemov                                 # section 8.1
+    reaction       12C(p,g)13N
+    quantity       yield
+    unit           1/particle
+    file           data/artemov.dat
+    columns        E_lab[MeV] _ value error
+    norm           1 fixed
+    target         tgt_artemov
+    quadrature     points 40
+dataset epoch_run2                              # section 3.7, epochs
+    reaction       13C(p,g)14N
+    quantity       sigma
+    unit           ub
+    file           data/run2.dat
+    columns        E_lab[keV] value error_percent
+    norm           1 fit prior 1 5%
+    shift          G
+    shift          offset 0.5 keV fixed
+    target         C13B@run2
+    beam           B1
+    detector       D90
+    quadrature     points 30 width_multiplier 20 per_width 50
+    fold_windows   0.2-0.4 0.5-0.6 MeV blend 2 keV auto_tolerance 1e-3
+dataset legendre_a                              # section 7.2, legendre
+    reaction       12C(a,a)12C
+    quantity       legendre
+    expansion      a_over_a0
+    unit           1
+    file           data/leg.dat
+    columns        E_cm[MeV] order value error
+    norm           1 fixed
+dataset phase_p                                 # section 7.2, phase_shift
+    reaction       12C(p,p)12C
+    quantity       phase_shift
+    unit           deg
+    J              1/2
+    l              0
+    s              1/2
+    file           data/phase.dat
+    columns        E_lab[MeV] value error
+    norm           1 fixed
+dataset transmission_Ne                         # section 7.2, transmission
+    reaction       20Ne(n,n)20Ne + 20Ne(n,a)17O
+    quantity       transmission
+    unit           1
+    file           data/trans.dat
+    columns        E_lab[MeV] value error
+    norm           1 fixed
+    target         sampleNe
+    detector       D90
+    quadrature     points 20
+dataset thm_global                              # section 3.9
+    reaction       15N(p,a)12C
+    quantity       dsigma_domega
+    unit           b/sr
+    thm            global
+    file           data/thm.dat
+    columns        E_cm[MeV] theta_cm[deg] value error
+    norm           1 fit
+</data>
+<extrapolations>
+extrapolation S_low                             # section 3.8
+    reaction       12C(p,g)13N
+    quantity       sfactor
+    unit           keV*b
+    energies       range 0.02 0.8 MeV cm step 0.002
+    angles         none
+extrapolation S_points
+    reaction       12C(p,g)13N
+    quantity       sfactor
+    unit           keV*b
+    energies       range 0.02 0.8 MeV cm points 200 log
+extrapolation S_list
+    reaction       12C(p,g)13N
+    quantity       sfactor
+    unit           keV*b
+    energies       list 0.025 0.05 0.1 0.2 MeV cm
+extrapolation S_file
+    reaction       12C(p,g)13N
+    quantity       sfactor
+    unit           keV*b
+    energies       file "grid.txt" MeV lab
+extrapolation S_adaptive
+    reaction       12C(p,g)13N
+    quantity       sfactor
+    unit           keV*b
+    energies       adaptive 0.02 0.8 MeV cm tolerance 1e-3 max_points 2000 start_step 0.01
+extrapolation dsdo_grid
+    reaction       12C(p,p)12C
+    quantity       dsigma_domega
+    unit           mb/sr
+    energies       range 0.3 2.0 MeV lab step 0.01
+    angles         range 0 180 deg cm step 5
+    beam           B1
+    quadrature     points 20
+extrapolation leg_grid
+    reaction       12C(a,a)12C
+    quantity       legendre
+    expansion      absolute
+    unit           b/sr
+    energies       range 1 3 MeV cm step 0.01
+    orders         0 4
+</extrapolations>
+<modelData>
+datum wg_L5b                                    # section 3.10
+    quantity       resonance_strength
+    level          5
+    J              3-
+    reaction       15N(p,a)12C
+    value          2.63 keV
+    error          0.15 keV
+    source         "author, journal volume page (year), table 2"
+datum Er_cm
+    quantity       resonance_energy
+    level          5
+    J              3-
+    frame          E_cm
+    pair           p+15N
+    value          1.0 MeV
+    error          1 keV
+datum width_a1
+    quantity       partial_width
+    level          5
+    J              3-
+    pair           a+12C[4.439]
+    value          0 eV
+    error          1 eV
+datum Gtot
+    quantity       total_width
+    level          5
+    J              3-
+    value          14.62 keV
+    error          0.2 keV
+datum br
+    quantity       branching_ratio
+    level          5
+    J              3-
+    reaction       15N(p,a)12C
+    value          88 %
+    error          1 %
+datum anc_gs
+    quantity       anc
+    level          1
+    J              1/2-
+    pair           p+12C
+    l              1
+    s              1/2
+    value          1.6 fm^-1/2
+    error          0.1 fm^-1/2
+datum a_n20Ne
+    quantity       scattering_length
+    pair           n+20Ne
+    s              coherent
+    value          4.6 fm
+    error          0.1 fm
+    imag           0.01 fm
+    imag_error     0.005 fm
+</modelData>
