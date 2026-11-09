@@ -456,6 +456,14 @@ set_tests_properties(pyazr_potential_sessions PROPERTIES ENVIRONMENT "OMP_NUM_TH
 
 # chiSquared.out written through the API carries the Park, abundance and scattering-length totals
 # (2026-10-27, audit item 30).
+# The fit's objective through pyazr (docs/upgrade/objective.md step 4): objective() = objective_and_grad()[0] = the sum
+# of the engine's terms, the gradient against finite differences, on models with norm, shift-function and
+# scattering-length terms.
+add_test(NAME pyazr_objective
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/objective_test.py)
+set_tests_properties(pyazr_objective PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
 add_test(NAME pyazr_output_penalties
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/output_penalties_test.py)
