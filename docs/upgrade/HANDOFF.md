@@ -14,6 +14,13 @@ the owner's AI keeps adding features. Agreed:
 **PI, 2026-11-10: no merge with `origin/dev` during the reconstruction;** it is planned only when everything is
 complete. The assessment below is kept for then.
 
+**Requested feature (PI, 2026-11-10), after Phase 3, as the first feature through the new recipes:** extrapolation
+segments on a non-uniform grid. Proposed design (format 2, a `<segmentsTest>` keyword):
+- `energies <file>`, or `energies E1 E2 ...` inline, replaces min/max/step;
+- `adaptive <tol>` bisects, from the coarse uniform grid, every interval where the curve departs from linear
+  interpolation by more than `tol` (relative), up to a point budget, seeded with the level energies and widths;
+- reuse `AdaptiveIntegrationGrid` where it fits.
+
 **`origin/dev` since the upgrade branched (2026-11-08, 18 commits, measured 2026-11-10):**
 - documentation (skills), 10 commits;
 - portable as they are: target-effect auto windows (442610f3, 3a104e06), UDR time-of-flight kernels at low energy
