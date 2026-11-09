@@ -10,7 +10,7 @@ set(_coul ${_pc}/coul/src/complex_functions.cpp ${_pc}/coul/src/cwfcomp.cpp ${_p
           ${_pc}/src/method_coul.cpp)
 set(_coulfg ${_pc}/coulfg/src/coulfg2.c ${_pc}/src/method_coulfg.cpp)
 set(_coulcc ${_pc}/coulcc/src/coulcc.cpp ${_pc}/coulcc/src/kernels.cpp ${_pc}/src/method_coulcc.cpp)
-target_sources(azure2_physics PRIVATE ${_pc}/src/Coulomb.cpp ${_coulsm} ${_coul} ${_coulfg} ${_coulcc})
+target_sources(azure2_physics PRIVATE ${_pc}/src/Coulomb.cpp ${_pc}/src/Whittaker.cpp ${_coulsm} ${_coul} ${_coulfg} ${_coulcc})
 target_include_directories(azure2_physics PUBLIC ${_pc}/include)
 # Include directories: the third-party sources see their own directory; the adaptors (ours, compiled with the physics
 # target's warnings) see it as a system directory (-isystem), so that the third-party headers' warnings are not

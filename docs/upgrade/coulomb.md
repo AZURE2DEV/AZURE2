@@ -73,10 +73,67 @@ For E_c < 0 the decaying solution of (1) with κ = |k| and η_b = Z₁Z₂ e² �
 and the bound-channel shift function is S_c = ρ W′/W at ρ = κ a_c. The interface is pycoulomb's: `whittaker(l, η_b,
 ρ)` → W, W′, status, and `whittaker_scaled(l, η_b, ρ)` → mantissa, log₁₀ scale, ρW′/W, which stays finite just below a
 charged threshold, where η_b grows like E_b^−½ and W underflows. pycoulomb computes U with GSL's `gsl_sf_hyperg_U`,
-which physics/ cannot use. **This branch does not move the Whittaker functions**: `WhitFunc` and `ShftFunc` stay in
-the engine until a GSL-free U is in `physics/coulomb/` (proposed: COULCC at imaginary argument, which gives H⁺ and
-hence W up to a known factor, checked against mpmath and GSL), with a comparison of the bound-state outputs, which will
-move in their last digits (section 6).
+which physics/ cannot use.
+
+**Design (2026-11-08, step 3b (i)).** Three ways were compared on 990 points (l = 0–8; η_b = 0, 0.01, 0.3, 1, 2, 3,
+5, 10, 30, 100, 300; ρ = 10⁻³–50) against mpmath's `whitw` at 40 digits:
+
+| method | worst relative error of W | points without a value |
+|---|---|---|
+| GSL `gsl_sf_hyperg_U` (the engine's `WhitFunc`) | 1.2 × 10⁻⁹ (l = 0, η_b = 100, ρ = 10⁻³) | 90 (GSL error, overflow or underflow) |
+| COULCC at ρ = iκr, η = −iη_b (the earlier proposal) | — | 0/0 at η_b = l + 1, l + 2, … (below) |
+| the integral representation below (Python prototype) | 4.6 × 10⁻¹³ (l = 5, η_b = 300, ρ = 10⁻³) | 0 |
+
+COULCC was dropped: H⁺_l(−iη_b, iκr) = e^{−i(l+η_b)π/2} [Γ(l+1+η_b)/Γ(l+1−η_b)]^½ W_l(κr) (DLMF 33.2.7; checked
+with mpmath to 30 digits), and the factor vanishes at η_b = l + 1, l + 2, …, so W = H⁺/factor loses digits there,
+however accurate H⁺ is. Its logarithmic derivative is normalization-free, but the ANC conversions and N_f need W
+itself.
+
+**Method.** For a = l + 1 + η_b ≥ 1 (η_b ≥ 0: a neutral or repulsive pair; nuclear pairs are never attractive),
+b = 2l + 2, z = 2ρ:
+
+    U(a, b, z) = (1/Γ(a)) ∫₀^∞ e^{−zt} t^{a−1} (1+t)^{b−a−1} dt,    dU/dz = −a U(a+1, b+1, z)   (DLMF 13.4.4, 13.3.22)
+
+so that ln W = −ρ + (l+1) ln 2ρ − ln Γ(a) + ln I(a, b, 2ρ) and ρW′/W = −ρ + (l+1) − 2aρ I(a+1, b+1, 2ρ)/I(a, b, 2ρ)
+(primes d/dρ). The integrand is positive and has one maximum t₀ (a quadratic in t); with t = t₀ exp[(π/2) sinh s]
+(double-exponential in both tails) the trapezoidal sum in s converges geometrically. The sum is formed in
+logarithms (largest term factored out), so W is never formed before the end: `whittaker_scaled` returns mantissa
+and power of ten, and `whittaker` returns W, W′ when they are inside the double range and `out_of_range` (NaN)
+otherwise. The step is halved from 1/2 until two sums agree to 4ε; terms are summed while they exceed e⁻⁴⁰ of the
+largest. No GSL, no table, no state: the same arguments give the same bits in any thread.
+
+**Interface** (`Whittaker.h` in `physics/coulomb`, beside `Coulomb.h`):
+
+    struct WhittakerWave { double W, Wp; Status status; };                 // W_l(ρ) = W_{−η_b, l+½}(2ρ), dW/dρ
+    struct WhittakerScaled { double mantissa; long log10_scale; double rho_dlog; Status status; };
+    WhittakerWave whittaker(int l, double eta_b, double rho) noexcept;    // out_of_range outside the double range
+    WhittakerScaled whittaker_scaled(int l, double eta_b, double rho) noexcept;   // W = mantissa·10^scale, ρW′/W
+
+`invalid_argument` for l < 0 or > 10000, η_b < 0 or not finite, ρ ≤ 0 or not finite. The binding exposes both with
+array inputs.
+
+**Tests.** `physics_whittaker` against a committed mpmath reference (`physics/tests/data/whittaker.csv`, made by
+`make_whittaker_reference.py`, 40 digits: l = 0–10, η_b = 0–1000, ρ = 10⁻⁴–200, the scaled form where W leaves the
+double range), with the tolerance set from the measured error; ρW′/W against mpmath's derivative; the same bits from
+eight threads; `invalid_argument` cases. Outside physics/, a reference test compares with GSL (where GSL gives a
+value) and times both. Speed decides the engine part: `ECIntegral` spends about 85 % of its time in GSL's U.
+
+**Part 1 verified (2026-11-09; build of bf8622e2, GCC 11.5 Release, pyazr on).** No warnings. `ctest -LE slow`
+114/114, with `physics_whittaker`, `whittaker_gsl` and `pyazr_whittaker_wave` (the binding) passing in the full
+build; 1 vs 8 threads byte-identical (T1–T3, 13N, three bases); the 179 projects × 3 bases against a18fe89e:
+2040/2040 files identical (the engine does not call the new functions yet). `run_tests.sh` was not run: no engine
+path changed.
+
+**Engine (step 3b (i), second part, after the timing).** `WhitFunc` becomes a thin adapter over `whittaker` /
+`whittaker_scaled` (it keeps η_b and ρ from `Kinematics`); `ShftFunc`'s bound branch takes ρW′/W in place of
+`CoulombTable::ExactBound` (GSL's U ratio, trusted for η_b ≤ 1000 and η_b ≤ 50 or z ≥ 0.05, linearly interpolated
+to S(0) closer to threshold; the numerical derivative of W is only the opt-in `AZURE_BOUND_SHIFT_NUMERICAL` route).
+The new function holds 10⁻¹² over that band and below it, so whether the interpolation band narrows (outputs near
+threshold move) is decided with its own comparison. `CoulombTable`, `ThmNumerics` and `ThmFunc` call the same
+function; GSL's U leaves the engine. In the data path `ECIntegral` evaluates W at every radius its adaptive rule
+samples (13× GSL's time per call); the rate path already tabulates the final-state W once per pathway on a fixed
+grid, and the per-integral table of step 3b (ii) does the same for the data path. Bound-state outputs (ANC ↔ γ conversions, N_f, external capture to bound states, sub-threshold shifts) move
+in their last digits; the 179-project comparison classifies every change, and the T1–T3 truth checks must hold.
 
 ## 2. Channel functions
 

@@ -795,6 +795,8 @@ class Session {
   AZUREAPI *api_;
 };
 
+void BindPhysics(py::module_ &m);  // pybind_physics.cpp: the free functions of physics/
+
 PYBIND11_MODULE(_azure2, m) {
   m.doc() = "In-process bindings for the AZURE2 R-matrix engine.";
 
@@ -805,6 +807,7 @@ PYBIND11_MODULE(_azure2, m) {
   gsl_set_error_handler(&GSLException::GSLErrorHandler);
 
   py::register_exception<AZURE2Error>(m, "AZURE2Error", PyExc_RuntimeError);
+  BindPhysics(m);
 
   // The engine's reading of a <thm> block, for AzrModel (pyazr/azrfile.py),
   // which edits files without a session.  No files are read.

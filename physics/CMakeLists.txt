@@ -81,6 +81,15 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
 endif()
 add_test(NAME physics_channel_functions COMMAND physics_channel_functions_test ${CMAKE_CURRENT_SOURCE_DIR}/tests/data/coulomb.csv)
 
+# The Whittaker functions of bound channels against mpmath (tests/data/whittaker.csv, make_whittaker_reference.py):
+# W and rho W'/W, the double range, argument checks, thread independence (docs/upgrade/coulomb.md section 1.4).
+add_executable(physics_whittaker_test tests/whittaker_test.cpp)
+target_link_libraries(physics_whittaker_test PRIVATE azure2_physics Threads::Threads)
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+  target_compile_options(physics_whittaker_test PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+add_test(NAME physics_whittaker COMMAND physics_whittaker_test ${CMAKE_CURRENT_SOURCE_DIR}/tests/data/whittaker.csv)
+
 if(NOT AZURE2_PHYSICS_STANDALONE)
   # physics/ configured, built and tested on its own, in a fresh build tree under this one.
   add_test(NAME physics_standalone

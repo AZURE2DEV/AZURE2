@@ -526,6 +526,13 @@ add_test(NAME pyazr_zero_width_fixed
                  ${CMAKE_CURRENT_SOURCE_DIR}/zero_width_fixed_test.py)
 set_tests_properties(pyazr_zero_width_fixed PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
+# pyazr.whittaker_wave: the engine's GSL-free Whittaker function (docs/upgrade/coulomb.md section 1.4) against
+# mpmath, the scaled form outside the double range, broadcasting, ValueError for invalid arguments.
+add_test(NAME pyazr_whittaker_wave
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/whittaker_wave_test.py)
+set_tests_properties(pyazr_whittaker_wave PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
 # The R-matrix route (<config> first line false) at a pole of the R-matrix: tests/13N's thick-target capture puts a
 # sub-point exactly at a level's energy (NaN / 1.2 % off before 2026-11-01); identical_pp_res and natural_neon hit an
 # exact pole with Brune (LU failure / 84 points 0).  ~4 min.

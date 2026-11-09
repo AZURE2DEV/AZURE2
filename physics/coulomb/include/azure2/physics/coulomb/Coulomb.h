@@ -34,7 +34,8 @@ enum class Method {
 enum class Status {
   ok,
   invalid_argument,  ///< l < 0 or l > 10000, eta or rho not finite, rho <= 0
-  failed             ///< the algorithm threw, reported failure or returned a non-finite value
+  failed,            ///< the algorithm threw, reported failure or returned a non-finite value
+  out_of_range       ///< the value exists but is outside the range of a double (Whittaker.h: whittaker)
 };
 
 /// Coulomb functions at one (l, eta, rho).
