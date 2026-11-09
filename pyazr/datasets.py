@@ -227,8 +227,6 @@ def _shiftfn_block(vals):
     return expr, params
 
 
-@dataclass
-
 def _tag_index(lines, tag):
     """The index of the first line that is ``tag`` once trimmed (a tag is a whole line, any spaces and line ending
     around it; docs/upgrade/project.md, P2); ValueError when there is none."""
@@ -238,6 +236,7 @@ def _tag_index(lines, tag):
     raise ValueError(f"{tag} is not in the file")
 
 
+@dataclass
 class Segment:
     """One data segment: its provenance and what it measures."""
 
