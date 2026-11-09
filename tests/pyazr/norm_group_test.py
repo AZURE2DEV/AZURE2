@@ -64,7 +64,8 @@ try:
     SegmentSet._parse(last.split()[:-3], 99)     # "... normgroup" with no label
     check("a normgroup without a label is refused", False, "no error")
 except ValueError as err:
-    check("a normgroup without a label is refused", "normgroup without a label" in str(err), str(err))
+    # The engine's message (pyazr reads segment lines through SegLine since Phase 3 step 3; project.md section 5).
+    check("a normgroup without a label is refused", "normgroup needs a label" in str(err), str(err))
 
 print("\n3. with the engine: parameters, penalty, chi2 and Jacobian")
 try:
