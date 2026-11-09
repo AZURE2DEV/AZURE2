@@ -1820,6 +1820,13 @@ class azure2:
     def penalties(self, params=None):
         """The prior terms AZURE2 adds to chi-squared, per segment.
 
+        All of them come from the engine's objective (Phase 2,
+        docs/upgrade/objective.md; before pyazr 2.11 this method recomputed
+        most of them in Python): a fixed parameter pays no prior, a profiled
+        THM norm has none, and the prior covariance replaces the own priors of
+        the parameters it lists.  The key ``"nuisance"`` holds the
+        ``<parameterSettings>`` nuisance priors (``useAsNuisance``).
+
         ``AZURECalc::operator()`` does not minimize the data chi-squared alone.
         For every segment it also adds
 
@@ -1874,137 +1881,21 @@ class azure2:
         residuals (:meth:`prior_covariance_residuals`) and added the same way.
         """
         x = np.asarray(self.params_rwa if params is None else params, float)
-        norm = np.zeros(self.nsegments)
-        shift = np.zeros(self.nsegments)
-        shift_sqrt = np.zeros(self.nsegments)
-        current = {p.segment_key: p for p in self.parameters.norms}
-        shifting = {p.segment_key: p for p in self.parameters.shifts}
-        sqrting = {p.segment_key: p for p in self.parameters.sqrt_shifts}
-        shift_fn = np.zeros(self.nsegments)
-        fn_par = {(p.segment_key, p.fn_term): p for p in self.parameters.fn_shifts}
-        norm_groups = set()                  # labels whose first member has been seen
-        shift_groups = set()                 # the same for shiftgroup (the shift belongs to the first member)
-        for i, d in enumerate(self._parsed("active")):
-            p = current.get(d.key)
-            value = (float(x[p.free_index])
-                     if p is not None and not p.fixed and p.free_index is not None
-                     and p.free_index < x.size else d.norm)
-            sigma = d.nominal_norm / 100.0 * d.norm_error
-            follower = bool(d.norm_group) and d.norm_group in norm_groups
-            if d.norm_group:
-                norm_groups.add(d.norm_group)
-            # A normgroup's penalty is its first member's; a fixed norm pays none (docs/upgrade/objective.md D5),
-            # nor a free THM norm, which is profiled out, not a parameter (D4).
-            if sigma and not follower and d.vary_norm and not d.thm:
-                norm[i] = ((value - d.nominal_norm) / sigma) ** 2
-            # A shiftgroup follower's shift is its leader's and its own parameter is fixed: the engine
-            # (ESegment::SetShiftGroupFollower, AddShiftPenalty) adds no penalty for it.  Before 2026-10-27
-            # a follower whose line kept vary = 1, an error and a value was charged (shift/error)^2 again.
-            shift_follower = bool(d.shift_group) and d.shift_group in shift_groups
-            if d.shift_group:
-                shift_groups.add(d.shift_group)
-            if d.vary_shift and d.energy_shift_error and not shift_follower:
-                q = shifting.get(d.key)
-                sval = (float(x[q.free_index])
-                        if q is not None and not q.fixed and q.free_index is not None
-                        and q.free_index < x.size else d.energy_shift)
-                shift[i] = ((sval - d.nominal_shift) / d.energy_shift_error) ** 2
-            if d.vary_shift_sqrt and d.energy_shift_sqrt_error:
-                q = sqrting.get(d.key)
-                bval = (float(x[q.free_index])
-                        if q is not None and not q.fixed and q.free_index is not None
-                        and q.free_index < x.size else d.energy_shift_sqrt)
-                shift_sqrt[i] = (bval / d.energy_shift_sqrt_error) ** 2
-            for j, (nominal, sigma, vary) in enumerate(d.shift_fn_params):
-                if not (vary and sigma):
-                    continue
-                q = fn_par.get((d.key, j))
-                aval = (float(x[q.free_index])
-                        if q is not None and not q.fixed and q.free_index is not None
-                        and q.free_index < x.size else nominal)
-                shift_fn[i] += (aval / sigma) ** 2
-        # Park formalism: the J > 0 wall, sum (J/1e-3)^2 over levels with J < 0.
-        # The engine adds it to calculate_chi2_rwa itself (it is part of what
-        # AZURE2 minimizes), so objective() does not add it again; it is
-        # reported here so a fit can see when it is active.  Always 0 in Brune
-        # mode.  Note this is one number, not one per segment.
-        park = 0.0
-        if self.options.get("use_park"):
-            J = np.asarray(self.sess.park_norms(x), float)
-            park = float(np.sum((J[J < 0] / 1.0e-3) ** 2))
-        # Isotopic abundances (projects with an <abundances> block): the prior
-        # ((w - w0)/sigma)^2 per nucleus and the sum-to-one term
-        # ((sum w) - 1)^2 / abundanceSumSigma^2.  Like the Park term these are
-        # added by the engine inside calculate_chi2_rwa, so objective() does
-        # not add them again; reported here (one number) so a fit can see them.
-        abundance = 0.0
-        abund = self.parameters.abundances
-        if abund:
-            model = self._parsed("model")
-            samples = model.samples
-            totals = {}
-            for p in abund:
-                value = (float(x[p.free_index]) if not p.fixed and p.free_index is not None
-                         and p.free_index < x.size else float(p.value))
-                name = p.sample or ""
-                totals[name] = totals.get(name, 0.0) + value
-                w0, _, sigma = samples.get(name, {}).get((p.nucleus_Z, p.nucleus_A), (value, False, 0.0))
-                if sigma > 0:
-                    abundance += ((value - w0) / sigma) ** 2
-            # one sum-to-one term per sample: its own "sum" line, else the config key
-            for name, total in totals.items():
-                s_sum = model.sample_sum_sigma(name)
-                if s_sum is None:
-                    s_sum = model.abundance_sum_sigma
-                if s_sum > 0:
-                    abundance += ((total - 1.0) / s_sum) ** 2
-        # Measured scattering lengths (<scatteringLengths>): engine side as well, reported here.
-        scattering_length = self.scattering_length_chi2(x)
-        # Electron screening: the prior of each free U_e with a sigma (not inside calculate_chi2_rwa,
-        # like the normalization terms).
-        screening = 0.0
-        for p in self.parameters.screenings:
-            if p.fixed or not p.prior_sigma:
-                continue
-            value = (float(x[p.free_index]) if p.free_index is not None and p.free_index < x.size
-                     else float(p.value))
-            screening += ((value - p.prior_nominal) / p.prior_sigma) ** 2
-        # Fitted target densities: the prior of each free density with a sigma, the same way.  Beyond the largest
-        # density its grids span the engine computes at that density (and warns); the prior is taken there too.
-        density = 0.0
-        for p in self.parameters.densities:
-            if p.fixed or not p.prior_sigma:
-                continue
-            value = (float(x[p.free_index]) if p.free_index is not None and p.free_index < x.size
-                     else float(p.value))
-            value = min(max(value, 0.01 * p.prior_nominal), p.density_max)
-            density += ((value - p.prior_nominal) / p.prior_sigma) ** 2
-        # Fitted Doppler temperatures: the prior of each free temperature with a sigma, the same way.  Outside
-        # [T0/4, the layout temperature] the engine computes at the nearest end (and warns); the prior is taken there.
-        doppler = 0.0
-        for p in self.parameters.dopplers:
-            if p.fixed or not p.prior_sigma:
-                continue
-            value = (float(x[p.free_index]) if p.free_index is not None and p.free_index < x.size
-                     else float(p.value))
-            value = min(max(value, 0.25 * p.prior_nominal), p.doppler_max)
-            doppler += ((value - p.prior_nominal) / p.prior_sigma) ** 2
-        # Fitted sample thicknesses: the prior of each free thickness with a sigma, the same way.  Below 0 the
-        # engine computes at 0; the prior is taken there too.
-        thickness = 0.0
-        for p in self.parameters.thicknesses:
-            if p.fixed or not p.prior_sigma or p.thickness_leader is not None:
-                continue
-            value = (float(x[p.free_index]) if p.free_index is not None and p.free_index < x.size
-                     else float(p.value))
-            value = max(value, 0.0)
-            thickness += ((value - p.prior_nominal) / p.prior_sigma) ** 2
-        # Prior parameter covariance (<config> priorCovariance=): r.r, r = L^-1 (p - mu) from the engine.
-        prior_covariance = float(np.sum(self.prior_covariance_residuals(x) ** 2))
-        return {"norm": norm, "shift": shift, "shift_sqrt": shift_sqrt, "shift_fn": shift_fn,
-                "park": park, "abundance": abundance, "scattering_length": scattering_length,
-                "screening": screening, "density": density, "doppler": doppler, "thickness": thickness,
-                "prior_covariance": prior_covariance}
+        # Every term from the engine's objective (docs/upgrade/objective.md, Phase 2): pyazr computes none itself.
+        t = self.sess.objective_terms_rwa(x)
+        value = dict(zip(t["names"], np.asarray(t["values"], float)))
+        n = self.nsegments
+        seg = lambda key: np.asarray(t[key], float)[1:n + 1]  # index 0 unused (segments are 1-based)
+        return {"norm": seg("norm"), "shift": seg("shift"), "shift_sqrt": seg("shift_sqrt"),
+                "shift_fn": seg("shift_fn"),
+                "park": float(value.get("Park J > 0", 0.0)), "abundance": float(value.get("abundances", 0.0)),
+                "scattering_length": float(value.get("scattering lengths", 0.0)),
+                "screening": float(value.get("screening priors", 0.0)),
+                "density": float(value.get("density priors", 0.0)),
+                "doppler": float(value.get("Doppler priors", 0.0)),
+                "thickness": float(value.get("thickness priors", 0.0)),
+                "nuisance": float(value.get("nuisance priors", 0.0)),
+                "prior_covariance": float(value.get("prior covariance", 0.0))}
 
     def prior_covariance_residuals(self, params=None):
         """Whitened residuals r = L^-1 (p - mu) of the prior parameter covariance (``priorCovariance=<file>`` in
@@ -2107,21 +1998,28 @@ class azure2:
         return int(self.sess.refreeze_covariance())
 
     def objective(self, params=None):
-        """What AZURE2's own fit minimizes: chi-squared plus the penalties.
+        """What AZURE2's own fit minimizes: chi-squared plus every prior and constraint.
 
-        This is the number to hand a minimizer.  ``chiSquared.out`` reports the
-        parts separately, as ``Total-Chi-Squared``, ``Total-Norm-Chi-Squared``
-        and, when a shift is free, ``Total-Shift-Chi-Squared``.
+        This is the number to hand a minimizer: the engine's objective
+        (docs/upgrade/objective.md), the same terms and the same order as the
+        CLI's fit -- data chi-squared (THM norms profiled), data covariance,
+        nuisance priors, Park's wall, screening, density, Doppler and thickness
+        priors, abundances, scattering lengths and the prior covariance, which
+        replaces the own priors of its parameters.  :meth:`penalties` gives the
+        terms separately; ``chiSquared.out`` reports them as ``Total-...``.
         """
         x = np.asarray(self.params_rwa if params is None else params, float)
-        pen = self.penalties(x)
-        # pen["park"], pen["abundance"] and pen["scattering_length"] are already inside
-        # calculate_chi2_rwa (engine side).
-        return (float(np.sum(self.calculate_chi2_rwa(x)))
-                + float(np.sum(pen["norm"])) + float(np.sum(pen["shift"]))
-                + float(np.sum(pen["shift_sqrt"])) + float(np.sum(pen["shift_fn"]))
-                + pen["screening"] + pen["density"] + pen["doppler"] + pen["thickness"]
-                + pen["prior_covariance"])
+        return float(self.sess.calculate_objective_rwa(x))
+
+    def objective_and_grad(self, params):
+        """Value and gradient of :meth:`objective` at the free RWA parameters.
+
+        The data part as :meth:`chi2_and_grad` (analytic energies, widths and
+        normalizations; finite-differenced energy shifts), plus the analytic
+        gradients of the priors.  Returns ``(objective, grad)``.
+        """
+        resp = np.asarray(self.sess.calculate_objective_grad_rwa(np.asarray(params, float).ravel()), dtype=float)
+        return float(resp[0]), np.asarray(resp[1:], dtype=float)
 
     def chi2_and_grad(self, params):
         """Value and analytic gradient of the (data) chi-squared.

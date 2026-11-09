@@ -1,5 +1,6 @@
 #include <algorithm>
 #include "Objective.h"
+#include "ParameterLimitsManager.h"
 #include "AZUREAPI.h"
 #include "ScatteringLength.h"
 #include "AZUREParams.h"
@@ -1339,6 +1340,82 @@ vector_r AZUREAPI::CalculateChi2GradRWA(const vector_r &params) const {
   out.push_back(chi2);
   for (int i = 0; i < (int)all_rwa_.size(); i++)
     if (!fixed_[i]) out.push_back(gradFull[i]);
+  return out;
+}
+
+bool AZUREAPI::NuisancePriorOf(int f, double &nominal, double &sigma) const {
+  if (!nuisanceRead_) {
+    nuisanceRead_ = true;
+    // A scratch parameter set: the limits manager applies the settings to it, not to the session's parameters.
+    nuisanceParams_.reset(new AZUREParams);
+    compound()->FillMnParams(nuisanceParams_->GetMinuitParams(), &configure());
+    data()->FillMnParams(nuisanceParams_->GetMinuitParams());
+    nuisance_.reset(new ParameterLimitsManager(&configure(), compound(), data(), nuisanceParams_.get()));
+    if (nuisance_->ReadParameterSettings())
+      nuisance_->ApplyAllParameterSettings(nuisanceParams_->GetMinuitParams());
+  }
+  if (!nuisance_) return false;
+  // A parameter of the prior covariance has no diagonal prior of its own (objective.md D3).
+  if (const PriorCovariance *pc = data()->GetPriorCovariance()) {
+    const std::vector<int> &listed = pc->FullIndex();
+    if (std::find(listed.begin(), listed.end(), f) != listed.end()) return false;
+  }
+  return nuisance_->NuisancePrior(f, nominal, sigma);
+}
+
+double AZUREAPI::NuisanceChi2(const vector_r &full) const {
+  double chi2 = 0.0;
+  for (int f = 0; f < (int)full.size(); f++) {
+    double nominal, sigma;
+    if (!NuisancePriorOf(f, nominal, sigma)) continue;
+    const double d = (full[f] - nominal) / sigma;
+    chi2 += d * d;
+  }
+  return chi2;
+}
+
+void AZUREAPI::AddNuisanceGradient(const vector_r &full, vector_r &gradFull) const {
+  for (int f = 0; f < (int)full.size() && f < (int)gradFull.size(); f++) {
+    double nominal, sigma;
+    if (NuisancePriorOf(f, nominal, sigma)) gradFull[f] += 2.0 * (full[f] - nominal) / (sigma * sigma);
+  }
+}
+
+std::vector<std::string> AZUREAPI::ObjectiveTermNames() const {
+  std::vector<std::string> names;
+  for (const auto &t : Objective::Engine().Terms()) names.push_back(t->Name());
+  return names;
+}
+
+double AZUREAPI::CalculateObjectiveRWA(const vector_r &params, std::vector<double> *terms,
+                                       ObjectiveContext::SegmentPriors *segments) const {
+  const vector_r full = MapPackedToFull(params, all_rwa_, fixed_);
+  FillFromFullRWA(full);
+  EvaluateFilledChi2(nullptr);  // the model value of every point (the objective's data term recomputes the sum)
+  ObjectiveContext context{compound(), data(), full, configure()};
+  context.storeTotals = true;
+  context.termsOut = terms;
+  context.segmentPriorsOut = segments;
+  context.nuisance = [this](const vector_r &q) { return NuisanceChi2(q); };
+  return Objective::Engine().Chi2(context);
+}
+
+vector_r AZUREAPI::CalculateObjectiveGradRWA(const vector_r &params) const {
+  // The gradient of CalculateChi2RWA's terms (data, Park, abundances, scattering lengths) ...
+  vector_r out = CalculateChi2GradRWA(params);
+  const vector_r full = MapPackedToFull(params, all_rwa_, fixed_);
+  vector_r gradFull(all_rwa_.size(), 0.0);
+  // ... plus the diagonal priors (abundances are already in), the nuisance priors and the prior covariance.
+  const ParamIndexMap pmap = BuildParamIndexMap(compound(), data(), fixed_);
+  ForEachDiagonalPrior(data(), compound(), pmap, [&](int idx, double nominal, double sigma) {
+    if (idx < 0 || idx >= (int)gradFull.size() || pmap.Desc(idx).kind == ParamKind::Abundance) return;
+    gradFull[idx] += 2.0 * (full[idx] - nominal) / (sigma * sigma);
+  });
+  AddNuisanceGradient(full, gradFull);
+  if (const PriorCovariance *pc = data()->GetPriorCovariance()) pc->AddGradient(full, gradFull);
+  for (int i = 0, k = 1; i < (int)all_rwa_.size(); i++)
+    if (!fixed_[i]) out[k++] += gradFull[i];
+  out[0] = CalculateObjectiveRWA(params);
   return out;
 }
 

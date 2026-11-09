@@ -25,6 +25,13 @@ class SegmentTerms : public ObjectiveTerm {
   void Add(const ObjectiveContext &c, double &chi2) const override {
     EData *ld = c.data;
     if (c.segmentChi2) c.segmentChi2->assign(ld->NumSegments() + 1, 0.0);
+    ObjectiveContext::SegmentPriors *out = c.segmentPriorsOut;
+    if (out) {
+      out->norm.assign(ld->NumSegments() + 1, 0.0);
+      out->shift.assign(ld->NumSegments() + 1, 0.0);
+      out->shiftSqrt.assign(ld->NumSegments() + 1, 0.0);
+      out->shiftFn.assign(ld->NumSegments() + 1, 0.0);
+    }
     for (int i = 1; i <= ld->NumSegments(); i++) {
       ESegment *segment = ld->GetSegment(i);
       if (!segment) continue;
@@ -58,11 +65,16 @@ class SegmentTerms : public ObjectiveTerm {
           double dataNorm = segment->GetNorm();
           double dataNormNominal = segment->GetNominalNorm();
           double dataNormError = dataNormNominal / 100. * segment->GetNormError();
-          if (dataNormError != 0.) chi2 += pow((dataNorm - dataNormNominal) / dataNormError, 2.0);
+          if (dataNormError != 0.) {
+            const double term = pow((dataNorm - dataNormNominal) / dataNormError, 2.0);
+            chi2 += term;
+            if (out) out->norm[i] = term;
+          }
         }
       }
       // Energy-shift priors.
       if (c.segmentPriors) segment->AddShiftPenalty(chi2);
+      if (out && c.segmentPriors) segment->ShiftPenaltyParts(out->shift[i], out->shiftSqrt[i], out->shiftFn[i]);
       if (thmGroup < 0) {
         if (c.storeTotals) segment->SetSegmentChiSquared(segmentChiSquared);
         if (c.segmentChi2) (*c.segmentChi2)[i] = segmentChiSquared;
@@ -86,7 +98,10 @@ class NuisanceTerm : public ObjectiveTerm {
  public:
   std::string Name() const override { return "nuisance priors"; }
   void Add(const ObjectiveContext &c, double &chi2) const override {
-    if (c.nuisance) chi2 += c.nuisance(c.p);
+    if (!c.nuisance) return;
+    const double v = c.nuisance(c.p);
+    chi2 += v;
+    if (c.storeTotals) c.data->SetNuisanceChi2(v);
   }
 };
 
@@ -197,7 +212,19 @@ double Objective::Chi2(const ObjectiveContext &c) const {
     terms_.front()->Add(c, chi2);
     return chi2;
   }
-  for (const auto &t : terms_) t->Add(c, chi2);
+  if (!c.termsOut) {
+    for (const auto &t : terms_) t->Add(c, chi2);
+    return chi2;
+  }
+  // With a breakdown: each term on its own (a small prior next to a large data chi^2 keeps its digits), summed in
+  // order.  The total may then differ from the plain sum in its last bits.
+  c.termsOut->clear();
+  for (const auto &t : terms_) {
+    double v = 0.0;
+    t->Add(c, v);
+    c.termsOut->push_back(v);
+    chi2 += v;
+  }
   return chi2;
 }
 

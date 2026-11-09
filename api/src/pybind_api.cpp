@@ -527,6 +527,41 @@ class Session {
     }
     return to_array(out);
   }
+  // The fit's objective (docs/upgrade/objective.md): its value, its gradient, and its terms (names, values, and the
+  // normalization and shift priors per segment, index 0 unused).
+  double calculate_objective_rwa(const py::array_t<double, py::array::forcecast> &p) {
+    ConfigScope guard(config_, &ecCache_, &potentials_);
+    vector_r v = to_vector(p);
+    expect_free(v, "calculate_objective_rwa");
+    return api_->CalculateObjectiveRWA(v);
+  }
+  py::array_t<double> calculate_objective_grad_rwa(const py::array_t<double, py::array::forcecast> &p) {
+    vector_r v = to_vector(p), out;
+    expect_free(v, "calculate_objective_grad_rwa");
+    {
+      py::gil_scoped_release release;
+      ConfigScope guard(config_, &ecCache_, &potentials_);
+      out = api_->CalculateObjectiveGradRWA(v);
+    }
+    return to_array(out);
+  }
+  py::dict objective_terms_rwa(const py::array_t<double, py::array::forcecast> &p) {
+    ConfigScope guard(config_, &ecCache_, &potentials_);
+    vector_r v = to_vector(p);
+    expect_free(v, "objective_terms_rwa");
+    std::vector<double> terms;
+    ObjectiveContext::SegmentPriors seg;
+    const double total = api_->CalculateObjectiveRWA(v, &terms, &seg);
+    py::dict d;
+    d["total"] = total;
+    d["names"] = api_->ObjectiveTermNames();
+    d["values"] = to_array(terms);
+    d["norm"] = to_array(seg.norm);
+    d["shift"] = to_array(seg.shift);
+    d["shift_sqrt"] = to_array(seg.shiftSqrt);
+    d["shift_fn"] = to_array(seg.shiftFn);
+    return d;
+  }
   py::array_t<double> calculate_residual_jacobian_rwa(const py::array_t<double, py::array::forcecast> &p,
                                                       const std::vector<int> &skip) {
     vector_r v = to_vector(p), out;
@@ -932,6 +967,12 @@ PYBIND11_MODULE(_azure2, m) {
            "freezes it at its parameters.  Returns the number of covariance groups with relvector terms.")
       .def("calculate_chi2_physical", &Session::calculate_chi2_physical,
            py::call_guard<py::gil_scoped_release>(), py::arg("params"))
+      .def("calculate_objective_rwa", &Session::calculate_objective_rwa, py::arg("params"),
+           "The fit's objective at the free RWA parameters: data chi^2 plus every prior and constraint.")
+      .def("calculate_objective_grad_rwa", &Session::calculate_objective_grad_rwa, py::arg("params"),
+           "[objective, gradient...] at the free RWA parameters.")
+      .def("objective_terms_rwa", &Session::objective_terms_rwa, py::arg("params"),
+           "The objective's terms: total, names, values, and per-segment norm/shift priors (index 0 unused).")
       .def("calculate_chi2_grad_rwa", &Session::calculate_chi2_grad_rwa,
            py::arg("params"))
       .def("calculate_residual_jacobian_rwa", &Session::calculate_residual_jacobian_rwa,

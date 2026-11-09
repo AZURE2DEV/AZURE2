@@ -2817,6 +2817,8 @@ void EData::WriteOutputFiles(const Config &configure, bool isFit, const BandData
       }
       if (anyPrior) chiOut << " Total-Thickness-Chi-Squared: " << this->ThicknessPenalty();
     }
+    // Nuisance priors (<parameterSettings> useAsNuisance), part of the objective in every path (objective.md D6).
+    if (nuisanceChi2_ != 0.0) chiOut << " Total-Nuisance-Chi-Squared: " << nuisanceChi2_;
     // Measured scattering lengths (<scatteringLengths>; table in scatteringLengths.out).
     if (scatteringLengthChi2_ != 0.0)
       chiOut << " Total-Scattering-Length-Chi-Squared: " << scatteringLengthChi2_;

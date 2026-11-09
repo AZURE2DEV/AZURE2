@@ -207,6 +207,9 @@ class EData {
   double GetAbundancePenalty() const { return abundancePenalty_; }
   /// chi2 of the measured scattering lengths (<scatteringLengths>) at the last evaluation.
   void SetScatteringLengthChi2(double chi2) { scatteringLengthChi2_ = chi2; }
+  /// The nuisance priors' total of the last reported evaluation (<parameterSettings> useAsNuisance; objective.md D6).
+  void SetNuisanceChi2(double chi2) { nuisanceChi2_ = chi2; }
+  double GetNuisanceChi2() const { return nuisanceChi2_; }
   double GetScatteringLengthChi2() const { return scatteringLengthChi2_; }
   /// The prior parameter covariance of the run (<config> priorCovariance=, PriorCovariance.h), shared by every copy
   /// (Clone); null without one.  Set by the CLI (AZUREMain) and pyazr (AZUREAPI) once the parameters are known.
@@ -479,6 +482,7 @@ class EData {
   double parkPenalty_ = 0.0;
   double abundancePenalty_ = 0.0;
   double scatteringLengthChi2_ = 0.0;
+  double nuisanceChi2_ = 0.0;
   std::shared_ptr<const PriorCovariance> priorCov_;  // shared by every copy (read-only once set up)
   double priorCovChi2_ = 0.0;
   std::vector<std::string> nucleusLabels_;   // one per compound nucleus, for the natural decomposition file

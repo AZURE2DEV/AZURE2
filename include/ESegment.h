@@ -67,6 +67,8 @@ class ESegment {
    * its multivariate Gaussian takes their place (docs/upgrade/objective.md D3), set once at set-up
    * (ReplaceDiagonalPriors, Objective.h).
    */
+  /// The three parts of AddShiftPenalty separately: the constant shift, the sqrt(E) coefficient, the shift function.
+  void ShiftPenaltyParts(double &constant, double &sqrtTerm, double &function) const;
   void ReplaceNormPrior() { normPriorReplaced_ = true; }
   bool IsNormPriorReplaced() const { return normPriorReplaced_; }
   void ReplaceShiftPrior() { shiftPriorReplaced_ = true; }

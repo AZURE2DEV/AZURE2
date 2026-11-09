@@ -953,6 +953,18 @@ void ESegment::AddShiftPenalty(double &chi) const {
       if (shiftFnVary_[j] && shiftFnError_[j] != 0.0 && !IsShiftFnPriorReplaced(j)) chi += pow(shiftFnValues_[j] / shiftFnError_[j], 2.0);
 }
 
+void ESegment::ShiftPenaltyParts(double &constant, double &sqrtTerm, double &function) const {
+  constant = sqrtTerm = function = 0.0;
+  if (varyEnergyShift_ && energyShiftError_ != 0.0 && !shiftPriorReplaced_)
+    constant = pow((energyShift_ - energyShiftNominal_) / energyShiftError_, 2.0);
+  if (varyEnergyShiftSqrt_ && energyShiftSqrtError_ != 0.0 && !shiftSqrtPriorReplaced_)
+    sqrtTerm = pow(energyShiftSqrt_ / energyShiftSqrtError_, 2.0);
+  if (OwnsShiftFn() && hasShiftFn_)
+    for (int j = 0; j < (int)shiftFnValues_.size(); j++)
+      if (shiftFnVary_[j] && shiftFnError_[j] != 0.0 && !IsShiftFnPriorReplaced(j))
+        function += pow(shiftFnValues_[j] / shiftFnError_[j], 2.0);
+}
+
 void ESegment::SetEnergyShiftSqrt(double energyShiftSqrt) {
   energyShiftSqrt_ = energyShiftSqrt;
 }

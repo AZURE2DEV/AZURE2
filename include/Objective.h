@@ -45,6 +45,14 @@ struct ObjectiveContext {
   /// Add the normalization and energy-shift priors (T3, T4) in the segment loop.  The MCMC takes them as log-priors
   /// (AZURECalcMCMC::CalculateLogPrior) and evaluates only the data part (Objective::DataChi2).
   bool segmentPriors = true;
+  /// Optional breakdown (index = segment number): the normalization prior and the three energy-shift prior parts
+  /// of each segment, as added by the segment loop (pyazr's penalties(), the writer).
+  struct SegmentPriors {
+    std::vector<double> norm, shift, shiftSqrt, shiftFn;
+  };
+  SegmentPriors *segmentPriorsOut = nullptr;
+  /// Optional breakdown: each term's contribution, in Objective::Terms() order.
+  std::vector<double> *termsOut = nullptr;
   /// T5, the nuisance chi^2 (AZURECalc::CalculateNuisanceChiSquared), or empty when there is no limits manager.
   std::function<double(const vector_r &)> nuisance;
 };
