@@ -192,6 +192,9 @@ Gate: outputs within the stated quadrature tolerance, each difference explained;
 - [ ] Parallel over grid-energy blocks with per-task scratch; explicit thread budget; remove pools, `EData::Clone`,
       point mapping, copy-on-write tables, `NodeTableCache`, process-wide memos; EC unit amplitudes per grid energy;
       rates and extrapolation on the grid (+ analytic narrow-resonance term).
+- [ ] No hidden state (`ARCHITECTURE.md` §9): the mutable function-level statics of `src/` (about 50), the
+      `NuclearPotentialManager` singleton and the `thread_local` caches of `ECIntegral.cpp` become caller-owned tables
+      or go; a consistency check refuses new ones.
 Gate: thread-count independence by construction; memory one problem regardless of threads; T2 benchmark recorded.
 
 ## Phase 7 — DWBA for THM vertices (leaf module; may start in parallel with Phases 4–6)

@@ -169,6 +169,16 @@ how each was checked:
 - **Determinism.** Results must not depend on thread count, on which file a
   session started from, or on the order of levels and channels. Tests run with
   `OMP_NUM_THREADS=2`. Differences across GCC, Clang and MinGW stay near 1e-5.
+- **No hidden state.** Constant tables (masses, constants, the schema) are built
+  once and reached through a function returning a `const` reference; nothing
+  else is global. What a calculation writes belongs to the caller and is passed
+  in (`Results`, per-stage tables, scratch). Do not add a function-level
+  `static` or `thread_local` that holds a computed value, or a cache keyed by
+  the last call. The mutable statics still in `src/` go in Phase 6
+  (`docs/upgrade/ARCHITECTURE.md` section 9).
+- **Extension is a table row.** A new quantity, χ² term, kernel or stopping
+  model is one row in the one table of its kind, with its test. No class that
+  registers itself from a static object, no factory hierarchy.
 
 ## Recipes: where a new feature goes
 
