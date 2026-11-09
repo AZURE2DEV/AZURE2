@@ -263,6 +263,14 @@ c, so only S(0) changes: its K_n agree with GSL's to about 10⁻¹⁶.
   levels within B(η_b = 1000) of threshold, S at threshold), which move at 10⁻¹⁵. Classify, then ctest,
   `run_tests.sh` and the thread check.
 
+**Bound channel functions verified (2026-11-09; build of 5c4fb3ed).** Physics test `physics_bound_functions` (K_n
+against mpmath, 374 values, to 2 × 10⁻¹⁵; S(0) against the threshold limit; neutral closed forms; the band; exact
+rules). Engine-side `physics_derivatives_gsl`: `central_derivative` against `gsl_deriv_central` bit for bit in
+10⁴/10⁴ cases (5951 taking GSL's second, optimal step). 179 × 3 against the band head, with and without a table:
+2040/2040 identical both ways (no project evaluates S(0) itself, and the derivative is a faithful port). ctest 119/119,
+`run_tests.sh` 133/133, 1 vs 8 threads identical. `ShftFunc`, `ChannelFunc` and `CoulFunc` no longer include
+`gsl_deriv.h` or `gsl_sf_bessel.h` (the opt-in `AZURE_BOUND_SHIFT_NUMERICAL` route keeps GSL in `ShftFunc`).
+
 ## 2. Channel functions
 
 ### 2.1 Definition
