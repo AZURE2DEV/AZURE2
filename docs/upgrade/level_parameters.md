@@ -337,8 +337,9 @@ levels at 43.9, 122.8, 141.0 MeV, residuals 41–118 MeV) not transformed, in it
 **Rule.** In `brune_from_formal`, a level for which the fixed-point iteration ends without meeting the tolerance and
 with a last step above `rounding_bound_MeV` (where the status would be `NotConverged`) is solved for the root of g
 instead, in the report and the evaluation iteration alike:
-1. Bracket: the last two iterates; if g does not change sign between them, expand from the last iterate towards the
-   sign change (g < 0: upwards), starting with a width max(last step, 10⁻³ MeV), doubled up to 64 times.
+1. Bracket: the last two iterates, if g is finite at both and changes sign between them (a 2-cycle); otherwise —
+   an iteration that diverges overflows instead of cycling — expand from the level's formal energy towards the sign
+   change (g < 0: upwards), starting with a width of 10⁻³ MeV, doubled up to 64 times.
 2. Bisection on the bracket until the midpoint equals an end (full double precision) or g = 0; at most about 60
    eigenproblems of the block's size.
 3. The level takes the r-th eigenvalue and eigenvector of A at the root: E, the Brune amplitudes Vᵀγ and the row of
@@ -353,13 +354,19 @@ instead, in the report and the evaluation iteration alike:
 Levels that converge are untouched: the fallback only runs where the old result was the formal values or NaN, so
 all other outputs stay bit-identical. Cost: only for those levels, the 1000 fixed-point iterations plus the bisection.
 
+`FormalToBruneOptions::bracket` (default true) switches the rule off, for the unit tests of the fixed-point branches
+(they stop the iteration with `max_iterations` = 1, where a bracket would now be found).
+
 **Where.** `physics/src/LevelParameters.cpp` (`brune_from_formal`), `LevelSet::Status::Bracketed`; the report message
 in `src/CNuc.cpp`; `ThrowIfFailed` and `WarnOnce` (`src/CNucExternalCapture.cpp`) unchanged (Bracketed is not a
 failure).
 
 **Tests.** `level_parameters_unit_test`: a one-level block made by `formal_from_brune` from a Brune level with
 γ²S′(E) > 1 (e′ < −1: the fixed point repels): `brune_from_formal` returns the Brune input to 10⁻¹⁰ relative with
-status `Bracketed`, in report and evaluation mode, and with `max_iterations` = 1 as well; a three-level case that
-converges keeps its status and values. `pyazr_formal_capture_mask` (the blocker) passes unchanged. Expected outputs:
+status `Bracketed`, in report and evaluation mode (a linear S: the iterates diverge and overflow, the bracket comes
+from the formal energy); the three-level case with `max_iterations` = 1 gives every level Converged or Bracketed at
+the tight result (10⁻¹⁰); the existing fixed-point tests with `bracket` = false keep their expectations; channel
+functions that are NaN away from the formal energy: no bracket, NaN in an evaluation and the formal values in the
+report. `pyazr_formal_capture_mask` (the blocker) passes unchanged. Expected outputs:
 179 × 3 identical except the formal basis of `screening_6li` (its three levels now transformed: `parameters.out`
 and `run.log`), classified.
