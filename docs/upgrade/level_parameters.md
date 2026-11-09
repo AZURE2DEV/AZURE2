@@ -349,8 +349,10 @@ instead, in the report and the evaluation iteration alike:
    at the root, `boundary_shift` = S_c(root) − B_c. A warning names the level and says it was solved by bracketing
    (the evaluation iteration prints the first one per process, as now; the report prints a NOTE in place of the
    WARNING, without "the input energy and widths are kept").
-5. No bracket (g not finite, or no sign change after the expansion), or a failed eigenproblem: as now (NaN in an
-   evaluation, formal values with the WARNING in the report, a stop at setup).
+5. An iteration that diverges overflows: its matrix is no longer finite and the eigenproblem fails. That is the
+   same case, solved as in 1 from the formal energy. No bracket (g not finite, or no sign change after the
+   expansion), or an eigenproblem that fails on a finite matrix: as now (NaN in an evaluation, formal values with the
+   WARNING in the report, a stop at setup).
 Levels that converge are untouched: the fallback only runs where the old result was the formal values or NaN, so
 all other outputs stay bit-identical. Cost: only for those levels, the 1000 fixed-point iterations plus the bisection.
 
