@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
 """The fit's objective through pyazr (docs/upgrade/objective.md, Phase 2 step 4).
 
-On models with normalization priors (tests/norm_groups), energy-shift-function priors (tests/shift_fn) and a
-scattering-length constraint (tests/scattering_length/be7p_fit):
+On tests/upgrade/T2 (normalization and shift priors, density priors, abundances, a data covariance and a prior
+covariance, all non-zero at the test point), tests/norm_groups, tests/shift_fn and tests/scattering_length/be7p_fit
+(a scattering-length constraint):
 
   1. objective() = the first entry of objective_and_grad() (the same engine call), to 1e-12;
   2. objective() = the sum of the engine's terms, and the per-segment norm and shift arrays of penalties() sum to
      what the terms say, to 1e-9 relative;
   3. objective_and_grad()'s gradient = central finite differences of objective(), to 1e-5 of the largest component
-     (step 1e-6 (|x| + 1));
+     (step 1e-6 (|x| + 1)), at a point moved 2 % off the start so that the priors are not at their centres;
   4. objective() >= calculate_chi2_rwa() (the priors are sums of squares).
 
 Needs the compiled engine; skips cleanly without it.  Run from anywhere:  python3 tests/pyazr/objective_test.py
@@ -22,7 +23,9 @@ import numpy as np
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
-MODELS = [("norm_groups", "norm_groups.azr"), ("shift_fn", "shift_fn.azr"), ("scattering_length", "be7p_fit.azr")]
+MODELS = [("upgrade/T2", "T2.azr"), ("norm_groups", "norm_groups.azr"), ("shift_fn", "shift_fn.azr"),
+          ("scattering_length", "be7p_fit.azr")]
+WITH_PRIORS = {"upgrade/T2"}  # norm and shift priors, density priors, abundances, data and prior covariance
 
 failures = []
 
@@ -49,7 +52,10 @@ for project, azr in MODELS:
         for sub in ("output", "checks"):
             os.makedirs(os.path.join(d, sub), exist_ok=True)
         s = azure2(os.path.join(d, azr), cwd=d)
-        x = np.asarray(s.params_rwa, float)
+        # Off the priors' centres, so that every prior term and its gradient is exercised: each free parameter
+        # moved by 2 % of its value (alternating sign), the norms and shifts included.
+        x0 = np.asarray(s.params_rwa, float)
+        x = x0 + 0.02 * (np.abs(x0) + 1e-3) * np.where(np.arange(x0.size) % 2 == 0, 1.0, -1.0)
         f = s.objective(x)
         f2, g = s.objective_and_grad(x)
         tag = f"{project}/{azr}"
@@ -61,11 +67,17 @@ for project, azr in MODELS:
               f"{total} vs {f}")
         pen = s.penalties(x)
         segsum = sum(float(np.sum(pen[k])) for k in ("norm", "shift", "shift_sqrt", "shift_fn"))
-        check(f"{tag}: per-segment priors finite and >= 0 (sum {segsum:.6g})", np.isfinite(segsum) and segsum >= 0)
+        check(f"{tag}: per-segment priors finite (sum {segsum:.6g})", np.isfinite(segsum) and segsum >= 0)
+        if project in WITH_PRIORS:
+            prior_terms = [n for n, v in zip(t["names"], t["values"]) if v > 0 and n != "data, normalizations and energy shifts"]
+            check(f"{tag}: the priors are in play ({segsum:.4g} per segment; {', '.join(prior_terms)})",
+                  segsum > 0 and len(prior_terms) >= 3)
         chi2 = float(np.sum(s.calculate_chi2_rwa(x)))
         check(f"{tag}: objective {f:.8g} >= calculate_chi2_rwa {chi2:.8g}", f >= chi2 - 1e-9 * max(1.0, abs(chi2)))
         # 3. gradient against central differences of objective() (at most 12 parameters, spread over the vector)
-        idx = np.unique(np.linspace(0, x.size - 1, min(12, x.size)).astype(int))
+        # every parameter where the priors are in play, else at most 12 spread over the vector
+        idx = (np.arange(x.size) if project in WITH_PRIORS
+               else np.unique(np.linspace(0, x.size - 1, min(12, x.size)).astype(int)))
         worst = 0.0
         for i in idx:
             h = 1e-6 * (abs(x[i]) + 1.0)
