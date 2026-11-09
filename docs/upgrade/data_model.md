@@ -318,6 +318,8 @@ Where a step can move bits it says so in §6 and names the classification.
 
 ## 3. Every present kind as a tree, and the text form
 
+*The text form of this section is superseded by `project_format3.md` (2026-11-09); the trees stand.*
+
 Notation: `σ(a→b)` is a leaf, `[E1]` a filter, `·` a `Scale`, `w(s)` a `Weighted` by the abundances of sample s, J_k the
 term's frame factor.
 
@@ -387,8 +389,22 @@ M10). A new model quantity is then a physics function and a selector, not a new 
 ## 5. Decisions
 
 **Taken 2026-11-09 (director's review):** M1 (a), M2 (c), M3 (a) with (b) carried to Phase 5 as an open decision for
-the maintainer, M4 (a), M5 (a), M6 (b), M7 (b), M8 (b), M13 (b). **Pending:** M9, M10 and M12 until `data_kinds.md`
-is reviewed (they fix what users write); M11 until the thread-dependence diagnosis reports (`fit_threads.md`).
+the maintainer, M4 (a), M5 (a), M6 (b), M7 (b), M8 (b), M13 (b). **Taken after `data_kinds.md` (same day):** M9 — neither (a) nor (b) as written: the user-facing form is the named
+`quantity <name> unit <u> frame <lab|cm> …` keyword block of `data_kinds.md` §5.1, one closed table of quantities
+mapped to trees in `SegmentKinds`; a free `predict "<expr>"` form waits until a project needs a combination the table
+and the SUM/RATIO blocks cannot write (after Phase 5). M10 (b), section name `<modelData>`. M12 as recommended; the
+folded kind is `quantity yield … target <name>`. **Pending:** M11 until the thread-dependence diagnosis reports
+(`fit_threads.md`).
+
+**From the maintainer, 2026-11-09 (overrides M12 and the "old projects load unchanged" clauses of this note and of
+`data_kinds.md` §5.1):** backward compatibility of the `.azr` is not required; a converter from the old format is.
+The engine therefore reads one grammar only (format 3, `project_format3.md`): named quantities, named targets,
+`<modelData>`. The integer isDiff codes, the positional segment columns and the `<targetInt>` index lists are known
+to the converter (`io/src/Convert.cpp`, `AZURE2 --convert`, `pyazr.convert_azr`) and to nothing else; an old file
+given to the engine is refused with a message naming the converter. The gate changes accordingly: the outputs of the
+converted test projects are bit-identical to those of the originals on the previous engine. The format must read
+naturally in the GUI and in Python: the same field names in the file, in the pyazr call and in the form, all taken
+from one table of quantities exported by the engine.
 
 **M1. Where `experiment/` lives.** (a) A standalone CMake target on `physics/` from the first step, with an engine
 adapter; (b) inside `src/` first, split later. Recommendation (a): the one-way rule is then enforced by the linker
