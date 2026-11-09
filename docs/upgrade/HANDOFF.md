@@ -36,7 +36,8 @@ Fermi-function argument; `ECIntegral.cpp`'s proton mass 1.00727638 u (CODATA 201
 
 **Open, found by the benchmark (not caused by Phase 3): fits depend on the thread count.** Same binary, T2, MIGRAD
 with 200 calls: the final χ² is 0.306025731622686 / …729007276 / …733669139 (prior-covariance term) at 1 / 2 / 4
-threads, each reproducible; the writer's total ends at 691.608 (1 thread) and 595.877 (8 threads), because the fit
+threads, each reproducible; the writer's total ends at 691.608 (1 thread) and 595.877 (8 threads; one of three
+runs of the merged head ended at 691.608, so at 8 threads not even repeatable), because the fit
 is unconverged and the 9th-digit differences grow over 200 steps. Present on the Phase 1 build (b-pathways) and the
 Phase 2 head too; the 2026-11-07 entry deferred it to Phase 2 ("fixed-order reductions in the numerical gradient"),
 which did not address it. Calculations (menu 1) stay identical at 1 and 8 threads. Suspect: the pooled working

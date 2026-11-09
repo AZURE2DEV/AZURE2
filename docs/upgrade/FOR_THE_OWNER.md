@@ -21,12 +21,12 @@ collision matrix → observables → apparatus → χ² — with one implementat
 | Phase | What it gives | Checked by |
 |---|---|---|
 | 0. Measure and protect | Synthetic projects T1–T3 with known true parameters; golden outputs; a speed benchmark; nightly thread and memory sanitizers; the rules in `CLAUDE.md`; ten skills | — |
-| 1. Physics core | `physics/`, a standalone library (no engine headers, no GSL): Coulomb and Whittaker functions from pycoulomb, level-parameter conventions and transformations (Brune, formal, Park), external capture, coupling coefficients, reaction pathways. The Coulomb memo is replaced by a per-stage table: results no longer depend on the thread count | mpmath and closed forms; outputs bit-identical or every difference classified |
+| 1. Physics core | `physics/`, a standalone library (no engine headers, no GSL): Coulomb and Whittaker functions from pycoulomb, level-parameter conventions and transformations (Brune, formal, Park), external capture, coupling coefficients, reaction pathways. The Coulomb memo is replaced by a per-stage table: calculations no longer depend on the thread count | mpmath and closed forms; outputs bit-identical or every difference classified |
 | 2. One objective | One ordered list of χ² terms used by the fit, the gradient, least squares, the MCMC and the Python API; pyazr computes no prior itself | χ² bit-identical where no decision applied; decisions D1–D7 recorded |
 | 3. One project model | `io/`: the `.azr` read once, losslessly, by the engine and pyazr alike; a format version, `AZURE2 --convert`, unchanged round trips of every file; one mass table | 179 projects × 3 bases identical |
 
 After every phase: the 179 project files of the test suite in three bases (Brune, formal, Park) compared file by
-file with the previous engine, the 133 regression projects, about 130 unit and pyazr tests, and 1 against 8 threads.
+file with the previous engine, the 133 regression projects, about 130 unit and pyazr tests, and calculations at 1 against 8 threads.
 
 **Speed** (T2, 340 points with every apparatus kernel; this machine, same build options; `tests/upgrade/bench/`):
 
@@ -35,7 +35,7 @@ file with the previous engine, the 133 regression projects, about 130 unit and p
 | calculation, 1 thread | 0.93 s | 0.90 s | −3 % (within the spread) |
 | calculation, 8 threads | 0.42 s | 0.24 s | −43 % |
 | fit, 200 calls, 1 thread | 63.2 s | 56.2 s | −11 % |
-| fit, 200 calls, 8 threads | 36.4 s | 30.7 s | −16 % |
+| fit, 200 calls, 8 threads | 36.4 s | 30.7 s | −16 % (see the open problem below) |
 | fit peak memory, 8 threads | 488 MB | 643 MB | +32 % |
 
 The memory comes from tables kept for the numerical derivative with respect to energy shifts; they go when that
@@ -86,7 +86,8 @@ Until then, new physics is best written on the upgrade branch, following the rec
 
 **Known open problem.** A fit's path still depends on the number of threads: on T2 the χ² after 200 MIGRAD calls
 differs in the 9th digit between 1, 2 and 4 threads, which an unconverged fit amplifies (691.6 against 595.9 at 1
-and 8 threads). Calculations are identical at any thread count. It was already present when Phase 1 began, and is traced
+and 8 threads); at 8 threads even repeated runs can end at either value. Calculations are identical at any thread
+count. It was already present when Phase 1 began, and is traced
 in `HANDOFF.md`; Phase 6 (evaluation without copies) removes the suspected cause if it is not found sooner.
 
 **Two values for the maintainers to decide**, since changing them moves results: the electron mass in the
