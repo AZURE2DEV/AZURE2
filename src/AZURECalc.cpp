@@ -121,79 +121,6 @@ double SegmentLocalChi2(ESegment *segment, CNuc *lc, const Config &config,
   return chi;
 }
 
-// The shift penalties as (full parameter index, nominal, sigma), for the code
-// that needs a penalty's derivatives rather than its value: d/dx = 2 (x - nominal)
-// / sigma^2, curvature 2 / sigma^2.  Exactly the terms ESegment::AddShiftPenalty
-// adds, so the gradient, G2 and the least-squares priors stay consistent with
-// chi^2.  The nominal is 0 for every shift term since 2026-10-25 (the file's value
-// is only the start).
-template <class F>
-void ForEachShiftPenalty(EData *data, const ParamIndexMap &pmap, F f) {
-  for (int s = 1; s <= data->NumSegments(); s++) {
-    ESegment *seg = data->GetSegment(s);
-    if (!seg) continue;
-    int idx;
-    if (seg->IsVaryEnergyShift() && seg->GetEnergyShiftError() != 0.0 && (idx = pmap.EnergyShiftIndex(s)) >= 0)
-      f(idx, seg->GetNominalEnergyShift(), seg->GetEnergyShiftError());  // 0 unless a prior_centre row
-    if (seg->IsVaryEnergyShiftSqrt() && seg->GetEnergyShiftSqrtError() != 0.0 &&
-        (idx = pmap.EnergyShiftSqrtIndex(s)) >= 0)
-      f(idx, 0.0, seg->GetEnergyShiftSqrtError());
-    if (seg->OwnsShiftFn() && seg->HasShiftFn())
-      for (int j = 0; j < seg->NumShiftFnParams(); j++)
-        if (seg->IsVaryShiftFn(j) && seg->GetShiftFnErrors()[j] != 0.0 && (idx = pmap.EnergyShiftFnIndex(s, j)) >= 0)
-          f(idx, 0.0, seg->GetShiftFnErrors()[j]);
-  }
-}
-
-// The electron-screening priors ((U_e - nominal)/sigma)^2, U_e in eV: f(full index, nominal, sigma) for each
-// screening parameter with sigma > 0 (EData::ScreeningPenalty is their sum).
-template <class F>
-void ForEachScreeningPrior(EData *data, const ParamIndexMap &pmap, F f) {
-  for (int k = 1; k <= data->NumScreeningParams(); k++) {
-    const TargetEffect *te = data->GetScreeningTargetEffect(k);
-    if (te->GetScreeningSigma() <= 0.0) continue;
-    const int idx = pmap.ScreeningIndex(k);
-    if (idx >= 0) f(idx, te->GetScreeningNominal(), te->GetScreeningSigma());
-  }
-}
-
-// The fitted-density priors ((N - N0)/sigma)^2, N in atoms/cm^2: f(full index, nominal, sigma) for each density
-// parameter with sigma > 0 (EData::DensityPenalty is their sum).
-template <class F>
-void ForEachDensityPrior(EData *data, const ParamIndexMap &pmap, F f) {
-  for (int k = 1; k <= data->NumDensityParams(); k++) {
-    const TargetEffect *te = data->GetDensityTargetEffect(k);
-    if (te->GetDensitySigma() <= 0.0) continue;
-    const int idx = pmap.DensityIndex(k);
-    if (idx >= 0) f(idx, te->GetDensityNominal(), te->GetDensitySigma());
-  }
-}
-
-// The fitted-Doppler-temperature priors ((T - T0)/sigma)^2, T in K: f(full index, nominal, sigma) for each Doppler
-// parameter with sigma > 0 (EData::DopplerPenalty is their sum).
-template <class F>
-void ForEachDopplerPrior(EData *data, const ParamIndexMap &pmap, F f) {
-  for (int k = 1; k <= data->NumDopplerParams(); k++) {
-    const TargetEffect *te = data->GetDopplerTargetEffect(k);
-    if (te->GetDopplerSigma() <= 0.0) continue;
-    const int idx = pmap.DopplerIndex(k);
-    if (idx >= 0) f(idx, te->GetDopplerNominal(), te->GetDopplerSigma());
-  }
-}
-
-// The fitted-sample-thickness priors ((n - n0)/sigma)^2, n in atoms/barn: f(full index, nominal, sigma) for each
-// thickness parameter with sigma > 0 that owns its value (EData::ThicknessPenalty is their sum; a thickness-group
-// follower's parameter is fixed and carries no prior).
-template <class F>
-void ForEachThicknessPrior(EData *data, const ParamIndexMap &pmap, F f) {
-  for (int k = 1; k <= data->NumThicknessParams(); k++) {
-    const ESegment *seg = data->GetSegment(data->GetThicknessSegment(k));
-    if (seg->GetThicknessSigma() <= 0.0 || seg->IsThicknessGroupFollower()) continue;
-    const int idx = pmap.ThicknessIndex(k);
-    if (idx >= 0) f(idx, seg->GetNominalThickness(), seg->GetThicknessSigma());
-  }
-}
-
 // The segments (1-based) whose points one energy-shift parameter moves, and how to
 // set it on them: its own segment, plus every follower of its shift group for a
 // group's constant shift and for each shift-function parameter.
@@ -1278,17 +1205,13 @@ bool AZURECalc::GradientFromJacobian(const std::vector<double> &p, std::vector<d
       grad[f] += 2.0 * r[i] * d;
       g2[f] += 2.0 * d * d;
     }
-  // Penalties (x - x0)^2 / sigma^2: gradient 2 (x - x0) / sigma^2, curvature 2 / sigma^2.
+  // Diagonal priors (x - x0)^2 / sigma^2 (Objective.h): gradient 2 (x - x0) / sigma^2, curvature 2 / sigma^2.
   ParamIndexMap pmap = BuildParamIndexMap(compound(), data(), std::vector<bool>());
-  for (int s = 1; s <= data()->NumSegments(); s++) {
-    ESegment *seg = data()->GetSegment(s);
-    if (!seg) continue;
-    int idx;
-    if (seg->IsVaryNorm() && (idx = pmap.NormIndex(s)) >= 0 && idx < (int)p.size()) {
-      const double n0 = seg->GetNominalNorm(), nerr = n0 / 100.0 * seg->GetNormError();
-      if (nerr != 0.0) { grad[idx] += 2.0 * (p[idx] - n0) / (nerr * nerr); g2[idx] += 2.0 / (nerr * nerr); }
-    }
-  }
+  ForEachDiagonalPrior(data(), compound(), pmap, [&](int idx, double nominal, double e) {
+    if (idx >= (int)p.size()) return;
+    grad[idx] += 2.0 * (p[idx] - nominal) / (e * e);
+    g2[idx] += 2.0 / (e * e);
+  });
   // Park: the J > 0 wall, sum over the levels with J < 0 of (J/s)^2, is not a
   // residual.  Its gradient (zero while every J > 0) as the adjoint path adds it.
   if (configure().paramMask & Config::USE_PARK_FORMALISM) {
@@ -1303,32 +1226,7 @@ bool AZURECalc::GradientFromJacobian(const std::vector<double> &p, std::vector<d
     }
     ReturnPooledCNuc(lc);
   }
-  ForEachShiftPenalty(data(), pmap, [&](int idx, double nominal, double e) {
-    if (idx >= (int)p.size()) return;
-    grad[idx] += 2.0 * (p[idx] - nominal) / (e * e);
-    g2[idx] += 2.0 / (e * e);
-  });
-  ForEachScreeningPrior(data(), pmap, [&](int idx, double nominal, double e) {
-    if (idx >= (int)p.size()) return;
-    grad[idx] += 2.0 * (p[idx] - nominal) / (e * e);
-    g2[idx] += 2.0 / (e * e);
-  });
-  ForEachDensityPrior(data(), pmap, [&](int idx, double nominal, double e) {
-    if (idx >= (int)p.size()) return;
-    grad[idx] += 2.0 * (p[idx] - nominal) / (e * e);
-    g2[idx] += 2.0 / (e * e);
-  });
-  ForEachDopplerPrior(data(), pmap, [&](int idx, double nominal, double e) {
-    if (idx >= (int)p.size()) return;
-    grad[idx] += 2.0 * (p[idx] - nominal) / (e * e);
-    g2[idx] += 2.0 / (e * e);
-  });
-  ForEachThicknessPrior(data(), pmap, [&](int idx, double nominal, double e) {
-    if (idx >= (int)p.size()) return;
-    grad[idx] += 2.0 * (p[idx] - nominal) / (e * e);
-    g2[idx] += 2.0 / (e * e);
-  });
-  // Isotopic abundances: prior and sum-to-one gradient and (diagonal) curvature.  The sample sums are taken at
+  // Isotopic abundances: the sum-to-one gradient and (diagonal) curvature.  The sample sums are taken at
   // p: compound() holds the abundances of the last full evaluation, so its AbundanceSum was stale here.
   std::vector<double> sumAtP;
   if (compound()->HasAbundanceBlock()) {
@@ -1348,11 +1246,7 @@ bool AZURECalc::GradientFromJacobian(const std::vector<double> &p, std::vector<d
       if (idx < 0 || idx >= (int)p.size()) continue;
       int sample, nucleus;
       compound()->AbundanceOf(k, sample, nucleus);
-      const SampleAbundance &e = compound()->GetSample(sample)->entries[nucleus - 1];
-      if (e.sigma > 0.0) {
-        grad[idx] += 2.0 * (p[idx] - e.nominal) / (e.sigma * e.sigma);
-        g2[idx] += 2.0 / (e.sigma * e.sigma);
-      }
+      // (The per-nucleus prior is added above, with the other diagonal priors.)
       const double s = compound()->SampleSumSigma(sample, configure().abundanceSumSigma);
       if (s > 0.0) {
         grad[idx] += 2.0 * (sumAtP[sample - 1] - 1.0) / (s * s);
@@ -1379,30 +1273,10 @@ std::vector<double> AZURECalc::G2(const std::vector<double> &p) const {
       const int f = packedToFull[a];
       if (f >= 0 && f < (int)g2.size()) g2[f] += 2.0 * d * d;
     }
-  // Penalty curvatures, (x - x0)^2 / sigma^2 -> 2 / sigma^2.
+  // Penalty curvatures, (x - x0)^2 / sigma^2 -> 2 / sigma^2: the diagonal priors (Objective.h) and the abundance
+  // sum-to-one term's diagonal.
   ParamIndexMap pmap = BuildParamIndexMap(compound(), data(), std::vector<bool>());
-  for (int s = 1; s <= data()->NumSegments(); s++) {
-    ESegment *seg = data()->GetSegment(s);
-    if (!seg) continue;
-    int idx;
-    if (seg->IsVaryNorm() && (idx = pmap.NormIndex(s)) >= 0 && idx < (int)g2.size()) {
-      const double nerr = seg->GetNominalNorm() / 100.0 * seg->GetNormError();
-      if (nerr != 0.0) g2[idx] += 2.0 / (nerr * nerr);
-    }
-  }
-  ForEachShiftPenalty(data(), pmap, [&](int idx, double, double e) {
-    if (idx < (int)g2.size()) g2[idx] += 2.0 / (e * e);
-  });
-  ForEachScreeningPrior(data(), pmap, [&](int idx, double, double e) {
-    if (idx < (int)g2.size()) g2[idx] += 2.0 / (e * e);
-  });
-  ForEachDensityPrior(data(), pmap, [&](int idx, double, double e) {
-    if (idx < (int)g2.size()) g2[idx] += 2.0 / (e * e);
-  });
-  ForEachDopplerPrior(data(), pmap, [&](int idx, double, double e) {
-    if (idx < (int)g2.size()) g2[idx] += 2.0 / (e * e);
-  });
-  ForEachThicknessPrior(data(), pmap, [&](int idx, double, double e) {
+  ForEachDiagonalPrior(data(), compound(), pmap, [&](int idx, double, double e) {
     if (idx < (int)g2.size()) g2[idx] += 2.0 / (e * e);
   });
   if (compound()->HasAbundanceBlock()) {
@@ -1411,8 +1285,6 @@ std::vector<double> AZURECalc::G2(const std::vector<double> &p) const {
       if (idx < 0 || idx >= (int)g2.size()) continue;
       int sample, nucleus;
       compound()->AbundanceOf(k, sample, nucleus);
-      const SampleAbundance &e = compound()->GetSample(sample)->entries[nucleus - 1];
-      if (e.sigma > 0.0) g2[idx] += 2.0 / (e.sigma * e.sigma);
       const double s = compound()->SampleSumSigma(sample, configure().abundanceSumSigma);
       if (s > 0.0) g2[idx] += 2.0 / (s * s);
     }
@@ -1714,113 +1586,47 @@ int AZURECalc::PrepareFreeParams(const vector_r &full,
   hi.assign(nFree, std::numeric_limits<double>::infinity());
   pen_nom.assign(nFree, 0.0);
   pen_inv2.assign(nFree, 0.0);
-  // Shift priors by full parameter index (p2f holds full indices of the same map).
-  std::map<int, std::pair<double, double>> shiftPrior;  // full index -> (nominal, sigma)
-  ForEachShiftPenalty(data(), BuildParamIndexMap(compound(), data(), std::vector<bool>()),
-                      [&](int idx, double nominal, double sig) { shiftPrior[idx] = {nominal, sig}; });
+  // The diagonal priors by full parameter index (p2f holds full indices of the same map; Objective.h).
+  const ParamIndexMap pmap = BuildParamIndexMap(compound(), data(), std::vector<bool>());
+  std::map<int, std::pair<double, double>> prior;  // full index -> (nominal, sigma)
+  ForEachDiagonalPrior(data(), compound(), pmap,
+                       [&](int idx, double nominal, double sig) { prior[idx] = {nominal, sig}; });
+  // The sum-to-one term couples the abundances and is not a per-parameter penalty: the least-squares drivers leave
+  // it out (warned once), MIGRAD carries it exactly (Objective).
+  bool anySum = false;
+  if (compound()->HasAbundanceBlock())
+    for (int k = 1; k <= compound()->NumAbundanceParams(); k++) {
+      int sample, nucleus;
+      compound()->AbundanceOf(k, sample, nucleus);
+      if (compound()->SampleSumSigma(sample, configure().abundanceSumSigma) > 0.0) anySum = true;
+    }
   for (int a = 0; a < nFree; a++) {
     int f = p2f[a];
     x[a] = full[f];
     const auto &par = mp.Parameter(f);
     if (par.HasLowerLimit()) lo[a] = par.LowerLimit();
     if (par.HasUpperLimit()) hi[a] = par.UpperLimit();
-    // Gaussian penalties contribute (1/sigma^2) to the diagonal of J^T J and
-    // (x-nominal)/sigma^2 to the gradient.  Norm / shift / nuisance penalties
-    // are identified the same way operator()/CalculateNuisanceChiSquared do.
-    std::string name = par.GetName();
-    if (AZURELabel::IsNormName(name)) {
-      for (int s = 1; s <= data()->NumSegments(); s++) {
-        ESegment *seg = data()->GetSegment(s);
-        if (!seg || !seg->IsVaryNorm()) continue;
-        char vn[64];
-        snprintf(vn, sizeof(vn), "segment_%d_norm", seg->GetSegmentKey());
-        if (name == vn) {
-          double n0 = seg->GetNominalNorm();
-          double sig = n0 / 100.0 * seg->GetNormError();
-          if (sig != 0.0) {
-            pen_nom[a] = n0;
-            pen_inv2[a] = 1.0 / (sig * sig);
-          }
-          break;
-        }
-      }
-    } else if (AZURELabel::IsEnergyShiftName(name)) {
-      auto it = shiftPrior.find(f);
-      if (it != shiftPrior.end()) {
-        pen_nom[a] = it->second.first;
-        pen_inv2[a] = 1.0 / (it->second.second * it->second.second);
-      }
-    } else if (name.compare(0, 10, "screening_") == 0) {
-      // Electron-screening potential: its prior is a diagonal penalty row.
-      for (int k = 1; k <= data()->NumScreeningParams(); k++) {
-        if (name != "screening_" + std::to_string(data()->GetScreeningEffect(k))) continue;
-        const TargetEffect *te = data()->GetScreeningTargetEffect(k);
-        if (te->GetScreeningSigma() > 0.0) {
-          pen_nom[a] = te->GetScreeningNominal();
-          pen_inv2[a] = 1.0 / (te->GetScreeningSigma() * te->GetScreeningSigma());
-        }
-      }
-    } else if (name.compare(0, 8, "density_") == 0) {
-      // Fitted target density: its prior is a diagonal penalty row.
-      for (int k = 1; k <= data()->NumDensityParams(); k++) {
-        if (name != "density_" + std::to_string(data()->GetDensityEffect(k))) continue;
-        const TargetEffect *te = data()->GetDensityTargetEffect(k);
-        if (te->GetDensitySigma() > 0.0) {
-          pen_nom[a] = te->GetDensityNominal();
-          pen_inv2[a] = 1.0 / (te->GetDensitySigma() * te->GetDensitySigma());
-        }
-      }
-    } else if (name.find("segment_") == 0 && name.size() > 10 && name.compare(name.size() - 10, 10, "_thickness") == 0) {
-      // Fitted sample thickness: its prior is a diagonal penalty row (none for a thickness-group follower).
-      for (int k = 1; k <= data()->NumThicknessParams(); k++) {
-        const ESegment *seg = data()->GetSegment(data()->GetThicknessSegment(k));
-        if (name != "segment_" + std::to_string(seg->GetSegmentKey()) + "_thickness") continue;
-        if (seg->GetThicknessSigma() > 0.0 && !seg->IsThicknessGroupFollower()) {
-          pen_nom[a] = seg->GetNominalThickness();
-          pen_inv2[a] = 1.0 / (seg->GetThicknessSigma() * seg->GetThicknessSigma());
-        }
-      }
-    } else if (name.find("doppler_") == 0) {
-      // Fitted Doppler temperature: its prior is a diagonal penalty row.
-      for (int k = 1; k <= data()->NumDopplerParams(); k++) {
-        if (name != "doppler_" + std::to_string(data()->GetDopplerEffect(k))) continue;
-        const TargetEffect *te = data()->GetDopplerTargetEffect(k);
-        if (te->GetDopplerSigma() > 0.0) {
-          pen_nom[a] = te->GetDopplerNominal();
-          pen_inv2[a] = 1.0 / (te->GetDopplerSigma() * te->GetDopplerSigma());
-        }
-      }
-    } else if (name.compare(0, 10, "abundance_") == 0) {
-      // Isotopic abundance: its <abundances> prior is a diagonal penalty row.
-      // The sum-to-one term couples the abundances and is not a per-parameter
-      // penalty: the least-squares drivers leave it out (warned once), MIGRAD
-      // carries it exactly (AZURECalc::operator()).
-      bool anySum = false;
-      for (int k = 1; k <= compound()->NumAbundanceParams(); k++) {
-        int sample, nucleus;
-        compound()->AbundanceOf(k, sample, nucleus);
-        if (compound()->SampleSumSigma(sample, configure().abundanceSumSigma) > 0.0) anySum = true;
-        if (name != compound()->AbundanceParamName(sample, nucleus)) continue;
-        const SampleAbundance &e = compound()->GetSample(sample)->entries[nucleus - 1];
-        if (e.sigma > 0.0) {
-          pen_nom[a] = e.nominal;
-          pen_inv2[a] = 1.0 / (e.sigma * e.sigma);
-        }
-      }
-      static std::atomic<bool> warnedSum{false};
-      if (anySum && !warnedSum.exchange(true))
-        configure().outStream << "WARNING: a sum-to-one width is set for the abundances, but the least-squares fitter applies only "
-                              << "the per-nucleus abundance priors; the sum-to-one penalty is carried by MIGRAD only." << std::endl;
-    } else if (limitsManager_) {
-      // Looked up by the full-vector index f, not by a: a counts the
-      // parameters free in this Jacobian, the limits manager's non-fixed index
-      // counts those free when it was applied plus every fixed segment
-      // parameter, and the two need not agree.
+    // Gaussian penalties contribute (1/sigma^2) to the diagonal of J^T J and (x-nominal)/sigma^2 to the gradient.
+    auto it = prior.find(f);
+    if (it != prior.end()) {
+      pen_nom[a] = it->second.first;
+      pen_inv2[a] = 1.0 / (it->second.second * it->second.second);
+    } else if (limitsManager_ && (f >= pmap.NumFull() || pmap.Desc(f).kind == ParamKind::LevelEnergy ||
+                                  pmap.Desc(f).kind == ParamKind::Gamma || pmap.Desc(f).kind == ParamKind::ThmCoherent)) {
+      // Nuisance priors (levels and THM coherent background only).  Looked up by the full-vector index f, not by
+      // a: a counts the parameters free in this Jacobian, the limits manager's non-fixed index counts those free
+      // when it was applied plus every fixed segment parameter, and the two need not agree.
       double nom, sig;
       if (limitsManager_->NuisancePrior(f, nom, sig)) {
         pen_nom[a] = nom;
         pen_inv2[a] = 1.0 / (sig * sig);
       }
+    }
+    if (f < pmap.NumFull() && pmap.Desc(f).kind == ParamKind::Abundance) {
+      static std::atomic<bool> warnedSum{false};
+      if (anySum && !warnedSum.exchange(true))
+        configure().outStream << "WARNING: a sum-to-one width is set for the abundances, but the least-squares fitter applies only "
+                              << "the per-nucleus abundance priors; the sum-to-one penalty is carried by MIGRAD only." << std::endl;
     }
   }
   return nFree;

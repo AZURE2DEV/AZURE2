@@ -6,11 +6,13 @@
 #include <string>
 #include <vector>
 
+#include "AZUREGrad.h"
+#include "CNuc.h"
+#include "Config.h"
 #include "Constants.h"
-
-class CNuc;
-class Config;
-class EData;
+#include "EData.h"
+#include "ESegment.h"
+#include "TargetEffect.h"
 
 /*!
  * The fit objective as one ordered list of terms (docs/upgrade/objective.md, Phase 2).  Every path that needs the
@@ -64,5 +66,113 @@ class Objective {
  private:
   std::vector<std::unique_ptr<ObjectiveTerm> > terms_;
 };
+
+
+/*
+ * The diagonal priors (x - nominal)^2 / sigma^2 of single parameters, as (full parameter index, nominal, sigma), for
+ * the code that needs their derivatives or their least-squares rows rather than their value: d/dx = 2 (x - nominal) /
+ * sigma^2, curvature 2 / sigma^2.  Exactly the terms the objective adds (T3, T4, T8 and T7's per-nucleus priors), so
+ * the gradients, G2 and the least-squares rows stay consistent with chi^2.
+ */
+
+// The shift penalties as (full parameter index, nominal, sigma), for the code
+// that needs a penalty's derivatives rather than its value: d/dx = 2 (x - nominal)
+// / sigma^2, curvature 2 / sigma^2.  Exactly the terms ESegment::AddShiftPenalty
+// adds, so the gradient, G2 and the least-squares priors stay consistent with
+// chi^2.  The nominal is 0 for every shift term since 2026-10-25 (the file's value
+// is only the start).
+template <class F>
+inline void ForEachShiftPenalty(EData *data, const ParamIndexMap &pmap, F f) {
+  for (int s = 1; s <= data->NumSegments(); s++) {
+    ESegment *seg = data->GetSegment(s);
+    if (!seg) continue;
+    int idx;
+    if (seg->IsVaryEnergyShift() && seg->GetEnergyShiftError() != 0.0 && (idx = pmap.EnergyShiftIndex(s)) >= 0)
+      f(idx, seg->GetNominalEnergyShift(), seg->GetEnergyShiftError());  // 0 unless a prior_centre row
+    if (seg->IsVaryEnergyShiftSqrt() && seg->GetEnergyShiftSqrtError() != 0.0 &&
+        (idx = pmap.EnergyShiftSqrtIndex(s)) >= 0)
+      f(idx, 0.0, seg->GetEnergyShiftSqrtError());
+    if (seg->OwnsShiftFn() && seg->HasShiftFn())
+      for (int j = 0; j < seg->NumShiftFnParams(); j++)
+        if (seg->IsVaryShiftFn(j) && seg->GetShiftFnErrors()[j] != 0.0 && (idx = pmap.EnergyShiftFnIndex(s, j)) >= 0)
+          f(idx, 0.0, seg->GetShiftFnErrors()[j]);
+  }
+}
+
+// The electron-screening priors ((U_e - nominal)/sigma)^2, U_e in eV: f(full index, nominal, sigma) for each
+// screening parameter with sigma > 0 (EData::ScreeningPenalty is their sum).
+template <class F>
+inline void ForEachScreeningPrior(EData *data, const ParamIndexMap &pmap, F f) {
+  for (int k = 1; k <= data->NumScreeningParams(); k++) {
+    const TargetEffect *te = data->GetScreeningTargetEffect(k);
+    if (te->GetScreeningSigma() <= 0.0) continue;
+    const int idx = pmap.ScreeningIndex(k);
+    if (idx >= 0) f(idx, te->GetScreeningNominal(), te->GetScreeningSigma());
+  }
+}
+
+// The fitted-density priors ((N - N0)/sigma)^2, N in atoms/cm^2: f(full index, nominal, sigma) for each density
+// parameter with sigma > 0 (EData::DensityPenalty is their sum).
+template <class F>
+inline void ForEachDensityPrior(EData *data, const ParamIndexMap &pmap, F f) {
+  for (int k = 1; k <= data->NumDensityParams(); k++) {
+    const TargetEffect *te = data->GetDensityTargetEffect(k);
+    if (te->GetDensitySigma() <= 0.0) continue;
+    const int idx = pmap.DensityIndex(k);
+    if (idx >= 0) f(idx, te->GetDensityNominal(), te->GetDensitySigma());
+  }
+}
+
+// The fitted-Doppler-temperature priors ((T - T0)/sigma)^2, T in K: f(full index, nominal, sigma) for each Doppler
+// parameter with sigma > 0 (EData::DopplerPenalty is their sum).
+template <class F>
+inline void ForEachDopplerPrior(EData *data, const ParamIndexMap &pmap, F f) {
+  for (int k = 1; k <= data->NumDopplerParams(); k++) {
+    const TargetEffect *te = data->GetDopplerTargetEffect(k);
+    if (te->GetDopplerSigma() <= 0.0) continue;
+    const int idx = pmap.DopplerIndex(k);
+    if (idx >= 0) f(idx, te->GetDopplerNominal(), te->GetDopplerSigma());
+  }
+}
+
+// The fitted-sample-thickness priors ((n - n0)/sigma)^2, n in atoms/barn: f(full index, nominal, sigma) for each
+// thickness parameter with sigma > 0 that owns its value (EData::ThicknessPenalty is their sum; a thickness-group
+// follower's parameter is fixed and carries no prior).
+template <class F>
+inline void ForEachThicknessPrior(EData *data, const ParamIndexMap &pmap, F f) {
+  for (int k = 1; k <= data->NumThicknessParams(); k++) {
+    const ESegment *seg = data->GetSegment(data->GetThicknessSegment(k));
+    if (seg->GetThicknessSigma() <= 0.0 || seg->IsThicknessGroupFollower()) continue;
+    const int idx = pmap.ThicknessIndex(k);
+    if (idx >= 0) f(idx, seg->GetNominalThickness(), seg->GetThicknessSigma());
+  }
+}
+
+// Every diagonal prior: normalizations (T3), energy shifts (T4), screening, density, Doppler and thickness (T8),
+// abundances (T7, per nucleus; the sum-to-one term couples them and is not diagonal).
+template <class F>
+inline void ForEachDiagonalPrior(EData *data, CNuc *compound, const ParamIndexMap &pmap, F f) {
+  for (int s = 1; s <= data->NumSegments(); s++) {
+    ESegment *seg = data->GetSegment(s);
+    int idx;
+    if (!seg || !seg->IsVaryNorm() || (idx = pmap.NormIndex(s)) < 0) continue;
+    const double n0 = seg->GetNominalNorm(), nerr = n0 / 100.0 * seg->GetNormError();
+    if (nerr != 0.0) f(idx, n0, nerr);
+  }
+  ForEachShiftPenalty(data, pmap, f);
+  ForEachScreeningPrior(data, pmap, f);
+  ForEachDensityPrior(data, pmap, f);
+  ForEachDopplerPrior(data, pmap, f);
+  ForEachThicknessPrior(data, pmap, f);
+  if (compound->HasAbundanceBlock())
+    for (int k = 1; k <= compound->NumAbundanceParams(); k++) {
+      const int idx = pmap.AbundanceIndex(k);
+      if (idx < 0) continue;
+      int sample, nucleus;
+      compound->AbundanceOf(k, sample, nucleus);
+      const SampleAbundance &e = compound->GetSample(sample)->entries[nucleus - 1];
+      if (e.sigma > 0.0) f(idx, e.nominal, e.sigma);
+    }
+}
 
 #endif
