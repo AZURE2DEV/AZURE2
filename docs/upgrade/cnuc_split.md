@@ -171,8 +171,9 @@ returns S, S′ and P (sections 5, 7).
    builds): `SortPathways`, `CalcAngularDists`, `CalcCaptureAnalyzingPower` into `observables`,
    computed once per reaction with `AngularCoupling` (3j/6j/9j against `AngCoeff`: differences of one ulp are possible,
    so this step is checked to 10⁻¹⁴ and re-baselined by its own commit if an output moves).
-6. **Data accessors**: callers of `GetPair`/`GetJGroup` read the System (partition α, block b) through the adapter
-   map; the pathway trees stop living on `PPair`.
+6. **Data accessors** (section 10): callers of `GetPair`/`GetJGroup` read the System (partition α, block b) through the adapter
+   map; the pathway trees stop living on `PPair`. In two parts: 6a the enumeration (`SortPathways`) as a physics
+   function of the System, which the engine's trees are filled from; 6b the consumers of the trees, one by one.
 7. Phase 2 and 3 take (e) and (c). `CNuc` is then empty and deleted.
 
 ## 4. The formal basis and the eigensolver
@@ -595,3 +596,52 @@ and the zeros must agree.
 observable within 10⁻¹² relative of its column's largest value is (b) rounding. A fitted value within the fit's
 tolerance is (b). Anything else stops the step. Then `ctest`, `run_tests.sh` and 1 vs 8 threads. A test whose
 expected value moves only by the amounts in (c) is re-baselined in its own commit, with the classification.
+
+## 10. Step 6a: design
+
+The pathway trees on `PPair` (`Decay` → `KGroup` → `MGroup`/`ECMGroup`) are read by every observable (`AMatrixFunc`,
+`GenMatrixFunc`, `RMatrixFunc`, `EPoint`, `EData`, `AZUREAPI`, `CNucExternalCapture`: about 340 calls of
+`GetDecay`, `GetKGroup`, `GetMGroup`, `GetECMGroup`, `GetKLGroup`). `GetPair`/`GetJGroup` are called about 730 times
+in 23 files. Moving all of them at once is the observables move of Phase 2, so step 6 is split. Step 6a moves what
+decides the trees, the enumeration of `SortPathways`, into physics/. The trees, their consumers and
+`CalcAngularDists` (which reads the trees) stay. Step 6b then moves the consumers one at a time onto the physics
+result and deletes the trees when the last one has moved.
+
+**The function** (`physics/include/azure2/physics/Pathways.h`):
+
+    reaction_pathways(System, entrance partition α, final states, options) → [ExitPathways]
+
+The System is the R-matrix structure (`CNucSystemContent::Structure`: blocks are the J-groups in the R-matrix). A
+final state is described by its 2J, parity, photon partition, multipole mask (E1, M1, E2) and particle channels
+(partition, l, 2s). Final states can lie in J-groups outside the R-matrix, so they are not System blocks. The options
+are the R-matrix-capture flag (`USE_RMC_FORMALISM`: no photon exit pathways). The result has one entry per exit
+partition α′, in order of first appearance. Each entry holds the channel-spin groups (2s, 2s′ and, for the
+unobserved-primary groups, 2s₂′), each with its internal pathways and its external pathways:
+- internal pathway: block b, entrance channel k, exit channel k′, statistical spin factor (2J + 1)·I₁I₂ factor;
+- external pathway: multipole, L, entrance l, compound 2J, final state, final channel and, for channel capture,
+  the channel-capture group and pathway it continues and the compound block's photon channel.
+
+Every list is in the order `SortPathways` appends: its loops (entrance pair, exit pair, s, s′, s₂′, group, channel,
+channel′) run over System indices in the same order, since the System lists the partitions, R-matrix groups and their
+channels in `CNuc` order (`physics_system.md`). The rules are those of `SortPathways`: the four exit kinds (beta
+entrance with l ≤ 1, elastic, particle exit with s₂′, photon), the deduplication of channel-capture groups on the
+pathway triple, the radiation type from the parities, the multipole mask and J triangle, and the coupling rule
+`couples` of `ExternalCapture.h` (the same expression).
+
+**The engine.** `SortPathways` builds the System, calls `reaction_pathways` for each entrance pair, and fills
+`Decay`/`KGroup`/`MGroup`/`ECMGroup` from the result through the adapter map (block → J-group number, block channel
+→ group channel number, final state → J-group and level number). The trees are therefore the same objects in the same
+order with the same numbers, so every output is expected bit-identical.
+
+**Verification.**
+(a) A physics test on synthetic Systems checks properties the enumeration must have, without reusing its loops:
+- every internal pathway joins two channels of one block with the stated channel spins;
+- every pair of block channels with entrance partition α appears in exactly one group per exit kind;
+- every external pathway satisfies the parity, mask, J and coupling rules;
+- the count of each kind equals a direct count.
+(b) An engine-side ctest keeps a verbatim copy of the old `SortPathways` (at db972c84). It builds both trees on
+T1–T3 and on the projects with UPOS, external capture, beta-delayed and capture-A_y pathways
+(`upos_pair_index`, `light_excitation`, `13N`, `13N_capture_ay`, `ec_e1m1_phase`, `beta_delayed_alpha`,
+`capture_ay_coupling`). Every field and every position must be equal.
+(c) 179 `.azr` × 3 bases against the merged head before 6a (db972c84): every file identical; anything else stops the
+step. Then ctest, `run_tests.sh` and 1 vs 8 threads.
