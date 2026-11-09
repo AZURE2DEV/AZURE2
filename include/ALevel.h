@@ -45,6 +45,14 @@ class ALevel {
   /// Does this channel's <levels> gamma field hold a reduced-width amplitude
   /// directly, rather than a physical width? (The 33-field THM line's flag.)
   bool GammaIsRWA(int) const;
+  /// Was this channel's input width exactly zero (a zero in the <levels> line, a channel the level does not list,
+  /// or a zero in the physical vector handed to CNuc::TransformIn)?  With IGNORE_ZERO_WIDTHS (--ignore-externals,
+  /// the default) such a radiative channel has no external part: neither in the observed width (TransformIn /
+  /// TransformOut) nor in the resonant channel capture through the level (AMatrixFunc).  It is a property of the
+  /// input, fixed when the width is read, and not a test on the working amplitude: the external part used to be
+  /// dropped whenever |gamma| < 1e-8 MeV^1/2, which made every cross section jump when a fitted or profiled
+  /// amplitude crossed 1e-8.
+  bool ZeroInputWidth(int) const;
   /// Is the level a final state for external capture?
   bool IsECLevel() const;
   int NumNFIntegrals() const;
@@ -121,6 +129,7 @@ class ALevel {
   /// Append a channel with the given initial reduced width amplitude.
   void AddGamma(double);
   void SetGamma(int, double);
+  void SetZeroInputWidth(int, bool);
   void SetE(double);
   void SetFitGamma(int, double);
   void SetFitE(double);
@@ -182,6 +191,8 @@ class ALevel {
   /// Per-channel input convention: true = gamma column was a reduced width
   /// amplitude (MeV^(1/2)), false = physical partial width/ANC (legacy default).
   std::vector<bool> gamma_is_rwa_;
+  /// See ZeroInputWidth.
+  std::vector<bool> zero_input_;
   vector_r gammas_;
   vector_r fitgammas_;
   vector_r ec_gammas_;

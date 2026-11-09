@@ -101,10 +101,16 @@ Available Options
        :math:`\Gamma_c = 2P_c\gamma_c^2`.  Same cross sections as the
        default; see the note below.
    * - ``--ignore-externals``
-     - Ignore external width if internal width is zeroed (equivalent to the
-       GUI option).  This is the default.
+     - A photon channel whose width is given as exactly zero (a 0 in
+       ``<levels>``, or a channel the level does not list) has no external
+       part: no external width and no channel capture through that level.
+       This is the default.  The test is on the input, in the observed
+       (Brune) form, so it is the same in every basis and does not change
+       during a fit; builds before 2026-11-08 tested the current amplitude
+       against 10⁻⁸ MeV^½, so the basis in use and a fit crossing 10⁻⁸
+       changed it (``docs/upgrade/external_capture.md`` section 3).
    * - ``--no-ignore-externals``
-     - Keep the external width of a level whose internal width is zero (the
+     - Keep the external width of a level whose input width is zero (the
        GUI option unticked; pyazr ``ignore_externals=False``).  Needed for the
        R-matrix route, see below.  Before November 2026 the CLI had no way to
        turn the option off.

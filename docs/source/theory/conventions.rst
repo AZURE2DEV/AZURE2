@@ -237,7 +237,8 @@ with its sign.
   :math:`\gamma^{\rm int} = \operatorname{sign}(\Gamma)\,[\tilde\gamma^2 -
   (\mathrm{Im}\,\gamma^{\rm ext})^2]^{1/2} - \mathrm{Re}\,\gamma^{\rm ext}`
   (``subtract_external_capture``, ``LevelParameters.cpp:329-353``), with :math:`\gamma^{\rm ext}` from
-  ``CNuc::CalcExternalWidth`` (``CNuc.cpp:3196-3278``).
+  ``external_reduced_width`` (``physics/src/ExternalCapture.cpp``, through
+  ``ExternalReducedWidth`` of ``src/CNucExternalCapture.cpp``).
 - **Static moments.** A photon channel of a level at the energy and
   :math:`J^\pi` of the final state carries a static moment (M1 or E2 only):
   a penetrability factor of its own applies (:math:`3J/[4(J+1)\mu_N^2]` for
@@ -281,10 +282,26 @@ with its sign.
   :math:`0^+` state at 90° differed between ``--no-brune`` and the default by up
   to 81 % (:math:`E_\alpha` = 1.0–6.5 MeV, ``--no-ignore-externals``); now by
   :math:`1.5\times10^{-11}` (``tests/beam_profile_kernel/check.sh``).
-  With ``--ignore-externals`` (the default) the bases still differ: that
-  option drops the external capture of a level whose internal photon
-  amplitude is zero, and which levels those are depends on the basis
-  (``docs/upgrade/cnuc_split.md`` section 8).
+  ``--ignore-externals`` (the default) drops the external part of a photon
+  channel whose width is given as exactly zero: no external width, and the
+  level is left out of the channel capture. The test is on the input, which
+  is in the observed (Brune) form in every basis, and it does not change in
+  a fit. In the formal basis the left-out Brune levels are carried to the
+  formal ones by the projector :math:`\Pi = T^{-1}PT` (:math:`T` the
+  Brune-from-formal transform, :math:`P` the diagonal mask), so the bases
+  agree (``docs/upgrade/external_capture.md`` section 3). Builds before
+  2026-11-08 tested :math:`|\gamma| < 10^{-8}` MeV\ :sup:`1/2` on the
+  amplitude in use, so the formal basis differed from the default by up to
+  54 % (``tests/upgrade/T1``) and a fit crossing :math:`10^{-8}` changed the
+  cross sections discontinuously.
+  The adjoint does not differentiate :math:`\Pi` or the Brune amplitude of a
+  final state that shares its block, so in the formal basis the
+  :math:`\chi^2` gradient, the residual Jacobian and the model gradients are
+  finite differences when a capture block has a masked level with a particle
+  width (or a free particle amplitude), and whenever external capture goes to
+  such a final state. A masked level with no particle width is decoupled
+  (:math:`\Pi = P` exactly) and keeps the analytic gradient
+  (``docs/upgrade/external_capture.md`` section 7).
 - **No transformation** (``--no-transform``). The ``<levels>`` values are
   used as :math:`E_\lambda` and :math:`\gamma_{\lambda c}` directly.
 
@@ -364,7 +381,7 @@ with the radial overlap, for a non-channel-capture pathway,
 :doc:`external_capture_operator` replaces the effective charge by a function of
 :math:`r`). The bracket is the hard-sphere wave function, which vanishes at
 :math:`r = a`. :math:`\mathcal N_f` is the bound-state normalization
-(``SqrtNFFactor``), so the prefactor is the ANC of the final level, with the
+(``bound_state_normalization`` in ``physics/src/ExternalCapture.cpp``), so the prefactor is the ANC of the final level, with the
 sign of :math:`\gamma_{fc_f}`. The angular factors are
 
 .. math::

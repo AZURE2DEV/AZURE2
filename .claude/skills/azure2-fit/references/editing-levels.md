@@ -83,7 +83,7 @@ writes every level parameter at its current observed value (`transform_all_rwa(f
 - The external-capture integrals depend only on the EC final-level energies (fixed in practice), pair data and the data
   grid, so `recalculate_external_capture()` changes a fit's χ² by about 0.1 at most; it uses the level energies from
   the file, not the session's. `ignore_externals=True` is `--ignore-externals`: it drops the external amplitude only
-  where the internal width is zero, it does not switch external capture off.
+  where the width is given as exactly zero in the file, it does not switch external capture off.
 - **Target-integration sub-point grids** are re-placed on every evaluation from the current level energies and widths
   (`--no-grid-replacement`, pyazr `replace_grids=False`, restores a grid fixed at start-up; segments that need
   external-capture amplitudes keep their grids; `docs/source/user_guide/experimental_effects.rst`). With replacement a

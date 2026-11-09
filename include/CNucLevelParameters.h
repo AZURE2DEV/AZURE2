@@ -42,7 +42,7 @@ azure2::physics::ChannelFunctions ChannelFunctionsFromCNuc(CNuc &compound, const
 azure2::physics::ProjectLevels ProjectLevelsFromCNuc(CNuc &filled, const CNucSystemMap &map, std::size_t b);
 
 /*!
- * External-capture amplitudes of block b's photon channels (CNuc::CalcExternalWidth with isInitial = true), in the
+ * External-capture amplitudes of block b's photon channels (ExternalReducedWidth with initial = true), in the
  * layout of the block's gamma; not present unless external capture is on, nor (as in the engine) for an amplitude
  * |gamma| < 1e-8 when zero widths are ignored (IGNORE_ZERO_WIDTHS).  The value depends on the amplitudes the
  * CNuc's levels hold at the time of the call (the level's own particle amplitudes and the final state's): CNuc's

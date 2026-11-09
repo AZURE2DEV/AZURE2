@@ -301,6 +301,22 @@ int main() {
     const LevelSet b2 = brune_from_formal(sys, 0, formal.E, formal.gamma, B, cf, tight);
     report("formal -> Brune: energies", MaxRel(b2.E, E), 1e-13);
     report("formal -> Brune: amplitudes, signs included", MaxRel(b2.gamma, brune.gamma), 1e-11);
+    // The transform T (external_capture.md section 3): gamma~ = T gamma, its rows unit vectors, and the iteration's
+    // results unchanged by asking for it.
+    FormalToBruneOptions withT = tight;
+    withT.want_transform = true;
+    const LevelSet bT = brune_from_formal(sys, 0, formal.E, formal.gamma, B, cf, withT);
+    const std::size_t nl = formal.E.size(), ncT = formal.gamma.size() / nl;
+    std::vector<double> viaT(nl * ncT, 0.0), norms(nl, 0.0), ones(nl, 1.0);
+    for (std::size_t l = 0; l < nl; l++) {
+      for (std::size_t m = 0; m < nl; m++) {
+        norms[l] += bT.transform[l * nl + m] * bT.transform[l * nl + m];
+        for (std::size_t k = 0; k < ncT; k++) viaT[l * ncT + k] += bT.transform[l * nl + m] * formal.gamma[m * ncT + k];
+      }
+    }
+    report("formal -> Brune: T gamma = gamma~", MaxRel(viaT, bT.gamma), 1e-13);
+    report("formal -> Brune: rows of T are unit vectors", MaxRel(norms, ones), 1e-14);
+    report("formal -> Brune: the transform changes nothing else", MaxRel(bT.gamma, b2.gamma), 0.0);
     const LevelSet f2 = formal_from_brune(sys, 0, b2.E, b2.gamma, B, cf);
     report("formal -> Brune -> formal: energies", MaxRel(f2.E, formal.E), 1e-12);
     report("formal -> Brune -> formal: amplitudes, signs included", MaxRel(f2.gamma, formal.gamma), 1e-11);

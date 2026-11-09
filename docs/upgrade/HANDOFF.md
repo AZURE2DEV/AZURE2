@@ -2,6 +2,163 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-09 (evening) — split `CNuc`, step 5: coupling coefficients of the observables
+
+Branch `feature/upgrade-1-coupling` from 9be284f0 (step 4), not merged. Commits: design (`cnuc_split.md` §9,
+da3703d2, alone), physics (96917f36), engine (563a7172), record (9143239d). `CalcAngularDists`,
+`CalcCaptureAnalyzingPower` and `ThmAngular`'s Z̄ take their coefficients from `physics/ObservableCoupling` (no
+GSL; new `wigner_9j`, `racah_w`); `AngCoeff::Wigner9j` deleted; `CNuc.cpp` 3135 → 3061 lines. `SortPathways`
+moves to step 6 with the pathway trees.
+
+**Evidence.** The physics tests check the 9j and, independently of the code under test, the particle and photon
+coefficients against m-scheme angular distributions (237k checks, ≤ 1.4 × 10⁻¹⁴). The engine-side test checks
+every coefficient against the old GSL expression (≤ 4 × 10⁻¹⁵ relative, same terms kept). 179 × 3: 2063/2069
+identical; the six files left (`ec_e1m1_phase` s_1, `gamma_lab_frame` cm, in three bases) differ by at most
+3.2 × 10⁻¹⁵ of the column maximum. The sign flips in `ec_e1m1_phase` are 10⁻¹⁹ residues of a cross section that
+is exactly zero at 0° and 180°. ctest 113/113, run_tests 133/133, threads identical, timing unchanged. **Ready
+for PI review/merge**; independent of the four branches waiting.
+
+**Next.** (1) PI: merge order of the five branches (`zero-width-fixed`, `whittaker`, `brune-iteration`,
+`whittaker-engine`, `coupling`). (2) Step 6: data accessors and the pathway trees (`SortPathways`) on the System.
+(3) `ShftFunc` band; lecture 2.
+
+## 2026-11-09 (day) — PI decisions; the Brune blocker fixed; step 3b (ii)
+
+**PI decisions.** (1) `brune-iteration`: option (i), the iteration must converge where the root exists.
+(2) afd8ee6a (`apply_fit_test.py` to §9's rule) confirmed. (3) The Whittaker engine branch waits for step 3b (ii)
+— now done, see below.
+
+| branch | state |
+|---|---|
+| `feature/upgrade-1-brune-iteration` | **verified, blocker fixed** (`level_parameters.md` §10, design a3bb203a + d6afeaeb + ff484603, code 5d8dc1e1, verified e4ca5d9d). E − e(E) is strictly increasing (Weyl, S′ ≥ 0), so each level has one Brune energy; the fixed-point map repels where e′ < −1 (−2.88 on the blocker: 2-cycle −0.973 / 4.462 MeV around the root 2.36820 MeV). A level that ends unconverged is now the root by bracket + bisection (status `Bracketed`). ctest 111/111, run_tests 133/133, threads identical; 179 × 3: only `screening_6li` formal changes (three background levels now transformed, equal to the Brune input digit for digit) |
+| `feature/upgrade-1-whittaker-engine` | step 3b (ii) done (design cf5ddcce, code 82ca0985, verified b70ffdf9): final-state W memoized on its exact arguments, bit-identical (2040/2040), 99.8 % hits; T1 5.14 → 2.77 s, 13N 9.71 → 7.08 s (GSL build: 2.89 / 7.60 s). **Ready for PI review/merge**; after the merge everyone rebuilds the Coulomb table (format 2) |
+
+**Next.** (1) PI: merge order (`zero-width-fixed`, `whittaker`, `brune-iteration`, then `whittaker-engine`).
+(2) Narrowing `ShftFunc`'s band near threshold (own comparison). (3) Lecture 2.
+
+## 2026-11-09 (night) — the three branches built and verified; the Whittaker engine part on a new branch; lecture 1
+
+Work moved to a 24-core node (local builds, no Condor); at most 12 threads. Environment: conda env with Python 3.12,
+numpy, scipy, mpmath, pybind11; build `cmake ... -DBUILD_GUI=OFF -DUSE_API=ON -Dpybind11_DIR=...` (34 s on 12 jobs).
+The 179 × 3 comparison takes 51 s with a Coulomb table and ~8 min without; `run_tests.sh` ~20 min on 11 threads.
+
+| branch | state |
+|---|---|
+| `feature/upgrade-1-external-capture` | `run_tests.sh` rerun: 133/133 (pending item closed); `ctest -LE slow` 111/111 |
+| `feature/upgrade-1-zero-width-fixed` | **verified** (`external_capture.md` §9, "Verified"): 2040/2040 identical, ctest 112/112, run_tests 133/133, threads identical. Two test commits: check (c) of the new test called `apply_fit` in a way it refuses (fixed); `apply_fit_test.py` "fixed nonzero, no line: still refused" changed to §9's rule — **PI to review** (afd8ee6a) |
+| `feature/upgrade-1-whittaker` | **verified** (`coulomb.md` §1.4, "Part 1 verified"): 2040/2040 identical, ctest 114/114 with the binding test |
+| `feature/upgrade-1-brune-iteration` | verified except one test — **blocker for the PI** (`level_parameters.md` §9, "Blocker"): `pyazr_formal_capture_mask` (c) is NaN because `brune_from_formal` 2-cycles (E = −0.973 / 4.462 MeV) at ±10⁻⁶ MeV on `energy_3`; a18fe89e hid the same non-convergence by keeping formal values. Otherwise 179 × 3: Brune, Park identical, formal 657/662 (1.7 × 10⁻¹¹); run_tests 133/133 |
+| `feature/upgrade-1-whittaker-engine` (new, from `-whittaker`) | step 3b (i) part 2: design addendum (a2593c96), engine switch (48fb454f), EC signature v6 with a stale-file case (5ed85322). **Changes outputs; PI to review before merging.** Numbers below |
+| `docs/lectures-1` (new, from 7704e48f) | lecture 1 text written (`docs/lectures/01-external-region/lecture.md`), figures redone (no label boxes over curves, ranges fitted) |
+
+**Whittaker engine part (`feature/upgrade-1-whittaker-engine`).** `WhitFunc`, `CoulombTable::ExactBound` and
+`ThmBoundStateTail` call `whittaker` / `whittaker_scaled`; no engine file includes `gsl_sf_hyperg.h`. The Coulomb
+table format is 2 (its bound sheet changed): a format-1 file is refused with a warning, so **everyone must rebuild
+their table after the merge** (`AZURE2 --build-coulomb-table`, 112 s on 12 threads). Comparison without a table
+against the `-whittaker` head: Brune 595/689, formal 559/662, Park 605/689 identical; every observable within
+2.2 × 10⁻⁹ of its column's largest value; parameter files at most 9 × 10⁻⁸ relative (last printed digits), the
+apparent large differences being values at rounding (10⁻¹⁸–10⁻³⁷ formal zero-input widths; 10⁻²² cross sections
+at 0°/180° that vanish), one 0.99999999 eV width printed as 1000 meV, and −0.000000 signs; the 20 `intEC.dat`
+caches change (hence v6). With tables built by each build: `c12c12` identical in the three bases. Note: the
+format-1 table in `~/.azure2` on this node (26 Oct) moves `c12c12` by 1.9 × 10⁻⁵ against a format-1 table
+built by today's reference build — the table can go stale within one format number. ctest 114/114 (with a format-2
+table; `pyazr_park_dsde` needs a usable table, it fails when the only table is refused); threads identical;
+run_tests 133/133. **Cost:** one-thread calc 13N 7.10 → 9.14 s, T1 2.62 → 4.73 s, all of it in
+set-up (the external-capture table, 1176 integrals at 1320 nodes in T1, recomputed every run; evaluation unchanged,
+~1 ms) — the 13× slower W per call. Step 3b (ii), one W table per integral, is the remedy; do it before merging.
+
+**Next.** (1) PI: the brune-iteration blocker (safeguarded iteration, or move the test model); afd8ee6a; whether the
+engine switch may merge with its cost or waits for 3b (ii). (2) Step 3b (ii): the per-integral W table in
+`ECIntegral`'s data path, then the timing again. (3) Narrowing `ShftFunc`'s band near threshold (own comparison).
+(4) Lecture 2 (channels, level and collision matrices, the three bases).
+
+## 2026-11-08, end of session — lectures added to the plan; work stopped here
+
+The PI asked for R-matrix lectures (Notion Markdown, figures, later slides): plan and lecture 1's figures in
+`docs/lectures/` (`PLAN.md`). Lecture 1's text is not written. Everything else is as in the entry below: four
+branches, the three on top of step 4 BUILD-PENDING (Condor schedd on crcfe02 down).
+
+## 2026-11-08, later — three branches on top of `feature/upgrade-1-external-capture`; builds pending
+
+The PI accepted step 4's fixes and its two proposed defaults (2026-11-08). Each is a branch cut from
+`feature/upgrade-1-external-capture` a18fe89e, design note first, then code; they do not depend on each other.
+Merge order: this branch, then the three in any order. **Not built yet**: the login node's Condor schedd has been
+down since the node rebooted (~07:40); the code is syntax-checked (`g++ -fsyntax-only` with the build's flags, no
+warnings in the touched lines) and each code commit says "BUILD AND TESTS PENDING".
+
+- `feature/upgrade-1-brune-iteration` (worktree `azure2-up-ec`): `brune_from_formal` inside an evaluation converges
+  at max(10⁻¹² MeV, 10⁻¹²|E|), takes its last iterate at the rounding floor (≤ 10⁻⁹ MeV, status `RoundingLimited`),
+  and gives NaN instead of the formal values otherwise; setup failures stop the run (`level_parameters.md` §9).
+  Tests: `level_parameters_unit_test` (new cases), `pyazr_formal_brune_iteration` (slow; χ² of
+  `beam_profile_kernel` smooth in `width_9_2`, which jumped 40.44 → 42.93).
+- `feature/upgrade-1-zero-width-fixed` (worktree `azure2-up-zero`): a width given as 0 is fixed in every basis
+  (`ZeroInputWidth`, not the transformed value); `apply_fit` skips fixed unlisted channels; pyazr 2.9.1
+  (`external_capture.md` §9). Test `pyazr_zero_width_fixed`. Expected: formal free set = Brune free set (134 → 67 on
+  `beam_profile_kernel`), `--no-ignore-externals` input-0 photon widths fixed.
+- `feature/upgrade-1-whittaker` (worktree `azure2-up-whit`), step 3b (i) part 1: `physics/coulomb` `whittaker`,
+  `whittaker_scaled` without GSL (integral representation of U, double-exponential quadrature; `coulomb.md` §1.4).
+  Against mpmath on 1162 points: W 2.1 × 10⁻¹², ρW′/W 3.3 × 10⁻¹³ (GSL as the engine calls it: 6.9 × 10⁻⁹, 10 points
+  without a value); COULCC at imaginary argument dropped (0/0 at η_b = l+1, l+2, …). 4.8 µs per call against GSL's
+  0.36 µs. `physics_whittaker` and `whittaker_gsl` were run standalone (pass; four mutations each fail it); the
+  binding `_azure2.whittaker` and `pyazr.whittaker_wave` (pyazr 2.10.0) wait for the build.
+
+**To do when Condor is back** (per branch): build (`upgrade-work/build.sh SRC BUILD OFF`), `ctest -LE slow`, the new
+slow test, `run_tests.sh`, 1 vs 8 threads, the 179-project comparison against a18fe89e (`ec-work/runall.sh`,
+`classify.py`), each change classified; then a follow-up commit with the numbers. Also still pending:
+`run_tests.sh` on this branch's 709ed040 build (`ec-work/verify.sh`).
+
+**Next (step 3b (i) part 2, design in `coulomb.md` §1.4):** `WhitFunc` over `whittaker`/`whittaker_scaled`,
+`ShftFunc`'s bound branch on ρW′/W (whether the interpolated band near threshold narrows is a separate comparison),
+`CoulombTable`, `ThmNumerics`, `ThmFunc`; measure `ECIntegral`'s data path (13× per W call) before and after, and
+route `pyazr.whittaker` (transform.py) through the engine. Bound-state outputs move in their last digits; classify.
+
+## 2026-11-08 (`feature/upgrade-1-external-capture`) — split `CNuc`, step 4: `physics/external_capture`; the mask on the input
+
+Branch `feature/upgrade-1-external-capture` from `feature/upgrade` 5055bec0, not merged. Commits: the design
+(`external_capture.md`, alone), the physics part, the engine through the adapter, the mask on the input, the
+lowest-level final state with a free energy (step 2 open item 2); then the addendum (section 7, alone), one adjoint
+test for every gradient path with decoupled masked levels on P, `tests/pyazr/formal_capture_mask_test.py`, these docs.
+
+**State.** `physics/external_capture`: N_f, the multipole rule, γ^ext (Eq. 4, radial integral injected), the
+projector Π = T⁻¹PT; the adapter `src/CNucExternalCapture.cpp` replaces `CalcExternalWidth` and six copies of
+N_f^−½ (`CNuc.cpp` 3349 → 3132 lines). `--ignore-externals` masks a photon channel whose input width is exactly zero
+(`ALevel::ZeroInputWidth`), the same in every basis and continuous in a fit; the formal basis carries the Brune mask
+with Π. The adjoint does not differentiate Π or the step-2 final-state amplitudes: `FormalPartsOutsideAdjoint`
+(`src/AZUREGrad.cpp`) sends the χ² gradient, the residual Jacobian and the model gradients to finite differences
+when a slot has a projector or a masked level has a free particle amplitude, or a formal final-state block exists;
+a masked level with no particle width is decoupled and uses P (exact). How the parts stay apart: the physics part
+gets arrays and returns arrays; the adapter only reads `CNuc` and calls it; the gradient asks `CNuc` one question.
+
+**Evidence** (`external_capture.md` §6). 179 `.azr` × 3 bases against 5055bec0: Brune 689/689, Park 689/689
+identical; formal 650/662, every change classified (`upgrade/T1` capture and χ², `beam_profile_kernel` capture,
+χ² and three input-0 E2 widths), each changed formal output now equal to the Brune one. The guard commit:
+2040/2040 files byte-identical to 3d08b7f0. χ² gradient vs central differences, formal basis, 13N with a masked
+coupled 1/2⁺ level: 1.7 × 10⁻³ → 1.4 × 10⁻⁷ (new test; fails on e205038e; other checks fail on 5055bec0). No
+warnings; check.sh PASS; `ctest -LE slow` 111/111 (`pyazr_zero_width_level` passes again); `run_tests.sh` 133/133 on 3d08b7f0 (on the final build cut short by the 2026-11-08 node reboot, rerun pending; its
+menu-1 outputs are byte-identical to 3d08b7f0's);
+1 vs 8 threads byte-identical (T1–T3, 13N, three bases); T2 bench (Brune; mean of three, same host, 5055bec0 → 3d08b7f0; the
+guard is a no-op in Brune) fit200 61.58 → 62.16 s (1 thread, +0.9 %), 26.61 → 26.65 s (8); calc 1.03 → 0.98 s,
+0.21 → 0.20 s.
+
+**Open (proposed default in brackets).**
+- **Blocker for merging the formal basis as "continuous":** `brune_from_formal` at 10⁻¹² MeV is at the rounding
+  limit (§8). On `beam_profile_kernel` a 10⁻⁶ change of one width makes the 20 MeV 1⁻ level miss the tolerance
+  (last step 7.7 × 10⁻¹² MeV after 1001 iterations); the formal values are then kept silently, its row of T becomes
+  a unit vector and χ² jumps 40.44 → 42.93. The merged step-2 final-state amplitudes use the same call. [A
+  tolerance relative to the rounding of E, e.g. max(10⁻¹² MeV, 64 ε |E|), in both callers; a level that still does
+  not converge is an error of the evaluation, not formal values. Needs the PI: it changes merged formal-basis
+  numbers at ~10⁻¹¹ and the no-silent-fallback rule decides the second half.]
+- Width parameters with value 0 are fixed at setup (`CNuc.cpp:2259`), tested on the transformed value, so in the
+  formal basis rounding decides: `beam_profile_kernel` frees 35 parameters with |value| < 10⁻¹² on 5055bec0 and 48
+  here (10 new on the lowest 1⁻, 2⁺, 3⁻ levels, from 8df95d22's reordered sums; 3 masked photon channels now exactly
+  γ^int = 0 plus rounding). [Fix on the input, as the mask: a width given as 0 is fixed in every basis. Changes which
+  parameters a formal-basis fit varies; PI decision.]
+- Formal basis with a projector or a final-state block: finite-difference gradients. [Accept; the derivative of T
+  is a Phase 2 item.]
+- From step 2, unchanged: `TransformOut`'s 10⁻⁶ MeV report iteration; `ThmLevelWidth`'s own total width.
+
+**Next.** PI decisions on the two items above; then merge; then step 3b (i) (Whittaker functions without GSL).
+
 ## 2026-11-08 (`feature/upgrade-1-cnuc-split-2`) — split `CNuc`, step 2: observed quantities; formal-basis external capture
 
 Branch `feature/upgrade-1-cnuc-split-2` from `feature/upgrade` 9d50667f, not merged. Commits: the design

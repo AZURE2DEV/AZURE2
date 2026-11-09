@@ -510,6 +510,14 @@ add_test(NAME pyazr_zero_width_level
                  ${CMAKE_CURRENT_SOURCE_DIR}/zero_width_level_test.py)
 set_tests_properties(pyazr_zero_width_level PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
+# The --ignore-externals mask (docs/upgrade/external_capture.md sections 3 and 7): defined on the input (1e-20 eV keeps
+# its external part), formal = Brune capture with a masked level coupled to another, and the chi2 gradient equal to
+# central differences in both bases (the formal one missed the projector's dependence, 1.5e-2, before 2026-11-08).
+add_test(NAME pyazr_formal_capture_mask
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/formal_capture_mask_test.py)
+set_tests_properties(pyazr_formal_capture_mask PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
 # The R-matrix route (<config> first line false) at a pole of the R-matrix: tests/13N's thick-target capture puts a
 # sub-point exactly at a level's energy (NaN / 1.2 % off before 2026-11-01); identical_pp_res and natural_neon hit an
 # exact pole with Brune (LU failure / 84 points 0).  ~4 min.

@@ -183,11 +183,11 @@ std::vector<double> boundary_values(const System &system, std::size_t b, const s
 
 /// Photon channels: total amplitude -> internal one, gamma_int = sign(gamma) (gamma^2 - Im^2)^1/2 - Re of the
 /// external amplitude (CNuc.cpp, TransformIn, second loop).  ext has the layout of gamma; entries not present are
-/// left alone, and so are |gamma| < 1e-8 when ignore_zero_widths.
+/// left alone: the --ignore-externals mask is applied by the caller, which leaves a masked channel's entry absent
+/// (external_capture.md section 3).
 /// exceeded, if given, receives the index (lambda * n_c + k) of every entry where |Im| exceeded the total amplitude.
 void subtract_external_capture(const System &system, std::size_t b, std::vector<double> &gamma,
-                               const std::vector<ExternalWidth> &ext, bool ignore_zero_widths,
-                               std::vector<std::string> &warnings, std::vector<std::size_t> *exceeded = nullptr);
+                               const std::vector<ExternalWidth> &ext, std::vector<std::string> &warnings, std::vector<std::size_t> *exceeded = nullptr);
 
 struct LevelSet {
   std::vector<double> E;      ///< MeV
@@ -202,6 +202,11 @@ struct LevelSet {
   std::vector<Status> status;
   std::vector<double> residual_MeV;
   std::vector<double> boundary_shift;
+  /// brune_from_formal with FormalToBruneOptions::want_transform: T (n x n, row-major, input level order), the Brune
+  /// amplitudes as combinations of the formal ones, gamma~_lambda c = sum_mu T_lambda mu gamma_mu c; row lambda is the
+  /// unit eigenvector of lambda's last problem (a unit vector for a level whose formal values are kept).  Empty
+  /// otherwise.  The masked channel capture of the formal basis uses it (external_capture.md section 3).
+  std::vector<double> transform;
 };
 
 /*!
@@ -219,6 +224,7 @@ LevelSet formal_from_brune(const System &system, std::size_t b, const std::vecto
 struct FormalToBruneOptions {
   double energy_tolerance_MeV = 1e-6;  ///< the engine's (CNuc::TransformOut)
   int max_iterations = 1000;           ///< the engine's
+  bool want_transform = false;         ///< fill LevelSet::transform
 };
 
 /// Formal -> Brune by the engine's iteration (CNuc::TransformOut): per level, B_c moved to S_c(E) and the matrix
@@ -299,7 +305,6 @@ struct InternalParameters {
 
 struct LevelParameterOptions {
   const std::vector<ExternalWidth> *external = nullptr;  ///< photon external-capture amplitudes (internal columns)
-  bool ignore_zero_widths = false;                       ///< the engine's IGNORE_ZERO_WIDTHS for that subtraction
   bool formal = true;  ///< compute the formal parameters (false: basis_* only, E/gamma left empty)
 };
 

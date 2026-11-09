@@ -27,6 +27,7 @@
 #include "NucLine.h"
 #include "Minuit2/MnUserParameters.h"
 #include "NFIntegral.h"
+#include "CNucExternalCapture.h"
 #include "ShftFunc.h"
 
 /*!
@@ -998,6 +999,7 @@ void CNuc::Initialize(const Config &configure) {
   if (!(configure.paramMask & Config::USE_API))
     configure.outStream << "Sorting Reaction Pathways..." << std::endl;
   this->SortPathways(configure);
+  this->SetUpFormalCaptureMasks(configure);
   if ((configure.fileCheckMask | configure.screenCheckMask) & Config::CHECK_PATHWAYS)
     this->PrintPathways(configure);
 
@@ -1143,16 +1145,13 @@ void CNuc::FillCompoundFromParamsPhysical(const vector_r &p) {
       ALevel *level = this->GetJGroup(j)->GetLevel(la);
       level->SetE(p[i]);
       i++;
-      double nFSum = 1.0;
+      std::vector<double> g;
       for (int ch = 1; ch <= this->GetJGroup(j)->NumChannels(); ch++) {
         level->SetGamma(ch, p[i]);
-        if (ch <= level->NumNFIntegrals()) nFSum += 2.0 *
-            this->GetPair(this->GetJGroup(j)->GetChannel(ch)->GetPairNum())->GetChRad() *
-            this->GetPair(this->GetJGroup(j)->GetChannel(ch)->GetPairNum())->GetRedMass() *
-            uconv / pow(hbarc, 2.0) * pow(p[i], 2.0) * level->GetNFIntegral(ch);
+        g.push_back(p[i]);
         i++;
       }
-      level->SetSqrtNFFactor(1.0 / sqrt(nFSum));
+      level->SetSqrtNFFactor(SqrtNFFactor(*this, this->GetJGroup(j), level, 1.0, g));
     }
   }
   if (hasAbundanceBlock_)
@@ -1171,7 +1170,6 @@ void CNuc::PrintCompoundFromParams() {
       ALevel *level = this->GetJGroup(j)->GetLevel(la);
       level->GetE();
       i++;
-      double nFSum = 1.0;
       for (int ch = 1; ch <= this->GetJGroup(j)->NumChannels(); ch++) {
         level->GetGamma(ch);
         std::cout << "Level " << level->GetE() << " " << level->GetGamma(ch) << std::endl;
@@ -1221,6 +1219,8 @@ bool CNuc::TransformIn(const Config &configure) {
           const int ch = (int)k + 1;
           AChannel *theChannel = theJGroup->GetChannel(ch);
           const double input = in.value[lb * nc + k];
+          // The --ignore-externals mask is a property of the input (external_capture.md section 3).
+          theLevel->SetZeroInputWidth(ch, input == 0.0);
           switch (amp.notes[lb * nc + k]) {
             case phys::ColumnNote::None: break;
             case phys::ColumnNote::AmplitudeFlagIgnored:
@@ -1310,18 +1310,9 @@ bool CNuc::TransformIn(const Config &configure) {
         // gamma_obs^2 / J, so with Park's amplitudes it becomes 1 / sqrt(J + sum_c A_c gamma_obs^2) (see
         // CalcShiftFunctions).
         if (park) theLevel->SetParkNorm(parkNorm);
-        double nFSum = park ? parkNorm : 1.0;
-        for (std::size_t k = 0; k < nc; k++) {
-          const int ch = (int)k + 1;
-          AChannel *theChannel = theJGroup->GetChannel(ch);
-          const double gamma = amp.gamma[lb * nc + k];
-          theLevel->SetGamma(ch, gamma);
-          if (ch <= theLevel->NumNFIntegrals()) nFSum += 2.0 *
-              this->GetPair(theChannel->GetPairNum())->GetChRad() *
-              this->GetPair(theChannel->GetPairNum())->GetRedMass() *
-              uconv / pow(hbarc, 2.0) * pow(gamma, 2.0) * theLevel->GetNFIntegral(ch);
-        }
-        theLevel->SetSqrtNFFactor(1.0 / sqrt(nFSum));
+        const std::vector<double> g(amp.gamma.begin() + lb * nc, amp.gamma.begin() + (lb + 1) * nc);
+        for (std::size_t k = 0; k < nc; k++) theLevel->SetGamma((int)k + 1, g[k]);
+        theLevel->SetSqrtNFFactor(SqrtNFFactor(*this, theJGroup, theLevel, park ? parkNorm : 1.0, g));
       }
     }
 
@@ -1329,7 +1320,6 @@ bool CNuc::TransformIn(const Config &configure) {
     // holds its Brune (Park) amplitudes: the final state enters external capture with its own pole's amplitude in
     // every basis (cnuc_split.md section 8).  The subtraction changes photon amplitudes only, which no other
     // level's external capture reads.
-    const bool ignoreZero = !!(configure.paramMask & Config::IGNORE_ZERO_WIDTHS);
     for (std::size_t b = 0; b < system.num_blocks(); b++) {
       const int j = map.groupOfBlock[b];
       JGroup *theJGroup = this->GetJGroup(j);
@@ -1343,7 +1333,7 @@ bool CNuc::TransformIn(const Config &configure) {
       const std::vector<phys::ExternalWidth> ext = ExternalWidthsFromCNuc(*this, map, b, configure);
       std::vector<std::string> warnings;
       std::vector<std::size_t> exceeded;
-      phys::subtract_external_capture(system, b, gamma, ext, ignoreZero, warnings, &exceeded);
+      phys::subtract_external_capture(system, b, gamma, ext, warnings, &exceeded);
       for (std::size_t i : exceeded) {
         const int la = levels[i / nc], ch = (int)(i % nc) + 1;
         configure.outStream << "**WARNING: Imaginary portion of the external width is greater "
@@ -2319,23 +2309,21 @@ void CNuc::FillCompoundFromParams(const vector_r &p) {
       ALevel *level = this->GetJGroup(j)->GetLevel(la);
       level->SetFitE(p[i]);
       i++;
-      double nFSum = 1.0;
+      std::vector<double> g;
       for (int ch = 1; ch <= this->GetJGroup(j)->NumChannels(); ch++) {
         level->SetFitGamma(ch, p[i]);
         level->SetECGamma(ch, p[i]);
-        if (ch <= level->NumNFIntegrals()) nFSum += 2.0 *
-            this->GetPair(this->GetJGroup(j)->GetChannel(ch)->GetPairNum())->GetChRad() *
-            this->GetPair(this->GetJGroup(j)->GetChannel(ch)->GetPairNum())->GetRedMass() *
-            uconv / pow(hbarc, 2.0) * pow(p[i], 2.0) * level->GetNFIntegral(ch);
+        g.push_back(p[i]);
         i++;
       }
-      level->SetSqrtNFFactor(1.0 / sqrt(nFSum));
+      level->SetSqrtNFFactor(SqrtNFFactor(*this, this->GetJGroup(j), level, 1.0, g));
     }
   }
   if (hasAbundanceBlock_)
     for (unsigned int s = 0; s < samples_.size(); s++)
       for (unsigned int k = 0; k < nuclei_.size(); k++) samples_[s].entries[k].abundance = p[i++];
   if (ecFinalBlocks_) this->ECFinalStatesFromFormal();
+  if (captureMaskSetup_) this->FormalCaptureMasksFromParams();
 }
 
 /*!
@@ -2433,19 +2421,9 @@ void CNuc::TransformToBrune(const Config &configure, bool report) {
         }
         theLevel->SetTransformE(out.E[lb]);
         theLevel->SetTransformIterations(out.iterations[lb]);
-        double nFSum = 1.0;
-        for (std::size_t k = 0; k < nc; k++) {
-          const int ch = (int)k + 1;
-          AChannel *theChannel = theJGroup->GetChannel(ch);
-          const double g = out.gamma[lb * nc + k];
-          theLevel->SetTransformGamma(ch, g);
-          if (ch <= theLevel->NumNFIntegrals()) nFSum += 2.0 *
-              this->GetPair(theChannel->GetPairNum())->GetChRad() *
-              this->GetPair(theChannel->GetPairNum())->GetRedMass() *
-              uconv / pow(hbarc, 2.0) * pow(g, 2.0) *
-              theLevel->GetNFIntegral(ch);
-        }
-        theLevel->SetSqrtNFFactor(1.0 / sqrt(nFSum));
+        const std::vector<double> g(out.gamma.begin() + lb * nc, out.gamma.begin() + (lb + 1) * nc);
+        for (std::size_t k = 0; k < nc; k++) theLevel->SetTransformGamma((int)k + 1, g[k]);
+        theLevel->SetSqrtNFFactor(SqrtNFFactor(*this, theJGroup, theLevel, 1.0, g));
       }
     }
   } else {
@@ -2489,8 +2467,8 @@ void CNuc::ObservedWidths(const Config &configure) {
         rwa.push_back(theLevel->GammaIsRWA(ch) ? 1 : 0);
         complex externalWidth(0.0, 0.0);
         if ((theChannel->GetRadType() == 'M' || theChannel->GetRadType() == 'E') && theLevel->IsInRMatrix() &&
-            external && !(fabs(theLevel->GetTransformGamma(ch)) < 1.0e-8 && ignoreZero)) {
-          externalWidth = CalcExternalWidth(theJGroup, theLevel, theChannel, false, configure);
+            external && !(ignoreZero && theLevel->ZeroInputWidth(ch))) {
+          externalWidth = ExternalReducedWidth(*this, theJGroup, theLevel, theChannel, false, configure);
           ext[lb * nc + k].present = true;
           ext[lb * nc + k].value = externalWidth;
         }
@@ -3022,13 +3000,9 @@ void CNuc::CalcShiftFunctions(const Config &configure, bool secondDerivatives) {
       // Brune's amplitudes, gamma_Park / sqrt(J); folding the 1/sqrt(J)
       // in here keeps gamma * N_f^{1/2} the same number in both
       // parametrizations.
-      double nFSum = parkNorm;
-      for (int ch = 1; ch <= theJGroup->NumChannels() && ch <= theLevel->NumNFIntegrals(); ch++) {
-        PPair *thePair = this->GetPair(theJGroup->GetChannel(ch)->GetPairNum());
-        nFSum += 2.0 * thePair->GetChRad() * thePair->GetRedMass() * uconv / pow(hbarc, 2.0) *
-            pow(theLevel->GetFitGamma(ch), 2.0) * theLevel->GetNFIntegral(ch);
-      }
-      theLevel->SetSqrtNFFactor(1.0 / sqrt(nFSum));
+      std::vector<double> g;
+      for (int ch = 1; ch <= theJGroup->NumChannels(); ch++) g.push_back(theLevel->GetFitGamma(ch));
+      theLevel->SetSqrtNFFactor(SqrtNFFactor(*this, theJGroup, theLevel, parkNorm, g));
     }
   }
 }
@@ -3125,194 +3099,6 @@ double CNuc::ParkNormPenalty() {
     }
   }
   return penalty;
-}
-
-/*!
- * The R-matrix blocks of the formal basis that hold an external-capture final state with other levels
- * (cnuc_split.md section 8): in them the final state's formal amplitude is a mixture of the block's poles, and its
- * Brune amplitude, the residue of its own pole, is what external capture needs.  Setup state, shared by the clones.
- */
-struct CNuc::ECFinalBlocks {
-  CNucSystem structure;
-  std::vector<std::size_t> blocks;
-  bool gslCoulomb = false, rmc = false;
-};
-
-void CNuc::SetUpECFinalBlocks(const Config &configure) {
-  ecFinalBlocks_.reset();
-  // The final state's energy in external capture (the photon energy, the bound-state wave): its Brune energy, the
-  // level energy now except in the formal basis (below).
-  for (int j = 1; j <= this->NumJGroups(); j++)
-    for (int la = 1; la <= this->GetJGroup(j)->NumLevels(); la++)
-      if (this->GetJGroup(j)->GetLevel(la)->IsECLevel())
-        this->GetJGroup(j)->GetLevel(la)->SetECEnergy(this->GetJGroup(j)->GetLevel(la)->GetE());
-  if ((configure.paramMask & Config::USE_BRUNE_FORMALISM) || !(configure.paramMask & Config::USE_EXTERNAL_CAPTURE))
-    return;
-  auto record = std::make_shared<ECFinalBlocks>(ECFinalBlocks{
-      BuildSystemFromCNuc(*this, configure, CNucSystemContent::Structure), {},
-      !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC), !!(configure.paramMask & Config::USE_RMC_FORMALISM)});
-  for (std::size_t b = 0; b < record->structure.system.num_blocks(); b++) {
-    const std::vector<int> &levels = record->structure.map.levelOfBlockLevel[b];
-    // The lowest level of a block (B_c = S_c at its energy) has formal parameters equal to its Brune ones: the
-    // iteration of brune_from_formal moves B_c by S_c(E) - B_c = 0 (level_parameters.md section 3).  So does the only
-    // level of a block.  Only a final state above the lowest level of its block needs its Brune amplitude.
-    JGroup *group = this->GetJGroup(record->structure.map.groupOfBlock[b]);
-    std::size_t lowest = 0;
-    for (std::size_t lb = 1; lb < levels.size(); lb++)
-      if (group->GetLevel(levels[lb])->GetE() < group->GetLevel(levels[lowest])->GetE()) lowest = lb;
-    for (std::size_t lb = 0; lb < levels.size(); lb++)
-      if (lb != lowest && group->GetLevel(levels[lb])->IsECLevel()) {
-        record->blocks.push_back(b);
-        break;
-      }
-  }
-  if (record->blocks.empty()) return;
-  ecFinalBlocks_ = record;
-  // The Brune energies of their final states, from the formal parameters (iteration to 1e-12 MeV).
-  const phys::ChannelFunctions cf = ChannelFunctionsFromCNuc(*this, record->structure.map, record->gslCoulomb, record->rmc);
-  phys::FormalToBruneOptions options;
-  options.energy_tolerance_MeV = 1e-12;
-  for (std::size_t b : record->blocks) {
-    JGroup *group = this->GetJGroup(record->structure.map.groupOfBlock[b]);
-    const std::vector<int> &levels = record->structure.map.levelOfBlockLevel[b];
-    const std::size_t nc = group->NumChannels();
-    std::vector<double> E, gamma, B(nc);
-    for (int la : levels) {
-      E.push_back(group->GetLevel(la)->GetE());
-      for (std::size_t k = 0; k < nc; k++) gamma.push_back(group->GetLevel(la)->GetGamma((int)k + 1));
-    }
-    for (std::size_t k = 0; k < nc; k++) B[k] = group->GetChannel((int)k + 1)->GetBoundaryCondition();
-    const phys::LevelSet brune = phys::brune_from_formal(record->structure.system, b, E, gamma, B, cf, options);
-    for (std::size_t lb = 0; lb < levels.size(); lb++)
-      if (group->GetLevel(levels[lb])->IsECLevel()) group->GetLevel(levels[lb])->SetECEnergy(brune.E[lb]);
-  }
-}
-
-/*!
- * Formal basis: the Brune amplitudes of the final states in ecFinalBlocks_ at the current fit parameters (physics/
- * brune_from_formal), as their external-capture amplitude, with N_f^1/2 formed from them.  The iteration's tolerance
- * is 1e-12 MeV, so that the capture agrees with the Brune basis to rounding (the reports use the engine's 1e-6 MeV).
- */
-void CNuc::ECFinalStatesFromFormal() {
-  const ECFinalBlocks &r = *ecFinalBlocks_;
-  const phys::ChannelFunctions cf = ChannelFunctionsFromCNuc(*this, r.structure.map, r.gslCoulomb, r.rmc);
-  phys::FormalToBruneOptions options;
-  options.energy_tolerance_MeV = 1e-12;
-  for (std::size_t b : r.blocks) {
-    JGroup *group = this->GetJGroup(r.structure.map.groupOfBlock[b]);
-    const std::vector<int> &levels = r.structure.map.levelOfBlockLevel[b];
-    const std::size_t nc = group->NumChannels();
-    std::vector<double> E, gamma, B(nc);
-    for (int la : levels) {
-      E.push_back(group->GetLevel(la)->GetFitE());
-      for (std::size_t k = 0; k < nc; k++) gamma.push_back(group->GetLevel(la)->GetFitGamma((int)k + 1));
-    }
-    for (std::size_t k = 0; k < nc; k++) B[k] = group->GetChannel((int)k + 1)->GetBoundaryCondition();
-    const phys::LevelSet brune = phys::brune_from_formal(r.structure.system, b, E, gamma, B, cf, options);
-    for (std::size_t lb = 0; lb < levels.size(); lb++) {
-      ALevel *level = group->GetLevel(levels[lb]);
-      if (!level->IsECLevel()) continue;
-      double nFSum = 1.0;
-      for (std::size_t k = 0; k < nc; k++) {
-        const int ch = (int)k + 1;
-        const double g = brune.gamma[lb * nc + k];
-        level->SetECGamma(ch, g);
-        if (ch <= level->NumNFIntegrals()) nFSum += 2.0 *
-            this->GetPair(group->GetChannel(ch)->GetPairNum())->GetChRad() *
-            this->GetPair(group->GetChannel(ch)->GetPairNum())->GetRedMass() *
-            uconv / pow(hbarc, 2.0) * pow(g, 2.0) * level->GetNFIntegral(ch);
-      }
-      level->SetSqrtNFFactor(1.0 / sqrt(nFSum));
-    }
-  }
-}
-
-/*!
- * Calculates the external reduced width amplitudes for a given channel.
- */
-
-complex CNuc::CalcExternalWidth(JGroup *theJGroup, ALevel *theLevel,
-                                AChannel *theChannel, bool isInitial, const Config &configure) {
-  complex externalWidth(0.0, 0.0);
-  if (theChannel->GetRadType() == 'E' || (theChannel->GetRadType() == 'M' && theChannel->GetL() == 1)) {
-    bool isExternal = false;
-    int j = 0;
-    int la = 0;
-    while (!isExternal && j < this->NumJGroups()) {
-      j++;
-      la = 0;
-      while (!isExternal && la < this->GetJGroup(j)->NumLevels()) {
-        la++;
-        if (this->GetJGroup(j)->GetLevel(la)->IsECLevel() &&
-            theChannel->GetPairNum() == this->GetJGroup(j)->GetLevel(la)->GetECPairNum()) {
-          isExternal = true;
-        }
-      }
-    }
-    if (isExternal) {
-      JGroup *theFinalJGroup = this->GetJGroup(j);
-      ALevel *theFinalLevel = theFinalJGroup->GetLevel(la);
-      double theLevelEnergy;
-      if (!isInitial)
-        theLevelEnergy = theLevel->GetTransformE();
-      else
-        theLevelEnergy = theLevel->GetE();
-      int multL = theChannel->GetL();
-      if (((theChannel->GetRadType() == 'E' && multL == 1) && (theFinalLevel->GetECMultMask() & isE1)) ||
-          ((theChannel->GetRadType() == 'M' && multL == 1) && (theFinalLevel->GetECMultMask() & isM1)) ||
-          ((theChannel->GetRadType() == 'E' && multL == 2) && (theFinalLevel->GetECMultMask() & isE2))) {  // allow only m1,e1,e2
-        double theFinalLevelEnergy;
-        if (!isInitial)
-          theFinalLevelEnergy = theFinalLevel->GetTransformE();
-        else
-          theFinalLevelEnergy = theFinalLevel->GetE();
-        for (int ch = 1; ch <= theJGroup->NumChannels(); ch++) {
-          double theInitialChannelGamma;
-          if (!isInitial)
-            theInitialChannelGamma = theLevel->GetTransformGamma(ch);
-          else
-            theInitialChannelGamma = theLevel->GetGamma(ch);
-          AChannel *initialChannel = theJGroup->GetChannel(ch);
-          if (initialChannel->GetRadType() == 'P') {
-            for (int chp = 1; chp <= theFinalJGroup->NumChannels(); chp++) {
-              double theFinalChannelGamma;
-              if (!isInitial)
-                theFinalChannelGamma = theFinalLevel->GetTransformGamma(chp);
-              else
-                theFinalChannelGamma = theFinalLevel->GetGamma(chp);
-              AChannel *finalChannel = theFinalJGroup->GetChannel(chp);
-              if (finalChannel->GetRadType() == 'P') {
-                if (finalChannel->GetPairNum() == initialChannel->GetPairNum()) {
-                  if ((abs(initialChannel->GetL() - multL) <= finalChannel->GetL() && finalChannel->GetL() <= initialChannel->GetL() + multL &&
-                       fabs(initialChannel->GetS() - finalChannel->GetL()) <= theFinalJGroup->GetJ() &&
-                       theFinalJGroup->GetJ() <= initialChannel->GetS() + finalChannel->GetL() && initialChannel->GetS() == finalChannel->GetS()) ||
-                      (fabs(initialChannel->GetS() - multL) <= finalChannel->GetS() && finalChannel->GetS() <= initialChannel->GetS() + multL &&
-                       fabs(initialChannel->GetL() - finalChannel->GetS()) <= theFinalJGroup->GetJ() &&
-                       theFinalJGroup->GetJ() <= initialChannel->GetL() + finalChannel->GetS() && initialChannel->GetL() == finalChannel->GetL() &&
-                       theChannel->GetRadType() == 'M')) {
-                    PPair *theFinalPair = this->GetPair(finalChannel->GetPairNum());
-
-                    ECIntegral theECIntegral(theFinalPair, configure);
-                    complex integrals = theECIntegral(initialChannel->GetL(), finalChannel->GetL(),
-                                                      initialChannel->GetS(), finalChannel->GetS(),
-                                                      theJGroup->GetJ(), theFinalJGroup->GetJ(),
-                                                      multL, theChannel->GetRadType(),
-                                                      theLevelEnergy, theFinalLevelEnergy,
-                                                      true);
-
-                    double ecNormParam = theFinalChannelGamma *
-                        theFinalLevel->GetSqrtNFFactor() * theFinalLevel->GetECConversionFactor(chp);
-                    externalWidth -= ecNormParam * theInitialChannelGamma * integrals;
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-  return externalWidth;
 }
 
 /*!
