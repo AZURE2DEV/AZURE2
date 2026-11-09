@@ -7,6 +7,7 @@
 #include <map>
 #include <tuple>
 #include "InputFiles.h"
+#include "LevelCoincidence.h"
 #include "AngCoeff.h"
 #include "CNuc.h"
 #include <mutex>
@@ -1419,6 +1420,19 @@ bool CNuc::TransformIn(const Config &configure) {
       if (!(configure.paramMask & Config::USE_BRUNE_FORMALISM) && !tempEnergies.empty()) {
         matrix_r nMatrix;
         matrix_r mMatrix;
+        // dS/dE at a level, for the limits of the divided differences between coincident levels.
+        auto shiftDerivative = [&](int index, int ch) {
+          ALevel *theLevel = theJGroup->GetLevel(levelKeys[index]);
+          AChannel *theChannel = theJGroup->GetChannel(ch);
+          PPair *thePair = this->GetPair(theChannel->GetPairNum());
+          const double localEnergy = theLevel->GetE() - thePair->GetExE() - thePair->GetSepE();
+          if (localEnergy > 0.0) {
+            CoulFunc theCoulombFunction(thePair, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
+            return theCoulombFunction.PEShift_dE(theChannel->GetL(), thePair->GetChRad(), localEnergy);
+          }
+          ShftFunc theShiftFunction(thePair);
+          return theShiftFunction.EnergyDerivative(theChannel->GetL(), theLevel->GetE());
+        };
         for (int mu = 0; mu < tempEnergies.size(); mu++) {
           vector_r tempLevelVector;
           nMatrix.push_back(tempLevelVector);
@@ -1437,7 +1451,12 @@ bool CNuc::TransformIn(const Config &configure) {
               double mSum = 0.0;
               double nSum = 0.0;
               for (int ch = 1; ch <= theJGroup->NumChannels(); ch++) {
-                if (theJGroup->GetChannel(ch)->GetRadType() == 'P') {
+                if (theJGroup->GetChannel(ch)->GetRadType() == 'P' && LevelsCoincide(tempEnergies[mu], tempEnergies[la])) {
+                  const double dS = shiftDerivative(la, ch);
+                  mSum += dS * tempGammas[la][ch - 1] * tempGammas[mu][ch - 1];
+                  nSum += (shifts[la][ch - 1] - tempEnergies[la] * dS - theJGroup->GetChannel(ch)->GetBoundaryCondition()) *
+                      tempGammas[la][ch - 1] * tempGammas[mu][ch - 1];
+                } else if (theJGroup->GetChannel(ch)->GetRadType() == 'P') {
                   mSum += (shifts[mu][ch - 1] - shifts[la][ch - 1]) / (tempEnergies[mu] - tempEnergies[la]) *
                       tempGammas[la][ch - 1] * tempGammas[mu][ch - 1];
                   nSum += ((tempEnergies[mu] * shifts[la][ch - 1] - tempEnergies[la] * shifts[mu][ch - 1]) /
@@ -3141,7 +3160,7 @@ void CNuc::CalcShiftFunctions(const Config &configure, bool secondDerivatives) {
     JGroup *group;
     ALevel *level;
     double energy;
-    bool recompute, second;
+    bool recompute, first, second;
   };
   std::vector<Moved> levels;
   for (int j = 1; j <= this->NumJGroups(); j++) {
@@ -3156,18 +3175,25 @@ void CNuc::CalcShiftFunctions(const Config &configure, bool secondDerivatives) {
           // moved since the last call.  Park's J below depends on the widths
           // too and is always refreshed.
           const bool recompute = !theLevel->ShiftFunctionsValidAt(levelEnergy);
+          // A level on top of another of its J-group takes the limits of the divided differences, in S' and
+          // (gradients) S''; everywhere else only Park needs them.
+          bool coincident = false;
+          for (int other = 1; other <= theJGroup->NumLevels() && !coincident; other++)
+            coincident = other != la && theJGroup->GetLevel(other)->IsInRMatrix() &&
+                LevelsCoincide(levelEnergy, theJGroup->GetLevel(other)->GetFitE());
+          const bool first = recompute || (coincident && !theLevel->ShiftDerivativesValidAt(levelEnergy));
           // d^2S/dE^2 (Park) enters only the gradient: the numerical second
           // derivative costs five shift functions per channel, so a chi-squared
           // alone leaves it out, and a later call that asks for it fills it in.
-          const bool second = park && secondDerivatives && !theLevel->ShiftSecondDerivativesValidAt(levelEnergy);
+          const bool second = ((park && secondDerivatives) || coincident) && !theLevel->ShiftSecondDerivativesValidAt(levelEnergy);
           const int firstOfLevel = (int)derivatives.size();
           for (int ch = 1; ch <= theJGroup->NumChannels(); ch++) {
             AChannel *theChannel = theJGroup->GetChannel(ch);
             PPair *thePair = this->GetPair(theChannel->GetPairNum());
             if (thePair->GetPType() == 0) {
-              if (!recompute && !second) continue;
+              if (!first && !second) continue;
               int lValue = theChannel->GetL();
-              const bool parkP = park && theChannel->GetRadType() == 'P';
+              const bool derivativeChannel = (park || coincident) && theChannel->GetRadType() == 'P';
               double resonanceEnergy = levelEnergy - (thePair->GetSepE() + thePair->GetExE());
               if (recompute) {
                 if (resonanceEnergy < 0.0) {
@@ -3180,18 +3206,18 @@ void CNuc::CalcShiftFunctions(const Config &configure, bool secondDerivatives) {
                   theLevel->SetShiftFunction(ch, theCoulombFunction.PEShift(lValue, radius, resonanceEnergy));
                 }
               }
-              if (parkP && (recompute || second)) {
+              if (derivativeChannel && (first || second)) {
                 // Channels that differ only in the channel spin share the derivative.
                 int source = -1;
                 for (int k = firstOfLevel; k < (int)derivatives.size() && source < 0; k++)
                   if (derivatives[k].source < 0 && derivatives[k].pair == thePair && derivatives[k].l == lValue) source = k;
-                derivatives.push_back({theLevel, thePair, ch, lValue, levelEnergy, recompute, second, 0.0, 0.0, source});
+                derivatives.push_back({theLevel, thePair, ch, lValue, levelEnergy, first, second, 0.0, 0.0, source});
               }
             } else {
               theLevel->SetShiftFunction(ch, theJGroup->GetLevel(1)->GetShiftFunction(1));
             }
           }
-          levels.push_back({theJGroup, theLevel, levelEnergy, recompute, second});
+          levels.push_back({theJGroup, theLevel, levelEnergy, recompute, first && (park || coincident), second});
         }
       }
     }
@@ -3273,6 +3299,7 @@ void CNuc::CalcShiftFunctions(const Config &configure, bool secondDerivatives) {
     ALevel *theLevel = m.level;
     JGroup *theJGroup = m.group;
     if (m.recompute) theLevel->SetShiftFunctionsEnergy(m.energy);
+    if (m.first) theLevel->SetShiftDerivativesEnergy(m.energy);
     if (m.second) theLevel->SetShiftSecondDerivativesEnergy(m.energy);
     if (park) {
       // Park (2021) Eq. (28): J = 1 - sum_c gamma_c^2 (dS_c/dE) at E_lambda.

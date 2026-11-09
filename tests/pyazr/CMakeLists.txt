@@ -406,3 +406,9 @@ add_test(NAME pyazr_sampling
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/sampling_test.py)
 set_tests_properties(pyazr_sampling PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
+# Two levels of one J^pi at one energy: the limits of the shift-function divided differences, values and derivatives.
+add_test(NAME pyazr_coincident_levels
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/coincident_levels_test.py)
+set_tests_properties(pyazr_coincident_levels PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")

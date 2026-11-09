@@ -1,4 +1,5 @@
 #include "ChannelSpace.h"
+#include "LevelCoincidence.h"
 #include "AChannel.h"
 #include "ALevel.h"
 #include "Config.h"
@@ -75,7 +76,7 @@ const LevelArrays &CurrentLevelArrays(JGroup *jg) {
   a.inv.assign((size_t)n * n, 0.0);
   for (int r = 0; r < n; r++)
     for (int c = 0; c < n; c++)
-      if (r != c) a.inv[(size_t)r * n + c] = 1.0 / (a.E[r] - a.E[c]);
+      if (r != c && !LevelsCoincide(a.E[r], a.E[c])) a.inv[(size_t)r * n + c] = 1.0 / (a.E[r] - a.E[c]);
   return a;
 }
 
@@ -167,6 +168,12 @@ const LevelDerivatives &CurrentLevelDerivatives(JGroup *jg, int mode, const std:
               if (!particle[d]) continue;
               const double gg = a.G[(size_t)l * nch + d] * a.G[(size_t)j * nch + d];
               if (gg == 0.0) continue;
+              if (iv == 0.0) {  // coincident levels: the limits in S''
+                const double Spp = jg->GetLevel(l + 1)->GetShiftSecondDerivative(d + 1);
+                e.k[j] -= 0.5 * gg * Spp * a.E[l];
+                e.q[j] -= 0.5 * gg * Spp;
+                continue;
+              }
               const double Sl = a.S[(size_t)l * nch + d], Sj = a.S[(size_t)j * nch + d], Spl = Sp(l, d);
               const double s0 = (Sj * a.E[l] - Sl * a.E[j]) * iv, s1 = (Sl - Sj) * iv;
               e.k[j] += gg * (Sj - Spl * a.E[j] - s0) * iv;
@@ -188,6 +195,11 @@ const LevelDerivatives &CurrentLevelDerivatives(JGroup *jg, int mode, const std:
             if (gj == 0.0) continue;
             const double iv = a.inv[(size_t)l * n + j];
             const double Sl = Slc, Sj = a.S[(size_t)j * nch + c];
+            if (iv == 0.0) {  // coincident levels: s0 -> S - E S', s1 -> S'
+              e.k[j] = gj * (Sl - Sp(l, c) * a.E[l]);
+              e.q[j] = -gj * Sp(l, c);
+              continue;
+            }
             e.k[j] = gj * (Sj * a.E[l] - Sl * a.E[j]) * iv;
             e.q[j] = -gj * (Sl - Sj) * iv;
           }

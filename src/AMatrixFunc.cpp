@@ -1,4 +1,5 @@
 #include "AMatrixFunc.h"
+#include "LevelCoincidence.h"
 #include "Profile.h"
 #include "AngCoeff.h"
 #include "PolarizationFunc.h"
@@ -297,12 +298,16 @@ void AMatrixFunc::FillLevelMatrix(int j, EPoint *point, double inEnergy) {
               // is S_c(E) - B_c + i P_c.  Eq. (9) gives the off-diagonal overlap.
               sum += gammaCh * gammaChp * (channel->GetBoundaryCondition() - shiftFunctions_[la][ch]);
               if (la != lap)
-                parkOverlap -= gammaCh * gammaChp * (shiftFunctions_[la][ch] - shiftFunctions_[lap][ch]) /
-                    (levelEnergies_[la] - levelEnergies_[lap]);
+                parkOverlap -= gammaCh * gammaChp *
+                    (LevelsCoincide(levelEnergies_[la], levelEnergies_[lap])
+                         ? level->GetShiftDerivative(ch)
+                         : (shiftFunctions_[la][ch] - shiftFunctions_[lap][ch]) / (levelEnergies_[la] - levelEnergies_[lap]));
             } else if ((configure().paramMask & Config::USE_BRUNE_FORMALISM) && radType == 'P') {
               sum += gammaCh * gammaChp * channel->GetBoundaryCondition();
               if (la == lap)
                 sum -= gammaCh * gammaChp * shiftFunctions_[la][ch];
+              else if (LevelsCoincide(levelEnergies_[la], levelEnergies_[lap]))
+                sum -= gammaCh * gammaChp * (shiftFunctions_[la][ch] + level->GetShiftDerivative(ch) * (inEnergy - levelEnergies_[la]));
               else
                 sum -= gammaCh * gammaChp *
                     (shiftFunctions_[la][ch] * (inEnergy - levelEnergies_[lap]) - shiftFunctions_[lap][ch] * (inEnergy - levelEnergies_[la])) /
@@ -1464,6 +1469,15 @@ void AMatrixFunc::LevelMatrixAdjoint(EPoint *energyPoint, int jNum, const matrix
             if (g == 0.0) continue;
             double Sr = lr->GetShiftFunction(d), Sc = lc->GetShiftFunction(d);
             double dSr = lr->GetShiftDerivative(d), dSc = lc->GetShiftDerivative(d);
+            if (LevelsCoincide(Er, Ec)) {
+              // J_rc -> -g S', and both energy derivatives of (S_r - S_c)/(E_r - E_c) -> S''/2.
+              const double d2 = lr->GetShiftSecondDerivative(d);
+              Jrc -= g * dSr;
+              dJdEr -= 0.5 * g * d2;
+              dJdEc -= 0.5 * g * d2;
+              sumS1 += g * dSr;
+              continue;
+            }
             double q = (Sr - Sc) / den;
             Jrc -= g * q;
             dJdEr -= g * (dSr - q) / den;
@@ -1507,7 +1521,7 @@ void AMatrixFunc::LevelMatrixAdjoint(EPoint *energyPoint, int jNum, const matrix
             grad += -gc * std::real(conj(Mbar[a - 1][c - 1]) * Kac + conj(Mbar[c - 1][a - 1]) * Kca);
             if (pd) {
               double Ec = lc_->GetFitE();
-              double delta = (Sa - Sc) / (Ea - Ec);
+              double delta = LevelsCoincide(Ea, Ec) ? la_->GetShiftDerivative(d) : (Sa - Sc) / (Ea - Ec);
               grad += -gc * delta * (std::real(Mbar[a - 1][c - 1]) * (Ea - inEnergy) +
                                      std::real(Mbar[c - 1][a - 1]) * (Ec - inEnergy));
             }
@@ -1562,6 +1576,14 @@ void AMatrixFunc::LevelMatrixAdjoint(EPoint *energyPoint, int jNum, const matrix
           const double dSc = sd[c][ch];
           const double ac = inEnergy - E[c];
           const double iv = inv[(size_t)r * n + c];
+          if (iv == 0.0) {
+            // Coincident levels: Q -> S_r + S'_r (inE - E_r), and both dQ/dE -> S''_r (inE - E_r) / 2.
+            const double half = 0.5 * jg->GetLevel(r + 1)->GetShiftSecondDerivative(ch + 1) * ar;
+            const double w = std::real(mrow[c]) * g;
+            dE[r] += w * half;
+            dE[c] += w * half;
+            continue;
+          }
           const double Q = (Sr * ac - Sc * ar) * iv;
           const double dQdEr = (dSr * ac + Sc - Q) * iv;
           const double dQdEc = (-Sr - dSc * ar + Q) * iv;
@@ -1622,11 +1644,20 @@ void AMatrixFunc::LevelMatrixAdjoint(EPoint *energyPoint, int jNum, const matrix
       }
       if (anyBruneP && c != a) {
         const double iv = inv[(size_t)a * n + c];
-        const double w1 = wr * (inEnergy - E[c]) * iv, w2 = wr * iv;
-        const double *sgc = &SG[(size_t)c * nch];
-        for (int d = 0; d < nch; d++) {
-          t1[d] += w1 * gc[d];
-          t2[d] += w2 * sgc[d];
+        if (iv == 0.0) {
+          // Coincident levels: D_d[a][c] -> S_a,d + S'_a,d (inE - E_a), as t1 and t2 enter below.
+          ALevel *levelA = jg->GetLevel(a + 1);
+          for (int d = 0; d < nch; d++) {
+            t1[d] += wr * gc[d];
+            t2[d] -= wr * levelA->GetShiftDerivative(d + 1) * gc[d];
+          }
+        } else {
+          const double w1 = wr * (inEnergy - E[c]) * iv, w2 = wr * iv;
+          const double *sgc = &SG[(size_t)c * nch];
+          for (int d = 0; d < nch; d++) {
+            t1[d] += w1 * gc[d];
+            t2[d] += w2 * sgc[d];
+          }
         }
       }
     }

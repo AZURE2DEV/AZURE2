@@ -1,4 +1,5 @@
 #include "EPoint.h"
+#include "LevelCoincidence.h"
 #include "CNuc.h"
 #include "MatrixInv.h"
 #include "RMatrixFunc.h"
@@ -162,6 +163,8 @@ void RMatrixFunc::FillMatrices(EPoint *point) {
               sum -= gammaCh * gammaChp * channelShift;
               if (la == lap)
                 sum += gammaCh * gammaChp * level->GetShiftFunction(ch);
+              else if (LevelsCoincide(level->GetFitE(), levelp->GetFitE()))
+                sum += gammaCh * gammaChp * (level->GetShiftFunction(ch) + level->GetShiftDerivative(ch) * (inEnergy - level->GetFitE()));
               else
                 sum += gammaCh * gammaChp *
                     (level->GetShiftFunction(ch) * (inEnergy - levelp->GetFitE()) - levelp->GetShiftFunction(ch) * (inEnergy - level->GetFitE())) /

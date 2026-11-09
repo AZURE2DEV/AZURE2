@@ -390,7 +390,7 @@ void ALevel::SetParkNorm(double parkNorm) {
 }
 
 /*!
- * Returns dS_c/dE at the level energy (Park formalism only).
+ * Returns dS_c/dE at the level energy (Park, or a level coincident with another of its J-group).
  */
 
 double ALevel::GetShiftDerivative(int channelNum) const {
@@ -398,7 +398,7 @@ double ALevel::GetShiftDerivative(int channelNum) const {
 }
 
 /*!
- * Returns d^2S_c/dE^2 at the level energy (Park formalism only).
+ * Returns d^2S_c/dE^2 at the level energy (Park, or a level coincident with another of its J-group).
  */
 
 double ALevel::GetShiftSecondDerivative(int channelNum) const {
@@ -443,6 +443,14 @@ void ALevel::SetShiftFunctionsEnergy(double energy) {
   shift_cache_energy_ = energy;
 }
 
+bool ALevel::ShiftDerivativesValidAt(double energy) const {
+  return shift_d1_energy_ == energy;
+}
+
+void ALevel::SetShiftDerivativesEnergy(double energy) {
+  shift_d1_energy_ = energy;
+}
+
 bool ALevel::ShiftSecondDerivativesValidAt(double energy) const {
   return shift_d2_energy_ == energy;
 }
@@ -453,6 +461,7 @@ void ALevel::SetShiftSecondDerivativesEnergy(double energy) {
 
 void ALevel::InvalidateShiftFunctions() {
   shift_cache_energy_ = std::numeric_limits<double>::quiet_NaN();
+  shift_d1_energy_ = std::numeric_limits<double>::quiet_NaN();
   shift_d2_energy_ = std::numeric_limits<double>::quiet_NaN();
 }
 
