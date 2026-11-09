@@ -110,3 +110,46 @@ messy").
 
 Steps 1–2 change no χ² and need none of these decisions. Steps 3–5 apply them, each decision in its own commit with
 its own comparison, so that every changed output is attributable to one decision.
+
+## 4. As built (branch `feature/upgrade-2-objective`, 2026-11-09)
+
+| commit | what | outputs |
+|---|---|---|
+| c99a8e07 (2a) | `Objective`, one ordered list of terms; `operator()` and `Chi2On` sum it | identical |
+| 802eb6fb (2b) | `ForEachDiagonalPrior`, one enumeration for `GradientFromJacobian`, `G2`, the least-squares rows (no name matching) | identical |
+| 615c71f8 (2c) | nuisance and own-prior bookkeeping by `ParamIndexMap` kind | identical |
+| 82ac146a (D5) | a fixed parameter pays no prior | constants only |
+| 64aba582 (D4) | no norm prior for a profiled THM norm in the writer and pyazr | THM `chiSquared.out` |
+| 5834693d (D3) | the prior covariance replaces its parameters' diagonal priors (`ReplaceDiagonalPriors`) | `prior_covariance` |
+| 3cd21e02 (D1) | the MCMC likelihood is `Objective::DataChi2` (THM norms profiled) | THM MCMC |
+| 5cf9cad9 (D2, D7) | Park's wall and the abundance sum-to-one as least-squares rows (`AppendModelRows`) | Park and abundance LM/GSL fits |
+| 32f067df (step 4, D6) | the API's objective, gradient and breakdown; pyazr computes no prior; nuisance priors in the API and the writer (pyazr 2.11.0) | pyazr objective |
+| ab9e13e1, d35f6d6b (step 5, D6) | the MCMC's priors by kind from the fit's enumeration; nuisance priors in the MCMC | MCMC with nuisance priors |
+
+The test changes are in commits of their own: 1c11fe1e (`prior_covariance` (c), D3), bf1c1f45
+(`pyazr_azr_parse_cache`, step 4), 58be9a73 and e8468cdc (`pyazr_objective_terms`; e8468cdc restores
+`objective_test.py`, which 86ac2970 had overwritten), c6caf712 (`nuisance_prior` (d), (e)).
+
+**Evidence.**
+- **2a + 2b:** 179 × 3 identical. The fit tests of 14 projects run through an archiving wrapper (every engine call of
+  their `check.sh`, MIGRAD numerical and analytic, LM and GSL; 215 runs) give identical outputs against the build
+  before. ctest 119/119, `run_tests.sh` 133/133, threads identical.
+- **2c, D3–D5:** 179 × 3 identical. The one test that moved, `prior_covariance` (c), is re-baselined for D3: the
+  difference with and without the covariance is 2C⁻¹(p − μ) minus the replaced shift prior's gradient, 40.
+- **D1, D2, D7:** 179 × 3 identical. Of 179 fit-test runs, five changed, all as decided:
+  - the three THM MCMC runs (D1). `mcmc_classification`'s THM chain had run to a level energy of −3.2 × 10⁷ MeV with
+    the unprofiled norm; it now sits at 6.29 MeV;
+  - `natural_target`'s LM and GSL fits (D7): the full objective at their optimum goes from 32.8674 to 32.8673, now that
+    the sum-to-one term is minimized.
+- **Step 4:** 179 × 3 identical; ctest 130/130 (with the slow tests) after `pyazr_azr_parse_cache` was updated: the
+  penalties are now the engine's, on the model it loaded, so an edit of the `.azr` on disk no longer moves them within
+  a session, as it never moved the χ²; `run_tests.sh` 133/133; threads identical. `pyazr_objective_terms`:
+  objective = the sum of its terms, its gradient = finite differences on all 19 parameters of T2 (2.8 × 10⁻⁸; norm,
+  shift, density, abundance and covariance priors non-zero there).
+- **Step 5:** of 148 fit-test runs (MCMC projects included) none changed; ctest 130/130, `run_tests.sh` 133/133.
+  `nuisance_prior` (e) fails on the step-4 build and passes on step 5.
+
+**Not done (open).** The writer still reads totals stored by the final evaluation (`Set...Penalty`) rather than the
+terms themselves (step 3 as designed). The `inference/` target is not a separate library yet: the terms use the
+engine's `EData` and `CNuc` directly, and become a library when Phase 4 makes the data plain values. The MCMC's
+level-energy spread and its user priors keep their code.
