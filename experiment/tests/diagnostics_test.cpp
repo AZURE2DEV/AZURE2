@@ -251,6 +251,18 @@ int main() {
               codes.count("E_FIELD_REQUIRED") && d.size() == 7);
   }
   {
+    // A data set without its quantity: one diagnostic, not one per field that depends on the quantity.
+    const std::vector<Diagnostic> d = Diagnose(kTargets + Data(Set(Folded(kDataset), "quantity", "") + "    target t1\n"));
+    check("missing quantity: only E_FIELD_REQUIRED", d.size() == 1 && d[0].field == "quantity");
+  }
+  {
+    // A neutron sample is not a fold: no quadrature.
+    const std::string ts = "<targets>\ntarget ts\n    kind sample\n    active 20Ne\n    areal_density 0.01 atoms/b fixed\n</targets>\n";
+    check("sample: quadrature refused", Diagnose(ts + Data(Set(Set(Set(kDataset, "reaction", "    reaction 20Ne(n,n)20Ne"),
+                                                                       "quantity", "    quantity transmission"), "unit", "    unit 1") +
+                                                              "    target ts\n    quadrature points 20\n")).size() == 1);
+  }
+  {
     // Story (b) with identical particles: the note's message (section 9.2).
     const std::vector<Diagnostic> d =
         Diagnose(Data("dataset aC_RTH\n    reaction 4He(a,a)4He\n    quantity ratio_to_rutherford\n    unit 1\n"

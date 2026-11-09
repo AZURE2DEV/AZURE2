@@ -180,11 +180,11 @@ Data set, in ``<data>``.  Measured values of one quantity in one data file (sect
      - the detector record: Q_k, resolution, UDR
    * - ``quadrature``
      - ``points <integer >= 1> [width_multiplier <number > 0>] [per_width <number > 0>]``
-     - only when the record is folded (a target layer, infinite target or sample, a Doppler-broadening target, a beam, or a detector resolution); required
+     - only when the record is folded (a target layer or infinite target, a Doppler-broadening target, a beam, or a detector resolution); required
      - sub-point grid of the fold
    * - ``fold_windows``
      - ``<lo>-<hi> ... <energy unit> | auto[:<tolerance>[:<margin>]] [blend <number> <energy unit>] [auto_tolerance <number > 0>]``
-     - only when the record is folded (a target layer, infinite target or sample, a Doppler-broadening target, a beam, or a detector resolution); optional
+     - only when the record is folded (a target layer or infinite target, a Doppler-broadening target, a beam, or a detector resolution); optional
      - lab-energy windows of the fold
    * - ``J``
      - ``<J>``
@@ -344,11 +344,11 @@ Extrapolation, in ``<extrapolations>``.  Model values on a grid, without data (s
      - the detector record: Q_k, resolution, UDR
    * - ``quadrature``
      - ``points <integer >= 1> [width_multiplier <number > 0>] [per_width <number > 0>]``
-     - only when the record is folded (a target layer, infinite target or sample, a Doppler-broadening target, a beam, or a detector resolution); required
+     - only when the record is folded (a target layer or infinite target, a Doppler-broadening target, a beam, or a detector resolution); required
      - sub-point grid of the fold
    * - ``fold_windows``
      - ``<lo>-<hi> ... <energy unit> | auto[:<tolerance>[:<margin>]] [blend <number> <energy unit>] [auto_tolerance <number > 0>]``
-     - only when the record is folded (a target layer, infinite target or sample, a Doppler-broadening target, a beam, or a detector resolution); optional
+     - only when the record is folded (a target layer or infinite target, a Doppler-broadening target, a beam, or a detector resolution); optional
      - lab-energy windows of the fold
    * - ``J``
      - ``<J>``

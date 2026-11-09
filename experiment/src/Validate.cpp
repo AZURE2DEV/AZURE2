@@ -338,7 +338,9 @@ int Validator::Holds(const Condition &c, const Work &w) const {
       if (t) {
         const Value *kind = t->vr.Get("kind");
         if (!kind) return -1;
-        fold = fold || kind->word != "none" || t->given.count("doppler");
+        // A layer or an infinite target integrates over the energy loss; a neutron sample enters through the
+        // transmission or yield transform (no sub-points) unless it Doppler-broadens.
+        fold = fold || kind->word == "layer" || kind->word == "infinite" || t->given.count("doppler");
       }
       if (d) fold = fold || d->given.count("energy_resolution") || d->given.count("udr");
       return result(fold ? 1 : 0);
@@ -349,15 +351,12 @@ int Validator::Holds(const Condition &c, const Work &w) const {
 
 void Validator::CheckFields(Work &w) {
   const Quantity *q = w.vr.quantity;
-  const bool quantityKnown = q || !w.given.count("quantity");
   for (const FieldDef &f : w.def->fields) {
     int applies = 1, required = 0;
     std::string why;
     if (f.byQuantity) {
       if (!q) {
-        if (!quantityKnown || !w.def->Find("quantity")) continue;
-        applies = 0;
-        why = "it depends on the quantity, which is missing";
+        continue;  // the quantity is missing or unknown, which is reported: what depends on it is not judged
       } else {
         const QuantityField *rule = nullptr;
         for (const QuantityField &qf : q->fields)

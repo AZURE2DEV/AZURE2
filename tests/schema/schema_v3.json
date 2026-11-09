@@ -280,7 +280,7 @@
      "grammar": "points <integer >= 1> [width_multiplier <number > 0>] [per_width <number > 0>]",
      "applies_when": {
       "if": "fold",
-      "text": "the record is folded (a target layer, infinite target or sample, a Doppler-broadening target, a beam, or a detector resolution)"
+      "text": "the record is folded (a target layer or infinite target, a Doppler-broadening target, a beam, or a detector resolution)"
      },
      "required": true,
      "alternatives": [
@@ -327,7 +327,7 @@
      "grammar": "<lo>-<hi> ... <energy unit> | auto[:<tolerance>[:<margin>]] [blend <number> <energy unit>] [auto_tolerance <number > 0>]",
      "applies_when": {
       "if": "fold",
-      "text": "the record is folded (a target layer, infinite target or sample, a Doppler-broadening target, a beam, or a detector resolution)"
+      "text": "the record is folded (a target layer or infinite target, a Doppler-broadening target, a beam, or a detector resolution)"
      },
      "required": false,
      "alternatives": [
@@ -734,7 +734,7 @@
      "grammar": "points <integer >= 1> [width_multiplier <number > 0>] [per_width <number > 0>]",
      "applies_when": {
       "if": "fold",
-      "text": "the record is folded (a target layer, infinite target or sample, a Doppler-broadening target, a beam, or a detector resolution)"
+      "text": "the record is folded (a target layer or infinite target, a Doppler-broadening target, a beam, or a detector resolution)"
      },
      "required": true,
      "alternatives": [
@@ -781,7 +781,7 @@
      "grammar": "<lo>-<hi> ... <energy unit> | auto[:<tolerance>[:<margin>]] [blend <number> <energy unit>] [auto_tolerance <number > 0>]",
      "applies_when": {
       "if": "fold",
-      "text": "the record is folded (a target layer, infinite target or sample, a Doppler-broadening target, a beam, or a detector resolution)"
+      "text": "the record is folded (a target layer or infinite target, a Doppler-broadening target, a beam, or a detector resolution)"
      },
      "required": false,
      "alternatives": [

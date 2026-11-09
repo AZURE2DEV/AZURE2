@@ -191,8 +191,8 @@ std::string Describe(const Condition &c) {
     case Condition::GammaExit: return "the reaction has" + std::string(c.negate ? " no" : " a") + " photon exit";
     case Condition::ThmExperiment: return "thm" + std::string(c.negate ? " does not name" : " names") + " an experiment of <thm>";
     case Condition::Fold:
-      return std::string("the record is") + no + " folded (a target layer, infinite target or sample, a Doppler-broadening target, a "
-             "beam, or a detector resolution)";
+      return std::string("the record is") + no + " folded (a target layer or infinite target, a Doppler-broadening target, a beam, "
+             "or a detector resolution)";
   }
   return "";
 }
