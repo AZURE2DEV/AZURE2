@@ -60,11 +60,6 @@ class ShftFunc {
    */
   double ZeroEnergyLimit(int l) const;
   /*!
-   * S = z W'/W below threshold from the Whittaker recurrence, at a binding
-   * energy (MeV, > 0).  False if GSL cannot evaluate it.
-   */
-  bool WhittakerShift(int l, double binding, double &s) const;
-  /*!
    * Exact shift function of a closed neutral channel (eta = 0) at rho = kappa a:
    * S_0 = -rho, S_l = -rho^2 / (l - S_{l-1}) - l, i.e. rho u'/u for the decaying
    * solution u = rho k_l(rho).  Every term is negative, so the recursion is stable.
@@ -78,9 +73,6 @@ class ShftFunc {
   double totalSepE() const { return totalSepE_; };
   /// Channel radius, fm.
   double radius() const { return radius_; };
-  /// GSL adaptor for the shift function, for differentiation.
-  static double thisShftFunc(double, void *);
-  static double thisShftFuncDeriv(double, void *);
   /// GSL adaptor for the Whittaker function at params_ (NumericalShift).
   static double theWhitFunc(double, void *);
   /// The numerical radial derivative of W at params_ (AZURE_BOUND_SHIFT_NUMERICAL=1).

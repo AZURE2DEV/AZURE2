@@ -8,22 +8,9 @@
 #include <cstdlib>
 #include <math.h>
 #include <gsl/gsl_deriv.h>
+#include "azure2/physics/ChannelFunctions.h"
+#include "azure2/physics/Derivatives.h"
 #include <gsl/gsl_errno.h>
-#include <gsl/gsl_sf_bessel.h>
-
-double ShftFunc::thisShftFunc(double x, void *p) {
-  ShftFunc *shift = (ShftFunc *)p;
-  int l = shift->params_.lValue;
-
-  return shift->operator()(l, x);
-}
-
-double ShftFunc::thisShftFuncDeriv(double x, void *p) {
-  ShftFunc *shift = (ShftFunc *)p;
-  int l = shift->params_.lValue;
-
-  return shift->EnergyDerivative(l, x);
-}
 
 /*!
  * Zero-energy limit of the shift function, the value both the positive- and the
@@ -38,44 +25,12 @@ double ShftFunc::thisShftFuncDeriv(double x, void *p) {
 double ShftFunc::ZeroEnergyLimit(int l) const {
   const WhitFunc &w = *params_.whitFunc;
   const double c = w.z1() * w.z2() * fstruc * w.redmass() * uconv / hbarc;
-  if (!(c > 0.0)) return -(double)l;
-  const double x = std::sqrt(8.0 * c * radius());
-  gsl_sf_result kl, kl1;
-  int s1, s2;
-  {
-    GslQuiet quiet;  // statuses checked here; thread-safe (GSLException.h)
-    s1 = gsl_sf_bessel_Kn_scaled_e(2 * l, x, &kl);
-    s2 = gsl_sf_bessel_Kn_scaled_e(2 * l + 1, x, &kl1);
-  }
-  if (s1 != GSL_SUCCESS || s2 != GSL_SUCCESS || kl1.val == 0.0) return -(double)l;
-  return -(double)l - 0.5 * x * kl.val / kl1.val;
+  return azure2::physics::zero_energy_shift(c, radius(), l);  // K_n without GSL (coulomb.md section 1.4)
 }
 
 double ShftFunc::theWhitFunc(double x, void *p) {
   Params *params = (Params *)p;
   return params->whitFunc->operator()(params->lValue, x, params->bindingEnergy);
-}
-
-/*!
- * Below threshold, S = z W'(z)/W(z) at z = 2 kappa a for the Whittaker function
- * W_{-eta, l+1/2} = exp(-z/2) z^(l+1) U(a, b, z), a = l + 1 + eta, b = 2l + 2,
- * and U' = -a U(a+1, b+1, z):
- *
- *   S = l + 1 - z/2 - a z U(a+1, b+1, z) / U(a, b, z)
- *
- * (CoulombTable::ExactBound, now physics/coulomb's whittaker_scaled, which
- * forms the ratio from its quadrature sums in logarithms, docs/upgrade/
- * coulomb.md section 1.4).  No large terms cancel, unlike the
- * U(a-1, b, z)/U(a, b, z) form used on thm before the merge of October 2026
- * (z/2 + eta - ratio, both ~eta), which was 10-100 times less accurate near
- * threshold.  Returns false if the arguments are invalid.
- */
-bool ShftFunc::WhittakerShift(int l, double binding, double &s) const {
-  const double etaB = kin_.rel ? kin_.EtaBound(binding) : sqrt(uconv / 2.) * fstruc * zz_ * sqrt(redmass_ / binding);
-  const double rhoB = kin_.rel ? kin_.RhoBound(radius(), binding)
-                               : sqrt(2. * uconv) / hbarc * radius() * sqrt(redmass_ * binding);
-  s = CoulombTable::ExactBound(l, etaB, rhoB);
-  return std::isfinite(s);
 }
 
 /*!
@@ -90,7 +45,7 @@ bool ShftFunc::WhittakerShift(int l, double binding, double &s) const {
  *
  * Now, in order: S(0) at exactly zero binding; the closed form of a neutral
  * channel (NeutralBoundShift); the Coulomb table's bound sheet when a table is
- * in use and covers (eta_b, rho_b); the exact U ratio (WhittakerShift) inside
+ * in use and covers (eta_b, rho_b); the exact ratio rho W'/W (physics/ coulomb_bound_shift) inside
  * eta_b <= 1000 (bindingMin below), and closer to threshold a linear
  * interpolation between S(-bindingMin) and S(0), so S is smooth through
  * threshold.
@@ -122,27 +77,18 @@ double ShftFunc::operator()(int l, double energy) {
   // wrong by 3e-4 - 4e-3 (p+12C); for comparisons only.
   if (!UseURatio()) return NumericalShift();
 
-  // Closer to threshold than eta_b = 1000 (the range in which whittaker_scaled is tested to 1e-12; beyond it, at
-  // eta_b >~ 1e4, it scatters at 1e-9 and grows slower) S is interpolated linearly between S(-bindingMin) and the
-  // exact zero-energy limit S(0), so it is smooth through threshold; S - S(0) is linear in the binding there to about
-  // 1e-11.  Until 2026-11-09 the band also covered eta_b > 50 where z = 2 kappa a < 0.05, where GSL's U, used then,
-  // could be off by 1e-6 (p+p, eta = 111, z = 1.2e-3); whittaker_scaled is not (coulomb.md section 1.4, "The
-  // interpolation band near threshold").
-  const double kEtaMax = 1000.0;
+  // The exact ratio within eta_b <= 1000 and the linear interpolation to S(0) closer to threshold: physics/
+  // coulomb_bound_shift (coulomb.md section 1.4), with this channel's eta_b and rho_b.
   const WhitFunc &w = *params_.whitFunc;
-  const double mu = w.redmass() * uconv;
-  const double c = w.z1() * w.z2() * fstruc * mu / hbarc;  // eta * kappa, fm^-1
-  auto bindingAtKappa = [mu](double kappa) { return std::pow(hbarc * kappa, 2.0) / (2.0 * mu); };
-  const double bindingMin = (c > 0.0) ? bindingAtKappa(c / kEtaMax) : 0.0;
-
-  double s;
-  if (binding >= bindingMin) {
-    if (WhittakerShift(l, binding, s)) return s;
-    return ZeroEnergyLimit(l);
-  }
-  const double s0 = ZeroEnergyLimit(l);
-  if (!WhittakerShift(l, bindingMin, s)) return s0;
-  return s0 + (s - s0) * (binding / bindingMin);
+  azure2::physics::BoundShiftArgs args;
+  args.mu_MeV = w.redmass() * uconv;
+  args.c_fm = w.z1() * w.z2() * fstruc * args.mu_MeV / hbarc;  // eta * kappa, fm^-1
+  args.a_fm = radius();
+  args.eta_rho = [this](double B, double &etaB, double &rhoB) {
+    etaB = kin_.rel ? kin_.EtaBound(B) : sqrt(uconv / 2.) * fstruc * zz_ * sqrt(redmass_ / B);
+    rhoB = kin_.rel ? kin_.RhoBound(radius(), B) : sqrt(2. * uconv) / hbarc * radius() * sqrt(redmass_ * B);
+  };
+  return azure2::physics::coulomb_bound_shift(l, binding, args);
 }
 
 /*!
@@ -176,22 +122,15 @@ bool ShftFunc::BoundTableOk(int l, double energy) const {
 }
 
 double ShftFunc::EnergyDerivative(int l, double energy, double step) {
-  double result;
-  double error;
-
   params_.lValue = l;
 
-  gsl_function F;
-  F.function = &thisShftFunc;
-  F.params = this;
-
-  // gsl_deriv_central samples E +- h and E +- h/2: one route for all four (the table only when it covers
+  // central_derivative (GSL's gsl_deriv_central, ported to physics/) samples E +- h and E +- h/2: one route for all four (the table only when it covers
   // every one of them), so the table's edge cannot put a jump into the derivative (dev, audit 2026-10-25,
   // item 32).  The step is the caller's (ChannelFunc::DerivativeStep for a closed channel; 1 eV by default).
   const double h = step;
   forceExact_ = table_ && !(BoundTableOk(l, energy + h) && BoundTableOk(l, energy - h) &&
                             BoundTableOk(l, energy + 0.5 * h) && BoundTableOk(l, energy - 0.5 * h));
-  gsl_deriv_central(&F, energy, h, &result, &error);
+  const double result = azure2::physics::central_derivative([this, l](double e) { return operator()(l, e); }, energy, h);
   forceExact_ = false;
 
   return result;
@@ -211,18 +150,8 @@ double ShftFunc::EnergySecondDerivative(int l, double energy) {
     ExactScope(bool &f) : flag(f), saved(f) { flag = true; }
     ~ExactScope() { flag = saved; }
   } exact(forceExact_);
-  if (binding < 4.0 * h) {
-    const double f = 1.0e-3;
-    double s0 = operator()(l, energy);
-    double s1 = operator()(l, energy - f);
-    double s2 = operator()(l, energy - 2.0 * f);
-    double s3 = operator()(l, energy - 3.0 * f);
-    return (2.0 * s0 - 5.0 * s1 + 4.0 * s2 - s3) / (f * f);
-  }
-  double s0 = operator()(l, energy);
-  double d1 = (operator()(l, energy + h) - 2.0 * s0 + operator()(l, energy - h)) / (h * h);
-  double d2 = (operator()(l, energy + 2.0 * h) - 2.0 * s0 + operator()(l, energy - 2.0 * h)) / (4.0 * h * h);
-  return (4.0 * d1 - d2) / 3.0;
+  return azure2::physics::second_derivative([this, l](double e) { return operator()(l, e); }, energy, h, 1.0e-3,
+                                            binding < 4.0 * h, azure2::physics::Side::Below);
 }
 
 const CoulombTable *ShftFunc::SharedTable(bool neutral) {
@@ -241,7 +170,5 @@ bool ShftFunc::UseNeutralClosedForm() {
 }
 
 double ShftFunc::NeutralBoundShift(int l, double rho) {
-  double s = -rho;
-  for (int ll = 1; ll <= l; ll++) s = -rho * rho / (ll - s) - ll;
-  return s;
+  return azure2::physics::neutral_bound_shift(l, rho);
 }

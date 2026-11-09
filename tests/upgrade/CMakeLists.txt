@@ -51,3 +51,9 @@ set_tests_properties(channel_table_unit PROPERTIES TIMEOUT 300)
 add_executable(observable_coupling_gsl_test observable_coupling_gsl_test.cpp)
 target_link_libraries(observable_coupling_gsl_test PRIVATE AZURE2Core)
 add_test(NAME physics_observable_coupling_gsl COMMAND observable_coupling_gsl_test)
+
+# physics/ central_derivative against GSL's gsl_deriv_central, bit for bit (docs/upgrade/coulomb.md section 1.4).
+add_executable(derivatives_gsl_test derivatives_gsl_test.cpp)
+target_link_libraries(derivatives_gsl_test PRIVATE azure2_physics ${GSL_LIBRARIES})
+target_include_directories(derivatives_gsl_test PRIVATE ${GSL_INCLUDE_DIRS})
+add_test(NAME physics_derivatives_gsl COMMAND derivatives_gsl_test)
