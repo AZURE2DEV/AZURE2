@@ -91,7 +91,7 @@ bool ShftFunc::WhittakerShift(int l, double binding, double &s) const {
  * Now, in order: S(0) at exactly zero binding; the closed form of a neutral
  * channel (NeutralBoundShift); the Coulomb table's bound sheet when a table is
  * in use and covers (eta_b, rho_b); the exact U ratio (WhittakerShift) inside
- * the band where GSL's U was trusted (bindingMin below), and closer to threshold a linear
+ * eta_b <= 1000 (bindingMin below), and closer to threshold a linear
  * interpolation between S(-bindingMin) and S(0), so S is smooth through
  * threshold.
  */
@@ -122,26 +122,18 @@ double ShftFunc::operator()(int l, double energy) {
   // wrong by 3e-4 - 4e-3 (p+12C); for comparisons only.
   if (!UseURatio()) return NumericalShift();
 
-  // The band kept from GSL's U (coulomb.md section 1.4: unchanged in the step that replaced GSL by
-  // whittaker_scaled, which holds 1e-12 inside and outside it; narrowing it is a separate step).
-  // Where GSL's U was trusted (the exact U ratio, WhittakerShift): eta <= 1000,
-  // and either eta <= 50 or z = 2 kappa a >= 0.05.  Against mpmath (October
-  // 2026; p+p, p+7Li, 6Li+d, p+12C, p+18O, a+12C, a+16O, 12C+12C, l = 0-3,
-  // binding 1e-10 - 3 MeV) the ratio is good to ~1e-9 there, and outside it it
-  // can be off by 1e-6 (p+p, eta = 111, z = 1.2e-3) or fail; closer to
-  // threshold S is interpolated linearly between S(-bindingMin) and the exact
-  // zero-energy limit S(0), so it is smooth through threshold.  Largest error
-  // of the whole function on that set: 8.7e-9 absolute (it was 2.2e-8 with
-  // the U(A-1)/U(A) form and eta <= 300).
-  const double kEtaMax = 1000.0, kEtaSafe = 50.0, kZSafe = 0.05;
+  // Closer to threshold than eta_b = 1000 (the range in which whittaker_scaled is tested to 1e-12; beyond it, at
+  // eta_b >~ 1e4, it scatters at 1e-9 and grows slower) S is interpolated linearly between S(-bindingMin) and the
+  // exact zero-energy limit S(0), so it is smooth through threshold; S - S(0) is linear in the binding there to about
+  // 1e-11.  Until 2026-11-09 the band also covered eta_b > 50 where z = 2 kappa a < 0.05, where GSL's U, used then,
+  // could be off by 1e-6 (p+p, eta = 111, z = 1.2e-3); whittaker_scaled is not (coulomb.md section 1.4, "The
+  // interpolation band near threshold").
+  const double kEtaMax = 1000.0;
   const WhitFunc &w = *params_.whitFunc;
   const double mu = w.redmass() * uconv;
   const double c = w.z1() * w.z2() * fstruc * mu / hbarc;  // eta * kappa, fm^-1
   auto bindingAtKappa = [mu](double kappa) { return std::pow(hbarc * kappa, 2.0) / (2.0 * mu); };
-  const double bindingMin =
-      (c > 0.0) ? std::max(bindingAtKappa(c / kEtaMax),
-                           std::min(bindingAtKappa(c / kEtaSafe), bindingAtKappa(kZSafe / (2.0 * radius()))))
-                : 0.0;
+  const double bindingMin = (c > 0.0) ? bindingAtKappa(c / kEtaMax) : 0.0;
 
   double s;
   if (binding >= bindingMin) {
