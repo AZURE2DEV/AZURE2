@@ -130,7 +130,7 @@ class AZURECalcMCMC {
    *
    * Requires UpdateParameterVectors() to have run first.
    */
-  void BuildAutoPriors() const;
+  void BuildAutoPriors(bool useRWA = true) const;
 
   /*!
    * Parameter kind of each varying parameter; empty until BuildAutoPriors().

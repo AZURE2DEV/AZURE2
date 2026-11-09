@@ -5,6 +5,9 @@
 
 #include "Constants.h"
 #include "AZUREGrad.h"
+#include "Objective.h"
+#include "ParameterLimitsManager.h"
+#include <memory>
 #include <map>
 #include <vector>
 #include "ThmExperiment.h"
@@ -386,6 +389,21 @@ class AZUREAPI {
   vector_r CalculateChi2GradRWA(const vector_r &params) const;
 
   /*!
+   * The objective of the fit (docs/upgrade/objective.md; Objective.h): the data chi-squared and every prior and
+   * constraint the CLI's fit minimizes -- normalization, energy-shift, screening, density, Doppler and thickness
+   * priors, nuisance priors (<parameterSettings> useAsNuisance), Park's wall, abundances, scattering lengths, the
+   * prior covariance -- at the free RWA parameters.  `terms` (optional) gets each term's value in
+   * ObjectiveTermNames() order, `segments` (optional) the normalization and shift priors per segment (index =
+   * segment number).
+   */
+  double CalculateObjectiveRWA(const vector_r &params, std::vector<double> *terms = nullptr,
+                               ObjectiveContext::SegmentPriors *segments = nullptr) const;
+  /// The objective and its gradient: [ objective, d/dp_0, ..., d/dp_{n-1} ] (CalculateChi2GradRWA plus the priors).
+  vector_r CalculateObjectiveGradRWA(const vector_r &params) const;
+  /// The names of the objective's terms, in the order of CalculateObjectiveRWA's `terms`.
+  std::vector<std::string> ObjectiveTermNames() const;
+
+  /*!
    * Standardized residuals r_i = (fit_i - data_i*n)/(cmErr_i*n) (so sum r_i^2 =
    * chi2) and their analytic Jacobian J_{ij} = d r_i / d theta_j, for
    * Gauss-Newton / Levenberg-Marquardt.  Columns are the non-fixed parameters
@@ -493,6 +511,14 @@ class AZUREAPI {
 
 
  private:
+  /// The nuisance priors of <parameterSettings> (useAsNuisance), read once: chi^2 and gradient at the full vector,
+  /// without the parameters of the prior covariance (D3).
+  double NuisanceChi2(const vector_r &full) const;
+  void AddNuisanceGradient(const vector_r &full, vector_r &gradFull) const;
+  bool NuisancePriorOf(int f, double &nominal, double &sigma) const;
+  mutable std::unique_ptr<AZUREParams> nuisanceParams_;
+  mutable std::unique_ptr<ParameterLimitsManager> nuisance_;
+  mutable bool nuisanceRead_ = false;
   /// Shared body of SetRadius and Rebuild: refill from the .azr with every radius override in \p radii.
   bool RebuildImpl(const std::map<int, double> &radii);
   /// Read and match the prior parameter covariance onto names_ / fixed_ (data mode only) and hand it to the data

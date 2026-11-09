@@ -38,6 +38,7 @@ struct SampleAbundance {
   double nominal = 1.0;     ///< value read from the file, centre of the prior
   double sigma = 0.0;       ///< prior width; 0 = no prior
   bool vary = false;
+  bool priorReplaced = false;  ///< the prior covariance replaces this prior (docs/upgrade/objective.md D3)
 };
 
 /// A sample: one set of isotopic (or stoichiometric) abundances, one entry per

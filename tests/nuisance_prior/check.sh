@@ -21,8 +21,11 @@
 #         filled parameter list                         -> chi2 of the same
 #         run without the prior + 1 (param.par rounds the values, so its own
 #         baseline)
-# The "Total Chi-Squared:" line on stdout is the one that includes the priors
-# (chiSquared.out holds the data and normalization terms only).
+# The "Total Chi-Squared:" line on stdout includes the priors.  Since 2026-11-09 (docs/upgrade/objective.md D6,
+# step 5) the nuisance priors are in every path:
+#   (d)   chiSquared.out of (b) reports Total-Nuisance-Chi-Squared = 1 (rel 1e-6);
+#   (e)   an MCMC on the model of (b) (24 walkers, 100 steps, physical parameters; its set-up only) applies the prior
+#         ("Nuisance priors from <parameterSettings>: 1").
 #
 #   ./tests/nuisance_prior/check.sh path/to/AZURE2
 
@@ -88,4 +91,23 @@ for case in b c; do
   fi
 done
 [ "$bad" -eq 0 ] && echo "  ok    nuisance prior evaluated on the parameter it names"
+
+# (d) the writer reports the nuisance term (D6)
+nu="$(grep -oE 'Total-Nuisance-Chi-Squared: [0-9.eE+-]+' "$WORK/b/output/chiSquared.out" | awk '{print $2}')"
+if [ -n "$nu" ] && awk -v a="$nu" 'BEGIN{d=a-1; if(d<0)d=-d; exit !(d<1e-6)}'; then
+  echo "  ok    (d) chiSquared.out: Total-Nuisance-Chi-Squared $nu (the 1-sigma offset)"
+else
+  echo "  FAIL  (d) chiSquared.out: Total-Nuisance-Chi-Squared '${nu}', expected 1"; bad=1
+fi
+
+# (e) the MCMC applies the same prior (the shared configuration, step 5)
+d="$WORK/b"
+# Only the set-up is needed (the priors are reported, and flushed, before sampling starts): stop after 30 s.
+(cd "$d" && printf '6\n\n24\n100\n\n0.5\n1\nno\nyes\n' | timeout 30 "$AZURE2_BIN" --no-gui --no-readline run.azr 2>&1 \
+   | head -c 5000000 | tr '\r' '\n' > mcmc.log)
+if grep -q "Nuisance priors from <parameterSettings>: 1 level/background parameter" "$d/mcmc.log"; then
+  echo "  ok    (e) MCMC: the nuisance prior of <parameterSettings> is applied"
+else
+  echo "  FAIL  (e) MCMC: no nuisance prior applied"; grep -i "prior" "$d/mcmc.log" | head -5; bad=1
+fi
 exit "$bad"

@@ -196,6 +196,10 @@ class AZURECalc : public ROOT::Minuit2::FCNGradientBase {
    * Calculate nuisance parameter chi-squared contribution
    */
   double CalculateNuisanceChiSquared(const vector_r &p) const;
+  /// The nuisance prior (nominal, sigma) of full index f, false for none or one the prior covariance replaces (D3).
+  bool NuisancePriorOf(int f, double &nominal, double &sigma) const;
+  /// Is full index f a parameter of the prior covariance (<config> priorCovariance=)?
+  bool CoveredByPriorCovariance(int f) const;
 
   /*!
    * Add the analytic gradient of the nuisance-parameter penalty to `grad`,
@@ -204,13 +208,6 @@ class AZURECalc : public ROOT::Minuit2::FCNGradientBase {
    * covers only the data chi-squared).
    */
   void AddNuisanceGradient(const vector_r &p, std::vector<double> &grad) const;
-
-  /*!
-   * Full-vector indices of the parameters that carry a diagonal prior of their own (normError, shift errors,
-   * screening / density / Doppler / thickness / abundance sigmas, nuisance priors).  A prior parameter covariance
-   * that also lists one of them applies on top (the run notes the overlap).
-   */
-  std::vector<int> IndicesWithOwnPrior() const;
 
   /*!
    * Object pool management methods

@@ -65,4 +65,4 @@ __all__ = ["azure2", "ScatteringLength", "ScatteringLengthLine", "whittaker_wave
            "Variant", "Averaged", "ModelAverage", "model_average",
            "parameter_label", "azr_parameter_slots", "write_averaged_azr",
            "prior_from_fit", "read_prior", "write_prior", "read_covariance_dat"]
-__version__ = '2.10.0'
+__version__ = '2.11.0'

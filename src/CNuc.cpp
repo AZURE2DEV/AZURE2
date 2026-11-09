@@ -573,7 +573,7 @@ double CNuc::AbundancePenalty(double globalSumSigma) const {
   for (unsigned int s = 0; s < samples_.size(); s++) {
     for (unsigned int i = 0; i < nuclei_.size(); i++) {
       const SampleAbundance &e = samples_[s].entries[i];
-      if (e.sigma > 0.0) penalty += pow((e.abundance - e.nominal) / e.sigma, 2.0);
+      if (e.sigma > 0.0 && !e.priorReplaced) penalty += pow((e.abundance - e.nominal) / e.sigma, 2.0);
     }
     const double sig = this->SampleSumSigma((int)s + 1, globalSumSigma);
     if (sig > 0.0) penalty += pow((this->AbundanceSum((int)s + 1) - 1.0) / sig, 2.0);

@@ -13,8 +13,8 @@ segment (isDiff 5, so the E1-component path of calculate_rwa is exercised):
      objective / segment_chi2 open the .azr ZERO times (the old code: once per segment per call);
   2. the values are unchanged: each segment is the engine's total, the E1 segment the engine's
      E1 component, and objective = chi2 + penalties as before;
-  3. a change to the file on disk is still seen (the penalty follows an edited nominal norm),
-     and configure() re-reads;
+  3. a change to the file on disk is seen by the parse cache (active_datasets), while the penalties stay the
+     engine's, on the model it loaded (since pyazr 2.11), and configure() re-reads;
   4. the public datasets / active_datasets / extrapolations are copies: editing them does not
      change the session's penalties.
 The old code fails 1.
@@ -130,7 +130,9 @@ def main():
             ref_obj = (float(np.sum(m.calculate_chi2_rwa(x))) + float(np.sum(pen["norm"]))
                        + float(np.sum(pen["shift"])) + float(np.sum(pen["shift_sqrt"]))
                        + float(np.sum(pen["shift_fn"])) + pen["screening"] + pen["density"])
-            check("objective = chi2 + penalties", obj == ref_obj, f"{obj} vs {ref_obj}")
+            # The objective is the engine's (docs/upgrade/objective.md step 4): its terms summed in the engine's
+            # order, so the Python sum may differ in the last bit.
+            check("objective = chi2 + penalties", abs(obj - ref_obj) <= 1e-13 * abs(ref_obj), f"{obj} vs {ref_obj}")
 
             print("\n3. an edit of the file on disk is still seen")
             # segment 1: nominal norm 1 -> 1.1 (5 % error, norm parameter still 1.0 in the engine)
@@ -141,17 +143,26 @@ def main():
             time.sleep(0.01)
             with open(azr, "w") as f:
                 f.write(text.replace(old, new, 1))
-            norm_after = float(m.penalties(x)["norm"][0])
+            # Since pyazr 2.11 the penalties are the engine's (objective.md step 4), computed on the model the
+            # engine loaded -- the one its chi-squared uses; a session does not re-read the .azr (configure()
+            # re-reads metadata from the engine).  Before, penalties() parsed the file in Python and followed an
+            # edit at once, so they could describe another model than the chi-squared.  The Python parse cache
+            # still follows the edit (its own views of the file).
+            norm_unconfigured = float(m.penalties(x)["norm"][0])
             want = ((1.0 - 1.1) / (1.1 / 100.0 * 5.0)) ** 2
             check("norm penalty before the edit is 0", norm_before == 0.0, f"{norm_before}")
-            check("norm penalty follows the edited nominal", abs(norm_after - want) <= 1e-12 * want,
-                  f"{norm_after} vs {want}")
+            check("the engine's penalty keeps the loaded model", norm_unconfigured == 0.0, f"{norm_unconfigured}")
             with OpenCounter(azr) as c:
                 m.configure()
-                m.penalties(x)
+                m.active_datasets
+                norm_after = float(m.penalties(x)["norm"][0])
             with OpenCounter(azr) as c2:
+                m.active_datasets
                 m.penalties(x)
-            # two parses after configure(): the segment list and the AzrModel (scattering lengths)
+            check("... also after configure()", norm_after == 0.0, f"{norm_after}")
+            check("the parse cache follows the edit (active_datasets: nominal norm 1.1)",
+                  abs(m.active_datasets[0].nominal_norm - 1.1) <= 1e-12, f"{m.active_datasets[0].nominal_norm}")
+            del want
             check("configure() re-reads, the next call does not", c.n >= 1 and c2.n == 0,
                   f"{c.n} then {c2.n} opens")
             with open(azr, "w") as f:           # put it back
