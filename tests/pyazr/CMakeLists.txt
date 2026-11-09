@@ -459,10 +459,10 @@ set_tests_properties(pyazr_potential_sessions PROPERTIES ENVIRONMENT "OMP_NUM_TH
 # The fit's objective through pyazr (docs/upgrade/objective.md step 4): objective() = objective_and_grad()[0] = the sum
 # of the engine's terms, the gradient against finite differences, on models with norm, shift-function and
 # scattering-length terms.
-add_test(NAME pyazr_objective
+add_test(NAME pyazr_objective_terms
          COMMAND ${Python3_EXECUTABLE}
-                 ${CMAKE_CURRENT_SOURCE_DIR}/objective_test.py)
-set_tests_properties(pyazr_objective PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+                 ${CMAKE_CURRENT_SOURCE_DIR}/objective_terms_test.py)
+set_tests_properties(pyazr_objective_terms PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
 add_test(NAME pyazr_output_penalties
          COMMAND ${Python3_EXECUTABLE}
