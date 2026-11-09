@@ -103,6 +103,15 @@ void Document::FindSections() {
   for (std::size_t k : open)
     problems_.push_back("line " + std::to_string(sections_[k].open + 1) + ": <" + sections_[k].name +
                         "> is not closed");
+  // A top-level section given twice: only the first is read.
+  for (std::size_t a = 0; a < sections_.size(); a++)
+    for (std::size_t b = a + 1; b < sections_.size(); b++)
+      if (sections_[a].depth == 0 && sections_[b].depth == 0 && sections_[a].name == sections_[b].name) {
+        problems_.push_back("line " + std::to_string(sections_[b].open + 1) + ": a second <" + sections_[b].name +
+                            "> (the first is at line " + std::to_string(sections_[a].open + 1) +
+                            "); only the first is read");
+        break;
+      }
 }
 
 const Document::Section *Document::Find(const std::string &name) const {

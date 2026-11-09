@@ -195,6 +195,14 @@ class Config {
   /// Read the <config> block, then the optional <potential> and <thm> blocks.
   /// -1 if the file cannot be read, -2 if an optional block is malformed (already reported).
   int ReadConfigFile();
+  /*!
+   * The section <name> of the .azr (configfile) as a stream: its opening tag, its lines and its closing tag (each
+   * line ending read as "\n"; to the end of the file if the section is not closed), or null when the file cannot be
+   * read or has no such top-level section.  The file is read through InputFiles (cached per cacheInputFiles, so the
+   * section is that of the file as it now is) and parsed as an io::Document (docs/upgrade/project.md, Phase 3): a tag
+   * is a whole trimmed line.
+   */
+  std::unique_ptr<std::istream> SectionStream(const std::string &name) const;
   /// Reads the <potential> block of the configuration file, if it has one.
   int ReadPotentialBlock();
   /// Reads the optional <thm> block. -1 on an unknown key or an unterminated block.

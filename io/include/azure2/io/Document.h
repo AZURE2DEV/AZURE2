@@ -49,7 +49,8 @@ class Document {
   /// The lines strictly between a section's tags (empty for an unclosed section).
   std::vector<std::string> Body(const Section &s) const;
 
-  /// Structural problems: unclosed sections, a closing tag without its opening tag, tags crossing (<a><b></a></b>).
+  /// Structural problems: unclosed sections, a closing tag without its opening tag, tags crossing (<a><b></a></b>),
+  /// a top-level section given twice (only the first is read).
   const std::vector<std::string> &Problems() const { return problems_; }
 
   /*!

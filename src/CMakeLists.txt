@@ -88,6 +88,7 @@ endif (BUILD_LIBRARY)
 # CNuc -> System adapter (CNucSystem.cpp) uses it so far.
 target_link_libraries(AZURE2Core PUBLIC
     azure2_physics
+    azure2_io
     Minuit2::Minuit2
     ${GSL_LIBRARIES}
     ${BLAS_LIBRARIES}

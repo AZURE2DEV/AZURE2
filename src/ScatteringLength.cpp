@@ -116,15 +116,11 @@ bool Adjoint(CNuc *compound, const Config &configure, const Channel &ch, complex
 
 int ReadConstraints(CNuc *compound, const Config &configure, std::vector<Constraint> &constraints) {
   constraints.clear();
-  std::ifstream in(configure.configfile.c_str());
-  if (!in) return 0;
+  std::unique_ptr<std::istream> section = configure.SectionStream("scatteringLengths");
+  if (!section) return 0;
+  std::istream &in = *section;
   std::string line;
-  while (!in.eof() && line != "<scatteringLengths>") {
-    getline(in, line);
-    size_t a = line.find_first_not_of(" \t\r"), b = line.find_last_not_of(" \t\r");
-    line = (a == std::string::npos) ? std::string() : line.substr(a, b - a + 1);
-  }
-  if (line != "<scatteringLengths>") return 0;
+  getline(in, line);  // <scatteringLengths>
   int n = 0;
   auto error = [&](const std::string &what) {
     configure.outStream << "ERROR: <scatteringLengths> line " << n << ": " << what << "." << std::endl;

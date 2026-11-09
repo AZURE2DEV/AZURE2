@@ -1,4 +1,6 @@
 #include "Config.h"
+#include "InputFiles.h"
+#include "azure2/io/Document.h"
 #include <cstdlib>
 #include "NuclearPotentialManager.h"
 #ifndef NO_STAT
@@ -78,14 +80,44 @@ bool Config::ResolveMatrixRoute() {
   return true;
 }
 
+std::unique_ptr<std::istream> Config::SectionStream(const std::string &name) const {
+  std::unique_ptr<std::istream> file = InputFiles::Open(configfile, cacheInputFiles);
+  if (!file || !*file) return nullptr;
+  std::ostringstream bytes;
+  bytes << file->rdbuf();
+  const azure2::io::Document doc = azure2::io::Document::Parse(bytes.str());
+  const azure2::io::Document::Section *s = doc.Find(name);
+  if (!s) return nullptr;
+  std::string text;
+  const std::size_t end =
+      (s->close == azure2::io::Document::Section::npos) ? doc.NumLines() : s->close + 1;
+  for (std::size_t i = s->open; i < end; i++) {
+    // The tags as written by the readers' tests ("<name>", "</name>"): trimmed (P2).
+    bool closing = false;
+    const std::string tag = azure2::io::TagOf(doc.Line(i), closing);
+    text += (i == s->open || (i == s->close && !tag.empty())) ? (closing ? "</" : "<") + tag + ">" : doc.Line(i);
+    text += "\n";
+  }
+  return std::unique_ptr<std::istream>(new std::istringstream(text));
+}
+
 int Config::ReadConfigFile() {
   std::string dummy;
   std::string temp;
-  std::ifstream in(configfile.c_str());
-  if (!in) return -1;
+  // The <config> section of the project (io::Document; a tag is a whole trimmed line).
+  std::unique_ptr<std::istream> section = SectionStream("config");
+  if (!section) return -1;
+  // The file's structural problems (an unclosed or repeated section, crossing tags), once per read.
+  {
+    std::unique_ptr<std::istream> file = InputFiles::Open(configfile, cacheInputFiles);
+    std::ostringstream bytes;
+    if (file && *file) bytes << file->rdbuf();
+    for (const std::string &problem : azure2::io::Document::Parse(bytes.str()).Problems())
+      outStream << "WARNING: " << configfile << ": " << problem << std::endl;
+  }
+  std::istream &in = *section;
   std::string line = "";
-  while (line != "<config>" && !in.eof()) getline(in, line);
-  if (line != "<config>") return -1;
+  getline(in, line);  // <config>
   in >> temp;
   getline(in, dummy);
   if (temp == "true")
@@ -195,7 +227,6 @@ int Config::ReadConfigFile() {
       priorCovariance = value;
   }
   if (line != "</config>") return -1;
-  in.close();
   // A malformed optional block has already been reported: -2, so the caller
   // does not add a misleading "could not open" on top.
   if (this->ReadPotentialBlock() != 0) return -2;
@@ -247,12 +278,11 @@ int Config::ReadConfigFile() {
  */
 
 int Config::ReadPotentialBlock() {
-  std::ifstream in(configfile.c_str());
-  if (!in) return -1;
-
+  std::unique_ptr<std::istream> section = SectionStream("potential");
+  if (!section) return 0;  // optional block, absent
+  std::istream &in = *section;
   std::string line = "";
-  while (line != "<potential>" && !in.eof()) getline(in, line);
-  if (line != "<potential>") return 0;  // optional block, absent
+  getline(in, line);  // <potential>
 
   NuclearPotentialManager &manager = NuclearPotentialManager::instance();
   manager.resetToDefault();
@@ -357,7 +387,6 @@ int Config::ReadPotentialBlock() {
     else if (key == "r0")
       value >> current.r0;
   }
-  in.close();
 
   if (!closed) return -1;  // unterminated block
   flush();

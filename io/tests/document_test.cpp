@@ -62,6 +62,7 @@ int main() {
     check("closing without opening reported", Document::Parse("1\n</levels>\n").Problems().size() == 1);
     Document d = Document::Parse("<a>\n<b>\n</a>\n</b>\n");
     check("crossing reported", !d.Problems().empty());
+    check("a repeated top-level section reported", Document::Parse("<a>\n</a>\n<a>\n</a>\n").Problems().size() == 1);
   }
   {
     const std::string in = "<config>\r\n1\r\n2\r\n</config>\r\n<levels>\r\nL\r\n</levels>\r\n";
