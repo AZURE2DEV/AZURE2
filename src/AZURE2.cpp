@@ -11,6 +11,7 @@
 
 #include "azure2/io/Convert.h"
 #include "azure2/io/Document.h"
+#include "azure2/experiment/Schema.h"
 #include "AZUREMain.h"
 #include "Config.h"
 #include "NucLine.h"
@@ -122,6 +123,7 @@ void printHelp() {
             << std::setw(25) << std::left << "\t--ec-convection-current:" << std::setw(0) << "The exact-form convection current (the default; undoes an earlier --no-ec-convection-current)." << std::endl
             << std::setw(25) << std::left << "\t--no-ec-convection-current:" << std::setw(0) << "With --no-long-wavelength: external capture with the charge (extended Siegert) part of the E_L operator only, without its convection-current part." << std::endl
             << std::setw(25) << std::left << "\t--convert:" << std::setw(0) << "--convert OLD NEW: write the old-format project OLD in the updated format (format 2) to NEW (not overwritten) and exit." << std::endl
+            << std::setw(25) << std::left << "\t--schema:" << std::setw(0) << "Print the table of project format 3 (record kinds, fields, quantities, units, diagnostic codes) as JSON and exit." << std::endl
             << std::setw(25) << std::left << "\t--build-coulomb-table[=FILE]:" << std::setw(0) << "Build the Coulomb table (about 5 min on 4 threads, 88 MB; FILE as for --coulomb-table) and exit." << std::endl
             << std::setw(25) << std::left << "\t--grid-replacement:" << std::setw(0) << "Re-place the adaptive sub-point grids as levels and shifts move (the default)." << std::endl
             << std::setw(25) << std::left << "\t--no-grid-replacement:" << std::setw(0) << "Keep the adaptive sub-point grids placed from the input file's levels (default: re-place them as levels and shifts move)." << std::endl
@@ -1627,6 +1629,14 @@ int main(int argc, char *argv[]) {
         return 1;
       }
       return convertProject(argv[i + 1], argv[i + 2]);
+    }
+
+  // --schema prints the table of project format 3 as JSON and exits (docs/upgrade/project_format3.md section 6.1);
+  // tests/schema/schema_v3.json is its committed copy
+  for (int i = 1; i < argc; i++)
+    if (strcmp(argv[i], "--schema") == 0) {
+      std::cout << azure2::experiment::Schema::ToJson() << std::endl;
+      return 0;
     }
 
   // --build-coulomb-table[=FILE] builds the table and exits

@@ -85,10 +85,12 @@ endif (BUILD_LIBRARY)
 # unresolved on GNU ld (Linux and MinGW).  macOS's linker rescans archives and
 # hides the mistake, which is why the hand-written order looked fine.
 # azure2_physics (physics/) is below the engine: the engine may use it, never the reverse.  Only the
-# CNuc -> System adapter (CNucSystem.cpp) uses it so far.
+# CNuc -> System adapter (CNucSystem.cpp) uses it so far.  azure2_experiment: the format-3 table (AZURE2 --schema
+# and the binding's schema()).
 target_link_libraries(AZURE2Core PUBLIC
     azure2_physics
     azure2_io
+    azure2_experiment
     Minuit2::Minuit2
     ${GSL_LIBRARIES}
     ${BLAS_LIBRARIES}
