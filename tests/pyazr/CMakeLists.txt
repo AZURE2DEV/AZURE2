@@ -533,6 +533,14 @@ add_test(NAME pyazr_whittaker_wave
                  ${CMAKE_CURRENT_SOURCE_DIR}/whittaker_wave_test.py)
 set_tests_properties(pyazr_whittaker_wave PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
+# The formal -> Brune iteration inside an evaluation (docs/upgrade/level_parameters.md section 9): chi2 of
+# beam_profile_kernel in the formal basis is smooth in width_9_2 (it jumped 40.44 -> 42.93 when a level missed a 1e-12
+# MeV tolerance by rounding and kept its formal values).  ~3 min.
+add_test(NAME pyazr_formal_brune_iteration
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/formal_brune_iteration_test.py)
+set_tests_properties(pyazr_formal_brune_iteration PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2" LABELS "slow")
+
 # The R-matrix route (<config> first line false) at a pole of the R-matrix: tests/13N's thick-target capture puts a
 # sub-point exactly at a level's energy (NaN / 1.2 % off before 2026-11-01); identical_pp_res and natural_neon hit an
 # exact pole with Brune (LU failure / 84 points 0).  ~4 min.

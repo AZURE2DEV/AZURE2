@@ -1,9 +1,12 @@
 #include "CNucExternalCapture.h"
 
+#include <atomic>
 #include <cmath>
+#include <iostream>
 #include <memory>
 
 #include "AChannel.h"
+#include "GSLException.h"
 #include "ALevel.h"
 #include "CNuc.h"
 #include "CNucLevelParameters.h"
@@ -20,6 +23,37 @@
 #include "azure2/physics/LevelParameters.h"
 
 namespace phys = azure2::physics;
+
+namespace {
+/*!
+ * The formal -> Brune iteration inside a formal-basis evaluation (level_parameters.md section 9): 1e-12 MeV or 1e-12
+ * relative, the last iterate at the rounding floor, NaN instead of formal values.
+ */
+phys::FormalToBruneOptions EvaluationIteration(bool wantTransform) {
+  phys::FormalToBruneOptions options;
+  options.energy_tolerance_MeV = 1e-12;
+  options.relative_tolerance = 1e-12;
+  options.evaluation = true;
+  options.want_transform = wantTransform;
+  return options;
+}
+
+/// The first warning of an evaluation-time iteration, once per process (a fit evaluates thousands of times).
+void WarnOnce(const phys::LevelSet &set) {
+  static std::atomic<bool> told{false};
+  if (set.warnings.empty() || told.exchange(true)) return;
+  std::cerr << "WARNING (formal basis, evaluation): " << set.warnings.front()
+            << " (further such warnings are not shown)" << std::endl;
+}
+
+/// At setup a level that cannot be transformed stops the run, as TransformIn does.
+void ThrowIfFailed(const phys::LevelSet &set) {
+  for (std::size_t i = 0; i < set.status.size(); i++)
+    if (set.status[i] == phys::LevelSet::Status::EigenFailed || set.status[i] == phys::LevelSet::Status::NotConverged)
+      throw GSLException("External-capture final states (formal basis): " +
+                         (i < set.warnings.size() ? set.warnings[i] : std::string("a level could not be transformed")));
+}
+}  // namespace
 
 double SqrtNFFactor(CNuc &compound, JGroup *group, const ALevel *level, double n0, const std::vector<double> &gamma) {
   std::vector<phys::BoundChannel> channels;
@@ -126,10 +160,9 @@ void CNuc::SetUpECFinalBlocks(const Config &configure) {
   }
   if (record->blocks.empty()) return;
   ecFinalBlocks_ = record;
-  // The Brune energies of their final states, from the formal parameters (iteration to 1e-12 MeV).
+  // The Brune energies of their final states, from the formal parameters (EvaluationIteration).
   const phys::ChannelFunctions cf = ChannelFunctionsFromCNuc(*this, record->structure.map, record->gslCoulomb, record->rmc);
-  phys::FormalToBruneOptions options;
-  options.energy_tolerance_MeV = 1e-12;
+  const phys::FormalToBruneOptions options = EvaluationIteration(false);
   for (std::size_t b : record->blocks) {
     JGroup *group = this->GetJGroup(record->structure.map.groupOfBlock[b]);
     const std::vector<int> &levels = record->structure.map.levelOfBlockLevel[b];
@@ -141,6 +174,8 @@ void CNuc::SetUpECFinalBlocks(const Config &configure) {
     }
     for (std::size_t k = 0; k < nc; k++) B[k] = group->GetChannel((int)k + 1)->GetBoundaryCondition();
     const phys::LevelSet brune = phys::brune_from_formal(record->structure.system, b, E, gamma, B, cf, options);
+    ThrowIfFailed(brune);
+    WarnOnce(brune);
     for (std::size_t lb = 0; lb < levels.size(); lb++)
       if (group->GetLevel(levels[lb])->IsECLevel()) group->GetLevel(levels[lb])->SetECEnergy(brune.E[lb]);
   }
@@ -148,14 +183,13 @@ void CNuc::SetUpECFinalBlocks(const Config &configure) {
 
 /*!
  * Formal basis: the Brune amplitudes of the final states in ecFinalBlocks_ at the current fit parameters (physics/
- * brune_from_formal), as their external-capture amplitude, with N_f^1/2 formed from them.  The iteration's tolerance
- * is 1e-12 MeV, so that the capture agrees with the Brune basis to rounding (the reports use the engine's 1e-6 MeV).
+ * brune_from_formal), as their external-capture amplitude, with N_f^1/2 formed from them.  The iteration is
+ * EvaluationIteration's, so that the capture agrees with the Brune basis to rounding (the reports use 1e-6 MeV).
  */
 void CNuc::ECFinalStatesFromFormal() {
   const ECFinalBlocks &r = *ecFinalBlocks_;
   const phys::ChannelFunctions cf = ChannelFunctionsFromCNuc(*this, r.structure.map, r.gslCoulomb, r.rmc);
-  phys::FormalToBruneOptions options;
-  options.energy_tolerance_MeV = 1e-12;
+  const phys::FormalToBruneOptions options = EvaluationIteration(false);
   for (std::size_t b : r.blocks) {
     JGroup *group = this->GetJGroup(r.structure.map.groupOfBlock[b]);
     const std::vector<int> &levels = r.structure.map.levelOfBlockLevel[b];
@@ -167,6 +201,7 @@ void CNuc::ECFinalStatesFromFormal() {
     }
     for (std::size_t k = 0; k < nc; k++) B[k] = group->GetChannel((int)k + 1)->GetBoundaryCondition();
     const phys::LevelSet brune = phys::brune_from_formal(r.structure.system, b, E, gamma, B, cf, options);
+    WarnOnce(brune);
     for (std::size_t lb = 0; lb < levels.size(); lb++) {
       ALevel *level = group->GetLevel(levels[lb]);
       if (!level->IsECLevel()) continue;
@@ -232,14 +267,12 @@ void CNuc::SetUpFormalCaptureMasks(const Config &configure) {
 
 /*!
  * The projector Pi = T^-1 P T of each slot at the current fit parameters (physics/ capture_mask, Eq. 5), T from
- * brune_from_formal to 1e-12 MeV as for the final states; empty when no level of the block is masked.
+ * brune_from_formal (EvaluationIteration) as for the final states; empty when no level of the block is masked.
  */
 void CNuc::FormalCaptureMasksFromParams() {
   const CaptureMaskSetup &r = *captureMaskSetup_;
   const phys::ChannelFunctions cf = ChannelFunctionsFromCNuc(*this, r.structure.map, r.gslCoulomb, r.rmc);
-  phys::FormalToBruneOptions options;
-  options.energy_tolerance_MeV = 1e-12;
-  options.want_transform = true;
+  const phys::FormalToBruneOptions options = EvaluationIteration(true);
   for (std::size_t i = 0; i < r.slots.size(); i++) {
     const CaptureMaskSetup::Slot &s = r.slots[i];
     CaptureMask &mask = captureMasks_[i];
@@ -266,6 +299,7 @@ void CNuc::FormalCaptureMasksFromParams() {
     }
     for (std::size_t k = 0; k < nc; k++) B[k] = group->GetChannel((int)k + 1)->GetBoundaryCondition();
     const phys::LevelSet brune = phys::brune_from_formal(r.structure.system, s.block, E, gamma, B, cf, options);
+    WarnOnce(brune);
     mask.projector = phys::capture_mask(brune.transform, n, masked);
   }
 }

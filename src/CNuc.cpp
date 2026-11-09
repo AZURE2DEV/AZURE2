@@ -2399,6 +2399,13 @@ void CNuc::TransformToBrune(const Config &configure, bool report) {
                               << "    " << AZURELabel::Level(theJGroup, theLevel, j, la) << std::endl
                               << "  The input energy and widths are kept for this level; its "
                               << "transformed values are unreliable." << std::endl;
+        } else if (out.status[lb] == phys::LevelSet::Status::Bracketed) {
+          // The fixed point repels (e' < -1): the root of E - e(E) by bisection (level_parameters.md section 10).
+          configure.outStream << "**NOTE: Level transformed by a bracketed root (the iteration does not converge here)"
+                              << std::endl
+                              << "    " << AZURELabel::Level(theJGroup, theLevel, j, la) << std::endl
+                              << "  Energy residual " << out.residual_MeV[lb] << " MeV (" << out.iterations[lb]
+                              << " iterations and evaluations of E - e(E))." << std::endl;
         } else if (out.status[lb] == phys::LevelSet::Status::NotConverged) {
           // The iteration chases the energy eigenvalue while each channel's boundary condition moves with it, so the
           // channel whose boundary condition is still shifting most is the one holding up convergence -- name it,

@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <numeric>
 #include <sstream>
 #include <stdexcept>
@@ -455,9 +456,96 @@ LevelSet formal_from_brune(const System &system, std::size_t b, const std::vecto
 }
 
 namespace {
+/// brune_from_formal in an evaluation, a level that cannot be transformed: NaN energy, amplitudes and row of T, so that
+/// every observable that uses it is not finite (level_parameters.md section 9).
+void UndefinedLevel(std::vector<double> &tempE, std::vector<double> &tempG, std::vector<double> &W, std::size_t n,
+                    std::size_t nc, std::size_t me) {
+  const double nan = std::numeric_limits<double>::quiet_NaN();
+  tempE[me] = nan;
+  for (std::size_t k = 0; k < nc; k++) tempG[me * nc + k] = nan;
+  if (!W.empty())
+    for (std::size_t q = 0; q < n; q++) W[me * n + q] = nan;
+}
+
 // A level whose formal values are kept is its own formal level: its row of the transform is a unit vector.
 void KeepFormalRow(std::vector<double> &W, std::size_t n, std::size_t me) {
   for (std::size_t q = 0; q < n; q++) W[me * n + q] = (q == me) ? 1.0 : 0.0;
+}
+
+/// g(x) = x - e_r(x), e_r the eigenvalue of rank r of A(x) = diag(E) - sum_c (S_c(x) - B_c) gamma_c gamma_c^T, the
+/// formal levels in rank order (level_parameters.md section 10).  NaN when S or the eigenproblem fails.
+struct RootFunction {
+  const System &system;
+  std::size_t b;
+  const std::vector<double> &E, &gamma, &B;
+  const ChannelFunctions &cf;
+  const std::vector<bool> &particle;
+  std::size_t r;
+  EigenResult eig;
+  std::vector<double> shift;
+  int calls = 0;
+
+  double operator()(double x) {
+    calls++;
+    const std::size_t n = E.size(), nc = B.size();
+    shift.assign(nc, 0.0);
+    for (std::size_t k = 0; k < nc; k++)
+      if (particle[k]) shift[k] = cf(b, k, x).S - B[k];
+    std::vector<double> C(n * n);
+    for (std::size_t mu = 0; mu < n; mu++)
+      for (std::size_t mup = 0; mup < n; mup++) {
+        double chanSum = 0.0;
+        for (std::size_t k = 0; k < nc; k++)
+          if (particle[k]) chanSum += shift[k] * gamma[mu * nc + k] * gamma[mup * nc + k];
+        C[mu * n + mup] = (mu == mup) ? E[mu] - chanSum : -chanSum;
+      }
+    for (double c : C)
+      if (!std::isfinite(c)) return std::numeric_limits<double>::quiet_NaN();
+    eig = symmetric_eigen(C, n);
+    return eig.ok ? x - eig.values[r] : std::numeric_limits<double>::quiet_NaN();
+  }
+};
+
+/// The root of g by bisection on a bracket: the two iterates if g changes sign between them, else expanded from x0
+/// (the formal energy).  On success f.eig and f.shift belong to the root.
+bool BracketedRoot(RootFunction &f, double xa, double xb, double x0, double &root) {
+  double lo = 0.0, hi = 0.0, glo = 0.0, ghi = 0.0;
+  bool found = false;
+  if (std::isfinite(xa) && std::isfinite(xb)) {
+    const double ga = f(xa), gb = f(xb);
+    if (std::isfinite(ga) && std::isfinite(gb) && (ga <= 0.0) != (gb <= 0.0)) {
+      found = true;
+      if (ga <= 0.0) lo = xa, glo = ga, hi = xb, ghi = gb;
+      else lo = xb, glo = gb, hi = xa, ghi = ga;
+    }
+  }
+  if (!found) {
+    double x = x0, g = f(x0), width = 1e-3;
+    if (!std::isfinite(g)) return false;
+    const double dir = (g < 0.0) ? 1.0 : -1.0;
+    for (int i = 0; i < 64 && !found; i++, width *= 2.0) {
+      const double x2 = x + dir * width, g2 = f(x2);
+      if (!std::isfinite(g2)) return false;
+      if ((g2 <= 0.0) != (g <= 0.0)) {
+        found = true;
+        if (dir > 0.0) lo = x, glo = g, hi = x2, ghi = g2;
+        else lo = x2, glo = g2, hi = x, ghi = g;
+      }
+      x = x2, g = g2;
+    }
+    if (!found) return false;
+  }
+  // lo: g <= 0, hi: g > 0.  Bisection to full double precision.
+  for (int i = 0; i < 2100; i++) {
+    const double mid = lo + 0.5 * (hi - lo);
+    if (mid == lo || mid == hi) break;
+    const double gm = f(mid);
+    if (!std::isfinite(gm)) return false;
+    if (gm <= 0.0) lo = mid, glo = gm;
+    else hi = mid, ghi = gm;
+  }
+  root = (std::fabs(glo) <= std::fabs(ghi)) ? lo : hi;
+  return std::isfinite(f(root));
 }
 }  // namespace
 
@@ -488,6 +576,7 @@ LevelSet brune_from_formal(const System &system, std::size_t b, const std::vecto
       tempE[rank[i]] = E[i];
       for (std::size_t k = 0; k < nc; k++) tempG[rank[i] * nc + k] = gamma[i * nc + k];
     }
+    const std::vector<double> rankedE = tempE, rankedG = tempG;  // the formal levels in rank order
     const std::size_t me = (std::size_t)rank[lev];
     // W: the rows of tempG as combinations of the formal levels in rank order (tempG = W gamma_ranked), carried only
     // when the transform is asked for (external_capture.md section 3).
@@ -497,7 +586,30 @@ LevelSet brune_from_formal(const System &system, std::size_t b, const std::vecto
       for (std::size_t i = 0; i < n; i++) W[i * n + i] = 1.0;
     }
     std::vector<double> tempB = B;
-    int iteration = 1;
+    int iteration = 1, reportedIterations = -1;
+    // Section 10: the root of E - e(E) on a bracket (xa, xb, else expanded from the formal energy); the level takes the
+    // eigenvector of A(root) in the formal levels, oriented on its own level.  false: no bracket, nothing changed.
+    auto bracketed = [&](double xa, double xb, std::ostringstream &o) {
+      RootFunction g{system, b, rankedE, rankedG, B, cf, particle, me, {}, {}};
+      double root = 0.0;
+      if (!options.bracket || !BracketedRoot(g, xa, xb, rankedE[me], root)) return false;
+      out.status[lev] = LevelSet::Status::Bracketed;
+      out.residual_MeV[lev] = std::fabs(root - g.eig.values[me]);
+      for (std::size_t k = 0; k < nc; k++) out.boundary_shift[lev * nc + k] = g.shift[k];
+      const double orientation = (g.eig.vectors[me * n + me] < 0.0) ? -1.0 : 1.0;
+      tempE = g.eig.values;
+      for (std::size_t k = 0; k < nc; k++) {
+        double sum = 0.0;
+        for (std::size_t mup = 0; mup < n; mup++) sum += g.eig.vectors[mup * n + me] * rankedG[mup * nc + k];
+        tempG[me * nc + k] = orientation * sum;
+      }
+      if (!W.empty())
+        for (std::size_t q = 0; q < n; q++) W[me * n + q] = orientation * g.eig.vectors[q * n + me];
+      reportedIterations = iteration + g.calls;
+      o << "; the fixed point repels here: the level is the root of E - e(E), bracketed and bisected (" << g.calls
+        << " evaluations, residual " << out.residual_MeV[lev] << " MeV)";
+      return true;
+    };
     bool done = false;
     while (iteration <= options.max_iterations && !done) {
       std::vector<double> diff(nc, 0.0);
@@ -517,17 +629,35 @@ LevelSet brune_from_formal(const System &system, std::size_t b, const std::vecto
           C[mu * n + mup] = (mu == mup) ? tempE[mu] - chanSum : -chanSum;
         }
       const EigenResult eig = symmetric_eigen(C, n);
+      bool finite = true;
+      for (double c : C) finite = finite && std::isfinite(c);
+      if (!eig.ok && !finite) {
+        // Section 10, rule 5: the iterates overflowed (a repelling fixed point), the bracket comes from the formal energy.
+        std::ostringstream o;
+        o << Label(system, b, lev) << ": the iteration diverged after " << iteration << " iterations";
+        const double nan = std::numeric_limits<double>::quiet_NaN();
+        if (bracketed(nan, nan, o)) {
+          out.warnings.push_back(o.str());
+          break;
+        }
+      }
       if (!eig.ok) {
-        out.warnings.push_back(Label(system, b, lev) + ": could not transform the level (eigenvalue problem failed); "
-                                                       "the formal values are kept");
         out.status[lev] = LevelSet::Status::EigenFailed;
-        tempE[me] = E[lev];
-        for (std::size_t k = 0; k < nc; k++) tempG[me * nc + k] = gamma[lev * nc + k];
-        if (!W.empty()) KeepFormalRow(W, n, me);
+        if (options.evaluation) {
+          out.warnings.push_back(Label(system, b, lev) + ": could not transform the level (eigenvalue problem failed); "
+                                                         "the model is undefined here (NaN)");
+          UndefinedLevel(tempE, tempG, W, n, nc, me);
+        } else {
+          out.warnings.push_back(Label(system, b, lev) + ": could not transform the level (eigenvalue problem failed); "
+                                                         "the formal values are kept");
+          tempE[me] = E[lev];
+          for (std::size_t k = 0; k < nc; k++) tempG[me * nc + k] = gamma[lev * nc + k];
+          if (!W.empty()) KeepFormalRow(W, n, me);
+        }
         break;
       }
       const double step = std::fabs(eig.values[me] - tempE[me]);  // MeV
-      if (step <= options.energy_tolerance_MeV) done = true;
+      if (step <= std::max(options.energy_tolerance_MeV, options.relative_tolerance * std::fabs(tempE[me]))) done = true;
       // Each eigenvector oriented like formal_from_brune's: its component on its own level positive.
       std::vector<double> newG(n * nc);
       for (std::size_t mu = 0; mu < n; mu++) {
@@ -550,26 +680,40 @@ LevelSet brune_from_formal(const System &system, std::size_t b, const std::vecto
         }
         W.swap(newW);
       }
+      const double previous = tempE[me];
       tempE = eig.values;
       tempG.swap(newG);
       if (!done) {
         if (iteration == options.max_iterations) {
-          std::ostringstream o;
-          o << Label(system, b, lev) << ": not transformed after " << options.max_iterations
-            << " iterations; the formal values are kept";
-          out.warnings.push_back(o.str());
-          out.status[lev] = LevelSet::Status::NotConverged;
           out.residual_MeV[lev] = step;
-          tempE[me] = E[lev];
-          for (std::size_t k = 0; k < nc; k++) tempG[me * nc + k] = gamma[lev * nc + k];
-          if (!W.empty()) KeepFormalRow(W, n, me);
+          std::ostringstream o;
+          o << Label(system, b, lev) << ": not transformed after " << options.max_iterations << " iterations (last step "
+            << step << " MeV)";
+          const bool atFloor = options.evaluation && step <= options.rounding_bound_MeV;
+          if (!atFloor && bracketed(previous, tempE[me], o)) {
+          } else if (atFloor) {
+            // At the rounding floor: the last iterate is accurate to the step and continuous in the parameters.
+            out.status[lev] = LevelSet::Status::RoundingLimited;
+            o << "; the last iterate is used";
+          } else if (options.evaluation) {
+            out.status[lev] = LevelSet::Status::NotConverged;
+            o << "; the model is undefined here (NaN)";
+            UndefinedLevel(tempE, tempG, W, n, nc, me);
+          } else {
+            out.status[lev] = LevelSet::Status::NotConverged;
+            o << "; the formal values are kept";
+            tempE[me] = E[lev];
+            for (std::size_t k = 0; k < nc; k++) tempG[me * nc + k] = gamma[lev * nc + k];
+            if (!W.empty()) KeepFormalRow(W, n, me);
+          }
+          out.warnings.push_back(o.str());
         }
         iteration++;
       }
     }
     out.E[lev] = tempE[me];
     for (std::size_t k = 0; k < nc; k++) out.gamma[lev * nc + k] = tempG[me * nc + k];
-    out.iterations[lev] = iteration;
+    out.iterations[lev] = (reportedIterations >= 0) ? reportedIterations : iteration;
     if (!W.empty())
       for (std::size_t i = 0; i < n; i++) out.transform[lev * n + i] = W[me * n + (std::size_t)rank[i]];
   }

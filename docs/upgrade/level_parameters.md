@@ -254,3 +254,131 @@ convention record and no jj project; that needs the project reader (`io/`) to ca
 Code: `physics/include/azure2/physics/{Convention,LevelParameters,AngularCoupling,SymmetricEigen}.h`,
 `physics/src/{LevelParameters,Recoupling,AngularCoupling,SymmetricEigen}.cpp`; adapter `include/CNucLevelParameters.h`,
 `src/CNucLevelParameters.cpp`.
+
+## 9. The formal → Brune iteration inside an evaluation (design, 2026-11-08)
+
+**What.** `brune_from_formal` iterates, per level, B_c ← S_c(E) and the rediagonalization of
+E − Σ_c (S_c − B_c) γγᵀ until the level's energy moves by at most a tolerance; a level that does not converge in
+1000 iterations, or whose eigenproblem fails, keeps its formal values (unit row of T). That is the engine's report
+iteration (`TransformOut`, 10⁻⁶ MeV) and stays so. Since step 2 the same function runs inside every formal-basis
+evaluation (`ECFinalStatesFromFormal`, `FormalCaptureMasksFromParams`, and `SetUpECFinalBlocks` at setup), at
+10⁻¹² MeV. There the iteration can stall at its rounding floor: on `beam_profile_kernel` the 1⁻ level with Brune
+energy 20.0 MeV ends at steps of 7.7 × 10⁻¹² MeV (3.9 × 10⁻¹³ relative, about 1700 ε: the rounding of E is amplified
+by the slope of the shift function) after a 10⁻⁶ change of one width, its formal values are kept, the capture mask
+changes and χ² jumps 40.44 → 42.93 (`external_capture.md` §8). Keeping the formal values is right for a report that
+warns; inside a fit it is a silent, discontinuous substitute.
+
+**Rule** (options of `FormalToBruneOptions`; the defaults keep the report iteration unchanged):
+1. `relative_tolerance`: converged when the step is at most max(`energy_tolerance_MeV`, `relative_tolerance`·|E|).
+   The evaluation callers use 10⁻¹² MeV and 10⁻¹² relative (about 4500 ε): the stall above converges, and the
+   formal ↔ Brune capture agreement stays at 10⁻¹¹.
+2. `evaluation = true`: a level that has not met the tolerance after the iterations, but whose last step is at most
+   `rounding_bound_MeV` (10⁻⁹ MeV), takes its last iterate (status `RoundingLimited`; continuous in the parameters,
+   accurate to that step). A level whose eigenproblem fails, or whose last step is larger, gets NaN energy and
+   amplitudes (status as now, row of T NaN): the model is undefined there, so the observables and χ² are not finite —
+   MCMC rejects the point (its log-probability is tested with `isfinite`), Minuit and pyazr see a failed evaluation.
+   No formal values are substituted. The engine warns once per process on stderr with the level and the step.
+   At setup (`SetUpECFinalBlocks`) a failure stops the run (`GSLException`), as `TransformIn` does.
+
+**Where.** `physics/` (`brune_from_formal`, `FormalToBruneOptions`, `LevelSet::Status`); the three callers in
+`src/CNucExternalCapture.cpp` set the options through one function. Nothing else changes.
+
+**Tests.** `level_parameters_unit_test`: with `max_iterations` = 1, `evaluation` and a rounding bound above the first
+step, the last iterate is returned (not the formal values) with status `RoundingLimited`; with a bound below it, NaN;
+without `evaluation`, the formal values as before; a relative tolerance of 10⁻³ converges in fewer iterations to an
+energy within 10⁻³|E| of the tight one. A pyazr test on `beam_profile_kernel` (formal basis): χ² at the start and
+±10⁻⁶ relative on `width_9_2` is smooth (the second difference is below 10⁻³ of the first). Expected outputs: menu 1
+of the 179 projects unchanged in Brune and Park; formal at most in the last printed digits, every change classified.
+
+**Verified (2026-11-09; build of 92d1525e, GCC 11.5 Release, pyazr on; local 24-core node).** No warnings.
+`ctest -LE slow` 110/111, `physics_level_parameters_unit` and the slow `pyazr_formal_brune_iteration` pass (41.7 s);
+`run_tests.sh` 133/133 (1185 s, 11 threads); 1 vs 8 threads byte-identical on T1–T3 and 13N in the three bases. The
+179 projects × 3 bases against a18fe89e: Brune 689/689 and Park 689/689 identical; formal 657/662, the five
+changes being `beam_profile_kernel` `AZUREOut_aa=1_R=4.out` (two tokens, 1.7 × 10⁻¹¹ relative) and four `run.log`
+lines that count Coulomb-table lookups (fewer iterations under the relative tolerance, e.g. 318934 → 300814). No
+evaluation of the 179 projects warned or gave NaN.
+
+**Blocker: `pyazr_formal_capture_mask` fails (check (c), formal-basis χ² gradient = NaN).** Its model (13N plus a
+1/2⁺ level at 4.5 MeV with Γ_p = 20 keV, `formal_capture_mask_test.py`) sits where the fixed-point iteration of
+`brune_from_formal` does not converge for block 1, level 0: at the test's start point it converges, but at ±10⁻⁶ MeV
+on `energy_3` (2.3682 MeV) it alternates between E = −0.973 and 4.462 MeV (last step 5.435 MeV after 1000
+iterations, a 2-cycle). The rule above then gives NaN, as designed, and the central differences of check (c) are
+NaN. On a18fe89e the same four evaluations did not converge either (instrumented build: four "not converged" lines,
+same 2-cycle) and silently kept the formal values, so check (c) passed there by comparing two silently substituted
+models. This is the case the rule was written for, but it shows a gap in the iteration, not in the rule: a 2-cycle
+is not a rounding stall. Options for the PI: (i) a safeguarded iteration in `brune_from_formal` (damping, or a
+bracketed root of E − e(E) per level) so that such levels converge, with its own design note and the unit test as
+the case; (ii) move the test model away from the 2-cycle and record the 2-cycle as a known NaN region. Not merged
+until decided.
+
+**Decision (PI, 2026-11-09): option (i).** The iteration must converge where the root exists; see §10.
+
+## 10. A bracketed root where the fixed-point iteration does not converge (design, 2026-11-09)
+
+**Why the root exists and is unique.** For level λ of rank r (ascending formal energy), the Brune energy is the
+solution of g(x) = x − e_r(x) = 0, with e_r(x) the r-th eigenvalue (ascending) of
+A(x) = diag(E_formal) − Σ_c (S_c(x) − B_c) γ_c γ_cᵀ (particle channels; γ_c the column of formal amplitudes). The
+iteration of §4 is the fixed-point map x ← e_r(x): it re-bases B_c at S_c(x) and rediagonalizes, which leaves the
+spectrum of A(x) unchanged. Since dA/dx = −Σ_c S_c′(x) γ_c γ_cᵀ is negative semidefinite whenever every S_c′ ≥ 0 (the
+shift function rises with energy, open and closed channels alike), each sorted eigenvalue e_r(x) is non-increasing
+(Weyl's monotonicity), so g′(x) ≥ 1: one root per level, always. The fixed-point map converges only where
+|e_r′| < 1 at the root. Where e_r′ < −1 the root repels: the iterates jump to either side and end in a 2-cycle
+(x_a, x_b) with e_r(x_a) = x_b, e_r(x_b) = x_a — and then g(x_a) = x_a − x_b and g(x_b) = x_b − x_a have opposite
+signs, so the 2-cycle brackets the root.
+
+**Measured on the blocker** (`pyazr_formal_capture_mask`, block 1, level 0; debug build of 46efe93e, scan of g on
+−3 … 7 MeV in steps of 0.05 MeV with the formal parameters of the four failing evaluations): g increases
+everywhere, slope 1.003 … 3.96; one root, at 2.36820 MeV (the 2.368 MeV resonance), e_r′ = −2.88 there; bisection
+between the two iterates of the 2-cycle (−0.973, 4.462 MeV) finds it in each of the four evaluations. The centre point
+of check (c) "converged" only because the iteration started within the tolerance of the root. The report iteration
+of the 179 projects × 3 bases (step 4 build) leaves three levels of `screening_6li` (formal basis; background
+levels at 43.9, 122.8, 141.0 MeV, residuals 41–118 MeV) not transformed, in its three files.
+
+**Rule.** In `brune_from_formal`, a level for which the fixed-point iteration ends without meeting the tolerance and
+with a last step above `rounding_bound_MeV` (where the status would be `NotConverged`) is solved for the root of g
+instead, in the report and the evaluation iteration alike:
+1. Bracket: the last two iterates, if g is finite at both and changes sign between them (a 2-cycle); otherwise —
+   an iteration that diverges overflows instead of cycling — expand from the level's formal energy towards the sign
+   change (g < 0: upwards), starting with a width of 10⁻³ MeV, doubled up to 64 times.
+2. Bisection on the bracket until the midpoint equals an end (full double precision) or g = 0; at most about 60
+   eigenproblems of the block's size.
+3. The level takes the r-th eigenvalue and eigenvector of A at the root: E, the Brune amplitudes Vᵀγ and the row of
+   T, the eigenvector oriented with its component on the level's own formal level positive (the orientation rule
+   of §4 and `formal_from_brune`).
+4. Status `Bracketed` (new), iterations = the fixed-point iterations plus the bisection steps, `residual_MeV` = |g|
+   at the root, `boundary_shift` = S_c(root) − B_c. A warning names the level and says it was solved by bracketing
+   (the evaluation iteration prints the first one per process, as now; the report prints a NOTE in place of the
+   WARNING, without "the input energy and widths are kept").
+5. An iteration that diverges overflows: its matrix is no longer finite and the eigenproblem fails. That is the
+   same case, solved as in 1 from the formal energy. No bracket (g not finite, or no sign change after the
+   expansion), or an eigenproblem that fails on a finite matrix: as now (NaN in an evaluation, formal values with the
+   WARNING in the report, a stop at setup).
+Levels that converge are untouched: the fallback only runs where the old result was the formal values or NaN, so
+all other outputs stay bit-identical. Cost: only for those levels, the 1000 fixed-point iterations plus the bisection.
+
+`FormalToBruneOptions::bracket` (default true) switches the rule off, for the unit tests of the fixed-point branches
+(they stop the iteration with `max_iterations` = 1, where a bracket would now be found).
+
+**Where.** `physics/src/LevelParameters.cpp` (`brune_from_formal`), `LevelSet::Status::Bracketed`; the report message
+in `src/CNuc.cpp`; `ThrowIfFailed` and `WarnOnce` (`src/CNucExternalCapture.cpp`) unchanged (Bracketed is not a
+failure).
+
+**Tests.** `level_parameters_unit_test`: a one-level block made by `formal_from_brune` from a Brune level with
+γ²S′(E) > 1 (e′ < −1: the fixed point repels): `brune_from_formal` returns the Brune input to 10⁻¹⁰ relative with
+status `Bracketed`, in report and evaluation mode (a linear S: the iterates diverge and overflow, the bracket comes
+from the formal energy); the three-level case with `max_iterations` = 1 gives every level Converged or Bracketed at
+the tight result (10⁻¹⁰); the existing fixed-point tests with `bracket` = false keep their expectations; channel
+functions that are NaN away from the formal energy: no bracket, NaN in an evaluation and the formal values in the
+report. `pyazr_formal_capture_mask` (the blocker) passes unchanged. Expected outputs:
+179 × 3 identical except the formal basis of `screening_6li` (its three levels now transformed: `parameters.out`
+and `run.log`), classified.
+
+**Verified (2026-11-09; build of 5d8dc1e1, GCC 11.5 Release, pyazr on).** No warnings. `ctest -LE slow` 111/111
+(the blocker passes: check (c) formal 1.4 × 10⁻⁷, Brune 1.1 × 10⁻⁷), the slow `pyazr_formal_brune_iteration` passes;
+`physics_level_parameters_unit` with §6b; `run_tests.sh` 133/133 (1182 s, 11 threads); 1 vs 8 threads
+byte-identical (T1–T3, 13N, three bases). 179 × 3 against 46efe93e with the same format-1 table: Brune 689/689 and
+Park 689/689 identical, formal 656/662: the six files of `screening_6li` (`parameters.out`, `run.log` of bare, fit,
+scr), where the three levels the old iteration left untransformed (formal values 122.75, 43.89, 141.04 MeV printed
+under a WARNING) are now bracketed: 30.0000, 11.5670, 30.0000 MeV, every width equal digit for digit to the
+Brune-basis run of the same file (the input), and a NOTE in place of the WARNING. Classified as a fix (the round
+trip formal → Brune now returns the input).
