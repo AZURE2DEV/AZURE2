@@ -90,14 +90,12 @@ def _fmt(x):
     return repr(float(x))
 
 
-# -- the <thm> block: the engine's (Config::ReadThmBlock) and the GUI's
-#    (ThmSettings in gui/src/ThmOptionsDialog.cpp) rules, ported -------------
+# -- the <thm> block: read by the engine (_azure2.read_thm_block, api/src/pybind_thm.cpp); written the GUI's way
+#    (ThmSettings in gui/src/ThmOptionsDialog.cpp) ------------------------------
 
 _THM_GLOBAL_DEFAULTS = {"entranceL": "incoherent", "vertex": "constant",
                         "kinematics": "lacognata", "coulombIntegral": False,
                         "spectatorEnergy": 0.0}
-_THM_FLOAT_PREFIX = re.compile(r"[ \t\n\r\f\v]*[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?")
-_THM_INT_PREFIX = re.compile(r"[ \t\n\r\f\v]*[+-]?\d+")
 
 
 # An explicit prior centre in <parameterSettings> (EData::ReadPriorCentres).
@@ -116,28 +114,25 @@ class _Classic:
 CLASSIC = _Classic()
 
 
-_ENGINE_CHECK = []      # [function] once looked up; [None] without the engine
-
-
 def _engine_thm_check(lines, global_rules=False):
-    """The engine's verdict on the lines of a <thm> block, when the compiled
-    module is there (``_azure2.check_thm_block``: the parser AZURE2 itself
-    runs, without the files the block names).  The Python port below decides
-    first, with its own messages; this catches what the port would let
-    through.  Raises ValueError with AZURE2's message; nothing without the
-    module."""
-    if not _ENGINE_CHECK:
-        try:
-            from . import _azure2
-            _ENGINE_CHECK.append(getattr(_azure2, "check_thm_block", None))
-        except Exception:                           # not built: the port alone
-            _ENGINE_CHECK.append(None)
-    check = _ENGINE_CHECK[0]
-    if check is None:
-        return
-    why = check([str(ln) for ln in lines], global_rules)
+    """The engine's verdict on the lines of a <thm> block (``_azure2.check_thm_block``: the parser AZURE2 itself
+    runs, without the files the block names; with ``global_rules`` also the global options against the
+    experiments).  Raises ValueError with AZURE2's message."""
+    why = _engine_module().check_thm_block([str(ln) for ln in lines], global_rules)
     if why:
         raise ValueError(f"{why} (AZURE2 refuses the file).")
+
+
+def _thm_read(lines):
+    """The block's lines as AZURE2 reads them: the settings dict of :func:`_thm_default_settings`, with the
+    experiments by name (``keys`` and each key's value; api/src/pybind_thm.cpp).  ValueError with AZURE2's
+    message -- or, for a global optical potential outside its validity range, the message the engine gives once
+    the data are read (:func:`_thm_check_global_optical`)."""
+    s = _engine_module().read_thm_block([str(ln) for ln in lines])
+    for name, x in s["experiments"].items():
+        if x.get("distortion") == "optical" and all(k in x for k in ("beam", "target", "spectator", "Ebeam")):
+            _thm_check_global_optical(f"<thm> experiment[{name}]: ", x)
+    return s
 
 
 def _thm_default_settings():
@@ -148,542 +143,25 @@ def _thm_default_settings():
 
 # -- THM experiments: experiment[<name>] key=value ... (src/ThmExperiment.cpp) --
 
-# AME2020 nuclear masses (u): atomic mass - Z m_e + electron binding (Lunney
-# et al. 2003), the engine's table (ThmExperiment.cpp, kNuclides).
-_THM_NUCLIDES = {
-    "n": (0, 1, 1.0086649159), "p": (1, 1, 1.0072764675), "d": (1, 2, 2.0135532134),
-    "t": (1, 3, 3.0155007169), "3He": (2, 3, 3.0149322434), "4He": (2, 4, 4.0015061756),
-    "6Li": (3, 6, 6.0134773618), "7Li": (3, 7, 7.0143579087), "9Be": (4, 9, 9.0099891714),
-    "10B": (5, 10, 10.0101946866), "11B": (5, 11, 11.0065629921),
-    "12C": (6, 12, 11.9967096429), "13C": (6, 13, 13.0000644777),
-    "14N": (7, 14, 13.9992355671), "15N": (7, 15, 14.9962704619),
-    "16O": (8, 16, 15.9905282131), "17O": (8, 17, 16.9947453497),
-    "18O": (8, 18, 17.9947732059), "19F": (9, 19, 18.9934689019),
-    "20Ne": (10, 20, 19.9869581831), "23Na": (11, 23, 22.9837396828),
-    "24Mg": (12, 24, 23.9784646239),
-}
-_THM_BACKGROUNDS = ("none", "const", "linear", "quadratic")
-_THM_EXPERIMENT_KEYS = ("segments", "background", "beam", "target", "spectator", "Ebeam",
-                        "lineshape", "ps", "psNodes", "distortion", "opticalAA", "opticalSF",
-                        "spectatorAngle", "distortionRef", "distortionRatio", "boundState",
-                        "theta", "vertexModel", "spectatorAngles", "spectatorAngleNodes",
-                        "cbackground")
 _THM_DISTORTION_DETAIL = ("spectatorAngle", "distortionRef", "distortionRatio", "boundState")
-_THM_NAME = re.compile(r"[A-Za-z0-9_.+-]+")
-_THM_WHOLE_INT = re.compile(r"[+-]?\d+")
-
-
-def _thm_whole_double(text):
-    """A whole token as a finite number (operator>> consuming everything)."""
-    m = _THM_FLOAT_PREFIX.match(text)
-    if not m or m.start(0) != 0 or text[:1].isspace() or m.end(0) != len(text):
-        return None
-    x = float(m.group(0))
-    return x if math.isfinite(x) else None
-
-
-def _thm_whole_int(text):
-    return int(text) if _THM_WHOLE_INT.fullmatch(text) else None
-
-
-def _thm_nuclide(text):
-    """ThmNuclide::Parse: (name, Z, A, mass) or ValueError."""
-    if text in _THM_NUCLIDES:
-        return (text,) + _THM_NUCLIDES[text]
-    f = text.split(",")
-    if len(f) == 3:
-        Z, A, mass = _thm_whole_int(f[0]), _thm_whole_int(f[1]), _thm_whole_double(f[2])
-        if (Z is not None and A is not None and mass is not None and Z >= 0
-                and A >= 1 and Z <= A and mass > 0.0 and abs(mass - A) < 1.0):
-            return (text, Z, A, mass)
-        raise ValueError(f"'{text}': expected Z,A,mass with 0 <= Z <= A and the "
-                         "nuclear mass in u (within 1 u of A)")
-    raise ValueError(f"unknown nuclide '{text}' (known: {' '.join(_THM_NUCLIDES)}; "
-                     "or Z,A,mass in u)")
-
-
-def _thm_segment_list(text):
-    out = []
-    for item in text.split(","):
-        dash = item.find("-", 1)
-        if dash < 0:
-            lo = hi = _thm_whole_int(item)
-            ok = lo is not None
-        else:
-            lo, hi = _thm_whole_int(item[:dash]), _thm_whole_int(item[dash + 1:])
-            ok = lo is not None and hi is not None and hi >= lo
-        if not ok or lo < 1:
-            raise ValueError(f"segments='{text}': expected segment numbers >= 1 "
-                             "like 1,2,4-6")
-        if hi > 100000:                       # ThmExperiment.cpp kMaxThmSegment
-            raise ValueError(f"segments='{text}': segment numbers go up to 100000")
-        seen = set(out)
-        for k in range(lo, hi + 1):
-            if k in seen:
-                raise ValueError(f"segments='{text}': segment {k} is listed twice")
-            seen.add(k)
-            out.append(k)
-    return sorted(out)
-
-
-def _thm_ps_window(text):
-    """"pmin-pmax" (MeV/c, 0 <= pmin <= pmax): the '-' with a number on both
-    sides; (lo, hi) or None."""
-    for k in range(1, len(text) - 1):
-        if text[k] != "-":
-            continue
-        lo, hi = _thm_whole_double(text[:k]), _thm_whole_double(text[k + 1:])
-        if lo is not None and hi is not None:
-            return (lo, hi) if 0.0 <= lo <= hi else None
-    return None
-
-
-def _thm_parse_ps(value):
-    """ParsePs (src/ThmExperiment.cpp): the value of ps= as a normalized
-    string, or ValueError (message without the experiment prefix)."""
-    usage = (f"ps='{value}': expected delta, hulthen:pmin-pmax, hulthen:a,b:pmin-pmax "
-             "(a, b in fm^-1), gauss:FWHM:pmin-pmax or table:<file> (momenta in MeV/c, "
-             "0 <= pmin <= pmax)")
-    if value == "delta":
-        return value
-    f = value.split(":")
-    if len(f) >= 2 and f[0] == "table":
-        if not value[6:]:
-            raise ValueError(usage)
-        return value
-    if f[0] == "hulthen" and len(f) in (2, 3):
-        if len(f) == 3:
-            ab = f[1].split(",")
-            a = _thm_whole_double(ab[0]) if len(ab) == 2 else None
-            b = _thm_whole_double(ab[1]) if len(ab) == 2 else None
-            if a is None or b is None or not (a > 0.0 and b > a):
-                raise ValueError(f"ps='{value}': Hulthen a,b in fm^-1 with 0 < a < b "
-                                 "(deuteron: 0.2317,1.202)")
-        if _thm_ps_window(f[-1]) is None:
-            raise ValueError(usage)
-        return value
-    if f[0] == "gauss" and len(f) == 3:
-        w = _thm_whole_double(f[1])
-        if w is None or not w > 0.0:
-            raise ValueError(f"ps='{value}': the FWHM of |phi(p_s)|^2 must be a number "
-                             "> 0 (MeV/c)")
-        if _thm_ps_window(f[2]) is None:
-            raise ValueError(usage)
-        return value
-    raise ValueError(usage)
-
-
-# Global optical potentials (src/ThmOptical.cpp): name -> projectiles (Z, A),
-# reference, target mass range, projectile lab-energy range (MeV).
-_THM_GLOBAL_OPTICALS = {
-    "ancai06": (((1, 2),), "An & Cai, PRC 73 (2006) 054605", 12, 238, 0.0, 183.0),
-    "daehnick80": (((1, 2),), "Daehnick, Childs & Vrcelj, PRC 21 (1980) 2253 "
-                   "(global set)", 27, 238, 11.8, 90.0),
-    "kd03": (((0, 1), (1, 1)), "Koning & Delaroche, NPA 713 (2003) 231 (global)", 24, 209,
-             0.001, 200.0),
-    "bg71": (((1, 3), (2, 3)), "Becchetti & Greenlees (1971)", 40, 208, 1.0, 40.0),
-    "liang09": (((2, 3),), "Liang, Li & Cai, J. Phys. G 36 (2009) 085104", 9, 208, 0.0, 270.0),
-    "mcfadden66": (((2, 4),), "McFadden & Satchler, NPA 84 (1966) 177", 16, 208, 1.0, 25.0),
-    "avrigeanu94": (((2, 4),), "Avrigeanu, Hodgson & Avrigeanu, PRC 49 (1994) 2136", 16, 250,
-                    1.0, 73.0),
-}
-_THM_SPECIES = {(0, 1): "n", (1, 1): "p", (1, 2): "d", (1, 3): "t", (2, 3): "3He", (2, 4): "4He"}
-
-
-def _thm_global_optical(value):
-    """(name, extrapolate) of a global optical potential value, or None."""
-    name, colon, option = value.partition(":")
-    if name in _THM_GLOBAL_OPTICALS and (not colon or option == "extrapolate"):
-        return name, bool(colon)
-    return None
-
-
-def _thm_parse_optical(key, value):
-    """ParseOptical (src/ThmExperiment.cpp): plane | coulomb | a global
-    optical potential <name>[:extrapolate] | ten numbers V,R,a,W,RW,aW,WD,RD,aD,RC;
-    the value as given, or ValueError."""
-    if value in ("plane", "coulomb"):
-        return value
-    if value[:1].isalpha():
-        if _thm_global_optical(value) is None:
-            raise ValueError(f"{key}='{value}': expected plane, coulomb, a global optical "
-                             f"potential ({', '.join(_THM_GLOBAL_OPTICALS)}, optionally "
-                             ":extrapolate) or ten numbers V,R,a,W,RW,aW,WD,RD,aD,RC")
-        return value
-    f = value.split(",")
-    p = [_thm_whole_double(t) for t in f] if len(f) == 10 else None
-    ok = p is not None and all(v is not None for v in p)
-    if ok:
-        for t in range(3):
-            if p[3 * t] != 0.0 and not (p[3 * t + 1] > 0.0 and p[3 * t + 2] > 0.0):
-                ok = False
-        ok = ok and p[9] >= 0.0
-    if not ok:
-        raise ValueError(f"{key}='{value}': expected plane, coulomb or ten numbers "
-                         "V,R,a,W,RW,aW,WD,RD,aD,RC (MeV and fm: real volume, imaginary "
-                         "volume and imaginary surface Woods-Saxon, depths > 0 "
-                         "attractive/absorptive, radii and diffusenesses > 0 where the "
-                         "depth is not 0, the Coulomb radius RC >= 0, 0 = point charge)")
-    return value
-
-
-def _thm_parse_distortion_key(key, value):
-    """The distortion keys of an experiment line: the value to keep, or
-    ValueError (message without the experiment prefix)."""
-    if key == "distortion":
-        if value in ("none", "coulomb", "optical") or (value.startswith("table:")
-                                                        and len(value) > 6):
-            return value
-        raise ValueError(f"distortion='{value}': expected none, coulomb, optical or "
-                         "table:<file>")
-    if key in ("opticalAA", "opticalSF"):
-        return _thm_parse_optical(key, value)
-    if key == "spectatorAngle":
-        if value == "qf":
-            return value
-        a = _thm_whole_double(value[3:]) if value.startswith("cm:") else _thm_whole_double(value)
-        if a is None or not 0.0 <= a <= 180.0:
-            raise ValueError(f"spectatorAngle='{value}': expected qf, a lab angle in "
-                             "degrees (0-180) or cm:<degrees> (0-180)")
-        return value
-    if key == "distortionRef":
-        if _thm_whole_double(value) is None:
-            raise ValueError(f"distortionRef='{value}': expected the reference energy "
-                             "E_ref in MeV (c.m. of x + A)")
-        return value
-    if key == "distortionRatio":
-        if value not in ("dwpw", "dw"):
-            raise ValueError(f"distortionRatio='{value}': expected dwpw or dw")
-        return value
-    if key == "boundState":
-        f = value.split(":")
-        ok = len(f) in (1, 2) and f[0] in ("whittaker", "yukawa")
-        if ok and len(f) == 2:
-            r = _thm_whole_double(f[1])
-            ok = r is not None and 0.0 <= r <= 50.0
-        if not ok:
-            raise ValueError(f"boundState='{value}': expected whittaker or yukawa, "
-                             "optionally :rmin in fm (0-50)")
-        return value
-    raise KeyError(key)
-
-
-def _thm_spin(text):
-    """ReadSpin (ThmExperiment.cpp): "1/2", "0.5", "2" -> a multiple of 1/2, or None."""
-    if not text or text[0] in "+-":
-        return None
-    if "/" in text:
-        num, _, den = text.partition("/")
-        n = _thm_whole_int(num)
-        return n / 2.0 if den == "2" and n is not None and n >= 0 else None
-    x = _thm_whole_double(text)
-    if x is None or x < 0.0 or abs(2.0 * x - round(2.0 * x)) > 1e-9:
-        return None
-    return x
-
-
-def _thm_spin_text(j):
-    twice = int(round(2.0 * j))
-    return str(twice // 2) if twice % 2 == 0 else f"{twice}/2"
-
-
-def _thm_parse_cbackground(value):
-    """ParseThmCoherentBackground: a list of term dicts, ValueError if AZURE2
-    would refuse the value."""
-    form = ("expected <J><+|->:<exit pair key>[:<s>,<l>,<s'>,<l'>][:const|:linear]"
-            "[=<Re c0>,<Im c0>[,<Re c1>,<Im c1>]] terms separated by ';' (a value "
-            "followed by f is fixed)")
-    items = value.split(";")
-    terms = []
-    for item in items:
-        bad = f"cbackground: '{item}': "
-        if not item:
-            raise ValueError(f"cbackground='{value}': an empty term; " + form)
-        spec, eq, values = item.partition("=")
-        f = spec.split(":")
-        if not 2 <= len(f) <= 4:
-            raise ValueError(bad + form)
-        jpi = f[0]
-        J = _thm_spin(jpi[:-1]) if len(jpi) >= 2 and jpi[-1] in "+-" else None
-        if J is None:
-            raise ValueError(bad + f"J^pi '{jpi}': expected e.g. 1/2+ or 2-")
-        key = _thm_whole_int(f[1])
-        if key is None or key < 1 or f[1][0] in "+-":
-            raise ValueError(bad + f"exit pair key '{f[1]}': expected a positive whole number")
-        t = {"J": J, "parity": 1 if jpi[-1] == "+" else -1, "exit": key,
-             "channels": None, "form": "const", "values": None}
-        have_form = False
-        for x in f[2:]:
-            if x in ("const", "linear"):
-                if have_form:
-                    raise ValueError(bad + form)
-                have_form = True
-                t["form"] = x
-                continue
-            if t["channels"] is not None or have_form:
-                raise ValueError(bad + form)
-            c = x.split(",")
-            ok = len(c) == 4
-            if ok:
-                s_in, l_in = _thm_spin(c[0]), _thm_whole_int(c[1])
-                s_out, l_out = _thm_spin(c[2]), _thm_whole_int(c[3])
-                ok = (None not in (s_in, l_in, s_out, l_out) and l_in >= 0 and l_out >= 0
-                      and c[1][0] != "+" and c[3][0] != "+")
-            if not ok:
-                raise ValueError(bad + f"channels '{x}': expected <s>,<l>,<s'>,<l'> "
-                                 "(entrance and exit channel spin and l)")
-            t["channels"] = (s_in, l_in, s_out, l_out)
-        if eq:
-            v = values.split(",")
-            n = 2 if t["form"] == "const" else 4
-            if len(v) != n:
-                raise ValueError(bad + f"expected {n} values after '=' (" +
-                                 ("Re c0, Im c0" if n == 2 else "Re c0, Im c0, Re c1, Im c1")
-                                 + ")")
-            vals = []
-            for w in v:
-                fixed = w.endswith("f")
-                x = _thm_whole_double(w[:-1] if fixed else w)
-                if x is None:
-                    raise ValueError(bad + f"value '{w}': expected a number, optionally "
-                                     "followed by f (fixed)")
-                vals.append((x, fixed))
-            t["values"] = vals
-        terms.append(t)
-    return terms
-
-
-def _thm_format_cbackground(terms):
-    """FormatThmCoherentBackground: the canonical value of a term list."""
-    out = []
-    for t in terms:
-        s = f"{_thm_spin_text(t['J'])}{'+' if t['parity'] > 0 else '-'}:{t['exit']}"
-        if t["channels"] is not None:
-            a, b, c, d = t["channels"]
-            s += f":{_thm_spin_text(a)},{b},{_thm_spin_text(c)},{d}"
-        if t["form"] == "linear":
-            s += ":linear"
-        if t["values"] is not None:
-            s += "=" + ",".join(_thm_plain_number(x) + ("f" if fx else "")
-                                for x, fx in t["values"])
-        out.append(s)
-    return ";".join(out)
-
-
-def _thm_parse_experiment(line, experiments):
-    """ParseThmExperimentLine: merge one experiment line (comment stripped,
-    trimmed) into ``experiments`` (name -> record); ValueError if AZURE2
-    would refuse it."""
-    close = line.find("]")
-    if not line.startswith("experiment[") or close < 0:
-        raise ValueError("<thm> expected experiment[<name>] key=value ...")
-    name = line[len("experiment["):close]
-    if not _THM_NAME.fullmatch(name):
-        raise ValueError(f"<thm> experiment[{name}]: a name is letters, digits "
-                         "and _ - . + only")
-    where = f"<thm> experiment[{name}]: "
-    rest = line[close + 1:]
-    if rest and rest[0] not in " \t":
-        raise ValueError(where + "expected a space after ']'")
-    work = dict(experiments.get(name, {"keys": []}))
-    work["keys"] = list(work["keys"])
-    tokens = rest.split()
-    if not tokens:
-        raise ValueError(where + "no key=value given")
-    for token in tokens:
-        eq = token.find("=")
-        if eq <= 0 or eq + 1 == len(token):
-            raise ValueError(where + f"'{token}' is not key=value")
-        key, value = token[:eq], token[eq + 1:]
-        if key in work["keys"]:
-            raise ValueError(where + f"key '{key}' is given twice")
-        if key == "segments":
-            try:
-                work["segments"] = _thm_segment_list(value)
-            except ValueError as err:
-                raise ValueError(where + str(err)) from None
-        elif key == "background":
-            if value not in _THM_BACKGROUNDS:
-                raise ValueError(where + f"background='{value}': expected none, "
-                                 "const, linear or quadratic")
-            work["background"] = value
-        elif key in ("beam", "target", "spectator"):
-            try:
-                work[key] = _thm_nuclide(value)
-            except ValueError as err:
-                raise ValueError(where + f"{key}: {err}") from None
-        elif key == "Ebeam":
-            x = _thm_whole_double(value)
-            if x is None or not x > 0.0:
-                raise ValueError(where + f"Ebeam='{value}': expected the lab beam "
-                                 "energy in MeV, > 0")
-            work["Ebeam"] = x
-        elif key == "lineshape":
-            if value not in ("on", "off"):
-                raise ValueError(where + f"lineshape='{value}': expected on or off")
-            work["lineshape"] = value == "on"
-        elif key == "ps":
-            try:
-                work["ps"] = _thm_parse_ps(value)
-            except ValueError as err:
-                raise ValueError(where + str(err)) from None
-        elif key == "psNodes":
-            n = _thm_whole_int(value)
-            if n is None or not 1 <= n <= 64:
-                raise ValueError(where + f"psNodes='{value}': expected a whole number of "
-                                 "Gauss-Legendre nodes, 1 to 64")
-            work["psNodes"] = n
-        elif key in ("distortion", "opticalAA", "opticalSF") + _THM_DISTORTION_DETAIL:
-            try:
-                work[key] = _thm_parse_distortion_key(key, value)
-            except ValueError as err:
-                raise ValueError(where + str(err)) from None
-        elif key == "theta":
-            window = None if value == "all" else _thm_ps_window(value)
-            if value != "all" and (window is None or window[1] > 180.0):
-                raise ValueError(where + f"theta='{value}': expected all or thmin-thmax, "
-                                 "the c.m. angles of the exit pair relative to p_xA in "
-                                 "degrees, 0 <= thmin <= thmax <= 180")
-            work["theta"] = value
-        elif key == "vertexModel":
-            if value not in ("pw", "dw"):
-                raise ValueError(where + f"vertexModel='{value}': expected pw or dw")
-            work["vertexModel"] = value
-        elif key == "spectatorAngles":
-            v = value[3:] if value.startswith("cm:") else value
-            window = None if v.startswith("table:") else _thm_ps_window(v)
-            if not ((v.startswith("table:") and len(v) > 6)
-                    or (window is not None and window[1] <= 180.0)):
-                raise ValueError(where + f"spectatorAngles='{value}': expected thmin-thmax "
-                                 "(lab polar angles of the spectator to the beam, degrees, "
-                                 "0 <= thmin <= thmax <= 180), cm:thmin-thmax (c.m.), "
-                                 "table:<file> or cm:table:<file> (angle, acceptance)")
-            work["spectatorAngles"] = value
-        elif key == "spectatorAngleNodes":
-            n = _thm_whole_int(value)
-            if n is None or not 1 <= n <= 64:
-                raise ValueError(where + f"spectatorAngleNodes='{value}': expected a whole "
-                                 "number of Gauss-Legendre nodes, 1 to 64")
-            work["spectatorAngleNodes"] = n
-        elif key == "cbackground":
-            try:
-                work["cbackground"] = _thm_format_cbackground(_thm_parse_cbackground(value))
-            except ValueError as err:
-                raise ValueError(where + str(err)) from None
-        else:
-            raise ValueError(where + f"unknown key '{key}' (keys: segments, "
-                             "background, beam, target, spectator, Ebeam, lineshape, ps, "
-                             "psNodes, distortion, opticalAA, opticalSF, spectatorAngle, "
-                             "distortionRef, distortionRatio, boundState, theta, "
-                             "vertexModel, spectatorAngles, spectatorAngleNodes, "
-                             "cbackground)")
-        work["keys"].append(key)
-    experiments[name] = work
-
-
-def _thm_check_experiments(experiments):
-    """CheckThmExperiments: ValueError if the set is refused."""
-    owner = {}
-    for name, x in experiments.items():
-        where = f"<thm> experiment[{name}]: "
-        if "segments" not in x["keys"]:
-            raise ValueError(where + "segments= is required")
-        kin = sum(k in x["keys"] for k in ("beam", "target", "spectator", "Ebeam"))
-        if kin not in (0, 4):
-            raise ValueError(where + "beam, target, spectator and Ebeam go together "
-                             "(all four or none)")
-        if x.get("lineshape") and kin != 4:
-            raise ValueError(where + "lineshape=on needs the kinematics of the reaction: "
-                             "beam, target, spectator and Ebeam")
-        if x.get("lineshape") and x.get("cbackground"):
-            raise ValueError(where + "lineshape=on and cbackground= cannot be combined: "
-                             "the Coulomb line shape N_C multiplies the level amplitudes "
-                             "only, and its phase (E_lambda - E - i Gamma/2)^(-i zeta) "
-                             "depends on the energy unit unless every term of the "
-                             "amplitude carries it")
-        if x.get("ps", "delta") != "delta" and kin != 4:
-            raise ValueError(where + "a ps window (ps=hulthen|gauss|table) needs the "
-                             "kinematics of the reaction: beam, target, spectator and "
-                             "Ebeam (mu_sx and the spectator momenta reached at each "
-                             "energy)")
-        if "psNodes" in x["keys"] and x.get("ps", "delta") == "delta":
-            raise ValueError(where + "psNodes= needs a ps window (ps=hulthen|gauss|table)")
-        dist = x.get("distortion", "none")
-        computed = dist in ("coulomb", "optical")
-        if computed and kin != 4:
-            raise ValueError(where + f"distortion={dist} needs the kinematics of the "
-                             "reaction: beam, target, spectator and Ebeam")
-        if ("opticalAA" in x["keys"] or "opticalSF" in x["keys"]) and dist != "optical":
-            raise ValueError(where + "opticalAA= and opticalSF= need distortion=optical")
-        for key in _THM_DISTORTION_DETAIL:
-            if key in x["keys"] and not computed:
-                raise ValueError(where + f"{key}= needs distortion=coulomb or "
-                                 "distortion=optical")
-        if x.get("vertexModel", "pw") == "dw":
-            if not computed:
-                raise ValueError(where + "vertexModel=dw builds the vertex from the "
-                                 "distorted waves of a + A and s + F: it needs "
-                                 "distortion=coulomb or distortion=optical (and the "
-                                 "kinematics)")
-            for key in ("distortionRef", "distortionRatio"):
-                if key in x["keys"]:
-                    raise ValueError(where + f"{key}= belongs to the distortion factor "
-                                     "R(E), which vertexModel=dw replaces (R is not "
-                                     "applied; the DW vertex carries the energy "
-                                     "dependence)")
-            if x.get("theta", "all") != "all":
-                raise ValueError(where + "theta= (fixed-angle observable) is not "
-                                 "available with vertexModel=dw: the distorted source has "
-                                 "every m_l about p_xA, which the fixed-angle sum does "
-                                 "not carry")
-        # The acceptance (ThmExperiment.cpp CheckThmExperiments): ps= (a |p_s|
-        # cut with the momentum distribution) and spectatorAngles= describe one
-        # set of directions at fixed E.
-        has_ps = x.get("ps", "delta") != "delta"
-        if ("spectatorAngles" in x or has_ps) and "spectatorAngle" in x["keys"]:
-            if "spectatorAngles" in x:
-                raise ValueError(where + "spectatorAngle= (one direction) and "
-                                 "spectatorAngles= (a window) exclude each other")
-            raise ValueError(where + "spectatorAngle= (one direction) and a ps window "
-                             "exclude each other: the window accepts every direction "
-                             "whose |p_s| lies in it (write spectatorAngles=cm:t-t for one "
-                             "direction with the cut)")
-        if "spectatorAngles" in x:
-            if not computed and not has_ps:
-                raise ValueError(where + "spectatorAngles= averages over the accepted "
-                                 "spectator directions the plane-wave vertex (with the "
-                                 "momentum distribution of ps=hulthen|gauss|table), or R(E) "
-                                 "and the DW vertex (distortion=coulomb|optical); with "
-                                 "neither it has nothing to average")
-            if "psNodes" in x["keys"]:
-                raise ValueError(where + "with spectatorAngles= the nodes are "
-                                 "spectatorAngleNodes= (per c.m. interval); psNodes= is the "
-                                 "node count of a ps window without spectatorAngles=")
-        elif "spectatorAngleNodes" in x["keys"]:
-            raise ValueError(where + "spectatorAngleNodes= needs a spectator-direction "
-                             "window (spectatorAngles=)")
-        if (computed and x.get("vertexModel", "pw") != "dw"
-                and x.get("ps", "delta") != "delta"
-                and x.get("distortionRatio", "dwpw") == "dw"):
-            raise ValueError(where + "distortionRatio=dw multiplies the model by |M|^2, "
-                             "which carries the momentum distribution |phi(q)|^2 at the "
-                             "spectator direction; a ps window already weights the model "
-                             "with |phi(p_s)|^2 of data divided by it, so it would count "
-                             "twice. Use distortionRatio=dwpw (the default) with a window")
-        if dist == "optical" and kin == 4:
-            _thm_check_global_optical(where, x)
-        for k in x["segments"]:
-            if k in owner:
-                raise ValueError(where + f"segment {k} is already in "
-                                 f"experiment[{owner[k]}]")
-            owner[k] = name
 
 
 def _thm_nucleus_name(Z, A):
-    for name, (z, a, _m) in _THM_NUCLIDES.items():
+    for name, z, a, _m in _engine_module().thm_nuclides():
         if (z, a) == (Z, A):
             return name
     return f"(Z,A)=({Z},{A})"
+
+
+def _thm_global_optical(value):
+    """(model, extrapolate) of a global optical potential value (the engine's table), or None."""
+    name, colon, option = value.partition(":")
+    if colon and option != "extrapolate":
+        return None
+    for g in _engine_module().thm_global_opticals():
+        if g["name"] == name:
+            return g, bool(colon)
+    return None
 
 
 def _thm_check_global_optical(where, x):
@@ -702,14 +180,15 @@ def _thm_check_global_optical(where, x):
         g = _thm_global_optical(x.get(key, "coulomb"))
         if g is None:
             continue
-        name, extrapolate = g
-        projectiles, ref, amin, amax, emin, emax = _THM_GLOBAL_OPTICALS[name]
-        if (one[0], one[1]) in projectiles:
+        g, extrapolate = g
+        name, ref, species = g["name"], g["reference"], g["projectiles"]
+        (amin, amax), (emin, emax) = g["a_range"], g["e_range"]
+        describes = _engine_module().thm_global_optical_for
+        if describes(name, one[0], one[1]):
             proj, targ = one, two
-        elif (two[0], two[1]) in projectiles:
+        elif describes(name, two[0], two[1]):
             proj, targ = two, one
         else:
-            species = " ".join(_THM_SPECIES[p] for p in projectiles)
             raise ValueError(where + f"{key}={name} ({ref}, for {species}): the {label} "
                              f"channel is {_thm_nucleus_name(one[0], one[1])} + "
                              f"{_thm_nucleus_name(two[0], two[1])}, which it does not "
@@ -717,7 +196,7 @@ def _thm_check_global_optical(where, x):
                              "V,R,a,W,RW,aW,WD,RD,aD,RC)")
         problems = []
         if not amin <= targ[1] <= amax:
-            problems.append(f"target A = {targ[1]} (valid {amin}-{amax})")
+            problems.append(f"target A = {targ[1]} (valid {amin:g}-{amax:g})")
         if ecm is not None:
             elab = ecm * (proj[2] + targ[2]) / targ[2]
             if not emin <= elab <= emax:
@@ -828,92 +307,36 @@ def _thm_number(x):
     return ("-" if sign else "") + t
 
 
-def _thm_read_double(text, strict=False):
-    """operator>> on an istringstream: a leading number, the rest ignored
-    (``strict``: nothing but blanks may follow)."""
-    m = _THM_FLOAT_PREFIX.match(text)
-    if not m or (strict and text[m.end():].strip()):
-        return None
-    return float(m.group(0))
-
-
-def _thm_read_int(text, strict):
-    m = _THM_INT_PREFIX.match(text)
-    if not m:
-        return None
-    if strict and text[m.end():].strip():
-        return None
-    return int(m.group(0))
-
-
 def _thm_parse_line(raw, s):
-    """One block line into settings ``s``: returns (key, value) normalized
-    as the GUI writes them, ("", "") for a blank or comment line; raises
-    ValueError for a line the engine would refuse."""
+    """One global block line into settings ``s``: returns (key, value) normalized as the GUI writes them, ("", "")
+    for a blank, comment or experiment line (experiments are read with the block, :func:`_thm_read`); raises
+    ValueError for a line the engine would refuse (``_azure2.thm_option``)."""
     line = raw.split("#", 1)[0].strip()
-    if not line:
+    if not line or line.startswith("experiment["):
         return "", ""
-    if line.startswith("experiment["):
-        # An experiment record: validated and merged, but kept as a line of
-        # its own (like a comment) when the options are rewritten.
-        _thm_parse_experiment(line, s["experiments"])
-        return "", ""
-    if "=" not in line:
-        raise ValueError(f"<thm> line not understood: '{raw.strip()}'")
-    k, v = line.split("=", 1)
-    k = k.rstrip(" \t")
-    v = v.lstrip(" \t")
     bad = ValueError(f"<thm> line not understood: '{raw.strip()}'")
-    if k == "vertex":
-        if v == "real":
-            v = "perlevel"
-        if v not in ("onshell", "constant", "perlevel"):
-            raise bad
-        s["vertex"] = v
-    elif k == "kinematics":
-        if v not in ("lacognata", "triple", "kf3body", "lambda32"):
-            raise bad
-        s["kinematics"] = v
-    elif k == "entranceL":
-        if v not in ("coherent", "incoherent"):
-            raise bad
-        s["entranceL"] = v
-    elif k == "coulombIntegral":
-        if v in ("1", "true", "on"):
-            s["coulombIntegral"] = True
-        elif v in ("0", "false", "off"):
-            s["coulombIntegral"] = False
-        else:
-            raise bad
-        v = "1" if s["coulombIntegral"] else "0"
-    elif k.startswith("spectatorEnergy"):
-        x = _thm_read_double(v, strict=True)
-        if x is None or not x >= 0.0:
-            raise bad
-        v = _thm_number(x)
-        if k == "spectatorEnergy":
-            s["spectatorEnergy"] = x
-        elif len(k) > 17 and k[15] == "[" and k.endswith("]"):
-            pair = _thm_read_int(k[16:-1], strict=False)
-            if pair is None:
-                raise bad
-            s["spectatorByPair"][pair] = x
-            k = f"spectatorEnergy[{pair}]"
-        else:
-            raise bad
-    elif k.startswith("weight"):
-        test = k.startswith("weightTest[")
-        open_ = 10 if test else 6
-        if not (len(k) > open_ + 2 and k[open_] == "[" and k.endswith("]") and v):
-            raise bad
-        seg = _thm_read_int(k[open_ + 1:-1], strict=True)
-        if seg is None or seg < 1:
-            raise bad
-        s["weightTest" if test else "weight"][seg] = v
-        k = f"{'weightTest' if test else 'weight'}[{seg}]"
-    else:
+    if "=" not in line:
         raise bad
-    return k, v
+    k, v = line.split("=", 1)
+    o = _engine_module().thm_option(k.rstrip(" \t"), v.lstrip(" \t"))
+    if o is None:
+        raise bad
+    kind = o["kind"]
+    if kind in ("vertex", "kinematics", "entranceL"):
+        s[kind] = v = o["word"]
+        return kind, v
+    if kind == "coulombIntegral":
+        s[kind] = o["flag"]
+        return kind, "1" if o["flag"] else "0"
+    if kind == "spectatorEnergy":
+        if o["pair"] is None:
+            s["spectatorEnergy"] = o["energy"]
+            return "spectatorEnergy", _thm_number(o["energy"])
+        s["spectatorByPair"][o["pair"]] = o["energy"]
+        return f"spectatorEnergy[{o['pair']}]", _thm_number(o["energy"])
+    key = "weightTest" if o["test"] else "weight"
+    s[key][o["segment"]] = o["file"]
+    return f"{key}[{o['segment']}]", o["file"]
 
 
 def _thm_key_values(s):
@@ -971,32 +394,7 @@ def _thm_compose(old_lines, s):
 
 def _thm_read_weight_table(path):
     """ThmWeightTable::Read: "" if the table is usable, else why not."""
-    try:
-        with open(path) as f:
-            text = f.read()
-    except OSError:
-        return f"cannot read the weight file '{path}'"
-    energies = []
-    for n, line in enumerate(text.splitlines(), 1):
-        line = line.split("#", 1)[0]
-        if not line.strip():
-            continue
-        where = f"'{path}' line {n}: "
-        tok = line.split()
-        try:
-            if len(tok) != 2 or any("_" in t for t in tok):
-                raise ValueError
-            e, w = float(tok[0]), float(tok[1])
-        except ValueError:
-            return where + "expected two numbers, E (MeV) and w"
-        if not (math.isfinite(e) and math.isfinite(w) and w > 0.0):
-            return where + "the weight must be finite and > 0"
-        if energies and not e > energies[-1]:
-            return where + "the energies must be strictly increasing"
-        energies.append(e)
-    if len(energies) < 2:
-        return f"'{path}' needs at least two rows (E w)"
-    return ""
+    return _engine_module().read_thm_weight_table(path)
 
 
 
@@ -3525,15 +2923,9 @@ class AzrModel:
         return [ln.rstrip("\r\n") for ln in lines[i + 1:j]]
 
     def _thm_settings(self):
-        """The block parsed into the GUI's ThmSettings (a dict); ValueError on
+        """The block as AZURE2 reads it, as the GUI's ThmSettings (a dict); ValueError on
         a line the engine would refuse."""
-        s = _thm_default_settings()
-        body = self._thm_body()
-        for line in body:
-            _thm_parse_line(line, s)
-        _thm_check_experiments(s["experiments"])
-        _engine_thm_check(body)
-        return s
+        return _thm_read(self._thm_body())
 
     def thm_options(self, defaults=False):
         """The options of the ``<thm>`` block, as a dict.
@@ -3883,10 +3275,7 @@ class AzrModel:
             raise ValueError(f"<thm> experiment[{name}]: a value cannot contain '#' "
                              "or a line break.")
         s = self._thm_settings()
-        others = {k: v for k, v in s["experiments"].items() if k != name}
-        trial = dict(others)
-        _thm_parse_experiment(text, trial)
-        _thm_check_experiments(trial)
+        trial = _thm_read(self._thm_body_without_experiment(name) + [text])["experiments"]
         rec = _thm_experiment_record(trial[name])
         if rec.get("theta", "all") != "all" and s["entranceL"] == "coherent":
             raise ValueError(f"<thm> experiment[{name}]: theta= computes the interference "
@@ -3930,8 +3319,9 @@ class AzrModel:
                     exits.add(int(float(tok[2])))
             groups = {(round(2 * float(lv.J)), 1 if lv.parity > 0 else -1)
                       for lv in self.levels}
-            for t in _thm_parse_cbackground(rec["cbackground"]):
-                jpi = f"{_thm_spin_text(t['J'])}{'+' if t['parity'] > 0 else '-'}"
+            engine = _engine_module()
+            for t in engine.parse_thm_cbackground(rec["cbackground"])[0]:
+                jpi = f"{engine.thm_spin_text(t['J'])}{'+' if t['parity'] > 0 else '-'}"
                 if t["exit"] not in exits:
                     raise ValueError(f"<thm> experiment[{name}]: cbackground {jpi}:"
                                      f"{t['exit']}: no segment of the experiment has exit "
@@ -3955,10 +3345,7 @@ class AzrModel:
         if name not in s["experiments"]:
             return self
         body = self._thm_body_without_experiment(name)
-        rest = _thm_default_settings()
-        for line in body:
-            _thm_parse_line(line, rest)
-        if _thm_is_default(rest):
+        if _thm_is_default(_thm_read(body)):
             body = []
         self._thm_set_body(body)
         return self
@@ -3971,7 +3358,10 @@ class AzrModel:
         cbackground; ValueError (model unchanged) if AZURE2 would refuse it."""
         if not isinstance(cbackground, str):
             cbackground = ";".join(str(t) for t in cbackground)
-        text = _thm_format_cbackground(_thm_parse_cbackground(cbackground))
+        try:
+            text = _engine_module().parse_thm_cbackground(cbackground)[1]
+        except ValueError as err:
+            raise ValueError(f"<thm> experiment[{name}]: {err}") from None
         body = self._thm_body()
         head = f"experiment[{name}]"
         for i, line in enumerate(body):
@@ -3985,10 +3375,7 @@ class AzrModel:
                     new = re.sub(r"(?<!\S)cbackground=\S+", "cbackground=" + text, code, count=1)
                     trial = list(body)
                     trial[i] = new + hash_ + comment
-                    s = _thm_default_settings()
-                    for ln in trial:
-                        _thm_parse_line(ln, s)
-                    _thm_check_experiments(s["experiments"])
+                    _thm_read(trial)
                     self._thm_set_body(trial)
                     return self
         raise KeyError(f"<thm> experiment[{name}] has no cbackground= to replace")

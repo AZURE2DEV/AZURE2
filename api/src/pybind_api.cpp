@@ -840,6 +840,7 @@ class Session {
 };
 
 void BindPhysics(py::module_ &m);  // pybind_physics.cpp: the free functions of physics/
+void BindThm(py::module_ &m);      // pybind_thm.cpp: <thm> blocks as the engine reads them
 
 PYBIND11_MODULE(_azure2, m) {
   m.doc() = "In-process bindings for the AZURE2 R-matrix engine.";
@@ -853,10 +854,7 @@ PYBIND11_MODULE(_azure2, m) {
   py::register_exception<AZURE2Error>(m, "AZURE2Error", PyExc_RuntimeError);
   BindPhysics(m);
 
-  // The engine's reading of a <thm> block, for AzrModel (pyazr/azrfile.py),
-  // which edits files without a session.  No files are read.
-  m.def("check_thm_block", &CheckThmBlockLines, py::arg("lines"), py::arg("global_rules") = false,
-        "The lines of a <thm> block as AZURE2 reads them: \"\" or the message it reports.");
+  BindThm(m);  // pybind_thm.cpp: the engine's reading of a <thm> block, for AzrModel
   // The project file as a lossless document (io::Document; docs/upgrade/project.md section 2): pyazr's AzrModel
   // reads and edits the file through it, as the engine does.  Lines are str (decoded UTF-8, invalid bytes kept as
   // surrogates on the Python side by the caller); sections are (name, open, close, depth, parent) with close = -1 for

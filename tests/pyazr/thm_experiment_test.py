@@ -178,16 +178,13 @@ with tempfile.TemporaryDirectory() as tmp:
         print("skip the engine part: no AZURE2 binary to compare against")
         sys.exit(1 if failures else 77)
 
-    # The port and the engine's own reading (_azure2.check_thm_block) take and
-    # refuse the same blocks; AzrModel asks the engine too when it is built.
+    # AzrModel reads the block through the engine (_azure2.read_thm_block): it takes and refuses exactly the blocks
+    # the engine's check (_azure2.check_thm_block) does.
     from pyazr import _azure2
 
     def port_ok(lines):
-        st = _azrfile._thm_default_settings()
         try:
-            for ln in lines:
-                _azrfile._thm_parse_line(ln, st)
-            _azrfile._thm_check_experiments(st["experiments"])
+            _azrfile._thm_read(lines)
             return True
         except ValueError:
             return False
@@ -201,7 +198,7 @@ with tempfile.TemporaryDirectory() as tmp:
               ["experiment[A] segments=1", "experiment[B] segments=1"]]
     for b in blocks:
         engine = _azure2.check_thm_block(b) == ""
-        check(f"port and engine agree on {b}", port_ok(b) == engine, (port_ok(b), _azure2.check_thm_block(b)))
+        check(f"AzrModel and engine agree on {b}", port_ok(b) == engine, (port_ok(b), _azure2.check_thm_block(b)))
     both = ["coulombIntegral=1",
             "experiment[A] segments=1 beam=18O target=d spectator=n Ebeam=54 distortion=coulomb"]
     check("the engine's global rule: coulombIntegral=1 with R(E)",

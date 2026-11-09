@@ -140,6 +140,12 @@ output round-trips byte for byte.
 - `<config>` keys only inside `<config>`, the last line winning; the output directory by position.
 - Refused as the engine refuses them (P3): malformed `<abundances>` lines and prior centres that are not finite, or a
   norm centre ≤ 0.
-- Remaining second readings, documented rather than removed:
-  - `<thm>`: pyazr's Python port, which also passes every block through the engine's parser (`check_thm_block`);
-  - `<scatteringLengths>`: pyazr checks the tokens; the pairs and spins are checked when the engine loads the model.
+- `<thm>` through the engine (after step 4): `_azure2.read_thm_block` (api/src/pybind_thm.cpp, the engine's
+  `ParseThmBlockLines`) returns the options and the experiments with each key's value as written; `thm_option`,
+  `parse_thm_cbackground`, `thm_nuclides`, `thm_global_opticals` and `read_thm_weight_table` replace the Python copies
+  of the grammar, the nuclide mass table, the optical-potential table and the weight-file reader (about 650 lines).
+  pyazr keeps the writers (the GUI's compose) and, before the data are read, three checks the engine makes only once
+  they are: a global optical potential's validity range, the vertexModel=dw global rules, and the segments of an
+  experiment (THM, free norm, exit pairs of cbackground).
+- Remaining second reading: `<scatteringLengths>`, whose tokens pyazr checks; the pairs and spins are checked when the
+  engine loads the model.

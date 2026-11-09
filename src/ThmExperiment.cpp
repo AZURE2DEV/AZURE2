@@ -6,6 +6,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <fstream>
+#include <iterator>
 #include <map>
 #include <set>
 #include <sstream>
@@ -213,6 +214,8 @@ std::string ThmNuclide::Parse(const std::string &text, ThmNuclide &out) {
   for (const ThmNuclide &n : kNuclides) names += (names.empty() ? "" : " ") + n.name;
   return "unknown nuclide '" + text + "' (known: " + names + "; or Z,A,mass in u)";
 }
+
+std::vector<ThmNuclide> ThmNuclide::Table() { return std::vector<ThmNuclide>(std::begin(kNuclides), std::end(kNuclides)); }
 
 const ThmNuclide *ThmNuclide::Find(int Z, int A) {
   for (const ThmNuclide &n : kNuclides)
@@ -459,6 +462,7 @@ bool ParseThmOptionLine(const std::string &key, const std::string &value, ThmOpt
     if (key == "spectatorEnergy") return true;
     if (!(key.size() > 17 && key[15] == '[' && key.back() == ']')) return false;
     std::istringstream ks(key.substr(16, key.size() - 17));
+    out.perPair = true;
     return !!(ks >> out.pairKey);
   }
   if (key.compare(0, 6, "weight") == 0) {
@@ -478,9 +482,8 @@ bool ParseThmOptionLine(const std::string &key, const std::string &value, ThmOpt
   return false;
 }
 
-std::string CheckThmBlockLines(const std::vector<std::string> &lines, bool global) {
-  std::vector<ThmExperiment> experiments;
-  bool coulombIntegral = false;
+std::string ParseThmBlockLines(const std::vector<std::string> &lines, std::vector<ThmOptionLine> &options,
+                               std::vector<ThmExperiment> &experiments) {
   for (std::string line : lines) {
     size_t hash = line.find('#');
     if (hash != std::string::npos) line = line.substr(0, hash);
@@ -501,10 +504,21 @@ std::string CheckThmBlockLines(const std::vector<std::string> &lines, bool globa
     ThmOptionLine o;
     if (eq == std::string::npos || !ParseThmOptionLine(key, value, o))
       return "<thm> line not understood: '" + trimmed + "'";
-    if (o.kind == ThmOptionLine::COULOMB_INTEGRAL) coulombIntegral = o.flag;
+    options.push_back(o);
   }
   std::string why = CheckThmExperiments(experiments);
-  if (why.empty() && global) why = CheckThmCoulombConsistency(experiments, coulombIntegral);
+  return why.empty() ? why : "<thm> " + why;
+}
+
+std::string CheckThmBlockLines(const std::vector<std::string> &lines, bool global) {
+  std::vector<ThmOptionLine> options;
+  std::vector<ThmExperiment> experiments;
+  std::string why = ParseThmBlockLines(lines, options, experiments);
+  if (!why.empty() || !global) return why;
+  bool coulombIntegral = false;
+  for (const ThmOptionLine &o : options)
+    if (o.kind == ThmOptionLine::COULOMB_INTEGRAL) coulombIntegral = o.flag;
+  why = CheckThmCoulombConsistency(experiments, coulombIntegral);
   return why.empty() ? why : "<thm> " + why;
 }
 
@@ -671,6 +685,7 @@ std::string ParseThmExperimentLine(const std::string &line, std::vector<ThmExper
     }
     if (!why.empty()) return where + why;
     work.keys.push_back(key);
+    work.values.push_back(value);
   }
   if (count == 0) return where + "no key=value given";
   if (x)
