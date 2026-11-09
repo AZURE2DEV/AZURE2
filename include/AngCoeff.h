@@ -21,14 +21,6 @@ class AngCoeff {
    */
   static double Racah(double, double, double, double, double, double);
   /*!
-   * Returns the Wigner 9-j symbol. This is the object Seyler and Weller call
-   * \f$X(l s b; l' s' b'; k 1 k)\f$ -- the bare symbol, not the
-   * \f$[\prod (2j+1)]^{1/2}\f$-normalized Fano X, as their worked example on
-   * p. 458 of Phys. Rev. C 20 (1979) 453 shows.
-   */
-  static double Wigner9j(double, double, double, double, double, double,
-                         double, double, double);
-  /*!
    * Spherical harmonic \f$Y_l^m(\theta,\phi)\f$ with the Condon-Shortley
    * phase. AZURE2 otherwise only needs \f$m=0\f$, for which points carry
    * Legendre polynomials; polarization observables need \f$m \neq 0\f$.

@@ -8,7 +8,6 @@
 #include <map>
 #include <tuple>
 #include "InputFiles.h"
-#include "AngCoeff.h"
 #include "CNuc.h"
 #include <mutex>
 #include <exception>
@@ -29,6 +28,14 @@
 #include "NFIntegral.h"
 #include "CNucExternalCapture.h"
 #include "ShftFunc.h"
+#include "azure2/physics/ObservableCoupling.h"
+
+namespace {
+
+//! 2j as an integer, for the physics/ coupling coefficients (docs/upgrade/cnuc_split.md section 9).
+int Twice(double j) { return (int)std::lround(2.0 * j); }
+
+}  // namespace
 
 /*!
  * Returns true if a specified pair key exists in the PPair vector, otherwise returns false.
@@ -1913,17 +1920,16 @@ void CNuc::CalcAngularDists(int maxL) {
               double sp = theDecay->GetKGroup(k)->GetSp();
               if ((int)(l1 + l2 + lOrder) % 2 == 0 && (int)(l1p + l2p + w1p + w2p + lOrder) % 2 == 0) {
                 double z1z2 = 0.0;
-                double z1 = sqrt(2. * l1 + 1.) * sqrt(2. * l2 + 1.) * sqrt(2. * j1 + 1.) * sqrt(2. * j2 + 1.) * AngCoeff::ClebGord(l1, l2, lOrder, 0., 0., 0.) * AngCoeff::Racah(l1, j1, l2, j2, s, lOrder);
                 if (this->GetPair(theDecay->GetPairNum())->GetPType() == 0) {
-                  double z2 = sqrt(2. * l1p + 1.) * sqrt(2. * l2p + 1.) * sqrt(2. * j1 + 1.) * sqrt(2. * j2 + 1.) * AngCoeff::ClebGord(l1p, l2p, lOrder, 0., 0., 0.) * AngCoeff::Racah(l1p, j1, l2p, j2, sp, lOrder);
-                  z1z2 = pow(-1.0, sp - s) / 4. * z1 * z2;
+                  z1z2 = azure2::physics::particle_interference((int)l1, (int)l1p, Twice(j1), (int)l2, (int)l2p, Twice(j2),
+                                                                Twice(s), Twice(sp), lOrder);
                   // A cross-spin UPOS group mixes two exit channel spins; only the
                   // secondary-gamma coefficient below applies to it.
                   if (theDecay->GetKGroup(k)->IsCrossSpin()) z1z2 = 0.;
                 } else if (this->GetPair(theDecay->GetPairNum())->GetPType() == 10) {
                   double jf = this->GetPair(theDecay->GetPairNum())->GetJ(2);
-                  double z2 = sqrt(2. * l1p + 1.) * sqrt(2. * l2p + 1.) * sqrt(2. * j1 + 1.) * sqrt(2. * j2 + 1.) * AngCoeff::ClebGord(l1p, l2p, lOrder, 1., -1., 0) * AngCoeff::Racah(l1p, j1, l2p, j2, jf, lOrder);
-                  z1z2 = pow(-1., 1. + s - jf) / 4. * z1 * z2;
+                  z1z2 = azure2::physics::photon_interference((int)l1, (int)l1p, Twice(j1), (int)l2, (int)l2p, Twice(j2),
+                                                              Twice(s), Twice(jf), lOrder);
                 }
                 // Calculate z1z2_upos for Unobserved Primary, Observed Secondary (UPOS) case
                 double z1z2_upos = 0.;
@@ -1939,12 +1945,8 @@ void CNuc::CalcAngularDists(int maxL) {
                     s1pCh == sp && s2pCh == sp2) {
                   double j1f = this->GetPair(theDecay->GetPairNum())->GetJ(1);
                   double j2f = this->GetPair(theDecay->GetPairNum())->GetJ(2);
-                  z1z2_upos = pow(-1., sp - sp2) * pow(-1., lOrder + sp2 - sp) * (2. * j1 + 1.) * (2. * j2 + 1.) *
-                      pow((2. * l1 + 1.) * (2. * j2f + 1.) * (2. * sp + 1.) * (2. * sp2 + 1.), 0.5) *
-                      AngCoeff::ClebGord(lOrder, l1, l2, 0., 0., 0.) *
-                      AngCoeff::Racah(lOrder, j2f, sp2, j1f, j2f, sp) *
-                      AngCoeff::Racah(lOrder, sp, j2, l1p, sp2, j1) *
-                      AngCoeff::Racah(lOrder, j1, l2, s, j2, l1);
+                  z1z2_upos = azure2::physics::upos_interference((int)l1, (int)l1p, Twice(j1), (int)l2, Twice(j2), Twice(s),
+                                                                 Twice(sp), Twice(sp2), Twice(j1f), Twice(j2f), lOrder);
                 }
                 if (fabs(z1z2) > 1e-10 || fabs(z1z2_upos) > 1e-10) {
                   KLGroup NewKLGroup(k, lOrder);
@@ -1991,28 +1993,6 @@ void CNuc::CalcAngularDists(int maxL) {
   }
 }
 
-namespace {
-
-//! (-1)^n for an expression that is an integer but arrives as a double.
-inline double PhaseM1(double n) {
-  return (std::labs(std::lround(n)) % 2) ? -1.0 : 1.0;
-}
-
-inline double Hat(double j) { return sqrt(2.0 * j + 1.0); }
-
-/*!
- * Quantum numbers of one capture pathway, t = {p L b l s} in the notation of
- * Seyler and Weller: photon mode p (1 electric, 0 magnetic) and multipolarity
- * L, compound spin b, entrance orbital angular momentum l, channel spin s.
- */
-struct AyPathway {
-  int kGroup, path;
-  bool isEC;
-  double l, L, b, s;
-  int p;
-};
-
-}  // namespace
 
 /*!
  * Builds the capture analyzing-power coefficient table for one decay.
@@ -2063,7 +2043,12 @@ void CNuc::CalcCaptureAnalyzingPower(int aa, int decayNum, int maxL) {
   if (xSpin <= 0.0) return;                    // no vector polarization to have
 
   // --- Flatten every pathway of the decay, internal and external. ---
-  std::vector<AyPathway> paths;
+  struct Pathway {
+    int kGroup, path;
+    bool isEC;
+    azure2::physics::CapturePathway t;
+  };
+  std::vector<Pathway> paths;
   for (int k = 1; k <= theDecay->NumKGroups(); k++) {
     KGroup *theKGroup = theDecay->GetKGroup(k);
     for (int m = 1; m <= theKGroup->NumMGroups(); m++) {
@@ -2071,90 +2056,31 @@ void CNuc::CalcCaptureAnalyzingPower(int aa, int decayNum, int maxL) {
       JGroup *jgroup = this->GetJGroup(theMGroup->GetJNum());
       AChannel *entranceChannel = jgroup->GetChannel(theMGroup->GetChNum());
       AChannel *exitChannel = jgroup->GetChannel(theMGroup->GetChpNum());
-      AyPathway t;
-      t.kGroup = k;
-      t.path = m;
-      t.isEC = false;
-      t.l = (double)entranceChannel->GetL();
-      t.L = (double)exitChannel->GetL();
-      t.b = jgroup->GetJ();
-      t.s = theKGroup->GetS();
-      t.p = (exitChannel->GetRadType() == 'E') ? 1 : 0;
-      paths.push_back(t);
+      paths.push_back(Pathway{k, m, false,
+                              {entranceChannel->GetL(), exitChannel->GetL(), Twice(jgroup->GetJ()),
+                               Twice(theKGroup->GetS()), (exitChannel->GetRadType() == 'E') ? 1 : 0}});
     }
     for (int m = 1; m <= theKGroup->NumECMGroups(); m++) {
       ECMGroup *theECMGroup = theKGroup->GetECMGroup(m);
-      AyPathway t;
-      t.kGroup = k;
-      t.path = m;
-      t.isEC = true;
-      t.l = (double)theECMGroup->GetL();
-      t.L = (double)theECMGroup->GetMult();
-      t.b = theECMGroup->GetJ();
-      t.s = theKGroup->GetS();
-      t.p = (theECMGroup->GetRadType() == 'E') ? 1 : 0;
-      paths.push_back(t);
+      paths.push_back(Pathway{k, m, true,
+                              {theECMGroup->GetL(), theECMGroup->GetMult(), Twice(theECMGroup->GetJ()),
+                               Twice(theKGroup->GetS()), (theECMGroup->GetRadType() == 'E') ? 1 : 0}});
     }
   }
   if (paths.empty()) return;
 
-  // --- Eq. (21) prefactor, common to every term at a given k. ---
-  // 3 sqrt(x) xhat khat / [(x+1) k (k+1)]^{1/2}
-  std::vector<double> bPrefactor(maxL + 1, 0.0);
-  for (int k = 1; k <= maxL; k++)
-    bPrefactor[k] = 3.0 * sqrt(xSpin) * Hat(xSpin) * Hat((double)k) / sqrt((xSpin + 1.0) * (double)k * ((double)k + 1.0));
-
+  // a_k (Seyler and Weller, Eq. 20) and b_k (Eq. 21) with the light-first channel-spin phase (-1)^(s - s') on the
+  // channel-spin off-diagonal terms (before 2026-10-26, audit item 9, it was missing: fitting the capture A_y of a
+  // target with spin was the same as flipping the sign of every width with odd j1 + j2 - s, and inconsistent with the
+  // particle A_y of the same widths; tests/capture_ay_coupling); docs/upgrade/cnuc_split.md section 9.
   for (size_t i1 = 0; i1 < paths.size(); i1++) {
-    const AyPathway &t1 = paths[i1];
+    const Pathway &t1 = paths[i1];
     for (size_t i2 = 0; i2 < paths.size(); i2++) {
-      const AyPathway &t2 = paths[i2];
+      const Pathway &t2 = paths[i2];
       for (int k = 0; k <= maxL; k++) {
-        // Eq. (15): the empty bracket, [ ] = 1/2 [1 + (-1)^{L+p+L'+p'+k}].
-        if ((int)(t1.L + t1.p + t2.L + t2.p + k) % 2 != 0) continue;
-        // Both coefficients carry (l 0, l' 0 | k 0) and (L 1, L' -1 | k 0);
-        // testing them first prunes almost everything before any 6-j or 9-j.
-        double cgL = AngCoeff::ClebGord(t1.l, t2.l, (double)k, 0., 0., 0.);
-        if (fabs(cgL) < 1.e-12) continue;
-        double cgG = AngCoeff::ClebGord(t1.L, t2.L, (double)k, 1., -1., 0.);
-        if (fabs(cgG) < 1.e-12) continue;
-        double wG = AngCoeff::Racah(t1.L, t1.b, t2.L, t2.b, cSpin, (double)k);
-        if (fabs(wG) < 1.e-12) continue;
-
-        double common = cgL * cgG * wG * Hat(t1.l) * Hat(t2.l) * Hat(t1.L) * Hat(t2.L) * (2. * t1.b + 1.) * (2. * t2.b + 1.);
-
-        // --- Eq. (20). Only the channel-spin diagonal contributes. ---
-        double ak = 0.0;
-        if (fabs(t1.s - t2.s) < 1.e-6) {
-          double wL = AngCoeff::Racah(t1.l, t1.b, t2.l, t2.b, t1.s, (double)k);
-          ak = PhaseM1(t1.s - cSpin + 1.0) * common * wL;
-        }
-
-        // --- Eq. (21). Channel-spin off-diagonal terms are kept. ---
-        double bk = 0.0;
-        if (k >= 1) {
-          double wS = AngCoeff::Racah(xSpin, t1.s, xSpin, t2.s, aSpin, 1.0);
-          if (fabs(wS) >= 1.e-12) {
-            double x9j = AngCoeff::Wigner9j(t1.l, t1.s, t1.b,
-                                            t2.l, t2.s, t2.b,
-                                            (double)k, 1.0, (double)k);
-            // Seyler and Weller couple the channel spin target first,
-            // <j2 m2 j1 m1 | s nu>; AZURE2 couples it light particle first,
-            // <j1 m1 j2 m2 | s nu> = (-1)^(j1 + j2 - s) <j2 m2 j1 m1 | s nu>
-            // (Lane and Thomas; PolarizationFunc, the M1 EC spin operator, the
-            // UPOS coupling), which for the product R R'^* is a (-1)^(s - s')
-            // on every channel-spin off-diagonal term.  Without it (before
-            // 2026-10-26, audit item 9) the capture A_y of a target with spin
-            // had the sign of every such term flipped: fitting it was the same
-            // as flipping the sign of every width with odd j1 + j2 - s, and
-            // inconsistent with the particle A_y of the same widths.  Spin-0
-            // targets (one channel spin) are unaffected; tests/capture_ay_coupling.
-            if (fabs(x9j) >= 1.e-14)
-              bk = bPrefactor[k] * common * Hat(t1.s) * Hat(t2.s) * wS * x9j *
-                   PhaseM1(aSpin - xSpin + cSpin - t1.b - t1.s + t1.l) * PhaseM1(t1.s - t2.s);
-          }
-        }
-
-        if (fabs(ak) < 1.e-10 && fabs(bk) < 1.e-10) continue;
+        const azure2::physics::CaptureAyCoefficients c =
+            azure2::physics::capture_ay_coefficients(t1.t, t2.t, k, Twice(xSpin), Twice(aSpin), Twice(cSpin));
+        if (fabs(c.a) < 1.e-10 && fabs(c.b) < 1.e-10) continue;
         CaptureAyTerm term;
         term.kOrder = k;
         term.kGroup1 = t1.kGroup;
@@ -2163,8 +2089,8 @@ void CNuc::CalcCaptureAnalyzingPower(int aa, int decayNum, int maxL) {
         term.kGroup2 = t2.kGroup;
         term.path2 = t2.path;
         term.isEC2 = t2.isEC;
-        term.ak = ak;
-        term.bk = bk;
+        term.ak = c.a;
+        term.bk = c.b;
         theDecay->AddCaptureAyTerm(term);
       }
     }

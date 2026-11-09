@@ -45,3 +45,9 @@ add_test(NAME channel_table_unit
                  ${CMAKE_CURRENT_SOURCE_DIR}/T3/T3.azr
          WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
 set_tests_properties(channel_table_unit PROPERTIES TIMEOUT 300)
+
+# The observable coupling coefficients of physics/ against the engine's expressions before step 5, written with
+# AngCoeff and GSL's 9j (docs/upgrade/cnuc_split.md section 9 (b)).
+add_executable(observable_coupling_gsl_test observable_coupling_gsl_test.cpp)
+target_link_libraries(observable_coupling_gsl_test PRIVATE AZURE2Core)
+add_test(NAME physics_observable_coupling_gsl COMMAND observable_coupling_gsl_test)

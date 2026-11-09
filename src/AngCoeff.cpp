@@ -33,14 +33,6 @@ double AngCoeff::Racah(double j1, double j2, double l2, double l1, double j3, do
   return pow(-1.0, j1 + j2 + l2 + l1) * w6j;
 }
 
-double AngCoeff::Wigner9j(double j1, double j2, double j3,
-                          double j4, double j5, double j6,
-                          double j7, double j8, double j9) {
-  return gsl_sf_coupling_9j((int)(2 * j1), (int)(2 * j2), (int)(2 * j3),
-                            (int)(2 * j4), (int)(2 * j5), (int)(2 * j6),
-                            (int)(2 * j7), (int)(2 * j8), (int)(2 * j9));
-}
-
 double AngCoeff::LegendreP1(int l, double x) {
   if (l < 1) return 0.0;
   // gsl_sf_legendre_Plm includes the Condon-Shortley (-1)^m; Seyler and
