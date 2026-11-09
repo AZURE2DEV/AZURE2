@@ -80,7 +80,7 @@ below (full text and reasons in `docs/upgrade/RULES.md`):
 | `src/`, `include/` | C++ engine | `AZURE2.cpp` (main, CLI flags) → `AZUREMain` → `CNuc` (levels, channels) + `EData` (segments, data, experimental effects) → `AZURECalc` (χ²), `AZUREGrad` (gradients), `AZURECalcMCMC` |
 | `api/` | `AZUREAPI` + pybind11 module `_azure2` | Builds `pyazr/_azure2*.so` in place |
 | `io/` | The `.azr` document and its format conversion | Standalone (no engine headers); the engine and pyazr read the file through it |
-| `experiment/` | Model expressions (what a data set measures) and lab → c.m. frames | Uses `physics/` only (no engine headers); `experiment/README.md` |
+| `experiment/` | Model expressions (what a data set measures), lab → c.m. frames, the table of project format 3 | Uses `physics/` and `io/`'s `Record.h` only (no engine headers); `experiment/README.md` |
 | `pyazr/` | Python package | In-process engine; `.azr` editing (`azrfile.py`, `datasets.py`) on the engine's document and parsers |
 | `numcmc/` | Ensemble MCMC sampler | |
 | `external/` | Vendored Minuit2, erya/pugixml (Coulomb functions: `physics/coulomb/`, from pycoulomb) | **Do not edit**; it is upstream code |
@@ -214,6 +214,29 @@ bypassed. Run it first (under a second), then the build and the tests of "Defini
    `pyazr_thm_nuclide_masses`).
 
 **A CLI flag.** `parseOptions`, `printHelp` and `docs/source/reference/command_line.rst` [check 1].
+
+**A format-3 field** (a key of a record kind: `docs/upgrade/project_format3.md`, `experiment/README.md` §2).
+1. One `FieldDef` row in the kind's list in `experiment/src/Schema.cpp`: key, title, value type (`ValueSpec`; a
+   structured value is a `FormSpec` there), where it applies and where it is required (`Condition`), doc. If it depends
+   on the quantity, `ByQ(...)` there and a `QuantityField` in each row of `experiment/src/Quantities.cpp` that uses it.
+   No parser code: the value type's parser exists (`Parsers.h`); a new value type is a parser plus a case in `ParseValue`.
+2. A fixture line in `experiment/tests/data/` that validates, and a case in `experiment/tests/diagnostics_test.cpp`
+   if the field brings a refusal of its own.
+3. `AZURE2 --schema > tests/schema/schema_v3.json`, bump `Schema::kVersion` if an existing project changes meaning
+   [check 21: `experiment_schema`, `pyazr_schema`]; `python3 tools/gen_schema_docs.py` [check 18].
+
+**A format-3 quantity.** One `Quantity` row in `experiment/src/Quantities.cpp` (units, column roles, reaction rule,
+required and allowed fields, target kinds, norm rules, tree, EXFOR codes, refusals), a record of it in the `variants`
+of `experiment/tests/quantities_test.cpp` (the test fails for a row without one), then the schema and docs as above;
+later its tree builder (step 3).
+
+**A format-3 unit.** One `Unit` row in `experiment/src/Units.cpp` (token, dimension, factor to the dimension's engine
+unit, aliases); `experiment_parsers` checks every row's dimension and factor and `experiment_quantities` tries the unit
+on every quantity; then the schema and docs as above.
+
+**A format-3 diagnostic code.** A constant in `experiment/include/azure2/experiment/Diagnostics.h` (`io/`'s reader:
+`io/include/azure2/io/Record.h`), its row in `DiagnosticCodes()` and a case in `experiment/tests/diagnostics_test.cpp`
+that triggers it alone [check 24].
 
 Reference commits: `git show --stat 062b1bfe` (segment keyword `shiftfngroup`), `3e13fb28` (`normgroup`).
 

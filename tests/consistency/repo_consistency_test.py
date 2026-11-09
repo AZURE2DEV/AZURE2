@@ -322,9 +322,57 @@ for top in ("src", "api/src"):
                 problems.append(f"{rel}: opens the project file ({line.strip()}); take the section from "
                                 "Config::SectionStream")
 
+# 18. The format-3 reference page is the table's, not prose that can drift: docs/source/reference/format3.rst equals
+#     what tools/gen_schema_docs.py makes of tests/schema/schema_v3.json (docs/upgrade/project_format3.md section 7.4),
+#     which in turn equals AZURE2 --schema (check 21: the ctests experiment_schema and pyazr_schema).
+try:
+    import importlib.util
+    _spec = importlib.util.spec_from_file_location("gen_schema_docs", os.path.join(ROOT, "tools", "gen_schema_docs.py"))
+    _gen = importlib.util.module_from_spec(_spec)
+    _spec.loader.exec_module(_gen)
+    import json
+    if _gen.generate(json.loads(read("tests/schema/schema_v3.json"))) != read("docs/source/reference/format3.rst"):
+        problems.append("docs/source/reference/format3.rst: not the output of tools/gen_schema_docs.py; run it "
+                        "(after AZURE2 --schema > tests/schema/schema_v3.json if the table changed)")
+except (OSError, ValueError) as e:
+    problems.append(f"check 18: {e}")
+
+
+# 24. Every diagnostic code is declared, listed in the schema and tested (docs/upgrade/project_format3.md section 7.4):
+#     the codes are the constants of experiment/'s Diagnostics.h (namespace codes) and io/'s Record.h (record_codes);
+#     each is in DiagnosticCodes() (experiment/src/Diagnostics.cpp, which the schema exports); each appears quoted in
+#     a test of experiment/tests/ or io/tests/; and every "E_..."/"W_..." literal in experiment/src/ and io/src/ is a
+#     declared code (a code made up at the call site would bypass the list).
+declared = {}
+for rel in ("experiment/include/azure2/experiment/Diagnostics.h", "io/include/azure2/io/Record.h"):
+    for const, code in re.findall(r'constexpr const char \*(k\w+) = "([EWA][A-Z_]*)"', read(rel)):
+        declared[const] = code
+registry = read("experiment/src/Diagnostics.cpp")
+tests_text = ""
+for top in ("experiment/tests", "io/tests"):
+    for name in sorted(os.listdir(os.path.join(ROOT, top))):
+        if name.endswith(".cpp"):
+            tests_text += read(f"{top}/{name}")
+if not declared:
+    problems.append("check 24: no diagnostic codes found; update this test")
+for const, code in sorted(declared.items()):
+    if not re.search(r"\{\s*(?:rc::)?" + const + r"\s*,", registry):
+        problems.append(f"{code}: declared but not in DiagnosticCodes() (experiment/src/Diagnostics.cpp)")
+    if f'"{code}"' not in tests_text:
+        problems.append(f"{code}: no test in experiment/tests/ or io/tests/ names it (each code needs one that triggers it)")
+for top in ("experiment/src", "io/src"):
+    for name in sorted(os.listdir(os.path.join(ROOT, top))):
+        if not name.endswith(".cpp"):
+            continue
+        for code in sorted(set(re.findall(r'"([EW]_[A-Z][A-Z_]+)"', read(f"{top}/{name}")))):
+            if code not in declared.values():
+                problems.append(f"{top}/{name}: diagnostic code {code} is not declared in Diagnostics.h or Record.h")
+
+
 if problems:
     for p in problems:
         print("FAIL", p)
     print(f"{len(problems)} consistency problem(s)")
     sys.exit(1)
-print(f"repository consistent: {len(flags)} CLI flags, segment keywords, test registration, check.sh modes, pyazr version and exports")
+print(f"repository consistent: {len(flags)} CLI flags, segment keywords, test registration, check.sh modes, pyazr version and exports, "
+      f"format-3 reference page, {len(declared)} diagnostic codes")
