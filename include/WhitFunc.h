@@ -8,7 +8,12 @@
 #include "GSLException.h"
 #include "Kinematics.h"
 
+#include <cstdint>
+#include <cstring>
 #include <iostream>
+#include <unordered_map>
+
+#include "Profile.h"
 
 extern double gsl_whit_function(int, double, double, double, int, int);
 
@@ -87,6 +92,52 @@ class WhitFunc {
     log10Scale = (double)ws.log10_scale;
     return ws.mantissa;  // in [1, 10): W > 0 for every valid argument
   };
+  /*!
+   * Scaled through a thread-local memo keyed on the arguments of whittaker_scaled, (l, eta_b, rho): the same bits as
+   * Scaled, since whittaker_scaled is a pure function and the key holds everything it reads.  For the final-state
+   * factor of ECIntegral's data path, which GSL's qagiu samples at the same radii for every entrance energy
+   * (docs/upgrade/coulomb.md, step 3b (ii)).  At most kMemoEntries per thread; cleared when full.
+   */
+  double ScaledMemo(int l, double radius, double energy, double &log10Scale) const {
+    log10Scale = 0.0;
+    double etaB, rho;
+    if (!Arguments(radius, energy, etaB, rho) || !(rho > 0.0)) return 0.0;
+    struct Key {
+      int l;
+      double etaB, rho;
+      bool operator==(const Key &o) const { return l == o.l && etaB == o.etaB && rho == o.rho; }
+    };
+    struct Hash {
+      std::size_t operator()(const Key &k) const {
+        std::uint64_t a, b;
+        std::memcpy(&a, &k.etaB, sizeof a);
+        std::memcpy(&b, &k.rho, sizeof b);
+        std::uint64_t h = a * 0x9E3779B97F4A7C15ULL ^ (b + 0x632BE59BD9B4E019ULL + (a << 6) + (a >> 2));
+        return (std::size_t)(h ^ ((std::uint64_t)k.l * 0xC2B2AE3D27D4EB4FULL));
+      }
+    };
+    struct Value {
+      double mantissa, log10Scale;
+    };
+    static thread_local std::unordered_map<Key, Value, Hash> memo;
+    const Key key{l, etaB, rho};
+    const auto it = memo.find(key);
+    if (it != memo.end()) {
+      AZUREProfile::Count(AZUREProfile::kWhitMemoHit);
+      log10Scale = it->second.log10Scale;
+      return it->second.mantissa;
+    }
+    AZUREProfile::Count(AZUREProfile::kWhitMemoMiss);
+    namespace co = azure2::physics::coulomb;
+    const co::WhittakerScaled ws = co::whittaker_scaled(l, etaB, rho);
+    Value v{0.0, 0.0};
+    if (ws.status == co::Status::ok) v = {ws.mantissa, (double)ws.log10_scale};
+    if (memo.size() >= kMemoEntries) memo.clear();
+    memo.emplace(key, v);
+    log10Scale = v.log10Scale;
+    return v.mantissa;
+  };
+  static constexpr std::size_t kMemoEntries = std::size_t(1) << 17;
 
  private:
   /// eta_b and rho = kappa r at binding energy `energy` (MeV) and `radius` (fm), as the engine always formed them

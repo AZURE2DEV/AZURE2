@@ -19,7 +19,8 @@ std::atomic<long long> g_count[kNumCounters];
 const char *const kCounterNames[kNumCounters] = {"channel-space solves", "level route: size",
                                                  "level route: no formal set-up", "level route: near pole",
                                                  "level route: pivot", "level route: forced",
-                                                 "channel space, deflated"};
+                                                 "channel space, deflated", "final-state W: memo hits",
+                                                 "final-state W: computed"};
 }  // namespace
 
 void CountEvent(Counter counter) { g_count[counter].fetch_add(1, std::memory_order_relaxed); }
