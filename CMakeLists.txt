@@ -116,6 +116,8 @@ enable_testing()  # before the subdirectory, so that its tests are registered (r
 add_subdirectory(physics)
 # io/: the project model (docs/upgrade/project.md), which uses nothing either.
 add_subdirectory(io)
+# experiment/: model expressions and frames (docs/upgrade/data_model.md), which use physics/ only.
+add_subdirectory(experiment)
 
 # ---------------------------------------------------------------- macOS/Homebrew
 # Homebrew needs help that a Linux build never does, and without it a plain

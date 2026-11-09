@@ -80,6 +80,7 @@ below (full text and reasons in `docs/upgrade/RULES.md`):
 | `src/`, `include/` | C++ engine | `AZURE2.cpp` (main, CLI flags) → `AZUREMain` → `CNuc` (levels, channels) + `EData` (segments, data, experimental effects) → `AZURECalc` (χ²), `AZUREGrad` (gradients), `AZURECalcMCMC` |
 | `api/` | `AZUREAPI` + pybind11 module `_azure2` | Builds `pyazr/_azure2*.so` in place |
 | `io/` | The `.azr` document and its format conversion | Standalone (no engine headers); the engine and pyazr read the file through it |
+| `experiment/` | Model expressions (what a data set measures) and lab → c.m. frames | Uses `physics/` only (no engine headers); `experiment/README.md` |
 | `pyazr/` | Python package | In-process engine; `.azr` editing (`azrfile.py`, `datasets.py`) on the engine's document and parsers |
 | `numcmc/` | Ensemble MCMC sampler | |
 | `external/` | Vendored Minuit2, erya/pugixml (Coulomb functions: `physics/coulomb/`, from pycoulomb) | **Do not edit**; it is upstream code |
