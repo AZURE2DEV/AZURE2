@@ -208,6 +208,35 @@ the memo build's signatures equal the v6 build's, with and without a table). 1 v
 495. **Cost** (one thread, calc, mean of three, each build with its own table): T1 2.89 s (`-whittaker` head, GSL)
 → 5.14 s (engine switch) → 2.77 s (memo); 13N 7.60 → 9.71 → 7.08 s. The engine switch no longer costs time.
 
+**The interpolation band near threshold (design, 2026-11-09).** `ShftFunc::operator()` evaluates ρW′/W exactly for
+binding B ≥ B_min. Closer to threshold it interpolates linearly between S(−B_min) and S(0) (`ZeroEnergyLimit`, Bessel K).
+B_min is the binding where η_b = 1000, or, if larger, the smaller of the bindings where η_b = 50 and where
+z = 2κa = 0.05. The second condition described where GSL's U went wrong (off by 10⁻⁶ at η = 111, z = 1.2 × 10⁻³ for
+p+p); `whittaker_scaled` has no such weakness. Measured on p+¹²C, p+p, α+¹²C and ¹²C+¹²C, l = 0 and 3, B = 10⁻¹⁴–1 MeV:
+- status ok everywhere;
+- S tends to S(0) linearly in B;
+- below about 10⁻⁹ MeV (η_b ≳ 10⁴) it jitters at 10⁻⁹ relative, beyond the η_b ≤ 1000 its test covers to 10⁻¹²;
+- each call takes 2–9 µs, but 16–230 µs at η_b ≳ 10⁷.
+
+So the η_b = 1000 limit stays, and the GSL condition is dropped: B_min = B(η_b = 1000). For p+¹²C, B_min goes from
+3.3 × 10⁻⁴ to 8.2 × 10⁻⁷ MeV. In what is left of the band, S − S(0) is linear to about 10⁻¹¹ (its curvature,
+measured from the values above, is about 3 × 10⁻⁵ of the linear term at 10⁻³ MeV and shrinks with B).
+
+*Expected.* S changes, without a table, only for bindings between the old and the new B_min. There the linear
+interpolation was off by up to about 10⁻⁸ absolute, so outputs near threshold move at that level. dS/dE moves by up to
+about 10⁻⁵ relative on a level within 3 × 10⁻⁴ MeV below threshold. The Coulomb table is filled from `ExactBound` (not
+`operator()`), so its contents and format do not change. With a table, only the bindings the table does not cover
+change. 179 × 3, with and without a table, against the head of this branch: every changed file classified. A change
+beyond about 10⁻⁷ relative in an observable is examined before the step goes on. Then ctest, `run_tests.sh` and the
+thread check.
+
+**Band narrowed, verified (2026-11-09; build of 37e1c5ba).** 179 × 3 against the merged head db972c84:
+- without a table, 2040/2040 identical: no project has a bound channel between the old and the new B_min;
+- with a format-2 table, 2039/2040: `ec_threshold` `ng`, R = 3, one number, 1.2 × 10⁻¹¹ of its column (a point the
+  table does not cover), class (b).
+
+ctest 117/117, `run_tests.sh` 133/133, 1 vs 8 threads identical.
+
 ## 2. Channel functions
 
 ### 2.1 Definition
