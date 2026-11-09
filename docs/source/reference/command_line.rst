@@ -412,6 +412,18 @@ target-effect sub-points (at most 20 dumps per run).  A non-finite
 :math:`\chi^2`, or one above :math:`10^{100}`, is handed to Minuit2 as
 :math:`10^{100}`.
 
+``AZURE_POISON_RESULTS=1``: at the start of every evaluation (after the
+parameters, norms and energy shifts are handed to the data) every value the
+evaluation produces -- each point's and sub-point's calculated cross section,
+its E1 and E2 parts, A_y, A_0, angular-distribution coefficients and sample
+terms -- is set to a quiet NaN before it is calculated, so a value read before
+the evaluation writes it, for instance one kept from an earlier evaluation,
+appears as NaN in the output.  A test of the engine, not of a project: the
+output files of a correct engine do not change.  In pyazr the E1 and E2 parts
+(``calculated_segments_e1``, ``_e2``) of a line that is not an
+angle-integrated cross section become NaN, since they are never calculated
+there (0 without the variable).
+
 Examples
 --------
 
