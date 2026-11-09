@@ -250,6 +250,54 @@ for rel, literal in sorted(KNOWN):
     if literal not in read(rel):
         problems.append(f"{rel}: {literal} is gone; remove it from KNOWN in check 10")
 
+
+# 11. One objective (docs/upgrade/objective.md): the chi^2 terms beyond the data points -- Park's wall, abundances,
+#     scattering lengths, target-effect priors, the data covariance -- are added in src/Objective.cpp, which every
+#     path (CLI fit, gradient, API, writer) asks.  A new path that adds one itself drifts from the rest the first time
+#     a term changes.  Allowed elsewhere: the files that define the terms, and the listed uses with their reason.
+PENALTIES = ("ParkNormPenalty", "AbundancePenalty", "AbundanceSumPenalty", "ScatteringLength::Chi2",
+             "ScreeningPenalty", "DensityPenalty", "DopplerPenalty", "ThicknessPenalty", "CovarianceChi2Correction")
+DEFINERS = {"src/Objective.cpp", "src/CNuc.cpp", "src/ScatteringLength.cpp", "src/EData.cpp", "src/ESegment.cpp",
+            "src/TargetEffect.cpp"}
+ALLOWED_PENALTY_USES = {
+    # The MCMC splits the posterior: per-nucleus abundance priors are log-priors (CalculateLogPrior), so the
+    # likelihood carries only the sum-to-one term and the scattering lengths; Park's wall rejects the step outright.
+    ("src/AZURECalcMCMC.cpp", "AbundanceSumPenalty"), ("src/AZURECalcMCMC.cpp", "ScatteringLength::Chi2"),
+    ("src/AZURECalcMCMC.cpp", "ParkNormPenalty"),
+    # The API's data chi^2 in residual form (EvaluateFilledChi2, the analytic gradient): T2 for its rows;
+    # pyazr_objective checks it against the CLI's objective.
+    ("api/src/AZUREAPI.cpp", "CovarianceChi2Correction"),
+}
+for top in ("src", "api/src"):
+    for name in sorted(os.listdir(os.path.join(ROOT, top))):
+        rel = f"{top}/{name}"
+        if not name.endswith(".cpp") or rel in DEFINERS:
+            continue
+        text = read(rel)
+        for fn in PENALTIES:
+            for m in re.finditer(r"(?<![\w:])" + re.escape(fn) + r"\(", text):
+                line = text[text.rfind("\n", 0, m.start()) + 1:text.find("\n", m.start())]
+                if line.lstrip().startswith(("//", "*")) or (rel, fn) in ALLOWED_PENALTY_USES:
+                    continue
+                problems.append(f"{rel}: calls {fn}() -- a chi^2 term outside src/Objective.cpp; ask the objective "
+                                "(Objective::Engine().Chi2 / ModelChi2 / DataChi2) or add a term there "
+                                "(docs/upgrade/objective.md)")
+
+
+# 12. One reading of the project file (docs/upgrade/project.md): the engine opens the .azr only in src/Config.cpp
+#     (InputFiles + io::Document); every reader takes its section from Config::SectionStream.  Opening the file
+#     anywhere else is a second parser.
+ALLOWED_OPENS = {"src/ParameterLimitsManager.cpp"}  # only whether the file exists (false = no file, true = no block)
+for top in ("src", "api/src"):
+    for name in sorted(os.listdir(os.path.join(ROOT, top))):
+        rel = f"{top}/{name}"
+        if not name.endswith(".cpp") or rel == "src/Config.cpp" or rel in ALLOWED_OPENS:
+            continue
+        for line in read(rel).splitlines():
+            if re.search(r"(ifstream\s*\w*\s*[({]|\.open\s*\(|fopen\s*\(|InputFiles::Open\s*\()[^;]*configfile", line):
+                problems.append(f"{rel}: opens the project file ({line.strip()}); take the section from "
+                                "Config::SectionStream")
+
 if problems:
     for p in problems:
         print("FAIL", p)
