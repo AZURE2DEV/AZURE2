@@ -51,3 +51,11 @@ set_tests_properties(channel_table_unit PROPERTIES TIMEOUT 300)
 add_executable(observable_coupling_gsl_test observable_coupling_gsl_test.cpp)
 target_link_libraries(observable_coupling_gsl_test PRIVATE AZURE2Core)
 add_test(NAME physics_observable_coupling_gsl COMMAND observable_coupling_gsl_test)
+
+# The pathway trees built from physics/ reaction_pathways against a verbatim copy of the SortPathways they replaced,
+# on every .azr under tests/, Brune and formal basis (docs/upgrade/cnuc_split.md section 10 (b)).
+add_executable(pathways_from_cnuc_test pathways_from_cnuc_test.cpp)
+target_link_libraries(pathways_from_cnuc_test PRIVATE AZURE2Core)
+add_test(NAME physics_pathways_from_cnuc COMMAND pathways_from_cnuc_test ${CMAKE_SOURCE_DIR}/tests
+         WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+set_tests_properties(physics_pathways_from_cnuc PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1" TIMEOUT 900)

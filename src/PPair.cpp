@@ -308,6 +308,10 @@ void PPair::AddDecay(Decay decay) {
   decays_.push_back(decay);
 }
 
+void PPair::ClearDecays() {
+  decays_.clear();
+}
+
 /*!
  * Sets the particle pair to be an internal entrance pair.
  */
