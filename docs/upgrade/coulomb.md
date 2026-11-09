@@ -173,6 +173,27 @@ compares a table session with an exact one and fails when the only table on the 
 recomputed every run, even with `intEC.dat` present), evaluation ~1 ms in both. This is the 13× cost per W call in
 `ECIntegral`'s data path; the per-integral W table (step 3b (ii)) removes it and should come before merging.
 
+**Step 3b (ii): the final-state W of the data path, memoized (design, 2026-11-09).** The cost above is the
+final-state factor W_{l_f}(κ_f r) of `ECIntegral`: `fgEvaluate` (FW, GW) and the outgoing factor of `WWIntegrand`
+evaluate it at every radius GSL's `qagiu` samples, for every node energy of every `ECTable` term, although it does
+not depend on the entrance energy. The rate path's fixed Laguerre grid would remove it, but it changes the quadrature
+of the data path (outputs move). Instead: `qagiu` maps [a, ∞) to t ∈ (0, 1] and bisects; a subinterval it creates is
+the same bits whatever the integrand, and so are its 21 Gauss–Kronrod radii. The integrals of one final state at
+different entrance energies therefore sample largely the same radii, and a memo keyed on the exact arguments returns
+the bits a new evaluation would.
+
+*Rule.* `WhitFunc::ScaledMemo(l, r, E_b, log10Scale)`: η_b and ρ formed as in `Scaled`, then a thread-local table
+keyed on (l, η_b, ρ) — the arguments of `whittaker_scaled` themselves, so no key can be stale and no model or pair
+identity enters — returns the stored (mantissa, scale) or computes and stores them. `whittaker_scaled` is a pure
+function (same arguments, same bits, any thread), so results are bit-identical to `Scaled`. The table holds at most
+2¹⁷ entries per thread (about 10 MB) and is cleared when full. It is used for the final-state factor in
+`fgEvaluate` and in `WWIntegrand` (outgoing factor) only; the entrance factor of `WWIntegrand` depends on the
+entrance energy and stays `Scaled`. `AZURE_PROFILE` reports hits and misses.
+
+*Expected.* 179 × 3 byte-identical (with and without a table, against the head of this branch); threads identical;
+the cost measured again (13N, T1, one thread, calc). If the hit rate is low (the trees of different energies share
+few subintervals), the fallback is the fixed grid, as its own design with a comparison.
+
 ## 2. Channel functions
 
 ### 2.1 Definition
