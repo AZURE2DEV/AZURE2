@@ -351,162 +351,56 @@ void AZURECalcMCMC::SetPriors(const std::vector<double> &priorMeans,
   usePriors_ = usePriors;
 }
 
-void AZURECalcMCMC::BuildAutoPriors() const {
+void AZURECalcMCMC::BuildAutoPriors(bool useRWA) const {
   if (!parametersInitialized_) {
     configure().outStream << "Warning: BuildAutoPriors() called before parameters were "
                           << "initialized; automatic priors skipped.\n";
     return;
   }
 
-  // Classify every parameter by its name in the parameter vector, so that the
-  // classification has the vector's length and order whatever blocks
-  // CNuc::FillMnParams and EData::FillMnParams put in it.  Re-walking the
-  // levels and segments instead (as this did) gave an entry to a free THM norm,
-  // which is profiled and not a parameter, and none to a THM coherent
-  // background: the lengths then differed, and the automatic priors and the
-  // level-energy spread were dropped for the whole run.  Blocks: per
-  // J-group and level one energy and one width per channel; one isotopic
-  // abundance per (sample, nucleus) with an <abundances> block; norms; energy
-  // shifts; sqrt(E) coefficients; shift-function parameters; electron-screening
-  // potentials (screening_<n>); fitted target densities (density_<n>, dev);
-  // fitted Doppler temperatures (doppler_<n>, dev); fitted sample thicknesses
-  // (segment_<k>_thickness, dev); THM cbkg (last).  AZUREAPI::GetParameterInfo() walks the same sequence.
+  // Classify every parameter of the vector, in its length and order, by its ParamIndexMap kind (BuildParamIndexMap
+  // mirrors CNuc::FillMnParams and EData::FillMnParams): per J-group and level one energy and one width per channel;
+  // abundances; norms; energy shifts; sqrt(E) coefficients; shift-function parameters; screening, density, Doppler
+  // and thickness parameters; THM cbkg.  (Re-walking the levels and segments, as this once did, gave an entry to a
+  // free THM norm, which is profiled and not a parameter; matching names, as it did until 2026-11-09, duplicated the
+  // fit's prior rules.)
   std::vector<int> allKinds;
   std::vector<double> allAutoMean;
   std::vector<double> allAutoStd;  // <= 0 means "no automatic prior available"
   std::vector<std::string> unknownNames;
 
-  // segment_<k>_<tail>: the segment of key k, or null.
-  auto segmentOf = [&](const std::string &name, const std::string &tail) -> ESegment * {
-    if (name.compare(0, 8, "segment_") != 0 || !AZURELabel::EndsWith(name, tail)) return nullptr;
-    const std::string key = name.substr(8, name.size() - 8 - tail.size());
-    if (key.empty() || key.find_first_not_of("0123456789") != std::string::npos) return nullptr;
-    if (!data()->IsSegmentKey(std::atoi(key.c_str()))) return nullptr;
-    return data()->GetSegmentFromKey(std::atoi(key.c_str()));
-  };
-
-  // abundance[_<sample>]_<Z>_<A> (CNuc::AbundanceParamName): the <abundances>
-  // line's value and sigma are the prior, as the fit uses them.
-  CNuc *nuc = compound();
-  std::map<std::string, std::pair<double, double>> abundancePrior;
-  for (int k = 1; k <= nuc->NumAbundanceParams(); ++k) {
-    int sample, nucleus;
-    nuc->AbundanceOf(k, sample, nucleus);
-    const SampleAbundance &e = nuc->GetSample(sample)->entries[nucleus - 1];
-    abundancePrior[nuc->AbundanceParamName(sample, nucleus)] = std::make_pair(e.nominal, e.sigma);
-  }
-  // segment_<k>_energy_shift_fn<j> (EData::FillMnParams): the segment, j in `term`.
-  auto shiftFnOf = [&](const std::string &name, int &term) -> ESegment * {
-    static const std::string tag = "_energy_shift_fn";
-    if (name.compare(0, 8, "segment_") != 0) return nullptr;
-    const size_t at = name.rfind(tag);
-    if (at == std::string::npos || at <= 8) return nullptr;
-    const std::string key = name.substr(8, at - 8), j = name.substr(at + tag.size());
-    if (key.find_first_not_of("0123456789") != std::string::npos || j.empty() ||
-        j.find_first_not_of("0123456789") != std::string::npos)
-      return nullptr;
-    if (!data()->IsSegmentKey(std::atoi(key.c_str()))) return nullptr;
-    ESegment *s = data()->GetSegmentFromKey(std::atoi(key.c_str()));
-    term = std::atoi(j.c_str());
-    if (!s->OwnsShiftFn() || !s->HasShiftFn() || term >= s->NumShiftFnParams()) return nullptr;
-    return s;
-  };
-
-  // density_<n> (EData::FillMnParams): the target effect of density parameter n, or null.
-  auto densityOf = [&](const std::string &name) -> const TargetEffect * {
-    if (name.compare(0, 8, "density_") != 0) return nullptr;
-    const std::string n = name.substr(8);
-    if (n.empty() || n.find_first_not_of("0123456789") != std::string::npos) return nullptr;
-    for (int k = 1; k <= data()->NumDensityParams(); ++k)
-      if (data()->GetDensityEffect(k) == std::atoi(n.c_str())) return data()->GetDensityTargetEffect(k);
-    return nullptr;
-  };
-
-  // doppler_<n> (EData::FillMnParams): the first copy of Doppler parameter n's line, or null.
-  auto dopplerOf = [&](const std::string &name) -> const TargetEffect * {
-    if (name.compare(0, 8, "doppler_") != 0) return nullptr;
-    const std::string n = name.substr(8);
-    if (n.empty() || n.find_first_not_of("0123456789") != std::string::npos) return nullptr;
-    for (int k = 1; k <= data()->NumDopplerParams(); ++k)
-      if (data()->GetDopplerEffect(k) == std::atoi(n.c_str())) return data()->GetDopplerTargetEffect(k);
-    return nullptr;
-  };
-
-  // screening_<n> (EData::FillMnParams): the target effect n with a screening block, or null.
-  auto screeningOf = [&](const std::string &name) -> const TargetEffect * {
-    if (name.compare(0, 10, "screening_") != 0) return nullptr;
-    const std::string n = name.substr(10);
-    if (n.empty() || n.find_first_not_of("0123456789") != std::string::npos) return nullptr;
-    for (int k = 1; k <= data()->NumScreeningParams(); ++k)
-      if (data()->GetScreeningEffect(k) == std::atoi(n.c_str()))
-        return data()->GetScreeningTargetEffect(k);
-    return nullptr;
-  };
-
+  // The kind of every parameter from the parameter-index map, and the diagonal priors from the fit's own enumeration
+  // (Objective.h ForEachDiagonalPrior; docs/upgrade/objective.md step 5: the MCMC shares the fit's configuration),
+  // by index, not by name.
+  const ParamIndexMap pmap = BuildParamIndexMap(compound(), data(), std::vector<bool>());
+  std::map<int, std::pair<double, double>> diagonal;  // full index -> (mean, sigma)
+  ForEachDiagonalPrior(data(), compound(), pmap,
+                       [&](int idx, double nominal, double sigma) { diagonal[idx] = std::make_pair(nominal, sigma); });
   for (size_t i = 0; i < paramNames_.size(); ++i) {
-    const std::string &name = paramNames_[i];
     int kind = -1;
-    double mean = 0.0, std = -1.0;
-    const TargetEffect *te = nullptr;
-    ESegment *seg = nullptr;
-    int term = -1;
-    if (name.compare(0, 7, "energy_") == 0) {
-      kind = PARAM_ENERGY;
-    } else if (name.compare(0, 6, "width_") == 0) {
-      kind = PARAM_WIDTH;
-    } else if ((seg = segmentOf(name, "_norm"))) {
-      // GetNormError() is a percentage of the nominal norm; this reproduces
-      // the penalty AZURECalc::operator() adds during a Minuit fit.
-      kind = PARAM_NORM;
-      mean = seg->GetNominalNorm();
-      std = mean / 100.0 * seg->GetNormError();
-    } else if ((seg = segmentOf(name, "_energy_shift_sqrt"))) {
-      kind = PARAM_SHIFT_SQRT;
-      mean = 0.0;  // shift priors are centred on no shift (dev 0dd28e5, ESegment::AddShiftPenalty)
-      std = seg->GetEnergyShiftSqrtError();
-    } else if ((seg = segmentOf(name, "_energy_shift"))) {
-      kind = PARAM_SHIFT;
-      mean = seg->GetNominalEnergyShift();  // 0, or the explicit prior_centre row
-      std = seg->GetEnergyShiftError();
-    } else if (abundancePrior.count(name)) {
-      kind = PARAM_ABUNDANCE;
-      mean = abundancePrior[name].first;
-      std = abundancePrior[name].second;
-    } else if ((seg = shiftFnOf(name, term))) {
-      // a shift-function parameter: the energy-shift prior rule (as dev)
-      kind = PARAM_SHIFT;
-      mean = 0.0;  // from no shift, as ESegment::AddShiftPenalty
-      std = seg->GetShiftFnErrors()[term];
-    } else if ((te = screeningOf(name))) {
-      // an electron-screening potential (eV): its value and sigma are the
-      // prior, as the fit uses them (as dev)
-      kind = PARAM_SCREENING;
-      mean = te->GetScreeningNominal();
-      std = te->GetScreeningSigma();
-    } else if ((te = densityOf(name))) {
-      // a fitted target density (atoms/cm^2): the line's density and sigma are the prior (as dev)
-      kind = PARAM_DENSITY;
-      mean = te->GetDensityNominal();
-      std = te->GetDensitySigma();
-    } else if ((te = dopplerOf(name))) {
-      // a fitted Doppler temperature (K): the line's T and sigma are the prior (as dev)
-      kind = PARAM_DOPPLER;
-      mean = te->GetDopplerNominal();
-      std = te->GetDopplerSigma();
-    } else if ((seg = segmentOf(name, "_thickness"))) {
-      // a fitted sample thickness (atoms/barn): the line's n and sigma are the prior, none for a
-      // thickness-group follower, whose parameter is fixed (as dev)
-      kind = PARAM_THICKNESS;
-      mean = seg->GetNominalThickness();
-      std = seg->IsThicknessGroupFollower() ? 0.0 : seg->GetThicknessSigma();
-    } else if (name.compare(0, 5, "cbkg_") == 0) {
-      kind = PARAM_CBKG;
-    } else {
-      unknownNames.push_back(name);
+    if ((int)i < pmap.NumFull()) {
+      switch (pmap.Desc((int)i).kind) {
+        case ParamKind::LevelEnergy: kind = PARAM_ENERGY; break;
+        case ParamKind::Gamma: kind = PARAM_WIDTH; break;
+        case ParamKind::Norm: kind = PARAM_NORM; break;
+        case ParamKind::EnergyShift: kind = PARAM_SHIFT; break;
+        case ParamKind::EnergyShiftSqrt: kind = PARAM_SHIFT_SQRT; break;
+        case ParamKind::EnergyShiftFn: kind = PARAM_SHIFT; break;  // the energy-shift prior rule
+        case ParamKind::Abundance: kind = PARAM_ABUNDANCE; break;
+        case ParamKind::Screening: kind = PARAM_SCREENING; break;
+        case ParamKind::Density: kind = PARAM_DENSITY; break;
+        case ParamKind::Doppler: kind = PARAM_DOPPLER; break;
+        case ParamKind::Thickness: kind = PARAM_THICKNESS; break;
+        case ParamKind::ThmCoherent: kind = PARAM_CBKG; break;
+      }
     }
+    if (kind < 0) unknownNames.push_back(paramNames_[i]);
+    auto it = diagonal.find((int)i);
     allKinds.push_back(kind);
-    allAutoMean.push_back(mean);
-    allAutoStd.push_back(std);
+    allAutoMean.push_back(it == diagonal.end() ? 0.0 : it->second.first);
+    // A prior kind without a prior (no quoted error) is 0, sampled uniformly; levels and cbkg -1.
+    allAutoStd.push_back(it != diagonal.end() ? it->second.second
+                                              : (kind == PARAM_ENERGY || kind == PARAM_WIDTH || kind == PARAM_CBKG) ? -1.0 : 0.0);
   }
 
   if (allKinds.size() != fixed_.size() || !unknownNames.empty()) {
@@ -584,6 +478,49 @@ void AZURECalcMCMC::BuildAutoPriors() const {
       else
         noPriorLabels.push_back(AZURELabel::Parameter(compound(), data(), freeAllIndex[i]));
     }
+  }
+
+  // Nuisance priors (<parameterSettings> useAsNuisance) on level parameters and THM coherent backgrounds, as the fit
+  // applies them (docs/upgrade/objective.md D6, step 5): reduced amplitudes in an RWA chain, the physical width in a
+  // physical-parameter chain.  They are part of the shared configuration, so they replace a prior the MCMC
+  // configuration set on the same parameter (noted).
+  {
+    AZUREParams scratch;
+    compound()->FillMnParams(scratch.GetMinuitParams(), &configure());
+    data()->FillMnParams(scratch.GetMinuitParams());
+    ParameterLimitsManager limits(&configure(), compound(), data(), &scratch);
+    int nNuisance = 0;
+    std::string overridden;
+    if (limits.ReadParameterSettings()) {
+      limits.ApplyAllParameterSettings(scratch.GetMinuitParams());
+      for (size_t i = 0; i < nfree; ++i) {
+        const int kind = freeKinds_[i];
+        if (kind != PARAM_ENERGY && kind != PARAM_WIDTH && kind != PARAM_CBKG) continue;
+        double nominal, sigma;
+        const bool has = useRWA ? limits.NuisancePrior(freeAllIndex[i], nominal, sigma)
+                                : limits.NuisancePriorPhysical(freeAllIndex[i], nominal, sigma);
+        if (!has) continue;
+        const std::string label = AZURELabel::Parameter(compound(), data(), freeAllIndex[i]);
+        if (usePriors_[i] && priorStds_[i] > 0.0) {
+          overridden += (overridden.empty() ? "" : ", ") + label;
+        } else if (kind == PARAM_CBKG) {
+          nCbkgSet++;
+        } else {  // the summary below counted it as a level parameter without a prior
+          nUserSet++;
+          noPriorLabels.erase(std::remove(noPriorLabels.begin(), noPriorLabels.end(), label), noPriorLabels.end());
+        }
+        priorMeans_[i] = nominal;
+        priorStds_[i] = sigma;
+        usePriors_[i] = true;
+        nNuisance++;
+      }
+    }
+    if (nNuisance > 0)
+      configure().outStream << "Nuisance priors from <parameterSettings>: " << nNuisance << " level/background parameter"
+                            << (nNuisance == 1 ? "" : "s") << ", as in the fit\n";
+    if (!overridden.empty())
+      configure().Note("Note: MCMC: the <parameterSettings> nuisance prior replaces the MCMC prior set on " + overridden +
+                       " (the MCMC shares the fit's configuration).");
   }
 
   configure().outStream << "Automatic priors: " << nAutoNorm << " normalization"
@@ -1078,7 +1015,7 @@ bool AZURECalcMCMC::RunMCMCSampling(int nwalkers, int nsteps, const std::vector<
     // Classify the varying parameters and derive the normalization and
     // energy-shift priors from the data. Must follow UpdateParameterVectors()
     // (it needs fixed_) and precede any log-probability evaluation.
-    BuildAutoPriors();
+    BuildAutoPriors(useRWA);
     // The prior parameter covariance (after the automatic priors, which it replaces for its parameters).
     if (!SetUpPriorCovariance(useRWA)) {
       configure().outStream << "MCMC sampling not started." << std::endl;

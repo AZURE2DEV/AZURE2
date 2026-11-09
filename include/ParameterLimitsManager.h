@@ -72,6 +72,9 @@ class ParameterLimitsManager {
    * the parameters this manager was applied to (which, with a param.par file,
    * need not match a freshly filled parameter list).
    */
+  /// As NuisancePrior, in the parameter's own units also for a width (the physical width, eV): an MCMC that samples
+  /// physical parameters.
+  bool NuisancePriorPhysical(int actualIndex, double &nominal, double &error) const;
   bool NuisancePrior(int actualIndex, double &nominal, double &error) const;
 
  private:

@@ -704,6 +704,15 @@ double ParameterLimitsManager::GetConvertedErrorByIndex(int nonFixedIndex) const
   return setting->error;
 }
 
+bool ParameterLimitsManager::NuisancePriorPhysical(int actualIndex, double &nominal, double &error) const {
+  if (actualIndex < 0 || actualIndex >= (int)priorByActualIndex_.size()) return false;
+  const ParameterSetting *setting = priorByActualIndex_[actualIndex];
+  if (!setting) return false;
+  nominal = setting->nominalValue;
+  error = setting->error;
+  return error > 0.0;
+}
+
 bool ParameterLimitsManager::NuisancePrior(int actualIndex, double &nominal, double &error) const {
   if (actualIndex < 0 || actualIndex >= (int)priorByActualIndex_.size()) return false;
   const ParameterSetting *setting = priorByActualIndex_[actualIndex];
