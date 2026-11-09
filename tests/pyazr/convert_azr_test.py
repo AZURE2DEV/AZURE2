@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """pyazr.convert_azr: an old-format project (format 1) in the updated format (docs/upgrade/project.md section 4).
 
-On tests/7Li_p_a (with <lastRun>, an <mcmc> block of run settings and a <potential> block without a hybrid
+On tests/17O (with <lastRun>, an <mcmc> block of run settings and a <potential> block without a hybrid
 potential) and tests/hybrid_potential (a hybrid potential for one of two pairs):
   1. the converted file is format 2 (_azure2.project_format) and lists its changes; converting it again changes
      nothing; an existing target is not overwritten;
-  2. <lastRun> is gone, and <potential> only where a pair uses the hybrid potential;
+  2. <lastRun> and <mcmc>'s run settings are gone, and <potential> remains only where a pair uses the hybrid
+     potential;
   3. a session on the converted file gives the chi-squared of a session on the original, to 1e-12.
 Needs the compiled engine; skips cleanly without it.  Run from anywhere:  python3 tests/pyazr/convert_azr_test.py
 """
@@ -18,7 +19,7 @@ import numpy as np
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
-CASES = [("7Li_p_a", "7Li_p_a.azr", False), ("hybrid_potential", "hybrid_potential.azr", True)]
+CASES = [("17O", "17O.azr", False), ("hybrid_potential", "hybrid_potential.azr", True)]
 
 failures = []
 
@@ -58,6 +59,7 @@ for project, azr, hybrid in CASES:
         except FileExistsError:
             check(f"{project}: an existing target is not overwritten", True)
         check(f"{project}: <lastRun> gone", b"<lastRun>" not in text)
+        check(f"{project}: <mcmc>'s run settings gone", b"nwalkers" not in text)
         check(f"{project}: <potential> {'kept (hybrid)' if hybrid else 'gone (no hybrid)'}",
               (b"<potential>" in text) == hybrid)
         a = azure2(old, cwd=d)
