@@ -380,18 +380,18 @@ void AZURECalcMCMC::BuildAutoPriors(bool useRWA) const {
     int kind = -1;
     if ((int)i < pmap.NumFull()) {
       switch (pmap.Desc((int)i).kind) {
-        case ParamKind::LevelEnergy: kind = PARAM_ENERGY; break;
-        case ParamKind::Gamma: kind = PARAM_WIDTH; break;
-        case ParamKind::Norm: kind = PARAM_NORM; break;
-        case ParamKind::EnergyShift: kind = PARAM_SHIFT; break;
-        case ParamKind::EnergyShiftSqrt: kind = PARAM_SHIFT_SQRT; break;
-        case ParamKind::EnergyShiftFn: kind = PARAM_SHIFT; break;  // the energy-shift prior rule
-        case ParamKind::Abundance: kind = PARAM_ABUNDANCE; break;
-        case ParamKind::Screening: kind = PARAM_SCREENING; break;
-        case ParamKind::Density: kind = PARAM_DENSITY; break;
-        case ParamKind::Doppler: kind = PARAM_DOPPLER; break;
-        case ParamKind::Thickness: kind = PARAM_THICKNESS; break;
-        case ParamKind::ThmCoherent: kind = PARAM_CBKG; break;
+        case ::ParamKind::LevelEnergy: kind = PARAM_ENERGY; break;
+        case ::ParamKind::Gamma: kind = PARAM_WIDTH; break;
+        case ::ParamKind::Norm: kind = PARAM_NORM; break;
+        case ::ParamKind::EnergyShift: kind = PARAM_SHIFT; break;
+        case ::ParamKind::EnergyShiftSqrt: kind = PARAM_SHIFT_SQRT; break;
+        case ::ParamKind::EnergyShiftFn: kind = PARAM_SHIFT; break;  // the energy-shift prior rule
+        case ::ParamKind::Abundance: kind = PARAM_ABUNDANCE; break;
+        case ::ParamKind::Screening: kind = PARAM_SCREENING; break;
+        case ::ParamKind::Density: kind = PARAM_DENSITY; break;
+        case ::ParamKind::Doppler: kind = PARAM_DOPPLER; break;
+        case ::ParamKind::Thickness: kind = PARAM_THICKNESS; break;
+        case ::ParamKind::ThmCoherent: kind = PARAM_CBKG; break;
       }
     }
     if (kind < 0) unknownNames.push_back(paramNames_[i]);
