@@ -80,6 +80,11 @@ like physics/'s `CNucSystem`):
 4. The API returns the objective's terms (value and gradient), and pyazr's `penalties()` becomes a call. Check:
    `tests/pyazr/output_penalties_test.py` and pyazr's χ² identical, except under decisions D3 and D5.
 5. MCMC reads the same terms as log-priors (−χ²/2 plus its normalization constants). This needs decisions D1 and D2.
+   **PI, 2026-11-09: the MCMC shares the fit's configuration** ("The MCMC should share the same configuration with the
+   frequentist"). The posterior is exp(−χ²/2) of the fit's objective, term for term (nuisance priors and the prior
+   covariance included), from the same `.azr`. The MCMC differs only where stated: J ≤ 0 lies outside the support
+   (D2), and its Gaussian normalization constants. Its name-based `BuildAutoPriors` is replaced by the terms'
+   enumeration.
 
 ## 3. Decisions (the paths disagree today; unifying them changes χ² somewhere)
 
