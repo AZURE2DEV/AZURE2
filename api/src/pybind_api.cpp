@@ -26,6 +26,7 @@
 #include <sstream>
 #include "azure2/io/Convert.h"
 #include "azure2/io/Document.h"
+#include "azure2/io/LevelGrouping.h"
 #include "AZUREAPI.h"
 #include "Config.h"
 #include "GSLException.h"
@@ -962,6 +963,20 @@ PYBIND11_MODULE(_azure2, m) {
         return d;
       },
       py::arg("line"), "One <segmentsData> line as AZURE2 reads it (SegLine).");
+  // The level of a <levels> line (io::LevelGrouper): the rule of CNuc::Fill, for pyazr's AzrModel.  assign returns
+  // (level, kind, other level, its first level ID); kind: "joined", "new", "same_energy", "new_nearby".
+  {
+    using azure2::io::LevelGrouper;
+    py::class_<LevelGrouper>(m, "LevelGrouper")
+        .def(py::init<>())
+        .def("assign", [](LevelGrouper &g, int group, double energy, int id) {
+          const LevelGrouper::Slot s = g.Assign(group, energy, id);
+          const char *kind = s.kind == LevelGrouper::Kind::Joined ? "joined"
+                             : s.kind == LevelGrouper::Kind::NewLevel ? "new"
+                             : s.kind == LevelGrouper::Kind::SameEnergy ? "same_energy" : "new_nearby";
+          return py::make_tuple(s.level, kind, s.other, s.otherID);
+        }, py::arg("group"), py::arg("energy"), py::arg("id"));
+  }
   // The project file's format and its conversion (io::ConvertToFormat2; docs/upgrade/project.md section 4), on text.
   m.def(
       "convert_project_text",

@@ -471,6 +471,13 @@ add_test(NAME pyazr_convert_azr
                  ${CMAKE_CURRENT_SOURCE_DIR}/convert_azr_test.py)
 set_tests_properties(pyazr_convert_azr PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
+# AzrModel groups <levels> lines as the engine does (io::LevelGrouper; docs/upgrade/project.md P2): interleaved lines
+# give the same levels, in AzrModel and in the engine.
+add_test(NAME pyazr_level_grouping
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/level_grouping_test.py)
+set_tests_properties(pyazr_level_grouping PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
 add_test(NAME pyazr_output_penalties
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/output_penalties_test.py)

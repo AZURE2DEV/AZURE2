@@ -1624,19 +1624,35 @@ class AzrModel:
         body = "".join(lines[lv[1] + 1:lv[2]])
         suffix = "".join(lines[lv[2]:])
 
-        # group channel lines into levels by their levelID
-        levels, cur, cur_id = [], [], None
+        # Channel lines into levels.  Active lines by the engine's rule (io::LevelGrouper, as CNuc::Fill; project.md
+        # P2): within a J^pi group of a compound nucleus, a line joins the level of its ID within 1 keV, else one at
+        # the identical energy, else opens a new level -- wherever the lines stand in the block.  Inactive lines,
+        # which the engine does not read, stay grouped by consecutive ID.
+        grouper = _engine_module().LevelGrouper()
+        nucleus_of_channel = _nuclei_module().nucleus_of_channel
+        groups, slots = {}, {}
+        levels, inactive = [], None
         for line in body.splitlines():
             if not line.strip():
                 continue
             ch = AzrChannel.from_line(line)
-            if cur and ch.levelID != cur_id:
-                levels.append(AzrLevel(cur))
-                cur = []
-            cur.append(ch)
-            cur_id = ch.levelID
-        if cur:
-            levels.append(AzrLevel(cur))
+            if not ch.active:
+                if inactive is not None and inactive.channels[-1].levelID == ch.levelID:
+                    inactive.channels.append(ch)
+                else:
+                    inactive = AzrLevel([ch])
+                    levels.append(inactive)
+                continue
+            inactive = None
+            key = (int(round(2 * ch.levelJ)), int(ch.levelPi), nucleus_of_channel(ch))
+            group = groups.setdefault(key, len(groups) + 1)
+            level = grouper.assign(group, float(ch.levelE), int(ch.levelID))[0]
+            lv = slots.get((group, level))
+            if lv is None:
+                lv = slots[(group, level)] = AzrLevel([ch])
+                levels.append(lv)
+            else:
+                lv.channels.append(ch)
         return cls(prefix, levels, suffix, source=path)
 
     def _final_newline(self):
