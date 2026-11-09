@@ -139,8 +139,8 @@ Available Options
        threads, write it to ``FILE`` (default as for ``--coulomb-table``),
        report progress in steps of 10 % and exit; no project file is needed.
        The same build as **Configure → Build Coulomb Table...** in the GUI.
-   * - ``--convert OLD NEW``
-     - Write the project ``OLD`` in the updated file format (format 2) to
+   * - ``--convert``
+     - ``--convert OLD NEW``: write the project ``OLD`` in the updated file format (format 2) to
        ``NEW``, which must not exist, list what changed and exit: ``<lastRun>``
        and ``<mcmc>``'s run settings removed (read by nothing),
        ``useAdaptiveGrid`` moved from ``<potential>`` to ``<config>``,
