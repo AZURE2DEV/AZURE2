@@ -228,6 +228,16 @@ def _shiftfn_block(vals):
 
 
 @dataclass
+
+def _tag_index(lines, tag):
+    """The index of the first line that is ``tag`` once trimmed (a tag is a whole line, any spaces and line ending
+    around it; docs/upgrade/project.md, P2); ValueError when there is none."""
+    for i, line in enumerate(lines):
+        if line.strip() == tag:
+            return i
+    raise ValueError(f"{tag} is not in the file")
+
+
 class Segment:
     """One data segment: its provenance and what it measures."""
 
@@ -379,8 +389,8 @@ class SegmentSet(list):
         with open(path) as f:
             lines = f.readlines()
         try:
-            start = lines.index("<segmentsData>\n") + 1
-            end = lines.index("</segmentsData>\n")
+            start = _tag_index(lines, "<segmentsData>") + 1
+            end = _tag_index(lines, "</segmentsData>")
         except ValueError:
             raise ValueError(f"{path}: no <segmentsData> block.")
         segs = cls()
@@ -664,8 +674,8 @@ class TestSegmentSet(list):
         with open(path) as f:
             lines = f.readlines()
         try:
-            start = lines.index("<segmentsTest>\n") + 1
-            end = lines.index("</segmentsTest>\n")
+            start = _tag_index(lines, "<segmentsTest>") + 1
+            end = _tag_index(lines, "</segmentsTest>")
         except ValueError:
             # A model need not declare any extrapolations.
             return cls()

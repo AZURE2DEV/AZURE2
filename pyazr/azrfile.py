@@ -999,6 +999,41 @@ def _thm_read_weight_table(path):
     return ""
 
 
+
+def _document(text):
+    """The engine's lossless document of a project's text (``_azure2.Document``; docs/upgrade/project.md): the one
+    reading of the file that pyazr and AZURE2 share.  Needs the compiled module."""
+    from . import _azure2
+    return _azure2.Document.parse(text.encode("utf-8", "surrogateescape"))
+
+
+def _tag_index(lines, tag):
+    """The index of the first line that is ``tag`` once trimmed (the document's rule for a tag: a whole line, any
+    spaces and line ending around it); ValueError when there is none, as list.index."""
+    for i, line in enumerate(lines):
+        if line.strip() == tag:
+            return i
+    raise ValueError(f"{tag} is not in the file")
+
+
+def _has_tag(lines, tag):
+    return any(line.strip() == tag for line in lines)
+
+
+def _lines(text):
+    """The lines of ``text`` with their endings, split as the document splits them (on newline only: str.splitlines
+    also splits on form feeds and Unicode separators, which would shift the line numbers)."""
+    return re.findall(r"[^\n]*\n|[^\n]+$", text)
+
+
+def _section(doc, name):
+    """The first top-level section ``name`` of a document as (name, open line, close line or -1, depth, parent), or
+    None."""
+    for sec in doc.sections():
+        if sec[0] == name and sec[3] == 0:
+            return sec
+    return None
+
 class AzrChannel:
     """One channel line (31 fields, plus e1 and/or the THM binding energy and
     width flag).  Level fields are shared by a level's lines.
@@ -1563,14 +1598,16 @@ class AzrModel:
         """Parse a .azr file; only <levels> is interpreted, the rest is kept verbatim."""
         with open(path) as f:
             text = f.read()
-        start = text.find("<levels>")
-        end = text.find("</levels>")
-        if start == -1 or end == -1:
+        doc = _document(text)
+        lv = _section(doc, "levels")
+        if lv is None or lv[2] < 0:
             raise ValueError(f"{path}: no <levels> ... </levels> block.")
-        body_start = text.index("\n", start) + 1
-        prefix = text[:body_start]
-        body = text[body_start:end]
-        suffix = text[end:]
+        # Whole lines: up to and including the <levels> line, its body, and from the </levels> line on (the
+        # engine's document, docs/upgrade/project.md: a tag is a whole trimmed line, not a substring).
+        lines = _lines(text)
+        prefix = "".join(lines[:lv[1] + 1])
+        body = "".join(lines[lv[1] + 1:lv[2]])
+        suffix = "".join(lines[lv[2]:])
 
         # group channel lines into levels by their levelID
         levels, cur, cur_id = [], [], None
@@ -1989,8 +2026,8 @@ class AzrModel:
         """
         lines = self._suffix.splitlines()
         try:
-            start = lines.index("<segmentsTest>")
-            end = lines.index("</segmentsTest>")
+            start = _tag_index(lines, "<segmentsTest>")
+            end = _tag_index(lines, "</segmentsTest>")
         except ValueError:
             # No block yet: append one at the end of the tail.
             self._suffix = (self._suffix.rstrip("\n") + "\n\n<segmentsTest>\n"
@@ -2076,7 +2113,7 @@ class AzrModel:
         line = "  ".join(_fmt(t) if not isinstance(t, str) else t for t in toks)
         lines = self._suffix.splitlines()
         if "<segmentsTest>" in lines:
-            end = lines.index("</segmentsTest>")
+            end = _tag_index(lines, "</segmentsTest>")
             self._set_suffix_lines(lines[:end] + [line] + lines[end:])
         else:
             self._splice_segments_test([line])
@@ -2111,8 +2148,8 @@ class AzrModel:
         """
         lines = self._suffix.splitlines()
         try:
-            start = lines.index("<segmentsTest>") + 1
-            end = lines.index("</segmentsTest>")
+            start = _tag_index(lines, "<segmentsTest>") + 1
+            end = _tag_index(lines, "</segmentsTest>")
         except ValueError:
             raise ValueError("no <segmentsTest> block to trim.")
         body = [ln for ln in lines[start:end] if ln.strip()]
@@ -2203,7 +2240,7 @@ class AzrModel:
         lines = self._suffix.splitlines()
         if "<abundances>" not in lines:
             raise ValueError("no <abundances> block (set an abundance first).")
-        a, b = lines.index("<abundances>"), lines.index("</abundances>")
+        a, b = _tag_index(lines, "<abundances>"), _tag_index(lines, "</abundances>")
         prefix = f"{sample}: " if sample else ""
         new = None if sigma is None else f"{prefix}sum {_fmt(float(sigma))}"
         for i in range(a + 1, b):
@@ -2227,7 +2264,7 @@ class AzrModel:
     def _abundance_lines(self):
         lines = self._suffix.splitlines()
         try:
-            a, b = lines.index("<abundances>"), lines.index("</abundances>")
+            a, b = _tag_index(lines, "<abundances>"), _tag_index(lines, "</abundances>")
         except ValueError:
             return []
         return [ln for ln in lines[a + 1:b] if ln.strip() and not ln.strip().startswith("#")]
@@ -2255,10 +2292,10 @@ class AzrModel:
         new = f"{prefix}{nuc.Z} {nuc.A} {_fmt(value)} {1 if vary else 0} {_fmt(sigma)}"
         lines = self._suffix.splitlines()
         if "<abundances>" not in lines:
-            at = lines.index("</levels>") + 1 if "</levels>" in lines else 0
+            at = _tag_index(lines, "</levels>") + 1 if "</levels>" in lines else 0
             lines[at:at] = ["<abundances>", new, "</abundances>"]
         else:
-            a, b = lines.index("<abundances>"), lines.index("</abundances>")
+            a, b = _tag_index(lines, "<abundances>"), _tag_index(lines, "</abundances>")
             for i in range(a + 1, b):
                 name, rest = _split_sample_prefix(lines[i])
                 t = rest.split()
@@ -2341,7 +2378,7 @@ class AzrModel:
         ``output/scatteringLengths.out``."""
         lines = self._suffix.splitlines()
         try:
-            a, b = lines.index("<scatteringLengths>"), lines.index("</scatteringLengths>")
+            a, b = _tag_index(lines, "<scatteringLengths>"), _tag_index(lines, "</scatteringLengths>")
         except ValueError:
             return []
         out = []
@@ -2364,7 +2401,7 @@ class AzrModel:
         entries = list(entries)
         lines = self._suffix.splitlines()
         if "<scatteringLengths>" in lines:
-            a, b = lines.index("<scatteringLengths>"), lines.index("</scatteringLengths>")
+            a, b = _tag_index(lines, "<scatteringLengths>"), _tag_index(lines, "</scatteringLengths>")
             del lines[a:b + 1]
             at = a
         else:
@@ -2688,7 +2725,7 @@ class AzrModel:
         lines = self._suffix.splitlines()
         if "<segmentsData>" not in lines:
             return lines, []
-        a, b = lines.index("<segmentsData>"), lines.index("</segmentsData>")
+        a, b = _tag_index(lines, "<segmentsData>"), _tag_index(lines, "</segmentsData>")
         return lines, [(i, lines[i]) for i in range(a + 1, b) if lines[i].strip()]
 
     @property
@@ -3164,7 +3201,7 @@ class AzrModel:
         lines = self._suffix.splitlines()
         if "<segmentsData>" not in lines:
             raise ValueError("no <segmentsData> block to add to.")
-        end = lines.index("</segmentsData>")
+        end = _tag_index(lines, "</segmentsData>")
         self._set_suffix_lines(lines[:end] + [line] + lines[end:])
         return self
 
@@ -3205,8 +3242,8 @@ class AzrModel:
         """
         lines = self._suffix.splitlines()
         try:
-            start = lines.index("<segmentsData>")
-            end = lines.index("</segmentsData>")
+            start = _tag_index(lines, "<segmentsData>")
+            end = _tag_index(lines, "</segmentsData>")
         except ValueError:
             raise ValueError("no <segmentsData> block to clear.")
         self._set_suffix_lines(lines[:start + 1] + lines[end:])
@@ -3218,8 +3255,8 @@ class AzrModel:
         """The raw ``<targetInt>`` lines (one experimental effect each)."""
         lines = self._suffix.splitlines()
         try:
-            start = lines.index("<targetInt>") + 1
-            end = lines.index("</targetInt>")
+            start = _tag_index(lines, "<targetInt>") + 1
+            end = _tag_index(lines, "</targetInt>")
         except ValueError:
             return []
         return [ln for ln in lines[start:end] if ln.strip()]
@@ -3227,8 +3264,8 @@ class AzrModel:
     def _splice_target_int(self, new_lines):
         lines = self._suffix.splitlines()
         try:
-            start = lines.index("<targetInt>")
-            end = lines.index("</targetInt>")
+            start = _tag_index(lines, "<targetInt>")
+            end = _tag_index(lines, "</targetInt>")
         except ValueError:
             self._suffix = (self._suffix.rstrip("\n") + "\n\n<targetInt>\n"
                             + "\n".join(new_lines) + "\n</targetInt>"
@@ -3347,7 +3384,7 @@ class AzrModel:
         line = "  ".join(t if isinstance(t, str) else _fmt(t) for t in toks)
         lines = self._suffix.splitlines()
         if "<targetInt>" in lines:
-            end = lines.index("</targetInt>")
+            end = _tag_index(lines, "</targetInt>")
             self._set_suffix_lines(lines[:end] + [line] + lines[end:])
         else:
             self._splice_target_int([line])
@@ -3888,7 +3925,7 @@ class AzrModel:
         block = ["<thm>"] + body + ["</thm>"]
         lines = self._suffix.splitlines()
         if "</targetInt>" in lines:
-            end = lines.index("</targetInt>") + 1
+            end = _tag_index(lines, "</targetInt>") + 1
             self._set_suffix_lines(lines[:end] + block + lines[end:])
         else:
             self._set_suffix_lines(lines + block)
@@ -3935,7 +3972,7 @@ class AzrModel:
         block = ["<thm>"] + body + ["</thm>"]
         lines = self._suffix.splitlines()
         if "</targetInt>" in lines:
-            end = lines.index("</targetInt>") + 1
+            end = _tag_index(lines, "</targetInt>") + 1
             self._set_suffix_lines(lines[:end] + block + lines[end:])
         else:
             self._set_suffix_lines(lines + block)
@@ -3947,7 +3984,7 @@ class AzrModel:
         lines = self._suffix.splitlines()
         if "<targetInt>" not in lines:
             return lines, []
-        a, b = lines.index("<targetInt>"), lines.index("</targetInt>")
+        a, b = _tag_index(lines, "<targetInt>"), _tag_index(lines, "</targetInt>")
         return lines, [(i, lines[i]) for i in range(a + 1, b) if lines[i].strip()]
 
     @property

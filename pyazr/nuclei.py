@@ -319,9 +319,10 @@ def merge_projects(models, out, abundances, sum_sigma=0.0, shared=(), natural=Tr
 
     # 6. assemble: member 0's config (output dir to out's), merged levels, abundances, segments, targetInt
     base = members[0]
-    text = base._prefix
-    text = text[:text.index("<levels>")]
-    config = text[text.index("<config>"):text.index("</config>")].rstrip("\n").split("\n")
+    from .azrfile import _tag_index
+    prefix = base._prefix.splitlines()
+    prefix = prefix[:_tag_index(prefix, "<levels>")]
+    config = prefix[_tag_index(prefix, "<config>"):_tag_index(prefix, "</config>")]
     config = [ln for ln in config if not ln.strip().startswith("abundanceSumSigma=")]
     if sum_sigma > 0:
         config.append(f"abundanceSumSigma={sum_sigma:g}")

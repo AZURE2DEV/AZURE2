@@ -122,3 +122,11 @@ output round-trips byte for byte.
   outputs of the original and the converted file are bit-identical (179 × 3).
 - Converting a format-2 file changes nothing. The converter's report lists exactly the removed and moved sections.
 - A file whose meaning changes under P2/P3 is reported line by line, with both readings.
+
+## 5. pyazr on the engine's document (step 3, as built so far)
+
+- `_azure2.Document` binds `io::Document`. **pyazr now needs the compiled engine module to read a project:** a
+  pure-Python fallback would be the second parser that Phase 3 removes.
+- `AzrModel.from_file` takes `<levels>` from the document (whole-line tags), and every section search in `azrfile`,
+  `datasets`, `azure2`, `bands` and `nuclei` uses the document's tag rule (`_tag_index`: a whole trimmed line). Band
+  directories keep their names (the same bytes are hashed).

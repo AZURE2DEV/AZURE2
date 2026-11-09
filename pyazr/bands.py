@@ -651,8 +651,11 @@ def trimmed_model(azr_file, keys=None, grids=None, cwd=None, workdir=None):
         model_file.set_extrapolations(list(grids))
 
     if workdir is None:
-        block = model_file._suffix.split("<segmentsTest>")[1].split(
-            "</segmentsTest>")[0]
+        from .azrfile import _tag_index
+        suffix = model_file._suffix.splitlines(keepends=True)
+        # The text between the tags, starting with the opening tag's newline: the bytes the directory name was
+        # always hashed from, so existing band directories stay valid.
+        block = "\n" + "".join(suffix[_tag_index(suffix, "<segmentsTest>") + 1:_tag_index(suffix, "</segmentsTest>")])
         tag = hashlib.sha1(block.encode()).hexdigest()[:10]
         workdir = os.path.join(cwd, "output", "bands", tag)
     model_file.set_output_dir(os.path.relpath(workdir, cwd))
