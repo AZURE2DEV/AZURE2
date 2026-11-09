@@ -118,6 +118,12 @@ double range), with the tolerance set from the measured error; ρW′/W against 
 eight threads; `invalid_argument` cases. Outside physics/, a reference test compares with GSL (where GSL gives a
 value) and times both. Speed decides the engine part: `ECIntegral` spends about 85 % of its time in GSL's U.
 
+**Part 1 verified (2026-11-09; build of bf8622e2, GCC 11.5 Release, pyazr on).** No warnings. `ctest -LE slow`
+114/114, with `physics_whittaker`, `whittaker_gsl` and `pyazr_whittaker_wave` (the binding) passing in the full
+build; 1 vs 8 threads byte-identical (T1–T3, 13N, three bases); the 179 projects × 3 bases against a18fe89e:
+2040/2040 files identical (the engine does not call the new functions yet). `run_tests.sh` was not run: no engine
+path changed.
+
 **Engine (step 3b (i), second part, after the timing).** `WhitFunc` becomes a thin adapter over `whittaker` /
 `whittaker_scaled` (it keeps η_b and ρ from `Kinematics`); `ShftFunc`'s bound branch takes ρW′/W in place of
 `CoulombTable::ExactBound` (GSL's U ratio, trusted for η_b ≤ 1000 and η_b ≤ 50 or z ≥ 0.05, linearly interpolated
