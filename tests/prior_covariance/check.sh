@@ -14,7 +14,8 @@
 #       width and an energy shift (the shift's gradient takes the segment-local finite-difference path): analytic
 #       = finite differences (1e-6 of the largest), the Jacobian path = the adjoint gradient (1e-10 of the largest,
 #       the finite-differenced shift column to 1e-8 of its own), and the gradient with the prior minus the gradient
-#       without it = 2 C^-1 (p - mu) on the three parameters (1e-7) and 0 elsewhere (adjoint and Jacobian paths);
+#       without it = 2 C^-1 (p - mu) minus the diagonal priors it replaces (D3) on the three parameters (1e-7) and 0
+#       elsewhere (adjoint and Jacobian paths);
 #   (d) a norm the data do not constrain (its segment's errors x 1e8): a fit returns the prior mean; with a
 #       correlated prior (rho 0.95) and the other norm pinned by the data, it lands on the conditional mean
 #       mu_B + C_AB/C_AA (A - mu_A), 0.024 away from mu_B -- to 1e-4, MIGRAD (--use-gradient) and --use-lm;
@@ -195,7 +196,10 @@ if [ -s "$WORK/c_none/output/param.par" ]; then
       || bad "(c) with the prior: gradient vs finite differences $fd of the largest"
     if le "$jac" 1e-10 && le "$jsh" 1e-8; then ok "(c) Jacobian path = adjoint ($jac of the largest; the shift column $jsh of its own)"
     else bad "(c) Jacobian path vs adjoint: $jac of the largest, shift column $jsh"; fi
-    # the prior's own gradient: (with - without) = 2 C^-1 (p - mu) at the start (indices: norm 11, width_2_1 3, shift 13)
+    # the prior's own gradient: (with - without) = 2 C^-1 (p - mu) at the start (indices: norm 11, width_2_1 3, shift 13),
+    # minus the diagonal priors the covariance replaces (docs/upgrade/objective.md D3, 2026-11-09): segment 1's norm
+    # prior (error 10 %, 2 (n - n0)/sigma^2 = 0 at n = n0 = 1) and its shift prior (error 0.01: 2 * 0.002 / 0.01^2).
+    # Before D3 both were applied and the difference was 2 C^-1 (p - mu) alone.
     read -r dg djac drest <<< "$("$PY" -I - "$WORK/c_prior/rows" "$WORK/c_none/rows" <<'PYEOF'
 import sys
 import numpy as np
@@ -204,6 +208,7 @@ o = {int(r.split()[0]): [float(v) for v in r.split()[1:4]] for r in open(sys.arg
 C = np.array([[1e-4, 2e-5, 1e-7], [2e-5, 1e-3, -2e-6], [1e-7, -2e-6, 1e-5]])
 d = np.array([1.0 - 1.05, 0.75 - 0.7, 0.002 - 0.004])
 g = 2 * np.linalg.solve(C, d)
+g -= np.array([2 * (1.0 - 1.0) / 0.1 ** 2, 0.0, 2 * 0.002 / 0.01 ** 2])  # the replaced diagonal priors (D3)
 idx = [11, 3, 13]
 big = max(abs(v[0]) for v in w.values())
 dg = max(abs((w[i][0] - o[i][0]) - g[k]) / abs(g).max() for k, i in enumerate(idx))
@@ -213,7 +218,7 @@ print(f"{dg:.2e} {dj:.2e} {rest:.2e}")
 PYEOF
 )"
     if le "$dg" 1e-7 && le "$djac" 1e-7 && le "$drest" 1e-9; then
-      ok "(c) gradient with minus without the prior = 2 C^-1 (p - mu): adjoint $dg, Jacobian path $djac; elsewhere 0 ($drest)"
+      ok "(c) gradient with minus without the prior = 2 C^-1 (p - mu) minus the replaced diagonal priors: adjoint $dg, Jacobian path $djac; elsewhere 0 ($drest)"
     else bad "(c) prior gradient: adjoint $dg, Jacobian path $djac (of the largest prior component), elsewhere $drest"; fi
   fi
 else
