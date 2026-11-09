@@ -2,6 +2,26 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-09 (evening) — split `CNuc`, step 5: coupling coefficients of the observables
+
+Branch `feature/upgrade-1-coupling` from 9be284f0 (step 4), not merged. Commits: design (`cnuc_split.md` §9,
+da3703d2, alone), physics (96917f36), engine (563a7172), record (9143239d). `CalcAngularDists`,
+`CalcCaptureAnalyzingPower` and `ThmAngular`'s Z̄ take their coefficients from `physics/ObservableCoupling` (no
+GSL; new `wigner_9j`, `racah_w`); `AngCoeff::Wigner9j` deleted; `CNuc.cpp` 3135 → 3061 lines. `SortPathways`
+moves to step 6 with the pathway trees.
+
+**Evidence.** The physics tests check the 9j and, independently of the code under test, the particle and photon
+coefficients against m-scheme angular distributions (237k checks, ≤ 1.4 × 10⁻¹⁴). The engine-side test checks
+every coefficient against the old GSL expression (≤ 4 × 10⁻¹⁵ relative, same terms kept). 179 × 3: 2063/2069
+identical; the six files left (`ec_e1m1_phase` s_1, `gamma_lab_frame` cm, in three bases) differ by at most
+3.2 × 10⁻¹⁵ of the column maximum. The sign flips in `ec_e1m1_phase` are 10⁻¹⁹ residues of a cross section that
+is exactly zero at 0° and 180°. ctest 113/113, run_tests 133/133, threads identical, timing unchanged. **Ready
+for PI review/merge**; independent of the four branches waiting.
+
+**Next.** (1) PI: merge order of the five branches (`zero-width-fixed`, `whittaker`, `brune-iteration`,
+`whittaker-engine`, `coupling`). (2) Step 6: data accessors and the pathway trees (`SortPathways`) on the System.
+(3) `ShftFunc` band; lecture 2.
+
 ## 2026-11-09 (day) — PI decisions; the Brune blocker fixed; step 3b (ii)
 
 **PI decisions.** (1) `brune-iteration`: option (i), the iteration must converge where the root exists.
