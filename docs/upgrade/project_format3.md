@@ -1077,6 +1077,8 @@ Refused with the table's message: every code in `data_kinds.md` §5.4.
   `list` of today's accumulated energies: outputs must be bit-identical to the originals on the previous engine. With
   the default (`range`), the differences must be confined to extrapolation rows and are classified (53 grids with
   another point count, 135 moved by ≤ 3.9 × 10⁻¹² relative).
+- *F11.* `experiment/` may use `io/`'s plain record structs (`azure2/io/Record.h`); `io/` includes nothing of
+  `experiment/`. The rule "experiment/ uses physics/ only" (`data_model.md` M13) is relaxed by exactly this header.
 - *F13.* Level names wait for the `<levels>` note, written when step 7 of the `CNuc` split takes the reader out of
   `CNuc` (`cnuc_split.md`).
 - *Order of work.* (1) parameter kinds as an attribute of the parameter vector, no recognition by name prefix
