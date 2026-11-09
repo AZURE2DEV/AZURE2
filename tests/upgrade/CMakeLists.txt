@@ -65,3 +65,8 @@ add_executable(derivatives_gsl_test derivatives_gsl_test.cpp)
 target_link_libraries(derivatives_gsl_test PRIVATE azure2_physics ${GSL_LIBRARIES})
 target_include_directories(derivatives_gsl_test PRIVATE ${GSL_INCLUDE_DIRS})
 add_test(NAME physics_derivatives_gsl COMMAND derivatives_gsl_test)
+
+# A fit does not depend on the number of threads: pooled working copies give a fresh copy's bits, and fits at 1 and
+# 4 threads evaluate the same vectors to the same values (tests/fit_threads/check.sh, docs/upgrade/fit_threads.md).
+add_test(NAME fit_threads COMMAND bash ${CMAKE_SOURCE_DIR}/tests/fit_threads/check.sh $<TARGET_FILE:AZURE2>)
+set_tests_properties(fit_threads PROPERTIES TIMEOUT 600)

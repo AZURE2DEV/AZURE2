@@ -1315,9 +1315,13 @@ int EData::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, const st
     }
     std::vector<double> grid = AdaptiveIntegrationGrid(gc).GenerateGrid(spec.startEnergy, spec.endEnergy, g);
     std::vector<EPoint> &subs = point->GetSubPoints();
+    // The grid kept is the one placed now, bit for bit.  Before 2026-11-09 nodes within 1e-12 (relative) of the
+    // present ones counted as unchanged and the old grid stayed: which grid a working copy then held depended on
+    // the parameter vectors it had evaluated before, and Minuit's parallel gradient hands those out by thread, so
+    // the objective at one p differed between pooled copies in its last digits and a fit depended on the thread
+    // count (docs/upgrade/fit_threads.md).
     bool same = (subs.size() == grid.size());
-    for (size_t k = 0; same && k < grid.size(); k++)
-      same = std::fabs(subs[k].GetOriginalEnergy() - grid[k]) <= 1.0e-12 * std::max(1.0, std::fabs(grid[k]));
+    for (size_t k = 0; same && k < grid.size(); k++) same = subs[k].GetOriginalEnergy() == grid[k];
     if (same) return;
     if (subs.size() != grid.size())
       moved[q] = -1.0;

@@ -61,6 +61,7 @@ Diagnostics (environment variables; standard error):
 | `AZURE_TE_WEIGHTS_CHECK=1`, `AZURE_TE_WEIGHTS_FD=1` | check the target-effect combiner weights |
 | `AZURE_POOL_CHECK=1` | compare the pooled, parallel χ² with a fresh serial one |
 | `AZURE_SERIAL_CHI2=1` | evaluate χ² serially |
+| `AZURE_TRACE_FCN=1` (or `fresh`) | print every χ² with its parameter vector, bit-exact, to compare runs; `fresh` also checks each against a fresh model copy |
 
 The finite-difference reference of `AZURE_GRAD_CHECK` uses the single-threaded χ², about 10× slower than a fit
 evaluation. Differences of 10⁻⁴–10⁻³ near narrow levels are finite-difference truncation (they shrink as h²); larger

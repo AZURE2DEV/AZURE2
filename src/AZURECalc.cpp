@@ -566,6 +566,26 @@ double AZURECalc::operator()(const vector_r &p) const {
   double chiSquared = Objective::Engine().Chi2(context);
 
   if (std::getenv("AZURE_DUMP_NONFINITE")) DumpNonFinite(p, chiSquared, localCompound, localData);
+  if (const char *trace = std::getenv("AZURE_TRACE_FCN")) {
+    // Diagnostic (docs/upgrade/fit_threads.md): each objective value with its parameter vector, bit for bit
+    // (hexadecimal floating point), so two runs can be compared value by value.  With "fresh", a fit's value is
+    // also computed on a fresh clone of the master objects: a pooled working copy must give the same bits.
+    std::ostringstream os;
+    os << std::hexfloat << "[fcn] " << thisIteration << " " << chiSquared << " |";
+    for (double v : p) os << " " << v;
+    if (isFit && std::string(trace) == "fresh") {
+      std::vector<double> segPool, segFresh;
+      Chi2On(localCompound, localData, p, &segPool);
+      std::unique_ptr<CNuc> fc(compound()->Clone());
+      std::unique_ptr<EData> fd(data()->Clone());
+      os << " || fresh " << Chi2On(fc.get(), fd.get(), p, &segFresh);
+      for (size_t s = 1; s < segPool.size() && s < segFresh.size(); s++)
+        if (segPool[s] != segFresh[s]) os << " segment " << s << " " << segPool[s] << " " << segFresh[s];
+    }
+    static std::mutex traceMutex;
+    std::lock_guard<std::mutex> lk(traceMutex);
+    std::cerr << os.str() << std::endl;
+  }
 
   if (!localData->IsErrorAnalysis() && thisIteration != 0) {
     {

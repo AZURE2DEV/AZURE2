@@ -394,6 +394,15 @@ the target-effect combiner weights; ``AZURE_POOL_CHECK=1`` compares the pooled,
 parallel :math:`\chi^2` with a fresh serial one; ``AZURE_SERIAL_CHI2=1``
 evaluates every :math:`\chi^2` serially.
 
+``AZURE_TRACE_FCN=1`` prints to standard error, for every :math:`\chi^2`
+evaluation of a calculation or a fit, its number, its value and the parameter
+vector, in hexadecimal floating point (``[fcn] N chi2 | p...``), so that two runs
+(at different thread counts, say) can be compared value by value;
+``AZURE_TRACE_FCN=fresh`` also evaluates each fit vector on a fresh copy of the
+model and prints that value after ``|| fresh``, with the segments whose
+:math:`\chi^2` differ from the pooled working copy's (a fresh copy per
+evaluation: slow).
+
 ``AZURE_DUMP_NONFINITE=1`` (or ``=<threshold>``, default :math:`10^{10}`):
 whenever a :math:`\chi^2` evaluation is non-finite or above the threshold,
 append to ``nonfinite_dump.txt`` in the working directory the parameters that

@@ -10,5 +10,6 @@
 # from every thread of the OpenMP numerical gradient (Numerical2PGradientCalculator.cxx:116-163) without
 # synchronization.  A real race in Minuit2 (vendored, not edited here: root CLAUDE.md): increments can be lost, so
 # the call count Minuit2 reports, and the --max-calls bound that uses it, are approximate under threads.  It does
-# not touch any value the fit computes.  Seen in T1-fit and T3-fit (MIGRAD, Hesse), clang 23.1.4, 8 threads.
+# not touch the objective, but a fit bounded by --max-calls can run one more MIGRAD iteration at more threads
+# (docs/upgrade/fit_threads.md section 3).  Seen in T1-fit and T3-fit (MIGRAD, Hesse), clang 23.1.4, 8 threads.
 fun:_ZNK4ROOT7Minuit29MnUserFcnclERKNS0_8LAVectorE
