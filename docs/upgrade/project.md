@@ -71,8 +71,10 @@ project files in `tests/` and `examples/`.
 ## 3. Decisions
 
 **PI, 2026-11-09:** P2 and P3 accepted as proposed. P4 replaced: "remove sections that are not needed". New: "a
-converter from the old to the updated file format so people can use the old azr files" (P5, §4). P1 (the archive)
-is still open.
+converter from the old to the updated file format so people can use the old azr files" (P5, §4). P1 (the archive): it is on another machine; "in here you have to test on what you have or can make". The
+gate is therefore the 189 project files under `tests/` and `examples/`, and variants made from them: every file
+with CRLF, CR and no final newline; with blank lines, trailing spaces and comments added between and around the
+sections; and with each section removed in turn and each single field edited in turn.
 
 - **P1, the archive.** The ROADMAP's 48,922 `.azr` files are mentioned nowhere else in the repository or its history.
   Where are they, and may a copy be used on this node, read only?
