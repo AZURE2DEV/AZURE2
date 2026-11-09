@@ -9,6 +9,8 @@
  * subsequent routines/classes follow object-oriented C++ programming conventions.
  */
 
+#include "azure2/io/Convert.h"
+#include "azure2/io/Document.h"
 #include "AZUREMain.h"
 #include "Config.h"
 #include "NucLine.h"
@@ -119,6 +121,7 @@ void printHelp() {
             << std::setw(25) << std::left << "\t--no-ec-table:" << std::setw(0) << "External capture integrals at every energy (no energy tables); shifted amplitudes interpolated." << std::endl
             << std::setw(25) << std::left << "\t--ec-convection-current:" << std::setw(0) << "The exact-form convection current (the default; undoes an earlier --no-ec-convection-current)." << std::endl
             << std::setw(25) << std::left << "\t--no-ec-convection-current:" << std::setw(0) << "With --no-long-wavelength: external capture with the charge (extended Siegert) part of the E_L operator only, without its convection-current part." << std::endl
+            << std::setw(25) << std::left << "\t--convert OLD NEW:" << std::setw(0) << "Write the old-format project OLD in the updated format (format 2) to NEW (not overwritten) and exit." << std::endl
             << std::setw(25) << std::left << "\t--build-coulomb-table[=FILE]:" << std::setw(0) << "Build the Coulomb table (about 5 min on 4 threads, 88 MB; FILE as for --coulomb-table) and exit." << std::endl
             << std::setw(25) << std::left << "\t--grid-replacement:" << std::setw(0) << "Re-place the adaptive sub-point grids as levels and shifts move (the default)." << std::endl
             << std::setw(25) << std::left << "\t--no-grid-replacement:" << std::setw(0) << "Keep the adaptive sub-point grids placed from the input file's levels (default: re-place them as levels and shifts move)." << std::endl
@@ -551,6 +554,37 @@ void getParameterFile(bool useReadline, Config &configure) {
       if (!useReadline) configure.outStream << "External Parameter File (leave blank for new file): ";
     }
   }
+}
+
+/*!
+ * --convert OLD NEW: OLD's format-2 conversion (io::ConvertToFormat2; docs/upgrade/project.md section 4) written to
+ * NEW, which must not exist; the changes are listed.  A file already in format 2 is copied unchanged.
+ */
+static int convertProject(const std::string &from, const std::string &to) {
+  std::ifstream in(from, std::ios::binary);
+  if (!in) {
+    std::cout << "ERROR: --convert: cannot read " << from << std::endl;
+    return 1;
+  }
+  if (std::ifstream(to)) {
+    std::cout << "ERROR: --convert: " << to << " exists; it is not overwritten" << std::endl;
+    return 1;
+  }
+  std::ostringstream bytes;
+  bytes << in.rdbuf();
+  azure2::io::Document doc = azure2::io::Document::Parse(bytes.str());
+  for (const std::string &problem : doc.Problems()) std::cout << "WARNING: " << from << ": " << problem << std::endl;
+  const std::vector<std::string> changes = azure2::io::ConvertToFormat2(doc);
+  std::ofstream out(to, std::ios::binary);
+  out << doc.Write();
+  if (!out) {
+    std::cout << "ERROR: --convert: cannot write " << to << std::endl;
+    return 1;
+  }
+  if (changes.empty()) std::cout << from << " is already in format 2; copied to " << to << std::endl;
+  for (const std::string &c : changes) std::cout << "  " << c << std::endl;
+  std::cout << "Wrote " << to << " (format 2)." << std::endl;
+  return 0;
 }
 
 /*!
@@ -1584,6 +1618,16 @@ int main(int argc, char *argv[]) {
 
   // Set GSL Error Handler
   gsl_set_error_handler(&GSLException::GSLErrorHandler);
+
+  // --convert OLD NEW writes OLD's format-2 conversion to NEW and exits (docs/upgrade/project.md section 4)
+  for (int i = 1; i < argc; i++)
+    if (strcmp(argv[i], "--convert") == 0) {
+      if (i + 2 >= argc) {
+        std::cout << "ERROR: --convert needs two files: --convert old.azr new.azr" << std::endl;
+        return 1;
+      }
+      return convertProject(argv[i + 1], argv[i + 2]);
+    }
 
   // --build-coulomb-table[=FILE] builds the table and exits
   for (int i = 1; i < argc; i++) {

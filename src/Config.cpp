@@ -1,5 +1,6 @@
 #include "Config.h"
 #include "InputFiles.h"
+#include "azure2/io/Convert.h"
 #include "azure2/io/Document.h"
 #include <cstdlib>
 #include "NuclearPotentialManager.h"
@@ -85,7 +86,9 @@ std::unique_ptr<std::istream> Config::SectionStream(const std::string &name) con
   if (!file || !*file) return nullptr;
   std::ostringstream bytes;
   bytes << file->rdbuf();
-  const azure2::io::Document doc = azure2::io::Document::Parse(bytes.str());
+  azure2::io::Document doc = azure2::io::Document::Parse(bytes.str());
+  // A format-1 file is read as its format-2 conversion (docs/upgrade/project.md section 4); ReadConfigFile notes it.
+  azure2::io::ConvertToFormat2(doc);
   const azure2::io::Document::Section *s = doc.Find(name);
   if (!s) return nullptr;
   std::string text;
@@ -112,10 +115,18 @@ int Config::ReadConfigFile() {
     std::unique_ptr<std::istream> file = InputFiles::Open(configfile, cacheInputFiles);
     std::ostringstream bytes;
     if (file && *file) bytes << file->rdbuf();
-    const azure2::io::Document doc = azure2::io::Document::Parse(bytes.str());  // kept alive for the loop
+    azure2::io::Document doc = azure2::io::Document::Parse(bytes.str());  // kept alive for the loops
     for (const std::string &problem : doc.Problems())
       outStream << "WARNING: " << configfile << ": " << problem << std::endl;
+    if (azure2::io::FormatOf(doc) == 1) {
+      const std::vector<std::string> changes = azure2::io::ConvertToFormat2(doc);
+      std::string list;
+      for (const std::string &c : changes) list += (list.empty() ? "" : "; ") + c;
+      Note("Note: " + configfile + " is in the old format (format 1); it is read as its format-2 conversion (" + list +
+           "). AZURE2 --convert writes the converted file.");
+    }
   }
+  useAdaptiveGrid = true;  // the default; a <config> key (format 2) or <potential> (format 1, converted) sets it
   std::istream &in = *section;
   std::string line = "";
   getline(in, line);  // <config>
@@ -226,6 +237,10 @@ int Config::ReadConfigFile() {
       relativisticReferencePair = atoi(value.c_str());
     else if (key == "priorCovariance")
       priorCovariance = value;
+    else if (key == "useAdaptiveGrid")  // format 2 (format 1: in <potential>)
+      useAdaptiveGrid = (value == "1" || value == "true");
+    else if (key == "format")  // the file format (docs/upgrade/project.md section 4); read by io::FormatOf
+      continue;
   }
   if (line != "</config>") return -1;
   // A malformed optional block has already been reported: -2, so the caller
@@ -280,7 +295,10 @@ int Config::ReadConfigFile() {
 
 int Config::ReadPotentialBlock() {
   std::unique_ptr<std::istream> section = SectionStream("potential");
-  if (!section) return 0;  // optional block, absent
+  if (!section) {  // optional block, absent: no hybrid potential (also after a project that had one)
+    NuclearPotentialManager::instance().resetToDefault();
+    return 0;
+  }
   std::istream &in = *section;
   std::string line = "";
   getline(in, line);  // <potential>

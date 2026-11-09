@@ -139,6 +139,14 @@ Available Options
        threads, write it to ``FILE`` (default as for ``--coulomb-table``),
        report progress in steps of 10 % and exit; no project file is needed.
        The same build as **Configure → Build Coulomb Table...** in the GUI.
+   * - ``--convert OLD NEW``
+     - Write the project ``OLD`` in the updated file format (format 2) to
+       ``NEW``, which must not exist, list what changed and exit: ``<lastRun>``
+       and ``<mcmc>``'s run settings removed (read by nothing),
+       ``useAdaptiveGrid`` moved from ``<potential>`` to ``<config>``,
+       ``<potential>`` kept only with a hybrid potential, and ``format=2`` added
+       to ``<config>``.  An old file still loads: it is read as its conversion,
+       with a note.
    * - ``--no-long-wavelength``
      - Electric external capture without the long-wavelength approximation:
        the radial operator :math:`\bar e_L r^L` becomes the charge term of the
