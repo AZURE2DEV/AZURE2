@@ -478,6 +478,13 @@ add_test(NAME pyazr_level_grouping
                  ${CMAKE_CURRENT_SOURCE_DIR}/level_grouping_test.py)
 set_tests_properties(pyazr_level_grouping PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
+# AzrModel keeps a file's own layout (docs/upgrade/project.md section 5, step 4): unedited round trips of every
+# project file and of CRLF / no-blank-line / interleaved variants; a field edit changes only its lines.
+add_test(NAME pyazr_azr_layout
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/azr_layout_test.py)
+set_tests_properties(pyazr_azr_layout PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1")
+
 add_test(NAME pyazr_output_penalties
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/output_penalties_test.py)

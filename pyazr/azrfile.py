@@ -1608,14 +1608,24 @@ class AzrModel:
         self.levels: List[AzrLevel] = levels
         self._suffix = suffix       # text from "</levels>" onward
         self.source = source
+        # The file as read (from_file): its line ending, the <levels> body's lines and the structure of the levels.
+        # While no level or channel is added, removed or reordered, to_text rewrites only the lines of the channels
+        # that changed and keeps every other byte (project.md section 5, step 4).
+        self._newline = "\n"
+        self._body = None           # [line with its ending] of the <levels> body, or None (canonical layout)
+        self._structure = None      # [(level, [channel, ...]), ...] as read
+        self._line_of = {}          # id(channel) -> its line in self._body
 
     # -- parsing / serialization ---------------------------------------------
 
     @classmethod
     def from_file(cls, path):
         """Parse a .azr file; only <levels> is interpreted, the rest is kept verbatim."""
-        with open(path) as f:
-            text = f.read()
+        with open(path, newline="") as f:
+            raw = f.read()
+        # One line ending inside (\n); the file's own is restored on writing.
+        newline = "\r\n" if "\r\n" in raw else "\n"
+        text = raw.replace("\r\n", "\n")
         doc = _document(text)
         lv = _section(doc, "levels")
         if lv is None or lv[2] < 0:
@@ -1635,10 +1645,13 @@ class AzrModel:
         nucleus_of_channel = _nuclei_module().nucleus_of_channel
         groups, slots = {}, {}
         levels, inactive = [], None
-        for line in body.splitlines():
+        line_of = {}                    # id(channel) -> its line in the body
+        for index, line in enumerate(_lines(body)):
+            line = line.rstrip("\n")
             if not line.strip():
                 continue
             ch = AzrChannel.from_line(line)
+            line_of[id(ch)] = index
             if not ch.active:
                 if inactive is not None and inactive.channels[-1].levelID == ch.levelID:
                     inactive.channels.append(ch)
@@ -1656,7 +1669,12 @@ class AzrModel:
                 levels.append(lv)
             else:
                 lv.channels.append(ch)
-        return cls(prefix, levels, suffix, source=path)
+        model = cls(prefix, levels, suffix, source=path)
+        model._newline = newline
+        model._body = _lines(body)
+        model._structure = [(lv, list(lv.channels)) for lv in levels]
+        model._line_of = line_of
+        return model
 
     def _final_newline(self):
         """"\n" if the file ends with a newline, else "" -- what it keeps."""
@@ -1696,18 +1714,45 @@ class AzrModel:
         self._prefix = "".join(lines)
         return self
 
+    def _same_structure(self):
+        """No level or channel added, removed or reordered since the file was read."""
+        if self._structure is None or len(self._structure) != len(self.levels):
+            return False
+        for (lv0, chs0), lv in zip(self._structure, self.levels):
+            if lv0 is not lv or len(chs0) != len(lv.channels):
+                return False
+            if any(a is not b for a, b in zip(chs0, lv.channels)):
+                return False
+        return True
+
     def to_text(self):
-        """The whole file as text, with <levels> re-emitted and everything else unchanged."""
-        self._renumber()
-        blocks = ["\n".join(c.to_line() for c in lv.channels)
-                  for lv in self.levels]
-        body = "\n\n".join(blocks)
-        return self._prefix + body + "\n\n" + self._suffix
+        """The whole file as text, with the file's own line ending.
+
+        While the levels keep the structure they were read with, the <levels> block is the file's own, with only
+        the lines of edited channels rewritten (every other byte kept: blank lines, IDs, layout).  After a level or
+        channel is added, removed or reordered the block is re-emitted in the canonical layout (levels numbered
+        1, 2, ..., one blank line between them).  The rest of the file is kept as it is."""
+        if self._body is not None and self._same_structure():
+            body = list(self._body)
+            for lv in self.levels:
+                for c in lv.channels:
+                    i = self._line_of[id(c)]
+                    new = c.to_line()
+                    if body[i].rstrip("\n") != new:
+                        body[i] = new + ("\n" if body[i].endswith("\n") else "")
+            text = self._prefix + "".join(body) + self._suffix
+        else:
+            self._renumber()
+            blocks = ["\n".join(c.to_line() for c in lv.channels)
+                      for lv in self.levels]
+            body = "\n\n".join(blocks)
+            text = self._prefix + body + "\n\n" + self._suffix
+        return text if self._newline == "\n" else text.replace("\n", self._newline)
 
     def write(self, path):
         """Write the (edited) model to ``path`` and return it.  The original
         file is never modified."""
-        with open(path, "w") as f:
+        with open(path, "w", newline="") as f:  # the text carries the file's own line ending
             f.write(self.to_text())
         return path
 
