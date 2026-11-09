@@ -2,6 +2,27 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-10 — plan to the PI's meeting with the owner (next week)
+
+**PI (maintainer):** the goal is to hand the owner a code that is efficient, easy to maintain and easy to extend, while
+the owner's AI keeps adding features. Agreed:
+- finish Phase 3 (`project.md`; P1–P5 decided);
+- the `CLAUDE.md` guardrails: recipes for adding a feature, consistency checks that fail when one is bypassed, a fast
+  pre-merge check, a speed benchmark;
+- a short document for the owner;
+- merge with `origin/dev` **at the end**.
+
+**`origin/dev` since the upgrade branched (2026-11-08, 18 commits, measured 2026-11-10):**
+- documentation (skills), 10 commits;
+- portable as they are: target-effect auto windows (442610f3, 3a104e06), UDR time-of-flight kernels at low energy
+  (a68474f0), test and CI fixes (5a08c048);
+- to redo in the new structure:
+  - the heavy-ion Coulomb threshold fallback (56512d6a): it patches `external/coul`, now `physics/coulomb`; to be
+    checked against mpmath;
+  - the coincident-level analytic limits (6d3be80a), now in `physics/level_parameters`;
+  - pyazr NUTS sampling (bf09666a, 7de653af), which should use `objective_and_grad()`;
+- obsolete: the Qt logo (b4be0500; decision 3) and the `libcoul` GSL link (63f0c093; library gone).
+
 ## 2026-11-09 (late) — Phase 2 (one objective) merged; band and bound channel functions merged
 
 **Merged into `feature/upgrade`:**
