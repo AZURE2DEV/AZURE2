@@ -1,4 +1,5 @@
 #include "AZURECalc.h"
+#include "Objective.h"
 #include "PriorCovariance.h"
 #include "Profile.h"
 #include "ScatteringLength.h"
@@ -607,99 +608,20 @@ double AZURECalc::operator()(const vector_r &p) const {
     }
   }
 
-  // Process segments with components - use new integrated calculation method
-  double chiSquared = 0.0;
+  // The model value of every point, then the objective (Objective.h: data, priors and constraints, in one order).
   for (int i = 1; i <= localData->NumSegments(); i++) {
     ESegment *segment = localData->GetSegment(i);
-    if (segment) {
-      // Recalculate points using the new combined calculation method
-      for (int pointIdx = 0; pointIdx < segment->NumPoints(); pointIdx++) {
-        double theoreticalValue = segment->CalculateTheoreticalCrossSection(pointIdx, localCompound, configure(), localData, pre);
-        EPoint *point = segment->GetPoint(pointIdx + 1);
-        if (point) {
-          point->SetFitCrossSection(theoreticalValue);
-        }
-      }
-
-      // Recalculate chi-squared for this segment with components.
-      // A THM segment with a free norm has an arbitrary overall scale: during a
-      // fit it is profiled out analytically (n* set to its optimum, no norm
-      // penalty) so it cannot trade against the direct-data normalizations.
-      double segmentChiSquared = 0.0;
-      // A THM experiment (<thm> experiment[...]) profiles one norm (and a
-      // background) over all of its segments: once, at its last segment, when
-      // the models of all of them are in.  It sets their norms and chi^2.
-      const int thmGroup = localData->ThmGroupOf(i);
-      if (thmGroup >= 0) {
-        if (localData->IsLastOfThmGroup(thmGroup, i)) chiSquared += localData->ProfileThmGroup(thmGroup);
-      } else if (segment->IsProfiledNorm()) {
-        segmentChiSquared = segment->ProfileNormChiSquared();
-      } else {
-        for (int pointIdx = 0; pointIdx < segment->NumPoints(); pointIdx++) {
-          EPoint *point = segment->GetPoint(pointIdx + 1);
-          if (point) {
-            double residual = point->GetFitCrossSection() - point->GetCMCrossSection() * segment->GetNorm();
-            double error = point->GetCMCrossSectionError() * segment->GetNorm();
-            if (error != 0.0) {
-              segmentChiSquared += (residual * residual) / (error * error);
-            }
-          }
-        }
-
-        // Add normalization chi-squared contribution (profiled norms have none).
-        double dataNorm = segment->GetNorm();
-        double dataNormNominal = segment->GetNominalNorm();
-        double dataNormError = dataNormNominal / 100. * segment->GetNormError();
-        if (dataNormError != 0.) {
-          chiSquared += pow((dataNorm - dataNormNominal) / dataNormError, 2.0);
-        }
-      }
-
-      // Add the energy-shift penalties
-      segment->AddShiftPenalty(chiSquared);
-
-      if (thmGroup < 0) {
-        segment->SetSegmentChiSquared(segmentChiSquared);
-        chiSquared += segmentChiSquared;
-      }
+    if (!segment) continue;
+    for (int pointIdx = 0; pointIdx < segment->NumPoints(); pointIdx++) {
+      double theoreticalValue = segment->CalculateTheoreticalCrossSection(pointIdx, localCompound, configure(), localData, pre);
+      EPoint *point = segment->GetPoint(pointIdx + 1);
+      if (point) point->SetFitCrossSection(theoreticalValue);
     }
   }
-  // Data covariance: r^T M^-1 r over each group in place of its points' r_i^2.
-  if (localData->HasCovariance()) chiSquared += localData->CovarianceChi2Correction();
-
-  // Add nuisance parameter chi-squared contributions
-  if (limitsManager_) {
-    chiSquared += CalculateNuisanceChiSquared(p);
-  }
-  // Park formalism: keep every level's overlap J positive.
-  if (configure().paramMask & Config::USE_PARK_FORMALISM) {
-    double parkPenalty = localCompound->ParkNormPenalty();
-    chiSquared += parkPenalty;
-    localData->SetParkPenalty(parkPenalty);
-  }
-  // Electron-screening potentials and fitted target densities: their priors.
-  chiSquared += localData->ScreeningPenalty();
-  chiSquared += localData->DensityPenalty();
-  chiSquared += localData->DopplerPenalty();
-  chiSquared += localData->ThicknessPenalty();
-  // Isotopic abundances: their priors and the sum-to-one term.
-  if (localCompound->HasAbundanceBlock()) {
-    double abundancePenalty = localCompound->AbundancePenalty(configure().abundanceSumSigma);
-    chiSquared += abundancePenalty;
-    localData->SetAbundancePenalty(abundancePenalty);
-  }
-  // Measured scattering lengths (<scatteringLengths>), evaluated at each pair's threshold.
-  if (localCompound->HasScatteringLengthConstraints()) {
-    double slChi2 = ScatteringLength::Chi2(localCompound, configure(), localCompound->ScatteringLengthConstraints());
-    chiSquared += slChi2;
-    localData->SetScatteringLengthChi2(slChi2);
-  }
-  // Prior parameter covariance (<config> priorCovariance=): (p - mu)^T C^-1 (p - mu).
-  if (const PriorCovariance *pc = localData->GetPriorCovariance()) {
-    const double pcChi2 = pc->Chi2(p);
-    chiSquared += pcChi2;
-    localData->SetPriorCovarianceChi2(pcChi2);
-  }
+  ObjectiveContext context{localCompound, localData, p, configure()};
+  context.storeTotals = true;
+  if (limitsManager_) context.nuisance = [this](const vector_r &q) { return CalculateNuisanceChiSquared(q); };
+  double chiSquared = Objective::Engine().Chi2(context);
 
   if (std::getenv("AZURE_DUMP_NONFINITE")) DumpNonFinite(p, chiSquared, localCompound, localData);
 
@@ -820,8 +742,6 @@ double AZURECalc::Chi2On(CNuc *lc, EData *ld, const vector_r &p, std::vector<dou
   if (configure().paramMask & Config::USE_BRUNE_FORMALISM) lc->CalcShiftFunctions(configure(), false);
   const bool pre = PrecalculatePoints(lc, ld, thmOnly);
 
-  double chiSquared = 0.0;
-  if (segChis) segChis->assign(ld->NumSegments() + 1, 0.0);
   for (int i = 1; i <= ld->NumSegments(); i++) {
     ESegment *segment = ld->GetSegment(i);
     if (!segment) continue;
@@ -831,54 +751,15 @@ double AZURECalc::Chi2On(CNuc *lc, EData *ld, const vector_r &p, std::vector<dou
       EPoint *pt = segment->GetPoint(pid + 1);
       if (pt) pt->SetFitCrossSection(th);
     }
-    double segChi = 0.0;
-    const int thmGroup = ld->ThmGroupOf(i);
-    if (thmGroup >= 0) {
-      // A THM experiment: one profile over its segments, at the last of them.
-      if (ld->IsLastOfThmGroup(thmGroup, i)) segChi = ld->ProfileThmGroup(thmGroup);
-    } else if (segment->IsProfiledNorm()) {
-      // Arbitrary THM scale: profile the norm out (no penalty).
-      segChi = segment->ProfileNormChiSquared();
-    } else {
-      for (int pid = 0; pid < segment->NumPoints(); pid++) {
-        EPoint *pt = segment->GetPoint(pid + 1);
-        if (pt) {
-          double r = pt->GetFitCrossSection() - pt->GetCMCrossSection() * segment->GetNorm();
-          double err = pt->GetCMCrossSectionError() * segment->GetNorm();
-          if (err != 0.0) segChi += (r * r) / (err * err);
-        }
-      }
-      double dataNorm = segment->GetNorm();
-      double nom = segment->GetNominalNorm();
-      double nerr = nom / 100.0 * segment->GetNormError();
-      if (nerr != 0.0) chiSquared += pow((dataNorm - nom) / nerr, 2.0);
-    }
-    if (segChis) (*segChis)[i] = segChi;
-    segment->AddShiftPenalty(chiSquared);
-    chiSquared += segChi;
   }
-  if (thmOnly) return chiSquared;
-  // (A THM segment carries no covariance block: EData refuses one.)
-  if (ld->HasCovariance()) chiSquared += ld->CovarianceChi2Correction(segChis);
-  if (limitsManager_) chiSquared += CalculateNuisanceChiSquared(p);
-  // Park's J > 0 wall, as operator() adds it: the finite-difference fallback of
-  // Gradient() and its columns (and the AZURE_GRAD_CHECK reference)
-  // differentiate this function, and LM / GSL-LM take it as their cost.  Not
-  // in the THM-only part (thmOnly returned above), which adds to an analytic
-  // gradient that has the wall.
-  if (configure().paramMask & Config::USE_PARK_FORMALISM) chiSquared += lc->ParkNormPenalty();
-  // The working copy lc holds the abundances of p (FillCompoundFromParams above); compound() holds whatever the
-  // last full evaluation left there, so using it here froze the abundance prior in the LM/GSL cost and in the
-  // finite-difference gradient columns (found 2026-10-17 by the isospin-levels session).
-  if (lc->HasAbundanceBlock()) chiSquared += lc->AbundancePenalty(configure().abundanceSumSigma);
-  if (lc->HasScatteringLengthConstraints())
-    chiSquared += ScatteringLength::Chi2(lc, configure(), lc->ScatteringLengthConstraints());
-  chiSquared += ld->ScreeningPenalty();
-  chiSquared += ld->DensityPenalty();
-  chiSquared += ld->DopplerPenalty();
-  chiSquared += ld->ThicknessPenalty();
-  if (const PriorCovariance *pc = ld->GetPriorCovariance()) chiSquared += pc->Chi2(p);
-  return chiSquared;
+  // The objective of operator() (Objective.h), on these working copies: the finite-difference columns of
+  // Gradient(), the AZURE_GRAD_CHECK reference and the LM / GSL-LM cost differentiate or minimize the same function.
+  // thmOnly: the THM segments' data part alone, which adds to an analytic gradient that has every other term.
+  ObjectiveContext context{lc, ld, p, configure()};
+  context.segmentChi2 = segChis;
+  context.thmOnly = thmOnly;
+  if (limitsManager_) context.nuisance = [this](const vector_r &q) { return CalculateNuisanceChiSquared(q); };
+  return Objective::Engine().Chi2(context);
 }
 
 double AZURECalc::Chi2Value(const vector_r &p, bool thmOnly) const {
