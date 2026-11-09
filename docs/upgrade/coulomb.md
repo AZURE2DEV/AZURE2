@@ -230,6 +230,13 @@ change. 179 × 3, with and without a table, against the head of this branch: eve
 beyond about 10⁻⁷ relative in an observable is examined before the step goes on. Then ctest, `run_tests.sh` and the
 thread check.
 
+**Band narrowed, verified (2026-11-09; build of 37e1c5ba).** 179 × 3 against the merged head db972c84:
+- without a table, 2040/2040 identical: no project has a bound channel between the old and the new B_min;
+- with a format-2 table, 2039/2040: `ec_threshold` `ng`, R = 3, one number, 1.2 × 10⁻¹¹ of its column (a point the
+  table does not cover), class (b).
+
+ctest 117/117, `run_tests.sh` 133/133, 1 vs 8 threads identical.
+
 ## 2. Channel functions
 
 ### 2.1 Definition
