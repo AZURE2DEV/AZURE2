@@ -20,6 +20,10 @@
 #include <iostream>
 #include <string>
 
+#include "SegLine.h"
+
+#include <cstdio>
+#include <sstream>
 #include "azure2/io/Convert.h"
 #include "azure2/io/Document.h"
 #include "AZUREAPI.h"
@@ -889,6 +893,75 @@ PYBIND11_MODULE(_azure2, m) {
         .def("common_ending", [](const Document &d) { return py::bytes(d.CommonEnding()); })
         .def("format", [](const Document &d) { return azure2::io::FormatOf(d); });
   }
+  // One <segmentsData> line as the engine reads it (SegLine; docs/upgrade/project.md section 5): pyazr's datasets
+  // build their Segment from this, so pyazr and AZURE2 read every segment line the same way.  Components are
+  // (entrance, exit, angle or None, scaling or None) from SegLine's component list.
+  m.def(
+      "parse_segment_line",
+      [](const std::string &line) {
+        std::istringstream in(line);
+        SegLine sl(in);
+        py::dict d;
+        d["active"] = sl.isActive();
+        d["entrance_key"] = sl.entranceKey();
+        d["exit_key"] = sl.exitKey();
+        d["energy_min"] = sl.minE();
+        d["energy_max"] = sl.maxE();
+        d["angle_min"] = sl.minA();
+        d["angle_max"] = sl.maxA();
+        d["is_diff"] = sl.isDiff();
+        d["phase_J"] = sl.phaseJ();
+        d["phase_L"] = sl.phaseL();
+        d["phase_S"] = sl.phaseS();
+        d["norm"] = sl.dataNorm();
+        d["vary_norm"] = sl.varyNorm();
+        d["norm_error"] = sl.dataNormError();
+        d["energy_shift"] = sl.energyShift();
+        d["energy_shift_error"] = sl.energyShiftError();
+        d["vary_shift"] = sl.varyEnergyShift();
+        d["data_file"] = sl.dataFile();
+        d["has_sqrt_shift"] = sl.hasSqrtShift();
+        d["energy_shift_sqrt"] = sl.energyShiftSqrt();
+        d["energy_shift_sqrt_error"] = sl.energyShiftSqrtError();
+        d["vary_shift_sqrt"] = sl.varyEnergyShiftSqrt();
+        d["natural"] = sl.natural();
+        d["total"] = sl.total();
+        d["transmission"] = sl.transmission();
+        d["yield_thickness"] = sl.yieldThickness();
+        d["thickness_fit"] = sl.thicknessFit();
+        d["thickness_vary"] = sl.thicknessVary();
+        d["thickness_sigma"] = sl.thicknessSigma();
+        d["thickness_group"] = sl.thicknessGroup();
+        d["absolute"] = sl.absolute();
+        d["shift_group"] = sl.shiftGroup();
+        d["shift_fn_group"] = sl.shiftFnGroup();
+        d["norm_group"] = sl.normGroup();
+        d["covariance"] = sl.covarianceFile();
+        d["shift_fn"] = sl.shiftFn();
+        d["shift_fn_values"] = sl.shiftFnValues();
+        d["shift_fn_errors"] = sl.shiftFnErrors();
+        d["shift_fn_vary"] = sl.shiftFnVary();
+        d["is_advanced"] = sl.isAdvanced();
+        d["operation_type"] = sl.operationType();
+        d["is_upos"] = sl.isUPOS();
+        d["parse_error"] = sl.parseError();
+        d["parse_warning"] = sl.parseWarning();
+        py::list components;
+        std::istringstream list(sl.componentsList());
+        std::string item;
+        while (std::getline(list, item, ';')) {
+          int e = 0, x = 0;
+          py::object angle = py::none(), scaling = py::none();
+          std::sscanf(item.c_str(), "Entrance: %d, Exit: %d", &e, &x);
+          const std::size_t a = item.find("Angle: "), sc = item.find("Scaling: ");
+          if (a != std::string::npos) angle = py::float_(std::strtod(item.c_str() + a + 7, nullptr));
+          if (sc != std::string::npos) scaling = py::float_(std::strtod(item.c_str() + sc + 9, nullptr));
+          components.append(py::make_tuple(e, x, angle, scaling));
+        }
+        d["components"] = components;
+        return d;
+      },
+      py::arg("line"), "One <segmentsData> line as AZURE2 reads it (SegLine).");
   // The project file's format and its conversion (io::ConvertToFormat2; docs/upgrade/project.md section 4), on text.
   m.def(
       "convert_project_text",

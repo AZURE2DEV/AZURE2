@@ -1000,10 +1000,25 @@ def _thm_read_weight_table(path):
 
 
 
+
+def _engine_module():
+    """The compiled engine module (``pyazr._azure2``).  A module loaded by file path, outside its package (tests that
+    import azrfile.py or datasets.py alone), takes it from the package next to its own file."""
+    try:
+        from . import _azure2
+        return _azure2
+    except ImportError:
+        import importlib
+        import sys
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        if root not in sys.path:
+            sys.path.insert(0, root)
+        return importlib.import_module("pyazr._azure2")
+
 def _document(text):
     """The engine's lossless document of a project's text (``_azure2.Document``; docs/upgrade/project.md): the one
     reading of the file that pyazr and AZURE2 share.  Needs the compiled module."""
-    from . import _azure2
+    _azure2 = _engine_module()
     return _azure2.Document.parse(text.encode("utf-8", "surrogateescape"))
 
 
@@ -4234,7 +4249,7 @@ def convert_azr(old, new, overwrite=False):
     unless ``overwrite``.  Returns the list of changes (empty for a file
     already in format 2).
     """
-    from . import _azure2
+    _azure2 = _engine_module()
     with open(old, "rb") as f:
         text = f.read()  # bytes, converted as bytes (the file's encoding is kept)
     if os.path.exists(new) and not overwrite:
