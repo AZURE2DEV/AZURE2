@@ -372,3 +372,13 @@ functions that are NaN away from the formal energy: no bracket, NaN in an evalua
 report. `pyazr_formal_capture_mask` (the blocker) passes unchanged. Expected outputs:
 179 × 3 identical except the formal basis of `screening_6li` (its three levels now transformed: `parameters.out`
 and `run.log`), classified.
+
+**Verified (2026-11-09; build of 5d8dc1e1, GCC 11.5 Release, pyazr on).** No warnings. `ctest -LE slow` 111/111
+(the blocker passes: check (c) formal 1.4 × 10⁻⁷, Brune 1.1 × 10⁻⁷), the slow `pyazr_formal_brune_iteration` passes;
+`physics_level_parameters_unit` with §6b; `run_tests.sh` 133/133 (1182 s, 11 threads); 1 vs 8 threads
+byte-identical (T1–T3, 13N, three bases). 179 × 3 against 46efe93e with the same format-1 table: Brune 689/689 and
+Park 689/689 identical, formal 656/662: the six files of `screening_6li` (`parameters.out`, `run.log` of bare, fit,
+scr), where the three levels the old iteration left untransformed (formal values 122.75, 43.89, 141.04 MeV printed
+under a WARNING) are now bracketed: 30.0000, 11.5670, 30.0000 MeV, every width equal digit for digit to the
+Brune-basis run of the same file (the input), and a NOTE in place of the WARNING. Classified as a fix (the round
+trip formal → Brune now returns the input).
