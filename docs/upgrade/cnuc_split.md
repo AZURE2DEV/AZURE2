@@ -528,3 +528,50 @@ includes N_λ and γ^ext (listed).
 **Not in step 2.** N_f^½ itself and γ^ext stay engine code (step 4); the formal-basis evaluation pays one
 `brune_from_formal` per final-state block per evaluation (measured on T1–T3, which have no such block, and on
 `beam_profile_kernel`).
+
+## 9. Step 5: design
+
+Step 5 moves the coupling coefficients of the observables into physics/: the Legendre coefficients of the angular
+distributions (`CNuc::CalcAngularDists`), the capture analyzing-power coefficients (`CNuc::CalcCaptureAnalyzingPower`)
+and the THM angular coefficient (`ThmAngular.cpp`, the same Z̄). They are then computed without GSL, from the 3j and 6j
+of `AngularCoupling` and a new 9j. `SortPathways` is not in this step; it moves with the pathway trees (step 6), because
+its output is those trees on `PPair`. The pathway enumeration, the thresholds that decide which terms are kept, the
+`KLGroup`/`Interference`/`CaptureAyTerm` objects and the lazy build of the capture table under its mutex stay as they are.
+
+**The functions** (`physics/include/azure2/physics/ObservableCoupling.h`; all angular momenta doubled, as in physics/).
+With x̂ = (2x + 1)^½ and the Racah W(abcd; ef) = (−1)^(a+b+c+d) {a b e; d c f}:
+
+    Z̄(l₁ j₁ l₂ j₂; s L)    = l̂₁ l̂₂ ĵ₁ ĵ₂ (l₁ 0 l₂ 0 | L 0) W(l₁ j₁ l₂ j₂; s L)                                      (9.1)
+    Z̄γ(L₁ j₁ L₂ j₂; j_f L) = L̂₁ L̂₂ ĵ₁ ĵ₂ (L₁ 1 L₂ −1 | L 0) W(L₁ j₁ L₂ j₂; j_f L)                                 (9.2)
+
+and the interference coefficients the engine stores. A particle exit is (−1)^(s′−s) Z̄(l₁ j₁ l₂ j₂; s L) Z̄(l′₁ j₁ l′₂ j₂; s′ L) / 4.
+A photon exit is (−1)^(1+s−j_f) Z̄(l₁ j₁ l₂ j₂; s L) Z̄γ(L₁ j₁ L₂ j₂; j_f L) / 4. The particle exit with an unobserved primary
+(Brune and deBoer, PRC 102, 024628, Eq. 22, in AZURE2's light-first channel-spin order, as the comment at
+`CNuc.cpp` 1930 derives) is a product of three Racah W. For capture A_y, a_k and b_k are Seyler and Weller,
+PRC 20, 453, Eqs. (20) and (21), with the (−1)^(s−s′) of the light-first coupling (audit item 9). The pruning of
+`CalcCaptureAnalyzingPower` (a factor below 10⁻¹² or a 9j below 10⁻¹⁴ gives zero) goes into the function, so it
+returns the same zeros. `wigner_9j` is added to `AngularCoupling` as the sum over x of three 6j (Edmonds 6.4.3).
+
+**Not in step 5.** The remaining `AngCoeff` callers evaluate at each point, not at setup, and stay on GSL until the
+observables move (Phase 2): `PolarizationFunc` (Clebsch-Gordan, Y_lm), `ECIntegral` (Clebsch-Gordan, Racah of the
+multipole operators), and `LegendreP1` in `AMatrixFunc`/`GenMatrixFunc`. `AngCoeff`'s 9j then has no caller and is
+deleted.
+
+**Numbers.** GSL's 3j and 6j and those of `AngularCoupling` differ in the last bits. For 2j ≤ 12, 69 % of the
+non-zero 6j differ, by at most 7.3 × 10⁻¹⁵ relative; for 2j ≤ 20, 97 % of the 3j differ. `AngularCoupling` agrees
+with exact values to 10⁻¹⁵, and GSL returns 6.9 × 10⁻¹⁸ for some 6j that are exactly zero. The step therefore
+changes the coefficients by about 10⁻¹⁵ relative, and each observable by the same amount. A fit can amplify that to
+its tolerance. It is checked, and if needed re-baselined, as in §3 item 5.
+
+**Verification.**
+(a) physics tests, on things that do not use the code under test. The 9j is checked against exact values, against
+its reduction to a 6j when one argument is zero (Edmonds 6.4.14), against its definition as a sum over all
+projections of six 3j for 2j ≤ 4, and against its orthogonality. (9.1) and (9.2) are checked against the m-scheme
+sum of Clebsch-Gordan products that defines them, for l, L ≤ 3 and 2j ≤ 6.
+(b) an engine-side ctest compares every new function with the engine's old expression (`AngCoeff`, GSL) for all
+quantum numbers up to l, L ≤ 4, 2j, 2s ≤ 8 and k ≤ 6. The limit is 10⁻¹⁴ of the largest coefficient of its kind,
+and the zeros must agree.
+(c) the engine before (9be284f0) and after, on all 179 `.azr` in three bases, every changed file classified. An
+observable within 10⁻¹² relative of its column's largest value is (b) rounding. A fitted value within the fit's
+tolerance is (b). Anything else stops the step. Then `ctest`, `run_tests.sh` and 1 vs 8 threads. A test whose
+expected value moves only by the amounts in (c) is re-baselined in its own commit, with the classification.
