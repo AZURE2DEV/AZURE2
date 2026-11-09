@@ -114,6 +114,8 @@ endif()
 # (which it must not see): a subdirectory inherits the directory properties as they stand when it is added.
 enable_testing()  # before the subdirectory, so that its tests are registered (repeated below for the rest)
 add_subdirectory(physics)
+# io/: the project model (docs/upgrade/project.md), which uses nothing either.
+add_subdirectory(io)
 
 # ---------------------------------------------------------------- macOS/Homebrew
 # Homebrew needs help that a Linux build never does, and without it a plain

@@ -84,6 +84,7 @@ check_registered("tests/reference", r".+_test\.cpp")
 check_registered("tests/consistency", r".+_test\.py")
 check_registered("tests/upgrade", r".+_test\.cpp")
 check_registered("physics/tests", r".+_test\.cpp", "physics")
+check_registered("io/tests", r".+_test\.cpp", "io")
 
 
 # 3. Every regression directory is actually exercised by tests/run_tests.sh:
@@ -185,6 +186,21 @@ for dirpath, _, files in os.walk(os.path.join(ROOT, "physics")):
             if inc.startswith("<") and re.fullmatch(r"[a-z_]+", inc[1:-1]):
                 continue
             problems.append(f"{rel}: includes {inc}; physics/ may include only azure2/physics/ headers and the C++ standard library")
+
+
+# 9. io/ uses nothing either (docs/upgrade/project.md section 2): its own headers ("azure2/io/...") and the C++
+#    standard library only.
+for dirpath, _, files in os.walk(os.path.join(ROOT, "io")):
+    for name in sorted(files):
+        if not name.endswith((".h", ".hpp", ".cpp")):
+            continue
+        rel = os.path.relpath(os.path.join(dirpath, name), ROOT)
+        for inc in re.findall(r'^\s*#\s*include\s*([<"][^>"]+[>"])', read(rel), re.M):
+            if inc.startswith('"') and inc[1:-1].startswith("azure2/io/"):
+                continue
+            if inc.startswith("<") and re.fullmatch(r"[a-z_]+", inc[1:-1]):
+                continue
+            problems.append(f"{rel}: includes {inc}; io/ may include only azure2/io/ headers and the C++ standard library")
 
 
 if problems:
