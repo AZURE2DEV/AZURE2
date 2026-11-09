@@ -34,8 +34,28 @@ final head; `run_tests.sh` 133/133.
 **Open, for the maintainers (they move results):** `EPoint.cpp`'s m_e is CODATA 2002 (0.510998903 MeV) in the
 Fermi-function argument; `ECIntegral.cpp`'s proton mass 1.00727638 u (CODATA 2018: 1.007276466621). The first is a listed exception of check 10 (which covers u, ħc, α, m_e).
 
-**Next.** Thread check and speed benchmark on the merged head (running); the document for the owner; then the first
-feature through the recipes, extrapolation segments on a user or adaptive grid.
+**Open, found by the benchmark (not caused by Phase 3): fits depend on the thread count.** Same binary, T2, MIGRAD
+with 200 calls: the final χ² is 0.306025731622686 / …729007276 / …733669139 (prior-covariance term) at 1 / 2 / 4
+threads, each reproducible; the writer's total ends at 691.608 (1 thread) and 595.877 (8 threads), because the fit
+is unconverged and the 9th-digit differences grow over 200 steps. Present on the Phase 1 build (b-pathways) and the
+Phase 2 head too; the 2026-11-07 entry deferred it to Phase 2 ("fixed-order reductions in the numerical gradient"),
+which did not address it. Calculations (menu 1) stay identical at 1 and 8 threads. Suspect: the pooled working
+copies (`AZURECalc::GetPooledCNuc/EData`) carry state between evaluations, and Minuit2's parallel numerical gradient
+hands each copy a thread-dependent subset of calls. Next step: evaluate one parameter vector on a fresh copy and on a
+pool copy after a different history, and diff. Belongs with Phase 6 (no pools) unless a smaller cause is found first.
+
+**Benchmark** (this host, three interleaved runs each, rows in `tests/upgrade/bench/T2.tsv`; before = 93f8cbc5, the
+start of Phase 1): calc 0.93 → 0.90 s (1 thread), 0.42 → 0.24 s (8); fit200 63.2 → 56.2 s (1), 36.4 → 30.7 s (8);
+fit peak RSS 241 → 276 MB (1), 488 → 643 MB (8; the interim shift tables). The pre-upgrade `dev` engine (aab1de0d)
+cannot run T2 (χ² 1.2 × 10⁸: keywords it does not know), so it is not a baseline. The 93f8cbc5 build also ends the
+8-thread fit at 595.877: the thread dependence above predates Phase 1.
+
+**Document for the owner:** `docs/upgrade/FOR_THE_OWNER.md` (two pages).
+
+Thread check on the merged head (calculations, menu 1): 12/12 identical at 1 and 8 threads.
+
+**Next.** The fit thread dependence above (diagnose before new features); then the first feature through the
+recipes, extrapolation segments on a user or adaptive grid.
 
 ## 2026-11-10 — plan to the PI's meeting with the owner (next week)
 
