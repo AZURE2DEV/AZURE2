@@ -188,6 +188,16 @@ inline void ForEachDiagonalPrior(EData *data, CNuc *compound, const ParamIndexMa
  * are skipped by index, AZURECalc::NuisancePriorOf).  Returns the names of the parameters whose own prior it
  * replaced, for a note.  Call once, after the covariance is set (EData::SetPriorCovariance).
  */
+/*!
+ * The least-squares rows of the model terms that are sums of squares but not single-parameter priors
+ * (docs/upgrade/objective.md D2, D7), appended to `residuals` (and, with `jac` and `pmap`, their Jacobian rows over
+ * nCols packed columns): Park's J > 0 wall, one row per R-matrix level, J/s while J < 0 and 0 otherwise (Park
+ * formalism only; the shift functions and their derivatives must be current); the abundance sum-to-one term, one
+ * row per sample with a width, ((sum w) - 1)/s.  The number of rows does not depend on the parameters.
+ */
+void AppendModelRows(CNuc *compound, const Config &config, const ParamIndexMap *pmap, int nCols, vector_r &residuals,
+                     vector_r *jac);
+
 class PriorCovariance;
 std::vector<std::string> ReplaceDiagonalPriors(CNuc *compound, EData *data, const PriorCovariance &pc);
 

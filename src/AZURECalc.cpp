@@ -1227,48 +1227,7 @@ bool AZURECalc::GradientFromJacobian(const std::vector<double> &p, std::vector<d
     grad[idx] += 2.0 * (p[idx] - nominal) / (e * e);
     g2[idx] += 2.0 / (e * e);
   });
-  // Park: the J > 0 wall, sum over the levels with J < 0 of (J/s)^2, is not a
-  // residual.  Its gradient (zero while every J > 0) as the adjoint path adds it.
-  if (configure().paramMask & Config::USE_PARK_FORMALISM) {
-    CNuc *lc = GetPooledCNuc();
-    lc->FillCompoundFromParams(p);
-    lc->CalcShiftFunctions(configure());
-    if (lc->ParkNormPenalty() > 0.0) {
-      GradAccum accum;
-      accum.Init(lc);
-      AddParkPenaltyGradient(lc, configure(), accum);
-      accum.Scatter(pmap, grad);
-    }
-    ReturnPooledCNuc(lc);
-  }
-  // Isotopic abundances: the sum-to-one gradient and (diagonal) curvature.  The sample sums are taken at
-  // p: compound() holds the abundances of the last full evaluation, so its AbundanceSum was stale here.
-  std::vector<double> sumAtP;
-  if (compound()->HasAbundanceBlock()) {
-    sumAtP.assign(compound()->NumSamples(), 0.0);
-    for (int smp = 1; smp <= compound()->NumSamples(); smp++) sumAtP[smp - 1] = compound()->AbundanceSum(smp);
-    for (int k = 1; k <= compound()->NumAbundanceParams(); k++) {
-      const int idx = pmap.AbundanceIndex(k);
-      if (idx < 0 || idx >= (int)p.size()) continue;
-      int sample, nucleus;
-      compound()->AbundanceOf(k, sample, nucleus);
-      sumAtP[sample - 1] += p[idx] - compound()->GetSample(sample)->entries[nucleus - 1].abundance;
-    }
-  }
-  if (compound()->HasAbundanceBlock()) {
-    for (int k = 1; k <= compound()->NumAbundanceParams(); k++) {
-      const int idx = pmap.AbundanceIndex(k);
-      if (idx < 0 || idx >= (int)p.size()) continue;
-      int sample, nucleus;
-      compound()->AbundanceOf(k, sample, nucleus);
-      // (The per-nucleus prior is added above, with the other diagonal priors.)
-      const double s = compound()->SampleSumSigma(sample, configure().abundanceSumSigma);
-      if (s > 0.0) {
-        grad[idx] += 2.0 * (sumAtP[sample - 1] - 1.0) / (s * s);
-        g2[idx] += 2.0 / (s * s);
-      }
-    }
-  }
+  // Park's wall and the abundance sum-to-one term are residual rows (AppendModelRows): in J^T r above.
   g2CacheP_ = p;
   g2Cache_ = g2;
   return true;
@@ -1288,22 +1247,12 @@ std::vector<double> AZURECalc::G2(const std::vector<double> &p) const {
       const int f = packedToFull[a];
       if (f >= 0 && f < (int)g2.size()) g2[f] += 2.0 * d * d;
     }
-  // Penalty curvatures, (x - x0)^2 / sigma^2 -> 2 / sigma^2: the diagonal priors (Objective.h) and the abundance
-  // sum-to-one term's diagonal.
+  // Penalty curvatures, (x - x0)^2 / sigma^2 -> 2 / sigma^2: the diagonal priors (Objective.h).  The abundance
+  // sum-to-one term and Park's wall are residual rows (AppendModelRows), in the sum above.
   ParamIndexMap pmap = BuildParamIndexMap(compound(), data(), std::vector<bool>());
   ForEachDiagonalPrior(data(), compound(), pmap, [&](int idx, double, double e) {
     if (idx < (int)g2.size()) g2[idx] += 2.0 / (e * e);
   });
-  if (compound()->HasAbundanceBlock()) {
-    for (int k = 1; k <= compound()->NumAbundanceParams(); k++) {
-      const int idx = pmap.AbundanceIndex(k);
-      if (idx < 0 || idx >= (int)g2.size()) continue;
-      int sample, nucleus;
-      compound()->AbundanceOf(k, sample, nucleus);
-      const double s = compound()->SampleSumSigma(sample, configure().abundanceSumSigma);
-      if (s > 0.0) g2[idx] += 2.0 / (s * s);
-    }
-  }
   static std::atomic<int> g2Calls{0};
   if (std::getenv("AZURE_GRAD_TIMING")) {
     int c = ++g2Calls;
@@ -1439,6 +1388,8 @@ bool AZURECalc::ResidualJacobian(const vector_r &full, vector_r &residuals,
     if (const PriorCovariance *pc = ld->GetPriorCovariance())
       pc->AppendRows(full, [&](int f) { return f < pmap.NumFull() ? pmap.FullToPacked(f) : -1; }, nCols, residuals,
                      &jac);
+  // Park's J > 0 wall and the abundance sum-to-one term as rows (Objective.h AppendModelRows; objective.md D2, D7).
+  if (ok) AppendModelRows(lc, configure(), &pmap, nCols, residuals, &jac);
 
   packedToFull.resize(pmap.NumPacked());
   for (int a = 0; a < pmap.NumPacked(); a++) packedToFull[a] = pmap.PackedToFull(a);
@@ -1604,15 +1555,6 @@ int AZURECalc::PrepareFreeParams(const vector_r &full,
   std::map<int, std::pair<double, double>> prior;  // full index -> (nominal, sigma)
   ForEachDiagonalPrior(data(), compound(), pmap,
                        [&](int idx, double nominal, double sig) { prior[idx] = {nominal, sig}; });
-  // The sum-to-one term couples the abundances and is not a per-parameter penalty: the least-squares drivers leave
-  // it out (warned once), MIGRAD carries it exactly (Objective).
-  bool anySum = false;
-  if (compound()->HasAbundanceBlock())
-    for (int k = 1; k <= compound()->NumAbundanceParams(); k++) {
-      int sample, nucleus;
-      compound()->AbundanceOf(k, sample, nucleus);
-      if (compound()->SampleSumSigma(sample, configure().abundanceSumSigma) > 0.0) anySum = true;
-    }
   for (int a = 0; a < nFree; a++) {
     int f = p2f[a];
     x[a] = full[f];
@@ -1634,12 +1576,6 @@ int AZURECalc::PrepareFreeParams(const vector_r &full,
         pen_nom[a] = nom;
         pen_inv2[a] = 1.0 / (sig * sig);
       }
-    }
-    if (f < pmap.NumFull() && pmap.Desc(f).kind == ParamKind::Abundance) {
-      static std::atomic<bool> warnedSum{false};
-      if (anySum && !warnedSum.exchange(true))
-        configure().outStream << "WARNING: a sum-to-one width is set for the abundances, but the least-squares fitter applies only "
-                              << "the per-nucleus abundance priors; the sum-to-one penalty is carried by MIGRAD only." << std::endl;
     }
   }
   return nFree;
@@ -1834,6 +1770,8 @@ bool AZURECalc::ResidualsOnly(const vector_r &full, vector_r &residuals) const {
   // Prior parameter covariance, as the last rows of ResidualJacobian.
   if (const PriorCovariance *pc = ld->GetPriorCovariance())
     pc->AppendRows(full, [](int) { return -1; }, 0, residuals, nullptr);
+  // Park and abundance-sum rows, as the last rows of ResidualJacobian.
+  AppendModelRows(lc, configure(), nullptr, 0, residuals, nullptr);
   ReturnPooledCNuc(lc);
   ReturnPooledEData(ld);
   return true;

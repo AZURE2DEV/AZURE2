@@ -4,7 +4,11 @@
 
 #include <cmath>
 
+#include "AChannel.h"
+#include "ALevel.h"
 #include "CNuc.h"
+#include "JGroup.h"
+#include "PPair.h"
 #include "Config.h"
 #include "EData.h"
 #include "ESegment.h"
@@ -266,4 +270,67 @@ std::vector<std::string> ReplaceDiagonalPriors(CNuc *compound, EData *data, cons
     if (had) replaced.push_back(pc.Names()[a]);
   }
   return replaced;
+}
+
+void AppendModelRows(CNuc *compound, const Config &config, const ParamIndexMap *pmap, int nCols, vector_r &residuals,
+                     vector_r *jac) {
+  auto appendRow = [&](double r, const GradAccum *acc, const std::vector<std::pair<int, double>> *direct) {
+    residuals.push_back(r);
+    if (!jac || !pmap) return;
+    const size_t base = jac->size();
+    jac->resize(base + (size_t)nCols, 0.0);
+    vector_r rowFull(pmap->NumFull(), 0.0);
+    if (acc) acc->Scatter(*pmap, rowFull);
+    if (direct)
+      for (const auto &d : *direct)
+        if (d.first >= 0 && d.first < pmap->NumFull()) rowFull[d.first] += d.second;
+    for (int f = 0; f < pmap->NumFull(); f++) {
+      const int a = pmap->FullToPacked(f);
+      if (a >= 0 && a < nCols) (*jac)[base + (size_t)a] = rowFull[f];
+    }
+  };
+  // Park: r = J/s for J < 0; dJ/dgamma_c = -2 gamma_c S'_c, dJ/dE = -sum_c gamma_c^2 S''_c (AddParkPenaltyGradient).
+  if (config.paramMask & Config::USE_PARK_FORMALISM) {
+    const double s = CNuc::kParkNormScale;
+    for (int j = 1; j <= compound->NumJGroups(); j++) {
+      JGroup *jg = compound->GetJGroup(j);
+      if (!jg->IsInRMatrix()) continue;
+      for (int la = 1; la <= jg->NumLevels(); la++) {
+        ALevel *level = jg->GetLevel(la);
+        if (!level->IsInRMatrix()) continue;
+        const double J = level->GetParkNorm();
+        if (!(J < 0.0)) {
+          appendRow(0.0, nullptr, nullptr);
+          continue;
+        }
+        GradAccum acc;
+        acc.Init(compound);
+        double dE = 0.0;
+        for (int ch = 1; ch <= jg->NumChannels(); ch++) {
+          AChannel *channel = jg->GetChannel(ch);
+          if (channel->GetRadType() != 'P' || compound->GetPair(channel->GetPairNum())->GetPType() != 0) continue;
+          const double g = level->GetFitGamma(ch);
+          acc.AddGamma(j, la, ch, -2.0 * g * level->GetShiftDerivative(ch) / s);
+          dE -= g * g * level->GetShiftSecondDerivative(ch);
+        }
+        acc.AddE(j, la, dE / s);
+        appendRow(J / s, &acc, nullptr);
+      }
+    }
+  }
+  // Abundances: ((sum w) - 1)/s per sample with s > 0; d/dw_k = 1/s on every abundance of the sample.
+  if (compound->HasAbundanceBlock()) {
+    for (int smp = 1; smp <= compound->NumSamples(); smp++) {
+      const double s = compound->SampleSumSigma(smp, config.abundanceSumSigma);
+      if (!(s > 0.0)) continue;
+      std::vector<std::pair<int, double>> direct;
+      if (pmap)
+        for (int k = 1; k <= compound->NumAbundanceParams(); k++) {
+          int sample, nucleus;
+          compound->AbundanceOf(k, sample, nucleus);
+          if (sample == smp) direct.push_back({pmap->AbundanceIndex(k), 1.0 / s});
+        }
+      appendRow((compound->AbundanceSum(smp) - 1.0) / s, nullptr, &direct);
+    }
+  }
 }
