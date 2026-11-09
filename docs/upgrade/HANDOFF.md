@@ -2,6 +2,39 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-09 — Phase 4 S3 (a): results in a buffer, behind the old accessors (`feature/upgrade-4-results`)
+
+**Done** (`data_model.md` S3 (a), decision M2 (c)). `include/Results.h` (plain, no engine headers): one record per
+point and sub-point — σ, σ_E1, σ_E2, A_y, A_0, then (angular units) a count and max_ang_dist_order + 1 coefficients,
+then (points of a sample line) a count and one term per compound nucleus. `EPoint`'s seven result members are gone
+(`fitcrosssection_`, `fitE1/E2crosssection_`, `analyzing_power_`, `ang_dist_a0_`, `angularDists_`,
+`natural_terms_`); the accessors read the record. The buffer is the `EData`'s (one per working copy):
+`LayoutResults` at the end of `Initialize`, in `Clone` (the copy takes the source's values), and `EnsureResultsLayout`
+at the start of every evaluation (`BeginEvaluation`, last step of `FillEnergyShiftsFromParams`), which re-lays only
+when a point is not where the layout puts it (a re-placed sub-point grid, a copied segment). Probe copies in
+`EPoint::Calculate` and the reaction-rate points take a private one-record buffer. `ec_shifted_` stays: a memo
+keyed by exact energy (H6), not a result. `sizeof(EPoint)` 888 → 824 bytes; a unit is 24 bytes smaller overall.
+
+**`AZURE_POISON_RESULTS=1`** (documented in `command_line.rst`): the buffer is quiet NaN on entry to each
+evaluation. ctest `upgrade_poison_results`: T1–T3 calc / extrap / (T1) fit outputs and the API's arrays equal with
+and without it. One known case, listed by the test: K1, the API's E1/E2 arrays of lines that are not
+angle-integrated (never calculated there; 0 of a new record).
+
+**Verified:** 179 × 3 (menu 1, 1 thread) identical to the reference build (2040 files, run.log included), and
+identical again with `AZURE_POISON_RESULTS=1`; a 19-folder subset at 2 threads identical to 1 thread (only the
+Coulomb-table lookup counter in run.log differs); ctest −LE slow 131/131; T1 fit (menu 2) and T3 fit (`--use-gradient`) outputs identical to the reference, T3 also poisoned. Full T2 fit, 1 thread (bench invocation without a call limit): χ² 294.173 reference and branch, also poisoned; 292.7 s / 293.5 s, peak RSS 281.3 / 276.7 MB (run side by side); calc 1.06 / 1.07 s warm.
+
+**Stale reads found by reading (not reached by the test projects):** (1) `EPoint::Calculate`, automatic tolerance,
+`allPass` branch (`src/EPoint.cpp`, `this->SetFitCrossSection(bareValue)`): an E1/E2 data line (isDiff 5/6) with a
+sub-point fold keeps σ_E1/σ_E2 of the last evaluation that folded fully — a value carried between evaluations, so
+pool history (and the thread count) can enter a fit. (2) `ESegment::CalculateTheoreticalCrossSection` /
+`TransformedValue`: a failed term returns NaN before `SetNaturalTerms`, so the sample decomposition file prints the
+previous evaluation's terms for that point. (3) `MarkFailed` leaves NaN in σ_E1/σ_E2 of a non-capture point for
+good (only the API shows them).
+
+**Next:** S3 (b), split as proposed in the report (b1 engine calls take `Results&`; b2 owner moves to the caller;
+b3 gradient and MCMC); the stale reads above to S4.
+
 ## Phase 3 merged; guardrails (written 2026-11-09, after the plan entry below)
 
 **Merged into `feature/upgrade`:** `feature/upgrade-3-project`, **Phase 3** (design and record in `project.md`;
