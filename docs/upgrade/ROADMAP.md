@@ -115,6 +115,11 @@ Gate: bit-identical outputs (except the deliberate convention test cases); Coulo
       Jacobian); every penalty of `EData`, `CNuc`, `ESegment` and pyazr's `penalties()` becomes a term.
 - [ ] CLI fit, gradient, API, output writer all call it; the MCMC path keeps working until numcmc is removed.
 Gate: bit-identical χ², gradients = finite differences; pyazr no longer computes penalties in Python.
+*Done on `feature/upgrade-2-objective` (2026-11-09, merged; `objective.md`): one ordered list of terms (`Objective`)
+for the FCN, the LM/FD cost, the MCMC likelihood and the API; one enumeration of the diagonal priors for gradients,
+G2, least-squares rows and the MCMC; pyazr computes no prior (2.11.0). χ² bit-identical where no decision applies;
+PI decisions D1–D7 and "the MCMC shares the fit's configuration" applied, each change classified. Open: the writer
+from the terms rather than stored totals; `inference/` as a separate library (after Phase 4).*
 
 ## Phase 3 — One project model; library readers
 
