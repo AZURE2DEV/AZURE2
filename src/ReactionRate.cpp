@@ -64,6 +64,8 @@ double gsl_reactionrate_integrand(double u, void *p) {
   if (x <= kRateEnergyHigh && x >= kRateEnergyLow) {
     for (int exitKey : params->exitKeys) {
       EPoint *point = new EPoint(55.0, x, entranceKey, exitKey, false, false, false, 0.0, 0, 0);
+      azure2::Results results;  // the point's own result record
+      point->BindPrivateResults(results);
       point->Initialize(compound, configure);
       point->Calculate(compound, configure);
       double sigma = point->GetFitCrossSection();
@@ -291,6 +293,8 @@ double RateCrossSectionAt(double energy, CNuc *compound, const Config &configure
     double total = 0.0;
     for (int key : RateExitKeys(compound, entranceKey, exitKey)) {
       EPoint point(55.0, energy, entranceKey, key, false, false, false, 0.0, 0, 0);
+      azure2::Results results;  // the point's own result record
+      point.BindPrivateResults(results);
       point.Initialize(compound, configure);
       point.Calculate(compound, configure);
       double sigma = point.GetFitCrossSection();

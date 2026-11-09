@@ -2043,6 +2043,7 @@ int EData::Initialize(CNuc *compound, const Config &configure) {
   // Labels of the compound nuclei, for the sample decomposition files.
   nucleusLabels_.clear();
   for (int k = 1; k <= compound->NumNuclei(); k++) nucleusLabels_.push_back(compound->NucleusLabel(k));
+  numNuclei_ = compound->NumNuclei();
   // Identical-particle phase-shift segment validation: warn once per segment
   // if the requested L is forbidden by Bose/Fermi symmetry on an identical
   // pair. The phase branch in GenMatrixFunc would silently report delta = 0
@@ -2163,6 +2164,8 @@ int EData::Initialize(CNuc *compound, const Config &configure) {
   // Every point of this stage has its rows now; nothing reads the channel table until the energies change, and the
   // table (about 64 bytes a row) is not kept beside the rows it filled (docs/upgrade/channel_table.md section 2).
   channelTable_.reset();
+  // The result records of every point and sub-point (Results.h); laid out again when the points change.
+  this->EnsureResultsLayout();
 
   return 0;
 }
@@ -5327,6 +5330,58 @@ void EData::FillNormsFromParams(const vector_r &p) {
  */
 
 void EData::FillEnergyShiftsFromParams(const vector_r &p, EData *data, CNuc *theCNuc, const Config *configure) {
+  this->FillEnergyShiftsFromParamsImpl(p, data, theCNuc, configure);
+  this->BeginEvaluation();
+}
+
+template <class F>
+void EData::ForEachResultUnit(F f) {
+  const int nNatural = numNuclei_;
+  auto segment = [&](ESegment &seg) {
+    const int nat = seg.IsNatural() ? nNatural : 0;
+    for (EPoint &point : seg.GetPoints()) {
+      f(point, point.ResultAngularCapacity(), nat);
+      for (EPoint &sub : point.GetSubPoints()) f(sub, sub.ResultAngularCapacity(), 0);
+    }
+  };
+  for (ESegment &seg : segments_) segment(seg);
+  for (ESegment &seg : componentSegments_) segment(seg);
+}
+
+void EData::LayoutResults(const azure2::Results *source) {
+  size_t total = 0;
+  ForEachResultUnit([&](EPoint &, int nAng, int nNat) { total += azure2::Results::RecordSize(nAng, nNat); });
+  std::vector<double> next(total, 0.0);
+  size_t offset = 0;
+  ForEachResultUnit([&](EPoint &point, int nAng, int nNat) {
+    const azure2::Results *from = point.ResultBuffer();
+    if (from && (from == &results_ || from == source))
+      azure2::CopyRecord(from->slot.data() + point.ResultSlot(), point.ResultAngularSlots(), point.ResultNaturalSlots(),
+                         next.data() + offset, nAng, nNat);
+    point.BindResults(&results_, offset, nAng, nNat);
+    offset += azure2::Results::RecordSize(nAng, nNat);
+  });
+  results_.slot.swap(next);
+}
+
+void EData::EnsureResultsLayout() {
+  size_t offset = 0;
+  bool laidOut = true;
+  ForEachResultUnit([&](EPoint &point, int nAng, int nNat) {
+    if (!laidOut) return;
+    laidOut = point.ResultBuffer() == &results_ && point.ResultSlot() == offset &&
+              point.ResultAngularSlots() == nAng && point.ResultNaturalSlots() == nNat;
+    offset += azure2::Results::RecordSize(nAng, nNat);
+  });
+  if (!laidOut || offset != results_.slot.size()) this->LayoutResults(nullptr);
+}
+
+void EData::BeginEvaluation() {
+  this->EnsureResultsLayout();
+  if (azure2::Results::PoisonRequested()) results_.Poison();
+}
+
+void EData::FillEnergyShiftsFromParamsImpl(const vector_r &p, EData *data, CNuc *theCNuc, const Config *configure) {
   // The THM coherent backgrounds, the block after the shifts (none without
   // cbackground=): every caller fills the shifts right after the norms, with
   // the compound the model will run on.
@@ -5628,6 +5683,7 @@ EData *EData::Clone() const {
   dataCopy->nodeCache_ = this->nodeCache_;  // shared: a re-placed node is computed and held once
   dataCopy->priorCov_ = this->priorCov_;    // shared, read-only
   dataCopy->priorCovChi2_ = this->priorCovChi2_;
+  dataCopy->numNuclei_ = this->numNuclei_;
 
   // Build a mapping from component segment keys to cloned component segments
   std::unordered_map<int, ESegment *> clonedComponentMap;
@@ -5716,6 +5772,8 @@ EData *EData::Clone() const {
         if (!own.count(p->GetLocalMappedPoint(m)))
           throw std::logic_error("EData::Clone: a point of the copy maps a point that is not part of the copy");
   }
+  // The copy's own result records, holding this data set's values (a copied point held them before S3).
+  dataCopy->LayoutResults(&this->results_);
   return dataCopy;
 }
 

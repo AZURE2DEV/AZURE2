@@ -80,9 +80,6 @@ EPoint::EPoint(DataLine dataLine, ESegment *parent) {
   lab_crosssection_ = dataLine.crossSection();
   lab_dcrosssection_ = dataLine.error();
   geofactor_ = 0.;
-  fitcrosssection_ = 0.;
-  fitE1crosssection_ = 0.;
-  fitE2crosssection_ = 0.;
   sfactorconv_ = 0.;
   is_differential_ = parent->IsDifferential();
   is_phase_ = parent->IsPhase();
@@ -133,9 +130,6 @@ EPoint::EPoint(double angle, double energy, ESegment *parent) {
   lab_crosssection_ = 0.;
   lab_dcrosssection_ = 0.1;
   geofactor_ = 0.;
-  fitcrosssection_ = 0.;
-  fitE1crosssection_ = 0.;
-  fitE2crosssection_ = 0.;
   sfactorconv_ = 0.;
   is_differential_ = parent->IsDifferential();
   is_phase_ = parent->IsPhase();
@@ -187,9 +181,6 @@ EPoint::EPoint(double angle, double energy, int entranceKey,
   lab_crosssection_ = 0.;
   lab_dcrosssection_ = 0.1;
   geofactor_ = 0.;
-  fitcrosssection_ = 0.;
-  fitE1crosssection_ = 0.;
-  fitE2crosssection_ = 0.;
   sfactorconv_ = 0.;
   is_differential_ = isDifferential;
   is_phase_ = isPhase;
@@ -368,7 +359,10 @@ int EPoint::GetMaxAngDistOrder() const {
  */
 
 int EPoint::GetNumAngularDists() const {
-  return angularDists_.size();
+  if (!num_ang_slots_) return 0;
+  // as many as the last evaluation wrote; poisoned and not written in this one: the capacity, whose NaN values show
+  const double n = Rec()[azure2::Results::AngularOffset()];
+  return std::isnan(n) ? (int)num_ang_slots_ : (int)n;
 }
 
 /*!
@@ -465,22 +459,6 @@ double EPoint::GetGeometricalFactor() const {
 }
 
 /*!
- * Returns the calculated AZURE cross section.
- */
-
-double EPoint::GetFitCrossSection() const {
-  return fitcrosssection_;
-}
-
-double EPoint::GetFitE1CrossSection() const {
-  return fitE1crosssection_;
-}
-
-double EPoint::GetFitE2CrossSection() const {
-  return fitE2crosssection_;
-}
-
-/*!
  * Returns the multiplicative conversion factor from cross section to s-factor.
  */
 
@@ -557,7 +535,7 @@ double EPoint::GetTargetThickness() const {
  */
 
 double EPoint::GetAngularDist(int order) const {
-  return angularDists_[order];
+  return Rec()[azure2::Results::AngularOffset() + 1 + order];
 }
 
 /*!
@@ -1141,22 +1119,6 @@ void EPoint::ClearLegendrePolynomials() {
 
 void EPoint::SetGeometricalFactor(double geoFactor) {
   geofactor_ = geoFactor;
-}
-
-/*!
- * Sets the calculated AZURE cross section.
- */
-
-void EPoint::SetFitCrossSection(double crossSection) {
-  fitcrosssection_ = crossSection;
-}
-
-void EPoint::SetFitE1CrossSection(double e1crossSection) {
-  fitE1crosssection_ = e1crossSection;
-}
-
-void EPoint::SetFitE2CrossSection(double e2crossSection) {
-  fitE2crosssection_ = e2crossSection;
 }
 
 /*!
@@ -2244,6 +2206,8 @@ void EPoint::Calculate(CNuc *theCNuc, const Config &configure, EPoint *parent, i
     bool haveBare = false;
     if (blend < 1.0 || autoTol > 0.) {
       EPoint probe(*this);
+      azure2::Results probeResults;  // the probe's own record: it must not write the point's
+      probe.BindPrivateResults(probeResults);
       probe.SetTargetEffectNum(0);
       probe.ClearLocalMappedPoints();
       probe.integrationPoints_.clear();
@@ -2294,6 +2258,8 @@ void EPoint::Calculate(CNuc *theCNuc, const Config &configure, EPoint *parent, i
         for (int m = 1; m <= numMapped; m++) {
           EPoint *mappedPoint = this->GetLocalMappedPoint(m);
           EPoint mappedProbe(*mappedPoint);
+          azure2::Results probeResults;
+          mappedProbe.BindPrivateResults(probeResults);
           mappedProbe.SetTargetEffectNum(0);
           mappedProbe.ClearLocalMappedPoints();
           mappedProbe.integrationPoints_.clear();
@@ -2325,6 +2291,8 @@ void EPoint::Calculate(CNuc *theCNuc, const Config &configure, EPoint *parent, i
         // The mapped point is another observable at the same energy: its bare
         // value needs its own probe.
         EPoint mappedProbe(*mappedPoint);
+        azure2::Results probeResults;
+        mappedProbe.BindPrivateResults(probeResults);
         mappedProbe.SetTargetEffectNum(0);
         mappedProbe.ClearLocalMappedPoints();
         mappedProbe.integrationPoints_.clear();
@@ -3081,8 +3049,59 @@ void EPoint::SetTargetThickness(double targetThickness) {
  */
 
 void EPoint::SetAngularDists(vector_r dists) {
-  angularDists_.clear();
-  angularDists_ = dists;
+  if (dists.size() > num_ang_slots_)
+    throw std::logic_error("EPoint::SetAngularDists: " + std::to_string(dists.size()) + " coefficients, " +
+                           std::to_string(num_ang_slots_) + " result slots (segment " + std::to_string(segment_key_) +
+                           ")");
+  double *r = Rec() + azure2::Results::AngularOffset();
+  r[0] = (double)dists.size();
+  std::copy(dists.begin(), dists.end(), r + 1);
+}
+
+/*!
+ * The abundance-weighted terms written by the last evaluation: as many as were written (none for a point that is
+ * not the point of a sample segment).  A record poisoned and never written in this evaluation gives its capacity
+ * of NaN, so the read shows (AZURE_POISON_RESULTS).
+ */
+
+std::vector<double> EPoint::GetNaturalTerms() const {
+  if (!num_natural_slots_) return {};
+  const double *r = Rec() + azure2::Results::NaturalOffset(num_ang_slots_);
+  const int n = std::isnan(r[0]) ? (int)num_natural_slots_ : (int)r[0];
+  return std::vector<double>(r + 1, r + 1 + n);
+}
+
+void EPoint::SetNaturalTerms(const std::vector<double> &terms) {
+  if (terms.size() > num_natural_slots_)
+    throw std::logic_error("EPoint::SetNaturalTerms: " + std::to_string(terms.size()) + " terms, " +
+                           std::to_string(num_natural_slots_) + " result slots (segment " +
+                           std::to_string(segment_key_) + ")");
+  double *r = Rec() + azure2::Results::NaturalOffset(num_ang_slots_);
+  r[0] = (double)terms.size();
+  std::copy(terms.begin(), terms.end(), r + 1);
+}
+
+void EPoint::BindResults(azure2::Results *buffer, std::size_t slot, int nAng, int nNat) {
+  results_ = buffer;
+  slot_ = slot;
+  num_ang_slots_ = (std::uint16_t)nAng;
+  num_natural_slots_ = (std::uint16_t)nNat;
+}
+
+void EPoint::BindPrivateResults(azure2::Results &scratch) {
+  const int nAng = this->ResultAngularCapacity();
+  const int nNat = num_natural_slots_;
+  std::vector<double> next(azure2::Results::RecordSize(nAng, nNat), 0.0);
+  // the values the copied record holds: what the copy read before (a copy of a point copied its result members)
+  if (results_) azure2::CopyRecord(Rec(), num_ang_slots_, num_natural_slots_, next.data(), nAng, nNat);
+  scratch.slot.swap(next);
+  this->BindResults(&scratch, 0, nAng, nNat);
+}
+
+void EPoint::NoResultRecord() const {
+  throw std::logic_error("EPoint: a result was read or written on a point without a result record (segment " +
+                         std::to_string(segment_key_) + ", E_lab " + std::to_string(lab_energy_) +
+                         " MeV): the data set's layout (EData::LayoutResults) or the caller's binding is missing");
 }
 
 /*!

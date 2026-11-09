@@ -7,6 +7,7 @@
 #include "EDataIterator.h"
 #include "NodeTableCache.h"
 #include "ThmExperiment.h"
+#include "Results.h"
 #include <memory>
 #include <atomic>
 #include <deque>
@@ -298,8 +299,19 @@ class EData {
   void FillMnParams(ROOT::Minuit2::MnUserParameters &);
   /// Write the normalizations back from a Minuit parameter vector.
   void FillNormsFromParams(const vector_r &);
-  /// Write the energy shifts back from a Minuit parameter vector.
+  /// Write the energy shifts back from a Minuit parameter vector.  The last step of the hand-over of every
+  /// evaluation, so it ends with BeginEvaluation.
   void FillEnergyShiftsFromParams(const vector_r &, EData *data = nullptr, CNuc *theCNuc = nullptr, const Config *configure = nullptr);
+  /// The result buffer of this data set (docs/upgrade/data_model.md S3 (a)): one record per point and sub-point of
+  /// its segments and component segments (Results.h), owned here, one per working copy.
+  azure2::Results &GetResults() { return results_; }
+  /// Lays the result records out again (LayoutResults) if a point or sub-point is not bound to the record the
+  /// layout would give it: a new point, a re-placed sub-point grid, a copied segment.  O(points), no allocation
+  /// when nothing changed.
+  void EnsureResultsLayout();
+  /// The start of an evaluation, after the hand-over: EnsureResultsLayout, then, under AZURE_POISON_RESULTS=1,
+  /// every result slot quiet NaN, so a value read before this evaluation writes it shows as NaN.
+  void BeginEvaluation();
   /// Lay the adaptive sub-point grids out again for the levels theCNuc holds now
   /// (its fit values, as observed parameters) and the segments' energy shifts, and
   /// rebuild the sub-points of every point whose grid changed.  Sub-points of a
@@ -486,6 +498,17 @@ class EData {
   std::shared_ptr<const PriorCovariance> priorCov_;  // shared by every copy (read-only once set up)
   double priorCovChi2_ = 0.0;
   std::vector<std::string> nucleusLabels_;   // one per compound nucleus, for the natural decomposition file
+  int numNuclei_ = 0;  // compound nuclei: the natural terms of a sample segment's points (Initialize)
+  /// The results of an evaluation (GetResults); never shared with a copy (Clone lays out its own).
+  azure2::Results results_;
+  /// One record per point and sub-point, in the order of segments_ then componentSegments_, each point before
+  /// its sub-points.  A point's record keeps the values it held (in this buffer or in `source`, the data set
+  /// being cloned); a point new to the layout starts at 0, as a newly constructed point did.
+  void LayoutResults(const azure2::Results *source);
+  /// Calls f(point, angular slots, natural slots) for every point and sub-point in layout order.
+  template <class F>
+  void ForEachResultUnit(F f);
+  void FillEnergyShiftsFromParamsImpl(const vector_r &, EData *data, CNuc *theCNuc, const Config *configure);
   // A copy of the compound nucleus that holds the observed level parameters the
   // sub-point grids are laid out from (ReplaceSubPointGrids).  Never shared: a
   // copy or Clone of the EData starts without one.
