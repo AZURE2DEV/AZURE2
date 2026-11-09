@@ -1893,8 +1893,9 @@ class azure2:
             follower = bool(d.norm_group) and d.norm_group in norm_groups
             if d.norm_group:
                 norm_groups.add(d.norm_group)
-            # A normgroup's penalty is its first member's; a fixed norm pays none (docs/upgrade/objective.md D5).
-            if sigma and not follower and d.vary_norm:
+            # A normgroup's penalty is its first member's; a fixed norm pays none (docs/upgrade/objective.md D5),
+            # nor a free THM norm, which is profiled out, not a parameter (D4).
+            if sigma and not follower and d.vary_norm and not d.thm:
                 norm[i] = ((value - d.nominal_norm) / sigma) ** 2
             # A shiftgroup follower's shift is its leader's and its own parameter is fixed: the engine
             # (ESegment::SetShiftGroupFollower, AddShiftPenalty) adds no penalty for it.  Before 2026-10-27

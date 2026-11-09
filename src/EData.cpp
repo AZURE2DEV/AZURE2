@@ -2727,10 +2727,11 @@ void EData::WriteOutputFiles(const Config &configure, bool isFit, const BandData
       // the deviation from the nominal normalization in units of its uncertainty,
       // which the segment stores as a percentage.  This used to add a literal 1
       // per segment, so the reported total was just the number of segments.
-      // A fixed norm pays no prior (docs/upgrade/objective.md D5).
+      // A fixed norm pays no prior (docs/upgrade/objective.md D5), nor does a profiled THM norm, which is not a
+      // parameter: the fit adds no prior for it (D4).
       double normChiSquared = 0.;
       double normError = thisSegment->GetNominalNorm() / 100. * thisSegment->GetNormError();
-      if (normError != 0. && thisSegment->IsVaryNorm()) normChiSquared =
+      if (normError != 0. && thisSegment->IsVaryNorm() && !thisSegment->IsProfiledNorm()) normChiSquared =
                                pow((thisSegment->GetNorm() - thisSegment->GetNominalNorm()) / normError, 2.0);
       totalChiSquared += (thisSegment->GetSegmentChiSquared());
       totalNormChiSquared += normChiSquared;
