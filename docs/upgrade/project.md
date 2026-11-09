@@ -68,7 +68,11 @@ project files in `tests/` and `examples/`.
    `roundtrip_test.py` and the edit tests.
 5. One mass table (the gate's second half): `fill_masses` and the engine's masses read the same table.
 
-## 3. Decisions for the PI
+## 3. Decisions
+
+**PI, 2026-11-09:** P2 and P3 accepted as proposed. P4 replaced: "remove sections that are not needed". New: "a
+converter from the old to the updated file format so people can use the old azr files" (P5, §4). P1 (the archive)
+is still open.
 
 - **P1, the archive.** The ROADMAP's 48,922 `.azr` files are mentioned nowhere else in the repository or its history.
   Where are they, and may a copy be used on this node, read only?
@@ -87,3 +91,32 @@ project files in `tests/` and `examples/`.
   Proposal: the engine's strictness everywhere, since a file pyazr accepts and the engine refuses cannot be fitted.
 - **P4, unknown sections** (`<lastRun>`, `<mcmc>`'s run settings, anything else): kept verbatim and never interpreted,
   as pyazr does now.
+
+## 4. The updated format (format 2) and the converter
+
+**What changes** (nothing else; every other byte of a file means what it meant):
+- **`format=2`** in `<config>`'s `key=value` lines marks a file of the updated format. A file without it is format 1.
+  Older builds skip unknown keys, so a format-2 file still opens in them, apart from the changes below.
+- **Removed sections**, which no part of AZURE2 reads:
+  - `<lastRun>` (the Qt GUI's runtime options; in 92 of the 189 test files);
+  - the run settings of `<mcmc>` (`nwalkers`, `nsteps`, `chainspread`, `energyspread`, `nthreads`,
+    `usereducedwidths`), which the CLI asks for. `<mcmc>` keeps its `<parameters>` priors, which are read, and goes
+    when it has none.
+- **`useAdaptiveGrid` moves from `<potential>` to `<config>`.** It selects the target-integration and rate grids, not
+  the potential (`Config.cpp` says so), and in 44 of the 47 files with a `<potential>` block it is that block's only
+  reason to exist. `<potential>` remains only where a hybrid potential is used (`useHybridPotential=1`).
+- **The reading rules of P2 and P3.** One reading of every file: whole-line tags with any line ending; case-sensitive
+  keywords; quoted paths; the engine's level grouping; and messages naming the line where a row or keyword used to be
+  skipped silently.
+
+**The converter** (P5): `io::ConvertToFormat2(Project&)`, a function of the library, and three entry points to it:
+`AZURE2 --convert old.azr new.azr`, `pyazr.convert_azr(old, new)`, and the engine itself. A format-1 file still
+loads: the engine converts it in memory, notes that it did, and reports what changed (which sections it removed or
+moved, and a list of the lines it reads differently under P2/P3, if any). A conversion is deterministic, and its
+output round-trips byte for byte.
+
+**Checks.**
+- Every format-1 file under `tests/` and `examples/` (and the archive, P1): conversion succeeds, and the
+  outputs of the original and the converted file are bit-identical (179 × 3).
+- Converting a format-2 file changes nothing. The converter's report lists exactly the removed and moved sections.
+- A file whose meaning changes under P2/P3 is reported line by line, with both readings.
