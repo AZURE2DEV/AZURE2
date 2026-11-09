@@ -9,6 +9,8 @@
 #include "DataCovariance.h"
 #include "EData.h"
 #include "ESegment.h"
+#include "azure2/experiment/Expression.h"
+#include "ExperimentAdapter.h"
 
 #include <atomic>
 #include <cstdio>
@@ -534,48 +536,55 @@ int ESegment::Fill(CNuc *theCNuc, EData *theData, const Config &configure) {
         this->AddPoint(NewEPoint);
         PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetEntranceKey()));
         PPair *exitPair = theCNuc->GetPairFromKey(this->GetExitKey());  // nullptr for total capture (-1)
-        this->GetPoint(this->NumPoints())->SetParentData(theData);
-        if (entrancePair->GetPType() == 20 && exitPair) {
-          this->GetPoint(this->NumPoints())->ConvertDecayEnergy(exitPair);
-        } else if (this->IsCMDifferential()) {
-          //          this->GetPoint(this->NumPoints())->ConvertExcitationEnergy(entrancePair);
-          this->GetPoint(this->NumPoints())->ConvertLabEnergy(entrancePair);
-        } else if (!this->IsCMDifferential()) {
-          this->GetPoint(this->NumPoints())->ConvertLabEnergy(entrancePair);
-        }
-        if (exitPair && exitPair->GetPType() == 0 && this->IsDifferential() && !this->IsPhase() && !this->IsCMDifferential()) {
-          EPoint *converted = this->GetPoint(this->NumPoints());
-          const bool inRange = (this->GetEntranceKey() == this->GetExitKey())
-                                   ? converted->ConvertLabAngle(entrancePair)
-                                   : converted->ConvertLabAngle(entrancePair, exitPair, configure);
-          if (!inRange) {
-            // Beyond the kinematic maximum lab angle: not a NaN point, not a dropped segment (audit 2026-10-25, 31).
-            configure.outStream << "ERROR: " << "segment #" << this->GetSegmentKey() << ": lab angle " << converted->GetLabAngle() << " deg at E_lab = " << converted->GetLabEnergy()
-    << " MeV: " << converted->GetLabAngleWhy() << "." << std::endl;
-            theData->SetKinematicsError();
-            return -1;
-          }
-          // Skip cross section conversion for ratio segments (ratios are dimensionless)
-          // Use IsAdvanced() and GetLegacyOperationType() since components aren't added yet during Fill()
-          if (!(this->IsAdvanced() && this->GetLegacyOperationType() == 1)) {
-            this->GetPoint(this->NumPoints())->ConvertCrossSection(entrancePair, exitPair);
-          }
-        }
-        //        if(exitPair->GetPType()==0&&!this->IsDifferential()&&!this->IsPhase()&&this->IsCMDifferential()) {
-        //          this->GetPoint(this->NumPoints())->ConvertCMAngle(entrancePair,exitPair,configure);
-        //        }
-        if (exitPair && exitPair->GetPType() == 10 && this->IsDifferential() && !this->IsPhase() && !this->IsCMDifferential()) {
-          this->GetPoint(this->NumPoints())->ConvertLabAngleGammas(entrancePair);
-          // Skip cross section conversion for ratio segments (ratios are dimensionless)
-          // Use IsAdvanced() and GetLegacyOperationType() since components aren't added yet during Fill()
-          if (!(this->IsAdvanced() && this->GetLegacyOperationType() == 1)) {
-            this->GetPoint(this->NumPoints())->ConvertCrossSectionGammas(entrancePair);
-          }
+        EPoint *converted = this->GetPoint(this->NumPoints());
+        converted->SetParentData(theData);
+        // Ratios are dimensionless: no cross-section conversion.  IsAdvanced() and GetLegacyOperationType() since
+        // components aren't added yet during Fill().
+        const bool isRatio = this->IsAdvanced() && this->GetLegacyOperationType() == 1;
+        if (!this->ConvertPointToCM(converted, entrancePair, exitPair, configure, !isRatio, BeyondRange::Stop)) {
+          // Beyond the kinematic maximum lab angle: not a NaN point, not a dropped segment (audit 2026-10-25, 31).
+          configure.outStream << "ERROR: " << "segment #" << this->GetSegmentKey() << ": lab angle " << converted->GetLabAngle() << " deg at E_lab = " << converted->GetLabEnergy()
+                              << " MeV: " << converted->GetLabAngleWhy() << "." << std::endl;
+          theData->SetKinematicsError();
+          return -1;
         }
       }
     }
   }
   return 0;
+}
+
+double ESegment::CMEnergyFactor(PPair *entrancePair, PPair *exitPair) {
+  return (entrancePair->GetPType() == 20 && exitPair) ? azure2::experiment::DecayCMFactor(PartitionOf(exitPair))
+                                                      : azure2::experiment::BeamCMFactor(PartitionOf(entrancePair));
+}
+
+void ESegment::ConvertPointEnergyToCM(EPoint *point, PPair *entrancePair, PPair *exitPair) {
+  if (entrancePair->GetPType() == 20 && exitPair)
+    point->ConvertDecayEnergy(exitPair);
+  else
+    point->ConvertLabEnergy(entrancePair);
+}
+
+bool ESegment::ConvertPointToCM(EPoint *point, PPair *entrancePair, PPair *exitPair, const Config &configure,
+                                bool convertValue, BeyondRange beyond) const {
+  ConvertPointEnergyToCM(point, entrancePair, exitPair);
+  // Lab-frame differential data only: not c.m. data (isDiff 4 / 5), phase shifts, angular distributions.
+  const bool labDifferential = this->IsDifferential() && !this->IsPhase() && !this->IsAngularDist() && !this->IsCMDifferential();
+  if (!exitPair || !labDifferential) return true;
+  bool inRange = true;
+  if (exitPair->GetPType() == 0) {
+    inRange = (this->GetEntranceKey() == this->GetExitKey()) ? point->ConvertLabAngle(entrancePair)
+                                                             : point->ConvertLabAngle(entrancePair, exitPair, configure);
+    if (!inRange && beyond == BeyondRange::Stop) return false;
+    // (Convert: the factor at the last valid angle; ConvertCrossSection leaves the reported maximum as it is)
+    if (convertValue) point->ConvertCrossSection(entrancePair, exitPair);
+  }
+  if (exitPair->GetPType() == 10) {
+    point->ConvertLabAngleGammas(entrancePair);
+    if (convertValue) point->ConvertCrossSectionGammas(entrancePair);
+  }
+  return inRange;
 }
 
 /*!
@@ -1129,39 +1138,15 @@ void ESegment::UpdatePointEnergyWithShift(int i, CNuc *theCNuc, const Config *co
         PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetEntranceKey()));
         PPair *exitPair = theCNuc->GetPairFromKey(this->GetExitKey());  // nullptr for total capture (-1)
 
-        // Apply the same conversion functions as in ESegment::Fill
-        if (entrancePair->GetPType() == 20 && exitPair) {
-          point->ConvertDecayEnergy(exitPair);
-        } else if (this->IsCMDifferential()) {
-          point->ConvertLabEnergy(entrancePair);
-        } else if (!this->IsCMDifferential()) {
-          point->ConvertLabEnergy(entrancePair);
-        }
-
-        if (exitPair && exitPair->GetPType() == 0 && this->IsDifferential() && !this->IsPhase() && !this->IsCMDifferential()) {
-          const bool inRange = (this->GetEntranceKey() == this->GetExitKey())
-                                   ? point->ConvertLabAngle(entrancePair)
-                                   : point->ConvertLabAngle(entrancePair, exitPair, *configure);
-          if (!inRange) {
-            // An energy shift moved the point past the kinematic maximum lab angle mid-fit: the c.m. angle keeps
-            // its last valid value and the run says so (it cannot stop here; audit 2026-10-25, item 31).
-            configure->outStream << "WARNING: segment #" << this->GetSegmentKey() << ": the energy shift moved the point at lab angle "
-                                 << point->GetLabAngle() << " deg to E_lab = " << point->GetLabEnergy()
-                                 << " MeV, beyond its kinematic maximum " << point->GetLabAngleMax()
-                                 << " deg; its c.m. angle is kept at the last valid value." << std::endl;
-          }
-          // Skip cross section conversion for ratio segments (ratios are dimensionless)
-          if (!(this->IsAdvanced() && this->GetLegacyOperationType() == 1)) {
-            point->ConvertCrossSection(entrancePair, exitPair);
-          }
-        }
-
-        if (exitPair && exitPair->GetPType() == 10 && this->IsDifferential() && !this->IsPhase() && !this->IsCMDifferential()) {
-          point->ConvertLabAngleGammas(entrancePair);
-          // Skip cross section conversion for ratio segments (ratios are dimensionless)
-          if (!(this->IsAdvanced() && this->GetLegacyOperationType() == 1)) {
-            point->ConvertCrossSectionGammas(entrancePair);
-          }
+        // The same conversion as ESegment::Fill (ratios are dimensionless: no cross-section conversion)
+        const bool isRatio = this->IsAdvanced() && this->GetLegacyOperationType() == 1;
+        if (!this->ConvertPointToCM(point, entrancePair, exitPair, *configure, !isRatio, BeyondRange::Convert)) {
+          // An energy shift moved the point past the kinematic maximum lab angle mid-fit: the c.m. angle keeps
+          // its last valid value and the run says so (it cannot stop here; audit 2026-10-25, item 31).
+          configure->outStream << "WARNING: segment #" << this->GetSegmentKey() << ": the energy shift moved the point at lab angle "
+                               << point->GetLabAngle() << " deg to E_lab = " << point->GetLabEnergy()
+                               << " MeV, beyond its kinematic maximum " << point->GetLabAngleMax()
+                               << " deg; its c.m. angle is kept at the last valid value." << std::endl;
         }
 
         if (this->IsDifferential() || this->IsCMDifferential()) {
@@ -1201,14 +1186,10 @@ void ESegment::UpdatePointEnergyWithShift(int i, CNuc *theCNuc, const Config *co
             // offsets by the parent's shift) off a narrow resonance by s' x depth
             // (audit item 11, tests/shift_sqrt_subpoints).  A constant shift was
             // never affected.
-            double cmFactor;
             // A beta-delayed segment (entrance ptype 20) carries the light decay
             // particle's lab energy; c.m. = lab*(M1+M2)/M2 of the EXIT pair
             // (EPoint::ConvertDecayEnergy), not the entrance-pair ratio.
-            if (entrancePair->GetPType() == 20)
-              cmFactor = (exitPair->GetM(1) + exitPair->GetM(2)) / exitPair->GetM(2);
-            else
-              cmFactor = (entrancePair->GetM(2)) / (entrancePair->GetM(1) + entrancePair->GetM(2));
+            const double cmFactor = CMEnergyFactor(entrancePair, exitPair);
             // A THM segment's shift is not floored (its energies may lie below threshold), as for the point.
             double energyShiftCM = cmFactor * TotalEnergyShift(originalEnergy);
             double subShiftedEnergy = thm ? subOriginalEnergy + energyShiftCM
@@ -1486,10 +1467,7 @@ double ESegment::GetComponentScaling() const {
  */
 double ESegment::TermFrameFactor(const EPoint *basePoint, const EPoint *termPoint) {
   if (!basePoint || !termPoint) return 1.0;
-  const double jTerm = termPoint->GetCrossSectionKinFactor();
-  const double jBase = basePoint->GetCrossSectionKinFactor();
-  if (jTerm == 0.0 || jBase == 0.0 || jTerm == jBase) return 1.0;
-  return jBase / jTerm;
+  return azure2::experiment::TermFrameFactor(basePoint->GetCrossSectionKinFactor(), termPoint->GetCrossSectionKinFactor());
 }
 
 /*!
@@ -1534,34 +1512,18 @@ bool CalculatePoint(EPoint *point, const char *role, CNuc *cnuc, const Config &c
 }  // namespace
 
 /*!
- * Transmission of a sample n atoms/barn thick, T = exp(-n s), and dT/ds.
+ * Transmission of a sample n atoms/barn thick, T = exp(-n s), and dT/ds (azure2::experiment::node::Transmission).
  */
 double ESegment::Transmission(double n, double s, double *dTds, double *dTdn) {
-  const double t = std::exp(-n * s);
-  if (dTds) *dTds = -n * t;
-  if (dTdn) *dTdn = -s * t;
-  return t;
+  return azure2::experiment::node::Transmission(n, s, dTds, dTdn);
 }
 
 /*!
- * SAMMY's self-shielded yield Y0 = (s / st)(1 - exp(-n st)) and its partial derivatives.  g(st) = (1 - e^{-n st}) / st
- * tends to n (thin sample: Y0 = n s); below |n st| = 1e-4 its series is used, so a vanishing total is no 0/0.
+ * SAMMY's self-shielded yield Y0 = (s / st)(1 - exp(-n st)) and its partial derivatives
+ * (azure2::experiment::node::YieldY0).
  */
 double ESegment::YieldY0(double n, double s, double st, double *dYds, double *dYdst, double *dYdn) {
-  if (dYdn) *dYdn = s * std::exp(-n * st);  // d/dn [(s/st)(1 - e^{-n st})] = s e^{-n st}, also for st -> 0
-  const double u = n * st;
-  double g, dg;
-  if (std::fabs(u) < 1.0e-4) {
-    g = n * (1.0 - u / 2.0 + u * u / 6.0);
-    dg = n * n * (-0.5 + u / 3.0 - u * u / 8.0);
-  } else {
-    const double oneMinus = -std::expm1(-u);
-    g = oneMinus / st;
-    dg = (n * std::exp(-u) * st - oneMinus) / (st * st);
-  }
-  if (dYds) *dYds = g;
-  if (dYdst) *dYdst = s * dg;
-  return s * g;
+  return azure2::experiment::node::YieldY0(n, s, st, dYds, dYdst, dYdn);
 }
 
 bool ESegment::HasSubPointIntegration(EPoint *point) {

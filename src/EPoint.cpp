@@ -11,6 +11,7 @@
 #include "ChannelFunc.h"
 #include "CoulFunc.h"
 #include "Kinematics.h"
+#include "ExperimentAdapter.h"
 #include "DataLine.h"
 #include "ECIntegral.h"
 #include "ECAmplitudeCache.h"
@@ -741,22 +742,16 @@ void EPoint::Initialize(CNuc *compound, const Config &configure) {
   if (configure.paramMask & Config::USE_EXTERNAL_CAPTURE) this->CalculateECAmplitudes(compound, configure);
 }
 
-/*!
- * Calculates lab frame value from center of mass value.
- */
+// ---------------------------------------------------------------- lab -> c.m.
+// The formulas are azure2::experiment's (experiment/include/azure2/experiment/Frames.h, docs/upgrade/data_model.md
+// step S6); these functions read the point's lab values and its pairs, call them, and store the results in the point
+// with the state rules they always had (the maximum lab angle and the reason kept from the last map that set them; a
+// relativistic Jacobian kept at its last valid value where an energy shift moved the point beyond the kinematic
+// range).  ESegment::ConvertPointToCM is the one sequence that calls them.
 
-double EPoint::ConvertCMValue(double value, PPair *pPair) {
-  value = value * (pPair->GetM(1) + pPair->GetM(2)) / (pPair->GetM(2));
-  return value;
-}
-
-/*!
- * Calculates center of mass energy for a given lab energy.
- */
-
-double EPoint::ConvertLabValue(double value, PPair *pPair) {
-  value = value * (pPair->GetM(2)) / (pPair->GetM(1) + pPair->GetM(2));
-  return value;
+void EPoint::ApplyAngleLimit(const azure2::experiment::AngleLimit &lim) const {
+  if (lim.maxSet) labAngleMax_ = lim.max;
+  if (!lim.why.empty()) labAngleWhy_ = lim.why;
 }
 
 /*!
@@ -766,20 +761,13 @@ double EPoint::ConvertLabValue(double value, PPair *pPair) {
  */
 
 void EPoint::ConvertLabEnergy(PPair *pPair) {
-  if (Kinematics::Relativistic()) {
-    // T = sqrt(s) - m1 - m2 with s = (m1 + m2)^2 + 2 m2 E_lab (Kinematics.h)
-    const double m1 = pPair->GetM(1) * uconv, m2 = pPair->GetM(2) * uconv;
-    cm_energy_ = Kinematics::CMFromLab(m1, m2, this->GetLabEnergy());
-    excitation_energy_ = cm_energy_ + pPair->GetSepE() + pPair->GetExE();  // E_x = E_cm + S + E* of the pair (audit 01 B3, 2026-10-28)
-    bin_low_cm_ = Kinematics::CMFromLab(m1, m2, bin_low_lab_);
-    bin_high_cm_ = Kinematics::CMFromLab(m1, m2, bin_high_lab_);
-    return;
-  }
-  double factor = (pPair->GetM(2)) / (pPair->GetM(1) + pPair->GetM(2));
-  cm_energy_ = this->GetLabEnergy() * factor;
-  excitation_energy_ = cm_energy_ + pPair->GetSepE() + pPair->GetExE();  // E_x = E_cm + S + E* of the pair (audit 01 B3, 2026-10-28)
-  bin_low_cm_ = bin_low_lab_ * factor;
-  bin_high_cm_ = bin_high_lab_ * factor;
+  // E_x = E_cm + S + E* of the pair (audit 01 B3, 2026-10-28)
+  const azure2::experiment::BeamEnergiesCM e = azure2::experiment::BeamToCM(
+      PartitionOf(pPair), this->GetLabEnergy(), bin_low_lab_, bin_high_lab_, Kinematics::Relativistic());
+  cm_energy_ = e.eCM;
+  excitation_energy_ = e.eX;
+  bin_low_cm_ = e.binLowCM;
+  bin_high_cm_ = e.binHighCM;
 }
 
 /*!
@@ -788,7 +776,7 @@ void EPoint::ConvertLabEnergy(PPair *pPair) {
  */
 
 void EPoint::ConvertExcitationEnergy(PPair *pPair) {
-  excitation_energy_ = cm_energy_ + pPair->GetSepE() + pPair->GetExE();  // E_x = E_cm + S + E* of the pair (audit 01 B3, 2026-10-28)
+  excitation_energy_ = azure2::experiment::ExcitationEnergy(cm_energy_, PartitionOf(pPair));
 }
 
 /*!
@@ -799,103 +787,38 @@ void EPoint::ConvertExcitationEnergy(PPair *pPair) {
  */
 
 void EPoint::ConvertDecayEnergy(PPair *pPair) {
-  if (Kinematics::Relativistic()) {
-    // two-body decay at rest: equal momenta, T = E1 + sqrt(m2^2 + p^2) - m2
-    cm_energy_ = Kinematics::CMFromDecay(pPair->GetM(1) * uconv, pPair->GetM(2) * uconv, this->GetLabEnergy());
-    excitation_energy_ = cm_energy_ + pPair->GetSepE() + pPair->GetExE();  // E_x = E_cm + S + E* of the pair (audit 01 B3, 2026-10-28)
-    return;
-  }
-  cm_energy_ = this->GetLabEnergy() /
-      (pPair->GetM(2)) *
-      (pPair->GetM(1) + pPair->GetM(2));
-  excitation_energy_ = cm_energy_ + pPair->GetSepE() + pPair->GetExE();  // E_x = E_cm + S + E* of the pair (audit 01 B3, 2026-10-28)
+  const azure2::experiment::Partition p = PartitionOf(pPair);
+  cm_energy_ = azure2::experiment::DecayToCM(p, this->GetLabEnergy(), Kinematics::Relativistic());
+  excitation_energy_ = azure2::experiment::ExcitationEnergy(cm_energy_, p);
 }
 
 /*!
- * Calculates center of mass angles.  When a data point is initialized, the same angle is copied into
- * the attributes for center of mass and lab angles.  If this function is called, the center of mass angle
- * attribute is overwritten with the value calculated from the lab angle attribute.  This version of the
- * overloaded function is for scattering channels.
- */
-
-/*!
- * Relativistic lab -> c.m. transformation of a detected particle (relativistic=1, Kinematics.h): particle 1 of
- * \p exitPair (of \p entrancePair for elastic scattering) at lab angle theta_l.  With the c.m. boost
- * beta = P_lab / E_lab, gamma = E_lab / sqrt(s) and g = beta / beta_3* (beta_3* the detected particle's c.m.
- * velocity, from T_f = E_x - S_f), tan theta_l = sin theta* / (gamma (cos theta* + g)), and
- * dOmega_lab / dOmega_cm = gamma (1 + g cos theta*) / (gamma^2 (g + cos theta*)^2 + sin^2 theta*)^(3/2).
- * Where the lab angle is reached from two c.m. angles (g > 1) the root nearest \p nrCMAngle is taken, i.e. the
- * non-relativistic branch.  Returns false if the angle is not reached.
+ * Relativistic lab -> c.m. transformation of a detected particle (relativistic=1): particle 1 of \p exitPair (of
+ * \p entrancePair for elastic scattering) at the point's lab angle, at its c.m. energy
+ * (azure2::experiment::RelativisticLabToCM).  Where the lab angle is reached from two c.m. angles the root nearest
+ * \p nrCMAngle is taken.  Returns false if the angle is not reached (GetLabAngleMax, GetLabAngleWhy).
  */
 bool EPoint::RelativisticLabToCM(PPair *entrancePair, PPair *exitPair, double nrCMAngle, double &cmAngle,
                                  double &factor) const {
-  const double m1 = entrancePair->GetM(1) * uconv, m2 = entrancePair->GetM(2) * uconv;
-  const double m3 = exitPair->GetM(1) * uconv, m4 = exitPair->GetM(2) * uconv;
-  const double ti = this->GetCMEnergy();
-  const double tf = ti + entrancePair->GetSepE() + entrancePair->GetExE() - exitPair->GetSepE() - exitPair->GetExE();
-  if (!(tf > 0.0) || !(ti > 0.0)) {  // below the exit threshold (relativistic): no ejectile (K would take |k^2|)
-    std::ostringstream why;
-    why << "below the threshold of the exit pair (relativistic kinematics, c.m. energy in the exit channel " << tf
-        << " MeV): the lab angle cannot be converted; give the point as c.m. (code 4 / 5) or drop it";
-    labAngleWhy_ = why.str();
-    labAngleMax_ = 0.0;
-    return false;
-  }
-  const double e1 = Kinematics::LabFromCM(m1, m2, ti);
-  const double sqrtS = m1 + m2 + ti, eTot = e1 + m1 + m2;
-  const double pLab = sqrt(e1 * (e1 + 2.0 * m1));
-  const double beta = pLab / eTot, gam = eTot / sqrtS;
-  const double pf = Kinematics::K(m3, m4, tf) * hbarc, e3 = sqrt(m3 * m3 + pf * pf);
-  const double g = beta / (pf / e3);
-  const double thl = this->GetLabAngle() * pi / 180.;
-  // Where two c.m. angles reach one lab angle (g > 1) the lab angle has a maximum, sin theta_max = gamma_3* /
-  // (gamma g) with gamma_3* = E_3*/m_3 (the same as reaction-kinematics' p*/(m_3 sinh y)).  It is SMALLER than
-  // the non-relativistic Marion-Young maximum, by 0.3-0.6 deg just above the 7Li(p,n) and 12C(a,p) thresholds.
-  auto beyond = [&]() {
-    labAngleMax_ = (g > 1.0 && m3 > 0.0) ? asin(std::min(1.0, e3 / (m3 * gam * g))) * 180. / pi : 180.;
-    std::ostringstream why;
-    why << "beyond the kinematic maximum " << labAngleMax_ << " deg at this energy (relativistic kinematics; two c.m. "
-        << "angles reach every lab angle below it and only the forward branch is modelled; give the point as c.m., "
-        << "code 4 / 5, or drop it)";
-    labAngleWhy_ = why.str();
-    return false;
-  };
-  double x;  // cos theta*
-  if (fabs(sin(thl)) < 1e-12) {
-    x = cos(thl) > 0 ? 1.0 : -1.0;
-    if (g > 1.0) x = (fabs(nrCMAngle) < 90.0) ? 1.0 : -1.0;
-  } else {
-    const double t2 = pow(tan(thl), 2.0), gt2 = gam * gam * t2;
-    const double disc = 1.0 + gt2 * (1.0 - g * g);
-    if (disc < 0.0) return beyond();
-    const double r1 = (-gt2 * g + sqrt(disc)) / (1.0 + gt2), r2 = (-gt2 * g - sqrt(disc)) / (1.0 + gt2);
-    // a root is valid if cos theta* + g has the sign of cos theta_l
-    const bool v1 = (r1 + g) * cos(thl) > 0.0 && fabs(r1) <= 1.0, v2 = (r2 + g) * cos(thl) > 0.0 && fabs(r2) <= 1.0;
-    const double nrX = cos(nrCMAngle * pi / 180.);
-    if (v1 && v2) x = (fabs(r1 - nrX) <= fabs(r2 - nrX)) ? r1 : r2;
-    else if (v1) x = r1;
-    else if (v2) x = r2;
-    else return beyond();
-  }
-  x = std::max(-1.0, std::min(1.0, x));
-  cmAngle = acos(x) * 180. / pi;
-  factor = gam * (1.0 + g * x) / pow(gam * gam * (g + x) * (g + x) + 1.0 - x * x, 1.5);
-  return true;
+  azure2::experiment::AngleLimit lim;
+  const bool ok = azure2::experiment::RelativisticLabToCM(PartitionOf(entrancePair), PartitionOf(exitPair),
+                                                          this->GetCMEnergy(), this->GetLabAngle(), nrCMAngle, cmAngle,
+                                                          factor, lim);
+  this->ApplyAngleLimit(lim);
+  return ok;
 }
 
+/*!
+ * Calculates center of mass angles for elastic scattering (azure2::experiment::ElasticLabToCM; relativistic=1:
+ * RelativisticLabToCM, with the non-relativistic angle as the branch).  False beyond the kinematic maximum.
+ */
 bool EPoint::ConvertLabAngle(PPair *pPair) {
-  const double ratio = pPair->GetM(1) / pPair->GetM(2);
-  if (ratio > 1.0) {
-    labAngleMax_ = 180. / pi * asin(1.0 / ratio);
-    if (ratio * sin(pi / 180. * this->GetLabAngle()) > 1.0) {
-      std::ostringstream why;
-      why << "beyond the kinematic maximum " << labAngleMax_ << " deg of elastic scattering with a projectile heavier than "
-          << "the target (only the forward branch is modelled; give the point as c.m., code 4 / 5, or drop it)";
-      labAngleWhy_ = why.str();
-      return false;
-    }
-  }
-  cm_angle_ = this->GetLabAngle() + 180. / pi * asin(ratio * sin(pi / 180. * this->GetLabAngle()));
+  azure2::experiment::AngleLimit lim;
+  double nrAngle;
+  const bool ok = azure2::experiment::ElasticLabToCM(PartitionOf(pPair), this->GetLabAngle(), nrAngle, lim);
+  this->ApplyAngleLimit(lim);
+  if (!ok) return false;
+  cm_angle_ = nrAngle;
   double cmAngle, factor;
   if (Kinematics::Relativistic()) {
     if (!this->RelativisticLabToCM(pPair, pPair, cm_angle_, cmAngle, factor)) return false;  // why: set by the map
@@ -933,73 +856,18 @@ bool EPoint::ConvertLabAngle(PPair *entrancePair, PPair *exitPair, const Config 
 }
 
 /*!
- * The non-relativistic (Marion-Young) lab -> c.m. angle of a reaction exit; false below the exit threshold or
- * beyond the maximum lab angle (labAngleWhy_, labAngleMax_), cm_angle_ otherwise.
+ * The non-relativistic (Marion-Young) lab -> c.m. angle of a reaction exit (azure2::experiment::ReactionLabToCM);
+ * false below the exit threshold or beyond the maximum lab angle (labAngleWhy_, labAngleMax_), cm_angle_ otherwise.
  */
 bool EPoint::ConvertLabAngleNR(PPair *entrancePair, PPair *exitPair) {
-  double qValue = entrancePair->GetSepE() + entrancePair->GetExE() - exitPair->GetSepE() - exitPair->GetExE();
-  double a13 = (entrancePair->GetM(1) * exitPair->GetM(1)) * this->GetLabEnergy() / (this->GetLabEnergy() + qValue) /
-      (entrancePair->GetM(1) + entrancePair->GetM(2)) / (exitPair->GetM(1) + exitPair->GetM(2));
-  double a24 = (entrancePair->GetM(2) * exitPair->GetM(2)) * (1 + entrancePair->GetM(1) / entrancePair->GetM(2) * qValue / (this->GetLabEnergy() + qValue)) /
-      (entrancePair->GetM(1) + entrancePair->GetM(2)) / (exitPair->GetM(1) + exitPair->GetM(2));
-
-  // Below the threshold of the exit pair (classically E_lab + Q <= 0 in the c.m. share, i.e. a24 <= 0) there is
-  // no ejectile; the Marion-Young map then has no meaning and the sqrt below went NaN with no message.
-  if (!(this->GetLabEnergy() + qValue > 0.0) || !(a24 > 0.0)) {
-    std::ostringstream why;
-    why << "below the threshold of the exit pair (Q = " << qValue << " MeV): the lab angle cannot be converted; give "
-        << "the point as c.m. (code 4 / 5) or drop it";
-    labAngleWhy_ = why.str();
-    labAngleMax_ = 0.0;
-    return false;
-  }
-  if (a13 > a24) {
-    // Two c.m. angles reach every lab angle below thetaMax and none above it; only the forward branch is
-    // modelled.  The caller reports the point and stops (before 2026-10-27: a message, an assert that
-    // release builds compile out, and NaN from the sqrt below).
-    labAngleMax_ = asin(sqrt(a24 / a13)) * 180. / pi;
-    if (labAngleMax_ < this->GetLabAngle()) {
-      std::ostringstream why;
-      why << "beyond the kinematic maximum " << labAngleMax_ << " deg at this energy (two c.m. angles reach every lab "
-          << "angle below it and only the forward branch is modelled; give the point as c.m., code 4 / 5, or drop it)";
-      labAngleWhy_ = why.str();
-      return false;
-    }
-  }
-
-  double E3PerEt = a13 * pow(cos(this->GetLabAngle() * pi / 180.) + sqrt(a24 / a13 - pow(sin(this->GetLabAngle() * pi / 180.), 2.0)), 2.0);
-  double tempE3PerEt = a13 * pow(cos((this->GetLabAngle() + 0.001) * pi / 180.) + sqrt(a24 / a13 - pow(sin((this->GetLabAngle() + 0.001) * pi / 180.), 2.0)), 2.0);
-  double slope = sqrt(tempE3PerEt / a24) * sin((this->GetLabAngle() + 0.001) * pi / 180.) - sqrt(E3PerEt / a24) * sin(this->GetLabAngle() * pi / 180.);
-  bool switchDomain = false;
-  if (slope < 0.) switchDomain = true;
-
-  cm_angle_ = 180. / pi * asin(sqrt(E3PerEt / a24) * sin(this->GetLabAngle() * pi / 180.));
-  if (switchDomain) cm_angle_ = 180. - cm_angle_;
+  azure2::experiment::AngleLimit lim;
+  double cmAngle;
+  const bool ok = azure2::experiment::ReactionLabToCM(PartitionOf(entrancePair), PartitionOf(exitPair),
+                                                      this->GetLabEnergy(), this->GetLabAngle(), cmAngle, lim);
+  this->ApplyAngleLimit(lim);
+  if (!ok) return false;
+  cm_angle_ = cmAngle;
   return true;
-}
-
-/*!
- * Calculates center of mass angles as in ConvertLabAngle but uses the reletivistic equations of Iliadis C.37 and C.38.
- * When a data point is initialized, the same angle is copied into
- * the attributes for center of mass and lab angles.  If this function is called, the center of mass angle
- * attribute is overwritten with the value calculated from the lab angle attribute.  This version of the
- * overloaded function is for non-elastic particle channels.
- */
-
-void EPoint::ConvertCMAngle(PPair *entrancePair, PPair *exitPair, const Config &configure) {
-  double qValue = entrancePair->GetSepE() + entrancePair->GetExE() - exitPair->GetSepE() - exitPair->GetExE();
-  double gamma = sqrt(entrancePair->GetM(1) * exitPair->GetM(1) * this->GetLabEnergy() / (exitPair->GetM(1) * (exitPair->GetM(1) + exitPair->GetM(2)) * qValue + exitPair->GetM(1) * (exitPair->GetM(1) + exitPair->GetM(2) - entrancePair->GetM(1)) * this->GetLabEnergy()));
-  double temp_lab_angle = 180. / pi * acos((gamma + cos(this->GetCMAngle() * pi / 180.)) / sqrt(1 + gamma * gamma + 2. * gamma * cos(this->GetCMAngle() * pi / 180.)));
-  //  std::cout<<temp_lab_angle<<std::endl;
-}
-
-/*!
- * Velocity (in units of c) of the centre of mass of a projectile of kinetic energy E_lab on a target at rest:
- * beta = p c / (E_total) = sqrt(E_lab (E_lab + 2 m1 c^2)) / ((m1 + m2) c^2 + E_lab).
- */
-static double CMVelocity(double labEnergy, PPair *entrancePair) {
-  return sqrt(labEnergy * (labEnergy + 2.0 * entrancePair->GetM(1) * uconv)) /
-      ((entrancePair->GetM(1) + entrancePair->GetM(2)) * uconv + labEnergy);
 }
 
 /*!
@@ -1007,8 +875,8 @@ static double CMVelocity(double labEnergy, PPair *entrancePair) {
  * velocity beta, cos(theta_cm) = (cos(theta_lab) - beta) / (1 - beta cos(theta_lab)).
  */
 void EPoint::ConvertLabAngleGammas(PPair *entrancePair) {
-  double beta = CMVelocity(this->GetLabEnergy(), entrancePair);
-  cm_angle_ = 180. / pi * acos((cos(this->GetLabAngle() * pi / 180.) - beta) / (1 - beta * cos(this->GetLabAngle() * pi / 180.)));
+  const double beta = azure2::experiment::CMVelocity(PartitionOf(entrancePair), this->GetLabEnergy());
+  cm_angle_ = azure2::experiment::PhotonLabToCM(beta, this->GetLabAngle());
   // as for particles: the factor that takes the angle back to the lab for the output files
   angleKinFactor_ = (cm_angle_ > 0.) ? this->GetLabAngle() / cm_angle_ : 1.0;
   this->SetAngleKinFactor(angleKinFactor_);
@@ -1033,30 +901,19 @@ void EPoint::ConvertCrossSection(PPair *entrancePair, PPair *exitPair) {
     this->SetCrossSectionKinFactor(crossSectionKinFactor_);
     return;
   }
-  if (this->GetLabAngle() == 0.0 || this->GetLabAngle() == 180.0) {
-    double m1 = entrancePair->GetM(1);
-    double m2 = entrancePair->GetM(2);
-    double m3 = exitPair->GetM(1);
-    double m4 = exitPair->GetM(2);
-    double e1 = this->GetLabEnergy();
-    double qValue = entrancePair->GetSepE() + entrancePair->GetExE() - exitPair->GetSepE() - exitPair->GetExE();
-    double et = e1 + qValue;
-    double a = m1 * m4 * e1 / (m1 + m2) / (m3 + m4) / et;
-    double b = m1 * m3 * e1 / (m1 + m2) / (m3 + m4) / et;
-    double c = m2 * m3 / (m1 + m2) / (m3 + m4) * (1 + m1 * qValue / m2 / et);
-    double d = m2 * m4 / (m1 + m2) / (m3 + m4) * (1 + m1 * qValue / m2 / et);
-    double e3et = b + d + 2 * pow(a * c, 0.5) * cos(pi / 180. * this->GetCMAngle());
-    conversionFactor = pow(a * c, 0.5) * pow(d / b - pow(sin(this->GetLabAngle() * pi / 180.), 2.0), 0.5) / e3et;
-  } else {
-    conversionFactor = pow(sin(pi / 180. * this->GetLabAngle()) / sin(pi / 180. * this->GetCMAngle()), 2.0) * cos(pi / 180. * (this->GetCMAngle() - this->GetLabAngle()));
-  }
+  conversionFactor = azure2::experiment::ParticleJacobian(PartitionOf(entrancePair), PartitionOf(exitPair),
+                                                          this->GetLabEnergy(), this->GetLabAngle(), this->GetCMAngle());
   cm_crosssection_ = this->GetLabCrossSection() * conversionFactor;
   cm_dcrosssection_ = this->GetLabCrossSectionError() * conversionFactor;
   crossSectionKinFactor_ = conversionFactor;
   this->SetCrossSectionKinFactor(crossSectionKinFactor_);
 }
 
-/* Calculates the conversion factor */
+/*!
+ * dOmega_lab/dOmega_cm of a particle at this point, without storing it (the RATIO frame factors,
+ * ESegment::RatioTermFrameFactor).  Relativistic=1: the relativistic map's factor where it reaches the lab angle,
+ * otherwise -- unlike ConvertCrossSection, which keeps the last valid factor -- the non-relativistic one.
+ */
 
 double EPoint::CalculateCrossSectionConversionFactor(PPair *entrancePair, PPair *exitPair) {
   double conversionFactor;
@@ -1064,24 +921,8 @@ double EPoint::CalculateCrossSectionConversionFactor(PPair *entrancePair, PPair 
   if (Kinematics::Relativistic() && this->RelativisticLabToCM(entrancePair, exitPair, this->GetCMAngle(), relAngle, conversionFactor)) {
     return conversionFactor;
   }
-  if (this->GetLabAngle() == 0.0 || this->GetLabAngle() == 180.0) {
-    double m1 = entrancePair->GetM(1);
-    double m2 = entrancePair->GetM(2);
-    double m3 = exitPair->GetM(1);
-    double m4 = exitPair->GetM(2);
-    double e1 = this->GetLabEnergy();
-    double qValue = entrancePair->GetSepE() + entrancePair->GetExE() - exitPair->GetSepE() - exitPair->GetExE();
-    double et = e1 + qValue;
-    double a = m1 * m4 * e1 / (m1 + m2) / (m3 + m4) / et;
-    double b = m1 * m3 * e1 / (m1 + m2) / (m3 + m4) / et;
-    double c = m2 * m3 / (m1 + m2) / (m3 + m4) * (1 + m1 * qValue / m2 / et);
-    double d = m2 * m4 / (m1 + m2) / (m3 + m4) * (1 + m1 * qValue / m2 / et);
-    double e3et = b + d + 2 * pow(a * c, 0.5) * cos(pi / 180. * this->GetCMAngle());
-    conversionFactor = pow(a * c, 0.5) * pow(d / b - pow(sin(this->GetLabAngle() * pi / 180.), 2.0), 0.5) / e3et;
-  } else {
-    conversionFactor = pow(sin(pi / 180. * this->GetLabAngle()) / sin(pi / 180. * this->GetCMAngle()), 2.0) * cos(pi / 180. * (this->GetCMAngle() - this->GetLabAngle()));
-  }
-  return conversionFactor;
+  return azure2::experiment::ParticleJacobian(PartitionOf(entrancePair), PartitionOf(exitPair), this->GetLabEnergy(),
+                                              this->GetLabAngle(), this->GetCMAngle());
 }
 
 /*!
@@ -1089,11 +930,10 @@ double EPoint::CalculateCrossSectionConversionFactor(PPair *entrancePair, PPair 
  */
 
 void EPoint::ConvertCrossSectionGammas(PPair *entrancePair) {
-  // dsigma/dOmega_cm = dsigma/dOmega_lab * dOmega_lab/dOmega_cm.  For a photon, from the aberration above,
-  // dOmega_lab/dOmega_cm = d cos(theta_lab)/d cos(theta_cm) = (1 - beta^2)/(1 + beta cos theta_cm)^2
-  //                      = (1 - beta cos theta_lab)^2 / (1 - beta^2).
-  // (Before 2026-10-23 this was (1 - beta)^2/(1 - beta cos theta_lab), wrong at first order in beta: an overall
-  // -2 beta and a P1-shaped 3 beta cos(theta) -- -1.9 % at 90 deg and -4.8 % at 167 deg for 12C(a,g) at 3 MeV.)
+  // dsigma/dOmega_cm = dsigma/dOmega_lab * dOmega_lab/dOmega_cm, dOmega_lab/dOmega_cm = (1 - beta cos theta_lab)^2 /
+  // (1 - beta^2) (azure2::experiment::PhotonJacobian).  (Before 2026-10-23 this was (1 - beta)^2/(1 - beta cos
+  // theta_lab), wrong at first order in beta: an overall -2 beta and a P1-shaped 3 beta cos(theta) -- -1.9 % at
+  // 90 deg and -4.8 % at 167 deg for 12C(a,g) at 3 MeV.)
   double conversionFactor = this->CalculateCrossSectionGammaConversionFactor(entrancePair);
   cm_crosssection_ = this->GetLabCrossSection() * conversionFactor;
   cm_dcrosssection_ = this->GetLabCrossSectionError() * conversionFactor;
@@ -1104,14 +944,11 @@ void EPoint::ConvertCrossSectionGammas(PPair *entrancePair) {
 
 /*!
  * The lab-to-c.m. conversion factor for gamma rays (the one ConvertCrossSectionGammas stores; also the
- * RATIO path of ESegment::CalculateTheoreticalCrossSection).  Until 2026-10-26 this copy still had the
- * pre-2026-10-23 formula (1 - beta)^2 / (1 - beta cos theta_lab); a gamma RATIO of one entrance pair was
- * unaffected (the same wrong factor in numerator and denominator).
+ * RATIO path of ESegment::CalculateTheoreticalCrossSection).
  */
 
 double EPoint::CalculateCrossSectionGammaConversionFactor(PPair *entrancePair) {
-  double beta = CMVelocity(this->GetLabEnergy(), entrancePair);
-  return pow(1.0 - beta * cos(this->GetLabAngle() * pi / 180.0), 2.0) / (1.0 - beta * beta);
+  return azure2::experiment::PhotonJacobian(PartitionOf(entrancePair), this->GetLabEnergy(), this->GetLabAngle());
 }
 
 /*!

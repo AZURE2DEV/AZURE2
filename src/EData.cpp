@@ -793,31 +793,14 @@ int EData::MakePoints(const Config &configure, CNuc *theCNuc) {
                 theSegment->AddPoint(NewPoint);
                 EPoint *thePoint = theSegment->GetPoint(theSegment->NumPoints());
                 thePoint->SetParentData(this);
-                if (entrancePair->GetPType() == 20 && exitPair)
-                  thePoint->ConvertDecayEnergy(exitPair);
-                else if (!theSegment->IsCMDifferential())
-                  thePoint->ConvertLabEnergy(entrancePair);
-                else if (theSegment->IsCMDifferential())
-                  thePoint->ConvertLabEnergy(entrancePair);
                 // A RATIO is dimensionless: no cross-section conversion (as ESegment::Fill for data segments;
                 // the stored factor would otherwise divide the ratio in the lab output, kinflag.dat = 1).
                 const bool isRatio = theSegment->IsAdvanced() && theSegment->GetLegacyOperationType() == 1;
-                if (exitPair && exitPair->GetPType() == 0 && theSegment->IsDifferential() &&
-                    !theSegment->IsPhase() && !theSegment->IsAngularDist() && !theSegment->IsCMDifferential()) {
-                  const bool inRange = (theSegment->GetEntranceKey() == theSegment->GetExitKey())
-                                           ? thePoint->ConvertLabAngle(entrancePair)
-                                           : thePoint->ConvertLabAngle(entrancePair, exitPair, configure);
-                  if (!inRange) {
-                    configure.outStream << "ERROR: " << "test segment #" << theSegment->GetSegmentKey() << ": lab angle " << thePoint->GetLabAngle() << " deg at E_lab = " << thePoint->GetLabEnergy()
-    << " MeV: " << thePoint->GetLabAngleWhy() << "." << std::endl;
-                    return -1;
-                  }
-                  if (!isRatio) thePoint->ConvertCrossSection(entrancePair, exitPair);
-                }
-                if (exitPair && exitPair->GetPType() == 10 && theSegment->IsDifferential() &&
-                    !theSegment->IsPhase() && !theSegment->IsAngularDist() && !theSegment->IsCMDifferential()) {
-                  thePoint->ConvertLabAngleGammas(entrancePair);
-                  if (!isRatio) thePoint->ConvertCrossSectionGammas(entrancePair);
+                if (!theSegment->ConvertPointToCM(thePoint, entrancePair, exitPair, configure, !isRatio,
+                                                  ESegment::BeyondRange::Stop)) {
+                  configure.outStream << "ERROR: " << "test segment #" << theSegment->GetSegmentKey() << ": lab angle " << thePoint->GetLabAngle() << " deg at E_lab = " << thePoint->GetLabEnergy()
+                                      << " MeV: " << thePoint->GetLabAngleWhy() << "." << std::endl;
+                  return -1;
                 }
                 if (eStep == 0.0) break;
               }
@@ -1253,9 +1236,7 @@ int EData::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, const st
     PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(seg->GetEntranceKey()));
     PPair *exitPair = theCNuc->GetPairFromKey(seg->GetExitKey());  // nullptr for total capture (-1)
     // The c.m./lab factor the shift step uses for sub-points (ESegment::UpdatePointEnergyWithShift).
-    const double cmFactor = (entrancePair->GetPType() == 20 && exitPair)
-        ? (exitPair->GetM(1) + exitPair->GetM(2)) / exitPair->GetM(2)
-        : entrancePair->GetM(2) / (entrancePair->GetM(1) + entrancePair->GetM(2));
+    const double cmFactor = ESegment::CMEnergyFactor(entrancePair, exitPair);
     for (int i = 1; i <= seg->NumPoints(); i++) {
       EPoint *point = seg->GetPoint(i);
       if (!point->GetSubGridSpec().valid) continue;
@@ -1534,11 +1515,7 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
   for (ESegmentIterator segment = GetSegments().begin(); segment < GetSegments().end(); segment++) {
     PPair *entrancePair = compound->GetPair(compound->GetPairNumFromKey(segment->GetEntranceKey()));
     PPair *exitPair = compound->GetPairFromKey(segment->GetExitKey());  // nullptr for total capture (-1)
-    double cmConversion;
-    if (entrancePair->GetPType() == 20 && exitPair)
-      cmConversion = (exitPair->GetM(1) + exitPair->GetM(2)) / exitPair->GetM(2);
-    else
-      cmConversion = entrancePair->GetM(2) / (entrancePair->GetM(1) + entrancePair->GetM(2));
+    const double cmConversion = ESegment::CMEnergyFactor(entrancePair, exitPair);
 
     if (segment->IsTargetEffect()) {
       TargetEffect *targetEffect = this->GetTargetEffect(segment->GetTargetEffectNum());
@@ -1747,17 +1724,9 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
         // (EData::Initialize repeats this, idempotently, from the lab energy).
         PPair *compEntrance = compound->GetPair(compound->GetPairNumFromKey(component->GetEntranceKey()));
         PPair *compExit = compound->GetPairFromKey(component->GetExitKey());
-        double compConversion;
-        if (compEntrance->GetPType() == 20 && compExit)
-          compConversion = (compExit->GetM(1) + compExit->GetM(2)) / compExit->GetM(2);
-        else
-          compConversion = compEntrance->GetM(2) / (compEntrance->GetM(1) + compEntrance->GetM(2));
-        for (EPointIterator point = component->GetPoints().begin(); point < component->GetPoints().end(); point++) {
-          if (compEntrance->GetPType() == 20)
-            point->ConvertDecayEnergy(compExit);
-          else
-            point->ConvertLabEnergy(compEntrance);
-        }
+        const double compConversion = ESegment::CMEnergyFactor(compEntrance, compExit);
+        for (EPointIterator point = component->GetPoints().begin(); point < component->GetPoints().end(); point++)
+          ESegment::ConvertPointEnergyToCM(&*point, compEntrance, compExit);
         if (component->IsTargetEffect()) {
           TargetEffect *targetEffect = this->GetTargetEffect(component->GetTargetEffectNum());
           const int bohrZ1 = (compEntrance->GetPType() == 20) ? 0 : compEntrance->GetZ(1);
@@ -3526,30 +3495,11 @@ int EData::InitializeComponentSegments(CNuc *theCNuc, const Config &configure) {
       EPoint *point = componentSegment.GetPoint(i);
 
       if (entrancePair && exitPair) {
-        if (entrancePair->GetPType() == 20) {
-          point->ConvertDecayEnergy(exitPair);
-        } else if (!componentSegment.IsCMDifferential()) {
-          point->ConvertLabEnergy(entrancePair);
-        } else if (componentSegment.IsCMDifferential()) {
-          point->ConvertLabEnergy(entrancePair);
-        }
-
-        if (exitPair->GetPType() == 0 && componentSegment.IsDifferential() &&
-            !componentSegment.IsPhase() && !componentSegment.IsAngularDist() && !componentSegment.IsCMDifferential()) {
-          const bool inRange = (entranceKey == exitKey) ? point->ConvertLabAngle(entrancePair)
-                                                        : point->ConvertLabAngle(entrancePair, exitPair, configure);
-          if (!inRange) {
-            configure.outStream << "ERROR: " << "component (" << entranceKey << " -> " << exitKey << ") of segment #" << componentSegment.GetSegmentKey() << ": lab angle " << point->GetLabAngle() << " deg at E_lab = " << point->GetLabEnergy()
-    << " MeV: " << point->GetLabAngleWhy() << "." << std::endl;
-            return -1;
-          }
-          point->ConvertCrossSection(entrancePair, exitPair);
-        }
-
-        if (exitPair->GetPType() == 10 && componentSegment.IsDifferential() &&
-            !componentSegment.IsPhase() && !componentSegment.IsAngularDist() && !componentSegment.IsCMDifferential()) {
-          point->ConvertLabAngleGammas(entrancePair);
-          point->ConvertCrossSectionGammas(entrancePair);
+        // The base segment's sequence, with the component's own pairs; a component's value is always converted.
+        if (!componentSegment.ConvertPointToCM(point, entrancePair, exitPair, configure, true, ESegment::BeyondRange::Stop)) {
+          configure.outStream << "ERROR: " << "component (" << entranceKey << " -> " << exitKey << ") of segment #" << componentSegment.GetSegmentKey() << ": lab angle " << point->GetLabAngle() << " deg at E_lab = " << point->GetLabEnergy()
+                              << " MeV: " << point->GetLabAngleWhy() << "." << std::endl;
+          return -1;
         }
         // The sub-points of a target effect were laid out (ReadTargetEffectsFile) from the copied base
         // point's c.m. angle, before this conversion with the component's own pair; put them at the

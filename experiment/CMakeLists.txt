@@ -17,7 +17,8 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
 endif()
 
 add_library(azure2_experiment STATIC
-  src/Expression.cpp)
+  src/Expression.cpp
+  src/Frames.cpp)
 add_library(azure2::experiment ALIAS azure2_experiment)
 target_include_directories(azure2_experiment PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_link_libraries(azure2_experiment PUBLIC azure2_physics)
@@ -27,10 +28,11 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
   target_compile_options(azure2_experiment PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
-# Each node against the engine's expression written out in the test, bit for bit, and backward against finite
-# differences (docs/upgrade/data_model.md step S8).
+# expression: each node against the engine's expression written out in the test, bit for bit, and backward against
+# finite differences (docs/upgrade/data_model.md step S8).  frames: the lab -> c.m. functions against the engine's
+# expressions before S6, bit for bit, and against closed forms and Lorentz boosts (step S6).
 # (Sources named in full: repo_consistency checks that every tests/*_test.cpp is named here.)
-foreach(_src expression_test.cpp)
+foreach(_src expression_test.cpp frames_test.cpp)
   string(REPLACE "_test.cpp" "" _t ${_src})
   add_executable(experiment_${_t}_test tests/${_src})
   target_link_libraries(experiment_${_t}_test PRIVATE azure2_experiment)

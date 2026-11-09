@@ -75,5 +75,34 @@ One tree therefore serves every evaluation and every working copy, and it is con
 gives the per-nucleus terms of a sample (every `Weighted` node's value added to its nucleus in creation order, and a
 transform's w_q v_q), as `SetNaturalTerms` records them now.
 
-**Not here yet.** The tree is not wired into the engine (S10), and no keyword builds one (S9). The library's
-`Transmission` and `YieldY0` are a copy of `ESegment`'s until S6 makes `ESegment` call them.
+**Not here yet.** The tree is not wired into the engine (S10), and no keyword builds one (S9). `ESegment::Transmission`,
+`YieldY0` and `TermFrameFactor` call the library's (one formula each).
+
+## 2. Frames (`Frames.h`, step S6)
+
+A measured point is given in the laboratory: beam particle 1 of the entrance partition with kinetic energy E_lab (MeV)
+on particle 2 at rest, and for lab-frame differential data the detected particle 1 of the exit partition (a photon
+for a capture exit) at θ_lab (deg). The comparison is made in the c.m. frame of the entrance partition, so each point
+needs its c.m. energy E_c.m. = E_lab m₂/(m₁ + m₂) (relativistically √s − m₁ − m₂, s = (m₁ + m₂)² + 2 m₂ E_lab), the
+excitation energy E_x = E_c.m. + S + E*, its c.m. angle θ_c.m. (elastic, Marion–Young for a reaction, the boost of
+the detected particle with relativistic=1, photon aberration) and the Jacobian J = dΩ_lab/dΩ_c.m. that multiplies the
+measured value and its uncertainty, dσ/dΩ_c.m. = J dσ/dΩ_lab.
+
+The library holds these formulas as functions of plain numbers (masses in u, energies in MeV, angles in deg; a
+`Partition` is m₁, m₂, S, E*), in the engine's order of operations: `BeamToCM`, `DecayToCM`, `ElasticLabToCM`,
+`ReactionLabToCM`, `RelativisticLabToCM`, `CMVelocity`, `PhotonLabToCM`, `ParticleJacobian`, `PhotonJacobian`, and
+the relativistic energy maps `CMFromLab`, `LabFromCM`, `CMFromDecay` (which `include/Kinematics.h` now calls). A map
+that does not reach the lab angle returns false with an `AngleLimit` (the maximum lab angle and the reason).
+
+The engine keeps the state rules: `EPoint`'s conversion functions read the point's lab values and pairs, call the
+library and store the results (and the maximum and reason, as before); `ESegment::ConvertPointToCM` is the one
+sequence (energy, angle, value) that `ESegment::Fill`, `UpdatePointEnergyWithShift`, the test segments and the
+component segments call. Where the lab angle is beyond the kinematic maximum a caller either stops (load) or converts
+at the last valid angle (an energy shift mid-fit). `ESegment::CMEnergyFactor` is the one E_c.m./E_lab factor of the
+sub-point shift and the target-effect grids.
+
+Tests (`experiment_frames`): the engine's expressions before S6 written out, against the library on 20 000 random
+settings each, bit for bit; the elastic closed form tan θ_lab = sin θ_c.m./(cos θ_c.m. + m₁/m₂) (3.8 × 10⁻¹³);
+the inverse aberration; every Jacobian against a numerical d cos θ_lab / d cos θ_c.m. of the library's own angle map
+(≤ 1.3 × 10⁻¹⁰); the relativistic branch against Lorentz boosts built in the test from four-vectors (E_c.m. from the
+invariant mass, θ* boosted to the lab and converted back, 8.5 × 10⁻¹³; J = d cos θ_lab / d cos θ*, 2.9 × 10⁻¹⁰).
