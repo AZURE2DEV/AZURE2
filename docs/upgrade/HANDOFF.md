@@ -2,6 +2,20 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-09 (day) — PI decisions; the Brune blocker fixed; step 3b (ii)
+
+**PI decisions.** (1) `brune-iteration`: option (i), the iteration must converge where the root exists.
+(2) afd8ee6a (`apply_fit_test.py` to §9's rule) confirmed. (3) The Whittaker engine branch waits for step 3b (ii)
+— now done, see below.
+
+| branch | state |
+|---|---|
+| `feature/upgrade-1-brune-iteration` | **verified, blocker fixed** (`level_parameters.md` §10, design a3bb203a + d6afeaeb + ff484603, code 5d8dc1e1, verified e4ca5d9d). E − e(E) is strictly increasing (Weyl, S′ ≥ 0), so each level has one Brune energy; the fixed-point map repels where e′ < −1 (−2.88 on the blocker: 2-cycle −0.973 / 4.462 MeV around the root 2.36820 MeV). A level that ends unconverged is now the root by bracket + bisection (status `Bracketed`). ctest 111/111, run_tests 133/133, threads identical; 179 × 3: only `screening_6li` formal changes (three background levels now transformed, equal to the Brune input digit for digit) |
+| `feature/upgrade-1-whittaker-engine` | step 3b (ii) done (design cf5ddcce, code 82ca0985, verified b70ffdf9): final-state W memoized on its exact arguments, bit-identical (2040/2040), 99.8 % hits; T1 5.14 → 2.77 s, 13N 9.71 → 7.08 s (GSL build: 2.89 / 7.60 s). **Ready for PI review/merge**; after the merge everyone rebuilds the Coulomb table (format 2) |
+
+**Next.** (1) PI: merge order (`zero-width-fixed`, `whittaker`, `brune-iteration`, then `whittaker-engine`).
+(2) Narrowing `ShftFunc`'s band near threshold (own comparison). (3) Lecture 2.
+
 ## 2026-11-09 (night) — the three branches built and verified; the Whittaker engine part on a new branch; lecture 1
 
 Work moved to a 24-core node (local builds, no Condor); at most 12 threads. Environment: conda env with Python 3.12,
