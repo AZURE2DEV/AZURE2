@@ -2,6 +2,41 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## Phase 3 merged; guardrails (written 2026-11-09, after the plan entry below)
+
+**Merged into `feature/upgrade`:** `feature/upgrade-3-project`, **Phase 3** (design and record in `project.md`;
+decisions P1–P5). 31 commits; pyazr −460 lines net (−980 / +517), `io/` +937 lines.
+- `io/` (`azure2_io`, standalone like `physics/`): the lossless `io::Document`, the format conversion
+  (`io::ConvertToFormat2`, format 2 in `<config>`), the engine's level grouping. Round trip byte for byte of every
+  `.azr` under `tests/` and `examples/` in 945 variants (P1: the 48,922-file archive is on another machine).
+- The engine reads every section from the document (`Config::SectionStream`); a format-1 file is converted in memory
+  with a note; `AZURE2 --convert OLD NEW` and `pyazr.convert_azr` write it (P5: old files keep working).
+- pyazr reads through the binding: document, segment / extrapolation / target-effect lines, level grouping, `<thm>`
+  (`read_thm_block`; the 650-line Python port is deleted). The places where the two readers disagreed are decided
+  as P2/P3 (`project.md` §5). pyazr needs the compiled module to read a project; 2.12.0.
+- Step 4: `AzrModel` writes an unedited file back byte for byte in any layout or line ending; an edit changes only
+  its lines (`azr_layout_test.py`).
+- Step 5: one mass table. The engine's THM nuclei are generated from `pyazr/data/mass_1.mas20` (they were up to
+  1 × 10⁻⁸ u off it; no output of the 179 projects moved) and checked by `pyazr_thm_nuclide_masses`; u, ħc, α, m_e
+  have one definition (`physics/.../Constants.h`).
+- Phase 2 leftover closed: the API's Park / abundance / scattering-length terms come from `Objective::ModelChi2`.
+
+**Guardrails (`CLAUDE.md` "Recipes", `repo_consistency_test.py` 10–12):** a recipe per kind of addition (segment
+keyword, `<config>` key or section, objective term, physics function, CLI flag), each with the check that fails when
+it is bypassed: a constant copied with another value (10), a χ² term added outside `Objective.cpp` (11), the project
+file opened outside `Config.cpp` (12). Each was shown to fail on an injected bypass. The fast pre-merge check is
+`scripts/check.sh --quick` (consistency first, under a second).
+
+**Verified** (branch head bba7f965 for the engine; the later commits are API, tests and docs): 179 × 3 — every output
+identical except run.log, whose one changed line is the format-1 note; ctest 130/130 and the slow tests 10/10 on the
+final head; `run_tests.sh` 133/133.
+
+**Open, for the maintainers (they move results):** `EPoint.cpp`'s m_e is CODATA 2002 (0.510998903 MeV) in the
+Fermi-function argument; `ECIntegral.cpp`'s proton mass 1.00727638 u (CODATA 2018: 1.007276466621). The first is a listed exception of check 10 (which covers u, ħc, α, m_e).
+
+**Next.** Thread check and speed benchmark on the merged head (running); the document for the owner; then the first
+feature through the recipes, extrapolation segments on a user or adaptive grid.
+
 ## 2026-11-10 — plan to the PI's meeting with the owner (next week)
 
 **PI (maintainer):** the goal is to hand the owner a code that is efficient, easy to maintain and easy to extend, while

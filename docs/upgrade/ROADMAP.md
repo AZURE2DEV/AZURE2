@@ -58,36 +58,36 @@ in 47c119e4, `fix/adaptive-grid-criterion`]; the other four inherited failures a
       `coulomb(l, eta, rho) -> F, G, Fp, Gp, sigma_l`; Whittaker functions (move AZURE2's `WhitFunc`); remove committed
       build products (`.so`, `libcoulfg.a`, `cmake_install.cmake`, `.DS_Store`); tests against mpmath; tag a release.
 - [ ] `physics/` library target. `System`, `JpiBlock` (E[λ], γ[λ, c] arrays), partitions, channels.
-      First step done on `feature/upgrade-1-physics-system` (not merged): the `azure2_physics` target, `System` and
+      First step done on `feature/upgrade-1-physics-system` (merged): the `azure2_physics` target, `System` and
       `JpiBlock` as values (`physics_system.md`), the `CNuc` → System adapter `src/CNucSystem.cpp`, tests
       `physics_system_unit`, `physics_standalone`, `physics_system_from_cnuc`. The engine does not use them yet.
 - [ ] `channel_functions(α, l, E)` from pycoulomb, tables per (α, l, E); replaces `external/coul`, `CoulFunc`,
       `CoulFuncCache`, `WhitFunc`. Cross-method identity test (coul, coulsm, coulfg, GSL).
-      *First part done on `feature/upgrade-1-coulomb` (2026-11-07, not merged; design `coulomb.md`):
+      *First part done on `feature/upgrade-1-coulomb` (2026-11-07, merged; design `coulomb.md`):
       `physics/coulomb` (coulsm, coul, coulfg, coulcc; mpmath, Wronskian, identity, threads; GSL cross-check),
       `external/coul` deleted, open-channel `channel_functions` and the kinematics in physics/ called by the engine;
       bit-identical outputs except hybrid channels (≤ 9.9 × 10⁻¹¹, explained). `CoulFuncCache` kept: its deletion
       (branch `-nomemo`) costs 3–17× and waits for the per-stage table. Open (step 3b): Whittaker functions without
       GSL, the per-stage table, then the memo; hybrid channels, `CoulombTable`, `--gsl-coul`.*
-      *Step 3b (ii) on `feature/upgrade-1-channel-table` (2026-11-07, not merged; design `channel_table.md`): the
+      *Step 3b (ii) on `feature/upgrade-1-channel-table` (2026-11-07, merged; design `channel_table.md`): the
       per-stage channel table and the radial scratch, `CoulFuncCache` deleted; outputs as on `-nomemo`, THM checks
       and thread identity deterministic; free-shift refills from the segment's last three shift tables (interim until
       the analytic shift derivative); T2 fit200 −13 % / −23 % (1 / 8 threads), 13N +1.5 % (within spread),
       fit peak RSS +13 % / +30 % (`channel_table.md` §6).*
 - [ ] Split `CNuc`: nucleus data → `System`; boundary conditions, shift functions, Brune/Park transforms, angular
       coefficients → functions of the System.
-      *Step 1 done on `feature/upgrade-1-cnuc-split` (2026-11-07, not merged): plan `cnuc_split.md`;
+      *Step 1 done on `feature/upgrade-1-cnuc-split` (2026-11-07, merged): plan `cnuc_split.md`;
       `CalcBoundaryConditions`, `TransformIn` (all bases) and `TransformOut`'s formal iteration call `level_parameters`;
       1503 output files bit-identical in three bases.*
-      *Step 1b done on `feature/upgrade-1-cnuc-split-1b` (2026-11-07, not merged): B_c from the lowest level, formal
+      *Step 1b done on `feature/upgrade-1-cnuc-split-1b` (2026-11-07, merged): B_c from the lowest level, formal
       levels oriented like their Brune levels (not "largest |γ| positive", which changed capture observables), own
       eigensolvers, one channel energy; every changed output of 179 projects × 3 bases classified, no re-baseline.*
-      *Step 2 done on `feature/upgrade-1-cnuc-split-2` (2026-11-08, not merged): `observed_levels` is the one
+      *Step 2 done on `feature/upgrade-1-cnuc-split-2` (2026-11-08, merged): `observed_levels` is the one
       definition of Γ, C, μ, Q, B from γ^int + γ^ext (five copies deleted); `ConvertAmplitudeBasis` through
       `park_from_brune`; external capture takes the final state's Brune amplitude and energy in every basis (formal ↔
       Brune capture to `beam_profile_kernel`'s 6.049 MeV state 0.81 → agree; `tests/beam_profile_kernel/check.sh`);
       Brune and Park outputs identical, formal changes classified.*
-      *Step 4 done on `feature/upgrade-1-external-capture` (2026-11-08, not merged): `physics/external_capture` (N_f,
+      *Step 4 done on `feature/upgrade-1-external-capture` (2026-11-08, merged): `physics/external_capture` (N_f,
       γ^ext, the multipole rule, the projector Π); `--ignore-externals` on the input, the same in every basis; one
       adjoint test for the formal-basis parts; Brune and Park outputs identical, formal changes classified. Open before
       merge: `brune_from_formal`'s 10⁻¹² MeV tolerance at the rounding limit (`external_capture.md` §8). Next: 3b (i),
@@ -96,12 +96,12 @@ in 47c119e4, `fix/adaptive-grid-criterion`]; the other four inherited failures a
       own definitions (`docs/lectures/PLAN.md`); lecture 1 (external region) has its figures, text to write.*
 - [ ] Internal convention written in `docs/source/theory/conventions.rst`; `Convention` record; recoupling (6j) and
       phase conversions in `level_parameters`; convention-invariance test on T1–T3.
-      *Documentation part done on `feature/upgrade-1-conventions` (2026-11-07, not merged): the page states the
+      *Documentation part done on `feature/upgrade-1-conventions` (2026-11-07, merged): the page states the
       present engine's conventions with file:line references, lists where existing docs contradict the code, and
       sketches the record (planned); `tests/coulomb_nuclear_sign` pins the Coulomb–nuclear interference sign. Open:
       the record, `level_parameters`, the invariance test, and an independent check of the internal–external
       capture sign.*
-      *Code part done on `feature/upgrade-1-level-parameters` (2026-11-07, not merged): the `Convention` record in the
+      *Code part done on `feature/upgrade-1-level-parameters` (2026-11-07, merged): the `Convention` record in the
       System; `level_parameters` (observed ↔ Brune/Park, Brune ↔ formal, B_c, external-capture subtraction, LS ↔ jj
       by 6j, order and iˡ signs, an orthogonal T with its Jacobian), own 3j/6j and eigensolvers
       (`level_parameters.md`). Against `CNuc` on T1–T3: Brune and Park amplitudes and B_c bit-identical, formal to
@@ -123,11 +123,17 @@ from the terms rather than stored totals; `inference/` as a separate library (af
 
 ## Phase 3 — One project model; library readers
 
-- [ ] `io/Project`: one `.azr` reader/writer; engine and pyazr read through it; old files keep loading.
-- [ ] Round trip of the archive of 48,922 `.azr` files (the sweep used for the parser hardening).
+- [x] `io/Project`: one `.azr` reader/writer; engine and pyazr read through it; old files keep loading.
+- [x] Round trip of the archive of 48,922 `.azr` files (the sweep used for the parser hardening). *P1: the archive is
+      on another machine; done on every `.azr` of the repository in 945 variants (layouts, line endings, removals).*
 - [ ] pyazr `sources/`: AME/NUBASE, ENSDF, EXFOR (X4 master files), IAEA measured stopping; provenance records;
       fixtures of a few kB per library; `pyazr libraries update` as the only networked command.
 Gate: byte-identical round trips; one mass table in the whole code.
+*Done on `feature/upgrade-3-project` (2026-11-09, merged; `project.md`): `io/` (document, format 2 and `--convert`,
+level grouping); the engine and pyazr read every section through it (pyazr's `<thm>` port deleted); unedited files
+written back byte for byte, edits touch only their lines; the engine's THM nuclei generated from the one AME2020
+file; u, ħc, α, m_e defined once; `CLAUDE.md` recipes with consistency checks 10–12. 179 × 3 identical except the
+format-1 note in run.log. Open: `sources/` (the item above), `<scatteringLengths>` tokens still checked by pyazr.*
 
 ## Phase 4 — Data are data
 
