@@ -10,10 +10,15 @@ public names are a contract.
   subprocess and opens no socket. Rebuilding with CMake (`-DUSE_API=ON` and
   pybind11 found) writes `pyazr/_azure2*.so` here. That file is git-ignored;
   never commit it.
-- `azrfile.py` (`AzrModel`) and `datasets.py` (`SegmentSet`) read and write the
-  `.azr` file in pure Python, independently of the engine. They
-  must round-trip every file the engine accepts **unchanged**, including
-  inactive lines, unknown keyword tails and comments.
+- `azrfile.py` (`AzrModel`) and `datasets.py` (`SegmentSet`) edit the `.azr`
+  file on the engine's reading of it: the lossless document (`_azure2.Document`),
+  the line parsers (`parse_segment_line`, `parse_extrapolation_line`,
+  `parse_target_effect_line`, `read_thm_block`), the level grouping and the
+  format conversion (`convert_project_text`). They need the compiled module.
+  Never add a Python parser for a section: bind the engine's. They must
+  round-trip every file the engine accepts **byte for byte** (any layout, any
+  line ending), including inactive lines, unknown keyword tails and comments,
+  and an edit changes only the lines it edits (`tests/pyazr/azr_layout_test.py`).
 - `transform.py` is a Python port of the engine's `TransformOut`, and
   `widths.py` and `bands.py` re-derive engine quantities. Any such duplicate
   needs a test against the engine (see `tests/pyazr/`). Where possible, call

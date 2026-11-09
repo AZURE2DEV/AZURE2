@@ -1,4 +1,7 @@
 #include "Config.h"
+#include "InputFiles.h"
+#include "azure2/io/Convert.h"
+#include "azure2/io/Document.h"
 #include <cstdlib>
 #include "NuclearPotentialManager.h"
 #ifndef NO_STAT
@@ -78,14 +81,55 @@ bool Config::ResolveMatrixRoute() {
   return true;
 }
 
+std::unique_ptr<std::istream> Config::SectionStream(const std::string &name) const {
+  std::unique_ptr<std::istream> file = InputFiles::Open(configfile, cacheInputFiles);
+  if (!file || !*file) return nullptr;
+  std::ostringstream bytes;
+  bytes << file->rdbuf();
+  azure2::io::Document doc = azure2::io::Document::Parse(bytes.str());
+  // A format-1 file is read as its format-2 conversion (docs/upgrade/project.md section 4); ReadConfigFile notes it.
+  azure2::io::ConvertToFormat2(doc);
+  const azure2::io::Document::Section *s = doc.Find(name);
+  if (!s) return nullptr;
+  std::string text;
+  const std::size_t end =
+      (s->close == azure2::io::Document::Section::npos) ? doc.NumLines() : s->close + 1;
+  for (std::size_t i = s->open; i < end; i++) {
+    // The tags as written by the readers' tests ("<name>", "</name>"): trimmed (P2).
+    bool closing = false;
+    const std::string tag = azure2::io::TagOf(doc.Line(i), closing);
+    text += (i == s->open || (i == s->close && !tag.empty())) ? (closing ? "</" : "<") + tag + ">" : doc.Line(i);
+    text += "\n";
+  }
+  return std::unique_ptr<std::istream>(new std::istringstream(text));
+}
+
 int Config::ReadConfigFile() {
   std::string dummy;
   std::string temp;
-  std::ifstream in(configfile.c_str());
-  if (!in) return -1;
+  // The <config> section of the project (io::Document; a tag is a whole trimmed line).
+  std::unique_ptr<std::istream> section = SectionStream("config");
+  if (!section) return -1;
+  // The file's structural problems (an unclosed or repeated section, crossing tags), once per read.
+  {
+    std::unique_ptr<std::istream> file = InputFiles::Open(configfile, cacheInputFiles);
+    std::ostringstream bytes;
+    if (file && *file) bytes << file->rdbuf();
+    azure2::io::Document doc = azure2::io::Document::Parse(bytes.str());  // kept alive for the loops
+    for (const std::string &problem : doc.Problems())
+      outStream << "WARNING: " << configfile << ": " << problem << std::endl;
+    if (azure2::io::FormatOf(doc) == 1) {
+      const std::vector<std::string> changes = azure2::io::ConvertToFormat2(doc);
+      std::string list;
+      for (const std::string &c : changes) list += (list.empty() ? "" : "; ") + c;
+      Note("Note: " + configfile + " is in the old format (format 1); it is read as its format-2 conversion (" + list +
+           "). AZURE2 --convert writes the converted file.");
+    }
+  }
+  useAdaptiveGrid = true;  // the default; a <config> key (format 2) or <potential> (format 1, converted) sets it
+  std::istream &in = *section;
   std::string line = "";
-  while (line != "<config>" && !in.eof()) getline(in, line);
-  if (line != "<config>") return -1;
+  getline(in, line);  // <config>
   in >> temp;
   getline(in, dummy);
   if (temp == "true")
@@ -193,9 +237,12 @@ int Config::ReadConfigFile() {
       relativisticReferencePair = atoi(value.c_str());
     else if (key == "priorCovariance")
       priorCovariance = value;
+    else if (key == "useAdaptiveGrid")  // format 2 (format 1: in <potential>)
+      useAdaptiveGrid = (value == "1" || value == "true");
+    else if (key == "format")  // the file format (docs/upgrade/project.md section 4); read by io::FormatOf
+      continue;
   }
   if (line != "</config>") return -1;
-  in.close();
   // A malformed optional block has already been reported: -2, so the caller
   // does not add a misleading "could not open" on top.
   if (this->ReadPotentialBlock() != 0) return -2;
@@ -247,12 +294,14 @@ int Config::ReadConfigFile() {
  */
 
 int Config::ReadPotentialBlock() {
-  std::ifstream in(configfile.c_str());
-  if (!in) return -1;
-
+  std::unique_ptr<std::istream> section = SectionStream("potential");
+  if (!section) {  // optional block, absent: no hybrid potential (also after a project that had one)
+    NuclearPotentialManager::instance().resetToDefault();
+    return 0;
+  }
+  std::istream &in = *section;
   std::string line = "";
-  while (line != "<potential>" && !in.eof()) getline(in, line);
-  if (line != "<potential>") return 0;  // optional block, absent
+  getline(in, line);  // <potential>
 
   NuclearPotentialManager &manager = NuclearPotentialManager::instance();
   manager.resetToDefault();
@@ -357,7 +406,6 @@ int Config::ReadPotentialBlock() {
     else if (key == "r0")
       value >> current.r0;
   }
-  in.close();
 
   if (!closed) return -1;  // unterminated block
   flush();

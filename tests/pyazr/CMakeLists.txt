@@ -464,6 +464,34 @@ add_test(NAME pyazr_objective_terms
                  ${CMAKE_CURRENT_SOURCE_DIR}/objective_terms_test.py)
 set_tests_properties(pyazr_objective_terms PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
+# pyazr.convert_azr: an old project in the updated format (docs/upgrade/project.md section 4) -- format 2, idempotent,
+# the removed sections, the same chi-squared as the original.
+add_test(NAME pyazr_convert_azr
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/convert_azr_test.py)
+set_tests_properties(pyazr_convert_azr PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
+# AzrModel groups <levels> lines as the engine does (io::LevelGrouper; docs/upgrade/project.md P2): interleaved lines
+# give the same levels, in AzrModel and in the engine.
+add_test(NAME pyazr_level_grouping
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/level_grouping_test.py)
+set_tests_properties(pyazr_level_grouping PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
+# AzrModel keeps a file's own layout (docs/upgrade/project.md section 5, step 4): unedited round trips of every
+# project file and of CRLF / no-blank-line / interleaved variants; a field edit changes only its lines.
+# One mass table (docs/upgrade/project.md section 5, step 5): the engine's THM nuclei carry the nuclear masses of
+# pyazr/data/mass_1.mas20, the file fill_masses reads.
+add_test(NAME pyazr_thm_nuclide_masses
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/thm_nuclide_masses_test.py)
+set_tests_properties(pyazr_thm_nuclide_masses PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1")
+
+add_test(NAME pyazr_azr_layout
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/azr_layout_test.py)
+set_tests_properties(pyazr_azr_layout PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1")
+
 add_test(NAME pyazr_output_penalties
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/output_penalties_test.py)

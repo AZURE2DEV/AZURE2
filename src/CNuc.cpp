@@ -2,13 +2,14 @@
 #include <iostream>
 #include <cmath>
 #include <iomanip>
+#include <initializer_list>
 #include <sstream>
 #include <algorithm>
 #include <set>
 #include <map>
 #include <tuple>
-#include "InputFiles.h"
 #include "CNuc.h"
+#include "azure2/physics/Constants.h"
 #include <mutex>
 #include <exception>
 #include <stdexcept>
@@ -28,6 +29,7 @@
 #include "NFIntegral.h"
 #include "CNucExternalCapture.h"
 #include "ShftFunc.h"
+#include "azure2/io/LevelGrouping.h"
 #include "azure2/physics/ObservableCoupling.h"
 #include "azure2/physics/Pathways.h"
 
@@ -207,13 +209,13 @@ int CNuc::Fill(const Config &configure, const std::map<int, double> &radii) {
   int PairNum, LevelNum, ChannelNum, JGroupNum;
   int maxLValue = 0;
   std::map<std::pair<int, int>, std::vector<int> > channelsListed;  // (group, level) -> group channel numbers, in line order
-  std::map<std::pair<int, int>, std::set<int> > levelIDs;  // (group, level) -> level IDs of the lines that built it
-  std::unique_ptr<std::istream> inStream = InputFiles::Open(configure.configfile, configure.cacheInputFiles);
+  azure2::io::LevelGrouper levelGrouper;  // the level of each line (io/LevelGrouping.h)
+  // The <levels> section of the project (Config::SectionStream: io::Document, whole-line tags).
+  std::unique_ptr<std::istream> inStream = configure.SectionStream("levels");
+  if (!inStream) return -1;
   std::istream &in = *inStream;
-  if (!in) return -1;
   std::string line = "";
-  while (line != "<levels>" && !in.eof()) getline(in, line);
-  if (line != "<levels>") return -1;
+  getline(in, line);  // <levels>
   std::map<int, int> ecPairs;
   // Which compound nucleus each level (by its ID, column 9) belongs to: the
   // channel lines of one level must all come from pairs of one nucleus.
@@ -316,37 +318,22 @@ int CNuc::Fill(const Config &configure, const std::map<int, double> &radii) {
         // whatever its ID, so a narrow level put next to a broad one of the same J^pi (17O+a: 3/2- at 8.2900 and
         // 8.2893 MeV, IDs 91 and 22) was silently merged into it: its widths overwrote the broad level's and the
         // fit lost three parameters.  Lines with other IDs within 1 keV now make their own level, with a warning.
+        // The level of the line: io::LevelGrouper, the rule pyazr uses too (docs/upgrade/project.md, P2).
         ALevel NewLevel(Line);
         JGroup *group = this->GetJGroup(JGroupNum);
-        LevelNum = 0;
-        int sameEnergy = 0, nearby = 0;
-        for (int lv = 1; lv <= group->NumLevels() && !LevelNum; lv++) {
-          const double dE = fabs(group->GetLevel(lv)->GetE() - NewLevel.GetE());
-          if (dE > 1e-3) continue;
-          if (levelIDs[std::make_pair(JGroupNum, lv)].count(Line.levelID())) LevelNum = lv;
-          else if (dE == 0. && !sameEnergy) sameEnergy = lv;
-          else if (!nearby) nearby = lv;
-        }
-        if (!LevelNum && sameEnergy) {
-          LevelNum = sameEnergy;
-          const std::set<int> &ids = levelIDs[std::make_pair(JGroupNum, LevelNum)];
-          configure.outStream << "WARNING: level IDs " << *ids.begin() << " and " << Line.levelID() << " (J = "
+        const azure2::io::LevelGrouper::Slot slot = levelGrouper.Assign(JGroupNum, NewLevel.GetE(), Line.levelID());
+        if (slot.level > group->NumLevels()) group->AddLevel(NewLevel);
+        LevelNum = slot.level;
+        if (slot.kind == azure2::io::LevelGrouper::Kind::SameEnergy)
+          configure.outStream << "WARNING: level IDs " << slot.otherID << " and " << Line.levelID() << " (J = "
                               << group->GetJ() << (group->GetPi() == -1 ? "-" : "+") << ", E = " << NewLevel.GetE()
                               << " MeV) have the same J^pi and energy; their lines are read as one level." << std::endl;
-        }
-        if (!LevelNum) {
-          group->AddLevel(NewLevel);
-          LevelNum = group->NumLevels();
-          if (nearby) {
-            const std::set<int> &ids = levelIDs[std::make_pair(JGroupNum, nearby)];
-            configure.outStream << "WARNING: level ID " << Line.levelID() << " (J = " << group->GetJ()
-                                << (group->GetPi() == -1 ? "-" : "+") << ", E = " << NewLevel.GetE()
-                                << " MeV) is within 1 keV of level ID " << *ids.begin() << " (E = "
-                                << group->GetLevel(nearby)->GetE() << " MeV); they are kept as two levels."
-                                << std::endl;
-          }
-        }
-        levelIDs[std::make_pair(JGroupNum, LevelNum)].insert(Line.levelID());
+        if (slot.kind == azure2::io::LevelGrouper::Kind::NewNearby)
+          configure.outStream << "WARNING: level ID " << Line.levelID() << " (J = " << group->GetJ()
+                              << (group->GetPi() == -1 ? "-" : "+") << ", E = " << NewLevel.GetE()
+                              << " MeV) is within 1 keV of level ID " << slot.otherID << " (E = "
+                              << group->GetLevel(slot.other)->GetE() << " MeV); they are kept as two levels."
+                              << std::endl;
         // The width belongs to the GROUP's channel number: levels of one J-group may list their channel
         // lines in a different order, or not list a channel another level of the group carries.
         this->GetJGroup(JGroupNum)->GetLevel(LevelNum)->SetGammaFromLine(ChannelNum, Line);
@@ -448,12 +435,12 @@ int CNuc::Fill(const Config &configure, const std::map<int, double> &radii) {
 int CNuc::ReadAbundances(const Config &configure) {
   hasAbundanceBlock_ = false;
   samples_.clear();
-  std::unique_ptr<std::istream> inStream = InputFiles::Open(configure.configfile, configure.cacheInputFiles);
+  // The <abundances> section of the project (Config::SectionStream: io::Document, whole-line tags).
+  std::unique_ptr<std::istream> inStream = configure.SectionStream("abundances");
+  if (!inStream) return 0;
   std::istream &in = *inStream;
-  if (!in) return -1;
   std::string line = "";
-  while (line != "<abundances>" && !in.eof()) getline(in, line);
-  if (line != "<abundances>") return 0;
+  getline(in, line);  // <abundances>
   hasAbundanceBlock_ = true;
   // A sample is created the first time its name appears; the unnamed sample is "".
   auto sampleOf = [&](const std::string &name) -> AbundanceSample & {
@@ -716,8 +703,15 @@ int CNuc::CheckIdenticalChannels(const Config &configure) {
  */
 static std::set<int> ExitPairKeysInFile(const Config &configure) {
   std::set<int> keys;
-  std::unique_ptr<std::istream> inStream = InputFiles::Open(configure.configfile, configure.cacheInputFiles);
-  std::istream &in = *inStream;
+  // The <segmentsData> and <segmentsTest> sections (Config::SectionStream: io::Document, whole-line tags).
+  std::string text;
+  for (const char *name : {"segmentsData", "segmentsTest"})
+    if (std::unique_ptr<std::istream> section = configure.SectionStream(name)) {
+      std::ostringstream s;
+      s << section->rdbuf();
+      text += s.str();
+    }
+  std::istringstream in(text);
   std::string line;
   bool inSegments = false;
   while (std::getline(in, line)) {
@@ -889,7 +883,7 @@ int CNuc::GetMaxLValue() const {
  * nuclear (or bare-proton) masses mixed.  Nothing in the calculation changes.
  */
 int CNuc::CheckMassSeparationConsistency(const Config &configure) const {
-  const double me = 0.51099895;  // MeV
+  const double me = azure2::physics::kElectronMass_MeV;
   const int kMaxListed = 3;
   // A pair whose masses are mass numbers (both integers, other than 12C's exact 12) carries no Q value: it is
   // reported once, not compared.

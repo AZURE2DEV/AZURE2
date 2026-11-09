@@ -53,7 +53,7 @@ cli_doc = read("docs/source/reference/command_line.rst")
 flags = set(re.findall(r'"(--[a-z0-9-]+)=?"', parser))
 # Handled in main() before parseOptions, so accepted although parseOptions
 # never sees them.
-handled_in_main = {"--help", "--build-coulomb-table"}
+handled_in_main = {"--help", "--build-coulomb-table", "--convert"}
 flags -= handled_in_main
 # Removed: rejected with an error, documented as removed, not offered by --help.
 removed = {"--use-api"}
@@ -84,6 +84,7 @@ check_registered("tests/reference", r".+_test\.cpp")
 check_registered("tests/consistency", r".+_test\.py")
 check_registered("tests/upgrade", r".+_test\.cpp")
 check_registered("physics/tests", r".+_test\.cpp", "physics")
+check_registered("io/tests", r".+_test\.cpp", "io")
 
 
 # 3. Every regression directory is actually exercised by tests/run_tests.sh:
@@ -186,6 +187,116 @@ for dirpath, _, files in os.walk(os.path.join(ROOT, "physics")):
                 continue
             problems.append(f"{rel}: includes {inc}; physics/ may include only azure2/physics/ headers and the C++ standard library")
 
+
+# 9. io/ uses nothing either (docs/upgrade/project.md section 2): its own headers ("azure2/io/...") and the C++
+#    standard library only.
+for dirpath, _, files in os.walk(os.path.join(ROOT, "io")):
+    for name in sorted(files):
+        if not name.endswith((".h", ".hpp", ".cpp")):
+            continue
+        rel = os.path.relpath(os.path.join(dirpath, name), ROOT)
+        for inc in re.findall(r'^\s*#\s*include\s*([<"][^>"]+[>"])', read(rel), re.M):
+            if inc.startswith('"') and inc[1:-1].startswith("azure2/io/"):
+                continue
+            if inc.startswith("<") and re.fullmatch(r"[a-z_]+", inc[1:-1]):
+                continue
+            problems.append(f"{rel}: includes {inc}; io/ may include only azure2/io/ headers and the C++ standard library")
+
+
+
+# 10. One set of physical constants (docs/upgrade/project.md section 5, step 5): physics/'s Constants.h holds u, hbar c,
+#     alpha and m_e; any other copy in the engine, the API, io/ or pyazr must carry the same value (comments aside),
+#     so that a constant changed in one place cannot leave a stale copy that only some results use.  KNOWN lists the
+#     copies that differ on purpose, each with its reason; each is a decision for the maintainers, not drift.
+consts_src = read("physics/include/azure2/physics/Constants.h")
+CONSTANTS = {}
+for name, prefix in (("kHbarC_MeV_fm", "197.32"), ("kAtomicMassUnit_MeV", "931.49"), ("kElectronMass_MeV", "0.51099"),
+                     ("kFineStructure", "137.03")):
+    m = re.search(name + r"\s*=\s*(?:1\.0*\s*/\s*)?([0-9.]+)", consts_src)
+    if not m:
+        problems.append(f"physics Constants.h: {name} not found; update this test")
+        continue
+    CONSTANTS[prefix] = (name, float(m.group(1)))
+KNOWN = {
+    # m_e of CODATA 2002 in the beta-decay Fermi-function argument; CODATA 2018 moves beta-delayed outputs (~1e-7).
+    ("src/EPoint.cpp", "0.510998903"),
+}
+for top in ("src", "include", "api", "io", "pyazr"):
+    for dirpath, _, files in os.walk(os.path.join(ROOT, top)):
+        for name in sorted(files):
+            if not name.endswith((".h", ".cpp", ".py")):
+                continue
+            rel = os.path.relpath(os.path.join(dirpath, name), ROOT)
+            in_block = False
+            for line in read(rel).splitlines():
+                code = line
+                if name.endswith(".py"):
+                    code = code.split("#", 1)[0]
+                else:
+                    if in_block:
+                        if "*/" not in code:
+                            continue
+                        code, in_block = code.split("*/", 1)[1], False
+                    code = re.sub(r"/\*.*?\*/", "", code)
+                    if "/*" in code:
+                        code, in_block = code.split("/*", 1)[0], True
+                    code = code.split("//", 1)[0]
+                for literal in re.findall(r"(?<![0-9.])[0-9]+\.[0-9]+", code):
+                    for prefix, (cname, value) in CONSTANTS.items():
+                        if literal.startswith(prefix) and float(literal) != value and (rel, literal) not in KNOWN:
+                            problems.append(f"{rel}: {literal} is a copy of {cname} = {value!r} (physics Constants.h) "
+                                            "with another value; use the constant")
+for rel, literal in sorted(KNOWN):
+    if literal not in read(rel):
+        problems.append(f"{rel}: {literal} is gone; remove it from KNOWN in check 10")
+
+
+# 11. One objective (docs/upgrade/objective.md): the chi^2 terms beyond the data points -- Park's wall, abundances,
+#     scattering lengths, target-effect priors, the data covariance -- are added in src/Objective.cpp, which every
+#     path (CLI fit, gradient, API, writer) asks.  A new path that adds one itself drifts from the rest the first time
+#     a term changes.  Allowed elsewhere: the files that define the terms, and the listed uses with their reason.
+PENALTIES = ("ParkNormPenalty", "AbundancePenalty", "AbundanceSumPenalty", "ScatteringLength::Chi2",
+             "ScreeningPenalty", "DensityPenalty", "DopplerPenalty", "ThicknessPenalty", "CovarianceChi2Correction")
+DEFINERS = {"src/Objective.cpp", "src/CNuc.cpp", "src/ScatteringLength.cpp", "src/EData.cpp", "src/ESegment.cpp",
+            "src/TargetEffect.cpp"}
+ALLOWED_PENALTY_USES = {
+    # The MCMC splits the posterior: per-nucleus abundance priors are log-priors (CalculateLogPrior), so the
+    # likelihood carries only the sum-to-one term and the scattering lengths; Park's wall rejects the step outright.
+    ("src/AZURECalcMCMC.cpp", "AbundanceSumPenalty"), ("src/AZURECalcMCMC.cpp", "ScatteringLength::Chi2"),
+    ("src/AZURECalcMCMC.cpp", "ParkNormPenalty"),
+    # The API's data chi^2 in residual form (EvaluateFilledChi2, the analytic gradient): T2 for its rows;
+    # pyazr_objective checks it against the CLI's objective.
+    ("api/src/AZUREAPI.cpp", "CovarianceChi2Correction"),
+}
+for top in ("src", "api/src"):
+    for name in sorted(os.listdir(os.path.join(ROOT, top))):
+        rel = f"{top}/{name}"
+        if not name.endswith(".cpp") or rel in DEFINERS:
+            continue
+        text = read(rel)
+        for fn in PENALTIES:
+            for m in re.finditer(r"(?<![\w:])" + re.escape(fn) + r"\(", text):
+                line = text[text.rfind("\n", 0, m.start()) + 1:text.find("\n", m.start())]
+                if line.lstrip().startswith(("//", "*")) or (rel, fn) in ALLOWED_PENALTY_USES:
+                    continue
+                problems.append(f"{rel}: calls {fn}() -- a chi^2 term outside src/Objective.cpp; ask the objective "
+                                "(Objective::Engine().Chi2 / ModelChi2 / DataChi2) or add a term there "
+                                "(docs/upgrade/objective.md)")
+
+
+# 12. One reading of the project file (docs/upgrade/project.md): the engine opens the .azr only in src/Config.cpp
+#     (InputFiles + io::Document); every reader takes its section from Config::SectionStream.  Opening the file
+#     anywhere else is a second parser.
+ALLOWED_OPENS = {"src/ParameterLimitsManager.cpp"}  # only whether the file exists (false = no file, true = no block)
+for top in ("src", "api/src"):
+    for name in sorted(os.listdir(os.path.join(ROOT, top))):
+        rel = f"{top}/{name}"
+        if not name.endswith(".cpp") or rel == "src/Config.cpp" or rel in ALLOWED_OPENS:
+            continue
+        for line in read(rel).splitlines():
+            if re.search(r"(ifstream\s*\w*\s*[({]|\.open\s*\(|fopen\s*\(|InputFiles::Open\s*\()[^;]*configfile", line):
+                problems.append(f"{rel}: opens the project file ({line.strip()}); take the section from "
+                                "Config::SectionStream")
 
 if problems:
     for p in problems:

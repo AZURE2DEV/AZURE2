@@ -79,7 +79,8 @@ below (full text and reasons in `docs/upgrade/RULES.md`):
 |---|---|---|
 | `src/`, `include/` | C++ engine | `AZURE2.cpp` (main, CLI flags) → `AZUREMain` → `CNuc` (levels, channels) + `EData` (segments, data, experimental effects) → `AZURECalc` (χ²), `AZUREGrad` (gradients), `AZURECalcMCMC` |
 | `api/` | `AZUREAPI` + pybind11 module `_azure2` | Builds `pyazr/_azure2*.so` in place |
-| `pyazr/` | Python package | In-process engine plus a pure-Python `.azr` reader/writer (`azrfile.py`, `datasets.py`) |
+| `io/` | The `.azr` document and its format conversion | Standalone (no engine headers); the engine and pyazr read the file through it |
+| `pyazr/` | Python package | In-process engine; `.azr` editing (`azrfile.py`, `datasets.py`) on the engine's document and parsers |
 | `numcmc/` | Ensemble MCMC sampler | |
 | `external/` | Vendored Minuit2, erya/pugixml (Coulomb functions: `physics/coulomb/`, from pycoulomb) | **Do not edit**; it is upstream code |
 | `tests/` | All tests | See `tests/CLAUDE.md` |
@@ -169,32 +170,51 @@ how each was checked:
   session started from, or on the order of levels and channels. Tests run with
   `OMP_NUM_THREADS=2`. Differences across GCC, Clang and MinGW stay near 1e-5.
 
-## A new `.azr` keyword or option touches all of these
+## Recipes: where a new feature goes
 
-The `.azr` file is parsed independently by the engine and pyazr, so a feature
-is not finished until both read it, pyazr writes it back unchanged, and both
-report it the same way:
+The engine reads the `.azr` once, through `io/` (`io::Document`, `Config::SectionStream`), and pyazr reads it
+through the same code in the binding; the χ² is assembled in one place, `src/Objective.cpp`. Each recipe below is
+the whole list of places to touch; `tests/consistency/repo_consistency_test.py` fails when the rule in brackets is
+bypassed. Run it first (under a second), then the build and the tests of "Definition of done".
 
-1. Engine: `include/SegLine.h` / `NucLine.h` / `Config.cpp` (parse), the
-   owning class (`ESegment`, `EData`, `CNuc`, ...), and start-up error
-   messages for invalid combinations.
-2. If it adds fit parameters or penalties, all four objective paths:
-   `src/AZURECalc.cpp`, `src/AZUREGrad.cpp`, `src/AZUREMain.cpp` (output) and
-   `api/src/AZUREAPI.cpp`. They must give the same χ², and the analytic
-   gradient must agree with finite differences.
-3. CLI: the flag in `parseOptions`, `printHelp`, and
-   `docs/source/reference/command_line.rst`. The consistency test enforces all
-   three.
-4. pyazr: `datasets.py` / `azrfile.py` read and write, and `azure2.py` when it
-   affects χ² or penalties, plus a test in `tests/pyazr/` registered in its
-   `CMakeLists.txt`.
-5. Docs: the user-guide page and `reference/data_formats.rst` or
-   `output_files.rst`. Then the affected skills.
-6. Tests: a `tests/<name>/` project (`expected/chiSquared.out` and/or
-   `check.sh`) with a README that says what is checked and against what.
+**A segment or extrapolation keyword** (as `shiftfngroup`, `normgroup`).
+1. Parse it in `include/SegLine.h` or `ExtrapLine.h` (the one tokenizer; pyazr reads lines through
+   `_azure2.parse_segment_line` / `parse_extrapolation_line`, so it gets the keyword with no Python parser).
+2. Use it in the owning class (`ESegment`, `EData`); refuse invalid combinations at start-up with a message.
+3. Add it to `_KEYWORDS` in `pyazr/datasets.py` (the writer's list) [check 6: engine and pyazr keyword sets equal].
+4. Docs: `reference/data_formats.rst` and the user-guide page; a `tests/<name>/` project or a pyazr test.
 
-Reference implementations to copy: `git show --stat 062b1bfe` (segment keyword
-`shiftfngroup`) and `3e13fb28` (`normgroup`).
+**A `<config>` key or a new `.azr` section.**
+1. Read it in its owner from `Config::SectionStream("<name>")` [check 12: the project file is opened only in
+   `src/Config.cpp`]. A section's grammar belongs to one parser; pyazr calls it through `api/src/` (as
+   `pybind_thm.cpp` does for `<thm>`), never a Python copy.
+2. Its absence must reproduce the old result. If an old file needs rewriting to mean the same thing, extend
+   `io::ConvertToFormat2` (`io/src/Convert.cpp`) and `io/tests/convert_test.cpp`; `AZURE2 --convert` and
+   `pyazr.convert_azr` then cover it.
+3. pyazr: a reader and a setter in `azrfile.py` that edit the document in place (an unedited model writes the
+   file back byte for byte: `tests/pyazr/azr_layout_test.py`, `roundtrip_test.py`).
+4. Docs: `reference/data_formats.rst`.
+
+**A term of the objective** (a prior, a penalty, a constraint).
+1. One `ObjectiveTerm` subclass in `src/Objective.cpp`, in the term list (`docs/upgrade/objective.md` §4); its
+   gradient beside the others in `src/AZUREGrad.cpp`, and its residual rows in `AppendModelRows` if the
+   Levenberg-Marquardt path needs them. Every path -- CLI fit, gradient, API, MCMC, writer -- asks the objective
+   [check 11: no term is added outside `src/Objective.cpp`].
+2. The analytic gradient agrees with finite differences (`AZURE_GRAD_CHECK`, a pyazr test); the CLI and pyazr give
+   the same χ² (`tests/pyazr/objective_test.py`).
+3. Its total is reported in `chiSquared.out` through `storeTotals`; docs `output_files.rst`.
+
+**A physics function or an observable.**
+1. In `physics/` (no engine headers, no GSL: check 8), with its unit test in `physics/tests/` against an
+   independent value (closed form, mpmath `truth.py`, a published number).
+2. Exposed in the binding with array inputs (`api/src/pybind_physics.cpp`) so pyazr and the web UI call it.
+3. Constants come from `physics/include/azure2/physics/Constants.h` [check 10: no copy with another value], masses
+   from `pyazr/data/mass_1.mas20` (`pyazr.masses`; the engine's THM nuclei are generated from it and checked by
+   `pyazr_thm_nuclide_masses`).
+
+**A CLI flag.** `parseOptions`, `printHelp` and `docs/source/reference/command_line.rst` [check 1].
+
+Reference commits: `git show --stat 062b1bfe` (segment keyword `shiftfngroup`), `3e13fb28` (`normgroup`).
 
 ## Code structure
 
@@ -204,10 +224,11 @@ Reference implementations to copy: `git show --stat 062b1bfe` (segment keyword
   `EPoint.cpp`, `AZURECalc.cpp`, `pyazr/azure2.py`, `pyazr/azrfile.py`.
   Moving code out of them is welcome, but do it in its own commit with no
   behaviour change and the full test suite run, never mixed into a feature.
-- Use **one definition** of each formula and convention, and call it from both
+- Use **one definition** of each formula, format and convention, and call it from both
   the engine and the gradient. When pyazr needs it, expose it through
-  `_azure2` rather than re-implementing it in Python; where a Python copy is
-  unavoidable, test it against the engine.
+  `_azure2` rather than re-implementing it in Python (pyazr needs the compiled
+  module to read a project); where a Python copy is unavoidable, test it
+  against the engine.
 - Format C++ with `.clang-format` (2-space indent, `ColumnLimit: 0`, so you
   break lines yourself). Match the surrounding comment density. Comments say
   *why* and cite the equation or paper (`Edmonds 7.1.7`, `PRC 104, 064612`).

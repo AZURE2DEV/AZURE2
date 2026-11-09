@@ -29,16 +29,11 @@
  */
 
 int Config::ReadThmBlock() {
-  std::ifstream in(configfile.c_str());
-  if (!in) return -1;
+  std::unique_ptr<std::istream> section = SectionStream("thm");
+  if (!section) return 0;  // optional block, absent
+  std::istream &in = *section;
   std::string line = "";
-  while (!in.eof()) {
-    getline(in, line);
-    size_t b = line.find_first_not_of(" \t\r\n");
-    if (b != std::string::npos && line.compare(b, 5, "<thm>") == 0) break;
-    line = "";
-  }
-  if (line.find("<thm>") == std::string::npos) return 0;  // optional block, absent
+  getline(in, line);  // <thm>
 
   // A file named in the block, relative to the .azr.  Absolute is a leading
   // slash or backslash, or (Windows) a drive letter: "C:/..." or "C:\..."

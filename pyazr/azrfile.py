@@ -32,6 +32,7 @@ then follows as the 34th.  A line without them keeps its length.
 import decimal
 import math
 import os
+import warnings
 import re
 import tempfile
 from typing import List, NamedTuple, Optional
@@ -89,14 +90,12 @@ def _fmt(x):
     return repr(float(x))
 
 
-# -- the <thm> block: the engine's (Config::ReadThmBlock) and the GUI's
-#    (ThmSettings in gui/src/ThmOptionsDialog.cpp) rules, ported -------------
+# -- the <thm> block: read by the engine (_azure2.read_thm_block, api/src/pybind_thm.cpp); written the GUI's way
+#    (ThmSettings in gui/src/ThmOptionsDialog.cpp) ------------------------------
 
 _THM_GLOBAL_DEFAULTS = {"entranceL": "incoherent", "vertex": "constant",
                         "kinematics": "lacognata", "coulombIntegral": False,
                         "spectatorEnergy": 0.0}
-_THM_FLOAT_PREFIX = re.compile(r"[ \t\n\r\f\v]*[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?")
-_THM_INT_PREFIX = re.compile(r"[ \t\n\r\f\v]*[+-]?\d+")
 
 
 # An explicit prior centre in <parameterSettings> (EData::ReadPriorCentres).
@@ -115,28 +114,25 @@ class _Classic:
 CLASSIC = _Classic()
 
 
-_ENGINE_CHECK = []      # [function] once looked up; [None] without the engine
-
-
 def _engine_thm_check(lines, global_rules=False):
-    """The engine's verdict on the lines of a <thm> block, when the compiled
-    module is there (``_azure2.check_thm_block``: the parser AZURE2 itself
-    runs, without the files the block names).  The Python port below decides
-    first, with its own messages; this catches what the port would let
-    through.  Raises ValueError with AZURE2's message; nothing without the
-    module."""
-    if not _ENGINE_CHECK:
-        try:
-            from . import _azure2
-            _ENGINE_CHECK.append(getattr(_azure2, "check_thm_block", None))
-        except Exception:                           # not built: the port alone
-            _ENGINE_CHECK.append(None)
-    check = _ENGINE_CHECK[0]
-    if check is None:
-        return
-    why = check([str(ln) for ln in lines], global_rules)
+    """The engine's verdict on the lines of a <thm> block (``_azure2.check_thm_block``: the parser AZURE2 itself
+    runs, without the files the block names; with ``global_rules`` also the global options against the
+    experiments).  Raises ValueError with AZURE2's message."""
+    why = _engine_module().check_thm_block([str(ln) for ln in lines], global_rules)
     if why:
         raise ValueError(f"{why} (AZURE2 refuses the file).")
+
+
+def _thm_read(lines):
+    """The block's lines as AZURE2 reads them: the settings dict of :func:`_thm_default_settings`, with the
+    experiments by name (``keys`` and each key's value; api/src/pybind_thm.cpp).  ValueError with AZURE2's
+    message -- or, for a global optical potential outside its validity range, the message the engine gives once
+    the data are read (:func:`_thm_check_global_optical`)."""
+    s = _engine_module().read_thm_block([str(ln) for ln in lines])
+    for name, x in s["experiments"].items():
+        if x.get("distortion") == "optical" and all(k in x for k in ("beam", "target", "spectator", "Ebeam")):
+            _thm_check_global_optical(f"<thm> experiment[{name}]: ", x)
+    return s
 
 
 def _thm_default_settings():
@@ -147,542 +143,25 @@ def _thm_default_settings():
 
 # -- THM experiments: experiment[<name>] key=value ... (src/ThmExperiment.cpp) --
 
-# AME2020 nuclear masses (u): atomic mass - Z m_e + electron binding (Lunney
-# et al. 2003), the engine's table (ThmExperiment.cpp, kNuclides).
-_THM_NUCLIDES = {
-    "n": (0, 1, 1.0086649159), "p": (1, 1, 1.0072764675), "d": (1, 2, 2.0135532134),
-    "t": (1, 3, 3.0155007169), "3He": (2, 3, 3.0149322434), "4He": (2, 4, 4.0015061756),
-    "6Li": (3, 6, 6.0134773618), "7Li": (3, 7, 7.0143579087), "9Be": (4, 9, 9.0099891714),
-    "10B": (5, 10, 10.0101946866), "11B": (5, 11, 11.0065629921),
-    "12C": (6, 12, 11.9967096429), "13C": (6, 13, 13.0000644777),
-    "14N": (7, 14, 13.9992355671), "15N": (7, 15, 14.9962704619),
-    "16O": (8, 16, 15.9905282131), "17O": (8, 17, 16.9947453497),
-    "18O": (8, 18, 17.9947732059), "19F": (9, 19, 18.9934689019),
-    "20Ne": (10, 20, 19.9869581831), "23Na": (11, 23, 22.9837396828),
-    "24Mg": (12, 24, 23.9784646239),
-}
-_THM_BACKGROUNDS = ("none", "const", "linear", "quadratic")
-_THM_EXPERIMENT_KEYS = ("segments", "background", "beam", "target", "spectator", "Ebeam",
-                        "lineshape", "ps", "psNodes", "distortion", "opticalAA", "opticalSF",
-                        "spectatorAngle", "distortionRef", "distortionRatio", "boundState",
-                        "theta", "vertexModel", "spectatorAngles", "spectatorAngleNodes",
-                        "cbackground")
 _THM_DISTORTION_DETAIL = ("spectatorAngle", "distortionRef", "distortionRatio", "boundState")
-_THM_NAME = re.compile(r"[A-Za-z0-9_.+-]+")
-_THM_WHOLE_INT = re.compile(r"[+-]?\d+")
-
-
-def _thm_whole_double(text):
-    """A whole token as a finite number (operator>> consuming everything)."""
-    m = _THM_FLOAT_PREFIX.match(text)
-    if not m or m.start(0) != 0 or text[:1].isspace() or m.end(0) != len(text):
-        return None
-    x = float(m.group(0))
-    return x if math.isfinite(x) else None
-
-
-def _thm_whole_int(text):
-    return int(text) if _THM_WHOLE_INT.fullmatch(text) else None
-
-
-def _thm_nuclide(text):
-    """ThmNuclide::Parse: (name, Z, A, mass) or ValueError."""
-    if text in _THM_NUCLIDES:
-        return (text,) + _THM_NUCLIDES[text]
-    f = text.split(",")
-    if len(f) == 3:
-        Z, A, mass = _thm_whole_int(f[0]), _thm_whole_int(f[1]), _thm_whole_double(f[2])
-        if (Z is not None and A is not None and mass is not None and Z >= 0
-                and A >= 1 and Z <= A and mass > 0.0 and abs(mass - A) < 1.0):
-            return (text, Z, A, mass)
-        raise ValueError(f"'{text}': expected Z,A,mass with 0 <= Z <= A and the "
-                         "nuclear mass in u (within 1 u of A)")
-    raise ValueError(f"unknown nuclide '{text}' (known: {' '.join(_THM_NUCLIDES)}; "
-                     "or Z,A,mass in u)")
-
-
-def _thm_segment_list(text):
-    out = []
-    for item in text.split(","):
-        dash = item.find("-", 1)
-        if dash < 0:
-            lo = hi = _thm_whole_int(item)
-            ok = lo is not None
-        else:
-            lo, hi = _thm_whole_int(item[:dash]), _thm_whole_int(item[dash + 1:])
-            ok = lo is not None and hi is not None and hi >= lo
-        if not ok or lo < 1:
-            raise ValueError(f"segments='{text}': expected segment numbers >= 1 "
-                             "like 1,2,4-6")
-        if hi > 100000:                       # ThmExperiment.cpp kMaxThmSegment
-            raise ValueError(f"segments='{text}': segment numbers go up to 100000")
-        seen = set(out)
-        for k in range(lo, hi + 1):
-            if k in seen:
-                raise ValueError(f"segments='{text}': segment {k} is listed twice")
-            seen.add(k)
-            out.append(k)
-    return sorted(out)
-
-
-def _thm_ps_window(text):
-    """"pmin-pmax" (MeV/c, 0 <= pmin <= pmax): the '-' with a number on both
-    sides; (lo, hi) or None."""
-    for k in range(1, len(text) - 1):
-        if text[k] != "-":
-            continue
-        lo, hi = _thm_whole_double(text[:k]), _thm_whole_double(text[k + 1:])
-        if lo is not None and hi is not None:
-            return (lo, hi) if 0.0 <= lo <= hi else None
-    return None
-
-
-def _thm_parse_ps(value):
-    """ParsePs (src/ThmExperiment.cpp): the value of ps= as a normalized
-    string, or ValueError (message without the experiment prefix)."""
-    usage = (f"ps='{value}': expected delta, hulthen:pmin-pmax, hulthen:a,b:pmin-pmax "
-             "(a, b in fm^-1), gauss:FWHM:pmin-pmax or table:<file> (momenta in MeV/c, "
-             "0 <= pmin <= pmax)")
-    if value == "delta":
-        return value
-    f = value.split(":")
-    if len(f) >= 2 and f[0] == "table":
-        if not value[6:]:
-            raise ValueError(usage)
-        return value
-    if f[0] == "hulthen" and len(f) in (2, 3):
-        if len(f) == 3:
-            ab = f[1].split(",")
-            a = _thm_whole_double(ab[0]) if len(ab) == 2 else None
-            b = _thm_whole_double(ab[1]) if len(ab) == 2 else None
-            if a is None or b is None or not (a > 0.0 and b > a):
-                raise ValueError(f"ps='{value}': Hulthen a,b in fm^-1 with 0 < a < b "
-                                 "(deuteron: 0.2317,1.202)")
-        if _thm_ps_window(f[-1]) is None:
-            raise ValueError(usage)
-        return value
-    if f[0] == "gauss" and len(f) == 3:
-        w = _thm_whole_double(f[1])
-        if w is None or not w > 0.0:
-            raise ValueError(f"ps='{value}': the FWHM of |phi(p_s)|^2 must be a number "
-                             "> 0 (MeV/c)")
-        if _thm_ps_window(f[2]) is None:
-            raise ValueError(usage)
-        return value
-    raise ValueError(usage)
-
-
-# Global optical potentials (src/ThmOptical.cpp): name -> projectiles (Z, A),
-# reference, target mass range, projectile lab-energy range (MeV).
-_THM_GLOBAL_OPTICALS = {
-    "ancai06": (((1, 2),), "An & Cai, PRC 73 (2006) 054605", 12, 238, 0.0, 183.0),
-    "daehnick80": (((1, 2),), "Daehnick, Childs & Vrcelj, PRC 21 (1980) 2253 "
-                   "(global set)", 27, 238, 11.8, 90.0),
-    "kd03": (((0, 1), (1, 1)), "Koning & Delaroche, NPA 713 (2003) 231 (global)", 24, 209,
-             0.001, 200.0),
-    "bg71": (((1, 3), (2, 3)), "Becchetti & Greenlees (1971)", 40, 208, 1.0, 40.0),
-    "liang09": (((2, 3),), "Liang, Li & Cai, J. Phys. G 36 (2009) 085104", 9, 208, 0.0, 270.0),
-    "mcfadden66": (((2, 4),), "McFadden & Satchler, NPA 84 (1966) 177", 16, 208, 1.0, 25.0),
-    "avrigeanu94": (((2, 4),), "Avrigeanu, Hodgson & Avrigeanu, PRC 49 (1994) 2136", 16, 250,
-                    1.0, 73.0),
-}
-_THM_SPECIES = {(0, 1): "n", (1, 1): "p", (1, 2): "d", (1, 3): "t", (2, 3): "3He", (2, 4): "4He"}
-
-
-def _thm_global_optical(value):
-    """(name, extrapolate) of a global optical potential value, or None."""
-    name, colon, option = value.partition(":")
-    if name in _THM_GLOBAL_OPTICALS and (not colon or option == "extrapolate"):
-        return name, bool(colon)
-    return None
-
-
-def _thm_parse_optical(key, value):
-    """ParseOptical (src/ThmExperiment.cpp): plane | coulomb | a global
-    optical potential <name>[:extrapolate] | ten numbers V,R,a,W,RW,aW,WD,RD,aD,RC;
-    the value as given, or ValueError."""
-    if value in ("plane", "coulomb"):
-        return value
-    if value[:1].isalpha():
-        if _thm_global_optical(value) is None:
-            raise ValueError(f"{key}='{value}': expected plane, coulomb, a global optical "
-                             f"potential ({', '.join(_THM_GLOBAL_OPTICALS)}, optionally "
-                             ":extrapolate) or ten numbers V,R,a,W,RW,aW,WD,RD,aD,RC")
-        return value
-    f = value.split(",")
-    p = [_thm_whole_double(t) for t in f] if len(f) == 10 else None
-    ok = p is not None and all(v is not None for v in p)
-    if ok:
-        for t in range(3):
-            if p[3 * t] != 0.0 and not (p[3 * t + 1] > 0.0 and p[3 * t + 2] > 0.0):
-                ok = False
-        ok = ok and p[9] >= 0.0
-    if not ok:
-        raise ValueError(f"{key}='{value}': expected plane, coulomb or ten numbers "
-                         "V,R,a,W,RW,aW,WD,RD,aD,RC (MeV and fm: real volume, imaginary "
-                         "volume and imaginary surface Woods-Saxon, depths > 0 "
-                         "attractive/absorptive, radii and diffusenesses > 0 where the "
-                         "depth is not 0, the Coulomb radius RC >= 0, 0 = point charge)")
-    return value
-
-
-def _thm_parse_distortion_key(key, value):
-    """The distortion keys of an experiment line: the value to keep, or
-    ValueError (message without the experiment prefix)."""
-    if key == "distortion":
-        if value in ("none", "coulomb", "optical") or (value.startswith("table:")
-                                                        and len(value) > 6):
-            return value
-        raise ValueError(f"distortion='{value}': expected none, coulomb, optical or "
-                         "table:<file>")
-    if key in ("opticalAA", "opticalSF"):
-        return _thm_parse_optical(key, value)
-    if key == "spectatorAngle":
-        if value == "qf":
-            return value
-        a = _thm_whole_double(value[3:]) if value.startswith("cm:") else _thm_whole_double(value)
-        if a is None or not 0.0 <= a <= 180.0:
-            raise ValueError(f"spectatorAngle='{value}': expected qf, a lab angle in "
-                             "degrees (0-180) or cm:<degrees> (0-180)")
-        return value
-    if key == "distortionRef":
-        if _thm_whole_double(value) is None:
-            raise ValueError(f"distortionRef='{value}': expected the reference energy "
-                             "E_ref in MeV (c.m. of x + A)")
-        return value
-    if key == "distortionRatio":
-        if value not in ("dwpw", "dw"):
-            raise ValueError(f"distortionRatio='{value}': expected dwpw or dw")
-        return value
-    if key == "boundState":
-        f = value.split(":")
-        ok = len(f) in (1, 2) and f[0] in ("whittaker", "yukawa")
-        if ok and len(f) == 2:
-            r = _thm_whole_double(f[1])
-            ok = r is not None and 0.0 <= r <= 50.0
-        if not ok:
-            raise ValueError(f"boundState='{value}': expected whittaker or yukawa, "
-                             "optionally :rmin in fm (0-50)")
-        return value
-    raise KeyError(key)
-
-
-def _thm_spin(text):
-    """ReadSpin (ThmExperiment.cpp): "1/2", "0.5", "2" -> a multiple of 1/2, or None."""
-    if not text or text[0] in "+-":
-        return None
-    if "/" in text:
-        num, _, den = text.partition("/")
-        n = _thm_whole_int(num)
-        return n / 2.0 if den == "2" and n is not None and n >= 0 else None
-    x = _thm_whole_double(text)
-    if x is None or x < 0.0 or abs(2.0 * x - round(2.0 * x)) > 1e-9:
-        return None
-    return x
-
-
-def _thm_spin_text(j):
-    twice = int(round(2.0 * j))
-    return str(twice // 2) if twice % 2 == 0 else f"{twice}/2"
-
-
-def _thm_parse_cbackground(value):
-    """ParseThmCoherentBackground: a list of term dicts, ValueError if AZURE2
-    would refuse the value."""
-    form = ("expected <J><+|->:<exit pair key>[:<s>,<l>,<s'>,<l'>][:const|:linear]"
-            "[=<Re c0>,<Im c0>[,<Re c1>,<Im c1>]] terms separated by ';' (a value "
-            "followed by f is fixed)")
-    items = value.split(";")
-    terms = []
-    for item in items:
-        bad = f"cbackground: '{item}': "
-        if not item:
-            raise ValueError(f"cbackground='{value}': an empty term; " + form)
-        spec, eq, values = item.partition("=")
-        f = spec.split(":")
-        if not 2 <= len(f) <= 4:
-            raise ValueError(bad + form)
-        jpi = f[0]
-        J = _thm_spin(jpi[:-1]) if len(jpi) >= 2 and jpi[-1] in "+-" else None
-        if J is None:
-            raise ValueError(bad + f"J^pi '{jpi}': expected e.g. 1/2+ or 2-")
-        key = _thm_whole_int(f[1])
-        if key is None or key < 1 or f[1][0] in "+-":
-            raise ValueError(bad + f"exit pair key '{f[1]}': expected a positive whole number")
-        t = {"J": J, "parity": 1 if jpi[-1] == "+" else -1, "exit": key,
-             "channels": None, "form": "const", "values": None}
-        have_form = False
-        for x in f[2:]:
-            if x in ("const", "linear"):
-                if have_form:
-                    raise ValueError(bad + form)
-                have_form = True
-                t["form"] = x
-                continue
-            if t["channels"] is not None or have_form:
-                raise ValueError(bad + form)
-            c = x.split(",")
-            ok = len(c) == 4
-            if ok:
-                s_in, l_in = _thm_spin(c[0]), _thm_whole_int(c[1])
-                s_out, l_out = _thm_spin(c[2]), _thm_whole_int(c[3])
-                ok = (None not in (s_in, l_in, s_out, l_out) and l_in >= 0 and l_out >= 0
-                      and c[1][0] != "+" and c[3][0] != "+")
-            if not ok:
-                raise ValueError(bad + f"channels '{x}': expected <s>,<l>,<s'>,<l'> "
-                                 "(entrance and exit channel spin and l)")
-            t["channels"] = (s_in, l_in, s_out, l_out)
-        if eq:
-            v = values.split(",")
-            n = 2 if t["form"] == "const" else 4
-            if len(v) != n:
-                raise ValueError(bad + f"expected {n} values after '=' (" +
-                                 ("Re c0, Im c0" if n == 2 else "Re c0, Im c0, Re c1, Im c1")
-                                 + ")")
-            vals = []
-            for w in v:
-                fixed = w.endswith("f")
-                x = _thm_whole_double(w[:-1] if fixed else w)
-                if x is None:
-                    raise ValueError(bad + f"value '{w}': expected a number, optionally "
-                                     "followed by f (fixed)")
-                vals.append((x, fixed))
-            t["values"] = vals
-        terms.append(t)
-    return terms
-
-
-def _thm_format_cbackground(terms):
-    """FormatThmCoherentBackground: the canonical value of a term list."""
-    out = []
-    for t in terms:
-        s = f"{_thm_spin_text(t['J'])}{'+' if t['parity'] > 0 else '-'}:{t['exit']}"
-        if t["channels"] is not None:
-            a, b, c, d = t["channels"]
-            s += f":{_thm_spin_text(a)},{b},{_thm_spin_text(c)},{d}"
-        if t["form"] == "linear":
-            s += ":linear"
-        if t["values"] is not None:
-            s += "=" + ",".join(_thm_plain_number(x) + ("f" if fx else "")
-                                for x, fx in t["values"])
-        out.append(s)
-    return ";".join(out)
-
-
-def _thm_parse_experiment(line, experiments):
-    """ParseThmExperimentLine: merge one experiment line (comment stripped,
-    trimmed) into ``experiments`` (name -> record); ValueError if AZURE2
-    would refuse it."""
-    close = line.find("]")
-    if not line.startswith("experiment[") or close < 0:
-        raise ValueError("<thm> expected experiment[<name>] key=value ...")
-    name = line[len("experiment["):close]
-    if not _THM_NAME.fullmatch(name):
-        raise ValueError(f"<thm> experiment[{name}]: a name is letters, digits "
-                         "and _ - . + only")
-    where = f"<thm> experiment[{name}]: "
-    rest = line[close + 1:]
-    if rest and rest[0] not in " \t":
-        raise ValueError(where + "expected a space after ']'")
-    work = dict(experiments.get(name, {"keys": []}))
-    work["keys"] = list(work["keys"])
-    tokens = rest.split()
-    if not tokens:
-        raise ValueError(where + "no key=value given")
-    for token in tokens:
-        eq = token.find("=")
-        if eq <= 0 or eq + 1 == len(token):
-            raise ValueError(where + f"'{token}' is not key=value")
-        key, value = token[:eq], token[eq + 1:]
-        if key in work["keys"]:
-            raise ValueError(where + f"key '{key}' is given twice")
-        if key == "segments":
-            try:
-                work["segments"] = _thm_segment_list(value)
-            except ValueError as err:
-                raise ValueError(where + str(err)) from None
-        elif key == "background":
-            if value not in _THM_BACKGROUNDS:
-                raise ValueError(where + f"background='{value}': expected none, "
-                                 "const, linear or quadratic")
-            work["background"] = value
-        elif key in ("beam", "target", "spectator"):
-            try:
-                work[key] = _thm_nuclide(value)
-            except ValueError as err:
-                raise ValueError(where + f"{key}: {err}") from None
-        elif key == "Ebeam":
-            x = _thm_whole_double(value)
-            if x is None or not x > 0.0:
-                raise ValueError(where + f"Ebeam='{value}': expected the lab beam "
-                                 "energy in MeV, > 0")
-            work["Ebeam"] = x
-        elif key == "lineshape":
-            if value not in ("on", "off"):
-                raise ValueError(where + f"lineshape='{value}': expected on or off")
-            work["lineshape"] = value == "on"
-        elif key == "ps":
-            try:
-                work["ps"] = _thm_parse_ps(value)
-            except ValueError as err:
-                raise ValueError(where + str(err)) from None
-        elif key == "psNodes":
-            n = _thm_whole_int(value)
-            if n is None or not 1 <= n <= 64:
-                raise ValueError(where + f"psNodes='{value}': expected a whole number of "
-                                 "Gauss-Legendre nodes, 1 to 64")
-            work["psNodes"] = n
-        elif key in ("distortion", "opticalAA", "opticalSF") + _THM_DISTORTION_DETAIL:
-            try:
-                work[key] = _thm_parse_distortion_key(key, value)
-            except ValueError as err:
-                raise ValueError(where + str(err)) from None
-        elif key == "theta":
-            window = None if value == "all" else _thm_ps_window(value)
-            if value != "all" and (window is None or window[1] > 180.0):
-                raise ValueError(where + f"theta='{value}': expected all or thmin-thmax, "
-                                 "the c.m. angles of the exit pair relative to p_xA in "
-                                 "degrees, 0 <= thmin <= thmax <= 180")
-            work["theta"] = value
-        elif key == "vertexModel":
-            if value not in ("pw", "dw"):
-                raise ValueError(where + f"vertexModel='{value}': expected pw or dw")
-            work["vertexModel"] = value
-        elif key == "spectatorAngles":
-            v = value[3:] if value.startswith("cm:") else value
-            window = None if v.startswith("table:") else _thm_ps_window(v)
-            if not ((v.startswith("table:") and len(v) > 6)
-                    or (window is not None and window[1] <= 180.0)):
-                raise ValueError(where + f"spectatorAngles='{value}': expected thmin-thmax "
-                                 "(lab polar angles of the spectator to the beam, degrees, "
-                                 "0 <= thmin <= thmax <= 180), cm:thmin-thmax (c.m.), "
-                                 "table:<file> or cm:table:<file> (angle, acceptance)")
-            work["spectatorAngles"] = value
-        elif key == "spectatorAngleNodes":
-            n = _thm_whole_int(value)
-            if n is None or not 1 <= n <= 64:
-                raise ValueError(where + f"spectatorAngleNodes='{value}': expected a whole "
-                                 "number of Gauss-Legendre nodes, 1 to 64")
-            work["spectatorAngleNodes"] = n
-        elif key == "cbackground":
-            try:
-                work["cbackground"] = _thm_format_cbackground(_thm_parse_cbackground(value))
-            except ValueError as err:
-                raise ValueError(where + str(err)) from None
-        else:
-            raise ValueError(where + f"unknown key '{key}' (keys: segments, "
-                             "background, beam, target, spectator, Ebeam, lineshape, ps, "
-                             "psNodes, distortion, opticalAA, opticalSF, spectatorAngle, "
-                             "distortionRef, distortionRatio, boundState, theta, "
-                             "vertexModel, spectatorAngles, spectatorAngleNodes, "
-                             "cbackground)")
-        work["keys"].append(key)
-    experiments[name] = work
-
-
-def _thm_check_experiments(experiments):
-    """CheckThmExperiments: ValueError if the set is refused."""
-    owner = {}
-    for name, x in experiments.items():
-        where = f"<thm> experiment[{name}]: "
-        if "segments" not in x["keys"]:
-            raise ValueError(where + "segments= is required")
-        kin = sum(k in x["keys"] for k in ("beam", "target", "spectator", "Ebeam"))
-        if kin not in (0, 4):
-            raise ValueError(where + "beam, target, spectator and Ebeam go together "
-                             "(all four or none)")
-        if x.get("lineshape") and kin != 4:
-            raise ValueError(where + "lineshape=on needs the kinematics of the reaction: "
-                             "beam, target, spectator and Ebeam")
-        if x.get("lineshape") and x.get("cbackground"):
-            raise ValueError(where + "lineshape=on and cbackground= cannot be combined: "
-                             "the Coulomb line shape N_C multiplies the level amplitudes "
-                             "only, and its phase (E_lambda - E - i Gamma/2)^(-i zeta) "
-                             "depends on the energy unit unless every term of the "
-                             "amplitude carries it")
-        if x.get("ps", "delta") != "delta" and kin != 4:
-            raise ValueError(where + "a ps window (ps=hulthen|gauss|table) needs the "
-                             "kinematics of the reaction: beam, target, spectator and "
-                             "Ebeam (mu_sx and the spectator momenta reached at each "
-                             "energy)")
-        if "psNodes" in x["keys"] and x.get("ps", "delta") == "delta":
-            raise ValueError(where + "psNodes= needs a ps window (ps=hulthen|gauss|table)")
-        dist = x.get("distortion", "none")
-        computed = dist in ("coulomb", "optical")
-        if computed and kin != 4:
-            raise ValueError(where + f"distortion={dist} needs the kinematics of the "
-                             "reaction: beam, target, spectator and Ebeam")
-        if ("opticalAA" in x["keys"] or "opticalSF" in x["keys"]) and dist != "optical":
-            raise ValueError(where + "opticalAA= and opticalSF= need distortion=optical")
-        for key in _THM_DISTORTION_DETAIL:
-            if key in x["keys"] and not computed:
-                raise ValueError(where + f"{key}= needs distortion=coulomb or "
-                                 "distortion=optical")
-        if x.get("vertexModel", "pw") == "dw":
-            if not computed:
-                raise ValueError(where + "vertexModel=dw builds the vertex from the "
-                                 "distorted waves of a + A and s + F: it needs "
-                                 "distortion=coulomb or distortion=optical (and the "
-                                 "kinematics)")
-            for key in ("distortionRef", "distortionRatio"):
-                if key in x["keys"]:
-                    raise ValueError(where + f"{key}= belongs to the distortion factor "
-                                     "R(E), which vertexModel=dw replaces (R is not "
-                                     "applied; the DW vertex carries the energy "
-                                     "dependence)")
-            if x.get("theta", "all") != "all":
-                raise ValueError(where + "theta= (fixed-angle observable) is not "
-                                 "available with vertexModel=dw: the distorted source has "
-                                 "every m_l about p_xA, which the fixed-angle sum does "
-                                 "not carry")
-        # The acceptance (ThmExperiment.cpp CheckThmExperiments): ps= (a |p_s|
-        # cut with the momentum distribution) and spectatorAngles= describe one
-        # set of directions at fixed E.
-        has_ps = x.get("ps", "delta") != "delta"
-        if ("spectatorAngles" in x or has_ps) and "spectatorAngle" in x["keys"]:
-            if "spectatorAngles" in x:
-                raise ValueError(where + "spectatorAngle= (one direction) and "
-                                 "spectatorAngles= (a window) exclude each other")
-            raise ValueError(where + "spectatorAngle= (one direction) and a ps window "
-                             "exclude each other: the window accepts every direction "
-                             "whose |p_s| lies in it (write spectatorAngles=cm:t-t for one "
-                             "direction with the cut)")
-        if "spectatorAngles" in x:
-            if not computed and not has_ps:
-                raise ValueError(where + "spectatorAngles= averages over the accepted "
-                                 "spectator directions the plane-wave vertex (with the "
-                                 "momentum distribution of ps=hulthen|gauss|table), or R(E) "
-                                 "and the DW vertex (distortion=coulomb|optical); with "
-                                 "neither it has nothing to average")
-            if "psNodes" in x["keys"]:
-                raise ValueError(where + "with spectatorAngles= the nodes are "
-                                 "spectatorAngleNodes= (per c.m. interval); psNodes= is the "
-                                 "node count of a ps window without spectatorAngles=")
-        elif "spectatorAngleNodes" in x["keys"]:
-            raise ValueError(where + "spectatorAngleNodes= needs a spectator-direction "
-                             "window (spectatorAngles=)")
-        if (computed and x.get("vertexModel", "pw") != "dw"
-                and x.get("ps", "delta") != "delta"
-                and x.get("distortionRatio", "dwpw") == "dw"):
-            raise ValueError(where + "distortionRatio=dw multiplies the model by |M|^2, "
-                             "which carries the momentum distribution |phi(q)|^2 at the "
-                             "spectator direction; a ps window already weights the model "
-                             "with |phi(p_s)|^2 of data divided by it, so it would count "
-                             "twice. Use distortionRatio=dwpw (the default) with a window")
-        if dist == "optical" and kin == 4:
-            _thm_check_global_optical(where, x)
-        for k in x["segments"]:
-            if k in owner:
-                raise ValueError(where + f"segment {k} is already in "
-                                 f"experiment[{owner[k]}]")
-            owner[k] = name
 
 
 def _thm_nucleus_name(Z, A):
-    for name, (z, a, _m) in _THM_NUCLIDES.items():
+    for name, z, a, _m in _engine_module().thm_nuclides():
         if (z, a) == (Z, A):
             return name
     return f"(Z,A)=({Z},{A})"
+
+
+def _thm_global_optical(value):
+    """(model, extrapolate) of a global optical potential value (the engine's table), or None."""
+    name, colon, option = value.partition(":")
+    if colon and option != "extrapolate":
+        return None
+    for g in _engine_module().thm_global_opticals():
+        if g["name"] == name:
+            return g, bool(colon)
+    return None
 
 
 def _thm_check_global_optical(where, x):
@@ -701,14 +180,15 @@ def _thm_check_global_optical(where, x):
         g = _thm_global_optical(x.get(key, "coulomb"))
         if g is None:
             continue
-        name, extrapolate = g
-        projectiles, ref, amin, amax, emin, emax = _THM_GLOBAL_OPTICALS[name]
-        if (one[0], one[1]) in projectiles:
+        g, extrapolate = g
+        name, ref, species = g["name"], g["reference"], g["projectiles"]
+        (amin, amax), (emin, emax) = g["a_range"], g["e_range"]
+        describes = _engine_module().thm_global_optical_for
+        if describes(name, one[0], one[1]):
             proj, targ = one, two
-        elif (two[0], two[1]) in projectiles:
+        elif describes(name, two[0], two[1]):
             proj, targ = two, one
         else:
-            species = " ".join(_THM_SPECIES[p] for p in projectiles)
             raise ValueError(where + f"{key}={name} ({ref}, for {species}): the {label} "
                              f"channel is {_thm_nucleus_name(one[0], one[1])} + "
                              f"{_thm_nucleus_name(two[0], two[1])}, which it does not "
@@ -716,7 +196,7 @@ def _thm_check_global_optical(where, x):
                              "V,R,a,W,RW,aW,WD,RD,aD,RC)")
         problems = []
         if not amin <= targ[1] <= amax:
-            problems.append(f"target A = {targ[1]} (valid {amin}-{amax})")
+            problems.append(f"target A = {targ[1]} (valid {amin:g}-{amax:g})")
         if ecm is not None:
             elab = ecm * (proj[2] + targ[2]) / targ[2]
             if not emin <= elab <= emax:
@@ -827,92 +307,36 @@ def _thm_number(x):
     return ("-" if sign else "") + t
 
 
-def _thm_read_double(text, strict=False):
-    """operator>> on an istringstream: a leading number, the rest ignored
-    (``strict``: nothing but blanks may follow)."""
-    m = _THM_FLOAT_PREFIX.match(text)
-    if not m or (strict and text[m.end():].strip()):
-        return None
-    return float(m.group(0))
-
-
-def _thm_read_int(text, strict):
-    m = _THM_INT_PREFIX.match(text)
-    if not m:
-        return None
-    if strict and text[m.end():].strip():
-        return None
-    return int(m.group(0))
-
-
 def _thm_parse_line(raw, s):
-    """One block line into settings ``s``: returns (key, value) normalized
-    as the GUI writes them, ("", "") for a blank or comment line; raises
-    ValueError for a line the engine would refuse."""
+    """One global block line into settings ``s``: returns (key, value) normalized as the GUI writes them, ("", "")
+    for a blank, comment or experiment line (experiments are read with the block, :func:`_thm_read`); raises
+    ValueError for a line the engine would refuse (``_azure2.thm_option``)."""
     line = raw.split("#", 1)[0].strip()
-    if not line:
+    if not line or line.startswith("experiment["):
         return "", ""
-    if line.startswith("experiment["):
-        # An experiment record: validated and merged, but kept as a line of
-        # its own (like a comment) when the options are rewritten.
-        _thm_parse_experiment(line, s["experiments"])
-        return "", ""
-    if "=" not in line:
-        raise ValueError(f"<thm> line not understood: '{raw.strip()}'")
-    k, v = line.split("=", 1)
-    k = k.rstrip(" \t")
-    v = v.lstrip(" \t")
     bad = ValueError(f"<thm> line not understood: '{raw.strip()}'")
-    if k == "vertex":
-        if v == "real":
-            v = "perlevel"
-        if v not in ("onshell", "constant", "perlevel"):
-            raise bad
-        s["vertex"] = v
-    elif k == "kinematics":
-        if v not in ("lacognata", "triple", "kf3body", "lambda32"):
-            raise bad
-        s["kinematics"] = v
-    elif k == "entranceL":
-        if v not in ("coherent", "incoherent"):
-            raise bad
-        s["entranceL"] = v
-    elif k == "coulombIntegral":
-        if v in ("1", "true", "on"):
-            s["coulombIntegral"] = True
-        elif v in ("0", "false", "off"):
-            s["coulombIntegral"] = False
-        else:
-            raise bad
-        v = "1" if s["coulombIntegral"] else "0"
-    elif k.startswith("spectatorEnergy"):
-        x = _thm_read_double(v, strict=True)
-        if x is None or not x >= 0.0:
-            raise bad
-        v = _thm_number(x)
-        if k == "spectatorEnergy":
-            s["spectatorEnergy"] = x
-        elif len(k) > 17 and k[15] == "[" and k.endswith("]"):
-            pair = _thm_read_int(k[16:-1], strict=False)
-            if pair is None:
-                raise bad
-            s["spectatorByPair"][pair] = x
-            k = f"spectatorEnergy[{pair}]"
-        else:
-            raise bad
-    elif k.startswith("weight"):
-        test = k.startswith("weightTest[")
-        open_ = 10 if test else 6
-        if not (len(k) > open_ + 2 and k[open_] == "[" and k.endswith("]") and v):
-            raise bad
-        seg = _thm_read_int(k[open_ + 1:-1], strict=True)
-        if seg is None or seg < 1:
-            raise bad
-        s["weightTest" if test else "weight"][seg] = v
-        k = f"{'weightTest' if test else 'weight'}[{seg}]"
-    else:
+    if "=" not in line:
         raise bad
-    return k, v
+    k, v = line.split("=", 1)
+    o = _engine_module().thm_option(k.rstrip(" \t"), v.lstrip(" \t"))
+    if o is None:
+        raise bad
+    kind = o["kind"]
+    if kind in ("vertex", "kinematics", "entranceL"):
+        s[kind] = v = o["word"]
+        return kind, v
+    if kind == "coulombIntegral":
+        s[kind] = o["flag"]
+        return kind, "1" if o["flag"] else "0"
+    if kind == "spectatorEnergy":
+        if o["pair"] is None:
+            s["spectatorEnergy"] = o["energy"]
+            return "spectatorEnergy", _thm_number(o["energy"])
+        s["spectatorByPair"][o["pair"]] = o["energy"]
+        return f"spectatorEnergy[{o['pair']}]", _thm_number(o["energy"])
+    key = "weightTest" if o["test"] else "weight"
+    s[key][o["segment"]] = o["file"]
+    return f"{key}[{o['segment']}]", o["file"]
 
 
 def _thm_key_values(s):
@@ -970,33 +394,61 @@ def _thm_compose(old_lines, s):
 
 def _thm_read_weight_table(path):
     """ThmWeightTable::Read: "" if the table is usable, else why not."""
-    try:
-        with open(path) as f:
-            text = f.read()
-    except OSError:
-        return f"cannot read the weight file '{path}'"
-    energies = []
-    for n, line in enumerate(text.splitlines(), 1):
-        line = line.split("#", 1)[0]
-        if not line.strip():
-            continue
-        where = f"'{path}' line {n}: "
-        tok = line.split()
-        try:
-            if len(tok) != 2 or any("_" in t for t in tok):
-                raise ValueError
-            e, w = float(tok[0]), float(tok[1])
-        except ValueError:
-            return where + "expected two numbers, E (MeV) and w"
-        if not (math.isfinite(e) and math.isfinite(w) and w > 0.0):
-            return where + "the weight must be finite and > 0"
-        if energies and not e > energies[-1]:
-            return where + "the energies must be strictly increasing"
-        energies.append(e)
-    if len(energies) < 2:
-        return f"'{path}' needs at least two rows (E w)"
-    return ""
+    return _engine_module().read_thm_weight_table(path)
 
+
+
+
+def _package_module(name):
+    """The module ``pyazr.<name>``.  A module loaded by file path, outside its package (tests that import
+    azrfile.py alone), takes it from the package next to its own file."""
+    import importlib
+    if __package__:
+        return importlib.import_module(f"{__package__}.{name}")
+    import sys
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    if root not in sys.path:
+        sys.path.insert(0, root)
+    return importlib.import_module(f"pyazr.{name}")
+
+
+def _engine_module():
+    """The compiled engine module (``pyazr._azure2``)."""
+    return _package_module("_azure2")
+
+def _document(text):
+    """The engine's lossless document of a project's text (``_azure2.Document``; docs/upgrade/project.md): the one
+    reading of the file that pyazr and AZURE2 share.  Needs the compiled module."""
+    _azure2 = _engine_module()
+    return _azure2.Document.parse(text.encode("utf-8", "surrogateescape"))
+
+
+def _tag_index(lines, tag):
+    """The index of the first line that is ``tag`` once trimmed (the document's rule for a tag: a whole line, any
+    spaces and line ending around it); ValueError when there is none, as list.index."""
+    for i, line in enumerate(lines):
+        if line.strip() == tag:
+            return i
+    raise ValueError(f"{tag} is not in the file")
+
+
+def _has_tag(lines, tag):
+    return any(line.strip() == tag for line in lines)
+
+
+def _lines(text):
+    """The lines of ``text`` with their endings, split as the document splits them (on newline only: str.splitlines
+    also splits on form feeds and Unicode separators, which would shift the line numbers)."""
+    return re.findall(r"[^\n]*\n|[^\n]+$", text)
+
+
+def _section(doc, name):
+    """The first top-level section ``name`` of a document as (name, open line, close line or -1, depth, parent), or
+    None."""
+    for sec in doc.sections():
+        if sec[0] == name and sec[3] == 0:
+            return sec
+    return None
 
 class AzrChannel:
     """One channel line (31 fields, plus e1 and/or the THM binding energy and
@@ -1554,37 +1006,73 @@ class AzrModel:
         self.levels: List[AzrLevel] = levels
         self._suffix = suffix       # text from "</levels>" onward
         self.source = source
+        # The file as read (from_file): its line ending, the <levels> body's lines and the structure of the levels.
+        # While no level or channel is added, removed or reordered, to_text rewrites only the lines of the channels
+        # that changed and keeps every other byte (project.md section 5, step 4).
+        self._newline = "\n"
+        self._body = None           # [line with its ending] of the <levels> body, or None (canonical layout)
+        self._structure = None      # [(level, [channel, ...]), ...] as read
+        self._line_of = {}          # id(channel) -> its line in self._body
 
     # -- parsing / serialization ---------------------------------------------
 
     @classmethod
     def from_file(cls, path):
         """Parse a .azr file; only <levels> is interpreted, the rest is kept verbatim."""
-        with open(path) as f:
-            text = f.read()
-        start = text.find("<levels>")
-        end = text.find("</levels>")
-        if start == -1 or end == -1:
+        with open(path, newline="") as f:
+            raw = f.read()
+        # One line ending inside (\n); the file's own is restored on writing.
+        newline = "\r\n" if "\r\n" in raw else "\n"
+        text = raw.replace("\r\n", "\n")
+        doc = _document(text)
+        lv = _section(doc, "levels")
+        if lv is None or lv[2] < 0:
             raise ValueError(f"{path}: no <levels> ... </levels> block.")
-        body_start = text.index("\n", start) + 1
-        prefix = text[:body_start]
-        body = text[body_start:end]
-        suffix = text[end:]
+        # Whole lines: up to and including the <levels> line, its body, and from the </levels> line on (the
+        # engine's document, docs/upgrade/project.md: a tag is a whole trimmed line, not a substring).
+        lines = _lines(text)
+        prefix = "".join(lines[:lv[1] + 1])
+        body = "".join(lines[lv[1] + 1:lv[2]])
+        suffix = "".join(lines[lv[2]:])
 
-        # group channel lines into levels by their levelID
-        levels, cur, cur_id = [], [], None
-        for line in body.splitlines():
+        # Channel lines into levels.  Active lines by the engine's rule (io::LevelGrouper, as CNuc::Fill; project.md
+        # P2): within a J^pi group of a compound nucleus, a line joins the level of its ID within 1 keV, else one at
+        # the identical energy, else opens a new level -- wherever the lines stand in the block.  Inactive lines,
+        # which the engine does not read, stay grouped by consecutive ID.
+        grouper = _engine_module().LevelGrouper()
+        nucleus_of_channel = _nuclei_module().nucleus_of_channel
+        groups, slots = {}, {}
+        levels, inactive = [], None
+        line_of = {}                    # id(channel) -> its line in the body
+        for index, line in enumerate(_lines(body)):
+            line = line.rstrip("\n")
             if not line.strip():
                 continue
             ch = AzrChannel.from_line(line)
-            if cur and ch.levelID != cur_id:
-                levels.append(AzrLevel(cur))
-                cur = []
-            cur.append(ch)
-            cur_id = ch.levelID
-        if cur:
-            levels.append(AzrLevel(cur))
-        return cls(prefix, levels, suffix, source=path)
+            line_of[id(ch)] = index
+            if not ch.active:
+                if inactive is not None and inactive.channels[-1].levelID == ch.levelID:
+                    inactive.channels.append(ch)
+                else:
+                    inactive = AzrLevel([ch])
+                    levels.append(inactive)
+                continue
+            inactive = None
+            key = (int(round(2 * ch.levelJ)), int(ch.levelPi), nucleus_of_channel(ch))
+            group = groups.setdefault(key, len(groups) + 1)
+            level = grouper.assign(group, float(ch.levelE), int(ch.levelID))[0]
+            lv = slots.get((group, level))
+            if lv is None:
+                lv = slots[(group, level)] = AzrLevel([ch])
+                levels.append(lv)
+            else:
+                lv.channels.append(ch)
+        model = cls(prefix, levels, suffix, source=path)
+        model._newline = newline
+        model._body = _lines(body)
+        model._structure = [(lv, list(lv.channels)) for lv in levels]
+        model._line_of = line_of
+        return model
 
     def _final_newline(self):
         """"\n" if the file ends with a newline, else "" -- what it keeps."""
@@ -1613,29 +1101,56 @@ class AzrModel:
         if not path.endswith("/"):
             path += "/"
         os.makedirs(path, exist_ok=True)
-        lines = self._prefix.splitlines(keepends=True)
-        for i, line in enumerate(lines):
-            if line.rstrip().endswith("#Full Path to Output Directory"):
-                comment = line[line.index("#"):]
-                lines[i] = f"{path:<100}{comment}"
-                break
-        else:
+        # The engine's output directory is the second line inside <config> (Config::ReadConfigFile), whatever its
+        # comment says (project.md P2); the comment, if any, is kept.
+        lines, a, b = self._config_lines()
+        if a + 1 >= b:
             raise ValueError("no output-directory line in the <config> block.")
+        line = lines[a + 1]
+        comment = line[line.index("#"):] if "#" in line else "\n"
+        lines[a + 1] = f"{path:<100}{comment}" if "#" in line else f"{path}{comment}"
         self._prefix = "".join(lines)
         return self
 
+    def _same_structure(self):
+        """No level or channel added, removed or reordered since the file was read."""
+        if self._structure is None or len(self._structure) != len(self.levels):
+            return False
+        for (lv0, chs0), lv in zip(self._structure, self.levels):
+            if lv0 is not lv or len(chs0) != len(lv.channels):
+                return False
+            if any(a is not b for a, b in zip(chs0, lv.channels)):
+                return False
+        return True
+
     def to_text(self):
-        """The whole file as text, with <levels> re-emitted and everything else unchanged."""
-        self._renumber()
-        blocks = ["\n".join(c.to_line() for c in lv.channels)
-                  for lv in self.levels]
-        body = "\n\n".join(blocks)
-        return self._prefix + body + "\n\n" + self._suffix
+        """The whole file as text, with the file's own line ending.
+
+        While the levels keep the structure they were read with, the <levels> block is the file's own, with only
+        the lines of edited channels rewritten (every other byte kept: blank lines, IDs, layout).  After a level or
+        channel is added, removed or reordered the block is re-emitted in the canonical layout (levels numbered
+        1, 2, ..., one blank line between them).  The rest of the file is kept as it is."""
+        if self._body is not None and self._same_structure():
+            body = list(self._body)
+            for lv in self.levels:
+                for c in lv.channels:
+                    i = self._line_of[id(c)]
+                    new = c.to_line()
+                    if body[i].rstrip("\n") != new:
+                        body[i] = new + ("\n" if body[i].endswith("\n") else "")
+            text = self._prefix + "".join(body) + self._suffix
+        else:
+            self._renumber()
+            blocks = ["\n".join(c.to_line() for c in lv.channels)
+                      for lv in self.levels]
+            body = "\n\n".join(blocks)
+            text = self._prefix + body + "\n\n" + self._suffix
+        return text if self._newline == "\n" else text.replace("\n", self._newline)
 
     def write(self, path):
         """Write the (edited) model to ``path`` and return it.  The original
         file is never modified."""
-        with open(path, "w") as f:
+        with open(path, "w", newline="") as f:  # the text carries the file's own line ending
             f.write(self.to_text())
         return path
 
@@ -1988,8 +1503,8 @@ class AzrModel:
         """
         lines = self._suffix.splitlines()
         try:
-            start = lines.index("<segmentsTest>")
-            end = lines.index("</segmentsTest>")
+            start = _tag_index(lines, "<segmentsTest>")
+            end = _tag_index(lines, "</segmentsTest>")
         except ValueError:
             # No block yet: append one at the end of the tail.
             self._suffix = (self._suffix.rstrip("\n") + "\n\n<segmentsTest>\n"
@@ -2075,7 +1590,7 @@ class AzrModel:
         line = "  ".join(_fmt(t) if not isinstance(t, str) else t for t in toks)
         lines = self._suffix.splitlines()
         if "<segmentsTest>" in lines:
-            end = lines.index("</segmentsTest>")
+            end = _tag_index(lines, "</segmentsTest>")
             self._set_suffix_lines(lines[:end] + [line] + lines[end:])
         else:
             self._splice_segments_test([line])
@@ -2110,8 +1625,8 @@ class AzrModel:
         """
         lines = self._suffix.splitlines()
         try:
-            start = lines.index("<segmentsTest>") + 1
-            end = lines.index("</segmentsTest>")
+            start = _tag_index(lines, "<segmentsTest>") + 1
+            end = _tag_index(lines, "</segmentsTest>")
         except ValueError:
             raise ValueError("no <segmentsTest> block to trim.")
         body = [ln for ln in lines[start:end] if ln.strip()]
@@ -2178,10 +1693,17 @@ class AzrModel:
             if not t:
                 continue
             out.setdefault(name, dict(defaults))
+            # As the engine reads the line (CNuc::ReadAbundances), and refuses what it refuses (project.md P3):
+            # "[<sample>:] sum <sigma>" or "[<sample>:] Z A value vary sigma".
             if t[0] == "sum":
+                if len(t) < 2 or not _isfloat(t[1]):
+                    raise ValueError(f'<abundances> line "{line.strip()}" is not "[<sample>:] sum <sigma>" '
+                                     f"(AZURE2 refuses it)")
                 continue
-            if len(t) >= 5:
-                out[name][Nucleus(int(t[0]), int(t[1]))] = (float(t[2]), int(float(t[3])) == 1, float(t[4]))
+            if len(t) < 5 or not all(_isfloat(x) for x in t[:5]):
+                raise ValueError(f'<abundances> line "{line.strip()}" is not "[<sample>:] Z A value vary sigma" '
+                                 f"(AZURE2 refuses it)")
+            out[name][Nucleus(int(t[0]), int(t[1]))] = (float(t[2]), int(float(t[3])) == 1, float(t[4]))
         if not out:
             out[""] = dict(defaults)
         return out
@@ -2202,7 +1724,7 @@ class AzrModel:
         lines = self._suffix.splitlines()
         if "<abundances>" not in lines:
             raise ValueError("no <abundances> block (set an abundance first).")
-        a, b = lines.index("<abundances>"), lines.index("</abundances>")
+        a, b = _tag_index(lines, "<abundances>"), _tag_index(lines, "</abundances>")
         prefix = f"{sample}: " if sample else ""
         new = None if sigma is None else f"{prefix}sum {_fmt(float(sigma))}"
         for i in range(a + 1, b):
@@ -2226,7 +1748,7 @@ class AzrModel:
     def _abundance_lines(self):
         lines = self._suffix.splitlines()
         try:
-            a, b = lines.index("<abundances>"), lines.index("</abundances>")
+            a, b = _tag_index(lines, "<abundances>"), _tag_index(lines, "</abundances>")
         except ValueError:
             return []
         return [ln for ln in lines[a + 1:b] if ln.strip() and not ln.strip().startswith("#")]
@@ -2254,10 +1776,10 @@ class AzrModel:
         new = f"{prefix}{nuc.Z} {nuc.A} {_fmt(value)} {1 if vary else 0} {_fmt(sigma)}"
         lines = self._suffix.splitlines()
         if "<abundances>" not in lines:
-            at = lines.index("</levels>") + 1 if "</levels>" in lines else 0
+            at = _tag_index(lines, "</levels>") + 1 if "</levels>" in lines else 0
             lines[at:at] = ["<abundances>", new, "</abundances>"]
         else:
-            a, b = lines.index("<abundances>"), lines.index("</abundances>")
+            a, b = _tag_index(lines, "<abundances>"), _tag_index(lines, "</abundances>")
             for i in range(a + 1, b):
                 name, rest = _split_sample_prefix(lines[i])
                 t = rest.split()
@@ -2269,32 +1791,53 @@ class AzrModel:
         self._suffix = "\n".join(lines) + "\n"
         return self
 
+    def _config_lines(self):
+        """The prefix's lines and the index range (a, b) of the lines strictly inside ``<config>``."""
+        lines = self._prefix.splitlines(keepends=True)
+        a = _tag_index(lines, "<config>")
+        b = _tag_index(lines, "</config>")
+        return lines, a + 1, b
+
+    def _config_value(self, key):
+        """The value of ``key=value`` in ``<config>`` as the engine reads it (Config::ReadConfigFile): only lines
+        between the tags, the comment after '#' dropped, key and value trimmed, the last line of the key winning;
+        None when absent (project.md P2)."""
+        lines, a, b = self._config_lines()
+        value = None
+        for ln in lines[a:b]:
+            entry = ln.split("#", 1)[0]
+            if "=" not in entry:
+                continue
+            k, v = entry.split("=", 1)
+            if k.strip() == key:
+                value = v.strip()
+        return value
+
+    def _set_config_value(self, key, value):
+        """Remove every ``key=`` line of ``<config>`` and, unless ``value`` is None, add ``key=value`` as its last
+        line."""
+        lines, a, b = self._config_lines()
+        keep = [ln for ln in lines[a:b]
+                if not ("=" in ln.split("#", 1)[0] and ln.split("#", 1)[0].split("=", 1)[0].strip() == key)]
+        if value is not None:
+            keep.append(f"{key}={value}\n")
+        self._prefix = "".join(lines[:a] + keep + lines[b:])
+
     @property
     def abundance_sum_sigma(self):
         """The ``abundanceSumSigma`` config key (0 = no sum-to-one penalty)."""
-        for line in self._prefix.splitlines():
-            if line.strip().startswith("abundanceSumSigma="):
-                return float(line.split("=", 1)[1].split("#")[0])
-        return 0.0
+        v = self._config_value("abundanceSumSigma")
+        return float(v) if v else 0.0
 
     @abundance_sum_sigma.setter
     def abundance_sum_sigma(self, value):
-        lines = self._prefix.splitlines(keepends=True)
-        lines = [ln for ln in lines if not ln.strip().startswith("abundanceSumSigma=")]
-        if value and float(value) > 0:
-            end = next(i for i, ln in enumerate(lines) if ln.strip() == "</config>")
-            lines.insert(end, f"abundanceSumSigma={float(value):g}\n")
-        self._prefix = "".join(lines)
+        self._set_config_value("abundanceSumSigma", f"{float(value):g}" if value and float(value) > 0 else None)
 
     @property
     def prior_covariance(self):
         """The ``priorCovariance`` config key: the prior parameter covariance file (path relative to the .azr's
         directory, see :mod:`pyazr.priors`), or None without one."""
-        for line in self._prefix.splitlines():
-            if line.strip().startswith("priorCovariance="):
-                value = line.split("=", 1)[1].split("#")[0].strip()
-                return value or None
-        return None
+        return self._config_value("priorCovariance") or None
 
     @prior_covariance.setter
     def prior_covariance(self, path):
@@ -2303,30 +1846,17 @@ class AzrModel:
         if path and ("#" in str(path) or "\n" in str(path) or str(path) != str(path).strip()):
             raise ValueError(f"priorCovariance path {path!r}: no '#', line break or leading/trailing blank (the "
                              f"<config> line is cut there)")
-        lines = self._prefix.splitlines(keepends=True)
-        lines = [ln for ln in lines if not ln.strip().startswith("priorCovariance=")]
-        if path:
-            end = next(i for i, ln in enumerate(lines) if ln.strip() == "</config>")
-            lines.insert(end, f"priorCovariance={path}\n")
-        self._prefix = "".join(lines)
+        self._set_config_value("priorCovariance", str(path) if path else None)
 
     @property
     def relativistic(self):
         """The ``relativistic`` config key: relativistic two-body kinematics (k, eta, lab <-> c.m. from the
         invariant mass; user guide "Relativistic Kinematics").  False when absent."""
-        for line in self._prefix.splitlines():
-            if line.strip().startswith("relativistic="):
-                return line.split("=", 1)[1].split("#")[0].strip() in ("1", "true")
-        return False
+        return self._config_value("relativistic") in ("1", "true")
 
     @relativistic.setter
     def relativistic(self, value):
-        lines = self._prefix.splitlines(keepends=True)
-        lines = [ln for ln in lines if not ln.strip().startswith("relativistic=")]
-        if value:
-            end = next(i for i, ln in enumerate(lines) if ln.strip() == "</config>")
-            lines.insert(end, "relativistic=1\n")
-        self._prefix = "".join(lines)
+        self._set_config_value("relativistic", "1" if value else None)
 
     # -- measured scattering lengths ------------------------------------------
 
@@ -2340,7 +1870,7 @@ class AzrModel:
         ``output/scatteringLengths.out``."""
         lines = self._suffix.splitlines()
         try:
-            a, b = lines.index("<scatteringLengths>"), lines.index("</scatteringLengths>")
+            a, b = _tag_index(lines, "<scatteringLengths>"), _tag_index(lines, "</scatteringLengths>")
         except ValueError:
             return []
         out = []
@@ -2363,7 +1893,7 @@ class AzrModel:
         entries = list(entries)
         lines = self._suffix.splitlines()
         if "<scatteringLengths>" in lines:
-            a, b = lines.index("<scatteringLengths>"), lines.index("</scatteringLengths>")
+            a, b = _tag_index(lines, "<scatteringLengths>"), _tag_index(lines, "</scatteringLengths>")
             del lines[a:b + 1]
             at = a
         else:
@@ -2477,7 +2007,7 @@ class AzrModel:
             elif inside and s and file_substr in line:
                 t = line.split()
                 isDiff = int(float(t[7]))
-                i = 8 + (2 if isDiff % 10 == 2 else 0)   # dataNorm index
+                i = 8 + (2 if isDiff == 2 else 0)   # dataNorm index
                 if vary is not None:
                     t[i + 1] = "1" if vary else "0"
                 if sys_error is not None:
@@ -2514,7 +2044,7 @@ class AzrModel:
                 key += 1
                 t = line.split()
                 isDiff = int(float(t[7]))
-                out[key] = (t, 8 + (2 if isDiff % 10 == 2 else 0))
+                out[key] = (t, 8 + (2 if isDiff == 2 else 0))
         return out
 
     def set_segment_values(self, values):
@@ -2549,7 +2079,7 @@ class AzrModel:
             norm, shift = values[key]
             spans = _token_spans(line)
             t = [line[a:b] for a, b in spans]
-            i = 8 + (2 if int(float(t[7])) % 10 == 2 else 0)
+            i = 8 + (2 if int(float(t[7])) == 2 else 0)
             edits = {}
             if norm is not None:
                 edits[i] = repr(float(norm))
@@ -2583,15 +2113,15 @@ class AzrModel:
         Without a row the field is both, as in every classic file.  Only the
         keys with a row are listed; the other entry of a pair is None.
         """
+        prior_centre_row = _package_module("datasets").prior_centre_row
         out = {}
         for line in self._parameter_settings_lines():
-            m = _PRIOR_ROW.match(line)
-            if not m:
+            row = prior_centre_row(line)  # the engine's reading and its refusals (datasets.prior_centre_row)
+            if row is None:
                 continue
-            key = int(m.group(1))
+            key, kind, v = row
             n, sh = out.get(key, (None, None))
-            v = float(m.group(3))
-            out[key] = (v, sh) if m.group(2) == "norm" else (n, v)
+            out[key] = (v, sh) if kind == "norm" else (n, v)
         return out
 
     def _parameter_settings_lines(self):
@@ -2687,7 +2217,7 @@ class AzrModel:
         lines = self._suffix.splitlines()
         if "<segmentsData>" not in lines:
             return lines, []
-        a, b = lines.index("<segmentsData>"), lines.index("</segmentsData>")
+        a, b = _tag_index(lines, "<segmentsData>"), _tag_index(lines, "</segmentsData>")
         return lines, [(i, lines[i]) for i in range(a + 1, b) if lines[i].strip()]
 
     @property
@@ -3163,7 +2693,7 @@ class AzrModel:
         lines = self._suffix.splitlines()
         if "<segmentsData>" not in lines:
             raise ValueError("no <segmentsData> block to add to.")
-        end = lines.index("</segmentsData>")
+        end = _tag_index(lines, "</segmentsData>")
         self._set_suffix_lines(lines[:end] + [line] + lines[end:])
         return self
 
@@ -3204,8 +2734,8 @@ class AzrModel:
         """
         lines = self._suffix.splitlines()
         try:
-            start = lines.index("<segmentsData>")
-            end = lines.index("</segmentsData>")
+            start = _tag_index(lines, "<segmentsData>")
+            end = _tag_index(lines, "</segmentsData>")
         except ValueError:
             raise ValueError("no <segmentsData> block to clear.")
         self._set_suffix_lines(lines[:start + 1] + lines[end:])
@@ -3217,8 +2747,8 @@ class AzrModel:
         """The raw ``<targetInt>`` lines (one experimental effect each)."""
         lines = self._suffix.splitlines()
         try:
-            start = lines.index("<targetInt>") + 1
-            end = lines.index("</targetInt>")
+            start = _tag_index(lines, "<targetInt>") + 1
+            end = _tag_index(lines, "</targetInt>")
         except ValueError:
             return []
         return [ln for ln in lines[start:end] if ln.strip()]
@@ -3226,8 +2756,8 @@ class AzrModel:
     def _splice_target_int(self, new_lines):
         lines = self._suffix.splitlines()
         try:
-            start = lines.index("<targetInt>")
-            end = lines.index("</targetInt>")
+            start = _tag_index(lines, "<targetInt>")
+            end = _tag_index(lines, "</targetInt>")
         except ValueError:
             self._suffix = (self._suffix.rstrip("\n") + "\n\n<targetInt>\n"
                             + "\n".join(new_lines) + "\n</targetInt>"
@@ -3346,7 +2876,7 @@ class AzrModel:
         line = "  ".join(t if isinstance(t, str) else _fmt(t) for t in toks)
         lines = self._suffix.splitlines()
         if "<targetInt>" in lines:
-            end = lines.index("</targetInt>")
+            end = _tag_index(lines, "</targetInt>")
             self._set_suffix_lines(lines[:end] + [line] + lines[end:])
         else:
             self._splice_target_int([line])
@@ -3393,15 +2923,9 @@ class AzrModel:
         return [ln.rstrip("\r\n") for ln in lines[i + 1:j]]
 
     def _thm_settings(self):
-        """The block parsed into the GUI's ThmSettings (a dict); ValueError on
+        """The block as AZURE2 reads it, as the GUI's ThmSettings (a dict); ValueError on
         a line the engine would refuse."""
-        s = _thm_default_settings()
-        body = self._thm_body()
-        for line in body:
-            _thm_parse_line(line, s)
-        _thm_check_experiments(s["experiments"])
-        _engine_thm_check(body)
-        return s
+        return _thm_read(self._thm_body())
 
     def thm_options(self, defaults=False):
         """The options of the ``<thm>`` block, as a dict.
@@ -3751,10 +3275,7 @@ class AzrModel:
             raise ValueError(f"<thm> experiment[{name}]: a value cannot contain '#' "
                              "or a line break.")
         s = self._thm_settings()
-        others = {k: v for k, v in s["experiments"].items() if k != name}
-        trial = dict(others)
-        _thm_parse_experiment(text, trial)
-        _thm_check_experiments(trial)
+        trial = _thm_read(self._thm_body_without_experiment(name) + [text])["experiments"]
         rec = _thm_experiment_record(trial[name])
         if rec.get("theta", "all") != "all" and s["entranceL"] == "coherent":
             raise ValueError(f"<thm> experiment[{name}]: theta= computes the interference "
@@ -3798,8 +3319,9 @@ class AzrModel:
                     exits.add(int(float(tok[2])))
             groups = {(round(2 * float(lv.J)), 1 if lv.parity > 0 else -1)
                       for lv in self.levels}
-            for t in _thm_parse_cbackground(rec["cbackground"]):
-                jpi = f"{_thm_spin_text(t['J'])}{'+' if t['parity'] > 0 else '-'}"
+            engine = _engine_module()
+            for t in engine.parse_thm_cbackground(rec["cbackground"])[0]:
+                jpi = f"{engine.thm_spin_text(t['J'])}{'+' if t['parity'] > 0 else '-'}"
                 if t["exit"] not in exits:
                     raise ValueError(f"<thm> experiment[{name}]: cbackground {jpi}:"
                                      f"{t['exit']}: no segment of the experiment has exit "
@@ -3823,10 +3345,7 @@ class AzrModel:
         if name not in s["experiments"]:
             return self
         body = self._thm_body_without_experiment(name)
-        rest = _thm_default_settings()
-        for line in body:
-            _thm_parse_line(line, rest)
-        if _thm_is_default(rest):
+        if _thm_is_default(_thm_read(body)):
             body = []
         self._thm_set_body(body)
         return self
@@ -3839,7 +3358,10 @@ class AzrModel:
         cbackground; ValueError (model unchanged) if AZURE2 would refuse it."""
         if not isinstance(cbackground, str):
             cbackground = ";".join(str(t) for t in cbackground)
-        text = _thm_format_cbackground(_thm_parse_cbackground(cbackground))
+        try:
+            text = _engine_module().parse_thm_cbackground(cbackground)[1]
+        except ValueError as err:
+            raise ValueError(f"<thm> experiment[{name}]: {err}") from None
         body = self._thm_body()
         head = f"experiment[{name}]"
         for i, line in enumerate(body):
@@ -3853,10 +3375,7 @@ class AzrModel:
                     new = re.sub(r"(?<!\S)cbackground=\S+", "cbackground=" + text, code, count=1)
                     trial = list(body)
                     trial[i] = new + hash_ + comment
-                    s = _thm_default_settings()
-                    for ln in trial:
-                        _thm_parse_line(ln, s)
-                    _thm_check_experiments(s["experiments"])
+                    _thm_read(trial)
                     self._thm_set_body(trial)
                     return self
         raise KeyError(f"<thm> experiment[{name}] has no cbackground= to replace")
@@ -3887,7 +3406,7 @@ class AzrModel:
         block = ["<thm>"] + body + ["</thm>"]
         lines = self._suffix.splitlines()
         if "</targetInt>" in lines:
-            end = lines.index("</targetInt>") + 1
+            end = _tag_index(lines, "</targetInt>") + 1
             self._set_suffix_lines(lines[:end] + block + lines[end:])
         else:
             self._set_suffix_lines(lines + block)
@@ -3934,7 +3453,7 @@ class AzrModel:
         block = ["<thm>"] + body + ["</thm>"]
         lines = self._suffix.splitlines()
         if "</targetInt>" in lines:
-            end = lines.index("</targetInt>") + 1
+            end = _tag_index(lines, "</targetInt>") + 1
             self._set_suffix_lines(lines[:end] + block + lines[end:])
         else:
             self._set_suffix_lines(lines + block)
@@ -3946,23 +3465,37 @@ class AzrModel:
         lines = self._suffix.splitlines()
         if "<targetInt>" not in lines:
             return lines, []
-        a, b = lines.index("<targetInt>"), lines.index("</targetInt>")
+        a, b = _tag_index(lines, "<targetInt>"), _tag_index(lines, "</targetInt>")
         return lines, [(i, lines[i]) for i in range(a + 1, b) if lines[i].strip()]
+
+    def _target_effects(self):
+        """The ACTIVE <targetInt> lines as AZURE2 reads them (TargetEffect, through
+        ``_azure2.parse_target_effect_line``; project.md section 5), keyed by effect number (place among the active
+        lines).  A screening, Doppler or densityfit block the engine refuses raises ValueError."""
+        _, tl = self._target_int_lines()
+        parse = _engine_module().parse_target_effect_line
+        out, n = {}, 0
+        for _, line in tl:
+            if line.split()[0] != "1":
+                continue
+            n += 1
+            te = parse(line)
+            if te["screening_error"] or te["doppler_error"] or te["density_error"]:
+                why = te["density_error"] or ("screening" if te["screening_error"] else "doppler") + " block"
+                raise ValueError(f"<targetInt> effect {n}: {why} (AZURE2 refuses the line)")
+            out[n] = te
+        return out
 
     @property
     def screenings(self):
         """Electron screening of the <targetInt> lines: ``{effect: (Ue_eV, vary, sigma_eV)}``
         keyed by the effect number AZURE2 uses (the place among the ACTIVE lines), for the
         lines with a ``screening`` block."""
-        _, tl = self._target_int_lines()
-        out, n = {}, 0
-        for _, line in tl:
-            if line.split()[0] != "1":
-                continue
-            n += 1
-            m = self._SCREENING_RE.search(line)
-            if m:
-                out[n] = (float(m.group(1)), int(float(m.group(2))) != 0, float(m.group(3)))
+        out = {}
+        for n, te in self._target_effects().items():  # the engine's reading of each active line
+            if te["screening"] is not None:
+                ue, vary, sigma = te["screening"]
+                out[n] = (float(ue), bool(vary), float(sigma))
         return out
 
     def set_screening(self, effect, ue=None, vary=None, sigma=None):
@@ -4017,22 +3550,10 @@ class AzrModel:
         K, 0 = none), ``tmax`` (the optional Tmax field, else ``None``) and ``max`` (the layout temperature its
         sub-point grids span: Tmax, else T + 3 sigma but at least 1.21 T, or 2 T without a prior; T for a fixed
         line)."""
-        _, tl = self._target_int_lines()
-        out, n = {}, 0
-        for _, line in tl:
-            if line.split()[0] != "1":
-                continue
-            n += 1
-            m = self._DOPPLER_RE.search(line)
-            if not m or m.group(1) is None:
-                continue
-            T = float(m.group(1))
-            fit = m.group(2) is not None
-            vary = fit and int(float(m.group(2))) != 0
-            sigma = float(m.group(3)) if fit else 0.0
-            tmax = float(m.group(4)) if fit and m.group(4) else None
-            layout = (tmax if tmax else (max(T + 3.0 * sigma, 1.21 * T) if sigma > 0 else 2.0 * T)) if fit else T
-            out[n] = dict(temperature=T, fit=fit, vary=vary, sigma=sigma, tmax=tmax, max=layout)
+        out = {}
+        for n, te in self._target_effects().items():  # the engine's reading of each active line
+            if te["doppler"] is not None:
+                out[n] = dict(te["doppler"])
         return out
 
     def set_doppler(self, effect, T=None, vary=None, sigma=None, tmax=None):
@@ -4085,30 +3606,19 @@ class AzrModel:
         else N0 + 3 sigma but at least 1.1 N0, or 1.5 N0 without a prior), ``group`` (label or ``None``) and
         ``leader`` (the effect holding the parameter: itself, or its group's first line, whose density, prior
         and maximum the group shares)."""
-        _, tl = self._target_int_lines()
-        out, n, leader_of = {}, 0, {}
-        for _, line in tl:
-            tok = line.split()
-            if tok[0] != "1":
+        out, leader_of = {}, {}
+        for n, te in self._target_effects().items():  # the engine's reading of each active line
+            fit, group = te["density_fit"], (te["density_group"] or None)
+            if fit is None and group is None:
                 continue
-            n += 1
-            fit = self._DENSITYFIT_RE.search(line)
-            grp = self._DENSITYGROUP_RE.search(line)
-            if not fit and not grp:
-                continue
-            density = float(tok[6])
-            group = grp.group(1) if grp else None
             if group is not None and group in leader_of:
                 lead = out[leader_of[group]]
                 out[n] = dict(lead, density=lead["density"], group=group, leader=leader_of[group])
                 continue
-            if not fit:
+            if fit is None:
                 raise ValueError(f"<targetInt> effect {n}: density group {group} starts without a densityfit block")
-            sigma = self._density_sigma(fit.group(2), density)
-            dmax = (float(fit.group(3)) if fit.group(3) else
-                    max(density + 3.0 * sigma, 1.1 * density) if sigma > 0 else 1.5 * density)
-            out[n] = dict(density=density, vary=int(float(fit.group(1))) != 0, sigma=sigma, max=dmax,
-                          group=group, leader=n)
+            out[n] = dict(density=float(te["density"]), vary=bool(fit["vary"]), sigma=float(fit["sigma"]),
+                          max=float(fit["max"]), group=group, leader=n)
             if group is not None:
                 leader_of[group] = n
         return out
@@ -4182,3 +3692,28 @@ class AzrModel:
 
     def __repr__(self):
         return f"AzrModel({len(self.levels)} levels, source={self.source!r})"
+
+def convert_azr(old, new, overwrite=False):
+    """Write the project ``old`` in the updated file format (format 2) to ``new``.
+
+    The conversion is the engine's (``io::ConvertToFormat2``, the same as
+    ``AZURE2 --convert``; docs/upgrade/project.md section 4): ``<lastRun>`` and
+    ``<mcmc>``'s run settings are removed (nothing reads them),
+    ``useAdaptiveGrid`` moves from ``<potential>`` to ``<config>``,
+    ``<potential>`` stays only with a hybrid potential, and ``format=2`` is
+    added to ``<config>``; every other byte is kept.  An old file also loads as
+    it is (the engine reads it as its conversion).  ``new`` is not overwritten
+    unless ``overwrite``.  Returns the list of changes (empty for a file
+    already in format 2).
+    """
+    _azure2 = _engine_module()
+    with open(old, "rb") as f:
+        text = f.read()  # bytes, converted as bytes (the file's encoding is kept)
+    if os.path.exists(new) and not overwrite:
+        raise FileExistsError(f"{new} exists; pass overwrite=True to replace it")
+    converted, changes, problems = _azure2.convert_project_text(text)
+    for p in problems:
+        warnings.warn(f"{old}: {p}")
+    with open(new, "wb") as f:
+        f.write(converted)
+    return list(changes)

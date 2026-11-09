@@ -119,10 +119,13 @@ ParameterLimitsManager::ParameterLimitsManager(const Config *config, CNuc *compo
 bool ParameterLimitsManager::ReadParameterSettings() {
   parameterSettings_.clear();
 
-  std::ifstream file(config_->configfile.c_str());
-  if (!file.is_open()) {
-    return false;
+  {
+    std::ifstream test(config_->configfile.c_str());
+    if (!test.is_open()) return false;
   }
+  std::unique_ptr<std::istream> section = config_->SectionStream("parameterSettings");
+  if (!section) return true;  // no settings
+  std::istream &file = *section;
 
   std::string line;
   bool inParameterSettings = false;
@@ -199,7 +202,6 @@ bool ParameterLimitsManager::ReadParameterSettings() {
     }
   }
 
-  file.close();
   return true;
 }
 

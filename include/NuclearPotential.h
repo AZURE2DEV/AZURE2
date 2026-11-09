@@ -6,6 +6,8 @@
 #include <stdexcept>
 #include <cmath>
 
+#include "azure2/physics/Constants.h"
+
 /**
  * @brief Base class for nuclear potentials
  */
@@ -107,7 +109,7 @@ class CentrifugalPotential : public NuclearPotential {
    * @param redmass_MeV Reduced mass in MeV/c^2
    * @param hbarc hbar*c in MeV*fm (default 197.3269804)
    */
-  CentrifugalPotential(int l, double redmass_MeV, double hbarc = 197.3269804) :
+  CentrifugalPotential(int l, double redmass_MeV, double hbarc = azure2::physics::kHbarC_MeV_fm) :
     l_(l),
     redmass_MeV_(redmass_MeV),
     hbarc_(hbarc) {
@@ -165,7 +167,7 @@ class CoulombNuclearPotential : public NuclearPotential {
                           int l = 0,
                           double redmass_MeV = 931.49410242,
                           double Rc = 3.5,
-                          double hbarc = 197.3269804) :
+                          double hbarc = azure2::physics::kHbarC_MeV_fm) :
     Z1_(Z1),
     Z2_(Z2),
     nuclear_(nuclear_potential),

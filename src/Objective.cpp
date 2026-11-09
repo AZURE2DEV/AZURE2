@@ -108,6 +108,7 @@ class NuisanceTerm : public ObjectiveTerm {
 // T6: Park formalism, every level's overlap J kept positive.
 class ParkTerm : public ObjectiveTerm {
  public:
+  bool ModelOnly() const override { return true; }
   std::string Name() const override { return "Park J > 0"; }
   void Add(const ObjectiveContext &c, double &chi2) const override {
     if (!(c.config.paramMask & Config::USE_PARK_FORMALISM)) return;
@@ -142,6 +143,7 @@ class TargetPriorTerm : public ObjectiveTerm {
 // T7: isotopic abundances, their priors and the sum-to-one term.
 class AbundanceTerm : public ObjectiveTerm {
  public:
+  bool ModelOnly() const override { return true; }
   std::string Name() const override { return "abundances"; }
   void Add(const ObjectiveContext &c, double &chi2) const override {
     if (!c.compound->HasAbundanceBlock()) return;
@@ -154,6 +156,7 @@ class AbundanceTerm : public ObjectiveTerm {
 // T9: measured scattering lengths (<scatteringLengths>), evaluated at each pair's threshold.
 class ScatteringLengthTerm : public ObjectiveTerm {
  public:
+  bool ModelOnly() const override { return true; }
   std::string Name() const override { return "scattering lengths"; }
   void Add(const ObjectiveContext &c, double &chi2) const override {
     if (!c.compound->HasScatteringLengthConstraints()) return;
@@ -203,6 +206,13 @@ double Objective::DataChi2(ObjectiveContext c) const {
   double chi2 = 0.0;
   terms_[0]->Add(c, chi2);  // T1 (T3, T4 off)
   terms_[1]->Add(c, chi2);  // T2
+  return chi2;
+}
+
+double Objective::ModelChi2(const ObjectiveContext &c) const {
+  double chi2 = 0.0;
+  for (const auto &t : terms_)
+    if (t->ModelOnly()) t->Add(c, chi2);
   return chi2;
 }
 

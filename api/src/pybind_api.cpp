@@ -20,6 +20,15 @@
 #include <iostream>
 #include <string>
 
+#include "ExtrapLine.h"
+#include "SegLine.h"
+#include "TargetEffect.h"
+
+#include <cstdio>
+#include <sstream>
+#include "azure2/io/Convert.h"
+#include "azure2/io/Document.h"
+#include "azure2/io/LevelGrouping.h"
 #include "AZUREAPI.h"
 #include "Config.h"
 #include "GSLException.h"
@@ -831,6 +840,7 @@ class Session {
 };
 
 void BindPhysics(py::module_ &m);  // pybind_physics.cpp: the free functions of physics/
+void BindThm(py::module_ &m);      // pybind_thm.cpp: <thm> blocks as the engine reads them
 
 PYBIND11_MODULE(_azure2, m) {
   m.doc() = "In-process bindings for the AZURE2 R-matrix engine.";
@@ -844,10 +854,205 @@ PYBIND11_MODULE(_azure2, m) {
   py::register_exception<AZURE2Error>(m, "AZURE2Error", PyExc_RuntimeError);
   BindPhysics(m);
 
-  // The engine's reading of a <thm> block, for AzrModel (pyazr/azrfile.py),
-  // which edits files without a session.  No files are read.
-  m.def("check_thm_block", &CheckThmBlockLines, py::arg("lines"), py::arg("global_rules") = false,
-        "The lines of a <thm> block as AZURE2 reads them: \"\" or the message it reports.");
+  BindThm(m);  // pybind_thm.cpp: the engine's reading of a <thm> block, for AzrModel
+  // The project file as a lossless document (io::Document; docs/upgrade/project.md section 2): pyazr's AzrModel
+  // reads and edits the file through it, as the engine does.  Lines are str (decoded UTF-8, invalid bytes kept as
+  // surrogates on the Python side by the caller); sections are (name, open, close, depth, parent) with close = -1 for
+  // an unclosed section and parent = -1 at top level.
+  {
+    using azure2::io::Document;
+    auto sectionTuple = [](const Document &d, std::size_t k) {
+      const Document::Section &s = d.Sections()[k];
+      const long npos = -1;
+      return py::make_tuple(s.name, (long)s.open, s.close == Document::Section::npos ? npos : (long)s.close, s.depth,
+                            s.parent == Document::Section::npos ? npos : (long)s.parent);
+    };
+    py::class_<Document>(m, "Document")
+        .def_static("parse", [](const py::bytes &b) { return Document::Parse(std::string(b)); }, py::arg("data"))
+        .def("write", [](const Document &d) { return py::bytes(d.Write()); })
+        .def("num_lines", &Document::NumLines)
+        .def("line", [](const Document &d, std::size_t i) {
+          if (i >= d.NumLines()) throw py::index_error("line index out of range");
+          return py::bytes(d.Line(i));
+        }, py::arg("i"))
+        .def("ending", [](const Document &d, std::size_t i) {
+          if (i >= d.NumLines()) throw py::index_error("line index out of range");
+          return py::bytes(d.Ending(i));
+        }, py::arg("i"))
+        .def("sections", [sectionTuple](const Document &d) {
+          py::list out;
+          for (std::size_t k = 0; k < d.Sections().size(); k++) out.append(sectionTuple(d, k));
+          return out;
+        })
+        .def("problems", &Document::Problems)
+        .def("replace_lines", [](Document &d, std::size_t first, std::size_t last, const std::vector<py::bytes> &lines) {
+          if (first > last || last > d.NumLines()) throw py::index_error("line range out of range");
+          std::vector<std::string> v;
+          for (const py::bytes &b : lines) v.push_back(std::string(b));
+          d.ReplaceLines(first, last, v);
+        }, py::arg("first"), py::arg("last"), py::arg("lines"))
+        .def("common_ending", [](const Document &d) { return py::bytes(d.CommonEnding()); })
+        .def("format", [](const Document &d) { return azure2::io::FormatOf(d); });
+  }
+  // One <segmentsData> line as the engine reads it (SegLine; docs/upgrade/project.md section 5): pyazr's datasets
+  // build their Segment from this, so pyazr and AZURE2 read every segment line the same way.  Components are
+  // (entrance, exit, angle or None, scaling or None) from SegLine's component list.
+  m.def(
+      "parse_segment_line",
+      [](const std::string &line) {
+        std::istringstream in(line);
+        SegLine sl(in);
+        py::dict d;
+        d["active"] = sl.isActive();
+        d["entrance_key"] = sl.entranceKey();
+        d["exit_key"] = sl.exitKey();
+        d["energy_min"] = sl.minE();
+        d["energy_max"] = sl.maxE();
+        d["angle_min"] = sl.minA();
+        d["angle_max"] = sl.maxA();
+        d["is_diff"] = sl.isDiff();
+        d["phase_J"] = sl.phaseJ();
+        d["phase_L"] = sl.phaseL();
+        d["phase_S"] = sl.phaseS();
+        d["norm"] = sl.dataNorm();
+        d["vary_norm"] = sl.varyNorm();
+        d["norm_error"] = sl.dataNormError();
+        d["energy_shift"] = sl.energyShift();
+        d["energy_shift_error"] = sl.energyShiftError();
+        d["vary_shift"] = sl.varyEnergyShift();
+        d["data_file"] = sl.dataFile();
+        d["has_sqrt_shift"] = sl.hasSqrtShift();
+        d["energy_shift_sqrt"] = sl.energyShiftSqrt();
+        d["energy_shift_sqrt_error"] = sl.energyShiftSqrtError();
+        d["vary_shift_sqrt"] = sl.varyEnergyShiftSqrt();
+        d["natural"] = sl.natural();
+        d["total"] = sl.total();
+        d["transmission"] = sl.transmission();
+        d["yield_thickness"] = sl.yieldThickness();
+        d["thickness_fit"] = sl.thicknessFit();
+        d["thickness_vary"] = sl.thicknessVary();
+        d["thickness_sigma"] = sl.thicknessSigma();
+        d["thickness_group"] = sl.thicknessGroup();
+        d["absolute"] = sl.absolute();
+        d["shift_group"] = sl.shiftGroup();
+        d["shift_fn_group"] = sl.shiftFnGroup();
+        d["norm_group"] = sl.normGroup();
+        d["covariance"] = sl.covarianceFile();
+        d["shift_fn"] = sl.shiftFn();
+        d["shift_fn_values"] = sl.shiftFnValues();
+        d["shift_fn_errors"] = sl.shiftFnErrors();
+        d["shift_fn_vary"] = sl.shiftFnVary();
+        d["is_advanced"] = sl.isAdvanced();
+        d["operation_type"] = sl.operationType();
+        d["is_upos"] = sl.isUPOS();
+        d["parse_error"] = sl.parseError();
+        d["parse_warning"] = sl.parseWarning();
+        py::list components;
+        std::istringstream list(sl.componentsList());
+        std::string item;
+        while (std::getline(list, item, ';')) {
+          int e = 0, x = 0;
+          py::object angle = py::none(), scaling = py::none();
+          std::sscanf(item.c_str(), "Entrance: %d, Exit: %d", &e, &x);
+          const std::size_t a = item.find("Angle: "), sc = item.find("Scaling: ");
+          if (a != std::string::npos) angle = py::float_(std::strtod(item.c_str() + a + 7, nullptr));
+          if (sc != std::string::npos) scaling = py::float_(std::strtod(item.c_str() + sc + 9, nullptr));
+          components.append(py::make_tuple(e, x, angle, scaling));
+        }
+        d["components"] = components;
+        return d;
+      },
+      py::arg("line"), "One <segmentsData> line as AZURE2 reads it (SegLine).");
+  // One <segmentsTest> line as the engine reads it (ExtrapLine), for pyazr's TestSegmentSet (project.md section 5).
+  m.def(
+      "parse_extrapolation_line",
+      [](const std::string &line) {
+        std::istringstream in(line);
+        ExtrapLine el(in);
+        py::dict d;
+        d["active"] = el.isActive();
+        d["entrance_key"] = el.entranceKey();
+        d["exit_key"] = el.exitKey();
+        d["energy_min"] = el.minE();
+        d["energy_max"] = el.maxE();
+        d["energy_step"] = el.eStep();
+        d["angle_min"] = el.minA();
+        d["angle_max"] = el.maxA();
+        d["angle_step"] = el.aStep();
+        d["is_diff"] = el.isDiff();
+        d["phase_J"] = el.phaseJ();
+        d["phase_L"] = el.phaseL();
+        d["phase_S"] = el.phaseS();
+        d["max_order"] = el.maxAngDistOrder();
+        d["natural"] = el.natural();
+        d["total"] = el.total();
+        d["transmission"] = el.transmission();
+        d["yield_thickness"] = el.yieldThickness();
+        d["is_advanced"] = el.isAdvanced();
+        d["parse_error"] = el.parseError();
+        d["parse_warning"] = el.parseWarning();
+        return d;
+      },
+      py::arg("line"), "One <segmentsTest> line as AZURE2 reads it (ExtrapLine).");
+  // One <targetInt> line as the engine reads it (TargetEffect; its constructor reads no file and no Config field),
+  // for pyazr's screening, Doppler and density views (project.md section 5).
+  m.def(
+      "parse_target_effect_line",
+      [](const std::string &line) {
+        std::ostringstream sink;
+        Config scratch(sink);
+        std::istringstream in(line);
+        TargetEffect te(in, scratch);
+        py::dict d;
+        d["screening"] = te.HasScreening()
+            ? py::object(py::make_tuple(te.GetScreeningNominal(), te.IsScreeningVaried(), te.GetScreeningSigma()))
+            : py::object(py::none());
+        d["screening_error"] = te.HasScreeningError();
+        d["doppler"] = te.IsDoppler()
+            ? py::object(py::dict(py::arg("temperature") = te.GetDopplerNominal(), py::arg("fit") = te.HasDopplerFit(),
+                                  py::arg("vary") = te.IsDopplerVaried(), py::arg("sigma") = te.GetDopplerSigma(),
+                                  py::arg("tmax") = te.GetDopplerTmax() > 0.0 ? py::object(py::float_(te.GetDopplerTmax()))
+                                                                               : py::object(py::none()),
+                                  py::arg("max") = te.GetDopplerLayoutTemperature()))
+            : py::object(py::none());
+        d["doppler_error"] = te.HasDopplerError();
+        d["density_fit"] = te.HasDensityFit()
+            ? py::object(py::dict(py::arg("density") = te.GetDensityNominal(), py::arg("vary") = te.IsDensityVaried(),
+                                  py::arg("sigma") = te.GetDensitySigma(), py::arg("max") = te.GetLayoutDensity()))
+            : py::object(py::none());
+        d["density"] = te.GetDensity();
+        d["density_group"] = te.GetDensityGroup();
+        d["density_error"] = te.HasDensityFitError() ? te.GetDensityFitErrorText() : std::string();
+        return d;
+      },
+      py::arg("line"), "One <targetInt> line as AZURE2 reads it (TargetEffect): screening, Doppler and density blocks.");
+  // The level of a <levels> line (io::LevelGrouper): the rule of CNuc::Fill, for pyazr's AzrModel.  assign returns
+  // (level, kind, other level, its first level ID); kind: "joined", "new", "same_energy", "new_nearby".
+  {
+    using azure2::io::LevelGrouper;
+    py::class_<LevelGrouper>(m, "LevelGrouper")
+        .def(py::init<>())
+        .def("assign", [](LevelGrouper &g, int group, double energy, int id) {
+          const LevelGrouper::Slot s = g.Assign(group, energy, id);
+          const char *kind = s.kind == LevelGrouper::Kind::Joined ? "joined"
+                             : s.kind == LevelGrouper::Kind::NewLevel ? "new"
+                             : s.kind == LevelGrouper::Kind::SameEnergy ? "same_energy" : "new_nearby";
+          return py::make_tuple(s.level, kind, s.other, s.otherID);
+        }, py::arg("group"), py::arg("energy"), py::arg("id"));
+  }
+  // The project file's format and its conversion (io::ConvertToFormat2; docs/upgrade/project.md section 4), on text.
+  m.def(
+      "convert_project_text",
+      [](const std::string &text) {
+        azure2::io::Document doc = azure2::io::Document::Parse(text);
+        const std::vector<std::string> changes = azure2::io::ConvertToFormat2(doc);
+        return py::make_tuple(py::bytes(doc.Write()), changes, doc.Problems());
+      },
+      py::arg("text"),
+      "The format-2 conversion of a project's text: (converted bytes, the changes, structural problems).");
+  m.def(
+      "project_format", [](const std::string &text) { return azure2::io::FormatOf(azure2::io::Document::Parse(text)); },
+      py::arg("text"), "The format of a project's text: 2 with format=2 in <config>, else 1.");
   py::register_exception<GSLException>(m, "GSLError", PyExc_ArithmeticError);
 
   py::class_<RuntimeOptions>(m, "RuntimeOptions")

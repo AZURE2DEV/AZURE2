@@ -31,6 +31,8 @@ struct ThmNuclide {
   static std::string Parse(const std::string &text, ThmNuclide &out);
   /// The table entry with this Z and A, or null.
   static const ThmNuclide *Find(int Z, int A);
+  /// The built-in table (light nuclei, nuclear masses), in its order.
+  static std::vector<ThmNuclide> Table();
 };
 
 /// The three-body reaction of an experiment line, as ThmResolveReaction finds it.
@@ -168,8 +170,8 @@ struct ThmExperiment {
     bool fixed[4] = {false, false, false, false};
   };
   std::vector<CoherentTerm> cbackground;
-  /// Keys given so far (a key may not be repeated).
-  std::vector<std::string> keys;
+  /// Keys given so far (a key may not be repeated), and each one's value as written.
+  std::vector<std::string> keys, values;
   static const char *BackgroundName(int terms);
 };
 
@@ -188,6 +190,7 @@ struct ThmOptionLine {
   bool flag = false;     ///< coulombIntegral (1/true/on or 0/false/off)
   double energy = 0.0;   ///< spectatorEnergy (MeV, >= 0)
   int pairKey = 0;       ///< the key of spectatorEnergy[<pair key>] (unused for spectatorEnergy=)
+  bool perPair = false;  ///< spectatorEnergy[<pair key>]= (else spectatorEnergy=)
   bool test = false;     ///< weightTest[k] (else weight[k])
   int segment = 0;       ///< the k of weight[k] / weightTest[k] (>= 1)
   std::string file;      ///< the weight file as written
@@ -204,6 +207,10 @@ bool ParseThmOptionLine(const std::string &key, const std::string &value, ThmOpt
  * pyazr, which edits files without the engine and asks it when it is there).
  */
 std::string CheckThmBlockLines(const std::vector<std::string> &lines, bool global);
+/// The same reading, keeping what it read: every global line in `options` (in block order) and the experiments;
+/// "" or the message ("<thm> ...").  CheckThmBlockLines is this plus, with `global`, CheckThmCoulombConsistency.
+std::string ParseThmBlockLines(const std::vector<std::string> &lines, std::vector<ThmOptionLine> &options,
+                               std::vector<ThmExperiment> &experiments);
 
 /*!
  * Parses one `experiment[<name>] key=value ...` line (comment already

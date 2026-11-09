@@ -43,6 +43,7 @@ from ``ESegment``'s two constructors (``src/ESegment.cpp``), which is what
 AZURE2 itself acts on.
 """
 
+import math
 import os
 import re
 from dataclasses import dataclass
@@ -227,6 +228,53 @@ def _shiftfn_block(vals):
     return expr, params
 
 
+
+def _engine_module():
+    """The compiled engine module (``pyazr._azure2``).  A module loaded by file path, outside its package (tests that
+    import azrfile.py or datasets.py alone), takes it from the package next to its own file."""
+    try:
+        from . import _azure2
+        return _azure2
+    except ImportError:
+        import importlib
+        import sys
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        if root not in sys.path:
+            sys.path.insert(0, root)
+        return importlib.import_module("pyazr._azure2")
+
+
+_PRIOR_CENTRE = re.compile(r"^\s*segment_(\d+)_(norm|energy_shift)\s+prior_centre\s+(\S+)\s*$")
+
+
+def prior_centre_row(line):
+    """A ``segment_<key>_norm|energy_shift prior_centre <c>`` row of ``<parameterSettings>`` as the engine reads it
+    (EData::ReadPriorCentres): ``(key, "norm" or "energy_shift", centre)``, or None for any other row.  The engine
+    refuses a centre that is not a finite number, and a norm centre <= 0 (project.md P3): ValueError here."""
+    m = _PRIOR_CENTRE.match(line)
+    if not m:
+        return None
+    try:
+        v = float(m.group(3))
+    except ValueError:
+        v = float("nan")
+    if not math.isfinite(v):
+        raise ValueError(f'<parameterSettings> row "{line.strip()}": the centre is not a finite number '
+                         f"(AZURE2 refuses it)")
+    if m.group(2) == "norm" and v <= 0.0:
+        raise ValueError(f'<parameterSettings> row "{line.strip()}": a normalization centre must be > 0 '
+                         f"(AZURE2 refuses it)")
+    return int(m.group(1)), m.group(2), v
+
+def _tag_index(lines, tag):
+    """The index of the first line that is ``tag`` once trimmed (a tag is a whole line, any spaces and line ending
+    around it; docs/upgrade/project.md, P2); ValueError when there is none."""
+    for i, line in enumerate(lines):
+        if line.strip() == tag:
+            return i
+    raise ValueError(f"{tag} is not in the file")
+
+
 @dataclass
 class Segment:
     """One data segment: its provenance and what it measures."""
@@ -379,8 +427,8 @@ class SegmentSet(list):
         with open(path) as f:
             lines = f.readlines()
         try:
-            start = lines.index("<segmentsData>\n") + 1
-            end = lines.index("</segmentsData>\n")
+            start = _tag_index(lines, "<segmentsData>") + 1
+            end = _tag_index(lines, "</segmentsData>")
         except ValueError:
             raise ValueError(f"{path}: no <segmentsData> block.")
         segs = cls()
@@ -389,9 +437,8 @@ class SegmentSet(list):
             if not raw.strip():
                 continue
             key += 1
-            segs.append(cls._parse(raw.split(), key))
+            segs.append(cls._parse(raw, key))
         # Explicit prior centres (EData::ReadPriorCentres).
-        prior = re.compile(r"^\s*segment_(\d+)_(norm|energy_shift)\s+prior_centre\s+(\S+)\s*$")
         inside = False
         for raw in lines:
             t = raw.strip()
@@ -400,118 +447,64 @@ class SegmentSet(list):
                 continue
             if t.startswith("<"):
                 inside = False
-            m = prior.match(raw) if inside else None
-            if m:
-                seg = segs.by_key(int(m.group(1)))
+            row = prior_centre_row(raw) if inside else None
+            if row:
+                seg = segs.by_key(row[0])
                 if seg is not None:
-                    if m.group(2) == "norm":
-                        seg.nominal_norm = float(m.group(3))
+                    if row[1] == "norm":
+                        seg.nominal_norm = row[2]
                     else:
-                        seg.nominal_shift = float(m.group(3))
+                        seg.nominal_shift = row[2]
         return segs
 
     @staticmethod
-    def _parse(t, key):
-        active = int(float(t[0])) == 1
-        entrance_key = int(float(t[1]))
-        exit_key = int(float(t[2]))
-        eMin, eMax, aMin, aMax = (float(t[3]), float(t[4]),
-                                  float(t[5]), float(t[6]))
-        isDiff = int(float(t[7]))
-        i = 8
-        if isDiff == 2:                 # phase-shift carries J, L
-            i += 2
-        norm = float(t[i]); vary_norm = int(float(t[i + 1])) == 1
-        norm_error = float(t[i + 2]); i += 3
-        # optional energy-shift triple, then the (non-numeric) data file
-        shift = shift_error = 0.0
-        vary_shift = False
-        if i + 2 < len(t) and all(_isfloat(tok) for tok in t[i:i + 3]):
-            shift, shift_error = float(t[i]), float(t[i + 1])
-            vary_shift = int(float(t[i + 2])) == 1
-            i += 3
-        while i < len(t) and _isfloat(t[i]):
-            i += 1
-        data_file = t[i] if i < len(t) else ""
-
-        # A composite ("advanced") segment continues after the data file with
-        #   isAdvanced operationType nComponents [entrance exit angle [scaling]]*
-        # and a leading -1 in the count position marks the newer layout that
-        # carries a per-component scaling factor.  See SegLine.h.
-        operation, components = None, []
-        tail = t[i + 1:]
-
-        # Keyword blocks come at the very end, in either order:
-        #   sqrtshift b bError vary      the sqrt(E) energy-shift term
-        #   sample 1 | sample <name>     an abundance-weighted (sample) segment; alias natural
-        #   shiftgroup <label>           segments sharing one constant energy shift
-        #   shiftfngroup <label>         segments sharing one shift function, own constants
-        #   normgroup <label>            segments sharing one normalization
-        #   covariance <file>            segments sharing one data covariance matrix
-        #   shiftfn "<f(x)>" N v s vary  a shift function f(x; a0..a(N-1))
-        # Split them off first so the positional composite parse never sees them.
-        shift_sqrt = shift_sqrt_error = 0.0
-        vary_shift_sqrt = False
-        natural = False
-        tail, blocks = _split_keyword_tail(tail)
-        blk = blocks.get("sqrtshift") or []
-        if len(blk) == 3 and all(_isfloat(b) for b in blk):
-            shift_sqrt, shift_sqrt_error = float(blk[0]), float(blk[1])
-            vary_shift_sqrt = int(float(blk[2])) == 1
-        natural, natural_sample = _natural_token(blocks)
-        shift_fn, shift_fn_params = (_shiftfn_block(blocks["shiftfn"])
-                                     if "shiftfn" in blocks else (None, ()))
-        if tail and _isfloat(tail[0]) and int(float(tail[0])) == 1:
-            operation = "ratio" if (len(tail) > 1 and
-                                    int(float(tail[1])) == 1) else "sum"
-            j, scaled = 2, False
-            n = int(float(tail[j])) if len(tail) > j else 0
-            j += 1
-            if n == -1:                      # marker: per-component scaling
-                scaled = True
-                n = int(float(tail[j])) if len(tail) > j else 0
-                j += 1
-            for _ in range(n):
-                if j + 2 >= len(tail) + 1 and not scaled:
-                    break
-                try:
-                    e, x, a = (int(float(tail[j])), int(float(tail[j + 1])),
-                               float(tail[j + 2]))
-                except (IndexError, ValueError):
-                    break
-                j += 3
-                s = 1.0
-                if scaled and j < len(tail) and _isfloat(tail[j]):
-                    s = float(tail[j]); j += 1
-                components.append((e, x, a, s))
-
+    def _parse(raw, key):
+        """One <segmentsData> line as AZURE2 reads it: the engine's own parser (SegLine, through
+        ``_azure2.parse_segment_line``; docs/upgrade/project.md section 5), so pyazr and the engine cannot read a
+        line differently.  A line the engine refuses raises ValueError with its message."""
+        if not isinstance(raw, str):  # the token list of the former parser (callers that split the line themselves)
+            raw = " ".join(raw)
+        e = _engine_module().parse_segment_line(raw)
+        if e["parse_error"]:
+            raise ValueError(f"segment {key}: {e['parse_error']}")
+        observable, thm = _decode_observable(e["is_diff"], _OBSERVABLE)
+        natural = e["natural"] not in ("", "0")
+        sample = "" if e["natural"] in ("", "0", "1") else e["natural"]
+        thickness_fit = bool(e["thickness_fit"])
+        operation = (("ratio" if e["operation_type"] == 1 else "sum") if e["is_advanced"] == 1 else None)
+        components = tuple((ent, ext, -999.0 if ang is None else ang, 1.0 if sc is None else sc)
+                           for ent, ext, ang, sc in e["components"])
+        shift_fn_params = tuple((v, sig, vary == 1) for v, sig, vary in
+                                zip(e["shift_fn_values"], e["shift_fn_errors"], e["shift_fn_vary"]))
+        none_if_empty = lambda x: x if x else None
         return Segment(
-            key=key, active=active, entrance_key=entrance_key,
-            exit_key=exit_key, energy_min=eMin, energy_max=eMax,
-            angle_min=aMin, angle_max=aMax,
-            observable=_decode_observable(isDiff, _OBSERVABLE)[0],
-            norm=norm, vary_norm=vary_norm,
-            norm_error=norm_error, data_file=data_file,
-            energy_shift=shift, energy_shift_error=shift_error,
-            vary_shift=vary_shift,
-            thm=_decode_observable(isDiff, _OBSERVABLE)[1],
-            energy_shift_sqrt=shift_sqrt,
-            energy_shift_sqrt_error=shift_sqrt_error,
-            vary_shift_sqrt=vary_shift_sqrt,
-            natural=natural, natural_sample=natural_sample,
-            shift_group=(blocks.get("shiftgroup") or [None])[0],
-            shift_fn_group=(blocks.get("shiftfngroup") or [None])[0],
-            norm_group=(blocks.get("normgroup") or [None])[0],
-            covariance=(blocks.get("covariance") or [None])[0],
-            total=_total_token(blocks),
-            transmission=_thickness_token(blocks, "transmission"),
-            yield_thickness=_thickness_token(blocks, "yield"),
-            thickness_vary=_thickness_fit(blocks)[0], thickness_sigma=_thickness_fit(blocks)[1],
-            thickness_group=(blocks.get("thicknessgroup") or [None])[0],
-            phase_S=_spin_token(blocks),
-            absolute=bool(blocks.get("absolute")) and blocks["absolute"][0] == "1",
-            shift_fn=shift_fn, shift_fn_params=tuple(shift_fn_params),
-            operation=operation, components=tuple(components))
+            key=key, active=e["active"] == 1, entrance_key=e["entrance_key"],
+            exit_key=e["exit_key"], energy_min=e["energy_min"], energy_max=e["energy_max"],
+            angle_min=e["angle_min"], angle_max=e["angle_max"],
+            observable=observable,
+            norm=e["norm"], vary_norm=e["vary_norm"] == 1,
+            norm_error=e["norm_error"], data_file=e["data_file"],
+            energy_shift=e["energy_shift"], energy_shift_error=e["energy_shift_error"],
+            vary_shift=e["vary_shift"] == 1,
+            thm=thm,
+            energy_shift_sqrt=e["energy_shift_sqrt"],
+            energy_shift_sqrt_error=e["energy_shift_sqrt_error"],
+            vary_shift_sqrt=e["vary_shift_sqrt"] == 1,
+            natural=natural, natural_sample=sample,
+            shift_group=none_if_empty(e["shift_group"]),
+            shift_fn_group=none_if_empty(e["shift_fn_group"]),
+            norm_group=none_if_empty(e["norm_group"]),
+            covariance=none_if_empty(e["covariance"]),
+            total=e["total"] == 1,
+            transmission=e["transmission"],
+            yield_thickness=e["yield_thickness"],
+            thickness_vary=(e["thickness_vary"] == 1) if thickness_fit else None,
+            thickness_sigma=e["thickness_sigma"] if thickness_fit else 0.0,
+            thickness_group=none_if_empty(e["thickness_group"]),
+            phase_S=None if e["phase_S"] < 0 else e["phase_S"],
+            absolute=e["absolute"] == 1,
+            shift_fn=none_if_empty(e["shift_fn"]), shift_fn_params=shift_fn_params,
+            operation=operation, components=components)
 
     # -- views ----------------------------------------------------------------
 
@@ -664,8 +657,8 @@ class TestSegmentSet(list):
         with open(path) as f:
             lines = f.readlines()
         try:
-            start = lines.index("<segmentsTest>\n") + 1
-            end = lines.index("</segmentsTest>\n")
+            start = _tag_index(lines, "<segmentsTest>") + 1
+            end = _tag_index(lines, "</segmentsTest>")
         except ValueError:
             # A model need not declare any extrapolations.
             return cls()
@@ -675,37 +668,35 @@ class TestSegmentSet(list):
             if not raw.strip():
                 continue
             key += 1
-            segs.append(cls._parse(raw.split(), key))
+            segs.append(cls._parse(raw, key))
         return segs
 
     @staticmethod
-    def _parse(t, key):
-        active = int(float(t[0])) == 1
-        entrance_key = int(float(t[1]))
-        exit_key = int(float(t[2]))
-        eMin, eMax, eStep = float(t[3]), float(t[4]), float(t[5])
-        aMin, aMax, aStep = float(t[6]), float(t[7]), float(t[8])
-        isDiff = int(float(t[9]))
-        phase_J = phase_L = max_order = None
-        i = 10
-        if isDiff == 2:                 # phase shift carries J, L
-            phase_J = float(t[i]); phase_L = int(float(t[i + 1])); i += 2
-        elif isDiff == 3:               # angular distribution carries its order
-            max_order = int(float(t[i])); i += 1
-        _, blocks = _split_keyword_tail(t[i:])
-        natural, natural_sample = _natural_token(blocks)
+    def _parse(raw, key):
+        """One <segmentsTest> line as AZURE2 reads it: the engine's ExtrapLine, through
+        ``_azure2.parse_extrapolation_line`` (docs/upgrade/project.md section 5).  A line the engine refuses raises
+        ValueError with its message."""
+        if not isinstance(raw, str):  # the token list of the former parser
+            raw = " ".join(raw)
+        e = _engine_module().parse_extrapolation_line(raw)
+        if e["parse_error"]:
+            raise ValueError(f"extrapolation segment {key}: {e['parse_error']}")
+        observable, thm = _decode_observable(e["is_diff"], _EXTRAP_OBSERVABLE)
+        two = e["is_diff"] == 2
         return TestSegment(
-            key=key, active=active, entrance_key=entrance_key,
-            exit_key=exit_key,
-            energy_min=eMin, energy_max=eMax, energy_step=eStep,
-            angle_min=aMin, angle_max=aMax, angle_step=aStep,
-            observable=_decode_observable(isDiff, _EXTRAP_OBSERVABLE)[0],
-            phase_J=phase_J, phase_L=phase_L, max_ang_dist_order=max_order,
-            thm=_decode_observable(isDiff, _EXTRAP_OBSERVABLE)[1],
-            natural=natural, natural_sample=natural_sample,
-            total=_total_token(blocks), phase_S=_spin_token(blocks),
-            transmission=_thickness_token(blocks, "transmission"),
-            yield_thickness=_thickness_token(blocks, "yield"))
+            key=key, active=e["active"] == 1, entrance_key=e["entrance_key"],
+            exit_key=e["exit_key"],
+            energy_min=e["energy_min"], energy_max=e["energy_max"], energy_step=e["energy_step"],
+            angle_min=e["angle_min"], angle_max=e["angle_max"], angle_step=e["angle_step"],
+            observable=observable,
+            phase_J=e["phase_J"] if two else None, phase_L=e["phase_L"] if two else None,
+            max_ang_dist_order=e["max_order"] if e["is_diff"] == 3 else None,
+            thm=thm,
+            natural=e["natural"] not in ("", "0"),
+            natural_sample="" if e["natural"] in ("", "0", "1") else e["natural"],
+            total=e["total"] == 1, phase_S=None if e["phase_S"] < 0 else e["phase_S"],
+            transmission=e["transmission"],
+            yield_thickness=e["yield_thickness"])
 
     # -- views ----------------------------------------------------------------
 

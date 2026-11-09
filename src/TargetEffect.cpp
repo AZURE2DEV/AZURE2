@@ -390,6 +390,7 @@ TargetEffect::TargetEffect(std::istream &stream, const Config &configure) {
         dopplerLayout_ = (sigma > 0.0) ? std::max(dopplerNominal_ + 3.0 * sigma, 1.21 * dopplerNominal_)
                                        : 2.0 * dopplerNominal_;
         if (tmax > 0.0) dopplerLayout_ = tmax;
+        dopplerTmax_ = tmax > 0.0 ? tmax : 0.0;
       }
     }
     if (dopplerError_) isDoppler_ = false;

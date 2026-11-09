@@ -9,6 +9,8 @@
  * subsequent routines/classes follow object-oriented C++ programming conventions.
  */
 
+#include "azure2/io/Convert.h"
+#include "azure2/io/Document.h"
 #include "AZUREMain.h"
 #include "Config.h"
 #include "NucLine.h"
@@ -119,6 +121,7 @@ void printHelp() {
             << std::setw(25) << std::left << "\t--no-ec-table:" << std::setw(0) << "External capture integrals at every energy (no energy tables); shifted amplitudes interpolated." << std::endl
             << std::setw(25) << std::left << "\t--ec-convection-current:" << std::setw(0) << "The exact-form convection current (the default; undoes an earlier --no-ec-convection-current)." << std::endl
             << std::setw(25) << std::left << "\t--no-ec-convection-current:" << std::setw(0) << "With --no-long-wavelength: external capture with the charge (extended Siegert) part of the E_L operator only, without its convection-current part." << std::endl
+            << std::setw(25) << std::left << "\t--convert:" << std::setw(0) << "--convert OLD NEW: write the old-format project OLD in the updated format (format 2) to NEW (not overwritten) and exit." << std::endl
             << std::setw(25) << std::left << "\t--build-coulomb-table[=FILE]:" << std::setw(0) << "Build the Coulomb table (about 5 min on 4 threads, 88 MB; FILE as for --coulomb-table) and exit." << std::endl
             << std::setw(25) << std::left << "\t--grid-replacement:" << std::setw(0) << "Re-place the adaptive sub-point grids as levels and shifts move (the default)." << std::endl
             << std::setw(25) << std::left << "\t--no-grid-replacement:" << std::setw(0) << "Keep the adaptive sub-point grids placed from the input file's levels (default: re-place them as levels and shifts move)." << std::endl
@@ -554,13 +557,60 @@ void getParameterFile(bool useReadline, Config &configure) {
 }
 
 /*!
+ * --convert OLD NEW: OLD's format-2 conversion (io::ConvertToFormat2; docs/upgrade/project.md section 4) written to
+ * NEW, which must not exist; the changes are listed.  A file already in format 2 is copied unchanged.
+ */
+static int convertProject(const std::string &from, const std::string &to) {
+  std::ifstream in(from, std::ios::binary);
+  if (!in) {
+    std::cout << "ERROR: --convert: cannot read " << from << std::endl;
+    return 1;
+  }
+  if (std::ifstream(to)) {
+    std::cout << "ERROR: --convert: " << to << " exists; it is not overwritten" << std::endl;
+    return 1;
+  }
+  std::ostringstream bytes;
+  bytes << in.rdbuf();
+  azure2::io::Document doc = azure2::io::Document::Parse(bytes.str());
+  for (const std::string &problem : doc.Problems()) std::cout << "WARNING: " << from << ": " << problem << std::endl;
+  const std::vector<std::string> changes = azure2::io::ConvertToFormat2(doc);
+  std::ofstream out(to, std::ios::binary);
+  out << doc.Write();
+  if (!out) {
+    std::cout << "ERROR: --convert: cannot write " << to << std::endl;
+    return 1;
+  }
+  if (changes.empty()) std::cout << from << " is already in format 2; copied to " << to << std::endl;
+  for (const std::string &c : changes) std::cout << "  " << c << std::endl;
+  std::cout << "Wrote " << to << " (format 2)." << std::endl;
+  return 0;
+}
+
+/*!
+ * The section <name> of the project as a stream over its text (Config::SectionStream: io::Document, whole-line
+ * tags; docs/upgrade/project.md), or a stream in the fail state when there is no such section.
+ */
+static std::istringstream SectionText(const Config &configure, const std::string &name) {
+  std::istringstream in;
+  if (std::unique_ptr<std::istream> section = configure.SectionStream(name)) {
+    std::ostringstream text;
+    text << section->rdbuf();
+    in.str(text.str());
+  } else {
+    in.setstate(std::ios::failbit);
+  }
+  return in;
+}
+
+/*!
  * This function reads the segment file, and stores the active entrance and exit pair keys
  * for cross reference with the External capture file.  Only if an active external capture segment
  * is required is the user prompted for an external integrals file.
  */
 
 bool readSegmentFile(const Config &configure, std::vector<SegPairs> &segPairs) {
-  std::ifstream in;
+  std::istringstream in;
   std::string startTag, stopTag;
   if (configure.paramMask & Config::CALCULATE_WITH_DATA) {
     startTag = "<segmentsData>";
@@ -569,7 +619,7 @@ bool readSegmentFile(const Config &configure, std::vector<SegPairs> &segPairs) {
     startTag = "<segmentsTest>";
     stopTag = "</segmentsTest>";
   }
-  in.open(configure.configfile.c_str());
+  in = SectionText(configure, startTag.substr(1, startTag.size() - 2));
   if (in) {
     std::string line = "";
     while (line != startTag && !in.eof()) getline(in, line);
@@ -610,7 +660,6 @@ bool readSegmentFile(const Config &configure, std::vector<SegPairs> &segPairs) {
       configure.outStream << "Problem reading segments. Check configuration file." << std::endl;
       return false;
     }
-    in.close();
   } else {
     configure.outStream << "Cannot read segments. Check configuration file." << std::endl;
     return false;
@@ -890,8 +939,7 @@ void getRateParams(Config &configure, std::vector<SegPairs> &segPairs, bool useR
  */
 
 bool checkExternalCapture(Config &configure, const std::vector<SegPairs> &segPairs) {
-  std::ifstream in;
-  in.open(configure.configfile.c_str());
+  std::istringstream in = SectionText(configure, "levels");
   if (!in) {
     configure.outStream << "Cannot read nuclear information. Check configuration file." << std::endl;
     return false;
@@ -932,7 +980,6 @@ bool checkExternalCapture(Config &configure, const std::vector<SegPairs> &segPai
       }
     }
   }
-  in.close();
   in.clear();
   if ((configure.paramMask & Config::USE_EXTERNAL_CAPTURE) && (configure.paramMask & Config::USE_RMC_FORMALISM)) {
     configure.outStream << "WARNING: External capture is not compatible with Reich-Moore.  Ignoring external capture." << std::endl;
@@ -1315,7 +1362,7 @@ int runMCMC(Config &configure, const MCMCParams &mcmcParams) {
 
     // Read priors from AZURE2 file if they exist
     std::map<std::string, std::tuple<double, double, bool>> priorMap;  // paramName -> (priorMean, priorStd, usePrior)
-    std::ifstream priorFile(configure.configfile.c_str());
+    std::istringstream priorFile = SectionText(configure, "mcmc");
     if (priorFile.good()) {
       std::string line;
       bool inMCMCSection = false;
@@ -1388,7 +1435,6 @@ int runMCMC(Config &configure, const MCMCParams &mcmcParams) {
           }
         }
       }
-      priorFile.close();
     }
 
     // Build prior vectors for MCMC calculator (matching GUI approach)
@@ -1573,6 +1619,16 @@ int main(int argc, char *argv[]) {
   // Set GSL Error Handler
   gsl_set_error_handler(&GSLException::GSLErrorHandler);
 
+  // --convert OLD NEW writes OLD's format-2 conversion to NEW and exits (docs/upgrade/project.md section 4)
+  for (int i = 1; i < argc; i++)
+    if (strcmp(argv[i], "--convert") == 0) {
+      if (i + 2 >= argc) {
+        std::cout << "ERROR: --convert needs two files: --convert old.azr new.azr" << std::endl;
+        return 1;
+      }
+      return convertProject(argv[i + 1], argv[i + 2]);
+    }
+
   // --build-coulomb-table[=FILE] builds the table and exits
   for (int i = 1; i < argc; i++) {
     const std::string arg = argv[i];
@@ -1624,7 +1680,7 @@ int main(int argc, char *argv[]) {
   // <segmentsData> line whose observable code (8th field) is >= 10, so scan
   // the file once and enable the analytic gradient for such projects.
   if (!(configure.paramMask & Config::USE_ANALYTIC_GRADIENT)) {
-    std::ifstream thmScan(configure.configfile.c_str());
+    std::istringstream thmScan = SectionText(configure, "segmentsData");
     std::string line;
     bool inSegments = false;
     bool hasTHMSegment = false;

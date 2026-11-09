@@ -8,7 +8,7 @@
 // hbarc 197.327) and the CODATA 2006 electron mass.
 const double IntegratedFermiFunc::alpha_ = fstruc;
 const double IntegratedFermiFunc::pi_ = pi;
-const double IntegratedFermiFunc::electronMass_ = 0.51099895000;
+const double IntegratedFermiFunc::electronMass_ = azure2::physics::kElectronMass_MeV;
 const double IntegratedFermiFunc::hbarc_ = hbarc;
 
 /*!

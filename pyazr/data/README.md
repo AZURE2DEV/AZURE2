@@ -12,7 +12,9 @@ unchanged from the Atomic Mass Data Center's distribution:
 
 It is the one mass table of AZURE2: `pyazr.masses` reads it, and the GUI
 embeds the same file as a Qt resource (`gui/src/AZURESetup.qrc`), so both fill
-masses and separation energies from identical numbers.  The masses are
+masses and separation energies from identical numbers.  The engine's built-in THM nuclei
+(`src/ThmExperiment.cpp`, nuclear masses) are generated from it, and the ctest
+`pyazr_thm_nuclide_masses` fails if the two drift apart.  The masses are
 **atomic** masses (electrons included), the convention AZURE2 projects use
 throughout; a separation energy is then `S = m1 + m2 - M` of the compound
 nucleus, with the electrons cancelling.

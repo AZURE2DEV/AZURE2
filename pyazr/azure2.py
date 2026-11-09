@@ -57,7 +57,7 @@ def _config_output_dir(path):
     with open(path) as fh:
         lines = fh.read().splitlines()
     try:
-        i = next(k for k, line in enumerate(lines) if line == "<config>")
+        i = next(k for k, line in enumerate(lines) if line.strip() == "<config>")  # a whole trimmed line (P2)
     except StopIteration:
         return ""
     if i + 2 >= len(lines):

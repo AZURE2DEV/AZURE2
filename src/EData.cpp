@@ -340,12 +340,12 @@ int EData::NumSegments() const {
  */
 
 int EData::Fill(const Config &configure, CNuc *theCNuc) {
-  std::unique_ptr<std::istream> inStream = InputFiles::Open(configure.configfile, configure.cacheInputFiles);
+  // The <segmentsData> section of the project (Config::SectionStream: io::Document, whole-line tags).
+  std::unique_ptr<std::istream> inStream = configure.SectionStream("segmentsData");
+  if (!inStream) return -1;
   std::istream &in = *inStream;
-  if (!in) return -1;
   std::string line = "";
-  while (line != "<segmentsData>" && !in.eof()) getline(in, line);
-  if (line != "<segmentsData>") return -1;
+  getline(in, line);  // <segmentsData>
   line = "";
   int numTotalSegments = 0;
   while (!in.eof() && line != "</segmentsData>") {
@@ -609,8 +609,10 @@ int EData::Fill(const Config &configure, CNuc *theCNuc) {
  */
 
 int EData::ReadPriorCentres(const Config &configure) {
-  std::ifstream in(configure.configfile.c_str());
-  if (!in) return 0;
+  // The <parameterSettings> section (Config::SectionStream: io::Document, whole-line tags).
+  std::unique_ptr<std::istream> section = configure.SectionStream("parameterSettings");
+  if (!section) return 0;
+  std::istream &in = *section;
   std::string line;
   bool inside = false;
   while (getline(in, line)) {
@@ -684,12 +686,12 @@ int EData::ReadPriorCentres(const Config &configure) {
  */
 
 int EData::MakePoints(const Config &configure, CNuc *theCNuc) {
-  std::unique_ptr<std::istream> inStream = InputFiles::Open(configure.configfile, configure.cacheInputFiles);
+  // The <segmentsTest> section of the project (Config::SectionStream: io::Document, whole-line tags).
+  std::unique_ptr<std::istream> inStream = configure.SectionStream("segmentsTest");
+  if (!inStream) return -1;
   std::istream &in = *inStream;
-  if (!in) return -1;
   std::string line = "";
-  while (line != "<segmentsTest>" && !in.eof()) getline(in, line);
-  if (line != "<segmentsTest>") return -1;
+  getline(in, line);  // <segmentsTest>
   line = "";
   int numTotalSegments = 0;
   while (!in.eof() && line != "</segmentsTest>") {
@@ -1451,12 +1453,12 @@ int EData::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, const st
 }
 
 int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
-  std::unique_ptr<std::istream> inStream = InputFiles::Open(configure.configfile, configure.cacheInputFiles);
+  // The <targetInt> section of the project (Config::SectionStream: io::Document, whole-line tags).
+  std::unique_ptr<std::istream> inStream = configure.SectionStream("targetInt");
+  if (!inStream) return -1;
   std::istream &in = *inStream;
-  if (!in) return -1;
   std::string line = "";
-  while (line != "<targetInt>" && !in.eof()) getline(in, line);
-  if (line != "<targetInt>") return -1;
+  getline(in, line);  // <targetInt>
   line = "";
   int activeLines = 0;
   while (line != "</targetInt>" && !in.eof()) {

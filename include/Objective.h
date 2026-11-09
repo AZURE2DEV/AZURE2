@@ -63,6 +63,8 @@ class ObjectiveTerm {
   virtual std::string Name() const = 0;
   /// Adds this term to chi2 (some terms add in several steps, in the order the engine always used).
   virtual void Add(const ObjectiveContext &c, double &chi2) const = 0;
+  /// A term of the model alone (no data, no parameter vector): T6, T7, T9.
+  virtual bool ModelOnly() const { return false; }
 };
 
 class Objective {
@@ -74,6 +76,9 @@ class Objective {
   double Chi2(const ObjectiveContext &c) const;
   /// The data part alone, T1 (with the THM profiling) and T2, without the segment priors: the MCMC likelihood.
   double DataChi2(ObjectiveContext c) const;
+  /// The terms of the model alone (T6 Park, T7 abundances, T9 scattering lengths), in the engine's order: what the
+  /// API adds to its data chi^2 (AZUREAPI::FilledModelPenalties, the analytic-gradient path, the writer's totals).
+  double ModelChi2(const ObjectiveContext &c) const;
   const std::vector<std::unique_ptr<ObjectiveTerm> > &Terms() const { return terms_; }
 
  private:
