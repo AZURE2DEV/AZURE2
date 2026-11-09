@@ -403,9 +403,21 @@ the step-4 engine (a18fe89e code; Coulomb table format 1): 2063/2069 files ident
 expected value moved, so there was no re-baselining commit); 1 vs 8 threads identical (12/12). One-thread
 calculation: 13N 7.24 → 7.26 s, 13N_capture_ay 1.94 → 2.06 s (mean of three).
 
+### Step 6a (branch `feature/upgrade-1-pathways`, 2026-11-09)
+
+Design section 10 (365c325f); physics (8f92d046); engine (416bd630). `SortPathways` builds the System, calls
+`reaction_pathways` per entrance pair and fills the trees from its result; `CNuc.cpp` 3061 → 2913 lines.
+
+**Evidence.** (a) `physics_pathways_unit`: 1011 checks on a synthetic System (61 internal, 30 external pathways; 47 and
+0 with R-matrix capture). (b) `physics_pathways_from_cnuc`: the trees against a verbatim copy of the old
+`SortPathways` on every `.azr` under `tests/` (179), Brune and formal, every particle and beta pair an entrance:
+51524 nodes identical over 347 loads (11 skipped: models `Fill` refuses, by design, and formal transformations that
+do not exist); nothing is written. (c) 179 × 3 against the merged head db972c84: 2040/2040 identical. ctest
+119/119, `run_tests.sh` 133/133, 1 vs 8 threads identical.
+
 ### Remaining steps
 
-Steps 3b (iii), (iv), 6 (now with `SortPathways`) and 7 of section 3. Step 4 (`physics/external_capture`) takes N_f^½, γ^ext and the final
+Steps 3b (iii), (iv), 6b (the consumers of the trees; with Phase 2's observables) and 7 of section 3. Step 4 (`physics/external_capture`) takes N_f^½, γ^ext and the final
 state's Brune amplitude and energy (section 8) out of `CNuc`, and should define the `--ignore-externals` mask on the
 observed (Brune) amplitudes in every basis.
 
