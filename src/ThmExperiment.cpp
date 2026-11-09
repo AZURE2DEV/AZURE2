@@ -1,5 +1,6 @@
 #include "ThmExperiment.h"
 #include "ThmOptical.h"
+#include "Constants.h"
 
 #include <algorithm>
 #include <cctype>
@@ -15,19 +16,22 @@ namespace {
 
 /*!
  * Light nuclei: AME2020 atomic masses (Wang et al., Chin. Phys. C 45 (2021)
- * 030003, from the mass excesses) minus Z electron masses plus the electron
- * binding energy (Lunney, Pearson & Thibault, RMP 75 (2003) 1021, eq. A4),
- * i.e. nuclear masses in u.
+ * 030003; the atomic-mass column of pyazr/data/mass_1.mas20, the one mass
+ * table of AZURE2) minus Z electron masses (kElectronMass_MeV) plus the
+ * electron binding energy (Lunney, Pearson & Thibault, RMP 75 (2003) 1021,
+ * eq. A4), i.e. nuclear masses in u, to 10 decimals.  Regenerated from the
+ * file on 2026-11-09 (before, up to 1e-8 u off it, at 24Mg); the ctest
+ * pyazr_thm_nuclide_masses holds the two together.
  */
 const ThmNuclide kNuclides[] = {
     {"n", 0, 1, 1.0086649159},    {"p", 1, 1, 1.0072764675},    {"d", 1, 2, 2.0135532134},
     {"t", 1, 3, 3.0155007169},    {"3He", 2, 3, 3.0149322434},  {"4He", 2, 4, 4.0015061756},
-    {"6Li", 3, 6, 6.0134773618},  {"7Li", 3, 7, 7.0143579087},  {"9Be", 4, 9, 9.0099891714},
-    {"10B", 5, 10, 10.0101946866}, {"11B", 5, 11, 11.0065629921}, {"12C", 6, 12, 11.9967096429},
-    {"13C", 6, 13, 13.0000644777}, {"14N", 7, 14, 13.9992355671}, {"15N", 7, 15, 14.9962704619},
-    {"16O", 8, 16, 15.9905282131}, {"17O", 8, 17, 16.9947453497}, {"18O", 8, 18, 17.9947732059},
-    {"19F", 9, 19, 18.9934689019}, {"20Ne", 10, 20, 19.9869581831}, {"23Na", 11, 23, 22.9837396828},
-    {"24Mg", 12, 24, 23.9784646239},
+    {"6Li", 3, 6, 6.0134773618},  {"7Li", 3, 7, 7.0143579086},  {"9Be", 4, 9, 9.0099891682},
+    {"10B", 5, 10, 10.0101946883}, {"11B", 5, 11, 11.0065629923}, {"12C", 6, 12, 11.9967096429},
+    {"13C", 6, 13, 13.0000644782}, {"14N", 7, 14, 13.9992355672}, {"15N", 7, 15, 14.9962704612},
+    {"16O", 8, 16, 15.9905282122}, {"17O", 8, 17, 16.9947453489}, {"18O", 8, 18, 17.9947732051},
+    {"19F", 9, 19, 18.9934689009}, {"20Ne", 10, 20, 19.9869581813}, {"23Na", 11, 23, 22.9837396817},
+    {"24Mg", 12, 24, 23.9784646137},
 };
 
 // A whole token as a number (operator>> that must consume everything).
@@ -392,7 +396,7 @@ std::string FormatThmCoherentBackground(const std::vector<ThmExperiment::Coheren
 
 std::string ThmResolveReaction(const ThmNuclide &b, const ThmNuclide &t, const ThmNuclide &sp, double beamEnergy,
                                const int Z[2], const double M[2], ThmReactionKinematics &out) {
-  const double amu = 931.49410242;  // MeV/u (CODATA 2018)
+  const double amu = uconv;  // MeV/u
   const int A[2] = {(int)std::lround(M[0]), (int)std::lround(M[1])};
   // horse: 0 beam, 1 target; other: index of the pair nucleus that is the other one.
   int horse = -1, other = -1;

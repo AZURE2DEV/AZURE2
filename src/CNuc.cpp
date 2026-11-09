@@ -9,6 +9,7 @@
 #include <map>
 #include <tuple>
 #include "CNuc.h"
+#include "azure2/physics/Constants.h"
 #include <mutex>
 #include <exception>
 #include <stdexcept>
@@ -882,7 +883,7 @@ int CNuc::GetMaxLValue() const {
  * nuclear (or bare-proton) masses mixed.  Nothing in the calculation changes.
  */
 int CNuc::CheckMassSeparationConsistency(const Config &configure) const {
-  const double me = 0.51099895;  // MeV
+  const double me = azure2::physics::kElectronMass_MeV;
   const int kMaxListed = 3;
   // A pair whose masses are mass numbers (both integers, other than 12C's exact 12) carries no Q value: it is
   // reported once, not compared.

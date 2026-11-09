@@ -203,6 +203,53 @@ for dirpath, _, files in os.walk(os.path.join(ROOT, "io")):
             problems.append(f"{rel}: includes {inc}; io/ may include only azure2/io/ headers and the C++ standard library")
 
 
+
+# 10. One set of physical constants (docs/upgrade/project.md section 5, step 5): physics/'s Constants.h holds u, hbar c,
+#     alpha and m_e; any other copy in the engine, the API, io/ or pyazr must carry the same value (comments aside),
+#     so that a constant changed in one place cannot leave a stale copy that only some results use.  KNOWN lists the
+#     copies that differ on purpose, each with its reason; each is a decision for the maintainers, not drift.
+consts_src = read("physics/include/azure2/physics/Constants.h")
+CONSTANTS = {}
+for name, prefix in (("kHbarC_MeV_fm", "197.32"), ("kAtomicMassUnit_MeV", "931.49"), ("kElectronMass_MeV", "0.51099"),
+                     ("kFineStructure", "137.03")):
+    m = re.search(name + r"\s*=\s*(?:1\.0*\s*/\s*)?([0-9.]+)", consts_src)
+    if not m:
+        problems.append(f"physics Constants.h: {name} not found; update this test")
+        continue
+    CONSTANTS[prefix] = (name, float(m.group(1)))
+KNOWN = {
+    # m_e of CODATA 2002 in the beta-decay Fermi-function argument; CODATA 2018 moves beta-delayed outputs (~1e-7).
+    ("src/EPoint.cpp", "0.510998903"),
+}
+for top in ("src", "include", "api", "io", "pyazr"):
+    for dirpath, _, files in os.walk(os.path.join(ROOT, top)):
+        for name in sorted(files):
+            if not name.endswith((".h", ".cpp", ".py")):
+                continue
+            rel = os.path.relpath(os.path.join(dirpath, name), ROOT)
+            in_block = False
+            for line in read(rel).splitlines():
+                code = line
+                if name.endswith(".py"):
+                    code = code.split("#", 1)[0]
+                else:
+                    if in_block:
+                        if "*/" not in code:
+                            continue
+                        code, in_block = code.split("*/", 1)[1], False
+                    code = re.sub(r"/\*.*?\*/", "", code)
+                    if "/*" in code:
+                        code, in_block = code.split("/*", 1)[0], True
+                    code = code.split("//", 1)[0]
+                for literal in re.findall(r"(?<![0-9.])[0-9]+\.[0-9]+", code):
+                    for prefix, (cname, value) in CONSTANTS.items():
+                        if literal.startswith(prefix) and float(literal) != value and (rel, literal) not in KNOWN:
+                            problems.append(f"{rel}: {literal} is a copy of {cname} = {value!r} (physics Constants.h) "
+                                            "with another value; use the constant")
+for rel, literal in sorted(KNOWN):
+    if literal not in read(rel):
+        problems.append(f"{rel}: {literal} is gone; remove it from KNOWN in check 10")
+
 if problems:
     for p in problems:
         print("FAIL", p)

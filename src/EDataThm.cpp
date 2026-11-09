@@ -6,6 +6,7 @@
  * EData.cpp so that the classic data handling stays as it is on dev.
  */
 #include "CNuc.h"
+#include "Constants.h"
 #include "PPair.h"
 #include "ThmFunc.h"
 #include "ThmVertexBoundary.h"
@@ -46,7 +47,7 @@ void EData::FillThmCoherentFromParams(const vector_r &p, CNuc *theCNuc) {
 
 namespace {
 
-const double kAmu = 931.49410242;  // MeV/u (CODATA 2018)
+const double kAmu = uconv;  // MeV/u
 
 // The lowest and highest c.m. energy of the points of a group's segments.
 void ThmGroupEnergyRange(EData &data, const EData::ThmGroup &group, double &eLo, double &eHi) {

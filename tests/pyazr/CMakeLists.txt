@@ -480,6 +480,13 @@ set_tests_properties(pyazr_level_grouping PROPERTIES ENVIRONMENT "OMP_NUM_THREAD
 
 # AzrModel keeps a file's own layout (docs/upgrade/project.md section 5, step 4): unedited round trips of every
 # project file and of CRLF / no-blank-line / interleaved variants; a field edit changes only its lines.
+# One mass table (docs/upgrade/project.md section 5, step 5): the engine's THM nuclei carry the nuclear masses of
+# pyazr/data/mass_1.mas20, the file fill_masses reads.
+add_test(NAME pyazr_thm_nuclide_masses
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/thm_nuclide_masses_test.py)
+set_tests_properties(pyazr_thm_nuclide_masses PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1")
+
 add_test(NAME pyazr_azr_layout
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/azr_layout_test.py)
