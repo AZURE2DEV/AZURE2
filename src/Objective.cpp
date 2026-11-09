@@ -49,11 +49,13 @@ class SegmentTerms : public ObjectiveTerm {
             if (error != 0.0) segmentChiSquared += (residual * residual) / (error * error);
           }
         }
-        // Normalization prior (profiled norms have none).
-        double dataNorm = segment->GetNorm();
-        double dataNormNominal = segment->GetNominalNorm();
-        double dataNormError = dataNormNominal / 100. * segment->GetNormError();
-        if (dataNormError != 0.) chi2 += pow((dataNorm - dataNormNominal) / dataNormError, 2.0);
+        // Normalization prior (profiled norms have none; a fixed norm pays none, objective.md D5).
+        if (segment->IsVaryNorm()) {
+          double dataNorm = segment->GetNorm();
+          double dataNormNominal = segment->GetNominalNorm();
+          double dataNormError = dataNormNominal / 100. * segment->GetNormError();
+          if (dataNormError != 0.) chi2 += pow((dataNorm - dataNormNominal) / dataNormError, 2.0);
+        }
       }
       // Energy-shift priors.
       segment->AddShiftPenalty(chi2);

@@ -1847,8 +1847,8 @@ class azure2:
         ``nominal`` is the segment's ``nominal_norm``: the norm field of its
         ``<segmentsData>`` line, or its explicit ``prior_centre`` row in
         ``<parameterSettings>`` when it has one (the field is then only the
-        start value).  A fixed norm away from an explicit centre pays its
-        penalty too, as in the engine.  The constant shift's centre is
+        start value).  A fixed norm pays no penalty (it is a constant; since
+        2026-11-09, as in the engine).  The constant shift's centre is
         ``nominal_shift``: 0, or its explicit ``prior_centre`` row.
         Note the denominator uses the *nominal* normalization, and that
         ``norm_error`` is a percentage.  A THM segment with a free norm has no
@@ -1893,7 +1893,8 @@ class azure2:
             follower = bool(d.norm_group) and d.norm_group in norm_groups
             if d.norm_group:
                 norm_groups.add(d.norm_group)
-            if sigma and not follower:       # a normgroup's penalty is its first member's
+            # A normgroup's penalty is its first member's; a fixed norm pays none (docs/upgrade/objective.md D5).
+            if sigma and not follower and d.vary_norm:
                 norm[i] = ((value - d.nominal_norm) / sigma) ** 2
             # A shiftgroup follower's shift is its leader's and its own parameter is fixed: the engine
             # (ESegment::SetShiftGroupFollower, AddShiftPenalty) adds no penalty for it.  Before 2026-10-27

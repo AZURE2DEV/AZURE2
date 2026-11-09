@@ -72,9 +72,10 @@ class TargetEffect {
   bool IsScreeningVaried() const { return screeningVary_; }
   /// Prior width in eV, 0 = no prior.
   double GetScreeningSigma() const { return screeningSigma_; }
-  /// ((U_e - nominal) / sigma)^2, or 0 without a prior.
+  /// ((U_e - nominal) / sigma)^2, or 0 without a prior or when U_e is fixed (a fixed parameter pays no prior,
+  /// docs/upgrade/objective.md D5).
   double ScreeningPenalty() const {
-    if (!hasScreening_ || screeningSigma_ <= 0.0) return 0.0;
+    if (!hasScreening_ || !screeningVary_ || screeningSigma_ <= 0.0) return 0.0;
     const double r = (screeningUe_ - screeningNominal_) / screeningSigma_;
     return r * r;
   }
@@ -102,9 +103,9 @@ class TargetEffect {
   double GetDensitySigma() const { return densitySigma_; }
   /// The `densitygroup` label, empty without one.
   const std::string &GetDensityGroup() const { return densityGroup_; }
-  /// ((N - N0)/sigma)^2, or 0 without a prior.
+  /// ((N - N0)/sigma)^2, or 0 without a prior or when N is fixed (objective.md D5).
   double DensityPenalty() const {
-    if (!hasDensityFit_ || densitySigma_ <= 0.0) return 0.0;
+    if (!hasDensityFit_ || !densityVary_ || densitySigma_ <= 0.0) return 0.0;
     const double r = (density_ - densityNominal_) / densitySigma_;
     return r * r;
   }
@@ -272,9 +273,9 @@ class TargetEffect {
   double GetDopplerLayoutTemperature() const { return (dopplerLayout_ > 0.0) ? dopplerLayout_ : dopplerTemperature_; }
   /// The lowest temperature a fit may reach: T0/4 (the pieces, u(T0)/4 wide, stay within u(T)/2).
   double GetDopplerMinimum() const { return 0.25 * this->GetDopplerNominal(); }
-  /// ((T - T0)/sigma)^2, or 0 without a prior.
+  /// ((T - T0)/sigma)^2, or 0 without a prior or when T is fixed (objective.md D5).
   double DopplerPenalty() const {
-    if (!dopplerFit_ || dopplerSigma_ <= 0.0) return 0.0;
+    if (!dopplerFit_ || !dopplerVary_ || dopplerSigma_ <= 0.0) return 0.0;
     const double r = (dopplerTemperature_ - dopplerNominal_) / dopplerSigma_;
     return r * r;
   }

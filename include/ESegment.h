@@ -368,9 +368,10 @@ class ESegment {
     thicknessLeaderPos_ = pos;
     thickness_ = n;
   }
-  /// The prior ((n - n0)/sigma)^2 of a thickness parameter that owns its value (no follower), 0 otherwise.
+  /// The prior ((n - n0)/sigma)^2 of a free thickness parameter that owns its value (no follower), 0 otherwise (a
+  /// fixed parameter pays no prior, docs/upgrade/objective.md D5).
   double ThicknessPenalty() const {
-    if (!thicknessFit_ || thicknessLeaderPos_ >= 0 || !(thicknessSigma_ > 0.0)) return 0.0;
+    if (!IsThicknessVaried() || !(thicknessSigma_ > 0.0)) return 0.0;
     const double d = (thickness_ - GetNominalThickness()) / thicknessSigma_;
     return d * d;
   }

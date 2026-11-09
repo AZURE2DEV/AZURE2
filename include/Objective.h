@@ -105,7 +105,7 @@ template <class F>
 inline void ForEachScreeningPrior(EData *data, const ParamIndexMap &pmap, F f) {
   for (int k = 1; k <= data->NumScreeningParams(); k++) {
     const TargetEffect *te = data->GetScreeningTargetEffect(k);
-    if (te->GetScreeningSigma() <= 0.0) continue;
+    if (te->GetScreeningSigma() <= 0.0 || !te->IsScreeningVaried()) continue;
     const int idx = pmap.ScreeningIndex(k);
     if (idx >= 0) f(idx, te->GetScreeningNominal(), te->GetScreeningSigma());
   }
@@ -117,7 +117,7 @@ template <class F>
 inline void ForEachDensityPrior(EData *data, const ParamIndexMap &pmap, F f) {
   for (int k = 1; k <= data->NumDensityParams(); k++) {
     const TargetEffect *te = data->GetDensityTargetEffect(k);
-    if (te->GetDensitySigma() <= 0.0) continue;
+    if (te->GetDensitySigma() <= 0.0 || !te->IsDensityVaried()) continue;
     const int idx = pmap.DensityIndex(k);
     if (idx >= 0) f(idx, te->GetDensityNominal(), te->GetDensitySigma());
   }
@@ -129,7 +129,7 @@ template <class F>
 inline void ForEachDopplerPrior(EData *data, const ParamIndexMap &pmap, F f) {
   for (int k = 1; k <= data->NumDopplerParams(); k++) {
     const TargetEffect *te = data->GetDopplerTargetEffect(k);
-    if (te->GetDopplerSigma() <= 0.0) continue;
+    if (te->GetDopplerSigma() <= 0.0 || !te->IsDopplerVaried()) continue;
     const int idx = pmap.DopplerIndex(k);
     if (idx >= 0) f(idx, te->GetDopplerNominal(), te->GetDopplerSigma());
   }
@@ -142,7 +142,7 @@ template <class F>
 inline void ForEachThicknessPrior(EData *data, const ParamIndexMap &pmap, F f) {
   for (int k = 1; k <= data->NumThicknessParams(); k++) {
     const ESegment *seg = data->GetSegment(data->GetThicknessSegment(k));
-    if (seg->GetThicknessSigma() <= 0.0 || seg->IsThicknessGroupFollower()) continue;
+    if (seg->GetThicknessSigma() <= 0.0 || !seg->IsThicknessVaried()) continue;
     const int idx = pmap.ThicknessIndex(k);
     if (idx >= 0) f(idx, seg->GetNominalThickness(), seg->GetThicknessSigma());
   }
