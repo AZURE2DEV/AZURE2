@@ -855,10 +855,10 @@ bool AZUREAPI::WriteOutputFiles() {
   // parameters before writing.
   CNuc *localCompound = compound();
   if (localCompound) {
-    if (configure().paramMask & Config::USE_PARK_FORMALISM) data()->SetParkPenalty(localCompound->ParkNormPenalty());
-    if (localCompound->HasAbundanceBlock()) data()->SetAbundancePenalty(localCompound->AbundancePenalty(configure().abundanceSumSigma));
-    if (localCompound->HasScatteringLengthConstraints())
-      data()->SetScatteringLengthChi2(ScatteringLength::Chi2(localCompound, configure(), localCompound->ScatteringLengthConstraints()));
+    const vector_r none;
+    ObjectiveContext context{localCompound, data(), none, configure()};
+    context.storeTotals = true;
+    Objective::Engine().ModelChi2(context);
   }
   data()->WriteOutputFiles(configure(), false, nullptr);
   return true;
@@ -1054,15 +1054,9 @@ double AZUREAPI::EvaluateFilledChi2(vector_r *res) const {
 // The terms of the objective beyond the data (EvaluateFilledChi2), on the filled canonical compound: the same in
 // both bases (CalculateChi2RWA and CalculateChi2Physical must give one objective).
 double AZUREAPI::FilledModelPenalties() const {
-  double chiSquared = 0.0;
-  // Park formalism: the J > 0 wall, part of what a fit must minimize.
-  if (configure().paramMask & Config::USE_PARK_FORMALISM) chiSquared += compound()->ParkNormPenalty();
-  // Isotopic abundances: priors and the sum-to-one term.
-  if (compound()->HasAbundanceBlock()) chiSquared += compound()->AbundancePenalty(configure().abundanceSumSigma);
-  // Measured scattering lengths (<scatteringLengths>).
-  if (compound()->HasScatteringLengthConstraints())
-    chiSquared += ScatteringLength::Chi2(compound(), configure(), compound()->ScatteringLengthConstraints());
-  return chiSquared;
+  // Park's J > 0 wall, the abundance priors and sum-to-one, measured scattering lengths (Objective T6, T7, T9).
+  const vector_r none;
+  return Objective::Engine().ModelChi2(ObjectiveContext{compound(), data(), none, configure()});
 }
 
 double AZUREAPI::CalculateChi2RWA(const vector_r &rwaParams) const {
@@ -1247,19 +1241,13 @@ bool AZUREAPI::Chi2GradEGammaNorm(const vector_r &full, vector_r &gradFull,
 
   bool ok = AccumulateEGammaGradient(lc, ld, configure(), pmap, sdp, fb, accum);
   // Measured scattering lengths: the level-matrix adjoint at each threshold (false -> finite differences).
-  if (ok && lc->HasScatteringLengthConstraints()) {
+  if (ok && lc->HasScatteringLengthConstraints())
     ok = ScatteringLength::Chi2Gradient(lc, configure(), lc->ScatteringLengthConstraints(), accum, sdp);
-    if (ok) chi2 += ScatteringLength::Chi2(lc, configure(), lc->ScatteringLengthConstraints());
-  }
   if (ok) {
-    if (configure().paramMask & Config::USE_PARK_FORMALISM) {
-      AddParkPenaltyGradient(lc, configure(), accum);
-      chi2 += lc->ParkNormPenalty();
-    }
-    if (lc->HasAbundanceBlock()) {
-      AddAbundancePenaltyGradient(lc, configure(), accum);
-      chi2 += lc->AbundancePenalty(configure().abundanceSumSigma);
-    }
+    if (configure().paramMask & Config::USE_PARK_FORMALISM) AddParkPenaltyGradient(lc, configure(), accum);
+    if (lc->HasAbundanceBlock()) AddAbundancePenaltyGradient(lc, configure(), accum);
+    // Their values: the model terms of the objective (T6, T7, T9; before 2026-11-09 added here in the order 9, 6, 7).
+    chi2 += Objective::Engine().ModelChi2(ObjectiveContext{lc, ld, full, configure()});
     accum.Scatter(pmap, gradFull);
     for (int s = 1; s <= ld->NumSegments(); s++) {
       ESegment *seg = ld->GetSegment(s);
