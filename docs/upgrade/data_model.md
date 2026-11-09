@@ -387,8 +387,12 @@ M10). A new model quantity is then a physics function and a selector, not a new 
 ## 5. Decisions
 
 **Taken 2026-11-09 (director's review):** M1 (a), M2 (c), M3 (a) with (b) carried to Phase 5 as an open decision for
-the maintainer, M4 (a), M5 (a), M6 (b), M7 (b), M8 (b), M13 (b). **Pending:** M9, M10 and M12 until `data_kinds.md`
-is reviewed (they fix what users write); M11 until the thread-dependence diagnosis reports (`fit_threads.md`).
+the maintainer, M4 (a), M5 (a), M6 (b), M7 (b), M8 (b), M13 (b). **Taken after `data_kinds.md` (same day):** M9 — neither (a) nor (b) as written: the user-facing form is the named
+`quantity <name> unit <u> frame <lab|cm> …` keyword block of `data_kinds.md` §5.1, one closed table of quantities
+mapped to trees in `SegmentKinds`; a free `predict "<expr>"` form waits until a project needs a combination the table
+and the SUM/RATIO blocks cannot write (after Phase 5). M10 (b), section name `<modelData>`. M12 as recommended; the
+folded kind is `quantity yield … target <name>`. **Pending:** M11 until the thread-dependence diagnosis reports
+(`fit_threads.md`).
 
 **M1. Where `experiment/` lives.** (a) A standalone CMake target on `physics/` from the first step, with an engine
 adapter; (b) inside `src/` first, split later. Recommendation (a): the one-way rule is then enforced by the linker
