@@ -81,7 +81,10 @@ like physics/'s `CNucSystem`):
    `tests/pyazr/output_penalties_test.py` and pyazr's χ² identical, except under decisions D3 and D5.
 5. MCMC reads the same terms as log-priors (−χ²/2 plus its normalization constants). This needs decisions D1 and D2.
 
-## 3. Decisions for the PI (the paths disagree today; unifying them changes χ² somewhere)
+## 3. Decisions (the paths disagree today; unifying them changes χ² somewhere)
+
+**PI, 2026-11-09: every proposal D1–D7 below accepted** ("I agree with all your proposals. The fitting was getting
+messy").
 
 - **D1, THM profiling in MCMC.** The MCMC uses a plain Σr² with the THM norm unprofiled (it keeps whatever the clone
   holds), so it disagrees with the fit on THM projects. Proposal: the MCMC uses the profiled T1a/b, as the fit does.
@@ -100,4 +103,5 @@ like physics/'s `CNucSystem`):
 - **D7, abundance sum-to-one in the GSL/LM step.** It is dropped there with a warning. Proposal: it becomes a residual
   row like the rest (it is a sum of squares).
 
-Steps 1–2 change no χ² and need none of these decisions. Steps 3–5 follow the PI's answers.
+Steps 1–2 change no χ² and need none of these decisions. Steps 3–5 apply them, each decision in its own commit with
+its own comparison, so that every changed output is attributable to one decision.
