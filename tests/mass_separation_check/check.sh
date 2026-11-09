@@ -76,11 +76,16 @@ if [ -n "$PY" ]; then
                         if ($6 == 2) $23 = sprintf("%.10f", $23 - 0.005) } {print}' \
     "$SRC/li7pn_ang_rel.azr" > "$d/numbers.azr"
   if "$PY" - "$HERE/../.." "$d/numbers.azr" "$d/t.azr" > "$d/fill.log" 2>&1 <<'PYEOF'
-# azrfile.py by path: no package import, so no numpy or compiled module is needed
-import importlib.util, os, sys
-spec = importlib.util.spec_from_file_location("azrfile", os.path.join(sys.argv[1], "pyazr", "azrfile.py"))
-azrfile = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(azrfile)
+# The pyazr package: since Phase 3 (docs/upgrade/project.md section 5) AzrModel reads the file through the engine's
+# document (_azure2), so the compiled module is needed; exit 3 = not built (the check is skipped).
+import os, sys
+sys.path.insert(0, sys.argv[1])
+try:
+    from pyazr import azrfile
+    from pyazr import _azure2  # noqa: F401
+except ImportError as e:
+    print(f"no compiled pyazr module: {e}")
+    sys.exit(3)
 m = azrfile.AzrModel.from_file(sys.argv[2])
 print(m.fill_masses())
 m.write(sys.argv[3])
@@ -90,6 +95,7 @@ PYEOF
     if [ "$(warnings filled)" -eq 0 ] && ! grep -q "mass numbers as masses" "$d/run.log" && completed filled; then
       ok "(e) mass numbers filled by pyazr from AME2020: no warning, no note, run completes"
     else bad "(e) pyazr fill: $(warnings filled) warning(s), note $(grep -c 'mass numbers as masses' "$d/run.log")"; fi
+  elif grep -q "^no compiled pyazr module" "$d/fill.log"; then echo "  skip  (e) $(head -1 "$d/fill.log")"
   else bad "(e) pyazr fill_masses failed: $(tail -3 "$d/fill.log")"; fi
 else
   echo "  skip  (e) no python3"
