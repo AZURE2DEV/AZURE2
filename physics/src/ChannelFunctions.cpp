@@ -7,6 +7,7 @@
 #include <limits>
 
 #include "azure2/physics/Constants.h"
+#include "azure2/physics/coulomb/Whittaker.h"
 
 namespace azure2 {
 namespace physics {
@@ -116,6 +117,61 @@ OpenChannelValues channel_functions(const ChannelKinematics &kin, int l, double 
   v.sigma = w.sigma;
   v.status = coulomb::Status::ok;
   return v;
+}
+
+double bessel_k_scaled(int n, double x) {
+  if (n < 0 || !(x > 0.0) || !std::isfinite(x)) return std::numeric_limits<double>::quiet_NaN();
+  // e^x K_n(x) = int_0^inf exp(-x (cosh t - 1)) cosh(n t) dt.  The integrand is smooth, even in t and decays
+  // double-exponentially, so the trapezoid rule converges geometrically in 1/step; with step 0.02 the result agrees
+  // with mpmath to 5e-16 for n = 0-21, x = 1e-3-500.  cosh(n t) exp(...) = exp(n t - x (cosh t - 1)) (1 + e^(-2nt))/2.
+  const long double h = 0.02L;
+  long double sum = 0.5L;  // the t = 0 term, halved
+  for (int i = 1; i < 100000; i++) {
+    const long double t = i * h;
+    const long double v = std::exp((long double)n * t - (long double)x * (std::cosh(t) - 1.0L)) * 0.5L *
+                          (1.0L + std::exp(-2.0L * n * t));
+    sum += v;
+    if (v < 1e-22L * sum) break;
+  }
+  return (double)(sum * h);
+}
+
+double zero_energy_shift(double c_fm, double a_fm, int l) {
+  if (!(c_fm > 0.0)) return -(double)l;
+  const double x = std::sqrt(8.0 * c_fm * a_fm);
+  const double kl = bessel_k_scaled(2 * l, x), kl1 = bessel_k_scaled(2 * l + 1, x);
+  if (!std::isfinite(kl) || !std::isfinite(kl1) || kl1 == 0.0) return -(double)l;
+  return -(double)l - 0.5 * x * kl / kl1;
+}
+
+double neutral_bound_shift(int l, double rho) {
+  double s = -rho;
+  for (int ll = 1; ll <= l; ll++) s = -rho * rho / (ll - s) - ll;
+  return s;
+}
+
+double coulomb_bound_shift(int l, double B_MeV, const BoundShiftArgs &args) {
+  // Closer to threshold than eta_b = 1000, the range in which whittaker_scaled is tested to 1e-12 (beyond it, at
+  // eta_b >~ 1e4, it scatters at 1e-9 and grows slower), the linear interpolation to S(0); S - S(0) is linear in the
+  // binding there to about 1e-11.
+  const double kEtaMax = 1000.0;
+  auto bindingAtKappa = [&](double kappa) { return std::pow(kHbarC_MeV_fm * kappa, 2.0) / (2.0 * args.mu_MeV); };
+  const double bindingMin = (args.c_fm > 0.0) ? bindingAtKappa(args.c_fm / kEtaMax) : 0.0;
+  auto exact = [&](double B, double &s) {
+    double eta_b = 0.0, rho = 0.0;
+    args.eta_rho(B, eta_b, rho);
+    const coulomb::WhittakerScaled ws = coulomb::whittaker_scaled(l, eta_b, rho);
+    s = ws.status == coulomb::Status::ok ? ws.rho_dlog : std::numeric_limits<double>::quiet_NaN();
+    return std::isfinite(s);
+  };
+  double s;
+  if (B_MeV >= bindingMin) {
+    if (exact(B_MeV, s)) return s;
+    return zero_energy_shift(args.c_fm, args.a_fm, l);
+  }
+  const double s0 = zero_energy_shift(args.c_fm, args.a_fm, l);
+  if (!exact(bindingMin, s)) return s0;
+  return s0 + (s - s0) * (B_MeV / bindingMin);
 }
 
 }  // namespace physics

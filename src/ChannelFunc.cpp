@@ -5,7 +5,7 @@
 #include "ShftFunc.h"
 #include <algorithm>
 #include <cmath>
-#include <gsl/gsl_deriv.h>
+#include "azure2/physics/Derivatives.h"
 
 ChannelFunc::ChannelFunc(PPair *pair, bool useGSLFunctions)
     : pair_(pair),
@@ -49,17 +49,12 @@ double ChannelFunc::Penetrability(int l, double e) {
   return coul().Penetrability(l, radius_, e);
 }
 
-double ChannelFunc::shiftAdaptor(double e, void *p) {
-  ChannelFunc *self = static_cast<ChannelFunc *>(p);
-  return self->Shift(self->lDeriv_, e);
-}
-
 double ChannelFunc::DerivativeStep(double e) {
   return std::max(kStep, std::min(kMaxStep, 0.25 * std::fabs(e)));
 }
 
 double ChannelFunc::ShiftDerivative(int l, double e) {
-  // gsl_deriv_central probes e +- h and e +- h/2.
+  // central_derivative (GSL's gsl_deriv_central) probes e +- h and e +- h/2.
   const double h = DerivativeStep(e);
   // Whole stencil in one branch: the routine AZURE2 always used there.
   if (e + h < 0.0) return shft().EnergyDerivative(l, e + threshold_, h);
@@ -68,12 +63,6 @@ double ChannelFunc::ShiftDerivative(int l, double e) {
   // Coulomb threshold: S(e) = 2 S(0) - S(-e), so dS/dE(e) = dS/dE(-e).
   if (e > 0.0 && IsCoulombThreshold(pair_, e)) return ShiftDerivative(l, -e);
   // A stencil across threshold (or across the eta = 100 line): difference the
-  // continuous S.
-  lDeriv_ = l;
-  gsl_function F;
-  F.function = &shiftAdaptor;
-  F.params = this;
-  double result = 0.0, error = 0.0;
-  gsl_deriv_central(&F, e, kStep, &result, &error);
-  return result;
+  // continuous S (central_derivative: GSL's gsl_deriv_central, ported to physics/).
+  return azure2::physics::central_derivative([this, l](double x) { return Shift(l, x); }, e, kStep);
 }

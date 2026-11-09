@@ -20,6 +20,7 @@ endif()
 add_library(azure2_physics STATIC
   src/AngularCoupling.cpp
   src/ChannelFunctions.cpp
+  src/Derivatives.cpp
   src/ExternalCapture.cpp
   src/JpiBlock.cpp
   src/LevelParameters.cpp
@@ -83,6 +84,16 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
   target_compile_options(physics_channel_functions_test PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 add_test(NAME physics_channel_functions COMMAND physics_channel_functions_test ${CMAKE_CURRENT_SOURCE_DIR}/tests/data/coulomb.csv)
+
+# Bound channel functions and the derivatives: e^x K_n against mpmath (tests/data/bessel_k.csv, make_bessel_k.py),
+# S(0) against the threshold limit of rho W'/W, the neutral closed forms, the band, exact rules on polynomials
+# (docs/upgrade/coulomb.md section 1.4, "Bound channel functions in physics/").
+add_executable(physics_bound_functions_test tests/bound_functions_test.cpp)
+target_link_libraries(physics_bound_functions_test PRIVATE azure2_physics)
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+  target_compile_options(physics_bound_functions_test PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+add_test(NAME physics_bound_functions COMMAND physics_bound_functions_test ${CMAKE_CURRENT_SOURCE_DIR}/tests/data/bessel_k.csv)
 
 # The Whittaker functions of bound channels against mpmath (tests/data/whittaker.csv, make_whittaker_reference.py):
 # W and rho W'/W, the double range, argument checks, thread independence (docs/upgrade/coulomb.md section 1.4).

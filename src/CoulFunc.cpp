@@ -2,7 +2,7 @@
 #include "PPair.h"
 #include <iostream>
 #include <gsl/gsl_sf_coulomb.h>
-#include <gsl/gsl_deriv.h>
+#include "azure2/physics/Derivatives.h"
 #include <vector>
 #include <cstdlib>
 #include <cmath>
@@ -45,7 +45,6 @@ CoulFunc::CoulFunc(PPair *pPair, bool useGSLFunctions) :
   coulLast_.dF = 0.0;
   coulLast_.G = 0.0;
   coulLast_.dG = 0.0;
-  dEShiftParams_.coulFunc = this;
 
   // This pair's potential, falling back to the manager's default when the pair
   // has no setting of its own.  Fetched only for the hybrid method, the only user
@@ -280,24 +279,12 @@ double CoulFunc::PEShiftExact(int l, double radius, double energy) {
   return azure2::physics::shift(PhysicsWaves(coul), kin_.Rho(radius, energy));
 }
 
-double CoulFunc::thisPEShift(double x, void *p) {
-  DEShiftParams *params = (DEShiftParams *)p;
-  CoulFunc *coulFunc = (params->coulFunc);
-  int lValue = (params->lValue);
-  double radius = (params->radius);
-
-  return coulFunc->PEShift(lValue, radius, x);
-}
-
 /*!
  * Returns the energy derivative of the shift function a function of orbital
  * angular momentum, radius, and energy in the center of mass system.
  */
 
 double CoulFunc::PEShift_dE(int l, double radius, double energy, double step) {
-  double result;
-  double error;
-
   // A Richardson-extrapolated central difference with a step of 1e-3 E, accurate
   // to ~1e-10.  AZURE_SHIFT_DE_1EV=1 restores the route used before 2026-10-19, a
   // 1 eV central difference of the exact S, which carries its rounding noise: up
@@ -314,21 +301,7 @@ double CoulFunc::PEShift_dE(int l, double radius, double energy, double step) {
     return azure2::physics::shift_derivative([&](double e) { return viaTable ? PEShift(l, radius, e) : PEShiftExact(l, radius, e); }, energy);
   }
 
-  dEShiftParams_.radius = radius;
-  dEShiftParams_.lValue = l;
-
-  gsl_function F;
-  F.function = &thisPEShift;
-  F.params = &dEShiftParams_;
-
-  gsl_deriv_central(&F, energy, step, &result, &error);
-
-  return result;
-}
-
-double CoulFunc::thisPEShift_dE(double x, void *p) {
-  DEShiftParams *params = (DEShiftParams *)p;
-  return params->coulFunc->PEShift_dE(params->lValue, params->radius, x);
+  return azure2::physics::central_derivative([&](double e) { return PEShift(l, radius, e); }, energy, step);
 }
 
 /*!
@@ -344,18 +317,8 @@ double CoulFunc::PEShift_d2E(int l, double radius, double energy) {
   // leave ~1e-4 of rounding noise in S''.  Within 4h of the threshold, where
   // the function is only defined for positive energies, a forward stencil.
   const double h = 1.0e-2;
-  if (energy < 4.0 * h) {
-    const double f = 1.0e-3;
-    double s0 = PEShift(l, radius, energy);
-    double s1 = PEShift(l, radius, energy + f);
-    double s2 = PEShift(l, radius, energy + 2.0 * f);
-    double s3 = PEShift(l, radius, energy + 3.0 * f);
-    return (2.0 * s0 - 5.0 * s1 + 4.0 * s2 - s3) / (f * f);
-  }
-  double s0 = PEShift(l, radius, energy);
-  double d1 = (PEShift(l, radius, energy + h) - 2.0 * s0 + PEShift(l, radius, energy - h)) / (h * h);
-  double d2 = (PEShift(l, radius, energy + 2.0 * h) - 2.0 * s0 + PEShift(l, radius, energy - 2.0 * h)) / (4.0 * h * h);
-  return (4.0 * d1 - d2) / 3.0;
+  return azure2::physics::second_derivative([&](double e) { return PEShift(l, radius, e); }, energy, h, 1.0e-3,
+                                            energy < 4.0 * h, azure2::physics::Side::Above);
 }
 
 /*!

@@ -237,6 +237,47 @@ thread check.
 
 ctest 117/117, `run_tests.sh` 133/133, 1 vs 8 threads identical.
 
+**Bound channel functions in physics/ (design, 2026-11-09).** After the band step, the bound branch of the channel
+functions is the last engine code that does physics with GSL: `ShftFunc` (S(0) from `gsl_sf_bessel_Kn_scaled`, dS/dE
+by `gsl_deriv_central`) and `ChannelFunc`/`CoulFunc` (the same derivative routine at a stencil across threshold and
+above it). It moves to physics/:
+
+- `physics/Derivatives.h`: `central_derivative(f, x, h)`, the algorithm of `gsl_deriv_central` (GSL 2.x
+  `deriv/deriv.c`, GPL-3 like AZURE2; attribution in the source). It evaluates at x ± h and x ± h/2, then at most once
+  more at the step that balances rounding and truncation, and gives the same bits as GSL for the same f.
+  `second_derivative(f, x, h, side)` is the Richardson-extrapolated central second difference of `ShftFunc` and
+  `CoulFunc`, with their one-sided stencil within 4h of threshold (side: below or above).
+- `ChannelFunctions.h`:
+  - `bessel_k_scaled(n, x)` = e^x K_n(x) for integer n ≥ 0, x > 0, by the trapezoid rule on
+    ∫₀^∞ e^{−x(cosh t − 1)} cosh(nt) dt in long double (step 0.02, until a term is below 10⁻²² of the sum). Against
+    mpmath (n = 0–21, x = 10⁻³–500) it agrees to 4.6 × 10⁻¹⁶;
+  - `zero_energy_shift(c, a, l)` = −l − (x/2) K_{2l}(x)/K_{2l+1}(x), with x = (8ca)^½ (−l without Coulomb);
+  - `neutral_bound_shift(l, ρ)`, the continued fraction of `ShftFunc::NeutralBoundShift`;
+  - `bound_shift(kin, l, a, B)`: the order of `ShftFunc::operator()` without its table route. That is S(0) at B = 0,
+    the neutral form, ρW′/W from `whittaker_scaled` for η_b ≤ 1000, and the linear interpolation to S(0) beyond.
+
+The engine keeps the Coulomb table route, the stencil checks against the table (`forceExact_`), the opt-in numerical
+W route (`AZURE_BOUND_SHIFT_NUMERICAL`, on GSL) and `--gsl-coul`. The functions are called with the engine's η_b, ρ and
+c, so only S(0) changes: its K_n agree with GSL's to about 10⁻¹⁶.
+
+*Verification.*
+- physics tests: `bessel_k_scaled` against an mpmath table (`tests/data`, made by a script there);
+  `zero_energy_shift` against the limit of `whittaker_scaled` at B = 10⁻⁸ MeV (linear extrapolation in B, about
+  10⁻⁹); the derivatives on polynomials and exponentials, where they are exact or known.
+- engine-side test: `central_derivative` against `gsl_deriv_central`, bit for bit, on 10⁴ cases (smooth, noisy and
+  kinked functions; steps 10⁻⁶–10⁻²). This includes the second evaluation at the optimal step.
+- 179 × 3 with and without a table against the band head. Expected: identical, except outputs that use S(0) (bound
+  levels within B(η_b = 1000) of threshold, S at threshold), which move at 10⁻¹⁵. Classify, then ctest,
+  `run_tests.sh` and the thread check.
+
+**Bound channel functions verified (2026-11-09; build of 5c4fb3ed).** Physics test `physics_bound_functions` (K_n
+against mpmath, 374 values, to 2 × 10⁻¹⁵; S(0) against the threshold limit; neutral closed forms; the band; exact
+rules). Engine-side `physics_derivatives_gsl`: `central_derivative` against `gsl_deriv_central` bit for bit in
+10⁴/10⁴ cases (5951 taking GSL's second, optimal step). 179 × 3 against the band head, with and without a table:
+2040/2040 identical both ways (no project evaluates S(0) itself, and the derivative is a faithful port). ctest 119/119,
+`run_tests.sh` 133/133, 1 vs 8 threads identical. `ShftFunc`, `ChannelFunc` and `CoulFunc` no longer include
+`gsl_deriv.h` or `gsl_sf_bessel.h` (the opt-in `AZURE_BOUND_SHIFT_NUMERICAL` route keeps GSL in `ShftFunc`).
+
 ## 2. Channel functions
 
 ### 2.1 Definition

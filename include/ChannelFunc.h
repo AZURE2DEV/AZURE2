@@ -70,13 +70,11 @@ class ChannelFunc {
  private:
   CoulFunc &coul();
   ShftFunc &shft();
-  static double shiftAdaptor(double e, void *p);
 
   PPair *pair_;
   bool useGSL_;
   double threshold_;
   double radius_;
-  int lDeriv_ = 0;
   std::unique_ptr<CoulFunc> coul_;
   std::unique_ptr<ShftFunc> shft_;
 };

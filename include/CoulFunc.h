@@ -124,14 +124,6 @@ class CoulFunc {
   // Hybrid method calculation
   CoulWaves computeHybrid(int l, double radius, double energy);
 
-  static double thisPEShift(double, void *);
-  static double thisPEShift_dE(double, void *);
-  typedef struct DEShiftParams {
-    CoulFunc *coulFunc;
-    int lValue;
-    double radius;
-  } DEShiftParams;
-  DEShiftParams dEShiftParams_;
   bool useGSLFunctions_;
   bool useHybridMethod_;
   bool radialScratch_ = false;
