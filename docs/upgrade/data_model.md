@@ -318,6 +318,8 @@ Where a step can move bits it says so in §6 and names the classification.
 
 ## 3. Every present kind as a tree, and the text form
 
+*The text form of this section is superseded by `project_format3.md` (2026-11-09); the trees stand.*
+
 Notation: `σ(a→b)` is a leaf, `[E1]` a filter, `·` a `Scale`, `w(s)` a `Weighted` by the abundances of sample s, J_k the
 term's frame factor.
 

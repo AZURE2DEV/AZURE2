@@ -537,6 +537,10 @@ compare rates as outputs.
 
 ## 5. Proposal
 
+*Superseded in its text form by `project_format3.md` (2026-11-09): records with one field per line instead of keyword
+blocks on the segment line (K1 withdrawn), column roles instead of one frame, `ratio_to_rutherford` / `ratio_to_mott` as
+quantities. The physics of each kind below stands.*
+
 ### 5.1 One explicit quantity per data set
 
 Each data set states, in words, what its numbers are:
