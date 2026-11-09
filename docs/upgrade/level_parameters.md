@@ -289,3 +289,24 @@ without `evaluation`, the formal values as before; a relative tolerance of 10⁻
 energy within 10⁻³|E| of the tight one. A pyazr test on `beam_profile_kernel` (formal basis): χ² at the start and
 ±10⁻⁶ relative on `width_9_2` is smooth (the second difference is below 10⁻³ of the first). Expected outputs: menu 1
 of the 179 projects unchanged in Brune and Park; formal at most in the last printed digits, every change classified.
+
+**Verified (2026-11-09; build of 92d1525e, GCC 11.5 Release, pyazr on; local 24-core node).** No warnings.
+`ctest -LE slow` 110/111, `physics_level_parameters_unit` and the slow `pyazr_formal_brune_iteration` pass (41.7 s);
+`run_tests.sh` 133/133 (1185 s, 11 threads); 1 vs 8 threads byte-identical on T1–T3 and 13N in the three bases. The
+179 projects × 3 bases against a18fe89e: Brune 689/689 and Park 689/689 identical; formal 657/662, the five
+changes being `beam_profile_kernel` `AZUREOut_aa=1_R=4.out` (two tokens, 1.7 × 10⁻¹¹ relative) and four `run.log`
+lines that count Coulomb-table lookups (fewer iterations under the relative tolerance, e.g. 318934 → 300814). No
+evaluation of the 179 projects warned or gave NaN.
+
+**Blocker: `pyazr_formal_capture_mask` fails (check (c), formal-basis χ² gradient = NaN).** Its model (13N plus a
+1/2⁺ level at 4.5 MeV with Γ_p = 20 keV, `formal_capture_mask_test.py`) sits where the fixed-point iteration of
+`brune_from_formal` does not converge for block 1, level 0: at the test's start point it converges, but at ±10⁻⁶ MeV
+on `energy_3` (2.3682 MeV) it alternates between E = −0.973 and 4.462 MeV (last step 5.435 MeV after 1000
+iterations, a 2-cycle). The rule above then gives NaN, as designed, and the central differences of check (c) are
+NaN. On a18fe89e the same four evaluations did not converge either (instrumented build: four "not converged" lines,
+same 2-cycle) and silently kept the formal values, so check (c) passed there by comparing two silently substituted
+models. This is the case the rule was written for, but it shows a gap in the iteration, not in the rule: a 2-cycle
+is not a rounding stall. Options for the PI: (i) a safeguarded iteration in `brune_from_formal` (damping, or a
+bracketed root of E − e(E) per level) so that such levels converge, with its own design note and the unit test as
+the case; (ii) move the test model away from the 2-cycle and record the 2-cycle as a known NaN region. Not merged
+until decided.
