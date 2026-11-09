@@ -72,10 +72,22 @@ def fresh_copy(dst):
         os.remove(f)
 
 
+def _table_masses(*names):
+    """Nuclear masses (u) of the engine's built-in nuclei (_azure2.thm_nuclides, generated from the AME2020 file and
+    checked by pyazr_thm_nuclide_masses): kinematics inputs, not what is tested.  NaN without the engine (the test
+    skips then)."""
+    try:
+        from pyazr import _azure2
+        table = {n: m for n, _z, _a, m in _azure2.thm_nuclides()}
+        return tuple(table[n] for n in names)
+    except ImportError:
+        return tuple(float("nan") for _ in names)
+
+
 # Independent kinematics (nuclear masses in u: the built-in table for 3He, d,
 # p, 18O; the .azr pairs for p + 18O and a + 15N).
 U, HBARC, ALPHA, AMU = 931.4940954, 197.3269804, 1 / 137.035999084, 931.49410242
-M3HE, MD, MP, M18 = 3.0149322434, 2.0135532134, 1.0072764675, 17.9947732059
+M3HE, MD, MP, M18 = _table_masses("3He", "d", "p", "18O")
 MF, MA, M15 = 1.00727647 + 17.99477097, 4.00150618, 14.99626884
 E_AA = 115 * M3HE / (M18 + M3HE)
 BIND = (MP + MD - M3HE) * AMU

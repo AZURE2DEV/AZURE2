@@ -80,11 +80,24 @@ def fresh_copy(dst):
         os.remove(f)
 
 
+def _table_masses(*names):
+    """Nuclear masses (u) of the engine's built-in nuclei (_azure2.thm_nuclides, generated from the AME2020 file and
+    checked by pyazr_thm_nuclide_masses): kinematics inputs, not what is tested.  NaN without the engine (the test
+    skips then)."""
+    try:
+        from pyazr import _azure2
+        table = {n: m for n, _z, _a, m in _azure2.thm_nuclides()}
+        return tuple(table[n] for n in names)
+    except ImportError:
+        return tuple(float("nan") for _ in names)
+
+
 # Independent kinematics: mu_sx from the built-in nuclear masses of p and n
 # (AMU as the engine's table), mu_xA from the .azr pair (the engine's uconv,
 # hbar c: include/Constants.h).
 AMU, UCONV, HBARC = 931.49410242, 931.49410242, 197.3269804  # CODATA 2018 since the merge of dev 3264896d
-MU_SX = 1.0072764675 * 1.0086649159 / (1.0072764675 + 1.0086649159) * AMU
+_MP, _MN = _table_masses("p", "n")
+MU_SX = _MP * _MN / (_MP + _MN) * AMU
 MU_XA = 1.00727647 * 17.99477097 / (1.00727647 + 17.99477097) * UCONV
 B, RADIUS = 2.224566, 5.1
 HA, HB = 0.2317, 1.202                                         # Hulthen, fm^-1
@@ -92,7 +105,7 @@ HA, HB = 0.2317, 1.202                                         # Hulthen, fm^-1
 # 54 MeV, the Trojan horse d = p + n is the target, so x = k^_sF.k^_aA is
 # -cos(theta_cm); masses of the engine's nuclide table, reduced masses in
 # uconv as the engine's channels.
-M_N, M_P, M_D, M_O18 = 1.0086649159, 1.0072764675, 2.0135532134, 17.9947732059
+M_N, M_P, M_D, M_O18 = _table_masses("n", "p", "d", "18O")
 E_AA = 54.0 * M_D / (M_O18 + M_D)
 K_AA = math.sqrt(2 * M_D * M_O18 / (M_D + M_O18) * UCONV * E_AA) / HBARC
 KB = M_N / M_D * K_AA
