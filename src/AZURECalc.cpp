@@ -121,6 +121,21 @@ double SegmentLocalChi2(ESegment *segment, CNuc *lc, const Config &config,
   return chi;
 }
 
+// A parameter whose prior is its own (normalization, energy shift, abundance, screening, density, Doppler,
+// thickness): the limits manager's nuisance flag adds nothing to it (CalculateNuisanceChiSquared skips it).  By
+// kind (ParamIndexMap), not by name.
+bool HasOwnPriorKind(const ParamIndexMap &pmap, int fullIndex) {
+  if (fullIndex < 0 || fullIndex >= pmap.NumFull()) return false;
+  switch (pmap.Desc(fullIndex).kind) {
+    case ParamKind::Norm: case ParamKind::EnergyShift: case ParamKind::EnergyShiftSqrt: case ParamKind::EnergyShiftFn:
+    case ParamKind::Abundance: case ParamKind::Screening: case ParamKind::Density: case ParamKind::Doppler:
+    case ParamKind::Thickness:
+      return true;
+    default:
+      return false;
+  }
+}
+
 // The segments (1-based) whose points one energy-shift parameter moves, and how to
 // set it on them: its own segment, plus every follower of its shift group for a
 // group's constant shift and for each shift-function parameter.
@@ -1313,15 +1328,13 @@ bool AZURECalc::HasNuisanceParameters() const {
   // must not switch off the analytic G2 or the segment-local shift derivative.
   // The GUI writes nuisance = 1 on penalized norms, so without this filter a
   // model with norm uncertainties lost both (11B+a, 2026-10-10).
+  const ParamIndexMap pmap = BuildParamIndexMap(compound(), data(), std::vector<bool>());
   int nf = 0;
-  for (const auto &mp : fp.GetMinuitParams().Parameters()) {
+  for (int i = 0; i < (int)fp.GetMinuitParams().Params().size(); i++) {
+    const ROOT::Minuit2::MinuitParameter &mp = fp.GetMinuitParams().Parameter(i);
     const std::string &name = mp.GetName();
     if (mp.IsFixed() && name.find("segment") == std::string::npos) continue;
-    const bool inert = name.find("norm") != std::string::npos || name.find("shift") != std::string::npos ||
-                       name.find("abundance") != std::string::npos || name.find("screening") != std::string::npos ||
-                       name.find("density_") == 0 || name.find("doppler_") == 0 ||
-                       name.find("_thickness") != std::string::npos;
-    if (!inert && limitsManager_->IsNuisanceParameterByIndex(nf)) {
+    if (!HasOwnPriorKind(pmap, i) && limitsManager_->IsNuisanceParameterByIndex(nf)) {
       if (std::getenv("AZURE_GRAD_DEBUG"))
         std::cerr << "[grad] analytic G2 off: nuisance prior on '" << name << "'" << std::endl;
       return true;
@@ -2155,24 +2168,7 @@ std::vector<int> AZURECalc::IndicesWithOwnPrior() const {
   // the <abundances> sigma, and a nuisance prior of the limits manager (CalculateNuisanceChiSquared's indexing).
   std::vector<int> out;
   ParamIndexMap pmap = BuildParamIndexMap(compound(), data(), std::vector<bool>());
-  for (int s = 1; s <= data()->NumSegments(); s++) {
-    ESegment *seg = data()->GetSegment(s);
-    if (!seg || !seg->IsVaryNorm() || seg->IsNormGroupFollower()) continue;
-    const int idx = pmap.NormIndex(s);
-    if (idx >= 0 && seg->GetNominalNorm() / 100.0 * seg->GetNormError() != 0.0) out.push_back(idx);
-  }
-  auto add = [&](int idx, double, double) { out.push_back(idx); };
-  ForEachShiftPenalty(data(), pmap, add);
-  ForEachScreeningPrior(data(), pmap, add);
-  ForEachDensityPrior(data(), pmap, add);
-  ForEachDopplerPrior(data(), pmap, add);
-  ForEachThicknessPrior(data(), pmap, add);
-  for (int k = 1; k <= compound()->NumAbundanceParams(); k++) {
-    int sample, nucleus;
-    compound()->AbundanceOf(k, sample, nucleus);
-    const int idx = pmap.AbundanceIndex(k);
-    if (idx >= 0 && compound()->GetSample(sample)->entries[nucleus - 1].sigma > 0.0) out.push_back(idx);
-  }
+  ForEachDiagonalPrior(data(), compound(), pmap, [&](int idx, double, double) { out.push_back(idx); });
   if (limitsManager_) {
     AZUREParams tp;
     compound()->FillMnParams(tp.GetMinuitParams(), &configure());
@@ -2181,12 +2177,7 @@ std::vector<int> AZURECalc::IndicesWithOwnPrior() const {
     for (int i = 0; i < (int)tp.GetMinuitParams().Params().size(); i++) {
       const ROOT::Minuit2::MinuitParameter &mp = tp.GetMinuitParams().Parameter(i);
       if (mp.IsFixed() && mp.GetName().find("segment") == std::string::npos) continue;
-      const std::string &name = mp.GetName();
-      const bool own = name.find("norm") != std::string::npos || name.find("shift") != std::string::npos ||
-                       name.find("abundance") != std::string::npos || name.find("screening") != std::string::npos ||
-                       name.find("density_") == 0 || name.find("doppler_") == 0 ||
-                       name.find("_thickness") != std::string::npos;
-      if (!own && limitsManager_->IsNuisanceParameterByIndex(nonFixed) &&
+      if (!HasOwnPriorKind(pmap, i) && limitsManager_->IsNuisanceParameterByIndex(nonFixed) &&
           limitsManager_->GetConvertedErrorByIndex(nonFixed) > 0.0)
         out.push_back(i);
       nonFixed++;
