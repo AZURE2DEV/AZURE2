@@ -16,7 +16,7 @@ evaluations can have.
 The upgrade (branch `feature/upgrade`) rebuilds the engine so that its structure follows the calculation — levels →
 collision matrix → observables → apparatus → χ² — with one implementation of each formula and format.
 
-## What is done (Phases 0–3 of 9)
+## What is done (Phases 0–3 of 9; Phase 4 begun)
 
 | Phase | What it gives | Checked by |
 |---|---|---|
@@ -73,10 +73,39 @@ fail if the feature were wrong?**
 
 ## What comes next
 
-Phases 4–9 (`ROADMAP.md`): data as arrays converted to c.m. at load (4); one energy grid with the apparatus as
-kernels, AZURE2's own stopping, and the THM observable (5); evaluation without copies (6); DWBA vertices for THM (7);
-pyazr 3.0 with wheels (8); the web interface, and removal of Qt, ERYA and numcmc (9). The first new feature to go
-through the recipes is extrapolation segments on a user-given or adaptive energy grid.
+**Phase 4, begun: data are data** (`data_model.md`, `data_kinds.md`). Two things:
+
+1. *Structure.* A datum becomes an immutable record; what an evaluation computes goes to a buffer the caller owns;
+   what the model predicts for a data set is a small expression tree (a cross section, a sum, a ratio, a scale) with
+   one forward and one adjoint implementation. Today that composition is written in 19 loops and twice more in the
+   gradient, and the residual formula about nine times.
+2. *What a user can fit.* A data set will state in words what it is — quantity, unit, frame, reference, target,
+   normalisation — instead of an integer code and column positions:
+   `quantity dsigma/dOmega_ratio reference rutherford frame lab …`, `quantity yield target C13_a per charge q=1 …`.
+   Targets get names and are defined once. Model-level data (resonance strengths ωγ, scattering lengths) get their own
+   section. First new kinds: ratio to Rutherford or Mott, S factor, thick-target yields per charge, ωγ; the order
+   follows what EXFOR holds for light nuclei (10,132 charged-particle data sets counted, `data_kinds.md` §3).
+
+**Decision taken with Jakub (2026-11-09): no backward compatibility inside the engine.** The engine reads one
+grammar (format 3); `AZURE2 --convert` and `pyazr.convert_azr` turn any old file into it, and an old file given
+directly is refused with a message naming the converter. The gate is that every converted test project gives outputs
+identical to the original on the previous engine. This supersedes "old files load as before" above once format 3 lands.
+
+**For programs and AI agents:** `AZURE2 --schema` (every section, key, quantity and unit as JSON), `--validate`
+(all problems of a file at once, machine-readable) and a printout of each data set's expression tree. One table of
+quantities in the engine feeds the validation, Python, the GUI and the documentation.
+
+**`CNuc` is not yet split completely.** Phase 1 moved its physics into `physics/` and left the class as the owner of
+reading, the parameter vector and printing: 2,907 lines. The remaining steps (`cnuc_split.md`) are scheduled as their
+own track in Phase 4, with a check that no source file grows beyond its recorded size.
+
+Then Phases 5–9 (`ROADMAP.md`): one energy grid with the apparatus as kernels, AZURE2's own stopping, and the THM
+observable (5); evaluation without copies (6); DWBA vertices for THM (7); pyazr 3.0 with wheels (8); the web
+interface, and removal of Qt, ERYA and numcmc (9).
+
+**An idea outside AZURE2 (Jakub):** an experiment logbook — yields, target scans, on-line analysis — as a separate
+small Python package on the same `experiment/` and stopping libraries, exporting named targets and data sets to a
+project. AZURE2 itself stays an R-matrix code. Not before Phase 5 (it needs the stopping module).
 
 **`dev` and the upgrade.** `dev` has 18 commits since the upgrade branched. They are merged when the reconstruction
 is complete, not before. Most are documentation; the target-effect windows, the UDR kernels and test fixes port as
