@@ -42,6 +42,9 @@ struct ObjectiveContext {
   /// Store the segment chi^2 and the Park, abundance, scattering-length and prior-covariance totals into `data`
   /// (the writer reads them): the evaluation the fit reports, not a probe.
   bool storeTotals = false;
+  /// Add the normalization and energy-shift priors (T3, T4) in the segment loop.  The MCMC takes them as log-priors
+  /// (AZURECalcMCMC::CalculateLogPrior) and evaluates only the data part (Objective::DataChi2).
+  bool segmentPriors = true;
   /// T5, the nuisance chi^2 (AZURECalc::CalculateNuisanceChiSquared), or empty when there is no limits manager.
   std::function<double(const vector_r &)> nuisance;
 };
@@ -61,6 +64,8 @@ class Objective {
   static const Objective &Engine();
   /// The chi-squared of c.p (model values already computed).
   double Chi2(const ObjectiveContext &c) const;
+  /// The data part alone, T1 (with the THM profiling) and T2, without the segment priors: the MCMC likelihood.
+  double DataChi2(ObjectiveContext c) const;
   const std::vector<std::unique_ptr<ObjectiveTerm> > &Terms() const { return terms_; }
 
  private:

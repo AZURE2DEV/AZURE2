@@ -50,7 +50,7 @@ class SegmentTerms : public ObjectiveTerm {
           }
         }
         // Normalization prior (profiled norms have none; a fixed norm pays none, objective.md D5).
-        if (segment->IsVaryNorm() && !segment->IsNormPriorReplaced()) {
+        if (c.segmentPriors && segment->IsVaryNorm() && !segment->IsNormPriorReplaced()) {
           double dataNorm = segment->GetNorm();
           double dataNormNominal = segment->GetNominalNorm();
           double dataNormError = dataNormNominal / 100. * segment->GetNormError();
@@ -58,7 +58,7 @@ class SegmentTerms : public ObjectiveTerm {
         }
       }
       // Energy-shift priors.
-      segment->AddShiftPenalty(chi2);
+      if (c.segmentPriors) segment->AddShiftPenalty(chi2);
       if (thmGroup < 0) {
         if (c.storeTotals) segment->SetSegmentChiSquared(segmentChiSquared);
         if (c.segmentChi2) (*c.segmentChi2)[i] = segmentChiSquared;
@@ -176,6 +176,15 @@ Objective::Objective() {
 const Objective &Objective::Engine() {
   static const Objective objective;
   return objective;
+}
+
+double Objective::DataChi2(ObjectiveContext c) const {
+  c.segmentPriors = false;
+  c.thmOnly = false;
+  double chi2 = 0.0;
+  terms_[0]->Add(c, chi2);  // T1 (T3, T4 off)
+  terms_[1]->Add(c, chi2);  // T2
+  return chi2;
 }
 
 double Objective::Chi2(const ObjectiveContext &c) const {

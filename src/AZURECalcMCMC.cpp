@@ -1,3 +1,4 @@
+#include "Objective.h"
 #include "AZURECalcMCMC.h"
 #include "ScatteringLength.h"
 #include "ParameterLabel.h"
@@ -91,41 +92,21 @@ double AZURECalcMCMC::CalculateLogLikelihood(const vector_r &p) const {
     return -std::numeric_limits<double>::infinity();
   }
 
-  bool isFit = true;
-
-  // Process segments with components - use new integrated calculation method
-  double chiSquared = 0.0;
+  // The model value of every point, then the data part of the objective (Objective::DataChi2): the data chi^2 with
+  // THM norms profiled as the fit does (docs/upgrade/objective.md D1; before, the MCMC summed r^2 with whatever THM
+  // norm the clone held) and the data covariance.  The segment priors are log-priors (CalculateLogPrior).
   for (int i = 1; i <= localData->NumSegments(); i++) {
     ESegment *segment = localData->GetSegment(i);
-    if (segment) {
-      // Recalculate points using the new combined calculation method
-      for (int pointIdx = 0; pointIdx < segment->NumPoints(); pointIdx++) {
-        double theoreticalValue = segment->CalculateTheoreticalCrossSection(pointIdx, localCompound, configure(), localData);
-        EPoint *point = segment->GetPoint(pointIdx + 1);
-        if (point) {
-          point->SetFitCrossSection(theoreticalValue);
-        }
-      }
-
-      // Recalculate chi-squared for this segment with components
-      double segmentChiSquared = 0.0;
-      for (int pointIdx = 0; pointIdx < segment->NumPoints(); pointIdx++) {
-        EPoint *point = segment->GetPoint(pointIdx + 1);
-        if (point) {
-          double residual = point->GetFitCrossSection() - point->GetCMCrossSection() * segment->GetNorm();
-          double error = point->GetCMCrossSectionError() * segment->GetNorm();
-          if (error != 0.0) {
-            segmentChiSquared += (residual * residual) / (error * error);
-          }
-        }
-      }
-
-      segment->SetSegmentChiSquared(segmentChiSquared);
-      chiSquared += segmentChiSquared;
+    if (!segment) continue;
+    for (int pointIdx = 0; pointIdx < segment->NumPoints(); pointIdx++) {
+      double theoreticalValue = segment->CalculateTheoreticalCrossSection(pointIdx, localCompound, configure(), localData);
+      EPoint *point = segment->GetPoint(pointIdx + 1);
+      if (point) point->SetFitCrossSection(theoreticalValue);
     }
   }
-  // Data covariance: r^T M^-1 r over each group in place of its points' r_i^2.
-  if (localData->HasCovariance()) chiSquared += localData->CovarianceChi2Correction();
+  ObjectiveContext context{localCompound, localData, p, configure()};
+  context.storeTotals = true;
+  double chiSquared = Objective::Engine().DataChi2(context);
 
   // Isotopic abundances: priors and the sum-to-one term, part of the posterior as of the fit.
   if (localCompound->HasAbundanceBlock()) chiSquared += localCompound->AbundanceSumPenalty(configure().abundanceSumSigma);  // per-nucleus priors: CalculateLogPrior
@@ -200,41 +181,19 @@ double AZURECalcMCMC::CalculateLogLikelihoodPhysical(const vector_r &params_) co
 
   // Sub-segments are now integrated into ESegment, no separate initialization needed
 
-  bool isFit = true;  // For MCMC, we are always fitting
-
-  // Process segments with components - use new integrated calculation method
-  double chiSquared = 0.0;
+  // The model value of every point, then the data part of the objective, as CalculateLogLikelihood (D1).
   for (int i = 1; i <= localData->NumSegments(); i++) {
     ESegment *segment = localData->GetSegment(i);
-    if (segment) {
-      // Recalculate points using the new combined calculation method
-      for (int pointIdx = 0; pointIdx < segment->NumPoints(); pointIdx++) {
-        double theoreticalValue = segment->CalculateTheoreticalCrossSection(pointIdx, localCompound, configure(), localData);
-        EPoint *point = segment->GetPoint(pointIdx + 1);
-        if (point) {
-          point->SetFitCrossSection(theoreticalValue);
-        }
-      }
-
-      // Recalculate chi-squared for this segment with components
-      double segmentChiSquared = 0.0;
-      for (int pointIdx = 0; pointIdx < segment->NumPoints(); pointIdx++) {
-        EPoint *point = segment->GetPoint(pointIdx + 1);
-        if (point) {
-          double residual = point->GetFitCrossSection() - point->GetCMCrossSection() * segment->GetNorm();
-          double error = point->GetCMCrossSectionError() * segment->GetNorm();
-          if (error != 0.0) {
-            segmentChiSquared += (residual * residual) / (error * error);
-          }
-        }
-      }
-
-      segment->SetSegmentChiSquared(segmentChiSquared);
-      chiSquared += segmentChiSquared;
+    if (!segment) continue;
+    for (int pointIdx = 0; pointIdx < segment->NumPoints(); pointIdx++) {
+      double theoreticalValue = segment->CalculateTheoreticalCrossSection(pointIdx, localCompound, configure(), localData);
+      EPoint *point = segment->GetPoint(pointIdx + 1);
+      if (point) point->SetFitCrossSection(theoreticalValue);
     }
   }
-  // Data covariance: r^T M^-1 r over each group in place of its points' r_i^2.
-  if (localData->HasCovariance()) chiSquared += localData->CovarianceChi2Correction();
+  ObjectiveContext context{localCompound, localData, params_, configure()};
+  context.storeTotals = true;
+  double chiSquared = Objective::Engine().DataChi2(context);
 
   // Isotopic abundances: priors and the sum-to-one term, part of the posterior as of the fit.
   if (localCompound->HasAbundanceBlock()) chiSquared += localCompound->AbundanceSumPenalty(configure().abundanceSumSigma);  // per-nucleus priors: CalculateLogPrior
