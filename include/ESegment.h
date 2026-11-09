@@ -106,6 +106,22 @@ class ESegment {
   int GetExitKey() const;
   /// Read the data file and keep the points inside the energy and angle ranges, converting from the lab frame where needed.
   int Fill(CNuc *, EData *, const Config &);
+  /// What ConvertPointToCM does with a lab angle beyond the kinematic maximum: stop (the value is not converted),
+  /// or convert the value at the last valid angle (an energy shift moved the point there mid-fit).
+  enum class BeyondRange { Stop, Convert };
+  /// The lab -> c.m. conversion of one point of this segment (docs/upgrade/data_model.md section 1.4), the one
+  /// sequence of Fill, UpdatePointEnergyWithShift, the test segments and the component segments (EData): E_c.m.
+  /// (ConvertPointEnergyToCM); for lab-frame differential data (not phase, angular-distribution or c.m. data) the
+  /// c.m. angle of a particle or photon exit; and, with convertValue (false for a RATIO: dimensionless), the value
+  /// and its uncertainty times dOmega_lab/dOmega_cm.  False where the lab angle is beyond the kinematic maximum
+  /// (EPoint::GetLabAngleWhy, GetLabAngleMax); the caller reports it.
+  bool ConvertPointToCM(EPoint *point, PPair *entrancePair, PPair *exitPair, const Config &configure,
+                        bool convertValue, BeyondRange beyond) const;
+  /// E_c.m. and E_x of a point: a beta-delayed point (entrance type 20) from its decay pair, else from the beam.
+  static void ConvertPointEnergyToCM(EPoint *point, PPair *entrancePair, PPair *exitPair);
+  /// E_c.m. / E_lab of the segment's points, non-relativistic: (M1 + M2) / M2 of the decay pair for a beta-delayed
+  /// point, M2 / (M1 + M2) of the entrance pair otherwise (the rigid shift of sub-points, the target-effect grids).
+  static double CMEnergyFactor(PPair *entrancePair, PPair *exitPair);
   /// Orbital angular momentum. Phase-shift segments only.
   int GetL() const;
   /// 1-based position of the TargetEffect in the parent EData.

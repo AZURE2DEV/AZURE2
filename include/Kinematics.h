@@ -6,6 +6,7 @@
 #include "Config.h"
 #include "Constants.h"
 #include "PPair.h"
+#include "azure2/experiment/Frames.h"
 #include "azure2/physics/ChannelFunctions.h"
 
 /*!
@@ -48,20 +49,17 @@ inline double K(double m1, double m2, double T) { return azure2::physics::relati
 /// eta at T (above threshold), or eta_b = Z1 Z2 alpha mu_eff / kappa below it (T < 0).
 inline double Eta(double z1z2, double m1, double m2, double T) { return azure2::physics::relativistic_eta(z1z2, m1, m2, T); }
 
+// The lab <-> c.m. energy maps are experiment/'s (azure2/experiment/Frames.h): one formula for the engine and the
+// frames library.
+
 /// c.m. kinetic energy from the lab kinetic energy of particle 1 on particle 2 at rest.
-inline double CMFromLab(double m1, double m2, double eLab) {
-  const double m = m1 + m2;
-  return 2.0 * m2 * eLab / (std::sqrt(m * m + 2.0 * m2 * eLab) + m);
-}
+inline double CMFromLab(double m1, double m2, double eLab) { return azure2::experiment::CMFromLab(m1, m2, eLab); }
 
 /// Lab kinetic energy of particle 1 (particle 2 at rest) for c.m. kinetic energy T.
-inline double LabFromCM(double m1, double m2, double T) { return T * (2.0 * (m1 + m2) + T) / (2.0 * m2); }
+inline double LabFromCM(double m1, double m2, double T) { return azure2::experiment::LabFromCM(m1, m2, T); }
 
 /// c.m. kinetic energy from the kinetic energy of particle 1 of a two-body decay at rest.
-inline double CMFromDecay(double m1, double m2, double e1) {
-  const double p2 = e1 * (e1 + 2.0 * m1);
-  return e1 + p2 / (std::sqrt(m2 * m2 + p2) + m2);
-}
+inline double CMFromDecay(double m1, double m2, double e1) { return azure2::experiment::CMFromDecay(m1, m2, e1); }
 
 /*!
  * The kinematic quantities of one particle pair.  The non-relativistic branches are

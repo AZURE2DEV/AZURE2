@@ -38,6 +38,11 @@ class EData;
 class CNuc;
 class PPair;
 class TargetEffect;
+namespace azure2 {
+namespace experiment {
+struct AngleLimit;
+}
+}  // namespace azure2
 class DataLine;
 class Config;
 struct ThmWeightTable;
@@ -458,10 +463,6 @@ class EPoint {
   EnergyMap GetMap() const;
   /// Compute everything that depends on energy but not on the fit parameters. Run once before fitting.
   void Initialize(CNuc *, const Config &);
-  /// Lab energy to centre-of-mass energy.
-  double ConvertLabValue(double, PPair *);
-  /// Centre-of-mass energy to lab energy.
-  double ConvertCMValue(double, PPair *);
   /// Fill the centre-of-mass energy from the lab energy.
   void ConvertLabEnergy(PPair *);
   /// Fill the compound excitation energy.
@@ -482,8 +483,6 @@ class EPoint {
   double GetLabAngleMax() const { return labAngleMax_; };
   /// Why the last ConvertLabAngle returned false (a sentence for the error message).
   const std::string &GetLabAngleWhy() const { return labAngleWhy_; };
-  /// Centre-of-mass angle by the relativistic form, Iliadis C.37-C.38.
-  void ConvertCMAngle(PPair *, PPair *, const Config &);
   /// Fill the centre-of-mass cross section and uncertainty from the lab ones.
   void ConvertCrossSection(PPair *, PPair *);
   /// Centre-of-mass gamma angle, with the relativistic correction.
@@ -493,6 +492,11 @@ class EPoint {
   double CalculateCrossSectionConversionFactor(PPair *, PPair *);
   /// Relativistic lab -> c.m. angle and dOmega_lab/dOmega_cm of the detected particle (relativistic=1).
   bool RelativisticLabToCM(PPair *entrancePair, PPair *exitPair, double nrCMAngle, double &cmAngle, double &factor) const;
+ private:
+  /// Store what an angle map reported (the maximum lab angle, the reason), as the maps always did.
+  void ApplyAngleLimit(const azure2::experiment::AngleLimit &lim) const;
+
+ public:
   /// Lab motion (g, boost gamma) of the detected exit particle for the attenuation coefficients; false: Q as entered.
   bool QLabBoost(PPair *entrancePair, PPair *exitPair, double &g, double &gb) const;
   double CalculateCrossSectionGammaConversionFactor(PPair *);
