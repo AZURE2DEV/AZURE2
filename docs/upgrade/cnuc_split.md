@@ -167,7 +167,8 @@ returns S, S′ and P (sections 5, 7).
    The non-smooth last digits of S and S′ (section 5) remain until (i)–(ii): `coulsm` is good to 10⁻¹⁰ only.
 4. **External capture**: `CalcExternalWidth` and the bound-state normalization N_f^½ (`SqrtNFFactor`, now in five
    places) into `physics/external_capture`.
-5. **Coupling coefficients**: `SortPathways`, `CalcAngularDists`, `CalcCaptureAnalyzingPower` into `observables`,
+5. **Coupling coefficients** (done, section 6; design section 9; `SortPathways` moved to step 6 with the trees it
+   builds): `SortPathways`, `CalcAngularDists`, `CalcCaptureAnalyzingPower` into `observables`,
    computed once per reaction with `AngularCoupling` (3j/6j/9j against `AngCoeff`: differences of one ulp are possible,
    so this step is checked to 10⁻¹⁴ and re-baselined by its own commit if an output moves).
 6. **Data accessors**: callers of `GetPair`/`GetJGroup` read the System (partition α, block b) through the adapter
@@ -382,9 +383,28 @@ section 7 (observed_levels against hand values, 1.1 × 10⁻¹⁶). T2 benchmark
 (d12chas084), mean of three, before → after: calc 2.45 → 2.22 s (1 thread), 0.42 → 0.44 s (8); fit200 133.1 → 131.8 s
 (1), 55.8 → 56.2 s (8); peak RSS equal (`tests/upgrade/bench/T2.tsv`).
 
+### Step 5 (branch `feature/upgrade-1-coupling`, 2026-11-09)
+
+Design section 9 (da3703d2); physics functions and tests (96917f36); the engine switch (563a7172).
+`CalcAngularDists`, `CalcCaptureAnalyzingPower` and `ThmAngular`'s Z̄ call `ObservableCoupling` (3j, 6j and a
+new 9j of `AngularCoupling`, no GSL); `AngCoeff::Wigner9j` deleted. `CNuc.cpp` 3135 → 3061 lines.
+
+**Evidence.** (a) `physics_observable_coupling`: the 9j against its zero reduction (117649 checks), the six-3j sum
+(74088, 9002 non-zero) and its orthogonality (7415), to 6.7 × 10⁻¹⁶. The particle coefficients match the m-scheme
+angular distribution to 1.1 × 10⁻¹⁵ (6750 cases, = (1/π) Σ_k c_k P_k). The photon coefficients match to
+1.4 × 10⁻¹⁴ (31008 cases, = 8 Σ_k c_k P_k, with the helicity amplitude L̂ (L μ j_f m_f | J ν) d^L_{μλ} times λ
+for M). (b) `physics_observable_coupling_gsl`: every coefficient (3.7 × 10⁶ over seven kinds) matches the old GSL
+expression to 4 × 10⁻¹⁵ of its kind's largest value, with no keep-test mismatch. (c) 179 `.azr` × 3 bases against
+the step-4 engine (a18fe89e code; Coulomb table format 1): 2063/2069 files identical. The six changed files are
+`ec_e1m1_phase` `s_1` R = 3 and `gamma_lab_frame` `cm` R = 2, in each basis. Every changed number is within
+3.2 × 10⁻¹⁵ of its column's largest value: classified (b). `ec_e1m1_phase`'s sign flips are residues of
+10⁻²⁵–10⁻¹⁹ in a cross section that vanishes at 0° and 180°. ctest 113/113; `run_tests.sh` 133/133 (no
+expected value moved, so there was no re-baselining commit); 1 vs 8 threads identical (12/12). One-thread
+calculation: 13N 7.24 → 7.26 s, 13N_capture_ay 1.94 → 2.06 s (mean of three).
+
 ### Remaining steps
 
-Steps 3b (i), (iii), (iv) and 4–7 of section 3. Step 4 (`physics/external_capture`) takes N_f^½, γ^ext and the final
+Steps 3b (iii), (iv), 6 (now with `SortPathways`) and 7 of section 3. Step 4 (`physics/external_capture`) takes N_f^½, γ^ext and the final
 state's Brune amplitude and energy (section 8) out of `CNuc`, and should define the `--ignore-externals` mask on the
 observed (Brune) amplitudes in every basis.
 
