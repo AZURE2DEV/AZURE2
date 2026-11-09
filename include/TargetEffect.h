@@ -275,6 +275,8 @@ class TargetEffect {
   /// The line's temperature, the centre of the prior and the temperature the pieces are laid out for (K).
   double GetDopplerNominal() const { return dopplerFit_ ? dopplerNominal_ : dopplerTemperature_; }
   /// Prior width in K, 0 = no prior.
+  /// The Tmax field of "doppler T vary sigma Tmax" as written (K), 0 without one.
+  double GetDopplerTmax() const { return dopplerTmax_; }
   double GetDopplerSigma() const { return dopplerSigma_; }
   /// The temperature the sub-point grids and the integration windows span (the line's T when not fitted).
   double GetDopplerLayoutTemperature() const { return (dopplerLayout_ > 0.0) ? dopplerLayout_ : dopplerTemperature_; }
@@ -354,6 +356,7 @@ class TargetEffect {
   bool dopplerVary_ = false;
   double dopplerNominal_ = 0.0;      ///< K, as read
   double dopplerSigma_ = 0.0;        ///< K, prior width (0 = none)
+  double dopplerTmax_ = 0.0;         ///< K, the Tmax field of the fit form as written; 0 = none
   double dopplerLayout_ = 0.0;       ///< K, the temperature the grids span; 0 = the current temperature
   bool isUdr_ = false;
   std::string udrFile_;

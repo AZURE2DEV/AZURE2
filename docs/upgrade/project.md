@@ -130,3 +130,16 @@ output round-trips byte for byte.
 - `AzrModel.from_file` takes `<levels>` from the document (whole-line tags), and every section search in `azrfile`,
   `datasets`, `azure2`, `bands` and `nuclei` uses the document's tag rule (`_tag_index`: a whole trimmed line). Band
   directories keep their names (the same bytes are hashed).
+- Segment, extrapolation and `<targetInt>` lines are read by the engine's own parsers (`SegLine`, `ExtrapLine`,
+  `TargetEffect`), bound as `_azure2.parse_segment_line`, `parse_extrapolation_line` and `parse_target_effect_line`.
+  Before each switch the Python reader and the engine's were compared on every project file:
+  - 644 segment lines and 232 extrapolation lines agree in every field;
+  - of 567 screening, Doppler and density views, 561 agree; the 6 others are the two deliberately malformed test files,
+    which the engine refuses and the regular expressions read silently (P3).
+- Levels: the engine's rule, `io::LevelGrouper`, shared by `CNuc::Fill` and `AzrModel`.
+- `<config>` keys only inside `<config>`, the last line winning; the output directory by position.
+- Refused as the engine refuses them (P3): malformed `<abundances>` lines and prior centres that are not finite, or a
+  norm centre ≤ 0.
+- Remaining second readings, documented rather than removed:
+  - `<thm>`: pyazr's Python port, which also passes every block through the engine's parser (`check_thm_block`);
+  - `<scatteringLengths>`: pyazr checks the tokens; the pairs and spins are checked when the engine loads the model.

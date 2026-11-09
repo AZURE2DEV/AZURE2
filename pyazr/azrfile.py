@@ -4036,20 +4036,34 @@ class AzrModel:
         a, b = _tag_index(lines, "<targetInt>"), _tag_index(lines, "</targetInt>")
         return lines, [(i, lines[i]) for i in range(a + 1, b) if lines[i].strip()]
 
-    @property
-    def screenings(self):
-        """Electron screening of the <targetInt> lines: ``{effect: (Ue_eV, vary, sigma_eV)}``
-        keyed by the effect number AZURE2 uses (the place among the ACTIVE lines), for the
-        lines with a ``screening`` block."""
+    def _target_effects(self):
+        """The ACTIVE <targetInt> lines as AZURE2 reads them (TargetEffect, through
+        ``_azure2.parse_target_effect_line``; project.md section 5), keyed by effect number (place among the active
+        lines).  A screening, Doppler or densityfit block the engine refuses raises ValueError."""
         _, tl = self._target_int_lines()
+        parse = _engine_module().parse_target_effect_line
         out, n = {}, 0
         for _, line in tl:
             if line.split()[0] != "1":
                 continue
             n += 1
-            m = self._SCREENING_RE.search(line)
-            if m:
-                out[n] = (float(m.group(1)), int(float(m.group(2))) != 0, float(m.group(3)))
+            te = parse(line)
+            if te["screening_error"] or te["doppler_error"] or te["density_error"]:
+                why = te["density_error"] or ("screening" if te["screening_error"] else "doppler") + " block"
+                raise ValueError(f"<targetInt> effect {n}: {why} (AZURE2 refuses the line)")
+            out[n] = te
+        return out
+
+    @property
+    def screenings(self):
+        """Electron screening of the <targetInt> lines: ``{effect: (Ue_eV, vary, sigma_eV)}``
+        keyed by the effect number AZURE2 uses (the place among the ACTIVE lines), for the
+        lines with a ``screening`` block."""
+        out = {}
+        for n, te in self._target_effects().items():  # the engine's reading of each active line
+            if te["screening"] is not None:
+                ue, vary, sigma = te["screening"]
+                out[n] = (float(ue), bool(vary), float(sigma))
         return out
 
     def set_screening(self, effect, ue=None, vary=None, sigma=None):
@@ -4104,22 +4118,10 @@ class AzrModel:
         K, 0 = none), ``tmax`` (the optional Tmax field, else ``None``) and ``max`` (the layout temperature its
         sub-point grids span: Tmax, else T + 3 sigma but at least 1.21 T, or 2 T without a prior; T for a fixed
         line)."""
-        _, tl = self._target_int_lines()
-        out, n = {}, 0
-        for _, line in tl:
-            if line.split()[0] != "1":
-                continue
-            n += 1
-            m = self._DOPPLER_RE.search(line)
-            if not m or m.group(1) is None:
-                continue
-            T = float(m.group(1))
-            fit = m.group(2) is not None
-            vary = fit and int(float(m.group(2))) != 0
-            sigma = float(m.group(3)) if fit else 0.0
-            tmax = float(m.group(4)) if fit and m.group(4) else None
-            layout = (tmax if tmax else (max(T + 3.0 * sigma, 1.21 * T) if sigma > 0 else 2.0 * T)) if fit else T
-            out[n] = dict(temperature=T, fit=fit, vary=vary, sigma=sigma, tmax=tmax, max=layout)
+        out = {}
+        for n, te in self._target_effects().items():  # the engine's reading of each active line
+            if te["doppler"] is not None:
+                out[n] = dict(te["doppler"])
         return out
 
     def set_doppler(self, effect, T=None, vary=None, sigma=None, tmax=None):
@@ -4172,30 +4174,19 @@ class AzrModel:
         else N0 + 3 sigma but at least 1.1 N0, or 1.5 N0 without a prior), ``group`` (label or ``None``) and
         ``leader`` (the effect holding the parameter: itself, or its group's first line, whose density, prior
         and maximum the group shares)."""
-        _, tl = self._target_int_lines()
-        out, n, leader_of = {}, 0, {}
-        for _, line in tl:
-            tok = line.split()
-            if tok[0] != "1":
+        out, leader_of = {}, {}
+        for n, te in self._target_effects().items():  # the engine's reading of each active line
+            fit, group = te["density_fit"], (te["density_group"] or None)
+            if fit is None and group is None:
                 continue
-            n += 1
-            fit = self._DENSITYFIT_RE.search(line)
-            grp = self._DENSITYGROUP_RE.search(line)
-            if not fit and not grp:
-                continue
-            density = float(tok[6])
-            group = grp.group(1) if grp else None
             if group is not None and group in leader_of:
                 lead = out[leader_of[group]]
                 out[n] = dict(lead, density=lead["density"], group=group, leader=leader_of[group])
                 continue
-            if not fit:
+            if fit is None:
                 raise ValueError(f"<targetInt> effect {n}: density group {group} starts without a densityfit block")
-            sigma = self._density_sigma(fit.group(2), density)
-            dmax = (float(fit.group(3)) if fit.group(3) else
-                    max(density + 3.0 * sigma, 1.1 * density) if sigma > 0 else 1.5 * density)
-            out[n] = dict(density=density, vary=int(float(fit.group(1))) != 0, sigma=sigma, max=dmax,
-                          group=group, leader=n)
+            out[n] = dict(density=float(te["density"]), vary=bool(fit["vary"]), sigma=float(fit["sigma"]),
+                          max=float(fit["max"]), group=group, leader=n)
             if group is not None:
                 leader_of[group] = n
         return out

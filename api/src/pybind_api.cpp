@@ -22,6 +22,7 @@
 
 #include "ExtrapLine.h"
 #include "SegLine.h"
+#include "TargetEffect.h"
 
 #include <cstdio>
 #include <sstream>
@@ -995,6 +996,38 @@ PYBIND11_MODULE(_azure2, m) {
         return d;
       },
       py::arg("line"), "One <segmentsTest> line as AZURE2 reads it (ExtrapLine).");
+  // One <targetInt> line as the engine reads it (TargetEffect; its constructor reads no file and no Config field),
+  // for pyazr's screening, Doppler and density views (project.md section 5).
+  m.def(
+      "parse_target_effect_line",
+      [](const std::string &line) {
+        std::ostringstream sink;
+        Config scratch(sink);
+        std::istringstream in(line);
+        TargetEffect te(in, scratch);
+        py::dict d;
+        d["screening"] = te.HasScreening()
+            ? py::object(py::make_tuple(te.GetScreeningNominal(), te.IsScreeningVaried(), te.GetScreeningSigma()))
+            : py::object(py::none());
+        d["screening_error"] = te.HasScreeningError();
+        d["doppler"] = te.IsDoppler()
+            ? py::object(py::dict(py::arg("temperature") = te.GetDopplerNominal(), py::arg("fit") = te.HasDopplerFit(),
+                                  py::arg("vary") = te.IsDopplerVaried(), py::arg("sigma") = te.GetDopplerSigma(),
+                                  py::arg("tmax") = te.GetDopplerTmax() > 0.0 ? py::object(py::float_(te.GetDopplerTmax()))
+                                                                               : py::object(py::none()),
+                                  py::arg("max") = te.GetDopplerLayoutTemperature()))
+            : py::object(py::none());
+        d["doppler_error"] = te.HasDopplerError();
+        d["density_fit"] = te.HasDensityFit()
+            ? py::object(py::dict(py::arg("density") = te.GetDensityNominal(), py::arg("vary") = te.IsDensityVaried(),
+                                  py::arg("sigma") = te.GetDensitySigma(), py::arg("max") = te.GetLayoutDensity()))
+            : py::object(py::none());
+        d["density"] = te.GetDensity();
+        d["density_group"] = te.GetDensityGroup();
+        d["density_error"] = te.HasDensityFitError() ? te.GetDensityFitErrorText() : std::string();
+        return d;
+      },
+      py::arg("line"), "One <targetInt> line as AZURE2 reads it (TargetEffect): screening, Doppler and density blocks.");
   // The level of a <levels> line (io::LevelGrouper): the rule of CNuc::Fill, for pyazr's AzrModel.  assign returns
   // (level, kind, other level, its first level ID); kind: "joined", "new", "same_energy", "new_nearby".
   {
