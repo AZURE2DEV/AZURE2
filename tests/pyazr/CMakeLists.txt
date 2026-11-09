@@ -464,6 +464,13 @@ add_test(NAME pyazr_objective_terms
                  ${CMAKE_CURRENT_SOURCE_DIR}/objective_terms_test.py)
 set_tests_properties(pyazr_objective_terms PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
+# pyazr.convert_azr: an old project in the updated format (docs/upgrade/project.md section 4) -- format 2, idempotent,
+# the removed sections, the same chi-squared as the original.
+add_test(NAME pyazr_convert_azr
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/convert_azr_test.py)
+set_tests_properties(pyazr_convert_azr PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
 add_test(NAME pyazr_output_penalties
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/output_penalties_test.py)

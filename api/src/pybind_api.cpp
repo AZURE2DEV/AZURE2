@@ -20,6 +20,8 @@
 #include <iostream>
 #include <string>
 
+#include "azure2/io/Convert.h"
+#include "azure2/io/Document.h"
 #include "AZUREAPI.h"
 #include "Config.h"
 #include "GSLException.h"
@@ -848,6 +850,19 @@ PYBIND11_MODULE(_azure2, m) {
   // which edits files without a session.  No files are read.
   m.def("check_thm_block", &CheckThmBlockLines, py::arg("lines"), py::arg("global_rules") = false,
         "The lines of a <thm> block as AZURE2 reads them: \"\" or the message it reports.");
+  // The project file's format and its conversion (io::ConvertToFormat2; docs/upgrade/project.md section 4), on text.
+  m.def(
+      "convert_project_text",
+      [](const std::string &text) {
+        azure2::io::Document doc = azure2::io::Document::Parse(text);
+        const std::vector<std::string> changes = azure2::io::ConvertToFormat2(doc);
+        return py::make_tuple(py::bytes(doc.Write()), changes, doc.Problems());
+      },
+      py::arg("text"),
+      "The format-2 conversion of a project's text: (converted bytes, the changes, structural problems).");
+  m.def(
+      "project_format", [](const std::string &text) { return azure2::io::FormatOf(azure2::io::Document::Parse(text)); },
+      py::arg("text"), "The format of a project's text: 2 with format=2 in <config>, else 1.");
   py::register_exception<GSLException>(m, "GSLError", PyExc_ArithmeticError);
 
   py::class_<RuntimeOptions>(m, "RuntimeOptions")

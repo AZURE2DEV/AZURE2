@@ -32,6 +32,7 @@ then follows as the 34th.  A line without them keeps its length.
 import decimal
 import math
 import os
+import warnings
 import re
 import tempfile
 from typing import List, NamedTuple, Optional
@@ -4182,3 +4183,28 @@ class AzrModel:
 
     def __repr__(self):
         return f"AzrModel({len(self.levels)} levels, source={self.source!r})"
+
+def convert_azr(old, new, overwrite=False):
+    """Write the project ``old`` in the updated file format (format 2) to ``new``.
+
+    The conversion is the engine's (``io::ConvertToFormat2``, the same as
+    ``AZURE2 --convert``; docs/upgrade/project.md section 4): ``<lastRun>`` and
+    ``<mcmc>``'s run settings are removed (nothing reads them),
+    ``useAdaptiveGrid`` moves from ``<potential>`` to ``<config>``,
+    ``<potential>`` stays only with a hybrid potential, and ``format=2`` is
+    added to ``<config>``; every other byte is kept.  An old file also loads as
+    it is (the engine reads it as its conversion).  ``new`` is not overwritten
+    unless ``overwrite``.  Returns the list of changes (empty for a file
+    already in format 2).
+    """
+    from . import _azure2
+    with open(old, "rb") as f:
+        text = f.read()  # bytes, converted as bytes (the file's encoding is kept)
+    if os.path.exists(new) and not overwrite:
+        raise FileExistsError(f"{new} exists; pass overwrite=True to replace it")
+    converted, changes, problems = _azure2.convert_project_text(text)
+    for p in problems:
+        warnings.warn(f"{old}: {p}")
+    with open(new, "wb") as f:
+        f.write(converted)
+    return list(changes)
