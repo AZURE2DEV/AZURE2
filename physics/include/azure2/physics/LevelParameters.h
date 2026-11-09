@@ -200,7 +200,10 @@ struct LevelSet {
   /// S_c(E) - B_c of the last iteration (0 for non-particle channels).
   /// RoundingLimited (FormalToBruneOptions::evaluation only): the tolerance was not met in the iterations, but the
   /// last step is within rounding_bound_MeV, and the last iterate is returned.
-  enum class Status : unsigned char { Converged, EigenFailed, NotConverged, RoundingLimited };
+  /// Bracketed (FormalToBruneOptions::bracket): the iteration did not converge (the fixed point repels, e' < -1), and
+  /// the level is the root of E - e(E) found by bisection (level_parameters.md section 10); residual_MeV is |E - e(E)|
+  /// there and boundary_shift S_c(E) - B_c.
+  enum class Status : unsigned char { Converged, EigenFailed, NotConverged, RoundingLimited, Bracketed };
   std::vector<Status> status;
   std::vector<double> residual_MeV;
   std::vector<double> boundary_shift;
@@ -234,11 +237,15 @@ struct FormalToBruneOptions {
   /// of T; never its formal values.  false: the formal values are kept, with a warning (the report iteration).
   bool evaluation = false;
   double rounding_bound_MeV = 1e-9;
+  /// A level that would end NotConverged is solved as the root of E - e(E) by bisection (status Bracketed,
+  /// level_parameters.md section 10); false: the fixed-point outcome alone.
+  bool bracket = true;
 };
 
 /// Formal -> Brune by the engine's iteration (CNuc::TransformOut): per level, B_c moved to S_c(E) and the matrix
 /// E - sum_c (S_c - B_c) gamma gamma rediagonalized (symmetric_eigen) until the level's energy moves by <= the
-/// tolerance.  A level that does not converge keeps its formal values, with a warning, as in the engine (with
+/// tolerance.  A level that does not converge is the root of E - e(E), found by bisection (level_parameters.md
+/// section 10); if no root is bracketed, it keeps its formal values, with a warning, as in the engine (with
 /// FormalToBruneOptions::evaluation: its last iterate or NaN, level_parameters.md section 9).  Each
 /// eigenvector is oriented as in formal_from_brune (its component on its own level positive), so formal -> Brune ->
 /// formal and Brune -> formal -> Brune return the signs they started from.
