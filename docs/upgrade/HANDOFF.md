@@ -9,8 +9,10 @@ the owner's AI keeps adding features. Agreed:
 - finish Phase 3 (`project.md`; P1–P5 decided);
 - the `CLAUDE.md` guardrails: recipes for adding a feature, consistency checks that fail when one is bypassed, a fast
   pre-merge check, a speed benchmark;
-- a short document for the owner;
-- merge with `origin/dev` **at the end**.
+- a short document for the owner.
+
+**PI, 2026-11-10: no merge with `origin/dev` during the reconstruction;** it is planned only when everything is
+complete. The assessment below is kept for then.
 
 **`origin/dev` since the upgrade branched (2026-11-08, 18 commits, measured 2026-11-10):**
 - documentation (skills), 10 commits;
