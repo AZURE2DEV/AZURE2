@@ -229,6 +229,11 @@ add_test(NAME pyazr_nds_local_exfor
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/nds_local_exfor_test.py)
 
+# EXFOR requests carry the user-agent IAEA gave AZURE2; other services keep pyazr's own.  Offline.
+add_test(NAME pyazr_nds_exfor_user_agent
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/nds_exfor_user_agent_test.py)
+
 # Ratio-to-Rutherford EXFOR data with a lab angle column: to_azr converts the lab angle to the c.m.
 # frame and divides by the Jacobian, so the engine sees ratio x sigma_R,cm(theta_cm) (audit item 8);
 # the observable guess follows the angle column's frame.  Offline fixture subentries T0001004/5; the

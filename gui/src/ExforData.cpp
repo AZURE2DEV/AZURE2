@@ -11,6 +11,9 @@
 
 // Base URL of the IAEA EXFOR Web API (see https://nds.iaea.org/exfor/x4guide/API/)
 static const char *kExforBase = "https://nds.iaea.org/exfor";
+// The user-agent the IAEA Nuclear Data Section gave AZURE2 for this API (2026-11-09), which sits behind a
+// firewall that refuses many clients. pyazr/nds.py sends the same string.
+static const char *kExforUserAgent = "Exfor-Azure2/1.0";
 
 // Physical constants kept identical to AZURE2's include/Constants.h so the
 // astrophysical S-factor <-> cross-section conversion matches what AZURE2 does
@@ -63,8 +66,7 @@ void ExforData::searchDatasets(const QString &target, const QString &reaction,
   pending_ = SearchRequest;
   lastError_.clear();
   QNetworkRequest request(url);
-  request.setHeader(QNetworkRequest::UserAgentHeader,
-                    "AZURE2-EXFOR-client/1.0");
+  request.setHeader(QNetworkRequest::UserAgentHeader, kExforUserAgent);
   manager_->get(request);
 }
 
@@ -87,8 +89,7 @@ void ExforData::downloadDataset(const QString &datasetId,
   pending_ = DownloadRequest;
   lastError_.clear();
   QNetworkRequest request(url);
-  request.setHeader(QNetworkRequest::UserAgentHeader,
-                    "AZURE2-EXFOR-client/1.0");
+  request.setHeader(QNetworkRequest::UserAgentHeader, kExforUserAgent);
   manager_->get(request);
 }
 
