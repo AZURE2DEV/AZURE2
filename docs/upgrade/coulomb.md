@@ -156,6 +156,23 @@ without it. Every changed file is classified; bound-state quantities (ANC ↔ γ
 states, sub-threshold S) are expected to move at ≲ 10⁻⁸ relative (GSL's error, measured above), anything larger is
 explained. Timing: `ECIntegral`'s data path on a capture project (T1 or 13N), calc, one thread, before and after.
 
+**Engine part verified (2026-11-09; build of 5ed85322, GCC 11.5 Release, pyazr on).** No warnings; no engine file
+includes `gsl_sf_hyperg.h`. Without a table, against bf8622e2: Brune 595/689, formal 559/662, Park 605/689 files
+identical; every changed observable within 2.2 × 10⁻⁹ of its column's largest value (worst: `relativistic/he5`);
+`param.par`/`parameters.out` at most 9 × 10⁻⁸ relative in printed digits, larger relative changes only for values at
+rounding (formal zero-input widths 10⁻¹⁸–10⁻³⁷; cross sections of 10⁻²² at 0° and 180° where they vanish), one
+photon width of 0.99999999 eV printed as 1000 meV (`ec_threshold/ng`), and signs of −0.000000; all 20 `intEC.dat`
+files change (every token, ~10⁻¹⁰), hence EC signature v6 with the stale-file case (s) of `tests/ec_m1_exact`
+(fails without the bump). With a table built by each build (format 1 by bf8622e2, format 2 by this one), the
+table-vs-exact differences are of the same size for both (worst `c12c12`, 5.7 and 7.6 × 10⁻⁵, interpolation), and
+`c12c12` is identical between the two builds. `ctest -LE slow` 114/114 with a format-2 table (`pyazr_park_dsde`
+compares a table session with an exact one and fails when the only table on the machine is refused);
+`ec_m1_exact` PASS; `run_tests.sh` 133/133 (1421 s, 11 threads, format-2 table); 1 vs 8 threads byte-identical
+(T1–T3, 13N, three bases). **Cost** (one thread, calc, mean of three, own table): 13N 7.10 → 9.14 s, T1 2.62 →
+4.73 s; `AZURE_PROFILE` puts it all in set-up (the external-capture table: 1176 integrals, 1320 node values in T1,
+recomputed every run, even with `intEC.dat` present), evaluation ~1 ms in both. This is the 13× cost per W call in
+`ECIntegral`'s data path; the per-integral W table (step 3b (ii)) removes it and should come before merging.
+
 ## 2. Channel functions
 
 ### 2.1 Definition
