@@ -2,6 +2,42 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-09 (night) — the three branches built and verified; the Whittaker engine part on a new branch; lecture 1
+
+Work moved to a 24-core node (local builds, no Condor); at most 12 threads. Environment: conda env with Python 3.12,
+numpy, scipy, mpmath, pybind11; build `cmake ... -DBUILD_GUI=OFF -DUSE_API=ON -Dpybind11_DIR=...` (34 s on 12 jobs).
+The 179 × 3 comparison takes 51 s with a Coulomb table and ~8 min without; `run_tests.sh` ~20 min on 11 threads.
+
+| branch | state |
+|---|---|
+| `feature/upgrade-1-external-capture` | `run_tests.sh` rerun: 133/133 (pending item closed); `ctest -LE slow` 111/111 |
+| `feature/upgrade-1-zero-width-fixed` | **verified** (`external_capture.md` §9, "Verified"): 2040/2040 identical, ctest 112/112, run_tests 133/133, threads identical. Two test commits: check (c) of the new test called `apply_fit` in a way it refuses (fixed); `apply_fit_test.py` "fixed nonzero, no line: still refused" changed to §9's rule — **PI to review** (afd8ee6a) |
+| `feature/upgrade-1-whittaker` | **verified** (`coulomb.md` §1.4, "Part 1 verified"): 2040/2040 identical, ctest 114/114 with the binding test |
+| `feature/upgrade-1-brune-iteration` | verified except one test — **blocker for the PI** (`level_parameters.md` §9, "Blocker"): `pyazr_formal_capture_mask` (c) is NaN because `brune_from_formal` 2-cycles (E = −0.973 / 4.462 MeV) at ±10⁻⁶ MeV on `energy_3`; a18fe89e hid the same non-convergence by keeping formal values. Otherwise 179 × 3: Brune, Park identical, formal 657/662 (1.7 × 10⁻¹¹); run_tests 133/133 |
+| `feature/upgrade-1-whittaker-engine` (new, from `-whittaker`) | step 3b (i) part 2: design addendum (a2593c96), engine switch (48fb454f), EC signature v6 with a stale-file case (5ed85322). **Changes outputs; PI to review before merging.** Numbers below |
+| `docs/lectures-1` (new, from 7704e48f) | lecture 1 text written (`docs/lectures/01-external-region/lecture.md`), figures redone (no label boxes over curves, ranges fitted) |
+
+**Whittaker engine part (`feature/upgrade-1-whittaker-engine`).** `WhitFunc`, `CoulombTable::ExactBound` and
+`ThmBoundStateTail` call `whittaker` / `whittaker_scaled`; no engine file includes `gsl_sf_hyperg.h`. The Coulomb
+table format is 2 (its bound sheet changed): a format-1 file is refused with a warning, so **everyone must rebuild
+their table after the merge** (`AZURE2 --build-coulomb-table`, 112 s on 12 threads). Comparison without a table
+against the `-whittaker` head: Brune 595/689, formal 559/662, Park 605/689 identical; every observable within
+2.2 × 10⁻⁹ of its column's largest value; parameter files at most 9 × 10⁻⁸ relative (last printed digits), the
+apparent large differences being values at rounding (10⁻¹⁸–10⁻³⁷ formal zero-input widths; 10⁻²² cross sections
+at 0°/180° that vanish), one 0.99999999 eV width printed as 1000 meV, and −0.000000 signs; the 20 `intEC.dat`
+caches change (hence v6). With tables built by each build: `c12c12` identical in the three bases. Note: the
+format-1 table in `~/.azure2` on this node (26 Oct) moves `c12c12` by 1.9 × 10⁻⁵ against a format-1 table
+built by today's reference build — the table can go stale within one format number. ctest 114/114 (with a format-2
+table; `pyazr_park_dsde` needs a usable table, it fails when the only table is refused); threads identical;
+run_tests 133/133. **Cost:** one-thread calc 13N 7.10 → 9.14 s, T1 2.62 → 4.73 s, all of it in
+set-up (the external-capture table, 1176 integrals at 1320 nodes in T1, recomputed every run; evaluation unchanged,
+~1 ms) — the 13× slower W per call. Step 3b (ii), one W table per integral, is the remedy; do it before merging.
+
+**Next.** (1) PI: the brune-iteration blocker (safeguarded iteration, or move the test model); afd8ee6a; whether the
+engine switch may merge with its cost or waits for 3b (ii). (2) Step 3b (ii): the per-integral W table in
+`ECIntegral`'s data path, then the timing again. (3) Narrowing `ShftFunc`'s band near threshold (own comparison).
+(4) Lecture 2 (channels, level and collision matrices, the three bases).
+
 ## 2026-11-08, end of session — lectures added to the plan; work stopped here
 
 The PI asked for R-matrix lectures (Notion Markdown, figures, later slides): plan and lecture 1's figures in
