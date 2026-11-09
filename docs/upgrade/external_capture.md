@@ -220,3 +220,14 @@ Menu-1 outputs that print the number of free parameters or χ²/ν change accord
 **Tests.** A pyazr test: `beam_profile_kernel` in the formal basis has no free width whose input is zero, and the
 same free set as in the Brune basis; 13N with a photon width 0 and `--no-ignore-externals` has that parameter fixed;
 `apply_fit` in strict mode on a formal-basis vector succeeds.
+
+**Verified (2026-11-09; build of 70ab5323 + afd8ee6a, GCC 11.5 Release, pyazr on).** No warnings. `ctest -LE slow`
+112/112 after two test corrections (1a491286: check (c) of `pyazr_zero_width_fixed` called `apply_fit` with
+`transform=` and `include_fixed`, which `apply_fit` refuses; afd8ee6a: `apply_fit_test.py` required the opposite of
+the rule above for a fixed non-zero width on an unlisted channel — changed to the rule, for the PI's review, and it
+is now the test of the `azrfile.py` change: it fails with a18fe89e's `azrfile.py`). `pyazr_zero_width_fixed`: (a)
+67 = 67 free, (b) ×2 fixed; on a18fe89e (a) 134 vs 67 and (b) fail. `run_tests.sh` 133/133 (1193 s); 1 vs 8 threads
+byte-identical (T1–T3, 13N, three bases). The 179 projects × 3 bases against a18fe89e: 2040/2040 files identical —
+menu 1 prints neither the free-parameter count nor χ²/ν, so "Expected" above shows only in fits and in pyazr. No
+test project has a fixed width on a channel its level does not list (scan of the 75 that load in the formal basis),
+so the 179-project comparison cannot exercise the `azrfile.py` branch; `apply_fit_test.py` does.
