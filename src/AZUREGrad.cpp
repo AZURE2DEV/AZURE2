@@ -1,4 +1,5 @@
 #include "AZUREGrad.h"
+#include "ModelPass.h"
 #include "Profile.h"
 #include <atomic>
 #include <chrono>
@@ -703,7 +704,7 @@ bool GradTransformedPoint(ESegment *segment, EData *data, azure2::Results &resul
                           const Config &config,
                           const vector_matrix_r *shiftDeriv, const FitBarFn &fitBarFn, GradAccum &accum,
                           double &outModel) {
-  outModel = segment->CalculateTheoreticalCrossSection(pointIdx, compound, config, data, results);
+  outModel = azure2::EvaluateModelPoint(*segment, pointIdx, compound, config, results, azure2::LeafValues::Calculate);
   const double fitBar = fitBarFn(segment, i, pointIdx, outModel);
   if (fitBar == 0.0) return true;
   std::vector<ESegment::TransformTerm> terms;
@@ -868,18 +869,17 @@ bool GradOnePoint(ESegment *segment, EData *data, azure2::Results &results, int 
     double model = (baseComp == 1) ? point->GetFitE1CrossSection(results)
         : (baseComp == 2)          ? point->GetFitE2CrossSection(results)
                                    : point->GetFitCrossSection(results);
-    double weight = 1.0;
+    // the model value from the one combination (ModelPass.h), on the leaf just calculated
+    outModel = azure2::EvaluateModelPoint(*segment, pointIdx, compound, config, results, azure2::LeafValues::Ready);
     if (natural) {
       const int nucleus = abundanceOf(segment->GetEntranceKey());
-      weight = compound->GetAbundance(sample, nucleus);
-      outModel = weight * model;
+      const double weight = compound->GetAbundance(sample, nucleus);
       double fitBar = fitBarFn(segment, i, pointIdx, outModel);
       if (fitBar == 0.0) return true;
       accum.AddAbundance(compound->AbundanceOrdinal(sample, nucleus), fitBar * model);
       return amf.PointAdjoint(point, results, fitBar * weight, accum, shiftDeriv, baseComp);
     }
-    outModel = model;
-    double fitBar = fitBarFn(segment, i, pointIdx, model);
+    double fitBar = fitBarFn(segment, i, pointIdx, outModel);
     if (fitBar != 0.0)
       return amf.PointAdjoint(point, results, fitBar, accum, shiftDeriv, baseComp);
     return true;
@@ -927,7 +927,7 @@ bool GradOnePoint(ESegment *segment, EData *data, azure2::Results &results, int 
         amf.GenMatrixFunc::CalculateCrossSection(p, results);
       }
       // The combined model from the values the points now hold, exactly as the forward calculation forms it.
-      double model = segment->CalculateTheoreticalCrossSection(pointIdx, compound, config, data, results, true);
+      double model = azure2::EvaluateModelPoint(*segment, pointIdx, compound, config, results, azure2::LeafValues::Ready);
       outModel = model;
       double fitBar = fitBarFn(segment, i, pointIdx, model);
       if (fitBar == 0.0) return true;
@@ -980,7 +980,7 @@ bool GradOnePoint(ESegment *segment, EData *data, azure2::Results &results, int 
   }
 
   // Combined model (components and/or target-effect integration).
-  double model = segment->CalculateTheoreticalCrossSection(pointIdx, compound, config, data, results);
+  double model = azure2::EvaluateModelPoint(*segment, pointIdx, compound, config, results, azure2::LeafValues::Calculate);
   outModel = model;
   double fitBar = fitBarFn(segment, i, pointIdx, model);
   if (fitBar == 0.0) return true;
@@ -1203,9 +1203,9 @@ void AddCotangent(TMatrixCotangent &dst, const TMatrixCotangent &src) {
 // The forward solve of a group, at its host's energy, and each member's model
 // from the shared T-matrix (the plain-point forward of GradOnePoint).
 // `rawModel` is the member's unweighted observable, `weight` its natural-target
-// abundance (1 otherwise).
+// abundance (1 otherwise), `model` its model value (ModelPass.h).
 void GroupForward(AMatrixFunc &amf, const GradItem &it, azure2::Results &results, CNuc *compound, std::vector<double> &rawModel,
-                  std::vector<double> &weight) {
+                  std::vector<double> &weight, std::vector<double> &model) {
   EPoint *host = it.members[0].pt;
   AZUREProfile::Timer profileTimer(AZUREProfile::kGradForward);
   amf.ClearMatrices();
@@ -1215,6 +1215,7 @@ void GroupForward(AMatrixFunc &amf, const GradItem &it, azure2::Results &results
   const size_t g = it.members.size();
   rawModel.assign(g, 0.0);
   weight.assign(g, 1.0);
+  model.assign(g, 0.0);
   for (size_t q = 0; q < g; q++) {
     const GroupMember &m = it.members[q];
     amf.GenMatrixFunc::CalculateCrossSection(m.pt, results);
@@ -1225,6 +1226,7 @@ void GroupForward(AMatrixFunc &amf, const GradItem &it, azure2::Results &results
       const int nucleus = compound->GetPair(compound->GetPairNumFromKey(m.seg->GetEntranceKey()))->GetNucleus();
       weight[q] = compound->GetAbundance(m.seg->GetNaturalSample(), nucleus);
     }
+    model[q] = azure2::EvaluateModelPoint(*m.seg, m.pointIdx, compound, amf.configure(), results, azure2::LeafValues::Ready);
   }
 }
 
@@ -1237,14 +1239,13 @@ int AbundanceOrdinalOf(CNuc *compound, ESegment *seg) {
 // summed (the back-propagation is linear in them) and back-propagated once.
 bool GroupGradient(AMatrixFunc &amf, const GradItem &it, azure2::Results &results, CNuc *compound, const vector_matrix_r *shiftDeriv,
                    const FitBarFn &fitBarFn, GradAccum &accum) {
-  std::vector<double> rawModel, weight;
-  GroupForward(amf, it, results, compound, rawModel, weight);
+  std::vector<double> rawModel, weight, model;
+  GroupForward(amf, it, results, compound, rawModel, weight, model);
   TMatrixCotangent sum, bar;
   bool any = false;
   for (size_t q = 0; q < it.members.size(); q++) {
     const GroupMember &m = it.members[q];
-    const double model = weight[q] * rawModel[q];
-    const double fitBar = fitBarFn(m.seg, m.segNum, m.pointIdx, model);
+    const double fitBar = fitBarFn(m.seg, m.segNum, m.pointIdx, model[q]);
     if (fitBar == 0.0) continue;
     if (m.seg->IsNatural()) accum.AddAbundance(AbundanceOrdinalOf(compound, m.seg), fitBar * rawModel[q]);
     if (!amf.PointTBar(m.pt, results, fitBar * weight[q], bar, m.seg->GetCrossSectionComponent())) return false;
@@ -1272,17 +1273,16 @@ template <class FitBarOf, class RowFn>
 bool GroupRows(AMatrixFunc &amf, const GradItem &it, azure2::Results &results, CNuc *compound, const vector_matrix_r *shiftDeriv,
                FitBarOf fitBarOf, RowFn rowFn, GradAccum &accum, GradAccum &scratch,
                const AMatrixFunc::FreeMask *mask) {
-  std::vector<double> rawModel, weight;
-  GroupForward(amf, it, results, compound, rawModel, weight);
+  std::vector<double> rawModel, weight, model;
+  GroupForward(amf, it, results, compound, rawModel, weight, model);
   EPoint *host = it.members[0].pt;
   const size_t g = it.members.size();
-  std::vector<double> model(g), fitBar(g);
+  std::vector<double> fitBar(g);
   std::vector<TMatrixCotangent> bars(g);
   std::vector<std::vector<std::vector<BilinearTerm>>> terms(g);
   bool bilinear = true;
   for (size_t q = 0; q < g; q++) {
     const GroupMember &m = it.members[q];
-    model[q] = weight[q] * rawModel[q];
     fitBar[q] = fitBarOf(q, model[q]);
     if (fitBar[q] == 0.0) continue;
     if (!amf.PointTBar(m.pt, results, fitBar[q] * weight[q], bars[q], m.seg->GetCrossSectionComponent())) return false;
@@ -1672,8 +1672,7 @@ bool ComputeResidualJacobian(CNuc *compound, EData *data, azure2::Results &resul
     if (row < 0) return;
     const double n = norm[m.segNum];
     const double cmErr = m.pt->GetCMCrossSectionError();
-    const double denom = cmErr * n;
-    residuals[row] = (denom != 0.0) ? (model - m.pt->GetCMCrossSection() * n) / denom : 0.0;
+    residuals[row] = azure2::DataResidual(model, m.pt->GetCMCrossSection(), cmErr, n).Pull();
     // Scatter this row's d r / d(E,gamma) into the packed columns.
     fullRow.assign(pmap.NumFull(), 0.0);
     accum.Scatter(pmap, fullRow);
@@ -1805,12 +1804,14 @@ std::vector<THMRows> ComputeTHMRows(CNuc *lc, EData *ld, azure2::Results &result
     for (long k = 0; k < n; k++) {
       ESegment *seg = ld->GetSegment(rows[order[k].first].segment);
       if (seg->GetPoint(order[k].second + 1)->IsMapped()) continue;
-      out[order[k].first][slot[k]] = seg->CalculateTheoreticalCrossSection(order[k].second, lc, config, ld, results);
+      out[order[k].first][slot[k]] =
+          azure2::EvaluateModelPoint(*seg, order[k].second, lc, config, results, azure2::LeafValues::Calculate);
     }
     for (long k = 0; k < n; k++) {
       ESegment *seg = ld->GetSegment(rows[order[k].first].segment);
       if (seg->GetPoint(order[k].second + 1)->IsMapped())
-        out[order[k].first][slot[k]] = seg->CalculateTheoreticalCrossSection(order[k].second, lc, config, ld, results);
+        out[order[k].first][slot[k]] =
+            azure2::EvaluateModelPoint(*seg, order[k].second, lc, config, results, azure2::LeafValues::Calculate);
     }
   };
   auto fillCompound = [&](const vector_r &p) {
@@ -1943,7 +1944,7 @@ std::vector<THMRows> ComputeTHMRows(CNuc *lc, EData *ld, azure2::Results &result
       if (!pt) continue;
       d.push_back(pt->GetCMCrossSection());
       e.push_back(pt->GetCMCrossSectionError());
-      pt->SetFitCrossSection(results, tr.m[d.size() - 1]);
+      pt->SetModelValue(results, tr.m[d.size() - 1]);
     }
     const size_t n = d.size();
     if (ld->ThmGroupOf(tr.segment) >= 0) continue;  // a THM experiment: below
@@ -1958,7 +1959,6 @@ std::vector<THMRows> ComputeTHMRows(CNuc *lc, EData *ld, azure2::Results &result
     bool varyScale = false;
     double s;
     if (seg->IsProfiledNorm()) {
-      seg->ProfileNormChiSquared(results);  // sets n* (or 1 if degenerate), as the CLI
       varyScale = (Smd > 0.0 && Smm > 0.0);
       s = varyScale ? Smd / Smm : 1.0;
     } else {
@@ -2000,7 +2000,7 @@ std::vector<THMRows> ComputeTHMRows(CNuc *lc, EData *ld, azure2::Results &result
       if (ld->ThmGroupOf(rows[t].segment) == g) members.push_back(t);
     if (members.empty()) continue;
     ld->ProfileThmGroup(g, results);  // norms and profile from the models set above
-    const ThmProfile &prof = ld->GetThmGroup(g).profile;
+    const ThmProfile &prof = results.objective.thmProfiles[g];
     std::vector<double> m, d, e, energy, Jm;
     for (size_t t : members) {
       ESegment *seg = ld->GetSegment(rows[t].segment);

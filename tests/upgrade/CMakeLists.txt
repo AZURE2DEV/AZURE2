@@ -79,6 +79,37 @@ add_test(NAME upgrade_results_owner COMMAND results_owner_test ${CMAKE_CURRENT_S
          WORKING_DIRECTORY ${_results_owner_dir})
 set_tests_properties(upgrade_results_owner PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2" TIMEOUT 600)
 
+# A working copy that evaluated other parameters before gives a fresh copy's bits (docs/upgrade/data_model.md S1):
+# per-segment chi^2 and model values, on T2, natural_neon, shift_sqrt_subpoints (sqrt, shiftfn), 18O_p_a_thm and a
+# 7Li(p,n) point an energy shift moves out of the kinematic range, each on a copy of its input files.
+add_executable(history_test history_test.cpp)
+target_link_libraries(history_test PRIVATE AZURE2Core)
+set(_history_dir ${CMAKE_CURRENT_BINARY_DIR}/history)
+foreach(_h T2:${CMAKE_CURRENT_SOURCE_DIR}/T2 natural_neon:${CMAKE_SOURCE_DIR}/tests/natural_neon
+        shift_sqrt:${CMAKE_SOURCE_DIR}/tests/shift_sqrt_subpoints/models thm:${CMAKE_SOURCE_DIR}/tests/18O_p_a_thm)
+  string(REPLACE ":" ";" _hp ${_h})
+  list(GET _hp 0 _name)
+  list(GET _hp 1 _src)
+  file(MAKE_DIRECTORY ${_history_dir}/${_name}/output ${_history_dir}/${_name}/checks)
+  file(COPY ${_src}/ DESTINATION ${_history_dir}/${_name} PATTERN "output" EXCLUDE PATTERN "checks" EXCLUDE
+       PATTERN "expected" EXCLUDE)
+endforeach()
+# pn: tests/7Li_p_ay with a lab-differential 7Li(p,n) point at 1.90 MeV, 13 deg and a fitted shift of -15 keV: at A
+# (1.885 MeV, theta_max 11.7 deg with the engine's masses) the shift moves it beyond the kinematic range, at B (+1 keV,
+# 15.0 deg) back inside, so a copy's angle and Jacobian at A must not be those B left (data_model.md H4).
+file(MAKE_DIRECTORY ${_history_dir}/pn/output ${_history_dir}/pn/checks ${_history_dir}/pn/data)
+file(READ ${CMAKE_SOURCE_DIR}/tests/7Li_p_ay/7Li_p_ay.azr _pn)
+string(REPLACE "<segmentsData>\n" "<segmentsData>\n1 5 2 1.8 2.0 0 180 1 1 0 0 -0.015 0 1 data/pn13.dat 0 0\n" _pn "${_pn}")
+file(WRITE ${_history_dir}/pn/pn.azr "${_pn}")
+file(WRITE ${_history_dir}/pn/data/pn13.dat "1.90 13 1.0 0.1\n")
+file(COPY ${CMAKE_SOURCE_DIR}/tests/7Li_p_ay/data/ DESTINATION ${_history_dir}/pn/data)
+add_test(NAME upgrade_history
+         COMMAND history_test ${_history_dir}/T2/T2.azr ${_history_dir}/natural_neon/natural_neon.azr
+                 ${_history_dir}/shift_sqrt/sqrt.azr ${_history_dir}/shift_sqrt/shiftfn.azr
+                 ${_history_dir}/thm/18O_p_a_thm.azr ${_history_dir}/pn/pn.azr
+         WORKING_DIRECTORY ${_history_dir})
+set_tests_properties(upgrade_history PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2" TIMEOUT 900)
+
 # A fit does not depend on the number of threads: pooled working copies give a fresh copy's bits, and fits at 1 and
 # 4 threads evaluate the same vectors to the same values (tests/fit_threads/check.sh, docs/upgrade/fit_threads.md).
 add_test(NAME fit_threads COMMAND bash ${CMAKE_SOURCE_DIR}/tests/fit_threads/check.sh $<TARGET_FILE:AZURE2>)

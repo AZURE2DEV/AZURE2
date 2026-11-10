@@ -726,7 +726,7 @@ int AZUREMain::operator()() {
         configure().outStream << "Segment #"
                               << segment->GetSegmentKey()
                               << " Chi-Squared/N: "
-                              << segment->GetSegmentChiSquared() / segment->NumPoints()
+                              << results.objective.segmentChi2[segment - data()->GetSegments().begin() + 1] / segment->NumPoints()
                               << std::endl;
         // With component segments, no need to skip - total capture is handled within the segment
       }
@@ -754,7 +754,7 @@ int AZUREMain::operator()() {
           for (int s = 1; s <= data()->NumSegments(); s++) {
             ESegment *seg = data()->GetSegment(s);
             if (!seg) continue;
-            chi2data += seg->GetSegmentChiSquared();
+            chi2data += results.objective.segmentChi2[s];
             nData += seg->NumPoints();
           }
           // Degrees of freedom use the total number of free fit parameters

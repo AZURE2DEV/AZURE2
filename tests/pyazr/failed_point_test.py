@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """A point whose calculation fails is NaN, also in a composite (SUM / RATIO) segment, and the run says so.
 
-ESegment::CalculateTheoreticalCrossSection evaluates a segment's base point and the points of its components.  Before
+azure2::EvaluateModelPoint evaluates a segment's base point and the points of its components.  Before
 2026-11-01 it caught every exception there: a failed base point gave 0, a failed SUM component was left out of the sum
 (as was a component whose value was NaN or inf), a failed RATIO denominator gave 0, all without a word; the parallel
 pre-pass (EData::CalculatePointsInParallel) also set a failed point to 0.  Seen with tests/natural_neon on the R-matrix

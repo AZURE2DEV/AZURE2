@@ -21,8 +21,8 @@ namespace experiment {
  *   Transform  T = exp(-n s) (transmission) or Y0 = (s / s_t)(1 - exp(-n s_t)) (SAMMY's self-shielded yield) of the
  *              weighted term sums s, s_t at every sub-point of the base unit, then the base unit's kernel
  *
- * Every node's arithmetic is the engine's, in the engine's order of operations (src/ESegment.cpp,
- * CalculateTheoreticalCrossSection and TransformedValue), so that the tree reproduces today's model values bit for
+ * Every node's arithmetic is the engine's, in the engine's order of operations (src/ModelPass.cpp,
+ * ComposeModelValue and TransformedValue), so that the tree reproduces today's model values bit for
  * bit; `backward` is the adjoint of each node in the order src/AZUREGrad.cpp uses (GradOnePoint, shared-component
  * route; GradTransformedPoint).  experiment/README.md says where the two differ and why.
  *
@@ -58,7 +58,7 @@ struct SparseRows {
 };
 
 /*!
- * The apparatus of a Transform at one point, as the engine lays it out (ESegment::TransformedValue).
+ * The apparatus of a Transform at one point, as the engine lays it out (TransformedValue in src/ModelPass.cpp).
  *
  * - subPoints = false: no sub-point effect; F is applied to the terms' point values (their own folded values) and
  *   is the model value.

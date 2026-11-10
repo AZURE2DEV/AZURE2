@@ -5,7 +5,7 @@
 #
 # A lab-frame differential RATIO segment (isDiff 1) is base / denominator in the lab: sigma_lab = sigma_cm / J, so the
 # model is (sigma_cm,base / sigma_cm,den) (J_den / J_base).  Up to dev 1b6c346 both factors were computed with the BASE
-# segment's entrance and exit pair and the base exit's type (ESegment::CalculateTheoreticalCrossSection): right for a
+# segment's entrance and exit pair and the base exit's type (azure2::EvaluateModelPoint): right for a
 # denominator of the same pair, and for another particle pair at a general angle without relativistic=1 (the
 # non-relativistic Jacobian uses only the point's own two angles), but wrong for another exit pair with relativistic=1
 # or at 0 / 180 deg (the mass formula), and for a photon over a particle or the reverse (the wrong kind of Jacobian).

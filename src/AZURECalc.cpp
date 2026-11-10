@@ -1,4 +1,5 @@
 #include "AZURECalc.h"
+#include "ModelPass.h"
 #include "Objective.h"
 #include "PriorCovariance.h"
 #include "Profile.h"
@@ -107,13 +108,8 @@ double SegmentLocalChi2(ESegment *segment, CNuc *lc, const Config &config, EData
   double chi = 0.0;
   const double norm = segment->GetNorm();
   for (int pid = 0; pid < segment->NumPoints(); pid++) {
-    double th = segment->CalculateTheoreticalCrossSection(pid, lc, config, ld, results);
-    EPoint *pt = segment->GetPoint(pid + 1);
-    if (!pt) continue;
-    pt->SetFitCrossSection(results, th);
-    double r = th - pt->GetCMCrossSection() * norm;
-    double err = pt->GetCMCrossSectionError() * norm;
-    if (err != 0.0) chi += (r * r) / (err * err);
+    azure2::EvaluateModelPoint(*segment, pid, lc, config, results, azure2::LeafValues::Calculate);
+    chi += azure2::PointResidual(*segment->GetPoint(pid + 1), results, norm).Chi2();
   }
   segment->AddShiftPenalty(chi);
   return chi;
@@ -253,9 +249,8 @@ ShiftColumnCount FillShiftColumns(CNuc *lc, EData *ld, azure2::Results &results,
       EPoint *pt = seg->GetPoint(pid + 1);
       if (!pt) return;
       present[pid] = 1;
-      const double model = seg->CalculateTheoreticalCrossSection(pid, lc, config, ld, results);
-      const double denom = pt->GetCMCrossSectionError() * norm;
-      byPoint[pid] = (denom != 0.0) ? (model - pt->GetCMCrossSection() * norm) / denom : 0.0;
+      azure2::EvaluateModelPoint(*seg, pid, lc, config, results, azure2::LeafValues::Calculate);
+      byPoint[pid] = azure2::PointResidual(*pt, results, norm).Pull();
     };
     // No parallel construct inside an enclosing parallel region.  In parallel each point is calculated on
     // its own, without point mapping (ScopedPointMappingOff, as in the
@@ -286,9 +281,8 @@ ShiftColumnCount FillShiftColumns(CNuc *lc, EData *ld, azure2::Results &results,
       for (int pid = 0; pid < seg->NumPoints(); pid++) {
         EPoint *pt = seg->GetPoint(pid + 1);
         if (!pt) continue;
-        const double model = seg->CalculateTheoreticalCrossSection(pid, lc, config, ld, results, pre);
-        const double denom = pt->GetCMCrossSectionError() * norm;
-        out.push_back((denom != 0.0) ? (model - pt->GetCMCrossSection() * norm) / denom : 0.0);
+        azure2::EvaluateModelPoint(*seg, pid, lc, config, results, pre ? azure2::LeafValues::Ready : azure2::LeafValues::Calculate);
+        out.push_back(azure2::PointResidual(*pt, results, norm).Pull());
       }
     }
   };
@@ -447,10 +441,7 @@ void AZURECalc::DumpNonFinite(const vector_r &p, double chi, CNuc *lc, EData *ld
     double c = 0.0;
     for (int pid = 1; pid <= seg->NumPoints(); pid++) {
       EPoint *pt = seg->GetPoint(pid);
-      if (!pt) continue;
-      const double r = pt->GetFitCrossSection(results) - pt->GetCMCrossSection() * seg->GetNorm();
-      const double e = pt->GetCMCrossSectionError() * seg->GetNorm();
-      if (e != 0.0) c += r * r / (e * e);
+      if (pt) c += azure2::PointResidual(*pt, results, seg->GetNorm()).Chi2();
     }
     segs.push_back({std::isfinite(c) ? c : std::numeric_limits<double>::max(), i});
   }
@@ -464,9 +455,8 @@ void AZURECalc::DumpNonFinite(const vector_r &p, double chi, CNuc *lc, EData *ld
     for (int pid = 1; pid <= seg->NumPoints() && shown < 6; pid++) {
       EPoint *pt = seg->GetPoint(pid);
       if (!pt) continue;
-      const double fit = pt->GetFitCrossSection(results);
-      const double e = pt->GetCMCrossSectionError() * seg->GetNorm();
-      const double pull = (e != 0.0) ? (fit - pt->GetCMCrossSection() * seg->GetNorm()) / e : 0.0;
+      const double fit = pt->GetModelValue(results);
+      const double pull = azure2::PointResidual(*pt, results, seg->GetNorm()).Pull();
       if (std::isfinite(fit) && std::fabs(pull) < 1.0e4) continue;
       shown++;
       out << "    point " << pid << " Elab " << pt->GetLabEnergy() << " Ecm " << pt->GetCMEnergy() << " angle "
@@ -543,18 +533,9 @@ double AZURECalc::operator()(const vector_r &p) const {
   }
 
   // The model value of every point, then the objective (Objective.h: data, priors and constraints, in one order).
-  for (int i = 1; i <= localData->NumSegments(); i++) {
-    ESegment *segment = localData->GetSegment(i);
-    if (!segment) continue;
-    for (int pointIdx = 0; pointIdx < segment->NumPoints(); pointIdx++) {
-      double theoreticalValue =
-          segment->CalculateTheoreticalCrossSection(pointIdx, localCompound, configure(), localData, results, pre);
-      EPoint *point = segment->GetPoint(pointIdx + 1);
-      if (point) point->SetFitCrossSection(results, theoreticalValue);
-    }
-  }
+  azure2::EvaluateModel(*localData, localCompound, configure(), results,
+                        pre ? azure2::LeafValues::Ready : azure2::LeafValues::Calculate);
   ObjectiveContext context{localCompound, localData, results, p, configure()};
-  context.storeTotals = true;
   if (limitsManager_) context.nuisance = [this](const vector_r &q) { return CalculateNuisanceChiSquared(q); };
   double chiSquared = Objective::Engine().Chi2(context);
 
@@ -636,14 +617,7 @@ void AZURECalc::WriteIterationOutput(const vector_r &p) const {
     ld->FillEnergyShiftsFromParams(p, results, ld, lc, &configure());
     if (configure().paramMask & Config::USE_BRUNE_FORMALISM) lc->CalcShiftFunctions(configure());
 
-    for (int i = 1; i <= ld->NumSegments(); i++) {
-      ESegment *segment = ld->GetSegment(i);
-      if (!segment) continue;
-      for (int pid = 0; pid < segment->NumPoints(); pid++) {
-        EPoint *pt = segment->GetPoint(pid + 1);
-        if (pt) pt->SetFitCrossSection(results, segment->CalculateTheoreticalCrossSection(pid, lc, configure(), ld, results));
-      }
-    }
+    azure2::EvaluateModel(*ld, lc, configure(), results, azure2::LeafValues::Calculate);
 
     AZUREParams params;
     lc->FillMnParams(params, &configure());
@@ -696,16 +670,10 @@ double AZURECalc::Chi2On(CNuc *lc, EData *ld, azure2::Results &results, const ve
   if (configure().paramMask & Config::USE_BRUNE_FORMALISM) lc->CalcShiftFunctions(configure(), false);
   const bool pre = PrecalculatePoints(lc, ld, results, thmOnly);
 
-  for (int i = 1; i <= ld->NumSegments(); i++) {
-    ESegment *segment = ld->GetSegment(i);
-    if (!segment) continue;
-    if (thmOnly && !segment->IsTHM()) continue;
-    for (int pid = 0; pid < segment->NumPoints(); pid++) {
-      double th = segment->CalculateTheoreticalCrossSection(pid, lc, configure(), ld, results, pre);
-      EPoint *pt = segment->GetPoint(pid + 1);
-      if (pt) pt->SetFitCrossSection(results, th);
-    }
-  }
+  for (int i = 1; i <= ld->NumSegments(); i++)
+    if (!thmOnly || ld->GetSegment(i)->IsTHM())
+      azure2::EvaluateModelSegment(*ld->GetSegment(i), lc, configure(), results,
+                                   pre ? azure2::LeafValues::Ready : azure2::LeafValues::Calculate);
   // The objective of operator() (Objective.h), on these working copies: the finite-difference columns of
   // Gradient(), the AZURE_GRAD_CHECK reference and the LM / GSL-LM cost differentiate or minimize the same function.
   // thmOnly: the THM segments' data part alone, which adds to an analytic gradient that has every other term.
@@ -846,8 +814,8 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
     double norm = seg->GetNorm();
     double dataval = pt->GetCMCrossSection();
     double cmErr = pt->GetCMCrossSectionError();
-    double r = model - dataval * norm;
-    double err = cmErr * norm;
+    const azure2::Residual res = azure2::DataResidual(model, dataval, cmErr, norm);
+    const double r = res.difference, err = res.error;
     if (err == 0.0) return 0.0;
     if (seg->GetCovarianceGroup() >= 0) {
       // chi2 = r^T M^-1 r with r_i = (model - d n)/(cmErr n): d chi2/d r_i = 2 z_i, z = M^-1 r;
@@ -1750,11 +1718,8 @@ bool AZURECalc::ResidualsOnly(const vector_r &full, vector_r &residuals) const {
     if (!segment) continue;
     const double norm = segment->GetNorm();
     for (int pid = 0; pid < segment->NumPoints(); pid++) {
-      EPoint *pt = segment->GetPoint(pid + 1);
-      if (!pt) continue;
-      double th = segment->CalculateTheoreticalCrossSection(pid, lc, configure(), ld, results);
-      double denom = pt->GetCMCrossSectionError() * norm;
-      residuals.push_back(denom != 0.0 ? (th - pt->GetCMCrossSection() * norm) / denom : 0.0);
+      azure2::EvaluateModelPoint(*segment, pid, lc, configure(), results, azure2::LeafValues::Calculate);
+      residuals.push_back(azure2::PointResidual(*segment->GetPoint(pid + 1), results, norm).Pull());
     }
   }
   if (ld->HasCovariance()) ld->WhitenResidualRows(residuals, nullptr, 0);

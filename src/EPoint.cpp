@@ -410,7 +410,6 @@ double EPoint::GetOriginalEnergy() const {
   return original_energy_;
 }
 
-
 /*!
  * Returns the Legendre polynomial specified by an order.
  */
@@ -680,7 +679,6 @@ complex EPoint::GetECAmplitudeWithShift(int kGroupNum, int ecMGroupNum, CNuc *th
   return GetECAmplitude(kGroupNum, ecMGroupNum);
 }
 
-
 /*!
  * If a point is mapped, returns an EnergyMap structure containing the point to which it is mapped.
  */
@@ -724,7 +722,7 @@ void EPoint::Initialize(CNuc *compound, const Config &configure) {
 // The formulas are azure2::experiment's (experiment/include/azure2/experiment/Frames.h, docs/upgrade/data_model.md
 // step S6); these functions read the point's lab values and its pairs, call them, and store the results in the point
 // with the state rules they always had (the maximum lab angle and the reason kept from the last map that set them; a
-// relativistic Jacobian kept at its last valid value where an energy shift moved the point beyond the kinematic
+// relativistic Jacobian kept at its load-time value where an energy shift moved the point beyond the kinematic
 // range).  ESegment::ConvertPointToCM is the one sequence that calls them.
 
 void EPoint::ApplyAngleLimit(const azure2::experiment::AngleLimit &lim) const {
@@ -871,7 +869,7 @@ void EPoint::ConvertCrossSection(PPair *entrancePair, PPair *exitPair) {
   double relAngle;
   if (Kinematics::Relativistic()) {
     // Unreached only for a point an energy shift moved past the kinematic limit mid-fit (the angle converter
-    // warned and kept the last valid angle): keep the last valid factor too rather than a non-relativistic one.
+    // warned): the factor stays the one the point was loaded with (KeepLoadFrame), not a non-relativistic one.
     if (this->RelativisticLabToCM(entrancePair, exitPair, this->GetCMAngle(), relAngle, conversionFactor))
       crossSectionKinFactor_ = conversionFactor;
     cm_crosssection_ = this->GetLabCrossSection() * crossSectionKinFactor_;
@@ -890,7 +888,7 @@ void EPoint::ConvertCrossSection(PPair *entrancePair, PPair *exitPair) {
 /*!
  * dOmega_lab/dOmega_cm of a particle at this point, without storing it (the RATIO frame factors,
  * ESegment::RatioTermFrameFactor).  Relativistic=1: the relativistic map's factor where it reaches the lab angle,
- * otherwise -- unlike ConvertCrossSection, which keeps the last valid factor -- the non-relativistic one.
+ * otherwise -- unlike ConvertCrossSection, which keeps the load-time factor -- the non-relativistic one.
  */
 
 double EPoint::CalculateCrossSectionConversionFactor(PPair *entrancePair, PPair *exitPair) {
@@ -922,7 +920,7 @@ void EPoint::ConvertCrossSectionGammas(PPair *entrancePair) {
 
 /*!
  * The lab-to-c.m. conversion factor for gamma rays (the one ConvertCrossSectionGammas stores; also the
- * RATIO path of ESegment::CalculateTheoreticalCrossSection).
+ * RATIO path of azure2::EvaluateModelPoint).
  */
 
 double EPoint::CalculateCrossSectionGammaConversionFactor(PPair *entrancePair) {
@@ -1169,7 +1167,6 @@ void EPoint::CalcLegendreP(int maxL, CNuc *theCNuc, TargetEffect *targetEffect) 
     this->GetSubPoint(i)->CalcLegendreP(maxL, theCNuc, targetEffect);
   }
 }
-
 
 namespace {
 /* Below E = -B the half-off-shell momentum is imaginary and the form factor
@@ -1925,15 +1922,11 @@ ScopedPointMappingOff::~ScopedPointMappingOff() { tlPointMappingOff = previous_;
 bool ScopedPointMappingOff::Active() { return tlPointMappingOff; }
 
 void EPoint::MarkFailed(azure2::Results &results, const char *role, const Config &configure, const char *why) {
-  const double nan = std::numeric_limits<double>::quiet_NaN();
-  this->SetFitCrossSection(results, nan);
-  this->SetFitE1CrossSection(results, nan);
-  this->SetFitE2CrossSection(results, nan);
-  for (int i = 1; i <= this->NumLocalMappedPoints(); i++) {
-    EPoint *mapped = this->GetLocalMappedPoint(i);
-    mapped->SetFitCrossSection(results, nan);
-    mapped->SetFitE1CrossSection(results, nan);
-    mapped->SetFitE2CrossSection(results, nan);
+  // Every fixed quantity NaN and no angular-distribution coefficient, on this point and every point mapped onto it.
+  for (int i = 0; i <= this->NumLocalMappedPoints(); i++) {
+    EPoint *p = i ? this->GetLocalMappedPoint(i) : this;
+    std::fill(p->Rec(results), p->Rec(results) + azure2::Results::kNumFixed, std::numeric_limits<double>::quiet_NaN());
+    if (p->num_ang_slots_) p->Rec(results)[azure2::Results::AngularOffset()] = 0.0;
   }
   static std::atomic<bool> reported(false);
   if (!reported.exchange(true)) {
@@ -1948,7 +1941,7 @@ void EPoint::Calculate(CNuc *theCNuc, const Config &configure, azure2::Results &
                        int subPointNum) {
   // Test hook (tests/pyazr/failed_point_test.py): AZURE_TEST_FAIL_E=<lab energy, MeV> makes the calculation of a
   // data or test point at that energy throw, AZURE_TEST_FAIL_EXIT=<pair key> only for that exit pair, so the
-  // handling of a failed point (ESegment::CalculateTheoreticalCrossSection) can be exercised.
+  // handling of a failed point (azure2::EvaluateModelPoint) can be exercised.
   static const double testFailE = [] { const char *v = std::getenv("AZURE_TEST_FAIL_E"); return v ? std::atof(v) : -1.0; }();
   static const int testFailExit = [] { const char *v = std::getenv("AZURE_TEST_FAIL_EXIT"); return v ? std::atoi(v) : 0; }();
   if (testFailE >= 0.0 && !parent && std::fabs(this->GetLabEnergy() - testFailE) <= 1e-9 * std::max(1.0, testFailE) &&
@@ -2040,7 +2033,7 @@ void EPoint::Calculate(CNuc *theCNuc, const Config &configure, azure2::Results &
     // for edge blending and for the automatic per-point decision.  It is
     // obtained from a probe copy that pretends not to carry the effect, so the
     // ordinary single-point machinery above stays the single source of truth.
-    double bareValue = 0.0;
+    double bareValue = 0.0, bareE1 = 0.0, bareE2 = 0.0;
     bool haveBare = false;
     if (blend < 1.0 || autoTol > 0.) {
       EPoint probe(*this);
@@ -2051,6 +2044,7 @@ void EPoint::Calculate(CNuc *theCNuc, const Config &configure, azure2::Results &
       probe.integrationPoints_.clear();
       probe.Calculate(theCNuc, configure, probeResults);
       bareValue = probe.GetFitCrossSection(probeResults);
+      bareE1 = probe.GetFitE1CrossSection(probeResults), bareE2 = probe.GetFitE2CrossSection(probeResults);
       haveBare = true;
     }
 
@@ -2092,7 +2086,9 @@ void EPoint::Calculate(CNuc *theCNuc, const Config &configure, azure2::Results &
         if (estimate > autoTol * std::max(std::fabs(sMid), 1e-300)) allPass = false;
       }
       if (allPass) {
+        // the bare point's sigma and its E1 and E2 parts (what an E1 / E2 line reads)
         this->SetFitCrossSection(results, bareValue);
+        this->SetFitE1CrossSection(results, bareE1), this->SetFitE2CrossSection(results, bareE2);
         for (int m = 1; m <= numMapped; m++) {
           EPoint *mappedPoint = this->GetLocalMappedPoint(m);
           EPoint mappedProbe(*mappedPoint);
@@ -2103,6 +2099,8 @@ void EPoint::Calculate(CNuc *theCNuc, const Config &configure, azure2::Results &
           mappedProbe.integrationPoints_.clear();
           mappedProbe.Calculate(theCNuc, configure, probeResults);
           mappedPoint->SetFitCrossSection(results, mappedProbe.GetFitCrossSection(probeResults));
+          mappedPoint->SetFitE1CrossSection(results, mappedProbe.GetFitE1CrossSection(probeResults));
+          mappedPoint->SetFitE2CrossSection(results, mappedProbe.GetFitE2CrossSection(probeResults));
         }
         return;
       }
@@ -2405,8 +2403,7 @@ namespace {
 // restricted to the c.m. window [lo, hi]: the cross section (through `rd`) and, for a yield, the
 // stopping power are interpolated linearly between the two sub-points that bracket each node.
 // Accumulates num += integral of wNum(E) sigma(E) [/ (stopping(E) 1e24)] and den += integral of
-// wDen(E), so a kernel average is num / den and a yield is num alone. The one quadrature every
-// experimental effect uses; before 2026-10 it was written out separately in five branches.
+// wDen(E), so a kernel average is num / den and a yield is num alone: the one quadrature of every effect.
 template <class V, class Read, class WNum, class WDen>
 void GridQuadrature(EPoint *point, Read rd, double lo, double hi, bool divideByStopping, WNum wNum, WDen wDen,
                     V &num, double &den) {
@@ -2846,6 +2843,9 @@ void EPoint::IntegrateTargetEffect(const Config &configure, azure2::Results &res
   this->SetFitCrossSection(results, this->IntegrateTargetEffectImpl<double>(configure, [this, &results](int j) {
     return this->GetSubPoint(j)->GetFitCrossSection(results);
   }));
+}
+double EPoint::IntegrateSubPointValues(const Config &configure, const std::vector<double> &values) {
+  return this->IntegrateTargetEffectImpl<double>(configure, [&values](int j) { return values[j - 1]; });
 }
 
 bool EPoint::TargetEffectWeights(const Config &configure, std::vector<double> &c) {

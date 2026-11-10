@@ -2,6 +2,37 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-10 (day) — Phase 4 S1, S2 remainder and S4: one model pass (`feature/upgrade-4-model-pass`)
+
+**Done** (`data_model.md` S1, S2, S4; brief F).
+- **S2** (61dfec8c): a point an energy shift moves beyond the kinematic range keeps its load-time c.m. angle and factors
+  (`EPoint::KeepLoadFrame` / `RestoreLoadFrame`, H4); one component-key counter per `EData`, the two
+  `CreateComponentSegment` overloads one (H10); a beta-delayed spectrum is refused with exit -1 and with a target
+  integration, beam profile or screening on its line (`tests/beta_delayed_alpha/check.sh`; no tree project uses them).
+- **S1** (3ca0ff6b): `upgrade_history` (`tests/upgrade/history_test.cpp`) — fresh vs pooled copy, per-segment chi^2
+  and model values bit for bit, on T2, natural_neon, shift_sqrt (sqrt, shiftfn), 18O_p_a_thm and a generated 7Li(p,n)
+  point that a shift moves out of range; component keys of a second load.  On 041edabf it fails for H4 and H10 only.
+- **S4** (18e5ce8b): `Results::model` and `Results::objective`; `include/ModelPass.h` (`EvaluateModel*`, the one
+  combination `ComposeModelValue` in `src/ModelPass.cpp`, `TransformedValue` on a local vector, `DataResidual`);
+  every former `CalculateTheoreticalCrossSection` loop (20 calls) and residual (13 expressions) goes through it;
+  the objective's stored values (profiled norms, THM profiles, segment chi^2, totals) are in the buffer, the writer
+  and the API read them there (`EData::NormUsed`); stale reads of S3 (b) fixed (MarkFailed, failed sample terms,
+  automatic-tolerance E1/E2); check 28 (numbered 27 on the branch; renumbered at the merge); poison test widened (natural_neon, transmission + yield under a spread,
+  sample transmission).
+
+**Verified** (3 threads, work/b-model): 179 x 3 identical to tab-p3f after S2, S4 and the final commit
+(689/662/689); ctest -LE slow 150/150 (final tree); run_tests 136/136 (S4); calculations 1 vs 2 threads 12/12;
+T1/T3 fits (MIGRAD and gradient, 150 calls, 1 thread) every output file identical to 041edabf; T2 bench calc ~1.0-1.1 s,
+fit200 62-71 s on both, peak RSS 268 -> 271 MB (sizeof(EPoint) 816 -> 840 B).  Not run: 8 threads, TSan, slow ctests.
+
+**Still written into the data set by an evaluation** (not moved here): the covariance seeds (M^-1 r)_i
+(`ESegment::SetCovarianceSeed`, read by the gradient after `PrepareCovarianceSeeds`), and what the hand-over sets
+(norms, shifts, thicknesses, grids).  **Open:** a fixed energy-shift parameter changed in the vector (pyazr can) moves the
+points, and a copy that evaluated a nonzero value and then 0 does not give a fresh copy's result (history test with
+fixed shifts moved, on 041edabf; inferred cause: an inactive shift is not re-applied in
+`FillEnergyShiftsFromParamsImpl`) — not fixed.  The API's regular `UpdateSegments` branch returns the leaf sigma of an
+unassembled E1/E2-only segment, not its model value (unchanged; a decision).  Next: S5 (the plan).
+
 ## 2026-11-10 (morning) — Phase 4 S15: `<modelData>`, `ModelDataTerm`, ωγ first; scattering lengths as its rows (`feature/upgrade-4-model-data`)
 
 **Done** (`data_model.md` §4, M10; `project_format3.md` §3.10; `objective.md` §5).

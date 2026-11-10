@@ -5,6 +5,7 @@
 #include "Config.h"
 #include "CovarianceBand.h"
 #include "EData.h"
+#include "ModelPass.h"
 #include "ECAmplitudeCache.h"
 #include "ECTable.h"
 #include "AdaptiveIntegrationGrid.h"
@@ -185,6 +186,17 @@ static bool TotalAllowed(CNuc *theCNuc, ESegment &segment, int key, bool isTest,
   return true;
 }
 
+// A beta-delayed spectrum (entrance pair of type 20) is the energy distribution of one decay pair: its energies are
+// converted with that pair's masses (ESegment::ConvertPointEnergyToCM), so a segment without one (exit -1) is refused.
+static bool BetaDelayedAllowed(CNuc *theCNuc, ESegment &segment, int key, bool isTest, const Config &configure) {
+  if (!theCNuc->IsPairKey(segment.GetEntranceKey()) || segment.GetExitKey() != -1) return true;
+  if (theCNuc->GetPair(theCNuc->GetPairNumFromKey(segment.GetEntranceKey()))->GetPType() != 20) return true;
+  configure.outStream << "ERROR: " << (isTest ? "test segment" : "segment") << " #" << key << ": a beta-delayed "
+                      << "spectrum (entrance pair " << segment.GetEntranceKey() << " of type 20) needs its decay pair as"
+                      << " the exit pair, not -1 (total capture)." << std::endl;
+  return false;
+}
+
 static bool NaturalAllowed(CNuc *theCNuc, ESegment &segment, int key, bool isTest, const Config &configure) {
   const char *what = isTest ? "test segment" : "segment";
   const std::string &token = segment.GetNaturalToken();
@@ -221,7 +233,7 @@ static bool NaturalAllowed(CNuc *theCNuc, ESegment &segment, int key, bool isTes
  * The decomposition of a sample segment, one file per segment since
  * AZUREOut files are named by pair keys only: the energy, the total the fit
  * compares with the data, and the abundance-weighted term of every compound
- * nucleus (ESegment::CalculateTheoreticalCrossSection).  Same frame as the
+ * nucleus (azure2::EvaluateModelPoint).  Same frame as the
  * AZUREOut file (kinflag.dat), one line per point.
  */
 static void WriteNaturalDecomposition(const Config &configure, const azure2::Results &results, bool isExtrap,
@@ -244,7 +256,7 @@ static void WriteNaturalDecomposition(const Config &configure, const azure2::Res
     double kin = (kinflag != 0) ? point->GetCrossSectionKinFactor() : 1.0;
     if (kin == 0.0) kin = 1.0;
     out << std::setw(18) << std::scientific << (kinflag != 0 ? point->GetLabEnergy() : point->GetCMEnergy())
-        << std::setw(18) << std::scientific << point->GetFitCrossSection(results) / kin;
+        << std::setw(18) << std::scientific << point->GetModelValue(results) / kin;
     const std::vector<double> &terms = point->GetNaturalTerms(results);
     for (size_t k = 0; k < nucleusLabels.size(); k++)
       out << std::setw(18) << std::scientific << (k < terms.size() ? terms[k] / kin : 0.0);
@@ -356,6 +368,7 @@ int EData::Fill(const Config &configure, CNuc *theCNuc, const azure2::experiment
           if (!CoefficientsAllowed(theCNuc, NewSegment, numTotalSegments, configure)) return -1;
           if (!NaturalAllowed(theCNuc, NewSegment, numTotalSegments, false, configure)) return -1;
           if (!TotalAllowed(theCNuc, NewSegment, numTotalSegments, false, configure)) return -1;
+          if (!BetaDelayedAllowed(theCNuc, NewSegment, numTotalSegments, false, configure)) return -1;
           if (!UPOSAllowed(theCNuc, NewSegment, numTotalSegments, false, configure)) return -1;
           if (!TotalCaptureCodeOk(NewSegment, numTotalSegments, false, configure)) return -1;
           UPOSLabNote(NewSegment, numTotalSegments, false, configure);
@@ -546,6 +559,7 @@ int EData::MakePoints(const Config &configure, CNuc *theCNuc, const azure2::expe
           if (!AnalyzingPowerAllowed(theCNuc, NewSegment, numTotalSegments, true, configure)) return -1;
           if (!NaturalAllowed(theCNuc, NewSegment, numTotalSegments, true, configure)) return -1;
           if (!TotalAllowed(theCNuc, NewSegment, numTotalSegments, true, configure)) return -1;
+          if (!BetaDelayedAllowed(theCNuc, NewSegment, numTotalSegments, true, configure)) return -1;
           if (!UPOSAllowed(theCNuc, NewSegment, numTotalSegments, true, configure)) return -1;
           if (!TotalCaptureCodeOk(NewSegment, numTotalSegments, true, configure)) return -1;
           UPOSLabNote(NewSegment, numTotalSegments, true, configure);
@@ -1257,6 +1271,15 @@ int EData::SetUpTargetEffects(const Config &configure, CNuc *compound,
         configure.outStream << "ERROR: segment #" << segment->GetSegmentKey() << ": free-gas Doppler broadening"
                             << " (doppler) needs a particle entrance pair (a beam on target atoms in thermal motion)"
                             << std::endl;
+        return -1;
+      }
+      // A beta-delayed spectrum has no beam: a target integration or a beam profile would fold the decay energy with
+      // a beam's energy loss, screening would use the beta pair's charges.  A detector resolution (Gaussian, UDR) applies.
+      if (entrancePair->GetPType() == 20 &&
+          (targetEffect->IsTargetIntegration() || targetEffect->IsBeamProfile() || targetEffect->HasScreening())) {
+        configure.outStream << "ERROR: segment #" << segment->GetSegmentKey() << ": a beta-delayed spectrum (entrance"
+                            << " pair of type 20) takes a detector resolution only (Gaussian convolution, UDR), not a"
+                            << " target integration, a beam profile or electron screening." << std::endl;
         return -1;
       }
       if (targetEffect->IsUdr()) {
@@ -2239,7 +2262,7 @@ static void WriteBandLine(std::ostream &o, double energy, double excitation,
     << std::endl;
 }
 
-void EData::WriteOutputFiles(const Config &configure, const azure2::Results &results, bool isFit, const BandData *band) {
+void EData::WriteOutputFiles(const Config &configure, azure2::Results &results, bool isFit, const BandData *band) {
   AZUREOutput output(configure.outputdir);
   std::ofstream chiOut;
   if (!isFit && (configure.paramMask & Config::CALCULATE_WITH_DATA)) {
@@ -2263,12 +2286,15 @@ void EData::WriteOutputFiles(const Config &configure, const azure2::Results &res
   }
   if (kinflag != 0) configure.outStream << "Using alternate output format..." << std::endl;
 
-  // THM experiments: refresh their profile from the models the points hold
-  // (a snapshot written during a fit has not been profiled), so that the norm
-  // and the background written are those of these models.
-  if (configure.paramMask & Config::CALCULATE_WITH_DATA)
+  // THM experiments and profiled THM norms: their profile from the model values in `results` (a snapshot written
+  // during a fit has not been profiled), so that the norm and the background written are those of these models.
+  if (configure.paramMask & Config::CALCULATE_WITH_DATA) {
     for (int g = 0; g < NumThmGroups(); g++)
       if (!thmGroups_[g].trivial) ProfileThmGroup(g, results);
+    for (int i = 1; i <= NumSegments(); i++)
+      if (ThmGroupOf(i) < 0 && GetSegment(i)->IsProfiledNorm())
+        results.objective.segmentChi2[i] = GetSegment(i)->ProfileNormChiSquared(results, results.objective.norm[i]);
+  }
 
   // When a covariance is available, write a sibling ".band" file per output file,
   // with the same block/point structure so the GUI can pair them.
@@ -2351,18 +2377,18 @@ void EData::WriteOutputFiles(const Config &configure, const azure2::Results &res
         out.precision(10);
         if (segment->IsAngularDist()) {
           out << std::setw(18) << std::scientific << point->GetCMEnergy();
-          for (int i = 0; i < point->GetNumAngularDists(results); i++)
-            out << std::setw(18) << point->GetAngularDist(results, i);
+          for (int i = 0; i < point->GetNumModelAngularDists(results); i++)
+            out << std::setw(18) << point->GetModelAngularDist(results, i);
           out << std::endl;
           if (bandOut) WriteBandLine(*bandOut, point->GetCMEnergy(), point->GetExcitationEnergy(),
                                      point->GetCMAngle(), 0., 0., 0.);
         } else {
-          double fitCrossSection = point->GetFitCrossSection(results);
-          if (thmBackground) fitCrossSection += ThmBackgroundAt(segmentIndex, point->GetCMEnergy());
+          double fitCrossSection = point->GetModelValue(results);
+          if (thmBackground) fitCrossSection += ThmBackgroundAt(segmentIndex, point->GetCMEnergy(), results);
           if (firstSumIterator != GetSegments().end()) {
             int pointIndex = point - segment->GetPoints().begin() + 1;
             for (ESegmentIterator it = firstSumIterator; it < segment; it++)
-              fitCrossSection += it->GetPoint(pointIndex)->GetFitCrossSection(results);
+              fitCrossSection += it->GetPoint(pointIndex)->GetModelValue(results);
           }
           out << std::setw(18) << std::scientific << point->GetCMEnergy()
               << std::setw(18) << std::scientific << point->GetExcitationEnergy()
@@ -2370,7 +2396,7 @@ void EData::WriteOutputFiles(const Config &configure, const azure2::Results &res
               << std::setw(18) << std::scientific << fitCrossSection
               << std::setw(18) << std::scientific << fitCrossSection * point->GetSFactorConversion();
           if (!output.IsExtrap()) {
-            double dataNorm = thisSegment->GetNorm();
+            double dataNorm = NormUsed((int)(thisSegment - GetSegments().begin()) + 1, results);
             out << std::setw(18) << std::scientific << point->GetCMCrossSection() * dataNorm
                 << std::setw(18) << std::scientific << point->GetCMCrossSectionError() * dataNorm
                 << std::setw(18) << std::scientific << point->GetCMCrossSection() * dataNorm * point->GetSFactorConversion()
@@ -2392,19 +2418,19 @@ void EData::WriteOutputFiles(const Config &configure, const azure2::Results &res
         out.precision(10);
         if (segment->IsAngularDist()) {
           out << std::setw(18) << std::scientific << point->GetCMEnergy();
-          for (int i = 0; i < point->GetNumAngularDists(results); i++)
-            out << std::setw(18) << point->GetAngularDist(results, i);
+          for (int i = 0; i < point->GetNumModelAngularDists(results); i++)
+            out << std::setw(18) << point->GetModelAngularDist(results, i);
           out << std::endl;
           if (bandOut) WriteBandLine(*bandOut, point->GetLabEnergy(), point->GetExcitationEnergy(),
                                      point->GetLabAngle(), 0., 0., 0.);
         } else {
-          double fitCrossSection = (point->GetFitCrossSection(results) +
-                                    (thmBackground ? ThmBackgroundAt(segmentIndex, point->GetCMEnergy()) : 0.0)) /
+          double fitCrossSection = (point->GetModelValue(results) +
+                                    (thmBackground ? ThmBackgroundAt(segmentIndex, point->GetCMEnergy(), results) : 0.0)) /
                                    point->GetCrossSectionKinFactor();
           if (firstSumIterator != GetSegments().end()) {
             int pointIndex = point - segment->GetPoints().begin() + 1;
             for (ESegmentIterator it = firstSumIterator; it < segment; it++)
-              fitCrossSection += it->GetPoint(pointIndex)->GetFitCrossSection(results);
+              fitCrossSection += it->GetPoint(pointIndex)->GetModelValue(results);
           }
           out << std::setw(18) << std::scientific << point->GetLabEnergy()
               << std::setw(18) << std::scientific << point->GetExcitationEnergy()
@@ -2412,7 +2438,7 @@ void EData::WriteOutputFiles(const Config &configure, const azure2::Results &res
               << std::setw(18) << std::scientific << fitCrossSection
               << std::setw(18) << std::scientific << fitCrossSection * point->GetSFactorConversion();
           if (!output.IsExtrap()) {
-            double dataNorm = thisSegment->GetNorm();
+            double dataNorm = NormUsed((int)(thisSegment - GetSegments().begin()) + 1, results);
             out << std::setw(18) << std::scientific << point->GetLabCrossSection() * dataNorm
                 << std::setw(18) << std::scientific << point->GetLabCrossSectionError() * dataNorm
                 << std::setw(18) << std::scientific << point->GetLabCrossSection() * dataNorm * point->GetSFactorConversion()
@@ -2442,16 +2468,17 @@ void EData::WriteOutputFiles(const Config &configure, const azure2::Results &res
       if (normError != 0. && thisSegment->IsVaryNorm() && !thisSegment->IsProfiledNorm() &&
           !thisSegment->IsNormPriorReplaced()) normChiSquared =
                                pow((thisSegment->GetNorm() - thisSegment->GetNominalNorm()) / normError, 2.0);
-      totalChiSquared += (thisSegment->GetSegmentChiSquared());
+      const int thisIndex = (int)(thisSegment - GetSegments().begin()) + 1;
+      totalChiSquared += results.objective.segmentChi2[thisIndex];
       totalNormChiSquared += normChiSquared;
       totalN += thisSegment->NumPoints();
       chiOut << thisSegment->GetSegmentKey()
              << ","
-             << thisSegment->GetSegmentChiSquared()
+             << results.objective.segmentChi2[thisIndex]
              << ","
              << thisSegment->NumPoints()
              << ","
-             << thisSegment->GetNorm()
+             << NormUsed(thisIndex, results)
              << ","
              << normChiSquared
              << std::endl;
@@ -2479,7 +2506,7 @@ void EData::WriteOutputFiles(const Config &configure, const azure2::Results &res
            << totalN;
     // Park formalism: the J > 0 wall, when a level sits beyond it.
     if (configure.paramMask & Config::USE_PARK_FORMALISM)
-      chiOut << " Total-Park-Chi-Squared: " << parkPenalty_;
+      chiOut << " Total-Park-Chi-Squared: " << results.objective.park;
     // The energy-shift penalties the fit minimised (ESegment::AddShiftPenalty), when
     // any shift is a fit parameter.  Without this the file reported less than the
     // minimiser's own total by exactly this amount.
@@ -2494,8 +2521,8 @@ void EData::WriteOutputFiles(const Config &configure, const azure2::Results &res
     }
     if (anyShiftVaried) chiOut << " Total-Shift-Chi-Squared: " << totalShiftChiSquared;
     // Isotopic abundances: their priors and the sum-to-one term.
-    if (abundancePenalty_ != 0.0)
-      chiOut << " Total-Abundance-Chi-Squared: " << abundancePenalty_;
+    if (results.objective.abundance != 0.0)
+      chiOut << " Total-Abundance-Chi-Squared: " << results.objective.abundance;
     // Electron-screening priors, when a screening potential has one.
     {
       bool anyPrior = false;
@@ -2527,15 +2554,16 @@ void EData::WriteOutputFiles(const Config &configure, const azure2::Results &res
       if (anyPrior) chiOut << " Total-Thickness-Chi-Squared: " << this->ThicknessPenalty();
     }
     // Nuisance priors (<parameterSettings> useAsNuisance), part of the objective in every path (objective.md D6).
-    if (nuisanceChi2_ != 0.0) chiOut << " Total-Nuisance-Chi-Squared: " << nuisanceChi2_;
+    if (results.objective.nuisance != 0.0) chiOut << " Total-Nuisance-Chi-Squared: " << results.objective.nuisance;
     // The model data (T9): <scatteringLengths> (table in scatteringLengths.out) and <modelData> (modelData.out).
-    if (scatteringLengthChi2_ != 0.0) chiOut << " Total-Scattering-Length-Chi-Squared: " << scatteringLengthChi2_;
-    if (hasModelDataChi2_) chiOut << " Total-Model-Data-Chi-Squared: " << modelDataChi2_;
+    if (results.objective.scatteringLength != 0.0)
+      chiOut << " Total-Scattering-Length-Chi-Squared: " << results.objective.scatteringLength;
+    if (results.objective.hasModelData) chiOut << " Total-Model-Data-Chi-Squared: " << results.objective.modelData;
     // Prior parameter covariance (<config> priorCovariance=): (p - mu)^T C^-1 (p - mu), whenever the key is set.
     // Written with 15 significant digits (a new field: the older ones keep their 6).
     if (!configure.priorCovariance.empty()) {
       const std::streamsize prec = chiOut.precision(15);
-      chiOut << " Total-Prior-Covariance-Chi-Squared: " << priorCovChi2_;
+      chiOut << " Total-Prior-Covariance-Chi-Squared: " << results.objective.priorCovariance;
       chiOut.precision(prec);
     }
     chiOut << std::endl
@@ -2572,7 +2600,7 @@ void EData::WriteOutputFiles(const Config &configure, const azure2::Results &res
           out << "CM,";
         } else
           out << "Lab,";
-        out << segment->GetNorm() << ","
+        out << NormUsed((int)(segment - GetSegments().begin()) + 1, results) << ","
             << segment->GetEnergyShift() << std::endl;
       }
       out.flush();
@@ -2619,7 +2647,7 @@ void EData::WriteOutputFiles(const Config &configure, const azure2::Results &res
           out << "CM,";
         } else
           out << "Lab,";
-        out << segment->GetNorm() << ","
+        out << NormUsed((int)(segment - GetSegments().begin()) + 1, results) << ","
             << segment->GetEnergyShift() << ","
             << segment->GetEnergyShiftSqrt() << std::endl;
       }
@@ -3601,68 +3629,30 @@ bool EData::CheckTransformedSegments(const Config &configure) {
   return true;
 }
 
-ESegment *EData::CreateComponentSegment(const ESegment &baseSegment, int entranceKey, int exitKey) {
-  // Create a copy of the base segment with different entrance/exit keys
-  // Store component segments separately to avoid iterator invalidation
-
-  // Add a copy of the base segment to the component segments vector
-  this->componentSegments_.push_back(baseSegment);
-  ESegment *componentSegment = &componentSegments_.back();
-
-  // Set the new entrance/exit keys for the component segment
-  componentSegment->SetEntranceKey(entranceKey);
-  componentSegment->SetExitKey(exitKey);
-
-  // Set a unique segment key to avoid cache conflicts
-  // Use negative keys for component segments to distinguish from regular segments
-  static int componentSegmentKeyCounter = -1000;
-  componentSegment->SetSegmentKey(componentSegmentKeyCounter--);
-
-  // Clear any existing components to avoid circular references
-  componentSegment->ClearComponents();
-  componentSegment->SetNatural(false);   // the weighting is the base segment's job
-  componentSegment->ApplyTotalToPoints();
-
-  // The component segment now has the same data points as the base segment
-  // but with different entrance/exit keys, so it will calculate different
-  // theoretical cross sections when initialized
-
-  return componentSegment;
-}
-
 /*!
- * Creates a component segment with a fixed angle for ratio denominators
+ * A component of a SUM, RATIO, sample or total-capture segment: a copy of the base segment, its points included,
+ * with its own pairs, kept in componentSegments_ (a deque: the base segments' pointers stay valid).  A fixed angle
+ * (deg; a RATIO denominator at one angle) puts every point there, lab and c.m. slots alike.
  */
-ESegment *EData::CreateComponentSegment(const ESegment &baseSegment, int entranceKey, int exitKey, double fixedAngle) {
-  // Create a copy of the base segment with different entrance/exit keys
+ESegment *EData::CreateComponentSegment(const ESegment &baseSegment, int entranceKey, int exitKey,
+                                        std::optional<double> fixedAngle) {
   this->componentSegments_.push_back(baseSegment);
   ESegment *componentSegment = &componentSegments_.back();
-
-  // Set the new entrance/exit keys for the component segment
   componentSegment->SetEntranceKey(entranceKey);
   componentSegment->SetExitKey(exitKey);
-
-  // Set the fixed angle by constraining min and max to the same value
-  componentSegment->SetMinAngle(fixedAngle);
-  componentSegment->SetMaxAngle(fixedAngle);
-
-  // CRITICAL: Override all point angles to the fixed angle
-  // This ensures calculations use the fixed angle, not the original data angles
-  std::vector<EPoint> &points = componentSegment->GetPoints();
-  for (auto &point : points) {
-    point.SetCMAngle(fixedAngle);
-    point.SetLabAngle(fixedAngle);  // Also set lab angle to be consistent
+  if (fixedAngle) {
+    componentSegment->SetMinAngle(*fixedAngle);
+    componentSegment->SetMaxAngle(*fixedAngle);
+    for (EPoint &point : componentSegment->GetPoints()) {
+      point.SetCMAngle(*fixedAngle);
+      point.SetLabAngle(*fixedAngle);
+    }
   }
-
-  // Set a unique segment key to avoid cache conflicts
-  static int componentSegmentKeyCounter = -1000;
-  componentSegment->SetSegmentKey(componentSegmentKeyCounter--);
-
-  // Clear any existing components to avoid circular references
-  componentSegment->ClearComponents();
-  componentSegment->SetNatural(false);   // the weighting is the base segment's job
+  // A key of its own (negative: not a segment of the file), from the data set's counter, for the caches keyed by it
+  componentSegment->SetSegmentKey(nextComponentKey_--);
+  componentSegment->ClearComponents();  // no circular references
+  componentSegment->SetNatural(false);  // the weighting is the base segment's job
   componentSegment->ApplyTotalToPoints();
-
   return componentSegment;
 }
 
@@ -3771,7 +3761,7 @@ bool ShiftsAgree(const ShiftForm &a, const ShiftForm &b) {
  * The host of a group is its first point in data order (segment, then point
  * index): every loop that calculates the whole data set walks it in that order,
  * so a host is calculated before the points that read from it
- * (ESegment::CalculateTheoreticalCrossSection; ESegment::
+ * (azure2::EvaluateModelPoint; ESegment::
  * UpdatePointEnergiesWithShift for the energy-dependent values, within a
  * segment).  The parallel loops (AZURECalc::PrecalculatePoints) hand out hosts
  * only, each of which calculates its mapped points.  The analytic gradient
@@ -4435,7 +4425,7 @@ int EData::ResolveCovarianceGroups(const Config &configure) {
   return 0;
 }
 
-double EData::CovarianceChi2Correction(const azure2::Results &results, std::vector<double> *segChis) {
+double EData::CovarianceChi2Correction(azure2::Results &results, std::vector<double> *segChis) {
   double correction = 0.0;
   std::vector<double> r, z;
   for (const std::shared_ptr<DataCovariance::Group> &gp : covGroups_) {
@@ -4445,9 +4435,7 @@ double EData::CovarianceChi2Correction(const azure2::Results &results, std::vect
     for (int a = 0; a < g.n; a++) {
       ESegment *seg = this->GetSegment(g.members[a].first);
       EPoint *pt = seg->GetPoint(g.members[a].second + 1);
-      const double norm = seg->GetNorm();
-      const double err = pt->GetCMCrossSectionError() * norm;
-      r[a] = err != 0.0 ? (pt->GetFitCrossSection(results) - pt->GetCMCrossSection() * norm) / err : 0.0;
+      r[a] = azure2::PointResidual(*pt, results, seg->GetNorm()).Pull();
       diag += r[a] * r[a];
     }
     g.EnsureFactored(r);
@@ -4465,7 +4453,7 @@ double EData::CovarianceChi2Correction(const azure2::Results &results, std::vect
     std::map<int, double> part;
     for (int a = 0; a < g.n; a++) part[g.members[a].first] += r[a] * z[a];
     for (const auto &ps : part) {
-      this->GetSegment(ps.first)->SetSegmentChiSquared(ps.second);
+      results.objective.segmentChi2[ps.first] = ps.second;
       if (segChis && ps.first < (int)segChis->size()) (*segChis)[ps.first] = ps.second;
     }
   }
@@ -4524,9 +4512,7 @@ void EData::WriteCovarianceSummary(const Config &configure, const azure2::Result
     for (int a = 0; a < g.n; a++) {
       ESegment *seg = this->GetSegment(g.members[a].first);
       EPoint *pt = seg->GetPoint(g.members[a].second + 1);
-      const double norm = seg->GetNorm();
-      const double err = pt->GetCMCrossSectionError() * norm;
-      r[a] = err != 0.0 ? (pt->GetFitCrossSection(results) - pt->GetCMCrossSection() * norm) / err : 0.0;
+      r[a] = azure2::PointResidual(*pt, results, seg->GetNorm()).Pull();
       diag += r[a] * r[a];
     }
     g.EnsureFactored(r);
@@ -4561,9 +4547,7 @@ void EData::PrepareCovarianceSeeds(CNuc *theCNuc, const Config &configure, azure
 #pragma omp parallel for schedule(dynamic) if (!omp_in_parallel())
   for (int k = 0; k < (int)work.size(); k++) {
     ScopedPointMappingOff noPointMapping;
-    ESegment *seg = work[k].first;
-    const double th = seg->CalculateTheoreticalCrossSection(work[k].second, theCNuc, configure, this, results);
-    seg->GetPoint(work[k].second + 1)->SetFitCrossSection(results, th);
+    azure2::EvaluateModelPoint(*work[k].first, work[k].second, theCNuc, configure, results, azure2::LeafValues::Calculate);
   }
   this->CovarianceChi2Correction(results);
 }
@@ -5076,6 +5060,12 @@ void EData::LayoutResults(azure2::Results *results) {
   });
   resultsSize_ = total;
   if (results) results->slot.swap(next);
+  modelSize_ = 0;
+  for (ESegment &seg : segments_)
+    for (EPoint &point : seg.GetPoints()) {
+      point.SetModelRecord(modelSize_, point.ResultAngularCapacity());
+      modelSize_ += azure2::Results::ModelRecordSize(point.ResultAngularCapacity());
+    }
 }
 
 void EData::BeginEvaluation(azure2::Results &results) {
@@ -5086,10 +5076,8 @@ void EData::BeginEvaluation(azure2::Results &results) {
     laidOut = point.ResultSlot() == offset && point.ResultAngularSlots() == nAng && point.ResultNaturalSlots() == nNat;
     offset += azure2::Results::RecordSize(nAng, nNat);
   });
-  if (!laidOut || offset != resultsSize_)
-    this->LayoutResults(&results);
-  else if (results.slot.size() != resultsSize_)
-    results.slot.resize(resultsSize_, 0.0);
+  if (!laidOut || offset != resultsSize_) this->LayoutResults(&results);
+  this->SizeResults(results);
   if (azure2::Results::PoisonRequested()) results.Poison();
 }
 
@@ -5394,7 +5382,6 @@ EData *EData::Clone() const {
   dataCopy->covGroups_ = this->covGroups_;  // shared: one factor (and one frozen model) for all copies
   dataCopy->nodeCache_ = this->nodeCache_;  // shared: a re-placed node is computed and held once
   dataCopy->priorCov_ = this->priorCov_;    // shared, read-only
-  dataCopy->priorCovChi2_ = this->priorCovChi2_;
   dataCopy->numNuclei_ = this->numNuclei_;
 
   // Build a mapping from component segment keys to cloned component segments
