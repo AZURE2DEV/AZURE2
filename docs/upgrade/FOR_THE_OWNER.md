@@ -92,20 +92,36 @@ directly is refused with a message naming the converter. The gate is that every 
 identical to the original on the previous engine. This supersedes "old files load as before" above once format 3 lands.
 
 **For programs and AI agents:** `AZURE2 --schema` (every record kind, field, quantity, unit and diagnostic code as
-JSON; done, with `pyazr.schema()` and a reference page generated from it), `--validate` (all problems of a file at
-once, machine-readable; in work) and a printout of each data set's expression tree. One table of quantities in the
+JSON; done, with `pyazr.schema()` and a reference page generated from it), `AZURE2 --validate FILE [--json]` (all
+problems of a file at once, each with a code and a line; done, with `pyazr.validate`) and `--describe` (how the engine
+understood each data set: quantity, reactions, linked effects, parameters; in work). One table of quantities in the
 engine feeds the validation, Python, the GUI and the documentation: a new kind of data is one row of that table, a
 tree builder and a test.
 
+**The converter exists** (`convert/`, `AZURE2 --convert OLD NEW --to 3`, `pyazr.convert_azr`): of the 189 project
+files of the test tree, 186 convert to format 3 and validate without a question, and the 3 refused are files the old
+engine refuses too. It reports the map from the old parameter names (`segment_5_norm`) to the new ones, which carry
+the data set's name. The engine itself still runs format 2 until the format-3 reader is merged (in work).
+
 **State and extension points** (`ARCHITECTURE.md` §9). The only singletons are constant tables; whatever an
 evaluation writes is owned by its caller; an extension is one explicit table row, never a self-registering class.
-Done so far in Phase 4: the values an evaluation computes live in one buffer (`Results`) instead of in the data
-points; the model expressions (sum, ratio, scale, sample transform) and the lab → c.m. frames have one implementation
-each in a standalone library `experiment/`, with unit tests against closed forms.
+Done so far in Phase 4: the values an evaluation computes live in one buffer (`Results`) that the caller owns and
+passes in, instead of in the data points (a debug mode poisons the buffer, so a value read before it is written fails
+a test); the model expressions (sum, ratio, scale, sample transform) and the lab → c.m. frames have one
+implementation each in a standalone library `experiment/`, with unit tests against closed forms; what a fit parameter
+is (a level energy, a width, a normalisation, an abundance …) is a record given where the parameter is created, and
+no code recognises a parameter by the spelling of its name any more (`parameter_kinds.md`; a check fails on a new
+name test), which is what lets a data set's parameters carry the user's names.
 
 **`CNuc` is not yet split completely.** Phase 1 moved its physics into `physics/` and left the class as the owner of
-reading, the parameter vector and printing: 2,907 lines. The remaining steps (`cnuc_split.md`) are scheduled as their
-own track in Phase 4, with a check that no source file grows beyond its recorded size.
+reading, the parameter vector and printing: 2,907 lines. Since then its printing, its consistency checks, its
+messages and the `<levels>` grammar (now in `io/`) have moved to files of their own: `CNuc.cpp` is 1,954 lines. What
+remains is the parameter vector and the set-up from the level rows (`cnuc_split.md`, "Remaining steps").
+
+**No source file may grow.** `tests/consistency/file_sizes.tsv` lists the 18 hand-written files above 1,000 lines
+with their sizes; the consistency test fails when a listed file grows or another file passes 1,000 lines, and the
+numbers are only lowered. New code therefore goes into small files with one job, which is also what an AI assistant
+reads and changes most reliably.
 
 Then Phases 5–9 (`ROADMAP.md`): one energy grid with the apparatus as kernels, AZURE2's own stopping, and the THM
 observable (5); evaluation without copies (6); DWBA vertices for THM (7); pyazr 3.0 with wheels (8); the web

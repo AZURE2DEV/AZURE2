@@ -2,6 +2,68 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-10 (director, morning) — Phase 4: the second wave merged (S3 b, parameter kinds, CNuc split, converter)
+
+**Merged into `feature/upgrade-4-data`** (`--no-ff`, in this order; each branch verified by the director's own runs
+before its merge — build with 0 warnings, 179 × 3 identical to the Phase 3 head, `ctest -LE slow`,
+`tests/run_tests.sh`): `feature/upgrade-4-results-b` (S3 b), `feature/upgrade-cnuc-split-3` (078dc233),
+`feature/upgrade-4-param-kinds` (06013f09), `feature/upgrade-4-convert` (041edabf). Their entries are below.
+**The merged head as a whole** (041edabf, `work/b-p4r`, `work/verify-p4r.log`): build 0 warnings; 179 × 3 identical to the Phase 3 head
+(689 + 662 + 689 files); `ctest -LE slow` 149/149; `tests/run_tests.sh` 135/135; calculations at 1 and 8 threads
+12/12 identical; `upgrade_poison_results`, `upgrade_results_owner` and the two converter tests repeated six
+times, all passed; `tools/convert_tree.sh`: 186 of 189 files convert and validate with zero errors, the 3 refused are
+refused by the old engine too, 5 files the old engine refuses are converted (the list of `project_format3.md` §8.5).
+
+**What the director changed at the merges** (each in the merge commit's message):
+- Check numbers: the size ratchet is check **26** (25 is "no `Results` member in `EPoint.h`/`EData.h`").
+- `ALevel::PadChannels` pushes the per-channel vectors once; `ALevel::AddGamma` deleted (8b9ab7cb).
+- `<abundances>` has one parser, `convert/`'s `ReadAbundanceLine` (the converter needs it line by line);
+  `io/AbundanceLines.{h,cpp}` and the transfer test `io_abundance_lines` are deleted. `convert/` includes no engine
+  header (`NucLine.h` is gone; `io::LevelRow`); check 9c no longer allows one.
+- `<parameterSettings>` `prior_centre` rows: the engine keeps the reader of the parameter-kinds branch
+  (`EData::ReadPriorCentres`: the whole name against `SegmentParameterName`); `convert/`'s `PriorCentreRow.h` serves
+  the converter only. **Difference to close in 3b:** the converter drops a row whose N names no `<segmentsData>` line;
+  the engine refuses it.
+- `tests/thm_distortion/check.sh` drops the `prior_centre` rows of the segment lines its reduced project removes
+  (dda649f7): since the parameter-kinds branch a row naming no line is an error. **User-visible:** a hand-reduced
+  copy of a project that keeps such rows is refused with a message naming the accepted names; the shipped examples
+  are not affected.
+- `tests/upgrade/results_owner_test.cpp` called `FillMnParams` with the old argument after the parameter-kinds merge:
+  **06013f09 does not compile that test** (the engine builds); repaired in 041edabf. The cause was merging on the
+  branch's own verification without building the merged tree first; from now on the merged tree is built before the
+  merge is committed.
+- `tests/consistency/file_sizes.tsv` was re-baselined at each merge (the record was taken before the branches grew
+  files in parallel). Raised in total against the first record: `pybind_api.cpp` 1299, `azrfile.py` 3756,
+  `CNuc.cpp` 1954 (from 1942: `PadChannels`, the abundance loop); lowered: `AZURE2.cpp` 1721, `ThmExperiment.cpp`
+  1026; `TargetEffect.cpp` (932) left the list. 18 files remain above 1,000 lines.
+- pyazr 2.15.0 (`validate`, `convert_azr(..., to=3)`).
+
+**Accepted from the branches' reports, for the PI to see** (behaviour a user can meet):
+- F1 `prior_centre` rows as above. F2: a `<mcmc>` `<parameters>` row that names no parameter, or has fewer than five
+  tokens, stops the run (before: ignored). F3: limits of nuisance parameters are converted eV → reduced only for
+  widths.
+- Format decisions that fix what users write (`project_format3.md` §10 and the step 3a entries): record kind
+  `normalization`; `quadrature points <n>` required on a folded data set; quantity `sigma_nuclear`; fields
+  `entrance_pair` / `exit_pair`; the target state `16O[2.143](n,n)16O[2.143]`; the temporary flag `--to 3`.
+
+**Waiting for the PI** (unchanged): the two atomic increments in the vendored Minuit2 (cause B of thread-dependent
+fits; `external/` may not be touched without asking; bounded fits of the poison test run at one thread until then);
+M3 (b); the electron mass in `EPoint.cpp` and the proton mass in `ECIntegral.cpp`; whether a spin-orbit hybrid
+potential is wanted (CNuc 3b iii). The host has no ASan runtime for this compiler (the sanitizer jobs run in CI
+only).
+
+**Running now** (Opus agents from 041edabf; briefs in `/data0/skowrons/AZURE2-upgrade/work/briefs/`):
+- F, `feature/upgrade-4-model-pass` (`wt-model`): S1 history test, S2 remainder, S4 one model pass and one residual.
+- E, `feature/upgrade-4-model-data` (`wt-mdata`): S15, `<modelData>` with `datum` records, `ModelDataTerm`, ωγ; the
+  scattering lengths as rows of the same term.
+- G, `feature/upgrade-4-format3-reader` (`wt-fmt3`): 3b-1 with S9 — set-up from specs, `Schema::Build`, the engine
+  runs format 3, `--describe`.
+
+**Then.** 3c (pyazr's model on records), 3d (the tree converted, the old path and `convert/`'s engine use deleted,
+`--convert-params`); S5, S7, S10–S13 (the tree pass replaces the composition and the hand-written adjoint), S14, S16;
+ratio to Rutherford/Mott, S factor (with the `nds.py` mass fix), yields per charge; extrapolation grids; CNuc 6b and
+7. Merge `origin/dev` only when the reconstruction is complete.
+
 ## 2026-11-10 (night, later) — step 3a follow-up: the director's D1–D5 and review R1–R3 (`feature/upgrade-4-convert`)
 
 **Done.** D1: quantity `sigma_nuclear` (the angle-integrated nuclear elastic integral of a charged pair; warning
