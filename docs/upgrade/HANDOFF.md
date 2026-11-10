@@ -74,8 +74,13 @@ by one ulp makes 119 files fail).
 - **M3 (b) is the aim** (`data_model.md` §5): lab data with a fitted shift are compared in the frame of the data —
   the model is converted to the lab, the measured values and errors stay as measured. Phase 5 does it; every fit
   it moves (shifted lab-differential data) is listed with its size. Until then (a) stays, bit-identical.
-- **Still open:** the confirmation of the new refusals and of
-  the format-3 words (the lists above and in the entry of this morning). No ASan runtime on this host.
+- **Confirmed by the PI:** the new refusals (a `prior_centre` row naming no segment line; an `<mcmc>` parameter row
+  that names no parameter or is short; a composite block whose operation type is neither sum nor ratio; a
+  β-delayed segment with target integration, a beam profile, screening or exit −1), the API returning the model
+  value for E1-only / E2-only segments, and the format-3 words (`normalization` and `energy_scale` records, the
+  follower parameter name `<record>.value[<data set>]`, `quadrature points <n>` required, `sigma_nuclear`,
+  `entrance_pair` / `exit_pair`, the target-state grammar, units other than the engine's refused until the units
+  step, data files relative to the working directory). Nothing waits for the PI now. No ASan runtime on this host.
 
 **Running now** (Opus agents from fe181256, 3 threads each; briefs in `/data0/skowrons/AZURE2-upgrade/work/briefs/`):
 - H, `feature/upgrade-4-expr` (`wt-expr`), `H_expression_pass.md`: S10 (the model pass evaluates the expression
