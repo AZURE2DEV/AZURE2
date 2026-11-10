@@ -36,7 +36,7 @@ class ALevel {
  public:
   /// Build from a line of the nuclear input file.
   explicit ALevel(const azure2::io::LevelRow &);
-  /// Build with only an energy; widths are added afterwards with AddGamma.
+  /// Build with only an energy; widths are added afterwards (PadChannels, SetGamma).
   ALevel(double);
   /// Is this level part of the A-/R-Matrix calculation?
   /// False for a level that exists only as an external-capture final state,
@@ -127,8 +127,6 @@ class ALevel {
   void PadChannels(int n);
   /// Number of channels the width vectors hold.
   int NumGammas() const { return (int)gammas_.size(); }
-  /// Append a channel with the given initial reduced width amplitude.
-  void AddGamma(double);
   void SetGamma(int, double);
   void SetZeroInputWidth(int, bool);
   void SetE(double);

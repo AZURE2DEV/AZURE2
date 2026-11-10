@@ -258,7 +258,7 @@ Reference commits: `git show --stat 062b1bfe` (segment keyword `shiftfngroup`), 
   large files further: every hand-written source file of `src/`, `include/`,
   `physics/`, `io/`, `experiment/`, `api/src/`, `pyazr/` and `tools/` above
   1,000 lines is listed with its line count in
-  `tests/consistency/file_sizes.tsv` [check 25: a listed file may not grow, an
+  `tests/consistency/file_sizes.tsv` [check 26: a listed file may not grow, an
   unlisted one may not pass 1,000 lines; only the director adds an entry].
   After shortening a listed file, `python3
   tests/consistency/repo_consistency_test.py --tighten-sizes` lowers its record

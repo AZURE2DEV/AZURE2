@@ -228,13 +228,10 @@ void ALevel::PadChannels(int n) {
     gammas_.push_back(0.0);
     fitgammas_.push_back(0.0);
     ec_gammas_.push_back(0.0);
-  ec_gammas_.push_back(0.0);
     transform_gammas_.push_back(0.0);
     big_gammas_.push_back(0.0);
     observed_values_.push_back(0.0);
     observed_kinds_.push_back(0);
-  observed_values_.push_back(0.0);
-  observed_kinds_.push_back(0);
     external_gammas_.push_back(complex(0.0, 0.0));
     channelfixed_.push_back(true);
     gamma_is_rwa_.push_back(false);  // a padded channel has a zero width: the flag is moot
@@ -252,29 +249,6 @@ void ALevel::SetGammaFromLine(int channelNum, const azure2::io::LevelRow &nucLin
   // The THM field 33 (gammaIsRWA) goes with its width to the group channel.
   gamma_is_rwa_[channelNum - 1] = (nucLine.gammaIsRWA() == 1);
   zero_input_[channelNum - 1] = (nucLine.gamma() == 0.0);
-}
-
-/*!
- * This function adds a position in the width vectors corresponding to a new channel.
- * The initial reduced width amplitude is set directly.
- */
-
-void ALevel::AddGamma(double reducedWidth) {
-  stamp_ = NewStamp();
-  gammas_.push_back(reducedWidth);
-  fitgammas_.push_back(0.0);
-  ec_gammas_.push_back(0.0);
-  transform_gammas_.push_back(0.0);
-  big_gammas_.push_back(0.0);
-  observed_values_.push_back(0.0);
-  observed_kinds_.push_back(0);
-  external_gammas_.push_back(complex(0.0, 0.0));
-  channelfixed_.push_back(false);
-  gamma_is_rwa_.push_back(false);
-  zero_input_.push_back(reducedWidth == 0.0);
-  shifts_.push_back(0.0);
-  shift_derivs_.push_back(0.0);
-  shift_derivs2_.push_back(0.0);
 }
 
 /*!

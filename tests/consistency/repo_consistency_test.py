@@ -8,7 +8,7 @@ mention, a test file nobody registered, a check.sh without its executable bit
 source tree only, runs in well under a second.
 
     python3 tests/consistency/repo_consistency_test.py
-    python3 tests/consistency/repo_consistency_test.py --tighten-sizes   # lower the size record (check 25), only
+    python3 tests/consistency/repo_consistency_test.py --tighten-sizes   # lower the size record (check 26), only
 
 Exits 0 when everything agrees, 1 with one line per problem otherwise.
 """
@@ -43,7 +43,7 @@ def function_body(source, signature):
     raise ValueError("unbalanced braces after " + signature)
 
 
-# 25. The size ratchet (CLAUDE.md "Code structure"): a file that can be read whole is one a person or an agent can
+# 26. The size ratchet (CLAUDE.md "Code structure"): a file that can be read whole is one a person or an agent can
 #     maintain.  Every hand-written source file (.cpp, .h, .py and the other C/C++ suffixes) of the engine, the
 #     modules, the API, pyazr and tools/ that is longer than SIZE_LIMIT lines is listed in SIZE_RECORD with its line
 #     count, and may not be longer than recorded; an unlisted file above the limit fails, so a new file stays below
@@ -58,7 +58,7 @@ SIZE_SUFFIXES = (".cpp", ".h", ".py", ".hpp", ".cc", ".c", ".H")
 SIZE_SKIP_DIRS = {"tests", "__pycache__"}  # test sources, bytecode
 SIZE_GENERATED = set()                     # generated files in SIZE_DIRS (none today), relative paths
 SIZE_RECORD = "tests/consistency/file_sizes.tsv"
-SIZE_HEADER = f"""# The size ratchet (tests/consistency/repo_consistency_test.py, check 25): every hand-written source file above
+SIZE_HEADER = f"""# The size ratchet (tests/consistency/repo_consistency_test.py, check 26): every hand-written source file above
 # {SIZE_LIMIT} lines, with the most lines it may have.  A listed file may not grow; an unlisted file may not pass {SIZE_LIMIT}
 # lines.  Lower the numbers (never raise them) with
 #   python3 tests/consistency/repo_consistency_test.py --tighten-sizes
@@ -103,7 +103,7 @@ def check_sizes():
     try:
         record = read_size_record()
     except (OSError, ValueError) as e:
-        problems.append(f"check 25: {e}")
+        problems.append(f"check 26: {e}")
         return
     for rel, lines in sorted(sized_files().items()):
         if rel in record and lines > record[rel]:

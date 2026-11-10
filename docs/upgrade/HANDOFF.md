@@ -5,7 +5,7 @@ Update this file at the end of every work session: what changed, what is next, w
 ## 2026-11-10 — `CNuc` split continued, and a file-size ratchet (branch `feature/upgrade-cnuc-split-3`)
 
 **Done** (record: `cnuc_split.md` §2.1 inventory, §6 "Steps (d), (c)", "Remaining steps").
-- Check 25 (`tests/consistency/file_sizes.tsv`): every hand-written source above 1000 lines is listed and may not
+- Check 26 (`tests/consistency/file_sizes.tsv`; numbered 25 on the branch): every hand-written source above 1000 lines is listed and may not
   grow; an unlisted file may not pass 1000 lines; `--tighten-sizes` lowers the record (never raises). 19 files.
 - `CNuc.cpp` 2907 → 1942 lines, without touching the parameter vector: output and check files (`CNucReport.cpp`),
   load-time checks (`CNucChecks.cpp`), transformation messages (`CNucTransformMessages.cpp`), all through const access;
