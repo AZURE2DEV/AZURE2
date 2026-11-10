@@ -82,7 +82,7 @@ int PairType(phys::PartitionKind k) {
   return -1;
 }
 
-// ---- the structure of each project, read off its <levels> lines (columns: include/NucLine.h; 2s and 2l in the
+// ---- the structure of each project, read off its <levels> lines (columns: io/include/azure2/io/LevelRows.h; 2s and 2l in the
 // file).  Photon channels: E when pi_level * pi_final = (-1)^L, else M (AChannel's rule).
 struct ExpChannel {
   int key;

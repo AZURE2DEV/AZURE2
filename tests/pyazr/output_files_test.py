@@ -95,7 +95,7 @@ with tempfile.TemporaryDirectory() as tmp:
 
     # EData::WriteOutputFiles owns the data files. A CLI run additionally
     # leaves param.par (written at initialization) and parameters.out (from
-    # CNuc::PrintTransformParams at the end); neither belongs to this call, so
+    # WriteParametersOut at the end); neither belongs to this call, so
     # compare what it does own and say what it does not.
     owned = {"chiSquared.out"} | {n for n in from_cli if n.startswith("AZUREOut_")}
     check("every data file the CLI wrote is there",

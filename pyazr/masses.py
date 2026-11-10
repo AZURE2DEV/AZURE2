@@ -3,7 +3,7 @@
 A particle pair carries both its two masses and its separation energy, and the
 two are linked: ``S = m1 + m2 - M`` of the compound nucleus.  Filling both from
 one table keeps them consistent; AZURE2 warns at load time when a project's
-pairs disagree by more than 1 keV (``CNuc::CheckMassSeparationConsistency``).
+pairs disagree by more than 1 keV (``WarnMassSeparationMismatch``, ``src/CNucChecks.cpp``).
 
 The table is ``pyazr/data/mass_1.mas20``, the AME2020 file as the Atomic Mass
 Data Center distributes it.  The GUI embeds the same file, so both front ends

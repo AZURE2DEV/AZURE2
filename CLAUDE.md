@@ -255,10 +255,16 @@ Reference commits: `git show --stat 062b1bfe` (segment keyword `shiftfngroup`), 
 
 - Put a new feature in its **own class and file**, as `ShftFunc`,
   `CoulombTable`, `DataCovariance` and `ScatteringLength` are. Do not grow the
-  large files further: `EData.cpp` (4300 lines), `CNuc.cpp`, `AMatrixFunc.cpp`,
-  `EPoint.cpp`, `AZURECalc.cpp`, `pyazr/azure2.py`, `pyazr/azrfile.py`.
-  Moving code out of them is welcome, but do it in its own commit with no
-  behaviour change and the full test suite run, never mixed into a feature.
+  large files further: every hand-written source file of `src/`, `include/`,
+  `physics/`, `io/`, `experiment/`, `api/src/`, `pyazr/` and `tools/` above
+  1,000 lines is listed with its line count in
+  `tests/consistency/file_sizes.tsv` [check 25: a listed file may not grow, an
+  unlisted one may not pass 1,000 lines; only the director adds an entry].
+  After shortening a listed file, `python3
+  tests/consistency/repo_consistency_test.py --tighten-sizes` lowers its record
+  (it never raises one). Moving code out of the large files is welcome, but do
+  it in its own commit with no behaviour change and the full test suite run,
+  never mixed into a feature.
 - Use **one definition** of each formula, format and convention, and call it from both
   the engine and the gradient. When pyazr needs it, expose it through
   `_azure2` rather than re-implementing it in Python (pyazr needs the compiled

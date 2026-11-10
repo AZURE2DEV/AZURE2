@@ -16,6 +16,7 @@
 #include "ParameterLabel.h"
 #include "Config.h"
 #include "CNuc.h"
+#include "CNucReport.h"
 #include "EData.h"
 #include "ESegment.h"
 #include "EPoint.h"
@@ -28,7 +29,6 @@
 #include <iomanip>
 #include <thread>
 
-#include <algorithm>
 #include <cmath>
 #include <cstdlib>
 #include <limits>
@@ -666,7 +666,7 @@ void AZURECalc::WriteIterationOutput(const vector_r &p) const {
     WriteParameters(params, configure());
     ld->WriteOutputFiles(configure(), results, true);
     lc->TransformOut(configure());
-    lc->PrintTransformParams(configure());
+    WriteParametersOut(*lc, configure());
   } catch (...) {
     // An intermediate snapshot is a convenience, never a reason to abort a fit.
     // A failure may leave the copies half-filled: drop them so the next

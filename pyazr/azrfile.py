@@ -21,8 +21,8 @@ writing a file and launching a fresh instance from it::
     path = model.write("13N_edited.azr")          # original file untouched
     azr = azure2(path)                            # run with the edited scheme
 
-The 31 fields of a channel line match ``NucLine`` in the AZURE2 source
-(``include/NucLine.h``); note the file stores ``2*S`` and ``2*L`` as integers,
+The 31 fields of a channel line match ``LevelRow`` in the AZURE2 source
+(``io/include/azure2/io/LevelRows.h``); note the file stores ``2*S`` and ``2*L`` as integers,
 which the ``S`` / ``L`` properties convert.  Optional trailing fields: the
 light particle's excitation energy ``e1`` (MeV, dev 2026-11-05) alone is a 32nd
 field; the THM binding energy and width flag are fields 32 and 33, and ``e1``
@@ -37,12 +37,12 @@ import re
 import tempfile
 from typing import List, NamedTuple, Optional
 
-# Field order of a <levels> channel line, matching NucLine's read order: 31
+# Field order of a <levels> channel line, matching LevelRow's read order: 31
 # mandatory fields, then optional trailing ones.  dev's optional 32nd column is
 # the light particle's excitation energy e1 (2026-11-05); thm's two optional
 # columns (binding energy, and a flag saying the gamma column holds a reduced
 # width amplitude rather than a partial width or ANC) came first.  The engine
-# tells them apart by the number of trailing fields (NucLine): 1 = e1 (dev),
+# tells them apart by the number of trailing fields (LevelRow): 1 = e1 (dev),
 # 2 = binding energy and flag (thm), 3 = binding energy, flag and e1.  Here the
 # fields are kept in that logical order; to_line() writes the layout back.
 _FIELDS = [

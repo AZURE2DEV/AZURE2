@@ -34,7 +34,7 @@
 
 #include "Config.h"
 #include "Constants.h"
-#include "NucLine.h"
+#include "azure2/io/LevelRows.h"
 #include "PPair.h"
 #include "ThmFunc.h"
 
@@ -202,7 +202,7 @@ const RefValue kReference[] = {
 };
 // clang-format on
 
-// A PPair built through the same 31(+2)-column NucLine the .azr reader uses.
+// A PPair built through the same 31(+2)-column row the .azr reader uses (io/ LevelRows.h).
 PPair makePair(const PairSpec &s) {
   std::ostringstream line;
   line.precision(15);  // the default 6 digits would round the masses
@@ -211,7 +211,7 @@ PPair makePair(const PairSpec &s) {
   line << "1 1 0 0 1 1 1 0 1 1 0 0 0 1 0 1 0 " << s.m1 << " " << s.m2 << " " << s.z1 << " "
        << s.z2 << " 0 0 0 1 0 0 " << s.a << " 0 0 0 " << s.bindingE;
   std::istringstream in(line.str());
-  NucLine nl(in);
+  azure2::io::LevelRow nl(in);
   return PPair(nl);
 }
 

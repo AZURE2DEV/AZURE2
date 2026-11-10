@@ -11,6 +11,7 @@
 
 #include "Config.h"
 #include "CNuc.h"
+#include "CNucReport.h"
 #include "PPair.h"
 #include "EData.h"
 #include "ESegment.h"
@@ -32,7 +33,6 @@
 #include <limits>
 #include <new>
 #include <cmath>
-#include <algorithm>
 
 AZUREAPI::AZUREAPI(Config &configure) : configure_(configure), data_(nullptr), compound_(nullptr) {
   // A session rebuilds its model from the files (SetRadius, potential changes, mode switches): read each
@@ -133,7 +133,7 @@ int AZUREAPI::Initialize() {
     return -1;
   }
   if ((configure().screenCheckMask | configure().fileCheckMask) &
-      Config::CHECK_COMPOUND_NUCLEUS) compound()->PrintNuc(configure());
+      Config::CHECK_COMPOUND_NUCLEUS) WriteCompoundNucleusCheck(*compound(), configure());
 
   if (!(configure().paramMask & Config::CALCULATE_REACTION_RATE)) {
     // Fill the data object from the segments and data file

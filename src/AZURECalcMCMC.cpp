@@ -4,12 +4,12 @@
 #include "ParameterLabel.h"
 #include "Config.h"
 #include "CNuc.h"
+#include "CNucReport.h"
 #include "EData.h"
 #include "ParameterLimitsManager.h"
 #include "AZUREParams.h"
 #include "PriorCovariance.h"
 #include "GSLException.h"
-#include "JGroup.h"
 #include "ALevel.h"
 #include <iostream>
 #include <iomanip>
@@ -917,7 +917,7 @@ void mcmc_iteration_callback(int current_step, int total_steps) {
             if (!g_using_rwa_parameters) {
               localCompound->TransformOut(g_mcmc_for_callbacks->configure());
             }
-            localCompound->PrintTransformParams(g_mcmc_for_callbacks->configure());
+            WriteParametersOut(*localCompound, g_mcmc_for_callbacks->configure());
 
             // Write param.mcmc snapshot: all RWA parameters (including fixed), analogous to param.sav
             if (!rwaFullParams.empty() && rwaFullParams.size() == g_param_names.size()) {

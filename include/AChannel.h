@@ -1,7 +1,11 @@
 #ifndef ACHANNEL_H
 #define ACHANNEL_H
 
-class NucLine;
+namespace azure2 {
+namespace io {
+class LevelRow;
+}
+}  // namespace azure2
 
 /// An AZURE channel object.
 
@@ -17,7 +21,7 @@ class NucLine;
 class AChannel {
  public:
   /// Build from a channel line of the nuclear input file; \p pairNum is the pair it decays to.
-  AChannel(NucLine, int);
+  AChannel(const azure2::io::LevelRow &, int);
   /// Build directly from couplings: l, s, pair number, radiation type.
   AChannel(int, double, int, char);
   /// 1-based index of this channel's particle pair, as CNuc::GetPair takes it.

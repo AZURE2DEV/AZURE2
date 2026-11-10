@@ -1,5 +1,5 @@
 #include "ALevel.h"
-#include "NucLine.h"
+#include "azure2/io/LevelRows.h"
 #include <atomic>
 
 std::uint64_t ALevel::NewStamp() {
@@ -11,7 +11,7 @@ std::uint64_t ALevel::NewStamp() {
  * This constructor is used when a level object is created from an entry in the nuclear file.
  */
 
-ALevel::ALevel(NucLine nucLine) :
+ALevel::ALevel(const azure2::io::LevelRow &nucLine) :
   level_e_(nucLine.levelE()),
   fitlevel_e_(0.0),
   isinrmatrix_(true),
@@ -222,33 +222,6 @@ complex ALevel::GetExternalGamma(int channelNum) const {
   return external_gammas_[channelNum - 1];
 }
 
-/*!
- * This function adds a position in the width vectors corresponding to a new channel.
- * The initial reduced width amplitude is set from an entry in the nuclear input file.
- */
-
-void ALevel::AddGamma(NucLine nucLine) {
-  stamp_ = NewStamp();
-  double b = nucLine.gamma();
-  gammas_.push_back(b);
-  fitgammas_.push_back(0.0);
-  ec_gammas_.push_back(0.0);
-  transform_gammas_.push_back(0.0);
-  big_gammas_.push_back(0.0);
-  observed_values_.push_back(0.0);
-  observed_kinds_.push_back(0);
-  external_gammas_.push_back(complex(0.0, 0.0));
-  if (nucLine.channelFix() == 1)
-    channelfixed_.push_back(true);
-  else
-    channelfixed_.push_back(false);
-  gamma_is_rwa_.push_back(nucLine.gammaIsRWA() == 1);
-  zero_input_.push_back(b == 0.0);
-  shifts_.push_back(0.0);
-  shift_derivs_.push_back(0.0);
-  shift_derivs2_.push_back(0.0);
-}
-
 void ALevel::PadChannels(int n) {
   stamp_ = NewStamp();
   while ((int)gammas_.size() < n) {
@@ -272,7 +245,7 @@ void ALevel::PadChannels(int n) {
   }
 }
 
-void ALevel::SetGammaFromLine(int channelNum, NucLine nucLine) {
+void ALevel::SetGammaFromLine(int channelNum, const azure2::io::LevelRow &nucLine) {
   this->PadChannels(channelNum);
   gammas_[channelNum - 1] = nucLine.gamma();
   channelfixed_[channelNum - 1] = (nucLine.channelFix() == 1);

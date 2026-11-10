@@ -6,7 +6,11 @@
 
 #include <limits>
 
-class NucLine;
+namespace azure2 {
+namespace io {
+class LevelRow;
+}
+}  // namespace azure2
 
 /// An AZURE level object.
 
@@ -31,7 +35,7 @@ class NucLine;
 class ALevel {
  public:
   /// Build from a line of the nuclear input file.
-  ALevel(NucLine);
+  explicit ALevel(const azure2::io::LevelRow &);
   /// Build with only an energy; widths are added afterwards with AddGamma.
   ALevel(double);
   /// Is this level part of the A-/R-Matrix calculation?
@@ -115,13 +119,10 @@ class ALevel {
   double GetShiftDerivative(int) const;
   double GetShiftSecondDerivative(int) const;
 
-  /// Append a channel, taking its initial width from the input file line.
-  void AddGamma(NucLine);
   /// Put the width of an input file line at its J-group channel number (1-based), padding any channel
-  /// before it with a zero, fixed width.  CNuc::Fill uses this: AddGamma(NucLine) appended in the order of
-  /// the level's own lines, which only matched the group's channel numbering when every level listed every
-  /// channel in the same order.
-  void SetGammaFromLine(int channelNum, NucLine nucLine);
+  /// before it with a zero, fixed width (CNuc::Fill): a level may list its channels in another order than its
+  /// group, or leave one out.
+  void SetGammaFromLine(int channelNum, const azure2::io::LevelRow &nucLine);
   /// Pad the width vectors with zero, fixed widths up to n channels.
   void PadChannels(int n);
   /// Number of channels the width vectors hold.

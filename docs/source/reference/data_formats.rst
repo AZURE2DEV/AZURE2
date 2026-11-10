@@ -247,7 +247,7 @@ lines, which a reader that does not know a key skips:
    older than 2026-11-05 ignore the key silently.
 
 The ``<levels>`` block has one line per channel of a level, 31
-whitespace-separated columns (read by ``NucLine``, ``include/NucLine.h``), and
+whitespace-separated columns (read by ``azure2::io::LevelRow``, ``io/include/azure2/io/LevelRows.h``), and
 optionally one, two or three more:
 
 .. list-table::

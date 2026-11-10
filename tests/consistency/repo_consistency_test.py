@@ -8,6 +8,7 @@ mention, a test file nobody registered, a check.sh without its executable bit
 source tree only, runs in well under a second.
 
     python3 tests/consistency/repo_consistency_test.py
+    python3 tests/consistency/repo_consistency_test.py --tighten-sizes   # lower the size record (check 25), only
 
 Exits 0 when everything agrees, 1 with one line per problem otherwise.
 """
@@ -40,6 +41,106 @@ def function_body(source, signature):
             if depth == 0:
                 return source[brace:i]
     raise ValueError("unbalanced braces after " + signature)
+
+
+# 25. The size ratchet (CLAUDE.md "Code structure"): a file that can be read whole is one a person or an agent can
+#     maintain.  Every hand-written source file (.cpp, .h, .py and the other C/C++ suffixes) of the engine, the
+#     modules, the API, pyazr and tools/ that is longer than SIZE_LIMIT lines is listed in SIZE_RECORD with its line
+#     count, and may not be longer than recorded; an unlisted file above the limit fails, so a new file stays below
+#     it (entries are added by the director only).  Tests, external/ and generated files are not counted.
+#     `--tighten-sizes` rewrites the record to the present counts where they are lower and drops the files that fell
+#     to the limit or below; it never raises a number and never adds a file.  Exact equality is not required: other
+#     branches shorten files too, and the record is tightened at each merge.  It runs first, because --tighten-sizes
+#     runs it alone.
+SIZE_LIMIT = 1000
+SIZE_DIRS = ("src", "include", "physics", "io", "experiment", "api/src", "pyazr", "tools")
+SIZE_SUFFIXES = (".cpp", ".h", ".py", ".hpp", ".cc", ".c", ".H")
+SIZE_SKIP_DIRS = {"tests", "__pycache__"}  # test sources, bytecode
+SIZE_GENERATED = set()                     # generated files in SIZE_DIRS (none today), relative paths
+SIZE_RECORD = "tests/consistency/file_sizes.tsv"
+SIZE_HEADER = f"""# The size ratchet (tests/consistency/repo_consistency_test.py, check 25): every hand-written source file above
+# {SIZE_LIMIT} lines, with the most lines it may have.  A listed file may not grow; an unlisted file may not pass {SIZE_LIMIT}
+# lines.  Lower the numbers (never raise them) with
+#   python3 tests/consistency/repo_consistency_test.py --tighten-sizes
+# Entries are added by the director only.
+"""
+
+
+def line_count(rel):
+    """Lines of a file as wc -l counts them, plus a last line without its newline."""
+    with open(os.path.join(ROOT, rel), "rb") as f:
+        data = f.read()
+    return data.count(b"\n") + (1 if data and not data.endswith(b"\n") else 0)
+
+
+def sized_files():
+    """{relative path: lines} of every file the ratchet counts."""
+    sizes = {}
+    for top in SIZE_DIRS:
+        for dirpath, dirnames, files in os.walk(os.path.join(ROOT, top)):
+            dirnames[:] = sorted(d for d in dirnames if d not in SIZE_SKIP_DIRS and not d.startswith((".", "build")))
+            for name in sorted(files):
+                rel = os.path.relpath(os.path.join(dirpath, name), ROOT).replace(os.sep, "/")
+                if name.endswith(SIZE_SUFFIXES) and rel not in SIZE_GENERATED:
+                    sizes[rel] = line_count(rel)
+    return sizes
+
+
+def read_size_record():
+    """{relative path: recorded lines}, in file order."""
+    record = {}
+    for number, line in enumerate(read(SIZE_RECORD).splitlines(), 1):
+        if not line.strip() or line.startswith("#"):
+            continue
+        fields = line.split("\t")
+        if len(fields) != 2 or not fields[1].strip().isdigit():
+            raise ValueError(f"{SIZE_RECORD}:{number}: not '<path><TAB><lines>': {line!r}")
+        record[fields[0].strip()] = int(fields[1])
+    return record
+
+
+def check_sizes():
+    try:
+        record = read_size_record()
+    except (OSError, ValueError) as e:
+        problems.append(f"check 25: {e}")
+        return
+    for rel, lines in sorted(sized_files().items()):
+        if rel in record and lines > record[rel]:
+            problems.append(f"{rel}: {lines} lines, more than the {record[rel]} recorded in {SIZE_RECORD}; move code "
+                            "out of it into a file of its own (CLAUDE.md, \"Code structure\")")
+        elif rel not in record and lines > SIZE_LIMIT:
+            problems.append(f"{rel}: {lines} lines, above the limit of {SIZE_LIMIT} and not in {SIZE_RECORD}; split "
+                            "it (a new file stays below the limit; only the director adds an entry)")
+
+
+def tighten_sizes():
+    record = read_size_record()
+    sizes = sized_files()
+    kept = {}
+    for rel, recorded in record.items():
+        lines = sizes.get(rel, 0)
+        if lines <= SIZE_LIMIT:
+            print(f"dropped {rel}: {lines} lines, recorded {recorded}")
+        elif lines < recorded:
+            print(f"lowered {rel}: {recorded} -> {lines}")
+            kept[rel] = lines
+        else:
+            kept[rel] = recorded
+    with open(os.path.join(ROOT, SIZE_RECORD), "w", encoding="utf-8", newline="\n") as f:
+        f.write(SIZE_HEADER)
+        for rel in sorted(kept):
+            f.write(f"{rel}\t{kept[rel]}\n")
+    print(f"{SIZE_RECORD}: {len(kept)} files")
+
+
+if sys.argv[1:] == ["--tighten-sizes"]:
+    tighten_sizes()
+    sys.exit(0)
+if sys.argv[1:]:
+    print(f"usage: {sys.argv[0]} [--tighten-sizes]")
+    sys.exit(2)
+check_sizes()
 
 
 # 1. Every command-line flag the parser accepts is in --help and in the
@@ -388,4 +489,4 @@ if problems:
     print(f"{len(problems)} consistency problem(s)")
     sys.exit(1)
 print(f"repository consistent: {len(flags)} CLI flags, segment keywords, test registration, check.sh modes, pyazr version and exports, "
-      f"format-3 reference page, {len(declared)} diagnostic codes")
+      f"format-3 reference page, {len(declared)} diagnostic codes, file sizes")
