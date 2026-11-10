@@ -16,14 +16,14 @@
 #   JOBS=<n> (default 1; one thread per run)   CONVERT_OPTIONS="--exact-grids" (passed to every conversion)
 #   OLD_ENGINE=0 skips the old engine's runs.
 #
-# Exit 0 when every file converted and validated with zero errors, 1 otherwise.
+# Exit 0 when every file converted and validated with zero errors, 1 otherwise, 2 on a usage error (or when OUT
+# exists).
 
 set -o pipefail
 export LC_ALL=C OMP_NUM_THREADS=1
 
-BIN="${1:?usage: convert_tree.sh AZURE2 SRC OUT}"
-SRC="${2:?usage: convert_tree.sh AZURE2 SRC OUT}"
-OUT="${3:?usage: convert_tree.sh AZURE2 SRC OUT}"
+[ $# -eq 3 ] || { echo "usage: [JOBS=n] [CONVERT_OPTIONS=...] [OLD_ENGINE=0] convert_tree.sh AZURE2 SRC OUT" >&2; exit 2; }
+BIN=$1; SRC=$2; OUT=$3
 JOBS="${JOBS:-1}"
 BIN="$(cd "$(dirname "$BIN")" && pwd)/$(basename "$BIN")"
 case "$OUT" in /*) ;; *) OUT="$PWD/$OUT" ;; esac

@@ -1086,8 +1086,8 @@ from the parameter vector instead. This is a step before the reader switch.
    project directory) with the converter at one thread into a copy of the tree; the report of each conversion is kept.
 2. `AZURE2 --validate --json` on every converted file: zero errors.
 3. Run the engine before format 3 on the originals and the format-3 engine on the converted files, menu 1, the three
-   bases (`/data0/skowrons/AZURE2-upgrade/tools/runall.sh` with `JOBS` within the thread budget), and compare with
-   `classify.py`. Required: every output of every data set bit-identical, `chiSquared.out` and `normalizations.out`
+   bases (`tools/runall.sh` with `JOBS` within the thread budget), and compare with `tools/cls.sh`
+   (`classify.py`; `ARCHITECTURE.md` section 10). Required: every output of every data set bit-identical, `chiSquared.out` and `normalizations.out`
    included. This holds only if (a) the reader keeps number tokens verbatim and parses them with the old function
    (`strtod`), (b) prior widths are computed by the old expressions in the old order (norm: n₀σ/100 inside the penalty,
    `src/AZURECalc.cpp:901`; density: σ/100·N₀ at read, `TargetEffect.cpp:355`), (c) data sets keep their file order,
@@ -1120,13 +1120,15 @@ and the others with `bad_*` files say which runs they expect to fail).]**
 **The gate as a tool** (`tools/format3_gate.sh`, `tools/format3_gate.py`): items 1, 3 and 4 with exact grids, menu 1,
 
 ```
-WORK=<scratch> REF=tab-p3f JOBS=3 RUNALL=<runall.sh> tools/format3_gate.sh <engine> <source tree> <tag>
+WORK=<scratch> REF=<tag of the original tree's run> JOBS=3 tools/format3_gate.sh <engine> <source tree> <tag>
 ```
 
 converts the source tree's `tests/` with `tools/convert_tree.sh` and `--exact-grids` (without the old engine's pass)
 into `$WORK/gate-<tag>/converted`, makes it runnable (`format3_gate.py tree`: each original whose conversion
-validates, or fails only with `E_DATA_FILE`, is replaced by its conversion under its own name; the others are listed
-in `tree.txt`), runs it in the three bases with `runall.sh` as `tab-<tag>` (one thread per run, `JOBS` runs at once)
+validates, or fails only with `E_DATA_FILE`, is replaced by its conversion under its own name; a project the converter
+leaves alone because it is format 3 already stays as it is, so its outputs are compared too and must be identical; the
+others are listed in `tree.txt` with the converter's reason), runs it in the three bases with `tools/runall.sh` as
+`tab-<tag>` (one thread per run, `JOBS` runs at once)
 and compares every output file with those of the reference tag `REF` (`format3_gate.py compare`; `param.par` after
 each conversion's parameter-name map; `run.log` not compared). A file is identical, or its difference consists of
 classes each listed for that file and project in the table `CLASSES` of `format3_gate.py` (class, file, projects,

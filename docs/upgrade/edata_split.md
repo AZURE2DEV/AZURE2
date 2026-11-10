@@ -36,8 +36,8 @@ shrank; (f) the step's own check of §5 passes — every step names the outputs 
 
 ### 2.1 How the numbers were obtained
 
-All numbers of this page were counted at commit 070756a1 by the scripts in
-`/data0/skowrons/AZURE2-upgrade/work/edata-note/` (`defs.py`, `inventory.py`, `spans.py`, `tables.py`, `members.py`):
+All numbers of this page were counted at commit 070756a1 by scratch scripts, not committed
+(`defs.py`, `inventory.py`, `spans.py`, `tables.py`, `members.py`):
 top-level definitions are found by brace matching outside comments, strings and character literals; a header's members
 by the same matching inside the class body. "Lines" of a function is its definition from signature to closing brace;
 the **span** of a move (§2.3, §5) adds the comment and blank lines between it and the definition before it, which move

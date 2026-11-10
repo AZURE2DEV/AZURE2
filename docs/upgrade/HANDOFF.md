@@ -2,6 +2,36 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-10 (agent, brief T) — the comparison tools in the repository, and small follow-ups (`feature/upgrade-4-tools`)
+
+**Done** (no physics change; every project output identical to the start).
+- The comparison of two engines is in the repository: `tools/runall.sh`, `tools/run_one.sh`, `tools/cls.sh`,
+  `tools/classify.py`, copied from the scripts outside the repository with their behaviour kept; `JOBS` defaults to 1,
+  usage errors exit 2, each has a header (what, environment, output).  `format3_gate.sh` takes `runall.sh` from beside
+  itself.  Described in `CLAUDE.md` (recipes) and `ARCHITECTURE.md` §10 "Comparing the outputs of two engines".
+- No path of this machine in a tracked file (outside this log): the docs name `tools/...`; consistency check 30 fails
+  on a path under /data0 or /home (three allowed lines, of the skills checker and its test).
+- The format-3 gate keeps the projects that are format 3 already (the four of `tests/ratio_to_rutherford/models/`) and
+  runs them unchanged; a project left out is listed in `tree.txt` with the converter's reason.
+- `scripts/check.sh`: one `JOBS` (default 4) for the build and ctest.
+- `tests/hybrid_potential/check_per_pair.py`: its reference comes from `expected/chiSquared.out` and `tolerance` (the
+  old pin 2462154.2 was stale; the engine gives 2466142.3); it runs in a temporary copy; ctest `pyazr_hybrid_per_pair`
+  (16 s).
+- The data check file (`checks/data.chk`) of an extrapolation run with an adaptive grid is written after the
+  refinement and lists the refined grid (378 points, not the 21 of the start grid; `src/AZUREMain.cpp` only).
+- `--print-predictions` and `pyazr.predictions` label a format-3 data set and extrapolation by the record's name
+  (`src/Predictions.cpp`); old projects keep their numbers.  Re-pinned: `tests/upgrade/predictions.txt` (8 lines of the
+  four format-3 projects), `tests/ratio_to_rutherford/expected/story_predictions.txt`.
+
+**Verified** (build `work/b-tools`, 0 warnings, 3 threads): 183 × 3 against `tab-trial8`: 704 / 677 / 704 identical,
+once with the committed tools (`tab-tl1`) and once with the outside ones (`tab-tl2`), the two classification tables
+byte-identical; the gate (`REF=tab-trial8`, tag `tlg1`): 521 (494) files per basis, 483 (456) identical, 38
+classified, 0 differ, 0 missing; `JOBS=1 scripts/check.sh --quick`: ctest -LE slow 170/170; consistency on the tree of
+every commit; `tests/extrapolation_grids/check.sh` (12 ok) and `tests/ratio_to_rutherford/check.sh` (7 ok).  Not run:
+the whole `tests/run_tests.sh`, Sphinx, 1 against 8 threads.
+
+**Open.** pyazr's version is not bumped for the new labels of `pyazr.predictions` (format-3 projects only).
+
 ## 2026-11-10 (director, evening) — Phase 4: the fifth wave merged (dead code out of the data classes, ratio to Rutherford, the hybrid potential as a value, extrapolation grids)
 
 **Merged into `feature/upgrade-4-data`** (`--no-ff`, in this order; each rehearsed, built and verified in a scratch

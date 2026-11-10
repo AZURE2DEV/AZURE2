@@ -763,7 +763,9 @@ are converted to MeV (deg).  The same forms describe an angle grid
    refined at every angle at once: an energy joins the grid, at all angles,
    when any angle needs it (one grid for all angles).  The run log reports the
    count (``Adaptive grid of extrapolation #1: 251 energies (...)``); the
-   output files list the grid's points as for any other grid.
+   output files list the grid's points as for any other grid, and so does the
+   data check file (``checks/data.chk``, the Data Check line of
+   ``<config>``): it is written after the refinement.
 
    The refinement sees what the start grid and the level seeds bracket.  A
    structure that is not at a level -- an interference minimum, a threshold

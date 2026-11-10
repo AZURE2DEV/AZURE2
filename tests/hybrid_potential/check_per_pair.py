@@ -15,25 +15,62 @@ That is what this script covers:
   6. The parameter vector is re-derived by the change, and reusing a vector
      captured beforehand is what quietly gives a different answer.
 
-Run from this directory:  python3 check_per_pair.py
+The project and its variants are run in a temporary copy of this folder.
+Needs the compiled engine (ctest pyazr_hybrid_per_pair; PYAZR_ENGINE_DIR for a
+module built elsewhere):  python3 check_per_pair.py
 """
+import atexit
 import os
+import shutil
 import sys
+import tempfile
 
 os.environ.setdefault("OMP_NUM_THREADS", "2")
+SOURCE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.normpath(os.path.join(SOURCE, "..", "..")))
 
-import numpy as np
+try:
+    import numpy as np
+    from pyazr import _azure2  # noqa: F401  (the compiled engine)
+    from pyazr import azure2
+except ImportError as e:
+    print(f"SKIP: {e}")
+    sys.exit(77)
 
-from pyazr import AzrModel, azure2
-
-HERE = os.path.dirname(os.path.abspath(__file__))
+HERE = tempfile.mkdtemp(prefix="check_per_pair.")
+atexit.register(shutil.rmtree, HERE, ignore_errors=True)
+os.makedirs(os.path.join(HERE, "output"))
+shutil.copytree(os.path.join(SOURCE, "data"), os.path.join(HERE, "data"))
 AZR = os.path.join(HERE, "hybrid_potential.azr")
+shutil.copy(os.path.join(SOURCE, "hybrid_potential.azr"), AZR)
+
+
+def committed_total():
+    """Total-Chi-Squared of expected/chiSquared.out, the reference tests/run_tests.sh compares this project with."""
+    with open(os.path.join(SOURCE, "expected", "chiSquared.out")) as f:
+        for line in f:
+            if line.startswith("Total-Chi-Squared:"):
+                return float(line.split()[1])
+    raise RuntimeError("no Total-Chi-Squared line in expected/chiSquared.out")
+
+
+def committed_tolerance():
+    """The project's relative tolerance on that total (the first number of ./tolerance, as tests/run_tests.sh reads
+    it): the reference is printed to six digits and recorded with one toolchain."""
+    with open(os.path.join(SOURCE, "tolerance")) as f:
+        for line in f:
+            if line.strip() and not line.lstrip().startswith("#"):
+                return float(line.split()[0])
+    raise RuntimeError("no number in tolerance")
+
 
 # The project as committed: default Woods-Saxon V0 = 40, pair 1 overriding it
-# with V0 = 20, pair 2 (the photon pair) off.
-# Re-measured 2026-09-11, when the project moved to a converged
-# resonance-width multiplier of 20 (see ../../include/AdaptiveIntegrationGrid.h).
-FILE_CHI2 = 2462154.20340123
+# with V0 = 20, pair 2 (the photon pair) off.  Its chi-squared is the one of
+# expected/chiSquared.out (check 1, within the project's tolerance); every other
+# path that must give the same project is compared with the value computed here
+# (FILE_CHI2, set in check 1) to round-off.
+EXPECTED_CHI2 = committed_total()
+EXPECTED_TOL = committed_tolerance()
 TOL = 1e-6           # relative; the two paths should agree to round-off
 
 failures = []
@@ -85,7 +122,8 @@ print("1. the project as committed (pair 1 overrides the default)")
 with azure2(AZR, cwd=HERE) as m:
     x = np.asarray(m.params_rwa, float)
     chi2_file = float(np.sum(m.calculate_chi2_rwa(x)))
-    check("chi2 from the file", chi2_file, FILE_CHI2)
+    check("chi2 from the file equals expected/chiSquared.out", chi2_file, EXPECTED_CHI2, EXPECTED_TOL)
+    FILE_CHI2 = chi2_file
     check_true("pair 1 carries its own setting", m.nuclear_potential(1).own)
     check_true("pair 1 uses its own V0, not the default's",
                m.nuclear_potential(1).V0 == 20.0
@@ -109,8 +147,8 @@ with azure2(path, cwd=HERE) as m:
     chi2_off = float(np.sum(m.calculate_chi2_rwa(np.asarray(m.params_rwa, float))))
     print(f"        baseline chi2 = {chi2_off:.6f}")
     # 1e-4, not the 1e-3 this used to demand. The potential's effect on this
-    # project's chi-squared is 2.9e-4 relative (2462859.63 against 2462154.20),
-    # measured 2026-09-11. The larger figure the old threshold assumed came from
+    # project's chi-squared is 2.8e-4 relative (2466827.58 against 2466142.31
+    # with the distorted bound states; 2.9e-4 before them). The larger figure the old threshold assumed came from
     # an unconverged target integral, in which the grid itself responded to the
     # potential through the penetrability in its resonance-width estimate;
     # refining the grid removes that in the pre-fix code too (see ../tolerance).

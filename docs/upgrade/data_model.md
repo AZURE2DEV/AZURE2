@@ -469,8 +469,8 @@ keyword → tree table is in one place next to the nodes.
 
 ## 6. Steps
 
-Verification for every step unless stated otherwise: 179 × 3 identical (`/data0/skowrons/AZURE2-upgrade/tools/runall.sh`,
-`classify.py`), `ctest -LE slow`, `tests/run_tests.sh` 133/133, calculations identical at 1 and 8 threads, and the
+Verification for every step unless stated otherwise: 179 × 3 identical (`tools/runall.sh`,
+`tools/cls.sh`; `ARCHITECTURE.md` section 10), `ctest -LE slow`, `tests/run_tests.sh` 133/133, calculations identical at 1 and 8 threads, and the
 archived fit runs of `objective.md` §4 identical. Steps S2–S5 come first because they remove cross-object writes and
 history.
 
