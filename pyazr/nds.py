@@ -23,6 +23,9 @@ dropped straight into an evaluation::
                      observable="total-capture")
     AzrModel.from_file("13N.azr").add_data_segment(**kw).write("13N_new.azr")
 
+A ratio to Rutherford or Mott (``,DA,,RTH``, ``,DA,,MOT``) is a format-3
+quantity: ``ExforData.to_dataset`` writes it (``pyazr/exfor_coulomb.py``).
+
 When the EXFOR Web-API cannot be reached (it is intermittently behind a
 Cloudflare challenge), ``fetch_exfor`` and ``reference`` read the entry from a
 local copy of the EXFOR master files instead (https://github.com/IAEA-NDS/exfor_master,
@@ -84,8 +87,8 @@ _PROJ_MASS = {k: v[1] for k, v in _PROJ_ZA.items()}
 #: error would be read by AZURE2 as an infinitely precise measurement.
 _DEFAULT_REL_ERROR = 0.05
 
-# Constants matching include/Constants.h, so a converted S-factor or Rutherford
-# ratio reproduces what AZURE2 computes internally.
+# Constants matching include/Constants.h, so a converted S-factor reproduces
+# what AZURE2 computes internally.
 _UCONV = 931.49410242            # CODATA 2018, as the engine (include/Constants.h)
 _FSTRUC = 1.00 / 137.035999084
 _HBARC = 197.3269804
@@ -229,32 +232,29 @@ class ExforData:
         Set ``observable`` to ``total-capture`` for a radiative-capture
         reaction.
 
-        **Ratio-to-Rutherford data** (EXFOR ``,,RTH``) is dimensionless and
-        indistinguishable from an analyzing power once fetched, because
-        ``x4get`` drops the quantity suffix that says which.  ``rutherford=True``
-        multiplies by the Coulomb cross section to give barn/sr; ``False``
-        passes the values through; the default warns when the choice matters.
-        The ratio is the same in both frames, but the cross section written
-        is in the frame of the angle column: for ``ANG-CM`` it is the c.m.
-        Rutherford cross section at that angle; for a lab ``ANG`` column the
-        lab angle is taken to the c.m. frame with the elastic kinematics of
-        the entrance masses (the same ``target_mass`` / ``projectile_mass``
-        as the energy conversion; pass the exact masses for an exact
-        round trip) and the c.m. value is divided by the lab-to-c.m. Jacobian,
-        so AZURE2 recovers ratio x sigma_R,cm(theta_cm) from the file
-        (before 2026-10-26 the c.m. Rutherford value at the *lab* angle was
-        written, 1.13x off for p + 16O and 1.8-2.2x for alpha + 12C).
+        **Ratio-to-Rutherford data** (``,DA,,RTH``, ``,DA,,MOT``) is refused: it is
+        format-3 quantity ``ratio_to_rutherford`` (``ratio_to_mott``), written by
+        :meth:`to_dataset`; multiplying it by sigma_R here (until November 2026)
+        froze sigma_R under a shift, did not fold it and used mass numbers.  A
+        dimensionless differential whose code was dropped by ``x4get`` is an
+        analyzing power (``rutherford=False``), with a warning.
 
         Other unit conversions (``MB``, ``NB/SR``, ...) are applied from the
         column unit; ``cross_section_scale`` / ``energy_scale`` / ``angle_scale``
         multiply on top for any manual fix-up.
         """
         os = _import_os()
+        if _is_rutherford_ratio(self, {c.name: c.unit for c in self.columns}, rutherford) or \
+                _exfor_coulomb().quantity_code(self.reaction) is not None:
+            raise ValueError(
+                f"{self.dataset_id}: a ratio to the Rutherford or Mott cross section ({self.reaction!r}) is a "
+                f"format-3 quantity (ratio_to_rutherford, ratio_to_mott): ExforData.to_dataset writes it.  "
+                f"to_azr no longer multiplies it by a Rutherford cross section (frozen under an energy shift, "
+                f"not folded, mass numbers).")
         data = _azr_columns(self, target_mass=target_mass,
                             projectile_mass=projectile_mass,
                             cross_section_scale=cross_section_scale,
-                            energy_scale=energy_scale, angle_scale=angle_scale,
-                            rutherford=rutherford)
+                            energy_scale=energy_scale, angle_scale=angle_scale)
         os.makedirs(data_dir, exist_ok=True)
         if file_name is None:
             file_name = _safe_name(self.dataset_id, self.author, self.year)
@@ -262,13 +262,7 @@ class ExforData:
         with open(path, "w") as f:
             for row in data:
                 f.write("  ".join(f"{v:.8g}" for v in row) + "\n")
-        if observable:
-            obs = observable
-        else:
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore")   # _azr_columns has warned already
-                is_ratio = _is_rutherford_ratio(self, {c.name: c.unit for c in self.columns}, rutherford)
-            obs = self._guess_observable(rutherford=is_ratio)
+        obs = observable or self._guess_observable()
         ang = data[:, 1]
         en = data[:, 0]
         syspct = self._sys_error_percent()
@@ -279,6 +273,49 @@ class ExforData:
         if syspct is not None:
             kw["norm_error"] = float(syspct)
         return kw
+
+    def format3_quantity(self):
+        """The format-3 quantity of a ratio to a Coulomb cross section, or ``None`` (``exfor_coulomb.quantity``;
+        a ValueError for RTH of identical particles (K2), MOT of different ones, an inelastic group)."""
+        return _exfor_coulomb().quantity(self)
+
+    def to_dataset(self, data_dir, name, quantity=None, norm=None, target_mass=None, projectile_mass=None,
+                   energy_scale=1.0, angle_scale=1.0, file_name=None):
+        """Write a ratio to Rutherford or Mott as a format-3 data set: the file ``E_lab angle ratio error`` (the
+        ratios not converted; ``EN-CM`` to the lab with ``target_mass`` / ``projectile_mass``, as :meth:`to_azr`) and
+        the returned text of its ``dataset`` record (``quantity`` from :meth:`format3_quantity` unless given; the
+        angle frame from the EXFOR heading; ``norm`` by default ``1 fit prior 1 <ERR-SYS>%``, a ValueError when the
+        entry gives no ERR-SYS)."""
+        os = _import_os()
+        coulomb = _exfor_coulomb()
+        quantity = coulomb.chosen_quantity(self, quantity)
+        frame = _angle_frame(self)
+        if frame is None:
+            raise ValueError(f"{self.dataset_id}: a ratio to a Coulomb cross section needs an angle column.")
+        if norm is None:
+            sys_pct = self._sys_error_percent()
+            if sys_pct is None:
+                raise ValueError(f"{self.dataset_id}: the entry gives no ERR-SYS in per cent: pass norm= (for "
+                                 f"example '1 fit prior 1 5%', or '1 fixed').")
+            norm = f"1 fit prior 1 {sys_pct:g}%"
+        m_t, m_p = self.masses(target_mass, projectile_mass)
+        cols = {c.name: c.unit for c in self.columns}
+        ratio = _values(self).astype(float)
+        rows = np.column_stack([_energy_column(self, cols, m_t, m_p) * energy_scale, _angle_column(self, cols) * angle_scale,
+                                ratio, _error_column(self, cols, ratio, (cols.get("DATA-CM") or cols.get("DATA") or "").upper())])
+        keep = np.all(np.isfinite(rows), axis=1)
+        if not np.all(keep):
+            warnings.warn(f"{self.dataset_id}: {int(np.sum(~keep))} of {len(rows)} rows have a blank energy, "
+                          f"angle or value and were left out.")
+            rows = rows[keep]
+        os.makedirs(data_dir, exist_ok=True)
+        path = os.path.join(data_dir, (file_name or _safe_name(self.dataset_id, self.author, self.year)) + ".dat")
+        with open(path, "w") as f:
+            f.write(f"# EXFOR {self.dataset_id} {self.reaction}: E_lab(MeV) theta_{frame}(deg) ratio error "
+                    f"(not converted)\n")
+            for row in rows:
+                f.write("  ".join(f"{v:.8g}" for v in row) + "\n")
+        return coulomb.record(self, name, quantity, path, frame, norm)
 
     # -- internal helpers ----------------------------------------------------
     def _sys_error_percent(self):
@@ -291,20 +328,19 @@ class ExforData:
                 unit = c.unit
         return float(arr[0]) if unit == "PER-CENT" else None
 
-    def _guess_observable(self, rutherford=False):
+    def _guess_observable(self):
         """The AZURE2 observable the columns suggest.
 
         The angle column's frame decides between ``differential`` (EXFOR
         ``ANG`` / ``COS``, lab) and ``differential-cm`` (``ANG-CM`` /
         ``COS-CM``); before 2026-10-26 every angle column was called c.m.  A
-        dimensionless differential is an analyzing power unless it is a ratio
-        to Rutherford (``rutherford``), which :meth:`to_azr` has turned into a
-        cross section.
+        dimensionless differential is an analyzing power (a ratio to
+        Rutherford never reaches here: :meth:`to_azr` refuses it).
         """
         if self.exit == "G" or "SFC" in self.reaction:
             return "total-capture"
         frame = _angle_frame(self)
-        if not rutherford and ("POL" in self.reaction or "NO-DIM" in [c.unit for c in self.columns]):
+        if "POL" in self.reaction or "NO-DIM" in [c.unit for c in self.columns]:
             return "analyzing-power"
         if frame == "cm":
             return "differential-cm"
@@ -323,6 +359,17 @@ class ExforColumn:
     def __repr__(self):  # pragma: no cover
         return f"<ExforColumn {self.name} ({self.unit})>" if self.unit \
             else f"<ExforColumn {self.name}>"
+
+
+def _exfor_coulomb():
+    """pyazr/exfor_coulomb.py, loaded by its path, so that this file also works on its own (the nds tests load it
+    without the compiled package)."""
+    import importlib.util
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "exfor_coulomb.py")
+    spec = importlib.util.spec_from_file_location("pyazr_exfor_coulomb", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def _import_os():
@@ -381,20 +428,6 @@ def _sfactor_factors(unit):
     if "*" not in unit or "EV" not in unit:
         return None
     return _barn_factor(unit) * _energy_factor(unit), _energy_factor(unit)
-
-
-def _rutherford_barn_per_sr(z1, z2, e_cm_mev, angle_deg):
-    """Rutherford differential cross section, c.m. frame, in barn/sr.
-
-    ``dsigma/dOmega = (Z1 Z2 e^2 / 4E)^2 / sin^4(theta/2)`` with
-    ``e^2 = alpha hbar c`` in MeV fm, giving fm^2/sr; 1 fm^2 = 1e-2 barn.
-    """
-    e_cm_mev = np.asarray(e_cm_mev, float)
-    sin_half = np.sin(np.radians(np.asarray(angle_deg, float)) / 2.0)
-    amplitude = (z1 * z2 * _FSTRUC * _HBARC) / (4.0 * e_cm_mev)
-    with np.errstate(divide="ignore", invalid="ignore"):
-        out = (amplitude ** 2) / (sin_half ** 4) * 1e-2
-    return np.where((e_cm_mev > 0) & (sin_half != 0), out, np.nan)
 
 
 def _parse_columns(header):
@@ -810,16 +843,15 @@ def sfactor_to_cross_section(S, E_cm_kev, z1, z2, mu):
 
 
 def _azr_columns(data, target_mass=None, projectile_mass=None,
-                 cross_section_scale=1.0, energy_scale=1.0, angle_scale=1.0,
-                 rutherford=None):
-    """Build the ``(lab E_MeV, angle_deg, cs, err)`` array for a dataset."""
+                 cross_section_scale=1.0, energy_scale=1.0, angle_scale=1.0):
+    """Build the ``(lab E_MeV, angle_deg, cs, err)`` array for a dataset (a
+    dimensionless value -- an analyzing power, a ratio -- is written as it is)."""
     m_t, m_p = data.masses(target_mass, projectile_mass)
     cols = {c.name: c.unit for c in data.columns}
     energy = _energy_column(data, cols, m_t, m_p) * energy_scale
     angle = _angle_column(data, cols) * angle_scale
     cs, err = _data_column(data, cols, m_t, m_p,
-                           cross_section_scale=cross_section_scale,
-                           rutherford=rutherford)
+                           cross_section_scale=cross_section_scale)
     out = np.column_stack([energy, angle, cs, err])
     # A row with a blank energy, angle or value (EXFOR leaves fields blank, and
     # the local master files read them as NaN) cannot go into an AZURE2 file.
@@ -883,7 +915,7 @@ def _error_column(data, cols, raw, data_unit):
     """Uncertainty per point, expressed in the *raw* units of ``raw``.
 
     Raw, not barns: the caller converts the data column afterwards -- and for
-    an S-factor or a Rutherford ratio that conversion is per-point and
+    an S-factor that conversion is per-point and
     non-linear -- so the error has to go through exactly the same steps.
 
     EXFOR gives the uncertainty absolutely (``ERR-S``, ``DATA-ERR``) or as a
@@ -935,14 +967,13 @@ def _is_rutherford_ratio(data, cols, rutherford=None):
             f"{data.dataset_id}: dimensionless differential data, which is "
             f"either a ratio to Rutherford or an analyzing power -- x4get does "
             f"not say which (x4list does: check the reaction code for ',,RTH'). "
-            f"Values passed through unconverted; pass rutherford=True to "
-            f"multiply by the Coulomb cross section, or rutherford=False to "
-            f"silence this.")
+            f"Values passed through as an analyzing power; a ratio to Rutherford "
+            f"is a format-3 quantity (ExforData.to_dataset), and "
+            f"rutherford=False silences this.")
     return False
 
 
-def _data_column(data, cols, m_t, m_p, cross_section_scale=1.0,
-                 rutherford=None):
+def _data_column(data, cols, m_t, m_p, cross_section_scale=1.0):
     dname = "DATA-CM" if "DATA-CM" in cols else "DATA"
     if dname not in data.arrays:
         raise ValueError(f"{data.dataset_id}: no DATA / DATA-CM column in "
@@ -970,38 +1001,6 @@ def _data_column(data, cols, m_t, m_p, cross_section_scale=1.0,
         mu = m_t * m_p / (m_t + m_p)
         cs = sfactor_to_cross_section(cs * to_barn_kev, E_cm_kev, z1, z2, mu)
         stat = sfactor_to_cross_section(stat * to_barn_kev, E_cm_kev, z1, z2, mu)
-    elif _is_rutherford_ratio(data, cols, rutherford):
-        # Ratio to Rutherford (EXFOR quantity code ...,,RTH): dimensionless,
-        # but not a cross section -- passing it through as barns would be
-        # wrong by the Coulomb cross section itself.
-        za_t, za_p = data.za(data.target), data.za(data.projectile)
-        z2 = za_t[0] if za_t else 0
-        z1 = za_p[0] if za_p else 0
-        if not (z1 and z2):
-            raise ValueError(
-                f"{data.dataset_id}: ratio-to-Rutherford data needs the "
-                f"entrance-channel charges, which could not be read from "
-                f"{data.reaction!r}.")
-        # The ratio is frame-independent; the cross section written must be
-        # in the frame of the angle column.  A lab angle goes to the c.m.
-        # frame with the elastic kinematics of the entrance masses, and the
-        # c.m. Rutherford value comes back to the lab through the Jacobian
-        # AZURE2 will apply when it reads the file (EPoint::ConvertCrossSection),
-        # so the engine sees ratio x sigma_R,cm(theta_cm).  Before 2026-10-26
-        # the c.m. Rutherford at the LAB angle was written for ANG data.
-        angle = _angle_column(data, cols)
-        jac = 1.0
-        if _angle_frame(data) == "lab":
-            angle, jac = elastic_lab_to_cm(angle, m_t, m_p)
-        if za_t and za_p and za_t == za_p:
-            warnings.warn(
-                f"{data.dataset_id}: identical particles ({data.reaction!r}); "
-                f"the ratio is to the Mott cross section, which this conversion "
-                f"does not form -- the values written are ratio x Rutherford.")
-        coulomb = _rutherford_barn_per_sr(
-            z1, z2, _cm_kev(data, cols, m_t, m_p) / 1e3, angle) / jac
-        cs = cs * coulomb
-        stat = stat * coulomb
     elif "NO-DIM" in unit or "ARB" in unit:
         pass                                 # analyzing power, yield ratio, ...
     else:

@@ -1,25 +1,24 @@
 #!/usr/bin/env python3
-"""Ratio-to-Rutherford EXFOR data with a LAB angle column (audit item 8, fixed 2026-10-26).
-
-The ratio sigma/sigma_R is the same in both frames, but to_azr writes a cross section in the frame of
-the angle column.  For an ``ANG`` (lab) column it used to multiply by the c.m. Rutherford cross section
-at the lab angle: 1.13x off for p + 16O, 1.8-2.2x for alpha + 12C.  Now the lab angle goes to the c.m.
-frame with the elastic kinematics (``elastic_lab_to_cm``), and the c.m. value ratio x sigma_R(theta_cm)
-is divided by the lab-to-c.m. Jacobian AZURE2 applies when it reads a lab file, so the engine sees
-exactly ratio x sigma_R,cm(theta_cm).  ``_guess_observable`` also called every angle column c.m.; a
-lab ``ANG`` column is ``differential`` now, and a ratio to Rutherford is no analyzing power.
+"""Ratio-to-Rutherford EXFOR data (,DA,,RTH; ,DA,,MOT) become the format-3 quantities ratio_to_rutherford and
+ratio_to_mott (docs/upgrade/data_kinds.md sections 3.2, 4.3; step S14): ExforData.format3_quantity maps the code,
+ExforData.to_dataset writes the ratios unconverted with the record, and to_azr refuses a ratio instead of
+multiplying it by a Rutherford cross section (which froze sigma_R under an energy shift, did not fold it and used
+mass numbers; audit item 8 had fixed its frame on 2026-10-26).
 
 Fixture: tests/pyazr/data/exfor_master T0001004 (12C(p,el), EN/MEV, ANG lab, DATA NO-DIM ,,RTH) and
 T0001005 (the same with ANG-CM).  Checks:
   1. elastic_lab_to_cm against the engine's own formulae (EPoint::ConvertLabAngle / ConvertCrossSection);
-  2. ANG-CM: values = ratio x sigma_R,cm(E_cm, theta);  ANG: values = ratio x sigma_R,cm(theta_cm) / J;
-  3. the observable guess: lab -> differential, c.m. -> differential-cm, no-dim without RTH -> analyzing
-     power, the capture fixture -> total-capture;
-  4. with the compiled engine (skipped without it): the lab file through a p + 12C model, the engine's
-     converted c.m. angles and data = theta_cm and ratio x sigma_R,cm(theta_cm) to 1e-8.
+  2. format3_quantity: RTH -> ratio_to_rutherford, MOT of identical particles -> ratio_to_mott; refused (ValueError,
+     with the reason): RTH of identical particles (K2), MOT of different ones (point-nucleus Mott), an inelastic group;
+  3. to_azr refuses a ratio; a no-dim differential that is not one is an analyzing power, written through;
+  4. to_dataset: the ratios and errors unconverted, lab or c.m. angles as the heading says, the record's fields; no
+     ERR-SYS and no norm= is refused;
+  5. with the compiled engine (skipped without it): the code table equals the exfor column of the quantity table, and
+     the written record runs in a format-3 p + 12C project: the data are the ratios, the angles the c.m. ones.
 
 Run from anywhere:  python3 tests/pyazr/nds_rutherford_test.py
 """
+import dataclasses
 import importlib.util
 import math
 import os
@@ -50,6 +49,14 @@ def close(a, b, tol=1e-12):
     return a.shape == b.shape and np.all(np.abs(a - b) <= tol * np.maximum(1.0, np.abs(b)))
 
 
+def refused(f, *words):
+    try:
+        f()
+    except ValueError as e:
+        return all(w in str(e) for w in words)
+    return False
+
+
 MP, MT = 1.00782, 12.0          # the masses of the p + 12C test model
 Z1, Z2 = 1, 6
 
@@ -70,78 +77,78 @@ check("J finite at 0 and 180 degrees, (1+gamma)^-2 and (1-gamma)^-2",
 check("theta_lab = atan2(sin theta_cm, gamma + cos theta_cm)",
       close(np.degrees(np.arctan2(np.sin(tcr), g + np.cos(tcr))), lab[inner], 1e-12))
 
-print("\n2. the converted values")
+print("\n2. the quantity code")
 cm = N.fetch_exfor("T0001005", source="local")
 lb = N.fetch_exfor("T0001004", source="local")
-ratio = np.array([0.9, 1.2, 1.5])
-err = np.array([0.02, 0.03, 0.04])
-angles = np.array([30.0, 90.0, 150.0])
-e_cm = 2.0 * MT / (MT + MP)
-with warnings.catch_warnings(record=True) as w:
-    warnings.simplefilter("always")
-    rows_cm = N._azr_columns(cm, target_mass=MT, projectile_mass=MP)
-    rows_lb = N._azr_columns(lb, target_mass=MT, projectile_mass=MP)
-check("no warning for a ,,RTH reaction code", not w, [str(x.message) for x in w])
-r_cm = N._rutherford_barn_per_sr(Z1, Z2, e_cm, angles)
-check("ANG-CM: ratio x sigma_R,cm(theta)", close(rows_cm[:, 2], ratio * r_cm) and close(rows_cm[:, 3], err * r_cm),
-      rows_cm[:, 2:])
-check("ANG-CM: the angle column is written through", close(rows_cm[:, 1], angles))
-tcm, j = N.elastic_lab_to_cm(angles, MT, MP)
-want = ratio * N._rutherford_barn_per_sr(Z1, Z2, e_cm, tcm) / j
-check("ANG (lab): ratio x sigma_R,cm(theta_cm) / J", close(rows_lb[:, 2], want) and close(rows_lb[:, 3], err / ratio * want),
-      (rows_lb[:, 2], want))
-check("ANG (lab): the lab angle column is written through", close(rows_lb[:, 1], angles))
-old = ratio * r_cm                                           # what was written before the fix
-check("the old value (c.m. Rutherford at the lab angle) is 1.05-1.3x off here",
-      np.all(old / want > 1.04) and np.all(old / want < 1.3), old / want)
-# the Rutherford helper itself: (Z1 Z2 alpha hbar c / 4 E)^2 / sin^4(theta/2) in barn
-amp = Z1 * Z2 * N._FSTRUC * N._HBARC / (4.0 * e_cm)
-check("sigma_R,cm formula", close(r_cm, amp ** 2 / np.sin(np.radians(angles) / 2) ** 4 * 1e-2))
+check("12C(p,el) ,,DA,,RTH -> ratio_to_rutherford", lb.format3_quantity() == "ratio_to_rutherford")
+check("PAR,DA,,RTH -> ratio_to_rutherford",
+      dataclasses.replace(lb, reaction="6-C-12(P,EL)6-C-12,PAR,DA,,RTH").format3_quantity() == "ratio_to_rutherford")
+aa_mot = dataclasses.replace(lb, reaction="2-HE-4(A,EL)2-HE-4,,DA,,MOT")
+check("4He(a,el) ,,DA,,MOT -> ratio_to_mott", aa_mot.format3_quantity() == "ratio_to_mott")
+check("RTH of identical particles: refused, Rutherford or Mott is asked (K2)",
+      refused(dataclasses.replace(lb, reaction="2-HE-4(A,EL)2-HE-4,,DA,,RTH").format3_quantity, "K2", "ratio_to_mott"))
+check("MOT of different particles: refused (relativistic point-nucleus Mott)",
+      refused(dataclasses.replace(lb, reaction="6-C-12(P,EL)6-C-12,,DA,,MOT").format3_quantity, "point-nucleus"))
+check("an inelastic group: refused", refused(dataclasses.replace(lb, reaction="6-C-12(A,INL)6-C-12,,DA,,RTH").format3_quantity,
+                                               "not elastic"))
+check("a plain dsigma/dOmega is no Coulomb ratio", dataclasses.replace(lb, reaction="6-C-12(P,EL)6-C-12,,DA").format3_quantity() is None)
 
-print("\n3. the observable guess")
-check("lab ANG ratio -> differential", lb._guess_observable(rutherford=True) == "differential")
-check("ANG-CM ratio -> differential-cm", cm._guess_observable(rutherford=True) == "differential-cm")
-check("a no-dim differential that is not a ratio -> analyzing-power",
-      lb._guess_observable() == "analyzing-power" and cm._guess_observable() == "analyzing-power")
-cap = N.fetch_exfor("T0001002", source="local")
-check("the capture fixture -> total-capture", cap._guess_observable() == "total-capture")
+print("\n3. to_azr")
 work = tempfile.mkdtemp(prefix="pyazr_nds_rth_")
 try:
-    kw_lb = lb.to_azr(os.path.join(work, "data"), 1, 1, target_mass=MT, projectile_mass=MP)
-    kw_cm = cm.to_azr(os.path.join(work, "data"), 1, 1, target_mass=MT, projectile_mass=MP, file_name="cm")
-    check("to_azr: lab set -> observable differential, c.m. set -> differential-cm",
-          kw_lb["observable"] == "differential" and kw_cm["observable"] == "differential-cm",
-          (kw_lb["observable"], kw_cm["observable"]))
-    check("to_azr: angle range from the lab angles", (kw_lb["angle_min"], kw_lb["angle_max"]) == (30.0, 150.0))
-    with warnings.catch_warnings(record=True) as w:
-        warnings.simplefilter("always")
-        kw_forced = lb.to_azr(os.path.join(work, "data"), 1, 1, rutherford=False, file_name="ay")
-    check("rutherford=False: values through, analyzing-power", kw_forced["observable"] == "analyzing-power"
-          and close(np.loadtxt(kw_forced["data_file"])[:, 2], ratio), kw_forced["observable"])
+    check("to_azr refuses a ratio to Rutherford, naming to_dataset",
+          refused(lambda: lb.to_azr(os.path.join(work, "data"), 1, 1, target_mass=MT, projectile_mass=MP), "to_dataset"))
+    ay = dataclasses.replace(lb, reaction="6-C-12(P,EL)6-C-12,,POL/DA,,ANA")
+    kw = ay.to_azr(os.path.join(work, "data"), 1, 1, file_name="ay")
+    check("an analyzing power: analyzing-power, values through", kw["observable"] == "analyzing-power" and
+          close(np.loadtxt(kw["data_file"])[:, 2], [0.9, 1.2, 1.5]), kw["observable"])
+    check("the observable guess of the capture fixture: total-capture",
+          N.fetch_exfor("T0001002", source="local")._guess_observable() == "total-capture")
 
-    print("\n4. the lab file through the engine")
+    print("\n4. to_dataset")
+    check("no ERR-SYS and no norm=: refused", refused(lambda: lb.to_dataset(os.path.join(work, "data"), "rth"), "norm="))
+    rec_lb = lb.to_dataset(os.path.join(work, "data"), "rth_lab", norm="1 fit prior 1 3%", target_mass=MT,
+                           projectile_mass=MP, file_name="lab")
+    rec_cm = cm.to_dataset(os.path.join(work, "data"), "rth_cm", norm="1 fixed", target_mass=MT, projectile_mass=MP,
+                           file_name="cm")
+    rows_lb = np.loadtxt(os.path.join(work, "data", "lab.dat"))
+    rows_cm = np.loadtxt(os.path.join(work, "data", "cm.dat"))
+    ratio, err, angles = [0.9, 1.2, 1.5], [0.02, 0.03, 0.04], [30.0, 90.0, 150.0]
+    check("lab and c.m. files: E_lab 2 MeV, the angles and the ratios and errors as given",
+          close(rows_lb, np.column_stack([[2.0] * 3, angles, ratio, err])) and close(rows_cm, rows_lb), (rows_lb, rows_cm))
+    want = ["dataset rth_lab", "reaction       12C(p,p)12C", "quantity       ratio_to_rutherford", "unit           1",
+            "columns        E_lab[MeV] theta_lab[deg] value error", "norm           1 fit prior 1 3%", "exfor          T0001004"]
+    check("the record of the lab set", all(w in rec_lb for w in want), rec_lb)
+    check("the record of the c.m. set: theta_cm", "columns        E_lab[MeV] theta_cm[deg] value error" in rec_cm, rec_cm)
+    check("identical particles with quantity='ratio_to_mott' given: 4He(a,a)4He",
+          "reaction       4He(a,a)4He" in dataclasses.replace(lb, reaction="2-HE-4(A,EL)2-HE-4,,DA,,RTH").to_dataset(
+              os.path.join(work, "data"), "aa", quantity="ratio_to_mott", norm="1 fixed", file_name="aa"))
+
+    print("\n5. with the engine")
     sys.path.insert(0, ROOT)
     try:
-        from pyazr import azure2, AzrModel
-        import pyazr._azure2  # noqa: F401
+        import pyazr
+        from pyazr import azure2
     except Exception as e:
         print(f"  skip  engine not importable ({e})")
     else:
-        model = AzrModel.from_file(os.path.join(ROOT, "tests", "convolution_unify", "models", "fixed.azr"))
-        model.add_data_segment(**kw_lb)
-        azr = os.path.join(work, "rth.azr")
+        q = pyazr.schema()["quantities"]
+        table = {code: name for name in ("ratio_to_rutherford", "ratio_to_mott") for code in q[name]["exfor"]}
+        check("the code table = the exfor column of the two quantities",
+              table == N._exfor_coulomb().COULOMB_RATIO_CODES, table)
+        model = open(os.path.join(ROOT, "tests", "convolution_unify", "models", "fixed.azr")).read()
+        head = model[:model.index("</config>")] + "format=3\n" + model[model.index("</config>"):model.index("</levels>") + 10]
         os.makedirs(os.path.join(work, "output"), exist_ok=True)
         os.makedirs(os.path.join(work, "checks"), exist_ok=True)
-        model.write(azr)
+        azr = os.path.join(work, "rth.azr")
+        with open(azr, "w") as f:
+            f.write(head + "\n<data>\n" + rec_lb + "</data>\n<extrapolations>\n</extrapolations>\n<targets>\n</targets>\n")
         with azure2(azr, cwd=work) as m:
             ang = np.asarray(m.angles[0], float)
             xs = np.asarray(m.cross[0], float)
-            en = np.asarray(m.energies[0], float)
+        tcm, _ = N.elastic_lab_to_cm(np.array(angles), MT, MP)
         check("engine: lab angles converted to theta_cm", close(ang, tcm, 1e-8), (ang, tcm))
-        check("engine: c.m. energy", close(en, [e_cm] * 3, 1e-8), en)
-        want_cm = ratio * N._rutherford_barn_per_sr(Z1, Z2, e_cm, tcm)
-        # the data file carries 8 significant digits
-        check("engine: converted data = ratio x sigma_R,cm(theta_cm)", close(xs, want_cm, 1e-7), (xs, want_cm))
+        check("engine: the data are the ratios, not converted", close(xs, ratio, 1e-12), xs)
 finally:
     shutil.rmtree(work, ignore_errors=True)
 
