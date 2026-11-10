@@ -2,6 +2,9 @@
 # charge state 1, a shared target with its thickness fitted.  Corrections to the note's text, marked there:
 # 'phase solid' (required with 'stopping evaluation') and 'quadrature points 40' (required on a folded data set,
 # section 7.2).
+<config>
+format=3
+</config>
 <targets>
 target C13A
     kind           layer

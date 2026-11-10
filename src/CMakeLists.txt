@@ -111,6 +111,8 @@ endif()
 # AZUREAPI pulls AZURE2Core in as a PUBLIC dependency of its own.  Everything
 # else follows from the graph above.
 target_link_libraries(AZURE2 ${AZUREAPI_LIBRARIES} AZURE2Core)
+# convert/: AZURE2 --convert ... --to 3 and --validate (src/AZURE2.cpp)
+target_link_libraries(AZURE2 azure2_convert)
 
 # Windows DLL bundling for libraries that can't be statically linked
 if(CROSS_COMPILE_WINDOWS)

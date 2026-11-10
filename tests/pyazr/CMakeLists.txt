@@ -471,6 +471,13 @@ add_test(NAME pyazr_schema
                  ${CMAKE_CURRENT_SOURCE_DIR}/schema_test.py)
 set_tests_properties(pyazr_schema PROPERTIES ENVIRONMENT "AZURE2_BIN=$<TARGET_FILE:AZURE2>")
 
+# AZURE2 --validate and pyazr.validate (the fixtures of experiment/tests/data/, a file with several errors, a format-2
+# file refused) and pyazr.convert_azr(..., to=3) against the committed conversion (docs/upgrade/project_format3.md 6.2, 8).
+add_test(NAME pyazr_validate
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/validate_test.py)
+set_tests_properties(pyazr_validate PROPERTIES ENVIRONMENT "AZURE2_BIN=$<TARGET_FILE:AZURE2>")
+
 # pyazr.convert_azr: an old project in the updated format (docs/upgrade/project.md section 4) -- format 2, idempotent,
 # the removed sections, the same chi-squared as the original.
 add_test(NAME pyazr_convert_azr

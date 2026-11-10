@@ -53,7 +53,9 @@ cli_doc = read("docs/source/reference/command_line.rst")
 flags = set(re.findall(r'"(--[a-z0-9-]+)=?"', parser))
 # Handled in main() before parseOptions, so accepted although parseOptions
 # never sees them.
-handled_in_main = {"--help", "--build-coulomb-table", "--convert", "--schema"}
+handled_in_main = {"--help", "--build-coulomb-table", "--convert", "--schema", "--validate",
+                   # options of --convert ... --to 3 and of --validate, read in main() with their command
+                   "--to", "--json-report", "--answers", "--exact-grids", "--strict", "--allow-questions", "--json"}
 flags -= handled_in_main
 # Removed: rejected with an error, documented as removed, not offered by --help.
 removed = {"--use-api"}
