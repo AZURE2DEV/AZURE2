@@ -737,7 +737,7 @@ class LevelWidthTransformer:
 # ---------------------------------------------------------------------------
 
 def _radiation_type(azr_channel) -> str:
-    """``AChannel::AChannel(NucLine, int)``: pType -> 'P' / 'E' / 'M' / 'F' / 'G'."""
+    """``AChannel::AChannel(LevelRow, int)``: pType -> 'P' / 'E' / 'M' / 'F' / 'G'."""
     ptype = azr_channel.ptype
     if ptype == 0:
         return "P"

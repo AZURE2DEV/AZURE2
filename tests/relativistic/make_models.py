@@ -41,7 +41,7 @@ TAIL = """<targetInt>
 """
 
 def line(j, pi, ex, fix, s, l, lid, gamma, pair, chfix=0):
-    """One <levels> line (NucLine column order)."""
+    """One <levels> line (column order of io/ LevelRows.h)."""
     (j1, pi1, j2, pi2, m1, m2, z1, z2, sep, rad) = pair
     return (f"{j:g} {pi:d} {ex:.6f} {fix:d} 1 {PAIRKEY[pair]} {int(2*s)} {int(2*l)} {lid} 1 {chfix} {gamma:g} "
             f"{j1:g} {pi1} {j2:g} {pi2} 0 {m1} {m2} {z1} {z2} {sep} {sep} 0 0 0.0 0 {rad} 0 0 0")

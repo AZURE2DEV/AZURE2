@@ -19,7 +19,7 @@ for x, y in zip(levels("orig.azr"), levels("back.azr")):
 for (i, p, q), n in sorted(diff.items()): print(f"t{i} {p} -> {q}: {n} lines")
 ```
 
-Token names, in order (`include/NucLine.h`): `levelJ levelPi levelE levelFix aa ir s l levelID isActive channelFix
+Token names, in order (`io/include/azure2/io/LevelRows.h`): `levelJ levelPi levelE levelFix aa ir s l levelID isActive channelFix
 gamma j1 pi1 j2 pi2 e2 m1 m2 z1 z2 entranceSepE sepE j3 pi3 e3 pType chRad g1 g2 ecMultMask`.
 
 ## Reading GNDS with FUDGE

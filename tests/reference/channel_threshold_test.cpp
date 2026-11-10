@@ -41,7 +41,7 @@
 #include "Config.h"
 #include "Constants.h"
 #include "CoulFunc.h"
-#include "NucLine.h"
+#include "azure2/io/LevelRows.h"
 #include "PPair.h"
 #include "ShftFunc.h"
 
@@ -68,7 +68,7 @@ PPair makePair(const PairSpec &s) {
   line << "1 1 0 0 1 1 1 0 1 1 0 0 0 1 0 1 0 " << s.m1 << " " << s.m2 << " " << s.z1 << " "
        << s.z2 << " " << s.sepE << " " << s.sepE << " 0 1 0 0 " << s.a << " 0 0 0";
   std::istringstream in(line.str());
-  NucLine nl(in);
+  azure2::io::LevelRow nl(in);
   return PPair(nl);
 }
 

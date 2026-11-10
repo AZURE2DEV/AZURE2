@@ -3,7 +3,11 @@
 
 #include "Decay.h"
 
-class NucLine;
+namespace azure2 {
+namespace io {
+class LevelRow;
+}
+}  // namespace azure2
 
 /// An AZURE Particle Pair
 
@@ -16,7 +20,7 @@ class NucLine;
 class PPair {
  public:
   /// Build from a line of the nuclear input file.
-  PPair(NucLine);
+  explicit PPair(const azure2::io::LevelRow &);
   /// Is this the entrance pair the calculation is driven from?
   bool IsEntrance() const;
   /// Charge number of particle 1 or 2.

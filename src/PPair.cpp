@@ -1,4 +1,4 @@
-#include "NucLine.h"
+#include "azure2/io/LevelRows.h"
 #include "PPair.h"
 #include <assert.h>
 #include <cmath>
@@ -7,7 +7,7 @@
  * A particle pair object is created from and entry in the nuclear input file.
  */
 
-PPair::PPair(NucLine nucLine) {
+PPair::PPair(const azure2::io::LevelRow &nucLine) {
   pair_z_[0] = nucLine.z1();
   pair_z_[1] = nucLine.z2();
   pair_m_[0] = nucLine.m1();

@@ -14,7 +14,7 @@
 #include "azure2/experiment/Schema.h"
 #include "AZUREMain.h"
 #include "Config.h"
-#include "NucLine.h"
+#include "azure2/io/LevelRows.h"
 #include "SegLine.h"
 #include "ExtrapLine.h"
 #include "GSLException.h"
@@ -966,7 +966,7 @@ bool checkExternalCapture(Config &configure, const std::vector<SegPairs> &segPai
     if (line != "</levels>" && !in.eof()) {
       std::istringstream stm;
       stm.str(line);
-      NucLine tempNucLine(stm);
+      azure2::io::LevelRow tempNucLine(stm);
       if ((stm.rdstate() & (std::stringstream::failbit | std::stringstream::badbit))) {
         configure.outStream << "Problem reading nuclear information. Check configuration file.  The line:\n  "
                             << line << std::endl;

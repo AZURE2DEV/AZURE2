@@ -1,11 +1,11 @@
 #include "JGroup.h"
-#include "NucLine.h"
+#include "azure2/io/LevelRows.h"
 
 /*!
  * This constructor is used when a \f$ J^\pi \f$ group is created from an entry in the nuclear input file.
  */
 
-JGroup::JGroup(NucLine nucLine) :
+JGroup::JGroup(const azure2::io::LevelRow &nucLine) :
   pi_(nucLine.levelPi()),
   j_(nucLine.levelJ()),
   isinrmatrix_(true) {};

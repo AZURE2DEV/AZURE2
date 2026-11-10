@@ -18,7 +18,7 @@ Prefer extending it to re-deriving the format.
 
 ## 2. The 31 fields of a level line
 
-One line per **channel** of each level, a blank line between levels (`include/NucLine.h`):
+One line per **channel** of each level, a blank line between levels (`io/include/azure2/io/LevelRows.h`):
 
 ```
 levelJ levelPi levelE levelFix aa ir 2S 2L levelID isActive channelFix
@@ -33,7 +33,7 @@ pType chRad g1 g2 ecMultMask
 | `levelFix` | 1 = energy fixed, 0 = fit parameter | per level, repeated on each of its lines |
 | `aa` | legacy entrance key | the Qt GUI wrote `1`; `CNuc` never reads it |
 | `ir` | this channel's pair key | what `entrance`/`exit` of a segment refer to |
-| `2S`, `2L` | doubled channel spin and orbital momentum | integers; `NucLine` halves them on read |
+| `2S`, `2L` | doubled channel spin and orbital momentum | integers; the engine halves them on read |
 | `channelFix` | 1 = width fixed | per channel |
 | `gamma` | Γ (eV) for an open particle channel, ANC (fm^-1/2) for a closed one, Γ_γ (eV) for a photon channel | not a reduced-width amplitude (§4) |
 | `j1 pi1` | light partner spin and parity | a photon pair carries `1 1` |

@@ -26,7 +26,8 @@
 #include "CoulFunc.h"
 #include "ECIntegral.h"
 #include "GSLException.h"
-#include "NucLine.h"
+#include "azure2/io/AbundanceLines.h"
+#include "azure2/io/LevelRows.h"
 #include "Minuit2/MnUserParameters.h"
 #include "NFIntegral.h"
 #include "CNucExternalCapture.h"
@@ -208,139 +209,122 @@ int CNuc::Fill(const Config &configure, const std::map<int, double> &radii) {
   int maxLValue = 0;
   std::map<std::pair<int, int>, std::vector<int> > channelsListed;  // (group, level) -> group channel numbers, in line order
   azure2::io::LevelGrouper levelGrouper;  // the level of each line (io/LevelGrouping.h)
-  // The <levels> section of the project (Config::SectionStream: io::Document, whole-line tags).
+  // The rows of the <levels> section (Config::SectionStream: io::Document, whole-line tags; io/ LevelRows.h).
   std::unique_ptr<std::istream> inStream = configure.SectionStream("levels");
   if (!inStream) return -1;
-  std::istream &in = *inStream;
-  std::string line = "";
-  getline(in, line);  // <levels>
+  const azure2::io::LevelSection section = azure2::io::ReadLevelSection(*inStream);
   std::map<int, int> ecPairs;
   // Which compound nucleus each level (by its ID, column 9) belongs to: the
   // channel lines of one level must all come from pairs of one nucleus.
   std::map<int, int> levelNucleus;
   std::map<int, double> lightExcitation;  // pair key -> e1 of the first line naming it
-  line = "";
-  while (!in.eof() && line != "</levels>") {
-    getline(in, line);
-    bool empty = true;
-    for (unsigned int i = 0; i < line.size(); ++i)
-      if (line[i] != ' ' && line[i] != '\t') {
-        empty = false;
-        break;
-      }
-    if (empty == true) continue;
-    if (!in.eof() && line != "</levels>") {
-      std::istringstream stm;
-      stm.str(line);
-      NucLine Line(stm);
-      if (stm.rdstate() & (std::stringstream::failbit | std::stringstream::badbit)) return -1;
-      // The light particle's excitation energy, the optional 32nd column (2026-11-05).  A pair's columns are
-      // read from the first line that names it, so a different e1 on a later line of the same pair would be
-      // dropped without a word -- and it is a different threshold and a different identical-particle test, so
-      // refuse it.  A photon or an electron has no excited state.
-      if (Line.e1() < 0.) {
-        configure.outStream << "ERROR: pair " << Line.ir() << " has a negative light-particle excitation energy (column 32), "
-                            << Line.e1() << " MeV." << std::endl;
+  for (const azure2::io::LevelRow &Line : section.rows) {
+    // The light particle's excitation energy, the optional 32nd column (2026-11-05).  A pair's columns are
+    // read from the first line that names it, so a different e1 on a later line of the same pair would be
+    // dropped without a word -- and it is a different threshold and a different identical-particle test, so
+    // refuse it.  A photon or an electron has no excited state.
+    if (Line.e1() < 0.) {
+      configure.outStream << "ERROR: pair " << Line.ir() << " has a negative light-particle excitation energy (column 32), "
+                          << Line.e1() << " MeV." << std::endl;
+      return -1;
+    }
+    if (Line.e1() != 0. && (Line.pType() == 10 || Line.pType() == 20)) {
+      configure.outStream << "ERROR: pair " << Line.ir() << " is a " << (Line.pType() == 10 ? "gamma" : "beta")
+                          << " pair (type " << Line.pType() << ") but has a light-particle excitation energy (column 32) of "
+                          << Line.e1() << " MeV; only a particle pair can have one." << std::endl;
+      return -1;
+    }
+    {
+      std::map<int, double>::const_iterator seen = lightExcitation.find(Line.ir());
+      if (seen == lightExcitation.end()) {
+        lightExcitation[Line.ir()] = Line.e1();
+      } else if (fabs(seen->second - Line.e1()) > 1.0e-9) {
+        configure.outStream << "ERROR: pair " << Line.ir() << " has two light-particle excitation energies (column 32), "
+                            << seen->second << " and " << Line.e1() << " MeV, on different <levels> lines; a pair's "
+                            << "columns must be the same on every line." << std::endl;
         return -1;
-      }
-      if (Line.e1() != 0. && (Line.pType() == 10 || Line.pType() == 20)) {
-        configure.outStream << "ERROR: pair " << Line.ir() << " is a " << (Line.pType() == 10 ? "gamma" : "beta")
-                            << " pair (type " << Line.pType() << ") but has a light-particle excitation energy (column 32) of "
-                            << Line.e1() << " MeV; only a particle pair can have one." << std::endl;
-        return -1;
-      }
-      {
-        std::map<int, double>::const_iterator seen = lightExcitation.find(Line.ir());
-        if (seen == lightExcitation.end()) {
-          lightExcitation[Line.ir()] = Line.e1();
-        } else if (fabs(seen->second - Line.e1()) > 1.0e-9) {
-          configure.outStream << "ERROR: pair " << Line.ir() << " has two light-particle excitation energies (column 32), "
-                              << seen->second << " and " << Line.e1() << " MeV, on different <levels> lines; a pair's "
-                              << "columns must be the same on every line." << std::endl;
-          return -1;
-        }
-      }
-      if (Line.l() > maxLValue && Line.pType() == 0) maxLValue = Line.l();
-      if (Line.isActive() != 1 && configure.includeAllJPi) {
-        // A pair is a property of the system, not of the level that happens to mention it: with every
-        // J^pi scattering through its hard sphere, a pair whose levels are all switched off still has
-        // channels, so it is kept.
-        PPair NewPair(Line);
-        if (!this->IsPair(NewPair)) this->AddPair(NewPair);
-      }
-      if (Line.isActive() == 1) {
-        PPair NewPair(Line);
-        PairNum = this->IsPair(NewPair);
-        if (!PairNum) {
-          this->AddPair(NewPair);
-          PairNum = this->IsPair(NewPair);
-        }
-        if (Line.ecMultMask() != 0) {
-          std::map<int, int>::iterator it = ecPairs.find(PairNum);
-          if (it == ecPairs.end()) ecPairs[PairNum] = Line.ecMultMask();
-        }
-        const int nucleusNum = this->GetPair(PairNum)->GetNucleus();
-        std::map<int, int>::iterator lvl = levelNucleus.find(Line.levelID());
-        if (lvl == levelNucleus.end()) {
-          levelNucleus[Line.levelID()] = nucleusNum;
-        } else if (lvl->second != nucleusNum) {
-          configure.outStream << "ERROR: level ID " << Line.levelID() << " (J = " << Line.levelJ()
-                              << (Line.levelPi() == -1 ? "-" : "+") << ", E = " << Line.levelE()
-                              << " MeV) has channels of two compound nuclei, "
-                              << this->NucleusLabel(lvl->second) << " and " << this->NucleusLabel(nucleusNum)
-                              << ": a level belongs to one nucleus." << std::endl;
-          return -1;
-        }
-        JGroup NewJGroup(Line);
-        NewJGroup.SetNucleus(nucleusNum, this->GetPair(PairNum)->GetNucleusZ(), this->GetPair(PairNum)->GetNucleusA());
-        JGroupNum = this->IsJGroup(NewJGroup);
-        if (!JGroupNum) {
-          this->AddJGroup(NewJGroup);
-          JGroupNum = this->IsJGroup(NewJGroup);
-        }
-        AChannel NewChannel(Line, PairNum);
-        ChannelNum = this->GetJGroup(JGroupNum)->IsChannel(NewChannel);
-        if (!ChannelNum) {
-          this->GetJGroup(JGroupNum)->AddChannel(NewChannel);
-          ChannelNum = this->GetJGroup(JGroupNum)->IsChannel(NewChannel);
-          if (this->GetJGroup(JGroupNum)->GetChannel(ChannelNum)->GetL() > maxLValue &&
-              this->GetJGroup(JGroupNum)->GetChannel(ChannelNum)->GetRadType() == 'P')
-            maxLValue = this->GetJGroup(JGroupNum)->GetChannel(ChannelNum)->GetL();
-
-          // Calculate and set Wigner Limit for the newly created channel
-          PPair *channelPair = this->GetPair(PairNum);
-          this->GetJGroup(JGroupNum)->GetChannel(ChannelNum)->SetWignerLimit(channelPair->GetRedMass(), channelPair->GetChRad());
-        }
-        // A line belongs to a level of its J-group that carries the same level ID within 1 keV, or failing that
-        // to one at the identical energy.  Until 2026-10-24 any level within 1 keV was taken (JGroup::IsLevel),
-        // whatever its ID, so a narrow level put next to a broad one of the same J^pi (17O+a: 3/2- at 8.2900 and
-        // 8.2893 MeV, IDs 91 and 22) was silently merged into it: its widths overwrote the broad level's and the
-        // fit lost three parameters.  Lines with other IDs within 1 keV now make their own level, with a warning.
-        // The level of the line: io::LevelGrouper, the rule pyazr uses too (docs/upgrade/project.md, P2).
-        ALevel NewLevel(Line);
-        JGroup *group = this->GetJGroup(JGroupNum);
-        const azure2::io::LevelGrouper::Slot slot = levelGrouper.Assign(JGroupNum, NewLevel.GetE(), Line.levelID());
-        if (slot.level > group->NumLevels()) group->AddLevel(NewLevel);
-        LevelNum = slot.level;
-        if (slot.kind == azure2::io::LevelGrouper::Kind::SameEnergy)
-          configure.outStream << "WARNING: level IDs " << slot.otherID << " and " << Line.levelID() << " (J = "
-                              << group->GetJ() << (group->GetPi() == -1 ? "-" : "+") << ", E = " << NewLevel.GetE()
-                              << " MeV) have the same J^pi and energy; their lines are read as one level." << std::endl;
-        if (slot.kind == azure2::io::LevelGrouper::Kind::NewNearby)
-          configure.outStream << "WARNING: level ID " << Line.levelID() << " (J = " << group->GetJ()
-                              << (group->GetPi() == -1 ? "-" : "+") << ", E = " << NewLevel.GetE()
-                              << " MeV) is within 1 keV of level ID " << slot.otherID << " (E = "
-                              << group->GetLevel(slot.other)->GetE() << " MeV); they are kept as two levels."
-                              << std::endl;
-        // The width belongs to the GROUP's channel number: levels of one J-group may list their channel
-        // lines in a different order, or not list a channel another level of the group carries.
-        this->GetJGroup(JGroupNum)->GetLevel(LevelNum)->SetGammaFromLine(ChannelNum, Line);
-        channelsListed[std::make_pair(JGroupNum, LevelNum)].push_back(ChannelNum);
       }
     }
-  }
+    if (Line.l() > maxLValue && Line.pType() == 0) maxLValue = Line.l();
+    if (Line.isActive() != 1 && configure.includeAllJPi) {
+      // A pair is a property of the system, not of the level that happens to mention it: with every
+      // J^pi scattering through its hard sphere, a pair whose levels are all switched off still has
+      // channels, so it is kept.
+      PPair NewPair(Line);
+      if (!this->IsPair(NewPair)) this->AddPair(NewPair);
+    }
+    if (Line.isActive() == 1) {
+      PPair NewPair(Line);
+      PairNum = this->IsPair(NewPair);
+      if (!PairNum) {
+        this->AddPair(NewPair);
+        PairNum = this->IsPair(NewPair);
+      }
+      if (Line.ecMultMask() != 0) {
+        std::map<int, int>::iterator it = ecPairs.find(PairNum);
+        if (it == ecPairs.end()) ecPairs[PairNum] = Line.ecMultMask();
+      }
+      const int nucleusNum = this->GetPair(PairNum)->GetNucleus();
+      std::map<int, int>::iterator lvl = levelNucleus.find(Line.levelID());
+      if (lvl == levelNucleus.end()) {
+        levelNucleus[Line.levelID()] = nucleusNum;
+      } else if (lvl->second != nucleusNum) {
+        configure.outStream << "ERROR: level ID " << Line.levelID() << " (J = " << Line.levelJ()
+                            << (Line.levelPi() == -1 ? "-" : "+") << ", E = " << Line.levelE()
+                            << " MeV) has channels of two compound nuclei, "
+                            << this->NucleusLabel(lvl->second) << " and " << this->NucleusLabel(nucleusNum)
+                            << ": a level belongs to one nucleus." << std::endl;
+        return -1;
+      }
+      JGroup NewJGroup(Line);
+      NewJGroup.SetNucleus(nucleusNum, this->GetPair(PairNum)->GetNucleusZ(), this->GetPair(PairNum)->GetNucleusA());
+      JGroupNum = this->IsJGroup(NewJGroup);
+      if (!JGroupNum) {
+        this->AddJGroup(NewJGroup);
+        JGroupNum = this->IsJGroup(NewJGroup);
+      }
+      AChannel NewChannel(Line, PairNum);
+      ChannelNum = this->GetJGroup(JGroupNum)->IsChannel(NewChannel);
+      if (!ChannelNum) {
+        this->GetJGroup(JGroupNum)->AddChannel(NewChannel);
+        ChannelNum = this->GetJGroup(JGroupNum)->IsChannel(NewChannel);
+        if (this->GetJGroup(JGroupNum)->GetChannel(ChannelNum)->GetL() > maxLValue &&
+            this->GetJGroup(JGroupNum)->GetChannel(ChannelNum)->GetRadType() == 'P')
+          maxLValue = this->GetJGroup(JGroupNum)->GetChannel(ChannelNum)->GetL();
 
-  if (line != "</levels>") return -1;
+        // Calculate and set Wigner Limit for the newly created channel
+        PPair *channelPair = this->GetPair(PairNum);
+        this->GetJGroup(JGroupNum)->GetChannel(ChannelNum)->SetWignerLimit(channelPair->GetRedMass(), channelPair->GetChRad());
+      }
+      // A line belongs to a level of its J-group that carries the same level ID within 1 keV, or failing that
+      // to one at the identical energy.  Until 2026-10-24 any level within 1 keV was taken (JGroup::IsLevel),
+      // whatever its ID, so a narrow level put next to a broad one of the same J^pi (17O+a: 3/2- at 8.2900 and
+      // 8.2893 MeV, IDs 91 and 22) was silently merged into it: its widths overwrote the broad level's and the
+      // fit lost three parameters.  Lines with other IDs within 1 keV now make their own level, with a warning.
+      // The level of the line: io::LevelGrouper, the rule pyazr uses too (docs/upgrade/project.md, P2).
+      ALevel NewLevel(Line);
+      JGroup *group = this->GetJGroup(JGroupNum);
+      const azure2::io::LevelGrouper::Slot slot = levelGrouper.Assign(JGroupNum, NewLevel.GetE(), Line.levelID());
+      if (slot.level > group->NumLevels()) group->AddLevel(NewLevel);
+      LevelNum = slot.level;
+      if (slot.kind == azure2::io::LevelGrouper::Kind::SameEnergy)
+        configure.outStream << "WARNING: level IDs " << slot.otherID << " and " << Line.levelID() << " (J = "
+                            << group->GetJ() << (group->GetPi() == -1 ? "-" : "+") << ", E = " << NewLevel.GetE()
+                            << " MeV) have the same J^pi and energy; their lines are read as one level." << std::endl;
+      if (slot.kind == azure2::io::LevelGrouper::Kind::NewNearby)
+        configure.outStream << "WARNING: level ID " << Line.levelID() << " (J = " << group->GetJ()
+                            << (group->GetPi() == -1 ? "-" : "+") << ", E = " << NewLevel.GetE()
+                            << " MeV) is within 1 keV of level ID " << slot.otherID << " (E = "
+                            << group->GetLevel(slot.other)->GetE() << " MeV); they are kept as two levels."
+                            << std::endl;
+      // The width belongs to the GROUP's channel number: levels of one J-group may list their channel
+      // lines in a different order, or not list a channel another level of the group carries.
+      this->GetJGroup(JGroupNum)->GetLevel(LevelNum)->SetGammaFromLine(ChannelNum, Line);
+      channelsListed[std::make_pair(JGroupNum, LevelNum)].push_back(ChannelNum);
+    }
+  }
+  // A malformed row, or no </levels>: the rows before it are read (and refused for their own reasons first).
+  if (section.malformed || !section.complete) return -1;
 
 
   // Every level of a J-group needs one width per group channel.  Until 2026-10-17 widths were appended in the
@@ -433,12 +417,11 @@ int CNuc::Fill(const Config &configure, const std::map<int, double> &radii) {
 int CNuc::ReadAbundances(const Config &configure) {
   hasAbundanceBlock_ = false;
   samples_.clear();
-  // The <abundances> section of the project (Config::SectionStream: io::Document, whole-line tags).
+  // The <abundances> section of the project (Config::SectionStream: io::Document, whole-line tags; io/
+  // AbundanceLines.h).
   std::unique_ptr<std::istream> inStream = configure.SectionStream("abundances");
   if (!inStream) return 0;
-  std::istream &in = *inStream;
-  std::string line = "";
-  getline(in, line);  // <abundances>
+  const azure2::io::AbundanceSection section = azure2::io::ReadAbundanceSection(*inStream);
   hasAbundanceBlock_ = true;
   // A sample is created the first time its name appears; the unnamed sample is "".
   auto sampleOf = [&](const std::string &name) -> AbundanceSample & {
@@ -450,59 +433,35 @@ int CNuc::ReadAbundances(const Config &configure) {
     samples_.push_back(sample);
     return samples_.back();
   };
-  line = "";
-  while (!in.eof() && line != "</abundances>") {
-    getline(in, line);
-    std::string entry = line;
-    size_t hash = entry.find('#');
-    if (hash != std::string::npos) entry = entry.substr(0, hash);
-    if (entry.find_first_not_of(" \t\r") == std::string::npos) continue;
-    if (line == "</abundances>") break;
-    // optional "<name>:" prefix (one token ending in a colon)
-    std::string name;
-    std::istringstream probe(entry);
-    std::string first;
-    probe >> first;
-    if (!first.empty() && first.back() == ':') {
-      name = first.substr(0, first.size() - 1);
-      std::string rest;
-      getline(probe, rest);
-      entry = rest;
-    }
-    std::istringstream stm(entry);
-    std::string head;
-    if (!(stm >> head)) continue;
-    if (head == "sum") {
-      double s;
-      if (!(stm >> s)) {
-        configure.outStream << "ERROR: <abundances> line \"" << line << "\" is not \"[<sample>:] sum <sigma>\"." << std::endl;
-        return -1;
-      }
-      sampleOf(name).sumSigma = s;
+  for (const azure2::io::AbundanceLine &entry : section.lines) {
+    if (entry.isSum) {
+      sampleOf(entry.sample).sumSigma = entry.sumSigma;
       continue;
-    }
-    std::istringstream stm2(entry);
-    int z, a, vary;
-    double value, sigma;
-    if (!(stm2 >> z >> a >> value >> vary >> sigma)) {
-      configure.outStream << "ERROR: <abundances> line \"" << line
-                          << "\" is not \"[<sample>:] <Z> <A> <abundance> <vary> <sigma>\" or \"[<sample>:] sum <sigma>\"." << std::endl;
-      return -1;
     }
     bool found = false;
     for (unsigned int i = 0; i < nuclei_.size(); i++) {
-      if (nuclei_[i].Z != z || nuclei_[i].A != a) continue;
-      SampleAbundance &e = sampleOf(name).entries[i];
-      e.abundance = e.nominal = value;
-      e.vary = (vary == 1);
-      e.sigma = sigma;
+      if (nuclei_[i].Z != entry.Z || nuclei_[i].A != entry.A) continue;
+      SampleAbundance &e = sampleOf(entry.sample).entries[i];
+      e.abundance = e.nominal = entry.value;
+      e.vary = (entry.vary == 1);
+      e.sigma = entry.sigma;
       found = true;
     }
     if (!found)
-      configure.outStream << "WARNING: <abundances> names Z=" << z << " A=" << a
+      configure.outStream << "WARNING: <abundances> names Z=" << entry.Z << " A=" << entry.A
                           << ", which no pair of the project forms; ignored." << std::endl;
   }
-  if (line != "</abundances>") return -1;
+  switch (section.problem) {
+    case azure2::io::AbundanceSection::Problem::None: break;
+    case azure2::io::AbundanceSection::Problem::BadSum:
+      configure.outStream << "ERROR: <abundances> line \"" << section.badLine << "\" is not \"[<sample>:] sum <sigma>\"." << std::endl;
+      return -1;
+    case azure2::io::AbundanceSection::Problem::BadEntry:
+      configure.outStream << "ERROR: <abundances> line \"" << section.badLine
+                          << "\" is not \"[<sample>:] <Z> <A> <abundance> <vary> <sigma>\" or \"[<sample>:] sum <sigma>\"." << std::endl;
+      return -1;
+  }
+  if (!section.complete) return -1;
   // An empty block still means "abundances are parameters": one unnamed sample at the defaults.
   if (samples_.empty()) sampleOf("");
   return 0;

@@ -46,7 +46,7 @@ A run, from the command line
 2. ``src/AZUREMain.cpp``, ``AZUREMain::operator()``:
 
    * ``CNuc::Fill`` reads ``<pairs>`` and ``<levels>`` (each level line through
-     ``NucLine``: 31 columns and an optional 32nd, the light particle's
+     ``io/``'s ``LevelRow``: 31 columns and an optional 32nd, the light particle's
      excitation energy -- the layout is in :doc:`../reference/data_formats`).
      ``PPair`` keeps the light and heavy excitations apart
      (``GetLightExE`` / ``GetHeavyExE``); ``GetExE`` is their sum, the
@@ -93,7 +93,7 @@ One file, three readers
 
 The ``.azr`` file is parsed independently by:
 
-* the engine: ``Config.cpp`` (``<config>``), ``CNuc.cpp`` with ``NucLine.h``
+* the engine: ``Config.cpp`` (``<config>``), ``CNuc.cpp`` with ``io/`` ``LevelRows.h``
   (``<levels>``), ``EData.cpp`` with ``SegLine.h`` / ``ExtrapLine.h``
   (segments and experimental effects), plus the pre-scans in ``AZURE2.cpp``;
 * pyazr: ``pyazr/azrfile.py`` (``AzrModel``) and ``pyazr/datasets.py``

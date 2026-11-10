@@ -5,7 +5,11 @@
 #include "ALevel.h"
 #include "AChannel.h"
 
-class NucLine;
+namespace azure2 {
+namespace io {
+class LevelRow;
+}
+}  // namespace azure2
 
 /// An AZURE \f$ J^\pi \f$ group.
 
@@ -17,7 +21,7 @@ class NucLine;
 class JGroup {
  public:
   /// Build from a line of the nuclear input file.
-  JGroup(NucLine);
+  explicit JGroup(const azure2::io::LevelRow &);
   /// Build directly from a spin and a parity (\f$\pm1\f$).
   JGroup(double, int);
   /// Is this group part of the A-/R-Matrix calculation?

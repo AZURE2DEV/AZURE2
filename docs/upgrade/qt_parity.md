@@ -34,7 +34,7 @@ because the engine also searches the whole file for them.
       Z, 22 separation energy of pair 1 (MeV), 23 separation energy of this pair (MeV), 24-26 placeholders, 27 pair
       type (0 particle, 10 gamma, 20 beta), 28 channel radius (fm), 29-30 light and heavy g factor, 31 external-capture
       multipolarity mask (bit 0 E1, bit 1 M1, bit 2 E2) (`LevelsTab.cpp`)
-- [ ] `<levels>` trailing columns, told apart by count as the engine's NucLine does: one extra = light-particle E_x;
+- [ ] `<levels>` trailing columns, told apart by count as the engine's reader (io/ LevelRows.h) does: one extra = light-particle E_x;
       two = THM binding energy B (MeV) and the width-is-amplitude flag; three = both, light E_x last. The GUI always
       writes 33 columns, and a 34th (light E_x, MeV) only on lines of a pair whose light E_x is nonzero
       (`LevelsTab.cpp`)
