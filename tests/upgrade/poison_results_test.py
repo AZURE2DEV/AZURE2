@@ -77,6 +77,10 @@ def run_cli(binary, project, menu, extra, poison, tmp):
         shutil.rmtree(os.path.join(d, sub), ignore_errors=True)
         os.makedirs(os.path.join(d, sub))
     env = dict(os.environ, AZURE_POISON_RESULTS="1" if poison else "0")
+    if any(a.startswith("--max-calls") for a in extra):
+        # A fit bounded by --max-calls is reproducible at one thread only: Minuit2's call counter is not atomic, so
+        # with several threads the same fit can run one more iteration (docs/upgrade/fit_threads.md, cause B).
+        env["OMP_NUM_THREADS"] = "1"
     r = subprocess.run([binary, "--no-gui", "--no-readline", "--no-coulomb-table", *extra, PROJECTS[project]],
                        input=menu, cwd=d, env=env, capture_output=True, text=True, timeout=1800)
     out = {}
