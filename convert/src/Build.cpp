@@ -11,11 +11,13 @@ namespace convert {
 // ================================================================ reactions
 bool Builder::ReactionTokens(const std::string &record, int entrance, int exit, int isAdvanced, int op,
                              const std::vector<ComponentEntry> &components, const std::string &angleFrame,
-                             std::vector<io::Token> &out, std::string &why) {
-  std::string ambiguity;
-  const std::string base = Reaction(entrance, exit, why, ambiguity);
+                             std::vector<io::Token> &out, std::string &why,
+                             std::vector<std::pair<std::string, std::string>> &pairKeys) {
+  bool inAmbiguous = false, outAmbiguous = false, termAmbiguous = false;
+  const std::string base = Reaction(entrance, exit, why, inAmbiguous, outAmbiguous);
   if (base.empty()) return false;
   out.push_back(Tok(base));
+  bool composite = false;
   if (isAdvanced == 1) {
     Count(Construct::kComposite);
     if (components.empty()) {
@@ -26,9 +28,11 @@ bool Builder::ReactionTokens(const std::string &record, int entrance, int exit, 
       return false;
     }
     for (const ComponentEntry &c : components) {
-      if (op != 1 && components.empty()) break;
-      std::string term = Reaction(c.entrance, c.exit, why, ambiguity);
+      composite = true;
+      bool a = false, b = false;
+      std::string term = Reaction(c.entrance, c.exit, why, a, b);
       if (term.empty()) return false;
+      termAmbiguous = termAmbiguous || a || b;
       if (c.hasScaling) term = ShortestText(c.scaling) + "*" + term;
       out.push_back(Tok(op == 1 ? "/" : "+"));
       out.push_back(Tok(term));
@@ -40,12 +44,19 @@ bool Builder::ReactionTokens(const std::string &record, int entrance, int exit, 
       }
     }
   }
-  if (!ambiguity.empty()) {
+  if (composite && (inAmbiguous || outAmbiguous || termAmbiguous)) {
+    // A sum or a ratio cannot name pairs by key (section 3.5): it waits for named pairs in <levels>.
     std::string text;
     for (const io::Token &t : out) text += (text.empty() ? "" : " ") + t.text;
     const std::string answer = Ask(Construct::kReaction, record + ".reaction",
-                                   "the reaction label does not identify one pair: " + ambiguity + "write the reaction", text);
+                                   "a term of the sum or ratio names two pairs with the same particles and states; a "
+                                   "composite reaction cannot carry pair keys",
+                                   text);
     out = Words(answer);
+  } else {
+    // The label names two pairs: the <levels> pair keys say which (entrance_pair, exit_pair; section 3.5).
+    if (inAmbiguous) pairKeys.push_back({"entrance_pair", std::to_string(entrance)});
+    if (outAmbiguous) pairKeys.push_back({"exit_pair", std::to_string(exit)});
   }
   Count(Construct::kReaction);
   return true;

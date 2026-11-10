@@ -118,8 +118,6 @@ std::string ReadOldProject(const io::Document &doc, OldProject &out) {
       const int d = parsed->isDiff();
       if (d == 19) return "data segment #" + std::to_string(key) + " uses isDiff 19 (THM angular-distribution coefficients), which the old engine refused";
       if (d == 8 || d == 18) return "data segment #" + std::to_string(key) + " uses isDiff " + std::to_string(d) + " (polarization x cross section), which the old engine refused";
-      if (d >= 10 && !parsed->covarianceFile().empty())
-        return "data segment #" + std::to_string(key) + " is a THM segment with a covariance block, which the old engine refused";
       OldDataLine dl;
       dl.key = key;
       dl.docLine = (int)i + 1;

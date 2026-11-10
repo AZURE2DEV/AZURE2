@@ -160,9 +160,8 @@ struct Construct {
 };
 
 inline const char *const kChargedElastic =
-    "an angle-integrated cross section of the elastic scattering of a charged pair: the old engine computed the integral "
-    "of the nuclear amplitude alone, pi/k^2 sum g |T|^2 without the Coulomb amplitude (GenMatrixFunc); format 3 refuses "
-    "quantity sigma there (section 7.2) and has no quantity for this integral";
+    "the old engine computed the integral of the nuclear amplitude alone (pi/k^2 sum g |T|^2), not a measurable cross "
+    "section";
 
 /// One active <targetInt> line as format-3 records (decision F7: target, beam and detector own their effects).
 struct Apparatus {
@@ -256,7 +255,10 @@ class Builder {
     return false;
   }
   /// The label of one reaction; exit -1 is [total].  "" with `why` set when a pair is unknown.
-  std::string Reaction(int entrance, int exit, std::string &why, std::string &ambiguity) const {
+  /// The label of one reaction; exit -1 is [total].  An excited entrance pair writes the target's state and the
+  /// projectile's excitation (section 3.5).  `inAmbiguous`/`outAmbiguous`: another pair has the same particles and
+  /// states, so the label names two pairs.  "" with `why` set when a pair is unknown.
+  std::string Reaction(int entrance, int exit, std::string &why, bool &inAmbiguous, bool &outAmbiguous) const {
     const OldPair *in = Pair(entrance);
     if (!in) {
       why = "entrance pair " + std::to_string(entrance) + " is not a pair of <levels>";
@@ -267,10 +269,10 @@ class Builder {
       why = "exit pair " + std::to_string(exit) + " is not a pair of <levels>";
       return "";
     }
-    if (in->e1 != 0 || in->e2 != 0) ambiguity += "entrance pair " + std::to_string(entrance) + " has an excited particle; ";
-    if (Ambiguous(*in)) ambiguity += "pair " + std::to_string(entrance) + " has the same particles and states as another pair; ";
-    if (out && Ambiguous(*out)) ambiguity += "pair " + std::to_string(exit) + " has the same particles and states as another pair; ";
-    std::string s = Nuclide(in->z2, in->A2()) + "(" + LightLabel(*in) + ",";
+    inAmbiguous = Ambiguous(*in);
+    outAmbiguous = out && Ambiguous(*out);
+    std::string s = Nuclide(in->z2, in->A2()) + (in->e2 != 0 ? "[" + in->e2Text + "]" : "") + "(" + LightLabel(*in) +
+                    (in->e1 != 0 ? "[" + in->e1Text + "]" : "") + ",";
     if (!out) {
       s += "g)" + Nuclide(in->z1 + in->z2, in->A1() + in->A2()) + "[total]";
       return s;
@@ -291,15 +293,16 @@ class Builder {
   /// True when a term of the line is the elastic scattering of a charged pair, angle-integrated: the old engine
   /// computed the integral of the nuclear amplitude alone (pi/k^2 sum g |T|^2, GenMatrixFunc), which format 3 has no
   /// quantity for (section 7.2 refuses sigma there).
-  bool ChargedElasticTerm(int entrance, int exit, const std::vector<ComponentEntry> &components) const {
+  /// How many terms of the line are the elastic scattering of a charged pair, and how many terms it has.
+  int ChargedElasticTerms(int entrance, int exit, const std::vector<ComponentEntry> &components, int &terms) const {
     auto charged = [&](int in, int out) {
       const OldPair *p = Pair(in);
       return in == out && p && p->pType == 0 && p->z1 > 0 && p->z2 > 0;
     };
-    if (charged(entrance, exit)) return true;
-    for (const ComponentEntry &c : components)
-      if (charged(c.entrance, c.exit)) return true;
-    return false;
+    int n = charged(entrance, exit) ? 1 : 0;
+    terms = 1 + (int)components.size();
+    for (const ComponentEntry &c : components) n += charged(c.entrance, c.exit) ? 1 : 0;
+    return n;
   }
   /// The CONVERTED comment of the last Implicit call ("" when there was none), taken by the next field written.
   std::string TakeComment() {
@@ -324,9 +327,10 @@ class Builder {
   void RewriteConfigAndPriors();
 
   /// The reaction field of a line (base pair keys, components, operation, frame of fixed angles).
+  /// `pairKeys` receives the entrance_pair and exit_pair fields a single reaction needs when its label names two pairs.
   bool ReactionTokens(const std::string &record, int entrance, int exit, int isAdvanced, int op,
                       const std::vector<ComponentEntry> &components, const std::string &angleFrame, std::vector<io::Token> &out,
-                      std::string &why);
+                      std::string &why, std::vector<std::pair<std::string, std::string>> &pairKeys);
   /// A nuisance: "<v> [unit] fixed|fit [prior c w]".
   static std::vector<io::Token> Nuisance(const std::string &value, const std::string &unit, bool fit, bool prior,
                                          const std::string &centre, const std::string &width) {

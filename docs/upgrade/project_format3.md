@@ -208,6 +208,18 @@ A reaction is `<target nucleus>(<projectile>,<ejectile>)<residual>[<state>]`:
 - a light particle's excitation `a[e1]` analogously (`data_formats.rst`, column 34 `e1`);
 - the reaction must name exactly one entrance pair and one exit pair of the project; otherwise the error lists the
   project's pair labels.
+- **[Step 3a, director's decisions D2, D3 (2026-11-10):** the target nucleus may carry a state, `16O[2.143](n,n)16O[2.143]`
+  — an entrance pair whose heavy particle is excited — matched to the pair's heavy-particle excitation exactly as the
+  residual state is; `[total]` is not a target state. An elastic reaction has the same state on both sides. Where a
+  label names two pairs of the project (the same particles and states, e.g. `examples/c12c12_tumino2018`: pairs 1 and
+  6, ¹²C + ¹²C, which differ in their channel lines and in the THM binding-energy column), the data set or
+  extrapolation writes `entrance_pair <key>` and/or `exit_pair <key>`, the pair key of `<levels>` (column 6), a
+  written label as the level ID of F13 (a). They are accepted only where the label alone is ambiguous and required
+  there (the reader checks both against `<levels>`: a redundant key is a second source of truth); they apply to a
+  single reaction only — a sum or a ratio with an ambiguous term waits for named pairs in `<levels>`. The rule "a THM
+  data set takes the pair carrying the THM columns" was not taken: the old engine uses the key written, the two pairs
+  of that file carry different channels (pair 1 has eight levels pair 6 lacks), and the THM columns are read only by the
+  THM vertex (`EDataThm.cpp`, `EPoint.cpp`); the rule would hold in that file but is no meaning the old engine has.]**
 
 Ordinal labels (`a1`, `p2`) are refused: an ordinal counts the states the project happens to include, which is a
 position. `a0`, `p0`, `n0`, `g0` are accepted as aliases of the ground state.
@@ -804,6 +816,7 @@ units 1/uC, 1/mC, 1/C, with the model scaled by 10⁻⁶ C/(q e) for 1/uC etc., 
 | name | units | columns (energy; angle) | requires / allows | tree | EXFOR | refusals |
 |---|---|---|---|---|---|---|
 | `sigma` | b family; `1` with a `/` reaction; `arbitrary` | E_lab, E_cm, E_decay; none | allows `multipole E1|E2`, `secondary_gamma`, `target` (thin layer: target-averaged σ, `data_kinds.md` eq. 2), `beam`, `detector`, `thm` | σ(r) [filter], Sum/Scale/Ratio from the reaction, Weighted if the target has isotopes, folds inside the leaf (M4) | `,SIG`, `PAR,SIG`, `,SIG,,TTA`; `/`, `+` combinations | charged-particle elastic σ ("infinite; give dsigma_domega or ratio_to_rutherford", LEXFOR p. S.2); `multipole` with a particle exit; target `kind infinite` ("use quantity yield") |
+| `sigma_nuclear` [step 3a, D1] | b family; `1` with a `/` reaction | E_lab, E_cm; none | every term elastic with a charged entrance; sums and ratios as for `sigma` (a natural target's isotopes, `tests/natural_target`); allows `target`, `beam`, `detector` | the angle-integrated elastic cross section of the nuclear amplitude alone, π/k² Σ g \|T\|² (`GenMatrixFunc`); for a charged pair it leaves out the Coulomb amplitude and its interference and is not a measurable cross section: for tests, diagnostics and comparison with phase-shift formulas | — | inelastic; neutral entrance (there `sigma` is the same integral and the one name); in a `dataset` the warning `W_NOT_MEASURABLE` |
 | `sigma_total` | b family | E_lab, E_cm; none | reaction elastic, neutral entrance | σ_tot(a→a) by the optical theorem (`GM` 103–119) | `,SIG` with SF3 `TOT` | charged entrance |
 | `dsigma_domega` | b/sr family | E_lab, E_cm; theta_lab, theta_cm (value in the angle's frame) | allows `secondary_gamma`, target, beam, detector, thm | dσ/dΩ_cm(r, θ), lab data converted at load | `,DA`, `PAR,DA` | `[total]` exit; `,DA,,REL` without `norm fit` |
 | `sfactor` | MeV·b, keV·b, eV·b | E_cm, E_lab; none | allows `multipole` | Scale_SF(E)∘σ, S = Eσe^{2πη} with the engine's η and atomic masses (`data_kinds.md` §4.1) | `,SIG,,SFC`, `PAR,SIG,,SFC`, `EP/PAR,SIG,,SFC` | neutral entrance |
@@ -1015,7 +1028,9 @@ the nuclear amplitude alone, π/k² Σ g |T|², and which §7.2 refuses as `sigm
 (ii) two pairs with the same particles and states (`examples/c12c12_tumino2018`: pairs 1 and 6, ¹²C + ¹²C, differing
 only in the THM columns of `<levels>`), which no reaction label can tell apart; (iii) an entrance pair with an excited
 target (`tests/thm_coherent_background/toy`: n + ¹⁶O(2.143)), which the grammar of §3.5 cannot write. Each is a
-decision for the format (a quantity, pair names, a target state), not for the converter.]**
+decision for the format (a quantity, pair names, a target state), not for the converter.]** **[Decided (director, 2026-11-10) and implemented in step 3a:
+(i) quantity `sigma_nuclear` (§7.2), which the converter writes with a `# CONVERTED:` comment; (ii) `entrance_pair` /
+`exit_pair` (§3.5); (iii) the target state (§3.5). The tree now converts without a question (§8.5).]**
 
 ### 8.4 The engine refuses older files
 
@@ -1054,6 +1069,25 @@ from the parameter vector instead. This is a step before the reader switch.
    relative. These outputs are compared at matching energies and classified "grid rule", with the list of the 53.
 5. `tests/run_tests.sh` 133/133 and `ctest -LE slow` on the converted tree, then pyazr's round-trip tests (an
    unedited converted file writes back byte for byte).
+**[Step 3a, director's D4 (2026-11-10): the converter converts what is written and does not copy the old engine's
+semantic refusals; they are the format-3 reader's build checks. `tools/convert_tree.sh` runs the old engine (menu 1,
+one thread, as `tools/run_one.sh`) on every original and lists the files it refuses that the converter converts. On
+the tree of step 3a (186 of 189 files convert and validate; the 3 refused are refused by the old engine too), the
+format-3 engine of 3b must refuse each of these five with the reason given:
+- `tests/angular_coefficients/models/bad_elastic.azr` — "segment #1 (angular coefficients): an elastic distribution
+  includes the Coulomb amplitude, which the Legendre expansion leaves out";
+- `tests/ec_final_state_listed/models/missing_group.azr` — "external capture into pair 3 needs its final state,
+  J^pi = 0.5+ at E_x = 0.4953 MeV, as a level of the project …; that J^pi group does not exist";
+- `tests/ec_final_state_listed/models/missing_level.azr` — the same final state, "none is listed within 1 keV in that
+  J^pi group";
+- `tests/natural_target/models/bad_level.azr` — "level ID 1 (J = 1+, E = 8.2506 MeV) has channels of two compound
+  nuclei, Z=7 A=13 and Z=7 A=14";
+- `tests/relativistic/models/li7pn_edge_rel.azr` — "segment #1: lab angle 44.9 deg at E_lab = 1.9 MeV: beyond the
+  kinematic maximum 44.5984 deg (relativistic kinematics …)".
+Menu 1 only: a refusal that only an extrapolation run (menu 3) or a data file written by a test's `check.sh` reaches is
+not in this list (the `check.sh` of `tests/natural_target`, `tests/angular_coefficients`, `tests/electron_screening`
+and the others with `bad_*` files say which runs they expect to fail).]**
+
 6. The converted files replace the originals in one commit; the originals move to `tests/convert/fixtures/` with their
    committed conversions (check 20), so the converter is tested on every construct for as long as it exists.
 

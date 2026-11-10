@@ -140,13 +140,21 @@ int main(int argc, char **argv) {
     for (const std::string &x : onlyA) std::printf("        converter only: %s\n", x.c_str());
     for (const std::string &x : onlyB) std::printf("        hand only:      %s\n", x.c_str());
   }
-  // 4. questions: none answered -> no result; allowQuestions -> '?' placeholders
+  // 4. c12c12_tumino2018: two pairs with the same particles (1 and 6, 12C + 12C): converted with pair keys (section 3.5)
+  //    ...and with one more line, a sum whose entrance pair is ambiguous, a question: none answered -> no result;
+  //    allowQuestions -> '?' placeholders
   {
     std::string old;
     const std::string path = root + "/examples/c12c12_tumino2018/c12c12_tumino2018.azr";
     check("questions: read", Slurp(path, old));
     ConvertOptions o;
     o.projectDir = Dir(path);
+    const ConvertResult plain = ConvertToFormat3(old, o);
+    check("c12c12_tumino2018: converted, the THM data sets on pair 1 by key",
+          plain.ok && plain.questions.empty() && plain.text.find("    entrance_pair  1\n") != std::string::npos &&
+              plain.text.find("    entrance_pair  6\n") != std::string::npos);
+    const std::string sumLine = "1  1  2  0  7  0  180  0  1  0  0  0  0  0  data/thm_p0.dat  1  0  1  1  3  -999\n";
+    old.insert(old.find("</segmentsData>"), sumLine);
     const ConvertResult r = ConvertToFormat3(old, o);
     check("questions: no result without answers", !r.ok && !r.questions.empty() && r.text.empty());
     o.allowQuestions = true;

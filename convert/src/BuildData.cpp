@@ -135,9 +135,10 @@ void Builder::BuildData() {
     // reaction
     const std::string angleFrame = (code == 4 || code == 7) ? "cm" : "lab";
     std::vector<io::Token> reaction;
+    std::vector<std::pair<std::string, std::string>> pairKeys;
     std::string why;
     if (!ReactionTokens(name, s.entranceKey(), (code == 3 || s.exitKey() == -1) ? -1 : s.exitKey(), s.isAdvanced(), s.operationType(), s.components(),
-                        angleFrame, reaction, why)) {
+                        angleFrame, reaction, why, pairKeys)) {
       if (!active) {
         Note(Construct::kDataLine, name, "inactive data line " + std::to_string(d.key) + ": " + why + "; dropped");
         continue;
@@ -146,6 +147,7 @@ void Builder::BuildData() {
       continue;
     }
     Add(r, "reaction", reaction);
+    for (const auto &k : pairKeys) Add(r, k.first, k.second);
 
     // quantity, unit, columns
     std::string quantity, unit, angleRole, quantityNote;
@@ -193,8 +195,18 @@ void Builder::BuildData() {
     } else if (thinTarget && (code == 0 || code == 3 || code == 5 || code == 6) && !sampleThickness) {
       quantityNote = "a thin target: the old engine compared the numbers as the target-averaged cross section in b";
     }
-    if ((quantity == "sigma") && ChargedElasticTerm(s.entranceKey(), s.exitKey(), s.components()))
-      quantity = Ask(Construct::kDataCode, name + ".quantity", kChargedElastic, quantity);
+    std::string quantityComment;
+    if (quantity == "sigma") {
+      int terms = 0;
+      const int charged = ChargedElasticTerms(s.entranceKey(), s.exitKey(), s.components(), terms);
+      if (charged == terms) {
+        quantity = Implicit(Construct::kDataCode, name, "quantity", "sigma_nuclear", kChargedElastic);
+        quantityComment = TakeComment();
+      } else if (charged > 0) {
+        quantity = Ask(Construct::kDataCode, name + ".quantity",
+                       "a sum or ratio of an elastic integral of a charged pair and other terms: no quantity holds it", "");
+      }
+    }
     if (beta) {
       // A beta-delayed spectrum: the old engine compared the numbers in the line's normalization, any units.
       quantity = "beta_delayed_spectrum";
@@ -202,7 +214,7 @@ void Builder::BuildData() {
     }
     const bool profiled = thm && s.varyNorm() == 1;  // ESegment::IsProfiledNorm
     if (profiled) unit = "arbitrary";
-    Add(r, "quantity", quantity);
+    Add(r, "quantity", quantity, quantityComment);
     if (!quantityNote.empty()) unit = Implicit(Construct::kDataCode, name, "unit", unit, quantityNote);
     Add(r, "unit", unit, TakeComment());
     for (const auto &x : extra) Add(r, x.first, x.second);
@@ -381,13 +393,15 @@ void Builder::BuildExtrapolations() {
     const bool ratio = s.isAdvanced() == 1 && s.operationType() == 1 && !s.components().empty();
     const std::string angleFrame = (code == 5 || code == 7) ? "cm" : "lab";
     std::vector<io::Token> reaction;
+    std::vector<std::pair<std::string, std::string>> pairKeys;
     std::string why;
     if (!ReactionTokens(name, s.entranceKey(), (code == 4 || s.exitKey() == -1) ? -1 : s.exitKey(), s.isAdvanced(), s.operationType(), s.components(),
-                        angleFrame, reaction, why)) {
+                        angleFrame, reaction, why, pairKeys)) {
       Note(Construct::kTestLine, name, (active ? "" : "inactive ") + std::string("test line ") + std::to_string(t.key) + ": " + why + "; dropped");
       continue;
     }
     Add(r, "reaction", reaction);
+    for (const auto &k : pairKeys) Add(r, k.first, k.second);
     std::string quantity, unit;
     bool angles = false;
     switch (code) {
@@ -424,9 +438,19 @@ void Builder::BuildExtrapolations() {
       quantity = "beta_delayed_spectrum";
       unit = "arbitrary";
     }
-    if (quantity == "sigma" && ChargedElasticTerm(s.entranceKey(), s.exitKey(), s.components()))
-      quantity = Ask(Construct::kTestCode, name + ".quantity", kChargedElastic, quantity);
-    Add(r, "quantity", quantity);
+    std::string quantityComment;
+    if (quantity == "sigma") {
+      int terms = 0;
+      const int charged = ChargedElasticTerms(s.entranceKey(), s.exitKey(), s.components(), terms);
+      if (charged == terms) {
+        quantity = Implicit(Construct::kTestCode, name, "quantity", "sigma_nuclear", kChargedElastic);
+        quantityComment = TakeComment();
+      } else if (charged > 0) {
+        quantity = Ask(Construct::kTestCode, name + ".quantity",
+                       "a sum or ratio of an elastic integral of a charged pair and other terms: no quantity holds it", "");
+      }
+    }
+    Add(r, "quantity", quantity, quantityComment);
     Add(r, "unit", unit);
     if (code == 3) {
       Add(r, "expansion", "a_over_a0");

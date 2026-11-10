@@ -44,10 +44,13 @@ const std::string kLevels =
 
 struct Old {
   std::string data, test, targetInt, extra, config;
+  std::string levels = "";  ///< more <levels> lines
 };
 
 std::string Text(const Old &o) {
-  return "<config>\nformat=2\n" + o.config + "</config>\n" + kLevels + "<segmentsData>\n" + o.data + "</segmentsData>\n" +
+  std::string levels = kLevels;
+  levels.insert(levels.size() - std::string("</levels>\n").size(), o.levels);
+  return "<config>\nformat=2\n" + o.config + "</config>\n" + levels + "<segmentsData>\n" + o.data + "</segmentsData>\n" +
          "<segmentsTest>\n" + o.test + "</segmentsTest>\n" + "<targetInt>\n" + o.targetInt + "</targetInt>\n" + o.extra;
 }
 
@@ -441,6 +444,47 @@ int main(int argc, char **argv) {
     Expect("coherent", r, "datum scattering_length_2",
            F{{"quantity", "scattering_length"}, {"pair", "n+20Ne"}, {"s", "coherent"}, {"value", "4.6 fm"}, {"error", "0.1 fm"},
              {"imag", "0.2 fm"}, {"imag_error", "0.05 fm"}});
+  }
+  // ---- director's D1: the angle-integrated elastic integral of a charged pair (GenMatrixFunc: pi/k^2 sum g |T|^2 of
+  //      the nuclear amplitude) is quantity sigma_nuclear, with a CONVERTED comment
+  {
+    const ConvertResult r = Convert({"1 1 1 0.2 1.4 0 180 0 1 0 0 0 0 0 el.dat\n", "1 1 1 0.5 1.5 0.5 0 0 0 0\n", "", "", ""});
+    Expect("charged elastic, data", r, "dataset el",
+           F{{"reaction", "15N(p,p)15N"}, {"quantity", "sigma_nuclear"}, {"unit", "b"}, {"file", "el.dat"},
+             {"columns", "E_lab[MeV] _ value error"}, {"energy_window", "0.2 1.4 MeV"}, {"norm", "1 fixed"}});
+    Expect("charged elastic, test", r, "extrapolation x1",
+           F{{"reaction", "15N(p,p)15N"}, {"quantity", "sigma_nuclear"}, {"unit", "b"}, {"energies", "range 0.5 1.5 MeV lab step 0.5"}});
+    check("charged elastic: the CONVERTED comment on the quantity",
+          r.text.find("    # CONVERTED: the old engine computed the integral of the nuclear amplitude alone (pi/k^2 sum g |T|^2), "
+                      "not a measurable cross section\n    quantity       sigma_nuclear\n") != std::string::npos);
+    check("charged elastic: no question", r.questions.empty());
+  }
+  // ---- director's D2: two pairs with the same particles and states (7 is a copy of 5, n + 20Ne): the label names both,
+  //      so the <levels> pair keys are written; a sum with such a term is still a question
+  {
+    const std::string pair7 = "0.5 1 7.0 0 7 7 1 0 4 1 0 1.0 0.5 1 0.0 1 0.0 1.008665 19.99244 0 10 6.76 6.76 0 0 0.0 0 5.0 0 0 0\n";
+    Old o = {"1 7 7 0.1 2 0 180 0 1 0 0 0 0 0 k7.dat\n1 5 5 0.1 2 0 180 0 1 0 0 0 0 0 k5.dat\n", "", "", "", ""};
+    o.levels = pair7;
+    const ConvertResult r = Convert(o);
+    Expect("pair keys, pair 7", r, "dataset k7",
+           F{{"reaction", "20Ne(n,n)20Ne"}, {"entrance_pair", "7"}, {"exit_pair", "7"}, {"quantity", "sigma"}, {"unit", "b"},
+             {"file", "k7.dat"}, {"columns", "E_lab[MeV] _ value error"}, {"energy_window", "0.1 2 MeV"}, {"norm", "1 fixed"}});
+    Expect("pair keys, pair 5", r, "dataset k5",
+           F{{"reaction", "20Ne(n,n)20Ne"}, {"entrance_pair", "5"}, {"exit_pair", "5"}, {"quantity", "sigma"}, {"unit", "b"},
+             {"file", "k5.dat"}, {"columns", "E_lab[MeV] _ value error"}, {"energy_window", "0.1 2 MeV"}, {"norm", "1 fixed"}});
+    check("pair keys: no question", r.questions.empty());
+    Old c = {"1 7 7 0.1 2 0 180 0 1 0 0 0 0 0 ks.dat 1 0 1 6 6 -999\n", "", "", "", ""};
+    c.levels = pair7;
+    const ConvertResult q = Convert(c);
+    check("pair keys: a sum with an ambiguous term is a question", !q.ok && q.questions.size() == 1 && q.questions[0].key == "ks.reaction");
+  }
+  // ---- director's D3: an entrance pair with an excited heavy particle (8: n + 16O(2.143)): the target's state
+  {
+    Old o = {"1 8 8 0.1 2 0 180 0 1 0 0 0 0 0 ex.dat\n", "", "", "", ""};
+    o.levels = "0.5 1 7.0 0 8 8 1 0 5 1 0 1.0 0.5 1 0.0 1 2.143 1.008665 15.994915 0 8 6.76 6.76 0 0 0.0 0 5.0 0 0 0\n";
+    const ConvertResult r = Convert(o);
+    Expect("target state", r, "dataset ex",
+           Sigma("ex.dat", "16O[2.143](n,n)16O[2.143]") + F{{"energy_window", "0.1 2 MeV"}, {"norm", "1 fixed"}});
   }
   // ---- <parameterSettings>: rows renamed by the map
   {
