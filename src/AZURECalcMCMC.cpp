@@ -158,8 +158,8 @@ double AZURECalcMCMC::CalculateLogLikelihoodPhysical(const vector_r &params_) co
     return -std::numeric_limits<double>::infinity();
   }
 
-  localCompound->FillMnParams(params.GetMinuitParams(), &configure());
-  localData->FillMnParams(params.GetMinuitParams());
+  localCompound->FillMnParams(params, &configure());
+  localData->FillMnParams(params);
   localCompound->FillCompoundFromParams(params.GetMinuitParams().Params());
   // The tail of the physical vector (normalizations, energy shifts, screening)
   // is the same in both bases.  The norms were never copied out of it, so the
@@ -218,11 +218,12 @@ void AZURECalcMCMC::UpdateParameterVectors(const vector_r &physicalParams) const
   physical_.clear();
   fixed_.clear();
   paramNames_.clear();
+  paramKinds_.clear();
   g_param_names.clear();
 
   AZUREParams params;
-  compound()->FillMnParams(params.GetMinuitParams(), &configure());
-  data()->FillMnParams(params.GetMinuitParams());
+  compound()->FillMnParams(params, &configure());
+  data()->FillMnParams(params);
   if (configure().paramMask & Config::USE_PREVIOUS_PARAMETERS) {
     params.ReadUserParameters(configure());
     params.ReconcileBasis(compound(), configure());
@@ -236,6 +237,7 @@ void AZURECalcMCMC::UpdateParameterVectors(const vector_r &physicalParams) const
     all_rwa_.push_back(params.GetMinuitParams().Parameter(i).Value());
     fixed_.push_back(params.GetMinuitParams().Parameter(i).IsFixed());
     paramNames_.push_back(params.GetMinuitParams().GetName(i));
+    paramKinds_.push_back(params.Kind(i));
     g_param_names.push_back(params.GetMinuitParams().GetName(i));
     // If not fixed, add to rwa
     if (!params.GetMinuitParams().Parameter(i).IsFixed()) {
@@ -358,58 +360,31 @@ void AZURECalcMCMC::BuildAutoPriors(bool useRWA) const {
     return;
   }
 
-  // Classify every parameter of the vector, in its length and order, by its ParamIndexMap kind (BuildParamIndexMap
-  // mirrors CNuc::FillMnParams and EData::FillMnParams): per J-group and level one energy and one width per channel;
-  // abundances; norms; energy shifts; sqrt(E) coefficients; shift-function parameters; screening, density, Doppler
-  // and thickness parameters; THM cbkg.  (Re-walking the levels and segments, as this once did, gave an entry to a
-  // free THM norm, which is profiled and not a parameter; matching names, as it did until 2026-11-09, duplicated the
-  // fit's prior rules.)
-  std::vector<int> allKinds;
+  // Every parameter of the vector, in its length and order, by its kind (its record, written by CNuc::FillMnParams
+  // and EData::FillMnParams).  (Re-walking the levels and segments, as this once did, gave an entry to a free THM
+  // norm, which is profiled and not a parameter; matching names duplicated the fit's prior rules.)
+  std::vector<ParamKind> allKinds = paramKinds_;
   std::vector<double> allAutoMean;
   std::vector<double> allAutoStd;  // <= 0 means "no automatic prior available"
-  std::vector<std::string> unknownNames;
 
-  // The kind of every parameter from the parameter-index map, and the diagonal priors from the fit's own enumeration
-  // (Objective.h ForEachDiagonalPrior; docs/upgrade/objective.md step 5: the MCMC shares the fit's configuration),
-  // by index, not by name.
+  // The diagonal priors from the fit's own enumeration (Objective.h ForEachDiagonalPrior; docs/upgrade/objective.md
+  // step 5: the MCMC shares the fit's configuration), by index, not by name.
   const ParamIndexMap pmap = BuildParamIndexMap(compound(), data(), std::vector<bool>());
   std::map<int, std::pair<double, double>> diagonal;  // full index -> (mean, sigma)
   ForEachDiagonalPrior(data(), compound(), pmap,
                        [&](int idx, double nominal, double sigma) { diagonal[idx] = std::make_pair(nominal, sigma); });
-  for (size_t i = 0; i < paramNames_.size(); ++i) {
-    int kind = -1;
-    if ((int)i < pmap.NumFull()) {
-      switch (pmap.Desc((int)i).kind) {
-        case ::ParamKind::LevelEnergy: kind = PARAM_ENERGY; break;
-        case ::ParamKind::Gamma: kind = PARAM_WIDTH; break;
-        case ::ParamKind::Norm: kind = PARAM_NORM; break;
-        case ::ParamKind::EnergyShift: kind = PARAM_SHIFT; break;
-        case ::ParamKind::EnergyShiftSqrt: kind = PARAM_SHIFT_SQRT; break;
-        case ::ParamKind::EnergyShiftFn: kind = PARAM_SHIFT; break;  // the energy-shift prior rule
-        case ::ParamKind::Abundance: kind = PARAM_ABUNDANCE; break;
-        case ::ParamKind::Screening: kind = PARAM_SCREENING; break;
-        case ::ParamKind::Density: kind = PARAM_DENSITY; break;
-        case ::ParamKind::Doppler: kind = PARAM_DOPPLER; break;
-        case ::ParamKind::Thickness: kind = PARAM_THICKNESS; break;
-        case ::ParamKind::ThmCoherent: kind = PARAM_CBKG; break;
-      }
-    }
-    if (kind < 0) unknownNames.push_back(paramNames_[i]);
+  for (size_t i = 0; i < allKinds.size(); ++i) {
+    const ParamKind kind = allKinds[i];
     auto it = diagonal.find((int)i);
-    allKinds.push_back(kind);
     allAutoMean.push_back(it == diagonal.end() ? 0.0 : it->second.first);
     // A prior kind without a prior (no quoted error) is 0, sampled uniformly; levels and cbkg -1.
-    allAutoStd.push_back(it != diagonal.end() ? it->second.second
-                                              : (kind == PARAM_ENERGY || kind == PARAM_WIDTH || kind == PARAM_CBKG) ? -1.0 : 0.0);
+    allAutoStd.push_back(it != diagonal.end() ? it->second.second : KindRow(kind).ownPrior ? 0.0 : -1.0);
   }
 
-  if (allKinds.size() != fixed_.size() || !unknownNames.empty()) {
+  if (allKinds.size() != fixed_.size()) {
     configure().outStream << "Warning: parameter classification produced "
                           << allKinds.size() << " entries for "
                           << fixed_.size() << " parameters";
-    if (!unknownNames.empty())
-      configure().outStream << ", " << unknownNames.size() << " not recognised (first: "
-                            << unknownNames[0] << ")";
     configure().outStream << "; automatic priors skipped to avoid mis-assigning them.\n";
     freeKinds_.clear();
     return;
@@ -444,17 +419,15 @@ void AZURECalcMCMC::BuildAutoPriors(bool useRWA) const {
   std::vector<std::string> noPriorLabels;
 
   for (size_t i = 0; i < nfree; ++i) {
-    const int kind = freeKinds_[i];
+    const ParamKind kind = freeKinds_[i];
 
-    if (kind == PARAM_NORM || kind == PARAM_SHIFT || kind == PARAM_SHIFT_SQRT || kind == PARAM_ABUNDANCE ||
-        kind == PARAM_SCREENING || kind == PARAM_DENSITY || kind == PARAM_DOPPLER ||
-        kind == PARAM_THICKNESS) {
+    if (KindRow(kind).ownPrior) {
       // Derived from the data, so it always wins over whatever the GUI holds.
       if (freeAutoStd[i] > 0.0) {
         priorMeans_[i] = freeAutoMean[i];
         priorStds_[i] = freeAutoStd[i];
         usePriors_[i] = true;
-        if (kind == PARAM_NORM)
+        if (kind == ParamKind::Norm)
           nAutoNorm++;
         else
           nAutoShift++;
@@ -465,7 +438,7 @@ void AZURECalcMCMC::BuildAutoPriors(bool useRWA) const {
         nNoError++;
         noErrorLabels.push_back(AZURELabel::Parameter(compound(), data(), freeAllIndex[i]));
       }
-    } else if (kind == PARAM_CBKG) {
+    } else if (kind == ParamKind::ThmCoherent) {
       // THM coherent background: nothing in the data quotes an error on it,
       // so no automatic prior; a prior the caller defined is kept.
       nCbkg++;
@@ -486,16 +459,16 @@ void AZURECalcMCMC::BuildAutoPriors(bool useRWA) const {
   // configuration set on the same parameter (noted).
   {
     AZUREParams scratch;
-    compound()->FillMnParams(scratch.GetMinuitParams(), &configure());
-    data()->FillMnParams(scratch.GetMinuitParams());
+    compound()->FillMnParams(scratch, &configure());
+    data()->FillMnParams(scratch);
     ParameterLimitsManager limits(&configure(), compound(), data(), &scratch);
     int nNuisance = 0;
     std::string overridden;
     if (limits.ReadParameterSettings()) {
-      limits.ApplyAllParameterSettings(scratch.GetMinuitParams());
+      limits.ApplyAllParameterSettings(scratch);
       for (size_t i = 0; i < nfree; ++i) {
-        const int kind = freeKinds_[i];
-        if (kind != PARAM_ENERGY && kind != PARAM_WIDTH && kind != PARAM_CBKG) continue;
+        const ParamKind kind = freeKinds_[i];
+        if (kind != ParamKind::LevelEnergy && kind != ParamKind::Gamma && kind != ParamKind::ThmCoherent) continue;
         double nominal, sigma;
         const bool has = useRWA ? limits.NuisancePrior(freeAllIndex[i], nominal, sigma)
                                 : limits.NuisancePriorPhysical(freeAllIndex[i], nominal, sigma);
@@ -503,7 +476,7 @@ void AZURECalcMCMC::BuildAutoPriors(bool useRWA) const {
         const std::string label = AZURELabel::Parameter(compound(), data(), freeAllIndex[i]);
         if (usePriors_[i] && priorStds_[i] > 0.0) {
           overridden += (overridden.empty() ? "" : ", ") + label;
-        } else if (kind == PARAM_CBKG) {
+        } else if (kind == ParamKind::ThmCoherent) {
           nCbkgSet++;
         } else {  // the summary below counted it as a level parameter without a prior
           nUserSet++;
@@ -568,14 +541,19 @@ bool AZURECalcMCMC::SetUpPriorCovariance(bool useRWA) const {
   if (!useRWA) {
     // The prior is in the param.sav space: level energies and reduced-width amplitudes.  A physical-parameter chain
     // samples partial widths, so a prior on a level parameter would be applied to the wrong quantity.
-    for (const std::string &name : priorCov_->Names())
-      if (name.rfind("energy_", 0) == 0 || name.rfind("width_", 0) == 0) {
+    for (size_t a = 0; a < priorCov_->Names().size(); a++) {
+      const std::string &name = priorCov_->Names()[a];
+      const int f = priorCov_->FullIndex()[a];
+      const bool level = f >= 0 && f < (int)paramKinds_.size() &&
+                         (paramKinds_[f] == ParamKind::LevelEnergy || paramKinds_[f] == ParamKind::Gamma);
+      if (level) {
         configure().outStream << "**ERROR: priorCovariance: " << name << " is a level parameter and its prior is on "
                               << "the reduced-width (RWA) parameters of param.sav; sample with RWA parameters."
                               << std::endl;
         priorCov_.reset();
         return false;
       }
+    }
   }
   // The multivariate Gaussian replaces the diagonal prior of each of its parameters.
   std::vector<int> packedOf(fixed_.size(), -1);
@@ -863,8 +841,8 @@ void mcmc_iteration_callback(int current_step, int total_steps) {
 
             if (isValid) {
               AZUREParams params;
-              localCompound->FillMnParams(params.GetMinuitParams(), &g_mcmc_for_callbacks->configure());
-              localData->FillMnParams(params.GetMinuitParams());
+              localCompound->FillMnParams(params, &g_mcmc_for_callbacks->configure());
+              localData->FillMnParams(params);
               localCompound->FillCompoundFromParams(params.GetMinuitParams().Params());
               localData->FillNormsFromParams(fullParams);
               // After the compound: the sub-point grids are laid out from its fit values.
@@ -976,7 +954,7 @@ std::vector<std::string> AZURECalcMCMC::ParkNonPositiveLevels(const std::vector<
       lc->FillCompoundFromParamsPhysical(ReconstructFullParametersPhysical(p));
       if (lc->TransformIn(configure())) {
         AZUREParams params;
-        lc->FillMnParams(params.GetMinuitParams(), &configure());
+        lc->FillMnParams(params, &configure());
         lc->FillCompoundFromParams(params.GetMinuitParams().Params());
         filled = true;
       }
@@ -1101,14 +1079,12 @@ bool AZURECalcMCMC::RunMCMCSampling(int nwalkers, int nsteps, const std::vector<
       double relative = fabs(initialParams[j]) * spreadFraction;
       double spread = relative;
 
-      const int kind = (j < (int)freeKinds_.size()) ? freeKinds_[j] : -1;
+      const bool known = j < (int)freeKinds_.size();
 
-      if (kind == PARAM_ENERGY) {
+      if (known && freeKinds_[j] == ParamKind::LevelEnergy) {
         spread = energySpreadMeV;
         nEnergyCapped++;
-      } else if (kind == PARAM_NORM || kind == PARAM_SHIFT || kind == PARAM_SHIFT_SQRT || kind == PARAM_ABUNDANCE ||
-                 kind == PARAM_SCREENING || kind == PARAM_DENSITY || kind == PARAM_DOPPLER ||
-                 kind == PARAM_THICKNESS) {
+      } else if (known && KindRow(freeKinds_[j]).ownPrior) {
         // Starting outside the prior only wastes steps walking back into it.
         if (j < (int)priorStds_.size() && j < (int)usePriors_.size() &&
             usePriors_[j] && priorStds_[j] > 0.0 && priorStds_[j] < spread) {

@@ -162,6 +162,9 @@ class AZUREAPI {
    *                    (width params only, -1 otherwise)
    */
   vector_r GetParameterInfo() const;
+  /// What each parameter is and what it belongs to (its record, written where it was created), in the order of
+  /// params_names(): the kind and the owner fields of ParameterRecord.  The binding's parameter_records().
+  const std::vector<ParameterRecord> &GetParameterRecords() const { return records_; }
 
   // Number of numeric fields packed per particle pair by GetPairsInfo().
   // Keep this in sync with pyazr/parameters.py (Pair._NFIELDS).
@@ -575,6 +578,7 @@ class AZUREAPI {
   // Parameters
   std::vector<bool> fixed_;
   std::vector<std::string> names_;
+  std::vector<ParameterRecord> records_;  ///< what each parameter is (AZUREParams::Records), in the order of names_
   vector_r all_, all_rwa_, values_, values_rwa_, norms_, normsErrors_;
 
   // Data

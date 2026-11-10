@@ -8,6 +8,7 @@
 #include "NodeTableCache.h"
 #include "ThmExperiment.h"
 #include "Results.h"
+#include "ParameterKind.h"
 #include <memory>
 #include <atomic>
 #include <deque>
@@ -27,6 +28,7 @@ class ThmDistortion;
 class ThmDwVertex;
 
 class CNuc;
+class AZUREParams;
 class PriorCovariance;
 struct BandData;
 namespace ROOT {
@@ -296,7 +298,11 @@ class EData {
   void PrepareCovarianceSeeds(CNuc *, const Config &);
   /// The segment (1-based) whose norm segment s uses: its norm-group leader, or s itself.
   int NormOwner(int s) const;
-  void FillMnParams(ROOT::Minuit2::MnUserParameters &);
+  void FillMnParams(AZUREParams &);
+  /// The name of a data-segment parameter of the segment with key `key` (kind Norm, EnergyShift, EnergyShiftSqrt,
+  /// Thickness, or EnergyShiftFn with its j), as param files and <parameterSettings> rows name it; empty for any
+  /// other kind.  The one definition of these names (FillMnParams, ReadPriorCentres).
+  static std::string SegmentParameterName(int key, ParamKind kind, int fnTerm = 0);
   /// Write the normalizations back from a Minuit parameter vector.
   void FillNormsFromParams(const vector_r &);
   /// Write the energy shifts back from a Minuit parameter vector.  The last step of the hand-over of every
@@ -370,6 +376,8 @@ class EData {
     std::string experiment;
     double value = 0.0;
     bool fixed = false;
+    int jGroup = -1, entrance = -1, exit = -1;  ///< the combination's J group and channels in it (1-based)
+    int term = -1;                              ///< 0 Re c0, 1 Im c0, 2 Re c1, 3 Im c1
   };
   int NumThmCoherentParams() const { return (int)thmCoherentParams_.size(); }
   const ThmCoherentParam &GetThmCoherentParam(int k) const { return thmCoherentParams_[k]; }

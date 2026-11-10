@@ -16,6 +16,7 @@ class MnUserParameters;
 }
 }  // namespace ROOT
 class Config;
+class AZUREParams;
 
 /// An AZURE compound nucleus
 
@@ -233,8 +234,8 @@ class CNuc {
   void PrintRelativisticParams(const Config &) const;
 
   // -- fitting --------------------------------------------------------------
-  /// Seed the Minuit parameter array from the current level parameters.
-  void FillMnParams(ROOT::Minuit2::MnUserParameters &, const Config *config = nullptr);
+  /// Seed the parameter vector from the current level parameters, each with its record (what it is).
+  void FillMnParams(AZUREParams &, const Config *config = nullptr);
   /// Write a Minuit parameter vector back into the levels.
   void FillCompoundFromParams(const vector_r &);
   /// As above, for a vector already in physical rather than formal parameters.

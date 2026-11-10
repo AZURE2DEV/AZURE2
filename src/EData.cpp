@@ -11,6 +11,7 @@
 #include "SegLine.h"
 #include "AdaptiveIntegrationGrid.h"
 #include "Minuit2/MnUserParameters.h"
+#include "AZUREParams.h"
 #include "GSLException.h"
 #include <gsl/gsl_linalg.h>
 #include <map>
@@ -602,10 +603,13 @@ int EData::Fill(const Config &configure, CNuc *theCNuc) {
  * Reads the explicit prior centres of <parameterSettings> (see EData.h) and
  * moves the nominal normalization / energy shift of the segments they name.
  * Only rows of exactly three tokens whose second token is "prior_centre" are
- * read; every other row is left to ParameterLimitsManager, as before.  A row
- * for a segment key with no active segment is reported and ignored (an
- * inactive line keeps its key); a malformed row, or a normalization centre
- * that is not positive, fails the run.
+ * read; every other row is left to ParameterLimitsManager, as before.  The
+ * first token is matched whole against the names of the active segments'
+ * normalization and energy-shift parameters (SegmentParameterName); a row that
+ * names none of them -- a segment key with no active segment (an inactive line
+ * keeps its key), or any other name -- is reported and ignored; a centre that
+ * is not a finite number, or a normalization centre that is not positive,
+ * fails the run.
  */
 
 int EData::ReadPriorCentres(const Config &configure) {
@@ -635,22 +639,22 @@ int EData::ReadPriorCentres(const Config &configure) {
     while (stm >> t) tok.push_back(t);
     if (tok.size() != 3 || tok[1] != "prior_centre") continue;
 
+    // The row names its parameter by the whole name the parameter vector gives it (SegmentParameterName).
     const std::string &name = tok[0];
+    int pos = 0;
     bool isNorm = false;
-    std::string number;
-    const std::string normTail = "_norm", shiftTail = "_energy_shift";
-    if (name.compare(0, 8, "segment_") == 0 && name.size() > 8 + normTail.size() &&
-        name.compare(name.size() - normTail.size(), normTail.size(), normTail) == 0) {
-      isNorm = true;
-      number = name.substr(8, name.size() - 8 - normTail.size());
-    } else if (name.compare(0, 8, "segment_") == 0 && name.size() > 8 + shiftTail.size() &&
-               name.compare(name.size() - shiftTail.size(), shiftTail.size(), shiftTail) == 0) {
-      number = name.substr(8, name.size() - 8 - shiftTail.size());
+    for (int s = 1; s <= this->NumSegments() && pos == 0; s++) {
+      const int key = this->GetSegment(s)->GetSegmentKey();
+      if (name == SegmentParameterName(key, ParamKind::Norm)) {
+        pos = s;
+        isNorm = true;
+      } else if (name == SegmentParameterName(key, ParamKind::EnergyShift)) {
+        pos = s;
+      }
     }
-    const bool digits = !number.empty() && number.find_first_not_of("0123456789") == std::string::npos;
     char *end = NULL;
     const double centre = strtod(tok[2].c_str(), &end);
-    if (!digits || end == tok[2].c_str() || *end != '\0' || !std::isfinite(centre)) {
+    if (end == tok[2].c_str() || *end != '\0' || !std::isfinite(centre)) {
       configure.outStream << "ERROR: <parameterSettings> row \"" << trimmed
                           << "\" is not \"segment_N_norm prior_centre value\" or "
                              "\"segment_N_energy_shift prior_centre value\"." << std::endl;
@@ -661,20 +665,16 @@ int EData::ReadPriorCentres(const Config &configure) {
                           << "\": a normalization prior centre must be positive." << std::endl;
       return -1;
     }
-    const int key = atoi(number.c_str());
-    bool found = false;
-    for (int s = 1; s <= this->NumSegments(); s++) {
-      ESegment *segment = this->GetSegment(s);
-      if (segment->GetSegmentKey() != key) continue;
-      found = true;
-      if (isNorm)
-        segment->SetNominalNorm(centre);
-      else
-        segment->SetNominalEnergyShift(centre);
-    }
-    if (!found)
+    if (pos == 0) {
       configure.outStream << "WARNING: <parameterSettings> row \"" << trimmed
                           << "\" names no active data segment; ignored." << std::endl;
+      continue;
+    }
+    ESegment *segment = this->GetSegment(pos);
+    if (isNorm)
+      segment->SetNominalNorm(centre);
+    else
+      segment->SetNominalEnergyShift(centre);
   }
   return 0;
 }
@@ -4876,13 +4876,29 @@ void EData::SyncNormGroupParams(ROOT::Minuit2::MnUserParameters &p) const {
  * Fills the Minuit parameter array from initial values in the EData object.
  */
 
-void EData::FillMnParams(ROOT::Minuit2::MnUserParameters &p) {
+std::string EData::SegmentParameterName(int key, ParamKind kind, int fnTerm) {
+  const std::string stem = "segment_" + std::to_string(key) + "_";
+  switch (kind) {
+    case ParamKind::Norm: return stem + "norm";
+    case ParamKind::EnergyShift: return stem + "energy_shift";
+    case ParamKind::EnergyShiftSqrt: return stem + "energy_shift_sqrt";
+    case ParamKind::EnergyShiftFn: return stem + "energy_shift_fn" + std::to_string(fnTerm);
+    case ParamKind::Thickness: return stem + "thickness";
+    default: return std::string();
+  }
+}
+
+void EData::FillMnParams(AZUREParams &params) {
+  ROOT::Minuit2::MnUserParameters &p = params.GetMinuitParams();
+  // 1-based position of a segment in the list (the records' and ParamIndexMap's numbering).
+  auto SegmentPosition = [this](ESegmentIterator it) { return (int)(it - GetSegments().begin()) + 1; };
   SetNormParamOffset(p.Params().size());
   char varname[50];
   for (ESegmentIterator segment = GetSegments().begin(); segment < GetSegments().end(); segment++) {
     if (segment->IsVaryNorm() && !segment->IsProfiledNorm()) {
-      snprintf(varname, sizeof(varname), "segment_%d_norm", segment->GetSegmentKey());
-      p.Add(varname, segment->GetNorm(), segment->GetNorm() * 0.05);
+      snprintf(varname, sizeof(varname), "%s", SegmentParameterName(segment->GetSegmentKey(), ParamKind::Norm).c_str());
+      params.Add(varname, segment->GetNorm(), segment->GetNorm() * 0.05,
+                 ParameterRecord::OfSegment(ParamKind::Norm, SegmentPosition(segment), segment->GetSegmentKey()));
       p.SetLowerLimit(varname, 0.0);
       if (segment->IsNormGroupFollower()) p.Fix(varname);  // the group's norm is its leader's parameter
 
@@ -4895,9 +4911,10 @@ void EData::FillMnParams(ROOT::Minuit2::MnUserParameters &p) {
   SetEnergyShiftParamOffset(p.Params().size());
   for (ESegmentIterator segment = GetSegments().begin(); segment < GetSegments().end(); segment++) {
     // Always add energy shift parameter, regardless of IsVaryEnergyShift()
-    snprintf(varname, sizeof(varname), "segment_%d_energy_shift", segment->GetSegmentKey());
+    snprintf(varname, sizeof(varname), "%s", SegmentParameterName(segment->GetSegmentKey(), ParamKind::EnergyShift).c_str());
     double stepSize = (segment->GetEnergyShiftError() > 0.0) ? segment->GetEnergyShiftError() * 0.01 : 0.0005;
-    p.Add(varname, segment->GetEnergyShift(), stepSize);
+    params.Add(varname, segment->GetEnergyShift(), stepSize,
+               ParameterRecord::OfSegment(ParamKind::EnergyShift, SegmentPosition(segment), segment->GetSegmentKey()));
 
     if (!segment->IsVaryEnergyShift()) {
       p.Fix(varname);  // Fix parameter if not varying
@@ -4910,9 +4927,11 @@ void EData::FillMnParams(ROOT::Minuit2::MnUserParameters &p) {
   // written before the term existed fits exactly as before.
   SetEnergyShiftSqrtParamOffset(p.Params().size());
   for (ESegmentIterator segment = GetSegments().begin(); segment < GetSegments().end(); segment++) {
-    snprintf(varname, sizeof(varname), "segment_%d_energy_shift_sqrt", segment->GetSegmentKey());
+    snprintf(varname, sizeof(varname), "%s",
+             SegmentParameterName(segment->GetSegmentKey(), ParamKind::EnergyShiftSqrt).c_str());
     double stepSize = (segment->GetEnergyShiftSqrtError() > 0.0) ? segment->GetEnergyShiftSqrtError() * 0.01 : 0.0005;
-    p.Add(varname, segment->GetEnergyShiftSqrt(), stepSize);
+    params.Add(varname, segment->GetEnergyShiftSqrt(), stepSize,
+               ParameterRecord::OfSegment(ParamKind::EnergyShiftSqrt, SegmentPosition(segment), segment->GetSegmentKey()));
     if (!segment->IsVaryEnergyShiftSqrt()) p.Fix(varname);
   }
 
@@ -4922,9 +4941,11 @@ void EData::FillMnParams(ROOT::Minuit2::MnUserParameters &p) {
   for (ESegmentIterator segment = GetSegments().begin(); segment < GetSegments().end(); segment++) {
     if (!segment->OwnsShiftFn() || !segment->HasShiftFn()) continue;
     for (int j = 0; j < segment->NumShiftFnParams(); j++) {
-      snprintf(varname, sizeof(varname), "segment_%d_energy_shift_fn%d", segment->GetSegmentKey(), j);
+      snprintf(varname, sizeof(varname), "%s",
+               SegmentParameterName(segment->GetSegmentKey(), ParamKind::EnergyShiftFn, j).c_str());
       const double err = segment->GetShiftFnErrors()[j];
-      p.Add(varname, segment->GetShiftFnValues()[j], (err > 0.0) ? err * 0.01 : 0.0005);
+      params.Add(varname, segment->GetShiftFnValues()[j], (err > 0.0) ? err * 0.01 : 0.0005,
+                 ParameterRecord::ShiftFnTerm(SegmentPosition(segment), segment->GetSegmentKey(), j));
       if (!segment->IsVaryShiftFn(j)) p.Fix(varname);
     }
   }
@@ -4935,7 +4956,8 @@ void EData::FillMnParams(ROOT::Minuit2::MnUserParameters &p) {
     const TargetEffect *te = this->GetScreeningTargetEffect(k);
     snprintf(varname, sizeof(varname), "screening_%d", this->GetScreeningEffect(k));
     const double ue = te->GetScreeningUe();
-    p.Add(varname, ue, std::max(10.0, 0.05 * std::fabs(ue)));
+    params.Add(varname, ue, std::max(10.0, 0.05 * std::fabs(ue)),
+               ParameterRecord::OfEffect(ParamKind::Screening, this->GetScreeningEffect(k)));
     p.SetLowerLimit(varname, 0.0);
     if (!te->IsScreeningVaried()) p.Fix(varname);
   }
@@ -4947,7 +4969,8 @@ void EData::FillMnParams(ROOT::Minuit2::MnUserParameters &p) {
     const TargetEffect *te = this->GetDensityTargetEffect(k);
     snprintf(varname, sizeof(varname), "density_%d", this->GetDensityEffect(k));
     const double n = te->GetDensity();
-    p.Add(varname, n, (te->GetDensitySigma() > 0.0) ? 0.1 * te->GetDensitySigma() : 0.01 * n);
+    params.Add(varname, n, (te->GetDensitySigma() > 0.0) ? 0.1 * te->GetDensitySigma() : 0.01 * n,
+               ParameterRecord::OfEffect(ParamKind::Density, this->GetDensityEffect(k)));
     p.SetLimits(varname, 0.01 * te->GetDensityNominal(), te->GetLayoutDensity());
     if (!te->IsDensityVaried()) p.Fix(varname);
   }
@@ -4959,7 +4982,8 @@ void EData::FillMnParams(ROOT::Minuit2::MnUserParameters &p) {
     const TargetEffect *te = this->GetDopplerTargetEffect(k);
     snprintf(varname, sizeof(varname), "doppler_%d", this->GetDopplerEffect(k));
     const double t = te->GetDopplerTemperature();
-    p.Add(varname, t, (te->GetDopplerSigma() > 0.0) ? 0.1 * te->GetDopplerSigma() : 0.01 * t);
+    params.Add(varname, t, (te->GetDopplerSigma() > 0.0) ? 0.1 * te->GetDopplerSigma() : 0.01 * t,
+               ParameterRecord::OfEffect(ParamKind::Doppler, this->GetDopplerEffect(k)));
     p.SetLimits(varname, te->GetDopplerMinimum(), te->GetDopplerLayoutTemperature());
     if (!te->IsDopplerVaried()) p.Fix(varname);
   }
@@ -4969,9 +4993,10 @@ void EData::FillMnParams(ROOT::Minuit2::MnUserParameters &p) {
   thicknessParamOffset_ = p.Params().size();
   for (int k = 1; k <= this->NumThicknessParams(); k++) {
     ESegment *seg = this->GetSegment(this->GetThicknessSegment(k));
-    snprintf(varname, sizeof(varname), "segment_%d_thickness", seg->GetSegmentKey());
+    snprintf(varname, sizeof(varname), "%s", SegmentParameterName(seg->GetSegmentKey(), ParamKind::Thickness).c_str());
     const double n = seg->GetSampleThickness();
-    p.Add(varname, n, (seg->GetThicknessSigma() > 0.0) ? 0.1 * seg->GetThicknessSigma() : 0.01 * n);
+    params.Add(varname, n, (seg->GetThicknessSigma() > 0.0) ? 0.1 * seg->GetThicknessSigma() : 0.01 * n,
+               ParameterRecord::OfSegment(ParamKind::Thickness, this->GetThicknessSegment(k), seg->GetSegmentKey()));
     p.SetLowerLimit(varname, 0.0);
     if (!seg->IsThicknessVaried()) p.Fix(varname);
   }
@@ -4979,7 +5004,8 @@ void EData::FillMnParams(ROOT::Minuit2::MnUserParameters &p) {
   // THM coherent backgrounds (cbackground=): Re/Im of each amplitude, last.
   thmCoherentParamOffset_ = thmCoherentParams_.empty() ? -1 : (int)p.Params().size();
   for (const ThmCoherentParam &c : thmCoherentParams_) {
-    p.Add(c.name, c.value, c.value != 0.0 ? 0.1 * std::fabs(c.value) : 0.1);
+    params.Add(c.name, c.value, c.value != 0.0 ? 0.1 * std::fabs(c.value) : 0.1,
+               ParameterRecord::ThmCoherent(c.experiment, c.jGroup, c.entrance, c.exit, c.term));
     if (c.fixed) p.Fix(c.name);
   }
 }
@@ -5021,8 +5047,7 @@ int EData::ResolveThicknessGroups(const Config &configure) {
     configure.Note("Note: thickness group '" + g.first + "': segments #" + std::to_string(leader.GetSegmentKey()) +
                    " +" + members.str() + " share one sample thickness (segment #" +
                    std::to_string(leader.GetSegmentKey()) + "'s, " +
-                   (leader.HasThicknessFit() ? "parameter segment_" + std::to_string(leader.GetSegmentKey()) +
-                                                   "_thickness"
+                   (leader.HasThicknessFit() ? "parameter " + SegmentParameterName(leader.GetSegmentKey(), ParamKind::Thickness)
                                              : std::string("fixed")) +
                    ").");
   }

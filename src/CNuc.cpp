@@ -26,6 +26,7 @@
 #include "GSLException.h"
 #include "NucLine.h"
 #include "Minuit2/MnUserParameters.h"
+#include "AZUREParams.h"
 #include "NFIntegral.h"
 #include "CNucExternalCapture.h"
 #include "ShftFunc.h"
@@ -1991,7 +1992,8 @@ void CNuc::PrintAngularDists(const Config &configure) {
  * Fills the Minuit parameter array from initial values in the CNuc object.
  */
 
-void CNuc::FillMnParams(ROOT::Minuit2::MnUserParameters &p, const Config *config) {
+void CNuc::FillMnParams(AZUREParams &params, const Config *config) {
+  ROOT::Minuit2::MnUserParameters &p = params.GetMinuitParams();
   char varname[50];
   int energyIndex = 1;
   for (int j = 1; j <= this->NumJGroups(); j++) {
@@ -1999,7 +2001,7 @@ void CNuc::FillMnParams(ROOT::Minuit2::MnUserParameters &p, const Config *config
       ALevel *level = this->GetJGroup(j)->GetLevel(la);
       snprintf(varname, sizeof(varname), "j=%d_la=%d_energy", j, la);
       snprintf(varname, sizeof(varname), "energy_%d", energyIndex);
-      p.Add(varname, level->GetE(), 0.1 * level->GetE());
+      params.Add(varname, level->GetE(), 0.1 * level->GetE(), ParameterRecord::LevelEnergy(j, la, energyIndex));
       bool isUnbound = false;
       for (int ir = 1; ir <= this->NumPairs(); ir++) {
         PPair *pair = this->GetPair(ir);
@@ -2017,7 +2019,7 @@ void CNuc::FillMnParams(ROOT::Minuit2::MnUserParameters &p, const Config *config
         snprintf(varname, sizeof(varname), "j=%d_la=%d_ch=%d_rwa", j, la, ch);
         snprintf(varname, sizeof(varname), "width_%d_%d", energyIndex, widthIndex);
         widthIndex++;
-        p.Add(varname, level->GetGamma(ch), 0.1 * level->GetGamma(ch));
+        params.Add(varname, level->GetGamma(ch), 0.1 * level->GetGamma(ch), ParameterRecord::Width(j, la, ch, energyIndex));
         // A width given as 0 is not fitted, in every basis: the input decides, not the transformed amplitude, which
         // in the formal basis is 0 or rounding by the order of the sums (external_capture.md section 9).  Without a
         // transformation the input is the parameter.
@@ -2055,7 +2057,8 @@ void CNuc::FillMnParams(ROOT::Minuit2::MnUserParameters &p, const Config *config
       for (unsigned int k = 0; k < nuclei_.size(); k++) {
         const SampleAbundance &e = samples_[s].entries[k];
         std::string name = this->AbundanceParamName((int)s + 1, (int)k + 1);
-        p.Add(name, e.abundance, e.sigma > 0.0 ? e.sigma : 0.1 * e.abundance + 1e-3);
+        params.Add(name, e.abundance, e.sigma > 0.0 ? e.sigma : 0.1 * e.abundance + 1e-3,
+                   ParameterRecord::Abundance((int)s + 1, samples_[s].name, (int)k + 1, nuclei_[k].Z, nuclei_[k].A));
         p.SetLowerLimit(name, 0.0);
         if (!e.vary) p.Fix(name);
       }

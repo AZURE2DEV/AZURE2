@@ -191,8 +191,8 @@ bool BuildBandData(CNuc *compound, EData *data, const Config &config,
   // Minuit order) as the fitter: the caller's (param.par included), else the
   // .azr's -- mirrors AZURECalc::ResidualJacobian.
   AZUREParams tp;
-  compound->FillMnParams(tp.GetMinuitParams(), &config);
-  data->FillMnParams(tp.GetMinuitParams());
+  compound->FillMnParams(tp, &config);
+  data->FillMnParams(tp);
   const int nMn = tp.GetMinuitParams().Params().size();
   std::vector<bool> fixed(nMn);
   for (int i = 0; i < nMn; i++) fixed[i] = tp.GetMinuitParams().Parameter(i).IsFixed();

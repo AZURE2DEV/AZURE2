@@ -129,8 +129,8 @@ struct Model {
     data = new EData();
     if (compound->Fill(cfg) == -1 || data->Fill(cfg, compound) == -1) return false;
     compound->Initialize(cfg);
-    compound->FillMnParams(params.GetMinuitParams(), &cfg);
-    data->FillMnParams(params.GetMinuitParams());
+    compound->FillMnParams(params, &cfg);
+    data->FillMnParams(params);
     return data->Initialize(compound, cfg) != -1;
   }
 };

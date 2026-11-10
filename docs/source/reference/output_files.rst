@@ -51,6 +51,71 @@ the file lacks keeps its value from the project, and rows are appended as
 parameters are added (``segment_N_energy_shift_sqrt``, the THM ``cbkg_*``),
 so read them by name in your own scripts too.
 
+**Kinds of parameter.** A name is a label for people and files: AZURE2 does
+not read from it what a parameter is. Each parameter carries its kind and what
+it belongs to, set where the parameter is made; a name in a file is matched
+whole. pyazr shows them as ``Parameter.kind`` and the owner fields
+(``segment_key``, ``effect``, ``sample``, ``thm_experiment``, ...), and
+``pyazr.parameters.parameter_kinds()`` lists the kinds. In the order of the
+vector:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 14 30 18 38
+
+   * - kind
+     - name
+     - unit
+     - what it is
+   * - ``energy``
+     - ``energy_<n>``
+     - MeV
+     - level energy of level *n* (counted over all J groups)
+   * - ``width``
+     - ``width_<n>_<c>``
+     - MeV\ :sup:`1/2`
+     - reduced-width amplitude of level *n* in channel *c*, in the run's basis
+   * - ``abundance``
+     - ``abundance[_<sample>]_<Z>_<A>``
+     - 1
+     - isotopic abundance (``<abundances>``)
+   * - ``norm``
+     - ``segment_<k>_norm``
+     - 1
+     - normalization of data segment *k*
+   * - ``shift``
+     - ``segment_<k>_energy_shift``
+     - MeV (lab)
+     - constant energy shift of segment *k*
+   * - ``shift_sqrt``
+     - ``segment_<k>_energy_shift_sqrt``
+     - MeV\ :sup:`1/2`
+     - coefficient of the :math:`\sqrt{E}` shift of segment *k*
+   * - ``shift_fn``
+     - ``segment_<k>_energy_shift_fn<j>``
+     - as the function defines
+     - parameter :math:`a_j` of segment *k*'s shift function
+   * - ``screening``
+     - ``screening_<n>``
+     - eV
+     - electron-screening potential of target effect *n*
+   * - ``density``
+     - ``density_<n>``
+     - atoms/cm²
+     - fitted target density of target effect (or density group) *n*
+   * - ``doppler``
+     - ``doppler_<n>``
+     - K
+     - fitted Doppler temperature of target effect *n*
+   * - ``thickness``
+     - ``segment_<k>_thickness``
+     - atoms/barn
+     - fitted sample thickness of transmission or yield segment *k*
+   * - ``cbkg``
+     - ``cbkg_<experiment>_...``
+     - HOES amplitude (:math:`c_1` per MeV)
+     - Re or Im of a THM coherent-background coefficient
+
 param.fit
 ^^^^^^^^^
 

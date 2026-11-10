@@ -2,6 +2,27 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-10 — parameter kinds: what a parameter is comes from its record, not its name (`feature/upgrade-4-param-kinds`)
+
+Record and recipe: `parameter_kinds.md` (format 3 check 23, decision F3).
+- **Done.** `include/ParameterKind.h` (plain, standard library only): `ParamKind` (codes 0–11 = the API's type codes;
+  moved from `AZUREGrad.h`, the MCMC's `PARAM_*` and pyazr's `_KINDS` deleted), `ParamKindTable()` (key, unit, owner
+  fields, `ownPrior`, `segmentField`, `varyFromProject`, doc) and `ParameterRecord` (kind, ordinal, owner fields).
+  `AZUREParams::Add(name, value, step, record)` is the only way a parameter enters the vector (`Record(i)` throws if a
+  parameter lacks one); `CNuc::FillMnParams` / `EData::FillMnParams` take `AZUREParams&`. Every name test is gone:
+  `AZUREParams` (param files), `ParameterLimitsManager` (GUI numbering, setting names and index fallback, nuisance
+  exclusion, width conversion; six dead functions deleted, `FindParameterIndex` that refilled the vector per call
+  replaced by the index), `AZURECalc`, `AZUREMain`, `AZURECalcMCMC`, the CLI MCMC (`PrettyParameterName`,
+  `FindMcmcPriorParameter`), `EData::ReadPriorCentres` (whole names from `EData::SegmentParameterName`), the API's
+  norm / shift index lists, pyazr (`load_sav`, `save_fit`'s cbkg, an abundance's sample). `ParameterLabel.h`'s
+  `IsNormName` & co. and the dead `ApplyThmCoherentValues` deleted. Binding: `Session.parameter_records()`,
+  `_azure2.parameter_kinds()`; pyazr 2.14.0 (`parameters.parameter_kinds()`, `Parameter.thm_*`, `level_number`).
+  Check 23 in `repo_consistency_test.py` (shown failing on the start head: 70 problems). Test
+  `pyazr_parameter_kinds`.
+- **Open.** The layout is still walked a second time by position in `BuildParamIndexMap`, `GetParameterInfo` (now
+  checked against the records), `AZURELabel::Parameter`; building them from the records is the next step. pyazr's
+  document layer still parses the `prior_centre` rows by regex (no session; listed in check 23).
+
 ## 2026-11-09 (night) — fits that depend on the thread count: two causes (branch `fix/upgrade-fit-threads`)
 
 Record: `fit_threads.md`. Diagnostic `AZURE_TRACE_FCN=1|fresh` (every χ² with its parameter vector in hex floats;

@@ -601,6 +601,10 @@ int EData::BuildThmGroups(const Config &configure, CNuc *theCNuc, int numLines) 
               par.experiment = x.name;
               par.value = t.hasValues ? t.value[k] : 0.0;
               par.fixed = t.hasValues && t.fixed[k];
+              par.jGroup = j;
+              par.entrance = in;
+              par.exit = out;
+              par.term = k;
               thmCoherentParams_.push_back(par);
             }
             c << (found || cb->combos.size() > 1 ? "; " : "") << jpi << " (" << ThmSpinText(ci->GetS()) << ","

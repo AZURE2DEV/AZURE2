@@ -22,32 +22,6 @@ class ALevel;
  */
 namespace AZURELabel {
 
-/*!
- * Whether a fit-parameter name is a segment normalization ("segment_<k>_norm")
- * or energy shift ("segment_<k>_energy_shift", or its sqrt(E) coefficient
- * "segment_<k>_energy_shift_sqrt").  Matched by form, not by a
- * substring: a THM coherent-background name, cbkg_<experiment>_..., carries
- * the experiment's own name and may contain "norm" or "shift".
- */
-inline bool EndsWith(const std::string &s, const std::string &tail) {
-  return s.size() >= tail.size() && s.compare(s.size() - tail.size(), tail.size(), tail) == 0;
-}
-inline bool IsNormName(const std::string &name) {
-  return name.compare(0, 8, "segment_") == 0 && EndsWith(name, "_norm");
-}
-/// segment_<key>_energy_shift_fn<j>: parameter aj of a segment's shift function ("shiftfn").
-inline bool IsEnergyShiftFnName(const std::string &name) {
-  if (name.compare(0, 8, "segment_") != 0) return false;
-  const size_t at = name.rfind("_energy_shift_fn");
-  if (at == std::string::npos) return false;
-  const std::string j = name.substr(at + 16);
-  return !j.empty() && j.find_first_not_of("0123456789") == std::string::npos;
-}
-inline bool IsEnergyShiftName(const std::string &name) {
-  return name.compare(0, 8, "segment_") == 0 &&
-         (EndsWith(name, "_energy_shift") || EndsWith(name, "_energy_shift_sqrt") || IsEnergyShiftFnName(name));
-}
-
 /*! Spin as a fraction: 1.5 -> "3/2", 2.0 -> "2". */
 /// Spin as text, half-integers as "3/2".
 std::string Spin(double j);

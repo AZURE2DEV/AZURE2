@@ -25,6 +25,8 @@ struct ParameterSetting {
   bool useAsNuisance;
   std::string category;
   int minuitIndex;  // Minuit2 parameter index
+  /// Stored under a parameter's own name (the one-token form): matched by that name or not at all.
+  bool parameterNameForm = false;
 };
 
 class ParameterLimitsManager {
@@ -34,29 +36,11 @@ class ParameterLimitsManager {
   // Read parameter settings from AZURE2 file
   bool ReadParameterSettings();
 
-  // Apply all parameter settings to Minuit parameters
-  void ApplyAllParameterSettings(ROOT::Minuit2::MnUserParameters &p);
-
-  // Check if parameter is marked as nuisance
-  bool IsNuisanceParameter(const std::string &paramName) const;
+  // Apply all parameter settings to the parameters (limits; nuisance priors for NuisancePrior)
+  void ApplyAllParameterSettings(AZUREParams &params);
 
   // Check if parameter is marked as nuisance by Minuit2 index
   bool IsNuisanceParameterByIndex(int nonFixedIndex) const;
-
-  // Get parameter error for nuisance calculation
-  double GetParameterError(const std::string &paramName) const;
-
-  // Get converted nominal value (physical to reduced for width parameters)
-  double GetConvertedNominalValue(const std::string &paramName) const;
-
-  // Get converted error (physical to reduced for width parameters)
-  double GetConvertedError(const std::string &paramName) const;
-
-  // Get converted nominal value by Minuit2 index (physical to reduced for width parameters)
-  double GetConvertedNominalValueByIndex(int nonFixedIndex) const;
-
-  // Get converted error by Minuit2 index (physical to reduced for width parameters)
-  double GetConvertedErrorByIndex(int nonFixedIndex) const;
 
   /*!
    * Gaussian prior on the parameter at position actualIndex of the FULL Minuit
@@ -92,24 +76,28 @@ class ParameterLimitsManager {
   /// none, and for segment norms/shifts).  Built by BuildIndexMap().
   std::vector<ParameterSetting *> priorByActualIndex_;
 
+  /// Whether the nuisance prior of each full-vector parameter is on a level width (its settings are partial widths,
+  /// eV, converted to reduced-width amplitudes).  Built by BuildIndexMap().
+  std::vector<bool> priorIsWidth_;
+
   // Internal functions
-  int FindParameterIndex(const std::string &paramName) const;
-  double ConvertPhysicalLimitToReduced(double physicalLimit, const std::string &paramName) const;
-  void ApplyParameterSetting(const std::string &paramName, ROOT::Minuit2::MnUserParameters &p);
-  void ApplyParameterSettingByIndex(int nonFixedIndex, int actualIndex, ROOT::Minuit2::MnUserParameters &p);
+  /// The parameter at full-vector index paramIndex set to a physical value (a level width in eV), as the fit
+  /// parameter (the reduced-width amplitude) that value corresponds to.
+  double ConvertPhysicalLimitToReduced(double physicalLimit, int paramIndex) const;
+  void ApplyParameterSettingByIndex(int nonFixedIndex, int actualIndex, AZUREParams &params);
   /*!
-   * Translates a Minuit parameter name into the name the GUI writes into the
-   * <parameterSettings> block ("energy_2" -> "Level 2 Energy (MeV)",
-   * "width_2_3" -> "Level 2 Channel 3 Width (eV)"; segment norms and energy
-   * shifts already share their names).
+   * The name under which the GUI writes a parameter into the <parameterSettings>
+   * block: a level energy as "Level 2 Energy (MeV)", a width as "Level 2
+   * Channel 3 Width (eV)" (from the parameter's record), every other parameter
+   * under its own name.
    */
-  static std::string SettingNameForMinuitName(const std::string &minuitName);
+  static std::string SettingNameFor(const ParameterRecord &record, const std::string &name);
   /*!
    * Resolves each enumerated non-fixed parameter to its settings entry, by name
    * where possible and by the stored minuit_index only for entries no name
    * matched.  Must be called before any ...ByIndex() lookup.
    */
-  void BuildIndexMap(const ROOT::Minuit2::MnUserParameters &p);
+  void BuildIndexMap(const AZUREParams &params);
   ParameterSetting *SettingForIndex(int nonFixedIndex) const;
 };
 
