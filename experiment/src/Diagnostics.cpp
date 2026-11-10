@@ -20,6 +20,7 @@ const std::vector<DiagnosticCode> &DiagnosticCodes() {
   using namespace codes;
   namespace rc = io::record_codes;
   const Severity E = Severity::Error;
+  // {code, severity, meaning}
   static const std::vector<DiagnosticCode> table = {
       // The reader (io/RecordReader)
       {rc::kUnterminatedQuote, E, "a quoted token has no closing quote on its line"},

@@ -131,8 +131,36 @@ records}`: each `ValidatedRecord` holds its fields as typed `Value`s (numbers ke
 its lines. Step 3's `Schema::Build` is to read those values and never text. What needs `<levels>` (the pair and level
 behind a reaction label, a level's J^pi) or the data files (rows, zero errors) is not checked here.
 
-To add (the recipes of `CLAUDE.md`): a field is one `FieldDef` row in `Schema.cpp` (and a `QuantityField` in the
-quantity rows that use it), a quantity one `Quantity` row in `Quantities.cpp`, a unit one `Unit` row in `Units.cpp`; then
+Every row names its members. A quantity is one function of `Quantities.cpp` that fills a `Quantity` member by member
+(`q.units = {AnyUnitOf("sfactor")};`, `q.refusals = {RefusedAtValidation(...)};`; unset members keep the defaults of
+`Quantities.h`); a record kind is one function of `Schema.cpp` (`DatasetKind()`, ...) whose fields are made by helpers
+that say where they apply and whether they are required (`Req`, `Opt`, `RequiredWhen`, `OptionalWhen`, `ByQ`,
+`Repeatable`, `Defaulted`, `RequiredIf`); a structured value is a `FormSpec` of `Keyword(...)`/`Unkeyed(...)`
+alternatives with `Pos`/`Kw`/`OptionalKw` parts. A complete quantity row:
+
+```cpp
+Quantity SFactor() {
+  Quantity q;
+  q.name = "sfactor";
+  q.title = "Astrophysical S factor";
+  q.doc = "S(E) = E sigma(E) exp(2 pi eta) with the engine's eta and atomic masses (data_kinds.md section 4.1).";
+  q.recordKinds = kDataKinds;
+  q.engineUnit = "MeV*b";
+  q.units = {AnyUnitOf("sfactor")};
+  q.energyRoles = {"E_cm", "E_lab"};
+  q.reaction = {R::kChargedEntrance, "charged entrance"};
+  q.fields = {Allows("multipole", kGammaExit)};
+  q.tree = "Scale_SF(E) o Sigma(r)";
+  q.exfor = {",SIG,,SFC", "PAR,SIG,,SFC", "EP/PAR,SIG,,SFC"};
+  q.refusals = {RefusedAtValidation("E_REACTION_NOT_ALLOWED", "neutral",
+                                    "the S factor is defined for charged particles (Gamow factor)")};
+  return q;
+}
+```
+
+To add (the recipes of `CLAUDE.md`): a field is one `FieldDef` row in its kind's function in `Schema.cpp` (and an
+`Allows`/`Requires` in the quantity functions that use it), a quantity one function in `Quantities.cpp` and its entry in
+`Quantities()`, a unit one `Unit` row `{token, dimension, factor}` in `Units.cpp`; then
 `AZURE2 --schema > tests/schema/schema_v3.json` (bump `Schema::kVersion` when the table changes meaning) and
 `python3 tools/gen_schema_docs.py`. The tests: `experiment_schema` (the note's examples as fixtures in `tests/data/`
 validate with no diagnostic; the JSON equals the committed copy), `experiment_diagnostics` (one case per code),

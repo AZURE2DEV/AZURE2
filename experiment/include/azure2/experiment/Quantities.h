@@ -63,9 +63,14 @@ struct Refusal {
   std::string code;       ///< the diagnostic code it produces
   std::string rule;       ///< a rule of ReactionRule ("identical", ...) or the condition in words
   std::string message;
-  std::string checkedBy;  ///< "validate" (here) or "build" (step 3: needs <levels> or the data file)
+  std::string checkedBy;  ///< "validate" (here), "build" (step 3: needs <levels> or the data file) or "importer"
 };
 
+/*!
+ * One row of the table.  Quantities.cpp fills each row member by member, in one function per quantity; a member a
+ * row does not set keeps the default below (no angle axis, no order or window column, no reaction constraint, no
+ * field, no target kind, no norm rule beyond GeneralNormRules, no EXFOR code, no refusal).
+ */
 struct Quantity {
   std::string name;
   std::vector<std::string> aliases;
