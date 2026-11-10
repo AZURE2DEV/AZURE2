@@ -313,6 +313,76 @@ int main() {
                                        "<targets>\n" + beam + "</targets>\n"));
   }
 
+  // hybrid potentials (`potential` records, BuildPotentials): the settings member by member, units converted, the
+  // defaults noted, and one case per refusal
+  {
+    const std::string pot =
+        "potential p12C\n    pair p+12C\n    coulomb_radius 4.5 fm\n"
+        "    central woods_saxon depth 20000 keV radius 3.6 fm diffuseness 0.6 fm\n    matching_radius 16 fm\n";
+    const std::string gauss = "potential pN\n    pair p+15N\n    coulomb_radius 3.5 fm\n    central gaussian depth 40 MeV width 2.5 fm\n"
+                              "    step 0.02 fm\n";
+    auto potentials = [](const std::string &records) { return "<potentials>\n" + records + "</potentials>\n"; };
+    const BuiltProject b = BuildText(potentials(pot + gauss));
+    for (const Diagnostic &d : b.diagnostics) std::printf("        %s: %s\n", d.code.c_str(), d.message.c_str());
+    check("two potential records build", b.Ok() && b.diagnostics.empty());
+    check("one setting per pair named (7: p+12C, 1: p+15N), no default", b.potentials.pairs.size() == 2 &&
+                                                                            b.potentials.pairs.count(7) && b.potentials.pairs.count(1) &&
+                                                                            !b.potentials.defaults.enabled);
+    if (b.potentials.pairs.size() == 2) {
+      const HybridPotentialSetting &ws = b.potentials.pairs.at(7), &g = b.potentials.pairs.at(1);
+      check("p12C: Woods-Saxon, 20000 keV = 20 MeV, R 3.6, a 0.6, R_C 4.5, r_m 16 fm, the default step",
+            ws.enabled && ws.shape == azure2::physics::FormShape::WoodsSaxon && ws.V0 == 20000 * 1e-3 && ws.R == 3.6 &&
+                ws.a == 0.6 && ws.coulomb_radius_fm == 4.5 && ws.matching_radius_fm == 16.0 && ws.step_fm == 0.0275);
+      check("pN: Gaussian 40 MeV, r0 2.5 fm, R_C 3.5 fm, the default r_m, step 0.02 fm",
+            g.enabled && g.shape == azure2::physics::FormShape::Gaussian && g.V0 == 40.0 && g.r0 == 2.5 &&
+                g.coulomb_radius_fm == 3.5 && g.matching_radius_fm == 15.0 && g.step_fm == 0.02);
+      check("the potential values carry R_C, r_m and the step", ws.Potential().coulomb_radius_fm == 4.5 &&
+                                                                 ws.Potential().matching_radius_fm == 16.0 &&
+                                                                 g.Potential().step_fm == 0.02);
+      check("the record of each pair", b.potentialRecords.at(7).first == "p12C" && b.potentialRecords.at(1).first == "pN");
+    }
+    check("the defaults used are noted with the table's values",
+          b.potentialNotes == std::vector<std::string>{"potential p12C: step not given, 0.0275 fm (the default)",
+                                                       "potential pN: matching_radius not given, 15 fm (the default)"});
+    // the table's default texts are the solver's defaults
+    const RecordKind *kind = Schema::FindKind("potential");
+    check("matching_radius and step defaults of the table = HybridPotentialSetting's",
+          kind && kind->Find("matching_radius")->defaultText == "15 fm" && kind->Find("step")->defaultText == "0.0275 fm" &&
+              HybridPotentialSetting().matching_radius_fm == 15.0 && HybridPotentialSetting().step_fm == 0.0275);
+    const std::string dd = "potential d\n    pair d+12C\n    coulomb_radius 3.5 fm\n    central gaussian depth 40 MeV width 2.5 fm\n";
+    check("pair_key names one of the two d+12C pairs",
+          BuildText(potentials(dd + "    pair_key 6\n")).potentials.pairs.count(6) == 1);
+    ExpectOne("E_UNKNOWN_PAIR", BuildText(potentials(Set(pot, "pair", "    pair p+13C"))));
+    ExpectOne("E_AMBIGUOUS_PAIR", BuildText(potentials(dd)));
+    ExpectOne("E_PAIR_KEY", BuildText(potentials(pot + "    pair_key 7\n")));
+    ExpectOne("E_PAIR_KEY", BuildText(potentials(dd + "    pair_key 1\n")));
+    ExpectOne("E_POTENTIAL_TWICE", BuildText(potentials(pot + "potential again\n" + pot.substr(pot.find('\n') + 1))));
+    ExpectOne("E_POTENTIAL_PAIR_KIND", BuildText(potentials(Set(pot, "pair", "    pair g+16O"))));
+    ExpectOne("E_POTENTIAL_RELATIVISTIC", BuildText(potentials(pot), true));
+    // the THM data set d5 above enters through p+15N: a potential on that pair refuses it
+    const std::string thm = Set(Set(kDataset, "norm", "    norm profiled"), "unit", "    unit arbitrary") + "    thm global\n";
+    ExpectOne("E_THM_HYBRID_POTENTIAL", BuildText(Data(thm) + potentials(gauss)));
+    check("a THM data set with a potential on another pair builds", BuildText(Data(thm) + potentials(pot)).diagnostics.empty());
+    // the validator's refusals of the record (no build check needed)
+    ExpectOne("E_FIELD_REQUIRED", BuildText(potentials(Set(pot, "coulomb_radius", ""))));
+    ExpectOne("E_OUT_OF_RANGE", BuildText(potentials(Set(pot, "coulomb_radius", "    coulomb_radius 0 fm"))));
+    ExpectOne("E_OUT_OF_RANGE", BuildText(potentials(Set(gauss, "step", "    step -0.01 fm"))));
+    ExpectOne("E_OUT_OF_RANGE", BuildText(potentials(Set(gauss, "central", "    central gaussian depth 40 MeV width 0 fm"))));
+    ExpectOne("E_UNIT_NOT_ALLOWED", BuildText(potentials(Set(pot, "matching_radius", "    matching_radius 16 MeV"))));
+    ExpectOne("E_PART_MISSING", BuildText(potentials(Set(pot, "central", "    central woods_saxon depth 20 MeV radius 3.6 fm"))));
+    // the old block in a format-3 project (the reading path: ProjectReader)
+    {
+      Format3ReadOptions read;
+      read.build = false;
+      const Format3Project p = ReadFormat3Text("<config>\nformat=3\n</config>\n<potential>\nuseHybridPotential=1\n</potential>\n", read);
+      const bool one = p.diagnostics.size() == 1 && p.diagnostics[0].code == "E_OLD_POTENTIAL_BLOCK" &&
+                       p.diagnostics[0].line == 4 && p.diagnostics[0].message.find("--convert") != std::string::npos;
+      check("E_OLD_POTENTIAL_BLOCK alone, at the block's line, naming the converter", one);
+      if (!one)
+        for (const Diagnostic &d : p.diagnostics) std::printf("        got %s: %s\n", d.code.c_str(), d.message.c_str());
+    }
+  }
+
   std::printf("experiment_build: %d checks, %d failed\n", checks, failures);
   return failures == 0 ? 0 : 1;
 }

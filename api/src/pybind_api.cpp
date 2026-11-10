@@ -50,6 +50,12 @@ class AZURE2Error : public std::runtime_error {
     std::runtime_error(what) {}
 };
 
+// pybind_potentials.cpp: a session's hybrid potentials
+azure2::experiment::HybridPotentialSetting SessionPotentialSetting(const std::string &type, bool enabled, double V0,
+                                                                   double R, double a, double r0, double coulombRadius_fm);
+pybind11::tuple SessionPotentialView(const Config &config, int pair);
+pybind11::tuple SessionPotentialRecords(const Config &config);
+
 namespace {
 
 // CoulFunc reads g_config at construction to decide whether the hybrid
@@ -282,30 +288,15 @@ class Session {
   // model once it is rebuilt, which pyazr does after every change.
 
   // pair = 0 addresses the default that every unnamed pair falls back to.
-  void set_potential(int pair, const std::string &type, bool enabled,
-                     double V0, double R, double a, double r0) {
-    HybridPotentialSetting s;
-    s.enabled = enabled;
-    if (type == "WoodsSaxon")
-      s.shape = azure2::physics::FormShape::WoodsSaxon;
-    else if (type == "Gaussian")
-      s.shape = azure2::physics::FormShape::Gaussian;
-    else
-      throw AZURE2Error("unknown potential type '" + type + "'; expected 'WoodsSaxon' or 'Gaussian'");
-    s.V0 = V0;
-    s.R = R;
-    s.a = a;
-    s.r0 = r0;
+  void set_potential(int pair, const std::string &type, bool enabled, double V0, double R, double a, double r0,
+                     double coulomb_radius) {
     try {
-      s.Potential();
+      azure2::experiment::HybridPotentialSetting s = SessionPotentialSetting(type, enabled, V0, R, a, r0, coulomb_radius);
+      (pair ? config_->potentials.pairs[pair] : config_->potentials.defaults) = s;
     } catch (const std::exception &e) {
       throw AZURE2Error(std::string(pair ? "Failed to set potential for pair: " : "Failed to set default potential: ") +
                         e.what());
     }
-    if (pair)
-      config_->potentials.pairs[pair] = s;
-    else
-      config_->potentials.defaults = s;
     PotentialsChanged();
   }
 
@@ -313,18 +304,14 @@ class Session {
     if (pair)
       config_->potentials.pairs.erase(pair);
     else
-      config_->potentials = HybridPotentialSettings();
+      config_->potentials = azure2::experiment::HybridPotentialSettings();
     PotentialsChanged();
   }
 
-  // (enabled, type, V0, R, a, r0, has_own_setting) for the given pair,
-  // resolved against the default.
-  py::tuple get_potential(int pair) {
-    const HybridPotentialSettings &p = config_->potentials;
-    const HybridPotentialSetting &s = pair ? p.For(pair) : p.defaults;
-    bool own = pair ? p.pairs.count(pair) > 0 : true;
-    return py::make_tuple(s.enabled, s.ShapeName(), s.V0, s.R, s.a, s.r0, own);
-  }
+  // (enabled, type, V0, R, a, r0, has_own_setting, coulomb_radius) for the given pair, resolved against the default.
+  py::tuple get_potential(int pair) { return SessionPotentialView(*config_, pair); }
+  // (changed, record lines, notes): the session's potentials as format-3 records (pybind_potentials.cpp)
+  py::tuple potential_records() { return SessionPotentialRecords(*config_); }
 
   std::vector<int> configured_potential_pairs() { return config_->potentials.ConfiguredPairs(); }
 
@@ -1170,7 +1157,7 @@ PYBIND11_MODULE(_azure2, m) {
            "Rebuild the model with one pair's channel radius changed (fm).")
       .def("set_potential", &Session::set_potential, py::arg("pair"),
            py::arg("type"), py::arg("enabled"), py::arg("V0"), py::arg("R"),
-           py::arg("a"), py::arg("r0"),
+           py::arg("a"), py::arg("r0"), py::arg("coulomb_radius"),
            "Set the hybrid nuclear potential for one particle pair; pair=0 "
            "sets the default the unnamed pairs fall back to.  Call "
            "initialize() afterwards for it to reach the model.")
@@ -1178,7 +1165,9 @@ PYBIND11_MODULE(_azure2, m) {
            "Drop a pair's own potential so it follows the default again; "
            "pair=0 resets the default and every pair.")
       .def("get_potential", &Session::get_potential, py::arg("pair"),
-           "(enabled, type, V0, R, a, r0, has_own_setting) for a pair.")
+           "(enabled, type, V0, R, a, r0, has_own_setting, coulomb_radius) for a pair.")
+      .def("potential_records", &Session::potential_records,
+           "(changed, lines, notes): the potentials as format-3 records (a format-3 project only).")
       .def("configured_potential_pairs", &Session::configured_potential_pairs,
            "The pair keys carrying a potential of their own.")
       .def("update_data", &Session::update_data, py::call_guard<py::gil_scoped_release>(),

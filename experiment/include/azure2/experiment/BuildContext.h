@@ -49,6 +49,18 @@ class Context {
   static double InBase(const Number &n, const Unit *unit) { return unit && unit->factor != 1.0 ? n.value * unit->factor : n.value; }
 };
 
+/// The pair key `labelField` names by its label (light, heavy, state; `text` as written, `what` for the messages:
+/// "the entrance of 15N(p,g)16O", "the pair p+12C"), with the pair-key field `keyField` where the label names several
+/// pairs (section 3.5, D2/D3): accepted only there and required there; "" where the record cannot carry a key.
+/// Returns false after an error (E_UNKNOWN_PAIR, E_AMBIGUOUS_PAIR, E_PAIR_KEY).
+bool ResolvePair(Context &c, const ValidatedRecord &r, const std::string &labelField, const std::string &what,
+                 const Particle &light, const Particle &heavy, const ResidualState &state, const std::string &text,
+                 const std::string &keyField, int &key);
+
+/// The `potential` records of <potentials> (BuildPotentials.cpp): one setting per pair into out_.potentials, and the
+/// refusals that need the pairs, the THM data sets and the relativistic flag.  After the data sets are built.
+void BuildPotentials(Context &c);
+
 /// The effects of targets, beams and detectors on the data sets and extrapolations, the abundances of the targets'
 /// isotopes and the sample thicknesses (BuildEffects.cpp).
 void BuildEffects(Context &c);

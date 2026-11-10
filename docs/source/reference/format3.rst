@@ -25,6 +25,8 @@ Sections
      - ``extrapolation``
    * - ``<modelData>``
      - ``datum``
+   * - ``<potentials>``
+     - ``potential``
 
 Value types
 -----------
@@ -604,6 +606,44 @@ Model datum, in ``<modelData>``.  A literature value of a level property (sectio
      - ``<text>``
      - optional
      - the DOI of the publication
+
+potential
+~~~~~~~~~
+
+Hybrid potential, in ``<potentials>``.  The nuclear potential of one particle pair: its channel functions come from the radial equation with the Coulomb potential of a uniformly charged sphere and a central nuclear term, integrated inward from the matching radius to the channel radius (docs/upgrade/spin_orbit_potential.md section 1.1).  A pair without a record has none.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 14 40 22 24
+
+   * - field
+     - value
+     - presence
+     - meaning
+   * - ``pair``
+     - ``<particle>+<nucleus>[<E_x>]``
+     - required
+     - the particle pair of <levels> by its label (section 3.5)
+   * - ``pair_key``
+     - ``<integer >= 1>``
+     - optional
+     - the <levels> pair key, only where the label names two pairs
+   * - ``coulomb_radius``
+     - ``<number> <length unit>``
+     - required
+     - R_C of the uniformly charged sphere of the Coulomb term (the old <potential> block: 3.5 fm)
+   * - ``central``
+     - ``woods_saxon depth <number> <energy unit> radius <number> <length unit> diffuseness <number> <length unit> | gaussian depth <number> <energy unit> width <number> <length unit>``
+     - required
+     - the central nuclear term V_N(r)
+   * - ``matching_radius``
+     - ``<number> <length unit>``
+     - optional (default ``15 fm``)
+     - r_m: beyond it the solution is the point-Coulomb one; above every channel radius of the pair
+   * - ``step``
+     - ``<number> <length unit>``
+     - optional (default ``0.0275 fm``)
+     - the step of the inward integration, adjusted so that the channel radius is a node
 
 Quantities
 ----------
@@ -1780,13 +1820,13 @@ Diagnostic codes
      - a reaction or pair that no pair of <levels> has (particles and states)
    * - ``E_AMBIGUOUS_PAIR``
      - error
-     - a reaction or pair that two pairs of <levels> have (a data set says which with a pair key)
+     - a reaction or pair that two pairs of <levels> have (a data set or a potential says which with a pair key)
    * - ``E_NOT_A_CHANNEL``
      - error
      - a datum's pair (or pair, l, s) that is no channel of its level, or no s-wave channel spin of the pair
    * - ``E_PAIR_KEY``
      - error
-     - entrance_pair / exit_pair where the label names one pair, or a key the label does not name
+     - entrance_pair / exit_pair / pair_key where the label names one pair, or a key the label does not name
    * - ``E_DATA_FILE``
      - error
      - a data file that cannot be read, or has fewer columns than its roles
@@ -1802,6 +1842,21 @@ Diagnostic codes
    * - ``E_FOLD_CONFLICT``
      - error
      - data sets sharing a target with a free parameter differ in beam, detector or quadrature
+   * - ``E_POTENTIAL_TWICE``
+     - error
+     - two potential records for one pair
+   * - ``E_POTENTIAL_PAIR_KIND``
+     - error
+     - a potential record on a photon or beta pair (a potential belongs to a particle pair)
+   * - ``E_POTENTIAL_RELATIVISTIC``
+     - error
+     - a potential record in a project with relativistic kinematics
+   * - ``E_THM_HYBRID_POTENTIAL``
+     - error
+     - a THM data set or extrapolation whose entrance pair has a potential record
+   * - ``E_OLD_POTENTIAL_BLOCK``
+     - error
+     - the old <potential> block in a format-3 project (AZURE2 --convert writes potential records)
    * - ``W_NOT_MEASURABLE``
      - warning
      - a data set of a quantity that is computed for tests and comparison, not measured

@@ -76,14 +76,17 @@ std::string Keys(const std::vector<int> &keys) {
   return s;
 }
 
-// One side of a reaction: the pair key, by the label and (where the label names several pairs) the pair-key field.
-// `keyField` is "" for a term of a sum or ratio, which cannot carry a key.  Returns false after an error.
-bool ResolveSide(Context &c, const ValidatedRecord &r, const std::string &side, const Particle &light, const Particle &heavy,
-                 const ResidualState &state, const std::string &text, const std::string &keyField, int &key) {
+}  // namespace
+
+namespace build {
+
+bool ResolvePair(Context &c, const ValidatedRecord &r, const std::string &labelField, const std::string &what,
+                 const Particle &light, const Particle &heavy, const ResidualState &state, const std::string &text,
+                 const std::string &keyField, int &key) {
   const std::vector<int> keys = PairsNamed(light, heavy, state, c.pairs_);
   const Value *given = keyField.empty() ? nullptr : r.Get(keyField);
   if (keys.empty()) {
-    c.Error(codes::kUnknownPair, r, "reaction", UnknownPairMessage("the " + side + " of " + text), PairListing(c.pairs_));
+    c.Error(codes::kUnknownPair, r, labelField, UnknownPairMessage(what), PairListing(c.pairs_));
     return false;
   }
   if (keys.size() == 1) {
@@ -97,8 +100,8 @@ bool ResolveSide(Context &c, const ValidatedRecord &r, const std::string &side, 
     return true;
   }
   if (!given) {
-    c.Error(codes::kAmbiguousPair, r, "reaction",
-            AmbiguousPairMessage("the " + side + " of " + text, keys,
+    c.Error(codes::kAmbiguousPair, r, labelField,
+            AmbiguousPairMessage(what, keys,
                                  keyField.empty() ? "a term of a sum or ratio cannot carry a pair key"
                                                   : "write " + keyField + " <key> to say which"),
             {Keys(keys)});
@@ -112,6 +115,17 @@ bool ResolveSide(Context &c, const ValidatedRecord &r, const std::string &side, 
   }
   key = (int)given->integer;
   return true;
+}
+
+}  // namespace build
+
+namespace {
+
+// One side of a reaction: the pair key, by the label and (where the label names several pairs) the pair-key field.
+// `keyField` is "" for a term of a sum or ratio, which cannot carry a key.  Returns false after an error.
+bool ResolveSide(Context &c, const ValidatedRecord &r, const std::string &side, const Particle &light, const Particle &heavy,
+                 const ResidualState &state, const std::string &text, const std::string &keyField, int &key) {
+  return build::ResolvePair(c, r, "reaction", "the " + side + " of " + text, light, heavy, state, text, keyField, key);
 }
 
 // The entrance and exit pair keys of one reaction term (exit -1 for [total]).
@@ -644,6 +658,7 @@ BuiltProject Schema::Build(const ValidationResult &validated, const LevelTables 
   }
   for (auto &x : out.thm.experiments) std::sort(x.datasetKeys.begin(), x.datasetKeys.end());
   build::BuildEffects(c);
+  build::BuildPotentials(c);
   NameParameters(c);
   ModelDataBuild modelData = BuildModelData(validated, levels.levels, levels.pairs);
   out.modelData = std::move(modelData.data);

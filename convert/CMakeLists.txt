@@ -30,7 +30,8 @@ add_library(azure2_convert STATIC
   src/BuildData.cpp
   src/BuildSections.cpp
   src/Convert.cpp
-  src/OldProject.cpp)
+  src/OldProject.cpp
+  src/PotentialRecords.cpp)
 add_library(azure2::convert ALIAS azure2_convert)
 target_include_directories(azure2_convert PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include
                                           PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)

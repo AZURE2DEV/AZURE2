@@ -2,6 +2,45 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-10 (agent, brief U) — the hybrid potential as a format-3 record (`feature/upgrade-4-potential-record`)
+
+**Done.**
+- A format-3 project states a pair's hybrid potential as a `potential` record of a new section `<potentials>`:
+  `pair` (the pair label; `pair_key` only where two pairs have the label, the data sets' rule), `coulomb_radius`
+  (required), `central woods_saxon depth radius diffuseness | gaussian depth width`, `matching_radius` and `step`
+  (defaults 15 fm, 0.0275 fm, noted in the run log when used). No spin–orbit term. A pair without a record has no
+  potential; there is no default record. Every word is a row of the schema table (`--schema`, `pyazr.schema()`,
+  `format3.rst`); `--describe` prints each pair's potential with units.
+- Matching radius and step were already fields of the potential value and in every table key (`PotentialKey`), so
+  they are fields of the record. The Coulomb radius was already a field of the value (3.5 fm by default); the old
+  block keeps giving 3.5 fm.
+- Refusals with codes of the table: `E_POTENTIAL_TWICE`, `E_POTENTIAL_PAIR_KIND` (photon or beta pair),
+  `E_POTENTIAL_RELATIVISTIC`, `E_THM_HYBRID_POTENTIAL` (a THM data set or extrapolation whose entrance pair has a
+  record; the engine's own check stays for old projects), `E_OLD_POTENTIAL_BLOCK` (`<potential>` in a format-3
+  file, naming the converter); the existing `E_UNKNOWN_PAIR`, `E_AMBIGUOUS_PAIR`, `E_PAIR_KEY`, `E_FIELD_REQUIRED`,
+  `E_OUT_OF_RANGE`, `E_UNIT_NOT_ALLOWED`, `E_PART_MISSING` for the record's fields.
+- Files: `experiment/` (schema row, `BuildPotentials.cpp`, `HybridPotentialSettings` moved here from `include/` and
+  `src/`, `build::ResolvePair` shared with the data sets, `Describe.cpp`, `ProjectReader.cpp`); the old block's parser
+  moved verbatim to `convert/include/azure2/convert/PotentialBlock.h` (engine and converter read it with one parser);
+  `convert/PotentialRecords.h` writes records from settings (the converter and pyazr's writer).
+- Converter: one record per particle pair the old block gives a potential (default expanded, `coulomb_radius 3.5 fm`,
+  r_m and step written out), notes for sections that write nothing; the format-3 file has no `<potential>`.
+- pyazr 2.22.0: `set_nuclear_potential(..., coulomb_radius=)`, `NuclearPotential.coulomb_radius`,
+  `azure2.potential_records()`, `save_fit` of a format-3 project writes the session's potentials as records when they
+  changed. The potential methods live in `pyazr/potentials.py` (moved verbatim first).
+
+**Verified** (build `work/b-potrec`, 0 warnings, 3 threads): 183 × 3 against `tab-trial8` (tag `tab-pr1`): 704 / 677 /
+704 identical; `ctest -LE slow` 170/170; `tests/run_tests.sh` 142 passed / 0 failed; spec equivalence 193 files, 185
+converted, 183 equal, 2 recorded, 0 differ (now comparing every particle pair's potential by bits; injection 4 fails
+hybrid_potential, T3, T3_start); converted-tree gate (`REF=tab-trial8`, tag `prg1`): 472 (445) identical, 38
+classified, 0 differ, 11 missing, as before; converted `hybrid_potential`, T3, T3_start at 1 and 3 threads in the
+three bases: 87 / 87 files identical; `pyazr_potential_record`: R_C = 5 fm against DOP853 P 1.7e-8, S 7.2e-8. Every new
+check shown failing once with its check removed or its value moved (the report lists the injections).
+
+**Open.** pyazr's `save_fit` of a format-3 project works only with `norms="nominal"` (`"fitted"` reads
+`<segmentsData>`); format-2 `save_fit` still does not write a potential changed in the session. Web UI / Qt forms
+for the record not made. The spin–orbit term and `two_j` (note §5 steps 4–5).
+
 ## 2026-11-10 (agent, brief V) — design of step 6b of the `CNuc` split: the readers of the pathway trees (`docs/upgrade-pathways-6b`)
 
 **Done** (documents only; no code changed).

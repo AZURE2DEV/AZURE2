@@ -1,11 +1,13 @@
 #ifndef AZURE2_EXPERIMENT_BUILD_H
 #define AZURE2_EXPERIMENT_BUILD_H
 
+#include <map>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include "azure2/experiment/Diagnostics.h"
+#include "azure2/experiment/HybridPotentialSettings.h"
 #include "azure2/experiment/LevelTables.h"
 #include "azure2/experiment/SetupSpecs.h"
 
@@ -45,6 +47,13 @@ struct BuiltProject {
   AbundanceSpecs abundances;
   ThmMembershipSpec thm;
   std::vector<ModelDatum> modelData;  ///< the `datum` records of <modelData>, in record order (BuildModelData)
+  /// The `potential` records of <potentials>: one setting per pair key, no default (a pair without a record has no
+  /// potential).
+  HybridPotentialSettings potentials;
+  /// The record of each pair's potential: pair key -> (record name, line).
+  std::map<int, std::pair<std::string, int>> potentialRecords;
+  /// The defaults of the table the potential records used (matching radius, step), one line each for the log.
+  std::vector<std::string> potentialNotes;
   /// Diagnostics of the build checks, ordered by line.
   std::vector<Diagnostic> diagnostics;
   /// The checks that need a calculation and are made by the engine's set-up, which this build does not do (the

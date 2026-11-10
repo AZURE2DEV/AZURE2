@@ -9,7 +9,7 @@ RMatrixFunc.cpp AZUREOutput.cpp  EDataIterator.cpp   TargetEffect.cpp
 AZUREParams.cpp EPoint.cpp Interference.cpp CNuc.cpp Equation.cpp
 JGroup.cpp Config.cpp ESegment.cpp ModelPass.cpp CoulombReference.cpp Predictions.cpp CalculationPlan.cpp KGroup.cpp IntegratedFermiFunc.cpp
 EffectiveCharge.cpp  GSLException.cpp ParameterLimitsManager.cpp
-AdaptiveIntegrationGrid.cpp AdaptiveExtrapolation.cpp HybridPotentialSettings.cpp AZUREGrad.cpp ThmFunc.cpp
+AdaptiveIntegrationGrid.cpp AdaptiveExtrapolation.cpp AZUREGrad.cpp ThmFunc.cpp
 EDataOutputFiles.cpp
 EDataCheckFiles.cpp
 EDataCovariance.cpp
