@@ -697,6 +697,8 @@ Differential cross section (``dataset``, ``extrapolation``).  dsigma/dOmega at t
      - ``E_lab``, ``E_cm``
    * - angle column
      - required: ``theta_lab``, ``theta_cm``
+   * - window columns
+     - allowed (a beam with a profile)
    * - reaction
      - sums and ratios; no [total] exit
    * - ``target``
@@ -855,6 +857,14 @@ Legendre coefficients (``dataset``, ``extrapolation``).  c.m. Legendre coefficie
      - required
    * - ``orders``
      - required
+   * - ``target``
+     - allowed
+   * - ``beam``
+     - allowed
+   * - ``detector``
+     - allowed
+   * - target kinds
+     - ``layer``, ``none``
    * - norm
      - fixed when expansion is a_over_a0 or rsl: normalised coefficients carry no normalization: norm is fixed (data_formats.rst, Legendre data)
    * - tree
@@ -1067,6 +1077,8 @@ beta-delayed particle spectrum (``dataset``, ``extrapolation``).  The spectrum o
      - beta entrance pair (step 3)
    * - ``detector``
      - allowed
+   * - norm
+     - fixed, fit when always: the spectrum's scale is carried by the beta-feeding amplitudes
    * - tree
      - ``the leaves with EnergyIn = DecayLab``
    * - refused (build)
@@ -1251,7 +1263,7 @@ Asymptotic normalization coefficient (``datum``).  C of a bound level from its r
 scattering_length
 ~~~~~~~~~~~~~~~~~
 
-Scattering length (``datum``).  Re and Im of the scattering length of a neutral pair (include/ScatteringLength.h).
+Scattering length (``datum``).  Re and Im of the s-wave scattering length of a particle pair, Coulomb-modified for a charged pair (include/ScatteringLength.h).
 
 .. list-table::
    :header-rows: 1
@@ -1265,8 +1277,6 @@ Scattering length (``datum``).  Re and Im of the scattering length of a neutral 
      - ``fm`` (1)
    * - energy column
      - --
-   * - reaction
-     - neutral pair
    * - ``pair``
      - required
    * - ``s``
@@ -1279,8 +1289,6 @@ Scattering length (``datum``).  Re and Im of the scattering length of a neutral 
      - ``a_0 (Re, Im)``
    * - EXFOR
      - ``,AMP``, ``COH,AMP``
-   * - refused (validate)
-     - charged_pair: the scattering length is defined for a neutral pair (``E_REACTION_NOT_ALLOWED``)
 
 For every quantity: norm fit, profiled when the unit is arbitrary (the value is in arbitrary units: its normalization is free (fit without a prior) or profiled).
 
@@ -1526,8 +1534,6 @@ Column roles
    * - ``E_lab``
      - ``energy`` unit in brackets
    * - ``E_cm``
-     - ``energy`` unit in brackets
-   * - ``E_x``
      - ``energy`` unit in brackets
    * - ``E_decay``
      - ``energy`` unit in brackets

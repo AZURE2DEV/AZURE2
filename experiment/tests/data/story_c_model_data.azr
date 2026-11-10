@@ -6,7 +6,7 @@ datum Er_L5
     level          5
     J              3-
     frame          E_x
-    value          13.2692 MeV
+    value          13.2652 MeV
     error          0.3 keV
     source         "author, journal volume page (year), table 1"
 datum wg_L5

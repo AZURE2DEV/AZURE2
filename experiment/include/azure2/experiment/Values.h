@@ -136,7 +136,7 @@ struct ParticlePair {
 };
 
 struct ColumnRole {
-  std::string role;            ///< E_lab, E_cm, E_x, E_decay, theta_lab, theta_cm, order, value, error,
+  std::string role;            ///< E_lab, E_cm, E_decay, theta_lab, theta_cm, order, value, error,
                                ///< error_percent, window_lo, window_hi, _
   const Unit *unit = nullptr;  ///< for energy and angle roles
   int col = 0;

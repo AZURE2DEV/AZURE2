@@ -1819,7 +1819,7 @@
     "angle": ["theta_lab", "theta_cm"],
     "angle_axis": "required",
     "order": false,
-    "windows": false
+    "windows": true
    },
    "reaction": {
     "rule": "sums and ratios; no [total] exit",
@@ -2072,8 +2072,18 @@
     },
     "orders": {
      "required": true
+    },
+    "target": {
+     "required": false
+    },
+    "beam": {
+     "required": false
+    },
+    "detector": {
+     "required": false
     }
    },
+   "target_kinds": ["layer", "none"],
    "norm_rules": [
     {
      "when": {
@@ -2398,6 +2408,17 @@
      "required": false
     }
    },
+   "norm_rules": [
+    {
+     "when": {
+      "if": "always",
+      "text": "always"
+     },
+     "modes": ["fixed", "fit"],
+     "prior": true,
+     "message": "the spectrum's scale is carried by the beta-feeding amplitudes"
+    }
+   ],
    "tree": "the leaves with EnergyIn = DecayLab",
    "exfor": [],
    "refusals": [
@@ -2658,7 +2679,7 @@
   },
   "scattering_length": {
    "title": "Scattering length",
-   "doc": "Re and Im of the scattering length of a neutral pair (include/ScatteringLength.h).",
+   "doc": "Re and Im of the s-wave scattering length of a particle pair, Coulomb-modified for a charged pair (include/ScatteringLength.h).",
    "record_kinds": ["datum"],
    "engine_unit": "fm",
    "units": {
@@ -2672,8 +2693,8 @@
     "windows": false
    },
    "reaction": {
-    "rule": "neutral pair",
-    "flags": ["neutral_pair"]
+    "rule": "",
+    "flags": []
    },
    "fields": {
     "pair": {
@@ -2696,14 +2717,7 @@
    },
    "tree": "a_0 (Re, Im)",
    "exfor": [",AMP", "COH,AMP"],
-   "refusals": [
-    {
-     "code": "E_REACTION_NOT_ALLOWED",
-     "rule": "charged_pair",
-     "message": "the scattering length is defined for a neutral pair",
-     "checked_by": "validate"
-    }
-   ]
+   "refusals": []
   }
  },
  "general_norm_rules": [
@@ -3020,9 +3034,6 @@
    "unit": "energy"
   },
   "E_cm": {
-   "unit": "energy"
-  },
-  "E_x": {
    "unit": "energy"
   },
   "E_decay": {

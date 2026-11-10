@@ -112,6 +112,31 @@ int main() {
         Diagnose(Data(kDataset)).empty() && Diagnose(kTargets + Data(Folded(kDataset))).empty() &&
             Diagnose(Model(kDatum)).empty());
 
+  // Constructs the old engine reads and the table took from step 3a on (the converter's survey of the test tree):
+  // each validates with no diagnostic.
+  check("thm global with norm profiled (ESegment::IsProfiledNorm profiles every fitted THM norm)",
+        Diagnose(Data(Set(Set(kDataset, "norm", "    norm profiled"), "unit", "    unit arbitrary") + "    thm global\n")).empty());
+  check("legendre data folded with a beam",
+        Diagnose(kTargets + Data(Folded(Set(Set(Set(Set(kDataset, "quantity", "    quantity legendre"), "unit", "    unit 1"),
+                                                "columns", "    columns E_lab[MeV] order value error"),
+                                            "reaction", "    reaction 15N(p,p)15N") +
+                                        "    expansion a_over_a0\n")))
+            .empty());
+  check("dsigma_domega with the window columns of a beam profile",
+        Diagnose("<targets>\nbeam bp\n    profile skewed_gaussian xi 0.3 MeV omega 0.03 MeV alpha 1 weight 1\n"
+                 "    truncation 0\n    detailed_balance no\n</targets>\n" +
+                 Data(Set(Set(Set(kDataset, "quantity", "    quantity dsigma_domega"), "unit", "    unit b/sr"), "columns",
+                          "    columns E_lab[MeV] theta_lab[deg] value error window_lo window_hi") +
+                      "    beam bp\n    quadrature points 20\n"))
+            .empty());
+  check("beta_delayed_spectrum with a fixed norm (the feeding amplitudes carry the scale)",
+        Diagnose(Data(Set(Set(Set(Set(kDataset, "quantity", "    quantity beta_delayed_spectrum"), "unit", "    unit arbitrary"),
+                              "columns", "    columns E_decay[MeV] value error"),
+                          "reaction", "    reaction 16N(b-,a)12C")))
+            .empty());
+  check("scattering_length of a charged pair (Coulomb-modified)",
+        Diagnose(Model("datum a1\n    quantity scattering_length\n    pair p+7Be\n    s 2\n    value -7 fm\n    error 1 fm\n")).empty());
+
   const std::vector<Case> cases = {
       // The reader
       {"E_UNTERMINATED_QUOTE", Data(Set(kDataset, "file", "    file \"f.dat"))},
@@ -168,6 +193,9 @@ int main() {
       {"E_ROLE_TWICE", Data(Set(kDataset, "columns", "    columns E_lab[MeV] value value error"))},
       {"E_ROLE_REQUIRED", Data(Set(kDataset, "columns", "    columns E_lab[MeV] value"))},
       {"E_ROLE_NOT_ALLOWED", Data(Set(kDataset, "columns", "    columns E_lab[MeV] theta_lab[deg] value error"))},
+      // E_x is no column role (step 3a): no quantity takes an excitation-energy column; 'frame E_x' of a datum is a
+      // field value
+      {"E_UNKNOWN_ROLE", Data(Set(kDataset, "columns", "    columns E_x[MeV] value error"))},
       // Between records
       {"E_UNKNOWN_REFERENCE", kTargets + Data(kDataset + "    beam b2\n    quadrature points 20\n")},
       {"E_REFERENCE_KIND", Data(Set(kDataset, "norm", "    norm d1"))},

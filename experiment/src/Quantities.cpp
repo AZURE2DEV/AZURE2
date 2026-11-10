@@ -137,6 +137,7 @@ Quantity DsigmaDomega() {
   q.energyRoles = {"E_lab", "E_cm"};
   q.angleRoles = {"theta_lab", "theta_cm"};
   q.angle = Quantity::RequiredAngle;
+  q.windowRoles = true;  // a beam-profile kernel on differential data (tests/beam_profile_kernel)
   q.reaction = {R::kSum | R::kRatio | R::kNoTotal, "sums and ratios; no [total] exit"};
   q.fields = {Allows("target", kNoThm), Allows("beam"), Allows("detector"), Allows("secondary_gamma"), Allows("thm")};
   q.targetKinds = {"layer", "none"};
@@ -230,7 +231,10 @@ Quantity Legendre() {
              AnyUnitOf("cross_section", Condition::Is("expansion", {"4pi"}))};
   q.energyRoles = {"E_lab", "E_cm"};
   q.orderRole = true;
-  q.fields = {Requires("expansion"), Requires("orders")};
+  // The apparatus as for dsigma_domega: the old engine folds coefficient data with a <targetInt> line
+  // (tests/angular_coefficients, conv.azr), and the converter writes what it folded.
+  q.fields = {Requires("expansion"), Requires("orders"), Allows("target"), Allows("beam"), Allows("detector")};
+  q.targetKinds = {"layer", "none"};
   q.norm = {NormModesWithPrior(Condition::Is("expansion", {"a_over_a0", "rsl"}), {"fixed"},
                                "normalised coefficients carry no normalization: norm is fixed (data_formats.rst, "
                                "Legendre data)")};
@@ -359,6 +363,10 @@ Quantity BetaDelayedSpectrum() {
   q.energyRoles = {"E_decay"};
   q.reaction = {0, "beta entrance pair (step 3)"};
   q.fields = {Allows("detector")};
+  // The feeding amplitudes of the levels carry the spectrum's scale, so its norm may be fixed (tests/
+  // beta_delayed_alpha fixes it); this rule decides before the general one for arbitrary units.
+  q.norm = {NormModesWithPrior(Condition(), {"fixed", "fit"},
+                               "the spectrum's scale is carried by the beta-feeding amplitudes")};
   q.tree = "the leaves with EnergyIn = DecayLab";
   q.refusals = {RefusedAtBuild("E_REACTION_NOT_ALLOWED", "non-beta entrance", "needs a beta entrance pair")};
   return q;
@@ -457,16 +465,14 @@ Quantity ScatteringLength() {
   Quantity q;
   q.name = "scattering_length";
   q.title = "Scattering length";
-  q.doc = "Re and Im of the scattering length of a neutral pair (include/ScatteringLength.h).";
+  q.doc = "Re and Im of the s-wave scattering length of a particle pair, Coulomb-modified for a charged pair "
+          "(include/ScatteringLength.h).";
   q.recordKinds = kDatum;
   q.engineUnit = "fm";
   q.units = {OneUnit("fm")};
-  q.reaction = {R::kNeutralPair, "neutral pair"};
   q.fields = {Requires("pair"), Requires("s"), Allows("imag"), Requires("imag_error", Condition::Present("imag"))};
   q.tree = "a_0 (Re, Im)";
   q.exfor = {",AMP", "COH,AMP"};
-  q.refusals = {RefusedAtValidation("E_REACTION_NOT_ALLOWED", "charged_pair",
-                                    "the scattering length is defined for a neutral pair")};
   return q;
 }
 

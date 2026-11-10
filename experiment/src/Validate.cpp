@@ -518,12 +518,13 @@ void Validator::CheckNorm(Work &w) {
   const io::Field *src = Source(w, "norm");
   Diagnostic d = Base(w, "norm", src->line, src->col);
   const std::string mode = NuisanceModeName(n->mode);
-  if (n->mode == NuisanceMode::Profiled && Holds(Condition::Of(Condition::ThmExperiment), w) == 0) {
+  // Every THM data set with a fitted norm has it profiled (ESegment::IsProfiledNorm), in an experiment or not.
+  if (n->mode == NuisanceMode::Profiled && Holds(Condition::Present("thm"), w) == 0) {
     d.hasFound = true;
     d.found = mode;
     d.allowed = {"fixed", "fit"};
-    Emit(d, codes::kModeNotAllowed, Where(w, "norm") + ": 'profiled' is the norm mode of THM data sets of an experiment "
-                                                       "(thm <experiment>, section 3.9)");
+    Emit(d, codes::kModeNotAllowed, Where(w, "norm") + ": 'profiled' is the norm mode of THM data sets "
+                                                       "(thm <experiment> or thm global, section 3.9)");
     return;
   }
   std::vector<const NormRule *> rules;

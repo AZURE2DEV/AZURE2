@@ -171,7 +171,6 @@ dataset <name>
 |---|---|---|
 | `E_lab` | beam energy of the light particle on the heavy one at rest (forward kinematics) | in the role: `E_lab[MeV]` |
 | `E_cm` | entrance-channel c.m. energy | `E_cm[keV]` … |
-| `E_x` | excitation energy of the compound nucleus [step 2: no quantity row of §7.2 accepts it; kept as a role] | |
 | `E_decay` | lab energy of the detected particle of a decay at rest (β-delayed) | |
 | `theta_lab`, `theta_cm` | detection angle | `theta_cm[deg]`, `[rad]` |
 | `order` | Legendre order k (integer) | — |
@@ -179,6 +178,10 @@ dataset <name>
 | `error_percent` | the uncertainty in per cent of the value | % |
 | `window_lo`, `window_hi` | reconstructed-energy window of a beam-profile kernel (today columns 5–6, `qt_parity.md` §7) | as the energy column |
 | `_` | a column that is not read | — |
+
+**[Correction, step 3a (2026-11-10): the role `E_x` is removed. No quantity row of §7.2 takes an excitation-energy
+column and the old engine reads none (data energies are E_lab, `data_formats.rst`); `frame E_x` of a `resonance_energy`
+datum (§3.10) is a field value, not a column role. `columns E_x[MeV] …` is now `E_UNKNOWN_ROLE`.]**
 
 The unit of the energy and angle columns is written in the role: `E_lab[MeV]`, `E_cm[keV]`, `theta_cm[deg]`.
 The converter writes `E_lab[MeV]` and `theta_lab[deg]` (today's fixed units, `data_formats.rst:7-31`). An angle-
@@ -228,19 +231,21 @@ grammar writes exactly those. The first term is the base term whose frame the ot
 ### 3.6 Shared nuisances: `norm` and `energy_scale` records (decision F6)
 
 ```
-norm D
+normalization D
     value      1 fit prior 1 8%
 
 energy_scale G
     offset     0 MeV fit prior 0 0.003
-    sqrt       0 MeV^1/2 fixed                               # E' = E + b sqrt(E/MeV)
-    function   "a0*(x-0.8)"                                  # x = E_lab of the point (MeV)
+    sqrt       0 MeV^1/2 fixed                               # E' = E + b sqrt(E), b in MeV^1/2 and E in MeV
+    function   "a0*(x-0.8)" MeV                              # x = E_lab of the point (MeV); the result in MeV
     param      a0 0 fit prior 0 0.01                          # repeatable, one per parameter
 ```
 
 **[Correction, step 2 (2026-11-10): the record kind is `normalization D` (§3.1 correction); the function states the unit of its result,
 `function "a0*(x-0.8)" MeV` (principle 5); with b in MeV^1/2 the sqrt term is E' = E + b sqrt(E), E in MeV (b sqrt(E/MeV)
-would make b an energy; `include/SegLine.h:214` has the same comment).]**
+would make b an energy; `include/SegLine.h:214` has the same comment).]** **[Step 3a: the example above is written
+with these corrections; the comment of `SegLine.h` (now `convert/include/azure2/convert/SegLine.h`) says E' = E + a +
+b sqrt(E) with E in MeV and b in MeV^1/2.]**
 
 A data set says `norm D` or `shift G`. The value lives in one place; no data set carries a copy that is ignored.
 `shiftgroup G` (shared offset and function) is `shift G` on each member; `shiftfngroup F` (shared function, own
@@ -1048,12 +1053,13 @@ one prior.
 
 ### 9.3 (c) ωγ and E_r of one level from the literature
 
-For T2's level 5 (3⁻; Γ_p = 1.702 keV, Γ_α0 = 12.92 keV, Γ_α1 = 0): ω = 7/4 for p + ¹⁵N (spins ½, ½), so
+For T2's level 5 (3⁻ at E_x = 13.2652 MeV in `T2.azr`, the start value of the fit; the truth of
+`tests/upgrade/T2/truth.json` is 13.2692 MeV; Γ_p = 1.702 keV, Γ_α0 = 12.92 keV, Γ_α1 = 0): ω = 7/4 for p + ¹⁵N (spins ½, ½), so
 ωγ = 1.75 × 1.702 × 12.92 / 14.62 = 2.63 keV (computed for this note from `tests/upgrade/T2/README.md` §1).
 
 | | (c) |
 |---|---|
-| file | `<modelData>`: `datum Er_L5` `quantity resonance_energy`, `level 5`, `J 3-`, `frame E_x`, `value 13.2692 MeV`, `error 0.3 keV`, `source "…"`; `datum wg_L5` `quantity resonance_strength`, `level 5`, `J 3-`, `reaction 15N(p,a)12C`, `value 2.63 keV`, `error 0.15 keV`, `source "…"` |
+| file | `<modelData>`: `datum Er_L5` `quantity resonance_energy`, `level 5`, `J 3-`, `frame E_x`, `value 13.2652 MeV`, `error 0.3 keV`, `source "…"`; `datum wg_L5` `quantity resonance_strength`, `level 5`, `J 3-`, `reaction 15N(p,a)12C`, `value 2.63 keV`, `error 0.15 keV`, `source "…"` |
 | Python | `p.add_datum("wg_L5", quantity="resonance_strength", level=5, J="3-", reaction="15N(p,a)12C", value="2.63 keV", error="0.15 keV", source="…")`; with `J="2+"`: `FormatError: datum 'wg_L5', field 'J': level 5 is 3- (E_x = 13.2652 MeV); the datum says 2+` |
 | GUI | Model data → "+ Datum": quantity; level drop-down "5: 3⁻ 13.2652 MeV" (fills J, shown read-only); reaction from the level's channels; value and error with unit drop-downs. Preview: "ωγ = ω Γ_p Γ_α0/Γ of level 5 with observed widths at E_r, ω = 7/4; model now 2.63 keV; warning: Γ/E_r = 1.3 % > 1 %, the parameter form (8) and the area of the resonance differ (data_kinds.md §4.7)" |
 | agent | `--validate --json` returns the Γ/E_r warning with code `W_BROAD_LEVEL`; `--describe` gives the formula and the parameters it depends on |
