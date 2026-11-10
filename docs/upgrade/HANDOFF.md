@@ -67,7 +67,7 @@ by one ulp makes 119 files fail).
   unless a user meets it.
 - **The two masses keep their values** (no result moves) and are named in one place, so that each is one line to
   change: `electronMassOfFermiFunction` and `protonMassOfM1Capture` in `include/Constants.h`
-  (`feature/upgrade-4-named-masses`).
+  (merged, 46031fa6; 179 × 3 identical).
 - **A spin-orbit term may be added to the hybrid potentials**: step 3b (iii) of `cnuc_split.md` is wanted (channel
   functions keyed by (α, l, j); it needs its design note first: `<potential>` grammar, `NuclearPotentialManager`,
   the key of `ChannelTable`).
