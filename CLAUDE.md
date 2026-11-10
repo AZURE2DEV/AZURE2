@@ -173,7 +173,8 @@ how each was checked:
 - **No hidden state.** Constant tables (masses, constants, the schema) are built
   once and reached through a function returning a `const` reference; nothing
   else is global. What a calculation writes belongs to the caller and is passed
-  in (`Results`, per-stage tables, scratch). Do not add a function-level
+  in (`Results`, per-stage tables, scratch); a point or a data set holds where
+  its record lies, never a buffer [`repo_consistency_test.py` check 25]. Do not add a function-level
   `static` or `thread_local` that holds a computed value, or a cache keyed by
   the last call. The mutable statics still in `src/` go in Phase 6
   (`docs/upgrade/ARCHITECTURE.md` section 9).
