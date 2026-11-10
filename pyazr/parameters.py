@@ -345,6 +345,11 @@ class NuclearPotential:
     potential's Coulomb term: the ``coulomb_radius`` field of a format-3
     ``potential`` record, 3.5 fm in an older project's ``<potential>`` block.
     Depths are MeV, ``R``, ``a``, ``r0`` fm.
+
+    ``spin_orbit`` is ``None`` or the pair's spin-orbit term as a dict
+    ``{"depth": MeV, "radius": fm, "diffuseness": fm, "on": "light"|"heavy"}``:
+    v_so(r) <2 l.i> with v_so = V_so (2.000 fm^2) (1/r) df/dr, FRESCO's
+    convention (``docs/source/theory/hybrid_potential.rst``).
     """
 
     pair: int
@@ -356,6 +361,7 @@ class NuclearPotential:
     r0: float
     own: bool
     coulomb_radius: float = 3.5
+    spin_orbit: Optional[dict] = None
 
     @property
     def is_woods_saxon(self):
@@ -370,6 +376,10 @@ class NuclearPotential:
             shape = f"WoodsSaxon V0={self.V0:g} R={self.R:g} a={self.a:g}"
         else:
             shape = f"Gaussian V0={self.V0:g} r0={self.r0:g}"
+        so = self.spin_orbit
+        if so:
+            shape += (f" spin-orbit V_so={so['depth']:g} R_so={so['radius']:g} "
+                      f"a_so={so['diffuseness']:g} on {so['on']}")
         return (f"NuclearPotential({who}, {shape} R_C={self.coulomb_radius:g}"
                 f"{'' if self.own or self.pair == 0 else ', inherited'})")
 

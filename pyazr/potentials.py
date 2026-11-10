@@ -23,10 +23,15 @@ class _HybridPotentials:
         it did when the potential was a single global object.
         """
         pair = self._check_potential_pair(pair)
-        enabled, type_, V0, R, a, r0, own, rc = self.sess.get_potential(pair)
+        enabled, type_, V0, R, a, r0, own, rc, so = self.sess.get_potential(pair)
+        spin_orbit = None
+        if len(so):
+            spin_orbit = {"depth": float(so[0]), "radius": float(so[1]), "diffuseness": float(so[2]),
+                          "on": "heavy" if so[3] else "light"}
         return NuclearPotential(pair=pair, enabled=bool(enabled), type=str(type_),
                                 V0=float(V0), R=float(R), a=float(a),
-                                r0=float(r0), own=bool(own), coulomb_radius=float(rc))
+                                r0=float(r0), own=bool(own), coulomb_radius=float(rc),
+                                spin_orbit=spin_orbit)
 
     def nuclear_potentials(self):
         """Every pair's resolved setting, plus the default under key ``0``."""
@@ -37,7 +42,7 @@ class _HybridPotentials:
 
     def set_nuclear_potential(self, pair=0, type=None, enabled=True,
                               V0=None, R=None, a=None, r0=None,
-                              coulomb_radius=None, reinitialize=True):
+                              coulomb_radius=None, spin_orbit=None, reinitialize=True):
         """Give one particle pair its own hybrid nuclear potential.
 
         A nuclear potential belongs to a pair -- it bends the radial wave
@@ -52,6 +57,17 @@ class _HybridPotentials:
         (fm) is the radius of the uniformly charged sphere of the Coulomb term;
         a pair without a setting of its own starts from 3.5 fm (the old
         ``<potential>`` block's value), a format-3 record states it.
+
+        ``spin_orbit`` adds a spin-orbit term to a pair with one spinning
+        particle: a dict ``{"depth": V_so MeV, "radius": R_so fm,
+        "diffuseness": a_so fm, "on": "light"|"heavy"}``, the term
+        v_so(r) <2 l.i> with v_so = V_so (2.000 fm^2) (1/r) df/dr (FRESCO's
+        convention; a strength quoted for l.s without the 2 is twice this V_so).
+        ``None`` keeps the pair's term, ``False`` removes it.  A pair with two
+        spinning particles (E_SO_TWO_SPINS), the term on a spin-0 particle
+        (E_SO_ZERO_SPIN) and a term on the default (``pair=0``) are refused.
+        The channel functions of such a pair depend on J:
+        :meth:`coulomb_functions` then needs ``J``.
 
         The potential is read by ``CoulFunc`` when it is constructed, deep
         inside a calculation, so a change only reaches the model once the model
@@ -90,7 +106,22 @@ class _HybridPotentials:
                                  f"got R={R}, a={a}.")
         elif not r0 > 0:
             raise ValueError(f"Gaussian needs r0 > 0, got r0={r0}.")
-        self.sess.set_potential(pair, type_, bool(enabled), V0, R, a, r0, rc)
+        if spin_orbit is None:
+            so = cur.spin_orbit
+        elif spin_orbit is False:
+            so = None
+        else:
+            so = dict(spin_orbit)
+            if set(so) != {"depth", "radius", "diffuseness", "on"}:
+                raise ValueError(f"spin_orbit needs exactly the keys depth, radius, diffuseness, on; got {sorted(so)}.")
+            if so["on"] not in ("light", "heavy"):
+                raise ValueError(f"spin_orbit 'on' is 'light' or 'heavy', got {so['on']!r}.")
+        so_list = [] if not so else [float(so["depth"]), float(so["radius"]), float(so["diffuseness"]),
+                                     1.0 if so["on"] == "heavy" else 0.0]
+        try:
+            self.sess.set_potential(pair, type_, bool(enabled), V0, R, a, r0, rc, so_list)
+        except Exception as e:  # the engine's refusals (SpinOrbitChecks.h) and parameter checks
+            raise ValueError(str(e)) from None
         if reinitialize:
             self._rebuild_after_potential_change()
         return self.nuclear_potential(pair)
