@@ -6,10 +6,9 @@
 #include <vector>
 #include <mutex>
 #include <memory>
+#include "azure2/experiment/SetupSpecs.h"
 
 class EData;
-class ExtrapLine;
-class SegLine;
 class CNuc;
 class Config;
 struct ThmWeightTable;
@@ -34,10 +33,10 @@ enum OperationType {
 
 class ESegment {
  public:
-  /// Build a data segment from a <segmentsData> line.
-  ESegment(SegLine);
-  /// Build an extrapolation segment from a <segmentsTest> line -- points on a grid, no data file.
-  ESegment(ExtrapLine);
+  /// Build a data segment from its spec (experiment/'s SetupSpecs.h).
+  explicit ESegment(const azure2::experiment::DatasetSpec &);
+  /// Build an extrapolation segment from its spec -- points on a grid, no data file.
+  explicit ESegment(const azure2::experiment::ExtrapolationSpec &);
   /// Does this point fall inside the segment's energy and angle ranges?
   bool IsInSegment(EPoint);
   /// Differential cross section in the lab frame?
@@ -54,10 +53,9 @@ class ESegment {
   /// evaluation instead of competing with the direct-data norms as a Minuit
   /// parameter.
   bool IsProfiledNorm() const;
-  /// Set the normalization to the value that minimizes this segment's chi^2 at
-  /// the current model (points must already hold their fit cross sections) and
-  /// return that minimum chi^2.  Used for profiled (THM) norms.
-  double ProfileNormChiSquared(const azure2::Results &results);
+  /// The normalization that minimizes this segment's chi^2 at the model values in `results` (profiledNorm) and that
+  /// minimum chi^2 (returned).  Used for profiled (THM) norms; the segment's own norm is not changed.
+  double ProfileNormChiSquared(const azure2::Results &results, double &profiledNorm) const;
   /// Does the segment carry target effects?
   bool IsTargetEffect() const;
   /// Is the normalization a free fit parameter?
@@ -107,7 +105,7 @@ class ESegment {
   /// Read the data file and keep the points inside the energy and angle ranges, converting from the lab frame where needed.
   int Fill(CNuc *, EData *, const Config &);
   /// What ConvertPointToCM does with a lab angle beyond the kinematic maximum: stop (the value is not converted),
-  /// or convert the value at the last valid angle (an energy shift moved the point there mid-fit).
+  /// or convert the value at the load-time angle (an energy shift moved the point there mid-fit).
   enum class BeyondRange { Stop, Convert };
   /// The lab -> c.m. conversion of one point of this segment (docs/upgrade/data_model.md section 1.4), the one
   /// sequence of Fill, UpdatePointEnergyWithShift, the test segments and the component segments (EData): E_c.m.
@@ -140,12 +138,6 @@ class ESegment {
   double GetMinAngle() const;
   /// Largest angle of the segment, lab frame.
   double GetMaxAngle() const;
-  /// Chi-squared contributed by this segment.
-  double GetSegmentChiSquared() const;
-  /// Energy step between generated points. Extrapolation segments only.
-  double GetEStep() const;
-  /// Angle step between generated points. Extrapolation segments only.
-  double GetAStep() const;
   /// Total spin. Phase-shift segments only.
   double GetJ() const;
   /// Channel spin of a phase-shift segment ("spin <s>"), or -1 when the line gives none; see EData::Initialize.
@@ -273,14 +265,12 @@ class ESegment {
   bool IsAdvanced() const;
   /// Combination type as an integer: 0 sum, 1 ratio.
   int GetLegacyOperationType() const;
-  /// Semicolon-separated component list, as written in the input file.
-  std::string GetComponentsList() const;
+  /// The terms of a composite segment after the leading one.
+  const std::vector<azure2::experiment::ComponentSpec> &GetComponents() const { return components_; }
   /// Path of the data file this segment reads.
   std::string GetDataFile() const;
   /// Append a point.
   void AddPoint(EPoint);
-  /// Record this segment's chi-squared.
-  void SetSegmentChiSquared(double);
   /// Point the segment at a TargetEffect in the parent EData.
   void SetTargetEffectNum(int);
   void SetSegmentKey(int);
@@ -381,7 +371,7 @@ class ESegment {
   /// segment's cross section and s_t the total cross section of the entrance pair, from a hidden "total 1"
   /// component (IsYieldTotalTerm).  With a sub-point target effect (resolution, Gaussian spread) the transform is
   /// applied at every sub-point before the kernel, as SAMMY does: broadening a cross section and then
-  /// exponentiating fills in the dips of a thick sample.  ESegment::CalculateTheoreticalCrossSection; the points
+  /// exponentiating fills in the dips of a thick sample.  azure2::EvaluateModelPoint; the points
   /// keep the plain cross sections, so they can still share calculations with other segments.
   bool IsTransmission() const { return transmission_ > 0.0; }
   bool IsYield() const { return yield_ > 0.0; }
@@ -488,20 +478,6 @@ class ESegment {
   /// computed with the BASE segment's pairs (audit item 15).
   static double RatioTermFrameFactor(EPoint *point, const ESegment *term, CNuc *cnuc);
 
-  // Calculate theoretical cross section including components
-  /// Theoretical value at a point, combining the components if this is a composite segment.
-  /*!
-   * `precalculated`: every non-mapped point of this segment and of its components
-   * has already been Calculate()d for the current parameters (AZURECalc does
-   * that in one parallel pass), so only the combination is done here.
-   */
-  /// The value of a transmission or yield segment at a point (IsTransformed).
-  /// The points' values are read from and written into `results`, the buffer of the evaluation.
-  double TransformedValue(int pointIndex, CNuc *cnuc, const Config &configure, azure2::Results &results,
-                          bool precalculated);
-  double CalculateTheoreticalCrossSection(int pointIndex, CNuc *cnuc, const Config &configure, EData *edata,
-                                          azure2::Results &results, bool precalculated = false);
-
   /// Free-shift refills (docs/upgrade/channel_table.md section 2.1, interim until the objective has the analytic
   /// shift derivative): BeginShiftRefill, single-threaded before the parallel re-energise loop, keeps the tables of
   /// the segment's last kShiftTables shift states for UpdatePointEnergyWithShift to read (exact keys) and has every
@@ -512,6 +488,8 @@ class ESegment {
   static constexpr std::size_t kShiftTables = 3;
 
  private:
+  /// The observable flags and the model-side options both constructors take from the reaction spec.
+  void SetReaction(const azure2::experiment::ReactionSpec &);
   struct ShiftTable {
     std::vector<double> state;  ///< energy shift, sqrt shift, shift-function values
     std::shared_ptr<const ChannelTable> table;
@@ -553,9 +531,6 @@ class ESegment {
   double max_e_;
   double min_a_;
   double max_a_;
-  double e_step_;
-  double a_step_;
-  double segment_chi_squared_;
   double j_;
   double dataNorm_;
   double dataNormNominal_;
@@ -613,7 +588,7 @@ class ESegment {
   bool yieldTotalTerm_ = false;  // IsYieldTotalTerm
   bool isCoefficients_ = false;
   bool coefficientsAbsolute_ = false;
-  std::string componentsList_;
+  std::vector<azure2::experiment::ComponentSpec> components_;  ///< the terms of a SUM / RATIO after the leading one
   std::string datafile_;
   std::vector<EPoint> points_;
 

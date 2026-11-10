@@ -432,6 +432,13 @@ add_test(NAME pyazr_scattering_length
                  ${CMAKE_CURRENT_SOURCE_DIR}/scattering_length_test.py)
 set_tests_properties(pyazr_scattering_length PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
+# Model data (<modelData>): pyazr.model_data's records against hand values on T2, the term in penalties(), its
+# gradient against central differences, and the binding's resonance_strength / statistical_factor / branching_ratio.
+add_test(NAME pyazr_model_data
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/model_data_test.py)
+set_tests_properties(pyazr_model_data PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
 # Electron screening: the AzrModel helpers for the screening block of a <targetInt> line, the
 # screening_<n> parameter and its prior, and its analytic gradient and Jacobian column.
 add_test(NAME pyazr_screening

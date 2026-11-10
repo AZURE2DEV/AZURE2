@@ -13,8 +13,9 @@
 #include "EData.h"
 #include "ESegment.h"
 #include "EPoint.h"
+#include "ModelPass.h"
 #include "PriorCovariance.h"
-#include "ScatteringLength.h"
+#include "ModelData.h"
 
 namespace {
 
@@ -50,16 +51,10 @@ class SegmentTerms : public ObjectiveTerm {
           if (c.segmentChi2) (*c.segmentChi2)[i] = g;
         }
       } else if (segment->IsProfiledNorm()) {
-        segmentChiSquared = segment->ProfileNormChiSquared(c.results);
+        segmentChiSquared = segment->ProfileNormChiSquared(c.results, c.results.objective.norm[i]);
       } else {
-        for (int pointIdx = 0; pointIdx < segment->NumPoints(); pointIdx++) {
-          EPoint *point = segment->GetPoint(pointIdx + 1);
-          if (point) {
-            double residual = point->GetFitCrossSection(c.results) - point->GetCMCrossSection() * segment->GetNorm();
-            double error = point->GetCMCrossSectionError() * segment->GetNorm();
-            if (error != 0.0) segmentChiSquared += (residual * residual) / (error * error);
-          }
-        }
+        for (int pointIdx = 0; pointIdx < segment->NumPoints(); pointIdx++)
+          segmentChiSquared += azure2::PointResidual(*segment->GetPoint(pointIdx + 1), c.results, segment->GetNorm()).Chi2();
         // Normalization prior (profiled norms have none; a fixed norm pays none, objective.md D5).
         if (c.segmentPriors && segment->IsVaryNorm() && !segment->IsNormPriorReplaced()) {
           double dataNorm = segment->GetNorm();
@@ -76,7 +71,7 @@ class SegmentTerms : public ObjectiveTerm {
       if (c.segmentPriors) segment->AddShiftPenalty(chi2);
       if (out && c.segmentPriors) segment->ShiftPenaltyParts(out->shift[i], out->shiftSqrt[i], out->shiftFn[i]);
       if (thmGroup < 0) {
-        if (c.storeTotals) segment->SetSegmentChiSquared(segmentChiSquared);
+        c.results.objective.segmentChi2[i] = segmentChiSquared;
         if (c.segmentChi2) (*c.segmentChi2)[i] = segmentChiSquared;
         chi2 += segmentChiSquared;
       }
@@ -101,7 +96,7 @@ class NuisanceTerm : public ObjectiveTerm {
     if (!c.nuisance) return;
     const double v = c.nuisance(c.p);
     chi2 += v;
-    if (c.storeTotals) c.data->SetNuisanceChi2(v);
+    c.results.objective.nuisance = v;
   }
 };
 
@@ -114,7 +109,7 @@ class ParkTerm : public ObjectiveTerm {
     if (!(c.config.paramMask & Config::USE_PARK_FORMALISM)) return;
     const double parkPenalty = c.compound->ParkNormPenalty();
     chi2 += parkPenalty;
-    if (c.storeTotals) c.data->SetParkPenalty(parkPenalty);
+    c.results.objective.park = parkPenalty;
   }
 };
 
@@ -149,20 +144,27 @@ class AbundanceTerm : public ObjectiveTerm {
     if (!c.compound->HasAbundanceBlock()) return;
     const double abundancePenalty = c.compound->AbundancePenalty(c.config.abundanceSumSigma);
     chi2 += abundancePenalty;
-    if (c.storeTotals) c.data->SetAbundancePenalty(abundancePenalty);
+    c.results.objective.abundance = abundancePenalty;
   }
 };
 
-// T9: measured scattering lengths (<scatteringLengths>), evaluated at each pair's threshold.
-class ScatteringLengthTerm : public ObjectiveTerm {
+// T9: the model data (ModelData.h): measured scattering lengths (<scatteringLengths>, <modelData>) and the level
+// quantities of <modelData> (resonance strengths, energies, widths, branching ratios, ANCs).
+class ModelDataTerm : public ObjectiveTerm {
  public:
   bool ModelOnly() const override { return true; }
-  std::string Name() const override { return "scattering lengths"; }
+  std::string Name() const override { return "model data"; }
   void Add(const ObjectiveContext &c, double &chi2) const override {
-    if (!c.compound->HasScatteringLengthConstraints()) return;
-    const double slChi2 = ScatteringLength::Chi2(c.compound, c.config, c.compound->ScatteringLengthConstraints());
-    chi2 += slChi2;
-    if (c.storeTotals) c.data->SetScatteringLengthChi2(slChi2);
+    const ModelDataSet &set = c.compound->GetModelData();
+    if (set.NumResiduals() == 0) return;
+    double sectionPart = 0.0, linesPart = 0.0;
+    const double v = ModelData::Chi2(c.compound, c.config, set, &sectionPart, &linesPart);
+    chi2 += v;
+    c.results.objective.scatteringLength = linesPart;
+    if (set.hasSection) {
+      c.results.objective.modelData = sectionPart;
+      c.results.objective.hasModelData = true;
+    }
   }
 };
 
@@ -175,7 +177,7 @@ class PriorCovarianceTerm : public ObjectiveTerm {
     if (!pc) return;
     const double pcChi2 = pc->Chi2(c.p);
     chi2 += pcChi2;
-    if (c.storeTotals) c.data->SetPriorCovarianceChi2(pcChi2);
+    c.results.objective.priorCovariance = pcChi2;
   }
 };
 
@@ -191,7 +193,7 @@ Objective::Objective() {
   terms_.emplace_back(new TargetPriorTerm(TargetPriorTerm::Doppler));
   terms_.emplace_back(new TargetPriorTerm(TargetPriorTerm::Thickness));
   terms_.emplace_back(new AbundanceTerm);
-  terms_.emplace_back(new ScatteringLengthTerm);
+  terms_.emplace_back(new ModelDataTerm);
   terms_.emplace_back(new PriorCovarianceTerm);
 }
 
@@ -214,6 +216,26 @@ double Objective::ModelChi2(const ObjectiveContext &c) const {
   for (const auto &t : terms_)
     if (t->ModelOnly()) t->Add(c, chi2);
   return chi2;
+}
+
+double Objective::ModelDataChi2(const ObjectiveContext &c) const {
+  return ModelData::Chi2(c.compound, c.config, c.compound->GetModelData());
+}
+
+void Objective::ModelDataResiduals(const ObjectiveContext &c, vector_r &residuals) const {
+  ModelData::Residuals(c.compound, c.config, c.compound->GetModelData(), residuals);
+}
+
+bool Objective::ModelDataGradient(const ObjectiveContext &c, const ParamIndexMap &pmap,
+                                  const vector_matrix_r *shiftDeriv, GradAccum &accum) const {
+  return ModelData::Gradient(c.compound, c.config, c.compound->GetModelData(), pmap, shiftDeriv, accum);
+}
+
+bool Objective::AppendModelDataRows(const ObjectiveContext &c, const ParamIndexMap &pmap,
+                                    const vector_matrix_r *shiftDeriv, int nCols, vector_r &residuals,
+                                    vector_r &jac) const {
+  return ModelData::AppendRows(c.compound, c.config, c.compound->GetModelData(), pmap, shiftDeriv, nCols, residuals,
+                               jac);
 }
 
 double Objective::Chi2(const ObjectiveContext &c) const {

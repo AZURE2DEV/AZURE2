@@ -28,7 +28,6 @@
 #include "ECIntegral.h"
 #include "GSLException.h"
 #include "azure2/io/LevelRows.h"
-#include "azure2/convert/AbundanceLine.h"
 #include "Minuit2/MnUserParameters.h"
 #include "AZUREParams.h"
 #include "NFIntegral.h"
@@ -309,6 +308,7 @@ int CNuc::Fill(const Config &configure, const std::map<int, double> &radii) {
       const azure2::io::LevelGrouper::Slot slot = levelGrouper.Assign(JGroupNum, NewLevel.GetE(), Line.levelID());
       if (slot.level > group->NumLevels()) group->AddLevel(NewLevel);
       LevelNum = slot.level;
+      group->GetLevel(LevelNum)->AddID(Line.levelID());
       if (slot.kind == azure2::io::LevelGrouper::Kind::SameEnergy)
         configure.outStream << "WARNING: level IDs " << slot.otherID << " and " << Line.levelID() << " (J = "
                             << group->GetJ() << (group->GetPi() == -1 ? "-" : "+") << ", E = " << NewLevel.GetE()
@@ -327,7 +327,6 @@ int CNuc::Fill(const Config &configure, const std::map<int, double> &radii) {
   }
   // A malformed row, or no </levels>: the rows before it are read (and refused for their own reasons first).
   if (section.malformed || !section.complete) return -1;
-
 
   // Every level of a J-group needs one width per group channel.  Until 2026-10-17 widths were appended in the
   // order of each level's own lines, so a level listing fewer channels than its group left a short width vector
@@ -396,7 +395,7 @@ int CNuc::Fill(const Config &configure, const std::map<int, double> &radii) {
     for (int j = 1; j <= this->NumJGroups(); j++) this->GetJGroup(j)->SetNucleusLabelled(true);
 
   if (this->ReadAbundances(configure) == -1) return -1;
-  if (ScatteringLength::ReadConstraints(this, configure, scatLenConstraints_) == -1) return -1;
+  if (std::shared_ptr<const ModelDataSet> read = ModelData::Read(*this, configure)) modelData_ = read; else return -1;
   // right after the pairs are known, before any data file is read (a project whose data fail still gets it)
   WarnMassSeparationMismatch(*this, configure);
 
@@ -404,25 +403,18 @@ int CNuc::Fill(const Config &configure, const std::map<int, double> &radii) {
 }
 
 /*!
- * The optional <abundances> block: one line per compound nucleus,
- *   <Z> <A> <abundance> <vary> <prior sigma>
- * A nucleus without a line keeps 1.0, fixed.  A line for a (Z, A) the pairs do
- * not form is reported and ignored.  Without the block no abundance becomes a
+ * The abundances of the samples (AbundancesSpec): one row per compound nucleus and sample, or a sample's sum-prior
+ * width.  A nucleus without a row keeps 1.0, fixed.  A row for a (Z, A) the pairs do not form is reported and
+ * ignored.  Without the block no abundance becomes a
  * Minuit parameter, so every project written before the block existed keeps
  * its parameter layout, param.par and <parameterSettings> indices.
  */
 
-int CNuc::ReadAbundances(const Config &configure) {
-  hasAbundanceBlock_ = false;
+int CNuc::SetAbundances(const Config &configure, const azure2::experiment::AbundanceSpecs &specs) {
+  hasAbundanceBlock_ = specs.abundances.present;
   samples_.clear();
-  // The <abundances> section of the project (Config::SectionStream: io::Document, whole-line tags).
-  std::unique_ptr<std::istream> inStream = configure.SectionStream("abundances");
-  if (!inStream) return 0;
-  std::istream &in = *inStream;
-  std::string line = "";
-  getline(in, line);  // <abundances>
-  hasAbundanceBlock_ = true;
-  // A sample is created the first time its name appears; the unnamed sample is "".
+  if (!hasAbundanceBlock_) return 0;
+  // A sample is created the first time a row sets one of its values; the unnamed sample is "".
   auto sampleOf = [&](const std::string &name) -> AbundanceSample & {
     for (unsigned int s = 0; s < samples_.size(); s++)
       if (samples_[s].name == name) return samples_[s];
@@ -432,43 +424,28 @@ int CNuc::ReadAbundances(const Config &configure) {
     samples_.push_back(sample);
     return samples_.back();
   };
-  line = "";
-  while (!in.eof() && line != "</abundances>") {
-    getline(in, line);
-    if (line == "</abundances>") break;
-    // The line's fields (convert/'s AbundanceLine.h: the one reader of the old grammar, shared with the converter).
-    const azure2::convert::AbundanceLine entry = azure2::convert::ReadAbundanceLine(line);
-    if (entry.kind == azure2::convert::AbundanceLine::Blank) continue;
-    const std::string &name = entry.sample;
-    if (entry.kind == azure2::convert::AbundanceLine::BadSum) {
-      configure.outStream << "ERROR: <abundances> line \"" << line << "\" is not \"[<sample>:] sum <sigma>\"." << std::endl;
-      return -1;
-    }
-    if (entry.kind == azure2::convert::AbundanceLine::Sum) {
-      sampleOf(name).sumSigma = entry.sumSigma;
+  for (const azure2::experiment::AbundanceRowSpec &row : specs.abundances.rows) {
+    if (row.isSum) {
+      sampleOf(row.sample).sumSigma = row.sumSigma;
       continue;
     }
-    if (entry.kind == azure2::convert::AbundanceLine::BadEntry) {
-      configure.outStream << "ERROR: <abundances> line \"" << line
-                          << "\" is not \"[<sample>:] <Z> <A> <abundance> <vary> <sigma>\" or \"[<sample>:] sum <sigma>\"." << std::endl;
-      return -1;
-    }
-    const int z = entry.z, a = entry.a, vary = entry.vary;
-    const double value = entry.value, sigma = entry.sigma;
     bool found = false;
     for (unsigned int i = 0; i < nuclei_.size(); i++) {
-      if (nuclei_[i].Z != z || nuclei_[i].A != a) continue;
-      SampleAbundance &e = sampleOf(name).entries[i];
-      e.abundance = e.nominal = value;
-      e.vary = (vary == 1);
-      e.sigma = sigma;
+      if (nuclei_[i].Z != row.z || nuclei_[i].A != row.a) continue;
+      SampleAbundance &e = sampleOf(row.sample).entries[i];
+      e.abundance = e.nominal = row.value;
+      e.vary = row.vary;
+      e.sigma = row.sigma;
       found = true;
     }
     if (!found)
-      configure.outStream << "WARNING: <abundances> names Z=" << z << " A=" << a
+      configure.outStream << "WARNING: <abundances> names Z=" << row.z << " A=" << row.a
                           << ", which no pair of the project forms; ignored." << std::endl;
   }
-  if (line != "</abundances>") return -1;
+  if (specs.failed) {
+    if (!specs.error.empty()) configure.outStream << specs.error << std::endl;
+    return -1;
+  }
   // An empty block still means "abundances are parameters": one unnamed sample at the defaults.
   if (samples_.empty()) sampleOf("");
   return 0;

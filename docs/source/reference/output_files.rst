@@ -313,11 +313,25 @@ write this file unless they fall back to MIGRAD.
 
 With a ``<scatteringLengths>`` block the totals line ends with
 ``Total-Scattering-Length-Chi-Squared``, the constraint term of
-:doc:`../theory/scattering_length` (also part of the minimised sum).
+:doc:`../theory/scattering_length` (also part of the minimised sum); with a
+``<modelData>`` section (:doc:`data_formats`) it also carries
+``Total-Model-Data-Chi-Squared``, the sum over its data.  The two are the
+parts of one term of the objective, "model data".
 The same holds for ``Total-Park-Chi-Squared`` and
 ``Total-Abundance-Chi-Squared``; the file written through pyazr's
 ``write_output_files`` carries all three evaluated at the parameters it was
 asked for (before October 2026 the API left them at zero or stale).
+
+modelData.out
+^^^^^^^^^^^^^
+
+Written after every calculation and fit of a project with a ``<modelData>``
+section (and copied to the run log): one line per datum with its name, its
+quantity, the model value at the parameters of the run, the value and error
+of the datum in the unit it is written in, the residual
+:math:`(q - d)/e` and its :math:`\chi^2` (two lines, ``Re`` and ``Im``, for a
+scattering length with an imaginary part), and the total, which equals
+``Total-Model-Data-Chi-Squared``.
 
 scatteringLengths.out
 ^^^^^^^^^^^^^^^^^^^^^

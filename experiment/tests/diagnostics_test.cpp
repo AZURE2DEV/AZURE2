@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 
+#include "azure2/experiment/ModelDatum.h"
 #include "azure2/experiment/Schema.h"
 #include "azure2/io/Document.h"
 #include "azure2/io/RecordReader.h"
@@ -262,7 +263,70 @@ int main() {
     check("E_WRONG_SECTION: exactly this one diagnostic", one);
     if (one) tested.insert("E_WRONG_SECTION");
   }
-  for (const DiagnosticCode &c : DiagnosticCodes()) check(std::string(c.code) + " has a case here", tested.count(c.code) == 1);
+  {
+    // The model data against <levels> (BuildModelData): T2's pairs and the 3- levels as plain tables
+    // (tests/upgrade/T2/README.md section 1); each case changes one thing of a valid datum or of the tables.
+    std::vector<PairInfo> pairs(3);
+    pairs[0] = {1, 0, 1, 1, 7, 15, 0.0, 0.0, 12.1274, 1, 1, false, "p+15N"};
+    pairs[1] = {2, 0, 2, 4, 6, 12, 0.0, 0.0, 7.16192, 0, 0, false, "a+12C"};
+    pairs[2] = {3, 0, 2, 4, 6, 12, 0.0, 4.43891, 7.16192 + 4.43891, 0, 4, false, "a+12C[4.43891]"};
+    const std::vector<LevelChannelInfo> channels = {{1, 2, 2}, {1, 4, 2}, {2, 3, 0}};  // no a1 channel
+    std::vector<LevelInfo> levels(3);
+    levels[0] = {{4}, 6, -1, 13.0734, 1e-3, 2, 1, channels};
+    levels[1] = {{5}, 6, -1, 13.2652, 1e-3, 2, 2, channels};
+    levels[2] = {{6}, 6, -1, 11.0, 1e-3, 2, 3, channels};  // below the p + 15N threshold
+    auto build = [&](const std::string &records, const std::vector<LevelInfo> &lv, const std::vector<PairInfo> &pr) {
+      const std::vector<Diagnostic> v = Diagnose(Model(records));
+      if (!v.empty()) return v;
+      const Document doc = Document::Parse(Model(records));
+      const azure2::io::RecordReadResult r = azure2::io::ReadRecords(doc, doc.Sections()[0], Schema::KindsOfSection("modelData"));
+      return BuildModelData(Schema::Validate({{"modelData", r.set.records}}), lv, pr).diagnostics;
+    };
+    check("model data: the valid datum builds with no diagnostic", build(kDatum, levels, pairs).empty());
+    std::vector<LevelInfo> broad = levels, nearby = levels;
+    broad[1].width = 0.01462;  // Gamma / E_r = 14.62 keV / 1.1378 MeV = 1.3 %
+    nearby[0].energy = 13.26;  // 5.2 keV from level 5, Gamma = 1 keV
+    std::vector<PairInfo> twice = pairs;
+    twice.push_back(pairs[1]);
+    twice.back().key = 4;
+    struct BuildCase {
+      const char *code;
+      std::string records;
+      const std::vector<LevelInfo> *levels;
+      const std::vector<PairInfo> *pairs;
+    };
+    const std::vector<BuildCase> buildCases = {
+        {"E_UNKNOWN_LEVEL", Set(kDatum, "level", "    level 9"), &levels, &pairs},
+        {"E_LEVEL_JPI", Set(kDatum, "J", "    J 2+"), &levels, &pairs},
+        {"E_UNKNOWN_PAIR", Set(kDatum, "reaction", "    reaction 15N(p,d)14N"), &levels, &pairs},
+        {"E_AMBIGUOUS_PAIR", kDatum, &levels, &twice},
+        {"E_NOT_A_CHANNEL", Set(kDatum, "reaction", "    reaction 15N(p,a)12C[4.439]"), &levels, &pairs},
+        {"E_OUT_OF_RANGE", Set(kDatum, "level", "    level 6"), &levels, &pairs},
+        {"E_FIELD_NOT_APPLICABLE",
+         "datum c1\n    quantity anc\n    level 5\n    J 3-\n    pair p+15N\n    l 2\n    s 1\n"
+         "    value 1 fm^-1/2\n    error 0.1 fm^-1/2\n",
+         &levels, &pairs},
+        {"W_BROAD_LEVEL", kDatum, &broad, &pairs},
+        {"W_NEARBY_LEVEL", kDatum, &nearby, &pairs},
+    };
+    for (const BuildCase &c : buildCases) {
+      const std::vector<Diagnostic> d = build(c.records, *c.levels, *c.pairs);
+      const bool one = d.size() == 1 && d[0].code == c.code;
+      check(std::string(c.code) + " (model data): exactly this one diagnostic", one);
+      if (!one)
+        for (const Diagnostic &x : d) std::printf("        got %s\n", x.ToText().c_str());
+      if (one) {
+        check(std::string(c.code) + ": a line and a message naming what is wrong", d[0].line > 0 && !d[0].message.empty());
+        tested.insert(c.code);
+      }
+    }
+  }
+  // the build checks need <levels> pairs and data files: their cases are in build_test.cpp (Schema::Build);
+  // E_UNKNOWN_PAIR and E_AMBIGUOUS_PAIR have a case in both (a datum's pair above, a data set's reaction there)
+  const std::set<std::string> buildCodes = {"E_PAIR_KEY",    "E_DATA_FILE",
+                                            "E_NOT_BUILT",    "E_THM_RELATIVISTIC", "E_THM_COVARIANCE", "E_FOLD_CONFLICT"};
+  for (const DiagnosticCode &c : DiagnosticCodes())
+    if (!buildCodes.count(c.code)) check(std::string(c.code) + " has a case here", tested.count(c.code) == 1);
 
   // Fixes change syntax only.
   {

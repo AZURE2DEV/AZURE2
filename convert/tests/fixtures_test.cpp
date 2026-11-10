@@ -19,6 +19,7 @@
 #include <vector>
 
 #include "azure2/convert/Convert.h"
+#include "azure2/experiment/ProjectReader.h"
 #include "azure2/experiment/Schema.h"
 #include "azure2/io/Document.h"
 #include "azure2/io/RecordReader.h"
@@ -122,8 +123,12 @@ int main(int argc, char **argv) {
     check(item.second + ": converting twice gives the same bytes", ConvertToFormat3(old, o).text == r.text);
     const ConvertResult again = ConvertToFormat3(r.text, o);
     check(item.second + ": a format-3 input is refused", !again.ok && again.refusal == "already format 3");
-    const Format3Check c = CheckFormat3Text(r.text, item.second);
-    check(item.second + ": validates with zero errors", c.Ok());
+    azure2::experiment::Format3ReadOptions read;
+    read.fileName = item.second;
+    read.readDataFiles = false;  // data files are opened from the test folder the engine runs in, not checked here
+    const azure2::experiment::Format3Project c = azure2::experiment::ReadFormat3Text(r.text, read);
+    for (const azure2::experiment::Diagnostic &d : c.diagnostics) std::printf("        %s\n", d.ToText().c_str());
+    check(item.second + ": validates and builds with zero errors", c.Ok());
   }
   // 3. T2 against the note's hand-written conversion
   {

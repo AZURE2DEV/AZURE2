@@ -9,137 +9,117 @@
 #include "DataCovariance.h"
 #include "EData.h"
 #include "ESegment.h"
+#include "ModelPass.h"
 #include "azure2/experiment/Expression.h"
 #include "ExperimentAdapter.h"
 
 #include <atomic>
 #include <cstdio>
 #include <cstdlib>
-#include "azure2/convert/ExtrapLine.h"
-#include "azure2/convert/SegLine.h"
 #include "ThmLineshape.h"
 #include "ThmDistortion.h"
 #include "ThmAngular.h"
 #include "ThmDwVertex.h"
 
 /*!
- * This constructor is used if the segment contains actual experimental data.  The segment
- * is created with reference to an entry in the segments data file.
+ * The observable flags and the model-side options of a data set or an extrapolation (ReactionSpec).  A THM segment
+ * (modified R-matrix / half-off-shell; docs/THM_IMPLEMENTATION.md) computes the same observables with the THM
+ * amplitude.  The vector analyzing power is differential in the c.m. frame, so it takes the angular machinery of a
+ * differential cross section although it is a dimensionless ratio.
  */
 
-ESegment::ESegment(SegLine segLine) {
-  entrancekey_ = segLine.entranceKey();
-  exitkey_ = segLine.exitKey();
-  min_e_ = segLine.minE();
-  max_e_ = segLine.maxE();
-  min_a_ = segLine.minA();
-  max_a_ = segLine.maxA();
-  e_step_ = 0.0;
-  a_step_ = 0.0;
-  segment_chi_squared_ = 0.0;
-  // A THM (modified R-matrix / half-off-shell) segment is flagged by an isDiff
-  // offset of 10: THM is orthogonal to the underlying observable type, so
-  // isDiff>=10 means "THM", and (isDiff-10) is the ordinary observable code
-  // (0 angle-integrated, 1 differential, ...). See docs/THM_IMPLEMENTATION.md.
-  isTHM_ = (segLine.isDiff() >= 10);
-  int diff = isTHM_ ? segLine.isDiff() - 10 : segLine.isDiff();
-  // isDiff 7 is the vector analyzing power: differential in the centre-of-mass
-  // frame, so it needs the same angular machinery as a differential cross
-  // section even though the quantity itself is a dimensionless ratio. It is
-  // tested against the offset-stripped code, so it composes with THM the way
-  // every other observable does.
-  isAnalyzingPower_ = (diff == 7);
-  if (diff == 1 || diff == 4 || diff == 7)
-    isdifferential_ = true;
-  else
-    isdifferential_ = false;
-  if (diff == 4 || diff == 7)
-    iscmdifferential_ = true;
-  else
-    iscmdifferential_ = false;
-  if (diff == 2) {
-    isphase_ = true;
-    j_ = segLine.phaseJ();
-    l_ = segLine.phaseL();
-    phaseS_ = segLine.phaseS();
+void ESegment::SetReaction(const azure2::experiment::ReactionSpec &r) {
+  using azure2::experiment::Observable;
+  entrancekey_ = r.entranceKey;
+  exitkey_ = r.exitKey;
+  isTHM_ = r.thm;
+  isAnalyzingPower_ = (r.observable == Observable::AnalyzingPower);
+  iscmdifferential_ = (r.observable == Observable::DifferentialCM || r.observable == Observable::AnalyzingPower);
+  isdifferential_ = iscmdifferential_ || r.observable == Observable::DifferentialLab;
+  isphase_ = (r.observable == Observable::PhaseShift);
+  if (isphase_) {
+    j_ = r.phaseJ;
+    l_ = r.phaseL;
+    phaseS_ = r.phaseS;
   } else {
-    isphase_ = false;
     j_ = 0.0;
     l_ = 0;
   }
-  isTotalCapture_ = (diff == 3) ? 1 : 0;
-  // isDiff 5/6 are angle-integrated capture segments compared only against the
-  // E1 or E2 component of the cross section, respectively.
-  if (diff == 5)
+  isTotalCapture_ = (r.observable == Observable::TotalCapture) ? 1 : 0;
+  // E1 / E2 data are angle-integrated capture compared only with that multipole's part of the cross section.
+  if (r.observable == Observable::CrossSectionE1)
     crossSectionComponent_ = 1;
-  else if (diff == 6)
+  else if (r.observable == Observable::CrossSectionE2)
     crossSectionComponent_ = 2;
   else
     crossSectionComponent_ = 0;
   isAngDist_ = false;
   maxAngDistOrder_ = 0;
-  // isDiff 9: Legendre coefficients of the angular distribution as data (the points are
-  // angular-distribution points; every order the compound allows is computed)
-  isCoefficients_ = (segLine.isDiff() == 9);
-  coefficientsAbsolute_ = (segLine.absolute() == 1);
+  // Legendre coefficients of the angular distribution as data: the points are angular-distribution points, and
+  // every order the compound allows is computed.
+  isCoefficients_ = (r.observable == Observable::AngularCoefficients);
   if (isCoefficients_) maxAngDistOrder_ = 20;
-  datafile_ = segLine.dataFile();
-  dataNorm_ = dataNormNominal_ = segLine.dataNorm();
-  dataNormError_ = segLine.dataNormError();
-  energyShift_ = segLine.energyShift();
-  // The shift prior is centred on no shift (dev 0dd28e5: the line's value is only the start), unless a
-  // "segment_N_energy_shift prior_centre c" row moves it (EData::ReadPriorCentres).
+  isAdvanced_ = (r.combination != azure2::experiment::ReactionSpec::Combination::None);
+  operationType_ = (r.combination == azure2::experiment::ReactionSpec::Combination::Ratio) ? 1 : 0;
+  components_ = r.components;
+  naturalToken_ = r.sample;
+  isTotal_ = r.total;
+  transmission_ = r.transmission;
+  yield_ = r.yieldThickness;
+  thickness_ = GetNominalThickness();
+}
+
+/*!
+ * A data segment: points read from a file (Fill) and compared with the model.
+ */
+
+ESegment::ESegment(const azure2::experiment::DatasetSpec &spec) {
+  SetReaction(spec.reaction);
+  min_e_ = spec.minE;
+  max_e_ = spec.maxE;
+  min_a_ = spec.minA;
+  max_a_ = spec.maxA;
+  coefficientsAbsolute_ = spec.absolute;
+  datafile_ = spec.dataFile;
+  dataNorm_ = dataNormNominal_ = spec.norm;
+  dataNormError_ = spec.normError;
+  energyShift_ = spec.energyShift;
+  // The shift prior is centred on no shift (the spec's value is only the start), unless the spec gives a centre
+  // (applied by EData::Fill once the groups are resolved, as is the normalization's).
   energyShiftNominal_ = 0.0;
   lastEnergyShift_ = std::numeric_limits<double>::quiet_NaN();  // the points start unshifted: the first fill always applies the shift
-  energyShiftError_ = segLine.energyShiftError();
-  if (segLine.varyEnergyShift() == 1)
-    varyEnergyShift_ = true;
-  else
-    varyEnergyShift_ = false;
-  energyShiftSqrt_ = energyShiftSqrtNominal_ = segLine.energyShiftSqrt();
+  energyShiftError_ = spec.energyShiftError;
+  varyEnergyShift_ = spec.varyEnergyShift;
+  energyShiftSqrt_ = energyShiftSqrtNominal_ = spec.energyShiftSqrt;
   lastEnergyShiftSqrt_ = std::numeric_limits<double>::quiet_NaN();
-  energyShiftSqrtError_ = segLine.energyShiftSqrtError();
-  varyEnergyShiftSqrt_ = (segLine.varyEnergyShiftSqrt() == 1);
-  shiftGroup_ = segLine.shiftGroup();
+  energyShiftSqrtError_ = spec.energyShiftSqrtError;
+  varyEnergyShiftSqrt_ = spec.varyEnergyShiftSqrt;
+  shiftGroup_ = spec.shiftGroup;
   shiftLeaderPos_ = -1;
   hasShiftGroupFollowers_ = false;
-  shiftFnGroup_ = segLine.shiftFnGroup();
-  normGroup_ = segLine.normGroup();
-  covarianceFile_ = segLine.covarianceFile();
+  shiftFnGroup_ = spec.shiftFunctionGroup;
+  normGroup_ = spec.normGroup;
+  covarianceFile_ = spec.covarianceFile;
   normLeaderPos_ = -1;
   hasNormGroupFollowers_ = false;
-  hasSqrtShiftBlock_ = segLine.hasSqrtShift();
-  shiftFnDeclared_ = segLine.shiftFn();
-  shiftFnNominal_ = segLine.shiftFnValues();
-  shiftFnError_ = segLine.shiftFnErrors();
-  for (int v : segLine.shiftFnVary()) shiftFnVary_.push_back(v == 1);
+  hasSqrtShiftBlock_ = spec.hasSqrtShift;
+  shiftFnDeclared_ = spec.shiftFunction;
+  shiftFnNominal_ = spec.shiftFunctionValues;
+  shiftFnError_ = spec.shiftFunctionErrors;
+  shiftFnVary_ = spec.shiftFunctionVary;
   hasShiftFn_ = false;
   shiftFnConfig_ = nullptr;
   shiftFnSourcePos_ = -1;
   shiftFnParamStart_ = -1;
-  if (segLine.varyNorm() == 1)
-    varyNorm_ = true;
-  else
-    varyNorm_ = false;
-  isAdvanced_ = segLine.isAdvanced() == 1;
-  operationType_ = segLine.operationType();
-  componentsList_ = segLine.componentsList();
-  naturalToken_ = segLine.natural();
-  isTotal_ = segLine.total() == 1;
-  transmission_ = segLine.transmission();
-  yield_ = segLine.yieldThickness();
-  thickness_ = GetNominalThickness();
-  thicknessFit_ = segLine.thicknessFit();
-  thicknessVary_ = segLine.thicknessVary();
-  thicknessSigma_ = segLine.thicknessSigma();
-  thicknessGroup_ = segLine.thicknessGroup();
-  if (segLine.isUPOS() == 1)
-    isUPOS_ = true;
-  else
-    isUPOS_ = false;
-  secondaryDecayL_ = segLine.secondaryDecayL();
-  Ic_ = segLine.Ic();
-  delta_ = segLine.delta();
+  varyNorm_ = spec.varyNorm;
+  thicknessFit_ = spec.thicknessFit;
+  thicknessVary_ = spec.thicknessVary ? 1 : 0;
+  thicknessSigma_ = spec.thicknessSigma;
+  thicknessGroup_ = spec.thicknessGroup;
+  isUPOS_ = spec.upos;
+  secondaryDecayL_ = spec.secondaryDecayL;
+  Ic_ = spec.secondaryFinalSpin;
+  delta_ = spec.secondaryMixingRatio;
   targetEffectNum_ = 0;
   isTargetEffect_ = false;
 
@@ -150,53 +130,19 @@ ESegment::ESegment(SegLine segLine) {
 }
 
 /*!
- * This constructor is used if the segment contains no actual data, and the points must be created
- * (such as in an extrapolation).  The segment is created with reference to an entry in the segments
- * extrapolation file.
+ * An extrapolation segment: no data, the points are made on a grid (EData::MakePoints).
  */
 
-ESegment::ESegment(ExtrapLine extrapLine) {
-  entrancekey_ = extrapLine.entranceKey();
-  exitkey_ = extrapLine.exitKey();
-  min_e_ = extrapLine.minE();
-  max_e_ = extrapLine.maxE();
-  min_a_ = extrapLine.minA();
-  max_a_ = extrapLine.maxA();
-  e_step_ = extrapLine.eStep();
-  a_step_ = extrapLine.aStep();
-  segment_chi_squared_ = 0.0;
-  // THM (modified R-matrix) extrapolation segment: isDiff offset of 10 (see the
-  // SegLine constructor above and docs/THM_IMPLEMENTATION.md).
-  isTHM_ = (extrapLine.isDiff() >= 10);
-  int diff = isTHM_ ? extrapLine.isDiff() - 10 : extrapLine.isDiff();
-  isAnalyzingPower_ = (diff == 7);
-  if (diff == 1 || diff == 5 || diff == 7)
-    isdifferential_ = true;
-  else
-    isdifferential_ = false;
-  if (diff == 5 || diff == 7)
-    iscmdifferential_ = true;
-  else
-    iscmdifferential_ = false;
-  if (diff == 2) {
-    isphase_ = true;
-    j_ = extrapLine.phaseJ();
-    l_ = extrapLine.phaseL();
-    phaseS_ = extrapLine.phaseS();
-  } else {
-    isphase_ = false;
-    j_ = 0.0;
-    l_ = 0;
-  }
-  if (diff == 3) {
+ESegment::ESegment(const azure2::experiment::ExtrapolationSpec &spec) {
+  SetReaction(spec.reaction);
+  min_e_ = spec.minE;
+  max_e_ = spec.maxE;
+  min_a_ = spec.minA;
+  max_a_ = spec.maxA;
+  if (spec.reaction.observable == azure2::experiment::Observable::AngularDistribution) {
     isAngDist_ = true;
-    maxAngDistOrder_ = extrapLine.maxAngDistOrder();
-  } else {
-    isAngDist_ = false;
-    maxAngDistOrder_ = 0;
+    maxAngDistOrder_ = spec.maxAngDistOrder;
   }
-  isTotalCapture_ = (diff == 4) ? 1 : 0;
-  crossSectionComponent_ = 0;
   datafile_ = "";
   dataNorm_ = dataNormNominal_ = 1.;
   dataNormError_ = 0.;
@@ -221,16 +167,7 @@ ESegment::ESegment(ExtrapLine extrapLine) {
   shiftFnParamStart_ = -1;
   varyEnergyShiftSqrt_ = false;
   varyNorm_ = false;
-
-  // Read advanced segment data from ExtrapLine
-  isAdvanced_ = (extrapLine.isAdvanced() == 1);
-  operationType_ = extrapLine.operationType();
-  componentsList_ = extrapLine.componentsList();
-  naturalToken_ = extrapLine.natural();
-  isTotal_ = extrapLine.total() == 1;
-  transmission_ = extrapLine.transmission();
-  yield_ = extrapLine.yieldThickness();
-  thickness_ = GetNominalThickness();  // a test segment has no thickness parameter (ExtrapLine::thicknessFitIgnored)
+  // a test segment has no thickness parameter: it uses its own sample thickness (SetReaction)
 
   isUPOS_ = false;
   secondaryDecayL_ = 0;
@@ -239,14 +176,7 @@ ESegment::ESegment(ExtrapLine extrapLine) {
   targetEffectNum_ = 0;
   isTargetEffect_ = false;
 
-  // Initialize advanced segment composition based on operation type
-  if (extrapLine.operationType() == 0) {
-    segmentOperationType_ = SUM;
-  } else if (extrapLine.operationType() == 1) {
-    segmentOperationType_ = RATIO;
-  } else {
-    segmentOperationType_ = SUM;  // Default to SUM operation
-  }
+  segmentOperationType_ = (operationType_ == 1) ? RATIO : SUM;
   componentScaling_ = 1.0;
   componentCalculationMutex_ = std::make_shared<std::mutex>();
 }
@@ -318,37 +248,33 @@ bool ESegment::IsProfiledNorm() const {
 /*!
  * With the norm n multiplying the data (residual m - n d, error n e), the
  * chi^2 = sum ((m - n d)/(n e))^2 is minimized at n* = S_mm / S_md, giving
- * chi^2_min = S_dd - S_md^2 / S_mm, where S_ab = sum a_i b_i / e_i^2.  Points
- * must already carry their model values in GetFitCrossSection().
+ * chi^2_min = S_dd - S_md^2 / S_mm, where S_ab = sum a_i b_i / e_i^2.  The
+ * points' model values must be in `results` (azure2::EvaluateModelPoint); n* is
+ * returned in `profiledNorm`.
  */
 
-double ESegment::ProfileNormChiSquared(const azure2::Results &results) {
+double ESegment::ProfileNormChiSquared(const azure2::Results &results, double &profiledNorm) const {
   double Smm = 0.0, Smd = 0.0, Sdd = 0.0;
-  for (EPointIterator pt = GetPoints().begin(); pt < GetPoints().end(); pt++) {
-    double e = pt->GetCMCrossSectionError();
+  for (const EPoint &pt : points_) {
+    double e = pt.GetCMCrossSectionError();
     if (e == 0.0) continue;
     double w = 1.0 / (e * e);
-    double m = pt->GetFitCrossSection(results);
-    double d = pt->GetCMCrossSection();
+    double m = pt.GetModelValue(results);
+    double d = pt.GetCMCrossSection();
     Smm += m * m * w;
     Smd += m * d * w;
     Sdd += d * d * w;
   }
   if (Smd > 0.0 && Smm > 0.0) {
-    SetNorm(Smm / Smd);
+    profiledNorm = Smm / Smd;
     double chi = Sdd - Smd * Smd / Smm;
     return chi > 0.0 ? chi : 0.0;
   }
   // Degenerate (no positive model-data overlap): leave the scale at unity and
   // report the unscaled chi^2 so the fit still sees a finite, honest value.
-  SetNorm(1.0);
+  profiledNorm = 1.0;
   double chi = 0.0;
-  for (EPointIterator pt = GetPoints().begin(); pt < GetPoints().end(); pt++) {
-    double e = pt->GetCMCrossSectionError();
-    if (e == 0.0) continue;
-    double r = pt->GetFitCrossSection(results) - pt->GetCMCrossSection();
-    chi += (r * r) / (e * e);
-  }
+  for (const EPoint &pt : points_) chi += azure2::PointResidual(pt, results, 1.0).Chi2();
   return chi;
 }
 
@@ -572,18 +498,21 @@ bool ESegment::ConvertPointToCM(EPoint *point, PPair *entrancePair, PPair *exitP
   // Lab-frame differential data only: not c.m. data (isDiff 4 / 5), phase shifts, angular distributions.
   const bool labDifferential = this->IsDifferential() && !this->IsPhase() && !this->IsAngularDist() && !this->IsCMDifferential();
   if (!exitPair || !labDifferential) return true;
+  // Convert: from the state of the point as loaded (EPoint::KeepLoadFrame), so that where the angle cannot be
+  // converted the angle and the factor are the load-time ones, whatever this copy converted before (H4).
+  if (beyond == BeyondRange::Convert) point->RestoreLoadFrame();
   bool inRange = true;
   if (exitPair->GetPType() == 0) {
     inRange = (this->GetEntranceKey() == this->GetExitKey()) ? point->ConvertLabAngle(entrancePair)
                                                              : point->ConvertLabAngle(entrancePair, exitPair, configure);
     if (!inRange && beyond == BeyondRange::Stop) return false;
-    // (Convert: the factor at the last valid angle; ConvertCrossSection leaves the reported maximum as it is)
     if (convertValue) point->ConvertCrossSection(entrancePair, exitPair);
   }
   if (exitPair->GetPType() == 10) {
     point->ConvertLabAngleGammas(entrancePair);
     if (convertValue) point->ConvertCrossSectionGammas(entrancePair);
   }
+  if (beyond == BeyondRange::Stop) point->KeepLoadFrame();
   return inRange;
 }
 
@@ -654,36 +583,12 @@ double ESegment::GetMaxAngle() const {
 }
 
 /*!
- * Returns the chi-squared value of the segment after the fitting process.
- */
-
-double ESegment::GetSegmentChiSquared() const {
-  return segment_chi_squared_;
-}
-
-/*!
  * Returns the chi-squared value due to the normalization for each segment after the fitting process.
  */
 
 // double ESegment::GetNormChiSquared() const {
 //   return norm_chi_squared_;
 // }
-
-/*!
- * Returns the energy step to take when creating points in a segment.  Only applies for extrapolation segments.
- */
-
-double ESegment::GetEStep() const {
-  return e_step_;
-}
-
-/*!
- * Returns the angle step to take when creating points in a segment.  Only applies for extrapolation segments.
- */
-
-double ESegment::GetAStep() const {
-  return a_step_;
-}
 
 /*!
  * Returns the total spin of the segment.  Only applies if the segment is phase shift.
@@ -778,14 +683,6 @@ bool ESegment::IsAdvanced() const {
 
 int ESegment::GetLegacyOperationType() const {
   return operationType_;
-}
-
-/*!
- * Returns the semicolon-separated list of components.
- */
-
-std::string ESegment::GetComponentsList() const {
-  return componentsList_;
 }
 
 /*!
@@ -1142,11 +1039,11 @@ void ESegment::UpdatePointEnergyWithShift(int i, CNuc *theCNuc, const Config *co
         const bool isRatio = this->IsAdvanced() && this->GetLegacyOperationType() == 1;
         if (!this->ConvertPointToCM(point, entrancePair, exitPair, *configure, !isRatio, BeyondRange::Convert)) {
           // An energy shift moved the point past the kinematic maximum lab angle mid-fit: the c.m. angle keeps
-          // its last valid value and the run says so (it cannot stop here; audit 2026-10-25, item 31).
+          // its value as loaded and the run says so (it cannot stop here; audit 2026-10-25, item 31).
           configure->outStream << "WARNING: segment #" << this->GetSegmentKey() << ": the energy shift moved the point at lab angle "
                                << point->GetLabAngle() << " deg to E_lab = " << point->GetLabEnergy()
                                << " MeV, beyond its kinematic maximum " << point->GetLabAngleMax()
-                               << " deg; its c.m. angle is kept at the last valid value." << std::endl;
+                               << " deg; its c.m. angle is kept at its value as loaded." << std::endl;
         }
 
         if (this->IsDifferential() || this->IsCMDifferential()) {
@@ -1213,7 +1110,7 @@ void ESegment::UpdatePointEnergyWithShift(int i, CNuc *theCNuc, const Config *co
               // subPoint->ConvertLabEnergy(entrancePair);
             }
 
-            // A sub-point is built at its parent's c.m. angle (EData::ReadTargetEffectsFile, EPoint(angle, energy,
+            // A sub-point is built at its parent's c.m. angle (EData::SetUpTargetEffects, EPoint(angle, energy,
             // parent) puts that angle in both slots) and carries no data of its own, so the lab-to-c.m. angle and
             // cross-section conversions of the parent (above) must not be applied to it.  Before 2026-10-26 they
             // were, which took the parent's c.m. angle for a lab angle and moved every sub-point by the full
@@ -1275,22 +1172,6 @@ void ESegment::ApplyTotalToPoints() {
     for (int i = 1; i <= point.NumSubPoints(); i++) point.GetSubPoint(i)->SetIsTotal(total);
   }
 }
-
-/*!
- * Sets the chi squared value for the segment during the fitting process.
- */
-
-void ESegment::SetSegmentChiSquared(double chiSquared) {
-  segment_chi_squared_ = chiSquared;
-}
-
-/*!
- * Sets the chi squared value for the segment normalization during the fitting process.
- */
-
-// void ESegment::SetNormChiSquared(double chiSquared) {
-//   norm_chi_squared_=chiSquared;
-// }
 
 /*!
  * Sets the position of the corresponding TargetEffect object in the vector
@@ -1488,29 +1369,6 @@ double ESegment::RatioTermFrameFactor(EPoint *point, const ESegment *term, CNuc 
   return point->CalculateCrossSectionConversionFactor(entrancePair, exitPair);
 }
 
-namespace {
-
-/*!
- * Calculate a point; if the calculation throws (a singular matrix, a Coulomb function out of range, ...), mark it
- * failed (EPoint::MarkFailed: NaN, reported once) and return false, so that neither the point nor chi^2 can pass for
- * a result.  Before 2026-11-01 a failed base point gave 0, a failed or non-finite component was left out of a SUM and
- * a failed RATIO denominator gave 0, all without a word: the natural SUM segments of tests/natural_neon on the
- * R-matrix route came back 0 at 84 points.
- */
-bool CalculatePoint(EPoint *point, const char *role, CNuc *cnuc, const Config &configure, azure2::Results &results) {
-  try {
-    point->Calculate(cnuc, configure, results);
-    return true;
-  } catch (const std::exception &e) {
-    point->MarkFailed(results, role, configure, e.what());
-  } catch (...) {
-    point->MarkFailed(results, role, configure, "unknown exception.");
-  }
-  return false;
-}
-
-}  // namespace
-
 /*!
  * Transmission of a sample n atoms/barn thick, T = exp(-n s), and dT/ds (azure2::experiment::node::Transmission).
  */
@@ -1555,234 +1413,6 @@ bool ESegment::TransformTerms(int pointIndex, CNuc *cnuc, std::vector<TransformT
     terms.push_back({cp, comp, w, scale, nucleus, false, comp->GetCrossSectionComponent()});
   }
   return true;
-}
-
-/*!
- * The value of a transmission or yield segment at a point (ESegment.h, IsTransformed).  The points, base and
- * components, hold plain cross sections; they are summed with their weights into s (and s_t for a yield), at every
- * sub-point when the point carries a sub-point target effect, transformed there, and only then integrated with the
- * base point's kernel (EPoint::IntegrateTargetEffect, on the transformed values swapped into its sub-point slots).
- * EData::CheckTransformedSegments makes sure every term shares the base point's sub-point grid.
- */
-double ESegment::TransformedValue(int pointIndex, CNuc *cnuc, const Config &configure, azure2::Results &results,
-                                  bool precalculated) {
-  const double nan = std::numeric_limits<double>::quiet_NaN();
-  EPoint *basePoint = GetPoint(pointIndex + 1);
-  for (ESegment *comp : componentSegments_) {
-    if (!comp || pointIndex >= comp->NumPoints()) continue;
-    EPoint *cp = comp->GetPoint(pointIndex + 1);
-    if (!precalculated && cp && (!cp->IsMapped() || ScopedPointMappingOff::Active()) &&
-        !CalculatePoint(cp, comp->IsYieldTotalTerm() ? "yield total" : "SUM component", cnuc, configure, results))
-      return nan;
-  }
-  std::vector<TransformTerm> terms;
-  if (!TransformTerms(pointIndex, cnuc, terms)) return nan;
-  const double n = GetSampleThickness();
-  const bool yield = IsYield();
-  auto valueOf = [&results](EPoint *p, int c) {
-    return (c == 1) ? p->GetFitE1CrossSection(results) : (c == 2) ? p->GetFitE2CrossSection(results)
-                                                                  : p->GetFitCrossSection(results);
-  };
-  // the observable from the term values v_q (a point, or one sub-point of every term)
-  auto transform = [&](const std::vector<double> &v) {
-    double sum = 0.0, total = 0.0;
-    for (size_t q = 0; q < terms.size(); q++) (terms[q].total ? total : sum) += terms[q].weight * v[q];
-    return yield ? YieldY0(n, sum, total) : Transmission(n, sum);
-  };
-
-  if (IsNatural()) {
-    std::vector<double> naturalTerms(cnuc->NumNuclei(), 0.0);
-    for (const TransformTerm &t : terms)
-      if (!t.total) naturalTerms[t.nucleus - 1] += t.weight * valueOf(t.point, t.xsComponent);
-    basePoint->SetNaturalTerms(results, naturalTerms);
-  }
-
-  std::vector<double> v(terms.size());
-  if (!HasSubPointIntegration(basePoint)) {
-    for (size_t q = 0; q < terms.size(); q++) v[q] = valueOf(terms[q].point, terms[q].xsComponent);
-    return transform(v);
-  }
-
-  const int nsp = basePoint->NumSubPoints();
-  for (const TransformTerm &t : terms)
-    if (t.point->NumSubPoints() != nsp) return nan;  // refused at load (EData::CheckTransformedSegments)
-  std::vector<double> baseRaw(nsp), f(nsp);
-  // Free-gas Doppler broadening comes before the transform (SAMMY's order): every term's sub-point values are
-  // broadened on the common grid, the broadened values transformed, and the kernel then applied without its own
-  // Doppler step.  A line with no kernel after the Doppler step gives the transform of sigma_D at the point.
-  const TargetEffect *effect = basePoint->GetParentData()->GetTargetEffect(basePoint->GetTargetEffectNum());
-  const bool doppler = effect && effect->IsDoppler();
-  std::vector<std::vector<double>> raw;
-  std::vector<std::pair<int, double>> dw;
-  auto broadenAt = [&](double e) {
-    basePoint->DopplerWeights(e, dw);
-    for (size_t q = 0; q < terms.size(); q++) {
-      double s = 0.0;
-      for (const auto &t : dw) s += t.second * raw[q][t.first - 1];
-      v[q] = s;
-    }
-  };
-  if (doppler) {
-    raw.assign(terms.size(), std::vector<double>(nsp));
-    for (size_t q = 0; q < terms.size(); q++)
-      for (int j = 1; j <= nsp; j++) raw[q][j - 1] = valueOf(terms[q].point->GetSubPoint(j), terms[q].xsComponent);
-    if (!effect->HasResolutionStage()) {
-      broadenAt(basePoint->GetCMEnergy());
-      return transform(v);
-    }
-  }
-  for (int j = 1; j <= nsp; j++) {
-    if (doppler) {
-      broadenAt(basePoint->GetSubPoint(j)->GetCMEnergy());
-    } else {
-      for (size_t q = 0; q < terms.size(); q++) {
-        EPoint *sp = terms[q].point->GetSubPoint(j);
-        v[q] = valueOf(sp, terms[q].xsComponent);
-      }
-    }
-    f[j - 1] = transform(v);
-    baseRaw[j - 1] = basePoint->GetSubPoint(j)->GetFitCrossSection(results);
-  }
-  const double baseIntegrated = basePoint->GetFitCrossSection(results);
-  for (int j = 1; j <= nsp; j++) basePoint->GetSubPoint(j)->SetFitCrossSection(results, f[j - 1]);
-  {
-    EPoint::DopplerAppliedScope dopplerDone(basePoint);
-    basePoint->IntegrateTargetEffect(configure, results);
-  }
-  const double value = basePoint->GetFitCrossSection(results);
-  for (int j = 1; j <= nsp; j++) basePoint->GetSubPoint(j)->SetFitCrossSection(results, baseRaw[j - 1]);
-  basePoint->SetFitCrossSection(results, baseIntegrated);
-  return value;
-}
-
-/*!
- * Calculates the theoretical cross section for this segment, including
- * combination with any additional components according to the operation type
- */
-double ESegment::CalculateTheoreticalCrossSection(int pointIndex, CNuc *cnuc, const Config &configure, EData *edata,
-                                                   azure2::Results &results, bool precalculated) {
-  if (pointIndex < 0 || pointIndex >= NumPoints()) {
-    return 0.0;
-  }
-
-  // Calculate the base segment's theoretical cross section
-  EPoint *basePoint = GetPoint(pointIndex + 1);
-  if (!basePoint) {
-    return 0.0;
-  }
-
-  // Calculate base point if not already calculated
-  const double nan = std::numeric_limits<double>::quiet_NaN();
-  if (!precalculated && (!basePoint->IsMapped() || ScopedPointMappingOff::Active()) &&
-      !CalculatePoint(basePoint, "base term", cnuc, configure, results))
-    return nan;
-
-  if (IsTransformed()) return TransformedValue(pointIndex, cnuc, configure, results, precalculated);
-
-  // For E1/E2-only segments compare against the corresponding component of the
-  // (angle-integrated capture) cross section instead of the full cross section.
-  double baseValue;
-  if (crossSectionComponent_ == 1)
-    baseValue = basePoint->GetFitE1CrossSection(results);
-  else if (crossSectionComponent_ == 2)
-    baseValue = basePoint->GetFitE2CrossSection(results);
-  else
-    baseValue = basePoint->GetFitCrossSection(results);
-
-  // A sample segment: every term is weighted by the isotopic
-  // abundance of its entrance pair's compound nucleus, and the weighted terms
-  // are kept per nucleus on the base point for the decomposition output.
-  std::vector<double> naturalTerms;
-  const bool natural = this->IsNatural();
-  if (natural) {
-    naturalTerms.assign(cnuc->NumNuclei(), 0.0);
-    const int nucleus = cnuc->GetPair(cnuc->GetPairNumFromKey(this->GetEntranceKey()))->GetNucleus();
-    baseValue *= cnuc->GetAbundance(naturalSample_, nucleus);
-    naturalTerms[nucleus - 1] += baseValue;
-  }
-
-  // If no components, return base value
-  if (!HasComponents()) {
-    if (natural) basePoint->SetNaturalTerms(results, naturalTerms);
-    return baseValue;
-  }
-
-
-  // Calculate component values and combine according to operation type
-  if (segmentOperationType_ == SUM) {
-    double sum = baseValue;
-    int compIdx = 0;
-    for (const auto &componentSegment : componentSegments_) {
-      if (componentSegment && pointIndex < componentSegment->NumPoints()) {
-        EPoint *componentPoint = componentSegment->GetPoint(pointIndex + 1);
-        if (componentPoint) {
-          // No lock needed since each thread works on independent EData clones
-          if (!precalculated && (!componentPoint->IsMapped() || ScopedPointMappingOff::Active()) &&
-              !CalculatePoint(componentPoint, "SUM component", cnuc, configure, results))
-            return nan;
-          // A non-finite term makes the sum non-finite (it was left out before 2026-11-01).
-          double compValue = componentPoint->GetFitCrossSection(results);
-          // the term in the base point's frame (TermFrameFactor)
-          double term = componentSegment->GetComponentScaling() * TermFrameFactor(basePoint, componentPoint) * compValue;
-          if (natural) {
-            const int nucleus = cnuc->GetPair(cnuc->GetPairNumFromKey(componentSegment->GetEntranceKey()))->GetNucleus();
-            term *= cnuc->GetAbundance(naturalSample_, nucleus);
-            naturalTerms[nucleus - 1] += term;
-          }
-          sum += term;
-          compIdx++;
-        }
-      }
-    }
-    if (natural) basePoint->SetNaturalTerms(results, naturalTerms);
-    return sum;
-  } else if (segmentOperationType_ == RATIO) {
-    if (componentSegments_.empty()) {
-      return baseValue;
-    }
-
-    // For ratio: base / first_component
-    ESegment *firstComponent = componentSegments_[0];
-    if (firstComponent && pointIndex < firstComponent->NumPoints()) {
-      EPoint *denominatorPoint = firstComponent->GetPoint(pointIndex + 1);
-      if (denominatorPoint) {
-        // No lock needed since each thread works on independent EData clones
-        if (!precalculated && (!denominatorPoint->IsMapped() || ScopedPointMappingOff::Active()) &&
-            !CalculatePoint(denominatorPoint, "RATIO denominator", cnuc, configure, results))
-          return nan;
-
-        double denominatorValue = denominatorPoint->GetFitCrossSection(results);
-        if (denominatorValue == 0.0) {
-          // No ratio exists (e.g. the denominator's exit channel is closed at this energy).  Before 2026-11-01 the
-          // point was 0, which a fit compared with the datum as if it were a calculated ratio.  Now NaN and a
-          // warning, once.  Only this term is NaN: the base point and the points mapped onto it are left alone.
-          static std::atomic<bool> reported(false);
-          if (!reported.exchange(true)) {
-#pragma omp critical(azure_failed_point)
-            configure.outStream << "WARNING: the RATIO denominator of segment " << basePoint->GetSegmentKey()
-                                << " is 0 at E_lab " << basePoint->GetLabEnergy() << " MeV, angle "
-                                << basePoint->GetLabAngle() << " deg: the ratio is NaN there (further zero"
-                                << " denominators are not reported)." << std::endl;
-          }
-          return nan;
-        }
-
-        // A lab-frame differential ratio is the ratio of the two LAB cross sections,
-        // sigma_lab = sigma_cm / J: each term with its own pair's Jacobian.  (Before
-        // 2026-10-27 the denominator's J was computed with the base segment's pairs:
-        // wrong for a denominator to another exit pair with relativistic=1 or at 0 /
-        // 180 deg, and for a photon over a particle or the reverse; audit item 15.)
-        const double baseConversionFactor = RatioTermFrameFactor(basePoint, this, cnuc);
-        const double denominatorConversionFactor = RatioTermFrameFactor(denominatorPoint, firstComponent, cnuc);
-
-        double ratioValue = baseValue / denominatorValue * (denominatorConversionFactor / baseConversionFactor);
-        return ratioValue;
-      }
-    }
-    return nan;  // no denominator point (component segments copy the base's points, so not expected)
-  }
-
-  return baseValue;
 }
 
 void ESegment::SetThmLineshape(std::shared_ptr<const ThmLineshape> l) {

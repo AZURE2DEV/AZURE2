@@ -36,6 +36,7 @@
 #include "Config.h"
 #include "EData.h"
 #include "ESegment.h"
+#include "ModelPass.h"
 #include "Results.h"
 
 Config *g_config = nullptr;  // defined by the executable; the library reads it
@@ -67,22 +68,15 @@ bool SameBits(const std::vector<double> &a, const std::vector<double> &b, std::s
   return true;
 }
 
-// One evaluation, as AZURECalc::Chi2On does it: the hand-over into `results`, then every point's model value.
+// One evaluation, as AZURECalc::Chi2On does it: the hand-over into `results`, then every point's model value
+// (Results::model).
 std::vector<double> Evaluate(CNuc *lc, EData *ld, azure2::Results &results, const vector_r &p, const Config &cfg) {
   lc->FillCompoundFromParams(p);
   ld->FillNormsFromParams(p);
   ld->FillEnergyShiftsFromParams(p, results, ld, lc, &cfg);
   if (cfg.paramMask & Config::USE_BRUNE_FORMALISM) lc->CalcShiftFunctions(cfg, false);
-  std::vector<double> models;
-  for (int i = 1; i <= ld->NumSegments(); i++) {
-    ESegment *segment = ld->GetSegment(i);
-    for (int pid = 0; pid < segment->NumPoints(); pid++) {
-      const double m = segment->CalculateTheoreticalCrossSection(pid, lc, cfg, ld, results);
-      segment->GetPoint(pid + 1)->SetFitCrossSection(results, m);
-      models.push_back(m);
-    }
-  }
-  return models;
+  azure2::EvaluateModel(*ld, lc, cfg, results, azure2::LeafValues::Calculate);
+  return results.model;
 }
 
 struct Copy {

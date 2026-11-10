@@ -3,7 +3,7 @@
 # A point whose calculation fails is NaN in the CLI too, and the run says so.
 #
 # The CLI's objective takes the values of the parallel pre-pass (EData::CalculatePointsInParallel), which before
-# 2026-11-01 set a failed point to 0 without a word (and ESegment::CalculateTheoreticalCrossSection gave 0 or left
+# 2026-11-01 set a failed point to 0 without a word (and azure2::EvaluateModelPoint gave 0 or left
 # a SUM term out).  The failure is injected with the test hook AZURE_TEST_FAIL_E=<lab energy> (here the base term
 # of tests/sum_lab_frame's SUM segment at one energy; the segment carries a 0.05 MeV energy shift, so 6.15 -> 6.2).
 # Checked: mode 1 prints the warning and chiSquared.out's total is nan, the output file has nan at that point only;

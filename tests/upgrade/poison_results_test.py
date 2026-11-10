@@ -7,8 +7,11 @@ value kept from an earlier evaluation, or one no evaluation ever writes -- is Na
 the same calculations with and without the variable and requires equal results:
 
   CLI    T1, T2, T3: menu 1 (calculate with data) and menu 3 (extrapolate); T1 also a short fit (menu 2,
-         --max-calls), which goes through the pooled working copies and the analytic gradient.  Every output
-         file must be byte for byte the same.
+         --max-calls), which goes through the pooled working copies and the analytic gradient.  The model pass
+         (data_model.md S4: Results::model and the objective's values, poisoned with the leaf values): menu 1 on
+         tests/natural_neon (sample sums; T2 above has a SUM and a RATIO), and tests/transmission_yield's conv (a transmission and a yield under a Gaussian spread: the
+         transform at every sub-point) and natT (a sample transmission).  Every output file must be byte for byte
+         the same.
   rate   tests/reaction_rate's p12C model, menu 5 (reaction rate): each rate point evaluates into a buffer of its
          own (EPoint::UsePrivateRecord), poisoned as every other; reactionrates.out byte for byte.
   pyazr  T1, T2, T3: the values, E1 and E2 parts, angles, energies and angular-distribution coefficients of
@@ -42,6 +45,11 @@ sys.path.insert(0, os.path.normpath(os.path.join(HERE, "..", "..")))  # pyazr fr
 import upgrade_project as up  # noqa: E402
 
 PROJECTS = {"T1": "T1.azr", "T2": "T2.azr", "T3": "T3.azr"}
+# The model-pass projects (menu 1 only): name -> (directory relative to tests/, .azr); "transmission_yield" is made by
+# its make_models.py into the scratch directory.
+MODEL_PROJECTS = {"natural_neon": ("natural_neon", "natural_neon.azr"), "transmission": ("transmission_yield", "conv.azr"),
+                  "natural_transmission": ("transmission_yield", "natT.azr")}
+TESTS = os.path.normpath(os.path.join(HERE, ".."))
 MENUS = {"calc": "1\n\n\n7\n", "extrap": "3\n\n\n7\n"}
 FIT = ("T1", "2\nn\n\n\n7\n", ["--max-calls=30"])
 RATE_DIR = os.path.normpath(os.path.join(HERE, "..", "reaction_rate"))
@@ -65,9 +73,9 @@ def run_rate(binary, poison, tmp):
     return r.returncode, out
 
 
-def run_cli(binary, project, menu, extra, poison, tmp):
+def run_cli(binary, project, menu, extra, poison, tmp, src=None, azr=None):
     d = tempfile.mkdtemp(dir=tmp)
-    src = os.path.join(HERE, project)
+    src = src or os.path.join(HERE, project)
     for f in os.listdir(src):
         p = os.path.join(src, f)
         if f in ("output", "checks"):
@@ -81,7 +89,7 @@ def run_cli(binary, project, menu, extra, poison, tmp):
         # A fit bounded by --max-calls is reproducible at one thread only: Minuit2's call counter is not atomic, so
         # with several threads the same fit can run one more iteration (docs/upgrade/fit_threads.md, cause B).
         env["OMP_NUM_THREADS"] = "1"
-    r = subprocess.run([binary, "--no-gui", "--no-readline", "--no-coulomb-table", *extra, PROJECTS[project]],
+    r = subprocess.run([binary, "--no-gui", "--no-readline", "--no-coulomb-table", *extra, azr or PROJECTS[project]],
                        input=menu, cwd=d, env=env, capture_output=True, text=True, timeout=1800)
     out = {}
     for f in sorted(os.listdir(os.path.join(d, "output"))):
@@ -159,6 +167,27 @@ def main():
             if plain.get(f) != poisoned.get(f):
                 problems.append(f"rate: output/{f} differs with poisoning")
         print(f"rate p12C: {len(plain)} files compared")
+        made = os.path.join(tmp, "transmission_yield")
+        os.makedirs(made)
+        mk = subprocess.run([sys.executable, "-I", os.path.join(TESTS, "transmission_yield", "make_models.py"),
+                             os.path.join(TESTS, "reaction_rate", "models", "n12C.azr"),
+                             os.path.join(TESTS, "natural_neon", "natural_neon.azr"), made],
+                            capture_output=True, text=True)
+        if mk.returncode != 0:
+            problems.append(f"transmission_yield models: {mk.stderr.strip()[-300:]}")
+        shutil.copytree(os.path.join(TESTS, "natural_neon", "data"), os.path.join(made, "data"), dirs_exist_ok=True)
+        for name, (rel, azr) in MODEL_PROJECTS.items():
+            src = made if rel == "transmission_yield" else os.path.join(TESTS, rel)
+            rc0, plain = run_cli(binary, name, MENUS["calc"], [], False, tmp, src, azr)
+            rc1, poisoned = run_cli(binary, name, MENUS["calc"], [], True, tmp, src, azr)
+            if rc0 != rc1:
+                problems.append(f"{name} calc: exit {rc0} without, {rc1} with poisoning")
+            if "chiSquared.out" not in plain:
+                problems.append(f"{name} calc: no chiSquared.out")
+            for f in sorted(set(plain) | set(poisoned)):
+                if plain.get(f) != poisoned.get(f):
+                    problems.append(f"{name} calc: output/{f} differs with poisoning")
+            print(f"{name} calc: {len(plain)} files compared")
     try:
         import pyazr.azure2  # noqa: F401
         have_api = True

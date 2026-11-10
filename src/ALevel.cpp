@@ -496,3 +496,9 @@ void ALevel::SetECParams(int pairNum, unsigned char multMask) {
   ecPairNum_ = pairNum;
   ecMultMask_ = multMask;
 }
+
+void ALevel::AddID(int id) {
+  for (int known : ids_)
+    if (known == id) return;
+  ids_.push_back(id);
+}

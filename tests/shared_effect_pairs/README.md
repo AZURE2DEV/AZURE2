@@ -11,7 +11,7 @@ c.m. once, with the mass ratio `m2/(m1+m2)` of the first segment on the line (`C
 ratio: 0.43 % on the width for n + 20Ne against n + 22Ne, tens of keV on a beam-profile centroid
 (audit 2026-10-25, tier 3 entry 3, checklist t3-22). The line now keeps its lab values and each
 point converts them with its own factor and charges (`EPoint::SetTargetKinematics`, set by
-`EData::ReadTargetEffectsFile` for data points and component points alike).
+`EData::SetUpTargetEffects` for data points and component points alike).
 
 ## Checks (`check.sh path/to/AZURE2`)
 

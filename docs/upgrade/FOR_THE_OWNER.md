@@ -77,13 +77,16 @@ fail if the feature were wrong?**
 
 1. *Structure.* A datum becomes an immutable record; what an evaluation computes goes to a buffer the caller owns;
    what the model predicts for a data set is a small expression tree (a cross section, a sum, a ratio, a scale) with
-   one forward and one adjoint implementation. Today that composition is written in 19 loops and twice more in the
-   gradient, and the residual formula about nine times.
+   one forward and one adjoint implementation. That composition was written in about 20 loops and twice more in
+   the gradient, and the residual formula 13 times; since 2026-11-10 both are one function each (the model pass,
+   `src/ModelPass.cpp`; a check fails on a second copy). The gradient's hand-written adjoint is the next to go.
 2. *What a user can fit.* A data set will state in words what it is — quantity, unit, frame, reference, target,
    normalisation — instead of an integer code and column positions:
    `quantity dsigma/dOmega_ratio reference rutherford frame lab …`, `quantity yield target C13_a per charge q=1 …`.
-   Targets get names and are defined once. Model-level data (resonance strengths ωγ, scattering lengths) get their own
-   section. First new kinds: ratio to Rutherford or Mott, S factor, thick-target yields per charge, ωγ; the order
+   Targets get names and are defined once. Model-level data have their own section, `<modelData>` (done:
+   resonance strength ωγ, resonance energy, total and partial width, branching ratio, ANC, scattering length — values
+   from the literature compared with a function of the level parameters, as one χ² term, `modelData.out`,
+   `pyazr.model_data`). First new kinds of beam data: ratio to Rutherford or Mott, S factor, thick-target yields per charge, ωγ; the order
    follows what EXFOR holds for light nuclei (10,132 charged-particle data sets counted, `data_kinds.md` §3).
 
 **Decision taken with Jakub (2026-11-09): no backward compatibility inside the engine.** The engine reads one
@@ -101,13 +104,18 @@ tree builder and a test.
 **The converter exists** (`convert/`, `AZURE2 --convert OLD NEW --to 3`, `pyazr.convert_azr`): of the 189 project
 files of the test tree, 186 convert to format 3 and validate without a question, and the 3 refused are files the old
 engine refuses too. It reports the map from the old parameter names (`segment_5_norm`) to the new ones, which carry
-the data set's name. The engine itself still runs format 2 until the format-3 reader is merged (in work).
+the data set's name. The engine's set-up no longer takes file lines: it takes plain records ("specs": data set,
+reaction, target effect, abundances), and `Schema::Build` makes those from a validated format-3 file. A test compares
+them, member by member and bit by bit, with what the old file gives: 183 of the 186 converted files are equal and 3
+are recorded differences (files that exist to test a refusal). What is left before the engine runs a format-3 file
+directly is the wiring of that path into the program and the comparison of the outputs (in work).
 
 **State and extension points** (`ARCHITECTURE.md` §9). The only singletons are constant tables; whatever an
 evaluation writes is owned by its caller; an extension is one explicit table row, never a self-registering class.
 Done so far in Phase 4: the values an evaluation computes live in one buffer (`Results`) that the caller owns and
 passes in, instead of in the data points (a debug mode poisons the buffer, so a value read before it is written fails
-a test); the model expressions (sum, ratio, scale, sample transform) and the lab → c.m. frames have one
+a test), and what the objective computes (profiled normalisations, χ² per data set, penalty totals) lives there too,
+so an evaluation writes nothing into the data; the model expressions (sum, ratio, scale, sample transform) and the lab → c.m. frames have one
 implementation each in a standalone library `experiment/`, with unit tests against closed forms; what a fit parameter
 is (a level energy, a width, a normalisation, an abundance …) is a record given where the parameter is created, and
 no code recognises a parameter by the spelling of its name any more (`parameter_kinds.md`; a check fails on a new

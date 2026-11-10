@@ -2559,8 +2559,8 @@
     "windows": false
    },
    "reaction": {
-    "rule": "one reaction",
-    "flags": []
+    "rule": "one reaction, no [total] exit",
+    "flags": ["no_total"]
    },
    "fields": {
     "level": {
@@ -2722,8 +2722,8 @@
     "windows": false
    },
    "reaction": {
-    "rule": "",
-    "flags": []
+    "rule": "one reaction, no [total] exit",
+    "flags": ["no_total"]
    },
    "fields": {
     "level": {
@@ -3381,9 +3381,61 @@
    "severity": "error",
    "meaning": "efficiency and norm both free without a prior (F9)"
   },
+  "E_UNKNOWN_LEVEL": {
+   "severity": "error",
+   "meaning": "a datum's level ID that no active level of <levels> has, or two levels of its J^pi have"
+  },
+  "E_LEVEL_JPI": {
+   "severity": "error",
+   "meaning": "a datum's J^pi that is not the J^pi of the level with its ID (F13)"
+  },
+  "E_UNKNOWN_PAIR": {
+   "severity": "error",
+   "meaning": "a reaction or pair of a datum that no pair of <levels> has (particles and states)"
+  },
+  "E_AMBIGUOUS_PAIR": {
+   "severity": "error",
+   "meaning": "a reaction or pair of a datum that two pairs of <levels> have"
+  },
+  "E_NOT_A_CHANNEL": {
+   "severity": "error",
+   "meaning": "a datum's pair (or pair, l, s) that is no channel of its level, or no s-wave channel spin of the pair"
+  },
+  "E_PAIR_KEY": {
+   "severity": "error",
+   "meaning": "entrance_pair / exit_pair where the label names one pair, or a key the label does not name"
+  },
+  "E_DATA_FILE": {
+   "severity": "error",
+   "meaning": "a data file that cannot be read, or has fewer columns than its roles"
+  },
+  "E_NOT_BUILT": {
+   "severity": "error",
+   "meaning": "a value the table takes and this engine cannot yet set up (a unit, frame or form of a later step)"
+  },
+  "E_THM_RELATIVISTIC": {
+   "severity": "error",
+   "meaning": "a THM data set or extrapolation in a project with relativistic kinematics"
+  },
+  "E_THM_COVARIANCE": {
+   "severity": "error",
+   "meaning": "a covariance file on a THM data set (its chi^2 is its experiment's profiled one)"
+  },
+  "E_FOLD_CONFLICT": {
+   "severity": "error",
+   "meaning": "data sets sharing a target with a free parameter differ in beam, detector or quadrature"
+  },
   "W_NOT_MEASURABLE": {
    "severity": "warning",
    "meaning": "a data set of a quantity that is computed for tests and comparison, not measured"
+  },
+  "W_BROAD_LEVEL": {
+   "severity": "warning",
+   "meaning": "a resonance strength of a level with Gamma / E_r > 1 %: eq. (8) and the area of the resonance differ"
+  },
+  "W_NEARBY_LEVEL": {
+   "severity": "warning",
+   "meaning": "a resonance strength of a level with another level of its J^pi within 10 Gamma"
   }
  }
 }

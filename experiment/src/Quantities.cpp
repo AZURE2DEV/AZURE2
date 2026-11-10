@@ -408,7 +408,7 @@ Quantity ResonanceStrength() {
   q.recordKinds = kDatum;
   q.engineUnit = "eV";
   q.units = {OneUnit("eV"), OneUnit("meV"), OneUnit("ueV"), OneUnit("keV")};
-  q.reaction = {0, "one reaction"};
+  q.reaction = {R::kNoTotal, "one reaction, no [total] exit"};
   q.fields = {Requires("level"), Requires("J"), Requires("reaction")};
   q.tree = "omega Gamma_a Gamma_b / Gamma at E_r";
   q.exfor = {",WID/STR", "PAR,WID/STR"};
@@ -468,6 +468,7 @@ Quantity BranchingRatio() {
   q.recordKinds = kDatum;
   q.engineUnit = "1";
   q.units = {OneUnit("1"), OneUnit("%")};
+  q.reaction = {R::kNoTotal, "one reaction, no [total] exit"};
   q.fields = {Requires("level"), Requires("J"), Requires("reaction")};
   q.tree = "Gamma_b / Gamma";
   return q;

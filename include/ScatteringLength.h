@@ -97,8 +97,26 @@ struct Constraint {
  */
 int ReadConstraints(CNuc *compound, const Config &configure, std::vector<Constraint> &constraints);
 
+/// The channel spin(s) and weights of a constraint from its pair key and s (s < 0: the coherent combination), as the
+/// <scatteringLengths> reader and the <modelData> reader (ModelData.cpp) resolve them.  "" or the reason it cannot be.
+std::string ResolveConstraint(CNuc *compound, Constraint &c);
+
 /// Model value of a constraint (fm).
 complex ConstraintValue(CNuc *compound, const Config &configure, const Constraint &c);
+
+/// Residuals of one constraint, appended to r: (Re a - value)/sigma and (Im a - imValue)/imSigma for each
+/// nonzero sigma; none when it is inactive.
+void ConstraintResiduals(CNuc *compound, const Config &configure, const Constraint &c, std::vector<double> &r);
+
+/*!
+ * Gradient of one constraint's chi2 (row = -1) or of its row-th residual (0: the first of Re, Im that it has) into
+ * accum.  Returns false where Adjoint does.
+ */
+bool ConstraintGradient(CNuc *compound, const Config &configure, const Constraint &c, GradAccum &accum,
+                        const vector_matrix_r *shiftDeriv, int row);
+
+/// Number of residual rows of one constraint (0, 1 or 2).
+int NumResiduals(const Constraint &c);
 
 /// Residuals of the active constraints: (Re a - value)/sigma and (Im a - imValue)/imSigma for
 /// each nonzero sigma, in constraint order.

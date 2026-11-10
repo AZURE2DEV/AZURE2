@@ -22,8 +22,8 @@
 
 #include "azure2/convert/ExtrapLine.h"
 #include "azure2/convert/SegLine.h"
+#include "azure2/convert/SpecsFromOldLines.h"
 #include "TargetEffect.h"
-
 #include <cstdio>
 #include <sstream>
 #include "azure2/io/Convert.h"
@@ -186,6 +186,7 @@ void apply_options(Config &config, const RuntimeOptions &opt) {
 
 }  // namespace
 
+void AddModelData(py::dict &terms, const AZUREAPI &api, const vector_r &free);  // pybind_model_data.cpp
 class Session {
  public:
   Session(const std::string &configfile, const RuntimeOptions &opt) :
@@ -631,6 +632,7 @@ class Session {
     d["shift"] = to_array(seg.shift);
     d["shift_sqrt"] = to_array(seg.shiftSqrt);
     d["shift_fn"] = to_array(seg.shiftFn);
+    AddModelData(d, *api_, v);  // the <modelData> data, one record each
     return d;
   }
   py::array_t<double> calculate_residual_jacobian_rwa(const py::array_t<double, py::array::forcecast> &p,
@@ -917,7 +919,6 @@ PYBIND11_MODULE(_azure2, m) {
 
   py::register_exception<AZURE2Error>(m, "AZURE2Error", PyExc_RuntimeError);
   BindPhysics(m);
-
   BindThm(m);  // pybind_thm.cpp: the engine's reading of a <thm> block, for AzrModel
 
   m.def(
@@ -981,9 +982,8 @@ PYBIND11_MODULE(_azure2, m) {
         .def("common_ending", [](const Document &d) { return py::bytes(d.CommonEnding()); })
         .def("format", [](const Document &d) { return azure2::io::FormatOf(d); });
   }
-  // One <segmentsData> line as the engine reads it (SegLine; docs/upgrade/project.md section 5): pyazr's datasets
-  // build their Segment from this, so pyazr and AZURE2 read every segment line the same way.  Components are
-  // (entrance, exit, angle or None, scaling or None) from SegLine's component list.
+  // One <segmentsData> line as the engine reads it (SegLine, project.md section 5), for pyazr's datasets.  Components
+  // are (entrance, exit, angle or None, scaling or None) from SegLine's component list.
   m.def(
       "parse_segment_line",
       [](const std::string &line) {
@@ -1081,15 +1081,15 @@ PYBIND11_MODULE(_azure2, m) {
         return d;
       },
       py::arg("line"), "One <segmentsTest> line as AZURE2 reads it (ExtrapLine).");
-  // One <targetInt> line as the engine reads it (TargetEffect; its constructor reads no file and no Config field),
-  // for pyazr's screening, Doppler and density views (project.md section 5).
+  // One <targetInt> line as the engine reads it (old-line adaptor + TargetEffect), for pyazr's effect views.
   m.def(
       "parse_target_effect_line",
       [](const std::string &line) {
         std::ostringstream sink;
         Config scratch(sink);
         std::istringstream in(line);
-        TargetEffect te(in, scratch);
+        bool readFailed = false;
+        TargetEffect te(azure2::convert::TargetEffectSpecFromOldLine(in, readFailed), scratch);
         py::dict d;
         d["screening"] = te.HasScreening()
             ? py::object(py::make_tuple(te.GetScreeningNominal(), te.IsScreeningVaried(), te.GetScreeningSigma()))

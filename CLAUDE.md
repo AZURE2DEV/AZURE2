@@ -214,7 +214,8 @@ bypassed. Run it first (under a second), then the build and the tests of "Defini
    [check 11: no term is added outside `src/Objective.cpp`].
 2. The analytic gradient agrees with finite differences (`AZURE_GRAD_CHECK`, a pyazr test); the CLI and pyazr give
    the same χ² (`tests/pyazr/objective_test.py`).
-3. Its total is reported in `chiSquared.out` through `storeTotals`; docs `output_files.rst`.
+3. Its total goes into `Results::objective` (the evaluation's buffer) and from there to `chiSquared.out`; docs
+   `output_files.rst`.
 
 **A physics function or an observable.**
 1. In `physics/` (no engine headers, no GSL: check 8), with its unit test in `physics/tests/` against an
@@ -223,6 +224,18 @@ bypassed. Run it first (under a second), then the build and the tests of "Defini
 3. Constants come from `physics/include/azure2/physics/Constants.h` [check 10: no copy with another value], masses
    from `pyazr/data/mass_1.mas20` (`pyazr.masses`; the engine's THM nuclei are generated from it and checked by
    `pyazr_thm_nuclide_masses`).
+
+**A model-only datum** (no beam energy: a resonance strength, a width, an ANC; `docs/upgrade/data_model.md` §4, M10).
+The objective gets no new term: T9, `ModelDataTerm`, evaluates every row of `<modelData>`.
+1. Its formula in `physics/` (`ResonanceQuantities.h` is the pattern) with a unit test against numbers by hand and its
+   derivatives against central differences; the binding (`api/src/pybind_physics.cpp`).
+2. Its row in the table (`experiment/src/Quantities.cpp`, `q.recordKinds = kDatum`; the recipe "A format-3 quantity")
+   and in `ModelQuantities()` (`experiment/src/ModelDatum.cpp`), with what `BuildModelData` must find in `<levels>`
+   (level, pairs, channel) and its refusals (a code each, recipe "A format-3 diagnostic code").
+3. Its case in `LevelValue` (`src/ModelData.cpp`), from the observed slots `CNuc::ObservedOfFitValues` fills (never
+   formal parameters); its gradient comes with it (central differences over the level's J^π group).
+4. A function `test_<quantity>` in `tests/model_data/check.sh` against a value by hand [check 27: every datum
+   quantity of the table has its `ModelQuantities()` row and a test named after it]; `reference/data_formats.rst`.
 
 **A CLI flag.** `parseOptions`, `printHelp` and `docs/source/reference/command_line.rst` [check 1].
 

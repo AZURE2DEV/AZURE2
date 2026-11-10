@@ -12,6 +12,7 @@
 
 #include "azure2/io/LevelRows.h"  // the <levels> line (format 3 keeps that grammar); the converter reads only the pair columns
 #include "azure2/convert/PriorCentreRow.h"
+#include "azure2/convert/SpecsFromOldLines.h"
 #include "azure2/convert/ThmLines.h"
 
 namespace azure2 {
@@ -118,6 +119,9 @@ std::string ReadOldProject(const io::Document &doc, OldProject &out) {
       const int d = parsed->isDiff();
       if (d == 19) return "data segment #" + std::to_string(key) + " uses isDiff 19 (THM angular-distribution coefficients), which the old engine refused";
       if (d == 8 || d == 18) return "data segment #" + std::to_string(key) + " uses isDiff " + std::to_string(d) + " (polarization x cross section), which the old engine refused";
+      if (parsed->isAdvanced() == 1 && parsed->operationType() != 0 && parsed->operationType() != 1)
+        return "data segment #" + std::to_string(key) + ": its composite block has operation type " +
+               std::to_string(parsed->operationType()) + ", which is neither 0 (sum) nor 1 (ratio)";
       OldDataLine dl;
       dl.key = key;
       dl.docLine = (int)i + 1;
@@ -143,6 +147,9 @@ std::string ReadOldProject(const io::Document &doc, OldProject &out) {
       if (parsed->hasCovariance()) return "test segment #" + std::to_string(key) + " carries a covariance block, which the old engine refused";
       if (d == 9 || d == 19) return "test segment #" + std::to_string(key) + " uses isDiff " + std::to_string(d) + " (angular coefficients, a data-segment type), which the old engine refused";
       if (d == 8 || d == 18) return "test segment #" + std::to_string(key) + " uses isDiff " + std::to_string(d) + " (polarization x cross section), which the old engine refused";
+      if (parsed->isAdvanced() == 1 && parsed->operationType() != 0 && parsed->operationType() != 1)
+        return "test segment #" + std::to_string(key) + ": its composite block has operation type " +
+               std::to_string(parsed->operationType()) + ", which is neither 0 (sum) nor 1 (ratio)";
       OldTestLine tl;
       tl.key = key;
       tl.docLine = (int)i + 1;
@@ -247,6 +254,15 @@ std::string ReadOldProject(const io::Document &doc, OldProject &out) {
       const PriorCentreRow row = ReadPriorCentreRow(trimmed);
       if (row.kind == PriorCentreRow::NotARow) continue;
       if (row.kind == PriorCentreRow::Malformed) return "<parameterSettings> row \"" + trimmed + "\" cannot be read";
+      {
+        // The engine's reading of the row (its whole name against the names of the <segmentsData> lines): a row it
+        // refuses is refused here with its reason.
+        experiment::SpecList<experiment::DatasetSpec> lines;
+        lines.items.resize(out.data.size());
+        std::istringstream one("<parameterSettings>\n" + trimmed + "\n");
+        const std::string refusal = PriorCentresFromOldRows(&one, lines);
+        if (!refusal.empty()) return refusal.substr(std::strlen("ERROR: "));
+      }
       if (row.kind == PriorCentreRow::Norm) {
         if (row.centre <= 0.) return "<parameterSettings> row \"" + trimmed + "\": a normalization prior centre must be positive";
         out.normCentre[row.segment] = row.centre;

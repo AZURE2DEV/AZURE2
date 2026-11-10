@@ -1886,7 +1886,7 @@ class azure2:
         return {"norm": seg("norm"), "shift": seg("shift"), "shift_sqrt": seg("shift_sqrt"),
                 "shift_fn": seg("shift_fn"),
                 "park": float(value.get("Park J > 0", 0.0)), "abundance": float(value.get("abundances", 0.0)),
-                "scattering_length": float(value.get("scattering lengths", 0.0)),
+                "scattering_length": float(value.get("model data", 0.0)),
                 "screening": float(value.get("screening priors", 0.0)),
                 "density": float(value.get("density priors", 0.0)),
                 "doppler": float(value.get("Doppler priors", 0.0)),

@@ -4,15 +4,15 @@ KLGroup.cpp ALevel.cpp Decay.cpp AngCoeff.cpp MGroup.cpp
 AMatrixFunc.cpp  DoubleFactorial.cpp EigenFunc.cpp  NFIntegral.cpp
 ECIntegral.cpp ECTable.cpp ECAmplitudeCache.cpp MatrixInv.cpp LevelMatrixSolver.cpp Profile.cpp ChannelSpace.cpp
 PPair.cpp AZURECalc.cpp Objective.cpp
-ECMGroup.cpp ReactionRate.cpp AZUREMain.cpp EData.cpp DataCovariance.cpp ShftFunc.cpp ScatteringLength.cpp
+ECMGroup.cpp ReactionRate.cpp AZUREMain.cpp EData.cpp DataCovariance.cpp ShftFunc.cpp ScatteringLength.cpp ModelData.cpp CNucObserved.cpp
 RMatrixFunc.cpp AZUREOutput.cpp  EDataIterator.cpp   TargetEffect.cpp
 AZUREParams.cpp EPoint.cpp Interference.cpp CNuc.cpp Equation.cpp
-JGroup.cpp Config.cpp ESegment.cpp KGroup.cpp IntegratedFermiFunc.cpp
+JGroup.cpp Config.cpp ESegment.cpp ModelPass.cpp KGroup.cpp IntegratedFermiFunc.cpp
 EffectiveCharge.cpp  GSLException.cpp ParameterLimitsManager.cpp
 AdaptiveIntegrationGrid.cpp NuclearPotentialManager.cpp AZUREGrad.cpp ThmFunc.cpp
 THMMatrixFunc.cpp ThmVertexBoundary.cpp ThmNumerics.cpp EDataThm.cpp ConfigThm.cpp ThmExperiment.cpp ThmLineshape.cpp ThmDistortion.cpp ThmOptical.cpp ThmDwVertex.cpp ThmAngular.cpp CovarianceBand.cpp PriorCovariance.cpp ParameterLabel.cpp PolarizationFunc.cpp ChannelFunc.cpp CoulombTable.cpp
 CNucSystem.cpp CNucLevelParameters.cpp CNucExternalCapture.cpp CNucReport.cpp CNucChecks.cpp
-CNucTransformMessages.cpp)
+CNucTransformMessages.cpp OldLineSetup.cpp)
 
 # Add MCMC sources when MCMC is enabled
 if(USE_MCMC)
@@ -90,13 +90,13 @@ endif (BUILD_LIBRARY)
 # CNuc -> System adapter (CNucSystem.cpp) uses it so far.
 # azure2_experiment (experiment/: model expressions, lab -> c.m. frames, the format-3 table of AZURE2 --schema
 # and the binding's schema()) uses physics/ and io/'s Record.h only and is below the engine likewise.
-# azure2_convert_lines (convert/: the old line parsers, header-only) until the format-3 reader replaces the old
-# sections (step 3b); the engine includes them from convert/ so that each old grammar has one parser.
+# azure2_convert_specs (convert/: the old sections as set-up specs, with the old line parsers it is built on) until
+# step 3d deletes the old sections; the engine reads an old project only through it (src/OldLineSetup.cpp).
 target_link_libraries(AZURE2Core PUBLIC
     azure2_physics
     azure2_io
     azure2_experiment
-    azure2_convert_lines
+    azure2_convert_specs
     Minuit2::Minuit2
     ${GSL_LIBRARIES}
     ${BLAS_LIBRARIES}

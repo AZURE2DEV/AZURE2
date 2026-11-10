@@ -31,8 +31,8 @@ with g the cotangent of the node (∂χ²/∂m for the root). The transmission i
 yield F = Y₀ = (s/s_t)(1 − exp(−n s_t)); n is the sample thickness (atoms/b, a parameter), s = Σ_q w_q v_q the
 weighted sum of the reaction terms and s_t the total term of a yield, with weights w_q = (c_q J_q,i) a_q.
 
-**Order of operations.** Every value is formed as `src/ESegment.cpp` forms it today (CalculateTheoreticalCrossSection
-1698–1822, TransformedValue 1605–1696, Transmission, YieldY0, TermFrameFactor 1487–1493): a SUM starts from the base
+**Order of operations.** Every value is formed as the model pass forms it today (`src/ModelPass.cpp`: ComposeModelValue,
+TransformedValue; `src/ESegment.cpp`: Transmission, YieldY0, TermFrameFactor): a SUM starts from the base
 term and adds the terms in component order; a term is (c J) v and then times a; a ratio is num/den times (J_den/J_num);
 inside a transform the weight w = (c J) a is formed first and then multiplied by v, and s starts from 0. The test
 `experiment_expression` compares each node and each composition with these expressions written out, bit for bit, on
@@ -125,6 +125,7 @@ here, as tables:
 | `src/ValueParsers.cpp`, `ReactionParser.cpp`, `ColumnsGrid.cpp` | the one parser of each value type (`Parsers.h`), producing the typed values of `Values.h` |
 | `src/Validate.cpp` | `Schema::Validate`: every problem as a `Diagnostic` (code, line, column, record, field, found, allowed, message, syntax-only fix) |
 | `src/SchemaJson.cpp`, `Json.cpp` | `Schema::ToJson`: the table as the JSON of §6.1 (`AZURE2 --schema`, `pyazr.schema()`) |
+| `src/ModelDatum.cpp` | `BuildModelData`: a validated `datum` record as a `ModelDatum`, its level and pairs found in `<levels>` given as plain tables (`LevelInfo`, `PairInfo`), with the refusals and warnings that need them; `ModelQuantities()`, the quantities the engine evaluates (`src/ModelData.cpp`) |
 
 `Schema::Validate(sections)` takes the records of each format-3 section and returns `ValidationResult{diagnostics,
 records}`: each `ValidatedRecord` holds its fields as typed `Value`s (numbers keep the text written), its quantity row,

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Composite segments: a zero RATIO denominator, the component scaling factor, and the route pyazr runs.
 
-1. RATIO with a zero denominator (ESegment::CalculateTheoreticalCrossSection).  tests/ratio_frame/models/ratio_data.azr
+1. RATIO with a zero denominator (azure2::EvaluateModelPoint).  tests/ratio_frame/models/ratio_data.azr
    (2->3 over a fixed-angle denominator) with the denominator moved to exit pair 5 and every pair-5 width set to 0, so
    the denominator cross section is exactly 0.  Before 2026-11-01 each such point was 0, which a fit compared with the
    datum as if it were a calculated ratio; now it is NaN and a warning is printed once.  Control: the same model with

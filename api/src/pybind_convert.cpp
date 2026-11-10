@@ -1,6 +1,7 @@
 // Format 3 for pyazr (docs/upgrade/project_format3.md sections 6.2, 8): the validation of a format-3 text, as
 // AZURE2 --validate, and the conversion of an old project to format 3, as AZURE2 --convert ... --to 3.  Both are
-// convert/'s (CheckFormat3Text, ConvertToFormat3); pyazr only hands texts over and parses the JSON.
+// experiment/'s reading path (ReadFormat3Text: records, validation, build) and convert/'s ConvertToFormat3; pyazr
+// only hands texts over and parses the JSON.
 
 #include <map>
 #include <string>
@@ -9,6 +10,7 @@
 #include <pybind11/stl.h>
 
 #include "azure2/convert/Convert.h"
+#include "azure2/experiment/ProjectReader.h"
 
 namespace py = pybind11;
 
@@ -18,7 +20,10 @@ void BindConvert(py::module_ &m) {
       [](const std::string &text, const std::string &fileName) -> py::tuple {
         const std::string refusal = azure2::convert::NotFormat3Message(text, fileName);
         if (!refusal.empty()) return py::make_tuple(refusal, std::string("[]"), 0);  // section 8.4
-        const azure2::convert::Format3Check c = azure2::convert::CheckFormat3Text(text, fileName);
+        azure2::experiment::Format3ReadOptions read;
+        read.fileName = fileName;
+        // data files as the engine opens them: relative to the working directory
+        const azure2::experiment::Format3Project c = azure2::experiment::ReadFormat3Text(text, read);
         std::string json = "[";
         for (std::size_t i = 0; i < c.diagnostics.size(); i++) json += (i ? ",\n " : "\n ") + c.diagnostics[i].ToJson();
         json += c.diagnostics.empty() ? "]" : "\n]";
@@ -26,7 +31,7 @@ void BindConvert(py::module_ &m) {
       },
       py::arg("text"), py::arg("file_name"),
       "Validate a format-3 project text (AZURE2 --validate): (refusal of a format-1/2 text or '', the diagnostics as a "
-      "JSON array, the number of checks left to the format-3 reader because they need <levels> or the data files).");
+      "JSON array, the number of the table's build checks not made: those of model data, which are built in a later step).");
   m.def(
       "convert_format3_text",
       [](const std::string &text, const std::string &projectDir, const std::map<std::string, std::string> &answers,

@@ -2,6 +2,220 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-10 (director, day) — Phase 4: the third wave merged (specs, `Schema::Build`, model data, one model pass)
+
+**Merged into `feature/upgrade-4-data`** (`--no-ff`, in this order): G1 `feature/upgrade-4-format3-reader` at 7342c790
+(d1711801: the set-up consumes specs, S9); E `feature/upgrade-4-model-data` (5d96d069: `<modelData>`, `ModelDataTerm`,
+S15); F `feature/upgrade-4-model-pass` (f7463bd8: S1, the rest of S2, S4); G2 `feature/upgrade-4-format3-reader` at
+2f57af31 (fe181256: `Schema::Build`). Their entries are below. **Procedure since the second wave:** every merge is
+rehearsed in a scratch worktree, the merged tree is built and verified there, and the tree committed is that tree
+(`git diff --cached` against the rehearsal is empty), so no merge commit is unbuilt.
+
+**The merged head as a whole** (fe181256; build `work/b-trial2`, 0 warnings): 179 × 3 identical to the Phase 3 head
+(689 + 662 + 689 files); `ctest -LE slow` 155/155; `tests/run_tests.sh` 137 passed / 0 failed; calculations at 1 and 8 threads
+12/12 identical; T2 with a `<modelData>` section identical at 1 and 8 threads in the three bases and identical to the tree
+before the model pass; spec-equivalence: 189 files, 186 converted, 183 equal, 3 recorded, 0 differ (one value moved
+by one ulp makes 119 files fail).
+
+**What the director changed at the merges** (each in its merge commit's message):
+- Consistency checks: **27** is the model data's (every datum quantity is evaluated and tested), **28** the model
+  pass's (one composition, one residual; it was 27 on its branch).
+- `ModelDataTerm` writes its totals to `Results::objective` (`scatteringLength`; `modelData`, `hasModelData` are new
+  members); `chiSquared.out` reads them there. Nothing the objective computes is stored in the data set any more.
+- The diagnostic codes of the model data and of `Build` are one list (63 codes); `E_UNKNOWN_PAIR` and
+  `E_AMBIGUOUS_PAIR` exist once and have a case in both tests.
+- `ESegment` lost both the stored χ² (F) and the grid steps (G2: an extrapolation's grid is a list).
+- `tests/schema/schema_v3.json` and `docs/source/reference/format3.rst` regenerated from the merged build;
+  `tests/consistency/file_sizes.tsv` set to the merged counts at each merge (lowered: `AZUREAPI.cpp` 2033,
+  `AZURECalc.cpp` 2075, `AZURECalcMCMC.cpp` 1434, `EData.cpp` 5571, `ESegment.cpp` 1446).
+
+**Decisions of the director** (the briefs of the next wave carry them):
+- G1: a composite block whose operation type is neither sum nor ratio is refused (the old engine ran it
+  inconsistently). Shared normalization and energy scale stay group labels with the engine's leader rule until S7.
+- E: the gradient of the level quantities (ωγ, widths, energies, branching, ANC) is a central difference of the
+  observed values (about 70 µs per evaluation on T2 against 77 ms for the data); the scattering lengths keep their
+  exact adjoint. `resonance_strength` and `branching_ratio` refuse a `[total]` exit.
+- F: the API's `UpdateSegments` will return the model value for E1-only / E2-only segments (today the leaf σ, while
+  χ² uses σ_E1 / σ_E2) — a behaviour change, with a test, in brief I. The MCMC snapshot writes the model value for
+  such segments (accepted; test in brief I). Covariance seeds move into `Results` with S5.
+- G2: a varied follower of a norm group keeps its own fixed parameter in the engine until S7 and is named
+  `<record>.value[<data set>]`; the converter's name map must be injective (test); `varname[50]` becomes a string.
+  `bad_key.azr` and `bad_sample.azr` stay recorded differences; `M_thick.azr` is a converter defect (brief G-3).
+  Units other than the engine's are refused by `Build` (`E_NOT_BUILT`) until the units step. Data files are read
+  relative to the working directory; `--describe` will print the resolved paths.
+
+**Defects found and not yet fixed** (owner in brackets):
+- A fixed energy shift changed between evaluations leaves a pooled working copy different from a fresh one
+  (`natural_neon`: χ² 5589.035 pooled, 3342.510 fresh, already at 041edabf) [brief I, part 1].
+- `tests/sum_lab_frame/sum_data.azr` and `tests/ratio_frame/ratio_data.azr` have no committed data [brief I].
+- `EPoint::DopplerAppliedScope` sets a flag on the base point during an evaluation; `src/ModelPass.cpp` has a
+  warn-once `static std::atomic<bool>` [Phase 6, mutable statics].
+- `CNuc::ObservedOfFitValues` writes the observed slots of the levels during an evaluation [Phase 6 / S16].
+- Pair labels are built in three places; `Build` has its own pair table (`PairRow`) beside the model data's
+  `PairInfo` [brief G-3, part A].
+
+**For the PI to see** (behaviour a user can meet; additions to the list of the entry of this morning):
+- New refusals: a composite block with an operation type other than sum or ratio; β-delayed segments with target
+  integration, a beam profile, screening or exit −1.
+- The API value of E1-only / E2-only segments (above).
+- Format 3: the follower parameter name; units other than the engine's refused for now; data-file paths relative to
+  the working directory.
+
+**Waiting for the PI** (unchanged): the two atomic increments in the vendored Minuit2; M3 (b); the electron mass in
+`EPoint.cpp` and the proton mass in `ECIntegral.cpp`; whether a spin-orbit hybrid potential is wanted. No ASan
+runtime on this host.
+
+**Running now** (Opus agents from fe181256, 3 threads each; briefs in `/data0/skowrons/AZURE2-upgrade/work/briefs/`):
+- H, `feature/upgrade-4-expr` (`wt-expr`), `H_expression_pass.md`: S10 (the model pass evaluates the expression
+  tree; `--print-predictions`) and S11 (the gradient through `backward`).
+- I, `feature/upgrade-4-plan` (`wt-plan`), `I_plan.md`: the follow-ups of the model pass (fixed-shift history, API
+  value, snapshot test, covariance seeds), then S5 (the calculation plan; one writer per slot).
+- G3, `feature/upgrade-4-format3-reader` (`wt-fmt3`), `G3_engine_runs_format3.md`: the model data joined to the
+  reader, the parameter-name stems, the engine runs a format-3 file, `--describe`, the converted-tree gate.
+
+**Then.** S7 `Measurement` (after S5; removes the follower parameters); 3c (pyazr's model on records); 3d (the tree
+converted, the old path deleted); units in `Build` with the new quantities — ratio to Rutherford/Mott (S14), S
+factor (with the `nds.py` mass fix), yields per charge; S12, S13, S16; extrapolation grids (list, file, adaptive);
+CNuc 6b and 7. Merge `origin/dev` only when the reconstruction is complete.
+
+## 2026-11-10 (late morning) — format 3, step 3b-1, G2: records produce the engine's specs (`feature/upgrade-4-format3-reader`)
+
+**Done.**
+- `Schema::Build(validated records, pairs of <levels>, options) -> BuiltProject` (`experiment/include/azure2/experiment/Build.h`,
+  `src/Build.cpp`, `src/BuildEffects.cpp`): data sets, extrapolations, shared `normalization`/`energy_scale` (the record's
+  values written into every member; a scale's function only on its first active member, as `EData::ResolveShiftFunctions`
+  requires), effects (one `TargetEffectSpec` per distinct target/beam/detector/quadrature/fold_windows, ordered by the first
+  of its records), sample thicknesses, abundances (one row per isotope and compound nucleus its data sets reach), THM
+  membership (`ThmMembershipSpec`).  Reactions resolved against the pairs (states to the digits written; §3.5 pair-key rule).
+- Build diagnostics with table codes and a test each (`experiment/tests/build_test.cpp`): `E_UNKNOWN_PAIR`, `E_AMBIGUOUS_PAIR`
+  (names and wording of the model-data branch), `E_PAIR_KEY`, `E_DATA_FILE`, `E_NOT_BUILT` (what the table takes and this
+  engine cannot set up yet: units other than the engine's, c.m. or file/adaptive grids, column layouts, epochs, ...),
+  `E_THM_RELATIVISTIC`, `E_THM_COVARIANCE`, `E_FOLD_CONFLICT`; `E_FIELD_NOT_APPLICABLE` for a phase shift's (J, l, s).
+- The reading path `ReadFormat3Text/Project` (`experiment/.../ProjectReader.h`, library `azure2_experiment_reader`, links io/)
+  replaces convert/'s `CheckFormat3Text`; `AZURE2 --validate` and `pyazr.validate` build too (data files relative to the
+  working directory, as the engine opens them); the converter's self-check stays validation only.
+- `ExtrapolationSpec` holds its grid as lists (`energies`, `angles`): the old adaptor fills them by the old accumulating loops,
+  `Build` by decision F10; `EData::MakePoints` iterates the lists (`ESegment::GetEStep/GetAStep` deleted).
+- Spec-equivalence ctest `convert_spec_equivalence` (all 189 files: 186 convert, 183 equal, 3 recorded, 0 differ; rules in its
+  header; `AZURE2_SPEC_INJECT=1` shows it failing).
+- Converter: targets with a screening U_e or a density/temperature fit form are never merged (each old line had its own
+  parameter; tests/screening_6li/bare.azr had three merged); `PairLabel` writes a light particle's excitation; an existing
+  `<modelData>` section receives the converted `<scatteringLengths>` rows (one section); the `pair` value accepts `n[0.3]+20Ne`.
+
+**Verified** (build `work/b-fmt3`, 0 warnings, 3 threads): 179 × 3 against `tab-p3f` 689 / 662 / 689 identical (tag
+`tab-fmt3b`); `ctest -LE slow` 149/152 then the 3 failures fixed (a test's code list, a note's text, the data-file
+directory of `pyazr_validate`) and those plus `repo_consistency` rerun: pass; `tests/run_tests.sh` 135 passed, 0 failed;
+consistency checks pass.
+
+**Not done (next):** G2 item 4 (parameter-name stems; a norm-group follower has its own fixed parameter in the engine, which
+the converter's map sends to the same new name as the leader's: a decision); `<modelData>`/`<scatteringLengths>` are not
+built (the director joins the model-data branch); G3 entirely (`Config::ReadConfigFile` on format 3, reading order and
+`ExitPairKeysInFile`, the five §8.5 refusals, `--describe`, the converted-tree gate, docs).
+
+## 2026-11-10 (day) — Phase 4 S1, S2 remainder and S4: one model pass (`feature/upgrade-4-model-pass`)
+
+**Done** (`data_model.md` S1, S2, S4; brief F).
+- **S2** (61dfec8c): a point an energy shift moves beyond the kinematic range keeps its load-time c.m. angle and factors
+  (`EPoint::KeepLoadFrame` / `RestoreLoadFrame`, H4); one component-key counter per `EData`, the two
+  `CreateComponentSegment` overloads one (H10); a beta-delayed spectrum is refused with exit -1 and with a target
+  integration, beam profile or screening on its line (`tests/beta_delayed_alpha/check.sh`; no tree project uses them).
+- **S1** (3ca0ff6b): `upgrade_history` (`tests/upgrade/history_test.cpp`) — fresh vs pooled copy, per-segment chi^2
+  and model values bit for bit, on T2, natural_neon, shift_sqrt (sqrt, shiftfn), 18O_p_a_thm and a generated 7Li(p,n)
+  point that a shift moves out of range; component keys of a second load.  On 041edabf it fails for H4 and H10 only.
+- **S4** (18e5ce8b): `Results::model` and `Results::objective`; `include/ModelPass.h` (`EvaluateModel*`, the one
+  combination `ComposeModelValue` in `src/ModelPass.cpp`, `TransformedValue` on a local vector, `DataResidual`);
+  every former `CalculateTheoreticalCrossSection` loop (20 calls) and residual (13 expressions) goes through it;
+  the objective's stored values (profiled norms, THM profiles, segment chi^2, totals) are in the buffer, the writer
+  and the API read them there (`EData::NormUsed`); stale reads of S3 (b) fixed (MarkFailed, failed sample terms,
+  automatic-tolerance E1/E2); check 28 (numbered 27 on the branch; renumbered at the merge); poison test widened (natural_neon, transmission + yield under a spread,
+  sample transmission).
+
+**Verified** (3 threads, work/b-model): 179 x 3 identical to tab-p3f after S2, S4 and the final commit
+(689/662/689); ctest -LE slow 150/150 (final tree); run_tests 136/136 (S4); calculations 1 vs 2 threads 12/12;
+T1/T3 fits (MIGRAD and gradient, 150 calls, 1 thread) every output file identical to 041edabf; T2 bench calc ~1.0-1.1 s,
+fit200 62-71 s on both, peak RSS 268 -> 271 MB (sizeof(EPoint) 816 -> 840 B).  Not run: 8 threads, TSan, slow ctests.
+
+**Still written into the data set by an evaluation** (not moved here): the covariance seeds (M^-1 r)_i
+(`ESegment::SetCovarianceSeed`, read by the gradient after `PrepareCovarianceSeeds`), and what the hand-over sets
+(norms, shifts, thicknesses, grids).  **Open:** a fixed energy-shift parameter changed in the vector (pyazr can) moves the
+points, and a copy that evaluated a nonzero value and then 0 does not give a fresh copy's result (history test with
+fixed shifts moved, on 041edabf; inferred cause: an inactive shift is not re-applied in
+`FillEnergyShiftsFromParamsImpl`) — not fixed.  The API's regular `UpdateSegments` branch returns the leaf sigma of an
+unassembled E1/E2-only segment, not its model value (unchanged; a decision).  Next: S5 (the plan).
+
+## 2026-11-10 (morning) — Phase 4 S15: `<modelData>`, `ModelDataTerm`, ωγ first; scattering lengths as its rows (`feature/upgrade-4-model-data`)
+
+**Done** (`data_model.md` §4, M10; `project_format3.md` §3.10; `objective.md` §5).
+- `physics/ResonanceQuantities.h`: ω, ωγ = ωΓ_aΓ_b/Γ, Γ_b/Γ, Γ = Σ|Γ_c| with partial derivatives (test
+  `physics_resonance_quantities`: T2 level 5 by hand, 12C+12C ω, derivatives against central differences); binding
+  `_azure2.statistical_factor`, `resonance_strength`, `branching_ratio` on arrays.
+- `experiment/ModelDatum.h`: `ModelQuantity`, `ModelQuantities()`, `BuildModelData(validated, LevelInfo[], PairInfo[])`
+  (no engine: `<levels>` as plain tables); codes `E_UNKNOWN_LEVEL`, `E_LEVEL_JPI`, `E_UNKNOWN_PAIR`, `E_AMBIGUOUS_PAIR`,
+  `E_NOT_A_CHANNEL`, `W_BROAD_LEVEL`, `W_NEARBY_LEVEL` (cases in `experiment_diagnostics`); table: strength and
+  branching ratio refuse a `[total]` exit (schema JSON and `format3.rst` regenerated, `schema_version` 3.0 kept).
+- Engine: `ALevel::IDs()` (the `<levels>` IDs of a level, from `CNuc::Fill`); `src/ModelData.cpp` reads
+  `<scatteringLengths>` (unchanged grammar) and `<modelData>` (`io::ReadRecords` + `Schema::Validate` +
+  `BuildModelData`), evaluates the level quantities from `CNuc::ObservedOfFitValues` (`src/CNucObserved.cpp`:
+  TransformOut's two steps without messages, N_f^−½ put back), gradient and rows by central differences through
+  `CNuc::SetFitLevelParameter`; scattering lengths exact as before. `ModelDataTerm` replaces `ScatteringLengthTerm` at
+  T9; the six hand-written sites (`AZURECalc` gradient, LM rows, GSL rows; `AZUREAPI` gradient, rows; MCMC ×2) call
+  `Objective::ModelDataGradient` / `AppendModelDataRows` / `ModelDataResiduals` / `ModelDataChi2`. Check 11 extended.
+- Outputs: `modelData.out` and the run log table; `Total-Model-Data-Chi-Squared` in `chiSquared.out` (with the
+  section); a project with model data and no segments runs. pyazr 2.16.0: `pyazr.model_data(model)` → `ModelDatum`
+  records (from `objective_terms_rwa()["model_data"]`); `penalties()["scattering_length"]` is the whole term
+  ("model data").
+- Recipe "A model-only datum" in `CLAUDE.md`, check 27 (every datum quantity has its `ModelQuantities()` row and a
+  `test_<quantity>`); docs `data_formats.rst`, `output_files.rst`, `chi_squared.rst`, `objective.md` §5.
+
+**Verified** (2 threads, `work/b-mdata`, 0 warnings): 179 × 3 against `tab-p3f` 689 / 662 / 689 identical;
+`scripts/check.sh --quick` (ctest −LE slow) 151/151; `tests/run_tests.sh` 136 passed, 0 failed (OMP 2, 2230 s; with
+`model_data`). Cost of the term on T2 (model data alone, 1 thread): about 70 µs per evaluation (Brune, Park), 360 µs
+(formal: the Brune iteration), against about 77 ms for a T2 evaluation; T2 fit200 (`--use-lm --max-calls=200`, 1
+thread, table on) 16.3–17.0 s without, 16.5 s with one strength. Not run: 1 vs 8 threads (budget), sphinx, `ctest -L slow`.
+
+**Open.** The converter writes `pair` labels without the light particle's excitation (`Builder::PairLabel`), which
+`BuildModelData` then matches to the ground-state pair or refuses; converting a format-2 file that already has a
+`<modelData>` section writes a second one (the reader takes the first only). Full report: `work/mdata/REPORT.md`.
+
+## 2026-11-10 (morning) — format 3, step 3b-1, G1: the engine's set-up consumes specs (S9) (`feature/upgrade-4-format3-reader`)
+
+**Done.**
+- `experiment/include/azure2/experiment/SetupSpecs.h` (plain, standard library only): `DatasetSpec`,
+  `ExtrapolationSpec` (sharing `ReactionSpec`: pair keys, an `Observable` instead of the isDiff code, THM, phase-shift
+  J/l/s, SUM/RATIO with `ComponentSpec` values, sample, total, transmission/yield), `TargetEffectSpec` (the data sets
+  it applies to as keys), `AbundanceRowSpec`/`AbundancesSpec`, and `SpecList<Spec>` (items in order, each with the
+  reader's warning/note, and the reason the reader stopped). The prior centres are fields of `DatasetSpec` (F14).
+- The engine takes specs: `ESegment(const DatasetSpec&)`, `ESegment(const ExtrapolationSpec&)` (one `SetReaction` for
+  the flags), `TargetEffect(const TargetEffectSpec&, const Config&)`, `EData::Fill(cfg, cnuc, const DataSpecs&)`,
+  `EData::MakePoints(cfg, cnuc, const ExtrapolationSpecs&)`, `EData::SetUpTargetEffects` (was `ReadTargetEffectsFile`),
+  `EData::ApplyPriorCentres` (was `ReadPriorCentres`), `CNuc::SetAbundances`. No engine constructor takes an old line;
+  the component list is a vector of values (the "Entrance: X, Exit: Y" string round trip is gone).
+- The old-line adaptor, temporary: `convert/`'s `SpecsFromOldLines.h/.cpp` (library `azure2_convert_specs`; the old
+  reading loops with their messages, words and order), called by `src/OldLineSetup.cpp` (the old-signature
+  `EData::Fill/MakePoints(cfg, cnuc)` and `CNuc::ReadAbundances`). Step 3d deletes both.
+- Converter: a `prior_centre` row the engine refuses (a name that matches no `<segmentsData>` line, e.g.
+  `segment_2_norm` with one line or `segment_01_norm`) is refused with the engine's reason (it was dropped silently);
+  a composite block with an operation type other than 0 / 1 is refused by both (new: the old engine ran it, as a
+  RATIO in `Fill` but not a ratio in the c.m. conversion).
+- Test `old_line_specs` (every isDiff code of data and test lines against the flags of the old constructors, written
+  by hand; components bit for bit; the reading refusals with their words; prior-centre names equal
+  `EData::SegmentParameterName`; abundances; `<targetInt>` keys); shown failing with an injected flag error. Three
+  `convert_constructs` cases.
+
+**Verified** (build `work/b-fmt3`, 3 threads, 0 warnings): 179 × 3 against `tab-p3f` 689 / 662 / 689 identical
+(run.log included; tag `tab-fmt3`); `ctest -LE slow` 150/150 (OMP 2, -j 1); `tests/run_tests.sh` 135 passed, 0 failed (OMP 3, 1832 s); consistency checks pass; size ratchet lowered
+(`EData.cpp` 5883 → 5590, `ESegment.cpp` 1816 → 1743, `CNuc.cpp` 1954 → 1931; `pybind_api.cpp` unchanged at 1299).
+
+**Not done in G1 (left for G2/G3):** a THM spec (the `<thm>` block is still read by `ThmExperiment`'s parser into
+`ThmExperiment`, which is already a plain struct; `ThmLines.h` stays included); `<scatteringLengths>` (brief E);
+shared norm / energy scale as records of their own (the spec carries the group labels, the engine still takes a
+group's values from its first member); parameter-name stems in the spec (G2 item 4); `src/AZURE2.cpp`'s pair check
+still reads `SegLine`/`ExtrapLine` (G3 reading order).
+
+**Behaviour that changed only for edge cases** (no test output moved): two `prior_centre` rows for the same parameter of
+an inactive line warn once (last row) instead of twice; a `<targetInt>` line shorter than its convolution
+coefficient count no longer reads past the vector (missing coefficients are 0).
+
 ## 2026-11-10 (director, morning) — Phase 4: the second wave merged (S3 b, parameter kinds, CNuc split, converter)
 
 **Merged into `feature/upgrade-4-data`** (`--no-ff`, in this order; each branch verified by the director's own runs

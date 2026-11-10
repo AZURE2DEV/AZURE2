@@ -99,7 +99,7 @@ written after them. Grids, modes and the `intEC.extrap` cache are azure2-calcula
 ## 4. Keys: how `<targetInt>` and parameter files find a segment
 
 - A `<targetInt>` entry is matched to a segment purely by its numeric key column, whatever section the line lives
-  in (`EData::ReadTargetEffectsFile`). `<segmentsData>` keys run 1..N in file order; `<segmentsTest>` keys are a
+  in (`EData::SetUpTargetEffects`). `<segmentsData>` keys run 1..N in file order; `<segmentsTest>` keys are a
   separate 1..M counter. Appending a test line (by hand, `add_extrapolation` or `set_extrapolations`) can land on a
   key an unrelated data segment claims for a target effect and inherit its convolution. Robust layout: mirror every
   `<segmentsData>` line into `<segmentsTest>` one to one, in the same order, inactive by default (remapping the

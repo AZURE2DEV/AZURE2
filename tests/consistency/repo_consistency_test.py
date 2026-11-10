@@ -312,14 +312,17 @@ for dirpath, _, files in os.walk(os.path.join(ROOT, "io")):
 #     M1; docs/upgrade/project_format3.md section 7.3, the director's decision of 2026-11-09): its own headers
 #     ("azure2/experiment/..."), physics/'s ("azure2/physics/..."), the one header "azure2/io/Record.h" (header-only
 #     structs) and the C++ standard library.  Its tests may also include io/'s reader ("azure2/io/..."): they read
-#     their fixtures as the engine will.  An engine header (EPoint.h, Config.h), another io/ header in the library
-#     or a system library makes the module depend on what it must not.
+#     their fixtures as the engine will; so may the one file of the reading path, src/ProjectReader.cpp (library
+#     azure2_experiment_reader, which links io/: records -> Validate -> <levels> pairs -> Build, step 3b), which the
+#     table library azure2_experiment does not contain.  An engine header (EPoint.h, Config.h), another io/ header in
+#     the table library or a system library makes the module depend on what it must not.
 for dirpath, _, files in os.walk(os.path.join(ROOT, "experiment")):
     for name in sorted(files):
         if not name.endswith((".h", ".hpp", ".cpp")):
             continue
         rel = os.path.relpath(os.path.join(dirpath, name), ROOT)
-        in_tests = rel.startswith(os.path.join("experiment", "tests") + os.sep)
+        in_tests = rel.startswith(os.path.join("experiment", "tests") + os.sep) or \
+            rel == os.path.join("experiment", "src", "ProjectReader.cpp")
         for inc in re.findall(r'^\s*#\s*include\s*([<"][^>"]+[>"])', read(rel), re.M):
             if inc.startswith('"') and inc[1:-1].startswith(("azure2/experiment/", "azure2/physics/")):
                 continue
@@ -414,17 +417,20 @@ if not ELEMENT_RUN.search(read("physics/src/Elements.cpp")):
     problems.append("check 10b: physics/src/Elements.cpp does not match the element pattern; update this check")
 
 # 11. One objective (docs/upgrade/objective.md): the chi^2 terms beyond the data points -- Park's wall, abundances,
-#     scattering lengths, target-effect priors, the data covariance -- are added in src/Objective.cpp, which every
+#     the model data (scattering lengths, <modelData>), target-effect priors, the data covariance -- are added in src/Objective.cpp, which every
 #     path (CLI fit, gradient, API, writer) asks.  A new path that adds one itself drifts from the rest the first time
 #     a term changes.  Allowed elsewhere: the files that define the terms, and the listed uses with their reason.
 PENALTIES = ("ParkNormPenalty", "AbundancePenalty", "AbundanceSumPenalty", "ScatteringLength::Chi2",
+             "ScatteringLength::Residuals", "ScatteringLength::Chi2Gradient", "ModelData::Chi2", "ModelData::Residuals",
+             "ModelData::Gradient", "ModelData::AppendRows",
              "ScreeningPenalty", "DensityPenalty", "DopplerPenalty", "ThicknessPenalty", "CovarianceChi2Correction")
-DEFINERS = {"src/Objective.cpp", "src/CNuc.cpp", "src/ScatteringLength.cpp", "src/EData.cpp", "src/ESegment.cpp",
-            "src/TargetEffect.cpp"}
+DEFINERS = {"src/Objective.cpp", "src/CNuc.cpp", "src/ScatteringLength.cpp", "src/ModelData.cpp", "src/EData.cpp",
+            "src/ESegment.cpp", "src/TargetEffect.cpp"}
 ALLOWED_PENALTY_USES = {
     # The MCMC splits the posterior: per-nucleus abundance priors are log-priors (CalculateLogPrior), so the
-    # likelihood carries only the sum-to-one term and the scattering lengths; Park's wall rejects the step outright.
-    ("src/AZURECalcMCMC.cpp", "AbundanceSumPenalty"), ("src/AZURECalcMCMC.cpp", "ScatteringLength::Chi2"),
+    # likelihood carries only the sum-to-one term (and the model data, Objective::ModelDataChi2); Park's wall rejects
+    # the step outright.
+    ("src/AZURECalcMCMC.cpp", "AbundanceSumPenalty"),
     ("src/AZURECalcMCMC.cpp", "ParkNormPenalty"),
     # The API's data chi^2 in residual form (EvaluateFilledChi2, the analytic gradient): T2 for its rows;
     # pyazr_objective checks it against the CLI's objective.
@@ -474,6 +480,34 @@ try:
                         "(after AZURE2 --schema > tests/schema/schema_v3.json if the table changed)")
 except (OSError, ValueError) as e:
     problems.append(f"check 18: {e}")
+
+
+# 27. Every model-data quantity is evaluated and tested (CLAUDE.md recipe "A model-only datum"; data_model.md M10): each
+#     quantity of the table for record kind datum (experiment/src/Quantities.cpp, q.recordKinds = kDatum) has its row
+#     in ModelQuantities() (experiment/src/ModelDatum.cpp: the engine's evaluation, src/ModelData.cpp, switches on it)
+#     and a test named after it, a shell function `test_<quantity>()` or a Python `def test_<quantity>(` under tests/.
+quantities_text = read("experiment/src/Quantities.cpp")
+datum_quantities = []
+for body in re.split(r"\nQuantity \w+\(\) \{", quantities_text)[1:]:
+    body = body.split("\n}\n", 1)[0]
+    m = re.search(r'q\.name = "(\w+)";', body)
+    if m and re.search(r"q\.recordKinds = kDatum;", body):
+        datum_quantities.append(m.group(1))
+if not datum_quantities:
+    problems.append("check 27: no datum quantities found in experiment/src/Quantities.cpp; update this test")
+evaluated = set(re.findall(r'(?m)^\s*\{"(\w+)", ModelQuantity::\w+\}', read("experiment/src/ModelDatum.cpp")))
+test_names = set()
+for dirpath, _, files in os.walk(os.path.join(ROOT, "tests")):
+    for name in files:
+        if name.endswith((".sh", ".py")):
+            text = open(os.path.join(dirpath, name), encoding="utf-8", errors="replace").read()
+            test_names.update(re.findall(r"(?m)^\s*(?:def )?test_(\w+)\s*\(", text))
+for q in datum_quantities:
+    if q not in evaluated:
+        problems.append(f"{q}: a datum quantity of the table without a row in ModelQuantities() "
+                        "(experiment/src/ModelDatum.cpp) and its evaluation in src/ModelData.cpp")
+    if q not in test_names:
+        problems.append(f"{q}: a datum quantity without a test named after it (test_{q} under tests/)")
 
 
 # 24. Every diagnostic code is declared, listed in the schema and tested (docs/upgrade/project_format3.md section 7.4):
@@ -527,7 +561,7 @@ PY_NAME_REGEX = re.compile(r're\.(?:match|fullmatch|search|compile)\(\s*[rbf]*["
 ALLOWED_NAME_TESTS = {
     # The <parameterSettings> "segment_<key>_norm|energy_shift prior_centre c" row, read and rewritten by pyazr's
     # document layer (AzrModel.prior_centres / set_prior_centres, SegmentSet) without an engine session, so without a
-    # parameter vector to look the name up in.  The engine matches the row's name whole (EData::ReadPriorCentres).
+    # parameter vector to look the name up in.  The engine matches the row's name whole (convert/'s PriorCentresFromOldRows).
     ("pyazr/datasets.py", "_PRIOR_CENTRE = re.compile("),
     ("pyazr/azrfile.py", "_PRIOR_ROW = re.compile("),
     # An example script that reads param.par without the engine (pyazr.transform only).
@@ -599,6 +633,29 @@ for rel in ("include/EPoint.h", "include/EData.h"):
         problems.append(f"{rel}: declares a results member ({' '.join(stmt.split())}); the buffer belongs to the "
                         "caller of the evaluation and is passed in (include/Results.h)")
 
+# 28. One model pass and one residual (docs/upgrade/data_model.md S4, include/ModelPass.h): what a data set predicts
+#     is combined in src/ModelPass.cpp only (ComposeModelValue, TransformedValue, reached through
+#     azure2::EvaluateModelPoint / EvaluateModelSegment / EvaluateModel), and the residual (f - y n)/(dy n) is written
+#     once (azure2::DataResidual, PointResidual).  A second combination loop or residual expression drifts from the
+#     first the next time either changes (before S4: 19 loops and 9 residuals).
+COMPOSITION = re.compile(r"(?<![\w:])(?:ComposeModelValue|TransformedValue|CalculateTheoreticalCrossSection)\s*\(")
+RESIDUAL = re.compile(r"[\w)\]]\s*-(?![>-])\s*[\w\->.()]*?(?:GetCMCrossSection\(\)|\bdataval\b|\bd\[\w+\])\s*\*\s*"
+                      r"[\w\[\].>()-]*?\b(?:n|norm|dataNorm|GetNorm)\b")
+for top in ("src", "api/src", "include", "tests/upgrade", "tests/reference"):
+    for name in sorted(os.listdir(os.path.join(ROOT, top))):
+        rel = f"{top}/{name}"
+        if not name.endswith((".cpp", ".h")) or rel in ("src/ModelPass.cpp", "include/ModelPass.h"):
+            continue
+        text = re.sub(r"//[^\n]*|/\*.*?\*/", "", read(rel), flags=re.S)
+        if COMPOSITION.search(text):
+            problems.append(f"{rel}: combines a segment's model value itself; call azure2::EvaluateModelPoint "
+                            "(include/ModelPass.h), the one model pass")
+        for m in RESIDUAL.finditer(text):
+            problems.append(f"{rel}: writes a data residual ({m.group(0).strip()}); use azure2::DataResidual or "
+                            "PointResidual (include/ModelPass.h)")
+if not RESIDUAL.search("double r = th - pt->GetCMCrossSection() * norm;"):
+    problems.append("check 28: the residual pattern no longer matches the form it guards; update this check")
+
 
 if problems:
     for p in problems:
@@ -606,4 +663,4 @@ if problems:
     print(f"{len(problems)} consistency problem(s)")
     sys.exit(1)
 print(f"repository consistent: {len(flags)} CLI flags, segment keywords, test registration, check.sh modes, pyazr version and exports, "
-      f"format-3 reference page, {len(declared)} diagnostic codes, file sizes")
+      f"format-3 reference page, {len(declared)} diagnostic codes, file sizes, one model pass and residual")

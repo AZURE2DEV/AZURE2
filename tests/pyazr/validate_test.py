@@ -106,7 +106,7 @@ with tempfile.TemporaryDirectory() as tmp:
         lines = [l for l in out.splitlines() if l.startswith(broken + ":") and l[len(broken) + 1:].split(":")[0].isdigit()]
         check("--validate broken (text): one line per error, file:line: record.field: ...",
               code == 2 and len(lines) == len(BROKEN_CODES) and all(": d1." in l or ": d2." in l for l in lines), out)
-        check("--validate: the note on the checks left to the format-3 reader", "were not run" in out)
+        check("--validate: the note on the checks skipped (model data, built in a later step)", "check(s) skipped" in out)
     if pyazr:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
@@ -140,7 +140,13 @@ with tempfile.TemporaryDirectory() as tmp:
               str(rep.get("parameters")))
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            check("convert_azr(to=3): the result validates", pyazr.validate(new) == [])
+            # data files are read relative to the working directory, as the engine opens them: the project's folder
+            here = os.getcwd()
+            os.chdir(os.path.dirname(old))
+            try:
+                check("convert_azr(to=3): the result validates and builds", pyazr.validate(new) == [])
+            finally:
+                os.chdir(here)
         try:
             pyazr.convert_azr(new, os.path.join(tmp, "again.azr"), to=3)
             check("convert_azr(to=3) of a format-3 file is refused", False)

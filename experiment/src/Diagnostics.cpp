@@ -78,8 +78,22 @@ const std::vector<DiagnosticCode> &DiagnosticCodes() {
       {kUnknownEpoch, E, "target@epoch where the target has no such epoch"},
       {kTargetKind, E, "a target whose kind the quantity does not take"},
       {kDegenerateNuisance, E, "efficiency and norm both free without a prior (F9)"},
+      // Model data against <levels>
+      {kUnknownLevel, E, "a datum's level ID that no active level of <levels> has, or two levels of its J^pi have"},
+      {kLevelJpi, E, "a datum's J^pi that is not the J^pi of the level with its ID (F13)"},
+      {kUnknownPair, E, "a reaction or pair of a datum that no pair of <levels> has (particles and states)"},
+      {kAmbiguousPair, E, "a reaction or pair of a datum that two pairs of <levels> have"},
+      {kNotAChannel, E, "a datum's pair (or pair, l, s) that is no channel of its level, or no s-wave channel spin of the pair"},
+      {kPairKey, E, "entrance_pair / exit_pair where the label names one pair, or a key the label does not name"},
+      {kDataFile, E, "a data file that cannot be read, or has fewer columns than its roles"},
+      {kNotBuilt, E, "a value the table takes and this engine cannot yet set up (a unit, frame or form of a later step)"},
+      {kThmRelativistic, E, "a THM data set or extrapolation in a project with relativistic kinematics"},
+      {kThmCovariance, E, "a covariance file on a THM data set (its chi^2 is its experiment's profiled one)"},
+      {kFoldConflict, E, "data sets sharing a target with a free parameter differ in beam, detector or quadrature"},
       // Warnings
       {kNotMeasurable, Severity::Warning, "a data set of a quantity that is computed for tests and comparison, not measured"},
+      {kBroadLevel, Severity::Warning, "a resonance strength of a level with Gamma / E_r > 1 %: eq. (8) and the area of the resonance differ"},
+      {kNearbyLevel, Severity::Warning, "a resonance strength of a level with another level of its J^pi within 10 Gamma"},
   };
   return table;
 }
