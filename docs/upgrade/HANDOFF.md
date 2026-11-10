@@ -2,6 +2,49 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-10 (night) — format 3, step 3a: named table rows, `--validate`, the converter old → format 3 (`feature/upgrade-4-convert`)
+
+**Done** (`project_format3.md` §§6.2, 8, corrections marked "step 3a").
+- **Named rows.** `Quantities.cpp`: one function per quantity filling `Quantity` by member; `Schema.cpp`: one function
+  per record kind, field helpers that say where a field applies and whether it is required (no positional booleans),
+  structured values from `Keyword`/`Unkeyed` alternatives; `Units.cpp` rows without the empty alias braces. Schema JSON
+  byte-identical (cmp). Recipes in `CLAUDE.md` and `experiment/README.md` show a complete row.
+- **Step-2 loose ends.** Column role `E_x` removed (no quantity takes it; `frame E_x` is a field value); §3.6 example
+  with step 2's corrections; §9.3 at 13.2652 MeV. Five constructs the old engine reads and the table refused, found by
+  converting the test tree, now taken (each with a case that fails when reverted): `norm profiled` on `thm global`,
+  legendre with apparatus, window columns on `dsigma_domega`, fixed norm on `beta_delayed_spectrum`, charged-pair
+  `scattering_length`. `schema_version` stays 3.0 (nothing accepted before changes meaning); JSON and
+  `format3.rst` regenerated.
+- **`AZURE2 --validate FILE [--json]`**, `pyazr.validate(path)`: every diagnostic, the number of checks left to 3b
+  (the quantities' "build" refusals) as a note, exit 0 / 2 / 3 (format 1/2 refused with §8.4's message).
+  `io::FormatOf` knows format 3; this engine refuses a format-3 project with a message (it runs format 2 until 3b).
+- **`convert/`**: the old line parsers (`SegLine.h`, `ExtrapLine.h`, `ComponentList.h` moved; `TargetIntLine.h`,
+  `AbundanceLine.h`, `ScatteringLengthLine.h`, `PriorCentreRow.h`, `ThmLines.h` taken out of the engine's routines
+  unchanged) and the converter `azure2_convert` (`ConvertToFormat3`, `CheckFormat3Text`), used by
+  `AZURE2 --convert OLD NEW --to 3 [--json-report R] [--answers A] [--exact-grids] [--strict] [--allow-questions]` and
+  `pyazr.convert_azr(old, new, to=3, ...)` (pyazr 2.14.0). `tools/convert_tree.sh` converts a copy of the test tree and
+  prints the table of §8.1.
+
+**Temporary dependencies of the engine on `convert/` (3b removes exactly these):** `AZURE2Core` links
+`azure2_convert_lines`; `src/EData.cpp`, `src/ESegment.cpp`, `src/AZURE2.cpp`, `api/src/pybind_api.cpp` include
+`SegLine.h`/`ExtrapLine.h`; `src/TargetEffect.cpp` `TargetIntLine.h`; `src/CNuc.cpp` `AbundanceLine.h`;
+`src/ScatteringLength.cpp` `ScatteringLengthLine.h`; `src/EData.cpp` `PriorCentreRow.h`; `src/ThmExperiment.cpp`
+`ThmLines.h`. Not temporary in the same sense: the CLI (`AZURE2`) and `_azure2` link `azure2_convert` for `--convert`
+and `--validate`; `CheckFormat3Text` (read the format-3 sections with `io::ReadRecords`, validate with the table) is the
+driver the 3b reader should own — move it there. `convert/` reads `<levels>` with the engine's `NucLine.h` (check 9c).
+
+**Verified** (2 threads; build `work/b-conv`, 0 warnings): 179 × 3, menu 1, the engine code of these commits against
+`tab-p3f` (tag `tab-conv3`): 689 / 662 / 689 files identical (Brune, formal, Park), run.log included; `ctest -LE slow`
+145/145 (142 + `convert_constructs`, `convert_fixtures`, `pyazr_validate`); `tests/run_tests.sh` 134 passed, 0 failed (OMP 2, 2261 s);
+`tools/convert_tree.sh`: 168 of 189 files convert and validate with zero errors, the 3 the old engine refuses are
+refused (`angular_coefficients/models/bad_norm`, `bad_test`, `electron_screening/bad`), 18 stop at questions of the
+three kinds of §8.3. Not run: calculations at 8 threads (budget), sphinx.
+
+**Open (decisions for the director):** a quantity for the angle-integrated nuclear elastic integral of a charged pair
+(16 test files); pair names or another way to tell two identical pairs apart (`c12c12_tumino2018`); an excited target in
+the reaction grammar (`thm_coherent_background/toy`). `--convert-params` (param.sav) is not written; the parameter map
+is in the report.
+
 ## 2026-11-09 (night) — fits that depend on the thread count: two causes (branch `fix/upgrade-fit-threads`)
 
 Record: `fit_threads.md`. Diagnostic `AZURE_TRACE_FCN=1|fresh` (every χ² with its parameter vector in hex floats;
