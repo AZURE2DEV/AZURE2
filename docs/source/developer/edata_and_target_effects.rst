@@ -517,7 +517,7 @@ A ``transmission <n>`` or ``yield <n>`` segment (``ESegment::IsTransformed``) is
 a nonlinear function of its cross sections, so it cannot be one more linear
 combination of integrated point values.  Its points, base and components, keep
 the plain cross sections -- they can still be mapped onto other segments' points
-and share their calculations -- and ``ESegment::TransformedValue`` forms the
+and share their calculations -- and ``TransformedValue`` of ``src/ModelPass.cpp`` forms the
 observable: the terms (``ESegment::TransformTerms``: weight = component scaling,
 frame factor and sample abundance; a yield's hidden ``total 1`` component,
 ``IsYieldTotalTerm``, made by ``EData::FinishTransformedSegment``, is its
@@ -527,7 +527,7 @@ swapped into the base point's sub-point slots for one more pass of
 ``EPoint::IntegrateTargetEffect``.  ``EData::CheckTransformedSegments`` refuses
 what that cannot express: terms on different sub-point grids (a sample of
 several compound nuclei), and a blended or automatically skipped effect.  Every
-evaluation path assembles a segment through ``CalculateTheoreticalCrossSection``;
+evaluation path assembles a segment through ``azure2::EvaluateModelPoint``;
 pyazr's branch tests ``ESegment::NeedsAssembly`` (components, sample weights or
 a transform), and the MCMC output snapshot assembles those segments too.  The
 gradient (``GradTransformedPoint``) back-propagates each term's point or
@@ -789,7 +789,7 @@ those of the points mapped onto it are NaN, and a warning naming the segment,
 the energy and the error is printed the first time in a run.  Both evaluation
 paths do this, the parallel pre-pass (``EData::CalculatePointsInParallel``,
 whose values the CLI's objective takes) and the per-point path
-(``ESegment::CalculateTheoreticalCrossSection``); a SUM or RATIO segment with a
+(``azure2::EvaluateModelPoint`` (``src/ModelPass.cpp``)); a SUM or RATIO segment with a
 failed or non-finite term is NaN at that point.  :math:`\chi^2` is then NaN,
 so a failed evaluation cannot pass for a result.  Before 2026-11-01 a failed
 point was 0, a failed or non-finite SUM term was left out and a failed RATIO

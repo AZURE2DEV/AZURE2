@@ -680,7 +680,7 @@ void GatherThmGroup(EData *data, const azure2::Results &results, const std::vect
     for (int p = 1; p <= seg->NumPoints(); p++) {
       EPoint *pt = seg->GetPoint(p);
       if (!pt) continue;
-      m.push_back(pt->GetFitCrossSection(results));
+      m.push_back(pt->GetModelValue(results));
       d.push_back(pt->GetCMCrossSection());
       e.push_back(pt->GetCMCrossSectionError());
       energy.push_back(pt->GetCMEnergy());
@@ -689,18 +689,18 @@ void GatherThmGroup(EData *data, const azure2::Results &results, const std::vect
 }
 }  // namespace
 
-double EData::ProfileThmGroup(int g, const azure2::Results &results) {
+double EData::ProfileThmGroup(int g, azure2::Results &results) {
   ThmGroup &group = thmGroups_[g];
   std::vector<double> m, d, e, energy;
   GatherThmGroup(this, results, group.segments, m, d, e, energy);
-  group.profile = SolveThmProfile(m, d, e, energy, group.terms);
-  const ThmProfile &p = group.profile;
+  azure2::Results::ObjectiveValues &out = results.objective;
+  const ThmProfile &p = out.thmProfiles[g] = SolveThmProfile(m, d, e, energy, group.terms);
   double total = 0.0;
   size_t k = 0;
   for (int s : group.segments) {
     ESegment *seg = GetSegment(s);
     if (!seg->IsProfiledNorm()) continue;
-    seg->SetNorm(p.Norm());
+    out.norm[s] = p.Norm();
     double chi = 0.0;
     for (int q = 1; q <= seg->NumPoints(); q++) {
       if (!seg->GetPoint(q)) continue;
@@ -708,7 +708,7 @@ double EData::ProfileThmGroup(int g, const azure2::Results &results) {
       chi += r * r;
       k++;
     }
-    seg->SetSegmentChiSquared(chi);
+    out.segmentChi2[s] = chi;
     total += chi;
   }
   return total;
@@ -716,20 +716,20 @@ double EData::ProfileThmGroup(int g, const azure2::Results &results) {
 
 void EData::ThmGroupResiduals(int g, int i, const azure2::Results &results, std::vector<double> &out) {
   out.clear();
-  const ThmProfile &p = thmGroups_[g].profile;
+  const ThmProfile &p = results.objective.thmProfiles[g];
   ESegment *seg = GetSegment(i);
   for (int q = 1; q <= seg->NumPoints(); q++) {
     EPoint *pt = seg->GetPoint(q);
     if (!pt) continue;
-    out.push_back(p.Residual(pt->GetFitCrossSection(results), pt->GetCMCrossSection(), pt->GetCMCrossSectionError(),
+    out.push_back(p.Residual(pt->GetModelValue(results), pt->GetCMCrossSection(), pt->GetCMCrossSectionError(),
                              pt->GetCMEnergy()));
   }
 }
 
-double EData::ThmBackgroundAt(int i, double energy) {
+double EData::ThmBackgroundAt(int i, double energy, const azure2::Results &results) {
   int g = ThmGroupOf(i);
   if (g < 0 || thmGroups_[g].terms == 0) return 0.0;
-  return thmGroups_[g].profile.Background(energy);
+  return results.objective.thmProfiles[g].Background(energy);
 }
 
 std::vector<ThmExperimentReport> EData::ThmExperimentReports(const azure2::Results &results) {
@@ -747,7 +747,7 @@ std::vector<ThmExperimentReport> EData::ThmExperimentReports(const azure2::Resul
       GatherThmGroup(this, results, group.segments, m, d, e, energy);
       p = SolveThmProfile(m, d, e, energy, group.terms);
     } else {
-      p = group.profile;
+      p = results.objective.thmProfiles[g];
     }
     r.points = 0;
     r.chi2 = 0.0;
@@ -755,7 +755,7 @@ std::vector<ThmExperimentReport> EData::ThmExperimentReports(const azure2::Resul
       ESegment *seg = GetSegment(s);
       if (!seg->IsProfiledNorm()) continue;
       r.segments.push_back(seg->GetSegmentKey());
-      r.chi2 += seg->GetSegmentChiSquared();
+      r.chi2 += results.objective.segmentChi2[s];
     }
     r.points = p.points;
     p.Reported(r.value, r.covariance);

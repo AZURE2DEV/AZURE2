@@ -31,8 +31,8 @@ with g the cotangent of the node (∂χ²/∂m for the root). The transmission i
 yield F = Y₀ = (s/s_t)(1 − exp(−n s_t)); n is the sample thickness (atoms/b, a parameter), s = Σ_q w_q v_q the
 weighted sum of the reaction terms and s_t the total term of a yield, with weights w_q = (c_q J_q,i) a_q.
 
-**Order of operations.** Every value is formed as `src/ESegment.cpp` forms it today (CalculateTheoreticalCrossSection
-1698–1822, TransformedValue 1605–1696, Transmission, YieldY0, TermFrameFactor 1487–1493): a SUM starts from the base
+**Order of operations.** Every value is formed as the model pass forms it today (`src/ModelPass.cpp`: ComposeModelValue,
+TransformedValue; `src/ESegment.cpp`: Transmission, YieldY0, TermFrameFactor): a SUM starts from the base
 term and adds the terms in component order; a term is (c J) v and then times a; a ratio is num/den times (J_den/J_num);
 inside a transform the weight w = (c J) a is formed first and then multiplied by v, and s starts from 0. The test
 `experiment_expression` compares each node and each composition with these expressions written out, bit for bit, on

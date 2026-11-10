@@ -1,5 +1,6 @@
 #ifndef EPOINT_H
 #define EPOINT_H
+#include <algorithm>
 #include <cmath>
 #include <limits>
 #include <vector>
@@ -107,7 +108,7 @@ class TELinearForm {
  * While an object of this type is alive on a thread, point mapping
  * (EData::MapData) is ignored by the calculations made on THAT thread: a host
  * point's EPoint::Calculate no longer fills its mapped points, and
- * ESegment::CalculateTheoreticalCrossSection calculates a mapped point itself
+ * azure2::EvaluateModelPoint calculates a mapped point itself
  * instead of reading back the value its host left there.  Every mapped point
  * carries its own sub-points and energy-dependent values, so the result is the
  * same; only the sharing is lost.  The analytic-gradient loops (AZUREGrad.cpp)
@@ -523,7 +524,7 @@ class EPoint {
   /// Record the calculated cross section.
   void SetFitCrossSection(azure2::Results &r, double v) { Rec(r)[azure2::Results::kSigma] = v; }
   /// The abundance-weighted term of each compound nucleus at this point of a
-  /// natural-target segment, indexed by nucleus (ESegment::CalculateTheoreticalCrossSection).
+  /// natural-target segment, indexed by nucleus (azure2::EvaluateModelPoint).
   std::vector<double> GetNaturalTerms(const azure2::Results &r) const;
   void SetNaturalTerms(azure2::Results &r, const std::vector<double> &terms);
   void SetFitE1CrossSection(azure2::Results &r, double v) { Rec(r)[azure2::Results::kSigmaE1] = v; }
@@ -546,9 +547,31 @@ class EPoint {
   /// under AZURE_POISON_RESULTS=1: the record of a new evaluation, as EData::BeginEvaluation gives).
   void UsePrivateRecord(azure2::Results &scratch, const azure2::Results &values);
   void UsePrivateRecord(azure2::Results &scratch);
+  /// Where the point's model record lies in Results::model (EData::LayoutResults; kNoRecord for a component point, a
+  /// sub-point or a point outside a data set), and how many angular-distribution coefficients it holds.  The model
+  /// value is what the data set predicts at the point (ModelPass.h); the leaf values above are what the point itself
+  /// calculates.
+  std::size_t ModelSlot() const { return model_slot_; }
+  void SetModelRecord(std::size_t slot, int nAng) { model_slot_ = slot, num_model_ang_ = (std::uint16_t)nAng; }
+  int ModelAngularSlots() const { return num_model_ang_; }
+  double GetModelValue(const azure2::Results &r) const { return r.model[ModelRecord(r)]; }
+  void SetModelValue(azure2::Results &r, double v) const { r.model[ModelRecord(r)] = v; }
+  /// The coefficients a_k of an angular-distribution point as the model record holds them (count, then values).
+  int GetNumModelAngularDists(const azure2::Results &r) const {
+    if (!num_model_ang_) return 0;
+    const double n = r.model[ModelRecord(r) + 1];  // NaN (poisoned, not written): the capacity, as the leaf's count
+    return std::isnan(n) ? (int)num_model_ang_ : (int)n;
+  }
+  double GetModelAngularDist(const azure2::Results &r, int k) const { return r.model[ModelRecord(r) + 2 + k]; }
+  /// Copy the leaf record's angular-distribution count and coefficients into the model record (EvaluateModelPoint).
+  void CopyAngularDistsToModel(azure2::Results &r) const {
+    if (!num_model_ang_) return;
+    const double *from = Rec(r) + azure2::Results::AngularOffset();
+    std::copy(from, from + 1 + std::min<int>(num_model_ang_, num_ang_slots_), r.model.begin() + ModelRecord(r) + 1);
+  }
   /// A calculation that threw: NaN cross sections (total, E1, E2) on this point and on every point mapped onto it,
   /// and a warning naming the segment, the role of the point, its energy and the error, the first time in a run.
-  /// Used by ESegment::CalculateTheoreticalCrossSection and EData::CalculatePointsInParallel (before 2026-11-01
+  /// Used by azure2::EvaluateModelPoint and EData::CalculatePointsInParallel (before 2026-11-01
   /// both gave 0 or left the term out, silently).
   void MarkFailed(azure2::Results &results, const char *role, const Config &configure, const char *why);
   int GetSegmentKey() const { return segment_key_; }
@@ -622,6 +645,9 @@ class EPoint {
   void SetTargetEffectNum(int);
   void AddSubPoint(EPoint);
   void IntegrateTargetEffect(const Config &, azure2::Results &results);
+  /// IntegrateTargetEffect on given sub-point values (0-based, one per sub-point) instead of the sub-points' slots:
+  /// the integrated value, nothing written (the transform of a transmission or yield segment, src/ModelPass.cpp).
+  double IntegrateSubPointValues(const Config &, const std::vector<double> &values);
   /*!
    * Free-gas Doppler broadening on this point's sub-point grid (TargetEffect::IsDoppler): the weights w with
    * sigma_D(eCM) = sum w.second * sigma(sub-point w.first), sigma linear in E between sub-points, from the
@@ -641,7 +667,7 @@ class EPoint {
   double DopplerTemperatureDerivative(const Config &, const std::vector<double> &values);
   /*!
    * While alive, IntegrateTargetEffect (and TargetEffectWeights) skip the Doppler step: for the
-   * transmission/yield assembly (ESegment::TransformedValue), which broadens the terms itself before the
+   * transmission/yield assembly (TransformedValue in src/ModelPass.cpp), which broadens the terms itself before the
    * transform and only then hands the sub-point values to the kernel.
    */
   class DopplerAppliedScope {
@@ -870,6 +896,15 @@ class EPoint {
     return r.slot.data() + slot_;
   }
   [[noreturn]] void NoResultRecord(const azure2::Results &r) const;
+  // Where the model record lies (see ModelSlot).
+  std::size_t model_slot_ = kNoRecord;
+  std::uint16_t num_model_ang_ = 0;
+  std::size_t ModelRecord(const azure2::Results &r) const {
+    if (model_slot_ == kNoRecord || model_slot_ + azure2::Results::ModelRecordSize(num_model_ang_) > r.model.size())
+      NoModelRecord(r);
+    return model_slot_;
+  }
+  [[noreturn]] void NoModelRecord(const azure2::Results &r) const;
 };
 
 #endif

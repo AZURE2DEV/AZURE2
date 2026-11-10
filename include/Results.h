@@ -8,6 +8,8 @@
 #include <limits>
 #include <vector>
 
+#include "ThmProfile.h"
+
 namespace azure2 {
 
 /*!
@@ -19,15 +21,14 @@ namespace azure2 {
  * A record holds, in this order:
  *   kSigma    the unit's observable: sigma (b), dsigma/dOmega_c.m. (b/sr), a phase shift (deg), A_y (1), a
  *             Legendre coefficient a_k (1) or A_k (b/sr), the THM cross section; after the target fold for a
- *             point that carries one; the composed (SUM, RATIO, sample, transform) value once the segment's
- *             combination has run
+ *             point that carries one (never the segment's combination: that is the model value, below)
  *   kSigmaE1  the E1 part of an angle-integrated capture cross section (b)
  *   kSigmaE2  the E2 part (b)
  *   kAy       the analysing power A_y (1), kept beside the cross section, which weights its target average
  *   kA0       A_0 = sigma_int / 4 pi (b/sr) of an angular-distribution unit
  *   then, for a unit with an angular-distribution capacity K > 0: the number of coefficients written, then K values
  *   a_0 .. a_{K-1}; then, for the point of a sample (natural) segment with N > 0 nuclei: the number of terms written,
- *   then N abundance-weighted terms, one per compound nucleus.
+ *   then N abundance-weighted terms, one per compound nucleus (written with the model value, EvaluateModelPoint).
  *
  * Who holds what.  The layout -- where each unit's record starts and how many angular and natural slots it has -- is
  * a property of the data set and of every copy of it (EData::LayoutResults; a unit keeps its offset).  The storage
@@ -37,17 +38,43 @@ namespace azure2 {
  *
  * The one way to reach a result: every accessor and every function that reads or writes one takes the buffer as an
  * argument, `const Results &` to read and `Results &` to write -- `point->GetFitCrossSection(results)`,
- * `point->Calculate(cnuc, config, results)`, `segment->CalculateTheoreticalCrossSection(i, cnuc, config, data,
- * results)`.  There is no default buffer, no global and no thread-local one.  The owner hands its buffer to
+ * `point->Calculate(cnuc, config, results)`, `azure2::EvaluateModelPoint(segment, i, cnuc, config, results,
+ * leaves)`.  There is no default buffer, no global and no thread-local one.  The owner hands its buffer to
  * EData::FillEnergyShiftsFromParams, the last step of the hand-over (EData::BeginEvaluation), which sizes it for the
  * data set's layout and, under AZURE_POISON_RESULTS=1, fills it with NaN.
  *
- * The struct is plain (no engine headers), so it can move to the experiment library (Phase 4, S6/S7).
+ * The struct is plain (no engine headers; ThmProfile.h is plain too), so it can move to the experiment library.
  */
 struct Results {
   enum Quantity : std::size_t { kSigma = 0, kSigmaE1 = 1, kSigmaE2 = 2, kAy = 3, kA0 = 4, kNumFixed = 5 };
 
   std::vector<double> slot;
+
+  /*!
+   * What the data set predicts, apart from the leaf values above (docs/upgrade/data_model.md section 2.1, step S4):
+   * one record per point of a data or test segment -- not of a component segment or a sub-point --, laid out with the
+   * leaf records (EData::LayoutResults; the point keeps its offset, EPoint::ModelSlot).  A record holds the model
+   * value m_i, the segment's combination (SUM, RATIO, sample, transform, the E1 or E2 part) of its points' leaf
+   * values, which the residual compares with the datum; then, for a point with an angular-distribution capacity
+   * K > 0, the number of coefficients and K coefficients a_0 .. a_{K-1}.  Written by azure2::EvaluateModelPoint
+   * (ModelPass.h) only.
+   */
+  std::vector<double> model;
+
+  /*!
+   * What the objective (Objective.h) writes, index = segment number (1-based; [0] unused): the normalization the
+   * segment's data were compared with (the parameter's, or the profiled n* of a THM segment), its data chi^2 (a THM
+   * experiment's segments: each one's share of the profile), the profile of each THM experiment (EData::thmGroups_
+   * order), and the totals of the terms that are not per segment.  The writers and the API read them from here.
+   */
+  struct ObjectiveValues {
+    std::vector<double> norm, segmentChi2;
+    std::vector<ThmProfile> thmProfiles;
+    double nuisance = 0.0, park = 0.0, abundance = 0.0, scatteringLength = 0.0, priorCovariance = 0.0;
+  } objective;
+
+  /// Length of a model record with angular capacity nAng.
+  static std::size_t ModelRecordSize(std::size_t nAng) { return 1 + (nAng ? 1 + nAng : 0); }
 
   /// Length of a record with angular capacity nAng and nNat natural terms.
   static std::size_t RecordSize(std::size_t nAng, std::size_t nNat) {
@@ -58,8 +85,12 @@ struct Results {
   /// Offset, inside a record, of the natural-term count (the terms follow it).
   static std::size_t NaturalOffset(std::size_t nAng) { return kNumFixed + (nAng ? 1 + nAng : 0); }
 
-  /// Every slot quiet NaN: a slot read before the evaluation writes it then shows as NaN.
-  void Poison() { std::fill(slot.begin(), slot.end(), std::numeric_limits<double>::quiet_NaN()); }
+  /// Every slot, model value and per-segment objective value quiet NaN: a value read before the evaluation writes it
+  /// then shows as NaN.
+  void Poison() {
+    const double nan = std::numeric_limits<double>::quiet_NaN();
+    for (std::vector<double> *v : {&slot, &model, &objective.norm, &objective.segmentChi2}) std::fill(v->begin(), v->end(), nan);
+  }
 
   /// AZURE_POISON_RESULTS=1: reused result storage is poisoned on entry to every evaluation.
   static bool PoisonRequested() {

@@ -155,7 +155,7 @@ inline void TermWeight(const TransformTerm &t, const Inputs &in, std::size_t i, 
   weight = (t.abundance >= 0) ? scale * in.params[t.abundance] : scale;
 }
 
-/// F of the term values v (ESegment::TransformedValue's `transform`).
+/// F of the term values v (TransformedValue in src/ModelPass.cpp's `transform`).
 inline double ApplyF(const TransformSpec &t, const double *w, const double *v, double n) {
   double sum = 0.0, total = 0.0;
   for (std::size_t q = 0; q < t.terms.size(); q++) (t.terms[q].total ? total : sum) += w[q] * v[q];

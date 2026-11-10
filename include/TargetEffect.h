@@ -250,7 +250,7 @@ class TargetEffect {
    *   sigma_D(E) = 1/(u sqrt(pi) v^2) int_0^inf [exp(-(v-w)^2/u^2) - exp(-(v+w)^2/u^2)] w^2 sigma(w^2) dw,
    * v = sqrt(E), w = sqrt(E'), E the lab-equivalent energy (E_cm over the point's c.m./lab factor), u^2 = kT m/M
    * with m/M the beam/target mass ratio of the entrance pair, and only then are the transmission/yield transform
-   * (ESegment::TransformedValue) and the line's resolution kernel (Gaussian, UDR, target integration, beam
+   * (TransformedValue in src/ModelPass.cpp) and the line's resolution kernel (Gaussian, UDR, target integration, beam
    * profile) applied: SAMMY's order.  A line with only `doppler` evaluates sigma_D at the point.
    */
   bool IsDoppler() const { return isDoppler_; }

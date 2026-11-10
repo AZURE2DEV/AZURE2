@@ -54,10 +54,9 @@ class ESegment {
   /// evaluation instead of competing with the direct-data norms as a Minuit
   /// parameter.
   bool IsProfiledNorm() const;
-  /// Set the normalization to the value that minimizes this segment's chi^2 at
-  /// the current model (points must already hold their fit cross sections) and
-  /// return that minimum chi^2.  Used for profiled (THM) norms.
-  double ProfileNormChiSquared(const azure2::Results &results);
+  /// The normalization that minimizes this segment's chi^2 at the model values in `results` (profiledNorm) and that
+  /// minimum chi^2 (returned).  Used for profiled (THM) norms; the segment's own norm is not changed.
+  double ProfileNormChiSquared(const azure2::Results &results, double &profiledNorm) const;
   /// Does the segment carry target effects?
   bool IsTargetEffect() const;
   /// Is the normalization a free fit parameter?
@@ -140,8 +139,6 @@ class ESegment {
   double GetMinAngle() const;
   /// Largest angle of the segment, lab frame.
   double GetMaxAngle() const;
-  /// Chi-squared contributed by this segment.
-  double GetSegmentChiSquared() const;
   /// Energy step between generated points. Extrapolation segments only.
   double GetEStep() const;
   /// Angle step between generated points. Extrapolation segments only.
@@ -279,8 +276,6 @@ class ESegment {
   std::string GetDataFile() const;
   /// Append a point.
   void AddPoint(EPoint);
-  /// Record this segment's chi-squared.
-  void SetSegmentChiSquared(double);
   /// Point the segment at a TargetEffect in the parent EData.
   void SetTargetEffectNum(int);
   void SetSegmentKey(int);
@@ -381,7 +376,7 @@ class ESegment {
   /// segment's cross section and s_t the total cross section of the entrance pair, from a hidden "total 1"
   /// component (IsYieldTotalTerm).  With a sub-point target effect (resolution, Gaussian spread) the transform is
   /// applied at every sub-point before the kernel, as SAMMY does: broadening a cross section and then
-  /// exponentiating fills in the dips of a thick sample.  ESegment::CalculateTheoreticalCrossSection; the points
+  /// exponentiating fills in the dips of a thick sample.  azure2::EvaluateModelPoint; the points
   /// keep the plain cross sections, so they can still share calculations with other segments.
   bool IsTransmission() const { return transmission_ > 0.0; }
   bool IsYield() const { return yield_ > 0.0; }
@@ -488,20 +483,6 @@ class ESegment {
   /// computed with the BASE segment's pairs (audit item 15).
   static double RatioTermFrameFactor(EPoint *point, const ESegment *term, CNuc *cnuc);
 
-  // Calculate theoretical cross section including components
-  /// Theoretical value at a point, combining the components if this is a composite segment.
-  /*!
-   * `precalculated`: every non-mapped point of this segment and of its components
-   * has already been Calculate()d for the current parameters (AZURECalc does
-   * that in one parallel pass), so only the combination is done here.
-   */
-  /// The value of a transmission or yield segment at a point (IsTransformed).
-  /// The points' values are read from and written into `results`, the buffer of the evaluation.
-  double TransformedValue(int pointIndex, CNuc *cnuc, const Config &configure, azure2::Results &results,
-                          bool precalculated);
-  double CalculateTheoreticalCrossSection(int pointIndex, CNuc *cnuc, const Config &configure, EData *edata,
-                                          azure2::Results &results, bool precalculated = false);
-
   /// Free-shift refills (docs/upgrade/channel_table.md section 2.1, interim until the objective has the analytic
   /// shift derivative): BeginShiftRefill, single-threaded before the parallel re-energise loop, keeps the tables of
   /// the segment's last kShiftTables shift states for UpdatePointEnergyWithShift to read (exact keys) and has every
@@ -555,7 +536,6 @@ class ESegment {
   double max_a_;
   double e_step_;
   double a_step_;
-  double segment_chi_squared_;
   double j_;
   double dataNorm_;
   double dataNormNominal_;

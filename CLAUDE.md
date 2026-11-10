@@ -214,7 +214,8 @@ bypassed. Run it first (under a second), then the build and the tests of "Defini
    [check 11: no term is added outside `src/Objective.cpp`].
 2. The analytic gradient agrees with finite differences (`AZURE_GRAD_CHECK`, a pyazr test); the CLI and pyazr give
    the same χ² (`tests/pyazr/objective_test.py`).
-3. Its total is reported in `chiSquared.out` through `storeTotals`; docs `output_files.rst`.
+3. Its total goes into `Results::objective` (the evaluation's buffer) and from there to `chiSquared.out`; docs
+   `output_files.rst`.
 
 **A physics function or an observable.**
 1. In `physics/` (no engine headers, no GSL: check 8), with its unit test in `physics/tests/` against an

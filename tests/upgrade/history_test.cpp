@@ -32,6 +32,7 @@
 #include "Config.h"
 #include "EData.h"
 #include "ESegment.h"
+#include "ModelPass.h"
 #include "Objective.h"
 #include "ParameterKind.h"
 #include "Results.h"
@@ -87,12 +88,8 @@ Evaluation Evaluate(Copy &c, const vector_r &p, const Config &cfg) {
   for (int i = 1; i <= ld->NumSegments(); i++) segments.push_back(ld->GetSegment(i));
   const bool pre = EData::CalculatePointsInParallel(segments, lc, cfg, c.results) >= 0;
   Evaluation e;
-  for (ESegment *segment : segments)
-    for (int pid = 0; pid < segment->NumPoints(); pid++) {
-      const double m = segment->CalculateTheoreticalCrossSection(pid, lc, cfg, ld, c.results, pre);
-      segment->GetPoint(pid + 1)->SetFitCrossSection(c.results, m);
-      e.models.push_back(m);
-    }
+  azure2::EvaluateModel(*ld, lc, cfg, c.results, pre ? azure2::LeafValues::Ready : azure2::LeafValues::Calculate);
+  e.models = c.results.model;
   ObjectiveContext context{lc, ld, c.results, p, cfg};
   context.segmentChi2 = &e.segmentChi2;
   const double total = Objective::Engine().Chi2(context);

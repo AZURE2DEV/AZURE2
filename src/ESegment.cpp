@@ -9,6 +9,7 @@
 #include "DataCovariance.h"
 #include "EData.h"
 #include "ESegment.h"
+#include "ModelPass.h"
 #include "azure2/experiment/Expression.h"
 #include "ExperimentAdapter.h"
 
@@ -36,7 +37,6 @@ ESegment::ESegment(SegLine segLine) {
   max_a_ = segLine.maxA();
   e_step_ = 0.0;
   a_step_ = 0.0;
-  segment_chi_squared_ = 0.0;
   // A THM (modified R-matrix / half-off-shell) segment is flagged by an isDiff
   // offset of 10: THM is orthogonal to the underlying observable type, so
   // isDiff>=10 means "THM", and (isDiff-10) is the ordinary observable code
@@ -164,7 +164,6 @@ ESegment::ESegment(ExtrapLine extrapLine) {
   max_a_ = extrapLine.maxA();
   e_step_ = extrapLine.eStep();
   a_step_ = extrapLine.aStep();
-  segment_chi_squared_ = 0.0;
   // THM (modified R-matrix) extrapolation segment: isDiff offset of 10 (see the
   // SegLine constructor above and docs/THM_IMPLEMENTATION.md).
   isTHM_ = (extrapLine.isDiff() >= 10);
@@ -318,37 +317,33 @@ bool ESegment::IsProfiledNorm() const {
 /*!
  * With the norm n multiplying the data (residual m - n d, error n e), the
  * chi^2 = sum ((m - n d)/(n e))^2 is minimized at n* = S_mm / S_md, giving
- * chi^2_min = S_dd - S_md^2 / S_mm, where S_ab = sum a_i b_i / e_i^2.  Points
- * must already carry their model values in GetFitCrossSection().
+ * chi^2_min = S_dd - S_md^2 / S_mm, where S_ab = sum a_i b_i / e_i^2.  The
+ * points' model values must be in `results` (azure2::EvaluateModelPoint); n* is
+ * returned in `profiledNorm`.
  */
 
-double ESegment::ProfileNormChiSquared(const azure2::Results &results) {
+double ESegment::ProfileNormChiSquared(const azure2::Results &results, double &profiledNorm) const {
   double Smm = 0.0, Smd = 0.0, Sdd = 0.0;
-  for (EPointIterator pt = GetPoints().begin(); pt < GetPoints().end(); pt++) {
-    double e = pt->GetCMCrossSectionError();
+  for (const EPoint &pt : points_) {
+    double e = pt.GetCMCrossSectionError();
     if (e == 0.0) continue;
     double w = 1.0 / (e * e);
-    double m = pt->GetFitCrossSection(results);
-    double d = pt->GetCMCrossSection();
+    double m = pt.GetModelValue(results);
+    double d = pt.GetCMCrossSection();
     Smm += m * m * w;
     Smd += m * d * w;
     Sdd += d * d * w;
   }
   if (Smd > 0.0 && Smm > 0.0) {
-    SetNorm(Smm / Smd);
+    profiledNorm = Smm / Smd;
     double chi = Sdd - Smd * Smd / Smm;
     return chi > 0.0 ? chi : 0.0;
   }
   // Degenerate (no positive model-data overlap): leave the scale at unity and
   // report the unscaled chi^2 so the fit still sees a finite, honest value.
-  SetNorm(1.0);
+  profiledNorm = 1.0;
   double chi = 0.0;
-  for (EPointIterator pt = GetPoints().begin(); pt < GetPoints().end(); pt++) {
-    double e = pt->GetCMCrossSectionError();
-    if (e == 0.0) continue;
-    double r = pt->GetFitCrossSection(results) - pt->GetCMCrossSection();
-    chi += (r * r) / (e * e);
-  }
+  for (const EPoint &pt : points_) chi += azure2::PointResidual(pt, results, 1.0).Chi2();
   return chi;
 }
 
@@ -654,14 +649,6 @@ double ESegment::GetMinAngle() const {
 
 double ESegment::GetMaxAngle() const {
   return max_a_;
-}
-
-/*!
- * Returns the chi-squared value of the segment after the fitting process.
- */
-
-double ESegment::GetSegmentChiSquared() const {
-  return segment_chi_squared_;
 }
 
 /*!
@@ -1280,14 +1267,6 @@ void ESegment::ApplyTotalToPoints() {
 }
 
 /*!
- * Sets the chi squared value for the segment during the fitting process.
- */
-
-void ESegment::SetSegmentChiSquared(double chiSquared) {
-  segment_chi_squared_ = chiSquared;
-}
-
-/*!
  * Sets the position of the corresponding TargetEffect object in the vector
  * of the parent EData object.
  */
@@ -1483,29 +1462,6 @@ double ESegment::RatioTermFrameFactor(EPoint *point, const ESegment *term, CNuc 
   return point->CalculateCrossSectionConversionFactor(entrancePair, exitPair);
 }
 
-namespace {
-
-/*!
- * Calculate a point; if the calculation throws (a singular matrix, a Coulomb function out of range, ...), mark it
- * failed (EPoint::MarkFailed: NaN, reported once) and return false, so that neither the point nor chi^2 can pass for
- * a result.  Before 2026-11-01 a failed base point gave 0, a failed or non-finite component was left out of a SUM and
- * a failed RATIO denominator gave 0, all without a word: the natural SUM segments of tests/natural_neon on the
- * R-matrix route came back 0 at 84 points.
- */
-bool CalculatePoint(EPoint *point, const char *role, CNuc *cnuc, const Config &configure, azure2::Results &results) {
-  try {
-    point->Calculate(cnuc, configure, results);
-    return true;
-  } catch (const std::exception &e) {
-    point->MarkFailed(results, role, configure, e.what());
-  } catch (...) {
-    point->MarkFailed(results, role, configure, "unknown exception.");
-  }
-  return false;
-}
-
-}  // namespace
-
 /*!
  * Transmission of a sample n atoms/barn thick, T = exp(-n s), and dT/ds (azure2::experiment::node::Transmission).
  */
@@ -1550,234 +1506,6 @@ bool ESegment::TransformTerms(int pointIndex, CNuc *cnuc, std::vector<TransformT
     terms.push_back({cp, comp, w, scale, nucleus, false, comp->GetCrossSectionComponent()});
   }
   return true;
-}
-
-/*!
- * The value of a transmission or yield segment at a point (ESegment.h, IsTransformed).  The points, base and
- * components, hold plain cross sections; they are summed with their weights into s (and s_t for a yield), at every
- * sub-point when the point carries a sub-point target effect, transformed there, and only then integrated with the
- * base point's kernel (EPoint::IntegrateTargetEffect, on the transformed values swapped into its sub-point slots).
- * EData::CheckTransformedSegments makes sure every term shares the base point's sub-point grid.
- */
-double ESegment::TransformedValue(int pointIndex, CNuc *cnuc, const Config &configure, azure2::Results &results,
-                                  bool precalculated) {
-  const double nan = std::numeric_limits<double>::quiet_NaN();
-  EPoint *basePoint = GetPoint(pointIndex + 1);
-  for (ESegment *comp : componentSegments_) {
-    if (!comp || pointIndex >= comp->NumPoints()) continue;
-    EPoint *cp = comp->GetPoint(pointIndex + 1);
-    if (!precalculated && cp && (!cp->IsMapped() || ScopedPointMappingOff::Active()) &&
-        !CalculatePoint(cp, comp->IsYieldTotalTerm() ? "yield total" : "SUM component", cnuc, configure, results))
-      return nan;
-  }
-  std::vector<TransformTerm> terms;
-  if (!TransformTerms(pointIndex, cnuc, terms)) return nan;
-  const double n = GetSampleThickness();
-  const bool yield = IsYield();
-  auto valueOf = [&results](EPoint *p, int c) {
-    return (c == 1) ? p->GetFitE1CrossSection(results) : (c == 2) ? p->GetFitE2CrossSection(results)
-                                                                  : p->GetFitCrossSection(results);
-  };
-  // the observable from the term values v_q (a point, or one sub-point of every term)
-  auto transform = [&](const std::vector<double> &v) {
-    double sum = 0.0, total = 0.0;
-    for (size_t q = 0; q < terms.size(); q++) (terms[q].total ? total : sum) += terms[q].weight * v[q];
-    return yield ? YieldY0(n, sum, total) : Transmission(n, sum);
-  };
-
-  if (IsNatural()) {
-    std::vector<double> naturalTerms(cnuc->NumNuclei(), 0.0);
-    for (const TransformTerm &t : terms)
-      if (!t.total) naturalTerms[t.nucleus - 1] += t.weight * valueOf(t.point, t.xsComponent);
-    basePoint->SetNaturalTerms(results, naturalTerms);
-  }
-
-  std::vector<double> v(terms.size());
-  if (!HasSubPointIntegration(basePoint)) {
-    for (size_t q = 0; q < terms.size(); q++) v[q] = valueOf(terms[q].point, terms[q].xsComponent);
-    return transform(v);
-  }
-
-  const int nsp = basePoint->NumSubPoints();
-  for (const TransformTerm &t : terms)
-    if (t.point->NumSubPoints() != nsp) return nan;  // refused at load (EData::CheckTransformedSegments)
-  std::vector<double> baseRaw(nsp), f(nsp);
-  // Free-gas Doppler broadening comes before the transform (SAMMY's order): every term's sub-point values are
-  // broadened on the common grid, the broadened values transformed, and the kernel then applied without its own
-  // Doppler step.  A line with no kernel after the Doppler step gives the transform of sigma_D at the point.
-  const TargetEffect *effect = basePoint->GetParentData()->GetTargetEffect(basePoint->GetTargetEffectNum());
-  const bool doppler = effect && effect->IsDoppler();
-  std::vector<std::vector<double>> raw;
-  std::vector<std::pair<int, double>> dw;
-  auto broadenAt = [&](double e) {
-    basePoint->DopplerWeights(e, dw);
-    for (size_t q = 0; q < terms.size(); q++) {
-      double s = 0.0;
-      for (const auto &t : dw) s += t.second * raw[q][t.first - 1];
-      v[q] = s;
-    }
-  };
-  if (doppler) {
-    raw.assign(terms.size(), std::vector<double>(nsp));
-    for (size_t q = 0; q < terms.size(); q++)
-      for (int j = 1; j <= nsp; j++) raw[q][j - 1] = valueOf(terms[q].point->GetSubPoint(j), terms[q].xsComponent);
-    if (!effect->HasResolutionStage()) {
-      broadenAt(basePoint->GetCMEnergy());
-      return transform(v);
-    }
-  }
-  for (int j = 1; j <= nsp; j++) {
-    if (doppler) {
-      broadenAt(basePoint->GetSubPoint(j)->GetCMEnergy());
-    } else {
-      for (size_t q = 0; q < terms.size(); q++) {
-        EPoint *sp = terms[q].point->GetSubPoint(j);
-        v[q] = valueOf(sp, terms[q].xsComponent);
-      }
-    }
-    f[j - 1] = transform(v);
-    baseRaw[j - 1] = basePoint->GetSubPoint(j)->GetFitCrossSection(results);
-  }
-  const double baseIntegrated = basePoint->GetFitCrossSection(results);
-  for (int j = 1; j <= nsp; j++) basePoint->GetSubPoint(j)->SetFitCrossSection(results, f[j - 1]);
-  {
-    EPoint::DopplerAppliedScope dopplerDone(basePoint);
-    basePoint->IntegrateTargetEffect(configure, results);
-  }
-  const double value = basePoint->GetFitCrossSection(results);
-  for (int j = 1; j <= nsp; j++) basePoint->GetSubPoint(j)->SetFitCrossSection(results, baseRaw[j - 1]);
-  basePoint->SetFitCrossSection(results, baseIntegrated);
-  return value;
-}
-
-/*!
- * Calculates the theoretical cross section for this segment, including
- * combination with any additional components according to the operation type
- */
-double ESegment::CalculateTheoreticalCrossSection(int pointIndex, CNuc *cnuc, const Config &configure, EData *edata,
-                                                   azure2::Results &results, bool precalculated) {
-  if (pointIndex < 0 || pointIndex >= NumPoints()) {
-    return 0.0;
-  }
-
-  // Calculate the base segment's theoretical cross section
-  EPoint *basePoint = GetPoint(pointIndex + 1);
-  if (!basePoint) {
-    return 0.0;
-  }
-
-  // Calculate base point if not already calculated
-  const double nan = std::numeric_limits<double>::quiet_NaN();
-  if (!precalculated && (!basePoint->IsMapped() || ScopedPointMappingOff::Active()) &&
-      !CalculatePoint(basePoint, "base term", cnuc, configure, results))
-    return nan;
-
-  if (IsTransformed()) return TransformedValue(pointIndex, cnuc, configure, results, precalculated);
-
-  // For E1/E2-only segments compare against the corresponding component of the
-  // (angle-integrated capture) cross section instead of the full cross section.
-  double baseValue;
-  if (crossSectionComponent_ == 1)
-    baseValue = basePoint->GetFitE1CrossSection(results);
-  else if (crossSectionComponent_ == 2)
-    baseValue = basePoint->GetFitE2CrossSection(results);
-  else
-    baseValue = basePoint->GetFitCrossSection(results);
-
-  // A sample segment: every term is weighted by the isotopic
-  // abundance of its entrance pair's compound nucleus, and the weighted terms
-  // are kept per nucleus on the base point for the decomposition output.
-  std::vector<double> naturalTerms;
-  const bool natural = this->IsNatural();
-  if (natural) {
-    naturalTerms.assign(cnuc->NumNuclei(), 0.0);
-    const int nucleus = cnuc->GetPair(cnuc->GetPairNumFromKey(this->GetEntranceKey()))->GetNucleus();
-    baseValue *= cnuc->GetAbundance(naturalSample_, nucleus);
-    naturalTerms[nucleus - 1] += baseValue;
-  }
-
-  // If no components, return base value
-  if (!HasComponents()) {
-    if (natural) basePoint->SetNaturalTerms(results, naturalTerms);
-    return baseValue;
-  }
-
-
-  // Calculate component values and combine according to operation type
-  if (segmentOperationType_ == SUM) {
-    double sum = baseValue;
-    int compIdx = 0;
-    for (const auto &componentSegment : componentSegments_) {
-      if (componentSegment && pointIndex < componentSegment->NumPoints()) {
-        EPoint *componentPoint = componentSegment->GetPoint(pointIndex + 1);
-        if (componentPoint) {
-          // No lock needed since each thread works on independent EData clones
-          if (!precalculated && (!componentPoint->IsMapped() || ScopedPointMappingOff::Active()) &&
-              !CalculatePoint(componentPoint, "SUM component", cnuc, configure, results))
-            return nan;
-          // A non-finite term makes the sum non-finite (it was left out before 2026-11-01).
-          double compValue = componentPoint->GetFitCrossSection(results);
-          // the term in the base point's frame (TermFrameFactor)
-          double term = componentSegment->GetComponentScaling() * TermFrameFactor(basePoint, componentPoint) * compValue;
-          if (natural) {
-            const int nucleus = cnuc->GetPair(cnuc->GetPairNumFromKey(componentSegment->GetEntranceKey()))->GetNucleus();
-            term *= cnuc->GetAbundance(naturalSample_, nucleus);
-            naturalTerms[nucleus - 1] += term;
-          }
-          sum += term;
-          compIdx++;
-        }
-      }
-    }
-    if (natural) basePoint->SetNaturalTerms(results, naturalTerms);
-    return sum;
-  } else if (segmentOperationType_ == RATIO) {
-    if (componentSegments_.empty()) {
-      return baseValue;
-    }
-
-    // For ratio: base / first_component
-    ESegment *firstComponent = componentSegments_[0];
-    if (firstComponent && pointIndex < firstComponent->NumPoints()) {
-      EPoint *denominatorPoint = firstComponent->GetPoint(pointIndex + 1);
-      if (denominatorPoint) {
-        // No lock needed since each thread works on independent EData clones
-        if (!precalculated && (!denominatorPoint->IsMapped() || ScopedPointMappingOff::Active()) &&
-            !CalculatePoint(denominatorPoint, "RATIO denominator", cnuc, configure, results))
-          return nan;
-
-        double denominatorValue = denominatorPoint->GetFitCrossSection(results);
-        if (denominatorValue == 0.0) {
-          // No ratio exists (e.g. the denominator's exit channel is closed at this energy).  Before 2026-11-01 the
-          // point was 0, which a fit compared with the datum as if it were a calculated ratio.  Now NaN and a
-          // warning, once.  Only this term is NaN: the base point and the points mapped onto it are left alone.
-          static std::atomic<bool> reported(false);
-          if (!reported.exchange(true)) {
-#pragma omp critical(azure_failed_point)
-            configure.outStream << "WARNING: the RATIO denominator of segment " << basePoint->GetSegmentKey()
-                                << " is 0 at E_lab " << basePoint->GetLabEnergy() << " MeV, angle "
-                                << basePoint->GetLabAngle() << " deg: the ratio is NaN there (further zero"
-                                << " denominators are not reported)." << std::endl;
-          }
-          return nan;
-        }
-
-        // A lab-frame differential ratio is the ratio of the two LAB cross sections,
-        // sigma_lab = sigma_cm / J: each term with its own pair's Jacobian.  (Before
-        // 2026-10-27 the denominator's J was computed with the base segment's pairs:
-        // wrong for a denominator to another exit pair with relativistic=1 or at 0 /
-        // 180 deg, and for a photon over a particle or the reverse; audit item 15.)
-        const double baseConversionFactor = RatioTermFrameFactor(basePoint, this, cnuc);
-        const double denominatorConversionFactor = RatioTermFrameFactor(denominatorPoint, firstComponent, cnuc);
-
-        double ratioValue = baseValue / denominatorValue * (denominatorConversionFactor / baseConversionFactor);
-        return ratioValue;
-      }
-    }
-    return nan;  // no denominator point (component segments copy the base's points, so not expected)
-  }
-
-  return baseValue;
 }
 
 void ESegment::SetThmLineshape(std::shared_ptr<const ThmLineshape> l) {

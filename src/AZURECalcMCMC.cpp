@@ -1,5 +1,6 @@
 #include "Objective.h"
 #include "AZURECalcMCMC.h"
+#include "ModelPass.h"
 #include "ScatteringLength.h"
 #include "ParameterLabel.h"
 #include "Config.h"
@@ -98,18 +99,8 @@ double AZURECalcMCMC::CalculateLogLikelihood(const vector_r &p) const {
   // The model value of every point, then the data part of the objective (Objective::DataChi2): the data chi^2 with
   // THM norms profiled as the fit does (docs/upgrade/objective.md D1; before, the MCMC summed r^2 with whatever THM
   // norm the clone held) and the data covariance.  The segment priors are log-priors (CalculateLogPrior).
-  for (int i = 1; i <= localData->NumSegments(); i++) {
-    ESegment *segment = localData->GetSegment(i);
-    if (!segment) continue;
-    for (int pointIdx = 0; pointIdx < segment->NumPoints(); pointIdx++) {
-      double theoreticalValue =
-          segment->CalculateTheoreticalCrossSection(pointIdx, localCompound, configure(), localData, results);
-      EPoint *point = segment->GetPoint(pointIdx + 1);
-      if (point) point->SetFitCrossSection(results, theoreticalValue);
-    }
-  }
+  azure2::EvaluateModel(*localData, localCompound, configure(), results, azure2::LeafValues::Calculate);
   ObjectiveContext context{localCompound, localData, results, p, configure()};
-  context.storeTotals = true;
   double chiSquared = Objective::Engine().DataChi2(context);
 
   // Isotopic abundances: priors and the sum-to-one term, part of the posterior as of the fit.
@@ -189,18 +180,8 @@ double AZURECalcMCMC::CalculateLogLikelihoodPhysical(const vector_r &params_) co
 
   azure2::Results &results = working->results;
   // The model value of every point, then the data part of the objective, as CalculateLogLikelihood (D1).
-  for (int i = 1; i <= localData->NumSegments(); i++) {
-    ESegment *segment = localData->GetSegment(i);
-    if (!segment) continue;
-    for (int pointIdx = 0; pointIdx < segment->NumPoints(); pointIdx++) {
-      double theoreticalValue =
-          segment->CalculateTheoreticalCrossSection(pointIdx, localCompound, configure(), localData, results);
-      EPoint *point = segment->GetPoint(pointIdx + 1);
-      if (point) point->SetFitCrossSection(results, theoreticalValue);
-    }
-  }
+  azure2::EvaluateModel(*localData, localCompound, configure(), results, azure2::LeafValues::Calculate);
   ObjectiveContext context{localCompound, localData, results, params_, configure()};
-  context.storeTotals = true;
   double chiSquared = Objective::Engine().DataChi2(context);
 
   // Isotopic abundances: priors and the sum-to-one term, part of the posterior as of the fit.
@@ -879,15 +860,12 @@ void mcmc_iteration_callback(int current_step, int total_steps) {
                 data.point()->Calculate(localCompound, g_mcmc_for_callbacks->configure(), localResults);
               }
             }
-            // Segments whose value the segment assembles (components, sample weights, transmission / yield): the
-            // iterator above skips composite segments, and a point holds the plain cross section, not the observable.
+            // The model values (ModelPass.h): the points above are calculated; the iterator skips the component
+            // segments, so those of a segment that assembles its value are calculated by the model pass.
             for (int s = 1; s <= localData->NumSegments(); s++) {
               ESegment *seg = localData->GetSegment(s);
-              if (!seg || !seg->NeedsAssembly()) continue;
-              for (int pid = 0; pid < seg->NumPoints(); pid++)
-                seg->GetPoint(pid + 1)->SetFitCrossSection(
-                    localResults, seg->CalculateTheoreticalCrossSection(pid, localCompound, g_mcmc_for_callbacks->configure(),
-                                                                        localData, localResults));
+              azure2::EvaluateModelSegment(*seg, localCompound, g_mcmc_for_callbacks->configure(), localResults,
+                                           seg->NeedsAssembly() ? azure2::LeafValues::Calculate : azure2::LeafValues::Ready);
             }
 
             localData->WriteOutputFiles(g_mcmc_for_callbacks->configure(), localResults, true);

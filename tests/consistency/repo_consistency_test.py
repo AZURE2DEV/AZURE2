@@ -599,6 +599,29 @@ for rel in ("include/EPoint.h", "include/EData.h"):
         problems.append(f"{rel}: declares a results member ({' '.join(stmt.split())}); the buffer belongs to the "
                         "caller of the evaluation and is passed in (include/Results.h)")
 
+# 27. One model pass and one residual (docs/upgrade/data_model.md S4, include/ModelPass.h): what a data set predicts
+#     is combined in src/ModelPass.cpp only (ComposeModelValue, TransformedValue, reached through
+#     azure2::EvaluateModelPoint / EvaluateModelSegment / EvaluateModel), and the residual (f - y n)/(dy n) is written
+#     once (azure2::DataResidual, PointResidual).  A second combination loop or residual expression drifts from the
+#     first the next time either changes (before S4: 19 loops and 9 residuals).
+COMPOSITION = re.compile(r"(?<![\w:])(?:ComposeModelValue|TransformedValue|CalculateTheoreticalCrossSection)\s*\(")
+RESIDUAL = re.compile(r"[\w)\]]\s*-(?![>-])\s*[\w\->.()]*?(?:GetCMCrossSection\(\)|\bdataval\b|\bd\[\w+\])\s*\*\s*"
+                      r"[\w\[\].>()-]*?\b(?:n|norm|dataNorm|GetNorm)\b")
+for top in ("src", "api/src", "include", "tests/upgrade", "tests/reference"):
+    for name in sorted(os.listdir(os.path.join(ROOT, top))):
+        rel = f"{top}/{name}"
+        if not name.endswith((".cpp", ".h")) or rel in ("src/ModelPass.cpp", "include/ModelPass.h"):
+            continue
+        text = re.sub(r"//[^\n]*|/\*.*?\*/", "", read(rel), flags=re.S)
+        if COMPOSITION.search(text):
+            problems.append(f"{rel}: combines a segment's model value itself; call azure2::EvaluateModelPoint "
+                            "(include/ModelPass.h), the one model pass")
+        for m in RESIDUAL.finditer(text):
+            problems.append(f"{rel}: writes a data residual ({m.group(0).strip()}); use azure2::DataResidual or "
+                            "PointResidual (include/ModelPass.h)")
+if not RESIDUAL.search("double r = th - pt->GetCMCrossSection() * norm;"):
+    problems.append("check 27: the residual pattern no longer matches the form it guards; update this check")
+
 
 if problems:
     for p in problems:
@@ -606,4 +629,4 @@ if problems:
     print(f"{len(problems)} consistency problem(s)")
     sys.exit(1)
 print(f"repository consistent: {len(flags)} CLI flags, segment keywords, test registration, check.sh modes, pyazr version and exports, "
-      f"format-3 reference page, {len(declared)} diagnostic codes, file sizes")
+      f"format-3 reference page, {len(declared)} diagnostic codes, file sizes, one model pass and residual")

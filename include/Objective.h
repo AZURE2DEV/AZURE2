@@ -33,17 +33,15 @@
 struct ObjectiveContext {
   CNuc *compound;
   EData *data;
-  /// The buffer of the evaluation, holding the model value of every point of `data`.
-  const azure2::Results &results;
+  /// The buffer of the evaluation: the model value of every point of `data` (azure2::EvaluateModel) in, what the terms
+  /// store out (Results::objective: profiled norms, THM profiles, segment chi^2, totals; the writer reads them).
+  azure2::Results &results;
   const vector_r &p;
   const Config &config;
   /// Per-segment data chi^2 out (index = segment number, the THM experiment's at its last segment), or null.
   std::vector<double> *segmentChi2 = nullptr;
   /// Only the THM segments' data chi^2 (T1-T4 over THM segments; no other term).
   bool thmOnly = false;
-  /// Store the segment chi^2 and the Park, abundance, scattering-length and prior-covariance totals into `data`
-  /// (the writer reads them): the evaluation the fit reports, not a probe.
-  bool storeTotals = false;
   /// Add the normalization and energy-shift priors (T3, T4) in the segment loop.  The MCMC takes them as log-priors
   /// (AZURECalcMCMC::CalculateLogPrior) and evaluates only the data part (Objective::DataChi2).
   bool segmentPriors = true;

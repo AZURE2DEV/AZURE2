@@ -2,6 +2,7 @@
 #include "Objective.h"
 #include "ParameterLimitsManager.h"
 #include "AZUREAPI.h"
+#include "ModelPass.h"
 #include "ScatteringLength.h"
 #include "AZUREParams.h"
 
@@ -184,7 +185,8 @@ int AZUREAPI::Initialize() {
   if (data()->Initialize(compound(), configure()) == -1) return -1;
   // The session's buffer for the new layout, at 0 until an evaluation writes it (a read before any evaluation, such
   // as GetThmExperiments, sees 0 as it did when the data set held the buffer).
-  results_.slot.assign(data()->ResultsSize(), 0.0);
+  results_ = azure2::Results();
+  data()->SizeResults(results_);
 
   return 0;
 }
@@ -374,22 +376,18 @@ int AZUREAPI::UpdateSegments(vector_r &p) {
     // Handle component segments using the new integrated calculation method
     if (segments[i].NeedsAssembly()) {
       for (int k = 0; k < data.size(); ++k) {
-        // Use the new component-aware calculation method
-        double theoreticalValue = segments[i].CalculateTheoreticalCrossSection(k, localCompound, configure(), localData, results(), pre);
-
-        // Update the point's fit cross section with the combined result
-        data[k].SetFitCrossSection(results(), theoreticalValue);
-
-        cross.push_back(theoreticalValue);
+        // The segment's model value (ModelPass.h); E1, E2 and the angles of its base point
+        cross.push_back(azure2::EvaluateModelPoint(segments[i], k, localCompound, configure(), results(),
+                                                   pre ? azure2::LeafValues::Ready : azure2::LeafValues::Calculate));
         crossE1.push_back(data[k].GetFitE1CrossSection(results()));
         crossE2.push_back(data[k].GetFitE2CrossSection(results()));
         angles.push_back(data[k].GetCMAngle());
         energies.push_back(data[k].GetCMEnergy());
         conv.push_back(data[k].GetSFactorConversion());
         excitationEnergies.push_back(data[k].GetExcitationEnergy());
-        angularDists.push_back((double)data[k].GetNumAngularDists(results()));
-        for (int a = 0; a < data[k].GetNumAngularDists(results()); ++a)
-          angularDists.push_back(data[k].GetAngularDist(results(), a));
+        angularDists.push_back((double)data[k].GetNumModelAngularDists(results()));
+        for (int a = 0; a < data[k].GetNumModelAngularDists(results()); ++a)
+          angularDists.push_back(data[k].GetModelAngularDist(results(), a));
       }
     } else {
       // Regular segment calculation (existing logic)
@@ -484,22 +482,18 @@ int AZUREAPI::UpdateSegmentsRWA(vector_r &p) {
     // Handle component segments using the new integrated calculation method
     if (segments[i].NeedsAssembly()) {
       for (int k = 0; k < data.size(); ++k) {
-        // Use the new component-aware calculation method
-        double theoreticalValue = segments[i].CalculateTheoreticalCrossSection(k, localCompound, configure(), localData, results(), pre);
-
-        // Update the point's fit cross section with the combined result
-        data[k].SetFitCrossSection(results(), theoreticalValue);
-
-        cross.push_back(theoreticalValue);
+        // The segment's model value (ModelPass.h); E1, E2 and the angles of its base point
+        cross.push_back(azure2::EvaluateModelPoint(segments[i], k, localCompound, configure(), results(),
+                                                   pre ? azure2::LeafValues::Ready : azure2::LeafValues::Calculate));
         crossE1.push_back(data[k].GetFitE1CrossSection(results()));
         crossE2.push_back(data[k].GetFitE2CrossSection(results()));
         angles.push_back(data[k].GetCMAngle());
         energies.push_back(data[k].GetCMEnergy());
         conv.push_back(data[k].GetSFactorConversion());
         excitationEnergies.push_back(data[k].GetExcitationEnergy());
-        angularDists.push_back((double)data[k].GetNumAngularDists(results()));
-        for (int a = 0; a < data[k].GetNumAngularDists(results()); ++a)
-          angularDists.push_back(data[k].GetAngularDist(results(), a));
+        angularDists.push_back((double)data[k].GetNumModelAngularDists(results()));
+        for (int a = 0; a < data[k].GetNumModelAngularDists(results()); ++a)
+          angularDists.push_back(data[k].GetModelAngularDist(results(), a));
       }
     } else {
       // Regular segment calculation (existing logic)
@@ -595,22 +589,18 @@ int AZUREAPI::UpdateSegmentsAllRWA(vector_r &p) {
     // Handle component segments using the new integrated calculation method
     if (segments[i].NeedsAssembly()) {
       for (int k = 0; k < data.size(); ++k) {
-        // Use the new component-aware calculation method
-        double theoreticalValue = segments[i].CalculateTheoreticalCrossSection(k, localCompound, configure(), localData, results(), pre);
-
-        // Update the point's fit cross section with the combined result
-        data[k].SetFitCrossSection(results(), theoreticalValue);
-
-        cross.push_back(theoreticalValue);
+        // The segment's model value (ModelPass.h); E1, E2 and the angles of its base point
+        cross.push_back(azure2::EvaluateModelPoint(segments[i], k, localCompound, configure(), results(),
+                                                   pre ? azure2::LeafValues::Ready : azure2::LeafValues::Calculate));
         crossE1.push_back(data[k].GetFitE1CrossSection(results()));
         crossE2.push_back(data[k].GetFitE2CrossSection(results()));
         angles.push_back(data[k].GetCMAngle());
         energies.push_back(data[k].GetCMEnergy());
         conv.push_back(data[k].GetSFactorConversion());
         excitationEnergies.push_back(data[k].GetExcitationEnergy());
-        angularDists.push_back((double)data[k].GetNumAngularDists(results()));
-        for (int a = 0; a < data[k].GetNumAngularDists(results()); ++a)
-          angularDists.push_back(data[k].GetAngularDist(results(), a));
+        angularDists.push_back((double)data[k].GetNumModelAngularDists(results()));
+        for (int a = 0; a < data[k].GetNumModelAngularDists(results()); ++a)
+          angularDists.push_back(data[k].GetModelAngularDist(results(), a));
       }
     } else {
       // Regular segment calculation (existing logic)
@@ -863,7 +853,6 @@ bool AZUREAPI::WriteOutputFiles() {
   if (localCompound) {
     const vector_r none;
     ObjectiveContext context{localCompound, data(), results(), none, configure()};
-    context.storeTotals = true;
     Objective::Engine().ModelChi2(context);
   }
   data()->WriteOutputFiles(configure(), results(), false, nullptr);
@@ -940,7 +929,8 @@ bool AZUREAPI::RebuildImpl(const std::map<int, double> &radii) {
     configure().paramMask |= Config::USE_PREVIOUS_INTEGRALS;
     return false;
   }
-  results_.slot.assign(data()->ResultsSize(), 0.0);  // as after the first Initialize
+  results_ = azure2::Results();  // as after the first Initialize
+  data()->SizeResults(results_);
   configure().paramMask |= Config::USE_PREVIOUS_INTEGRALS;
 
   // Without this the client keeps the pre-change parameter vector, names,
@@ -1005,11 +995,8 @@ double AZUREAPI::EvaluateFilledChi2(vector_r *res) const {
   for (int i = 1; i <= ld->NumSegments(); i++) {
     ESegment *segment = ld->GetSegment(i);
     if (!segment) continue;
-    for (int pid = 0; pid < segment->NumPoints(); pid++) {
-      double th = segment->CalculateTheoreticalCrossSection(pid, lc, configure(), ld, results(), pre);
-      EPoint *point = segment->GetPoint(pid + 1);
-      if (point) point->SetFitCrossSection(results(), th);
-    }
+    azure2::EvaluateModelSegment(*segment, lc, configure(), results(),
+                                 pre ? azure2::LeafValues::Ready : azure2::LeafValues::Calculate);
 
     // A THM experiment: one profile (shared norm, background) over its
     // segments, at the last of them, as the CLI.
@@ -1034,23 +1021,19 @@ double AZUREAPI::EvaluateFilledChi2(vector_r *res) const {
     }
 
     // A free THM norm is the arbitrary HOES scale: profiled to its optimum
-    // (which also stores n* on the segment), exactly as the CLI does.
+    // (n* stored in the buffer), exactly as the CLI does.
     double segChi = 0.0;
     const bool profiled = segment->IsProfiledNorm();
-    if (profiled) segChi = segment->ProfileNormChiSquared(results());
+    if (profiled) segChi = segment->ProfileNormChiSquared(results(), results().objective.norm[i]);
 
-    const double norm = segment->GetNorm();
+    const double norm = ld->NormUsed(i, results());
     for (int pid = 0; pid < segment->NumPoints(); pid++) {
-      EPoint *point = segment->GetPoint(pid + 1);
-      if (!point) continue;
-      double residual = point->GetFitCrossSection(results()) - point->GetCMCrossSection() * norm;
-      double error = point->GetCMCrossSectionError() * norm;
-      double r = (error != 0.0) ? residual / error : 0.0;
+      const double r = azure2::PointResidual(*segment->GetPoint(pid + 1), results(), norm).Pull();
       if (!profiled) segChi += r * r;
       if (res) res->push_back(r);
     }
 
-    segment->SetSegmentChiSquared(segChi);
+    results().objective.segmentChi2[i] = segChi;
     chiSquared += segChi;
   }
   // Data covariance: r^T M^-1 r over each group in place of its points' r_i^2 (never a THM segment).
@@ -1073,7 +1056,7 @@ double AZUREAPI::CalculateChi2RWA(const vector_r &rwaParams) const {
   FillFromFullRWA(full);
   // Prior parameter covariance (dev b7e77292): not part of this chi2 (pyazr's objective() adds
   // penalties()["prior_covariance"]), recorded for chiSquared.out (WriteOutputFiles).
-  if (const PriorCovariance *pc = data()->GetPriorCovariance()) data()->SetPriorCovarianceChi2(pc->Chi2(full));
+  if (const PriorCovariance *pc = data()->GetPriorCovariance()) results().objective.priorCovariance = pc->Chi2(full);
   return EvaluateFilledChi2(nullptr) + FilledModelPenalties();
 }
 
@@ -1094,7 +1077,7 @@ vector_r AZUREAPI::GetCurrentNorms() const {
     int newKey = segments[i].GetSegmentKey();
     if (prevKey == newKey) continue;
     prevKey = newKey;
-    out.push_back(segments[i].GetNorm());
+    out.push_back(data()->NormUsed((int)i + 1, results()));
   }
   return out;
 }
@@ -1162,7 +1145,7 @@ double AZUREAPI::CalculateChi2Physical(const vector_r &physicalParams) const {
   localData->FillEnergyShiftsFromParams(params_, results(), localData, localCompound, &configure());
   if (configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure());
 
-  if (const PriorCovariance *pc = localData->GetPriorCovariance()) localData->SetPriorCovarianceChi2(pc->Chi2(params_));
+  if (const PriorCovariance *pc = localData->GetPriorCovariance()) results().objective.priorCovariance = pc->Chi2(params_);
   // The same terms CalculateChi2RWA adds: the two bases must give one objective (dev 7284d09).
   return EvaluateFilledChi2(nullptr) + FilledModelPenalties();
 }
@@ -1214,8 +1197,8 @@ bool AZUREAPI::Chi2GradEGammaNorm(const vector_r &full, vector_r &gradFull,
     double norm = seg->GetNorm();
     double dataval = pt->GetCMCrossSection();
     double cmErr = pt->GetCMCrossSectionError();
-    double r = model - dataval * norm;
-    double err = cmErr * norm;
+    const azure2::Residual res = azure2::DataResidual(model, dataval, cmErr, norm);
+    const double r = res.difference, err = res.error;
     if (err == 0.0) return 0.0;
     // chi2 falls out of the same residual the gradient uses (so value and
     // gradient stay consistent). Runs in the parallel point loop, so guard it.
@@ -1295,11 +1278,11 @@ vector_r AZUREAPI::CalculateChi2GradRWA(const vector_r &params) const {
         // A THM experiment, profiled by ComputeTHMRows: its residuals.
         for (double r : tr.r) c += r * r;
       } else if (seg->IsProfiledNorm()) {
-        c = seg->ProfileNormChiSquared(results());
+        c = seg->ProfileNormChiSquared(results(), results().objective.norm[tr.segment]);
       } else {
         for (double r : tr.r) c += r * r;
       }
-      seg->SetSegmentChiSquared(c);
+      results().objective.segmentChi2[tr.segment] = c;
       chi2 += c;
       for (int col = 0; col < nCols; col++) {
         double g = 0.0;
@@ -1388,7 +1371,6 @@ double AZUREAPI::CalculateObjectiveRWA(const vector_r &params, std::vector<doubl
   FillFromFullRWA(full);
   EvaluateFilledChi2(nullptr);  // the model value of every point (the objective's data term recomputes the sum)
   ObjectiveContext context{compound(), data(), results(), full, configure()};
-  context.storeTotals = true;
   context.termsOut = terms;
   context.segmentPriorsOut = segments;
   context.nuisance = [this](const vector_r &q) { return NuisanceChi2(q); };

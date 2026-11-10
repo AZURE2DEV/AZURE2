@@ -3,8 +3,8 @@
 //
 // value: each node, and the compositions the engine forms today (SUM with frame factors and abundances, RATIO,
 // transmission and self-shielded yield with and without sub-points and free-gas Doppler), against the engine's
-// expressions written out below as they stand in src/ESegment.cpp (CalculateTheoreticalCrossSection,
-// TransformedValue, Transmission, YieldY0, TermFrameFactor), bit for bit, on values with full 53-bit mantissas.  A
+// expressions written out below as they stand in src/ModelPass.cpp (ComposeModelValue,
+// TransformedValue) and src/ESegment.cpp (Transmission, YieldY0, TermFrameFactor), bit for bit, on values with full 53-bit mantissas.  A
 // reordered sum or product (a + b + c as a + (b + c), (c J) v as c (J v)) changes the last bit at some of the 4000
 // random points and fails here.  Edge cases: a zero RATIO denominator (NaN, also -0), an empty Sum (0), a zero sample
 // thickness, a vanishing yield total (the series branch), a term with a sub-point grid of another length (NaN).
@@ -71,7 +71,7 @@ struct OldComponent {
   double scaling, jBase, jTerm, value, abundance;
 };
 
-// ESegment::CalculateTheoreticalCrossSection, SUM and natural branches
+// ComposeModelValue (src/ModelPass.cpp), SUM and natural branches
 double OldSum(double baseValue, bool natural, double baseAbundance, const std::vector<OldComponent> &comps,
               std::vector<double> *naturalTerms = nullptr) {
   if (natural) {
@@ -94,7 +94,7 @@ double OldSum(double baseValue, bool natural, double baseAbundance, const std::v
   return sum;
 }
 
-// ESegment::CalculateTheoreticalCrossSection, RATIO branch
+// ComposeModelValue (src/ModelPass.cpp), RATIO branch
 double OldRatio(double baseValue, double denominatorValue, double baseConversionFactor,
                 double denominatorConversionFactor) {
   if (denominatorValue == 0.0) return NaN;
@@ -764,7 +764,7 @@ void TestTransform(bool yield, bool natural, int mode) {
       for (std::size_t q = 0; q <= K; q++) okNat = okNat && same(natOld[q], natNew[q]);
     }
   }
-  check("Evaluate = ESegment::TransformedValue, bit for bit", ok);
+  check("Evaluate = TransformedValue (src/ModelPass.cpp), bit for bit", ok);
   if (natural) check("Natural = ESegment's SetNaturalTerms", okNat);
 
   // backward against finite differences on 3 points
