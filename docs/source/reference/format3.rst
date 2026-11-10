@@ -333,7 +333,7 @@ Extrapolation, in ``<extrapolations>``.  Model values on a grid, without data (s
    * - ``energies``
      - ``range <lo> <hi> <energy unit> lab|cm step <s> | range <lo> <hi> <energy unit> lab|cm points <n> [log] | list <v> ... <energy unit> lab|cm | file <path> <energy unit> lab|cm | adaptive <lo> <hi> <energy unit> lab|cm tolerance <t> max_points <n> start_step <s>``
      - required
-     - the energy grid (F10: E_k = lo + k step)
+     - the energy grid: range, list, file or adaptive (section 3.8)
    * - ``angles``
      - ``range <lo> <hi> <angle unit> lab|cm step <s> | range <lo> <hi> <angle unit> lab|cm points <n> [log] | list <v> ... <angle unit> lab|cm | file <path> <angle unit> lab|cm | adaptive <lo> <hi> <angle unit> lab|cm tolerance <t> max_points <n> start_step <s> | none``
      - optional

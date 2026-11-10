@@ -344,7 +344,7 @@ RecordKind ExtrapolationKind() {
                      PairKeyFields(),
                      {Req("quantity", "Quantity", QuantityEnum("extrapolation"), "what is computed (section 7.2)"),
                       Req("unit", "Unit", Spec(ValueType::Unit, "@quantity"), "unit of the output values"),
-                      Req("energies", "Energies", GridOf("energy"), "the energy grid (F10: E_k = lo + k step)"),
+                      Req("energies", "Energies", GridOf("energy"), "the energy grid: range, list, file or adaptive (section 3.8)"),
                       Opt("angles", "Angles", GridOrNone("angle"), "the angle grid; required for quantities with an angle"),
                       Defaulted(Opt("active", "Active", Words({"yes", "no"}), "an inactive extrapolation is not computed"), "yes"),
                       ByQ("orders", "Legendre orders", Structured(f.orders), "the Legendre orders computed")},

@@ -25,6 +25,8 @@ PairInfo PairInfoOfRow(const io::LevelRow &r) {
   p.lightExcitation = r.e1();
   p.heavyExcitation = r.e2();
   p.threshold = r.sepE() + (r.e1() + r.e2());  // PPair: GetSepE() + GetExE()
+  p.lightMass = r.m1();
+  p.heavyMass = r.m2();
   p.twoJLight = (int)std::lround(2.0 * r.j1());
   p.twoJHeavy = (int)std::lround(2.0 * r.j2());
   p.identical = io::IdenticalParticles(r);

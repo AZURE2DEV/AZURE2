@@ -28,6 +28,7 @@ struct PairInfo {
   /// The two excitations as written in <levels> ("" = not known: the label formats the value)
   std::string lightExcitationText, heavyExcitationText;
   double threshold = 0.0;  ///< MeV, the E_x of the compound nucleus at which the pair opens (S + e1 + e2)
+  double lightMass = 0.0, heavyMass = 0.0;  ///< u, the masses of <levels> (PPair's), for the frame of a c.m. grid
   int twoJLight = 0, twoJHeavy = 0;  ///< 2j of the two particles
   bool identical = false;            ///< the two particles are identical (PPair::IsIdentical)
 };

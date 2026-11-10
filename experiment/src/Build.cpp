@@ -9,6 +9,7 @@
 #include <sstream>
 
 #include "azure2/experiment/BuildContext.h"
+#include "azure2/experiment/Grids.h"
 #include "azure2/experiment/ModelDatum.h"
 #include "azure2/physics/Elements.h"
 
@@ -491,38 +492,23 @@ bool BuildDataset(Context &c, const ValidatedRecord &r, DatasetSpec &d, Member &
   return ok;
 }
 
-// The grid of an extrapolation (decision F10: range lo hi step s is E_k = lo + k s).  `bounds` are its lo and hi.
-bool ReadGrid(Context &c, const ValidatedRecord &r, const std::string &field, const Grid &g, std::vector<double> &values,
-              double &lo, double &hi) {
-  if (g.frame == "cm" && field == "energies") {
-    c.Error(codes::kNotBuilt, r, field, "an energy grid in the c.m. frame: this engine takes lab energies (a later step)");
+// The grid of an extrapolation (Grids.h).  `lo` and `hi` are its bounds as the segment reports them.
+bool ReadGrid(Context &c, const ValidatedRecord &r, const std::string &field, const Grid &g, const PairInfo *entrance,
+              std::vector<double> &values, double &lo, double &hi, std::string *file = nullptr) {
+  GridSetting setting;
+  setting.energies = field == "energies";
+  setting.entrance = entrance;
+  setting.relativistic = c.opt_.relativistic;
+  setting.projectDir = c.opt_.projectDir;
+  GridValues v = ReadGridValues(g, setting);
+  if (!v.ok) {
+    c.Error(v.code, r, field, v.error);
     return false;
   }
-  if (g.kind == "list") {
-    for (const Number &n : g.values) values.push_back(Context::InBase(n, g.unit));
-  } else if (g.kind == "range" && g.hasStep) {
-    lo = Context::InBase(g.lo, g.unit);
-    hi = Context::InBase(g.hi, g.unit);
-    const double step = Context::InBase(g.step, g.unit);
-    const long n = step > 0 ? (long)std::floor((hi - lo) / step + 1e-9) : 0;
-    for (long k = 0; k <= n; k++) values.push_back(lo + k * step);
-    return true;
-  } else if (g.kind == "range" && g.hasPoints) {
-    lo = Context::InBase(g.lo, g.unit);
-    hi = Context::InBase(g.hi, g.unit);
-    for (long k = 0; k < g.points; k++) {
-      const double t = g.points > 1 ? (double)k / (double)(g.points - 1) : 0.0;
-      values.push_back(g.log ? lo * std::pow(hi / lo, t) : lo + t * (hi - lo));
-    }
-    return true;
-  } else {
-    c.Error(codes::kNotBuilt, r, field, "a grid of kind " + g.kind + ": this engine takes range and list grids (a later step)");
-    return false;
-  }
-  if (!values.empty()) {
-    lo = values.front();
-    hi = values.back();
-  }
+  values = std::move(v.values);
+  lo = v.lo;
+  hi = v.hi;
+  if (file) *file = v.file;
   return true;
 }
 
@@ -535,8 +521,15 @@ bool BuildExtrapolation(Context &c, const ValidatedRecord &r, ExtrapolationSpec 
   if (!ok) return false;
   ok = ReadObservable(c, r, angleFrame, x.reaction) && ok;
   ok = EngineUnit(c, r) && ok;
-  if (const Value *e = r.Get("energies")) ok = ReadGrid(c, r, "energies", e->grid, x.energies, x.minE, x.maxE) && ok;
-  if (hasAngles) ok = ReadGrid(c, r, "angles", angles->grid, x.angles, x.minA, x.maxA) && ok;
+  if (const Value *e = r.Get("energies")) {
+    ok = ReadGrid(c, r, "energies", e->grid, c.Pair(x.reaction.entranceKey), x.energies, x.minE, x.maxE, &x.gridFile) && ok;
+    if (e->grid.kind == "adaptive") {
+      x.adaptive.on = true;
+      x.adaptive.tolerance = e->grid.tolerance.value;
+      x.adaptive.maxPoints = e->grid.maxPoints;
+    }
+  }
+  if (hasAngles) ok = ReadGrid(c, r, "angles", angles->grid, nullptr, x.angles, x.minA, x.maxA) && ok;
   else x.angles = {0.0};
   if (const Value *o = r.Get("orders")) {
     const Value *first = o->Get("first"), *last = o->Get("last");

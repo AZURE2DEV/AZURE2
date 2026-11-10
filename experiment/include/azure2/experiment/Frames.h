@@ -58,6 +58,9 @@ struct BeamEnergiesCM {
 };
 /// E_c.m., E_x and the c.m. bin edges of a beam point of lab energy eLab and bin edges binLowLab, binHighLab.
 BeamEnergiesCM BeamToCM(const Partition &entrance, double eLab, double binLowLab, double binHighLab, bool relativistic);
+/// The lab energy of a beam point whose E_c.m. is eCM: the inverse of BeamToCM's map (non-relativistic eCM (m1 + m2)/m2,
+/// relativistic LabFromCM), for an energy grid given in the c.m. frame.  BeamToCM gives eCM back to rounding.
+double BeamLabFromCM(const Partition &entrance, double eCM, bool relativistic);
 /// E_c.m. of a beta-delayed point: eLab is the light particle's lab energy, the partition the decay's (exit) pair.
 double DecayToCM(const Partition &exit, double eLab, bool relativistic);
 
