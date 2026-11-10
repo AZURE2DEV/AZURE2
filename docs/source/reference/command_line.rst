@@ -176,6 +176,21 @@ Available Options
        format-3 reader; their number is printed as a note.  Exit 0 without errors, 2 with errors,
        3 for a format-1 or format-2 file (with the conversion command), 1 when ``FILE`` cannot be
        read.  ``pyazr.validate(path)`` returns the same diagnostics.
+   * - ``--print-predictions``
+     - ``--print-predictions FILE``: set the project ``FILE`` up as a calculation would (its
+       data files are read relative to the working directory), print what every data set and
+       then every extrapolation predicts, one line each as ``data <key>: <tree>`` or
+       ``extrapolation <key>: <tree>``, and exit.  The tree is the expression the model pass
+       evaluates at each point: leaves ``sigma(1->2)``, ``sigma(1->2; mult=E1)``,
+       ``dsdo_cm(1->2)``, ``ay``, ``phase(1->1; J=..; l=..; s=..)``, ``ak``/``Ak``,
+       ``angdist(..; k=K)``, ``sigma_total(1->1)`` (``thm_`` before a THM observable;
+       ``angle=`` for a term at a fixed lab angle); nodes ``sum(a, b, ...)``,
+       ``c*J0/Jk*a`` (a SUM term with its scaling c and the frame factor J_0/J_k into the
+       frame of the first term), ``abundance(<sample>, <nucleus>)*a``, ``ratio(a, b)*J1/J0``
+       (each term with its own lab-to-c.m. factor J_k), ``transmission(n=<n>, a)`` and
+       ``yield(n=<n>, a, s_t)`` (n the nominal sample thickness, atoms/b).  Exit 0, or 1 with
+       the set-up's messages on standard error when the project cannot be set up.
+       ``pyazr.predictions(path)`` returns the same lines.
    * - ``--schema``
      - Print the table of project format 3 as one JSON document and exit: the
        record kinds and their fields with value types and conditions, the

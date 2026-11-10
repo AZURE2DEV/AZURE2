@@ -154,7 +154,7 @@ cli_doc = read("docs/source/reference/command_line.rst")
 flags = set(re.findall(r'"(--[a-z0-9-]+)=?"', parser))
 # Handled in main() before parseOptions, so accepted although parseOptions
 # never sees them.
-handled_in_main = {"--help", "--build-coulomb-table", "--convert", "--schema", "--validate",
+handled_in_main = {"--help", "--build-coulomb-table", "--convert", "--schema", "--validate", "--print-predictions",
                    # options of --convert ... --to 3 and of --validate, read in main() with their command
                    "--to", "--json-report", "--answers", "--exact-grids", "--strict", "--allow-questions", "--json"}
 flags -= handled_in_main
@@ -656,6 +656,26 @@ for top in ("src", "api/src", "include", "tests/upgrade", "tests/reference"):
                             "PointResidual (include/ModelPass.h)")
 if not RESIDUAL.search("double r = th - pt->GetCMCrossSection() * norm;"):
     problems.append("check 28: the residual pattern no longer matches the form it guards; update this check")
+# ... and the composition is the expression tree's (step S10, include/Predictions.h): the pieces it combines -- a
+# term's scaling and frame factor, a sample's abundance weight, the transmission / yield transform, the transform's
+# term list -- are read only where the tree's inputs are filled (src/ModelPass.cpp) or its setup is made
+# (src/Predictions.cpp), and defined in ESegment; experiment/ holds the arithmetic.  The adjoint of the composition is
+# the tree's backward too (step S11, azure2::ModelPointBackward), so the gradient reads none of them.
+PIECES = re.compile(r"(?<![\w:])(?:ESegment::)?(?:TermFrameFactor|RatioTermFrameFactor|TransformTerms|Transmission|YieldY0)"
+                    r"\s*\(|(?:->|\.)GetComponentScaling\s*\(|(?:->|\.)GetAbundance\s*\(\s*\w*[Ss]ample")
+PIECES_ALLOWED = {"src/ModelPass.cpp", "src/Predictions.cpp", "src/ESegment.cpp", "include/ESegment.h"}
+for top in ("src", "api/src", "include"):
+    for name in sorted(os.listdir(os.path.join(ROOT, top))):
+        rel = f"{top}/{name}"
+        if not name.endswith((".cpp", ".h")) or rel in PIECES_ALLOWED:
+            continue
+        text = re.sub(r"//[^\n]*|/\*.*?\*/", "", read(rel), flags=re.S)
+        for m in PIECES.finditer(text):
+            problems.append(f"{rel}: composes a model value from its pieces ({m.group(0).strip()}); a data set's "
+                            "prediction is its expression tree (include/Predictions.h, evaluated by "
+                            "azure2::EvaluateModelPoint)")
+if not PIECES.search("w = compound->GetAbundance(sample, nucleus) * ESegment::TermFrameFactor(p, q);"):
+    problems.append("check 28: the composition pattern no longer matches the form it guards; update this check")
 
 
 if problems:

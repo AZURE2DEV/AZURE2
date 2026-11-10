@@ -2,6 +2,52 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-10 (evening) — Phase 4 S10 and S11: the model pass evaluates the expression tree; the gradient through `backward` (`feature/upgrade-4-expr`)
+
+**Done** (brief H; `data_model.md` S10, S11, M7).
+- **S10.** `experiment/Prediction.h`: one builder per kind of tree (observable, SUM — also a total capture —, RATIO,
+  transmission, yield) in the table `TreeKinds()` (`TreeKindOf` decides), from a `PredictionSetup` (the reaction, the
+  terms the set-up made: component segments with scaling, fixed angle, compound nucleus; sample; thickness); the tree's
+  leaves, factors and parameters listed beside it; `PredictionText`.  `Expression.h`: `Inputs`/`Cotangents` are views
+  of the caller's arrays, the workspace holds a tree of up to 32 nodes at one point in fixed arrays (no allocation).
+  Engine: `EData::BuildPredictions` (after Fill / MakePoints, `src/Predictions.cpp`) gives every segment an immutable
+  tree shared by the working copies; `ComposeModelValue` (src/ModelPass.cpp) fills the inputs at the point and evaluates
+  it; the hand-written SUM / RATIO / sample / transform arithmetic is gone.  `AZURE2 --print-predictions FILE`,
+  `pyazr.predictions(path)` (2.17.0); ctest `upgrade_predictions` (189 projects of tests/ and examples/ against
+  `tests/upgrade/predictions.txt`; regenerate with `python3 tests/upgrade/predictions_test.py --binary <AZURE2> --write`),
+  `pyazr_predictions`, `experiment_prediction`.  Check 28 extended (the pieces of a composition are read only where the
+  tree's inputs or setup are made).
+- **S11.** `azure2::ModelPointBackward` (cotangents of leaves, sub-points and parameters from the tree's `Backward`);
+  every route of `src/AZUREGrad.cpp` uses it (plain, shared-component, per-term, transform, grouped).
+  `GradTransformedPoint`, the SUM/RATIO coefficients, the abundance weights, `ESegment::TransformTerms`, `Transmission`,
+  `YieldY0` deleted; AZUREGrad.cpp 2036 → 1850, ESegment.cpp 1446 → 1406.
+
+**Verified** (work/b-expr, 0 warnings, 3 threads, `AZURE2_COULOMB_TABLE` set): 179 × 3 identical to `tab-p3f` after S10
+(tag `tab-expr-s10`) and after S11 (`tab-expr-s11`), 689 / 662 / 689; `ctest -LE slow` 158/158 after each part
+(poison and history tests pass); `tests/run_tests.sh` (final tree, OMP 3) 137 passed / 0 failed; calculations at 1 and 2
+threads on T1–T3 and 13N in three bases 12/12 identical; S11 gate against the start head (pyazr, 1 thread):
+`objective_and_grad`, `chi2_and_grad`, `residual_jacobian`, `model_gradients` of T1, T2, T3, natural_neon, two
+transmission/yield models (with and without a spread) and a SUM project, 75 arrays all bit for bit; T1 and T3 fits
+`--use-gradient --max-calls=150` every output identical; `AZURE_GRAD_CHECK` of tests/transmission_yield unchanged
+(3.05e-11, 3.54e-11 of the largest); T2 bench (1 thread, 3 runs each) calc 0.28–0.30 s vs 0.29–0.30 s, fit200
+17.4–18.0 s vs 17.0–18.2 s, peak RSS unchanged; malloc calls of a T2 calculation +97 (the 13 trees' set-up, nothing
+per point).  Scripts: `work/expr/final.sh`, `grad_dump.py`, `grad_cmp.py`, `fits.sh`.
+
+**Follow-up (director's request): the three S11 changes off the test set, shown.** (1) An E1-only / E2-only SUM with
+a component: the forward reads the leading term's E1 / E2 part and each component's full sigma; ctest
+`pyazr_composite_gradient` (13N levels, synthetic data) compares the gradient with central differences by both
+component routes: 1.1e-7 / 8.9e-8 of the largest with this branch, 0.29 (E1) and 1.0 (E2) with the start head, whose
+adjoint took the component's E1 / E2 part.  (2) A RATIO with a zero numerator: `experiment_expression` checks
+`RatioBackward` against the closed form (J_den/J_num)/den; no project shows it in a gradient, because a numerator that
+is exactly 0 (closed exit channel, zero width) has zero derivative there.  (3) A non-finite SUM term: the forward
+propagates it (NaN sum) and the tree's adjoint does not skip it (unit test in `experiment_expression`); the old adjoint
+skipped it while the forward did not.  The head of `feature/upgrade-4-data` has moved (docs, `include/Constants.h` named
+masses); this branch is not rebased on it (the director merges).
+
+**Open.** The tree holds a node per term (T2 data 8: 4 nodes); the transform path still allocates its sub-point
+vectors and the kernel object per point, as before.  Not run: 8 threads, TSan, `ctest -L slow`, sphinx.  Next: S12
+(components as leaves), S13 (filters), S14 (`predict`, `rutherford`).
+
 ## 2026-11-10 — plan for splitting `EData`, `EPoint`, `ESegment` (branch `docs/upgrade-edata-split`, documents only)
 
 **Done.** `docs/upgrade/edata_split.md`: inventory at 070756a1 of every member function (`EData` 139, `EPoint` 226,

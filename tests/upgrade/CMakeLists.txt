@@ -122,3 +122,11 @@ if(Python3_Interpreter_FOUND)
            COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/poison_results_test.py --binary $<TARGET_FILE:AZURE2>)
   set_tests_properties(upgrade_poison_results PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2" TIMEOUT 1800)
 endif()
+# What every data set and extrapolation of tests/ and examples/ predicts (docs/upgrade/data_model.md section 3, step
+# S10): `AZURE2 --print-predictions` against the committed table tests/upgrade/predictions.txt (regenerate with
+# predictions_test.py --write).
+if(Python3_Interpreter_FOUND)
+  add_test(NAME upgrade_predictions
+           COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/predictions_test.py --binary $<TARGET_FILE:AZURE2>)
+  set_tests_properties(upgrade_predictions PROPERTIES TIMEOUT 1800)
+endif()

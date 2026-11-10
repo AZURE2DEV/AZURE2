@@ -426,6 +426,14 @@ void TestNodesAlone() {
   check("Ratio: den = 0 gives NaN", std::isnan(node::RatioValue(1.5, 0.0, 1.0, 1.0)));
   check("Ratio: den = -0 gives NaN", std::isnan(node::RatioValue(1.5, -0.0, 1.0, 1.0)));
   check("Ratio: num = 0 gives 0", node::RatioValue(0.0, 2.5, 1.1, 0.9) == 0.0);
+  {
+    // a zero numerator (S11): dm/dnum = (J_den / J_num) / den exactly, dm/dden = -m / den = -0 (the adjoint before
+    // S11 gave the numerator 0, since it formed m / num)
+    double cn = 0.0, cd = 0.0;
+    node::RatioBackward(1.7, 0.0, 2.5, 1.1, 0.9, 0.0, cn, cd);
+    check("Ratio backward at num = 0: numerator g (J_den/J_num)/den, denominator 0",
+          cn == 1.7 * ((0.9 / 1.1) / 2.5) && cd == 0.0, std::to_string(cn) + " " + std::to_string(cd));
+  }
   check("Sum: no children gives 0", node::SumValue(nullptr, 0) == 0.0);
   {
     const double s0 = -0.0, s1 = 0.0;
@@ -488,8 +496,11 @@ void TestSum(bool natural) {
   }
   t.Sum(terms);
   Inputs in;
-  for (auto &l : leaf) in.leaves.push_back({l.data(), 1});
-  for (auto &f : factor) in.factors.push_back({f.data(), 1});
+  std::vector<PointArray> leafArrays, factorArrays;
+  for (auto &l : leaf) leafArrays.push_back({l.data(), 1});
+  for (auto &f : factor) factorArrays.push_back({f.data(), 1});
+  in.leaves = leafArrays;
+  in.factors = factorArrays;
   in.params = abundance.data();
 
   Workspace ws;
@@ -517,7 +528,9 @@ void TestSum(bool natural) {
   std::vector<std::vector<double>> leafBar(K + 1, std::vector<double>(N, 0.0));
   std::vector<double> paramBar(K + 1, 0.0);
   Cotangents cot;
-  for (auto &l : leafBar) cot.leaves.push_back(l.data());
+  std::vector<double *> leafBarPtr;
+  for (auto &l : leafBar) leafBarPtr.push_back(l.data());
+  cot.leaves = leafBarPtr;
   cot.params = paramBar.data();
   check("Backward runs", t.Backward(in, n, g.data(), cot, ws));
   FdCheck fd;
@@ -543,7 +556,9 @@ void TestSum(bool natural) {
       std::vector<std::vector<double>> lb(K + 1, std::vector<double>(N, 0.0));
       std::vector<double> pb(K + 1, 0.0);
       Cotangents c1;
-      for (auto &l : lb) c1.leaves.push_back(l.data());
+      std::vector<double *> lbPtr;
+      for (auto &l : lb) lbPtr.push_back(l.data());
+      c1.leaves = lbPtr;
       c1.params = pb.data();
       std::vector<double> gi(n, 0.0);
       gi[i] = g[i];
@@ -578,8 +593,10 @@ void TestRatio() {
   Tree t;
   t.Ratio(t.Leaf(0), t.Leaf(1), 0, 1);
   Inputs in;
-  in.leaves = {{num.data(), 1}, {den.data(), 1}};
-  in.factors = {{jn.data(), 1}, {jd.data(), 1}};
+  const std::vector<PointArray> leafArrays{{num.data(), 1}, {den.data(), 1}};
+  const std::vector<PointArray> factorArrays{{jn.data(), 1}, {jd.data(), 1}};
+  in.leaves = leafArrays;
+  in.factors = factorArrays;
   Workspace ws;
   std::vector<double> m(N);
   t.Evaluate(in, N, m.data(), ws);
@@ -599,7 +616,8 @@ void TestRatio() {
   for (std::size_t i : pts) g[i] = rnd(0.1, 2.0, true);
   std::vector<double> nb(N, 0.0), db(N, 0.0);
   Cotangents cot;
-  cot.leaves = {nb.data(), db.data()};
+  const std::vector<double *> barPtr{nb.data(), db.data()};
+  cot.leaves = barPtr;
   t.Backward(in, N, g.data(), cot, ws);
   FdCheck fd;
   bool ag = true;
@@ -621,7 +639,8 @@ void TestRatio() {
   g1[z] = 1.0;
   std::vector<double> nb1(N, 0.0), db1(N, 0.0);
   Cotangents c1;
-  c1.leaves = {nb1.data(), db1.data()};
+  const std::vector<double *> bar1Ptr{nb1.data(), db1.data()};
+  c1.leaves = bar1Ptr;
   t.Backward(in, N, g1.data(), c1, ws);
   check("Backward at a zero denominator: NaN", std::isnan(nb1[z]) && std::isnan(db1[z]));
 }
@@ -717,13 +736,19 @@ void TestTransform(bool yield, bool natural, int mode) {
   Tree t;
   t.Transform(spec);
   Inputs in;
+  std::vector<PointArray> leafArrays, factorArrays;
+  std::vector<SubPointArray> subArrays;
   for (std::size_t q = 0; q < nTerms; q++) {
-    in.leaves.push_back({point[q].data(), 1});
-    in.subLeaves.push_back({sub[q].data(), offset.data()});
+    leafArrays.push_back({point[q].data(), 1});
+    subArrays.push_back({sub[q].data(), offset.data()});
   }
-  for (auto &f : factor) in.factors.push_back({f.data(), 1});
+  for (auto &f : factor) factorArrays.push_back({f.data(), 1});
+  in.leaves = leafArrays;
+  in.subLeaves = subArrays;
+  in.factors = factorArrays;
   in.params = params.data();
-  in.folds = {&fold};
+  const std::vector<const SubPointFold *> folds{&fold};
+  in.folds = folds;
 
   Workspace ws;
   std::vector<double> m(N);
@@ -774,10 +799,13 @@ void TestTransform(bool yield, bool natural, int mode) {
   std::vector<std::vector<double>> pb(nTerms, std::vector<double>(N, 0.0)), sb(nTerms, std::vector<double>(N * nsp, 0.0));
   std::vector<double> parBar(params.size(), 0.0);
   Cotangents cot;
+  std::vector<double *> pbPtr, sbPtr;
   for (std::size_t q = 0; q < nTerms; q++) {
-    cot.leaves.push_back(pb[q].data());
-    cot.subLeaves.push_back(sb[q].data());
+    pbPtr.push_back(pb[q].data());
+    sbPtr.push_back(sb[q].data());
   }
+  cot.leaves = pbPtr;
+  cot.subLeaves = sbPtr;
   cot.params = parBar.data();
   check("Backward runs", t.Backward(in, n, g.data(), cot, ws));
   FdCheck fd;
@@ -822,10 +850,13 @@ void TestTransform(bool yield, bool natural, int mode) {
       std::vector<std::vector<double>> pb1(nTerms, std::vector<double>(N, 0.0)), sb1(nTerms, std::vector<double>(N * nsp, 0.0));
       std::vector<double> par1(params.size(), 0.0);
       Cotangents c1;
+      std::vector<double *> pb1Ptr, sb1Ptr;
       for (std::size_t q = 0; q < nTerms; q++) {
-        c1.leaves.push_back(pb1[q].data());
-        c1.subLeaves.push_back(sb1[q].data());
+        pb1Ptr.push_back(pb1[q].data());
+        sb1Ptr.push_back(sb1[q].data());
       }
+      c1.leaves = pb1Ptr;
+      c1.subLeaves = sb1Ptr;
       c1.params = par1.data();
       t.Backward(in, i + 1, gi.data(), c1, ws);
       const OldTransformGrad ag = OldGradTransformedPoint(setups[i], gi[i], dTRows);
@@ -846,10 +877,12 @@ void TestTransform(bool yield, bool natural, int mode) {
     nl.linear = false;
     if (mode >= 1) {
       Inputs in2 = in;
-      in2.folds = {&nl};
+      const std::vector<const SubPointFold *> nlFolds{&nl};
+      in2.folds = nlFolds;
       Cotangents none;
-      none.leaves.assign(nTerms, nullptr);
-      none.subLeaves.assign(nTerms, nullptr);
+      const std::vector<double *> nulls(nTerms, nullptr);
+      none.leaves = nulls;
+      none.subLeaves = nulls;
       check("non-linear kernel: Backward returns false", !t.Backward(in2, n, g.data(), none, ws));
     }
   }
@@ -883,16 +916,20 @@ void TestEdges() {
     t.Transform(spec);
     double n = 0.01;
     Inputs in;
-    in.leaves = {{p0.data(), 1}, {p1.data(), 1}};
-    in.subLeaves = {{s0.data(), o0.data()}, {s1.data(), o1.data()}};
+    const std::vector<PointArray> leafArrays{{p0.data(), 1}, {p1.data(), 1}};
+    in.leaves = leafArrays;
+    const std::vector<SubPointArray> subArrays{{s0.data(), o0.data()}, {s1.data(), o1.data()}};
+    in.subLeaves = subArrays;
     in.params = &n;
-    in.folds = {&fold};
+    const std::vector<const SubPointFold *> folds{&fold};
+    in.folds = folds;
     Workspace ws;
     check("sub-point grids of different length: NaN", std::isnan(t.Value(in, 0, ws)));
     double g = 1.0;
     Cotangents cot;
-    cot.leaves.assign(2, nullptr);
-    cot.subLeaves.assign(2, nullptr);
+    const std::vector<double *> nulls(2, nullptr);
+    cot.leaves = nulls;
+    cot.subLeaves = nulls;
     check("... and Backward false", !t.Backward(in, 1, &g, cot, ws));
   }
   // zero thickness through the tree: T = 1 at every sub-point, the kernel of 1
@@ -912,10 +949,13 @@ void TestEdges() {
     t.Transform(spec);
     double n = 0.0;
     Inputs in;
-    in.leaves = {{p0.data(), 1}};
-    in.subLeaves = {{s0.data(), o0.data()}};
+    const std::vector<PointArray> leafArrays{{p0.data(), 1}};
+    in.leaves = leafArrays;
+    const std::vector<SubPointArray> subArrays{{s0.data(), o0.data()}};
+    in.subLeaves = subArrays;
     in.params = &n;
-    in.folds = {&fold};
+    const std::vector<const SubPointFold *> folds{&fold};
+    in.folds = folds;
     Workspace ws;
     check("transmission at zero thickness = kernel of 1", t.Value(in, 0, ws) == 1.0);
   }
@@ -932,13 +972,45 @@ void TestEdges() {
     }
     check("a node used twice is refused", threw);
   }
+  // a non-finite SUM term (S11): the forward propagates it (the sum is NaN, as the model pass has since 2026-11-01:
+  // "a non-finite term makes the sum non-finite"), and the adjoint does not skip it either: d(sum)/d(term) = c J for
+  // every term, the NaN term included, and a NaN cotangent of the value (the chi^2 slope of a NaN model) reaches every
+  // term.  The hand-written adjoint before S11 skipped the non-finite term only.
+  {
+    std::vector<double> v0{2.0}, v1{std::numeric_limits<double>::quiet_NaN()}, v2{3.0}, J{1.25};
+    Tree t;
+    const int a = t.Leaf(0);
+    const int b = t.Scale(0.5, t.Leaf(1), 0);
+    const int c = t.Scale(2.0, t.Leaf(2));
+    t.Sum({a, b, c});
+    const std::vector<PointArray> leafArrays{{v0.data(), 1}, {v1.data(), 1}, {v2.data(), 1}};
+    const std::vector<PointArray> factorArrays{{J.data(), 1}};
+    Inputs in;
+    in.leaves = leafArrays;
+    in.factors = factorArrays;
+    Workspace ws;
+    check("SUM with a NaN term: the value is NaN", std::isnan(t.Value(in, 0, ws)));
+    double c0 = 0, c1 = 0, c2 = 0;
+    const std::vector<double *> bars{&c0, &c1, &c2};
+    Cotangents cot;
+    cot.leaves = bars;
+    double g = 0.8;
+    t.Backward(in, 1, &g, cot, ws);
+    check("... the adjoint does not skip it: cotangents g, g c J, g c (the NaN term's included)",
+          c0 == 0.8 && c1 == 0.8 * (0.5 * 1.25) && c2 == 0.8 * 2.0);
+    c0 = c1 = c2 = 0;
+    g = std::numeric_limits<double>::quiet_NaN();
+    t.Backward(in, 1, &g, cot, ws);
+    check("... and a NaN slope reaches every term", std::isnan(c0) && std::isnan(c1) && std::isnan(c2));
+  }
   // strided leaves: the slot layout of a unit with several quantities
   {
     std::vector<double> slots{1.5, 9.0, 2.5, 9.0, 3.5, 9.0};
     Tree t;
     t.Scale(2.0, t.Leaf(0));
     Inputs in;
-    in.leaves = {{slots.data(), 2}};
+    const std::vector<PointArray> leafArrays{{slots.data(), 2}};
+    in.leaves = leafArrays;
     Workspace ws;
     std::vector<double> m(3);
     t.Evaluate(in, 3, m.data(), ws);

@@ -1,5 +1,6 @@
 // The project-file commands of the command line (ProjectCommands.h): --convert (format 2, and format 3 with --to 3,
-// docs/upgrade/project_format3.md section 8), --validate (section 6.2) and --schema (section 6.1).
+// docs/upgrade/project_format3.md section 8), --validate (section 6.2), --schema (section 6.1) and --print-predictions
+// (docs/upgrade/data_model.md section 3).
 #include "ProjectCommands.h"
 
 #include <cstring>
@@ -9,6 +10,7 @@
 #include <string>
 #include <vector>
 
+#include "Predictions.h"
 #include "azure2/convert/Convert.h"
 #include "azure2/experiment/ProjectReader.h"
 #include "azure2/experiment/Schema.h"
@@ -165,6 +167,20 @@ int validateProject(const std::string &file, bool json) {
   return c.Ok() ? 0 : 2;
 }
 
+/// The expression tree of every data set and extrapolation of `file`, one line each; 0, or 1 (with the set-up's
+/// messages) when the project could not be set up.
+int printPredictions(const std::string &file) {
+  std::ostringstream messages;
+  const std::vector<std::string> lines = azure2::ProjectPredictions(file, messages);
+  bool failed = false;
+  for (const std::string &line : lines) {
+    std::cout << line << std::endl;
+    failed = failed || line.find(": set-up failed") != std::string::npos || line.rfind("project: ", 0) == 0;
+  }
+  if (failed) std::cerr << messages.str();
+  return failed ? 1 : 0;
+}
+
 /// The command was given; it exits with `value`.
 bool Exit(int &exitCode, int value) {
   exitCode = value;
@@ -213,6 +229,16 @@ bool RunProjectCommand(int argc, char **argv, int &exitCode) {
       bool json = false;
       for (int k = 1; k < argc; k++) json = json || strcmp(argv[k], "--json") == 0;
       return Exit(exitCode, validateProject(argv[i + 1], json));
+    }
+
+  // --print-predictions FILE prints what every data set and extrapolation of FILE predicts, as a tree, and exits
+  for (int i = 1; i < argc; i++)
+    if (strcmp(argv[i], "--print-predictions") == 0) {
+      if (i + 1 >= argc) {
+        std::cout << "ERROR: --print-predictions needs a file: --print-predictions project.azr" << std::endl;
+        return Exit(exitCode, 1);
+      }
+      return Exit(exitCode, printPredictions(argv[i + 1]));
     }
 
   // --schema prints the table of project format 3 as JSON and exits (docs/upgrade/project_format3.md section 6.1);

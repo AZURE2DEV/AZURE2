@@ -717,3 +717,19 @@ set_tests_properties(${_pyazr_tests} PROPERTIES SKIP_RETURN_CODE 77)
 if(PYAZR_OUTPUT_DIR)
     set_property(TEST ${_pyazr_tests} APPEND PROPERTY ENVIRONMENT "PYAZR_ENGINE_DIR=${PYAZR_OUTPUT_DIR}")
 endif()
+
+# pyazr.predictions(path): the expression trees of a project, as AZURE2 --print-predictions prints them
+# (docs/upgrade/data_model.md section 3, step S10).
+add_test(NAME pyazr_predictions
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/predictions_test.py)
+set_tests_properties(pyazr_predictions PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1;AZURE2_BIN=$<TARGET_FILE:AZURE2>"
+                     SKIP_RETURN_CODE 77)
+
+# The gradient of an E1-only / E2-only SUM with a component (the component's full sigma, as the forward reads it)
+# against central differences of the objective, by both component routes (docs/upgrade/data_model.md S11).
+add_test(NAME pyazr_composite_gradient
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/composite_gradient_test.py)
+set_tests_properties(pyazr_composite_gradient PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1" SKIP_RETURN_CODE 77
+                     TIMEOUT 900)

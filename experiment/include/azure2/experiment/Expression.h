@@ -23,8 +23,8 @@ namespace experiment {
  *
  * Every node's arithmetic is the engine's, in the engine's order of operations (src/ModelPass.cpp,
  * ComposeModelValue and TransformedValue), so that the tree reproduces today's model values bit for
- * bit; `backward` is the adjoint of each node in the order src/AZUREGrad.cpp uses (GradOnePoint, shared-component
- * route; GradTransformedPoint).  experiment/README.md says where the two differ and why.
+ * bit; `backward` is the adjoint of each node in the order the hand-written adjoint of src/AZUREGrad.cpp used before
+ * it was replaced by this one (step S11).  experiment/README.md says where the two differ and why.
  *
  * Storage: a Tree is a flat vector of Node values in creation order.  A node is created after its children, so the
  * creation order is a post-order and the evaluation is one forward sweep over the vector (no recursion, no pointers,
@@ -113,20 +113,34 @@ struct TransformSpec {
   std::vector<TransformTerm> terms;
 };
 
+/// A view of `size` values the caller owns (an array on its stack, a vector it keeps): Inputs and Cotangents refer to
+/// the caller's arrays, so that an evaluation at one point allocates nothing.  A view of a vector is valid while the
+/// vector is neither destroyed nor resized; a temporary vector is refused.
+template <class T>
+struct View {
+  const T *data = nullptr;
+  std::size_t size = 0;
+  View() = default;
+  View(const T *values, std::size_t count) : data(values), size(count) {}
+  View(const std::vector<T> &values) : data(values.data()), size(values.size()) {}  // NOLINT: implicit by design
+  View(std::vector<T> &&) = delete;
+  const T &operator[](std::size_t k) const { return data[k]; }
+};
+
 /// What an evaluation reads.
 struct Inputs {
-  std::vector<PointArray> leaves;      ///< leaf input k at point i
-  std::vector<SubPointArray> subLeaves;  ///< leaf input k at the sub-points of point i (Transform terms only)
-  std::vector<PointArray> factors;     ///< per-point factors (Scale, Ratio, Transform terms)
-  const double *params = nullptr;      ///< abundances, sample thicknesses, Doppler temperatures
-  std::vector<const SubPointFold *> folds;
+  View<PointArray> leaves;      ///< leaf input k at point i
+  View<SubPointArray> subLeaves;  ///< leaf input k at the sub-points of point i (Transform terms only)
+  View<PointArray> factors;     ///< per-point factors (Scale, Ratio, Transform terms)
+  const double *params = nullptr;  ///< abundances, sample thicknesses, Doppler temperatures
+  View<const SubPointFold *> folds;
 };
 
 /// Cotangents accumulated by Tree::backward (+=; null entries are skipped).
 struct Cotangents {
-  std::vector<double *> leaves;     ///< per leaf input, per point
-  std::vector<double *> subLeaves;  ///< per leaf input, laid out as its SubPointArray
-  double *params = nullptr;         ///< per parameter
+  View<double *> leaves;     ///< per leaf input, per point
+  View<double *> subLeaves;  ///< per leaf input, laid out as its SubPointArray
+  double *params = nullptr;  ///< per parameter
 };
 
 /// The arithmetic of each node at one point, value and backward, as used by Tree (and tested alone).
@@ -182,8 +196,13 @@ struct Node {
   double c = 1.0;     ///< Scale: constant
 };
 
-/// Scratch space of an evaluation, reused across calls (one per thread).
+/// Scratch space of an evaluation, reused across calls (one per thread).  The node values and cotangents of a tree of
+/// up to kInline nodes at one point live in the fixed arrays, so that Value and a one-point Backward of such a tree
+/// allocate nothing; larger trees and runs of points use the vectors.
 struct Workspace {
+  static constexpr std::size_t kInline = 32;
+  double inlineRows[kInline];
+  double inlineBar[kInline];
   std::vector<double> rows;  // node x point values (Tree::evaluate, backward)
   std::vector<double> bar;   // node x point cotangents (backward)
   std::vector<double> v, f, c, raw, cot;
@@ -214,14 +233,14 @@ class Tree {
 
   /// m_i for i in [0, n): out[i].  One pass per node over all points.
   void Evaluate(const Inputs &in, std::size_t n, double *out, Workspace &ws) const;
-  /// m_i at one point.
-  double Value(const Inputs &in, std::size_t i, Workspace &ws) const;
+  /// m_i at one point; with `perGroup`, also the per-nucleus terms of that evaluation added to it (Natural).
+  double Value(const Inputs &in, std::size_t i, Workspace &ws, double *perGroup = nullptr) const;
   /// Accumulates g_i d m_i / d(inputs) into `cot` for i in [0, n) (reverse sweep; values recomputed).  Returns false
   /// where a Transform's kernel is not linear (SubPointFold::weights false).
   bool Backward(const Inputs &in, std::size_t n, const double *g, Cotangents &cot, Workspace &ws) const;
   /// The per-nucleus terms at point i (the decomposition of a sample): every Weighted node's value added to
   /// perGroup[group] in creation order, and every Transform term's w_i v_i (point values) likewise.
-  void Natural(const Inputs &in, std::size_t i, double *perGroup, Workspace &ws) const;
+  void Natural(const Inputs &in, std::size_t i, double *perGroup, Workspace &ws) const { Value(in, i, ws, perGroup); }
 
  private:
   int Add(Node nd, const std::vector<int> &children);
@@ -229,6 +248,10 @@ class Tree {
   bool TransformBackward(const TransformSpec &t, const Inputs &in, std::size_t i, double g, Cotangents &cot,
                          Workspace &ws) const;
   void Sweep(const Inputs &in, std::size_t i0, std::size_t n, double *rows, Workspace &ws) const;
+  void AddNatural(const Inputs &in, std::size_t i, const double *rows, double *perGroup) const;
+  /// node x point storage of the workspace: its fixed array when it fits, else the vector, resized.
+  double *Rows(Workspace &ws, std::size_t count) const;
+  double *Bar(Workspace &ws, std::size_t count) const;
 
   std::vector<Node> nodes_;
   std::vector<int> children_;

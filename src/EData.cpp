@@ -494,7 +494,7 @@ int EData::Fill(const Config &configure, CNuc *theCNuc, const azure2::experiment
 
   if (this->NumSegments() > 0) {
     if (this->SetUpTargetEffects(configure, theCNuc, specs.targetEffects) == -1) return -1;
-    if (!this->CheckTransformedSegments(configure)) return -1;
+    if (!this->CheckTransformedSegments(configure) || !this->BuildPredictions(theCNuc, configure)) return -1;
     this->MapData(theCNuc);
   }
 
@@ -689,7 +689,7 @@ int EData::MakePoints(const Config &configure, CNuc *theCNuc, const azure2::expe
 
   if (this->NumSegments() > 0) {
     if (this->SetUpTargetEffects(configure, theCNuc, specs.targetEffects) == -1) return -1;
-    if (!this->CheckTransformedSegments(configure)) return -1;
+    if (!this->CheckTransformedSegments(configure) || !this->BuildPredictions(theCNuc, configure)) return -1;
     this->MapData(theCNuc);
   }
 
