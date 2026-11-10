@@ -181,8 +181,9 @@ Available Options
    * - ``--print-predictions``
      - ``--print-predictions FILE``: set the project ``FILE`` up as a calculation would (its
        data files are read relative to the working directory), print what every data set and
-       then every extrapolation predicts, one line each as ``data <key>: <tree>`` or
-       ``extrapolation <key>: <tree>``, and exit.  The tree is the expression the model pass
+       then every extrapolation predicts, one line each as ``data <label>: <tree>`` or
+       ``extrapolation <label>: <tree>``, and exit; the label is the data set's or extrapolation's
+       name in a format-3 project and its number (1, 2, ...) in an older one.  The tree is the expression the model pass
        evaluates at each point: leaves ``sigma(1->2)``, ``sigma(1->2; mult=E1)``,
        ``dsdo_cm(1->2)``, ``ay``, ``phase(1->1; J=..; l=..; s=..)``, ``ak``/``Ak``,
        ``angdist(..; k=K)``, ``sigma_total(1->1)`` (``thm_`` before a THM observable;

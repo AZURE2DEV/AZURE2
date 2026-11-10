@@ -12,6 +12,7 @@
 #include "azure2/convert/AbundanceLine.h"
 #include "azure2/convert/ComponentList.h"
 #include "azure2/convert/ExtrapLine.h"
+#include "azure2/convert/PotentialBlock.h"
 #include "azure2/convert/ScatteringLengthLine.h"
 #include "azure2/convert/SegLine.h"
 #include "azure2/convert/TargetIntLine.h"
@@ -100,6 +101,8 @@ struct OldProject {
   OldThm thm;
   std::map<int, double> normCentre, shiftCentre;  ///< prior_centre rows by segment key
   std::map<int, std::string> normCentreText, shiftCentreText;
+  bool hasPotential = false;  ///< a <potential> block (the hybrid model on for some pair)
+  PotentialBlock potential;   ///< as the engine reads it (its warnings included)
   double abundanceSumSigma = 0.0;  ///< <config> abundanceSumSigma= (the engine's global sum width)
   std::string abundanceSumSigmaText;
 };

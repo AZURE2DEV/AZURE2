@@ -120,6 +120,7 @@ form. A record block inside today's sections keeps one document model and one ta
 | `<extrapolations>` | `extrapolation` | `<segmentsTest>` |
 | `<targets>` | `target`, `beam`, `detector` | `<targetInt>`, `<abundances>`, `transmission`/`yield` sample thicknesses |
 | `<modelData>` | `datum` | `<scatteringLengths>`; new: ωγ, E_r, Γ, branching, ANC (M10) |
+| `<potentials>` | `potential` | `<potential>` (the hybrid potentials; `spin_orbit_potential.md` §3.3) |
 | `<config>` | `format=3` and the existing keys | `format=2` (`io/src/Convert.cpp:30-38`) |
 
 `<levels>`, `<thm>` (without `segments=`, §3.9), `<parameterSettings>` and `<mcmc>` keep their grammar in this
@@ -406,6 +407,20 @@ Quantities: `resonance_strength`, `resonance_energy` (`frame E_x | E_cm | E_lab`
 (`pair`, `s`, `value` and `error` for Re, optional `imag`, `imag_error`), all ((q(θ) − d)/e)² in one
 `ModelDataTerm` (`data_model.md` §4, M10). ωγ is eq. (8) of `data_kinds.md` §4.7 with observed widths at E_r; a
 warning at load when Γ/E_r > 1 % or another level of the same J^π lies within 10 Γ; refused for E_r < 0 (K4).
+
+### 3.10a `potential` (the hybrid potential of a pair)
+
+[Added 2026-11-10, `spin_orbit_potential.md` §3.3 without the spin–orbit term.] One record per particle pair:
+`pair` (the label; `pair_key` only where two pairs have it, the rule of §3.5), `coulomb_radius` (required: the old
+block implied 3.5 fm), `central woods_saxon depth radius diffuseness | gaussian depth width` (depth > 0 attractive),
+`matching_radius` and `step` (the solver's numbers, which the potential value carries and the tables key on; defaults
+15 fm and 0.0275 fm, noted in the run log when used). Lengths and energies in any unit of the table. A pair without a
+record has no potential; there is no default record: the converter expands the old block's default into one record
+per particle pair it applies to (none for photon or beta pairs, which have no channel function of a potential), drops a
+section with `useHybridPotential=0` with a note and removes the old block; a format-3 file that holds `<potential>` is
+refused (`E_OLD_POTENTIAL_BLOCK`). Refusals of the build: `E_POTENTIAL_TWICE`, `E_POTENTIAL_PAIR_KIND`,
+`E_POTENTIAL_RELATIVISTIC`, `E_THM_HYBRID_POTENTIAL` (a THM data set or extrapolation whose entrance pair has one).
+The numbers are not fit parameters (§6 Q7 of that note).
 
 ### 3.11 T2 in format 3, beside the old text
 
@@ -1086,8 +1101,8 @@ from the parameter vector instead. This is a step before the reader switch.
    project directory) with the converter at one thread into a copy of the tree; the report of each conversion is kept.
 2. `AZURE2 --validate --json` on every converted file: zero errors.
 3. Run the engine before format 3 on the originals and the format-3 engine on the converted files, menu 1, the three
-   bases (`/data0/skowrons/AZURE2-upgrade/tools/runall.sh` with `JOBS` within the thread budget), and compare with
-   `classify.py`. Required: every output of every data set bit-identical, `chiSquared.out` and `normalizations.out`
+   bases (`tools/runall.sh` with `JOBS` within the thread budget), and compare with `tools/cls.sh`
+   (`classify.py`; `ARCHITECTURE.md` section 10). Required: every output of every data set bit-identical, `chiSquared.out` and `normalizations.out`
    included. This holds only if (a) the reader keeps number tokens verbatim and parses them with the old function
    (`strtod`), (b) prior widths are computed by the old expressions in the old order (norm: n₀σ/100 inside the penalty,
    `src/AZURECalc.cpp:901`; density: σ/100·N₀ at read, `TargetEffect.cpp:355`), (c) data sets keep their file order,
@@ -1120,13 +1135,15 @@ and the others with `bad_*` files say which runs they expect to fail).]**
 **The gate as a tool** (`tools/format3_gate.sh`, `tools/format3_gate.py`): items 1, 3 and 4 with exact grids, menu 1,
 
 ```
-WORK=<scratch> REF=tab-p3f JOBS=3 RUNALL=<runall.sh> tools/format3_gate.sh <engine> <source tree> <tag>
+WORK=<scratch> REF=<tag of the original tree's run> JOBS=3 tools/format3_gate.sh <engine> <source tree> <tag>
 ```
 
 converts the source tree's `tests/` with `tools/convert_tree.sh` and `--exact-grids` (without the old engine's pass)
 into `$WORK/gate-<tag>/converted`, makes it runnable (`format3_gate.py tree`: each original whose conversion
-validates, or fails only with `E_DATA_FILE`, is replaced by its conversion under its own name; the others are listed
-in `tree.txt`), runs it in the three bases with `runall.sh` as `tab-<tag>` (one thread per run, `JOBS` runs at once)
+validates, or fails only with `E_DATA_FILE`, is replaced by its conversion under its own name; a project the converter
+leaves alone because it is format 3 already stays as it is, so its outputs are compared too and must be identical; the
+others are listed in `tree.txt` with the converter's reason), runs it in the three bases with `tools/runall.sh` as
+`tab-<tag>` (one thread per run, `JOBS` runs at once)
 and compares every output file with those of the reference tag `REF` (`format3_gate.py compare`; `param.par` after
 each conversion's parameter-name map; `run.log` not compared). A file is identical, or its difference consists of
 classes each listed for that file and project in the table `CLASSES` of `format3_gate.py` (class, file, projects,

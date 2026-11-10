@@ -11,6 +11,7 @@
 #include <fstream>
 #include <set>
 #include <sstream>
+#include "azure2/convert/PotentialRecords.h"
 #include "azure2/convert/PriorCentreRow.h"
 #include "azure2/io/Convert.h"
 #include "azure2/physics/Elements.h"
@@ -163,6 +164,7 @@ struct Construct {
   static constexpr const char *kSettings = "<parameterSettings>";
   static constexpr const char *kMcmc = "<mcmc> priors";
   static constexpr const char *kPriorCovariance = "priorCovariance";
+  static constexpr const char *kPotential = "<potential>";
 };
 
 inline const char *const kChargedElastic =
@@ -318,6 +320,7 @@ class Builder {
   void RewriteThm();
   void RewriteSettings();
   void RewriteConfigAndPriors();
+  void BuildPotentials();
 
   /// The reaction field of a line (base pair keys, components, operation, frame of fixed angles).
   /// `pairKeys` receives the entrance_pair and exit_pair fields a single reaction needs when its label names two pairs.

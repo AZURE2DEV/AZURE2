@@ -21,7 +21,9 @@
 #      --describe prints the grid file's resolved path and its number of energies;
 #   5. an angle grid (dsigma/dOmega at 45 and 135 deg c.m.): one adaptive energy grid for both angles (the union),
 #      the same energies at each; the 1/2+ level decays by E1 to a 1/2- state, so the distribution is isotropic, every
-#      angle's curve is sigma/(4 pi) and the grid is the angle-integrated one, energy for energy.
+#      angle's curve is sigma/(4 pi) and the grid is the angle-integrated one, energy for energy;
+#   6. the data check file (`file` on the Data Check line of <config>) of an adaptive grid lists the refined grid the
+#      output has, point for point, not the start grid.
 #
 #   ./tests/extrapolation_grids/check.sh path/to/AZURE2
 
@@ -165,6 +167,21 @@ if [ "$nint" -gt 0 ] && [ "$a45" = "$aint" ] && [ "$a45" = "$a135" ]; then
   ok "an angle grid: the $na energies of the angle-integrated grid at 45 and at 135 deg (isotropic)"
 else
   bad "an angle grid: $na energies at 45 deg, $(echo "$a135" | grep -c .) at 135 deg ($(grep -m1 ERROR "$WORK/angles/run.log"))"
+fi
+
+# ---- 6. the data check file lists the refined grid
+setup datachk "adaptive 0.2 0.4 MeV cm tolerance 1e-3 max_points 2000 start_step 0.01"
+sed -i 's/^none\( *#Data Check\)/file\1/' "$WORK/datachk/m.azr"
+run datachk 1
+# data.chk: the rows of the "Data" table (segment 1), their c.m. energies (column 4)
+chk=$(awk '/^\*  *Data  *\*/ {d = 1; next} d && $1 == 1 && NF >= 7 {print $4}' "$WORK/datachk/checks/data.chk" 2>/dev/null)
+nchk=$(echo "$chk" | grep -c .)
+nout=$(awk 'NF && $1 !~ /^#/' "$WORK/datachk/$OUT" 2>/dev/null | wc -l)
+if grep -q '^file *#Data Check' "$WORK/datachk/m.azr" && [ "$nout" -gt 21 ] && [ "$nchk" = "$nout" ] &&
+   [ "$(echo "$chk" | head -1)" = 0.2 ] && [ "$(echo "$chk" | tail -1)" = 0.4 ]; then
+  ok "data check file: the $nchk points of the refined grid (the start grid has 21)"
+else
+  bad "data check file: $nchk points listed, $nout calculated"
 fi
 
 echo

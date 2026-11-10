@@ -9,10 +9,21 @@ RMatrixFunc.cpp AZUREOutput.cpp  EDataIterator.cpp   TargetEffect.cpp
 AZUREParams.cpp EPoint.cpp Interference.cpp CNuc.cpp Equation.cpp
 JGroup.cpp Config.cpp ESegment.cpp ModelPass.cpp CoulombReference.cpp Predictions.cpp CalculationPlan.cpp KGroup.cpp IntegratedFermiFunc.cpp
 EffectiveCharge.cpp  GSLException.cpp ParameterLimitsManager.cpp
-AdaptiveIntegrationGrid.cpp AdaptiveExtrapolation.cpp HybridPotentialSettings.cpp AZUREGrad.cpp ThmFunc.cpp
+AdaptiveIntegrationGrid.cpp AdaptiveExtrapolation.cpp AZUREGrad.cpp ThmFunc.cpp
 EDataOutputFiles.cpp
 EDataCheckFiles.cpp
 EDataCovariance.cpp
+EDataTargetEffects.cpp
+EDataExternalCapture.cpp
+EDataParameters.cpp
+EDataHandOver.cpp
+EPointCalculate.cpp
+EPointFolds.cpp
+EPointChannelTables.cpp
+EPointLegendre.cpp
+EPointExternalCapture.cpp
+ESegmentParameters.cpp
+ESegmentShifts.cpp
 THMMatrixFunc.cpp ThmVertexBoundary.cpp ThmNumerics.cpp EDataThm.cpp ConfigThm.cpp ThmExperiment.cpp ThmLineshape.cpp ThmDistortion.cpp ThmOptical.cpp ThmDwVertex.cpp ThmAngular.cpp CovarianceBand.cpp PriorCovariance.cpp ParameterLabel.cpp PolarizationFunc.cpp ChannelFunc.cpp CoulombTable.cpp
 EDataThmReports.cpp
 CNucSystem.cpp CNucLevelParameters.cpp CNucExternalCapture.cpp CNucReport.cpp CNucChecks.cpp

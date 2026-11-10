@@ -180,6 +180,17 @@ int main(int argc, char **argv) {
                                        r->Get("energies")->grid.log && r->Get("energies")->grid.frame == "cm");
     r = e.result.Find("S_adaptive");
     check("grid adaptive", r && r->Get("energies")->grid.maxPoints == 2000 && r->Get("energies")->grid.tolerance.text == "1e-3");
+    r = e.result.Find("p12C");
+    check("potential: pair, R_C, Woods-Saxon parts with units", r && r->kind == "potential" && r->section == "potentials" &&
+                                                                    r->Get("pair")->pair.heavy.A == 12 &&
+                                                                    r->Get("coulomb_radius")->number.value == 3.5 &&
+                                                                    r->Get("central")->word == "woods_saxon" &&
+                                                                    r->Get("central")->Get("diffuseness")->number.text == "0.6" &&
+                                                                    std::string(r->Get("central")->Get("depth")->unit->token) == "MeV");
+    r = e.result.Find("a12C");
+    check("potential: an excited pair, a Gaussian in keV, matching_radius and step left out",
+          r && r->Get("central")->word == "gaussian" && r->Get("central")->Get("width")->number.value == 2.5 &&
+              std::string(r->Get("central")->Get("depth")->unit->token) == "keV" && !r->Has("matching_radius") && !r->Has("step"));
     r = e.result.Find("anc_gs");
     check("datum spin-parity 1/2-", r && r->Get("J")->spin.twice == 1 && r->Get("J")->spin.parity == -1);
     r = e.result.Find("width_a1");

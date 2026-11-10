@@ -11,6 +11,7 @@
 #include "EData.h"
 #include "ESegment.h"
 #include "PPair.h"
+#include "azure2/experiment/ProjectReader.h"
 
 namespace azure2 {
 
@@ -21,12 +22,26 @@ int NucleusOf(CNuc &compound, int entranceKey) {
   return compound.GetPair(compound.GetPairNumFromKey(entranceKey))->GetNucleus();
 }
 
-/// The trees of one EData as lines "<what> <key>: <tree>".
-void AppendLines(EData &data, const char *what, std::vector<std::string> &lines) {
+/// The names of a format-3 project's records of one kind ("dataset", "extrapolation") in file order: the record
+/// with key k (Schema::Build numbers them 1, 2, ... in that order, inactive ones counted) is names[k - 1].  Empty for
+/// an old project, whose data sets have no names.
+std::vector<std::string> RecordNames(const Config &configure, const std::string &kind) {
+  std::vector<std::string> names;
+  if (!configure.format3) return names;
+  for (const experiment::ValidatedRecord &r : configure.format3->validated.records)
+    if (r.kind == kind) names.push_back(r.name);
+  return names;
+}
+
+/// The trees of one EData as lines "<what> <label>: <tree>", the label the data set's name where the project gives
+/// one (format 3), else its key.
+void AppendLines(EData &data, const char *what, const std::vector<std::string> &names, std::vector<std::string> &lines) {
   for (int s = 1; s <= data.NumSegments(); s++) {
     const ESegment &segment = *data.GetSegment(s);
     const experiment::Prediction *p = segment.GetPrediction();
-    lines.push_back(std::string(what) + " " + std::to_string(segment.GetSegmentKey()) + ": " +
+    const int key = segment.GetSegmentKey();
+    const bool named = key >= 1 && key <= (int)names.size() && !names[key - 1].empty();
+    lines.push_back(std::string(what) + " " + (named ? names[key - 1] : std::to_string(key)) + ": " +
                     (p ? experiment::PredictionText(*p) : std::string("(no tree)")));
   }
 }
@@ -96,11 +111,11 @@ std::vector<std::string> ProjectPredictions(const std::string &projectFile, std:
   if (data.Fill(configure, &compound) == -1)
     lines.push_back("data: set-up failed");
   else
-    AppendLines(data, "data", lines);
+    AppendLines(data, "data", RecordNames(configure, "dataset"), lines);
   if (extrapolations.MakePoints(configure, &compound) == -1)
     lines.push_back("extrapolation: set-up failed");
   else
-    AppendLines(extrapolations, "extrapolation", lines);
+    AppendLines(extrapolations, "extrapolation", RecordNames(configure, "extrapolation"), lines);
   return lines;
 }
 

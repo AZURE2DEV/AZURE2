@@ -838,7 +838,7 @@ requested radius is a grid node; the functions and their derivatives are good
 to about 10\ :sup:`−8` there (with the potential switched to zero depth, P and S
 agree with the Coulomb functions to 6·10\ :sup:`−9` and 2·10\ :sup:`−8` for p + :sup:`12`\ C).
 The Coulomb term of the potential is that of a uniformly charged sphere of radius
-3.5 fm with e\ :sup:`2` = αħc, the constants of the Coulomb functions it is matched to;
+:math:`R_C` (the record's ``coulomb_radius``; 3.5 fm in an old ``<potential>`` block) with e\ :sup:`2` = αħc, the constants of the Coulomb functions it is matched to;
 builds before 2026-11-10 used e\ :sup:`2` = 1.4399764 MeV fm, which put a 10\ :sup:`−5`
 difference into P and S that was not the integration's.
 Before October 2026 the values were interpolated linearly between nodes and the
@@ -886,7 +886,8 @@ setting, and ``pair=0`` is the default that a pair without one inherits.
 
    azr.set_nuclear_potential(1, type="WoodsSaxon", enabled=True,
                              V0=20.0, R=3.6, a=0.6)
-   azr.set_nuclear_potential(2, type="Gaussian", enabled=True, V0=60.0, r0=4.0)
+   azr.set_nuclear_potential(2, type="Gaussian", enabled=True, V0=60.0, r0=4.0,
+                             coulomb_radius=4.0)
    azr.set_nuclear_potential(2, enabled=False)   # off for pair 2 alone
    azr.clear_nuclear_potential(1)                # follow the default again
 
@@ -907,7 +908,39 @@ Two things that will bite:
 - **A fit made without the potential is not a fit made with it.** Refit before
   reading anything off the model.
 
-The equivalent in a ``.azr`` is the ``<potential>`` block, where keys before the
+``coulomb_radius`` (fm, default 3.5) is the radius :math:`R_C` of the uniformly
+charged sphere of the potential's Coulomb term; ``nuclear_potential(p).coulomb_radius``
+reads it back. The matching radius (15 fm) and the Numerov step (0.0275 fm) are
+fields of a format-3 record (below) and are not set from pyazr.
+
+In a project of format 3 a potential is a ``potential`` record of the
+``<potentials>`` section, one per particle pair; a pair without a record has
+none, and there is no default record:
+
+.. code-block:: text
+
+   <potentials>
+   potential p12C
+       pair            p+12C
+       coulomb_radius  3.5 fm
+       central         woods_saxon depth 20 MeV radius 3.6 fm diffuseness 0.6 fm
+       matching_radius 15 fm
+       step            0.0275 fm
+   </potentials>
+
+``central`` is ``woods_saxon depth radius diffuseness`` or ``gaussian depth
+width``; the depth is positive for an attractive well. The pair is named by its
+label, with ``pair_key <key>`` only where two pairs of ``<levels>`` have that label.
+``coulomb_radius`` is required; ``matching_radius`` and ``step`` default to 15 fm
+and 0.0275 fm (the run log notes it). Lengths and energies may be written in any
+unit of the unit table (``keV``, ``m``). The fields, their diagnostics and the
+refusals (a photon or beta pair, two records for one pair, ``relativistic=1``,
+the entrance pair of THM data) are in :doc:`../reference/format3`.
+``save_fit`` of a format-3 project writes the session's potentials as these
+records when ``set_nuclear_potential`` changed them (the converter's writer: a
+session default becomes one record per particle pair it applies to).
+
+An older project has the ``<potential>`` block instead, where keys before the
 first ``pair=`` are the default and a ``pair=`` line opens a section that starts
 from it:
 
@@ -925,10 +958,14 @@ from it:
    useHybridPotential=0
    </potential>
 
-A file with no ``pair=`` line reads exactly as it did when the model was
-global. The command-line program reads the block through the same parser,
-so the two cannot drift. Worked example: ``pyazr/examples/nuclear_potential.py``;
-``tests/hybrid_potential`` pins the behaviour.
+Its Coulomb radius is 3.5 fm. ``AZURE2 --convert OLD NEW --to 3`` writes one
+``potential`` record per particle pair the block gives a potential (the default
+expanded, ``coulomb_radius 3.5 fm`` written out; a section with
+``useHybridPotential=0`` writes nothing and is noted), and a format-3 project
+that still holds the block is refused (``E_OLD_POTENTIAL_BLOCK``). The engine,
+pyazr and the converter read the block through one parser, so they cannot drift.
+Worked example: ``pyazr/examples/nuclear_potential.py``; ``tests/hybrid_potential``
+pins the behaviour.
 
 The potential belongs to the session. Several sessions in one process keep
 their own default and per-pair settings: a second session's ``<potential>``

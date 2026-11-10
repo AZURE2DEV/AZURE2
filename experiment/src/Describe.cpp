@@ -143,6 +143,12 @@ std::string Fmt(double x) {
   return s.str();
 }
 
+/// "Woods-Saxon V0 20 MeV, R 3.6 fm, a 0.6 fm" / "Gaussian V0 40 MeV, r0 2.5 fm".
+std::string CentralText(const HybridPotentialSetting &s) {
+  if (s.shape == physics::FormShape::Gaussian) return "Gaussian V0 " + Fmt(s.V0) + " MeV, r0 " + Fmt(s.r0) + " fm";
+  return "Woods-Saxon V0 " + Fmt(s.V0) + " MeV, R " + Fmt(s.R) + " fm, a " + Fmt(s.a) + " fm";
+}
+
 }  // namespace
 
 std::string DescribeText(const Format3Project &p) {
@@ -205,6 +211,13 @@ std::string DescribeText(const Format3Project &p) {
     if (d.pair) out << "; pair " << Pair(p, d.pair);
     out << "\n";
   }
+  for (const auto &x : p.built.potentials.pairs) {
+    const HybridPotentialSetting &s = x.second;
+    const auto r = p.built.potentialRecords.find(x.first);
+    out << "potential " << (r != p.built.potentialRecords.end() ? r->second.first + " (line " + std::to_string(r->second.second) + ")" : "?")
+        << ": pair " << Pair(p, x.first) << "\n  central " << CentralText(s) << "; Coulomb radius R_C " << Fmt(s.coulomb_radius_fm)
+        << " fm; matching radius " << Fmt(s.matching_radius_fm) << " fm, step " << Fmt(s.step_fm) << " fm\n";
+  }
   return out.str();
 }
 
@@ -262,6 +275,19 @@ std::string DescribeJson(const Format3Project &p) {
     j.Key("value").Number(d.value).Key("error").Number(d.error).Key("unit").String(d.unit);
     j.Key("level").Integer(d.levelId).Key("entrance_pair").Integer(d.entrancePair).Key("exit_pair").Integer(d.exitPair);
     j.Key("pair").Integer(d.pair).EndObject();
+  }
+  j.EndArray().Key("potentials").BeginArray();
+  for (const auto &x : p.built.potentials.pairs) {
+    const HybridPotentialSetting &s = x.second;
+    const auto r = p.built.potentialRecords.find(x.first);
+    j.BeginObject().Key("name").String(r != p.built.potentialRecords.end() ? r->second.first : "").Key("pair").Integer(x.first);
+    j.Key("central").String(s.shape == physics::FormShape::Gaussian ? "gaussian" : "woods_saxon").Key("depth_MeV").Number(s.V0);
+    if (s.shape == physics::FormShape::Gaussian)
+      j.Key("width_fm").Number(s.r0);
+    else
+      j.Key("radius_fm").Number(s.R).Key("diffuseness_fm").Number(s.a);
+    j.Key("coulomb_radius_fm").Number(s.coulomb_radius_fm).Key("matching_radius_fm").Number(s.matching_radius_fm);
+    j.Key("step_fm").Number(s.step_fm).EndObject();
   }
   j.EndArray().EndObject();
   return j.Str();

@@ -175,7 +175,7 @@ std::vector<FieldDef> Concat(std::vector<std::vector<FieldDef>> lists) {
 // ---------------------------------------------------------------- structured values (sections 3.3-3.10)
 struct Forms {
   FormSpec shift, quadrature, foldWindows, secondaryGamma, orders, function, param, epoch, stopping, straggling,
-      isotope, isotopeSum, doppler, spread, profile, resolution, udr, channelSpin;
+      isotope, isotopeSum, doppler, spread, profile, resolution, udr, channelSpin, central;
 };
 
 Forms MakeForms() {
@@ -225,6 +225,12 @@ Forms MakeForms() {
                      Kw("channel", WithUnit("time")), Kw("centred", Words({"yes", "no"}))},
                     "SAMMY's time-of-flight resolution (UDR)")}};
   f.channelSpin = {{Keyword("coherent", {}, "the coherent scattering length"), Unkeyed({Pos("spin", Spec(ValueType::Spin))}, "the channel spin")}};
+  f.central = {{Keyword("woods_saxon",
+                        {Kw("depth", PositiveWithUnit("energy"), "V0 > 0, attractive"), Kw("radius", PositiveWithUnit("length"), "R"),
+                         Kw("diffuseness", PositiveWithUnit("length"), "a")},
+                        "V_N(r) = -V0 / (1 + exp((r - R)/a))"),
+                Keyword("gaussian", {Kw("depth", PositiveWithUnit("energy"), "V0 > 0, attractive"), Kw("width", PositiveWithUnit("length"), "r0")},
+                        "V_N(r) = -V0 exp(-(r/r0)^2)")}};
   return f;
 }
 
@@ -444,6 +450,29 @@ RecordKind DatumKind() {
   return k;
 }
 
+RecordKind PotentialKind() {
+  const Forms &f = StructuredValues();
+  RecordKind k;
+  k.kind = "potential";
+  k.sections = {"potentials"};
+  k.title = "Hybrid potential";
+  k.doc = "The nuclear potential of one particle pair: its channel functions come from the radial equation with the Coulomb "
+          "potential of a uniformly charged sphere and a central nuclear term, integrated inward from the matching radius to "
+          "the channel radius (docs/upgrade/spin_orbit_potential.md section 1.1).  A pair without a record has none.";
+  k.fields = {Req("pair", "Pair", Spec(ValueType::Pair), "the particle pair of <levels> by its label (section 3.5)"),
+              Opt("pair_key", "Pair key", IntAtLeast(1), "the <levels> pair key, only where the label names two pairs"),
+              Req("coulomb_radius", "Coulomb radius", PositiveWithUnit("length"),
+                  "R_C of the uniformly charged sphere of the Coulomb term (the old <potential> block: 3.5 fm)"),
+              Req("central", "Central term", Structured(f.central), "the central nuclear term V_N(r)"),
+              Defaulted(Opt("matching_radius", "Matching radius", PositiveWithUnit("length"),
+                            "r_m: beyond it the solution is the point-Coulomb one; above every channel radius of the pair"),
+                        "15 fm"),
+              Defaulted(Opt("step", "Numerov step", PositiveWithUnit("length"),
+                            "the step of the inward integration, adjusted so that the channel radius is a node"),
+                        "0.0275 fm")};
+  return k;
+}
+
 }  // namespace
 
 std::string Grammar(const ValueSpec &spec) {
@@ -554,6 +583,7 @@ const std::vector<std::pair<std::string, std::vector<std::string>>> &Schema::Sec
       {"targets", {"target", "beam", "detector"}},
       {"extrapolations", {"extrapolation"}},
       {"modelData", {"datum"}},
+      {"potentials", {"potential"}},
   };
   return sections;
 }
@@ -573,7 +603,7 @@ const RecordKind *Schema::FindKind(const std::string &kind) {
 const std::vector<RecordKind> &Schema::Kinds() {
   static const std::vector<RecordKind> kinds = {DatasetKind(),       NormalizationKind(), EnergyScaleKind(),
                                                 ExtrapolationKind(), TargetKind(),        BeamKind(),
-                                                DetectorKind(),      DatumKind()};
+                                                DetectorKind(),      DatumKind(),         PotentialKind()};
   return kinds;
 }
 

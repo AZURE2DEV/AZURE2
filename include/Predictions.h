@@ -22,8 +22,9 @@ namespace azure2 {
 /// points, then its component segments in order), with the compound nucleus of each entrance pair.
 experiment::PredictionSetup PredictionSetupOf(const ESegment &segment, CNuc &compound);
 
-/// One line per data set and extrapolation of a project, "data <key>: <tree>" then "extrapolation <key>: <tree>", in
-/// the order of the file (AZURE2 --print-predictions, pyazr.predictions).  The project is set up as a calculation
+/// One line per data set and extrapolation of a project, "data <label>: <tree>" then "extrapolation <label>: <tree>",
+/// in the order of the file (AZURE2 --print-predictions, pyazr.predictions); the label is the record's name in a
+/// format-3 project, the key (1, 2, ...) in an old one.  The project is set up as a calculation
 /// would set it up (data files read relative to the working directory); a set-up that fails gives one line
 /// "data: set-up failed" or "extrapolation: set-up failed", and its messages go to `messages`.
 std::vector<std::string> ProjectPredictions(const std::string &projectFile, std::ostream &messages);

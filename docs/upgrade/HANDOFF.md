@@ -2,6 +2,199 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-10 (director, night) — the sixth wave merged; a faster regime; the data structure is replaced, not carved
+
+**Merged into `feature/upgrade-4-data`** (`--no-ff`; each rehearsed, built and verified in a scratch worktree, the
+committed tree is that tree): the tools follow-up (the converted-tree gate as `tools/format3_gate.sh`), the
+pathway-table design (`cnuc_split.md` §11, with the director's decisions §11.11), the potential as a record of the
+project (`potential` in `<potentials>`; pyazr 2.23.0), and the cut of `EData`, `EPoint`, `ESegment` into files with
+one job (`edata_split.md` §5.8). Their entries are below.
+
+**The merged head as a whole** (build `work/b-trial11`, 0 warnings): 183 projects × 3 bases identical to the
+reference tag `tab-trial8` (704 + 677 + 704 files); `ctest -LE slow` 171/171; `ctest -L slow` 10/10 (run once, on the
+head before the potential record); `tests/run_tests.sh` 142 passed / 0 failed; calculations at 1 and 6 threads 12/12
+identical; T2 with a `<modelData>` section identical in the three bases; spec equivalence: 193 files, 185 converted,
+183 equal, 2 recorded, 0 differ; the converted tree: 483 (456 formal) identical, 38 classified, 0 differ, 0 missing.
+All of it was run on the merged tree of the last merge (`work/director/verify_trial11.out`). Not run on this head:
+1 against 8 threads, ThreadSanitizer.
+
+**The PI, 2026-11-10 (evening): go faster; the physics must stay the same.** What changes:
+- An agent checks each commit quickly (build, consistency test, the unit tests of the change, a handful of
+  projects) and runs the whole comparison once per branch or milestone; speed is measured once, at the end. The
+  director verifies once per merge and merges several branches together (`work/director/full_verify.sh`).
+- The data classes are not carved further. `EData`, `ESegment`, `EPoint` are **replaced**: what was measured is one
+  immutable shared object per data set, the working copy is a flat vector of calculation units addressed by the
+  plan, the functions that compute move onto these unchanged, and the three classes are deleted
+  (`work/briefs/X_data_structure.md`; its design page will be `docs/upgrade/data_structure.md`). This takes the place
+  of the steps S7 and S12 of `data_model.md` §6 and of the data-path part of Phase 6; `edata_split.md` §5 from F1 on
+  is superseded.
+
+**Decisions of the director.**
+- The pathway table (`cnuc_split.md` §11) is built in two branches: first everything outside the data classes (the
+  table, the check files, the set-up readers, the R-matrix route, the forward hot path), then, after the data
+  structure is replaced, the external-capture set-up, capture A_y at set-up and the deletion of the trees.
+- The spin–orbit term follows the PI's four answers (one spinning particle; FRESCO's convention; the same potential
+  for bound states and closed channels; e² = α ħc): `work/briefs/W_spin_orbit.md`.
+
+**Defects and debts found, not yet fixed** (owner in brackets):
+- An exit pair number is used as a decay position in the external-capture code of the data classes and in
+  `AZUREAPI::GetECIntegrals`; no project of `tests/` triggers it [second pathway branch, with a test project].
+- The not-found check of the exit in `GenMatrixFunc`/`AMatrixFunc` cannot be reached; the capture-A_y terms are built
+  lazily under a static mutex; `GetECIntegrals` uses the formal energy in every basis [pathway branches].
+- pyazr: `save_fit` of a format-3 project fails with `norms="fitted"`; `save_fit` of an old-format project does not
+  write a changed potential; `set_nuclear_potential` takes no matching radius or step [pyazr on records].
+- `io::WriteRecords` pads keys to 15 characters (`matching_radius` is misaligned); `classify.py` treats two
+  unreadable files as equal [tools].
+
+**Then.** Units, S factor and yields per charge (`J_units_scales.md`); pyazr's model on records, one set-up path for
+both formats, components as leaves in `predict`, the recipe "a new kind of data"; the rest of `CNuc`; Phase 5 (with
+the lab-frame comparison of shifted data); Phase 6 (what is left of the mutable statics); `FOR_THE_OWNER.md` and
+`ROADMAP.md` for the meeting with the owner; `origin/dev` merged only when the reconstruction is complete.
+
+**Running now** (Opus agents; briefs in `/data0/skowrons/AZURE2-upgrade/work/briefs/`, the PI allowed all 24 threads):
+the replacement of the data structure (`X_data_structure.md`, `feature/upgrade-4-data-structure`), the pathway table
+outside the data classes (`Y_pathway_table_1.md`, `feature/upgrade-4-pathway-table-1`), the spin–orbit term
+(`W_spin_orbit.md`, `feature/upgrade-4-spin-orbit`), units, S factor and yields per charge (`J_units_scales.md`,
+`feature/upgrade-4-units`).
+
+## 2026-11-10 (agent, brief S) — `EData`, `EPoint`, `ESegment` cut into files with one job (`feature/upgrade-4-edata-split-3`)
+
+**What file holds what now.** Eleven new source files and two new headers, each made by a verbatim move (bodies
+unchanged, one commit per file); the file map of all three classes is `edata_split.md` §5.8.
+- `EData`: `src/EDataTargetEffects.cpp` (target effects, sub-point grids, windows, grid re-placement; the
+  component-segment grid block stays inside `SetUpTargetEffects`, which S12 rewrites), `src/EDataExternalCapture.cpp`
+  (EC amplitudes of the data, the `intEC` file, its count and signature; `ECProgressRedraw` became a private static
+  member of `EData` because `InitializeComponentSegments` in `EData.cpp` uses it too), `src/EDataParameters.cpp`
+  (parameter-block offsets, names and start values, shift/norm/thickness groups, density parameters, prior centres),
+  `src/EDataHandOver.cpp` (a parameter vector into segments, effects and points; the four target-effect prior totals,
+  with four check-11 allowance rows).
+- `EPoint`: `src/EPointCalculate.cpp` (`Calculate`, thin target, observable-wise integration, `MarkFailed`,
+  `ScopedPointMappingOff` with its thread-local flag), `src/EPointFolds.cpp` with `include/TELinearForm.h` (the
+  apparatus folds), `src/EPointChannelTables.cpp` with `include/EPointTables.h` (channel tables, sharing, Coulomb
+  amplitude, getters; `EDependentTables`, `EDependentShare`, `ThmPsTable` are namespace-level types that `EPoint`
+  names by aliases; check 25 reads the new header), `src/EPointLegendre.cpp` (Legendre polynomials, Q-coefficient
+  average), `src/EPointExternalCapture.cpp` (the point's EC amplitudes, also at a shifted energy).
+- `ESegment`: `src/ESegmentParameters.cpp` (shift values, shift and norm groups, shift function, shift prior),
+  `src/ESegmentShifts.cpp` (re-energising after a shift, channel tables of the last shift states).
+Sizes: `EData.cpp` 4,454 → 1,950, `EPoint.cpp` 2,920 → 951, `ESegment.cpp` 1,366 → 881, `EPoint.h` 896 → 766,
+`EData.h` 560 → 565; the largest new file is `EDataTargetEffects.cpp` (964).
+
+**Not moved, and who takes it.** What is left in `EData.cpp` is what later steps delete or rewrite: the component
+segments (S12), point mapping, result layout, `Clone` and the parallel pass (the rest of S5), `Fill`/`MakePoints` and
+the load-time refusals (after 3d).  `EPoint.cpp` keeps the datum and frame code (S7), `ESegment.cpp` the frame code
+(S7) and the composition helpers (S10–S12).
+
+**One code change besides the moves.** Once `EPoint.cpp` had shrunk, GCC 11 (-O3) inlined the file-local
+`LegendreSeries` into `EPoint::CalcLegendreP`, and the T2 calculation ran 3.6 % more instructions and 3.8 % more
+cycles than the base (callgrind: all of it there).  A separate commit keeps the function out of line
+(`__attribute__((noinline))`; the CI builds GCC, Apple clang and MinGW GCC, not MSVC).  Cycles, minimum of 6 runs
+alternated with the base build at 1 thread: calculation −2.6 %, without the Coulomb table −0.6 %, 200-call fit −2.9 %;
+179 × 3 outputs identical before and after.
+
+**Verified.** Every move: 0 warnings; the diff of the removed lines against the new file's body and of the rest against
+the old file less those lines, both empty (shown exceptions: the namespace and signature lines of `ECProgressRedraw`,
+the alias lines of `EPoint.h`, the indentation of the moved table types); consistency test after `--tighten-sizes`;
+179 × 3 identical to `tab-p3f` (689 / 662 / 689; tags `tab-esplit3-c1` … `-c12`); `scripts/check.sh --quick`
+(ctest 165/165).  Also `tests/progress_bars` after the EC move and `tests/shift_fn`, `tests/energy_shift_sqrt` after
+the shift moves.  End of work (`TMAX=3 NT=3 work/verify-p4c.sh wt-esplit3 esplit3`): 179 × 3 identical, `ctest -LE slow` 165/165,
+`tests/run_tests.sh` 141 passed / 0 failed, 1 against 3 threads on T1–T3 and 13N in three bases 12 identical;
+`tests/format3_engine/check.sh` passed.
+
+**Open.** The branch starts from a320e818; the director rebases it onto the moved integration branch (the hybrid
+potential and the extrapolation grids edit `src/CMakeLists.txt`, `file_sizes.tsv` and possibly `EData::MakePoints`).
+
+## 2026-11-10 (agent, brief U) — the hybrid potential as a format-3 record (`feature/upgrade-4-potential-record`)
+
+**Done.**
+- A format-3 project states a pair's hybrid potential as a `potential` record of a new section `<potentials>`:
+  `pair` (the pair label; `pair_key` only where two pairs have the label, the data sets' rule), `coulomb_radius`
+  (required), `central woods_saxon depth radius diffuseness | gaussian depth width`, `matching_radius` and `step`
+  (defaults 15 fm, 0.0275 fm, noted in the run log when used). No spin–orbit term. A pair without a record has no
+  potential; there is no default record. Every word is a row of the schema table (`--schema`, `pyazr.schema()`,
+  `format3.rst`); `--describe` prints each pair's potential with units.
+- Matching radius and step were already fields of the potential value and in every table key (`PotentialKey`), so
+  they are fields of the record. The Coulomb radius was already a field of the value (3.5 fm by default); the old
+  block keeps giving 3.5 fm.
+- Refusals with codes of the table: `E_POTENTIAL_TWICE`, `E_POTENTIAL_PAIR_KIND` (photon or beta pair),
+  `E_POTENTIAL_RELATIVISTIC`, `E_THM_HYBRID_POTENTIAL` (a THM data set or extrapolation whose entrance pair has a
+  record; the engine's own check stays for old projects), `E_OLD_POTENTIAL_BLOCK` (`<potential>` in a format-3
+  file, naming the converter); the existing `E_UNKNOWN_PAIR`, `E_AMBIGUOUS_PAIR`, `E_PAIR_KEY`, `E_FIELD_REQUIRED`,
+  `E_OUT_OF_RANGE`, `E_UNIT_NOT_ALLOWED`, `E_PART_MISSING` for the record's fields.
+- Files: `experiment/` (schema row, `BuildPotentials.cpp`, `HybridPotentialSettings` moved here from `include/` and
+  `src/`, `build::ResolvePair` shared with the data sets, `Describe.cpp`, `ProjectReader.cpp`); the old block's parser
+  moved verbatim to `convert/include/azure2/convert/PotentialBlock.h` (engine and converter read it with one parser);
+  `convert/PotentialRecords.h` writes records from settings (the converter and pyazr's writer).
+- Converter: one record per particle pair the old block gives a potential (default expanded, `coulomb_radius 3.5 fm`,
+  r_m and step written out), notes for sections that write nothing; the format-3 file has no `<potential>`.
+- pyazr 2.22.0: `set_nuclear_potential(..., coulomb_radius=)`, `NuclearPotential.coulomb_radius`,
+  `azure2.potential_records()`, `save_fit` of a format-3 project writes the session's potentials as records when they
+  changed. The potential methods live in `pyazr/potentials.py` (moved verbatim first).
+
+**Verified** (build `work/b-potrec`, 0 warnings, 3 threads): 183 × 3 against `tab-trial8` (tag `tab-pr1`): 704 / 677 /
+704 identical; `ctest -LE slow` 170/170; `tests/run_tests.sh` 142 passed / 0 failed; spec equivalence 193 files, 185
+converted, 183 equal, 2 recorded, 0 differ (now comparing every particle pair's potential by bits; injection 4 fails
+hybrid_potential, T3, T3_start); converted-tree gate (`REF=tab-trial8`, tag `prg1`): 472 (445) identical, 38
+classified, 0 differ, 11 missing, as before; converted `hybrid_potential`, T3, T3_start at 1 and 3 threads in the
+three bases: 87 / 87 files identical; `pyazr_potential_record`: R_C = 5 fm against DOP853 P 1.7e-8, S 7.2e-8. Every new
+check shown failing once with its check removed or its value moved (the report lists the injections).
+
+**Open.** pyazr's `save_fit` of a format-3 project works only with `norms="nominal"` (`"fitted"` reads
+`<segmentsData>`); format-2 `save_fit` still does not write a potential changed in the session. Web UI / Qt forms
+for the record not made. The spin–orbit term and `two_j` (note §5 steps 4–5).
+
+## 2026-11-10 (agent, brief V) — design of step 6b of the `CNuc` split: the readers of the pathway trees (`docs/upgrade-pathways-6b`)
+
+**Done** (documents only; no code changed).
+- `cnuc_split.md` §11, "Step 6b: design": the inventory of every function that reads the pathway trees (320 accesses
+  outside `CNuc.cpp`, 86 in it, per function with the fields used, hot or cold, OpenMP or not), the one writer after
+  set-up (`CNuc::CalcCaptureAnalyzingPower`, lazily in the point pass under a function-level static mutex), what the
+  nodes hold beyond `reaction_pathways`' result (only structural data: three derived lists per decay), the table
+  (`PathwayTable`, flat rows per entrance in tree order, engine numbers beside System indices, built once by
+  `CNuc::Initialize`, held as `shared_ptr<const>` and shared by every working copy), the hot loop before and after,
+  the UPOS, beta-delayed, channel-capture and capture-A_y shapes, eight bit-identical steps with their counts and
+  tests, the measurement and stop rule, and six defects met while reading. "Remaining steps" points to §11.
+
+**Verified how.** Counts by `work/pathnote/inventory.py` and `grep -o` at cb8f5912; the decay numbering of 14 of the 21
+external-capture projects with the pathways check file (`work/pathnote/ecprobe.sh`, base build `work/b-trial9`, one
+thread): every decay position equals its exit pair number; `perf stat` (five runs) and `perf record` of the T2
+calculation and of a 30-call T2 fit on the base build, one thread. `python3 tests/consistency/repo_consistency_test.py`
+before the commit.
+
+**Open.** The director's decisions listed at the end of the report (where the table's handle lives after step 7, the
+capture-A_y request list against building for every photon exit, the defect of an exit pair number used as a decay
+position, the fall-back branches). Not run: the cost of building capture-A_y terms for every photon exit; whether a
+sub-point of a capture-A_y point can be the first caller with no Legendre order.
+
+## 2026-11-10 (agent, brief T) — the comparison tools in the repository, and small follow-ups (`feature/upgrade-4-tools`)
+
+**Done** (no physics change; every project output identical to the start).
+- The comparison of two engines is in the repository: `tools/runall.sh`, `tools/run_one.sh`, `tools/cls.sh`,
+  `tools/classify.py`, copied from the scripts outside the repository with their behaviour kept; `JOBS` defaults to 1,
+  usage errors exit 2, each has a header (what, environment, output).  `format3_gate.sh` takes `runall.sh` from beside
+  itself.  Described in `CLAUDE.md` (recipes) and `ARCHITECTURE.md` §10 "Comparing the outputs of two engines".
+- No path of this machine in a tracked file (outside this log): the docs name `tools/...`; consistency check 30 fails
+  on a path under /data0 or /home (three allowed lines, of the skills checker and its test).
+- The format-3 gate keeps the projects that are format 3 already (the four of `tests/ratio_to_rutherford/models/`) and
+  runs them unchanged; a project left out is listed in `tree.txt` with the converter's reason.
+- `scripts/check.sh`: one `JOBS` (default 4) for the build and ctest.
+- `tests/hybrid_potential/check_per_pair.py`: its reference comes from `expected/chiSquared.out` and `tolerance` (the
+  old pin 2462154.2 was stale; the engine gives 2466142.3); it runs in a temporary copy; ctest `pyazr_hybrid_per_pair`
+  (16 s).
+- The data check file (`checks/data.chk`) of an extrapolation run with an adaptive grid is written after the
+  refinement and lists the refined grid (378 points, not the 21 of the start grid; `src/AZUREMain.cpp` only).
+- `--print-predictions` and `pyazr.predictions` label a format-3 data set and extrapolation by the record's name
+  (`src/Predictions.cpp`); old projects keep their numbers.  Re-pinned: `tests/upgrade/predictions.txt` (8 lines of the
+  four format-3 projects), `tests/ratio_to_rutherford/expected/story_predictions.txt`.
+
+**Verified** (build `work/b-tools`, 0 warnings, 3 threads): 183 × 3 against `tab-trial8`: 704 / 677 / 704 identical,
+once with the committed tools (`tab-tl1`) and once with the outside ones (`tab-tl2`), the two classification tables
+byte-identical; the gate (`REF=tab-trial8`, tag `tlg1`): 521 (494) files per basis, 483 (456) identical, 38
+classified, 0 differ, 0 missing; `JOBS=1 scripts/check.sh --quick`: ctest -LE slow 170/170; consistency on the tree of
+every commit; `tests/extrapolation_grids/check.sh` (12 ok) and `tests/ratio_to_rutherford/check.sh` (7 ok).  Not run:
+the whole `tests/run_tests.sh`, Sphinx, 1 against 8 threads.
+
+**Open.** pyazr's version is not bumped for the new labels of `pyazr.predictions` (format-3 projects only).
+
 ## 2026-11-10 (director, evening) — Phase 4: the fifth wave merged (dead code out of the data classes, ratio to Rutherford, the hybrid potential as a value, extrapolation grids)
 
 **Merged into `feature/upgrade-4-data`** (`--no-ff`, in this order; each rehearsed, built and verified in a scratch

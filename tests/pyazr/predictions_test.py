@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """pyazr.predictions(path): the expression trees of a project's data sets and extrapolations (docs/upgrade/data_model.md
-section 3), the same lines as `AZURE2 --print-predictions` (AZURE2_BIN), on T2 (SUM, RATIO, sample, phase shift, ...)
-and natural_neon (sample SUMs); a project that cannot be set up raises ValueError.
+section 3), the same lines as `AZURE2 --print-predictions` (AZURE2_BIN), on T2 (SUM, RATIO, sample, phase shift, ...),
+natural_neon (sample SUMs) and the format-3 project ratio_to_rutherford/models/aC_story (a data set and an extrapolation
+labelled by their record names, an old project's by their numbers); a project that cannot be set up raises ValueError.
 Needs the compiled engine; skips (exit 77) without it.
 """
 import os
@@ -29,7 +30,8 @@ except ImportError as e:
     sys.exit(77)
 
 binary = os.environ.get("AZURE2_BIN")
-for rel in ("tests/upgrade/T2/T2.azr", "tests/natural_neon/natural_neon.azr"):
+NAMED = "tests/ratio_to_rutherford/models/aC_story.azr"
+for rel in ("tests/upgrade/T2/T2.azr", "tests/natural_neon/natural_neon.azr", NAMED):
     d, name = os.path.split(os.path.join(ROOT, rel))
     cwd = os.getcwd()
     os.chdir(d)
@@ -38,6 +40,12 @@ for rel in ("tests/upgrade/T2/T2.azr", "tests/natural_neon/natural_neon.azr"):
     finally:
         os.chdir(cwd)
     check(f"{rel}: one line per data set and extrapolation", len(lines) > 0 and all(": " in l for l in lines), lines[:3])
+    if rel == NAMED:
+        check(f"{rel}: the data set and the extrapolation by their record names",
+              [l.split(": ")[0] for l in lines] == ["data aC_RTH", "extrapolation aC_RTH_curve"], lines)
+    else:
+        check(f"{rel}: an old project's data sets by their numbers",
+              all(l.split(": ")[0].split(" ", 1)[1].isdigit() for l in lines), lines[:3])
     if binary:
         cli = subprocess.run([binary, "--print-predictions", name], cwd=d, stdout=subprocess.PIPE, check=True)
         check(f"{rel}: equal to AZURE2 --print-predictions", cli.stdout.decode().splitlines() == lines)

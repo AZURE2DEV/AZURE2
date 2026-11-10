@@ -393,7 +393,8 @@ Each step is one branch, mergeable on its own, with the 179 × 3 gate.
    Outputs move for hybrid projects with a sub-threshold level or capture (`hybrid_potential`: its bound ¹³N ground
    state), classified with cause and size; nothing else. Needs the PI's decision Q4. Depends on step 3b (i) of
    `cnuc_split.md` (Whittaker functions in physics/), if that lands first, to write it once.
-3. **The format-3 `potential` record** (§3.3) and its converter row, without spin–orbit. Outputs identical. Needs the
+3. **The format-3 `potential` record** (§3.3) and its converter row, without spin–orbit. [Done 2026-11-10,
+   `feature/upgrade-4-potential-record`: `project_format3.md` §3.10a.] Outputs identical. Needs the
    format-3 reader of Phase 4 (`project_format3.md` §7).
 4. **The key** (§3.1): `two_j` in `ChannelTable::Key`, `RadialBlockKey`, `ShiftDerivKey`, the scratch, always −1.
    Outputs identical (byte-identical tables in `channel_table_unit`).

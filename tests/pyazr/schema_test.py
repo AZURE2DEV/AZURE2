@@ -53,7 +53,13 @@ else:
 
 check("sections", s["sections"] == {"data": ["dataset", "normalization", "energy_scale"],
                                     "targets": ["target", "beam", "detector"],
-                                    "extrapolations": ["extrapolation"], "modelData": ["datum"]})
+                                    "extrapolations": ["extrapolation"], "modelData": ["datum"],
+                                    "potentials": ["potential"]})
+pot = s["records"]["potential"]["fields"]
+check("potential: pair, coulomb_radius and central required; matching_radius and step with their defaults",
+      pot["pair"].get("required") is True and pot["coulomb_radius"].get("required") is True and
+      pot["central"].get("required") is True and pot["matching_radius"].get("default") == "15 fm" and
+      pot["step"].get("default") == "0.0275 fm", str({k: (v.get("required"), v.get("default")) for k, v in pot.items()}))
 for kind, rec in s["records"].items():
     for key, field in rec["fields"].items():
         if not ({"type", "grammar", "doc"} <= set(field)):

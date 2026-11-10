@@ -482,6 +482,21 @@ add_test(NAME pyazr_hybrid_threshold
                  ${CMAKE_CURRENT_SOURCE_DIR}/hybrid_threshold_test.py)
 set_tests_properties(pyazr_hybrid_threshold PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
+# The per-pair semantics of the hybrid potential on tests/hybrid_potential (its own folder's script): a pair's setting
+# beats the default, a pair without one inherits it, the API and the file give the same chi-squared, the Coulomb memo
+# sees a change of the potential; the project as committed against expected/chiSquared.out (about 20 s).
+add_test(NAME pyazr_hybrid_per_pair
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../hybrid_potential/check_per_pair.py)
+set_tests_properties(pyazr_hybrid_per_pair PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
+# The hybrid potential as a format-3 record: its Coulomb radius against an independent integration (DOP853, R_C =
+# 5 fm), set_nuclear_potential(coulomb_radius=...) equal to the record, save_fit writing the record.
+add_test(NAME pyazr_potential_record
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/potential_record_test.py)
+set_tests_properties(pyazr_potential_record PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
 # chiSquared.out written through the API carries the Park, abundance and scattering-length totals
 # (2026-10-27, audit item 30).
 # The fit's objective through pyazr (docs/upgrade/objective.md step 4): objective() = objective_and_grad()[0] = the sum

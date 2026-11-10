@@ -1,2 +1,2 @@
-data 1: ratio(dsdo_cm(1->1), rutherford(1->1))
-extrapolation 1: ratio(dsdo_cm(1->1), rutherford(1->1))
+data aC_RTH: ratio(dsdo_cm(1->1), rutherford(1->1))
+extrapolation aC_RTH_curve: ratio(dsdo_cm(1->1), rutherford(1->1))

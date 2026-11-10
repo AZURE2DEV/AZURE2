@@ -51,8 +51,9 @@ def validate(path):
 def predictions(path):
     """What every data set and extrapolation of the project ``path`` predicts, as the engine's expression trees.
 
-    Returns the lines ``AZURE2 --print-predictions path`` prints: ``"data <key>: <tree>"`` for each data set, then
-    ``"extrapolation <key>: <tree>"`` (docs/source/reference/command_line.rst gives the tree's text form).  The
+    Returns the lines ``AZURE2 --print-predictions path`` prints: ``"data <label>: <tree>"`` for each data set, then
+    ``"extrapolation <label>: <tree>"``, the label the record's name in a format-3 project and the number (1, 2, ...)
+    in an old one (docs/source/reference/command_line.rst gives the tree's text form).  The
     project is set up as a calculation would set it up, its data files read relative to the working directory.  A
     set-up that fails raises ``ValueError`` with the engine's messages.  Needs the compiled engine module.
     """

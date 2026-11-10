@@ -9,6 +9,8 @@
 #
 #   --quick     skip the physics regression suite and the docs
 #   build-dir   default build/; must already be configured (see README.md)
+#   JOBS=<n>    compile jobs of the build and tests ctest runs at once (default 4); most engine and pyazr
+#               tests set OMP_NUM_THREADS=2 for themselves, so ctest uses about 2 x JOBS threads
 #
 # Exits non-zero at the first failing stage and says which one.
 
@@ -21,11 +23,12 @@ BUILD_DIR=""
 for arg in "$@"; do
   case "$arg" in
     --quick) QUICK=1 ;;
-    -h|--help) sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) BUILD_DIR="$arg" ;;
   esac
 done
 BUILD_DIR="${BUILD_DIR:-$REPO_ROOT/build}"
+JOBS="${JOBS:-4}"
 case "$BUILD_DIR" in /*) ;; *) BUILD_DIR="$PWD/$BUILD_DIR" ;; esac
 
 if [ ! -f "$BUILD_DIR/CMakeCache.txt" ]; then
@@ -41,14 +44,14 @@ stage "repository consistency"
 python3 "$REPO_ROOT/tests/consistency/repo_consistency_test.py" || fail "repository consistency"
 
 stage "build ($BUILD_DIR)"
-cmake --build "$BUILD_DIR" --parallel || fail "build"
+cmake --build "$BUILD_DIR" --parallel "$JOBS" || fail "build"
 if ! ls "$REPO_ROOT"/pyazr/_azure2* >/dev/null 2>&1; then
   echo "WARNING: pyazr/_azure2 was not built (pybind11 not found at configure time);"
   echo "         the pyazr tests that need the engine will skip their engine sections."
 fi
 
 stage "ctest -LE slow"
-ctest --test-dir "$BUILD_DIR" -LE slow --output-on-failure -j "${CTEST_JOBS:-4}" || fail "ctest"
+ctest --test-dir "$BUILD_DIR" -LE slow --output-on-failure -j "$JOBS" || fail "ctest"
 
 if [ "$QUICK" -eq 1 ]; then
   echo; echo "Quick check passed (physics regression suite and docs skipped)."

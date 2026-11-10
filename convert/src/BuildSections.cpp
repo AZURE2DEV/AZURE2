@@ -199,5 +199,27 @@ void Builder::RewriteConfigAndPriors() {
     }
 }
 
+// ================================================================ <potential>
+// The old block -> one `potential` record per particle pair it gives the model to (PotentialRecords, which pyazr's
+// writer uses too), coulomb_radius 3.5 fm and the solver's matching radius and step written out; the engine's warnings
+// about the block and every section that writes no record are notes.  An unclosed block was refused by the old engine.
+void Builder::BuildPotentials() {
+  if (!old_.hasPotential) return;
+  if (!old_.potential.closed) {
+    res_.refusal = "<potential> is not closed (the old engine refused the project)";
+    return;
+  }
+  for (const std::string &w : old_.potential.warnings) Note(Construct::kPotential, "", "the old engine: " + w);
+  std::vector<experiment::PairInfo> pairs;
+  for (const auto &p : old_.pairs) pairs.push_back(p.second.Info());
+  const PotentialRecordsResult r = PotentialRecords(old_.potential.settings, pairs, used_);
+  for (const io::Record &rec : r.records.records) {
+    used_.insert(rec.name);
+    Count(Construct::kPotential);
+  }
+  for (const std::string &n : r.notes) Note(Construct::kPotential, "", n);
+  out_.potentials = r.records;
+}
+
 }  // namespace convert
 }  // namespace azure2

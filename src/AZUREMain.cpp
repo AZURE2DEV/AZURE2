@@ -79,6 +79,11 @@ int AZUREMain::operator()() {
   if ((configure().screenCheckMask | configure().fileCheckMask) &
       Config::CHECK_COMPOUND_NUCLEUS) WriteCompoundNucleusCheck(*compound(), configure());
 
+  // An extrapolation run whose project has an adaptive grid refines it once the parameters are known (below).
+  const bool refinesAdaptiveGrids =
+      !(configure().paramMask & (Config::CALCULATE_WITH_DATA | Config::CALCULATE_REACTION_RATE)) &&
+      HasAdaptiveGrids(configure());
+
   if (!(configure().paramMask & Config::CALCULATE_REACTION_RATE)) {
     // Fill the data object from the segments and data file
     //   Compound object is passed to the function for pair key verification and
@@ -101,7 +106,9 @@ int AZUREMain::operator()() {
         return -1;
       }
     }
-    if ((configure().fileCheckMask | configure().screenCheckMask) & Config::CHECK_DATA)
+    // The data check lists the points that are calculated: an extrapolation run with an adaptive grid writes it after
+    // the refinement below, on the refined grid.
+    if (((configure().fileCheckMask | configure().screenCheckMask) & Config::CHECK_DATA) && !refinesAdaptiveGrids)
       data()->PrintData(configure());
 
     // Cache will be populated dynamically as integrals are calculated
@@ -138,12 +145,12 @@ int AZUREMain::operator()() {
   // An adaptive extrapolation grid is a function of the parameters (docs/upgrade/project_format3.md section 3.8): it is
   // refined now, at the run's parameters, and the extrapolations are made again on the refined grids before anything
   // is computed on them (AdaptiveExtrapolation.h).
-  if (!(configure().paramMask & (Config::CALCULATE_WITH_DATA | Config::CALCULATE_REACTION_RATE)) &&
-      HasAdaptiveGrids(configure())) {
+  if (refinesAdaptiveGrids) {
     std::unique_ptr<EData> refined = MakeRefinedExtrapolations(configure(), compound(), params.GetMinuitParams().Params());
     if (!refined) return -1;
     delete data_;
     data_ = refined.release();
+    if ((configure().fileCheckMask | configure().screenCheckMask) & Config::CHECK_DATA) data()->PrintData(configure());
   }
   // Prior parameter covariance (<config> priorCovariance=): matched onto the parameter vector as it stands now (a
   // parameter file can fix or free level parameters), before anything is written, so a refused file leaves no

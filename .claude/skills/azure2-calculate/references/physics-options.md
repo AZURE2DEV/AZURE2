@@ -31,13 +31,15 @@ scripts; a calculation under different flags is a different model.
 - Older-build errors of the M1 EC term (6.25 % low; wrong spin-term sign for half-integer partners; spurious orbital
   term on channel-spin-flip pathways): `older-builds.md`.
 
-## Hybrid nuclear potential (`<potential>` block)
+## Hybrid nuclear potential (`potential` record; older projects: `<potential>` block)
 
-- The potential changes F and G inside 15 fm, hence P, S and the entrance wave of the EC integrand. The bound-state
-  Whittaker tail, the ANC-to-width conversion at the channel radius a_c and the NF integral stay pure Coulomb. With a
-  potential still of a few MeV at a_c, the two sides of an EC integral come from different Hamiltonians: put a_c
-  beyond R + 5a of the Woods–Saxon, or accept the inconsistency. Behaviour: `docs/source/user_guide/pyazr.rst`
-  ("What the potential does not touch").
+- Format 3: one `potential` record per particle pair in `<potentials>` (`pair`, required `coulomb_radius`, `central
+  woods_saxon|gaussian ...`, optional `matching_radius` 15 fm and `step` 0.0275 fm); no record, no potential.
+  `AZURE2 --convert OLD NEW --to 3` writes the records from an old block (`coulomb_radius 3.5 fm`). Fields and
+  refusals: `docs/source/reference/format3.rst`.
+- The potential changes the radial solution between a_c and the matching radius, hence P, S, the phases and the EC
+  entrance wave, and below threshold the decaying solution (S, ANC conversion, bound-state tail of EC). Behaviour:
+  `docs/source/user_guide/pyazr.rst`.
 - A pyazr session owns its potential: several sessions with different potentials in one process stay independent
   (`tests/pyazr/potential_sessions_test.py`). Builds before 2026-10-27 (expires: 2027-02-01) shared one potential per
   process (the last session opened set it for all) and had an O(dr) derivative of the Numerov solution at a_c (shift

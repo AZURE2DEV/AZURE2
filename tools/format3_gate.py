@@ -4,7 +4,9 @@
   format3_gate.py tree CONVERTED TREE
       A runnable tree from the output of tools/convert_tree.sh: each original whose conversion validated (or whose
       only validation errors are E_DATA_FILE, a data file a test's check.sh writes) is replaced by its .f3.azr under
-      the original's name, so its outputs land where the original's did; the others are removed and listed.
+      the original's name, so its outputs land where the original's did; a project the converter left alone because
+      it is format 3 already stays as it is (with the data files it names, which the copy of the tree holds), so its
+      outputs are compared too and must be identical; the others are removed and listed with the converter's reason.
 
   format3_gate.py compare CMP REF NEW CONVERTED
       Every output file of REF (the original tree's run, tools/runall.sh) against NEW (the converted tree's), per
@@ -187,8 +189,41 @@ def classes_of(filename, old, new, names):
 # ---------------------------------------------------------------- tree
 
 
+ALREADY_FORMAT3 = "already format 3"  # the converter's refusal of a format-3 project (its report's "refusal")
+
+
+def _read_json(path):
+    try:
+        with open(path) as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return None
+
+
+def not_converted_reason(base):
+    """Why the original BASE.azr was not converted: the report's refusal, else the first validation error of the
+    conversion, else the ERROR line of the converter's log."""
+    report = _read_json(base + ".report.json")
+    if isinstance(report, dict) and report.get("refusal"):
+        return report["refusal"]
+    diags = _read_json(base + ".validate.json")
+    if isinstance(diags, list):
+        errors = [x for x in diags if isinstance(x, dict) and x.get("severity") == "error"]
+        if errors:
+            return f"{errors[0].get('code')}: {errors[0].get('message')} ({len(errors)} error(s))"
+    try:
+        with open(base + ".convert.log", errors="replace") as f:
+            for line in f:
+                if line.startswith("ERROR"):
+                    return line.strip()
+    except OSError:
+        pass
+    return "no conversion, report or log"
+
+
 def make_tree(conv, tree):
-    """The runnable tree (see the module docstring); prints the files kept without data files and those left out."""
+    """The runnable tree (see the module docstring); prints the files kept without data files, the format-3 projects
+    kept as they are and those left out."""
     if os.path.exists(tree):
         subprocess.run(["rm", "-rf", tree], check=True)
     os.makedirs(tree)
@@ -211,12 +246,15 @@ def make_tree(conv, tree):
                 without_data = any(x["code"] == "E_DATA_FILE" for x in diags)
             except (ValueError, KeyError, TypeError):
                 kept = False
+        report = _read_json(base + ".report.json")
         if kept:
             if without_data:
                 print("kept without its data files: " + rel)
             os.replace(converted, f)
+        elif isinstance(report, dict) and report.get("refusal") == ALREADY_FORMAT3 and not os.path.exists(converted):
+            print("format 3 already, kept as it is: " + rel)
         else:
-            print("not in the tree: " + rel)
+            print(f"not in the tree: {rel} ({not_converted_reason(base)})")
             for g in (f, converted):
                 if os.path.exists(g):
                     os.remove(g)
