@@ -2,6 +2,85 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-10 (director) — Phase 4: four branches merged; decisions; what runs next
+
+**Merged into `feature/upgrade-4-data`, and that into `feature/upgrade`** (verified by the director's own runs,
+`/data0/skowrons/AZURE2-upgrade/work/verify-p4i.log` and `verify-p4j.log`: 179 × 3 identical to the Phase 3 head —
+689 + 662 + 689 files; `ctest -LE slow` 142/142; `tests/run_tests.sh` 134/134; calculations at 1 and 8 threads, 12/12
+identical):
+- `fix/upgrade-fit-threads` — cause A of the thread-dependent fits (entry below; `fit_threads.md`).
+- `feature/upgrade-4-results` — S3 (a), the `Results` buffer behind the old accessors (entry below).
+- `feature/upgrade-4-experiment` — **S8**: the expression nodes `Leaf`, `Sum`, `Scale`, `Weighted`, `Ratio`,
+  `Transform` with `value` and `backward` (`experiment/README.md` §1; not wired into the engine). **S6**: the
+  lab → c.m. functions in `experiment/` (`Frames.h`), `EPoint`'s conversions call them, one conversion sequence
+  `ESegment::ConvertPointToCM` and one E_c.m./E_lab factor `ESegment::CMEnergyFactor` (README §2).
+- `feature/upgrade-4-format` — **format 3, step 2** (`project_format3.md` §10): the generic record reader
+  `io::ReadRecords`, the table (8 record kinds, 18 quantities, 43 units, 49 diagnostic codes) and `Schema::Validate`
+  in `experiment/` (README §3), `AZURE2 --schema`, `pyazr.schema()`, the generated page
+  `docs/source/reference/format3.rst`, checks 18, 21, 24. Not wired: the engine still reads format 2.
+
+**Decisions (director, with the PI's standing instructions).**
+- Data model M1–M13 (`data_model.md` §5) and format F1–F20 (`project_format3.md` §10) as recorded there. PI,
+  2026-11-09: no backward compatibility in the engine, a converter instead; the format must read naturally in the
+  GUI and in Python.
+- F11: `experiment/` may include `azure2/io/Record.h` (header-only target `azure2_io_record`) and nothing else of
+  `io/`; check 9b enforces it.
+- Step 2's corrections to the note are accepted: the shared-normalization record kind is `normalization` (record
+  kinds and field keys are disjoint within a section); keys match `[A-Za-z][A-Za-z0-9_]*`; `profiled` may stand
+  alone; a formula states the unit of its result; a folded data set requires `quadrature points <n>`.
+- All knowledge of the old formats goes into one directory, `convert/` (target `azure2_convert`), used only by
+  `AZURE2 --convert` and `pyazr.convert_azr`; when the format-3 reader is wired the old parsers leave the engine and
+  the rule "Old inputs keep working" of `CLAUDE.md` is replaced by "the engine reads one format; the converter reads
+  the old ones".
+- State and extension points (PI approved 2026-11-10; `ARCHITECTURE.md` §9, `CLAUDE.md`): the only singletons are
+  constant tables behind functions returning `const&`; what an evaluation writes is owned by its caller; an
+  extension is one explicit table row and a test; no self-registering classes, no abstract factories. The ~50
+  mutable function-level statics, `NuclearPotentialManager` and the `thread_local` caches of `ECIntegral.cpp` go in
+  Phase 6, with a consistency check.
+- The quantity rows of `experiment/src/Quantities.cpp` are positional (twenty values, bare booleans): not accepted
+  as the final form; step 3a rewrites them with named members, schema JSON unchanged.
+- S6 changed one behaviour: a β-delayed entrance with no exit pair now gets the beam conversion where the old code
+  dereferenced a null pair. Not accepted as it is: it must be a refusal with a message (with the S2 remainder).
+
+**Waiting for the PI.**
+- Cause B of the thread-dependent fits: Minuit2's call counter is not atomic (`external/minuit2/src/MnUserFcn.cxx:21`,
+  `MnFcn.cxx:26`; `mutable int fNumCall`, `inc/Minuit2/MnFcn.h:53`). Two atomic increments fix it (shown on a scratch
+  build). `CLAUDE.md` requires asking before `external/` is touched.
+- M3 (b) of `data_model.md`; the electron mass in `EPoint.cpp` and the proton mass in `ECIntegral.cpp`.
+
+**Running now (Opus agents; briefs in `/data0/skowrons/AZURE2-upgrade/work/briefs/`).**
+- A, `feature/upgrade-4-results-b`: S3 (b) — the buffer passed explicitly, owned by the caller; `EPoint` and `EData`
+  hold none.
+- B, `feature/upgrade-4-param-kinds`: parameter kinds as an attribute of the parameter vector; no code reads a
+  kind from a name (check 23); prerequisite of user-chosen names.
+- C, `feature/upgrade-cnuc-split-3`: file-size ratchet; `CNuc` inventory and the moves that do not touch the
+  parameter vector (output, reading, N_f^½, 6b, 3b (iii)).
+- D, `feature/upgrade-4-convert`: named table rows, `AZURE2 --validate`, the converter old → format 3 in `convert/`
+  (`--convert … --to 3` until the reader lands).
+
+**Then, in this order.** Format 3b: the reader (validated records → what the engine consumes), `--describe`, the two
+gate runs of F10, the test tree converted, the old parsers out of the engine. S2 remainder (load-time angle and factor
+beyond the kinematic range, one component-key counter per `EData`, the β refusal) and S1's history test on more
+projects. S4 (one model pass) with the stale reads of the S3 entry, each with a test that reaches the path first; then
+S5, S7, S9–S13. S15 (`<modelData>`, ωγ). New quantities in the order of `data_kinds.md` §5.3. `CNuc` step 7 after B.
+
+**Open findings, not yet assigned.**
+- `param.fit` (written at evaluation 100, 200, …) holds a schedule-dependent vector under the parallel gradient.
+- `EPoint::GetECAmplitudeWithShift` may keep the level energy of a copy's first shifted evaluation (inferred;
+  no test reaches it).
+- From S8/S6, for S9–S11: a `Transform` holds its own terms (not `Transform(n; Sum)`) to keep the bits; SUM components
+  and the RATIO denominator use the total σ whatever the E1/E2 filter of the base (forward and gradient disagree for
+  a SUM with an E1/E2 base); a component's fixed angle is not always c.m.; two Jacobian fallbacks differ per call
+  site; `backward` differs from `AZUREGrad` by ≤ 2 ulp for a weighted and scaled SUM term; with relativistic=1 the
+  angle "kept at the last valid value" is the non-relativistic angle, and the sub-point shift factor is
+  non-relativistic; `angleKinFactor_` is dead state.
+- pyazr `nds.py` converts S factors with mass numbers (σ +2.9 % for ³He+α at 93 keV, +6.7 % for p+¹²C at 100 keV);
+  fixed when the S factor becomes an engine quantity.
+- `src/ParameterLabel.cpp` and `pyazr/nuclei.py` have their own element lists beside `physics/…/Elements.h` (in B's
+  brief as a second commit).
+- Idea of the PI, outside AZURE2: an experiment logbook (yields, target scans) as a separate small Python package on
+  `experiment/` and the stopping module; not before Phase 5. AZURE2 stays an R-matrix code.
+
 ## 2026-11-09 (night) — fits that depend on the thread count: two causes (branch `fix/upgrade-fit-threads`)
 
 Record: `fit_threads.md`. Diagnostic `AZURE_TRACE_FCN=1|fresh` (every χ² with its parameter vector in hex floats;
