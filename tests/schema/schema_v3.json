@@ -700,7 +700,7 @@
      "required": true,
      "dimension": "energy",
      "units": ["MeV", "keV", "eV", "meV", "ueV"],
-     "doc": "the energy grid (F10: E_k = lo + k step)"
+     "doc": "the energy grid: range, list, file or adaptive (section 3.8)"
     },
     "angles": {
      "title": "Angles",

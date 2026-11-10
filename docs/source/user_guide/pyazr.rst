@@ -1149,6 +1149,25 @@ mode **only active test segments are returned**, so segment *i* is
    running session does not re-check. It is safe to delete; it only costs time
    to rebuild.
 
+Extrapolation grids
+-------------------
+
+``pyazr.extrapolation_grid(text, masses=None, relativistic=False,
+project_dir="", angles=False)`` gives the energies of a grid written as in a
+format-3 ``extrapolation`` record (:ref:`extrapolation-grids`) -- the engine's
+own reader, so the values are the ones the record gives -- as lab energies in
+MeV; a c.m. grid needs the entrance pair's masses in u::
+
+   E = pyazr.extrapolation_grid("range 20 800 keV cm points 200 log", masses=(1.00728, 12.0))
+
+``pyazr.refine_grid(start, model, tolerance, max_points)`` runs the refinement
+of an ``adaptive`` grid on any Python function ``model(xs)`` (one value, or one
+sequence of values, per abscissa) and returns the grid, the values and whether
+``max_points`` stopped it.  A session (``pyazr.azure2``) in extrapolation mode
+refuses a project with an ``adaptive`` grid: the session evaluates at many
+parameter vectors, and the grid is made by the extrapolation run (menu 3) at
+one.
+
 Frames and units
 ----------------
 

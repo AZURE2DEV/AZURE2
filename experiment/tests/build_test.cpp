@@ -3,6 +3,7 @@
 // project member by member (reaction resolution with states, the pair-key rule, observables, windows, norm and shift,
 // a shared normalization, an extrapolation grid by decision F10, the effect of a target and a beam, THM membership).
 //   experiment_build_test
+#include <cmath>
 #include <cstdio>
 #include <fstream>
 #include <string>
@@ -49,6 +50,8 @@ LevelTables Pairs() {
              pair(4, 10, 0, 0, 8, 16, 2, 0, 0), pair(5, 0, 1, 2, 6, 12, 2, 0, 0), pair(6, 0, 1, 2, 6, 12, 2, 0, 0),
              pair(7, 0, 1, 1, 6, 12, 1, 0, 0), pair(8, 0, 2, 4, 2, 4, 0, 0, 0), pair(9, 0, 2, 4, 2, 4, 0, 0, 0)};
   t.pairs[7].identical = true;
+  t.pairs[0].lightMass = 1.00783;  // p + 15N: the masses a c.m. grid is converted with
+  t.pairs[0].heavyMass = 15.0001;
   return t;
 }
 
@@ -220,6 +223,26 @@ int main() {
         BuildText("<extrapolations>\nextrapolation x1\n    reaction 15N(p,a)12C\n    quantity sigma\n    unit b\n"
                   "    energies list 0.3 MeV lab\n    covariance c.txt\n</extrapolations>\n")
                 .diagnostics.size() == 1);
+  // the grid forms of an extrapolation (Grids.h): a c.m. list with the entrance pair's masses, a file, an adaptive grid
+  {
+    std::ofstream("build_test_grid.txt") << "# E_lab (keV)\n100\n200\n";
+    const std::string x = "<extrapolations>\nextrapolation x1\n    reaction 15N(p,a)12C\n    quantity sigma\n    unit b\n";
+    const BuiltProject cm = BuildText(x + "    energies list 0.3 MeV cm\n</extrapolations>\n");
+    check("a c.m. list: E_lab = 0.3 (1.00783 + 15.0001)/15.0001 MeV, with pair 1's masses",
+          cm.Ok() && cm.extrapolations.extrapolations.items.size() == 1 &&
+              std::fabs(cm.extrapolations.extrapolations.items[0].spec.energies[0] - 0.3 * 16.00793 / 15.0001) < 1e-15);
+    const BuiltProject file = BuildText(x + "    energies file \"build_test_grid.txt\" keV lab\n</extrapolations>\n");
+    check("a file grid in keV: 0.1 and 0.2 MeV, the path kept for --describe",
+          file.Ok() && file.extrapolations.extrapolations.items[0].spec.energies == std::vector<double>({0.1, 0.2}) &&
+              file.extrapolations.extrapolations.items[0].spec.gridFile == "build_test_grid.txt");
+    ExpectOne("E_DATA_FILE", BuildText(x + "    energies file \"no_such_grid.txt\" MeV lab\n</extrapolations>\n"));
+    const BuiltProject adaptive =
+        BuildText(x + "    energies adaptive 0.1 0.35 MeV lab tolerance 1e-3 max_points 500 start_step 0.1\n</extrapolations>\n");
+    const ExtrapolationSpec &a = adaptive.extrapolations.extrapolations.items[0].spec;
+    check("an adaptive grid: its start grid 0.1, 0.2, 0.30000000000000004, 0.35, tolerance and max_points",
+          adaptive.Ok() && a.adaptive.on && a.adaptive.tolerance == 1e-3 && a.adaptive.maxPoints == 500 &&
+              a.energies == std::vector<double>({0.1, 0.1 + 0.1, 0.1 + 2 * 0.1, 0.35}) && a.minE == 0.1 && a.maxE == 0.35);
+  }
   check("the removed polarization quantity is not in the table (E_NOT_IN_LIST)",
         BuildText(Data(Set(kDataset, "quantity", "    quantity polarization"))).diagnostics.size() >= 1);
 

@@ -693,3 +693,84 @@ unit other than the engine's is refused for now (``E_NOT_BUILT``) in a data
 set's ``unit`` and ``columns``, a target's ``areal_density`` (atoms/cm\ :sup:`2`;
 a neutron sample's atoms/b), ``stopping`` (MeV cm\ :sup:`2`/atom) and
 ``screening`` (eV), and a beam ``spread`` formula (MeV).
+
+.. _extrapolation-grids:
+
+Extrapolation Grids
+^^^^^^^^^^^^^^^^^^^
+
+The ``energies`` field of an ``extrapolation`` record (format 3) says where the
+model is computed.  Each form names its unit and frame; ``lab`` energies are
+those of the light particle of the entrance pair on the heavy one at rest, as in
+the data files, and ``cm`` energies are entrance-channel c.m. energies, taken to
+lab energies with the pair's masses from ``<levels>`` (``E_lab = E_cm (m1 +
+m2)/m2``, or the relativistic inverse with ``relativistic=1``) so that the
+engine computes, and the output lists, the c.m. energies asked for (to rounding,
+10⁻¹⁶ relative).  Any energy (angle) unit of the table may be written; the values
+are converted to MeV (deg).  The same forms describe an angle grid
+(``angles``; an angle grid is not adaptive).
+
+``range lo hi <unit> <frame> step s``
+   ``E_k = lo + k s`` for ``k = 0 … ⌊(hi − lo)/s + 10⁻⁹⌋``::
+
+      energies   range 0.02 0.8 MeV cm step 0.002
+
+``range lo hi <unit> <frame> points n [log]``
+   ``n`` points from ``lo`` to ``hi``, evenly spaced or, with ``log``, evenly
+   spaced in ``ln E`` (``lo > 0``)::
+
+      energies   range 20 800 keV cm points 200 log
+
+``list x1 x2 … <unit> <frame>``
+   The energies as written, in that order::
+
+      energies   list 0.025 0.05 0.1 0.2 MeV cm
+
+``file "path" <unit> <frame>``
+   One energy per line; ``#`` starts a comment, blank lines are skipped.  The
+   path is relative to the project's directory, as a data file's;
+   ``AZURE2 --describe`` prints the path it opened and the number of energies::
+
+      energies   file "grids/gamow_window.txt" keV cm
+
+``adaptive lo hi <unit> <frame> tolerance t max_points n start_step s``
+   A grid made by the extrapolation run (menu 3) at the run's parameters, for
+   a narrow resonance that a uniform grid would need a tiny step everywhere
+   for::
+
+      energies   adaptive 0.2 0.4 MeV cm tolerance 1e-3 max_points 2000 start_step 0.01
+
+   The run starts from the uniform grid of ``start_step`` over ``[lo, hi]``
+   (``hi`` included) and adds, as seeds, ``E_λ + kΓ_λ`` for ``k = 0, ±1/2,
+   ±1, ±2, ±4`` of every level of the entrance pair's compound nucleus inside
+   the range (the observed energy and total width at the run's parameters).
+   Then, sweep by sweep, the model is computed at the midpoint ``m`` of every
+   interval ``[a, b]`` made in the sweep before (all intervals in the first),
+   and an interval is split -- ``m`` joins the grid, its two halves are tested
+   in the next sweep -- when the model differs from the straight line between
+   its ends by more than the tolerance:
+   ``|f(m) − (f(a) + f(b))/2| > t · max(|f(m)|, 10⁻³ max|f|)``, the maximum over
+   the values computed so far.  Below 10⁻³ of its largest value a curve is thus
+   refined to the absolute deviation ``t · 10⁻³ max|f|``, not relative to
+   itself.  The midpoint of an interval that is not split is dropped, so every
+   interval of the final grid has been tested.  The refinement ends when no
+   interval is split, or when a sweep's splits would make the grid longer than
+   ``max_points``: then the splits with the largest deviations are made up to
+   that count and the run warns with the largest deviation left and where.
+   ``f`` is the value the point pass computes, before the output's frame and
+   S-factor conversions: the c.m. cross section (or differential cross
+   section, phase shift, analyzing power).  With an angle grid the energies are
+   refined at every angle at once: an energy joins the grid, at all angles,
+   when any angle needs it (one grid for all angles).  The run log reports the
+   count (``Adaptive grid of extrapolation #1: 251 energies (...)``); the
+   output files list the grid's points as for any other grid.
+
+   The grid depends on the parameters: a run with other parameters can give
+   other energies.  Which intervals are split is decided once per sweep from
+   the computed values, so the grid does not depend on the number of threads.
+   A single level of width 1 eV at 300 keV (``tests/extrapolation_grids``)
+   needs fewer than 400 points for its peak and its integral to 10⁻³; a uniform
+   grid of the same count misses the peak by more than half.  pyazr sessions
+   (``pyazr.azure2``) evaluate at many parameter vectors and refuse an adaptive
+   grid; ``pyazr.refine_grid`` runs the same refinement on any Python function,
+   and ``pyazr.extrapolation_grid`` gives the energies of the other forms.

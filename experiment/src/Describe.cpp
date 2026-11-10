@@ -185,9 +185,14 @@ std::string DescribeText(const Format3Project &p) {
     out << ReferenceText(x.reaction);
     for (const Term &t : Terms(r, x.reaction))
       out << "    " << t.text << ": entrance pair " << Pair(p, t.entrance) << ", exit pair " << Pair(p, t.exit) << "\n";
-    out << "  grid: " << x.energies.size() << " energies E_lab " << Fmt(x.minE) << " - " << Fmt(x.maxE) << " MeV";
+    out << "  grid: " << x.energies.size() << (x.adaptive.on ? " start energies" : " energies") << " E_lab " << Fmt(x.minE)
+        << " - " << Fmt(x.maxE) << " MeV";
     if (!x.angles.empty()) out << " at " << x.angles.size() << " angle(s) " << Fmt(x.minA) << " - " << Fmt(x.maxA) << " deg";
     out << "\n";
+    if (!x.gridFile.empty()) out << "  grid file: " << x.gridFile << " (" << x.energies.size() << " energies)\n";
+    if (x.adaptive.on)
+      out << "  adaptive: refined in the extrapolation run to a relative tolerance " << Fmt(x.adaptive.tolerance)
+          << ", at most " << x.adaptive.maxPoints << " energies\n";
     for (const std::string &e : Effects(p.built.extrapolations.targetEffects, x.key)) out << "  effect: " << e << "\n";
     out << "  parameters: " << x.names.energyShift << ", " << x.names.energyShiftSqrt << " (energy shift, fixed)\n";
   }
@@ -245,6 +250,9 @@ std::string DescribeJson(const Format3Project &p) {
     j.Key("quantity").String(r.quantity ? r.quantity->name : "");
     reactionTree(r, x.reaction);
     j.Key("energies").Integer((long)x.energies.size()).Key("angles").Integer((long)x.angles.size());
+    j.Key("grid_file").String(x.gridFile);
+    j.Key("adaptive").Bool(x.adaptive.on);
+    if (x.adaptive.on) j.Key("tolerance").Number(x.adaptive.tolerance).Key("max_points").Integer(x.adaptive.maxPoints);
     j.Key("effects").StringArray(Effects(p.built.extrapolations.targetEffects, x.key));
     j.EndObject();
   }

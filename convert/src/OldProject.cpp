@@ -48,6 +48,8 @@ experiment::PairInfo OldPair::Info() const {
   p.heavyA = A2();
   p.lightExcitation = e1;
   p.heavyExcitation = e2;
+  p.lightMass = m1;
+  p.heavyMass = m2;
   p.lightExcitationText = e1Text;
   p.heavyExcitationText = e2Text;
   return p;

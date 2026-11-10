@@ -499,6 +499,13 @@ add_test(NAME pyazr_schema
                  ${CMAKE_CURRENT_SOURCE_DIR}/schema_test.py)
 set_tests_properties(pyazr_schema PROPERTIES ENVIRONMENT "AZURE2_BIN=$<TARGET_FILE:AZURE2>")
 
+# pyazr.extrapolation_grid and pyazr.refine_grid: the engine's grid forms and adaptive refinement; a session refuses
+# an adaptive grid (docs/upgrade/project_format3.md section 3.8).
+add_test(NAME pyazr_extrapolation_grid
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/extrapolation_grid_test.py)
+set_tests_properties(pyazr_extrapolation_grid PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1")
+
 # AZURE2 --validate and pyazr.validate (the fixtures of experiment/tests/data/, a file with several errors, a format-2
 # file refused) and pyazr.convert_azr(..., to=3) against the committed conversion (docs/upgrade/project_format3.md 6.2, 8).
 add_test(NAME pyazr_validate

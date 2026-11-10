@@ -55,6 +55,11 @@ BeamEnergiesCM BeamToCM(const Partition &p, double eLab, double binLowLab, doubl
   return r;
 }
 
+double BeamLabFromCM(const Partition &p, double eCM, bool relativistic) {
+  if (relativistic) return LabFromCM(p.m1 * uconv, p.m2 * uconv, eCM);
+  return eCM / BeamCMFactor(p);
+}
+
 double DecayToCM(const Partition &p, double eLab, bool relativistic) {
   // two-body decay at rest: equal momenta, T = E1 + sqrt(m2^2 + p^2) - m2
   if (relativistic) return CMFromDecay(p.m1 * uconv, p.m2 * uconv, eLab);

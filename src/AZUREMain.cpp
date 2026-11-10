@@ -1,6 +1,8 @@
 #include <cmath>
 #include "AZURECalc.h"
 #include "AZUREMain.h"
+
+#include "AdaptiveExtrapolation.h"
 #include "CNucChecks.h"
 #include "CNucReport.h"
 #include "Objective.h"
@@ -132,6 +134,16 @@ int AZUREMain::operator()() {
     configure().outStream << "Reading User Parameter File..." << std::endl;
     params.ReadUserParameters(configure());
     if (!params.ReconcileBasis(compound(), configure())) return -1;
+  }
+  // An adaptive extrapolation grid is a function of the parameters (docs/upgrade/project_format3.md section 3.8): it is
+  // refined now, at the run's parameters, and the extrapolations are made again on the refined grids before anything
+  // is computed on them (AdaptiveExtrapolation.h).
+  if (!(configure().paramMask & (Config::CALCULATE_WITH_DATA | Config::CALCULATE_REACTION_RATE)) &&
+      HasAdaptiveGrids(configure())) {
+    std::unique_ptr<EData> refined = MakeRefinedExtrapolations(configure(), compound(), params.GetMinuitParams().Params());
+    if (!refined) return -1;
+    delete data_;
+    data_ = refined.release();
   }
   // Prior parameter covariance (<config> priorCovariance=): matched onto the parameter vector as it stands now (a
   // parameter file can fix or free level parameters), before anything is written, so a refused file leaves no
