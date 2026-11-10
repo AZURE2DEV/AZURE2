@@ -7,8 +7,9 @@
 #include "EData.h"
 #include "ECAmplitudeCache.h"
 #include "ECTable.h"
-#include "ExtrapLine.h"
-#include "SegLine.h"
+#include "azure2/convert/ExtrapLine.h"
+#include "azure2/convert/SegLine.h"
+#include "azure2/convert/PriorCentreRow.h"
 #include "AdaptiveIntegrationGrid.h"
 #include "Minuit2/MnUserParameters.h"
 #include "GSLException.h"
@@ -629,39 +630,23 @@ int EData::ReadPriorCentres(const Config &configure) {
       continue;
     }
     if (!inside || trimmed[0] == '#') continue;
-    std::istringstream stm(trimmed);
-    std::vector<std::string> tok;
-    std::string t;
-    while (stm >> t) tok.push_back(t);
-    if (tok.size() != 3 || tok[1] != "prior_centre") continue;
-
-    const std::string &name = tok[0];
-    bool isNorm = false;
-    std::string number;
-    const std::string normTail = "_norm", shiftTail = "_energy_shift";
-    if (name.compare(0, 8, "segment_") == 0 && name.size() > 8 + normTail.size() &&
-        name.compare(name.size() - normTail.size(), normTail.size(), normTail) == 0) {
-      isNorm = true;
-      number = name.substr(8, name.size() - 8 - normTail.size());
-    } else if (name.compare(0, 8, "segment_") == 0 && name.size() > 8 + shiftTail.size() &&
-               name.compare(name.size() - shiftTail.size(), shiftTail.size(), shiftTail) == 0) {
-      number = name.substr(8, name.size() - 8 - shiftTail.size());
-    }
-    const bool digits = !number.empty() && number.find_first_not_of("0123456789") == std::string::npos;
-    char *end = NULL;
-    const double centre = strtod(tok[2].c_str(), &end);
-    if (!digits || end == tok[2].c_str() || *end != '\0' || !std::isfinite(centre)) {
+    // The row's fields (convert/'s PriorCentreRow.h: the one reader of the old grammar, shared with the converter).
+    const azure2::convert::PriorCentreRow row = azure2::convert::ReadPriorCentreRow(trimmed);
+    if (row.kind == azure2::convert::PriorCentreRow::NotARow) continue;
+    if (row.kind == azure2::convert::PriorCentreRow::Malformed) {
       configure.outStream << "ERROR: <parameterSettings> row \"" << trimmed
                           << "\" is not \"segment_N_norm prior_centre value\" or "
                              "\"segment_N_energy_shift prior_centre value\"." << std::endl;
       return -1;
     }
+    const bool isNorm = row.kind == azure2::convert::PriorCentreRow::Norm;
+    const double centre = row.centre;
     if (isNorm && centre <= 0.) {
       configure.outStream << "ERROR: <parameterSettings> row \"" << trimmed
                           << "\": a normalization prior centre must be positive." << std::endl;
       return -1;
     }
-    const int key = atoi(number.c_str());
+    const int key = row.segment;
     bool found = false;
     for (int s = 1; s <= this->NumSegments(); s++) {
       ESegment *segment = this->GetSegment(s);

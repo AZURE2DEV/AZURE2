@@ -5,8 +5,8 @@
 #include <string>
 #include <sstream>
 #include <vector>
-#include "ComponentList.h"
-#include "SegLine.h"  // ReadThicknessBlock
+#include "azure2/convert/ComponentList.h"
+#include "azure2/convert/SegLine.h"  // ReadThicknessBlock
 
 /// A class to read and store a line from the extrapolation input file.
 
@@ -57,7 +57,7 @@ class ExtrapLine {
       if (advancedStream >> tempIsAdvanced && tempIsAdvanced == 1) {
         isAdvanced_ = 1;
         if (advancedStream >> operationType_) {
-          const std::string componentError = ReadComponentList(advancedStream, componentsList_, parseWarning_);
+          const std::string componentError = ReadComponentList(advancedStream, componentsList_, parseWarning_, components_);
           if (!componentError.empty()) {
             parseError_ = componentError;
             stream.setstate(std::ios::failbit);
@@ -223,6 +223,8 @@ class ExtrapLine {
    * Returns the semicolon-separated list of components.
    */
   std::string componentsList() const { return componentsList_; };
+  /// The components as values (the converter to format 3 reads them; the engine reads componentsList()).
+  const std::vector<ComponentEntry> &components() const { return components_; };
   /*!
    * Returns flag for if this segment is an unobserved primary transition (1 = is, 0 = not).
    */
@@ -271,6 +273,7 @@ class ExtrapLine {
   bool thicknessFitIgnored_ = false;
   bool hasCovariance_ = false;
   std::string componentsList_;
+  std::vector<ComponentEntry> components_;
   int isUPOS_;
   int secondaryDecayL_;
   double Ic_;

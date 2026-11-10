@@ -5,7 +5,7 @@
 #include <string>
 #include <cstdlib>
 #include <sstream>
-#include "ComponentList.h"
+#include "azure2/convert/ComponentList.h"
 #include <vector>
 
 /// A class to read and store a line from the data segments input file.
@@ -189,7 +189,7 @@ class SegLine {
         if (advancedStream >> tempIsAdvanced && tempIsAdvanced == 1) {
           isAdvanced_ = 1;
           if (advancedStream >> operationType_) {
-            const std::string componentError = ReadComponentList(advancedStream, componentsList_, parseWarning_);
+            const std::string componentError = ReadComponentList(advancedStream, componentsList_, parseWarning_, components_);
             if (!componentError.empty()) {
               parseError_ = componentError;
               stream.setstate(std::ios::failbit);
@@ -211,7 +211,7 @@ class SegLine {
         // Optional keyword block at the very end of the line:
         //   sqrtshift <b> <bError> <vary>
         // adds a sqrt(E) term to the segment's energy shift,
-        //   E' = E + energyShift + b * sqrt(E / MeV)   (E in MeV, b in MeV^1/2),
+        //   E' = E + energyShift + b * sqrt(E)   (E in MeV, b in MeV^1/2),
         // the form an additive offset in an analyzing-magnet field reading
         // produces.  A keyword rather than a positional token, so that a line
         // without it (every file written before 2026-10) and the positional
@@ -385,9 +385,9 @@ class SegLine {
         }
       } else {
         // If no file path found, use trimmed string
-        int p2 = remainingString.find_last_not_of(" \n\t\r");
+        const std::size_t p2 = remainingString.find_last_not_of(" \n\t\r");
         if (p2 != std::string::npos) {
-          int p1 = remainingString.find_first_not_of(" \n\t\r");
+          std::size_t p1 = remainingString.find_first_not_of(" \n\t\r");
           if (p1 == std::string::npos) p1 = 0;
           dataFile_ = StripPathQuotes(remainingString.substr(p1, (p2 - p1) + 1));
         } else
@@ -550,6 +550,8 @@ class SegLine {
    * Returns the semicolon-separated list of components.
    */
   std::string componentsList() const { return componentsList_; };
+  /// The components as values (the converter to format 3 reads them; the engine reads componentsList()).
+  const std::vector<ComponentEntry> &components() const { return components_; };
   /*!
    * Returns flag for if this segment is an unobserved primary transition (1 = is, 0 = not).
    */
@@ -612,6 +614,7 @@ class SegLine {
   std::string thicknessGroup_;
   int absolute_;
   std::string componentsList_;
+  std::vector<ComponentEntry> components_;
   int isUPOS_;
   int secondaryDecayL_;
   double Ic_;

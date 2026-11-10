@@ -20,8 +20,8 @@
 #include <iostream>
 #include <string>
 
-#include "ExtrapLine.h"
-#include "SegLine.h"
+#include "azure2/convert/ExtrapLine.h"
+#include "azure2/convert/SegLine.h"
 #include "TargetEffect.h"
 
 #include <cstdio>

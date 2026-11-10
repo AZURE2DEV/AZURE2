@@ -149,17 +149,17 @@ if all_match:
 #    pyazr splits the tail by its own table, so a keyword the engine learns and
 #    pyazr does not is mangled by a load and save there.
 engine_kw = set()
-for header in ("include/SegLine.h", "include/ExtrapLine.h"):
+for header in ("convert/include/azure2/convert/SegLine.h", "convert/include/azure2/convert/ExtrapLine.h"):
     engine_kw |= set(re.findall(r'keyword == "([a-z]+)"', read(header)))
 py_match = re.search(r"_KEYWORDS\s*=\s*\{(.*?)\}", read("pyazr/datasets.py"), re.S)
 py_kw = set(re.findall(r'"([a-z]+)"\s*:', py_match.group(1))) if py_match else set()
 for name, kw in (("pyazr/datasets.py _KEYWORDS", py_kw),):
     for k in sorted(engine_kw - kw):
-        problems.append(f"segment keyword '{k}': read by the engine (SegLine.h/ExtrapLine.h), unknown to {name}")
+        problems.append(f"segment keyword '{k}': read by the engine (convert/'s SegLine.h/ExtrapLine.h), unknown to {name}")
     for k in sorted(kw - engine_kw):
         problems.append(f"segment keyword '{k}': known to {name}, not read by the engine")
 if not engine_kw:
-    problems.append("could not find the segment keywords in include/SegLine.h; update this test")
+    problems.append("could not find the segment keywords in convert/include/azure2/convert/SegLine.h; update this test")
 
 
 # 7. The repository carries its licence.

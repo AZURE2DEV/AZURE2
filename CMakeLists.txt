@@ -118,6 +118,9 @@ add_subdirectory(physics)
 add_subdirectory(io)
 # experiment/: model expressions and frames (docs/upgrade/data_model.md), which use physics/ only.
 add_subdirectory(experiment)
+# convert/: the old project formats -- their line parsers (which the engine uses until the format-3 reader) and the
+# converter to format 3 (docs/upgrade/project_format3.md section 8).
+add_subdirectory(convert)
 
 # ---------------------------------------------------------------- macOS/Homebrew
 # Homebrew needs help that a Linux build never does, and without it a plain

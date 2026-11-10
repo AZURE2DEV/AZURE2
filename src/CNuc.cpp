@@ -25,6 +25,7 @@
 #include "ECIntegral.h"
 #include "GSLException.h"
 #include "NucLine.h"
+#include "azure2/convert/AbundanceLine.h"
 #include "Minuit2/MnUserParameters.h"
 #include "NFIntegral.h"
 #include "CNucExternalCapture.h"
@@ -455,42 +456,26 @@ int CNuc::ReadAbundances(const Config &configure) {
   line = "";
   while (!in.eof() && line != "</abundances>") {
     getline(in, line);
-    std::string entry = line;
-    size_t hash = entry.find('#');
-    if (hash != std::string::npos) entry = entry.substr(0, hash);
-    if (entry.find_first_not_of(" \t\r") == std::string::npos) continue;
     if (line == "</abundances>") break;
-    // optional "<name>:" prefix (one token ending in a colon)
-    std::string name;
-    std::istringstream probe(entry);
-    std::string first;
-    probe >> first;
-    if (!first.empty() && first.back() == ':') {
-      name = first.substr(0, first.size() - 1);
-      std::string rest;
-      getline(probe, rest);
-      entry = rest;
+    // The line's fields (convert/'s AbundanceLine.h: the one reader of the old grammar, shared with the converter).
+    const azure2::convert::AbundanceLine entry = azure2::convert::ReadAbundanceLine(line);
+    if (entry.kind == azure2::convert::AbundanceLine::Blank) continue;
+    const std::string &name = entry.sample;
+    if (entry.kind == azure2::convert::AbundanceLine::BadSum) {
+      configure.outStream << "ERROR: <abundances> line \"" << line << "\" is not \"[<sample>:] sum <sigma>\"." << std::endl;
+      return -1;
     }
-    std::istringstream stm(entry);
-    std::string head;
-    if (!(stm >> head)) continue;
-    if (head == "sum") {
-      double s;
-      if (!(stm >> s)) {
-        configure.outStream << "ERROR: <abundances> line \"" << line << "\" is not \"[<sample>:] sum <sigma>\"." << std::endl;
-        return -1;
-      }
-      sampleOf(name).sumSigma = s;
+    if (entry.kind == azure2::convert::AbundanceLine::Sum) {
+      sampleOf(name).sumSigma = entry.sumSigma;
       continue;
     }
-    std::istringstream stm2(entry);
-    int z, a, vary;
-    double value, sigma;
-    if (!(stm2 >> z >> a >> value >> vary >> sigma)) {
+    if (entry.kind == azure2::convert::AbundanceLine::BadEntry) {
       configure.outStream << "ERROR: <abundances> line \"" << line
                           << "\" is not \"[<sample>:] <Z> <A> <abundance> <vary> <sigma>\" or \"[<sample>:] sum <sigma>\"." << std::endl;
       return -1;
     }
+    const int z = entry.z, a = entry.a, vary = entry.vary;
+    const double value = entry.value, sigma = entry.sigma;
     bool found = false;
     for (unsigned int i = 0; i < nuclei_.size(); i++) {
       if (nuclei_[i].Z != z || nuclei_[i].A != a) continue;

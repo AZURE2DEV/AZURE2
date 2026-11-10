@@ -1,6 +1,7 @@
 #include "InputFiles.h"
 #include "TargetEffect.h"
 #include "AdaptiveIntegrationGrid.h"
+#include "azure2/convert/TargetIntLine.h"
 #include <sstream>
 #include <iostream>
 #include <cctype>
@@ -32,288 +33,94 @@ TargetEffect::TargetEffect(std::istream &stream, const Config &configure) {
   transitionWidth_ = 0.0;
   autoTolerance_ = 0.0;
 
-  // Every field has a default: a line may end before the optional ones, and
-  // an extraction attempted at the end of the stream leaves its target
-  // untouched (the sentry fails before num_get runs), so an uninitialized
-  // flag read whatever the stack held.  With isConvCoefficients = 1 by
-  // accident the empty convolution equation went through Equation::Initialize,
-  // which prints "Error: empty equation." and exits -- seen 2026-10-13 on the
-  // compute nodes for the 17O+a file, whose inactive lines stop after the
-  // Q-coefficient count, while the same file loaded on the login node.
-  int isActive = 0;
-  std::string segmentList;
-  int numIntegrationPoints = 0;
-  int isConvolution = 0;
-  double sigma = 0.0;
-  int isTargetIntegration = 0;
-  double density = 0.0;
-  std::string stoppingPowerEq;
-  int numParameters = 0;
-  vector_r parameters;
-  int isQCoefficients = 0;
-  int numQCoefficients = 0;
-  vector_r qCoefficients;
-  int isConvCoefficients = 0;
-  int numConvCoefficients = 0;
-  vector_r convCoefficients;
-  std::string convolutionEq;
+  // The line's fields as written (convert/'s TargetIntLine.h: the one reader of the old <targetInt> grammar,
+  // shared with the converter to format 3 until the format-3 reader replaces the section).  Every field has a
+  // default there: a line may end before the optional ones.
+  azure2::convert::TargetIntLine line;
+  azure2::convert::ReadTargetIntLine(stream, line);
+  if (line.complete) {
+    const int isActive = line.isActive;
+    const int numIntegrationPoints = line.numIntegrationPoints;
+    const int isConvolution = line.isConvolution;
+    const double sigma = line.sigma;
+    const int isTargetIntegration = line.isTargetIntegration;
+    const double density = line.density;
+    const int numParameters = line.numParameters;
+    const vector_r &parameters = line.parameters;
+    const int numConvCoefficients = line.numConvCoefficients;
+    const vector_r &convCoefficients = line.convCoefficients;
 
-  stream >> isActive >> segmentList >> numIntegrationPoints >> isConvolution >> sigma >> isTargetIntegration >> density >> stoppingPowerEq >> numParameters;
-  if (!stream.eof()) {
-    for (int i = 0; i < numParameters; i++) {
-      double tempParameter = 0.0;
-      stream >> tempParameter;
-      parameters.push_back(tempParameter);
-    }
-
-    stream >> isQCoefficients >> numQCoefficients;
-    for (int i = 0; i < numQCoefficients && stream.good(); i++) {
-      double tempQCoefficient = 0.0;
-      stream >> tempQCoefficient;
-      qCoefficients.push_back(tempQCoefficient);
-    }
-    isQCoefficients_ = (isQCoefficients == 1) ? true : false;
-    qCoefficients_ = qCoefficients;
-
-    stream >> isConvCoefficients >> convolutionEq >> numConvCoefficients;
-    for (int i = 0; i < numConvCoefficients && stream.good(); i++) {
-      double tempConvCoefficient = 0.0;
-      stream >> tempConvCoefficient;
-      convCoefficients.push_back(tempConvCoefficient);
-    }
-    isConvCoefficients_ = (isConvCoefficients == 1) ? true : false;
+    isQCoefficients_ = (line.isQCoefficients == 1) ? true : false;
+    qCoefficients_ = line.qCoefficients;
+    isConvCoefficients_ = (line.isConvCoefficients == 1) ? true : false;
     convCoefficients_ = convCoefficients;
 
-    // Read straggling flag and coefficient (optional for backward compatibility)
-    // Skip whitespace and check if there's a digit (not a '<' which would be </targetInt>)
-    if (stream.good()) stream >> std::ws;  // Skip whitespace
-    if (stream.good() && stream.peek() != '<' && std::isdigit(stream.peek())) {
-      int isStraggling = 0;
-      stream >> isStraggling;
-      isStraggling_ = (isStraggling == 1);
-
-      // Try to read coefficient if available
-      if (stream.good()) stream >> std::ws;
-      if (stream.good() && stream.peek() != '<' && (std::isdigit(stream.peek()) || stream.peek() == '.' || stream.peek() == '-')) {
-        double stragglingCoeff = 0.0;
-        stream >> stragglingCoeff;
-        stragglingCoefficient_ = stragglingCoeff;
-
-        // Try to read adaptive grid params (optional for backward compatibility)
-        if (stream.good()) stream >> std::ws;
-        if (stream.good() && stream.peek() != '<' && (std::isdigit(stream.peek()) || stream.peek() == '.' || stream.peek() == '-')) {
-          double rwm;
-          stream >> rwm;
-          if (stream) {
-            resonanceWidthMultiplier_ = rwm;
-            explicitResonanceWidthMultiplier_ = true;
-            if (stream.good()) stream >> std::ws;
-            if (stream.good() && stream.peek() != '<' && (std::isdigit(stream.peek()) || stream.peek() == '.' || stream.peek() == '-')) {
-              double ppw;
-              stream >> ppw;
-              if (stream) pointsPerWidth_ = ppw;
-            }
-          }
-        }
+    if (line.hasStragglingFlag) {
+      isStraggling_ = (line.isStraggling == 1);
+      if (line.hasStragglingCoefficient) stragglingCoefficient_ = line.stragglingCoefficient;
+      if (line.hasResonanceWidthMultiplier) {
+        resonanceWidthMultiplier_ = line.resonanceWidthMultiplier;
+        explicitResonanceWidthMultiplier_ = true;
       }
+      if (line.hasPointsPerWidth) pointsPerWidth_ = line.pointsPerWidth;
     }
 
-    // Optional restriction of the effect to lab-energy windows: a quoted
-    // token "lo1-hi1,lo2-hi2" (empty "" means unrestricted), then optionally
-    // the blend width at each edge (MeV) and the automatic-application
-    // tolerance.  Old files stop before this token; old readers never look
-    // past the fields they know, so the format stays compatible both ways.
-    // Every probe is guarded on good(): the caller treats failbit as a
-    // malformed line, and probing past the end of an exactly-consumed line
-    // must not look like an error.
-    if (stream.good()) {
-      stream >> std::ws;
-      if (stream.good() && stream.peek() == '"') {
-        std::string rangesToken;
-        stream >> rangesToken;
-        size_t q = 0;
-        while ((q = rangesToken.find('\"')) != std::string::npos) rangesToken.erase(q, 1);
-        std::istringstream rs(rangesToken);
-        std::string item;
-        while (std::getline(rs, item, ',')) {
-          if (item.compare(0, 4, "auto") == 0) {
-            // "auto", "auto:<tol>", "auto:<tol>:<margin>": windows from the level scheme (IsAutoWindows)
-            autoWindows_ = true;
-            std::istringstream as(item.substr(4));
-            char colon = 0;
-            double v = 0.0;
-            if (as >> colon && colon == ':' && as >> v && v > 0.) autoWindowTolerance_ = v;
-            colon = 0;
-            if (as >> colon && colon == ':' && as >> v && v > 0.) autoWindowMargin_ = v;
-            continue;
-          }
-          size_t dash = item.find('-', 1);  // energies are positive; skip a leading sign
-          if (dash == std::string::npos) continue;
-          double lo = atof(item.substr(0, dash).c_str());
-          double hi = atof(item.substr(dash + 1).c_str());
-          if (hi > lo) ranges_.push_back(std::pair<double, double>(lo, hi));
-        }
-        if (stream.good()) {
-          stream >> std::ws;
-          if (stream.good() && stream.peek() != '<' && (std::isdigit(stream.peek()) || stream.peek() == '.')) {
-            double tw;
-            stream >> tw;
-            if (!stream.fail() && tw > 0.) transitionWidth_ = tw;
-            if (stream.good()) {
-              stream >> std::ws;
-              if (stream.good() && stream.peek() != '<' && (std::isdigit(stream.peek()) || stream.peek() == '.')) {
-                double tol;
-                stream >> tol;
-                if (!stream.fail() && tol > 0.) autoTolerance_ = tol;
-              }
-            }
-          }
-        }
-      }
+    if (line.hasRangesToken) {
+      if (line.autoWindows) autoWindows_ = true;
+      if (line.hasAutoWindowTolerance) autoWindowTolerance_ = line.autoWindowTolerance;
+      if (line.hasAutoWindowMargin) autoWindowMargin_ = line.autoWindowMargin;
+      ranges_ = line.ranges;
+      if (line.transitionWidth > 0.) transitionWidth_ = line.transitionWidth;
+      if (line.autoTolerance > 0.) autoTolerance_ = line.autoTolerance;
     }
-    // Optional keyword blocks, introduced by a word so that older readers
-    // (which only ever probe for digits or a quote) stop in front of them:
-    //   beamprofile N {xi omega alpha weight}xN tpcSigma nCut dbFlag
-    //   udr "<file>" flightPath_m burstFWHM_ns channel_ns centred
-    //   screening Ue_eV vary sigma_eV
-    //   densityfit vary sigma [max]    (sigma in atoms/cm^2, or "<p>%" of the line's density; max: the largest
-    //                                   density the sub-point grids must span, atoms/cm^2)
-    //   densitygroup <label>
-    //   doppler T_K                    (free-gas Doppler broadening, effective temperature in kelvin)
-    //   doppler T_K vary sigma_K [Tmax_K]   (a fitted temperature: parameter doppler_<n>, prior sigma about T,
-    //                                        Tmax the largest temperature the sub-point grids must span)
-    std::string densitySigmaToken;
-    bool densityFitRead = false;
-    double densityMaxRead = 0.0;
-    std::string dopplerVaryToken, dopplerSigmaToken, dopplerMaxToken;
-    bool dopplerFitRead = false;
-    while (stream.good()) {
-      stream >> std::ws;
-      if (!(stream.good() && std::isalpha(stream.peek()))) break;
-      std::string keyword;
-      stream >> keyword;
-      if (keyword == "beamprofile") {
-        int numComponents = 0;
-        stream >> numComponents;
-        for (int i = 0; i < numComponents && stream.good(); i++) {
-          BeamProfileComponent c;
-          stream >> c.xi >> c.omega >> c.alpha >> c.weight;
-          beamProfile_.push_back(c);
-        }
-        int dbFlag = 0;
-        stream >> beamTpcSigma_ >> beamTruncation_ >> dbFlag;
-        beamPhotodissociation_ = (dbFlag == 1);
-        isBeamProfile_ = !beamProfile_.empty() && !stream.fail();
-        if (beamProfile_.empty()) stream.setstate(std::ios_base::failbit);
-      } else if (keyword == "sigmalab") {
-        sigmaLab_ = true;
-      } else if (keyword == "screening") {
-        int vary = 0;
-        stream >> screeningNominal_ >> vary >> screeningSigma_;
-        if (stream.fail() || screeningSigma_ < 0.0) {
-          // Flagged as well as failed: at the end of the line the fail bit is cleared below.
-          screeningError_ = true;
-          stream.setstate(std::ios_base::failbit);
-        } else {
-          hasScreening_ = true;
-          screeningVary_ = (vary != 0);
-          screeningUe_ = screeningNominal_;
-        }
-      } else if (keyword == "densityfit") {
-        int vary = 0;
-        stream >> vary >> densitySigmaToken;
-        if (stream.fail() || densitySigmaToken.empty()) {
-          densityFitError_ = true;
-          densityFitErrorText_ = "a densityfit block is 'densityfit vary sigma' (sigma in atoms/cm^2 or a percentage, \"2.3%\")";
-          stream.setstate(std::ios_base::failbit);
-        } else {
-          densityFitRead = true;
-          densityVary_ = (vary != 0);
-          // optional: the largest density the grids must span (atoms/cm^2)
-          if (stream.good()) stream >> std::ws;
-          if (stream.good() && (std::isdigit(stream.peek()) || stream.peek() == '.')) {
-            stream >> densityMaxRead;
-            if (stream.fail()) {
-              densityFitError_ = true;
-              densityFitErrorText_ = "the optional densityfit maximum is not a number";
-            }
-          }
-        }
-      } else if (keyword == "densitygroup") {
-        stream >> densityGroup_;
-        if (stream.fail() || densityGroup_.empty()) {
-          densityFitError_ = true;
-          densityFitErrorText_ = "a densitygroup block is 'densitygroup <label>'";
-          stream.setstate(std::ios_base::failbit);
-        }
-      } else if (keyword == "doppler") {
-        stream >> dopplerTemperature_;
-        if (stream.fail() || !(dopplerTemperature_ > 0.0)) {
-          dopplerError_ = true;  // flagged as well as failed: at the end of the line the fail bit is cleared below
-          dopplerErrorText_ = "a doppler block is 'doppler T' or 'doppler T vary sigma [Tmax]' with the effective"
-                              " temperature T > 0 in kelvin";
-          stream.setstate(std::ios_base::failbit);
-        } else {
-          isDoppler_ = true;
-          // optional fit form: vary sigma [Tmax], numbers (a following keyword starts with a letter)
-          auto numberToken = [&](std::string &tok) {
-            if (stream.good()) stream >> std::ws;
-            if (!stream.good()) return false;
-            const int c = stream.peek();
-            if (!(std::isdigit(c) || c == '.' || c == '-' || c == '+')) return false;
-            stream >> tok;
-            return !stream.fail();
-          };
-          if (numberToken(dopplerVaryToken)) {
-            dopplerFitRead = true;
-            if (!numberToken(dopplerSigmaToken)) {
-              dopplerError_ = true;
-              dopplerErrorText_ = "a doppler block is 'doppler T' or 'doppler T vary sigma [Tmax]': the fit form needs"
-                                  " both vary (0 or 1) and sigma (the prior width in K, 0 = none)";
-              stream.setstate(std::ios_base::failbit);
-            } else {
-              numberToken(dopplerMaxToken);
-            }
-          }
-        }
-      } else if (keyword == "udr") {
-        stream >> std::ws;
-        std::string file;
-        if (stream.peek() == '"') {
-          stream.get();
-          std::getline(stream, file, '"');
-        } else {
-          stream >> file;
-        }
-        int centred = 1;
-        stream >> udrFlightPath_ >> udrBurstFwhm_ >> udrChannelWidth_ >> centred;
-        udrFile_ = file;
-        udrCentred_ = (centred != 0);
-        isUdr_ = !udrFile_.empty() && udrFlightPath_ > 0.0 && !stream.fail();
-        if (!isUdr_) stream.setstate(std::ios_base::failbit);
-      } else {
-        stream.setstate(std::ios_base::failbit);
-      }
-    }
-    // A line consumed exactly to its end during the optional probes is not a
-    // parse error; genuinely malformed fields fail without reaching eof.
-    if (stream.fail() && stream.eof()) stream.clear(std::ios_base::eofbit);
 
-    size_t found = 0;
-    while (found != std::string::npos) {
-      found = segmentList.find('\"');
-      if (found != std::string::npos) segmentList.erase(found, 1);
+    for (const azure2::convert::TargetIntLine::ProfileComponent &p : line.beamProfile) {
+      BeamProfileComponent c;
+      c.xi = p.xi;
+      c.omega = p.omega;
+      c.alpha = p.alpha;
+      c.weight = p.weight;
+      beamProfile_.push_back(c);
     }
-    found = 0;
-    while (found != std::string::npos) {
-      found = stoppingPowerEq.find('\"');
-      if (found != std::string::npos) stoppingPowerEq.erase(found, 1);
+    beamTpcSigma_ = line.beamTpcSigma;
+    beamTruncation_ = line.beamTruncation;
+    beamPhotodissociation_ = (line.beamDetailedBalance == 1);
+    isBeamProfile_ = line.isBeamProfile;
+    sigmaLab_ = line.sigmaLab;
+    screeningNominal_ = line.screeningNominal;
+    screeningSigma_ = line.screeningSigma;
+    screeningError_ = line.screeningError;
+    if (line.hasScreening) {
+      hasScreening_ = true;
+      screeningVary_ = (line.screeningVary != 0);
+      screeningUe_ = screeningNominal_;
     }
-    found = 0;
-    while (found != std::string::npos) {
-      found = convolutionEq.find('\"');
-      if (found != std::string::npos) convolutionEq.erase(found, 1);
-    }
+    const std::string &densitySigmaToken = line.densitySigmaToken;
+    const bool densityFitRead = line.densityFitRead;
+    const double densityMaxRead = line.densityMaxRead;
+    densityVary_ = (line.densityVary != 0);
+    densityFitError_ = line.densityFitError;
+    densityFitErrorText_ = line.densityFitErrorText;
+    densityGroup_ = line.densityGroup;
+    dopplerTemperature_ = line.dopplerTemperature;
+    dopplerError_ = line.dopplerError;
+    dopplerErrorText_ = line.dopplerErrorText;
+    isDoppler_ = line.isDoppler;
+    const std::string &dopplerVaryToken = line.dopplerVaryToken;
+    const std::string &dopplerSigmaToken = line.dopplerSigmaToken;
+    const std::string &dopplerMaxToken = line.dopplerMaxToken;
+    const bool dopplerFitRead = line.dopplerFitRead;
+    udrFile_ = line.udrFile;
+    udrFlightPath_ = line.udrFlightPath;
+    udrBurstFwhm_ = line.udrBurstFwhm;
+    udrChannelWidth_ = line.udrChannelWidth;
+    udrCentred_ = (line.udrCentred != 0);
+    isUdr_ = line.isUdr;
+
+    const std::string segmentList = azure2::convert::TargetIntUnquoted(line.segmentList);
+    const std::string stoppingPowerEq = azure2::convert::TargetIntUnquoted(line.stoppingPowerEq);
+    const std::string convolutionEq = azure2::convert::TargetIntUnquoted(line.convolutionEq);
+
     if (isActive == 1)
       isActive_ = true;
     else
@@ -997,36 +804,7 @@ void TargetEffect::SetNumSubPoints(int numPoints) {
  */
 
 std::vector<int> TargetEffect::GetSegmentsList() const {
-  std::vector<int> tempList;
-  int i = 0;
-  int lastSegNum = 0;
-  bool inclusive = false;
-  while (i < segmentsList_.length()) {
-    if (segmentsList_[i] >= '0' && segmentsList_[i] <= '9') {
-      std::string tempString;
-      while (segmentsList_[i] != ',' && segmentsList_[i] != '-' &&
-             i < segmentsList_.length()) {
-        tempString += segmentsList_[i];
-        i++;
-      }
-      std::istringstream stm;
-      stm.str(tempString);
-      int tempSegNum;
-      stm >> tempSegNum;
-      if (inclusive == true)
-        for (int j = lastSegNum + 1; j <= tempSegNum; j++)
-          tempList.push_back(j);
-      else
-        tempList.push_back(tempSegNum);
-      lastSegNum = tempSegNum;
-    }
-    if (segmentsList_[i] == '-')
-      inclusive = true;
-    else
-      inclusive = false;
-    i++;
-  }
-  return tempList;
+  return azure2::convert::TargetIntSegmentKeys(segmentsList_);  // convert/'s TargetIntLine.h
 }
 
 /*!
