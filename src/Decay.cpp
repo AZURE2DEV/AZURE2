@@ -196,6 +196,7 @@ void Decay::BuildFlatInterferences() {
         f.r2 = t[1];
       }
       f.z = itf->GetZ1Z2();
+      f.z_upos = itf->GetZ1Z2_UPOS();
       f.spEqual = spEqual;
       f.s1 = f.r1 ? position(k, f.m1, f.r1) : -1;
       f.s2 = f.r2 ? position(k, f.m2, f.r2) : -1;

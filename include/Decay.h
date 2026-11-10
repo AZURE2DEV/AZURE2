@@ -3,7 +3,7 @@
 
 #include "KGroup.h"
 #include "KLGroup.h"
-#include "CaptureAyTerm.h"
+#include "PathwayTable.h"
 
 /// An AZURE decay pair.
 
@@ -12,30 +12,12 @@
  * and serves as a container class for the KGroup and the KLGroup vectors and their subsequent reaction pathways.
  */
 
-/// One interference term of the differential cross section, flattened (Decay::FlatInterferences).
-struct FlatInterference {
-  int k;        ///< k-group (1-based)
-  int m1, m2;   ///< pathways (1-based)
-  int l;        ///< Legendre order
-  char r1, r2;  ///< 'R' internal, 'E' external capture pathway
-  double z;     ///< Z1Z2 coefficient
-  bool spEqual; ///< the k-group has equal entrance and exit channel spins
-  int s1, s2;   ///< positions of the two pathways in Decay::InterferencePathways
-};
-
-/// A pathway taking part in an interference (Decay::InterferencePathways).
-struct InterferencePathway {
-  int k, m;   ///< k-group and pathway (1-based)
-  char rad;   ///< 'R' internal, 'E' external capture
-};
-
-/// A pathway whose entrance and exit channel are the same (Decay::DiagonalPathways).
-struct DiagonalPathway {
-  int k, m;         ///< k-group and pathway (1-based)
-  double s;         ///< channel spin
-  int l;            ///< orbital angular momentum
-  double statSpin;  ///< MGroup::GetStatSpinFactor
-};
+// The interference, pathway and capture-A_y rows are the pathway table's (PathwayTable.h); the trees hold them in the
+// same types until they are deleted.
+using azure2::CaptureAyTerm;
+using azure2::DiagonalPathway;
+using azure2::FlatInterference;
+using azure2::InterferencePathway;
 
 class Decay {
  public:

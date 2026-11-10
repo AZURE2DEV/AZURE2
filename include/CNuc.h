@@ -8,6 +8,7 @@
 #include <map>
 #include "JGroup.h"
 #include "PPair.h"
+#include "PathwayTable.h"
 #include "ModelData.h"
 #include "azure2/experiment/SetupSpecs.h"
 
@@ -158,6 +159,8 @@ class CNuc {
   void CalcBoundaryConditions(const Config &);
   /// Build the internal (MGroup) and external (ECMGroup) reaction pathways.
   void SortPathways(const Config &);
+  /// Build the pathway table (Pathways()); CNucPathways.cpp.
+  void BuildPathways(const Config &);
   /// Build the KLGroup and Interference structure and its \f$Z_1Z_2\f$ coefficients.
   void CalcAngularDists(int);
   /// Build one decay's capture analyzing-power coefficient table (Seyler and
@@ -241,6 +244,13 @@ class CNuc {
   /// As above, for a vector already in physical rather than formal parameters.
   void FillCompoundFromParamsPhysical(const vector_r &);
 
+  /// The reaction pathways of the run (PathwayTable.h), built by Initialize and shared by every copy (Clone).
+  /// Throws std::logic_error before Initialize.
+  const azure2::PathwayTable &Pathways() const;
+  /// Ask Initialize to build the capture analyzing-power terms of (entrance pair, exit pair), both 1-based, in the
+  /// pathway table.  Set-up state, like PPair::SetEntrance: it must be called before Initialize.
+  void RequestCaptureAy(int entrancePair, int exitPair);
+
   /// Deep copy. AZURECalc gives each thread its own, since a calculation
   /// writes the fitted parameters into the object it runs on.
   CNuc *Clone() const;
@@ -282,6 +292,9 @@ class CNuc {
   /// The abundances of the samples from their spec into samples_; -1 (with the reader's message) when the reader
   /// stopped.
   int SetAbundances(const Config &, const azure2::experiment::AbundanceSpecs &);
+  /// The pathway table (Initialize) and the capture-A_y requests it is built with.
+  std::shared_ptr<const azure2::PathwayTable> pathways_;
+  std::vector<std::pair<int, int> > captureAyRequests_;
   std::vector<PPair> pairs_;
   std::vector<JGroup> jgroups_;
   std::vector<CompoundNucleus> nuclei_;
