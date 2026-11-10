@@ -271,7 +271,8 @@ void GenMatrixFunc::CalculateBareCrossSection(EPoint *point, azure2::Results &re
       const bool particleExit = (aa != exitPairNum && exitPairDiff->GetPType() == 0);
       if (!point->IsAngularDist() && !(particleExit && point->IsUPOS())) {
         const azure2::FlatInterference *flat = P.interferences.data() + theDecay.first_interference;
-        if (rt_decay_ != &theDecay && theDecay.has_interferences) {
+        // An exit without interference lists (a beta entrance) has an empty list here.
+        if (rt_decay_ != &theDecay) {
           rt_wl_.clear();
           const std::vector<vector_c> *T = tmatrix_.empty() ? nullptr : &tmatrix_[0];
           for (const azure2::FlatInterference *fp = flat; fp != flat + theDecay.num_interferences; fp++) {
@@ -284,33 +285,6 @@ void GenMatrixFunc::CalculateBareCrossSection(EPoint *point, azure2::Results &re
             const complex T2 = (f.r2 == 'E') ? ec_tmatrix_[f.k - 1][f.m2 - 1]
                                              : (T ? (*T)[f.k - 1][f.m2 - 1] : complex(0.0, 0.0));
             rt_wl_[f.l] += f.z * T1 * conj(T2);
-          }
-          this->BuildCoulombInterference(P, theDecay, aa == exitPairNum);
-          rt_decay_ = &theDecay;
-        } else if (rt_decay_ != &theDecay) {
-          // An exit without interference lists (a beta entrance): its list is empty.
-          rt_wl_.clear();
-          for (int i = 0; i < theDecay.num_interferences; i++) {
-            const azure2::FlatInterference &f = flat[i];
-            const int kNum = f.k;
-            if (particleExit && P.Group(theDecay, kNum).sp != P.Group(theDecay, kNum).sp2) continue;
-            const int lOrder = f.l;
-            if ((int)rt_wl_.size() <= lOrder) rt_wl_.resize(lOrder + 1, complex(0.0, 0.0));
-            complex T1(0.0, 0.0), T2(0.0, 0.0);
-            if (f.r1 == 'R' && f.r2 == 'R') {
-              T1 = this->GetTMatrixElement(kNum, f.m1);
-              T2 = this->GetTMatrixElement(kNum, f.m2);
-            } else if (f.r1 == 'E' && f.r2 == 'R') {
-              T1 = this->GetECTMatrixElement(kNum, f.m1);
-              T2 = this->GetTMatrixElement(kNum, f.m2);
-            } else if (f.r1 == 'R' && f.r2 == 'E') {
-              T1 = this->GetTMatrixElement(kNum, f.m1);
-              T2 = this->GetECTMatrixElement(kNum, f.m2);
-            } else if (f.r1 == 'E' && f.r2 == 'E') {
-              T1 = this->GetECTMatrixElement(kNum, f.m1);
-              T2 = this->GetECTMatrixElement(kNum, f.m2);
-            }
-            rt_wl_[lOrder] += f.z * T1 * conj(T2);
           }
           this->BuildCoulombInterference(P, theDecay, aa == exitPairNum);
           rt_decay_ = &theDecay;
@@ -928,29 +902,13 @@ void GenMatrixFunc::BuildCoulombInterference(const azure2::EntrancePathways &P, 
   rt_it_.clear();
   rt_it_built_ = elastic;
   if (!elastic) return;
-  if (exit.has_interferences) {
-    for (int n = 0; n < exit.num_diagonal; n++) {
-      const azure2::DiagonalPathway &d = P.diagonal[exit.first_diagonal + n];
-      size_t i = 0;
-      while (i < rt_it_.size() && !(rt_it_[i].s == d.s && rt_it_[i].l == d.l)) i++;
-      if (i == rt_it_.size()) rt_it_.push_back(CoulombTerm{d.s, d.l, complex(0.0, 0.0)});
-      rt_it_[i].c += d.statSpin * conj(this->GetTMatrixElement(d.k, d.m));
-    }
-    return;
-  }
-  for (int k = 1; k <= exit.num_groups; k++) {
-    const azure2::SpinGroupRow &g = P.Group(exit, k);
-    for (int m = 1; m <= g.num_internal; m++) {
-      const azure2::InternalRow &theMGroup = P.Internal(g, m);
-      AChannel *entranceChannel = compound()->GetJGroup(theMGroup.group)->GetChannel(theMGroup.ch);
-      AChannel *exitChannel = compound()->GetJGroup(theMGroup.group)->GetChannel(theMGroup.chp);
-      if (entranceChannel != exitChannel) continue;
-      const double sValue = entranceChannel->GetS();
-      const int lValue = entranceChannel->GetL();
-      size_t i = 0;
-      while (i < rt_it_.size() && !(rt_it_[i].s == sValue && rt_it_[i].l == lValue)) i++;
-      if (i == rt_it_.size()) rt_it_.push_back(CoulombTerm{sValue, lValue, complex(0.0, 0.0)});
-      rt_it_[i].c += theMGroup.stat_spin_factor * conj(this->GetTMatrixElement(k, m));
-    }
+  // The pathways with equal entrance and exit channel; an exit without interference lists (a beta entrance) has none
+  // and is never elastic.
+  for (int n = 0; n < exit.num_diagonal; n++) {
+    const azure2::DiagonalPathway &d = P.diagonal[exit.first_diagonal + n];
+    size_t i = 0;
+    while (i < rt_it_.size() && !(rt_it_[i].s == d.s && rt_it_[i].l == d.l)) i++;
+    if (i == rt_it_.size()) rt_it_.push_back(CoulombTerm{d.s, d.l, complex(0.0, 0.0)});
+    rt_it_[i].c += d.statSpin * conj(this->GetTMatrixElement(d.k, d.m));
   }
 }
