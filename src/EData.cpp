@@ -5129,14 +5129,15 @@ void EData::FillEnergyShiftsFromParamsImpl(const vector_r &p, EData *data, CNuc 
           fnValues.push_back((start >= 0 && idx < (int)p.size()) ? p[idx] : segment->GetShiftFnValues()[q]);
         }
       }
-      const bool shiftActive = segment->IsVaryEnergyShift() || shiftConst != 0.0 || lead >= 0 ||
-                               segment->IsVaryEnergyShiftSqrt() || shiftSqrt != 0.0 || segment->HasShiftFn();
+      // A segment whose points carry a shift of an earlier evaluation (last shift not NaN) stays active, so a fixed
+      // shift set back to 0 moves them back (upgrade_history: such a copy gives a fresh copy's bits).
+      const bool shiftActive = segment->IsVaryEnergyShift() || shiftConst != 0.0 || lead >= 0 || segment->HasShiftFn() ||
+                               segment->IsVaryEnergyShiftSqrt() || shiftSqrt != 0.0 || !std::isnan(segment->GetLastEnergyShift());
       if (shiftActive) {
         shiftActiveSegments.push_back(&*segment);
         if (segment->HasComponents())
           for (ESegment *componentSegment : segment->GetComponentSegments())
             if (componentSegment) shiftActiveSegments.push_back(componentSegment);
-        // Check if energy is the same, if so, continue
         if (segment->GetLastEnergyShift() == shiftConst && segment->GetLastEnergyShiftSqrt() == shiftSqrt &&
             (!segment->HasShiftFn() || segment->GetLastShiftFnValues() == fnValues)) {
           i++;
@@ -5200,7 +5201,6 @@ void EData::FillEnergyShiftsFromParamsImpl(const vector_r &p, EData *data, CNuc 
         }
       }
 
-      // Always increment i and j since both shift parameters are present for ALL segments
       i++;
       j++;
     }
