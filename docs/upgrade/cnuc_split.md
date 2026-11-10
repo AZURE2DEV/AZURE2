@@ -160,7 +160,8 @@ returns S, S′ and P (sections 5, 7).
    so this step is checked to 10⁻¹⁴ and re-baselined by its own commit if an output moves).
 6. **Data accessors** (section 10): callers of `GetPair`/`GetJGroup` read the System (partition α, block b) through the adapter
    map; the pathway trees stop living on `PPair`. In two parts: 6a the enumeration (`SortPathways`) as a physics
-   function of the System, which the engine's trees are filled from; 6b the consumers of the trees, one by one.
+   function of the System, which the engine's trees are filled from; 6b the consumers of the trees, one by one
+   (design: section 11).
 7. Phase 2 and 3 take (e) and (c). `CNuc` is then empty and deleted.
 
 ## 4. The formal basis and the eigensolver
@@ -440,11 +441,10 @@ tokens of segment lines) is not moved, see "Remaining steps".
   read.  Either `Fill`'s callers pass them (EData knows the segments, but reads them after `Fill`), or the segment
   readers (`SegLine`, `ExtrapLine`) provide them; both change behaviour on a malformed segment line, so they wait for a
   decision.
-- **Step 6b** (consumers of the pathway trees read the System): about 270 tree accesses in `GenMatrixFunc` (92),
-  `AMatrixFunc` (78), `EData`, `RMatrixFunc`, `EPoint`, `AZUREAPI`, `CNucExternalCapture`, plus `CalcAngularDists`,
-  `CalcCaptureAnalyzingPower` and `WritePathwaysCheck`.  First a design addendum to section 10: where the per-stage
-  pathway table (the `reaction_pathways` result with the coupling coefficients) lives once it is not on `PPair`
-  (setup state owned by the caller, ARCHITECTURE §9), and how the hot loops index it.
+- **Step 6b** (consumers of the pathway trees read the physics result): design in section 11 — the inventory of the
+  readers (320 tree accesses outside `CNuc.cpp`, 86 in it), the immutable `PathwayTable` built by `CNuc::Initialize`
+  from `reaction_pathways` and the coupling coefficients and shared by every working copy, and eight bit-identical
+  steps ending with the deletion of the trees.
 - **Step 3b (iii)** (hybrid channels as (α, l, j)): today's hybrid potential is central and keyed by the pair
   (`NuclearPotentialManager::tagFor(pairKey)`), so the channel functions do not depend on j; (α, l, j) entries need a
   spin-orbit term first (a new physics feature: `<potential>` grammar, `NuclearPotentialManager`, `CoulFunc`, the
@@ -690,3 +690,568 @@ T1–T3 and on the projects with UPOS, external capture, beta-delayed and captur
 `capture_ay_coupling`). Every field and every position must be equal.
 (c) 179 `.azr` × 3 bases against the merged head before 6a (db972c84): every file identical; anything else stops the
 step. Then ctest, `run_tests.sh` and 1 vs 8 threads.
+
+## 11. Step 6b: design
+
+Step 6b moves every reader of the pathway trees on `PPair` (`Decay` → `KGroup` → `MGroup`/`ECMGroup`, and
+`KLGroup` → `Interference`) onto one immutable table built from the result of `reaction_pathways` (§10) and the
+coupling coefficients (§9), and deletes the trees, their classes and their adapter with the last reader. It changes
+no number: every step keeps each output file of the 183 projects × 3 bases byte-identical to `tab-trial8` (704 /
+677 / 704 files, Brune / formal / Park), and 1 thread against several. Line numbers below are those of the start
+commit cb8f5912 (the integration branch `feature/upgrade-4-data`). `src/EData.cpp`, `src/EPoint.cpp` and
+`src/ESegment.cpp` are being cut into smaller files by verbatim moves (in work, `edata_split.md`): consumers are named
+by function, and the file given is the file at cb8f5912.
+
+### 11.1 Inventory of the readers
+
+Counted with `work/pathnote/inventory.py` (a name search attributing each occurrence to the enclosing function
+definition). "Accesses" counts the container accessors of the trees: `GetDecay`, `NumDecays`, `IsDecay`,
+`GetKGroup`, `NumKGroups`, `IsKGroup`, `GetMGroup`, `NumMGroups`, `IsMGroup`, `GetECMGroup`, `NumECMGroups`,
+`GetKLGroup`, `NumKLGroups`, `IsKLGroup`, `GetInterference`, `NumInterferences`, `FlatInterferences`,
+`InterferencePathways`, `NumInterferenceOrders`, `DiagonalPathways`, `TablesBuilt`, `GetCaptureAyTerm`,
+`NumCaptureAyTerms`, `IsCaptureAyBuilt` and the writers (`Add*`, `Set*`, `BuildFlatInterferences`, `ClearDecays`).
+Counting only the five `Get…Group`/`GetDecay` getters gives 211 in the readers and 47 in `CNuc.cpp` (258, the
+"about 270" of "Remaining steps"). The node fields read (`GetJNum`, `GetChNum`, …) are listed by name; `GetS`, `GetL`,
+`GetJ` and `GetRadType` are not counted, since `JGroup` and `AChannel` have getters of the same names. "Hot" is inside
+the point loop of an evaluation (forward or gradient); "OMP" says whether it runs inside an OpenMP region.
+
+| file | function | def. / accesses at | accesses | node fields read | hot | OMP |
+|---|---|---|---|---|---|---|
+| `src/GenMatrixFunc.cpp` | `GenMatrixFunc::CalculateBareCrossSection` | 38 / 49–536 | 96 | Decay pair, flat interferences, `TablesBuilt`; KGroup s, s′, s₂′, cross-spin; MGroup group, ch, ch′, stat. factor; ECMGroup l, L, J, E/M; KLGroup k, L; Interference m₁, m₂, type, Z̄₁Z̄₂, Z̄₁Z̄₂ UPOS | yes | yes (point pass, `EData.cpp` 4444) |
+| `src/GenMatrixFunc.cpp` | `GenMatrixFunc::CalculateAmplitudeMatrix` | 801 / 814–828 | 10 | KGroup cross-spin; MGroup group, ch, ch′ | yes (particle A_y) | yes |
+| `src/GenMatrixFunc.cpp` | `GenMatrixFunc::CalculateCaptureAnalyzingPower` | 845 / 857–877 | 6 | capture-A_y terms; calls `CNuc::CalcCaptureAnalyzingPower` (a write, §11.2) | yes (capture A_y) | yes |
+| `src/GenMatrixFunc.cpp` | `GenMatrixFunc::BuildCoulombInterference` | 923 / 927–947 | 7 | diagonal pathways, `TablesBuilt`; MGroup group, ch, ch′, stat. factor | yes (elastic) | yes |
+| `src/AMatrixFunc.cpp` | `AMatrixFunc::CalculateTMatrix` | 513 / 528–599 | 16 | MGroup group, ch, ch′; ECMGroup final group, level, channel, channel-capture flag and back-reference, photon channel | yes | yes |
+| `src/AMatrixFunc.cpp` | `AMatrixFunc::PointTBar` | 672 / 703–1113 | 62 | as `CalculateBareCrossSection`, plus interference pathways and orders, capture-A_y terms (calls `CalcCaptureAnalyzingPower`) | yes (gradient) | yes (`AZUREGrad.cpp` 1280, 1387) |
+| `src/AMatrixFunc.cpp` | `AMatrixFunc::TBarAdjoint` | 1129 / 1147–1315 | 18 | as `CalculateTMatrix` | yes (gradient) | yes |
+| `src/AMatrixFunc.cpp` | `AMatrixFunc::CollectBilinearTerms` | 1852 / 1859–1875 | 11 | MGroup group, ch, ch′; ECMGroup count | yes (gradient) | yes |
+| `src/AMatrixFunc.cpp` | `AMatrixFunc::TBarProducts` | 2690 / 2692–2695 | 4 | flat interferences, pathways, orders, `TablesBuilt` | yes (gradient) | yes |
+| `include/AMatrixFunc.h` | `TBarProducts`, `tbar_decay_` | 350–355 | 1 (+ `Decay *` in two declarations) | — | — | — |
+| `include/GenMatrixFunc.h` | `BuildCoulombInterference`, `rt_decay_` | 178, 188 | 0 (`Decay *` in two declarations) | — | — | — |
+| `src/RMatrixFunc.cpp` | `RMatrixFunc::CalculateTMatrix` | 340 / 348–413 | 16 | as `AMatrixFunc::CalculateTMatrix` | yes (the R-matrix route: `<config>` first line `false`, `EPoint.cpp` 1924–1929) | yes |
+| `src/EData.cpp` | `WalkECAmplitudes` (template, the intEC signature and count) | 1997 / 2011–2052 | 11 | KGroup s; ECMGroup l, L, J, E/M, final channel, channel capture and back-reference | no (set-up) | no |
+| `src/EData.cpp` | `EData::CalculateECAmplitudes` (writes `intEC.dat`) | 2231 / 2394–2395 | 5 | group and pathway counts | no | its loop at 2361 is a parallel region; these lines are after it |
+| `src/EData.cpp` | `EData::InitializeComponentSegments` (component intEC lines) | 2447 / 2680–2738 | 6 | group and pathway counts | no | as above (2642) |
+| `src/EPoint.cpp` | `EPoint::GetECAmplitudeWithShift` | 594 / 611–615 | 3 | ECMGroup final group, level; then `ECPathwayAmplitude` | yes (with external capture, on an energy the point has not stored) | yes |
+| `src/EPoint.cpp` | `ECPathwayAmplitude` (static) | 1679 / 1711–1741 | 3 | KGroup s; ECMGroup l, L, J, E/M, final channel, channel capture and back-reference | set-up, and as above | yes |
+| `src/EPoint.cpp` | `EPoint::CalculateECAmplitudes` | 1754 / 1765–1768 | 6 | group and pathway counts | no (set-up) | yes (`EData.cpp` 2361, 2642) |
+| `src/CNucExternalCapture.cpp` | `CNuc::SetUpFormalCaptureMasks` | 230 / 241–248 | 10 | ECMGroup channel capture, back-reference, photon channel; MGroup group | no (set-up) | no |
+| `api/src/AZUREAPI.cpp` | `AZUREAPI::GetECIntegrals` | 1727 / 1751–1797 | 9 | KGroup s; ECMGroup l, L, J, E/M, final channel, channel capture and back-reference | no (API call) | no |
+| `src/CNucReport.cpp` | `WritePathwaysCheck` | 126 / 144–212 | 14 | every field of KGroup, MGroup, ECMGroup | no (check file) | no |
+| `src/CNucReport.cpp` | `WriteAngularDistributionsCheck` | 246 / 262–274 | 6 | KLGroup k, L; Interference m₁, m₂, type, Z̄₁Z̄₂ | no (check file) | no |
+| `src/CNuc.cpp` | `CNuc::SortPathways` (fills the trees) | 890 / 928–969 | 18 (writers) | — | no | no |
+| `src/CNuc.cpp` | `CNuc::CalcAngularDists` (KLGroups, flat and diagonal lists) | 1020 / 1024–1160 | 58 (reads and writes) | MGroup group, ch, ch′, stat. factor; ECMGroup l, L, J, E/M; KGroup s, s′, s₂′, cross-spin | no | no |
+| `src/CNuc.cpp` | `CNuc::CalcCaptureAnalyzingPower` (capture-A_y terms, lazily) | 1190 / 1196–1263 | 10 (reads and writes) | MGroup group, ch, ch′; ECMGroup l, L, J, E/M; KGroup s | **yes** (first capture-A_y point) | **yes** |
+
+Readers outside `CNuc.cpp`: 320 accesses (`GenMatrixFunc.cpp` 119, `AMatrixFunc.cpp` 111, `CNucReport.cpp` 20,
+`EData.cpp` 22, `RMatrixFunc.cpp` 16, `EPoint.cpp` 12, `CNucExternalCapture.cpp` 10, `AZUREAPI.cpp` 9,
+`AMatrixFunc.h` 1); in `CNuc.cpp` 86. Not readers: `src/AZUREGrad.cpp` (0 accesses; it passes `TMatrixCotangent`
+buffers shaped by `PointTBar`), the THM matrix functions, `PolarizationFunc` (it takes group and channel numbers),
+and the other `src/EData*.cpp` files at cb8f5912. The class files themselves (`Decay`, `KGroup`, `KLGroup`, `PPair`,
+`MGroup`, `ECMGroup`: 109 occurrences) and `tests/upgrade/pathways_from_cnuc_test.cpp` (114) go with the trees.
+
+**The numbering is a contract.** The pathway positions (k, m) — 1-based spin group within its decay, and pathway
+within its group, separately for internal and external — key per-evaluation and per-point state outside the trees:
+`GenMatrixFunc::tmatrix_[decay][k][m]` and `ec_tmatrix_[k][m]` (`AddTMatrixElement` asserts the order), the
+cotangents `TMatrixCotangent::t`, `ec` (`AMatrixFunc.h` 20), the point's `ec_amplitudes_`, `ec_energies_`,
+`ec_shifted_` (`EPoint::GetECAmplitude(k, m)`), the keys of `ECAmplitudeCache::AmplitudeKey` (k, m, entrance, exit,
+segment), the line order of `intEC.dat` and its signature (`WalkECAmplitudes` hashes the pathways in tree order), and
+the indices stored in the interference and capture-A_y terms. The table keeps these numbers exactly; renumbering
+them is a separate change (§11.9).
+
+### 11.2 Writes to the trees after set-up
+
+The trees are written by `CNuc::SortPathways` and `CNuc::CalcAngularDists`, both called once from `CNuc::Initialize`
+(`CNuc.cpp` 700, 709), and by the test `pathways_from_cnuc_test.cpp` (it clears and rebuilds them). One writer runs
+after set-up, during the point pass:
+
+- **`CNuc::CalcCaptureAnalyzingPower`** (`CNuc.cpp` 1190–1267), called from
+  `GenMatrixFunc::CalculateCaptureAnalyzingPower` (`GenMatrixFunc.cpp` 864) and `AMatrixFunc::PointTBar`
+  (`AMatrixFunc.cpp` 865) by the first capture-A_y point of a decay, on whichever OpenMP thread computes it. It
+  appends to `Decay::captureAy_` and sets `captureAyBuilt_`, under a function-level `static std::mutex` (`CNuc.cpp`
+  1199), a mutable static that ARCHITECTURE §9 forbids. The threads of the point pass and of the gradient
+  (`AZUREGrad.cpp` 1282: one `AMatrixFunc` per thread on the same `CNuc`) share the trees, so the table is built once
+  per `CNuc` object; a clone made before the build has none and builds its own. The terms are built for the Legendre
+  order `point->GetMaxLOrder()` of the first caller. For a differential point that is `configure.maxLOrder`
+  (`EPoint::Initialize`, `EPoint.cpp` 677), so all callers ask for the same order; it is not established here that no
+  caller (a target-integration sub-point of an A_y point) has `GetMaxLOrder() = −1`, which would build an empty table
+  and mark it built.
+
+Mutable fields of the nodes and who writes them: `PPair::decays_` (`AddDecay`, `ClearDecays`); `Decay::kgroups_`,
+`klgroups_` (`AddKGroup`, `AddKLGroup`), `flat_`, `flatPathways_`, `flatOrders_` (`BuildFlatInterferences`), `diag_`
+(`SetDiagonalPathways`), `tables_built_` (`SetTablesBuilt`) — all `CalcAngularDists` or `SortPathways`;
+`Decay::captureAy_`, `captureAyBuilt_` — `CalcCaptureAnalyzingPower`, after set-up; `KGroup::mgroups_`,
+`ec_mgroups_`, `MGroup::statspinfactor_` — `SortPathways`; `KLGroup::interferences_`, `interferenceIndex_` —
+`CalcAngularDists`; `ECMGroup::statspinfactor_` — no writer (stays 0.0; `ECMGroup::GetStatSpinFactor` has no caller);
+`MGroup::tmatrix_`, `ECMGroup::tmatrix_` — never initialised, written or read.
+
+### 11.3 What the nodes hold beyond the physics result
+
+Every field is structural: none depends on the parameters θ, the nuisances ν or the energy, so the whole content is
+set-up state and fits an immutable table. Some fields depend on the configuration (`maxLOrder`, R-matrix capture,
+which pairs are entrances), which is fixed before `CNuc::Initialize`.
+
+| node, field | in `reaction_pathways`' result | derived at set-up | depends on θ or E |
+|---|---|---|---|
+| `Decay::pair_` | `ExitPathways::partition` (+1: `pairOfPartition` is the identity) | — | no |
+| `KGroup::s_`, `sp_`, `sp2_`, `hasSp2_` | `SpinGroup::two_s`, `two_sp`, `two_sp2`, `has_sp2` (halved; exact) | — | no |
+| `MGroup::jnum_`, `ch_`, `chp_` | `InternalPathway::block`, `k_in`, `k_out` through `CNucSystemMap` (`groupOfBlock`; `channelOfBlockChannel[b][k] = k + 1` as built, `CNucSystem.cpp` 102–146) | — | no |
+| `MGroup::statspinfactor_` | `stat_spin_factor`, 0.0 when `has_stat_spin_factor` is false (beta entrance) | — | no |
+| `ECMGroup::radtype_`, `mult_`, `li_`, `ji_`, `chf_` | `X`, `L`, `l`, `two_J / 2.`, `final_channel + 1` | — | no |
+| `ECMGroup::jGroupNum_`, `levelNum_` | `final_state` through the final-state list of `SortPathways` (J-group, level) | — | no |
+| `ECMGroup::ischancap_`, `chdecay_`, `chkgroup_`, `chmgroup_` | `channel_capture`, `cc_exit + 1`, `cc_group + 1`, `cc_pathway + 1` (the tree stores 0 for direct capture; the result carries the triple for both) | — | no |
+| `ECMGroup::internalChannel_` | `photon_channel` through the map, 0 when −1 | — | no |
+| `KLGroup` (k, L), `Interference` (m₁, m₂, type, Z̄₁Z̄₂, Z̄₁Z̄₂ UPOS) | — | `CalcAngularDists` from the pathways' J, l, l′, s′, E/M and the exit partition's spins, by `particle_interference`, `photon_interference`, `upos_interference` (§9), kept when \|Z\| > 10⁻¹⁰, for L = 0 … `maxLOrder` | no |
+| `Decay::flat_`, `flatPathways_`, `flatOrders_` | — | `BuildFlatInterferences`, from the KLGroups in their order | no |
+| `Decay::diag_` | — | the internal pathways with entrance = exit channel (s, l, stat. factor) | no |
+| `Decay::captureAy_` | — | `capture_ay_coefficients` (§9) over all pathway pairs of a photon decay, kept when \|a\| or \|b\| ≥ 10⁻¹⁰, for k = 0 … max L | no (built lazily, §11.2) |
+| `Decay::tables_built_`, `captureAyBuilt_`; `KLGroup::interferenceIndex_` | — | flags and a set-up search index | — |
+| `MGroup::tmatrix_`, `ECMGroup::tmatrix_`, `ECMGroup::statspinfactor_` | — | unused | — |
+
+So the table is the physics result in the engine's numbering plus three derived lists per decay (interferences,
+diagonal pathways, capture-A_y terms). Nothing of it belongs in the per-evaluation state (`Results`, the plan's
+tasks) or in the per-stage energy tables.
+
+### 11.4 The table
+
+**Two layouts.**
+
+(a) *The physics result itself.* Keep `std::vector<physics::ExitPathways>` per entrance (nested: exits → spin groups →
+internal and external pathway vectors, System indices, 0-based), add the three derived lists as physics types, and
+let the engine translate a block index to its J-group number through `CNucSystemMap` in each loop. One representation,
+in physics/. The hot loops pay one map lookup per pathway (`groupOfBlock[block]`, a vector index) and keep three
+levels of vectors.
+
+(b) *A flat engine table of the same result.* Per entrance, one array per kind of row (exits, spin groups, internal
+pathways, external pathways, interferences, interference pathways, diagonal pathways, capture-A_y terms), each in
+the order of the trees, with offsets and counts linking them; rows carry the engine's numbers (J-group, channel,
+level) beside the System indices. Declared in the engine, because it carries engine numbers.
+
+**Recommendation: (b).** It removes the map lookups and the nested vectors from the hottest loops (§11.8), and its
+row index is a global pathway index per entrance, which is what Phase 5 needs to store T-matrix elements in one flat
+buffer instead of `tmatrix_[decay][k][m]` (§11.9). The cost is that the engine numbers are a second copy of the
+System's indices; they go when the per-point tables and the level matrix are keyed by System block (`channel_table.md`
+§2: Phase 4/5), and the table then moves to physics/ without them. What would change the recommendation: if the
+per-point channel tables (`EDependentTables::Slot(jGroup, channel)`) and `AMatrixFunc`'s per-group matrices were keyed
+by System block before 6b starts, the engine numbers would be unneeded and (a), read directly, would be the simpler
+choice.
+
+**Types** (`include/PathwayTable.h`, `src/PathwayTable.cpp`; plain structs, indices only, no pointers):
+
+```cpp
+namespace azure2 {
+struct InternalRow {           // an MGroup
+  int group, ch, chp;          // J-group number and its entrance and exit channel numbers (CNuc's, 1-based)
+  double stat_spin_factor;     // (2J + 1) / ((2 I1' + 1)(2 I2' + 1)) of the exit pair; 0.0 for a beta entrance
+  int block, k_in, k_out;      // physics::InternalPathway (System indices, 0-based)
+};
+struct ExternalRow {           // an ECMGroup
+  char rad_type;               // 'E' or 'M'
+  int mult, l;                 // multipolarity L; entrance orbital angular momentum l
+  double J;                    // compound J (two_J / 2.)
+  int final_group, final_level, final_channel;   // the final state's J-group, level and channel (1-based)
+  bool channel_capture;
+  int cc_exit, cc_group, cc_pathway;   // channel capture: the internal pathway it passes through, 1-based as the
+                                        // check file prints them; 0 for direct capture (as the tree)
+  int cc_row;                  // the same pathway as an index into EntrancePathways::internal; -1 for direct capture
+  int photon_channel;          // the J-group channel of the block's photon channel (1-based), 0 if none
+};
+struct SpinGroupRow {          // a KGroup
+  double s, sp, sp2;           // channel spins; sp2 = 0.0 unless has_sp2
+  bool has_sp2;
+  int first_internal, num_internal, first_external, num_external;
+  bool CrossSpin() const { return has_sp2 && sp != sp2; }
+};
+struct ExitRow {               // a Decay
+  int pair;                    // exit pair number (1-based)
+  int first_group, num_groups;
+  bool has_interferences;      // Decay::TablesBuilt: false for a beta entrance
+  int first_interference, num_interferences, num_orders;
+  int first_interference_pathway, num_interference_pathways;
+  int first_diagonal, num_diagonal;
+  int first_capture_ay, num_capture_ay;
+};
+struct EntrancePathways {
+  std::vector<ExitRow> exits;
+  std::vector<SpinGroupRow> groups;
+  std::vector<InternalRow> internal;
+  std::vector<ExternalRow> external;
+  std::vector<FlatInterference> interferences;          // with a new field z_upos (Interference::GetZ1Z2_UPOS)
+  std::vector<InterferencePathway> interference_pathways;
+  std::vector<DiagonalPathway> diagonal;
+  std::vector<CaptureAyTerm> capture_ay;
+  int ExitOf(int exitPair) const;                       // 1-based exit position, 0 if the pair is no exit
+};
+class PathwayTable {
+ public:
+  const EntrancePathways &Entrance(int pair) const;     // pair 1-based; empty for a pair that is not an entrance
+ private:
+  std::vector<EntrancePathways> entrances_;             // one per pair, in CNuc order
+};
+}
+```
+
+`FlatInterference`, `InterferencePathway`, `DiagonalPathway` (now in `Decay.h`) and `CaptureAyTerm` keep their
+fields and their 1-based (k, m) and move to `PathwayTable.h`; `FlatInterference` gains `z_upos`, so the UPOS and
+angular-coefficient loops that walk `KLGroup`s today walk the flat list (it is built in the same order: KLGroups in
+order of creation, interferences in order within each, and no (k, L) group is split, since `CalcAngularDists` loops
+k → L → m₁ → m₂ and a (m₁, m₂, type) never repeats within one (k, L)).
+
+**Who builds it, when.** One function, `BuildPathwayTable(const CNucSystem &, final states, options)`, called by
+`CNuc::Initialize` where `SortPathways` and `CalcAngularDists` are called now, after the input transformation and
+`SetUpECFinalBlocks`. It takes the System and its map (`BuildSystemFromCNuc(…, Structure)`), the final-state list
+that `SortPathways` builds (`physics::FinalState` and its J-group and level), and options: R-matrix capture,
+`maxLOrder`, the entrance pairs (`PPair::IsEntrance`, set while the data are read, before `CNuc::Initialize`) and the
+(entrance, exit) pairs that need capture-A_y terms (§11.5). It calls `reaction_pathways` per entrance, appends the
+rows in the order of the result, then the interferences (the loop of `CalcAngularDists`, reading J, l, l′, s′ and
+E/M from the System: `two_J`, channel `l`, `two_s`, `kind`, the same integers and the same halved doubles that
+`JGroup`/`AChannel` return), the diagonal pathways and the requested capture-A_y terms. Nothing writes it afterwards.
+
+**Who owns it.** Not the System (it depends on the final states, the configuration and the entrances, none of which
+are the R-matrix structure) and not the calculation plan (the plan is per data set and rebuilt when a shift changes;
+the table is per run and is also read by the reaction rate, the extrapolations and the API). It is set-up state of the
+run: `CNuc::Initialize` produces it as a `std::shared_ptr<const PathwayTable>`, and during 6b `CNuc` carries that
+handle (`const PathwayTable &CNuc::Pathways() const`); `CNuc::Clone` copies the handle, so every working copy shares
+one table instead of deep-copying the trees. In step 7, when `CNuc` is deleted, the handle moves to the object that
+replaces it as the holder of the run's immutable set-up (the System and the tables built from it); the readers do not
+change, only the object `Pathways()` is called on. `PPair` holds nothing.
+
+**How a point and a thread reach it.** Through the objects they are given, never a global. Each matrix-function object
+already receives its `CNuc *` (the point pass `Reset`s its per-thread `AMatrixFunc` with the point's `CNuc` at every
+point, `EPoint.cpp` 1922–1926; the gradient builds one per thread, `AZUREGrad.cpp` 1282); a reader takes `const
+EntrancePathways &P = compound()->Pathways().Entrance(aa)` once per point, before its loops. `EPoint` and `EData`
+set-up functions already receive the `CNuc *` they read; new signatures take `const PathwayTable &` directly. Threads
+only read.
+
+**The hottest loop.** `AMatrixFunc::CalculateTMatrix` runs for every point of every evaluation (forward) and its
+loop shape is shared by `RMatrixFunc::CalculateTMatrix`, `TBarAdjoint` and `CollectBilinearTerms`. Today
+(`AMatrixFunc.cpp` 539–598, abridged):
+
+```cpp
+for (int ir = irStart; ir <= irEnd; ir++) {
+  Decay *theDecay = compound()->GetPair(aa)->GetDecay(ir);
+  for (int k = 1; k <= theDecay->NumKGroups(); k++) {
+    for (int m = 1; m <= theDecay->GetKGroup(k)->NumMGroups(); m++) {
+      MGroup *theMGroup = theDecay->GetKGroup(k)->GetMGroup(m);
+      int jNum = theMGroup->GetJNum();
+      int chNum = theMGroup->GetChNum();
+      int chpNum = theMGroup->GetChpNum();
+      JGroup *theJGroup = compound()->GetJGroup(jNum);          // the three pointers are not used below
+      AChannel *entranceChannel = theJGroup->GetChannel(chNum);
+      AChannel *exitChannel = theJGroup->GetChannel(chpNum);
+      complex coulombPhaseEn = point->GetExpCoulombPhase(jNum, chNum);
+      ...                                                         // phases, sqrt(P), GetUBilinear(jNum, chNum, chpNum)
+      this->AddTMatrixElement(k, m, tmatrix);                     // or (k, m, ., ir) with R-matrix capture
+    }
+    for (int m = 1; m <= theDecay->GetKGroup(k)->NumECMGroups(); m++) {
+      ECMGroup *theECMGroup = theDecay->GetKGroup(k)->GetECMGroup(m);
+      ALevel *finalLevel = compound()->GetJGroup(theECMGroup->GetJGroupNum())->GetLevel(theECMGroup->GetLevelNum());
+      ...
+      if (theECMGroup->IsChannelCapture()) {
+        MGroup *chanMGroup = compound()->GetPair(aa)->GetDecay(theECMGroup->GetChanCapDecay())
+                                 ->GetKGroup(theECMGroup->GetChanCapKGroup())->GetMGroup(theECMGroup->GetChanCapMGroup());
+        ...                                                       // chanMGroup->GetJNum(), GetChNum(), GetChpNum()
+      }
+      this->AddECTMatrixElement(k, m, tmatrix);
+    }
+  }
+}
+```
+
+On the table, with every arithmetic line unchanged and in the same order:
+
+```cpp
+const EntrancePathways &P = compound()->Pathways().Entrance(aa);
+for (int ir = irStart; ir <= irEnd; ir++) {
+  const ExitRow &exit = P.exits[ir - 1];
+  for (int k = 1; k <= exit.num_groups; k++) {
+    const SpinGroupRow &g = P.groups[exit.first_group + k - 1];
+    for (int m = 1; m <= g.num_internal; m++) {
+      const InternalRow &r = P.internal[g.first_internal + m - 1];
+      const int jNum = r.group, chNum = r.ch, chpNum = r.chp;
+      complex coulombPhaseEn = point->GetExpCoulombPhase(jNum, chNum);
+      ...                                                         // unchanged
+      this->AddTMatrixElement(k, m, tmatrix);
+    }
+    for (int m = 1; m <= g.num_external; m++) {
+      const ExternalRow &x = P.external[g.first_external + m - 1];
+      ALevel *finalLevel = compound()->GetJGroup(x.final_group)->GetLevel(x.final_level);
+      ...
+      if (x.channel_capture) {
+        const InternalRow &cc = P.internal[x.cc_row];
+        ...                                                       // cc.group, cc.ch, cc.chp
+      }
+      this->AddECTMatrixElement(k, m, tmatrix);
+    }
+  }
+}
+```
+
+**What stays identical, so that the bits stay.** The loops visit exits, spin groups and pathways in the order of the
+trees (the rows are appended in that order, and the step-1 test below proves it), so every sum over pathways
+(`CalculateBareCrossSection`'s temporary T-matrices grouped by (J, l, l′) in order of first appearance, the flat
+interference sum into `rt_wl_` by Legendre order, the Coulomb-interference terms, the capture-A_y sums, the
+cotangent sums of the gradient) adds the same terms in the same order. The operands are the same: integers, and
+doubles that are exact halves (s, s′, J) or the same `stat_spin_factor` and coefficient doubles computed by the same
+functions with the same arguments. The (k, m) passed to `AddTMatrixElement`, `GetECAmplitude`, the cotangent
+buffers and the EC cache keys are the same numbers.
+
+**Tempting, and not to be taken in 6b.**
+- Skipping zero rows or reordering rows "for locality" (by block, by l): it reorders the sums.
+- Merging the internal and external rows into one array, or renumbering m across groups: (k, m) is the contract of
+  §11.1.
+- Replacing the linear search of `IsTempTMatrix` by a precomputed (J, l, l′) group index per row: a sound later
+  speed-up, but the group index must reproduce the order of first appearance; it is not part of 6b.
+- Sharing the rows of a cross-spin UPOS group with the equal-spin groups whose pathways it repeats: each copy is
+  its own (k, m) slot of the T-matrix storage.
+- Fixing a defect of §11.9 inside a move: each fix is its own commit with its own classification.
+
+**The gradient.** The gradient pass (`AZUREGrad.cpp`, `PointTBar`, `TBarAdjoint`, `CollectBilinearTerms`,
+`TBarProducts`) needs from the table exactly what the forward pass reads, read-only: the shapes of the cotangent
+buffers (groups × internal and external counts of one exit), the (J, l, l′) grouping, the flat interferences with
+their pathway positions (s₁, s₂) and orders, the diagonal pathways, the capture-A_y terms, and for each external row
+its final state and channel-capture row. The table has no derivative (nothing in it depends on θ), and the
+cotangent buffers stay per evaluation and per thread as now. `TBarProducts(Decay *)` and the cached pointer
+`tbar_decay_` (and `GenMatrixFunc::rt_decay_`) key a per-object scratch by the decay's address; they become a pointer
+to the `ExitRow` (or the pair (entrance, exit)), with the same invalidation (`AddTMatrixElement` resets
+`rt_decay_`).
+
+**What the layout must not make harder: the coupled spin–orbit treatment** (`spin_orbit_potential.md` §2.3, option
+(b), §5 step 6). There the channel functions of the channel spins of one (α, l, J) become a matrix block, and the
+collision matrix of a pathway (c, c′) needs the block's matrices instead of products of per-channel phases and √P.
+The table must therefore name a pathway by its block and block channels (it keeps `block`, `k_in`, `k_out` beside the
+engine numbers), must hold no channel-function value or per-channel scalar (it holds none: they depend on the energy),
+and must not assume that a channel spin identifies one channel of an (α, l, J) (the spin groups are a property of the
+pathway pairs, not of the channels). Option (b) changes the arithmetic of the T-matrix in the matrix functions, not
+the pathway list.
+
+### 11.5 The other pathway shapes
+
+- **Unobserved primary, observed secondary (UPOS).** A particle exit α′ ≠ α has spin groups (s, s′, s₂′); a group with
+  s′ ≠ s₂′ holds the pathways of both exit spins. `SpinGroupRow` keeps `sp2`, `has_sp2` and `CrossSpin()`; the
+  interference rows keep `z` (zero for a cross-spin group) and the new `z_upos`, and `sp_equal`. The readers that
+  skip cross-spin groups (`CalculateAmplitudeMatrix`, the RMC branch and the angle-integrated sum of
+  `CalculateBareCrossSection`, `PointTBar`'s guard) test `g.CrossSpin()` or `g.sp != g.sp2` exactly as they test
+  the KGroup now.
+- **Beta-delayed.** A beta entrance has groups (2l, 0) for l = 0, 1, internal pathways only, `stat_spin_factor` 0.0,
+  and no interference lists (`CalcAngularDists` skips a pair of type 20). Its exits have `has_interferences = false`,
+  which is `TablesBuilt() == false` today; the readers' fall-back branches for that case walk empty `KLGroup` lists
+  and contribute nothing (§11.9).
+- **Channel capture.** An external row continues an internal pathway of another exit of the same entrance; the tree
+  stores the position triple (decay, k, m), the table also stores `cc_row`, the internal row itself, which is all
+  that `CalculateTMatrix`, `TBarAdjoint`, `RMatrixFunc::CalculateTMatrix`, `ECPathwayAmplitude`, `WalkECAmplitudes`,
+  `SetUpFormalCaptureMasks` and `GetECIntegrals` use it for (group, channel, exit channel, and the exit channel's l
+  and s). The triple stays for the check file. `photon_channel` is the J-group channel number the tree calls
+  `GetIntChannelNum`, 0 when the block has no photon channel to that final state.
+- **Capture A_y.** Today the terms are built lazily under a mutex (§11.2). In the table they are built at set-up for
+  each (entrance, exit) that a capture-A_y segment uses (an analyzing-power segment with a photon exit: the
+  condition under which `GenMatrixFunc::CalculateCrossSection` calls `CalculateCaptureAnalyzingPower`,
+  `GenMatrixFunc.cpp` 573–581), at `maxLOrder`, with the same early returns (photon exit only; projectile spin > 0).
+  The set-up of the run knows these segments before `CNuc::Initialize` (the data are read first). A capture-A_y point
+  whose (entrance, exit) was not requested must stop with a message, not compute A_y = 0 silently. Building the terms
+  for every photon exit instead would remove the request list at the cost of 9j symbols for every capture project with
+  a spinning projectile (13N, T1, …); that cost was not measured (§11.10).
+
+### 11.6 Steps
+
+Each step is one branch, mergeable alone, bit-identical: 183 projects × 3 bases against `tab-trial8` (704 / 677 /
+704 identical), `ctest -LE slow`, `tests/run_tests.sh`, and calculations at 1 against several threads on T1, T2, T3,
+13N and the projects named in the step, plus the measurement of §11.8. Counts are accessor occurrences as in §11.1,
+before → after, in the files the step touches.
+
+1. **The table beside the trees.** `include/PathwayTable.h`, `src/PathwayTable.cpp` (`BuildPathwayTable`), the handle
+   on `CNuc` and its build in `CNuc::Initialize`; the trees are still built and read. No reader changes (accesses
+   406 → 406). Test (new ctest, in `tests/upgrade/pathways_from_cnuc_test.cpp`, which already loads every `.azr` of
+   `tests/` in the Brune and formal bases with every particle and beta pair an entrance): table against trees, every
+   field and every position — exits, groups, internal and external rows (with `cc_row` resolving to the tree's
+   back-reference), each interference (k, m₁, m₂, L, types, Z̄₁Z̄₂, Z̄₁Z̄₂ UPOS) in flat order, interference pathways,
+   orders, diagonal pathways, and the capture-A_y terms of every photon decay (forcing the tree's lazy build with
+   `CalcCaptureAnalyzingPower` at `maxLOrder`); doubles compared bit for bit. Plus a unit test of properties that do
+   not reuse the builder: every row's (group, ch, chp) is a channel pair of one J-group with the group's spins; every
+   interference names rows that exist; for a photon exit, a_k = 4 Z̄₁Z̄₂ for the pathway pairs of one spin group (the
+   relation `CNuc.cpp` 1175–1176 and `GenMatrixFunc.cpp` 895–897 state; if it holds only summed over the pairs of one
+   order, the test compares the sums). Outputs identical by construction (nothing reads the table). Memory: one table
+   per run.
+2. **Check files and set-up readers** (disjoint files, may run as three parallel branches after step 1):
+   (2a) `WritePathwaysCheck`, `WriteAngularDistributionsCheck` (`CNucReport.cpp` 20 → 0); (2b)
+   `CNuc::SetUpFormalCaptureMasks` (`CNucExternalCapture.cpp` 10 → 0); (2c) `AZUREAPI::GetECIntegrals`
+   (`AZUREAPI.cpp` 9 → 0). Test: the four check files of T1, T3, 13N and `beam_profile_kernel` written with the checks
+   on are byte-identical to the base's (as in the record of steps (d)); for 2c, `tests/ec_integrals_signature/check.sh`
+   and `tests/ec_relativistic_signature/check.sh` (they reach `GetECIntegrals` through pyazr) and the arrays of
+   `pyazr/examples/ec_integrals.py` on 13N compared number for number, base against step.
+3. **External-capture amplitudes at set-up**: `WalkECAmplitudes`, `EData::CalculateECAmplitudes`,
+   `EData::InitializeComponentSegments` (`EData.cpp` 22 → 0), `EPoint::CalculateECAmplitudes`,
+   `EPoint::GetECAmplitudeWithShift`, `ECPathwayAmplitude` (`EPoint.cpp` 12 → 0). After the file split of
+   `edata_split.md` is merged (these functions move to `EDataExternalCapture.cpp` and `EPointExternalCapture.cpp`, in
+   work). The exit is looked up as the tree's numbering does today (`GetDecay(exit pair number)`, §11.9 item 1): the
+   table's `ExitOf` gives the same position in every probed project, and the fix is a separate commit. Test: the 21
+   `intEC.dat` files of the Brune basis identical, and the signature (`EData::ECSignature`, `EData.cpp` 2117, which
+   hashes the pathways in tree order through `WalkECAmplitudes`) unchanged, so that a file written by the base is
+   accepted; 13N and `beam_profile_kernel` byte-identical at 1 and 8 threads.
+4. **The R-matrix route**: `RMatrixFunc::CalculateTMatrix` (`RMatrixFunc.cpp` 16 → 0). Independent of 3 and 5.
+   The 183 × 3 comparison does not reach it: no `.azr` under `tests/` has `false` on the first line of `<config>`
+   (counted: 0), and `Config::ResolveMatrixRoute` switches to the A-matrix whenever ignore-externals (the default) or
+   Park's basis is on. The step therefore adds its own comparison, base against step, byte for byte: T1, T3, 13N and
+   `beam_profile_kernel` copied with that line `false`, run with `--no-ignore-externals` in the Brune and formal
+   bases.
+5. **Forward hot path**: (5a) `AMatrixFunc::CalculateTMatrix` (`AMatrixFunc.cpp` 111 → 95); (5b)
+   `GenMatrixFunc::CalculateBareCrossSection`, `CalculateAmplitudeMatrix`, `BuildCoulombInterference` and the
+   `rt_decay_` key (`GenMatrixFunc.cpp` 119 → 6, `GenMatrixFunc.h` `Decay *` → `ExitRow *`). 5a and 5b touch disjoint
+   files and may run in parallel. The R-matrix-capture branches (`--use-rmc`: `CalculateTMatrix`'s `isRMC`, the
+   first branch of `CalculateBareCrossSection`) are not reached by the 183 × 3 comparison either (`--use-rmc` occurs
+   only in `tests/thm_lineshape/check.sh`): the step compares T1 and 13N with `--use-rmc`, base against step. The
+   fall-back branches for `TablesBuilt() == false` either go (they add nothing) in a separate commit with its own
+   comparison, or are kept reading the empty list. Test: as for every step, and
+   T1–T3, `upos_pair_index`, `light_excitation`, `beta_delayed_alpha`, `ec_e1m1_phase`, `identical_entrance_reaction`
+   at 1 and 8 threads.
+6. **Capture A_y at set-up**: the request list from the set-up of the run;
+   `GenMatrixFunc::CalculateCaptureAnalyzingPower` and the capture-A_y block of `PointTBar` read the table;
+   `CNuc::CalcCaptureAnalyzingPower` (78 lines and its 24-line comment), `captureAyMutex`, `Decay::captureAy_`,
+   `captureAyBuilt_` and their accessors are deleted (`GenMatrixFunc.cpp` 6 → 0, `AMatrixFunc.cpp` 95 → 92). After 5b
+   (same file). Test: `13N_capture_ay`, `capture_ay_coupling` byte-identical at 1 and 8 threads; a ctest that a
+   capture-A_y point of an unrequested reaction stops with its message.
+7. **Gradient**: `PointTBar` (rest), `TBarAdjoint`, `CollectBilinearTerms`, `TBarProducts`, `tbar_decay_`
+   (`AMatrixFunc.cpp` 92 → 0, `AMatrixFunc.h` 1 → 0). After 5a and 6. Test: the gradient tests of ctest (analytic
+   against finite differences), the T2 fit (200 calls) at 1 thread identical in every output file, at 8 threads as the
+   base (the base's own 1-vs-8-thread fit differs in the 8th digit of χ², `channel_table.md` §6).
+8. **Delete the trees.** `SortPathways` (85 lines) and `CalcAngularDists` (144) go (`CNuc::Initialize` calls
+   `BuildPathwayTable` only); `PPair::decays_`, `AddDecay`, `ClearDecays`, `NumDecays`, `IsDecay` (2), `GetDecay` (2);
+   the class files `Decay` (117 + 206 lines), `KGroup` (57 + 124), `MGroup` (35 + 52), `ECMGroup` (70 + 156),
+   `KLGroup` (47 + 67), `Interference` (42 + 67) — 1040 lines — and `CaptureAyTerm.h` (43, its struct moved in step 1);
+   `pathways_from_cnuc_test.cpp` (383 lines, ctest `physics_pathways_from_cnuc`: both its comparisons need the trees);
+   the six sources from `src/CMakeLists.txt`. `CNuc.cpp` loses lines 886–1163 except `CalcBoundaryConditions`
+   (`SortPathways` with its comment, 886–974, and `CalcAngularDists` with its comment, 1016–1163: 237 lines);
+   `CalcCaptureAnalyzingPower` went in step 6. The property tests of step 1 and `physics_pathways_unit` stay. Test:
+   the full set of the step rule.
+
+Order: 1, then 2a, 2b, 2c, 3, 4, 5a, 5b in any order (3 after the file split), then 6 (after 5b), 7 (after 5a and 6),
+8 last. Steps 2a–2c, 3, 4, 5a and 5b touch disjoint files.
+
+### 11.7 Why the steps are bit-identical
+
+Each step replaces where an integer or a double comes from (a node's field → a row's field holding the same value),
+never an arithmetic expression or the order of a sum. The only places that compute anything are the builder's
+coefficient loops, which are `CalcAngularDists`' and `CalcCaptureAnalyzingPower`'s loops moved with their arguments
+taken from the System; step 1's test compares their doubles bit for bit with the trees' on every project before any
+reader switches. A difference in a later step is therefore a reader that iterates or indexes differently, and the
+step stops until it is found.
+
+### 11.8 Cost
+
+**Indirections per inner iteration.** Today an internal pathway of `CalculateTMatrix` costs, in the loop condition and
+body, the calls `Decay::GetKGroup` (twice), `KGroup::NumMGroups`, `KGroup::GetMGroup`, `MGroup::GetJNum`, `GetChNum`,
+`GetChpNum`, `CNuc::GetJGroup` and `JGroup::GetChannel` (twice): eleven out-of-line calls (the getters are defined in
+`.cpp` files; the build is `-O3` without link-time optimisation, `CMakeCache.txt` of the base build), each one or two
+dependent loads. On the table it is one indexed load of the row (the bases of `P.internal` and `g` are loop-invariant)
+and three field reads, no call. A channel-capture row adds today `PPair::GetDecay`, `Decay::GetKGroup`,
+`KGroup::GetMGroup` and three getters; on the table one indexed load. `CalculateBareCrossSection`'s angle-integrated
+loop reaches `CNuc::GetJGroup` and `JGroup::GetChannel` for l, l′ and J of every pathway; those stay in 6b (they are
+channel data, the other half of step 6), so its gain is smaller. Indexing the table cannot be slower than chasing the
+trees unless the compiler fails to hoist the row bases; inlining changes when code moves between files (the file split
+stopped once on the T2 calculation's inlining, in work), which is why each step is measured.
+
+**Measured on the base build** (`work/b-trial9`, this host, one thread, `--no-coulomb-table`):
+- T2 calculation (menu 1), `perf stat -e cycles:u,instructions:u`, five runs: 3.308–3.317 × 10⁹ cycles (spread
+  0.3 %), 11 688 402 464–11 688 402 966 instructions (spread 4 × 10⁻⁸).
+- `perf record` of the T2 calculation (1060 samples): the pathway readers are below 1 % (`CalculateTMatrix` 0.37 %,
+  `CalculateBareCrossSection` 0.28 % self); 94 % of the run is the Coulomb functions of the set-up.
+- `perf record` of a T2 fit of 30 calls (`--use-lm --max-calls=30`, 22 133 samples): `CalculateBareCrossSection`
+  1.39 % self (2.1 % with callees), `CalculateTMatrix` 0.58 %, `JGroup::GetChannel` 0.37 %, `CNuc::GetJGroup` 0.24 %,
+  `Decay::GetKGroup` 0.09 %, `KGroup::GetMGroup` 0.04 %, `PPair::GetDecay` 0.02 % (self). The readers and the getters
+  they call are 3–4 % of a short fit (`GetChannel` and `GetJGroup` also serve the level matrix); a step that only
+  changes how rows are reached moves a fraction of that, so a 2 % change of the fit's cycles means it added work.
+
+**What each step measures** (base = the head before the step, same host, alternating base and step, `OMP_NUM_THREADS=1`):
+
+    perf stat -r 5 -e cycles:u,instructions:u <AZURE2> --no-gui --no-readline --no-coulomb-table T2.azr < menu
+    # T2 calculation: menu '1\n\n\n7\n' in a copy of tests/upgrade/T2 (as scripts/bench_upgrade.sh)
+    perf stat -r 3 -e cycles:u,instructions:u <AZURE2> --no-gui --no-readline --no-coulomb-table \
+        --use-lm --max-calls=200 T2.azr < menu
+    # T2 fit of 200 calls: menu '2\nn\n\n\n7\n'
+
+and, for the steps that touch them, 13N (external capture at set-up: step 3), `13N_capture_ay` (step 6) and the T2
+fit with the analytic gradient path (step 7). **Stop rule:** the mean cycles of the step exceed the base's by more
+than 2 % on the T2 calculation or on the 200-call fit: stop, profile (`perf record -g`), and report. Instructions are
+reproducible to 10⁻⁷ and show any change in the work done; a rise in instructions with cycles inside 2 % is reported,
+not a stop. Peak RSS (`/usr/bin/time -f %M`) of the fit at 1 and 8 threads is reported; it is expected to fall, since
+the working copies share one table instead of copying the trees.
+
+### 11.9 What 6b does not solve, and what was met while reading
+
+**What remains.** After 6b `CNuc` still holds the pairs, J-groups, channels and levels (the `GetPair`/`GetJGroup`
+half of step 6: about 730 calls, §10), the boundary values, the external-capture set-up, the parameter vector, the
+abundances and penalties (step 7), and the handle to the table. The readers still call `CNuc::GetJGroup` and
+`JGroup::GetChannel` for channel data (l, J, E/M of a pathway's channels) and `EPoint`'s per-(J-group, channel)
+tables; the engine numbers in the rows exist only for these.
+
+**What Phases 5 and 6 will want differently.**
+- One collision-matrix solve per grid energy for all reactions (Phase 5): the T-matrix of a pathway becomes a slot of
+  a flat per-energy buffer indexed by the row number of the table, not `tmatrix_[decay][k][m]`; the (k, m) contract
+  of §11.1 (and the intEC line order, the cotangent buffers, the EC cache key) then changes in one commit, with the
+  intEC signature bumped.
+- Observables as functions of U with "coupling coefficients precomputed per reaction" (ARCHITECTURE §3): the flat
+  interference and capture-A_y lists are those coefficients; they move to physics/ with System indices when the
+  engine numbers go.
+- Evaluation without copies (Phase 6): the table is already shared and immutable; the per-object scratches keyed by
+  the last decay (`rt_decay_`, `tbar_decay_`) become per-task scratch.
+- The total-capture and SUM components loop over several exits of one entrance (the R-matrix-capture branch):
+  Phase 5's reaction-indexed observables would rather index exits by (entrance, exit) than by decay position.
+
+**Defects and oddities (not fixed; file and line at cb8f5912).**
+1. *An exit pair number used as a decay position.* `EData.cpp` 2011, 2394–2395, 2680–2681; `EPoint.cpp` 611,
+   1765–1766; `AZUREAPI.cpp` 1751–1752 call `entrancePair->GetDecay(ir)` with `ir` the exit pair's number. The decays
+   of an entrance are in pair order but skip a beta pair and any pair without a pathway from that entrance (another
+   compound nucleus, an unconnected pair), so whenever such a pair is numbered below the photon pair these lines read
+   another decay or index past the end. The other readers search the decay by `GetPairNum()`. Probed: 14 of the 21
+   projects of `tests/` with external capture (one `.azr` of each folder) were run with the pathways check file on;
+   in every one each decay's position equals its pair number, so `tests/` does not exercise the defect. A test project
+   with a beta pair or a second nucleus listed before the photon pair is needed.
+2. *The not-found check of the decay search is unreachable.* The search `while (ir < N) { ir++; if (match) break; }`
+   (`GenMatrixFunc.cpp` 49, 814, 857; `AMatrixFunc.cpp` 533, 703, 1147, 1859) ends with `ir = N` when no decay
+   matches, so the following `if (ir > NumDecays()) return false` (`GenMatrixFunc.cpp` 818, 861) never fires and the
+   last decay is used; with no decay at all `GetDecay(0)` indexes −1. `ExitOf` returns 0 for "no
+   exit", and the readers must then refuse instead of reading.
+3. *Capture-A_y terms built in the point pass* under a function-level static mutex, for the first caller's Legendre
+   order (§11.2); removed by step 6.
+4. *`AZUREAPI::GetECIntegrals` uses the final state's formal energy* (`ecLevel->GetE()`, `AZUREAPI.cpp` 1786); the
+   engine's integrals use the Brune energy `GetECEnergy()` since step 2 (`EPoint.cpp` 615, 1769). In the formal basis
+   the API's integrals are at another energy than the engine's.
+5. *Dead fields.* `MGroup::tmatrix_`, `ECMGroup::tmatrix_` (never initialised or read), `ECMGroup::statspinfactor_`
+   (never set; its getter has no caller). The three unused pointers `theJGroup`, `entranceChannel`, `exitChannel` in
+   `AMatrixFunc::CalculateTMatrix` (`AMatrixFunc.cpp` 549–551) cost three calls per pathway; they go with step 5a.
+6. *Fall-back branches for `TablesBuilt() == false`* (`GenMatrixFunc.cpp` 287–316 and the Coulomb-interference
+   branch 936–948): reached only by a decay without interference lists (beta entrance), where the `KLGroup` list they
+   walk is empty.
+
+### 11.10 What this design rests on
+
+Counted (scripts and outputs in `work/pathnote/`): the accessor counts of §11.1 (`inventory.py`, `grep -o`); the
+writers of §11.2 (`grep` of every `Add…`, `Set…`, `Clear…` of the tree classes over `src/`, `api/`, `include/`,
+`tests/`); the line counts of §11.6 (`wc -l`); the decay numbering of 14 external-capture projects (`ecprobe.sh`,
+base build, one thread). Measured: the `perf stat` and `perf record` figures of §11.8 (base build `work/b-trial9`, this
+host, one thread). Inferred by reading, not run: that every row reproduces the tree (step 1's test establishes it);
+that every capture-A_y caller asks for `maxLOrder` (§11.2); that `channelOfBlockChannel` is the identity
+(`CNucSystem.cpp`); the indirection counts of §11.8; the cost of building capture-A_y terms for every photon exit
+(not measured).
+
+### 11.11 Decisions of the director (2026-11-10)
+
+1. The flat engine table of §11.4 is the layout. Its handle (`shared_ptr<const PathwayTable>`) sits on `CNuc`
+   while the readers move and goes to the object that replaces `CNuc` with step 7.
+2. Capture A_y: the terms are built at set-up for the exits that the data sets with capture-A_y points name. The
+   set-up collects them from the segments; a user writes nothing. A capture-A_y point whose exit was not collected
+   stops with a message that names the data set (it cannot happen through the set-up; it guards the API). The static
+   mutex goes.
+3. Defect 1 (an exit pair number used as a decay position) is fixed before the external-capture readers move
+   (step 3), in its own commit with a test project that has a pair without a pathway numbered below the photon
+   pair; the outputs of every present project stay identical.
+4. Defect 2 (the unreachable not-found check) is fixed with the reader it belongs to: no exit refuses with a
+   message, it never reads the last decay.
+5. The fall-back branches for `TablesBuilt() == false` are deleted in a commit of their own, after a run of every
+   project with an abort placed in them shows that they are not reached with a non-empty list.
+6. The step-1 comparison of table and trees goes into `pathways_from_cnuc_test.cpp`, which step 8 deletes.
+7. Defect 4 (`AZUREAPI::GetECIntegrals` at the formal energy) is fixed with step 2c and gets a pyazr test in the
+   formal basis.
+8. The steps start after the cut of `EData`, `EPoint` and `ESegment` into smaller files is merged. The R-matrix
+   route and `--use-rmc` are compared separately at the steps that touch them (§11.6), since no project of
+   `tests/` selects them.

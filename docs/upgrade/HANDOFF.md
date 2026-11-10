@@ -2,6 +2,29 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-10 (agent, brief V) — design of step 6b of the `CNuc` split: the readers of the pathway trees (`docs/upgrade-pathways-6b`)
+
+**Done** (documents only; no code changed).
+- `cnuc_split.md` §11, "Step 6b: design": the inventory of every function that reads the pathway trees (320 accesses
+  outside `CNuc.cpp`, 86 in it, per function with the fields used, hot or cold, OpenMP or not), the one writer after
+  set-up (`CNuc::CalcCaptureAnalyzingPower`, lazily in the point pass under a function-level static mutex), what the
+  nodes hold beyond `reaction_pathways`' result (only structural data: three derived lists per decay), the table
+  (`PathwayTable`, flat rows per entrance in tree order, engine numbers beside System indices, built once by
+  `CNuc::Initialize`, held as `shared_ptr<const>` and shared by every working copy), the hot loop before and after,
+  the UPOS, beta-delayed, channel-capture and capture-A_y shapes, eight bit-identical steps with their counts and
+  tests, the measurement and stop rule, and six defects met while reading. "Remaining steps" points to §11.
+
+**Verified how.** Counts by `work/pathnote/inventory.py` and `grep -o` at cb8f5912; the decay numbering of 14 of the 21
+external-capture projects with the pathways check file (`work/pathnote/ecprobe.sh`, base build `work/b-trial9`, one
+thread): every decay position equals its exit pair number; `perf stat` (five runs) and `perf record` of the T2
+calculation and of a 30-call T2 fit on the base build, one thread. `python3 tests/consistency/repo_consistency_test.py`
+before the commit.
+
+**Open.** The director's decisions listed at the end of the report (where the table's handle lives after step 7, the
+capture-A_y request list against building for every photon exit, the defect of an exit pair number used as a decay
+position, the fall-back branches). Not run: the cost of building capture-A_y terms for every photon exit; whether a
+sub-point of a capture-A_y point can be the first caller with no Legendre order.
+
 ## 2026-11-10 (agent, brief T) — the comparison tools in the repository, and small follow-ups (`feature/upgrade-4-tools`)
 
 **Done** (no physics change; every project output identical to the start).
