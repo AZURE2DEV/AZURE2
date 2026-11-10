@@ -11,16 +11,17 @@
 # Environment (as runall.sh):
 #   WORK     scratch (required): the runs land in $WORK/cmp/<basis>/tab-<tag>, the converted tree in $WORK/gate-<tag>
 #   JOBS     parallel runs and conversions, one thread each (default 1)
-#   REF      the reference tag in $WORK/cmp, the original tree's run by runall.sh (required; e.g. tab-p3f)
-#   RUNALL   runall.sh of the comparison tools (default: runall.sh beside this script)
+#   REF      the reference tag in $WORK/cmp, the original tree's run by tools/runall.sh with the same engine (required)
+#   RUNALL   the runall.sh to run the converted tree with (default: tools/runall.sh, beside this script)
 #
 # Prints the counts per basis; the full list in $WORK/gate-<tag>/gate.txt.  Exit 0 when no file differs and none is
 # missing, 1 otherwise, 2 on a usage or set-up error.
 
-ENGINE="${1:?usage: format3_gate.sh ENGINE SOURCE_TREE TAG}"
-SRC="${2:?usage: format3_gate.sh ENGINE SOURCE_TREE TAG}"
-TAG="${3:?usage: format3_gate.sh ENGINE SOURCE_TREE TAG}"
-: "${WORK:?set WORK to the scratch directory of runall.sh}" "${REF:?set REF to the reference tag (e.g. tab-p3f)}"
+usage() { echo "usage: WORK=<scratch> REF=<reference tag> [JOBS=n] format3_gate.sh ENGINE SOURCE_TREE TAG${1:+ ($1)}" >&2; exit 2; }
+[ $# -eq 3 ] || usage
+[ -n "${WORK:-}" ] || usage "set WORK to the scratch directory of runall.sh"
+[ -n "${REF:-}" ] || usage "set REF to the reference tag"
+ENGINE=$1; SRC=$2; TAG=$3
 HERE=$(cd "$(dirname "$0")" && pwd)
 RUNALL="${RUNALL:-$HERE/runall.sh}"
 JOBS="${JOBS:-1}"

@@ -326,6 +326,20 @@ that triggers it alone [check 24].
 
 Reference commits: `git show --stat 062b1bfe` (segment keyword `shiftfngroup`), `3e13fb28` (`normgroup`).
 
+**Comparing the outputs of two engines** (a change that must not move any number; the full text is
+`docs/upgrade/ARCHITECTURE.md` section 10). Run every project of a `tests/` tree with each engine, then compare:
+```bash
+export SRC_TESTS=$PWD/tests WORK=<scratch> JOBS=<runs at once, one thread each; default 1>
+tools/runall.sh <absolute path of the reference engine> tab-ref   # once per reference
+tools/runall.sh <absolute path of the new engine> tab-new         # a fresh tag for every run
+tools/cls.sh tab-ref tab-new; grep '^## ' $WORK/cls-tab-new.tsv   # "## <basis>: N files, N identical" when nothing moved
+```
+Menu 1, three bases (Brune, `--no-brune`, `--use-park`); the outputs land in `$WORK/cmp/<basis>/<tag>/.res-<folder>/
+<file>.azr/` (`output/`, `checks/`, `run.log`), the table in `$WORK/cls-<tag>.tsv`, one line per file that differs.
+*Identical* (`tools/classify.py`): the same lines of tokens after commas become blanks and `=` a token of its own,
+numbers compared by value (`1.0` equals `1`), progress lines of `run.log` dropped. The converted-tree gate of format 3
+(`tools/format3_gate.sh`) runs the same `runall.sh`.
+
 ## Code structure
 
 - Put a new feature in its **own class and file**, as `ShftFunc`,

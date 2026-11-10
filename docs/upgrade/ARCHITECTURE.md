@@ -254,6 +254,33 @@ Bohr limit of straggling, probability conservation of kernel weights; THM Green 
 During migration today's engine provides golden outputs for T1–T3; the ~96 current test folders stay as oracles until
 the phase that replaces their code is merged.
 
+**Comparing the outputs of two engines.** A change that must not move a number (a move of code, a split of a file, a
+new reader of the same input) is checked by running every project of the test tree with both engines and comparing
+every file they write. Three commands, from the repository root:
+
+```bash
+export SRC_TESTS=$PWD/tests WORK=<scratch> JOBS=<runs at once>
+tools/runall.sh <reference engine, absolute path> tab-ref && tools/runall.sh <new engine, absolute path> tab-new
+tools/cls.sh tab-ref tab-new; grep '^## ' $WORK/cls-tab-new.tsv
+```
+
+- `tools/runall.sh ENGINE TAG [MODE ...]` runs each folder of `$SRC_TESTS` that holds an `.azr` (`output/` folders
+  left out) as one job of `tools/run_one.sh`: menu 1 (calculate with data), one OpenMP thread, in a private copy of
+  the folder's top-level test folder, in the three bases ("" Brune, `--no-brune`, `--use-park`), `JOBS` jobs at once
+  (default 1; the caller states its thread budget). A run is cut off after 900 s, its log after 2 MB. The files land in
+  `$WORK/cmp/<basis>/<TAG>/.res-<folder>/<file>.azr/`: `output/`, `checks/` and `run.log` (`<basis>` is `brune`,
+  `no-brune` or `use-park`; `/` in the folder is written `__`). Every run gets a fresh tag.
+- `tools/cls.sh REFTAG NEWTAG` writes `$WORK/cls-NEWTAG.tsv` with `tools/classify.py`: one line per file that differs
+  or exists in one run only (largest relative difference of the numbers, counts of numbers, sign flips and words that
+  differ, change of the line count), then per basis `## <basis>: N files, M identical` and a line per kind of file
+  with a difference. *Identical* means: each file is read as lines of tokens (carriage returns are line breaks, commas
+  blanks, `=` a token of its own, split at blanks; the lines of `run.log` with a progress bar, a percentage,
+  "Calculating" or "Progress" dropped), and the two files have the same number of lines, the same number of tokens on
+  each line, and each pair of tokens is equal as text or, when both are numbers, equal in value (`1.0` and `1`).
+  Spacing and the spelling of a number do not count; any change of a value, however small, does.
+- The converted-tree gate of format 3 (`tools/format3_gate.sh`, `project_format3.md` section 8.5) runs the same
+  `runall.sh` on a converted copy of the tree and compares with its own rules (`tools/format3_gate.py`).
+
 ## 11. Front ends
 
 - **pyazr 3.0**: modules named like the core (`project`, `system`, `data`, `objective`, `evaluate`, `physics` (the
