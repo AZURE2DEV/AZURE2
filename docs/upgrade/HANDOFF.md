@@ -102,10 +102,12 @@ by one ulp makes 119 files fail).
   re-run (PASS); e² = 1.4399764 against α ħc = 1.4399645 and the Whittaker S below threshold confirmed in the
   code. Director's decisions on its §6: no channel-spin operator (Q3); R_C a required field, 3.5 fm written by the
   converter (Q6); potential parameters are not fit parameters (Q7); matching radius and step are fields with logged
-  defaults (Q8). **For the PI** (nothing is built until then, and nothing else waits for it): Q1 only pairs with
-  one spinning particle at first; Q2 FRESCO's convention (2.000 fm², 2 l·s); Q4 distort bound states and closed
-  channels with the potential (moves `hybrid_potential`, removes a step of about 1 in S at threshold); Q5 e² = α ħc
-  in the hybrid Coulomb potential (moves hybrid outputs by about 10⁻⁵). The note's steps 1 (potential as a value,
+  defaults (Q8). **Decided by the PI, 2026-11-10 (yes to all four):** Q1 only pairs
+  with one spinning particle at first, the others refused until a project needs the coupled treatment; Q2 FRESCO's
+  convention (2.000 fm², 2 l·s); Q4 bound states and closed channels are distorted with the potential (moves
+  `hybrid_potential`, removes a step of about 1 in S at threshold); Q5 e² = α ħc in the hybrid Coulomb potential
+  (moves hybrid outputs by about 10⁻⁵). Both moves are classified with cause and size when they are made.
+  The note's steps 1 (potential as a value,
   no singleton), 3 (format-3 record) and 4 (key with `two_j` = −1) move no output and need no decision.
 - **M3 (b) is the aim** (`data_model.md` §5): lab data with a fitted shift are compared in the frame of the data —
   the model is converted to the lab, the measured values and errors stay as measured. Phase 5 does it; every fit

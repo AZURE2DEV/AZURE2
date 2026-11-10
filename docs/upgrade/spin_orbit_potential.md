@@ -408,6 +408,9 @@ Steps 1, 3 and 4 do not depend on each other; step 5 needs 1, 3 and 4, and shoul
 
 ## 6. Questions for the PI
 
+**Decided 2026-11-10.** The PI: yes to questions 1, 2, 4 and 5. The director: 3 no; 6 yes; 7 no; 8 yes. The
+questions stay below as the record of what was decided.
+
 1. **Target spin.** Support only pairs with one spinning particle first (option (a)), refusing the others, and do the
    coupled treatment only when a project needs it? *Recommendation: yes.*
 2. **Convention.** V_so as in FRESCO (Eq. (3): (ħ/m_πc)² = 2.000 fm², operator 2 l·s = l·σ), written as
