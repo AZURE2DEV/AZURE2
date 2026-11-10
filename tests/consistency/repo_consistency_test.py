@@ -444,6 +444,9 @@ ALLOWED_PENALTY_USES = {
     ("src/EDataOutputFiles.cpp", "DensityPenalty"),
     ("src/EDataOutputFiles.cpp", "DopplerPenalty"),
     ("src/EDataOutputFiles.cpp", "ThicknessPenalty"),
+    # The data covariance, moved out of src/EData.cpp (docs/upgrade/edata_split.md W2): the file defines the
+    # covariance term, and PrepareCovarianceSeeds evaluates it for the seeds the gradient reads.
+    ("src/EDataCovariance.cpp", "CovarianceChi2Correction"),
 }
 for top in ("src", "api/src"):
     for name in sorted(os.listdir(os.path.join(ROOT, top))):
