@@ -89,10 +89,12 @@ ratios() {
 # awk programs editing the .azr
 NOFOLD='/<targetInt>/ { print; T = 1; next } /<\/targetInt>/ { T = 0 } T { next } { print }'
 # examples/c12c12_tumino2018 reduced to one THM segment on data/pts.dat, no
-# folding, its <thm> block dropped (the runs append their own).
+# folding, its <thm> block dropped (the runs append their own), and the
+# prior_centre rows of the segment lines that are gone dropped with them (a row
+# that names no <segmentsData> line is an error).
 C12MIN='/<segmentsData>/ { print; print "1  1  2  0  7  0  180  10  1  1  0  0  0  0  data/pts.dat  0  0"; S = 1; next }
 /<\/segmentsData>/ { S = 0 } /<targetInt>/ { print; S = 1; next } /<\/targetInt>/ { S = 0 }
-/<thm>/ { T = 1; next } /<\/thm>/ { T = 0; next } S || T { next } { print }'
+/<thm>/ { T = 1; next } /<\/thm>/ { T = 0; next } S || T { next } / prior_centre / { next } { print }'
 
 # (a) ----------------------------------------------------------------------
 echo "(a) distortion=none == no key"
