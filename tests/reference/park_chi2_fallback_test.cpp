@@ -143,7 +143,7 @@ bool AdjointApplies(Model &m, const vector_r &p) {
   lc->FillCompoundFromParams(p);
   ld->FillNormsFromParams(p);
   azure2::Results results;
-  ld->FillEnergyShiftsFromParams(p, results, ld, lc, &m.cfg);
+  ld->FillEnergyShiftsFromParams(p, results, lc, &m.cfg);
   lc->CalcShiftFunctions(m.cfg);
   vector_matrix_r sd = BuildShiftDerivTable(lc, m.cfg);
   ParamIndexMap pmap = BuildParamIndexMap(lc, ld, std::vector<bool>());

@@ -84,7 +84,7 @@ Evaluation Evaluate(Copy &c, const vector_r &p, const Config &cfg) {
   EData *ld = c.data.get();
   lc->FillCompoundFromParams(p);
   ld->FillNormsFromParams(p);
-  ld->FillEnergyShiftsFromParams(p, c.results, ld, lc, &cfg);
+  ld->FillEnergyShiftsFromParams(p, c.results, lc, &cfg);
   if (cfg.paramMask & Config::USE_BRUNE_FORMALISM) lc->CalcShiftFunctions(cfg, false);
   std::vector<ESegment *> segments;
   for (int i = 1; i <= ld->NumSegments(); i++) segments.push_back(ld->GetSegment(i));
