@@ -107,12 +107,15 @@ exit; they hold no data. The order of the units (base first, leaves in term orde
 
 ## 4. Order of the commits
 
-Milestone 1 (what was measured exists once):
+Milestone 1 (what was measured exists once; done, commits 0439701a and 9db6b59a):
 1. `Measurement`, `ReadMeasurementRows`, `ConvertRow` in `experiment/` with unit tests by hand.
 2. Segments hold a `shared_ptr<const Measurement>`; points read the datum by row; the input members go.
 3. The frame: `ESegment::Fill`, the shift step and the component load call one function; y_c.m., δy_c.m. and the
    Jacobian live in the frame; `loadFrame_` goes (the nominal frame takes its place).
-4. Components as leaves of the base segment: the component deque and its copies go.
+4. Components as leaves of the base segment: the component deque and its copies go.  In milestone 1 a leaf lives in
+   its segment (`ESegment::Leaf`: pairs, key, fixed angle, scale, role, target effect, units); the segment's own
+   points are term 0, a leaf term k, and the shift step, the frame, the grids and the target set-up take
+   (segment, term) (`TermRef`); `EData::LeafRefs` lists the leaves in creation order (plan, layout, intEC file).
 5. `--describe` shows rows read, kept and the kept range.
 Milestone 2 (the working copy is flat): the unit vector with sub-points as ranges; settings out of the units; plan
 by index; `Clone` becomes a copy. Milestone 3 (the old names are gone): `DataSet` and `WorkingCopy` apart, callers

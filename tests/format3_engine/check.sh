@@ -179,7 +179,8 @@ for s in d["datasets"]:
     got = (s["rows_read"], s["rows_kept"], s.get("kept_E_lab_MeV"))
     if want != got:
         bad.append((s["name"], want, got))
-print(bad)
+if bad:
+    print(bad)
 sys.exit(1 if bad else 0)'; then
     ok "--describe --json: rows read and kept and the kept E_lab range of every data set, as counted from its file"
   else
