@@ -28,7 +28,9 @@ Building and checking
    ./scripts/check.sh            # consistency, build, ctest, physics suite, docs
    ./scripts/check.sh --quick    # without the physics suite and docs
 
-``scripts/check.sh`` stops at the first failing stage. CI runs the same tests
+``scripts/check.sh`` stops at the first failing stage. ``JOBS=<n>`` sets both the
+compile jobs of the build and the number of tests ``ctest`` runs at once
+(default 4; most tests use two OpenMP threads each). CI runs the same tests
 on Linux, macOS and Windows, and a change is not finished until all three
 pass. The test suites are:
 

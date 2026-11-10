@@ -95,6 +95,7 @@ cmake -S . -B build -DCMAKE_BUILD_TYPE=Release \
       -Dpybind11_DIR="$(python3 -m pybind11 --cmakedir)"   # without pybind11 the pyazr module is silently skipped
 cmake --build build --parallel
 ./scripts/check.sh            # everything below, in order; --quick skips the physics suite
+JOBS=2 ./scripts/check.sh --quick   # JOBS: compile jobs and parallel ctest tests (default 4; about 2 threads per test)
 ```
 
 What `scripts/check.sh` runs, and what to run by hand when iterating:
