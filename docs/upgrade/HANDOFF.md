@@ -26,7 +26,15 @@ Update this file at the end of every work session: what changed, what is next, w
 - Recipe "A model-only datum" in `CLAUDE.md`, check 27 (every datum quantity has its `ModelQuantities()` row and a
   `test_<quantity>`); docs `data_formats.rst`, `output_files.rst`, `chi_squared.rst`, `objective.md` §5.
 
-**Verified, open, decisions:** see `work/mdata/REPORT.md` of this branch's agent (E).
+**Verified** (2 threads, `work/b-mdata`, 0 warnings): 179 × 3 against `tab-p3f` 689 / 662 / 689 identical;
+`scripts/check.sh --quick` (ctest −LE slow) 151/151; `tests/run_tests.sh` 136 passed, 0 failed (OMP 2, 2230 s; with
+`model_data`). Cost of the term on T2 (model data alone, 1 thread): about 70 µs per evaluation (Brune, Park), 360 µs
+(formal: the Brune iteration), against about 77 ms for a T2 evaluation; T2 fit200 (`--use-lm --max-calls=200`, 1
+thread, table on) 16.3–17.0 s without, 16.5 s with one strength. Not run: 1 vs 8 threads (budget), sphinx, `ctest -L slow`.
+
+**Open.** The converter writes `pair` labels without the light particle's excitation (`Builder::PairLabel`), which
+`BuildModelData` then matches to the ground-state pair or refuses; converting a format-2 file that already has a
+`<modelData>` section writes a second one (the reader takes the first only). Full report: `work/mdata/REPORT.md`.
 
 ## 2026-11-10 (night, later) — step 3a follow-up: the director's D1–D5 and review R1–R3 (`feature/upgrade-4-convert`)
 
