@@ -467,6 +467,13 @@ add_test(NAME pyazr_potential_sessions
                  ${CMAKE_CURRENT_SOURCE_DIR}/potential_sessions_test.py)
 set_tests_properties(pyazr_potential_sessions PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
+# The shift function of a hybrid pair is continuous through threshold: below it the decaying solution of the radial
+# equation with the potential (spin_orbit_potential.md section 2.4), against an independent integration.
+add_test(NAME pyazr_hybrid_threshold
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/hybrid_threshold_test.py)
+set_tests_properties(pyazr_hybrid_threshold PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
 # chiSquared.out written through the API carries the Park, abundance and scattering-length totals
 # (2026-10-27, audit item 30).
 # The fit's objective through pyazr (docs/upgrade/objective.md step 4): objective() = objective_and_grad()[0] = the sum

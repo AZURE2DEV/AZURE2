@@ -2,6 +2,7 @@
 #include "Objective.h"
 #include "ParameterLimitsManager.h"
 #include "AZUREAPI.h"
+#include "ChannelFunc.h"
 #include "ModelPass.h"
 #include "ScatteringLength.h"
 #include "AZUREParams.h"
@@ -1664,7 +1665,7 @@ vector_r AZUREAPI::GetPairsInfo() const {
 
 /*!
  * Coulomb wave functions, penetrability, shift function and hard-sphere phase
- * on a requested energy grid.
+ * on a requested energy grid; below threshold the shift function alone.
  *
  * These are ordinary R-matrix quantities that AZURE2 has always computed
  * internally; what is new is being able to ask for them.  The values follow the
@@ -1694,29 +1695,21 @@ vector_r AZUREAPI::GetCoulombFunctions(const vector_r &request) const {
   for (int i = 0; i < nE; ++i) {
     double energy = request[4 + i];
     double F = 0., dF = 0., G = 0., dG = 0., P = 0., S = 0., delta = 0.;
-    if (energy > 0.0) {
+    if (energy > 0.0 && !ChannelFunc::IsCoulombThreshold(pair, energy)) {
       try {
         CoulWaves w = coul(lValue, radius, energy);
-        F = w.F;
-        dF = w.dF;
-        G = w.G;
-        dG = w.dG;
+        F = w.F, dF = w.dF, G = w.G, dG = w.dG;
         P = coul.Penetrability(lValue, radius, energy);
         S = coul.PEShift(lValue, radius, energy);
         delta = -std::atan2(w.F, w.G);
       } catch (...) {
-        // A failed evaluation returns zeros for that energy rather than
-        // aborting the whole grid; the caller can see which points are missing.
+        // A failed evaluation returns zeros for that energy rather than aborting the grid.
         F = dF = G = dG = P = S = delta = 0.;
       }
+    } else if (radius == pair->GetChRad()) {  // closed (E <= 0, eta > 100): S through threshold (ChannelFunc)
+      S = ChannelFunc(pair, !!(configure().paramMask & Config::USE_GSL_COULOMB_FUNC)).Shift(lValue, energy);
     }
-    out.push_back(F);
-    out.push_back(dF);
-    out.push_back(G);
-    out.push_back(dG);
-    out.push_back(P);
-    out.push_back(S);
-    out.push_back(delta);
+    out.insert(out.end(), {F, dF, G, dG, P, S, delta});
   }
   return out;
 }

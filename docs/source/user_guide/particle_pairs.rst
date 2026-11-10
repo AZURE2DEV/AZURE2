@@ -439,9 +439,9 @@ Limits.  The hybrid nuclear-potential Coulomb functions (a ``<potential>``
 block) solve a Schrödinger equation outside the channel radius (between it and
 the 15 fm matching radius) and are refused
 with ``relativistic=1`` and on the entrance pair of a THM segment (the THM vertex uses point-Coulomb waves;
-``ERROR (E_THM_HYBRID_POTENTIAL)``); they bend the scattering functions only, not the
-bound-state tail, ANC conversion or NF integral of external capture
-(:doc:`pyazr`, "What the potential does not touch").  Target effects (beam spread, target thickness, sub-point
+``ERROR (E_THM_HYBRID_POTENTIAL)``); they bend the scattering functions and, below threshold, the
+decaying solution, its shift function, the ANC conversion and the bound-state tail of external capture
+(:doc:`pyazr`).  Target effects (beam spread, target thickness, sub-point
 grids) and energy shifts convert lab energy intervals to the c.m. frame with the
 constant ratio :math:`m_2/m`; the exact ratio :math:`m_2/\sqrt{s}` differs by
 :math:`T/m` of the interval (0.4 % of a few-keV shift at 20 MeV).  Photon

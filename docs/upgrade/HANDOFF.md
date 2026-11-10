@@ -51,6 +51,45 @@ note's DOP853 integration (`work/so-note/radial.py` B) gives 6e-9 / 2e-8.  Refer
 older drift inside the 2e-2 tolerance and 4.9e-5 is e²).  `pyazr.rst` and `hybrid_derivative_test.py` no longer call
 1e-5 the integration's accuracy; the latter now asks for 1e-6.
 
+**Part 3 — distorted bound states and closed channels (outputs of `hybrid_potential` move).**
+- `physics/HybridPotential.h`: `DecayingSolution` (W̃_l(r) at E = −B ≤ 0: the Whittaker function beyond r_m, the
+  zero-energy decaying solution √r K_{2l+1}(√(8cr)) at B = 0, inward by `IntegrateInward`, which now rescales a
+  solution past 1e250 into `log_scale`) and `HybridBoundShift` (S = aW̃′/W̃; closer to threshold than η_b = 1000 the
+  linear interpolation to S(0), as `coulomb_bound_shift`).  The Coulomb path's reflection S(E) = 2S(0) − S(−E) in the
+  band η > 100 is kept and now reflects the distorted S, so S is continuous through threshold (|S(E) − S(0)| ≤ 5e-4
+  for |E| ≤ 1 keV, p + ¹²C); no change of the Coulomb path for pairs without a potential.
+- One implementation, reached through the two engine classes every user already calls: `ShftFunc` (S, S′, S″ below
+  and at threshold → `ChannelFunc`, the channel table's closed rows, Brune/Park transformations) and `WhitFunc`
+  (W̃ for the ANC ↔ γ conversion of `CNucLevelParameters`, the EC conversion factor and NF integral of `CNuc`, the
+  final-state tail of `ECIntegral`) dispatch on `PPair::GetHybridPotential()`; a pair without one takes the old lines.
+- `coulomb_functions` (API, pyazr 2.17.1) returns S at E ≤ 0 and in the band η > 100 (channel radius only; before: 0,
+  and in the band the Coulomb routine's value).
+- Tests: `physics_hybrid_potential` parts 3–4 against `physics/tests/data/hybrid_bound.csv`
+  (`make_hybrid_bound_reference.py`: scipy DOP853 + mpmath Whittaker/Bessel/Coulomb): S on −2 … +0.5 MeV, l = 0–2, to
+  6.6e-8 (tolerance 1e-6), V_N = 0 rows (Whittaker/Coulomb S) to 1.1e-7, ln W̃(a) to 4.5e-10, ∫_a^∞ W̃² dr to 2.6e-8;
+  fails with E = +B instead of −B in `DecayingSolution`.  `pyazr_hybrid_threshold`: continuity (1e-3) and S at the
+  ¹³N ground state against the table (≤ 6.6e-8); fails with the undistorted S injected in `ShftFunc` (steps 1.06,
+  0.92, 0.75 for l = 0, 1, 2, the note's 1.07, 0.92, 0.75).
+- 179 × 3 against `tab-hyb2` (Part 2): only `hybrid_potential` moves (T3 has no state below the α + α threshold):
+
+| file | largest relative change | what moves physically | independent number |
+|---|---|---|---|
+| param.par, parameters.out | 0.166 (Park 0.153) | the ¹³N ground state's g_int (ANC 1.62 fm^-1/2 fixed): 1.271943 → 1.060263 MeV^1/2 | γ_obs = C W̃(a)(ħ²/2μa)^1/2 and g = γ_obs(1 − γ_obs² S′)^-1/2 from the DOP853 script: 1.060263 (old W, S′: 1.271943), to all printed digits |
+| AZUREOut_aa=1_R=1.out | 1.2e-2 | elastic p + ¹²C through the transformed bound level | follows from the above |
+| chiSquared.out | 9.3e-3 (segment 3 2238.82 → 2259.87) | same | — |
+| run.log | 0.69 | the χ² lines, and the Coulomb-table lookup count 66 → 20 (the hybrid pair's bound S no longer reads the table) | — |
+
+  Reference regenerated: `tests/hybrid_potential/expected/chiSquared.out`.  Docs: `pyazr.rst` (the "does not touch"
+  paragraph replaced), `particle_pairs.rst`, the hybrid README.
+- Verified (head of the branch, 3 threads): `ctest -LE slow` 164/164; `tests/run_tests.sh` see the commit message;
+  1 and 2 threads identical (T1–T3, 13N, hybrid_potential × 3 bases, 15/15); converted-tree gate 183 equal / 3
+  recorded / 0 differ; consistency at every commit.
+
+**Open / next.** The `<potentials>` record of format 3 (note §3.3) and the spin–orbit term (steps 3–5).
+`tests/hybrid_potential/check_per_pair.py` (not in ctest) pins χ² = 2462154.2 and fails on the start head's engine
+too (2466121.4 there; 2466142.3 now): a stale pin, not touched.  `E_THM_HYBRID_POTENTIAL` is an engine message, not
+yet a row of the format-3 diagnostic table (the potential is not a format-3 record yet).
+
 ## 2026-11-10 (evening) — brief I: the follow-ups of the model pass, and S5, the calculation plan (`feature/upgrade-4-plan`)
 
 **Done** (brief `work/briefs/I_plan.md`; full report `work/plan/REPORT.md`).

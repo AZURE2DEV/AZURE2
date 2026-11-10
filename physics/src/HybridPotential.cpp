@@ -4,7 +4,11 @@
 #include <cmath>
 #include <stdexcept>
 
+#include <limits>
+
+#include "azure2/physics/ChannelFunctions.h"
 #include "azure2/physics/Constants.h"
+#include "azure2/physics/coulomb/Whittaker.h"
 
 namespace azure2 {
 namespace physics {
@@ -99,6 +103,8 @@ RadialValue IntegrateInward(const HybridPotential &p, int z1, int z2, double mu_
   }
 
   // Numerov, inward from r_m.
+  RadialValue v;
+  const double kRescale = 1e250;
   const double dr2 = dr * dr;
   for (int i = npts - 3; i >= lowest; --i) {
     double denom = 1.0 + (dr2 / 12.0) * g[i];
@@ -107,12 +113,68 @@ RadialValue IntegrateInward(const HybridPotential &p, int z1, int z2, double mu_
     } else {
       u[i] = u[i + 1];
     }
+    if (std::abs(u[i].real()) > kRescale || std::abs(u[i].imag()) > kRescale) {
+      for (int j = i; j < npts; ++j) u[j] /= kRescale;
+      v.log_scale += std::log(kRescale);
+    }
   }
 
-  RadialValue v;
   v.u = u[n_a];
   v.du_dr = (u[n_a - 2] - 8.0 * u[n_a - 1] + 8.0 * u[n_a + 1] - u[n_a + 2]) / (12.0 * dr);
   return v;
+}
+
+namespace {
+
+/// ln of the decaying point-Coulomb solution beyond r_m at r (fm) and binding B >= 0 (MeV): W_{-eta_b,l+1/2}(2 kappa r)
+/// (unit ANC) for B > 0; sqrt(r) K_{2l+1}(sqrt(8 c r)) (charged) or r^-l (neutral) at B = 0.  NaN if out of range.
+double OuterLogDecaying(int l, double c_fm, double mu_MeV, double B_MeV, double r) {
+  if (B_MeV > 0.0) {
+    const double kappa = std::sqrt(2.0 * mu_MeV * B_MeV) / kHbarC_MeV_fm;  // fm^-1
+    const coulomb::WhittakerScaled w = coulomb::whittaker_scaled(l, c_fm / kappa, kappa * r);
+    if (w.status != coulomb::Status::ok) return std::numeric_limits<double>::quiet_NaN();
+    return std::log(w.mantissa) + (double)w.log10_scale * std::log(10.0);
+  }
+  if (!(c_fm > 0.0)) return -l * std::log(r);
+  const double x = std::sqrt(8.0 * c_fm * r);
+  return 0.5 * std::log(r) + std::log(bessel_k_scaled(2 * l + 1, x)) - x;
+}
+
+}  // namespace
+
+DecayingValue DecayingSolution(const HybridPotential &p, int z1, int z2, double mu_MeV, int l, double r_fm, double B_MeV) {
+  const double c = z1 * z2 * kFineStructure * mu_MeV / kHbarC_MeV_fm;  // eta_b kappa (fm^-1)
+  DecayingValue v;
+  if (r_fm > p.matching_radius_fm) {  // the point-Coulomb solution (B = 0: its log-derivative by a centred difference)
+    v.log_W = OuterLogDecaying(l, c, mu_MeV, B_MeV, r_fm);
+    if (B_MeV > 0.0) {
+      const double kappa = std::sqrt(2.0 * mu_MeV * B_MeV) / kHbarC_MeV_fm;
+      v.rho_dlog = coulomb::whittaker_scaled(l, c / kappa, kappa * r_fm).rho_dlog;
+    } else {
+      const double h = 1e-4 * r_fm;
+      v.rho_dlog = r_fm * (OuterLogDecaying(l, c, mu_MeV, B_MeV, r_fm + h) - OuterLogDecaying(l, c, mu_MeV, B_MeV, r_fm - h)) / (2.0 * h);
+    }
+    return v;
+  }
+  const double ref = OuterLogDecaying(l, c, mu_MeV, B_MeV, p.matching_radius_fm);
+  auto outer = [&](double r) { return std::complex<double>(std::exp(OuterLogDecaying(l, c, mu_MeV, B_MeV, r) - ref), 0.0); };
+  const RadialValue u = IntegrateInward(p, z1, z2, mu_MeV, l, r_fm, -B_MeV, outer);
+  v.sign = u.u.real() < 0.0 ? -1.0 : 1.0;
+  v.log_W = std::log(std::fabs(u.u.real())) + u.log_scale + ref;
+  v.rho_dlog = r_fm * u.du_dr.real() / u.u.real();
+  return v;
+}
+
+double HybridBoundShift(const HybridPotential &p, int z1, int z2, double mu_MeV, int l, double a_fm, double B_MeV) {
+  // As coulomb_bound_shift: closer to threshold than eta_b = 1000, the linear interpolation between S(-B_min) and S(0).
+  const double kEtaMax = 1000.0;
+  const double c = z1 * z2 * kFineStructure * mu_MeV / kHbarC_MeV_fm;
+  const double bindingMin = (c > 0.0) ? std::pow(kHbarC_MeV_fm * c / kEtaMax, 2.0) / (2.0 * mu_MeV) : 0.0;
+  auto S = [&](double B) { return DecayingSolution(p, z1, z2, mu_MeV, l, a_fm, B).rho_dlog; };
+  if (B_MeV >= bindingMin && B_MeV > 0.0) return S(B_MeV);
+  const double s0 = S(0.0);
+  if (!(B_MeV > 0.0)) return s0;
+  return s0 + (S(bindingMin) - s0) * (B_MeV / bindingMin);
 }
 
 }  // namespace physics

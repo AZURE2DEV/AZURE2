@@ -58,12 +58,11 @@ add_test(NAME physics_system_unit COMMAND physics_system_unit_test)
 # rules, gamma^ext and the formal-basis mask (docs/upgrade/external_capture.md section 5).  The 9j and the observable
 # coupling coefficients against the six-3j sum and m-scheme angular distributions (docs/upgrade/cnuc_split.md section 9).
 # The resonance strength, branching ratio and total width against numbers computed by hand and their derivatives
-# against central differences (docs/upgrade/data_kinds.md section 4.7).  The hybrid potential as a value and its
-# inward radial integration against the Coulomb functions with V_N = 0 (docs/upgrade/spin_orbit_potential.md).
+# against central differences (docs/upgrade/data_kinds.md section 4.7).
 # (Sources named in full: repo_consistency checks that every tests/*_test.cpp is named here.)
 foreach(_src angular_coupling_test.cpp symmetric_eigen_test.cpp level_parameters_unit_test.cpp
              external_capture_unit_test.cpp observable_coupling_test.cpp pathways_unit_test.cpp
-             resonance_quantities_test.cpp hybrid_potential_test.cpp)
+             resonance_quantities_test.cpp)
   string(REPLACE "_test.cpp" "" _t ${_src})
   add_executable(physics_${_t}_test tests/${_src})
   target_link_libraries(physics_${_t}_test PRIVATE azure2_physics)
@@ -110,6 +109,16 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
   target_compile_options(physics_whittaker_test PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 add_test(NAME physics_whittaker COMMAND physics_whittaker_test ${CMAKE_CURRENT_SOURCE_DIR}/tests/data/whittaker.csv)
+
+# The hybrid potential as a value, its inward radial integration against the Coulomb functions with V_N = 0, and the
+# distorted decaying solution (S, ln W~(a), int W~^2) against an independent integration (tests/data/hybrid_bound.csv,
+# make_hybrid_bound_reference.py; docs/upgrade/spin_orbit_potential.md).
+add_executable(physics_hybrid_potential_test tests/hybrid_potential_test.cpp)
+target_link_libraries(physics_hybrid_potential_test PRIVATE azure2_physics)
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+  target_compile_options(physics_hybrid_potential_test PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+add_test(NAME physics_hybrid_potential COMMAND physics_hybrid_potential_test ${CMAKE_CURRENT_SOURCE_DIR}/tests/data/hybrid_bound.csv)
 
 # Element symbols by Z against the AME2020 table the masses come from (pyazr/data/mass_1.mas20).
 add_executable(physics_elements_test tests/elements_test.cpp)
