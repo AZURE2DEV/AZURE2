@@ -28,6 +28,15 @@ Update this file at the end of every work session: what changed, what is next, w
 - Tests: `experiment_build` (units, sfactor, yields), `experiment_prediction` (Scaled), `pyazr_units_scales`,
   `nds_local_exfor` section 6, `tests/units_scales/check.sh` (the section 9.1 example on T2's levels, adaptive S grid).
 
+**Verified** (build `work/b-units`, 0 warnings): 183 + 1 projects x 3 bases against `tab-trial8`: 704 / 677 / 704
+identical, the 7 other files per basis those of the new `tests/units_scales/models/yield_story.azr` (tag
+`tab-units-final`); converted-tree gate (`gunits2`): 483 (456) identical, 38 classified, 0 differ, 0 missing; spec
+equivalence 194 files, 185 converted, 183 equal, 2 recorded, 0 differ; `ctest -LE slow` 172/172 (after adding the new
+project's three lines to `tests/upgrade/predictions.txt`); calculations at 1 and 2 threads on T1-T3, 13N in three
+bases identical; every new test shown failing once with an injected error (multiplying instead of dividing in
+`Rescale`, the S factor at the lab energy, charge state 1, the S-factor node dropped, pi = 3.1416, mass numbers in
+`sfactor_to_cross_section`).  `tests/run_tests.sh` (OMP 2) 143 passed, 0 failed (with `units_scales`).
+
 **Open.** AZUREOut files of an S-factor or per-charge data set print the model in the cross-section column and that
 times E exp(2 pi eta) in the S column (the output writer is in the data-class files); `calculate_sfactor_rwa` likewise.
 `EPoint`'s own S-factor conversion (output column) is a second formula of the same factor (bit-different association).
