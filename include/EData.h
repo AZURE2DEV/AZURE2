@@ -324,6 +324,7 @@ class EData {
     results.objective.norm.resize(segments_.size() + 1, 0.0);
     results.objective.segmentChi2.resize(segments_.size() + 1, 0.0);
     results.objective.thmProfiles.resize(thmGroups_.size());
+    results.objective.covarianceSeed.resize(covGroups_.empty() ? 0 : modelSize_, 0.0);
   }
   /// Lay the adaptive sub-point grids out again for the levels theCNuc holds now
   /// (its fit values, as observed parameters) and the segments' energy shifts, and

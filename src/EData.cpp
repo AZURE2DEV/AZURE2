@@ -4439,10 +4439,8 @@ double EData::CovarianceChi2Correction(azure2::Results &results, std::vector<dou
     for (int a = 0; a < g.n; a++) q += z[a] * z[a];
     g.WhitenTranspose(z.data());
     correction += q - diag;
-    for (int a = 0; a < g.n; a++) {
-      ESegment *seg = this->GetSegment(g.members[a].first);
-      seg->SetCovarianceSeed(g.members[a].second, z[a]);
-    }
+    for (int a = 0; a < g.n; a++)
+      this->GetSegment(g.members[a].first)->GetPoint(g.members[a].second + 1)->SetCovarianceSeed(results, z[a]);
     // Per-segment chi2: the exact partition sum_i r_i (M^-1 r)_i of the group's chi2.
     std::map<int, double> part;
     for (int a = 0; a < g.n; a++) part[g.members[a].first] += r[a] * z[a];

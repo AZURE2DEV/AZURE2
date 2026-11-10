@@ -553,6 +553,9 @@ class EPoint {
   int ModelAngularSlots() const { return num_model_ang_; }
   double GetModelValue(const azure2::Results &r) const { return r.model[ModelRecord(r)]; }
   void SetModelValue(azure2::Results &r, double v) const { r.model[ModelRecord(r)] = v; }
+  /// The point's covariance seed (M^-1 r)_i (Results::ObjectiveValues::covarianceSeed), at its model record.
+  double GetCovarianceSeed(const azure2::Results &r) const { return r.objective.covarianceSeed.at(ModelRecord(r)); }
+  void SetCovarianceSeed(azure2::Results &r, double z) const { r.objective.covarianceSeed.at(ModelRecord(r)) = z; }
   /// The coefficients a_k of an angular-distribution point as the model record holds them (count, then values).
   int GetNumModelAngularDists(const azure2::Results &r) const {
     if (!num_model_ang_) return 0;

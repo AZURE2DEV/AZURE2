@@ -1010,7 +1010,7 @@ bool AZUREAPI::Chi2GradEGammaNorm(const vector_r &full, vector_r &gradFull,
     chi2 += (r * r) / (err * err);
     if (seg->GetCovarianceGroup() >= 0) {
       // d chi2/d r_i = 2 z_i, z = M^-1 r; d r_i/d model = 1/(cmErr n), d r_i/d n = -model/(cmErr n^2).
-      const double z = seg->GetCovarianceSeed(pid);
+      const double z = pt->GetCovarianceSeed(results());
       const int o = ld->NormOwner(i);
       if (norm != 0.0 && o >= 1 && o < (int)normData.size() && ld->GetSegment(o)->IsVaryNorm()) {
         const double dNorm = -2.0 * z * model / (cmErr * norm * norm);
