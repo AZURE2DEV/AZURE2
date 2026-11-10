@@ -85,8 +85,9 @@ double ThmFormFactor(int l, double b, double mu, double E, double B,
  *
  * E = 0 exactly returns the common limit of both sides, O(r)/O(a) ->
  * sqrt(r/a) K_{2l+1}(sqrt(8 eta k r)) / K_{2l+1}(sqrt(8 eta k a)) (real).  For
- * E <= 0 the result is real.  O_l is the point-Coulomb wave: a hybrid nuclear
- * potential, if enabled for the pair, is not applied here.
+ * E <= 0 the result is real.  O_l is the point-Coulomb wave: a THM segment
+ * whose entrance pair has a hybrid nuclear potential is refused at set-up
+ * (E_THM_HYBRID_POTENTIAL, ThmVertexAllowsPair).
  *
  * Numerics (details in src/ThmFunc.cpp): Gauss-Legendre panels on the real
  * axis; for E > 0 the conditionally convergent tail beyond the asymptotic

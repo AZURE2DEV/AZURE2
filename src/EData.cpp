@@ -12,6 +12,7 @@
 #include "Minuit2/MnUserParameters.h"
 #include "AZUREParams.h"
 #include "GSLException.h"
+#include "ThmVertexBoundary.h"
 #include <gsl/gsl_linalg.h>
 #include <map>
 #include <tuple>
@@ -19,7 +20,6 @@
 #include <gsl/gsl_vector.h>
 #include <cmath>
 #include <limits>
-#include "NuclearPotentialManager.h"
 #include <algorithm>
 #include <atomic>
 #include <chrono>
@@ -370,6 +370,7 @@ int EData::Fill(const Config &configure, CNuc *theCNuc, const azure2::experiment
           if (!TotalAllowed(theCNuc, NewSegment, numTotalSegments, false, configure)) return -1;
           if (!BetaDelayedAllowed(theCNuc, NewSegment, numTotalSegments, false, configure)) return -1;
           if (!UPOSAllowed(theCNuc, NewSegment, numTotalSegments, false, configure)) return -1;
+          if (!ThmVertexAllowsPair(theCNuc, NewSegment, numTotalSegments, false, configure)) return -1;
           if (!TotalCaptureCodeOk(NewSegment, numTotalSegments, false, configure)) return -1;
           UPOSLabNote(NewSegment, numTotalSegments, false, configure);
           bool isValidTotal = false;
@@ -561,6 +562,7 @@ int EData::MakePoints(const Config &configure, CNuc *theCNuc, const azure2::expe
           if (!TotalAllowed(theCNuc, NewSegment, numTotalSegments, true, configure)) return -1;
           if (!BetaDelayedAllowed(theCNuc, NewSegment, numTotalSegments, true, configure)) return -1;
           if (!UPOSAllowed(theCNuc, NewSegment, numTotalSegments, true, configure)) return -1;
+          if (!ThmVertexAllowsPair(theCNuc, NewSegment, numTotalSegments, true, configure)) return -1;
           if (!TotalCaptureCodeOk(NewSegment, numTotalSegments, true, configure)) return -1;
           UPOSLabNote(NewSegment, numTotalSegments, true, configure);
           bool isValidTotal = false;
@@ -2916,19 +2918,10 @@ std::string EData::ECSignature(CNuc *theCNuc, const Config &configure) {
     hash.Add(pair->GetChRad());
     // The hybrid potential bends the Coulomb functions of this pair, and so
     // both the entrance-channel phases and the final-state integrand.
-    // (CoulFunc applies it when the global switch and the pair's own
-    // setting are both on.)
-    const NuclearPotentialManager &potentials = NuclearPotentialManager::instance();
-    bool hybrid = configure.useHybridMethod && potentials.isPairEnabled(pair->GetPairKey());
-    hash.Add(hybrid ? 1 : 0);
-    if (hybrid) {
-      NuclearPotentialSetting setting = potentials.getSetting(pair->GetPairKey());
-      hash.Add(setting.type.c_str());
-      hash.Add(setting.V0);
-      hash.Add(setting.R);
-      hash.Add(setting.a);
-      hash.Add(setting.r0);
-    }
+    const std::optional<azure2::physics::HybridPotential> &potential = pair->GetHybridPotential();
+    hash.Add(potential ? 1 : 0);
+    if (potential)
+      for (double v : azure2::physics::PotentialKey(potential)) hash.Add(v);
   }
   return hash.Hex();
 }

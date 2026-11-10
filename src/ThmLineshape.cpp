@@ -8,7 +8,6 @@
 #include "ChannelFunc.h"
 #include "Config.h"
 #include "JGroup.h"
-#include "NuclearPotentialManager.h"
 #include "PPair.h"
 #include "ThmExperiment.h"
 
@@ -99,16 +98,15 @@ double ThmLevelWidth(CNuc *compound, JGroup *jgroup, ALevel *level, const Config
   // The Coulomb table in use (P and dS/dE come from it where it covers a channel).
   key.push_back((double)reinterpret_cast<std::uintptr_t>(
       (g_config && g_config->useCoulombTable) ? CoulombTable::Shared(g_config->coulombTablePath) : nullptr));
-  const bool hybridOn = g_config ? g_config->useHybridMethod : false;
   for (int ch = 1; ch <= numChannels; ch++) {
     AChannel *channel = jgroup->GetChannel(ch);
     PPair *pair = compound->GetPair(channel->GetPairNum());
-    const bool hybrid = hybridOn && NuclearPotentialManager::instance().isPairEnabled(pair->GetPairKey());
     const double values[] = {level->GetFitGamma(ch), (double)channel->GetL(), (double)channel->GetRadType(),
                              (double)pair->GetZ(1), (double)pair->GetZ(2), pair->GetRedMass(), pair->GetChRad(),
-                             pair->GetSepE(), pair->GetExE(), pair->GetJ(2), (double)pair->GetPi(2),
-                             hybrid ? (double)NuclearPotentialManager::instance().tagFor(pair->GetPairKey()) : 0.0};
+                             pair->GetSepE(), pair->GetExE(), pair->GetJ(2), (double)pair->GetPi(2)};
     key.insert(key.end(), values, values + sizeof(values) / sizeof(values[0]));
+    const std::vector<double> potential = azure2::physics::PotentialKey(pair->GetHybridPotential());
+    key.insert(key.end(), potential.begin(), potential.end());
   }
   for (const Entry &m : memo)
     if (m.key == key) return m.width;

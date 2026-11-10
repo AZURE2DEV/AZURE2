@@ -4,7 +4,7 @@
 #   python3 tests/consistency/repo_consistency_test.py --tighten-sizes
 # Entries are added by the director only.
 api/src/AZUREAPI.cpp	1837
-api/src/pybind_api.cpp	1299
+api/src/pybind_api.cpp	1283
 physics/coulomb/coul/src/cwfcomp.cpp	1440
 physics/coulomb/coulsm/src/cwfcomp.cpp	2070
 pyazr/azrfile.py	3756
@@ -17,7 +17,7 @@ src/AZURECalcMCMC.cpp	1434
 src/AZUREGrad.cpp	1850
 src/CNuc.cpp	1931
 src/EData.cpp	5528
-src/EDataThm.cpp	1233
-src/EPoint.cpp	2983
+src/EDataThm.cpp	1232
+src/EPoint.cpp	2982
 src/ESegment.cpp	1406
 src/ThmExperiment.cpp	1026

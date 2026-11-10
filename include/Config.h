@@ -7,6 +7,7 @@
 #include <mutex>
 #include <set>
 
+#include "HybridPotentialSettings.h"
 #include "ThmOptions.h"
 
 /// A structure holding the reaction rate calculation configuration
@@ -116,8 +117,10 @@ class Config {
   RateParams rateParams;
   /// NLopt algorithm selection (0=SBPLX, 1=COBYLA, 2=BOBYQA, 3=NEWUOA, 4=PRAXIS, 5=Nelder-Mead)
   int nloptAlgorithm;
-  /// Use hybrid Coulomb method with nuclear potential
+  /// Use hybrid Coulomb method with nuclear potential: potentials.AnyEnabled(), set with them
   bool useHybridMethod;
+  /// The hybrid nuclear potentials of the project, per pair (the <potential> block; pyazr's set_nuclear_potential)
+  HybridPotentialSettings potentials;
   /// Extra MIGRAD passes after re-freezing the model of relvector data-covariance terms at the
   /// fitted parameters (--refreeze-covariance[=N]); 0 = none.  The final outputs always use the
   /// model re-frozen at the fitted parameters, so they match a calculation from param.sav.

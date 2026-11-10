@@ -2,6 +2,32 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-10 — agent, brief O: the hybrid potential as a value, one e², distorted bound states (`feature/upgrade-4-hybrid-potential`)
+
+**Part 1 — the potential as a value (bit-identical).**
+- `physics/HybridPotential.h`: `FormFactor`, `HybridPotential` (`coulomb_radius_fm` 3.5, `central_depth_MeV`, `central`,
+  `matching_radius_fm` 15, `step_fm` 0.0275), compared by value; `PotentialKey` (the numbers of a potential for keys);
+  `IntegrateInward` (the Numerov solver, a free function; the loop stops at node n_a - 2, the last one read).
+- The settings are values in the run's or session's `Config` (`HybridPotentialSettings`, `include/` +
+  `src/HybridPotentialSettings.cpp`); `CNuc::Fill` gives each `PPair` its `std::optional<HybridPotential>`; `CoulFunc`
+  reads it from the pair.  Chosen over the System because `CoulFunc` is built from a `PPair` at every point and the
+  System is rebuilt from `CNuc` on demand; the pair is set-up state owned by the caller's `CNuc`.
+- Deleted: `NuclearPotentialManager` (singleton, tags, counter, `exportState`/`importState`), `NuclearPotential.h`
+  (class hierarchy), pyazr's `ConfigScope` potential swap, `CoulFunc`'s dead setters (`setMatchingRadius`,
+  `setNumerovGridStep`, `setNuclearPotential`, `setUseHybridMethod`).  The channel table's pair signature, the EC term
+  key, the radial scratch key, the shift-derivative memo, the THM line-shape memo and the THM vertex memo compare the
+  potential's values; the EC signature hashes `PotentialKey` (hybrid EC caches are recomputed once).
+- THM: a THM segment whose entrance pair has a potential is refused, `ERROR (E_THM_HYBRID_POTENTIAL)`
+  (`ThmVertexAllowsPair`, `src/ThmVertexBoundary.cpp`); no committed project had one.  Test: `tests/thm_options` (j).
+- Words: "outside the channel radius" (`CNuc.cpp`, `particle_pairs.rst`), "inward" (`tests/hybrid_potential/tolerance`).
+- Verified: 179 × 3 identical to `tab-p3f` (tag `tab-hyb1`, 689 / 662 / 689); `ctest -LE slow` 163/163; pyazr
+  `coulomb_functions` (pairs 1, 2, L = 0–3, six energies) and `calculate` of `tests/hybrid_potential` byte-identical to
+  `work/b-trial3` (65 arrays); `potential_sessions_test.py` passes and fails with a function-static shared settings
+  object injected into `CNuc::Fill`; `physics_hybrid_potential` fails with the step left out of `operator==`;
+  `thm_options` (j) fails on `work/b-trial3` (the run goes through); `tests/run_tests.sh` 138 / 0;
+  calculations at 1 and 2 threads identical (T1, T2, T3, 13N, hybrid_potential × 3 bases, 15/15); converted-tree gate
+  (`convert_spec_equivalence_test`) 183 equal, 3 recorded, 0 differ.
+
 ## 2026-11-10 (evening) — brief I: the follow-ups of the model pass, and S5, the calculation plan (`feature/upgrade-4-plan`)
 
 **Done** (brief `work/briefs/I_plan.md`; full report `work/plan/REPORT.md`).

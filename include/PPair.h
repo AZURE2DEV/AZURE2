@@ -1,7 +1,10 @@
 #ifndef PPAIR_H
 #define PPAIR_H
 
+#include <optional>
+
 #include "Decay.h"
+#include "azure2/physics/HybridPotential.h"
 
 namespace azure2 {
 namespace io {
@@ -112,6 +115,10 @@ class PPair {
   /// differential cross section, which by convention counts particles, carries
   /// a further 2 of its own (GenMatrixFunc).
   double GetEntranceSymmetryFactor() const;
+  /// The nuclear potential of the hybrid model for this pair (spin_orbit_potential.md section 1.1), none for a pair
+  /// with plain Coulomb functions.  Set by CNuc::Fill from Config::potentials.
+  const std::optional<azure2::physics::HybridPotential> &GetHybridPotential() const { return hybrid_potential_; }
+  void SetHybridPotential(const std::optional<azure2::physics::HybridPotential> &p) { hybrid_potential_ = p; }
   void AddDecay(Decay);
   /// Removes every Decay (tests/upgrade/pathways_from_cnuc_test.cpp rebuilds the trees with the code before step 6a).
   void ClearDecays();
@@ -143,6 +150,7 @@ class PPair {
   double red_mass_;
   double i1i2factor_;
   std::vector<Decay> decays_;
+  std::optional<azure2::physics::HybridPotential> hybrid_potential_;
 };
 
 #endif

@@ -9,7 +9,7 @@ RMatrixFunc.cpp AZUREOutput.cpp  EDataIterator.cpp   TargetEffect.cpp
 AZUREParams.cpp EPoint.cpp Interference.cpp CNuc.cpp Equation.cpp
 JGroup.cpp Config.cpp ESegment.cpp ModelPass.cpp Predictions.cpp CalculationPlan.cpp KGroup.cpp IntegratedFermiFunc.cpp
 EffectiveCharge.cpp  GSLException.cpp ParameterLimitsManager.cpp
-AdaptiveIntegrationGrid.cpp NuclearPotentialManager.cpp AZUREGrad.cpp ThmFunc.cpp
+AdaptiveIntegrationGrid.cpp HybridPotentialSettings.cpp AZUREGrad.cpp ThmFunc.cpp
 THMMatrixFunc.cpp ThmVertexBoundary.cpp ThmNumerics.cpp EDataThm.cpp ConfigThm.cpp ThmExperiment.cpp ThmLineshape.cpp ThmDistortion.cpp ThmOptical.cpp ThmDwVertex.cpp ThmAngular.cpp CovarianceBand.cpp PriorCovariance.cpp ParameterLabel.cpp PolarizationFunc.cpp ChannelFunc.cpp CoulombTable.cpp
 CNucSystem.cpp CNucLevelParameters.cpp CNucExternalCapture.cpp CNucReport.cpp CNucChecks.cpp
 CNucTransformMessages.cpp OldLineSetup.cpp)
