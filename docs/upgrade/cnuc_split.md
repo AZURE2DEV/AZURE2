@@ -444,7 +444,8 @@ tokens of segment lines) is not moved, see "Remaining steps".
 - **Step 6b** (consumers of the pathway trees read the physics result): design in section 11 — the inventory of the
   readers (320 tree accesses outside `CNuc.cpp`, 86 in it), the immutable `PathwayTable` built by `CNuc::Initialize`
   from `reaction_pathways` and the coupling coefficients and shared by every working copy, and eight bit-identical
-  steps ending with the deletion of the trees.
+  steps ending with the deletion of the trees.  Done on `feature/upgrade-4-pathway-table-1`: steps 1, 2, 4, 5 and 7
+  without the capture-A_y block; open: steps 3, 6 and 8 (they edit `EData*`/`EPoint*`).
 - **Step 3b (iii)** (hybrid channels as (α, l, j)): today's hybrid potential is central and keyed by the pair
   (`NuclearPotentialManager::tagFor(pairKey)`), so the channel functions do not depend on j; (α, l, j) entries need a
   spin-orbit term first (a new physics feature: `<potential>` grammar, `NuclearPotentialManager`, `CoulFunc`, the
