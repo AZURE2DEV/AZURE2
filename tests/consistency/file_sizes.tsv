@@ -16,7 +16,7 @@ src/AZURECalc.cpp	2075
 src/AZURECalcMCMC.cpp	1434
 src/AZUREGrad.cpp	2036
 src/CNuc.cpp	1931
-src/EData.cpp	5081
+src/EData.cpp	4841
 src/EDataThm.cpp	1233
 src/EPoint.cpp	3006
 src/ESegment.cpp	1446

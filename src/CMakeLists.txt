@@ -11,6 +11,7 @@ JGroup.cpp Config.cpp ESegment.cpp ModelPass.cpp KGroup.cpp IntegratedFermiFunc.
 EffectiveCharge.cpp  GSLException.cpp ParameterLimitsManager.cpp
 AdaptiveIntegrationGrid.cpp NuclearPotentialManager.cpp AZUREGrad.cpp ThmFunc.cpp
 EDataOutputFiles.cpp
+EDataCheckFiles.cpp
 THMMatrixFunc.cpp ThmVertexBoundary.cpp ThmNumerics.cpp EDataThm.cpp ConfigThm.cpp ThmExperiment.cpp ThmLineshape.cpp ThmDistortion.cpp ThmOptical.cpp ThmDwVertex.cpp ThmAngular.cpp CovarianceBand.cpp PriorCovariance.cpp ParameterLabel.cpp PolarizationFunc.cpp ChannelFunc.cpp CoulombTable.cpp
 CNucSystem.cpp CNucLevelParameters.cpp CNucExternalCapture.cpp CNucReport.cpp CNucChecks.cpp
 CNucTransformMessages.cpp OldLineSetup.cpp)
