@@ -70,9 +70,12 @@ class EData {
    * of the segment line stays the start value.  Without a row the field is
    * both, as it always was.  Three-token rows are skipped by the older
    * <parameterSettings> readers (engine and GUI), which then fall back to the
-   * field.  Returns -1 on a malformed row.
+   * field.  `numSegmentLines` is the number of <segmentsData> lines, active or
+   * not (their keys are 1..numSegmentLines).  A row naming a line that is not
+   * active is reported and ignored; a row naming anything else, or with a
+   * centre that is not a number, returns -1.
    */
-  int ReadPriorCentres(const Config &);
+  int ReadPriorCentres(const Config &, int numSegmentLines);
   /// Index at which the sqrt(E) energy-shift coefficients start in the Minuit vector.
   int GetEnergyShiftSqrtParamOffset() const;
   /// Index at which the shift-function parameters start in the Minuit vector (after the sqrt(E)

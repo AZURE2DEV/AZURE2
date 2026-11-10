@@ -1361,7 +1361,24 @@ int runMCMC(Config &configure, const MCMCParams &mcmcParams) {
               double priorStd = std::atof(parts[parts.size() - 2].c_str());
               bool usePrior = (std::atoi(parts[parts.size() - 1].c_str()) == 1);
 
-              if (paramOfRow >= 0) priorMap[paramOfRow] = std::make_tuple(priorMean, priorStd, usePrior);
+              if (paramOfRow < 0) {
+                // A prior that is silently not applied is a wrong chain that looks right.
+                configure.outStream << "ERROR: <mcmc> <parameters> row \"" << line << "\": \"" << rawParamName
+                                    << "\" names no parameter of this model.  A row names a parameter by its whole "
+                                    << "name as in param.sav (energy_1, width_1_2, segment_1_norm, ...), optionally "
+                                    << "as \"label (name)\", or by the short forms E<n>, G<n><c>, N<k>, S<k>, "
+                                    << "followed by: value, prior mean, prior sigma, use (0 or 1)." << std::endl;
+                delete compound;
+                delete data;
+                return -1;
+              }
+              priorMap[paramOfRow] = std::make_tuple(priorMean, priorStd, usePrior);
+            } else {
+              configure.outStream << "ERROR: <mcmc> <parameters> row \"" << line << "\": expected a parameter name "
+                                  << "followed by: value, prior mean, prior sigma, use (0 or 1)." << std::endl;
+              delete compound;
+              delete data;
+              return -1;
             }
           }
         }

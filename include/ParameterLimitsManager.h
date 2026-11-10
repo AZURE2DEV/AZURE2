@@ -82,7 +82,8 @@ class ParameterLimitsManager {
 
   // Internal functions
   /// The parameter at full-vector index paramIndex set to a physical value (a level width in eV), as the fit
-  /// parameter (the reduced-width amplitude) that value corresponds to.
+  /// parameter (the reduced-width amplitude) that value corresponds to.  Called for widths only; an index outside
+  /// the level parameters returns the value unchanged.
   double ConvertPhysicalLimitToReduced(double physicalLimit, int paramIndex) const;
   void ApplyParameterSettingByIndex(int nonFixedIndex, int actualIndex, AZUREParams &params);
   /*!

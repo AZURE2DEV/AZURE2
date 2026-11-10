@@ -11,7 +11,7 @@
 # lengths ("parameter classification produced 6 entries but there are 7
 # parameters"), and the run dropped the automatic priors AND the level-energy
 # spread, scattering every energy by the percentage spread instead (5 % of a
-# 4.6 MeV level is 230 keV).  Kinds now come from the parameter names.
+# 4.6 MeV level is 230 keV).  Kinds now come from each parameter's record.
 #
 # Runs (24 walkers, 100 steps, level-energy spread 0.5 keV, physical
 # parameters, a few seconds each):
@@ -23,7 +23,9 @@
 #               the free THM norm is profiled (no parameter);
 #   thm_cbkg    the same with a free coherent background (Re, Im) and a prior
 #               on Re defined in <mcmc>: no automatic prior for cbkg, the
-#               user's kept.
+#               user's kept;
+#   pp_short, pp_badrow   pp_plain with an <mcmc> prior row "E1 ..." (applied) and
+#               "width_01_2 ..." (names no parameter: the run stops with a message).
 # Each must classify without the warning, report the level energies as
 # limited to 0.5 keV, and start its walkers within a few keV of each level
 # (range of each energy over the walkers of the first step < 10 keV, > 0).
@@ -134,7 +136,16 @@ stage thm_cbkg "$TOY" toy.azr
   printf '<mcmc>\n<parameters>\ncbkg_E_1/2+_2_1/2,0,1/2,0_re0 0.05 0.05 0.01 1\n</parameters>\n</mcmc>\n'
 } > "$WORK/thm_cbkg/run.azr"
 
-for v in pp_sqrt pp_plain thm thm_cbkg; do mcmc "$v"; done
+# <mcmc> prior rows name their parameter: a short form (E1, the first level's energy) is applied; a row that names
+# no parameter (the old spelling width_01_2) stops the run with a message, instead of leaving that prior out.
+stage pp_short "$ESQ" energy_shift_sqrt.azr
+{ cat "$WORK/pp_plain/run.azr"; printf '<mcmc>\n<parameters>\nE1 0 0 0.01 1\n</parameters>\n</mcmc>\n'; } \
+  > "$WORK/pp_short/run.azr"
+stage pp_badrow "$ESQ" energy_shift_sqrt.azr
+{ cat "$WORK/pp_plain/run.azr"; printf '<mcmc>\n<parameters>\nwidth_01_2 0 0 0.01 1\n</parameters>\n</mcmc>\n'; } \
+  > "$WORK/pp_badrow/run.azr"
+
+for v in pp_sqrt pp_plain thm thm_cbkg pp_short pp_badrow; do mcmc "$v"; done
 
 echo "== sqrt(E) coefficient free"
 check pp_sqrt 5 "Automatic priors: 1 normalization, 2 energy shifts"
@@ -145,6 +156,16 @@ check thm 1 "Automatic priors: 0 normalizations, 0 energy shifts"
 echo "== THM, coherent background"
 check thm_cbkg 1 "2 THM coherent-background parameters: 1 with a user-defined prior, the others uniform (no automatic prior)" \
   "Found 1 Gaussian prior(s) in AZURE2 file."
+
+echo "== <mcmc> prior rows"
+if grep -q "Found 1 Gaussian prior(s) in AZURE2 file." "$WORK/pp_short/log" && \
+   grep "Level 1 Energy (MeV)" "$WORK/pp_short/log" | grep -q "Yes (Gaussian)"; then
+  ok "pp_short: the short form E1 sets the first level energy's prior"
+else bad "pp_short: E1 not applied"; grep "Level 1 Energy" "$WORK/pp_short/log" | sed 's/^/        /'; fi
+if [ "$(cat "$WORK/pp_badrow/status")" != 0 ] && grep -q '"width_01_2" names no parameter of this model' "$WORK/pp_badrow/log" && \
+   [ ! -s "$WORK/pp_badrow/output/samples.mcmc" ]; then
+  ok "pp_badrow: a row naming no parameter stops the run ($(grep -o 'names no parameter of this model' "$WORK/pp_badrow/log" | head -1))"
+else bad "pp_badrow: status $(cat "$WORK/pp_badrow/status"), $(grep -c 'names no parameter' "$WORK/pp_badrow/log") error line(s)"; fi
 
 [ "$fail" -eq 0 ] && echo "  PASS" || echo "  FAIL"
 [ "$fail" -eq 0 ]

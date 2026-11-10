@@ -363,12 +363,16 @@ void ParameterLimitsManager::ApplyParameterSettingByIndex(int nonFixedIndex, int
     p.SetLimits(paramName, lower, upper);
   }
 
-  // If nuisance parameter, convert nominal value and error
-  if (!params.Record(actualIndex).Row().segmentField && setting->useAsNuisance) {
+  // A nuisance prior on a width is given as a partial width (eV) and converted to the reduced-width amplitude; on any
+  // other parameter it is used as given (NuisancePrior reads the reduced values of a width only).
+  if (setting->useAsNuisance && isWidth) {
     setting->nominalValueReduced = ConvertPhysicalLimitToReduced(setting->nominalValue, actualIndex);
     double errorSmall = std::abs(setting->nominalValueReduced - ConvertPhysicalLimitToReduced(setting->nominalValue - setting->error, actualIndex));
     double errorLarge = std::abs(ConvertPhysicalLimitToReduced(setting->nominalValue + setting->error, actualIndex) - setting->nominalValueReduced);
     setting->errorReduced = std::max(errorSmall, errorLarge);
+  } else if (setting->useAsNuisance) {
+    setting->nominalValueReduced = setting->nominalValue;
+    setting->errorReduced = setting->error;
   }
 }
 
@@ -382,6 +386,11 @@ double ParameterLimitsManager::ConvertPhysicalLimitToReduced(double physicalLimi
 
   try {
     vector_r currentParams = clone->GetTransformParams(*config_);
+    // Only the level parameters (and abundances) are in the physical vector; the callers convert widths only.
+    if (paramIndex < 0 || paramIndex >= (int)currentParams.size()) {
+      delete clone;
+      return physicalLimit;
+    }
 
     currentParams[paramIndex] = physicalLimit;
     clone->FillCompoundFromParamsPhysical(currentParams);

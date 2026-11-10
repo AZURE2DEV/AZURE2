@@ -59,8 +59,9 @@ tests used to answer:
 | `src/AZURECalc.cpp` 1451 | Levenberg–Marquardt gradient scale of a density | kind `Density` |
 | `src/AZUREMain.cpp` 784 | the band covariance's column names: free level parameters | kinds `LevelEnergy`, `Gamma` |
 | `src/AZURECalcMCMC.cpp` 572; its `PARAM_*` enum | a prior covariance on level parameters refused for a physical chain; prior rules | kinds through `FullIndex`; `ParamKind`, `ownPrior` |
-| `src/AZURE2.cpp` 1102–1228 `createPrettyParameterName` | the MCMC table's names; matching `<mcmc>` prior rows | `PrettyParameterName(record)`; `FindMcmcPriorParameter` |
-| `src/EData.cpp` 641–650 | `segment_N_norm` and `segment_N_energy_shift prior_centre` rows | whole name against `SegmentParameterName` |
+| `src/AZURE2.cpp` 1102–1228 `createPrettyParameterName` | the MCMC table's names; matching `<mcmc>` prior rows | `PrettyParameterName(record)`; `FindMcmcPriorParameter` (a row naming no parameter is an error) |
+| `src/ParameterLimitsManager.cpp` nuisance conversion | converted every non-segment nuisance row through the level parameters (out of bounds for screening, cbkg, …) | widths only (kind `Gamma`) |
+| `src/EData.cpp` 641–650 | `segment_N_norm` and `segment_N_energy_shift prior_centre` rows | whole name against `SegmentParameterName` of every line key: active applied, inactive warned, any other name an error |
 | `src/ThmExperiment.cpp` `ApplyThmCoherentValues` | (no callers) | deleted |
 | `pyazr/parameters.py` 179; `_KINDS` | an abundance's sample name; the kind keys | record `sample_name`; `parameter_kinds()` |
 | `pyazr/azure2.py` 862, 1161–1180 | extrapolation skips segment rows of a `.sav`; `save_fit` of `cbkg_*` | `segment_field`; `thm_*` fields |

@@ -583,7 +583,7 @@ int EData::Fill(const Config &configure, CNuc *theCNuc) {
   if (this->ResolveThicknessGroups(configure) == -1) return -1;
   if (this->ResolveCovarianceGroups(configure) == -1) return -1;
 
-  if (ReadPriorCentres(configure) != 0) return -1;
+  if (ReadPriorCentres(configure, numTotalSegments) != 0) return -1;
 
   if (CheckThmWeights(configure, configure.thm.weightBySegment, "weight", "<segmentsData>",
                       numTotalSegments, this) != 0)
@@ -604,15 +604,19 @@ int EData::Fill(const Config &configure, CNuc *theCNuc) {
  * moves the nominal normalization / energy shift of the segments they name.
  * Only rows of exactly three tokens whose second token is "prior_centre" are
  * read; every other row is left to ParameterLimitsManager, as before.  The
- * first token is matched whole against the names of the active segments'
- * normalization and energy-shift parameters (SegmentParameterName); a row that
- * names none of them -- a segment key with no active segment (an inactive line
- * keeps its key), or any other name -- is reported and ignored; a centre that
- * is not a finite number, or a normalization centre that is not positive,
- * fails the run.
+ * first token is matched whole against the normalization and energy-shift
+ * names (SegmentParameterName) of every <segmentsData> line, keys
+ * 1..numSegmentLines: a row for an active segment moves its prior's centre; a
+ * row for a line that is not active (an inactive line, or one skipped at load)
+ * is reported and ignored; any other name fails the run -- a typo would
+ * otherwise leave the prior where it was, a wrong fit that looks right.  A
+ * centre that is not a finite number, or a normalization centre that is not
+ * positive, fails the run too.  Segment keys are unique in segments_ (each is
+ * the line counter of EData::Fill at its one AddSegment), so at most one
+ * segment matches; the loop applies the row to every match all the same.
  */
 
-int EData::ReadPriorCentres(const Config &configure) {
+int EData::ReadPriorCentres(const Config &configure, int numSegmentLines) {
   // The <parameterSettings> section (Config::SectionStream: io::Document, whole-line tags).
   std::unique_ptr<std::istream> section = configure.SectionStream("parameterSettings");
   if (!section) return 0;
@@ -641,16 +645,29 @@ int EData::ReadPriorCentres(const Config &configure) {
 
     // The row names its parameter by the whole name the parameter vector gives it (SegmentParameterName).
     const std::string &name = tok[0];
-    int pos = 0;
+    int key = 0;
     bool isNorm = false;
-    for (int s = 1; s <= this->NumSegments() && pos == 0; s++) {
-      const int key = this->GetSegment(s)->GetSegmentKey();
-      if (name == SegmentParameterName(key, ParamKind::Norm)) {
-        pos = s;
+    for (int k = 1; k <= numSegmentLines && key == 0; k++) {
+      if (name == SegmentParameterName(k, ParamKind::Norm)) {
+        key = k;
         isNorm = true;
-      } else if (name == SegmentParameterName(key, ParamKind::EnergyShift)) {
-        pos = s;
+      } else if (name == SegmentParameterName(k, ParamKind::EnergyShift)) {
+        key = k;
       }
+    }
+    if (key == 0 && numSegmentLines < 1) {
+      configure.outStream << "ERROR: <parameterSettings> row \"" << trimmed << "\": a prior_centre row moves the "
+                          << "prior of a data segment, and the project has no <segmentsData> line." << std::endl;
+      return -1;
+    }
+    if (key == 0) {
+      configure.outStream << "ERROR: <parameterSettings> row \"" << trimmed << "\" names no parameter a prior_centre "
+                          << "row can move: it takes " << SegmentParameterName(1, ParamKind::Norm) << " ... "
+                          << SegmentParameterName(numSegmentLines, ParamKind::Norm) << " or "
+                          << SegmentParameterName(1, ParamKind::EnergyShift) << " ... "
+                          << SegmentParameterName(numSegmentLines, ParamKind::EnergyShift)
+                          << " (a <segmentsData> line's key, counting inactive lines)." << std::endl;
+      return -1;
     }
     char *end = NULL;
     const double centre = strtod(tok[2].c_str(), &end);
@@ -665,16 +682,19 @@ int EData::ReadPriorCentres(const Config &configure) {
                           << "\": a normalization prior centre must be positive." << std::endl;
       return -1;
     }
-    if (pos == 0) {
+    bool found = false;
+    for (int s = 1; s <= this->NumSegments(); s++) {
+      ESegment *segment = this->GetSegment(s);
+      if (segment->GetSegmentKey() != key) continue;
+      found = true;
+      if (isNorm)
+        segment->SetNominalNorm(centre);
+      else
+        segment->SetNominalEnergyShift(centre);
+    }
+    if (!found)
       configure.outStream << "WARNING: <parameterSettings> row \"" << trimmed
                           << "\" names no active data segment; ignored." << std::endl;
-      continue;
-    }
-    ESegment *segment = this->GetSegment(pos);
-    if (isNorm)
-      segment->SetNominalNorm(centre);
-    else
-      segment->SetNominalEnergyShift(centre);
   }
   return 0;
 }
