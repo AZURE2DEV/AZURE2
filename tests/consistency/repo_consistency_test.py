@@ -678,10 +678,44 @@ if not PIECES.search("w = compound->GetAbundance(sample, nucleus) * ESegment::Te
     problems.append("check 28: the composition pattern no longer matches the form it guards; update this check")
 
 
+# 29. The calculation plan (docs/upgrade/data_model.md S5, include/CalculationPlan.h): which point calculates which is
+#     the plan's, held by position in the data set (PointRef); a point holds the index of its task, never a pointer
+#     to another point.  A pointer from one point into another made Clone re-map every list, and a missed one had a
+#     working copy write into the original's points.  So: (a) no data member of EPoint is a pointer to an EPoint or a
+#     container of such pointers; (b) the old mapped-point list and its accessors are gone; (c) a plan position is
+#     turned into a point (EData::PlanPoint) only by the plan (src/CalculationPlan.cpp), EPoint::PlanMapped and the
+#     plan's tests -- everything else asks EPoint::PlanMapped or the plan.
+POINT_PTR = re.compile(r"^\s*(?:mutable\s+)?(?:std::\w+<\s*)?(?:const\s+)?EPoint\s*\*(?:\s*>)?\s*\w+_\s*(?:=[^;]*)?;", re.M)
+eph = re.sub(r"//[^\n]*|/\*.*?\*/", "", read("include/EPoint.h"), flags=re.S)
+# the RAII scopes nested in EPoint (DopplerAppliedScope, ...) hold the point they set a flag on: not a member of EPoint
+eph = re.sub(r"\bclass\s+\w+Scope\b[^{;]*\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\};", "", eph)
+if "plan_task_" not in eph:
+    problems.append("check 29: EPoint's members are no longer found in include/EPoint.h; update this check")
+for m in POINT_PTR.finditer(eph):
+    problems.append(f"include/EPoint.h: a point holds a pointer to a point ({m.group(0).strip()}); the calculation "
+                    "plan (include/CalculationPlan.h) says who calculates whom")
+if not POINT_PTR.search("  std::vector<EPoint *> mapped_;") or not POINT_PTR.search("  EPoint *host_ = nullptr;"):
+    problems.append("check 29: the member pattern no longer matches the forms it guards; update this check")
+OLD_MAPPING = re.compile(r"\b(?:\w*LocalMappedPoints?|local_mapped_points_|GetMappedPoints|EPointMapIterator)\b")
+PLAN_POINT = re.compile(r"\bPlanPoint\s*\(")
+PLAN_POINT_FILES = {"src/CalculationPlan.cpp", "src/EPoint.cpp", "include/EData.h", "tests/upgrade/plan_test.cpp"}
+for top in ("src", "api/src", "include", "tests/upgrade", "tests/reference"):
+    for name in sorted(os.listdir(os.path.join(ROOT, top))):
+        rel = f"{top}/{name}"
+        if not name.endswith((".cpp", ".h")):
+            continue
+        text = re.sub(r"//[^\n]*|/\*.*?\*/", "", read(rel), flags=re.S)
+        if OLD_MAPPING.search(text):
+            problems.append(f"{rel}: uses a mapped-point list of a point ({OLD_MAPPING.search(text).group(0)}); ask "
+                            "EPoint::PlanMapped or the calculation plan")
+        if rel not in PLAN_POINT_FILES and PLAN_POINT.search(text):
+            problems.append(f"{rel}: resolves a plan position itself (EData::PlanPoint); ask EPoint::PlanMapped or "
+                            "the calculation plan (src/CalculationPlan.cpp)")
+
 if problems:
     for p in problems:
         print("FAIL", p)
     print(f"{len(problems)} consistency problem(s)")
     sys.exit(1)
 print(f"repository consistent: {len(flags)} CLI flags, segment keywords, test registration, check.sh modes, pyazr version and exports, "
-      f"format-3 reference page, {len(declared)} diagnostic codes, file sizes, one model pass and residual")
+      f"format-3 reference page, {len(declared)} diagnostic codes, file sizes, one model pass and residual, one calculation plan")

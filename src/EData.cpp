@@ -1040,8 +1040,9 @@ int EData::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, const st
     gc.resonanceWidthMultiplier = spec.resonanceWidthMultiplier;
     gc.pointsPerWidth = spec.pointsPerWidth;
     gc.resonanceOffset = it.offset;
-    for (int m = 1; m <= point->NumLocalMappedPoints(); m++) {
-      auto own = mappedSegment.find(point->GetLocalMappedPoint(m));
+    const azure2::MappedPoints mapped = point->PlanMapped();
+    for (int m = 0; m < mapped.size(); m++) {
+      auto own = mappedSegment.find(mapped[m]);
       if (own == mappedSegment.end() || !own->second.replaceable) return;  // its mapped point keeps the grid
     }
     std::vector<double> grid = AdaptiveIntegrationGrid(gc).GenerateGrid(spec.startEnergy, spec.endEnergy, g);
@@ -1111,8 +1112,8 @@ int EData::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, const st
       }
     };
     layOut(point, it.seg, it.shifted);
-    for (int m = 1; m <= point->NumLocalMappedPoints(); m++) {
-      EPoint *mp = point->GetLocalMappedPoint(m);
+    for (int m = 0; m < mapped.size(); m++) {
+      EPoint *mp = mapped[m];
       auto own = mappedSegment.find(mp);  // present and replaceable: checked above
       layOut(mp, own->second.seg, own->second.shifted);
       newSubPoints += (long)grid.size();
@@ -1154,8 +1155,9 @@ int EData::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, const st
     for (const Item &it : work) {
       EPoint *host = it.seg->GetPoint(it.i);
       const std::vector<EPoint> &hs = host->GetSubPoints();
-      for (int m = 1; m <= host->NumLocalMappedPoints(); m++) {
-        const std::vector<EPoint> &ms = host->GetLocalMappedPoint(m)->GetSubPoints();
+      const azure2::MappedPoints mapped = host->PlanMapped();
+      for (int m = 0; m < mapped.size(); m++) {
+        const std::vector<EPoint> &ms = mapped[m]->GetSubPoints();
         bool same = ms.size() == hs.size();
         for (size_t k = 0; same && k < hs.size(); k++) same = ms[k].GetOriginalEnergy() == hs[k].GetOriginalEnergy();
         if (!same)
@@ -3449,13 +3451,6 @@ int EData::InitializeComponentSegments(CNuc *theCNuc, const Config &configure) {
                             subPoint->AddECAmplitude(k, ecm, ecAmplitude);
                           }
                         }
-                        for (EPointMapIterator mappedPoint = point->GetMappedPoints().begin();
-                             mappedPoint < point->GetMappedPoints().begin(); mappedPoint++) {
-                          (*mappedPoint)->AddECAmplitude(k, ecm, point->GetECAmplitude(k, ecm));
-                          for (int i = 1; i <= point->NumSubPoints(); i++) {
-                            (*mappedPoint)->GetSubPoint(i)->AddECAmplitude(k, ecm, point->GetSubPoint(i)->GetECAmplitude(k, ecm));
-                          }
-                        }
                       }
                     }
                   }
@@ -3770,19 +3765,16 @@ bool ShiftsAgree(const ShiftForm &a, const ShiftForm &b) {
 
 void EData::MapData(CNuc *theCNuc) {
   for (ESegmentIterator segment = GetSegments().begin(); segment < GetSegments().end(); segment++) {
-    for (EPointIterator point = segment->GetPoints().begin(); point < segment->GetPoints().end(); point++) {
+    for (EPointIterator point = segment->GetPoints().begin(); point < segment->GetPoints().end(); point++)
       point->ClearMapping();
-      point->ClearLocalMappedPoints();
-    }
   }
-  for (ESegment &component : componentSegments_) {
-    for (EPointIterator point = component.GetPoints().begin(); point < component.GetPoints().end(); point++) {
+  for (ESegment &component : componentSegments_)
+    for (EPointIterator point = component.GetPoints().begin(); point < component.GetPoints().end(); point++)
       point->ClearMapping();
-      point->ClearLocalMappedPoints();
-    }
-  }
+  // (host, mapped point) in the order each host calculates its mapped points
+  std::vector<std::pair<azure2::PointRef, azure2::PointRef>> mapping;
   const char *off = std::getenv("AZURE_NO_POINT_MAPPING");
-  if (off && *off && std::string(off) != "0") return;
+  if (off && *off && std::string(off) != "0") return plan_.Build(*this, mapping);
   const char *crossOff = std::getenv("AZURE_NO_CROSS_SEGMENT_MAPPING");
   const bool crossSegment = !(crossOff && *crossOff && std::string(crossOff) != "0");
 
@@ -3859,10 +3851,10 @@ void EData::MapData(CNuc *theCNuc) {
         if (h.seg != refs[k].seg && !(crossSegment && !ownOnly[h.seg] && !ownOnly[refs[k].seg] &&
                                       ShiftsAgree(shiftForms[h.seg], shiftForms[refs[k].seg])))
           continue;
-        EPoint &hp = pointOf(h);
-        if (SharesCalculation(hp, p)) {
+        if (SharesCalculation(pointOf(h), p)) {
           p.SetMap(h.seg + 1, h.point + 1);
-          hp.AddLocalMappedPoint(&p);
+          mapping.push_back({{azure2::PointRef::kSegments, h.seg, h.point},
+                             {azure2::PointRef::kSegments, refs[k].seg, refs[k].point}});
           mapped = true;
           break;
         }
@@ -3872,7 +3864,8 @@ void EData::MapData(CNuc *theCNuc) {
     start = end;
   }
 
-  MapComponentSegments(theCNuc);
+  MapComponentSegments(theCNuc, mapping);
+  plan_.Build(*this, mapping);
 }
 
 /*!
@@ -3887,10 +3880,12 @@ void EData::MapData(CNuc *theCNuc) {
  * (OwnsEDependentValues).  A beta-delayed entrance is left out: its energy-dependent values depend on the exit pair.
  * AZURE_NO_COMPONENT_MAPPING=1 switches this off (and AZURE_NO_POINT_MAPPING=1 all mapping).
  */
-void EData::MapComponentSegments(CNuc *theCNuc) {
+void EData::MapComponentSegments(CNuc *theCNuc, std::vector<std::pair<azure2::PointRef, azure2::PointRef>> &mapping) {
   if (!theCNuc) return;
   const char *off = std::getenv("AZURE_NO_COMPONENT_MAPPING");
   if (off && *off && std::string(off) != "0") return;
+  std::unordered_map<const ESegment *, int> componentPos;
+  for (int c = 0; c < (int)componentSegments_.size(); c++) componentPos[&componentSegments_[c]] = c;
   std::vector<ESegment> &segments = GetSegments();
   for (int s = 0; s < (int)segments.size(); s++) {
     ESegment &seg = segments[s];
@@ -3904,14 +3899,13 @@ void EData::MapComponentSegments(CNuc *theCNuc) {
     // themselves, as before: the external-capture amplitudes and their file (intEC.dat) skip mapped points, so
     // mapping them would change that file's layout.
     for (ESegment *component : seg.GetComponentSegments()) {
-      if (!component || component->NumPoints() != n) continue;
+      if (!component || component->NumPoints() != n || !componentPos.count(component)) continue;
       for (int p = 0; p < n; p++) {
-        EPoint &host = points[p];
         EPoint *cp = component->GetPoint(p + 1);
-        if (!cp || !SharesCalculation(host, *cp, false)) continue;
+        if (!cp || !SharesCalculation(points[p], *cp, false)) continue;
         cp->SetMap(s + 1, p + 1);
         cp->SetOwnsEDependentValues(true);
-        host.AddLocalMappedPoint(cp);
+        mapping.push_back({{azure2::PointRef::kSegments, s, p}, {azure2::PointRef::kComponents, componentPos[component], p}});
       }
     }
   }
@@ -4439,10 +4433,8 @@ double EData::CovarianceChi2Correction(azure2::Results &results, std::vector<dou
     for (int a = 0; a < g.n; a++) q += z[a] * z[a];
     g.WhitenTranspose(z.data());
     correction += q - diag;
-    for (int a = 0; a < g.n; a++) {
-      ESegment *seg = this->GetSegment(g.members[a].first);
-      seg->SetCovarianceSeed(g.members[a].second, z[a]);
-    }
+    for (int a = 0; a < g.n; a++)
+      this->GetSegment(g.members[a].first)->GetPoint(g.members[a].second + 1)->SetCovarianceSeed(results, z[a]);
     // Per-segment chi2: the exact partition sum_i r_i (M^-1 r)_i of the group's chi2.
     std::map<int, double> part;
     for (int a = 0; a < g.n; a++) part[g.members[a].first] += r[a] * z[a];
@@ -5129,14 +5121,15 @@ void EData::FillEnergyShiftsFromParamsImpl(const vector_r &p, EData *data, CNuc 
           fnValues.push_back((start >= 0 && idx < (int)p.size()) ? p[idx] : segment->GetShiftFnValues()[q]);
         }
       }
-      const bool shiftActive = segment->IsVaryEnergyShift() || shiftConst != 0.0 || lead >= 0 ||
-                               segment->IsVaryEnergyShiftSqrt() || shiftSqrt != 0.0 || segment->HasShiftFn();
+      // A segment whose points carry a shift of an earlier evaluation (last shift not NaN) stays active, so a fixed
+      // shift set back to 0 moves them back (upgrade_history: such a copy gives a fresh copy's bits).
+      const bool shiftActive = segment->IsVaryEnergyShift() || shiftConst != 0.0 || lead >= 0 || segment->HasShiftFn() ||
+                               segment->IsVaryEnergyShiftSqrt() || shiftSqrt != 0.0 || !std::isnan(segment->GetLastEnergyShift());
       if (shiftActive) {
         shiftActiveSegments.push_back(&*segment);
         if (segment->HasComponents())
           for (ESegment *componentSegment : segment->GetComponentSegments())
             if (componentSegment) shiftActiveSegments.push_back(componentSegment);
-        // Check if energy is the same, if so, continue
         if (segment->GetLastEnergyShift() == shiftConst && segment->GetLastEnergyShiftSqrt() == shiftSqrt &&
             (!segment->HasShiftFn() || segment->GetLastShiftFnValues() == fnValues)) {
           i++;
@@ -5200,7 +5193,6 @@ void EData::FillEnergyShiftsFromParamsImpl(const vector_r &p, EData *data, CNuc 
         }
       }
 
-      // Always increment i and j since both shift parameters are present for ALL segments
       i++;
       j++;
     }
@@ -5229,7 +5221,7 @@ void EData::FillEnergyShiftsFromParamsImpl(const vector_r &p, EData *data, CNuc 
           if (s->ShiftHost(i)) continue;
           EPoint *pt = s->GetPoint(i + 1);
           const double nsp = pt ? pt->NumSubPoints() : 0;
-          const double nMapped = pt ? pt->NumLocalMappedPoints() : 0;
+          const double nMapped = pt ? pt->PlanMapped().size() : 0;
           work.push_back({(1.0 + nsp) * (1.0 + 0.1 * nMapped), s, i});
         }
       std::stable_sort(work.begin(), work.end(), [](const Item &x, const Item &y) { return x.cost > y.cost; });
@@ -5370,6 +5362,7 @@ EData *EData::Clone() const {
   dataCopy->targetEffects_ = this->targetEffects_;
   dataCopy->segments_ = this->segments_;
   dataCopy->componentSegments_ = this->componentSegments_;
+  dataCopy->plan_ = this->plan_;
   dataCopy->thmGroups_ = this->thmGroups_;
   dataCopy->thmCoherentParams_ = this->thmCoherentParams_;
   dataCopy->thmCoherentParamOffset_ = this->thmCoherentParamOffset_;
@@ -5416,55 +5409,12 @@ EData *EData::Clone() const {
     }
   }
 
-  // Every point of every segment, not EDataIterator's: the iterator skips the segments that hold components (SUM,
-  // RATIO, total capture, a yield's total term), whose points before 2026-11-05 kept the ORIGINAL data as their parent
-  // (so a fitted density or Doppler temperature never moved for them in a fit's working copy) and the original's
-  // mapped-point list (so each copy also computed, and wrote, the original's component points).
+  // The points of the copy belong to it (a fitted density or Doppler temperature reaches them through it).  The plan
+  // and the points' task indices are positions, valid in the copy as they are: no point holds a pointer to another.
   for (ESegment &segment : dataCopy->segments_)
-    for (int j = 1; j <= segment.NumPoints(); j++) {
-      EPoint *point = segment.GetPoint(j);
-      point->SetParentData(dataCopy);
-      point->ClearLocalMappedPoints();
-      point->ClearECAmplitudes();
-    }
-  // Also fix parentData for component segment points
-  for (size_t i = 0; i < dataCopy->componentSegments_.size(); i++) {
-    for (int j = 1; j <= dataCopy->componentSegments_[i].NumPoints(); j++) {
-      dataCopy->componentSegments_[i].GetPoint(j)->SetParentData(dataCopy);
-      dataCopy->componentSegments_[i].GetPoint(j)->ClearLocalMappedPoints();
-      dataCopy->componentSegments_[i].GetPoint(j)->ClearECAmplitudes();
-    }
-  }
-  for (EDataIterator data = dataCopy->begin(); data != dataCopy->end(); data++) {
-    if (data.point()->IsMapped()) {
-      EnergyMap pointMap = data.point()->GetMap();
-      dataCopy->GetSegment(pointMap.segment)->GetPoint(pointMap.point)->AddLocalMappedPoint(&*data.point());
-    }
-  }
-  // Component points mapped onto their base segment's points (MapComponentSegments), in the order MapData added
-  // them: components in turn.
-  for (size_t i = 0; i < dataCopy->segments_.size(); i++)
-    for (ESegment *component : dataCopy->segments_[i].GetComponentSegments())
-      for (int j = 1; component && j <= component->NumPoints(); j++) {
-        EPoint *cp = component->GetPoint(j);
-        if (!cp->IsMapped()) continue;
-        EnergyMap pointMap = cp->GetMap();
-        dataCopy->GetSegment(pointMap.segment)->GetPoint(pointMap.point)->AddLocalMappedPoint(cp);
-      }
-  // Every point a host of the copy calculates must be a point of the copy: a
-  // pointer into the original would have the copy's calculations write into
-  // the original's points (from every pooled thread at once in a fit).
-  {
-    std::unordered_set<const EPoint *> own;
-    for (ESegment &segment : dataCopy->segments_)
-      for (int j = 1; j <= segment.NumPoints(); j++) own.insert(segment.GetPoint(j));
-    for (ESegment &segment : dataCopy->componentSegments_)
-      for (int j = 1; j <= segment.NumPoints(); j++) own.insert(segment.GetPoint(j));
-    for (const EPoint *p : own)
-      for (int m = 1; m <= p->NumLocalMappedPoints(); m++)
-        if (!own.count(p->GetLocalMappedPoint(m)))
-          throw std::logic_error("EData::Clone: a point of the copy maps a point that is not part of the copy");
-  }
+    for (EPoint &point : segment.GetPoints()) point.SetParentData(dataCopy), point.ClearECAmplitudes();
+  for (ESegment &segment : dataCopy->componentSegments_)
+    for (EPoint &point : segment.GetPoints()) point.SetParentData(dataCopy), point.ClearECAmplitudes();
   // The copy's layout: its points carry this data set's offsets, which are the copy's own when the copy has the
   // same points; the values are in the buffers of the callers that evaluate the two.
   dataCopy->LayoutResults(nullptr);
@@ -5544,7 +5494,7 @@ int EData::CalculatePointsInParallel(const std::vector<ESegment *> &segments, CN
   // same way whatever the order.
   std::vector<double> cost(work.size());
   for (size_t k = 0; k < work.size(); k++)
-    cost[k] = (1.0 + work[k]->NumSubPoints()) * (1.0 + work[k]->NumLocalMappedPoints());
+    cost[k] = (1.0 + work[k]->NumSubPoints()) * (1.0 + work[k]->PlanMapped().size());
   std::vector<size_t> order(work.size());
   for (size_t k = 0; k < order.size(); k++) order[k] = k;
   std::stable_sort(order.begin(), order.end(), [&cost](size_t a, size_t b) { return cost[a] > cost[b]; });
@@ -5553,19 +5503,26 @@ int EData::CalculatePointsInParallel(const std::vector<ESegment *> &segments, CN
   work.swap(sorted);
   int failed = 0;
   AZUREProfile::Timer profileTimer(AZUREProfile::kPoints);
-#pragma omp parallel for schedule(dynamic, 1) reduction(+ : failed)
-  for (int k = 0; k < (int)work.size(); k++) {
+  // One item per task of the plan: its host calculates itself and the points the plan maps onto it.
+  auto runTask = [&](EPoint *host) {
     try {
-      work[k]->Calculate(theCNuc, configure, results);
+      host->Calculate(theCNuc, configure, results);
     } catch (const std::exception &e) {
       // NaN on the point and the points mapped onto it, reported once (EPoint::MarkFailed); 0 on the point alone,
       // silently, before 2026-11-01 -- and the CLI's objective takes these values (PrecalculatePoints).
-      work[k]->MarkFailed(results, "point", configure, e.what());
-      failed++;
+      host->MarkFailed(results, "point", configure, e.what());
+      return 1;
     } catch (...) {
-      work[k]->MarkFailed(results, "point", configure, "unknown exception.");
-      failed++;
+      host->MarkFailed(results, "point", configure, "unknown exception.");
+      return 1;
     }
+    return 0;
+  };
+  if (azure2::CalculationPlan::RunTimeCheckRequested() && !work.empty()) {
+    azure2::CalculationPlan::RunChecked(*work[0]->GetParentData(), work, results, [&](EPoint *h) { failed += runTask(h); });
+    return failed;
   }
+#pragma omp parallel for schedule(dynamic, 1) reduction(+ : failed)
+  for (int k = 0; k < (int)work.size(); k++) failed += runTask(work[k]);
   return failed;
 }

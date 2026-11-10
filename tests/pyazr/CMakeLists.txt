@@ -56,6 +56,12 @@ add_test(NAME pyazr_azr_parse_cache
                  ${CMAKE_CURRENT_SOURCE_DIR}/azr_parse_cache_test.py)
 set_tests_properties(pyazr_azr_parse_cache PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
+# The API reports the model value of an E1-only / E2-only segment, as chi^2 uses it (ModelPass.h; HANDOFF).
+add_test(NAME pyazr_api_model_value
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/api_model_value_test.py)
+set_tests_properties(pyazr_api_model_value PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
 # A rebuild (set_channel_radius, a potential change) keeps no Coulomb memo of the old radius, reads no
 # unchanged input file and prints the setup Notes once per session (before 2026-11-04: ~96 kB per new
 # radius, every file re-read, every Note reprinted; the 3H+d free-radius MCMC reached 239 GB).

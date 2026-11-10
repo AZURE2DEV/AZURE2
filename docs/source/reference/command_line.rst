@@ -477,6 +477,15 @@ output files of a correct engine do not change.  In pyazr the E1 and E2 parts
 angle-integrated cross section become NaN, since they are never calculated
 there (0 without the variable).
 
+``AZURE_PLAN_CHECK=1``: the points of an evaluation are calculated by the
+tasks of the data set's calculation plan, one task per point that calculates
+itself and the points of equal energy mapped onto it (one writer per value,
+checked when the plan is built).  With the variable set, the parallel point
+pass runs the tasks one after the other and checks that each writes only the
+values of its own points and sub-points and that no value is written by two
+tasks; a breach stops the run with a message naming the task and the point.
+A test of the engine, slow, single-threaded; the output files do not change.
+
 Examples
 --------
 

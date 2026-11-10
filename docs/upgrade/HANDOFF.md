@@ -2,6 +2,53 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-10 (evening) — brief I: the follow-ups of the model pass, and S5, the calculation plan (`feature/upgrade-4-plan`)
+
+**Done** (brief `work/briefs/I_plan.md`; full report `work/plan/REPORT.md`).
+- **Fixed energy shift back to 0** (934c11a3): a segment whose points carry a shift of an earlier evaluation stays
+  "shift active", so a fixed shift set back to 0 re-energises its points; `upgrade_history` gains vector C (every fixed
+  shift and sqrt(E) coefficient moved by 1 keV): pooled C → A = fresh A, C → A → C = fresh C (8 failures before).
+- **API value of E1-only / E2-only segments** (37aac384): `UpdateSegments*` report the model value of every segment
+  (one loop, `AZUREAPI::ReportSegments`); pyazr's `_segment_values` no longer swaps the part in itself. Test
+  `pyazr_api_model_value` (8 failures on the start head's engine).
+- **MCMC snapshot** (3af76e1d): `tests/mcmc_snapshot_components/check.sh` — total, E1-only and E2-only capture blocks of
+  the snapshot equal a calculation at `param.mcmc` (8.8e-8); fails with the leaf value injected.
+- **Covariance seeds** (87ef450f): `Results::ObjectiveValues::covarianceSeed` (indexed as `Results::model`), not
+  `ESegment`; `tests/data_covariance` (d) and `pyazr_data_covariance` fail with the neighbour's seed injected.
+- **S5, the calculation plan** (9df9fc92): `include/CalculationPlan.h`, `src/CalculationPlan.cpp`; a point holds its task
+  index, never a pointer to another point; `local_mapped_points_` and `Clone`'s pointer re-mapping are gone; the plan is
+  built and checked (one writer per point) in `MapData`; `AZURE_PLAN_CHECK=1` checks each task's slot writes at run
+  time; tests `upgrade_plan` (179 projects' set-up), `upgrade_plan_runtime`; check 29.
+
+**Still written into the data set by an evaluation** (after the seeds moved): the hand-over of the parameters (norms,
+shifts with their re-energised points, grids and the plan, densities, screening, Doppler T, thicknesses); in the point
+pass only the external-capture memo `EPoint::ec_shifted_` (H6, keyed by exact energy) and the scoped flags
+`DopplerAppliedScope` / `TargetFallbackScope` (set and reset inside one call); the relvector covariance model frozen
+at the first `EnsureFactored` (H9, a shared group, once).  Outside the data set: `CNuc::ObservedOfFitValues`.
+
+**The two projects without data** (`tests/sum_lab_frame/models/sum_data.azr`, `tests/ratio_frame/models/ratio_data.azr`,
+and their `*_free.azr`): their data are made at test time — `sum.dat` by `tests/sum_lab_frame/check.sh` (b) from the
+plain segments' fitted lab values, `ratio.dat` by `tests/ratio_frame/check.sh` (e); `tests/failed_point/check.sh` and
+`tests/pyazr/composite_terms_test.py` write five points of their own.  Nothing to commit; in the 179 × 3 sweep they run
+without data in both trees (READMEs say so).
+
+**For the PI to see** (behaviour change): the API's `calculated_segments` of an E1-only / E2-only segment is its E1 /
+E2 part (the value its χ² uses), no longer the total; `calculate_sfactor*` of such a segment changes with it.
+
+**Verified** (3 threads, `work/b-plan`, 0 warnings, head 9df9fc92; `work/plan/verify.sh`): 179 × 3 identical to
+`tab-p3f` (689 / 662 / 689; tag `tab-plan2`); `ctest -LE slow` 158/158; `tests/run_tests.sh` 138 passed / 0 failed;
+calculations at 1 and 3 threads identical on T1, T2, T3, 13N in the three bases (12/12); T1 and T3 short fits
+(MIGRAD and `--use-gradient`, 150 calls, 1 thread) every output file identical to the start head (logs differ only in
+progress bars). Benchmark T2 (3 runs each, this host): calc 1.08–1.16 s → 1.13–1.14 s (1 thread), 0.45–0.47 →
+0.44–0.47 s (3); fit200 68.9–71.0 → 69.9–71.4 s (1), 47.7–49.6 → 48.4–49.5 s (3); peak RSS of the fit 272–273 →
+270–274 MB (1), 348–350 → 349–353 MB (3): unchanged, not the drop expected (`sizeof(EPoint)` 840 → 824 B is
+5 kB on T2's 330 points; the memory is in the tables).  Not run: ThreadSanitizer (no TSan runtime on this host:
+`libtsan.so` missing, no clang), 1 vs 8 threads, `ctest -L slow`.
+
+**Open / next.** S7 (`Measurement`); the plan's tasks still call `EPoint::Calculate` with the mapped points resolved
+through the host's data set (Phase 6 makes the task the unit of work); the dead `data == nullptr` branch of
+`EData::FillEnergyShiftsFromParamsImpl` (no caller) could go.
+
 ## 2026-11-10 (evening) — Phase 4 S10 and S11: the model pass evaluates the expression tree; the gradient through `backward` (`feature/upgrade-4-expr`)
 
 **Done** (brief H; `data_model.md` S10, S11, M7).

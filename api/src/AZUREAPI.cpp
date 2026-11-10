@@ -312,7 +312,13 @@ bool AZUREAPI::SetParamsAllRWA(const vector_r &p) {
   return true;
 }
 
-int AZUREAPI::UpdateSegments(vector_r &p) {
+// The arrays UpdateSegments* report, for the segments of ReportedSegments: per point the model value
+// (Results::model, the value the residual compares with the datum: the E1 / E2 part of an E1- or E2-only segment, the
+// combination of a SUM, RATIO, sample or transform), the E1 and E2 parts and the angular-distribution coefficients
+// of its base point, its c.m. energy and angle, S-factor conversion and excitation energy.  A point whose
+// calculation fails is NaN (EPoint::MarkFailed), and the arrays keep one entry per point.  Without data: the arrays
+// are emptied.
+int AZUREAPI::ReportSegments(CNuc *localCompound, EData *localData) {
   calculatedConv_.clear();
   calculatedEnergies_.clear();
   calculatedAngles_.clear();
@@ -321,7 +327,42 @@ int AZUREAPI::UpdateSegments(vector_r &p) {
   calculatedSegmentsE1_.clear();
   calculatedSegmentsE2_.clear();
   calculatedExcitationEnergies_.clear();
+  if (!localData) return 0;
+  AZUREProfile::ScopedReport profileReport("api segments");
+  const std::vector<ESegment *> segments = ReportedSegments(localData->GetSegments());
+  const bool pre = PrecalculateAll(segments, localCompound, configure(), results());
+  for (ESegment *segment : segments) {
+    std::vector<EPoint> &data = segment->GetPoints();
+    std::vector<double> cross, crossE1, crossE2, energies, angles, conv, excitationEnergies;
+    // Angular-distribution coefficients, self-describing per point: a count followed by that many Legendre
+    // coefficients (a zero for a point outside an angular-distribution segment).
+    std::vector<double> angularDists;
+    for (int k = 0; k < (int)data.size(); ++k) {
+      cross.push_back(azure2::EvaluateModelPoint(*segment, k, localCompound, configure(), results(),
+                                                 pre ? azure2::LeafValues::Ready : azure2::LeafValues::Calculate));
+      crossE1.push_back(data[k].GetFitE1CrossSection(results()));
+      crossE2.push_back(data[k].GetFitE2CrossSection(results()));
+      angles.push_back(data[k].GetCMAngle());
+      energies.push_back(data[k].GetCMEnergy());
+      conv.push_back(data[k].GetSFactorConversion());
+      excitationEnergies.push_back(data[k].GetExcitationEnergy());
+      angularDists.push_back((double)data[k].GetNumModelAngularDists(results()));
+      for (int a = 0; a < data[k].GetNumModelAngularDists(results()); ++a)
+        angularDists.push_back(data[k].GetModelAngularDist(results(), a));
+    }
+    calculatedConv_.push_back(conv);
+    calculatedSegments_.push_back(cross);
+    calculatedSegmentsE1_.push_back(crossE1);
+    calculatedSegmentsE2_.push_back(crossE2);
+    calculatedEnergies_.push_back(energies);
+    calculatedAngles_.push_back(angles);
+    calculatedAngularDists_.push_back(angularDists);
+    calculatedExcitationEnergies_.push_back(excitationEnergies);
+  }
+  return calculatedSegments_.size();
+}
 
+int AZUREAPI::UpdateSegments(vector_r &p) {
   int k = 0;
   vector_r params_ = all_;
   for (int i = 0; i < all_.size(); ++i) {
@@ -340,7 +381,10 @@ int AZUREAPI::UpdateSegments(vector_r &p) {
   localCompound->FillCompoundFromParamsPhysical(params_);
   bool isValid = localCompound->TransformIn(configure());
 
-  if (!isValid) return 0;
+  if (!isValid) {
+    ReportSegments(nullptr, nullptr);  // nothing reported for an invalid vector (the arrays of the last call go)
+    return 0;
+  }
 
   localCompound->FillMnParams(params);
   localData->FillMnParams(params);
@@ -352,93 +396,10 @@ int AZUREAPI::UpdateSegments(vector_r &p) {
   localData->FillEnergyShiftsFromParams(params_, results(), localData, localCompound, &configure());
   if (configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure());
 
-  int newKey = -1;
-  int prevKey = -1;
-  int nSegments = 0;
-
-  std::vector<ESegment> &segments = localData->GetSegments();
-  AZUREProfile::ScopedReport profileReport("api segments");
-  const bool pre = PrecalculateAll(ReportedSegments(segments), localCompound, configure(), results());
-  for (int i = 0; i < segments.size(); ++i) {
-    newKey = segments[i].GetSegmentKey();
-    if (prevKey == newKey) continue;
-    prevKey = newKey;
-    ++nSegments;
-
-    std::vector<EPoint> &data = segments[i].GetPoints();
-
-    std::vector<double> cross, crossE1, crossE2, energies, angles, conv, excitationEnergies;
-    // Angular-distribution coefficients, self-describing per point:
-    // a count followed by that many Legendre coefficients. Points that
-    // are not part of an angular-distribution segment contribute a zero.
-    std::vector<double> angularDists;
-
-    // Handle component segments using the new integrated calculation method
-    if (segments[i].NeedsAssembly()) {
-      for (int k = 0; k < data.size(); ++k) {
-        // The segment's model value (ModelPass.h); E1, E2 and the angles of its base point
-        cross.push_back(azure2::EvaluateModelPoint(segments[i], k, localCompound, configure(), results(),
-                                                   pre ? azure2::LeafValues::Ready : azure2::LeafValues::Calculate));
-        crossE1.push_back(data[k].GetFitE1CrossSection(results()));
-        crossE2.push_back(data[k].GetFitE2CrossSection(results()));
-        angles.push_back(data[k].GetCMAngle());
-        energies.push_back(data[k].GetCMEnergy());
-        conv.push_back(data[k].GetSFactorConversion());
-        excitationEnergies.push_back(data[k].GetExcitationEnergy());
-        angularDists.push_back((double)data[k].GetNumModelAngularDists(results()));
-        for (int a = 0; a < data[k].GetNumModelAngularDists(results()); ++a)
-          angularDists.push_back(data[k].GetModelAngularDist(results(), a));
-      }
-    } else {
-      // Regular segment calculation (existing logic)
-      for (int k = 0; k < data.size(); ++k) {
-        bool failed = false;
-        if (!pre && !data[k].IsMapped()) {
-          try {
-            data[k].Calculate(localCompound, configure(), results());
-          } catch (GSLException &e) {
-            // A GSL failure at one point used to skip every push_back for it, so the arrays came back shorter
-            // than the data and misaligned with it, silently (audit 2026-10-25, item 30).  Keep the slot: NaN.
-            failed = true;
-          }
-        }
-        const double nan = std::numeric_limits<double>::quiet_NaN();
-        cross.push_back(failed ? nan : data[k].GetFitCrossSection(results()));
-        crossE1.push_back(failed ? nan : data[k].GetFitE1CrossSection(results()));
-        crossE2.push_back(failed ? nan : data[k].GetFitE2CrossSection(results()));
-        angles.push_back(data[k].GetCMAngle());
-        energies.push_back(data[k].GetCMEnergy());
-        conv.push_back(data[k].GetSFactorConversion());
-        excitationEnergies.push_back(data[k].GetExcitationEnergy());
-        angularDists.push_back((double)data[k].GetNumAngularDists(results()));
-        for (int a = 0; a < data[k].GetNumAngularDists(results()); ++a)
-          angularDists.push_back(data[k].GetAngularDist(results(), a));
-      }
-    }
-
-    calculatedConv_.push_back(conv);
-    calculatedSegments_.push_back(cross);
-    calculatedSegmentsE1_.push_back(crossE1);
-    calculatedSegmentsE2_.push_back(crossE2);
-    calculatedEnergies_.push_back(energies);
-    calculatedAngles_.push_back(angles);
-    calculatedAngularDists_.push_back(angularDists);
-    calculatedExcitationEnergies_.push_back(excitationEnergies);
-  }
-
-  return calculatedSegments_.size();
+  return ReportSegments(localCompound, localData);
 }
 
 int AZUREAPI::UpdateSegmentsRWA(vector_r &p) {
-  calculatedConv_.clear();
-  calculatedEnergies_.clear();
-  calculatedAngles_.clear();
-  calculatedAngularDists_.clear();
-  calculatedSegments_.clear();
-  calculatedSegmentsE1_.clear();
-  calculatedSegmentsE2_.clear();
-  calculatedExcitationEnergies_.clear();
-
   int k = 0;
   vector_r params_ = all_rwa_;
   for (int i = 0; i < all_rwa_.size(); ++i) {
@@ -458,93 +419,10 @@ int AZUREAPI::UpdateSegmentsRWA(vector_r &p) {
   localData->FillEnergyShiftsFromParams(params_, results(), localData, localCompound, &configure());
   if (configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure());
 
-  int newKey = -1;
-  int prevKey = -1;
-  int nSegments = 0;
-
-  std::vector<ESegment> &segments = localData->GetSegments();
-  AZUREProfile::ScopedReport profileReport("api segments");
-  const bool pre = PrecalculateAll(ReportedSegments(segments), localCompound, configure(), results());
-  for (int i = 0; i < segments.size(); ++i) {
-    newKey = segments[i].GetSegmentKey();
-    if (prevKey == newKey) continue;
-    prevKey = newKey;
-    ++nSegments;
-
-    std::vector<EPoint> &data = segments[i].GetPoints();
-
-    std::vector<double> cross, crossE1, crossE2, energies, angles, conv, excitationEnergies;
-    // Angular-distribution coefficients, self-describing per point:
-    // a count followed by that many Legendre coefficients. Points that
-    // are not part of an angular-distribution segment contribute a zero.
-    std::vector<double> angularDists;
-
-    // Handle component segments using the new integrated calculation method
-    if (segments[i].NeedsAssembly()) {
-      for (int k = 0; k < data.size(); ++k) {
-        // The segment's model value (ModelPass.h); E1, E2 and the angles of its base point
-        cross.push_back(azure2::EvaluateModelPoint(segments[i], k, localCompound, configure(), results(),
-                                                   pre ? azure2::LeafValues::Ready : azure2::LeafValues::Calculate));
-        crossE1.push_back(data[k].GetFitE1CrossSection(results()));
-        crossE2.push_back(data[k].GetFitE2CrossSection(results()));
-        angles.push_back(data[k].GetCMAngle());
-        energies.push_back(data[k].GetCMEnergy());
-        conv.push_back(data[k].GetSFactorConversion());
-        excitationEnergies.push_back(data[k].GetExcitationEnergy());
-        angularDists.push_back((double)data[k].GetNumModelAngularDists(results()));
-        for (int a = 0; a < data[k].GetNumModelAngularDists(results()); ++a)
-          angularDists.push_back(data[k].GetModelAngularDist(results(), a));
-      }
-    } else {
-      // Regular segment calculation (existing logic)
-      for (int k = 0; k < data.size(); ++k) {
-        bool failed = false;
-        if (!pre && !data[k].IsMapped()) {
-          try {
-            data[k].Calculate(localCompound, configure(), results());
-          } catch (GSLException &e) {
-            // A GSL failure at one point used to skip every push_back for it, so the arrays came back shorter
-            // than the data and misaligned with it, silently (audit 2026-10-25, item 30).  Keep the slot: NaN.
-            failed = true;
-          }
-        }
-        const double nan = std::numeric_limits<double>::quiet_NaN();
-        cross.push_back(failed ? nan : data[k].GetFitCrossSection(results()));
-        crossE1.push_back(failed ? nan : data[k].GetFitE1CrossSection(results()));
-        crossE2.push_back(failed ? nan : data[k].GetFitE2CrossSection(results()));
-        angles.push_back(data[k].GetCMAngle());
-        energies.push_back(data[k].GetCMEnergy());
-        conv.push_back(data[k].GetSFactorConversion());
-        excitationEnergies.push_back(data[k].GetExcitationEnergy());
-        angularDists.push_back((double)data[k].GetNumAngularDists(results()));
-        for (int a = 0; a < data[k].GetNumAngularDists(results()); ++a)
-          angularDists.push_back(data[k].GetAngularDist(results(), a));
-      }
-    }
-
-    calculatedConv_.push_back(conv);
-    calculatedSegments_.push_back(cross);
-    calculatedSegmentsE1_.push_back(crossE1);
-    calculatedSegmentsE2_.push_back(crossE2);
-    calculatedEnergies_.push_back(energies);
-    calculatedAngles_.push_back(angles);
-    calculatedAngularDists_.push_back(angularDists);
-    calculatedExcitationEnergies_.push_back(excitationEnergies);
-  }
-
-  return calculatedSegments_.size();
+  return ReportSegments(localCompound, localData);
 }
 
 int AZUREAPI::UpdateSegmentsAllRWA(vector_r &p) {
-  calculatedConv_.clear();
-  calculatedEnergies_.clear();
-  calculatedAngles_.clear();
-  calculatedAngularDists_.clear();
-  calculatedSegments_.clear();
-  calculatedSegmentsE1_.clear();
-  calculatedSegmentsE2_.clear();
-  calculatedExcitationEnergies_.clear();
-
   int k = 0;
   for (int i = 0; i < all_rwa_.size(); ++i) {
     all_rwa_[i] = p[i];
@@ -565,81 +443,7 @@ int AZUREAPI::UpdateSegmentsAllRWA(vector_r &p) {
   localData->FillEnergyShiftsFromParams(params_, results(), localData, localCompound, &configure());
   if (configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure());
 
-  int newKey = -1;
-  int prevKey = -1;
-  int nSegments = 0;
-
-  std::vector<ESegment> &segments = localData->GetSegments();
-  AZUREProfile::ScopedReport profileReport("api segments");
-  const bool pre = PrecalculateAll(ReportedSegments(segments), localCompound, configure(), results());
-  for (int i = 0; i < segments.size(); ++i) {
-    newKey = segments[i].GetSegmentKey();
-    if (prevKey == newKey) continue;
-    prevKey = newKey;
-    ++nSegments;
-
-    std::vector<EPoint> &data = segments[i].GetPoints();
-
-    std::vector<double> cross, crossE1, crossE2, energies, angles, conv, excitationEnergies;
-    // Angular-distribution coefficients, self-describing per point:
-    // a count followed by that many Legendre coefficients. Points that
-    // are not part of an angular-distribution segment contribute a zero.
-    std::vector<double> angularDists;
-
-    // Handle component segments using the new integrated calculation method
-    if (segments[i].NeedsAssembly()) {
-      for (int k = 0; k < data.size(); ++k) {
-        // The segment's model value (ModelPass.h); E1, E2 and the angles of its base point
-        cross.push_back(azure2::EvaluateModelPoint(segments[i], k, localCompound, configure(), results(),
-                                                   pre ? azure2::LeafValues::Ready : azure2::LeafValues::Calculate));
-        crossE1.push_back(data[k].GetFitE1CrossSection(results()));
-        crossE2.push_back(data[k].GetFitE2CrossSection(results()));
-        angles.push_back(data[k].GetCMAngle());
-        energies.push_back(data[k].GetCMEnergy());
-        conv.push_back(data[k].GetSFactorConversion());
-        excitationEnergies.push_back(data[k].GetExcitationEnergy());
-        angularDists.push_back((double)data[k].GetNumModelAngularDists(results()));
-        for (int a = 0; a < data[k].GetNumModelAngularDists(results()); ++a)
-          angularDists.push_back(data[k].GetModelAngularDist(results(), a));
-      }
-    } else {
-      // Regular segment calculation (existing logic)
-      for (int k = 0; k < data.size(); ++k) {
-        bool failed = false;
-        if (!pre && !data[k].IsMapped()) {
-          try {
-            data[k].Calculate(localCompound, configure(), results());
-          } catch (GSLException &e) {
-            // A GSL failure at one point used to skip every push_back for it, so the arrays came back shorter
-            // than the data and misaligned with it, silently (audit 2026-10-25, item 30).  Keep the slot: NaN.
-            failed = true;
-          }
-        }
-        const double nan = std::numeric_limits<double>::quiet_NaN();
-        cross.push_back(failed ? nan : data[k].GetFitCrossSection(results()));
-        crossE1.push_back(failed ? nan : data[k].GetFitE1CrossSection(results()));
-        crossE2.push_back(failed ? nan : data[k].GetFitE2CrossSection(results()));
-        angles.push_back(data[k].GetCMAngle());
-        energies.push_back(data[k].GetCMEnergy());
-        conv.push_back(data[k].GetSFactorConversion());
-        excitationEnergies.push_back(data[k].GetExcitationEnergy());
-        angularDists.push_back((double)data[k].GetNumAngularDists(results()));
-        for (int a = 0; a < data[k].GetNumAngularDists(results()); ++a)
-          angularDists.push_back(data[k].GetAngularDist(results(), a));
-      }
-    }
-
-    calculatedConv_.push_back(conv);
-    calculatedSegments_.push_back(cross);
-    calculatedSegmentsE1_.push_back(crossE1);
-    calculatedSegmentsE2_.push_back(crossE2);
-    calculatedEnergies_.push_back(energies);
-    calculatedAngles_.push_back(angles);
-    calculatedAngularDists_.push_back(angularDists);
-    calculatedExcitationEnergies_.push_back(excitationEnergies);
-  }
-
-  return calculatedSegments_.size();
+  return ReportSegments(localCompound, localData);
 }
 
 // Transform RWA parameters to physical values
@@ -1206,7 +1010,7 @@ bool AZUREAPI::Chi2GradEGammaNorm(const vector_r &full, vector_r &gradFull,
     chi2 += (r * r) / (err * err);
     if (seg->GetCovarianceGroup() >= 0) {
       // d chi2/d r_i = 2 z_i, z = M^-1 r; d r_i/d model = 1/(cmErr n), d r_i/d n = -model/(cmErr n^2).
-      const double z = seg->GetCovarianceSeed(pid);
+      const double z = pt->GetCovarianceSeed(results());
       const int o = ld->NormOwner(i);
       if (norm != 0.0 && o >= 1 && o < (int)normData.size() && ld->GetSegment(o)->IsVaryNorm()) {
         const double dNorm = -2.0 * z * model / (cmErr * norm * norm);

@@ -528,6 +528,9 @@ class AZUREAPI {
 
 
  private:
+  /// The arrays of UpdateSegments* (the model value of every point, its E1 / E2 parts, frame and coefficients) for
+  /// the hand-over already made into the session's compound and data.  Returns the number of segments reported.
+  int ReportSegments(CNuc *localCompound, EData *localData);
   /// The nuisance priors of <parameterSettings> (useAsNuisance), read once: chi^2 and gradient at the full vector,
   /// without the parameters of the prior covariance (D3).
   double NuisanceChi2(const vector_r &full) const;
