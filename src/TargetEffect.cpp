@@ -51,12 +51,14 @@ TargetEffect::TargetEffect(const azure2::experiment::TargetEffectSpec &line, con
     if (line.hasStragglingFlag) {
       isStraggling_ = line.straggling;
       if (line.hasStragglingCoefficient) stragglingCoefficient_ = line.stragglingCoefficient;
-      if (line.hasResonanceWidthMultiplier) {
-        resonanceWidthMultiplier_ = line.resonanceWidthMultiplier;
-        explicitResonanceWidthMultiplier_ = true;
-      }
-      if (line.hasPointsPerWidth) pointsPerWidth_ = line.pointsPerWidth;
     }
+    // The quadrature of the sub-point grid, with or without a target (an old line gives it only after its straggling
+    // flag; a format-3 `quadrature` field of a beam-only data set has no straggling)
+    if (line.hasResonanceWidthMultiplier) {
+      resonanceWidthMultiplier_ = line.resonanceWidthMultiplier;
+      explicitResonanceWidthMultiplier_ = true;
+    }
+    if (line.hasPointsPerWidth) pointsPerWidth_ = line.pointsPerWidth;
 
     if (line.hasRanges) {
       if (line.autoWindows) autoWindows_ = true;

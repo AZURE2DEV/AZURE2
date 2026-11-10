@@ -2,6 +2,45 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-10 (evening) — format 3, step 3b-1, G-3: the engine runs a format-3 project (`feature/upgrade-4-format3-reader`)
+
+**Done** (brief G-3; report `work/fmt3c/REPORT.md`).
+- **A** (b2bb1452): one table of the pairs and levels of `<levels>` (`experiment/LevelTables.h`: `PairInfo`, `LevelInfo`,
+  `PairLabel`, `PairsNamed`, one wording of `E_UNKNOWN_PAIR` / `E_AMBIGUOUS_PAIR`), made once from the rows
+  (`LevelTablesOfRows`, reader library) and read by `Build`, `BuildModelData` and the engine's model data (which checks a
+  datum's level indices against the compound nucleus); `PairRow`, the engine's `PairInfos/LevelInfos` and the converter's
+  label copy are gone; `io::IdenticalParticles` is PPair's rule.  `Schema::Build` resolves `<modelData>`
+  (`BuiltProject::modelData`); the spec-equivalence test compares the model data.
+- **B** (ba0cd97d): parameter names come from the spec (`ParameterNames`; adaptor: `segment_<k>_...`; Build: `<ds>.norm`,
+  `<ds>.shift.offset|sqrt`, `D.value`, `G.offset`, `G.a<j>`, `<target>.areal_density`, a follower's `<record>.<field>[<ds>]`;
+  effects and abundances by their target).  No fixed name buffer (`EData`, `CNuc`).  The converter's map names every
+  parameter the engine makes and is injective (checked over every converted file).  Converter: one path for data and test
+  lines with a sample (M_thick asks 4 questions now; no longer a recorded difference); a missing sample of a test line is
+  noted.
+- **C**: `Config::ReadConfigFile` reads a format-3 file (records → Validate → `<levels>` tables → Build; `Config::format3`);
+  `src/ProjectSetup.cpp` (was `OldLineSetup.cpp`) gives the set-up the specs of either producer, the `<levels>` rows read
+  once and the exit pairs of the active data sets (`ExitPairKeysInFile` deleted; `AZURE2.cpp`'s pair and THM scans read
+  specs too); `<thm>` membership and weights from the records; `AZURE2 --describe FILE [--json]`, `pyazr.describe`
+  (pyazr 2.17.0); `tests/format3_engine/check.sh`; docs (`data_formats.rst` format-3 section, `command_line.rst`, the
+  note's status, the recipe "A new kind of data set").  Two converter/Build defects found by the gate and fixed: a
+  `quadrature` without a straggling flag lost its width multiplier (TargetEffect gated it on the old line's flag), and the
+  converter wrote `width_multiplier 20` where the old line gave none (a pure convolution's core then changed).
+
+**Verified** (build `work/b-fmt3`, 0 warnings, 3 threads): 179 × 3 on the old tree identical to `tab-p3f` after A, B and
+with the final engine (689/662/689); `ctest -LE slow` 155/155 (final tree); `tests/run_tests.sh` 138 passed, 0 failed
+(with `format3_engine`); consistency checks pass; spec equivalence 189 files, 185 converted, 183 equal, 2 recorded,
+0 differ (injections =2, =3 fail). Gate (tree converted into `work/fmt3c/tree3x`, exact grids; `tree3p` plain): of the 510
+output files per base of `tab-p3f`, 471 identical, 30 classified (param.par steps of fixed zero shifts, follower rows,
+angle window of angle-integrated data, sample header names, scattering lengths as model data), 2 differ (angle_mapping,
+the abundance defect), 7 missing (shift_subpoint_angle/template: refused for missing data files); plain grids give the
+same in menu 1 and differ in menu 3 in extrapolation outputs only. 1 vs 2 threads on converted T1, T2, T3, 13N
+identical. The five refusals of §8.5 hold (three checked with dummy data files).
+
+**Open / for the director**: the abundance row a converter drops when no data set of the sample reaches its compound
+nucleus still enters the old engine's sum-to-one prior (`tests/angle_mapping`: Total-Abundance χ² 0 → 25 in format 3);
+a member of a varied shared normalization has a fixed parameter of its own also where its old line did not vary (S7
+removes it); `.azr`s that are not data-mode safe for 1-thread runs were not run at 2 threads beyond T2 (see report).
+
 ## 2026-11-10 (director, day) — Phase 4: the third wave merged (specs, `Schema::Build`, model data, one model pass)
 
 **Merged into `feature/upgrade-4-data`** (`--no-ff`, in this order): G1 `feature/upgrade-4-format3-reader` at 7342c790

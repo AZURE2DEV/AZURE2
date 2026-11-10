@@ -12,7 +12,7 @@ EffectiveCharge.cpp  GSLException.cpp ParameterLimitsManager.cpp
 AdaptiveIntegrationGrid.cpp NuclearPotentialManager.cpp AZUREGrad.cpp ThmFunc.cpp
 THMMatrixFunc.cpp ThmVertexBoundary.cpp ThmNumerics.cpp EDataThm.cpp ConfigThm.cpp ThmExperiment.cpp ThmLineshape.cpp ThmDistortion.cpp ThmOptical.cpp ThmDwVertex.cpp ThmAngular.cpp CovarianceBand.cpp PriorCovariance.cpp ParameterLabel.cpp PolarizationFunc.cpp ChannelFunc.cpp CoulombTable.cpp
 CNucSystem.cpp CNucLevelParameters.cpp CNucExternalCapture.cpp CNucReport.cpp CNucChecks.cpp
-CNucTransformMessages.cpp OldLineSetup.cpp)
+CNucTransformMessages.cpp ProjectSetup.cpp)
 
 # Add MCMC sources when MCMC is enabled
 if(USE_MCMC)
@@ -92,7 +92,7 @@ endif (BUILD_LIBRARY)
 # and the binding's schema()) uses physics/ and io/'s Record.h only and is below the engine likewise.
 # azure2_experiment_reader (the reading path of a format-3 project, ProjectReader.h, and the <levels> tables) links io/.
 # azure2_convert_specs (convert/: the old sections as set-up specs, with the old line parsers it is built on) until
-# step 3d deletes the old sections; the engine reads an old project only through it (src/OldLineSetup.cpp).
+# step 3d deletes the old sections; the engine reads an old project only through it (src/ProjectSetup.cpp).
 target_link_libraries(AZURE2Core PUBLIC
     azure2_physics
     azure2_io

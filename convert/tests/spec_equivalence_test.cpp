@@ -323,6 +323,8 @@ void CompareEffect(const std::string &w, const TargetEffectSpec &x, const Target
   if (x.qCoefficients) Bits(w + " Q values", x.qCoefficientValues, y.qCoefficientValues);
   if (FoldsAnything(x)) {
     Eq(w + " points", x.numIntegrationPoints, y.numIntegrationPoints);
+    // given or left out matters (TargetEffect::GetResonanceWidthMultiplier: a pure convolution's core when left out)
+    Eq(w + " width multiplier given", x.hasResonanceWidthMultiplier, y.hasResonanceWidthMultiplier);
     Bits(w + " width multiplier", x.hasResonanceWidthMultiplier ? x.resonanceWidthMultiplier : 20.0,
          y.hasResonanceWidthMultiplier ? y.resonanceWidthMultiplier : 20.0);
     Bits(w + " points per width", x.hasPointsPerWidth ? x.pointsPerWidth : 50.0, y.hasPointsPerWidth ? y.pointsPerWidth : 50.0);

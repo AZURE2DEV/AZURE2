@@ -551,7 +551,7 @@ dataset Almeida1983_21Ne_ntot_lo
     energy_window  0.03 0.259 MeV
     norm           9.1535196e-01 fixed prior 9.1535196e-01 5%
     beam           beam_targetInt1
-    quadrature     points 15 width_multiplier 20 per_width 50
+    quadrature     points 15
 
 # <segmentsData> line 4
 dataset Almeida1983_22Ne_ntot_lo
@@ -563,7 +563,7 @@ dataset Almeida1983_22Ne_ntot_lo
     energy_window  0.03 0.354 MeV
     norm           1.0086012e+00 fixed prior 1.0086012e+00 5%
     beam           beam_targetInt1
-    quadrature     points 15 width_multiplier 20 per_width 50
+    quadrature     points 15
 
 # <segmentsData> line 5
 dataset Sikkema1958_22Ne_ntot
@@ -575,7 +575,7 @@ dataset Sikkema1958_22Ne_ntot
     energy_window  1.85 2.5 MeV
     norm           1.0817206e+00 fixed prior 1.0817206e+00 15.0%
     beam           beam_targetInt2
-    quadrature     points 30 width_multiplier 20 per_width 50
+    quadrature     points 30
 
 # <segmentsData> line 6
 dataset Sikkema_20Ne_ntot
@@ -587,7 +587,7 @@ dataset Sikkema_20Ne_ntot
     energy_window  1.85 2.5 MeV
     norm           1.0134644e+00 fixed prior 1.0134644e+00 15.0%
     beam           beam_targetInt2
-    quadrature     points 30 width_multiplier 20 per_width 50
+    quadrature     points 30
 
 # <segmentsData> line 7
 dataset Junghans_ntotal
@@ -626,7 +626,7 @@ extrapolation x3
     energies       range 0.03 0.8 MeV lab step 0.002
     # CONVERTED: the <targetInt> line that lists line 3 also folded this extrapolation (the same index, EData::MakePoints); written explicitly
     beam           beam_targetInt1
-    quadrature     points 15 width_multiplier 20 per_width 50
+    quadrature     points 15
 
 # <segmentsTest> line 4
 extrapolation x4
@@ -636,7 +636,7 @@ extrapolation x4
     energies       range 0.03 0.8 MeV lab step 0.002
     # CONVERTED: the <targetInt> line that lists line 4 also folded this extrapolation (the same index, EData::MakePoints); written explicitly
     beam           beam_targetInt1
-    quadrature     points 15 width_multiplier 20 per_width 50
+    quadrature     points 15
 </extrapolations>
 <targets>
 # <targetInt> line 1

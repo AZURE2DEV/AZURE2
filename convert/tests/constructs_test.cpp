@@ -398,7 +398,7 @@ int main(int argc, char **argv) {
     Expect("defaults written", r, "dataset e2",
            F{{"reaction", "15N(p,a)12C"}, {"quantity", "dsigma_domega"}, {"unit", "b/sr"}, {"file", "e2.dat"},
              {"columns", "E_lab[MeV] theta_lab[deg] value error"}, {"energy_window", "0.2 1.4 MeV"}, {"angle_window", "90 90 deg"},
-             {"norm", "1 fixed"}, {"beam", "beam_e2"}, {"detector", "det_e2"}, {"quadrature", "points 30 width_multiplier 20 per_width 50"}});
+             {"norm", "1 fixed"}, {"beam", "beam_e2"}, {"detector", "det_e2"}, {"quadrature", "points 30"}});
     Expect("extrapolation of the same index", r, "extrapolation x1",
            F{{"reaction", "15N(p,a)12C"}, {"quantity", "sigma"}, {"unit", "b"}, {"energies", "range 0.2 0.3 MeV lab step 0.05"},
              {"target", "tgt_e1"}, {"beam", "beam_e1"}, {"quadrature", "points 20 width_multiplier 10 per_width 20"}});
@@ -448,7 +448,7 @@ int main(int argc, char **argv) {
            F{{"kind", "layer"}, {"active", "15N"}, {"areal_density", "1e+18 atoms/cm2 fit grid_max 1.5e18"},
              {"stopping", "formula \"a0\" a0=1e-20 MeV*cm2/atom"}, {"straggling", "none"}});
     Expect("densitygroup member", r, "dataset dg2",
-           Sigma("dg2.dat") + F{{"energy_window", "0.2 1.4 MeV"}, {"norm", "1 fixed"}, {"target", "t"}, {"quadrature", "points 50 width_multiplier 20 per_width 50"}});
+           Sigma("dg2.dat") + F{{"energy_window", "0.2 1.4 MeV"}, {"norm", "1 fixed"}, {"target", "t"}, {"quadrature", "points 50"}});
     check("densitygroup: the member's density is a note", HasNote(r, "own density 2e+18"));
   }
   // ---- beamprofile: beam profile, detector resolution (the TPC sigma), data columns 5-6 the windows; udr

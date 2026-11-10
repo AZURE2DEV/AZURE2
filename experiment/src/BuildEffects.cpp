@@ -185,12 +185,15 @@ void DetectorInto(Context &c, const ValidatedRecord &d, TargetEffectSpec &e) {
 void QuadratureInto(const Value *q, const Value *w, TargetEffectSpec &e) {
   if (q) {
     if (const Value *v = q->Get("points")) e.numIntegrationPoints = (int)v->integer;
-    e.hasResonanceWidthMultiplier = true;
-    e.resonanceWidthMultiplier = 20.0;
-    if (const Value *v = q->Get("width_multiplier")) e.resonanceWidthMultiplier = v->number.value;
-    e.hasPointsPerWidth = true;
-    e.pointsPerWidth = 50.0;
-    if (const Value *v = q->Get("per_width")) e.pointsPerWidth = v->number.value;
+    // given or not (left out, the engine's default: 20, and a pure Gaussian convolution's smaller core)
+    if (const Value *v = q->Get("width_multiplier")) {
+      e.hasResonanceWidthMultiplier = true;
+      e.resonanceWidthMultiplier = v->number.value;
+    }
+    if (const Value *v = q->Get("per_width")) {
+      e.hasPointsPerWidth = true;
+      e.pointsPerWidth = v->number.value;
+    }
   }
   if (w) {
     e.hasRanges = true;

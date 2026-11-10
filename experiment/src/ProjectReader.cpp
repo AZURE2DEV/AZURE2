@@ -2,7 +2,6 @@
 #include "azure2/experiment/ProjectReader.h"
 
 #include <sstream>
-#include <utility>
 
 #include "azure2/io/Document.h"
 #include "azure2/io/LevelRows.h"
@@ -17,18 +16,26 @@ bool Format3Project::Ok() const {
   return true;
 }
 
-std::vector<io::LevelRow> LevelRowsOf(const io::Document &doc, bool &ok) {
-  ok = false;
+namespace {
+
+// The <levels> section of a document read with io::ReadLevelSection; null when it is absent or not closed.
+std::shared_ptr<const io::LevelSection> LevelSectionOf(const io::Document &doc) {
   const io::Document::Section *s = doc.Find("levels");
-  if (!s || s->close == io::Document::Section::npos) return {};
+  if (!s || s->close == io::Document::Section::npos) return nullptr;
   std::ostringstream text;
   text << "<levels>\n";
   for (const std::string &line : doc.Body(*s)) text << line << "\n";
   text << "</levels>\n";
   std::istringstream in(text.str());
-  io::LevelSection levels = io::ReadLevelSection(in);
-  ok = !levels.malformed;
-  return std::move(levels.rows);
+  return std::make_shared<const io::LevelSection>(io::ReadLevelSection(in));
+}
+
+}  // namespace
+
+std::vector<io::LevelRow> LevelRowsOf(const io::Document &doc, bool &ok) {
+  const std::shared_ptr<const io::LevelSection> levels = LevelSectionOf(doc);
+  ok = levels && !levels->malformed;
+  return levels ? levels->rows : std::vector<io::LevelRow>();
 }
 
 bool RelativisticFlag(const io::Document &doc) {
@@ -66,7 +73,10 @@ Format3Project ReadFormat3Project(const io::Document &doc, const Format3ReadOpti
     if (r.quantity)
       for (const Refusal &x : r.quantity->refusals)
         if (x.checkedBy == "build") buildChecks++;
-  p.levels = LevelTablesOfRows(LevelRowsOf(doc, p.levelsRead));
+  p.levelSection = LevelSectionOf(doc);
+  p.levelsRead = p.levelSection && !p.levelSection->malformed;
+  if (p.levelSection) p.levels = LevelTablesOfRows(p.levelSection->rows);
+  p.projectDir = options.projectDir;
   if (options.build && p.Ok() && p.levelsRead) {
     BuildOptions b;
     b.projectDir = options.projectDir;

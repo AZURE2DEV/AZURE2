@@ -328,7 +328,7 @@
          "optional": true,
          "default": "20",
          "positive": true,
-         "doc": "resonance-width multiplier of the adaptive grid"
+         "doc": "resonance-width multiplier of the adaptive grid (left out: 20, a pure Gaussian convolution a smaller core)"
         },
         {
          "name": "per_width",
@@ -806,7 +806,7 @@
          "optional": true,
          "default": "20",
          "positive": true,
-         "doc": "resonance-width multiplier of the adaptive grid"
+         "doc": "resonance-width multiplier of the adaptive grid (left out: 20, a pure Gaussian convolution a smaller core)"
         },
         {
          "name": "per_width",

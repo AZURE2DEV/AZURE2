@@ -91,7 +91,7 @@ dataset meyer_84
     angle_window   84.3 84.3 deg
     norm           1 fixed
     target         t
-    quadrature     points 50 width_multiplier 20 per_width 50
+    quadrature     points 50
 
 # <segmentsData> line 4
 dataset meyer_114
@@ -104,7 +104,7 @@ dataset meyer_114
     angle_window   114.5 114.5 deg
     norm           1 fixed
     target         t
-    quadrature     points 50 width_multiplier 20 per_width 50
+    quadrature     points 50
 
 # <segmentsData> line 5
 dataset meyer_144

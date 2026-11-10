@@ -7,7 +7,7 @@ and agents read field names, allowed values and units from it rather than spelli
 
 import warnings
 
-__all__ = ["schema", "validate"]
+__all__ = ["schema", "validate", "describe"]
 
 
 def schema():
@@ -29,8 +29,10 @@ def validate(path):
     Returns a list of dicts, one per diagnostic (docs/upgrade/project_format3.md section 6.2): ``severity``
     ("error", "warning"), ``code``, ``file``, ``line``, ``column``, ``section``, ``record_kind``, ``record``,
     ``field``, ``found``, ``allowed``, ``message`` and a syntax-only ``fix``.  An empty list: the file is valid.
-    The checks that need ``<levels>`` or the data files are made too (the engine's build of the project); a check of
-    model data, which is built in a later step, is counted and given as a warning.  A format-1 or format-2 file raises ``ValueError`` with the conversion command (section 8.4).
+    The checks that need ``<levels>`` or the data files are made too (the engine's build of the project, model data
+    included; data files are read relative to the working directory, as the engine opens them); when they cannot be
+    made (an error of the validation, no readable ``<levels>``) their number is given as a warning.  A format-1 or
+    format-2 file raises ``ValueError`` with the conversion command (section 8.4).
     Needs the compiled engine module.
     """
     import json
@@ -41,6 +43,30 @@ def validate(path):
     if refusal:
         raise ValueError(refusal)
     if skipped:
-        warnings.warn(f"{path}: {skipped} check(s) of model data were not run (<modelData> is built in a later "
-                      "step)", stacklevel=2)
+        warnings.warn(f"{path}: {skipped} build check(s) were not run (they need a valid project and its <levels>)",
+                      stacklevel=2)
     return json.loads(diagnostics)
+
+
+def describe(path, as_json=False):
+    """What the engine made of the format-3 project ``path``, as ``AZURE2 --describe [--json]`` prints it.
+
+    For every data set and extrapolation: the quantity, the observable computed, the reaction tree with the ``<levels>``
+    pair keys each term resolved to, the windows, the data file as the engine opens it (the resolved path: relative to
+    the working directory), the target, beam and detector effects linked to it and its fit parameters with their names
+    and kinds; then the model data (docs/upgrade/project_format3.md section 6.3).  Returns the text, or with
+    ``as_json`` a dict (``datasets``, ``extrapolations``, ``model_data``).  A project with an error raises
+    ``ValueError`` with its diagnostics; a format-1 or format-2 file raises ``ValueError`` with the conversion command.
+    Needs the compiled engine module.
+    """
+    import json
+    from .azrfile import _engine_module
+    with open(path, "rb") as f:
+        text = f.read()
+    refusal, diagnostics, description = _engine_module().describe_format3_text(text, str(path), bool(as_json))
+    if refusal:
+        raise ValueError(refusal)
+    if not description:
+        errors = [d["message"] for d in json.loads(diagnostics) if d["severity"] == "error"]
+        raise ValueError(f"{path}: not described, the project has errors: " + "; ".join(errors))
+    return json.loads(description) if as_json else description

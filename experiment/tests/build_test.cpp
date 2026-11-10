@@ -169,10 +169,11 @@ int main() {
                                                                   b.data.targetEffects.items[0].spec.datasetKeys == std::vector<int>{4});
       if (b.data.targetEffects.items.size() == 1) {
         const TargetEffectSpec &e = b.data.targetEffects.items[0].spec;
-        check("the effect: a layer of 1e18 atoms/cm2, screening 1000 eV fitted with 200 eV, sigma 1 keV = 0.001 MeV, 20 points",
+        check("the effect: a layer of 1e18 atoms/cm2, screening 1000 eV fitted with 200 eV, sigma 1 keV = 0.001 MeV, 20 points "
+              "(multiplier and points per width left out: the engine's defaults)",
               e.active && e.targetIntegration && e.density == 1e18 && e.stoppingPowerEquation == "a0" && e.screening &&
                   e.screeningUe == 1000 && e.screeningVary && e.screeningSigma == 200 && e.convolution && e.sigma == 1 * 1e-3 &&
-                  e.numIntegrationPoints == 20 && e.resonanceWidthMultiplier == 20 && e.pointsPerWidth == 50);
+                  e.numIntegrationPoints == 20 && !e.hasResonanceWidthMultiplier && !e.hasPointsPerWidth);
       }
     } else {
       check("5 data sets and 1 extrapolation", false);

@@ -389,7 +389,7 @@ bool BuildDataset(Context &c, const ValidatedRecord &r, DatasetSpec &d, Member &
   if (const Value *w = r.Get("angle_window")) {
     d.minA = Context::InBase(w->lo, w->unit);
     d.maxA = Context::InBase(w->hi, w->unit);
-  } else if (angleRole) {
+  } else {  // every angle (an angle-integrated observable has none; the engine reports the window, normalizations.out)
     d.minA = 0.0;
     d.maxA = 180.0;
   }

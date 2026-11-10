@@ -26,6 +26,7 @@
 #include "CoulFunc.h"
 #include "ECIntegral.h"
 #include "GSLException.h"
+#include "ProjectSetup.h"
 #include "azure2/io/LevelRows.h"
 #include "Minuit2/MnUserParameters.h"
 #include "AZUREParams.h"
@@ -209,10 +210,9 @@ int CNuc::Fill(const Config &configure, const std::map<int, double> &radii) {
   int maxLValue = 0;
   std::map<std::pair<int, int>, std::vector<int> > channelsListed;  // (group, level) -> group channel numbers, in line order
   azure2::io::LevelGrouper levelGrouper;  // the level of each line (io/LevelGrouping.h)
-  // The rows of the <levels> section (Config::SectionStream: io::Document, whole-line tags; io/ LevelRows.h).
-  std::unique_ptr<std::istream> inStream = configure.SectionStream("levels");
-  if (!inStream) return -1;
-  const azure2::io::LevelSection section = azure2::io::ReadLevelSection(*inStream);
+  // The rows of the <levels> section, read once (ProjectSetup.h: a format-3 project's by Config::ReadConfigFile).
+  azure2::io::LevelSection section;
+  if (!ProjectLevelSection(configure, section)) return -1;  // no <levels> section
   std::map<int, int> ecPairs;
   // Which compound nucleus each level (by its ID, column 9) belongs to: the
   // channel lines of one level must all come from pairs of one nucleus.
@@ -593,41 +593,8 @@ int CNuc::AddHardSphereGroups(const Config &configure, int maxL) {
  * exists from the nuclear file.  If not, the state is created.
  */
 
-/*!
- * Pair keys that the project's active segments (data and test lines) or the reaction-rate pair exit into: the
- * pairs whose external capture a run can use.  Read from the configuration file, since the data are not
- * parsed yet when the compound nucleus is built.
- */
-static std::set<int> ExitPairKeysInFile(const Config &configure) {
-  std::set<int> keys;
-  // The <segmentsData> and <segmentsTest> sections (Config::SectionStream: io::Document, whole-line tags).
-  std::string text;
-  for (const char *name : {"segmentsData", "segmentsTest"})
-    if (std::unique_ptr<std::istream> section = configure.SectionStream(name)) {
-      std::ostringstream s;
-      s << section->rdbuf();
-      text += s.str();
-    }
-  std::istringstream in(text);
-  std::string line;
-  bool inSegments = false;
-  while (std::getline(in, line)) {
-    std::string s = line;
-    s.erase(0, s.find_first_not_of(" \t\r"));
-    s.erase(s.find_last_not_of(" \t\r") + 1);
-    if (s == "<segmentsData>" || s == "<segmentsTest>") { inSegments = true; continue; }
-    if (s == "</segmentsData>" || s == "</segmentsTest>") { inSegments = false; continue; }
-    if (!inSegments || s.empty()) continue;
-    std::istringstream stm(s);
-    int active = 0, entranceKey = 0, exitKey = 0;
-    if ((stm >> active >> entranceKey >> exitKey) && active == 1) keys.insert(exitKey);
-  }
-  if (configure.paramMask & Config::CALCULATE_REACTION_RATE) keys.insert(configure.rateParams.exitPair);
-  return keys;
-}
-
 int CNuc::ParseExternalCapture(const Config &configure, std::map<int, int> &ecPairs) {
-  std::set<int> usedExitKeys = ExitPairKeysInFile(configure);
+  std::set<int> usedExitKeys = ProjectExitPairKeys(configure);  // the exit pairs of the active data sets (their specs)
   // A total-capture rate (exit key -1) exits into every capture pair of its entrance nucleus.
   if ((configure.paramMask & Config::CALCULATE_REACTION_RATE) && configure.rateParams.exitPair == -1)
     for (int key : CapturePairKeys(configure.rateParams.entrancePair)) usedExitKeys.insert(key);

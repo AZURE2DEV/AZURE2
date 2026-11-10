@@ -165,9 +165,12 @@ void Builder::BuildApparatus() {
     // the fold's numerical settings, on the data sets
     a.folded = a.hasBeam || integrates || l.isDoppler || l.isBeamProfile || l.isUdr;
     if (a.folded) {
-      const std::string rwm = l.hasResonanceWidthMultiplier ? NumberText(l.resonanceWidthMultiplier, e.text) : "20";
-      const std::string ppw = l.hasPointsPerWidth ? NumberText(l.pointsPerWidth, e.text) : "50";
-      a.quadrature = Words("points " + std::to_string(l.numIntegrationPoints) + " width_multiplier " + rwm + " per_width " + ppw);
+      // the multiplier and the points per width only where the old line gives them: left out, a pure Gaussian
+      // convolution takes its smaller core (TargetEffect::GetResonanceWidthMultiplier)
+      std::string q = "points " + std::to_string(l.numIntegrationPoints);
+      if (l.hasResonanceWidthMultiplier) q += " width_multiplier " + NumberText(l.resonanceWidthMultiplier, e.text);
+      if (l.hasPointsPerWidth) q += " per_width " + NumberText(l.pointsPerWidth, e.text);
+      a.quadrature = Words(q);
       if (l.hasRangesToken && (l.autoWindows || !l.ranges.empty())) {
         Count(Construct::kWindows);
         std::string w;

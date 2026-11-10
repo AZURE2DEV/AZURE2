@@ -145,8 +145,25 @@ with tempfile.TemporaryDirectory() as tmp:
             os.chdir(os.path.dirname(old))
             try:
                 check("convert_azr(to=3): the result validates and builds", pyazr.validate(new) == [])
+                # 5. pyazr.describe: what the engine makes of it, as AZURE2 --describe
+                text = pyazr.describe(new)
+                check("pyazr.describe: the pair keys and the resolved data file",
+                      "entrance pair 1 (p+15N), exit pair 2 (a+12C)" in text and
+                      os.path.join(os.path.dirname(old), "data", "s01_int_thin.dat") in text, text[:400])
+                d = pyazr.describe(new, as_json=True)
+                check("pyazr.describe(as_json=True): the data sets with their parameters",
+                      d["datasets"][0]["name"] == "s01_int_thin" and
+                      any(p["name"] == "s01_int_thin.norm" for p in d["datasets"][0]["parameters"]), str(d)[:300])
+                if BIN:
+                    code, out, _ = cli("--describe", new)
+                    check("--describe and pyazr.describe: the same text", code == 0 and out == text, out[:300])
             finally:
                 os.chdir(here)
+        try:
+            pyazr.describe(broken)
+            check("pyazr.describe of a project with errors raises", False)
+        except ValueError as e:
+            check("pyazr.describe of a project with errors raises", "errors" in str(e))
         try:
             pyazr.convert_azr(new, os.path.join(tmp, "again.azr"), to=3)
             check("convert_azr(to=3) of a format-3 file is refused", False)

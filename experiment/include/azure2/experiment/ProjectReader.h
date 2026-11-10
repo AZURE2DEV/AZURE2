@@ -1,6 +1,7 @@
 #ifndef AZURE2_EXPERIMENT_PROJECTREADER_H
 #define AZURE2_EXPERIMENT_PROJECTREADER_H
 
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -10,6 +11,7 @@ namespace azure2 {
 namespace io {
 class Document;
 class LevelRow;
+struct LevelSection;
 }
 namespace experiment {
 
@@ -24,6 +26,10 @@ struct Format3Project {
   std::vector<Diagnostic> diagnostics;  ///< the reader's, the validator's and the build's, each with the file name
   ValidationResult validated;
   LevelTables levels;  ///< the pairs and levels of <levels> (LevelTablesOfRows)
+  /// The <levels> section as read once (null when the file has none): the engine fills its compound nucleus from
+  /// these rows (CNuc::Fill), the tables above are made from them.
+  std::shared_ptr<const io::LevelSection> levelSection;
+  std::string projectDir;  ///< the directory the data files were read from ("" = the working directory)
   BuiltProject built;  ///< empty when the validation found an error (Build needs a valid project)
   bool levelsRead = false;  ///< <levels> was read without a malformed line
   /// The checks the table leaves to the build that were not made: all of them when the validation failed or no

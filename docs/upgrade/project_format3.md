@@ -11,6 +11,15 @@ table itself (§7), the converter from today's files (§8), and the decisions le
 code. The engine reads format 3 only; old files go through `AZURE2 --convert` (maintainer, 2026-11-09,
 `data_model.md` §5).
 
+**What is built (step 3b, 2026-11-10).** The table, `--schema`, `--validate` (§6.1, 6.2, 7); the converter (§8.1–8.3);
+`Schema::Build` (records → the engine's set-up specs, model data included; §8 construct by construct, checked by
+`convert_spec_equivalence` over every converting test file); the engine runs a format-3 file
+(`Config::ReadConfigFile`: records → Validate → `<levels>` tables → Build → set-up; §7.3) and `--describe` (§6.3, a
+plain listing of the specs, not yet the expression tree of S10); parameter names from the records (§8.4's renaming:
+the converter's `parameters` map). Not built: §8.4's refusal of old files and `--convert-params` (step 3d), pyazr's
+model on records (step 3c), units other than the engine's (refused, `E_NOT_BUILT`), the quantities and grids marked
+"a later step" in the table, `Measurement` (S7: the fixed follower parameters of a shared normalization remain).
+
 Inputs: `data_model.md` (Phase 4: `Measurement`, model expression trees, decisions M1–M13) and `data_kinds.md` (what
 the engine accepts, EXFOR, the physics of each kind, K1–K9). Line numbers refer to `feature/upgrade-4-data` at
 `eb79d95a`. **[V]** read in the code or a file; **[I]** inferred, not run. A small survey script (1 thread, in the

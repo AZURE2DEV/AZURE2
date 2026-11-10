@@ -54,7 +54,7 @@ class EData {
   int Fill(const Config &, CNuc *, const azure2::experiment::DataSpecs &);
   /// Build points from the extrapolation grids instead of data files, for a run with no data.  Returns -1 on failure.
   int MakePoints(const Config &, CNuc *, const azure2::experiment::ExtrapolationSpecs &);
-  /// TEMPORARY (step 3d): the same from the old sections of the project (src/OldLineSetup.cpp).
+  /// TEMPORARY (step 3d): the same from the old sections of the project (src/ProjectSetup.cpp).
   int Fill(const Config &, CNuc *);
   int MakePoints(const Config &, CNuc *);
   /// Fit iterations used so far.

@@ -1,5 +1,5 @@
 // The project-file commands of the command line (ProjectCommands.h): --convert (format 2, and format 3 with --to 3,
-// docs/upgrade/project_format3.md section 8), --validate (section 6.2) and --schema (section 6.1).
+// docs/upgrade/project_format3.md section 8), --validate (section 6.2), --describe (section 6.3) and --schema (6.1).
 #include "ProjectCommands.h"
 
 #include <cstring>
@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "azure2/convert/Convert.h"
+#include "azure2/experiment/Describe.h"
 #include "azure2/experiment/ProjectReader.h"
 #include "azure2/experiment/Schema.h"
 #include "azure2/io/Convert.h"
@@ -165,6 +166,37 @@ int validateProject(const std::string &file, bool json) {
   return c.Ok() ? 0 : 2;
 }
 
+/*!
+ * --describe FILE [--json]: what the engine makes of the format-3 project FILE (docs/upgrade/project_format3.md
+ * section 6.3; experiment/Describe.h): per data set its quantity, observable, reaction with the pair keys, windows,
+ * the data file's resolved path, effects and parameters.  A project with an error: its diagnostics, exit 2; a
+ * format-1 or format-2 file: exit 3; a file that cannot be read: exit 1.
+ */
+int describeProject(const std::string &file, bool json) {
+  std::string bytes;
+  if (!ReadFileBytes(file, bytes)) {
+    std::cout << "ERROR: --describe: cannot read " << file << std::endl;
+    return 1;
+  }
+  const std::string refusal = azure2::convert::NotFormat3Message(bytes, file);
+  if (!refusal.empty()) {
+    std::cout << "ERROR: " << refusal << std::endl;
+    return 3;
+  }
+  azure2::experiment::Format3ReadOptions read;
+  read.fileName = file;  // data files as the engine opens them: relative to the working directory
+  const azure2::experiment::Format3Project c = azure2::experiment::ReadFormat3Text(bytes, read);
+  for (const azure2::experiment::Diagnostic &d : c.diagnostics)
+    (d.severity == azure2::experiment::Severity::Error ? std::cout : std::cerr) << d.ToText() << std::endl;
+  if (!c.Ok() || !c.levelsRead) {
+    std::cout << file << ": not described (" << (c.levelsRead ? "errors above" : "no readable <levels>") << ")." << std::endl;
+    return 2;
+  }
+  std::cout << (json ? azure2::experiment::DescribeJson(c) : azure2::experiment::DescribeText(c)) << std::flush;
+  if (json) std::cout << std::endl;
+  return 0;
+}
+
 /// The command was given; it exits with `value`.
 bool Exit(int &exitCode, int value) {
   exitCode = value;
@@ -213,6 +245,18 @@ bool RunProjectCommand(int argc, char **argv, int &exitCode) {
       bool json = false;
       for (int k = 1; k < argc; k++) json = json || strcmp(argv[k], "--json") == 0;
       return Exit(exitCode, validateProject(argv[i + 1], json));
+    }
+
+  // --describe FILE [--json] prints what the engine makes of a format-3 project and exits (section 6.3)
+  for (int i = 1; i < argc; i++)
+    if (strcmp(argv[i], "--describe") == 0) {
+      if (i + 1 >= argc) {
+        std::cout << "ERROR: --describe needs a file: --describe project.azr [--json]" << std::endl;
+        return Exit(exitCode, 1);
+      }
+      bool json = false;
+      for (int k = 1; k < argc; k++) json = json || strcmp(argv[k], "--json") == 0;
+      return Exit(exitCode, describeProject(argv[i + 1], json));
     }
 
   // --schema prints the table of project format 3 as JSON and exits (docs/upgrade/project_format3.md section 6.1);
