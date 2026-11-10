@@ -43,6 +43,10 @@ is a question), Build gives it its abundance row: tests/angle_mapping is now ide
 NotUsed and `EData::Fill` refuses an unread data file (`E_DATA_FILE`), `EData::MakePoints` warns
 (`W_DATA_FILE_NOT_READ`); `--validate` / `--describe` stay Required. 3 (9719363f): an unreadable data file refuses a
 data run; documented with the other differences from the old engine. 5 (597c7aad): §3.11's T2 quadratures.
+Verified after them (engine `work/fmt3c/binC/AZURE2` = `work/b-fmt3`): 179 × 3 identical to `tab-p3f` (`tab-fmt3cH`);
+`ctest -LE slow` 155/155; `tests/run_tests.sh` 138/0; spec equivalence 189/185/183/2/0; gate menu 1, both grids: of 510
+(483 no-brune) files 472 (445) identical, 38 classified, 0 differ, 0 missing; menu 3 exact: 302 identical, 9
+classified, 8 differ (bad_sample runs; modelData.out added); 1 vs 2 threads on converted T1, T2, T3, 13N identical.
 
 **Open.**
 - The engine counts a nucleus a sample does not list at abundance 1.0 in the sum-to-one prior (old behaviour, unchanged).
