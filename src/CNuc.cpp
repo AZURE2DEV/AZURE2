@@ -23,6 +23,7 @@
 #include "CNucSystem.h"
 #include "CNucChecks.h"
 #include "CNucReport.h"
+#include "CNucTransformMessages.h"
 #include "CoulFunc.h"
 #include "ECIntegral.h"
 #include "GSLException.h"
@@ -839,95 +840,13 @@ bool CNuc::TransformIn(const Config &configure) {
         ALevel *theLevel = theJGroup->GetLevel(la);
         for (std::size_t k = 0; k < nc; k++) {
           const int ch = (int)k + 1;
-          AChannel *theChannel = theJGroup->GetChannel(ch);
           const double input = in.value[lb * nc + k];
           // The --ignore-externals mask is a property of the input (external_capture.md section 3).
           theLevel->SetZeroInputWidth(ch, input == 0.0);
-          switch (amp.notes[lb * nc + k]) {
-            case phys::ColumnNote::None: break;
-            case phys::ColumnNote::AmplitudeFlagIgnored:
-              configure.outStream << "WARNING: Reduced width amplitude input flag is only "
-                                  << "supported for particle channels; ignored for J = "
-                                  << theJGroup->GetJ() << " E = " << theLevel->GetE()
-                                  << " MeV channel " << ch << "." << std::endl;
-              break;
-            case phys::ColumnNote::ZeroPenetrability: {
-              PPair *pair = this->GetPair(theChannel->GetPairNum());
-              configure.outStream << "**WARNING: " << AZURELabel::Level(theJGroup, theLevel, j, la)
-                                  << ", " << AZURELabel::Channel(this, theJGroup, ch)
-                                  << ": the level is " << theLevel->GetE() - pair->GetSepE() - pair->GetExE()
-                                  << " MeV above the channel threshold, where P = 0 in double precision, "
-                                  << "so its observed width of " << input
-                                  << " eV cannot be converted; the reduced width is set to 0. "
-                                  << "Give a reduced-width amplitude (gammaIsRWA) for a level at threshold."
-                                  << std::endl;
-              break;
-            }
-            case phys::ColumnNote::AtThreshold:
-              configure.outStream << "**WARNING: " << AZURELabel::Level(theJGroup, theLevel, j, la)
-                                  << ", " << AZURELabel::Channel(this, theJGroup, ch)
-                                  << ": the level sits exactly at the channel threshold, where an ANC "
-                                  << "does not define a reduced width; the reduced width is set to 0. "
-                                  << "Give a reduced-width amplitude (gammaIsRWA) for a level at threshold."
-                                  << std::endl;
-              break;
-          }
+          WarnInputColumn(*this, configure, j, la, ch, amp.notes[lb * nc + k], input);
         }
+        WarnObservedOutOfReach(*this, configure, j, la, amp, in, lb, nc);
         const double parkNorm = amp.park_norm[lb];
-        const double halfDenom = amp.half_denominator[lb];
-        if (park && parkNorm <= 0.) {
-          // In Brune's parametrization this limit is only reached for an infinite reduced width; in Park's it is an
-          // ordinary point of the parameter space, with nothing in the level matrix to stop it.
-          configure.outStream << "**WARNING: Park norm J = 1 - sum gamma^2 dS/dE = " << parkNorm
-                              << " is not positive" << std::endl
-                              << "    " << AZURELabel::Level(theJGroup, theLevel, j, la) << std::endl
-                              << "  The widths of this level exceed what the channel radii allow; no"
-                              << std::endl
-                              << "  standard R-matrix (real reduced widths) corresponds to it."
-                              << std::endl;
-        } else if (!park && halfDenom < 0.) {
-          // An observed width Gamma_c = 2 P_c gamma_c^2 / (1 + sum gamma^2 dS/dE) saturates at 2 P_c / (dS_c/dE) as
-          // gamma_c -> infinity, so the input is out of reach of any reduced width when
-          // 1 - sum_c Gamma_c (dS_c/dE) / (2 P_c) < 0.  The usual cause is input in the wrong units (a reduced-width
-          // amplitude read as a width), so name the channel and the numbers.
-          configure.outStream << "**WARNING: Denominator less than zero while transforming"
-                              << std::endl
-                              << "    " << AZURELabel::Level(theJGroup, theLevel, j, la) << std::endl
-                              << "  No reduced width reproduces these observed widths: "
-                              << "1 - sum_c Gamma_c (dS_c/dE)/(2 P_c) = " << halfDenom << " < 0."
-                              << std::endl;
-          int worst = 0;  // channel number of the largest term, first of equal ones
-          for (std::size_t k = 0; k < nc; k++) {
-            const phys::DenominatorTerm &t = amp.denominator_terms[lb * nc + k];
-            if (t.present && (worst == 0 || t.term > amp.denominator_terms[lb * nc + worst - 1].term)) worst = (int)k + 1;
-          }
-          if (worst > 0) {
-            const phys::DenominatorTerm &t = amp.denominator_terms[lb * nc + worst - 1];
-            AChannel *wc = theJGroup->GetChannel(worst);
-            bool bound = theLevel->GetE() - this->GetPair(wc->GetPairNum())->GetSepE() -
-                    this->GetPair(wc->GetPairNum())->GetExE() <= 0.0;
-            configure.outStream << "  Largest term: " << AZURELabel::Channel(this, theJGroup, worst)
-                                << (bound ? " (bound; ANC input)" : "")
-                                << ": input " << in.value[lb * nc + worst - 1]
-                                << (bound ? " fm^(-1/2)" : " eV")
-                                << ", P = " << t.P << ", dS/dE = " << t.dS_dE
-                                << " MeV^-1, Gamma (dS/dE)/(2P) = " << t.term / 2.0 << "." << std::endl;
-            if (!bound && t.dS_dE > 0.0)
-              configure.outStream << "  Even alone, this channel's observed width saturates at 2P/(dS/dE) = "
-                                  << 2.0 * t.P / t.dS_dE * 1e6 << " eV." << std::endl;
-          }
-          // Orders of magnitude over the limit is the signature of a unit mistake; a sum just past 1 is a level
-          // broader than its channels allow at these radii.
-          if (-halfDenom > 100.0)
-            configure.outStream << "  So large an excess usually means wrong units: widths in eV (ANCs in fm^-1/2), "
-                                << "not reduced-width amplitudes -- pyazr's calculate() and calculate_energies() "
-                                << "take physical values, calculate_rwa() amplitudes." << std::endl;
-          else
-            configure.outStream << "  The level is broader than its channels allow at these radii: "
-                                << "reduce the widths or enlarge the channel radii." << std::endl;
-          configure.outStream << "  The transformation may not have been successful for this level."
-                              << std::endl;
-        }
         // The bound-state normalization of an external-capture final state is defined with Brune's reduced widths
         // gamma_obs^2 / J, so with Park's amplitudes it becomes 1 / sqrt(J + sum_c A_c gamma_obs^2) (see
         // CalcShiftFunctions).
@@ -957,14 +876,7 @@ bool CNuc::TransformIn(const Config &configure) {
       std::vector<std::size_t> exceeded;
       phys::subtract_external_capture(system, b, gamma, ext, warnings, &exceeded);
       for (std::size_t i : exceeded) {
-        const int la = levels[i / nc], ch = (int)(i % nc) + 1;
-        configure.outStream << "**WARNING: Imaginary portion of the external width is greater "
-                            << "than the total width" << std::endl
-                            << "    "
-                            << AZURELabel::LevelAndChannel(this, theJGroup, theJGroup->GetLevel(la), j, la, ch)
-                            << std::endl
-                            << "    [j=" << j << " la=" << la << " ch=" << ch << "]"
-                            << std::endl;
+        WarnExternalExceedsTotal(*this, configure, j, levels[i / nc], (int)(i % nc) + 1);
       }
       for (std::size_t lb = 0; lb < levels.size(); lb++)
         for (std::size_t k = 0; k < nc; k++) theJGroup->GetLevel(levels[lb])->SetGamma((int)k + 1, gamma[lb * nc + k]);
@@ -1530,14 +1442,7 @@ void CNuc::TransformToBrune(const Config &configure, bool report) {
     for (int j = 1; j <= this->NumJGroups(); j++)
       for (int la = 1; la <= this->GetJGroup(j)->NumLevels(); la++) {
         ALevel *theLevel = this->GetJGroup(j)->GetLevel(la);
-        if (report && theLevel->IsInRMatrix() && theLevel->GetParkNorm() <= 0.0)
-          configure.outStream << "**WARNING: Park norm J = " << theLevel->GetParkNorm() << " is not positive"
-                              << std::endl
-                              << "    " << AZURELabel::Level(this->GetJGroup(j), theLevel, j, la) << std::endl
-                              << "  The widths of this level exceed what the channel radii allow; no"
-                              << std::endl
-                              << "  standard R-matrix (real reduced widths) corresponds to it."
-                              << std::endl;
+        if (report && theLevel->IsInRMatrix() && theLevel->GetParkNorm() <= 0.0) WarnParkNormNotPositive(*this, configure, j, la);
       }
   }
   if (!(configure.paramMask & Config::USE_BRUNE_FORMALISM)) {
@@ -1570,42 +1475,7 @@ void CNuc::TransformToBrune(const Config &configure, bool report) {
       for (std::size_t lb = 0; lb < levels.size(); lb++) {
         const int la = levels[lb];
         ALevel *theLevel = theJGroup->GetLevel(la);
-        if (!report) {
-        } else if (out.status[lb] == phys::LevelSet::Status::EigenFailed) {
-          configure.outStream << "**WARNING: Could not transform level (eigenvalue problem failed)" << std::endl
-                              << "    " << AZURELabel::Level(theJGroup, theLevel, j, la) << std::endl
-                              << "  The input energy and widths are kept for this level; its "
-                              << "transformed values are unreliable." << std::endl;
-        } else if (out.status[lb] == phys::LevelSet::Status::Bracketed) {
-          // The fixed point repels (e' < -1): the root of E - e(E) by bisection (level_parameters.md section 10).
-          configure.outStream << "**NOTE: Level transformed by a bracketed root (the iteration does not converge here)"
-                              << std::endl
-                              << "    " << AZURELabel::Level(theJGroup, theLevel, j, la) << std::endl
-                              << "  Energy residual " << out.residual_MeV[lb] << " MeV (" << out.iterations[lb]
-                              << " iterations and evaluations of E - e(E))." << std::endl;
-        } else if (out.status[lb] == phys::LevelSet::Status::NotConverged) {
-          // The iteration chases the energy eigenvalue while each channel's boundary condition moves with it, so the
-          // channel whose boundary condition is still shifting most is the one holding up convergence -- name it,
-          // since that is the width to look at.
-          int worstChannel = 0;
-          double worstDiff = 0.0;
-          for (std::size_t k = 0; k < nc; k++)
-            if (std::fabs(out.boundary_shift[lb * nc + k]) >= worstDiff) {
-              worstDiff = std::fabs(out.boundary_shift[lb * nc + k]);
-              worstChannel = (int)k + 1;
-            }
-          configure.outStream << "**WARNING: Could not transform level after "
-                              << options.max_iterations << " iterations" << std::endl
-                              << "    " << AZURELabel::Level(theJGroup, theLevel, j, la) << std::endl
-                              << "  Energy residual " << out.residual_MeV[lb]
-                              << " MeV, tolerance " << options.energy_tolerance_MeV << " MeV." << std::endl;
-          if (worstChannel > 0)
-            configure.outStream << "  Least converged channel (largest boundary-condition shift, "
-                                << worstDiff << "):" << std::endl
-                                << "    " << AZURELabel::Channel(this, theJGroup, worstChannel) << std::endl;
-          configure.outStream << "  The input energy and widths are kept for this level; its "
-                              << "transformed values are unreliable." << std::endl;
-        }
+        if (report) WarnFormalToBrune(*this, configure, j, la, out, lb, nc, options);
         theLevel->SetTransformE(out.E[lb]);
         theLevel->SetTransformIterations(out.iterations[lb]);
         const std::vector<double> g(out.gamma.begin() + lb * nc, out.gamma.begin() + (lb + 1) * nc);
