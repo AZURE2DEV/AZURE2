@@ -2,6 +2,27 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-10 — plan for splitting `EData`, `EPoint`, `ESegment` (branch `docs/upgrade-edata-split`, documents only)
+
+**Done.** `docs/upgrade/edata_split.md`: inventory at 070756a1 of every member function (`EData` 139, `EPoint` 226,
+`ESegment` 187 definitions, overloads apart) and data member (43, 93, 98) with lines, responsibility, callers and
+destination; a partition of the four source files that sums to their sizes; target files with sizes; what waits for
+S5, S7, S10–S12, 3d and Phases 5–6; ordered steps; risks; defects met. A paragraph in `ROADMAP.md` names the track.
+The first three steps touch code no running branch edits (checked against `wt-expr`, `wt-plan`, `wt-fmt3` at 10:42):
+N1 the output writer to `src/EDataOutputFiles.cpp` (490 lines; `EData.cpp` 5,571 → 5,081; check 11 needs four
+allowance rows), N2 the check files to `src/EDataCheckFiles.cpp` (240; → 4,841; no test project writes them: a
+by-hand comparison and a new ctest), N3 the THM reports and tables to `src/EDataThmReports.cpp` (461; `EDataThm.cpp`
+1,233 → 772).
+
+**Verified how.** All numbers counted by the scripts in `/data0/skowrons/AZURE2-upgrade/work/edata-note/` (brace
+matching, name search over `src/`, `include/`, `api/`, `tests/`); the partitions sum back to 5,571, 1,233, 3,006 and
+1,446 lines. `python3 tests/consistency/repo_consistency_test.py` passes. Nothing was built or run: the steps are a
+plan.
+
+**Open.** Decisions D1–D5 of `edata_split.md` §8 (D1: whether to cut the parts Phases 5 and 6 rewrite into files
+before those phases; without it `EData.cpp` stays at about 1,980 and `EPoint.cpp` at about 2,720 lines through Phase 5).
+Defects found, not fixed: §7 of the note (twelve items) and the duplicates of §2.6 (eleven).
+
 ## 2026-11-10 (agent, brief N) — design note: a spin–orbit term in the hybrid potentials
 
 **Done** (branch `docs/upgrade-spin-orbit-note`, documents only): `docs/upgrade/spin_orbit_potential.md`. It covers

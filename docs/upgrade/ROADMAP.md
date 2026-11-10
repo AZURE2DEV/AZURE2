@@ -184,6 +184,15 @@ Remaining (`cnuc_split.md`, "Remaining steps"): 3b (iii) hybrid-potential channe
 file-size ratchet is consistency check 26 (`tests/consistency/file_sizes.tsv`): no listed file grows, no other file
 passes 1,000 lines, and the record only goes down.
 
+**`EData`, `EPoint`, `ESegment` split** (own track beside the `CNuc` split; plan `edata_split.md`): at 070756a1
+`src/EData.cpp` has 5,571 lines, `EDataThm.cpp` 1,233, `EPoint.cpp` 3,006, `ESegment.cpp` 1,446. Each step is a
+verbatim move, a split in place or a deletion, bit-identical on 179 × 3. Now, beside the running branches: the output
+writer (490 lines), the check files (240) and the THM reports and tables (461) into files of their own, and the writer
+in four functions (N1–N4). After the current wave: dead code (W1) and the data covariance (W2). After 3d, S7 and S12:
+the load-time checks, the parameter layout, the hand-over and the shift code into their own files; S5, S7, S10–S12
+delete mapping, frames and composition. The parts Phases 5 and 6 rewrite (target effects and grids, external capture,
+folds, channel tables) wait for the director's decision D1 (`edata_split.md` §8).
+
 ## Phase 5 — Energy grid, kernels, stopping, THM observable
 
 - [ ] `EnergyGrid` on compound-nucleus energies; one collision-matrix solve per grid energy for all reactions; grid
