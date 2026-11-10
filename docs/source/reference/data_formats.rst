@@ -644,6 +644,22 @@ same diagnostics ``AZURE2 --validate`` prints.  ``AZURE2 --describe FILE``
 the pair keys of each reaction term, the data file's resolved path, the
 effects linked to it and its fit parameters.
 
+Where the engine reading a format-3 file behaves differently from the old
+engine on the same project (``AZURE2 --convert`` reports the rest):
+
+* A data file that cannot be read refuses a run with data (``E_DATA_FILE``);
+  the old engine skipped that data set with a warning and fitted the others.
+  A run without data (extrapolations, menu 3, and pyazr calls that only
+  extrapolate) does not read the data files: one that cannot be read is the
+  warning ``W_DATA_FILE_NOT_READ``.  ``--validate`` and ``--describe`` require
+  them.
+* A member of a varied shared ``normalization`` has a fixed parameter of its own
+  (``D.value[<data set>]``) whether or not its old line varied it, and the
+  start and step of a follower's fixed parameters are the record's.
+* Scattering lengths are model data: ``chiSquared.out`` labels them
+  ``Model-Data`` and ``modelData.out`` lists them.
+* An abundance-weighted output names its sample by its target.
+
 Parameter names follow the records: a data set's own are
 ``<data set>.norm``, ``<data set>.shift.offset`` and ``<data set>.shift.sqrt``
 (every data set has the two shift parameters, fixed at 0 without a shift); a

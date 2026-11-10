@@ -19,6 +19,11 @@ plain listing of the specs, not yet the expression tree of S10); parameter names
 the converter's `parameters` map). Not built: §8.4's refusal of old files and `--convert-params` (step 3d), pyazr's
 model on records (step 3c), units other than the engine's (refused, `E_NOT_BUILT`), the quantities and grids marked
 "a later step" in the table, `Measurement` (S7: the fixed follower parameters of a shared normalization remain).
+Differences from the old engine on the same project (the gate of §8.5, classified; `reference/data_formats.rst`): an
+unreadable data file refuses a run with data (`E_DATA_FILE`; the old engine skipped the data set with a warning), a run
+without data does not read them (`W_DATA_FILE_NOT_READ`); a follower of a varied shared normalization always has its
+fixed parameter `<record>.value[<data set>]`; scattering lengths are reported as model data; abundance-weighted
+outputs name the sample by its target; an angle-integrated data set reports the angle window 0–180°.
 
 Inputs: `data_model.md` (Phase 4: `Measurement`, model expression trees, decisions M1–M13) and `data_kinds.md` (what
 the engine accepts, EXFOR, the physics of each kind, K1–K9). Line numbers refer to `feature/upgrade-4-data` at
