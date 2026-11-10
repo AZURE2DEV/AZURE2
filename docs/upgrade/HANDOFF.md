@@ -19,6 +19,8 @@ Record and recipe: `parameter_kinds.md` (format 3 check 23, decision F3).
   `_azure2.parameter_kinds()`; pyazr 2.14.0 (`parameters.parameter_kinds()`, `Parameter.thm_*`, `level_number`).
   Check 23 in `repo_consistency_test.py` (shown failing on the start head: 70 problems). Test
   `pyazr_parameter_kinds`.
+- **Second commit:** one element table: `ParameterLabel.cpp` (stopped at Kr) and `pyazr.nuclei.SYMBOLS` take
+  `physics/Elements.h` (binding `_azure2.element_symbols()`); check 10b.
 - **Open.** The layout is still walked a second time by position in `BuildParamIndexMap`, `GetParameterInfo` (now
   checked against the records), `AZURELabel::Parameter`; building them from the records is the next step. pyazr's
   document layer still parses the `prior_centre` rows by regex (no session; listed in check 23).

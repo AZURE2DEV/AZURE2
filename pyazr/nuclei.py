@@ -25,12 +25,22 @@ from typing import NamedTuple
 
 __all__ = ["SYMBOLS", "Nucleus", "nucleus_of_channel", "nucleus_of_pair", "merge_projects", "MergeReport"]
 
-#: Element symbols by charge number (0 = the neutron).
-SYMBOLS = (
-    "n H He Li Be B C N O F Ne Na Mg Al Si P S Cl Ar K Ca Sc Ti V Cr Mn Fe Co Ni Cu Zn Ga Ge As Se Br Kr "
-    "Rb Sr Y Zr Nb Mo Tc Ru Rh Pd Ag Cd In Sn Sb Te I Xe Cs Ba La Ce Pr Nd Pm Sm Eu Gd Tb Dy Ho Er Tm Yb Lu "
-    "Hf Ta W Re Os Ir Pt Au Hg Tl Pb Bi Po At Rn Fr Ra Ac Th Pa U Np Pu Am Cm Bk Cf Es Fm Md No Lr "
-    "Rf Db Sg Bh Hs Mt Ds Rg Cn Nh Fl Mc Lv Ts Og").split()
+
+def _element_symbols():
+    """The engine's table of element symbols (physics/Elements.h), through the binding; also when this file is
+    loaded by path outside its package."""
+    import importlib
+    import sys
+    if __package__:
+        return list(importlib.import_module(f"{__package__}._azure2").element_symbols())
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    if root not in sys.path:
+        sys.path.insert(0, root)
+    return list(importlib.import_module("pyazr._azure2").element_symbols())
+
+
+#: Element symbols by charge number (0 = the neutron, to 118), the engine's one table.
+SYMBOLS = _element_symbols()
 
 
 class Nucleus(NamedTuple):

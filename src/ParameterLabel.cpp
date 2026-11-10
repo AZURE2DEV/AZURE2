@@ -10,20 +10,9 @@
 #include "ESegment.h"
 #include "JGroup.h"
 #include "PPair.h"
+#include "azure2/physics/Elements.h"
 
 namespace AZURELabel {
-namespace {
-
-// Light nuclei only; R-matrix work does not go far up the chart, and an unknown
-// charge degrades to "Z=<n>" rather than guessing.
-const char *kElements[] = {
-    "n", "H", "He", "Li", "Be", "B", "C", "N", "O", "F", "Ne", "Na",
-    "Mg", "Al", "Si", "P", "S", "Cl", "Ar", "K", "Ca", "Sc", "Ti", "V",
-    "Cr", "Mn", "Fe", "Co", "Ni", "Cu", "Zn", "Ga", "Ge", "As", "Se", "Br",
-    "Kr"};
-const int kNumElements = (int)(sizeof(kElements) / sizeof(kElements[0]));
-
-}  // namespace
 
 std::string Spin(double j) {
   std::ostringstream out;
@@ -60,8 +49,8 @@ std::string Nuclide(int z, double mass) {
 
   std::ostringstream out;
   out << a;
-  if (z >= 0 && z < kNumElements) {
-    out << kElements[z];
+  if (z >= 0 && z <= azure2::physics::kMaxElementZ) {
+    out << azure2::physics::ElementSymbol(z);
   } else {
     out << "(Z=" << z << ")";
   }

@@ -276,6 +276,19 @@ for rel, literal in sorted(KNOWN):
 
 
 
+# 10b. One table of element symbols: physics/'s Elements.h (ElementSymbol, ElementZ; the binding's element_symbols(),
+#      which pyazr.nuclei.SYMBOLS is).  A second list in the engine, the API, io/, experiment/ or pyazr -- three
+#      consecutive symbols written out -- is a copy that drifts (src/ParameterLabel.cpp's stopped at Kr).
+ELEMENT_RUN = re.compile(r'\bHe\b["\',\s]{1,6}\bLi\b["\',\s]{1,6}\bBe\b')
+for top in ("src", "include", "api", "io", "experiment", "pyazr"):
+    for dirpath, _, files in os.walk(os.path.join(ROOT, top)):
+        for fname in sorted(files):
+            rel = os.path.relpath(os.path.join(dirpath, fname), ROOT)
+            if fname.endswith((".h", ".cpp", ".py")) and "/tests/" not in "/" + rel and ELEMENT_RUN.search(read(rel)):
+                problems.append(f"{rel}: a list of element symbols; use physics/'s Elements.h "
+                                "(pyazr: _azure2.element_symbols())")
+if not ELEMENT_RUN.search(read("physics/src/Elements.cpp")):
+    problems.append("check 10b: physics/src/Elements.cpp does not match the element pattern; update this check")
 
 # 11. One objective (docs/upgrade/objective.md): the chi^2 terms beyond the data points -- Park's wall, abundances,
 #     scattering lengths, target-effect priors, the data covariance -- are added in src/Objective.cpp, which every
