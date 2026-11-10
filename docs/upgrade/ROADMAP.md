@@ -141,6 +141,9 @@ Design: `data_model.md` (survey, types, decisions M1–M13, steps S1–S16), `da
 what EXFOR holds, the proposal for named quantities, targets, Rutherford ratios, resonance strengths),
 `project_format3.md` (the format the engine reads), `fit_threads.md` (the fit's dependence on the thread count).
 Started 2026-11-09; integration branch `feature/upgrade-4-data`.
+Done by 2026-11-10 (merged, verified): S3 (a) `Results` behind the old accessors and `AZURE_POISON_RESULTS`; S6 frames;
+S8 expression nodes; the first cause of thread-dependent fits (S2, exact grid comparison); format 3 step 2 (record
+reader, the table, `--schema`). In work: S3 (b), parameter kinds, the converter and `--validate`, the `CNuc` split.
 
 - [ ] State of an evaluation in one place (S1–S5): a `Results` buffer owned by the caller, with slots per calculation
       unit; one model pass and one residual function; the mapping as a plan; no writes from one object into another and

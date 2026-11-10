@@ -1,6 +1,6 @@
 # The AZURE2 upgrade: where it stands, and how to add to it
 
-A short account for the owner of AZURE2, 2026-11-09. The details are in `HANDOFF.md`, `ROADMAP.md` and the design
+A short account for the owner of AZURE2, 2026-11-10. The details are in `HANDOFF.md`, `ROADMAP.md` and the design
 notes of `docs/upgrade/`.
 
 ## Why
@@ -44,9 +44,9 @@ won.
 
 ## What users notice
 
-- Old `.azr` files load as before: they are converted in memory, with a note in the log.
-  `AZURE2 --convert old.azr new.azr` (or `pyazr.convert_azr`) writes the new format, which drops sections nothing
-  reads any more.
+- Today old `.azr` files still load (converted in memory, with a note in the log), and
+  `AZURE2 --convert old.azr new.azr` (or `pyazr.convert_azr`) writes the current format. When format 3 lands
+  (Phase 4, below) the engine reads only that; the converter turns any older file into it.
 - pyazr needs the compiled engine module to read a project: there is one reader, the engine's.
 - Results are unchanged except where a decision was taken and recorded (for example D1: the MCMC now profiles THM
   normalisations, which corrected a diverging chain). Each change is listed with its size in the design notes.
@@ -91,9 +91,17 @@ grammar (format 3); `AZURE2 --convert` and `pyazr.convert_azr` turn any old file
 directly is refused with a message naming the converter. The gate is that every converted test project gives outputs
 identical to the original on the previous engine. This supersedes "old files load as before" above once format 3 lands.
 
-**For programs and AI agents:** `AZURE2 --schema` (every section, key, quantity and unit as JSON), `--validate`
-(all problems of a file at once, machine-readable) and a printout of each data set's expression tree. One table of
-quantities in the engine feeds the validation, Python, the GUI and the documentation.
+**For programs and AI agents:** `AZURE2 --schema` (every record kind, field, quantity, unit and diagnostic code as
+JSON; done, with `pyazr.schema()` and a reference page generated from it), `--validate` (all problems of a file at
+once, machine-readable; in work) and a printout of each data set's expression tree. One table of quantities in the
+engine feeds the validation, Python, the GUI and the documentation: a new kind of data is one row of that table, a
+tree builder and a test.
+
+**State and extension points** (`ARCHITECTURE.md` §9). The only singletons are constant tables; whatever an
+evaluation writes is owned by its caller; an extension is one explicit table row, never a self-registering class.
+Done so far in Phase 4: the values an evaluation computes live in one buffer (`Results`) instead of in the data
+points; the model expressions (sum, ratio, scale, sample transform) and the lab → c.m. frames have one implementation
+each in a standalone library `experiment/`, with unit tests against closed forms.
 
 **`CNuc` is not yet split completely.** Phase 1 moved its physics into `physics/` and left the class as the owner of
 reading, the parameter vector and printing: 2,907 lines. The remaining steps (`cnuc_split.md`) are scheduled as their
@@ -113,11 +121,12 @@ they are; three changes (the heavy-ion Coulomb fallback, the coincident-level li
 in the new structure; two are obsolete (the assessment is in `HANDOFF.md`).
 Until then, new physics is best written on the upgrade branch, following the recipes.
 
-**Known open problem.** A fit's path still depends on the number of threads: on T2 the χ² after 200 MIGRAD calls
-differs in the 9th digit between 1, 2 and 4 threads, which an unconverged fit amplifies (691.6 against 595.9 at 1
-and 8 threads); at 8 threads even repeated runs can end at either value. Calculations are identical at any thread
-count. It was already present when Phase 1 began, and is traced
-in `HANDOFF.md`; Phase 6 (evaluation without copies) removes the suspected cause if it is not found sooner.
+**Fits and the number of threads.** A fit's path depended on the number of threads (T2 after 200 MIGRAD calls: χ²
+691.6 at 1 thread, 595.9 at 8). Two causes were found (`fit_threads.md`). The first is fixed: a working copy kept a
+sub-point grid that lay within 10⁻¹² of the new one, so its χ² depended, in the last bits, on what it had evaluated
+before. The second is in the vendored Minuit2: its call counter is not atomic, so with several threads a fit limited
+by `--max-calls` can run one more iteration. Two atomic increments remove it (shown on a scratch build); the patch
+touches `external/` and waits for the maintainers' decision. Calculations are identical at any thread count.
 
 **Two values for the maintainers to decide**, since changing them moves results: the electron mass in the
 β-decay Fermi function (CODATA 2002) and the proton mass in `ECIntegral.cpp` (older than CODATA 2018).

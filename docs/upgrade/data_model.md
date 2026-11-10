@@ -286,7 +286,8 @@ plan with no mapping.
 ### 2.5 Library placement
 
 `experiment/` becomes a CMake target `azure2_experiment` that links only `azure2_physics` (masses, constants,
-kinematics), like `physics/` and `io/`, from its first commit (decision M1). It holds `Measurement`, the frames, the
+kinematics), like `physics/` and `io/`, from its first commit (decision M1). (Relaxed by decision F11 of `project_format3.md`: it may
+also include `io/`'s plain record structs, `azure2/io/Record.h`, the header-only target `azure2_io_record`.) It holds `Measurement`, the frames, the
 expression nodes, the keyword → tree table and `Results`. The engine (`src/`) holds the adapter: the calculation
 units and the plan, i.e. today's `EPoint`/`EData` machinery, which a leaf reads through its slot. `io/` parses the
 segment line into a plain `SegmentSpec` (today's `SegLine`, moved and made pure as `project.md` §2 intended); the

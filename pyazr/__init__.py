@@ -38,6 +38,7 @@ from .modelavg import (Variant, Averaged, ModelAverage, model_average,
                        parameter_label, azr_parameter_slots,
                        write_averaged_azr)
 from .priors import prior_from_fit, read_prior, write_prior, read_covariance_dat
+from .schema import schema
 
 __all__ = ["azure2", "convert_azr", "ScatteringLength", "ScatteringLengthLine", "whittaker_wave",
            "tabulate", "TabulatedCrossSection",
@@ -64,5 +65,6 @@ __all__ = ["azure2", "convert_azr", "ScatteringLength", "ScatteringLengthLine", 
            "uncertainty_bands", "extrapolation_bands",
            "Variant", "Averaged", "ModelAverage", "model_average",
            "parameter_label", "azr_parameter_slots", "write_averaged_azr",
-           "prior_from_fit", "read_prior", "write_prior", "read_covariance_dat"]
-__version__ = '2.12.0'
+           "prior_from_fit", "read_prior", "write_prior", "read_covariance_dat",
+           "schema"]
+__version__ = '2.13.0'

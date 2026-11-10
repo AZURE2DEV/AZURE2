@@ -53,7 +53,7 @@ cli_doc = read("docs/source/reference/command_line.rst")
 flags = set(re.findall(r'"(--[a-z0-9-]+)=?"', parser))
 # Handled in main() before parseOptions, so accepted although parseOptions
 # never sees them.
-handled_in_main = {"--help", "--build-coulomb-table", "--convert"}
+handled_in_main = {"--help", "--build-coulomb-table", "--convert", "--schema"}
 flags -= handled_in_main
 # Removed: rejected with an error, documented as removed, not offered by --help.
 removed = {"--use-api"}
@@ -205,21 +205,27 @@ for dirpath, _, files in os.walk(os.path.join(ROOT, "io")):
 
 
 
-# 9b. experiment/ uses physics/ only (docs/upgrade/data_model.md section 2.5, decision M1): its own headers
-#     ("azure2/experiment/..."), physics/'s ("azure2/physics/...") and the C++ standard library.  An engine header
-#     (EPoint.h, Config.h), io/ or a system library makes the module depend on what it must not.
+# 9b. experiment/ uses physics/ and io/'s plain record structs only (docs/upgrade/data_model.md section 2.5, decision
+#     M1; docs/upgrade/project_format3.md section 7.3, the director's decision of 2026-11-09): its own headers
+#     ("azure2/experiment/..."), physics/'s ("azure2/physics/..."), the one header "azure2/io/Record.h" (header-only
+#     structs) and the C++ standard library.  Its tests may also include io/'s reader ("azure2/io/..."): they read
+#     their fixtures as the engine will.  An engine header (EPoint.h, Config.h), another io/ header in the library
+#     or a system library makes the module depend on what it must not.
 for dirpath, _, files in os.walk(os.path.join(ROOT, "experiment")):
     for name in sorted(files):
         if not name.endswith((".h", ".hpp", ".cpp")):
             continue
         rel = os.path.relpath(os.path.join(dirpath, name), ROOT)
+        in_tests = rel.startswith(os.path.join("experiment", "tests") + os.sep)
         for inc in re.findall(r'^\s*#\s*include\s*([<"][^>"]+[>"])', read(rel), re.M):
             if inc.startswith('"') and inc[1:-1].startswith(("azure2/experiment/", "azure2/physics/")):
                 continue
+            if inc == '"azure2/io/Record.h"' or (in_tests and inc.startswith('"azure2/io/')):
+                continue
             if inc.startswith("<") and re.fullmatch(r"[a-z_]+", inc[1:-1]):
                 continue
-            problems.append(f"{rel}: includes {inc}; experiment/ may include only azure2/experiment/ and azure2/physics/ "
-                            "headers and the C++ standard library")
+            problems.append(f"{rel}: includes {inc}; experiment/ may include only azure2/experiment/, azure2/physics/ "
+                            "and azure2/io/Record.h headers (its tests also azure2/io/) and the C++ standard library")
 
 
 # 10. One set of physical constants (docs/upgrade/project.md section 5, step 5): physics/'s Constants.h holds u, hbar c,
@@ -316,9 +322,57 @@ for top in ("src", "api/src"):
                 problems.append(f"{rel}: opens the project file ({line.strip()}); take the section from "
                                 "Config::SectionStream")
 
+# 18. The format-3 reference page is the table's, not prose that can drift: docs/source/reference/format3.rst equals
+#     what tools/gen_schema_docs.py makes of tests/schema/schema_v3.json (docs/upgrade/project_format3.md section 7.4),
+#     which in turn equals AZURE2 --schema (check 21: the ctests experiment_schema and pyazr_schema).
+try:
+    import importlib.util
+    _spec = importlib.util.spec_from_file_location("gen_schema_docs", os.path.join(ROOT, "tools", "gen_schema_docs.py"))
+    _gen = importlib.util.module_from_spec(_spec)
+    _spec.loader.exec_module(_gen)
+    import json
+    if _gen.generate(json.loads(read("tests/schema/schema_v3.json"))) != read("docs/source/reference/format3.rst"):
+        problems.append("docs/source/reference/format3.rst: not the output of tools/gen_schema_docs.py; run it "
+                        "(after AZURE2 --schema > tests/schema/schema_v3.json if the table changed)")
+except (OSError, ValueError) as e:
+    problems.append(f"check 18: {e}")
+
+
+# 24. Every diagnostic code is declared, listed in the schema and tested (docs/upgrade/project_format3.md section 7.4):
+#     the codes are the constants of experiment/'s Diagnostics.h (namespace codes) and io/'s Record.h (record_codes);
+#     each is in DiagnosticCodes() (experiment/src/Diagnostics.cpp, which the schema exports); each appears quoted in
+#     a test of experiment/tests/ or io/tests/; and every "E_..."/"W_..." literal in experiment/src/ and io/src/ is a
+#     declared code (a code made up at the call site would bypass the list).
+declared = {}
+for rel in ("experiment/include/azure2/experiment/Diagnostics.h", "io/include/azure2/io/Record.h"):
+    for const, code in re.findall(r'constexpr const char \*(k\w+) = "([EWA][A-Z_]*)"', read(rel)):
+        declared[const] = code
+registry = read("experiment/src/Diagnostics.cpp")
+tests_text = ""
+for top in ("experiment/tests", "io/tests"):
+    for name in sorted(os.listdir(os.path.join(ROOT, top))):
+        if name.endswith(".cpp"):
+            tests_text += read(f"{top}/{name}")
+if not declared:
+    problems.append("check 24: no diagnostic codes found; update this test")
+for const, code in sorted(declared.items()):
+    if not re.search(r"\{\s*(?:rc::)?" + const + r"\s*,", registry):
+        problems.append(f"{code}: declared but not in DiagnosticCodes() (experiment/src/Diagnostics.cpp)")
+    if f'"{code}"' not in tests_text:
+        problems.append(f"{code}: no test in experiment/tests/ or io/tests/ names it (each code needs one that triggers it)")
+for top in ("experiment/src", "io/src"):
+    for name in sorted(os.listdir(os.path.join(ROOT, top))):
+        if not name.endswith(".cpp"):
+            continue
+        for code in sorted(set(re.findall(r'"([EW]_[A-Z][A-Z_]+)"', read(f"{top}/{name}")))):
+            if code not in declared.values():
+                problems.append(f"{top}/{name}: diagnostic code {code} is not declared in Diagnostics.h or Record.h")
+
+
 if problems:
     for p in problems:
         print("FAIL", p)
     print(f"{len(problems)} consistency problem(s)")
     sys.exit(1)
-print(f"repository consistent: {len(flags)} CLI flags, segment keywords, test registration, check.sh modes, pyazr version and exports")
+print(f"repository consistent: {len(flags)} CLI flags, segment keywords, test registration, check.sh modes, pyazr version and exports, "
+      f"format-3 reference page, {len(declared)} diagnostic codes")

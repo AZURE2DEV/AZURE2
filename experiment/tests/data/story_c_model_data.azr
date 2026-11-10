@@ -1,0 +1,20 @@
+# User story (c), docs/upgrade/project_format3.md section 9.3: omega gamma and E_r of T2's level 5 from the
+# literature.
+<modelData>
+datum Er_L5
+    quantity       resonance_energy
+    level          5
+    J              3-
+    frame          E_x
+    value          13.2692 MeV
+    error          0.3 keV
+    source         "author, journal volume page (year), table 1"
+datum wg_L5
+    quantity       resonance_strength
+    level          5
+    J              3-
+    reaction       15N(p,a)12C
+    value          2.63 keV
+    error          0.15 keV
+    source         "author, journal volume page (year), table 2"
+</modelData>
