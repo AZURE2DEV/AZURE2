@@ -405,6 +405,11 @@ experiment[LC09] segments=11,12 beam=15N target=d spectator=n Ebeam=60
 </thm>
 ```
 
+**[Step 3a: the block below is the note's draft; what the converter writes is `convert/tests/fixtures/T2.f3.azr`
+and, as records, `experiment/tests/data/T2_format3.azr`. They differ from the draft in three places, each a defect of
+the draft: s02, s03 and s08 share `beam_targetInt2` (and s02, s03 `det_targetInt2`; F7: identical beams are one
+record, shared records are not named after one data set); the excited state is `[4.43891]`.]**
+
 New (what `AZURE2 --convert T2.azr T2_f3.azr` writes; names from the data-file stems; pairs: 1 = p + ¹⁵N, 2 = α +
 ¹²C, 3 = α + ¹²C(4.43891); `<targetInt>` lines without straggling fields take today's grid defaults 20/50, written
 out):
@@ -888,9 +893,9 @@ never writes them. It never overwrites its input or a file it did not create; si
 | data line, active flag 0 | `active no` | the record keeps its place in output numbering (§8.5) |
 | entrance, exit keys | `reaction` label | exit −1 → `[total]`; ambiguous label (two pairs with the same partition and state) → ask |
 | Emin Emax | `energy_window … MeV`, tokens verbatim | |
-| θmin θmax | `angle_window … deg` for quantities with an angle; dropped for angle-integrated data when every row's angle column lies inside, else ask [I: whether `ESegment::Fill` filters angle-integrated rows by angle was not checked] | |
+| θmin θmax | `angle_window … deg` for quantities with an angle; dropped for angle-integrated data [settled, step 3a: `ESegment::IsInSegment` tests the angle window of differential data (isDiff 1, 4, 7) only, so the old engine never filtered angle-integrated rows by angle; no question] | |
 | data isDiff 0, 1, 2, 3, 4, 5, 6, 7, 9 | `sigma`; `dsigma_domega` + `theta_lab`; `phase_shift` + J, l (+ s); `sigma` + `[total]`; `dsigma_domega` + `theta_cm`; `sigma` + `multipole E1`; `… E2`; `analyzing_power` + `theta_cm`; `legendre` + `order` + `expansion a_over_a0` (`absolute` with `absolute 1`) | survey: 170, 257, 7, 17, 65, 0, 0, 99, 10 lines |
-| test isDiff 0, 1, 2, 3 + K, 4, 5, 7 | `sigma`; `dsigma_domega` lab; `phase_shift`; `legendre expansion absolute orders 0-K` [I: the exact output of test code 3, `GM` 223–425, to be checked by S9's printed trees]; `sigma [total]`; `dsigma_domega` c.m.; `analyzing_power` | survey: 112, 74, 17, 1, 3, 16, 2 |
+| test isDiff 0, 1, 2, 3 + K, 4, 5, 7 | `sigma`; `dsigma_domega` lab; `phase_shift`; `legendre expansion a_over_a0 orders 0-K` [settled, step 3a: `GenMatrixFunc` divides each coefficient by the angle-integrated cross section (`angularCoeff[k] … 4 / angleIntegratedXS`) and `EData` writes a_0 … a_K, i.e. a_k = A_k/A_0, not the absolute A_k]; `sigma [total]`; `dsigma_domega` c.m.; `analyzing_power` | survey: 112, 74, 17, 1, 3, 16, 2 |
 | isDiff + 10 | `thm <experiment>` from `<thm>` `segments=`, or `thm global` | 19 data, 6 test lines |
 | isDiff 8, 18 and other refused codes | refused, as the old engine refused them (`EData.cpp:397`) | |
 | `spin s` | `s`; absent and unique from the pair spins → written; absent and not unique → the old engine refused the line | |
@@ -945,6 +950,35 @@ and `tests/13N` segment 1 (`artemov.dat`, a thick-target line `"1,2"` with densi
 file's numbers (4 × 10⁻¹⁴ at 0.19 MeV) were compared as reactions per incident proton, which is what the record now
 says.
 
+**[Corrections, step 3a (2026-11-10), from the converter (`convert/`) and the old engine's code:**
+- **`shiftgroup L`**: the group shares the constant shift and the leader's `shiftfn` only (`EData::ResolveShiftGroups`,
+  `ResolveShiftFunctions`); each member keeps its own `sqrtshift` (a sqrt term and a function on one member are refused
+  by the old engine). `energy_scale L` holds the leader's offset and function; the members write `shift L` and their
+  own `shift sqrt …`.
+- **Shift priors** are measured from zero (`ESegment::AddShiftPenalty`): `shift offset <s> MeV fit prior <c> <σ>` has
+  c = 0 unless a `prior_centre` row gives one; `shift sqrt` and the `param`s of a function `prior 0 <σ>`. A shift of 0
+  that is not fitted is omitted. A norm keeps its prior on `fixed` (as in the table above); a shift only when fitted.
+- **THM norms**: every THM data set with a fitted norm has it profiled (`ESegment::IsProfiledNorm`), `thm global` too
+  (§3.9 and the validator now allow it); its unit is `arbitrary`. A THM test line is `thm global` (experiments list
+  data lines only).
+- **Records shared by several data sets** (F7) are named after their `<targetInt>` line (`beam_targetInt2`), after a
+  THM experiment when all users are its data sets (`beam_LC09`), after the data set (`tgt_s01_int_thin`) only when they
+  belong to one; identical beams and detectors (and targets without a free parameter) are one record. Data sets are
+  named from their file names, extrapolations `x<k>`, model data `scattering_length_<n>`; a name taken already gets
+  `_2`, `_3`.
+- **Residual states** are written as `<levels>` writes the pair's excitation (`[4.43891]`); §3.11's T2 and the fixture
+  `experiment/tests/data/T2_format3.azr` follow (the comparison is the ctest `convert_fixtures`).
+- **A phase shift without `spin s`** takes the one channel spin of its (J, l) among the entrance pair's active
+  `<levels>` channels (and the hard-sphere channels with `includeAllJPi=1`), as `EData::Initialize` requires; several:
+  refused, as the old engine refused it.
+- **Test grids** of one point (Emin = Emax, or a step of 0: the old loop's `break`) are written as `list`.
+- **Numbers** are written as the old line wrote them when a token of the line reads back to the same double (the
+  longest such token), else as the shortest decimal that reads back to it.
+- **Side files** are `<stem>.f3<extension>` (`prior_cov.f3.txt`, as in §3.11).
+- **Also taken by the table** (they are read by the old engine and were refused, `experiment/` commit of step 3a):
+  legendre data folded with a target, beam or detector; beam-profile window columns on `dsigma_domega`; a fixed norm
+  on `beta_delayed_spectrum`; `scattering_length` of a charged pair (Coulomb-modified).]**
+
 ### 8.2 What the converter writes without asking, and the note it leaves
 
 The converter preserves the meaning the old engine gave a file; it does not reinterpret it. Where that meaning was
@@ -973,9 +1007,15 @@ Asked (severity `ask`, §6.2), with the answer key in brackets:
   [`<ds>.target`];
 - a data set with a `sample` whose `<targetInt>` target is shared with data sets without the sample [`<ds>.target`].
 
-The survey suggests that none of the 189 test files raises a question [I: the converter does not exist; this is from
-the construct counts and the files read for this note]. With `--strict`, the implicit-meaning items of §8.2 become
-questions as well (decision F12).
+The survey suggested that none of the 189 test files raises a question. **[Step 3a, measured with the converter
+(`tools/convert_tree.sh`): 18 files raise questions, of three kinds the note did not foresee — (i) an angle-integrated
+cross section of the elastic scattering of a charged pair (16 files: `tests/natural_target`, `tests/hard_sphere`,
+`tests/coulomb_nuclear_sign`, `tests/identical_entrance_reaction`), which the old engine computed as the integral of
+the nuclear amplitude alone, π/k² Σ g |T|², and which §7.2 refuses as `sigma` without offering another quantity;
+(ii) two pairs with the same particles and states (`examples/c12c12_tumino2018`: pairs 1 and 6, ¹²C + ¹²C, differing
+only in the THM columns of `<levels>`), which no reaction label can tell apart; (iii) an entrance pair with an excited
+target (`tests/thm_coherent_background/toy`: n + ¹⁶O(2.143)), which the grammar of §3.5 cannot write. Each is a
+decision for the format (a quantity, pair names, a target state), not for the converter.]**
 
 ### 8.4 The engine refuses older files
 
@@ -1223,12 +1263,12 @@ are not points); include files; reading format 1 or 2 in the engine.
 
 - The `<levels>` grammar (pairs and levels as named records) is outside this note. Reaction labels are built from the
   pair columns of `<levels>` (`data_formats.rst`, levels table); β-pair and light-excitation labels are sketched only.
-- Whether `ESegment::Fill` drops angle-integrated rows by the angle window, and the exact quantity of test isDiff 3
-  (`GM` 223–425): not read; the converter's printed trees (S9) decide both.
+- [Settled, step 3a: `ESegment::Fill` does not drop angle-integrated rows by the angle window; test isDiff 3 is
+  a_k = A_k/A_0, k = 0 … K (§8.1).]
 - The finite-layer yield per particle with N in the prefactor (story a) and the stopping evaluation are Phase 5 work;
   the format reserves the fields.
 - `,TRN` as the EXFOR code for transmission was not checked against Dict. 236.
-- That no test file raises a converter question is an expectation from the survey, not a run.
+- [Run, step 3a: 18 test files raise converter questions (§8.3).]
 - The adaptive extrapolation grid's seeding and tolerance are a proposal (HANDOFF 2026-11-10); its test (a grid that
   reproduces a narrow resonance's area to the stated tolerance) is to be written with it.
 - Where the web UI's own code lives was not checked; check 17 assumes it is under `pyazr/`.

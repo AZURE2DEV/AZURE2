@@ -228,6 +228,29 @@ for dirpath, _, files in os.walk(os.path.join(ROOT, "experiment")):
                             "and azure2/io/Record.h headers (its tests also azure2/io/) and the C++ standard library")
 
 
+# 9c. convert/ (the old formats and the converter, docs/upgrade/project_format3.md section 8) uses io/, experiment/ and
+#     physics/ and nothing else of AZURE2, except the one engine header NucLine.h: the <levels> line, whose grammar
+#     format 3 keeps (until the <levels> note gives it a home in io/).  Its own headers are "azure2/convert/..." and,
+#     in src/, the plain names of src/'s headers.
+for dirpath, _, files in os.walk(os.path.join(ROOT, "convert")):
+    own = {n for n in os.listdir(os.path.join(ROOT, "convert", "src"))} if os.path.isdir(os.path.join(ROOT, "convert", "src")) else set()
+    for name in sorted(files):
+        if not name.endswith((".h", ".hpp", ".cpp")):
+            continue
+        rel = os.path.relpath(os.path.join(dirpath, name), ROOT)
+        for inc in re.findall(r'^\s*#\s*include\s*([<"][^>"]+[>"])', read(rel), re.M):
+            if inc.startswith('"') and inc[1:-1].startswith(("azure2/convert/", "azure2/io/", "azure2/experiment/", "azure2/physics/")):
+                continue
+            if inc == '"NucLine.h"' and rel.startswith(os.path.join("convert", "src") + os.sep):
+                continue
+            if inc.startswith('"') and inc[1:-1] in own and rel.startswith(os.path.join("convert", "src") + os.sep):
+                continue
+            if inc.startswith("<") and re.fullmatch(r"[a-z_]+", inc[1:-1]):
+                continue
+            problems.append(f"{rel}: includes {inc}; convert/ may include only azure2/convert/, azure2/io/, azure2/experiment/, "
+                            "azure2/physics/ headers, its own src/ headers, NucLine.h (in src/) and the C++ standard library")
+
+
 # 10. One set of physical constants (docs/upgrade/project.md section 5, step 5): physics/'s Constants.h holds u, hbar c,
 #     alpha and m_e; any other copy in the engine, the API, io/ or pyazr must carry the same value (comments aside),
 #     so that a constant changed in one place cannot leave a stale copy that only some results use.  KNOWN lists the

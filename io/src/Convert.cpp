@@ -32,14 +32,14 @@ int FormatOf(const Document &doc) {
   if (!c) return 1;
   for (const std::string &line : doc.Body(*c)) {
     std::string key, value;
-    if (KeyValue(line, key, value) && key == "format") return value == "2" ? 2 : 1;
+    if (KeyValue(line, key, value) && key == "format") return value == "2" ? 2 : value == "3" ? 3 : 1;
   }
   return 1;
 }
 
 std::vector<std::string> ConvertToFormat2(Document &doc) {
   std::vector<std::string> report;
-  if (FormatOf(doc) == 2) return report;
+  if (FormatOf(doc) != 1) return report;
 
   // <lastRun>
   if (const Document::Section *s = doc.Find("lastRun")) {
