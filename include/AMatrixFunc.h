@@ -347,12 +347,12 @@ class AMatrixFunc : public GenMatrixFunc {
    */
   void FormalBilinearAdjoint(int j, const std::vector<BilinearTerm> &terms, GradAccum &accum);
   /// Builds tbar_q_ for the T-matrix held now (see the definition).
-  bool TBarProducts(Decay *theDecay, bool particleExit);
+  bool TBarProducts(const azure2::EntrancePathways &P, const azure2::ExitRow &exit, bool particleExit);
   /// Cotangent coefficients of the differential sum, [pathway][order], over
-  /// Decay::InterferencePathways and its orders.
+  /// the exit's interference pathways and its orders.
   std::vector<complex> tbar_q_;
   std::vector<double> tbar_legendre_;
-  const Decay *tbar_decay_ = nullptr;
+  const azure2::ExitRow *tbar_decay_ = nullptr;
   bool tbar_particle_ = false;
   /// AZURE_CHANNEL_VERIFY: compare the channel-space solve of J-group j with the level matrix.
   void VerifyChannelSpace(int j, EPoint *point, double inEnergy);
