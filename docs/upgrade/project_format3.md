@@ -1125,8 +1125,10 @@ WORK=<scratch> REF=<tag of the original tree's run> JOBS=3 tools/format3_gate.sh
 
 converts the source tree's `tests/` with `tools/convert_tree.sh` and `--exact-grids` (without the old engine's pass)
 into `$WORK/gate-<tag>/converted`, makes it runnable (`format3_gate.py tree`: each original whose conversion
-validates, or fails only with `E_DATA_FILE`, is replaced by its conversion under its own name; the others are listed
-in `tree.txt`), runs it in the three bases with `runall.sh` as `tab-<tag>` (one thread per run, `JOBS` runs at once)
+validates, or fails only with `E_DATA_FILE`, is replaced by its conversion under its own name; a project the converter
+leaves alone because it is format 3 already stays as it is, so its outputs are compared too and must be identical; the
+others are listed in `tree.txt` with the converter's reason), runs it in the three bases with `tools/runall.sh` as
+`tab-<tag>` (one thread per run, `JOBS` runs at once)
 and compares every output file with those of the reference tag `REF` (`format3_gate.py compare`; `param.par` after
 each conversion's parameter-name map; `run.log` not compared). A file is identical, or its difference consists of
 classes each listed for that file and project in the table `CLASSES` of `format3_gate.py` (class, file, projects,
