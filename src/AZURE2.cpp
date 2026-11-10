@@ -13,10 +13,11 @@
 #include "azure2/io/Document.h"
 #include "azure2/experiment/Schema.h"
 #include "AZUREMain.h"
+#include "ProjectCommands.h"
 #include "Config.h"
 #include "azure2/io/LevelRows.h"
-#include "SegLine.h"
-#include "ExtrapLine.h"
+#include "azure2/convert/SegLine.h"
+#include "azure2/convert/ExtrapLine.h"
 #include "GSLException.h"
 #include "ECAmplitudeCache.h"
 #include "CoulombTable.h"
@@ -123,6 +124,13 @@ void printHelp() {
             << std::setw(25) << std::left << "\t--ec-convection-current:" << std::setw(0) << "The exact-form convection current (the default; undoes an earlier --no-ec-convection-current)." << std::endl
             << std::setw(25) << std::left << "\t--no-ec-convection-current:" << std::setw(0) << "With --no-long-wavelength: external capture with the charge (extended Siegert) part of the E_L operator only, without its convection-current part." << std::endl
             << std::setw(25) << std::left << "\t--convert:" << std::setw(0) << "--convert OLD NEW: write the old-format project OLD in the updated format (format 2) to NEW (not overwritten) and exit." << std::endl
+            << std::setw(25) << std::left << "\t" << std::setw(0) << "--convert OLD NEW --to 3 [--json-report R] [--answers A] [--exact-grids] [--strict] [--allow-questions]:" << std::endl
+            << std::setw(25) << std::left << "\t" << std::setw(0) << "write format 3 (records; docs/upgrade/project_format3.md section 8) and its side files <f>.f3<ext>," << std::endl
+            << std::setw(25) << std::left << "\t" << std::setw(0) << "R the JSON report (notes, questions, parameter names old -> new), A the answers {\"<record>.<field>\": value}," << std::endl
+            << std::setw(25) << std::left << "\t" << std::setw(0) << "--exact-grids the grids the old engine accumulated (F10), --strict ask where the old meaning was implicit," << std::endl
+            << std::setw(25) << std::left << "\t" << std::setw(0) << "--allow-questions '?' for unanswered questions. --to 3 is needed until this engine reads format 3." << std::endl
+            << std::setw(25) << std::left << "\t--validate:" << std::setw(0) << "--validate FILE [--json]: check a format-3 project against the table and print every problem" << std::endl
+            << std::setw(25) << std::left << "\t" << std::setw(0) << "(file:line: record.field: message, or a JSON array); exit 0 without errors, 2 with errors, 3 for format 1/2." << std::endl
             << std::setw(25) << std::left << "\t--schema:" << std::setw(0) << "Print the table of project format 3 (record kinds, fields, quantities, units, diagnostic codes) as JSON and exit." << std::endl
             << std::setw(25) << std::left << "\t--build-coulomb-table[=FILE]:" << std::setw(0) << "Build the Coulomb table (about 5 min on 4 threads, 88 MB; FILE as for --coulomb-table) and exit." << std::endl
             << std::setw(25) << std::left << "\t--grid-replacement:" << std::setw(0) << "Re-place the adaptive sub-point grids as levels and shifts move (the default)." << std::endl
@@ -556,37 +564,6 @@ void getParameterFile(bool useReadline, Config &configure) {
       if (!useReadline) configure.outStream << "External Parameter File (leave blank for new file): ";
     }
   }
-}
-
-/*!
- * --convert OLD NEW: OLD's format-2 conversion (io::ConvertToFormat2; docs/upgrade/project.md section 4) written to
- * NEW, which must not exist; the changes are listed.  A file already in format 2 is copied unchanged.
- */
-static int convertProject(const std::string &from, const std::string &to) {
-  std::ifstream in(from, std::ios::binary);
-  if (!in) {
-    std::cout << "ERROR: --convert: cannot read " << from << std::endl;
-    return 1;
-  }
-  if (std::ifstream(to)) {
-    std::cout << "ERROR: --convert: " << to << " exists; it is not overwritten" << std::endl;
-    return 1;
-  }
-  std::ostringstream bytes;
-  bytes << in.rdbuf();
-  azure2::io::Document doc = azure2::io::Document::Parse(bytes.str());
-  for (const std::string &problem : doc.Problems()) std::cout << "WARNING: " << from << ": " << problem << std::endl;
-  const std::vector<std::string> changes = azure2::io::ConvertToFormat2(doc);
-  std::ofstream out(to, std::ios::binary);
-  out << doc.Write();
-  if (!out) {
-    std::cout << "ERROR: --convert: cannot write " << to << std::endl;
-    return 1;
-  }
-  if (changes.empty()) std::cout << from << " is already in format 2; copied to " << to << std::endl;
-  for (const std::string &c : changes) std::cout << "  " << c << std::endl;
-  std::cout << "Wrote " << to << " (format 2)." << std::endl;
-  return 0;
 }
 
 /*!
@@ -1566,23 +1543,9 @@ int main(int argc, char *argv[]) {
   // Set GSL Error Handler
   gsl_set_error_handler(&GSLException::GSLErrorHandler);
 
-  // --convert OLD NEW writes OLD's format-2 conversion to NEW and exits (docs/upgrade/project.md section 4)
-  for (int i = 1; i < argc; i++)
-    if (strcmp(argv[i], "--convert") == 0) {
-      if (i + 2 >= argc) {
-        std::cout << "ERROR: --convert needs two files: --convert old.azr new.azr" << std::endl;
-        return 1;
-      }
-      return convertProject(argv[i + 1], argv[i + 2]);
-    }
-
-  // --schema prints the table of project format 3 as JSON and exits (docs/upgrade/project_format3.md section 6.1);
-  // tests/schema/schema_v3.json is its committed copy
-  for (int i = 1; i < argc; i++)
-    if (strcmp(argv[i], "--schema") == 0) {
-      std::cout << azure2::experiment::Schema::ToJson() << std::endl;
-      return 0;
-    }
+  // --convert, --validate, --schema: the project-file commands (src/ProjectCommands.cpp), each of which exits
+  int projectCommandExit = 0;
+  if (RunProjectCommand(argc, argv, projectCommandExit)) return projectCommandExit;
 
   // --build-coulomb-table[=FILE] builds the table and exits
   for (int i = 1; i < argc; i++) {

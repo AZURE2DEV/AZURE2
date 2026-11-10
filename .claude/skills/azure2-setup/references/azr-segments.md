@@ -30,7 +30,7 @@ isActive entranceKey exitKey minE maxE minA maxA isDiff [phaseJ phaseL] dataNorm
 tail = isAdvanced [operationType nComp {entrance exit angle [scaling]}...] isUPOS [L Ic delta] [keyword blocks]
 ```
 
-Parser: `include/SegLine.h`. Energies E_lab (MeV), angles θ_lab (deg) unless the observable code says c.m.
+Parser: `convert/include/azure2/convert/SegLine.h`. Energies E_lab (MeV), angles θ_lab (deg) unless the observable code says c.m.
 `isDiff + 10` marks a THM (HOES) segment (azure2-thm).
 
 - **Formatting.** The engine tokenizes on any whitespace, but the Qt GUI's segment editor (released builds) expects

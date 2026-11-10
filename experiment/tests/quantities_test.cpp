@@ -45,7 +45,9 @@ std::vector<Diagnostic> Diagnose(const std::string &text) {
     sections.push_back({s.name, r.set.records});
   }
   const ValidationResult v = Schema::Validate(sections);
-  out.insert(out.end(), v.diagnostics.begin(), v.diagnostics.end());
+  // Errors only: a quantity's data-set warning (W_NOT_MEASURABLE) is tested in diagnostics_test.
+  for (const Diagnostic &d : v.diagnostics)
+    if (d.severity == Severity::Error) out.push_back(d);
   return out;
 }
 
@@ -120,6 +122,7 @@ int main() {
       {"sigma",
        {{"dataset", DS("15N(p,a)12C", "sigma", "b", M)},
         {"dataset", DS("15N(p,a)12C[4.439] / 15N(p,a)12C", "sigma", "1", M), true}}},
+      {"sigma_nuclear", {{"dataset", DS("12C(p,p)12C", "sigma_nuclear", "b", M)}}},
       {"sigma_total", {{"dataset", DS("20Ne(n,n)20Ne", "sigma_total", "b", M)}}},
       {"dsigma_domega",
        {{"dataset", DS("15N(p,a)12C", "dsigma_domega", "b/sr", MA), false, "", true},

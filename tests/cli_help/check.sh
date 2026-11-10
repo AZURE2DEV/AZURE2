@@ -10,7 +10,8 @@
 # --use-nlopt, count only where they are compiled in):
 #
 #   1. every flag the help prints is accepted (no "Unknown option" warning);
-#   2. every flag literal of src/AZURE2.cpp is either accepted and printed,
+#   2. every flag literal of src/AZURE2.cpp and src/ProjectCommands.cpp (the --convert, --validate and --schema
+#      commands) is either accepted and printed,
 #      or neither (compiled out);
 #   3. the flag table of docs/source/reference/command_line.rst names every
 #      printed flag, and no flag the source does not have.
@@ -31,13 +32,14 @@ AZURE2_BIN="$(cd "$(dirname "$AZURE2_BIN")" && pwd)/$(basename "$AZURE2_BIN")"
 RUN="$(guard_command "${TEST_TIMEOUT:-60}")"
 export OMP_NUM_THREADS=1
 SRC="$HERE/../../src/AZURE2.cpp"
+SRC_COMMANDS="$HERE/../../src/ProjectCommands.cpp"
 DOC="$HERE/../../docs/source/reference/command_line.rst"
 
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/cli_help.XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
 fail=0
 
-if [ ! -f "$SRC" ] || [ ! -f "$DOC" ]; then
+if [ ! -f "$SRC" ] || [ ! -f "$SRC_COMMANDS" ] || [ ! -f "$DOC" ]; then
   bad "src/AZURE2.cpp or docs/source/reference/command_line.rst not found next to tests/"
   echo "  FAIL"; exit 1
 fi
@@ -47,7 +49,7 @@ fi
 # A flag that takes a value prints as "--flag[=FILE]:".
 printed="$(sed -n 's/^[[:space:]]*\(--[a-z][a-z-]*\)\(\[=[A-Z]*\]\)\{0,1\}:.*/\1/p' "$WORK/help.txt" | sort -u)"
 # The flags of the source: every "--flag" string literal of src/AZURE2.cpp.
-literals="$(tr -d '\r' < "$SRC" | grep -o '"--[a-z][a-z-]*"' | tr -d '"' | sort -u)"
+literals="$(cat "$SRC" "$SRC_COMMANDS" | tr -d '\r' | grep -o '"--[a-z][a-z-]*"' | tr -d '"' | sort -u)"
 # The flags of the documentation's table: "* - ``--flag``" rows.
 documented="$(tr -d '\r' < "$DOC" | sed -n 's/^ *\* - ``\(--[a-z][a-z-]*\)\(\[=[A-Z]*\]\)\{0,1\}``.*/\1/p' | sort -u)"
 
@@ -75,7 +77,7 @@ for f in $(printf '%s\n%s\n' "$printed" "$literals" | sort -u); do
   elif [ "$acc" = yes ] && [ "$in_help" = no ]; then
     bad "$f is accepted but --help does not print it"
   elif [ "$in_src" = no ]; then
-    bad "$f is printed and accepted but is no literal of src/AZURE2.cpp (check this test)"
+    bad "$f is printed and accepted but is no literal of src/AZURE2.cpp or src/ProjectCommands.cpp (check this test)"
   elif [ "$acc" = yes ]; then
     ok "$f: accepted and printed"
   else

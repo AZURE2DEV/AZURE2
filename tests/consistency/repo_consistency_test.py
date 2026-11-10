@@ -154,7 +154,9 @@ cli_doc = read("docs/source/reference/command_line.rst")
 flags = set(re.findall(r'"(--[a-z0-9-]+)=?"', parser))
 # Handled in main() before parseOptions, so accepted although parseOptions
 # never sees them.
-handled_in_main = {"--help", "--build-coulomb-table", "--convert", "--schema"}
+handled_in_main = {"--help", "--build-coulomb-table", "--convert", "--schema", "--validate",
+                   # options of --convert ... --to 3 and of --validate, read in main() with their command
+                   "--to", "--json-report", "--answers", "--exact-grids", "--strict", "--allow-questions", "--json"}
 flags -= handled_in_main
 # Removed: rejected with an error, documented as removed, not offered by --help.
 removed = {"--use-api"}
@@ -250,17 +252,17 @@ if all_match:
 #    pyazr splits the tail by its own table, so a keyword the engine learns and
 #    pyazr does not is mangled by a load and save there.
 engine_kw = set()
-for header in ("include/SegLine.h", "include/ExtrapLine.h"):
+for header in ("convert/include/azure2/convert/SegLine.h", "convert/include/azure2/convert/ExtrapLine.h"):
     engine_kw |= set(re.findall(r'keyword == "([a-z]+)"', read(header)))
 py_match = re.search(r"_KEYWORDS\s*=\s*\{(.*?)\}", read("pyazr/datasets.py"), re.S)
 py_kw = set(re.findall(r'"([a-z]+)"\s*:', py_match.group(1))) if py_match else set()
 for name, kw in (("pyazr/datasets.py _KEYWORDS", py_kw),):
     for k in sorted(engine_kw - kw):
-        problems.append(f"segment keyword '{k}': read by the engine (SegLine.h/ExtrapLine.h), unknown to {name}")
+        problems.append(f"segment keyword '{k}': read by the engine (convert/'s SegLine.h/ExtrapLine.h), unknown to {name}")
     for k in sorted(kw - engine_kw):
         problems.append(f"segment keyword '{k}': known to {name}, not read by the engine")
 if not engine_kw:
-    problems.append("could not find the segment keywords in include/SegLine.h; update this test")
+    problems.append("could not find the segment keywords in convert/include/azure2/convert/SegLine.h; update this test")
 
 
 # 7. The repository carries its licence.
@@ -327,6 +329,26 @@ for dirpath, _, files in os.walk(os.path.join(ROOT, "experiment")):
                 continue
             problems.append(f"{rel}: includes {inc}; experiment/ may include only azure2/experiment/, azure2/physics/ "
                             "and azure2/io/Record.h headers (its tests also azure2/io/) and the C++ standard library")
+
+
+# 9c. convert/ (the old formats and the converter, docs/upgrade/project_format3.md section 8) uses io/, experiment/ and
+#     physics/ and nothing else of AZURE2 (the <levels> line, whose grammar format 3 keeps, is io/'s LevelRow).  Its
+#     own headers are "azure2/convert/..." and, in src/, the plain names of src/'s headers.
+for dirpath, _, files in os.walk(os.path.join(ROOT, "convert")):
+    own = {n for n in os.listdir(os.path.join(ROOT, "convert", "src"))} if os.path.isdir(os.path.join(ROOT, "convert", "src")) else set()
+    for name in sorted(files):
+        if not name.endswith((".h", ".hpp", ".cpp")):
+            continue
+        rel = os.path.relpath(os.path.join(dirpath, name), ROOT)
+        for inc in re.findall(r'^\s*#\s*include\s*([<"][^>"]+[>"])', read(rel), re.M):
+            if inc.startswith('"') and inc[1:-1].startswith(("azure2/convert/", "azure2/io/", "azure2/experiment/", "azure2/physics/")):
+                continue
+            if inc.startswith('"') and inc[1:-1] in own and rel.startswith(os.path.join("convert", "src") + os.sep):
+                continue
+            if inc.startswith("<") and re.fullmatch(r"[a-z_]+", inc[1:-1]):
+                continue
+            problems.append(f"{rel}: includes {inc}; convert/ may include only azure2/convert/, azure2/io/, azure2/experiment/, "
+                            "azure2/physics/ headers, its own src/ headers and the C++ standard library")
 
 
 # 10. One set of physical constants (docs/upgrade/project.md section 5, step 5): physics/'s Constants.h holds u, hbar c,

@@ -1,6 +1,9 @@
 # User story (d), docs/upgrade/project_format3.md section 9.4: the data of story (b) as the EXFOR importer would add
 # them, with the provenance fields and a covariance file for the correlated partial uncertainties.  The importer
 # itself is not written yet; this is the record it is to produce.
+<config>
+format=3
+</config>
 <data>
 dataset aC_RTH
     reaction       12C(a,a)12C

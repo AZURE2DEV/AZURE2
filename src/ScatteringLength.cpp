@@ -1,4 +1,5 @@
 #include "ScatteringLength.h"
+#include "azure2/convert/ScatteringLengthLine.h"
 #include "AMatrixFunc.h"
 #include "AZUREGrad.h"
 #include "AChannel.h"
@@ -129,23 +130,21 @@ int ReadConstraints(CNuc *compound, const Config &configure, std::vector<Constra
   while (getline(in, line)) {
     if (line.find("</scatteringLengths>") != std::string::npos) break;
     n++;
-    size_t hash = line.find('#');
-    if (hash != std::string::npos) line = line.substr(0, hash);
-    std::istringstream stm(line);
+    // The line's fields (convert/'s ScatteringLengthLine.h: the one reader of the old grammar, shared with the
+    // converter to format 3).
+    const azure2::convert::ScatteringLengthLine read = azure2::convert::ReadScatteringLengthLine(line);
+    if (read.kind == azure2::convert::ScatteringLengthLine::Blank) continue;
+    if (read.kind == azure2::convert::ScatteringLengthLine::Malformed) return error(read.error);
     Constraint c;
-    int active;
-    if (!(stm >> active)) continue;  // blank or comment
-    if (!(stm >> c.pairKey >> c.s >> c.value >> c.sigma))
-      return error("expected 'active pairKey s value sigma [imValue imSigma]'");
-    double im, imSigma;
-    if (stm >> im) {
-      if (!(stm >> imSigma)) return error("an imaginary part needs its uncertainty too");
-      c.imValue = im;
-      c.imSigma = imSigma;
+    c.pairKey = read.pairKey;
+    c.s = read.s;
+    c.value = read.value;
+    c.sigma = read.sigma;
+    if (read.hasImaginary) {
+      c.imValue = read.imValue;
+      c.imSigma = read.imSigma;
     }
-    std::string extra;
-    if (stm >> extra) return error("unexpected '" + extra + "'");
-    c.active = (active != 0);
+    c.active = (read.active != 0);
     c.line = n;
     if (c.sigma < 0.0 || c.imSigma < 0.0) return error("uncertainties must not be negative");
     if (!compound->IsPairKey(c.pairKey)) return error("no particle pair with key " + std::to_string(c.pairKey));

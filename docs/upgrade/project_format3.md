@@ -171,7 +171,6 @@ dataset <name>
 |---|---|---|
 | `E_lab` | beam energy of the light particle on the heavy one at rest (forward kinematics) | in the role: `E_lab[MeV]` |
 | `E_cm` | entrance-channel c.m. energy | `E_cm[keV]` … |
-| `E_x` | excitation energy of the compound nucleus [step 2: no quantity row of §7.2 accepts it; kept as a role] | |
 | `E_decay` | lab energy of the detected particle of a decay at rest (β-delayed) | |
 | `theta_lab`, `theta_cm` | detection angle | `theta_cm[deg]`, `[rad]` |
 | `order` | Legendre order k (integer) | — |
@@ -179,6 +178,10 @@ dataset <name>
 | `error_percent` | the uncertainty in per cent of the value | % |
 | `window_lo`, `window_hi` | reconstructed-energy window of a beam-profile kernel (today columns 5–6, `qt_parity.md` §7) | as the energy column |
 | `_` | a column that is not read | — |
+
+**[Correction, step 3a (2026-11-10): the role `E_x` is removed. No quantity row of §7.2 takes an excitation-energy
+column and the old engine reads none (data energies are E_lab, `data_formats.rst`); `frame E_x` of a `resonance_energy`
+datum (§3.10) is a field value, not a column role. `columns E_x[MeV] …` is now `E_UNKNOWN_ROLE`.]**
 
 The unit of the energy and angle columns is written in the role: `E_lab[MeV]`, `E_cm[keV]`, `theta_cm[deg]`.
 The converter writes `E_lab[MeV]` and `theta_lab[deg]` (today's fixed units, `data_formats.rst:7-31`). An angle-
@@ -205,6 +208,18 @@ A reaction is `<target nucleus>(<projectile>,<ejectile>)<residual>[<state>]`:
 - a light particle's excitation `a[e1]` analogously (`data_formats.rst`, column 34 `e1`);
 - the reaction must name exactly one entrance pair and one exit pair of the project; otherwise the error lists the
   project's pair labels.
+- **[Step 3a, director's decisions D2, D3 (2026-11-10):** the target nucleus may carry a state, `16O[2.143](n,n)16O[2.143]`
+  — an entrance pair whose heavy particle is excited — matched to the pair's heavy-particle excitation exactly as the
+  residual state is; `[total]` is not a target state. An elastic reaction has the same state on both sides. Where a
+  label names two pairs of the project (the same particles and states, e.g. `examples/c12c12_tumino2018`: pairs 1 and
+  6, ¹²C + ¹²C, which differ in their channel lines and in the THM binding-energy column), the data set or
+  extrapolation writes `entrance_pair <key>` and/or `exit_pair <key>`, the pair key of `<levels>` (column 6), a
+  written label as the level ID of F13 (a). They are accepted only where the label alone is ambiguous and required
+  there (the reader checks both against `<levels>`: a redundant key is a second source of truth); they apply to a
+  single reaction only — a sum or a ratio with an ambiguous term waits for named pairs in `<levels>`. The rule "a THM
+  data set takes the pair carrying the THM columns" was not taken: the old engine uses the key written, the two pairs
+  of that file carry different channels (pair 1 has eight levels pair 6 lacks), and the THM columns are read only by the
+  THM vertex (`EDataThm.cpp`, `EPoint.cpp`); the rule would hold in that file but is no meaning the old engine has.]**
 
 Ordinal labels (`a1`, `p2`) are refused: an ordinal counts the states the project happens to include, which is a
 position. `a0`, `p0`, `n0`, `g0` are accepted as aliases of the ground state.
@@ -228,19 +243,21 @@ grammar writes exactly those. The first term is the base term whose frame the ot
 ### 3.6 Shared nuisances: `norm` and `energy_scale` records (decision F6)
 
 ```
-norm D
+normalization D
     value      1 fit prior 1 8%
 
 energy_scale G
     offset     0 MeV fit prior 0 0.003
-    sqrt       0 MeV^1/2 fixed                               # E' = E + b sqrt(E/MeV)
-    function   "a0*(x-0.8)"                                  # x = E_lab of the point (MeV)
+    sqrt       0 MeV^1/2 fixed                               # E' = E + b sqrt(E), b in MeV^1/2 and E in MeV
+    function   "a0*(x-0.8)" MeV                              # x = E_lab of the point (MeV); the result in MeV
     param      a0 0 fit prior 0 0.01                          # repeatable, one per parameter
 ```
 
 **[Correction, step 2 (2026-11-10): the record kind is `normalization D` (§3.1 correction); the function states the unit of its result,
 `function "a0*(x-0.8)" MeV` (principle 5); with b in MeV^1/2 the sqrt term is E' = E + b sqrt(E), E in MeV (b sqrt(E/MeV)
-would make b an energy; `include/SegLine.h:214` has the same comment).]**
+would make b an energy; `include/SegLine.h:214` has the same comment).]** **[Step 3a: the example above is written
+with these corrections; the comment of `SegLine.h` (now `convert/include/azure2/convert/SegLine.h`) says E' = E + a +
+b sqrt(E) with E in MeV and b in MeV^1/2.]**
 
 A data set says `norm D` or `shift G`. The value lives in one place; no data set carries a copy that is ignored.
 `shiftgroup G` (shared offset and function) is `shift G` on each member; `shiftfngroup F` (shared function, own
@@ -399,6 +416,11 @@ natN: sum 0
 experiment[LC09] segments=11,12 beam=15N target=d spectator=n Ebeam=60
 </thm>
 ```
+
+**[Step 3a: the block below is the note's draft; what the converter writes is `convert/tests/fixtures/T2.f3.azr`
+and, as records, `experiment/tests/data/T2_format3.azr`. They differ from the draft in three places, each a defect of
+the draft: s02, s03 and s08 share `beam_targetInt2` (and s02, s03 `det_targetInt2`; F7: identical beams are one
+record, shared records are not named after one data set); the excited state is `[4.43891]`.]**
 
 New (what `AZURE2 --convert T2.azr T2_f3.azr` writes; names from the data-file stems; pairs: 1 = p + ¹⁵N, 2 = α +
 ¹²C, 3 = α + ¹²C(4.43891); `<targetInt>` lines without straggling fields take today's grid defaults 20/50, written
@@ -794,6 +816,7 @@ units 1/uC, 1/mC, 1/C, with the model scaled by 10⁻⁶ C/(q e) for 1/uC etc., 
 | name | units | columns (energy; angle) | requires / allows | tree | EXFOR | refusals |
 |---|---|---|---|---|---|---|
 | `sigma` | b family; `1` with a `/` reaction; `arbitrary` | E_lab, E_cm, E_decay; none | allows `multipole E1|E2`, `secondary_gamma`, `target` (thin layer: target-averaged σ, `data_kinds.md` eq. 2), `beam`, `detector`, `thm` | σ(r) [filter], Sum/Scale/Ratio from the reaction, Weighted if the target has isotopes, folds inside the leaf (M4) | `,SIG`, `PAR,SIG`, `,SIG,,TTA`; `/`, `+` combinations | charged-particle elastic σ ("infinite; give dsigma_domega or ratio_to_rutherford", LEXFOR p. S.2); `multipole` with a particle exit; target `kind infinite` ("use quantity yield") |
+| `sigma_nuclear` [step 3a, D1] | b family; `1` with a `/` reaction | E_lab, E_cm; none | every term elastic with a charged entrance; sums and ratios as for `sigma` (a natural target's isotopes, `tests/natural_target`); allows `target`, `beam`, `detector` | the angle-integrated elastic cross section of the nuclear amplitude alone, π/k² Σ g \|T\|² (`GenMatrixFunc`); for a charged pair it leaves out the Coulomb amplitude and its interference and is not a measurable cross section: for tests, diagnostics and comparison with phase-shift formulas | — | inelastic; neutral entrance (there `sigma` is the same integral and the one name); in a `dataset` the warning `W_NOT_MEASURABLE` |
 | `sigma_total` | b family | E_lab, E_cm; none | reaction elastic, neutral entrance | σ_tot(a→a) by the optical theorem (`GM` 103–119) | `,SIG` with SF3 `TOT` | charged entrance |
 | `dsigma_domega` | b/sr family | E_lab, E_cm; theta_lab, theta_cm (value in the angle's frame) | allows `secondary_gamma`, target, beam, detector, thm | dσ/dΩ_cm(r, θ), lab data converted at load | `,DA`, `PAR,DA` | `[total]` exit; `,DA,,REL` without `norm fit` |
 | `sfactor` | MeV·b, keV·b, eV·b | E_cm, E_lab; none | allows `multipole` | Scale_SF(E)∘σ, S = Eσe^{2πη} with the engine's η and atomic masses (`data_kinds.md` §4.1) | `,SIG,,SFC`, `PAR,SIG,,SFC`, `EP/PAR,SIG,,SFC` | neutral entrance |
@@ -883,9 +906,9 @@ never writes them. It never overwrites its input or a file it did not create; si
 | data line, active flag 0 | `active no` | the record keeps its place in output numbering (§8.5) |
 | entrance, exit keys | `reaction` label | exit −1 → `[total]`; ambiguous label (two pairs with the same partition and state) → ask |
 | Emin Emax | `energy_window … MeV`, tokens verbatim | |
-| θmin θmax | `angle_window … deg` for quantities with an angle; dropped for angle-integrated data when every row's angle column lies inside, else ask [I: whether `ESegment::Fill` filters angle-integrated rows by angle was not checked] | |
+| θmin θmax | `angle_window … deg` for quantities with an angle; dropped for angle-integrated data [settled, step 3a: `ESegment::IsInSegment` tests the angle window of differential data (isDiff 1, 4, 7) only, so the old engine never filtered angle-integrated rows by angle; no question] | |
 | data isDiff 0, 1, 2, 3, 4, 5, 6, 7, 9 | `sigma`; `dsigma_domega` + `theta_lab`; `phase_shift` + J, l (+ s); `sigma` + `[total]`; `dsigma_domega` + `theta_cm`; `sigma` + `multipole E1`; `… E2`; `analyzing_power` + `theta_cm`; `legendre` + `order` + `expansion a_over_a0` (`absolute` with `absolute 1`) | survey: 170, 257, 7, 17, 65, 0, 0, 99, 10 lines |
-| test isDiff 0, 1, 2, 3 + K, 4, 5, 7 | `sigma`; `dsigma_domega` lab; `phase_shift`; `legendre expansion absolute orders 0-K` [I: the exact output of test code 3, `GM` 223–425, to be checked by S9's printed trees]; `sigma [total]`; `dsigma_domega` c.m.; `analyzing_power` | survey: 112, 74, 17, 1, 3, 16, 2 |
+| test isDiff 0, 1, 2, 3 + K, 4, 5, 7 | `sigma`; `dsigma_domega` lab; `phase_shift`; `legendre expansion a_over_a0 orders 0-K` [settled, step 3a: `GenMatrixFunc` divides each coefficient by the angle-integrated cross section (`angularCoeff[k] … 4 / angleIntegratedXS`) and `EData` writes a_0 … a_K, i.e. a_k = A_k/A_0, not the absolute A_k]; `sigma [total]`; `dsigma_domega` c.m.; `analyzing_power` | survey: 112, 74, 17, 1, 3, 16, 2 |
 | isDiff + 10 | `thm <experiment>` from `<thm>` `segments=`, or `thm global` | 19 data, 6 test lines |
 | isDiff 8, 18 and other refused codes | refused, as the old engine refused them (`EData.cpp:397`) | |
 | `spin s` | `s`; absent and unique from the pair spins → written; absent and not unique → the old engine refused the line | |
@@ -940,6 +963,35 @@ and `tests/13N` segment 1 (`artemov.dat`, a thick-target line `"1,2"` with densi
 file's numbers (4 × 10⁻¹⁴ at 0.19 MeV) were compared as reactions per incident proton, which is what the record now
 says.
 
+**[Corrections, step 3a (2026-11-10), from the converter (`convert/`) and the old engine's code:**
+- **`shiftgroup L`**: the group shares the constant shift and the leader's `shiftfn` only (`EData::ResolveShiftGroups`,
+  `ResolveShiftFunctions`); each member keeps its own `sqrtshift` (a sqrt term and a function on one member are refused
+  by the old engine). `energy_scale L` holds the leader's offset and function; the members write `shift L` and their
+  own `shift sqrt …`.
+- **Shift priors** are measured from zero (`ESegment::AddShiftPenalty`): `shift offset <s> MeV fit prior <c> <σ>` has
+  c = 0 unless a `prior_centre` row gives one; `shift sqrt` and the `param`s of a function `prior 0 <σ>`. A shift of 0
+  that is not fitted is omitted. A norm keeps its prior on `fixed` (as in the table above); a shift only when fitted.
+- **THM norms**: every THM data set with a fitted norm has it profiled (`ESegment::IsProfiledNorm`), `thm global` too
+  (§3.9 and the validator now allow it); its unit is `arbitrary`. A THM test line is `thm global` (experiments list
+  data lines only).
+- **Records shared by several data sets** (F7) are named after their `<targetInt>` line (`beam_targetInt2`), after a
+  THM experiment when all users are its data sets (`beam_LC09`), after the data set (`tgt_s01_int_thin`) only when they
+  belong to one; identical beams and detectors (and targets without a free parameter) are one record. Data sets are
+  named from their file names, extrapolations `x<k>`, model data `scattering_length_<n>`; a name taken already gets
+  `_2`, `_3`.
+- **Residual states** are written as `<levels>` writes the pair's excitation (`[4.43891]`); §3.11's T2 and the fixture
+  `experiment/tests/data/T2_format3.azr` follow (the comparison is the ctest `convert_fixtures`).
+- **A phase shift without `spin s`** takes the one channel spin of its (J, l) among the entrance pair's active
+  `<levels>` channels (and the hard-sphere channels with `includeAllJPi=1`), as `EData::Initialize` requires; several:
+  refused, as the old engine refused it.
+- **Test grids** of one point (Emin = Emax, or a step of 0: the old loop's `break`) are written as `list`.
+- **Numbers** are written as the old line wrote them when a token of the line reads back to the same double (the
+  longest such token), else as the shortest decimal that reads back to it.
+- **Side files** are `<stem>.f3<extension>` (`prior_cov.f3.txt`, as in §3.11).
+- **Also taken by the table** (they are read by the old engine and were refused, `experiment/` commit of step 3a):
+  legendre data folded with a target, beam or detector; beam-profile window columns on `dsigma_domega`; a fixed norm
+  on `beta_delayed_spectrum`; `scattering_length` of a charged pair (Coulomb-modified).]**
+
 ### 8.2 What the converter writes without asking, and the note it leaves
 
 The converter preserves the meaning the old engine gave a file; it does not reinterpret it. Where that meaning was
@@ -968,9 +1020,17 @@ Asked (severity `ask`, §6.2), with the answer key in brackets:
   [`<ds>.target`];
 - a data set with a `sample` whose `<targetInt>` target is shared with data sets without the sample [`<ds>.target`].
 
-The survey suggests that none of the 189 test files raises a question [I: the converter does not exist; this is from
-the construct counts and the files read for this note]. With `--strict`, the implicit-meaning items of §8.2 become
-questions as well (decision F12).
+The survey suggested that none of the 189 test files raises a question. **[Step 3a, measured with the converter
+(`tools/convert_tree.sh`): 18 files raise questions, of three kinds the note did not foresee — (i) an angle-integrated
+cross section of the elastic scattering of a charged pair (16 files: `tests/natural_target`, `tests/hard_sphere`,
+`tests/coulomb_nuclear_sign`, `tests/identical_entrance_reaction`), which the old engine computed as the integral of
+the nuclear amplitude alone, π/k² Σ g |T|², and which §7.2 refuses as `sigma` without offering another quantity;
+(ii) two pairs with the same particles and states (`examples/c12c12_tumino2018`: pairs 1 and 6, ¹²C + ¹²C, differing
+only in the THM columns of `<levels>`), which no reaction label can tell apart; (iii) an entrance pair with an excited
+target (`tests/thm_coherent_background/toy`: n + ¹⁶O(2.143)), which the grammar of §3.5 cannot write. Each is a
+decision for the format (a quantity, pair names, a target state), not for the converter.]** **[Decided (director, 2026-11-10) and implemented in step 3a:
+(i) quantity `sigma_nuclear` (§7.2), which the converter writes with a `# CONVERTED:` comment; (ii) `entrance_pair` /
+`exit_pair` (§3.5); (iii) the target state (§3.5). The tree now converts without a question (§8.5).]**
 
 ### 8.4 The engine refuses older files
 
@@ -1009,6 +1069,25 @@ from the parameter vector instead. This is a step before the reader switch.
    relative. These outputs are compared at matching energies and classified "grid rule", with the list of the 53.
 5. `tests/run_tests.sh` 133/133 and `ctest -LE slow` on the converted tree, then pyazr's round-trip tests (an
    unedited converted file writes back byte for byte).
+**[Step 3a, director's D4 (2026-11-10): the converter converts what is written and does not copy the old engine's
+semantic refusals; they are the format-3 reader's build checks. `tools/convert_tree.sh` runs the old engine (menu 1,
+one thread, as `tools/run_one.sh`) on every original and lists the files it refuses that the converter converts. On
+the tree of step 3a (186 of 189 files convert and validate; the 3 refused are refused by the old engine too), the
+format-3 engine of 3b must refuse each of these five with the reason given:
+- `tests/angular_coefficients/models/bad_elastic.azr` — "segment #1 (angular coefficients): an elastic distribution
+  includes the Coulomb amplitude, which the Legendre expansion leaves out";
+- `tests/ec_final_state_listed/models/missing_group.azr` — "external capture into pair 3 needs its final state,
+  J^pi = 0.5+ at E_x = 0.4953 MeV, as a level of the project …; that J^pi group does not exist";
+- `tests/ec_final_state_listed/models/missing_level.azr` — the same final state, "none is listed within 1 keV in that
+  J^pi group";
+- `tests/natural_target/models/bad_level.azr` — "level ID 1 (J = 1+, E = 8.2506 MeV) has channels of two compound
+  nuclei, Z=7 A=13 and Z=7 A=14";
+- `tests/relativistic/models/li7pn_edge_rel.azr` — "segment #1: lab angle 44.9 deg at E_lab = 1.9 MeV: beyond the
+  kinematic maximum 44.5984 deg (relativistic kinematics …)".
+Menu 1 only: a refusal that only an extrapolation run (menu 3) or a data file written by a test's `check.sh` reaches is
+not in this list (the `check.sh` of `tests/natural_target`, `tests/angular_coefficients`, `tests/electron_screening`
+and the others with `bad_*` files say which runs they expect to fail).]**
+
 6. The converted files replace the originals in one commit; the originals move to `tests/convert/fixtures/` with their
    committed conversions (check 20), so the converter is tested on every construct for as long as it exists.
 
@@ -1048,12 +1127,13 @@ one prior.
 
 ### 9.3 (c) ωγ and E_r of one level from the literature
 
-For T2's level 5 (3⁻; Γ_p = 1.702 keV, Γ_α0 = 12.92 keV, Γ_α1 = 0): ω = 7/4 for p + ¹⁵N (spins ½, ½), so
+For T2's level 5 (3⁻ at E_x = 13.2652 MeV in `T2.azr`, the start value of the fit; the truth of
+`tests/upgrade/T2/truth.json` is 13.2692 MeV; Γ_p = 1.702 keV, Γ_α0 = 12.92 keV, Γ_α1 = 0): ω = 7/4 for p + ¹⁵N (spins ½, ½), so
 ωγ = 1.75 × 1.702 × 12.92 / 14.62 = 2.63 keV (computed for this note from `tests/upgrade/T2/README.md` §1).
 
 | | (c) |
 |---|---|
-| file | `<modelData>`: `datum Er_L5` `quantity resonance_energy`, `level 5`, `J 3-`, `frame E_x`, `value 13.2692 MeV`, `error 0.3 keV`, `source "…"`; `datum wg_L5` `quantity resonance_strength`, `level 5`, `J 3-`, `reaction 15N(p,a)12C`, `value 2.63 keV`, `error 0.15 keV`, `source "…"` |
+| file | `<modelData>`: `datum Er_L5` `quantity resonance_energy`, `level 5`, `J 3-`, `frame E_x`, `value 13.2652 MeV`, `error 0.3 keV`, `source "…"`; `datum wg_L5` `quantity resonance_strength`, `level 5`, `J 3-`, `reaction 15N(p,a)12C`, `value 2.63 keV`, `error 0.15 keV`, `source "…"` |
 | Python | `p.add_datum("wg_L5", quantity="resonance_strength", level=5, J="3-", reaction="15N(p,a)12C", value="2.63 keV", error="0.15 keV", source="…")`; with `J="2+"`: `FormatError: datum 'wg_L5', field 'J': level 5 is 3- (E_x = 13.2652 MeV); the datum says 2+` |
 | GUI | Model data → "+ Datum": quantity; level drop-down "5: 3⁻ 13.2652 MeV" (fills J, shown read-only); reaction from the level's channels; value and error with unit drop-downs. Preview: "ωγ = ω Γ_p Γ_α0/Γ of level 5 with observed widths at E_r, ω = 7/4; model now 2.63 keV; warning: Γ/E_r = 1.3 % > 1 %, the parameter form (8) and the area of the resonance differ (data_kinds.md §4.7)" |
 | agent | `--validate --json` returns the Γ/E_r warning with code `W_BROAD_LEVEL`; `--describe` gives the formula and the parameters it depends on |
@@ -1217,12 +1297,12 @@ are not points); include files; reading format 1 or 2 in the engine.
 
 - The `<levels>` grammar (pairs and levels as named records) is outside this note. Reaction labels are built from the
   pair columns of `<levels>` (`data_formats.rst`, levels table); β-pair and light-excitation labels are sketched only.
-- Whether `ESegment::Fill` drops angle-integrated rows by the angle window, and the exact quantity of test isDiff 3
-  (`GM` 223–425): not read; the converter's printed trees (S9) decide both.
+- [Settled, step 3a: `ESegment::Fill` does not drop angle-integrated rows by the angle window; test isDiff 3 is
+  a_k = A_k/A_0, k = 0 … K (§8.1).]
 - The finite-layer yield per particle with N in the prefactor (story a) and the stopping evaluation are Phase 5 work;
   the format reserves the fields.
 - `,TRN` as the EXFOR code for transmission was not checked against Dict. 236.
-- That no test file raises a converter question is an expectation from the survey, not a run.
+- [Run, step 3a: 18 test files raise converter questions (§8.3).]
 - The adaptive extrapolation grid's seeding and tolerance are a proposal (HANDOFF 2026-11-10); its test (a grid that
   reproduces a narrow resonance's area to the stated tolerance) is to be written with it.
 - Where the web UI's own code lives was not checked; check 17 assumes it is under `pyazr/`.

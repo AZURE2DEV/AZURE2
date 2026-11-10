@@ -7,7 +7,7 @@ namespace experiment {
 
 const std::vector<std::pair<std::string, std::string>> &AxisRoles() {
   static const std::vector<std::pair<std::string, std::string>> roles = {
-      {"E_lab", "energy"}, {"E_cm", "energy"}, {"E_x", "energy"}, {"E_decay", "energy"},
+      {"E_lab", "energy"}, {"E_cm", "energy"}, {"E_decay", "energy"},
       {"theta_lab", "angle"}, {"theta_cm", "angle"}};
   return roles;
 }

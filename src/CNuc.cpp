@@ -27,8 +27,8 @@
 #include "CoulFunc.h"
 #include "ECIntegral.h"
 #include "GSLException.h"
-#include "azure2/io/AbundanceLines.h"
 #include "azure2/io/LevelRows.h"
+#include "azure2/convert/AbundanceLine.h"
 #include "Minuit2/MnUserParameters.h"
 #include "AZUREParams.h"
 #include "NFIntegral.h"
@@ -415,11 +415,12 @@ int CNuc::Fill(const Config &configure, const std::map<int, double> &radii) {
 int CNuc::ReadAbundances(const Config &configure) {
   hasAbundanceBlock_ = false;
   samples_.clear();
-  // The <abundances> section of the project (Config::SectionStream: io::Document, whole-line tags; io/
-  // AbundanceLines.h).
+  // The <abundances> section of the project (Config::SectionStream: io::Document, whole-line tags).
   std::unique_ptr<std::istream> inStream = configure.SectionStream("abundances");
   if (!inStream) return 0;
-  const azure2::io::AbundanceSection section = azure2::io::ReadAbundanceSection(*inStream);
+  std::istream &in = *inStream;
+  std::string line = "";
+  getline(in, line);  // <abundances>
   hasAbundanceBlock_ = true;
   // A sample is created the first time its name appears; the unnamed sample is "".
   auto sampleOf = [&](const std::string &name) -> AbundanceSample & {
@@ -431,35 +432,43 @@ int CNuc::ReadAbundances(const Config &configure) {
     samples_.push_back(sample);
     return samples_.back();
   };
-  for (const azure2::io::AbundanceLine &entry : section.lines) {
-    if (entry.isSum) {
-      sampleOf(entry.sample).sumSigma = entry.sumSigma;
+  line = "";
+  while (!in.eof() && line != "</abundances>") {
+    getline(in, line);
+    if (line == "</abundances>") break;
+    // The line's fields (convert/'s AbundanceLine.h: the one reader of the old grammar, shared with the converter).
+    const azure2::convert::AbundanceLine entry = azure2::convert::ReadAbundanceLine(line);
+    if (entry.kind == azure2::convert::AbundanceLine::Blank) continue;
+    const std::string &name = entry.sample;
+    if (entry.kind == azure2::convert::AbundanceLine::BadSum) {
+      configure.outStream << "ERROR: <abundances> line \"" << line << "\" is not \"[<sample>:] sum <sigma>\"." << std::endl;
+      return -1;
+    }
+    if (entry.kind == azure2::convert::AbundanceLine::Sum) {
+      sampleOf(name).sumSigma = entry.sumSigma;
       continue;
     }
+    if (entry.kind == azure2::convert::AbundanceLine::BadEntry) {
+      configure.outStream << "ERROR: <abundances> line \"" << line
+                          << "\" is not \"[<sample>:] <Z> <A> <abundance> <vary> <sigma>\" or \"[<sample>:] sum <sigma>\"." << std::endl;
+      return -1;
+    }
+    const int z = entry.z, a = entry.a, vary = entry.vary;
+    const double value = entry.value, sigma = entry.sigma;
     bool found = false;
     for (unsigned int i = 0; i < nuclei_.size(); i++) {
-      if (nuclei_[i].Z != entry.Z || nuclei_[i].A != entry.A) continue;
-      SampleAbundance &e = sampleOf(entry.sample).entries[i];
-      e.abundance = e.nominal = entry.value;
-      e.vary = (entry.vary == 1);
-      e.sigma = entry.sigma;
+      if (nuclei_[i].Z != z || nuclei_[i].A != a) continue;
+      SampleAbundance &e = sampleOf(name).entries[i];
+      e.abundance = e.nominal = value;
+      e.vary = (vary == 1);
+      e.sigma = sigma;
       found = true;
     }
     if (!found)
-      configure.outStream << "WARNING: <abundances> names Z=" << entry.Z << " A=" << entry.A
+      configure.outStream << "WARNING: <abundances> names Z=" << z << " A=" << a
                           << ", which no pair of the project forms; ignored." << std::endl;
   }
-  switch (section.problem) {
-    case azure2::io::AbundanceSection::Problem::None: break;
-    case azure2::io::AbundanceSection::Problem::BadSum:
-      configure.outStream << "ERROR: <abundances> line \"" << section.badLine << "\" is not \"[<sample>:] sum <sigma>\"." << std::endl;
-      return -1;
-    case azure2::io::AbundanceSection::Problem::BadEntry:
-      configure.outStream << "ERROR: <abundances> line \"" << section.badLine
-                          << "\" is not \"[<sample>:] <Z> <A> <abundance> <vary> <sigma>\" or \"[<sample>:] sum <sigma>\"." << std::endl;
-      return -1;
-  }
-  if (!section.complete) return -1;
+  if (line != "</abundances>") return -1;
   // An empty block still means "abundances are parameters": one unnamed sample at the defaults.
   if (samples_.empty()) sampleOf("");
   return 0;

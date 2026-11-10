@@ -15,8 +15,8 @@
 #include <atomic>
 #include <cstdio>
 #include <cstdlib>
-#include "ExtrapLine.h"
-#include "SegLine.h"
+#include "azure2/convert/ExtrapLine.h"
+#include "azure2/convert/SegLine.h"
 #include "ThmLineshape.h"
 #include "ThmDistortion.h"
 #include "ThmAngular.h"

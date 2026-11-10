@@ -20,8 +20,8 @@
 #include <iostream>
 #include <string>
 
-#include "ExtrapLine.h"
-#include "SegLine.h"
+#include "azure2/convert/ExtrapLine.h"
+#include "azure2/convert/SegLine.h"
 #include "TargetEffect.h"
 
 #include <cstdio>
@@ -904,6 +904,7 @@ class Session {
 void BindPhysics(py::module_ &m);  // pybind_physics.cpp: the free functions of physics/
 void BindThm(py::module_ &m);      // pybind_thm.cpp: <thm> blocks as the engine reads them
 void BindSchema(py::module_ &m);   // pybind_schema.cpp: the table of project format 3
+void BindConvert(py::module_ &m);  // pybind_convert.cpp: format-3 validation and the converter old -> format 3
 
 PYBIND11_MODULE(_azure2, m) {
   m.doc() = "In-process bindings for the AZURE2 R-matrix engine.";
@@ -940,6 +941,7 @@ PYBIND11_MODULE(_azure2, m) {
       "The kinds of fit parameter (ParameterKind.h), one dict per kind in the order of their codes: code, key (the "
       "Parameter.kind of pyazr), unit, owner fields, own_prior, segment_field, vary_from_project, doc.");
   BindSchema(m);  // pybind_schema.cpp: the format-3 table (schema(), as AZURE2 --schema)
+  BindConvert(m);  // pybind_convert.cpp: validate_format3_text, convert_format3_text
   // The project file as a lossless document (io::Document; docs/upgrade/project.md section 2): pyazr's AzrModel
   // reads and edits the file through it, as the engine does.  Lines are str (decoded UTF-8, invalid bytes kept as
   // surrogates on the Python side by the caller); sections are (name, open, close, depth, parent) with close = -1 for
@@ -1137,7 +1139,7 @@ PYBIND11_MODULE(_azure2, m) {
       "The format-2 conversion of a project's text: (converted bytes, the changes, structural problems).");
   m.def(
       "project_format", [](const std::string &text) { return azure2::io::FormatOf(azure2::io::Document::Parse(text)); },
-      py::arg("text"), "The format of a project's text: 2 with format=2 in <config>, else 1.");
+      py::arg("text"), "The format of a project's text: 2 or 3 with format=2 or format=3 in <config>, else 1.");
   py::register_exception<GSLException>(m, "GSLError", PyExc_ArithmeticError);
 
   py::class_<RuntimeOptions>(m, "RuntimeOptions")

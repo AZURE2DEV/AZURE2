@@ -113,8 +113,8 @@ int main(int argc, char **argv) {
     return 1;
   }
   compound.Initialize(cfg);
-  compound.FillMnParams(params.GetMinuitParams(), &cfg);
-  data.FillMnParams(params.GetMinuitParams());
+  compound.FillMnParams(params, &cfg);
+  data.FillMnParams(params);
   if (data.Initialize(&compound, cfg) == -1) {
     check("T2 initializes", false, sink.str().substr(0, 400));
     return 1;

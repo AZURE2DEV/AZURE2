@@ -118,6 +118,12 @@ int Config::ReadConfigFile() {
     azure2::io::Document doc = azure2::io::Document::Parse(bytes.str());  // kept alive for the loops
     for (const std::string &problem : doc.Problems())
       outStream << "WARNING: " << configfile << ": " << problem << std::endl;
+    if (azure2::io::FormatOf(doc) == 3) {
+      // The format-3 reader is step 3b of docs/upgrade/project_format3.md; until it lands this engine reads format 2.
+      outStream << "ERROR: " << configfile << " is a format-3 project; this build of the engine runs format-2 projects "
+                << "only (AZURE2 --validate checks a format-3 file)." << std::endl;
+      return -1;
+    }
     if (azure2::io::FormatOf(doc) == 1) {
       const std::vector<std::string> changes = azure2::io::ConvertToFormat2(doc);
       std::string list;

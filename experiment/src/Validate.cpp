@@ -305,10 +305,12 @@ int Validator::Holds(const Condition &c, const Work &w) const {
       return result(std::find(c.values.begin(), c.values.end(), v->unit->dimension) != c.values.end() ? 1 : 0);
     }
     case Condition::RatioReaction:
+    case Condition::SingleReaction:
     case Condition::GammaExit: {
       const Value *v = w.vr.Get("reaction");
       if (!v) return w.given.count("reaction") ? -1 : result(0);
       if (c.kind == Condition::RatioReaction) return result(v->reaction.op == ReactionExpr::Ratio ? 1 : 0);
+      if (c.kind == Condition::SingleReaction) return result(v->reaction.terms.size() == 1 ? 1 : 0);
       bool all = true;
       for (const ReactionTerm &t : v->reaction.terms) all = all && t.reaction.GammaExit();
       return result(all ? 1 : 0);
@@ -518,12 +520,13 @@ void Validator::CheckNorm(Work &w) {
   const io::Field *src = Source(w, "norm");
   Diagnostic d = Base(w, "norm", src->line, src->col);
   const std::string mode = NuisanceModeName(n->mode);
-  if (n->mode == NuisanceMode::Profiled && Holds(Condition::Of(Condition::ThmExperiment), w) == 0) {
+  // Every THM data set with a fitted norm has it profiled (ESegment::IsProfiledNorm), in an experiment or not.
+  if (n->mode == NuisanceMode::Profiled && Holds(Condition::Present("thm"), w) == 0) {
     d.hasFound = true;
     d.found = mode;
     d.allowed = {"fixed", "fit"};
-    Emit(d, codes::kModeNotAllowed, Where(w, "norm") + ": 'profiled' is the norm mode of THM data sets of an experiment "
-                                                       "(thm <experiment>, section 3.9)");
+    Emit(d, codes::kModeNotAllowed, Where(w, "norm") + ": 'profiled' is the norm mode of THM data sets "
+                                                       "(thm <experiment> or thm global, section 3.9)");
     return;
   }
   std::vector<const NormRule *> rules;
@@ -638,6 +641,14 @@ void Validator::CheckQuantity(Work &w) {
   if (w.vr.kind == "dataset") {
     CheckColumns(w);
     CheckNorm(w);
+    if (!q.datasetWarning.empty()) {  // a quantity computed for tests and comparison, not measured (W_NOT_MEASURABLE)
+      const Value *qv = w.vr.Get("quantity");
+      Diagnostic d = Base(w, "quantity", qv->line, qv->col);
+      d.severity = Severity::Warning;
+      d.hasFound = true;
+      d.found = q.name;
+      Emit(d, codes::kNotMeasurable, Where(w, "quantity") + ": " + q.datasetWarning);
+    }
   }
   if (w.vr.kind == "extrapolation") {
     const Value *g = w.vr.Get("angles");

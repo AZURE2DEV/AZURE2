@@ -27,7 +27,18 @@
  * std::to_string, i.e. "%f" (six decimals: a scaling of 1.5e-7 was read as 0).  Now the scaling format is strict,
  * the two-number layout is read as the GUI reads it, and the numbers keep 17 significant digits.
  */
-inline std::string ReadComponentList(std::istream &in, std::string &componentsList, std::string &warning) {
+/// One component as read: pair keys, and the fixed angle (deg) and scaling when the line gives them (-999 = none).
+struct ComponentEntry {
+  int entrance = 0, exit = 0;
+  bool hasAngle = false;
+  double angle = 0.0;
+  bool hasScaling = false;
+  double scaling = 1.0;
+};
+
+/// As ReadComponentList below; `entries` receives the components as values (the converter to format 3 reads them).
+inline std::string ReadComponentList(std::istream &in, std::string &componentsList, std::string &warning,
+                                     std::vector<ComponentEntry> &entries) {
   auto fmt = [](double v) {
     std::ostringstream os;
     os << std::setprecision(17) << v;
@@ -58,6 +69,14 @@ inline std::string ReadComponentList(std::istream &in, std::string &componentsLi
       if (angle > -900.0) componentStr += ", Angle: " + fmt(angle);
       if (scaling > -900.0) componentStr += ", Scaling: " + fmt(scaling);
       components.push_back(componentStr);
+      ComponentEntry e;
+      e.entrance = entrance;
+      e.exit = exit;
+      e.hasAngle = angle > -900.0;
+      e.angle = angle;
+      e.hasScaling = scaling > -900.0;
+      e.scaling = scaling;
+      entries.push_back(e);
     }
   } else if (numComponents > 0) {
     // Count the numbers that follow (without consuming them) to choose the layout.
@@ -81,6 +100,12 @@ inline std::string ReadComponentList(std::istream &in, std::string &componentsLi
       std::string componentStr = "Entrance: " + std::to_string((int)e) + ", Exit: " + std::to_string((int)x);
       if (angle > -900.0) componentStr += ", Angle: " + fmt(angle);
       components.push_back(componentStr);
+      ComponentEntry c;
+      c.entrance = (int)e;
+      c.exit = (int)x;
+      c.hasAngle = angle > -900.0;
+      c.angle = angle;
+      entries.push_back(c);
     }
   }
   for (size_t i = 0; i < components.size(); i++) componentsList += (i ? ";" : "") + components[i];

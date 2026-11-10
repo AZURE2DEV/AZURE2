@@ -85,17 +85,17 @@ int main(int argc, char **argv) {
   {
     const Checked t2 = CheckText(Slurp(dir + "/T2_format3.azr"));
     const ValidationResult &r = t2.result;
-    check("T2: 13 data sets, 14 apparatus records, 2 shared nuisances", r.records.size() == 13 + 14 + 2);
+    check("T2: 13 data sets, 13 apparatus records, 2 shared nuisances", r.records.size() == 13 + 13 + 2);
     const ValidatedRecord *s09 = r.Find("s09_ratio");
     check("s09: ratio tree", s09 && s09->Get("reaction")->reaction.op == ReactionExpr::Ratio &&
-                                 s09->Get("reaction")->reaction.Tree() == "Ratio(15N(p,a)12C[4.439], 15N(p,a)12C)");
+                                 s09->Get("reaction")->reaction.Tree() == "Ratio(15N(p,a)12C[4.43891], 15N(p,a)12C)");
     check("s09: quantity row and unit", s09 && s09->quantity && s09->quantity->name == "sigma" &&
                                             std::string(s09->Get("unit")->unit->token) == "1");
     const ValidatedRecord *s08 = r.Find("s08_sum");
-    check("s08: sum of two terms, excited state 4.439 as written",
+    check("s08: sum of two terms, excited state 4.43891 as written",
           s08 && s08->Get("reaction")->reaction.op == ReactionExpr::Sum && s08->Get("reaction")->reaction.terms.size() == 2 &&
               s08->Get("reaction")->reaction.terms[1].reaction.state.kind == ResidualState::Excited &&
-              s08->Get("reaction")->reaction.terms[1].reaction.state.energy.text == "4.439");
+              s08->Get("reaction")->reaction.terms[1].reaction.state.energy.text == "4.43891");
     const ValidatedRecord *s01 = r.Find("s01_int_thin");
     const Nuisance *n = s01 ? &s01->Get("norm")->nuisance : nullptr;
     check("s01: norm 1 fit prior 1 5%", n && n->hasValue && n->value.text == "1" && n->mode == NuisanceMode::Fit &&
@@ -140,8 +140,8 @@ int main(int argc, char **argv) {
     const ValidatedRecord *b7 = r.Find("beam_s07_profile");
     check("beam_s07: profile skewed_gaussian", b7 && b7->Get("profile")->word == "skewed_gaussian" &&
                                                    b7->Get("profile")->Get("omega")->number.text == "0.035");
-    const ValidatedRecord *d2 = r.Find("det_s02_diff090");
-    check("det_s02: five Q_k", d2 && d2->Get("attenuation")->numbers.size() == 5);
+    const ValidatedRecord *d2 = r.Find("det_targetInt2");
+    check("det_targetInt2: five Q_k", d2 && d2->Get("attenuation")->numbers.size() == 5);
   }
   {
     const Checked a = CheckText(Slurp(dir + "/story_a_yield.azr"));

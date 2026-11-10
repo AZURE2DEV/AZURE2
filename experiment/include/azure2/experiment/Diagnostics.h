@@ -117,6 +117,8 @@ constexpr const char *kReferenceKind = "E_REFERENCE_KIND";
 constexpr const char *kUnknownEpoch = "E_UNKNOWN_EPOCH";
 constexpr const char *kTargetKind = "E_TARGET_KIND";
 constexpr const char *kDegenerateNuisance = "E_DEGENERATE_NUISANCE";
+// Warnings
+constexpr const char *kNotMeasurable = "W_NOT_MEASURABLE";
 }  // namespace codes
 
 }  // namespace experiment

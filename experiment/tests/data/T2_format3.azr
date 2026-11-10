@@ -1,6 +1,8 @@
 # T2 in format 3 (docs/upgrade/project_format3.md section 3.11), with the records the note abbreviates by '...'
 # written out.  Corrections to the note's text, each marked in the note: 'spread formula' and the energy_scale
-# 'function' state the unit of their result (principle 5).
+# 'function' state the unit of their result (principle 5).  Step 3a: as AZURE2 --convert --to 3 writes T2 (the ctest
+# convert_fixtures compares the records): records shared by several data sets are named after their <targetInt> line,
+# identical beams are one record (decision F7), and residual states are written as <levels> writes them (4.43891).
 <config>
 format=3
 </config>
@@ -13,9 +15,9 @@ target tgt_s01_int_thin                         # <targetInt> line 1
     straggling     bohr
 beam beam_s01_int_thin
     spread         0.001 MeV lab
-beam beam_s02_diff090                           # <targetInt> line 2 (data sets s02, s03)
+beam beam_targetInt2                            # <targetInt> line 2 (data sets s02, s03; line 7, s08)
     spread         0.002 MeV lab
-detector det_s02_diff090
+detector det_targetInt2
     attenuation    1 0.995 0.98 0.96 0.93
 target tgt_s04_thick                            # line 3
     kind           infinite
@@ -45,8 +47,6 @@ beam beam_s07_profile                           # line 6
     detailed_balance no
 detector det_s07_profile
     energy_resolution 0.004 MeV lab
-beam beam_s08_sum                               # line 7
-    spread         0.002 MeV lab
 beam beam_LC09                                  # line 8 (s11, s12)
     spread         0.021344 MeV lab
 target natN                                     # <abundances> sample natN; compound 16O = p + 15N
@@ -86,8 +86,8 @@ dataset s02_diff090
     norm           D
     shift          G
     covariance     cov_diff.txt
-    beam           beam_s02_diff090
-    detector       det_s02_diff090
+    beam           beam_targetInt2
+    detector       det_targetInt2
     quadrature     points 20 width_multiplier 20 per_width 50
 dataset s03_diff150
     reaction       15N(p,a)12C
@@ -100,8 +100,8 @@ dataset s03_diff150
     norm           D
     shift          G
     covariance     cov_diff.txt
-    beam           beam_s02_diff090
-    detector       det_s02_diff090
+    beam           beam_targetInt2
+    detector       det_targetInt2
     quadrature     points 20 width_multiplier 20 per_width 50
 dataset s04_thick
     reaction       15N(p,a)12C
@@ -148,17 +148,17 @@ dataset s07_profile
     detector       det_s07_profile
     quadrature     points 60 width_multiplier 20 per_width 50
 dataset s08_sum
-    reaction       15N(p,a)12C + 15N(p,a)12C[4.439]
+    reaction       15N(p,a)12C + 15N(p,a)12C[4.43891]
     quantity       sigma
     unit           b
     file           data/s08_sum.dat
     columns        E_lab[MeV] _ value error
     energy_window  0.599999 1.400001 MeV
     norm           1 fit
-    beam           beam_s08_sum
+    beam           beam_targetInt2
     quadrature     points 20 width_multiplier 20 per_width 50
 dataset s09_ratio
-    reaction       15N(p,a)12C[4.439] / 15N(p,a)12C
+    reaction       15N(p,a)12C[4.43891] / 15N(p,a)12C
     quantity       sigma
     unit           1
     file           data/s09_ratio.dat

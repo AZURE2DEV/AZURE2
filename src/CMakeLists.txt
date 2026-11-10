@@ -62,7 +62,8 @@ if(NOT NO_READLINE)
     endif()
 endif (NOT NO_READLINE)
 
-set(AZURE2_EXEC_SOURCES AZURE2.cpp)
+# ProjectCommands.cpp: --convert, --validate, --schema (they use convert/, linked below)
+set(AZURE2_EXEC_SOURCES AZURE2.cpp ProjectCommands.cpp)
 
 if (${CMAKE_SYSTEM_NAME} MATCHES "Windows")
     set(AZURE2_EXEC_SOURCES ${AZURE2_EXEC_SOURCES} AZURE2.rc)
@@ -89,10 +90,13 @@ endif (BUILD_LIBRARY)
 # CNuc -> System adapter (CNucSystem.cpp) uses it so far.
 # azure2_experiment (experiment/: model expressions, lab -> c.m. frames, the format-3 table of AZURE2 --schema
 # and the binding's schema()) uses physics/ and io/'s Record.h only and is below the engine likewise.
+# azure2_convert_lines (convert/: the old line parsers, header-only) until the format-3 reader replaces the old
+# sections (step 3b); the engine includes them from convert/ so that each old grammar has one parser.
 target_link_libraries(AZURE2Core PUBLIC
     azure2_physics
     azure2_io
     azure2_experiment
+    azure2_convert_lines
     Minuit2::Minuit2
     ${GSL_LIBRARIES}
     ${BLAS_LIBRARIES}
@@ -109,6 +113,8 @@ endif()
 # AZUREAPI pulls AZURE2Core in as a PUBLIC dependency of its own.  Everything
 # else follows from the graph above.
 target_link_libraries(AZURE2 ${AZUREAPI_LIBRARIES} AZURE2Core)
+# convert/: AZURE2 --convert ... --to 3 and --validate (src/AZURE2.cpp)
+target_link_libraries(AZURE2 azure2_convert)
 
 # Windows DLL bundling for libraries that can't be statically linked
 if(CROSS_COMPILE_WINDOWS)

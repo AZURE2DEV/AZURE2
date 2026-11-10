@@ -54,7 +54,7 @@ const char *TypeDoc(ValueType t) {
     case ValueType::Nucleus: return "a nuclide <A><Symbol>";
     case ValueType::Pair: return "a particle pair, light particle first";
     case ValueType::Composition: return "element symbols with their atoms per formula unit";
-    case ValueType::Reaction: return "reactions <A><X>(<a>,<b>)<A><Y>[<E_x>|total], a sum or a ratio of two, scaled terms "
+    case ValueType::Reaction: return "reactions <A><X>[<E_x>](<a>,<b>)<A><Y>[<E_x>|total] (the target's state for an excited entrance pair), a sum or a ratio of two, scaled terms "
                                      "<c>*<reaction>, terms at a fixed angle '@ <angle> <unit> lab|cm'";
     case ValueType::Columns: return "the role of each column of the data file, energy and angle roles with their unit";
     case ValueType::Grid: return "an energy or angle grid; range: E_k = lo + k step (F10)";
@@ -223,6 +223,7 @@ void WriteQuantity(JsonWriter &j, const Quantity &q) {
     j.EndObject();
   }
   j.EndArray();
+  if (!q.datasetWarning.empty()) j.Key("dataset_warning").String(q.datasetWarning);
   j.EndObject();
 }
 

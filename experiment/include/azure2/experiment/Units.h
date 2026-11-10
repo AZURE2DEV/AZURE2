@@ -21,7 +21,7 @@ struct Unit {
   const char *token;
   const char *dimension;
   double factor;  ///< to the dimension's base unit
-  std::vector<std::string> aliases;  ///< accepted and written back as `token` (µb -> ub)
+  std::vector<std::string> aliases = {};  ///< accepted and written back as `token` (µb -> ub); none by default
 };
 
 struct Dimension {

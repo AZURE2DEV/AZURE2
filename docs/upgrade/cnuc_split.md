@@ -416,10 +416,12 @@ identical after each), with `scripts/check.sh --quick` (ctest −LE slow 142/142
 - **(d) transformation messages**: `src/CNucTransformMessages.cpp`, the warnings of `TransformIn` and
   `TransformToBrune` (same wording).  Three 13N variants trigger the three column notes, identical to the base;
   the external-capture, eigen-failure and not-converged messages are reached by no input.
-- **(c) input**: `NucLine` is `io/`'s `LevelRow` (`LevelRows.h`) with `ReadLevelSection`; the `<abundances>` parsing
-  is `ReadAbundanceSection` (`AbundanceLines.h`).  `Fill` and `ReadAbundances` build from the records.  ctests
-  `io_level_rows` (10554 rows of 189 files against a verbatim copy of the old reader, every field) and
-  `io_abundance_lines`; six malformed variants give the base build's messages byte for byte.
+- **(c) input**: `NucLine` is `io/`'s `LevelRow` (`LevelRows.h`) with `ReadLevelSection`.  `Fill` builds from the
+  records.  ctest `io_level_rows` (10554 rows of 189 files against a verbatim copy of the old reader, every field);
+  six malformed variants give the base build's messages byte for byte.  The `<abundances>` line is read by
+  `convert/`'s `ReadAbundanceLine` (`azure2/convert/AbundanceLine.h`), the parser the converter to format 3 uses
+  too; the `io::ReadAbundanceSection` this step first wrote was a second parser of the same line and was removed
+  when the converter was merged (the old grammar goes with step 3d).
 - **(c) dead code**: the two unreachable branches of `ParseExternalCapture` and the write-only max-l members.
 
 `CNuc.cpp` 2907 → 1942 lines, `CNuc.h` 306 → 281.  Still in `CNuc.cpp` and its stream: `Fill` obtains the

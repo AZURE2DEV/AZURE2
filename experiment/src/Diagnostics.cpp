@@ -20,6 +20,7 @@ const std::vector<DiagnosticCode> &DiagnosticCodes() {
   using namespace codes;
   namespace rc = io::record_codes;
   const Severity E = Severity::Error;
+  // {code, severity, meaning}
   static const std::vector<DiagnosticCode> table = {
       // The reader (io/RecordReader)
       {rc::kUnterminatedQuote, E, "a quoted token has no closing quote on its line"},
@@ -77,6 +78,8 @@ const std::vector<DiagnosticCode> &DiagnosticCodes() {
       {kUnknownEpoch, E, "target@epoch where the target has no such epoch"},
       {kTargetKind, E, "a target whose kind the quantity does not take"},
       {kDegenerateNuisance, E, "efficiency and norm both free without a prior (F9)"},
+      // Warnings
+      {kNotMeasurable, Severity::Warning, "a data set of a quantity that is computed for tests and comparison, not measured"},
   };
   return table;
 }

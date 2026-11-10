@@ -1,5 +1,8 @@
 # User story (b), docs/upgrade/project_format3.md section 9.2, last paragraph: the five angles in five files share
 # one norm record (one parameter, one prior).
+<config>
+format=3
+</config>
 <data>
 normalization aC
     value          1 fit prior 1 3%

@@ -238,22 +238,45 @@ parameter is lives in its record, never in its name [check 23: no prefix or suff
    with the kind in `tests/pyazr/parameter_kinds_test.py` (its names rebuilt from the records).
 
 **A format-3 field** (a key of a record kind: `docs/upgrade/project_format3.md`, `experiment/README.md` §2).
-1. One `FieldDef` row in the kind's list in `experiment/src/Schema.cpp`: key, title, value type (`ValueSpec`; a
-   structured value is a `FormSpec` there), where it applies and where it is required (`Condition`), doc. If it depends
-   on the quantity, `ByQ(...)` there and a `QuantityField` in each row of `experiment/src/Quantities.cpp` that uses it.
+1. One `FieldDef` row in its kind's function in `experiment/src/Schema.cpp` (`DatasetKind()`, `TargetKind()`, ...),
+   made by the helper that says where it applies and whether it is required: `Req`, `Opt`, `RequiredWhen`,
+   `OptionalWhen`, `ByQ` (the quantity decides), wrapped in `Repeatable`/`Defaulted`/`RequiredIf` where needed, e.g.
+   `RequiredWhen("charge_state", "Charge state", IntAtLeast(1), Condition::Dimension({"per_charge"}), "the beam's
+   charge state q")`. A structured value is a `FormSpec` of `StructuredValues()` built from `Keyword(...)`/`Unkeyed(...)`
+   alternatives and `Pos`/`Kw`/`OptionalKw` parts. If the field depends on the quantity, `ByQ(...)` there and an
+   `Allows(...)`/`Requires(...)` in each quantity function of `experiment/src/Quantities.cpp` that uses it.
    No parser code: the value type's parser exists (`Parsers.h`); a new value type is a parser plus a case in `ParseValue`.
 2. A fixture line in `experiment/tests/data/` that validates, and a case in `experiment/tests/diagnostics_test.cpp`
    if the field brings a refusal of its own.
 3. `AZURE2 --schema > tests/schema/schema_v3.json`, bump `Schema::kVersion` if an existing project changes meaning
    [check 21: `experiment_schema`, `pyazr_schema`]; `python3 tools/gen_schema_docs.py` [check 18].
 
-**A format-3 quantity.** One `Quantity` row in `experiment/src/Quantities.cpp` (units, column roles, reaction rule,
-required and allowed fields, target kinds, norm rules, tree, EXFOR codes, refusals), a record of it in the `variants`
-of `experiment/tests/quantities_test.cpp` (the test fails for a row without one), then the schema and docs as above;
-later its tree builder (step 3).
+**A format-3 quantity.** One function in `experiment/src/Quantities.cpp` that fills its `Quantity` member by member,
+and its entry in `Quantities()`; members it does not set keep the defaults of `Quantities.h`:
+```cpp
+Quantity SFactor() {
+  Quantity q;
+  q.name = "sfactor";
+  q.title = "Astrophysical S factor";
+  q.doc = "S(E) = E sigma(E) exp(2 pi eta) with the engine's eta and atomic masses (data_kinds.md section 4.1).";
+  q.recordKinds = kDataKinds;
+  q.engineUnit = "MeV*b";
+  q.units = {AnyUnitOf("sfactor")};
+  q.energyRoles = {"E_cm", "E_lab"};
+  q.reaction = {R::kChargedEntrance, "charged entrance"};
+  q.fields = {Allows("multipole", kGammaExit)};
+  q.tree = "Scale_SF(E) o Sigma(r)";
+  q.exfor = {",SIG,,SFC", "PAR,SIG,,SFC", "EP/PAR,SIG,,SFC"};
+  q.refusals = {RefusedAtValidation("E_REACTION_NOT_ALLOWED", "neutral",
+                                    "the S factor is defined for charged particles (Gamow factor)")};
+  return q;
+}
+```
+Then a record of it in the `variants` of `experiment/tests/quantities_test.cpp` (the test fails for a row without
+one), the schema and docs as above; later its tree builder (step 3).
 
-**A format-3 unit.** One `Unit` row in `experiment/src/Units.cpp` (token, dimension, factor to the dimension's engine
-unit, aliases); `experiment_parsers` checks every row's dimension and factor and `experiment_quantities` tries the unit
+**A format-3 unit.** One `Unit` row in `experiment/src/Units.cpp`, `{token, dimension, factor to the dimension's
+engine unit[, aliases]}`, e.g. `{"keV", "energy", 1e-3}`; `experiment_parsers` checks every row's dimension and factor and `experiment_quantities` tries the unit
 on every quantity; then the schema and docs as above.
 
 **A format-3 diagnostic code.** A constant in `experiment/include/azure2/experiment/Diagnostics.h` (`io/`'s reader:
