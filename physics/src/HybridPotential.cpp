@@ -11,8 +11,8 @@ namespace physics {
 
 namespace {
 
-/// e^2 (MeV fm) of the Coulomb term V_C.
-constexpr double kCoulombE2_MeV_fm = 1.4399764;
+/// e^2 = alpha hbar c (MeV fm) of the Coulomb term V_C, the constants of the boundary values at r_m.
+constexpr double kCoulombE2_MeV_fm = kFineStructure * kHbarC_MeV_fm;
 
 }  // namespace
 

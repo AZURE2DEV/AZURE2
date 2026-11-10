@@ -5,7 +5,10 @@
 //     PotentialKey; no potential has the key {0}.  The factories refuse a non-positive parameter.
 //  2. V_N = 0 (depth 0): the solution of the radial equation with only the Coulomb (uniform sphere inside R_C) and
 //     centrifugal terms, read outside R_C, is the Coulomb H+ = G + iF.  P = rho/|H|^2 and S = rho Re(H' H*)/|H|^2
-//     at a = 3.6 fm of p + 12C, l = 0-2, E = 0.5-3 MeV against the library's Coulomb functions (coulsm, 1e-9).
+//     at a = 3.6 fm of p + 12C, l = 0-2, E = 0.5-3 MeV against the library's Coulomb functions (coulsm, 1e-9): to
+//     2e-7, the accuracy of the O(step^4) integration (largest 9.3e-8, at l = 2, 3 MeV; 6e-9 in P and 2e-8 in S at
+//     l = 1, 0.5 MeV, work/so-note/radial.py part B).  The Coulomb term with e^2 = 1.4399764 MeV fm instead of
+//     alpha hbar c fails at 2.3e-5.
 #include <cmath>
 #include <complex>
 #include <cstdio>
@@ -112,7 +115,7 @@ double CoulombOnly(double tolerance) {
 
 int main() {
   Values();
-  const double worst = CoulombOnly(1e-4);
+  const double worst = CoulombOnly(2e-7);
   std::printf("V_N = 0 against the Coulomb functions: worst %.2e\n", worst);
   if (failures) {
     std::printf("%d failure(s)\n", failures);

@@ -8,8 +8,10 @@ interpolation between the bracketing grid nodes and the derivative the chord slo
 O(dr) quantity: with a nuclear potential of 1e-9 MeV (the parser refuses 0) the shift function of
 p + 12C at the channel radius was off by 3.8e-3 (l = 0) to 4.2e-2 (l = 3), while F and G were good
 to 1e-5 (audit 2026-10-25, item 16).  The grid is now laid so that the requested radius is a node,
-and the derivative is a five-point central difference; the remaining difference is the Numerov
-integration itself, ~1e-5 in S and P.
+and the derivative is a five-point central difference.  The ~1e-5 left in P and S until brief O
+(2026-11-10) was not the integration but the Coulomb term of the potential, e^2 = 1.4399764 MeV fm
+against the alpha hbar c of the boundary values; with alpha hbar c the integration agrees with the
+Coulomb functions to ~1e-8 (physics_hybrid_potential), and this test asks for 1e-6.
 
 Model: tests/hybrid_potential/hybrid_potential.azr (p + 12C, pair 1) with its <potential> block
 replaced: once switched off, once a Woods-Saxon of depth 1e-9 MeV.  Compared through
@@ -73,8 +75,8 @@ try:
             worst_s = max(worst_s, ds)
             worst_p = max(worst_p, dp)
             check(f"l = {L}, {label}: S of the 1e-9 MeV potential = plain S (max |dS| {ds:.1e}, S {a['S'][2]:.4f} at 1 MeV)",
-                  ds <= 1e-4, f"max |dS| {ds:.2e} > 1e-4")
-            check(f"l = {L}, {label}: P agrees to 1e-4 (max rel {dp:.1e})", dp <= 1e-4, f"max rel {dp:.2e}")
+                  ds <= 1e-6, f"max |dS| {ds:.2e} > 1e-6")
+            check(f"l = {L}, {label}: P agrees to 1e-6 (max rel {dp:.1e})", dp <= 1e-6, f"max rel {dp:.2e}")
     # not vacuous: the hybrid path really ran (its values are not bit-identical to the plain ones)
     a = plain.coulomb_functions(1, energies, L=0)
     b = tiny.coulomb_functions(1, energies, L=0)

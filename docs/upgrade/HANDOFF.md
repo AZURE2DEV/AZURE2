@@ -28,6 +28,29 @@ Update this file at the end of every work session: what changed, what is next, w
   calculations at 1 and 2 threads identical (T1, T2, T3, 13N, hybrid_potential × 3 bases, 15/15); converted-tree gate
   (`convert_spec_equivalence_test`) 183 equal, 3 recorded, 0 differ.
 
+**Part 2 — e² = αħc (outputs of hybrid projects move).** `physics/src/HybridPotential.cpp`: the Coulomb term's
+e² = 1.4399764 MeV fm → `kFineStructure * kHbarC_MeV_fm` (8.3 × 10⁻⁶ relative).  179 × 3 against `tab-p3f` (tag
+`tab-hyb2`): only `hybrid_potential` and `upgrade/T3` (T3, T3_start) move, in all three bases; everything else identical.
+
+| project | file | largest relative change | cause |
+|---|---|---|---|
+| hybrid_potential | AZUREOut_aa=1_R=1.out (p + ¹²C elastic) | 1.3e-5 | e² |
+| hybrid_potential | chiSquared.out (segment 3: 2238.93 → 2238.82) | 4.9e-5 | e² |
+| hybrid_potential | param.par, parameters.out, scatteringLengths.out | 2.5e-5 | e² (P, S at a_c) |
+| T3 | AZUREOut_aa=1_R=1.out (α + α) | 8.8e-2 on δ = 2.26e-3 → 2.48e-3 at E_lab 0.875 MeV, a phase near zero (absolute 2.2e-4); 5.8e-3 next point; others ≤ 1e-5 | e² |
+| T3 | AZUREOut_aa=4_R=1.out | 1.6e-5 | e² |
+| T3 | AZUREOut_aa=2/3_* (p + ⁷Li, n + ⁷Be: no potential, through the shared levels) | ≤ 7e-7 | e² |
+| T3 | chiSquared.out, param.par, parameters.out | 7.5e-5, 2.3e-6, 2.7e-6 | e² |
+| T3_start | chiSquared.out / AZUREOut_aa=1_R=1.out | 2.8e-4 / 2.2e-3 | e² |
+
+Independent check: with V_N = 0 the integration now reproduces the Coulomb P and S to ≤ 9.3e-8 (p + ¹²C, l = 0–2,
+0.5–3 MeV; `physics_hybrid_potential`, tolerance 2e-7), against 2.3e-5 with the old e² (the test fails then); the
+note's DOP853 integration (`work/so-note/radial.py` B) gives 6e-9 / 2e-8.  References regenerated: T3 goldens
+(`golden.py --write`, T1 left as recorded; `ENGINE` says so), `tests/hybrid_potential/expected/chiSquared.out`
+(segment 3 2239.69 → 2238.82: 2239.69 was a pin of 2026-09-28; the start head gives 2238.93, so 3.4e-4 of the step is
+older drift inside the 2e-2 tolerance and 4.9e-5 is e²).  `pyazr.rst` and `hybrid_derivative_test.py` no longer call
+1e-5 the integration's accuracy; the latter now asks for 1e-6.
+
 ## 2026-11-10 (evening) — brief I: the follow-ups of the model pass, and S5, the calculation plan (`feature/upgrade-4-plan`)
 
 **Done** (brief `work/briefs/I_plan.md`; full report `work/plan/REPORT.md`).

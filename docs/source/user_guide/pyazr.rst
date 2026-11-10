@@ -830,7 +830,12 @@ the external region.
 The hybrid values come from a Numerov integration of H⁺ = G + iF inward from
 the 15 fm matching radius on a grid of about 0.0275 fm, laid so that the
 requested radius is a grid node; the functions and their derivatives are good
-to about 10\ :sup:`−5` there, which is the accuracy of the integration itself.
+to about 10\ :sup:`−8` there (with the potential switched to zero depth, P and S
+agree with the Coulomb functions to 6·10\ :sup:`−9` and 2·10\ :sup:`−8` for p + :sup:`12`\ C).
+The Coulomb term of the potential is that of a uniformly charged sphere of radius
+3.5 fm with e\ :sup:`2` = αħc, the constants of the Coulomb functions it is matched to;
+builds before 2026-11-10 used e\ :sup:`2` = 1.4399764 MeV fm, which put a 10\ :sup:`−5`
+difference into P and S that was not the integration's.
 Before October 2026 the values were interpolated linearly between nodes and the
 derivatives were the slope of the bracketing cell, a first-order quantity: the
 shift function of a hybrid pair was off by 4·10\ :sup:`−3` (l = 0) to
