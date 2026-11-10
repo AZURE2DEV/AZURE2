@@ -1102,6 +1102,24 @@ Menu 1 only: a refusal that only an extrapolation run (menu 3) or a data file wr
 not in this list (the `check.sh` of `tests/natural_target`, `tests/angular_coefficients`, `tests/electron_screening`
 and the others with `bad_*` files say which runs they expect to fail).]**
 
+**The gate as a tool** (`tools/format3_gate.sh`, `tools/format3_gate.py`): items 1, 3 and 4 with exact grids, menu 1,
+
+```
+WORK=<scratch> REF=tab-p3f JOBS=3 RUNALL=<runall.sh> tools/format3_gate.sh <engine> <source tree> <tag>
+```
+
+converts the source tree's `tests/` with `tools/convert_tree.sh` and `--exact-grids` (without the old engine's pass)
+into `$WORK/gate-<tag>/converted`, makes it runnable (`format3_gate.py tree`: each original whose conversion
+validates, or fails only with `E_DATA_FILE`, is replaced by its conversion under its own name; the others are listed
+in `tree.txt`), runs it in the three bases with `runall.sh` as `tab-<tag>` (one thread per run, `JOBS` runs at once)
+and compares every output file with those of the reference tag `REF` (`format3_gate.py compare`; `param.par` after
+each conversion's parameter-name map; `run.log` not compared). A file is identical, or its difference consists of
+classes each listed for that file and project in the table `CLASSES` of `format3_gate.py` (class, file, projects,
+why), or it differs. The counts per basis are printed, the list in `$WORK/gate-<tag>/gate.txt`; the exit status is 1
+when a file differs or is missing, so a new difference fails the gate until a row with its reason is added to the
+table. On the head of the fourth wave (64b8e7ae): of 510 (483 formal) files per basis 472 (445) identical, 38
+classified, 0 differ, 0 missing.
+
 6. The converted files replace the originals in one commit; the originals move to `tests/convert/fixtures/` with their
    committed conversions (check 20), so the converter is tested on every construct for as long as it exists.
 
