@@ -424,6 +424,23 @@ Stable now and edited by nobody: the output writer and the check files of `EData
 Each step is one commit (N4: two) on its own branch, mergeable alone, with the evidence of §1. "Sizes after" are counted
 at 070756a1; a step merged after other branches applies to their sizes the same differences.
 
+**Status (branch `feature/upgrade-4-edata-split-3`, brief S).** N1–N4, W1, W2 are merged.  Brief S brought M1, M2 and
+the first five D1 files forward, as verbatim moves, and stopped there (the T2 calculation became 3.6–4.4 % slower in
+cycles after the channel tables moved; see the HANDOFF entry):
+
+| step | new file (lines) | moved | `EData.cpp` / `EPoint.cpp` after |
+|---|---|---|---|
+| D1 | `src/EDataTargetEffects.cpp` (964) | `SetUpTargetEffects` (with its component-grid block), `ReplaceSubPointGrids`, `GridNucleus` members, five file-local helpers: 938 | 3,516 |
+| D1 | `src/EDataExternalCapture.cpp` (521) | `CalculateECAmplitudes`, `CountECAmplitudes`, `ECSignature`, `ECSignaturePath`, their helpers; `ECProgressRedraw` is now a private static member of `EData` (shared with `InitializeComponentSegments`): 501 | 3,015 |
+| M1 | `src/EDataParameters.cpp` (741) | offsets, `ApplyPriorCentres`, groups, `FillMnParams`, `SetUpDensityParams`, `DopplerParamOfEffect`: 717 | 2,298 |
+| M2 | `src/EDataHandOver.cpp` (363) | `Fill*FromParams`, `FillEnergyShiftsFromParamsImpl`, `ApplyScreening`, the four target-effect penalties: 348 | 1,950 |
+| D1 | `src/EPointCalculate.cpp` (419) | `Calculate`, thin target, observable integration, `MarkFailed`, `ScopedPointMappingOff` with its flag: 398 | 2,522 |
+| D1 | `src/EPointFolds.cpp` (478), `include/TELinearForm.h` (49) | the folds and their templates, `GridQuadrature`: 463; `TELinearForm`: 41 | 2,059 |
+| D1 | `src/EPointChannelTables.cpp` (712), `include/EPointTables.h` (111) | channel rows, sharing, Coulomb amplitude, table getters: 690; the three table types, namespace-level, aliased in `EPoint` | 1,369 |
+
+Not done: `src/EPointLegendre.cpp`, `src/EPointExternalCapture.cpp` (D1), `src/ESegmentParameters.cpp`,
+`src/ESegmentShifts.cpp` (M3).
+
 ### 5.1 Now, in parallel with H, I, G3
 
 **N1 — the output writer to `src/EDataOutputFiles.cpp`.** Moves `WriteNaturalDecomposition` (`EData.cpp` 231–265),

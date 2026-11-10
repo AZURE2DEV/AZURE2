@@ -2,6 +2,48 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-10 (agent, brief S) — `EData`/`EPoint` split: seven files moved, stopped on a 4 % slower T2 calculation (`feature/upgrade-4-edata-split-3`)
+
+**What file holds what now.** Every move is verbatim (bodies unchanged); `edata_split.md` §5 has the table.
+- `src/EDataTargetEffects.cpp`: target effects, the sub-point grids of their points, the energy windows, the grid
+  re-placement for the current parameters.  The component-segment grid block stays inside `SetUpTargetEffects` (a part
+  of a function cannot move alone); S12 deletes it there.
+- `src/EDataExternalCapture.cpp`: the external-capture amplitudes of the data, the `intEC` file, its count and
+  signature, the progress bar.  `ECProgressRedraw` is used also by `InitializeComponentSegments` (stays in `EData.cpp`),
+  so it is now a private static member of `EData` (declared in `EData.h`, which now includes `<ctime>`).
+- `src/EDataParameters.cpp`: the offsets of the data-side parameter blocks, names and start values (`FillMnParams`),
+  shift, shift-function, normalization and thickness groups, density parameters, prior centres.
+- `src/EDataHandOver.cpp`: a parameter vector into segments, effects and points (`Fill*FromParams`, the shift
+  hand-over), and the four target-effect prior totals; check 11 has four allowance rows for this file.
+- `src/EPointCalculate.cpp`: `EPoint::Calculate`, the thin target, the observable-wise integration, `MarkFailed`, and
+  `ScopedPointMappingOff` with its thread-local flag (one object, as before).
+- `src/EPointFolds.cpp` and `include/TELinearForm.h`: the apparatus folds and the linear form they are evaluated on.
+- `src/EPointChannelTables.cpp` and `include/EPointTables.h`: the energy-dependent channel tables of a point, their
+  sharing, the Coulomb amplitude and the table getters; `EDependentTables`, `EDependentShare` and `ThmPsTable` are
+  namespace-level types, which `EPoint` names by aliases (`EPoint::EDependentShare` still works).  Check 25 reads the
+  new header.
+Sizes: `EData.cpp` 4,454 → 1,950, `EPoint.cpp` 2,920 → 1,369, `EPoint.h` 896 → 766, `EData.h` 560 → 565.
+
+**Verified.** Each of the seven commits: 0 warnings; the diff of the removed lines against the new file's body and of the
+rest against the old file less those lines, both empty (the two exceptions are shown in the report: the namespace and
+signature lines of `ECProgressRedraw`, the alias lines in `EPoint.h`); consistency test after `--tighten-sizes`;
+179 × 3 identical to `tab-p3f` (689 / 662 / 689, tags `tab-esplit3-c1` … `-c7`); `scripts/check.sh --quick` (ctest 165/165).
+`tests/progress_bars` passed (3 threads) after the external-capture move.
+
+**Stopped: the T2 calculation is slower after the channel-table move.** T2 menu 1 at 1 thread, base build `b-trial6`
+against this branch, alternated: user-space instructions +3.6 %, cycles +3.6 to +4.4 % (min of 6); the 200-call fit is
+not slower (cycles −0.1 %, instructions +1.4 %).  Callgrind puts the whole difference in `EPoint::CalcLegendreP`: with
+`EPoint.cpp` smaller, GCC now inlines the file-local `LegendreSeries` into it, and the inlined loop costs 68 M more
+instructions per calculation.  An experiment (not committed: `__attribute__((noinline))` on `LegendreSeries`) gives
+−1.7 % cycles on the calculation and −2.7 % on the fit against the base, outputs identical.  Brief S says to stop at a
+slow-down above 2 %, so the Legendre and point external-capture files and the two `ESegment` files are not made.
+
+**Open.** The director's decision on the inlining (above); then `src/EPointLegendre.cpp`,
+`src/EPointExternalCapture.cpp`, `src/ESegmentParameters.cpp`, `src/ESegmentShifts.cpp`.
+At the head of the seven moves (`TMAX=3 NT=3 work/verify-p4c.sh wt-esplit3 esplit3`): 179 × 3 identical, `ctest -LE
+slow` 165/165, `tests/run_tests.sh` 141 passed / 0 failed, 1 against 3 threads on T1–T3 and 13N in three bases 12
+identical; `tests/format3_engine/check.sh` passed.
+
 ## 2026-11-10 (night) — S14, brief L: ratio to Rutherford and to Mott, the `rutherford` leaf (`feature/upgrade-4-rutherford`)
 
 **Done** (brief `work/briefs/L_rutherford_ratio.md`).
