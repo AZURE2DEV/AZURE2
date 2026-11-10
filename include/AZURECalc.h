@@ -89,7 +89,7 @@ class AZURECalc : public ROOT::Minuit2::FCNGradientBase {
   /// True when the limits manager declares at least one nuisance parameter.
   bool HasNuisanceParameters() const;
   /*!
-   * Calculate every non-mapped point of every segment and component segment in
+   * Calculate every non-mapped point of every segment and of its leaves in
    * one OpenMP pass (a point's Calculate also fills its mapped copies), so the
    * per-segment loops only combine.  Returns false -- and does nothing -- when
    * already inside a parallel region (Minuit's parallel numerical gradient) or

@@ -381,16 +381,11 @@ int EData::Fill(const Config &configure, CNuc *theCNuc, const azure2::experiment
                 ESegment *filledSegment = this->GetSegment(this->NumSegments());
                 filledSegment->SetOperationType(operation);
 
-                // One full segment copy per component (spec: entrance, exit, optional fixed angle, scaling)
+                // One leaf per component (spec: entrance, exit, optional fixed angle, scaling)
                 for (const azure2::experiment::ComponentSpec &c : NewSegment.GetComponents()) {
                   if (!this->CheckComponentPairs(theCNuc, *filledSegment, c.entranceKey, c.exitKey, configure)) return -1;
-                  ESegment *componentSegment =
-                      c.hasAngle ? this->CreateComponentSegment(*filledSegment, c.entranceKey, c.exitKey, c.angle)
-                                 : this->CreateComponentSegment(*filledSegment, c.entranceKey, c.exitKey);
-                  if (componentSegment) {
-                    componentSegment->SetComponentScaling(c.scaling);
-                    filledSegment->AddComponentSegment(componentSegment);
-                  }
+                  this->AddLeaf(*filledSegment, c.entranceKey, c.exitKey,
+                                c.hasAngle ? std::optional<double>(c.angle) : std::nullopt, c.scaling);
                 }
               }
 
@@ -410,13 +405,9 @@ int EData::Fill(const Config &configure, CNuc *theCNuc, const azure2::experiment
                       // For the first capture pair, set the base segment's exit key
                       baseSegment->SetExitKey(theCNuc->GetPair(i)->GetPairKey());
                     } else {
-                      // For additional capture pairs, create component segments instead of separate segments
-                      ESegment *componentSegment = this->CreateComponentSegment(*baseSegment,
-                                                                                baseSegment->GetEntranceKey(),
-                                                                                theCNuc->GetPair(i)->GetPairKey());
-                      if (componentSegment) {
-                        baseSegment->AddComponentSegment(componentSegment);
-                      }
+                      // Each further capture pair is a leaf of the segment
+                      this->AddLeaf(*baseSegment, baseSegment->GetEntranceKey(), theCNuc->GetPair(i)->GetPairKey(),
+                                    std::nullopt, 1.0);
                     }
                   }
                 }
@@ -525,7 +516,7 @@ int EData::MakePoints(const Config &configure, CNuc *theCNuc, const azure2::expe
             for (int i = 0; i < theSegment->NumPoints(); i++) {
               // A ratio is dimensionless: no cross-section conversion (as ESegment::Fill for data segments;
               // the stored factor would otherwise divide the ratio in the lab output, kinflag.dat = 1).
-              if (!theSegment->ConvertRowToCM(i, entrancePair, exitPair, !theSegment->IsDimensionlessRatio(),
+              if (!theSegment->ConvertRowToCM(0, i, entrancePair, exitPair, !theSegment->IsDimensionlessRatio(),
                                               ESegment::BeyondRange::Stop)) {
                 const EPoint *thePoint = theSegment->GetPoint(i + 1);
                 configure.outStream << "ERROR: " << "test segment #" << theSegment->GetSegmentKey() << ": lab angle " << thePoint->GetLabAngle() << " deg at E_lab = " << thePoint->GetLabEnergy()
@@ -533,23 +524,18 @@ int EData::MakePoints(const Config &configure, CNuc *theCNuc, const azure2::expe
                 return -1;
               }
             }
-            theSegment->KeepLoadFrame();
+            theSegment->KeepLoadFrame(0);
 
             // Handle advanced segments (sum/ratio of components) - AFTER points are added
             if (NewSegment.IsAdvanced()) {
               int operation = NewSegment.GetOperationType();
               theSegment->SetOperationType((OperationType)operation);
 
-              // One full segment copy per component (spec: entrance, exit, optional fixed angle, scaling)
+              // One leaf per component (spec: entrance, exit, optional fixed angle, scaling)
               for (const azure2::experiment::ComponentSpec &c : NewSegment.GetComponents()) {
                 if (!this->CheckComponentPairs(theCNuc, *theSegment, c.entranceKey, c.exitKey, configure)) return -1;
-                ESegment *componentSegment =
-                    c.hasAngle ? this->CreateComponentSegment(*theSegment, c.entranceKey, c.exitKey, c.angle)
-                               : this->CreateComponentSegment(*theSegment, c.entranceKey, c.exitKey);
-                if (componentSegment) {
-                  componentSegment->SetComponentScaling(c.scaling);
-                  theSegment->AddComponentSegment(componentSegment);
-                }
+                this->AddLeaf(*theSegment, c.entranceKey, c.exitKey,
+                              c.hasAngle ? std::optional<double>(c.angle) : std::nullopt, c.scaling);
               }
             }
             if (theSegment->NumPoints() == 0) {
@@ -573,13 +559,9 @@ int EData::MakePoints(const Config &configure, CNuc *theCNuc, const azure2::expe
                       // For the first capture pair, set the base segment's exit key
                       baseSegment->SetExitKey(theCNuc->GetPair(i)->GetPairKey());
                     } else {
-                      // For additional capture pairs, create component segments instead of separate segments
-                      ESegment *componentSegment = this->CreateComponentSegment(*baseSegment,
-                                                                                baseSegment->GetEntranceKey(),
-                                                                                theCNuc->GetPair(i)->GetPairKey());
-                      if (componentSegment) {
-                        baseSegment->AddComponentSegment(componentSegment);
-                      }
+                      // Each further capture pair is a leaf of the segment
+                      this->AddLeaf(*baseSegment, baseSegment->GetEntranceKey(), theCNuc->GetPair(i)->GetPairKey(),
+                                    std::nullopt, 1.0);
                     }
                   }
                 }
@@ -819,10 +801,10 @@ int EData::Initialize(CNuc *compound, const Config &configure) {
     if (this->CalculateECAmplitudes(compound, configure) == -1) return -1;
   }
 
-  // Initialize component segments - ensure their entrance/exit pairs are properly set up
+  // The leaves: their pairs, frames and tables
   if (!(configure.paramMask & Config::USE_API))
     configure.outStream << "Initializing Component Segments..." << std::endl;
-  if (this->InitializeComponentSegments(compound, configure) == -1) return -1;
+  if (this->InitializeLeaves(compound, configure) == -1) return -1;
   // Every point of this stage has its rows now; nothing reads the channel table until the energies change, and the
   // table (about 64 bytes a row) is not kept beside the rows it filled (docs/upgrade/channel_table.md section 2).
   channelTable_.reset();
@@ -943,19 +925,21 @@ void EData::CalcCoulombAmplitude(CNuc *theCNuc) {
 }
 
 /*!
- * Initialize component segments by ensuring their entrance/exit pairs are properly set up
- * in the compound nucleus for calculations.
+ * Sets up the leaves of every segment (ESegment::AddLeaf: the components of SUM, RATIO, sample and total-capture
+ * segments, the total term of a yield): their pairs in the compound nucleus, their frames with their own pairs, their
+ * energy-dependent values, Legendre polynomials, Coulomb amplitudes and external-capture amplitudes (appended to the
+ * intEC file after those of the segments).  The run log still calls them component segments.
  */
 
-int EData::InitializeComponentSegments(CNuc *theCNuc, const Config &configure) {
-  // Initialize all component segments with the same process as regular segments
+int EData::InitializeLeaves(CNuc *theCNuc, const Config &configure) {
+  // The leaves go through the steps of the segments' own points
   if (!(configure.paramMask & Config::USE_API))
-    configure.outStream << "Initializing Component Segments (" << componentSegments_.size() << " components)..." << std::endl;
+    configure.outStream << "Initializing Component Segments (" << leafRefs_.size() << " components)..." << std::endl;
 
   // First, ensure entrance/exit pairs are properly set up in the compound nucleus
-  for (auto &componentSegment : componentSegments_) {
-    int entranceKey = componentSegment.GetEntranceKey();
-    int exitKey = componentSegment.GetExitKey();
+  for (const std::pair<int, int> &leaf : leafRefs_) {
+    int entranceKey = segments_[leaf.first].TermEntranceKey(leaf.second);
+    int exitKey = segments_[leaf.first].TermExitKey(leaf.second);
 
     // Ensure entrance pair is set as entrance if it exists
     if (theCNuc->IsPairKey(entranceKey)) {
@@ -983,11 +967,10 @@ int EData::InitializeComponentSegments(CNuc *theCNuc, const Config &configure) {
     }
   }
 
-  // Initialize component segments using the same process as regular segments
-  // Apply pair-dependent conversions for component segments
-  for (auto &componentSegment : componentSegments_) {
-    int entranceKey = componentSegment.GetEntranceKey();
-    int exitKey = componentSegment.GetExitKey();
+  // The frame of each leaf with its own pairs
+  for (const std::pair<int, int> &leaf : leafRefs_) {
+    int entranceKey = segments_[leaf.first].TermEntranceKey(leaf.second);
+    int exitKey = segments_[leaf.first].TermExitKey(leaf.second);
 
     PPair *entrancePair = nullptr;
     PPair *exitPair = nullptr;
@@ -1000,13 +983,13 @@ int EData::InitializeComponentSegments(CNuc *theCNuc, const Config &configure) {
     }
 
     // Apply the same conversions that are done for test segment points
-    for (int i = 1; i <= componentSegment.NumPoints(); i++) {
-      EPoint *point = componentSegment.GetPoint(i);
+    for (int i = 1; i <= (int)segments_[leaf.first].TermPoints(leaf.second).size(); i++) {
+      EPoint *point = segments_[leaf.first].GetTermPoint(leaf.second, i);
 
       if (entrancePair && exitPair) {
         // The base segment's sequence, with the component's own pairs; a component's value is always converted.
-        if (!componentSegment.ConvertRowToCM(i - 1, entrancePair, exitPair, true, ESegment::BeyondRange::Stop)) {
-          configure.outStream << "ERROR: " << "component (" << entranceKey << " -> " << exitKey << ") of segment #" << componentSegment.GetSegmentKey() << ": lab angle " << point->GetLabAngle() << " deg at E_lab = " << point->GetLabEnergy()
+        if (!segments_[leaf.first].ConvertRowToCM(leaf.second, i - 1, entrancePair, exitPair, true, ESegment::BeyondRange::Stop)) {
+          configure.outStream << "ERROR: " << "component (" << entranceKey << " -> " << exitKey << ") of segment #" << segments_[leaf.first].TermKey(leaf.second) << ": lab angle " << point->GetLabAngle() << " deg at E_lab = " << point->GetLabEnergy()
                               << " MeV: " << point->GetLabAngleWhy() << "." << std::endl;
           return -1;
         }
@@ -1021,20 +1004,20 @@ int EData::InitializeComponentSegments(CNuc *theCNuc, const Config &configure) {
         }
       }
     }
-    if (entrancePair && exitPair) componentSegment.KeepLoadFrame();
+    if (entrancePair && exitPair) segments_[leaf.first].KeepLoadFrame(leaf.second);
   }
 
-  // CalcEDependentValues for component segments, in parallel as for the data segments
+  // CalcEDependentValues for the leaves, in parallel as for the data segments
   // (EData::CalcEDependentValues).  Each point writes only itself, its sub-points and its local
   // mapped points that do not own their values; those are never computed here (the condition
   // below) and each has exactly one host, so no two threads write the same point.  Serial, this
   // loop was 9 of the 17.6 s of a natural_neon calculation on 24 threads.
   {
     std::vector<EPoint *> points;
-    for (auto &componentSegment : componentSegments_)
-      for (int i = 1; i <= componentSegment.NumPoints(); i++)
-        if (!(componentSegment.GetPoint(i)->IsMapped()) || componentSegment.GetPoint(i)->OwnsEDependentValues())
-          points.push_back(componentSegment.GetPoint(i));
+    for (const std::pair<int, int> &leaf : leafRefs_)
+      for (int i = 1; i <= (int)segments_[leaf.first].TermPoints(leaf.second).size(); i++)
+        if (!(segments_[leaf.first].GetTermPoint(leaf.second, i)->IsMapped()) || segments_[leaf.first].GetTermPoint(leaf.second, i)->OwnsEDependentValues())
+          points.push_back(segments_[leaf.first].GetTermPoint(leaf.second, i));
     if (!points.empty()) {
       try {
         channelTable_ = BuildChannelTable(theCNuc, configure, points);
@@ -1047,12 +1030,12 @@ int EData::InitializeComponentSegments(CNuc *theCNuc, const Config &configure) {
   ChannelRowSource componentRows;
   if (channelTable_) componentRows.tables.push_back(channelTable_.get());
   const ChannelRowSource *componentTable = &componentRows;
-  for (auto &componentSegment : componentSegments_) {
+  for (const std::pair<int, int> &leaf : leafRefs_) {
     bool localStop = false;
 #pragma omp parallel for shared(localStop, configure)
-    for (int i = 1; i <= componentSegment.NumPoints(); i++) {
+    for (int i = 1; i <= (int)segments_[leaf.first].TermPoints(leaf.second).size(); i++) {
       if (configure.stopFlag || localStop) continue;
-      EPoint *point = componentSegment.GetPoint(i);
+      EPoint *point = segments_[leaf.first].GetTermPoint(leaf.second, i);
       if (!(point->IsMapped()) || point->OwnsEDependentValues()) {
         try {
           point->CalcEDependentValues(theCNuc, configure, true, true, componentTable);
@@ -1068,31 +1051,31 @@ int EData::InitializeComponentSegments(CNuc *theCNuc, const Config &configure) {
     if (configure.stopFlag || localStop) return -1;
   }
 
-  // CalcLegendreP for component segments
-  for (auto &componentSegment : componentSegments_) {
+  // CalcLegendreP for the leaves
+  for (const std::pair<int, int> &leaf : leafRefs_) {
     // Get TargetEffect with Q-coefficients if applicable
     TargetEffect *effect = NULL;
-    if (componentSegment.IsTargetEffect()) {
-      TargetEffect *te = this->GetTargetEffect(componentSegment.GetTargetEffectNum());
+    if (segments_[leaf.first].IsTargetEffect()) {
+      TargetEffect *te = this->GetTargetEffect(segments_[leaf.first].TermTargetEffectNum(leaf.second));
       if (te && te->IsQCoefficients()) {
         effect = te;
       }
     }
-    for (int i = 1; i <= componentSegment.NumPoints(); i++) {
-      EPoint *point = componentSegment.GetPoint(i);
+    for (int i = 1; i <= (int)segments_[leaf.first].TermPoints(leaf.second).size(); i++) {
+      EPoint *point = segments_[leaf.first].GetTermPoint(leaf.second, i);
       point->CalcLegendreP(configure.maxLOrder, theCNuc, effect);
     }
   }
 
-  // CalcCoulombAmplitude for component segments
-  for (auto &componentSegment : componentSegments_) {
-    for (int i = 1; i <= componentSegment.NumPoints(); i++) {
-      EPoint *point = componentSegment.GetPoint(i);
+  // CalcCoulombAmplitude for the leaves
+  for (const std::pair<int, int> &leaf : leafRefs_) {
+    for (int i = 1; i <= (int)segments_[leaf.first].TermPoints(leaf.second).size(); i++) {
+      EPoint *point = segments_[leaf.first].GetTermPoint(leaf.second, i);
       point->CalcCoulombAmplitude(theCNuc);
     }
   }
 
-  // Calculate EC amplitudes for component segments if external capture is enabled.
+  // Calculate EC amplitudes for the leaves if external capture is enabled.
   // The integrals are saved to (or read back from) the same intEC.dat/intEC.extrap
   // file as the regular segments.  When previously calculated integrals are reused,
   // the (expensive) component-segment EC calculation is skipped entirely, which is
@@ -1121,32 +1104,32 @@ int EData::InitializeComponentSegments(CNuc *theCNuc, const Config &configure) {
       if (!(configure.paramMask & Config::USE_API))
         configure.outStream << "Calculating EC Amplitudes for Component Segments..." << std::endl;
     }
-    for (auto &componentSegment : componentSegments_) {
-      int aa = theCNuc->GetPairNumFromKey(componentSegment.GetEntranceKey());
+    for (const std::pair<int, int> &leaf : leafRefs_) {
+      int aa = theCNuc->GetPairNumFromKey(segments_[leaf.first].TermEntranceKey(leaf.second));
       if (theCNuc->GetPair(aa)->GetPType() != 20 && theCNuc->GetPair(aa)->IsEntrance()) {
         PPair *entrancePair = theCNuc->GetPair(aa);
         for (int j = 1; j <= theCNuc->NumJGroups(); j++) {
           for (int la = 1; la <= theCNuc->GetJGroup(j)->NumLevels(); la++) {
             if (theCNuc->GetJGroup(j)->GetLevel(la)->IsECLevel()) {
               ALevel *ecLevel = theCNuc->GetJGroup(j)->GetLevel(la);
-              int ir = theCNuc->GetPairNumFromKey(componentSegment.GetExitKey());
+              int ir = theCNuc->GetPairNumFromKey(segments_[leaf.first].TermExitKey(leaf.second));
               if (ecLevel->GetECPairNum() == ir) {
                 if (!usePrevious) {
                   char segmentKeyOut[256];
-                  snprintf(segmentKeyOut, sizeof(segmentKeyOut), "%d", componentSegment.GetSegmentKey());
+                  snprintf(segmentKeyOut, sizeof(segmentKeyOut), "%d", segments_[leaf.first].TermKey(leaf.second));
                   if (!(configure.paramMask & Config::USE_API)) {
                     configure.outStream << "\tSegment #" << std::setw(12) << segmentKeyOut
                                         << std::setw(0) << " [                         ] 0%";
                     configure.outStream.flush();
                   }
-                  int numPoints = componentSegment.NumPoints();
+                  int numPoints = (int)segments_[leaf.first].TermPoints(leaf.second).size();
                   std::atomic<int> pointIndex(0);
                   time_t startTime = time(NULL);
                   bool localStop = false;
 #pragma omp parallel for shared(configure, localStop, pointIndex, startTime)
                   for (int i = 1; i <= numPoints; i++) {
                     if (configure.stopFlag || localStop) continue;
-                    EPoint *point = componentSegment.GetPoint(i);
+                    EPoint *point = segments_[leaf.first].GetTermPoint(leaf.second, i);
                     if (!(point->IsMapped()) || point->OwnsEDependentValues()) {
                       try {
                         point->CalculateECAmplitudes(theCNuc, configure, channelTable_.get());
@@ -1178,8 +1161,8 @@ int EData::InitializeComponentSegments(CNuc *theCNuc, const Config &configure) {
                 // Write the freshly calculated amplitudes to the file, or read the
                 // previously saved ones back in.  The iteration order matches the
                 // regular-segment loop in CalculateECAmplitudes exactly.
-                for (EPointIterator point = componentSegment.GetPoints().begin();
-                     point < componentSegment.GetPoints().end(); point++) {
+                for (EPointIterator point = segments_[leaf.first].TermPoints(leaf.second).begin();
+                     point < segments_[leaf.first].TermPoints(leaf.second).end(); point++) {
                   if (!(point->IsMapped()) || point->OwnsEDependentValues()) {
                     for (int k = 1; k <= entrancePair->GetDecay(ir)->NumKGroups(); k++) {
                       for (int ecm = 1; ecm <= entrancePair->GetDecay(ir)->GetKGroup(k)->NumECMGroups(); ecm++) {
@@ -1229,9 +1212,6 @@ int EData::InitializeComponentSegments(CNuc *theCNuc, const Config &configure) {
   return 0;
 }
 
-/*!
- * Creates a component segment as a full copy of the base segment with different entrance/exit keys
- */
 /*!
  * Checks a component's pair keys before the component is created: both must
  * exist and belong to one compound nucleus (a reaction does not change the
@@ -1283,31 +1263,22 @@ bool EData::FinishTransformedSegment(CNuc *theCNuc, ESegment *seg, int key, bool
   PPair *entrance = theCNuc->GetPair(theCNuc->GetPairNumFromKey(seg->GetEntranceKey()));
   if (entrance->GetPType() != 0 || entrance->GetZ(1) * entrance->GetZ(2) != 0)
     return refuse("a sample transmission or self-shielded yield needs a neutral entrance pair (a neutron beam).");
-  for (ESegment *comp : seg->GetComponentSegments())
-    if (comp) comp->ClearTransform();
   if (seg->IsTransmission()) return true;
 
   if (seg->IsNatural())
     return refuse("not on a sample (abundance-weighted) segment: the total of a mixture is not implemented for Y0.");
   if (seg->GetExitKey() == seg->GetEntranceKey() || seg->IsTotal())
     return refuse("Y0 is a capture or reaction yield: the exit pair must differ from the entrance pair (no \"total 1\").");
-  for (ESegment *comp : seg->GetComponentSegments()) {
-    if (!comp) continue;
-    if (comp->GetEntranceKey() != seg->GetEntranceKey() || comp->GetExitKey() == comp->GetEntranceKey())
+  for (int t = 1; t < seg->NumTerms(); t++) {
+    if (seg->TermEntranceKey(t) != seg->GetEntranceKey() || seg->TermExitKey(t) == seg->TermEntranceKey(t))
       return refuse("every term of a yield must be a reaction of the segment's entrance pair (pair " +
                     std::to_string(seg->GetEntranceKey()) + ") to another exit pair.");
   }
   if (entrance->IsIdentical()) return refuse("not for a pair of identical particles.");
   if (configure.paramMask & Config::USE_RMC_FORMALISM)
     return refuse("the total cross section of Y0 needs the optical theorem, not available with --use-rmc.");
-  ESegment *total = this->CreateComponentSegment(*seg, seg->GetEntranceKey(), seg->GetEntranceKey());
-  if (!total) return refuse("could not create the total-cross-section term.");
-  total->ClearTransform();
-  total->SetComponentScaling(1.0);
-  total->SetYieldTotalTerm();
-  total->ApplyTotalToPoints();
   if (!seg->HasComponents()) seg->SetOperationType(SUM);
-  seg->AddComponentSegment(total);
+  seg->MakeYieldTotalLeaf(this->AddLeaf(*seg, seg->GetEntranceKey(), seg->GetEntranceKey(), std::nullopt, 1.0));
   return true;
 }
 
@@ -1326,8 +1297,8 @@ bool EData::CheckTransformedSegments(const Config &configure) {
     for (int p = 1; p <= seg.NumPoints(); p++) {
       EPoint *base = seg.GetPoint(p);
       if (!ESegment::HasSubPointIntegration(base)) {
-        for (ESegment *comp : seg.GetComponentSegments())
-          if (comp && p <= comp->NumPoints() && ESegment::HasSubPointIntegration(comp->GetPoint(p))) {
+        for (int t = 1; t < seg.NumTerms(); t++)
+          if (p <= (int)seg.TermPoints(t).size() && ESegment::HasSubPointIntegration(seg.GetTermPoint(t, p))) {
             configure.outStream << "ERROR: " << what << "a term is integrated over sub-points at E_lab "
                                 << base->GetLabEnergy() << " MeV where the segment's own point is not." << std::endl;
             return false;
@@ -1344,8 +1315,8 @@ bool EData::CheckTransformedSegments(const Config &configure) {
                             << "and the tolerance of that <targetInt> line)." << std::endl;
         return false;
       }
-      for (ESegment *comp : seg.GetComponentSegments()) {
-        EPoint *cp = (comp && p <= comp->NumPoints()) ? comp->GetPoint(p) : nullptr;
+      for (int t = 1; t < seg.NumTerms(); t++) {
+        EPoint *cp = p <= (int)seg.TermPoints(t).size() ? seg.GetTermPoint(t, p) : nullptr;
         bool same = cp && cp->NumSubPoints() == base->NumSubPoints();
         for (int j = 1; same && j <= base->NumSubPoints(); j++) {
           const double a = base->GetSubPoint(j)->GetCMEnergy(), b = cp->GetSubPoint(j)->GetCMEnergy();
@@ -1365,32 +1336,14 @@ bool EData::CheckTransformedSegments(const Config &configure) {
 }
 
 /*!
- * A component of a SUM, RATIO, sample or total-capture segment: a copy of the base segment, its points included,
- * with its own pairs, kept in componentSegments_ (a deque: the base segments' pointers stay valid).  A fixed angle
- * (deg; a RATIO denominator at one angle) puts every point there, lab and c.m. slots alike.
+ * A leaf of a SUM, RATIO, sample, total-capture or yield segment (ESegment::AddLeaf): its pairs, a fixed angle (deg;
+ * a RATIO denominator at one angle) or none, its scale, and a key of its own from the data set's counter (negative:
+ * not a segment of the file; the caches and the intEC file are keyed by it).  Returns its term.
  */
-ESegment *EData::CreateComponentSegment(const ESegment &baseSegment, int entranceKey, int exitKey,
-                                        std::optional<double> fixedAngle) {
-  this->componentSegments_.push_back(baseSegment);
-  ESegment *componentSegment = &componentSegments_.back();
-  componentSegment->SetEntranceKey(entranceKey);
-  componentSegment->SetExitKey(exitKey);
-  if (fixedAngle) {
-    componentSegment->SetMinAngle(*fixedAngle);
-    componentSegment->SetMaxAngle(*fixedAngle);
-    for (int i = 0; i < componentSegment->NumPoints(); i++) {
-      EPoint &point = componentSegment->GetPoints()[i];
-      point.SetCMAngle(*fixedAngle);
-      point.SetLabAngle(*fixedAngle);
-      componentSegment->SetFrameAngle(i, *fixedAngle);
-    }
-  }
-  // A key of its own (negative: not a segment of the file), from the data set's counter, for the caches keyed by it
-  componentSegment->SetSegmentKey(nextComponentKey_--);
-  componentSegment->ClearComponents();  // no circular references
-  componentSegment->SetNatural(false);  // the weighting is the base segment's job
-  componentSegment->ApplyTotalToPoints();
-  return componentSegment;
+int EData::AddLeaf(ESegment &base, int entranceKey, int exitKey, std::optional<double> fixedAngle, double scaling) {
+  const int t = base.AddLeaf(entranceKey, exitKey, fixedAngle, scaling, nextComponentKey_--);
+  leafRefs_.push_back({(int)(&base - segments_.data()), t});
+  return t;
 }
 
 namespace {
@@ -1516,9 +1469,8 @@ void EData::MapData(CNuc *theCNuc) {
     for (EPointIterator point = segment->GetPoints().begin(); point < segment->GetPoints().end(); point++)
       point->ClearMapping();
   }
-  for (ESegment &component : componentSegments_)
-    for (EPointIterator point = component.GetPoints().begin(); point < component.GetPoints().end(); point++)
-      point->ClearMapping();
+  for (const std::pair<int, int> &leaf : leafRefs_)
+    for (EPoint &point : segments_[leaf.first].TermPoints(leaf.second)) point.ClearMapping();
   // (host, mapped point) in the order each host calculates its mapped points
   std::vector<std::pair<azure2::PointRef, azure2::PointRef>> mapping;
   const char *off = std::getenv("AZURE_NO_POINT_MAPPING");
@@ -1612,7 +1564,7 @@ void EData::MapData(CNuc *theCNuc) {
     start = end;
   }
 
-  MapComponentSegments(theCNuc, mapping);
+  MapLeaves(theCNuc, mapping);
   plan_.Build(*this, mapping);
 }
 
@@ -1628,12 +1580,12 @@ void EData::MapData(CNuc *theCNuc) {
  * (OwnsEDependentValues).  A beta-delayed entrance is left out: its energy-dependent values depend on the exit pair.
  * AZURE_NO_COMPONENT_MAPPING=1 switches this off (and AZURE_NO_POINT_MAPPING=1 all mapping).
  */
-void EData::MapComponentSegments(CNuc *theCNuc, std::vector<std::pair<azure2::PointRef, azure2::PointRef>> &mapping) {
+void EData::MapLeaves(CNuc *theCNuc, std::vector<std::pair<azure2::PointRef, azure2::PointRef>> &mapping) {
   if (!theCNuc) return;
   const char *off = std::getenv("AZURE_NO_COMPONENT_MAPPING");
   if (off && *off && std::string(off) != "0") return;
-  std::unordered_map<const ESegment *, int> componentPos;
-  for (int c = 0; c < (int)componentSegments_.size(); c++) componentPos[&componentSegments_[c]] = c;
+  std::map<std::pair<int, int>, int> leafPos;  // (segment, term) -> position in the plan's leaf list
+  for (int c = 0; c < (int)leafRefs_.size(); c++) leafPos[leafRefs_[c]] = c;
   std::vector<ESegment> &segments = GetSegments();
   for (int s = 0; s < (int)segments.size(); s++) {
     ESegment &seg = segments[s];
@@ -1646,14 +1598,15 @@ void EData::MapComponentSegments(CNuc *theCNuc, std::vector<std::pair<azure2::Po
     // by exit and EPoint::Calculate builds each exit's T-matrix once).  The base's points stay unmapped among
     // themselves, as before: the external-capture amplitudes and their file (intEC.dat) skip mapped points, so
     // mapping them would change that file's layout.
-    for (ESegment *component : seg.GetComponentSegments()) {
-      if (!component || component->NumPoints() != n || !componentPos.count(component)) continue;
+    for (int t = 1; t < seg.NumTerms(); t++) {
+      std::vector<EPoint> &leafPoints = seg.TermPoints(t);
+      if ((int)leafPoints.size() != n || !leafPos.count({s, t})) continue;
       for (int p = 0; p < n; p++) {
-        EPoint *cp = component->GetPoint(p + 1);
-        if (!cp || !SharesCalculation(points[p], *cp, false)) continue;
+        EPoint *cp = &leafPoints[p];
+        if (!SharesCalculation(points[p], *cp, false)) continue;
         cp->SetMap(s + 1, p + 1);
         cp->SetOwnsEDependentValues(true);
-        mapping.push_back({{azure2::PointRef::kSegments, s, p}, {azure2::PointRef::kComponents, componentPos[component], p}});
+        mapping.push_back({{azure2::PointRef::kSegments, s, p}, {azure2::PointRef::kLeaves, leafPos[{s, t}], p}});
       }
     }
   }
@@ -1679,15 +1632,15 @@ void EData::DeleteLastSegment() {
 template <class F>
 void EData::ForEachResultUnit(F f) {
   const int nNatural = numNuclei_;
-  auto segment = [&](ESegment &seg) {
-    const int nat = seg.IsNatural() ? nNatural : 0;
-    for (EPoint &point : seg.GetPoints()) {
+  auto segment = [&](ESegment &seg, int t) {
+    const int nat = (t == 0 && seg.IsNatural()) ? nNatural : 0;
+    for (EPoint &point : seg.TermPoints(t)) {
       f(point, point.ResultAngularCapacity(), nat);
       for (EPoint &sub : point.GetSubPoints()) f(sub, sub.ResultAngularCapacity(), 0);
     }
   };
-  for (ESegment &seg : segments_) segment(seg);
-  for (ESegment &seg : componentSegments_) segment(seg);
+  for (ESegment &seg : segments_) segment(seg, 0);
+  for (const std::pair<int, int> &leaf : leafRefs_) segment(segments_[leaf.first], leaf.second);
 }
 
 void EData::LayoutResults(azure2::Results *results) {
@@ -1785,7 +1738,7 @@ EData *EData::Clone() const {
   dataCopy->isErrorAnalysis_ = this->isErrorAnalysis_;
   dataCopy->targetEffects_ = this->targetEffects_;
   dataCopy->segments_ = this->segments_;
-  dataCopy->componentSegments_ = this->componentSegments_;
+  dataCopy->leafRefs_ = this->leafRefs_;
   dataCopy->plan_ = this->plan_;
   dataCopy->thmGroups_ = this->thmGroups_;
   dataCopy->thmCoherentParams_ = this->thmCoherentParams_;
@@ -1795,50 +1748,11 @@ EData *EData::Clone() const {
   dataCopy->priorCov_ = this->priorCov_;    // shared, read-only
   dataCopy->numNuclei_ = this->numNuclei_;
 
-  // Build a mapping from component segment keys to cloned component segments
-  std::unordered_map<int, ESegment *> clonedComponentMap;
-  for (size_t i = 0; i < dataCopy->componentSegments_.size(); i++) {
-    int segmentKey = dataCopy->componentSegments_[i].GetSegmentKey();
-    clonedComponentMap[segmentKey] = &(dataCopy->componentSegments_[i]);
-  }
-
-  // Update component segment pointers in cloned regular segments
-  for (size_t i = 0; i < dataCopy->segments_.size(); i++) {
-    auto &segment = dataCopy->segments_[i];
-    const auto &originalSegment = this->segments_[i];
-
-    if (originalSegment.HasComponents()) {
-      // Clear the old component pointers (they point to original EData)
-      segment.ClearComponents();
-
-      // Preserve the operation type
-      segment.SetOperationType(originalSegment.GetOperationType());
-
-      // Add the remapped component segments by finding them in the cloned componentSegments_
-      for (const auto &originalComponent : originalSegment.GetComponentSegments()) {
-        // Find this component in the original componentSegments_ to get its position
-        int componentIndex = -1;
-        for (size_t j = 0; j < this->componentSegments_.size(); j++) {
-          if (&this->componentSegments_[j] == originalComponent) {
-            componentIndex = j;
-            break;
-          }
-        }
-
-        // Add the corresponding cloned component
-        if (componentIndex >= 0 && componentIndex < (int)dataCopy->componentSegments_.size()) {
-          segment.AddComponentSegment(&dataCopy->componentSegments_[componentIndex]);
-        }
-      }
-    }
-  }
-
   // The points of the copy belong to it (a fitted density or Doppler temperature reaches them through it).  The plan
   // and the points' task indices are positions, valid in the copy as they are: no point holds a pointer to another.
   for (ESegment &segment : dataCopy->segments_)
-    for (EPoint &point : segment.GetPoints()) point.SetParentData(dataCopy), point.ClearECAmplitudes();
-  for (ESegment &segment : dataCopy->componentSegments_)
-    for (EPoint &point : segment.GetPoints()) point.SetParentData(dataCopy), point.ClearECAmplitudes();
+    for (int t = 0; t < segment.NumTerms(); t++)
+      for (EPoint &point : segment.TermPoints(t)) point.SetParentData(dataCopy), point.ClearECAmplitudes();
   // The copy's layout: its points carry this data set's offsets, which are the copy's own when the copy has the
   // same points; the values are in the buffers of the callers that evaluate the two.
   dataCopy->LayoutResults(nullptr);
@@ -1899,17 +1813,11 @@ int EData::CalculatePointsInParallel(const std::vector<ESegment *> &segments, CN
   if (std::getenv("AZURE_SERIAL_CHI2")) return -1;
   std::vector<EPoint *> work;
   std::set<ESegment *> seen;
-  auto add = [&](ESegment *seg) {
-    if (!seg || !seen.insert(seg).second) return;
-    for (int p = 1; p <= seg->NumPoints(); p++) {
-      EPoint *pt = seg->GetPoint(p);
-      if (pt && !pt->IsMapped()) work.push_back(pt);
-    }
-  };
   for (ESegment *seg : segments) {
-    if (!seg) continue;
-    add(seg);
-    for (ESegment *comp : seg->GetComponentSegments()) add(comp);
+    if (!seg || !seen.insert(seg).second) continue;
+    for (int t = 0; t < seg->NumTerms(); t++)
+      for (EPoint &pt : seg->TermPoints(t))
+        if (!pt.IsMapped()) work.push_back(&pt);
   }
   // A host also calculates every point mapped onto it (EData::MapData), so
   // its work grows with that number: one Fowler-type angular distribution at

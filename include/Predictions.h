@@ -19,7 +19,7 @@ class ESegment;
 namespace azure2 {
 
 /// The setup of a segment's tree: its reaction as read, and its terms as the set-up made them (term 0 the segment's own
-/// points, then its component segments in order), with the compound nucleus of each entrance pair.
+/// points, then its leaves in order), with the compound nucleus of each entrance pair.
 experiment::PredictionSetup PredictionSetupOf(const ESegment &segment, CNuc &compound);
 
 /// One line per data set and extrapolation of a project, "data <label>: <tree>" then "extrapolation <label>: <tree>",

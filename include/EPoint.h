@@ -106,8 +106,9 @@ class EPoint {
   /// what was measured there (energy, value, uncertainty, bins, file record, Legendre order) from the rows, which the
   /// segment's measurement keeps alive and never changes.
   EPoint(const azure2::experiment::MeasurementRows &rows, int row, ESegment *);
-  /// A point at a given c.m. energy and angle that is no row of a measurement (a sub-point of a target effect).
-  EPoint(double, double, ESegment *);
+  /// A point at a given c.m. energy and angle that is no row of a measurement (a sub-point of a target effect), with
+  /// the conventions of term `term` of the segment (ESegment::TermEntranceKey ...).
+  EPoint(double angle, double energy, const ESegment *segment, int term);
   /// Build with every convention given explicitly, rather than inherited from a segment.
   EPoint(double, double, int, int, bool, bool, bool, double, int, int);
   /// Differential cross section?

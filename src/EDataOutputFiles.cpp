@@ -41,7 +41,7 @@ static void WriteNaturalDecomposition(const Config &configure, const azure2::Res
   out.precision(10);
   for (int i = 1; i <= segment->NumPoints(); i++) {
     EPoint *point = segment->GetPoint(i);
-    double kin = (kinflag != 0) ? segment->Jacobian(i - 1) : 1.0;
+    double kin = (kinflag != 0) ? segment->Jacobian(0, i - 1) : 1.0;
     if (kin == 0.0) kin = 1.0;
     out << std::setw(18) << std::scientific << (kinflag != 0 ? point->GetLabEnergy() : point->GetCMEnergy())
         << std::setw(18) << std::scientific << point->GetModelValue(results) / kin;
@@ -235,7 +235,7 @@ void EData::WriteSegmentFiles(const Config &configure, const azure2::Results &re
         } else {
           double fitCrossSection = (point->GetModelValue(results) +
                                     (thmBackground ? ThmBackgroundAt(segmentIndex, point->GetCMEnergy(), results) : 0.0)) /
-                                   segment->Jacobian((int)(point - segment->GetPoints().begin()));
+                                   segment->Jacobian(0, (int)(point - segment->GetPoints().begin()));
           if (firstSumIterator != GetSegments().end()) {
             int pointIndex = point - segment->GetPoints().begin() + 1;
             for (ESegmentIterator it = firstSumIterator; it < segment; it++)
@@ -257,7 +257,7 @@ void EData::WriteSegmentFiles(const Config &configure, const azure2::Results &re
             out << std::endl;
           if (bandOut) {
             std::vector<double> g = pointBandGrad(point);
-            double kin = segment->Jacobian((int)(point - segment->GetPoints().begin()));
+            double kin = segment->Jacobian(0, (int)(point - segment->GetPoints().begin()));
             double dxs = g.empty() ? 0. : band->dXS(g) / kin;
             WriteBandLine(*bandOut, point->GetLabEnergy(), point->GetExcitationEnergy(),
                           point->GetLabAngle(), fitCrossSection, dxs, point->GetSFactorConversion());

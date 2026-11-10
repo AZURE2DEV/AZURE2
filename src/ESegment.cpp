@@ -123,7 +123,6 @@ ESegment::ESegment(const azure2::experiment::DatasetSpec &spec) : parameterNames
 
   // Initialize advanced segment composition
   segmentOperationType_ = SUM;  // Default to SUM operation
-  componentScaling_ = 1.0;
 }
 
 /*!
@@ -172,7 +171,6 @@ ESegment::ESegment(const azure2::experiment::ExtrapolationSpec &spec) : paramete
   isTargetEffect_ = false;
 
   segmentOperationType_ = (operationType_ == 1) ? RATIO : SUM;
-  componentScaling_ = 1.0;
 }
 
 /*!
@@ -236,8 +234,8 @@ bool ESegment::IsProfiledNorm() const {
 
 double ESegment::ProfileNormChiSquared(const azure2::Results &results, double &profiledNorm) const {
   double Smm = 0.0, Smd = 0.0, Sdd = 0.0;
-  for (int i = 0; i < (int)points_.size(); i++) {
-    const EPoint &pt = points_[i];
+  for (int i = 0; i < (int)own_.points.size(); i++) {
+    const EPoint &pt = own_.points[i];
     double e = CMError(i);
     if (e == 0.0) continue;
     double w = 1.0 / (e * e);
@@ -256,7 +254,7 @@ double ESegment::ProfileNormChiSquared(const azure2::Results &results, double &p
   // report the unscaled chi^2 so the fit still sees a finite, honest value.
   profiledNorm = 1.0;
   double chi = 0.0;
-  for (int i = 0; i < (int)points_.size(); i++) chi += azure2::PointResidual(*this, i, results, 1.0).Chi2();
+  for (int i = 0; i < (int)own_.points.size(); i++) chi += azure2::PointResidual(*this, i, results, 1.0).Chi2();
   return chi;
 }
 
@@ -343,7 +341,7 @@ bool ESegment::IsVaryNorm() const {
  */
 
 int ESegment::NumPoints() const {
-  return points_.size();
+  return own_.points.size();
 }
 
 /*!
@@ -433,7 +431,7 @@ int ESegment::Fill(CNuc *theCNuc, EData *theData, const Config &configure) {
   PPair *exitPair = theCNuc->GetPairFromKey(this->GetExitKey());  // nullptr for total capture (-1)
   for (int i = 0; i < this->NumPoints(); i++) {
     // Ratios are dimensionless: no cross-section conversion (decided by the spec: components are not added yet).
-    if (!this->ConvertRowToCM(i, entrancePair, exitPair, !this->IsDimensionlessRatio(), BeyondRange::Stop)) {
+    if (!this->ConvertRowToCM(0, i, entrancePair, exitPair, !this->IsDimensionlessRatio(), BeyondRange::Stop)) {
       // Beyond the kinematic maximum lab angle: not a NaN point, not a dropped segment (audit 2026-10-25, 31).
       const EPoint *converted = this->GetPoint(i + 1);
       configure.outStream << "ERROR: " << "segment #" << this->GetSegmentKey() << ": lab angle " << converted->GetLabAngle() << " deg at E_lab = " << converted->GetLabEnergy()
@@ -442,7 +440,7 @@ int ESegment::Fill(CNuc *theCNuc, EData *theData, const Config &configure) {
       return -1;
     }
   }
-  this->KeepLoadFrame();
+  this->KeepLoadFrame(0);
   return 0;
 }
 
@@ -456,14 +454,14 @@ void ESegment::SetMeasurementRows(std::shared_ptr<const azure2::experiment::Meas
   m->provenance = provenance;
   measurement_ = m;
   const azure2::experiment::MeasurementRows &r = *measurement_->rows;
-  points_.clear();
-  points_.reserve(r.Size());
-  frame_.rows.clear();
-  frame_.rows.reserve(r.Size());
+  own_.points.clear();
+  own_.points.reserve(r.Size());
+  own_.frame.rows.clear();
+  own_.frame.rows.reserve(r.Size());
   for (int i = 0; i < r.Size(); i++) {
     this->AddPoint(EPoint(r, i, this));
-    points_.back().SetParentData(data);
-    frame_.rows.push_back(azure2::experiment::UnconvertedRow(r.energy[i], r.angle[i], r.value[i], r.error[i],
+    own_.points.back().SetParentData(data);
+    own_.frame.rows.push_back(azure2::experiment::UnconvertedRow(r.energy[i], r.angle[i], r.value[i], r.error[i],
                                                             r.binLow[i], r.binHigh[i]));
   }
 }
@@ -493,7 +491,8 @@ double ESegment::CMEnergyFactor(PPair *entrancePair, PPair *exitPair) {
 namespace {
 
 // How the rows of a term with these pairs are converted (experiment::FrameRule).
-azure2::experiment::FrameRule RuleOf(const ESegment &segment, PPair *entrancePair, PPair *exitPair, bool convertValue) {
+azure2::experiment::FrameRule RuleOf(const ESegment &segment, int t, PPair *entrancePair, PPair *exitPair,
+                                     bool convertValue) {
   using azure2::experiment::ExitKind;
   azure2::experiment::FrameRule r;
   r.entrance = PartitionOf(entrancePair);
@@ -502,7 +501,7 @@ azure2::experiment::FrameRule RuleOf(const ESegment &segment, PPair *entrancePai
     r.exitKind = exitPair->GetPType() == 0 ? ExitKind::Particle : exitPair->GetPType() == 10 ? ExitKind::Photon
                                                                                               : ExitKind::Other;
   }
-  r.elastic = segment.GetEntranceKey() == segment.GetExitKey();
+  r.elastic = segment.TermEntranceKey(t) == segment.TermExitKey(t);
   r.betaDelayed = entrancePair->GetPType() == 20 && exitPair;
   r.relativistic = Kinematics::Relativistic();
   // Lab-frame differential data only: not c.m. data (isDiff 4 / 5), phase shifts, angular distributions.
@@ -514,15 +513,17 @@ azure2::experiment::FrameRule RuleOf(const ESegment &segment, PPair *entrancePai
 
 }  // namespace
 
-bool ESegment::ConvertRowToCM(int i, PPair *entrancePair, PPair *exitPair, bool convertValue, BeyondRange beyond) {
-  EPoint *point = this->GetPoint(i + 1);
-  azure2::experiment::FrameRow &row = frame_.rows[i];
+bool ESegment::ConvertRowToCM(int t, int i, PPair *entrancePair, PPair *exitPair, bool convertValue,
+                              BeyondRange beyond) {
+  TermUnits &u = Units(t);
+  EPoint *point = &u.points[i];
+  azure2::experiment::FrameRow &row = u.frame.rows[i];
   // After a shift: from the row as converted at load, so that where the angle cannot be converted the angle and the
   // factor are the load-time ones, whatever this copy converted before (data_model.md section 1.3, H4).
-  if (beyond == BeyondRange::Convert && loadFrame_) row = loadFrame_->rows[i];
+  if (beyond == BeyondRange::Convert && u.loadFrame) row = u.loadFrame->rows[i];
   const azure2::experiment::MeasurementRows &rows = *measurement_->rows;
   azure2::experiment::AngleLimit lim;
-  const bool ok = azure2::experiment::ConvertRow(RuleOf(*this, entrancePair, exitPair, convertValue),
+  const bool ok = azure2::experiment::ConvertRow(RuleOf(*this, t, entrancePair, exitPair, convertValue),
                                                  point->GetLabEnergy(), point->GetLabAngle(), rows.value[i],
                                                  rows.error[i], rows.binLow[i], rows.binHigh[i],
                                                  beyond == BeyondRange::Stop, row, lim);
@@ -531,13 +532,55 @@ bool ESegment::ConvertRowToCM(int i, PPair *entrancePair, PPair *exitPair, bool 
   return ok;
 }
 
-void ESegment::ConvertRowEnergyToCM(int i, PPair *entrancePair, PPair *exitPair) {
-  EPoint *point = this->GetPoint(i + 1);
-  azure2::experiment::FrameRow &row = frame_.rows[i];
+void ESegment::ConvertRowEnergyToCM(int t, int i, PPair *entrancePair, PPair *exitPair) {
+  TermUnits &u = Units(t);
+  azure2::experiment::FrameRow &row = u.frame.rows[i];
   const azure2::experiment::MeasurementRows &rows = *measurement_->rows;
-  azure2::experiment::ConvertRowEnergy(RuleOf(*this, entrancePair, exitPair, false), point->GetLabEnergy(),
+  azure2::experiment::ConvertRowEnergy(RuleOf(*this, t, entrancePair, exitPair, false), u.points[i].GetLabEnergy(),
                                        rows.binLow[i], rows.binHigh[i], row);
-  point->SetFrame(row);
+  u.points[i].SetFrame(row);
+}
+
+int ESegment::AddLeaf(int entranceKey, int exitKey, std::optional<double> fixedAngle, double scaling, int key) {
+  Leaf leaf;
+  leaf.key = key;
+  leaf.entranceKey = entranceKey;
+  leaf.exitKey = exitKey;
+  leaf.fixedAngle = fixedAngle;
+  leaf.scaling = scaling;
+  leaf.units.points = own_.points;
+  leaf.units.frame = own_.frame;
+  leaf.units.loadFrame = own_.loadFrame;
+  for (int i = 0; i < (int)leaf.units.points.size(); i++) {
+    EPoint &point = leaf.units.points[i];
+    point.SetEntranceKey(entranceKey);
+    point.SetExitKey(exitKey);
+    if (fixedAngle) {
+      point.SetCMAngle(*fixedAngle);
+      point.SetLabAngle(*fixedAngle);
+      leaf.units.frame.rows[i].thetaCM = *fixedAngle;
+    }
+  }
+  leaves_.push_back(std::move(leaf));
+  const int t = (int)leaves_.size();
+  for (EPoint &point : leaves_.back().units.points) point.SetIsTotal(IsTermTotal(t));
+  return t;
+}
+
+void ESegment::MakeYieldTotalLeaf(int t) {
+  leaves_[t - 1].yieldTotal = true;
+  for (EPoint &point : leaves_[t - 1].units.points) point.SetIsTotal(IsTermTotal(t));
+}
+
+bool ESegment::IsTermTotal(int t) const {
+  return (isTotal_ || IsYieldTotalLeaf(t)) && TermExitKey(t) == TermEntranceKey(t);
+}
+
+void ESegment::SetTermTargetEffectNum(int t, int n) {
+  if (t == 0)
+    SetTargetEffectNum(n);
+  else
+    leaves_[t - 1].targetEffectNum = n;
 }
 
 /*!
@@ -679,19 +722,7 @@ void ESegment::AddPoint(EPoint point) {
   // calculation does not have to look back up.
   point.SetIsAnalyzingPower(this->IsAnalyzingPower());
   point.SetIsTotal(this->IsTotalTerm());
-  points_.push_back(point);
-}
-
-/*!
- * Stamps IsTotalTerm on every point and sub-point: a component made from a "total" base segment
- * (EData::CreateComponentSegment) is a total only if its exit pair is its entrance pair.
- */
-void ESegment::ApplyTotalToPoints() {
-  const bool total = this->IsTotalTerm();
-  for (EPoint &point : points_) {
-    point.SetIsTotal(total);
-    for (int i = 1; i <= point.NumSubPoints(); i++) point.GetSubPoint(i)->SetIsTotal(total);
-  }
+  own_.points.push_back(point);
 }
 
 /*!
@@ -768,7 +799,7 @@ void ESegment::SetMaxAngle(double maxAngle) {
  */
 
 EPoint *ESegment::GetPoint(int pointNum) {
-  EPoint *b = &points_[pointNum - 1];
+  EPoint *b = &own_.points[pointNum - 1];
   return b;
 }
 
@@ -777,19 +808,10 @@ EPoint *ESegment::GetPoint(int pointNum) {
  */
 
 std::vector<EPoint> &ESegment::GetPoints() {
-  return points_;
+  return own_.points;
 }
 
 // Advanced segment composition methods
-
-/*!
- * Adds a component segment (full ESegment copy)
- */
-void ESegment::AddComponentSegment(ESegment *componentSegment) {
-  if (componentSegment) {
-    componentSegments_.push_back(componentSegment);
-  }
-}
 
 /*!
  * Sets the operation type for combining components (SUM or RATIO)
@@ -806,44 +828,6 @@ OperationType ESegment::GetOperationType() const {
 }
 
 /*!
- * Returns true if this segment has additional components
- */
-bool ESegment::HasComponents() const {
-  return !componentSegments_.empty();
-}
-
-/*!
- * Returns a reference to the component segments vector
- */
-const std::vector<ESegment *> &ESegment::GetComponentSegments() const {
-  return componentSegments_;
-}
-
-/*!
- * Clears all components from the segment
- */
-void ESegment::ClearComponents() {
-  // Clean up component segments (they are owned by EData, so just clear pointers)
-  componentSegments_.clear();
-}
-
-/*!
- * Sets the per-component scaling factor applied to this segment when it is
- * combined as a component of a parent advanced (SUM) segment.
- */
-void ESegment::SetComponentScaling(double scaling) {
-  componentScaling_ = scaling;
-}
-
-/*!
- * Returns the per-component scaling factor. Defaults to 1.0 for segments that
- * are not used as a scaled component.
- */
-double ESegment::GetComponentScaling() const {
-  return componentScaling_;
-}
-
-/*!
  * The frame factor of a SUM term (ESegment.h).  Each point carries the
  * lab-to-c.m. factor of its own conversion (EPoint::ConvertCrossSection,
  * ConvertCrossSectionGammas; 1 when none was done), refreshed with the energy
@@ -851,8 +835,8 @@ double ESegment::GetComponentScaling() const {
  * as they were: 13C(a,n1+n2) at 6 MeV, -2.9 % at 0 deg to +5.6 % at 150 deg
  * (audit item 7, tests/sum_lab_frame).
  */
-double ESegment::TermFrameFactor(const ESegment &base, const ESegment &term, int i) {
-  return azure2::experiment::TermFrameFactor(base.Jacobian(i), term.Jacobian(i));
+double ESegment::TermFrameFactor(int t, int i) const {
+  return azure2::experiment::TermFrameFactor(Jacobian(0, i), Jacobian(t, i));
 }
 
 /*!
@@ -861,12 +845,12 @@ double ESegment::TermFrameFactor(const ESegment &base, const ESegment &term, int
  * 1 for a ratio that is not a lab-frame differential one (c.m., angle-integrated,
  * phase shift) or a term without a proper exit pair (a total-capture term).
  */
-double ESegment::RatioTermFrameFactor(EPoint *point, const ESegment *term, CNuc *cnuc) {
-  if (!point || !term || !cnuc) return 1.0;
-  if (!term->IsDifferential() || term->IsCMDifferential() || term->IsPhase() || term->IsAngularDist()) return 1.0;
-  if (!cnuc->IsPairKey(term->GetEntranceKey()) || !cnuc->IsPairKey(term->GetExitKey())) return 1.0;
-  PPair *entrancePair = cnuc->GetPair(cnuc->GetPairNumFromKey(term->GetEntranceKey()));
-  PPair *exitPair = cnuc->GetPair(cnuc->GetPairNumFromKey(term->GetExitKey()));
+double ESegment::RatioTermFrameFactor(int t, EPoint *point, CNuc *cnuc) const {
+  if (!point || !cnuc) return 1.0;
+  if (!IsDifferential() || IsCMDifferential() || IsPhase() || IsAngularDist()) return 1.0;
+  if (!cnuc->IsPairKey(TermEntranceKey(t)) || !cnuc->IsPairKey(TermExitKey(t))) return 1.0;
+  PPair *entrancePair = cnuc->GetPair(cnuc->GetPairNumFromKey(TermEntranceKey(t)));
+  PPair *exitPair = cnuc->GetPair(cnuc->GetPairNumFromKey(TermExitKey(t)));
   if (entrancePair->GetPType() == 20) return 1.0;
   if (exitPair->GetPType() == 10) return point->CalculateCrossSectionGammaConversionFactor(entrancePair);
   if (exitPair->GetPType() != 0) return 1.0;
@@ -881,30 +865,30 @@ bool ESegment::HasSubPointIntegration(EPoint *point) {
 
 void ESegment::SetThmLineshape(std::shared_ptr<const ThmLineshape> l) {
   thmLineshape_ = l;
-  for (EPoint &point : points_) point.SetThmLineshape(l.get());
+  for (EPoint &point : own_.points) point.SetThmLineshape(l.get());
 }
 
 void ESegment::SetThmDistortion(std::shared_ptr<const ThmDistortion> d) {
   thmDistortion_ = d;
-  for (EPoint &point : points_) point.SetThmDistortion(d.get());
+  for (EPoint &point : own_.points) point.SetThmDistortion(d.get());
 }
 
 void ESegment::SetThmDwVertex(std::shared_ptr<const ThmDwVertex> v) {
   thmDwVertex_ = v;
-  for (EPoint &point : points_) point.SetThmDwVertex(v.get());
+  for (EPoint &point : own_.points) point.SetThmDwVertex(v.get());
 }
 
 void ESegment::SetThmCoherent(std::shared_ptr<const ThmCoherentBackground> c) {
   thmCoherent_ = c;
-  for (EPoint &point : points_) point.SetThmCoherent(c.get());
+  for (EPoint &point : own_.points) point.SetThmCoherent(c.get());
 }
 
 void ESegment::SetThmAngleWindow(std::shared_ptr<const ThmAngleWindow> w) {
   thmAngle_ = w;
-  for (EPoint &point : points_) point.SetThmAngleWindow(w.get());
+  for (EPoint &point : own_.points) point.SetThmAngleWindow(w.get());
 }
 
 void ESegment::SetThmSpectatorWindow(std::shared_ptr<const ThmSpectatorWindow> w) {
   thmWindow_ = w;
-  for (EPoint &point : points_) point.SetThmSpectatorWindow(w.get());
+  for (EPoint &point : own_.points) point.SetThmSpectatorWindow(w.get());
 }

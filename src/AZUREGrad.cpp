@@ -793,7 +793,7 @@ bool GradOnePoint(ESegment *segment, EData *data, azure2::Results &results, int 
     return amf.PointAdjoint(point, results, c.leaves[0].cotangent, accum, shiftDeriv, c.leaves[0].xsComponent);
   }
 
-  // A SUM or RATIO segment whose components share the base point's energy (EData::MapComponentSegments): one
+  // A SUM or RATIO segment whose components share the base point's energy (EData::MapLeaves): one
   // level-matrix solution for every term, each term's T-matrix and cotangent in turn, and one back-propagation of
   // the merged cotangents (TBarAdjointMany).  AZURE_NO_COMPONENT_MAPPING=1 keeps the per-term route below.
   static const bool componentMappingOff = [] {
@@ -803,9 +803,9 @@ bool GradOnePoint(ESegment *segment, EData *data, azure2::Results &results, int 
   if (!segment->IsTransformed() && hasComp && !subpointTE && !componentMappingOff) {
     std::vector<EPoint *> pts{point};
     bool shared = true;
-    for (ESegment *comp : segment->GetComponentSegments()) {
-      if (!comp || pointIdx >= comp->NumPoints()) continue;
-      EPoint *cp = comp->GetPoint(pointIdx + 1);
+    for (int t = 1; t < segment->NumTerms(); t++) {
+      if (pointIdx >= (int)segment->TermPoints(t).size()) continue;
+      EPoint *cp = segment->GetTermPoint(t, pointIdx + 1);
       if (!cp) continue;
       if (cp->GetEntranceKey() != point->GetEntranceKey() || cp->GetCMEnergy() != point->GetCMEnergy() ||
           cp->NumSubPoints() != 0)

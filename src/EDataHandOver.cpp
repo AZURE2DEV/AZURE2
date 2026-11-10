@@ -95,8 +95,8 @@ void EData::FillDensitiesFromParams(const vector_r &p, const Config &configure) 
     }
   }
   if (!any) return;
-  auto update = [&](ESegment &seg) {
-    if (!seg.IsTargetEffect()) return;
+  auto update = [&](const TermRef &seg) {
+    if (!seg.segment->IsTargetEffect()) return;
     const int n = seg.GetTargetEffectNum();
     if (n < 1 || n > (int)changed.size() || !changed[n - 1]) return;
     TargetEffect *te = this->GetTargetEffect(n);
@@ -109,8 +109,8 @@ void EData::FillDensitiesFromParams(const vector_r &p, const Config &configure) 
                                       te->MeanEnergyLoss(point->GetTargetLabEnergy(), configure, te->GetDensity()));
     }
   };
-  for (ESegment &seg : segments_) update(seg);
-  for (ESegment &seg : componentSegments_) update(seg);
+  for (ESegment &seg : segments_) update({&seg, 0});
+  for (const LeafRef &leaf : leafRefs_) update({&segments_[leaf.first], leaf.second});
 }
 
 double EData::DensityPenalty() const {
@@ -125,7 +125,7 @@ void EData::ApplyScreening() {
   std::vector<int> paramOf(this->NumTargetEffects() + 1, 0);
   for (int k = 1; k <= this->NumScreeningParams(); k++)
     for (int n : screeningCopies_[k - 1]) paramOf[n] = k;
-  auto apply = [&](ESegment &seg) {
+  auto apply = [&](const TermRef &seg) {
     const int te = seg.GetTargetEffectNum();
     if (te <= 0 || te >= (int)paramOf.size() || paramOf[te] == 0) return;
     const double ueMeV = this->GetTargetEffect(te)->GetScreeningUe() * 1.0e-6;
@@ -135,8 +135,8 @@ void EData::ApplyScreening() {
       for (int j = 1; j <= point->NumSubPoints(); j++) point->GetSubPoint(j)->SetScreening(ueMeV, paramOf[te]);
     }
   };
-  for (ESegment &seg : segments_) apply(seg);
-  for (ESegment &seg : componentSegments_) apply(seg);
+  for (ESegment &seg : segments_) apply({&seg, 0});
+  for (const LeafRef &leaf : leafRefs_) apply({&segments_[leaf.first], leaf.second});
 }
 
 void EData::FillScreeningFromParams(const vector_r &p) {
@@ -209,12 +209,16 @@ void EData::FillEnergyShiftsFromParamsImpl(const vector_r &p, CNuc *theCNuc, con
   // ~195 s per evaluation on the 11B+a mixed grid against 0.5 s for the
   // points.  Inside an enclosing parallel region (Minuit's numerical
   // gradient) the loop stays serial, as before.
-  std::vector<ESegment *> toUpdate;
-  auto queueUpdate = [&toUpdate](ESegment *s) {
-    if (std::find(toUpdate.begin(), toUpdate.end(), s) == toUpdate.end()) toUpdate.push_back(s);
+  // The terms to re-energise: a segment's own and, with it, its leaves, which take the segment's shift.
+  std::vector<TermRef> toUpdate;
+  auto queueTerm = [&toUpdate](const TermRef &t) {
+    if (std::find(toUpdate.begin(), toUpdate.end(), t) == toUpdate.end()) toUpdate.push_back(t);
   };
-  // Segments (and their components) whose points carry an energy shift, moved or not.
-  std::vector<ESegment *> shiftActiveSegments;
+  auto queueUpdate = [&queueTerm](ESegment *s) {
+    for (int t = 0; t < s->NumTerms(); t++) queueTerm({s, t});
+  };
+  // The terms of the segments whose points carry an energy shift, moved or not.
+  std::vector<TermRef> shiftActiveSegments;
   for (ESegmentIterator segment = this->GetSegments().begin(); segment < this->GetSegments().end(); segment++) {
     // Both terms are present for every segment: the constant shift at p[i]
     // and the sqrt(E) coefficient at p[j].  Either moving the points means
@@ -239,10 +243,7 @@ void EData::FillEnergyShiftsFromParamsImpl(const vector_r &p, CNuc *theCNuc, con
     const bool shiftActive = segment->IsVaryEnergyShift() || shiftConst != 0.0 || lead >= 0 || segment->HasShiftFn() ||
                              segment->IsVaryEnergyShiftSqrt() || shiftSqrt != 0.0 || !std::isnan(segment->GetLastEnergyShift());
     if (shiftActive) {
-      shiftActiveSegments.push_back(&*segment);
-      if (segment->HasComponents())
-        for (ESegment *componentSegment : segment->GetComponentSegments())
-          if (componentSegment) shiftActiveSegments.push_back(componentSegment);
+      for (int t = 0; t < segment->NumTerms(); t++) shiftActiveSegments.push_back({&*segment, t});
       if (segment->GetLastEnergyShift() == shiftConst && segment->GetLastEnergyShiftSqrt() == shiftSqrt &&
           (!segment->HasShiftFn() || segment->GetLastShiftFnValues() == fnValues)) {
         i++;
@@ -259,51 +260,6 @@ void EData::FillEnergyShiftsFromParamsImpl(const vector_r &p, CNuc *theCNuc, con
       queueUpdate(&*segment);
       anyEnergyShifted = true;
 
-      // Apply the same energy shift to ALL component segments of this master segment
-      if (segment->HasComponents()) {
-        for (ESegment *componentSegment : segment->GetComponentSegments()) {
-          if (componentSegment) {
-            componentSegment->SetEnergyShift(segment->GetEnergyShift());
-            componentSegment->SetEnergyShiftSqrt(segment->GetEnergyShiftSqrt());
-            componentSegment->CopyShiftFnFrom(*segment);
-            queueUpdate(componentSegment);
-          }
-        }
-      }
-    }
-
-    // Apply the same energy shift to all component segments in total capture segments
-    if (segment->IsTotalCapture() && segment->HasComponents()) {
-      if (shiftActive) {
-        // Apply energy shift to all component segments
-        const std::vector<ESegment *> &componentSegments = segment->GetComponentSegments();
-        for (ESegment *componentSegment : componentSegments) {
-          if (componentSegment) {
-            // Check if energy is the same, if so, skip the recompute.
-            // NOTE: do NOT advance i or j here. All components of a total-capture
-            // segment share this segment's single pair of shift parameters;
-            // i and j are advanced exactly once per segment at the end of the
-            // loop.  Advancing them inside the component loop desyncs the
-            // parameter-to-segment mapping for every subsequent segment.
-            if (componentSegment->GetLastEnergyShift() == shiftConst &&
-                componentSegment->GetLastEnergyShiftSqrt() == shiftSqrt &&
-                (!segment->HasShiftFn() || componentSegment->GetLastShiftFnValues() == fnValues)) {
-              continue;
-            }
-
-            componentSegment->SetEnergyShift(shiftConst);
-            componentSegment->SetLastEnergyShift(shiftConst);
-            componentSegment->SetEnergyShiftSqrt(shiftSqrt);
-            componentSegment->SetLastEnergyShiftSqrt(shiftSqrt);
-            if (segment->HasShiftFn()) {
-              componentSegment->CopyShiftFnFrom(*segment);
-              componentSegment->SetLastShiftFnValues(fnValues);
-            }
-            queueUpdate(componentSegment);
-            anyEnergyShifted = true;
-          }
-        }
-      }
     }
 
     i++;
@@ -313,26 +269,26 @@ void EData::FillEnergyShiftsFromParamsImpl(const vector_r &p, CNuc *theCNuc, con
   // The sub-point grids, for the levels and shifts just set.  Sub-points of
   // shifted segments are moved and energised by the step below.
   if (theCNuc && configure) {
-    std::vector<ESegment *> reshift;
+    std::vector<TermRef> reshift;
     if (this->ReplaceSubPointGrids(theCNuc, *configure, shiftActiveSegments, reshift) > 0) anyEnergyShifted = true;
-    for (ESegment *s : reshift) queueUpdate(s);
+    for (const TermRef &t : reshift) queueTerm(t);
   }
 
   if (!toUpdate.empty()) {
     if (theCNuc && configure)
-      for (ESegment *s : toUpdate) s->BeginShiftRefill(theCNuc, *configure);
+      for (const TermRef &t : toUpdate) t.segment->BeginShiftRefill(t.term, theCNuc, *configure);
     // One work item per point (with its sub-points), largest first, so a
     // segment with thousands of sub-points per point does not serialize.
     // A point mapped onto another (EData::MapData) copies its values from
     // that host, so it is re-energised with it, on the same thread, after
     // it (ESegment::UpdatePointGroupEnergyWithShift); it gets no item of its
     // own.  A mapped point costs little (a copy, its Coulomb amplitudes).
-    struct Item { double cost; ESegment *seg; int i; };
+    struct Item { double cost; TermRef seg; int i; };
     std::vector<Item> work;
-    for (ESegment *s : toUpdate)
-      for (int i = 0; i < s->NumPoints(); i++) {
-        if (s->ShiftHost(i)) continue;
-        EPoint *pt = s->GetPoint(i + 1);
+    for (const TermRef &s : toUpdate)
+      for (int i = 0; i < s.NumPoints(); i++) {
+        if (s.segment->ShiftHost(s.term, i)) continue;
+        EPoint *pt = s.GetPoint(i + 1);
         const double nsp = pt ? pt->NumSubPoints() : 0;
         const double nMapped = pt ? pt->PlanMapped().size() : 0;
         work.push_back({(1.0 + nsp) * (1.0 + 0.1 * nMapped), s, i});
@@ -347,13 +303,15 @@ void EData::FillEnergyShiftsFromParamsImpl(const vector_r &p, CNuc *theCNuc, con
     // inactive nested team renumbers its thread 0, and per-thread state
     // indexed by thread number would then be shared between the outer threads.
     if (serial) {
-      for (size_t q = 0; q < work.size(); q++) work[q].seg->UpdatePointGroupEnergyWithShift(work[q].i, theCNuc, configure);
+      for (size_t q = 0; q < work.size(); q++)
+        work[q].seg.segment->UpdatePointGroupEnergyWithShift(work[q].seg.term, work[q].i, theCNuc, configure);
     } else {
 #pragma omp parallel for schedule(dynamic, 1)
-      for (int q = 0; q < (int)work.size(); q++) work[q].seg->UpdatePointGroupEnergyWithShift(work[q].i, theCNuc, configure);
+      for (int q = 0; q < (int)work.size(); q++)
+        work[q].seg.segment->UpdatePointGroupEnergyWithShift(work[q].seg.term, work[q].i, theCNuc, configure);
     }
     if (theCNuc && configure)
-      for (ESegment *s : toUpdate) s->CommitShiftTable(theCNuc, *configure);
+      for (const TermRef &t : toUpdate) t.segment->CommitShiftTable(t.term, theCNuc, *configure);
   }
 
   // The energy-based point mapping (MapData) follows the shifted energies.

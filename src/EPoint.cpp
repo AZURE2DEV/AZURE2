@@ -100,9 +100,9 @@ EPoint::EPoint(const azure2::experiment::MeasurementRows &rows, int row, ESegmen
  * the EPoint object.
  */
 
-EPoint::EPoint(double angle, double energy, ESegment *parent) {
-  entrance_key_ = parent->GetEntranceKey();
-  exit_key_ = parent->GetExitKey();
+EPoint::EPoint(double angle, double energy, const ESegment *parent, int term) {
+  entrance_key_ = parent->TermEntranceKey(term);
+  exit_key_ = parent->TermExitKey(term);
   lab_angle_ = angle;
   cm_angle_ = angle;
   nominal_energy_ = energy;
@@ -110,7 +110,7 @@ EPoint::EPoint(double angle, double energy, ESegment *parent) {
   cm_energy_ = energy;
   excitation_energy_ = energy;
   crossSectionComponent_ = parent ? parent->GetCrossSectionComponent() : 0;
-  segment_key_ = parent->GetSegmentKey();
+  segment_key_ = parent->TermKey(term);
   geofactor_ = 0.;
   sfactorconv_ = 0.;
   is_differential_ = parent->IsDifferential();

@@ -18,7 +18,7 @@ namespace {
 std::string Where(EData &data, const PointRef &r) {
   std::ostringstream s;
   EPoint *p = data.PlanPoint(r);
-  s << (r.list == PointRef::kSegments ? "segment" : "component segment") << " #" << r.segment + 1 << ", point "
+  s << (r.list == PointRef::kSegments ? "segment" : "leaf") << " #" << r.segment + 1 << ", point "
     << r.point + 1;
   if (p) s << " (key " << p->GetSegmentKey() << ", E_lab " << p->GetLabEnergy() << " MeV)";
   return s.str();
@@ -43,7 +43,7 @@ void CalculationPlan::Build(EData &data, const std::vector<std::pair<PointRef, P
   tasks_.clear();
   for (int list = 0; list < 2; list++)
     for (int s = 0; s < data.NumPlanSegments(list); s++)
-      for (int p = 0; p < data.PlanSegment(list, s)->NumPoints(); p++) {
+      for (int p = 0; p < data.NumPlanPoints(list, s); p++) {
         EPoint *point = data.PlanPoint({list, s, p});
         point->SetPlanTask(-1);
         if (point->IsMapped()) continue;
@@ -104,7 +104,7 @@ std::string CalculationPlan::Check(EData &data) const {
   for (int list = 0; list < 2; list++) {
     writer[list].resize(data.NumPlanSegments(list));
     for (int s = 0; s < data.NumPlanSegments(list); s++)
-      writer[list][s].assign(data.PlanSegment(list, s)->NumPoints(), -1);
+      writer[list][s].assign(data.NumPlanPoints(list, s), -1);
   }
   auto claim = [&](const PointRef &r, int task, std::string &why) {
     if (r.list < 0 || r.list > 1 || r.segment < 0 || r.segment >= (int)writer[r.list].size() || r.point < 0 ||

@@ -327,7 +327,7 @@ ShiftColumnCount FillShiftColumns(CNuc *lc, EData *ld, azure2::Results &results,
   auto updateSegment = [&](ESegment *seg) {
     if (!InParallelRegion()) {
 #pragma omp parallel for schedule(dynamic, 1)
-      for (int pid = 0; pid < seg->NumPoints(); pid++) seg->UpdatePointGroupEnergyWithShift(pid, lc, &config);
+      for (int pid = 0; pid < seg->NumPoints(); pid++) seg->UpdatePointGroupEnergyWithShift(0, pid, lc, &config);
     } else {
       seg->UpdatePointEnergiesWithShift(lc, &config);
     }
