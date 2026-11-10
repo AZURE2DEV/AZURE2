@@ -8,7 +8,9 @@
 #   3. a data set named with 60 characters: its parameter names whole in param.par (no fixed-size name buffer);
 #   4. --describe of the converted T2: the pair keys, the resolved data file, the parameters; --json parses;
 #   5. a format-3 file with an error is refused with the reader's diagnostic;
-#   6. the converted T2 at 1 and 2 threads: identical outputs.
+#   6. the converted T2 at 1 and 2 threads: identical outputs;
+#   7. a run without data (menu 3) does not need the data files: with the data directory away, T2's extrapolations give
+#      the outputs of the run with data present, byte for byte (W_DATA_FILE_NOT_READ); a data run refuses (E_DATA_FILE).
 #
 #   ./tests/format3_engine/check.sh path/to/AZURE2
 
@@ -173,6 +175,37 @@ if [ -f "$WORK/new/m.azr" ]; then
     ok "T2 format 3: 1 and 2 threads give identical outputs"
   else
     bad "T2 format 3: 1 and 2 threads differ: $(diff -rq "$WORK/new/output" "$WORK/two/output" | head -2)"
+  fi
+fi
+
+# ---- 7. extrapolations without the data files
+run3() {
+  (cd "$WORK/$1" && rm -rf output/* checks/* && printf '3\nn\n\n\n7\n' |
+     OMP_NUM_THREADS=1 run_limited 600 "$AZURE2_BIN" --no-gui --no-readline m.azr > run.log 2>&1)
+}
+if [ -f "$WORK/new/m.azr" ]; then
+  # T2 has no extrapolation: one is added (15N(p,a)12C on a list of lab energies)
+  awk '/^<\/extrapolations>/ { print "extrapolation xa\n    reaction       15N(p,a)12C\n    quantity       sigma\n    unit           b\n    energies       list 0.3 0.5 0.7 0.9 MeV lab" } { print }' \
+    "$WORK/new/m.azr" > "$WORK/x3.azr"
+  grep -q '^extrapolation xa' "$WORK/x3.azr" || bad "the extrapolation was not added (no <extrapolations> section)"
+  setup x3data "$WORK/x3.azr"
+  for f in "$WORK/new"/*.f3.txt; do [ -f "$f" ] && cp "$f" "$WORK/x3data/"; done
+  run3 x3data
+  setup x3nodata "$WORK/x3data/m.azr"
+  rm "$WORK/x3nodata/data"
+  run3 x3nodata
+  n=$(ls "$WORK/x3data/output" | wc -l)
+  if [ "$n" -gt 0 ] && diff -r "$WORK/x3data/output" "$WORK/x3nodata/output" > /dev/null &&
+     grep -q 'W_DATA_FILE_NOT_READ' "$WORK/x3nodata/run.log" && ! grep -q '^ERROR' "$WORK/x3nodata/run.log"; then
+    ok "extrapolations without the data files: the $n outputs of the run with data, byte for byte (a warning per file)"
+  else
+    bad "extrapolations without the data files: $(diff -rq "$WORK/x3data/output" "$WORK/x3nodata/output" | head -2) $(grep -m1 '^ERROR' "$WORK/x3nodata/run.log")"
+  fi
+  run x3nodata 1
+  if grep -q 'E_DATA_FILE' "$WORK/x3nodata/run.log" && [ ! -s "$WORK/x3nodata/output/chiSquared.out" ]; then
+    ok "a data run without the data files: refused with E_DATA_FILE"
+  else
+    bad "a data run without the data files: not refused with E_DATA_FILE"
   fi
 fi
 

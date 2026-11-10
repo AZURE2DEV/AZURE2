@@ -50,7 +50,8 @@ LevelTables Pairs() {
   return t;
 }
 
-BuiltProject BuildText(const std::string &text, bool relativistic = false, bool readFiles = false) {
+BuiltProject BuildText(const std::string &text, bool relativistic = false, bool readFiles = false,
+                       DataFiles dataFiles = DataFiles::Required) {
   const Document doc = Document::Parse(text);
   std::vector<SectionRecords> sections;
   for (const Document::Section &s : doc.Sections()) {
@@ -67,6 +68,7 @@ BuiltProject BuildText(const std::string &text, bool relativistic = false, bool 
   BuildOptions o;
   o.relativistic = relativistic;
   o.readDataFiles = readFiles;
+  o.dataFiles = dataFiles;
   return Schema::Build(v, Pairs(), o);
 }
 
@@ -187,6 +189,14 @@ int main() {
   ExpectOne("E_PAIR_KEY", BuildText(Data(kDataset + "    entrance_pair 1\n")));
   ExpectOne("E_PAIR_KEY", BuildText(Data(dd + "    entrance_pair 1\n    exit_pair 5\n")));
   ExpectOne("E_DATA_FILE", BuildText(Data(Set(kDataset, "file", "    file no_such_file.dat")), false, true));
+  // a run that does not use the data (an extrapolation): the same file is a warning, and the project builds
+  {
+    const BuiltProject b = BuildText(Data(Set(kDataset, "file", "    file no_such_file.dat")), false, true, DataFiles::NotUsed);
+    ExpectOne("W_DATA_FILE_NOT_READ", b);
+    check("W_DATA_FILE_NOT_READ: a warning, the project builds, the path in 'found'",
+          b.Ok() && !b.diagnostics.empty() && b.diagnostics[0].severity == Severity::Warning &&
+              b.diagnostics[0].found == "no_such_file.dat" && b.data.datasets.items.size() == 1);
+  }
   check("the data file read in the valid case", BuildText(Data(kDataset), false, true).diagnostics.empty());
   ExpectOne("E_DATA_FILE", BuildText(Data(Set(kDataset, "columns", "    columns E_lab[MeV] _ value error _ _")), false, true));
   ExpectOne("E_NOT_BUILT", BuildText(Data(Set(kDataset, "unit", "    unit mb"))));

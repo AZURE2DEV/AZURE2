@@ -44,6 +44,7 @@ struct Format3ReadOptions {
   /// Run Schema::Build (needs <levels> and the data files); false: the reader and the validator only.
   bool build = true;
   bool readDataFiles = true;
+  DataFiles dataFiles = DataFiles::Required;  ///< BuildOptions::dataFiles
 };
 
 Format3Project ReadFormat3Project(const io::Document &doc, const Format3ReadOptions &options);

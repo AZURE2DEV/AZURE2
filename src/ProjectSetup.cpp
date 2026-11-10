@@ -52,17 +52,40 @@ azure2::experiment::ExtrapolationSpecs OldExtrapolationSpecs(const Config &confi
   return specs;
 }
 
+// The data files of a format-3 project that could not be read (Config::ReadFormat3Project builds it for a run without
+// data): a data run refuses them as E_DATA_FILE, a run without data warns.  True when there were any.
+bool ReportUnreadDataFiles(const Config &configure, bool dataRun) {
+  bool any = false;
+  for (azure2::experiment::Diagnostic d : configure.format3->diagnostics) {
+    if (d.code != azure2::experiment::codes::kDataFileNotRead) continue;
+    any = true;
+    if (dataRun) {
+      d.code = azure2::experiment::codes::kDataFile;
+      d.severity = azure2::experiment::Severity::Error;
+      d.message = d.recordKind + " " + d.record + ", field file: cannot read " + d.found;
+    }
+    configure.outStream << (dataRun ? "ERROR: " : "WARNING: ") << d.ToText() << std::endl;
+  }
+  return any;
+}
+
 }  // namespace
 
 int EData::Fill(const Config &configure, CNuc *theCNuc) {
-  if (configure.format3) return this->Fill(configure, theCNuc, configure.format3->built.data);
+  if (configure.format3) {
+    if (ReportUnreadDataFiles(configure, true)) return -1;
+    return this->Fill(configure, theCNuc, configure.format3->built.data);
+  }
   bool present = false;
   const azure2::experiment::DataSpecs specs = OldDataSpecs(configure, present);
   return present ? this->Fill(configure, theCNuc, specs) : -1;
 }
 
 int EData::MakePoints(const Config &configure, CNuc *theCNuc) {
-  if (configure.format3) return this->MakePoints(configure, theCNuc, configure.format3->built.extrapolations);
+  if (configure.format3) {
+    ReportUnreadDataFiles(configure, false);
+    return this->MakePoints(configure, theCNuc, configure.format3->built.extrapolations);
+  }
   bool present = false;
   const azure2::experiment::ExtrapolationSpecs specs = OldExtrapolationSpecs(configure, present);
   return present ? this->MakePoints(configure, theCNuc, specs) : -1;

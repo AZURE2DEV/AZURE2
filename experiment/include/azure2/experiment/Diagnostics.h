@@ -126,6 +126,7 @@ constexpr const char *kNotAChannel = "E_NOT_A_CHANNEL";
 // Build checks (Schema::Build: they need <levels> or the data files)
 constexpr const char *kPairKey = "E_PAIR_KEY";
 constexpr const char *kDataFile = "E_DATA_FILE";
+constexpr const char *kDataFileNotRead = "W_DATA_FILE_NOT_READ";
 constexpr const char *kNotBuilt = "E_NOT_BUILT";
 constexpr const char *kThmRelativistic = "E_THM_RELATIVISTIC";
 constexpr const char *kThmCovariance = "E_THM_COVARIANCE";

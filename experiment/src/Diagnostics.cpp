@@ -94,6 +94,7 @@ const std::vector<DiagnosticCode> &DiagnosticCodes() {
       {kNotMeasurable, Severity::Warning, "a data set of a quantity that is computed for tests and comparison, not measured"},
       {kBroadLevel, Severity::Warning, "a resonance strength of a level with Gamma / E_r > 1 %: eq. (8) and the area of the resonance differ"},
       {kNearbyLevel, Severity::Warning, "a resonance strength of a level with another level of its J^pi within 10 Gamma"},
+      {kDataFileNotRead, Severity::Warning, "a data file that cannot be read in a run that does not use the data (an extrapolation): not read"},
   };
   return table;
 }

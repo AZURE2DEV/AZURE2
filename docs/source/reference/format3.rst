@@ -1811,3 +1811,6 @@ Diagnostic codes
    * - ``W_NEARBY_LEVEL``
      - warning
      - a resonance strength of a level with another level of its J^pi within 10 Gamma
+   * - ``W_DATA_FILE_NOT_READ``
+     - warning
+     - a data file that cannot be read in a run that does not use the data (an extrapolation): not read

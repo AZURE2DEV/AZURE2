@@ -81,6 +81,7 @@ Format3Project ReadFormat3Project(const io::Document &doc, const Format3ReadOpti
     BuildOptions b;
     b.projectDir = options.projectDir;
     b.readDataFiles = options.readDataFiles;
+    b.dataFiles = options.dataFiles;
     b.relativistic = RelativisticFlag(doc);
     p.built = Schema::Build(p.validated, p.levels, b);
     p.diagnostics.insert(p.diagnostics.end(), p.built.diagnostics.begin(), p.built.diagnostics.end());

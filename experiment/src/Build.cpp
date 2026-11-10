@@ -46,6 +46,13 @@ void Context::Error(const char *code, const ValidatedRecord &record, const std::
   out_.diagnostics.push_back(d);
 }
 
+void Context::Warn(const char *code, const ValidatedRecord &record, const std::string &field, const std::string &message,
+                   const std::string &found) {
+  Error(code, record, field, message);
+  out_.diagnostics.back().severity = Severity::Warning;
+  out_.diagnostics.back().found = found;
+}
+
 const PairInfo *Context::Pair(int key) const { return PairByKey(key, pairs_); }
 
 const ValidatedRecord *Context::Record(const std::string &name, const std::string &kind) const {
@@ -284,6 +291,10 @@ bool CheckDataFile(Context &c, const ValidatedRecord &r, const std::string &file
   const std::string path = absolute || c.opt_.projectDir.empty() ? file : c.opt_.projectDir + "/" + file;
   std::ifstream in(path);
   if (!in) {
+    if (c.opt_.dataFiles == DataFiles::NotUsed) {  // an extrapolation run never opens it
+      c.Warn(codes::kDataFileNotRead, r, "file", "cannot read " + path + "; not read: this run does not use data", path);
+      return true;
+    }
     c.Error(codes::kDataFile, r, "file", "cannot read " + path);
     return false;
   }

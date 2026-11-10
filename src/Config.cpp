@@ -109,14 +109,18 @@ std::unique_ptr<std::istream> Config::SectionStream(const std::string &name) con
 /*!
  * A format-3 project, read once through the one reading path (docs/upgrade/project_format3.md section 7.3): records ->
  * Validate -> <levels> tables -> Schema::Build.  Every diagnostic is printed (file:line: record.field: message); an
- * error refuses the project.  Data files are read relative to the working directory, as the set-up opens them.
+ * error refuses the project.  Data files are read relative to the working directory, as the set-up opens them; one
+ * that cannot be read is reported by the run that needs it (ProjectSetup.cpp), not here.
  */
 int Config::ReadFormat3Project(const azure2::io::Document &doc) {
   azure2::experiment::Format3ReadOptions read;
   read.fileName = configfile;
+  // Which run follows is chosen later (menu, pyazr call): a data file that cannot be read is reported by the set-up
+  // that would open it (src/ProjectSetup.cpp: an error for a data run, a warning for an extrapolation)
+  read.dataFiles = azure2::experiment::DataFiles::NotUsed;
   auto project = std::make_shared<azure2::experiment::Format3Project>(azure2::experiment::ReadFormat3Project(doc, read));
   for (const azure2::experiment::Diagnostic &d : project->diagnostics)
-    outStream << (d.severity == azure2::experiment::Severity::Error ? "ERROR: " : "WARNING: ") << d.ToText() << std::endl;
+    if (d.code != azure2::experiment::codes::kDataFileNotRead) outStream << (d.severity == azure2::experiment::Severity::Error ? "ERROR: " : "WARNING: ") << d.ToText() << std::endl;
   if (!project->Ok() || !project->levelsRead) {
     if (project->Ok()) outStream << "ERROR: " << configfile << ": the <levels> section is missing or malformed." << std::endl;
     outStream << "ERROR: " << configfile << " (format 3) is refused; AZURE2 --validate " << configfile
