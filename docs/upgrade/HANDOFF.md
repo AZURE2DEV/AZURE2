@@ -2,6 +2,36 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-10 (night, later) — step 3a follow-up: the director's D1–D5 and review R1–R3 (`feature/upgrade-4-convert`)
+
+**Done.** D1: quantity `sigma_nuclear` (the angle-integrated nuclear elastic integral of a charged pair; warning
+`W_NOT_MEASURABLE` in a data set); the converter writes it with a `# CONVERTED:` comment. D2: fields `entrance_pair` /
+`exit_pair` (pair keys of `<levels>`, only where a label names two pairs; not on a sum or ratio) — the THM-column rule
+was not taken (`project_format3.md` §3.5 says why). D3: a target state in the reaction grammar,
+`16O[2.143](n,n)16O[2.143]`. D4: the converter converts what is written; `tools/convert_tree.sh` runs the old engine
+on every original and lists the files it refuses that the converter converts (§8.5 records them). R1: the project-file
+commands (`--convert`, `--validate`, `--schema`) moved to `src/ProjectCommands.cpp`; `cli_help` reads its literals
+too. R2: every `TargetEffect` member has an in-class initialiser (test `target_effect_line`).
+
+**Checked on the work tree before the last commits** (2 threads, `work/b-conv`, 0 warnings): `tools/convert_tree.sh`
+186 of 189 convert and validate with no question, the 3 refused are refused by the old engine too, 5 files the old
+engine refuses are converted (§8.5); `convert_constructs` 155/155, `convert_fixtures` 86/86, `experiment_*` pass,
+`pyazr_validate` 35/35, `cli_help` PASS, `repo_consistency` passes; `target_effect_line` passes, valgrind 0 errors
+(with the old header: uninitialised reads). The 179 × 3, `ctest -LE slow` and `run_tests.sh` of the final tree are the
+director's.
+
+**For step 3b (recorded here, not done):**
+- `--convert-params` for `param.sav` / `param.par` files (the old -> new parameter map is in the converter's report);
+- `ExtrapLine` never reads a UPOS block on test lines (`isUPOS_` stays 0): decide whether test lines can carry one;
+- `convert/include/azure2/convert/ThmLines.h` duplicates two small generic helpers (split at a separator, whole
+  integer) that `src/ThmExperiment.cpp` keeps for its other readers; one copy should remain when `<thm>` moves;
+- `CheckFormat3Text` (read the format-3 sections with `io::ReadRecords`, validate with the table) belongs to the
+  format-3 reader: move it from `convert/` there, and the CLI's `--validate` and pyazr's `validate` with it;
+- the pair-key rule of §3.5 (`entrance_pair`/`exit_pair` accepted only where the label is ambiguous, required there)
+  and the target state are checked against `<levels>` by the reader (the validator cannot see `<levels>`);
+- every file of §8.5's list (the old engine refuses it, the converter converts it) must be refused by the format-3
+  engine.
+
 ## 2026-11-10 (night) — format 3, step 3a: named table rows, `--validate`, the converter old → format 3 (`feature/upgrade-4-convert`)
 
 **Done** (`project_format3.md` §§6.2, 8, corrections marked "step 3a").
