@@ -319,7 +319,10 @@ one), the schema and docs as above; later its tree builder (step 3).
 
 **A format-3 unit.** One `Unit` row in `experiment/src/Units.cpp`, `{token, dimension, factor to the dimension's
 engine unit[, aliases]}`, e.g. `{"keV", "energy", 1e-3}`; `experiment_parsers` checks every row's dimension and factor and `experiment_quantities` tries the unit
-on every quantity; then the schema and docs as above.
+on every quantity; then the schema and docs as above.  A factor is applied only by `Units.h` `Rescale` (through
+`ToBase`, `ToUnit`, `Context::InBase`; the columns of a data file through `experiment/DataRows.h`, where the points
+are made), never as a literal in `Build`.  A quantity that is a scale of an observable the engine computes (an S
+factor, a yield per unit charge) is `ReactionSpec::scale` (`experiment/src/BuildUnits.cpp`), one tree kind `Scaled`.
 
 **A format-3 diagnostic code.** A constant in `experiment/include/azure2/experiment/Diagnostics.h` (`io/`'s reader:
 `io/include/azure2/io/Record.h`), its row in `DiagnosticCodes()` and a case in `experiment/tests/diagnostics_test.cpp`

@@ -190,18 +190,6 @@ bool ReadReaction(Context &c, const ValidatedRecord &r, const std::string &angle
   return ok;
 }
 
-// The unit of the values: the engine compares the numbers as written, in its own unit.
-bool EngineUnit(Context &c, const ValidatedRecord &r) {
-  const Value *u = r.Get("unit");
-  if (u && u->unit && u->unit->factor != 1.0) {
-    c.Error(codes::kNotBuilt, r, "unit",
-            std::string("values in ") + u->unit->token + ": this engine reads the values in the unit of the quantity (" +
-                (r.quantity ? r.quantity->engineUnit : std::string("?")) + "); a conversion is a later step");
-    return false;
-  }
-  return true;
-}
-
 // The phase-shift partial wave and its check against the entrance pair's spins (a channel spin s couples j1 and j2,
 // and J couples l and s).
 bool ReadPhaseShift(Context &c, const ValidatedRecord &r, ReactionSpec &spec) {
@@ -225,17 +213,38 @@ bool ReadPhaseShift(Context &c, const ValidatedRecord &r, ReactionSpec &spec) {
   return true;
 }
 
+// The S factor S = E sigma exp(2 pi eta) of the angle-integrated cross section (data_kinds.md section 4.1): a factor
+// on the model at the point's c.m. energy, defined for a charged entrance pair.
+bool SFactorOf(Context &c, const ValidatedRecord &r, ReactionSpec &spec) {
+  const PairInfo *p = c.Pair(spec.entranceKey);
+  if (p && (p->kind != 0 || p->lightZ * p->heavyZ == 0)) {
+    c.Error(codes::kReactionNotAllowed, r, "reaction",
+            "pair " + PairLabel(*p) + " has an uncharged particle: the S factor is defined for charged particles (the Gamow "
+            "factor exp(2 pi eta)); give quantity sigma");
+    return false;
+  }
+  if (r.Has("thm")) {
+    c.Error(codes::kNotBuilt, r, "thm",
+            "a THM data set as an S factor: THM cross sections are in arbitrary units and reach below the entrance threshold, "
+            "where exp(2 pi eta) is not defined; give quantity sigma");
+    return false;
+  }
+  spec.scale.sFactor = true;
+  return true;
+}
+
 // The observable of a data set or an extrapolation from its quantity and its angle frame ("" angle-integrated).
 bool ReadObservable(Context &c, const ValidatedRecord &r, const std::string &angleFrame, ReactionSpec &spec) {
   const std::string q = r.quantity ? r.quantity->name : "";
   const bool data = r.kind == "dataset";
   using O = Observable;
   if (q == "sigma" || q == "sigma_nuclear" || q == "sigma_total" || q == "beta_delayed_spectrum" || q == "transmission" ||
-      q == "neutron_yield" || (q == "yield" && angleFrame.empty())) {
+      q == "neutron_yield" || q == "sfactor" || (q == "yield" && angleFrame.empty())) {
     const std::string multipole = Word(r, "multipole");
     spec.observable = multipole == "E1" ? O::CrossSectionE1 : multipole == "E2" ? O::CrossSectionE2 : O::CrossSection;
     if (spec.exitKey == -1 && spec.combination == ReactionSpec::Combination::None) spec.observable = O::TotalCapture;
     spec.total = q == "sigma_total";
+    if (q == "sfactor") return SFactorOf(c, r, spec);
     if (q == "beta_delayed_spectrum") {
       const PairInfo *p = c.Pair(spec.entranceKey);
       if (p && p->kind != 20) {
@@ -306,27 +315,6 @@ bool ReadObservable(Context &c, const ValidatedRecord &r, const std::string &ang
   }
   c.Error(codes::kNotBuilt, r, "quantity", "quantity " + q + ": this engine cannot set it up yet (a later step)");
   return false;
-}
-
-// The column layout the engine reads: E, angle (or order, or unused), value, error[, window_lo, window_hi], unused.
-bool CheckColumns(Context &c, const ValidatedRecord &r, const Columns &cols, const std::string &secondRole) {
-  std::vector<std::string> want = {r.quantity && r.quantity->name == "beta_delayed_spectrum" ? "E_decay" : "E_lab", secondRole,
-                                   "value", "error"};
-  bool ok = !cols.fromFile && cols.roles.size() >= 4;
-  for (std::size_t i = 0; ok && i < cols.roles.size(); i++) {
-    const ColumnRole &role = cols.roles[i];
-    const std::string expected = i < 4 ? want[i] : i == 4 ? "window_lo" : i == 5 ? "window_hi" : "_";
-    if (role.role != expected && !(i >= 4 && role.role == "_") && !(i == 1 && expected == "_" && role.role == "_")) ok = false;
-    if (role.unit && role.unit->factor != 1.0) ok = false;
-  }
-  if (!ok) {
-    std::string layout;
-    for (const std::string &w : want) layout += (layout.empty() ? "" : " ") + w;
-    c.Error(codes::kNotBuilt, r, "columns",
-            "this engine reads the columns " + layout + "[ window_lo window_hi] in MeV and deg, in this order (other "
-                                                        "layouts, units and 'from_file' are a later step)");
-  }
-  return ok;
 }
 
 // The data file exists and its first row holds every column the roles name.
@@ -400,9 +388,9 @@ void OffsetInto(const Nuisance &n, DatasetSpec &d) {
 
 void SqrtInto(const Nuisance &n, DatasetSpec &d) {
   d.hasSqrtShift = true;
-  d.energyShiftSqrt = n.value.value;
+  d.energyShiftSqrt = Context::InBase(n.value, n.unit);
   d.varyEnergyShiftSqrt = n.mode == NuisanceMode::Fit;
-  if (n.hasPrior) d.energyShiftSqrtError = n.priorWidth.value;
+  if (n.hasPrior) d.energyShiftSqrtError = Context::InBase(n.priorWidth, n.unit);
 }
 
 void FunctionInto(const ValidatedRecord &scale, DatasetSpec &d) {
@@ -432,15 +420,8 @@ bool BuildDataset(Context &c, const ValidatedRecord &r, DatasetSpec &d, Member &
   ok = ReadReaction(c, r, angleFrame, d.reaction, m) && ok;
   if (!ok) return false;
   ok = ReadObservable(c, r, angleFrame, d.reaction) && ok;
-  ok = EngineUnit(c, r) && ok;
+  ok = build::ValueUnit(c, r, d.reaction, &d.columns) && ok;
   d.absolute = Word(r, "expansion") == "absolute";
-  if (const Value *w = r.Get("energy_window")) {
-    d.minE = Context::InBase(w->lo, w->unit);
-    d.maxE = Context::InBase(w->hi, w->unit);
-  } else {
-    d.minE = 0.0;
-    d.maxE = std::numeric_limits<double>::max();
-  }
   if (const Value *w = r.Get("angle_window")) {
     d.minA = Context::InBase(w->lo, w->unit);
     d.maxA = Context::InBase(w->hi, w->unit);
@@ -451,9 +432,10 @@ bool BuildDataset(Context &c, const ValidatedRecord &r, DatasetSpec &d, Member &
   if (const Value *f = r.Get("file")) d.dataFile = f->word;
   if (cols) {
     const std::string second = angleRole ? angleRole->role : (r.quantity && r.quantity->name == "legendre") ? "order" : "_";
-    ok = CheckColumns(c, r, cols->columns, second) && ok;
+    ok = build::DataColumns(c, r, cols->columns, second, d) && ok;
     if (ok && m.active && c.opt_.readDataFiles) ok = CheckDataFile(c, r, d.dataFile, cols->columns.roles.size()) && ok;
   }
+  build::EnergyWindow(r, d);
   // norm: its own nuisance, or a shared normalization record (its values in every member; the engine takes the group's
   // from its first loaded member, EData::ResolveNormGroups)
   if (const Value *n = r.Get("norm")) {
@@ -563,7 +545,7 @@ bool BuildExtrapolation(Context &c, const ValidatedRecord &r, ExtrapolationSpec 
   bool ok = ReadReaction(c, r, angleFrame, x.reaction, m);
   if (!ok) return false;
   ok = ReadObservable(c, r, angleFrame, x.reaction) && ok;
-  ok = EngineUnit(c, r) && ok;
+  ok = build::ValueUnit(c, r, x.reaction, nullptr) && ok;
   if (const Value *e = r.Get("energies")) {
     ok = ReadGrid(c, r, "energies", e->grid, c.Pair(x.reaction.entranceKey), x.energies, x.minE, x.maxE, &x.gridFile) && ok;
     if (e->grid.kind == "adaptive") {

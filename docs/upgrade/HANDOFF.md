@@ -2,6 +2,36 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-10 (agent, brief J) — units in format 3, the S factor as a quantity, yields per charge (`feature/upgrade-4-units`)
+
+**Done.**
+- Units: every number of a format-3 project may be written in any unit of its dimension.  One function applies a
+  factor (`experiment/Units.h` `Rescale`, through `ToBase`, `ToUnit`, `Context::InBase`): a power-of-ten factor
+  divides by the exact integer, so a value exact in the written unit is the same double as the value written in the
+  engine unit.  Record fields (windows, shifts incl. the sqrt term, grids, areal density in atoms/b for a layer and a
+  sample, U_e in keV, a straggling coefficient in any sqrt-energy unit, stopping and spread formulas in another unit,
+  UDR times, model data) are converted in `Build`.  The columns of a data file: `DatasetSpec::columns`
+  (`ColumnConversion`: energy, angle, value factors, an `E_cm` column with the entrance pair's masses), applied by
+  `experiment/DataRows.h` `RowToEngine` through `DataLine::ToEngineUnits`, called in `ESegment::Fill`; the energy
+  window is in the energy column's frame and unit.  An extrapolation in another unit is computed in it.
+- S factor: `quantity sfactor` builds; `ReactionSpec::scale` (`ValueScale`) with `sFactor`; tree kind `Scaled`
+  (one row of `TreeKinds()`), `FactorRef::Kind::SFactor`, its value `SFactorConversionValue` (src/CoulombReference.cpp)
+  from `physics/AstrophysicalFactor.h` `sfactor_conversion` (E exp(2 pi eta), non-relativistic eta, <levels> masses);
+  binding `_azure2.sfactor_conversion`.  Adaptive extrapolation grids of `sfactor` refine on S (the model value).
+- Yields: `1/uC|mC|C` with `charge_state` (x 1e-6 C/(q e) ...), `counts/...` with a fixed `efficiency`, `arbitrary`;
+  a layer target is refused for a yield (Phase 5 kernel), a fitted efficiency is refused.
+- pyazr 2.27.0: `sfactor_to_cross_section(S, E_cm_kev, z1, z2, m1_u, m2_u)` via the engine; `to_azr` refuses S-factor
+  data; `ExforData.to_sfactor_dataset` (pyazr/exfor_sfactor.py) writes `quantity sfactor`.
+- Defects fixed on the way: `unit 1/C` / `counts/C` (factor 1) were built with no scaling; a yield on a layer built as
+  the target-averaged cross section; a sqrt shift, straggling coefficient, UDR times read without their unit; percent
+  priors of U_e and sample thickness read as absolute.
+- Tests: `experiment_build` (units, sfactor, yields), `experiment_prediction` (Scaled), `pyazr_units_scales`,
+  `nds_local_exfor` section 6, `tests/units_scales/check.sh` (the section 9.1 example on T2's levels, adaptive S grid).
+
+**Open.** AZUREOut files of an S-factor or per-charge data set print the model in the cross-section column and that
+times E exp(2 pi eta) in the S column (the output writer is in the data-class files); `calculate_sfactor_rwa` likewise.
+`EPoint`'s own S-factor conversion (output column) is a second formula of the same factor (bit-different association).
+
 ## 2026-11-10 (agent, brief S) — `EData`, `EPoint`, `ESegment` cut into files with one job (`feature/upgrade-4-edata-split-3`)
 
 **What file holds what now.** Eleven new source files and two new headers, each made by a verbatim move (bodies

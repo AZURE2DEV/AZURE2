@@ -226,11 +226,9 @@ class ExforData:
         (or ``"analyzing-power"``), EXFOR ``ANG`` (lab) data with
         ``observable="differential"``.
 
-        **S-factor data.** When ``DATA`` is reported as ``B*KEV`` / ``B*EV``
-        (an ``SFC`` reaction), the values are converted to barns using
-        :func:`sfactor_to_cross_section`, so AZURE2 receives a cross section.
-        Set ``observable`` to ``total-capture`` for a radiative-capture
-        reaction.
+        **S-factor data** (``DATA`` in ``B*KEV`` / ``B*EV``, an ``SFC`` reaction) is refused: it is format-3
+        quantity ``sfactor``, written by :meth:`to_sfactor_dataset`, and the engine converts its model with the
+        masses of ``<levels>`` (until November 2026 this method converted the data to barns with mass numbers).
 
         **Ratio-to-Rutherford data** (``,DA,,RTH``, ``,DA,,MOT``) is refused: it is
         format-3 quantity ``ratio_to_rutherford`` (``ratio_to_mott``), written by
@@ -251,6 +249,12 @@ class ExforData:
                 f"format-3 quantity (ratio_to_rutherford, ratio_to_mott): ExforData.to_dataset writes it.  "
                 f"to_azr no longer multiplies it by a Rutherford cross section (frozen under an energy shift, "
                 f"not folded, mass numbers).")
+        if _sfactor_factors({c.name: c.unit for c in self.columns}.get("DATA-CM") or
+                            {c.name: c.unit for c in self.columns}.get("DATA")) is not None:
+            raise ValueError(
+                f"{self.dataset_id}: S-factor data ({self.reaction!r}) is format-3 quantity sfactor: "
+                f"ExforData.to_sfactor_dataset writes it, and the engine converts the model with the masses of "
+                f"<levels> (to_azr no longer converts the data to barns with mass numbers).")
         data = _azr_columns(self, target_mass=target_mass,
                             projectile_mass=projectile_mass,
                             cross_section_scale=cross_section_scale,
@@ -317,6 +321,13 @@ class ExforData:
                 f.write("  ".join(f"{v:.8g}" for v in row) + "\n")
         return coulomb.record(self, name, quantity, path, frame, norm)
 
+    def to_sfactor_dataset(self, data_dir, name, norm=None, file_name=None):
+        """Write S-factor data (an ``SFC`` reaction) as a format-3 data set of quantity ``sfactor`` and return the text
+        of its ``dataset`` record (``exfor_sfactor.dataset``: E as EXFOR gives it, ``EN-CM`` as ``E_cm``, S in MeV b;
+        ``norm`` by default ``1 fit prior 1 <ERR-SYS>%``).  The engine compares the data with E sigma exp(2 pi eta)
+        at each point's c.m. energy (after a fitted shift), with the masses of ``<levels>``."""
+        return _exfor_module("exfor_sfactor.py").dataset(self, data_dir, name, norm, file_name)
+
     # -- internal helpers ----------------------------------------------------
     def _sys_error_percent(self):
         arr = self.arrays.get("ERR-SYS")
@@ -361,15 +372,19 @@ class ExforColumn:
             else f"<ExforColumn {self.name}>"
 
 
-def _exfor_coulomb():
-    """pyazr/exfor_coulomb.py, loaded by its path, so that this file also works on its own (the nds tests load it
-    without the compiled package)."""
+def _exfor_module(file):
+    """pyazr/<file>, loaded by its path, so that this file also works on its own (the nds tests load it without the
+    compiled package)."""
     import importlib.util
-    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "exfor_coulomb.py")
-    spec = importlib.util.spec_from_file_location("pyazr_exfor_coulomb", path)
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), file)
+    spec = importlib.util.spec_from_file_location("pyazr_" + file[:-3], path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def _exfor_coulomb():
+    return _exfor_module("exfor_coulomb.py")
 
 
 def _import_os():
@@ -828,18 +843,21 @@ def _angle_frame(data):
     return None
 
 
-def sfactor_to_cross_section(S, E_cm_kev, z1, z2, mu):
-    """Convert an S-factor to a cross section: ``sigma = S exp(-2 pi eta) / E``.
+def sfactor_to_cross_section(S, E_cm_kev, z1, z2, m1_u, m2_u):
+    """Convert an S factor to a cross section: ``sigma = S exp(-2 pi eta) / E``.
 
-    ``S`` in b keV, ``E_cm_kev`` in keV, ``mu`` the reduced mass in u,
-    ``z1``/``z2`` the projectile/target charges.  The Sommerfeld parameter uses
-    the same constant as AZURE2's ``EPoint::CalcEDependentValues``
-    (``pi * sqrt(uconv/2) * fstruct = 0.157488``), so feeding AZURE2 the
-    resulting barns reproduces the reported S-factor.
+    ``S`` in b keV, ``E_cm_kev`` in keV (c.m.), ``z1``/``z2`` the charges and ``m1_u``/``m2_u`` the atomic masses (u)
+    of the entrance pair, as in the project's ``<levels>``.  The factor is the engine's
+    (``_azure2.sfactor_conversion``, physics/AstrophysicalFactor.h, the one used by ``quantity sfactor``): mass
+    numbers in place of the masses change sigma by exp(2 pi Delta eta) - 1 (+2.9 % for 3He + alpha at 93 keV, +6.7 %
+    for p + 12C at 100 keV).  For a fit, give the data as ``quantity sfactor`` (:meth:`ExforData.to_sfactor_dataset`)
+    and let the engine convert the model instead.
     """
-    E_cm_MeV = E_cm_kev / 1e3
-    eta = 0.157488 * z1 * z2 * np.sqrt(mu / E_cm_MeV)
-    return S * np.exp(-2 * np.pi * eta) / E_cm_kev
+    from . import _azure2
+    E = np.atleast_1d(np.asarray(E_cm_kev, float)) / 1e3
+    conv = _azure2.sfactor_conversion(int(z1), int(z2), float(m1_u), float(m2_u), E)  # MeV
+    out = np.asarray(S, float) / 1e3 / (conv if np.ndim(E_cm_kev) else conv[0])
+    return out if np.ndim(out) else float(out)
 
 
 def _azr_columns(data, target_mass=None, projectile_mass=None,
@@ -982,42 +1000,13 @@ def _data_column(data, cols, m_t, m_p, cross_section_scale=1.0):
     cs = data.arrays[dname].astype(float)
     stat = _error_column(data, cols, cs, unit)
 
-    sf = _sfactor_factors(unit)
-    if sf is not None:
-        # S-factor (an SFC reaction) -> cross section.
-        E_cm_kev = _cm_kev(data, cols, m_t, m_p)
-        to_barn_kev = sf[0] * 1e3           # b*MeV -> b*keV, to match E_cm_kev
-        za_t, za_p = data.za(data.target), data.za(data.projectile)
-        # No silent default here.  The penetrability factor exp(-2 pi eta) is
-        # exponential in Z1 Z2, so an assumed charge is not a small error: the
-        # old p + 12C fallback turned the LUNA 3He(a,g)7Be S factor into a
-        # cross section 5000 times too large at 93 keV.
-        if not (za_t and za_p):
-            raise ValueError(
-                f"{data.dataset_id}: cannot read the entrance-channel charges "
-                f"from {data.reaction!r}, and an S-factor cannot be converted "
-                f"without them (sigma = S exp(-2 pi eta)/E, eta ~ Z1 Z2).")
-        z2, z1 = za_t[0], za_p[0]
-        mu = m_t * m_p / (m_t + m_p)
-        cs = sfactor_to_cross_section(cs * to_barn_kev, E_cm_kev, z1, z2, mu)
-        stat = sfactor_to_cross_section(stat * to_barn_kev, E_cm_kev, z1, z2, mu)
-    elif "NO-DIM" in unit or "ARB" in unit:
+    if "NO-DIM" in unit or "ARB" in unit:
         pass                                 # analyzing power, yield ratio, ...
     else:
         factor = _barn_factor(unit)
         cs = cs * factor
         stat = stat * factor
     return cs * cross_section_scale, stat * cross_section_scale
-
-
-def _cm_kev(data, cols, m_t, m_p):
-    """Center-of-mass energy of each point in keV."""
-    for c in data.columns:
-        if c.name == "EN-CM":
-            E = data.arrays["EN-CM"].astype(float) * _energy_factor(c.unit)
-            return E * 1e3
-    E_lab = _energy_column(data, cols, m_t, m_p)
-    return E_lab * m_t / (m_t + m_p) * 1e3
 
 
 # -- ENSDF / LiveChart -------------------------------------------------------

@@ -175,6 +175,8 @@ void CompareReaction(const std::string &w, const ReactionSpec &a, const Reaction
   Bits(w + " transmission", a.transmission, b.transmission);
   Bits(w + " yield thickness", a.yieldThickness, b.yieldThickness);
   Eq(w + " Coulomb reference", (int)a.coulombReference, (int)b.coulombReference);
+  Bits(w + " model factor", a.scale.factor, b.scale.factor);
+  Eq(w + " S factor", a.scale.sFactor, b.scale.sFactor);
 }
 
 // The first active member of each group of `label`.
@@ -199,6 +201,10 @@ void CompareDatasets(const std::vector<DatasetSpec> &a, const std::vector<Datase
     Eq(w + " active", x.active, y.active);
     Eq(w + " file", x.dataFile, y.dataFile);
     if (!x.active || !y.active) continue;
+    Bits(w + " energy column factor", x.columns.energy, y.columns.energy);
+    Eq(w + " energy column c.m.", x.columns.energyCM, y.columns.energyCM);
+    Bits(w + " angle column factor", x.columns.angle, y.columns.angle);
+    Bits(w + " value column factor", x.columns.value, y.columns.value);
     CompareReaction(w, x.reaction, y.reaction);
     Bits(w + " minE", x.minE, y.minE);
     Bits(w + " maxE", x.maxE, y.maxE);
