@@ -129,9 +129,6 @@ class CNuc {
   const JGroup *GetJGroup(int) const;
   void AddPair(PPair);
   void AddJGroup(JGroup);
-  /// Largest orbital angular momentum appearing in any channel.
-  int GetMaxLValue() const;
-  void SetMaxLValue(int);
 
   // -- building -------------------------------------------------------------
   /// Build the whole object from the nuclear and external-capture input files.
@@ -275,7 +272,6 @@ class CNuc {
   std::vector<AbundanceSample> samples_;
   bool hasAbundanceBlock_ = false;
   std::vector<ScatteringLength::Constraint> scatLenConstraints_;
-  int maxLValue_;
   bool transformedIn_ = false;
   std::vector<double> thmCoherentValues_;
 };

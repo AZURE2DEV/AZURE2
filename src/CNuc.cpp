@@ -384,12 +384,8 @@ int CNuc::Fill(const Config &configure, const std::map<int, double> &radii) {
     }
   }
 
-  this->SetMaxLValue(maxLValue);
-  if (configure.includeAllJPi) {
-    int hardSphereMaxL = configure.hardSphereMaxL >= 0 ? configure.hardSphereMaxL : maxLValue;
-    if (hardSphereMaxL > maxLValue) this->SetMaxLValue(hardSphereMaxL);
-    this->AddHardSphereGroups(configure, hardSphereMaxL);
-  }
+  if (configure.includeAllJPi)
+    this->AddHardSphereGroups(configure, configure.hardSphereMaxL >= 0 ? configure.hardSphereMaxL : maxLValue);
   if (RefuseForbiddenIdenticalChannels(*this, configure) == -1) return -1;
   if ((configure.paramMask & Config::USE_EXTERNAL_CAPTURE) && this->NumJGroups() > 0 && this->NumPairs() > 0)
     if (this->ParseExternalCapture(configure, ecPairs) == -1) return -1;
@@ -669,7 +665,6 @@ int CNuc::ParseExternalCapture(const Config &configure, std::map<int, int> &ecPa
     JGroup newJGroup(jValue, parity);
     newJGroup.SetNucleus(exitPair->GetNucleus(), exitPair->GetNucleusZ(), exitPair->GetNucleusA());
     int jGroupNum = this->IsJGroup(newJGroup);
-    int levelNum = 0;
     ALevel probeLevel(exitPair->GetHeavyExE());
     if (!jGroupNum || !this->GetJGroup(jGroupNum)->IsLevel(probeLevel)) {
       const bool used = usedExitKeys.count(exitPair->GetPairKey()) > 0;
@@ -682,106 +677,42 @@ int CNuc::ParseExternalCapture(const Config &configure, std::map<int, int> &ecPa
       if (used) return -1;
       continue;
     }
-    if (jGroupNum) {
-      ALevel newLevel(exitPair->GetHeavyExE());
-      levelNum = this->GetJGroup(jGroupNum)->IsLevel(newLevel);
-      // IsLevel is an energy-only match within 1 keV and returns the first level that fits.  Since e239a12 two
-      // levels of one J^pi may sit within 1 keV of each other (different level IDs), so the pair's E_x can match
-      // more than one: refuse that instead of taking the first silently (audit 2026-10-25, checklist item 28).
-      {
-        int matches = 0;
-        for (int lv = 1; lv <= this->GetJGroup(jGroupNum)->NumLevels(); lv++)
-          if (fabs(this->GetJGroup(jGroupNum)->GetLevel(lv)->GetE() - exitPair->GetHeavyExE()) <= 1.0e-3) matches++;
-        if (matches > 1) {
-          configure.outStream << "ERROR: external capture into pair " << exitPair->GetPairKey() << ": " << matches
-                              << " levels of J^pi = " << jValue << (parity > 0 ? "+" : "-") << " lie within 1 keV of its final-state energy E_x = "
-                              << exitPair->GetHeavyExE() << " MeV, so the final state is ambiguous.  Move the extra level(s) by more than 1 keV"
-                              << " or give the pair the energy of the one it decays to." << std::endl;
-          return -1;
-        }
+    // Here the J^pi group exists and holds a level at the final state's energy (above).
+    const int levelNum = this->GetJGroup(jGroupNum)->IsLevel(probeLevel);
+    // IsLevel is an energy-only match within 1 keV and returns the first level that fits.  Since e239a12 two
+    // levels of one J^pi may sit within 1 keV of each other (different level IDs), so the pair's E_x can match
+    // more than one: refuse that instead of taking the first silently (audit 2026-10-25, checklist item 28).
+    {
+      int matches = 0;
+      for (int lv = 1; lv <= this->GetJGroup(jGroupNum)->NumLevels(); lv++)
+        if (fabs(this->GetJGroup(jGroupNum)->GetLevel(lv)->GetE() - exitPair->GetHeavyExE()) <= 1.0e-3) matches++;
+      if (matches > 1) {
+        configure.outStream << "ERROR: external capture into pair " << exitPair->GetPairKey() << ": " << matches
+                            << " levels of J^pi = " << jValue << (parity > 0 ? "+" : "-") << " lie within 1 keV of its final-state energy E_x = "
+                            << exitPair->GetHeavyExE() << " MeV, so the final state is ambiguous.  Move the extra level(s) by more than 1 keV"
+                            << " or give the pair the energy of the one it decays to." << std::endl;
+        return -1;
       }
-      if (!levelNum) {
-        this->GetJGroup(jGroupNum)->AddLevel(newLevel);
-        levelNum = this->GetJGroup(jGroupNum)->IsLevel(newLevel);
-        for (int ch = 1; ch <= this->GetJGroup(jGroupNum)->NumChannels(); ch++) {
-          if (this->GetJGroup(jGroupNum)->GetChannel(ch)->GetRadType() == 'P')
-            this->GetJGroup(jGroupNum)->GetLevel(levelNum)->AddGamma(0.1);
-          else
-            this->GetJGroup(jGroupNum)->GetLevel(levelNum)->AddGamma(0.0);
-        }
+    }
+    this->GetJGroup(jGroupNum)->GetLevel(levelNum)->SetECParams(ec->first, ec->second);
+    for (int ch = 1; ch <= this->GetJGroup(jGroupNum)->NumChannels(); ch++) {
+      PPair *theFinalPair = this->GetPair(this->GetJGroup(jGroupNum)->GetChannel(ch)->GetPairNum());
+      double nfIntegralValue = 0.;
+      double ecConvert = 0.;
+      if (theFinalPair->GetPType() == 0) {
+        NFIntegral newNFIntegral(theFinalPair);
+        nfIntegralValue = newNFIntegral(this->GetJGroup(jGroupNum)->GetChannel(ch)->GetL(), exitPair->GetHeavyExE());
+        WhitFunc newWhitFunc(theFinalPair);
+        double whitConv = newWhitFunc(this->GetJGroup(jGroupNum)->GetChannel(ch)->GetL(),
+                                      theFinalPair->GetChRad(),
+                                      fabs(exitPair->GetHeavyExE() - theFinalPair->GetSepE() - theFinalPair->GetExE()));
+        ecConvert = sqrt(2.0 * theFinalPair->GetRedMass() * theFinalPair->GetChRad() * uconv / pow(hbarc, 2.0)) / whitConv;
       }
-      this->GetJGroup(jGroupNum)->GetLevel(levelNum)->SetECParams(ec->first, ec->second);
-      for (int ch = 1; ch <= this->GetJGroup(jGroupNum)->NumChannels(); ch++) {
-        PPair *theFinalPair = this->GetPair(this->GetJGroup(jGroupNum)->GetChannel(ch)->GetPairNum());
-        double nfIntegralValue = 0.;
-        double ecConvert = 0.;
-        if (theFinalPair->GetPType() == 0) {
-          NFIntegral newNFIntegral(theFinalPair);
-          nfIntegralValue = newNFIntegral(this->GetJGroup(jGroupNum)->GetChannel(ch)->GetL(), exitPair->GetHeavyExE());
-          WhitFunc newWhitFunc(theFinalPair);
-          double whitConv = newWhitFunc(this->GetJGroup(jGroupNum)->GetChannel(ch)->GetL(),
-                                        theFinalPair->GetChRad(),
-                                        fabs(exitPair->GetHeavyExE() - theFinalPair->GetSepE() - theFinalPair->GetExE()));
-          ecConvert = sqrt(2.0 * theFinalPair->GetRedMass() * theFinalPair->GetChRad() * uconv / pow(hbarc, 2.0)) / whitConv;
-        }
-        this->GetJGroup(jGroupNum)->GetLevel(levelNum)->AddNFIntegral(nfIntegralValue);
-        this->GetJGroup(jGroupNum)->GetLevel(levelNum)->AddECConversionFactor(ecConvert);
-      }
-    } else {
-      this->AddJGroup(newJGroup);
-      jGroupNum = this->IsJGroup(newJGroup);
-      ALevel newLevel(exitPair->GetHeavyExE());
-      this->GetJGroup(jGroupNum)->AddLevel(newLevel);
-      levelNum = this->GetJGroup(jGroupNum)->IsLevel(newLevel);
-      this->GetJGroup(jGroupNum)->GetLevel(levelNum)->SetECParams(ec->first, ec->second);
-      for (int ir = 1; ir <= this->NumPairs(); ir++) {
-        if (this->GetPair(ir)->GetPType() == 0 && this->GetPair(ir)->GetNucleus() == exitPair->GetNucleus()) {
-          double s1 = this->GetPair(ir)->GetJ(1);
-          double s2 = this->GetPair(ir)->GetJ(2);
-          int sPi = this->GetPair(ir)->GetPi(1) * this->GetPair(ir)->GetPi(2);
-          bool identicalPair = this->GetPair(ir)->IsIdentical();
-          for (double chS = fabs(s1 - s2); chS <= s1 + s2; chS += 1.) {
-            for (int chL = 0; chL <= this->GetMaxLValue(); chL++) {
-              int chPi = sPi * (int)pow(-1, chL);
-              // Bose/Fermi symmetry for an identical pair: exchange gives
-              // (-1)^l in space and (-1)^(2j-s) in channel spin, and the
-              // product must be (-1)^(2j), so only l+s even survives -- for
-              // bosons and fermions alike (1S0 is allowed in p+p, 3S1 is not).
-              if (identicalPair && (chL + (int)(chS + 0.5)) % 2 != 0) continue;
-              if (fabs(chS - chL) <= jValue && jValue <= chS + chL && chPi == parity) {
-                AChannel newChannel(chL, chS, ir, 'P');
-                this->GetJGroup(jGroupNum)->AddChannel(newChannel);
-
-                // Calculate and set Wigner Limit for the newly created channel
-                int newChannelNum = this->GetJGroup(jGroupNum)->NumChannels();
-                PPair *channelPair = this->GetPair(ir);
-                this->GetJGroup(jGroupNum)->GetChannel(newChannelNum)->SetWignerLimit(channelPair->GetRedMass(), channelPair->GetChRad());
-
-                this->GetJGroup(jGroupNum)->GetLevel(levelNum)->AddGamma(0.1);
-                NFIntegral newNFIntegral(this->GetPair(ir));
-                double nfIntegralValue = newNFIntegral(chL, exitPair->GetHeavyExE());
-                WhitFunc newWhitFunc(this->GetPair(ir));
-                double whitConv = newWhitFunc(chL, this->GetPair(ir)->GetChRad(),
-                                              fabs(exitPair->GetHeavyExE() - this->GetPair(ir)->GetSepE() - this->GetPair(ir)->GetExE()));
-                double ecConvert = sqrt(2.0 * this->GetPair(ir)->GetRedMass() * this->GetPair(ir)->GetChRad() * uconv / pow(hbarc, 2.0)) / whitConv;
-                this->GetJGroup(jGroupNum)->GetLevel(levelNum)->AddNFIntegral(nfIntegralValue);
-                this->GetJGroup(jGroupNum)->GetLevel(levelNum)->AddECConversionFactor(ecConvert);
-              }
-            }
-          }
-        }
-      }
+      this->GetJGroup(jGroupNum)->GetLevel(levelNum)->AddNFIntegral(nfIntegralValue);
+      this->GetJGroup(jGroupNum)->GetLevel(levelNum)->AddECConversionFactor(ecConvert);
     }
   }
   return 0;
-}
-
-/*!
- * Returns the maximum value of orbital angular momentum read from channels in the nuclear file.
- */
-
-int CNuc::GetMaxLValue() const {
-  return maxLValue_;
 }
 
 /*!
@@ -1783,14 +1714,6 @@ vector_r CNuc::GetTransformParams(const Config &) {
       for (unsigned int k = 0; k < nuclei_.size(); k++) params.push_back(samples_[s].entries[k].abundance);
 
   return params;
-}
-
-/*!
- * Sets the maximum orbital angular momentum value read from the nuclear input file.
- */
-
-void CNuc::SetMaxLValue(int maxL) {
-  maxLValue_ = maxL;
 }
 
 namespace {
