@@ -27,7 +27,7 @@
  *   T6     Park's J > 0 wall;
  *   T8     electron-screening, target-density, Doppler-temperature and sample-thickness priors (four terms);
  *   T7     abundance priors and sum-to-one;
- *   T9     measured scattering lengths;
+ *   T9     the model data (ModelData.h): measured scattering lengths;
  *   T10    the prior parameter covariance.
  */
 struct ObjectiveContext {
@@ -78,9 +78,21 @@ class Objective {
   double Chi2(const ObjectiveContext &c) const;
   /// The data part alone, T1 (with the THM profiling) and T2, without the segment priors: the MCMC likelihood.
   double DataChi2(ObjectiveContext c) const;
-  /// The terms of the model alone (T6 Park, T7 abundances, T9 scattering lengths), in the engine's order: what the
-  /// API adds to its data chi^2 (AZUREAPI::FilledModelPenalties, the analytic-gradient path, the writer's totals).
+  /// The terms of the model alone (T6 Park, T7 abundances, T9 model data), in the engine's order: what the API adds
+  /// to its data chi^2 (AZUREAPI::FilledModelPenalties, the analytic-gradient path, the writer's totals).
   double ModelChi2(const ObjectiveContext &c) const;
+  /*!
+   * T9, the model data (ModelData.h), for the paths that need more than its value, at the parameters c.compound
+   * holds: its chi-squared alone (the MCMC likelihood; 0 without model data), its residual rows in row order, its
+   * gradient d chi2/d(E, gamma) into accum, and its rows with their Jacobian rows over nCols packed columns of pmap.
+   * The last two return false where the gradient is not available here (the caller differentiates numerically).
+   */
+  double ModelDataChi2(const ObjectiveContext &c) const;
+  void ModelDataResiduals(const ObjectiveContext &c, vector_r &residuals) const;
+  bool ModelDataGradient(const ObjectiveContext &c, const ParamIndexMap &pmap, const vector_matrix_r *shiftDeriv,
+                         GradAccum &accum) const;
+  bool AppendModelDataRows(const ObjectiveContext &c, const ParamIndexMap &pmap, const vector_matrix_r *shiftDeriv,
+                           int nCols, vector_r &residuals, vector_r &jac) const;
   const std::vector<std::unique_ptr<ObjectiveTerm> > &Terms() const { return terms_; }
 
  private:

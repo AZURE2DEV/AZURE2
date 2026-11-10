@@ -153,3 +153,34 @@ The test changes are in commits of their own: 1c11fe1e (`prior_covariance` (c), 
 terms themselves (step 3 as designed). The `inference/` target is not a separate library yet: the terms use the
 engine's `EData` and `CNuc` directly, and become a library when Phase 4 makes the data plain values. The MCMC's
 level-energy spread and its user priors keep their code.
+
+## 5. T9, the model data (Phase 4 step S15, decision M10)
+
+T9 is one term, `ModelDataTerm` in `src/Objective.cpp` (`ModelOnly() = true`, at T9's place in the list, so the sum
+keeps its order), over the rows of `ModelDataSet` (`include/ModelData.h`): first the lines of `<scatteringLengths>`
+(Re, then Im, each when its σ > 0), then the `datum` records of `<modelData>` in file order (one row, two for a
+scattering length with an imaginary part). Each row is (q_k(θ) − d_k)/e_k; the term is Σ r_k² in row order. With
+`<scatteringLengths>` alone the rows, their order, their χ² and every output are those of the former
+`ScatteringLengthTerm` (the 179 × 3 comparison of the branch).
+
+Every path asks the objective: the value (`Objective::Chi2`, `ModelChi2`; the MCMC likelihood `ModelDataChi2`), the
+least-squares rows (`ModelDataResiduals`, the GSL path; `AppendModelDataRows`, LM and the API, after the data rows and
+before the prior covariance, where the scattering-length rows were), and the gradient (`ModelDataGradient`, the
+Minuit adjoint path and the API). The six hand-written scattering-length sites of `AZURECalc`, `AZUREAPI` and
+`AZURECalcMCMC` call these.
+
+- **Scattering lengths**: `ScatteringLength::ConstraintValue`; gradient and rows exact, through the level-matrix
+  adjoint at the threshold (`ScatteringLength::ConstraintGradient`).
+- **Level quantities** (`resonance_strength`, `resonance_energy`, `total_width`, `partial_width`, `branching_ratio`,
+  `anc`): from the observed energy and widths of the current fit values, `CNuc::ObservedOfFitValues` (TransformOut's
+  two steps without messages: formal → Brune by `brune_from_formal` in the formal basis, then `observed_levels`; the
+  N_f^−½ that TransformToBrune sets is put back, so nothing a calculation reads changes). The formulas are
+  `physics/ResonanceQuantities.h`. Gradient and rows: central differences of the observed quantities over the level
+  parameters of the data's J^π groups (all groups with external capture), each parameter set and set back by
+  `CNuc::SetFitLevelParameter` (bit for bit), steps 10⁻⁵ max(1, |E|) MeV and 10⁻⁵ max(|γ|, 10⁻³) MeV^½; Park's shift
+  functions are recomputed after. An exact chain rule through the formal → Brune iteration was not written (no
+  adjoint exists for it).
+
+Totals: the writer gets the `<scatteringLengths>` part (`Total-Scattering-Length-Chi-Squared`) and the `<modelData>`
+part (`Total-Model-Data-Chi-Squared`, written only with the section); pyazr's `penalties()["scattering_length"]` is
+the whole term ("model data"); `pyazr.model_data` gives the rows of the section as records.

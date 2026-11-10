@@ -3,6 +3,7 @@
 
 #include "Constants.h"
 #include <cstdint>
+#include <vector>
 
 #include <limits>
 
@@ -169,10 +170,15 @@ class ALevel {
   /// Mark the level as an external-capture final state of a pair, with its
   /// multipolarity mask.
   void SetECParams(int, unsigned char);
+  /// The level IDs (column 9 of <levels>) of the lines read into this level, in file order without repeats: the
+  /// names a <modelData> datum uses for it (docs/upgrade/project_format3.md F13).
+  const std::vector<int> &IDs() const { return ids_; }
+  void AddID(int id);
 
  private:
   static std::uint64_t NewStamp();
   std::uint64_t stamp_ = NewStamp();
+  std::vector<int> ids_;
   bool isinrmatrix_;
   bool energyfixed_;
   bool isECLevel_;

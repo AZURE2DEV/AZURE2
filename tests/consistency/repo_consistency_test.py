@@ -414,17 +414,20 @@ if not ELEMENT_RUN.search(read("physics/src/Elements.cpp")):
     problems.append("check 10b: physics/src/Elements.cpp does not match the element pattern; update this check")
 
 # 11. One objective (docs/upgrade/objective.md): the chi^2 terms beyond the data points -- Park's wall, abundances,
-#     scattering lengths, target-effect priors, the data covariance -- are added in src/Objective.cpp, which every
+#     the model data (scattering lengths, <modelData>), target-effect priors, the data covariance -- are added in src/Objective.cpp, which every
 #     path (CLI fit, gradient, API, writer) asks.  A new path that adds one itself drifts from the rest the first time
 #     a term changes.  Allowed elsewhere: the files that define the terms, and the listed uses with their reason.
 PENALTIES = ("ParkNormPenalty", "AbundancePenalty", "AbundanceSumPenalty", "ScatteringLength::Chi2",
+             "ScatteringLength::Residuals", "ScatteringLength::Chi2Gradient", "ModelData::Chi2", "ModelData::Residuals",
+             "ModelData::Gradient", "ModelData::AppendRows",
              "ScreeningPenalty", "DensityPenalty", "DopplerPenalty", "ThicknessPenalty", "CovarianceChi2Correction")
-DEFINERS = {"src/Objective.cpp", "src/CNuc.cpp", "src/ScatteringLength.cpp", "src/EData.cpp", "src/ESegment.cpp",
-            "src/TargetEffect.cpp"}
+DEFINERS = {"src/Objective.cpp", "src/CNuc.cpp", "src/ScatteringLength.cpp", "src/ModelData.cpp", "src/EData.cpp",
+            "src/ESegment.cpp", "src/TargetEffect.cpp"}
 ALLOWED_PENALTY_USES = {
     # The MCMC splits the posterior: per-nucleus abundance priors are log-priors (CalculateLogPrior), so the
-    # likelihood carries only the sum-to-one term and the scattering lengths; Park's wall rejects the step outright.
-    ("src/AZURECalcMCMC.cpp", "AbundanceSumPenalty"), ("src/AZURECalcMCMC.cpp", "ScatteringLength::Chi2"),
+    # likelihood carries only the sum-to-one term (and the model data, Objective::ModelDataChi2); Park's wall rejects
+    # the step outright.
+    ("src/AZURECalcMCMC.cpp", "AbundanceSumPenalty"),
     ("src/AZURECalcMCMC.cpp", "ParkNormPenalty"),
     # The API's data chi^2 in residual form (EvaluateFilledChi2, the analytic gradient): T2 for its rows;
     # pyazr_objective checks it against the CLI's objective.
@@ -474,6 +477,34 @@ try:
                         "(after AZURE2 --schema > tests/schema/schema_v3.json if the table changed)")
 except (OSError, ValueError) as e:
     problems.append(f"check 18: {e}")
+
+
+# 27. Every model-data quantity is evaluated and tested (CLAUDE.md recipe "A model-only datum"; data_model.md M10): each
+#     quantity of the table for record kind datum (experiment/src/Quantities.cpp, q.recordKinds = kDatum) has its row
+#     in ModelQuantities() (experiment/src/ModelDatum.cpp: the engine's evaluation, src/ModelData.cpp, switches on it)
+#     and a test named after it, a shell function `test_<quantity>()` or a Python `def test_<quantity>(` under tests/.
+quantities_text = read("experiment/src/Quantities.cpp")
+datum_quantities = []
+for body in re.split(r"\nQuantity \w+\(\) \{", quantities_text)[1:]:
+    body = body.split("\n}\n", 1)[0]
+    m = re.search(r'q\.name = "(\w+)";', body)
+    if m and re.search(r"q\.recordKinds = kDatum;", body):
+        datum_quantities.append(m.group(1))
+if not datum_quantities:
+    problems.append("check 27: no datum quantities found in experiment/src/Quantities.cpp; update this test")
+evaluated = set(re.findall(r'(?m)^\s*\{"(\w+)", ModelQuantity::\w+\}', read("experiment/src/ModelDatum.cpp")))
+test_names = set()
+for dirpath, _, files in os.walk(os.path.join(ROOT, "tests")):
+    for name in files:
+        if name.endswith((".sh", ".py")):
+            text = open(os.path.join(dirpath, name), encoding="utf-8", errors="replace").read()
+            test_names.update(re.findall(r"(?m)^\s*(?:def )?test_(\w+)\s*\(", text))
+for q in datum_quantities:
+    if q not in evaluated:
+        problems.append(f"{q}: a datum quantity of the table without a row in ModelQuantities() "
+                        "(experiment/src/ModelDatum.cpp) and its evaluation in src/ModelData.cpp")
+    if q not in test_names:
+        problems.append(f"{q}: a datum quantity without a test named after it (test_{q} under tests/)")
 
 
 # 24. Every diagnostic code is declared, listed in the schema and tested (docs/upgrade/project_format3.md section 7.4):

@@ -1,6 +1,5 @@
 #include "Objective.h"
 #include "AZURECalcMCMC.h"
-#include "ScatteringLength.h"
 #include "ParameterLabel.h"
 #include "Config.h"
 #include "CNuc.h"
@@ -114,8 +113,7 @@ double AZURECalcMCMC::CalculateLogLikelihood(const vector_r &p) const {
 
   // Isotopic abundances: priors and the sum-to-one term, part of the posterior as of the fit.
   if (localCompound->HasAbundanceBlock()) chiSquared += localCompound->AbundanceSumPenalty(configure().abundanceSumSigma);  // per-nucleus priors: CalculateLogPrior
-  if (localCompound->HasScatteringLengthConstraints())  // measured scattering lengths: part of the likelihood
-    chiSquared += ScatteringLength::Chi2(localCompound, configure(), localCompound->ScatteringLengthConstraints());
+  chiSquared += Objective::Engine().ModelDataChi2(context);  // the model data (T9): part of the likelihood
 
   // Return objects to pool instead of deleting
   ReturnPooledCNuc(localCompound);
@@ -205,8 +203,7 @@ double AZURECalcMCMC::CalculateLogLikelihoodPhysical(const vector_r &params_) co
 
   // Isotopic abundances: priors and the sum-to-one term, part of the posterior as of the fit.
   if (localCompound->HasAbundanceBlock()) chiSquared += localCompound->AbundanceSumPenalty(configure().abundanceSumSigma);  // per-nucleus priors: CalculateLogPrior
-  if (localCompound->HasScatteringLengthConstraints())  // measured scattering lengths: part of the likelihood
-    chiSquared += ScatteringLength::Chi2(localCompound, configure(), localCompound->ScatteringLengthConstraints());
+  chiSquared += Objective::Engine().ModelDataChi2(context);  // the model data (T9): part of the likelihood
 
   // Return objects to pool instead of deleting
   ReturnPooledCNuc(localCompound);

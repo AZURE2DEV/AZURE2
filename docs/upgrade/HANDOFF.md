@@ -2,6 +2,40 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-10 (morning) — Phase 4 S15: `<modelData>`, `ModelDataTerm`, ωγ first; scattering lengths as its rows (`feature/upgrade-4-model-data`)
+
+**Done** (`data_model.md` §4, M10; `project_format3.md` §3.10; `objective.md` §5).
+- `physics/ResonanceQuantities.h`: ω, ωγ = ωΓ_aΓ_b/Γ, Γ_b/Γ, Γ = Σ|Γ_c| with partial derivatives (test
+  `physics_resonance_quantities`: T2 level 5 by hand, 12C+12C ω, derivatives against central differences); binding
+  `_azure2.statistical_factor`, `resonance_strength`, `branching_ratio` on arrays.
+- `experiment/ModelDatum.h`: `ModelQuantity`, `ModelQuantities()`, `BuildModelData(validated, LevelInfo[], PairInfo[])`
+  (no engine: `<levels>` as plain tables); codes `E_UNKNOWN_LEVEL`, `E_LEVEL_JPI`, `E_UNKNOWN_PAIR`, `E_AMBIGUOUS_PAIR`,
+  `E_NOT_A_CHANNEL`, `W_BROAD_LEVEL`, `W_NEARBY_LEVEL` (cases in `experiment_diagnostics`); table: strength and
+  branching ratio refuse a `[total]` exit (schema JSON and `format3.rst` regenerated, `schema_version` 3.0 kept).
+- Engine: `ALevel::IDs()` (the `<levels>` IDs of a level, from `CNuc::Fill`); `src/ModelData.cpp` reads
+  `<scatteringLengths>` (unchanged grammar) and `<modelData>` (`io::ReadRecords` + `Schema::Validate` +
+  `BuildModelData`), evaluates the level quantities from `CNuc::ObservedOfFitValues` (`src/CNucObserved.cpp`:
+  TransformOut's two steps without messages, N_f^−½ put back), gradient and rows by central differences through
+  `CNuc::SetFitLevelParameter`; scattering lengths exact as before. `ModelDataTerm` replaces `ScatteringLengthTerm` at
+  T9; the six hand-written sites (`AZURECalc` gradient, LM rows, GSL rows; `AZUREAPI` gradient, rows; MCMC ×2) call
+  `Objective::ModelDataGradient` / `AppendModelDataRows` / `ModelDataResiduals` / `ModelDataChi2`. Check 11 extended.
+- Outputs: `modelData.out` and the run log table; `Total-Model-Data-Chi-Squared` in `chiSquared.out` (with the
+  section); a project with model data and no segments runs. pyazr 2.16.0: `pyazr.model_data(model)` → `ModelDatum`
+  records (from `objective_terms_rwa()["model_data"]`); `penalties()["scattering_length"]` is the whole term
+  ("model data").
+- Recipe "A model-only datum" in `CLAUDE.md`, check 27 (every datum quantity has its `ModelQuantities()` row and a
+  `test_<quantity>`); docs `data_formats.rst`, `output_files.rst`, `chi_squared.rst`, `objective.md` §5.
+
+**Verified** (2 threads, `work/b-mdata`, 0 warnings): 179 × 3 against `tab-p3f` 689 / 662 / 689 identical;
+`scripts/check.sh --quick` (ctest −LE slow) 151/151; `tests/run_tests.sh` 136 passed, 0 failed (OMP 2, 2230 s; with
+`model_data`). Cost of the term on T2 (model data alone, 1 thread): about 70 µs per evaluation (Brune, Park), 360 µs
+(formal: the Brune iteration), against about 77 ms for a T2 evaluation; T2 fit200 (`--use-lm --max-calls=200`, 1
+thread, table on) 16.3–17.0 s without, 16.5 s with one strength. Not run: 1 vs 8 threads (budget), sphinx, `ctest -L slow`.
+
+**Open.** The converter writes `pair` labels without the light particle's excitation (`Builder::PairLabel`), which
+`BuildModelData` then matches to the ground-state pair or refuses; converting a format-2 file that already has a
+`<modelData>` section writes a second one (the reader takes the first only). Full report: `work/mdata/REPORT.md`.
+
 ## 2026-11-10 (morning) — format 3, step 3b-1, G1: the engine's set-up consumes specs (S9) (`feature/upgrade-4-format3-reader`)
 
 **Done.**

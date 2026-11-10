@@ -144,7 +144,7 @@ int AZUREAPI::Initialize() {
       if (data()->Fill(configure(), compound()) == -1) {
         // configure().outStream << "Could not fill data object from file." << std::endl;
         return -1;
-      } else if (data()->NumSegments() == 0) {
+      } else if (data()->NumSegments() == 0 && compound()->GetModelData().NumResiduals() == 0) {
         // configure().outStream << "There is no data provided." << std::endl;
         return -1;
       }
@@ -1247,9 +1247,8 @@ bool AZUREAPI::Chi2GradEGammaNorm(const vector_r &full, vector_r &gradFull,
   };
 
   bool ok = AccumulateEGammaGradient(lc, ld, results(), configure(), pmap, sdp, fb, accum);
-  // Measured scattering lengths: the level-matrix adjoint at each threshold (false -> finite differences).
-  if (ok && lc->HasScatteringLengthConstraints())
-    ok = ScatteringLength::Chi2Gradient(lc, configure(), lc->ScatteringLengthConstraints(), accum, sdp);
+  // The model data (T9; false -> finite differences).
+  if (ok) ok = Objective::Engine().ModelDataGradient(ObjectiveContext{lc, ld, results(), full, configure()}, pmap, sdp, accum);
   if (ok) {
     if (configure().paramMask & Config::USE_PARK_FORMALISM) AddParkPenaltyGradient(lc, configure(), accum);
     if (lc->HasAbundanceBlock()) AddAbundancePenaltyGradient(lc, configure(), accum);
@@ -1534,27 +1533,10 @@ vector_r AZUREAPI::CalculateResidualJacobianRWA(const vector_r &params, const st
   // Data covariance: whiten the data rows, w = W r per group (W^T W = M^-1, sum w^2 = r^T M^-1 r).
   if (ld->HasCovariance()) ld->WhitenResidualRows(residuals, &jacobian, nCols);
 
-  // Measured scattering lengths: rows after the data rows, as AZURECalc::ResidualJacobian.
-  if (lc->HasScatteringLengthConstraints()) {
-    if (configure().paramMask & Config::USE_BRUNE_FORMALISM) lc->CalcShiftFunctions(configure());
-    const std::vector<ScatteringLength::Constraint> &cons = lc->ScatteringLengthConstraints();
-    vector_r rs;
-    ScatteringLength::Residuals(lc, configure(), cons, rs);
-    for (size_t q = 0; q < rs.size(); q++) {
-      GradAccum acc;
-      acc.Init(lc);
-      if (!ScatteringLength::Chi2Gradient(lc, configure(), cons, acc, sdp, (int)q)) return vector_r{-1.0};
-      vector_r rowFull(pmap.NumFull(), 0.0);
-      acc.Scatter(pmap, rowFull);
-      residuals.push_back(rs[q]);
-      const size_t base = jacobian.size();
-      jacobian.resize(base + (size_t)nCols, 0.0);
-      for (int f = 0; f < pmap.NumFull(); f++) {
-        const int a = pmap.FullToPacked(f);
-        if (a >= 0 && a < nCols) jacobian[base + (size_t)a] = rowFull[f];
-      }
-    }
-  }
+  // The model data (T9): rows after the data rows, as AZURECalc::ResidualJacobian.
+  if (!Objective::Engine().AppendModelDataRows(ObjectiveContext{lc, ld, results(), full, configure()}, pmap, sdp, nCols,
+                                               residuals, jacobian))
+    return vector_r{-1.0};
 
   // Prior parameter covariance: its whitened rows L^-1 (p - mu) last, Jacobian L^-1 on its parameters' columns.
   if (const PriorCovariance *pc = ld->GetPriorCovariance())

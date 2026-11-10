@@ -24,7 +24,6 @@
 #include "azure2/convert/SegLine.h"
 #include "azure2/convert/SpecsFromOldLines.h"
 #include "TargetEffect.h"
-
 #include <cstdio>
 #include <sstream>
 #include "azure2/io/Convert.h"
@@ -187,6 +186,7 @@ void apply_options(Config &config, const RuntimeOptions &opt) {
 
 }  // namespace
 
+void AddModelData(py::dict &terms, const AZUREAPI &api, const vector_r &free);  // pybind_model_data.cpp
 class Session {
  public:
   Session(const std::string &configfile, const RuntimeOptions &opt) :
@@ -632,6 +632,7 @@ class Session {
     d["shift"] = to_array(seg.shift);
     d["shift_sqrt"] = to_array(seg.shiftSqrt);
     d["shift_fn"] = to_array(seg.shiftFn);
+    AddModelData(d, *api_, v);  // the <modelData> data, one record each
     return d;
   }
   py::array_t<double> calculate_residual_jacobian_rwa(const py::array_t<double, py::array::forcecast> &p,
@@ -918,7 +919,6 @@ PYBIND11_MODULE(_azure2, m) {
 
   py::register_exception<AZURE2Error>(m, "AZURE2Error", PyExc_RuntimeError);
   BindPhysics(m);
-
   BindThm(m);  // pybind_thm.cpp: the engine's reading of a <thm> block, for AzrModel
 
   m.def(

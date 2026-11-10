@@ -356,6 +356,17 @@ class AZUREAPI {
    */
   vector_r CalculateScatteringLengthsRWA(const vector_r &rwaParams) const;
 
+  /// The model values of the <modelData> data at a free RWA vector (ModelData::SectionValues), one per datum in file
+  /// order; values in the unit the datum is written in.  AZUREAPIModelData.cpp.
+  struct ModelDatumValue {
+    std::string name, quantity, unit, source;
+    double model = 0.0, value = 0.0, error = 0.0, residual = 0.0;
+    bool hasImag = false;  ///< a scattering length with Im a0 given: the *Imag members
+    double modelImag = 0.0, imag = 0.0, imagError = 0.0, residualImag = 0.0;
+    double chi2 = 0.0;  ///< the datum's share of the objective's model-data term
+  };
+  std::vector<ModelDatumValue> ModelDataRWA(const vector_r &rwaParams) const;
+
   /*!
    * Park formalism: the overlap J = 1 - sum_c gamma_c^2 dS_c/dE of every
    * R-matrix level at the given non-fixed RWA parameters, in the order of
