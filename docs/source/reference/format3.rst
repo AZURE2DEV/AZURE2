@@ -92,7 +92,7 @@ Value types
      - element symbols with their atoms per formula unit
    * - ``reaction_expr``
      - ``<reaction> { + <reaction> } | <reaction> / <reaction>``
-     - reactions <A><X>(<a>,<b>)<A><Y>[<E_x>\|total], a sum or a ratio of two, scaled terms <c>\*<reaction>, terms at a fixed angle '@ <angle> <unit> lab\|cm'
+     - reactions <A><X>[<E_x>](<a>,<b>)<A><Y>[<E_x>\|total] (the target's state for an excited entrance pair), a sum or a ratio of two, scaled terms <c>\*<reaction>, terms at a fixed angle '@ <angle> <unit> lab\|cm'
    * - ``columns``
      - ``<role> <role> ... | from_file``
      - the role of each column of the data file, energy and angle roles with their unit
@@ -126,8 +126,16 @@ Data set, in ``<data>``.  Measured values of one quantity in one data file (sect
      - ``<reaction> { + <reaction> } | <reaction> / <reaction>``
      - required
      - the reaction expression (section 3.5)
+   * - ``entrance_pair``
+     - ``<integer >= 1>``
+     - only when the reaction is one reaction (no sum, no ratio); optional
+     - the <levels> pair key of the entrance pair, only where the reaction label names two pairs
+   * - ``exit_pair``
+     - ``<integer >= 1>``
+     - only when the reaction is one reaction (no sum, no ratio); optional
+     - the <levels> pair key of the exit pair, only where the reaction label names two pairs
    * - ``quantity``
-     - ``sigma|sigma_total|dsigma_domega|sfactor|ratio_to_rutherford|ratio_to_mott|legendre|analyzing_power|phase_shift|yield|transmission|neutron_yield|beta_delayed_spectrum``
+     - ``sigma|sigma_nuclear|sigma_total|dsigma_domega|sfactor|ratio_to_rutherford|ratio_to_mott|legendre|analyzing_power|phase_shift|yield|transmission|neutron_yield|beta_delayed_spectrum``
      - required
      - what the numbers are (section 7.2)
    * - ``unit``
@@ -306,8 +314,16 @@ Extrapolation, in ``<extrapolations>``.  Model values on a grid, without data (s
      - ``<reaction> { + <reaction> } | <reaction> / <reaction>``
      - required
      - the reaction expression (section 3.5)
+   * - ``entrance_pair``
+     - ``<integer >= 1>``
+     - only when the reaction is one reaction (no sum, no ratio); optional
+     - the <levels> pair key of the entrance pair, only where the reaction label names two pairs
+   * - ``exit_pair``
+     - ``<integer >= 1>``
+     - only when the reaction is one reaction (no sum, no ratio); optional
+     - the <levels> pair key of the exit pair, only where the reaction label names two pairs
    * - ``quantity``
-     - ``sigma|sigma_total|dsigma_domega|sfactor|ratio_to_rutherford|ratio_to_mott|legendre|analyzing_power|phase_shift|yield|transmission|neutron_yield|beta_delayed_spectrum``
+     - ``sigma|sigma_nuclear|sigma_total|dsigma_domega|sfactor|ratio_to_rutherford|ratio_to_mott|legendre|analyzing_power|phase_shift|yield|transmission|neutron_yield|beta_delayed_spectrum``
      - required
      - what is computed (section 7.2)
    * - ``unit``
@@ -636,11 +652,47 @@ Cross section (``dataset``, ``extrapolation``).  Angle-integrated cross section 
    * - EXFOR
      - ``,SIG``, ``PAR,SIG``, ``,SIG,,TTA``
    * - refused (validate)
-     - charged_elastic: the angle-integrated elastic cross section of charged particles is infinite: give dsigma_domega or ratio_to_rutherford (LEXFOR p. S.2) (``E_REACTION_NOT_ALLOWED``)
+     - charged_elastic: the angle-integrated elastic cross section of charged particles is infinite: give dsigma_domega or ratio_to_rutherford (LEXFOR p. S.2); the integral of the nuclear amplitude alone is quantity sigma_nuclear (``E_REACTION_NOT_ALLOWED``)
    * - refused (validate)
      - multipole with a particle exit: a multipole filter selects photon multipoles (``E_FIELD_NOT_APPLICABLE``)
    * - refused (validate)
      - target kind infinite: a thick (infinite) target gives a yield: use quantity yield (``E_TARGET_KIND``)
+
+sigma_nuclear
+~~~~~~~~~~~~~
+
+Nuclear elastic integral (``dataset``, ``extrapolation``).  Angle-integrated elastic cross section of the nuclear amplitude alone, pi/k^2 sum g \|T\|^2; for a charged pair it leaves out the Coulomb amplitude and its interference and is not a measurable cross section: for tests, diagnostics and comparison with phase-shift formulas.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 20 80
+
+   * - property
+     - value
+   * - engine unit
+     - ``b``
+   * - units
+     - ``b`` (1), ``mb`` (0.001), ``ub`` (1e-06), ``nb`` (1e-09), ``1`` (--)
+   * -
+     - ``1`` only when the reaction is a ratio
+   * - energy column
+     - ``E_lab``, ``E_cm``
+   * - reaction
+     - elastic, charged entrance; sums and ratios
+   * - ``target``
+     - allowed
+   * - ``beam``
+     - allowed
+   * - ``detector``
+     - allowed
+   * - target kinds
+     - ``layer``, ``none``
+   * - tree
+     - ``SigmaNuclear(r) = pi/k^2 sum g |T|^2 (GenMatrixFunc, angle-integrated, entrance = exit)``
+   * - refused (validate)
+     - inelastic: the nuclear elastic integral is an elastic quantity (``E_REACTION_NOT_ALLOWED``)
+   * - refused (validate)
+     - neutral: for a neutral pair the elastic cross section is quantity sigma (``E_REACTION_NOT_ALLOWED``)
 
 sigma_total
 ~~~~~~~~~~~
@@ -1715,3 +1767,6 @@ Diagnostic codes
    * - ``E_DEGENERATE_NUISANCE``
      - error
      - efficiency and norm both free without a prior (F9)
+   * - ``W_NOT_MEASURABLE``
+     - warning
+     - a data set of a quantity that is computed for tests and comparison, not measured

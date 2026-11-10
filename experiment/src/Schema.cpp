@@ -235,6 +235,17 @@ const Forms &StructuredValues() {
 }
 
 // ---------------------------------------------------------------- fields shared by several kinds
+/// The pair keys of <levels> for a reaction whose label names two pairs (section 3.5): written labels, as the level
+/// ID of a datum (F13 (a)); accepted only where the label alone is ambiguous and required there (step 3 checks both
+/// against <levels>); not for a sum or a ratio (their terms wait for named pairs).
+std::vector<FieldDef> PairKeyFields() {
+  const Condition single = Condition::Of(Condition::SingleReaction);
+  return {OptionalWhen("entrance_pair", "Entrance pair key", IntAtLeast(1), single,
+                       "the <levels> pair key of the entrance pair, only where the reaction label names two pairs"),
+          OptionalWhen("exit_pair", "Exit pair key", IntAtLeast(1), single,
+                       "the <levels> pair key of the exit pair, only where the reaction label names two pairs")};
+}
+
 std::vector<FieldDef> ApparatusFields() {
   const Forms &f = StructuredValues();
   const Condition fold = Condition::Of(Condition::Fold);
@@ -278,8 +289,9 @@ RecordKind DatasetKind() {
   k.sections = {"data"};
   k.title = "Data set";
   k.doc = "Measured values of one quantity in one data file (section 3.4).";
-  k.fields = Concat({{Req("reaction", "Reaction", Spec(ValueType::Reaction), "the reaction expression (section 3.5)"),
-                      Req("quantity", "Quantity", QuantityEnum("dataset"), "what the numbers are (section 7.2)"),
+  k.fields = Concat({{Req("reaction", "Reaction", Spec(ValueType::Reaction), "the reaction expression (section 3.5)")},
+                     PairKeyFields(),
+                     {Req("quantity", "Quantity", QuantityEnum("dataset"), "what the numbers are (section 7.2)"),
                       Req("unit", "Unit", Spec(ValueType::Unit, "@quantity"), "unit of the value and error columns"),
                       Req("file", "Data file", Spec(ValueType::Path), "the data file, relative to the project"),
                       Req("columns", "Columns", Spec(ValueType::Columns), "role of each column (section 3.4.1)"),
@@ -328,8 +340,9 @@ RecordKind ExtrapolationKind() {
   k.sections = {"extrapolations"};
   k.title = "Extrapolation";
   k.doc = "Model values on a grid, without data (section 3.8, F20).";
-  k.fields = Concat({{Req("reaction", "Reaction", Spec(ValueType::Reaction), "the reaction expression (section 3.5)"),
-                      Req("quantity", "Quantity", QuantityEnum("extrapolation"), "what is computed (section 7.2)"),
+  k.fields = Concat({{Req("reaction", "Reaction", Spec(ValueType::Reaction), "the reaction expression (section 3.5)")},
+                     PairKeyFields(),
+                     {Req("quantity", "Quantity", QuantityEnum("extrapolation"), "what is computed (section 7.2)"),
                       Req("unit", "Unit", Spec(ValueType::Unit, "@quantity"), "unit of the output values"),
                       Req("energies", "Energies", GridOf("energy"), "the energy grid (F10: E_k = lo + k step)"),
                       Opt("angles", "Angles", GridOrNone("angle"), "the angle grid; required for quantities with an angle"),
@@ -499,6 +512,7 @@ const char *ConditionKindName(Condition::Kind k) {
     case Condition::FieldPresent: return "field_present";
     case Condition::UnitDimension: return "unit_dimension";
     case Condition::RatioReaction: return "ratio_reaction";
+    case Condition::SingleReaction: return "single_reaction";
     case Condition::AngleAxis: return "angle_axis";
     case Condition::GammaExit: return "gamma_exit";
     case Condition::ThmExperiment: return "thm_experiment";
@@ -517,6 +531,7 @@ std::string Describe(const Condition &c) {
     case Condition::FieldPresent: return c.field + " is" + (c.negate ? " not" : "") + " given";
     case Condition::UnitDimension: return "the unit is" + std::string(no) + " " + values;
     case Condition::RatioReaction: return "the reaction is" + std::string(no) + " a ratio";
+    case Condition::SingleReaction: return "the reaction is" + std::string(no) + " one reaction (no sum, no ratio)";
     case Condition::AngleAxis: return "the record has" + std::string(c.negate ? " no" : " an") + " angle axis (a theta column or an angle grid)";
     case Condition::GammaExit: return "the reaction has" + std::string(c.negate ? " no" : " a") + " photon exit";
     case Condition::ThmExperiment: return "thm" + std::string(c.negate ? " does not name" : " names") + " an experiment of <thm>";

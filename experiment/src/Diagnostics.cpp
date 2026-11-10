@@ -78,6 +78,8 @@ const std::vector<DiagnosticCode> &DiagnosticCodes() {
       {kUnknownEpoch, E, "target@epoch where the target has no such epoch"},
       {kTargetKind, E, "a target whose kind the quantity does not take"},
       {kDegenerateNuisance, E, "efficiency and norm both free without a prior (F9)"},
+      // Warnings
+      {kNotMeasurable, Severity::Warning, "a data set of a quantity that is computed for tests and comparison, not measured"},
   };
   return table;
 }

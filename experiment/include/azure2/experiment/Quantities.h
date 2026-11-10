@@ -91,6 +91,8 @@ struct Quantity {
   std::string tree;
   std::vector<std::string> exfor;
   std::vector<Refusal> refusals;
+  /// Non-empty for a quantity that is no measurable observable: a data set of it gets W_NOT_MEASURABLE with this text.
+  std::string datasetWarning;
 };
 
 const std::vector<Quantity> &Quantities();

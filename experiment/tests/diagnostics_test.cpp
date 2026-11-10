@@ -137,6 +137,23 @@ int main() {
   check("scattering_length of a charged pair (Coulomb-modified)",
         Diagnose(Model("datum a1\n    quantity scattering_length\n    pair p+7Be\n    s 2\n    value -7 fm\n    error 1 fm\n")).empty());
 
+  // step 3a, director's D1-D3: sigma_nuclear in an extrapolation (no warning); a pair key on one reaction; a target state
+  check("sigma_nuclear in an extrapolation validates",
+        Diagnose("<extrapolations>\nextrapolation x1\n    reaction 12C(p,p)12C\n    quantity sigma_nuclear\n    unit b\n"
+                 "    energies range 0.5 1 MeV lab step 0.1\n</extrapolations>\n")
+            .empty());
+  check("entrance_pair and exit_pair on one reaction validate",
+        Diagnose(Data(kDataset + "    entrance_pair 1\n    exit_pair 2\n")).empty());
+  check("a target state: 16O[2.143](n,n)16O[2.143] is elastic (sigma_total validates)",
+        Diagnose(Data(Set(Set(kDataset, "reaction", "    reaction 16O[2.143](n,n)16O[2.143]"), "quantity", "    quantity sigma_total")))
+            .empty());
+  {
+    const std::vector<Diagnostic> d =
+        Diagnose(Data(Set(Set(kDataset, "reaction", "    reaction 16O[2.143](n,n)16O"), "quantity", "    quantity sigma_total")));
+    check("a target state different from the residual's: not elastic",
+          d.size() == 1 && d[0].code == std::string("E_REACTION_NOT_ALLOWED"));
+  }
+
   const std::vector<Case> cases = {
       // The reader
       {"E_UNTERMINATED_QUOTE", Data(Set(kDataset, "file", "    file \"f.dat"))},
@@ -193,6 +210,12 @@ int main() {
       {"E_ROLE_TWICE", Data(Set(kDataset, "columns", "    columns E_lab[MeV] value value error"))},
       {"E_ROLE_REQUIRED", Data(Set(kDataset, "columns", "    columns E_lab[MeV] value"))},
       {"E_ROLE_NOT_ALLOWED", Data(Set(kDataset, "columns", "    columns E_lab[MeV] theta_lab[deg] value error"))},
+      // a data set of a quantity that is not measurable
+      {"W_NOT_MEASURABLE", Data(Set(Set(kDataset, "reaction", "    reaction 15N(p,p)15N"), "quantity", "    quantity sigma_nuclear"))},
+      // a pair key on a sum (its terms wait for named pairs)
+      {"E_FIELD_NOT_APPLICABLE", Data(Set(kDataset, "reaction", "    reaction 15N(p,a)12C + 15N(p,a)12C[4.439]") + "    entrance_pair 1\n")},
+      // a target state that is not a number
+      {"E_REACTION_SYNTAX", Data(Set(kDataset, "reaction", "    reaction 16O[total](n,n)16O"))},
       // E_x is no column role (step 3a): no quantity takes an excitation-energy column; 'frame E_x' of a datum is a
       // field value
       {"E_UNKNOWN_ROLE", Data(Set(kDataset, "columns", "    columns E_x[MeV] value error"))},

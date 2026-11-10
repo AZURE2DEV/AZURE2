@@ -81,7 +81,7 @@
   },
   "reaction_expr": {
    "grammar": "<reaction> { + <reaction> } | <reaction> / <reaction>",
-   "doc": "reactions <A><X>(<a>,<b>)<A><Y>[<E_x>|total], a sum or a ratio of two, scaled terms <c>*<reaction>, terms at a fixed angle '@ <angle> <unit> lab|cm'"
+   "doc": "reactions <A><X>[<E_x>](<a>,<b>)<A><Y>[<E_x>|total] (the target's state for an excited entrance pair), a sum or a ratio of two, scaled terms <c>*<reaction>, terms at a fixed angle '@ <angle> <unit> lab|cm'"
   },
   "columns": {
    "grammar": "<role> <role> ... | from_file",
@@ -112,12 +112,36 @@
      "required": true,
      "doc": "the reaction expression (section 3.5)"
     },
+    "entrance_pair": {
+     "title": "Entrance pair key",
+     "type": "integer",
+     "grammar": "<integer >= 1>",
+     "applies_when": {
+      "if": "single_reaction",
+      "text": "the reaction is one reaction (no sum, no ratio)"
+     },
+     "required": false,
+     "min": 1,
+     "doc": "the <levels> pair key of the entrance pair, only where the reaction label names two pairs"
+    },
+    "exit_pair": {
+     "title": "Exit pair key",
+     "type": "integer",
+     "grammar": "<integer >= 1>",
+     "applies_when": {
+      "if": "single_reaction",
+      "text": "the reaction is one reaction (no sum, no ratio)"
+     },
+     "required": false,
+     "min": 1,
+     "doc": "the <levels> pair key of the exit pair, only where the reaction label names two pairs"
+    },
     "quantity": {
      "title": "Quantity",
      "type": "enum",
-     "grammar": "sigma|sigma_total|dsigma_domega|sfactor|ratio_to_rutherford|ratio_to_mott|legendre|analyzing_power|phase_shift|yield|transmission|neutron_yield|beta_delayed_spectrum",
+     "grammar": "sigma|sigma_nuclear|sigma_total|dsigma_domega|sfactor|ratio_to_rutherford|ratio_to_mott|legendre|analyzing_power|phase_shift|yield|transmission|neutron_yield|beta_delayed_spectrum",
      "required": true,
-     "values": ["sigma", "sigma_total", "dsigma_domega", "sfactor", "ratio_to_rutherford", "ratio_to_mott", "legendre", "analyzing_power", "phase_shift", "yield", "transmission", "neutron_yield", "beta_delayed_spectrum"],
+     "values": ["sigma", "sigma_nuclear", "sigma_total", "dsigma_domega", "sfactor", "ratio_to_rutherford", "ratio_to_mott", "legendre", "analyzing_power", "phase_shift", "yield", "transmission", "neutron_yield", "beta_delayed_spectrum"],
      "aliases": {
       "cross_section": "sigma",
       "dsdo": "dsigma_domega",
@@ -623,12 +647,36 @@
      "required": true,
      "doc": "the reaction expression (section 3.5)"
     },
+    "entrance_pair": {
+     "title": "Entrance pair key",
+     "type": "integer",
+     "grammar": "<integer >= 1>",
+     "applies_when": {
+      "if": "single_reaction",
+      "text": "the reaction is one reaction (no sum, no ratio)"
+     },
+     "required": false,
+     "min": 1,
+     "doc": "the <levels> pair key of the entrance pair, only where the reaction label names two pairs"
+    },
+    "exit_pair": {
+     "title": "Exit pair key",
+     "type": "integer",
+     "grammar": "<integer >= 1>",
+     "applies_when": {
+      "if": "single_reaction",
+      "text": "the reaction is one reaction (no sum, no ratio)"
+     },
+     "required": false,
+     "min": 1,
+     "doc": "the <levels> pair key of the exit pair, only where the reaction label names two pairs"
+    },
     "quantity": {
      "title": "Quantity",
      "type": "enum",
-     "grammar": "sigma|sigma_total|dsigma_domega|sfactor|ratio_to_rutherford|ratio_to_mott|legendre|analyzing_power|phase_shift|yield|transmission|neutron_yield|beta_delayed_spectrum",
+     "grammar": "sigma|sigma_nuclear|sigma_total|dsigma_domega|sfactor|ratio_to_rutherford|ratio_to_mott|legendre|analyzing_power|phase_shift|yield|transmission|neutron_yield|beta_delayed_spectrum",
      "required": true,
-     "values": ["sigma", "sigma_total", "dsigma_domega", "sfactor", "ratio_to_rutherford", "ratio_to_mott", "legendre", "analyzing_power", "phase_shift", "yield", "transmission", "neutron_yield", "beta_delayed_spectrum"],
+     "values": ["sigma", "sigma_nuclear", "sigma_total", "dsigma_domega", "sfactor", "ratio_to_rutherford", "ratio_to_mott", "legendre", "analyzing_power", "phase_shift", "yield", "transmission", "neutron_yield", "beta_delayed_spectrum"],
      "aliases": {
       "cross_section": "sigma",
       "dsdo": "dsigma_domega",
@@ -1730,7 +1778,7 @@
     {
      "code": "E_REACTION_NOT_ALLOWED",
      "rule": "charged_elastic",
-     "message": "the angle-integrated elastic cross section of charged particles is infinite: give dsigma_domega or ratio_to_rutherford (LEXFOR p. S.2)",
+     "message": "the angle-integrated elastic cross section of charged particles is infinite: give dsigma_domega or ratio_to_rutherford (LEXFOR p. S.2); the integral of the nuclear amplitude alone is quantity sigma_nuclear",
      "checked_by": "validate"
     },
     {
@@ -1746,6 +1794,68 @@
      "checked_by": "validate"
     }
    ]
+  },
+  "sigma_nuclear": {
+   "title": "Nuclear elastic integral",
+   "doc": "Angle-integrated elastic cross section of the nuclear amplitude alone, pi/k^2 sum g |T|^2; for a charged pair it leaves out the Coulomb amplitude and its interference and is not a measurable cross section: for tests, diagnostics and comparison with phase-shift formulas.",
+   "record_kinds": ["dataset", "extrapolation"],
+   "engine_unit": "b",
+   "units": {
+    "b": 1,
+    "mb": 0.001,
+    "ub": 1e-06,
+    "nb": 1e-09,
+    "1": null
+   },
+   "unit_conditions": [
+    {
+     "unit": "1",
+     "when": {
+      "if": "ratio_reaction",
+      "text": "the reaction is a ratio"
+     }
+    }
+   ],
+   "columns": {
+    "energy": ["E_lab", "E_cm"],
+    "angle": [],
+    "angle_axis": "none",
+    "order": false,
+    "windows": false
+   },
+   "reaction": {
+    "rule": "elastic, charged entrance; sums and ratios",
+    "flags": ["sum", "ratio", "elastic", "charged_entrance"]
+   },
+   "fields": {
+    "target": {
+     "required": false
+    },
+    "beam": {
+     "required": false
+    },
+    "detector": {
+     "required": false
+    }
+   },
+   "target_kinds": ["layer", "none"],
+   "tree": "SigmaNuclear(r) = pi/k^2 sum g |T|^2 (GenMatrixFunc, angle-integrated, entrance = exit)",
+   "exfor": [],
+   "refusals": [
+    {
+     "code": "E_REACTION_NOT_ALLOWED",
+     "rule": "inelastic",
+     "message": "the nuclear elastic integral is an elastic quantity",
+     "checked_by": "validate"
+    },
+    {
+     "code": "E_REACTION_NOT_ALLOWED",
+     "rule": "neutral",
+     "message": "for a neutral pair the elastic cross section is quantity sigma",
+     "checked_by": "validate"
+    }
+   ],
+   "dataset_warning": "sigma_nuclear leaves out the Coulomb amplitude and its interference: it is not a measurable cross section (for tests, diagnostics and comparison with phase-shift formulas)"
   },
   "sigma_total": {
    "title": "Total cross section",
@@ -3270,6 +3380,10 @@
   "E_DEGENERATE_NUISANCE": {
    "severity": "error",
    "meaning": "efficiency and norm both free without a prior (F9)"
+  },
+  "W_NOT_MEASURABLE": {
+   "severity": "warning",
+   "meaning": "a data set of a quantity that is computed for tests and comparison, not measured"
   }
  }
 }

@@ -96,11 +96,37 @@ Quantity Sigma() {
   q.refusals = {
       RefusedAtValidation("E_REACTION_NOT_ALLOWED", "charged_elastic",
                           "the angle-integrated elastic cross section of charged particles is infinite: give "
-                          "dsigma_domega or ratio_to_rutherford (LEXFOR p. S.2)"),
+                          "dsigma_domega or ratio_to_rutherford (LEXFOR p. S.2); the integral of the nuclear amplitude alone is "
+                          "quantity sigma_nuclear"),
       RefusedAtValidation("E_FIELD_NOT_APPLICABLE", "multipole with a particle exit",
                           "a multipole filter selects photon multipoles"),
       RefusedAtValidation("E_TARGET_KIND", "target kind infinite",
                           "a thick (infinite) target gives a yield: use quantity yield")};
+  return q;
+}
+
+Quantity SigmaNuclear() {
+  Quantity q;
+  q.name = "sigma_nuclear";
+  q.title = "Nuclear elastic integral";
+  q.doc = "Angle-integrated elastic cross section of the nuclear amplitude alone, pi/k^2 sum g |T|^2; for a charged pair "
+          "it leaves out the Coulomb amplitude and its interference and is not a measurable cross section: for tests, "
+          "diagnostics and comparison with phase-shift formulas.";
+  q.recordKinds = kDataKinds;
+  q.engineUnit = "b";
+  q.units = {AnyUnitOf("cross_section"), OneUnit("1", kRatio)};
+  q.energyRoles = {"E_lab", "E_cm"};
+  // A neutral pair's elastic sigma is the same integral and keeps the one name 'sigma'.  Sums and ratios of such terms
+  // as for sigma (a natural target's isotopes, tests/natural_target).
+  q.reaction = {R::kSum | R::kRatio | R::kElastic | R::kChargedEntrance, "elastic, charged entrance; sums and ratios"};
+  q.fields = {Allows("target"), Allows("beam"), Allows("detector")};
+  q.targetKinds = {"layer", "none"};
+  q.tree = "SigmaNuclear(r) = pi/k^2 sum g |T|^2 (GenMatrixFunc, angle-integrated, entrance = exit)";
+  q.refusals = {RefusedAtValidation("E_REACTION_NOT_ALLOWED", "inelastic", "the nuclear elastic integral is an elastic quantity"),
+                RefusedAtValidation("E_REACTION_NOT_ALLOWED", "neutral",
+                                    "for a neutral pair the elastic cross section is quantity sigma")};
+  q.datasetWarning = "sigma_nuclear leaves out the Coulomb amplitude and its interference: it is not a measurable cross "
+                     "section (for tests, diagnostics and comparison with phase-shift formulas)";
   return q;
 }
 
@@ -490,7 +516,7 @@ const std::vector<NormRule> &GeneralNormRules() {
 const std::vector<Quantity> &Quantities() {
   static const std::vector<Quantity> rows = {
       // data sets and extrapolations
-      Sigma(), SigmaTotal(), DsigmaDomega(), SFactor(), RatioToRutherford(), RatioToMott(), Legendre(),
+      Sigma(), SigmaNuclear(), SigmaTotal(), DsigmaDomega(), SFactor(), RatioToRutherford(), RatioToMott(), Legendre(),
       AnalyzingPower(), PhaseShift(), Yield(), Transmission(), NeutronYield(), BetaDelayedSpectrum(),
       // model data
       ResonanceStrength(), ResonanceEnergy(), TotalWidth(), PartialWidth(), BranchingRatio(), Anc(),

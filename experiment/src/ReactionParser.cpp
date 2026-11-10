@@ -1,9 +1,10 @@
 // Reaction expressions of format 3 (Parsers.h; docs/upgrade/project_format3.md section 3.5):
 //   expression := term { + term } | term / term
 //   term       := [<number> *] <reaction> [@ <angle> <unit> <frame>]
-//   reaction   := <A><Symbol>(<particle>,<particle>)<A><Symbol>[<state>]
+//   reaction   := <A><Symbol>[<state>](<particle>,<particle>)<A><Symbol>[<state>]
 // with light particles n p d t h a g e- b- b+ (aliases a0 p0 n0 d0 t0 h0 g0 for the ground state; ordinals a1 refused),
-// a particle excitation <particle>[<E>], and the residual state absent, [0], [<E_x in MeV>] or [total] (photons).
+// a particle excitation <particle>[<E>], the target's state absent, [0] or [<E_x in MeV>] (an entrance pair with an
+// excited heavy particle), and the residual state absent, [0], [<E_x in MeV>] or [total] (photons).
 // The pair matching against <levels> is step 3's (it needs the project's pairs).
 #include <cstddef>
 
@@ -46,14 +47,22 @@ bool ParseSingle(const std::string &text, int col, ParseContext &ctx, SingleReac
   if (open == std::string::npos || comma == std::string::npos || close == std::string::npos)
     return fail(codes::kReactionSyntax, "is not a reaction <target>(<projectile>,<ejectile>)<residual>[<state>], e.g. "
                                         "15N(p,a)12C or 12C(p,g)13N[total]");
-  std::string residual, state, error;
-  bool hasState = false;
+  std::string residual, state, error, target, targetState;
+  bool hasState = false, hasTargetState = false;
   if (!SplitExcitation(text.substr(close + 1), residual, state, hasState))
     return fail(codes::kReactionSyntax, "has unbalanced brackets in its residual state");
+  if (!SplitExcitation(text.substr(0, open), target, targetState, hasTargetState))
+    return fail(codes::kReactionSyntax, "has unbalanced brackets in its target state");
   const char *code = nullptr;
-  if (!ParseParticleText(text.substr(0, open), false, r.target, error, code) ||
+  if (!ParseParticleText(target, false, r.target, error, code) ||
       !ParseParticleText(residual, false, r.residual, error, code))
     return fail(code == codes::kNucleusSyntax ? codes::kReactionSyntax : code, "-- " + error);
+  if (hasTargetState) {
+    // the state of the target nucleus: an entrance pair whose heavy particle is excited (matched as the residual's)
+    if (!ParseNumberText(targetState, r.targetState.energy) || r.targetState.energy.value < 0)
+      return fail(codes::kReactionSyntax, "-- the target state is [<E_x in MeV>] or [0], not [" + targetState + "]");
+    if (r.targetState.energy.value > 0) r.targetState.kind = ResidualState::Excited;
+  }
   struct Light {
     std::string text;
     Particle *out;

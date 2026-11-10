@@ -43,8 +43,10 @@ const char *NuisanceModeName(NuisanceMode m) {
 }
 
 bool SingleReaction::Elastic() const {
-  return projectile.Same(ejectile) && target.Same(residual) && state.kind == ResidualState::Ground && !projectile.excited &&
-         !ejectile.excited;
+  const bool sameState = (state.kind == ResidualState::Ground && targetState.kind == ResidualState::Ground) ||
+                         (state.kind == ResidualState::Excited && targetState.kind == ResidualState::Excited &&
+                          state.energy.value == targetState.energy.value);
+  return projectile.Same(ejectile) && target.Same(residual) && sameState && !projectile.excited && !ejectile.excited;
 }
 
 bool SingleReaction::ChargedEntrance() const { return projectile.Z > 0 && target.Z > 0; }
@@ -59,7 +61,8 @@ std::string SingleReaction::Canonical() const {
     if (p.excited) s += "[" + p.excitation.text + "]";
     return s;
   };
-  std::string s = target.text + "(" + particle(projectile) + "," + particle(ejectile) + ")" + residual.text;
+  std::string s = target.text + (targetState.kind == ResidualState::Excited ? "[" + targetState.energy.text + "]" : "") + "(" +
+                  particle(projectile) + "," + particle(ejectile) + ")" + residual.text;
   if (state.kind == ResidualState::Total) s += "[total]";
   if (state.kind == ResidualState::Excited) s += "[" + state.energy.text + "]";
   return s;
