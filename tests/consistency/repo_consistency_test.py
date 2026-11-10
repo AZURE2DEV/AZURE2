@@ -368,8 +368,9 @@ for name, prefix in (("kHbarC_MeV_fm", "197.32"), ("kAtomicMassUnit_MeV", "931.4
         continue
     CONSTANTS[prefix] = (name, float(m.group(1)))
 KNOWN = {
-    # m_e of CODATA 2002 in the beta-decay Fermi-function argument; CODATA 2018 moves beta-delayed outputs (~1e-7).
-    ("src/EPoint.cpp", "0.510998903"),
+    # m_e of CODATA 2002 in the beta-decay Fermi-function argument, named and kept on purpose (maintainers' decision
+    # 2026-11-10: no result moves; one line to change); CODATA 2018 moves beta-delayed outputs (~1e-7).
+    ("include/Constants.h", "0.510998903"),
 }
 for top in ("src", "include", "api", "io", "pyazr"):
     for dirpath, _, files in os.walk(os.path.join(ROOT, top)):
