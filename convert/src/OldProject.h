@@ -15,6 +15,7 @@
 #include "azure2/convert/ScatteringLengthLine.h"
 #include "azure2/convert/SegLine.h"
 #include "azure2/convert/TargetIntLine.h"
+#include "azure2/experiment/LevelTables.h"
 #include "azure2/io/Document.h"
 
 namespace azure2 {
@@ -31,6 +32,8 @@ struct OldPair {
   std::string e1Text, e2Text;
   int A1() const;
   int A2() const;
+  /// The pair as the format-3 tables hold it (the label's fields: particles, excitations as written).
+  experiment::PairInfo Info() const;
 };
 
 /// A channel of a <levels> line: the partial wave (J, l, s) of a pair.

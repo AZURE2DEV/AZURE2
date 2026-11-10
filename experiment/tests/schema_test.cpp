@@ -112,8 +112,9 @@ int main(int argc, char **argv) {
     check("s02: norm and shift are references", s02 && s02->Get("norm")->type == ValueType::Reference &&
                                                     s02->Get("norm")->word == "D" && s02->Get("shift")->word.empty() &&
                                                     s02->Get("shift")->Get("scale")->word == "G");
-    check("s02: quadrature parts", s02 && s02->Get("quadrature")->Get("points")->integer == 20 &&
-                                       s02->Get("quadrature")->Get("per_width")->number.text == "50");
+    // the old line gives no multiplier and no points per width: the converter writes only the points
+    check("s02: quadrature parts", s02 && s02->Get("quadrature") && s02->Get("quadrature")->Get("points")->integer == 20 &&
+                                       !s02->Get("quadrature")->Get("per_width"));
     const ValidatedRecord *s11 = r.Find("s11_thm_hoes_a");
     check("s11: norm profiled, thm LC09", s11 && s11->Get("norm")->nuisance.mode == NuisanceMode::Profiled &&
                                              !s11->Get("norm")->nuisance.hasValue && s11->Get("thm")->word == "LC09");

@@ -81,8 +81,8 @@ const std::vector<DiagnosticCode> &DiagnosticCodes() {
       // Model data against <levels>
       {kUnknownLevel, E, "a datum's level ID that no active level of <levels> has, or two levels of its J^pi have"},
       {kLevelJpi, E, "a datum's J^pi that is not the J^pi of the level with its ID (F13)"},
-      {kUnknownPair, E, "a reaction or pair of a datum that no pair of <levels> has (particles and states)"},
-      {kAmbiguousPair, E, "a reaction or pair of a datum that two pairs of <levels> have"},
+      {kUnknownPair, E, "a reaction or pair that no pair of <levels> has (particles and states)"},
+      {kAmbiguousPair, E, "a reaction or pair that two pairs of <levels> have (a data set says which with a pair key)"},
       {kNotAChannel, E, "a datum's pair (or pair, l, s) that is no channel of its level, or no s-wave channel spin of the pair"},
       {kPairKey, E, "entrance_pair / exit_pair where the label names one pair, or a key the label does not name"},
       {kDataFile, E, "a data file that cannot be read, or has fewer columns than its roles"},
@@ -94,6 +94,7 @@ const std::vector<DiagnosticCode> &DiagnosticCodes() {
       {kNotMeasurable, Severity::Warning, "a data set of a quantity that is computed for tests and comparison, not measured"},
       {kBroadLevel, Severity::Warning, "a resonance strength of a level with Gamma / E_r > 1 %: eq. (8) and the area of the resonance differ"},
       {kNearbyLevel, Severity::Warning, "a resonance strength of a level with another level of its J^pi within 10 Gamma"},
+      {kDataFileNotRead, Severity::Warning, "a data file that cannot be read in a run that does not use the data (an extrapolation): not read"},
   };
   return table;
 }

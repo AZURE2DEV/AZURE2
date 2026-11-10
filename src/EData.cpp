@@ -3847,27 +3847,24 @@ void EData::SyncNormGroupParams(ROOT::Minuit2::MnUserParameters &p) const {
  * Fills the Minuit parameter array from initial values in the EData object.
  */
 
-std::string EData::SegmentParameterName(int key, ParamKind kind, int fnTerm) {
-  const std::string stem = "segment_" + std::to_string(key) + "_";
-  switch (kind) {
-    case ParamKind::Norm: return stem + "norm";
-    case ParamKind::EnergyShift: return stem + "energy_shift";
-    case ParamKind::EnergyShiftSqrt: return stem + "energy_shift_sqrt";
-    case ParamKind::EnergyShiftFn: return stem + "energy_shift_fn" + std::to_string(fnTerm);
-    case ParamKind::Thickness: return stem + "thickness";
-    default: return std::string();
-  }
+namespace {
+
+// The name of a target effect's parameter: from its target in format 3 (<target>.areal_density), else the old
+// <kind>_<effect number>.
+std::string EffectParameterName(const TargetEffect &te, const char *oldKind, const char *field, int effect) {
+  return te.GetTargetName().empty() ? std::string(oldKind) + "_" + std::to_string(effect) : te.GetTargetName() + field;
 }
+
+}  // namespace
 
 void EData::FillMnParams(AZUREParams &params) {
   ROOT::Minuit2::MnUserParameters &p = params.GetMinuitParams();
   // 1-based position of a segment in the list (the records' and ParamIndexMap's numbering).
   auto SegmentPosition = [this](ESegmentIterator it) { return (int)(it - GetSegments().begin()) + 1; };
   SetNormParamOffset(p.Params().size());
-  char varname[50];
   for (ESegmentIterator segment = GetSegments().begin(); segment < GetSegments().end(); segment++) {
     if (segment->IsVaryNorm() && !segment->IsProfiledNorm()) {
-      snprintf(varname, sizeof(varname), "%s", SegmentParameterName(segment->GetSegmentKey(), ParamKind::Norm).c_str());
+      const std::string &varname = segment->GetParameterNames().norm;
       params.Add(varname, segment->GetNorm(), segment->GetNorm() * 0.05,
                  ParameterRecord::OfSegment(ParamKind::Norm, SegmentPosition(segment), segment->GetSegmentKey()));
       p.SetLowerLimit(varname, 0.0);
@@ -3882,7 +3879,7 @@ void EData::FillMnParams(AZUREParams &params) {
   SetEnergyShiftParamOffset(p.Params().size());
   for (ESegmentIterator segment = GetSegments().begin(); segment < GetSegments().end(); segment++) {
     // Always add energy shift parameter, regardless of IsVaryEnergyShift()
-    snprintf(varname, sizeof(varname), "%s", SegmentParameterName(segment->GetSegmentKey(), ParamKind::EnergyShift).c_str());
+    const std::string &varname = segment->GetParameterNames().energyShift;
     double stepSize = (segment->GetEnergyShiftError() > 0.0) ? segment->GetEnergyShiftError() * 0.01 : 0.0005;
     params.Add(varname, segment->GetEnergyShift(), stepSize,
                ParameterRecord::OfSegment(ParamKind::EnergyShift, SegmentPosition(segment), segment->GetSegmentKey()));
@@ -3898,8 +3895,7 @@ void EData::FillMnParams(AZUREParams &params) {
   // written before the term existed fits exactly as before.
   SetEnergyShiftSqrtParamOffset(p.Params().size());
   for (ESegmentIterator segment = GetSegments().begin(); segment < GetSegments().end(); segment++) {
-    snprintf(varname, sizeof(varname), "%s",
-             SegmentParameterName(segment->GetSegmentKey(), ParamKind::EnergyShiftSqrt).c_str());
+    const std::string &varname = segment->GetParameterNames().energyShiftSqrt;
     double stepSize = (segment->GetEnergyShiftSqrtError() > 0.0) ? segment->GetEnergyShiftSqrtError() * 0.01 : 0.0005;
     params.Add(varname, segment->GetEnergyShiftSqrt(), stepSize,
                ParameterRecord::OfSegment(ParamKind::EnergyShiftSqrt, SegmentPosition(segment), segment->GetSegmentKey()));
@@ -3912,8 +3908,7 @@ void EData::FillMnParams(AZUREParams &params) {
   for (ESegmentIterator segment = GetSegments().begin(); segment < GetSegments().end(); segment++) {
     if (!segment->OwnsShiftFn() || !segment->HasShiftFn()) continue;
     for (int j = 0; j < segment->NumShiftFnParams(); j++) {
-      snprintf(varname, sizeof(varname), "%s",
-               SegmentParameterName(segment->GetSegmentKey(), ParamKind::EnergyShiftFn, j).c_str());
+      const std::string &varname = segment->GetParameterNames().shiftFunction.at(j);
       const double err = segment->GetShiftFnErrors()[j];
       params.Add(varname, segment->GetShiftFnValues()[j], (err > 0.0) ? err * 0.01 : 0.0005,
                  ParameterRecord::ShiftFnTerm(SegmentPosition(segment), segment->GetSegmentKey(), j));
@@ -3925,7 +3920,7 @@ void EData::FillMnParams(AZUREParams &params) {
   screeningParamOffset_ = p.Params().size();
   for (int k = 1; k <= this->NumScreeningParams(); k++) {
     const TargetEffect *te = this->GetScreeningTargetEffect(k);
-    snprintf(varname, sizeof(varname), "screening_%d", this->GetScreeningEffect(k));
+    const std::string varname = EffectParameterName(*te, "screening", ".screening", this->GetScreeningEffect(k));
     const double ue = te->GetScreeningUe();
     params.Add(varname, ue, std::max(10.0, 0.05 * std::fabs(ue)),
                ParameterRecord::OfEffect(ParamKind::Screening, this->GetScreeningEffect(k)));
@@ -3938,7 +3933,7 @@ void EData::FillMnParams(AZUREParams &params) {
   densityParamOffset_ = p.Params().size();
   for (int k = 1; k <= this->NumDensityParams(); k++) {
     const TargetEffect *te = this->GetDensityTargetEffect(k);
-    snprintf(varname, sizeof(varname), "density_%d", this->GetDensityEffect(k));
+    const std::string varname = EffectParameterName(*te, "density", ".areal_density", this->GetDensityEffect(k));
     const double n = te->GetDensity();
     params.Add(varname, n, (te->GetDensitySigma() > 0.0) ? 0.1 * te->GetDensitySigma() : 0.01 * n,
                ParameterRecord::OfEffect(ParamKind::Density, this->GetDensityEffect(k)));
@@ -3951,7 +3946,7 @@ void EData::FillMnParams(AZUREParams &params) {
   dopplerParamOffset_ = p.Params().size();
   for (int k = 1; k <= this->NumDopplerParams(); k++) {
     const TargetEffect *te = this->GetDopplerTargetEffect(k);
-    snprintf(varname, sizeof(varname), "doppler_%d", this->GetDopplerEffect(k));
+    const std::string varname = EffectParameterName(*te, "doppler", ".doppler", this->GetDopplerEffect(k));
     const double t = te->GetDopplerTemperature();
     params.Add(varname, t, (te->GetDopplerSigma() > 0.0) ? 0.1 * te->GetDopplerSigma() : 0.01 * t,
                ParameterRecord::OfEffect(ParamKind::Doppler, this->GetDopplerEffect(k)));
@@ -3964,7 +3959,7 @@ void EData::FillMnParams(AZUREParams &params) {
   thicknessParamOffset_ = p.Params().size();
   for (int k = 1; k <= this->NumThicknessParams(); k++) {
     ESegment *seg = this->GetSegment(this->GetThicknessSegment(k));
-    snprintf(varname, sizeof(varname), "%s", SegmentParameterName(seg->GetSegmentKey(), ParamKind::Thickness).c_str());
+    const std::string &varname = seg->GetParameterNames().thickness;
     const double n = seg->GetSampleThickness();
     params.Add(varname, n, (seg->GetThicknessSigma() > 0.0) ? 0.1 * seg->GetThicknessSigma() : 0.01 * n,
                ParameterRecord::OfSegment(ParamKind::Thickness, this->GetThicknessSegment(k), seg->GetSegmentKey()));
@@ -4018,7 +4013,7 @@ int EData::ResolveThicknessGroups(const Config &configure) {
     configure.Note("Note: thickness group '" + g.first + "': segments #" + std::to_string(leader.GetSegmentKey()) +
                    " +" + members.str() + " share one sample thickness (segment #" +
                    std::to_string(leader.GetSegmentKey()) + "'s, " +
-                   (leader.HasThicknessFit() ? "parameter " + SegmentParameterName(leader.GetSegmentKey(), ParamKind::Thickness)
+                   (leader.HasThicknessFit() ? "parameter " + leader.GetParameterNames().thickness
                                              : std::string("fixed")) +
                    ").");
   }

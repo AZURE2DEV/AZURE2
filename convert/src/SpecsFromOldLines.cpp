@@ -21,6 +21,7 @@ using experiment::ComponentSpec;
 using experiment::DatasetSpec;
 using experiment::ExtrapolationSpec;
 using experiment::Observable;
+using experiment::ParameterNames;
 using experiment::ReactionSpec;
 using experiment::SpecList;
 using experiment::TargetEffectSpec;
@@ -96,6 +97,19 @@ std::string ReadReaction(const Line &line, Observable observable, bool thm, Reac
   return std::string();
 }
 
+// The old names of a segment's fit parameters: segment_<key>_norm, ... (the names param files, <parameterSettings>
+// rows and prior_centre rows of an old project use).
+ParameterNames OldParameterNames(int key, int shiftFunctionTerms) {
+  const std::string stem = "segment_" + std::to_string(key) + "_";
+  ParameterNames n;
+  n.norm = stem + "norm";
+  n.energyShift = stem + "energy_shift";
+  n.energyShiftSqrt = stem + "energy_shift_sqrt";
+  for (int j = 0; j < shiftFunctionTerms; j++) n.shiftFunction.push_back(stem + "energy_shift_fn" + std::to_string(j));
+  n.thickness = stem + "thickness";
+  return n;
+}
+
 DatasetSpec DatasetOf(const SegLine &s, int key, std::string &why) {
   DatasetSpec d;
   d.key = key;
@@ -121,6 +135,7 @@ DatasetSpec DatasetOf(const SegLine &s, int key, std::string &why) {
   d.varyEnergyShiftSqrt = s.varyEnergyShiftSqrt() == 1;
   d.shiftFunction = s.shiftFn();
   d.shiftFunctionValues = s.shiftFnValues();
+  d.names = OldParameterNames(key, (int)s.shiftFnValues().size());
   d.shiftFunctionErrors = s.shiftFnErrors();
   for (int v : s.shiftFnVary()) d.shiftFunctionVary.push_back(v == 1);
   d.shiftGroup = s.shiftGroup();
@@ -140,6 +155,7 @@ DatasetSpec DatasetOf(const SegLine &s, int key, std::string &why) {
 ExtrapolationSpec ExtrapolationOf(const ExtrapLine &s, int key, std::string &why) {
   ExtrapolationSpec x;
   x.key = key;
+  x.names = OldParameterNames(key, 0);
   x.active = s.isActive() == 1;
   const bool thm = s.isDiff() >= 10;
   why = ReadReaction(s, ExtrapolationObservable(thm ? s.isDiff() - 10 : s.isDiff()), thm, x.reaction);
@@ -445,7 +461,8 @@ experiment::AbundanceSpecs AbundanceSpecsFromOldLines(std::istream *section) {
 }
 
 std::string OldSegmentParameterName(int key, bool isNorm) {
-  return "segment_" + std::to_string(key) + (isNorm ? "_norm" : "_energy_shift");
+  const ParameterNames n = OldParameterNames(key, 0);
+  return isNorm ? n.norm : n.energyShift;
 }
 
 std::string PriorCentresFromOldRows(std::istream *section, SpecList<DatasetSpec> &datasets) {

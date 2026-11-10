@@ -288,6 +288,19 @@ Quantity SFactor() {
 Then a record of it in the `variants` of `experiment/tests/quantities_test.cpp` (the test fails for a row without
 one), the schema and docs as above; later its tree builder (step 3).
 
+**A new kind of data set** (a quantity the engine can fit, step 3b: the engine runs format 3).
+1. Its row in the table: the recipe "A format-3 quantity" [`experiment_quantities` fails without its variant; check 18
+   when `format3.rst` is not regenerated; check 24 for a new diagnostic code].
+2. Its tree builder: the case in `Schema::Build` (`experiment/src/Build.cpp`, `ReadObservable`, called by `BuildDataset`) that
+   turns the record into a `DatasetSpec` (`SetupSpecs.h`: the observable, the reaction's pair keys, the windows,
+   the nuisances with their `ParameterNames`); until it has one, `Build` refuses the quantity with `E_NOT_BUILT`, so
+   a file never runs with a quantity the engine does not compute.  What the engine computes for the spec is the
+   model pass (`include/ModelPass.h`; the expression tree, S10).
+3. A test: a case in `experiment/tests/build_test.cpp` (the spec member by member, and its refusals), and when an old
+   construct converts to it, `convert_spec_equivalence` (the old line's spec equals the record's) and a run of the
+   converted file (`tests/format3_engine/check.sh` is the pattern: outputs byte for byte the old file's).
+   `AZURE2 --describe` must show the observable and the pair keys it resolved to.
+
 **A format-3 unit.** One `Unit` row in `experiment/src/Units.cpp`, `{token, dimension, factor to the dimension's
 engine unit[, aliases]}`, e.g. `{"keV", "energy", 1e-3}`; `experiment_parsers` checks every row's dimension and factor and `experiment_quantities` tries the unit
 on every quantity; then the schema and docs as above.

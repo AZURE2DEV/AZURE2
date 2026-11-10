@@ -2,6 +2,67 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-10 (evening) — format 3, step 3b-1, G-3: the engine runs a format-3 project (`feature/upgrade-4-format3-reader`)
+
+**Done** (brief G-3; report `work/fmt3c/REPORT.md`).
+- **A** (b2bb1452): one table of the pairs and levels of `<levels>` (`experiment/LevelTables.h`: `PairInfo`, `LevelInfo`,
+  `PairLabel`, `PairsNamed`, one wording of `E_UNKNOWN_PAIR` / `E_AMBIGUOUS_PAIR`), made once from the rows
+  (`LevelTablesOfRows`, reader library) and read by `Build`, `BuildModelData` and the engine's model data (which checks a
+  datum's level indices against the compound nucleus); `PairRow`, the engine's `PairInfos/LevelInfos` and the converter's
+  label copy are gone; `io::IdenticalParticles` is PPair's rule.  `Schema::Build` resolves `<modelData>`
+  (`BuiltProject::modelData`); the spec-equivalence test compares the model data.
+- **B** (ba0cd97d): parameter names come from the spec (`ParameterNames`; adaptor: `segment_<k>_...`; Build: `<ds>.norm`,
+  `<ds>.shift.offset|sqrt`, `D.value`, `G.offset`, `G.a<j>`, `<target>.areal_density`, a follower's `<record>.<field>[<ds>]`;
+  effects and abundances by their target).  No fixed name buffer (`EData`, `CNuc`).  The converter's map names every
+  parameter the engine makes and is injective (checked over every converted file).  Converter: one path for data and test
+  lines with a sample (M_thick asks 4 questions now; no longer a recorded difference); a missing sample of a test line is
+  noted.
+- **C**: `Config::ReadConfigFile` reads a format-3 file (records → Validate → `<levels>` tables → Build; `Config::format3`);
+  `src/ProjectSetup.cpp` (was `OldLineSetup.cpp`) gives the set-up the specs of either producer, the `<levels>` rows read
+  once and the exit pairs of the active data sets (`ExitPairKeysInFile` deleted; `AZURE2.cpp`'s pair and THM scans read
+  specs too); `<thm>` membership and weights from the records; `AZURE2 --describe FILE [--json]`, `pyazr.describe`
+  (pyazr 2.17.0); `tests/format3_engine/check.sh`; docs (`data_formats.rst` format-3 section, `command_line.rst`, the
+  note's status, the recipe "A new kind of data set").  Two converter/Build defects found by the gate and fixed: a
+  `quadrature` without a straggling flag lost its width multiplier (TargetEffect gated it on the old line's flag), and the
+  converter wrote `width_multiplier 20` where the old line gave none (a pure convolution's core then changed).
+
+**Verified** (build `work/b-fmt3`, 0 warnings, 3 threads): 179 × 3 on the old tree identical to `tab-p3f` after A, B and
+with the final engine (689/662/689); `ctest -LE slow` 155/155 (final tree); `tests/run_tests.sh` 138 passed, 0 failed
+(with `format3_engine`); consistency checks pass; spec equivalence 189 files, 185 converted, 183 equal, 2 recorded,
+0 differ (injections =2, =3 fail). Gate (tree converted into `work/fmt3c/tree3x`, exact grids; `tree3p` plain): of the 510
+output files per base of `tab-p3f`, 471 identical, 30 classified (param.par steps of fixed zero shifts, follower rows,
+angle window of angle-integrated data, sample header names, scattering lengths as model data), 2 differ (angle_mapping,
+the abundance defect), 7 missing (shift_subpoint_angle/template: refused for missing data files); plain grids give the
+same in menu 1 and differ in menu 3 in extrapolation outputs only. 1 vs 2 threads on converted T1, T2, T3, 13N
+identical. The five refusals of §8.5 hold (three checked with dummy data files).
+
+**Follow-up (the director's decisions on the G-3 report).** 1 (951fd09f): the converter keeps a sample's row of a
+compound nucleus no line reaches (its isotope from the <levels> pairs with the lines' light particle; none or several
+is a question), Build gives it its abundance row: tests/angle_mapping is now identical but for name classes.
+2 (4e6e7f59): `BuildOptions::dataFiles` (`DataFiles::Required | NotUsed`); the engine reads a format-3 project with
+NotUsed and `EData::Fill` refuses an unread data file (`E_DATA_FILE`), `EData::MakePoints` warns
+(`W_DATA_FILE_NOT_READ`); `--validate` / `--describe` stay Required. 3 (9719363f): an unreadable data file refuses a
+data run; documented with the other differences from the old engine. 5 (597c7aad): §3.11's T2 quadratures.
+Verified after them (engine `work/fmt3c/binC/AZURE2` = `work/b-fmt3`): 179 × 3 identical to `tab-p3f` (`tab-fmt3cH`);
+`ctest -LE slow` 155/155; `tests/run_tests.sh` 138/0; spec equivalence 189/185/183/2/0; gate menu 1, both grids: of 510
+(483 no-brune) files 472 (445) identical, 38 classified, 0 differ, 0 missing; menu 3 exact: 302 identical, 9
+classified, 8 differ (bad_sample runs; modelData.out added); 1 vs 2 threads on converted T1, T2, T3, 13N identical.
+
+**Open.**
+- The engine counts a nucleus a sample does not list at abundance 1.0 in the sum-to-one prior (old behaviour, unchanged).
+  It showed in tests/angle_mapping before decision 1 (format 3: 7_13 at 1.0, Total-Abundance chi^2 25 instead of 0);
+  the targets step decides whether an unlisted nucleus counts.
+- A member of a varied shared normalization has a fixed parameter of its own also where its old line did not vary (S7
+  removes it).
+
+**Debt** (each removed by the step named):
+- `src/ProjectSetup.cpp` reads the old sections through the adaptor once per question (`ProjectExitPairKeys`,
+  `ProjectReactionPairs`, `ProjectHasThmData`, `EData::Fill`, `MakePoints`) — step 3d deletes the old branch.
+- `Format3ThmSection` (src/ConfigThm.cpp) writes old-grammar `segments=` / `weight[k]=` text for the <thm> parser — goes
+  when `ThmOptions` takes `ThmMembershipSpec` directly (the THM part of S7/3d).
+- Level parameters are still named `energy_<n>` / `width_<n>_<m>` in a format-3 run: `project_format3.md` is silent
+  (`<levels>` keeps its grammar, §3.2), so the names of level parameters are open for the `<levels>` step.
+
 ## 2026-11-10 (agent, brief P) — `EData` split N1–N4 (branch `feature/upgrade-4-edata-split-1`)
 
 **Done** (`edata_split.md` §5.1, one commit per step):

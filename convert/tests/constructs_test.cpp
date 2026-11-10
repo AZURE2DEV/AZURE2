@@ -8,6 +8,7 @@
 #include <fstream>
 #include <map>
 #include <sstream>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -278,7 +279,11 @@ int main(int argc, char **argv) {
     Expect("shiftgroup record", r, "energy_scale G", F{{"offset", "0.001 MeV fit prior 0 0.002"}});
     Expect("shiftgroup member", r, "dataset g2", Sigma("g2.dat") + F{{"energy_window", "0.2 1.4 MeV"}, {"norm", "1 fixed"}, {"shift", "G"}});
     check("shiftgroup: the member's own shift is a note", HasNote(r, "its own shift 0.005"));
-    check("shiftgroup: segment_3_energy_shift -> G.offset", Param(r, "segment_3_energy_shift") == "G.offset");
+    // the group's parameter is the first active member's; a later member's own (fixed) one is named for it
+    check("shiftgroup: segment_2_energy_shift -> G.offset", Param(r, "segment_2_energy_shift") == "G.offset");
+    check("shiftgroup: segment_3_energy_shift -> G.offset[g2]", Param(r, "segment_3_energy_shift") == "G.offset[g2]");
+    check("a data set without a shift: segment_5_energy_shift -> f2.shift.offset, sqrt -> f2.shift.sqrt",
+          Param(r, "segment_5_energy_shift") == "f2.shift.offset" && Param(r, "segment_5_energy_shift_sqrt") == "f2.shift.sqrt");
     Expect("shiftfngroup record", r, "energy_scale F", F{{"function", "\"a0*x\" MeV"}, {"param", "a0 0 fit prior 0 0.01"}});
     Expect("shiftfngroup member", r, "dataset f2",
            Sigma("f2.dat") + F{{"energy_window", "0.2 1.4 MeV"}, {"norm", "1 fixed"}, {"shift", "offset 0.004 MeV fixed"}, {"shift", "F"}});
@@ -292,6 +297,18 @@ int main(int argc, char **argv) {
     Expect("normgroup member", r, "dataset n2", Sigma("n2.dat") + F{{"energy_window", "0.2 1.4 MeV"}, {"norm", "D"}});
     check("normgroup: the prior_centre row is removed", r.text.find("prior_centre") == std::string::npos);
   }
+  // ---- normgroup with varied norms: the leader's parameter is the record's value, a follower's (fixed by the engine
+  //      until S7) <record>.value[<data set>]; the map is injective (the director's decision on G2 item 4)
+  {
+    const ConvertResult r = Convert({"1 1 2 0.2 1.4 0 180 0 1.1 1 8 0 0 0 n1.dat normgroup D\n"
+                                     "1 1 2 0.2 1.4 0 180 0 1 1 0 0 0 0 n2.dat normgroup D\n",
+                                     "", "", "", ""});
+    check("normgroup: segment_1_norm -> D.value", Param(r, "segment_1_norm") == "D.value");
+    check("normgroup: segment_2_norm -> D.value[n2]", Param(r, "segment_2_norm") == "D.value[n2]");
+    std::set<std::string> news;
+    for (const auto &p : r.parameterNames) news.insert(p.second);
+    check("normgroup: the parameter map is injective", news.size() == r.parameterNames.size());
+  }
   // ---- a prior_centre row the engine refuses (a name that matches no <segmentsData> line) is refused with its reason;
   //      a composite block with an operation type other than 0 or 1 likewise
   {
@@ -304,6 +321,22 @@ int main(int argc, char **argv) {
     check("prior_centre with a leading zero: refused", !z.ok);
     const ConvertResult o = Convert({"1 1 2 0.2 1.4 0 180 0 1 0 0 0 0 0 o.dat 1 2 1 1 2\n", "", "", "", ""});
     check("operation type 2: refused", !o.ok && o.refusal.find("neither 0 (sum) nor 1 (ratio)") != std::string::npos);
+  }
+  // ---- a sample's row of a compound nucleus no line reaches is kept: its isotope from the pair of <levels> that forms it
+  //      with the lines' light particle (n + 22Ne -> 23Ne); a row no pair forms is a question, never a silent drop
+  {
+    const ConvertResult r = Convert({"1 5 5 0.1 2 0 180 0 1 0 0 0 0 0 nat.dat sample natNe\n", "", "",
+                                     "<abundances>\nnatNe: 10 21 0.9 1 0.01\nnatNe: 10 23 0.1 1 0.01\nnatNe: sum 0.001\n</abundances>\n",
+                                     ""});
+    Expect("unreached row kept", r, "target natNe",
+           F{{"kind", "none"}, {"isotope", "20Ne 0.9 fit prior 0.9 0.01"}, {"isotope", "22Ne 0.1 fit prior 0.1 0.01"},
+             {"isotope_sum", "prior 1 0.001"}});
+    check("unreached row kept: its parameter mapped", Param(r, "abundance_natNe_10_23") == "natNe.isotope.22Ne");
+    const ConvertResult q = Convert({"1 5 5 0.1 2 0 180 0 1 0 0 0 0 0 nat.dat sample natNe\n", "", "",
+                                     "<abundances>\nnatNe: 10 21 0.9 1 0.01\nnatNe: 10 25 0.1 1 0.01\n</abundances>\n", ""});
+    bool asked = false;
+    for (const auto &x : q.questions) asked = asked || x.key == "natNe.isotope.10_25";
+    check("a row no pair forms: a question, not converted without its answer", asked && !q.ok);
   }
   // ---- covariance; total 1 (sigma_total); sample (abundances per compound nucleus -> isotopes of target nuclei)
   {
@@ -381,7 +414,7 @@ int main(int argc, char **argv) {
     Expect("defaults written", r, "dataset e2",
            F{{"reaction", "15N(p,a)12C"}, {"quantity", "dsigma_domega"}, {"unit", "b/sr"}, {"file", "e2.dat"},
              {"columns", "E_lab[MeV] theta_lab[deg] value error"}, {"energy_window", "0.2 1.4 MeV"}, {"angle_window", "90 90 deg"},
-             {"norm", "1 fixed"}, {"beam", "beam_e2"}, {"detector", "det_e2"}, {"quadrature", "points 30 width_multiplier 20 per_width 50"}});
+             {"norm", "1 fixed"}, {"beam", "beam_e2"}, {"detector", "det_e2"}, {"quadrature", "points 30"}});
     Expect("extrapolation of the same index", r, "extrapolation x1",
            F{{"reaction", "15N(p,a)12C"}, {"quantity", "sigma"}, {"unit", "b"}, {"energies", "range 0.2 0.3 MeV lab step 0.05"},
              {"target", "tgt_e1"}, {"beam", "beam_e1"}, {"quadrature", "points 20 width_multiplier 10 per_width 20"}});
@@ -431,7 +464,7 @@ int main(int argc, char **argv) {
            F{{"kind", "layer"}, {"active", "15N"}, {"areal_density", "1e+18 atoms/cm2 fit grid_max 1.5e18"},
              {"stopping", "formula \"a0\" a0=1e-20 MeV*cm2/atom"}, {"straggling", "none"}});
     Expect("densitygroup member", r, "dataset dg2",
-           Sigma("dg2.dat") + F{{"energy_window", "0.2 1.4 MeV"}, {"norm", "1 fixed"}, {"target", "t"}, {"quadrature", "points 50 width_multiplier 20 per_width 50"}});
+           Sigma("dg2.dat") + F{{"energy_window", "0.2 1.4 MeV"}, {"norm", "1 fixed"}, {"target", "t"}, {"quadrature", "points 50"}});
     check("densitygroup: the member's density is a note", HasNote(r, "own density 2e+18"));
   }
   // ---- beamprofile: beam profile, detector resolution (the TPC sigma), data columns 5-6 the windows; udr

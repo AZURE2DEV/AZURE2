@@ -328,7 +328,7 @@
          "optional": true,
          "default": "20",
          "positive": true,
-         "doc": "resonance-width multiplier of the adaptive grid"
+         "doc": "resonance-width multiplier of the adaptive grid (left out: 20, a pure Gaussian convolution a smaller core)"
         },
         {
          "name": "per_width",
@@ -806,7 +806,7 @@
          "optional": true,
          "default": "20",
          "positive": true,
-         "doc": "resonance-width multiplier of the adaptive grid"
+         "doc": "resonance-width multiplier of the adaptive grid (left out: 20, a pure Gaussian convolution a smaller core)"
         },
         {
          "name": "per_width",
@@ -3391,11 +3391,11 @@
   },
   "E_UNKNOWN_PAIR": {
    "severity": "error",
-   "meaning": "a reaction or pair of a datum that no pair of <levels> has (particles and states)"
+   "meaning": "a reaction or pair that no pair of <levels> has (particles and states)"
   },
   "E_AMBIGUOUS_PAIR": {
    "severity": "error",
-   "meaning": "a reaction or pair of a datum that two pairs of <levels> have"
+   "meaning": "a reaction or pair that two pairs of <levels> have (a data set says which with a pair key)"
   },
   "E_NOT_A_CHANNEL": {
    "severity": "error",
@@ -3436,6 +3436,10 @@
   "W_NEARBY_LEVEL": {
    "severity": "warning",
    "meaning": "a resonance strength of a level with another level of its J^pi within 10 Gamma"
+  },
+  "W_DATA_FILE_NOT_READ": {
+   "severity": "warning",
+   "meaning": "a data file that cannot be read in a run that does not use the data (an extrapolation): not read"
   }
  }
 }

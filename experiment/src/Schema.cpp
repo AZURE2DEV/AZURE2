@@ -184,7 +184,7 @@ Forms MakeForms() {
               Keyword("sqrt", {Pos("value", Nuis("sqrt_energy"))}, "E' = E + b sqrt(E), b in MeV^1/2 with E in MeV"),
               Unkeyed({Pos("scale", Ref({"energy_scale"}))}, "the terms of a shared energy_scale record")}};
   f.quadrature = {{Unkeyed({Kw("points", IntAtLeast(1), "sub-points of the fold; no default (every <targetInt> line states it)"),
-                            OptionalKw("width_multiplier", PositiveNum(), "resonance-width multiplier of the adaptive grid", "20"),
+                            OptionalKw("width_multiplier", PositiveNum(), "resonance-width multiplier of the adaptive grid (left out: 20, a pure Gaussian convolution a smaller core)", "20"),
                             OptionalKw("per_width", PositiveNum(), "points per resonance width", "50")},
                            "")}};
   f.foldWindows = {{Unkeyed({Pos("windows", Spec(ValueType::Windows, "energy"), "lab-energy windows, or auto[:tolerance[:margin]]"),

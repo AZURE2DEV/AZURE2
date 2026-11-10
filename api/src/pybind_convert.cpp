@@ -1,5 +1,5 @@
-// Format 3 for pyazr (docs/upgrade/project_format3.md sections 6.2, 8): the validation of a format-3 text, as
-// AZURE2 --validate, and the conversion of an old project to format 3, as AZURE2 --convert ... --to 3.  Both are
+// Format 3 for pyazr (docs/upgrade/project_format3.md sections 6.2, 6.3, 8): the validation of a format-3 text, as
+// AZURE2 --validate, its description, as AZURE2 --describe, and the conversion of an old project to format 3, as AZURE2 --convert ... --to 3.  Both are
 // experiment/'s reading path (ReadFormat3Text: records, validation, build) and convert/'s ConvertToFormat3; pyazr
 // only hands texts over and parses the JSON.
 
@@ -10,6 +10,7 @@
 #include <pybind11/stl.h>
 
 #include "azure2/convert/Convert.h"
+#include "azure2/experiment/Describe.h"
 #include "azure2/experiment/ProjectReader.h"
 
 namespace py = pybind11;
@@ -31,7 +32,26 @@ void BindConvert(py::module_ &m) {
       },
       py::arg("text"), py::arg("file_name"),
       "Validate a format-3 project text (AZURE2 --validate): (refusal of a format-1/2 text or '', the diagnostics as a "
-      "JSON array, the number of the table's build checks not made: those of model data, which are built in a later step).");
+      "JSON array, the number of the table's build checks not made: all of them when the validation found an error or "
+      "<levels> could not be read, else 0).");
+  m.def(
+      "describe_format3_text",
+      [](const std::string &text, const std::string &fileName, bool json) -> py::tuple {
+        const std::string refusal = azure2::convert::NotFormat3Message(text, fileName);
+        if (!refusal.empty()) return py::make_tuple(refusal, std::string("[]"), std::string());
+        azure2::experiment::Format3ReadOptions read;
+        read.fileName = fileName;
+        const azure2::experiment::Format3Project c = azure2::experiment::ReadFormat3Text(text, read);
+        std::string diagnostics = "[";
+        for (std::size_t i = 0; i < c.diagnostics.size(); i++) diagnostics += (i ? ",\n " : "\n ") + c.diagnostics[i].ToJson();
+        diagnostics += c.diagnostics.empty() ? "]" : "\n]";
+        if (!c.Ok() || !c.levelsRead) return py::make_tuple(std::string(), diagnostics, std::string());
+        return py::make_tuple(std::string(), diagnostics,
+                              json ? azure2::experiment::DescribeJson(c) : azure2::experiment::DescribeText(c));
+      },
+      py::arg("text"), py::arg("file_name"), py::arg("json"),
+      "Describe a format-3 project text (AZURE2 --describe [--json]): (refusal of a format-1/2 text or '', the "
+      "diagnostics as a JSON array, the description: '' when the project has an error).");
   m.def(
       "convert_format3_text",
       [](const std::string &text, const std::string &projectDir, const std::map<std::string, std::string> &answers,

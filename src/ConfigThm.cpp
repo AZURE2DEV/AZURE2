@@ -4,12 +4,46 @@
  * classic configuration stays as it is on dev.
  */
 #include "Config.h"
+#include "azure2/experiment/ProjectReader.h"
 
 #include <algorithm>
 #include <cctype>
 #include <cmath>
 #include <iostream>
 #include <sstream>
+
+namespace {
+
+/*!
+ * The <thm> block of a format-3 project in the grammar ReadThmBlock reads: format 3 names a THM experiment's data
+ * sets and a data set's weight table in its records (section 3.9; Schema::Build, ThmMembershipSpec), so the members
+ * are added to each experiment[<name>] line as segments=<keys> and the weights as weight[<k>]= / weightTest[<k>]=
+ * lines before </thm>.
+ */
+std::unique_ptr<std::istream> Format3ThmSection(std::istream &in, const azure2::experiment::ThmMembershipSpec &thm) {
+  std::string text, line;
+  while (std::getline(in, line)) {
+    std::string trimmed = line.substr(0, line.find('#'));
+    trimmed.erase(0, trimmed.find_first_not_of(" \t\r"));
+    if (trimmed.compare(0, 11, "experiment[") == 0) {
+      const std::string name = trimmed.substr(11, trimmed.find(']') - 11);
+      for (const auto &x : thm.experiments) {
+        if (x.name != name) continue;
+        std::string keys;
+        for (int k : x.datasetKeys) keys += (keys.empty() ? "" : ",") + std::to_string(k);
+        line = line.substr(0, line.find('#')) + " segments=" + keys;
+      }
+    }
+    if (trimmed.compare(0, 6, "</thm>") == 0) {
+      for (const auto &w : thm.datasetWeights) text += "weight[" + std::to_string(w.first) + "]=" + w.second + "\n";
+      for (const auto &w : thm.extrapolationWeights) text += "weightTest[" + std::to_string(w.first) + "]=" + w.second + "\n";
+    }
+    text += line + "\n";
+  }
+  return std::unique_ptr<std::istream>(new std::istringstream(text));
+}
+
+}  // namespace
 
 /*!
  * Reads the optional <thm> block: `key=value` lines setting the variant of the
@@ -31,6 +65,7 @@
 int Config::ReadThmBlock() {
   std::unique_ptr<std::istream> section = SectionStream("thm");
   if (!section) return 0;  // optional block, absent
+  if (format3) section = Format3ThmSection(*section, format3->built.thm);
   std::istream &in = *section;
   std::string line = "";
   getline(in, line);  // <thm>

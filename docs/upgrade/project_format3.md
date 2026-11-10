@@ -11,6 +11,20 @@ table itself (§7), the converter from today's files (§8), and the decisions le
 code. The engine reads format 3 only; old files go through `AZURE2 --convert` (maintainer, 2026-11-09,
 `data_model.md` §5).
 
+**What is built (step 3b, 2026-11-10).** The table, `--schema`, `--validate` (§6.1, 6.2, 7); the converter (§8.1–8.3);
+`Schema::Build` (records → the engine's set-up specs, model data included; §8 construct by construct, checked by
+`convert_spec_equivalence` over every converting test file); the engine runs a format-3 file
+(`Config::ReadConfigFile`: records → Validate → `<levels>` tables → Build → set-up; §7.3) and `--describe` (§6.3, a
+plain listing of the specs, not yet the expression tree of S10); parameter names from the records (§8.4's renaming:
+the converter's `parameters` map). Not built: §8.4's refusal of old files and `--convert-params` (step 3d), pyazr's
+model on records (step 3c), units other than the engine's (refused, `E_NOT_BUILT`), the quantities and grids marked
+"a later step" in the table, `Measurement` (S7: the fixed follower parameters of a shared normalization remain).
+Differences from the old engine on the same project (the gate of §8.5, classified; `reference/data_formats.rst`): an
+unreadable data file refuses a run with data (`E_DATA_FILE`; the old engine skipped the data set with a warning), a run
+without data does not read them (`W_DATA_FILE_NOT_READ`); a follower of a varied shared normalization always has its
+fixed parameter `<record>.value[<data set>]`; scattering lengths are reported as model data; abundance-weighted
+outputs name the sample by its target; an angle-integrated data set reports the angle window 0–180°.
+
 Inputs: `data_model.md` (Phase 4: `Measurement`, model expression trees, decisions M1–M13) and `data_kinds.md` (what
 the engine accepts, EXFOR, the physics of each kind, K1–K9). Line numbers refer to `feature/upgrade-4-data` at
 `eb79d95a`. **[V]** read in the code or a file; **[I]** inferred, not run. A small survey script (1 thread, in the
@@ -511,7 +525,7 @@ dataset s02_diff090
     covariance     cov_diff.txt
     beam           beam_s02_diff090
     detector       det_s02_diff090
-    quadrature     points 20 width_multiplier 20 per_width 50
+    quadrature     points 20
 dataset s03_diff150                             # as s02 with angle_window 150 150 deg, file data/s03_diff150.dat
     ...
 dataset s04_thick
@@ -528,7 +542,7 @@ dataset s04_thick
 dataset s05_implanted                           # sigma, b; norm 1 fixed; target tgt_s05_implanted; beam beam_s05_implanted;
     ...                                         # quadrature points 40 width_multiplier 10 per_width 20
 dataset s06_gas                                 # sigma, b; norm 1 fit prior 1 5%; target tgt_s06_gas; beam beam_s06_gas;
-    ...                                         # quadrature points 40 width_multiplier 20 per_width 50
+    ...                                         # quadrature points 40
 dataset s07_profile
     reaction       15N(p,a)12C
     quantity       sigma
@@ -549,7 +563,7 @@ dataset s08_sum
     energy_window  0.599999 1.400001 MeV
     norm           1 fit
     beam           beam_s08_sum
-    quadrature     points 20 width_multiplier 20 per_width 50
+    quadrature     points 20
 dataset s09_ratio
     reaction       15N(p,a)12C[4.439] / 15N(p,a)12C
     quantity       sigma
@@ -577,7 +591,7 @@ dataset s11_thm_hoes_a
     energy_window  0.032015 0.640314 MeV
     norm           profiled
     beam           beam_LC09
-    quadrature     points 30 width_multiplier 20 per_width 50
+    quadrature     points 30
 dataset s12_thm_hoes_b                          # as s11, file data/s12_thm_hoes_b.dat, window 0.042687 0.618970 MeV
     ...
 dataset s13_thm_oes

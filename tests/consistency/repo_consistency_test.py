@@ -154,7 +154,8 @@ cli_doc = read("docs/source/reference/command_line.rst")
 flags = set(re.findall(r'"(--[a-z0-9-]+)=?"', parser))
 # Handled in main() before parseOptions, so accepted although parseOptions
 # never sees them.
-handled_in_main = {"--help", "--build-coulomb-table", "--convert", "--schema", "--validate", "--print-predictions",
+handled_in_main = {"--help", "--build-coulomb-table", "--convert", "--schema", "--validate", "--describe",
+                   "--print-predictions",
                    # options of --convert ... --to 3 and of --validate, read in main() with their command
                    "--to", "--json-report", "--answers", "--exact-grids", "--strict", "--allow-questions", "--json"}
 flags -= handled_in_main
@@ -312,9 +313,9 @@ for dirpath, _, files in os.walk(os.path.join(ROOT, "io")):
 #     M1; docs/upgrade/project_format3.md section 7.3, the director's decision of 2026-11-09): its own headers
 #     ("azure2/experiment/..."), physics/'s ("azure2/physics/..."), the one header "azure2/io/Record.h" (header-only
 #     structs) and the C++ standard library.  Its tests may also include io/'s reader ("azure2/io/..."): they read
-#     their fixtures as the engine will; so may the one file of the reading path, src/ProjectReader.cpp (library
-#     azure2_experiment_reader, which links io/: records -> Validate -> <levels> pairs -> Build, step 3b), which the
-#     table library azure2_experiment does not contain.  An engine header (EPoint.h, Config.h), another io/ header in
+#     their fixtures as the engine will; so may the two files of the reading path, src/ProjectReader.cpp and
+#     src/LevelTablesOfRows.cpp (library azure2_experiment_reader, which links io/: records -> Validate -> <levels>
+#     tables -> Build, step 3b), which the table library azure2_experiment does not contain.  An engine header (EPoint.h, Config.h), another io/ header in
 #     the table library or a system library makes the module depend on what it must not.
 for dirpath, _, files in os.walk(os.path.join(ROOT, "experiment")):
     for name in sorted(files):
@@ -322,7 +323,8 @@ for dirpath, _, files in os.walk(os.path.join(ROOT, "experiment")):
             continue
         rel = os.path.relpath(os.path.join(dirpath, name), ROOT)
         in_tests = rel.startswith(os.path.join("experiment", "tests") + os.sep) or \
-            rel == os.path.join("experiment", "src", "ProjectReader.cpp")
+            rel in (os.path.join("experiment", "src", "ProjectReader.cpp"),
+                    os.path.join("experiment", "src", "LevelTablesOfRows.cpp"))
         for inc in re.findall(r'^\s*#\s*include\s*([<"][^>"]+[>"])', read(rel), re.M):
             if inc.startswith('"') and inc[1:-1].startswith(("azure2/experiment/", "azure2/physics/")):
                 continue

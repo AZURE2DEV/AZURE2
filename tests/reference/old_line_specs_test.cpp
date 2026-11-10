@@ -153,11 +153,20 @@ int main() {
   }
 
   // 4. Prior centres.
-  for (int k = 1; k <= 40; k++) {
-    check("norm name " + std::to_string(k),
-          azure2::convert::OldSegmentParameterName(k, true) == EData::SegmentParameterName(k, ParamKind::Norm));
-    check("shift name " + std::to_string(k),
-          azure2::convert::OldSegmentParameterName(k, false) == EData::SegmentParameterName(k, ParamKind::EnergyShift));
+  // The names the adaptor gives a data set's parameters (the engine's names of an old project), and the names its
+  // prior_centre rows are matched against.
+  {
+    const SpecList<DatasetSpec> d = Data(OldDataText(0) + OldDataText(0));
+    check("parameter names of data set 2",
+          d.items.size() == 2 && d.items[1].spec.names.norm == "segment_2_norm" &&
+              d.items[1].spec.names.energyShift == "segment_2_energy_shift" &&
+              d.items[1].spec.names.energyShiftSqrt == "segment_2_energy_shift_sqrt" &&
+              d.items[1].spec.names.thickness == "segment_2_thickness");
+    for (int k = 1; k <= 40; k++) {
+      check("norm name " + std::to_string(k), azure2::convert::OldSegmentParameterName(k, true) == "segment_" + std::to_string(k) + "_norm");
+      check("shift name " + std::to_string(k),
+            azure2::convert::OldSegmentParameterName(k, false) == "segment_" + std::to_string(k) + "_energy_shift");
+    }
   }
   {
     SpecList<DatasetSpec> d = Data(OldDataText(0) + "0" + OldDataText(0).substr(1));

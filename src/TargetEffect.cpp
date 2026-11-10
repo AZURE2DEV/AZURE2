@@ -14,7 +14,8 @@
  * HasDensityFitError / HasDopplerError.
  */
 
-TargetEffect::TargetEffect(const azure2::experiment::TargetEffectSpec &line, const Config &configure) {
+TargetEffect::TargetEffect(const azure2::experiment::TargetEffectSpec &line, const Config &configure)
+    : targetName_(line.targetName) {
   // Straggling off; a coefficient of 0 means Bohr straggling when it is on (0.04 keV^1/2 before 2026-10-27)
   isStraggling_ = false;
   stragglingCoefficient_ = 0.0;
@@ -50,12 +51,14 @@ TargetEffect::TargetEffect(const azure2::experiment::TargetEffectSpec &line, con
     if (line.hasStragglingFlag) {
       isStraggling_ = line.straggling;
       if (line.hasStragglingCoefficient) stragglingCoefficient_ = line.stragglingCoefficient;
-      if (line.hasResonanceWidthMultiplier) {
-        resonanceWidthMultiplier_ = line.resonanceWidthMultiplier;
-        explicitResonanceWidthMultiplier_ = true;
-      }
-      if (line.hasPointsPerWidth) pointsPerWidth_ = line.pointsPerWidth;
     }
+    // The quadrature of the sub-point grid, with or without a target (an old line gives it only after its straggling
+    // flag; a format-3 `quadrature` field of a beam-only data set has no straggling)
+    if (line.hasResonanceWidthMultiplier) {
+      resonanceWidthMultiplier_ = line.resonanceWidthMultiplier;
+      explicitResonanceWidthMultiplier_ = true;
+    }
+    if (line.hasPointsPerWidth) pointsPerWidth_ = line.pointsPerWidth;
 
     if (line.hasRanges) {
       if (line.autoWindows) autoWindows_ = true;

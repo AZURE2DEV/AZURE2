@@ -1,4 +1,6 @@
 #include "Config.h"
+
+#include "azure2/experiment/ProjectReader.h"
 #include "InputFiles.h"
 #include "azure2/io/Convert.h"
 #include "azure2/io/Document.h"
@@ -104,6 +106,31 @@ std::unique_ptr<std::istream> Config::SectionStream(const std::string &name) con
   return std::unique_ptr<std::istream>(new std::istringstream(text));
 }
 
+/*!
+ * A format-3 project, read once through the one reading path (docs/upgrade/project_format3.md section 7.3): records ->
+ * Validate -> <levels> tables -> Schema::Build.  Every diagnostic is printed (file:line: record.field: message); an
+ * error refuses the project.  Data files are read relative to the working directory, as the set-up opens them; one
+ * that cannot be read is reported by the run that needs it (ProjectSetup.cpp), not here.
+ */
+int Config::ReadFormat3Project(const azure2::io::Document &doc) {
+  azure2::experiment::Format3ReadOptions read;
+  read.fileName = configfile;
+  // Which run follows is chosen later (menu, pyazr call): a data file that cannot be read is reported by the set-up
+  // that would open it (src/ProjectSetup.cpp: an error for a data run, a warning for an extrapolation)
+  read.dataFiles = azure2::experiment::DataFiles::NotUsed;
+  auto project = std::make_shared<azure2::experiment::Format3Project>(azure2::experiment::ReadFormat3Project(doc, read));
+  for (const azure2::experiment::Diagnostic &d : project->diagnostics)
+    if (d.code != azure2::experiment::codes::kDataFileNotRead) outStream << (d.severity == azure2::experiment::Severity::Error ? "ERROR: " : "WARNING: ") << d.ToText() << std::endl;
+  if (!project->Ok() || !project->levelsRead) {
+    if (project->Ok()) outStream << "ERROR: " << configfile << ": the <levels> section is missing or malformed." << std::endl;
+    outStream << "ERROR: " << configfile << " (format 3) is refused; AZURE2 --validate " << configfile
+              << " lists the same diagnostics." << std::endl;
+    return -1;
+  }
+  format3 = project;
+  return 0;
+}
+
 int Config::ReadConfigFile() {
   std::string dummy;
   std::string temp;
@@ -118,12 +145,8 @@ int Config::ReadConfigFile() {
     azure2::io::Document doc = azure2::io::Document::Parse(bytes.str());  // kept alive for the loops
     for (const std::string &problem : doc.Problems())
       outStream << "WARNING: " << configfile << ": " << problem << std::endl;
-    if (azure2::io::FormatOf(doc) == 3) {
-      // The format-3 reader is step 3b of docs/upgrade/project_format3.md; until it lands this engine reads format 2.
-      outStream << "ERROR: " << configfile << " is a format-3 project; this build of the engine runs format-2 projects "
-                << "only (AZURE2 --validate checks a format-3 file)." << std::endl;
-      return -1;
-    }
+    format3.reset();
+    if (azure2::io::FormatOf(doc) == 3 && ReadFormat3Project(doc) != 0) return -1;
     if (azure2::io::FormatOf(doc) == 1) {
       const std::vector<std::string> changes = azure2::io::ConvertToFormat2(doc);
       std::string list;

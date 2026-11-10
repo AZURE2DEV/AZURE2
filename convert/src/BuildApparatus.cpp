@@ -165,9 +165,12 @@ void Builder::BuildApparatus() {
     // the fold's numerical settings, on the data sets
     a.folded = a.hasBeam || integrates || l.isDoppler || l.isBeamProfile || l.isUdr;
     if (a.folded) {
-      const std::string rwm = l.hasResonanceWidthMultiplier ? NumberText(l.resonanceWidthMultiplier, e.text) : "20";
-      const std::string ppw = l.hasPointsPerWidth ? NumberText(l.pointsPerWidth, e.text) : "50";
-      a.quadrature = Words("points " + std::to_string(l.numIntegrationPoints) + " width_multiplier " + rwm + " per_width " + ppw);
+      // the multiplier and the points per width only where the old line gives them: left out, a pure Gaussian
+      // convolution takes its smaller core (TargetEffect::GetResonanceWidthMultiplier)
+      std::string q = "points " + std::to_string(l.numIntegrationPoints);
+      if (l.hasResonanceWidthMultiplier) q += " width_multiplier " + NumberText(l.resonanceWidthMultiplier, e.text);
+      if (l.hasPointsPerWidth) q += " per_width " + NumberText(l.pointsPerWidth, e.text);
+      a.quadrature = Words(q);
       if (l.hasRangesToken && (l.autoWindows || !l.ranges.empty())) {
         Count(Construct::kWindows);
         std::string w;
@@ -239,15 +242,19 @@ void Builder::BuildSamples() {
       if (samples_[i].name == token) return i;
     return -2;
   };
+  // data and test lines alike: a sample <abundances> lacks is dropped with a note naming the line
+  auto sampleOfLine = [&](const std::string &record, const std::string &natural) {
+    const int i = sampleIndex(natural);
+    if (i == -2)
+      Note(Construct::kSample, record, "sample '" + natural + "' is not in <abundances>: the old engine refused the line; the record has no isotopes");
+    return i;
+  };
   for (const auto &kv : activeData_) {
-    const int i = sampleIndex(kv.second->parsed->natural());
-    if (i == -2) {
-      Note(Construct::kSample, dataName_[kv.first], "sample '" + kv.second->parsed->natural() + "' is not in <abundances>: the old engine refused the line; the record has no isotopes");
-    }
+    const int i = sampleOfLine(dataName_[kv.first], kv.second->parsed->natural());
     if (i >= 0) sampleOfData_[kv.first] = i;
   }
   for (const auto &kv : activeTest_) {
-    const int i = sampleIndex(kv.second->parsed->natural());
+    const int i = sampleOfLine(testName_[kv.first], kv.second->parsed->natural());
     if (i >= 0) sampleOfTest_[kv.first] = i;
   }
 }
@@ -286,6 +293,41 @@ void Builder::NameApparatus() {
       continue;
     }
     Count(Construct::kSample);
+    // A row of a compound nucleus that no line of the sample reaches is kept (the composition is the target's, and the
+    // sum-to-one prior needs every row): its isotope is the heavy particle of the <levels> pairs that form that compound
+    // with the light particle of the sample's lines; none or several such isotopes is a question.
+    std::set<std::pair<int, int>> lights;  // (Z, A) of the light particles of the sample's lines
+    auto addLight = [&](int key) {
+      if (const OldPair *p = Pair(key)) lights.insert({p->z1, p->A1()});
+    };
+    for (const auto &kv : sampleOfData_)
+      if (kv.second == si) addLight(activeData_[kv.first]->parsed->entranceKey());
+    for (const auto &kv : sampleOfTest_)
+      if (kv.second == si) addLight(activeTest_[kv.first]->parsed->entranceKey());
+    for (const auto &kv : smp.entries) {
+      if (nucleusOfCompound.count(kv.first)) continue;
+      std::set<std::string> candidates;
+      for (const auto &pp : old_.pairs) {
+        const OldPair &p = pp.second;
+        if (p.pType == 0 && lights.count({p.z1, p.A1()}) && p.z1 + p.z2 == kv.first.first && p.A1() + p.A2() == kv.first.second)
+          candidates.insert(Nuclide(p.z2, p.A2()));
+      }
+      const std::string where = "sample '" + smp.name + "': compound nucleus (" + std::to_string(kv.first.first) + ", " +
+                                std::to_string(kv.first.second) + "), reached by no line of the sample";
+      if (candidates.size() == 1) {
+        nucleusOfCompound[kv.first] = *candidates.begin();
+        Note(Construct::kAbundances, "", where + ": kept as the isotope " + *candidates.begin() + " (the pair of <levels> that forms it)");
+      } else {
+        std::string list;
+        for (const std::string &c : candidates) list += (list.empty() ? "" : ", ") + c;
+        nucleusOfCompound[kv.first] =
+            Ask(Construct::kSample, (smp.name.empty() ? "natural" : smp.name) + ".isotope." + std::to_string(kv.first.first) + "_" +
+                                        std::to_string(kv.first.second),
+                where + (candidates.empty() ? ": no pair of <levels> forms it with the sample's light particle; which isotope is it?"
+                                            : ": the pairs of <levels> that form it give the isotopes " + list + "; which is it?"),
+                "");
+      }
+    }
     // isotope fields, in compound-nucleus order
     std::vector<io::Field> isotopes;
     std::vector<std::pair<std::string, std::string>> params;  // old name, isotope label
@@ -307,33 +349,44 @@ void Builder::NameApparatus() {
                             std::to_string(kv.first.second),
                         kv.second});
     }
-    for (const auto &kv : smp.entries)
-      if (!nucleusOfCompound.count(kv.first))
-        Note(Construct::kAbundances, "", "sample '" + smp.name + "': compound nucleus (" + std::to_string(kv.first.first) + ", " +
-                                             std::to_string(kv.first.second) + ") is reached by no data set of the sample: dropped");
     io::Field sum;
     sum.key = "isotope_sum";
     const double sigma = smp.hasSum && smp.sum >= 0 ? smp.sum : old_.abundanceSumSigma;
     const std::string sigmaText = smp.hasSum && smp.sum >= 0 ? smp.sumText : old_.abundanceSumSigmaText;
     sum.tokens = sigma > 0 ? Words("prior 1 " + sigmaText) : Words("none");
     // Where the isotopes go: the data set's <targetInt> target, else one target per sample.
+    // Data sets and extrapolations alike (one path): a member on a <targetInt> target puts the isotopes there, and a
+    // target shared with a line of another sample (or none) is a question.
     std::set<int> targetApparatus;
     bool ownTarget = false;
+    struct Member {
+      bool isData;
+      int key;
+    };
+    std::vector<Member> members;
+    for (int k : users) members.push_back({true, k});
     for (const auto &kv : sampleOfTest_)
-      if (kv.second == si && !(apparatusOfTest_.count(kv.first) && apparatus_[apparatusOfTest_[kv.first]].hasTarget)) ownTarget = true;
-    for (int k : users) {
-      if (apparatusOfData_.count(k) && apparatus_[apparatusOfData_[k]].hasTarget) {
-        const int ai = apparatusOfData_[k];
-        targetApparatus.insert(ai);
-        for (int other : apparatus_[ai].dataKeys)
-          if (!sampleOfData_.count(other) || sampleOfData_[other] != si)
-            Ask(Construct::kSample, dataName_[k] + ".target",
-                "its target (<targetInt> line " + std::to_string(apparatus_[ai].line->index) + ") is shared with " + dataName_[other] +
-                    ", which has not the same sample",
-                "");
-      } else {
+      if (kv.second == si) members.push_back({false, kv.first});
+    auto sampleOf = [&](bool isData, int key) {
+      const std::map<int, int> &samples = isData ? sampleOfData_ : sampleOfTest_;
+      return samples.count(key) ? samples.at(key) : -1;
+    };
+    for (const Member &m : members) {
+      std::map<int, int> &apparatusOf = m.isData ? apparatusOfData_ : apparatusOfTest_;
+      if (!(apparatusOf.count(m.key) && apparatus_[apparatusOf[m.key]].hasTarget)) {
         ownTarget = true;
+        continue;
       }
+      const int ai = apparatusOf[m.key];
+      targetApparatus.insert(ai);
+      const std::string &name = (m.isData ? dataName_ : testName_)[m.key];
+      for (const bool otherIsData : {true, false})
+        for (int other : otherIsData ? apparatus_[ai].dataKeys : apparatus_[ai].testKeys)
+          if (sampleOf(otherIsData, other) != si)
+            Ask(Construct::kSample, name + ".target",
+                "its target (<targetInt> line " + std::to_string(apparatus_[ai].line->index) + ") is shared with " +
+                    (otherIsData ? dataName_ : testName_)[other] + ", which has not the same sample",
+                "");
     }
     if (targetApparatus.size() + (ownTarget ? 1 : 0) > 1)
       Ask(Construct::kSample, (smp.name.empty() ? "natural" : smp.name) + ".target",

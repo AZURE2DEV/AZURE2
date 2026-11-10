@@ -185,12 +185,15 @@ void DetectorInto(Context &c, const ValidatedRecord &d, TargetEffectSpec &e) {
 void QuadratureInto(const Value *q, const Value *w, TargetEffectSpec &e) {
   if (q) {
     if (const Value *v = q->Get("points")) e.numIntegrationPoints = (int)v->integer;
-    e.hasResonanceWidthMultiplier = true;
-    e.resonanceWidthMultiplier = 20.0;
-    if (const Value *v = q->Get("width_multiplier")) e.resonanceWidthMultiplier = v->number.value;
-    e.hasPointsPerWidth = true;
-    e.pointsPerWidth = 50.0;
-    if (const Value *v = q->Get("per_width")) e.pointsPerWidth = v->number.value;
+    // given or not (left out, the engine's default: 20, and a pure Gaussian convolution's smaller core)
+    if (const Value *v = q->Get("width_multiplier")) {
+      e.hasResonanceWidthMultiplier = true;
+      e.resonanceWidthMultiplier = v->number.value;
+    }
+    if (const Value *v = q->Get("per_width")) {
+      e.hasPointsPerWidth = true;
+      e.pointsPerWidth = v->number.value;
+    }
   }
   if (w) {
     e.hasRanges = true;
@@ -252,6 +255,7 @@ SpecList<TargetEffectSpec> Effects(Context &c, const std::vector<Member> &member
     e.source = "target " + (x.target ? x.target->name : std::string("-")) + ", beam " + (x.beam ? x.beam->name : std::string("-")) +
                ", detector " + (x.detector ? x.detector->name : std::string("-"));
     if (x.target) {
+      e.targetName = x.target->name;
       TargetInto(c, *x.target, *x.target, e);
       if (usesOfTarget[x.target] > 1) {
         if ((x.target->Has("screening") || FreeNuisance(x.target, "doppler")) && !reported.count(x.target) &&
@@ -294,6 +298,7 @@ void SampleThickness(Context &c, std::vector<Member> &members, bool isData) {
     ds.thicknessVary = n.mode == NuisanceMode::Fit;
     ds.thicknessSigma = n.hasPrior ? n.priorWidth.value : 0.0;
     if (ds.thicknessFit && users[target->name] > 1) ds.thicknessGroup = target->name;
+    if (ds.thicknessFit) ds.names.thickness = target->name + ".areal_density";  // a follower's: Build's NameParameters
   }
 }
 
@@ -319,14 +324,24 @@ void Abundances(Context &c) {
       const Value *nucleus = iso->Get("nucleus"), *abundance = iso->Get("abundance");
       if (!nucleus || !abundance) continue;
       std::set<std::pair<int, int>> compounds;
+      std::set<std::pair<int, int>> lights;  // the light particles of the target's data sets
       for (const Member *m : users)
         for (int key : m->termEntranceKeys)
-          if (const PairRow *p = c.Pair(key))
-            if (p->z2 == nucleus->nucleus.Z && (int)std::lround(p->m2) == nucleus->nucleus.A)
-              compounds.insert({p->z1 + p->z2, (int)std::lround(p->m1) + (int)std::lround(p->m2)});
+          if (const PairInfo *p = c.Pair(key)) {
+            lights.insert({p->lightZ, p->lightA});
+            if (p->heavyZ == nucleus->nucleus.Z && p->heavyA == nucleus->nucleus.A)
+              compounds.insert({p->lightZ + p->heavyZ, p->lightA + p->heavyA});
+          }
+      // an isotope no data set reaches is still part of the composition (the sum-to-one prior): its compound nucleus is
+      // the one the pairs of <levels> form with the data sets' light particle
+      if (compounds.empty())
+        for (const PairInfo &p : c.pairs_)
+          if (p.kind == 0 && lights.count({p.lightZ, p.lightA}) && p.heavyZ == nucleus->nucleus.Z && p.heavyA == nucleus->nucleus.A)
+            compounds.insert({p.lightZ + p.heavyZ, p.lightA + p.heavyA});
       for (const auto &zA : compounds) {
         AbundanceRowSpec row;
         row.sample = t->name;
+        row.isotope = nucleus->nucleus.text;
         row.z = zA.first;
         row.a = zA.second;
         const Nuisance &n = abundance->nuisance;

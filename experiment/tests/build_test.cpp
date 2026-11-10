@@ -29,27 +29,29 @@ void check(const std::string &what, bool ok) {
 }
 
 // p+15N (1), a+12C (2), a+12C[4.43891] (3), g+16O (4), d+12C twice (5, 6), p+12C (7)
-std::vector<PairRow> Pairs() {
-  auto pair = [](int key, int type, int z1, double m1, int z2, double m2, double j1, double j2, double e2) {
-    PairRow p;
+LevelTables Pairs() {
+  auto pair = [](int key, int type, int z1, int a1, int z2, int a2, int twoJ1, int twoJ2, double e2) {
+    PairInfo p;
     p.key = key;
-    p.pType = type;
-    p.z1 = z1;
-    p.m1 = m1;
-    p.z2 = z2;
-    p.m2 = m2;
-    p.j1 = j1;
-    p.j2 = j2;
-    p.e2 = e2;
+    p.kind = type;
+    p.lightZ = z1;
+    p.lightA = a1;
+    p.heavyZ = z2;
+    p.heavyA = a2;
+    p.twoJLight = twoJ1;
+    p.twoJHeavy = twoJ2;
+    p.heavyExcitation = e2;
     return p;
   };
-  return {pair(1, 0, 1, 1.00728, 7, 15.0001, 0.5, 0.5, 0), pair(2, 0, 2, 4.0026, 6, 12.0, 0, 0, 0),
-          pair(3, 0, 2, 4.0026, 6, 12.0, 0, 2, 4.43891), pair(4, 10, 0, 0, 8, 15.9949, 1, 0, 0),
-          pair(5, 0, 1, 2.0141, 6, 12.0, 1, 0, 0), pair(6, 0, 1, 2.0141, 6, 12.0, 1, 0, 0),
-          pair(7, 0, 1, 1.00728, 6, 12.0, 0.5, 0, 0)};
+  LevelTables t;
+  t.pairs = {pair(1, 0, 1, 1, 7, 15, 1, 1, 0), pair(2, 0, 2, 4, 6, 12, 0, 0, 0), pair(3, 0, 2, 4, 6, 12, 0, 4, 4.43891),
+             pair(4, 10, 0, 0, 8, 16, 2, 0, 0), pair(5, 0, 1, 2, 6, 12, 2, 0, 0), pair(6, 0, 1, 2, 6, 12, 2, 0, 0),
+             pair(7, 0, 1, 1, 6, 12, 1, 0, 0)};
+  return t;
 }
 
-BuiltProject BuildText(const std::string &text, bool relativistic = false, bool readFiles = false) {
+BuiltProject BuildText(const std::string &text, bool relativistic = false, bool readFiles = false,
+                       DataFiles dataFiles = DataFiles::Required) {
   const Document doc = Document::Parse(text);
   std::vector<SectionRecords> sections;
   for (const Document::Section &s : doc.Sections()) {
@@ -66,6 +68,7 @@ BuiltProject BuildText(const std::string &text, bool relativistic = false, bool 
   BuildOptions o;
   o.relativistic = relativistic;
   o.readDataFiles = readFiles;
+  o.dataFiles = dataFiles;
   return Schema::Build(v, Pairs(), o);
 }
 
@@ -168,10 +171,11 @@ int main() {
                                                                   b.data.targetEffects.items[0].spec.datasetKeys == std::vector<int>{4});
       if (b.data.targetEffects.items.size() == 1) {
         const TargetEffectSpec &e = b.data.targetEffects.items[0].spec;
-        check("the effect: a layer of 1e18 atoms/cm2, screening 1000 eV fitted with 200 eV, sigma 1 keV = 0.001 MeV, 20 points",
+        check("the effect: a layer of 1e18 atoms/cm2, screening 1000 eV fitted with 200 eV, sigma 1 keV = 0.001 MeV, 20 points "
+              "(multiplier and points per width left out: the engine's defaults)",
               e.active && e.targetIntegration && e.density == 1e18 && e.stoppingPowerEquation == "a0" && e.screening &&
                   e.screeningUe == 1000 && e.screeningVary && e.screeningSigma == 200 && e.convolution && e.sigma == 1 * 1e-3 &&
-                  e.numIntegrationPoints == 20 && e.resonanceWidthMultiplier == 20 && e.pointsPerWidth == 50);
+                  e.numIntegrationPoints == 20 && !e.hasResonanceWidthMultiplier && !e.hasPointsPerWidth);
       }
     } else {
       check("5 data sets and 1 extrapolation", false);
@@ -185,6 +189,14 @@ int main() {
   ExpectOne("E_PAIR_KEY", BuildText(Data(kDataset + "    entrance_pair 1\n")));
   ExpectOne("E_PAIR_KEY", BuildText(Data(dd + "    entrance_pair 1\n    exit_pair 5\n")));
   ExpectOne("E_DATA_FILE", BuildText(Data(Set(kDataset, "file", "    file no_such_file.dat")), false, true));
+  // a run that does not use the data (an extrapolation): the same file is a warning, and the project builds
+  {
+    const BuiltProject b = BuildText(Data(Set(kDataset, "file", "    file no_such_file.dat")), false, true, DataFiles::NotUsed);
+    ExpectOne("W_DATA_FILE_NOT_READ", b);
+    check("W_DATA_FILE_NOT_READ: a warning, the project builds, the path in 'found'",
+          b.Ok() && !b.diagnostics.empty() && b.diagnostics[0].severity == Severity::Warning &&
+              b.diagnostics[0].found == "no_such_file.dat" && b.data.datasets.items.size() == 1);
+  }
   check("the data file read in the valid case", BuildText(Data(kDataset), false, true).diagnostics.empty());
   ExpectOne("E_DATA_FILE", BuildText(Data(Set(kDataset, "columns", "    columns E_lab[MeV] _ value error _ _")), false, true));
   ExpectOne("E_NOT_BUILT", BuildText(Data(Set(kDataset, "unit", "    unit mb"))));

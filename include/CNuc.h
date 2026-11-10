@@ -41,6 +41,7 @@ struct SampleAbundance {
   double sigma = 0.0;       ///< prior width; 0 = no prior
   bool vary = false;
   bool priorReplaced = false;  ///< the prior covariance replaces this prior (docs/upgrade/objective.md D3)
+  std::string isotope;  ///< format 3: the isotope as written, which names the parameter ("" = the old name)
 };
 
 /// A sample: one set of isotopic (or stoichiometric) abundances, one entry per
@@ -276,7 +277,7 @@ class CNuc {
   std::string transformError_;
   /// 1-based index of the nucleus with this (Z, A), appending it if new.
   int FindOrAddNucleus(int z, int a);
-  /// TEMPORARY (step 3d, src/OldLineSetup.cpp): the old <abundances> section through SetAbundances.
+  /// TEMPORARY (step 3d, src/ProjectSetup.cpp): the old <abundances> section through SetAbundances.
   int ReadAbundances(const Config &);
   /// The abundances of the samples from their spec into samples_; -1 (with the reader's message) when the reader
   /// stopped.

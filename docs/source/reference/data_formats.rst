@@ -571,3 +571,108 @@ temperature, no parameter) and its GUI misreads the line.
    ``pyazr`` (:doc:`../user_guide/pyazr`), whose load-and-save round trip
    ``tests/pyazr/roundtrip_test`` checks. The internal format may change
    between versions.
+
+Project Files in Format 3
+-------------------------
+
+A project in format 3 (``format=3`` in ``<config>``; the design is
+``docs/upgrade/project_format3.md``, the table of every record kind, field,
+quantity, unit and diagnostic is :doc:`format3`) keeps ``<config>``,
+``<levels>``, ``<parameterSettings>``, ``<mcmc>`` and ``<thm>`` and replaces
+``<segmentsData>``, ``<segmentsTest>``, ``<targetInt>``, ``<abundances>`` and
+``<scatteringLengths>`` by named records: ``dataset``, ``normalization`` and
+``energy_scale`` in ``<data>``, ``extrapolation`` in ``<extrapolations>``,
+``target``, ``beam`` and ``detector`` in ``<targets>``, ``datum`` in
+``<modelData>``.  A record is a header line ``<kind> <name>`` and one
+``<key> <value>`` line per field; ``#`` starts a comment.  Records refer to one
+another by name, in any order.  An excerpt of T2 (``tests/upgrade/T2``, written
+by ``AZURE2 --convert T2.azr T2_f3.azr --to 3``; the whole file is
+``experiment/tests/data/T2_format3.azr``)::
+
+   <config>
+   format=3
+   </config>
+   <targets>
+   target tgt_s01_int_thin                         # <targetInt> line 1
+       kind           layer
+       active         15N
+       areal_density  5e17 atoms/cm2 fixed
+       stopping       formula "a0*x^a1" a0=1.6e-20 a1=-0.45 MeV*cm2/atom
+       straggling     bohr
+   beam beam_s01_int_thin
+       spread         0.001 MeV lab
+   </targets>
+   <data>
+   normalization D                                 # shared by s02 and s03
+       value          1 fit prior 1 8%
+   energy_scale G
+       offset         0 MeV fit prior 0 0.003
+       function       "a0*(x-0.8)" MeV
+       param          a0 0 fit prior 0 0.01
+   dataset s01_int_thin
+       reaction       15N(p,a)12C
+       quantity       sigma
+       unit           b
+       file           data/s01_int_thin.dat
+       columns        E_lab[MeV] _ value error
+       energy_window  0.199999 1.400001 MeV
+       norm           1 fit prior 1 5%
+       shift          offset 0 MeV fit prior 0 0.003
+       target         tgt_s01_int_thin
+       beam           beam_s01_int_thin
+       quadrature     points 20 width_multiplier 10 per_width 20
+   dataset s02_diff090
+       reaction       15N(p,a)12C
+       quantity       dsigma_domega
+       unit           b/sr
+       file           data/s02_diff090.dat
+       columns        E_lab[MeV] theta_lab[deg] value error
+       energy_window  0.249999 1.350001 MeV
+       angle_window   90 90 deg
+       norm           D
+       shift          G
+   </data>
+
+The engine reads such a file in one pass: the records are read and checked
+against the table, the reactions are resolved against the pairs of
+``<levels>`` (a label names a pair by its particles and states; where it names
+two, ``entrance_pair`` / ``exit_pair`` give the key), the model data against
+its levels, and the data files are opened **relative to the working
+directory** (as for an old project).  Any error refuses the project with the
+same diagnostics ``AZURE2 --validate`` prints.  ``AZURE2 --describe FILE``
+(``pyazr.describe``) prints what was understood: per data set the observable,
+the pair keys of each reaction term, the data file's resolved path, the
+effects linked to it and its fit parameters.
+
+Where the engine reading a format-3 file behaves differently from the old
+engine on the same project (``AZURE2 --convert`` reports the rest):
+
+* A data file that cannot be read refuses a run with data (``E_DATA_FILE``);
+  the old engine skipped that data set with a warning and fitted the others.
+  A run without data (extrapolations, menu 3, and pyazr calls that only
+  extrapolate) does not read the data files: one that cannot be read is the
+  warning ``W_DATA_FILE_NOT_READ``.  ``--validate`` and ``--describe`` require
+  them.
+* A member of a varied shared ``normalization`` has a fixed parameter of its own
+  (``D.value[<data set>]``) whether or not its old line varied it, and the
+  start and step of a follower's fixed parameters are the record's.
+* Scattering lengths are model data: ``chiSquared.out`` labels them
+  ``Model-Data`` and ``modelData.out`` lists them.
+* An abundance-weighted output names its sample by its target.
+
+Parameter names follow the records: a data set's own are
+``<data set>.norm``, ``<data set>.shift.offset`` and ``<data set>.shift.sqrt``
+(every data set has the two shift parameters, fixed at 0 without a shift); a
+shared record's belong to the first active data set of the group
+(``D.value``, ``G.offset``, ``G.a0``, ``<target>.areal_density``) and a later
+member keeps a fixed parameter of its own, ``D.value[s03_diff150]``; the
+effects of a target are ``<target>.areal_density``, ``<target>.doppler``,
+``<target>.screening``, an isotope's abundance ``<target>.isotope.<nuclide>``.
+``AZURE2 --convert ... --to 3`` reports the map from the old names
+(``segment_2_norm``) to these in its ``--json-report`` (``parameters``) and
+renames the rows of ``<parameterSettings>`` by it.  Windows, shifts, fixed
+term angles and a detector resolution are converted to the engine's units; a
+unit other than the engine's is refused for now (``E_NOT_BUILT``) in a data
+set's ``unit`` and ``columns``, a target's ``areal_density`` (atoms/cm\ :sup:`2`;
+a neutron sample's atoms/b), ``stopping`` (MeV cm\ :sup:`2`/atom) and
+``screening`` (eV), and a beam ``spread`` formula (MeV).

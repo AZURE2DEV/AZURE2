@@ -44,7 +44,8 @@ convert_one() {
   local new="${f%.azr}.f3.azr" report="${f%.azr}.report.json" val="${f%.azr}.validate.json"
   # shellcheck disable=SC2086
   if "$BIN" --convert "$f" "$new" --to 3 --json-report "$report" $CONVERT_OPTIONS > "${f%.azr}.convert.log" 2>&1; then
-    if "$BIN" --validate "$new" --json > "$val" 2> "${f%.azr}.validate.log"; then
+    # in the file's folder: data files are read relative to the working directory, as tools/run_one.sh runs the engine
+    if (cd "$(dirname "$new")" && "$BIN" --validate "$(basename "$new")" --json) > "$val" 2> "${f%.azr}.validate.log"; then
       echo "ok        $f"
     else
       echo "INVALID   $f"

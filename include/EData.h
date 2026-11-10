@@ -55,7 +55,7 @@ class EData {
   int Fill(const Config &, CNuc *, const azure2::experiment::DataSpecs &);
   /// Build points from the extrapolation grids instead of data files, for a run with no data.  Returns -1 on failure.
   int MakePoints(const Config &, CNuc *, const azure2::experiment::ExtrapolationSpecs &);
-  /// TEMPORARY (step 3d): the same from the old sections of the project (src/OldLineSetup.cpp).
+  /// TEMPORARY (step 3d): the same from the old sections of the project (src/ProjectSetup.cpp).
   int Fill(const Config &, CNuc *);
   int MakePoints(const Config &, CNuc *);
   /// Fit iterations used so far.
@@ -81,7 +81,8 @@ class EData {
   int GetEnergyShiftFnParamOffset() const;
   /*!
    * Electron screening.  The <targetInt> lines with a `screening` block, in line order, each with one
-   * parameter `screening_<n>` (n = the effect number: its place among the active <targetInt> lines),
+   * parameter `screening_<n>` (n = the effect number: its place among the active <targetInt> lines; format 3:
+   * `<target>.screening`),
    * U_e in eV, after the shift-function parameters.  None without a screening block.  A line listing
    * several segments has one copy of its effect per segment (SetUpTargetEffects); the parameter is
    * the line's, shared by every copy.
@@ -103,7 +104,8 @@ class EData {
   /// Sum of the screening priors ((U_e - nominal)/sigma)^2.
   double ScreeningPenalty() const;
   /*!
-   * Fitted target densities (TargetEffect::HasDensityFit).  One parameter `density_<n>` (atoms/cm^2) per
+   * Fitted target densities (TargetEffect::HasDensityFit).  One parameter `density_<n>` (format 3:
+   * `<target>.areal_density`; atoms/cm^2) per
    * ungrouped `densityfit` line and per `densitygroup`, n = the effect number of the line (of the group's first
    * line: its place among the active <targetInt> lines), after the screening parameters.  None without a
    * densityfit block.  As for screening, a line listing several segments has one copy of its effect per segment;
@@ -129,7 +131,7 @@ class EData {
   double DensityPenalty() const;
   /*!
    * Fitted Doppler temperatures (TargetEffect::HasDopplerFit, `doppler T vary sigma [Tmax]`).  One parameter
-   * `doppler_<n>` (K) per such line, n = the line number (its place among the active <targetInt> lines, as
+   * `doppler_<n>` (format 3: `<target>.doppler`; K) per such line, n = the line number (its place among the active <targetInt> lines, as
    * screening_<n>), after the density parameters.  None without the fit form.
    */
   int NumDopplerParams() const { return (int)dopplerEffects_.size(); }
@@ -151,7 +153,7 @@ class EData {
   double DopplerPenalty() const;
   /*!
    * Fitted sample thicknesses (ESegment::HasThicknessFit, `transmission n vary sigma` / `yield n vary sigma`).  One
-   * parameter `segment_<key>_thickness` (atoms/barn) per data segment whose line has the fit form, in segment order,
+   * parameter (atoms/barn; its name from the spec, ParameterNames::thickness) per data segment whose line has the fit form, in segment order,
    * after the Doppler temperatures; a thickness-group follower's is fixed at its leader's value.  None without the
    * fit form.
    */
@@ -311,11 +313,6 @@ class EData {
   /// The segment (1-based) whose norm segment s uses: its norm-group leader, or s itself.
   int NormOwner(int s) const;
   void FillMnParams(AZUREParams &);
-  /// The name of a data-segment parameter of the segment with key `key` (kind Norm, EnergyShift, EnergyShiftSqrt,
-  /// Thickness, or EnergyShiftFn with its j), as param files and <parameterSettings> rows name it; empty for any
-  /// other kind.  The one definition of these names (FillMnParams; convert/'s OldSegmentParameterName gives the
-  /// same for old projects' prior_centre rows, test `old_line_specs`).
-  static std::string SegmentParameterName(int key, ParamKind kind, int fnTerm = 0);
   /// Write the normalizations back from a Minuit parameter vector.
   void FillNormsFromParams(const vector_r &);
   /// Write the energy shifts back from a Minuit parameter vector.  The last step of the hand-over of every

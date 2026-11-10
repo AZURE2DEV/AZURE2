@@ -268,4 +268,20 @@ Level 6 Channel 14 Width (eV) 1100 0 0 110 0 0 level 10
 Level 9 Energy (MeV) 3.5453 0 0 0.01 0 0 level 11
 Level 9 Channel 21 Width (eV) 49000 0 0 4900 0 0 level 12
 Level 9 Channel 22 Width (eV) 1e-05 0 0 1e-06 0 0 level 13
+artemov.shift.offset 0 0 0 0 0 0 shift 14
+seagrave.shift.offset 0 0 0 0 0 0 shift 15
+meyer_84.shift.offset 0 0 0 0.005 0 0 shift 16
+meyer_114.shift.offset 0 0 0 0 0 0 shift 17
+meyer_144.shift.offset 0 0 0 0 0 0 shift 18
+skowronski_luna_hpge.shift.offset 0 0 0 0 0 0 shift 19
+skowronski_luna_bgo.shift.offset 0 0 0 0 0 0 shift 20
+skowronski_fels.shift.offset 0 0 0 0 0 0 shift 21
+kettner_0.shift.offset 0 0 0 0 0 0 shift 22
+kettner_55.shift.offset 0 0 0 0.001 0 0 shift 23
+baumann_1618.shift.offset 0 0 0 0 0 0 shift 24
+baumann_1658.shift.offset 0 0 0 0 0 0 shift 25
+baumann_1708.shift.offset 0 0 0 0 0 0 shift 26
+baumann_1738.shift.offset 0 0 0 0 0 0 shift 27
+baumann_1758.shift.offset 0 0 0 0 0 0 shift 28
+baumann_1779.shift.offset 0 0 0 0 0 0 shift 29
 </parameterSettings>

@@ -1777,10 +1777,10 @@ Diagnostic codes
      - a datum's J^pi that is not the J^pi of the level with its ID (F13)
    * - ``E_UNKNOWN_PAIR``
      - error
-     - a reaction or pair of a datum that no pair of <levels> has (particles and states)
+     - a reaction or pair that no pair of <levels> has (particles and states)
    * - ``E_AMBIGUOUS_PAIR``
      - error
-     - a reaction or pair of a datum that two pairs of <levels> have
+     - a reaction or pair that two pairs of <levels> have (a data set says which with a pair key)
    * - ``E_NOT_A_CHANNEL``
      - error
      - a datum's pair (or pair, l, s) that is no channel of its level, or no s-wave channel spin of the pair
@@ -1811,3 +1811,6 @@ Diagnostic codes
    * - ``W_NEARBY_LEVEL``
      - warning
      - a resonance strength of a level with another level of its J^pi within 10 Gamma
+   * - ``W_DATA_FILE_NOT_READ``
+     - warning
+     - a data file that cannot be read in a run that does not use the data (an extrapolation): not read
