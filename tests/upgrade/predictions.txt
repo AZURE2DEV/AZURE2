@@ -625,6 +625,9 @@ extrapolation 1: sum(sigma(1->2))
 extrapolation 1: sum(sigma(1->2))
 == tests/transform_level_order/models/desc_fit.azr
 extrapolation 1: sum(sigma(1->2))
+== tests/units_scales/models/yield_story.azr
+data Y_curve: 113595465155.1859*sigma(1->2)
+extrapolation Y_thick: sigma(1->2)
 == tests/upgrade/T1/T1.azr
 data 1: dsdo_cm(1->1)
 data 2: dsdo_cm(1->1)
