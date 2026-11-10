@@ -58,8 +58,6 @@ class EData {
   /// TEMPORARY (step 3d): the same from the old sections of the project (src/ProjectSetup.cpp).
   int Fill(const Config &, CNuc *);
   int MakePoints(const Config &, CNuc *);
-  /// Fit iterations used so far.
-  int Iterations() const;
   /// Number of target-effect definitions attached to the data.
   int NumTargetEffects() const;
   /// Index at which the normalization parameters start in the Minuit vector.
@@ -95,7 +93,6 @@ class EData {
   const TargetEffect *GetScreeningTargetEffect(int k) const {
     return const_cast<EData *>(this)->GetTargetEffect(screeningCopies_[k - 1].front());
   }
-  int GetScreeningParamOffset() const { return screeningParamOffset_; }
   /// Push each screening effect's current U_e onto the points and sub-points of its segments.
   void ApplyScreening();
   /// Set the screening effects' U_e from a parameter vector, then ApplyScreening (called by
@@ -119,11 +116,6 @@ class EData {
   const TargetEffect *GetDensityTargetEffect(int k) const {
     return const_cast<EData *>(this)->GetTargetEffect(densityLeadCopies_[k - 1]);
   }
-  int GetDensityParamOffset() const { return densityParamOffset_; }
-  /// The density parameter (1-based) effect \p n follows, 0 if its density is not fitted.
-  int DensityParamOfEffect(int n) const {
-    return (n >= 1 && n <= (int)densityParamOfEffect_.size()) ? densityParamOfEffect_[n - 1] : 0;
-  }
   /// Set the fitted densities from a parameter vector and recompute the target thickness of every point of
   /// their lines (called by FillEnergyShiftsFromParams, so every evaluation sees the vector's values).
   void FillDensitiesFromParams(const vector_r &, const Config &);
@@ -143,7 +135,6 @@ class EData {
   const TargetEffect *GetDopplerTargetEffect(int k) const {
     return const_cast<EData *>(this)->GetTargetEffect(dopplerCopies_[k - 1].front());
   }
-  int GetDopplerParamOffset() const { return dopplerParamOffset_; }
   /// The Doppler parameter (1-based) of effect \p n, 0 if its temperature is not a fit parameter.
   int DopplerParamOfEffect(int n) const;
   /// Set the fitted temperatures from a parameter vector (clamped to [T0/4, layout temperature], with a warning
@@ -160,7 +151,6 @@ class EData {
   int NumThicknessParams() const { return (int)thicknessSegments_.size(); }
   /// Position (1-based, as GetSegment) of the segment owning thickness parameter k (1-based).
   int GetThicknessSegment(int k) const { return thicknessSegments_[k - 1]; }
-  int GetThicknessParamOffset() const { return thicknessParamOffset_; }
   /// The thickness parameter (1-based) whose value segment \p pos (1-based) uses: its own, its group leader's for a
   /// follower; 0 when that thickness is no parameter.
   int ThicknessParamOfSegment(int pos) const;
@@ -186,8 +176,6 @@ class EData {
   /// Count one more objective evaluation. Returns the count before this one (0 for the first), taken in one atomic
   /// operation, so concurrent callers (Minuit2's OpenMP numerical gradient) each get a distinct number.
   int Iterate();
-  /// Reset the iteration counter to zero.
-  void ResetIterations();
   /// Initialize every point: EPoint::Initialize over the whole data set.
   int Initialize(CNuc *, const Config &);
   /// Append a segment.
@@ -318,12 +306,8 @@ class EData {
   /// Write the energy shifts back from a Minuit parameter vector.  The last step of the hand-over of every
   /// evaluation, so it ends with BeginEvaluation(results): `results` is the buffer of the evaluation that follows,
   /// owned by its caller.
-  void FillEnergyShiftsFromParams(const vector_r &, azure2::Results &results, EData *data = nullptr,
-                                  CNuc *theCNuc = nullptr, const Config *configure = nullptr);
-  /// Slots of a result buffer for this data set: one record per point and sub-point of its segments and component
-  /// segments (Results.h), as laid out by LayoutResults.  The data set holds the layout (each point its offset),
-  /// never the values.
-  std::size_t ResultsSize() const { return resultsSize_; }
+  void FillEnergyShiftsFromParams(const vector_r &, azure2::Results &results, CNuc *theCNuc = nullptr,
+                                  const Config *configure = nullptr);
   /// The start of an evaluation into the caller's buffer `results`, after the hand-over: the records are laid out
   /// again if a point or sub-point is not where the layout puts it (a new point, a re-placed sub-point grid, a copied
   /// segment), each moving its values in `results` to its new record; `results` is sized for the layout (a new buffer
@@ -403,7 +387,6 @@ class EData {
   };
   int NumThmCoherentParams() const { return (int)thmCoherentParams_.size(); }
   const ThmCoherentParam &GetThmCoherentParam(int k) const { return thmCoherentParams_[k]; }
-  int GetThmCoherentParamOffset() const { return thmCoherentParamOffset_; }
   /// Reads the coherent-background block of a full parameter vector (if it
   /// has one) into the parameters and, if given, the compound the HOES model
   /// reads them from.  Called by FillEnergyShiftsFromParams.
@@ -490,10 +473,9 @@ class EData {
   /// per data set, so a component's key depends on its project alone (not on what else the process loaded) and no
   /// two components share one (data_model.md section 1.3, H10).
   int nextComponentKey_ = -1000;
-  bool componentError_ = false;
   std::map<std::string, std::shared_ptr<DataCovariance::File>> covFiles_;  // only while filling
   std::vector<std::shared_ptr<DataCovariance::Group>> covGroups_;         // shared by every copy
-  bool covarianceError_ = false;              // a component failed CheckComponentPairs
+  bool covarianceError_ = false;              // a covariance file could not be read (CovarianceFileFor)
   bool kinematicsError_ = false;              // a lab angle beyond the kinematic maximum (audit 2026-10-25, item 31)
   std::atomic<int> iterations_{0};  // objective evaluations; incremented from every thread of a parallel gradient
   int normParamOffset_;
@@ -542,7 +524,9 @@ class EData {
   std::shared_ptr<const PriorCovariance> priorCov_;  // shared by every copy (read-only once set up)
   std::vector<std::string> nucleusLabels_;   // one per compound nucleus, for the natural decomposition file
   int numNuclei_ = 0;  // compound nuclei: the natural terms of a sample segment's points (Initialize)
-  /// Slots of a buffer laid out for this data set (ResultsSize), and its model values (Results::model).
+  /// Slots of a buffer laid out for this data set: one record per point and sub-point of its segments and component
+  /// segments (Results.h, LayoutResults; the data set holds the layout, never the values), and its model values
+  /// (Results::model).
   std::size_t resultsSize_ = 0, modelSize_ = 0;
   /// One record per point and sub-point, in the order of segments_ then componentSegments_, each point before its
   /// sub-points: each gets its offset (EPoint::SetResultRecord); and one model record per point of segments_
@@ -553,7 +537,7 @@ class EData {
   /// Calls f(point, angular slots, natural slots) for every point and sub-point in layout order.
   template <class F>
   void ForEachResultUnit(F f);
-  void FillEnergyShiftsFromParamsImpl(const vector_r &, EData *data, CNuc *theCNuc, const Config *configure);
+  void FillEnergyShiftsFromParamsImpl(const vector_r &, CNuc *theCNuc, const Config *configure);
   // A copy of the compound nucleus that holds the observed level parameters the
   // sub-point grids are laid out from (ReplaceSubPointGrids).  Never shared: a
   // copy or Clone of the EData starts without one.

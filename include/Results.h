@@ -53,7 +53,7 @@ struct Results {
   /*!
    * What the data set predicts, apart from the leaf values above (docs/upgrade/data_model.md section 2.1, step S4):
    * one record per point of a data or test segment -- not of a component segment or a sub-point --, laid out with the
-   * leaf records (EData::LayoutResults; the point keeps its offset, EPoint::ModelSlot).  A record holds the model
+   * leaf records (EData::LayoutResults; the point keeps its offset, EPoint::SetModelRecord).  A record holds the model
    * value m_i, the segment's combination (SUM, RATIO, sample, transform, the E1 or E2 part) of its points' leaf
    * values, which the residual compares with the datum; then, for a point with an angular-distribution capacity
    * K > 0, the number of coefficients and K coefficients a_0 .. a_{K-1}.  Written by azure2::EvaluateModelPoint
@@ -71,7 +71,7 @@ struct Results {
     std::vector<double> norm, segmentChi2;
     /// The covariance seed (M^-1 r)_i of every point in a data-covariance group (EData::CovarianceChi2Correction):
     /// the point's share of d(chi^2)/d(r_i) / 2, which the gradient reads.  Indexed as Results::model (the point's
-    /// model record, EPoint::ModelSlot); sized only when the data set has a covariance group.
+    /// model record, EPoint::SetModelRecord); sized only when the data set has a covariance group.
     std::vector<double> covarianceSeed;
     std::vector<ThmProfile> thmProfiles;
     double nuisance = 0.0, park = 0.0, abundance = 0.0, scatteringLength = 0.0, priorCovariance = 0.0;

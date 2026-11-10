@@ -73,7 +73,7 @@ bool SameBits(const std::vector<double> &a, const std::vector<double> &b, std::s
 std::vector<double> Evaluate(CNuc *lc, EData *ld, azure2::Results &results, const vector_r &p, const Config &cfg) {
   lc->FillCompoundFromParams(p);
   ld->FillNormsFromParams(p);
-  ld->FillEnergyShiftsFromParams(p, results, ld, lc, &cfg);
+  ld->FillEnergyShiftsFromParams(p, results, lc, &cfg);
   if (cfg.paramMask & Config::USE_BRUNE_FORMALISM) lc->CalcShiftFunctions(cfg, false);
   azure2::EvaluateModel(*ld, lc, cfg, results, azure2::LeafValues::Calculate);
   return results.model;

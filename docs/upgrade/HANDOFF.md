@@ -2,6 +2,38 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-10 (agent, brief Q) — `EData` split W1 and W2 (branch `feature/upgrade-4-edata-split-2`)
+
+**Done** (`edata_split.md` §5.2; one commit per class for W1, one for W2; each item re-proved dead by `git grep -nw`
+over `src/ include/ api/ experiment/ io/ physics/ convert/ pyazr/ tests/ tools/` on this tree).
+- W1 `EData` (530d5a7f): `Iterations`, `ResetIterations`, `Get{Screening,Density,Doppler,Thickness,ThmCoherent}ParamOffset`,
+  `DensityParamOfEffect`, `ResultsSize`, the write-only `componentError_`; the unreachable `data == nullptr` branch of
+  `FillEnergyShiftsFromParamsImpl` with the `data` parameter of `FillEnergyShiftsFromParams` (24 callers passed the
+  data set itself; the kept branch reads `this`) and its write-only counter `k`.  §7 items 1, 2, 10 (EData parts).
+- W1 `EPoint` (685c2697): `StoreSubpointOffsets`, `ApplySubpointShift` (never defined), `IsTargetFallbackOnly` (the flag
+  stays; comments name `SetTargetFallbackOnly`), `ModelSlot`, `ModelAngularSlots`, `SetExcitationEnergy`,
+  `angleKinFactor_` with its getter, setter and writes; not in the note: `GetNumAngularDists`, `GetAngularDist`.
+  §7 item 6: the three self-assignments through `SetCrossSectionKinFactor` and with them the setter.
+- W1 `ESegment` (2518a118): `GetNominalEnergyShiftSqrt` / `energyShiftSqrtNominal_`, `Has{Shift,Norm}GroupFollowers`
+  with their members and setters (and the two calls in `EData`), `SetVaryNorm`, `AddComponent`,
+  `componentCalculationMutex_`; §7 items 3, 10.
+- W2 (3837d59c): `CovarianceFileFor` … `PrepareCovarianceSeeds` (256 lines) verbatim to `src/EDataCovariance.cpp`;
+  one check-11 row.
+Sizes: `EData.cpp` 4,793 → 4,455, `EPoint.cpp` 2,983 → 2,920, `ESegment.cpp` 1,406 → 1,366, `EData.h` 576 → 560,
+`EPoint.h` 911 → 896, `ESegment.h` 590 → 574; new `EDataCovariance.cpp` 275.
+
+**Verified** (build `work/b-esplit2`, 3 threads): every commit 0 warnings, consistency (after `--tighten-sizes`),
+`scripts/check.sh --quick` (ctest -LE slow 163/163), 179 × 3 identical to `tab-p3f` (689/662/689; tags
+`tab-esplit2-w1a`, `-w1b`, `-w1c`, `-w2`); after the EData commit `tests/shift_fn` and `tests/energy_shift_sqrt` pass;
+W2: the move `diff`s empty, and the covariance projects (`data_covariance` diag, dense, rel; T2 Brune and formal;
+fit.azr with MIGRAD-gradient, LM, GSL-LM fits) byte for byte against the base build `work/b-trial5`, all output
+files (`work/esplit2/cov_cmp.sh`).  At the end (`work/esplit2/final.sh`): `tests/run_tests.sh` (OMP 3) 140 passed,
+0 failed; 1 vs 2 threads on T1, T2, T3, 13N in the three bases: 12/12 output directories identical.
+
+**Open.** History comments outside §7 item 10's list remain (`EData::CheckComponentPairs` "as was done",
+`EPoint::ConvertLabAngle` "Until 2026-10-29", `ConvertCrossSectionGammas` "Before 2026-10-23", two "Before 2026-11-05" comments in `EData.cpp`
+(the grid re-placement, the gamma pair's final level).  `#include <mutex>` stays in `ESegment.h` (other files may rely on it).
+
 ## 2026-11-10 (director, afternoon) — Phase 4: the fourth wave merged (expression tree, plan, `EData` split N1–N4, the engine runs format 3)
 
 **Merged into `feature/upgrade-4-data`** (`--no-ff`, in this order; each rehearsed, built and verified in a scratch

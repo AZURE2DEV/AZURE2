@@ -662,14 +662,6 @@ int EData::MakePoints(const Config &configure, CNuc *theCNuc, const azure2::expe
 }
 
 /*!
- * Returns the number of fit iterations needed to minimize the parameters to the data.
- */
-
-int EData::Iterations() const {
-  return iterations_.load(std::memory_order_relaxed);
-}
-
-/*!
  * Returns the number of TargetEffect objects contained in the present object.
  */
 
@@ -712,7 +704,7 @@ int EData::GetEnergyShiftFnParamOffset() const {
 namespace {
 /*!
  * The sub-points of a thin-target point outside the windows of an energy-restricted integration
- * (EPoint::IsTargetFallbackOnly): one at E_bar = E - D for a fixed density; for a fitted one three, at E_bar of the
+ * (EPoint::SetTargetFallbackOnly): one at E_bar = E - D for a fixed density; for a fitted one three, at E_bar of the
  * smallest density the fit may reach (0.01 N0, EData::FillDensitiesFromParams), of the nominal N0 and of the layout
  * density, through which the kernel interpolates E_bar(N) -- exact at N0, smooth in N.
  */
@@ -919,9 +911,9 @@ bool SegmentNeedsEC(ESegment &segment, CNuc *theCNuc, const Config &configure) {
  * with the data by the shift step; the resonances are offset by the point's c.m.
  * shift so the dense part of the grid lands on each resonance after the move.
  *
- * A grid differs from the current one if a node moved by more than 1e-12
- * relative: the round trip from the file's observed values through the formal
- * parameters and back changes them in the last digits only.
+ * A grid is kept only if every node is bit for bit where the new one puts it;
+ * otherwise the point gets the new grid, so the grid depends on the current
+ * parameters alone (docs/upgrade/fit_threads.md).
  */
 int EData::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, const std::vector<ESegment *> &shiftActive,
                                 std::vector<ESegment *> &reshift) {
@@ -1012,11 +1004,9 @@ int EData::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, const st
     }
     std::vector<double> grid = AdaptiveIntegrationGrid(gc).GenerateGrid(spec.startEnergy, spec.endEnergy, g);
     std::vector<EPoint> &subs = point->GetSubPoints();
-    // The grid kept is the one placed now, bit for bit.  Before 2026-11-09 nodes within 1e-12 (relative) of the
-    // present ones counted as unchanged and the old grid stayed: which grid a working copy then held depended on
-    // the parameter vectors it had evaluated before, and Minuit's parallel gradient hands those out by thread, so
-    // the objective at one p differed between pooled copies in its last digits and a fit depended on the thread
-    // count (docs/upgrade/fit_threads.md).
+    // The grid kept is the one placed now, bit for bit.  A grid kept within a tolerance would depend on the
+    // parameter vectors the working copy evaluated before, which Minuit's parallel gradient hands out by thread:
+    // the objective at one p, and so a fit, would depend on the thread count (docs/upgrade/fit_threads.md).
     bool same = (subs.size() == grid.size());
     for (size_t k = 0; same && k < grid.size(); k++) same = subs[k].GetOriginalEnergy() == grid[k];
     if (same) return;
@@ -1262,7 +1252,7 @@ int EData::SetUpTargetEffects(const Config &configure, CNuc *compound,
         // downstream machinery treats them as ordinary points -- except under a
         // thin-target integration, whose data carry the beam energy: there a
         // point outside the windows is evaluated at its depth-averaged energy
-        // E_bar (EPoint::IsTargetFallbackOnly, 2026-11-05).
+        // E_bar (EPoint::SetTargetFallbackOnly).
         double blendWeight = targetEffect->BlendWeight(point->GetLabEnergy(), windows);
         if (blendWeight <= 0. && !thinTarget) continue;
         point->SetTargetEffectNum(segment->GetTargetEffectNum());
@@ -1708,14 +1698,6 @@ void EData::SetErrorAnalysis(bool errorAnalysis) {
 
 int EData::Iterate() {
   return iterations_.fetch_add(1, std::memory_order_relaxed);
-}
-
-/*!
- * This function sets the number of iterations to zero.
- */
-
-void EData::ResetIterations() {
-  iterations_.store(0, std::memory_order_relaxed);
 }
 
 /*!
@@ -2769,7 +2751,6 @@ bool EData::CheckComponentPairs(CNuc *theCNuc, const ESegment &baseSegment, int 
   if (!theCNuc->IsPairKey(entranceKey) || !theCNuc->IsPairKey(exitKey)) {
     configure.outStream << "ERROR: segment #" << baseSegment.GetSegmentKey() << ": component " << entranceKey
                         << " -> " << exitKey << " names a pair key that is not in the compound nucleus." << std::endl;
-    componentError_ = true;
     return false;
   }
   PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(entranceKey));
@@ -2779,7 +2760,6 @@ bool EData::CheckComponentPairs(CNuc *theCNuc, const ESegment &baseSegment, int 
                         << " -> " << exitKey << " connects two compound nuclei ("
                         << theCNuc->NucleusLabel(entrancePair->GetNucleus()) << " and "
                         << theCNuc->NucleusLabel(exitPair->GetNucleus()) << ")." << std::endl;
-    componentError_ = true;
     return false;
   }
   entrancePair->SetEntrance();
@@ -3235,7 +3215,6 @@ int EData::ResolveShiftGroups(const Config &configure) {
     }
     ESegment &leader = segments_[it->second];
     seg.SetShiftGroupFollower(it->second, leader.GetEnergyShift());
-    leader.SetHasShiftGroupFollowers(true);
   }
   for (const auto &g : leaders) {
     const ESegment &leader = segments_[g.second];
@@ -3523,7 +3502,6 @@ void EData::ResolveNormGroups(const Config &configure) {
     }
     ESegment &leader = segments_[it->second];
     seg.SetNormGroupFollower(it->second, leader.GetNorm(), leader.GetNominalNorm());
-    leader.SetHasNormGroupFollowers(true);
   }
   for (const auto &g : leaders) {
     const ESegment &leader = segments_[g.second];
@@ -3549,263 +3527,6 @@ int EData::NormOwner(int s) const {
   if (s < 1 || s > (int)segments_.size()) return s;
   const int lead = segments_[s - 1].GetNormLeaderPos();
   return (lead >= 0) ? lead + 1 : s;
-}
-
-std::shared_ptr<DataCovariance::File> EData::CovarianceFileFor(const std::string &path, const Config &configure) {
-  const std::string key = DataCovariance::CanonicalPath(path);
-  auto it = covFiles_.find(key);
-  if (it != covFiles_.end()) return it->second;
-  std::string err;
-  std::shared_ptr<DataCovariance::File> f = DataCovariance::Read(path, err, configure.cacheInputFiles);
-  if (!f) {
-    configure.outStream << "ERROR: Covariance file: " << err << "." << std::endl;
-    covarianceError_ = true;
-    return nullptr;
-  }
-  configure.outStream << "Covariance file " << path << ": " << f->N << " rows over " << f->files.size()
-                      << " data file(s)" << (f->rel.empty() ? std::string() : ", " + std::to_string(f->rel.size()) +
-                                                                                   " relvector term(s)")
-                      << "." << std::endl;
-  covFiles_[key] = f;
-  return f;
-}
-
-/*!
- * One group per covariance file: its segments' points in the file's row order, the
- * absolute part of their submatrix, the relvector fractions on their rows, and the
- * Cholesky factor of M = D^-1 C D^-1.  Without relvector terms the factor is final here;
- * with them it is checked here with the data in place of the model and frozen at the
- * first evaluation (DataCovariance::Group::EnsureFactored).
- */
-int EData::ResolveCovarianceGroups(const Config &configure) {
-  covGroups_.clear();
-  std::map<std::string, int> groupOf;
-  struct Item { int row, seg, pid; };
-  std::vector<std::vector<Item>> items;
-  std::vector<std::shared_ptr<DataCovariance::File>> files;
-  for (int s = 1; s <= this->NumSegments(); s++) {
-    ESegment *seg = this->GetSegment(s);
-    if (seg->GetCovarianceFile().empty()) continue;
-    const std::string key = DataCovariance::CanonicalPath(seg->GetCovarianceFile());
-    auto fit = covFiles_.find(key);
-    if (fit == covFiles_.end()) return -1;  // Fill reported it
-    auto git = groupOf.find(key);
-    int g;
-    if (git == groupOf.end()) {
-      g = (int)items.size();
-      groupOf[key] = g;
-      items.emplace_back();
-      files.push_back(fit->second);
-      auto grp = std::make_shared<DataCovariance::Group>();
-      grp->path = seg->GetCovarianceFile();
-      covGroups_.push_back(grp);
-    } else {
-      g = git->second;
-    }
-    seg->SetCovarianceGroup(g);
-    covGroups_[g]->numSegments++;
-    const std::string canonicalData = DataCovariance::CanonicalPath(seg->GetDataFile());
-    for (int pid = 0; pid < seg->NumPoints(); pid++) {
-      const int row = fit->second->RowOf(canonicalData, seg->GetPoint(pid + 1)->GetFileRecord());
-      if (row < 0) return -1;  // cannot happen: Fill checked the file and the record count
-      items[g].push_back({row, s, pid});
-    }
-  }
-  if (covGroups_.empty()) {
-    covFiles_.clear();
-    return 0;
-  }
-  const std::string modelFile = configure.outputdir + "covarianceModel.out";
-  bool anyRelative = false;
-  for (size_t g = 0; g < covGroups_.size(); g++) {
-    DataCovariance::Group &grp = *covGroups_[g];
-    const DataCovariance::File &f = *files[g];
-    std::vector<Item> &it = items[g];
-    std::stable_sort(it.begin(), it.end(), [](const Item &a, const Item &b) { return a.row < b.row; });
-    for (size_t k = 1; k < it.size(); k++)
-      if (it[k].row == it[k - 1].row) {
-        configure.outStream << "ERROR: Row " << it[k].row + 1 << " of covariance file " << grp.path
-                            << " is fitted twice, in segments #" << this->GetSegment(it[k - 1].seg)->GetSegmentKey()
-                            << " and #" << this->GetSegment(it[k].seg)->GetSegmentKey()
-                            << " (overlapping energy or angle windows on one data file)." << std::endl;
-        return -1;
-      }
-    const int n = (int)it.size();
-    grp.n = n;
-    grp.N = f.N;
-    grp.members.resize(n);
-    grp.rows.resize(n);
-    grp.sigma.resize(n);
-    grp.data.resize(n);
-    grp.label.resize(n);
-    for (int a = 0; a < n; a++) {
-      grp.members[a] = {it[a].seg, it[a].pid};
-      grp.rows[a] = it[a].row;
-      ESegment *seg = this->GetSegment(it[a].seg);
-      EPoint *pt = seg->GetPoint(it[a].pid + 1);
-      grp.sigma[a] = pt->GetLabCrossSectionError();
-      grp.data[a] = pt->GetLabCrossSection();
-      std::ostringstream lab;
-      lab << seg->GetSegmentKey() << " " << pt->GetLabEnergy() << " " << pt->GetLabAngle();
-      grp.label[a] = lab.str();
-    }
-    grp.modelFile = modelFile;
-    // B (diagonal and blocks) factored by connected components; it must be positive
-    // definite by itself on the fitted rows.
-    const int bad = grp.SetUp(f);
-    if (bad >= 0) {
-      configure.outStream << "ERROR: Covariance file " << grp.path << ": its diagonal and block terms are not positive"
-                          << " definite on the fitted rows (at file row " << grp.rows[bad] + 1
-                          << "). Every fitted row needs a variance of its own from a diagonal or block term;"
-                          << " vector and relvector terms alone are not enough." << std::endl;
-      return -1;
-    }
-    if (grp.HasRelative())
-      anyRelative = true;  // the low-rank part waits for the model of the first evaluation
-    else
-      grp.Factor(grp.data);
-    configure.outStream << "Covariance " << grp.path << ": " << n << " of " << f.N << " rows fitted, in "
-                        << grp.numSegments << " segment(s); " << grp.NumComponents()
-                        << " diagonal/block component(s) (largest " << grp.LargestComponent() << " rows), "
-                        << grp.absolute.size() << " vector term(s)"
-                        << (grp.HasRelative() ? ", " + std::to_string(grp.rel.size()) +
-                                                    " relvector term(s) on the model frozen at the first evaluation"
-                                              : std::string())
-                        << "." << std::endl;
-    if (f.numSigmaMismatch > 0)
-      configure.outStream << "WARNING: " << f.numSigmaMismatch << " point(s) of " << grp.path
-                          << " have an error column more than 1 % from sqrt(C_ii) (worst "
-                          << 100.0 * f.worstSigmaMismatch << " %; first: " << f.firstSigmaMismatch
-                          << "); sqrt(C_ii) is used." << std::endl;
-  }
-  if (anyRelative) std::ofstream(modelFile.c_str(), std::ios::trunc);
-  covFiles_.clear();
-  return 0;
-}
-
-double EData::CovarianceChi2Correction(azure2::Results &results, std::vector<double> *segChis) {
-  double correction = 0.0;
-  std::vector<double> r, z;
-  for (const std::shared_ptr<DataCovariance::Group> &gp : covGroups_) {
-    DataCovariance::Group &g = *gp;
-    r.assign(g.n, 0.0);
-    double diag = 0.0;
-    for (int a = 0; a < g.n; a++) {
-      ESegment *seg = this->GetSegment(g.members[a].first);
-      EPoint *pt = seg->GetPoint(g.members[a].second + 1);
-      r[a] = azure2::PointResidual(*pt, results, seg->GetNorm()).Pull();
-      diag += r[a] * r[a];
-    }
-    g.EnsureFactored(r);
-    z = r;
-    g.Whiten(z.data());
-    double q = 0.0;
-    for (int a = 0; a < g.n; a++) q += z[a] * z[a];
-    g.WhitenTranspose(z.data());
-    correction += q - diag;
-    for (int a = 0; a < g.n; a++)
-      this->GetSegment(g.members[a].first)->GetPoint(g.members[a].second + 1)->SetCovarianceSeed(results, z[a]);
-    // Per-segment chi2: the exact partition sum_i r_i (M^-1 r)_i of the group's chi2.
-    std::map<int, double> part;
-    for (int a = 0; a < g.n; a++) part[g.members[a].first] += r[a] * z[a];
-    for (const auto &ps : part) {
-      results.objective.segmentChi2[ps.first] = ps.second;
-      if (segChis && ps.first < (int)segChis->size()) (*segChis)[ps.first] = ps.second;
-    }
-  }
-  return correction;
-}
-
-void EData::WhitenResidualRows(std::vector<double> &residuals, std::vector<double> *jacobian, int nCols) {
-  if (covGroups_.empty()) return;
-  std::vector<int> rowStart(this->NumSegments() + 2, 0);
-  int row = 0;
-  for (int s = 1; s <= this->NumSegments(); s++) {
-    rowStart[s] = row;
-    row += this->GetSegment(s)->NumPoints();
-  }
-  if (row > (int)residuals.size()) return;  // not the data-row layout
-  for (const std::shared_ptr<DataCovariance::Group> &gp : covGroups_) {
-    DataCovariance::Group &g = *gp;
-    std::vector<int> rows(g.n);
-    for (int a = 0; a < g.n; a++) rows[a] = rowStart[g.members[a].first] + g.members[a].second;
-    std::vector<double> y(g.n);
-    for (int a = 0; a < g.n; a++) y[a] = residuals[rows[a]];
-    g.EnsureFactored(y);  // the first evaluation of a run with relvector terms freezes the model here
-    g.Whiten(y.data());
-    for (int a = 0; a < g.n; a++) residuals[rows[a]] = y[a];
-    if (!jacobian || nCols <= 0) continue;
-    std::vector<double> &J = *jacobian;
-#pragma omp parallel for schedule(dynamic, 4)
-    for (int c = 0; c < nCols; c++) {
-      std::vector<double> col(g.n);
-      bool any = false;
-      for (int a = 0; a < g.n; a++) any |= (col[a] = J[(size_t)rows[a] * nCols + c]) != 0.0;
-      if (!any) continue;
-      g.Whiten(col.data());
-      for (int a = 0; a < g.n; a++) J[(size_t)rows[a] * nCols + c] = col[a];
-    }
-  }
-}
-
-/*!
- * covariance.out: per covariance group, the fitted rows, the chi2 r^T M^-1 r of the
- * current fit values and, for comparison, the sum of r_i^2 (the chi2 the same points
- * would have without their correlations).
- */
-void EData::WriteCovarianceSummary(const Config &configure, const azure2::Results &results) {
-  std::ofstream out((configure.outputdir + "covariance.out").c_str());
-  if (!out) return;
-  out << "# file, fitted rows, rows, segments, chi2 (r^T M^-1 r), sum of r_i^2 (correlations ignored), relvector terms"
-      << std::endl;
-  out.precision(12);
-  out << std::scientific;
-  std::vector<double> r;
-  for (const std::shared_ptr<DataCovariance::Group> &gp : covGroups_) {
-    DataCovariance::Group &g = *gp;
-    r.assign(g.n, 0.0);
-    double diag = 0.0;
-    for (int a = 0; a < g.n; a++) {
-      ESegment *seg = this->GetSegment(g.members[a].first);
-      EPoint *pt = seg->GetPoint(g.members[a].second + 1);
-      r[a] = azure2::PointResidual(*pt, results, seg->GetNorm()).Pull();
-      diag += r[a] * r[a];
-    }
-    g.EnsureFactored(r);
-    g.Whiten(r.data());
-    double q = 0.0;
-    for (int a = 0; a < g.n; a++) q += r[a] * r[a];
-    out << g.path << ", " << g.n << ", " << g.N << ", " << g.numSegments << ", " << q << ", " << diag << ", "
-        << g.rel.size() << std::endl;
-  }
-}
-
-bool EData::HasRelativeCovariance() const {
-  for (const std::shared_ptr<DataCovariance::Group> &gp : covGroups_)
-    if (gp->HasRelative()) return true;
-  return false;
-}
-
-void EData::RefreezeCovariance() {
-  for (const std::shared_ptr<DataCovariance::Group> &gp : covGroups_) gp->Refreeze();
-}
-
-void EData::PrepareCovarianceSeeds(CNuc *theCNuc, const Config &configure, azure2::Results &results) {
-  if (covGroups_.empty()) return;
-  std::vector<std::pair<ESegment *, int>> work;
-  for (int s = 1; s <= this->NumSegments(); s++) {
-    ESegment *seg = this->GetSegment(s);
-    if (seg->GetCovarianceGroup() < 0) continue;
-    for (int pid = 0; pid < seg->NumPoints(); pid++) work.push_back({seg, pid});
-  }
-  // Each point on its own, without point mapping (as the gradient's own point loops): a
-  // mapped point would otherwise read a host value that may not be calculated yet.
-#pragma omp parallel for schedule(dynamic) if (!omp_in_parallel())
-  for (int k = 0; k < (int)work.size(); k++) {
-    ScopedPointMappingOff noPointMapping;
-    azure2::EvaluateModelPoint(*work[k].first, work[k].second, theCNuc, configure, results, azure2::LeafValues::Calculate);
-  }
-  this->CovarianceChi2Correction(results);
 }
 
 
@@ -4190,7 +3911,7 @@ void EData::FillDensitiesFromParams(const vector_r &p, const Config &configure) 
     for (EPointIterator point = seg.GetPoints().begin(); point < seg.GetPoints().end(); point++) {
       if (point->GetTargetEffectNum() != n || !(point->GetTargetThickness() > 0.0)) continue;
       point->SetTargetThickness(point->GetCMFactor() * te->TargetThickness(point->GetTargetLabEnergy(), configure));
-      // E_bar of the sigma(E_bar) fallback moves with the density too (EPoint::IsTargetFallbackOnly)
+      // E_bar of the sigma(E_bar) fallback moves with the density too (EPoint::SetTargetFallbackOnly)
       if (!te->IsThickTarget())
         point->SetTargetFallbackDepth(point->GetCMFactor() *
                                       te->MeanEnergyLoss(point->GetTargetLabEnergy(), configure, te->GetDensity()));
@@ -4274,9 +3995,9 @@ void EData::FillNormsFromParams(const vector_r &p) {
  * Fills the Energy Shifts from the Minuit parameter array.
  */
 
-void EData::FillEnergyShiftsFromParams(const vector_r &p, azure2::Results &results, EData *data, CNuc *theCNuc,
+void EData::FillEnergyShiftsFromParams(const vector_r &p, azure2::Results &results, CNuc *theCNuc,
                                        const Config *configure) {
-  this->FillEnergyShiftsFromParamsImpl(p, data, theCNuc, configure);
+  this->FillEnergyShiftsFromParamsImpl(p, theCNuc, configure);
   this->BeginEvaluation(results);
 }
 
@@ -4332,7 +4053,7 @@ void EData::BeginEvaluation(azure2::Results &results) {
   if (azure2::Results::PoisonRequested()) results.Poison();
 }
 
-void EData::FillEnergyShiftsFromParamsImpl(const vector_r &p, EData *data, CNuc *theCNuc, const Config *configure) {
+void EData::FillEnergyShiftsFromParamsImpl(const vector_r &p, CNuc *theCNuc, const Config *configure) {
   // The THM coherent backgrounds, the block after the shifts (none without
   // cbackground=): every caller fills the shifts right after the norms, with
   // the compound the model will run on.
@@ -4347,223 +4068,164 @@ void EData::FillEnergyShiftsFromParamsImpl(const vector_r &p, EData *data, CNuc 
   this->FillThicknessFromParams(p);
   int i = GetEnergyShiftParamOffset();
   int j = GetEnergyShiftSqrtParamOffset();
-  int k = 0;
   bool anyEnergyShifted = false;
 
-  if (data) {
-    // Re-energising a point (ESegment::UpdatePointEnergyWithShift: Coulomb
-    // functions of the point and its sub-points) touches only that point, so
-    // the shift values are set here in the original order and the points of
-    // the segments that moved are re-energised afterwards in parallel, each
-    // segment once, in its final state.  A line search moves every shift at once; serially that cost
-    // ~195 s per evaluation on the 11B+a mixed grid against 0.5 s for the
-    // points.  Inside an enclosing parallel region (Minuit's numerical
-    // gradient) the loop stays serial, as before.
-    std::vector<ESegment *> toUpdate;
-    auto queueUpdate = [&toUpdate](ESegment *s) {
-      if (std::find(toUpdate.begin(), toUpdate.end(), s) == toUpdate.end()) toUpdate.push_back(s);
-    };
-    // Segments (and their components) whose points carry an energy shift, moved or not.
-    std::vector<ESegment *> shiftActiveSegments;
-    for (ESegmentIterator segment = data->GetSegments().begin(); segment < data->GetSegments().end(); segment++) {
-      k++;
-
-      // Both terms are present for every segment: the constant shift at p[i]
-      // and the sqrt(E) coefficient at p[j].  Either moving the points means
-      // the segment must be re-shifted (the mapping E -> E + a + b*sqrt(E) is
-      // applied from the original energies, so one update covers both).
-      // A shift-group follower reads its group leader's constant shift.
-      const int lead = segment->GetShiftLeaderPos();
-      const double shiftConst = (lead >= 0) ? p[GetEnergyShiftParamOffset() + lead] : p[i];
-      const double shiftSqrt = (j >= 0 && j < (int)p.size()) ? p[j] : 0.0;
-      // A shift function's parameters sit in the shift-function block, at the
-      // owning segment's (this one or its group leader) start.
-      std::vector<double> fnValues;
-      if (segment->HasShiftFn()) {
-        const int start = data->GetSegment(segment->GetShiftFnSourcePos() + 1)->GetShiftFnParamStart();
-        for (int q = 0; q < segment->NumShiftFnParams(); q++) {
-          const int idx = GetEnergyShiftFnParamOffset() + start + q;
-          fnValues.push_back((start >= 0 && idx < (int)p.size()) ? p[idx] : segment->GetShiftFnValues()[q]);
-        }
-      }
-      // A segment whose points carry a shift of an earlier evaluation (last shift not NaN) stays active, so a fixed
-      // shift set back to 0 moves them back (upgrade_history: such a copy gives a fresh copy's bits).
-      const bool shiftActive = segment->IsVaryEnergyShift() || shiftConst != 0.0 || lead >= 0 || segment->HasShiftFn() ||
-                               segment->IsVaryEnergyShiftSqrt() || shiftSqrt != 0.0 || !std::isnan(segment->GetLastEnergyShift());
-      if (shiftActive) {
-        shiftActiveSegments.push_back(&*segment);
-        if (segment->HasComponents())
-          for (ESegment *componentSegment : segment->GetComponentSegments())
-            if (componentSegment) shiftActiveSegments.push_back(componentSegment);
-        if (segment->GetLastEnergyShift() == shiftConst && segment->GetLastEnergyShiftSqrt() == shiftSqrt &&
-            (!segment->HasShiftFn() || segment->GetLastShiftFnValues() == fnValues)) {
-          i++;
-          j++;
-          continue;
-        }
-
-        segment->SetEnergyShift(shiftConst);
-        segment->SetLastEnergyShift(shiftConst);
-        segment->SetEnergyShiftSqrt(shiftSqrt);
-        segment->SetLastEnergyShiftSqrt(shiftSqrt);
-        for (int q = 0; q < (int)fnValues.size(); q++) segment->SetShiftFnValue(q, fnValues[q]);
-        if (segment->HasShiftFn()) segment->SetLastShiftFnValues(fnValues);
-        queueUpdate(&*segment);
-        anyEnergyShifted = true;
-
-        // Apply the same energy shift to ALL component segments of this master segment
-        if (segment->HasComponents()) {
-          for (ESegment *componentSegment : segment->GetComponentSegments()) {
-            if (componentSegment) {
-              componentSegment->SetEnergyShift(segment->GetEnergyShift());
-              componentSegment->SetEnergyShiftSqrt(segment->GetEnergyShiftSqrt());
-              componentSegment->CopyShiftFnFrom(*segment);
-              queueUpdate(componentSegment);
-            }
-          }
-        }
-      }
-
-      // Apply the same energy shift to all component segments in total capture segments
-      if (segment->IsTotalCapture() && segment->HasComponents()) {
-        if (shiftActive) {
-          // Apply energy shift to all component segments
-          const std::vector<ESegment *> &componentSegments = segment->GetComponentSegments();
-          for (ESegment *componentSegment : componentSegments) {
-            if (componentSegment) {
-              // Check if energy is the same, if so, skip the recompute.
-              // NOTE: do NOT advance i or j here. All components of a total-capture
-              // segment share this segment's single pair of shift parameters;
-              // i and j are advanced exactly once per segment at the end of the
-              // loop.  Advancing them inside the component loop desyncs the
-              // parameter-to-segment mapping for every subsequent segment.
-              if (componentSegment->GetLastEnergyShift() == shiftConst &&
-                  componentSegment->GetLastEnergyShiftSqrt() == shiftSqrt &&
-                  (!segment->HasShiftFn() || componentSegment->GetLastShiftFnValues() == fnValues)) {
-                continue;
-              }
-
-              componentSegment->SetEnergyShift(shiftConst);
-              componentSegment->SetLastEnergyShift(shiftConst);
-              componentSegment->SetEnergyShiftSqrt(shiftSqrt);
-              componentSegment->SetLastEnergyShiftSqrt(shiftSqrt);
-              if (segment->HasShiftFn()) {
-                componentSegment->CopyShiftFnFrom(*segment);
-                componentSegment->SetLastShiftFnValues(fnValues);
-              }
-              queueUpdate(componentSegment);
-              anyEnergyShifted = true;
-            }
-          }
-        }
-      }
-
-      i++;
-      j++;
-    }
-
-    // The sub-point grids, for the levels and shifts just set.  Sub-points of
-    // shifted segments are moved and energised by the step below.
-    if (theCNuc && configure) {
-      std::vector<ESegment *> reshift;
-      if (data->ReplaceSubPointGrids(theCNuc, *configure, shiftActiveSegments, reshift) > 0) anyEnergyShifted = true;
-      for (ESegment *s : reshift) queueUpdate(s);
-    }
-
-    if (!toUpdate.empty()) {
-      if (theCNuc && configure)
-        for (ESegment *s : toUpdate) s->BeginShiftRefill(theCNuc, *configure);
-      // One work item per point (with its sub-points), largest first, so a
-      // segment with thousands of sub-points per point does not serialize.
-      // A point mapped onto another (EData::MapData) copies its values from
-      // that host, so it is re-energised with it, on the same thread, after
-      // it (ESegment::UpdatePointGroupEnergyWithShift); it gets no item of its
-      // own.  A mapped point costs little (a copy, its Coulomb amplitudes).
-      struct Item { double cost; ESegment *seg; int i; };
-      std::vector<Item> work;
-      for (ESegment *s : toUpdate)
-        for (int i = 0; i < s->NumPoints(); i++) {
-          if (s->ShiftHost(i)) continue;
-          EPoint *pt = s->GetPoint(i + 1);
-          const double nsp = pt ? pt->NumSubPoints() : 0;
-          const double nMapped = pt ? pt->PlanMapped().size() : 0;
-          work.push_back({(1.0 + nsp) * (1.0 + 0.1 * nMapped), s, i});
-        }
-      std::stable_sort(work.begin(), work.end(), [](const Item &x, const Item &y) { return x.cost > y.cost; });
-#ifdef _OPENMP
-      const bool serial = omp_in_parallel();
-#else
-      const bool serial = true;
-#endif
-      // No parallel construct at all when already inside a parallel region: an
-      // inactive nested team renumbers its thread 0, and per-thread state
-      // indexed by thread number would then be shared between the outer threads.
-      if (serial) {
-        for (size_t q = 0; q < work.size(); q++) work[q].seg->UpdatePointGroupEnergyWithShift(work[q].i, theCNuc, configure);
-      } else {
-#pragma omp parallel for schedule(dynamic, 1)
-        for (int q = 0; q < (int)work.size(); q++) work[q].seg->UpdatePointGroupEnergyWithShift(work[q].i, theCNuc, configure);
-      }
-      if (theCNuc && configure)
-        for (ESegment *s : toUpdate) s->CommitShiftTable(theCNuc, *configure);
-    }
-
-    // Critical fix: Rebuild energy-based mapping system after energy shifts
-    if (anyEnergyShifted) {
-      data->MapData(theCNuc);
-    }
-
-    return;
-  }
-  for (ESegmentIterator segment = GetSegments().begin(); segment < GetSegments().end(); segment++) {
+  // Re-energising a point (ESegment::UpdatePointEnergyWithShift: Coulomb
+  // functions of the point and its sub-points) touches only that point, so
+  // the shift values are set here in the original order and the points of
+  // the segments that moved are re-energised afterwards in parallel, each
+  // segment once, in its final state.  A line search moves every shift at once; serially that cost
+  // ~195 s per evaluation on the 11B+a mixed grid against 0.5 s for the
+  // points.  Inside an enclosing parallel region (Minuit's numerical
+  // gradient) the loop stays serial, as before.
+  std::vector<ESegment *> toUpdate;
+  auto queueUpdate = [&toUpdate](ESegment *s) {
+    if (std::find(toUpdate.begin(), toUpdate.end(), s) == toUpdate.end()) toUpdate.push_back(s);
+  };
+  // Segments (and their components) whose points carry an energy shift, moved or not.
+  std::vector<ESegment *> shiftActiveSegments;
+  for (ESegmentIterator segment = this->GetSegments().begin(); segment < this->GetSegments().end(); segment++) {
+    // Both terms are present for every segment: the constant shift at p[i]
+    // and the sqrt(E) coefficient at p[j].  Either moving the points means
+    // the segment must be re-shifted (the mapping E -> E + a + b*sqrt(E) is
+    // applied from the original energies, so one update covers both).
+    // A shift-group follower reads its group leader's constant shift.
     const int lead = segment->GetShiftLeaderPos();
     const double shiftConst = (lead >= 0) ? p[GetEnergyShiftParamOffset() + lead] : p[i];
+    const double shiftSqrt = (j >= 0 && j < (int)p.size()) ? p[j] : 0.0;
+    // A shift function's parameters sit in the shift-function block, at the
+    // owning segment's (this one or its group leader) start.
+    std::vector<double> fnValues;
     if (segment->HasShiftFn()) {
-      const int start = GetSegment(segment->GetShiftFnSourcePos() + 1)->GetShiftFnParamStart();
+      const int start = this->GetSegment(segment->GetShiftFnSourcePos() + 1)->GetShiftFnParamStart();
       for (int q = 0; q < segment->NumShiftFnParams(); q++) {
         const int idx = GetEnergyShiftFnParamOffset() + start + q;
-        if (start >= 0 && idx < (int)p.size()) segment->SetShiftFnValue(q, p[idx]);
+        fnValues.push_back((start >= 0 && idx < (int)p.size()) ? p[idx] : segment->GetShiftFnValues()[q]);
       }
     }
-    // Always apply energy shift since parameters are always present for all segments
-    if (segment->IsVaryEnergyShift() || shiftConst != 0.0 || lead >= 0 || segment->HasShiftFn()) {
+    // A segment whose points carry a shift of an earlier evaluation (last shift not NaN) stays active, so a fixed
+    // shift set back to 0 moves them back (upgrade_history: such a copy gives a fresh copy's bits).
+    const bool shiftActive = segment->IsVaryEnergyShift() || shiftConst != 0.0 || lead >= 0 || segment->HasShiftFn() ||
+                             segment->IsVaryEnergyShiftSqrt() || shiftSqrt != 0.0 || !std::isnan(segment->GetLastEnergyShift());
+    if (shiftActive) {
+      shiftActiveSegments.push_back(&*segment);
+      if (segment->HasComponents())
+        for (ESegment *componentSegment : segment->GetComponentSegments())
+          if (componentSegment) shiftActiveSegments.push_back(componentSegment);
+      if (segment->GetLastEnergyShift() == shiftConst && segment->GetLastEnergyShiftSqrt() == shiftSqrt &&
+          (!segment->HasShiftFn() || segment->GetLastShiftFnValues() == fnValues)) {
+        i++;
+        j++;
+        continue;
+      }
+
       segment->SetEnergyShift(shiftConst);
-      segment->UpdatePointEnergiesWithShift();
+      segment->SetLastEnergyShift(shiftConst);
+      segment->SetEnergyShiftSqrt(shiftSqrt);
+      segment->SetLastEnergyShiftSqrt(shiftSqrt);
+      for (int q = 0; q < (int)fnValues.size(); q++) segment->SetShiftFnValue(q, fnValues[q]);
+      if (segment->HasShiftFn()) segment->SetLastShiftFnValues(fnValues);
+      queueUpdate(&*segment);
       anyEnergyShifted = true;
 
-      // CRITICAL FIX: Apply the same energy shift to ALL component segments of this master segment
+      // Apply the same energy shift to ALL component segments of this master segment
       if (segment->HasComponents()) {
         for (ESegment *componentSegment : segment->GetComponentSegments()) {
           if (componentSegment) {
             componentSegment->SetEnergyShift(segment->GetEnergyShift());
+            componentSegment->SetEnergyShiftSqrt(segment->GetEnergyShiftSqrt());
             componentSegment->CopyShiftFnFrom(*segment);
-            componentSegment->UpdatePointEnergiesWithShift();
+            queueUpdate(componentSegment);
           }
         }
       }
     }
 
-    // CRITICAL FIX: Apply the same energy shift to all component segments in total capture segments
+    // Apply the same energy shift to all component segments in total capture segments
     if (segment->IsTotalCapture() && segment->HasComponents()) {
-      if (segment->IsVaryEnergyShift() || shiftConst != 0.0 || lead >= 0 || segment->HasShiftFn()) {
+      if (shiftActive) {
         // Apply energy shift to all component segments
         const std::vector<ESegment *> &componentSegments = segment->GetComponentSegments();
         for (ESegment *componentSegment : componentSegments) {
           if (componentSegment) {
+            // Check if energy is the same, if so, skip the recompute.
+            // NOTE: do NOT advance i or j here. All components of a total-capture
+            // segment share this segment's single pair of shift parameters;
+            // i and j are advanced exactly once per segment at the end of the
+            // loop.  Advancing them inside the component loop desyncs the
+            // parameter-to-segment mapping for every subsequent segment.
+            if (componentSegment->GetLastEnergyShift() == shiftConst &&
+                componentSegment->GetLastEnergyShiftSqrt() == shiftSqrt &&
+                (!segment->HasShiftFn() || componentSegment->GetLastShiftFnValues() == fnValues)) {
+              continue;
+            }
+
             componentSegment->SetEnergyShift(shiftConst);
-            componentSegment->CopyShiftFnFrom(*segment);
-            componentSegment->UpdatePointEnergiesWithShift();
+            componentSegment->SetLastEnergyShift(shiftConst);
+            componentSegment->SetEnergyShiftSqrt(shiftSqrt);
+            componentSegment->SetLastEnergyShiftSqrt(shiftSqrt);
+            if (segment->HasShiftFn()) {
+              componentSegment->CopyShiftFnFrom(*segment);
+              componentSegment->SetLastShiftFnValues(fnValues);
+            }
+            queueUpdate(componentSegment);
             anyEnergyShifted = true;
           }
         }
       }
     }
 
-    // Always increment i since energy shift parameters are now present for ALL segments
     i++;
+    j++;
   }
 
-  // Critical fix: Rebuild energy-based mapping system after energy shifts
+  // The sub-point grids, for the levels and shifts just set.  Sub-points of
+  // shifted segments are moved and energised by the step below.
+  if (theCNuc && configure) {
+    std::vector<ESegment *> reshift;
+    if (this->ReplaceSubPointGrids(theCNuc, *configure, shiftActiveSegments, reshift) > 0) anyEnergyShifted = true;
+    for (ESegment *s : reshift) queueUpdate(s);
+  }
+
+  if (!toUpdate.empty()) {
+    if (theCNuc && configure)
+      for (ESegment *s : toUpdate) s->BeginShiftRefill(theCNuc, *configure);
+    // One work item per point (with its sub-points), largest first, so a
+    // segment with thousands of sub-points per point does not serialize.
+    // A point mapped onto another (EData::MapData) copies its values from
+    // that host, so it is re-energised with it, on the same thread, after
+    // it (ESegment::UpdatePointGroupEnergyWithShift); it gets no item of its
+    // own.  A mapped point costs little (a copy, its Coulomb amplitudes).
+    struct Item { double cost; ESegment *seg; int i; };
+    std::vector<Item> work;
+    for (ESegment *s : toUpdate)
+      for (int i = 0; i < s->NumPoints(); i++) {
+        if (s->ShiftHost(i)) continue;
+        EPoint *pt = s->GetPoint(i + 1);
+        const double nsp = pt ? pt->NumSubPoints() : 0;
+        const double nMapped = pt ? pt->PlanMapped().size() : 0;
+        work.push_back({(1.0 + nsp) * (1.0 + 0.1 * nMapped), s, i});
+      }
+    std::stable_sort(work.begin(), work.end(), [](const Item &x, const Item &y) { return x.cost > y.cost; });
+#ifdef _OPENMP
+    const bool serial = omp_in_parallel();
+#else
+    const bool serial = true;
+#endif
+    // No parallel construct at all when already inside a parallel region: an
+    // inactive nested team renumbers its thread 0, and per-thread state
+    // indexed by thread number would then be shared between the outer threads.
+    if (serial) {
+      for (size_t q = 0; q < work.size(); q++) work[q].seg->UpdatePointGroupEnergyWithShift(work[q].i, theCNuc, configure);
+    } else {
+#pragma omp parallel for schedule(dynamic, 1)
+      for (int q = 0; q < (int)work.size(); q++) work[q].seg->UpdatePointGroupEnergyWithShift(work[q].i, theCNuc, configure);
+    }
+    if (theCNuc && configure)
+      for (ESegment *s : toUpdate) s->CommitShiftTable(theCNuc, *configure);
+  }
+
+  // The energy-based point mapping (MapData) follows the shifted energies.
   if (anyEnergyShifted) {
     this->MapData(theCNuc);
   }
