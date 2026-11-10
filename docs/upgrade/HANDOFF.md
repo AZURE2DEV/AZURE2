@@ -71,7 +71,10 @@ by one ulp makes 119 files fail).
 - **A spin-orbit term may be added to the hybrid potentials**: step 3b (iii) of `cnuc_split.md` is wanted (channel
   functions keyed by (α, l, j); it needs its design note first: `<potential>` grammar, `NuclearPotentialManager`,
   the key of `ChannelTable`).
-- **Still open:** M3 (b) (explained to the PI; decided in Phase 5) and the confirmation of the new refusals and of
+- **M3 (b) is the aim** (`data_model.md` §5): lab data with a fitted shift are compared in the frame of the data —
+  the model is converted to the lab, the measured values and errors stay as measured. Phase 5 does it; every fit
+  it moves (shifted lab-differential data) is listed with its size. Until then (a) stays, bit-identical.
+- **Still open:** the confirmation of the new refusals and of
   the format-3 words (the lists above and in the entry of this morning). No ASan runtime on this host.
 
 **Running now** (Opus agents from fe181256, 3 threads each; briefs in `/data0/skowrons/AZURE2-upgrade/work/briefs/`):

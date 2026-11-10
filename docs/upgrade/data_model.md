@@ -420,6 +420,7 @@ becomes.
 hand-over into a per-ν `MeasurementFrame`; (b) compare in the frame of the data: m_lab = m_c.m./J(ν), weights 1/δy_lab
 fixed. Recommendation: (a) in Phase 4 (bit-identical); (b) proposed for Phase 5, since a χ² weight that moves with a
 nuisance is a model choice nobody made; it moves fits with shifted lab-differential data and is classified there.
+**Decided by the PI, 2026-11-10: (b) is the aim, in Phase 5;** (a) stays until then.
 
 **M4. Folds in Phase 4.** (a) Inside the leaf (today's per-point fold), `Transform` as the only node that reads
 sub-point values; (b) explicit `Fold` nodes now. Recommendation (a): the folds are entangled with mapping, probes,

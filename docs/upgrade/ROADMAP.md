@@ -192,6 +192,9 @@ passes 1,000 lines, and the record only goes down.
       separate numerator, phase shifts, β-delayed spectra, optical theorem, identical particles.
 - [ ] Kernel builders: target, resolution, beam profile, UDR, Doppler, energy shifts (interpolation weights), SUM,
       RATIO, natural targets, S-factor diagonal; analytic ∂K/∂ν.
+- [ ] Lab data with a fitted shift compared in the frame of the data (decision M3 (b) of `data_model.md`, taken by
+      the PI 2026-11-10): the model goes to the lab, the measured values and errors stay fixed. Every fit it moves
+      is listed with its size.
 - [ ] Stopping module (`ARCHITECTURE.md` §7): `Material`, ZBL nuclear, Bethe with corrections, straggling with
       Tschalär propagation, user tables; then the fitted low-energy evaluation for p and α (IAEA data), gases; then
       compounds and heavier ions; ERYA and `SRIM2013.xml` removed; licence check of any shipped table.
