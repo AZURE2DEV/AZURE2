@@ -33,6 +33,17 @@ transmission/yield models (with and without a spread) and a SUM project, 75 arra
 17.4–18.0 s vs 17.0–18.2 s, peak RSS unchanged; malloc calls of a T2 calculation +97 (the 13 trees' set-up, nothing
 per point).  Scripts: `work/expr/final.sh`, `grad_dump.py`, `grad_cmp.py`, `fits.sh`.
 
+**Follow-up (director's request): the three S11 changes off the test set, shown.** (1) An E1-only / E2-only SUM with
+a component: the forward reads the leading term's E1 / E2 part and each component's full sigma; ctest
+`pyazr_composite_gradient` (13N levels, synthetic data) compares the gradient with central differences by both
+component routes: 1.1e-7 / 8.9e-8 of the largest with this branch, 0.29 (E1) and 1.0 (E2) with the start head, whose
+adjoint took the component's E1 / E2 part.  (2) A RATIO with a zero numerator: `experiment_expression` checks
+`RatioBackward` against the closed form (J_den/J_num)/den; no project shows it in a gradient, because a numerator that
+is exactly 0 (closed exit channel, zero width) has zero derivative there.  (3) A non-finite SUM term: the forward
+propagates it (NaN sum) and the tree's adjoint does not skip it (unit test in `experiment_expression`); the old adjoint
+skipped it while the forward did not.  The head of `feature/upgrade-4-data` has moved (docs, `include/Constants.h` named
+masses); this branch is not rebased on it (the director merges).
+
 **Open.** The tree holds a node per term (T2 data 8: 4 nodes); the transform path still allocates its sub-point
 vectors and the kernel object per point, as before.  Not run: 8 threads, TSan, `ctest -L slow`, sphinx.  Next: S12
 (components as leaves), S13 (filters), S14 (`predict`, `rutherford`).

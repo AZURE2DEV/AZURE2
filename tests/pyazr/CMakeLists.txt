@@ -725,3 +725,11 @@ add_test(NAME pyazr_predictions
                  ${CMAKE_CURRENT_SOURCE_DIR}/predictions_test.py)
 set_tests_properties(pyazr_predictions PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1;AZURE2_BIN=$<TARGET_FILE:AZURE2>"
                      SKIP_RETURN_CODE 77)
+
+# The gradient of an E1-only / E2-only SUM with a component (the component's full sigma, as the forward reads it)
+# against central differences of the objective, by both component routes (docs/upgrade/data_model.md S11).
+add_test(NAME pyazr_composite_gradient
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/composite_gradient_test.py)
+set_tests_properties(pyazr_composite_gradient PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1" SKIP_RETURN_CODE 77
+                     TIMEOUT 900)

@@ -426,6 +426,14 @@ void TestNodesAlone() {
   check("Ratio: den = 0 gives NaN", std::isnan(node::RatioValue(1.5, 0.0, 1.0, 1.0)));
   check("Ratio: den = -0 gives NaN", std::isnan(node::RatioValue(1.5, -0.0, 1.0, 1.0)));
   check("Ratio: num = 0 gives 0", node::RatioValue(0.0, 2.5, 1.1, 0.9) == 0.0);
+  {
+    // a zero numerator (S11): dm/dnum = (J_den / J_num) / den exactly, dm/dden = -m / den = -0 (the adjoint before
+    // S11 gave the numerator 0, since it formed m / num)
+    double cn = 0.0, cd = 0.0;
+    node::RatioBackward(1.7, 0.0, 2.5, 1.1, 0.9, 0.0, cn, cd);
+    check("Ratio backward at num = 0: numerator g (J_den/J_num)/den, denominator 0",
+          cn == 1.7 * ((0.9 / 1.1) / 2.5) && cd == 0.0, std::to_string(cn) + " " + std::to_string(cd));
+  }
   check("Sum: no children gives 0", node::SumValue(nullptr, 0) == 0.0);
   {
     const double s0 = -0.0, s1 = 0.0;
@@ -963,6 +971,37 @@ void TestEdges() {
       threw = true;
     }
     check("a node used twice is refused", threw);
+  }
+  // a non-finite SUM term (S11): the forward propagates it (the sum is NaN, as the model pass has since 2026-11-01:
+  // "a non-finite term makes the sum non-finite"), and the adjoint does not skip it either: d(sum)/d(term) = c J for
+  // every term, the NaN term included, and a NaN cotangent of the value (the chi^2 slope of a NaN model) reaches every
+  // term.  The hand-written adjoint before S11 skipped the non-finite term only.
+  {
+    std::vector<double> v0{2.0}, v1{std::numeric_limits<double>::quiet_NaN()}, v2{3.0}, J{1.25};
+    Tree t;
+    const int a = t.Leaf(0);
+    const int b = t.Scale(0.5, t.Leaf(1), 0);
+    const int c = t.Scale(2.0, t.Leaf(2));
+    t.Sum({a, b, c});
+    const std::vector<PointArray> leafArrays{{v0.data(), 1}, {v1.data(), 1}, {v2.data(), 1}};
+    const std::vector<PointArray> factorArrays{{J.data(), 1}};
+    Inputs in;
+    in.leaves = leafArrays;
+    in.factors = factorArrays;
+    Workspace ws;
+    check("SUM with a NaN term: the value is NaN", std::isnan(t.Value(in, 0, ws)));
+    double c0 = 0, c1 = 0, c2 = 0;
+    const std::vector<double *> bars{&c0, &c1, &c2};
+    Cotangents cot;
+    cot.leaves = bars;
+    double g = 0.8;
+    t.Backward(in, 1, &g, cot, ws);
+    check("... the adjoint does not skip it: cotangents g, g c J, g c (the NaN term's included)",
+          c0 == 0.8 && c1 == 0.8 * (0.5 * 1.25) && c2 == 0.8 * 2.0);
+    c0 = c1 = c2 = 0;
+    g = std::numeric_limits<double>::quiet_NaN();
+    t.Backward(in, 1, &g, cot, ws);
+    check("... and a NaN slope reaches every term", std::isnan(c0) && std::isnan(c1) && std::isnan(c2));
   }
   // strided leaves: the slot layout of a unit with several quantities
   {
