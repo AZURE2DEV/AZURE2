@@ -483,6 +483,20 @@ class EPoint {
   double GetLabAngleMax() const { return labAngleMax_; };
   /// Why the last ConvertLabAngle returned false (a sentence for the error message).
   const std::string &GetLabAngleWhy() const { return labAngleWhy_; };
+  /// The frame state the lab -> c.m. conversion keeps where it cannot convert (the c.m. angle, the angle and
+  /// cross-section factors, the kinematic-limit report), as the point holds it once loaded (ESegment::Fill; a
+  /// fixed-angle component: EData::CreateComponentSegment).  ESegment::ConvertPointToCM restores it before it converts
+  /// a shifted energy, so a point an energy shift moves beyond the kinematic range keeps its load-time values, not
+  /// those an earlier evaluation of its copy left (docs/upgrade/data_model.md section 1.3, H4).
+  void KeepLoadFrame() { loadFrame_ = {true, cm_angle_, angleKinFactor_, crossSectionKinFactor_, labAngleMax_, labAngleWhy_}; }
+  void RestoreLoadFrame() {
+    if (!loadFrame_.kept) return;
+    cm_angle_ = loadFrame_.cmAngle;
+    angleKinFactor_ = loadFrame_.angleKinFactor;
+    crossSectionKinFactor_ = loadFrame_.crossSectionKinFactor;
+    labAngleMax_ = loadFrame_.labAngleMax;
+    labAngleWhy_ = loadFrame_.labAngleWhy;
+  }
   /// Fill the centre-of-mass cross section and uncertainty from the lab ones.
   void ConvertCrossSection(PPair *, PPair *);
   /// Centre-of-mass gamma angle, with the relativistic correction.
@@ -746,6 +760,11 @@ class EPoint {
   mutable double labAngleMax_ = 180.;  ///< kinematic maximum lab angle of the last failed conversion
   mutable std::string labAngleWhy_;    ///< the reason of the last failed conversion (set by the const relativistic map too)
   double crossSectionKinFactor_;
+  struct LoadFrame {
+    bool kept = false;
+    double cmAngle = 0.0, angleKinFactor = 1.0, crossSectionKinFactor = 1.0, labAngleMax = 180.;
+    std::string labAngleWhy;
+  } loadFrame_;  ///< KeepLoadFrame
   // Beam-profile effect: per-point energy window (lab as read, c.m. after
   // conversion; NaN when the data file has no such columns) and the inverse
   // reaction kinematics for the detailed-balance weight.

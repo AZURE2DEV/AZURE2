@@ -107,7 +107,7 @@ class ESegment {
   /// Read the data file and keep the points inside the energy and angle ranges, converting from the lab frame where needed.
   int Fill(CNuc *, EData *, const Config &);
   /// What ConvertPointToCM does with a lab angle beyond the kinematic maximum: stop (the value is not converted),
-  /// or convert the value at the last valid angle (an energy shift moved the point there mid-fit).
+  /// or convert the value at the load-time angle (an energy shift moved the point there mid-fit).
   enum class BeyondRange { Stop, Convert };
   /// The lab -> c.m. conversion of one point of this segment (docs/upgrade/data_model.md section 1.4), the one
   /// sequence of Fill, UpdatePointEnergyWithShift, the test segments and the component segments (EData): E_c.m.

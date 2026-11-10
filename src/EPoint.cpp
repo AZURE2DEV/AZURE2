@@ -724,7 +724,7 @@ void EPoint::Initialize(CNuc *compound, const Config &configure) {
 // The formulas are azure2::experiment's (experiment/include/azure2/experiment/Frames.h, docs/upgrade/data_model.md
 // step S6); these functions read the point's lab values and its pairs, call them, and store the results in the point
 // with the state rules they always had (the maximum lab angle and the reason kept from the last map that set them; a
-// relativistic Jacobian kept at its last valid value where an energy shift moved the point beyond the kinematic
+// relativistic Jacobian kept at its load-time value where an energy shift moved the point beyond the kinematic
 // range).  ESegment::ConvertPointToCM is the one sequence that calls them.
 
 void EPoint::ApplyAngleLimit(const azure2::experiment::AngleLimit &lim) const {
@@ -871,7 +871,7 @@ void EPoint::ConvertCrossSection(PPair *entrancePair, PPair *exitPair) {
   double relAngle;
   if (Kinematics::Relativistic()) {
     // Unreached only for a point an energy shift moved past the kinematic limit mid-fit (the angle converter
-    // warned and kept the last valid angle): keep the last valid factor too rather than a non-relativistic one.
+    // warned): the factor stays the one the point was loaded with (KeepLoadFrame), not a non-relativistic one.
     if (this->RelativisticLabToCM(entrancePair, exitPair, this->GetCMAngle(), relAngle, conversionFactor))
       crossSectionKinFactor_ = conversionFactor;
     cm_crosssection_ = this->GetLabCrossSection() * crossSectionKinFactor_;
@@ -890,7 +890,7 @@ void EPoint::ConvertCrossSection(PPair *entrancePair, PPair *exitPair) {
 /*!
  * dOmega_lab/dOmega_cm of a particle at this point, without storing it (the RATIO frame factors,
  * ESegment::RatioTermFrameFactor).  Relativistic=1: the relativistic map's factor where it reaches the lab angle,
- * otherwise -- unlike ConvertCrossSection, which keeps the last valid factor -- the non-relativistic one.
+ * otherwise -- unlike ConvertCrossSection, which keeps the load-time factor -- the non-relativistic one.
  */
 
 double EPoint::CalculateCrossSectionConversionFactor(PPair *entrancePair, PPair *exitPair) {

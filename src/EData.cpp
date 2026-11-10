@@ -187,6 +187,17 @@ static bool TotalAllowed(CNuc *theCNuc, ESegment &segment, int key, bool isTest,
   return true;
 }
 
+// A beta-delayed spectrum (entrance pair of type 20) is the energy distribution of one decay pair: its energies are
+// converted with that pair's masses (ESegment::ConvertPointEnergyToCM), so a segment without one (exit -1) is refused.
+static bool BetaDelayedAllowed(CNuc *theCNuc, ESegment &segment, int key, bool isTest, const Config &configure) {
+  if (!theCNuc->IsPairKey(segment.GetEntranceKey()) || segment.GetExitKey() != -1) return true;
+  if (theCNuc->GetPair(theCNuc->GetPairNumFromKey(segment.GetEntranceKey()))->GetPType() != 20) return true;
+  configure.outStream << "ERROR: " << (isTest ? "test segment" : "segment") << " #" << key << ": a beta-delayed "
+                      << "spectrum (entrance pair " << segment.GetEntranceKey() << " of type 20) needs its decay pair as"
+                      << " the exit pair, not -1 (total capture)." << std::endl;
+  return false;
+}
+
 static bool NaturalAllowed(CNuc *theCNuc, ESegment &segment, int key, bool isTest, const Config &configure) {
   const char *what = isTest ? "test segment" : "segment";
   const std::string &token = segment.GetNaturalToken();
@@ -418,6 +429,7 @@ int EData::Fill(const Config &configure, CNuc *theCNuc) {
           if (!CoefficientsAllowed(theCNuc, NewSegment, numTotalSegments, configure)) return -1;
           if (!NaturalAllowed(theCNuc, NewSegment, numTotalSegments, false, configure)) return -1;
           if (!TotalAllowed(theCNuc, NewSegment, numTotalSegments, false, configure)) return -1;
+          if (!BetaDelayedAllowed(theCNuc, NewSegment, numTotalSegments, false, configure)) return -1;
           if (!UPOSAllowed(theCNuc, NewSegment, numTotalSegments, false, configure)) return -1;
           if (!TotalCaptureCodeOk(NewSegment, numTotalSegments, false, configure)) return -1;
           UPOSLabNote(NewSegment, numTotalSegments, false, configure);
@@ -772,6 +784,7 @@ int EData::MakePoints(const Config &configure, CNuc *theCNuc) {
           if (!AnalyzingPowerAllowed(theCNuc, NewSegment, numTotalSegments, true, configure)) return -1;
           if (!NaturalAllowed(theCNuc, NewSegment, numTotalSegments, true, configure)) return -1;
           if (!TotalAllowed(theCNuc, NewSegment, numTotalSegments, true, configure)) return -1;
+          if (!BetaDelayedAllowed(theCNuc, NewSegment, numTotalSegments, true, configure)) return -1;
           if (!UPOSAllowed(theCNuc, NewSegment, numTotalSegments, true, configure)) return -1;
           if (!TotalCaptureCodeOk(NewSegment, numTotalSegments, true, configure)) return -1;
           UPOSLabNote(NewSegment, numTotalSegments, true, configure);
@@ -1550,6 +1563,15 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
         configure.outStream << "ERROR: segment #" << segment->GetSegmentKey() << ": free-gas Doppler broadening"
                             << " (doppler) needs a particle entrance pair (a beam on target atoms in thermal motion)"
                             << std::endl;
+        return -1;
+      }
+      // A beta-delayed spectrum has no beam: a target integration or a beam profile would fold the decay energy with
+      // a beam's energy loss, screening would use the beta pair's charges.  A detector resolution (Gaussian, UDR) applies.
+      if (entrancePair->GetPType() == 20 &&
+          (targetEffect->IsTargetIntegration() || targetEffect->IsBeamProfile() || targetEffect->HasScreening())) {
+        configure.outStream << "ERROR: segment #" << segment->GetSegmentKey() << ": a beta-delayed spectrum (entrance"
+                            << " pair of type 20) takes a detector resolution only (Gaussian convolution, UDR), not a"
+                            << " target integration, a beam profile or electron screening." << std::endl;
         return -1;
       }
       if (targetEffect->IsUdr()) {
@@ -3894,68 +3916,30 @@ bool EData::CheckTransformedSegments(const Config &configure) {
   return true;
 }
 
-ESegment *EData::CreateComponentSegment(const ESegment &baseSegment, int entranceKey, int exitKey) {
-  // Create a copy of the base segment with different entrance/exit keys
-  // Store component segments separately to avoid iterator invalidation
-
-  // Add a copy of the base segment to the component segments vector
-  this->componentSegments_.push_back(baseSegment);
-  ESegment *componentSegment = &componentSegments_.back();
-
-  // Set the new entrance/exit keys for the component segment
-  componentSegment->SetEntranceKey(entranceKey);
-  componentSegment->SetExitKey(exitKey);
-
-  // Set a unique segment key to avoid cache conflicts
-  // Use negative keys for component segments to distinguish from regular segments
-  static int componentSegmentKeyCounter = -1000;
-  componentSegment->SetSegmentKey(componentSegmentKeyCounter--);
-
-  // Clear any existing components to avoid circular references
-  componentSegment->ClearComponents();
-  componentSegment->SetNatural(false);   // the weighting is the base segment's job
-  componentSegment->ApplyTotalToPoints();
-
-  // The component segment now has the same data points as the base segment
-  // but with different entrance/exit keys, so it will calculate different
-  // theoretical cross sections when initialized
-
-  return componentSegment;
-}
-
 /*!
- * Creates a component segment with a fixed angle for ratio denominators
+ * A component of a SUM, RATIO, sample or total-capture segment: a copy of the base segment, its points included,
+ * with its own pairs, kept in componentSegments_ (a deque: the base segments' pointers stay valid).  A fixed angle
+ * (deg; a RATIO denominator at one angle) puts every point there, lab and c.m. slots alike.
  */
-ESegment *EData::CreateComponentSegment(const ESegment &baseSegment, int entranceKey, int exitKey, double fixedAngle) {
-  // Create a copy of the base segment with different entrance/exit keys
+ESegment *EData::CreateComponentSegment(const ESegment &baseSegment, int entranceKey, int exitKey,
+                                        std::optional<double> fixedAngle) {
   this->componentSegments_.push_back(baseSegment);
   ESegment *componentSegment = &componentSegments_.back();
-
-  // Set the new entrance/exit keys for the component segment
   componentSegment->SetEntranceKey(entranceKey);
   componentSegment->SetExitKey(exitKey);
-
-  // Set the fixed angle by constraining min and max to the same value
-  componentSegment->SetMinAngle(fixedAngle);
-  componentSegment->SetMaxAngle(fixedAngle);
-
-  // CRITICAL: Override all point angles to the fixed angle
-  // This ensures calculations use the fixed angle, not the original data angles
-  std::vector<EPoint> &points = componentSegment->GetPoints();
-  for (auto &point : points) {
-    point.SetCMAngle(fixedAngle);
-    point.SetLabAngle(fixedAngle);  // Also set lab angle to be consistent
+  if (fixedAngle) {
+    componentSegment->SetMinAngle(*fixedAngle);
+    componentSegment->SetMaxAngle(*fixedAngle);
+    for (EPoint &point : componentSegment->GetPoints()) {
+      point.SetCMAngle(*fixedAngle);
+      point.SetLabAngle(*fixedAngle);
+    }
   }
-
-  // Set a unique segment key to avoid cache conflicts
-  static int componentSegmentKeyCounter = -1000;
-  componentSegment->SetSegmentKey(componentSegmentKeyCounter--);
-
-  // Clear any existing components to avoid circular references
-  componentSegment->ClearComponents();
-  componentSegment->SetNatural(false);   // the weighting is the base segment's job
+  // A key of its own (negative: not a segment of the file), from the data set's counter, for the caches keyed by it
+  componentSegment->SetSegmentKey(nextComponentKey_--);
+  componentSegment->ClearComponents();  // no circular references
+  componentSegment->SetNatural(false);  // the weighting is the base segment's job
   componentSegment->ApplyTotalToPoints();
-
   return componentSegment;
 }
 

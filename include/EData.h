@@ -13,6 +13,7 @@
 #include <atomic>
 #include <deque>
 #include <map>
+#include <optional>
 #include "DataCovariance.h"
 #include <memory>
 #include <ios>
@@ -240,12 +241,13 @@ class EData {
   int InitializeComponentSegments(CNuc *, const Config &);
   /// Validates a component's pair keys (both present, one compound nucleus) and flags its entrance pair; false with the error printed otherwise.
   bool CheckComponentPairs(CNuc *, const ESegment &baseSegment, int entranceKey, int exitKey, const Config &);
-  ESegment *CreateComponentSegment(const ESegment &baseSegment, int entranceKey, int exitKey);
+  /// A component segment: a copy of baseSegment with these pairs (and, for a RATIO denominator, a fixed angle, deg).
+  ESegment *CreateComponentSegment(const ESegment &baseSegment, int entranceKey, int exitKey,
+                                   std::optional<double> fixedAngle = std::nullopt);
   /// A transmission or yield segment after its components exist: checks, plain components, the yield's total term.
   bool FinishTransformedSegment(CNuc *, ESegment *, int key, bool isTest, const Config &);
   /// Every term of a transmission or yield segment on the base point's sub-point grid (after the target effects).
   bool CheckTransformedSegments(const Config &);
-  ESegment *CreateComponentSegment(const ESegment &baseSegment, int entranceKey, int exitKey, double fixedAngle);
   /// Map points at equal energies onto one another, so a shared energy is calculated once.
   /// The compound nucleus tells which segments have a particle exit; null is conservative.
   void MapData(CNuc *theCNuc = nullptr);
@@ -466,6 +468,10 @@ class EData {
   std::vector<TargetEffect> targetEffects_;
   std::vector<ESegment> segments_;
   std::deque<ESegment> componentSegments_;  // Separate storage for component segments (deque avoids pointer invalidation)
+  /// The key of the next component segment (CreateComponentSegment): -1000, -1001, ... in creation order, one counter
+  /// per data set, so a component's key depends on its project alone (not on what else the process loaded) and no
+  /// two components share one (data_model.md section 1.3, H10).
+  int nextComponentKey_ = -1000;
   bool componentError_ = false;
   std::map<std::string, std::shared_ptr<DataCovariance::File>> covFiles_;  // only while filling
   std::vector<std::shared_ptr<DataCovariance::Group>> covGroups_;         // shared by every copy

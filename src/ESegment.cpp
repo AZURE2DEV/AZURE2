@@ -572,18 +572,21 @@ bool ESegment::ConvertPointToCM(EPoint *point, PPair *entrancePair, PPair *exitP
   // Lab-frame differential data only: not c.m. data (isDiff 4 / 5), phase shifts, angular distributions.
   const bool labDifferential = this->IsDifferential() && !this->IsPhase() && !this->IsAngularDist() && !this->IsCMDifferential();
   if (!exitPair || !labDifferential) return true;
+  // Convert: from the state of the point as loaded (EPoint::KeepLoadFrame), so that where the angle cannot be
+  // converted the angle and the factor are the load-time ones, whatever this copy converted before (H4).
+  if (beyond == BeyondRange::Convert) point->RestoreLoadFrame();
   bool inRange = true;
   if (exitPair->GetPType() == 0) {
     inRange = (this->GetEntranceKey() == this->GetExitKey()) ? point->ConvertLabAngle(entrancePair)
                                                              : point->ConvertLabAngle(entrancePair, exitPair, configure);
     if (!inRange && beyond == BeyondRange::Stop) return false;
-    // (Convert: the factor at the last valid angle; ConvertCrossSection leaves the reported maximum as it is)
     if (convertValue) point->ConvertCrossSection(entrancePair, exitPair);
   }
   if (exitPair->GetPType() == 10) {
     point->ConvertLabAngleGammas(entrancePair);
     if (convertValue) point->ConvertCrossSectionGammas(entrancePair);
   }
+  if (beyond == BeyondRange::Stop) point->KeepLoadFrame();
   return inRange;
 }
 
@@ -1142,11 +1145,11 @@ void ESegment::UpdatePointEnergyWithShift(int i, CNuc *theCNuc, const Config *co
         const bool isRatio = this->IsAdvanced() && this->GetLegacyOperationType() == 1;
         if (!this->ConvertPointToCM(point, entrancePair, exitPair, *configure, !isRatio, BeyondRange::Convert)) {
           // An energy shift moved the point past the kinematic maximum lab angle mid-fit: the c.m. angle keeps
-          // its last valid value and the run says so (it cannot stop here; audit 2026-10-25, item 31).
+          // its value as loaded and the run says so (it cannot stop here; audit 2026-10-25, item 31).
           configure->outStream << "WARNING: segment #" << this->GetSegmentKey() << ": the energy shift moved the point at lab angle "
                                << point->GetLabAngle() << " deg to E_lab = " << point->GetLabEnergy()
                                << " MeV, beyond its kinematic maximum " << point->GetLabAngleMax()
-                               << " deg; its c.m. angle is kept at the last valid value." << std::endl;
+                               << " deg; its c.m. angle is kept at its value as loaded." << std::endl;
         }
 
         if (this->IsDifferential() || this->IsCMDifferential()) {
@@ -1283,14 +1286,6 @@ void ESegment::ApplyTotalToPoints() {
 void ESegment::SetSegmentChiSquared(double chiSquared) {
   segment_chi_squared_ = chiSquared;
 }
-
-/*!
- * Sets the chi squared value for the segment normalization during the fitting process.
- */
-
-// void ESegment::SetNormChiSquared(double chiSquared) {
-//   norm_chi_squared_=chiSquared;
-// }
 
 /*!
  * Sets the position of the corresponding TargetEffect object in the vector
