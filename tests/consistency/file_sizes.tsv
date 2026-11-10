@@ -17,5 +17,5 @@ src/AZURECalcMCMC.cpp	1434
 src/AZUREGrad.cpp	1850
 src/CNuc.cpp	1894
 src/EData.cpp	1950
-src/ESegment.cpp	1366
+src/ESegment.cpp	1149
 src/ThmExperiment.cpp	1026
