@@ -704,7 +704,7 @@ int EData::GetEnergyShiftFnParamOffset() const {
 namespace {
 /*!
  * The sub-points of a thin-target point outside the windows of an energy-restricted integration
- * (EPoint::IsTargetFallbackOnly): one at E_bar = E - D for a fixed density; for a fitted one three, at E_bar of the
+ * (EPoint::SetTargetFallbackOnly): one at E_bar = E - D for a fixed density; for a fitted one three, at E_bar of the
  * smallest density the fit may reach (0.01 N0, EData::FillDensitiesFromParams), of the nominal N0 and of the layout
  * density, through which the kernel interpolates E_bar(N) -- exact at N0, smooth in N.
  */
@@ -1252,7 +1252,7 @@ int EData::SetUpTargetEffects(const Config &configure, CNuc *compound,
         // downstream machinery treats them as ordinary points -- except under a
         // thin-target integration, whose data carry the beam energy: there a
         // point outside the windows is evaluated at its depth-averaged energy
-        // E_bar (EPoint::IsTargetFallbackOnly, 2026-11-05).
+        // E_bar (EPoint::SetTargetFallbackOnly).
         double blendWeight = targetEffect->BlendWeight(point->GetLabEnergy(), windows);
         if (blendWeight <= 0. && !thinTarget) continue;
         point->SetTargetEffectNum(segment->GetTargetEffectNum());
@@ -4170,7 +4170,7 @@ void EData::FillDensitiesFromParams(const vector_r &p, const Config &configure) 
     for (EPointIterator point = seg.GetPoints().begin(); point < seg.GetPoints().end(); point++) {
       if (point->GetTargetEffectNum() != n || !(point->GetTargetThickness() > 0.0)) continue;
       point->SetTargetThickness(point->GetCMFactor() * te->TargetThickness(point->GetTargetLabEnergy(), configure));
-      // E_bar of the sigma(E_bar) fallback moves with the density too (EPoint::IsTargetFallbackOnly)
+      // E_bar of the sigma(E_bar) fallback moves with the density too (EPoint::SetTargetFallbackOnly)
       if (!te->IsThickTarget())
         point->SetTargetFallbackDepth(point->GetCMFactor() *
                                       te->MeanEnergyLoss(point->GetTargetLabEnergy(), configure, te->GetDensity()));

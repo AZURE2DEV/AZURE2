@@ -328,9 +328,8 @@ class EPoint {
   /// point is evaluated at the single depth-averaged energy E_bar = E - D of its own target instead of being a
   /// plain point at its data (beam) energy, which was off by the centroid shift ~Delta/2.  Such a point carries
   /// one sub-point at E_bar (fixed density) or three spanning the range of E_bar a fitted density can reach,
-  /// and IsTargetFallbackOnly() is true.  D (c.m. MeV, TargetEffect::MeanEnergyLoss) is set on every thin-target
+  /// and SetTargetFallbackOnly(true) marks it.  D (c.m. MeV, TargetEffect::MeanEnergyLoss) is set on every thin-target
   /// point: edge blending and the automatic decision fall back to sigma(E_bar) as well.
-  bool IsTargetFallbackOnly() const { return target_fallback_only_; }
   void SetTargetFallbackOnly(bool f) { target_fallback_only_ = f; }
   double GetTargetFallbackDepth() const { return target_fallback_depth_; }
   void SetTargetFallbackDepth(double d) { target_fallback_depth_ = d; }
@@ -358,8 +357,6 @@ class EPoint {
   /// A_0 = sigma_int / 4 pi (b/sr) of an angular-distribution point, set with its coefficients.
   double GetAngDistA0(const azure2::Results &r) const { return Rec(r)[azure2::Results::kA0]; };
   void SetAngDistA0(azure2::Results &r, double a0) { Rec(r)[azure2::Results::kA0] = a0; };
-  /// Number of stored angular-distribution coefficients.
-  int GetNumAngularDists(const azure2::Results &r) const;
   /// Angular momentum of the secondary decay. UPOS points only.
   int GetSecondaryDecayL() const;
   /// Angle in the lab frame.
@@ -429,10 +426,6 @@ class EPoint {
   /// fitted density recomputes it at the same energy (EData::FillDensitiesFromParams).
   double GetTargetLabEnergy() const { return targetLabEnergy_; }
   void SetTargetLabEnergy(double e) { targetLabEnergy_ = e; }
-  /// Angular-distribution coefficient of the given order.
-  double GetAngularDist(const azure2::Results &r, int order) const;
-  /// Jacobian converting the angle from lab to centre of mass.
-  double GetAngleKinFactor() const;
   /// Jacobian converting the cross section from lab to centre of mass.
   double GetCrossSectionKinFactor() const;
   /// Final-state spin. UPOS points only.
@@ -547,9 +540,7 @@ class EPoint {
   /// sub-point or a point outside a data set), and how many angular-distribution coefficients it holds.  The model
   /// value is what the data set predicts at the point (ModelPass.h); the leaf values above are what the point itself
   /// calculates.
-  std::size_t ModelSlot() const { return model_slot_; }
   void SetModelRecord(std::size_t slot, int nAng) { model_slot_ = slot, num_model_ang_ = (std::uint16_t)nAng; }
-  int ModelAngularSlots() const { return num_model_ang_; }
   double GetModelValue(const azure2::Results &r) const { return r.model[ModelRecord(r)]; }
   void SetModelValue(azure2::Results &r, double v) const { r.model[ModelRecord(r)] = v; }
   /// The point's covariance seed (M^-1 r)_i (Results::ObjectiveValues::covarianceSeed), at its model record.
@@ -578,7 +569,6 @@ class EPoint {
   void SetSFactorConversion(double);
   void SetLabEnergy(double);
   void SetCMEnergy(double);
-  void SetExcitationEnergy(double);
   void SetLabAngle(double);
   void SetCMAngle(double);
   void SetExitKey(int);
@@ -714,13 +704,9 @@ class EPoint {
   void SetStoppingPower(double);
   void SetTargetThickness(double);
   void SetAngularDists(azure2::Results &r, vector_r dists);
-  void SetAngleKinFactor(double);
-  void SetCrossSectionKinFactor(double);
   EData *GetParentData() const;
   EPoint *GetSubPoint(int);
   std::vector<EPoint> &GetSubPoints();
-  void StoreSubpointOffsets();                                                          // Store offsets for adaptive grid preservation
-  void ApplySubpointShift(double energyShift, CNuc *theCNuc, const Config &configure);  // Intelligent shift preserving resonance structure
  private:
   /// Body of IntegrateTargetEffect on a value type V (double or TELinearForm);
   /// rd(j) supplies sub-point j's value.
@@ -759,9 +745,9 @@ class EPoint {
   int targetEffectNum_;
   int fileRecord_ = 0;
   double target_blend_weight_ = 1.0;
-  bool target_fallback_only_ = false;   ///< see IsTargetFallbackOnly
+  bool target_fallback_only_ = false;   ///< see SetTargetFallbackOnly
   bool target_fallback_now_ = false;    ///< see TargetFallbackScope
-  double target_fallback_depth_ = 0.0;  ///< D = E - E_bar, c.m. MeV (see IsTargetFallbackOnly)
+  double target_fallback_depth_ = 0.0;  ///< D = E - E_bar, c.m. MeV (see SetTargetFallbackOnly)
   int max_ang_dist_order_;
   double cm_angle_;
   double lab_angle_;
@@ -785,7 +771,6 @@ class EPoint {
   double stoppingPower_;
   double targetThickness_;
   double targetLabEnergy_ = 0.0;
-  double angleKinFactor_;
   mutable double labAngleMax_ = 180.;  ///< kinematic maximum lab angle of the last failed conversion
   mutable std::string labAngleWhy_;    ///< the reason of the last failed conversion (set by the const relativistic map too)
   double crossSectionKinFactor_;
@@ -884,7 +869,7 @@ class EPoint {
   std::size_t slot_ = kNoRecord;
   std::uint16_t num_ang_slots_ = 0;
   std::uint16_t num_natural_slots_ = 0;
-  std::uint16_t num_model_ang_ = 0;  // see ModelSlot
+  std::uint16_t num_model_ang_ = 0;  // see SetModelRecord
   // The point's record in the buffer `r`; a point without a record, or a buffer too short for it (not sized for the
   // layout of the point's data set: EData::BeginEvaluation), throws.
   const double *Rec(const azure2::Results &r) const {
@@ -898,7 +883,7 @@ class EPoint {
     return r.slot.data() + slot_;
   }
   [[noreturn]] void NoResultRecord(const azure2::Results &r) const;
-  // Where the model record lies (see ModelSlot).
+  // Where the model record lies (see SetModelRecord).
   std::size_t model_slot_ = kNoRecord;
   std::size_t ModelRecord(const azure2::Results &r) const {
     if (model_slot_ == kNoRecord || model_slot_ + azure2::Results::ModelRecordSize(num_model_ang_) > r.model.size())

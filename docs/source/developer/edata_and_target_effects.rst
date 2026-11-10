@@ -473,7 +473,7 @@ both give :math:`\sigma(E_0)`, off by the centroid shift.  Its fallback is
 :math:`\bar E = \int E\,dE/\epsilon \big/ \int dE/\epsilon` over the target
 (``TargetEffect::MeanEnergyLoss`` gives :math:`D = E_0 - \bar E`, stored on every
 thin-target point and updated with a fitted density).  A point outside every
-window keeps the effect number with ``IsTargetFallbackOnly()`` set and one
+window keeps the effect number, is marked by ``SetTargetFallbackOnly(true)`` and has one
 sub-point at :math:`\bar E` (three, at :math:`\bar E` of 0.01 :math:`N_0`,
 :math:`N_0` and the layout density, under ``densityfit``); edge blending happens
 inside ``IntegrateKernelsImpl`` against ``TargetFallbackImpl`` (linear in the

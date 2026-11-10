@@ -105,7 +105,6 @@ EPoint::EPoint(DataLine dataLine, ESegment *parent) {
   targetEffectNum_ = 0;
   parentData_ = NULL;
   stoppingPower_ = 0.0;
-  angleKinFactor_ = 1.0;
   crossSectionKinFactor_ = 1.0;
 }
 
@@ -155,7 +154,6 @@ EPoint::EPoint(double angle, double energy, ESegment *parent) {
   targetEffectNum_ = 0;
   parentData_ = NULL;
   stoppingPower_ = 0.0;
-  angleKinFactor_ = 1.0;
   crossSectionKinFactor_ = 1.0;
 }
 
@@ -348,17 +346,6 @@ int EPoint::GetMaxAngDistOrder() const {
 }
 
 /*!
- * Return the number of angular distribution coefficients in the vector.
- */
-
-int EPoint::GetNumAngularDists(const azure2::Results &r) const {
-  if (!num_ang_slots_) return 0;
-  // as many as the last evaluation wrote; poisoned and not written in this one: the capacity, whose NaN values show
-  const double n = Rec(r)[azure2::Results::AngularOffset()];
-  return std::isnan(n) ? (int)num_ang_slots_ : (int)n;
-}
-
-/*!
  * Returns the angle of the data point in the laboratory frame.
  */
 
@@ -520,22 +507,6 @@ double EPoint::GetStoppingPower() const {
 
 double EPoint::GetTargetThickness() const {
   return targetThickness_;
-}
-
-/*!
- * Returns the angular distribution coefficient corresponding to the given order;
- */
-
-double EPoint::GetAngularDist(const azure2::Results &r, int order) const {
-  return Rec(r)[azure2::Results::AngularOffset() + 1 + order];
-}
-
-/*!
- * Returns the kinematic factor to convert angle from lab to cm angle;
- */
-
-double EPoint::GetAngleKinFactor() const {
-  return angleKinFactor_;
 }
 
 /*!
@@ -813,13 +784,9 @@ bool EPoint::ConvertLabAngle(PPair *entrancePair, PPair *exitPair, const Config 
     // no non-relativistic angle (beyond its maximum or threshold): the forward root
     if (!this->RelativisticLabToCM(entrancePair, exitPair, nrOk ? cm_angle_ : 0.0, relAngle, relFactor)) return false;
     cm_angle_ = relAngle;
-    angleKinFactor_ = this->GetLabAngle() / cm_angle_;
-    this->SetAngleKinFactor(angleKinFactor_);
     return true;
   }
   if (!this->ConvertLabAngleNR(entrancePair, exitPair)) return false;
-  angleKinFactor_ = this->GetLabAngle() / cm_angle_;
-  this->SetAngleKinFactor(angleKinFactor_);
   return true;
 }
 
@@ -845,9 +812,6 @@ bool EPoint::ConvertLabAngleNR(PPair *entrancePair, PPair *exitPair) {
 void EPoint::ConvertLabAngleGammas(PPair *entrancePair) {
   const double beta = azure2::experiment::CMVelocity(PartitionOf(entrancePair), this->GetLabEnergy());
   cm_angle_ = azure2::experiment::PhotonLabToCM(beta, this->GetLabAngle());
-  // as for particles: the factor that takes the angle back to the lab for the output files
-  angleKinFactor_ = (cm_angle_ > 0.) ? this->GetLabAngle() / cm_angle_ : 1.0;
-  this->SetAngleKinFactor(angleKinFactor_);
 }
 
 /*!
@@ -866,7 +830,6 @@ void EPoint::ConvertCrossSection(PPair *entrancePair, PPair *exitPair) {
       crossSectionKinFactor_ = conversionFactor;
     cm_crosssection_ = this->GetLabCrossSection() * crossSectionKinFactor_;
     cm_dcrosssection_ = this->GetLabCrossSectionError() * crossSectionKinFactor_;
-    this->SetCrossSectionKinFactor(crossSectionKinFactor_);
     return;
   }
   conversionFactor = azure2::experiment::ParticleJacobian(PartitionOf(entrancePair), PartitionOf(exitPair),
@@ -874,7 +837,6 @@ void EPoint::ConvertCrossSection(PPair *entrancePair, PPair *exitPair) {
   cm_crosssection_ = this->GetLabCrossSection() * conversionFactor;
   cm_dcrosssection_ = this->GetLabCrossSectionError() * conversionFactor;
   crossSectionKinFactor_ = conversionFactor;
-  this->SetCrossSectionKinFactor(crossSectionKinFactor_);
 }
 
 /*!
@@ -907,7 +869,6 @@ void EPoint::ConvertCrossSectionGammas(PPair *entrancePair) {
   cm_dcrosssection_ = this->GetLabCrossSectionError() * conversionFactor;
   // the output files take the fitted c.m. cross section back to the lab with this factor (EData::WriteOutputFiles)
   crossSectionKinFactor_ = conversionFactor;
-  this->SetCrossSectionKinFactor(crossSectionKinFactor_);
 }
 
 /*!
@@ -973,14 +934,6 @@ void EPoint::SetCMEnergy(double energy) {
 }
 
 /*!
- * Sets the excitation energy to the given value;
- */
-
-void EPoint::SetExcitationEnergy(double energy) {
-  excitation_energy_ = energy;
-}
-
-/*!
  * Sets the lab angle to the given value;
  */
 
@@ -1009,22 +962,6 @@ void EPoint::SetExitKey(int key) {
  */
 void EPoint::SetEntranceKey(int key) {
   entrance_key_ = key;
-}
-
-/*!
- * Sets the kinematic factor to convert angle from lab to cm angle;
- */
-
-void EPoint::SetAngleKinFactor(double anglekinfactor) {
-  angleKinFactor_ = anglekinfactor;
-}
-
-/*!
- * Sets the kinematic factor to convert cross section from lab to cm angle;
- */
-
-void EPoint::SetCrossSectionKinFactor(double crosssectionkinfactor) {
-  crossSectionKinFactor_ = crosssectionkinfactor;
 }
 
 /*!
@@ -2138,7 +2075,7 @@ void EPoint::Calculate(CNuc *theCNuc, const Config &configure, azure2::Results &
 
 /*!
  * The sub-point stage of a thin-target integration.  Unlike the other kernels it falls back to sigma at the
- * depth-averaged energy E_bar = E - D (IsTargetFallbackOnly), never to a plain point at the data energy: the data
+ * depth-averaged energy E_bar = E - D (SetTargetFallbackOnly), never to a plain point at the data energy: the data
  * of a target integration carry the beam energy, and sigma(E_beam) is off by the centroid shift ~Delta/2 (13C+a
  * ND2021r with windows around the narrow levels: chi2 420,221 against 402,111 integrated everywhere, 2026-11-05).
  *  - outside every window: the one to three fallback sub-points, then the kernel (which returns sigma(E_bar));
@@ -2583,7 +2520,7 @@ V EPoint::IntegrateKernelsImpl(const Config &configure, Read rd) {
   TargetEffect *targetEffect = this->GetParentData()->GetTargetEffect(this->GetTargetEffectNum());
   const int numPoints = this->NumSubPoints();
   // A thin-target point outside the windows of an energy-restricted integration, or one the automatic
-  // tolerance let off: sigma at the depth-averaged energy E_bar (IsTargetFallbackOnly, TargetFallbackScope).
+  // tolerance let off: sigma at the depth-averaged energy E_bar (SetTargetFallbackOnly, TargetFallbackScope).
   const bool thinTarget = targetEffect->IsTargetIntegration() && !targetEffect->IsThickTarget();
   if (thinTarget && (target_fallback_only_ || target_fallback_now_)) return this->TargetFallbackImpl<V>(rd);
   if (numPoints < 2) return V(0.0);
