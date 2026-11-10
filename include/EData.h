@@ -413,6 +413,9 @@ class EData {
   /// The background (model units) that the output adds to the model value of a point of segment i at c.m. energy
   /// E under the profile in `results`; 0 outside a group with one.
   double ThmBackgroundAt(int i, double energy, const azure2::Results &results);
+  /// The lowest and highest c.m. energy (MeV) of the points of a group's segments: the grids of the set-up
+  /// (EDataThm.cpp) and the ranges of the reports (EDataThmReports.cpp).
+  static void ThmGroupEnergyRange(EData &data, const ThmGroup &group, double &eLo, double &eHi);
   /// Profile of every experiment, trivial ones included, for the output and pyazr.
   std::vector<ThmExperimentReport> ThmExperimentReports(const azure2::Results &results);
   /*!
