@@ -445,6 +445,14 @@ add_test(NAME pyazr_model_data
                  ${CMAKE_CURRENT_SOURCE_DIR}/model_data_test.py)
 set_tests_properties(pyazr_model_data PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
+# Ratio to Rutherford (data_kinds.md section 4.3): the chi^2 of ratio data against the same data multiplied by
+# sigma_R, with and without an energy shift, the ratio of two folds, the binding's Coulomb cross sections and the
+# gradient, against tests/ratio_to_rutherford/truth.py (mpmath; skipped without it).
+add_test(NAME pyazr_ratio_to_rutherford
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/ratio_to_rutherford_test.py)
+set_tests_properties(pyazr_ratio_to_rutherford PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
 # Electron screening: the AzrModel helpers for the screening block of a <targetInt> line, the
 # screening_<n> parameter and its prior, and its analytic gradient and Jacobian column.
 add_test(NAME pyazr_screening

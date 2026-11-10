@@ -278,10 +278,70 @@ void TestTransforms() {
   check("a yield without its total term is refused", threw);
 }
 
+/// A ratio to the Rutherford or Mott cross section: dsdo_cm over the analytic Coulomb leaf of the same point, no frame
+/// factors (the value is not converted at load), and its adjoint g/den, -g num/den^2.
+void TestCoulombRatio() {
+  std::printf("ratio to a Coulomb cross section\n");
+  PredictionSetup s;
+  s.reaction.observable = Observable::DifferentialLab;
+  s.reaction.coulombReference = CoulombReference::Rutherford;
+  s.terms = {Term(1, 1, 1)};
+  Prediction p = BuildPrediction(s);
+  check("kind coulomb_ratio", p.kind == TreeKind::CoulombRatio && TreeKindOf(s) == TreeKind::CoulombRatio);
+  check("text", PredictionText(p) == "ratio(dsdo_cm(1->1), rutherford(1->1))", PredictionText(p));
+  check("leaves: the observable and the Rutherford leaf of term 0, no factors, no parameters",
+        p.leaves.size() == 2 && p.leaves[0].part == LeafPart::Value && p.leaves[1].part == LeafPart::Rutherford &&
+            p.leaves[0].term == 0 && p.leaves[1].term == 0 && IsCoulombReference(p.leaves[1].part) &&
+            !IsCoulombReference(p.leaves[0].part) && p.factors.empty() && p.params.empty());
+  bool ok = true, okBack = true;
+  for (int i = 0; i < 2000; i++) {
+    double v[2] = {rnd(0, 30), rnd(1e-3, 30)};
+    PointArray arrays[2] = {{&v[0], 1}, {&v[1], 1}};
+    Inputs in;
+    in.leaves = View<PointArray>(arrays, 2);
+    Workspace ws;
+    ok = ok && same(p.tree.Value(in, 0, ws), v[0] / v[1]);
+    const double g = rnd(-2, 2);
+    double cn = 0.0, cd = 0.0;
+    double *cots[2] = {&cn, &cd};
+    Cotangents cot;
+    cot.leaves = View<double *>(cots, 2);
+    p.tree.Backward(in, 1, &g, cot, ws);
+    okBack = okBack && std::fabs(cn - g / v[1]) <= 1e-14 * std::fabs(g / v[1]) &&
+             std::fabs(cd + g * v[0] / (v[1] * v[1])) <= 1e-13 * std::fabs(g * v[0] / (v[1] * v[1]));
+  }
+  check("value = num / den, bit for bit", ok);
+  check("backward: g / den and -g num / den^2", okBack);
+  s.reaction.observable = Observable::DifferentialCM;
+  s.reaction.coulombReference = CoulombReference::Mott;
+  check("Mott, c.m. angles", PredictionText(BuildPrediction(s)) == "ratio(dsdo_cm(1->1), mott(1->1))",
+        PredictionText(BuildPrediction(s)));
+  auto refused = [](PredictionSetup x) {
+    try {
+      BuildPrediction(x);
+    } catch (const std::invalid_argument &) {
+      return true;
+    }
+    return false;
+  };
+  PredictionSetup x = s;
+  x.sample = 1;
+  check("refused: a sample", refused(x));
+  x = s;
+  x.reaction.thm = true;
+  check("refused: a THM observable", refused(x));
+  x = s;
+  x.terms.push_back(Term(1, 2, 1));
+  check("refused: a second term", refused(x));
+  x = s;
+  x.reaction.observable = Observable::CrossSection;
+  check("refused: an angle-integrated observable", refused(x));
+}
+
 void TestTable() {
   std::printf("table\n");
   const std::vector<TreeKindRow> &rows = TreeKinds();
-  bool ordered = rows.size() == 5;
+  bool ordered = rows.size() == 6;
   for (std::size_t k = 0; k < rows.size(); k++) ordered = ordered && static_cast<std::size_t>(rows[k].kind) == k && rows[k].build;
   check("one row per kind, in the order of the enum", ordered);
   bool threw = false;
@@ -300,6 +360,7 @@ int main() {
   TestSum();
   TestRatio();
   TestTransforms();
+  TestCoulombRatio();
   TestTable();
   if (failures) {
     std::printf("%d FAILURE(S)\n", failures);

@@ -14,6 +14,7 @@
 
 #include "CNuc.h"
 #include "Config.h"
+#include "CoulombReference.h"
 #include "EData.h"
 #include "EPoint.h"
 #include "ESegment.h"
@@ -193,7 +194,10 @@ struct PointInputs {
     EPoint *basePoint = segment.GetPoint(pointIndex + 1);
     for (std::size_t k = 0; k < nl; k++) {
       point[k] = TermPoint(segment, p.leaves[k].term, pointIndex);
-      leafValue[k] = LeafValue(point[k], p.leaves[k].part, results);
+      const LeafPart part = p.leaves[k].part;
+      leafValue[k] = azure2::experiment::IsCoulombReference(part)
+                         ? azure2::CoulombReferenceValue(point[k], part, cnuc, configure)
+                         : LeafValue(point[k], part, results);
       leafArray[k] = {&leafValue[k], 1};
     }
     for (std::size_t f = 0; f < nf; f++) {
@@ -260,6 +264,7 @@ double ComposeModelValue(ESegment &segment, int pointIndex, CNuc *cnuc, const Co
   for (const azure2::experiment::LeafSelector &leaf : p.leaves) {
     EPoint *termPoint = TermPoint(segment, leaf.term, pointIndex);
     if (!termPoint) return FailedSample(segment, basePoint, cnuc, results);  // component segments copy the base's points
+    if (azure2::experiment::IsCoulombReference(leaf.part)) continue;  // analytic: nothing to calculate
     if (CalculatesItself(termPoint, leaves) &&
         !CalculatePoint(termPoint, TermRole(p, segment, leaf.term), cnuc, configure, results))
       return FailedSample(segment, basePoint, cnuc, results);
@@ -346,6 +351,10 @@ bool ModelPointBackward(ESegment &segment, int pointIndex, CNuc *compound, const
     for (std::size_t k = 0; k < nl; k++)
       out.leaves[k].sub.assign(subCotangents.begin() + static_cast<std::ptrdiff_t>(inputs.subOffsets[2 * k]),
                                subCotangents.begin() + static_cast<std::ptrdiff_t>(inputs.subOffsets[2 * k + 1]));
+  // A Coulomb leaf depends on no parameter the caller back-propagates (its energy shift is differentiated by
+  // finite differences, as every leaf's): it leaves the list, whose entries go through the R-matrix adjoint.
+  for (std::size_t k = nl; k-- > 0;)
+    if (experiment::IsCoulombReference(p.leaves[k].part)) out.leaves.erase(out.leaves.begin() + static_cast<std::ptrdiff_t>(k));
   return ok;
 }
 

@@ -1,0 +1,40 @@
+<config>
+true #Perform A-Matrix Calculation
+output/ #Full Path to Output Directory
+checks/ #Full Path to Checks Directory
+none #Compond Nucleus Check
+none #Boundary Condition Check
+none #Data Check
+none #Lo-Matrix and Penetrability Check
+none #Legendre Polynomial Check
+none #Coulomb Amplitudes Check
+none #Reaction Pathway Check
+none #Angular Distributions Check
+includeAllJPi=1
+maxOrbitalMomentum=6
+format=3
+</config>
+<levels>
+0 1 3.0 1 1 1 0 0 1 1 1 0 0 1 0 1 0 4.00260325 4.00260325 2 2 -0.0918 -0.0918 0 0 0.0 0 4.5 0 0 0
+
+</levels>
+<data>
+</data>
+<extrapolations>
+# alpha + alpha (identical spin-0 bosons), every allowed partial wave l <= 6 pure hard-sphere scattering (a = 4.5 fm,
+# no width): the engine's elastic cross section (symmetrised) and its ratio to Mott on one c.m. grid.
+extrapolation dsdo_cm
+    reaction       4He(a,a)4He
+    quantity       dsigma_domega
+    unit           b/sr
+    energies       range 1.0 9.0 MeV lab step 2.0
+    angles         range 10 170 deg cm step 20
+extrapolation mott_cm
+    reaction       4He(a,a)4He
+    quantity       ratio_to_mott
+    unit           1
+    energies       range 1.0 9.0 MeV lab step 2.0
+    angles         range 10 170 deg cm step 20
+</extrapolations>
+<targets>
+</targets>

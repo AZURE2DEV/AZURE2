@@ -27,6 +27,24 @@ const char *ObservableName(Observable o) {
   return "?";
 }
 
+/// For a ratio to a Coulomb cross section, what the observable is divided by ("" otherwise).
+std::string ReferenceText(const ReactionSpec &r) {
+  switch (r.coulombReference) {
+    case CoulombReference::None: return "";
+    case CoulombReference::Rutherford:
+      return "  divided by the Rutherford cross section at the same c.m. energy and angle, folded alike; the value is "
+             "the same in both frames (not converted at load)\n";
+    case CoulombReference::Mott:
+      return "  divided by the Mott cross section (identical particles, the particles' spin) at the same c.m. energy and "
+             "angle, folded alike; the value is the same in both frames (not converted at load)\n";
+  }
+  return "";
+}
+
+const char *ReferenceName(CoulombReference c) {
+  return c == CoulombReference::Rutherford ? "rutherford" : c == CoulombReference::Mott ? "mott" : "";
+}
+
 bool AngleObservable(Observable o) {
   return o == Observable::DifferentialLab || o == Observable::DifferentialCM || o == Observable::AnalyzingPower;
 }
@@ -139,6 +157,7 @@ std::string DescribeText(const Format3Project &p) {
     if (!d.active) continue;
     out << "  " << (r.quantity ? r.quantity->name : "?") << ": " << ObservableName(d.reaction.observable)
         << (reaction ? " of " + reaction->reaction.Tree() : "") << "\n";
+    out << ReferenceText(d.reaction);
     for (const Term &t : Terms(r, d.reaction))
       out << "    " << t.text << ": entrance pair " << Pair(p, t.entrance) << ", exit pair " << Pair(p, t.exit)
           << (t.scale != 1.0 ? ", scale " + Fmt(t.scale) : "") << (t.hasAngle ? ", at " + Fmt(t.angle) + " deg lab" : "") << "\n";
@@ -163,6 +182,7 @@ std::string DescribeText(const Format3Project &p) {
     if (!x.active) continue;
     out << "  " << (r.quantity ? r.quantity->name : "?") << ": " << ObservableName(x.reaction.observable)
         << (reaction ? " of " + reaction->reaction.Tree() : "") << "\n";
+    out << ReferenceText(x.reaction);
     for (const Term &t : Terms(r, x.reaction))
       out << "    " << t.text << ": entrance pair " << Pair(p, t.entrance) << ", exit pair " << Pair(p, t.exit) << "\n";
     out << "  grid: " << x.energies.size() << " energies E_lab " << Fmt(x.minE) << " - " << Fmt(x.maxE) << " MeV";
@@ -191,6 +211,7 @@ std::string DescribeJson(const Format3Project &p) {
     const Value *reaction = r.Get("reaction");
     j.Key("observable").String(ObservableName(spec.observable));
     j.Key("tree").String(reaction ? reaction->reaction.Tree() : "");
+    j.Key("coulomb_reference").String(ReferenceName(spec.coulombReference));
     j.Key("terms").BeginArray();
     for (const Term &t : Terms(r, spec)) {
       j.BeginObject().Key("reaction").String(t.text).Key("entrance_pair").Integer(t.entrance).Key("exit_pair").Integer(t.exit);

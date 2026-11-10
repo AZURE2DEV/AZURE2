@@ -48,6 +48,8 @@ LeafSelector Leaf(const PredictionSetup &s, int t, LeafPart part) {
       break;
   }
   if (r.thm) kind = "thm_" + kind;
+  if (part == LeafPart::Rutherford) kind = "rutherford";
+  if (part == LeafPart::Mott) kind = "mott";
   if (part == LeafPart::E1) options += "; mult=E1";
   if (part == LeafPart::E2) options += "; mult=E2";
   if (s.upos) options += "; upos L=" + std::to_string(s.uposL) + "; Ic=" + Number(s.uposIc) + "; delta=" + Number(s.uposDelta);
@@ -114,6 +116,20 @@ void BuildRatio(const PredictionSetup &s, Prediction &p) {
   const int jNum = AddFactor(FactorRef::Kind::RatioFrame, 0, p);
   const int jDen = AddFactor(FactorRef::Kind::RatioFrame, 1, p);
   p.tree.Ratio(num, den, jNum, jDen);
+}
+
+/// term 0 over the Coulomb cross section of term 0's pair at its point: no frame factors (both are c.m. values at the
+/// same c.m. angle, and the data are not converted at load).  A sample, components and a THM observable are refused.
+void BuildCoulombRatio(const PredictionSetup &s, Prediction &p) {
+  const ReactionSpec &r = s.reaction;
+  if (s.terms.size() != 1 || s.sample > 0 || r.thm || r.combination != ReactionSpec::Combination::None)
+    throw std::invalid_argument("experiment::BuildPrediction: a ratio to a Coulomb cross section is one elastic term");
+  if (r.observable != Observable::DifferentialLab && r.observable != Observable::DifferentialCM)
+    throw std::invalid_argument("experiment::BuildPrediction: a ratio to a Coulomb cross section divides dsigma/dOmega");
+  const int num = AddLeaf(s, 0, LeafPart::Value, p);
+  const int den =
+      AddLeaf(s, 0, r.coulombReference == CoulombReference::Mott ? LeafPart::Mott : LeafPart::Rutherford, p);
+  p.tree.Ratio(num, den);
 }
 
 /// The weighted terms of a transmission or a yield (ESegment::TransformTerms): term 0 with weight a, a component
@@ -216,6 +232,7 @@ const std::vector<TreeKindRow> &TreeKinds() {
       {TreeKind::Ratio, "ratio", BuildRatio},
       {TreeKind::Transmission, "transmission", BuildTransmission},
       {TreeKind::Yield, "yield", BuildYield},
+      {TreeKind::CoulombRatio, "coulomb_ratio", BuildCoulombRatio},
   };
   return rows;
 }
@@ -226,6 +243,7 @@ TreeKind TreeKindOf(const PredictionSetup &s) {
   if (r.yieldThickness > 0.0) return TreeKind::Yield;
   if (r.combination == ReactionSpec::Combination::Ratio) return TreeKind::Ratio;
   if (r.combination == ReactionSpec::Combination::Sum || r.observable == Observable::TotalCapture) return TreeKind::Sum;
+  if (r.coulombReference != CoulombReference::None) return TreeKind::CoulombRatio;
   return TreeKind::Observable;
 }
 

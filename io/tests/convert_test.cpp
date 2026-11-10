@@ -89,6 +89,10 @@ int main(int argc, char **argv) {
     const Document orig = Document::Parse(bytes);
     Document d = Document::Parse(bytes);
     const bool wasOne = FormatOf(orig) == 1;
+    if (FormatOf(orig) == 3) {  // a format-3 test project (tests/ratio_to_rutherford/models): left as it is
+      check(name + ": a format-3 file is not converted to format 2", ConvertToFormat2(d).empty() && d.Write() == bytes);
+      continue;
+    }
     const std::vector<std::string> report = ConvertToFormat2(d);
     check(name + ": format 2 after conversion", FormatOf(d) == 2);
     check(name + ": a report for a format-1 file", !wasOne || !report.empty());

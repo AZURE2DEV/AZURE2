@@ -238,6 +238,35 @@ bool ReadObservable(Context &c, const ValidatedRecord &r, const std::string &ang
     }
     return true;
   }
+  if (q == "ratio_to_rutherford" || q == "ratio_to_mott") {
+    // dsigma/dOmega over the Coulomb cross section, both at the c.m. angle (data_kinds.md section 4.3); lab angles are
+    // converted at load as for dsigma_domega, the value is not (it is the same in both frames).
+    const bool mott = q == "ratio_to_mott";
+    spec.observable = angleFrame == "cm" ? O::DifferentialCM : O::DifferentialLab;
+    spec.coulombReference = mott ? CoulombReference::Mott : CoulombReference::Rutherford;
+    // The validator read the reaction's labels; here the pairs of <levels> they resolved to decide.
+    const PairInfo *p = c.Pair(spec.entranceKey);
+    if (spec.combination != ReactionSpec::Combination::None || spec.exitKey != spec.entranceKey) {
+      c.Error(codes::kReactionNotAllowed, r, "reaction",
+              "the ratio to the " + std::string(mott ? "Mott" : "Rutherford") +
+                  " cross section is defined for one elastic reaction (entrance and exit the same pair of <levels>): "
+                  "give dsigma_domega");
+      return false;
+    }
+    if (p && (p->kind != 0 || p->lightZ * p->heavyZ == 0)) {
+      c.Error(codes::kReactionNotAllowed, r, "reaction",
+              "pair " + PairLabel(*p) + " has no Coulomb scattering (a neutral or non-particle pair): give dsigma_domega");
+      return false;
+    }
+    if (p && p->identical != mott) {
+      c.Error(codes::kReactionNotAllowed, r, "quantity",
+              mott ? "pair " + PairLabel(*p) + " has no identical particles: use quantity 'ratio_to_rutherford'"
+                   : "pair " + PairLabel(*p) + " has identical particles; the Coulomb reference is Mott-symmetrised: use "
+                                               "quantity 'ratio_to_mott'");
+      return false;
+    }
+    return true;
+  }
   if (q == "analyzing_power") {
     spec.observable = O::AnalyzingPower;
     if (angleFrame != "cm") {

@@ -168,6 +168,7 @@ void CompareReaction(const std::string &w, const ReactionSpec &a, const Reaction
   Eq(w + " total", a.total, b.total);
   Bits(w + " transmission", a.transmission, b.transmission);
   Bits(w + " yield thickness", a.yieldThickness, b.yieldThickness);
+  Eq(w + " Coulomb reference", (int)a.coulombReference, (int)b.coulombReference);
 }
 
 // The first active member of each group of `label`.

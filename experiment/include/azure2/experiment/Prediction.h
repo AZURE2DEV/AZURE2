@@ -17,8 +17,13 @@ namespace azure2 {
 namespace experiment {
 
 /// Which value of a term's calculation unit a leaf reads at a point: the observable itself, or the E1 / E2 part of an
-/// angle-integrated capture cross section (b).  The codes are the engine's cross-section component (0, 1, 2).
-enum class LeafPart { Value = 0, E1 = 1, E2 = 2 };
+/// angle-integrated capture cross section (b) -- the codes 0, 1, 2 are the engine's cross-section component --, or the
+/// Rutherford or Mott cross section (b/sr, c.m.) at the term's point, folded as the point's observable is: an analytic
+/// leaf, which no level parameter moves (src/CoulombReference.cpp).
+enum class LeafPart { Value = 0, E1 = 1, E2 = 2, Rutherford = 3, Mott = 4 };
+
+/// Whether a leaf is the analytic Coulomb reference (no R-matrix calculation, no adjoint to the level parameters).
+inline bool IsCoulombReference(LeafPart part) { return part == LeafPart::Rutherford || part == LeafPart::Mott; }
 
 /// One term of a prediction as the set-up resolved it: term 0 is the data set's own points, terms 1, 2, ... its
 /// component segments in order (the components of a SUM or RATIO, the further capture pairs of a total capture, the
@@ -82,6 +87,7 @@ enum class TreeKind {
   Ratio,         ///< term 0 over term 1, each with its own frame factor
   Transmission,  ///< T = exp(-n s) of the weighted terms, at every sub-point before the kernel
   Yield,         ///< Y0 = (s / s_t)(1 - exp(-n s_t)), s_t the yield's total term
+  CoulombRatio,  ///< dsigma/dOmega over the Rutherford or Mott cross section at the same point, both folded alike
 };
 
 /// A built prediction: the tree and what its inputs, factors and parameters refer to (indices into these lists).
@@ -106,7 +112,8 @@ struct TreeKindRow {
 const std::vector<TreeKindRow> &TreeKinds();
 
 /// The kind of tree a setup needs (the one place that decides it): a transmission or a yield by its thickness, else a
-/// RATIO, else a SUM (a SUM line or a total capture), else the observable alone.
+/// RATIO, else a SUM (a SUM line or a total capture), else a ratio to a Coulomb cross section, else the observable
+/// alone.
 TreeKind TreeKindOf(const PredictionSetup &setup);
 
 /// The tree of a setup, by its kind's builder.  Throws std::invalid_argument for a setup no builder takes (no terms, a
@@ -115,7 +122,8 @@ Prediction BuildPrediction(const PredictionSetup &setup);
 
 /// The tree as one line of text (data_model.md section 3): leaves "sigma(1->2)", "dsdo_cm(1->2)", ...; "sum(a, b)",
 /// "c*J0/J1*a" (a SUM term: its factor and the frame factor J_0/J_1), "abundance(<sample>, <nucleus>)*a",
-/// "ratio(a, b)*J1/J0", "transmission(n=<n>, a)", "yield(n=<n>, a, b)".
+/// "ratio(a, b)*J1/J0", "transmission(n=<n>, a)", "yield(n=<n>, a, b)"; the Coulomb leaves "rutherford(1->1)",
+/// "mott(1->1)".
 std::string PredictionText(const Prediction &prediction);
 
 }  // namespace experiment
