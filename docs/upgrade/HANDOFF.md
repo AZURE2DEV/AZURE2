@@ -61,9 +61,18 @@ by one ulp makes 119 files fail).
 - Format 3: the follower parameter name; units other than the engine's refused for now; data-file paths relative to
   the working directory.
 
-**Waiting for the PI** (unchanged): the two atomic increments in the vendored Minuit2; M3 (b); the electron mass in
-`EPoint.cpp` and the proton mass in `ECIntegral.cpp`; whether a spin-orbit hybrid potential is wanted. No ASan
-runtime on this host.
+**Decisions of the PI, 2026-11-10** (they replace the list "waiting for the PI" of the earlier entries):
+- **Minuit2 is not patched** for now. Cause B of thread-dependent fits (`fit_threads.md`: the non-atomic call counter
+  of the vendored Minuit2) stays documented; the bounded fits of the poison test stay at one thread. Do not ask again
+  unless a user meets it.
+- **The two masses keep their values** (no result moves) and are named in one place, so that each is one line to
+  change: `electronMassOfFermiFunction` and `protonMassOfM1Capture` in `include/Constants.h`
+  (`feature/upgrade-4-named-masses`).
+- **A spin-orbit term may be added to the hybrid potentials**: step 3b (iii) of `cnuc_split.md` is wanted (channel
+  functions keyed by (α, l, j); it needs its design note first: `<potential>` grammar, `NuclearPotentialManager`,
+  the key of `ChannelTable`).
+- **Still open:** M3 (b) (explained to the PI; decided in Phase 5) and the confirmation of the new refusals and of
+  the format-3 words (the lists above and in the entry of this morning). No ASan runtime on this host.
 
 **Running now** (Opus agents from fe181256, 3 threads each; briefs in `/data0/skowrons/AZURE2-upgrade/work/briefs/`):
 - H, `feature/upgrade-4-expr` (`wt-expr`), `H_expression_pass.md`: S10 (the model pass evaluates the expression
