@@ -23,6 +23,7 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
 endif()
 
 add_library(azure2_experiment STATIC
+  src/AdaptiveGrid.cpp
   src/ColumnsGrid.cpp
   src/Diagnostics.cpp
   src/Build.cpp

@@ -39,6 +39,7 @@ from .modelavg import (Variant, Averaged, ModelAverage, model_average,
                        write_averaged_azr)
 from .priors import prior_from_fit, read_prior, write_prior, read_covariance_dat
 from .schema import schema, validate, describe, predictions
+from .grids import extrapolation_grid, refine_grid
 from .model_data import ModelDatum, model_data
 
 __all__ = ["azure2", "convert_azr", "ScatteringLength", "ScatteringLengthLine", "whittaker_wave",
@@ -67,5 +68,6 @@ __all__ = ["azure2", "convert_azr", "ScatteringLength", "ScatteringLengthLine", 
            "Variant", "Averaged", "ModelAverage", "model_average",
            "parameter_label", "azr_parameter_slots", "write_averaged_azr",
            "prior_from_fit", "read_prior", "write_prior", "read_covariance_dat",
-           "schema", "validate", "describe", "predictions", "ModelDatum", "model_data"]
+           "schema", "validate", "describe", "predictions", "ModelDatum", "model_data",
+           "extrapolation_grid", "refine_grid"]
 __version__ = '2.18.0'

@@ -365,6 +365,21 @@ extrapolation S_low
   is reused where it fits (HANDOFF 2026-11-10, "Requested feature").
 - The frame of the grid is stated (`lab` or `cm`); `cm` replaces pyazr's own conversion (`pyazr/azrfile.py:1522-1540`).
 
+**[Implemented (brief K, 2026-11-10).** One reader of the grid forms, `experiment/Grids.h` (`ReadGridValues`), used by
+`Build` and by `pyazr.extrapolation_grid`; a `cm` energy grid is taken to lab energies by `Frames`' `BeamLabFromCM`
+(the inverse of the engine's map) with the `<levels>` masses of the entrance pair; a `file` grid is read relative to
+the project as a data file. The refinement is a pure function, `experiment/AdaptiveGrid.h` (`RefineGrid`, given the
+model as a callable; `pyazr.refine_grid` on a Python function). Its rule as built: an interval is split when
+|f(m) − (f(a)+f(b))/2| > t·max(|f(m)|, 10⁻³ max|f|); the midpoint of an interval not split is dropped; seeds
+E_λ + kΓ_λ, k = 0, ±1/2, ±1, ±2, ±4 (observed values at the run's parameters); `max_points` makes the splits with the
+largest deviations and warns with the largest left. The extrapolation run (`src/AdaptiveExtrapolation.cpp`, called
+from `AZUREMain` before the data set is initialized) computes each sweep's batch with the point pass on an
+extrapolation data set made by `EData::MakePoints` (the parameter layout the run's), then makes the run's data set on
+the refined grids; with an angle grid the energies are refined at all angles at once (one union grid). A pyazr session
+refuses an adaptive grid. `AdaptiveIntegrationGrid` (the sub-point grid of a fold, refined from a level list and a
+tolerance on the folded integral) is not reused: its rule and its inputs are those of an integral, not of a curve.
+User page: `data_formats.rst`, "Extrapolation Grids".]**
+
 ### 3.9 THM data
 
 A THM data set is the same record with `thm <experiment>` (today isDiff + 10, `ESegment.cpp:38-43`), naming an

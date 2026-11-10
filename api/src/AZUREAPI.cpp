@@ -2,6 +2,7 @@
 #include "Objective.h"
 #include "ParameterLimitsManager.h"
 #include "AZUREAPI.h"
+#include "AdaptiveExtrapolation.h"
 #include "ModelPass.h"
 #include "ScatteringLength.h"
 #include "AZUREParams.h"
@@ -150,8 +151,7 @@ int AZUREAPI::Initialize() {
         return -1;
       }
     } else {
-      if (data()->MakePoints(configure(), compound()) == -1) {
-        // configure().outStream << "Could not fill data object from file." << std::endl;
+      if (data()->MakePoints(configure(), compound()) == -1 || SessionRefusesAdaptiveGrids(configure())) {
         return -1;
       } else if (data()->NumSegments() == 0) {
         // configure().outStream << "Extrapolation segments produce no data." << std::endl;
@@ -717,7 +717,7 @@ bool AZUREAPI::RebuildImpl(const std::map<int, double> &radii) {
   if (configure().paramMask & Config::CALCULATE_WITH_DATA) {
     if (data()->Fill(configure(), compound()) == -1) return false;
   } else {
-    if (data()->MakePoints(configure(), compound()) == -1) return false;
+    if (data()->MakePoints(configure(), compound()) == -1 || SessionRefusesAdaptiveGrids(configure())) return false;
   }
   if (data()->NumSegments() == 0) return false;
 
