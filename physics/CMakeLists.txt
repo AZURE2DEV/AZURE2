@@ -21,6 +21,7 @@ add_library(azure2_physics STATIC
   src/AngularCoupling.cpp
   src/ChannelFunctions.cpp
   src/Derivatives.cpp
+  src/Elements.cpp
   src/ExternalCapture.cpp
   src/JpiBlock.cpp
   src/LevelParameters.cpp
@@ -103,6 +104,14 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
   target_compile_options(physics_whittaker_test PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 add_test(NAME physics_whittaker COMMAND physics_whittaker_test ${CMAKE_CURRENT_SOURCE_DIR}/tests/data/whittaker.csv)
+
+# Element symbols by Z against the AME2020 table the masses come from (pyazr/data/mass_1.mas20).
+add_executable(physics_elements_test tests/elements_test.cpp)
+target_link_libraries(physics_elements_test PRIVATE azure2_physics)
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+  target_compile_options(physics_elements_test PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+add_test(NAME physics_elements COMMAND physics_elements_test ${CMAKE_CURRENT_SOURCE_DIR}/../pyazr/data/mass_1.mas20)
 
 if(NOT AZURE2_PHYSICS_STANDALONE)
   # physics/ configured, built and tested on its own, in a fresh build tree under this one.

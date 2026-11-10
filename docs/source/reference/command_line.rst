@@ -147,6 +147,13 @@ Available Options
        ``<potential>`` kept only with a hybrid potential, and ``format=2`` added
        to ``<config>``.  An old file still loads: it is read as its conversion,
        with a note.
+   * - ``--schema``
+     - Print the table of project format 3 as one JSON document and exit: the
+       record kinds and their fields with value types and conditions, the
+       quantities with their units, column roles, reaction rules and refusals,
+       the units with their factors, and the diagnostic codes
+       (:doc:`format3`).  No project file is needed.  The same document is
+       ``pyazr.schema()``; ``tests/schema/schema_v3.json`` is its committed copy.
    * - ``--no-long-wavelength``
      - Electric external capture without the long-wavelength approximation:
        the radial operator :math:`\bar e_L r^L` becomes the charge term of the

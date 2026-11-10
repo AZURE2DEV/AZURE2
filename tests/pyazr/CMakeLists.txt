@@ -464,6 +464,13 @@ add_test(NAME pyazr_objective_terms
                  ${CMAKE_CURRENT_SOURCE_DIR}/objective_terms_test.py)
 set_tests_properties(pyazr_objective_terms PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
+# pyazr.schema(): the table of project format 3 equals tests/schema/schema_v3.json and AZURE2 --schema
+# (docs/upgrade/project_format3.md section 6.1, check 21).
+add_test(NAME pyazr_schema
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/schema_test.py)
+set_tests_properties(pyazr_schema PROPERTIES ENVIRONMENT "AZURE2_BIN=$<TARGET_FILE:AZURE2>")
+
 # pyazr.convert_azr: an old project in the updated format (docs/upgrade/project.md section 4) -- format 2, idempotent,
 # the removed sections, the same chi-squared as the original.
 add_test(NAME pyazr_convert_azr

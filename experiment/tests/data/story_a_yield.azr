@@ -1,0 +1,42 @@
+# User story (a), docs/upgrade/project_format3.md section 9.1: 13C(p,g) thick-target yield curve in counts per uC,
+# charge state 1, a shared target with its thickness fitted.  Corrections to the note's text, marked there:
+# 'phase solid' (required with 'stopping evaluation') and 'quadrature points 40' (required on a folded data set,
+# section 7.2).
+<targets>
+target C13A
+    kind           layer
+    active         13C
+    composition    C 1
+    areal_density  1.2e18 atoms/cm2 fit prior 1.2e18 15%
+    stopping       evaluation scale 1 fit prior 1 4%
+    straggling     bohr
+    phase          solid
+beam pbeam
+    spread         0.3 keV lab
+</targets>
+<data>
+dataset Y_curve
+    reaction       13C(p,g)14N
+    quantity       yield
+    unit           counts/uC
+    charge_state   1
+    efficiency     0.0182 fit prior 0.0182 3%
+    file           data/yield_curve.dat
+    columns        E_lab[keV] value error
+    norm           1 fixed
+    target         C13A
+    beam           pbeam
+    quadrature     points 40
+dataset Y_scan
+    reaction       13C(p,g)14N
+    quantity       yield
+    unit           counts/uC
+    charge_state   1
+    efficiency     0.0175 fit prior 0.0175 3%
+    file           data/yield_scan.dat
+    columns        E_lab[keV] value error
+    norm           1 fixed
+    target         C13A
+    beam           pbeam
+    quadrature     points 40
+</data>

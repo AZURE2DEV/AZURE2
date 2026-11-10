@@ -3,11 +3,13 @@
 This module holds the part of the comparison between the R-matrix model and the data that depends on the
 measurement and not on the level parameters: the model expression of a data set (which calculated observables a
 measured value corresponds to, and how they combine) and, from step S6, the conversion of a measured point from the
-laboratory to the centre-of-mass frame. It is the `azure2_experiment` CMake target, namespace `azure2::experiment`,
-and uses `physics/` (constants, kinematics) and the C++ standard library only (`docs/upgrade/data_model.md` §2.5,
-decision M1). Three checks keep it so: the target links only `azure2_physics` and sees no engine include directory;
-the ctest `experiment_standalone` configures and builds this directory on its own; `repo_consistency` (check 9b)
-refuses any other include.
+laboratory to the centre-of-mass frame; and the table of project format 3 (§3). It is the `azure2_experiment` CMake
+target, namespace `azure2::experiment`, and uses `physics/` (constants, kinematics, element symbols), io/'s plain record
+structs (`azure2/io/Record.h`, header-only, target `azure2_io_record`) and the C++ standard library only
+(`docs/upgrade/data_model.md` §2.5, decision M1; `project_format3.md` §7.3). Three checks keep it so: the library
+links only `azure2_physics` and `azure2_io_record` and sees no engine include directory; the ctest
+`experiment_standalone` configures and builds this directory on its own (with physics/ and io/); `repo_consistency`
+(check 9b) refuses any other include (the tests may also include io/'s reader, with which they read their fixtures).
 
 ## 1. Model expressions (`Expression.h`, step S8)
 
@@ -106,3 +108,32 @@ settings each, bit for bit; the elastic closed form tan θ_lab = sin θ_c.m./(co
 the inverse aberration; every Jacobian against a numerical d cos θ_lab / d cos θ_c.m. of the library's own angle map
 (≤ 1.3 × 10⁻¹⁰); the relativistic branch against Lorentz boosts built in the test from four-vectors (E_c.m. from the
 invariant mass, θ* boosted to the lab and converted back, 8.5 × 10⁻¹³; J = d cos θ_lab / d cos θ*, 2.9 × 10⁻¹⁰).
+
+## 3. The table of project format 3 (`Schema.h`, `project_format3.md` §7, step 2 of its §10)
+
+Format 3 writes every data set, target, beam, detector, shared normalization, energy scale, extrapolation and model
+datum as a record: a header `<kind> <name>`, then one `<key> <value tokens>` line per field. `io::ReadRecords`
+(`io/include/azure2/io/RecordReader.h`) splits a section into records and knows no kind or field; everything else is
+here, as tables:
+
+| file | holds |
+|---|---|
+| `src/Schema.cpp` | the record kinds, their sections and fields (`FieldDef`: key, value type, where it applies, where it is required, repeatable, default, doc) and the structured values (`FormSpec`: stopping, udr, quadrature, ...) |
+| `src/Quantities.cpp` | one `Quantity` row per quantity of §7.2: units, column roles, reaction rule, the fields it requires and allows, target kinds, norm rules, tree, EXFOR codes, refusals |
+| `src/Units.cpp` | the units with dimension and factor to the engine unit of the dimension |
+| `src/Diagnostics.cpp` | every diagnostic code with its severity and meaning |
+| `src/ValueParsers.cpp`, `ReactionParser.cpp`, `ColumnsGrid.cpp` | the one parser of each value type (`Parsers.h`), producing the typed values of `Values.h` |
+| `src/Validate.cpp` | `Schema::Validate`: every problem as a `Diagnostic` (code, line, column, record, field, found, allowed, message, syntax-only fix) |
+| `src/SchemaJson.cpp`, `Json.cpp` | `Schema::ToJson`: the table as the JSON of §6.1 (`AZURE2 --schema`, `pyazr.schema()`) |
+
+`Schema::Validate(sections)` takes the records of each format-3 section and returns `ValidationResult{diagnostics,
+records}`: each `ValidatedRecord` holds its fields as typed `Value`s (numbers keep the text written), its quantity row,
+its lines. Step 3's `Schema::Build` is to read those values and never text. What needs `<levels>` (the pair and level
+behind a reaction label, a level's J^pi) or the data files (rows, zero errors) is not checked here.
+
+To add (the recipes of `CLAUDE.md`): a field is one `FieldDef` row in `Schema.cpp` (and a `QuantityField` in the
+quantity rows that use it), a quantity one `Quantity` row in `Quantities.cpp`, a unit one `Unit` row in `Units.cpp`; then
+`AZURE2 --schema > tests/schema/schema_v3.json` (bump `Schema::kVersion` when the table changes meaning) and
+`python3 tools/gen_schema_docs.py`. The tests: `experiment_schema` (the note's examples as fixtures in `tests/data/`
+validate with no diagnostic; the JSON equals the committed copy), `experiment_diagnostics` (one case per code),
+`experiment_quantities` (every row's units and required fields), `experiment_parsers` (each value type).
