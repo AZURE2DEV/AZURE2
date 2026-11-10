@@ -362,6 +362,9 @@ numbers compared by value (`1.0` equals `1`), progress lines of `run.log` droppe
 - Format C++ with `.clang-format` (2-space indent, `ColumnLimit: 0`, so you
   break lines yourself). Match the surrounding comment density. Comments say
   *why* and cite the equation or paper (`Edmonds 7.1.7`, `PRC 104, 064612`).
+- No path of one machine (a directory under /data0 or /home) in a tracked file: tools find each other beside
+  themselves in `tools/`, scratch is an environment variable (`$WORK`), data files are relative to the project
+  [check 30; `docs/upgrade/HANDOFF.md`, a log, is left out].
 - Add no new dependencies (C++ or Python core) without asking. Optional Python
   extras go in `pyproject.toml` `[project.optional-dependencies]`.
 - Diagnostics are environment variables named `AZURE_*` / `AZURE2_*` (for

@@ -340,7 +340,7 @@ Results that move (no table file; the table changes nothing beyond 1e-8):
   and dev's re-placement keeps the anchor of level 5002 at -0.336 MeV (Gamma_alpha
   134 keV) that thm's refresh dropped; that point moves 18 %, every other by
   <= 1e-4.
-- THM best fits (/home/almalinux/thm_bestfits/12C_12C, file alone): plain_6.5
+- THM best fits (the 12C_12C directory of the local best-fit collection, file alone): plain_6.5
   91.5788 -> 91.5550, plain_8.5 70.3198 -> 70.3222, NCxR_8.5 100.470 ->
   100.472 (the direct segments' kernel normalisation; single segments by up
   to 3 % of their small chi2).

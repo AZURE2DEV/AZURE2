@@ -723,10 +723,71 @@ for top in ("src", "api/src", "include", "tests/upgrade", "tests/reference"):
             problems.append(f"{rel}: resolves a plan position itself (EData::PlanPoint); ask EPoint::PlanMapped or "
                             "the calculation plan (src/CalculationPlan.cpp)")
 
+
+# 30. No path of one machine in the repository: a tracked file that names a directory under /data0 or /home works on
+#     the machine it was written on only, and tells a reader of a clone to run something they do not have.  Tools are
+#     found beside each other (tools/), scratch is an environment variable ($WORK), data files are relative to the
+#     project.  docs/upgrade/HANDOFF.md is a log of what was run where and is left out; ALLOWED_MACHINE_PATHS lists
+#     the lines that name such a path on purpose (a rule against it, or its test), each with its reason.  Binary
+#     files are skipped.
+MACHINE_PATH = re.compile(r"/(?:data0|home)/")
+MACHINE_PATH_FREE_FILES = {"docs/upgrade/HANDOFF.md"}
+HOME = "/" + "home/"  # spelled in two parts so that this file passes its own check
+ALLOWED_MACHINE_PATHS = {
+    # The skills checker's rule R8 refuses personal paths in skills: its description and its pattern name them.
+    ("tools/check_skills.py", "R8  no personal absolute paths"),
+    ("tools/check_skills.py", r'r"(?:(?<![\w.$})])(?:/groups/|/Users/|/users/|' + HOME),
+    # ... and its test feeds such a path to the rule.
+    ("tests/consistency/check_skills_test.py", f'"See {HOME}me/x."'),
+}
+
+
+def tracked_files():
+    """The files git tracks (a fresh clone's), or, without git, every file of the tree outside build and output
+    folders."""
+    try:
+        out = subprocess.run(["git", "-c", "safe.directory=*", "ls-files", "-z"], cwd=ROOT, capture_output=True,
+                             check=True).stdout
+        return sorted(f for f in out.decode("utf-8", "replace").split("\0") if f)
+    except (OSError, subprocess.CalledProcessError):
+        found = []
+        for dirpath, dirnames, files in os.walk(ROOT):
+            dirnames[:] = [d for d in dirnames if d != ".git" and not d.startswith("build")
+                           and d not in ("output", "checks", "__pycache__", "_build")]
+            found += [os.path.relpath(os.path.join(dirpath, f), ROOT) for f in files]
+        return sorted(found)
+
+
+machine_path_hits = set()
+for rel in tracked_files():
+    if rel in MACHINE_PATH_FREE_FILES:
+        continue
+    try:
+        with open(os.path.join(ROOT, rel), "rb") as f:
+            raw = f.read()
+    except OSError:
+        continue  # a tracked file deleted in the work tree
+    if b"\0" in raw:
+        continue
+    for number, line in enumerate(raw.decode("utf-8", "replace").splitlines(), 1):
+        if not MACHINE_PATH.search(line):
+            continue
+        allowed = [a for a in ALLOWED_MACHINE_PATHS if a[0] == rel and a[1] in line]
+        if allowed:
+            machine_path_hits.update(allowed)
+            continue
+        problems.append(f"{rel}:{number}: names a path of one machine ({MACHINE_PATH.search(line).group(0)}...); "
+                        "use a path relative to the repository or the project, or an environment variable")
+for rel, text in sorted(ALLOWED_MACHINE_PATHS - machine_path_hits):
+    problems.append(f"{rel}: '{text}' is gone; remove it from ALLOWED_MACHINE_PATHS in check 30")
+if not MACHINE_PATH.search("tools/runall.sh is in /" + "data0/x/tools") or not MACHINE_PATH.search("see " + HOME):
+    problems.append("check 30: the path pattern no longer matches the forms it guards; update this check")
+
 if problems:
     for p in problems:
         print("FAIL", p)
     print(f"{len(problems)} consistency problem(s)")
     sys.exit(1)
 print(f"repository consistent: {len(flags)} CLI flags, segment keywords, test registration, check.sh modes, pyazr version and exports, "
-      f"format-3 reference page, {len(declared)} diagnostic codes, file sizes, one model pass and residual, one calculation plan")
+      f"format-3 reference page, {len(declared)} diagnostic codes, file sizes, one model pass and residual, one calculation plan, "
+      f"no machine paths")
