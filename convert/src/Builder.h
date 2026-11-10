@@ -237,19 +237,8 @@ class Builder {
     const auto it = old_.pairs.find(key);
     return it == old_.pairs.end() ? nullptr : &it->second;
   }
-  static std::string Nuclide(int Z, int A) { return std::to_string(A) + physics::ElementSymbol(Z); }
-  static std::string LightLabel(const OldPair &p) {
-    if (p.pType == 10) return "g";
-    if (p.pType == 20) return p.z1 < 0 ? "b-" : "b+";
-    const int A = p.A1();
-    if (p.z1 == 0 && A == 1) return "n";
-    if (p.z1 == 1 && A == 1) return "p";
-    if (p.z1 == 1 && A == 2) return "d";
-    if (p.z1 == 1 && A == 3) return "t";
-    if (p.z1 == 2 && A == 3) return "h";
-    if (p.z1 == 2 && A == 4) return "a";
-    return Nuclide(p.z1, A);
-  }
+  static std::string Nuclide(int Z, int A) { return experiment::NuclideLabel(Z, A); }
+  static std::string LightLabel(const OldPair &p) { return experiment::LightParticleLabel(p.pType, p.z1, p.A1()); }
   /// Other pairs with the same particles and states: the label would not identify `p` (section 8.3).
   bool Ambiguous(const OldPair &p) const {
     for (const auto &kv : old_.pairs) {
@@ -289,10 +278,7 @@ class Builder {
     if (out->e2 != 0) s += "[" + out->e2Text + "]";
     return s;
   }
-  static std::string PairLabel(const OldPair &p) {
-    return LightLabel(p) + (p.e1 != 0 ? "[" + p.e1Text + "]" : "") + "+" + Nuclide(p.z2, p.A2()) +
-           (p.e2 != 0 ? "[" + p.e2Text + "]" : "");
-  }
+  static std::string PairLabel(const OldPair &p) { return experiment::PairLabel(p.Info()); }
 
   /// The channel spin of a phase-shift line without "spin s": the one spin of (J, l) of the entrance pair in the
   /// level scheme (EData::Initialize refuses a line with several).  "" with res_.refusal set when there are several.

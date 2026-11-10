@@ -110,10 +110,24 @@ add_test(NAME upgrade_history
          WORKING_DIRECTORY ${_history_dir})
 set_tests_properties(upgrade_history PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2" TIMEOUT 900)
 
+# The calculation plan (include/CalculationPlan.h, docs/upgrade/data_model.md S5): every point of every project of
+# tests/ is calculated by exactly one task, checked when the plan is built at set-up, again here and on a copy.
+add_executable(plan_test plan_test.cpp)
+target_link_libraries(plan_test PRIVATE AZURE2Core)
+add_test(NAME upgrade_plan COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/plan_test.sh $<TARGET_FILE:plan_test> ${CMAKE_SOURCE_DIR}/tests)
+set_tests_properties(upgrade_plan PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2" TIMEOUT 1800)
+# ... and at run time (AZURE_PLAN_CHECK=1) on T1-T3, 13N, natural_neon, a THM project, a transmission and a yield.
+add_test(NAME upgrade_plan_runtime COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/plan_runtime.sh $<TARGET_FILE:AZURE2>)
+set_tests_properties(upgrade_plan_runtime PROPERTIES TIMEOUT 1800)
+
 # A fit does not depend on the number of threads: pooled working copies give a fresh copy's bits, and fits at 1 and
 # 4 threads evaluate the same vectors to the same values (tests/fit_threads/check.sh, docs/upgrade/fit_threads.md).
 add_test(NAME fit_threads COMMAND bash ${CMAKE_SOURCE_DIR}/tests/fit_threads/check.sh $<TARGET_FILE:AZURE2>)
 set_tests_properties(fit_threads PROPERTIES TIMEOUT 600)
+# The four data check files of T1 are written, with their line counts (tests/check_files_data/check.sh): no other
+# project sets these checks (src/EDataCheckFiles.cpp, docs/upgrade/edata_split.md N2).
+add_test(NAME check_files_data COMMAND bash ${CMAKE_SOURCE_DIR}/tests/check_files_data/check.sh $<TARGET_FILE:AZURE2>)
+set_tests_properties(check_files_data PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2" TIMEOUT 300)
 # Results read before they are written (docs/upgrade/data_model.md, S3 and check 16): T1-T3 calculated, extrapolated
 # and (T1) fitted with and without AZURE_POISON_RESULTS=1, outputs and the API's arrays equal; known cases listed.
 find_package(Python3 COMPONENTS Interpreter)
@@ -121,4 +135,12 @@ if(Python3_Interpreter_FOUND)
   add_test(NAME upgrade_poison_results
            COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/poison_results_test.py --binary $<TARGET_FILE:AZURE2>)
   set_tests_properties(upgrade_poison_results PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2" TIMEOUT 1800)
+endif()
+# What every data set and extrapolation of tests/ and examples/ predicts (docs/upgrade/data_model.md section 3, step
+# S10): `AZURE2 --print-predictions` against the committed table tests/upgrade/predictions.txt (regenerate with
+# predictions_test.py --write).
+if(Python3_Interpreter_FOUND)
+  add_test(NAME upgrade_predictions
+           COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/predictions_test.py --binary $<TARGET_FILE:AZURE2>)
+  set_tests_properties(upgrade_predictions PROPERTIES TIMEOUT 1800)
 endif()

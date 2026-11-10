@@ -74,6 +74,13 @@ Run it from this directory:
 python3 check_per_pair.py
 ```
 
+## Below threshold
+
+The bound ¹³N ground state (E_x = 0, 1.944 MeV below the p + ¹²C threshold, l = 1) is transformed with the shift
+function of the decaying solution of the radial equation **with** the potential (`physics/HybridPotential.h`,
+`DecayingSolution`), so S is continuous through threshold; its values against an independent integration are in
+`physics/tests/data/hybrid_bound.csv` (`physics_hybrid_potential`, `tests/pyazr/hybrid_threshold_test.py`).
+
 ## One thing that will bite
 
 The potential changes the penetrabilities and shift functions, and those are

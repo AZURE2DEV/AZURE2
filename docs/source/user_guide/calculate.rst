@@ -61,6 +61,11 @@ Common uses:
 - Compute the cross section for the inverse reaction.
 - Calculate a previously unobserved cross section using only level parameters.
 
+In a format-3 project the energies of an extrapolation are a ``range`` (by
+step or by number of points, also logarithmic), a ``list``, a ``file`` or an
+``adaptive`` grid that this run refines at its parameters around narrow
+resonances (:ref:`extrapolation-grids`).
+
 Perform MINOS Error Analysis
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 

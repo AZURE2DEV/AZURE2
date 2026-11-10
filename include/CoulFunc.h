@@ -4,13 +4,14 @@
 #include <cmath>
 #include <complex>
 #include <memory>
+#include <optional>
 #include <gsl/gsl_sf_coulomb.h>
 #include "Kinematics.h"
 #include "azure2/physics/ChannelFunctions.h"
+#include "azure2/physics/HybridPotential.h"
 
 class PPair;
 class CoulombTable;
-class NuclearPotential;
 
 /// The return structure of the CoulFunc function class.
 
@@ -56,7 +57,7 @@ inline std::complex<double> CoulombHardSpherePhase(const CoulWaves &c) { return 
 
 class CoulFunc {
  public:
-  /// Build for a particle pair; resolves that pair's hybrid nuclear potential.
+  /// Build for a particle pair, with that pair's hybrid nuclear potential if it has one.
   CoulFunc(PPair *pPair, bool useGSLFunctions);
   /// Charge number of the first particle.
   int z1() const;
@@ -88,29 +89,8 @@ class CoulFunc {
   /// Second energy derivative of the shift function (numerical).
   double PEShift_d2E(int, double, double);
 
-  // Hybrid method support
-  /// Override this instance's nuclear potential.
-  void setNuclearPotential(std::shared_ptr<NuclearPotential> potential);
-  /// The nuclear potential in force for this pair.
-  std::shared_ptr<NuclearPotential> getNuclearPotential() const;
-  /// Radius at which the Numerov solution is matched to the Coulomb functions.
-  void setMatchingRadius(double r_match);
-  /// Matching radius, fm.
-  double getMatchingRadius() const;
-  /// Step of the outward Numerov integration, fm.
-  void setNumerovGridStep(double dr);
-  /// Numerov step, fm.
-  double getNumerovGridStep() const;
-  /// Turn the hybrid model on or off for this instance.
-  void setUseHybridMethod(bool useHybrid);
-  /// Is the hybrid model active here?
-  bool getUseHybridMethod() const;
-  /// The key of the pair this object was built for, which is what selects
-  /// its nuclear potential out of NuclearPotentialManager.
-  int pairKey() const { return pairKey_; }
-  /// The nuclear potential these waves are computed under (0 = plain Coulomb);
-  /// part of the ECTable term key.
-  long hybridTag() const { return hybridTag_; }
+  /// The pair's hybrid nuclear potential (PPair::GetHybridPotential), none for plain Coulomb functions.
+  const std::optional<azure2::physics::HybridPotential> &HybridPotential() const { return potential_; }
   /// Whether P, S and the phase come from the universal Coulomb table.
   bool UsesTable() const { return table_ != nullptr; }
 
@@ -121,16 +101,15 @@ class CoulFunc {
   void SetRadialScratch(bool use) { radialScratch_ = use; }
 
  private:
-  // Hybrid method calculation
+  /// The waves of the radial equation with the pair's potential (spin_orbit_potential.md section 1.1): the
+  /// solution equal to H+ = G + iF beyond the matching radius, integrated inward to the radius (physics/
+  /// IntegrateInward); the plain Coulomb functions at a radius beyond the matching radius.
   CoulWaves computeHybrid(int l, double radius, double energy);
+  /// The point-Coulomb functions by the selected routine (physics/coulomb or GSL).
+  CoulWaves PlainWaves(int l, double radius, double energy) const;
 
   bool useGSLFunctions_;
-  bool useHybridMethod_;
   bool radialScratch_ = false;
-  int pairKey_;
-  /// Identifies the nuclear potential these waves were computed under; part of
-  /// the Coulomb memo key.  0 means the plain Coulomb solution.
-  long hybridTag_;
   int z1_;
   int z2_;
   int lLast_;
@@ -152,10 +131,8 @@ class CoulFunc {
   double tLastR_ = 0.0, tLastE_ = 0.0, tP_ = 0.0, tS_ = 0.0, tPhi_ = 0.0;
   bool tOk_ = false;
 
-  // Hybrid method parameters
-  std::shared_ptr<NuclearPotential> nuclearPotential_;
-  double rMatch_;     // Matching radius for boundary conditions
-  double drNumerov_;  // Numerov grid step
+  /// The pair's hybrid nuclear potential; none: plain Coulomb functions.
+  std::optional<azure2::physics::HybridPotential> potential_;
 };
 
 #endif

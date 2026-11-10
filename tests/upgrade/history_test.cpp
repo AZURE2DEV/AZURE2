@@ -10,7 +10,9 @@
 //   fresh A, fresh B           a copy of the master evaluated once;
 //   pooled B -> A              a copy evaluated at B, then at A: its per-segment chi^2, total and model values equal
 //                              fresh A's bit for bit;
-//   pooled A -> B -> A -> B    the same copy back and forth: equal to fresh B's at the end.
+//   pooled A -> B -> A -> B    the same copy back and forth: equal to fresh B's at the end;
+//   pooled C -> A -> C         C = A with every fixed energy-shift parameter moved by 1 keV: equal to fresh A's, then
+//                              to fresh C's (a shift that becomes inactive again must be undone).
 // Also: a second load of the project in the same process gives its component segments the same keys, all distinct.
 // An evaluation is AZURECalc::Chi2On's: the hand-over, the parallel point pass, the model value of every point, the
 // objective (Objective.h) with the per-segment chi^2.
@@ -82,7 +84,7 @@ Evaluation Evaluate(Copy &c, const vector_r &p, const Config &cfg) {
   EData *ld = c.data.get();
   lc->FillCompoundFromParams(p);
   ld->FillNormsFromParams(p);
-  ld->FillEnergyShiftsFromParams(p, c.results, ld, lc, &cfg);
+  ld->FillEnergyShiftsFromParams(p, c.results, lc, &cfg);
   if (cfg.paramMask & Config::USE_BRUNE_FORMALISM) lc->CalcShiftFunctions(cfg, false);
   std::vector<ESegment *> segments;
   for (int i = 1; i <= ld->NumSegments(); i++) segments.push_back(ld->GetSegment(i));
@@ -199,6 +201,28 @@ int RunProject(const std::string &path) {
   Evaluate(back, pB, cfg);
   Evaluate(back, pA, cfg);
   Compare("pooled A -> B -> A -> B = fresh B", Evaluate(back, pB, cfg), eB);
+
+  // C: A with every fixed energy-shift parameter (constant and sqrt(E) coefficient) moved by 1 keV (1e-3).  A fixed
+  // parameter is still a component of the vector, and pyazr can change it between evaluations: a copy that evaluated
+  // C and then A -- where most fixed shifts are 0 again -- must give fresh A's bits (the points must not keep C's
+  // shift because the segment's shift is inactive at A).
+  vector_r pC = pA;
+  int movedFixed = 0;
+  for (unsigned int i = 0; i < pA.size(); i++) {
+    const ParamKind kind = params.Kind((int)i);
+    if (mp.Parameter(i).IsFixed() && (kind == ParamKind::EnergyShift || kind == ParamKind::EnergyShiftSqrt))
+      pC[i] += 0.001, movedFixed++;
+  }
+  if (movedFixed > 0) {
+    std::printf("  C moves %d fixed energy-shift parameters\n", movedFixed);
+    Copy freshC = copy();
+    const Evaluation eC = Evaluate(freshC, pC, cfg);
+    check("A and C give different chi^2", eA.segmentChi2[0] != eC.segmentChi2[0]);
+    Copy fixedShift = copy();
+    Evaluate(fixedShift, pC, cfg);
+    Compare("pooled C -> A = fresh A (fixed shifts moved and back)", Evaluate(fixedShift, pA, cfg), eA);
+    Compare("pooled C -> A -> C = fresh C", Evaluate(fixedShift, pC, cfg), eC);
+  }
   return 0;
 }
 

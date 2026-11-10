@@ -571,3 +571,212 @@ temperature, no parameter) and its GUI misreads the line.
    ``pyazr`` (:doc:`../user_guide/pyazr`), whose load-and-save round trip
    ``tests/pyazr/roundtrip_test`` checks. The internal format may change
    between versions.
+
+Project Files in Format 3
+-------------------------
+
+A project in format 3 (``format=3`` in ``<config>``; the design is
+``docs/upgrade/project_format3.md``, the table of every record kind, field,
+quantity, unit and diagnostic is :doc:`format3`) keeps ``<config>``,
+``<levels>``, ``<parameterSettings>``, ``<mcmc>`` and ``<thm>`` and replaces
+``<segmentsData>``, ``<segmentsTest>``, ``<targetInt>``, ``<abundances>`` and
+``<scatteringLengths>`` by named records: ``dataset``, ``normalization`` and
+``energy_scale`` in ``<data>``, ``extrapolation`` in ``<extrapolations>``,
+``target``, ``beam`` and ``detector`` in ``<targets>``, ``datum`` in
+``<modelData>``.  A record is a header line ``<kind> <name>`` and one
+``<key> <value>`` line per field; ``#`` starts a comment.  Records refer to one
+another by name, in any order.  An excerpt of T2 (``tests/upgrade/T2``, written
+by ``AZURE2 --convert T2.azr T2_f3.azr --to 3``; the whole file is
+``experiment/tests/data/T2_format3.azr``)::
+
+   <config>
+   format=3
+   </config>
+   <targets>
+   target tgt_s01_int_thin                         # <targetInt> line 1
+       kind           layer
+       active         15N
+       areal_density  5e17 atoms/cm2 fixed
+       stopping       formula "a0*x^a1" a0=1.6e-20 a1=-0.45 MeV*cm2/atom
+       straggling     bohr
+   beam beam_s01_int_thin
+       spread         0.001 MeV lab
+   </targets>
+   <data>
+   normalization D                                 # shared by s02 and s03
+       value          1 fit prior 1 8%
+   energy_scale G
+       offset         0 MeV fit prior 0 0.003
+       function       "a0*(x-0.8)" MeV
+       param          a0 0 fit prior 0 0.01
+   dataset s01_int_thin
+       reaction       15N(p,a)12C
+       quantity       sigma
+       unit           b
+       file           data/s01_int_thin.dat
+       columns        E_lab[MeV] _ value error
+       energy_window  0.199999 1.400001 MeV
+       norm           1 fit prior 1 5%
+       shift          offset 0 MeV fit prior 0 0.003
+       target         tgt_s01_int_thin
+       beam           beam_s01_int_thin
+       quadrature     points 20 width_multiplier 10 per_width 20
+   dataset s02_diff090
+       reaction       15N(p,a)12C
+       quantity       dsigma_domega
+       unit           b/sr
+       file           data/s02_diff090.dat
+       columns        E_lab[MeV] theta_lab[deg] value error
+       energy_window  0.249999 1.350001 MeV
+       angle_window   90 90 deg
+       norm           D
+       shift          G
+   </data>
+
+The engine reads such a file in one pass: the records are read and checked
+against the table, the reactions are resolved against the pairs of
+``<levels>`` (a label names a pair by its particles and states; where it names
+two, ``entrance_pair`` / ``exit_pair`` give the key), the model data against
+its levels, and the data files are opened **relative to the working
+directory** (as for an old project).  Any error refuses the project with the
+same diagnostics ``AZURE2 --validate`` prints.  ``AZURE2 --describe FILE``
+(``pyazr.describe``) prints what was understood: per data set the observable,
+the pair keys of each reaction term, the data file's resolved path, the
+effects linked to it and its fit parameters.
+
+Where the engine reading a format-3 file behaves differently from the old
+engine on the same project (``AZURE2 --convert`` reports the rest):
+
+* A data file that cannot be read refuses a run with data (``E_DATA_FILE``);
+  the old engine skipped that data set with a warning and fitted the others.
+  A run without data (extrapolations, menu 3, and pyazr calls that only
+  extrapolate) does not read the data files: one that cannot be read is the
+  warning ``W_DATA_FILE_NOT_READ``.  ``--validate`` and ``--describe`` require
+  them.
+* A member of a varied shared ``normalization`` has a fixed parameter of its own
+  (``D.value[<data set>]``) whether or not its old line varied it, and the
+  start and step of a follower's fixed parameters are the record's.
+* Scattering lengths are model data: ``chiSquared.out`` labels them
+  ``Model-Data`` and ``modelData.out`` lists them.
+* An abundance-weighted output names its sample by its target.
+
+Ratio to Rutherford and to Mott.  ``quantity ratio_to_rutherford`` (an elastic
+reaction of two different charged particles) and ``ratio_to_mott`` (identical
+particles) are :math:`d\sigma/d\Omega` over the Rutherford or Mott cross
+section at the same c.m. energy and angle (``unit 1``; lab or c.m. angles,
+the angle converted at load, the value not, since it is the same in both
+frames).  The engine computes the reference with its own :math:`\eta` and
+:math:`k` (the pair's masses, the run's kinematics; Mott with the
+interference weight :math:`(-1)^{2s}/(2s+1)` of the particles' spin) and folds
+it with the data set's beam spread, target layer or beam profile on the same
+sub-points as the cross section: the model is the ratio of the two folds.  A
+fitted energy shift moves both.  Refused: ``ratio_to_rutherford`` for
+identical particles and ``ratio_to_mott`` for different ones, a neutral pair,
+an inelastic group, and a Doppler-broadened target, electron screening,
+detector attenuation coefficients and ``fold_windows ... auto_tolerance`` on
+such a data set (``E_NOT_BUILT``).  The worked example is
+:doc:`../examples/ratio_to_rutherford`.
+
+Parameter names follow the records: a data set's own are
+``<data set>.norm``, ``<data set>.shift.offset`` and ``<data set>.shift.sqrt``
+(every data set has the two shift parameters, fixed at 0 without a shift); a
+shared record's belong to the first active data set of the group
+(``D.value``, ``G.offset``, ``G.a0``, ``<target>.areal_density``) and a later
+member keeps a fixed parameter of its own, ``D.value[s03_diff150]``; the
+effects of a target are ``<target>.areal_density``, ``<target>.doppler``,
+``<target>.screening``, an isotope's abundance ``<target>.isotope.<nuclide>``.
+``AZURE2 --convert ... --to 3`` reports the map from the old names
+(``segment_2_norm``) to these in its ``--json-report`` (``parameters``) and
+renames the rows of ``<parameterSettings>`` by it.  Windows, shifts, fixed
+term angles and a detector resolution are converted to the engine's units; a
+unit other than the engine's is refused for now (``E_NOT_BUILT``) in a data
+set's ``unit`` and ``columns``, a target's ``areal_density`` (atoms/cm\ :sup:`2`;
+a neutron sample's atoms/b), ``stopping`` (MeV cm\ :sup:`2`/atom) and
+``screening`` (eV), and a beam ``spread`` formula (MeV).
+
+.. _extrapolation-grids:
+
+Extrapolation Grids
+^^^^^^^^^^^^^^^^^^^
+
+The ``energies`` field of an ``extrapolation`` record (format 3) says where the
+model is computed.  Each form names its unit and frame; ``lab`` energies are
+those of the light particle of the entrance pair on the heavy one at rest, as in
+the data files, and ``cm`` energies are entrance-channel c.m. energies, taken to
+lab energies with the pair's masses from ``<levels>`` (``E_lab = E_cm (m1 +
+m2)/m2``, or the relativistic inverse with ``relativistic=1``) so that the
+engine computes, and the output lists, the c.m. energies asked for (to rounding,
+10⁻¹⁶ relative).  Any energy (angle) unit of the table may be written; the values
+are converted to MeV (deg).  The same forms describe an angle grid
+(``angles``; an angle grid is not adaptive).
+
+``range lo hi <unit> <frame> step s``
+   ``E_k = lo + k s`` for ``k = 0 … ⌊(hi − lo)/s + 10⁻⁹⌋``::
+
+      energies   range 0.02 0.8 MeV cm step 0.002
+
+``range lo hi <unit> <frame> points n [log]``
+   ``n`` points from ``lo`` to ``hi``, evenly spaced or, with ``log``, evenly
+   spaced in ``ln E`` (``lo > 0``)::
+
+      energies   range 20 800 keV cm points 200 log
+
+``list x1 x2 … <unit> <frame>``
+   The energies as written, in that order::
+
+      energies   list 0.025 0.05 0.1 0.2 MeV cm
+
+``file "path" <unit> <frame>``
+   One energy per line; ``#`` starts a comment, blank lines are skipped.  The
+   path is relative to the project's directory, as a data file's;
+   ``AZURE2 --describe`` prints the path it opened and the number of energies::
+
+      energies   file "grids/gamow_window.txt" keV cm
+
+``adaptive lo hi <unit> <frame> tolerance t max_points n start_step s``
+   A grid made by the extrapolation run (menu 3) at the run's parameters, for
+   a narrow resonance that a uniform grid would need a tiny step everywhere
+   for::
+
+      energies   adaptive 0.2 0.4 MeV cm tolerance 1e-3 max_points 2000 start_step 0.01
+
+   The run starts from the uniform grid of ``start_step`` over ``[lo, hi]``
+   (``hi`` included) and adds, as seeds, ``E_λ + kΓ_λ`` for ``k = 0, ±1/2,
+   ±1, ±2, ±4`` of every level of the entrance pair's compound nucleus inside
+   the range (the observed energy and total width at the run's parameters).
+   Then, sweep by sweep, the model is computed at the midpoint ``m`` of every
+   interval ``[a, b]`` made in the sweep before (all intervals in the first),
+   and an interval is split -- ``m`` joins the grid, its two halves are tested
+   in the next sweep -- when the model differs from the straight line between
+   its ends by more than the tolerance:
+   ``|f(m) − (f(a) + f(b))/2| > t · max(|f(m)|, 10⁻³ max|f|)``, the maximum over
+   the values computed so far.  Below 10⁻³ of its largest value a curve is thus
+   refined to the absolute deviation ``t · 10⁻³ max|f|``, not relative to
+   itself.  The midpoint of an interval that is not split is dropped, so every
+   interval of the final grid has been tested.  The refinement ends when no
+   interval is split, or when a sweep's splits would make the grid longer than
+   ``max_points``: then the splits with the largest deviations are made up to
+   that count and the run warns with the largest deviation left and where.
+   ``f`` is the value the point pass computes, before the output's frame and
+   S-factor conversions: the c.m. cross section (or differential cross
+   section, phase shift, analyzing power).  With an angle grid the energies are
+   refined at every angle at once: an energy joins the grid, at all angles,
+   when any angle needs it (one grid for all angles).  The run log reports the
+   count (``Adaptive grid of extrapolation #1: 251 energies (...)``); the
+   output files list the grid's points as for any other grid.
+
+   The refinement sees what the start grid and the level seeds bracket.  A
+   structure that is not at a level -- an interference minimum, a threshold
+   -- and is narrower than ``start_step`` can lie inside an interval whose
+   ends and midpoint are on a straight line, and is then not found: choose
+   ``start_step`` to resolve such structures.
+
+   The grid depends on the parameters: a run with other parameters can give
+   other energies.  Which intervals are split is decided once per sweep from
+   the computed values, so the grid does not depend on the number of threads.
+   A single level of width 1 eV at 300 keV (``tests/extrapolation_grids``)
+   needs fewer than 400 points for its peak and its integral to 10⁻³; a uniform
+   grid of the same count misses the peak by more than half.  pyazr sessions
+   (``pyazr.azure2``) evaluate at many parameter vectors and refuse an adaptive
+   grid; ``pyazr.refine_grid`` runs the same refinement on any Python function,
+   and ``pyazr.extrapolation_grid`` gives the energies of the other forms.

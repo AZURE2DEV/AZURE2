@@ -20,9 +20,11 @@ endif()
 add_library(azure2_physics STATIC
   src/AngularCoupling.cpp
   src/ChannelFunctions.cpp
+  src/CoulombScattering.cpp
   src/Derivatives.cpp
   src/Elements.cpp
   src/ExternalCapture.cpp
+  src/HybridPotential.cpp
   src/JpiBlock.cpp
   src/LevelParameters.cpp
   src/ObservableCoupling.cpp
@@ -90,6 +92,16 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
 endif()
 add_test(NAME physics_channel_functions COMMAND physics_channel_functions_test ${CMAKE_CURRENT_SOURCE_DIR}/tests/data/coulomb.csv)
 
+# The Rutherford and Mott cross sections against mpmath (tests/data/coulomb_scattering.csv,
+# make_coulomb_scattering.py) and closed forms (docs/upgrade/data_kinds.md section 4.3).
+add_executable(physics_coulomb_scattering_test tests/coulomb_scattering_test.cpp)
+target_link_libraries(physics_coulomb_scattering_test PRIVATE azure2_physics)
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+  target_compile_options(physics_coulomb_scattering_test PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+add_test(NAME physics_coulomb_scattering COMMAND physics_coulomb_scattering_test
+         ${CMAKE_CURRENT_SOURCE_DIR}/tests/data/coulomb_scattering.csv)
+
 # Bound channel functions and the derivatives: e^x K_n against mpmath (tests/data/bessel_k.csv, make_bessel_k.py),
 # S(0) against the threshold limit of rho W'/W, the neutral closed forms, the band, exact rules on polynomials
 # (docs/upgrade/coulomb.md section 1.4, "Bound channel functions in physics/").
@@ -108,6 +120,16 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
   target_compile_options(physics_whittaker_test PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 add_test(NAME physics_whittaker COMMAND physics_whittaker_test ${CMAKE_CURRENT_SOURCE_DIR}/tests/data/whittaker.csv)
+
+# The hybrid potential as a value, its inward radial integration against the Coulomb functions with V_N = 0, and the
+# distorted decaying solution (S, ln W~(a), int W~^2) against an independent integration (tests/data/hybrid_bound.csv,
+# make_hybrid_bound_reference.py; docs/upgrade/spin_orbit_potential.md).
+add_executable(physics_hybrid_potential_test tests/hybrid_potential_test.cpp)
+target_link_libraries(physics_hybrid_potential_test PRIVATE azure2_physics)
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+  target_compile_options(physics_hybrid_potential_test PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+add_test(NAME physics_hybrid_potential COMMAND physics_hybrid_potential_test ${CMAKE_CURRENT_SOURCE_DIR}/tests/data/hybrid_bound.csv)
 
 # Element symbols by Z against the AME2020 table the masses come from (pyazr/data/mass_1.mas20).
 add_executable(physics_elements_test tests/elements_test.cpp)

@@ -72,7 +72,7 @@ double AZURECalcMCMC::CalculateLogLikelihood(const vector_r &p) const {
     AZUREParams params;
     localCompound->FillCompoundFromParams(p);
     localData->FillNormsFromParams(p);
-    localData->FillEnergyShiftsFromParams(p, working->results, localData, localCompound, &configure());
+    localData->FillEnergyShiftsFromParams(p, working->results, localCompound, &configure());
     if (configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure(), false);
     // Park formalism: a level with J <= 0 has no R-matrix meaning -- outside the prior.
     if ((configure().paramMask & Config::USE_PARK_FORMALISM) && localCompound->ParkNormPenalty() > 0.0) {
@@ -163,7 +163,7 @@ double AZURECalcMCMC::CalculateLogLikelihoodPhysical(const vector_r &params_) co
   // posterior = prior, R-matrix posterior at frozen norms; 2026-10-26).
   localData->FillNormsFromParams(params_);
   // After the compound: the sub-point grids are laid out from its fit values.
-  localData->FillEnergyShiftsFromParams(params_, working->results, localData, localCompound, &configure());
+  localData->FillEnergyShiftsFromParams(params_, working->results, localCompound, &configure());
 
   // Fill Compound Nucleus From Minuit Parameters
   if (configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure(), false);
@@ -816,7 +816,7 @@ void mcmc_iteration_callback(int current_step, int total_steps) {
             // For RWA parameters, use the same approach as CalculateLogLikelihood
             localCompound->FillCompoundFromParams(fullParams);
             localData->FillNormsFromParams(fullParams);
-            localData->FillEnergyShiftsFromParams(fullParams, localResults, localData, localCompound,
+            localData->FillEnergyShiftsFromParams(fullParams, localResults, localCompound,
                                                   &g_mcmc_for_callbacks->configure());
             if (g_mcmc_for_callbacks->configure().paramMask & Config::USE_BRUNE_FORMALISM) {
               localCompound->CalcShiftFunctions(g_mcmc_for_callbacks->configure());
@@ -834,7 +834,7 @@ void mcmc_iteration_callback(int current_step, int total_steps) {
               localCompound->FillCompoundFromParams(params.GetMinuitParams().Params());
               localData->FillNormsFromParams(fullParams);
               // After the compound: the sub-point grids are laid out from its fit values.
-              localData->FillEnergyShiftsFromParams(fullParams, localResults, localData, localCompound,
+              localData->FillEnergyShiftsFromParams(fullParams, localResults, localCompound,
                                                   &g_mcmc_for_callbacks->configure());
               rwaFullParams = params.GetMinuitParams().Params();  // RWA params after TransformIn
               // FillMnParams read the clone's starting norms and shifts; the

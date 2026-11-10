@@ -153,6 +153,11 @@ lab angles (`pyazr/nds.py:232-247, 985-1004`) **[V]**; for identical particles i
 Mott and writes ratio × Rutherford anyway (`nds.py:997-1000`) **[V]**. The masses used are mass numbers
 (`nds.py:186-198`) **[V]**, not the atomic masses the engine uses.
 
+*Status, November 2026 (S14, brief L):* format 3 has the two quantities `ratio_to_rutherford` and `ratio_to_mott`,
+the model ratio(dsdo_cm, rutherford | mott) folded alike (`src/CoulombReference.cpp`); `pyazr.nds` maps `RTH` / `MOT`
+to them (`ExforData.format3_quantity`, `to_dataset`) and `to_azr` no longer multiplies.  The paragraph above describes
+the engine before that step.
+
 ### 2.5 The present EXFOR client (pyazr/nds.py)
 
 What it does **[V]**: fetch by dataset ID from the Web-API or a local `exfor_master` copy (`nds.py:463-490`); convert

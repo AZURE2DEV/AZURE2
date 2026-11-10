@@ -185,12 +185,15 @@ void DetectorInto(Context &c, const ValidatedRecord &d, TargetEffectSpec &e) {
 void QuadratureInto(const Value *q, const Value *w, TargetEffectSpec &e) {
   if (q) {
     if (const Value *v = q->Get("points")) e.numIntegrationPoints = (int)v->integer;
-    e.hasResonanceWidthMultiplier = true;
-    e.resonanceWidthMultiplier = 20.0;
-    if (const Value *v = q->Get("width_multiplier")) e.resonanceWidthMultiplier = v->number.value;
-    e.hasPointsPerWidth = true;
-    e.pointsPerWidth = 50.0;
-    if (const Value *v = q->Get("per_width")) e.pointsPerWidth = v->number.value;
+    // given or not (left out, the engine's default: 20, and a pure Gaussian convolution's smaller core)
+    if (const Value *v = q->Get("width_multiplier")) {
+      e.hasResonanceWidthMultiplier = true;
+      e.resonanceWidthMultiplier = v->number.value;
+    }
+    if (const Value *v = q->Get("per_width")) {
+      e.hasPointsPerWidth = true;
+      e.pointsPerWidth = v->number.value;
+    }
   }
   if (w) {
     e.hasRanges = true;
@@ -209,6 +212,37 @@ void QuadratureInto(const Value *q, const Value *w, TargetEffectSpec &e) {
   }
 }
 
+/*!
+ * The folds a ratio to the Rutherford or Mott cross section cannot take (data_kinds.md section 4.3): the engine folds
+ * the Coulomb cross section with the numerator's kernel on the numerator's sub-points (src/CoulombReference.cpp), which
+ * covers the energy kernels (beam spread, target layer, beam profile, UDR) and the edge blend.  Not covered:
+ *  - an automatic tolerance, which picks the folded or the bare value of each observable from its own sub-point
+ *    values, so numerator and denominator could take different choices;
+ *  - free-gas Doppler broadening, whose fitted temperature has an analytic derivative through the numerator only;
+ *  - electron screening, a factor on the nuclear cross section, not part of a ratio to Coulomb scattering;
+ *  - detector attenuation coefficients, which attenuate the Legendre terms of the nuclear amplitude and leave the
+ *    Coulomb amplitude, which has no finite Legendre series (sigma_R ~ theta^-4), as it is.
+ */
+void CoulombRatioFolds(Context &c, const ValidatedRecord &r, const Combination &x) {
+  const std::string q = r.quantity ? r.quantity->name : "";
+  if (q != "ratio_to_rutherford" && q != "ratio_to_mott") return;
+  const std::string what = "a ratio to the Coulomb cross section ";
+  if (x.target && x.target->Has("doppler"))
+    c.Error(codes::kNotBuilt, r, "target",
+            what + "with a Doppler-broadened target: this engine folds the Coulomb cross section with the energy kernels only");
+  if (x.target && x.target->Has("screening"))
+    c.Error(codes::kNotBuilt, r, "target",
+            what + "with electron screening: screening multiplies the nuclear cross section; the ratio is defined without it");
+  if (x.detector && x.detector->Has("attenuation"))
+    c.Error(codes::kNotBuilt, r, "detector",
+            what + "with attenuation coefficients: they attenuate the Legendre terms of the nuclear amplitude only, and the "
+                   "Coulomb cross section has no finite Legendre series");
+  if (x.windows && x.windows->Get("auto_tolerance"))
+    c.Error(codes::kNotBuilt, r, "fold_windows",
+            what + "with an automatic tolerance: it chooses the folded or the bare value of each observable from that "
+                   "observable's sub-points, which numerator and denominator could choose differently");
+}
+
 // The effects of the data sets (isData) or of the extrapolations.
 SpecList<TargetEffectSpec> Effects(Context &c, const std::vector<Member> &members) {
   std::vector<Combination> combos;
@@ -225,6 +259,7 @@ SpecList<TargetEffectSpec> Effects(Context &c, const std::vector<Member> &member
     if (!x.target && !x.beam && !x.detector) continue;
     x.quadrature = r.Get("quadrature");
     x.windows = r.Get("fold_windows");
+    CoulombRatioFolds(c, r, x);
     x.signature = (x.target ? x.target->name : "") + "|" + (x.beam ? x.beam->name : "") + "|" +
                   (x.detector ? x.detector->name : "") + "|" + Text(x.quadrature) + "|" + Text(x.windows);
     x.position = 1 << 30;
@@ -252,6 +287,7 @@ SpecList<TargetEffectSpec> Effects(Context &c, const std::vector<Member> &member
     e.source = "target " + (x.target ? x.target->name : std::string("-")) + ", beam " + (x.beam ? x.beam->name : std::string("-")) +
                ", detector " + (x.detector ? x.detector->name : std::string("-"));
     if (x.target) {
+      e.targetName = x.target->name;
       TargetInto(c, *x.target, *x.target, e);
       if (usesOfTarget[x.target] > 1) {
         if ((x.target->Has("screening") || FreeNuisance(x.target, "doppler")) && !reported.count(x.target) &&
@@ -294,6 +330,7 @@ void SampleThickness(Context &c, std::vector<Member> &members, bool isData) {
     ds.thicknessVary = n.mode == NuisanceMode::Fit;
     ds.thicknessSigma = n.hasPrior ? n.priorWidth.value : 0.0;
     if (ds.thicknessFit && users[target->name] > 1) ds.thicknessGroup = target->name;
+    if (ds.thicknessFit) ds.names.thickness = target->name + ".areal_density";  // a follower's: Build's NameParameters
   }
 }
 
@@ -319,14 +356,24 @@ void Abundances(Context &c) {
       const Value *nucleus = iso->Get("nucleus"), *abundance = iso->Get("abundance");
       if (!nucleus || !abundance) continue;
       std::set<std::pair<int, int>> compounds;
+      std::set<std::pair<int, int>> lights;  // the light particles of the target's data sets
       for (const Member *m : users)
         for (int key : m->termEntranceKeys)
-          if (const PairRow *p = c.Pair(key))
-            if (p->z2 == nucleus->nucleus.Z && (int)std::lround(p->m2) == nucleus->nucleus.A)
-              compounds.insert({p->z1 + p->z2, (int)std::lround(p->m1) + (int)std::lround(p->m2)});
+          if (const PairInfo *p = c.Pair(key)) {
+            lights.insert({p->lightZ, p->lightA});
+            if (p->heavyZ == nucleus->nucleus.Z && p->heavyA == nucleus->nucleus.A)
+              compounds.insert({p->lightZ + p->heavyZ, p->lightA + p->heavyA});
+          }
+      // an isotope no data set reaches is still part of the composition (the sum-to-one prior): its compound nucleus is
+      // the one the pairs of <levels> form with the data sets' light particle
+      if (compounds.empty())
+        for (const PairInfo &p : c.pairs_)
+          if (p.kind == 0 && lights.count({p.lightZ, p.lightA}) && p.heavyZ == nucleus->nucleus.Z && p.heavyA == nucleus->nucleus.A)
+            compounds.insert({p.lightZ + p.heavyZ, p.lightA + p.heavyA});
       for (const auto &zA : compounds) {
         AbundanceRowSpec row;
         row.sample = t->name;
+        row.isotope = nucleus->nucleus.text;
         row.z = zA.first;
         row.a = zA.second;
         const Nuisance &n = abundance->nuisance;

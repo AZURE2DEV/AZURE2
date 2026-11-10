@@ -449,6 +449,7 @@ tokens of segment lines) is not moved, see "Remaining steps".
   (`NuclearPotentialManager::tagFor(pairKey)`), so the channel functions do not depend on j; (α, l, j) entries need a
   spin-orbit term first (a new physics feature: `<potential>` grammar, `NuclearPotentialManager`, `CoulFunc`, the
   table key in `ChannelTable`), with its design note.
+  The design note is `spin_orbit_potential.md` (key (α, l, 2J) for a pair with one spinning particle; steps in its §5).
 - **Step 3b (iv)**, **step 7** (class (e): `FillMnParams`, `FillCompoundFromParams*`, `GetTransformParams`,
   `ConvertAmplitudeBasis`, the abundance members, penalties, `Initialize`, `Clone`) and the deletion of `CNuc`: not
   started (another agent changes the parameter vector).

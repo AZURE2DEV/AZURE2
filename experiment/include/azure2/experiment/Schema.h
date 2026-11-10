@@ -155,13 +155,12 @@ class Schema {
   /*!
    * The engine's set-up specs of a validated project (step 3b): data sets, extrapolations, the effects of targets,
    * beams and detectors on them, the abundances of the targets' isotopes and the members of THM experiments.
-   * Reactions are resolved against `pairs` (section 3.5: the pair-key rule, target and residual states); the checks
+   * Reactions are resolved against the pairs of `levels` (section 3.5: the pair-key rule, target and residual states); the checks
    * that need <levels> or the data files are made here and returned as diagnostics (codes of DiagnosticCodes()).
-   * `validated` must be free of errors; never throws for bad input.  The records <scatteringLengths>/`datum` of
-   * <modelData> are not built in this step.
+   * The `datum` records of <modelData> are resolved against `levels` too (BuildModelData, ModelDatum.h).
+   * `validated` must be free of errors; never throws for bad input.
    */
-  static BuiltProject Build(const ValidationResult &validated, const std::vector<PairRow> &pairs,
-                            const BuildOptions &options);
+  static BuiltProject Build(const ValidationResult &validated, const LevelTables &levels, const BuildOptions &options);
 
   /// The table as the JSON document of section 6.1 (schema_version "3.0"), deterministic, ending without a newline.
   static std::string ToJson();

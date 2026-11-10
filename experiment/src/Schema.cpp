@@ -184,7 +184,7 @@ Forms MakeForms() {
               Keyword("sqrt", {Pos("value", Nuis("sqrt_energy"))}, "E' = E + b sqrt(E), b in MeV^1/2 with E in MeV"),
               Unkeyed({Pos("scale", Ref({"energy_scale"}))}, "the terms of a shared energy_scale record")}};
   f.quadrature = {{Unkeyed({Kw("points", IntAtLeast(1), "sub-points of the fold; no default (every <targetInt> line states it)"),
-                            OptionalKw("width_multiplier", PositiveNum(), "resonance-width multiplier of the adaptive grid", "20"),
+                            OptionalKw("width_multiplier", PositiveNum(), "resonance-width multiplier of the adaptive grid (left out: 20, a pure Gaussian convolution a smaller core)", "20"),
                             OptionalKw("per_width", PositiveNum(), "points per resonance width", "50")},
                            "")}};
   f.foldWindows = {{Unkeyed({Pos("windows", Spec(ValueType::Windows, "energy"), "lab-energy windows, or auto[:tolerance[:margin]]"),
@@ -344,7 +344,7 @@ RecordKind ExtrapolationKind() {
                      PairKeyFields(),
                      {Req("quantity", "Quantity", QuantityEnum("extrapolation"), "what is computed (section 7.2)"),
                       Req("unit", "Unit", Spec(ValueType::Unit, "@quantity"), "unit of the output values"),
-                      Req("energies", "Energies", GridOf("energy"), "the energy grid (F10: E_k = lo + k step)"),
+                      Req("energies", "Energies", GridOf("energy"), "the energy grid: range, list, file or adaptive (section 3.8)"),
                       Opt("angles", "Angles", GridOrNone("angle"), "the angle grid; required for quantities with an angle"),
                       Defaulted(Opt("active", "Active", Words({"yes", "no"}), "an inactive extrapolation is not computed"), "yes"),
                       ByQ("orders", "Legendre orders", Structured(f.orders), "the Legendre orders computed")},

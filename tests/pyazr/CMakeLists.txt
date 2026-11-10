@@ -56,6 +56,12 @@ add_test(NAME pyazr_azr_parse_cache
                  ${CMAKE_CURRENT_SOURCE_DIR}/azr_parse_cache_test.py)
 set_tests_properties(pyazr_azr_parse_cache PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
+# The API reports the model value of an E1-only / E2-only segment, as chi^2 uses it (ModelPass.h; HANDOFF).
+add_test(NAME pyazr_api_model_value
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/api_model_value_test.py)
+set_tests_properties(pyazr_api_model_value PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
 # A rebuild (set_channel_radius, a potential change) keeps no Coulomb memo of the old radius, reads no
 # unchanged input file and prints the setup Notes once per session (before 2026-11-04: ~96 kB per new
 # radius, every file re-read, every Note reprinted; the 3H+d free-radius MCMC reached 239 GB).
@@ -439,6 +445,14 @@ add_test(NAME pyazr_model_data
                  ${CMAKE_CURRENT_SOURCE_DIR}/model_data_test.py)
 set_tests_properties(pyazr_model_data PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
+# Ratio to Rutherford (data_kinds.md section 4.3): the chi^2 of ratio data against the same data multiplied by
+# sigma_R, with and without an energy shift, the ratio of two folds, the binding's Coulomb cross sections and the
+# gradient, against tests/ratio_to_rutherford/truth.py (mpmath; skipped without it).
+add_test(NAME pyazr_ratio_to_rutherford
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/ratio_to_rutherford_test.py)
+set_tests_properties(pyazr_ratio_to_rutherford PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
 # Electron screening: the AzrModel helpers for the screening block of a <targetInt> line, the
 # screening_<n> parameter and its prior, and its analytic gradient and Jacobian column.
 add_test(NAME pyazr_screening
@@ -461,6 +475,13 @@ add_test(NAME pyazr_potential_sessions
                  ${CMAKE_CURRENT_SOURCE_DIR}/potential_sessions_test.py)
 set_tests_properties(pyazr_potential_sessions PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
+# The shift function of a hybrid pair is continuous through threshold: below it the decaying solution of the radial
+# equation with the potential (spin_orbit_potential.md section 2.4), against an independent integration.
+add_test(NAME pyazr_hybrid_threshold
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/hybrid_threshold_test.py)
+set_tests_properties(pyazr_hybrid_threshold PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
 # chiSquared.out written through the API carries the Park, abundance and scattering-length totals
 # (2026-10-27, audit item 30).
 # The fit's objective through pyazr (docs/upgrade/objective.md step 4): objective() = objective_and_grad()[0] = the sum
@@ -477,6 +498,13 @@ add_test(NAME pyazr_schema
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/schema_test.py)
 set_tests_properties(pyazr_schema PROPERTIES ENVIRONMENT "AZURE2_BIN=$<TARGET_FILE:AZURE2>")
+
+# pyazr.extrapolation_grid and pyazr.refine_grid: the engine's grid forms and adaptive refinement; a session refuses
+# an adaptive grid (docs/upgrade/project_format3.md section 3.8).
+add_test(NAME pyazr_extrapolation_grid
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/extrapolation_grid_test.py)
+set_tests_properties(pyazr_extrapolation_grid PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1")
 
 # AZURE2 --validate and pyazr.validate (the fixtures of experiment/tests/data/, a file with several errors, a format-2
 # file refused) and pyazr.convert_azr(..., to=3) against the committed conversion (docs/upgrade/project_format3.md 6.2, 8).
@@ -717,3 +745,19 @@ set_tests_properties(${_pyazr_tests} PROPERTIES SKIP_RETURN_CODE 77)
 if(PYAZR_OUTPUT_DIR)
     set_property(TEST ${_pyazr_tests} APPEND PROPERTY ENVIRONMENT "PYAZR_ENGINE_DIR=${PYAZR_OUTPUT_DIR}")
 endif()
+
+# pyazr.predictions(path): the expression trees of a project, as AZURE2 --print-predictions prints them
+# (docs/upgrade/data_model.md section 3, step S10).
+add_test(NAME pyazr_predictions
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/predictions_test.py)
+set_tests_properties(pyazr_predictions PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1;AZURE2_BIN=$<TARGET_FILE:AZURE2>"
+                     SKIP_RETURN_CODE 77)
+
+# The gradient of an E1-only / E2-only SUM with a component (the component's full sigma, as the forward reads it)
+# against central differences of the objective, by both component routes (docs/upgrade/data_model.md S11).
+add_test(NAME pyazr_composite_gradient
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/composite_gradient_test.py)
+set_tests_properties(pyazr_composite_gradient PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1" SKIP_RETURN_CODE 77
+                     TIMEOUT 900)

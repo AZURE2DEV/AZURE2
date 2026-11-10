@@ -2,6 +2,611 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-10 (director, evening) — Phase 4: the fifth wave merged (dead code out of the data classes, ratio to Rutherford, the hybrid potential as a value, extrapolation grids)
+
+**Merged into `feature/upgrade-4-data`** (`--no-ff`, in this order; each rehearsed, built and verified in a scratch
+worktree, the committed tree is that tree; the four agents' entries are below):
+1. ed860f74, `feature/upgrade-4-edata-split-2`: unused code out of `EData`, `EPoint`, `ESegment`; the data covariance
+   in `src/EDataCovariance.cpp`.
+2. 6392bb62, `feature/upgrade-4-rutherford`: data given as a ratio to the Rutherford or the Mott cross section
+   (`quantity ratio_to_rutherford`, `ratio_to_mott`).
+3. 8a143945, `feature/upgrade-4-hybrid-potential`: the hybrid potential is a value in `physics/` (the manager
+   singleton is gone), e² = α ħc in its Coulomb part, bound states and closed channels of a hybrid pair use the
+   solution distorted by the potential.
+4. 08a6165e, `feature/upgrade-4-extrap-grids`: extrapolation grids by step, by number of points (linear or
+   logarithmic), by list, from a file, in the laboratory or the c.m. frame, and adaptive; the converted-tree gate as
+   `tools/format3_gate.sh`.
+
+**The merged head as a whole** (08a6165e; build `work/b-trial8`, 0 warnings):
+- 183 projects (179 and the four of `tests/ratio_to_rutherford/models`) × 3 bases: 704 + 677 + 704 output files.
+  Of the 689 + 662 + 689 that the Phase 3 head has, 661 + 634 + 661 are identical; the 28 others per basis are
+  `hybrid_potential`, `upgrade/T3/T3` and `T3_start`, moved on purpose by merge 3 (cause and size in its entry and
+  its merge message). **The reference for bit-identity from here on is the tag `tab-trial8`** (every file of the head).
+- `ctest -LE slow` 169/169; `tests/run_tests.sh` 142 passed / 0 failed.
+- Calculations at 1 against 3 and at 1 against 6 threads, T1–T3 and 13N in the three bases: 12/12 identical.
+- T2 with a `<modelData>` section: identical at 1 and 3 threads in the three bases.
+- Spec equivalence: 193 files, 185 converted, 183 equal, 2 recorded, 0 differ, 8 not converted (format 3 already,
+  or test inputs that are not projects).
+- Converted tree against the same engine's run of the unconverted tree (`tools/format3_gate.sh`, `REF=tab-trial8`):
+  472 (445 formal) identical, 38 classified, 0 differ, 11 missing — the two projects written in format 3 with data,
+  which the gate does not carry yet (in work: `feature/upgrade-4-tools`).
+- T2 benchmark against the Phase 3 head, interleaved, three repetitions, the machine shared with two agents:
+  no change within the scatter. Calculation 0.97–1.13 s (Phase 3 head) against 0.98–1.14 s at 1 thread, 0.26–0.32 s
+  against 0.27–0.34 s at 6; 200 fit calls 61.7–70.6 s against 63.3–70.4 s at 1 thread, 30.1–33.6 s against
+  30.4–33.6 s at 6; peak memory of the fit 276 → 269 MB at 1 thread, 506–513 → 497–509 MB at 6; the same χ²
+  (10899.8; 691.608 after 200 calls) in every run (`work/bench-p4w5.tsv`).
+
+**What the director changed at the merges** (each in its merge commit's message):
+- `src/AdaptiveExtrapolation.cpp` (merge 4) read a point's model value through `EPoint::ModelSlot()`, which merge 1
+  had removed as unused; it uses `EPoint::GetModelValue(results)`. A branch that adds a caller of a name another
+  branch deletes builds alone and fails merged: the rehearsal build is what caught it.
+- pyazr is **2.21.0** (2.19.0 with the ratio data, 2.20.0 with the potential, 2.21.0 with the grids).
+- `tests/consistency/file_sizes.tsv` tightened to the merged counts at each merge.
+
+**Decisions of the director.**
+- Ratio to Rutherford: `ExforData.to_azr(rutherford=True)` no longer multiplies the data by σ_R (the engine
+  compares the ratio; `to_dataset` writes `quantity ratio_to_rutherford`). The four refusals stay (a ratio with
+  Doppler broadening, with electron screening, with attenuation, with `auto_tolerance`): each needs a decision on
+  what the reference cross section is under that effect. Nothing more for identical particles (Mott is its own
+  quantity).
+- Hybrid potential: `GetCoulombFunctions` / `pyazr.coulomb_functions` return the shift function at E ≤ 0 for every
+  pair (it returned 0); a THM segment whose entrance pair has a hybrid potential is refused
+  (`E_THM_HYBRID_POTENTIAL`); the T1 goldens stay as recorded.
+- Extrapolation grids: for `quantity sfactor` the refinement will test the S factor (with the units and S-factor
+  step); adaptive grids stay refused in a pyazr session (`pyazr.refine_grid` refines on a Python callable).
+- The comparison tools (`runall.sh`, `run_one.sh`, `cls.sh`, `classify.py`) go into the repository's `tools/`; no
+  path of one machine in a tracked file (a consistency check).
+
+**Defects and debts found, not yet fixed** (owner in brackets):
+- `tests/hybrid_potential/check_per_pair.py` (not in ctest) has a stale χ² pin; the data check file of an adaptive
+  extrapolation lists the start grid; `scripts/check.sh` builds with as many jobs as there are cores;
+  `--print-predictions` names a format-3 data set by its index [all: `feature/upgrade-4-tools`, running].
+- Adaptive refinement finds what the start grid and the level seeds bracket: a narrow structure that is not at a
+  level energy (an interference minimum between coarse start points whose ends and midpoint happen to lie on a
+  line) is not seen. The director added that limit to the description of adaptive grids (`data_formats.rst`): the
+  start step must resolve the structures that are not at a level. A second criterion (curvature from four points)
+  is a possible later addition [not scheduled].
+- Still not run by anyone: ThreadSanitizer (no runtime on this host), `ctest -L slow`, 1 against 8 threads on this
+  head (1 against 6 was run).
+
+**For the PI to see** (behaviour a user can meet; additions):
+- Ratio data under a beam spread or a target: the model is ⟨σ⟩/⟨σ_R⟩ (each folded, then divided), which is what an
+  experiment that normalises counts to a Rutherford calculation for the mean energy does not exactly give; the
+  documentation states the convention.
+- pyazr: `to_azr(rutherford=True)` is gone (use `to_dataset`); `coulomb_functions` below threshold returns S.
+- Hybrid potential (`hybrid_potential` project): the internal reduced width amplitude of the ¹³N ground state is
+  1.060263 MeV^½ (was 1.271943) for the same ANC, because the bound state is now distorted by the potential (the
+  PI's answer to question 4); χ² of its segment 3 2238.82 → 2259.87. The e² change moves hybrid outputs by ≤ 5e-5.
+- Extrapolations: `range A B points N log`, `list`, `file`, `frame cm`, `adaptive on tolerance T max_points N`; a
+  budget that stops the refinement is reported with the largest deviation left.
+
+**Running now** (Opus agents, 3 threads each; briefs in `/data0/skowrons/AZURE2-upgrade/work/briefs/`):
+- `feature/upgrade-4-edata-split-3` (`wt-esplit3`, `S_edata_split_3.md`): the remaining cuts of `EData`, `EPoint`,
+  `ESegment` into the files of `edata_split.md`, as verbatim moves (started from the tree of merge 2: rebase onto
+  6392bb62, then merge over 3 and 4).
+- `feature/upgrade-4-tools` (`wt-tools`, `T_tools_followup.md`): the comparison tools into `tools/`, the gate
+  carries format-3 projects, the small defects above (started from the rehearsal commit af654a5d of merge 4: rebase
+  `--onto 08a6165e af654a5d`).
+
+**Then.** Units and the quantities that are scales (S factor with the `nds.py` mass fix, yields per charge;
+`J_units_scales.md`), after the cuts are merged (it edits where the points are made); `Measurement` shared between
+working copies (`R_measurement.md`), after the cuts; pyazr's model on records, one set-up path for both formats,
+components as leaves, `predict`, the recipe "a new kind of data"; the spin–orbit term (note §5 steps 3–5); the
+rest of the `EData` and `CNuc` splits; Phase 5 (targets and kernels, shifted lab data compared in the lab frame);
+Phase 6 (mutable statics, the task as unit of work). Merge `origin/dev` only when the reconstruction is complete.
+
+## 2026-11-10 (agent, brief K) — extrapolation grids: list, file, points/log, c.m., adaptive; the gate as a tool (`feature/upgrade-4-extrap-grids`)
+
+**Done.**
+- bad7a299: the converted-tree gate is a committed tool, `tools/format3_gate.sh ENGINE SOURCE_TREE TAG` (`WORK`, `REF`,
+  `JOBS`, `RUNALL` from the environment) with `tools/format3_gate.py` (`tree`, `compare`; the accepted differences are
+  the explicit table `CLASSES`: class, file, projects, why); described in `project_format3.md` §8.5.  runall.sh is not
+  in the repository: the gate takes it from `RUNALL` (default: beside the script).
+- 05e8f975: one reader of the grid forms, `experiment/Grids.h` (`ReadGridValues`): `range … step` (F10), `range …
+  points n [log]`, `list`, `file "path"` (relative to the project, `#` comments), the start grid of `adaptive`; units
+  through the unit table; a `cm` energy grid taken to lab by `Frames`' new `BeamLabFromCM` with the `<levels>` masses
+  (`PairInfo::lightMass/heavyMass`).  `--describe` prints a grid file's path and count.
+- 011880d0: `experiment/AdaptiveGrid.h` (`RefineGrid`, a pure function of a callable model); the extrapolation run
+  refines adaptive grids before the data set is initialized (`src/AdaptiveExtrapolation.cpp`, three lines in
+  `AZUREMain`; no change to `EData`/`EPoint`/`ESegment`): level seeds, batches through the point pass on a sweep data
+  set made by `EData::MakePoints`, union grid over angles, `max_points` warning, then the run's data set on the refined
+  grids.  pyazr 2.18.0 unchanged: `pyazr.extrapolation_grid`, `pyazr.refine_grid` (`pyazr/grids.py`,
+  `pyazr/__init__.py`); a pyazr session refuses an adaptive grid.  Docs: `data_formats.rst` "Extrapolation Grids",
+  `calculate.rst`, `pyazr.rst`, `project_format3.md` §3.8.
+
+**Verified** (build `work/b-grids`, 0 warnings, 3 threads): 179 × 3 identical to `tab-p3f` (689/662/689, `tab-grids1`);
+`scripts/check.sh --quick` (ctest -LE slow 165/165); `tests/run_tests.sh` 141 passed, 0 failed (with `extrapolation_grids`); not run: Sphinx (not installed on this host), 1 against 8 threads (budget 3); the converted-tree gate
+(`format3_gate.sh`, tag `gridsg1`): 472 (445) identical, 38 classified, 0 differ, 0 missing, as on the start head
+(`gridsg0`); menu 3 of converted T1, T3 (plain conversion: `range … step`) and T2 with a `range … step` extrapolation:
+outputs identical to the start engine `work/b-trial5`; `tests/extrapolation_grids/check.sh` (narrow 1 eV level: 378
+points, peak 3.5e-8 from the closed form, integral 4.4e-4 from a dense grid, 1 and 3 threads identical with
+`AZURE_PLAN_CHECK=1`).
+
+**Open.** An adaptive grid in a pyazr session (refused now); refinement on the S factor rather than the cross
+section for `quantity sfactor` (the model value is refined; the floor 1e-3 max|f| leaves sub-barrier tails on the
+start grid); `CHECK_DATA` prints the start grid's points (before the refinement); `runall.sh`/`run_one.sh` into the
+repository (`tools/`) so that the gate needs no `RUNALL`.
+
+## 2026-11-10 — agent, brief O: the hybrid potential as a value, one e², distorted bound states (`feature/upgrade-4-hybrid-potential`)
+
+**Part 1 — the potential as a value (bit-identical).**
+- `physics/HybridPotential.h`: `FormFactor`, `HybridPotential` (`coulomb_radius_fm` 3.5, `central_depth_MeV`, `central`,
+  `matching_radius_fm` 15, `step_fm` 0.0275), compared by value; `PotentialKey` (the numbers of a potential for keys);
+  `IntegrateInward` (the Numerov solver, a free function; the loop stops at node n_a - 2, the last one read).
+- The settings are values in the run's or session's `Config` (`HybridPotentialSettings`, `include/` +
+  `src/HybridPotentialSettings.cpp`); `CNuc::Fill` gives each `PPair` its `std::optional<HybridPotential>`; `CoulFunc`
+  reads it from the pair.  Chosen over the System because `CoulFunc` is built from a `PPair` at every point and the
+  System is rebuilt from `CNuc` on demand; the pair is set-up state owned by the caller's `CNuc`.
+- Deleted: `NuclearPotentialManager` (singleton, tags, counter, `exportState`/`importState`), `NuclearPotential.h`
+  (class hierarchy), pyazr's `ConfigScope` potential swap, `CoulFunc`'s dead setters (`setMatchingRadius`,
+  `setNumerovGridStep`, `setNuclearPotential`, `setUseHybridMethod`).  The channel table's pair signature, the EC term
+  key, the radial scratch key, the shift-derivative memo, the THM line-shape memo and the THM vertex memo compare the
+  potential's values; the EC signature hashes `PotentialKey` (hybrid EC caches are recomputed once).
+- THM: a THM segment whose entrance pair has a potential is refused, `ERROR (E_THM_HYBRID_POTENTIAL)`
+  (`ThmVertexAllowsPair`, `src/ThmVertexBoundary.cpp`); no committed project had one.  Test: `tests/thm_options` (j).
+- Words: "outside the channel radius" (`CNuc.cpp`, `particle_pairs.rst`), "inward" (`tests/hybrid_potential/tolerance`).
+- Verified: 179 × 3 identical to `tab-p3f` (tag `tab-hyb1`, 689 / 662 / 689); `ctest -LE slow` 163/163; pyazr
+  `coulomb_functions` (pairs 1, 2, L = 0–3, six energies) and `calculate` of `tests/hybrid_potential` byte-identical to
+  `work/b-trial3` (65 arrays); `potential_sessions_test.py` passes and fails with a function-static shared settings
+  object injected into `CNuc::Fill`; `physics_hybrid_potential` fails with the step left out of `operator==`;
+  `thm_options` (j) fails on `work/b-trial3` (the run goes through); `tests/run_tests.sh` 138 / 0;
+  calculations at 1 and 2 threads identical (T1, T2, T3, 13N, hybrid_potential × 3 bases, 15/15); converted-tree gate
+  (`convert_spec_equivalence_test`) 183 equal, 3 recorded, 0 differ.
+
+**Part 2 — e² = αħc (outputs of hybrid projects move).** `physics/src/HybridPotential.cpp`: the Coulomb term's
+e² = 1.4399764 MeV fm → `kFineStructure * kHbarC_MeV_fm` (8.3 × 10⁻⁶ relative).  179 × 3 against `tab-p3f` (tag
+`tab-hyb2`): only `hybrid_potential` and `upgrade/T3` (T3, T3_start) move, in all three bases; everything else identical.
+
+| project | file | largest relative change | cause |
+|---|---|---|---|
+| hybrid_potential | AZUREOut_aa=1_R=1.out (p + ¹²C elastic) | 1.3e-5 | e² |
+| hybrid_potential | chiSquared.out (segment 3: 2238.93 → 2238.82) | 4.9e-5 | e² |
+| hybrid_potential | param.par, parameters.out, scatteringLengths.out | 2.5e-5 | e² (P, S at a_c) |
+| T3 | AZUREOut_aa=1_R=1.out (α + α) | 8.8e-2 on δ = 2.26e-3 → 2.48e-3 at E_lab 0.875 MeV, a phase near zero (absolute 2.2e-4); 5.8e-3 next point; others ≤ 1e-5 | e² |
+| T3 | AZUREOut_aa=4_R=1.out | 1.6e-5 | e² |
+| T3 | AZUREOut_aa=2/3_* (p + ⁷Li, n + ⁷Be: no potential, through the shared levels) | ≤ 7e-7 | e² |
+| T3 | chiSquared.out, param.par, parameters.out | 7.5e-5, 2.3e-6, 2.7e-6 | e² |
+| T3_start | chiSquared.out / AZUREOut_aa=1_R=1.out | 2.8e-4 / 2.2e-3 | e² |
+
+Independent check: with V_N = 0 the integration now reproduces the Coulomb P and S to ≤ 9.3e-8 (p + ¹²C, l = 0–2,
+0.5–3 MeV; `physics_hybrid_potential`, tolerance 2e-7), against 2.3e-5 with the old e² (the test fails then); the
+note's DOP853 integration (`work/so-note/radial.py` B) gives 6e-9 / 2e-8.  References regenerated: T3 goldens
+(`golden.py --write`, T1 left as recorded; `ENGINE` says so), `tests/hybrid_potential/expected/chiSquared.out`
+(segment 3 2239.69 → 2238.82: 2239.69 was a pin of 2026-09-28; the start head gives 2238.93, so 3.4e-4 of the step is
+older drift inside the 2e-2 tolerance and 4.9e-5 is e²).  `pyazr.rst` and `hybrid_derivative_test.py` no longer call
+1e-5 the integration's accuracy; the latter now asks for 1e-6.
+
+**Part 3 — distorted bound states and closed channels (outputs of `hybrid_potential` move).**
+- `physics/HybridPotential.h`: `DecayingSolution` (W̃_l(r) at E = −B ≤ 0: the Whittaker function beyond r_m, the
+  zero-energy decaying solution √r K_{2l+1}(√(8cr)) at B = 0, inward by `IntegrateInward`, which now rescales a
+  solution past 1e250 into `log_scale`) and `HybridBoundShift` (S = aW̃′/W̃; closer to threshold than η_b = 1000 the
+  linear interpolation to S(0), as `coulomb_bound_shift`).  The Coulomb path's reflection S(E) = 2S(0) − S(−E) in the
+  band η > 100 is kept and now reflects the distorted S, so S is continuous through threshold (|S(E) − S(0)| ≤ 5e-4
+  for |E| ≤ 1 keV, p + ¹²C); no change of the Coulomb path for pairs without a potential.
+- One implementation, reached through the two engine classes every user already calls: `ShftFunc` (S, S′, S″ below
+  and at threshold → `ChannelFunc`, the channel table's closed rows, Brune/Park transformations) and `WhitFunc`
+  (W̃ for the ANC ↔ γ conversion of `CNucLevelParameters`, the EC conversion factor and NF integral of `CNuc`, the
+  final-state tail of `ECIntegral`) dispatch on `PPair::GetHybridPotential()`; a pair without one takes the old lines.
+- `coulomb_functions` (API, pyazr 2.17.1) returns S at E ≤ 0 and in the band η > 100 (channel radius only; before: 0,
+  and in the band the Coulomb routine's value).
+- Tests: `physics_hybrid_potential` parts 3–4 against `physics/tests/data/hybrid_bound.csv`
+  (`make_hybrid_bound_reference.py`: scipy DOP853 + mpmath Whittaker/Bessel/Coulomb): S on −2 … +0.5 MeV, l = 0–2, to
+  6.6e-8 (tolerance 1e-6), V_N = 0 rows (Whittaker/Coulomb S) to 1.1e-7, ln W̃(a) to 4.5e-10, ∫_a^∞ W̃² dr to 2.6e-8;
+  fails with E = +B instead of −B in `DecayingSolution`.  `pyazr_hybrid_threshold`: continuity (1e-3) and S at the
+  ¹³N ground state against the table (≤ 6.6e-8); fails with the undistorted S injected in `ShftFunc` (steps 1.06,
+  0.92, 0.75 for l = 0, 1, 2, the note's 1.07, 0.92, 0.75).
+- 179 × 3 against `tab-hyb2` (Part 2): only `hybrid_potential` moves (T3 has no state below the α + α threshold):
+
+| file | largest relative change | what moves physically | independent number |
+|---|---|---|---|
+| param.par, parameters.out | 0.166 (Park 0.153) | the ¹³N ground state's g_int (ANC 1.62 fm^-1/2 fixed): 1.271943 → 1.060263 MeV^1/2 | γ_obs = C W̃(a)(ħ²/2μa)^1/2 and g = γ_obs(1 − γ_obs² S′)^-1/2 from the DOP853 script: 1.060263 (old W, S′: 1.271943), to all printed digits |
+| AZUREOut_aa=1_R=1.out | 1.2e-2 | elastic p + ¹²C through the transformed bound level | follows from the above |
+| chiSquared.out | 9.3e-3 (segment 3 2238.82 → 2259.87) | same | — |
+| run.log | 0.69 | the χ² lines, and the Coulomb-table lookup count 66 → 20 (the hybrid pair's bound S no longer reads the table) | — |
+
+  Reference regenerated: `tests/hybrid_potential/expected/chiSquared.out`.  Docs: `pyazr.rst` (the "does not touch"
+  paragraph replaced), `particle_pairs.rst`, the hybrid README.
+- Verified (head of the branch, 3 threads): `ctest -LE slow` 164/164; `tests/run_tests.sh` see the commit message;
+  1 and 2 threads identical (T1–T3, 13N, hybrid_potential × 3 bases, 15/15); converted-tree gate 183 equal / 3
+  recorded / 0 differ; consistency at every commit.
+
+**Open / next.** The `<potentials>` record of format 3 (note §3.3) and the spin–orbit term (steps 3–5).
+`tests/hybrid_potential/check_per_pair.py` (not in ctest) pins χ² = 2462154.2 and fails on the start head's engine
+too (2466121.4 there; 2466142.3 now): a stale pin, not touched.  `E_THM_HYBRID_POTENTIAL` is an engine message, not
+yet a row of the format-3 diagnostic table (the potential is not a format-3 record yet).
+
+## 2026-11-10 (night) — S14, brief L: ratio to Rutherford and to Mott, the `rutherford` leaf (`feature/upgrade-4-rutherford`)
+
+**Done** (brief `work/briefs/L_rutherford_ratio.md`).
+- `physics/CoulombScattering.h`: `rutherford_cross_section`, `mott_cross_section` (b/sr, c.m., with d/dE) from the
+  engine's η and k (`ChannelFunctions.h`); Mott with the interference weight (−1)^{2s}/(2s+1); binding
+  `_azure2.rutherford_cross_section`, `mott_cross_section`; test `physics_coulomb_scattering` (mpmath table).
+- Format 3: `ratio_to_rutherford`, `ratio_to_mott` are built (`Build.cpp` `ReadObservable`: dσ/dΩ at lab or c.m.
+  angles with `ReactionSpec::coulombReference`); refused from the pairs (one elastic reaction, charged, identical as
+  the quantity says) and for folds the reference does not follow (`BuildEffects.cpp` `CoulombRatioFolds`: Doppler,
+  screening, detector attenuation, automatic tolerance; `E_NOT_BUILT`).  Extrapolations alike.  `--describe` says
+  what the value is divided by (JSON `coulomb_reference`).
+- Tree: `TreeKind::CoulombRatio`, `ratio(dsdo_cm(r), rutherford(r) | mott(r))`; `LeafPart::Rutherford`, `Mott`.  Engine:
+  `src/CoulombReference.cpp` evaluates the leaf at the point (and, under a sub-point effect, at the point's own
+  sub-points through `EPoint::IntegrateSubPointValues`, with the edge blend): the model is ⟨dσ/dΩ⟩/⟨σ_C⟩.  Energy
+  shift: the rule of every leaf (the point is re-energised, d/dshift by finite differences).  The adjoint drops the
+  leaf.  `ESegment::IsDimensionlessRatio`: a ratio's value is not converted at load (one rule for RATIO and these).
+- α + α checked: the engine's elastic dσ/dΩ of identical particles is already the symmetrised one.
+- `pyazr.nds`: `ExforData.format3_quantity()`, `to_dataset()` (format-3 record, ratios unconverted); `to_azr` refuses a
+  ratio (no multiplication by σ_R any more).
+- Tests: `tests/ratio_to_rutherford/` (check.sh, truth.py, the §9.2 example with `--describe` committed),
+  `pyazr_ratio_to_rutherford`, `pyazr_nds_rutherford` (rewritten), cases in `experiment_build`,
+  `experiment_prediction`; io_convert leaves a format-3 project alone.  Docs: `examples/ratio_to_rutherford.rst`,
+  `data_formats.rst`, `pyazr.rst`, the setup skill's EXFOR reference, the recipe "A new kind of data set" (CLAUDE.md).
+
+**Verified**: build `work/b-ruth` (3 jobs, 0 warnings).  179 × 3 against `tab-p3f`: 689 / 662 / 689 identical (tag `tab-ruth`;
+the only other files are the four new projects of tests/ratio_to_rutherford, absent from the reference); `ctest -LE
+slow` 165/165 (2 skipped as on the base: pyazr_predictions, pyazr_composite_gradient), on the tree before the nds and
+docs commits, then the nds tests and `pyazr_ratio_to_rutherford` again after them; `tests/run_tests.sh` (OMP 3) 140
+passed, 1 failed: cli_help, which passes three times alone (load-dependent, see Open); `tests/format3_engine/check.sh`
+PASS; spec equivalence 193 files, 185 converted, 183 equal, 2 recorded, 0 differ (the 4 new format-3 files "already
+format 3"); T1, T2, T3, 13N × 3 bases at 1 and 2 threads: 12/12 identical; consistency checks pass at every commit.
+Physics: hard sphere α+¹²C and α+α against mpmath 3.5e-10 / 5.1e-10 (11-digit output); χ² ratio = χ² multiplied
+9.3e-15; 5 keV shift: both forms = truth.py to 6e-10, difference 0.39977 on 12.5; beam fold: ratio of folds to
+1.8e-6, fold of the ratio off by up to 7e-3; gradient = central differences 5e-7 (plain), 8e-8 (beam); CLI grad
+check 4.8e-8.  Every new test shown failing once (injections in the report, work/ruth/).
+
+**Open.** Lab-frame Legendre ratios (`LEG/RTH`) and the electron-scattering Mott cross section are out of scope.
+A detector-angle fold (finite angular acceptance) does not exist in the engine; the attenuation coefficients are
+refused for these quantities.  Sphinx not run (not installed here).  `tests/cli_help` failed once inside run_tests
+under machine load (flags reported "compiled out", then the doc table check), passed alone three times: not caused
+by this branch (no CLI or doc table change), not investigated.
+
+## 2026-11-10 (agent, brief Q) — `EData` split W1 and W2 (branch `feature/upgrade-4-edata-split-2`)
+
+**Done** (`edata_split.md` §5.2; one commit per class for W1, one for W2; each item re-proved dead by `git grep -nw`
+over `src/ include/ api/ experiment/ io/ physics/ convert/ pyazr/ tests/ tools/` on this tree).
+- W1 `EData` (530d5a7f): `Iterations`, `ResetIterations`, `Get{Screening,Density,Doppler,Thickness,ThmCoherent}ParamOffset`,
+  `DensityParamOfEffect`, `ResultsSize`, the write-only `componentError_`; the unreachable `data == nullptr` branch of
+  `FillEnergyShiftsFromParamsImpl` with the `data` parameter of `FillEnergyShiftsFromParams` (24 callers passed the
+  data set itself; the kept branch reads `this`) and its write-only counter `k`.  §7 items 1, 2, 10 (EData parts).
+- W1 `EPoint` (685c2697): `StoreSubpointOffsets`, `ApplySubpointShift` (never defined), `IsTargetFallbackOnly` (the flag
+  stays; comments name `SetTargetFallbackOnly`), `ModelSlot`, `ModelAngularSlots`, `SetExcitationEnergy`,
+  `angleKinFactor_` with its getter, setter and writes; not in the note: `GetNumAngularDists`, `GetAngularDist`.
+  §7 item 6: the three self-assignments through `SetCrossSectionKinFactor` and with them the setter.
+- W1 `ESegment` (2518a118): `GetNominalEnergyShiftSqrt` / `energyShiftSqrtNominal_`, `Has{Shift,Norm}GroupFollowers`
+  with their members and setters (and the two calls in `EData`), `SetVaryNorm`, `AddComponent`,
+  `componentCalculationMutex_`; §7 items 3, 10.
+- W2 (3837d59c): `CovarianceFileFor` … `PrepareCovarianceSeeds` (256 lines) verbatim to `src/EDataCovariance.cpp`;
+  one check-11 row.
+Sizes: `EData.cpp` 4,793 → 4,455, `EPoint.cpp` 2,983 → 2,920, `ESegment.cpp` 1,406 → 1,366, `EData.h` 576 → 560,
+`EPoint.h` 911 → 896, `ESegment.h` 590 → 574; new `EDataCovariance.cpp` 275.
+
+**Verified** (build `work/b-esplit2`, 3 threads): every commit 0 warnings, consistency (after `--tighten-sizes`),
+`scripts/check.sh --quick` (ctest -LE slow 163/163), 179 × 3 identical to `tab-p3f` (689/662/689; tags
+`tab-esplit2-w1a`, `-w1b`, `-w1c`, `-w2`); after the EData commit `tests/shift_fn` and `tests/energy_shift_sqrt` pass;
+W2: the move `diff`s empty, and the covariance projects (`data_covariance` diag, dense, rel; T2 Brune and formal;
+fit.azr with MIGRAD-gradient, LM, GSL-LM fits) byte for byte against the base build `work/b-trial5`, all output
+files (`work/esplit2/cov_cmp.sh`).  At the end (`work/esplit2/final.sh`): `tests/run_tests.sh` (OMP 3) 140 passed,
+0 failed; 1 vs 2 threads on T1, T2, T3, 13N in the three bases: 12/12 output directories identical.
+
+**Open.** History comments outside §7 item 10's list remain (`EData::CheckComponentPairs` "as was done",
+`EPoint::ConvertLabAngle` "Until 2026-10-29", `ConvertCrossSectionGammas` "Before 2026-10-23", two "Before 2026-11-05" comments in `EData.cpp`
+(the grid re-placement, the gamma pair's final level).  `#include <mutex>` stays in `ESegment.h` (other files may rely on it).
+
+## 2026-11-10 (director, afternoon) — Phase 4: the fourth wave merged (expression tree, plan, `EData` split N1–N4, the engine runs format 3)
+
+**Merged into `feature/upgrade-4-data`** (`--no-ff`, in this order; each rehearsed, built and verified in a scratch
+worktree, the committed tree is that tree): H `feature/upgrade-4-expr` (55fa32ed: S10 the model pass evaluates the
+expression tree, S11 the gradient through `backward`, `--print-predictions`); I `feature/upgrade-4-plan` (8a36a61a: the
+model-pass follow-ups and S5, the calculation plan); P `feature/upgrade-4-edata-split-1` (9dff49fe: `EData` split
+N1–N4); G3 `feature/upgrade-4-format3-reader` (28dbb50a: one `<levels>` table, parameter names from the specs, the engine
+runs a format-3 project, `--describe`). Their entries are below.
+
+**The merged head as a whole** (28dbb50a; build `work/b-trial5`, 0 warnings): 179 × 3 identical to the Phase 3
+head (689 + 662 + 689 files); `ctest -LE slow` 163/163; `tests/run_tests.sh` 140 passed / 0 failed; calculations at 1 and
+3 threads 12/12 identical; T2 with a `<modelData>` section identical at 1 and 3 threads in the three bases; spec
+equivalence: 189 files, 185 converted, 183 equal, 2 recorded, 0 differ; the converted tree (exact grids, menu 1): of
+the 510 (483 formal) output files per basis 472 (445) identical, 38 classified, 0 differ, 0 missing. Not yet run on
+this head: 1 against 8 threads (the machine is shared with three agents).
+
+**What the director changed at the merges** (each in its merge commit's message):
+- pyazr is **2.18.0** (H and G3 both took 2.17.0): `predictions` (H) and `describe` (G3) are both exported
+  (`pyazr/__init__.py`, `pyazr/schema.py`).
+- `src/ProjectCommands.cpp` holds both commands (`--print-predictions`, `--describe`); the consistency test's list of
+  flags handled in `main` has both; `command_line.rst` has both rows.
+- `tests/consistency/file_sizes.tsv` at the merged counts: `AZUREAPI.cpp` 1837, `AZUREGrad.cpp` 1850, `CNuc.cpp` 1894,
+  `EData.cpp` 4793, `EPoint.cpp` 2983, `ESegment.cpp` 1406; `EDataThm.cpp` (773) is off the record.
+- Checked on the combined tree, because no branch could: `--print-predictions` of the converted T2 gives the 13
+  lines of the old file; the converted T2 runs with `AZURE_PLAN_CHECK=1`; its outputs are the old file's but for the
+  two classified files (`param.par`, `normalizations.out`).
+
+**Decisions of the director.**
+- I: the plan's task becomes the unit of work (a task evaluates its host and writes its mapped points without going
+  through the data set) in **Phase 6**, with the mutable statics, not now.
+- P: `EData::ThmGroupEnergyRange` as a public static member is accepted (its callers are free functions of the
+  set-up); it goes into the THM set-up's own file with step M of `edata_split.md`.
+- G3, on its report (the agent implemented them; commits in its entry):
+  1. The converter keeps every abundance row of a sample that a line uses, also a row no line reaches (the isotope
+     from the `<levels>` pairs with the sample's light particle; none or several is a question). The engine's rule
+     that a nucleus a sample does not list counts 1.0 in the sum-to-one prior is unchanged and **open for the targets
+     step**.
+  2. A run that uses no data (menu 3, extrapolation-only pyazr calls) does not need the data files:
+     `BuildOptions::dataFiles` (`Required | NotUsed`), `W_DATA_FILE_NOT_READ`. `--validate` and `--describe` stay
+     strict.
+  3. An unreadable data file refuses a data run (`E_DATA_FILE`); the old engine skipped the segment. Documented.
+  4. The start step of a fixed zero shift differs between the formats (`param.par` only): accepted as classified.
+- The converted-tree gate lives only in `work/fmt3c` (`gate.sh`, `mktree.sh`, `gatecmp.py`, `classify3.py`); it
+  becomes a committed tool with brief K (the director ran it with `work/director/gate.sh`).
+
+**Defects and debts found, not yet fixed** (owner in brackets):
+- An `AZURE_PLAN_CHECK=1` breach throws `std::logic_error` that nothing catches (abort without a message naming the
+  task) [Phase 6, with the task as unit of work].
+- Peak memory did not drop with S5 (the memory is in the tables, not in the points) [S7 measures again; Phase 6].
+- `--print-predictions` names a data set by its index (`data 3:`) also in a format-3 project, where it has a name
+  [S13/S14, with `predict`].
+- `ProjectSetup` re-reads the old sections once per question; `Format3ThmSection` writes old `<thm>` grammar for
+  the parser; level parameters are `energy_<n>` / `width_<n>_<m>` in format 3 [3d; S7/3d; the `<levels>` step].
+- The two T2 benchmarks of H and I differ by a factor 4 in absolute time (0.29 s against 1.1 s for a calculation):
+  each compared with its own start head and found no change, but the conditions differed (not recorded). The
+  director measures the merged head against the Phase 3 head when the machine is free, with 1 against 8 threads
+  [director, end of wave].
+- Not run by anyone: ThreadSanitizer (no runtime on this host), `ctest -L slow`.
+- Run-to-run variation of the Minuit call count at 2 threads (`energy_shift_sqrt` 40/41, `shift_fn` 36/37 calls,
+  same fitted outputs) is cause B of `fit_threads.md` (the PI: Minuit2 is not patched).
+
+**For the PI to see** (behaviour a user can meet; additions):
+- The API's `calculated_segments` of an E1-only / E2-only segment is its E1 / E2 part (confirmed earlier).
+- Format 3: a data run with an unreadable data file is refused (the old engine skipped the segment with a warning);
+  an extrapolation run does not need the data files; a sample keeps all its isotopes.
+- `AZURE2 --describe FILE [--json]` / `pyazr.describe`: how the engine understood a project (pairs, data files as
+  opened, effects, parameter names). `AZURE2 --print-predictions FILE` / `pyazr.predictions`: the expression each data
+  set is compared with.
+- The gradient of an E1-only / E2-only SUM with a component was wrong before S11 (0.29 and 1.0 of the largest
+  element against central differences); it is right now (1e-7). Fits with `--use-gradient` of such segments change.
+
+**Running now** (Opus agents, 3 threads each; briefs in `/data0/skowrons/AZURE2-upgrade/work/briefs/`):
+- O, `feature/upgrade-4-hybrid-potential` (`wt-hybrid`), `O_hybrid_potential.md`: the potential as an immutable value
+  in `physics/` (no manager singleton), e² = α ħc, the distorted decaying solution (the PI's Q4, Q5; moved outputs
+  classified).
+- Q, `feature/upgrade-4-edata-split-2` (`wt-esplit2`), `Q_edata_split_2.md`: W1 (dead code out of `EData`, `EPoint`,
+  `ESegment`), W2 (the data covariance into `src/EDataCovariance.cpp`).
+- L, `feature/upgrade-4-rutherford` (`wt-ruth`), `L_rutherford_ratio.md`: S14, the `rutherford` / `mott` leaves and the
+  quantities `ratio_to_rutherford`, `ratio_to_mott`.
+
+**The PI on the split, 2026-11-10:** he expected `EData` to be split directly. The director agrees and changes the
+order of `edata_split.md` §5: the cuts scheduled "after S7" (M1–M3) and under D1 are made now, as verbatim moves,
+right after Q (brief `S_edata_split_3.md`); S7 and Phases 5–6 then edit the small files. F1/F2 still wait for 3d.
+
+**Then.** S (the remaining mechanical cuts of `EData`, `EPoint`, `ESegment`, after Q), K (extrapolation grids: list,
+file, points/log, c.m., adaptive; commits the gate), J (units; S factor with the `nds.py` mass fix; yields per
+charge), R (S7 `Measurement`, after S), 3c, 3d, S12, S13, S16; the spin-orbit term
+(note §5 steps 3–5, after O); `EData` split F1/F2, M, D1; CNuc 3b (iv), 6b, 7; Phase 5 (with M3 (b)); Phase 6 (mutable
+statics, the task as unit of work). Merge `origin/dev` only when the reconstruction is complete.
+
+## 2026-11-10 (evening) — format 3, step 3b-1, G-3: the engine runs a format-3 project (`feature/upgrade-4-format3-reader`)
+
+**Done** (brief G-3; report `work/fmt3c/REPORT.md`).
+- **A** (b2bb1452): one table of the pairs and levels of `<levels>` (`experiment/LevelTables.h`: `PairInfo`, `LevelInfo`,
+  `PairLabel`, `PairsNamed`, one wording of `E_UNKNOWN_PAIR` / `E_AMBIGUOUS_PAIR`), made once from the rows
+  (`LevelTablesOfRows`, reader library) and read by `Build`, `BuildModelData` and the engine's model data (which checks a
+  datum's level indices against the compound nucleus); `PairRow`, the engine's `PairInfos/LevelInfos` and the converter's
+  label copy are gone; `io::IdenticalParticles` is PPair's rule.  `Schema::Build` resolves `<modelData>`
+  (`BuiltProject::modelData`); the spec-equivalence test compares the model data.
+- **B** (ba0cd97d): parameter names come from the spec (`ParameterNames`; adaptor: `segment_<k>_...`; Build: `<ds>.norm`,
+  `<ds>.shift.offset|sqrt`, `D.value`, `G.offset`, `G.a<j>`, `<target>.areal_density`, a follower's `<record>.<field>[<ds>]`;
+  effects and abundances by their target).  No fixed name buffer (`EData`, `CNuc`).  The converter's map names every
+  parameter the engine makes and is injective (checked over every converted file).  Converter: one path for data and test
+  lines with a sample (M_thick asks 4 questions now; no longer a recorded difference); a missing sample of a test line is
+  noted.
+- **C**: `Config::ReadConfigFile` reads a format-3 file (records → Validate → `<levels>` tables → Build; `Config::format3`);
+  `src/ProjectSetup.cpp` (was `OldLineSetup.cpp`) gives the set-up the specs of either producer, the `<levels>` rows read
+  once and the exit pairs of the active data sets (`ExitPairKeysInFile` deleted; `AZURE2.cpp`'s pair and THM scans read
+  specs too); `<thm>` membership and weights from the records; `AZURE2 --describe FILE [--json]`, `pyazr.describe`
+  (pyazr 2.17.0); `tests/format3_engine/check.sh`; docs (`data_formats.rst` format-3 section, `command_line.rst`, the
+  note's status, the recipe "A new kind of data set").  Two converter/Build defects found by the gate and fixed: a
+  `quadrature` without a straggling flag lost its width multiplier (TargetEffect gated it on the old line's flag), and the
+  converter wrote `width_multiplier 20` where the old line gave none (a pure convolution's core then changed).
+
+**Verified** (build `work/b-fmt3`, 0 warnings, 3 threads): 179 × 3 on the old tree identical to `tab-p3f` after A, B and
+with the final engine (689/662/689); `ctest -LE slow` 155/155 (final tree); `tests/run_tests.sh` 138 passed, 0 failed
+(with `format3_engine`); consistency checks pass; spec equivalence 189 files, 185 converted, 183 equal, 2 recorded,
+0 differ (injections =2, =3 fail). Gate (tree converted into `work/fmt3c/tree3x`, exact grids; `tree3p` plain): of the 510
+output files per base of `tab-p3f`, 471 identical, 30 classified (param.par steps of fixed zero shifts, follower rows,
+angle window of angle-integrated data, sample header names, scattering lengths as model data), 2 differ (angle_mapping,
+the abundance defect), 7 missing (shift_subpoint_angle/template: refused for missing data files); plain grids give the
+same in menu 1 and differ in menu 3 in extrapolation outputs only. 1 vs 2 threads on converted T1, T2, T3, 13N
+identical. The five refusals of §8.5 hold (three checked with dummy data files).
+
+**Follow-up (the director's decisions on the G-3 report).** 1 (951fd09f): the converter keeps a sample's row of a
+compound nucleus no line reaches (its isotope from the <levels> pairs with the lines' light particle; none or several
+is a question), Build gives it its abundance row: tests/angle_mapping is now identical but for name classes.
+2 (4e6e7f59): `BuildOptions::dataFiles` (`DataFiles::Required | NotUsed`); the engine reads a format-3 project with
+NotUsed and `EData::Fill` refuses an unread data file (`E_DATA_FILE`), `EData::MakePoints` warns
+(`W_DATA_FILE_NOT_READ`); `--validate` / `--describe` stay Required. 3 (9719363f): an unreadable data file refuses a
+data run; documented with the other differences from the old engine. 5 (597c7aad): §3.11's T2 quadratures.
+Verified after them (engine `work/fmt3c/binC/AZURE2` = `work/b-fmt3`): 179 × 3 identical to `tab-p3f` (`tab-fmt3cH`);
+`ctest -LE slow` 155/155; `tests/run_tests.sh` 138/0; spec equivalence 189/185/183/2/0; gate menu 1, both grids: of 510
+(483 no-brune) files 472 (445) identical, 38 classified, 0 differ, 0 missing; menu 3 exact: 302 identical, 9
+classified, 8 differ (bad_sample runs; modelData.out added); 1 vs 2 threads on converted T1, T2, T3, 13N identical.
+
+**Open.**
+- The engine counts a nucleus a sample does not list at abundance 1.0 in the sum-to-one prior (old behaviour, unchanged).
+  It showed in tests/angle_mapping before decision 1 (format 3: 7_13 at 1.0, Total-Abundance chi^2 25 instead of 0);
+  the targets step decides whether an unlisted nucleus counts.
+- A member of a varied shared normalization has a fixed parameter of its own also where its old line did not vary (S7
+  removes it).
+
+**Debt** (each removed by the step named):
+- `src/ProjectSetup.cpp` reads the old sections through the adaptor once per question (`ProjectExitPairKeys`,
+  `ProjectReactionPairs`, `ProjectHasThmData`, `EData::Fill`, `MakePoints`) — step 3d deletes the old branch.
+- `Format3ThmSection` (src/ConfigThm.cpp) writes old-grammar `segments=` / `weight[k]=` text for the <thm> parser — goes
+  when `ThmOptions` takes `ThmMembershipSpec` directly (the THM part of S7/3d).
+- Level parameters are still named `energy_<n>` / `width_<n>_<m>` in a format-3 run: `project_format3.md` is silent
+  (`<levels>` keeps its grammar, §3.2), so the names of level parameters are open for the `<levels>` step.
+
+## 2026-11-10 (agent, brief P) — `EData` split N1–N4 (branch `feature/upgrade-4-edata-split-1`)
+
+**Done** (`edata_split.md` §5.1, one commit per step):
+- N1: the output writer (`WriteNaturalDecomposition`, `WriteBandLine`, `WriteOutputFiles`) to `src/EDataOutputFiles.cpp`;
+  four check-11 allowance rows for the penalty totals of `chiSquared.out` (D2).
+- N2: the four data check writers (`PrintData`, `PrintLegendreP`, `PrintEDependentValues`, `PrintCoulombAmplitude`) to
+  `src/EDataCheckFiles.cpp`; new ctest `check_files_data` (`tests/check_files_data/check.sh`: T1 with the four
+  checks on, files and line counts).
+- N3: `WriteThmExperiments` and the three THM tables to `src/EDataThmReports.cpp`; `ThmGroupEnergyRange` is a public
+  static member of `EData` (its set-up callers are free functions, so it cannot be private as the note says).
+- N4: `WriteOutputFiles` calls `WriteSegmentFiles`, `WriteChiSquaredFile`, the THM writer, `WriteNormalizationsFile`,
+  `WriteShiftsFile`; the per-segment χ² rows have their own loop over the same segments.
+Sizes: `EData.cpp` 5,571 → 4,841, `EDataThm.cpp` 1,233 → 773; new files 522, 251, 487 lines.
+
+**Verified how.** Each move: the moved lines of the old file `diff` empty against the new file's body. Each step:
+build 0 warnings, 179 × 3 identical to `tab-p3f`, `scripts/check.sh --quick`. Outputs the 179 runs do not reach,
+base (`work/b-trial2`) against branch, byte for byte: `.band`, lab-frame and `shifts.out` files of seven `check.sh`
+(N1, N4); the four check files as `file` and `screen` on T1, T3, 13N, `natural_neon` and a line-shape THM project
+(N2); the THM tables through pyazr with `repr` on 38 projects (N3). At the end: `tests/run_tests.sh` 138 passed
+(OMP 3), T1–T3 and 13N × 3 bases identical at 1 and 2 threads. Scripts in `work/esplit/`.
+
+**Open.** N3's helper is public, not private (above). The base engine itself varies from run to run at 2 threads in
+the Minuit call count of two fits (`energy_shift_sqrt` 40/41, `shift_fn` 36/37 calls, `fitStatus.out`), with the same
+fitted outputs; not investigated.
+
+## 2026-11-10 (evening) — brief I: the follow-ups of the model pass, and S5, the calculation plan (`feature/upgrade-4-plan`)
+
+**Done** (brief `work/briefs/I_plan.md`; full report `work/plan/REPORT.md`).
+- **Fixed energy shift back to 0** (934c11a3): a segment whose points carry a shift of an earlier evaluation stays
+  "shift active", so a fixed shift set back to 0 re-energises its points; `upgrade_history` gains vector C (every fixed
+  shift and sqrt(E) coefficient moved by 1 keV): pooled C → A = fresh A, C → A → C = fresh C (8 failures before).
+- **API value of E1-only / E2-only segments** (37aac384): `UpdateSegments*` report the model value of every segment
+  (one loop, `AZUREAPI::ReportSegments`); pyazr's `_segment_values` no longer swaps the part in itself. Test
+  `pyazr_api_model_value` (8 failures on the start head's engine).
+- **MCMC snapshot** (3af76e1d): `tests/mcmc_snapshot_components/check.sh` — total, E1-only and E2-only capture blocks of
+  the snapshot equal a calculation at `param.mcmc` (8.8e-8); fails with the leaf value injected.
+- **Covariance seeds** (87ef450f): `Results::ObjectiveValues::covarianceSeed` (indexed as `Results::model`), not
+  `ESegment`; `tests/data_covariance` (d) and `pyazr_data_covariance` fail with the neighbour's seed injected.
+- **S5, the calculation plan** (9df9fc92): `include/CalculationPlan.h`, `src/CalculationPlan.cpp`; a point holds its task
+  index, never a pointer to another point; `local_mapped_points_` and `Clone`'s pointer re-mapping are gone; the plan is
+  built and checked (one writer per point) in `MapData`; `AZURE_PLAN_CHECK=1` checks each task's slot writes at run
+  time; tests `upgrade_plan` (179 projects' set-up), `upgrade_plan_runtime`; check 29.
+
+**Still written into the data set by an evaluation** (after the seeds moved): the hand-over of the parameters (norms,
+shifts with their re-energised points, grids and the plan, densities, screening, Doppler T, thicknesses); in the point
+pass only the external-capture memo `EPoint::ec_shifted_` (H6, keyed by exact energy) and the scoped flags
+`DopplerAppliedScope` / `TargetFallbackScope` (set and reset inside one call); the relvector covariance model frozen
+at the first `EnsureFactored` (H9, a shared group, once).  Outside the data set: `CNuc::ObservedOfFitValues`.
+
+**The two projects without data** (`tests/sum_lab_frame/models/sum_data.azr`, `tests/ratio_frame/models/ratio_data.azr`,
+and their `*_free.azr`): their data are made at test time — `sum.dat` by `tests/sum_lab_frame/check.sh` (b) from the
+plain segments' fitted lab values, `ratio.dat` by `tests/ratio_frame/check.sh` (e); `tests/failed_point/check.sh` and
+`tests/pyazr/composite_terms_test.py` write five points of their own.  Nothing to commit; in the 179 × 3 sweep they run
+without data in both trees (READMEs say so).
+
+**For the PI to see** (behaviour change): the API's `calculated_segments` of an E1-only / E2-only segment is its E1 /
+E2 part (the value its χ² uses), no longer the total; `calculate_sfactor*` of such a segment changes with it.
+
+**Verified** (3 threads, `work/b-plan`, 0 warnings, head 9df9fc92; `work/plan/verify.sh`): 179 × 3 identical to
+`tab-p3f` (689 / 662 / 689; tag `tab-plan2`); `ctest -LE slow` 158/158; `tests/run_tests.sh` 138 passed / 0 failed;
+calculations at 1 and 3 threads identical on T1, T2, T3, 13N in the three bases (12/12); T1 and T3 short fits
+(MIGRAD and `--use-gradient`, 150 calls, 1 thread) every output file identical to the start head (logs differ only in
+progress bars). Benchmark T2 (3 runs each, this host): calc 1.08–1.16 s → 1.13–1.14 s (1 thread), 0.45–0.47 →
+0.44–0.47 s (3); fit200 68.9–71.0 → 69.9–71.4 s (1), 47.7–49.6 → 48.4–49.5 s (3); peak RSS of the fit 272–273 →
+270–274 MB (1), 348–350 → 349–353 MB (3): unchanged, not the drop expected (`sizeof(EPoint)` 840 → 824 B is
+5 kB on T2's 330 points; the memory is in the tables).  Not run: ThreadSanitizer (no TSan runtime on this host:
+`libtsan.so` missing, no clang), 1 vs 8 threads, `ctest -L slow`.
+
+**Open / next.** S7 (`Measurement`); the plan's tasks still call `EPoint::Calculate` with the mapped points resolved
+through the host's data set (Phase 6 makes the task the unit of work); the dead `data == nullptr` branch of
+`EData::FillEnergyShiftsFromParamsImpl` (no caller) could go.
+
+## 2026-11-10 (evening) — Phase 4 S10 and S11: the model pass evaluates the expression tree; the gradient through `backward` (`feature/upgrade-4-expr`)
+
+**Done** (brief H; `data_model.md` S10, S11, M7).
+- **S10.** `experiment/Prediction.h`: one builder per kind of tree (observable, SUM — also a total capture —, RATIO,
+  transmission, yield) in the table `TreeKinds()` (`TreeKindOf` decides), from a `PredictionSetup` (the reaction, the
+  terms the set-up made: component segments with scaling, fixed angle, compound nucleus; sample; thickness); the tree's
+  leaves, factors and parameters listed beside it; `PredictionText`.  `Expression.h`: `Inputs`/`Cotangents` are views
+  of the caller's arrays, the workspace holds a tree of up to 32 nodes at one point in fixed arrays (no allocation).
+  Engine: `EData::BuildPredictions` (after Fill / MakePoints, `src/Predictions.cpp`) gives every segment an immutable
+  tree shared by the working copies; `ComposeModelValue` (src/ModelPass.cpp) fills the inputs at the point and evaluates
+  it; the hand-written SUM / RATIO / sample / transform arithmetic is gone.  `AZURE2 --print-predictions FILE`,
+  `pyazr.predictions(path)` (2.17.0); ctest `upgrade_predictions` (189 projects of tests/ and examples/ against
+  `tests/upgrade/predictions.txt`; regenerate with `python3 tests/upgrade/predictions_test.py --binary <AZURE2> --write`),
+  `pyazr_predictions`, `experiment_prediction`.  Check 28 extended (the pieces of a composition are read only where the
+  tree's inputs or setup are made).
+- **S11.** `azure2::ModelPointBackward` (cotangents of leaves, sub-points and parameters from the tree's `Backward`);
+  every route of `src/AZUREGrad.cpp` uses it (plain, shared-component, per-term, transform, grouped).
+  `GradTransformedPoint`, the SUM/RATIO coefficients, the abundance weights, `ESegment::TransformTerms`, `Transmission`,
+  `YieldY0` deleted; AZUREGrad.cpp 2036 → 1850, ESegment.cpp 1446 → 1406.
+
+**Verified** (work/b-expr, 0 warnings, 3 threads, `AZURE2_COULOMB_TABLE` set): 179 × 3 identical to `tab-p3f` after S10
+(tag `tab-expr-s10`) and after S11 (`tab-expr-s11`), 689 / 662 / 689; `ctest -LE slow` 158/158 after each part
+(poison and history tests pass); `tests/run_tests.sh` (final tree, OMP 3) 137 passed / 0 failed; calculations at 1 and 2
+threads on T1–T3 and 13N in three bases 12/12 identical; S11 gate against the start head (pyazr, 1 thread):
+`objective_and_grad`, `chi2_and_grad`, `residual_jacobian`, `model_gradients` of T1, T2, T3, natural_neon, two
+transmission/yield models (with and without a spread) and a SUM project, 75 arrays all bit for bit; T1 and T3 fits
+`--use-gradient --max-calls=150` every output identical; `AZURE_GRAD_CHECK` of tests/transmission_yield unchanged
+(3.05e-11, 3.54e-11 of the largest); T2 bench (1 thread, 3 runs each) calc 0.28–0.30 s vs 0.29–0.30 s, fit200
+17.4–18.0 s vs 17.0–18.2 s, peak RSS unchanged; malloc calls of a T2 calculation +97 (the 13 trees' set-up, nothing
+per point).  Scripts: `work/expr/final.sh`, `grad_dump.py`, `grad_cmp.py`, `fits.sh`.
+
+**Follow-up (director's request): the three S11 changes off the test set, shown.** (1) An E1-only / E2-only SUM with
+a component: the forward reads the leading term's E1 / E2 part and each component's full sigma; ctest
+`pyazr_composite_gradient` (13N levels, synthetic data) compares the gradient with central differences by both
+component routes: 1.1e-7 / 8.9e-8 of the largest with this branch, 0.29 (E1) and 1.0 (E2) with the start head, whose
+adjoint took the component's E1 / E2 part.  (2) A RATIO with a zero numerator: `experiment_expression` checks
+`RatioBackward` against the closed form (J_den/J_num)/den; no project shows it in a gradient, because a numerator that
+is exactly 0 (closed exit channel, zero width) has zero derivative there.  (3) A non-finite SUM term: the forward
+propagates it (NaN sum) and the tree's adjoint does not skip it (unit test in `experiment_expression`); the old adjoint
+skipped it while the forward did not.  The head of `feature/upgrade-4-data` has moved (docs, `include/Constants.h` named
+masses); this branch is not rebased on it (the director merges).
+
+**Open.** The tree holds a node per term (T2 data 8: 4 nodes); the transform path still allocates its sub-point
+vectors and the kernel object per point, as before.  Not run: 8 threads, TSan, `ctest -L slow`, sphinx.  Next: S12
+(components as leaves), S13 (filters), S14 (`predict`, `rutherford`).
+
+## 2026-11-10 — plan for splitting `EData`, `EPoint`, `ESegment` (branch `docs/upgrade-edata-split`, documents only)
+
+**Done.** `docs/upgrade/edata_split.md`: inventory at 070756a1 of every member function (`EData` 139, `EPoint` 226,
+`ESegment` 187 definitions, overloads apart) and data member (43, 93, 98) with lines, responsibility, callers and
+destination; a partition of the four source files that sums to their sizes; target files with sizes; what waits for
+S5, S7, S10–S12, 3d and Phases 5–6; ordered steps; risks; defects met. A paragraph in `ROADMAP.md` names the track.
+The first three steps touch code no running branch edits (checked against `wt-expr`, `wt-plan`, `wt-fmt3` at 10:42):
+N1 the output writer to `src/EDataOutputFiles.cpp` (490 lines; `EData.cpp` 5,571 → 5,081; check 11 needs four
+allowance rows), N2 the check files to `src/EDataCheckFiles.cpp` (240; → 4,841; no test project writes them: a
+by-hand comparison and a new ctest), N3 the THM reports and tables to `src/EDataThmReports.cpp` (461; `EDataThm.cpp`
+1,233 → 772).
+
+**Verified how.** All numbers counted by the scripts in `/data0/skowrons/AZURE2-upgrade/work/edata-note/` (brace
+matching, name search over `src/`, `include/`, `api/`, `tests/`); the partitions sum back to 5,571, 1,233, 3,006 and
+1,446 lines. `python3 tests/consistency/repo_consistency_test.py` passes. Nothing was built or run: the steps are a
+plan.
+
+**Open.** Decisions D1–D5 of `edata_split.md` §8 (D1: whether to cut the parts Phases 5 and 6 rewrite into files
+before those phases; without it `EData.cpp` stays at about 1,980 and `EPoint.cpp` at about 2,720 lines through Phase 5).
+Defects found, not fixed: §7 of the note (twelve items) and the duplicates of §2.6 (eleven).
+
+## 2026-11-10 (agent, brief N) — design note: a spin–orbit term in the hybrid potentials
+
+**Done** (branch `docs/upgrade-spin-orbit-note`, documents only): `docs/upgrade/spin_orbit_potential.md`. It covers
+today's hybrid model with file:line (§1) and the physics of a spin–orbit term in AZURE2's channel-spin channels (§2).
+With one spinning particle the term is diagonal. With two, the channel spins of one (α, l, J) are coupled by the 6-j
+recoupling of `physics/src/Recoupling.cpp`, the channel functions become symmetric blocks, and U keeps the form of
+Eq. conv-u with blocks. The note also gives the design of option (a) (§3), tests (§4), steps (§5) and eight questions
+for the PI (§6). One line is added to `cnuc_split.md` at step 3b (iii).
+
+**Verified how**: scripts in `work/so-note/`:
+- the angular m-scheme checks, 308 cases to 5 × 10⁻¹⁵;
+- the engine's Numerov method against DOP853 with a spin–orbit term, to 10⁻⁷;
+- a δ-shell closed form;
+- a coupled 2 × 2 integration and the unitarity of the block U;
+- the reference engine `work/b-trial2` against the Numerov transcription, to 10⁻⁸.
+
+No engine code was written or built.
+
+**Found** (not fixed):
+- S of a hybrid pair jumps at threshold: it is distorted above threshold and the plain Whittaker form below. The jump
+  is about 1 for `tests/hybrid_potential`.
+- The hybrid Coulomb potential uses e² = 1.4399764 MeV fm, not α ħc. This alone accounts for the "10⁻⁵ accuracy of
+  the integration" that `pyazr.rst` and `hybrid_derivative_test.py` quote.
+- Two wordings are wrong: "inside the channel radius" (`CNuc.cpp:203`, `particle_pairs.rst:439`) and "outward"
+  (`CoulFunc.h:100`, `tests/hybrid_potential/tolerance:4`).
+
+**Open**: the PI's answers to §6 of the note; then steps 1–5 of its §5.
+
 ## 2026-11-10 (director, day) — Phase 4: the third wave merged (specs, `Schema::Build`, model data, one model pass)
 
 **Merged into `feature/upgrade-4-data`** (`--no-ff`, in this order): G1 `feature/upgrade-4-format3-reader` at 7342c790
@@ -61,9 +666,36 @@ by one ulp makes 119 files fail).
 - Format 3: the follower parameter name; units other than the engine's refused for now; data-file paths relative to
   the working directory.
 
-**Waiting for the PI** (unchanged): the two atomic increments in the vendored Minuit2; M3 (b); the electron mass in
-`EPoint.cpp` and the proton mass in `ECIntegral.cpp`; whether a spin-orbit hybrid potential is wanted. No ASan
-runtime on this host.
+**Decisions of the PI, 2026-11-10** (they replace the list "waiting for the PI" of the earlier entries):
+- **Minuit2 is not patched** for now. Cause B of thread-dependent fits (`fit_threads.md`: the non-atomic call counter
+  of the vendored Minuit2) stays documented; the bounded fits of the poison test stay at one thread. Do not ask again
+  unless a user meets it.
+- **The two masses keep their values** (no result moves) and are named in one place, so that each is one line to
+  change: `electronMassOfFermiFunction` and `protonMassOfM1Capture` in `include/Constants.h`
+  (merged, 46031fa6; 179 × 3 identical).
+- **A spin-orbit term may be added to the hybrid potentials**: step 3b (iii) of `cnuc_split.md` is wanted (channel
+  functions keyed by (α, l, j)). The design note is written: `spin_orbit_potential.md` (brief N). Director's review:
+  the recoupling example (p + ⁷Li, l = 1, J = 1) has the right trace and determinant for λ_j = −1, ½; `angular.py`
+  re-run (PASS); e² = 1.4399764 against α ħc = 1.4399645 and the Whittaker S below threshold confirmed in the
+  code. Director's decisions on its §6: no channel-spin operator (Q3); R_C a required field, 3.5 fm written by the
+  converter (Q6); potential parameters are not fit parameters (Q7); matching radius and step are fields with logged
+  defaults (Q8). **Decided by the PI, 2026-11-10 (yes to all four):** Q1 only pairs
+  with one spinning particle at first, the others refused until a project needs the coupled treatment; Q2 FRESCO's
+  convention (2.000 fm², 2 l·s); Q4 bound states and closed channels are distorted with the potential (moves
+  `hybrid_potential`, removes a step of about 1 in S at threshold); Q5 e² = α ħc in the hybrid Coulomb potential
+  (moves hybrid outputs by about 10⁻⁵). Both moves are classified with cause and size when they are made.
+  The note's steps 1 (potential as a value,
+  no singleton), 3 (format-3 record) and 4 (key with `two_j` = −1) move no output and need no decision.
+- **M3 (b) is the aim** (`data_model.md` §5): lab data with a fitted shift are compared in the frame of the data —
+  the model is converted to the lab, the measured values and errors stay as measured. Phase 5 does it; every fit
+  it moves (shifted lab-differential data) is listed with its size. Until then (a) stays, bit-identical.
+- **Confirmed by the PI:** the new refusals (a `prior_centre` row naming no segment line; an `<mcmc>` parameter row
+  that names no parameter or is short; a composite block whose operation type is neither sum nor ratio; a
+  β-delayed segment with target integration, a beam profile, screening or exit −1), the API returning the model
+  value for E1-only / E2-only segments, and the format-3 words (`normalization` and `energy_scale` records, the
+  follower parameter name `<record>.value[<data set>]`, `quadrature points <n>` required, `sigma_nuclear`,
+  `entrance_pair` / `exit_pair`, the target-state grammar, units other than the engine's refused until the units
+  step, data files relative to the working directory). Nothing waits for the PI now. No ASan runtime on this host.
 
 **Running now** (Opus agents from fe181256, 3 threads each; briefs in `/data0/skowrons/AZURE2-upgrade/work/briefs/`):
 - H, `feature/upgrade-4-expr` (`wt-expr`), `H_expression_pass.md`: S10 (the model pass evaluates the expression

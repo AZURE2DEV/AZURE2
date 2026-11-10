@@ -48,9 +48,12 @@ std::vector<std::vector<double>> PairSignatures(CNuc *cnuc, const Config &config
     PPair *pair = cnuc->GetPair(p);
     CoulFunc coulomb(pair, !!(configure.paramMask & Config::USE_GSL_COULOMB_FUNC));
     s.push_back({(double)pair->GetPType(), (double)pair->GetZ(1), (double)pair->GetZ(2), pair->GetM(1), pair->GetM(2),
-                 pair->GetRedMass(), pair->GetChRad(), pair->GetSepE(), pair->GetExE(), (double)coulomb.hybridTag(),
+                 pair->GetRedMass(), pair->GetChRad(), pair->GetSepE(), pair->GetExE(),
                  coulomb.UsesTable() ? 1.0 : 0.0, (configure.paramMask & Config::USE_GSL_COULOMB_FUNC) ? 1.0 : 0.0,
                  Kinematics::Relativistic() ? 1.0 : 0.0});
+    // the pair's hybrid potential, by value
+    const std::vector<double> potential = azure2::physics::PotentialKey(pair->GetHybridPotential());
+    s.back().insert(s.back().end(), potential.begin(), potential.end());
   }
   return s;
 }

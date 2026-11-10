@@ -61,7 +61,7 @@ void ESegment::SetReaction(const azure2::experiment::ReactionSpec &r) {
   if (isCoefficients_) maxAngDistOrder_ = 20;
   isAdvanced_ = (r.combination != azure2::experiment::ReactionSpec::Combination::None);
   operationType_ = (r.combination == azure2::experiment::ReactionSpec::Combination::Ratio) ? 1 : 0;
-  components_ = r.components;
+  reaction_ = r;
   naturalToken_ = r.sample;
   isTotal_ = r.total;
   transmission_ = r.transmission;
@@ -73,7 +73,7 @@ void ESegment::SetReaction(const azure2::experiment::ReactionSpec &r) {
  * A data segment: points read from a file (Fill) and compared with the model.
  */
 
-ESegment::ESegment(const azure2::experiment::DatasetSpec &spec) {
+ESegment::ESegment(const azure2::experiment::DatasetSpec &spec) : parameterNames_(spec.names) {
   SetReaction(spec.reaction);
   min_e_ = spec.minE;
   max_e_ = spec.maxE;
@@ -90,18 +90,16 @@ ESegment::ESegment(const azure2::experiment::DatasetSpec &spec) {
   lastEnergyShift_ = std::numeric_limits<double>::quiet_NaN();  // the points start unshifted: the first fill always applies the shift
   energyShiftError_ = spec.energyShiftError;
   varyEnergyShift_ = spec.varyEnergyShift;
-  energyShiftSqrt_ = energyShiftSqrtNominal_ = spec.energyShiftSqrt;
+  energyShiftSqrt_ = spec.energyShiftSqrt;
   lastEnergyShiftSqrt_ = std::numeric_limits<double>::quiet_NaN();
   energyShiftSqrtError_ = spec.energyShiftSqrtError;
   varyEnergyShiftSqrt_ = spec.varyEnergyShiftSqrt;
   shiftGroup_ = spec.shiftGroup;
   shiftLeaderPos_ = -1;
-  hasShiftGroupFollowers_ = false;
   shiftFnGroup_ = spec.shiftFunctionGroup;
   normGroup_ = spec.normGroup;
   covarianceFile_ = spec.covarianceFile;
   normLeaderPos_ = -1;
-  hasNormGroupFollowers_ = false;
   hasSqrtShiftBlock_ = spec.hasSqrtShift;
   shiftFnDeclared_ = spec.shiftFunction;
   shiftFnNominal_ = spec.shiftFunctionValues;
@@ -126,14 +124,13 @@ ESegment::ESegment(const azure2::experiment::DatasetSpec &spec) {
   // Initialize advanced segment composition
   segmentOperationType_ = SUM;  // Default to SUM operation
   componentScaling_ = 1.0;
-  componentCalculationMutex_ = std::make_shared<std::mutex>();
 }
 
 /*!
  * An extrapolation segment: no data, the points are made on a grid (EData::MakePoints).
  */
 
-ESegment::ESegment(const azure2::experiment::ExtrapolationSpec &spec) {
+ESegment::ESegment(const azure2::experiment::ExtrapolationSpec &spec) : parameterNames_(spec.names) {
   SetReaction(spec.reaction);
   min_e_ = spec.minE;
   max_e_ = spec.maxE;
@@ -150,16 +147,14 @@ ESegment::ESegment(const azure2::experiment::ExtrapolationSpec &spec) {
   energyShiftError_ = 0.0;
   lastEnergyShift_ = std::numeric_limits<double>::quiet_NaN();  // the points start unshifted: the first fill always applies the shift
   varyEnergyShift_ = false;
-  energyShiftSqrt_ = energyShiftSqrtNominal_ = 0.0;
+  energyShiftSqrt_ = 0.0;
   lastEnergyShiftSqrt_ = std::numeric_limits<double>::quiet_NaN();
   energyShiftSqrtError_ = 0.0;
   shiftGroup_ = "";
   shiftLeaderPos_ = -1;
-  hasShiftGroupFollowers_ = false;
   shiftFnGroup_ = "";
   normGroup_ = "";
   normLeaderPos_ = -1;
-  hasNormGroupFollowers_ = false;
   hasSqrtShiftBlock_ = false;
   hasShiftFn_ = false;
   shiftFnConfig_ = nullptr;
@@ -178,7 +173,6 @@ ESegment::ESegment(const azure2::experiment::ExtrapolationSpec &spec) {
 
   segmentOperationType_ = (operationType_ == 1) ? RATIO : SUM;
   componentScaling_ = 1.0;
-  componentCalculationMutex_ = std::make_shared<std::mutex>();
 }
 
 /*!
@@ -464,10 +458,10 @@ int ESegment::Fill(CNuc *theCNuc, EData *theData, const Config &configure) {
         PPair *exitPair = theCNuc->GetPairFromKey(this->GetExitKey());  // nullptr for total capture (-1)
         EPoint *converted = this->GetPoint(this->NumPoints());
         converted->SetParentData(theData);
-        // Ratios are dimensionless: no cross-section conversion.  IsAdvanced() and GetLegacyOperationType() since
-        // components aren't added yet during Fill().
-        const bool isRatio = this->IsAdvanced() && this->GetLegacyOperationType() == 1;
-        if (!this->ConvertPointToCM(converted, entrancePair, exitPair, configure, !isRatio, BeyondRange::Stop)) {
+        // Ratios are dimensionless: no cross-section conversion (decided by the spec: components are not added yet
+        // during Fill()).
+        if (!this->ConvertPointToCM(converted, entrancePair, exitPair, configure, !this->IsDimensionlessRatio(),
+                                    BeyondRange::Stop)) {
           // Beyond the kinematic maximum lab angle: not a NaN point, not a dropped segment (audit 2026-10-25, 31).
           configure.outStream << "ERROR: " << "segment #" << this->GetSegmentKey() << ": lab angle " << converted->GetLabAngle() << " deg at E_lab = " << converted->GetLabEnergy()
                               << " MeV: " << converted->GetLabAngleWhy() << "." << std::endl;
@@ -717,14 +711,6 @@ double ESegment::GetLastEnergyShiftSqrt() const {
 }
 
 /*!
- * Returns the sqrt(E) coefficient as declared in the input file.
- */
-
-double ESegment::GetNominalEnergyShiftSqrt() const {
-  return energyShiftSqrtNominal_;
-}
-
-/*!
  * Returns the uncertainty of the sqrt(E) coefficient.
  */
 
@@ -742,8 +728,6 @@ int ESegment::GetShiftLeaderPos() const { return shiftLeaderPos_; }
 
 bool ESegment::IsShiftGroupFollower() const { return shiftLeaderPos_ >= 0; }
 
-bool ESegment::HasShiftGroupFollowers() const { return hasShiftGroupFollowers_; }
-
 std::string ESegment::GetShiftFnGroup() const { return shiftFnGroup_; }
 
 void ESegment::SetShiftGroupFollower(int pos, double shift) {
@@ -752,15 +736,11 @@ void ESegment::SetShiftGroupFollower(int pos, double shift) {
   energyShift_ = shift;
 }
 
-void ESegment::SetHasShiftGroupFollowers(bool has) { hasShiftGroupFollowers_ = has; }
-
 std::string ESegment::GetNormGroup() const { return normGroup_; }
 
 int ESegment::GetNormLeaderPos() const { return normLeaderPos_; }
 
 bool ESegment::IsNormGroupFollower() const { return normLeaderPos_ >= 0; }
-
-bool ESegment::HasNormGroupFollowers() const { return hasNormGroupFollowers_; }
 
 void ESegment::SetNormGroupFollower(int pos, double norm, double nominal) {
   normLeaderPos_ = pos;
@@ -771,8 +751,6 @@ void ESegment::SetNormGroupFollower(int pos, double norm, double nominal) {
   dataNormNominal_ = nominal;
   dataNormError_ = 0.0;
 }
-
-void ESegment::SetHasNormGroupFollowers(bool has) { hasNormGroupFollowers_ = has; }
 
 bool ESegment::IsVaryEnergyShiftSqrt() const {
   return varyEnergyShiftSqrt_;
@@ -913,9 +891,7 @@ double ShiftedEnergy(double originalEnergy, double shift) {
  */
 
 void ESegment::UpdatePointEnergiesWithShift(CNuc *theCNuc, const Config *configure) {
-  // No lock needed since each thread works on independent EData clones
-  // after fixing EData::Clone to properly remap component segment pointers
-
+  // No lock: each thread re-energises the points of its own EData clone.
   for (int i = 0; i < NumPoints(); i++) UpdatePointEnergyWithShift(i, theCNuc, configure);
 }
 
@@ -967,8 +943,8 @@ EPoint *ESegment::ShiftHost(int i) {
   if (map.point < 1 || map.point > i) return nullptr;
   EPoint *candidate = GetPoint(map.point);
   if (candidate->NumSubPoints() != point->NumSubPoints()) return nullptr;
-  for (int m = 1; m <= candidate->NumLocalMappedPoints(); m++)
-    if (candidate->GetLocalMappedPoint(m) == point) return candidate;
+  for (int m = 0, n = candidate->PlanMapped().size(); m < n; m++)
+    if (candidate->PlanMapped()[m] == point) return candidate;
   return nullptr;
 }
 
@@ -988,8 +964,8 @@ void ESegment::UpdatePointGroupEnergyWithShift(int i, CNuc *theCNuc, const Confi
   // segment's to move: it is re-energised with its own segment, on its own.
   std::less<const EPoint *> before;
   const EPoint *first = &points_.front(), *last = &points_.back();
-  for (int m = 1; m <= point->NumLocalMappedPoints(); m++) {
-    const EPoint *mapped = point->GetLocalMappedPoint(m);
+  for (int m = 0, n = point->PlanMapped().size(); m < n; m++) {
+    const EPoint *mapped = point->PlanMapped()[m];
     if (before(mapped, first) || before(last, mapped)) continue;
     const int j = (int)(mapped - first);
     if (j > i && j < NumPoints() && ShiftHost(j) == point) UpdatePointEnergyWithShift(j, theCNuc, configure);
@@ -1036,8 +1012,8 @@ void ESegment::UpdatePointEnergyWithShift(int i, CNuc *theCNuc, const Config *co
         PPair *exitPair = theCNuc->GetPairFromKey(this->GetExitKey());  // nullptr for total capture (-1)
 
         // The same conversion as ESegment::Fill (ratios are dimensionless: no cross-section conversion)
-        const bool isRatio = this->IsAdvanced() && this->GetLegacyOperationType() == 1;
-        if (!this->ConvertPointToCM(point, entrancePair, exitPair, *configure, !isRatio, BeyondRange::Convert)) {
+        if (!this->ConvertPointToCM(point, entrancePair, exitPair, *configure, !this->IsDimensionlessRatio(),
+                                    BeyondRange::Convert)) {
           // An energy shift moved the point past the kinematic maximum lab angle mid-fit: the c.m. angle keeps
           // its value as loaded and the run says so (it cannot stop here; audit 2026-10-25, item 31).
           configure->outStream << "WARNING: segment #" << this->GetSegmentKey() << ": the energy shift moved the point at lab angle "
@@ -1229,14 +1205,6 @@ void ESegment::SetIsTotalCapture(int num) {
 }
 
 /*!
- * Set the flag determining if the normalization is varied.
- */
-
-void ESegment::SetVaryNorm(bool varyNorm) {
-  varyNorm_ = varyNorm;
-}
-
-/*!
  * Sets the minimum angle for the segment.
  */
 void ESegment::SetMinAngle(double minAngle) {
@@ -1268,14 +1236,6 @@ std::vector<EPoint> &ESegment::GetPoints() {
 }
 
 // Advanced segment composition methods
-
-/*!
- * Adds a component segment defined by entrance and exit keys
- */
-void ESegment::AddComponent(int entranceKey, int exitKey) {
-  // This method is now deprecated - use AddComponentSegment instead
-  // Components should be full ESegment copies, not just entrance/exit keys
-}
 
 /*!
  * Adds a component segment (full ESegment copy)
@@ -1369,50 +1329,10 @@ double ESegment::RatioTermFrameFactor(EPoint *point, const ESegment *term, CNuc 
   return point->CalculateCrossSectionConversionFactor(entrancePair, exitPair);
 }
 
-/*!
- * Transmission of a sample n atoms/barn thick, T = exp(-n s), and dT/ds (azure2::experiment::node::Transmission).
- */
-double ESegment::Transmission(double n, double s, double *dTds, double *dTdn) {
-  return azure2::experiment::node::Transmission(n, s, dTds, dTdn);
-}
-
-/*!
- * SAMMY's self-shielded yield Y0 = (s / st)(1 - exp(-n st)) and its partial derivatives
- * (azure2::experiment::node::YieldY0).
- */
-double ESegment::YieldY0(double n, double s, double st, double *dYds, double *dYdst, double *dYdn) {
-  return azure2::experiment::node::YieldY0(n, s, st, dYds, dYdst, dYdn);
-}
-
 bool ESegment::HasSubPointIntegration(EPoint *point) {
   if (!point || !point->IsTargetEffect() || point->NumSubPoints() <= 0 || !point->GetParentData()) return false;
   TargetEffect *te = point->GetParentData()->GetTargetEffect(point->GetTargetEffectNum());
   return te && te->IsSubPointEffect();
-}
-
-bool ESegment::TransformTerms(int pointIndex, CNuc *cnuc, std::vector<TransformTerm> &terms) {
-  terms.clear();
-  EPoint *basePoint = GetPoint(pointIndex + 1);
-  if (!basePoint) return false;
-  const bool natural = this->IsNatural();
-  auto nucleusOf = [&](int entranceKey) { return cnuc->GetPair(cnuc->GetPairNumFromKey(entranceKey))->GetNucleus(); };
-  const int baseNucleus = nucleusOf(this->GetEntranceKey());
-  terms.push_back({basePoint, this, natural ? cnuc->GetAbundance(naturalSample_, baseNucleus) : 1.0, 1.0, baseNucleus,
-                   false, crossSectionComponent_});
-  for (ESegment *comp : componentSegments_) {
-    if (!comp) continue;
-    EPoint *cp = (pointIndex < comp->NumPoints()) ? comp->GetPoint(pointIndex + 1) : nullptr;
-    if (!cp) return false;
-    const int nucleus = nucleusOf(comp->GetEntranceKey());
-    if (comp->IsYieldTotalTerm()) {
-      terms.push_back({cp, comp, 1.0, 1.0, nucleus, true, 0});
-      continue;
-    }
-    const double scale = comp->GetComponentScaling() * TermFrameFactor(basePoint, cp);
-    const double w = natural ? scale * cnuc->GetAbundance(naturalSample_, nucleus) : scale;
-    terms.push_back({cp, comp, w, scale, nucleus, false, comp->GetCrossSectionComponent()});
-  }
-  return true;
 }
 
 void ESegment::SetThmLineshape(std::shared_ptr<const ThmLineshape> l) {

@@ -412,7 +412,7 @@ complex ECIntegral::CalculateDirect(int theInitialLValue, int theFinalLValue,
     } else
       effectiveCharge = 1.;
   } else {
-    effectiveCharge = redMass * 1.00727638 *
+    effectiveCharge = redMass * protonMassOfM1Capture *
         (pair()->GetZ(1) / pow(pair()->GetM(1), 2.) +
          pair()->GetZ(2) / pow(pair()->GetM(2), 2.));
   }
@@ -452,7 +452,7 @@ complex ECIntegral::CalculateDirect(int theInitialLValue, int theFinalLValue,
     complex spinTerm = -sqrt((2. * theInitialSValue + 1.) * (2. * theFinalSValue + 1.)) *
         AngCoeff::Racah(1, theInitialSValue, theFinalJValue, theInitialLValue, theFinalSValue, theInitialJValue) * tau;
     ecAmplitude = complex(0.0, 1.0) *
-        sqrt(fstruc) * pow(hbarc, 1.5) / (2 * 1.00727638 * uconv) * sqrt(16. / 3.) * sqrt(2 * theFinalJValue + 1.) *
+        sqrt(fstruc) * pow(hbarc, 1.5) / (2 * protonMassOfM1Capture * uconv) * sqrt(16. / 3.) * sqrt(2 * theFinalJValue + 1.) *
         (orbitalTerm + spinTerm);
   }
 

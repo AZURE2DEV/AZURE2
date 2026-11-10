@@ -371,7 +371,7 @@ ShiftColumnCount FillShiftColumns(CNuc *lc, EData *ld, azure2::Results &results,
       fk[f] = value;
       lc->FillCompoundFromParams(fk);
       ld->FillNormsFromParams(fk);
-      ld->FillEnergyShiftsFromParams(fk, results, ld, lc, &config);
+      ld->FillEnergyShiftsFromParams(fk, results, lc, &config);
       allResiduals(out);
     };
     residualsAt(x0 + h, rPlus);
@@ -383,7 +383,7 @@ ShiftColumnCount FillShiftColumns(CNuc *lc, EData *ld, azure2::Results &results,
   // Leave the model at the parameters that were asked for.
   lc->FillCompoundFromParams(full);
   ld->FillNormsFromParams(full);
-  ld->FillEnergyShiftsFromParams(full, results, ld, lc, &config);
+  ld->FillEnergyShiftsFromParams(full, results, lc, &config);
   return count;
 }
 
@@ -514,7 +514,7 @@ double AZURECalc::operator()(const vector_r &p) const {
   const auto te0 = std::chrono::steady_clock::now();
   localCompound->FillCompoundFromParams(p);
   localData->FillNormsFromParams(p);
-  localData->FillEnergyShiftsFromParams(p, results, localData, localCompound, &configure());
+  localData->FillEnergyShiftsFromParams(p, results, localCompound, &configure());
   // A chi-squared alone: no Park second derivatives (CNuc::CalcShiftFunctions).
   if (configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure(), false);
   const auto te1 = std::chrono::steady_clock::now();
@@ -614,7 +614,7 @@ void AZURECalc::WriteIterationOutput(const vector_r &p) const {
   try {
     lc->FillCompoundFromParams(p);
     ld->FillNormsFromParams(p);
-    ld->FillEnergyShiftsFromParams(p, results, ld, lc, &configure());
+    ld->FillEnergyShiftsFromParams(p, results, lc, &configure());
     if (configure().paramMask & Config::USE_BRUNE_FORMALISM) lc->CalcShiftFunctions(configure());
 
     azure2::EvaluateModel(*ld, lc, configure(), results, azure2::LeafValues::Calculate);
@@ -665,7 +665,7 @@ double AZURECalc::Chi2On(CNuc *lc, EData *ld, azure2::Results &results, const ve
                          bool thmOnly) const {
   lc->FillCompoundFromParams(p);
   ld->FillNormsFromParams(p);
-  ld->FillEnergyShiftsFromParams(p, results, ld, lc, &configure());
+  ld->FillEnergyShiftsFromParams(p, results, lc, &configure());
   // A chi-squared alone: no Park second derivatives (CNuc::CalcShiftFunctions).
   if (configure().paramMask & Config::USE_BRUNE_FORMALISM) lc->CalcShiftFunctions(configure(), false);
   const bool pre = PrecalculatePoints(lc, ld, results, thmOnly);
@@ -785,7 +785,7 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
   azure2::Results &results = working->results;
   lc->FillCompoundFromParams(p);
   ld->FillNormsFromParams(p);
-  ld->FillEnergyShiftsFromParams(p, results, ld, lc, &configure());
+  ld->FillEnergyShiftsFromParams(p, results, lc, &configure());
 
   vector_matrix_r shiftDeriv;
   const vector_matrix_r *sdp = nullptr;
@@ -820,7 +820,7 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
     if (seg->GetCovarianceGroup() >= 0) {
       // chi2 = r^T M^-1 r with r_i = (model - d n)/(cmErr n): d chi2/d r_i = 2 z_i, z = M^-1 r;
       // d r_i/d model = 1/(cmErr n), d r_i/d n = -model/(cmErr n^2).
-      const double z = seg->GetCovarianceSeed(pid);
+      const double z = pt->GetCovarianceSeed(results);
       const int o = ld->NormOwner(i);
       if (norm != 0.0 && o >= 1 && o < (int)normData.size() && ld->GetSegment(o)->IsVaryNorm()) {
         const double dNorm = -2.0 * z * model / (cmErr * norm * norm);
@@ -1292,7 +1292,7 @@ bool AZURECalc::ResidualJacobian(const vector_r &full, vector_r &residuals,
   azure2::Results &results = working->results;
   lc->FillCompoundFromParams(full);
   ld->FillNormsFromParams(full);
-  ld->FillEnergyShiftsFromParams(full, results, ld, lc, &configure());
+  ld->FillEnergyShiftsFromParams(full, results, lc, &configure());
 
   vector_matrix_r shiftDeriv;
   const vector_matrix_r *sdp = nullptr;
@@ -1709,7 +1709,7 @@ bool AZURECalc::ResidualsOnly(const vector_r &full, vector_r &residuals) const {
   azure2::Results &results = working->results;
   lc->FillCompoundFromParams(full);
   ld->FillNormsFromParams(full);
-  ld->FillEnergyShiftsFromParams(full, results, ld, lc, &configure());
+  ld->FillEnergyShiftsFromParams(full, results, lc, &configure());
   if (configure().paramMask & Config::USE_BRUNE_FORMALISM) lc->CalcShiftFunctions(configure(), false);
 
   residuals.clear();

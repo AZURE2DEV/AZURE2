@@ -165,17 +165,42 @@ Available Options
        for an unanswered question (the file then does not validate).  A prior-covariance file is
        written beside ``NEW`` as ``<name>.f3<ext>`` with renamed parameters; data files are never
        written; nothing existing is overwritten.  The output is validated before it is written.
-       ``--to 3`` is needed until this engine reads format 3 (it runs format-2 projects and
-       refuses a format-3 one).
+       ``--to 3`` writes format 3, which the engine runs (an old project still runs until
+       step 3d of the upgrade).
    * - ``--validate``
      - ``--validate FILE [--json]``: read the format-3 project ``FILE``, check every record
        against the table (:doc:`format3`) and print every problem, one per line as
        ``file:line: record.field: severity code: message``, or with ``--json`` one JSON array of
        diagnostics (code, line, column, section, record, field, found, allowed, message, and a
-       syntax-only fix).  The checks that need ``<levels>`` or the data files are left to the
-       format-3 reader; their number is printed as a note.  Exit 0 without errors, 2 with errors,
+       syntax-only fix).  The checks that need ``<levels>`` or the data files are made too (data
+       files are read relative to the working directory, as the engine opens them); when the
+       project has an error they are not, and their number is printed as a note.  Exit 0 without
+       errors, 2 with errors,
        3 for a format-1 or format-2 file (with the conversion command), 1 when ``FILE`` cannot be
        read.  ``pyazr.validate(path)`` returns the same diagnostics.
+   * - ``--print-predictions``
+     - ``--print-predictions FILE``: set the project ``FILE`` up as a calculation would (its
+       data files are read relative to the working directory), print what every data set and
+       then every extrapolation predicts, one line each as ``data <key>: <tree>`` or
+       ``extrapolation <key>: <tree>``, and exit.  The tree is the expression the model pass
+       evaluates at each point: leaves ``sigma(1->2)``, ``sigma(1->2; mult=E1)``,
+       ``dsdo_cm(1->2)``, ``ay``, ``phase(1->1; J=..; l=..; s=..)``, ``ak``/``Ak``,
+       ``angdist(..; k=K)``, ``sigma_total(1->1)`` (``thm_`` before a THM observable;
+       ``angle=`` for a term at a fixed lab angle); nodes ``sum(a, b, ...)``,
+       ``c*J0/Jk*a`` (a SUM term with its scaling c and the frame factor J_0/J_k into the
+       frame of the first term), ``abundance(<sample>, <nucleus>)*a``, ``ratio(a, b)*J1/J0``
+       (each term with its own lab-to-c.m. factor J_k), ``transmission(n=<n>, a)`` and
+       ``yield(n=<n>, a, s_t)`` (n the nominal sample thickness, atoms/b).  Exit 0, or 1 with
+       the set-up's messages on standard error when the project cannot be set up.
+       ``pyazr.predictions(path)`` returns the same lines.
+   * - ``--describe``
+     - ``--describe FILE [--json]``: print what the engine makes of the format-3 project
+       ``FILE``: for every data set the quantity, the observable computed, the reaction tree
+       with the ``<levels>`` pair key each term resolved to, the windows, the data file as the
+       engine opens it (its resolved path), the target, beam and detector effects linked to it
+       and its fit parameters with names and kinds; then the extrapolations and the model data.
+       The place to see how a file was understood.  A project with errors prints them (exit 2).
+       ``pyazr.describe(path, as_json=False)`` returns the same.
    * - ``--schema``
      - Print the table of project format 3 as one JSON document and exit: the
        record kinds and their fields with value types and conditions, the
@@ -461,6 +486,15 @@ output files of a correct engine do not change.  In pyazr the E1 and E2 parts
 (``calculated_segments_e1``, ``_e2``) of a line that is not an
 angle-integrated cross section become NaN, since they are never calculated
 there (0 without the variable).
+
+``AZURE_PLAN_CHECK=1``: the points of an evaluation are calculated by the
+tasks of the data set's calculation plan, one task per point that calculates
+itself and the points of equal energy mapped onto it (one writer per value,
+checked when the plan is built).  With the variable set, the parallel point
+pass runs the tasks one after the other and checks that each writes only the
+values of its own points and sub-points and that no value is written by two
+tasks; a breach stops the run with a message naming the task and the point.
+A test of the engine, slow, single-threaded; the output files do not change.
 
 Examples
 --------

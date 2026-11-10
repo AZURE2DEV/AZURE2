@@ -41,43 +41,6 @@ std::string JpiText(int twoJ, int parity) {
   return j + (parity < 0 ? "-" : "+");
 }
 
-/// An excitation energy of <levels> (MeV) against one written in a label: equal to the digits written (4.439 is
-/// 4.43891); not written means the ground state (0).
-bool SameExcitation(double levelsMeV, bool written, const experiment::Number &n) {
-  if (!written) return std::fabs(levelsMeV) < 1e-9;
-  const std::string &t = n.text;
-  const std::size_t dot = t.find('.');
-  int decimals = 0;
-  if (t.find_first_of("eE") != std::string::npos) return std::fabs(levelsMeV - n.value) <= 1e-9 * std::fabs(n.value);
-  if (dot != std::string::npos) decimals = (int)(t.size() - dot - 1);
-  return std::fabs(levelsMeV - n.value) <= 0.5 * std::pow(10.0, -decimals) * (1.0 + 1e-12);
-}
-
-bool SameParticle(int Z, int A, const Particle &p) { return p.Z == Z && p.A == A; }
-
-/// The keys of the pairs with these particles and states: light particle `light`, heavy `heavy` in state `state`.
-std::vector<int> PairsOf(const Particle &light, const Particle &heavy, const ResidualState &state,
-                         const std::vector<PairInfo> &pairs) {
-  std::vector<int> keys;
-  const bool photon = light.light == "g";
-  for (const PairInfo &p : pairs) {
-    if (photon != (p.kind == 10) || p.kind == 20) continue;
-    if (!photon && (!SameParticle(p.lightZ, p.lightA, light) ||
-                    !SameExcitation(p.lightExcitation, light.excited, light.excitation)))
-      continue;
-    if (!SameParticle(p.heavyZ, p.heavyA, heavy)) continue;
-    if (!SameExcitation(p.heavyExcitation, state.kind == ResidualState::Excited, state.energy)) continue;
-    keys.push_back(p.key);
-  }
-  return keys;
-}
-
-const PairInfo *PairByKey(int key, const std::vector<PairInfo> &pairs) {
-  for (const PairInfo &p : pairs)
-    if (p.key == key) return &p;
-  return nullptr;
-}
-
 class Builder {
  public:
   Builder(const std::vector<LevelInfo> &levels, const std::vector<PairInfo> &pairs, ModelDataBuild &out)
@@ -124,7 +87,8 @@ class Builder {
   }
 
  private:
-  void Report(Severity severity, const char *code, const std::string &field, const std::string &message) {
+  void Report(Severity severity, const char *code, const std::string &field, const std::string &message,
+              const std::vector<std::string> &allowed = {}) {
     Diagnostic x;
     x.severity = severity;
     x.code = code;
@@ -138,6 +102,7 @@ class Builder {
         x.line = f.line;
         x.column = f.col;
       }
+    x.allowed = allowed;
     x.message = "datum '" + record_->name + "'" + (field.empty() ? "" : ", field '" + field + "'") + ": " + message;
     out_.diagnostics.push_back(x);
     if (severity == Severity::Error) ok_ = false;
@@ -186,13 +151,12 @@ class Builder {
   /// One pair key from a list of candidates, or 0 with a refusal.
   int OnePair(const std::vector<int> &keys, const std::string &field, const std::string &what) {
     if (keys.empty()) {
-      Report(Severity::Error, codes::kUnknownPair, field, "no pair of <levels> is " + what);
+      Report(Severity::Error, codes::kUnknownPair, field, UnknownPairMessage(what), PairListing(pairs_));
       return 0;
     }
     if (keys.size() > 1) {
       Report(Severity::Error, codes::kAmbiguousPair, field,
-             "pairs " + std::to_string(keys[0]) + " and " + std::to_string(keys[1]) + " of <levels> are both " + what +
-                 "; the label does not tell them apart");
+             AmbiguousPairMessage(what, keys, "the label does not tell them apart (a datum cannot carry a pair key)"));
       return 0;
     }
     return keys[0];
@@ -207,7 +171,7 @@ class Builder {
   void NeedChannel(const LevelInfo &level, int pairKey, const std::string &field, int l = -1, int twoS = -1) {
     if (!ok_ || IsChannel(level, pairKey, l, twoS)) return;
     const PairInfo *p = PairByKey(pairKey, pairs_);
-    std::string what = "pair " + std::to_string(pairKey) + (p ? " (" + p->label + ")" : "");
+    std::string what = "pair " + std::to_string(pairKey) + (p ? " (" + PairLabel(*p) + ")" : "");
     if (l >= 0) what += " with l = " + std::to_string(l) + " and s = " + (twoS % 2 ? std::to_string(twoS) + "/2" : std::to_string(twoS / 2));
     Report(Severity::Error, codes::kNotAChannel, field,
            what + " is no channel of level " + std::to_string(record_->Get("level")->integer) + " (" +
@@ -217,8 +181,8 @@ class Builder {
   int ReactionPair(const SingleReaction &r, bool entrance) {
     const std::string what = entrance ? "the entrance " + r.projectile.text + " + " + r.target.text
                                       : "the exit " + r.ejectile.text + " + " + r.residual.text;
-    if (entrance) return OnePair(PairsOf(r.projectile, r.target, r.targetState, pairs_), "reaction", what);
-    return OnePair(PairsOf(r.ejectile, r.residual, r.state, pairs_), "reaction", what);
+    if (entrance) return OnePair(PairsNamed(r.projectile, r.target, r.targetState, pairs_), "reaction", what);
+    return OnePair(PairsNamed(r.ejectile, r.residual, r.state, pairs_), "reaction", what);
   }
 
   void LevelPairs(ModelDatum &d, const LevelInfo &level) {
@@ -246,7 +210,7 @@ class Builder {
         const double Er = level.energy - in->threshold;  // MeV, c.m. of the entrance pair
         if (Er <= 0.0) {
           Report(Severity::Error, codes::kOutOfRange, "level",
-                 "level " + std::to_string(d.levelId) + " lies " + Fmt(-Er) + " MeV below the " + in->label +
+                 "level " + std::to_string(d.levelId) + " lies " + Fmt(-Er) + " MeV below the " + PairLabel(*in) +
                      " threshold (E_r = " + Fmt(Er) + " MeV): a subthreshold level has no strength; use an anc");
           return;
         }
@@ -290,7 +254,7 @@ class Builder {
         if (level.energy >= p->threshold)
           Report(Severity::Error, codes::kFieldNotApplicable, "pair",
                  "level " + std::to_string(d.levelId) + " lies " + Fmt(level.energy - p->threshold) + " MeV above the " +
-                     p->label + " threshold: an ANC belongs to a closed channel (give a partial_width)");
+                     PairLabel(*p) + " threshold: an ANC belongs to a closed channel (give a partial_width)");
         return;
       }
       case ModelQuantity::ScatteringLength:
@@ -304,8 +268,8 @@ class Builder {
       ok_ = false;
       return;
     }
-    d.pair = OnePair(PairsOf(pair->pair.light, pair->pair.heavy, pair->pair.state, pairs_), "pair",
-                     pair->pair.light.text + " + " + pair->pair.heavy.text);
+    d.pair = OnePair(PairsNamed(pair->pair.light, pair->pair.heavy, pair->pair.state, pairs_), "pair",
+                     "the pair " + pair->pair.light.text + " + " + pair->pair.heavy.text);
     if (ok_) NeedChannel(level, d.pair, "pair");
   }
 
@@ -331,8 +295,8 @@ class Builder {
       ok_ = false;
       return;
     }
-    d.pair = OnePair(PairsOf(pair->pair.light, pair->pair.heavy, pair->pair.state, pairs_), "pair",
-                     pair->pair.light.text + " + " + pair->pair.heavy.text);
+    d.pair = OnePair(PairsNamed(pair->pair.light, pair->pair.heavy, pair->pair.state, pairs_), "pair",
+                     "the pair " + pair->pair.light.text + " + " + pair->pair.heavy.text);
     if (!ok_) return;
     const PairInfo *p = PairByKey(d.pair, pairs_);
     if (p->kind != 0) {
@@ -352,7 +316,7 @@ class Builder {
     const bool allowed = d.twoS >= lo && d.twoS <= hi && (d.twoS - lo) % 2 == 0 && (!p->identical || d.twoS % 4 == 0);
     if (!allowed)
       Report(Severity::Error, codes::kNotAChannel, "s",
-             "pair " + std::to_string(p->key) + " (" + p->label + ") has no s-wave channel with channel spin " +
+             "pair " + std::to_string(p->key) + " (" + PairLabel(*p) + ") has no s-wave channel with channel spin " +
                  s->Get("spin")->spin.text);
   }
 

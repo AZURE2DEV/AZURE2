@@ -17,7 +17,8 @@ std::string Builder::SampleThicknessTarget(const std::string &record, int entran
       if (n != leadN)
         Note(Construct::kThicknessGroup, record, "its own sample thickness " + NumberText(n, line) +
                                                      " was not used by the old engine (the group's is its first line's): dropped");
-      if (fit) Param("segment_" + std::to_string(key) + "_thickness", it->second + ".areal_density");
+      // a later member's own parameter, fixed by the engine at the group's value
+      if (fit) Param("segment_" + std::to_string(key) + "_thickness", it->second + ".areal_density[" + record + "]");
       return it->second;
     }
   }
@@ -276,7 +277,10 @@ void Builder::BuildData() {
         Note(Construct::kNormGroup, name, "its own norm " + NumberText(s.dataNorm(), d.text) + " (vary " + std::to_string(s.varyNorm()) +
                                              ") was not used by the old engine (the group's is its first line's): dropped");
       Add(r, "norm", normName[s.normGroup()]);
-      if (active && s.varyNorm() == 1) Param("segment_" + std::to_string(d.key) + "_norm", normName[s.normGroup()] + ".value");
+      // the group's parameter is its first active member's; a later member keeps its own, fixed
+      if (active && s.varyNorm() == 1)
+        Param("segment_" + std::to_string(d.key) + "_norm",
+              normName[s.normGroup()] + ".value" + (normLeader[s.normGroup()] == d.key ? "" : "[" + name + "]"));
     } else if (profiled) {
       Add(r, "norm", "profiled");
     } else {
@@ -297,15 +301,15 @@ void Builder::BuildData() {
                                                " was not used by the old engine (the group's is its first line's): dropped");
       if (lead.key != d.key && !s.shiftFn().empty())
         Note(Construct::kShiftGroup, name, "a shiftfn on a follower of a shift group: the old engine refused it");
-      if (active) Param(sk + "_energy_shift", scaleName[s.shiftGroup()] + ".offset");
+      if (active) Param(sk + "_energy_shift", scaleName[s.shiftGroup()] + ".offset" + (lead.key == d.key ? "" : "[" + name + "]"));
     } else {
       if (s.energyShift() != 0 || s.varyEnergyShift() == 1) {
         Count(Construct::kShift);
         std::vector<io::Token> t = {Tok("offset")};
         for (const io::Token &x : offsetNuisance(d)) t.push_back(x);
         Add(r, "shift", t);
-        if (active) Param(sk + "_energy_shift", name + ".shift.offset");
       }
+      if (active) Param(sk + "_energy_shift", name + ".shift.offset");  // every data set has it (fixed 0 without a shift)
     }
     if (s.hasSqrtShift() && (s.energyShiftSqrt() != 0 || s.varyEnergyShiftSqrt() == 1)) {
       Count(Construct::kSqrtShift);
@@ -314,8 +318,8 @@ void Builder::BuildData() {
                                          s.energyShiftSqrtError() != 0, "0", Abs(NumberText(s.energyShiftSqrtError(), d.text))))
         t.push_back(x);
       Add(r, "shift", t);
-      if (active) Param(sk + "_energy_shift_sqrt", name + ".shift.sqrt");
     }
+    if (active) Param(sk + "_energy_shift_sqrt", name + ".shift.sqrt");  // every data set has it (fixed 0 without one)
     if (!s.shiftFnGroup().empty() && fnName.count(s.shiftFnGroup())) {
       Add(r, "shift", fnName[s.shiftFnGroup()]);
     } else if (!s.shiftFn().empty() && s.shiftGroup().empty()) {

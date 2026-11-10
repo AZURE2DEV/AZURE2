@@ -17,6 +17,7 @@
 #include "ExperimentAdapter.h"
 #include "JGroup.h"
 #include "PPair.h"
+#include "azure2/experiment/ProjectReader.h"
 #include "azure2/experiment/Schema.h"
 #include "azure2/io/RecordReader.h"
 #include "azure2/physics/Elements.h"
@@ -55,82 +56,21 @@ constexpr double kEnergyStep = 1e-5;
 constexpr double kAmplitudeStep = 1e-5;
 constexpr double kAmplitudeFloor = 1e-3;
 
-std::string LightLabel(const PPair &p) {
-  if (p.GetPType() == 10) return "g";
-  const int Z = p.GetZ(1), A = (int)std::lround(p.GetM(1));
-  if (Z == 0 && A == 1) return "n";
-  if (Z == 1 && A == 1) return "p";
-  if (Z == 1 && A == 2) return "d";
-  if (Z == 1 && A == 3) return "t";
-  if (Z == 2 && A == 3) return "h";
-  if (Z == 2 && A == 4) return "a";
-  return std::to_string(A) + phys::ElementSymbol(Z);
-}
-
-/// <levels> as BuildModelData reads it: the pairs.
-std::vector<ex::PairInfo> PairInfos(CNuc &compound) {
-  std::vector<ex::PairInfo> out;
-  for (int aa = 1; aa <= compound.NumPairs(); aa++) {
-    const PPair &p = *compound.GetPair(aa);
-    ex::PairInfo info;
-    info.key = p.GetPairKey();
-    info.kind = p.GetPType();
-    if (info.kind != 10) {
-      info.lightZ = p.GetZ(1);
-      info.lightA = (int)std::lround(p.GetM(1));
-    }
-    info.heavyZ = p.GetZ(2);
-    info.heavyA = (int)std::lround(p.GetM(2));
-    info.lightExcitation = p.GetLightExE();
-    info.heavyExcitation = p.GetHeavyExE();
-    info.threshold = p.GetSepE() + p.GetExE();
-    info.twoJLight = (int)std::lround(2.0 * p.GetJ(1));
-    info.twoJHeavy = (int)std::lround(2.0 * p.GetJ(2));
-    info.identical = p.IsIdentical();
-    std::ostringstream heavy;
-    heavy << info.heavyA << phys::ElementSymbol(info.heavyZ);
-    if (info.heavyExcitation != 0.0) heavy << "[" << info.heavyExcitation << "]";
-    info.label = LightLabel(p) + "+" + heavy.str();
-    out.push_back(info);
+/// The levels a model datum names are those of the tables made from the <levels> rows (LevelTablesOfRows): their
+/// indices must be the compound's.  "" when they are, else what differs (a defect of one of the two readers).
+std::string SameLevel(CNuc &compound, const ex::ModelDatum &d, const ex::LevelTables &levels) {
+  for (const ex::LevelInfo &l : levels.levels) {
+    if (l.group != d.group || l.level != d.level) continue;
+    if (d.group < 1 || d.group > compound.NumJGroups()) break;
+    JGroup *group = compound.GetJGroup(d.group);
+    if (d.level < 1 || d.level > group->NumLevels()) break;
+    if ((int)std::lround(2.0 * group->GetJ()) == l.twoJ && group->GetPi() == l.parity &&
+        group->GetLevel(d.level)->GetE() == l.energy && group->GetLevel(d.level)->IDs() == l.ids)
+      return "";
+    break;
   }
-  return out;
-}
-
-/// <levels> as BuildModelData reads it: the levels with their IDs, energies and the widths written.
-std::vector<ex::LevelInfo> LevelInfos(CNuc &compound) {
-  std::vector<ex::LevelInfo> out;
-  for (int j = 1; j <= compound.NumJGroups(); j++) {
-    JGroup *group = compound.GetJGroup(j);
-    std::vector<ex::LevelChannelInfo> channels;
-    for (int ch = 1; ch <= group->NumChannels(); ch++) {
-      const AChannel *c = group->GetChannel(ch);
-      channels.push_back({compound.GetPair(c->GetPairNum())->GetPairKey(), c->GetL(), (int)std::lround(2.0 * c->GetS())});
-    }
-    for (int la = 1; la <= group->NumLevels(); la++) {
-      ALevel *level = group->GetLevel(la);
-      if (level->IDs().empty()) continue;  // not a level of <levels> (an external-capture final state made by the engine)
-      ex::LevelInfo info;
-      info.ids = level->IDs();
-      info.twoJ = (int)std::lround(2.0 * group->GetJ());
-      info.parity = group->GetPi();
-      info.energy = level->GetE();
-      info.group = j;
-      info.level = la;
-      info.channels = channels;
-      // The total width as written (eV, read before the transformation): open particle channels and photon
-      // channels given as widths; a static moment (a photon channel to the level itself) is no width.
-      info.width = 0.0;
-      for (int ch = 1; ch <= group->NumChannels(); ch++) {
-        const PPair *p = compound.GetPair(group->GetChannel(ch)->GetPairNum());
-        if (level->GammaIsRWA(ch)) continue;
-        const bool open = p->GetPType() == 0 && level->GetE() > p->GetSepE() + p->GetExE();
-        const bool photon = p->GetPType() == 10 && std::fabs(level->GetE() - p->GetHeavyExE()) >= 1e-3;
-        if (open || photon) info.width += std::fabs(level->GetGamma(ch)) * 1e-6;
-      }
-      out.push_back(info);
-    }
-  }
-  return out;
+  return "level " + std::to_string(d.levelId) + " of the <levels> tables is not the compound nucleus's J^pi group " +
+         std::to_string(d.group) + ", level " + std::to_string(d.level) + " (internal error: report it)";
 }
 
 /// The value of one level quantity from the observed slots (CNuc::ObservedOfFitValues), in the engine unit.
@@ -277,7 +217,8 @@ void Print(const Config &configure, const ex::Diagnostic &d) {
 
 }  // namespace
 
-std::shared_ptr<const ModelDataSet> Read(CNuc &compound, const Config &configure) {
+std::shared_ptr<const ModelDataSet> Read(CNuc &compound, const Config &configure,
+                                         const std::vector<azure2::io::LevelRow> &rows) {
   auto set = std::make_shared<ModelDataSet>();
   if (ScatteringLength::ReadConstraints(&compound, configure, set->scatteringLengthLines) == -1) return nullptr;
   for (const ScatteringLength::Constraint &c : set->scatteringLengthLines)
@@ -288,6 +229,7 @@ std::shared_ptr<const ModelDataSet> Read(CNuc &compound, const Config &configure
       set->rows.push_back(row);
     }
 
+  const ex::LevelTables levels = ex::LevelTablesOfRows(rows);
   // <modelData>: format-3 datum records, read and validated by the format-3 table, then found in <levels>.  Line
   // numbers count from the section's first line after its tag.
   std::unique_ptr<std::istream> section = configure.SectionStream(kSection);
@@ -306,13 +248,21 @@ std::shared_ptr<const ModelDataSet> Read(CNuc &compound, const Config &configure
   for (const ex::Diagnostic &d : diagnostics) ok = ok && d.severity == ex::Severity::Warning;
   ex::ModelDataBuild built;
   if (ok) {
-    built = ex::BuildModelData(validated, LevelInfos(compound), PairInfos(compound));
+    built = ex::BuildModelData(validated, levels.levels, levels.pairs);
     diagnostics.insert(diagnostics.end(), built.diagnostics.begin(), built.diagnostics.end());
     ok = built.Ok();
   }
   for (const ex::Diagnostic &d : diagnostics) Print(configure, d);
   if (!ok) return nullptr;
   for (const ex::ModelDatum &d : built.data) {
+    if (d.quantity != ex::ModelQuantity::ScatteringLength) {
+      const std::string why = SameLevel(compound, d, levels);
+      if (!why.empty()) {
+        configure.outStream << "ERROR: <modelData> line " << d.line << ": datum '" << d.name << "': " << why << "."
+                            << std::endl;
+        return nullptr;
+      }
+    }
     ModelDataRow row;
     row.datum = d;
     row.inSection = true;

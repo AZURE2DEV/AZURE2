@@ -99,6 +99,11 @@ class LevelRow {
   double e1_;
 };
 
+/// True when the two particles of a row's pair are identical: every per-particle column matches (Z, mass, spin,
+/// parity, g-factor, excitation) and the pair is a particle pair.  The engine's PPair::IsIdentical and the pair table
+/// of the format-3 reader (azure2/experiment/Pairs.h) both use it.
+bool IdenticalParticles(const LevelRow &row);
+
 /// The rows of a <levels> section, in file order.
 struct LevelSection {
   std::vector<LevelRow> rows;  ///< every row up to the first malformed line

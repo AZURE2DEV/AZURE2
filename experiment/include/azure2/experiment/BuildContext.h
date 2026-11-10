@@ -25,11 +25,11 @@ struct Member {
 
 class Context {
  public:
-  Context(const ValidationResult &v, const std::vector<PairRow> &pairs, const BuildOptions &options, BuiltProject &out)
+  Context(const ValidationResult &v, const std::vector<PairInfo> &pairs, const BuildOptions &options, BuiltProject &out)
       : v_(v), pairs_(pairs), opt_(options), out_(out) {}
 
   const ValidationResult &v_;
-  const std::vector<PairRow> &pairs_;
+  const std::vector<PairInfo> &pairs_;
   const BuildOptions &opt_;
   BuiltProject &out_;
   std::vector<Member> data_, extrapolations_;
@@ -37,7 +37,10 @@ class Context {
   /// An error of `record`, at `field` (its first line when given, else the record's header).
   void Error(const char *code, const ValidatedRecord &record, const std::string &field, const std::string &message,
              const std::vector<std::string> &allowed = {});
-  const PairRow *Pair(int key) const;
+  /// A warning of `record` at `field` (as Error, severity Warning).
+  void Warn(const char *code, const ValidatedRecord &record, const std::string &field, const std::string &message,
+            const std::string &found = "");
+  const PairInfo *Pair(int key) const;
   /// The record named `name` of kind `kind`, or nullptr.
   const ValidatedRecord *Record(const std::string &name, const std::string &kind) const;
   /// The position of a record in the project (records in input order), for ordering.

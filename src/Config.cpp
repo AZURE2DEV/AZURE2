@@ -1,9 +1,10 @@
 #include "Config.h"
+
+#include "azure2/experiment/ProjectReader.h"
 #include "InputFiles.h"
 #include "azure2/io/Convert.h"
 #include "azure2/io/Document.h"
 #include <cstdlib>
-#include "NuclearPotentialManager.h"
 #ifndef NO_STAT
 #include <sys/stat.h>
 #endif
@@ -36,6 +37,7 @@ void Config::Reset() {
   checkdir = "";
   nloptAlgorithm = 0;       // Default to SBPLX
   useHybridMethod = false;  // Default to disabled
+  potentials = HybridPotentialSettings();
   refreezeCovariance = 0;
   maxCalls = 0;
   useAdaptiveGrid = true;   // Default to adaptive grid
@@ -104,6 +106,31 @@ std::unique_ptr<std::istream> Config::SectionStream(const std::string &name) con
   return std::unique_ptr<std::istream>(new std::istringstream(text));
 }
 
+/*!
+ * A format-3 project, read once through the one reading path (docs/upgrade/project_format3.md section 7.3): records ->
+ * Validate -> <levels> tables -> Schema::Build.  Every diagnostic is printed (file:line: record.field: message); an
+ * error refuses the project.  Data files are read relative to the working directory, as the set-up opens them; one
+ * that cannot be read is reported by the run that needs it (ProjectSetup.cpp), not here.
+ */
+int Config::ReadFormat3Project(const azure2::io::Document &doc) {
+  azure2::experiment::Format3ReadOptions read;
+  read.fileName = configfile;
+  // Which run follows is chosen later (menu, pyazr call): a data file that cannot be read is reported by the set-up
+  // that would open it (src/ProjectSetup.cpp: an error for a data run, a warning for an extrapolation)
+  read.dataFiles = azure2::experiment::DataFiles::NotUsed;
+  auto project = std::make_shared<azure2::experiment::Format3Project>(azure2::experiment::ReadFormat3Project(doc, read));
+  for (const azure2::experiment::Diagnostic &d : project->diagnostics)
+    if (d.code != azure2::experiment::codes::kDataFileNotRead) outStream << (d.severity == azure2::experiment::Severity::Error ? "ERROR: " : "WARNING: ") << d.ToText() << std::endl;
+  if (!project->Ok() || !project->levelsRead) {
+    if (project->Ok()) outStream << "ERROR: " << configfile << ": the <levels> section is missing or malformed." << std::endl;
+    outStream << "ERROR: " << configfile << " (format 3) is refused; AZURE2 --validate " << configfile
+              << " lists the same diagnostics." << std::endl;
+    return -1;
+  }
+  format3 = project;
+  return 0;
+}
+
 int Config::ReadConfigFile() {
   std::string dummy;
   std::string temp;
@@ -118,12 +145,8 @@ int Config::ReadConfigFile() {
     azure2::io::Document doc = azure2::io::Document::Parse(bytes.str());  // kept alive for the loops
     for (const std::string &problem : doc.Problems())
       outStream << "WARNING: " << configfile << ": " << problem << std::endl;
-    if (azure2::io::FormatOf(doc) == 3) {
-      // The format-3 reader is step 3b of docs/upgrade/project_format3.md; until it lands this engine reads format 2.
-      outStream << "ERROR: " << configfile << " is a format-3 project; this build of the engine runs format-2 projects "
-                << "only (AZURE2 --validate checks a format-3 file)." << std::endl;
-      return -1;
-    }
+    format3.reset();
+    if (azure2::io::FormatOf(doc) == 3 && ReadFormat3Project(doc) != 0) return -1;
     if (azure2::io::FormatOf(doc) == 1) {
       const std::vector<std::string> changes = azure2::io::ConvertToFormat2(doc);
       std::string list;
@@ -300,25 +323,23 @@ int Config::ReadConfigFile() {
  */
 
 int Config::ReadPotentialBlock() {
+  potentials = HybridPotentialSettings();
+  useHybridMethod = false;
   std::unique_ptr<std::istream> section = SectionStream("potential");
-  if (!section) {  // optional block, absent: no hybrid potential (also after a project that had one)
-    NuclearPotentialManager::instance().resetToDefault();
-    return 0;
-  }
+  if (!section) return 0;  // optional block, absent: no hybrid potential (also after a project that had one)
   std::istream &in = *section;
   std::string line = "";
   getline(in, line);  // <potential>
 
-  NuclearPotentialManager &manager = NuclearPotentialManager::instance();
-  manager.resetToDefault();
-
-  NuclearPotentialSetting current = manager.getDefaultSetting();
+  HybridPotentialSetting current = potentials.defaults;
   int currentPair = 0;  // 0 = the default section
   bool currentHasType = false, defaultHasType = false, closed = false;
 
   // Install whatever the section just read describes.  A section that asks for
   // the hybrid model without naming a potentialType, or names one that does not
-  // exist, is refused rather than silently given the default shape.
+  // exist, is refused rather than silently given the default shape.  A section
+  // whose parameters do not make a potential (HybridPotentialSetting::Potential
+  // throws) is not installed: a pair falls back to the default, the default is off.
   auto flush = [&]() {
     if (current.enabled && !currentHasType) {
       outStream << "WARNING: <potential> requests the hybrid method";
@@ -327,20 +348,20 @@ int Config::ReadPotentialBlock() {
       current.enabled = false;
     }
     try {
+      current.Potential();
       if (currentPair)
-        manager.setSetting(currentPair, current);
+        potentials.pairs[currentPair] = current;
       else
-        manager.setDefaultSetting(current);
+        potentials.defaults = current;
     } catch (const std::exception &e) {
-      outStream << "WARNING: invalid potential parameters (" << e.what()
-                << "); the hybrid method is disabled";
+      outStream << "WARNING: invalid potential parameters (" << (currentPair ? "Failed to set potential for pair: " : "Failed to set default potential: ")
+                << e.what() << "); the hybrid method is disabled";
       if (currentPair) outStream << " for pair " << currentPair;
       outStream << "." << std::endl;
-      current.enabled = false;
       if (currentPair)
-        manager.clearPairSetting(currentPair);
+        potentials.pairs.erase(currentPair);
       else
-        manager.setDefaultEnabled(false);
+        potentials.defaults.enabled = false;
     }
   };
 
@@ -372,7 +393,7 @@ int Config::ReadPotentialBlock() {
       }
       flush();
       currentPair = nextPair;
-      current = manager.getDefaultSetting();
+      current = potentials.defaults;
       currentHasType = defaultHasType;  // inherited with the shape
       continue;
     }
@@ -389,10 +410,10 @@ int Config::ReadPotentialBlock() {
       int typeCode = 0;
       value >> typeCode;
       if (typeCode == 0) {
-        current.type = "WoodsSaxon";
+        current.shape = azure2::physics::FormShape::WoodsSaxon;
         currentHasType = true;
       } else if (typeCode == 1) {
-        current.type = "Gaussian";
+        current.shape = azure2::physics::FormShape::Gaussian;
         currentHasType = true;
       } else {
         outStream << "WARNING: unknown potentialType " << typeCode
@@ -416,9 +437,8 @@ int Config::ReadPotentialBlock() {
   if (!closed) return -1;  // unterminated block
   flush();
 
-  // The global switch stays the master: it gates the paramMask bit and the
-  // GUI tab, while the manager decides which pairs the model applies to.
-  useHybridMethod = manager.isAnyEnabled();
+  // On when any pair has the model; CNuc::Fill gives each pair its potential.
+  useHybridMethod = potentials.AnyEnabled();
   return 0;
 }
 

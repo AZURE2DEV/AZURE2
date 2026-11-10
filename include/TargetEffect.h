@@ -107,6 +107,8 @@ class TargetEffect {
   bool IsDensityVaried() const { return densityVary_; }
   /// The line's density, the centre of the prior (atoms/cm^2).
   double GetDensityNominal() const { return densityNominal_; }
+  /// The target's name in format 3, which names the effect's parameters ("" for an old <targetInt> line).
+  const std::string &GetTargetName() const { return targetName_; }
   /// Prior width in atoms/cm^2 (a percentage already converted), 0 = no prior.
   double GetDensitySigma() const { return densitySigma_; }
   /// The `densitygroup` label, empty without one.
@@ -343,6 +345,7 @@ class TargetEffect {
   std::shared_ptr<const UdrKernel> BuildUdrKernel(double eLab, double mass) const;
 
  private:
+  std::string targetName_;
   struct UdrTable {
     std::string file;
     std::vector<double> energy;                ///< lab MeV, ascending

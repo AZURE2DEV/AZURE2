@@ -23,14 +23,18 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
 endif()
 
 add_library(azure2_experiment STATIC
+  src/AdaptiveGrid.cpp
   src/ColumnsGrid.cpp
   src/Diagnostics.cpp
   src/Build.cpp
   src/BuildEffects.cpp
   src/Expression.cpp
   src/Frames.cpp
+  src/Grids.cpp
   src/Json.cpp
   src/ModelDatum.cpp
+  src/Prediction.cpp
+  src/LevelTables.cpp
   src/Quantities.cpp
   src/ReactionParser.cpp
   src/Schema.cpp
@@ -42,7 +46,7 @@ add_library(azure2_experiment STATIC
 add_library(azure2::experiment ALIAS azure2_experiment)
 # The reading path of a format-3 project (ProjectReader.h): the table above with io/'s document, record and <levels>
 # readers.
-add_library(azure2_experiment_reader STATIC src/ProjectReader.cpp)
+add_library(azure2_experiment_reader STATIC src/ProjectReader.cpp src/LevelTablesOfRows.cpp src/Describe.cpp)
 target_link_libraries(azure2_experiment_reader PUBLIC azure2_experiment azure2_io)
 set_target_properties(azure2_experiment_reader PROPERTIES POSITION_INDEPENDENT_CODE ON CXX_EXTENSIONS OFF)
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
@@ -65,7 +69,7 @@ endif()
 # tests/schema/schema_v3.json (check 21).
 # (Sources named in full: repo_consistency checks that every tests/*_test.cpp is named here.)
 foreach(_src expression_test.cpp frames_test.cpp schema_test.cpp diagnostics_test.cpp quantities_test.cpp
-             parsers_test.cpp build_test.cpp)
+             parsers_test.cpp build_test.cpp prediction_test.cpp grids_test.cpp)
   string(REPLACE "_test.cpp" "" _t ${_src})
   add_executable(experiment_${_t}_test tests/${_src})
   target_link_libraries(experiment_${_t}_test PRIVATE azure2_experiment_reader)

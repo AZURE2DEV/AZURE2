@@ -38,6 +38,23 @@ std::string Trim(const std::string &s) {
 int OldPair::A1() const { return (int)std::lround(m1); }
 int OldPair::A2() const { return (int)std::lround(m2); }
 
+experiment::PairInfo OldPair::Info() const {
+  experiment::PairInfo p;
+  p.key = key;
+  p.kind = pType;
+  p.lightZ = z1;
+  p.lightA = A1();
+  p.heavyZ = z2;
+  p.heavyA = A2();
+  p.lightExcitation = e1;
+  p.heavyExcitation = e2;
+  p.lightMass = m1;
+  p.heavyMass = m2;
+  p.lightExcitationText = e1Text;
+  p.heavyExcitationText = e2Text;
+  return p;
+}
+
 std::string ShortestText(double value) {
   // The shortest decimal that reads back to the same double, in fixed or scientific form, whichever is shorter
   // (std::to_chars without a format: 90, 0.25, 5e+17).

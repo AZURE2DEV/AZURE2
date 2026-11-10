@@ -14,10 +14,9 @@
 #include "azure2/experiment/Schema.h"
 #include "AZUREMain.h"
 #include "ProjectCommands.h"
+#include "ProjectSetup.h"
 #include "Config.h"
 #include "azure2/io/LevelRows.h"
-#include "azure2/convert/SegLine.h"
-#include "azure2/convert/ExtrapLine.h"
 #include "GSLException.h"
 #include "ECAmplitudeCache.h"
 #include "CoulombTable.h"
@@ -130,7 +129,9 @@ void printHelp() {
             << std::setw(25) << std::left << "\t" << std::setw(0) << "--exact-grids the grids the old engine accumulated (F10), --strict ask where the old meaning was implicit," << std::endl
             << std::setw(25) << std::left << "\t" << std::setw(0) << "--allow-questions '?' for unanswered questions. --to 3 is needed until this engine reads format 3." << std::endl
             << std::setw(25) << std::left << "\t--validate:" << std::setw(0) << "--validate FILE [--json]: check a format-3 project against the table and print every problem" << std::endl
+            << std::setw(25) << std::left << "\t--describe:" << std::setw(0) << "--describe FILE [--json]: print what the engine makes of a format-3 project (data sets, reactions and pair keys, data files, effects, parameters)" << std::endl
             << std::setw(25) << std::left << "\t" << std::setw(0) << "(file:line: record.field: message, or a JSON array); exit 0 without errors, 2 with errors, 3 for format 1/2." << std::endl
+            << std::setw(25) << std::left << "\t--print-predictions:" << std::setw(0) << "--print-predictions FILE: print the expression tree of every data set and extrapolation of FILE, one line each, and exit." << std::endl
             << std::setw(25) << std::left << "\t--schema:" << std::setw(0) << "Print the table of project format 3 (record kinds, fields, quantities, units, diagnostic codes) as JSON and exit." << std::endl
             << std::setw(25) << std::left << "\t--build-coulomb-table[=FILE]:" << std::setw(0) << "Build the Coulomb table (about 5 min on 4 threads, 88 MB; FILE as for --coulomb-table) and exit." << std::endl
             << std::setw(25) << std::left << "\t--grid-replacement:" << std::setw(0) << "Re-place the adaptive sub-point grids as levels and shifts move (the default)." << std::endl
@@ -589,61 +590,13 @@ static std::istringstream SectionText(const Config &configure, const std::string
  */
 
 bool readSegmentFile(const Config &configure, std::vector<SegPairs> &segPairs) {
-  std::istringstream in;
-  std::string startTag, stopTag;
-  if (configure.paramMask & Config::CALCULATE_WITH_DATA) {
-    startTag = "<segmentsData>";
-    stopTag = "</segmentsData>";
-  } else {
-    startTag = "<segmentsTest>";
-    stopTag = "</segmentsTest>";
-  }
-  in = SectionText(configure, startTag.substr(1, startTag.size() - 2));
-  if (in) {
-    std::string line = "";
-    while (line != startTag && !in.eof()) getline(in, line);
-    if (line == startTag) {
-      line = "";
-      while (line != stopTag && !in.eof()) {
-        getline(in, line);
-        bool empty = true;
-        for (unsigned int i = 0; i < line.size(); ++i)
-          if (line[i] != ' ' && line[i] != '\t') {
-            empty = false;
-            break;
-          }
-        if (empty == true) continue;
-        if (line != stopTag && !in.eof()) {
-          std::istringstream stm;
-          stm.str(line);
-          if (configure.paramMask & Config::CALCULATE_WITH_DATA) {
-            SegLine segment(stm);
-            if (!(stm.rdstate() & (std::stringstream::failbit | std::stringstream::badbit)) && segment.isActive() == 1) {
-              SegPairs tempSet = {segment.entranceKey(), segment.exitKey()};
-              segPairs.push_back(tempSet);
-            }
-          } else {
-            ExtrapLine segment(stm);
-            if (!(stm.rdstate() & (std::stringstream::failbit | std::stringstream::badbit)) && segment.isActive() == 1) {
-              SegPairs tempSet = {segment.entranceKey(), segment.exitKey()};
-              segPairs.push_back(tempSet);
-            }
-          }
-        }
-      }
-      if (line != stopTag) {
-        configure.outStream << "Problem reading segments. Check configuration file." << std::endl;
-        return false;
-      }
-    } else {
-      configure.outStream << "Problem reading segments. Check configuration file." << std::endl;
-      return false;
-    }
-  } else {
+  // the active data sets (or extrapolations, for a run without data) from their specs (ProjectSetup.h)
+  std::vector<std::pair<int, int>> pairs;
+  if (!ProjectReactionPairs(configure, (configure.paramMask & Config::CALCULATE_WITH_DATA) != 0, pairs)) {
     configure.outStream << "Cannot read segments. Check configuration file." << std::endl;
     return false;
   }
-  in.clear();
+  for (const std::pair<int, int> &p : pairs) segPairs.push_back({p.first, p.second});
   return true;
 }
 
@@ -1543,9 +1496,8 @@ int main(int argc, char *argv[]) {
   // Set GSL Error Handler
   gsl_set_error_handler(&GSLException::GSLErrorHandler);
 
-  // --convert, --validate, --schema: the project-file commands (src/ProjectCommands.cpp), each of which exits
-  int projectCommandExit = 0;
-  if (RunProjectCommand(argc, argv, projectCommandExit)) return projectCommandExit;
+  // --convert, --validate, --schema, --print-predictions: the project-file commands (src/ProjectCommands.cpp), each exits
+  if (int projectCommandExit = 0; RunProjectCommand(argc, argv, projectCommandExit)) return projectCommandExit;
 
   // --build-coulomb-table[=FILE] builds the table and exits
   for (int i = 1; i < argc; i++) {
@@ -1594,25 +1546,11 @@ int main(int argc, char *argv[]) {
   // scaling (7Li(p,a) Tumino+Rolfs benchmark: default MIGRAD stops at
   // chi2 ~1057 with the direct norm dragged to 0.18, while the hybrid
   // analytic/THM-finite-difference gradient reaches the physical minimum,
-  // chi2 47.9 with the direct norm at 1.000).  A THM segment is any
-  // <segmentsData> line whose observable code (8th field) is >= 10, so scan
-  // the file once and enable the analytic gradient for such projects.
+  // chi2 47.9 with the direct norm at 1.000).  A THM segment is an active
+  // data set with a THM observable (its spec), so enable the analytic
+  // gradient for such projects.
   if (!(configure.paramMask & Config::USE_ANALYTIC_GRADIENT)) {
-    std::istringstream thmScan = SectionText(configure, "segmentsData");
-    std::string line;
-    bool inSegments = false;
-    bool hasTHMSegment = false;
-    while (thmScan && std::getline(thmScan, line) && !hasTHMSegment) {
-      if (line.find("<segmentsData>") != std::string::npos) { inSegments = true; continue; }
-      if (line.find("</segmentsData>") != std::string::npos) inSegments = false;
-      if (!inSegments) continue;
-      std::istringstream fields(line);
-      double f[8];
-      bool ok = true;
-      for (int i = 0; i < 8 && ok; i++)
-        if (!(fields >> f[i])) ok = false;
-      if (ok && f[0] == 1.0 && f[7] >= 10.0) hasTHMSegment = true;
-    }
+    const bool hasTHMSegment = ProjectHasThmData(configure);  // an active data set with a THM observable
     if (hasTHMSegment) {
       configure.paramMask |= Config::USE_ANALYTIC_GRADIENT;
       configure.outStream << "THM segments present: enabling the analytic gradient "

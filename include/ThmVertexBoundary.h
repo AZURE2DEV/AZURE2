@@ -5,7 +5,9 @@
 #include "Constants.h"
 
 class ALevel;
+class CNuc;
 class Config;
+class ESegment;
 class JGroup;
 class PPair;
 
@@ -86,5 +88,13 @@ class ThmVertexBoundary {
   double fixed_;  // B_c, or S_c(E_min) for LOWEST_LEVEL_SHIFT
   mutable ChannelFunc channelFunc_;
 };
+
+/*!
+ * The vertex uses the point-Coulomb wave of the entrance pair (ThmFunc.h); a hybrid nuclear potential on that pair
+ * would bend the line shape's channel functions and not the vertex, a model that is neither.  False, with the
+ * ERROR E_THM_HYBRID_POTENTIAL written, for a THM segment (or test segment, isTest) #key whose entrance pair has a
+ * potential (docs/upgrade/spin_orbit_potential.md section 3.4); true otherwise.
+ */
+bool ThmVertexAllowsPair(CNuc *compound, const ESegment &segment, int key, bool isTest, const Config &configure);
 
 #endif

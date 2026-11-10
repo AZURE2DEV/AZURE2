@@ -266,10 +266,22 @@ int main() {
   {
     // The model data against <levels> (BuildModelData): T2's pairs and the 3- levels as plain tables
     // (tests/upgrade/T2/README.md section 1); each case changes one thing of a valid datum or of the tables.
-    std::vector<PairInfo> pairs(3);
-    pairs[0] = {1, 0, 1, 1, 7, 15, 0.0, 0.0, 12.1274, 1, 1, false, "p+15N"};
-    pairs[1] = {2, 0, 2, 4, 6, 12, 0.0, 0.0, 7.16192, 0, 0, false, "a+12C"};
-    pairs[2] = {3, 0, 2, 4, 6, 12, 0.0, 4.43891, 7.16192 + 4.43891, 0, 4, false, "a+12C[4.43891]"};
+    auto pair = [](int key, int lightZ, int lightA, int heavyZ, int heavyA, double heavyE, double threshold, int twoJ1,
+                   int twoJ2) {
+      PairInfo p;
+      p.key = key;
+      p.lightZ = lightZ;
+      p.lightA = lightA;
+      p.heavyZ = heavyZ;
+      p.heavyA = heavyA;
+      p.heavyExcitation = heavyE;
+      p.threshold = threshold;
+      p.twoJLight = twoJ1;
+      p.twoJHeavy = twoJ2;
+      return p;
+    };
+    std::vector<PairInfo> pairs = {pair(1, 1, 1, 7, 15, 0.0, 12.1274, 1, 1), pair(2, 2, 4, 6, 12, 0.0, 7.16192, 0, 0),
+                                   pair(3, 2, 4, 6, 12, 4.43891, 7.16192 + 4.43891, 0, 4)};
     const std::vector<LevelChannelInfo> channels = {{1, 2, 2}, {1, 4, 2}, {2, 3, 0}};  // no a1 channel
     std::vector<LevelInfo> levels(3);
     levels[0] = {{4}, 6, -1, 13.0734, 1e-3, 2, 1, channels};
@@ -323,7 +335,7 @@ int main() {
   }
   // the build checks need <levels> pairs and data files: their cases are in build_test.cpp (Schema::Build);
   // E_UNKNOWN_PAIR and E_AMBIGUOUS_PAIR have a case in both (a datum's pair above, a data set's reaction there)
-  const std::set<std::string> buildCodes = {"E_PAIR_KEY",    "E_DATA_FILE",
+  const std::set<std::string> buildCodes = {"E_PAIR_KEY",    "E_DATA_FILE",   "W_DATA_FILE_NOT_READ",
                                             "E_NOT_BUILT",    "E_THM_RELATIVISTIC", "E_THM_COVARIANCE", "E_FOLD_CONFLICT"};
   for (const DiagnosticCode &c : DiagnosticCodes())
     if (!buildCodes.count(c.code)) check(std::string(c.code) + " has a case here", tested.count(c.code) == 1);

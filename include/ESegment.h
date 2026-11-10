@@ -8,6 +8,12 @@
 #include <memory>
 #include "azure2/experiment/SetupSpecs.h"
 
+namespace azure2 {
+namespace experiment {
+struct Prediction;
+}  // namespace experiment
+}  // namespace azure2
+
 class EData;
 class CNuc;
 class Config;
@@ -168,8 +174,6 @@ class ESegment {
   double GetEnergyShiftSqrt() const;
   /// sqrt(E) coefficient last applied to the points.
   double GetLastEnergyShiftSqrt() const;
-  /// sqrt(E) coefficient as declared in the input file (the penalty's reference).
-  double GetNominalEnergyShiftSqrt() const;
   /// Uncertainty on the sqrt(E) coefficient (MeV^1/2).
   double GetEnergyShiftSqrtError() const;
   /// Is the sqrt(E) coefficient a free fit parameter?
@@ -181,12 +185,9 @@ class ESegment {
   int GetShiftLeaderPos() const;
   /// Does this segment take its constant shift from another segment of its group?
   bool IsShiftGroupFollower() const;
-  /// Does another segment take its constant shift from this one?
-  bool HasShiftGroupFollowers() const;
   /// Make this segment a follower of the group member at position pos: its own
   /// shift stops being a fit parameter and starts at the given value.
   void SetShiftGroupFollower(int pos, double shift);
-  void SetHasShiftGroupFollowers(bool);
   /// Shift-function-group label ("" if none): segments with one label apply the shift
   /// function of the first of them but keep their own constant shifts.
   std::string GetShiftFnGroup() const;
@@ -197,27 +198,15 @@ class ESegment {
   int GetNormLeaderPos() const;
   /// Does this segment take its normalization from another segment of its group?
   bool IsNormGroupFollower() const;
-  /// Does another segment take its normalization from this one?
-  bool HasNormGroupFollowers() const;
   /// Make this segment a follower of the group member at position pos: it takes that
   /// member's norm and nominal norm, and carries no norm penalty of its own.
   void SetNormGroupFollower(int pos, double norm, double nominal);
-  void SetHasNormGroupFollowers(bool);
   /// Data-covariance file of the segment ("" if none): the segments naming one file
   /// share one covariance matrix (EData::ResolveCovarianceGroups).
   const std::string &GetCovarianceFile() const { return covarianceFile_; }
   /// Index of the segment's covariance group in EData (-1 if it has none).
   int GetCovarianceGroup() const { return covGroup_; }
   void SetCovarianceGroup(int g) { covGroup_ = g; }
-  /// (R^-1 r)_i of point \p pointIdx (0-based) at the last EData::CovarianceChi2Correction:
-  /// the point's share of d(chi2)/d(r_i) / 2 with the correlation matrix R of its group.
-  double GetCovarianceSeed(int pointIdx) const {
-    return pointIdx >= 0 && pointIdx < (int)covSeed_.size() ? covSeed_[pointIdx] : 0.0;
-  }
-  void SetCovarianceSeed(int pointIdx, double z) {
-    if ((int)covSeed_.size() <= pointIdx) covSeed_.resize(pointIdx + 1, 0.0);
-    covSeed_[pointIdx] = z;
-  }
   /// The whole lab-energy shift at a point's original lab energy: a + b*sqrt(E).
   double TotalEnergyShift(double labEnergy) const;
   /// Add this segment's energy-shift penalties, ((x - nominal)/sigma)^2 for each varied
@@ -266,7 +255,19 @@ class ESegment {
   /// Combination type as an integer: 0 sum, 1 ratio.
   int GetLegacyOperationType() const;
   /// The terms of a composite segment after the leading one.
-  const std::vector<azure2::experiment::ComponentSpec> &GetComponents() const { return components_; }
+  const std::vector<azure2::experiment::ComponentSpec> &GetComponents() const { return reaction_.components; }
+  /// The reaction, observable and model options as the spec gave them (before the set-up resolved pairs and terms).
+  const azure2::experiment::ReactionSpec &GetReaction() const { return reaction_; }
+  /// Is the value a ratio (a RATIO of two reactions, or a ratio to the Rutherford or Mott cross section)?  It is the
+  /// same in the lab and the c.m. frame: the data are not converted at load and the lab output does not divide it.
+  bool IsDimensionlessRatio() const {
+    return (IsAdvanced() && GetLegacyOperationType() == 1) ||
+           reaction_.coulombReference != azure2::experiment::CoulombReference::None;
+  }
+  /// What the segment predicts at its points (src/Predictions.cpp, EData::BuildPredictions): built once at set-up,
+  /// immutable, shared by the working copies; null before it is built.
+  const azure2::experiment::Prediction *GetPrediction() const { return prediction_.get(); }
+  void SetPrediction(std::shared_ptr<const azure2::experiment::Prediction> p) { prediction_ = std::move(p); }
   /// Path of the data file this segment reads.
   std::string GetDataFile() const;
   /// Append a point.
@@ -329,8 +330,6 @@ class ESegment {
   void SetEntranceKey(int);
   /// Number of segments to sum for total capture; 0 if not total capture.
   void SetIsTotalCapture(int);
-  /// Free or fix the normalization in the fit.
-  void SetVaryNorm(bool);
   void SetMinAngle(double);
   void SetMaxAngle(double);
   /// Point \p i, 1-based.
@@ -339,8 +338,6 @@ class ESegment {
   std::vector<EPoint> &GetPoints();
 
   // Advanced segment composition methods
-  /// Add a component named by its entrance and exit keys.
-  void AddComponent(int entranceKey, int exitKey);
   /// Add a component as a complete segment.
   void AddComponentSegment(ESegment *componentSegment);
   /// How the components combine: SUM or RATIO.
@@ -390,6 +387,8 @@ class ESegment {
   double GetThicknessSigma() const { return thicknessSigma_; }
   /// "thicknessgroup <label>" ("" = none); the follower's leader position in EData's segment list (-1: none).
   const std::string &GetThicknessGroup() const { return thicknessGroup_; }
+  /// The names of the segment's fit parameters, as its spec gives them (EData::FillMnParams).
+  const azure2::experiment::ParameterNames &GetParameterNames() const { return parameterNames_; }
   int GetThicknessLeaderPos() const { return thicknessLeaderPos_; }
   bool IsThicknessGroupFollower() const { return thicknessLeaderPos_ >= 0; }
   void SetThicknessGroupFollower(int pos, double n) {
@@ -418,24 +417,6 @@ class ESegment {
   /// The value the fit compares with the data is formed by the segment, not read off its points: components, a
   /// sample's abundance weights or a transmission / yield transform.
   bool NeedsAssembly() const { return HasComponents() || IsNatural() || IsTransformed(); }
-  /// The transforms and their derivatives (n in atoms/barn, cross sections in barns).
-  /// dTdn / dYdn: the derivatives with respect to the thickness n (the parameter segment_<key>_thickness).
-  static double Transmission(double n, double s, double *dTds = nullptr, double *dTdn = nullptr);
-  static double YieldY0(double n, double s, double st, double *dYds = nullptr, double *dYdst = nullptr,
-                        double *dYdn = nullptr);
-  /// One term of a transmission or yield segment at a point: its point, its weight in the segment's sum (component
-  /// scaling, frame factor, abundance), its compound nucleus, whether it is the yield's s_t, its E1/E2 selector.
-  struct TransformTerm {
-    EPoint *point;
-    const ESegment *segment;
-    double weight;  // scale times the abundance of a sample segment's term
-    double scale;   // component scaling times frame factor (1 for the base and the yield's total)
-    int nucleus;
-    bool total;
-    int xsComponent;
-  };
-  /// The terms of a transmission or yield segment at a point (base first); false if a term point is missing.
-  bool TransformTerms(int pointIndex, CNuc *cnuc, std::vector<TransformTerm> &terms);
   /// True when the point is integrated over sub-points (EPoint::IntegrateTargetEffect).
   static bool HasSubPointIntegration(EPoint *point);
   /// IsTotal for this term: the segment is "total" and its exit pair is its entrance pair.
@@ -542,19 +523,15 @@ class ESegment {
   bool varyEnergyShift_;
   double energyShiftSqrt_;
   double lastEnergyShiftSqrt_;  // likewise for the sqrt(E) coefficient
-  double energyShiftSqrtNominal_;
   double energyShiftSqrtError_;
   bool varyEnergyShiftSqrt_;
   std::string shiftGroup_;
   int shiftLeaderPos_;
-  bool hasShiftGroupFollowers_;
   std::string shiftFnGroup_;
   std::string normGroup_;
   int normLeaderPos_;
-  bool hasNormGroupFollowers_;
   std::string covarianceFile_;
   int covGroup_ = -1;
-  std::vector<double> covSeed_;
   bool hasSqrtShiftBlock_;
   // Shift function declared on this line (owner) ...
   std::string shiftFnDeclared_;
@@ -584,11 +561,13 @@ class ESegment {
   int thicknessVary_ = 0;
   double thicknessSigma_ = 0.0;
   std::string thicknessGroup_;
+  azure2::experiment::ParameterNames parameterNames_;
   int thicknessLeaderPos_ = -1;  // IsThicknessGroupFollower
   bool yieldTotalTerm_ = false;  // IsYieldTotalTerm
   bool isCoefficients_ = false;
   bool coefficientsAbsolute_ = false;
-  std::vector<azure2::experiment::ComponentSpec> components_;  ///< the terms of a SUM / RATIO after the leading one
+  azure2::experiment::ReactionSpec reaction_;  ///< GetReaction
+  std::shared_ptr<const azure2::experiment::Prediction> prediction_;  ///< GetPrediction
   std::string datafile_;
   std::vector<EPoint> points_;
 
@@ -596,7 +575,6 @@ class ESegment {
   std::vector<ESegment *> componentSegments_;
   OperationType segmentOperationType_;
   double componentScaling_;
-  mutable std::shared_ptr<std::mutex> componentCalculationMutex_;
 };
 
 #endif

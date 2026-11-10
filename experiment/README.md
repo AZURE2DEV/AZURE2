@@ -38,8 +38,8 @@ inside a transform the weight w = (c J) a is formed first and then multiplied by
 `experiment_expression` compares each node and each composition with these expressions written out, bit for bit, on
 4000 points with random 53-bit mantissas.
 
-**backward** is the adjoint of each node in the order `src/AZUREGrad.cpp` uses (GradOnePoint's shared-component route
-for SUM and RATIO, GradTransformedPoint for transforms). Bit for bit with those expressions: Sum, Scale, Weighted on a
+**backward** is the adjoint of each node in the order `src/AZUREGrad.cpp` used before S11 (GradOnePoint's
+shared-component route for SUM and RATIO, GradTransformedPoint for transforms; the tests keep those expressions). Bit for bit with those expressions: Sum, Scale, Weighted on a
 leaf, Ratio, and every Transform case (point values, sub-points, free-gas Doppler with and without a kernel, the
 thickness, abundance and Doppler-temperature cotangents). Not bit for bit: a weighted *and* scaled SUM term (a
 sample's component). The tree's reverse sweep forms (g a)(c J) for the leaf and g ((c J) v) for the abundance;
@@ -77,8 +77,18 @@ One tree therefore serves every evaluation and every working copy, and it is con
 gives the per-nucleus terms of a sample (every `Weighted` node's value added to its nucleus in creation order, and a
 transform's w_q v_q), as `SetNaturalTerms` records them now.
 
-**Not here yet.** The tree is not wired into the engine (S10), and no keyword builds one (S9). `ESegment::Transmission`,
-`YieldY0` and `TermFrameFactor` call the library's (one formula each).
+**In the engine (S10, S11).** `Prediction.h` builds the tree of a data set from its reaction and the terms the
+set-up made (`PredictionSetup`: term 0 the data set's own points, then its component segments with their scalings,
+fixed angles and compound nuclei, a sample and a thickness), one builder per kind in the table `TreeKinds()`
+(observable, SUM -- also a total capture --, RATIO, transmission, yield; `TreeKindOf` decides), and lists what each
+leaf, factor and parameter refers to; `PredictionText` prints it (`AZURE2 --print-predictions`, `pyazr.predictions`).
+The engine builds every segment's tree once (`EData::BuildPredictions`, `src/Predictions.cpp`), shares it between
+working copies, evaluates it in the model pass (`src/ModelPass.cpp`, `ComposeModelValue`) and takes the adjoint of the
+composition from `Backward` (`azure2::ModelPointBackward`, used by every route of `src/AZUREGrad.cpp`).  Its gradient
+vectors, Jacobians and model rows on T1-T3, natural_neon, a transmission/yield project with and without a spread and a
+SUM project were bit for bit those of the hand-written adjoint before S11 (the products whose association differs,
+above, gave the same bits there).  `experiment_prediction` checks each builder's value against the pre-S10 combination
+written out, bit for bit.
 
 ## 2. Frames (`Frames.h`, step S6)
 

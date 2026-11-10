@@ -7,7 +7,6 @@ class EPoint;
 class ESegment;
 
 typedef std::vector<EPoint>::iterator EPointIterator;
-typedef std::vector<EPoint *>::iterator EPointMapIterator;
 typedef std::vector<ESegment>::iterator ESegmentIterator;
 
 /// An iterator class for an EData object.

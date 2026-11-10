@@ -20,7 +20,16 @@
 //   that apply no effect to an active key are not effects.
 // - Abundances: per sample (old name mapped to the target the data sets name) and compound nucleus.
 // - THM: the experiment of each active key, and the weight files.
-// AZURE2_SPEC_INJECT=1 moves one value of the format-3 side by one ulp, to show that the test fails on a difference.
+// - Parameter names (B, the director's decision on G2 item 4): the converter's map (ConvertResult::parameterNames)
+//   sends each old name to one new name and no two old names to the same one (injective, every file); and the name
+//   the old-line adaptor gives each parameter the engine makes for an active data set (norm when it varies, shift,
+//   sqrt shift, the function terms it owns, a fitted thickness) maps to the name Build gives it.
+// - Model data, in the engine's row order (src/ModelData.cpp, ModelData::Read): the old <scatteringLengths> lines that
+//   give a residual (active, an uncertainty > 0) as the engine's constraint (pair key, s, Re a, sigma, Im a, sigma),
+//   then the datums of an old <modelData> section (BuildModelData against the tables of the old <levels> rows); the
+//   format-3 side: the datums Build made, a scattering length as the same constraint.  Doubles by their bits.
+// AZURE2_SPEC_INJECT=1 moves one value of the format-3 side by one ulp, to show that the test fails on a difference
+// (=2: the value of its first model datum; =3: the name of its first data set's energy-shift parameter).
 //   spec_equivalence_test <repository root>
 #include <algorithm>
 #include <cmath>
@@ -38,10 +47,14 @@
 
 #include "azure2/convert/Convert.h"
 #include "azure2/convert/SpecsFromOldLines.h"
+#include "azure2/convert/ScatteringLengthLine.h"
 #include "azure2/convert/ThmLines.h"
+#include "azure2/experiment/ModelDatum.h"
 #include "azure2/experiment/ProjectReader.h"
 #include "azure2/io/Convert.h"
 #include "azure2/io/Document.h"
+#include "azure2/io/LevelRows.h"
+#include "azure2/io/RecordReader.h"
 
 using namespace azure2;
 using namespace azure2::experiment;
@@ -59,9 +72,6 @@ const std::map<std::string, const char *> kRecorded = {
     {"tests/natural_target/models/bad_sample.azr",
      "a test line naming a sample that <abundances> lacks: the old engine refused it (menu 3), the conversion has no "
      "sample (a format-3 record cannot name a missing one)"},
-    {"tests/natural_target/models/M_thick.azr",
-     "test lines 3-4 with 'natural 1' share a <targetInt> target with lines 1-2 without: the converter drops their "
-     "sample (converter defect: for data lines it asks; for test lines it should too, or write a copy of the target)"},
 };
 int injected = 0;                   // AZURE2_SPEC_INJECT: change one value of the format-3 side (shows the test fails)
 
@@ -158,6 +168,7 @@ void CompareReaction(const std::string &w, const ReactionSpec &a, const Reaction
   Eq(w + " total", a.total, b.total);
   Bits(w + " transmission", a.transmission, b.transmission);
   Bits(w + " yield thickness", a.yieldThickness, b.yieldThickness);
+  Eq(w + " Coulomb reference", (int)a.coulombReference, (int)b.coulombReference);
 }
 
 // The first active member of each group of `label`.
@@ -313,6 +324,8 @@ void CompareEffect(const std::string &w, const TargetEffectSpec &x, const Target
   if (x.qCoefficients) Bits(w + " Q values", x.qCoefficientValues, y.qCoefficientValues);
   if (FoldsAnything(x)) {
     Eq(w + " points", x.numIntegrationPoints, y.numIntegrationPoints);
+    // given or left out matters (TargetEffect::GetResonanceWidthMultiplier: a pure convolution's core when left out)
+    Eq(w + " width multiplier given", x.hasResonanceWidthMultiplier, y.hasResonanceWidthMultiplier);
     Bits(w + " width multiplier", x.hasResonanceWidthMultiplier ? x.resonanceWidthMultiplier : 20.0,
          y.hasResonanceWidthMultiplier ? y.resonanceWidthMultiplier : 20.0);
     Bits(w + " points per width", x.hasPointsPerWidth ? x.pointsPerWidth : 50.0, y.hasPointsPerWidth ? y.pointsPerWidth : 50.0);
@@ -409,6 +422,43 @@ void CompareEffects(const std::string &what, const SpecList<TargetEffectSpec> &a
 }
 
 }  // namespace
+
+// A model datum as the engine's row: a scattering length as its constraint (ModelData::Read), else its fields.
+std::string DatumRow(const ModelDatum &d) {
+  char buf[512];
+  if (d.quantity == ModelQuantity::ScatteringLength)
+    std::snprintf(buf, sizeof buf, "scattering length pair %d s %a Re %a +- %a Im %a +- %a", d.pair,
+                  d.coherent ? -1.0 : 0.5 * d.twoS, d.value, d.error, d.hasImag ? d.imag : 0.0, d.hasImag ? d.imagError : 0.0);
+  else
+    std::snprintf(buf, sizeof buf, "%s level %d (%d, %d) %s pairs %d %d %d frame '%s' l %d 2s %d value %a +- %a unit %s",
+                  d.quantityName.c_str(), d.levelId, d.group, d.level, d.jpi.c_str(), d.entrancePair, d.exitPair, d.pair,
+                  d.frame.c_str(), d.l, d.twoS, d.value, d.error, d.unit.c_str());
+  return buf;
+}
+
+// The model-data rows of an old project in the engine's order: <scatteringLengths> lines with a residual, then the
+// datums of its <modelData> section.
+std::vector<std::string> OldModelDataRows(const io::Document &doc) {
+  std::vector<std::string> rows;
+  if (const io::Document::Section *s = doc.Find("scatteringLengths"))
+    for (const std::string &line : doc.Body(*s)) {
+      const convert::ScatteringLengthLine l = convert::ReadScatteringLengthLine(line);
+      if (l.kind != convert::ScatteringLengthLine::Constraint || l.active == 0) continue;
+      if (!(l.sigma > 0.0) && !(l.imSigma > 0.0)) continue;
+      char buf[256];
+      std::snprintf(buf, sizeof buf, "scattering length pair %d s %a Re %a +- %a Im %a +- %a", l.pairKey, l.s, l.value,
+                    l.sigma, l.hasImaginary ? l.imValue : 0.0, l.hasImaginary ? l.imSigma : 0.0);
+      rows.push_back(buf);
+    }
+  if (const io::Document::Section *s = doc.Find("modelData")) {
+    const io::RecordReadResult read = io::ReadRecords(doc, *s, Schema::KindsOfSection("modelData"));
+    const ValidationResult v = Schema::Validate({{"modelData", read.set.records}});
+    bool ok = false;
+    const LevelTables levels = LevelTablesOfRows(LevelRowsOf(doc, ok));
+    for (const ModelDatum &d : BuildModelData(v, levels.levels, levels.pairs).data) rows.push_back(DatumRow(d));
+  }
+  return rows;
+}
 
 int main(int argc, char **argv) {
   if (argc < 2) {
@@ -540,12 +590,9 @@ int main(int argc, char **argv) {
       }
       for (const AbundanceRowSpec &r : b.abundances.abundances.rows)
         if (!r.isSum && usedNew.count(r.sample)) rowsB[key(r.sample, r)] = row(r);
-      bool unreachedDropped = false;
-      for (const convert::ConvertNote &n : r.notes)
-        unreachedDropped = unreachedDropped || n.text.find("is reached by no data set of the sample: dropped") != std::string::npos;
       for (auto &kv : rowsA)
         if (rowsB.count(kv.first)) Eq("abundance " + kv.first, kv.second, rowsB[kv.first]);
-        else if (!unreachedDropped) problems.push_back("abundance " + kv.first + " missing in format 3");
+        else problems.push_back("abundance " + kv.first + " missing in format 3");
       // THM
       std::map<int, std::string> expA, expB;
       for (const auto &kv : oldExperimentOf)
@@ -560,6 +607,41 @@ int main(int argc, char **argv) {
       for (const auto &w : b.thm.extrapolationWeights) twb[w.first] = w.second;
       for (auto it = twa.begin(); it != twa.end();) it = activeExtrap.count(it->first) ? std::next(it) : twa.erase(it);
       Eq(std::string("THM extrapolation weights"), twa, twb);
+      std::vector<std::string> modelB;
+      for (std::size_t k = 0; k < b.modelData.size(); k++) {
+        ModelDatum d = b.modelData[k];
+        if (injected == 2 && k == 0) d.value = std::nextafter(d.value, 1e300);
+        modelB.push_back(DatumRow(d));
+      }
+      // parameter names: the converter's map is injective and takes the adaptor's names to Build's
+      std::map<std::string, std::string> map;
+      std::set<std::string> targets;
+      for (const auto &pn : r.parameterNames) {
+        if (map.count(pn.first) && map[pn.first] != pn.second) problems.push_back("parameter map: " + pn.first + " maps twice");
+        if (!map.count(pn.first) && !targets.insert(pn.second).second) problems.push_back("parameter map: two names map to " + pn.second);
+        map[pn.first] = pn.second;
+      }
+      if (injected == 3 && !db.empty()) db[0].names.energyShift += "x";
+      auto name = [&](const std::string &oldName, const std::string &newName) {
+        const auto it = map.find(oldName);
+        if (it == map.end()) problems.push_back("parameter map: no new name for " + oldName + " (Build: " + newName + ")");
+        else if (it->second != newName) problems.push_back("parameter name " + oldName + ": map " + it->second + ", Build " + newName);
+      };
+      for (std::size_t i = 0; i < std::min(da.size(), db.size()); i++) {
+        if (!da[i].active) continue;
+        const ParameterNames &a = da[i].names, &n = db[i].names;
+        if (da[i].varyNorm && !da[i].reaction.thm) name(a.norm, n.norm);  // a THM norm is profiled (ESegment::IsProfiledNorm)
+        name(a.energyShift, n.energyShift);
+        name(a.energyShiftSqrt, n.energyShiftSqrt);
+        for (std::size_t j = 0; j < std::min(a.shiftFunction.size(), n.shiftFunction.size()); j++)
+          name(a.shiftFunction[j], n.shiftFunction[j]);
+        if (da[i].thicknessFit) name(a.thickness, n.thickness);
+      }
+      const std::vector<std::string> modelA = OldModelDataRows(doc);
+      for (std::size_t k = 0; k < std::max(modelA.size(), modelB.size()); k++)
+        if (k >= modelA.size() || k >= modelB.size() || modelA[k] != modelB[k])
+          problems.push_back("model data row " + std::to_string(k + 1) + ": " + (k < modelA.size() ? modelA[k] : "-") +
+                             " vs " + (k < modelB.size() ? modelB[k] : "-"));
     }
     const auto known = kRecorded.find(rel);
     if (known != kRecorded.end()) {

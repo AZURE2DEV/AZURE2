@@ -7,7 +7,17 @@
 #include <mutex>
 #include <set>
 
+#include "HybridPotentialSettings.h"
 #include "ThmOptions.h"
+
+namespace azure2 {
+namespace experiment {
+struct Format3Project;
+}
+namespace io {
+class Document;
+}
+}  // namespace azure2
 
 /// A structure holding the reaction rate calculation configuration
 
@@ -116,8 +126,10 @@ class Config {
   RateParams rateParams;
   /// NLopt algorithm selection (0=SBPLX, 1=COBYLA, 2=BOBYQA, 3=NEWUOA, 4=PRAXIS, 5=Nelder-Mead)
   int nloptAlgorithm;
-  /// Use hybrid Coulomb method with nuclear potential
+  /// Use hybrid Coulomb method with nuclear potential: potentials.AnyEnabled(), set with them
   bool useHybridMethod;
+  /// The hybrid nuclear potentials of the project, per pair (the <potential> block; pyazr's set_nuclear_potential)
+  HybridPotentialSettings potentials;
   /// Extra MIGRAD passes after re-freezing the model of relvector data-covariance terms at the
   /// fitted parameters (--refreeze-covariance[=N]); 0 = none.  The final outputs always use the
   /// model re-frozen at the fitted parameters, so they match a calculation from param.sav.
@@ -130,6 +142,10 @@ class Config {
   /// The <thm> block (ThmOptions.h); Config::ThmOptions as before.
   typedef ::ThmOptions ThmOptions;
   ThmOptions thm;
+  /// A format-3 project as ReadConfigFile read it once (records -> Validate -> <levels> tables -> Schema::Build): the
+  /// <levels> rows and the specs the set-up consumes (src/ProjectSetup.cpp).  Null for an old project, whose specs
+  /// are read from its old sections when the set-up needs them (until step 3d).
+  std::shared_ptr<const azure2::experiment::Format3Project> format3;
   /// Take P, S and the hard-sphere phase of charged channels from the universal Coulomb
   /// table (CoulombTable) where it covers them; on by default (--no-coulomb-table turns it
   /// off).  Without a table file the run warns once and uses the exact routines.
@@ -195,6 +211,9 @@ class Config {
   /// Read the <config> block, then the optional <potential> and <thm> blocks.
   /// -1 if the file cannot be read, -2 if an optional block is malformed (already reported).
   int ReadConfigFile();
+  /// The format-3 branch of ReadConfigFile: reads the project into `format3`; -1 (with every diagnostic printed) when
+  /// it is refused.
+  int ReadFormat3Project(const azure2::io::Document &doc);
   /*!
    * The section <name> of the .azr (configfile) as a stream: its opening tag, its lines and its closing tag (each
    * line ending read as "\n"; to the end of the file if the section is not closed), or null when the file cannot be

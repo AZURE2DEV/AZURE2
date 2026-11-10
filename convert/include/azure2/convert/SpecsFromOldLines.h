@@ -40,7 +40,7 @@ experiment::AbundanceSpecs AbundanceSpecsFromOldLines(std::istream *section);
 std::string PriorCentresFromOldRows(std::istream *section, experiment::SpecList<experiment::DatasetSpec> &datasets);
 
 /// The old name of a data set's normalization (isNorm) or energy-shift parameter: the names prior_centre rows of
-/// an old project use (EData::SegmentParameterName gives the engine's names; a test keeps the two equal).
+/// an old project use (the adaptor writes the same names into DatasetSpec::names, which the engine gives its parameters).
 std::string OldSegmentParameterName(int key, bool isNorm);
 
 }  // namespace convert

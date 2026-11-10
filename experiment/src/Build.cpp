@@ -9,6 +9,8 @@
 #include <sstream>
 
 #include "azure2/experiment/BuildContext.h"
+#include "azure2/experiment/Grids.h"
+#include "azure2/experiment/ModelDatum.h"
 #include "azure2/physics/Elements.h"
 
 namespace azure2 {
@@ -21,25 +23,6 @@ bool BuiltProject::Ok() const {
   for (const Diagnostic &d : diagnostics)
     if (d.severity == Severity::Error) return false;
   return true;
-}
-
-std::string PairLabel(const PairRow &p) {
-  auto nuclide = [](int z, double m) { return std::to_string((int)std::lround(m)) + physics::ElementSymbol(z); };
-  std::string light;
-  const int a1 = (int)std::lround(p.m1);
-  if (p.pType == 10) light = "g";
-  else if (p.pType == 20) light = p.z1 < 0 ? "b-" : "b+";
-  else if (p.z1 == 0 && a1 == 1) light = "n";
-  else if (p.z1 == 1 && a1 == 1) light = "p";
-  else if (p.z1 == 1 && a1 == 2) light = "d";
-  else if (p.z1 == 1 && a1 == 3) light = "t";
-  else if (p.z1 == 2 && a1 == 3) light = "h";
-  else if (p.z1 == 2 && a1 == 4) light = "a";
-  else light = nuclide(p.z1, p.m1);
-  std::ostringstream e1, e2;
-  e1 << p.e1;
-  e2 << p.e2;
-  return light + (p.e1 != 0 ? "[" + e1.str() + "]" : "") + "+" + nuclide(p.z2, p.m2) + (p.e2 != 0 ? "[" + e2.str() + "]" : "");
 }
 
 namespace build {
@@ -64,11 +47,14 @@ void Context::Error(const char *code, const ValidatedRecord &record, const std::
   out_.diagnostics.push_back(d);
 }
 
-const PairRow *Context::Pair(int key) const {
-  for (const PairRow &p : pairs_)
-    if (p.key == key) return &p;
-  return nullptr;
+void Context::Warn(const char *code, const ValidatedRecord &record, const std::string &field, const std::string &message,
+                   const std::string &found) {
+  Error(code, record, field, message);
+  out_.diagnostics.back().severity = Severity::Warning;
+  out_.diagnostics.back().found = found;
 }
+
+const PairInfo *Context::Pair(int key) const { return PairByKey(key, pairs_); }
 
 const ValidatedRecord *Context::Record(const std::string &name, const std::string &kind) const {
   for (const ValidatedRecord &r : v_.records)
@@ -84,47 +70,6 @@ namespace {
 
 // ---------------------------------------------------------------- reactions (section 3.5)
 
-// Digits after the decimal point of a number as written ("4.439" -> 3; "4" -> 0; "4.4e0" -> 1).
-int Decimals(const std::string &text) {
-  const std::size_t dot = text.find('.');
-  if (dot == std::string::npos) return 0;
-  const std::size_t e = text.find_first_of("eE", dot);
-  return (int)((e == std::string::npos ? text.size() : e) - dot - 1);
-}
-
-// A written state [E_x] matches an excitation of <levels> to the digits written: [4.439] matches 4.43891 MeV.
-bool StateMatches(bool excited, const Number &written, double e) {
-  if (!excited || written.value == 0.0) return e == 0.0;
-  const double half = 0.5 * std::pow(10.0, -Decimals(written.text));
-  return std::fabs(e - written.value) <= half * (1.0 + 1e-9);
-}
-
-bool LightMatches(const Particle &p, const PairRow &pair) {
-  if (p.light == "g") return pair.pType == 10;
-  if (p.light == "b-") return pair.pType == 20 && pair.z1 < 0;
-  if (p.light == "b+") return pair.pType == 20 && pair.z1 > 0;
-  return pair.pType == 0 && p.Z == pair.z1 && p.A == (int)std::lround(pair.m1) &&
-         StateMatches(p.excited, p.excitation, pair.e1);
-}
-
-bool HeavyMatches(const Particle &p, const ResidualState &state, const PairRow &pair) {
-  return p.Z == pair.z2 && p.A == (int)std::lround(pair.m2) &&
-         StateMatches(state.kind == ResidualState::Excited, state.energy, pair.e2);
-}
-
-std::vector<int> Candidates(const Context &c, const Particle &light, const Particle &heavy, const ResidualState &state) {
-  std::vector<int> keys;
-  for (const PairRow &p : c.pairs_)
-    if (LightMatches(light, p) && HeavyMatches(heavy, state, p)) keys.push_back(p.key);
-  return keys;
-}
-
-std::vector<std::string> AllPairLabels(const Context &c) {
-  std::vector<std::string> labels;
-  for (const PairRow &p : c.pairs_) labels.push_back(std::to_string(p.key) + ": " + PairLabel(p));
-  return labels;
-}
-
 std::string Keys(const std::vector<int> &keys) {
   std::string s;
   for (int k : keys) s += (s.empty() ? "" : ", ") + std::to_string(k);
@@ -135,12 +80,10 @@ std::string Keys(const std::vector<int> &keys) {
 // `keyField` is "" for a term of a sum or ratio, which cannot carry a key.  Returns false after an error.
 bool ResolveSide(Context &c, const ValidatedRecord &r, const std::string &side, const Particle &light, const Particle &heavy,
                  const ResidualState &state, const std::string &text, const std::string &keyField, int &key) {
-  const std::vector<int> keys = Candidates(c, light, heavy, state);
+  const std::vector<int> keys = PairsNamed(light, heavy, state, c.pairs_);
   const Value *given = keyField.empty() ? nullptr : r.Get(keyField);
   if (keys.empty()) {
-    c.Error(codes::kUnknownPair, r, "reaction",
-            "the " + side + " of " + text + " is no pair of <levels> (particles and states); the pairs are listed",
-            AllPairLabels(c));
+    c.Error(codes::kUnknownPair, r, "reaction", UnknownPairMessage("the " + side + " of " + text), PairListing(c.pairs_));
     return false;
   }
   if (keys.size() == 1) {
@@ -155,9 +98,9 @@ bool ResolveSide(Context &c, const ValidatedRecord &r, const std::string &side, 
   }
   if (!given) {
     c.Error(codes::kAmbiguousPair, r, "reaction",
-            "the " + side + " of " + text + " names pairs " + Keys(keys) + " of <levels>" +
-                (keyField.empty() ? "; a term of a sum or ratio cannot carry a pair key"
-                                  : "; write " + keyField + " <key> to say which"),
+            AmbiguousPairMessage("the " + side + " of " + text, keys,
+                                 keyField.empty() ? "a term of a sum or ratio cannot carry a pair key"
+                                                  : "write " + keyField + " <key> to say which"),
             {Keys(keys)});
     return false;
   }
@@ -253,15 +196,16 @@ bool ReadPhaseShift(Context &c, const ValidatedRecord &r, ReactionSpec &spec) {
   spec.phaseJ = J->spin.twice / 2.0;
   spec.phaseL = (int)l->integer;
   spec.phaseS = s->spin.twice / 2.0;
-  const PairRow *p = c.Pair(spec.entranceKey);
+  const PairInfo *p = c.Pair(spec.entranceKey);
   if (!p) return true;
   const double sv = spec.phaseS, jv = spec.phaseJ, lv = spec.phaseL;
-  const bool sOk = sv >= std::fabs(p->j1 - p->j2) - 1e-6 && sv <= p->j1 + p->j2 + 1e-6;
+  const double j1 = p->twoJLight / 2.0, j2 = p->twoJHeavy / 2.0;
+  const bool sOk = sv >= std::fabs(j1 - j2) - 1e-6 && sv <= j1 + j2 + 1e-6;
   const bool jOk = jv >= std::fabs(lv - sv) - 1e-6 && jv <= lv + sv + 1e-6;
   if (!sOk || !jOk) {
     c.Error(codes::kFieldNotApplicable, r, sOk ? "J" : "s",
             "(J, l, s) = (" + J->spin.text + ", " + l->number.text + ", " + s->spin.text + ") is not a partial wave of pair " +
-                PairLabel(*p) + " (spins " + std::to_string(p->j1) + " and " + std::to_string(p->j2) + ")");
+                PairLabel(*p) + " (spins " + std::to_string(j1) + " and " + std::to_string(j2) + ")");
     return false;
   }
   return true;
@@ -279,8 +223,8 @@ bool ReadObservable(Context &c, const ValidatedRecord &r, const std::string &ang
     if (spec.exitKey == -1 && spec.combination == ReactionSpec::Combination::None) spec.observable = O::TotalCapture;
     spec.total = q == "sigma_total";
     if (q == "beta_delayed_spectrum") {
-      const PairRow *p = c.Pair(spec.entranceKey);
-      if (p && p->pType != 20) {
+      const PairInfo *p = c.Pair(spec.entranceKey);
+      if (p && p->kind != 20) {
         c.Error(codes::kReactionNotAllowed, r, "reaction", "a beta-delayed spectrum needs a beta entrance pair (type 20)");
         return false;
       }
@@ -291,6 +235,35 @@ bool ReadObservable(Context &c, const ValidatedRecord &r, const std::string &ang
     spec.observable = angleFrame == "cm" ? O::DifferentialCM : O::DifferentialLab;
     if (q == "yield" && angleFrame == "cm") {
       c.Error(codes::kNotBuilt, r, "", "a yield per steradian at a c.m. angle: this engine folds lab-angle yields only");
+      return false;
+    }
+    return true;
+  }
+  if (q == "ratio_to_rutherford" || q == "ratio_to_mott") {
+    // dsigma/dOmega over the Coulomb cross section, both at the c.m. angle (data_kinds.md section 4.3); lab angles are
+    // converted at load as for dsigma_domega, the value is not (it is the same in both frames).
+    const bool mott = q == "ratio_to_mott";
+    spec.observable = angleFrame == "cm" ? O::DifferentialCM : O::DifferentialLab;
+    spec.coulombReference = mott ? CoulombReference::Mott : CoulombReference::Rutherford;
+    // The validator read the reaction's labels; here the pairs of <levels> they resolved to decide.
+    const PairInfo *p = c.Pair(spec.entranceKey);
+    if (spec.combination != ReactionSpec::Combination::None || spec.exitKey != spec.entranceKey) {
+      c.Error(codes::kReactionNotAllowed, r, "reaction",
+              "the ratio to the " + std::string(mott ? "Mott" : "Rutherford") +
+                  " cross section is defined for one elastic reaction (entrance and exit the same pair of <levels>): "
+                  "give dsigma_domega");
+      return false;
+    }
+    if (p && (p->kind != 0 || p->lightZ * p->heavyZ == 0)) {
+      c.Error(codes::kReactionNotAllowed, r, "reaction",
+              "pair " + PairLabel(*p) + " has no Coulomb scattering (a neutral or non-particle pair): give dsigma_domega");
+      return false;
+    }
+    if (p && p->identical != mott) {
+      c.Error(codes::kReactionNotAllowed, r, "quantity",
+              mott ? "pair " + PairLabel(*p) + " has no identical particles: use quantity 'ratio_to_rutherford'"
+                   : "pair " + PairLabel(*p) + " has identical particles; the Coulomb reference is Mott-symmetrised: use "
+                                               "quantity 'ratio_to_mott'");
       return false;
     }
     return true;
@@ -348,6 +321,10 @@ bool CheckDataFile(Context &c, const ValidatedRecord &r, const std::string &file
   const std::string path = absolute || c.opt_.projectDir.empty() ? file : c.opt_.projectDir + "/" + file;
   std::ifstream in(path);
   if (!in) {
+    if (c.opt_.dataFiles == DataFiles::NotUsed) {  // an extrapolation run never opens it
+      c.Warn(codes::kDataFileNotRead, r, "file", "cannot read " + path + "; not read: this run does not use data", path);
+      return true;
+    }
     c.Error(codes::kDataFile, r, "file", "cannot read " + path);
     return false;
   }
@@ -453,7 +430,7 @@ bool BuildDataset(Context &c, const ValidatedRecord &r, DatasetSpec &d, Member &
   if (const Value *w = r.Get("angle_window")) {
     d.minA = Context::InBase(w->lo, w->unit);
     d.maxA = Context::InBase(w->hi, w->unit);
-  } else if (angleRole) {
+  } else {  // every angle (an angle-integrated observable has none; the engine reports the window, normalizations.out)
     d.minA = 0.0;
     d.maxA = 180.0;
   }
@@ -544,38 +521,23 @@ bool BuildDataset(Context &c, const ValidatedRecord &r, DatasetSpec &d, Member &
   return ok;
 }
 
-// The grid of an extrapolation (decision F10: range lo hi step s is E_k = lo + k s).  `bounds` are its lo and hi.
-bool ReadGrid(Context &c, const ValidatedRecord &r, const std::string &field, const Grid &g, std::vector<double> &values,
-              double &lo, double &hi) {
-  if (g.frame == "cm" && field == "energies") {
-    c.Error(codes::kNotBuilt, r, field, "an energy grid in the c.m. frame: this engine takes lab energies (a later step)");
+// The grid of an extrapolation (Grids.h).  `lo` and `hi` are its bounds as the segment reports them.
+bool ReadGrid(Context &c, const ValidatedRecord &r, const std::string &field, const Grid &g, const PairInfo *entrance,
+              std::vector<double> &values, double &lo, double &hi, std::string *file = nullptr) {
+  GridSetting setting;
+  setting.energies = field == "energies";
+  setting.entrance = entrance;
+  setting.relativistic = c.opt_.relativistic;
+  setting.projectDir = c.opt_.projectDir;
+  GridValues v = ReadGridValues(g, setting);
+  if (!v.ok) {
+    c.Error(v.code, r, field, v.error);
     return false;
   }
-  if (g.kind == "list") {
-    for (const Number &n : g.values) values.push_back(Context::InBase(n, g.unit));
-  } else if (g.kind == "range" && g.hasStep) {
-    lo = Context::InBase(g.lo, g.unit);
-    hi = Context::InBase(g.hi, g.unit);
-    const double step = Context::InBase(g.step, g.unit);
-    const long n = step > 0 ? (long)std::floor((hi - lo) / step + 1e-9) : 0;
-    for (long k = 0; k <= n; k++) values.push_back(lo + k * step);
-    return true;
-  } else if (g.kind == "range" && g.hasPoints) {
-    lo = Context::InBase(g.lo, g.unit);
-    hi = Context::InBase(g.hi, g.unit);
-    for (long k = 0; k < g.points; k++) {
-      const double t = g.points > 1 ? (double)k / (double)(g.points - 1) : 0.0;
-      values.push_back(g.log ? lo * std::pow(hi / lo, t) : lo + t * (hi - lo));
-    }
-    return true;
-  } else {
-    c.Error(codes::kNotBuilt, r, field, "a grid of kind " + g.kind + ": this engine takes range and list grids (a later step)");
-    return false;
-  }
-  if (!values.empty()) {
-    lo = values.front();
-    hi = values.back();
-  }
+  values = std::move(v.values);
+  lo = v.lo;
+  hi = v.hi;
+  if (file) *file = v.file;
   return true;
 }
 
@@ -588,8 +550,15 @@ bool BuildExtrapolation(Context &c, const ValidatedRecord &r, ExtrapolationSpec 
   if (!ok) return false;
   ok = ReadObservable(c, r, angleFrame, x.reaction) && ok;
   ok = EngineUnit(c, r) && ok;
-  if (const Value *e = r.Get("energies")) ok = ReadGrid(c, r, "energies", e->grid, x.energies, x.minE, x.maxE) && ok;
-  if (hasAngles) ok = ReadGrid(c, r, "angles", angles->grid, x.angles, x.minA, x.maxA) && ok;
+  if (const Value *e = r.Get("energies")) {
+    ok = ReadGrid(c, r, "energies", e->grid, c.Pair(x.reaction.entranceKey), x.energies, x.minE, x.maxE, &x.gridFile) && ok;
+    if (e->grid.kind == "adaptive") {
+      x.adaptive.on = true;
+      x.adaptive.tolerance = e->grid.tolerance.value;
+      x.adaptive.maxPoints = e->grid.maxPoints;
+    }
+  }
+  if (hasAngles) ok = ReadGrid(c, r, "angles", angles->grid, nullptr, x.angles, x.minA, x.maxA) && ok;
   else x.angles = {0.0};
   if (const Value *o = r.Get("orders")) {
     const Value *first = o->Get("first"), *last = o->Get("last");
@@ -610,15 +579,50 @@ bool BuildExtrapolation(Context &c, const ValidatedRecord &r, ExtrapolationSpec 
   return ok;
 }
 
+// ---------------------------------------------------------------- parameter names (SetupSpecs.h, ParameterNames)
+
+// The names of the parameters the engine makes for each data set and extrapolation: the data set's own, a shared
+// record's for the first active member of its group (the engine's leader rule, EData::Resolve*Groups), and for a
+// later member, whose parameter the engine keeps fixed, <record>.<field>[<data set>].
+void NameParameters(Context &c) {
+  std::map<std::string, int> normLeader, shiftLeader, thicknessLeader;
+  auto shared = [](std::map<std::string, int> &leaders, const std::string &label, int key, const std::string &field,
+                   const std::string &dataset, const std::string &own) {
+    if (label.empty()) return dataset + "." + own;
+    const int leader = leaders.emplace(label, key).first->second;
+    return label + "." + field + (leader == key ? "" : "[" + dataset + "]");
+  };
+  for (std::size_t i = 0; i < c.data_.size(); i++) {
+    const Member &m = c.data_[i];
+    DatasetSpec &d = c.out_.data.datasets.items[i].spec;
+    const std::string &name = m.record->name;
+    if (!m.active) continue;
+    d.names.norm = shared(normLeader, d.normGroup, d.key, "value", name, "norm");
+    d.names.energyShift = shared(shiftLeader, d.shiftGroup, d.key, "offset", name, "shift.offset");
+    d.names.energyShiftSqrt = name + ".shift.sqrt";
+    const std::string &scale = d.shiftFunctionGroup.empty() ? d.shiftGroup : d.shiftFunctionGroup;
+    for (std::size_t j = 0; j < d.shiftFunctionValues.size(); j++) d.names.shiftFunction.push_back(scale + ".a" + std::to_string(j));
+    if (d.thicknessFit && !d.thicknessGroup.empty()) {
+      const int leader = thicknessLeader.emplace(d.thicknessGroup, d.key).first->second;
+      if (leader != d.key) d.names.thickness += "[" + name + "]";
+    }
+  }
+  for (std::size_t i = 0; i < c.extrapolations_.size(); i++) {
+    ExtrapolationSpec &x = c.out_.extrapolations.extrapolations.items[i].spec;
+    const std::string &name = c.extrapolations_[i].record->name;
+    x.names.norm = name + ".norm";
+    x.names.energyShift = name + ".shift.offset";
+    x.names.energyShiftSqrt = name + ".shift.sqrt";
+  }
+}
+
 }  // namespace
 
-BuiltProject Schema::Build(const ValidationResult &validated, const std::vector<PairRow> &pairs, const BuildOptions &options) {
+BuiltProject Schema::Build(const ValidationResult &validated, const LevelTables &levels, const BuildOptions &options) {
   BuiltProject out;
-  Context c(validated, pairs, options, out);
+  Context c(validated, levels.pairs, options, out);
   std::map<std::string, int> firstActiveOfScale;
   for (const ValidatedRecord &r : validated.records) {
-    if (r.kind == "datum" && r.quantity)  // <modelData> is not built in this step
-      for (const Refusal &x : r.quantity->refusals) out.checksLeftToEngine += x.checkedBy == "build" ? 1 : 0;
     if (r.kind != "dataset" && r.kind != "extrapolation") continue;
     Member m;
     m.record = &r;
@@ -640,6 +644,10 @@ BuiltProject Schema::Build(const ValidationResult &validated, const std::vector<
   }
   for (auto &x : out.thm.experiments) std::sort(x.datasetKeys.begin(), x.datasetKeys.end());
   build::BuildEffects(c);
+  NameParameters(c);
+  ModelDataBuild modelData = BuildModelData(validated, levels.levels, levels.pairs);
+  out.modelData = std::move(modelData.data);
+  out.diagnostics.insert(out.diagnostics.end(), modelData.diagnostics.begin(), modelData.diagnostics.end());
   std::stable_sort(out.diagnostics.begin(), out.diagnostics.end(),
                    [](const Diagnostic &a, const Diagnostic &b) { return a.line < b.line; });
   if (!out.Ok()) {
