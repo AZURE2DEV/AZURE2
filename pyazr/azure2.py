@@ -954,7 +954,7 @@ class azure2(_HybridPotentials):
                 model.set_prior_centres(centres)
         # Electron-screening potentials are not written into the <targetInt> lines: the value there is the
         # prior's centre, and the fitted U_e travels in the .sav, like a normalization.
-        model.write(path)
+        self._write_potential_records(model).write(path)  # format 3: the session's hybrid potentials as records
 
         sav = None
         if param_sav:

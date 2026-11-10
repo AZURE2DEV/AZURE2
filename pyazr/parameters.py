@@ -340,6 +340,11 @@ class NuclearPotential:
     ``own`` distinguishes a pair that carries its own setting from one merely
     reporting the default -- the values are the same either way, but clearing a
     pair that has none is a no-op.
+
+    ``coulomb_radius`` (fm) is the radius of the uniformly charged sphere of the
+    potential's Coulomb term: the ``coulomb_radius`` field of a format-3
+    ``potential`` record, 3.5 fm in an older project's ``<potential>`` block.
+    Depths are MeV, ``R``, ``a``, ``r0`` fm.
     """
 
     pair: int
@@ -350,6 +355,7 @@ class NuclearPotential:
     a: float
     r0: float
     own: bool
+    coulomb_radius: float = 3.5
 
     @property
     def is_woods_saxon(self):
@@ -364,7 +370,7 @@ class NuclearPotential:
             shape = f"WoodsSaxon V0={self.V0:g} R={self.R:g} a={self.a:g}"
         else:
             shape = f"Gaussian V0={self.V0:g} r0={self.r0:g}"
-        return (f"NuclearPotential({who}, {shape}"
+        return (f"NuclearPotential({who}, {shape} R_C={self.coulomb_radius:g}"
                 f"{'' if self.own or self.pair == 0 else ', inherited'})")
 
 
