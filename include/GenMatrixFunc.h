@@ -4,6 +4,8 @@
 #include "Constants.h"
 #include "Config.h"
 
+#include <string>
+
 class EPoint;
 class CNuc;
 namespace azure2 {
@@ -144,6 +146,8 @@ class GenMatrixFunc {
   complex GetECTMatrixElement(int, int) const;
   /// Racah coefficient \f$R_k\f$ of the angular-distribution algebra.
   double GetRk(double, double, double, double, int);
+  /// The refusal of a point whose exit pair no pathway of its entrance pair reaches (pair numbers, 1-based).
+  std::string NoPathwayMessage(int entrancePair, int exitPair) const;
 
   /*!
    *This virtual function in implemented in the child class.

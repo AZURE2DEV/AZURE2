@@ -798,6 +798,12 @@ double GenMatrixFunc::GetRk(double j2f, double finalL, double finalLp, double Ic
 }
 
 
+std::string GenMatrixFunc::NoPathwayMessage(int entrancePair, int exitPair) const {
+  return "no reaction pathway leads from pair " + std::to_string(compound()->GetPair(entrancePair)->GetPairKey()) +
+         " to pair " + std::to_string(compound()->GetPair(exitPair)->GetPairKey()) +
+         " (no R-matrix level couples them, and no external capture leads there)";
+}
+
 bool GenMatrixFunc::CalculateAmplitudeMatrix(EPoint *point, double *spinSum,
                                              double *analyzingPower) {
   if (spinSum) *spinSum = 0.0;
