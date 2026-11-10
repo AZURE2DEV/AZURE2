@@ -10,6 +10,7 @@
 #include "KGroup.h"
 #include "azure2/physics/ExternalCapture.h"
 #include "KLGroup.h"
+#include <stdexcept>
 #include "MGroup.h"
 #include "Interference.h"
 #include "JGroup.h"
@@ -513,11 +514,11 @@ complex AMatrixFunc::GetChannelCaptureBilinear(int jGroupNum, int chNum, int chp
 void AMatrixFunc::CalculateTMatrix(EPoint *point) {
   AZUREProfile::Timer profileTimer(AZUREProfile::kTMatrix);
   tbar_decay_ = nullptr;
-  // Cache frequently accessed values to avoid repeated function calls
   int entranceKey = point->GetEntranceKey();
   int exitKey = point->GetExitKey();
   int aa = compound()->GetPairNumFromKey(entranceKey);
   int exitPairNum = compound()->GetPairNumFromKey(exitKey);
+  const azure2::EntrancePathways &P = compound()->Pathways().Entrance(aa);
 
   int irEnd;
   int irStart;
@@ -525,30 +526,22 @@ void AMatrixFunc::CalculateTMatrix(EPoint *point) {
   if ((configure().paramMask & Config::USE_RMC_FORMALISM) &&
       compound()->GetPair(exitPairNum)->GetPType() == 10) {
     irStart = 1;
-    irEnd = compound()->GetPair(aa)->NumDecays();
+    irEnd = (int)P.exits.size();
     isRMC = true;
   } else {
-    irStart = 0;
-    int numDecays = compound()->GetPair(aa)->NumDecays();
-    while (irStart < numDecays) {
-      irStart++;
-      if (compound()->GetPair(aa)->GetDecay(irStart)->GetPairNum() == exitPairNum) break;
-    }
+    irStart = P.ExitOf(exitPairNum);
+    if (!irStart) throw std::runtime_error(NoPathwayMessage(aa, exitPairNum));
     irEnd = irStart;
   }
   for (int ir = irStart; ir <= irEnd; ir++) {
-    Decay *theDecay = compound()->GetPair(aa)->GetDecay(ir);
-    for (int k = 1; k <= theDecay->NumKGroups(); k++) {
-      for (int m = 1; m <= theDecay->GetKGroup(k)->NumMGroups(); m++) {
-        MGroup *theMGroup = theDecay->GetKGroup(k)->GetMGroup(m);
-        // Cache frequently accessed values to avoid repeated function calls
-        int jNum = theMGroup->GetJNum();
-        int chNum = theMGroup->GetChNum();
-        int chpNum = theMGroup->GetChpNum();
-
-        JGroup *theJGroup = compound()->GetJGroup(jNum);
-        AChannel *entranceChannel = theJGroup->GetChannel(chNum);
-        AChannel *exitChannel = theJGroup->GetChannel(chpNum);
+    const azure2::ExitRow &theDecay = P.exits[ir - 1];
+    for (int k = 1; k <= theDecay.num_groups; k++) {
+      const azure2::SpinGroupRow &theKGroup = P.Group(theDecay, k);
+      for (int m = 1; m <= theKGroup.num_internal; m++) {
+        const azure2::InternalRow &theMGroup = P.Internal(theKGroup, m);
+        const int jNum = theMGroup.group;
+        const int chNum = theMGroup.ch;
+        const int chpNum = theMGroup.chp;
 
         // Cache phase calculations
         complex coulombPhaseEn = point->GetExpCoulombPhase(jNum, chNum);
@@ -574,11 +567,11 @@ void AMatrixFunc::CalculateTMatrix(EPoint *point) {
           this->AddTMatrixElement(k, m, tmatrix);
         }
       }
-      for (int m = 1; m <= theDecay->GetKGroup(k)->NumECMGroups(); m++) {
-        ECMGroup *theECMGroup = theDecay->GetKGroup(k)->GetECMGroup(m);
-        ALevel *finalLevel = compound()->GetJGroup(theECMGroup->GetJGroupNum())->GetLevel(theECMGroup->GetLevelNum());
-        double ecNormParam = finalLevel->GetECGamma(theECMGroup->GetFinalChannel()) *
-            finalLevel->GetSqrtNFFactor() * finalLevel->GetECConversionFactor(theECMGroup->GetFinalChannel());
+      for (int m = 1; m <= theKGroup.num_external; m++) {
+        const azure2::ExternalRow &theECMGroup = P.External(theKGroup, m);
+        ALevel *finalLevel = compound()->GetJGroup(theECMGroup.final_group)->GetLevel(theECMGroup.final_level);
+        double ecNormParam = finalLevel->GetECGamma(theECMGroup.final_channel) *
+            finalLevel->GetSqrtNFFactor() * finalLevel->GetECConversionFactor(theECMGroup.final_channel);
         // Use energy-shift aware EC amplitude calculation if energy shifts are active
         complex ecAmplitude;
         if (configure().paramMask & Config::USE_EXTERNAL_CAPTURE) {
@@ -589,14 +582,14 @@ void AMatrixFunc::CalculateTMatrix(EPoint *point) {
           ecAmplitude = point->GetECAmplitude(k, m);
         }
         complex tmatrix = ecNormParam * ecAmplitude;
-        if (theECMGroup->IsChannelCapture()) {
-          int internalChannel = theECMGroup->GetIntChannelNum();
-          MGroup *chanMGroup = compound()->GetPair(aa)->GetDecay(theECMGroup->GetChanCapDecay())->GetKGroup(theECMGroup->GetChanCapKGroup())->GetMGroup(theECMGroup->GetChanCapMGroup());
+        if (theECMGroup.channel_capture) {
+          int internalChannel = theECMGroup.photon_channel;
+          const azure2::InternalRow &chanMGroup = P.internal[theECMGroup.cc_row];
           int maskChannel = (configure().paramMask & Config::IGNORE_ZERO_WIDTHS) ? internalChannel : 0;
           complex umatrix = 2.0 * complex(0.0, 1.0) *
-              point->GetSqrtPenetrability(chanMGroup->GetJNum(), chanMGroup->GetChNum()) *
-              this->GetChannelCaptureBilinear(chanMGroup->GetJNum(), chanMGroup->GetChNum(),
-                                              chanMGroup->GetChpNum(), maskChannel);
+              point->GetSqrtPenetrability(chanMGroup.group, chanMGroup.ch) *
+              this->GetChannelCaptureBilinear(chanMGroup.group, chanMGroup.ch,
+                                              chanMGroup.chp, maskChannel);
           tmatrix = tmatrix * umatrix;
         }
         this->AddECTMatrixElement(k, m, tmatrix);
