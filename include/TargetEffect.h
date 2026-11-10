@@ -366,14 +366,14 @@ class TargetEffect {
   bool udrCentred_ = true;
   std::shared_ptr<UdrTable> udrTable_;  ///< shared between copies of the effect
 
-  bool isConvolution_;
-  bool isTargetIntegration_;
-  bool isActive_;
-  bool isQCoefficients_;
-  bool isConvCoefficients_;
-  int numIntegrationPoints_;
-  double sigma_;
-  double density_;
+  bool isConvolution_ = false;
+  bool isTargetIntegration_ = false;
+  bool isActive_ = false;  ///< a line ending inside its first nine fields is read as inactive
+  bool isQCoefficients_ = false;
+  bool isConvCoefficients_ = false;
+  int numIntegrationPoints_ = 0;
+  double sigma_ = 0.0;
+  double density_ = 0.0;
   bool isThickTarget_ = false;   ///< target integration with density 0 (IsThickTarget)
   Equation stoppingPowerEq_;
   std::string segmentsList_;
@@ -399,20 +399,20 @@ class TargetEffect {
   double layoutDensity_ = 0.0;    ///< density the sub-point grids span; 0 = the current density
 
   // Energy straggling: sigma = c_s sqrt(dE_cm) (c.m. coefficient), or Bohr's formula when c_s = 0.
-  bool isStraggling_;
-  double stragglingCoefficient_;
+  bool isStraggling_ = false;
+  double stragglingCoefficient_ = 0.0;
 
   // Adaptive integration grid parameters
-  double resonanceWidthMultiplier_;
+  double resonanceWidthMultiplier_ = 0.0;  ///< set from AdaptiveIntegrationGrid::GridConfig in the constructor
   bool explicitResonanceWidthMultiplier_ = false;
-  double pointsPerWidth_;
+  double pointsPerWidth_ = 0.0;            ///< likewise
 
   // Optional restriction of the effect to lab-energy windows, with a smooth
   // blend of the given width at each edge, and/or automatic per-point
   // application controlled by a relative tolerance.
   std::vector<std::pair<double, double> > ranges_;
-  double transitionWidth_;
-  double autoTolerance_;
+  double transitionWidth_ = 0.0;
+  double autoTolerance_ = 0.0;
   bool autoWindows_ = false;            ///< "auto" in the windows token (IsAutoWindows)
   double autoWindowTolerance_ = 0.01;   ///< peak error of the fallback a resonance may have outside a window
   double autoWindowMargin_ = 3.0;       ///< window reach beyond the target, in units of max(Gamma, Delta)

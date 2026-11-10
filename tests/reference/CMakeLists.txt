@@ -98,6 +98,12 @@ set_tests_properties(park_chi2_fallback PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=
 # forms (unit integral, centring, burst/channel widths in quadrature, energy
 # interpolation) and the time-of-flight conversions.  Writes and removes a
 # temporary file in its working directory.
+# A <targetInt> line that ends inside its first nine fields: every TargetEffect member has its initialised value
+# (step 3a; before, they were left indeterminate), and a complete line still sets them.
+add_executable(target_effect_line_test target_effect_line_test.cpp)
+target_link_libraries(target_effect_line_test PRIVATE AZURE2Core)
+add_test(NAME target_effect_line COMMAND target_effect_line_test)
+
 add_executable(udr_reference_test udr_reference_test.cpp)
 target_link_libraries(udr_reference_test PRIVATE AZURE2Core)
 add_test(NAME udr_reference COMMAND udr_reference_test)
