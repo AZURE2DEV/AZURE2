@@ -397,9 +397,17 @@ Each step is one branch, mergeable on its own, with the 179 × 3 gate.
    `feature/upgrade-4-potential-record`: `project_format3.md` §3.10a.] Outputs identical. Needs the
    format-3 reader of Phase 4 (`project_format3.md` §7).
 4. **The key** (§3.1): `two_j` in `ChannelTable::Key`, `RadialBlockKey`, `ShiftDerivKey`, the scratch, always −1.
-   Outputs identical (byte-identical tables in `channel_table_unit`).
+   Outputs identical (byte-identical tables in `channel_table_unit`).  [Done 2026-11-10,
+   `feature/upgrade-4-spin-orbit`: one function forms the key, `PPair::SpinOrbitTwoJ(J)`; also the THM shift memo
+   and the rate grid of `ECIntegral`.  The THM Coulomb term passes `kNoSpinOrbit` (the vertex refuses any potential).]
 5. **The spin–orbit term, option (a)**: the term in the solver, ⟨2 l·i⟩ from (l, 2J, 2i), the `spin_orbit` field,
    the diagnostics, pyazr's `J` argument, tests 1–9 of §4.2. Outputs identical unless a spin–orbit term is given.
+   [Done 2026-11-10, `feature/upgrade-4-spin-orbit`: `physics/HybridPotential.h` (`SpinOrbitTerm`, `TwoLDotI`,
+   `SpinOrbitRadialTerm`; the solvers take ⟨2 l·i⟩); `PPair::SpinOrbitFactor`; the record word (woods_saxon only);
+   the codes `E_SO_TWO_SPINS`, `E_SO_ZERO_SPIN`, `E_SO_RELATIVISTIC`, `E_SO_THM`, `E_SO_NEEDS_J` and `E_SO_NO_TERM`
+   (a J for a pair without the term) in `experiment/SpinOrbitChecks.h`; pyazr 2.24.0; tests: `physics_spin_orbit`,
+   `tests/spin_orbit_potential`, `pyazr_spin_orbit_potential`, `channel_table_unit` with both j.  Not done: the
+   web UI / Qt forms; `gaussian` as a spin–orbit form.]
 6. **Option (b)**, only on demand: matrix blocks in `EDependentTables`/the per-stage table, `AMatrixFunc`,
    `level_parameters`, observed widths and external capture; its own design note (the A-matrix and the level
    parameters are owned by `level_parameters.md` and the plan's S5 / CNuc step 6b, which should be merged first).
