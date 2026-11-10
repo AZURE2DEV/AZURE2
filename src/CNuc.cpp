@@ -309,6 +309,7 @@ int CNuc::Fill(const Config &configure, const std::map<int, double> &radii) {
       const azure2::io::LevelGrouper::Slot slot = levelGrouper.Assign(JGroupNum, NewLevel.GetE(), Line.levelID());
       if (slot.level > group->NumLevels()) group->AddLevel(NewLevel);
       LevelNum = slot.level;
+      group->GetLevel(LevelNum)->AddID(Line.levelID());
       if (slot.kind == azure2::io::LevelGrouper::Kind::SameEnergy)
         configure.outStream << "WARNING: level IDs " << slot.otherID << " and " << Line.levelID() << " (J = "
                             << group->GetJ() << (group->GetPi() == -1 ? "-" : "+") << ", E = " << NewLevel.GetE()
@@ -327,7 +328,6 @@ int CNuc::Fill(const Config &configure, const std::map<int, double> &radii) {
   }
   // A malformed row, or no </levels>: the rows before it are read (and refused for their own reasons first).
   if (section.malformed || !section.complete) return -1;
-
 
   // Every level of a J-group needs one width per group channel.  Until 2026-10-17 widths were appended in the
   // order of each level's own lines, so a level listing fewer channels than its group left a short width vector
@@ -396,7 +396,7 @@ int CNuc::Fill(const Config &configure, const std::map<int, double> &radii) {
     for (int j = 1; j <= this->NumJGroups(); j++) this->GetJGroup(j)->SetNucleusLabelled(true);
 
   if (this->ReadAbundances(configure) == -1) return -1;
-  if (ScatteringLength::ReadConstraints(this, configure, scatLenConstraints_) == -1) return -1;
+  if (std::shared_ptr<const ModelDataSet> read = ModelData::Read(*this, configure)) modelData_ = read; else return -1;
   // right after the pairs are known, before any data file is read (a project whose data fail still gets it)
   WarnMassSeparationMismatch(*this, configure);
 

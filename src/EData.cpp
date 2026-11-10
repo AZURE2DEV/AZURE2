@@ -2821,9 +2821,9 @@ void EData::WriteOutputFiles(const Config &configure, const azure2::Results &res
     }
     // Nuisance priors (<parameterSettings> useAsNuisance), part of the objective in every path (objective.md D6).
     if (nuisanceChi2_ != 0.0) chiOut << " Total-Nuisance-Chi-Squared: " << nuisanceChi2_;
-    // Measured scattering lengths (<scatteringLengths>; table in scatteringLengths.out).
-    if (scatteringLengthChi2_ != 0.0)
-      chiOut << " Total-Scattering-Length-Chi-Squared: " << scatteringLengthChi2_;
+    // The model data (T9): <scatteringLengths> (table in scatteringLengths.out) and <modelData> (modelData.out).
+    if (scatteringLengthChi2_ != 0.0) chiOut << " Total-Scattering-Length-Chi-Squared: " << scatteringLengthChi2_;
+    if (hasModelDataChi2_) chiOut << " Total-Model-Data-Chi-Squared: " << modelDataChi2_;
     // Prior parameter covariance (<config> priorCovariance=): (p - mu)^T C^-1 (p - mu), whenever the key is set.
     // Written with 15 significant digits (a new field: the older ones keep their 6).
     if (!configure.priorCovariance.empty()) {

@@ -8,7 +8,7 @@
 #include <map>
 #include "JGroup.h"
 #include "PPair.h"
-#include "ScatteringLength.h"
+#include "ModelData.h"
 
 namespace ROOT {
 namespace Minuit2 {
@@ -69,10 +69,12 @@ class CNuc {
   /// abundances Minuit parameters (one per nucleus and sample, after the
   /// level block), so a project without the block keeps its parameter layout.
   bool HasAbundanceBlock() const { return hasAbundanceBlock_; }
-  /// Measured scattering lengths of the optional <scatteringLengths> block (ScatteringLength::ReadConstraints).
-  const std::vector<ScatteringLength::Constraint> &ScatteringLengthConstraints() const { return scatLenConstraints_; }
-  /// Is there an active constrained scattering length (a chi2 term)?
-  bool HasScatteringLengthConstraints() const { return ScatteringLength::NumResiduals(scatLenConstraints_) > 0; }
+  /// The model data (ModelData.h): the rows of the objective's term T9, read by Fill.
+  const ModelDataSet &GetModelData() const { return *modelData_; }
+  /// The lines of the optional <scatteringLengths> block as read (ScatteringLength::ReadConstraints), for the report.
+  const std::vector<ScatteringLength::Constraint> &ScatteringLengthConstraints() const {
+    return modelData_->scatteringLengthLines;
+  }
   /// Number of samples the <abundances> block defines (0 without the block).
   int NumSamples() const { return (int)samples_.size(); }
   /// Sample \p s, 1-based.
@@ -219,6 +221,15 @@ class CNuc {
   /// without its messages (for WarnLargeRadiativeWidths, CNucChecks.h); the fit state is set back to the vector.
   /// False, with nothing set, if the transformation fails.
   bool ObservedWidthsAt(const Config &, const vector_r &);
+  /// The observed quantities of the current fit values (TransformOut without its messages) in the levels' observed and
+  /// transform slots, as the model data read them (ModelData.cpp) inside an evaluation: nothing a calculation reads
+  /// is changed (the bound-state normalizations TransformToBrune sets are put back).  False if the transformation
+  /// fails (the slots are then not meaningful).  CNucObserved.cpp.
+  bool ObservedOfFitValues(const Config &);
+  /// Set one fit value, as FillCompoundFromParams sets it with everything derived from it: the energy of level la of
+  /// J-group j (channel 0) or its amplitude in channel ch (1-based).  For the numerical derivatives of the model data;
+  /// setting the value back restores the state bit for bit.  CNucObserved.cpp.
+  void SetFitLevelParameter(int j, int la, int ch, double value);
 
   // -- fitting --------------------------------------------------------------
   /// Seed the parameter vector from the current level parameters, each with its record (what it is).
@@ -272,7 +283,8 @@ class CNuc {
   std::vector<CompoundNucleus> nuclei_;
   std::vector<AbundanceSample> samples_;
   bool hasAbundanceBlock_ = false;
-  std::vector<ScatteringLength::Constraint> scatLenConstraints_;
+  /// Setup state, shared by the copies (Clone).
+  std::shared_ptr<const ModelDataSet> modelData_ = std::make_shared<ModelDataSet>();
   bool transformedIn_ = false;
   std::vector<double> thmCoherentValues_;
 };

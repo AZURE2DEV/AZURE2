@@ -283,6 +283,13 @@ The file separates the two contributions::
   (:doc:`../theory/scattering_length`).  ``scatteringLengths.out`` lists each
   line's model value and contribution.  The term is part of every fitter's
   objective and of the MCMC likelihood.
+- **Total-Model-Data-Chi-Squared**, when the project has a ``<modelData>``
+  section (:doc:`../reference/data_formats`), is the sum over its data
+  (resonance strengths, energies, widths, branching ratios, ANCs, scattering
+  lengths) of :math:`((q - d)/e)^2`, :math:`q` from the observed energy and
+  widths of the level at the parameters.  ``modelData.out`` lists each
+  datum.  With the scattering lengths it is one term of the objective, in
+  every fitter and in the MCMC likelihood.
 - **Total-Prior-Covariance-Chi-Squared**, whenever the ``<config>`` block names
   a prior covariance file (``priorCovariance=<file>``, see below), is
   :math:`(\mathbf{p}-\boldsymbol{\mu})^T C^{-1} (\mathbf{p}-\boldsymbol{\mu})`,

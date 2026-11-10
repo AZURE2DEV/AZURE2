@@ -214,6 +214,11 @@ class EData {
   double GetAbundancePenalty() const { return abundancePenalty_; }
   /// chi2 of the measured scattering lengths (<scatteringLengths>) at the last evaluation.
   void SetScatteringLengthChi2(double chi2) { scatteringLengthChi2_ = chi2; }
+  /// chi2 of the <modelData> section's data at the last evaluation (written to chiSquared.out once set).
+  void SetModelDataChi2(double chi2) {
+    modelDataChi2_ = chi2;
+    hasModelDataChi2_ = true;
+  }
   /// The nuisance priors' total of the last reported evaluation (<parameterSettings> useAsNuisance; objective.md D6).
   void SetNuisanceChi2(double chi2) { nuisanceChi2_ = chi2; }
   double GetNuisanceChi2() const { return nuisanceChi2_; }
@@ -508,6 +513,8 @@ class EData {
   double parkPenalty_ = 0.0;
   double abundancePenalty_ = 0.0;
   double scatteringLengthChi2_ = 0.0;
+  double modelDataChi2_ = 0.0;
+  bool hasModelDataChi2_ = false;
   double nuisanceChi2_ = 0.0;
   std::shared_ptr<const PriorCovariance> priorCov_;  // shared by every copy (read-only once set up)
   double priorCovChi2_ = 0.0;

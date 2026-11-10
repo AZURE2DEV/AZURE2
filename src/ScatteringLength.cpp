@@ -115,6 +115,33 @@ bool Adjoint(CNuc *compound, const Config &configure, const Channel &ch, complex
   return f.BilinearAdjoint(&point, ch.jGroup, ch.channel, c.c1 * aBar, accum, shiftDeriv);
 }
 
+std::string ResolveConstraint(CNuc *compound, Constraint &c) {
+  if (!compound->IsPairKey(c.pairKey)) return "no particle pair with key " + std::to_string(c.pairKey);
+  PPair *pair = compound->GetPair(compound->GetPairNumFromKey(c.pairKey));
+  if (pair->GetPType() != 0) return "pair " + std::to_string(c.pairKey) + " is not a particle pair";
+  std::vector<Channel> all = Channels(compound, c.pairKey);
+  if (c.s < 0.0) {
+    if (pair->IsIdentical()) return "the coherent combination (s = -1) is not defined for an identical pair";
+    const double norm = (2.0 * pair->GetJ(1) + 1.0) * (2.0 * pair->GetJ(2) + 1.0);
+    for (const Channel &ch : all) {
+      c.terms.push_back(ch);
+      c.weights.push_back((2.0 * ch.s + 1.0) / norm);
+    }
+  } else {
+    for (const Channel &ch : all)
+      if (fabs(ch.s - c.s) < 1.0e-6) {
+        c.terms.push_back(ch);
+        c.weights.push_back(1.0);
+      }
+    if (c.terms.empty()) {
+      std::ostringstream m;
+      m << "pair " << c.pairKey << " has no s-wave channel with channel spin " << c.s;
+      return m.str();
+    }
+  }
+  return "";
+}
+
 int ReadConstraints(CNuc *compound, const Config &configure, std::vector<Constraint> &constraints) {
   constraints.clear();
   std::unique_ptr<std::istream> section = configure.SectionStream("scatteringLengths");
@@ -147,29 +174,8 @@ int ReadConstraints(CNuc *compound, const Config &configure, std::vector<Constra
     c.active = (read.active != 0);
     c.line = n;
     if (c.sigma < 0.0 || c.imSigma < 0.0) return error("uncertainties must not be negative");
-    if (!compound->IsPairKey(c.pairKey)) return error("no particle pair with key " + std::to_string(c.pairKey));
-    PPair *pair = compound->GetPair(compound->GetPairNumFromKey(c.pairKey));
-    if (pair->GetPType() != 0) return error("pair " + std::to_string(c.pairKey) + " is not a particle pair");
-    std::vector<Channel> all = Channels(compound, c.pairKey);
-    if (c.s < 0.0) {
-      if (pair->IsIdentical()) return error("the coherent combination (s = -1) is not defined for an identical pair");
-      const double norm = (2.0 * pair->GetJ(1) + 1.0) * (2.0 * pair->GetJ(2) + 1.0);
-      for (const Channel &ch : all) {
-        c.terms.push_back(ch);
-        c.weights.push_back((2.0 * ch.s + 1.0) / norm);
-      }
-    } else {
-      for (const Channel &ch : all)
-        if (fabs(ch.s - c.s) < 1.0e-6) {
-          c.terms.push_back(ch);
-          c.weights.push_back(1.0);
-        }
-      if (c.terms.empty()) {
-        std::ostringstream m;
-        m << "pair " << c.pairKey << " has no s-wave channel with channel spin " << c.s;
-        return error(m.str());
-      }
-    }
+    const std::string why = ResolveConstraint(compound, c);
+    if (!why.empty()) return error(why);
     constraints.push_back(c);
   }
   return (int)constraints.size();
@@ -181,24 +187,27 @@ complex ConstraintValue(CNuc *compound, const Config &configure, const Constrain
   return a;
 }
 
+int NumResiduals(const Constraint &c) {
+  if (!c.active) return 0;
+  return (c.sigma > 0.0 ? 1 : 0) + (c.imSigma > 0.0 ? 1 : 0);
+}
+
 int NumResiduals(const std::vector<Constraint> &constraints) {
   int n = 0;
-  for (const Constraint &c : constraints) {
-    if (!c.active) continue;
-    if (c.sigma > 0.0) n++;
-    if (c.imSigma > 0.0) n++;
-  }
+  for (const Constraint &c : constraints) n += NumResiduals(c);
   return n;
+}
+
+void ConstraintResiduals(CNuc *compound, const Config &configure, const Constraint &c, std::vector<double> &r) {
+  if (!c.active || (c.sigma <= 0.0 && c.imSigma <= 0.0)) return;
+  complex a = ConstraintValue(compound, configure, c);
+  if (c.sigma > 0.0) r.push_back((std::real(a) - c.value) / c.sigma);
+  if (c.imSigma > 0.0) r.push_back((std::imag(a) - c.imValue) / c.imSigma);
 }
 
 void Residuals(CNuc *compound, const Config &configure, const std::vector<Constraint> &constraints,
                std::vector<double> &r) {
-  for (const Constraint &c : constraints) {
-    if (!c.active || (c.sigma <= 0.0 && c.imSigma <= 0.0)) continue;
-    complex a = ConstraintValue(compound, configure, c);
-    if (c.sigma > 0.0) r.push_back((std::real(a) - c.value) / c.sigma);
-    if (c.imSigma > 0.0) r.push_back((std::imag(a) - c.imValue) / c.imSigma);
-  }
+  for (const Constraint &c : constraints) ConstraintResiduals(compound, configure, c, r);
 }
 
 double Chi2(CNuc *compound, const Config &configure, const std::vector<Constraint> &constraints) {
@@ -209,40 +218,39 @@ double Chi2(CNuc *compound, const Config &configure, const std::vector<Constrain
   return chi2;
 }
 
+bool ConstraintGradient(CNuc *compound, const Config &configure, const Constraint &c, GradAccum &accum,
+                        const vector_matrix_r *shiftDeriv, int row) {
+  if (!c.active || (c.sigma <= 0.0 && c.imSigma <= 0.0)) return true;
+  // d(chi2) = Re(conj(aBar) da):  aBar = 2 r_re/sigma + i 2 r_im/imSigma.  One residual row:
+  // aBar = 1/sigma (Re row) or i/imSigma (Im row), since Re(conj(i/s) da) = Im(da)/s.
+  complex aBar(0.0, 0.0);
+  if (row < 0) {
+    complex a = ConstraintValue(compound, configure, c);
+    if (c.sigma > 0.0) aBar += 2.0 * (std::real(a) - c.value) / (c.sigma * c.sigma);
+    if (c.imSigma > 0.0) aBar += complex(0.0, 2.0 * (std::imag(a) - c.imValue) / (c.imSigma * c.imSigma));
+  } else if (row == 0 && c.sigma > 0.0) {
+    aBar = 1.0 / c.sigma;
+  } else if (row < NumResiduals(c)) {
+    aBar = complex(0.0, 1.0 / c.imSigma);
+  } else {
+    return true;
+  }
+  for (size_t t = 0; t < c.terms.size(); t++)
+    if (!Adjoint(compound, configure, c.terms[t], c.weights[t] * aBar, accum, shiftDeriv)) return false;
+  return true;
+}
+
 bool Chi2Gradient(CNuc *compound, const Config &configure, const std::vector<Constraint> &constraints,
                   GradAccum &accum, const vector_matrix_r *shiftDeriv, int residual) {
-  int row = 0;
+  int first = 0;  // the first row of constraint c
   for (const Constraint &c : constraints) {
-    if (!c.active || (c.sigma <= 0.0 && c.imSigma <= 0.0)) continue;
-    // d(chi2) = Re(conj(aBar) da):  aBar = 2 r_re/sigma + i 2 r_im/imSigma.  One residual row:
-    // aBar = 1/sigma (Re row) or i/imSigma (Im row), since Re(conj(i/s) da) = Im(da)/s.
-    complex aBar(0.0, 0.0);
-    bool needed = false;
+    const int n = NumResiduals(c);
     if (residual < 0) {
-      complex a = ConstraintValue(compound, configure, c);
-      if (c.sigma > 0.0) aBar += 2.0 * (std::real(a) - c.value) / (c.sigma * c.sigma);
-      if (c.imSigma > 0.0) aBar += complex(0.0, 2.0 * (std::imag(a) - c.imValue) / (c.imSigma * c.imSigma));
-      needed = true;
-    } else {
-      if (c.sigma > 0.0) {
-        if (row == residual) {
-          aBar = 1.0 / c.sigma;
-          needed = true;
-        }
-        row++;
-      }
-      if (c.imSigma > 0.0) {
-        if (row == residual) {
-          aBar = complex(0.0, 1.0 / c.imSigma);
-          needed = true;
-        }
-        row++;
-      }
+      if (!ConstraintGradient(compound, configure, c, accum, shiftDeriv, -1)) return false;
+    } else if (residual < first + n) {
+      return ConstraintGradient(compound, configure, c, accum, shiftDeriv, residual - first);
     }
-    if (!needed) continue;
-    for (size_t t = 0; t < c.terms.size(); t++)
-      if (!Adjoint(compound, configure, c.terms[t], c.weights[t] * aBar, accum, shiftDeriv)) return false;
-    if (residual >= 0) break;
+    first += n;
   }
   return true;
 }

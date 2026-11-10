@@ -4,6 +4,7 @@
 #include "CNucChecks.h"
 #include "CNucReport.h"
 #include "Objective.h"
+#include "ModelData.h"
 #include "ScatteringLength.h"
 #include "ParameterLabel.h"
 #include "AZUREParams.h"
@@ -85,7 +86,7 @@ int AZUREMain::operator()() {
       if (data()->Fill(configure(), compound()) == -1) {
         configure().outStream << "Could not fill data object from file." << std::endl;
         return -1;
-      } else if (data()->NumSegments() == 0) {
+      } else if (data()->NumSegments() == 0 && compound()->GetModelData().NumResiduals() == 0) {  // model data alone run
         configure().outStream << "There is no data provided." << std::endl;
         return -1;
       }
@@ -842,6 +843,13 @@ int AZUREMain::operator()() {
                             << std::endl;
     } catch (const std::exception &e) {
       configure().outStream << "Scattering lengths not calculated: " << e.what() << std::endl;
+    }
+    // The <modelData> data at the same parameters (ModelData.h): modelData.out and the run log, only with the section.
+    const std::string modelData = ModelData::Report(compound(), configure(), compound()->GetModelData());
+    if (!modelData.empty()) {
+      std::ofstream mdOut((configure().outputdir + "modelData.out").c_str());
+      mdOut << modelData;
+      configure().outStream << modelData;
     }
   } else {
     // Calculate Reaction Rate

@@ -468,6 +468,76 @@ Neutron tables list *bound* lengths :math:`b`; enter the free length
    Compatibility: an engine older than this feature ignores the block (the
    constraints then do nothing); a GUI older than it drops the block on save.
 
+**Model data.** An optional ``<modelData>`` section holds literature values of
+level properties -- a resonance strength, a resonance energy, a total or
+partial width, a branching ratio, an ANC -- and scattering lengths, each
+compared with a function of the level parameters rather than with the model
+at a beam energy (``docs/upgrade/project_format3.md`` section 3.10).  It is
+the first section written in the records of project format 3
+(:doc:`format3`): a header ``datum <name>`` and one ``<key> <value>`` line per
+field, ``#`` comments anywhere.  T2's level 5 (``tests/upgrade/T2``), with
+the values ``tests/model_data`` checks::
+
+   <modelData>
+   datum wg_L5
+       quantity   resonance_strength
+       level      5                  # the level ID of <levels> (column 9)
+       J          3-                 # required: the level's J^pi
+       reaction   15N(p,a)12C        # entrance and exit pairs
+       value      2.63 keV
+       error      0.15 keV
+       source     "author, journal volume page (year), table 2"
+   datum Er_L5
+       quantity   resonance_energy
+       level      5
+       J          3-
+       frame      E_lab              # E_x, or E_cm / E_lab of a pair
+       pair       p+15N
+       value      1.2185 MeV
+       error      0.3 keV
+   </modelData>
+
+A level is named by its ID (column 9 of ``<levels>``) and its :math:`J^\pi`,
+which must agree; a pair by its particles and states (``p+15N``,
+``a+12C[4.439]``: an excitation energy matches to the digits written,
+``g+16O[6.13]`` a capture pair).  The fields of each quantity, its units and
+its EXFOR codes are the table of :doc:`format3`.  Every datum adds
+:math:`((q - d)/e)^2` to the chi-squared, with :math:`q` evaluated at every
+step of a fit from the **observed** energy and widths of the level (those
+``parameters.out`` reports, in the Brune, formal and Park bases alike):
+
+* ``resonance_strength``: :math:`\omega\gamma = \omega\Gamma_a\Gamma_b/\Gamma`,
+  :math:`\omega = (2J+1)(1+\delta_{aA})/((2j_a+1)(2j_A+1))`, with
+  :math:`\Gamma_a`, :math:`\Gamma_b` the observed widths summed over the
+  channels of the entrance and exit pairs and :math:`\Gamma` over all
+  channels (eV, meV, ueV, keV);
+* ``resonance_energy``: :math:`E_x` of the level, or :math:`E_\mathrm{c.m.} = E_x - S - E^*`
+  and :math:`E_\mathrm{lab}` of the pair (``relativistic=1`` honoured);
+* ``total_width``, ``partial_width`` (``pair``), ``branching_ratio``
+  (:math:`\Gamma_b/\Gamma`, ``reaction``);
+* ``anc``: :math:`|C|` of a closed channel (``pair``, ``l``, ``s``; 0 if a fit
+  moves the level above the threshold);
+* ``scattering_length``: as a ``<scatteringLengths>`` line (``pair``, ``s``
+  or ``coherent``, ``value``/``error``, optional ``imag``/``imag_error``).
+
+The engine refuses, with the code in the message: a level ID no active level
+has (``E_UNKNOWN_LEVEL``), a :math:`J^\pi` that is not the level's
+(``E_LEVEL_JPI``), a reaction or pair no pair has (``E_UNKNOWN_PAIR``) or two
+pairs have (``E_AMBIGUOUS_PAIR``), a pair that is no channel of the level
+(``E_NOT_A_CHANNEL``), a strength of a level below its entrance threshold
+(``E_OUT_OF_RANGE``: give an ``anc``), an ANC of an open channel, two data of
+one name, and every error of the format-3 table.  It warns when eq. (8) and
+the area of the resonance differ (``docs/upgrade/data_kinds.md`` section 4.7):
+:math:`\Gamma/E_r > 1\,\%` (``W_BROAD_LEVEL``) or another level of the same
+:math:`J^\pi` within :math:`10\,\Gamma` (``W_NEARBY_LEVEL``), from the widths
+written in ``<levels>``; a non-resonant amplitude in the same channel, which
+also changes the area, is not detected.  The table of the model values is
+written to ``modelData.out`` and the run log, and the term's total to
+``chiSquared.out`` (:doc:`output_files`); pyazr gives the same values as
+records, ``pyazr.model_data(model)``.  The level quantities' gradient is a
+central difference over the parameters of the level's :math:`J^\pi` group;
+the scattering lengths' is exact.
+
 A ``<targetInt>`` line may end with keyword blocks (``beamprofile ...``,
 ``udr ...``, ``sigmalab``, ``screening Ue vary sigma``). ``screening`` is
 electron screening of the listed segments: the screening potential in eV, 1 to
