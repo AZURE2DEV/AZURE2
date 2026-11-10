@@ -2,6 +2,47 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-10 (agent, brief W) — the spin-orbit term of the hybrid potential (`feature/upgrade-4-spin-orbit`)
+
+**Done** (`spin_orbit_potential.md` §5 steps 4 and 5, option (a): pairs with one spinning particle).
+- The key: channel functions of a pair whose potential has a spin-orbit term depend on (l, J).  `ChannelTable::Key`
+  is (pair, l, two_j, E_c); `CoulFunc`, `ShftFunc`, `WhitFunc`, `ChannelFunc`, `NFIntegral` take (l, two_j); the
+  radial scratch and one-deep memo of `CoulFunc`, the shift-derivative memo of `CNuc::CalcShiftFunctions`, the THM
+  shift memo and the rate grid of `ECIntegral` (now also keyed by the potential) carry it.  One function forms it:
+  `PPair::SpinOrbitTwoJ(J)` (`kNoSpinOrbit` = -1 for a pair without the term); `PPair::SpinOrbitFactor(l, two_j)`
+  gives <2 l.i>.  The THM Coulomb term passes `kNoSpinOrbit` (the THM vertex refuses any potential).
+- The term: `physics/HybridPotential.h` `SpinOrbitTerm` (optional field of `HybridPotential`, compared by value,
+  appended to `PotentialKey` only when present), `TwoLDotI`, `SpinOrbitRadialTerm` (FRESCO: V_so 2.000 fm^2 (1/r)
+  df/dr); `RadialPotential`, `IntegrateInward`, `DecayingSolution`, `HybridBoundShift` take <2 l.i>, added last and
+  not at all when 0.  Bound states, closed channels, S', S'' and the EC final state use it.
+- Format 3: `spin_orbit woods_saxon depth radius diffuseness on light|heavy operator 2l.s` (schema row; --describe;
+  the record writer writes it for pyazr's save_fit).  Codes (`experiment/SpinOrbitChecks.h`, shared by the build,
+  pyazr and the API): `E_SO_TWO_SPINS`, `E_SO_ZERO_SPIN`, `E_SO_RELATIVISTIC`, `E_SO_THM`, `E_SO_NEEDS_J`,
+  `E_SO_NO_TERM`.  `PPair::SetHybridPotential` refuses an impossible term as a last guard.
+- pyazr 2.24.0: `set_nuclear_potential(..., spin_orbit={depth, radius, diffuseness, on})`, `NuclearPotential.spin_orbit`,
+  `coulomb_functions(..., J=None)`.  `AZUREAPI::GetCoulombFunctions` moved verbatim to
+  `api/src/AZUREAPIChannelFunctions.cpp` first (size limit).
+- Tests: `physics_spin_orbit` (m-scheme angular factor, radial term, delta-shell closed form, the DOP853 table
+  `physics/tests/data/spin_orbit.csv`, bit-identity at <2 l.i> = 0), `tests/spin_orbit_potential` (χ² pinned; check.sh:
+  phase shifts against the table, unitarity, 1 vs 3 threads, gradient, capture), `pyazr_spin_orbit_potential`
+  (coulomb_functions with J, API = record, refusals, EC integrals per J against `ec_reference.py`),
+  `channel_table_unit` with both j.  Docs: `theory/hybrid_potential.rst`, `examples/spin_orbit_potential.rst`,
+  `pyazr.rst`, format3.rst regenerated.
+
+**Verified** (build `work/b-so`, clean, 0 warnings): 183 × 3 against `tab-trial8` (tag `tab-so3`): 704 / 677 / 704
+identical, plus 15 / 15 / 15 new files (the new project and its models); channel tables of T1–T3 byte-identical
+to the base build (a scratch dumper linked against each); T2 cycles (perf stat, 1 thread, base and branch alternated,
+6 repetitions, minimum): calculation 3.326e9 against 3.326e9, 200-call fit 2.122e11 against 2.124e11 (+0.1 %);
+instructions +0.38 % and +0.08 %; the remaining checks are in the report of the branch.  Every new test was shown to
+fail once with an injected error (l.s for 2 l.s, the sign of df/dr, <2 l.i> halved, the point's row read with
+J = l + 1/2, the EC bound state without its J).
+
+**Open.** Web UI / Qt forms for the word (they need: the spin_orbit structured value of the schema row, pyazr's
+dict, the J argument of coulomb_functions).  `gaussian` as a spin-orbit form (one schema alternative, one solver
+case, one test).  Option (b), pairs with two spins (refused).  `ScatteringLength::ZeroEnergyShift` (the exact
+threshold of a scattering-length point) uses the point-Coulomb S(0) for a hybrid pair, not the distorted one (older
+than this branch).  Sphinx not run (not installed on this host).
+
 ## 2026-11-10 (agent, brief S) — `EData`, `EPoint`, `ESegment` cut into files with one job (`feature/upgrade-4-edata-split-3`)
 
 **What file holds what now.** Eleven new source files and two new headers, each made by a verbatim move (bodies
