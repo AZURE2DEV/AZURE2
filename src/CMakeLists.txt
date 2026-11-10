@@ -61,7 +61,8 @@ if(NOT NO_READLINE)
     endif()
 endif (NOT NO_READLINE)
 
-set(AZURE2_EXEC_SOURCES AZURE2.cpp)
+# ProjectCommands.cpp: --convert, --validate, --schema (they use convert/, linked below)
+set(AZURE2_EXEC_SOURCES AZURE2.cpp ProjectCommands.cpp)
 
 if (${CMAKE_SYSTEM_NAME} MATCHES "Windows")
     set(AZURE2_EXEC_SOURCES ${AZURE2_EXEC_SOURCES} AZURE2.rc)
