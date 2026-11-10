@@ -200,8 +200,7 @@ int CNuc::GetPairNumFromKey(int key) {
 int CNuc::Fill(const Config &configure, const std::map<int, double> &radii) {
   transformedIn_ = false;
   if (configure.relativistic && configure.useHybridMethod) {
-    // The hybrid model solves a Schrodinger equation with a nuclear potential inside the channel
-    // radius; it has no relativistic form here, and mixing the two would be neither.
+    // The hybrid potential acts in a Schrodinger equation between a_c and the matching radius: no relativistic form.
     configure.outStream << "ERROR: relativistic=1 cannot be combined with the hybrid nuclear-potential "
                            "Coulomb functions (a <potential> block)." << std::endl;
     return -1;
@@ -384,6 +383,7 @@ int CNuc::Fill(const Config &configure, const std::map<int, double> &radii) {
     }
   }
 
+  for (int p = 1; p <= this->NumPairs(); p++) this->GetPair(p)->SetHybridPotential(configure.potentials.PotentialFor(this->GetPair(p)->GetPairKey()));  // a value, none: plain Coulomb
   if (configure.includeAllJPi)
     this->AddHardSphereGroups(configure, configure.hardSphereMaxL >= 0 ? configure.hardSphereMaxL : maxLValue);
   if (RefuseForbiddenIdenticalChannels(*this, configure) == -1) return -1;
@@ -1555,7 +1555,7 @@ namespace {
 struct ShiftDerivKey {
   int z1, z2, l;
   bool gsl;
-  long hybrid;
+  std::vector<double> hybrid;  ///< azure2::physics::PotentialKey of the pair's potential
   bool table, relativistic;
   double redmass, mass, radius, threshold, energy;
   bool operator<(const ShiftDerivKey &o) const {
@@ -1671,7 +1671,7 @@ void CNuc::CalcShiftFunctions(const Config &configure, bool secondDerivatives) {
       const double threshold = d.pair->GetSepE() + d.pair->GetExE();
       const double resonanceEnergy = d.energy - threshold;
       CoulFunc theCoulombFunction(d.pair, gslCoulomb);
-      const ShiftDerivKey key{d.pair->GetZ(1), d.pair->GetZ(2), d.l, gslCoulomb, theCoulombFunction.hybridTag(),
+      const ShiftDerivKey key{d.pair->GetZ(1), d.pair->GetZ(2), d.l, gslCoulomb, azure2::physics::PotentialKey(theCoulombFunction.HybridPotential()),
                               theCoulombFunction.UsesTable(), Kinematics::Relativistic(), d.pair->GetRedMass(),
                               d.pair->GetM(1) + d.pair->GetM(2), d.pair->GetChRad(), threshold, d.energy};
       bool need1 = d.first, need2 = d.second;

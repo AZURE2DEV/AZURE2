@@ -835,7 +835,12 @@ the external region.
 The hybrid values come from a Numerov integration of H⁺ = G + iF inward from
 the 15 fm matching radius on a grid of about 0.0275 fm, laid so that the
 requested radius is a grid node; the functions and their derivatives are good
-to about 10\ :sup:`−5` there, which is the accuracy of the integration itself.
+to about 10\ :sup:`−8` there (with the potential switched to zero depth, P and S
+agree with the Coulomb functions to 6·10\ :sup:`−9` and 2·10\ :sup:`−8` for p + :sup:`12`\ C).
+The Coulomb term of the potential is that of a uniformly charged sphere of radius
+3.5 fm with e\ :sup:`2` = αħc, the constants of the Coulomb functions it is matched to;
+builds before 2026-11-10 used e\ :sup:`2` = 1.4399764 MeV fm, which put a 10\ :sup:`−5`
+difference into P and S that was not the integration's.
 Before October 2026 the values were interpolated linearly between nodes and the
 derivatives were the slope of the bracketing cell, a first-order quantity: the
 shift function of a hybrid pair was off by 4·10\ :sup:`−3` (l = 0) to
@@ -843,20 +848,29 @@ shift function of a hybrid pair was off by 4·10\ :sup:`−3` (l = 0) to
 radius fell between nodes. A potential of vanishing depth now reproduces the
 plain Coulomb functions (``tests/pyazr/hybrid_derivative_test.py``).
 
-What the potential does not touch (a design limit, audit 2026-10-25 item 27):
-it bends the **scattering** functions F and G of the pair inside the 15 fm
-matching radius, and with them the penetrabilities, shift functions and the
-entrance-channel wave of the external-capture integrand. The **bound-state**
-side of external capture stays pure Coulomb: the final-state tail is the
-Whittaker function :math:`C\,W_{-\eta,l+1/2}(2\kappa r)` normalized by its
-ANC, the ANC-to-reduced-width conversion evaluates that Whittaker function at
-the channel radius, and the NF integral of the Brune normalization integrates
-it. With a potential still of a few MeV at the channel radius (the default
-Woods-Saxon R = 3.6 fm, a = 0.6 fm is 9 % of V₀ at 5 fm) the initial and
-final states of an external-capture integral therefore come from different
-Hamiltonians between the channel radius and the range of the potential. Use
-a channel radius beyond that range, or accept the inconsistency; the
-mismatch is below 10\ :sup:`−3` of the potential's depth beyond R + 5a.
+Below threshold the potential acts as well. A closed channel or a bound state of a
+hybrid pair uses the decaying solution :math:`\tilde W_l(r)` of the same radial
+equation at :math:`E = -B`, equal to the Whittaker function
+:math:`W_{-\eta_b,l+1/2}(2\kappa r)` beyond the 15 fm matching radius and
+integrated inward from there by the same Numerov grid. It gives the shift function
+:math:`S = a\tilde W'(a)/\tilde W(a)` (level-parameter transformations, boundary
+values, closed channels), the ANC-to-reduced-width conversion
+:math:`\mu a/(\hbar^2 \tilde W(a)^2)` (the ANC keeps its meaning: the bound state
+is :math:`C\,W_{-\eta_b,l+1/2}(2\kappa r)` at large r), and the final-state tail
+and NF integral of external capture. At threshold the zero-energy decaying solution
+:math:`\sqrt{r}K_{2l+1}(\sqrt{8cr})` (:math:`r^{-l}` without Coulomb) is the outer
+solution, closer to threshold than :math:`\eta_b = 1000` S is interpolated linearly
+to it, and in the band :math:`\eta > 100` just above threshold
+:math:`S(E) = 2S(0) - S(-E)`, as for the Coulomb functions; S is then continuous
+through threshold (to within :math:`|dS/dE|\,|E|`, about :math:`10^{-3}` at 1 keV for
+p + :sup:`12`\ C). Against an independent integration (scipy DOP853 with mpmath's
+Whittaker functions) S agrees to :math:`10^{-7}`, :math:`\ln\tilde W(a)` to
+:math:`10^{-9}` and :math:`\int_a^\infty \tilde W^2\,dr` to :math:`3\cdot10^{-8}`
+(``physics_hybrid_potential``). Builds before 2026-11-10 used the undistorted
+Whittaker function below threshold, so S of a hybrid pair jumped at threshold (by
+about 1 for p + :sup:`12`\ C with V₀ = 20 MeV) and a bound level was transformed
+with the Coulomb S while the scattering used the distorted one.
+``coulomb_functions`` returns this S at :math:`E \le 0` (channel radius only).
 
 The hybrid nuclear potential, per particle pair
 -----------------------------------------------

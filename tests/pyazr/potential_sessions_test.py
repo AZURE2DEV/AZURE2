@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """The hybrid nuclear potential belongs to the session, not to the process (audit 2026-10-25, item 30; 2026-10-27).
 
-`NuclearPotentialManager` is a process singleton.  Up to dev 2363ada `Config::ReadPotentialBlock` of a later pyazr
-session (or `set_potential` on it) replaced the settings an earlier live session was using: session A, built on a file
-with V0 = 80 MeV, computed with B's V0 = 120 MeV from the moment B existed.  Now each session keeps its own potential
-state and every engine call installs it (ConfigScope), so sessions cannot reconfigure each other.
+Up to dev 2363ada a process singleton held the potentials, and `Config::ReadPotentialBlock` of a later pyazr session
+(or `set_potential` on it) replaced the settings an earlier live session was using: session A, built on a file with
+V0 = 80 MeV, computed with B's V0 = 120 MeV from the moment B existed.  Now the potentials are values in the session's
+own Config (`HybridPotentialSettings`) and each pair of its model holds its own (`PPair::GetHybridPotential`), so
+sessions cannot reconfigure each other: there is no shared state to swap.
 
 Checks on tests/hybrid_potential (p + 12C, hybrid model on):
   (1) the shift function of session A (V0 = 80) is the same before and after session B (V0 = 120) is created and used;

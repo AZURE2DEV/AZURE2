@@ -32,6 +32,7 @@ class ShftFunc {
     kin_ = Kinematics::Channel(pPair);
     table_ = SharedTable(neutral_);
     params_.whitFunc = std::make_unique<WhitFunc>(pPair);
+    potential_ = pPair->GetHybridPotential();
   };
   /*!
    *
@@ -93,6 +94,8 @@ class ShftFunc {
   const CoulombTable *table_;
   /// Set while a difference stencil has a point outside the table: every point then takes the exact route.
   bool forceExact_ = false;
+  /// The pair's hybrid potential: S = a W~'/W~ of the distorted decaying solution (physics/ HybridBoundShift).
+  std::optional<azure2::physics::HybridPotential> potential_;
   /// Does the table cover the bound state at this energy (eta_b, rho_b of l)?
   bool BoundTableOk(int l, double energy) const;
   static const CoulombTable *SharedTable(bool neutral);

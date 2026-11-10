@@ -3,6 +3,7 @@
 
 #include "PPair.h"
 #include <cmath>
+#include "azure2/physics/HybridPotential.h"
 #include "azure2/physics/coulomb/Whittaker.h"
 #include "Constants.h"
 #include "GSLException.h"
@@ -35,6 +36,7 @@ class WhitFunc {
     z2_ = pPair->GetZ(2);
     redmass_ = (double)pPair->GetRedMass();
     kin_ = Kinematics::Channel(pPair);
+    potential_ = pPair->GetHybridPotential();
   };
   /*!
    * Returns the atomic number of the first particle in the pair.
@@ -60,6 +62,10 @@ class WhitFunc {
    * The function returns the value of the Whittaker function.
    */
   double operator()(int l, double radius, double energy) const {
+    if (potential_) {
+      const azure2::physics::DecayingValue d = Distorted(l, radius, energy);
+      return d.sign * std::exp(d.log_W);
+    }
     double etaB, rho;
     if (!Arguments(radius, energy, etaB, rho)) return 0;  // NaN arguments: 0, as before (FIXME upstream)
     namespace co = azure2::physics::coulomb;
@@ -84,6 +90,7 @@ class WhitFunc {
    */
   double Scaled(int l, double radius, double energy, double &log10Scale) const {
     log10Scale = 0.0;
+    if (potential_) return DistortedScaled(l, radius, energy, log10Scale);
     double etaB, rho;
     if (!Arguments(radius, energy, etaB, rho) || !(rho > 0.0)) return 0.0;
     namespace co = azure2::physics::coulomb;
@@ -100,6 +107,7 @@ class WhitFunc {
    */
   double ScaledMemo(int l, double radius, double energy, double &log10Scale) const {
     log10Scale = 0.0;
+    if (potential_) return DistortedScaled(l, radius, energy, log10Scale);  // the memo key has no potential
     double etaB, rho;
     if (!Arguments(radius, energy, etaB, rho) || !(rho > 0.0)) return 0.0;
     struct Key {
@@ -140,6 +148,17 @@ class WhitFunc {
   static constexpr std::size_t kMemoEntries = std::size_t(1) << 17;
 
  private:
+  /// A hybrid pair: W~_l(r) of the radial equation with the potential (physics/ DecayingSolution; non-relativistic,
+  /// the hybrid model refuses relativistic=1), equal to W beyond the matching radius.
+  azure2::physics::DecayingValue Distorted(int l, double radius, double energy) const {
+    return azure2::physics::DecayingSolution(*potential_, z1_, z2_, redmass_ * uconv, l, radius, energy);
+  }
+  double DistortedScaled(int l, double radius, double energy, double &log10Scale) const {
+    const azure2::physics::DecayingValue d = Distorted(l, radius, energy);
+    const double log10W = d.log_W / std::log(10.0);
+    log10Scale = std::floor(log10W);
+    return d.sign * std::pow(10.0, log10W - log10Scale);
+  }
   /// eta_b and rho = kappa r at binding energy `energy` (MeV) and `radius` (fm), as the engine always formed them
   /// (z = 2 kappa r); false if either is NaN.
   bool Arguments(double radius, double energy, double &etaB, double &rho) const {
@@ -152,6 +171,8 @@ class WhitFunc {
   int z2_;
   double redmass_;
   Kinematics::Channel kin_;
+  /// The pair's hybrid potential (PPair::GetHybridPotential); none: the point-Coulomb W.
+  std::optional<azure2::physics::HybridPotential> potential_;
 };
 
 #endif

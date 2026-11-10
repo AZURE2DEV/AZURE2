@@ -2,6 +2,94 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-10 — agent, brief O: the hybrid potential as a value, one e², distorted bound states (`feature/upgrade-4-hybrid-potential`)
+
+**Part 1 — the potential as a value (bit-identical).**
+- `physics/HybridPotential.h`: `FormFactor`, `HybridPotential` (`coulomb_radius_fm` 3.5, `central_depth_MeV`, `central`,
+  `matching_radius_fm` 15, `step_fm` 0.0275), compared by value; `PotentialKey` (the numbers of a potential for keys);
+  `IntegrateInward` (the Numerov solver, a free function; the loop stops at node n_a - 2, the last one read).
+- The settings are values in the run's or session's `Config` (`HybridPotentialSettings`, `include/` +
+  `src/HybridPotentialSettings.cpp`); `CNuc::Fill` gives each `PPair` its `std::optional<HybridPotential>`; `CoulFunc`
+  reads it from the pair.  Chosen over the System because `CoulFunc` is built from a `PPair` at every point and the
+  System is rebuilt from `CNuc` on demand; the pair is set-up state owned by the caller's `CNuc`.
+- Deleted: `NuclearPotentialManager` (singleton, tags, counter, `exportState`/`importState`), `NuclearPotential.h`
+  (class hierarchy), pyazr's `ConfigScope` potential swap, `CoulFunc`'s dead setters (`setMatchingRadius`,
+  `setNumerovGridStep`, `setNuclearPotential`, `setUseHybridMethod`).  The channel table's pair signature, the EC term
+  key, the radial scratch key, the shift-derivative memo, the THM line-shape memo and the THM vertex memo compare the
+  potential's values; the EC signature hashes `PotentialKey` (hybrid EC caches are recomputed once).
+- THM: a THM segment whose entrance pair has a potential is refused, `ERROR (E_THM_HYBRID_POTENTIAL)`
+  (`ThmVertexAllowsPair`, `src/ThmVertexBoundary.cpp`); no committed project had one.  Test: `tests/thm_options` (j).
+- Words: "outside the channel radius" (`CNuc.cpp`, `particle_pairs.rst`), "inward" (`tests/hybrid_potential/tolerance`).
+- Verified: 179 × 3 identical to `tab-p3f` (tag `tab-hyb1`, 689 / 662 / 689); `ctest -LE slow` 163/163; pyazr
+  `coulomb_functions` (pairs 1, 2, L = 0–3, six energies) and `calculate` of `tests/hybrid_potential` byte-identical to
+  `work/b-trial3` (65 arrays); `potential_sessions_test.py` passes and fails with a function-static shared settings
+  object injected into `CNuc::Fill`; `physics_hybrid_potential` fails with the step left out of `operator==`;
+  `thm_options` (j) fails on `work/b-trial3` (the run goes through); `tests/run_tests.sh` 138 / 0;
+  calculations at 1 and 2 threads identical (T1, T2, T3, 13N, hybrid_potential × 3 bases, 15/15); converted-tree gate
+  (`convert_spec_equivalence_test`) 183 equal, 3 recorded, 0 differ.
+
+**Part 2 — e² = αħc (outputs of hybrid projects move).** `physics/src/HybridPotential.cpp`: the Coulomb term's
+e² = 1.4399764 MeV fm → `kFineStructure * kHbarC_MeV_fm` (8.3 × 10⁻⁶ relative).  179 × 3 against `tab-p3f` (tag
+`tab-hyb2`): only `hybrid_potential` and `upgrade/T3` (T3, T3_start) move, in all three bases; everything else identical.
+
+| project | file | largest relative change | cause |
+|---|---|---|---|
+| hybrid_potential | AZUREOut_aa=1_R=1.out (p + ¹²C elastic) | 1.3e-5 | e² |
+| hybrid_potential | chiSquared.out (segment 3: 2238.93 → 2238.82) | 4.9e-5 | e² |
+| hybrid_potential | param.par, parameters.out, scatteringLengths.out | 2.5e-5 | e² (P, S at a_c) |
+| T3 | AZUREOut_aa=1_R=1.out (α + α) | 8.8e-2 on δ = 2.26e-3 → 2.48e-3 at E_lab 0.875 MeV, a phase near zero (absolute 2.2e-4); 5.8e-3 next point; others ≤ 1e-5 | e² |
+| T3 | AZUREOut_aa=4_R=1.out | 1.6e-5 | e² |
+| T3 | AZUREOut_aa=2/3_* (p + ⁷Li, n + ⁷Be: no potential, through the shared levels) | ≤ 7e-7 | e² |
+| T3 | chiSquared.out, param.par, parameters.out | 7.5e-5, 2.3e-6, 2.7e-6 | e² |
+| T3_start | chiSquared.out / AZUREOut_aa=1_R=1.out | 2.8e-4 / 2.2e-3 | e² |
+
+Independent check: with V_N = 0 the integration now reproduces the Coulomb P and S to ≤ 9.3e-8 (p + ¹²C, l = 0–2,
+0.5–3 MeV; `physics_hybrid_potential`, tolerance 2e-7), against 2.3e-5 with the old e² (the test fails then); the
+note's DOP853 integration (`work/so-note/radial.py` B) gives 6e-9 / 2e-8.  References regenerated: T3 goldens
+(`golden.py --write`, T1 left as recorded; `ENGINE` says so), `tests/hybrid_potential/expected/chiSquared.out`
+(segment 3 2239.69 → 2238.82: 2239.69 was a pin of 2026-09-28; the start head gives 2238.93, so 3.4e-4 of the step is
+older drift inside the 2e-2 tolerance and 4.9e-5 is e²).  `pyazr.rst` and `hybrid_derivative_test.py` no longer call
+1e-5 the integration's accuracy; the latter now asks for 1e-6.
+
+**Part 3 — distorted bound states and closed channels (outputs of `hybrid_potential` move).**
+- `physics/HybridPotential.h`: `DecayingSolution` (W̃_l(r) at E = −B ≤ 0: the Whittaker function beyond r_m, the
+  zero-energy decaying solution √r K_{2l+1}(√(8cr)) at B = 0, inward by `IntegrateInward`, which now rescales a
+  solution past 1e250 into `log_scale`) and `HybridBoundShift` (S = aW̃′/W̃; closer to threshold than η_b = 1000 the
+  linear interpolation to S(0), as `coulomb_bound_shift`).  The Coulomb path's reflection S(E) = 2S(0) − S(−E) in the
+  band η > 100 is kept and now reflects the distorted S, so S is continuous through threshold (|S(E) − S(0)| ≤ 5e-4
+  for |E| ≤ 1 keV, p + ¹²C); no change of the Coulomb path for pairs without a potential.
+- One implementation, reached through the two engine classes every user already calls: `ShftFunc` (S, S′, S″ below
+  and at threshold → `ChannelFunc`, the channel table's closed rows, Brune/Park transformations) and `WhitFunc`
+  (W̃ for the ANC ↔ γ conversion of `CNucLevelParameters`, the EC conversion factor and NF integral of `CNuc`, the
+  final-state tail of `ECIntegral`) dispatch on `PPair::GetHybridPotential()`; a pair without one takes the old lines.
+- `coulomb_functions` (API, pyazr 2.17.1) returns S at E ≤ 0 and in the band η > 100 (channel radius only; before: 0,
+  and in the band the Coulomb routine's value).
+- Tests: `physics_hybrid_potential` parts 3–4 against `physics/tests/data/hybrid_bound.csv`
+  (`make_hybrid_bound_reference.py`: scipy DOP853 + mpmath Whittaker/Bessel/Coulomb): S on −2 … +0.5 MeV, l = 0–2, to
+  6.6e-8 (tolerance 1e-6), V_N = 0 rows (Whittaker/Coulomb S) to 1.1e-7, ln W̃(a) to 4.5e-10, ∫_a^∞ W̃² dr to 2.6e-8;
+  fails with E = +B instead of −B in `DecayingSolution`.  `pyazr_hybrid_threshold`: continuity (1e-3) and S at the
+  ¹³N ground state against the table (≤ 6.6e-8); fails with the undistorted S injected in `ShftFunc` (steps 1.06,
+  0.92, 0.75 for l = 0, 1, 2, the note's 1.07, 0.92, 0.75).
+- 179 × 3 against `tab-hyb2` (Part 2): only `hybrid_potential` moves (T3 has no state below the α + α threshold):
+
+| file | largest relative change | what moves physically | independent number |
+|---|---|---|---|
+| param.par, parameters.out | 0.166 (Park 0.153) | the ¹³N ground state's g_int (ANC 1.62 fm^-1/2 fixed): 1.271943 → 1.060263 MeV^1/2 | γ_obs = C W̃(a)(ħ²/2μa)^1/2 and g = γ_obs(1 − γ_obs² S′)^-1/2 from the DOP853 script: 1.060263 (old W, S′: 1.271943), to all printed digits |
+| AZUREOut_aa=1_R=1.out | 1.2e-2 | elastic p + ¹²C through the transformed bound level | follows from the above |
+| chiSquared.out | 9.3e-3 (segment 3 2238.82 → 2259.87) | same | — |
+| run.log | 0.69 | the χ² lines, and the Coulomb-table lookup count 66 → 20 (the hybrid pair's bound S no longer reads the table) | — |
+
+  Reference regenerated: `tests/hybrid_potential/expected/chiSquared.out`.  Docs: `pyazr.rst` (the "does not touch"
+  paragraph replaced), `particle_pairs.rst`, the hybrid README.
+- Verified (head of the branch, 3 threads): `ctest -LE slow` 164/164; `tests/run_tests.sh` see the commit message;
+  1 and 2 threads identical (T1–T3, 13N, hybrid_potential × 3 bases, 15/15); converted-tree gate 183 equal / 3
+  recorded / 0 differ; consistency at every commit.
+
+**Open / next.** The `<potentials>` record of format 3 (note §3.3) and the spin–orbit term (steps 3–5).
+`tests/hybrid_potential/check_per_pair.py` (not in ctest) pins χ² = 2462154.2 and fails on the start head's engine
+too (2466121.4 there; 2466142.3 now): a stale pin, not touched.  `E_THM_HYBRID_POTENTIAL` is an engine message, not
+yet a row of the format-3 diagnostic table (the potential is not a format-3 record yet).
+
 ## 2026-11-10 (night) — S14, brief L: ratio to Rutherford and to Mott, the `rutherford` leaf (`feature/upgrade-4-rutherford`)
 
 **Done** (brief `work/briefs/L_rutherford_ratio.md`).

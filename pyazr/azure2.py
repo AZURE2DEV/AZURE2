@@ -2171,12 +2171,12 @@ class azure2:
         dict of arrays, all the same length as `energies`:
         ``F``, ``dF``, ``G``, ``dG`` (the Coulomb functions and their
         derivatives with respect to rho), ``P`` (penetrability), ``S`` (shift
-        function) and ``delta_hs`` (hard-sphere phase shift, radians).
+        function) and ``delta_hs`` (hard-sphere phase shift, radians); for a
+        closed channel (E <= 0, eta > 100) S alone, at the channel radius.
 
         The values follow the run's own configuration, so the same call returns
         the accurate Coulomb routine's answer, GSL's (``use_gsl_coul=True`` at
-        construction), or the Numerov solution through a nuclear potential (the
-        hybrid model), and comparing them is how one sees what those options do.
+        construction), or the hybrid model's Numerov solution: compare them.
         """
         e = np.asarray(energies, float).ravel()
         req = np.concatenate([[pair, L, radius, e.size], e])

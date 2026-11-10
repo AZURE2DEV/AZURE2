@@ -16,7 +16,6 @@
 #include "EData.h"
 #include "Minuit2/MnUserParameters.h"
 #include "GSLException.h"
-#include "NuclearPotentialManager.h"
 #include "ThmLineshape.h"
 #include "ThmReports.h"
 #include "ThmDistortion.h"

@@ -269,6 +269,16 @@ else
   echo "  FAIL  wnonthm: exit $(cat "$WORK/wnonthm/status"), chi2 '${c}'"; tail -5 "$WORK/wnonthm/log"; fail=1
 fi
 
+# (j) a hybrid nuclear potential on the THM entrance pair (pair 5): the vertex uses point-Coulomb waves, so the
+# run is refused with E_THM_HYBRID_POTENTIAL (ThmVertexAllowsPair) instead of mixing the two models silently.
+c="$(run hybrid "\n<potential>\nuseHybridPotential=0\npotentialType=0\nV0=20\nR=3.0\na=0.6\npair=5\nuseHybridPotential=1\n</potential>\n")"
+if [ -z "$c" ] && [ "$(cat "$WORK/hybrid/status")" -ne 0 ] &&
+   grep -q "ERROR (E_THM_HYBRID_POTENTIAL): segment #1 (THM): entrance pair 5" "$WORK/hybrid/log"; then
+  echo "  ok    hybrid entrance pair refused: $(grep -m1 'E_THM_HYBRID' "$WORK/hybrid/log")"
+else
+  echo "  FAIL  hybrid: exit $(cat "$WORK/hybrid/status"), chi2 '${c}'"; tail -5 "$WORK/hybrid/log"; fail=1
+fi
+
 if [ "$fail" -eq 0 ]; then
   echo "  ok    all <thm> options behave as pinned"; exit 0
 else

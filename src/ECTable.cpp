@@ -69,7 +69,7 @@ bool RateMode(const Config &configure) {
 std::vector<double> TermKey(PPair *pair, const Config &configure, const CoulFunc &coul, int li, int lf,
                             double si, double sf, double ji, double jf, int multL, char radType,
                             double levelEnergy, bool isChannelCapture, int nodesPerDecade) {
-  return {(double)pair->GetZ(1), (double)pair->GetZ(2), pair->GetM(1), pair->GetM(2), pair->GetRedMass(),
+  std::vector<double> key{(double)pair->GetZ(1), (double)pair->GetZ(2), pair->GetM(1), pair->GetM(2), pair->GetRedMass(),
           pair->GetJ(1), pair->GetJ(2), pair->GetG(1), pair->GetG(2), pair->GetChRad(),
           pair->GetSepE() + pair->GetExE(),
           (double)li, (double)lf, si, sf, ji, jf, (double)multL, (double)radType, levelEnergy,
@@ -79,11 +79,14 @@ std::vector<double> TermKey(PPair *pair, const Config &configure, const CoulFunc
           RateMode(configure) ? 1.0 : 0.0,  // the rate integrates on a fixed radial grid
           (configure.ecConvectionCurrent && !(configure.paramMask & Config::USE_LONGWAVELENGTH_APPROX)) ? 1.0 : 0.0,
           configure.useCoulombTable ? 1.0 : 0.0,
-          (double)coul.hybridTag(),  // the nuclear potential of a hybrid pair
           (double)nodesPerDecade,
           // relativistic kinematics change eta, rho and the flux factor of every node; the table lives for the
           // whole process, so a pyazr session alternating the switch must not share nodes (checklist t3-25)
           configure.relativistic ? 1.0 : 0.0};
+  // the nuclear potential of a hybrid pair, by value
+  const std::vector<double> potential = azure2::physics::PotentialKey(coul.HybridPotential());
+  key.insert(key.end(), potential.begin(), potential.end());
+  return key;
 }
 
 /*!

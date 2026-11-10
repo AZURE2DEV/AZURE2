@@ -10,6 +10,7 @@
 #include <gsl/gsl_deriv.h>
 #include "azure2/physics/ChannelFunctions.h"
 #include "azure2/physics/Derivatives.h"
+#include "azure2/physics/HybridPotential.h"
 #include <gsl/gsl_errno.h>
 
 /*!
@@ -24,6 +25,8 @@
  */
 double ShftFunc::ZeroEnergyLimit(int l) const {
   const WhitFunc &w = *params_.whitFunc;
+  if (potential_)  // the zero-energy decaying solution of the radial equation with the potential
+    return azure2::physics::HybridBoundShift(*potential_, w.z1(), w.z2(), w.redmass() * uconv, l, radius(), 0.0);
   const double c = w.z1() * w.z2() * fstruc * w.redmass() * uconv / hbarc;
   return azure2::physics::zero_energy_shift(c, radius(), l);  // K_n without GSL (coulomb.md section 1.4)
 }
@@ -55,6 +58,10 @@ double ShftFunc::operator()(int l, double energy) {
   if (!(binding > 0.0)) return ZeroEnergyLimit(l);
   params_.bindingEnergy = binding;
   params_.lValue = l;
+  if (potential_) {
+    const WhitFunc &w = *params_.whitFunc;
+    return azure2::physics::HybridBoundShift(*potential_, w.z1(), w.z2(), w.redmass() * uconv, l, radius(), binding);
+  }
 
   // Neutral channel: the Whittaker function is rho k_l(rho) up to a constant,
   // whose logarithmic derivative has the closed form below.

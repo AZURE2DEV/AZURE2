@@ -24,6 +24,7 @@ add_library(azure2_physics STATIC
   src/Derivatives.cpp
   src/Elements.cpp
   src/ExternalCapture.cpp
+  src/HybridPotential.cpp
   src/JpiBlock.cpp
   src/LevelParameters.cpp
   src/ObservableCoupling.cpp
@@ -119,6 +120,16 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
   target_compile_options(physics_whittaker_test PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 add_test(NAME physics_whittaker COMMAND physics_whittaker_test ${CMAKE_CURRENT_SOURCE_DIR}/tests/data/whittaker.csv)
+
+# The hybrid potential as a value, its inward radial integration against the Coulomb functions with V_N = 0, and the
+# distorted decaying solution (S, ln W~(a), int W~^2) against an independent integration (tests/data/hybrid_bound.csv,
+# make_hybrid_bound_reference.py; docs/upgrade/spin_orbit_potential.md).
+add_executable(physics_hybrid_potential_test tests/hybrid_potential_test.cpp)
+target_link_libraries(physics_hybrid_potential_test PRIVATE azure2_physics)
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+  target_compile_options(physics_hybrid_potential_test PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+add_test(NAME physics_hybrid_potential COMMAND physics_hybrid_potential_test ${CMAKE_CURRENT_SOURCE_DIR}/tests/data/hybrid_bound.csv)
 
 # Element symbols by Z against the AME2020 table the masses come from (pyazr/data/mass_1.mas20).
 add_executable(physics_elements_test tests/elements_test.cpp)

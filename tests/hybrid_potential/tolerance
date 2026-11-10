@@ -1,9 +1,10 @@
 # Relative tolerance on chi-squared for this project, overriding the suite's
 # default of 1e-3.
 #
-# The hybrid model integrates the radial wave functions outward through the
-# nuclear potential by Numerov -- some 545 steps of dr = 0.0275 fm out to the
-# 15 fm matching radius -- and then matches to the Coulomb functions. That
+# The hybrid model integrates the radial wave functions inward through the
+# nuclear potential by Numerov -- some 415 steps of dr = 0.0275 fm from the
+# 15 fm matching radius, where they equal the Coulomb functions, to the
+# channel radius. That
 # accumulates far more floating-point sensitivity than the plain Coulomb path,
 # which libm computes in one go: the same compiler on the same machine, built
 # -O0 instead of -O3, moves this project's segment 2 by 1.1e-3 and its total by

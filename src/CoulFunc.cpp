@@ -9,8 +9,6 @@
 #include <algorithm>
 #include <complex>
 #include <unordered_map>
-#include "NuclearPotential.h"
-#include "NuclearPotentialManager.h"
 #include "Config.h"
 #include "CoulombTable.h"
 #include "Kinematics.h"
@@ -21,19 +19,7 @@
 
 CoulFunc::CoulFunc(PPair *pPair, bool useGSLFunctions) :
   useGSLFunctions_(useGSLFunctions),
-  useHybridMethod_(false),
-  rMatch_(15.0),
-  drNumerov_(0.0275) {
-  // The hybrid model is selected per particle pair.  The global switch stays
-  // the master -- it is what the Runtime Options checkbox and the paramMask
-  // bit control -- and NuclearPotentialManager then decides which pairs it
-  // actually applies to.  A project that names no pair leaves every pair on
-  // the manager's default, which is the behaviour from when the model was
-  // global.
-  pairKey_ = pPair->GetPairKey();
-  useHybridMethod_ = (g_config ? g_config->useHybridMethod : false) &&
-      NuclearPotentialManager::instance().isPairEnabled(pairKey_);
-  hybridTag_ = useHybridMethod_ ? NuclearPotentialManager::instance().tagFor(pairKey_) : 0;
+  potential_(pPair->GetHybridPotential()) {
   z1_ = pPair->GetZ(1);
   z2_ = pPair->GetZ(2);
   redmass_ = (double)pPair->GetRedMass();
@@ -46,16 +32,9 @@ CoulFunc::CoulFunc(PPair *pPair, bool useGSLFunctions) :
   coulLast_.G = 0.0;
   coulLast_.dG = 0.0;
 
-  // This pair's potential, falling back to the manager's default when the pair
-  // has no setting of its own.  Fetched only for the hybrid method, the only user
-  // of it: a CoulFunc is built per channel and point, and copying the shared_ptr
-  // increments one reference count from every thread -- a contended atomic that
-  // was 15 % of a natural_neon calculation on 12 threads, with no potential in use.
-  if (useHybridMethod_) nuclearPotential_ = NuclearPotentialManager::instance().getPotential(pairKey_);
-
   // The table holds plain Coulomb functions of charged channels: not neutral
   // pairs (eta = 0, already cheap) and not pairs with a nuclear potential.
-  if (g_config && g_config->useCoulombTable && z1_ * z2_ != 0 && !(useHybridMethod_ && nuclearPotential_))
+  if (g_config && g_config->useCoulombTable && z1_ * z2_ != 0 && !potential_)
     table_ = CoulombTable::Shared(g_config->coulombTablePath);
 }
 
@@ -162,18 +141,19 @@ namespace {
 struct RadialBlockKey {
   int z1, z2, l;
   double redmass, mtot, energy;
-  long hybridTag;
+  std::optional<azure2::physics::HybridPotential> potential;
   bool gsl;
   bool operator==(const RadialBlockKey &o) const {
     return z1 == o.z1 && z2 == o.z2 && l == o.l && redmass == o.redmass && mtot == o.mtot && energy == o.energy &&
-           hybridTag == o.hybridTag && gsl == o.gsl;
+           potential == o.potential && gsl == o.gsl;
   }
 };
 struct RadialBlockHash {
   std::size_t operator()(const RadialBlockKey &k) const {
     std::size_t h = std::hash<double>()(k.energy);
     for (std::size_t v : {std::hash<int>()(k.z1), std::hash<int>()(k.z2), std::hash<int>()(k.l),
-                          std::hash<double>()(k.redmass), std::hash<double>()(k.mtot), std::hash<long>()(k.hybridTag),
+                          std::hash<double>()(k.redmass), std::hash<double>()(k.mtot),
+                          std::hash<double>()(k.potential ? k.potential->central_depth_MeV : -1.0),
                           std::hash<bool>()(k.gsl)})
       h ^= v + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
     return h;
@@ -212,7 +192,7 @@ CoulWaves CoulFunc::operator()(int l, double radius, double energy) {
       t_radialBlocks.clear();
       t_radialSize = 0;
     }
-    block = &t_radialBlocks[RadialBlockKey{z1_, z2_, l, redmass_, kin_.rel ? kin_.m1 + kin_.m2 : 0.0, energy, hybridTag_,
+    block = &t_radialBlocks[RadialBlockKey{z1_, z2_, l, redmass_, kin_.rel ? kin_.m1 + kin_.m2 : 0.0, energy, potential_,
                                            useGSLFunctions_}];
     auto w = block->find(radius);
     if (w != block->end()) {
@@ -224,22 +204,10 @@ CoulWaves CoulFunc::operator()(int l, double radius, double energy) {
   // Otherwise computed at every call: there is no process-wide memo (docs/upgrade/coulomb.md section 3).
   struct CoulWaves newResult;
 
-  // Check if hybrid method should be used
-  if (useHybridMethod_ && nuclearPotential_) {
+  if (potential_) {
     newResult = computeHybrid(l, radius, energy);
-  } else if (!useGSLFunctions_) {
-    newResult = CoulombWavesAt(l, kin_.Eta(energy), kin_.Rho(radius, energy));
   } else {
-    double eta = kin_.Eta(energy);
-    double rho = kin_.Rho(radius, energy);
-    double lValue = double(l);
-    double eF, eG;
-    gsl_sf_result F, Fp, G, Gp;
-    gsl_sf_coulomb_wave_FG_e(eta, rho, lValue, 0, &F, &Fp, &G, &Gp, &eF, &eG);
-    newResult.F = F.val * exp(eF);
-    newResult.dF = Fp.val * exp(eF);
-    newResult.G = G.val * exp(eG);
-    newResult.dG = Gp.val * exp(eG);
+    newResult = PlainWaves(l, radius, energy);
   }
   setLast(l, radius, energy, newResult);
   result = newResult;
@@ -321,223 +289,74 @@ double CoulFunc::PEShift_d2E(int l, double radius, double energy) {
                                             energy < 4.0 * h, azure2::physics::Side::Above);
 }
 
-/*!
- * Hybrid method: Numerov integration with nuclear potential using GSL or COUL boundary conditions.
- * This method integrates the Schrödinger equation inward from a matching radius where pure
- * Coulomb boundary conditions are applied, through the nuclear potential region.
- */
+CoulWaves CoulFunc::PlainWaves(int l, double radius, double energy) const {
+  CoulWaves result;
+  if (!useGSLFunctions_) {
+    result = CoulombWavesAt(l, kin_.Eta(energy), kin_.Rho(radius, energy));
+  } else {
+    double eta = kin_.Eta(energy);
+    double rho = kin_.Rho(radius, energy);
+    double lValue = double(l);
+    double eF, eG;
+    gsl_sf_result F, Fp, G, Gp;
+    gsl_sf_coulomb_wave_FG_e(eta, rho, lValue, 0, &F, &Fp, &G, &Gp, &eF, &eG);
+    result.F = F.val * exp(eF);
+    result.dF = Fp.val * exp(eF);
+    result.G = G.val * exp(eG);
+    result.dG = Gp.val * exp(eG);
+  }
+  return result;
+}
 
 CoulWaves CoulFunc::computeHybrid(int l, double radius, double energy) {
   struct CoulWaves result = {0.0, 0.0, 0.0, 0.0};
+  const azure2::physics::HybridPotential &potential = *potential_;
 
   // The engine's constants (Constants.h), as the plain Coulomb path uses them.
-  // Before 2026-10-27 this function had its own rounded copies (931.494,
-  // 0.00729735, 197.327; audit item 16).
   const double UCONV = uconv;    // MeV/u
   const double FSTRUC = fstruc;  // the fine-structure constant
   const double HBARC = hbarc;    // hbar c in MeV fm
 
   try {
-    // Validate inputs
-    const double r_min = 0.0;
-    if (rMatch_ <= r_min || radius > rMatch_ || radius < r_min || drNumerov_ <= 0.0) {
-      // Fall back to standard Coulomb calculation
-      if (!useGSLFunctions_) {
-        result = CoulombWavesAt(l, kin_.Eta(energy), kin_.Rho(radius, energy));
-      } else {
-        double eta = kin_.Eta(energy);
-        double rho = kin_.Rho(radius, energy);
-        double lValue = double(l);
-        double eF, eG;
-        gsl_sf_result F, Fp, G, Gp;
-        gsl_sf_coulomb_wave_FG_e(eta, rho, lValue, 0, &F, &Fp, &G, &Gp, &eF, &eG);
-        result.F = F.val * exp(eF);
-        result.dF = Fp.val * exp(eF);
-        result.G = G.val * exp(eG);
-        result.dG = Gp.val * exp(eG);
-      }
-      return result;
-    }
+    // Beyond the matching radius the waves are the point-Coulomb ones.
+    if (potential.matching_radius_fm <= 0.0 || radius > potential.matching_radius_fm || radius < 0.0 ||
+        potential.step_fm <= 0.0)
+      return PlainWaves(l, radius, energy);
 
-    // Setup: Constants and unit conversions
-    std::complex<double> lValue(static_cast<double>(l), 0.0);
     double redmass_MeV = redmass() * UCONV;
     double eta_real = z1() * z2() * FSTRUC * std::sqrt(redmass_MeV / 2.0) / std::sqrt(energy);
-    std::complex<double> eta(eta_real, 0.0);
     double drho_dr = std::sqrt(2.0 * UCONV) / HBARC * std::sqrt(redmass() * energy);
 
-    // Lambda to compute H+ = G + iF from rho using Coulomb boundary conditions
-    auto compute_H_plus = [&](double rho_val) -> std::complex<double> {
+    // H+ = G + iF of the point-Coulomb problem at r (fm), the solution beyond the matching radius.
+    auto outgoing = [&](double r) -> std::complex<double> {
+      const double rho_val = std::sqrt(2.0 * redmass_MeV) / HBARC * r * std::sqrt(energy);
       if (!useGSLFunctions_) {
         // physics/coulomb (coulsm) for the boundary conditions
-        const CoulWaves w = CoulombWavesAt(l, eta.real(), rho_val);
+        const CoulWaves w = CoulombWavesAt(l, eta_real, rho_val);
         return std::complex<double>(w.G, 0.0) + std::complex<double>(0.0, 1.0) * std::complex<double>(w.F, 0.0);
-      } else {
-        // Use GSL for boundary conditions
-        double eta_val = eta.real();
-        double lValue_val = static_cast<double>(l);
-        double eF, eG;
-        gsl_sf_result F, Fp, G, Gp;
-        gsl_sf_coulomb_wave_FG_e(eta_val, rho_val, lValue_val, 0, &F, &Fp, &G, &Gp, &eF, &eG);
-        double F_val = F.val * std::exp(eF);
-        double G_val = G.val * std::exp(eG);
-        return std::complex<double>(G_val, 0.0) + std::complex<double>(0.0, 1.0) * std::complex<double>(F_val, 0.0);
       }
+      double eF, eG;
+      gsl_sf_result F, Fp, G, Gp;
+      gsl_sf_coulomb_wave_FG_e(eta_real, rho_val, static_cast<double>(l), 0, &F, &Fp, &G, &Gp, &eF, &eG);
+      double F_val = F.val * std::exp(eF);
+      double G_val = G.val * std::exp(eG);
+      return std::complex<double>(G_val, 0.0) + std::complex<double>(0.0, 1.0) * std::complex<double>(F_val, 0.0);
     };
 
-    // Lambda to compute rho from radius
-    auto r_to_rho = [&](double r) -> double {
-      return std::sqrt(2.0 * redmass_MeV) / HBARC * r * std::sqrt(energy);
-    };
-
-    // The grid: a step close to drNumerov_ chosen so that the requested radius
-    // is a node, n_a = radius / dr, and the two nodes beyond the matching
-    // radius carry the Coulomb boundary conditions.  The value is then the
-    // Numerov node value and the derivative a five-point central difference,
-    // both O(dr^4).  Before 2026-10-27 the grid was fixed, the value was a
-    // linear interpolation between the bracketing nodes and the derivative the
-    // chord slope of that cell, an O(dr) quantity that put ~2e-3 to 2e-2 into
-    // the shift function (a+12C, a = 5.5 fm on a node: S off by 0.023; audit
-    // item 16).
-    const int n_a = std::max(2, static_cast<int>(std::lround(radius / drNumerov_)));
-    const double dr = radius / n_a;
-    const int n_top = static_cast<int>(std::ceil((rMatch_ - r_min) / dr));
-    const int npts = std::max(n_top + 3, n_a + 3);
-
-    std::vector<double> r_grid(npts);
-    std::vector<std::complex<double>> u(npts);
-
-    for (int i = 0; i < npts; ++i) {
-      r_grid[i] = r_min + i * dr;
-      if (i >= npts - 2) {
-        u[i] = compute_H_plus(r_to_rho(r_grid[i]));
-      }
-    }
-
-    // Create combined potential (Coulomb + Nuclear + Centrifugal)
-    if (!nuclearPotential_) {
-      std::cerr << "Error: Nuclear potential not set for Numerov integration." << std::endl;
-      return result;
-    }
-
-    auto combined_potential = std::make_shared<CoulombNuclearPotential>(
-        static_cast<int>(z1()), static_cast<int>(z2()),
-        *nuclearPotential_,
-        l,             // orbital angular momentum
-        redmass_MeV);  // reduced mass in MeV/c^2
-
-    // Compute effective g(r) = 2*mu/hbar^2 * (E - V(r))
-    std::vector<double> g(npts);
-    for (int i = 0; i < npts; ++i) {
-      g[i] = 2.0 * redmass_MeV / (HBARC * HBARC) * (energy - (*combined_potential)(r_grid[i]));
-    }
-
-    // Numerov backward integration from matching radius inward
-    double dr2 = dr * dr;
-    for (int i = npts - 3; i >= 0; --i) {
-      double denom = 1.0 + (dr2 / 12.0) * g[i];
-      if (std::abs(denom) > 1e-20) {
-        u[i] = ((2.0 - (5.0 * dr2 / 6.0) * g[i + 1]) * u[i + 1] -
-                (1.0 + (dr2 / 12.0) * g[i + 2]) * u[i + 2]) /
-            denom;
-      } else {
-        u[i] = u[i + 1];
-      }
-    }
-
-    // H+ at the requested radius (a node) and its derivative: the five-point
-    // central difference, O(dr^4).  n_a >= 2 and n_a + 2 <= npts - 1 by
-    // construction.
-    std::complex<double> H_plus = u[n_a];
-    std::complex<double> dH_dr = (u[n_a - 2] - 8.0 * u[n_a - 1] + 8.0 * u[n_a + 1] - u[n_a + 2]) / (12.0 * dr);
-
-    // Extract F, G and their derivatives from H+ = G + iF
-    result.G = H_plus.real();
-    result.F = H_plus.imag();
-    result.dG = dH_dr.real() / drho_dr;
-    result.dF = dH_dr.imag() / drho_dr;
+    // H+ at the requested radius (a node of the grid) and its r-derivative; F, G and their rho-derivatives from
+    // H+ = G + iF.
+    const azure2::physics::RadialValue h =
+        azure2::physics::IntegrateInward(potential, z1(), z2(), redmass_MeV, l, radius, energy, outgoing);
+    result.G = h.u.real();
+    result.F = h.u.imag();
+    result.dG = h.du_dr.real() / drho_dr;
+    result.dF = h.du_dr.imag() / drho_dr;
 
   } catch (const std::exception &e) {
     std::cerr << "Error in hybrid method: " << e.what() << std::endl;
     std::cerr << "Falling back to standard Coulomb calculation." << std::endl;
-    // Fall back to standard calculation
-    if (!useGSLFunctions_) {
-      result = CoulombWavesAt(l, kin_.Eta(energy), kin_.Rho(radius, energy));
-    } else {
-      double eta = kin_.Eta(energy);
-      double rho = kin_.Rho(radius, energy);
-      double lValue = double(l);
-      double eF, eG;
-      gsl_sf_result F, Fp, G, Gp;
-      gsl_sf_coulomb_wave_FG_e(eta, rho, lValue, 0, &F, &Fp, &G, &Gp, &eF, &eG);
-      result.F = F.val * exp(eF);
-      result.dF = Fp.val * exp(eF);
-      result.G = G.val * exp(eG);
-      result.dG = Gp.val * exp(eG);
-    }
+    result = PlainWaves(l, radius, energy);
   }
 
   return result;
-}
-
-// Hybrid method configuration methods
-
-/*!
- * Set the nuclear potential for hybrid method calculations.
- */
-void CoulFunc::setNuclearPotential(std::shared_ptr<NuclearPotential> potential) {
-  nuclearPotential_ = potential;
-}
-
-/*!
- * Get the current nuclear potential.
- */
-std::shared_ptr<NuclearPotential> CoulFunc::getNuclearPotential() const {
-  return nuclearPotential_;
-}
-
-/*!
- * Set the matching radius where Coulomb boundary conditions are applied.
- */
-void CoulFunc::setMatchingRadius(double r_match) {
-  if (r_match > 0.0) {
-    rMatch_ = r_match;
-  }
-}
-
-/*!
- * Get the current matching radius.
- */
-double CoulFunc::getMatchingRadius() const {
-  return rMatch_;
-}
-
-/*!
- * Set the Numerov grid step size.
- */
-void CoulFunc::setNumerovGridStep(double dr) {
-  if (dr > 0.0) {
-    drNumerov_ = dr;
-  }
-}
-
-/*!
- * Get the current Numerov grid step.
- */
-double CoulFunc::getNumerovGridStep() const {
-  return drNumerov_;
-}
-
-/*!
- * Enable/disable hybrid method for Coulomb wave calculations.
- */
-void CoulFunc::setUseHybridMethod(bool useHybrid) {
-  useHybridMethod_ = useHybrid;
-}
-
-/*!
- * Check if hybrid method is enabled.
- */
-bool CoulFunc::getUseHybridMethod() const {
-  return useHybridMethod_;
 }
