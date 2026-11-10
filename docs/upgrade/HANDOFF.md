@@ -2,6 +2,50 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-10 — Phase 4 S3 (b): the results buffer belongs to the caller (`feature/upgrade-4-results-b`)
+
+**Done** (`data_model.md` S3, decision M2 (c)). b1 (79c89e50): every accessor and engine function that reads or writes a
+result takes the buffer (`point->GetFitCrossSection(results)`, `Calculate(cnuc, cfg, results)`,
+`CalculateTheoreticalCrossSection(i, cnuc, cfg, data, results)`, `ObjectiveContext::results`, the gradient engine, the
+writer, the THM profile, the covariance chi^2, the band, the MCMC, the API); the form is stated at the top of
+`include/Results.h`.  b2 (3897fec9): `EPoint` holds only its offset and capacities; `EData` holds the layout
+(`LayoutResults`, `ResultsSize`) and no buffer; `FillEnergyShiftsFromParams(p, results, ...)` ends with
+`BeginEvaluation(results)` (re-layout carrying values in that buffer, sizing, poisoning).  Owners: `AZUREMain` (passes its
+buffer to `AZURECalc`), the pools of `AZURECalc` and `AZURECalcMCMC` (`WorkingData` = copy + buffer,
+`include/WorkingData.h`), the iteration and MCMC snapshots, the trace / pool-check fresh copies, probe copies and
+reaction-rate points (`EPoint::UsePrivateRecord`), the Python session (`AZUREAPI::results()`).  The gradient and the MCMC
+took ownership without S4: nothing is left for a "b3".  K1 stays the one listed exception (not fixed: owning the buffer
+does not decide what E1/E2 of a differential line should be).
+
+**Tests:** `upgrade_results_owner` (T2 copies, one copied from another, at two parameter vectors whose layouts differ,
+sequential and concurrent, bit for bit against fresh copies; fails with a shared buffer injected into `EPoint::Rec`);
+`upgrade_poison_results` now also runs a reaction rate; consistency check 25 (no `Results` member in `EPoint.h` /
+`EData.h`; fails on an injected member).
+
+**Verified** (b-resb2, this host, 3 threads at most): 179 × 3 identical to tab-p3f (689 / 662 / 689); ctest −LE slow
+143/143 (b1: 142/142); `run_tests.sh` 134 passed 0 failed; calculations at 1 and 3 threads 12/12 identical (8 threads
+not run: thread budget); T1 fit (menu 2, T1_start) and T3 fit (`--use-gradient`, T3_start) at 1 thread: every output
+file identical to a16f2a69.  Side by side with a16f2a69 at 1 thread, three interleaved runs (host load ~8): T2 calc
+1.04–1.13 s vs 1.06–1.11 s; fit200 66.4–68.4 s vs 66.0–69.8 s; fit peak RSS 272–276 MB vs 268–271 MB.
+`sizeof(EPoint)` 824 → 816 bytes.
+
+**Behaviour that moved only for reads that were already stale** (no output of the tests moves): a clone's first
+evaluation no longer starts from the values of the data set it was copied from (its buffer starts at 0); the API
+session's buffer is zeroed after `Initialize` (before, a re-initialised data set kept the values of points whose
+records did not move).  Both matter only to a read before write.
+
+**Stale reads still open (S4)**, at b2's lines: (1) `EPoint::Calculate`, automatic tolerance, `allPass` branch
+(`src/EPoint.cpp` 2095): σ_E1/σ_E2 of an E1/E2 line with a sub-point fold kept from the copy's previous evaluation (now
+from its own buffer; a pooled copy's first evaluation reads 0 instead of the master's values); (2)
+`ESegment::TransformedValue` / `CalculateTheoreticalCrossSection`: a failed term returns NaN before `SetNaturalTerms`
+(`src/ESegment.cpp` 1579 vs 1597, 1677 vs 1706/1737); (3) `MarkFailed` (`src/EPoint.cpp` 1927) leaves NaN σ_E1/σ_E2;
+(4) `AMatrixFunc::PointTBar` reads the forward value (`src/AMatrixFunc.cpp` 726) — written by the forward pass of the
+same evaluation, so not stale as long as the gradient follows an evaluation into the same buffer.
+
+**Found, not fixed:** `upgrade_poison_results` can fail by chance at 2 threads: `fitStatus.out` of the T1 fit holds
+Minuit's call count, which is not atomic (cause B of the fit-thread entry below); a16f2a69 gave 58 instead of 59 calls in
+1 of 12 runs, b2 in 0 of 12.  Comparing that file without its `calls` line, or the Minuit patch, would remove it.
+
 ## 2026-11-09 (night) — fits that depend on the thread count: two causes (branch `fix/upgrade-fit-threads`)
 
 Record: `fit_threads.md`. Diagnostic `AZURE_TRACE_FCN=1|fresh` (every χ² with its parameter vector in hex floats;
