@@ -436,6 +436,12 @@ ALLOWED_PENALTY_USES = {
     # The API's data chi^2 in residual form (EvaluateFilledChi2, the analytic gradient): T2 for its rows;
     # pyazr_objective checks it against the CLI's objective.
     ("api/src/AZUREAPI.cpp", "CovarianceChi2Correction"),
+    # The output writer, moved out of src/EData.cpp (docs/upgrade/edata_split.md N1): chiSquared.out prints the
+    # target-effect prior totals, which Results::objective does not hold yet (decision D2 of the note).
+    ("src/EDataOutputFiles.cpp", "ScreeningPenalty"),
+    ("src/EDataOutputFiles.cpp", "DensityPenalty"),
+    ("src/EDataOutputFiles.cpp", "DopplerPenalty"),
+    ("src/EDataOutputFiles.cpp", "ThicknessPenalty"),
 }
 for top in ("src", "api/src"):
     for name in sorted(os.listdir(os.path.join(ROOT, top))):

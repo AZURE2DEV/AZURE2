@@ -432,6 +432,9 @@ class EData {
   /// The background (model units) that the output adds to the model value of a point of segment i at c.m. energy
   /// E under the profile in `results`; 0 outside a group with one.
   double ThmBackgroundAt(int i, double energy, const azure2::Results &results);
+  /// The lowest and highest c.m. energy (MeV) of the points of a group's segments: the grids of the set-up
+  /// (EDataThm.cpp) and the ranges of the reports (EDataThmReports.cpp).
+  static void ThmGroupEnergyRange(EData &data, const ThmGroup &group, double &eLo, double &eHi);
   /// Profile of every experiment, trivial ones included, for the output and pyazr.
   std::vector<ThmExperimentReport> ThmExperimentReports(const azure2::Results &results);
   /*!
@@ -529,6 +532,16 @@ class EData {
   int BuildThmGroups(const Config &, CNuc *, int numLines);
   /// Writes output/thm_experiments.out.
   void WriteThmExperiments(const Config &, const azure2::Results &results);
+  /// The parts of WriteOutputFiles (src/EDataOutputFiles.cpp), in the order it calls them.  The AZUREOut_* files with
+  /// their .band siblings (when `band` holds gradients) and the sample decompositions; kinflag 0 writes the c.m.
+  /// frame, 1 the lab frame (kinflag.dat).
+  void WriteSegmentFiles(const Config &, const azure2::Results &results, int kinflag, const BandData *band);
+  /// chiSquared.out: one row per segment, in the order of the segment files, then the totals.
+  void WriteChiSquaredFile(const Config &, const azure2::Results &results);
+  /// normalizations.out, when a segment's normalization is varied.
+  void WriteNormalizationsFile(const Config &, const azure2::Results &results);
+  /// shifts.out, when a segment's energy shift is varied, follows a group or has a shift function.
+  void WriteShiftsFile(const Config &, const azure2::Results &results);
   std::shared_ptr<const PriorCovariance> priorCov_;  // shared by every copy (read-only once set up)
   std::vector<std::string> nucleusLabels_;   // one per compound nucleus, for the natural decomposition file
   int numNuclei_ = 0;  // compound nuclei: the natural terms of a sample segment's points (Initialize)

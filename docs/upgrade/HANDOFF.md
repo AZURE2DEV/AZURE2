@@ -2,6 +2,31 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-10 (agent, brief P) — `EData` split N1–N4 (branch `feature/upgrade-4-edata-split-1`)
+
+**Done** (`edata_split.md` §5.1, one commit per step):
+- N1: the output writer (`WriteNaturalDecomposition`, `WriteBandLine`, `WriteOutputFiles`) to `src/EDataOutputFiles.cpp`;
+  four check-11 allowance rows for the penalty totals of `chiSquared.out` (D2).
+- N2: the four data check writers (`PrintData`, `PrintLegendreP`, `PrintEDependentValues`, `PrintCoulombAmplitude`) to
+  `src/EDataCheckFiles.cpp`; new ctest `check_files_data` (`tests/check_files_data/check.sh`: T1 with the four
+  checks on, files and line counts).
+- N3: `WriteThmExperiments` and the three THM tables to `src/EDataThmReports.cpp`; `ThmGroupEnergyRange` is a public
+  static member of `EData` (its set-up callers are free functions, so it cannot be private as the note says).
+- N4: `WriteOutputFiles` calls `WriteSegmentFiles`, `WriteChiSquaredFile`, the THM writer, `WriteNormalizationsFile`,
+  `WriteShiftsFile`; the per-segment χ² rows have their own loop over the same segments.
+Sizes: `EData.cpp` 5,571 → 4,841, `EDataThm.cpp` 1,233 → 773; new files 522, 251, 487 lines.
+
+**Verified how.** Each move: the moved lines of the old file `diff` empty against the new file's body. Each step:
+build 0 warnings, 179 × 3 identical to `tab-p3f`, `scripts/check.sh --quick`. Outputs the 179 runs do not reach,
+base (`work/b-trial2`) against branch, byte for byte: `.band`, lab-frame and `shifts.out` files of seven `check.sh`
+(N1, N4); the four check files as `file` and `screen` on T1, T3, 13N, `natural_neon` and a line-shape THM project
+(N2); the THM tables through pyazr with `repr` on 38 projects (N3). At the end: `tests/run_tests.sh` 138 passed
+(OMP 3), T1–T3 and 13N × 3 bases identical at 1 and 2 threads. Scripts in `work/esplit/`.
+
+**Open.** N3's helper is public, not private (above). The base engine itself varies from run to run at 2 threads in
+the Minuit call count of two fits (`energy_shift_sqrt` 40/41, `shift_fn` 36/37 calls, `fitStatus.out`), with the same
+fitted outputs; not investigated.
+
 ## 2026-11-10 (evening) — brief I: the follow-ups of the model pass, and S5, the calculation plan (`feature/upgrade-4-plan`)
 
 **Done** (brief `work/briefs/I_plan.md`; full report `work/plan/REPORT.md`).

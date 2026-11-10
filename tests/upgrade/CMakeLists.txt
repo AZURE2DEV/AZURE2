@@ -124,6 +124,10 @@ set_tests_properties(upgrade_plan_runtime PROPERTIES TIMEOUT 1800)
 # 4 threads evaluate the same vectors to the same values (tests/fit_threads/check.sh, docs/upgrade/fit_threads.md).
 add_test(NAME fit_threads COMMAND bash ${CMAKE_SOURCE_DIR}/tests/fit_threads/check.sh $<TARGET_FILE:AZURE2>)
 set_tests_properties(fit_threads PROPERTIES TIMEOUT 600)
+# The four data check files of T1 are written, with their line counts (tests/check_files_data/check.sh): no other
+# project sets these checks (src/EDataCheckFiles.cpp, docs/upgrade/edata_split.md N2).
+add_test(NAME check_files_data COMMAND bash ${CMAKE_SOURCE_DIR}/tests/check_files_data/check.sh $<TARGET_FILE:AZURE2>)
+set_tests_properties(check_files_data PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2" TIMEOUT 300)
 # Results read before they are written (docs/upgrade/data_model.md, S3 and check 16): T1-T3 calculated, extrapolated
 # and (T1) fitted with and without AZURE_POISON_RESULTS=1, outputs and the API's arrays equal; known cases listed.
 find_package(Python3 COMPONENTS Interpreter)
