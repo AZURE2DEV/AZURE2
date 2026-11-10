@@ -520,7 +520,7 @@ dataset s02_diff090
     covariance     cov_diff.txt
     beam           beam_s02_diff090
     detector       det_s02_diff090
-    quadrature     points 20 width_multiplier 20 per_width 50
+    quadrature     points 20
 dataset s03_diff150                             # as s02 with angle_window 150 150 deg, file data/s03_diff150.dat
     ...
 dataset s04_thick
@@ -537,7 +537,7 @@ dataset s04_thick
 dataset s05_implanted                           # sigma, b; norm 1 fixed; target tgt_s05_implanted; beam beam_s05_implanted;
     ...                                         # quadrature points 40 width_multiplier 10 per_width 20
 dataset s06_gas                                 # sigma, b; norm 1 fit prior 1 5%; target tgt_s06_gas; beam beam_s06_gas;
-    ...                                         # quadrature points 40 width_multiplier 20 per_width 50
+    ...                                         # quadrature points 40
 dataset s07_profile
     reaction       15N(p,a)12C
     quantity       sigma
@@ -558,7 +558,7 @@ dataset s08_sum
     energy_window  0.599999 1.400001 MeV
     norm           1 fit
     beam           beam_s08_sum
-    quadrature     points 20 width_multiplier 20 per_width 50
+    quadrature     points 20
 dataset s09_ratio
     reaction       15N(p,a)12C[4.439] / 15N(p,a)12C
     quantity       sigma
@@ -586,7 +586,7 @@ dataset s11_thm_hoes_a
     energy_window  0.032015 0.640314 MeV
     norm           profiled
     beam           beam_LC09
-    quadrature     points 30 width_multiplier 20 per_width 50
+    quadrature     points 30
 dataset s12_thm_hoes_b                          # as s11, file data/s12_thm_hoes_b.dat, window 0.042687 0.618970 MeV
     ...
 dataset s13_thm_oes
