@@ -2,6 +2,7 @@
 #define AZURE2_EXPERIMENT_FRAMES_H
 
 #include <string>
+#include <vector>
 
 namespace azure2 {
 namespace experiment {
@@ -98,6 +99,58 @@ double PhotonLabToCM(double beta, double thetaLab);
 double ParticleJacobian(const Partition &entrance, const Partition &exit, double eLab, double thetaLab, double thetaCM);
 /// Photon: (1 - beta cos theta_lab)^2 / (1 - beta^2), beta = CMVelocity.
 double PhotonJacobian(const Partition &entrance, double eLab, double thetaLab);
+
+// ---------------------------------------------------------------- the frame of a measurement
+
+/// What the detected particle of a term's exit is, for the angle and value conversions.
+enum class ExitKind { None, Particle, Photon, Other };
+
+/*!
+ * How the rows of one term of a measurement are converted (docs/upgrade/data_structure.md section 1.2): the
+ * partitions of the term, what its exit detects, and which conversions apply.  Built by the engine from its pairs.
+ */
+struct FrameRule {
+  Partition entrance, exit;
+  ExitKind exitKind = ExitKind::None;  ///< None: no exit pair (total capture before its first capture pair is set)
+  bool elastic = false;                ///< the exit pair is the entrance pair
+  bool betaDelayed = false;            ///< beta-delayed entrance with an exit pair: E is the light particle's
+  bool relativistic = false;
+  bool labDifferential = false;        ///< lab-frame differential data: the angle (and value) are converted
+  bool convertValue = false;           ///< the value carries dOmega_lab/dOmega_cm (false for a ratio)
+};
+
+/// One row of a measurement in the c.m. frame (MeV, deg, the value's unit; jacobian = dOmega_lab/dOmega_cm).
+struct FrameRow {
+  double eLab = 0.0, eCM = 0.0, eX = 0.0;
+  double binLowCM = 0.0, binHighCM = 0.0;
+  double thetaCM = 0.0, jacobian = 1.0;
+  double yCM = 0.0, dyCM = 0.0;
+};
+
+/// The rows of a measurement (or of one leaf of it) in the c.m. frame, at one energy shift.
+struct MeasurementFrame {
+  std::vector<FrameRow> rows;
+};
+
+/// The row as read, before any conversion: the state ConvertRow starts from at load.
+FrameRow UnconvertedRow(double eLab, double thetaLab, double y, double dy, double binLowLab, double binHighLab);
+
+/*!
+ * The one lab -> c.m. conversion of a row (the engine's sequence, operation for operation): E_c.m., E_x and the bin
+ * edges from the lab energy eLab (beam, or the light particle of a beta decay); for lab-frame differential data with
+ * an exit, the c.m. angle of the detected particle at lab angle thetaLab and, with convertValue, y and dy times the
+ * Jacobian.  `row` holds the state to start from: at load the unconverted row, after an energy shift the row as it
+ * was converted at load, so that where the lab angle is beyond the kinematic maximum the angle and Jacobian are the
+ * load-time ones (whatever an earlier evaluation converted).  At load (`atLoad`) such a row stops the conversion and
+ * false is returned; after a shift the value is still converted at the load-time angle and false is returned.  `lim`
+ * receives what the angle maps reported, in the order they ran (merge with Merge).
+ */
+bool ConvertRow(const FrameRule &rule, double eLab, double thetaLab, double y, double dy, double binLowLab,
+                double binHighLab, bool atLoad, FrameRow &row, AngleLimit &lim);
+/// The energy part of ConvertRow alone: eLab, E_c.m., E_x and (beam) the c.m. bin edges of the row.
+void ConvertRowEnergy(const FrameRule &rule, double eLab, double binLowLab, double binHighLab, FrameRow &row);
+/// Merge what a later angle map reported into `into`: a maximum and a reason replace earlier ones when set.
+void Merge(AngleLimit &into, const AngleLimit &from);
 
 }  // namespace experiment
 }  // namespace azure2

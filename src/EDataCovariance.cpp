@@ -159,7 +159,7 @@ double EData::CovarianceChi2Correction(azure2::Results &results, std::vector<dou
     for (int a = 0; a < g.n; a++) {
       ESegment *seg = this->GetSegment(g.members[a].first);
       EPoint *pt = seg->GetPoint(g.members[a].second + 1);
-      r[a] = azure2::PointResidual(*pt, results, seg->GetNorm()).Pull();
+      r[a] = azure2::PointResidual(*seg, g.members[a].second, results, seg->GetNorm()).Pull();
       diag += r[a] * r[a];
     }
     g.EnsureFactored(r);
@@ -234,7 +234,7 @@ void EData::WriteCovarianceSummary(const Config &configure, const azure2::Result
     for (int a = 0; a < g.n; a++) {
       ESegment *seg = this->GetSegment(g.members[a].first);
       EPoint *pt = seg->GetPoint(g.members[a].second + 1);
-      r[a] = azure2::PointResidual(*pt, results, seg->GetNorm()).Pull();
+      r[a] = azure2::PointResidual(*seg, g.members[a].second, results, seg->GetNorm()).Pull();
       diag += r[a] * r[a];
     }
     g.EnsureFactored(r);

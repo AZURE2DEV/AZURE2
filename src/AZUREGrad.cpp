@@ -1477,7 +1477,7 @@ bool ComputeResidualJacobian(CNuc *compound, EData *data, azure2::Results &resul
   // Residual r = (model - data*n)/(cmErr*n);  d r / d model = 1/(cmErr*n), the
   // cotangent that yields d r / d(E,gamma) directly.
   auto fitBarOf = [&](const GroupMember &m) {
-    const double denom = m.pt->GetCMCrossSectionError() * norm[m.segNum];
+    const double denom = m.seg->CMError(m.pointIdx) * norm[m.segNum];
     return (denom != 0.0) ? 1.0 / denom : 0.0;
   };
   static thread_local vector_r fullRow;
@@ -1485,8 +1485,8 @@ bool ComputeResidualJacobian(CNuc *compound, EData *data, azure2::Results &resul
     const int row = rowOf[m.segNum][m.pointIdx];
     if (row < 0) return;
     const double n = norm[m.segNum];
-    const double cmErr = m.pt->GetCMCrossSectionError();
-    residuals[row] = azure2::DataResidual(model, m.pt->GetCMCrossSection(), cmErr, n).Pull();
+    const double cmErr = m.seg->CMError(m.pointIdx);
+    residuals[row] = azure2::DataResidual(model, m.seg->CMValue(m.pointIdx), cmErr, n).Pull();
     // Scatter this row's d r / d(E,gamma) into the packed columns.
     fullRow.assign(pmap.NumFull(), 0.0);
     accum.Scatter(pmap, fullRow);
@@ -1756,8 +1756,8 @@ std::vector<THMRows> ComputeTHMRows(CNuc *lc, EData *ld, azure2::Results &result
     for (int pid = 0; pid < seg->NumPoints(); pid++) {
       EPoint *pt = seg->GetPoint(pid + 1);
       if (!pt) continue;
-      d.push_back(pt->GetCMCrossSection());
-      e.push_back(pt->GetCMCrossSectionError());
+      d.push_back(seg->CMValue(pid));
+      e.push_back(seg->CMError(pid));
       pt->SetModelValue(results, tr.m[d.size() - 1]);
     }
     const size_t n = d.size();
@@ -1823,8 +1823,8 @@ std::vector<THMRows> ComputeTHMRows(CNuc *lc, EData *ld, azure2::Results &result
         EPoint *pt = seg->GetPoint(pid + 1);
         if (!pt) continue;
         m.push_back(rows[t].m[i]);
-        d.push_back(pt->GetCMCrossSection());
-        e.push_back(pt->GetCMCrossSectionError());
+        d.push_back(seg->CMValue(pid));
+        e.push_back(seg->CMError(pid));
         energy.push_back(pt->GetCMEnergy());
         Jm.insert(Jm.end(), rows[t].Jm.begin() + i * nCols, rows[t].Jm.begin() + (i + 1) * nCols);
         i++;

@@ -109,7 +109,7 @@ double SegmentLocalChi2(ESegment *segment, CNuc *lc, const Config &config, EData
   const double norm = segment->GetNorm();
   for (int pid = 0; pid < segment->NumPoints(); pid++) {
     azure2::EvaluateModelPoint(*segment, pid, lc, config, results, azure2::LeafValues::Calculate);
-    chi += azure2::PointResidual(*segment->GetPoint(pid + 1), results, norm).Chi2();
+    chi += azure2::PointResidual(*segment, pid, results, norm).Chi2();
   }
   segment->AddShiftPenalty(chi);
   return chi;
@@ -250,7 +250,7 @@ ShiftColumnCount FillShiftColumns(CNuc *lc, EData *ld, azure2::Results &results,
       if (!pt) return;
       present[pid] = 1;
       azure2::EvaluateModelPoint(*seg, pid, lc, config, results, azure2::LeafValues::Calculate);
-      byPoint[pid] = azure2::PointResidual(*pt, results, norm).Pull();
+      byPoint[pid] = azure2::PointResidual(*seg, pid, results, norm).Pull();
     };
     // No parallel construct inside an enclosing parallel region.  In parallel each point is calculated on
     // its own, without point mapping (ScopedPointMappingOff, as in the
@@ -282,7 +282,7 @@ ShiftColumnCount FillShiftColumns(CNuc *lc, EData *ld, azure2::Results &results,
         EPoint *pt = seg->GetPoint(pid + 1);
         if (!pt) continue;
         azure2::EvaluateModelPoint(*seg, pid, lc, config, results, pre ? azure2::LeafValues::Ready : azure2::LeafValues::Calculate);
-        out.push_back(azure2::PointResidual(*pt, results, norm).Pull());
+        out.push_back(azure2::PointResidual(*seg, pid, results, norm).Pull());
       }
     }
   };
@@ -441,7 +441,7 @@ void AZURECalc::DumpNonFinite(const vector_r &p, double chi, CNuc *lc, EData *ld
     double c = 0.0;
     for (int pid = 1; pid <= seg->NumPoints(); pid++) {
       EPoint *pt = seg->GetPoint(pid);
-      if (pt) c += azure2::PointResidual(*pt, results, seg->GetNorm()).Chi2();
+      if (pt) c += azure2::PointResidual(*seg, pid - 1, results, seg->GetNorm()).Chi2();
     }
     segs.push_back({std::isfinite(c) ? c : std::numeric_limits<double>::max(), i});
   }
@@ -456,11 +456,11 @@ void AZURECalc::DumpNonFinite(const vector_r &p, double chi, CNuc *lc, EData *ld
       EPoint *pt = seg->GetPoint(pid);
       if (!pt) continue;
       const double fit = pt->GetModelValue(results);
-      const double pull = azure2::PointResidual(*pt, results, seg->GetNorm()).Pull();
+      const double pull = azure2::PointResidual(*seg, pid - 1, results, seg->GetNorm()).Pull();
       if (std::isfinite(fit) && std::fabs(pull) < 1.0e4) continue;
       shown++;
       out << "    point " << pid << " Elab " << pt->GetLabEnergy() << " Ecm " << pt->GetCMEnergy() << " angle "
-          << pt->GetCMAngle() << " fit " << fit << " data " << pt->GetCMCrossSection() << " pull " << pull;
+          << pt->GetCMAngle() << " fit " << fit << " data " << seg->CMValue(pid - 1) << " pull " << pull;
       int nBad = 0;
       double firstBadE = 0.0, firstBadS = 0.0;
       for (int j = 1; j <= pt->NumSubPoints(); j++) {
@@ -812,8 +812,8 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
     EPoint *pt = seg->GetPoint(pid + 1);
     if (!pt) return 0.0;
     double norm = seg->GetNorm();
-    double dataval = pt->GetCMCrossSection();
-    double cmErr = pt->GetCMCrossSectionError();
+    double dataval = seg->CMValue(pid);
+    double cmErr = seg->CMError(pid);
     const azure2::Residual res = azure2::DataResidual(model, dataval, cmErr, norm);
     const double r = res.difference, err = res.error;
     if (err == 0.0) return 0.0;
@@ -1719,7 +1719,7 @@ bool AZURECalc::ResidualsOnly(const vector_r &full, vector_r &residuals) const {
     const double norm = segment->GetNorm();
     for (int pid = 0; pid < segment->NumPoints(); pid++) {
       azure2::EvaluateModelPoint(*segment, pid, lc, configure(), results, azure2::LeafValues::Calculate);
-      residuals.push_back(azure2::PointResidual(*segment->GetPoint(pid + 1), results, norm).Pull());
+      residuals.push_back(azure2::PointResidual(*segment, pid, results, norm).Pull());
     }
   }
   if (ld->HasCovariance()) ld->WhitenResidualRows(residuals, nullptr, 0);

@@ -574,8 +574,8 @@ int AZUREAPI::UpdateData() {
     for (int k = 0; k < data.size(); ++k) {
       energies.push_back(data[k].GetCMEnergy());
       angles.push_back(data[k].GetCMAngle());
-      cross.push_back(data[k].GetCMCrossSection());
-      crossErr.push_back(data[k].GetCMCrossSectionError());
+      cross.push_back(segments[i].CMValue(k));
+      crossErr.push_back(segments[i].CMError(k));
       conv.push_back(data[k].GetSFactorConversion());
       excitationEnergies.push_back(data[k].GetExcitationEnergy());
     }
@@ -833,7 +833,7 @@ double AZUREAPI::EvaluateFilledChi2(vector_r *res) const {
 
     const double norm = ld->NormUsed(i, results());
     for (int pid = 0; pid < segment->NumPoints(); pid++) {
-      const double r = azure2::PointResidual(*segment->GetPoint(pid + 1), results(), norm).Pull();
+      const double r = azure2::PointResidual(*segment, pid, results(), norm).Pull();
       if (!profiled) segChi += r * r;
       if (res) res->push_back(r);
     }
@@ -1000,8 +1000,8 @@ bool AZUREAPI::Chi2GradEGammaNorm(const vector_r &full, vector_r &gradFull,
     EPoint *pt = seg->GetPoint(pid + 1);
     if (!pt) return 0.0;
     double norm = seg->GetNorm();
-    double dataval = pt->GetCMCrossSection();
-    double cmErr = pt->GetCMCrossSectionError();
+    double dataval = seg->CMValue(pid);
+    double cmErr = seg->CMError(pid);
     const azure2::Residual res = azure2::DataResidual(model, dataval, cmErr, norm);
     const double r = res.difference, err = res.error;
     if (err == 0.0) return 0.0;

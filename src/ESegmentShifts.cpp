@@ -168,8 +168,7 @@ void ESegment::UpdatePointEnergyWithShift(int i, CNuc *theCNuc, const Config *co
         PPair *exitPair = theCNuc->GetPairFromKey(this->GetExitKey());  // nullptr for total capture (-1)
 
         // The same conversion as ESegment::Fill (ratios are dimensionless: no cross-section conversion)
-        if (!this->ConvertPointToCM(point, entrancePair, exitPair, *configure, !this->IsDimensionlessRatio(),
-                                    BeyondRange::Convert)) {
+        if (!this->ConvertRowToCM(i, entrancePair, exitPair, !this->IsDimensionlessRatio(), BeyondRange::Convert)) {
           // An energy shift moved the point past the kinematic maximum lab angle mid-fit: the c.m. angle keeps
           // its value as loaded and the run says so (it cannot stop here; audit 2026-10-25, item 31).
           configure->outStream << "WARNING: segment #" << this->GetSegmentKey() << ": the energy shift moved the point at lab angle "

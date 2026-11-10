@@ -521,22 +521,19 @@ int EData::MakePoints(const Config &configure, CNuc *theCNuc, const azure2::expe
             theCNuc->GetPair(theCNuc->GetPairNumFromKey(theSegment->GetEntranceKey()))->SetEntrance();
             PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(theSegment->GetEntranceKey()));
             PPair *exitPair = theCNuc->GetPairFromKey(theSegment->GetExitKey());  // nullptr for total capture (-1)
-            for (double angle : segment.angles) {
-              for (double energy : segment.energies) {
-                EPoint NewPoint(angle, energy, theSegment);
-                theSegment->AddPoint(NewPoint);
-                EPoint *thePoint = theSegment->GetPoint(theSegment->NumPoints());
-                thePoint->SetParentData(this);
-                // A ratio is dimensionless: no cross-section conversion (as ESegment::Fill for data segments;
-                // the stored factor would otherwise divide the ratio in the lab output, kinflag.dat = 1).
-                if (!theSegment->ConvertPointToCM(thePoint, entrancePair, exitPair, configure,
-                                                  !theSegment->IsDimensionlessRatio(), ESegment::BeyondRange::Stop)) {
-                  configure.outStream << "ERROR: " << "test segment #" << theSegment->GetSegmentKey() << ": lab angle " << thePoint->GetLabAngle() << " deg at E_lab = " << thePoint->GetLabEnergy()
-                                      << " MeV: " << thePoint->GetLabAngleWhy() << "." << std::endl;
-                  return -1;
-                }
+            theSegment->SetGridRows(segment.energies, segment.angles, this);
+            for (int i = 0; i < theSegment->NumPoints(); i++) {
+              // A ratio is dimensionless: no cross-section conversion (as ESegment::Fill for data segments;
+              // the stored factor would otherwise divide the ratio in the lab output, kinflag.dat = 1).
+              if (!theSegment->ConvertRowToCM(i, entrancePair, exitPair, !theSegment->IsDimensionlessRatio(),
+                                              ESegment::BeyondRange::Stop)) {
+                const EPoint *thePoint = theSegment->GetPoint(i + 1);
+                configure.outStream << "ERROR: " << "test segment #" << theSegment->GetSegmentKey() << ": lab angle " << thePoint->GetLabAngle() << " deg at E_lab = " << thePoint->GetLabEnergy()
+                                    << " MeV: " << thePoint->GetLabAngleWhy() << "." << std::endl;
+                return -1;
               }
             }
+            theSegment->KeepLoadFrame();
 
             // Handle advanced segments (sum/ratio of components) - AFTER points are added
             if (NewSegment.IsAdvanced()) {
@@ -1008,7 +1005,7 @@ int EData::InitializeComponentSegments(CNuc *theCNuc, const Config &configure) {
 
       if (entrancePair && exitPair) {
         // The base segment's sequence, with the component's own pairs; a component's value is always converted.
-        if (!componentSegment.ConvertPointToCM(point, entrancePair, exitPair, configure, true, ESegment::BeyondRange::Stop)) {
+        if (!componentSegment.ConvertRowToCM(i - 1, entrancePair, exitPair, true, ESegment::BeyondRange::Stop)) {
           configure.outStream << "ERROR: " << "component (" << entranceKey << " -> " << exitKey << ") of segment #" << componentSegment.GetSegmentKey() << ": lab angle " << point->GetLabAngle() << " deg at E_lab = " << point->GetLabEnergy()
                               << " MeV: " << point->GetLabAngleWhy() << "." << std::endl;
           return -1;
@@ -1024,6 +1021,7 @@ int EData::InitializeComponentSegments(CNuc *theCNuc, const Config &configure) {
         }
       }
     }
+    if (entrancePair && exitPair) componentSegment.KeepLoadFrame();
   }
 
   // CalcEDependentValues for component segments, in parallel as for the data segments
@@ -1380,9 +1378,11 @@ ESegment *EData::CreateComponentSegment(const ESegment &baseSegment, int entranc
   if (fixedAngle) {
     componentSegment->SetMinAngle(*fixedAngle);
     componentSegment->SetMaxAngle(*fixedAngle);
-    for (EPoint &point : componentSegment->GetPoints()) {
+    for (int i = 0; i < componentSegment->NumPoints(); i++) {
+      EPoint &point = componentSegment->GetPoints()[i];
       point.SetCMAngle(*fixedAngle);
       point.SetLabAngle(*fixedAngle);
+      componentSegment->SetFrameAngle(i, *fixedAngle);
     }
   }
   // A key of its own (negative: not a segment of the file), from the data set's counter, for the caches keyed by it

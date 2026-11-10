@@ -204,7 +204,7 @@ struct PointInputs {
       const FactorRef &r = p.factors[f];
       EPoint *termPoint = TermPoint(segment, r.term, pointIndex);
       factorValue[f] = (r.kind == FactorRef::Kind::TermFrame)
-                           ? ESegment::TermFrameFactor(basePoint, termPoint)
+                           ? (basePoint && termPoint ? ESegment::TermFrameFactor(segment, *TermSegment(segment, r.term), pointIndex) : 1.0)
                            : ESegment::RatioTermFrameFactor(termPoint, TermSegment(segment, r.term), cnuc);
       factorArray[f] = {&factorValue[f], 1};
     }
@@ -359,8 +359,8 @@ bool ModelPointBackward(ESegment &segment, int pointIndex, CNuc *compound, const
   return ok;
 }
 
-Residual PointResidual(const EPoint &point, const Results &results, double norm) {
-  return DataResidual(point.GetModelValue(results), point.GetCMCrossSection(), point.GetCMCrossSectionError(), norm);
+Residual PointResidual(const ESegment &segment, int i, const Results &results, double norm) {
+  return DataResidual(segment.GetPoints()[i].GetModelValue(results), segment.CMValue(i), segment.CMError(i), norm);
 }
 
 }  // namespace azure2

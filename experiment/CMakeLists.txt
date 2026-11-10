@@ -31,6 +31,7 @@ add_library(azure2_experiment STATIC
   src/BuildPotentials.cpp
   src/Expression.cpp
   src/Frames.cpp
+  src/Measurement.cpp
   src/Grids.cpp
   src/HybridPotentialSettings.cpp
   src/Json.cpp
@@ -71,7 +72,7 @@ endif()
 # tests/schema/schema_v3.json (check 21).
 # (Sources named in full: repo_consistency checks that every tests/*_test.cpp is named here.)
 foreach(_src expression_test.cpp frames_test.cpp schema_test.cpp diagnostics_test.cpp quantities_test.cpp
-             parsers_test.cpp build_test.cpp prediction_test.cpp grids_test.cpp)
+             parsers_test.cpp build_test.cpp prediction_test.cpp grids_test.cpp measurement_test.cpp)
   string(REPLACE "_test.cpp" "" _t ${_src})
   add_executable(experiment_${_t}_test tests/${_src})
   target_link_libraries(experiment_${_t}_test PRIVATE azure2_experiment_reader)

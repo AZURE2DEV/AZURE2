@@ -6,6 +6,8 @@
 #include <vector>
 #include <mutex>
 #include <memory>
+#include "azure2/experiment/Frames.h"
+#include "azure2/experiment/Measurement.h"
 #include "azure2/experiment/SetupSpecs.h"
 
 namespace azure2 {
@@ -43,8 +45,6 @@ class ESegment {
   explicit ESegment(const azure2::experiment::DatasetSpec &);
   /// Build an extrapolation segment from its spec -- points on a grid, no data file.
   explicit ESegment(const azure2::experiment::ExtrapolationSpec &);
-  /// Does this point fall inside the segment's energy and angle ranges?
-  bool IsInSegment(EPoint);
   /// Differential cross section in the lab frame?
   bool IsDifferential() const;
   /// Differential cross section in the centre-of-mass frame?
@@ -108,21 +108,39 @@ class ESegment {
   int GetEntranceKey() const;
   /// Exit particle pair key.
   int GetExitKey() const;
-  /// Read the data file and keep the points inside the energy and angle ranges, converting from the lab frame where needed.
+  /// Read the data file and keep the rows inside the energy and angle ranges (the segment's measurement), one point
+  /// per row, converted from the lab frame where needed.
   int Fill(CNuc *, EData *, const Config &);
-  /// What ConvertPointToCM does with a lab angle beyond the kinematic maximum: stop (the value is not converted),
-  /// or convert the value at the load-time angle (an energy shift moved the point there mid-fit).
+  /// What the segment measured: its rows (shared, never written after set-up), their provenance, its prediction.
+  const azure2::experiment::Measurement &GetMeasurement() const { return *measurement_; }
+  bool HasMeasurement() const { return measurement_ != nullptr; }
+  /// Make `rows` the segment's measurement and one point per row (a data file's rows, or the grid of an
+  /// extrapolation), in the frame as read; ConvertRowToCM converts them.
+  void SetMeasurementRows(std::shared_ptr<const azure2::experiment::MeasurementRows> rows,
+                          const azure2::experiment::MeasurementProvenance &provenance, bool extrapolation, EData *data);
+  /// The grid of an extrapolation as its measurement: one row per (angle, energy), energies varying fastest, value
+  /// 0 and uncertainty 0.1 (lab MeV, deg).
+  void SetGridRows(const std::vector<double> &energies, const std::vector<double> &angles, EData *data);
+  /// The c.m. value, its uncertainty and dOmega_lab/dOmega_cm of row i (0-based) at the present energy shift.
+  double CMValue(int i) const { return frame_.rows[i].yCM; }
+  double CMError(int i) const { return frame_.rows[i].dyCM; }
+  double Jacobian(int i) const { return frame_.rows[i].jacobian; }
+  /// The c.m. angle of row i in the frame (a fixed-angle term is evaluated at that angle).
+  void SetFrameAngle(int i, double thetaCM) { frame_.rows[i].thetaCM = thetaCM; }
+  /// What ConvertRowToCM does with a lab angle beyond the kinematic maximum: stop (at load: the value is not
+  /// converted), or convert the value at the load-time angle (an energy shift moved the point there mid-fit).
   enum class BeyondRange { Stop, Convert };
-  /// The lab -> c.m. conversion of one point of this segment (docs/upgrade/data_model.md section 1.4), the one
-  /// sequence of Fill, UpdatePointEnergyWithShift, the test segments and the component segments (EData): E_c.m.
-  /// (ConvertPointEnergyToCM); for lab-frame differential data (not phase, angular-distribution or c.m. data) the
-  /// c.m. angle of a particle or photon exit; and, with convertValue (false for a RATIO: dimensionless), the value
-  /// and its uncertainty times dOmega_lab/dOmega_cm.  False where the lab angle is beyond the kinematic maximum
-  /// (EPoint::GetLabAngleWhy, GetLabAngleMax); the caller reports it.
-  bool ConvertPointToCM(EPoint *point, PPair *entrancePair, PPair *exitPair, const Config &configure,
-                        bool convertValue, BeyondRange beyond) const;
-  /// E_c.m. and E_x of a point: a beta-delayed point (entrance type 20) from its decay pair, else from the beam.
-  static void ConvertPointEnergyToCM(EPoint *point, PPair *entrancePair, PPair *exitPair);
+  /// The lab -> c.m. conversion of row i (0-based) at the point's present lab energy (docs/upgrade/data_structure.md
+  /// section 1.2, experiment::ConvertRow): the one sequence of the load (Stop), of an energy shift (Convert) and of
+  /// the components, written into the segment's frame and the point.  With convertValue (false for a ratio:
+  /// dimensionless) the value and its uncertainty carry dOmega_lab/dOmega_cm.  False where the lab angle is beyond
+  /// the kinematic maximum (EPoint::GetLabAngleWhy, GetLabAngleMax); the caller reports it.
+  bool ConvertRowToCM(int i, PPair *entrancePair, PPair *exitPair, bool convertValue, BeyondRange beyond);
+  /// E_c.m., E_x and the c.m. bin edges of row i alone (the component grids are laid out before the components'
+  /// angles are converted).
+  void ConvertRowEnergyToCM(int i, PPair *entrancePair, PPair *exitPair);
+  /// The frame of the load as it stands now becomes the frame an energy shift starts from (BeyondRange::Convert).
+  void KeepLoadFrame() { loadFrame_ = std::make_shared<const azure2::experiment::MeasurementFrame>(frame_); }
   /// E_c.m. / E_lab of the segment's points, non-relativistic: (M1 + M2) / M2 of the decay pair for a beta-delayed
   /// point, M2 / (M1 + M2) of the entrance pair otherwise (the rigid shift of sub-points, the target-effect grids).
   static double CMEnergyFactor(PPair *entrancePair, PPair *exitPair);
@@ -266,8 +284,11 @@ class ESegment {
   }
   /// What the segment predicts at its points (src/Predictions.cpp, EData::BuildPredictions): built once at set-up,
   /// immutable, shared by the working copies; null before it is built.
-  const azure2::experiment::Prediction *GetPrediction() const { return prediction_.get(); }
-  void SetPrediction(std::shared_ptr<const azure2::experiment::Prediction> p) { prediction_ = std::move(p); }
+  const azure2::experiment::Prediction *GetPrediction() const {
+    return measurement_ ? measurement_->prediction.get() : nullptr;
+  }
+  /// Give the measurement its prediction (a new measurement that shares the rows: the points read them).
+  void SetPrediction(std::shared_ptr<const azure2::experiment::Prediction> p);
   /// Path of the data file this segment reads.
   std::string GetDataFile() const;
   /// Append a point.
@@ -336,6 +357,7 @@ class ESegment {
   EPoint *GetPoint(int);
   /// The points, by reference.
   std::vector<EPoint> &GetPoints();
+  const std::vector<EPoint> &GetPoints() const { return points_; }
 
   // Advanced segment composition methods
   /// Add a component as a complete segment.
@@ -439,16 +461,12 @@ class ESegment {
   void SetComponentScaling(double scaling);
   /// Scale factor as a component; 1.0 unless it is one.
   double GetComponentScaling() const;
-  /// The factor that takes a SUM term's c.m. cross section into the frame of
-  /// the base point: the base point's lab-to-c.m. conversion factor over the
-  /// term's.  A lab-frame differential segment is compared in the base pair's
-  /// c.m. frame (sigma_cm = J_base sigma_lab, ESegment::Fill), while a
-  /// component to another exit pair is evaluated in its own c.m. frame with its
-  /// own Jacobian J_term, so the lab-frame sum  sum_i s_i sigma_cm,i / J_i
-  /// reads  sum_i s_i (J_base / J_i) sigma_cm,i  there.  1 when the frames
-  /// agree: c.m. or angle-integrated segments, a component of the same pair,
-  /// gamma terms of one entrance pair.
-  static double TermFrameFactor(const EPoint *basePoint, const EPoint *termPoint);
+  /// The factor that takes a SUM term's c.m. cross section into the frame of the base point at row i: the base's
+  /// lab-to-c.m. factor over the term's (experiment::TermFrameFactor).  A lab-frame differential segment is compared
+  /// in the base pair's c.m. frame (sigma_cm = J_base sigma_lab), while a component to another exit pair is evaluated
+  /// in its own c.m. frame with its own Jacobian J_term, so the lab-frame sum  sum_i s_i sigma_cm,i / J_i  reads
+  /// sum_i s_i (J_base / J_i) sigma_cm,i  there.  1 when the frames agree.
+  static double TermFrameFactor(const ESegment &base, const ESegment &term, int i);
 
   /// The lab-to-c.m. factor of one RATIO term (sigma_cm = J sigma_lab) at a point,
   /// with the TERM's own entrance and exit pair and the Jacobian of its own exit
@@ -567,7 +585,9 @@ class ESegment {
   bool isCoefficients_ = false;
   bool coefficientsAbsolute_ = false;
   azure2::experiment::ReactionSpec reaction_;  ///< GetReaction
-  std::shared_ptr<const azure2::experiment::Prediction> prediction_;  ///< GetPrediction
+  std::shared_ptr<const azure2::experiment::Measurement> measurement_;  ///< GetMeasurement (shared by every copy)
+  azure2::experiment::MeasurementFrame frame_;  ///< the rows in the c.m. frame at the present shift
+  std::shared_ptr<const azure2::experiment::MeasurementFrame> loadFrame_;  ///< KeepLoadFrame (shared by every copy)
   std::string datafile_;
   std::vector<EPoint> points_;
 

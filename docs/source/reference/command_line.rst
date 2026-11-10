@@ -198,7 +198,9 @@ Available Options
      - ``--describe FILE [--json]``: print what the engine makes of the format-3 project
        ``FILE``: for every data set the quantity, the observable computed, the reaction tree
        with the ``<levels>`` pair key each term resolved to, the windows, the data file as the
-       engine opens it (its resolved path), the target, beam and detector effects linked to it
+       engine opens it (its resolved path), the rows it holds and the rows kept inside the
+       windows with their lab-energy range (JSON ``rows_read``, ``rows_kept``,
+       ``kept_E_lab_MeV``), the target, beam and detector effects linked to it
        and its fit parameters with names and kinds; then the extrapolations and the model data.
        The place to see how a file was understood.  A project with errors prints them (exit 2).
        ``pyazr.describe(path, as_json=False)`` returns the same.

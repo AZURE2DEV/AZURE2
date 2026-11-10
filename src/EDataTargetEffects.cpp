@@ -53,8 +53,7 @@ static void AddTargetFallbackNodes(EPoint *point, TargetEffect *te, double cmCon
   }
   for (double sub : nodes) {
     EPoint subPoint(point->GetCMAngle(), sub, segment);
-    subPoint.SetCoefficientOrder(point->GetCoefficientOrder());
-    subPoint.SetCoefficientAbsolute(point->GetCoefficientAbsolute());
+    subPoint.BelongToRowOf(*point);
     subPoint.SetStoppingPower(cmConversion * te->GetStoppingPowerEq()->Evaluate(configure, sub / cmConversion));
     point->AddSubPoint(subPoint);
   }
@@ -368,8 +367,7 @@ int EData::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, const st
       for (size_t k = 0; k < grid.size(); k++) {
         const double e = grid[k];
         EPoint sub(target->GetCMAngle(), e, seg);
-        sub.SetCoefficientOrder(target->GetCoefficientOrder());
-        sub.SetCoefficientAbsolute(target->GetCoefficientAbsolute());
+        sub.BelongToRowOf(*target);
         if (tspec.targetIntegration)
           sub.SetStoppingPower(tspec.stoppingConversion *
                                effect->GetStoppingPowerEq()->Evaluate(configure, e / tspec.stoppingConversion));
@@ -737,8 +735,7 @@ int EData::SetUpTargetEffects(const Config &configure, CNuc *compound,
           for (size_t i = 0; i < energyGrid.size(); i++) {
             double subEnergy = energyGrid[i];
             EPoint subPoint(point->GetCMAngle(), subEnergy, &*segment);
-            subPoint.SetCoefficientOrder(point->GetCoefficientOrder());
-            subPoint.SetCoefficientAbsolute(point->GetCoefficientAbsolute());
+            subPoint.BelongToRowOf(*point);
             if (targetEffect->IsTargetIntegration()) {
               double stoppingPower = cmConversion * targetEffect->GetStoppingPowerEq()->Evaluate(configure, subEnergy / cmConversion);
               subPoint.SetStoppingPower(stoppingPower);
@@ -759,8 +756,7 @@ int EData::SetUpTargetEffects(const Config &configure, CNuc *compound,
         PPair *compEntrance = compound->GetPair(compound->GetPairNumFromKey(component->GetEntranceKey()));
         PPair *compExit = compound->GetPairFromKey(component->GetExitKey());
         const double compConversion = ESegment::CMEnergyFactor(compEntrance, compExit);
-        for (EPointIterator point = component->GetPoints().begin(); point < component->GetPoints().end(); point++)
-          ESegment::ConvertPointEnergyToCM(&*point, compEntrance, compExit);
+        for (int i = 0; i < component->NumPoints(); i++) component->ConvertRowEnergyToCM(i, compEntrance, compExit);
         if (component->IsTargetEffect()) {
           TargetEffect *targetEffect = this->GetTargetEffect(component->GetTargetEffectNum());
           const int bohrZ1 = (compEntrance->GetPType() == 20) ? 0 : compEntrance->GetZ(1);
@@ -917,8 +913,7 @@ int EData::SetUpTargetEffects(const Config &configure, CNuc *compound,
               for (size_t i = 0; i < energyGrid.size(); i++) {
                 double subEnergy = energyGrid[i];
                 EPoint subPoint(point->GetCMAngle(), subEnergy, &*component);
-                subPoint.SetCoefficientOrder(point->GetCoefficientOrder());
-                subPoint.SetCoefficientAbsolute(point->GetCoefficientAbsolute());
+                subPoint.BelongToRowOf(*point);
                 if (targetEffect->IsTargetIntegration()) {
                   double stoppingPower = compConversion * targetEffect->GetStoppingPowerEq()->Evaluate(configure, subEnergy / compConversion);
                   subPoint.SetStoppingPower(stoppingPower);

@@ -1,5 +1,5 @@
-#ifndef DATALINE_H
-#define DATALINE_H
+#ifndef AZURE2_EXPERIMENT_DATALINE_H
+#define AZURE2_EXPERIMENT_DATALINE_H
 
 #include <fstream>
 #include <sstream>

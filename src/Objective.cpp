@@ -54,7 +54,7 @@ class SegmentTerms : public ObjectiveTerm {
         segmentChiSquared = segment->ProfileNormChiSquared(c.results, c.results.objective.norm[i]);
       } else {
         for (int pointIdx = 0; pointIdx < segment->NumPoints(); pointIdx++)
-          segmentChiSquared += azure2::PointResidual(*segment->GetPoint(pointIdx + 1), c.results, segment->GetNorm()).Chi2();
+          segmentChiSquared += azure2::PointResidual(*segment, pointIdx, c.results, segment->GetNorm()).Chi2();
         // Normalization prior (profiled norms have none; a fixed norm pays none, objective.md D5).
         if (c.segmentPriors && segment->IsVaryNorm() && !segment->IsNormPriorReplaced()) {
           double dataNorm = segment->GetNorm();
