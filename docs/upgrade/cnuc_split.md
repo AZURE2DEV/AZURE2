@@ -402,11 +402,54 @@ Design section 10 (365c325f); physics (8f92d046); engine (416bd630). `SortPathwa
 do not exist); nothing is written. (c) 179 × 3 against the merged head db972c84: 2040/2040 identical. ctest
 119/119, `run_tests.sh` 133/133, 1 vs 8 threads identical.
 
+### Steps (d), (c) (branch `feature/upgrade-cnuc-split-3`, 2026-11-10)
+
+Done, each in its own commit, every one bit-identical (179 `.azr` × 3 bases against `tab-p3f`: 689 / 662 / 689 files
+identical after each), with `scripts/check.sh --quick` (ctest −LE slow 142/142, then 144/144 with the two io tests):
+
+- **(d) output and checks**: `src/CNucReport.cpp` (the four check files, `parameters.out`, `relativistic.out`) and
+  `src/CNucChecks.cpp` (the identical-channel refusal and warning, the Legendre-order warning, the
+  separation-energy/mass check, the radiative-width warning), reading the nucleus through const overloads of the
+  accessors; `CheckRadiativeWidths` split into `ObservedWidthsAt` (stays) and `WarnLargeRadiativeWidths`;
+  `PrintCompoundFromParams`, `NucleusOfPair` deleted.  The check files are written by no run of the 179: T1, T3, 13N
+  and `beam_profile_kernel` were run with the four checks on (file and screen), base and branch, identical.
+- **(d) transformation messages**: `src/CNucTransformMessages.cpp`, the warnings of `TransformIn` and
+  `TransformToBrune` (same wording).  Three 13N variants trigger the three column notes, identical to the base;
+  the external-capture, eigen-failure and not-converged messages are reached by no input.
+- **(c) input**: `NucLine` is `io/`'s `LevelRow` (`LevelRows.h`) with `ReadLevelSection`; the `<abundances>` parsing
+  is `ReadAbundanceSection` (`AbundanceLines.h`).  `Fill` and `ReadAbundances` build from the records.  ctests
+  `io_level_rows` (10554 rows of 189 files against a verbatim copy of the old reader, every field) and
+  `io_abundance_lines`; six malformed variants give the base build's messages byte for byte.
+- **(c) dead code**: the two unreachable branches of `ParseExternalCapture` and the write-only max-l members.
+
+`CNuc.cpp` 2907 → 1942 lines, `CNuc.h` 306 → 281.  Still in `CNuc.cpp` and its stream: `Fill` obtains the
+`<levels>` stream from `Config` and hands it to `io/` unread; `ExitPairKeysInFile` (a second reader of the first three
+tokens of segment lines) is not moved, see "Remaining steps".
+
 ### Remaining steps
 
-Steps 3b (iii), (iv), 6b (the consumers of the trees; with Phase 2's observables) and 7 of section 3. Step 4 (`physics/external_capture`) takes N_f^½, γ^ext and the final
-state's Brune amplitude and energy (section 8) out of `CNuc`, and should define the `--ignore-externals` mask on the
-observed (Brune) amplitudes in every basis.
+- **Step 4** is done (section 6 of `external_capture.md`, merged before this branch): N_f^½ and γ^ext come from
+  `physics/external_capture` through `src/CNucExternalCapture.cpp`, the final state's Brune amplitude and energy are
+  set there, and the `--ignore-externals` mask is defined on the input (Brune/Park) width in every basis
+  (`ALevel::ZeroInputWidth`). What is left in `CNuc.cpp` is one adapter call `SqrtNFFactor(...)` in each of
+  `TransformIn`, `TransformToBrune`, `CalcShiftFunctions`, `FillCompoundFromParams`,
+  `FillCompoundFromParamsPhysical`; the last two belong to the parameter vector (step 7).
+- **`ExitPairKeysInFile`**: `ParseExternalCapture` needs the exit keys of the active segments before the data are
+  read.  Either `Fill`'s callers pass them (EData knows the segments, but reads them after `Fill`), or the segment
+  readers (`SegLine`, `ExtrapLine`) provide them; both change behaviour on a malformed segment line, so they wait for a
+  decision.
+- **Step 6b** (consumers of the pathway trees read the System): about 270 tree accesses in `GenMatrixFunc` (92),
+  `AMatrixFunc` (78), `EData`, `RMatrixFunc`, `EPoint`, `AZUREAPI`, `CNucExternalCapture`, plus `CalcAngularDists`,
+  `CalcCaptureAnalyzingPower` and `WritePathwaysCheck`.  First a design addendum to section 10: where the per-stage
+  pathway table (the `reaction_pathways` result with the coupling coefficients) lives once it is not on `PPair`
+  (setup state owned by the caller, ARCHITECTURE §9), and how the hot loops index it.
+- **Step 3b (iii)** (hybrid channels as (α, l, j)): today's hybrid potential is central and keyed by the pair
+  (`NuclearPotentialManager::tagFor(pairKey)`), so the channel functions do not depend on j; (α, l, j) entries need a
+  spin-orbit term first (a new physics feature: `<potential>` grammar, `NuclearPotentialManager`, `CoulFunc`, the
+  table key in `ChannelTable`), with its design note.
+- **Step 3b (iv)**, **step 7** (class (e): `FillMnParams`, `FillCompoundFromParams*`, `GetTransformParams`,
+  `ConvertAmplitudeBasis`, the abundance members, penalties, `Initialize`, `Clone`) and the deletion of `CNuc`: not
+  started (another agent changes the parameter vector).
 
 ## 7. Step 1b: design
 
