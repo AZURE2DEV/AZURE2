@@ -78,8 +78,6 @@ ESegment::ESegment(const azure2::experiment::DatasetSpec &spec) {
   max_e_ = spec.maxE;
   min_a_ = spec.minA;
   max_a_ = spec.maxA;
-  e_step_ = 0.0;
-  a_step_ = 0.0;
   segment_chi_squared_ = 0.0;
   coefficientsAbsolute_ = spec.absolute;
   datafile_ = spec.dataFile;
@@ -141,8 +139,6 @@ ESegment::ESegment(const azure2::experiment::ExtrapolationSpec &spec) {
   max_e_ = spec.maxE;
   min_a_ = spec.minA;
   max_a_ = spec.maxA;
-  e_step_ = spec.eStep;
-  a_step_ = spec.aStep;
   segment_chi_squared_ = 0.0;
   if (spec.reaction.observable == azure2::experiment::Observable::AngularDistribution) {
     isAngDist_ = true;
@@ -603,22 +599,6 @@ double ESegment::GetSegmentChiSquared() const {
 // double ESegment::GetNormChiSquared() const {
 //   return norm_chi_squared_;
 // }
-
-/*!
- * Returns the energy step to take when creating points in a segment.  Only applies for extrapolation segments.
- */
-
-double ESegment::GetEStep() const {
-  return e_step_;
-}
-
-/*!
- * Returns the angle step to take when creating points in a segment.  Only applies for extrapolation segments.
- */
-
-double ESegment::GetAStep() const {
-  return a_step_;
-}
 
 /*!
  * Returns the total spin of the segment.  Only applies if the segment is phase shift.

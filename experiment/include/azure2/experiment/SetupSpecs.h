@@ -107,9 +107,12 @@ struct ExtrapolationSpec {
   int key = 0;  ///< 1, 2, ... in file order (inactive ones counted)
   bool active = true;
   ReactionSpec reaction;
-  double minE = 0.0, maxE = 0.0, eStep = 0.0;  ///< lab energy grid (MeV); step 0 = one energy
-  double minA = 0.0, maxA = 0.0, aStep = 0.0;  ///< lab angle grid (deg); step 0 = one angle
-  int maxAngDistOrder = 0;                     ///< AngularDistribution: highest Legendre order
+  double minE = 0.0, maxE = 0.0;  ///< the energy grid's bounds (MeV, lab), as the segment reports them
+  double minA = 0.0, maxA = 0.0;  ///< the angle grid's bounds (deg)
+  std::vector<double> energies;  ///< lab energies of the grid (MeV), in order
+  std::vector<double> angles;    ///< angles of the grid (deg; lab, or c.m. for the c.m. observables), in order; the
+                                 ///< energies are repeated at each angle
+  int maxAngDistOrder = 0;       ///< AngularDistribution: highest Legendre order
 };
 
 /// An apparatus effect (target integration, beam resolution, beam profile, Doppler, UDR, screening) and the data
@@ -228,6 +231,19 @@ struct DataSpecs {
 struct ExtrapolationSpecs {
   SpecList<ExtrapolationSpec> extrapolations;
   SpecList<TargetEffectSpec> targetEffects;
+};
+
+/// THM data sets (docs/upgrade/THM.md): the members of each experiment[<name>] of <thm> and the weight files of
+/// single data sets and extrapolations (<thm> weight[k] / weightTest[k] in old files, `thm_weight` in format 3).  The
+/// rest of an experiment is read from <thm> by its own parser.
+struct ThmMembershipSpec {
+  struct Experiment {
+    std::string name;
+    std::vector<int> datasetKeys;  ///< DatasetSpec::key, ascending
+  };
+  std::vector<Experiment> experiments;  ///< in the order the data sets name them first
+  std::vector<std::pair<int, std::string>> datasetWeights;        ///< (DatasetSpec::key, weight file as written)
+  std::vector<std::pair<int, std::string>> extrapolationWeights;  ///< (ExtrapolationSpec::key, weight file)
 };
 
 /// The abundances as CNuc consumes them, and why the reader stopped (`error` printed after the rows are applied).

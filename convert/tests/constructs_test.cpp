@@ -458,6 +458,34 @@ int main(int argc, char **argv) {
            F{{"quantity", "scattering_length"}, {"pair", "n+20Ne"}, {"s", "coherent"}, {"value", "4.6 fm"}, {"error", "0.1 fm"},
              {"imag", "0.2 fm"}, {"imag_error", "0.05 fm"}});
   }
+  // ---- a scattering length of a pair whose light particle is excited: the label carries the excitation (n[0.3]),
+  //      else it would name the ground-state pair 5
+  {
+    Old o{"", "", "", "<scatteringLengths>\n1 7 0.5 4.6 0.1\n</scatteringLengths>\n", ""};
+    o.levels = "0.5 1 7.0 0 7 7 1 0 4 1 0 1.0 0.5 1 0.0 1 0.0 1.008665 19.99244 0 10 6.76 6.76 0 0 0.0 0 5.0 0 0 0 0.3\n";
+    const ConvertResult r = Convert(o);
+    for (const auto &d : r.diagnostics) std::printf("        %s\n", d.ToText().c_str());
+    Expect("excited light particle", r, "datum scattering_length_1",
+           F{{"quantity", "scattering_length"}, {"pair", "n[0.3]+20Ne"}, {"s", "1/2"}, {"value", "4.6 fm"}, {"error", "0.1 fm"}});
+  }
+  // ---- a format-2 file with a <modelData> section already: one section, its records first, the converted rows after
+  {
+    const ConvertResult r = Convert({"", "", "",
+                                     "<modelData>\ndatum a_given\n    quantity scattering_length\n    pair n+20Ne\n    s 1/2\n"
+                                     "    value 1 fm\n    error 0.1 fm\n</modelData>\n"
+                                     "<scatteringLengths>\n1 5 0.5 4.6 0.1\n</scatteringLengths>\n",
+                                     ""});
+    std::size_t sections = 0;
+    for (std::size_t at = r.text.find("<modelData>"); at != std::string::npos; at = r.text.find("<modelData>", at + 1)) sections++;
+    check("existing <modelData>: converted", r.ok);
+    if (!r.ok) std::printf("        refusal: %s\n", r.refusal.c_str());
+    for (const auto &d : r.diagnostics) std::printf("        %s\n", d.ToText().c_str());
+    check("existing <modelData>: one section", sections == 1);
+    check("existing <modelData>: its record first, the converted row after",
+          r.text.find("datum a_given") != std::string::npos &&
+              r.text.find("datum a_given") < r.text.find("datum scattering_length_1") &&
+              r.text.find("\n<scatteringLengths>\n") == std::string::npos);
+  }
   // ---- director's D1: the angle-integrated elastic integral of a charged pair (GenMatrixFunc: pi/k^2 sum g |T|^2 of
   //      the nuclear amplitude) is quantity sigma_nuclear, with a CONVERTED comment
   {

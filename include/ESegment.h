@@ -141,10 +141,6 @@ class ESegment {
   double GetMaxAngle() const;
   /// Chi-squared contributed by this segment.
   double GetSegmentChiSquared() const;
-  /// Energy step between generated points. Extrapolation segments only.
-  double GetEStep() const;
-  /// Angle step between generated points. Extrapolation segments only.
-  double GetAStep() const;
   /// Total spin. Phase-shift segments only.
   double GetJ() const;
   /// Channel spin of a phase-shift segment ("spin <s>"), or -1 when the line gives none; see EData::Initialize.
@@ -554,8 +550,6 @@ class ESegment {
   double max_e_;
   double min_a_;
   double max_a_;
-  double e_step_;
-  double a_step_;
   double segment_chi_squared_;
   double j_;
   double dataNorm_;

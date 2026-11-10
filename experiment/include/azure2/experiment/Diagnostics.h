@@ -117,6 +117,15 @@ constexpr const char *kReferenceKind = "E_REFERENCE_KIND";
 constexpr const char *kUnknownEpoch = "E_UNKNOWN_EPOCH";
 constexpr const char *kTargetKind = "E_TARGET_KIND";
 constexpr const char *kDegenerateNuisance = "E_DEGENERATE_NUISANCE";
+// Build checks (Schema::Build: they need <levels> or the data files)
+constexpr const char *kUnknownPair = "E_UNKNOWN_PAIR";
+constexpr const char *kAmbiguousPair = "E_AMBIGUOUS_PAIR";
+constexpr const char *kPairKey = "E_PAIR_KEY";
+constexpr const char *kDataFile = "E_DATA_FILE";
+constexpr const char *kNotBuilt = "E_NOT_BUILT";
+constexpr const char *kThmRelativistic = "E_THM_RELATIVISTIC";
+constexpr const char *kThmCovariance = "E_THM_COVARIANCE";
+constexpr const char *kFoldConflict = "E_FOLD_CONFLICT";
 // Warnings
 constexpr const char *kNotMeasurable = "W_NOT_MEASURABLE";
 }  // namespace codes

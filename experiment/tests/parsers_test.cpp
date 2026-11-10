@@ -114,6 +114,9 @@ int main() {
     check("nucleus: case matters", Code(Parse(S(ValueType::Nucleus), "4HE")) == "E_UNKNOWN_ELEMENT");
     check("pair a+12C[4.439]", Parse(S(ValueType::Pair), "a+12C[4.439]").ok);
     check("pair p+15N", Parse(S(ValueType::Pair), "p+15N").value.pair.light.Z == 1);
+    check("pair n[0.3]+20Ne: the light particle's excitation, as in a reaction label",
+          Parse(S(ValueType::Pair), "n[0.3]+20Ne").ok && Parse(S(ValueType::Pair), "n[0.3]+20Ne").value.pair.light.excited &&
+              Parse(S(ValueType::Pair), "n[0.3]+20Ne").value.pair.light.excitation.text == "0.3");
     check("composition C 1 O 2", Parse(S(ValueType::Composition), "C 1 O 2").value.composition.size() == 2);
     check("composition: zero atoms", Code(Parse(S(ValueType::Composition), "C 0")) == "E_OUT_OF_RANGE");
     Parsed f = Parse(S(ValueType::Formula), "\"a0*x^a1\" a0=1.6e-20 a1=-0.45");

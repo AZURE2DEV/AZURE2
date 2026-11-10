@@ -577,12 +577,8 @@ int EData::MakePoints(const Config &configure, CNuc *theCNuc, const azure2::expe
             theCNuc->GetPair(theCNuc->GetPairNumFromKey(theSegment->GetEntranceKey()))->SetEntrance();
             PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(theSegment->GetEntranceKey()));
             PPair *exitPair = theCNuc->GetPairFromKey(theSegment->GetExitKey());  // nullptr for total capture (-1)
-            double aStep = theSegment->GetAStep();
-            double eStep = theSegment->GetEStep();
-            for (double angle = theSegment->GetMinAngle();
-                 angle <= theSegment->GetMaxAngle(); angle += aStep) {
-              for (double energy = theSegment->GetMinEnergy();
-                   energy <= theSegment->GetMaxEnergy(); energy += eStep) {
+            for (double angle : segment.angles) {
+              for (double energy : segment.energies) {
                 EPoint NewPoint(angle, energy, theSegment);
                 theSegment->AddPoint(NewPoint);
                 EPoint *thePoint = theSegment->GetPoint(theSegment->NumPoints());
@@ -596,9 +592,7 @@ int EData::MakePoints(const Config &configure, CNuc *theCNuc, const azure2::expe
                                       << " MeV: " << thePoint->GetLabAngleWhy() << "." << std::endl;
                   return -1;
                 }
-                if (eStep == 0.0) break;
               }
-              if (aStep == 0.0) break;
             }
 
             // Handle advanced segments (sum/ratio of components) - AFTER points are added

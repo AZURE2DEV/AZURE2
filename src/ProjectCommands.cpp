@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "azure2/convert/Convert.h"
+#include "azure2/experiment/ProjectReader.h"
 #include "azure2/experiment/Schema.h"
 #include "azure2/io/Convert.h"
 #include "azure2/io/Document.h"
@@ -145,10 +146,12 @@ int validateProject(const std::string &file, bool json) {
     std::cout << "ERROR: " << refusal << std::endl;
     return 3;
   }
-  const azure2::convert::Format3Check c = azure2::convert::CheckFormat3Text(bytes, file);
+  azure2::experiment::Format3ReadOptions read;
+  read.fileName = file;
+        // data files as the engine opens them: relative to the working directory
+  const azure2::experiment::Format3Project c = azure2::experiment::ReadFormat3Text(bytes, read);
   const std::string note = "note: " + std::to_string(c.buildChecksSkipped) +
-                           " check(s) that need <levels> or the data files (the quantities' refusals marked 'build') were "
-                           "not run; the format-3 reader of step 3b runs them.";
+                           " check(s) skipped (model-data refusals marked 'build'; <modelData> is built in a later step).";
   if (json) {
     std::cout << "[";
     for (std::size_t i = 0; i < c.diagnostics.size(); i++) std::cout << (i ? ",\n " : "\n ") << c.diagnostics[i].ToJson();

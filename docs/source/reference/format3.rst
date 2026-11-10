@@ -1767,6 +1767,30 @@ Diagnostic codes
    * - ``E_DEGENERATE_NUISANCE``
      - error
      - efficiency and norm both free without a prior (F9)
+   * - ``E_UNKNOWN_PAIR``
+     - error
+     - a reaction or pair of a datum that no pair of <levels> has (particles and states)
+   * - ``E_AMBIGUOUS_PAIR``
+     - error
+     - a reaction or pair of a datum that two pairs of <levels> have
+   * - ``E_PAIR_KEY``
+     - error
+     - entrance_pair / exit_pair where the label names one pair, or a key the label does not name
+   * - ``E_DATA_FILE``
+     - error
+     - a data file that cannot be read, or has fewer columns than its roles
+   * - ``E_NOT_BUILT``
+     - error
+     - a value the table takes and this engine cannot yet set up (a unit, frame or form of a later step)
+   * - ``E_THM_RELATIVISTIC``
+     - error
+     - a THM data set or extrapolation in a project with relativistic kinematics
+   * - ``E_THM_COVARIANCE``
+     - error
+     - a covariance file on a THM data set (its chi^2 is its experiment's profiled one)
+   * - ``E_FOLD_CONFLICT``
+     - error
+     - data sets sharing a target with a free parameter differ in beam, detector or quadrature
    * - ``W_NOT_MEASURABLE``
      - warning
      - a data set of a quantity that is computed for tests and comparison, not measured

@@ -262,7 +262,11 @@ int main() {
     check("E_WRONG_SECTION: exactly this one diagnostic", one);
     if (one) tested.insert("E_WRONG_SECTION");
   }
-  for (const DiagnosticCode &c : DiagnosticCodes()) check(std::string(c.code) + " has a case here", tested.count(c.code) == 1);
+  // the build checks need <levels> pairs and data files: their cases are in build_test.cpp (Schema::Build)
+  const std::set<std::string> buildCodes = {"E_UNKNOWN_PAIR", "E_AMBIGUOUS_PAIR", "E_PAIR_KEY",       "E_DATA_FILE",
+                                            "E_NOT_BUILT",    "E_THM_RELATIVISTIC", "E_THM_COVARIANCE", "E_FOLD_CONFLICT"};
+  for (const DiagnosticCode &c : DiagnosticCodes())
+    if (!buildCodes.count(c.code)) check(std::string(c.code) + " has a case here", tested.count(c.code) == 1);
 
   // Fixes change syntax only.
   {

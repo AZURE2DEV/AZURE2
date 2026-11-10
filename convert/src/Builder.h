@@ -56,9 +56,15 @@ inline std::string Signature(const io::Record &r) {
   return s;
 }
 inline bool HasFreeParameter(const io::Record &r) {
-  for (const io::Field &f : r.fields)
+  for (const io::Field &f : r.fields) {
+    // the engine makes a parameter of every screening U_e (screening_<n>, fixed or not) and of an areal density or a
+    // temperature written with its fit form (a prior or a grid maximum), one per <targetInt> line: such a target is
+    // never merged with another, or the old lines' parameters would become one
+    if (f.key == "screening") return true;
     for (const io::Token &t : f.tokens)
-      if (t.text == "fit") return true;
+      if (t.text == "fit" || ((f.key == "areal_density" || f.key == "doppler") && (t.text == "prior" || t.text == "grid_max")))
+        return true;
+  }
   return false;
 }
 
@@ -284,7 +290,8 @@ class Builder {
     return s;
   }
   static std::string PairLabel(const OldPair &p) {
-    return LightLabel(p) + "+" + Nuclide(p.z2, p.A2()) + (p.e2 != 0 ? "[" + p.e2Text + "]" : "");
+    return LightLabel(p) + (p.e1 != 0 ? "[" + p.e1Text + "]" : "") + "+" + Nuclide(p.z2, p.A2()) +
+           (p.e2 != 0 ? "[" + p.e2Text + "]" : "");
   }
 
   /// The channel spin of a phase-shift line without "spin s": the one spin of (J, l) of the entrance pair in the

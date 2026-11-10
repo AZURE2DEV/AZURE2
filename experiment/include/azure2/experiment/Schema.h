@@ -6,6 +6,7 @@
 #include <utility>
 #include <vector>
 
+#include "azure2/experiment/Build.h"
 #include "azure2/experiment/Conditions.h"
 #include "azure2/experiment/Diagnostics.h"
 #include "azure2/experiment/Quantities.h"
@@ -150,6 +151,17 @@ class Schema {
    * <levels> or the data files is not checked here (Schema::Build, step 3).  Never throws for bad input.
    */
   static ValidationResult Validate(const std::vector<SectionRecords> &sections);
+
+  /*!
+   * The engine's set-up specs of a validated project (step 3b): data sets, extrapolations, the effects of targets,
+   * beams and detectors on them, the abundances of the targets' isotopes and the members of THM experiments.
+   * Reactions are resolved against `pairs` (section 3.5: the pair-key rule, target and residual states); the checks
+   * that need <levels> or the data files are made here and returned as diagnostics (codes of DiagnosticCodes()).
+   * `validated` must be free of errors; never throws for bad input.  The records <scatteringLengths>/`datum` of
+   * <modelData> are not built in this step.
+   */
+  static BuiltProject Build(const ValidationResult &validated, const std::vector<PairRow> &pairs,
+                            const BuildOptions &options);
 
   /// The table as the JSON document of section 6.1 (schema_version "3.0"), deterministic, ending without a newline.
   static std::string ToJson();
