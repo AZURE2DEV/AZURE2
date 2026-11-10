@@ -376,6 +376,21 @@ for rel, literal in sorted(KNOWN):
         problems.append(f"{rel}: {literal} is gone; remove it from KNOWN in check 10")
 
 
+
+# 10b. One table of element symbols: physics/'s Elements.h (ElementSymbol, ElementZ; the binding's element_symbols(),
+#      which pyazr.nuclei.SYMBOLS is).  A second list in the engine, the API, io/, experiment/ or pyazr -- three
+#      consecutive symbols written out -- is a copy that drifts (src/ParameterLabel.cpp's stopped at Kr).
+ELEMENT_RUN = re.compile(r'\bHe\b["\',\s]{1,6}\bLi\b["\',\s]{1,6}\bBe\b')
+for top in ("src", "include", "api", "io", "experiment", "pyazr"):
+    for dirpath, _, files in os.walk(os.path.join(ROOT, top)):
+        for fname in sorted(files):
+            rel = os.path.relpath(os.path.join(dirpath, fname), ROOT)
+            if fname.endswith((".h", ".cpp", ".py")) and "/tests/" not in "/" + rel and ELEMENT_RUN.search(read(rel)):
+                problems.append(f"{rel}: a list of element symbols; use physics/'s Elements.h "
+                                "(pyazr: _azure2.element_symbols())")
+if not ELEMENT_RUN.search(read("physics/src/Elements.cpp")):
+    problems.append("check 10b: physics/src/Elements.cpp does not match the element pattern; update this check")
+
 # 11. One objective (docs/upgrade/objective.md): the chi^2 terms beyond the data points -- Park's wall, abundances,
 #     scattering lengths, target-effect priors, the data covariance -- are added in src/Objective.cpp, which every
 #     path (CLI fit, gradient, API, writer) asks.  A new path that adds one itself drifts from the rest the first time
@@ -469,6 +484,86 @@ for top in ("experiment/src", "io/src"):
             if code not in declared.values():
                 problems.append(f"{top}/{name}: diagnostic code {code} is not declared in Diagnostics.h or Record.h")
 
+
+# 23. No code recognises a parameter's kind by its name (docs/upgrade/parameter_kinds.md; project_format3.md section
+#     7.4): what a parameter is comes from its record (include/ParameterKind.h), written where it is created; a name
+#     is a label, and where a file names a parameter the name is looked up whole (AZUREParams::IndexOfName).  Caught:
+#     in src/, include/, api/ a find / rfind / compare / starts_with / ends_with / EndsWith / StartsWith whose string
+#     is a stem of a parameter name ("segment_", "_norm", "width", ...), and the deleted helpers by name; in pyazr/ a
+#     startswith / endswith on such a stem or on a parameter's .name against a computed prefix, and a regular
+#     expression containing a stem.  Not caught: building a name (the creation sites), command-line flags and other
+#     strings.  ALLOWED_NAME_TESTS lists the file grammars read without a parameter vector, each with its reason.
+STEM = (r'(?:energy_|width_|segment_|abundance_|screening_|density_|doppler_|cbkg_|_norm|_energy_shift|_thickness|'
+        r'_sqrt|_fn|segment"|width"|Width"|norm"|shift")')
+CPP_NAME_TEST = re.compile(r'(?:\.\s*(?:r?find|compare|starts_with|ends_with)\s*\(\s*(?:0\s*,\s*\d+\s*,\s*)?'
+                           r'|\b(?:EndsWith|StartsWith)\s*\([^,()]*,\s*)"' + STEM)
+CPP_HELPERS = re.compile(r'\b(?:IsNormName|IsEnergyShiftName|IsEnergyShiftFnName|IsThicknessName)\b')
+PY_NAME_TEST = re.compile(r'\.(?:startswith|endswith)\(\s*[rbf]*["\']' + STEM.replace('"', '["\']')
+                          + r'|\.name\.(?:startswith|endswith)\(\s*[A-Za-z_]')
+PY_NAME_REGEX = re.compile(r're\.(?:match|fullmatch|search|compile)\(\s*[rbf]*["\'][^"\']*'
+                           r'(?:energy_|width_|segment_|abundance_|screening_|density_|doppler_|cbkg_)')
+ALLOWED_NAME_TESTS = {
+    # The <parameterSettings> "segment_<key>_norm|energy_shift prior_centre c" row, read and rewritten by pyazr's
+    # document layer (AzrModel.prior_centres / set_prior_centres, SegmentSet) without an engine session, so without a
+    # parameter vector to look the name up in.  The engine matches the row's name whole (EData::ReadPriorCentres).
+    ("pyazr/datasets.py", "_PRIOR_CENTRE = re.compile("),
+    ("pyazr/azrfile.py", "_PRIOR_ROW = re.compile("),
+    # An example script that reads param.par without the engine (pyazr.transform only).
+    ("pyazr/examples/transform_widths.py", 'm = re.match(r"width_'),
+}
+name_test_hits = set()
+for top in ("src", "include", "api", "pyazr"):
+    for dirpath, _, files in os.walk(os.path.join(ROOT, top)):
+        for fname in sorted(files):
+            if not fname.endswith((".h", ".cpp", ".py")):
+                continue
+            rel = os.path.relpath(os.path.join(dirpath, fname), ROOT)
+            in_block = False
+            for number, line in enumerate(read(rel).splitlines(), 1):
+                code = line
+                if fname.endswith(".py"):
+                    code = re.sub(r'#(?=[^"\']*$).*', "", code)
+                    hit = PY_NAME_TEST.search(code) or PY_NAME_REGEX.search(code)
+                else:
+                    if in_block:
+                        if "*/" not in code:
+                            continue
+                        code, in_block = code.split("*/", 1)[1], False
+                    code = re.sub(r"/\*.*?\*/", "", code)
+                    if "/*" in code:
+                        code, in_block = code.split("/*", 1)[0], True
+                    code = code.split("//", 1)[0]
+                    hit = CPP_NAME_TEST.search(code) or CPP_HELPERS.search(code)
+                if not hit:
+                    continue
+                allowed = [a for a in ALLOWED_NAME_TESTS if a[0] == rel and a[1] in line]
+                if allowed:
+                    name_test_hits.update(allowed)
+                    continue
+                problems.append(f"{rel}:{number}: tests a parameter's name ({line.strip()}); ask its record "
+                                "(AZUREParams::Record / Kind, pyazr Parameter.kind and owner fields; "
+                                "docs/upgrade/parameter_kinds.md)")
+for rel, text in sorted(ALLOWED_NAME_TESTS - name_test_hits):
+    problems.append(f"{rel}: '{text}' is gone; remove it from ALLOWED_NAME_TESTS in check 23")
+# The kinds: one enum, one table row per kind in the order of the codes, each documented for maintainers and users.
+kinds_h = read("include/ParameterKind.h")
+enum_body = kinds_h[kinds_h.index("enum class ParamKind"):]
+enum_body = enum_body[:enum_body.index("};")]
+enum_kinds = re.findall(r"^\s*(\w+) = (\d+),?", enum_body, re.M)
+row_kinds = re.findall(r'\{ParamKind::(\w+), "(\w+)"', kinds_h)
+if [k for k, _ in enum_kinds] != [k for k, _ in row_kinds] or \
+        [int(c) for _, c in enum_kinds] != list(range(len(enum_kinds))):
+    problems.append("include/ParameterKind.h: ParamKindTable() must have one row per ParamKind, in the order of the "
+                    "codes 0, 1, 2, ...")
+for rel in ("docs/upgrade/parameter_kinds.md", "docs/source/reference/output_files.rst"):
+    text = read(rel)
+    for kind, key in row_kinds:
+        if f"``{key}``" not in text and f"`{key}`" not in text:
+            problems.append(f"{rel}: the parameter kind {kind} ('{key}') is not documented")
+for other in ("include/AZUREGrad.h", "include/AZURECalcMCMC.h", "pyazr/parameters.py"):
+    if re.search(r"enum (?:class )?ParamKind\b|PARAM_ENERGY|^_KINDS\s*=", read(other), re.M):
+        problems.append(f"{other}: a second enumeration of parameter kinds; use ParameterKind.h "
+                        "(pyazr: parameter_kinds())")
 
 # 25. The results of an evaluation belong to its caller (docs/upgrade/data_model.md S3, include/Results.h): a point and a
 #     data set hold where a record lies, never the values, so a copy of either cannot write into another owner's

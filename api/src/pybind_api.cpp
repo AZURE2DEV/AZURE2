@@ -30,6 +30,8 @@
 #include "azure2/io/Document.h"
 #include "azure2/io/LevelGrouping.h"
 #include "AZUREAPI.h"
+#include "CNuc.h"
+#include "ParameterKind.h"
 #include "Config.h"
 #include "GSLException.h"
 #include "ECAmplitudeCache.h"
@@ -365,6 +367,66 @@ class Session {
   // -- parameter metadata ----------------------------------------------------
 
   py::array_t<double> parameter_info() const { return to_array(api_->GetParameterInfo()); }
+  /// One dict per parameter, in params_names() order: its kind (ParamKindTable key) and what it belongs to, from the
+  /// record written where it was created (ParameterKind.h).  Fields that do not apply are absent.
+  py::list parameter_records() const {
+    py::list out;
+    CNuc *nuc = api_->compound();
+    for (const ParameterRecord &r : api_->GetParameterRecords()) {
+      py::dict d;
+      d["kind"] = r.Row().key;
+      d["code"] = (int)r.kind;
+      d["ordinal"] = r.ordinal;
+      switch (r.kind) {
+        case ParamKind::LevelEnergy:
+        case ParamKind::Gamma:
+          d["jgroup"] = r.jGroup;
+          d["level"] = r.level;
+          d["level_number"] = r.levelNumber;
+          if (r.kind == ParamKind::Gamma) d["channel"] = r.channel;
+          break;
+        case ParamKind::Norm:
+        case ParamKind::EnergyShift:
+        case ParamKind::EnergyShiftSqrt:
+        case ParamKind::EnergyShiftFn:
+        case ParamKind::Thickness:
+          d["segment"] = r.segment;
+          d["segment_key"] = r.segmentKey;
+          if (r.kind == ParamKind::EnergyShiftFn) d["fn_term"] = r.fnTerm;
+          break;
+        case ParamKind::Screening:
+        case ParamKind::Density:
+        case ParamKind::Doppler:
+          d["effect"] = r.effect;
+          break;
+        case ParamKind::Abundance:
+          d["sample"] = r.sample;
+          d["sample_name"] = r.sampleName;
+          d["nucleus"] = r.nucleus;
+          d["nucleus_Z"] = r.nucleusZ;
+          d["nucleus_A"] = r.nucleusA;
+          break;
+        case ParamKind::ThmCoherent: {
+          d["thm_experiment"] = r.thmExperiment;
+          d["jgroup"] = r.jGroup;
+          d["channel"] = r.channel;
+          d["exit_channel"] = r.exitChannel;
+          d["thm_term"] = r.thmTerm;
+          // The combination as cbackground= writes it: J^pi, exit pair key, (s,l) -> (s',l').
+          JGroup *jg = nuc->GetJGroup(r.jGroup);
+          AChannel *in = jg->GetChannel(r.channel);
+          AChannel *ex = jg->GetChannel(r.exitChannel);
+          d["thm_jpi"] = ThmSpinText(jg->GetJ()) + (jg->GetPi() > 0 ? "+" : "-");
+          d["thm_exit_key"] = nuc->GetPair(ex->GetPairNum())->GetPairKey();
+          d["thm_channels"] = ThmSpinText(in->GetS()) + "," + std::to_string(in->GetL()) + "," +
+                              ThmSpinText(ex->GetS()) + "," + std::to_string(ex->GetL());
+          break;
+        }
+      }
+      out.append(d);
+    }
+    return out;
+  }
   py::array_t<double> pairs_info() const { return to_array(api_->GetPairsInfo()); }
   py::array_t<double> normalization_indices() const { return to_array(api_->GetNormalizationIndices()); }
   py::array_t<double> energy_shift_indices() const { return to_array(api_->GetEnergyShiftIndices()); }
@@ -856,6 +918,27 @@ PYBIND11_MODULE(_azure2, m) {
   BindPhysics(m);
 
   BindThm(m);  // pybind_thm.cpp: the engine's reading of a <thm> block, for AzrModel
+
+  m.def(
+      "parameter_kinds",
+      []() {
+        py::list out;
+        for (const ParamKindRow &row : ParamKindTable()) {
+          py::dict d;
+          d["code"] = (int)row.kind;
+          d["key"] = row.key;
+          d["unit"] = row.unit;
+          d["owner"] = row.owner;
+          d["own_prior"] = row.ownPrior;
+          d["segment_field"] = row.segmentField;
+          d["vary_from_project"] = row.varyFromProject;
+          d["doc"] = row.doc;
+          out.append(d);
+        }
+        return out;
+      },
+      "The kinds of fit parameter (ParameterKind.h), one dict per kind in the order of their codes: code, key (the "
+      "Parameter.kind of pyazr), unit, owner fields, own_prior, segment_field, vary_from_project, doc.");
   BindSchema(m);  // pybind_schema.cpp: the format-3 table (schema(), as AZURE2 --schema)
   // The project file as a lossless document (io::Document; docs/upgrade/project.md section 2): pyazr's AzrModel
   // reads and edits the file through it, as the engine does.  Lines are str (decoded UTF-8, invalid bytes kept as
@@ -1117,6 +1200,8 @@ PYBIND11_MODULE(_azure2, m) {
       .def("update_norms", &Session::update_norms, "Refill the normalization arrays.")
       .def("update_parameters", &Session::update_parameters, "Refill the parameter bookkeeping.")
       .def("parameter_info", &Session::parameter_info)
+      .def("parameter_records", &Session::parameter_records,
+           "What each parameter is: one dict per parameter (kind, owner fields), in params_names() order.")
       .def("pairs_info", &Session::pairs_info)
       .def("normalization_indices", &Session::normalization_indices)
       .def("energy_shift_indices", &Session::energy_shift_indices)

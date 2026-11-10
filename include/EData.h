@@ -8,6 +8,7 @@
 #include "NodeTableCache.h"
 #include "ThmExperiment.h"
 #include "Results.h"
+#include "ParameterKind.h"
 #include <memory>
 #include <atomic>
 #include <deque>
@@ -27,6 +28,7 @@ class ThmDistortion;
 class ThmDwVertex;
 
 class CNuc;
+class AZUREParams;
 class PriorCovariance;
 struct BandData;
 namespace ROOT {
@@ -68,9 +70,12 @@ class EData {
    * of the segment line stays the start value.  Without a row the field is
    * both, as it always was.  Three-token rows are skipped by the older
    * <parameterSettings> readers (engine and GUI), which then fall back to the
-   * field.  Returns -1 on a malformed row.
+   * field.  `numSegmentLines` is the number of <segmentsData> lines, active or
+   * not (their keys are 1..numSegmentLines).  A row naming a line that is not
+   * active is reported and ignored; a row naming anything else, or with a
+   * centre that is not a number, returns -1.
    */
-  int ReadPriorCentres(const Config &);
+  int ReadPriorCentres(const Config &, int numSegmentLines);
   /// Index at which the sqrt(E) energy-shift coefficients start in the Minuit vector.
   int GetEnergyShiftSqrtParamOffset() const;
   /// Index at which the shift-function parameters start in the Minuit vector (after the sqrt(E)
@@ -297,7 +302,11 @@ class EData {
   void PrepareCovarianceSeeds(CNuc *, const Config &, azure2::Results &results);
   /// The segment (1-based) whose norm segment s uses: its norm-group leader, or s itself.
   int NormOwner(int s) const;
-  void FillMnParams(ROOT::Minuit2::MnUserParameters &);
+  void FillMnParams(AZUREParams &);
+  /// The name of a data-segment parameter of the segment with key `key` (kind Norm, EnergyShift, EnergyShiftSqrt,
+  /// Thickness, or EnergyShiftFn with its j), as param files and <parameterSettings> rows name it; empty for any
+  /// other kind.  The one definition of these names (FillMnParams, ReadPriorCentres).
+  static std::string SegmentParameterName(int key, ParamKind kind, int fnTerm = 0);
   /// Write the normalizations back from a Minuit parameter vector.
   void FillNormsFromParams(const vector_r &);
   /// Write the energy shifts back from a Minuit parameter vector.  The last step of the hand-over of every
@@ -373,6 +382,8 @@ class EData {
     std::string experiment;
     double value = 0.0;
     bool fixed = false;
+    int jGroup = -1, entrance = -1, exit = -1;  ///< the combination's J group and channels in it (1-based)
+    int term = -1;                              ///< 0 Re c0, 1 Im c0, 2 Re c1, 3 Im c1
   };
   int NumThmCoherentParams() const { return (int)thmCoherentParams_.size(); }
   const ThmCoherentParam &GetThmCoherentParam(int k) const { return thmCoherentParams_[k]; }

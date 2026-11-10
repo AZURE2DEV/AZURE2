@@ -2,19 +2,10 @@
 #include <cmath>
 #include <cstdlib>
 #include <sstream>
+#include <stdexcept>
 #include "Config.h"
 #include "CNuc.h"
 
-namespace {
-// segment_<key>_energy_shift, ..._energy_shift_sqrt, ..._energy_shift_fn<j>
-bool IsEnergyShiftName(const std::string &name) {
-  return name.compare(0, 8, "segment_") == 0 && name.find("_energy_shift") != std::string::npos;
-}
-// segment_<key>_thickness (a fitted sample thickness)
-bool IsThicknessName(const std::string &name) {
-  return name.compare(0, 8, "segment_") == 0 && name.size() > 10 && name.compare(name.size() - 10, 10, "_thickness") == 0;
-}
-}  // namespace
 
 /*!
  * This function returns the MnUserParameters object used by Minuit to store
@@ -23,6 +14,26 @@ bool IsThicknessName(const std::string &name) {
 
 ROOT::Minuit2::MnUserParameters &AZUREParams::GetMinuitParams() {
   return params_;
+}
+
+void AZUREParams::Add(const std::string &name, double value, double step, ParameterRecord record) {
+  if (kindCount_.size() < ParamKindTable().size()) kindCount_.assign(ParamKindTable().size(), 0);
+  record.ordinal = ++kindCount_[(int)record.kind];
+  params_.Add(name, value, step);
+  records_.push_back(record);
+}
+
+const ParameterRecord &AZUREParams::Record(int i) const {
+  if (records_.size() != params_.Params().size())
+    throw std::logic_error("AZUREParams: " + std::to_string(params_.Params().size()) + " parameters but " +
+                           std::to_string(records_.size()) + " records (a parameter added without AZUREParams::Add)");
+  return records_.at(i);
+}
+
+int AZUREParams::IndexOfName(const std::string &name) const {
+  for (unsigned int i = 0; i < params_.Params().size(); i++)
+    if (params_.GetName(i) == name) return (int)i;
+  return -1;
 }
 
 /*!
@@ -95,16 +106,21 @@ void AZUREParams::ApplyUserParameterFile(const std::string &filename, std::ostre
       continue;
     }
     if (!number(errorToken, error)) error = std::nan("");
-    if (!segmentEntries && name.compare(0, 8, "segment_") == 0) {
-      segmentSkipped++;
-      continue;
-    }
     names.push_back(name);
     values.push_back(value);
     errors.push_back(error);
     fixed.push_back(rest == "fixed");
   }
 
+  // Each row names its parameter by its whole name; the record says what the parameter is.
+  std::vector<bool> skip(names.size(), false);
+  for (size_t ii = 0; ii < names.size(); ii++) {
+    const int i = IndexOfName(names[ii]);
+    if (!segmentEntries && i >= 0 && Record(i).Row().segmentField) {
+      skip[ii] = true;
+      segmentSkipped++;
+    }
+  }
   if (segmentSkipped > 0)
     out << "Note: " << segmentSkipped << " segment_* entries of " << filename
         << " (data-segment normalizations and energy shifts) are not applied: this run has no data segments,"
@@ -112,21 +128,16 @@ void AZUREParams::ApplyUserParameterFile(const std::string &filename, std::ostre
 
   for (int i = 0; i < GetMinuitParams().Params().size(); i++) {
     for (int ii = 0; ii < names.size(); ii++) {
-      if (GetMinuitParams().GetName(i) == names[ii]) {
-        // A level parameter fixed at zero is freed by a nonzero .sav value, and a
-        // free one fixed by a zero.  An energy shift is not: it follows the vary
-        // flag of its .azr segment line, because its penalty does (a freed shift
-        // would float with no penalty).  The .sav still sets its value.
-        // A screening potential, a fitted target density and a fitted Doppler temperature likewise follow their
-        // <targetInt> vary flags, and a fitted sample thickness the vary flag of its segment line.
-        const bool isShift = IsEnergyShiftName(GetMinuitParams().GetName(i)) ||
-                             GetMinuitParams().GetName(i).rfind("screening_", 0) == 0 ||
-                             GetMinuitParams().GetName(i).rfind("density_", 0) == 0 ||
-                             GetMinuitParams().GetName(i).rfind("doppler_", 0) == 0 ||
-                             IsThicknessName(GetMinuitParams().GetName(i));
-        if (!isShift && GetMinuitParams().Value(i) == 0.0 && values[ii] != 0.0 &&
+      if (!skip[ii] && GetMinuitParams().GetName(i) == names[ii]) {
+        // A level parameter or a normalization fixed at zero is freed by a nonzero .sav value, and a free one fixed
+        // by a zero.  An energy shift is not: it follows the vary flag of its .azr segment line, because its penalty
+        // does (a freed shift would float with no penalty).  The .sav still sets its value.  A screening potential, a
+        // fitted target density and a fitted Doppler temperature likewise follow their <targetInt> vary flags, and a
+        // fitted sample thickness the vary flag of its segment line (ParamKindRow::varyFromProject).
+        const bool varyFromProject = Record(i).Row().varyFromProject;
+        if (!varyFromProject && GetMinuitParams().Value(i) == 0.0 && values[ii] != 0.0 &&
             GetMinuitParams().Parameter(i).IsFixed()) GetMinuitParams().Release(i);
-        if (!isShift && GetMinuitParams().Value(i) != 0.0 && values[ii] == 0.0 &&
+        if (!varyFromProject && GetMinuitParams().Value(i) != 0.0 && values[ii] == 0.0 &&
             !GetMinuitParams().Parameter(i).IsFixed()) GetMinuitParams().Fix(i);
         GetMinuitParams().SetValue(i, values[ii]);
         if (std::isfinite(errors[ii])) GetMinuitParams().SetError(i, errors[ii]);

@@ -617,6 +617,7 @@ class azure2:
                 f"params_fixed reported {n}."
             )
 
+        owners = s.parameter_records()
         params = ParameterSet()
         free_counter = 0
         for i in range(n):
@@ -626,7 +627,7 @@ class azure2:
             if not fixed:
                 free_counter += 1
             params.append(
-                Parameter.from_record(i, name, records[i], free_index)
+                Parameter.from_record(i, name, records[i], free_index, owners[i])
             )
         return params
 
@@ -856,13 +857,15 @@ class azure2:
         vals = self.read_sav(path)
         hit = 0
         skipped = 0
+        segment_field = {k["key"]: k["segment_field"] for k in _azure2.parameter_kinds()}
+        records = s.parameter_records()
         for i in range(full.size):
             name = s.params_names(i)
             if name in vals:
-                if self.mode == "extrap" and name.startswith("segment_"):
+                if self.mode == "extrap" and segment_field[records[i]["kind"]]:
                     # A test segment carries no normalization or energy shift of its own; the
-                    # file's segment_<k>_* entries belong to DATA segment k and would move test
-                    # segment k's grid (audit 2026-10-25 item 12; the CLI skips them too).
+                    # file's entries for segment parameters belong to DATA segment k and would move
+                    # test segment k's grid (audit 2026-10-25 item 12; the CLI skips them too).
                     skipped += 1
                     continue
                 full[i] = vals[name]
@@ -1158,31 +1161,25 @@ class azure2:
                         f"{want_p:.10g}; it has been removed.")
         return path, sav
 
-    _CBKG_NAME = re.compile(r"([0-9/]+[+-])_(\d+)_([^_]+)_(re|im)([01])")
-
     def _save_cbkg(self, model, values):
         """Write the THM coherent-background parameters (``cbkg_*``) back into
         the ``cbackground=`` values of their experiments, one explicit term
         per (entrance, exit) combination with its values (``f`` for fixed),
         so the snapshot reads back as the fit.  ``values`` is the full
         parameter vector in the session's order (the cbkg entries are not
-        transformed)."""
+        transformed).  Each parameter's experiment, combination and coefficient
+        come from its record (:attr:`Parameter.thm_experiment` ...)."""
         cb = [(i, p) for i, p in enumerate(self.parameters) if p.kind == "cbkg"]
         if not cb:
             return
         for name in model.thm_experiments():
-            prefix = f"cbkg_{name}_"
             combos = {}
             for i, p in cb:
-                if not p.name.startswith(prefix):
+                if p.thm_experiment != name:
                     continue
-                m = self._CBKG_NAME.fullmatch(p.name[len(prefix):])
-                if not m:
-                    continue
-                key = (m.group(1), m.group(2), m.group(3))
-                slot = (0 if m.group(4) == "re" else 1) + 2 * int(m.group(5))
-                combos.setdefault(key, {})[slot] = (float(values[i]),
-                                                    bool(self.fixed_params[i]))
+                key = (p.thm_jpi, str(p.thm_exit_key), p.thm_channels)
+                combos.setdefault(key, {})[p.thm_term] = (float(values[i]),
+                                                          bool(self.fixed_params[i]))
             if not combos:
                 continue
             terms = []

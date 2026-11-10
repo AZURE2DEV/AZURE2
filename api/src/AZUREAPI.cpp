@@ -6,7 +6,7 @@
 #include "AZUREParams.h"
 
 #include "GSLException.h"
-#include "ParameterLabel.h"
+#include <stdexcept>
 #include "ECAmplitudeCache.h"
 
 #include "Config.h"
@@ -229,19 +229,21 @@ bool AZUREAPI::UpdateParameters() {
   all_.clear();
   all_rwa_.clear();
   names_.clear();
+  records_.clear();
   fixed_.clear();
   values_.clear();
   values_rwa_.clear();
 
   AZUREParams params;
-  compound()->FillMnParams(params.GetMinuitParams(), &configure());
-  data()->FillMnParams(params.GetMinuitParams());
+  compound()->FillMnParams(params, &configure());
+  data()->FillMnParams(params);
 
   compound()->FillCompoundFromParams(params.GetMinuitParams().Params());
 
   compound()->CalcShiftFunctions(configure());
   compound()->TransformOut(configure());
 
+  records_ = params.Records();
   for (int i = 0; i < params.GetMinuitParams().Params().size(); i++) {
     // if( !params.GetMinuitParams().Parameter(i).IsFixed( ) ){
     names_.push_back(params.GetMinuitParams().Parameter(i).GetName());
@@ -338,8 +340,8 @@ int AZUREAPI::UpdateSegments(vector_r &p) {
 
   if (!isValid) return 0;
 
-  localCompound->FillMnParams(params.GetMinuitParams());
-  localData->FillMnParams(params.GetMinuitParams());
+  localCompound->FillMnParams(params);
+  localData->FillMnParams(params);
   localCompound->FillCompoundFromParams(params.GetMinuitParams().Params());
   // Norms are the same in both bases (model curves do not use them, but the
   // segments then hold the vector's values, as after CalculateChi2Physical).
@@ -1147,8 +1149,8 @@ double AZUREAPI::CalculateChi2Physical(const vector_r &physicalParams) const {
   // global minimum of any minimiser driving this function.
   if (!isValid) return std::numeric_limits<double>::infinity();
 
-  localCompound->FillMnParams(params.GetMinuitParams());
-  localData->FillMnParams(params.GetMinuitParams());
+  localCompound->FillMnParams(params);
+  localData->FillMnParams(params);
   localCompound->FillCompoundFromParams(params.GetMinuitParams().Params());
   // The tail of the physical vector (normalizations, energy shifts, screening)
   // is the same in both bases (all_ is the transformed R-matrix block plus
@@ -1341,11 +1343,11 @@ bool AZUREAPI::NuisancePriorOf(int f, double &nominal, double &sigma) const {
     nuisanceRead_ = true;
     // A scratch parameter set: the limits manager applies the settings to it, not to the session's parameters.
     nuisanceParams_.reset(new AZUREParams);
-    compound()->FillMnParams(nuisanceParams_->GetMinuitParams(), &configure());
-    data()->FillMnParams(nuisanceParams_->GetMinuitParams());
+    compound()->FillMnParams(*nuisanceParams_, &configure());
+    data()->FillMnParams(*nuisanceParams_);
     nuisance_.reset(new ParameterLimitsManager(&configure(), compound(), data(), nuisanceParams_.get()));
     if (nuisance_->ReadParameterSettings())
-      nuisance_->ApplyAllParameterSettings(nuisanceParams_->GetMinuitParams());
+      nuisance_->ApplyAllParameterSettings(*nuisanceParams_);
   }
   if (!nuisance_) return false;
   // A parameter of the prior covariance has no diagonal prior of its own (objective.md D3).
@@ -1660,8 +1662,7 @@ vector_r AZUREAPI::GetNormalizationIndices() {
   int totalParams = all_rwa_.size();
   for (int i = 0; i < totalParams; ++i) {
     if (!fixed_[i]) {
-      // A segment norm (by form: a cbkg name can contain "norm")
-      if (AZURELabel::IsNormName(names_[i])) {
+      if (records_[i].kind == ParamKind::Norm) {
         indices.push_back(k);
       }
       ++k;
@@ -1678,8 +1679,9 @@ vector_r AZUREAPI::GetEnergyShiftIndices() {
   int totalParams = all_rwa_.size();
   for (int i = 0; i < totalParams; ++i) {
     if (!fixed_[i]) {
-      // A segment energy shift (by form: a cbkg name can contain "shift")
-      if (AZURELabel::IsEnergyShiftName(names_[i])) {
+      // Every energy-shift term: the constant, the sqrt(E) coefficient and the shift-function parameters
+      const ParamKind kind = records_[i].kind;
+      if (kind == ParamKind::EnergyShift || kind == ParamKind::EnergyShiftSqrt || kind == ParamKind::EnergyShiftFn) {
         indices.push_back(k);
       }
       ++k;
@@ -1705,6 +1707,10 @@ vector_r AZUREAPI::GetParameterInfo() const {
                   double level, double levelE, double channel, double L,
                   double S, double pair, double radtype, double segKey,
                   double wignerLimit, double inputIsRWA) {
+    // The walk below mirrors the creation order; the record, written at creation, says what the parameter is.
+    if (gi < (int)records_.size() && (double)(int)records_[gi].kind != type)
+      throw std::logic_error("GetParameterInfo: parameter " + std::to_string(gi) + " is not of kind " +
+                             std::to_string((int)type) + " in its record");
     info.push_back(type);
     info.push_back(jgroup);
     info.push_back(J);

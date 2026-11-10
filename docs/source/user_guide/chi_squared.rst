@@ -129,8 +129,11 @@ only the start value. (The energy-shift prior is centred on 0 anyway since
 25 October 2026, see below; on this branch an explicit
 ``segment_N_energy_shift prior_centre c`` row moves that centre to *c*.) ``3`` is the segment key, the line's position in
 ``<segmentsData>`` counting inactive lines, as in ``segment_3_norm`` of
-``param.sav``. A normalization centre must be positive; a row naming no
-active segment is reported and ignored. Without a row nothing changes: a file
+``param.sav``. A normalization centre must be positive. A row for a
+``<segmentsData>`` line that is not active is reported and ignored; a row
+whose name is not ``segment_N_norm`` or ``segment_N_energy_shift`` of a line
+of the file (a typo, a key beyond the last line) stops the run, since a prior
+that is silently not applied gives a wrong fit. Without a row nothing changes: a file
 that has none behaves exactly as before, and AZURE2 versions without the
 feature skip these three-token rows (the other ``<parameterSettings>`` rows
 have 9, 12 or 14) and centre the prior on the column.

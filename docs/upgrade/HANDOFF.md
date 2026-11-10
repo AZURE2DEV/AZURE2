@@ -2,6 +2,42 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-10 — parameter kinds: what a parameter is comes from its record, not its name (`feature/upgrade-4-param-kinds`)
+
+Record and recipe: `parameter_kinds.md` (format 3 check 23, decision F3).
+- **Done.** `include/ParameterKind.h` (plain, standard library only): `ParamKind` (codes 0–11 = the API's type codes;
+  moved from `AZUREGrad.h`, the MCMC's `PARAM_*` and pyazr's `_KINDS` deleted), `ParamKindTable()` (key, unit, owner
+  fields, `ownPrior`, `segmentField`, `varyFromProject`, doc) and `ParameterRecord` (kind, ordinal, owner fields).
+  `AZUREParams::Add(name, value, step, record)` is the only way a parameter enters the vector (`Record(i)` throws if a
+  parameter lacks one); `CNuc::FillMnParams` / `EData::FillMnParams` take `AZUREParams&`. Every name test is gone:
+  `AZUREParams` (param files), `ParameterLimitsManager` (GUI numbering, setting names and index fallback, nuisance
+  exclusion, width conversion; six dead functions deleted, `FindParameterIndex` that refilled the vector per call
+  replaced by the index), `AZURECalc`, `AZUREMain`, `AZURECalcMCMC`, the CLI MCMC (`PrettyParameterName`,
+  `FindMcmcPriorParameter`), `EData::ReadPriorCentres` (whole names from `EData::SegmentParameterName`), the API's
+  norm / shift index lists, pyazr (`load_sav`, `save_fit`'s cbkg, an abundance's sample). `ParameterLabel.h`'s
+  `IsNormName` & co. and the dead `ApplyThmCoherentValues` deleted. Binding: `Session.parameter_records()`,
+  `_azure2.parameter_kinds()`; pyazr 2.14.0 (`parameters.parameter_kinds()`, `Parameter.thm_*`, `level_number`).
+  Check 23 in `repo_consistency_test.py` (shown failing on the start head: 70 problems). Test
+  `pyazr_parameter_kinds`.
+- **Second commit:** one element table: `ParameterLabel.cpp` (stopped at Kr) and `pyazr.nuclei.SYMBOLS` take
+  `physics/Elements.h` (binding `_azure2.element_symbols()`); check 10b.
+- **Review follow-ups (director, 2026-11-10).** F1: a `prior_centre` row is applied to an active segment, reported
+  and ignored for a `<segmentsData>` line that is not active, and an error for any other name (names built with
+  `SegmentParameterName` over all line keys; the old error for a malformed name, now also for a key beyond the last
+  line or a typo). F2: an `<mcmc>` prior row that names no parameter stops the run with a message listing the
+  accepted forms. F3: `ParameterLimitsManager` converts nuisance settings for widths only; a nuisance row on a
+  screening or cbkg parameter wrote past the end of `CNuc::GetTransformParams()` (an `_GLIBCXX_ASSERTIONS` build
+  aborts; the cbkg case also crashed the Release build of the start head). Tests: `tests/prior_centre` (unknown and
+  typo rows refused, inactive line warned), `tests/mcmc_classification` (pp_short, pp_badrow), `tests/nuisance_kinds`.
+- **Known defects, recorded for later.** (1) The CLI MCMC table labels an energy shift "Segment k Energy Shift
+  (keV)" (`PrettyParameterName`, `src/AZURE2.cpp`), but the shift is in MeV; the string is also the GUI's matching
+  key, so fix it when that key goes (Phase 9, web UI). (2) pyazr parses the `prior_centre` rows with the same regex
+  twice (`pyazr/datasets.py` `_PRIOR_CENTRE`, `pyazr/azrfile.py` `_PRIOR_ROW`); one reader, or the engine's, in the
+  format-3 pyazr step.
+- **Open.** The layout is still walked a second time by position in `BuildParamIndexMap`, `GetParameterInfo` (now
+  checked against the records), `AZURELabel::Parameter`; building them from the records is the next step. pyazr's
+  document layer still parses the `prior_centre` rows by regex (no session; listed in check 23).
+
 ## 2026-11-10 — `CNuc` split continued, and a file-size ratchet (branch `feature/upgrade-cnuc-split-3`)
 
 **Done** (record: `cnuc_split.md` §2.1 inventory, §6 "Steps (d), (c)", "Remaining steps").

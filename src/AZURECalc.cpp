@@ -122,17 +122,10 @@ double SegmentLocalChi2(ESegment *segment, CNuc *lc, const Config &config, EData
 
 // A parameter whose prior is its own (normalization, energy shift, abundance, screening, density, Doppler,
 // thickness): the limits manager's nuisance flag adds nothing to it (CalculateNuisanceChiSquared skips it).  By
-// kind (ParamIndexMap), not by name.
+// kind (ParamKindRow::ownPrior), not by name.
 bool HasOwnPriorKind(const ParamIndexMap &pmap, int fullIndex) {
   if (fullIndex < 0 || fullIndex >= pmap.NumFull()) return false;
-  switch (pmap.Desc(fullIndex).kind) {
-    case ParamKind::Norm: case ParamKind::EnergyShift: case ParamKind::EnergyShiftSqrt: case ParamKind::EnergyShiftFn:
-    case ParamKind::Abundance: case ParamKind::Screening: case ParamKind::Density: case ParamKind::Doppler:
-    case ParamKind::Thickness:
-      return true;
-    default:
-      return false;
-  }
+  return KindRow(pmap.Desc(fullIndex).kind).ownPrior;
 }
 
 // The segments (1-based) whose points one energy-shift parameter moves, and how to
@@ -416,8 +409,8 @@ void AZURECalc::DumpNonFinite(const vector_r &p, double chi, CNuc *lc, EData *ld
   const int d = ++nDump;
   if (d > 20) return;
   AZUREParams names;
-  compound()->FillMnParams(names.GetMinuitParams(), &configure());
-  data()->FillMnParams(names.GetMinuitParams());
+  compound()->FillMnParams(names, &configure());
+  data()->FillMnParams(names);
   const auto &mp = names.GetMinuitParams();
   std::ostringstream out;
   out << "==== dump " << d << ": chi2 " << chi << " (threshold " << threshold << ")\n";
@@ -654,8 +647,8 @@ void AZURECalc::WriteIterationOutput(const vector_r &p) const {
     }
 
     AZUREParams params;
-    lc->FillMnParams(params.GetMinuitParams(), &configure());
-    ld->FillMnParams(params.GetMinuitParams());
+    lc->FillMnParams(params, &configure());
+    ld->FillMnParams(params);
     // FillMnParams reads the levels' input values (GetE/GetGamma), not the
     // point being evaluated; copy p in so param.fit matches this snapshot.
     ROOT::Minuit2::MnUserParameters &mp = params.GetMinuitParams();
@@ -792,8 +785,8 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
       g_jacGradForCheck.clear();
       unsetEnvVar("AZURE_GRAD_ADJOINT");
       AZUREParams fpc;
-      compound()->FillMnParams(fpc.GetMinuitParams(), &configure());
-      data()->FillMnParams(fpc.GetMinuitParams());
+      compound()->FillMnParams(fpc, &configure());
+      data()->FillMnParams(fpc);
       const int nMnc = fpc.GetMinuitParams().Params().size();
       double worst = 0.0; int worstIdx = -1, nFree = 0;
       for (size_t i = 0; i < grad.size() && i < ga.size(); i++) {
@@ -1219,8 +1212,8 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
 
 std::vector<bool> AZURECalc::FixedMask() const {
   AZUREParams tp;
-  compound()->FillMnParams(tp.GetMinuitParams(), &configure());
-  data()->FillMnParams(tp.GetMinuitParams());
+  compound()->FillMnParams(tp, &configure());
+  data()->FillMnParams(tp);
   const int nMn = tp.GetMinuitParams().Params().size();
   if ((int)fixedMask_.size() == nMn) return fixedMask_;
   std::vector<bool> fixed(nMn);
@@ -1291,8 +1284,8 @@ bool AZURECalc::HasNuisanceParameters() const {
   // exists" is not the question; whether it declares any nuisance parameter is.
   if (!limitsManager_) return false;
   AZUREParams fp;
-  compound()->FillMnParams(fp.GetMinuitParams(), &configure());
-  data()->FillMnParams(fp.GetMinuitParams());
+  compound()->FillMnParams(fp, &configure());
+  data()->FillMnParams(fp);
   // Index the parameters exactly as CalculateNuisanceChiSquared and
   // AddNuisanceGradient do, and ignore the ones they skip: a nuisance flag on a
   // norm or shift adds nothing to chi^2 or the gradient (those penalties come
@@ -1305,7 +1298,7 @@ bool AZURECalc::HasNuisanceParameters() const {
   for (int i = 0; i < (int)fp.GetMinuitParams().Params().size(); i++) {
     const ROOT::Minuit2::MinuitParameter &mp = fp.GetMinuitParams().Parameter(i);
     const std::string &name = mp.GetName();
-    if (mp.IsFixed() && name.find("segment") == std::string::npos) continue;
+    if (mp.IsFixed() && !fp.Record(i).Row().segmentField) continue;  // the limits manager's numbering
     if (!HasOwnPriorKind(pmap, i) && limitsManager_->IsNuisanceParameterByIndex(nf)) {
       if (std::getenv("AZURE_GRAD_DEBUG"))
         std::cerr << "[grad] analytic G2 off: nuisance prior on '" << name << "'" << std::endl;
@@ -1453,7 +1446,7 @@ double AZURECalc::RunLevenbergMarquardt(AZUREParams &params, int maxIter,
   std::vector<double> H(nFree * nFree), g(nFree), Hl(nFree * nFree), dx(nFree);
   std::vector<double> gScale(nFree, 1.0);  // see the convergence test
   for (int a = 0; a < nFree; a++)
-    if (mp.GetName(p2f[a]).rfind("density_", 0) == 0) gScale[a] = std::max(std::fabs(x[a]), 1.0);
+    if (params.Kind(p2f[a]) == ParamKind::Density) gScale[a] = std::max(std::fabs(x[a]), 1.0);
 
   for (int iter = 0; iter < maxIter; iter++) {
     if (iter > 0 && !ResidualJacobian(full, r, J, p2f)) break;

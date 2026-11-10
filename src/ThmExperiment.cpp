@@ -279,51 +279,6 @@ std::string ThmCoherentParamStem(const std::string &experiment, double J, int pa
          "_" + ThmSpinText(s) + "," + std::to_string(l) + "," + ThmSpinText(sp) + "," + std::to_string(lp) + "_";
 }
 
-std::string ApplyThmCoherentValues(const std::string &experiment, const std::string &value,
-                                   const std::vector<std::string> &names, const std::map<std::string, double> &values,
-                                   std::string &out) {
-  std::vector<ThmExperiment::CoherentTerm> terms, result;
-  std::string why = ParseThmCoherentBackground(value, terms);
-  if (!why.empty()) return why;
-  static const char *parts[4] = {"re0", "im0", "re1", "im1"};
-  for (const ThmExperiment::CoherentTerm &t : terms) {
-    const std::string prefix = "cbkg_" + experiment + "_" + ThmSpinText(t.J) + (t.parity > 0 ? "+" : "-") + "_" +
-                               std::to_string(t.exitKey) + "_";
-    // The combinations (s,l,s',l') of this term among the names, in order.
-    std::vector<std::string> combos;
-    for (const std::string &n : names) {
-      if (n.compare(0, prefix.size(), prefix) != 0) continue;
-      size_t last = n.rfind('_');
-      if (last == std::string::npos || last < prefix.size()) continue;
-      std::string channels = n.substr(prefix.size(), last - prefix.size());
-      if (t.hasChannels && channels != ThmSpinText(t.s) + "," + std::to_string(t.l) + "," + ThmSpinText(t.sp) + "," +
-                                           std::to_string(t.lp))
-        continue;
-      if (std::find(combos.begin(), combos.end(), channels) == combos.end()) combos.push_back(channels);
-    }
-    if (combos.empty()) {
-      result.push_back(t);
-      continue;
-    }
-    for (const std::string &channels : combos) {
-      ThmExperiment::CoherentTerm c = t;
-      std::vector<std::string> f = Split(channels, ',');
-      if (f.size() != 4 || !ReadSpin(f[0], c.s) || !ReadWholeInt(f[1], c.l) || !ReadSpin(f[2], c.sp) ||
-          !ReadWholeInt(f[3], c.lp))
-        return "cbackground: parameter name with channels '" + channels + "' is not one AZURE2 makes";
-      c.hasChannels = true;
-      c.hasValues = true;
-      for (int k = 0; k < 2 * c.form; k++) {
-        std::map<std::string, double>::const_iterator it = values.find(prefix + channels + "_" + parts[k]);
-        if (it != values.end()) c.value[k] = it->second;
-      }
-      result.push_back(c);
-    }
-  }
-  out = FormatThmCoherentBackground(result);
-  return "";
-}
-
 std::string ParseThmCoherentBackground(const std::string &value, std::vector<ThmExperiment::CoherentTerm> &out) {
   out.clear();
   const std::string form =

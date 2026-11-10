@@ -2,10 +2,13 @@
 // physics function is plottable).  No session, no project: each call is the physics function applied element-wise.
 #include <pybind11/numpy.h>
 #include <pybind11/pybind11.h>
+#include <pybind11/stl.h>
 
 #include <stdexcept>
 #include <string>
+#include <vector>
 
+#include "azure2/physics/Elements.h"
 #include "azure2/physics/coulomb/Whittaker.h"
 
 namespace py = pybind11;
@@ -56,4 +59,12 @@ void BindPhysics(py::module_ &m) {
         "Whittaker function W_{-eta_b, l+1/2}(2 rho) of a bound channel (physics/coulomb, no GSL) on equal-length "
         "arrays: dict of mantissa, log10_scale (W = mantissa * 10**log10_scale), rho_dlog (rho W'/W, the shift "
         "function at rho = kappa a) and status (0 ok, 1 invalid_argument, 2 failed).");
+  m.def(
+      "element_symbols",
+      []() {
+        std::vector<std::string> out;
+        for (int z = 0; z <= azure2::physics::kMaxElementZ; z++) out.push_back(azure2::physics::ElementSymbol(z));
+        return out;
+      },
+      "Element symbols by charge number, index 0 (the neutron, \"n\") to 118 (physics/Elements.h, the one table).");
 }

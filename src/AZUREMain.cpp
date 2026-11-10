@@ -125,8 +125,8 @@ int AZUREMain::operator()() {
 
   // Create new parameters for minuit, fill them from compound nucleus object and data file.
   AZUREParams params;
-  compound()->FillMnParams(params.GetMinuitParams(), &configure());
-  data()->FillMnParams(params.GetMinuitParams());
+  compound()->FillMnParams(params, &configure());
+  data()->FillMnParams(params);
   if (configure().paramMask & Config::USE_PREVIOUS_PARAMETERS) {
     configure().outStream << "Reading User Parameter File..." << std::endl;
     params.ReadUserParameters(configure());
@@ -176,7 +176,7 @@ int AZUREMain::operator()() {
     configure().outStream << "Applying parameter settings with Parameter Manager..." << std::endl;
     ParameterLimitsManager limitsManager(&configure(), compound(), data(), &params);
     limitsManager.ReadParameterSettings();
-    limitsManager.ApplyAllParameterSettings(params.GetMinuitParams());
+    limitsManager.ApplyAllParameterSettings(params);
 
     // Warn once if a level has a radiative width comparable to its particle width,
     // where the R-Matrix treatment of capture breaks down.
@@ -786,9 +786,9 @@ int AZUREMain::operator()() {
           const ROOT::Minuit2::MnUserParameters &mp = params.GetMinuitParams();
           std::vector<std::string> names;
           for (unsigned int i = 0; i < mp.Params().size(); i++) {
-            const std::string &nm = mp.GetName(i);
-            if (!mp.Parameter(i).IsFixed() && (nm.rfind("energy_", 0) == 0 || nm.rfind("width_", 0) == 0))
-              names.push_back(nm);
+            const ParamKind kind = params.Kind((int)i);
+            if (!mp.Parameter(i).IsFixed() && (kind == ParamKind::LevelEnergy || kind == ParamKind::Gamma))
+              names.push_back(mp.GetName(i));
           }
           if ((int)names.size() == bandCov.size()) bandCov.names = names;
         }

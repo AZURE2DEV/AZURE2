@@ -226,6 +226,17 @@ bypassed. Run it first (under a second), then the build and the tests of "Defini
 
 **A CLI flag.** `parseOptions`, `printHelp` and `docs/source/reference/command_line.rst` [check 1].
 
+**A new kind of fit parameter** (a nuisance, an apparatus parameter; `docs/upgrade/parameter_kinds.md`). What a
+parameter is lives in its record, never in its name [check 23: no prefix or suffix test of a parameter name].
+1. `include/ParameterKind.h`: the enum value (the next code) and its `ParamKindTable()` row (key, unit, owner fields,
+   `ownPrior` / `segmentField` / `varyFromProject`, doc); a `ParameterRecord` factory for new owner fields.
+2. Create it with `AZUREParams::Add(name, value, step, ParameterRecord::...)` in `CNuc::FillMnParams` or
+   `EData::FillMnParams`, the name built there by one function; every later question asks `params.Record(i)`.
+3. Follow the layout in `BuildParamIndexMap` and `AZUREAPI::GetParameterInfo` (it throws on a kind that disagrees
+   with the record); owner fields in the binding's `parameter_records()` and pyazr's `Parameter.from_record`.
+4. Docs: the kinds table of `reference/output_files.rst` and `parameter_kinds.md` section 1 [check 23]; a project
+   with the kind in `tests/pyazr/parameter_kinds_test.py` (its names rebuilt from the records).
+
 **A format-3 field** (a key of a record kind: `docs/upgrade/project_format3.md`, `experiment/README.md` §2).
 1. One `FieldDef` row in the kind's list in `experiment/src/Schema.cpp`: key, title, value type (`ValueSpec`; a
    structured value is a `FormSpec` there), where it applies and where it is required (`Condition`), doc. If it depends

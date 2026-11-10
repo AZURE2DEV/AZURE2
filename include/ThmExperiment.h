@@ -246,20 +246,6 @@ std::string ThmSpinText(double j);
 std::string ThmCoherentParamStem(const std::string &experiment, double J, int parity, int exitKey, double s, int l,
                                  double sp, int lp);
 /*!
- * `value` (a cbackground= value of experiment `experiment`) with start
- * values taken from `values` (parameter name -> value, e.g. a fit's
- * param.sav), into `out`.  `names` are all the experiment's parameter
- * names in the engine's order (EData::BuildThmGroups); a term that covers
- * several combinations is written as one explicit term per combination
- * (s,l,s',l') so each can carry its own values; fixed flags and forms are
- * kept, a value not in `values` keeps its start value, a term with no name
- * in `names` is kept as it is.  "" or why `value` is refused.
- */
-std::string ApplyThmCoherentValues(const std::string &experiment, const std::string &value,
-                                   const std::vector<std::string> &names, const std::map<std::string, double> &values,
-                                   std::string &out);
-
-/*!
  * The coherent background of one THM experiment as the model sees it
  * (EData::BuildThmGroups resolves the terms against the compound nucleus).
  * One entry per (J group, entrance channel, exit channel) combination, each

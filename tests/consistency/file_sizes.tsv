@@ -3,22 +3,22 @@
 # lines.  Lower the numbers (never raise them) with
 #   python3 tests/consistency/repo_consistency_test.py --tighten-sizes
 # Entries are added by the director only.
-api/src/AZUREAPI.cpp	2063
-api/src/pybind_api.cpp	1212
+api/src/AZUREAPI.cpp	2069
+api/src/pybind_api.cpp	1297
 physics/coulomb/coul/src/cwfcomp.cpp	1440
 physics/coulomb/coulsm/src/cwfcomp.cpp	2070
 pyazr/azrfile.py	3719
-pyazr/azure2.py	2572
+pyazr/azure2.py	2569
 pyazr/nds.py	1462
 src/AMatrixFunc.cpp	2817
-src/AZURE2.cpp	1813
-src/AZURECalc.cpp	2144
-src/AZURECalcMCMC.cpp	1483
+src/AZURE2.cpp	1758
+src/AZURECalc.cpp	2137
+src/AZURECalcMCMC.cpp	1459
 src/AZUREGrad.cpp	2036
-src/CNuc.cpp	1942
-src/EData.cpp	5838
-src/EDataThm.cpp	1229
+src/CNuc.cpp	1945
+src/EData.cpp	5883
+src/EDataThm.cpp	1233
 src/EPoint.cpp	3006
 src/ESegment.cpp	1816
 src/TargetEffect.cpp	1154
-src/ThmExperiment.cpp	1103
+src/ThmExperiment.cpp	1058
