@@ -2,6 +2,99 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-10 (director, evening) — Phase 4: the fifth wave merged (dead code out of the data classes, ratio to Rutherford, the hybrid potential as a value, extrapolation grids)
+
+**Merged into `feature/upgrade-4-data`** (`--no-ff`, in this order; each rehearsed, built and verified in a scratch
+worktree, the committed tree is that tree; the four agents' entries are below):
+1. ed860f74, `feature/upgrade-4-edata-split-2`: unused code out of `EData`, `EPoint`, `ESegment`; the data covariance
+   in `src/EDataCovariance.cpp`.
+2. 6392bb62, `feature/upgrade-4-rutherford`: data given as a ratio to the Rutherford or the Mott cross section
+   (`quantity ratio_to_rutherford`, `ratio_to_mott`).
+3. 8a143945, `feature/upgrade-4-hybrid-potential`: the hybrid potential is a value in `physics/` (the manager
+   singleton is gone), e² = α ħc in its Coulomb part, bound states and closed channels of a hybrid pair use the
+   solution distorted by the potential.
+4. 08a6165e, `feature/upgrade-4-extrap-grids`: extrapolation grids by step, by number of points (linear or
+   logarithmic), by list, from a file, in the laboratory or the c.m. frame, and adaptive; the converted-tree gate as
+   `tools/format3_gate.sh`.
+
+**The merged head as a whole** (08a6165e; build `work/b-trial8`, 0 warnings):
+- 183 projects (179 and the four of `tests/ratio_to_rutherford/models`) × 3 bases: 704 + 677 + 704 output files.
+  Of the 689 + 662 + 689 that the Phase 3 head has, 661 + 634 + 661 are identical; the 28 others per basis are
+  `hybrid_potential`, `upgrade/T3/T3` and `T3_start`, moved on purpose by merge 3 (cause and size in its entry and
+  its merge message). **The reference for bit-identity from here on is the tag `tab-trial8`** (every file of the head).
+- `ctest -LE slow` 169/169; `tests/run_tests.sh` 142 passed / 0 failed.
+- Calculations at 1 against 3 and at 1 against 6 threads, T1–T3 and 13N in the three bases: 12/12 identical.
+- T2 with a `<modelData>` section: identical at 1 and 3 threads in the three bases.
+- Spec equivalence: 193 files, 185 converted, 183 equal, 2 recorded, 0 differ, 8 not converted (format 3 already,
+  or test inputs that are not projects).
+- Converted tree against the same engine's run of the unconverted tree (`tools/format3_gate.sh`, `REF=tab-trial8`):
+  472 (445 formal) identical, 38 classified, 0 differ, 11 missing — the two projects written in format 3 with data,
+  which the gate does not carry yet (in work: `feature/upgrade-4-tools`).
+- T2 benchmark against the Phase 3 head, interleaved, three repetitions, the machine shared with two agents:
+  no change within the scatter. Calculation 0.97–1.13 s (Phase 3 head) against 0.98–1.14 s at 1 thread, 0.26–0.32 s
+  against 0.27–0.34 s at 6; 200 fit calls 61.7–70.6 s against 63.3–70.4 s at 1 thread, 30.1–33.6 s against
+  30.4–33.6 s at 6; peak memory of the fit 276 → 269 MB at 1 thread, 506–513 → 497–509 MB at 6; the same χ²
+  (10899.8; 691.608 after 200 calls) in every run (`work/bench-p4w5.tsv`).
+
+**What the director changed at the merges** (each in its merge commit's message):
+- `src/AdaptiveExtrapolation.cpp` (merge 4) read a point's model value through `EPoint::ModelSlot()`, which merge 1
+  had removed as unused; it uses `EPoint::GetModelValue(results)`. A branch that adds a caller of a name another
+  branch deletes builds alone and fails merged: the rehearsal build is what caught it.
+- pyazr is **2.21.0** (2.19.0 with the ratio data, 2.20.0 with the potential, 2.21.0 with the grids).
+- `tests/consistency/file_sizes.tsv` tightened to the merged counts at each merge.
+
+**Decisions of the director.**
+- Ratio to Rutherford: `ExforData.to_azr(rutherford=True)` no longer multiplies the data by σ_R (the engine
+  compares the ratio; `to_dataset` writes `quantity ratio_to_rutherford`). The four refusals stay (a ratio with
+  Doppler broadening, with electron screening, with attenuation, with `auto_tolerance`): each needs a decision on
+  what the reference cross section is under that effect. Nothing more for identical particles (Mott is its own
+  quantity).
+- Hybrid potential: `GetCoulombFunctions` / `pyazr.coulomb_functions` return the shift function at E ≤ 0 for every
+  pair (it returned 0); a THM segment whose entrance pair has a hybrid potential is refused
+  (`E_THM_HYBRID_POTENTIAL`); the T1 goldens stay as recorded.
+- Extrapolation grids: for `quantity sfactor` the refinement will test the S factor (with the units and S-factor
+  step); adaptive grids stay refused in a pyazr session (`pyazr.refine_grid` refines on a Python callable).
+- The comparison tools (`runall.sh`, `run_one.sh`, `cls.sh`, `classify.py`) go into the repository's `tools/`; no
+  path of one machine in a tracked file (a consistency check).
+
+**Defects and debts found, not yet fixed** (owner in brackets):
+- `tests/hybrid_potential/check_per_pair.py` (not in ctest) has a stale χ² pin; the data check file of an adaptive
+  extrapolation lists the start grid; `scripts/check.sh` builds with as many jobs as there are cores;
+  `--print-predictions` names a format-3 data set by its index [all: `feature/upgrade-4-tools`, running].
+- Adaptive refinement finds what the start grid and the level seeds bracket: a narrow structure that is not at a
+  level energy (an interference minimum between coarse start points whose ends and midpoint happen to lie on a
+  line) is not seen. The director added that limit to the description of adaptive grids (`data_formats.rst`): the
+  start step must resolve the structures that are not at a level. A second criterion (curvature from four points)
+  is a possible later addition [not scheduled].
+- Still not run by anyone: ThreadSanitizer (no runtime on this host), `ctest -L slow`, 1 against 8 threads on this
+  head (1 against 6 was run).
+
+**For the PI to see** (behaviour a user can meet; additions):
+- Ratio data under a beam spread or a target: the model is ⟨σ⟩/⟨σ_R⟩ (each folded, then divided), which is what an
+  experiment that normalises counts to a Rutherford calculation for the mean energy does not exactly give; the
+  documentation states the convention.
+- pyazr: `to_azr(rutherford=True)` is gone (use `to_dataset`); `coulomb_functions` below threshold returns S.
+- Hybrid potential (`hybrid_potential` project): the internal reduced width amplitude of the ¹³N ground state is
+  1.060263 MeV^½ (was 1.271943) for the same ANC, because the bound state is now distorted by the potential (the
+  PI's answer to question 4); χ² of its segment 3 2238.82 → 2259.87. The e² change moves hybrid outputs by ≤ 5e-5.
+- Extrapolations: `range A B points N log`, `list`, `file`, `frame cm`, `adaptive on tolerance T max_points N`; a
+  budget that stops the refinement is reported with the largest deviation left.
+
+**Running now** (Opus agents, 3 threads each; briefs in `/data0/skowrons/AZURE2-upgrade/work/briefs/`):
+- `feature/upgrade-4-edata-split-3` (`wt-esplit3`, `S_edata_split_3.md`): the remaining cuts of `EData`, `EPoint`,
+  `ESegment` into the files of `edata_split.md`, as verbatim moves (started from the tree of merge 2: rebase onto
+  6392bb62, then merge over 3 and 4).
+- `feature/upgrade-4-tools` (`wt-tools`, `T_tools_followup.md`): the comparison tools into `tools/`, the gate
+  carries format-3 projects, the small defects above (started from the rehearsal commit af654a5d of merge 4: rebase
+  `--onto 08a6165e af654a5d`).
+
+**Then.** Units and the quantities that are scales (S factor with the `nds.py` mass fix, yields per charge;
+`J_units_scales.md`), after the cuts are merged (it edits where the points are made); `Measurement` shared between
+working copies (`R_measurement.md`), after the cuts; pyazr's model on records, one set-up path for both formats,
+components as leaves, `predict`, the recipe "a new kind of data"; the spin–orbit term (note §5 steps 3–5); the
+rest of the `EData` and `CNuc` splits; Phase 5 (targets and kernels, shifted lab data compared in the lab frame);
+Phase 6 (mutable statics, the task as unit of work). Merge `origin/dev` only when the reconstruction is complete.
+
 ## 2026-11-10 (agent, brief K) — extrapolation grids: list, file, points/log, c.m., adaptive; the gate as a tool (`feature/upgrade-4-extrap-grids`)
 
 **Done.**

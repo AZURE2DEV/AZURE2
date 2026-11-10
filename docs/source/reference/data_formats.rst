@@ -765,6 +765,12 @@ are converted to MeV (deg).  The same forms describe an angle grid
    count (``Adaptive grid of extrapolation #1: 251 energies (...)``); the
    output files list the grid's points as for any other grid.
 
+   The refinement sees what the start grid and the level seeds bracket.  A
+   structure that is not at a level -- an interference minimum, a threshold
+   -- and is narrower than ``start_step`` can lie inside an interval whose
+   ends and midpoint are on a straight line, and is then not found: choose
+   ``start_step`` to resolve such structures.
+
    The grid depends on the parameters: a run with other parameters can give
    other energies.  Which intervals are split is decided once per sweep from
    the computed values, so the grid does not depend on the number of threads.
