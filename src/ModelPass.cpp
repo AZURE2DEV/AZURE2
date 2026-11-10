@@ -113,16 +113,19 @@ const char *TermRole(const Prediction &p, const ESegment &segment, int term) {
  * the free-gas Doppler broadening of the point's target effect as a linear map before the transform (SAMMY's order:
  * every term's sub-point values broadened on the common grid, the broadened values transformed, the kernel applied
  * without its own Doppler step), and EPoint::IntegrateSubPointValues on a local vector, never on the sub-points.
- * EData::CheckTransformedSegments makes sure every term shares the base point's sub-point grid.
+ * For the backward pass of a fitted temperature, the map's derivative d/dT goes beside it, its cotangent into
+ * parameter slot `temperatureSlot`.  EData::CheckTransformedSegments makes sure every term shares the base point's
+ * sub-point grid.
  */
 class BaseKernel : public azure2::experiment::SubPointFold {
  public:
-  BaseKernel(EPoint *base, const Config &configure) : base_(base), configure_(configure) {
+  BaseKernel(EPoint *base, const Config &configure, int temperatureSlot) : base_(base), configure_(configure) {
     if (!ESegment::HasSubPointIntegration(base)) return;
     stage_.subPoints = true;
     stage_.nsp = static_cast<std::size_t>(base->NumSubPoints());
     const TargetEffect *effect = base->GetParentData()->GetTargetEffect(base->GetTargetEffectNum());
     if (!effect || !effect->IsDoppler()) return;
+    const bool temperature = temperatureSlot >= 0 && base->GetParentData()->DopplerParamOfEffect(base->GetTargetEffectNum()) > 0;
     // one row at the point (no kernel after the Doppler step) or one per sub-point (the kernel's grid)
     std::vector<double> energies;
     stage_.fold = effect->HasResolutionStage();
@@ -130,17 +133,27 @@ class BaseKernel : public azure2::experiment::SubPointFold {
       energies.push_back(base->GetCMEnergy());
     else
       for (int j = 1; j <= base->NumSubPoints(); j++) energies.push_back(base->GetSubPoint(j)->GetCMEnergy());
-    std::vector<std::pair<int, double>> dw;
+    std::vector<std::pair<int, double>> dw, dwdT;
     rowStart_.push_back(0);
+    rowStartT_.push_back(0);
     for (double e : energies) {
-      base->DopplerWeights(e, dw);
+      base->DopplerWeights(e, dw, temperature ? &dwdT : nullptr);
       for (const auto &t : dw) {
         col_.push_back(t.first - 1);
         w_.push_back(t.second);
       }
       rowStart_.push_back(col_.size());
+      for (const auto &t : dwdT) {
+        colT_.push_back(t.first - 1);
+        wT_.push_back(t.second);
+      }
+      rowStartT_.push_back(colT_.size());
     }
     stage_.premap = {energies.size(), rowStart_.data(), col_.data(), w_.data()};
+    if (temperature) {
+      stage_.premapDT = {energies.size(), rowStartT_.data(), colT_.data(), wT_.data()};
+      stage_.dopplerParam = temperatureSlot;
+    }
   }
   azure2::experiment::TransformStage stage(std::size_t) const override { return stage_; }
   double fold(std::size_t, const double *f, std::size_t n) const override {
@@ -159,93 +172,109 @@ class BaseKernel : public azure2::experiment::SubPointFold {
   EPoint *base_;
   const Config &configure_;
   azure2::experiment::TransformStage stage_;
-  std::vector<std::size_t> rowStart_;
-  std::vector<int> col_;
-  std::vector<double> w_;
+  std::vector<std::size_t> rowStart_, rowStartT_;
+  std::vector<int> col_, colT_;
+  std::vector<double> w_, wT_;
 };
 
 /*!
- * The model value of a segment at a point: its expression tree (Predictions.h) evaluated on the values of its terms'
- * points.  The leaves are read from the points' records (the E1 / E2 part where the leaf says so); the frame factors
- * and the abundances and thickness are taken at the point; a transmission or yield reads its terms' sub-point values
- * and the base point's kernel.  The per-nucleus terms of a sample segment go into the base point's leaf record (the
- * decomposition output).
+ * The inputs of a segment's tree at one point, as the model pass and its adjoint read them: the leaf values from the
+ * terms' points' records (the E1 / E2 part where the leaf says so), the frame factors, the abundances and thickness at
+ * the point, and for a transmission or yield its terms' sub-point values and the base point's kernel.  On the stack
+ * up to 16 leaves, factors and parameters (nothing allocated on the plain, SUM, RATIO and sample paths).  Every term
+ * point must exist (ComposeModelValue checks).  One parameter slot more than the tree's is kept for the cotangent of a
+ * fitted Doppler temperature.
  */
-double ComposeModelValue(ESegment &segment, int pointIndex, CNuc *cnuc, const Config &configure,
-                         azure2::Results &results, azure2::LeafValues leaves) {
-  const Prediction *p = segment.GetPrediction();
-  if (!p) throw std::logic_error("EvaluateModelPoint: segment " + std::to_string(segment.GetSegmentKey()) +
-                                 " has no model expression (EData::BuildPredictions)");
-  EPoint *basePoint = segment.GetPoint(pointIndex + 1);
-  const std::size_t nl = p->leaves.size(), nf = p->factors.size(), np = p->params.size();
-
-  // The terms' points, calculated here when the leaves are not in yet (in term order, the base first).
-  LocalArray<EPoint *, 16> point(nl);
-  for (std::size_t k = 0; k < nl; k++) {
-    const int term = p->leaves[k].term;
-    point[k] = TermPoint(segment, term, pointIndex);
-    if (!point[k]) return FailedSample(segment, basePoint, cnuc, results);  // component segments copy the base's points
-    if (CalculatesItself(point[k], leaves) &&
-        !CalculatePoint(point[k], TermRole(*p, segment, term), cnuc, configure, results))
-      return FailedSample(segment, basePoint, cnuc, results);
+struct PointInputs {
+  PointInputs(ESegment &segment, const Prediction &p, int pointIndex, CNuc *cnuc, const Config &configure,
+              const azure2::Results &results)
+      : nl(p.leaves.size()), nf(p.factors.size()), np(p.params.size()), point(nl), leafValue(nl), factorValue(nf),
+        paramValue(np + 1), leafArray(nl), factorArray(nf) {
+    EPoint *basePoint = segment.GetPoint(pointIndex + 1);
+    for (std::size_t k = 0; k < nl; k++) {
+      point[k] = TermPoint(segment, p.leaves[k].term, pointIndex);
+      leafValue[k] = LeafValue(point[k], p.leaves[k].part, results);
+      leafArray[k] = {&leafValue[k], 1};
+    }
+    for (std::size_t f = 0; f < nf; f++) {
+      const FactorRef &r = p.factors[f];
+      EPoint *termPoint = TermPoint(segment, r.term, pointIndex);
+      factorValue[f] = (r.kind == FactorRef::Kind::TermFrame)
+                           ? ESegment::TermFrameFactor(basePoint, termPoint)
+                           : ESegment::RatioTermFrameFactor(termPoint, TermSegment(segment, r.term), cnuc);
+      factorArray[f] = {&factorValue[f], 1};
+    }
+    for (std::size_t q = 0; q < np; q++) {
+      const ParamRef &r = p.params[q];
+      paramValue[q] = (r.kind == ParamRef::Kind::Abundance) ? cnuc->GetAbundance(segment.GetNaturalSample(), r.nucleus)
+                                                            : segment.GetSampleThickness();
+    }
+    paramValue[np] = 0.0;
+    in.leaves = {leafArray.data(), nl};
+    in.factors = {factorArray.data(), nf};
+    in.params = paramValue.data();
+    if (p.tree.Transforms().empty()) return;
+    kernel = std::make_unique<BaseKernel>(basePoint, configure, static_cast<int>(np));
+    folds[0] = kernel.get();
+    in.folds = {folds, 1};
+    if (!ESegment::HasSubPointIntegration(basePoint)) return;
+    for (std::size_t k = 0; k < nl; k++) {
+      subOffsets.push_back(subValues.size());
+      for (int j = 1; j <= point[k]->NumSubPoints(); j++)
+        subValues.push_back(LeafValue(point[k]->GetSubPoint(j), p.leaves[k].part, results));
+      subOffsets.push_back(subValues.size());
+    }
+    for (std::size_t k = 0; k < nl; k++) subArray.push_back({subValues.data(), &subOffsets[2 * k]});
+    in.subLeaves = subArray;
   }
 
-  LocalArray<double, 16> leafValue(nl), factorValue(nf), paramValue(np);
-  LocalArray<azure2::experiment::PointArray, 16> leafArray(nl), factorArray(nf);
-  for (std::size_t k = 0; k < nl; k++) {
-    leafValue[k] = LeafValue(point[k], p->leaves[k].part, results);
-    leafArray[k] = {&leafValue[k], 1};
-  }
-  for (std::size_t f = 0; f < nf; f++) {
-    const FactorRef &r = p->factors[f];
-    EPoint *termPoint = TermPoint(segment, r.term, pointIndex);
-    factorValue[f] = (r.kind == FactorRef::Kind::TermFrame)
-                         ? ESegment::TermFrameFactor(basePoint, termPoint)
-                         : ESegment::RatioTermFrameFactor(termPoint, TermSegment(segment, r.term), cnuc);
-    factorArray[f] = {&factorValue[f], 1};
-  }
-  for (std::size_t q = 0; q < np; q++) {
-    const ParamRef &r = p->params[q];
-    paramValue[q] = (r.kind == ParamRef::Kind::Abundance) ? cnuc->GetAbundance(segment.GetNaturalSample(), r.nucleus)
-                                                          : segment.GetSampleThickness();
-  }
-  azure2::experiment::Inputs in;
-  in.leaves = {leafArray.data(), nl};
-  in.factors = {factorArray.data(), nf};
-  in.params = paramValue.data();
-
-  // A transmission or yield under a sub-point effect: its terms' sub-point values and the base point's kernel.
+  std::size_t nl, nf, np;
+  LocalArray<EPoint *, 16> point;
+  LocalArray<double, 16> leafValue, factorValue, paramValue;
+  LocalArray<azure2::experiment::PointArray, 16> leafArray, factorArray;
   std::vector<double> subValues;
   std::vector<std::size_t> subOffsets;
   std::vector<azure2::experiment::SubPointArray> subArray;
   std::unique_ptr<BaseKernel> kernel;
   const azure2::experiment::SubPointFold *folds[1] = {nullptr};
-  if (!p->tree.Transforms().empty()) {
-    kernel = std::make_unique<BaseKernel>(basePoint, configure);
-    folds[0] = kernel.get();
-    in.folds = {folds, 1};
-    if (ESegment::HasSubPointIntegration(basePoint)) {
-      for (std::size_t k = 0; k < nl; k++) {
-        subOffsets.push_back(subValues.size());
-        for (int j = 1; j <= point[k]->NumSubPoints(); j++)
-          subValues.push_back(LeafValue(point[k]->GetSubPoint(j), p->leaves[k].part, results));
-        subOffsets.push_back(subValues.size());
-      }
-      for (std::size_t k = 0; k < nl; k++) subArray.push_back({subValues.data(), &subOffsets[2 * k]});
-      in.subLeaves = subArray;
-    }
-  }
+  azure2::experiment::Inputs in;
+};
 
+const Prediction &PredictionOf(const ESegment &segment) {
+  const Prediction *p = segment.GetPrediction();
+  if (!p) throw std::logic_error("EvaluateModelPoint: segment " + std::to_string(segment.GetSegmentKey()) +
+                                 " has no model expression (EData::BuildPredictions)");
+  return *p;
+}
+
+/*!
+ * The model value of a segment at a point: its expression tree (Predictions.h) evaluated on its terms' values
+ * (PointInputs).  The per-nucleus terms of a sample segment go into the base point's leaf record (the decomposition
+ * output).
+ */
+double ComposeModelValue(ESegment &segment, int pointIndex, CNuc *cnuc, const Config &configure,
+                         azure2::Results &results, azure2::LeafValues leaves) {
+  const Prediction &p = PredictionOf(segment);
+  EPoint *basePoint = segment.GetPoint(pointIndex + 1);
+  // The terms' points, calculated here when the leaves are not in yet (in term order, the base first).
+  for (const azure2::experiment::LeafSelector &leaf : p.leaves) {
+    EPoint *termPoint = TermPoint(segment, leaf.term, pointIndex);
+    if (!termPoint) return FailedSample(segment, basePoint, cnuc, results);  // component segments copy the base's points
+    if (CalculatesItself(termPoint, leaves) &&
+        !CalculatePoint(termPoint, TermRole(p, segment, leaf.term), cnuc, configure, results))
+      return FailedSample(segment, basePoint, cnuc, results);
+  }
+  PointInputs inputs(segment, p, pointIndex, cnuc, configure, results);
   azure2::experiment::Workspace ws;
   double m;
   if (segment.IsNatural()) {
     std::vector<double> naturalTerms(cnuc->NumNuclei(), 0.0);
-    m = p->tree.Value(in, 0, ws, naturalTerms.data());
+    m = p.tree.Value(inputs.in, 0, ws, naturalTerms.data());
     basePoint->SetNaturalTerms(results, naturalTerms);
   } else {
-    m = p->tree.Value(in, 0, ws);
+    m = p.tree.Value(inputs.in, 0, ws);
   }
-  if (p->kind == azure2::experiment::TreeKind::Ratio && leafValue[1] == 0.0) {
+  if (p.kind == azure2::experiment::TreeKind::Ratio && inputs.leafValue[1] == 0.0) {
     // No ratio exists (e.g. the denominator's exit channel is closed at this energy): NaN and a warning, once.
     // Before 2026-11-01 the point was 0, which a fit compared with the datum as if it were a calculated ratio.
     static std::atomic<bool> reported(false);
@@ -283,6 +312,41 @@ void EvaluateModelSegment(ESegment &segment, CNuc *compound, const Config &confi
 
 void EvaluateModel(EData &data, CNuc *compound, const Config &config, Results &results, LeafValues leaves) {
   for (int i = 1; i <= data.NumSegments(); i++) EvaluateModelSegment(*data.GetSegment(i), compound, config, results, leaves);
+}
+
+bool ModelPointBackward(ESegment &segment, int pointIndex, CNuc *compound, const Config &config,
+                        const Results &results, double g, ModelCotangents &out) {
+  const Prediction &p = PredictionOf(segment);
+  for (const experiment::LeafSelector &leaf : p.leaves)
+    if (!TermPoint(segment, leaf.term, pointIndex)) return false;
+  PointInputs inputs(segment, p, pointIndex, compound, config, results);
+  const std::size_t nl = inputs.nl, np = inputs.np;
+  out.leaves.assign(nl, ModelCotangents::Leaf());
+  out.params.assign(np + 1, 0.0);
+  out.subPoints = !inputs.subArray.empty();
+  out.dopplerOrder = out.subPoints && inputs.kernel->stage(0).premap.rowStart != nullptr;
+  out.refs = &p.params;
+  // the sub-point cotangents laid out as the inputs' sub-point values (one run per leaf), then handed out per leaf
+  std::vector<double> subCotangents(inputs.subValues.size(), 0.0);
+  LocalArray<double *, 16> leafCot(nl), subCot(nl);
+  for (std::size_t k = 0; k < nl; k++) {
+    ModelCotangents::Leaf &l = out.leaves[k];
+    l.point = inputs.point[k];
+    l.xsComponent = static_cast<int>(p.leaves[k].part);
+    leafCot[k] = &l.cotangent;
+    subCot[k] = out.subPoints ? subCotangents.data() : nullptr;
+  }
+  experiment::Cotangents cot;
+  cot.leaves = {leafCot.data(), nl};
+  cot.subLeaves = {subCot.data(), nl};
+  cot.params = out.params.data();
+  experiment::Workspace ws;
+  const bool ok = p.tree.Backward(inputs.in, 1, &g, cot, ws);
+  if (out.subPoints)
+    for (std::size_t k = 0; k < nl; k++)
+      out.leaves[k].sub.assign(subCotangents.begin() + static_cast<std::ptrdiff_t>(inputs.subOffsets[2 * k]),
+                               subCotangents.begin() + static_cast<std::ptrdiff_t>(inputs.subOffsets[2 * k + 1]));
+  return ok;
 }
 
 Residual PointResidual(const EPoint &point, const Results &results, double norm) {

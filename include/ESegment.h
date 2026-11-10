@@ -430,24 +430,6 @@ class ESegment {
   /// The value the fit compares with the data is formed by the segment, not read off its points: components, a
   /// sample's abundance weights or a transmission / yield transform.
   bool NeedsAssembly() const { return HasComponents() || IsNatural() || IsTransformed(); }
-  /// The transforms and their derivatives (n in atoms/barn, cross sections in barns).
-  /// dTdn / dYdn: the derivatives with respect to the thickness n (the parameter segment_<key>_thickness).
-  static double Transmission(double n, double s, double *dTds = nullptr, double *dTdn = nullptr);
-  static double YieldY0(double n, double s, double st, double *dYds = nullptr, double *dYdst = nullptr,
-                        double *dYdn = nullptr);
-  /// One term of a transmission or yield segment at a point: its point, its weight in the segment's sum (component
-  /// scaling, frame factor, abundance), its compound nucleus, whether it is the yield's s_t, its E1/E2 selector.
-  struct TransformTerm {
-    EPoint *point;
-    const ESegment *segment;
-    double weight;  // scale times the abundance of a sample segment's term
-    double scale;   // component scaling times frame factor (1 for the base and the yield's total)
-    int nucleus;
-    bool total;
-    int xsComponent;
-  };
-  /// The terms of a transmission or yield segment at a point (base first); false if a term point is missing.
-  bool TransformTerms(int pointIndex, CNuc *cnuc, std::vector<TransformTerm> &terms);
   /// True when the point is integrated over sub-points (EPoint::IntegrateTargetEffect).
   static bool HasSubPointIntegration(EPoint *point);
   /// IsTotal for this term: the segment is "total" and its exit pair is its entrance pair.

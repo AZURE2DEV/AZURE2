@@ -1,7 +1,10 @@
 #ifndef AZURE2_MODELPASS_H
 #define AZURE2_MODELPASS_H
 
+#include <vector>
+
 #include "Results.h"
+#include "azure2/experiment/Prediction.h"
 
 class CNuc;
 class Config;
@@ -38,6 +41,30 @@ void EvaluateModelSegment(ESegment &segment, CNuc *compound, const Config &confi
                           LeafValues leaves);
 /// Every point of every segment of the data set, segment by segment, point by point.
 void EvaluateModel(EData &data, CNuc *compound, const Config &config, Results &results, LeafValues leaves);
+
+/// The cotangents of one point's model value m (step S11): g dm/d(leaf) for every leaf of the segment's tree, at the
+/// term's point or -- a transmission or yield under a sub-point effect -- at each of its sub-points, and g dm/d(param)
+/// for the tree's parameters (azure2::experiment::ParamRef: an abundance per weighted term, the thickness) with one
+/// slot more, the last, for a fitted Doppler temperature.  The adjoint of the composition, from the tree's backward;
+/// the leaves' own adjoint (the R-matrix part) is the caller's.
+struct ModelCotangents {
+  struct Leaf {
+    EPoint *point = nullptr;  ///< the term's point
+    int xsComponent = 0;      ///< which value it reads: 0 the observable, 1 / 2 the E1 / E2 part
+    double cotangent = 0.0;   ///< at the point (no sub-point stage)
+    std::vector<double> sub;  ///< at its sub-points 1..n (subPoints)
+  };
+  std::vector<Leaf> leaves;
+  std::vector<double> params;
+  const std::vector<experiment::ParamRef> *refs = nullptr;  ///< what params[0 .. size - 2] are
+  bool subPoints = false;     ///< the cotangents are at the sub-points
+  bool dopplerOrder = false;  ///< sub-points under a Doppler map (the adjoint takes them term by term)
+};
+/// The cotangents of point `pointIndex` of a data or test segment for the cotangent g of its model value, from the
+/// leaf values in `results` (the point pass, or the caller, calculated them).  False where the composition has no
+/// exact adjoint (a missing term point, a kernel that is not linear): the caller falls back to finite differences.
+bool ModelPointBackward(ESegment &segment, int pointIndex, CNuc *compound, const Config &config,
+                        const Results &results, double g, ModelCotangents &out);
 
 /// The residual of one datum: f - y n and dy n, as one expression for every path (the objective, the per-segment
 /// chi^2, the least-squares rows, the API, the covariance groups, the writers' diagnostics).

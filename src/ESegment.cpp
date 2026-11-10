@@ -1369,50 +1369,10 @@ double ESegment::RatioTermFrameFactor(EPoint *point, const ESegment *term, CNuc 
   return point->CalculateCrossSectionConversionFactor(entrancePair, exitPair);
 }
 
-/*!
- * Transmission of a sample n atoms/barn thick, T = exp(-n s), and dT/ds (azure2::experiment::node::Transmission).
- */
-double ESegment::Transmission(double n, double s, double *dTds, double *dTdn) {
-  return azure2::experiment::node::Transmission(n, s, dTds, dTdn);
-}
-
-/*!
- * SAMMY's self-shielded yield Y0 = (s / st)(1 - exp(-n st)) and its partial derivatives
- * (azure2::experiment::node::YieldY0).
- */
-double ESegment::YieldY0(double n, double s, double st, double *dYds, double *dYdst, double *dYdn) {
-  return azure2::experiment::node::YieldY0(n, s, st, dYds, dYdst, dYdn);
-}
-
 bool ESegment::HasSubPointIntegration(EPoint *point) {
   if (!point || !point->IsTargetEffect() || point->NumSubPoints() <= 0 || !point->GetParentData()) return false;
   TargetEffect *te = point->GetParentData()->GetTargetEffect(point->GetTargetEffectNum());
   return te && te->IsSubPointEffect();
-}
-
-bool ESegment::TransformTerms(int pointIndex, CNuc *cnuc, std::vector<TransformTerm> &terms) {
-  terms.clear();
-  EPoint *basePoint = GetPoint(pointIndex + 1);
-  if (!basePoint) return false;
-  const bool natural = this->IsNatural();
-  auto nucleusOf = [&](int entranceKey) { return cnuc->GetPair(cnuc->GetPairNumFromKey(entranceKey))->GetNucleus(); };
-  const int baseNucleus = nucleusOf(this->GetEntranceKey());
-  terms.push_back({basePoint, this, natural ? cnuc->GetAbundance(naturalSample_, baseNucleus) : 1.0, 1.0, baseNucleus,
-                   false, crossSectionComponent_});
-  for (ESegment *comp : componentSegments_) {
-    if (!comp) continue;
-    EPoint *cp = (pointIndex < comp->NumPoints()) ? comp->GetPoint(pointIndex + 1) : nullptr;
-    if (!cp) return false;
-    const int nucleus = nucleusOf(comp->GetEntranceKey());
-    if (comp->IsYieldTotalTerm()) {
-      terms.push_back({cp, comp, 1.0, 1.0, nucleus, true, 0});
-      continue;
-    }
-    const double scale = comp->GetComponentScaling() * TermFrameFactor(basePoint, cp);
-    const double w = natural ? scale * cnuc->GetAbundance(naturalSample_, nucleus) : scale;
-    terms.push_back({cp, comp, w, scale, nucleus, false, comp->GetCrossSectionComponent()});
-  }
-  return true;
 }
 
 void ESegment::SetThmLineshape(std::shared_ptr<const ThmLineshape> l) {

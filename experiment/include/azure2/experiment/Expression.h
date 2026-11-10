@@ -23,8 +23,8 @@ namespace experiment {
  *
  * Every node's arithmetic is the engine's, in the engine's order of operations (src/ModelPass.cpp,
  * ComposeModelValue and TransformedValue), so that the tree reproduces today's model values bit for
- * bit; `backward` is the adjoint of each node in the order src/AZUREGrad.cpp uses (GradOnePoint, shared-component
- * route; GradTransformedPoint).  experiment/README.md says where the two differ and why.
+ * bit; `backward` is the adjoint of each node in the order the hand-written adjoint of src/AZUREGrad.cpp used before
+ * it was replaced by this one (step S11).  experiment/README.md says where the two differ and why.
  *
  * Storage: a Tree is a flat vector of Node values in creation order.  A node is created after its children, so the
  * creation order is a post-order and the evaluation is one forward sweep over the vector (no recursion, no pointers,

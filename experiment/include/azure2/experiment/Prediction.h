@@ -17,8 +17,8 @@ namespace azure2 {
 namespace experiment {
 
 /// Which value of a term's calculation unit a leaf reads at a point: the observable itself, or the E1 / E2 part of an
-/// angle-integrated capture cross section (b).
-enum class LeafPart { Value, E1, E2 };
+/// angle-integrated capture cross section (b).  The codes are the engine's cross-section component (0, 1, 2).
+enum class LeafPart { Value = 0, E1 = 1, E2 = 2 };
 
 /// One term of a prediction as the set-up resolved it: term 0 is the data set's own points, terms 1, 2, ... its
 /// component segments in order (the components of a SUM or RATIO, the further capture pairs of a total capture, the

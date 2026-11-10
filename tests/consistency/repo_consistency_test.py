@@ -659,15 +659,14 @@ if not RESIDUAL.search("double r = th - pt->GetCMCrossSection() * norm;"):
 # term's scaling and frame factor, a sample's abundance weight, the transmission / yield transform, the transform's
 # term list -- are read only where the tree's inputs are filled (src/ModelPass.cpp) or its setup is made
 # (src/Predictions.cpp), and defined in ESegment; experiment/ holds the arithmetic.  The adjoint of the composition is
-# the tree's backward too (step S11), so the gradient reads none of them.
+# the tree's backward too (step S11, azure2::ModelPointBackward), so the gradient reads none of them.
 PIECES = re.compile(r"(?<![\w:])(?:ESegment::)?(?:TermFrameFactor|RatioTermFrameFactor|TransformTerms|Transmission|YieldY0)"
                     r"\s*\(|(?:->|\.)GetComponentScaling\s*\(|(?:->|\.)GetAbundance\s*\(\s*\w*[Ss]ample")
 PIECES_ALLOWED = {"src/ModelPass.cpp", "src/Predictions.cpp", "src/ESegment.cpp", "include/ESegment.h"}
-PIECES_ALLOWED_UNTIL_S11 = {"src/AZUREGrad.cpp"}
 for top in ("src", "api/src", "include"):
     for name in sorted(os.listdir(os.path.join(ROOT, top))):
         rel = f"{top}/{name}"
-        if not name.endswith((".cpp", ".h")) or rel in PIECES_ALLOWED | PIECES_ALLOWED_UNTIL_S11:
+        if not name.endswith((".cpp", ".h")) or rel in PIECES_ALLOWED:
             continue
         text = re.sub(r"//[^\n]*|/\*.*?\*/", "", read(rel), flags=re.S)
         for m in PIECES.finditer(text):
