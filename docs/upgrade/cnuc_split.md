@@ -1233,3 +1233,25 @@ host, one thread). Inferred by reading, not run: that every row reproduces the t
 that every capture-A_y caller asks for `maxLOrder` (§11.2); that `channelOfBlockChannel` is the identity
 (`CNucSystem.cpp`); the indirection counts of §11.8; the cost of building capture-A_y terms for every photon exit
 (not measured).
+
+### 11.11 Decisions of the director (2026-11-10)
+
+1. The flat engine table of §11.4 is the layout. Its handle (`shared_ptr<const PathwayTable>`) sits on `CNuc`
+   while the readers move and goes to the object that replaces `CNuc` with step 7.
+2. Capture A_y: the terms are built at set-up for the exits that the data sets with capture-A_y points name. The
+   set-up collects them from the segments; a user writes nothing. A capture-A_y point whose exit was not collected
+   stops with a message that names the data set (it cannot happen through the set-up; it guards the API). The static
+   mutex goes.
+3. Defect 1 (an exit pair number used as a decay position) is fixed before the external-capture readers move
+   (step 3), in its own commit with a test project that has a pair without a pathway numbered below the photon
+   pair; the outputs of every present project stay identical.
+4. Defect 2 (the unreachable not-found check) is fixed with the reader it belongs to: no exit refuses with a
+   message, it never reads the last decay.
+5. The fall-back branches for `TablesBuilt() == false` are deleted in a commit of their own, after a run of every
+   project with an abort placed in them shows that they are not reached with a non-empty list.
+6. The step-1 comparison of table and trees goes into `pathways_from_cnuc_test.cpp`, which step 8 deletes.
+7. Defect 4 (`AZUREAPI::GetECIntegrals` at the formal energy) is fixed with step 2c and gets a pyazr test in the
+   formal basis.
+8. The steps start after the cut of `EData`, `EPoint` and `ESegment` into smaller files is merged. The R-matrix
+   route and `--use-rmc` are compared separately at the steps that touch them (§11.6), since no project of
+   `tests/` selects them.
