@@ -14,7 +14,8 @@
  * HasDensityFitError / HasDopplerError.
  */
 
-TargetEffect::TargetEffect(const azure2::experiment::TargetEffectSpec &line, const Config &configure) {
+TargetEffect::TargetEffect(const azure2::experiment::TargetEffectSpec &line, const Config &configure)
+    : targetName_(line.targetName) {
   // Straggling off; a coefficient of 0 means Bohr straggling when it is on (0.04 keV^1/2 before 2026-10-27)
   isStraggling_ = false;
   stragglingCoefficient_ = 0.0;

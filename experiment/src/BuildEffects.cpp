@@ -252,6 +252,7 @@ SpecList<TargetEffectSpec> Effects(Context &c, const std::vector<Member> &member
     e.source = "target " + (x.target ? x.target->name : std::string("-")) + ", beam " + (x.beam ? x.beam->name : std::string("-")) +
                ", detector " + (x.detector ? x.detector->name : std::string("-"));
     if (x.target) {
+      e.targetName = x.target->name;
       TargetInto(c, *x.target, *x.target, e);
       if (usesOfTarget[x.target] > 1) {
         if ((x.target->Has("screening") || FreeNuisance(x.target, "doppler")) && !reported.count(x.target) &&
@@ -294,6 +295,7 @@ void SampleThickness(Context &c, std::vector<Member> &members, bool isData) {
     ds.thicknessVary = n.mode == NuisanceMode::Fit;
     ds.thicknessSigma = n.hasPrior ? n.priorWidth.value : 0.0;
     if (ds.thicknessFit && users[target->name] > 1) ds.thicknessGroup = target->name;
+    if (ds.thicknessFit) ds.names.thickness = target->name + ".areal_density";  // a follower's: Build's NameParameters
   }
 }
 
@@ -327,6 +329,7 @@ void Abundances(Context &c) {
       for (const auto &zA : compounds) {
         AbundanceRowSpec row;
         row.sample = t->name;
+        row.isotope = nucleus->nucleus.text;
         row.z = zA.first;
         row.a = zA.second;
         const Nuisance &n = abundance->nuisance;

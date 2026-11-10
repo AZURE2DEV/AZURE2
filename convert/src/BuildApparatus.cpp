@@ -239,15 +239,19 @@ void Builder::BuildSamples() {
       if (samples_[i].name == token) return i;
     return -2;
   };
+  // data and test lines alike: a sample <abundances> lacks is dropped with a note naming the line
+  auto sampleOfLine = [&](const std::string &record, const std::string &natural) {
+    const int i = sampleIndex(natural);
+    if (i == -2)
+      Note(Construct::kSample, record, "sample '" + natural + "' is not in <abundances>: the old engine refused the line; the record has no isotopes");
+    return i;
+  };
   for (const auto &kv : activeData_) {
-    const int i = sampleIndex(kv.second->parsed->natural());
-    if (i == -2) {
-      Note(Construct::kSample, dataName_[kv.first], "sample '" + kv.second->parsed->natural() + "' is not in <abundances>: the old engine refused the line; the record has no isotopes");
-    }
+    const int i = sampleOfLine(dataName_[kv.first], kv.second->parsed->natural());
     if (i >= 0) sampleOfData_[kv.first] = i;
   }
   for (const auto &kv : activeTest_) {
-    const int i = sampleIndex(kv.second->parsed->natural());
+    const int i = sampleOfLine(testName_[kv.first], kv.second->parsed->natural());
     if (i >= 0) sampleOfTest_[kv.first] = i;
   }
 }
@@ -317,23 +321,38 @@ void Builder::NameApparatus() {
     const std::string sigmaText = smp.hasSum && smp.sum >= 0 ? smp.sumText : old_.abundanceSumSigmaText;
     sum.tokens = sigma > 0 ? Words("prior 1 " + sigmaText) : Words("none");
     // Where the isotopes go: the data set's <targetInt> target, else one target per sample.
+    // Data sets and extrapolations alike (one path): a member on a <targetInt> target puts the isotopes there, and a
+    // target shared with a line of another sample (or none) is a question.
     std::set<int> targetApparatus;
     bool ownTarget = false;
+    struct Member {
+      bool isData;
+      int key;
+    };
+    std::vector<Member> members;
+    for (int k : users) members.push_back({true, k});
     for (const auto &kv : sampleOfTest_)
-      if (kv.second == si && !(apparatusOfTest_.count(kv.first) && apparatus_[apparatusOfTest_[kv.first]].hasTarget)) ownTarget = true;
-    for (int k : users) {
-      if (apparatusOfData_.count(k) && apparatus_[apparatusOfData_[k]].hasTarget) {
-        const int ai = apparatusOfData_[k];
-        targetApparatus.insert(ai);
-        for (int other : apparatus_[ai].dataKeys)
-          if (!sampleOfData_.count(other) || sampleOfData_[other] != si)
-            Ask(Construct::kSample, dataName_[k] + ".target",
-                "its target (<targetInt> line " + std::to_string(apparatus_[ai].line->index) + ") is shared with " + dataName_[other] +
-                    ", which has not the same sample",
-                "");
-      } else {
+      if (kv.second == si) members.push_back({false, kv.first});
+    auto sampleOf = [&](bool isData, int key) {
+      const std::map<int, int> &samples = isData ? sampleOfData_ : sampleOfTest_;
+      return samples.count(key) ? samples.at(key) : -1;
+    };
+    for (const Member &m : members) {
+      std::map<int, int> &apparatusOf = m.isData ? apparatusOfData_ : apparatusOfTest_;
+      if (!(apparatusOf.count(m.key) && apparatus_[apparatusOf[m.key]].hasTarget)) {
         ownTarget = true;
+        continue;
       }
+      const int ai = apparatusOf[m.key];
+      targetApparatus.insert(ai);
+      const std::string &name = (m.isData ? dataName_ : testName_)[m.key];
+      for (const bool otherIsData : {true, false})
+        for (int other : otherIsData ? apparatus_[ai].dataKeys : apparatus_[ai].testKeys)
+          if (sampleOf(otherIsData, other) != si)
+            Ask(Construct::kSample, name + ".target",
+                "its target (<targetInt> line " + std::to_string(apparatus_[ai].line->index) + ") is shared with " +
+                    (otherIsData ? dataName_ : testName_)[other] + ", which has not the same sample",
+                "");
     }
     if (targetApparatus.size() + (ownTarget ? 1 : 0) > 1)
       Ask(Construct::kSample, (smp.name.empty() ? "natural" : smp.name) + ".target",

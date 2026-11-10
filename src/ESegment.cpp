@@ -73,7 +73,7 @@ void ESegment::SetReaction(const azure2::experiment::ReactionSpec &r) {
  * A data segment: points read from a file (Fill) and compared with the model.
  */
 
-ESegment::ESegment(const azure2::experiment::DatasetSpec &spec) {
+ESegment::ESegment(const azure2::experiment::DatasetSpec &spec) : parameterNames_(spec.names) {
   SetReaction(spec.reaction);
   min_e_ = spec.minE;
   max_e_ = spec.maxE;
@@ -133,7 +133,7 @@ ESegment::ESegment(const azure2::experiment::DatasetSpec &spec) {
  * An extrapolation segment: no data, the points are made on a grid (EData::MakePoints).
  */
 
-ESegment::ESegment(const azure2::experiment::ExtrapolationSpec &spec) {
+ESegment::ESegment(const azure2::experiment::ExtrapolationSpec &spec) : parameterNames_(spec.names) {
   SetReaction(spec.reaction);
   min_e_ = spec.minE;
   max_e_ = spec.maxE;

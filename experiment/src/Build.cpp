@@ -546,6 +546,43 @@ bool BuildExtrapolation(Context &c, const ValidatedRecord &r, ExtrapolationSpec 
   return ok;
 }
 
+// ---------------------------------------------------------------- parameter names (SetupSpecs.h, ParameterNames)
+
+// The names of the parameters the engine makes for each data set and extrapolation: the data set's own, a shared
+// record's for the first active member of its group (the engine's leader rule, EData::Resolve*Groups), and for a
+// later member, whose parameter the engine keeps fixed, <record>.<field>[<data set>].
+void NameParameters(Context &c) {
+  std::map<std::string, int> normLeader, shiftLeader, thicknessLeader;
+  auto shared = [](std::map<std::string, int> &leaders, const std::string &label, int key, const std::string &field,
+                   const std::string &dataset, const std::string &own) {
+    if (label.empty()) return dataset + "." + own;
+    const int leader = leaders.emplace(label, key).first->second;
+    return label + "." + field + (leader == key ? "" : "[" + dataset + "]");
+  };
+  for (std::size_t i = 0; i < c.data_.size(); i++) {
+    const Member &m = c.data_[i];
+    DatasetSpec &d = c.out_.data.datasets.items[i].spec;
+    const std::string &name = m.record->name;
+    if (!m.active) continue;
+    d.names.norm = shared(normLeader, d.normGroup, d.key, "value", name, "norm");
+    d.names.energyShift = shared(shiftLeader, d.shiftGroup, d.key, "offset", name, "shift.offset");
+    d.names.energyShiftSqrt = name + ".shift.sqrt";
+    const std::string &scale = d.shiftFunctionGroup.empty() ? d.shiftGroup : d.shiftFunctionGroup;
+    for (std::size_t j = 0; j < d.shiftFunctionValues.size(); j++) d.names.shiftFunction.push_back(scale + ".a" + std::to_string(j));
+    if (d.thicknessFit && !d.thicknessGroup.empty()) {
+      const int leader = thicknessLeader.emplace(d.thicknessGroup, d.key).first->second;
+      if (leader != d.key) d.names.thickness += "[" + name + "]";
+    }
+  }
+  for (std::size_t i = 0; i < c.extrapolations_.size(); i++) {
+    ExtrapolationSpec &x = c.out_.extrapolations.extrapolations.items[i].spec;
+    const std::string &name = c.extrapolations_[i].record->name;
+    x.names.norm = name + ".norm";
+    x.names.energyShift = name + ".shift.offset";
+    x.names.energyShiftSqrt = name + ".shift.sqrt";
+  }
+}
+
 }  // namespace
 
 BuiltProject Schema::Build(const ValidationResult &validated, const LevelTables &levels, const BuildOptions &options) {
@@ -574,6 +611,7 @@ BuiltProject Schema::Build(const ValidationResult &validated, const LevelTables 
   }
   for (auto &x : out.thm.experiments) std::sort(x.datasetKeys.begin(), x.datasetKeys.end());
   build::BuildEffects(c);
+  NameParameters(c);
   ModelDataBuild modelData = BuildModelData(validated, levels.levels, levels.pairs);
   out.modelData = std::move(modelData.data);
   out.diagnostics.insert(out.diagnostics.end(), modelData.diagnostics.begin(), modelData.diagnostics.end());

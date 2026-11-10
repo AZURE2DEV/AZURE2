@@ -20,12 +20,16 @@
 //   that apply no effect to an active key are not effects.
 // - Abundances: per sample (old name mapped to the target the data sets name) and compound nucleus.
 // - THM: the experiment of each active key, and the weight files.
+// - Parameter names (B, the director's decision on G2 item 4): the converter's map (ConvertResult::parameterNames)
+//   sends each old name to one new name and no two old names to the same one (injective, every file); and the name
+//   the old-line adaptor gives each parameter the engine makes for an active data set (norm when it varies, shift,
+//   sqrt shift, the function terms it owns, a fitted thickness) maps to the name Build gives it.
 // - Model data, in the engine's row order (src/ModelData.cpp, ModelData::Read): the old <scatteringLengths> lines that
 //   give a residual (active, an uncertainty > 0) as the engine's constraint (pair key, s, Re a, sigma, Im a, sigma),
 //   then the datums of an old <modelData> section (BuildModelData against the tables of the old <levels> rows); the
 //   format-3 side: the datums Build made, a scattering length as the same constraint.  Doubles by their bits.
 // AZURE2_SPEC_INJECT=1 moves one value of the format-3 side by one ulp, to show that the test fails on a difference
-// (=2: the value of its first model datum).
+// (=2: the value of its first model datum; =3: the name of its first data set's energy-shift parameter).
 //   spec_equivalence_test <repository root>
 #include <algorithm>
 #include <cmath>
@@ -68,9 +72,6 @@ const std::map<std::string, const char *> kRecorded = {
     {"tests/natural_target/models/bad_sample.azr",
      "a test line naming a sample that <abundances> lacks: the old engine refused it (menu 3), the conversion has no "
      "sample (a format-3 record cannot name a missing one)"},
-    {"tests/natural_target/models/M_thick.azr",
-     "test lines 3-4 with 'natural 1' share a <targetInt> target with lines 1-2 without: the converter drops their "
-     "sample (converter defect: for data lines it asks; for test lines it should too, or write a copy of the target)"},
 };
 int injected = 0;                   // AZURE2_SPEC_INJECT: change one value of the format-3 side (shows the test fails)
 
@@ -611,6 +612,30 @@ int main(int argc, char **argv) {
         ModelDatum d = b.modelData[k];
         if (injected == 2 && k == 0) d.value = std::nextafter(d.value, 1e300);
         modelB.push_back(DatumRow(d));
+      }
+      // parameter names: the converter's map is injective and takes the adaptor's names to Build's
+      std::map<std::string, std::string> map;
+      std::set<std::string> targets;
+      for (const auto &pn : r.parameterNames) {
+        if (map.count(pn.first) && map[pn.first] != pn.second) problems.push_back("parameter map: " + pn.first + " maps twice");
+        if (!map.count(pn.first) && !targets.insert(pn.second).second) problems.push_back("parameter map: two names map to " + pn.second);
+        map[pn.first] = pn.second;
+      }
+      if (injected == 3 && !db.empty()) db[0].names.energyShift += "x";
+      auto name = [&](const std::string &oldName, const std::string &newName) {
+        const auto it = map.find(oldName);
+        if (it == map.end()) problems.push_back("parameter map: no new name for " + oldName + " (Build: " + newName + ")");
+        else if (it->second != newName) problems.push_back("parameter name " + oldName + ": map " + it->second + ", Build " + newName);
+      };
+      for (std::size_t i = 0; i < std::min(da.size(), db.size()); i++) {
+        if (!da[i].active) continue;
+        const ParameterNames &a = da[i].names, &n = db[i].names;
+        if (da[i].varyNorm && !da[i].reaction.thm) name(a.norm, n.norm);  // a THM norm is profiled (ESegment::IsProfiledNorm)
+        name(a.energyShift, n.energyShift);
+        name(a.energyShiftSqrt, n.energyShiftSqrt);
+        for (std::size_t j = 0; j < std::min(a.shiftFunction.size(), n.shiftFunction.size()); j++)
+          name(a.shiftFunction[j], n.shiftFunction[j]);
+        if (da[i].thicknessFit) name(a.thickness, n.thickness);
       }
       const std::vector<std::string> modelA = OldModelDataRows(doc);
       for (std::size_t k = 0; k < std::max(modelA.size(), modelB.size()); k++)

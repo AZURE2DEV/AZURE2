@@ -435,6 +435,7 @@ int CNuc::SetAbundances(const Config &configure, const azure2::experiment::Abund
       e.abundance = e.nominal = row.value;
       e.vary = row.vary;
       e.sigma = row.sigma;
+      e.isotope = row.isotope;
       found = true;
     }
     if (!found)
@@ -469,13 +470,11 @@ void CNuc::AbundanceOf(int ordinal, int &sample, int &nucleus) const {
 }
 
 std::string CNuc::AbundanceParamName(int sample, int nucleus) const {
-  char buf[128];
   const std::string &name = samples_[sample - 1].name;
-  if (name.empty())
-    snprintf(buf, sizeof(buf), "abundance_%d_%d", nuclei_[nucleus - 1].Z, nuclei_[nucleus - 1].A);
-  else
-    snprintf(buf, sizeof(buf), "abundance_%s_%d_%d", name.c_str(), nuclei_[nucleus - 1].Z, nuclei_[nucleus - 1].A);
-  return std::string(buf);
+  const std::string &isotope = samples_[sample - 1].entries[nucleus - 1].isotope;
+  if (!isotope.empty()) return name + ".isotope." + isotope;  // format 3: <target>.isotope.<isotope>
+  const std::string zA = std::to_string(nuclei_[nucleus - 1].Z) + "_" + std::to_string(nuclei_[nucleus - 1].A);
+  return "abundance_" + (name.empty() ? std::string() : name + "_") + zA;
 }
 
 double CNuc::GetAbundance(int sample, int nucleus) const {
@@ -1306,13 +1305,12 @@ void CNuc::CalcCaptureAnalyzingPower(int aa, int decayNum, int maxL) {
 
 void CNuc::FillMnParams(AZUREParams &params, const Config *config) {
   ROOT::Minuit2::MnUserParameters &p = params.GetMinuitParams();
-  char varname[50];
+  std::string varname;
   int energyIndex = 1;
   for (int j = 1; j <= this->NumJGroups(); j++) {
     for (int la = 1; la <= this->GetJGroup(j)->NumLevels(); la++) {
       ALevel *level = this->GetJGroup(j)->GetLevel(la);
-      snprintf(varname, sizeof(varname), "j=%d_la=%d_energy", j, la);
-      snprintf(varname, sizeof(varname), "energy_%d", energyIndex);
+      varname = "energy_" + std::to_string(energyIndex);
       params.Add(varname, level->GetE(), 0.1 * level->GetE(), ParameterRecord::LevelEnergy(j, la, energyIndex));
       bool isUnbound = false;
       for (int ir = 1; ir <= this->NumPairs(); ir++) {
@@ -1328,8 +1326,7 @@ void CNuc::FillMnParams(AZUREParams &params, const Config *config) {
       // Parameter settings will be applied by ParameterLimitsManager during fit
       int widthIndex = 1;
       for (int ch = 1; ch <= this->GetJGroup(j)->NumChannels(); ch++) {
-        snprintf(varname, sizeof(varname), "j=%d_la=%d_ch=%d_rwa", j, la, ch);
-        snprintf(varname, sizeof(varname), "width_%d_%d", energyIndex, widthIndex);
+        varname = "width_" + std::to_string(energyIndex) + "_" + std::to_string(widthIndex);
         widthIndex++;
         params.Add(varname, level->GetGamma(ch), 0.1 * level->GetGamma(ch), ParameterRecord::Width(j, la, ch, energyIndex));
         // A width given as 0 is not fitted, in every basis: the input decides, not the transformed amplitude, which

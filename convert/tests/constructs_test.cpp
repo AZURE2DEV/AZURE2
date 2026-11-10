@@ -8,6 +8,7 @@
 #include <fstream>
 #include <map>
 #include <sstream>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -278,7 +279,11 @@ int main(int argc, char **argv) {
     Expect("shiftgroup record", r, "energy_scale G", F{{"offset", "0.001 MeV fit prior 0 0.002"}});
     Expect("shiftgroup member", r, "dataset g2", Sigma("g2.dat") + F{{"energy_window", "0.2 1.4 MeV"}, {"norm", "1 fixed"}, {"shift", "G"}});
     check("shiftgroup: the member's own shift is a note", HasNote(r, "its own shift 0.005"));
-    check("shiftgroup: segment_3_energy_shift -> G.offset", Param(r, "segment_3_energy_shift") == "G.offset");
+    // the group's parameter is the first active member's; a later member's own (fixed) one is named for it
+    check("shiftgroup: segment_2_energy_shift -> G.offset", Param(r, "segment_2_energy_shift") == "G.offset");
+    check("shiftgroup: segment_3_energy_shift -> G.offset[g2]", Param(r, "segment_3_energy_shift") == "G.offset[g2]");
+    check("a data set without a shift: segment_5_energy_shift -> f2.shift.offset, sqrt -> f2.shift.sqrt",
+          Param(r, "segment_5_energy_shift") == "f2.shift.offset" && Param(r, "segment_5_energy_shift_sqrt") == "f2.shift.sqrt");
     Expect("shiftfngroup record", r, "energy_scale F", F{{"function", "\"a0*x\" MeV"}, {"param", "a0 0 fit prior 0 0.01"}});
     Expect("shiftfngroup member", r, "dataset f2",
            Sigma("f2.dat") + F{{"energy_window", "0.2 1.4 MeV"}, {"norm", "1 fixed"}, {"shift", "offset 0.004 MeV fixed"}, {"shift", "F"}});
@@ -291,6 +296,18 @@ int main(int argc, char **argv) {
     Expect("normgroup record", r, "normalization D", F{{"value", "1.1 fit prior 1 8%"}});
     Expect("normgroup member", r, "dataset n2", Sigma("n2.dat") + F{{"energy_window", "0.2 1.4 MeV"}, {"norm", "D"}});
     check("normgroup: the prior_centre row is removed", r.text.find("prior_centre") == std::string::npos);
+  }
+  // ---- normgroup with varied norms: the leader's parameter is the record's value, a follower's (fixed by the engine
+  //      until S7) <record>.value[<data set>]; the map is injective (the director's decision on G2 item 4)
+  {
+    const ConvertResult r = Convert({"1 1 2 0.2 1.4 0 180 0 1.1 1 8 0 0 0 n1.dat normgroup D\n"
+                                     "1 1 2 0.2 1.4 0 180 0 1 1 0 0 0 0 n2.dat normgroup D\n",
+                                     "", "", "", ""});
+    check("normgroup: segment_1_norm -> D.value", Param(r, "segment_1_norm") == "D.value");
+    check("normgroup: segment_2_norm -> D.value[n2]", Param(r, "segment_2_norm") == "D.value[n2]");
+    std::set<std::string> news;
+    for (const auto &p : r.parameterNames) news.insert(p.second);
+    check("normgroup: the parameter map is injective", news.size() == r.parameterNames.size());
   }
   // ---- a prior_centre row the engine refuses (a name that matches no <segmentsData> line) is refused with its reason;
   //      a composite block with an operation type other than 0 or 1 likewise

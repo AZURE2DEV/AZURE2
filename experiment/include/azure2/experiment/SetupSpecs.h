@@ -57,10 +57,25 @@ struct ReactionSpec {
   double yieldThickness = 0.0;  ///< > 0: self-shielded yield of a sample n atoms/b thick
 };
 
+/// The names of a data set's or an extrapolation's fit parameters, given by the spec's producer
+/// (docs/upgrade/parameter_kinds.md: a parameter's name is given where it is made, never read for its kind).  The
+/// old-line adaptor writes the old names (segment_<key>_norm, ...); Schema::Build the format-3 names: of the data set
+/// (<name>.norm, <name>.shift.offset, <name>.shift.sqrt), of a shared record for the first active member of its group
+/// (<norm record>.value, <energy_scale record>.offset, <energy_scale record>.a<j>, <target>.areal_density), and for a
+/// later member, whose parameter the engine keeps fixed, <record>.<field>[<data set name>].
+struct ParameterNames {
+  std::string norm;             ///< used when the norm varies and is not profiled
+  std::string energyShift;      ///< every data set has this parameter (fixed at 0 without a shift)
+  std::string energyShiftSqrt;  ///< likewise
+  std::vector<std::string> shiftFunction;  ///< a0, a1, ... of the function the data set owns
+  std::string thickness;        ///< used with a fitted sample thickness
+};
+
 /// A data set: points read from a file and compared with the model.
 struct DatasetSpec {
   int key = 0;              ///< the data set's number, 1, 2, ... in file order (inactive ones counted)
   bool active = true;
+  ParameterNames names;
   ReactionSpec reaction;
   double minE = 0.0, maxE = 0.0;  ///< lab energy window of the points used (MeV)
   double minA = 0.0, maxA = 0.0;  ///< lab angle window (deg), differential observables
@@ -106,6 +121,7 @@ struct DatasetSpec {
 struct ExtrapolationSpec {
   int key = 0;  ///< 1, 2, ... in file order (inactive ones counted)
   bool active = true;
+  ParameterNames names;
   ReactionSpec reaction;
   double minE = 0.0, maxE = 0.0;  ///< the energy grid's bounds (MeV, lab), as the segment reports them
   double minA = 0.0, maxA = 0.0;  ///< the angle grid's bounds (deg)
@@ -119,6 +135,9 @@ struct ExtrapolationSpec {
 /// sets it applies to.  Grammar and meaning of every field: docs/source/reference/data_formats.rst, <targetInt>.
 struct TargetEffectSpec {
   std::string source;  ///< the text it was read from, quoted in messages
+  /// The target's name, which names the effect's fit parameters (<target>.areal_density, <target>.doppler,
+  /// <target>.screening); "" for old lines (density_<effect>, doppler_<effect>, screening_<effect>)
+  std::string targetName;
   bool active = false;
   std::vector<int> datasetKeys;  ///< DatasetSpec::key / ExtrapolationSpec::key of the data sets it applies to
   int numIntegrationPoints = 0;
@@ -187,6 +206,9 @@ struct TargetEffectSpec {
 /// the first row that sets one of its abundances).
 struct AbundanceRowSpec {
   std::string sample;   ///< "" = the unnamed sample
+  /// The isotope as format 3 writes it ("13C"), which names the parameter <sample>.isotope.<isotope>; "" for old
+  /// lines (abundance_[<sample>_]<Z>_<A>)
+  std::string isotope;
   bool isSum = false;   ///< true: the width of the sample's sum-to-one prior; false: one nucleus's abundance
   double sumSigma = 0.0;
   int z = 0, a = 0;     ///< the compound nucleus

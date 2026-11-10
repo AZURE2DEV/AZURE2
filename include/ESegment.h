@@ -390,6 +390,8 @@ class ESegment {
   double GetThicknessSigma() const { return thicknessSigma_; }
   /// "thicknessgroup <label>" ("" = none); the follower's leader position in EData's segment list (-1: none).
   const std::string &GetThicknessGroup() const { return thicknessGroup_; }
+  /// The names of the segment's fit parameters, as its spec gives them (EData::FillMnParams).
+  const azure2::experiment::ParameterNames &GetParameterNames() const { return parameterNames_; }
   int GetThicknessLeaderPos() const { return thicknessLeaderPos_; }
   bool IsThicknessGroupFollower() const { return thicknessLeaderPos_ >= 0; }
   void SetThicknessGroupFollower(int pos, double n) {
@@ -584,6 +586,7 @@ class ESegment {
   int thicknessVary_ = 0;
   double thicknessSigma_ = 0.0;
   std::string thicknessGroup_;
+  azure2::experiment::ParameterNames parameterNames_;
   int thicknessLeaderPos_ = -1;  // IsThicknessGroupFollower
   bool yieldTotalTerm_ = false;  // IsYieldTotalTerm
   bool isCoefficients_ = false;

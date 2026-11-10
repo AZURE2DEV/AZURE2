@@ -41,6 +41,7 @@ struct SampleAbundance {
   double sigma = 0.0;       ///< prior width; 0 = no prior
   bool vary = false;
   bool priorReplaced = false;  ///< the prior covariance replaces this prior (docs/upgrade/objective.md D3)
+  std::string isotope;  ///< format 3: the isotope as written, which names the parameter ("" = the old name)
 };
 
 /// A sample: one set of isotopic (or stoichiometric) abundances, one entry per
