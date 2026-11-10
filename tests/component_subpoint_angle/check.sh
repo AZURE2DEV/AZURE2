@@ -2,7 +2,7 @@
 #
 # The sub-points of a SUM/RATIO component sit at the component's own c.m. angle (audit 2026-10-25, item 32; 2026-10-27).
 #
-# Component points are copies of the base segment's points.  ReadTargetEffectsFile laid out a target effect's
+# Component points are copies of the base segment's points.  SetUpTargetEffects laid out a target effect's
 # sub-points from the copied point's c.m. angle, before InitializeComponentSegments converted the component point's
 # angle with its own pair, and never revisited them: a component with a different exit pair (or a fixed-angle RATIO
 # denominator, whose raw lab angle was used) was integrated at the base pair's angle.  Now the sub-points are put at

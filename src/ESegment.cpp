@@ -15,131 +15,113 @@
 #include <atomic>
 #include <cstdio>
 #include <cstdlib>
-#include "azure2/convert/ExtrapLine.h"
-#include "azure2/convert/SegLine.h"
 #include "ThmLineshape.h"
 #include "ThmDistortion.h"
 #include "ThmAngular.h"
 #include "ThmDwVertex.h"
 
 /*!
- * This constructor is used if the segment contains actual experimental data.  The segment
- * is created with reference to an entry in the segments data file.
+ * The observable flags and the model-side options of a data set or an extrapolation (ReactionSpec).  A THM segment
+ * (modified R-matrix / half-off-shell; docs/THM_IMPLEMENTATION.md) computes the same observables with the THM
+ * amplitude.  The vector analyzing power is differential in the c.m. frame, so it takes the angular machinery of a
+ * differential cross section although it is a dimensionless ratio.
  */
 
-ESegment::ESegment(SegLine segLine) {
-  entrancekey_ = segLine.entranceKey();
-  exitkey_ = segLine.exitKey();
-  min_e_ = segLine.minE();
-  max_e_ = segLine.maxE();
-  min_a_ = segLine.minA();
-  max_a_ = segLine.maxA();
-  e_step_ = 0.0;
-  a_step_ = 0.0;
-  segment_chi_squared_ = 0.0;
-  // A THM (modified R-matrix / half-off-shell) segment is flagged by an isDiff
-  // offset of 10: THM is orthogonal to the underlying observable type, so
-  // isDiff>=10 means "THM", and (isDiff-10) is the ordinary observable code
-  // (0 angle-integrated, 1 differential, ...). See docs/THM_IMPLEMENTATION.md.
-  isTHM_ = (segLine.isDiff() >= 10);
-  int diff = isTHM_ ? segLine.isDiff() - 10 : segLine.isDiff();
-  // isDiff 7 is the vector analyzing power: differential in the centre-of-mass
-  // frame, so it needs the same angular machinery as a differential cross
-  // section even though the quantity itself is a dimensionless ratio. It is
-  // tested against the offset-stripped code, so it composes with THM the way
-  // every other observable does.
-  isAnalyzingPower_ = (diff == 7);
-  if (diff == 1 || diff == 4 || diff == 7)
-    isdifferential_ = true;
-  else
-    isdifferential_ = false;
-  if (diff == 4 || diff == 7)
-    iscmdifferential_ = true;
-  else
-    iscmdifferential_ = false;
-  if (diff == 2) {
-    isphase_ = true;
-    j_ = segLine.phaseJ();
-    l_ = segLine.phaseL();
-    phaseS_ = segLine.phaseS();
+void ESegment::SetReaction(const azure2::experiment::ReactionSpec &r) {
+  using azure2::experiment::Observable;
+  entrancekey_ = r.entranceKey;
+  exitkey_ = r.exitKey;
+  isTHM_ = r.thm;
+  isAnalyzingPower_ = (r.observable == Observable::AnalyzingPower);
+  iscmdifferential_ = (r.observable == Observable::DifferentialCM || r.observable == Observable::AnalyzingPower);
+  isdifferential_ = iscmdifferential_ || r.observable == Observable::DifferentialLab;
+  isphase_ = (r.observable == Observable::PhaseShift);
+  if (isphase_) {
+    j_ = r.phaseJ;
+    l_ = r.phaseL;
+    phaseS_ = r.phaseS;
   } else {
-    isphase_ = false;
     j_ = 0.0;
     l_ = 0;
   }
-  isTotalCapture_ = (diff == 3) ? 1 : 0;
-  // isDiff 5/6 are angle-integrated capture segments compared only against the
-  // E1 or E2 component of the cross section, respectively.
-  if (diff == 5)
+  isTotalCapture_ = (r.observable == Observable::TotalCapture) ? 1 : 0;
+  // E1 / E2 data are angle-integrated capture compared only with that multipole's part of the cross section.
+  if (r.observable == Observable::CrossSectionE1)
     crossSectionComponent_ = 1;
-  else if (diff == 6)
+  else if (r.observable == Observable::CrossSectionE2)
     crossSectionComponent_ = 2;
   else
     crossSectionComponent_ = 0;
   isAngDist_ = false;
   maxAngDistOrder_ = 0;
-  // isDiff 9: Legendre coefficients of the angular distribution as data (the points are
-  // angular-distribution points; every order the compound allows is computed)
-  isCoefficients_ = (segLine.isDiff() == 9);
-  coefficientsAbsolute_ = (segLine.absolute() == 1);
+  // Legendre coefficients of the angular distribution as data: the points are angular-distribution points, and
+  // every order the compound allows is computed.
+  isCoefficients_ = (r.observable == Observable::AngularCoefficients);
   if (isCoefficients_) maxAngDistOrder_ = 20;
-  datafile_ = segLine.dataFile();
-  dataNorm_ = dataNormNominal_ = segLine.dataNorm();
-  dataNormError_ = segLine.dataNormError();
-  energyShift_ = segLine.energyShift();
-  // The shift prior is centred on no shift (dev 0dd28e5: the line's value is only the start), unless a
-  // "segment_N_energy_shift prior_centre c" row moves it (EData::ReadPriorCentres).
+  isAdvanced_ = (r.combination != azure2::experiment::ReactionSpec::Combination::None);
+  operationType_ = (r.combination == azure2::experiment::ReactionSpec::Combination::Ratio) ? 1 : 0;
+  components_ = r.components;
+  naturalToken_ = r.sample;
+  isTotal_ = r.total;
+  transmission_ = r.transmission;
+  yield_ = r.yieldThickness;
+  thickness_ = GetNominalThickness();
+}
+
+/*!
+ * A data segment: points read from a file (Fill) and compared with the model.
+ */
+
+ESegment::ESegment(const azure2::experiment::DatasetSpec &spec) {
+  SetReaction(spec.reaction);
+  min_e_ = spec.minE;
+  max_e_ = spec.maxE;
+  min_a_ = spec.minA;
+  max_a_ = spec.maxA;
+  e_step_ = 0.0;
+  a_step_ = 0.0;
+  segment_chi_squared_ = 0.0;
+  coefficientsAbsolute_ = spec.absolute;
+  datafile_ = spec.dataFile;
+  dataNorm_ = dataNormNominal_ = spec.norm;
+  dataNormError_ = spec.normError;
+  energyShift_ = spec.energyShift;
+  // The shift prior is centred on no shift (the spec's value is only the start), unless the spec gives a centre
+  // (applied by EData::Fill once the groups are resolved, as is the normalization's).
   energyShiftNominal_ = 0.0;
   lastEnergyShift_ = std::numeric_limits<double>::quiet_NaN();  // the points start unshifted: the first fill always applies the shift
-  energyShiftError_ = segLine.energyShiftError();
-  if (segLine.varyEnergyShift() == 1)
-    varyEnergyShift_ = true;
-  else
-    varyEnergyShift_ = false;
-  energyShiftSqrt_ = energyShiftSqrtNominal_ = segLine.energyShiftSqrt();
+  energyShiftError_ = spec.energyShiftError;
+  varyEnergyShift_ = spec.varyEnergyShift;
+  energyShiftSqrt_ = energyShiftSqrtNominal_ = spec.energyShiftSqrt;
   lastEnergyShiftSqrt_ = std::numeric_limits<double>::quiet_NaN();
-  energyShiftSqrtError_ = segLine.energyShiftSqrtError();
-  varyEnergyShiftSqrt_ = (segLine.varyEnergyShiftSqrt() == 1);
-  shiftGroup_ = segLine.shiftGroup();
+  energyShiftSqrtError_ = spec.energyShiftSqrtError;
+  varyEnergyShiftSqrt_ = spec.varyEnergyShiftSqrt;
+  shiftGroup_ = spec.shiftGroup;
   shiftLeaderPos_ = -1;
   hasShiftGroupFollowers_ = false;
-  shiftFnGroup_ = segLine.shiftFnGroup();
-  normGroup_ = segLine.normGroup();
-  covarianceFile_ = segLine.covarianceFile();
+  shiftFnGroup_ = spec.shiftFunctionGroup;
+  normGroup_ = spec.normGroup;
+  covarianceFile_ = spec.covarianceFile;
   normLeaderPos_ = -1;
   hasNormGroupFollowers_ = false;
-  hasSqrtShiftBlock_ = segLine.hasSqrtShift();
-  shiftFnDeclared_ = segLine.shiftFn();
-  shiftFnNominal_ = segLine.shiftFnValues();
-  shiftFnError_ = segLine.shiftFnErrors();
-  for (int v : segLine.shiftFnVary()) shiftFnVary_.push_back(v == 1);
+  hasSqrtShiftBlock_ = spec.hasSqrtShift;
+  shiftFnDeclared_ = spec.shiftFunction;
+  shiftFnNominal_ = spec.shiftFunctionValues;
+  shiftFnError_ = spec.shiftFunctionErrors;
+  shiftFnVary_ = spec.shiftFunctionVary;
   hasShiftFn_ = false;
   shiftFnConfig_ = nullptr;
   shiftFnSourcePos_ = -1;
   shiftFnParamStart_ = -1;
-  if (segLine.varyNorm() == 1)
-    varyNorm_ = true;
-  else
-    varyNorm_ = false;
-  isAdvanced_ = segLine.isAdvanced() == 1;
-  operationType_ = segLine.operationType();
-  componentsList_ = segLine.componentsList();
-  naturalToken_ = segLine.natural();
-  isTotal_ = segLine.total() == 1;
-  transmission_ = segLine.transmission();
-  yield_ = segLine.yieldThickness();
-  thickness_ = GetNominalThickness();
-  thicknessFit_ = segLine.thicknessFit();
-  thicknessVary_ = segLine.thicknessVary();
-  thicknessSigma_ = segLine.thicknessSigma();
-  thicknessGroup_ = segLine.thicknessGroup();
-  if (segLine.isUPOS() == 1)
-    isUPOS_ = true;
-  else
-    isUPOS_ = false;
-  secondaryDecayL_ = segLine.secondaryDecayL();
-  Ic_ = segLine.Ic();
-  delta_ = segLine.delta();
+  varyNorm_ = spec.varyNorm;
+  thicknessFit_ = spec.thicknessFit;
+  thicknessVary_ = spec.thicknessVary ? 1 : 0;
+  thicknessSigma_ = spec.thicknessSigma;
+  thicknessGroup_ = spec.thicknessGroup;
+  isUPOS_ = spec.upos;
+  secondaryDecayL_ = spec.secondaryDecayL;
+  Ic_ = spec.secondaryFinalSpin;
+  delta_ = spec.secondaryMixingRatio;
   targetEffectNum_ = 0;
   isTargetEffect_ = false;
 
@@ -150,53 +132,22 @@ ESegment::ESegment(SegLine segLine) {
 }
 
 /*!
- * This constructor is used if the segment contains no actual data, and the points must be created
- * (such as in an extrapolation).  The segment is created with reference to an entry in the segments
- * extrapolation file.
+ * An extrapolation segment: no data, the points are made on a grid (EData::MakePoints).
  */
 
-ESegment::ESegment(ExtrapLine extrapLine) {
-  entrancekey_ = extrapLine.entranceKey();
-  exitkey_ = extrapLine.exitKey();
-  min_e_ = extrapLine.minE();
-  max_e_ = extrapLine.maxE();
-  min_a_ = extrapLine.minA();
-  max_a_ = extrapLine.maxA();
-  e_step_ = extrapLine.eStep();
-  a_step_ = extrapLine.aStep();
+ESegment::ESegment(const azure2::experiment::ExtrapolationSpec &spec) {
+  SetReaction(spec.reaction);
+  min_e_ = spec.minE;
+  max_e_ = spec.maxE;
+  min_a_ = spec.minA;
+  max_a_ = spec.maxA;
+  e_step_ = spec.eStep;
+  a_step_ = spec.aStep;
   segment_chi_squared_ = 0.0;
-  // THM (modified R-matrix) extrapolation segment: isDiff offset of 10 (see the
-  // SegLine constructor above and docs/THM_IMPLEMENTATION.md).
-  isTHM_ = (extrapLine.isDiff() >= 10);
-  int diff = isTHM_ ? extrapLine.isDiff() - 10 : extrapLine.isDiff();
-  isAnalyzingPower_ = (diff == 7);
-  if (diff == 1 || diff == 5 || diff == 7)
-    isdifferential_ = true;
-  else
-    isdifferential_ = false;
-  if (diff == 5 || diff == 7)
-    iscmdifferential_ = true;
-  else
-    iscmdifferential_ = false;
-  if (diff == 2) {
-    isphase_ = true;
-    j_ = extrapLine.phaseJ();
-    l_ = extrapLine.phaseL();
-    phaseS_ = extrapLine.phaseS();
-  } else {
-    isphase_ = false;
-    j_ = 0.0;
-    l_ = 0;
-  }
-  if (diff == 3) {
+  if (spec.reaction.observable == azure2::experiment::Observable::AngularDistribution) {
     isAngDist_ = true;
-    maxAngDistOrder_ = extrapLine.maxAngDistOrder();
-  } else {
-    isAngDist_ = false;
-    maxAngDistOrder_ = 0;
+    maxAngDistOrder_ = spec.maxAngDistOrder;
   }
-  isTotalCapture_ = (diff == 4) ? 1 : 0;
-  crossSectionComponent_ = 0;
   datafile_ = "";
   dataNorm_ = dataNormNominal_ = 1.;
   dataNormError_ = 0.;
@@ -221,16 +172,7 @@ ESegment::ESegment(ExtrapLine extrapLine) {
   shiftFnParamStart_ = -1;
   varyEnergyShiftSqrt_ = false;
   varyNorm_ = false;
-
-  // Read advanced segment data from ExtrapLine
-  isAdvanced_ = (extrapLine.isAdvanced() == 1);
-  operationType_ = extrapLine.operationType();
-  componentsList_ = extrapLine.componentsList();
-  naturalToken_ = extrapLine.natural();
-  isTotal_ = extrapLine.total() == 1;
-  transmission_ = extrapLine.transmission();
-  yield_ = extrapLine.yieldThickness();
-  thickness_ = GetNominalThickness();  // a test segment has no thickness parameter (ExtrapLine::thicknessFitIgnored)
+  // a test segment has no thickness parameter: it uses its own sample thickness (SetReaction)
 
   isUPOS_ = false;
   secondaryDecayL_ = 0;
@@ -239,14 +181,7 @@ ESegment::ESegment(ExtrapLine extrapLine) {
   targetEffectNum_ = 0;
   isTargetEffect_ = false;
 
-  // Initialize advanced segment composition based on operation type
-  if (extrapLine.operationType() == 0) {
-    segmentOperationType_ = SUM;
-  } else if (extrapLine.operationType() == 1) {
-    segmentOperationType_ = RATIO;
-  } else {
-    segmentOperationType_ = SUM;  // Default to SUM operation
-  }
+  segmentOperationType_ = (operationType_ == 1) ? RATIO : SUM;
   componentScaling_ = 1.0;
   componentCalculationMutex_ = std::make_shared<std::mutex>();
 }
@@ -781,14 +716,6 @@ int ESegment::GetLegacyOperationType() const {
 }
 
 /*!
- * Returns the semicolon-separated list of components.
- */
-
-std::string ESegment::GetComponentsList() const {
-  return componentsList_;
-}
-
-/*!
  * Sets the energy shift value for the data segment.
  */
 
@@ -1213,7 +1140,7 @@ void ESegment::UpdatePointEnergyWithShift(int i, CNuc *theCNuc, const Config *co
               // subPoint->ConvertLabEnergy(entrancePair);
             }
 
-            // A sub-point is built at its parent's c.m. angle (EData::ReadTargetEffectsFile, EPoint(angle, energy,
+            // A sub-point is built at its parent's c.m. angle (EData::SetUpTargetEffects, EPoint(angle, energy,
             // parent) puts that angle in both slots) and carries no data of its own, so the lab-to-c.m. angle and
             // cross-section conversions of the parent (above) must not be applied to it.  Before 2026-10-26 they
             // were, which took the parent's c.m. angle for a lab angle and moved every sub-point by the full

@@ -84,7 +84,7 @@ Result Scan(double lo, double hi, int numPoints, double g, double mult, double p
             int steps) {
   AdaptiveIntegrationGrid::GridConfig gc;
   gc.maxPoints = numPoints;
-  gc.baseEnergyStep = (hi - lo) / numPoints;  // as EData::ReadTargetEffectsFile sets it
+  gc.baseEnergyStep = (hi - lo) / numPoints;  // as EData::SetUpTargetEffects sets it
   gc.resonanceWidthMultiplier = mult;
   gc.pointsPerWidth = ppw;
   AdaptiveIntegrationGrid grid(gc);

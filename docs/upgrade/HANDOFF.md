@@ -2,6 +2,45 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-10 (morning) — format 3, step 3b-1, G1: the engine's set-up consumes specs (S9) (`feature/upgrade-4-format3-reader`)
+
+**Done.**
+- `experiment/include/azure2/experiment/SetupSpecs.h` (plain, standard library only): `DatasetSpec`,
+  `ExtrapolationSpec` (sharing `ReactionSpec`: pair keys, an `Observable` instead of the isDiff code, THM, phase-shift
+  J/l/s, SUM/RATIO with `ComponentSpec` values, sample, total, transmission/yield), `TargetEffectSpec` (the data sets
+  it applies to as keys), `AbundanceRowSpec`/`AbundancesSpec`, and `SpecList<Spec>` (items in order, each with the
+  reader's warning/note, and the reason the reader stopped). The prior centres are fields of `DatasetSpec` (F14).
+- The engine takes specs: `ESegment(const DatasetSpec&)`, `ESegment(const ExtrapolationSpec&)` (one `SetReaction` for
+  the flags), `TargetEffect(const TargetEffectSpec&, const Config&)`, `EData::Fill(cfg, cnuc, const DataSpecs&)`,
+  `EData::MakePoints(cfg, cnuc, const ExtrapolationSpecs&)`, `EData::SetUpTargetEffects` (was `ReadTargetEffectsFile`),
+  `EData::ApplyPriorCentres` (was `ReadPriorCentres`), `CNuc::SetAbundances`. No engine constructor takes an old line;
+  the component list is a vector of values (the "Entrance: X, Exit: Y" string round trip is gone).
+- The old-line adaptor, temporary: `convert/`'s `SpecsFromOldLines.h/.cpp` (library `azure2_convert_specs`; the old
+  reading loops with their messages, words and order), called by `src/OldLineSetup.cpp` (the old-signature
+  `EData::Fill/MakePoints(cfg, cnuc)` and `CNuc::ReadAbundances`). Step 3d deletes both.
+- Converter: a `prior_centre` row the engine refuses (a name that matches no `<segmentsData>` line, e.g.
+  `segment_2_norm` with one line or `segment_01_norm`) is refused with the engine's reason (it was dropped silently);
+  a composite block with an operation type other than 0 / 1 is refused by both (new: the old engine ran it, as a
+  RATIO in `Fill` but not a ratio in the c.m. conversion).
+- Test `old_line_specs` (every isDiff code of data and test lines against the flags of the old constructors, written
+  by hand; components bit for bit; the reading refusals with their words; prior-centre names equal
+  `EData::SegmentParameterName`; abundances; `<targetInt>` keys); shown failing with an injected flag error. Three
+  `convert_constructs` cases.
+
+**Verified** (build `work/b-fmt3`, 3 threads, 0 warnings): 179 × 3 against `tab-p3f` 689 / 662 / 689 identical
+(run.log included; tag `tab-fmt3`); `ctest -LE slow` 150/150 (OMP 2, -j 1); `tests/run_tests.sh` 135 passed, 0 failed (OMP 3, 1832 s); consistency checks pass; size ratchet lowered
+(`EData.cpp` 5883 → 5590, `ESegment.cpp` 1816 → 1743, `CNuc.cpp` 1954 → 1931; `pybind_api.cpp` unchanged at 1299).
+
+**Not done in G1 (left for G2/G3):** a THM spec (the `<thm>` block is still read by `ThmExperiment`'s parser into
+`ThmExperiment`, which is already a plain struct; `ThmLines.h` stays included); `<scatteringLengths>` (brief E);
+shared norm / energy scale as records of their own (the spec carries the group labels, the engine still takes a
+group's values from its first member); parameter-name stems in the spec (G2 item 4); `src/AZURE2.cpp`'s pair check
+still reads `SegLine`/`ExtrapLine` (G3 reading order).
+
+**Behaviour that changed only for edge cases** (no test output moved): two `prior_centre` rows for the same parameter of
+an inactive line warn once (last row) instead of twice; a `<targetInt>` line shorter than its convolution
+coefficient count no longer reads past the vector (missing coefficients are 0).
+
 ## 2026-11-10 (night, later) — step 3a follow-up: the director's D1–D5 and review R1–R3 (`feature/upgrade-4-convert`)
 
 **Done.** D1: quantity `sigma_nuclear` (the angle-integrated nuclear elastic integral of a charged pair; warning

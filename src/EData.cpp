@@ -7,8 +7,6 @@
 #include "EData.h"
 #include "ECAmplitudeCache.h"
 #include "ECTable.h"
-#include "azure2/convert/ExtrapLine.h"
-#include "azure2/convert/SegLine.h"
 #include "AdaptiveIntegrationGrid.h"
 #include "Minuit2/MnUserParameters.h"
 #include "AZUREParams.h"
@@ -340,75 +338,15 @@ int EData::NumSegments() const {
  * Returns -1 if the input files could not be read, otherwise returns 0.
  */
 
-int EData::Fill(const Config &configure, CNuc *theCNuc) {
-  // The <segmentsData> section of the project (Config::SectionStream: io::Document, whole-line tags).
-  std::unique_ptr<std::istream> inStream = configure.SectionStream("segmentsData");
-  if (!inStream) return -1;
-  std::istream &in = *inStream;
-  std::string line = "";
-  getline(in, line);  // <segmentsData>
-  line = "";
-  int numTotalSegments = 0;
-  while (!in.eof() && line != "</segmentsData>") {
-    getline(in, line);
-    bool empty = true;
-    for (unsigned int i = 0; i < line.size(); ++i)
-      if (line[i] != ' ' && line[i] != '\t') {
-        empty = false;
-        break;
-      }
-    if (empty == true) continue;
-    if (!in.eof() && line != "</segmentsData>") {
-      std::istringstream stm;
-      stm.str(line);
-      SegLine segment(stm);
-      if (stm.rdstate() & (std::stringstream::failbit | std::stringstream::badbit)) {
-        if (!segment.parseError().empty())
-          configure.outStream << "ERROR: Data segment #" << numTotalSegments + 1 << ": " << segment.parseError() << "."
-                              << std::endl;
-        return -1;
-      }
-      numTotalSegments++;
-      if (!segment.parseWarning().empty())
-        configure.outStream << "WARNING: Data segment #" << numTotalSegments << ": " << segment.parseWarning() << "."
-                            << std::endl;
-      if (segment.isDiff() == 19) {
-        // isDiff 9 + the THM offset: the angular-distribution coefficients are not a THM observable
-        // (ESegment would read 19 as an angle-integrated THM segment).
-        configure.outStream << "ERROR: Data segment #" << numTotalSegments
-                            << " uses isDiff 19 (THM angular-distribution coefficients), which is not supported."
-                            << std::endl;
-        return -1;
-      }
-      if (segment.isDiff() >= 10 && configure.relativistic) {
-        // The THM machinery (vertex, line shape, distortion, the HOES kinematics) is non-relativistic; with
-        // relativistic=1 the R-matrix part of the same amplitude would not be.
-        configure.outStream << "ERROR: Data segment #" << numTotalSegments
-                            << " is a THM segment; THM segments are not supported with relativistic=1." << std::endl;
-        return -1;
-      }
-      if (segment.isDiff() >= 10 && !segment.covarianceFile().empty()) {
-        // A THM segment's chi^2 is its experiment's (profiled norm, EDataThm), not a sum the covariance
-        // correction (EData::CovarianceChi2Correction) could amend.
-        configure.outStream << "ERROR: Data segment #" << numTotalSegments
-                            << " is a THM segment with a covariance block; a data covariance is not supported on"
-                            << " THM segments." << std::endl;
-        return -1;
-      }
-      if (segment.isDiff() == 8 || segment.isDiff() == 18) {
-        // Polarization x Cross Section was removed: the outgoing polarization of
-        // A(a,b)B is the analyzing power of the inverse reaction B(b,a)A.  18 is
-        // the same observable on a THM segment (isDiff offset 10).
-        configure.outStream
-            << "ERROR: Data segment #" << numTotalSegments << " uses isDiff " << segment.isDiff() << " (Polarization x"
-            << " Cross Section), which is no longer supported." << std::endl
-            << "       Divide the data by the differential cross section and enter the"
-            << " polarization as an Analyzing Power (isDiff 7) segment on the inverse"
-            << " channel (entrance = the measured exit pair, exit = the measured entrance pair)."
-            << std::endl;
-        return -1;
-      }
-      if (segment.isActive() == 1) {
+int EData::Fill(const Config &configure, CNuc *theCNuc, const azure2::experiment::DataSpecs &specs) {
+  const int numTotalSegments_ = (int)specs.datasets.items.size();
+  for (const auto &item : specs.datasets.items) {
+    {
+      const azure2::experiment::DatasetSpec &segment = item.spec;
+      const int numTotalSegments = segment.key;
+      if (!item.warning.empty()) configure.outStream << "WARNING: " << item.warning << std::endl;
+      if (!item.note.empty()) configure.Note(item.note);
+      if (segment.active) {
         ESegment NewSegment(segment);
 
         if (theCNuc->IsPairKey(NewSegment.GetEntranceKey())) {
@@ -464,66 +402,15 @@ int EData::Fill(const Config &configure, CNuc *theCNuc) {
                 ESegment *filledSegment = this->GetSegment(this->NumSegments());
                 filledSegment->SetOperationType(operation);
 
-                // Parse components and create full segment copies
-                std::string componentsStr = NewSegment.GetComponentsList();
-                if (!componentsStr.empty()) {
-                  // Components are stored as "Entrance: X, Exit: Y;Entrance: A, Exit: B;..." or with optional "Angle: Z" and "Scaling: S"
-                  std::istringstream stream(componentsStr);
-                  std::string component;
-                  while (std::getline(stream, component, ';')) {
-                    if (!component.empty()) {
-                      // Parse "Entrance: X, Exit: Y" format (with optional ", Angle: Z" and ", Scaling: S")
-                      size_t entrancePos = component.find("Entrance: ");
-                      size_t exitPos = component.find("Exit: ");
-                      size_t anglePos = component.find("Angle: ");
-                      size_t scalingPos = component.find("Scaling: ");
-
-                      double componentScaling = 1.0;
-                      if (scalingPos != std::string::npos) {
-                        try {  // SegLine / ExtrapLine wrote it (ReadComponentList), so a number; 1.0 silently before 2026-11-01
-                          componentScaling = std::stod(component.substr(scalingPos + 9));
-                        } catch (...) {
-                          configure.outStream << "ERROR: segment #" << numTotalSegments << ": the scaling of component \""
-                                              << component << "\" is not a number." << std::endl;
-                          return -1;
-                        }
-                      }
-
-                      if (entrancePos != std::string::npos && exitPos != std::string::npos) {
-                        entrancePos += 10;  // Length of "Entrance: "
-                        size_t commaPos = component.find(", Exit: ");
-                        if (commaPos != std::string::npos) {
-                          int entranceKey = std::stoi(component.substr(entrancePos, commaPos - entrancePos));
-                          exitPos += 6;  // Length of "Exit: "
-
-                          // Check if there's an angle specification
-                          ESegment *componentSegment = nullptr;
-                          if (anglePos != std::string::npos) {
-                            // Parse the exit key up to ", Angle:"
-                            size_t angleCommaPos = component.find(", Angle: ");
-                            int exitKey = std::stoi(component.substr(exitPos, angleCommaPos - exitPos));
-
-                            // Parse the angle value (std::stod stops at the trailing ", Scaling: ...")
-                            anglePos += 7;  // Length of "Angle: "
-                            double fixedAngle = std::stod(component.substr(anglePos));
-
-                            // Create component segment with fixed angle
-                            if (!this->CheckComponentPairs(theCNuc, *filledSegment, entranceKey, exitKey, configure)) return -1;
-                            componentSegment = this->CreateComponentSegment(*filledSegment, entranceKey, exitKey, fixedAngle);
-                          } else {
-                            // No angle specified, use standard method
-                            int exitKey = std::stoi(component.substr(exitPos));
-                            if (!this->CheckComponentPairs(theCNuc, *filledSegment, entranceKey, exitKey, configure)) return -1;
-                            componentSegment = this->CreateComponentSegment(*filledSegment, entranceKey, exitKey);
-                          }
-
-                          if (componentSegment) {
-                            componentSegment->SetComponentScaling(componentScaling);
-                            filledSegment->AddComponentSegment(componentSegment);
-                          }
-                        }
-                      }
-                    }
+                // One full segment copy per component (spec: entrance, exit, optional fixed angle, scaling)
+                for (const azure2::experiment::ComponentSpec &c : NewSegment.GetComponents()) {
+                  if (!this->CheckComponentPairs(theCNuc, *filledSegment, c.entranceKey, c.exitKey, configure)) return -1;
+                  ESegment *componentSegment =
+                      c.hasAngle ? this->CreateComponentSegment(*filledSegment, c.entranceKey, c.exitKey, c.angle)
+                                 : this->CreateComponentSegment(*filledSegment, c.entranceKey, c.exitKey);
+                  if (componentSegment) {
+                    componentSegment->SetComponentScaling(c.scaling);
+                    filledSegment->AddComponentSegment(componentSegment);
                   }
                 }
               }
@@ -575,23 +462,25 @@ int EData::Fill(const Config &configure, CNuc *theCNuc) {
     }
   }
 
-  if (line != "</segmentsData>") return -1;
-
+  if (specs.datasets.failed) {
+    if (!specs.datasets.error.empty()) configure.outStream << specs.datasets.error << std::endl;
+    return -1;
+  }
 
   if (this->ResolveShiftGroups(configure) == -1) return -1;
   this->ResolveNormGroups(configure);
   if (this->ResolveThicknessGroups(configure) == -1) return -1;
   if (this->ResolveCovarianceGroups(configure) == -1) return -1;
 
-  if (ReadPriorCentres(configure, numTotalSegments) != 0) return -1;
+  if (ApplyPriorCentres(configure, specs) != 0) return -1;
 
   if (CheckThmWeights(configure, configure.thm.weightBySegment, "weight", "<segmentsData>",
-                      numTotalSegments, this) != 0)
+                      numTotalSegments_, this) != 0)
     return -1;
-  if (BuildThmGroups(configure, theCNuc, numTotalSegments) != 0) return -1;
+  if (BuildThmGroups(configure, theCNuc, numTotalSegments_) != 0) return -1;
 
   if (this->NumSegments() > 0) {
-    if (this->ReadTargetEffectsFile(configure, theCNuc) == -1) return -1;
+    if (this->SetUpTargetEffects(configure, theCNuc, specs.targetEffects) == -1) return -1;
     if (!this->CheckTransformedSegments(configure)) return -1;
     this->MapData(theCNuc);
   }
@@ -600,101 +489,38 @@ int EData::Fill(const Config &configure, CNuc *theCNuc) {
 }
 
 /*!
- * Reads the explicit prior centres of <parameterSettings> (see EData.h) and
- * moves the nominal normalization / energy shift of the segments they name.
- * Only rows of exactly three tokens whose second token is "prior_centre" are
- * read; every other row is left to ParameterLimitsManager, as before.  The
- * first token is matched whole against the normalization and energy-shift
- * names (SegmentParameterName) of every <segmentsData> line, keys
- * 1..numSegmentLines: a row for an active segment moves its prior's centre; a
- * row for a line that is not active (an inactive line, or one skipped at load)
- * is reported and ignored; any other name fails the run -- a typo would
- * otherwise leave the prior where it was, a wrong fit that looks right.  A
- * centre that is not a finite number, or a normalization centre that is not
- * positive, fails the run too.  Segment keys are unique in segments_ (each is
- * the line counter of EData::Fill at its one AddSegment), so at most one
- * segment matches; the loop applies the row to every match all the same.
+ * Moves the nominal normalization / energy shift of the segments whose specs give a prior centre (after the groups
+ * are resolved, so that a group's follower keeps its own centre).  A centre for a data set that has no segment (not
+ * active, or skipped at load) is reported and ignored.  A refusal of the reader (specs.priorCentreError) is reported
+ * after the centres before it are applied, and fails the run.  Segment keys are unique in segments_, so at most one
+ * segment matches a spec.
  */
 
-int EData::ReadPriorCentres(const Config &configure, int numSegmentLines) {
-  // The <parameterSettings> section (Config::SectionStream: io::Document, whole-line tags).
-  std::unique_ptr<std::istream> section = configure.SectionStream("parameterSettings");
-  if (!section) return 0;
-  std::istream &in = *section;
-  std::string line;
-  bool inside = false;
-  while (getline(in, line)) {
-    const size_t a = line.find_first_not_of(" \t\r\n");
-    if (a == std::string::npos) continue;
-    const size_t b = line.find_last_not_of(" \t\r\n");
-    const std::string trimmed = line.substr(a, b - a + 1);
-    if (trimmed == "<parameterSettings>") {
-      inside = true;
-      continue;
-    }
-    if (trimmed[0] == '<') {
-      inside = false;
-      continue;
-    }
-    if (!inside || trimmed[0] == '#') continue;
-    std::istringstream stm(trimmed);
-    std::vector<std::string> tok;
-    std::string t;
-    while (stm >> t) tok.push_back(t);
-    if (tok.size() != 3 || tok[1] != "prior_centre") continue;
-
-    // The row names its parameter by the whole name the parameter vector gives it (SegmentParameterName).
-    const std::string &name = tok[0];
-    int key = 0;
-    bool isNorm = false;
-    for (int k = 1; k <= numSegmentLines && key == 0; k++) {
-      if (name == SegmentParameterName(k, ParamKind::Norm)) {
-        key = k;
-        isNorm = true;
-      } else if (name == SegmentParameterName(k, ParamKind::EnergyShift)) {
-        key = k;
-      }
-    }
-    if (key == 0 && numSegmentLines < 1) {
-      configure.outStream << "ERROR: <parameterSettings> row \"" << trimmed << "\": a prior_centre row moves the "
-                          << "prior of a data segment, and the project has no <segmentsData> line." << std::endl;
-      return -1;
-    }
-    if (key == 0) {
-      configure.outStream << "ERROR: <parameterSettings> row \"" << trimmed << "\" names no parameter a prior_centre "
-                          << "row can move: it takes " << SegmentParameterName(1, ParamKind::Norm) << " ... "
-                          << SegmentParameterName(numSegmentLines, ParamKind::Norm) << " or "
-                          << SegmentParameterName(1, ParamKind::EnergyShift) << " ... "
-                          << SegmentParameterName(numSegmentLines, ParamKind::EnergyShift)
-                          << " (a <segmentsData> line's key, counting inactive lines)." << std::endl;
-      return -1;
-    }
-    char *end = NULL;
-    const double centre = strtod(tok[2].c_str(), &end);
-    if (end == tok[2].c_str() || *end != '\0' || !std::isfinite(centre)) {
-      configure.outStream << "ERROR: <parameterSettings> row \"" << trimmed
-                          << "\" is not \"segment_N_norm prior_centre value\" or "
-                             "\"segment_N_energy_shift prior_centre value\"." << std::endl;
-      return -1;
-    }
-    if (isNorm && centre <= 0.) {
-      configure.outStream << "ERROR: <parameterSettings> row \"" << trimmed
-                          << "\": a normalization prior centre must be positive." << std::endl;
-      return -1;
-    }
-    bool found = false;
-    for (int s = 1; s <= this->NumSegments(); s++) {
-      ESegment *segment = this->GetSegment(s);
-      if (segment->GetSegmentKey() != key) continue;
-      found = true;
-      if (isNorm)
-        segment->SetNominalNorm(centre);
+int EData::ApplyPriorCentres(const Config &configure, const azure2::experiment::DataSpecs &specs) {
+  for (const auto &item : specs.datasets.items) {
+    const azure2::experiment::DatasetSpec &d = item.spec;
+    if (!d.hasNormCentre && !d.hasShiftCentre) continue;
+    ESegment *segment = nullptr;
+    for (int s = 1; s <= this->NumSegments(); s++)
+      if (this->GetSegment(s)->GetSegmentKey() == d.key) segment = this->GetSegment(s);
+    if (d.hasNormCentre) {
+      if (segment)
+        segment->SetNominalNorm(d.normCentre);
       else
-        segment->SetNominalEnergyShift(centre);
+        configure.outStream << "WARNING: <parameterSettings> row \"" << d.normCentreSource
+                            << "\" names no active data segment; ignored." << std::endl;
     }
-    if (!found)
-      configure.outStream << "WARNING: <parameterSettings> row \"" << trimmed
-                          << "\" names no active data segment; ignored." << std::endl;
+    if (d.hasShiftCentre) {
+      if (segment)
+        segment->SetNominalEnergyShift(d.shiftCentre);
+      else
+        configure.outStream << "WARNING: <parameterSettings> row \"" << d.shiftCentreSource
+                            << "\" names no active data segment; ignored." << std::endl;
+    }
+  }
+  if (!specs.priorCentreError.empty()) {
+    configure.outStream << specs.priorCentreError << std::endl;
+    return -1;
   }
   return 0;
 }
@@ -705,67 +531,15 @@ int EData::ReadPriorCentres(const Config &configure, int numSegmentLines) {
  * Returns -1 if the input files could not be read, otherwise returns 0.
  */
 
-int EData::MakePoints(const Config &configure, CNuc *theCNuc) {
-  // The <segmentsTest> section of the project (Config::SectionStream: io::Document, whole-line tags).
-  std::unique_ptr<std::istream> inStream = configure.SectionStream("segmentsTest");
-  if (!inStream) return -1;
-  std::istream &in = *inStream;
-  std::string line = "";
-  getline(in, line);  // <segmentsTest>
-  line = "";
-  int numTotalSegments = 0;
-  while (!in.eof() && line != "</segmentsTest>") {
-    getline(in, line);
-    bool empty = true;
-    for (unsigned int i = 0; i < line.size(); ++i)
-      if (line[i] != ' ' && line[i] != '\t') {
-        empty = false;
-        break;
-      }
-    if (empty == true) continue;
-    if (!in.eof() && line != "</segmentsTest>") {
-      std::istringstream stm;
-      stm.str(line);
-      ExtrapLine segment(stm);
-      if (stm.rdstate() & (std::stringstream::failbit | std::stringstream::badbit)) {
-        if (!segment.parseError().empty())
-          configure.outStream << "ERROR: Test segment #" << numTotalSegments + 1 << ": " << segment.parseError() << "."
-                              << std::endl;
-        return -1;
-      }
-      numTotalSegments++;
-      if (!segment.parseWarning().empty())
-        configure.outStream << "WARNING: Test segment #" << numTotalSegments << ": " << segment.parseWarning() << "."
-                            << std::endl;
-      if (segment.hasCovariance()) {
-        configure.outStream << "ERROR: Test segment #" << numTotalSegments
-                            << " carries a covariance block; a data covariance belongs on data segments only."
-                            << std::endl;
-        return -1;
-      }
-      if (segment.isDiff() >= 10 && configure.relativistic) {
-        configure.outStream << "ERROR: Test segment #" << numTotalSegments
-                            << " is a THM segment; THM segments are not supported with relativistic=1." << std::endl;
-        return -1;
-      }
-      if (segment.isDiff() == 9 || segment.isDiff() == 19) {
-        configure.outStream << "ERROR: Test segment #" << numTotalSegments
-                            << " uses isDiff " << segment.isDiff() << " (angular coefficients), a data-segment type; a test segment"
-                            << " computes the coefficients with isDiff 3 and a maximum order." << std::endl;
-        return -1;
-      }
-      if (segment.isDiff() == 8 || segment.isDiff() == 18) {
-        configure.outStream
-            << "ERROR: Test segment #" << numTotalSegments << " uses isDiff " << segment.isDiff() << " (Polarization x"
-            << " Cross Section), which is no longer supported; use an Analyzing Power (isDiff 7)"
-            << " segment on the inverse channel instead." << std::endl;
-        return -1;
-      }
-      if (segment.isActive() == 1 && segment.thicknessFitIgnored())
-        configure.Note("Note: test segment #" + std::to_string(numTotalSegments) +
-                       " carries the fit form of its transmission / yield block or a thicknessgroup; a test segment "
-                       "has no fit parameter and uses its own sample thickness n.");
-      if (segment.isActive() == 1) {
+int EData::MakePoints(const Config &configure, CNuc *theCNuc, const azure2::experiment::ExtrapolationSpecs &specs) {
+  const int numTotalSegments_ = (int)specs.extrapolations.items.size();
+  for (const auto &item : specs.extrapolations.items) {
+    {
+      const azure2::experiment::ExtrapolationSpec &segment = item.spec;
+      const int numTotalSegments = segment.key;
+      if (!item.warning.empty()) configure.outStream << "WARNING: " << item.warning << std::endl;
+      if (!item.note.empty()) configure.Note(item.note);
+      if (segment.active) {
         ESegment NewSegment(segment);
         if (theCNuc->IsPairKey(NewSegment.GetEntranceKey())) {
           PPair *segEntrance = theCNuc->GetPair(theCNuc->GetPairNumFromKey(NewSegment.GetEntranceKey()));
@@ -832,70 +606,16 @@ int EData::MakePoints(const Config &configure, CNuc *theCNuc) {
               int operation = NewSegment.GetOperationType();
               theSegment->SetOperationType((OperationType)operation);
 
-              // Parse components and create full segment copies
-              std::string componentsStr = NewSegment.GetComponentsList();
-              if (!componentsStr.empty()) {
-                // Components are stored as "Entrance: X, Exit: Y;Entrance: A, Exit: B;..." or with optional "Angle: Z" and "Scaling: S"
-                std::istringstream stream(componentsStr);
-                std::string component;
-                int componentCount = 0;
-                while (std::getline(stream, component, ';')) {
-                  if (!component.empty()) {
-                    // Parse "Entrance: X, Exit: Y" format (with optional ", Angle: Z" and ", Scaling: S")
-                    size_t entrancePos = component.find("Entrance: ");
-                    size_t exitPos = component.find("Exit: ");
-                    size_t anglePos = component.find("Angle: ");
-                    size_t scalingPos = component.find("Scaling: ");
-
-                    double componentScaling = 1.0;
-                    if (scalingPos != std::string::npos) {
-                      try {  // SegLine / ExtrapLine wrote it (ReadComponentList), so a number; 1.0 silently before 2026-11-01
-                        componentScaling = std::stod(component.substr(scalingPos + 9));
-                      } catch (...) {
-                        configure.outStream << "ERROR: segment #" << numTotalSegments << ": the scaling of component \""
-                                            << component << "\" is not a number." << std::endl;
-                        return -1;
-                      }
-                    }
-
-                    if (entrancePos != std::string::npos && exitPos != std::string::npos) {
-                      entrancePos += 10;  // Length of "Entrance: "
-                      size_t commaPos = component.find(", Exit: ");
-                      if (commaPos != std::string::npos) {
-                        int entranceKey = std::stoi(component.substr(entrancePos, commaPos - entrancePos));
-                        exitPos += 6;  // Length of "Exit: "
-
-                        // Check if there's an angle specification
-                        ESegment *componentSegment = nullptr;
-                        if (anglePos != std::string::npos) {
-                          // Parse the exit key up to ", Angle:"
-                          size_t angleCommaPos = component.find(", Angle: ");
-                          int exitKey = std::stoi(component.substr(exitPos, angleCommaPos - exitPos));
-
-                          // Parse the angle value (std::stod stops at the trailing ", Scaling: ...")
-                          anglePos += 7;  // Length of "Angle: "
-                          double fixedAngle = std::stod(component.substr(anglePos));
-
-                          // Create component segment with fixed angle
-                          if (!this->CheckComponentPairs(theCNuc, *theSegment, entranceKey, exitKey, configure)) return -1;
-                          componentSegment = this->CreateComponentSegment(*theSegment, entranceKey, exitKey, fixedAngle);
-                        } else {
-                          // No angle specified, use standard method
-                          int exitKey = std::stoi(component.substr(exitPos));
-                          if (!this->CheckComponentPairs(theCNuc, *theSegment, entranceKey, exitKey, configure)) return -1;
-                          componentSegment = this->CreateComponentSegment(*theSegment, entranceKey, exitKey);
-                        }
-
-                        if (componentSegment) {
-                          componentSegment->SetComponentScaling(componentScaling);
-                          theSegment->AddComponentSegment(componentSegment);
-                          componentCount++;
-                        }
-                      }
-                    }
-                  }
+              // One full segment copy per component (spec: entrance, exit, optional fixed angle, scaling)
+              for (const azure2::experiment::ComponentSpec &c : NewSegment.GetComponents()) {
+                if (!this->CheckComponentPairs(theCNuc, *theSegment, c.entranceKey, c.exitKey, configure)) return -1;
+                ESegment *componentSegment =
+                    c.hasAngle ? this->CreateComponentSegment(*theSegment, c.entranceKey, c.exitKey, c.angle)
+                               : this->CreateComponentSegment(*theSegment, c.entranceKey, c.exitKey);
+                if (componentSegment) {
+                  componentSegment->SetComponentScaling(c.scaling);
+                  theSegment->AddComponentSegment(componentSegment);
                 }
-              } else {
               }
             }
             if (theSegment->NumPoints() == 0) {
@@ -950,15 +670,17 @@ int EData::MakePoints(const Config &configure, CNuc *theCNuc) {
     }
   }
 
-  if (line != "</segmentsTest>") return -1;
-
+  if (specs.extrapolations.failed) {
+    if (!specs.extrapolations.error.empty()) configure.outStream << specs.extrapolations.error << std::endl;
+    return -1;
+  }
 
   if (CheckThmWeights(configure, configure.thm.weightByTestSegment, "weightTest", "<segmentsTest>",
-                      numTotalSegments, this) != 0)
+                      numTotalSegments_, this) != 0)
     return -1;
 
   if (this->NumSegments() > 0) {
-    if (this->ReadTargetEffectsFile(configure, theCNuc) == -1) return -1;
+    if (this->SetUpTargetEffects(configure, theCNuc, specs.targetEffects) == -1) return -1;
     if (!this->CheckTransformedSegments(configure)) return -1;
     this->MapData(theCNuc);
   }
@@ -1208,7 +930,7 @@ bool SegmentNeedsEC(ESegment &segment, CNuc *theCNuc, const Config &configure) {
 /*!
  * Re-places the adaptive sub-point grids (DeBoer 2026-10-19, Coulomb table stage 3).
  *
- * ReadTargetEffectsFile lays each grid out once, from the level energies and
+ * SetUpTargetEffects lays each grid out once, from the level energies and
  * widths in the input file.  A fit that moves a narrow level then integrates it
  * on a grid built for another position, and the objective depends on which file
  * the session started from (natural neon refit1: 25,773.96 from the start file,
@@ -1457,28 +1179,13 @@ int EData::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, const st
   return changed.load();
 }
 
-int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
-  // The <targetInt> section of the project (Config::SectionStream: io::Document, whole-line tags).
-  std::unique_ptr<std::istream> inStream = configure.SectionStream("targetInt");
-  if (!inStream) return -1;
-  std::istream &in = *inStream;
-  std::string line = "";
-  getline(in, line);  // <targetInt>
-  line = "";
+int EData::SetUpTargetEffects(const Config &configure, CNuc *compound,
+                              const azure2::experiment::SpecList<azure2::experiment::TargetEffectSpec> &specs) {
   int activeLines = 0;
-  while (line != "</targetInt>" && !in.eof()) {
-    getline(in, line);
-    bool empty = true;
-    for (unsigned int i = 0; i < line.size(); ++i)
-      if (line[i] != ' ' && line[i] != '\t') {
-        empty = false;
-        break;
-      }
-    if (empty == true) continue;
-    if (line != "</targetInt>" && !in.eof()) {
-      std::istringstream stm;
-      stm.str(line);
-      TargetEffect targetEffect(stm, configure);
+  for (const auto &item : specs.items) {
+    const std::string &line = item.spec.source;
+    {
+      TargetEffect targetEffect(item.spec, configure);
       if (targetEffect.HasScreeningError()) {
         std::cout << "ERROR: <targetInt> line \"" << line << "\": a screening block is 'screening Ue_eV vary sigma_eV'"
                   << std::endl;
@@ -1492,7 +1199,7 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
         std::cout << "ERROR: <targetInt> line \"" << line << "\": " << targetEffect.GetDensityFitErrorText() << std::endl;
         return -1;
       }
-      if (stm.rdstate() & (std::stringstream::failbit | std::stringstream::badbit)) return -1;
+      if (item.readFailed) return -1;
       if (targetEffect.IsActive()) {
         targetEffect.SetLineNumber(++activeLines);
         // Every listed segment gets its own copy of the effect.  The effect's
@@ -1534,7 +1241,7 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
       }
     }
   }
-  if (line != "</targetInt>") return -1;
+  if (specs.failed) return -1;
   if (this->SetUpDensityParams(configure) == -1) return -1;
   for (ESegmentIterator segment = GetSegments().begin(); segment < GetSegments().end(); segment++) {
     PPair *entrancePair = compound->GetPair(compound->GetPairNumFromKey(segment->GetEntranceKey()));
@@ -3532,7 +3239,7 @@ int EData::InitializeComponentSegments(CNuc *theCNuc, const Config &configure) {
                               << " MeV: " << point->GetLabAngleWhy() << "." << std::endl;
           return -1;
         }
-        // The sub-points of a target effect were laid out (ReadTargetEffectsFile) from the copied base
+        // The sub-points of a target effect were laid out (SetUpTargetEffects) from the copied base
         // point's c.m. angle, before this conversion with the component's own pair; put them at the
         // converted angle (CalcLegendreP below recurses into them).  Until 2026-10-27 a component with a
         // different exit pair, or a fixed-angle RATIO denominator (raw lab angle), was integrated at the
@@ -5149,7 +4856,7 @@ double EData::DopplerPenalty() const {
 }
 
 /*!
- * Groups the densityfit / densitygroup lines into parameters.  ReadTargetEffectsFile gives every segment a line
+ * Groups the densityfit / densitygroup lines into parameters.  SetUpTargetEffects gives every segment a line
  * lists its own copy of the effect (and every component of such a segment one more), so the effects are visited
  * by line (TargetEffect::GetLineNumber): the first copy of a line decides, the other copies follow it.  A
  * line that lists no existing segment has no copy and so no parameter (dev makes one that moves nothing).

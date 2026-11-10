@@ -1,7 +1,7 @@
 # shift_subpoint_angle — energy shifts must not move the sub-points of a target or resolution integration
 
 Sub-points (the energy grid of a convolution, beam profile or target integration) are built at their parent
-point's c.m. angle and carry no data of their own (`EData::ReadTargetEffectsFile`, `EPoint(angle, energy, parent)`
+point's c.m. angle and carry no data of their own (`EData::SetUpTargetEffects`, `EPoint(angle, energy, parent)`
 puts the angle in both the lab and the c.m. slot). `ESegment::UpdatePointEnergyWithShift`, which moves every
 point of a segment with an energy shift, re-ran the parent's lab-to-c.m. angle and cross-section conversions on
 each sub-point. That took the parent's c.m. angle for a lab angle and moved every sub-point by the full lab-c.m.
@@ -32,5 +32,5 @@ every model a 0.1 keV Gaussian convolution (20 sub-points) on all segments:
 
 **What it caught (fixed 2026-10-26).** Before the fix, (a) gave 23,096.7 instead of 13,484.5 (the audit's
 reproduction) and (c) moved the capture segments by 1.8e-4. The fix sets each sub-point's angle to the parent's
-c.m. angle at the shifted energy and skips the conversions, which is what `ReadTargetEffectsFile` does when the
+c.m. angle at the shifted energy and skips the conversions, which is what `SetUpTargetEffects` does when the
 sub-points are first built. (b) passes on the old build too: a shift of exactly 0 does not enter the conversion.

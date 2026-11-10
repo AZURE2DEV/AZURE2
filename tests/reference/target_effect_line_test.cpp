@@ -12,6 +12,7 @@
 
 #include "Config.h"
 #include "TargetEffect.h"
+#include "azure2/convert/SpecsFromOldLines.h"
 
 namespace {
 
@@ -25,7 +26,8 @@ void check(const std::string &what, bool ok) {
 
 TargetEffect Read(const Config &c, const std::string &line) {
   std::istringstream in(line);
-  return TargetEffect(in, c);
+  bool readFailed = false;
+  return TargetEffect(azure2::convert::TargetEffectSpecFromOldLine(in, readFailed), c);
 }
 
 }  // namespace

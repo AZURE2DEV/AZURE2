@@ -1,7 +1,6 @@
 #include "InputFiles.h"
 #include "TargetEffect.h"
 #include "AdaptiveIntegrationGrid.h"
-#include "azure2/convert/TargetIntLine.h"
 #include <sstream>
 #include <iostream>
 #include <cctype>
@@ -10,12 +9,12 @@
 #include <cmath>
 
 /*!
- * Constructor reads directly from an std::ifstream pointing to the target
- * effect input file.  If a valid target effect is read, a TargetEffect object is
- * created.
+ * Builds the effect from its spec (experiment/'s SetupSpecs.h).  A spec that is not active gives an inactive effect
+ * with the defaults; the blocks' consistency (density fit, Doppler fit) is checked here and reported through
+ * HasDensityFitError / HasDopplerError.
  */
 
-TargetEffect::TargetEffect(std::istream &stream, const Config &configure) {
+TargetEffect::TargetEffect(const azure2::experiment::TargetEffectSpec &line, const Config &configure) {
   // Straggling off; a coefficient of 0 means Bohr straggling when it is on (0.04 keV^1/2 before 2026-10-27)
   isStraggling_ = false;
   stragglingCoefficient_ = 0.0;
@@ -33,30 +32,23 @@ TargetEffect::TargetEffect(std::istream &stream, const Config &configure) {
   transitionWidth_ = 0.0;
   autoTolerance_ = 0.0;
 
-  // The line's fields as written (convert/'s TargetIntLine.h: the one reader of the old <targetInt> grammar,
-  // shared with the converter to format 3 until the format-3 reader replaces the section).  Every field has a
-  // default there: a line may end before the optional ones.
-  azure2::convert::TargetIntLine line;
-  azure2::convert::ReadTargetIntLine(stream, line);
-  if (line.complete) {
-    const int isActive = line.isActive;
+  // An inactive spec (the old reader's line that ended after the parameter count) keeps every default.
+  {
     const int numIntegrationPoints = line.numIntegrationPoints;
-    const int isConvolution = line.isConvolution;
     const double sigma = line.sigma;
-    const int isTargetIntegration = line.isTargetIntegration;
     const double density = line.density;
-    const int numParameters = line.numParameters;
-    const vector_r &parameters = line.parameters;
-    const int numConvCoefficients = line.numConvCoefficients;
-    const vector_r &convCoefficients = line.convCoefficients;
+    const int numParameters = (int)line.stoppingPowerParameters.size();
+    const vector_r &parameters = line.stoppingPowerParameters;
+    const int numConvCoefficients = (int)line.convolutionCoefficientValues.size();
+    const vector_r &convCoefficients = line.convolutionCoefficientValues;
 
-    isQCoefficients_ = (line.isQCoefficients == 1) ? true : false;
-    qCoefficients_ = line.qCoefficients;
-    isConvCoefficients_ = (line.isConvCoefficients == 1) ? true : false;
+    isQCoefficients_ = line.qCoefficients;
+    qCoefficients_ = line.qCoefficientValues;
+    isConvCoefficients_ = line.convolutionCoefficients;
     convCoefficients_ = convCoefficients;
 
     if (line.hasStragglingFlag) {
-      isStraggling_ = (line.isStraggling == 1);
+      isStraggling_ = line.straggling;
       if (line.hasStragglingCoefficient) stragglingCoefficient_ = line.stragglingCoefficient;
       if (line.hasResonanceWidthMultiplier) {
         resonanceWidthMultiplier_ = line.resonanceWidthMultiplier;
@@ -65,7 +57,7 @@ TargetEffect::TargetEffect(std::istream &stream, const Config &configure) {
       if (line.hasPointsPerWidth) pointsPerWidth_ = line.pointsPerWidth;
     }
 
-    if (line.hasRangesToken) {
+    if (line.hasRanges) {
       if (line.autoWindows) autoWindows_ = true;
       if (line.hasAutoWindowTolerance) autoWindowTolerance_ = line.autoWindowTolerance;
       if (line.hasAutoWindowMargin) autoWindowMargin_ = line.autoWindowMargin;
@@ -74,7 +66,7 @@ TargetEffect::TargetEffect(std::istream &stream, const Config &configure) {
       if (line.autoTolerance > 0.) autoTolerance_ = line.autoTolerance;
     }
 
-    for (const azure2::convert::TargetIntLine::ProfileComponent &p : line.beamProfile) {
+    for (const azure2::experiment::TargetEffectSpec::ProfileComponent &p : line.beamProfileComponents) {
       BeamProfileComponent c;
       c.xi = p.xi;
       c.omega = p.omega;
@@ -84,58 +76,48 @@ TargetEffect::TargetEffect(std::istream &stream, const Config &configure) {
     }
     beamTpcSigma_ = line.beamTpcSigma;
     beamTruncation_ = line.beamTruncation;
-    beamPhotodissociation_ = (line.beamDetailedBalance == 1);
-    isBeamProfile_ = line.isBeamProfile;
+    beamPhotodissociation_ = line.beamDetailedBalance;
+    isBeamProfile_ = line.beamProfile;
     sigmaLab_ = line.sigmaLab;
-    screeningNominal_ = line.screeningNominal;
+    screeningNominal_ = line.screeningUe;
     screeningSigma_ = line.screeningSigma;
-    screeningError_ = line.screeningError;
-    if (line.hasScreening) {
+    screeningError_ = line.screeningMalformed;
+    if (line.screening) {
       hasScreening_ = true;
-      screeningVary_ = (line.screeningVary != 0);
+      screeningVary_ = line.screeningVary;
       screeningUe_ = screeningNominal_;
     }
-    const std::string &densitySigmaToken = line.densitySigmaToken;
-    const bool densityFitRead = line.densityFitRead;
-    const double densityMaxRead = line.densityMaxRead;
-    densityVary_ = (line.densityVary != 0);
-    densityFitError_ = line.densityFitError;
-    densityFitErrorText_ = line.densityFitErrorText;
+    const std::string &densitySigmaToken = line.densitySigmaText;
+    const bool densityFitRead = line.densityFit;
+    const double densityMaxRead = line.densityMax;
+    densityVary_ = line.densityVary;
+    densityFitError_ = !line.densityReadError.empty();
+    densityFitErrorText_ = line.densityReadError;
     densityGroup_ = line.densityGroup;
     dopplerTemperature_ = line.dopplerTemperature;
-    dopplerError_ = line.dopplerError;
-    dopplerErrorText_ = line.dopplerErrorText;
-    isDoppler_ = line.isDoppler;
-    const std::string &dopplerVaryToken = line.dopplerVaryToken;
-    const std::string &dopplerSigmaToken = line.dopplerSigmaToken;
-    const std::string &dopplerMaxToken = line.dopplerMaxToken;
-    const bool dopplerFitRead = line.dopplerFitRead;
+    dopplerError_ = !line.dopplerReadError.empty();
+    dopplerErrorText_ = line.dopplerReadError;
+    isDoppler_ = line.doppler;
+    const std::string &dopplerVaryToken = line.dopplerVaryText;
+    const std::string &dopplerSigmaToken = line.dopplerSigmaText;
+    const std::string &dopplerMaxToken = line.dopplerMaxText;
+    const bool dopplerFitRead = line.dopplerFit;
     udrFile_ = line.udrFile;
     udrFlightPath_ = line.udrFlightPath;
     udrBurstFwhm_ = line.udrBurstFwhm;
     udrChannelWidth_ = line.udrChannelWidth;
-    udrCentred_ = (line.udrCentred != 0);
-    isUdr_ = line.isUdr;
+    udrCentred_ = line.udrCentred;
+    isUdr_ = line.udr;
 
-    const std::string segmentList = azure2::convert::TargetIntUnquoted(line.segmentList);
-    const std::string stoppingPowerEq = azure2::convert::TargetIntUnquoted(line.stoppingPowerEq);
-    const std::string convolutionEq = azure2::convert::TargetIntUnquoted(line.convolutionEq);
+    const std::string &stoppingPowerEq = line.stoppingPowerEquation;
+    const std::string &convolutionEq = line.convolutionEquation;
 
-    if (isActive == 1)
-      isActive_ = true;
-    else
-      isActive_ = false;
-    segmentsList_ = segmentList;
+    isActive_ = line.active;
+    datasetKeys_ = line.datasetKeys;
     numIntegrationPoints_ = numIntegrationPoints;
-    if (isConvolution == 1)
-      isConvolution_ = true;
-    else
-      isConvolution_ = false;
+    isConvolution_ = line.convolution;
     sigma_ = sigma;
-    if (isTargetIntegration == 1)
-      isTargetIntegration_ = true;
-    else
-      isTargetIntegration_ = false;
+    isTargetIntegration_ = line.targetIntegration;
     density_ = density;
     // density 0 (or negative) with target integration = an infinitely thick target (IsThickTarget)
     isThickTarget_ = isTargetIntegration_ && !(density_ > 0.0);
@@ -804,7 +786,7 @@ void TargetEffect::SetNumSubPoints(int numPoints) {
  */
 
 std::vector<int> TargetEffect::GetSegmentsList() const {
-  return azure2::convert::TargetIntSegmentKeys(segmentsList_);  // convert/'s TargetIntLine.h
+  return datasetKeys_;
 }
 
 /*!

@@ -292,6 +292,19 @@ int main(int argc, char **argv) {
     Expect("normgroup member", r, "dataset n2", Sigma("n2.dat") + F{{"energy_window", "0.2 1.4 MeV"}, {"norm", "D"}});
     check("normgroup: the prior_centre row is removed", r.text.find("prior_centre") == std::string::npos);
   }
+  // ---- a prior_centre row the engine refuses (a name that matches no <segmentsData> line) is refused with its reason;
+  //      a composite block with an operation type other than 0 or 1 likewise
+  {
+    const ConvertResult r = Convert({"1 1 2 0.2 1.4 0 180 0 1.1 1 8 0 0 0 n1.dat\n", "", "",
+                                     "<parameterSettings>\nsegment_2_norm prior_centre 1\n</parameterSettings>\n", ""});
+    check("prior_centre of no line: refused", !r.ok && r.refusal.find("names no parameter a prior_centre row can move: it "
+                                                                      "takes segment_1_norm ... segment_1_norm") != std::string::npos);
+    const ConvertResult z = Convert({"1 1 2 0.2 1.4 0 180 0 1.1 1 8 0 0 0 n1.dat\n", "", "",
+                                     "<parameterSettings>\nsegment_01_norm prior_centre 1\n</parameterSettings>\n", ""});
+    check("prior_centre with a leading zero: refused", !z.ok);
+    const ConvertResult o = Convert({"1 1 2 0.2 1.4 0 180 0 1 0 0 0 0 0 o.dat 1 2 1 1 2\n", "", "", "", ""});
+    check("operation type 2: refused", !o.ok && o.refusal.find("neither 0 (sum) nor 1 (ratio)") != std::string::npos);
+  }
   // ---- covariance; total 1 (sigma_total); sample (abundances per compound nucleus -> isotopes of target nuclei)
   {
     const ConvertResult r = Convert({"1 1 2 0.2 1.4 0 180 0 1 0 0 0 0 0 v1.dat covariance cov.txt\n"

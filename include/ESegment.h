@@ -6,10 +6,9 @@
 #include <vector>
 #include <mutex>
 #include <memory>
+#include "azure2/experiment/SetupSpecs.h"
 
 class EData;
-class ExtrapLine;
-class SegLine;
 class CNuc;
 class Config;
 struct ThmWeightTable;
@@ -34,10 +33,10 @@ enum OperationType {
 
 class ESegment {
  public:
-  /// Build a data segment from a <segmentsData> line.
-  ESegment(SegLine);
-  /// Build an extrapolation segment from a <segmentsTest> line -- points on a grid, no data file.
-  ESegment(ExtrapLine);
+  /// Build a data segment from its spec (experiment/'s SetupSpecs.h).
+  explicit ESegment(const azure2::experiment::DatasetSpec &);
+  /// Build an extrapolation segment from its spec -- points on a grid, no data file.
+  explicit ESegment(const azure2::experiment::ExtrapolationSpec &);
   /// Does this point fall inside the segment's energy and angle ranges?
   bool IsInSegment(EPoint);
   /// Differential cross section in the lab frame?
@@ -273,8 +272,8 @@ class ESegment {
   bool IsAdvanced() const;
   /// Combination type as an integer: 0 sum, 1 ratio.
   int GetLegacyOperationType() const;
-  /// Semicolon-separated component list, as written in the input file.
-  std::string GetComponentsList() const;
+  /// The terms of a composite segment after the leading one.
+  const std::vector<azure2::experiment::ComponentSpec> &GetComponents() const { return components_; }
   /// Path of the data file this segment reads.
   std::string GetDataFile() const;
   /// Append a point.
@@ -512,6 +511,8 @@ class ESegment {
   static constexpr std::size_t kShiftTables = 3;
 
  private:
+  /// The observable flags and the model-side options both constructors take from the reaction spec.
+  void SetReaction(const azure2::experiment::ReactionSpec &);
   struct ShiftTable {
     std::vector<double> state;  ///< energy shift, sqrt shift, shift-function values
     std::shared_ptr<const ChannelTable> table;
@@ -613,7 +614,7 @@ class ESegment {
   bool yieldTotalTerm_ = false;  // IsYieldTotalTerm
   bool isCoefficients_ = false;
   bool coefficientsAbsolute_ = false;
-  std::string componentsList_;
+  std::vector<azure2::experiment::ComponentSpec> components_;  ///< the terms of a SUM / RATIO after the leading one
   std::string datafile_;
   std::vector<EPoint> points_;
 

@@ -48,9 +48,13 @@ class EData {
   EData();
   /// Number of data segments.
   int NumSegments() const;
-  /// Build the segments from the segment and data files. Returns -1 on failure.
+  /// Build the segments from the data-set specs (each filled from its data file) and their effects.  Returns -1 on
+  /// failure (with the message).
+  int Fill(const Config &, CNuc *, const azure2::experiment::DataSpecs &);
+  /// Build points from the extrapolation grids instead of data files, for a run with no data.  Returns -1 on failure.
+  int MakePoints(const Config &, CNuc *, const azure2::experiment::ExtrapolationSpecs &);
+  /// TEMPORARY (step 3d): the same from the old sections of the project (src/OldLineSetup.cpp).
   int Fill(const Config &, CNuc *);
-  /// Build points from <segmentsTest> grids instead of data files, for a run with no data. Returns -1 on failure.
   int MakePoints(const Config &, CNuc *);
   /// Fit iterations used so far.
   int Iterations() const;
@@ -61,21 +65,13 @@ class EData {
   /// Index at which the energy-shift parameters start in the Minuit vector.
   int GetEnergyShiftParamOffset() const;
   /*!
-   * Explicit prior centres of normalizations and energy shifts: rows
-   *   segment_N_norm prior_centre c
-   *   segment_N_energy_shift prior_centre c
-   * of <parameterSettings> (N the segment key, the 1-based <segmentsData> line
-   * counting inactive lines).  Such a row moves only the centre of that prior
-   * (for a norm also the scale of its percentage width); the norm/shift field
-   * of the segment line stays the start value.  Without a row the field is
-   * both, as it always was.  Three-token rows are skipped by the older
-   * <parameterSettings> readers (engine and GUI), which then fall back to the
-   * field.  `numSegmentLines` is the number of <segmentsData> lines, active or
-   * not (their keys are 1..numSegmentLines).  A row naming a line that is not
-   * active is reported and ignored; a row naming anything else, or with a
-   * centre that is not a number, returns -1.
+   * The prior centres of the data sets' normalizations and energy shifts (DatasetSpec::normCentre, shiftCentre):
+   * the prior of a varied normalization or shift is centred there instead of on the start value (normalization)
+   * or 0 (shift).  Applied after the groups are resolved.  A centre for a data set without a segment (not active,
+   * or skipped at load) is reported and ignored; specs.priorCentreError (a row the old-line reader refused) is
+   * reported and returns -1.
    */
-  int ReadPriorCentres(const Config &, int numSegmentLines);
+  int ApplyPriorCentres(const Config &, const azure2::experiment::DataSpecs &specs);
   /// Index at which the sqrt(E) energy-shift coefficients start in the Minuit vector.
   int GetEnergyShiftSqrtParamOffset() const;
   /// Index at which the shift-function parameters start in the Minuit vector (after the sqrt(E)
@@ -85,7 +81,7 @@ class EData {
    * Electron screening.  The <targetInt> lines with a `screening` block, in line order, each with one
    * parameter `screening_<n>` (n = the effect number: its place among the active <targetInt> lines),
    * U_e in eV, after the shift-function parameters.  None without a screening block.  A line listing
-   * several segments has one copy of its effect per segment (ReadTargetEffectsFile); the parameter is
+   * several segments has one copy of its effect per segment (SetUpTargetEffects); the parameter is
    * the line's, shared by every copy.
    */
   int NumScreeningParams() const { return (int)screeningEffects_.size(); }
@@ -172,8 +168,9 @@ class EData {
   /// Link the thicknessgroup members to the group's first segment in file order; -1 (with an ERROR) when a member has
   /// no transmission / yield block.  Also lays out the thickness parameters (NumThicknessParams).
   int ResolveThicknessGroups(const Config &);
-  /// Read the target-effects input file and build the TargetEffect objects.
-  int ReadTargetEffectsFile(const Config &, CNuc *);
+  /// Build the TargetEffect objects from their specs and give each linked segment its copy.
+  int SetUpTargetEffects(const Config &, CNuc *,
+                         const azure2::experiment::SpecList<azure2::experiment::TargetEffectSpec> &);
   /// Is this a fit? AZURECalc clones the compound nucleus and data per thread only when it is.
   bool IsFit() const;
   /// Is this a Minos error-analysis call? Suppresses the transformation and file output.
@@ -305,7 +302,8 @@ class EData {
   void FillMnParams(AZUREParams &);
   /// The name of a data-segment parameter of the segment with key `key` (kind Norm, EnergyShift, EnergyShiftSqrt,
   /// Thickness, or EnergyShiftFn with its j), as param files and <parameterSettings> rows name it; empty for any
-  /// other kind.  The one definition of these names (FillMnParams, ReadPriorCentres).
+  /// other kind.  The one definition of these names (FillMnParams; convert/'s OldSegmentParameterName gives the
+  /// same for old projects' prior_centre rows, test `old_line_specs`).
   static std::string SegmentParameterName(int key, ParamKind kind, int fnTerm = 0);
   /// Write the normalizations back from a Minuit parameter vector.
   void FillNormsFromParams(const vector_r &);
@@ -488,7 +486,7 @@ class EData {
   std::vector<std::vector<int>> dopplerCopies_;  // per Doppler parameter: the target effects (copies) of its line
   int thicknessParamOffset_ = -1;      // -1 until FillMnParams has laid the vector out
   std::vector<int> thicknessSegments_;  // positions (1-based) of the segments with a thickness parameter, in order
-  /// Group the densityfit / densitygroup lines into parameters (ReadTargetEffectsFile); -1 on an error.
+  /// Group the densityfit / densitygroup lines into parameters (SetUpTargetEffects); -1 on an error.
   int SetUpDensityParams(const Config &);
   bool isFit_;
   bool isErrorAnalysis_;
