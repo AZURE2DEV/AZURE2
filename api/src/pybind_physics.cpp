@@ -9,6 +9,8 @@
 #include <string>
 #include <vector>
 
+#include "azure2/physics/Constants.h"
+#include "azure2/physics/CoulombScattering.h"
 #include "azure2/physics/Elements.h"
 #include "azure2/physics/ResonanceQuantities.h"
 #include "azure2/physics/coulomb/Whittaker.h"
@@ -119,6 +121,37 @@ py::array_t<double> StatisticalFactors(const py::array_t<int, py::array::forceca
   return out;
 }
 
+/// The kinematics of a pair from its charges and atomic masses (u), as the engine builds it (Kinematics::Channel).
+azure2::physics::ChannelKinematics PairKinematics(int z1, int z2, double m1_u, double m2_u, bool relativistic) {
+  azure2::physics::ChannelKinematics k;
+  k.z1 = z1;
+  k.z2 = z2;
+  k.mu_u = m1_u * m2_u / (m1_u + m2_u);
+  k.m1_MeV = m1_u * azure2::physics::kAtomicMassUnit_MeV;
+  k.m2_MeV = m2_u * azure2::physics::kAtomicMassUnit_MeV;
+  k.relativistic = relativistic;
+  return k;
+}
+
+/// The Rutherford (two_s < 0) or Mott (two_s >= 0) cross section and d/dE, element-wise on E_cm and theta_cm.
+py::dict CoulombCrossSections(const char *what, const azure2::physics::ChannelKinematics &kin, int two_s,
+                              const Array &e_cm, const Array &theta_cm) {
+  const auto E = e_cm.unchecked<1>(), T = theta_cm.unchecked<1>();
+  const py::ssize_t n = Common(what, {E.shape(0), T.shape(0)});
+  py::array_t<double> value(n), dE(n);
+  auto V = value.mutable_unchecked<1>(), D = dE.mutable_unchecked<1>();
+  for (py::ssize_t i = 0; i < n; i++) {
+    const azure2::physics::CoulombCrossSection c = two_s < 0 ? azure2::physics::rutherford_cross_section(kin, E(i), T(i))
+                                                             : azure2::physics::mott_cross_section(kin, two_s, E(i), T(i));
+    V(i) = c.value;
+    D(i) = c.d_dE;
+  }
+  py::dict out;
+  out["value"] = value;
+  out["d_dE"] = dE;
+  return out;
+}
+
 }  // namespace
 
 void BindPhysics(py::module_ &m) {
@@ -132,6 +165,29 @@ void BindPhysics(py::module_ &m) {
         "value and the partial derivatives d_gamma_a, d_gamma_b, d_gamma (the three widths independent).");
   m.def("branching_ratio", &BranchingRatios, py::arg("gamma_b"), py::arg("gamma"),
         "Gamma_b / Gamma, element-wise: dict of value, d_gamma_b and d_gamma.");
+  m.def(
+      "rutherford_cross_section",
+      [](int z1, int z2, double m1_u, double m2_u, const Array &e_cm, const Array &theta_cm, bool relativistic) {
+        return CoulombCrossSections("rutherford_cross_section", PairKinematics(z1, z2, m1_u, m2_u, relativistic), -1,
+                                    e_cm, theta_cm);
+      },
+      py::arg("z1"), py::arg("z2"), py::arg("m1_u"), py::arg("m2_u"), py::arg("e_cm"), py::arg("theta_cm"),
+      py::arg("relativistic") = false,
+      "Rutherford cross section (b/sr, c.m.) of a pair of charges z1, z2 and atomic masses m1_u, m2_u (u), with the "
+      "engine's eta and k (physics/CoulombScattering.h), element-wise on equal-length arrays of E_cm (MeV) and "
+      "theta_cm (deg): dict of value and d_dE (b/sr/MeV, at fixed angle).  NaN outside E > 0, 0 < theta < 180.");
+  m.def(
+      "mott_cross_section",
+      [](int z, double m_u, int two_s, const Array &e_cm, const Array &theta_cm, bool relativistic) {
+        if (two_s < 0) throw std::invalid_argument("mott_cross_section: two_s must be >= 0");
+        return CoulombCrossSections("mott_cross_section", PairKinematics(z, z, m_u, m_u, relativistic), two_s, e_cm,
+                                    theta_cm);
+      },
+      py::arg("z"), py::arg("m_u"), py::arg("two_s"), py::arg("e_cm"), py::arg("theta_cm"),
+      py::arg("relativistic") = false,
+      "Mott cross section (b/sr, c.m.) of two identical particles of charge z, atomic mass m_u (u) and spin two_s/2: "
+      "the symmetrised Coulomb amplitude with the interference weight (-1)^(2s)/(2s+1) (physics/CoulombScattering.h), "
+      "element-wise on E_cm (MeV) and theta_cm (deg): dict of value and d_dE (b/sr/MeV).");
   m.def("whittaker", &Whittaker, py::arg("l"), py::arg("eta_b"), py::arg("rho"),
         "Whittaker function W_{-eta_b, l+1/2}(2 rho) of a bound channel (physics/coulomb, no GSL) on equal-length "
         "arrays: dict of mantissa, log10_scale (W = mantissa * 10**log10_scale), rho_dlog (rho W'/W, the shift "
