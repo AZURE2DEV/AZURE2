@@ -2,6 +2,38 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-10 (agent, brief K) — extrapolation grids: list, file, points/log, c.m., adaptive; the gate as a tool (`feature/upgrade-4-extrap-grids`)
+
+**Done.**
+- bad7a299: the converted-tree gate is a committed tool, `tools/format3_gate.sh ENGINE SOURCE_TREE TAG` (`WORK`, `REF`,
+  `JOBS`, `RUNALL` from the environment) with `tools/format3_gate.py` (`tree`, `compare`; the accepted differences are
+  the explicit table `CLASSES`: class, file, projects, why); described in `project_format3.md` §8.5.  runall.sh is not
+  in the repository: the gate takes it from `RUNALL` (default: beside the script).
+- 05e8f975: one reader of the grid forms, `experiment/Grids.h` (`ReadGridValues`): `range … step` (F10), `range …
+  points n [log]`, `list`, `file "path"` (relative to the project, `#` comments), the start grid of `adaptive`; units
+  through the unit table; a `cm` energy grid taken to lab by `Frames`' new `BeamLabFromCM` with the `<levels>` masses
+  (`PairInfo::lightMass/heavyMass`).  `--describe` prints a grid file's path and count.
+- 011880d0: `experiment/AdaptiveGrid.h` (`RefineGrid`, a pure function of a callable model); the extrapolation run
+  refines adaptive grids before the data set is initialized (`src/AdaptiveExtrapolation.cpp`, three lines in
+  `AZUREMain`; no change to `EData`/`EPoint`/`ESegment`): level seeds, batches through the point pass on a sweep data
+  set made by `EData::MakePoints`, union grid over angles, `max_points` warning, then the run's data set on the refined
+  grids.  pyazr 2.18.0 unchanged: `pyazr.extrapolation_grid`, `pyazr.refine_grid` (`pyazr/grids.py`,
+  `pyazr/__init__.py`); a pyazr session refuses an adaptive grid.  Docs: `data_formats.rst` "Extrapolation Grids",
+  `calculate.rst`, `pyazr.rst`, `project_format3.md` §3.8.
+
+**Verified** (build `work/b-grids`, 0 warnings, 3 threads): 179 × 3 identical to `tab-p3f` (689/662/689, `tab-grids1`);
+`scripts/check.sh --quick` (ctest -LE slow 165/165); `tests/run_tests.sh` 141 passed, 0 failed (with `extrapolation_grids`); not run: Sphinx (not installed on this host), 1 against 8 threads (budget 3); the converted-tree gate
+(`format3_gate.sh`, tag `gridsg1`): 472 (445) identical, 38 classified, 0 differ, 0 missing, as on the start head
+(`gridsg0`); menu 3 of converted T1, T3 (plain conversion: `range … step`) and T2 with a `range … step` extrapolation:
+outputs identical to the start engine `work/b-trial5`; `tests/extrapolation_grids/check.sh` (narrow 1 eV level: 378
+points, peak 3.5e-8 from the closed form, integral 4.4e-4 from a dense grid, 1 and 3 threads identical with
+`AZURE_PLAN_CHECK=1`).
+
+**Open.** An adaptive grid in a pyazr session (refused now); refinement on the S factor rather than the cross
+section for `quantity sfactor` (the model value is refined; the floor 1e-3 max|f| leaves sub-barrier tails on the
+start grid); `CHECK_DATA` prints the start grid's points (before the refinement); `runall.sh`/`run_one.sh` into the
+repository (`tools/`) so that the gate needs no `RUNALL`.
+
 ## 2026-11-10 (director, afternoon) — Phase 4: the fourth wave merged (expression tree, plan, `EData` split N1–N4, the engine runs format 3)
 
 **Merged into `feature/upgrade-4-data`** (`--no-ff`, in this order; each rehearsed, built and verified in a scratch
