@@ -284,7 +284,7 @@ class Session {
   // pair = 0 addresses the default that every unnamed pair falls back to.
   void set_potential(int pair, const std::string &type, bool enabled,
                      double V0, double R, double a, double r0) {
-    HybridPotentialSetting s;
+    azure2::experiment::HybridPotentialSetting s;
     s.enabled = enabled;
     if (type == "WoodsSaxon")
       s.shape = azure2::physics::FormShape::WoodsSaxon;
@@ -313,15 +313,15 @@ class Session {
     if (pair)
       config_->potentials.pairs.erase(pair);
     else
-      config_->potentials = HybridPotentialSettings();
+      config_->potentials = azure2::experiment::HybridPotentialSettings();
     PotentialsChanged();
   }
 
   // (enabled, type, V0, R, a, r0, has_own_setting) for the given pair,
   // resolved against the default.
   py::tuple get_potential(int pair) {
-    const HybridPotentialSettings &p = config_->potentials;
-    const HybridPotentialSetting &s = pair ? p.For(pair) : p.defaults;
+    const azure2::experiment::HybridPotentialSettings &p = config_->potentials;
+    const azure2::experiment::HybridPotentialSetting &s = pair ? p.For(pair) : p.defaults;
     bool own = pair ? p.pairs.count(pair) > 0 : true;
     return py::make_tuple(s.enabled, s.ShapeName(), s.V0, s.R, s.a, s.r0, own);
   }

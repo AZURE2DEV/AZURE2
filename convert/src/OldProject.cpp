@@ -84,7 +84,7 @@ std::string SpinText(double j) {
 
 std::string ReadOldProject(const io::Document &doc, OldProject &out) {
   for (const char *name : {"levels", "segmentsData", "segmentsTest", "targetInt", "abundances", "scatteringLengths", "thm",
-                           "parameterSettings", "config"})
+                           "parameterSettings", "config", "potential"})
     if (const io::Document::Section *s = doc.Find(name))
       if (s->close == io::Document::Section::npos) return std::string("<") + name + "> is not closed";
   // <levels>: the pairs, from the first line naming each (as CNuc::Fill reads them), active or not.
@@ -211,6 +211,17 @@ std::string ReadOldProject(const io::Document &doc, OldProject &out) {
         return "<abundances> line \"" + line + "\" cannot be read";
       out.abundances.push_back(a);
     }
+  }
+
+  // <potential>: the hybrid potentials, with the engine's parser (after the format-2 conversion it is there only when
+  // a pair has the model on)
+  if (const io::Document::Section *s = doc.Find("potential")) {
+    std::string text = "<potential>\n";
+    for (const std::string &line : doc.Body(*s)) text += line + "\n";
+    text += "</potential>\n";
+    std::istringstream in(text);
+    out.potential = ReadPotentialBlock(in);
+    out.hasPotential = true;
   }
 
   // <scatteringLengths>

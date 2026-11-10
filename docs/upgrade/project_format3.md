@@ -120,6 +120,7 @@ form. A record block inside today's sections keeps one document model and one ta
 | `<extrapolations>` | `extrapolation` | `<segmentsTest>` |
 | `<targets>` | `target`, `beam`, `detector` | `<targetInt>`, `<abundances>`, `transmission`/`yield` sample thicknesses |
 | `<modelData>` | `datum` | `<scatteringLengths>`; new: ωγ, E_r, Γ, branching, ANC (M10) |
+| `<potentials>` | `potential` | `<potential>` (the hybrid potentials; `spin_orbit_potential.md` §3.3) |
 | `<config>` | `format=3` and the existing keys | `format=2` (`io/src/Convert.cpp:30-38`) |
 
 `<levels>`, `<thm>` (without `segments=`, §3.9), `<parameterSettings>` and `<mcmc>` keep their grammar in this
@@ -406,6 +407,20 @@ Quantities: `resonance_strength`, `resonance_energy` (`frame E_x | E_cm | E_lab`
 (`pair`, `s`, `value` and `error` for Re, optional `imag`, `imag_error`), all ((q(θ) − d)/e)² in one
 `ModelDataTerm` (`data_model.md` §4, M10). ωγ is eq. (8) of `data_kinds.md` §4.7 with observed widths at E_r; a
 warning at load when Γ/E_r > 1 % or another level of the same J^π lies within 10 Γ; refused for E_r < 0 (K4).
+
+### 3.10a `potential` (the hybrid potential of a pair)
+
+[Added 2026-11-10, `spin_orbit_potential.md` §3.3 without the spin–orbit term.] One record per particle pair:
+`pair` (the label; `pair_key` only where two pairs have it, the rule of §3.5), `coulomb_radius` (required: the old
+block implied 3.5 fm), `central woods_saxon depth radius diffuseness | gaussian depth width` (depth > 0 attractive),
+`matching_radius` and `step` (the solver's numbers, which the potential value carries and the tables key on; defaults
+15 fm and 0.0275 fm, noted in the run log when used). Lengths and energies in any unit of the table. A pair without a
+record has no potential; there is no default record: the converter expands the old block's default into one record
+per particle pair it applies to (none for photon or beta pairs, which have no channel function of a potential), drops a
+section with `useHybridPotential=0` with a note and removes the old block; a format-3 file that holds `<potential>` is
+refused (`E_OLD_POTENTIAL_BLOCK`). Refusals of the build: `E_POTENTIAL_TWICE`, `E_POTENTIAL_PAIR_KIND`,
+`E_POTENTIAL_RELATIVISTIC`, `E_THM_HYBRID_POTENTIAL` (a THM data set or extrapolation whose entrance pair has one).
+The numbers are not fit parameters (§6 Q7 of that note).
 
 ### 3.11 T2 in format 3, beside the old text
 

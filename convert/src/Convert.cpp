@@ -183,6 +183,8 @@ ConvertResult ConvertToFormat3(const std::string &oldText, const ConvertOptions 
              !built.modelData.records.empty()) {
     InsertSection(doc, "", "modelData", modelData);
   }
+  // <potential> -> <potentials> where the block was (none when no pair gets a potential)
+  ReplaceSection(doc, "potential", built.potentials.records.empty() ? "" : "potentials", io::WriteRecords(built.potentials));
   for (const auto &b : built.bodies) {
     if (b.first == "mcmc/parameters") {
       if (const io::Document::Section *m = doc.Find("mcmc"))

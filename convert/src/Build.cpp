@@ -107,6 +107,8 @@ std::string Builder::Run() {
   if (!res_.refusal.empty()) return res_.refusal;
   BuildScatteringLengths();
   if (!res_.refusal.empty()) return res_.refusal;
+  BuildPotentials();
+  if (!res_.refusal.empty()) return res_.refusal;
   // group records before the data sets that name them
   out_.data.records.insert(out_.data.records.begin(), groupRecords_.begin(), groupRecords_.end());
   RewriteThm();

@@ -28,8 +28,13 @@
 //   give a residual (active, an uncertainty > 0) as the engine's constraint (pair key, s, Re a, sigma, Im a, sigma),
 //   then the datums of an old <modelData> section (BuildModelData against the tables of the old <levels> rows); the
 //   format-3 side: the datums Build made, a scattering length as the same constraint.  Doubles by their bits.
+// - Hybrid potentials: for every particle pair of <levels>, the potential the old <potential> block gives it (the
+//   engine's parser, convert/PotentialBlock.h: its own section, else the default) and the one its `potential` record
+//   gives, as physics::PotentialKey (shape, V0, R, a, r0, R_C, r_m, step), doubles by their bits.  Photon and beta
+//   pairs are not compared: the converter writes no record for them (no channel function of a potential is computed).
 // AZURE2_SPEC_INJECT=1 moves one value of the format-3 side by one ulp, to show that the test fails on a difference
-// (=2: the value of its first model datum; =3: the name of its first data set's energy-shift parameter).
+// (=2: the value of its first model datum; =3: the name of its first data set's energy-shift parameter; =4: the
+// Coulomb radius of its first potential).
 //   spec_equivalence_test <repository root>
 #include <algorithm>
 #include <cmath>
@@ -46,6 +51,7 @@
 #include <vector>
 
 #include "azure2/convert/Convert.h"
+#include "azure2/convert/PotentialBlock.h"
 #include "azure2/convert/SpecsFromOldLines.h"
 #include "azure2/convert/ScatteringLengthLine.h"
 #include "azure2/convert/ThmLines.h"
@@ -636,6 +642,26 @@ int main(int argc, char **argv) {
         for (std::size_t j = 0; j < std::min(a.shiftFunction.size(), n.shiftFunction.size()); j++)
           name(a.shiftFunction[j], n.shiftFunction[j]);
         if (da[i].thicknessFit) name(a.thickness, n.thickness);
+      }
+      // hybrid potentials, per particle pair
+      experiment::HybridPotentialSettings oldPotentials;
+      if (auto s = Section(doc, "potential")) oldPotentials = convert::ReadPotentialBlock(*s).settings;
+      HybridPotentialSettings newPotentials = b.potentials;
+      if (injected == 4 && !newPotentials.pairs.empty())
+        newPotentials.pairs.begin()->second.coulomb_radius_fm = std::nextafter(newPotentials.pairs.begin()->second.coulomb_radius_fm, 1e300);
+      for (const PairInfo &pair : p.levels.pairs) {
+        if (pair.kind != 0) continue;
+        auto keyText = [](const std::optional<physics::HybridPotential> &v) {
+          std::string t;
+          char buf[64];
+          for (double x : physics::PotentialKey(v)) {
+            std::snprintf(buf, sizeof buf, " %a", x);
+            t += buf;
+          }
+          return t;
+        };
+        const std::string a = keyText(oldPotentials.PotentialFor(pair.key)), n = keyText(newPotentials.PotentialFor(pair.key));
+        if (a != n) problems.push_back("potential of pair " + std::to_string(pair.key) + ":" + a + " vs" + n);
       }
       const std::vector<std::string> modelA = OldModelDataRows(doc);
       for (std::size_t k = 0; k < std::max(modelA.size(), modelB.size()); k++)

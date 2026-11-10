@@ -1,7 +1,8 @@
 # The examples of docs/upgrade/project_format3.md sections 3.5-3.10 and 8.1 as records that validate.  Corrections to
 # the note, marked there: the target of section 3.7 has no 'phase' (only with 'stopping evaluation'); the formulas of
 # 'spread' and the energy_scale 'function' state their unit; the ratio of differential cross sections of section 3.5
-# is quantity dsigma_domega with unit 1.
+# is quantity dsigma_domega with unit 1.  The <potentials> example is docs/upgrade/spin_orbit_potential.md section 3.3
+# without the spin-orbit term, and a Gaussian with its defaults left out.
 <config>
 format=3
 </config>
@@ -230,3 +231,15 @@ datum a_n20Ne
     imag           0.01 fm
     imag_error     0.005 fm
 </modelData>
+<potentials>
+potential p12C
+    pair            p+12C
+    coulomb_radius  3.5 fm
+    central         woods_saxon depth 20 MeV radius 3.6 fm diffuseness 0.6 fm
+    matching_radius 15 fm
+    step            0.0275 fm
+potential a12C
+    pair            a+12C[4.439]
+    coulomb_radius  4.2 fm
+    central         gaussian depth 40000 keV width 2.5 fm
+</potentials>

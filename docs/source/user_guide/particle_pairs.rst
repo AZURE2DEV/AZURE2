@@ -435,11 +435,12 @@ the widths scaled by :math:`dE_s/dE_x = 1 + T_0/m_0`, for comparison with EDA
 parameters or ENDF ``KRL=1`` evaluations; ``relativisticReferencePair=<key>``
 chooses the reference pair (default: the first particle pair).
 
-Limits.  The hybrid nuclear-potential Coulomb functions (a ``<potential>``
-block) solve a Schrödinger equation outside the channel radius (between it and
+Limits.  The hybrid nuclear-potential Coulomb functions (a ``potential`` record
+of format 3, or the older ``<potential>`` block) solve a Schrödinger equation outside the channel radius (between it and
 the 15 fm matching radius) and are refused
 with ``relativistic=1`` and on the entrance pair of a THM segment (the THM vertex uses point-Coulomb waves;
-``ERROR (E_THM_HYBRID_POTENTIAL)``); they bend the scattering functions and, below threshold, the
+``E_THM_HYBRID_POTENTIAL``; a format-3 project is refused with
+``E_POTENTIAL_RELATIVISTIC`` for the first); they bend the scattering functions and, below threshold, the
 decaying solution, its shift function, the ANC conversion and the bound-state tail of external capture
 (:doc:`pyazr`).  Target effects (beam spread, target thickness, sub-point
 grids) and energy shifts convert lab energy intervals to the c.m. frame with the

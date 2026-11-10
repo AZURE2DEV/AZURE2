@@ -68,6 +68,17 @@ Format3Project ReadFormat3Project(const io::Document &doc, const Format3ReadOpti
   }
   p.validated = Schema::Validate(sections);
   p.diagnostics.insert(p.diagnostics.end(), p.validated.diagnostics.begin(), p.validated.diagnostics.end());
+  // The old <potential> block is not read in format 3 (its default section would give a potential to pairs the file
+  // does not name): the converter writes one potential record per pair.
+  if (const io::Document::Section *old = doc.Find("potential")) {
+    Diagnostic d;
+    d.code = codes::kOldPotentialBlock;
+    d.line = (int)old->open + 1;
+    d.section = "potential";
+    d.message = "<potential> is the old block of the hybrid potentials; format 3 states them as potential records in "
+                "<potentials>: convert the original with AZURE2 --convert OLD NEW --to 3";
+    p.diagnostics.push_back(d);
+  }
   int buildChecks = 0;
   for (const ValidatedRecord &r : p.validated.records)
     if (r.quantity)

@@ -1,5 +1,6 @@
 #include "Config.h"
 
+#include "azure2/convert/PotentialBlock.h"
 #include "azure2/experiment/ProjectReader.h"
 #include "InputFiles.h"
 #include "azure2/io/Convert.h"
@@ -37,7 +38,7 @@ void Config::Reset() {
   checkdir = "";
   nloptAlgorithm = 0;       // Default to SBPLX
   useHybridMethod = false;  // Default to disabled
-  potentials = HybridPotentialSettings();
+  potentials = azure2::experiment::HybridPotentialSettings();
   refreezeCovariance = 0;
   maxCalls = 0;
   useAdaptiveGrid = true;   // Default to adaptive grid
@@ -279,164 +280,31 @@ int Config::ReadConfigFile() {
 }
 
 /*!
- * Reads the <potential> block of the configuration file and configures the
- * hybrid Coulomb method accordingly.
+ * The hybrid potentials of the project, per pair.  A format-3 project states them as `potential` records of
+ * <potentials>, which Schema::Build has made into settings (one per pair, no default); the defaults of the table it
+ * used are noted.  An older project states them in the <potential> block, read with the old block's one parser
+ * (convert/ PotentialBlock.h, which the converter to format 3 uses too) and its warnings written here; without the
+ * block no pair has a potential.  useAdaptiveGrid in the block (format 1) is a property of the target-effect
+ * integration and stays global.
  *
- * The block is optional -- a file without one, or one with
- * useHybridPotential=0, leaves the defaults set by Reset() untouched, so this
- * is a no-op for every existing project.  The format is the one written by the
- * setup utility (gui/src/AZURESetup.cpp) and read back by
- * NuclearPotentialTab::readPotentialSettings:
- *
- *   <potential>
- *   useHybridPotential=1
- *   useAdaptiveGrid=1
- *   potentialType=0        # 0 = Woods-Saxon, 1 = Gaussian
- *   V0=80                  # depth, MeV
- *   R=3.6                  # radius, fm      (Woods-Saxon)
- *   a=0.6                  # diffuseness, fm (Woods-Saxon)
- *   r0=5.0                 # width, fm       (Gaussian)
- *   pair=2                 # everything below applies to pair 2 alone
- *   potentialType=1
- *   V0=90
- *   r0=4.0
- *   pair=5
- *   useHybridPotential=0   # pair 5 opts out
- *   </potential>
- *
- * A nuclear potential belongs to a particle pair -- it bends the radial wave
- * functions of that channel and no other -- so the keys are read per pair.
- * Everything before the first pair= is the default, which stands in for every
- * pair that does not name itself; a pair= line opens a section that starts
- * from that default and only has to state what differs.  A file with no pair=
- * line is therefore read exactly as it was when the model was global.
- *
- * useAdaptiveGrid is a property of the target-effect integration rather than
- * of any one channel, so it stays global wherever it appears.
- *
- * Parsing it here rather than in the setup utility is what makes the hybrid
- * model reachable from --no-gui and from pyazr: this function is on the path
- * both of them take.
- *
- * Returns 0 on success (including "no block present") and -1 if the block is
- * present but malformed.
+ * Returns 0 on success (including "no block present") and -1 if the block is present but not closed.
  */
-
 int Config::ReadPotentialBlock() {
-  potentials = HybridPotentialSettings();
+  potentials = azure2::experiment::HybridPotentialSettings();
   useHybridMethod = false;
+  if (format3) {
+    potentials = format3->built.potentials;
+    for (const std::string &note : format3->built.potentialNotes) Note("Note: " + configfile + ": " + note);
+    useHybridMethod = potentials.AnyEnabled();
+    return 0;
+  }
   std::unique_ptr<std::istream> section = SectionStream("potential");
   if (!section) return 0;  // optional block, absent: no hybrid potential (also after a project that had one)
-  std::istream &in = *section;
-  std::string line = "";
-  getline(in, line);  // <potential>
-
-  HybridPotentialSetting current = potentials.defaults;
-  int currentPair = 0;  // 0 = the default section
-  bool currentHasType = false, defaultHasType = false, closed = false;
-
-  // Install whatever the section just read describes.  A section that asks for
-  // the hybrid model without naming a potentialType, or names one that does not
-  // exist, is refused rather than silently given the default shape.  A section
-  // whose parameters do not make a potential (HybridPotentialSetting::Potential
-  // throws) is not installed: a pair falls back to the default, the default is off.
-  auto flush = [&]() {
-    if (current.enabled && !currentHasType) {
-      outStream << "WARNING: <potential> requests the hybrid method";
-      if (currentPair) outStream << " for pair " << currentPair;
-      outStream << " but gives no potentialType; it is disabled." << std::endl;
-      current.enabled = false;
-    }
-    try {
-      current.Potential();
-      if (currentPair)
-        potentials.pairs[currentPair] = current;
-      else
-        potentials.defaults = current;
-    } catch (const std::exception &e) {
-      outStream << "WARNING: invalid potential parameters (" << (currentPair ? "Failed to set potential for pair: " : "Failed to set default potential: ")
-                << e.what() << "); the hybrid method is disabled";
-      if (currentPair) outStream << " for pair " << currentPair;
-      outStream << "." << std::endl;
-      if (currentPair)
-        potentials.pairs.erase(currentPair);
-      else
-        potentials.defaults.enabled = false;
-    }
-  };
-
-  while (!in.eof()) {
-    getline(in, line);
-    size_t b = line.find_first_not_of(" \t\r\n");
-    if (b == std::string::npos) continue;
-    size_t e = line.find_last_not_of(" \t\r\n");
-    std::string trimmed = line.substr(b, e - b + 1);
-    if (trimmed == "</potential>") {
-      closed = true;
-      break;
-    }
-
-    size_t eq = trimmed.find('=');
-    if (eq == std::string::npos) continue;
-    std::string key = trimmed.substr(0, eq);
-    std::istringstream value(trimmed.substr(eq + 1));
-
-    // A pair= line closes the section being read and opens the next one.  Every
-    // section starts from the default, so a pair only has to state what differs.
-    if (key == "pair") {
-      int nextPair = 0;
-      value >> nextPair;
-      if (nextPair <= 0) {
-        outStream << "WARNING: <potential> has pair=" << nextPair
-                  << ", which is not a pair key; the section is ignored." << std::endl;
-        continue;
-      }
-      flush();
-      currentPair = nextPair;
-      current = potentials.defaults;
-      currentHasType = defaultHasType;  // inherited with the shape
-      continue;
-    }
-
-    if (key == "useHybridPotential") {
-      int v = 0;
-      value >> v;
-      current.enabled = (v == 1);
-    } else if (key == "useAdaptiveGrid") {
-      int v = 1;
-      value >> v;
-      useAdaptiveGrid = (v == 1);
-    } else if (key == "potentialType") {
-      int typeCode = 0;
-      value >> typeCode;
-      if (typeCode == 0) {
-        current.shape = azure2::physics::FormShape::WoodsSaxon;
-        currentHasType = true;
-      } else if (typeCode == 1) {
-        current.shape = azure2::physics::FormShape::Gaussian;
-        currentHasType = true;
-      } else {
-        outStream << "WARNING: unknown potentialType " << typeCode
-                  << " in <potential>";
-        if (currentPair) outStream << " for pair " << currentPair;
-        outStream << "; the hybrid method is disabled there." << std::endl;
-        current.enabled = false;
-        currentHasType = true;  // refused, not merely missing
-      }
-      if (!currentPair) defaultHasType = currentHasType;
-    } else if (key == "V0")
-      value >> current.V0;
-    else if (key == "R")
-      value >> current.R;
-    else if (key == "a")
-      value >> current.a;
-    else if (key == "r0")
-      value >> current.r0;
-  }
-
-  if (!closed) return -1;  // unterminated block
-  flush();
-
+  const azure2::convert::PotentialBlock block = azure2::convert::ReadPotentialBlock(*section);
+  for (const std::string &warning : block.warnings) outStream << warning << std::endl;
+  if (block.hasAdaptiveGrid) useAdaptiveGrid = block.adaptiveGrid;
+  potentials = block.settings;
+  if (!block.closed) return -1;  // unterminated block
   // On when any pair has the model; CNuc::Fill gives each pair its potential.
   useHybridMethod = potentials.AnyEnabled();
   return 0;

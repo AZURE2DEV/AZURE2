@@ -4,7 +4,8 @@
   "data": ["dataset", "normalization", "energy_scale"],
   "targets": ["target", "beam", "detector"],
   "extrapolations": ["extrapolation"],
-  "modelData": ["datum"]
+  "modelData": ["datum"],
+  "potentials": ["potential"]
  },
  "value_types": {
   "number": {
@@ -1704,6 +1705,136 @@
      "doc": "the DOI of the publication"
     }
    }
+  },
+  "potential": {
+   "title": "Hybrid potential",
+   "doc": "The nuclear potential of one particle pair: its channel functions come from the radial equation with the Coulomb potential of a uniformly charged sphere and a central nuclear term, integrated inward from the matching radius to the channel radius (docs/upgrade/spin_orbit_potential.md section 1.1).  A pair without a record has none.",
+   "sections": ["potentials"],
+   "fields": {
+    "pair": {
+     "title": "Pair",
+     "type": "pair",
+     "grammar": "<particle>+<nucleus>[<E_x>]",
+     "required": true,
+     "doc": "the particle pair of <levels> by its label (section 3.5)"
+    },
+    "pair_key": {
+     "title": "Pair key",
+     "type": "integer",
+     "grammar": "<integer >= 1>",
+     "required": false,
+     "min": 1,
+     "doc": "the <levels> pair key, only where the label names two pairs"
+    },
+    "coulomb_radius": {
+     "title": "Coulomb radius",
+     "type": "number_with_unit",
+     "grammar": "<number> <length unit>",
+     "required": true,
+     "dimension": "length",
+     "units": ["fm", "m"],
+     "positive": true,
+     "doc": "R_C of the uniformly charged sphere of the Coulomb term (the old <potential> block: 3.5 fm)"
+    },
+    "central": {
+     "title": "Central term",
+     "type": "structured",
+     "grammar": "woods_saxon depth <number> <energy unit> radius <number> <length unit> diffuseness <number> <length unit> | gaussian depth <number> <energy unit> width <number> <length unit>",
+     "required": true,
+     "alternatives": [
+      {
+       "keyword": "woods_saxon",
+       "parts": [
+        {
+         "name": "depth",
+         "keyword": true,
+         "type": "number_with_unit",
+         "grammar": "<number> <energy unit>",
+         "optional": false,
+         "dimension": "energy",
+         "units": ["MeV", "keV", "eV", "meV", "ueV"],
+         "positive": true,
+         "doc": "V0 > 0, attractive"
+        },
+        {
+         "name": "radius",
+         "keyword": true,
+         "type": "number_with_unit",
+         "grammar": "<number> <length unit>",
+         "optional": false,
+         "dimension": "length",
+         "units": ["fm", "m"],
+         "positive": true,
+         "doc": "R"
+        },
+        {
+         "name": "diffuseness",
+         "keyword": true,
+         "type": "number_with_unit",
+         "grammar": "<number> <length unit>",
+         "optional": false,
+         "dimension": "length",
+         "units": ["fm", "m"],
+         "positive": true,
+         "doc": "a"
+        }
+       ],
+       "doc": "V_N(r) = -V0 / (1 + exp((r - R)/a))"
+      },
+      {
+       "keyword": "gaussian",
+       "parts": [
+        {
+         "name": "depth",
+         "keyword": true,
+         "type": "number_with_unit",
+         "grammar": "<number> <energy unit>",
+         "optional": false,
+         "dimension": "energy",
+         "units": ["MeV", "keV", "eV", "meV", "ueV"],
+         "positive": true,
+         "doc": "V0 > 0, attractive"
+        },
+        {
+         "name": "width",
+         "keyword": true,
+         "type": "number_with_unit",
+         "grammar": "<number> <length unit>",
+         "optional": false,
+         "dimension": "length",
+         "units": ["fm", "m"],
+         "positive": true,
+         "doc": "r0"
+        }
+       ],
+       "doc": "V_N(r) = -V0 exp(-(r/r0)^2)"
+      }
+     ],
+     "doc": "the central nuclear term V_N(r)"
+    },
+    "matching_radius": {
+     "title": "Matching radius",
+     "type": "number_with_unit",
+     "grammar": "<number> <length unit>",
+     "required": false,
+     "default": "15 fm",
+     "dimension": "length",
+     "units": ["fm", "m"],
+     "positive": true,
+     "doc": "r_m: beyond it the solution is the point-Coulomb one; above every channel radius of the pair"
+    },
+    "step": {
+     "title": "Numerov step",
+     "type": "number_with_unit",
+     "grammar": "<number> <length unit>",
+     "required": false,
+     "default": "0.0275 fm",
+     "dimension": "length",
+     "units": ["fm", "m"],
+     "positive": true,
+     "doc": "the step of the inward integration, adjusted so that the channel radius is a node"
+    }
+   }
   }
  },
  "quantities": {
@@ -3395,7 +3526,7 @@
   },
   "E_AMBIGUOUS_PAIR": {
    "severity": "error",
-   "meaning": "a reaction or pair that two pairs of <levels> have (a data set says which with a pair key)"
+   "meaning": "a reaction or pair that two pairs of <levels> have (a data set or a potential says which with a pair key)"
   },
   "E_NOT_A_CHANNEL": {
    "severity": "error",
@@ -3403,7 +3534,7 @@
   },
   "E_PAIR_KEY": {
    "severity": "error",
-   "meaning": "entrance_pair / exit_pair where the label names one pair, or a key the label does not name"
+   "meaning": "entrance_pair / exit_pair / pair_key where the label names one pair, or a key the label does not name"
   },
   "E_DATA_FILE": {
    "severity": "error",
@@ -3424,6 +3555,26 @@
   "E_FOLD_CONFLICT": {
    "severity": "error",
    "meaning": "data sets sharing a target with a free parameter differ in beam, detector or quadrature"
+  },
+  "E_POTENTIAL_TWICE": {
+   "severity": "error",
+   "meaning": "two potential records for one pair"
+  },
+  "E_POTENTIAL_PAIR_KIND": {
+   "severity": "error",
+   "meaning": "a potential record on a photon or beta pair (a potential belongs to a particle pair)"
+  },
+  "E_POTENTIAL_RELATIVISTIC": {
+   "severity": "error",
+   "meaning": "a potential record in a project with relativistic kinematics"
+  },
+  "E_THM_HYBRID_POTENTIAL": {
+   "severity": "error",
+   "meaning": "a THM data set or extrapolation whose entrance pair has a potential record"
+  },
+  "E_OLD_POTENTIAL_BLOCK": {
+   "severity": "error",
+   "meaning": "the old <potential> block in a format-3 project (AZURE2 --convert writes potential records)"
   },
   "W_NOT_MEASURABLE": {
    "severity": "warning",
