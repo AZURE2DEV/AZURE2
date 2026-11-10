@@ -114,6 +114,7 @@ class PPair {
   void SetEntrance();
   /// Decay \p i, 1-based.
   Decay *GetDecay(int);
+  const Decay *GetDecay(int i) const { return &decays_[i - 1]; }
 
  private:
   bool entrance_;

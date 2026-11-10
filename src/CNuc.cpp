@@ -21,6 +21,8 @@
 #include "ChannelFunc.h"
 #include "CNucLevelParameters.h"
 #include "CNucSystem.h"
+#include "CNucChecks.h"
+#include "CNucReport.h"
 #include "CoulFunc.h"
 #include "ECIntegral.h"
 #include "GSLException.h"
@@ -150,10 +152,6 @@ CompoundNucleus *CNuc::GetNucleus(int nucleusNum) {
 
 const CompoundNucleus *CNuc::GetNucleus(int nucleusNum) const {
   return &nuclei_[nucleusNum - 1];
-}
-
-int CNuc::NucleusOfPair(int pairNum) {
-  return this->GetPair(pairNum)->GetNucleus();
 }
 
 std::string CNuc::NucleusLabel(int nucleusNum) const {
@@ -408,7 +406,7 @@ int CNuc::Fill(const Config &configure, const std::map<int, double> &radii) {
     if (hardSphereMaxL > maxLValue) this->SetMaxLValue(hardSphereMaxL);
     this->AddHardSphereGroups(configure, hardSphereMaxL);
   }
-  if (this->CheckIdenticalChannels(configure) == -1) return -1;
+  if (RefuseForbiddenIdenticalChannels(*this, configure) == -1) return -1;
   if ((configure.paramMask & Config::USE_EXTERNAL_CAPTURE) && this->NumJGroups() > 0 && this->NumPairs() > 0)
     if (this->ParseExternalCapture(configure, ecPairs) == -1) return -1;
 
@@ -418,7 +416,7 @@ int CNuc::Fill(const Config &configure, const std::map<int, double> &radii) {
   if (this->ReadAbundances(configure) == -1) return -1;
   if (ScatteringLength::ReadConstraints(this, configure, scatLenConstraints_) == -1) return -1;
   // right after the pairs are known, before any data file is read (a project whose data fail still gets it)
-  this->CheckMassSeparationConsistency(configure);
+  WarnMassSeparationMismatch(*this, configure);
 
   return 0;
 }
@@ -629,7 +627,7 @@ int CNuc::AddHardSphereGroups(const Config &configure, int maxL) {
               for (int cL = 0; cL <= maxL; cL++) {
                 if (tPi * (cL % 2 == 0 ? 1 : -1) != chPi) continue;
                 if (fabs(cS - cL) > jValue + 1.0e-6 || jValue > cS + cL + 1.0e-6) continue;
-                // Bose/Fermi symmetry for an identical pair: only l+s even (CheckIdenticalChannels).
+                // Bose/Fermi symmetry for an identical pair: only l+s even (RefuseForbiddenIdenticalChannels).
                 if (identicalPair && (cL + (int)(cS + 0.5)) % 2 != 0) continue;
                 AChannel newChannel(cL, cS, ir, 'P');
                 if (jg->IsChannel(newChannel)) continue;
@@ -647,48 +645,6 @@ int CNuc::AddHardSphereGroups(const Config &configure, int maxL) {
     }
   }
   return added;
-}
-
-/*!
- * Refuses a model that gives an identical pair with spin (p+p, d+d, 3He+3He)
- * a channel forbidden by Bose/Fermi symmetry, i.e. one with L+S odd.
- *
- * For spin-0 pairs such a channel only draws a warning (CNuc::Initialize),
- * as it always has. With spin the elastic cross section symmetrizes each
- * pathway by 1 + (-1)^(L'+S'), which the cross-section route applies as a
- * factor 4 on every channel it is given: a forbidden channel would be counted
- * four times instead of not at all, and the result would be wrong without any
- * sign of it. Such channels were also what the previous fermion rule,
- * (-1)^(L+S) = -1, asked for (3S1 instead of 1S0 in p+p), so an old model is
- * stopped here with the reason rather than silently re-interpreted.
- */
-
-int CNuc::CheckIdenticalChannels(const Config &configure) {
-  int bad = 0;
-  for (int j = 1; j <= this->NumJGroups(); j++) {
-    JGroup *jg = this->GetJGroup(j);
-    for (int ch = 1; ch <= jg->NumChannels(); ch++) {
-      AChannel *channel = jg->GetChannel(ch);
-      if (channel->GetRadType() != 'P') continue;
-      PPair *pp = this->GetPair(channel->GetPairNum());
-      if (!pp->HasSpinDependentExchange()) continue;
-      const int twoS = (int)std::lround(2.0 * channel->GetS());
-      if ((channel->GetL() + twoS / 2) % 2 == 0) continue;
-      configure.outStream << "ERROR: Identical-particle pair (Z=" << pp->GetZ(1)
-                          << ", A=" << pp->GetM(1) << ", j=" << pp->GetJ(1)
-                          << ") has a channel with J=" << jg->GetJ()
-                          << ", L=" << channel->GetL() << ", S=" << channel->GetS()
-                          << ", which Bose/Fermi symmetry forbids (L+S must be even)."
-                          << std::endl;
-      bad++;
-    }
-  }
-  if (bad) {
-    configure.outStream << "       Remove them from the model: allowed channels have L+S even (1S0, 3P0,1,2, 1D2, ... for p+p)."
-                        << std::endl;
-    return -1;
-  }
-  return 0;
 }
 
 /*!
@@ -875,117 +831,15 @@ int CNuc::GetMaxLValue() const {
  * contributions and coefficients.  A CNuc object can only be initialized for use AFTER it is filled.
  */
 
-/*!
- * Separation energies against masses, per compound nucleus (DeBoer 2026-10-29).  Every particle pair (pType 0) of a
- * nucleus is compared with the first one: S_b - S_a against (m1b + m2b - m1a - m2a) uconv.  Gamma and beta pairs are
- * left out -- their heavy mass is only a label (the photon energies come from excitation energies), and many projects
- * enter it as a mass number.  A mismatch within 5 keV of a multiple of the electron mass gets a hint: atomic and
- * nuclear (or bare-proton) masses mixed.  Nothing in the calculation changes.
- */
-int CNuc::CheckMassSeparationConsistency(const Config &configure) const {
-  const double me = azure2::physics::kElectronMass_MeV;
-  const int kMaxListed = 3;
-  // A pair whose masses are mass numbers (both integers, other than 12C's exact 12) carries no Q value: it is
-  // reported once, not compared.
-  auto massNumbers = [](const PPair *p) {
-    auto integral = [](double m) { return std::fabs(m - std::round(m)) < 1e-6; };
-    return integral(p->GetM(1)) && integral(p->GetM(2)) && !(std::round(p->GetM(1)) == 12 && std::round(p->GetM(2)) == 12);
-  };
-  int warnings = 0, unlisted = 0;
-  std::map<int, int> reference;  // nucleus -> pair number of its first particle pair with real masses
-  std::set<int> massNumberPairs;
-  for (int i = 1; i <= this->NumPairs(); i++) {
-    PPair *pb = const_cast<CNuc *>(this)->GetPair(i);
-    if (pb->GetPType() != 0) continue;
-    if (massNumbers(pb)) {
-      massNumberPairs.insert(pb->GetPairKey());
-      continue;
-    }
-    auto it = reference.find(pb->GetNucleus());
-    if (it == reference.end()) {
-      reference[pb->GetNucleus()] = i;
-      continue;
-    }
-    PPair *pa = const_cast<CNuc *>(this)->GetPair(it->second);
-    const double fromS = pb->GetSepE() - pa->GetSepE();
-    const double fromM = (pb->GetM(1) + pb->GetM(2) - pa->GetM(1) - pa->GetM(2)) * uconv;
-    const double diff = fromS - fromM;
-    if (!(std::fabs(diff) > kMassCheckTolerance)) continue;
-    if (++warnings > kMaxListed) {
-      ++unlisted;
-      continue;
-    }
-    std::ostringstream msg;
-    msg << std::setprecision(6) << "**WARNING: separation energies and masses disagree";
-    if (this->NumNuclei() > 1) msg << " in " << this->NucleusLabel(pb->GetNucleus());
-    msg << ": pair " << pb->GetPairKey() << " (S = " << pb->GetSepE() << " MeV, m1 + m2 = " << std::setprecision(10)
-        << pb->GetM(1) + pb->GetM(2) << " u) and pair " << pa->GetPairKey() << " (S = " << std::setprecision(6)
-        << pa->GetSepE() << " MeV, m1 + m2 = " << std::setprecision(10) << pa->GetM(1) + pa->GetM(2)
-        << " u): the separation energies differ by " << std::fixed << std::setprecision(4) << fromS
-        << " MeV, the masses by " << fromM << " MeV (" << std::showpos << std::setprecision(1) << diff * 1e3
-        << std::noshowpos << " keV).";
-    const double ne = diff / me;
-    if (std::fabs(ne) > 0.5 && std::fabs(ne - std::round(ne)) * me < 5.0e-3)
-      msg << "  That is " << std::lround(std::fabs(ne)) << " electron mass" << (std::lround(std::fabs(ne)) > 1 ? "es" : "")
-          << ": atomic and nuclear masses mixed (a bare-proton 1.00728 u among atomic masses, for one).";
-    msg << "  Thresholds use the separation energies and the kinematics the masses; take both from one mass table "
-           "(S = m1 + m2 - M of the compound nucleus).";
-    configure.outStream << msg.str() << std::endl;
-  }
-  if (unlisted > 0)
-    configure.outStream << "**WARNING: " << unlisted << " more pair" << (unlisted > 1 ? "s" : "")
-                        << " disagree in the same way (separation energies against masses)." << std::endl;
-  if (!massNumberPairs.empty()) {
-    std::ostringstream msg;
-    msg << "**NOTE: pair" << (massNumberPairs.size() > 1 ? "s" : "");
-    for (int k : massNumberPairs) msg << " " << k;
-    msg << " use" << (massNumberPairs.size() > 1 ? "" : "s") << " mass numbers as masses: the kinematics are good to "
-        << "about 0.1 % and the separation energies cannot be checked against them.";
-    configure.outStream << msg.str() << std::endl;
-  }
-  return warnings;
-}
-
 void CNuc::Initialize(const Config &configure) {
-  // Validate channels associated with identical-particle pairs:
-  // Bose/Fermi symmetry requires L+S even (for bosons this is the same as
-  // (-1)^(L+S) == +1). Warn on any violation; such channels still contribute
-  // to the calculation but the result will not respect identical-particle
-  // symmetry. Only spin-0 pairs get this far: for a pair with spin CNuc::Fill
-  // has already refused the model (CheckIdenticalChannels).
-  for (int j = 1; j <= this->NumJGroups(); j++) {
-    JGroup *jg = this->GetJGroup(j);
-    for (int ch = 1; ch <= jg->NumChannels(); ch++) {
-      AChannel *channel = jg->GetChannel(ch);
-      if (channel->GetRadType() != 'P') continue;
-      PPair *pp = this->GetPair(channel->GetPairNum());
-      if (!pp->IsIdentical()) continue;
-      int chL = channel->GetL();
-      int chS_twice = (int)(2.0 * channel->GetS() + 0.5);
-      if (chS_twice % 2 != 0) {
-        // Half-integer S in an identical pair would only arise for half-
-        // integer-spin particles in an asymmetric coupling; skip the
-        // even/odd test in that case to avoid false positives.
-        continue;
-      }
-      if ((chL + chS_twice / 2) % 2 != 0) {
-        configure.outStream << "**WARNING: Identical-particle pair (Z="
-                            << pp->GetZ(1) << ", A=" << pp->GetM(1)
-                            << ") has channel with L=" << chL
-                            << ", S=" << channel->GetS()
-                            << " violating Bose/Fermi symmetry "
-                            << "(L+S must be even). This channel should be removed from the input."
-                            << std::endl;
-      }
-    }
-  }
+  WarnForbiddenSpinlessChannels(*this, configure);
 
   // Calculate Boundary Conditions
   if (!(configure.paramMask & Config::USE_API))
     configure.outStream << "Calculating Boundary Conditions..." << std::endl;
   this->CalcBoundaryConditions(configure);
   if ((configure.fileCheckMask | configure.screenCheckMask) & Config::CHECK_BOUNDARY_CONDITIONS)
-    this->PrintBoundaryConditions(configure);
+    WriteBoundaryConditionsCheck(*this, configure);
 
   // Transform Input Parameters
   if (configure.paramMask & Config::TRANSFORM_PARAMETERS) {
@@ -1003,28 +857,15 @@ void CNuc::Initialize(const Config &configure) {
   this->SortPathways(configure);
   this->SetUpFormalCaptureMasks(configure);
   if ((configure.fileCheckMask | configure.screenCheckMask) & Config::CHECK_PATHWAYS)
-    this->PrintPathways(configure);
+    WritePathwaysCheck(*this, configure);
 
   // Calculate Angular Distribution Coefficients
   if (!(configure.paramMask & Config::USE_API))
     configure.outStream << "Calculating Angular Distribution Coefficients..." << std::endl;
-  // Legendre orders above Config::maxLOrder are never computed, so a particle channel with l > maxLOrder/2
-  // contributes terms (l + l' > maxLOrder) that are silently dropped from every differential cross section
-  // (angle-integrated values are complete).  Say so once per such channel (checklist t3-24).
-  for (int j = 1; j <= this->NumJGroups(); j++) {
-    JGroup *jg = this->GetJGroup(j);
-    for (int ch = 1; ch <= jg->NumChannels(); ch++) {
-      AChannel *channel = jg->GetChannel(ch);
-      if (channel->GetRadType() != 'P' || 2 * channel->GetL() <= Config::maxLOrder) continue;
-      configure.outStream << "**WARNING: channel l = " << channel->GetL() << " (J = " << jg->GetJ() << ", pair "
-                          << this->GetPair(channel->GetPairNum())->GetPairKey() << ") exceeds " << Config::maxLOrder / 2
-                          << ": Legendre terms above order " << Config::maxLOrder
-                          << " are not computed, so differential cross sections involving it are truncated." << std::endl;
-    }
-  }
+  WarnTruncatedLegendreOrders(*this, configure);
   this->CalcAngularDists(configure.maxLOrder);
   if ((configure.fileCheckMask | configure.screenCheckMask) & Config::CHECK_ANGULAR_DISTS)
-    this->PrintAngularDists(configure);
+    WriteAngularDistributionsCheck(*this, configure);
 }
 
 /*!
@@ -1042,98 +883,6 @@ void CNuc::AddPair(PPair pPair) {
 
 void CNuc::AddJGroup(JGroup jGroup) {
   jgroups_.push_back(jGroup);
-}
-
-/*!
- * Prints the initial structure of the compound nucleus object after filling but before initialization.
- * This includes all particle pairs, \f$ J^\pi \f$ groups, levels and channels.
- */
-
-void CNuc::PrintNuc(const Config &configure) {
-  std::streambuf *sbuffer;
-  std::filebuf fbuffer;
-  if (configure.fileCheckMask & Config::CHECK_COMPOUND_NUCLEUS) {
-    std::string outfile = configure.checkdir + "compoundnucleus.chk";
-    fbuffer.open(outfile.c_str(), std::ios::out);
-    sbuffer = &fbuffer;
-  } else if (configure.screenCheckMask & Config::CHECK_COMPOUND_NUCLEUS)
-    sbuffer = configure.outStream.rdbuf();
-  std::ostream out(sbuffer);
-  if (((configure.fileCheckMask & Config::CHECK_COMPOUND_NUCLEUS) &&
-       fbuffer.is_open()) ||
-      (configure.screenCheckMask & Config::CHECK_COMPOUND_NUCLEUS)) {
-    out << std::endl
-        << "************************************" << std::endl
-        << "*          Particle Pairs          *" << std::endl
-        << "************************************" << std::endl;
-    for (int i = 1; i <= this->NumPairs(); i++) {
-      out << "Pair Number: " << i << "  Pair Key: " << this->GetPair(i)->GetPairKey();
-      if (this->NumNuclei() > 1)
-        out << "  Compound Nucleus: " << this->NucleusLabel(this->GetPair(i)->GetNucleus());
-      out << std::endl;
-      out << std::setw(30) << "Light Particle J: " << this->GetPair(i)->GetJ(1) << std::endl
-          << std::setw(30) << "Light Particle Parity: " << this->GetPair(i)->GetPi(1) << std::endl
-          << std::setw(30) << "Light Particle Z: " << this->GetPair(i)->GetZ(1) << std::endl
-          << std::setw(30) << "Light Particle M: " << this->GetPair(i)->GetM(1) << std::endl
-          << std::setw(30) << "Light Particle g: " << this->GetPair(i)->GetG(1) << std::endl
-          << std::setw(30) << "Heavy Particle J: " << this->GetPair(i)->GetJ(2) << std::endl
-          << std::setw(30) << "Heavy Particle Parity: " << this->GetPair(i)->GetPi(2) << std::endl
-          << std::setw(30) << "Heavy Particle Z: " << this->GetPair(i)->GetZ(2) << std::endl
-          << std::setw(30) << "Heavy Particle M: " << this->GetPair(i)->GetM(2) << std::endl
-          << std::setw(30) << "Heavy Particle g: " << this->GetPair(i)->GetG(2) << std::endl
-          << std::setw(30) << "Seperation Energy [MeV]: " << this->GetPair(i)->GetSepE() << std::endl
-          << std::setw(30) << "Excitation Energy [MeV]: " << this->GetPair(i)->GetHeavyExE() << std::endl;
-      // the light particle's excitation (32nd column) only when it is set, so older outputs are unchanged
-      if (this->GetPair(i)->GetLightExE() != 0.)
-        out << std::setw(30) << "Light Excitation [MeV]: " << this->GetPair(i)->GetLightExE() << std::endl;
-      out << std::setw(30) << "Channel Radius: " << this->GetPair(i)->GetChRad() << std::endl;
-      if (this->GetPair(i)->GetPType() == 0)
-        out << std::setw(30) << "Pair Type: " << "Particle,Particle" << std::endl;
-      else if (this->GetPair(i)->GetPType() == 10)
-        out << std::setw(30) << "Pair Type: " << "Particle,Gamma" << std::endl;
-      else if (this->GetPair(i)->GetPType() == 20)
-        out << std::setw(30) << "Pair Type: " << "Beta Decay" << std::endl;
-      else
-        out << std::setw(30) << "Pair Type: Unknown" << std::endl;
-    }
-    out << std::endl
-        << "************************************" << std::endl
-        << "*              Levels              *" << std::endl
-        << "************************************" << std::endl
-        << std::setw(11) << "J Group #"
-        << std::setw(5) << "J"
-        << std::setw(4) << "Pi"
-        << std::setw(9) << "Level #"
-        << std::setw(14) << "Energy [MeV]"
-        << std::setw(11) << "Channel #"
-        << std::setw(3) << "l"
-        << std::setw(5) << "s"
-        << std::setw(8) << "Pair #"
-        << std::setw(11) << "Width"
-        << std::setw(11) << "Rad. Type" << std::endl;
-
-    for (int i = 1; i <= this->NumJGroups(); i++) {
-      for (int ii = 1; ii <= this->GetJGroup(i)->NumLevels(); ii++) {
-        for (int iii = 1; iii <= this->GetJGroup(i)->NumChannels(); iii++) {
-          out << std::setw(11) << i
-              << std::setw(5) << this->GetJGroup(i)->GetJ()
-              << std::setw(4) << this->GetJGroup(i)->GetPi()
-              << std::setw(9) << ii
-              << std::setw(14) << this->GetJGroup(i)->GetLevel(ii)->GetE()
-              << std::setw(11) << iii
-              << std::setw(3) << this->GetJGroup(i)->GetChannel(iii)->GetL()
-              << std::setw(5) << this->GetJGroup(i)->GetChannel(iii)->GetS()
-              << std::setw(8) << this->GetJGroup(i)->GetChannel(iii)->GetPairNum()
-              << std::setw(11) << this->GetJGroup(i)->GetLevel(ii)->GetGamma(iii)
-              << std::setw(11) << this->GetJGroup(i)->GetChannel(iii)->GetRadType() << std::endl;
-        }
-      }
-      out << std::endl;
-    }
-  } else
-    configure.outStream << "Could not write compound nucleus check file." << std::endl;
-  out.flush();
-  if (fbuffer.is_open()) fbuffer.close();
 }
 
 /*!
@@ -1159,25 +908,6 @@ void CNuc::FillCompoundFromParamsPhysical(const vector_r &p) {
   if (hasAbundanceBlock_)
     for (unsigned int s = 0; s < samples_.size(); s++)
       for (unsigned int k = 0; k < nuclei_.size(); k++) samples_[s].entries[k].abundance = p[i++];
-}
-
-/*!
- * Print the CNuc object from the parameter array.
- */
-
-void CNuc::PrintCompoundFromParams() {
-  int i = 0;
-  for (int j = 1; j <= this->NumJGroups(); j++) {
-    for (int la = 1; la <= this->GetJGroup(j)->NumLevels(); la++) {
-      ALevel *level = this->GetJGroup(j)->GetLevel(la);
-      level->GetE();
-      i++;
-      for (int ch = 1; ch <= this->GetJGroup(j)->NumChannels(); ch++) {
-        level->GetGamma(ch);
-        std::cout << "Level " << level->GetE() << " " << level->GetGamma(ch) << std::endl;
-      }
-    }
-  }
 }
 
 namespace phys = azure2::physics;
@@ -1490,115 +1220,6 @@ void CNuc::SortPathways(const Config &configure) {
 }
 
 /*!
- * Prints the internal and external reaction pathways.
- */
-
-void CNuc::PrintPathways(const Config &configure) {
-  std::streambuf *sbuffer;
-  std::filebuf fbuffer;
-  if (configure.fileCheckMask & Config::CHECK_PATHWAYS) {
-    std::string outfile = configure.checkdir + "pathways.chk";
-    fbuffer.open(outfile.c_str(), std::ios::out);
-    sbuffer = &fbuffer;
-  } else if (configure.screenCheckMask & Config::CHECK_PATHWAYS)
-    sbuffer = configure.outStream.rdbuf();
-  std::ostream out(sbuffer);
-  if (((configure.fileCheckMask & Config::CHECK_PATHWAYS) && fbuffer.is_open()) || (configure.screenCheckMask & Config::CHECK_PATHWAYS)) {
-    out << std::endl
-        << "************************************" << std::endl
-        << "*    Internal Reaction Pathways    *" << std::endl
-        << "************************************" << std::endl
-        << std::setw(17) << "Entrance Pair #"
-        << std::setw(9) << "Decay #"
-        << std::setw(14) << "Decay Pair #"
-        << std::setw(12) << "K Group #"
-        << std::setw(16) << "Entrance Ch. s"
-        << std::setw(13) << "Decay Ch. s"
-        << std::setw(11) << "M Group #"
-        << std::setw(11) << "J Group #"
-        << std::setw(16) << "Entrance Ch. #"
-        << std::setw(12) << "Exit Ch. #" << std::endl;
-    for (int i = 1; i <= this->NumPairs(); i++) {
-      PPair *thePair = this->GetPair(i);
-      for (int ii = 1; ii <= this->GetPair(i)->NumDecays(); ii++) {
-        for (int iii = 1; iii <= this->GetPair(i)->GetDecay(ii)->NumKGroups(); iii++) {
-          for (int iiii = 1; iiii <= this->GetPair(i)->GetDecay(ii)->GetKGroup(iii)->NumMGroups(); iiii++) {
-            out << std::setw(17) << i
-                << std::setw(9) << ii
-                << std::setw(14) << this->GetPair(i)->GetDecay(ii)->GetPairNum()
-                << std::setw(12) << iii
-                << std::setw(16) << this->GetPair(i)->GetDecay(ii)->GetKGroup(iii)->GetS()
-                << std::setw(13) << this->GetPair(i)->GetDecay(ii)->GetKGroup(iii)->GetSp()
-                << std::setw(11) << iiii
-                << std::setw(11) << this->GetPair(i)->GetDecay(ii)->GetKGroup(iii)->GetMGroup(iiii)->GetJNum()
-                << std::setw(16) << this->GetPair(i)->GetDecay(ii)->GetKGroup(iii)->GetMGroup(iiii)->GetChNum()
-                << std::setw(12) << this->GetPair(i)->GetDecay(ii)->GetKGroup(iii)->GetMGroup(iiii)->GetChpNum() << std::endl;
-          }
-        }
-        out << std::endl;
-      }
-    }
-    out << std::endl
-        << "************************************" << std::endl
-        << "*    External Reaction Pathways    *" << std::endl
-        << "************************************" << std::endl
-        << std::setw(17) << "Entrance Pair #"
-        << std::setw(9) << "Decay #"
-        << std::setw(14) << "Decay Pair #"
-        << std::setw(12) << "K Group #"
-        << std::setw(16) << "Entrance Ch. s"
-        << std::setw(13) << "Decay Ch. s"
-        << std::setw(11) << "M Group #"
-        << std::setw(11) << "Mult."
-        << std::setw(11) << "J_i Value"
-        << std::setw(11) << "J_f Value"
-        << std::setw(11) << "l_i Value"
-        << std::setw(11) << "l_f Value"
-        << std::setw(13) << "Type"
-        << std::setw(13) << "Ch. Decay #"
-        << std::setw(11) << "Ch. K #"
-        << std::setw(11) << "Ch. M #"
-        << std::setw(11) << "Int. Ch #"
-        << std::endl;
-    for (int i = 1; i <= this->NumPairs(); i++) {
-      PPair *thePair = this->GetPair(i);
-      for (int ii = 1; ii <= this->GetPair(i)->NumDecays(); ii++) {
-        for (int iii = 1; iii <= this->GetPair(i)->GetDecay(ii)->NumKGroups(); iii++) {
-          for (int iiii = 1; iiii <= this->GetPair(i)->GetDecay(ii)->GetKGroup(iii)->NumECMGroups(); iiii++) {
-            ECMGroup *theECMGroup = this->GetPair(i)->GetDecay(ii)->GetKGroup(iii)->GetECMGroup(iiii);
-            JGroup *theECJGroup = this->GetJGroup(theECMGroup->GetJGroupNum());
-            out << std::setw(17) << i
-                << std::setw(9) << ii
-                << std::setw(14) << this->GetPair(i)->GetDecay(ii)->GetPairNum()
-                << std::setw(12) << iii
-                << std::setw(16) << this->GetPair(i)->GetDecay(ii)->GetKGroup(iii)->GetS()
-                << std::setw(13) << theECJGroup->GetChannel(theECMGroup->GetFinalChannel())->GetS()
-                << std::setw(11) << iiii
-                << std::setw(10) << theECMGroup->GetRadType() << theECMGroup->GetMult()
-                << std::setw(11) << theECMGroup->GetJ()
-                << std::setw(11) << theECJGroup->GetJ()
-                << std::setw(11) << theECMGroup->GetL()
-                << std::setw(11) << theECJGroup->GetChannel(theECMGroup->GetFinalChannel())->GetL();
-            if (theECMGroup->IsChannelCapture())
-              out << std::setw(13) << "Channel"
-                  << std::setw(13) << theECMGroup->GetChanCapDecay()
-                  << std::setw(11) << theECMGroup->GetChanCapKGroup()
-                  << std::setw(11) << theECMGroup->GetChanCapMGroup()
-                  << std::setw(11) << theECMGroup->GetIntChannelNum() << std::endl;
-            else
-              out << std::setw(15) << "Hard Sphere" << std::endl;
-          }
-        }
-        out << std::endl;
-      }
-    }
-  } else
-    configure.outStream << "Could not write pathways check file." << std::endl;
-  out.flush();
-  if (fbuffer.is_open()) fbuffer.close();
-}
-
-/*!
  * Calculates the boundary conditions: B_c = S_c at the lowest R-matrix level of each \f$ J^\pi \f$ group.
  */
 
@@ -1636,48 +1257,6 @@ void CNuc::CalcBoundaryConditions(const Config &configure) {
     // stop as for any other failure of the initialization.
     throw GSLException(std::string("Boundary conditions: ") + e.what());
   }
-}
-
-/*!
- * Prints the boundary conditions.
- */
-
-void CNuc::PrintBoundaryConditions(const Config &configure) {
-  std::streambuf *sbuffer;
-  std::filebuf fbuffer;
-  if (configure.fileCheckMask & Config::CHECK_BOUNDARY_CONDITIONS) {
-    std::string outfile = configure.checkdir + "boundaryconditions.chk";
-    fbuffer.open(outfile.c_str(), std::ios::out);
-    sbuffer = &fbuffer;
-  } else if (configure.screenCheckMask & Config::CHECK_BOUNDARY_CONDITIONS)
-    sbuffer = configure.outStream.rdbuf();
-  std::ostream out(sbuffer);
-  if (((configure.fileCheckMask & Config::CHECK_BOUNDARY_CONDITIONS) && fbuffer.is_open()) ||
-      (configure.screenCheckMask & Config::CHECK_BOUNDARY_CONDITIONS)) {
-    out << std::endl
-        << "************************************" << std::endl
-        << "*        Boundary Conditions       *" << std::endl
-        << "************************************" << std::endl;
-    out << std::setw(10) << "J Group #"
-        << std::setw(10) << "Channel #"
-        << std::setw(20) << "Boundary Condition"
-        << std::endl;
-    for (int j = 1; j <= this->NumJGroups(); j++) {
-      if (this->GetJGroup(j)->IsInRMatrix()) {
-        JGroup *theJGroup = this->GetJGroup(j);
-        for (int ch = 1; ch <= theJGroup->NumChannels(); ch++) {
-          AChannel *theChannel = theJGroup->GetChannel(ch);
-          out << std::setw(10) << j
-              << std::setw(10) << ch
-              << std::setw(20) << theChannel->GetBoundaryCondition()
-              << std::endl;
-        }
-      }
-    }
-  } else
-    configure.outStream << "Could not write boundary conditions check file." << std::endl;
-  out.flush();
-  if (fbuffer.is_open()) fbuffer.close();
 }
 
 /*!
@@ -1931,60 +1510,6 @@ void CNuc::CalcCaptureAnalyzingPower(int aa, int decayNum, int maxL) {
       }
     }
   }
-}
-
-/*!
- * Prints the KLGroup and Interference object structure as well as the calculated coefficients.
- */
-
-void CNuc::PrintAngularDists(const Config &configure) {
-  std::streambuf *sbuffer;
-  std::filebuf fbuffer;
-  if (configure.fileCheckMask & Config::CHECK_ANGULAR_DISTS) {
-    std::string outfile = configure.checkdir + "angulardistributions.chk";
-    fbuffer.open(outfile.c_str(), std::ios::out);
-    sbuffer = &fbuffer;
-  } else if (configure.screenCheckMask & Config::CHECK_ANGULAR_DISTS)
-    sbuffer = configure.outStream.rdbuf();
-  std::ostream out(sbuffer);
-  if (((configure.fileCheckMask & Config::CHECK_ANGULAR_DISTS) && fbuffer.is_open()) ||
-      (configure.screenCheckMask & Config::CHECK_ANGULAR_DISTS)) {
-    out << std::endl
-        << "************************************" << std::endl
-        << "*       Angular Distributions       *" << std::endl
-        << "************************************" << std::endl;
-    out << std::setw(10) << "ir"
-        << std::setw(10) << "k"
-        << std::setw(10) << "L"
-        << std::setw(10) << "m1"
-        << std::setw(10) << "m2"
-        << std::setw(10) << "z1z2"
-        << std::setw(10) << "type"
-        << std::endl;
-    for (int aa = 1; aa <= this->NumPairs(); aa++) {
-      for (int ir = 1; ir <= this->GetPair(aa)->NumDecays(); ir++) {
-        Decay *theDecay = this->GetPair(aa)->GetDecay(ir);
-        for (int kl = 1; kl <= theDecay->NumKLGroups(); kl++) {
-          KLGroup *theKLGroup = theDecay->GetKLGroup(kl);
-          for (int i = 1; i <= theKLGroup->NumInterferences(); i++) {
-            Interference *theInter = theKLGroup->GetInterference(i);
-            out << std::setw(10) << theDecay->GetPairNum()
-                << std::setw(10) << theKLGroup->GetK()
-                << std::setw(10) << theKLGroup->GetLOrder()
-                << std::setw(10) << theInter->GetM1()
-                << std::setw(10) << theInter->GetM2()
-                << std::setw(10) << theInter->GetZ1Z2()
-                << std::setw(10) << theInter->GetInterferenceType()
-                << std::endl;
-          }
-          out << std::endl;
-        }
-      }
-    }
-  } else
-    configure.outStream << "Could not write angular distributions check file." << std::endl;
-  out.flush();
-  if (fbuffer.is_open()) fbuffer.close();
 }
 
 /*!
@@ -2260,273 +1785,23 @@ void CNuc::ObservedWidths(const Config &configure) {
 }
 
 /*!
- * Checks every R-Matrix level for a radiative width that is not small compared to
- * its particle width, and writes a single warning to the output stream if any is
- * found.  The R-Matrix description of radiative capture treats the photon channels
- * perturbatively (the gamma widths are assumed to make a negligible contribution to
- * the total width entering the level matrix), so a level with
- * \f$ \Gamma_\gamma \gtrsim 0.1 \Gamma_{particle} \f$ is outside the range in which
- * the calculated cross section can be trusted.
- *
- * The widths are the observed widths of the parameters passed in (the same vector that is
- * handed to the calculation), as parameters.out reports them (CNuc::ObservedWidths): open
- * particle channels and photon channels, with the level's normalization and the external
- * part of the photon amplitude.  Bound channels and static moments carry no width and are
- * skipped; levels with no open particle channel are not checked.
+ * The observed widths of a parameter vector, as parameters.out reports them (TransformOut without its messages):
+ * particle and photon widths with the level's normalization and, with external capture, the external part of the
+ * photon amplitude (physics/ observed_levels), in the levels' observed slots.  The fit state is set back to the vector
+ * afterwards, since TransformToBrune also sets the bound-state normalizations from the Brune values.
  */
 
-void CNuc::CheckRadiativeWidths(const Config &configure, const vector_r &params) {
-  static const double warningRatio = 0.1;
-
+bool CNuc::ObservedWidthsAt(const Config &configure, const vector_r &params) {
   this->FillCompoundFromParams(params);
-  // The observed widths of the start parameters, as parameters.out reports them (TransformOut without its
-  // messages; the final TransformOut prints them): particle and photon widths with the level's normalization and,
-  // with external capture, the external part of the photon amplitude (physics/ observed_levels).
   try {
     this->TransformToBrune(configure, false);
     this->ObservedWidths(configure);
   } catch (const std::exception &) {
-    // The widths are only needed for this diagnostic: skip it rather than abort the calculation.
     this->FillCompoundFromParams(params);
-    return;
+    return false;
   }
-  // TransformToBrune also set the bound-state normalizations from the Brune values: back to the fit state the
-  // calculation starts from.
   this->FillCompoundFromParams(params);
-
-  // Every flagged level, worst first. Reporting only the worst one hid how many
-  // levels were affected and which they were.
-  struct FlaggedLevel {
-    double ratio;
-    double radWidth;
-    double particleWidth;
-    std::string label;
-  };
-  std::vector<FlaggedLevel> flagged;
-
-  for (int j = 1; j <= this->NumJGroups(); j++) {
-    JGroup *theJGroup = this->GetJGroup(j);
-    if (!theJGroup->IsInRMatrix()) continue;
-    for (int la = 1; la <= theJGroup->NumLevels(); la++) {
-      ALevel *theLevel = theJGroup->GetLevel(la);
-      if (!theLevel->IsInRMatrix()) continue;
-      double particleWidth = 0.0;
-      double radiativeWidth = 0.0;
-      for (int ch = 1; ch <= theJGroup->NumChannels(); ch++) {
-        if (static_cast<phys::ObservedKind>(theLevel->GetObservedKind(ch)) != phys::ObservedKind::Width) continue;
-        const char type = theJGroup->GetChannel(ch)->GetRadType();
-        if (type == 'P')
-          particleWidth += fabs(theLevel->GetBigGamma(ch));
-        else if (type == 'M' || type == 'E')
-          radiativeWidth += fabs(theLevel->GetBigGamma(ch));
-      }
-      if (particleWidth <= 0.0 || radiativeWidth <= 0.0) continue;
-
-      double ratio = radiativeWidth / particleWidth;
-      if (ratio > warningRatio) {
-        FlaggedLevel entry;
-        entry.ratio = ratio;
-        entry.radWidth = radiativeWidth;
-        entry.particleWidth = particleWidth;
-        entry.label = AZURELabel::Level(theJGroup, theLevel, j, la);
-        flagged.push_back(entry);
-      }
-    }
-  }
-
-  if (!flagged.empty()) {
-    std::sort(flagged.begin(), flagged.end(),
-              [](const FlaggedLevel &a, const FlaggedLevel &b) { return a.ratio > b.ratio; });
-
-    const int numFlagged = (int)flagged.size();
-    configure.outStream << std::endl
-                        << "**WARNING: " << numFlagged << " level"
-                        << ((numFlagged == 1) ? " has" : "s have")
-                        << " a radiative width larger than " << warningRatio * 100.
-                        << "% of the particle width." << std::endl
-                        << "  R-Matrix capture assumes G_gamma << G_particle, so the calculated"
-                        << " cross section may be incorrect for "
-                        << ((numFlagged == 1) ? "this level." : "these levels.") << std::endl;
-
-    // Cap the list so a badly-configured model cannot bury the rest of the log.
-    const int maxListed = 10;
-    const int listed = std::min(numFlagged, maxListed);
-    for (int i = 0; i < listed; i++) {
-      configure.outStream << "    " << flagged[i].label << std::endl
-                          << "      G_gamma/G_particle = "
-                          << std::scientific << std::setprecision(2) << flagged[i].ratio
-                          << " (G_gamma = " << flagged[i].radWidth * 1e6
-                          << " eV, G_particle = " << flagged[i].particleWidth * 1e6 << " eV)"
-                          << std::endl;
-      configure.outStream.unsetf(std::ios::scientific);
-      configure.outStream.precision(6);
-    }
-    if (numFlagged > listed)
-      configure.outStream << "    ...and " << (numFlagged - listed)
-                          << " more level" << (((numFlagged - listed) == 1) ? "" : "s")
-                          << " with a smaller ratio." << std::endl;
-    configure.outStream << std::endl;
-  }
-}
-
-/*!
- * Writes the final transformed parameters to "parameters.out" file.
- */
-
-void CNuc::PrintTransformParams(const Config &configure) {
-  char filename[256];
-  ;
-  snprintf(filename, sizeof(filename), "%sparameters.out", configure.outputdir.c_str());
-  std::ofstream out;
-  out.open(filename);
-  if (out) {
-    out << "PHYSICAL LEVEL PARAMETERS (BOUNDARY CONDITION SET TO SHIFT AT E_LEVEL)" << std::endl;
-    out << std::endl;
-    for (int j = 1; j <= this->NumJGroups(); j++) {
-      JGroup *theJGroup = this->GetJGroup(j);
-      for (int la = 1; la <= this->GetJGroup(j)->NumLevels(); la++) {
-        out.precision(1);
-        out << std::fixed;
-        ALevel *theLevel = this->GetJGroup(j)->GetLevel(la);
-        out << "J = " << std::setw(3) << this->GetJGroup(j)->GetJ();
-        if (this->GetJGroup(j)->GetPi() == -1)
-          out << '-';
-        else
-          out << '+';
-        out.precision(4);
-        out << "  E_level = " << std::setw(8) << theLevel->GetTransformE() << " MeV"
-            << "  ITERATIONS = " << std::setw(5) << theLevel->GetTransformIterations();
-        if (this->NumNuclei() > 1) out << "  NUCLEUS " << this->NucleusLabel(theJGroup->GetNucleus());
-        out << std::endl;
-        for (int ch = 1; ch <= this->GetJGroup(j)->NumChannels(); ch++) {
-          AChannel *theChannel = this->GetJGroup(j)->GetChannel(ch);
-          PPair *exitPair = this->GetPair(theChannel->GetPairNum());
-          out << "  R = " << std::setw(2) << exitPair->GetPairKey();
-          if (theChannel->GetRadType() == 'P')
-            out << "  l = " << std::setw(3) << theChannel->GetL();
-          else if (theChannel->GetRadType() == 'F')
-            out << "  Fermi Beta Decay ";
-          else if (theChannel->GetRadType() == 'G')
-            out << "   G-T Beta Decay  ";
-          else
-            out << "  L = " << std::setw(2) << theChannel->GetRadType() << theChannel->GetL();
-          out.precision(1);
-          if (theChannel->GetRadType() != 'G' && theChannel->GetRadType() != 'F')
-            out << "  s = " << std::setw(4) << theChannel->GetS();
-          out.precision(6);
-          // The observed quantities of TransformOut (physics/ observed_levels): W and the reported value by kind.
-          const double W = theLevel->GetBigGamma(ch);
-          switch (static_cast<phys::ObservedKind>(theLevel->GetObservedKind(ch))) {
-            case phys::ObservedKind::ANC:
-              out << "  C  = " << std::setw(12) << sqrt(fabs(W)) << " fm^(-1/2)";
-              break;
-            case phys::ObservedKind::MagneticMoment:
-              out << "  mu = " << std::setw(12) << theLevel->GetObservedValue(ch) << " nm       ";
-              break;
-            case phys::ObservedKind::QuadrupoleMoment:
-              out << "  Q  = " << std::setw(12) << theLevel->GetObservedValue(ch) << " b        ";
-              break;
-            case phys::ObservedKind::Beta:
-              out << "  B  = " << std::setw(12) << W << "          ";
-              break;
-            case phys::ObservedKind::Width:
-              if (fabs(W) >= 1e-3)
-                out << "  G  = " << std::setw(12) << fabs(W) * 1e3 << " keV      ";
-              else if (fabs(W) >= 1e-6)
-                out << "  G  = " << std::setw(12) << fabs(W) * 1e6 << " eV       ";
-              else
-                out << "  G  = " << std::setw(12) << fabs(W) * 1e9 << " meV      ";
-              break;
-          }
-          out << "  g_int = " << std::setw(12) << theLevel->GetTransformGamma(ch);
-          if (theChannel->GetRadType() != 'G' && theChannel->GetRadType() != 'F')
-            out << " MeV^(1/2) ";
-          else
-            out << "           ";
-          out << "  g_ext = " << std::setw(20) << theLevel->GetExternalGamma(ch);
-          if (theChannel->GetRadType() != 'G' && theChannel->GetRadType() != 'F') out << " MeV^(1/2) ";
-          out << std::endl;
-        }
-        out << std::endl;
-      }
-    }
-  } else
-    configure.outStream << "Could not save parameters.out file." << std::endl;
-  if (configure.relativistic) this->PrintRelativisticParams(configure);
-}
-
-/*!
- * relativistic.out (runs with relativistic=1): the physical level parameters of parameters.out in
- * the level-energy convention of the LANL code EDA (ENDF KRL=1, LA-UR-19-31084).  AZURE2 keeps the
- * R-matrix energy linear in the excitation energy E_x = sqrt(s) - M; EDA uses
- * E(s) = (s - m0^2) / (2 m0), m0 the mass of a reference pair.  With T0 = E_x - S0 the reference
- * pair's kinetic energy, E(s) = T0 + T0^2 / (2 m0), written here on the excitation scale (+ S0).
- * Widths follow the energy derivative dE(s)/dE_x = 1 + T0/m0 at the level (the penetrabilities
- * are the same in both): Gamma' = Gamma (1 + T0/m0), gamma' = gamma sqrt(1 + T0/m0).  This is exact
- * at each level energy; away from it the two energy dependences differ at second order in T0/m0.
- */
-void CNuc::PrintRelativisticParams(const Config &configure) const {
-  char filename[256];
-  snprintf(filename, sizeof(filename), "%srelativistic.out", configure.outputdir.c_str());
-  std::ofstream out(filename);
-  if (!out) {
-    configure.outStream << "Could not save relativistic.out file." << std::endl;
-    return;
-  }
-  // the reference pair of each compound nucleus: the configured key if it belongs to it, else its first particle pair
-  auto reference = [&](int nucleus) -> const PPair * {
-    const PPair *first = nullptr;
-    for (int p = 1; p <= this->NumPairs(); p++) {
-      const PPair *pp = const_cast<CNuc *>(this)->GetPair(p);
-      if (pp->GetPType() != 0 || pp->GetNucleus() != nucleus) continue;
-      if (pp->GetPairKey() == configure.relativisticReferencePair) return pp;
-      if (!first) first = pp;
-    }
-    return first;
-  };
-  out << "# Relativistic kinematics (relativistic=1).  Level parameters of parameters.out in the E(s) convention" << std::endl
-      << "# of the LANL code EDA (ENDF KRL=1): E(s) = (s - m0^2)/(2 m0) for the reference pair (mass m0, threshold S0)," << std::endl
-      << "# here E_s = S0 + T0 + T0^2/(2 m0) with T0 = E_x - S0; Gamma_s = Gamma (1 + T0/m0), g_s = g sqrt(1 + T0/m0)." << std::endl
-      << "# relativisticReferencePair=<key> in <config> chooses the reference pair (default: the first particle pair)." << std::endl;
-  out << std::fixed;
-  for (int j = 1; j <= this->NumJGroups(); j++) {
-    JGroup *theJGroup = const_cast<CNuc *>(this)->GetJGroup(j);
-    const PPair *ref = reference(theJGroup->GetNucleus());
-    if (!ref) continue;
-    const double m0 = (ref->GetM(1) + ref->GetM(2)) * uconv;
-    const double s0 = ref->GetSepE() + ref->GetExE();
-    for (int la = 1; la <= theJGroup->NumLevels(); la++) {
-      ALevel *theLevel = theJGroup->GetLevel(la);
-      const double ex = theLevel->GetTransformE();
-      const double t0 = ex - s0;
-      const double d = 1.0 + t0 / m0;
-      out.precision(1);
-      out << "J = " << std::setw(4) << theJGroup->GetJ() << (theJGroup->GetPi() == -1 ? '-' : '+');
-      out.precision(6);
-      out << "  E_x = " << std::setw(11) << ex << " MeV  E_s = " << std::setw(11) << s0 + t0 + t0 * t0 / (2.0 * m0)
-          << " MeV  (E_s - E_x = " << std::setw(9) << 1e3 * t0 * t0 / (2.0 * m0) << " keV, reference R = "
-          << ref->GetPairKey() << ", dE_s/dE_x = " << std::setprecision(8) << d << ")" << std::endl;
-      for (int ch = 1; ch <= theJGroup->NumChannels(); ch++) {
-        AChannel *theChannel = theJGroup->GetChannel(ch);
-        if (theChannel->GetRadType() != 'P') continue;
-        const PPair *exitPair = const_cast<CNuc *>(this)->GetPair(theChannel->GetPairNum());
-        out.precision(1);
-        out << "    R = " << std::setw(2) << exitPair->GetPairKey() << "  l = " << std::setw(2) << theChannel->GetL()
-            << "  s = " << std::setw(4) << theChannel->GetS();
-        out.precision(6);
-        const double localEnergy = ex - exitPair->GetSepE() - exitPair->GetExE();
-        if (localEnergy < 0.0) {
-          out << "  (bound in this channel)";
-        } else {
-          out << "  G = " << std::setw(13) << fabs(theLevel->GetBigGamma(ch)) * 1e3 << " keV  G_s = " << std::setw(13)
-              << fabs(theLevel->GetBigGamma(ch)) * d * 1e3 << " keV";
-        }
-        out << "  g = " << std::setw(13) << theLevel->GetTransformGamma(ch) << "  g_s = " << std::setw(13)
-            << theLevel->GetTransformGamma(ch) * sqrt(d) << " MeV^(1/2)" << std::endl;
-      }
-      out << std::endl;
-    }
-  }
+  return true;
 }
 
 /* Gets the transformet parameters*/
@@ -2882,6 +2157,10 @@ PPair *CNuc::GetPair(int pairNum) {
   return b;
 }
 
+const PPair *CNuc::GetPair(int pairNum) const {
+  return &pairs_[pairNum - 1];
+}
+
 PPair *CNuc::GetPairFromKey(int key) {
   const int num = GetPairNumFromKey(key);
   return num > 0 ? GetPair(num) : nullptr;
@@ -2894,6 +2173,10 @@ PPair *CNuc::GetPairFromKey(int key) {
 JGroup *CNuc::GetJGroup(int jGroupNum) {
   JGroup *b = &jgroups_[jGroupNum - 1];
   return b;
+}
+
+const JGroup *CNuc::GetJGroup(int jGroupNum) const {
+  return &jgroups_[jGroupNum - 1];
 }
 
 /*!

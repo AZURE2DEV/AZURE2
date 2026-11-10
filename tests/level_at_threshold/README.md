@@ -2,7 +2,7 @@
 
 Every place that evaluates the shift function, penetrability or dS/dE at a
 level energy (CNuc::CalcBoundaryConditions, CalcShiftFunctions, TransformIn,
-TransformOut, CheckRadiativeWidths; the THM vertex=constant shift
+TransformOut, ObservedWidthsAt; the THM vertex=constant shift
 ShiftAtLevelEnergy; AZUREGrad's dS/dE table; the adaptive grid's width
 estimate) and the external-capture entrance channel (EPoint, ECIntegral) goes
 through `ChannelFunc` (include/ChannelFunc.h), which handles threshold once:

@@ -1,6 +1,8 @@
 #include <cmath>
 #include "AZURECalc.h"
 #include "AZUREMain.h"
+#include "CNucChecks.h"
+#include "CNucReport.h"
 #include "Objective.h"
 #include "ScatteringLength.h"
 #include "ParameterLabel.h"
@@ -72,7 +74,7 @@ int AZUREMain::operator()() {
     return -1;
   }
   if ((configure().screenCheckMask | configure().fileCheckMask) &
-      Config::CHECK_COMPOUND_NUCLEUS) compound()->PrintNuc(configure());
+      Config::CHECK_COMPOUND_NUCLEUS) WriteCompoundNucleusCheck(*compound(), configure());
 
   if (!(configure().paramMask & Config::CALCULATE_REACTION_RATE)) {
     // Fill the data object from the segments and data file
@@ -178,7 +180,8 @@ int AZUREMain::operator()() {
 
     // Warn once if a level has a radiative width comparable to its particle width,
     // where the R-Matrix treatment of capture breaks down.
-    compound()->CheckRadiativeWidths(configure(), params.GetMinuitParams().Params());
+    if (compound()->ObservedWidthsAt(configure(), params.GetMinuitParams().Params()))
+      WarnLargeRadiativeWidths(*compound(), configure());
 
     // Declare a new instance of FCNBase
     AZURECalc theFunc(data(), compound(), configure(), &limitsManager);
@@ -849,7 +852,8 @@ int AZUREMain::operator()() {
                               configure().rateParams.entrancePair, configure().rateParams.exitPair);
     // Warn once if a level has a radiative width comparable to its particle width,
     // where the R-Matrix treatment of capture breaks down.
-    compound()->CheckRadiativeWidths(configure(), params.GetMinuitParams().Params());
+    if (compound()->ObservedWidthsAt(configure(), params.GetMinuitParams().Params()))
+      WarnLargeRadiativeWidths(*compound(), configure());
     if (configure().paramMask & Config::USE_BRUNE_FORMALISM)
       compound()->CalcShiftFunctions(configure());
     if (configure().rateParams.useFile)
@@ -868,7 +872,7 @@ int AZUREMain::operator()() {
                           << std::endl;
     return -1;
   }
-  compound()->PrintTransformParams(configure());
+  WriteParametersOut(*compound(), configure());
 
   // Cleanup shared EC amplitude cache
   if (configure().paramMask & Config::USE_EXTERNAL_CAPTURE) {

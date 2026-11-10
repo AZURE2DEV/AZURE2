@@ -68,7 +68,7 @@ int JGroup::NumLevels() const {
  * Returns the number of channels in the AChannel vector.
  */
 
-int JGroup::NumChannels() {
+int JGroup::NumChannels() const {
   return channels_.size();
 }
 

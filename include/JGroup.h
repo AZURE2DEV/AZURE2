@@ -34,7 +34,7 @@ class JGroup {
   /// Number of levels in the group.
   int NumLevels() const;
   /// Number of channels shared by every level of the group.
-  int NumChannels();
+  int NumChannels() const;
   /// 1-based position of the channel in the group, or 0 if it is not there.
   int IsChannel(AChannel);
   /// Total angular momentum of the group.
@@ -57,8 +57,10 @@ class JGroup {
   void AddChannel(AChannel);
   /// Channel \p i, 1-based. Every level of the group shares this channel set.
   AChannel *GetChannel(int);
+  const AChannel *GetChannel(int i) const { return &channels_[i - 1]; }
   /// Level \p i, 1-based, numbered within this group rather than globally.
   ALevel *GetLevel(int);
+  const ALevel *GetLevel(int i) const { return &levels_[i - 1]; }
 
  private:
   bool isinrmatrix_;

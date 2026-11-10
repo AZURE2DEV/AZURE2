@@ -30,6 +30,7 @@ class KLGroup {
   void AddInterference(Interference);
   /// Pathway pair \\p i, 1-based.
   Interference *GetInterference(int);
+  const Interference *GetInterference(int i) const { return &interferences_[i - 1]; }
 
  private:
   int k_;
