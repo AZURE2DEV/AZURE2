@@ -43,6 +43,7 @@ add_test(NAME channel_table_unit
                  ${CMAKE_CURRENT_SOURCE_DIR}/T1/T1.azr
                  ${CMAKE_CURRENT_SOURCE_DIR}/T2/T2.azr
                  ${CMAKE_CURRENT_SOURCE_DIR}/T3/T3.azr
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../spin_orbit_potential/spin_orbit_potential.azr
          WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
 set_tests_properties(channel_table_unit PROPERTIES TIMEOUT 300)
 
