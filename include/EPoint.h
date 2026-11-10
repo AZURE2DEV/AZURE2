@@ -269,7 +269,7 @@ class EPoint {
   };
   const UdrKernel *GetUdrKernel() const { return udr_kernel_.get(); };
   double GetUdrProjectileMass() const { return udr_mass_; };
-  /// How the adaptive sub-point grid of this point was laid out (EData::ReadTargetEffectsFile),
+  /// How the adaptive sub-point grid of this point was laid out (EData::SetUpTargetEffects),
   /// so EData::ReplaceSubPointGrids can lay it out again for other level parameters.
   /// Energies are c.m., unshifted.
   struct SubGridSpec {
@@ -284,7 +284,7 @@ class EPoint {
   const SubGridSpec &GetSubGridSpec() const { return sub_grid_spec_; };
   /// The point's own lab -> c.m. factor and entrance-pair charges, with which every target-effect kernel
   /// converts the line's lab energies (beam sigma, beam profile, Bohr straggling).  Set by
-  /// EData::ReadTargetEffectsFile for each point and component point; a line shared by several pairs
+  /// EData::SetUpTargetEffects for each point and component point; a line shared by several pairs
   /// used to be converted once with the first pair's factor (2026-10-27).
   void SetTargetKinematics(double cmFactor, int z1, int z2) { cm_factor_ = cmFactor; bohr_z1_ = z1; bohr_z2_ = z2; }
   double GetCMFactor() const { return cm_factor_; }
@@ -425,7 +425,7 @@ class EPoint {
   double GetStoppingPower() const;
   /// Beam energy loss across the target at this point.
   double GetTargetThickness() const;
-  /// The lab energy the target thickness was computed at (EData::ReadTargetEffectsFile, unshifted), so a
+  /// The lab energy the target thickness was computed at (EData::SetUpTargetEffects, unshifted), so a
   /// fitted density recomputes it at the same energy (EData::FillDensitiesFromParams).
   double GetTargetLabEnergy() const { return targetLabEnergy_; }
   void SetTargetLabEnergy(double e) { targetLabEnergy_ = e; }

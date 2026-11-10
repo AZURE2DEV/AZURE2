@@ -19,6 +19,7 @@
 #include <vector>
 
 #include "TargetEffect.h"
+#include "azure2/convert/SpecsFromOldLines.h"
 #include "Config.h"
 
 // Each consumer of the engine defines this itself (src/AZURE2.cpp for the
@@ -70,7 +71,8 @@ static TargetEffect makeEffect(const Config &config, const std::string &file, do
   line << "1 \"1\" 200 0 0 0 0 \"\" 0 0 0 0 \"\" 0 0 0.04 20 50 udr \"" << file << "\" 100 "
        << burst << " " << channel << " " << centred;
   std::istringstream in(line.str());
-  return TargetEffect(in, config);
+  bool readFailed = false;
+  return TargetEffect(azure2::convert::TargetEffectSpecFromOldLine(in, readFailed), config);
 }
 
 int main() {

@@ -104,6 +104,12 @@ add_executable(target_effect_line_test target_effect_line_test.cpp)
 target_link_libraries(target_effect_line_test PRIVATE AZURE2Core)
 add_test(NAME target_effect_line COMMAND target_effect_line_test)
 
+# The old-line adaptor (convert/'s SpecsFromOldLines.h) and ESegment's spec constructors: the isDiff table, components,
+# the reading refusals, prior centres, abundances, <targetInt> data-set lists.
+add_executable(old_line_specs_test old_line_specs_test.cpp)
+target_link_libraries(old_line_specs_test PRIVATE AZURE2Core)
+add_test(NAME old_line_specs COMMAND old_line_specs_test)
+
 add_executable(udr_reference_test udr_reference_test.cpp)
 target_link_libraries(udr_reference_test PRIVATE AZURE2Core)
 add_test(NAME udr_reference COMMAND udr_reference_test)

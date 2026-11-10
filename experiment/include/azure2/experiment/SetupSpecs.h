@@ -1,0 +1,243 @@
+#ifndef AZURE2_EXPERIMENT_SETUPSPECS_H
+#define AZURE2_EXPERIMENT_SETUPSPECS_H
+
+// What the engine's set-up consumes (data_model.md S9, project_format3.md step 3b): one plain struct per thing the
+// engine builds -- a data set, an extrapolation, a target / beam / detector effect with the data sets it applies to,
+// and the abundances of the samples.  A spec is filled once by its producer (today the old-line adaptor of convert/,
+// SpecsFromOldLines.h; after step 3b also Schema::Build from format-3 records) and then only read: the engine's
+// constructors take it and nothing else.  Plain values, standard library only; energies in MeV, angles in degrees,
+// as the members say.  Where the engine needs a number as it was written (a token it checks or quotes in a message),
+// the member holds the text.
+
+#include <string>
+#include <utility>
+#include <vector>
+
+namespace azure2 {
+namespace experiment {
+
+/// What a data set or an extrapolation computes at each point (the model's observable, before any apparatus).
+enum class Observable {
+  CrossSection,          ///< angle-integrated cross section (b), or the transformed observable of a sample block
+  CrossSectionE1,        ///< angle-integrated capture, compared with the E1 part only
+  CrossSectionE2,        ///< angle-integrated capture, compared with the E2 part only
+  TotalCapture,          ///< angle-integrated capture summed over every capture pair of the entrance nucleus
+  DifferentialLab,       ///< dsigma/dOmega (b/sr) at a lab angle
+  DifferentialCM,        ///< dsigma/dOmega (b/sr) at a c.m. angle
+  AnalyzingPower,        ///< vector analyzing power A_y at a c.m. angle
+  PhaseShift,            ///< the nuclear phase shift (deg) of one partial wave
+  AngularCoefficients,   ///< Legendre coefficients of the c.m. angular distribution as data (data sets only)
+  AngularDistribution,   ///< Legendre coefficients up to an order, computed (extrapolations only)
+};
+
+/// One term of a composite (SUM / RATIO) data set or extrapolation.
+struct ComponentSpec {
+  int entranceKey = 0;   ///< pair key of <levels>
+  int exitKey = 0;       ///< pair key of <levels>
+  bool hasAngle = false; ///< false: the term is evaluated at the data set's own angles
+  double angle = 0.0;    ///< fixed lab angle (deg) when hasAngle
+  double scaling = 1.0;  ///< the term's factor (1 when none is given)
+};
+
+/// The fields an extrapolation and a data set share: the reaction, the observable and the model-side options.
+struct ReactionSpec {
+  int entranceKey = 0;  ///< pair key of <levels>
+  int exitKey = 0;      ///< pair key of <levels>; -1 = every capture pair (TotalCapture)
+  Observable observable = Observable::CrossSection;
+  bool thm = false;     ///< a THM (half-off-shell) observable of the same kind
+  double phaseJ = 0.0;  ///< PhaseShift: total spin J of the partial wave
+  int phaseL = 0;       ///< PhaseShift: orbital angular momentum l
+  double phaseS = -1.0; ///< PhaseShift: channel spin s, < 0 when not given
+  enum class Combination { None, Sum, Ratio };
+  Combination combination = Combination::None;  ///< a composite of the leading term and `components`
+  std::vector<ComponentSpec> components;
+  std::string sample = "0";  ///< "0": no sample; "1": the default sample; else a sample name of the abundances
+  bool total = false;        ///< the total cross section of the entrance pair (optical theorem)
+  double transmission = 0.0; ///< > 0: transmission exp(-n sigma) of a sample n atoms/b thick
+  double yieldThickness = 0.0;  ///< > 0: self-shielded yield of a sample n atoms/b thick
+};
+
+/// A data set: points read from a file and compared with the model.
+struct DatasetSpec {
+  int key = 0;              ///< the data set's number, 1, 2, ... in file order (inactive ones counted)
+  bool active = true;
+  ReactionSpec reaction;
+  double minE = 0.0, maxE = 0.0;  ///< lab energy window of the points used (MeV)
+  double minA = 0.0, maxA = 0.0;  ///< lab angle window (deg), differential observables
+  std::string dataFile;
+  bool absolute = false;          ///< AngularCoefficients: the data are A_k (b/sr), not a_k = A_k / A_0
+  // Normalization n: the model is compared with n x data ... (EData; value, uncertainty in percent, vary).
+  double norm = 1.0;
+  double normError = 0.0;          ///< prior width (%), 0 = no prior
+  bool varyNorm = false;
+  bool hasNormCentre = false;      ///< the prior is centred on normCentre, not on `norm`
+  double normCentre = 0.0;
+  std::string normCentreSource;    ///< the text that set it, for messages ("" when none)
+  std::string normGroup;           ///< shared normalization: data sets with one label share the first's norm
+  // Energy shift E' = E + shift + b sqrt(E) + f(E) (MeV; E the lab energy in MeV).
+  double energyShift = 0.0;
+  double energyShiftError = 0.0;   ///< prior width (MeV), 0 = no prior
+  bool varyEnergyShift = false;
+  bool hasShiftCentre = false;     ///< the prior is centred on shiftCentre, not on 0
+  double shiftCentre = 0.0;
+  std::string shiftCentreSource;
+  bool hasSqrtShift = false;       ///< a sqrt(E) term is declared
+  double energyShiftSqrt = 0.0;    ///< b (MeV^1/2)
+  double energyShiftSqrtError = 0.0;
+  bool varyEnergyShiftSqrt = false;
+  std::string shiftFunction;       ///< f(x) with x the lab energy (MeV), "" = none; parameters a0, a1, ...
+  std::vector<double> shiftFunctionValues, shiftFunctionErrors;
+  std::vector<bool> shiftFunctionVary;
+  std::string shiftGroup;          ///< data sets with one label share the first's constant shift
+  std::string shiftFunctionGroup;  ///< data sets with one label share the first's shift function
+  std::string covarianceFile;      ///< "" = none; data sets naming one file share its correlations
+  bool thicknessFit = false;       ///< the sample thickness is a fit parameter
+  bool thicknessVary = false;
+  double thicknessSigma = 0.0;     ///< prior width (atoms/b), 0 = none
+  std::string thicknessGroup;      ///< data sets with one label share the first's thickness
+  // Unobserved primary, observed secondary transition (UPOS).
+  bool upos = false;
+  int secondaryDecayL = 0;
+  double secondaryFinalSpin = 0.0;   ///< I_c
+  double secondaryMixingRatio = 0.0; ///< delta
+};
+
+/// An extrapolation: points on a grid, no data.
+struct ExtrapolationSpec {
+  int key = 0;  ///< 1, 2, ... in file order (inactive ones counted)
+  bool active = true;
+  ReactionSpec reaction;
+  double minE = 0.0, maxE = 0.0, eStep = 0.0;  ///< lab energy grid (MeV); step 0 = one energy
+  double minA = 0.0, maxA = 0.0, aStep = 0.0;  ///< lab angle grid (deg); step 0 = one angle
+  int maxAngDistOrder = 0;                     ///< AngularDistribution: highest Legendre order
+};
+
+/// An apparatus effect (target integration, beam resolution, beam profile, Doppler, UDR, screening) and the data
+/// sets it applies to.  Grammar and meaning of every field: docs/source/reference/data_formats.rst, <targetInt>.
+struct TargetEffectSpec {
+  std::string source;  ///< the text it was read from, quoted in messages
+  bool active = false;
+  std::vector<int> datasetKeys;  ///< DatasetSpec::key / ExtrapolationSpec::key of the data sets it applies to
+  int numIntegrationPoints = 0;
+  bool convolution = false;      ///< Gaussian beam-energy resolution
+  double sigma = 0.0;            ///< its width (MeV; frame: sigmaLab)
+  bool targetIntegration = false;
+  double density = 0.0;          ///< target thickness (atoms/cm^2); <= 0: an infinitely thick target
+  std::string stoppingPowerEquation;
+  std::vector<double> stoppingPowerParameters;
+  bool qCoefficients = false;
+  std::vector<double> qCoefficientValues;
+  bool convolutionCoefficients = false;  ///< energy-dependent resolution sigma(E) by an equation
+  std::string convolutionEquation;
+  std::vector<double> convolutionCoefficientValues;
+  bool hasStragglingFlag = false;
+  bool straggling = false;
+  bool hasStragglingCoefficient = false;
+  double stragglingCoefficient = 0.0;
+  bool hasResonanceWidthMultiplier = false;
+  double resonanceWidthMultiplier = 0.0;
+  bool hasPointsPerWidth = false;
+  double pointsPerWidth = 0.0;
+  bool hasRanges = false;                       ///< the lab-energy windows are given ("" = unrestricted)
+  std::vector<std::pair<double, double>> ranges;  ///< lab energy windows (MeV)
+  bool autoWindows = false;
+  bool hasAutoWindowTolerance = false;
+  double autoWindowTolerance = 0.0;
+  bool hasAutoWindowMargin = false;
+  double autoWindowMargin = 0.0;
+  double transitionWidth = 0.0;  ///< MeV, 0 when absent
+  double autoTolerance = 0.0;    ///< 0 when absent
+  struct ProfileComponent {
+    double xi = 0, omega = 0, alpha = 0, weight = 0;
+  };
+  bool beamProfile = false;
+  std::vector<ProfileComponent> beamProfileComponents;
+  double beamTpcSigma = 0.0;
+  double beamTruncation = 0.0;
+  bool beamDetailedBalance = false;
+  bool sigmaLab = false;
+  bool screening = false;
+  bool screeningMalformed = false;  ///< old-line reader: the screening block could not be read
+  double screeningUe = 0.0;         ///< electron-screening potential (eV)
+  bool screeningVary = false;
+  double screeningSigma = 0.0;      ///< prior width (eV)
+  bool densityFit = false;          ///< density fit block present
+  bool densityVary = false;
+  std::string densitySigmaText;     ///< prior width as written: a number (same unit as density) or a percentage
+  double densityMax = 0.0;          ///< largest density the grids span (atoms/cm^2), 0 = automatic
+  std::string densityReadError;     ///< old-line reader: why the density block could not be read ("" = it could)
+  std::string densityGroup;
+  bool doppler = false;
+  double dopplerTemperature = 0.0;  ///< K
+  bool dopplerFit = false;
+  std::string dopplerVaryText, dopplerSigmaText, dopplerMaxText;  ///< as written: 0|1, K, K ("" = none)
+  std::string dopplerReadError;     ///< old-line reader: why the Doppler block could not be read
+  bool udr = false;
+  std::string udrFile;
+  double udrFlightPath = 0.0;    ///< m
+  double udrBurstFwhm = 0.0;     ///< ns
+  double udrChannelWidth = 0.0;  ///< ns
+  bool udrCentred = true;
+};
+
+/// One row of the abundances of the samples, in the order given: rows are applied in that order (a sample exists from
+/// the first row that sets one of its abundances).
+struct AbundanceRowSpec {
+  std::string sample;   ///< "" = the unnamed sample
+  bool isSum = false;   ///< true: the width of the sample's sum-to-one prior; false: one nucleus's abundance
+  double sumSigma = 0.0;
+  int z = 0, a = 0;     ///< the compound nucleus
+  double value = 0.0;   ///< abundance (fraction)
+  bool vary = false;
+  double sigma = 0.0;   ///< prior width (fraction)
+};
+
+/// The abundances block: absent (no abundance is a parameter) or present with its rows (possibly none).
+struct AbundancesSpec {
+  bool present = false;
+  std::vector<AbundanceRowSpec> rows;
+};
+
+/// What a reader made of one section: the specs in order, each with the reader's messages to print before the engine
+/// sets it up, and why the reader stopped after the last item (`failed`; `error` is "" when the old engine stopped
+/// without a message).  The engine sets the items up in order and reports `error` after them, so that the messages
+/// come in the order of the section.
+template <class Spec>
+struct SpecList {
+  struct Item {
+    Spec spec;
+    std::string warning;      ///< printed as "WARNING: ..." before the item ("" = none)
+    std::string note;         ///< passed to Config::Note before the item ("" = none)
+    bool readFailed = false;  ///< the reader could not read all of the item's text (old <targetInt> lines)
+  };
+  std::vector<Item> items;
+  bool failed = false;
+  std::string error;  ///< the whole message, "ERROR: ..." ("" = none)
+};
+
+/// The data sets of a project and what they link to, as EData::Fill consumes them.
+struct DataSpecs {
+  SpecList<DatasetSpec> datasets;
+  /// A prior-centre row the old-line reader refused; reported where the old engine reported it (after the groups of
+  /// the data sets are resolved).  "" = none.
+  std::string priorCentreError;
+  SpecList<TargetEffectSpec> targetEffects;
+};
+
+/// The extrapolations of a project and what they link to, as EData::MakePoints consumes them.
+struct ExtrapolationSpecs {
+  SpecList<ExtrapolationSpec> extrapolations;
+  SpecList<TargetEffectSpec> targetEffects;
+};
+
+/// The abundances as CNuc consumes them, and why the reader stopped (`error` printed after the rows are applied).
+struct AbundanceSpecs {
+  AbundancesSpec abundances;
+  bool failed = false;
+  std::string error;
+};
+
+}  // namespace experiment
+}  // namespace azure2
+
+#endif

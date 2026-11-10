@@ -527,7 +527,7 @@ PY_NAME_REGEX = re.compile(r're\.(?:match|fullmatch|search|compile)\(\s*[rbf]*["
 ALLOWED_NAME_TESTS = {
     # The <parameterSettings> "segment_<key>_norm|energy_shift prior_centre c" row, read and rewritten by pyazr's
     # document layer (AzrModel.prior_centres / set_prior_centres, SegmentSet) without an engine session, so without a
-    # parameter vector to look the name up in.  The engine matches the row's name whole (EData::ReadPriorCentres).
+    # parameter vector to look the name up in.  The engine matches the row's name whole (convert/'s PriorCentresFromOldRows).
     ("pyazr/datasets.py", "_PRIOR_CENTRE = re.compile("),
     ("pyazr/azrfile.py", "_PRIOR_ROW = re.compile("),
     # An example script that reads param.par without the engine (pyazr.transform only).

@@ -9,6 +9,7 @@
 #include "JGroup.h"
 #include "PPair.h"
 #include "ScatteringLength.h"
+#include "azure2/experiment/SetupSpecs.h"
 
 namespace ROOT {
 namespace Minuit2 {
@@ -264,9 +265,11 @@ class CNuc {
   std::string transformError_;
   /// 1-based index of the nucleus with this (Z, A), appending it if new.
   int FindOrAddNucleus(int z, int a);
-  /// Reads the optional <abundances> block of the project file into samples_.
-  /// Returns -1 on a malformed line.
+  /// TEMPORARY (step 3d, src/OldLineSetup.cpp): the old <abundances> section through SetAbundances.
   int ReadAbundances(const Config &);
+  /// The abundances of the samples from their spec into samples_; -1 (with the reader's message) when the reader
+  /// stopped.
+  int SetAbundances(const Config &, const azure2::experiment::AbundanceSpecs &);
   std::vector<PPair> pairs_;
   std::vector<JGroup> jgroups_;
   std::vector<CompoundNucleus> nuclei_;

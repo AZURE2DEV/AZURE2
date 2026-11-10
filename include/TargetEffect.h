@@ -9,6 +9,7 @@
 #include "Constants.h"
 #include "Equation.h"
 #include "UdrKernel.h"
+#include "azure2/experiment/SetupSpecs.h"
 
 /// An AZURE target effect entry
 
@@ -21,8 +22,8 @@
 
 class TargetEffect {
  public:
-  /// Read one target effect from the target-effects input file.
-  TargetEffect(std::istream &, const Config &);
+  /// Build one effect from its spec (the data sets it applies to: GetSegmentsList).
+  TargetEffect(const azure2::experiment::TargetEffectSpec &, const Config &);
   /// Was this effect marked active in the input file?
   bool IsActive() const;
   /// Does it include Gaussian beam convolution?
@@ -173,6 +174,7 @@ class TargetEffect {
   void SetSigma(double);
   void SetDensity(double);
   void SetNumSubPoints(int);
+  /// The keys of the data sets the effect applies to.
   std::vector<int> GetSegmentsList() const;
   Equation *GetStoppingPowerEq();
   Equation *GetConvolutionEq();
@@ -376,7 +378,7 @@ class TargetEffect {
   double density_ = 0.0;
   bool isThickTarget_ = false;   ///< target integration with density 0 (IsThickTarget)
   Equation stoppingPowerEq_;
-  std::string segmentsList_;
+  std::vector<int> datasetKeys_;  ///< the data sets it applies to (DatasetSpec::key)
   vector_r qCoefficients_;
   vector_r convCoefficients_;
   Equation convolutionEq_;

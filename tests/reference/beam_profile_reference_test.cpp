@@ -42,6 +42,7 @@
 #include "EData.h"
 #include "EPoint.h"
 #include "TargetEffect.h"
+#include "azure2/convert/SpecsFromOldLines.h"
 
 // Each consumer of the engine defines this itself -- src/AZURE2.cpp for the CLI,
 // api/src/pybind_api.cpp for the Python API -- so a program that links
@@ -158,7 +159,8 @@ std::string targetIntLine(const std::string &profileBlock, int numPoints = 400) 
 
 TargetEffect makeEffect(const Config &configure, const std::string &line) {
   std::istringstream in(line);
-  return TargetEffect(in, configure);
+  bool readFailed = false;
+  return TargetEffect(azure2::convert::TargetEffectSpecFromOldLine(in, readFailed), configure);
 }
 
 // Fold sigma(E) through the engine: build a point with sub-points on a uniform

@@ -2,7 +2,7 @@
 #
 # Explicit prior centres: rows "segment_N_norm prior_centre c" and
 # "segment_N_energy_shift prior_centre c" of <parameterSettings>
-# (EData::ReadPriorCentres) move the centre of that segment's prior away from
+# (EData::ApplyPriorCentres) move the centre of that segment's prior away from
 # the norm / shift field of its <segmentsData> line, which stays the start
 # value.  Without a row the field is both, as it always was.
 #

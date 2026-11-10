@@ -5,7 +5,7 @@ mutation of it.
 
 A `<targetInt>` line with target integration and a density of 0 means an infinitely thick target:
 the yield per incident particle, ∫₀^E₀ σ(E)/ε(E) dE, not divided by a density. Up to dev 5df7024
-`EData::ReadTargetEffectsFile` implemented that by overwriting the **shared** effect's density with
+`EData::SetUpTargetEffects` implemented that by overwriting the **shared** effect's density with
 1e24 at the first point whose thickness came out below 1e-10 (audit 2026-10-25, item 17). Two
 things followed. That first point kept a target thickness of 0, and the Gaussian branch of
 `EPoint::IntegrateTargetEffectImpl` integrates from E₀ − thickness to E₀, so with a beam spread or
