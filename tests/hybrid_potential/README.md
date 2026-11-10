@@ -68,10 +68,13 @@ off returns exactly the no-hybrid answer, that setting a potential through the
 pyazr API equals loading the same potential from a file, and that the Coulomb
 memo is keyed on the potential so a change to one is actually seen.
 
-Run it from this directory:
+It also checks that the project as committed gives the total of
+`expected/chiSquared.out` within `tolerance`, read from those files. It runs in
+a temporary copy of this folder, in CTest as `pyazr_hybrid_per_pair` (about
+20 s), or by hand with the compiled engine:
 
 ```bash
-python3 check_per_pair.py
+python3 tests/hybrid_potential/check_per_pair.py
 ```
 
 ## Below threshold
