@@ -117,8 +117,16 @@ constexpr const char *kReferenceKind = "E_REFERENCE_KIND";
 constexpr const char *kUnknownEpoch = "E_UNKNOWN_EPOCH";
 constexpr const char *kTargetKind = "E_TARGET_KIND";
 constexpr const char *kDegenerateNuisance = "E_DEGENERATE_NUISANCE";
+// Model data against <levels> (ModelDatum.h, BuildModelData)
+constexpr const char *kUnknownLevel = "E_UNKNOWN_LEVEL";
+constexpr const char *kLevelJpi = "E_LEVEL_JPI";
+constexpr const char *kUnknownPair = "E_UNKNOWN_PAIR";
+constexpr const char *kAmbiguousPair = "E_AMBIGUOUS_PAIR";
+constexpr const char *kNotAChannel = "E_NOT_A_CHANNEL";
 // Warnings
 constexpr const char *kNotMeasurable = "W_NOT_MEASURABLE";
+constexpr const char *kBroadLevel = "W_BROAD_LEVEL";
+constexpr const char *kNearbyLevel = "W_NEARBY_LEVEL";
 }  // namespace codes
 
 }  // namespace experiment

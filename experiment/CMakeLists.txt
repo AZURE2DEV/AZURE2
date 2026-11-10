@@ -28,6 +28,7 @@ add_library(azure2_experiment STATIC
   src/Expression.cpp
   src/Frames.cpp
   src/Json.cpp
+  src/ModelDatum.cpp
   src/Quantities.cpp
   src/ReactionParser.cpp
   src/Schema.cpp

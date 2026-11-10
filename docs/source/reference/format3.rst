@@ -1154,7 +1154,7 @@ Resonance strength (``datum``).  omega gamma of a level from observed widths at 
    * - energy column
      - --
    * - reaction
-     - one reaction
+     - one reaction, no [total] exit
    * - ``level``
      - required
    * - ``J``
@@ -1271,6 +1271,8 @@ Branching ratio (``datum``).  Gamma_b / Gamma of a level.
      - ``1`` (1), ``%`` (0.01)
    * - energy column
      - --
+   * - reaction
+     - one reaction, no [total] exit
    * - ``level``
      - required
    * - ``J``
@@ -1767,6 +1769,27 @@ Diagnostic codes
    * - ``E_DEGENERATE_NUISANCE``
      - error
      - efficiency and norm both free without a prior (F9)
+   * - ``E_UNKNOWN_LEVEL``
+     - error
+     - a datum's level ID that no active level of <levels> has, or two levels of its J^pi have
+   * - ``E_LEVEL_JPI``
+     - error
+     - a datum's J^pi that is not the J^pi of the level with its ID (F13)
+   * - ``E_UNKNOWN_PAIR``
+     - error
+     - a reaction or pair of a datum that no pair of <levels> has (particles and states)
+   * - ``E_AMBIGUOUS_PAIR``
+     - error
+     - a reaction or pair of a datum that two pairs of <levels> have
+   * - ``E_NOT_A_CHANNEL``
+     - error
+     - a datum's pair (or pair, l, s) that is no channel of its level, or no s-wave channel spin of the pair
    * - ``W_NOT_MEASURABLE``
      - warning
      - a data set of a quantity that is computed for tests and comparison, not measured
+   * - ``W_BROAD_LEVEL``
+     - warning
+     - a resonance strength of a level with Gamma / E_r > 1 %: eq. (8) and the area of the resonance differ
+   * - ``W_NEARBY_LEVEL``
+     - warning
+     - a resonance strength of a level with another level of its J^pi within 10 Gamma
