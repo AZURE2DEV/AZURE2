@@ -33,6 +33,7 @@ class ShftFunc {
     table_ = SharedTable(neutral_);
     params_.whitFunc = std::make_unique<WhitFunc>(pPair);
     potential_ = pPair->GetHybridPotential();
+    pair_ = pPair;
   };
   /*!
    *
@@ -40,26 +41,26 @@ class ShftFunc {
   ~ShftFunc() = default;
   /*!
    * The parenthesis operator is defined to make the class instance callable as a function.  The orbital
-   * angular momentum and energy in the compound system are the dependent variables.
+   * angular momentum, the channel's 2J key (PPair::SpinOrbitTwoJ) and energy in the compound system are the dependent variables.
    * The function returns the value of the shift function.
    */
-  double operator()(int l, double energy);
+  double operator()(int l, int two_j, double energy);
   /*!
    * Returns the energy derivative of the shift function at the specified orbital
    * angular momentum and energy in the compound system.
    */
-  double EnergyDerivative(int l, double energy, double step = 1.0e-6);
+  double EnergyDerivative(int l, int two_j, double energy, double step = 1.0e-6);
   /*!
    * Returns the second energy derivative of the shift function (a central
    * difference of EnergyDerivative with a 1 keV step).
    */
-  double EnergySecondDerivative(int l, double energy);
+  double EnergySecondDerivative(int l, int two_j, double energy);
   /*!
    * The threshold (E = 0) value S_l(0), common limit of the positive- and
    * negative-energy shift functions: -l - (x/2) K_{2l}(x)/K_{2l+1}(x) with
    * x = sqrt(8 eta k a), or -l without Coulomb.
    */
-  double ZeroEnergyLimit(int l) const;
+  double ZeroEnergyLimit(int l, int two_j) const;
   /*!
    * Exact shift function of a closed neutral channel (eta = 0) at rho = kappa a:
    * S_0 = -rho, S_l = -rho^2 / (l - S_{l-1}) - l, i.e. rho u'/u for the decaying
@@ -80,6 +81,7 @@ class ShftFunc {
   double NumericalShift();
   typedef struct Params {
     int lValue;
+    int twoJ = azure2::physics::kNoSpinOrbit;
     double bindingEnergy;
     std::unique_ptr<WhitFunc> whitFunc;
   } Params;
@@ -96,6 +98,8 @@ class ShftFunc {
   bool forceExact_ = false;
   /// The pair's hybrid potential: S = a W~'/W~ of the distorted decaying solution (physics/ HybridBoundShift).
   std::optional<azure2::physics::HybridPotential> potential_;
+  /// The pair (PPair::SpinOrbitFactor gives <2 l.i> of a two_j key).
+  const PPair *pair_;
   /// Does the table cover the bound state at this energy (eta_b, rho_b of l)?
   bool BoundTableOk(int l, double energy) const;
   static const CoulombTable *SharedTable(bool neutral);

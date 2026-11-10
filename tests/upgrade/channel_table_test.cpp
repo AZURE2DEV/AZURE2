@@ -40,7 +40,7 @@ bool SameBits(const ChannelTable::Row &a, const ChannelTable::Row &b) { return s
 bool SameTable(const ChannelTable &a, const ChannelTable &b, const std::vector<ChannelTable::Key> &keys) {
   if (a.Size() != b.Size()) return false;
   for (const auto &k : keys) {
-    const ChannelTable::Row *x = a.Find(k.pair, k.l, k.energy), *y = b.Find(k.pair, k.l, k.energy);
+    const ChannelTable::Row *x = a.Find(k), *y = b.Find(k);
     if (!x || !y || !SameBits(*x, *y)) return false;
   }
   return true;
@@ -62,7 +62,7 @@ void CheckProject(const std::string &azr) {
     if (compound.GetPair(p)->GetPType() != 0) continue;
     for (int l = 0; l <= 4; l++)
       for (double e : {-2.0, -0.3, -1e-6, 2e-10, 1e-4, 0.01, 0.1, 0.35, 1.0, 2.5, 7.0})
-        keys.push_back({p, l, e});
+        keys.push_back({p, l, compound.GetPair(p)->SpinOrbitTwoJ(l + 0.5), e});
   }
   std::printf("%s: %zu keys\n", azr.c_str(), keys.size());
   std::vector<ChannelTable::Key> shuffled = keys;
@@ -80,16 +80,16 @@ void CheckProject(const std::string &azr) {
   check("1 thread in order == 8 threads shuffled with duplicates (bits)", SameTable(*one, *eight, keys));
   bool computeSame = true;
   for (const auto &k : keys)
-    computeSame = computeSame && SameBits(*one->Find(k.pair, k.l, k.energy),
-                                          ChannelTable::Compute(compound.GetPair(k.pair), k.l, k.energy, cfg));
+    computeSame = computeSame && SameBits(*one->Find(k),
+                                          ChannelTable::Compute(compound.GetPair(k.pair), k.l, k.two_j, k.energy, cfg));
   check("every row == ChannelTable::Compute at its key (bits)", computeSame);
   bool noNeighbour = true;
   for (const auto &k : keys)
-    noNeighbour = noNeighbour && !one->Find(k.pair, k.l, std::nextafter(k.energy, 1e9)) &&
-                  !one->Find(k.pair, k.l, std::nextafter(k.energy, -1e9));
+    noNeighbour = noNeighbour && !one->Find({k.pair, k.l, k.two_j, std::nextafter(k.energy, 1e9)}) &&
+                  !one->Find({k.pair, k.l, k.two_j, std::nextafter(k.energy, -1e9)});
   check("no row for E_c one ulp from a key", noNeighbour);
   std::vector<ChannelTable::Key> more = keys;
-  for (const auto &k : keys) more.push_back({k.pair, k.l, k.energy * 1.5 + 0.01});
+  for (const auto &k : keys) more.push_back({k.pair, k.l, k.two_j, k.energy * 1.5 + 0.01});
   auto fromPrevious = ChannelTable::Build(&compound, cfg, more, one.get());
   auto fromScratch = ChannelTable::Build(&compound, cfg, more);
   check("built from a previous table == built from scratch (bits)", SameTable(*fromPrevious, *fromScratch, more));

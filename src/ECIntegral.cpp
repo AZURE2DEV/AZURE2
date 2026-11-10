@@ -45,9 +45,9 @@ void ECIntegral::ClearFGMemo() { g_fgMemo.clear(); }
 static FGMemoEntry fgEvaluate(double x, ECIntegral::Params *params) {
   auto it = g_fgMemo.find(x);
   if (it != g_fgMemo.end()) return it->second;
-  struct CoulWaves coul = params->coulFunc->operator()(params->liValue, x, params->pairEnergy);
+  struct CoulWaves coul = params->coulFunc->operator()(params->liValue, params->twoJi, x, params->pairEnergy);
   double sOut;
-  double mOut = params->whitFunc->ScaledMemo(params->lfValue, x, params->bindingEnergy, sOut);
+  double mOut = params->whitFunc->ScaledMemo(params->lfValue, params->twoJf, x, params->bindingEnergy, sOut);
   double exponent = sOut - params->log10RefOut;
   double whit = (exponent < -280.0) ? 0.0 : mOut * pow(10.0, exponent);
   FGMemoEntry e = {coul.F, coul.G, whit};
@@ -85,14 +85,14 @@ double ECIntegral::WWIntegrand(double x, void *p) {
     // at the channel radius, so the integrand is O(1) where it matters.  The
     // common scale is put back by the caller.
     double sIn, sOut;
-    double mIn = theWhitFunc->Scaled(liValue, x, fabs(pairEnergy), sIn);
-    double mOut = theWhitFunc->ScaledMemo(lfValue, x, fabs(bindingEnergy), sOut);  // final state: memo (3b (ii))
+    double mIn = theWhitFunc->Scaled(liValue, params->twoJi, x, fabs(pairEnergy), sIn);
+    double mOut = theWhitFunc->ScaledMemo(lfValue, params->twoJf, x, fabs(bindingEnergy), sOut);  // final state: memo (3b (ii))
     double exponent = sIn + sOut - params->log10RefIn - params->log10RefOut;
     if (exponent < -280.0) return 0.0;  // genuinely negligible
     returnValue = mIn * mOut * pow(10.0, exponent) * pow(x, multLValue);
   } else {
-    double whitIn = theWhitFunc->operator()(liValue, x, fabs(pairEnergy));
-    double whitOut = theWhitFunc->operator()(lfValue, x, fabs(bindingEnergy));
+    double whitIn = theWhitFunc->operator()(liValue, params->twoJi, x, fabs(pairEnergy));
+    double whitOut = theWhitFunc->operator()(lfValue, params->twoJf, x, fabs(bindingEnergy));
     returnValue = whitIn * whitOut * pow(x, multLValue);
   }
   return params->useChargeFunction ? params->effectiveCharge->operator()(x) * returnValue : returnValue;
@@ -143,6 +143,8 @@ struct RateGridKey {
   int z1, z2;
   double redmass;
   int lf;
+  int twoJf;                       ///< the final channel's 2J key (PPair::SpinOrbitTwoJ)
+  std::vector<double> potential;  ///< physics::PotentialKey of the pair's potential (the final state is W~ of it)
   double bindingEnergy;
   double chanrad;
   bool operator<(const RateGridKey &o) const {
@@ -150,6 +152,8 @@ struct RateGridKey {
     if (z2 != o.z2) return z2 < o.z2;
     if (redmass != o.redmass) return redmass < o.redmass;
     if (lf != o.lf) return lf < o.lf;
+    if (twoJf != o.twoJf) return twoJf < o.twoJf;
+    if (potential != o.potential) return potential < o.potential;
     if (bindingEnergy != o.bindingEnergy) return bindingEnergy < o.bindingEnergy;
     return chanrad < o.chanrad;
   }
@@ -163,9 +167,10 @@ struct RateGridEntry {
 };
 const int kRateRadialPoints = 150;
 
-const RateGridEntry &getRateGrid(WhitFunc *wf, int lf, double bindingEnergy, double chanrad) {
+const RateGridEntry &getRateGrid(WhitFunc *wf, const std::vector<double> &potential, int lf, int twoJf,
+                                 double bindingEnergy, double chanrad) {
   static thread_local std::map<RateGridKey, RateGridEntry> cache;
-  RateGridKey key{wf->z1(), wf->z2(), wf->redmass(), lf, bindingEnergy, chanrad};
+  RateGridKey key{wf->z1(), wf->z2(), wf->redmass(), lf, twoJf, potential, bindingEnergy, chanrad};
   auto it = cache.find(key);
   if (it != cache.end()) return it->second;
 
@@ -180,7 +185,7 @@ const RateGridEntry &getRateGrid(WhitFunc *wf, int lf, double bindingEnergy, dou
       const double *xk = gsl_integration_fixed_nodes(ws);
       const double *wk = gsl_integration_fixed_weights(ws);
       double refOut;
-      wf->Scaled(lf, chanrad, bindingEnergy, refOut);
+      wf->Scaled(lf, twoJf, chanrad, bindingEnergy, refOut);
       e.refOut = refOut;
       e.x.resize(kRateRadialPoints);
       e.W.resize(kRateRadialPoints);
@@ -189,7 +194,7 @@ const RateGridEntry &getRateGrid(WhitFunc *wf, int lf, double bindingEnergy, dou
         e.x[k] = xk[k];
         e.W[k] = wk[k] * exp(b * (xk[k] - chanrad));  // undo the exp(-b(x-a)) weight
         double sk;
-        double mk = wf->Scaled(lf, xk[k], bindingEnergy, sk);
+        double mk = wf->Scaled(lf, twoJf, xk[k], bindingEnergy, sk);
         double expo = sk - refOut;
         e.whitOut[k] = (expo < -280.0) ? 0.0 : mk * pow(10.0, expo);
       }
@@ -220,14 +225,15 @@ void ECIntegral::Integrate(double chanrad) {
     // energy-independent final Whittaker.  Everything else keeps the adaptive
     // qagiu, which is the trusted path for fits and extrapolations.
     bool rateMode = configure_ && (configure_->paramMask & Config::CALCULATE_REACTION_RATE);
-    const RateGridEntry *grid = rateMode ? &getRateGrid(params_.whitFunc.get(), params_.lfValue, params_.bindingEnergy, chanrad)
+    const RateGridEntry *grid = rateMode ? &getRateGrid(params_.whitFunc.get(), azure2::physics::PotentialKey(pair()->GetHybridPotential()),
+                                                         params_.lfValue, params_.twoJf, params_.bindingEnergy, chanrad)
                                          : nullptr;
     if (grid && grid->ok) {
       params_.log10RefOut = grid->refOut;  // CalculateDirect restores 10^refOut
       long double fw = 0.0L, gw = 0.0L;
       for (size_t k = 0; k < grid->x.size(); ++k) {
         double x = grid->x[k];
-        struct CoulWaves coul = params_.coulFunc->operator()(params_.liValue, x, params_.pairEnergy);
+        struct CoulWaves coul = params_.coulFunc->operator()(params_.liValue, params_.twoJi, x, params_.pairEnergy);
         double eff = params_.useChargeFunction ? params_.effectiveCharge->operator()(x) : 1.0;
         double common = grid->W[k] * eff * grid->whitOut[k] * pow(x, params_.multLValue);
         fw += (long double)coul.F * common;
@@ -320,6 +326,8 @@ complex ECIntegral::CalculateDirect(int theInitialLValue, int theFinalLValue,
   params_.effectiveCharge = &effectiveChargeFunc;
   params_.liValue = theInitialLValue;
   params_.lfValue = theFinalLValue;
+  params_.twoJi = pair()->SpinOrbitTwoJ(theInitialJValue);
+  params_.twoJf = pair()->SpinOrbitTwoJ(theFinalJValue);
   params_.multLValue = theLMult;
   params_.pairEnergy = outEnergy;
   params_.bindingEnergy = fabs(levelEnergy - sepEnergy);
@@ -332,13 +340,13 @@ complex ECIntegral::CalculateDirect(int theInitialLValue, int theFinalLValue,
   // the bound-state factor in FW/GW (which used to vanish silently).
   {
     double sOut;
-    whitfunction()->Scaled(theFinalLValue, chanRad, params_.bindingEnergy, sOut);
+    whitfunction()->Scaled(theFinalLValue, params_.twoJf, chanRad, params_.bindingEnergy, sOut);
     params_.log10RefOut = sOut;
     params_.log10RefIn = 0.0;
     params_.useScaledWhittaker = false;
     if (outEnergy <= 0.0) {
       double sIn;
-      whitfunction()->Scaled(theInitialLValue, chanRad, fabs(outEnergy), sIn);
+      whitfunction()->Scaled(theInitialLValue, params_.twoJi, chanRad, fabs(outEnergy), sIn);
       params_.log10RefIn = sIn;
       params_.useScaledWhittaker = true;
     }
@@ -357,11 +365,11 @@ complex ECIntegral::CalculateDirect(int theInitialLValue, int theFinalLValue,
   complex overlapIntegral(0., 0.);
   if (outEnergy > 0.0) {
     struct CoulWaves
-        coul = coulfunction()->operator()(theInitialLValue, chanRad, outEnergy);
+        coul = coulfunction()->operator()(theInitialLValue, params_.twoJi, chanRad, outEnergy);
     if (isChannelCapture) {
       complex chanExpHSP = CoulombHardSpherePhase(coul);
       overlapIntegral = complex(0.0, -0.5) *
-          sqrt(coulfunction()->Penetrability(theInitialLValue, chanRad, outEnergy)) *
+          sqrt(coulfunction()->Penetrability(theInitialLValue, params_.twoJi, chanRad, outEnergy)) *
           Kinematics::Channel(pair()).FluxFactor(fabs(outEnergy)) / sqrt(hbarc) *
           chanExpHSP * (GW() + complex(0.0, 1.0) * FW());
     } else {
@@ -390,7 +398,7 @@ complex ECIntegral::CalculateDirect(int theInitialLValue, int theFinalLValue,
     // survives is the bound-state scale, applied in log space so that a
     // genuinely negligible result becomes zero instead of a NaN.
     double sWhit;
-    double mWhit = whitfunction()->Scaled(theInitialLValue, chanRad, fabs(outEnergy), sWhit);
+    double mWhit = whitfunction()->Scaled(theInitialLValue, params_.twoJi, chanRad, fabs(outEnergy), sWhit);
     double ratio = 0.0;
     if (mWhit != 0.0) {
       double log10Ratio = log10(fabs(GW() / mWhit)) + params_.log10RefOut;

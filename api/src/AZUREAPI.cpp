@@ -1697,17 +1697,17 @@ vector_r AZUREAPI::GetCoulombFunctions(const vector_r &request) const {
     double F = 0., dF = 0., G = 0., dG = 0., P = 0., S = 0., delta = 0.;
     if (energy > 0.0 && !ChannelFunc::IsCoulombThreshold(pair, energy)) {
       try {
-        CoulWaves w = coul(lValue, radius, energy);
+        CoulWaves w = coul(lValue, azure2::physics::kNoSpinOrbit, radius, energy);
         F = w.F, dF = w.dF, G = w.G, dG = w.dG;
-        P = coul.Penetrability(lValue, radius, energy);
-        S = coul.PEShift(lValue, radius, energy);
+        P = coul.Penetrability(lValue, azure2::physics::kNoSpinOrbit, radius, energy);
+        S = coul.PEShift(lValue, azure2::physics::kNoSpinOrbit, radius, energy);
         delta = -std::atan2(w.F, w.G);
       } catch (...) {
         // A failed evaluation returns zeros for that energy rather than aborting the grid.
         F = dF = G = dG = P = S = delta = 0.;
       }
     } else if (radius == pair->GetChRad()) {  // closed (E <= 0, eta > 100): S through threshold (ChannelFunc)
-      S = ChannelFunc(pair, !!(configure().paramMask & Config::USE_GSL_COULOMB_FUNC)).Shift(lValue, energy);
+      S = ChannelFunc(pair, !!(configure().paramMask & Config::USE_GSL_COULOMB_FUNC)).Shift(lValue, azure2::physics::kNoSpinOrbit, energy);
     }
     out.insert(out.end(), {F, dF, G, dG, P, S, delta});
   }

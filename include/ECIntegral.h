@@ -26,6 +26,8 @@ class ECIntegral {
     std::unique_ptr<WhitFunc> whitFunc;
     int liValue;
     int lfValue;
+    int twoJi;  ///< the entrance channel's 2J key (PPair::SpinOrbitTwoJ of J_i)
+    int twoJf;  ///< the final channel's 2J key (PPair::SpinOrbitTwoJ of J_f)
     int multLValue;
     double pairEnergy;
     double bindingEnergy;

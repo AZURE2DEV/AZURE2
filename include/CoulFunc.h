@@ -67,6 +67,8 @@ class CoulFunc {
   double redmass() const;
   /// Orbital angular momentum of the last evaluation.
   int lLast() const;
+  /// The 2J key (PPair::SpinOrbitTwoJ) of the last evaluation.
+  int twoJLast() const { return twoJLast_; }
   /// Radius of the last evaluation, fm.
   double radiusLast() const;
   /// Centre-of-mass energy of the last evaluation, MeV.
@@ -74,20 +76,22 @@ class CoulFunc {
   /// The last functions computed; a one-deep memo for repeated calls at the same point.
   struct CoulWaves coulLast() const;
   /// Record an evaluation as the memoized one.
-  void setLast(int, double, double, CoulWaves);
-  /// Coulomb functions at (l, radius fm, centre-of-mass energy MeV).
-  CoulWaves operator()(int, double, double);
-  /// Penetrability \f$P_l\f$ at (l, radius, energy).
-  double Penetrability(int, double, double);
-  /// Shift function \f$S_l\f$ at (l, radius, energy), positive energies.
-  double PEShift(int, double, double);
-  /// Hard-sphere phase factor exp(-i phi_l) = (G - iF)/|G + iF| at (l, radius, energy):
+  void setLast(int l, int two_j, double radius, double energy, CoulWaves);
+  /// Every function below is of a channel (l, two_j): two_j is the key PPair::SpinOrbitTwoJ makes from the channel's
+  /// J (kNoSpinOrbit for a pair without a spin-orbit term, whose functions do not depend on J).
+  /// Coulomb functions at (l, two_j, radius fm, centre-of-mass energy MeV).
+  CoulWaves operator()(int l, int two_j, double radius, double energy);
+  /// Penetrability \f$P_l\f$ at (l, two_j, radius, energy).
+  double Penetrability(int l, int two_j, double radius, double energy);
+  /// Shift function \f$S_l\f$ at (l, two_j, radius, energy), positive energies.
+  double PEShift(int l, int two_j, double radius, double energy);
+  /// Hard-sphere phase factor exp(-i phi_l) = (G - iF)/|G + iF| at (l, two_j, radius, energy):
   /// from the Coulomb table when one is in use and covers the point, else from the waves.
-  std::complex<double> HardSpherePhase(int, double, double);
+  std::complex<double> HardSpherePhase(int l, int two_j, double radius, double energy);
   /// Energy derivative \f$dS_l/dE\f$ -- the term that makes the observed-width transformation singular when it grows too large.
-  double PEShift_dE(int, double, double, double step = 1.0e-6);
+  double PEShift_dE(int l, int two_j, double radius, double energy, double step = 1.0e-6);
   /// Second energy derivative of the shift function (numerical).
-  double PEShift_d2E(int, double, double);
+  double PEShift_d2E(int l, int two_j, double radius, double energy);
 
   /// The pair's hybrid nuclear potential (PPair::GetHybridPotential), none for plain Coulomb functions.
   const std::optional<azure2::physics::HybridPotential> &HybridPotential() const { return potential_; }
@@ -104,7 +108,7 @@ class CoulFunc {
   /// The waves of the radial equation with the pair's potential (spin_orbit_potential.md section 1.1): the
   /// solution equal to H+ = G + iF beyond the matching radius, integrated inward to the radius (physics/
   /// IntegrateInward); the plain Coulomb functions at a radius beyond the matching radius.
-  CoulWaves computeHybrid(int l, double radius, double energy);
+  CoulWaves computeHybrid(int l, int two_j, double radius, double energy);
   /// The point-Coulomb functions by the selected routine (physics/coulomb or GSL).
   CoulWaves PlainWaves(int l, double radius, double energy) const;
 
@@ -113,6 +117,9 @@ class CoulFunc {
   int z1_;
   int z2_;
   int lLast_;
+  int twoJLast_ = azure2::physics::kNoSpinOrbit;
+  /// The pair (its spins and potential give <2 l.i> of a two_j key: PPair::SpinOrbitFactor).
+  const PPair *pair_;
   double redmass_;
   /// k and eta of this pair (relativistic or not, Kinematics.h).
   Kinematics::Channel kin_;
@@ -126,7 +133,7 @@ class CoulFunc {
   const CoulombTable *table_ = nullptr;
   bool TableLookup(int l, double radius, double energy);
   /// PEShift by the exact routine (never the table): one route for every point of a difference stencil.
-  double PEShiftExact(int l, double radius, double energy);
+  double PEShiftExact(int l, int two_j, double radius, double energy);
   int tLastL_ = -1;
   double tLastR_ = 0.0, tLastE_ = 0.0, tP_ = 0.0, tS_ = 0.0, tPhi_ = 0.0;
   bool tOk_ = false;

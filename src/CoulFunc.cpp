@@ -19,6 +19,7 @@
 
 CoulFunc::CoulFunc(PPair *pPair, bool useGSLFunctions) :
   useGSLFunctions_(useGSLFunctions),
+  pair_(pPair),
   potential_(pPair->GetHybridPotential()) {
   z1_ = pPair->GetZ(1);
   z2_ = pPair->GetZ(2);
@@ -55,9 +56,10 @@ bool CoulFunc::TableLookup(int l, double radius, double energy) {
   return tOk_;
 }
 
-std::complex<double> CoulFunc::HardSpherePhase(int l, double radius, double energy) {
+std::complex<double> CoulFunc::HardSpherePhase(int l, int two_j, double radius, double energy) {
+  // The table holds pairs without a potential only, whose functions do not depend on two_j.
   if (table_ && TableLookup(l, radius, energy)) return std::complex<double>(std::cos(tPhi_), -std::sin(tPhi_));
-  return CoulombHardSpherePhase(this->operator()(l, radius, energy));
+  return CoulombHardSpherePhase(this->operator()(l, two_j, radius, energy));
 }
 
 /*!
@@ -123,8 +125,9 @@ struct CoulWaves CoulFunc::coulLast() const {
  * Sets the last calculated Coulomb waves and the values for which they were calculated.
  */
 
-void CoulFunc::setLast(int lLast, double rLast, double eLast, CoulWaves coulLast) {
+void CoulFunc::setLast(int lLast, int twoJLast, double rLast, double eLast, CoulWaves coulLast) {
   lLast_ = lLast;
+  twoJLast_ = twoJLast;
   radiusLast_ = rLast;
   energyLast_ = eLast;
   coulLast_.F = coulLast.F;
@@ -139,19 +142,19 @@ namespace {
 /// radius.  Everything operator() depends on besides (l, radius, energy) is in the block's identity, so a stored value
 /// is the value operator() computes.  At most kRadialScratchSize radii are held; the scratch is emptied when full.
 struct RadialBlockKey {
-  int z1, z2, l;
+  int z1, z2, l, two_j;
   double redmass, mtot, energy;
   std::optional<azure2::physics::HybridPotential> potential;
   bool gsl;
   bool operator==(const RadialBlockKey &o) const {
-    return z1 == o.z1 && z2 == o.z2 && l == o.l && redmass == o.redmass && mtot == o.mtot && energy == o.energy &&
+    return z1 == o.z1 && z2 == o.z2 && l == o.l && two_j == o.two_j && redmass == o.redmass && mtot == o.mtot && energy == o.energy &&
            potential == o.potential && gsl == o.gsl;
   }
 };
 struct RadialBlockHash {
   std::size_t operator()(const RadialBlockKey &k) const {
     std::size_t h = std::hash<double>()(k.energy);
-    for (std::size_t v : {std::hash<int>()(k.z1), std::hash<int>()(k.z2), std::hash<int>()(k.l),
+    for (std::size_t v : {std::hash<int>()(k.z1), std::hash<int>()(k.z2), std::hash<int>()(k.l), std::hash<int>()(k.two_j),
                           std::hash<double>()(k.redmass), std::hash<double>()(k.mtot),
                           std::hash<double>()(k.potential ? k.potential->central_depth_MeV : -1.0),
                           std::hash<bool>()(k.gsl)})
@@ -172,7 +175,7 @@ thread_local std::size_t t_radialSize = 0;
  * The function returns the Coulomb waves.
  */
 
-CoulWaves CoulFunc::operator()(int l, double radius, double energy) {
+CoulWaves CoulFunc::operator()(int l, int two_j, double radius, double energy) {
   struct CoulWaves result = {0.0, 0.0, 0.0, 0.0};
 
   // fix: 12C(a,g) has problems under 1 keV, so we put a limit
@@ -181,7 +184,7 @@ CoulWaves CoulFunc::operator()(int l, double radius, double energy) {
   //}
 
   // First check the local cache (last calculated value)
-  if (l == lLast() && radius == radiusLast() && energy == energyLast()) {
+  if (l == lLast() && two_j == twoJLast() && radius == radiusLast() && energy == energyLast()) {
     result = coulLast();
     return result;
   }
@@ -192,11 +195,11 @@ CoulWaves CoulFunc::operator()(int l, double radius, double energy) {
       t_radialBlocks.clear();
       t_radialSize = 0;
     }
-    block = &t_radialBlocks[RadialBlockKey{z1_, z2_, l, redmass_, kin_.rel ? kin_.m1 + kin_.m2 : 0.0, energy, potential_,
+    block = &t_radialBlocks[RadialBlockKey{z1_, z2_, l, two_j, redmass_, kin_.rel ? kin_.m1 + kin_.m2 : 0.0, energy, potential_,
                                            useGSLFunctions_}];
     auto w = block->find(radius);
     if (w != block->end()) {
-      setLast(l, radius, energy, w->second);
+      setLast(l, two_j, radius, energy, w->second);
       return w->second;
     }
   }
@@ -205,11 +208,11 @@ CoulWaves CoulFunc::operator()(int l, double radius, double energy) {
   struct CoulWaves newResult;
 
   if (potential_) {
-    newResult = computeHybrid(l, radius, energy);
+    newResult = computeHybrid(l, two_j, radius, energy);
   } else {
     newResult = PlainWaves(l, radius, energy);
   }
-  setLast(l, radius, energy, newResult);
+  setLast(l, two_j, radius, energy, newResult);
   result = newResult;
   if (block) {
     block->emplace(radius, newResult);
@@ -224,9 +227,9 @@ CoulWaves CoulFunc::operator()(int l, double radius, double energy) {
  * angular momentum, radius, and energy in the center of mass system.
  */
 
-double CoulFunc::Penetrability(int l, double radius, double energy) {
+double CoulFunc::Penetrability(int l, int two_j, double radius, double energy) {
   if (table_ && TableLookup(l, radius, energy)) return tP_;
-  struct CoulWaves coul = this->operator()(l, radius, energy);
+  struct CoulWaves coul = this->operator()(l, two_j, radius, energy);
   return azure2::physics::penetrability(PhysicsWaves(coul), kin_.Rho(radius, energy));
 }
 
@@ -235,15 +238,15 @@ double CoulFunc::Penetrability(int l, double radius, double energy) {
  * angular momentum, radius, and energy in the center of mass system.
  */
 
-double CoulFunc::PEShift(int l, double radius, double energy) {
+double CoulFunc::PEShift(int l, int two_j, double radius, double energy) {
   if (table_ && TableLookup(l, radius, energy)) return tS_;
-  return PEShiftExact(l, radius, energy);
+  return PEShiftExact(l, two_j, radius, energy);
 }
 
-double CoulFunc::PEShiftExact(int l, double radius, double energy) {
+double CoulFunc::PEShiftExact(int l, int two_j, double radius, double energy) {
   // physics/ChannelFunctions: S with the overflow guard just above a charged threshold (eta >~ 110; 11B+alpha
   // within ~1 keV, where a band of bare cross sections of 1e26-1e37 b once came from the unguarded formula).
-  struct CoulWaves coul = this->operator()(l, radius, energy);
+  struct CoulWaves coul = this->operator()(l, two_j, radius, energy);
   return azure2::physics::shift(PhysicsWaves(coul), kin_.Rho(radius, energy));
 }
 
@@ -252,7 +255,7 @@ double CoulFunc::PEShiftExact(int l, double radius, double energy) {
  * angular momentum, radius, and energy in the center of mass system.
  */
 
-double CoulFunc::PEShift_dE(int l, double radius, double energy, double step) {
+double CoulFunc::PEShift_dE(int l, int two_j, double radius, double energy, double step) {
   // A Richardson-extrapolated central difference with a step of 1e-3 E, accurate
   // to ~1e-10.  AZURE_SHIFT_DE_1EV=1 restores the route used before 2026-10-19, a
   // 1 eV central difference of the exact S, which carries its rounding noise: up
@@ -266,10 +269,10 @@ double CoulFunc::PEShift_dE(int l, double radius, double energy, double step) {
     const bool viaTable = table_ && TableLookup(l, radius, energy + h) && TableLookup(l, radius, energy - h) &&
                           TableLookup(l, radius, energy + 0.5 * h) && TableLookup(l, radius, energy - 0.5 * h);
     // The difference itself is physics/'s (shift_derivative), with S from the route chosen here.
-    return azure2::physics::shift_derivative([&](double e) { return viaTable ? PEShift(l, radius, e) : PEShiftExact(l, radius, e); }, energy);
+    return azure2::physics::shift_derivative([&](double e) { return viaTable ? PEShift(l, two_j, radius, e) : PEShiftExact(l, two_j, radius, e); }, energy);
   }
 
-  return azure2::physics::central_derivative([&](double e) { return PEShift(l, radius, e); }, energy, step);
+  return azure2::physics::central_derivative([&](double e) { return PEShift(l, two_j, radius, e); }, energy, step);
 }
 
 /*!
@@ -279,13 +282,13 @@ double CoulFunc::PEShift_dE(int l, double radius, double energy, double step) {
  * Park level matrix needs it for the energy gradient of the overlap J.
  */
 
-double CoulFunc::PEShift_d2E(int l, double radius, double energy) {
+double CoulFunc::PEShift_d2E(int l, int two_j, double radius, double energy) {
   // Richardson-extrapolated central second difference, O(h^4), with a 10 keV
   // step: the Coulomb functions are good to ~1e-10, so a 1 keV step would
   // leave ~1e-4 of rounding noise in S''.  Within 4h of the threshold, where
   // the function is only defined for positive energies, a forward stencil.
   const double h = 1.0e-2;
-  return azure2::physics::second_derivative([&](double e) { return PEShift(l, radius, e); }, energy, h, 1.0e-3,
+  return azure2::physics::second_derivative([&](double e) { return PEShift(l, two_j, radius, e); }, energy, h, 1.0e-3,
                                             energy < 4.0 * h, azure2::physics::Side::Above);
 }
 
@@ -308,7 +311,7 @@ CoulWaves CoulFunc::PlainWaves(int l, double radius, double energy) const {
   return result;
 }
 
-CoulWaves CoulFunc::computeHybrid(int l, double radius, double energy) {
+CoulWaves CoulFunc::computeHybrid(int l, int two_j, double radius, double energy) {
   struct CoulWaves result = {0.0, 0.0, 0.0, 0.0};
   const azure2::physics::HybridPotential &potential = *potential_;
 
@@ -346,7 +349,7 @@ CoulWaves CoulFunc::computeHybrid(int l, double radius, double energy) {
     // H+ at the requested radius (a node of the grid) and its r-derivative; F, G and their rho-derivatives from
     // H+ = G + iF.
     const azure2::physics::RadialValue h =
-        azure2::physics::IntegrateInward(potential, z1(), z2(), redmass_MeV, l, radius, energy, outgoing);
+        azure2::physics::IntegrateInward(potential, z1(), z2(), redmass_MeV, l, pair_->SpinOrbitFactor(l, two_j), radius, energy, outgoing);
     result.G = h.u.real();
     result.F = h.u.imag();
     result.dG = h.du_dr.real() / drho_dr;

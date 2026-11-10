@@ -36,33 +36,33 @@ bool ChannelFunc::IsClosed(double e) const {
   return !(e > 0.0) || IsCoulombThreshold(pair_, e);
 }
 
-double ChannelFunc::Shift(int l, double e) {
-  if (e < 0.0) return shft()(l, e + threshold_);
-  if (e == 0.0) return shft().ZeroEnergyLimit(l);
+double ChannelFunc::Shift(int l, int two_j, double e) {
+  if (e < 0.0) return shft()(l, two_j, e + threshold_);
+  if (e == 0.0) return shft().ZeroEnergyLimit(l, two_j);
   if (IsCoulombThreshold(pair_, e))
-    return 2.0 * shft().ZeroEnergyLimit(l) - shft()(l, threshold_ - e);
-  return coul().PEShift(l, radius_, e);
+    return 2.0 * shft().ZeroEnergyLimit(l, two_j) - shft()(l, two_j, threshold_ - e);
+  return coul().PEShift(l, two_j, radius_, e);
 }
 
-double ChannelFunc::Penetrability(int l, double e) {
+double ChannelFunc::Penetrability(int l, int two_j, double e) {
   if (IsClosed(e)) return 0.0;
-  return coul().Penetrability(l, radius_, e);
+  return coul().Penetrability(l, two_j, radius_, e);
 }
 
 double ChannelFunc::DerivativeStep(double e) {
   return std::max(kStep, std::min(kMaxStep, 0.25 * std::fabs(e)));
 }
 
-double ChannelFunc::ShiftDerivative(int l, double e) {
+double ChannelFunc::ShiftDerivative(int l, int two_j, double e) {
   // central_derivative (GSL's gsl_deriv_central) probes e +- h and e +- h/2.
   const double h = DerivativeStep(e);
   // Whole stencil in one branch: the routine AZURE2 always used there.
-  if (e + h < 0.0) return shft().EnergyDerivative(l, e + threshold_, h);
+  if (e + h < 0.0) return shft().EnergyDerivative(l, two_j, e + threshold_, h);
   if (e - h > 0.0 && !IsCoulombThreshold(pair_, e - h))
-    return coul().PEShift_dE(l, radius_, e, h);
+    return coul().PEShift_dE(l, two_j, radius_, e, h);
   // Coulomb threshold: S(e) = 2 S(0) - S(-e), so dS/dE(e) = dS/dE(-e).
-  if (e > 0.0 && IsCoulombThreshold(pair_, e)) return ShiftDerivative(l, -e);
+  if (e > 0.0 && IsCoulombThreshold(pair_, e)) return ShiftDerivative(l, two_j, -e);
   // A stencil across threshold (or across the eta = 100 line): difference the
   // continuous S (central_derivative: GSL's gsl_deriv_central, ported to physics/).
-  return azure2::physics::central_derivative([this, l](double x) { return Shift(l, x); }, e, kStep);
+  return azure2::physics::central_derivative([this, l, two_j](double x) { return Shift(l, two_j, x); }, e, kStep);
 }

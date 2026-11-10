@@ -135,11 +135,12 @@ static complex ECPathwayAmplitude(CNuc *theCNuc, const Config &configure, PPair 
   int entranceNum = 0;
   for (int p = 1; p <= theCNuc->NumPairs() && !entranceNum; p++)
     if (theCNuc->GetPair(p) == entrancePair) entranceNum = p;
-  const ChannelTable::Row *row = table ? table->Find(entranceNum, theECMGroup->GetL(),
-                                                     (inEnergy - entrancePair->GetSepE()) - entrancePair->GetExE())
+  const int entranceTwoJ = entrancePair->SpinOrbitTwoJ(theECMGroup->GetJ());
+  const ChannelTable::Row *row = table ? table->Find({entranceNum, theECMGroup->GetL(), entranceTwoJ,
+                                                      (inEnergy - entrancePair->GetSepE()) - entrancePair->GetExE()})
                                        : nullptr;
   complex expHSP = (row && row->P > 0.0) ? row->expHSP
-                                         : theCoulombFunction.HardSpherePhase(theECMGroup->GetL(), entrancePair->GetChRad(), cmEnergy);
+                                         : theCoulombFunction.HardSpherePhase(theECMGroup->GetL(), entranceTwoJ, entrancePair->GetChRad(), cmEnergy);
 
   double sqrtGammaPene = pow((inEnergy - levelEnergy) / hbarc, theECMGroup->GetMult() + 0.5);
 
