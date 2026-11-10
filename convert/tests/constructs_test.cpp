@@ -322,6 +322,22 @@ int main(int argc, char **argv) {
     const ConvertResult o = Convert({"1 1 2 0.2 1.4 0 180 0 1 0 0 0 0 0 o.dat 1 2 1 1 2\n", "", "", "", ""});
     check("operation type 2: refused", !o.ok && o.refusal.find("neither 0 (sum) nor 1 (ratio)") != std::string::npos);
   }
+  // ---- a sample's row of a compound nucleus no line reaches is kept: its isotope from the pair of <levels> that forms it
+  //      with the lines' light particle (n + 22Ne -> 23Ne); a row no pair forms is a question, never a silent drop
+  {
+    const ConvertResult r = Convert({"1 5 5 0.1 2 0 180 0 1 0 0 0 0 0 nat.dat sample natNe\n", "", "",
+                                     "<abundances>\nnatNe: 10 21 0.9 1 0.01\nnatNe: 10 23 0.1 1 0.01\nnatNe: sum 0.001\n</abundances>\n",
+                                     ""});
+    Expect("unreached row kept", r, "target natNe",
+           F{{"kind", "none"}, {"isotope", "20Ne 0.9 fit prior 0.9 0.01"}, {"isotope", "22Ne 0.1 fit prior 0.1 0.01"},
+             {"isotope_sum", "prior 1 0.001"}});
+    check("unreached row kept: its parameter mapped", Param(r, "abundance_natNe_10_23") == "natNe.isotope.22Ne");
+    const ConvertResult q = Convert({"1 5 5 0.1 2 0 180 0 1 0 0 0 0 0 nat.dat sample natNe\n", "", "",
+                                     "<abundances>\nnatNe: 10 21 0.9 1 0.01\nnatNe: 10 25 0.1 1 0.01\n</abundances>\n", ""});
+    bool asked = false;
+    for (const auto &x : q.questions) asked = asked || x.key == "natNe.isotope.10_25";
+    check("a row no pair forms: a question, not converted without its answer", asked && !q.ok);
+  }
   // ---- covariance; total 1 (sigma_total); sample (abundances per compound nucleus -> isotopes of target nuclei)
   {
     const ConvertResult r = Convert({"1 1 2 0.2 1.4 0 180 0 1 0 0 0 0 0 v1.dat covariance cov.txt\n"

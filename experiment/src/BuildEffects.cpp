@@ -324,11 +324,20 @@ void Abundances(Context &c) {
       const Value *nucleus = iso->Get("nucleus"), *abundance = iso->Get("abundance");
       if (!nucleus || !abundance) continue;
       std::set<std::pair<int, int>> compounds;
+      std::set<std::pair<int, int>> lights;  // the light particles of the target's data sets
       for (const Member *m : users)
         for (int key : m->termEntranceKeys)
-          if (const PairInfo *p = c.Pair(key))
+          if (const PairInfo *p = c.Pair(key)) {
+            lights.insert({p->lightZ, p->lightA});
             if (p->heavyZ == nucleus->nucleus.Z && p->heavyA == nucleus->nucleus.A)
               compounds.insert({p->lightZ + p->heavyZ, p->lightA + p->heavyA});
+          }
+      // an isotope no data set reaches is still part of the composition (the sum-to-one prior): its compound nucleus is
+      // the one the pairs of <levels> form with the data sets' light particle
+      if (compounds.empty())
+        for (const PairInfo &p : c.pairs_)
+          if (p.kind == 0 && lights.count({p.lightZ, p.lightA}) && p.heavyZ == nucleus->nucleus.Z && p.heavyA == nucleus->nucleus.A)
+            compounds.insert({p.lightZ + p.heavyZ, p.lightA + p.heavyA});
       for (const auto &zA : compounds) {
         AbundanceRowSpec row;
         row.sample = t->name;

@@ -293,6 +293,41 @@ void Builder::NameApparatus() {
       continue;
     }
     Count(Construct::kSample);
+    // A row of a compound nucleus that no line of the sample reaches is kept (the composition is the target's, and the
+    // sum-to-one prior needs every row): its isotope is the heavy particle of the <levels> pairs that form that compound
+    // with the light particle of the sample's lines; none or several such isotopes is a question.
+    std::set<std::pair<int, int>> lights;  // (Z, A) of the light particles of the sample's lines
+    auto addLight = [&](int key) {
+      if (const OldPair *p = Pair(key)) lights.insert({p->z1, p->A1()});
+    };
+    for (const auto &kv : sampleOfData_)
+      if (kv.second == si) addLight(activeData_[kv.first]->parsed->entranceKey());
+    for (const auto &kv : sampleOfTest_)
+      if (kv.second == si) addLight(activeTest_[kv.first]->parsed->entranceKey());
+    for (const auto &kv : smp.entries) {
+      if (nucleusOfCompound.count(kv.first)) continue;
+      std::set<std::string> candidates;
+      for (const auto &pp : old_.pairs) {
+        const OldPair &p = pp.second;
+        if (p.pType == 0 && lights.count({p.z1, p.A1()}) && p.z1 + p.z2 == kv.first.first && p.A1() + p.A2() == kv.first.second)
+          candidates.insert(Nuclide(p.z2, p.A2()));
+      }
+      const std::string where = "sample '" + smp.name + "': compound nucleus (" + std::to_string(kv.first.first) + ", " +
+                                std::to_string(kv.first.second) + "), reached by no line of the sample";
+      if (candidates.size() == 1) {
+        nucleusOfCompound[kv.first] = *candidates.begin();
+        Note(Construct::kAbundances, "", where + ": kept as the isotope " + *candidates.begin() + " (the pair of <levels> that forms it)");
+      } else {
+        std::string list;
+        for (const std::string &c : candidates) list += (list.empty() ? "" : ", ") + c;
+        nucleusOfCompound[kv.first] =
+            Ask(Construct::kSample, (smp.name.empty() ? "natural" : smp.name) + ".isotope." + std::to_string(kv.first.first) + "_" +
+                                        std::to_string(kv.first.second),
+                where + (candidates.empty() ? ": no pair of <levels> forms it with the sample's light particle; which isotope is it?"
+                                            : ": the pairs of <levels> that form it give the isotopes " + list + "; which is it?"),
+                "");
+      }
+    }
     // isotope fields, in compound-nucleus order
     std::vector<io::Field> isotopes;
     std::vector<std::pair<std::string, std::string>> params;  // old name, isotope label
@@ -314,10 +349,6 @@ void Builder::NameApparatus() {
                             std::to_string(kv.first.second),
                         kv.second});
     }
-    for (const auto &kv : smp.entries)
-      if (!nucleusOfCompound.count(kv.first))
-        Note(Construct::kAbundances, "", "sample '" + smp.name + "': compound nucleus (" + std::to_string(kv.first.first) + ", " +
-                                             std::to_string(kv.first.second) + ") is reached by no data set of the sample: dropped");
     io::Field sum;
     sum.key = "isotope_sum";
     const double sigma = smp.hasSum && smp.sum >= 0 ? smp.sum : old_.abundanceSumSigma;

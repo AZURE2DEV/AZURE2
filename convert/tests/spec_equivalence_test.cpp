@@ -589,12 +589,9 @@ int main(int argc, char **argv) {
       }
       for (const AbundanceRowSpec &r : b.abundances.abundances.rows)
         if (!r.isSum && usedNew.count(r.sample)) rowsB[key(r.sample, r)] = row(r);
-      bool unreachedDropped = false;
-      for (const convert::ConvertNote &n : r.notes)
-        unreachedDropped = unreachedDropped || n.text.find("is reached by no data set of the sample: dropped") != std::string::npos;
       for (auto &kv : rowsA)
         if (rowsB.count(kv.first)) Eq("abundance " + kv.first, kv.second, rowsB[kv.first]);
-        else if (!unreachedDropped) problems.push_back("abundance " + kv.first + " missing in format 3");
+        else problems.push_back("abundance " + kv.first + " missing in format 3");
       // THM
       std::map<int, std::string> expA, expB;
       for (const auto &kv : oldExperimentOf)
