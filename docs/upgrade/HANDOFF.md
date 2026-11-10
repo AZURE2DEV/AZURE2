@@ -2,6 +2,34 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-10 (agent, brief N) — design note: a spin–orbit term in the hybrid potentials
+
+**Done** (branch `docs/upgrade-spin-orbit-note`, documents only): `docs/upgrade/spin_orbit_potential.md`. It covers
+today's hybrid model with file:line (§1) and the physics of a spin–orbit term in AZURE2's channel-spin channels (§2).
+With one spinning particle the term is diagonal. With two, the channel spins of one (α, l, J) are coupled by the 6-j
+recoupling of `physics/src/Recoupling.cpp`, the channel functions become symmetric blocks, and U keeps the form of
+Eq. conv-u with blocks. The note also gives the design of option (a) (§3), tests (§4), steps (§5) and eight questions
+for the PI (§6). One line is added to `cnuc_split.md` at step 3b (iii).
+
+**Verified how**: scripts in `work/so-note/`:
+- the angular m-scheme checks, 308 cases to 5 × 10⁻¹⁵;
+- the engine's Numerov method against DOP853 with a spin–orbit term, to 10⁻⁷;
+- a δ-shell closed form;
+- a coupled 2 × 2 integration and the unitarity of the block U;
+- the reference engine `work/b-trial2` against the Numerov transcription, to 10⁻⁸.
+
+No engine code was written or built.
+
+**Found** (not fixed):
+- S of a hybrid pair jumps at threshold: it is distorted above threshold and the plain Whittaker form below. The jump
+  is about 1 for `tests/hybrid_potential`.
+- The hybrid Coulomb potential uses e² = 1.4399764 MeV fm, not α ħc. This alone accounts for the "10⁻⁵ accuracy of
+  the integration" that `pyazr.rst` and `hybrid_derivative_test.py` quote.
+- Two wordings are wrong: "inside the channel radius" (`CNuc.cpp:203`, `particle_pairs.rst:439`) and "outward"
+  (`CoulFunc.h:100`, `tests/hybrid_potential/tolerance:4`).
+
+**Open**: the PI's answers to §6 of the note; then steps 1–5 of its §5.
+
 ## 2026-11-10 (director, day) — Phase 4: the third wave merged (specs, `Schema::Build`, model data, one model pass)
 
 **Merged into `feature/upgrade-4-data`** (`--no-ff`, in this order): G1 `feature/upgrade-4-format3-reader` at 7342c790
