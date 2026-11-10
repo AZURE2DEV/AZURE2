@@ -88,11 +88,12 @@ AzrModel.from_file("13N.azr").add_data_segment(**kw).write("13N_new.azr")
   without an error gets 5 % of its value (`_DEFAULT_REL_ERROR`), since zero would be an infinitely precise point.
   Report every data set that triggered this. An `ERR-SYS` given in absolute units instead of per cent, and
   non-positive values, need a manual check.
-- **Ratio to Rutherford**: `rutherford=True` multiplies by the Coulomb cross section (→ b/sr), `rutherford=False`
-  accepts the ratio. For a lab `ANG` column `to_azr` converts the angle to c.m. (`elastic_lab_to_cm`, entrance
-  masses; pass `target_mass`/`projectile_mass` for exact ones) and divides the c.m. Rutherford value by the lab→c.m.
-  Jacobian, so AZURE2 reads back ratio × σ_R,c.m.(θ_c.m.). Identical particles (ratio to Mott) get a warning and
-  ratio × Rutherford. Test: `tests/pyazr/nds_rutherford_test.py`.
+- **Ratio to Rutherford / Mott** (`,DA,,RTH`, `PAR,DA,,RTH`, `,DA,,MOT`): a format-3 quantity, `ratio_to_rutherford`
+  / `ratio_to_mott`. `d.format3_quantity()` names it (refusals with the reason: RTH of identical particles -- ask which
+  reference, then `quantity="ratio_to_mott"`; MOT of different particles; inelastic). `d.to_dataset(data_dir, name,
+  norm=...)` writes the ratios unconverted (`theta_lab`/`theta_cm` from the heading) and returns the `dataset`
+  record; without `ERR-SYS` it needs `norm=`. `to_azr` refuses a ratio (it no longer multiplies by σ_R).
+  Test: `tests/pyazr/nds_rutherford_test.py`; physics and engine: `tests/ratio_to_rutherford`.
 - builds before 2026-10-27 (expires: 2027-02-01): `to_azr` and the GUI EXFOR dialog multiplied a `,,RTH` ratio by
   the c.m. Rutherford cross section at the **lab** angle (1.13× off for p+¹⁶O, 1.8–2.2× for α+¹²C) and called every
   angle column c.m. Regenerate data files made from a lab-angle `,,RTH` set with such a build.

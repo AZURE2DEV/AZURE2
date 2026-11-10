@@ -20,6 +20,7 @@ endif()
 add_library(azure2_physics STATIC
   src/AngularCoupling.cpp
   src/ChannelFunctions.cpp
+  src/CoulombScattering.cpp
   src/Derivatives.cpp
   src/Elements.cpp
   src/ExternalCapture.cpp
@@ -89,6 +90,16 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
   target_compile_options(physics_channel_functions_test PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 add_test(NAME physics_channel_functions COMMAND physics_channel_functions_test ${CMAKE_CURRENT_SOURCE_DIR}/tests/data/coulomb.csv)
+
+# The Rutherford and Mott cross sections against mpmath (tests/data/coulomb_scattering.csv,
+# make_coulomb_scattering.py) and closed forms (docs/upgrade/data_kinds.md section 4.3).
+add_executable(physics_coulomb_scattering_test tests/coulomb_scattering_test.cpp)
+target_link_libraries(physics_coulomb_scattering_test PRIVATE azure2_physics)
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+  target_compile_options(physics_coulomb_scattering_test PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+add_test(NAME physics_coulomb_scattering COMMAND physics_coulomb_scattering_test
+         ${CMAKE_CURRENT_SOURCE_DIR}/tests/data/coulomb_scattering.csv)
 
 # Bound channel functions and the derivatives: e^x K_n against mpmath (tests/data/bessel_k.csv, make_bessel_k.py),
 # S(0) against the threshold limit of rho W'/W, the neutral closed forms, the band, exact rules on polynomials

@@ -258,6 +258,12 @@ class ESegment {
   const std::vector<azure2::experiment::ComponentSpec> &GetComponents() const { return reaction_.components; }
   /// The reaction, observable and model options as the spec gave them (before the set-up resolved pairs and terms).
   const azure2::experiment::ReactionSpec &GetReaction() const { return reaction_; }
+  /// Is the value a ratio (a RATIO of two reactions, or a ratio to the Rutherford or Mott cross section)?  It is the
+  /// same in the lab and the c.m. frame: the data are not converted at load and the lab output does not divide it.
+  bool IsDimensionlessRatio() const {
+    return (IsAdvanced() && GetLegacyOperationType() == 1) ||
+           reaction_.coulombReference != azure2::experiment::CoulombReference::None;
+  }
   /// What the segment predicts at its points (src/Predictions.cpp, EData::BuildPredictions): built once at set-up,
   /// immutable, shared by the working copies; null before it is built.
   const azure2::experiment::Prediction *GetPrediction() const { return prediction_.get(); }

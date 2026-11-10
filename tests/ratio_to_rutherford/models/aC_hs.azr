@@ -1,0 +1,46 @@
+<config>
+true #Perform A-Matrix Calculation
+output/ #Full Path to Output Directory
+checks/ #Full Path to Checks Directory
+none #Compond Nucleus Check
+none #Boundary Condition Check
+none #Data Check
+none #Lo-Matrix and Penetrability Check
+none #Legendre Polynomial Check
+none #Coulomb Amplitudes Check
+none #Reaction Pathway Check
+none #Angular Distributions Check
+includeAllJPi=1
+maxOrbitalMomentum=4
+format=3
+</config>
+<levels>
+0 1 9.0 1 1 1 0 0 1 1 1 0 0 1 0 1 0 4.00260325 12.0 2 6 7.16192 7.16192 0 0 0.0 0 5.0 0 0 0
+
+</levels>
+<data>
+</data>
+<extrapolations>
+# alpha + 12C, every partial wave l <= 4 pure hard-sphere scattering (a = 5 fm, the one level has no width): the
+# elastic cross section, its ratio to Rutherford on the same c.m. grid, and the ratio at lab angles.
+extrapolation dsdo_cm
+    reaction       12C(a,a)12C
+    quantity       dsigma_domega
+    unit           b/sr
+    energies       range 2.0 6.0 MeV lab step 1.0
+    angles         range 10 170 deg cm step 20
+extrapolation rth_cm
+    reaction       12C(a,a)12C
+    quantity       ratio_to_rutherford
+    unit           1
+    energies       range 2.0 6.0 MeV lab step 1.0
+    angles         range 10 170 deg cm step 20
+extrapolation rth_lab
+    reaction       12C(a,a)12C
+    quantity       ratio_to_rutherford
+    unit           1
+    energies       range 2.0 6.0 MeV lab step 1.0
+    angles         range 15 165 deg lab step 30
+</extrapolations>
+<targets>
+</targets>

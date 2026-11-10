@@ -28,7 +28,8 @@ void check(const std::string &what, bool ok) {
   }
 }
 
-// p+15N (1), a+12C (2), a+12C[4.43891] (3), g+16O (4), d+12C twice (5, 6), p+12C (7)
+// p+15N (1), a+12C (2), a+12C[4.43891] (3), g+16O (4), d+12C twice (5, 6), p+12C (7), a+a (8, identical),
+// a+a (9, not identical: a pair whose particles differ in a column the label does not show)
 LevelTables Pairs() {
   auto pair = [](int key, int type, int z1, int a1, int z2, int a2, int twoJ1, int twoJ2, double e2) {
     PairInfo p;
@@ -46,7 +47,8 @@ LevelTables Pairs() {
   LevelTables t;
   t.pairs = {pair(1, 0, 1, 1, 7, 15, 1, 1, 0), pair(2, 0, 2, 4, 6, 12, 0, 0, 0), pair(3, 0, 2, 4, 6, 12, 0, 4, 4.43891),
              pair(4, 10, 0, 0, 8, 16, 2, 0, 0), pair(5, 0, 1, 2, 6, 12, 2, 0, 0), pair(6, 0, 1, 2, 6, 12, 2, 0, 0),
-             pair(7, 0, 1, 1, 6, 12, 1, 0, 0)};
+             pair(7, 0, 1, 1, 6, 12, 1, 0, 0), pair(8, 0, 2, 4, 2, 4, 0, 0, 0), pair(9, 0, 2, 4, 2, 4, 0, 0, 0)};
+  t.pairs[7].identical = true;
   return t;
 }
 
@@ -220,6 +222,73 @@ int main() {
                 .diagnostics.size() == 1);
   check("the removed polarization quantity is not in the table (E_NOT_IN_LIST)",
         BuildText(Data(Set(kDataset, "quantity", "    quantity polarization"))).diagnostics.size() >= 1);
+
+  // ratio to Rutherford and to Mott (data_kinds.md section 4.3): the spec, and the refusals of Build
+  {
+    const std::string rth = "dataset r1\n    reaction 12C(a,a)12C\n    quantity ratio_to_rutherford\n    unit 1\n"
+                            "    file build_test_data.dat\n    columns E_lab[MeV] theta_lab[deg] value error\n"
+                            "    norm 1 fit prior 1 3%\n";
+    const std::string mott = Rename(Set(Set(Set(rth, "reaction", "    reaction 4He(a,a)4He\n    entrance_pair 8\n    exit_pair 8"),
+                                            "quantity", "    quantity ratio_to_mott"),
+                                        "columns", "    columns E_lab[MeV] theta_cm[deg] value error"),
+                                    "m1");
+    const std::string xr = "<extrapolations>\nextrapolation x1\n    reaction 12C(a,a)12C\n    quantity ratio_to_rutherford\n"
+                           "    unit 1\n    energies range 3 4 MeV lab step 0.5\n    angles list 30 60 deg lab\n</extrapolations>\n";
+    const BuiltProject b = BuildText(Data(rth + mott) + xr);
+    for (const Diagnostic &d : b.diagnostics) std::printf("        %s: %s\n", d.code.c_str(), d.message.c_str());
+    check("ratio_to_rutherford, ratio_to_mott and an extrapolation build", b.Ok() && b.diagnostics.empty());
+    if (b.data.datasets.items.size() == 2 && b.extrapolations.extrapolations.items.size() == 1) {
+      const ReactionSpec &r = b.data.datasets.items[0].spec.reaction, &m = b.data.datasets.items[1].spec.reaction;
+      const ReactionSpec &x = b.extrapolations.extrapolations.items[0].spec.reaction;
+      check("r1: a+12C elastic (pair 2), lab angles: differential lab over Rutherford, one term",
+            r.entranceKey == 2 && r.exitKey == 2 && r.observable == Observable::DifferentialLab &&
+                r.coulombReference == CoulombReference::Rutherford && r.combination == ReactionSpec::Combination::None &&
+                r.components.empty());
+      check("r1: norm 1 fit, 3 %", b.data.datasets.items[0].spec.varyNorm && b.data.datasets.items[0].spec.normError == 3.0);
+      check("m1: a+a (pair 8), c.m. angles: differential c.m. over Mott",
+            m.entranceKey == 8 && m.exitKey == 8 && m.observable == Observable::DifferentialCM &&
+                m.coulombReference == CoulombReference::Mott);
+      check("x1: the extrapolation over Rutherford at lab angles",
+            x.observable == Observable::DifferentialLab && x.coulombReference == CoulombReference::Rutherford);
+    } else {
+      check("2 data sets and 1 extrapolation", false);
+    }
+    check("dsigma_domega has no Coulomb reference",
+          BuildText(Data(kDataset)).data.datasets.items[0].spec.reaction.coulombReference == CoulombReference::None);
+    // refusals: the validator's (from the labels) and Build's (from the pairs of <levels>), one diagnostic each
+    ExpectOne("E_REACTION_NOT_ALLOWED", BuildText(Data(Set(rth, "reaction", "    reaction 4He(a,a)4He\n    entrance_pair 8\n    exit_pair 8"))));
+    ExpectOne("E_REACTION_NOT_ALLOWED", BuildText(Data(Set(rth, "reaction", "    reaction 12C(a,a)12C[4.439]"))));
+    ExpectOne("E_REACTION_NOT_ALLOWED", BuildText(Data(Set(mott, "reaction", "    reaction 12C(a,a)12C"))));
+    {
+      const BuiltProject n = BuildText(Data(Set(Set(mott, "entrance_pair", "    entrance_pair 9"), "exit_pair", "    exit_pair 9")));
+      ExpectOne("E_REACTION_NOT_ALLOWED", n);
+      check("Build: a ratio_to_mott on a pair that is not identical names ratio_to_rutherford",
+            n.diagnostics.size() == 1 && n.diagnostics[0].message.find("ratio_to_rutherford") != std::string::npos &&
+                n.diagnostics[0].message.find("(validation)") == std::string::npos);
+    }
+    {
+      const std::string id = Set(rth, "reaction", "    reaction 4He(a,a)4He\n    entrance_pair 8\n    exit_pair 8");
+      const BuiltProject n = BuildText(Data(id));
+      check("ratio_to_rutherford with identical particles names ratio_to_mott",
+            n.diagnostics.size() == 1 && n.diagnostics[0].message.find("ratio_to_mott") != std::string::npos);
+    }
+    // the folds the Coulomb reference does not follow (BuildEffects.cpp, CoulombRatioFolds): one E_NOT_BUILT each
+    const std::string t2 = "<targets>\ntarget t2\n    kind layer\n    active 12C\n    areal_density 1e18 atoms/cm2 fixed\n"
+                           "    stopping formula \"a0\" a0=1e-20 MeV*cm2/atom\n    straggling none\n";
+    const std::string beam = "beam b3\n    spread 0.01 MeV lab\n";
+    check("a target layer and a beam spread build",
+          BuildText(Data(rth + "    target t2\n    beam b3\n    quadrature points 20\n") + t2 + beam + "</targets>\n")
+              .diagnostics.empty());
+    ExpectOne("E_NOT_BUILT", BuildText(Data(rth + "    target t2\n    quadrature points 20\n") + t2 +
+                                       "    screening 1000 eV fixed\n</targets>\n"));
+    ExpectOne("E_NOT_BUILT", BuildText(Data(rth + "    target t2\n    quadrature points 20\n") + t2 +
+                                       "    doppler free_gas 300 K fixed\n</targets>\n"));
+    ExpectOne("E_NOT_BUILT", BuildText(Data(rth + "    beam b3\n    detector d3\n    quadrature points 20\n") +
+                                       "<targets>\n" + beam + "detector d3\n    attenuation 1 0.99 0.98\n</targets>\n"));
+    ExpectOne("E_NOT_BUILT", BuildText(Data(rth + "    beam b3\n    quadrature points 20\n"
+                                                  "    fold_windows 3-4 MeV auto_tolerance 1e-3\n") +
+                                       "<targets>\n" + beam + "</targets>\n"));
+  }
 
   std::printf("experiment_build: %d checks, %d failed\n", checks, failures);
   return failures == 0 ? 0 : 1;

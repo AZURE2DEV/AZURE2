@@ -49,6 +49,7 @@ A. M. Lane and R. G. Thomas, *Reviews of Modern Physics* **30**, 257 (1958).
    :caption: Examples
 
    examples/natural_neon
+   examples/ratio_to_rutherford
 
 .. toctree::
    :maxdepth: 2

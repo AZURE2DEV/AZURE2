@@ -489,7 +489,7 @@ history.
 | S11 | the gradient through `backward` (M7); `AG` 697–1380 composition code deleted | `AG` | gradient bits may move | gradient vectors on T1–T3 bit for bit against the build before, else classified; `AZURE_GRAD_CHECK`; archived fits |
 | S12 | components as leaves (M6): `componentSegments_` and `CreateComponentSegment` go | `ED` 3472–3977, 4218–4250 | `intEC.dat` layout, keys | `intEC.dat` byte for byte on the capture projects; 179 × 3 |
 | S13 | general amplitude filters on σ (M8) | `GM` 128–258, `experiment/` | new; old outputs unchanged | T1: Σ over a complete set of filters = σ to 10⁻¹²; E1-only and E2-only fits of T1 recover the generator's widths; isDiff 5/6 unchanged |
-| S14 | `predict` text form and the `rutherford` leaf (M9) | `io/`, `experiment/`, `GM`, `pyazr/datasets.py` `_KEYWORDS`, docs | new | ratio to Rutherford = 1 with all nuclear widths 0; round trip of a `predict` line; pyazr reads it through the binding |
+| S14 | `predict` text form and the `rutherford` leaf (M9) | `io/`, `experiment/`, `GM`, `pyazr/datasets.py` `_KEYWORDS`, docs | new | ratio to Rutherford = \|f_C + f_HS\|²/\|f_C\|² with all nuclear widths 0 (the hard-sphere phases remain: not 1; the `rutherford` leaf done, brief L, tests/ratio_to_rutherford); round trip of a `predict` line; pyazr reads it through the binding |
 | S15 | `<modelData>` and `ModelDataTerm`, ωγ first (M10); scattering lengths moved into it | `src/Objective.cpp`, `AG`, `physics/`, `api/` | χ² order kept; none for old projects | ωγ of an isolated level against Γ_aΓ_b/Γ by hand; the scattering-length tests unchanged |
 | S16 | recipe in `CLAUDE.md`, checks 13–16 (§7) | `CLAUDE.md`, `tests/consistency/repo_consistency_test.py` | none | each check fails on an injected bypass |
 

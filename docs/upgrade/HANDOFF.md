@@ -2,6 +2,48 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-10 (night) — S14, brief L: ratio to Rutherford and to Mott, the `rutherford` leaf (`feature/upgrade-4-rutherford`)
+
+**Done** (brief `work/briefs/L_rutherford_ratio.md`).
+- `physics/CoulombScattering.h`: `rutherford_cross_section`, `mott_cross_section` (b/sr, c.m., with d/dE) from the
+  engine's η and k (`ChannelFunctions.h`); Mott with the interference weight (−1)^{2s}/(2s+1); binding
+  `_azure2.rutherford_cross_section`, `mott_cross_section`; test `physics_coulomb_scattering` (mpmath table).
+- Format 3: `ratio_to_rutherford`, `ratio_to_mott` are built (`Build.cpp` `ReadObservable`: dσ/dΩ at lab or c.m.
+  angles with `ReactionSpec::coulombReference`); refused from the pairs (one elastic reaction, charged, identical as
+  the quantity says) and for folds the reference does not follow (`BuildEffects.cpp` `CoulombRatioFolds`: Doppler,
+  screening, detector attenuation, automatic tolerance; `E_NOT_BUILT`).  Extrapolations alike.  `--describe` says
+  what the value is divided by (JSON `coulomb_reference`).
+- Tree: `TreeKind::CoulombRatio`, `ratio(dsdo_cm(r), rutherford(r) | mott(r))`; `LeafPart::Rutherford`, `Mott`.  Engine:
+  `src/CoulombReference.cpp` evaluates the leaf at the point (and, under a sub-point effect, at the point's own
+  sub-points through `EPoint::IntegrateSubPointValues`, with the edge blend): the model is ⟨dσ/dΩ⟩/⟨σ_C⟩.  Energy
+  shift: the rule of every leaf (the point is re-energised, d/dshift by finite differences).  The adjoint drops the
+  leaf.  `ESegment::IsDimensionlessRatio`: a ratio's value is not converted at load (one rule for RATIO and these).
+- α + α checked: the engine's elastic dσ/dΩ of identical particles is already the symmetrised one.
+- `pyazr.nds`: `ExforData.format3_quantity()`, `to_dataset()` (format-3 record, ratios unconverted); `to_azr` refuses a
+  ratio (no multiplication by σ_R any more).
+- Tests: `tests/ratio_to_rutherford/` (check.sh, truth.py, the §9.2 example with `--describe` committed),
+  `pyazr_ratio_to_rutherford`, `pyazr_nds_rutherford` (rewritten), cases in `experiment_build`,
+  `experiment_prediction`; io_convert leaves a format-3 project alone.  Docs: `examples/ratio_to_rutherford.rst`,
+  `data_formats.rst`, `pyazr.rst`, the setup skill's EXFOR reference, the recipe "A new kind of data set" (CLAUDE.md).
+
+**Verified**: build `work/b-ruth` (3 jobs, 0 warnings).  179 × 3 against `tab-p3f`: 689 / 662 / 689 identical (tag `tab-ruth`;
+the only other files are the four new projects of tests/ratio_to_rutherford, absent from the reference); `ctest -LE
+slow` 165/165 (2 skipped as on the base: pyazr_predictions, pyazr_composite_gradient), on the tree before the nds and
+docs commits, then the nds tests and `pyazr_ratio_to_rutherford` again after them; `tests/run_tests.sh` (OMP 3) 140
+passed, 1 failed: cli_help, which passes three times alone (load-dependent, see Open); `tests/format3_engine/check.sh`
+PASS; spec equivalence 193 files, 185 converted, 183 equal, 2 recorded, 0 differ (the 4 new format-3 files "already
+format 3"); T1, T2, T3, 13N × 3 bases at 1 and 2 threads: 12/12 identical; consistency checks pass at every commit.
+Physics: hard sphere α+¹²C and α+α against mpmath 3.5e-10 / 5.1e-10 (11-digit output); χ² ratio = χ² multiplied
+9.3e-15; 5 keV shift: both forms = truth.py to 6e-10, difference 0.39977 on 12.5; beam fold: ratio of folds to
+1.8e-6, fold of the ratio off by up to 7e-3; gradient = central differences 5e-7 (plain), 8e-8 (beam); CLI grad
+check 4.8e-8.  Every new test shown failing once (injections in the report, work/ruth/).
+
+**Open.** Lab-frame Legendre ratios (`LEG/RTH`) and the electron-scattering Mott cross section are out of scope.
+A detector-angle fold (finite angular acceptance) does not exist in the engine; the attenuation coefficients are
+refused for these quantities.  Sphinx not run (not installed here).  `tests/cli_help` failed once inside run_tests
+under machine load (flags reported "compiled out", then the doc table check), passed alone three times: not caused
+by this branch (no CLI or doc table change), not investigated.
+
 ## 2026-11-10 (agent, brief Q) — `EData` split W1 and W2 (branch `feature/upgrade-4-edata-split-2`)
 
 **Done** (`edata_split.md` §5.2; one commit per class for W1, one for W2; each item re-proved dead by `git grep -nw`

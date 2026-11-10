@@ -42,7 +42,8 @@ void EvaluateModelSegment(ESegment &segment, CNuc *compound, const Config &confi
 /// Every point of every segment of the data set, segment by segment, point by point.
 void EvaluateModel(EData &data, CNuc *compound, const Config &config, Results &results, LeafValues leaves);
 
-/// The cotangents of one point's model value m (step S11): g dm/d(leaf) for every leaf of the segment's tree, at the
+/// The cotangents of one point's model value m (step S11): g dm/d(leaf) for every leaf of the segment's tree that the
+/// R-matrix computes (a Coulomb reference leaf, which no level parameter moves, is left out), at the
 /// term's point or -- a transmission or yield under a sub-point effect -- at each of its sub-points, and g dm/d(param)
 /// for the tree's parameters (azure2::experiment::ParamRef: an abundance per weighted term, the thickness) with one
 /// slot more, the last, for a fitted Doppler temperature.  The adjoint of the composition, from the tree's backward;

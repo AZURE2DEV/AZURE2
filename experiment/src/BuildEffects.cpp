@@ -212,6 +212,37 @@ void QuadratureInto(const Value *q, const Value *w, TargetEffectSpec &e) {
   }
 }
 
+/*!
+ * The folds a ratio to the Rutherford or Mott cross section cannot take (data_kinds.md section 4.3): the engine folds
+ * the Coulomb cross section with the numerator's kernel on the numerator's sub-points (src/CoulombReference.cpp), which
+ * covers the energy kernels (beam spread, target layer, beam profile, UDR) and the edge blend.  Not covered:
+ *  - an automatic tolerance, which picks the folded or the bare value of each observable from its own sub-point
+ *    values, so numerator and denominator could take different choices;
+ *  - free-gas Doppler broadening, whose fitted temperature has an analytic derivative through the numerator only;
+ *  - electron screening, a factor on the nuclear cross section, not part of a ratio to Coulomb scattering;
+ *  - detector attenuation coefficients, which attenuate the Legendre terms of the nuclear amplitude and leave the
+ *    Coulomb amplitude, which has no finite Legendre series (sigma_R ~ theta^-4), as it is.
+ */
+void CoulombRatioFolds(Context &c, const ValidatedRecord &r, const Combination &x) {
+  const std::string q = r.quantity ? r.quantity->name : "";
+  if (q != "ratio_to_rutherford" && q != "ratio_to_mott") return;
+  const std::string what = "a ratio to the Coulomb cross section ";
+  if (x.target && x.target->Has("doppler"))
+    c.Error(codes::kNotBuilt, r, "target",
+            what + "with a Doppler-broadened target: this engine folds the Coulomb cross section with the energy kernels only");
+  if (x.target && x.target->Has("screening"))
+    c.Error(codes::kNotBuilt, r, "target",
+            what + "with electron screening: screening multiplies the nuclear cross section; the ratio is defined without it");
+  if (x.detector && x.detector->Has("attenuation"))
+    c.Error(codes::kNotBuilt, r, "detector",
+            what + "with attenuation coefficients: they attenuate the Legendre terms of the nuclear amplitude only, and the "
+                   "Coulomb cross section has no finite Legendre series");
+  if (x.windows && x.windows->Get("auto_tolerance"))
+    c.Error(codes::kNotBuilt, r, "fold_windows",
+            what + "with an automatic tolerance: it chooses the folded or the bare value of each observable from that "
+                   "observable's sub-points, which numerator and denominator could choose differently");
+}
+
 // The effects of the data sets (isData) or of the extrapolations.
 SpecList<TargetEffectSpec> Effects(Context &c, const std::vector<Member> &members) {
   std::vector<Combination> combos;
@@ -228,6 +259,7 @@ SpecList<TargetEffectSpec> Effects(Context &c, const std::vector<Member> &member
     if (!x.target && !x.beam && !x.detector) continue;
     x.quadrature = r.Get("quadrature");
     x.windows = r.Get("fold_windows");
+    CoulombRatioFolds(c, r, x);
     x.signature = (x.target ? x.target->name : "") + "|" + (x.beam ? x.beam->name : "") + "|" +
                   (x.detector ? x.detector->name : "") + "|" + Text(x.quadrature) + "|" + Text(x.windows);
     x.position = 1 << 30;

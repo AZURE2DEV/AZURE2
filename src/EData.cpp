@@ -562,11 +562,10 @@ int EData::MakePoints(const Config &configure, CNuc *theCNuc, const azure2::expe
                 theSegment->AddPoint(NewPoint);
                 EPoint *thePoint = theSegment->GetPoint(theSegment->NumPoints());
                 thePoint->SetParentData(this);
-                // A RATIO is dimensionless: no cross-section conversion (as ESegment::Fill for data segments;
+                // A ratio is dimensionless: no cross-section conversion (as ESegment::Fill for data segments;
                 // the stored factor would otherwise divide the ratio in the lab output, kinflag.dat = 1).
-                const bool isRatio = theSegment->IsAdvanced() && theSegment->GetLegacyOperationType() == 1;
-                if (!theSegment->ConvertPointToCM(thePoint, entrancePair, exitPair, configure, !isRatio,
-                                                  ESegment::BeyondRange::Stop)) {
+                if (!theSegment->ConvertPointToCM(thePoint, entrancePair, exitPair, configure,
+                                                  !theSegment->IsDimensionlessRatio(), ESegment::BeyondRange::Stop)) {
                   configure.outStream << "ERROR: " << "test segment #" << theSegment->GetSegmentKey() << ": lab angle " << thePoint->GetLabAngle() << " deg at E_lab = " << thePoint->GetLabEnergy()
                                       << " MeV: " << thePoint->GetLabAngleWhy() << "." << std::endl;
                   return -1;

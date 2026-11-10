@@ -660,6 +660,23 @@ engine on the same project (``AZURE2 --convert`` reports the rest):
   ``Model-Data`` and ``modelData.out`` lists them.
 * An abundance-weighted output names its sample by its target.
 
+Ratio to Rutherford and to Mott.  ``quantity ratio_to_rutherford`` (an elastic
+reaction of two different charged particles) and ``ratio_to_mott`` (identical
+particles) are :math:`d\sigma/d\Omega` over the Rutherford or Mott cross
+section at the same c.m. energy and angle (``unit 1``; lab or c.m. angles,
+the angle converted at load, the value not, since it is the same in both
+frames).  The engine computes the reference with its own :math:`\eta` and
+:math:`k` (the pair's masses, the run's kinematics; Mott with the
+interference weight :math:`(-1)^{2s}/(2s+1)` of the particles' spin) and folds
+it with the data set's beam spread, target layer or beam profile on the same
+sub-points as the cross section: the model is the ratio of the two folds.  A
+fitted energy shift moves both.  Refused: ``ratio_to_rutherford`` for
+identical particles and ``ratio_to_mott`` for different ones, a neutral pair,
+an inelastic group, and a Doppler-broadened target, electron screening,
+detector attenuation coefficients and ``fold_windows ... auto_tolerance`` on
+such a data set (``E_NOT_BUILT``).  The worked example is
+:doc:`../examples/ratio_to_rutherford`.
+
 Parameter names follow the records: a data set's own are
 ``<data set>.norm``, ``<data set>.shift.offset`` and ``<data set>.shift.sqrt``
 (every data set has the two shift parameters, fixed at 0 without a shift); a

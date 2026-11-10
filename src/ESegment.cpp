@@ -458,10 +458,10 @@ int ESegment::Fill(CNuc *theCNuc, EData *theData, const Config &configure) {
         PPair *exitPair = theCNuc->GetPairFromKey(this->GetExitKey());  // nullptr for total capture (-1)
         EPoint *converted = this->GetPoint(this->NumPoints());
         converted->SetParentData(theData);
-        // Ratios are dimensionless: no cross-section conversion.  IsAdvanced() and GetLegacyOperationType() since
-        // components aren't added yet during Fill().
-        const bool isRatio = this->IsAdvanced() && this->GetLegacyOperationType() == 1;
-        if (!this->ConvertPointToCM(converted, entrancePair, exitPair, configure, !isRatio, BeyondRange::Stop)) {
+        // Ratios are dimensionless: no cross-section conversion (decided by the spec: components are not added yet
+        // during Fill()).
+        if (!this->ConvertPointToCM(converted, entrancePair, exitPair, configure, !this->IsDimensionlessRatio(),
+                                    BeyondRange::Stop)) {
           // Beyond the kinematic maximum lab angle: not a NaN point, not a dropped segment (audit 2026-10-25, 31).
           configure.outStream << "ERROR: " << "segment #" << this->GetSegmentKey() << ": lab angle " << converted->GetLabAngle() << " deg at E_lab = " << converted->GetLabEnergy()
                               << " MeV: " << converted->GetLabAngleWhy() << "." << std::endl;
@@ -1012,8 +1012,8 @@ void ESegment::UpdatePointEnergyWithShift(int i, CNuc *theCNuc, const Config *co
         PPair *exitPair = theCNuc->GetPairFromKey(this->GetExitKey());  // nullptr for total capture (-1)
 
         // The same conversion as ESegment::Fill (ratios are dimensionless: no cross-section conversion)
-        const bool isRatio = this->IsAdvanced() && this->GetLegacyOperationType() == 1;
-        if (!this->ConvertPointToCM(point, entrancePair, exitPair, *configure, !isRatio, BeyondRange::Convert)) {
+        if (!this->ConvertPointToCM(point, entrancePair, exitPair, *configure, !this->IsDimensionlessRatio(),
+                                    BeyondRange::Convert)) {
           // An energy shift moved the point past the kinematic maximum lab angle mid-fit: the c.m. angle keeps
           // its value as loaded and the run says so (it cannot stop here; audit 2026-10-25, item 31).
           configure->outStream << "WARNING: segment #" << this->GetSegmentKey() << ": the energy shift moved the point at lab angle "

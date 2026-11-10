@@ -1,0 +1,16 @@
+dataset aC_RTH (data set 1, line 28)
+  ratio_to_rutherford: differential cross section, lab angle of 12C(a,a)12C
+  divided by the Rutherford cross section at the same c.m. energy and angle, folded alike; the value is the same in both frames (not converted at load)
+    12C(a,a)12C: entrance pair 1 (a+12C), exit pair 1 (a+12C)
+  window E_lab 0 - 1.79769e+308 MeV, theta_lab 0 - 180 deg
+  data file <project>/data/aC_rth.dat
+  parameters:
+    aC_RTH.norm (norm, fit)
+    aC_RTH.shift.offset (energy shift, fixed)
+    aC_RTH.shift.sqrt (energy shift sqrt, fixed)
+extrapolation aC_RTH_curve (extrapolation 1, line 37)
+  ratio_to_rutherford: differential cross section, lab angle of 12C(a,a)12C
+  divided by the Rutherford cross section at the same c.m. energy and angle, folded alike; the value is the same in both frames (not converted at load)
+    12C(a,a)12C: entrance pair 1 (a+12C), exit pair 1 (a+12C)
+  grid: 61 energies E_lab 3 - 6 MeV at 5 angle(s) 30 - 150 deg
+  parameters: aC_RTH_curve.shift.offset, aC_RTH_curve.shift.sqrt (energy shift, fixed)

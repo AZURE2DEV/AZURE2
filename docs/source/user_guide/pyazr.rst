@@ -616,22 +616,27 @@ differentials to b/sr.  Pick ``observable`` to match the data's angle frame
 ``ANG`` → ``"differential"``).  See the ``azure2-setup`` skill for the full
 quantity/unit reference and failure modes.
 
-One case cannot be decided automatically. Ratio-to-Rutherford data
-(``,,RTH``) is dimensionless with an angle column, which is exactly what an
-analyzing power looks like — and ``x4get`` drops the quantity suffix that
-distinguishes them, so only the *search* result knows. ``to_azr`` warns and
-passes such values through; give it ``rutherford=True`` to multiply by the
-Coulomb cross section, or ``rutherford=False`` once you have checked.
-The cross section written is in the frame of the angle column: a lab ``ANG``
-column is taken to the c.m. frame with the elastic kinematics of the entrance
-masses (``elastic_lab_to_cm``) and the c.m. Rutherford value is divided by
-the lab-to-c.m. Jacobian, so AZURE2 recovers ratio × σ\ :sub:`R,cm`\ (θ\
-:sub:`cm`) from the file; pass ``target_mass`` / ``projectile_mass`` for an
-exact round trip (the default masses are mass numbers). Before October 2026
-the c.m. Rutherford value at the *lab* angle was written (1.13× off for
-p + :sup:`16`\ O, 1.8–2.2× for α + :sup:`12`\ C), and every angle column was
-labelled ``differential-cm`` by the observable guess; a lab column is
-``differential`` now.
+Ratio-to-Rutherford data (``,DA,,RTH``; ``,DA,,MOT`` for identical
+particles) are a quantity of project format 3, ``ratio_to_rutherford``
+(``ratio_to_mott``), which the engine divides by its own Coulomb cross section
+at the point's energy, folded as the data are
+(:doc:`../examples/ratio_to_rutherford`).  ``format3_quantity()`` names the
+quantity of an entry's code, and ``to_dataset`` writes the ratios as they are
+and returns the ``dataset`` record::
+
+   data = nds.fetch_exfor("T0001004", source="local")   # 12C(p,el),,DA,,RTH
+   data.format3_quantity()                               # 'ratio_to_rutherford'
+   record = data.to_dataset("run/data", "pC_rth", norm="1 fit prior 1 3%")
+   # 'dataset pC_rth\n    reaction 12C(p,p)12C\n    quantity ratio_to_rutherford ...'
+
+``to_azr`` refuses such data: until November 2026 it multiplied them by a
+Rutherford cross section, which an energy shift did not move and a fold did not
+average, with mass numbers.  ``RTH`` of identical particles is refused until
+the entry's text says the reference (pass ``quantity="ratio_to_mott"``), and
+``MOT`` of different particles (the relativistic point-nucleus cross section)
+is refused.  A dimensionless differential whose reaction code was dropped
+(``x4get`` drops the suffix that says ``RTH``) is taken for an analyzing power
+with a warning; ``rutherford=False`` says it is one.
 
 The module needs nothing beyond NumPy and the standard library, and doubles as
 a command-line tool::

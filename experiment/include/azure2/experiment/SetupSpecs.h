@@ -30,6 +30,10 @@ enum class Observable {
   AngularDistribution,   ///< Legendre coefficients up to an order, computed (extrapolations only)
 };
 
+/// The Coulomb cross section a ratio-to-Coulomb data set is divided by (data_kinds.md section 4.3): none, Rutherford
+/// (a charged, non-identical elastic pair), or Mott (identical particles, the spin from the pair).
+enum class CoulombReference { None, Rutherford, Mott };
+
 /// One term of a composite (SUM / RATIO) data set or extrapolation.
 struct ComponentSpec {
   int entranceKey = 0;   ///< pair key of <levels>
@@ -55,6 +59,10 @@ struct ReactionSpec {
   bool total = false;        ///< the total cross section of the entrance pair (optical theorem)
   double transmission = 0.0; ///< > 0: transmission exp(-n sigma) of a sample n atoms/b thick
   double yieldThickness = 0.0;  ///< > 0: self-shielded yield of a sample n atoms/b thick
+  /// Not None: the value is dsigma/dOmega (c.m.) over this Coulomb cross section at the same c.m. energy and angle,
+  /// each folded by the point's apparatus (quantities ratio_to_rutherford, ratio_to_mott; observable DifferentialLab
+  /// or DifferentialCM, elastic).  The value is the same in both frames: it is not converted at load.
+  CoulombReference coulombReference = CoulombReference::None;
 };
 
 /// The names of a data set's or an extrapolation's fit parameters, given by the spec's producer
