@@ -12,6 +12,7 @@
 #include "ParameterKind.h"
 #include <memory>
 #include <atomic>
+#include <ctime>
 #include <deque>
 #include <map>
 #include <optional>
@@ -538,6 +539,10 @@ class EData {
   template <class F>
   void ForEachResultUnit(F f);
   void FillEnergyShiftsFromParamsImpl(const vector_r &, CNuc *theCNuc, const Config *configure);
+  /// Redraws the progress bar of the external-capture loops (CalculateECAmplitudes, InitializeComponentSegments)
+  /// from inside their OpenMP loops, under the named critical section ec_progress.
+  static void ECProgressRedraw(const Config &configure, const char *segmentKeyOut, const std::atomic<int> &pointIndex,
+                               int numPoints, time_t &startTime);
   // A copy of the compound nucleus that holds the observed level parameters the
   // sub-point grids are laid out from (ReplaceSubPointGrids).  Never shared: a
   // copy or Clone of the EData starts without one.
