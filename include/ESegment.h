@@ -57,7 +57,7 @@ class ESegment {
   /// Set the normalization to the value that minimizes this segment's chi^2 at
   /// the current model (points must already hold their fit cross sections) and
   /// return that minimum chi^2.  Used for profiled (THM) norms.
-  double ProfileNormChiSquared();
+  double ProfileNormChiSquared(const azure2::Results &results);
   /// Does the segment carry target effects?
   bool IsTargetEffect() const;
   /// Is the normalization a free fit parameter?
@@ -496,9 +496,11 @@ class ESegment {
    * that in one parallel pass), so only the combination is done here.
    */
   /// The value of a transmission or yield segment at a point (IsTransformed).
-  double TransformedValue(int pointIndex, CNuc *cnuc, const Config &configure, bool precalculated);
+  /// The points' values are read from and written into `results`, the buffer of the evaluation.
+  double TransformedValue(int pointIndex, CNuc *cnuc, const Config &configure, azure2::Results &results,
+                          bool precalculated);
   double CalculateTheoreticalCrossSection(int pointIndex, CNuc *cnuc, const Config &configure, EData *edata,
-                                          bool precalculated = false);
+                                          azure2::Results &results, bool precalculated = false);
 
   /// Free-shift refills (docs/upgrade/channel_table.md section 2.1, interim until the objective has the analytic
   /// shift derivative): BeginShiftRefill, single-threaded before the parallel re-energise loop, keeps the tables of

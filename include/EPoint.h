@@ -259,8 +259,8 @@ class EPoint {
   void SetIsTotal(bool v) { is_total_ = v; };
   //! A_y is kept beside the cross section rather than replacing it, because
   //! target-effect integration needs the cross section as the weight.
-  double GetAnalyzingPower() const { return Rec()[azure2::Results::kAy]; };
-  void SetAnalyzingPower(double v) { Rec()[azure2::Results::kAy] = v; };
+  double GetAnalyzingPower(const azure2::Results &r) const { return Rec(r)[azure2::Results::kAy]; };
+  void SetAnalyzingPower(azure2::Results &r, double v) { Rec(r)[azure2::Results::kAy] = v; };
   //! The user-defined resolution kernel built for this point (shared, so
   //! copies of the point and of the data set do not duplicate it), and the
   //! projectile rest energy (MeV) its time-of-flight conversion uses.
@@ -356,10 +356,10 @@ class EPoint {
   void SetCoefficientOrder(int k) { coefficient_order_ = k; };
   void SetCoefficientAbsolute(bool a) { coefficient_absolute_ = a; };
   /// A_0 = sigma_int / 4 pi (b/sr) of an angular-distribution point, set with its coefficients.
-  double GetAngDistA0() const { return Rec()[azure2::Results::kA0]; };
-  void SetAngDistA0(double a0) { Rec()[azure2::Results::kA0] = a0; };
+  double GetAngDistA0(const azure2::Results &r) const { return Rec(r)[azure2::Results::kA0]; };
+  void SetAngDistA0(azure2::Results &r, double a0) { Rec(r)[azure2::Results::kA0] = a0; };
   /// Number of stored angular-distribution coefficients.
-  int GetNumAngularDists() const;
+  int GetNumAngularDists(const azure2::Results &r) const;
   /// Angular momentum of the secondary decay. UPOS points only.
   int GetSecondaryDecayL() const;
   /// Angle in the lab frame.
@@ -394,11 +394,11 @@ class EPoint {
   /// Geometrical factor \f$\pi/k^2\f$.
   double GetGeometricalFactor() const;
   /// Cross section AZURE2 calculated here.
-  double GetFitCrossSection() const { return Rec()[azure2::Results::kSigma]; }
+  double GetFitCrossSection(const azure2::Results &r) const { return Rec(r)[azure2::Results::kSigma]; }
   /// Calculated cross section, E1 component only.
-  double GetFitE1CrossSection() const { return Rec()[azure2::Results::kSigmaE1]; }
+  double GetFitE1CrossSection(const azure2::Results &r) const { return Rec(r)[azure2::Results::kSigmaE1]; }
   /// Calculated cross section, E2 component only.
-  double GetFitE2CrossSection() const { return Rec()[azure2::Results::kSigmaE2]; }
+  double GetFitE2CrossSection(const azure2::Results &r) const { return Rec(r)[azure2::Results::kSigmaE2]; }
   /// Multiply a cross section by this to get the astrophysical S-factor.
   double GetSFactorConversion() const;
   /// \f$\sqrt{P_c}\f$ for the channel at (J-group, channel), both 1-based.
@@ -430,7 +430,7 @@ class EPoint {
   double GetTargetLabEnergy() const { return targetLabEnergy_; }
   void SetTargetLabEnergy(double e) { targetLabEnergy_ = e; }
   /// Angular-distribution coefficient of the given order.
-  double GetAngularDist(int) const;
+  double GetAngularDist(const azure2::Results &r, int order) const;
   /// Jacobian converting the angle from lab to centre of mass.
   double GetAngleKinFactor() const;
   /// Jacobian converting the cross section from lab to centre of mass.
@@ -507,13 +507,13 @@ class EPoint {
   /// Set \f$\pi/k^2\f$.
   void SetGeometricalFactor(double);
   /// Record the calculated cross section.
-  void SetFitCrossSection(double v) { Rec()[azure2::Results::kSigma] = v; }
+  void SetFitCrossSection(azure2::Results &r, double v) { Rec(r)[azure2::Results::kSigma] = v; }
   /// The abundance-weighted term of each compound nucleus at this point of a
   /// natural-target segment, indexed by nucleus (ESegment::CalculateTheoreticalCrossSection).
-  std::vector<double> GetNaturalTerms() const;
-  void SetNaturalTerms(const std::vector<double> &terms);
-  void SetFitE1CrossSection(double v) { Rec()[azure2::Results::kSigmaE1] = v; }
-  void SetFitE2CrossSection(double v) { Rec()[azure2::Results::kSigmaE2] = v; }
+  std::vector<double> GetNaturalTerms(const azure2::Results &r) const;
+  void SetNaturalTerms(azure2::Results &r, const std::vector<double> &terms);
+  void SetFitE1CrossSection(azure2::Results &r, double v) { Rec(r)[azure2::Results::kSigmaE1] = v; }
+  void SetFitE2CrossSection(azure2::Results &r, double v) { Rec(r)[azure2::Results::kSigmaE2] = v; }
   /// The point's result record (docs/upgrade/data_model.md S3): a fixed range of a Results buffer, bound by the
   /// layout of the data set that holds the point (EData::LayoutResults), or by the caller of a calculation on a
   /// point outside a data set (BindPrivateResults).  A copy of a point shares its record until it is bound again.
@@ -533,7 +533,7 @@ class EPoint {
   /// and a warning naming the segment, the role of the point, its energy and the error, the first time in a run.
   /// Used by ESegment::CalculateTheoreticalCrossSection and EData::CalculatePointsInParallel (before 2026-11-01
   /// both gave 0 or left the term out, silently).
-  void MarkFailed(const char *role, const Config &configure, const char *why);
+  void MarkFailed(azure2::Results &results, const char *role, const Config &configure, const char *why);
   int GetSegmentKey() const { return segment_key_; }
   /// Set the cross-section to S-factor conversion.
   void SetSFactorConversion(double);
@@ -588,9 +588,11 @@ class EPoint {
   void AddECAmplitude(int, int, complex);
   void AddECAmplitude(int, int, complex, double);
   void ClearECAmplitudes();
-  void Calculate(CNuc *, const Config &configure, EPoint *parent = NULL, int subPointNum = 0);
+  /// Calculate the point (and the points mapped onto it, its sub-points) for the current parameters, writing the
+  /// values into `results`, the buffer of the evaluation laid out by the point's data set.
+  void Calculate(CNuc *, const Config &configure, azure2::Results &results, EPoint *parent = NULL, int subPointNum = 0);
   /// The sub-point stage of a thin-target integration, with its sigma(E_bar) fallback (see the .cpp).
-  void CalculateThinTarget(CNuc *, const Config &configure, TargetEffect *effect);
+  void CalculateThinTarget(CNuc *, const Config &configure, azure2::Results &results, TargetEffect *effect);
   void SetMap(int, int);
   void ClearMapping();
   /// A mapped point that keeps its own energy-dependent values: a component of a SUM, RATIO or total-capture segment
@@ -602,7 +604,7 @@ class EPoint {
   void ClearLocalMappedPoints();
   void SetTargetEffectNum(int);
   void AddSubPoint(EPoint);
-  void IntegrateTargetEffect(const Config &);
+  void IntegrateTargetEffect(const Config &, azure2::Results &results);
   /*!
    * Free-gas Doppler broadening on this point's sub-point grid (TargetEffect::IsDoppler): the weights w with
    * sigma_D(eCM) = sum w.second * sigma(sub-point w.first), sigma linear in E between sub-points, from the
@@ -639,10 +641,10 @@ class EPoint {
   /// yield = sum_i c[i] * (sub-point i's cross-section slot).  False if the
   /// integrator is not a pure linear form for this point.
   bool TargetEffectWeights(const Config &, std::vector<double> &c);
-  void IntegrateTargetEffectForObservable(const Config &);
+  void IntegrateTargetEffectForObservable(const Config &, azure2::Results &results);
   /// Integrate the E1 and E2 components of the cross section over the same
   /// sub-points as the total, for a segment compared against one component.
-  void IntegrateTargetEffectComponents(const Config &);
+  void IntegrateTargetEffectComponents(const Config &, azure2::Results &results);
   /// Per-point energy window (columns 5-6 of the data file) of a beam-profile
   /// effect: the detector-reconstructed energy slice the point was built from.
   bool HasBinWindow() const { return bin_low_lab_ == bin_low_lab_ && bin_high_lab_ == bin_high_lab_; };
@@ -663,7 +665,7 @@ class EPoint {
   void SetParentData(EData *);
   void SetStoppingPower(double);
   void SetTargetThickness(double);
-  void SetAngularDists(vector_r);
+  void SetAngularDists(azure2::Results &r, vector_r dists);
   void SetAngleKinFactor(double);
   void SetCrossSectionKinFactor(double);
   EData *GetParentData() const;
@@ -834,9 +836,14 @@ class EPoint {
   std::size_t slot_ = 0;
   std::uint16_t num_ang_slots_ = 0;
   std::uint16_t num_natural_slots_ = 0;
-  double *Rec() const {
-    if (!results_) NoResultRecord();
-    return results_->slot.data() + slot_;
+  // The record in `r`, which must be the buffer the point is bound to (checked while the binding still exists).
+  const double *Rec(const azure2::Results &r) const {
+    if (&r != results_) NoResultRecord();
+    return r.slot.data() + slot_;
+  }
+  double *Rec(azure2::Results &r) const {
+    if (&r != results_) NoResultRecord();
+    return r.slot.data() + slot_;
   }
   [[noreturn]] void NoResultRecord() const;
 };

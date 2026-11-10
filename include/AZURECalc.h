@@ -5,6 +5,7 @@
 #include "Minuit2/FCNGradientBase.h"
 #include "Constants.h"
 #include "AZUREParams.h"
+#include "Results.h"
 #include <vector>
 #include <memory>
 #include <mutex>
@@ -77,7 +78,7 @@ class AZURECalc : public ROOT::Minuit2::FCNGradientBase {
   /// Probe the analytic Jacobian at `p`; enables G2 for Minuit2 when it works.
   bool EnableG2(const std::vector<double> &p);
   /// AZURE_DUMP_NONFINITE diagnostic (see AZURECalc.cpp).
-  void DumpNonFinite(const vector_r &p, double chi, CNuc *lc, EData *ld) const;
+  void DumpNonFinite(const vector_r &p, double chi, CNuc *lc, EData *ld, const azure2::Results &results) const;
   /// True when the limits manager declares at least one nuisance parameter.
   bool HasNuisanceParameters() const;
   /*!
@@ -87,9 +88,9 @@ class AZURECalc : public ROOT::Minuit2::FCNGradientBase {
    * already inside a parallel region (Minuit's parallel numerical gradient) or
    * when AZURE_SERIAL_CHI2 is set; callers then use the per-point path.
    */
-  bool PrecalculatePoints(CNuc *lc, EData *ld, bool thmOnly = false) const;
-  /// chi^2 of `p` evaluated on the given working copies (optionally per segment).
-  double Chi2On(CNuc *lc, EData *ld, const vector_r &p, std::vector<double> *segChis = nullptr,
+  bool PrecalculatePoints(CNuc *lc, EData *ld, azure2::Results &results, bool thmOnly = false) const;
+  /// chi^2 of `p` evaluated on the given working copies, writing `results` (optionally per segment).
+  double Chi2On(CNuc *lc, EData *ld, azure2::Results &results, const vector_r &p, std::vector<double> *segChis = nullptr,
                 bool thmOnly = false) const;
   /*!
    * Side-effect-free chi-squared evaluation (no iteration counter / file output

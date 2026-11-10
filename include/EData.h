@@ -198,7 +198,8 @@ class EData {
   void CalcCoulombAmplitude(CNuc *);
   void PrintCoulombAmplitude(const Config &, CNuc *);
   /// Write AZUREOut_*, chiSquared.out and the rest of the run's output files.
-  void WriteOutputFiles(const Config &, bool = false, const BandData * = nullptr);
+  /// The values written are those of `results`, the buffer of the last evaluation of this data set.
+  void WriteOutputFiles(const Config &, const azure2::Results &results, bool = false, const BandData * = nullptr);
   /// Park formalism: the J > 0 penalty of the last objective evaluation, for
   /// chiSquared.out (set by AZURECalc::operator(); 0 otherwise).
   void SetParkPenalty(double penalty) { parkPenalty_ = penalty; }
@@ -280,20 +281,20 @@ class EData {
   /// return value to their total gives the covariance chi2).  Sets each covariance
   /// segment's chi2 to the sum over its points of r_i (M^-1 r)_i (also in \p segChis,
   /// indexed by segment number, when given) and the points' seeds (M^-1 r)_i.
-  double CovarianceChi2Correction(std::vector<double> *segChis = nullptr);
+  double CovarianceChi2Correction(const azure2::Results &results, std::vector<double> *segChis = nullptr);
   /// Whiten the data rows of a residual vector (and of a row-major Jacobian with \p nCols
   /// columns, when given): r <- W r within every covariance group (W^T W = M^-1).  Rows are the
   /// points in segment order, as ComputeResidualJacobian lays them out.
   void WhitenResidualRows(std::vector<double> &residuals, std::vector<double> *jacobian, int nCols);
   /// covariance.out: each group's chi2 and the diagonal-only sum, at the current fit values.
-  void WriteCovarianceSummary(const Config &);
+  void WriteCovarianceSummary(const Config &, const azure2::Results &results);
   /// Forget the frozen model of the relvector terms; the next evaluation freezes it again.
   void RefreezeCovariance();
   /// True when any data-covariance group has relvector terms (a model frozen at the first evaluation).
   bool HasRelativeCovariance() const;
   /// Calculate the covariance segments' points at the current parameters and set their
   /// seeds, for a gradient pass that needs (M^-1 r) before it reaches the points.
-  void PrepareCovarianceSeeds(CNuc *, const Config &);
+  void PrepareCovarianceSeeds(CNuc *, const Config &, azure2::Results &results);
   /// The segment (1-based) whose norm segment s uses: its norm-group leader, or s itself.
   int NormOwner(int s) const;
   void FillMnParams(ROOT::Minuit2::MnUserParameters &);
@@ -393,14 +394,14 @@ class EData {
    * stores the profile, sets every segment's norm to the shared n* and its
    * chi^2 to that of its own points, and returns the group's chi^2.
    */
-  double ProfileThmGroup(int g);
+  double ProfileThmGroup(int g, const azure2::Results &results);
   /// Standardized residuals (f - d)/e of segment i under its group's last profile, one per point.
-  void ThmGroupResiduals(int g, int i, std::vector<double> &out);
+  void ThmGroupResiduals(int g, int i, const azure2::Results &results, std::vector<double> &out);
   /// The background (model units) that the output adds to the fit cross
   /// section of a point of segment i at c.m. energy E; 0 outside a group with one.
   double ThmBackgroundAt(int i, double energy);
   /// Profile of every experiment, trivial ones included, for the output and pyazr.
-  std::vector<ThmExperimentReport> ThmExperimentReports();
+  std::vector<ThmExperimentReport> ThmExperimentReports(const azure2::Results &results);
   /*!
    * The Coulomb line shape of THM experiment `name` (lineshape=on) at the
    * c.m. energies `energies` (MeV, x + A) and the current fit parameters of
@@ -446,7 +447,7 @@ class EData {
    * ESegment::CalculateTheoreticalCrossSection(..., precalculated = true).
    */
   static int CalculatePointsInParallel(const std::vector<ESegment *> &segments, CNuc *theCNuc,
-                                       const Config &configure);
+                                       const Config &configure, azure2::Results &results);
 
  private:
   std::vector<TargetEffect> targetEffects_;
@@ -490,7 +491,7 @@ class EData {
   /// Builds thmGroups_ from the <thm> experiments once the segments are read; -1 after an ERROR.
   int BuildThmGroups(const Config &, CNuc *, int numLines);
   /// Writes output/thm_experiments.out.
-  void WriteThmExperiments(const Config &);
+  void WriteThmExperiments(const Config &, const azure2::Results &results);
   double parkPenalty_ = 0.0;
   double abundancePenalty_ = 0.0;
   double scatteringLengthChi2_ = 0.0;

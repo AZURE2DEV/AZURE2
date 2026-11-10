@@ -187,11 +187,11 @@ double engineFold(const Config &configure, EData &data, int effectNum, Sigma sig
     double e = hi - (hi - lo) * i / (nSub - 1);   // engine convention: high to low
     EPoint sub(0.0, e, 1, 2, false, false, false, 0.0, 0, 0);
     sub.BindResults(&results, rec * (i + 1), 0, 0);
-    sub.SetFitCrossSection(sigma(e));
+    sub.SetFitCrossSection(results, sigma(e));
     point.AddSubPoint(sub);
   }
-  point.IntegrateTargetEffect(configure);
-  return point.GetFitCrossSection();
+  point.IntegrateTargetEffect(configure, results);
+  return point.GetFitCrossSection(results);
 }
 
 }  // namespace

@@ -92,6 +92,7 @@ double AZURECalcMCMC::CalculateLogLikelihood(const vector_r &p) const {
     return -std::numeric_limits<double>::infinity();
   }
 
+  azure2::Results &results = localData->GetResults();
   // The model value of every point, then the data part of the objective (Objective::DataChi2): the data chi^2 with
   // THM norms profiled as the fit does (docs/upgrade/objective.md D1; before, the MCMC summed r^2 with whatever THM
   // norm the clone held) and the data covariance.  The segment priors are log-priors (CalculateLogPrior).
@@ -99,12 +100,13 @@ double AZURECalcMCMC::CalculateLogLikelihood(const vector_r &p) const {
     ESegment *segment = localData->GetSegment(i);
     if (!segment) continue;
     for (int pointIdx = 0; pointIdx < segment->NumPoints(); pointIdx++) {
-      double theoreticalValue = segment->CalculateTheoreticalCrossSection(pointIdx, localCompound, configure(), localData);
+      double theoreticalValue =
+          segment->CalculateTheoreticalCrossSection(pointIdx, localCompound, configure(), localData, results);
       EPoint *point = segment->GetPoint(pointIdx + 1);
-      if (point) point->SetFitCrossSection(theoreticalValue);
+      if (point) point->SetFitCrossSection(results, theoreticalValue);
     }
   }
-  ObjectiveContext context{localCompound, localData, p, configure()};
+  ObjectiveContext context{localCompound, localData, results, p, configure()};
   context.storeTotals = true;
   double chiSquared = Objective::Engine().DataChi2(context);
 
@@ -181,17 +183,19 @@ double AZURECalcMCMC::CalculateLogLikelihoodPhysical(const vector_r &params_) co
 
   // Sub-segments are now integrated into ESegment, no separate initialization needed
 
+  azure2::Results &results = localData->GetResults();
   // The model value of every point, then the data part of the objective, as CalculateLogLikelihood (D1).
   for (int i = 1; i <= localData->NumSegments(); i++) {
     ESegment *segment = localData->GetSegment(i);
     if (!segment) continue;
     for (int pointIdx = 0; pointIdx < segment->NumPoints(); pointIdx++) {
-      double theoreticalValue = segment->CalculateTheoreticalCrossSection(pointIdx, localCompound, configure(), localData);
+      double theoreticalValue =
+          segment->CalculateTheoreticalCrossSection(pointIdx, localCompound, configure(), localData, results);
       EPoint *point = segment->GetPoint(pointIdx + 1);
-      if (point) point->SetFitCrossSection(theoreticalValue);
+      if (point) point->SetFitCrossSection(results, theoreticalValue);
     }
   }
-  ObjectiveContext context{localCompound, localData, params_, configure()};
+  ObjectiveContext context{localCompound, localData, results, params_, configure()};
   context.storeTotals = true;
   double chiSquared = Objective::Engine().DataChi2(context);
 
@@ -843,6 +847,7 @@ void mcmc_iteration_callback(int current_step, int total_steps) {
         if (!fullParams.empty()) {
           CNuc *localCompound = g_mcmc_for_callbacks->compound()->Clone();
           EData *localData = g_mcmc_for_callbacks->data()->Clone();
+          azure2::Results &localResults = localData->GetResults();
 
           bool isValid = true;
           vector_r rwaFullParams;  // full RWA parameter set for param.mcmc
@@ -887,7 +892,7 @@ void mcmc_iteration_callback(int current_step, int total_steps) {
             // Calculate cross sections for all data points
             for (EDataIterator data = localData->begin(); data != localData->end(); data++) {
               if (!data.point()->IsMapped()) {
-                data.point()->Calculate(localCompound, g_mcmc_for_callbacks->configure());
+                data.point()->Calculate(localCompound, g_mcmc_for_callbacks->configure(), localResults);
               }
             }
             // Segments whose value the segment assembles (components, sample weights, transmission / yield): the
@@ -897,10 +902,11 @@ void mcmc_iteration_callback(int current_step, int total_steps) {
               if (!seg || !seg->NeedsAssembly()) continue;
               for (int pid = 0; pid < seg->NumPoints(); pid++)
                 seg->GetPoint(pid + 1)->SetFitCrossSection(
-                    seg->CalculateTheoreticalCrossSection(pid, localCompound, g_mcmc_for_callbacks->configure(), localData));
+                    localResults, seg->CalculateTheoreticalCrossSection(pid, localCompound, g_mcmc_for_callbacks->configure(),
+                                                                        localData, localResults));
             }
 
-            localData->WriteOutputFiles(g_mcmc_for_callbacks->configure(), true);
+            localData->WriteOutputFiles(g_mcmc_for_callbacks->configure(), localResults, true);
 
             if (!g_using_rwa_parameters) {
               localCompound->TransformOut(g_mcmc_for_callbacks->configure());

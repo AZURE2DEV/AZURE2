@@ -54,8 +54,9 @@ AZUREAPI::~AZUREAPI() {
 // caller repeats the calculation point by point, so a failed point keeps the
 // serial path's handling (a NaN slot in UpdateSegments*, 0 or a skipped
 // component in a chi-squared) and the results equal the serial path's.
-static bool PrecalculateAll(const std::vector<ESegment *> &segments, CNuc *lc, const Config &cfg) {
-  return EData::CalculatePointsInParallel(segments, lc, cfg) == 0;
+static bool PrecalculateAll(const std::vector<ESegment *> &segments, CNuc *lc, const Config &cfg,
+                            azure2::Results &results) {
+  return EData::CalculatePointsInParallel(segments, lc, cfg, results) == 0;
 }
 
 // The segments the UpdateSegments* loops report: the first of each run of equal keys.
@@ -350,7 +351,7 @@ int AZUREAPI::UpdateSegments(vector_r &p) {
 
   std::vector<ESegment> &segments = localData->GetSegments();
   AZUREProfile::ScopedReport profileReport("api segments");
-  const bool pre = PrecalculateAll(ReportedSegments(segments), localCompound, configure());
+  const bool pre = PrecalculateAll(ReportedSegments(segments), localCompound, configure(), results());
   for (int i = 0; i < segments.size(); ++i) {
     newKey = segments[i].GetSegmentKey();
     if (prevKey == newKey) continue;
@@ -369,21 +370,21 @@ int AZUREAPI::UpdateSegments(vector_r &p) {
     if (segments[i].NeedsAssembly()) {
       for (int k = 0; k < data.size(); ++k) {
         // Use the new component-aware calculation method
-        double theoreticalValue = segments[i].CalculateTheoreticalCrossSection(k, localCompound, configure(), localData, pre);
+        double theoreticalValue = segments[i].CalculateTheoreticalCrossSection(k, localCompound, configure(), localData, results(), pre);
 
         // Update the point's fit cross section with the combined result
-        data[k].SetFitCrossSection(theoreticalValue);
+        data[k].SetFitCrossSection(results(), theoreticalValue);
 
         cross.push_back(theoreticalValue);
-        crossE1.push_back(data[k].GetFitE1CrossSection());
-        crossE2.push_back(data[k].GetFitE2CrossSection());
+        crossE1.push_back(data[k].GetFitE1CrossSection(results()));
+        crossE2.push_back(data[k].GetFitE2CrossSection(results()));
         angles.push_back(data[k].GetCMAngle());
         energies.push_back(data[k].GetCMEnergy());
         conv.push_back(data[k].GetSFactorConversion());
         excitationEnergies.push_back(data[k].GetExcitationEnergy());
-        angularDists.push_back((double)data[k].GetNumAngularDists());
-        for (int a = 0; a < data[k].GetNumAngularDists(); ++a)
-          angularDists.push_back(data[k].GetAngularDist(a));
+        angularDists.push_back((double)data[k].GetNumAngularDists(results()));
+        for (int a = 0; a < data[k].GetNumAngularDists(results()); ++a)
+          angularDists.push_back(data[k].GetAngularDist(results(), a));
       }
     } else {
       // Regular segment calculation (existing logic)
@@ -391,7 +392,7 @@ int AZUREAPI::UpdateSegments(vector_r &p) {
         bool failed = false;
         if (!pre && !data[k].IsMapped()) {
           try {
-            data[k].Calculate(localCompound, configure());
+            data[k].Calculate(localCompound, configure(), results());
           } catch (GSLException &e) {
             // A GSL failure at one point used to skip every push_back for it, so the arrays came back shorter
             // than the data and misaligned with it, silently (audit 2026-10-25, item 30).  Keep the slot: NaN.
@@ -399,16 +400,16 @@ int AZUREAPI::UpdateSegments(vector_r &p) {
           }
         }
         const double nan = std::numeric_limits<double>::quiet_NaN();
-        cross.push_back(failed ? nan : data[k].GetFitCrossSection());
-        crossE1.push_back(failed ? nan : data[k].GetFitE1CrossSection());
-        crossE2.push_back(failed ? nan : data[k].GetFitE2CrossSection());
+        cross.push_back(failed ? nan : data[k].GetFitCrossSection(results()));
+        crossE1.push_back(failed ? nan : data[k].GetFitE1CrossSection(results()));
+        crossE2.push_back(failed ? nan : data[k].GetFitE2CrossSection(results()));
         angles.push_back(data[k].GetCMAngle());
         energies.push_back(data[k].GetCMEnergy());
         conv.push_back(data[k].GetSFactorConversion());
         excitationEnergies.push_back(data[k].GetExcitationEnergy());
-        angularDists.push_back((double)data[k].GetNumAngularDists());
-        for (int a = 0; a < data[k].GetNumAngularDists(); ++a)
-          angularDists.push_back(data[k].GetAngularDist(a));
+        angularDists.push_back((double)data[k].GetNumAngularDists(results()));
+        for (int a = 0; a < data[k].GetNumAngularDists(results()); ++a)
+          angularDists.push_back(data[k].GetAngularDist(results(), a));
       }
     }
 
@@ -460,7 +461,7 @@ int AZUREAPI::UpdateSegmentsRWA(vector_r &p) {
 
   std::vector<ESegment> &segments = localData->GetSegments();
   AZUREProfile::ScopedReport profileReport("api segments");
-  const bool pre = PrecalculateAll(ReportedSegments(segments), localCompound, configure());
+  const bool pre = PrecalculateAll(ReportedSegments(segments), localCompound, configure(), results());
   for (int i = 0; i < segments.size(); ++i) {
     newKey = segments[i].GetSegmentKey();
     if (prevKey == newKey) continue;
@@ -479,21 +480,21 @@ int AZUREAPI::UpdateSegmentsRWA(vector_r &p) {
     if (segments[i].NeedsAssembly()) {
       for (int k = 0; k < data.size(); ++k) {
         // Use the new component-aware calculation method
-        double theoreticalValue = segments[i].CalculateTheoreticalCrossSection(k, localCompound, configure(), localData, pre);
+        double theoreticalValue = segments[i].CalculateTheoreticalCrossSection(k, localCompound, configure(), localData, results(), pre);
 
         // Update the point's fit cross section with the combined result
-        data[k].SetFitCrossSection(theoreticalValue);
+        data[k].SetFitCrossSection(results(), theoreticalValue);
 
         cross.push_back(theoreticalValue);
-        crossE1.push_back(data[k].GetFitE1CrossSection());
-        crossE2.push_back(data[k].GetFitE2CrossSection());
+        crossE1.push_back(data[k].GetFitE1CrossSection(results()));
+        crossE2.push_back(data[k].GetFitE2CrossSection(results()));
         angles.push_back(data[k].GetCMAngle());
         energies.push_back(data[k].GetCMEnergy());
         conv.push_back(data[k].GetSFactorConversion());
         excitationEnergies.push_back(data[k].GetExcitationEnergy());
-        angularDists.push_back((double)data[k].GetNumAngularDists());
-        for (int a = 0; a < data[k].GetNumAngularDists(); ++a)
-          angularDists.push_back(data[k].GetAngularDist(a));
+        angularDists.push_back((double)data[k].GetNumAngularDists(results()));
+        for (int a = 0; a < data[k].GetNumAngularDists(results()); ++a)
+          angularDists.push_back(data[k].GetAngularDist(results(), a));
       }
     } else {
       // Regular segment calculation (existing logic)
@@ -501,7 +502,7 @@ int AZUREAPI::UpdateSegmentsRWA(vector_r &p) {
         bool failed = false;
         if (!pre && !data[k].IsMapped()) {
           try {
-            data[k].Calculate(localCompound, configure());
+            data[k].Calculate(localCompound, configure(), results());
           } catch (GSLException &e) {
             // A GSL failure at one point used to skip every push_back for it, so the arrays came back shorter
             // than the data and misaligned with it, silently (audit 2026-10-25, item 30).  Keep the slot: NaN.
@@ -509,16 +510,16 @@ int AZUREAPI::UpdateSegmentsRWA(vector_r &p) {
           }
         }
         const double nan = std::numeric_limits<double>::quiet_NaN();
-        cross.push_back(failed ? nan : data[k].GetFitCrossSection());
-        crossE1.push_back(failed ? nan : data[k].GetFitE1CrossSection());
-        crossE2.push_back(failed ? nan : data[k].GetFitE2CrossSection());
+        cross.push_back(failed ? nan : data[k].GetFitCrossSection(results()));
+        crossE1.push_back(failed ? nan : data[k].GetFitE1CrossSection(results()));
+        crossE2.push_back(failed ? nan : data[k].GetFitE2CrossSection(results()));
         angles.push_back(data[k].GetCMAngle());
         energies.push_back(data[k].GetCMEnergy());
         conv.push_back(data[k].GetSFactorConversion());
         excitationEnergies.push_back(data[k].GetExcitationEnergy());
-        angularDists.push_back((double)data[k].GetNumAngularDists());
-        for (int a = 0; a < data[k].GetNumAngularDists(); ++a)
-          angularDists.push_back(data[k].GetAngularDist(a));
+        angularDists.push_back((double)data[k].GetNumAngularDists(results()));
+        for (int a = 0; a < data[k].GetNumAngularDists(results()); ++a)
+          angularDists.push_back(data[k].GetAngularDist(results(), a));
       }
     }
 
@@ -571,7 +572,7 @@ int AZUREAPI::UpdateSegmentsAllRWA(vector_r &p) {
 
   std::vector<ESegment> &segments = localData->GetSegments();
   AZUREProfile::ScopedReport profileReport("api segments");
-  const bool pre = PrecalculateAll(ReportedSegments(segments), localCompound, configure());
+  const bool pre = PrecalculateAll(ReportedSegments(segments), localCompound, configure(), results());
   for (int i = 0; i < segments.size(); ++i) {
     newKey = segments[i].GetSegmentKey();
     if (prevKey == newKey) continue;
@@ -590,21 +591,21 @@ int AZUREAPI::UpdateSegmentsAllRWA(vector_r &p) {
     if (segments[i].NeedsAssembly()) {
       for (int k = 0; k < data.size(); ++k) {
         // Use the new component-aware calculation method
-        double theoreticalValue = segments[i].CalculateTheoreticalCrossSection(k, localCompound, configure(), localData, pre);
+        double theoreticalValue = segments[i].CalculateTheoreticalCrossSection(k, localCompound, configure(), localData, results(), pre);
 
         // Update the point's fit cross section with the combined result
-        data[k].SetFitCrossSection(theoreticalValue);
+        data[k].SetFitCrossSection(results(), theoreticalValue);
 
         cross.push_back(theoreticalValue);
-        crossE1.push_back(data[k].GetFitE1CrossSection());
-        crossE2.push_back(data[k].GetFitE2CrossSection());
+        crossE1.push_back(data[k].GetFitE1CrossSection(results()));
+        crossE2.push_back(data[k].GetFitE2CrossSection(results()));
         angles.push_back(data[k].GetCMAngle());
         energies.push_back(data[k].GetCMEnergy());
         conv.push_back(data[k].GetSFactorConversion());
         excitationEnergies.push_back(data[k].GetExcitationEnergy());
-        angularDists.push_back((double)data[k].GetNumAngularDists());
-        for (int a = 0; a < data[k].GetNumAngularDists(); ++a)
-          angularDists.push_back(data[k].GetAngularDist(a));
+        angularDists.push_back((double)data[k].GetNumAngularDists(results()));
+        for (int a = 0; a < data[k].GetNumAngularDists(results()); ++a)
+          angularDists.push_back(data[k].GetAngularDist(results(), a));
       }
     } else {
       // Regular segment calculation (existing logic)
@@ -612,7 +613,7 @@ int AZUREAPI::UpdateSegmentsAllRWA(vector_r &p) {
         bool failed = false;
         if (!pre && !data[k].IsMapped()) {
           try {
-            data[k].Calculate(localCompound, configure());
+            data[k].Calculate(localCompound, configure(), results());
           } catch (GSLException &e) {
             // A GSL failure at one point used to skip every push_back for it, so the arrays came back shorter
             // than the data and misaligned with it, silently (audit 2026-10-25, item 30).  Keep the slot: NaN.
@@ -620,16 +621,16 @@ int AZUREAPI::UpdateSegmentsAllRWA(vector_r &p) {
           }
         }
         const double nan = std::numeric_limits<double>::quiet_NaN();
-        cross.push_back(failed ? nan : data[k].GetFitCrossSection());
-        crossE1.push_back(failed ? nan : data[k].GetFitE1CrossSection());
-        crossE2.push_back(failed ? nan : data[k].GetFitE2CrossSection());
+        cross.push_back(failed ? nan : data[k].GetFitCrossSection(results()));
+        crossE1.push_back(failed ? nan : data[k].GetFitE1CrossSection(results()));
+        crossE2.push_back(failed ? nan : data[k].GetFitE2CrossSection(results()));
         angles.push_back(data[k].GetCMAngle());
         energies.push_back(data[k].GetCMEnergy());
         conv.push_back(data[k].GetSFactorConversion());
         excitationEnergies.push_back(data[k].GetExcitationEnergy());
-        angularDists.push_back((double)data[k].GetNumAngularDists());
-        for (int a = 0; a < data[k].GetNumAngularDists(); ++a)
-          angularDists.push_back(data[k].GetAngularDist(a));
+        angularDists.push_back((double)data[k].GetNumAngularDists(results()));
+        for (int a = 0; a < data[k].GetNumAngularDists(results()); ++a)
+          angularDists.push_back(data[k].GetAngularDist(results(), a));
       }
     }
 
@@ -856,17 +857,17 @@ bool AZUREAPI::WriteOutputFiles() {
   CNuc *localCompound = compound();
   if (localCompound) {
     const vector_r none;
-    ObjectiveContext context{localCompound, data(), none, configure()};
+    ObjectiveContext context{localCompound, data(), results(), none, configure()};
     context.storeTotals = true;
     Objective::Engine().ModelChi2(context);
   }
-  data()->WriteOutputFiles(configure(), false, nullptr);
+  data()->WriteOutputFiles(configure(), results(), false, nullptr);
   return true;
 }
 
 std::vector<ThmExperimentReport> AZUREAPI::GetThmExperiments() const {
   if (data_ == nullptr) return std::vector<ThmExperimentReport>();
-  return data()->ThmExperimentReports();
+  return data()->ThmExperimentReports(results());
 }
 
 bool AZUREAPI::GetThmLineshape(const std::string &name, const vector_r &energies, ThmLineshapeReport &out,
@@ -994,14 +995,14 @@ double AZUREAPI::EvaluateFilledChi2(vector_r *res) const {
   std::vector<std::vector<std::pair<int, size_t>>> groupRows(ld->NumThmGroups());
   // Every point in one parallel pass first (dev 37cdd34), as the CLI's AZURECalc::PrecalculatePoints.
   AZUREProfile::ScopedReport profileReport("api chi2");
-  const bool pre = PrecalculateAll(AllSegments(ld), lc, configure());
+  const bool pre = PrecalculateAll(AllSegments(ld), lc, configure(), results());
   for (int i = 1; i <= ld->NumSegments(); i++) {
     ESegment *segment = ld->GetSegment(i);
     if (!segment) continue;
     for (int pid = 0; pid < segment->NumPoints(); pid++) {
-      double th = segment->CalculateTheoreticalCrossSection(pid, lc, configure(), ld, pre);
+      double th = segment->CalculateTheoreticalCrossSection(pid, lc, configure(), ld, results(), pre);
       EPoint *point = segment->GetPoint(pid + 1);
-      if (point) point->SetFitCrossSection(th);
+      if (point) point->SetFitCrossSection(results(), th);
     }
 
     // A THM experiment: one profile (shared norm, background) over its
@@ -1014,11 +1015,11 @@ double AZUREAPI::EvaluateFilledChi2(vector_r *res) const {
           if (segment->GetPoint(pid + 1)) res->push_back(0.0);
       }
       if (ld->IsLastOfThmGroup(g, i)) {
-        chiSquared += ld->ProfileThmGroup(g);
+        chiSquared += ld->ProfileThmGroup(g, results());
         if (res) {
           std::vector<double> r;
           for (const std::pair<int, size_t> &row : groupRows[g]) {
-            ld->ThmGroupResiduals(g, row.first, r);
+            ld->ThmGroupResiduals(g, row.first, results(), r);
             std::copy(r.begin(), r.end(), res->begin() + row.second);
           }
         }
@@ -1030,13 +1031,13 @@ double AZUREAPI::EvaluateFilledChi2(vector_r *res) const {
     // (which also stores n* on the segment), exactly as the CLI does.
     double segChi = 0.0;
     const bool profiled = segment->IsProfiledNorm();
-    if (profiled) segChi = segment->ProfileNormChiSquared();
+    if (profiled) segChi = segment->ProfileNormChiSquared(results());
 
     const double norm = segment->GetNorm();
     for (int pid = 0; pid < segment->NumPoints(); pid++) {
       EPoint *point = segment->GetPoint(pid + 1);
       if (!point) continue;
-      double residual = point->GetFitCrossSection() - point->GetCMCrossSection() * norm;
+      double residual = point->GetFitCrossSection(results()) - point->GetCMCrossSection() * norm;
       double error = point->GetCMCrossSectionError() * norm;
       double r = (error != 0.0) ? residual / error : 0.0;
       if (!profiled) segChi += r * r;
@@ -1047,7 +1048,7 @@ double AZUREAPI::EvaluateFilledChi2(vector_r *res) const {
     chiSquared += segChi;
   }
   // Data covariance: r^T M^-1 r over each group in place of its points' r_i^2 (never a THM segment).
-  if (ld->HasCovariance()) chiSquared += ld->CovarianceChi2Correction();
+  if (ld->HasCovariance()) chiSquared += ld->CovarianceChi2Correction(results());
   return chiSquared;
 }
 
@@ -1056,7 +1057,7 @@ double AZUREAPI::EvaluateFilledChi2(vector_r *res) const {
 double AZUREAPI::FilledModelPenalties() const {
   // Park's J > 0 wall, the abundance priors and sum-to-one, measured scattering lengths (Objective T6, T7, T9).
   const vector_r none;
-  return Objective::Engine().ModelChi2(ObjectiveContext{compound(), data(), none, configure()});
+  return Objective::Engine().ModelChi2(ObjectiveContext{compound(), data(), results(), none, configure()});
 }
 
 double AZUREAPI::CalculateChi2RWA(const vector_r &rwaParams) const {
@@ -1162,7 +1163,7 @@ double AZUREAPI::CalculateChi2Physical(const vector_r &physicalParams) const {
 
 std::vector<AZUREAPI::THMRows> AZUREAPI::ComputeTHMRows(const vector_r &full,
                                                         const ParamIndexMap &pmap) const {
-  return ::ComputeTHMRows(compound(), data(), configure(), full, pmap);
+  return ::ComputeTHMRows(compound(), data(), results(), configure(), full, pmap);
 }
 
 
@@ -1198,8 +1199,8 @@ bool AZUREAPI::Chi2GradEGammaNorm(const vector_r &full, vector_r &gradFull,
   // every residual of the group first (one forward pass of those points), and the
   // group's chi2 is r^T M^-1 r in place of the sum of r_i^2 accumulated below.
   if (ld->HasCovariance()) {
-    ld->PrepareCovarianceSeeds(lc, configure());
-    chi2 += ld->CovarianceChi2Correction();
+    ld->PrepareCovarianceSeeds(lc, configure(), results());
+    chi2 += ld->CovarianceChi2Correction(results());
   }
   FitBarFn fb = [&](ESegment *seg, int i, int pid, double model) -> double {
     EPoint *pt = seg->GetPoint(pid + 1);
@@ -1239,7 +1240,7 @@ bool AZUREAPI::Chi2GradEGammaNorm(const vector_r &full, vector_r &gradFull,
     return 2.0 * r / (err * err);
   };
 
-  bool ok = AccumulateEGammaGradient(lc, ld, configure(), pmap, sdp, fb, accum);
+  bool ok = AccumulateEGammaGradient(lc, ld, results(), configure(), pmap, sdp, fb, accum);
   // Measured scattering lengths: the level-matrix adjoint at each threshold (false -> finite differences).
   if (ok && lc->HasScatteringLengthConstraints())
     ok = ScatteringLength::Chi2Gradient(lc, configure(), lc->ScatteringLengthConstraints(), accum, sdp);
@@ -1247,7 +1248,7 @@ bool AZUREAPI::Chi2GradEGammaNorm(const vector_r &full, vector_r &gradFull,
     if (configure().paramMask & Config::USE_PARK_FORMALISM) AddParkPenaltyGradient(lc, configure(), accum);
     if (lc->HasAbundanceBlock()) AddAbundancePenaltyGradient(lc, configure(), accum);
     // Their values: the model terms of the objective (T6, T7, T9; before 2026-11-09 added here in the order 9, 6, 7).
-    chi2 += Objective::Engine().ModelChi2(ObjectiveContext{lc, ld, full, configure()});
+    chi2 += Objective::Engine().ModelChi2(ObjectiveContext{lc, ld, results(), full, configure()});
     accum.Scatter(pmap, gradFull);
     for (int s = 1; s <= ld->NumSegments(); s++) {
       ESegment *seg = ld->GetSegment(s);
@@ -1288,7 +1289,7 @@ vector_r AZUREAPI::CalculateChi2GradRWA(const vector_r &params) const {
         // A THM experiment, profiled by ComputeTHMRows: its residuals.
         for (double r : tr.r) c += r * r;
       } else if (seg->IsProfiledNorm()) {
-        c = seg->ProfileNormChiSquared();
+        c = seg->ProfileNormChiSquared(results());
       } else {
         for (double r : tr.r) c += r * r;
       }
@@ -1380,7 +1381,7 @@ double AZUREAPI::CalculateObjectiveRWA(const vector_r &params, std::vector<doubl
   const vector_r full = MapPackedToFull(params, all_rwa_, fixed_);
   FillFromFullRWA(full);
   EvaluateFilledChi2(nullptr);  // the model value of every point (the objective's data term recomputes the sum)
-  ObjectiveContext context{compound(), data(), full, configure()};
+  ObjectiveContext context{compound(), data(), results(), full, configure()};
   context.storeTotals = true;
   context.termsOut = terms;
   context.segmentPriorsOut = segments;
@@ -1433,7 +1434,7 @@ vector_r AZUREAPI::CalculateResidualJacobianRWA(const vector_r &params, const st
   // THM rows are left zero by the adjoint and filled here: residuals with the
   // profiled norm, Jacobian from the HOES adjoint plus the
   // analytic dependence of the profiled scale (see ComputeTHMRows).
-  bool ok = ComputeResidualJacobian(lc, ld, configure(), pmap, sdp, residuals, jacobian, nCols,
+  bool ok = ComputeResidualJacobian(lc, ld, results(), configure(), pmap, sdp, residuals, jacobian, nCols,
                                     /*skipTHM=*/true);
 
   if (!ok) return vector_r{-1.0};
@@ -1481,7 +1482,7 @@ vector_r AZUREAPI::CalculateResidualJacobianRWA(const vector_r &params, const st
     bool anyTHM = false;
     for (int i = 1; i <= ld->NumSegments(); i++) anyTHM = anyTHM || (ld->GetSegment(i) && ld->GetSegment(i)->IsTHM());
     if (!anyTHM) {
-      FillShiftColumns(lc, ld, configure(), pmap, fixed_, full, &skip, residuals.size(), nCols, jacobian);
+      FillShiftColumns(lc, ld, results(), configure(), pmap, fixed_, full, &skip, residuals.size(), nCols, jacobian);
     } else {
       const size_t nRes = residuals.size();
       vector_r rPlus, rMinus;
@@ -1594,7 +1595,7 @@ vector_r AZUREAPI::CalculateModelGradientsRWA(const vector_r &params) const {
   // THM (HOES) rows come from the HOES adjoint (the T-matrix adjoint does not
   // cover them); see ComputeTHMRows.
   std::map<EPoint *, vector_r> grad;
-  if (!ComputeModelGradients(lc, ld, configure(), pmap, sdp, grad, /*skipTHM=*/true))
+  if (!ComputeModelGradients(lc, ld, results(), configure(), pmap, sdp, grad, /*skipTHM=*/true))
     return vector_r{-1.0};
   {
     std::vector<THMRows> thm = ComputeTHMRows(full, pmap);

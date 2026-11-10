@@ -655,11 +655,11 @@ void AMatrixFunc::AddAInvMatrixElement(int jGroupNum, int lambdaNum, int muNum, 
  * interference sum + elastic Coulomb interference).  Returns false (touching
  * nothing) for configurations outside the supported standard path.
  */
-bool AMatrixFunc::PointAdjoint(EPoint *point, double fitBar, GradAccum &accum,
+bool AMatrixFunc::PointAdjoint(EPoint *point, const azure2::Results &results, double fitBar, GradAccum &accum,
                                const vector_matrix_r *shiftDeriv, int xsComponent,
                                bool ayCrossSection) {
   TMatrixCotangent bar;
-  if (!this->PointTBar(point, fitBar, bar, xsComponent, ayCrossSection)) return false;
+  if (!this->PointTBar(point, results, fitBar, bar, xsComponent, ayCrossSection)) return false;
   this->TBarAdjoint(point, bar, accum, shiftDeriv);
   return true;
 }
@@ -669,7 +669,8 @@ bool AMatrixFunc::PointAdjoint(EPoint *point, double fitBar, GradAccum &accum,
  * (see PointAdjoint).  Reads the T-matrix held by this object and the
  * angle-dependent quantities of `point`.
  */
-bool AMatrixFunc::PointTBar(EPoint *point, double fitBar, TMatrixCotangent &bar, int xsComponent,
+bool AMatrixFunc::PointTBar(EPoint *point, const azure2::Results &results, double fitBar, TMatrixCotangent &bar,
+                            int xsComponent,
                             bool ayCrossSection) {
   AZUREProfile::Timer profileTimer(AZUREProfile::kGradTBar);
   const complex I(0.0, 1.0);
@@ -722,9 +723,9 @@ bool AMatrixFunc::PointTBar(EPoint *point, double fitBar, TMatrixCotangent &bar,
   bar.screen.clear();
   if (point->GetScreeningParam() > 0 && point->GetScreeningK() != 0.0 && !isPhase && !point->IsCoefficient() &&
       !(point->IsAnalyzingPower() && !ayCrossSection)) {
-    double y = point->GetFitCrossSection();
-    if (xsComponent == 1) y = point->GetFitE1CrossSection();
-    else if (xsComponent == 2) y = point->GetFitE2CrossSection();
+    double y = point->GetFitCrossSection(results);
+    if (xsComponent == 1) y = point->GetFitE1CrossSection(results);
+    else if (xsComponent == 2) y = point->GetFitE2CrossSection(results);
     bar.screen.push_back({point->GetScreeningParam(), fitBar * 1.0e-6 * point->GetScreeningK() * y});
     fitBar *= point->ScreeningFactor();
   }
@@ -998,7 +999,7 @@ bool AMatrixFunc::PointTBar(EPoint *point, double fitBar, TMatrixCotangent &bar,
     // sigma_int cotangent -fitBar a_k / sigma_int (integratedBar).  No Coulomb terms: elastic pairs are refused.
     const bool coef = point->IsCoefficient();
     const int kOrd = coef ? point->GetCoefficientOrder() : -1;
-    const double sigmaInt = coef ? 4.0 * pi * point->GetAngDistA0() : 0.0;
+    const double sigmaInt = coef ? 4.0 * pi * point->GetAngDistA0(results) : 0.0;
     if (coef && (point->IsUPOS() || !(sigmaInt > 0.0))) return false;
     const double dfac = coef ? (point->GetCoefficientAbsolute() ? 1.0 / rtFactor : 4.0 * pi / (rtFactor * sigmaInt)) : 0.0;
     auto pl = [&](int l) -> double { return coef ? ((l == kOrd) ? dfac : 0.0) : point->GetLegendreP(l); };
@@ -1089,7 +1090,7 @@ bool AMatrixFunc::PointTBar(EPoint *point, double fitBar, TMatrixCotangent &bar,
 
     if (coef && !point->GetCoefficientAbsolute()) {
       // a_k = N_k / sigma_int: the sigma_int cotangent through the angle-integrated form
-      integratedBar(-fitBar * point->GetFitCrossSection() / sigmaInt, 1.0);
+      integratedBar(-fitBar * point->GetFitCrossSection(results) / sigmaInt, 1.0);
     }
 
     if (!coef && aa == exitPairNum && theDecay->TablesBuilt()) {  // elastic Coulomb-nuclear interference

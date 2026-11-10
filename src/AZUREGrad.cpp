@@ -493,7 +493,7 @@ namespace {
 // (central differences on IntegrateTargetEffect) and in the sub-point adjoints.
 std::atomic<long long> g_teCombinerNs{0}, g_teAdjointNs{0};
 
-bool GradTargetEffectAdjoint(EPoint *point, double fitBar, GradAccum &accum,
+bool GradTargetEffectAdjoint(EPoint *point, azure2::Results &results, double fitBar, GradAccum &accum,
                              const vector_matrix_r *shiftDeriv, int xsComponent,
                              CNuc *compound, const Config &config) {
   int nsp = point->NumSubPoints();
@@ -538,8 +538,8 @@ bool GradTargetEffectAdjoint(EPoint *point, double fitBar, GradAccum &accum,
   }
 
   std::vector<double> sigma(nsp);
-  for (int i = 1; i <= nsp; i++) sigma[i - 1] = point->GetSubPoint(i)->GetFitCrossSection();
-  double model = point->GetFitCrossSection();
+  for (int i = 1; i <= nsp; i++) sigma[i - 1] = point->GetSubPoint(i)->GetFitCrossSection(results);
+  double model = point->GetFitCrossSection(results);
 
   const auto tc0 = std::chrono::steady_clock::now();
   // Exact weights in one pass of the integrator on a linear form
@@ -554,13 +554,13 @@ bool GradTargetEffectAdjoint(EPoint *point, double fitBar, GradAccum &accum,
     for (int i = 1; i <= nsp; i++) {
       double s0 = sigma[i - 1];
       double h = 1.0e-3 * (std::fabs(s0) + 1.0);
-      point->GetSubPoint(i)->SetFitCrossSection(s0 + h);
-      point->IntegrateTargetEffect(config);
-      double yp = point->GetFitCrossSection();
-      point->GetSubPoint(i)->SetFitCrossSection(s0 - h);
-      point->IntegrateTargetEffect(config);
-      double ym = point->GetFitCrossSection();
-      point->GetSubPoint(i)->SetFitCrossSection(s0);
+      point->GetSubPoint(i)->SetFitCrossSection(results, s0 + h);
+      point->IntegrateTargetEffect(config, results);
+      double yp = point->GetFitCrossSection(results);
+      point->GetSubPoint(i)->SetFitCrossSection(results, s0 - h);
+      point->IntegrateTargetEffect(config, results);
+      double ym = point->GetFitCrossSection(results);
+      point->GetSubPoint(i)->SetFitCrossSection(results, s0);
       w[i - 1] = (yp - ym) / (2.0 * h);
     }
   };
@@ -578,8 +578,8 @@ bool GradTargetEffectAdjoint(EPoint *point, double fitBar, GradAccum &accum,
         dmax = std::max(dmax, std::fabs(c[i] - cfd[i]));
         yW += c[i] * sigma[i];
       }
-      point->IntegrateTargetEffect(config);
-      const double yI = point->GetFitCrossSection();
+      point->IntegrateTargetEffect(config, results);
+      const double yI = point->GetFitCrossSection(results);
 #pragma omp critical
       std::cerr << "[te-weights] entrance " << point->GetEntranceKey() << " exit " << point->GetExitKey() << " E " << point->GetCMEnergy() << " nsp " << nsp
                 << ": max|c - c_fd|/max|c_fd| " << (cmax > 0 ? dmax / cmax : dmax) << ", sum c*s " << yW
@@ -590,35 +590,35 @@ bool GradTargetEffectAdjoint(EPoint *point, double fitBar, GradAccum &accum,
   // calls the forward pass makes.
   double den = 0.0, avg = 0.0;
   if (isAy) {
-    point->IntegrateTargetEffect(config);
-    den = point->GetFitCrossSection();
+    point->IntegrateTargetEffect(config, results);
+    den = point->GetFitCrossSection(results);
     for (int i = 1; i <= nsp; i++)
-      point->GetSubPoint(i)->SetFitCrossSection(sigma[i - 1] * point->GetSubPoint(i)->GetAnalyzingPower());
-    point->IntegrateTargetEffect(config);
-    const double num = point->GetFitCrossSection();
-    for (int i = 1; i <= nsp; i++) point->GetSubPoint(i)->SetFitCrossSection(sigma[i - 1]);
+      point->GetSubPoint(i)->SetFitCrossSection(results, sigma[i - 1] * point->GetSubPoint(i)->GetAnalyzingPower(results));
+    point->IntegrateTargetEffect(config, results);
+    const double num = point->GetFitCrossSection(results);
+    for (int i = 1; i <= nsp; i++) point->GetSubPoint(i)->SetFitCrossSection(results, sigma[i - 1]);
     // The forward pass returns 0 for D = 0, a constant: no gradient.
     if (!(std::fabs(den) > 0.0)) {
-      point->SetFitCrossSection(model);
+      point->SetFitCrossSection(results, model);
       return true;
     }
     avg = num / den;
   } else if (isCoefNorm) {
-    for (int i = 1; i <= nsp; i++) point->GetSubPoint(i)->SetFitCrossSection(point->GetSubPoint(i)->GetAngDistA0());
-    point->IntegrateTargetEffect(config);
-    den = point->GetFitCrossSection();
+    for (int i = 1; i <= nsp; i++) point->GetSubPoint(i)->SetFitCrossSection(results, point->GetSubPoint(i)->GetAngDistA0(results));
+    point->IntegrateTargetEffect(config, results);
+    den = point->GetFitCrossSection(results);
     for (int i = 1; i <= nsp; i++)
-      point->GetSubPoint(i)->SetFitCrossSection(sigma[i - 1] * point->GetSubPoint(i)->GetAngDistA0());
-    point->IntegrateTargetEffect(config);
-    const double num = point->GetFitCrossSection();
-    for (int i = 1; i <= nsp; i++) point->GetSubPoint(i)->SetFitCrossSection(sigma[i - 1]);
+      point->GetSubPoint(i)->SetFitCrossSection(results, sigma[i - 1] * point->GetSubPoint(i)->GetAngDistA0(results));
+    point->IntegrateTargetEffect(config, results);
+    const double num = point->GetFitCrossSection(results);
+    for (int i = 1; i <= nsp; i++) point->GetSubPoint(i)->SetFitCrossSection(results, sigma[i - 1]);
     if (!(std::fabs(den) > 0.0)) {
-      point->SetFitCrossSection(model);
+      point->SetFitCrossSection(results, model);
       return true;
     }
     avg = num / den;
   }
-  point->SetFitCrossSection(model);
+  point->SetFitCrossSection(results, model);
   // A fitted Doppler temperature (doppler_<n>): d/dT through the Doppler weights, the sub-point values fixed.  The
   // ratios (A_y, a normalised coefficient) take d(N/D) = (dN - <A> dD)/D on the same integrator.
   if (const int dk = point->GetParentData()->DopplerParamOfEffect(point->GetTargetEffectNum())) {
@@ -627,17 +627,17 @@ bool GradTargetEffectAdjoint(EPoint *point, double fitBar, GradAccum &accum,
     if (isAy || isCoefNorm) {
       std::vector<double> weight(nsp);
       for (int i = 1; i <= nsp; i++)
-        weight[i - 1] = isAy ? sigma[i - 1] : point->GetSubPoint(i)->GetAngDistA0();
+        weight[i - 1] = isAy ? sigma[i - 1] : point->GetSubPoint(i)->GetAngDistA0(results);
       for (int i = 1; i <= nsp; i++)
-        vals[i - 1] = weight[i - 1] * (isAy ? point->GetSubPoint(i)->GetAnalyzingPower() : sigma[i - 1]);
+        vals[i - 1] = weight[i - 1] * (isAy ? point->GetSubPoint(i)->GetAnalyzingPower(results) : sigma[i - 1]);
       const double dN = point->DopplerTemperatureDerivative(config, vals);
       const double dD = point->DopplerTemperatureDerivative(config, weight);
       dT = (dN - avg * dD) / den;
     } else {
       for (int i = 1; i <= nsp; i++) {
         EPoint *sp = point->GetSubPoint(i);
-        vals[i - 1] = (xsComponent == 1) ? sp->GetFitE1CrossSection()
-                      : (xsComponent == 2) ? sp->GetFitE2CrossSection() : sigma[i - 1];
+        vals[i - 1] = (xsComponent == 1) ? sp->GetFitE1CrossSection(results)
+                      : (xsComponent == 2) ? sp->GetFitE2CrossSection(results) : sigma[i - 1];
       }
       dT = point->DopplerTemperatureDerivative(config, vals);
     }
@@ -656,42 +656,42 @@ bool GradTargetEffectAdjoint(EPoint *point, double fitBar, GradAccum &accum,
     amf.InvertMatrices();
     amf.CalculateTMatrix(sp);
     if (!isAy && !isCoefNorm) {
-      if (!amf.PointAdjoint(sp, fitBar * c[i - 1], accum, shiftDeriv, xsComponent)) ok = false;
+      if (!amf.PointAdjoint(sp, results, fitBar * c[i - 1], accum, shiftDeriv, xsComponent)) ok = false;
       continue;
     }
     if (isCoefNorm) {
-      const double a0 = sp->GetAngDistA0();
+      const double a0 = sp->GetAngDistA0(results);
       const double akBar = fitBar * c[i - 1] * a0 / den;
       const double a0Bar = fitBar * c[i - 1] * (sigma[i - 1] - avg) / den;
-      if (akBar != 0.0 && !amf.PointAdjoint(sp, akBar, accum, shiftDeriv, 0)) ok = false;
-      if (ok && a0Bar != 0.0 && !amf.PointAdjoint(sp, a0Bar, accum, shiftDeriv, -1)) ok = false;
+      if (akBar != 0.0 && !amf.PointAdjoint(sp, results, akBar, accum, shiftDeriv, 0)) ok = false;
+      if (ok && a0Bar != 0.0 && !amf.PointAdjoint(sp, results, a0Bar, accum, shiftDeriv, -1)) ok = false;
       continue;
     }
     const double ayBar = fitBar * c[i - 1] * sigma[i - 1] / den;
-    const double xsBar = fitBar * c[i - 1] * (sp->GetAnalyzingPower() - avg) / den;
-    if (ayBar != 0.0 && !amf.PointAdjoint(sp, ayBar, accum, shiftDeriv, 0, false)) ok = false;
-    if (ok && xsBar != 0.0 && !amf.PointAdjoint(sp, xsBar, accum, shiftDeriv, 0, true)) ok = false;
+    const double xsBar = fitBar * c[i - 1] * (sp->GetAnalyzingPower(results) - avg) / den;
+    if (ayBar != 0.0 && !amf.PointAdjoint(sp, results, ayBar, accum, shiftDeriv, 0, false)) ok = false;
+    if (ok && xsBar != 0.0 && !amf.PointAdjoint(sp, results, xsBar, accum, shiftDeriv, 0, true)) ok = false;
   }
   g_teAdjointNs += std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - tc1).count();
   return ok;
 }
 
 // Forward + adjoint for one data point (target-effect or direct A-matrix).
-bool GradAdjointPoint(EPoint *point, int xsComponent, double fitBar, GradAccum &accum,
+bool GradAdjointPoint(EPoint *point, azure2::Results &results, int xsComponent, double fitBar, GradAccum &accum,
                       const vector_matrix_r *shiftDeriv, CNuc *compound, const Config &config) {
   TargetEffect *te = point->IsTargetEffect()
       ? point->GetParentData()->GetTargetEffect(point->GetTargetEffectNum())
       : nullptr;
   bool subpointTE = te && te->IsSubPointEffect();
   if (subpointTE)
-    return GradTargetEffectAdjoint(point, fitBar, accum, shiftDeriv, xsComponent, compound, config);
+    return GradTargetEffectAdjoint(point, results, fitBar, accum, shiftDeriv, xsComponent, compound, config);
 
   AMatrixFunc amf(compound, config);
   amf.ClearMatrices();
   amf.FillMatrices(point);
   amf.InvertMatrices();
   amf.CalculateTMatrix(point);
-  return amf.PointAdjoint(point, fitBar, accum, shiftDeriv, xsComponent);
+  return amf.PointAdjoint(point, results, fitBar, accum, shiftDeriv, xsComponent);
 }
 
 // Forward + adjoint for one point of a transmission or yield segment (ESegment::IsTransformed).  The model is
@@ -699,10 +699,11 @@ bool GradAdjointPoint(EPoint *point, int xsComponent, double fitBar, GradAccum &
 // sub-point target effect -- at every sub-point before the kernel: Y = sum_j c_j F(s_j, s_t,j), c_j the kernel's
 // exact weights (EPoint::TargetEffectWeights).  Each term's point or sub-point is back-propagated with the cotangent
 // fitBar c_j dF/d(its sum) times its weight, and a sample's abundance gets fitBar c_j dF/ds times its unweighted terms.
-bool GradTransformedPoint(ESegment *segment, EData *data, int i, int pointIdx, CNuc *compound, const Config &config,
+bool GradTransformedPoint(ESegment *segment, EData *data, azure2::Results &results, int i, int pointIdx, CNuc *compound,
+                          const Config &config,
                           const vector_matrix_r *shiftDeriv, const FitBarFn &fitBarFn, GradAccum &accum,
                           double &outModel) {
-  outModel = segment->CalculateTheoreticalCrossSection(pointIdx, compound, config, data);
+  outModel = segment->CalculateTheoreticalCrossSection(pointIdx, compound, config, data, results);
   const double fitBar = fitBarFn(segment, i, pointIdx, outModel);
   if (fitBar == 0.0) return true;
   std::vector<ESegment::TransformTerm> terms;
@@ -714,8 +715,9 @@ bool GradTransformedPoint(ESegment *segment, EData *data, int i, int pointIdx, C
   // A fitted sample thickness (segment_<key>_thickness, its group leader's for a follower): dF/dn at the same values,
   // dT/dn = -s exp(-n s), dY0/dn = s exp(-n s_t), with the kernel weight c of each (sub-)point.
   const int thicknessParam = data ? data->ThicknessParamOfSegment(i) : 0;
-  auto valueOf = [](EPoint *p, int c) {
-    return (c == 1) ? p->GetFitE1CrossSection() : (c == 2) ? p->GetFitE2CrossSection() : p->GetFitCrossSection();
+  auto valueOf = [&results](EPoint *p, int c) {
+    return (c == 1) ? p->GetFitE1CrossSection(results) : (c == 2) ? p->GetFitE2CrossSection(results)
+                                                                  : p->GetFitCrossSection(results);
   };
   std::vector<double> v(terms.size());
   // fitBar c dF/d(term q) for the values v, one term's point or sub-point at a time
@@ -740,7 +742,7 @@ bool GradTransformedPoint(ESegment *segment, EData *data, int i, int pointIdx, C
   if (!ESegment::HasSubPointIntegration(base)) {
     for (size_t q = 0; q < terms.size(); q++) v[q] = valueOf(terms[q].point, terms[q].xsComponent);
     return backProp(1.0, [&](size_t q, double cot) {
-      return GradAdjointPoint(terms[q].point, terms[q].xsComponent, cot, accum, shiftDeriv, compound, config);
+      return GradAdjointPoint(terms[q].point, results, terms[q].xsComponent, cot, accum, shiftDeriv, compound, config);
     });
   }
   const int nsp = base->NumSubPoints();
@@ -795,7 +797,7 @@ bool GradTransformedPoint(ESegment *segment, EData *data, int i, int pointIdx, C
         amf.FillMatrices(sp);
         amf.InvertMatrices();
         amf.CalculateTMatrix(sp);
-        if (!amf.PointAdjoint(sp, cot[q][k - 1], accum, shiftDeriv, terms[q].xsComponent)) return false;
+        if (!amf.PointAdjoint(sp, results, cot[q][k - 1], accum, shiftDeriv, terms[q].xsComponent)) return false;
       }
     return true;
   }
@@ -814,7 +816,7 @@ bool GradTransformedPoint(ESegment *segment, EData *data, int i, int pointIdx, C
       amf.FillMatrices(sp);
       amf.InvertMatrices();
       amf.CalculateTMatrix(sp);
-      return amf.PointAdjoint(sp, cot, accum, shiftDeriv, terms[q].xsComponent);
+      return amf.PointAdjoint(sp, results, cot, accum, shiftDeriv, terms[q].xsComponent);
     });
     if (!ok) return false;
   }
@@ -826,7 +828,7 @@ bool GradTransformedPoint(ESegment *segment, EData *data, int i, int pointIdx, C
 // fitBar = fitBarFn(segment, i, pointIdx, model).  Handles plain points (single
 // forward, reused for model + adjoint), component (SUM/RATIO) and target-effect
 // points.  Returns false on an unsupported configuration.
-bool GradOnePoint(ESegment *segment, EData *data, int i, int pointIdx,
+bool GradOnePoint(ESegment *segment, EData *data, azure2::Results &results, int i, int pointIdx,
                   CNuc *compound, const Config &config,
                   const vector_matrix_r *shiftDeriv, const FitBarFn &fitBarFn,
                   GradAccum &accum, double &outModel) {
@@ -837,7 +839,8 @@ bool GradOnePoint(ESegment *segment, EData *data, int i, int pointIdx,
   outModel = 0.0;
   if (!point) return true;
   if (segment->IsTransformed())
-    return GradTransformedPoint(segment, data, i, pointIdx, compound, config, shiftDeriv, fitBarFn, accum, outModel);
+    return GradTransformedPoint(segment, data, results, i, pointIdx, compound, config, shiftDeriv, fitBarFn, accum,
+                                outModel);
 
   int baseComp = segment->GetCrossSectionComponent();
   bool hasComp = segment->HasComponents();
@@ -861,10 +864,10 @@ bool GradOnePoint(ESegment *segment, EData *data, int i, int pointIdx,
     amf.FillMatrices(point);
     amf.InvertMatrices();
     amf.CalculateTMatrix(point);
-    amf.GenMatrixFunc::CalculateCrossSection(point);
-    double model = (baseComp == 1) ? point->GetFitE1CrossSection()
-        : (baseComp == 2)          ? point->GetFitE2CrossSection()
-                                   : point->GetFitCrossSection();
+    amf.GenMatrixFunc::CalculateCrossSection(point, results);
+    double model = (baseComp == 1) ? point->GetFitE1CrossSection(results)
+        : (baseComp == 2)          ? point->GetFitE2CrossSection(results)
+                                   : point->GetFitCrossSection(results);
     double weight = 1.0;
     if (natural) {
       const int nucleus = abundanceOf(segment->GetEntranceKey());
@@ -873,12 +876,12 @@ bool GradOnePoint(ESegment *segment, EData *data, int i, int pointIdx,
       double fitBar = fitBarFn(segment, i, pointIdx, outModel);
       if (fitBar == 0.0) return true;
       accum.AddAbundance(compound->AbundanceOrdinal(sample, nucleus), fitBar * model);
-      return amf.PointAdjoint(point, fitBar * weight, accum, shiftDeriv, baseComp);
+      return amf.PointAdjoint(point, results, fitBar * weight, accum, shiftDeriv, baseComp);
     }
     outModel = model;
     double fitBar = fitBarFn(segment, i, pointIdx, model);
     if (fitBar != 0.0)
-      return amf.PointAdjoint(point, fitBar, accum, shiftDeriv, baseComp);
+      return amf.PointAdjoint(point, results, fitBar, accum, shiftDeriv, baseComp);
     return true;
   }
 
@@ -921,15 +924,16 @@ bool GradOnePoint(ESegment *segment, EData *data, int i, int pointIdx,
       };
       for (EPoint *p : pts) {
         useExitOf(p);
-        amf.GenMatrixFunc::CalculateCrossSection(p);
+        amf.GenMatrixFunc::CalculateCrossSection(p, results);
       }
       // The combined model from the values the points now hold, exactly as the forward calculation forms it.
-      double model = segment->CalculateTheoreticalCrossSection(pointIdx, compound, config, data, true);
+      double model = segment->CalculateTheoreticalCrossSection(pointIdx, compound, config, data, results, true);
       outModel = model;
       double fitBar = fitBarFn(segment, i, pointIdx, model);
       if (fitBar == 0.0) return true;
-      auto valueOf = [](EPoint *p, int c) {
-        return (c == 1) ? p->GetFitE1CrossSection() : (c == 2) ? p->GetFitE2CrossSection() : p->GetFitCrossSection();
+      auto valueOf = [&results](EPoint *p, int c) {
+        return (c == 1) ? p->GetFitE1CrossSection(results) : (c == 2) ? p->GetFitE2CrossSection(results)
+                                                                      : p->GetFitCrossSection(results);
       };
       // d(model)/d(term q)
       std::vector<double> coef(pts.size(), 0.0);
@@ -949,7 +953,7 @@ bool GradOnePoint(ESegment *segment, EData *data, int i, int pointIdx,
         }
       } else {  // RATIO: base / first component
         const double baseVal = valueOf(pts[0], xsComp[0]);
-        const double denomVal = pts[1]->GetFitCrossSection();
+        const double denomVal = pts[1]->GetFitCrossSection(results);
         if (natural) {
           const int nucleus = abundanceOf(segment->GetEntranceKey());
           accum.AddAbundance(compound->AbundanceOrdinal(sample, nucleus), fitBar * baseVal);
@@ -966,7 +970,7 @@ bool GradOnePoint(ESegment *segment, EData *data, int i, int pointIdx,
         if (coef[q] == 0.0) continue;
         useExitOf(pts[q]);
         TMatrixCotangent bar;
-        if (!amf.PointTBar(pts[q], fitBar * coef[q], bar, xsComp[q])) return false;
+        if (!amf.PointTBar(pts[q], results, fitBar * coef[q], bar, xsComp[q])) return false;
         barPts.push_back(pts[q]);
         bars.push_back(std::move(bar));
       }
@@ -976,15 +980,15 @@ bool GradOnePoint(ESegment *segment, EData *data, int i, int pointIdx,
   }
 
   // Combined model (components and/or target-effect integration).
-  double model = segment->CalculateTheoreticalCrossSection(pointIdx, compound, config, data);
+  double model = segment->CalculateTheoreticalCrossSection(pointIdx, compound, config, data, results);
   outModel = model;
   double fitBar = fitBarFn(segment, i, pointIdx, model);
   if (fitBar == 0.0) return true;
 
   // The base term's own (unweighted) value, as the point still holds it.
-  double baseVal = (baseComp == 1) ? point->GetFitE1CrossSection()
-      : (baseComp == 2)            ? point->GetFitE2CrossSection()
-                                   : point->GetFitCrossSection();
+  double baseVal = (baseComp == 1) ? point->GetFitE1CrossSection(results)
+      : (baseComp == 2)            ? point->GetFitE2CrossSection(results)
+                                   : point->GetFitCrossSection(results);
   double baseWeight = 1.0;
   if (natural) {
     const int nucleus = abundanceOf(segment->GetEntranceKey());
@@ -992,15 +996,15 @@ bool GradOnePoint(ESegment *segment, EData *data, int i, int pointIdx,
     accum.AddAbundance(compound->AbundanceOrdinal(sample, nucleus), fitBar * baseVal);
   }
   if (!hasComp) {
-    return GradAdjointPoint(point, baseComp, fitBar * baseWeight, accum, shiftDeriv, compound, config);
+    return GradAdjointPoint(point, results, baseComp, fitBar * baseWeight, accum, shiftDeriv, compound, config);
   } else if (segment->GetOperationType() == SUM) {
-    if (!GradAdjointPoint(point, baseComp, fitBar * baseWeight, accum, shiftDeriv, compound, config))
+    if (!GradAdjointPoint(point, results, baseComp, fitBar * baseWeight, accum, shiftDeriv, compound, config))
       return false;
     for (ESegment *comp : segment->GetComponentSegments()) {
       if (!comp || pointIdx >= comp->NumPoints()) continue;
       EPoint *cp = comp->GetPoint(pointIdx + 1);
       if (!cp) continue;
-      double cv = cp->GetFitCrossSection();
+      double cv = cp->GetFitCrossSection(results);
       if (std::isnan(cv) || std::isinf(cv)) continue;
       // the term's scaling and its frame factor into the base point's frame (ESegment::TermFrameFactor)
       const double s = comp->GetComponentScaling() * ESegment::TermFrameFactor(point, cp);
@@ -1010,7 +1014,7 @@ bool GradOnePoint(ESegment *segment, EData *data, int i, int pointIdx,
         compWeight = compound->GetAbundance(sample, nucleus);
         accum.AddAbundance(compound->AbundanceOrdinal(sample, nucleus), fitBar * s * cv);
       }
-      if (!GradAdjointPoint(cp, comp->GetCrossSectionComponent(), fitBar * s * compWeight, accum,
+      if (!GradAdjointPoint(cp, results, comp->GetCrossSectionComponent(), fitBar * s * compWeight, accum,
                             shiftDeriv, compound, config))
         return false;
     }
@@ -1019,15 +1023,15 @@ bool GradOnePoint(ESegment *segment, EData *data, int i, int pointIdx,
     const std::vector<ESegment *> &comps = segment->GetComponentSegments();
     if (comps.empty() || !comps[0] || pointIdx >= comps[0]->NumPoints()) return false;
     EPoint *denomPoint = comps[0]->GetPoint(pointIdx + 1);
-    double baseVal = (baseComp == 1) ? point->GetFitE1CrossSection()
-        : (baseComp == 2)            ? point->GetFitE2CrossSection()
-                                     : point->GetFitCrossSection();
-    double denomVal = denomPoint ? denomPoint->GetFitCrossSection() : 0.0;
+    double baseVal = (baseComp == 1) ? point->GetFitE1CrossSection(results)
+        : (baseComp == 2)            ? point->GetFitE2CrossSection(results)
+                                     : point->GetFitCrossSection(results);
+    double denomVal = denomPoint ? denomPoint->GetFitCrossSection(results) : 0.0;
     if (baseVal != 0.0 && denomVal != 0.0 && denomPoint) {
-      if (!GradAdjointPoint(point, baseComp, fitBar * model / baseVal,
+      if (!GradAdjointPoint(point, results, baseComp, fitBar * model / baseVal,
                             accum, shiftDeriv, compound, config))
         return false;
-      if (!GradAdjointPoint(denomPoint, 0, -fitBar * model / denomVal,
+      if (!GradAdjointPoint(denomPoint, results, 0, -fitBar * model / denomVal,
                             accum, shiftDeriv, compound, config))
         return false;
     }
@@ -1044,7 +1048,8 @@ bool GradOnePoint(ESegment *segment, EData *data, int i, int pointIdx,
 // and an edge blend adds (1 - w) times the bare point.  The automatic
 // application of a target effect (a tolerance) switches between the folded
 // and the bare value by a test on the sub-points: not covered (false).
-bool ThmPointModelGradient(EPoint *point, CNuc *compound, const Config &config, const ThmAdjointContext &ctx,
+bool ThmPointModelGradient(EPoint *point, azure2::Results &results, CNuc *compound, const Config &config,
+                           const ThmAdjointContext &ctx,
                            GradAccum &accum, std::vector<double> &coherentBar) {
   static thread_local THMMatrixFunc reusable(compound, config);
   reusable.Reset(compound, config);
@@ -1063,20 +1068,20 @@ bool ThmPointModelGradient(EPoint *point, CNuc *compound, const Config &config, 
   const int nsp = point->NumSubPoints();
   if (nsp <= 0) return true;
   std::vector<double> sigma(nsp), c(nsp, 0.0);
-  for (int i = 1; i <= nsp; i++) sigma[i - 1] = point->GetSubPoint(i)->GetFitCrossSection();
-  const double model = point->GetFitCrossSection();
+  for (int i = 1; i <= nsp; i++) sigma[i - 1] = point->GetSubPoint(i)->GetFitCrossSection(results);
+  const double model = point->GetFitCrossSection(results);
   for (int i = 1; i <= nsp; i++) {
     const double s0 = sigma[i - 1], h = 1.0e-3 * (std::fabs(s0) + 1.0);
-    point->GetSubPoint(i)->SetFitCrossSection(s0 + h);
-    point->IntegrateTargetEffect(config);
-    const double yp = point->GetFitCrossSection();
-    point->GetSubPoint(i)->SetFitCrossSection(s0 - h);
-    point->IntegrateTargetEffect(config);
-    const double ym = point->GetFitCrossSection();
-    point->GetSubPoint(i)->SetFitCrossSection(s0);
+    point->GetSubPoint(i)->SetFitCrossSection(results, s0 + h);
+    point->IntegrateTargetEffect(config, results);
+    const double yp = point->GetFitCrossSection(results);
+    point->GetSubPoint(i)->SetFitCrossSection(results, s0 - h);
+    point->IntegrateTargetEffect(config, results);
+    const double ym = point->GetFitCrossSection(results);
+    point->GetSubPoint(i)->SetFitCrossSection(results, s0);
     c[i - 1] = (yp - ym) / (2.0 * h);
   }
-  point->SetFitCrossSection(model);
+  point->SetFitCrossSection(results, model);
   const double blend = point->GetTargetBlendWeight();
   for (int i = 1; i <= nsp; i++)
     if (c[i - 1] != 0.0 && !adjoint(point->GetSubPoint(i), blend * c[i - 1])) return false;
@@ -1199,7 +1204,7 @@ void AddCotangent(TMatrixCotangent &dst, const TMatrixCotangent &src) {
 // from the shared T-matrix (the plain-point forward of GradOnePoint).
 // `rawModel` is the member's unweighted observable, `weight` its natural-target
 // abundance (1 otherwise).
-void GroupForward(AMatrixFunc &amf, const GradItem &it, CNuc *compound, std::vector<double> &rawModel,
+void GroupForward(AMatrixFunc &amf, const GradItem &it, azure2::Results &results, CNuc *compound, std::vector<double> &rawModel,
                   std::vector<double> &weight) {
   EPoint *host = it.members[0].pt;
   AZUREProfile::Timer profileTimer(AZUREProfile::kGradForward);
@@ -1212,10 +1217,10 @@ void GroupForward(AMatrixFunc &amf, const GradItem &it, CNuc *compound, std::vec
   weight.assign(g, 1.0);
   for (size_t q = 0; q < g; q++) {
     const GroupMember &m = it.members[q];
-    amf.GenMatrixFunc::CalculateCrossSection(m.pt);
+    amf.GenMatrixFunc::CalculateCrossSection(m.pt, results);
     const int comp = m.seg->GetCrossSectionComponent();
-    rawModel[q] = (comp == 1) ? m.pt->GetFitE1CrossSection() : (comp == 2) ? m.pt->GetFitE2CrossSection()
-                                                                          : m.pt->GetFitCrossSection();
+    rawModel[q] = (comp == 1) ? m.pt->GetFitE1CrossSection(results) : (comp == 2) ? m.pt->GetFitE2CrossSection(results)
+                                                                          : m.pt->GetFitCrossSection(results);
     if (m.seg->IsNatural()) {
       const int nucleus = compound->GetPair(compound->GetPairNumFromKey(m.seg->GetEntranceKey()))->GetNucleus();
       weight[q] = compound->GetAbundance(m.seg->GetNaturalSample(), nucleus);
@@ -1230,10 +1235,10 @@ int AbundanceOrdinalOf(CNuc *compound, ESegment *seg) {
 
 // The scalar-objective adjoint of a group: the members' T-matrix cotangents are
 // summed (the back-propagation is linear in them) and back-propagated once.
-bool GroupGradient(AMatrixFunc &amf, const GradItem &it, CNuc *compound, const vector_matrix_r *shiftDeriv,
+bool GroupGradient(AMatrixFunc &amf, const GradItem &it, azure2::Results &results, CNuc *compound, const vector_matrix_r *shiftDeriv,
                    const FitBarFn &fitBarFn, GradAccum &accum) {
   std::vector<double> rawModel, weight;
-  GroupForward(amf, it, compound, rawModel, weight);
+  GroupForward(amf, it, results, compound, rawModel, weight);
   TMatrixCotangent sum, bar;
   bool any = false;
   for (size_t q = 0; q < it.members.size(); q++) {
@@ -1242,7 +1247,7 @@ bool GroupGradient(AMatrixFunc &amf, const GradItem &it, CNuc *compound, const v
     const double fitBar = fitBarFn(m.seg, m.segNum, m.pointIdx, model);
     if (fitBar == 0.0) continue;
     if (m.seg->IsNatural()) accum.AddAbundance(AbundanceOrdinalOf(compound, m.seg), fitBar * rawModel[q]);
-    if (!amf.PointTBar(m.pt, fitBar * weight[q], bar, m.seg->GetCrossSectionComponent())) return false;
+    if (!amf.PointTBar(m.pt, results, fitBar * weight[q], bar, m.seg->GetCrossSectionComponent())) return false;
     AddCotangent(sum, bar);
     any = true;
   }
@@ -1264,11 +1269,11 @@ bool GroupGradient(AMatrixFunc &amf, const GradItem &it, CNuc *compound, const v
 // pairs) or the decay has external capture, each member is back-propagated on
 // its own -- still from the one shared forward solve.
 template <class FitBarOf, class RowFn>
-bool GroupRows(AMatrixFunc &amf, const GradItem &it, CNuc *compound, const vector_matrix_r *shiftDeriv,
+bool GroupRows(AMatrixFunc &amf, const GradItem &it, azure2::Results &results, CNuc *compound, const vector_matrix_r *shiftDeriv,
                FitBarOf fitBarOf, RowFn rowFn, GradAccum &accum, GradAccum &scratch,
                const AMatrixFunc::FreeMask *mask) {
   std::vector<double> rawModel, weight;
-  GroupForward(amf, it, compound, rawModel, weight);
+  GroupForward(amf, it, results, compound, rawModel, weight);
   EPoint *host = it.members[0].pt;
   const size_t g = it.members.size();
   std::vector<double> model(g), fitBar(g);
@@ -1280,7 +1285,7 @@ bool GroupRows(AMatrixFunc &amf, const GradItem &it, CNuc *compound, const vecto
     model[q] = weight[q] * rawModel[q];
     fitBar[q] = fitBarOf(q, model[q]);
     if (fitBar[q] == 0.0) continue;
-    if (!amf.PointTBar(m.pt, fitBar[q] * weight[q], bars[q], m.seg->GetCrossSectionComponent())) return false;
+    if (!amf.PointTBar(m.pt, results, fitBar[q] * weight[q], bars[q], m.seg->GetCrossSectionComponent())) return false;
     if (bilinear && !amf.CollectBilinearTerms(host, bars[q], terms[q])) bilinear = false;
   }
 
@@ -1425,7 +1430,7 @@ bool ThmFiniteDifferencesRequested() {
 }
 
 
-bool AccumulateEGammaGradient(CNuc *compound, EData *data, const Config &config,
+bool AccumulateEGammaGradient(CNuc *compound, EData *data, azure2::Results &results, const Config &config,
                               const ParamIndexMap &pmap,
                               const vector_matrix_r *shiftDeriv,
                               const FitBarFn &fitBarFn,
@@ -1472,11 +1477,11 @@ bool AccumulateEGammaGradient(CNuc *compound, EData *data, const Config &config,
       const GradItem &it = items[k];
       bool ok = true;
       if (it.grouped && it.members.size() > 1) {
-        ok = GroupGradient(amf, it, compound, shiftDeriv, fitBarFn, local);
+        ok = GroupGradient(amf, it, results, compound, shiftDeriv, fitBarFn, local);
       } else {
         for (const GroupMember &m : it.members) {
           double model;
-          if (!GradOnePoint(m.seg, data, m.segNum, m.pointIdx, compound, config, shiftDeriv, fitBarFn, local, model)) {
+          if (!GradOnePoint(m.seg, data, results, m.segNum, m.pointIdx, compound, config, shiftDeriv, fitBarFn, local, model)) {
             ok = false;
             break;
           }
@@ -1552,7 +1557,7 @@ AMatrixFunc::FreeMask BuildFreeMask(CNuc *compound, const ParamIndexMap &pmap) {
 }
 
 template <class FitBarOf, class WriteRow>
-bool ForEachRow(CNuc *compound, EData *data, const Config &config, const vector_matrix_r *shiftDeriv,
+bool ForEachRow(CNuc *compound, EData *data, azure2::Results &results, const Config &config, const vector_matrix_r *shiftDeriv,
                 FitBarOf fitBarOf, WriteRow writeRow, int &bailSeg, int &numGroups, bool skipTHM,
                 const ParamIndexMap &pmap, const AMatrixFunc::FreeMask *mask) {
   const std::vector<GradItem> items = BuildGradItems(data, skipTHM);
@@ -1580,14 +1585,14 @@ bool ForEachRow(CNuc *compound, EData *data, const Config &config, const vector_
       if (it.grouped && it.members.size() > 1) {
         auto fb = [&](size_t q, double) { return fitBarOf(it.members[q]); };
         auto row = [&](size_t q, double model, GradAccum &acc) { writeRow(it.members[q], model, acc); };
-        ok = GroupRows(amf, it, compound, shiftDeriv, fb, row, accum, scratch, mask);
+        ok = GroupRows(amf, it, results, compound, shiftDeriv, fb, row, accum, scratch, mask);
       } else {
         for (const GroupMember &m : it.members) {
           const double fitBar = fitBarOf(m);
           FitBarFn oneFitBar = [fitBar](ESegment *, int, int, double) -> double { return fitBar; };
           accum.Zero();
           double model = 0.0;
-          if (!GradOnePoint(m.seg, data, m.segNum, m.pointIdx, compound, config, shiftDeriv, oneFitBar, accum, model)) {
+          if (!GradOnePoint(m.seg, data, results, m.segNum, m.pointIdx, compound, config, shiftDeriv, oneFitBar, accum, model)) {
             ok = false;
             break;
           }
@@ -1608,7 +1613,7 @@ bool ForEachRow(CNuc *compound, EData *data, const Config &config, const vector_
 
 }  // namespace
 
-bool ComputeResidualJacobian(CNuc *compound, EData *data, const Config &config,
+bool ComputeResidualJacobian(CNuc *compound, EData *data, azure2::Results &results, const Config &config,
                              const ParamIndexMap &pmap,
                              const vector_matrix_r *shiftDeriv,
                              vector_r &residuals, vector_r &jacobian, int &nCols,
@@ -1682,7 +1687,7 @@ bool ComputeResidualJacobian(CNuc *compound, EData *data, const Config &config,
   };
   int bailSeg = 0, numGroups = 0;
   const AMatrixFunc::FreeMask mask = BuildFreeMask(compound, pmap);
-  const bool ok = ForEachRow(compound, data, config, shiftDeriv, fitBarOf, writeRow, bailSeg, numGroups,
+  const bool ok = ForEachRow(compound, data, results, config, shiftDeriv, fitBarOf, writeRow, bailSeg, numGroups,
                              /*skipTHM=*/true, pmap, &mask);
   if (!ok) ReportBail("Jacobian/gradient", data->GetSegment(bailSeg), bailSeg);
 
@@ -1705,7 +1710,7 @@ bool ComputeResidualJacobian(CNuc *compound, EData *data, const Config &config,
   return ok;
 }
 
-bool ComputeModelGradients(CNuc *compound, EData *data, const Config &config,
+bool ComputeModelGradients(CNuc *compound, EData *data, azure2::Results &results, const Config &config,
                            const ParamIndexMap &pmap,
                            const vector_matrix_r *shiftDeriv,
                            std::map<EPoint *, vector_r> &gradByPoint,
@@ -1741,7 +1746,7 @@ bool ComputeModelGradients(CNuc *compound, EData *data, const Config &config,
   int bailSeg = 0, numGroups = 0;
   const AMatrixFunc::FreeMask mask = BuildFreeMask(compound, pmap);
   // skipTHM: the rows of THM (HOES) points are left zero for the caller.
-  const bool ok = ForEachRow(compound, data, config, shiftDeriv, fitBarOf, writeRow, bailSeg, numGroups, skipTHM,
+  const bool ok = ForEachRow(compound, data, results, config, shiftDeriv, fitBarOf, writeRow, bailSeg, numGroups, skipTHM,
                              pmap, &mask);
   if (!ok) {
     ReportBail("Jacobian/gradient", data->GetSegment(bailSeg), bailSeg);
@@ -1752,7 +1757,7 @@ bool ComputeModelGradients(CNuc *compound, EData *data, const Config &config,
 
 // THM (HOES) rows: see the declaration in AZUREGrad.h.  Shared by the API
 // (residual Jacobian, chi2 gradient, model gradients) and the CLI band.
-std::vector<THMRows> ComputeTHMRows(CNuc *lc, EData *ld, const Config &config,
+std::vector<THMRows> ComputeTHMRows(CNuc *lc, EData *ld, azure2::Results &results, const Config &config,
                                     const vector_r &full, const ParamIndexMap &pmap) {
   std::vector<THMRows> rows;
   const bool brune = (config.paramMask & Config::USE_BRUNE_FORMALISM);
@@ -1800,12 +1805,12 @@ std::vector<THMRows> ComputeTHMRows(CNuc *lc, EData *ld, const Config &config,
     for (long k = 0; k < n; k++) {
       ESegment *seg = ld->GetSegment(rows[order[k].first].segment);
       if (seg->GetPoint(order[k].second + 1)->IsMapped()) continue;
-      out[order[k].first][slot[k]] = seg->CalculateTheoreticalCrossSection(order[k].second, lc, config, ld);
+      out[order[k].first][slot[k]] = seg->CalculateTheoreticalCrossSection(order[k].second, lc, config, ld, results);
     }
     for (long k = 0; k < n; k++) {
       ESegment *seg = ld->GetSegment(rows[order[k].first].segment);
       if (seg->GetPoint(order[k].second + 1)->IsMapped())
-        out[order[k].first][slot[k]] = seg->CalculateTheoreticalCrossSection(order[k].second, lc, config, ld);
+        out[order[k].first][slot[k]] = seg->CalculateTheoreticalCrossSection(order[k].second, lc, config, ld, results);
     }
   };
   auto fillCompound = [&](const vector_r &p) {
@@ -1865,7 +1870,7 @@ std::vector<THMRows> ComputeTHMRows(CNuc *lc, EData *ld, const Config &config,
         EPoint *pt = seg->GetPoint(order[k].second + 1);
         accum.Zero();
         std::fill(coherentBar.begin(), coherentBar.end(), 0.0);
-        if (!ThmPointModelGradient(pt, lc, config, ctx, accum, coherentBar)) {
+        if (!ThmPointModelGradient(pt, results, lc, config, ctx, accum, coherentBar)) {
 #pragma omp critical
           bail = true;
           continue;
@@ -1938,7 +1943,7 @@ std::vector<THMRows> ComputeTHMRows(CNuc *lc, EData *ld, const Config &config,
       if (!pt) continue;
       d.push_back(pt->GetCMCrossSection());
       e.push_back(pt->GetCMCrossSectionError());
-      pt->SetFitCrossSection(tr.m[d.size() - 1]);
+      pt->SetFitCrossSection(results, tr.m[d.size() - 1]);
     }
     const size_t n = d.size();
     if (ld->ThmGroupOf(tr.segment) >= 0) continue;  // a THM experiment: below
@@ -1953,7 +1958,7 @@ std::vector<THMRows> ComputeTHMRows(CNuc *lc, EData *ld, const Config &config,
     bool varyScale = false;
     double s;
     if (seg->IsProfiledNorm()) {
-      seg->ProfileNormChiSquared();  // sets n* (or 1 if degenerate), as the CLI
+      seg->ProfileNormChiSquared(results);  // sets n* (or 1 if degenerate), as the CLI
       varyScale = (Smd > 0.0 && Smm > 0.0);
       s = varyScale ? Smd / Smm : 1.0;
     } else {
@@ -1994,7 +1999,7 @@ std::vector<THMRows> ComputeTHMRows(CNuc *lc, EData *ld, const Config &config,
     for (size_t t = 0; t < rows.size(); t++)
       if (ld->ThmGroupOf(rows[t].segment) == g) members.push_back(t);
     if (members.empty()) continue;
-    ld->ProfileThmGroup(g);  // norms and profile from the models set above
+    ld->ProfileThmGroup(g, results);  // norms and profile from the models set above
     const ThmProfile &prof = ld->GetThmGroup(g).profile;
     std::vector<double> m, d, e, energy, Jm;
     for (size_t t : members) {

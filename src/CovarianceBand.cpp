@@ -179,7 +179,7 @@ double BandData::dXS(const std::vector<double> &g) const {
   return (v > 0.0) ? std::sqrt(v) : 0.0;
 }
 
-bool BuildBandData(CNuc *compound, EData *data, const Config &config,
+bool BuildBandData(CNuc *compound, EData *data, azure2::Results &results, const Config &config,
                    const BandCovariance &savedCov, BandData &out,
                    const std::vector<bool> *fixedMask) {
   out.compound = compound;
@@ -234,7 +234,7 @@ bool BuildBandData(CNuc *compound, EData *data, const Config &config,
   // ComputeModelGradients yields full packed rows; reduce each to the band
   // columns so the sensitivities line up with the covariance.
   std::map<EPoint *, vector_r> fullGrad;
-  if (!ComputeModelGradients(compound, data, config, pmap, sdp, fullGrad, /*skipTHM=*/true))
+  if (!ComputeModelGradients(compound, data, results, config, pmap, sdp, fullGrad, /*skipTHM=*/true))
     return false;
 
   // THM (HOES) points: their rows come from ComputeTHMRows (the HOES adjoint;
@@ -248,7 +248,7 @@ bool BuildBandData(CNuc *compound, EData *data, const Config &config,
   // gets no band: a change of the parameters that only rescales m leaves q put.
   {
     const vector_r full = tp.GetMinuitParams().Params();
-    std::vector<THMRows> thm = ComputeTHMRows(compound, data, config, full, pmap);
+    std::vector<THMRows> thm = ComputeTHMRows(compound, data, results, config, full, pmap);
     const int nCols = pmap.NumPacked();
     for (const THMRows &tr : thm) {
       ESegment *seg = data->GetSegment(tr.segment);

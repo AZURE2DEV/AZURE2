@@ -322,13 +322,13 @@ bool ESegment::IsProfiledNorm() const {
  * must already carry their model values in GetFitCrossSection().
  */
 
-double ESegment::ProfileNormChiSquared() {
+double ESegment::ProfileNormChiSquared(const azure2::Results &results) {
   double Smm = 0.0, Smd = 0.0, Sdd = 0.0;
   for (EPointIterator pt = GetPoints().begin(); pt < GetPoints().end(); pt++) {
     double e = pt->GetCMCrossSectionError();
     if (e == 0.0) continue;
     double w = 1.0 / (e * e);
-    double m = pt->GetFitCrossSection();
+    double m = pt->GetFitCrossSection(results);
     double d = pt->GetCMCrossSection();
     Smm += m * m * w;
     Smd += m * d * w;
@@ -346,7 +346,7 @@ double ESegment::ProfileNormChiSquared() {
   for (EPointIterator pt = GetPoints().begin(); pt < GetPoints().end(); pt++) {
     double e = pt->GetCMCrossSectionError();
     if (e == 0.0) continue;
-    double r = pt->GetFitCrossSection() - pt->GetCMCrossSection();
+    double r = pt->GetFitCrossSection(results) - pt->GetCMCrossSection();
     chi += (r * r) / (e * e);
   }
   return chi;
@@ -1497,14 +1497,14 @@ namespace {
  * a failed RATIO denominator gave 0, all without a word: the natural SUM segments of tests/natural_neon on the
  * R-matrix route came back 0 at 84 points.
  */
-bool CalculatePoint(EPoint *point, const char *role, CNuc *cnuc, const Config &configure) {
+bool CalculatePoint(EPoint *point, const char *role, CNuc *cnuc, const Config &configure, azure2::Results &results) {
   try {
-    point->Calculate(cnuc, configure);
+    point->Calculate(cnuc, configure, results);
     return true;
   } catch (const std::exception &e) {
-    point->MarkFailed(role, configure, e.what());
+    point->MarkFailed(results, role, configure, e.what());
   } catch (...) {
-    point->MarkFailed(role, configure, "unknown exception.");
+    point->MarkFailed(results, role, configure, "unknown exception.");
   }
   return false;
 }
@@ -1564,22 +1564,24 @@ bool ESegment::TransformTerms(int pointIndex, CNuc *cnuc, std::vector<TransformT
  * base point's kernel (EPoint::IntegrateTargetEffect, on the transformed values swapped into its sub-point slots).
  * EData::CheckTransformedSegments makes sure every term shares the base point's sub-point grid.
  */
-double ESegment::TransformedValue(int pointIndex, CNuc *cnuc, const Config &configure, bool precalculated) {
+double ESegment::TransformedValue(int pointIndex, CNuc *cnuc, const Config &configure, azure2::Results &results,
+                                  bool precalculated) {
   const double nan = std::numeric_limits<double>::quiet_NaN();
   EPoint *basePoint = GetPoint(pointIndex + 1);
   for (ESegment *comp : componentSegments_) {
     if (!comp || pointIndex >= comp->NumPoints()) continue;
     EPoint *cp = comp->GetPoint(pointIndex + 1);
     if (!precalculated && cp && (!cp->IsMapped() || ScopedPointMappingOff::Active()) &&
-        !CalculatePoint(cp, comp->IsYieldTotalTerm() ? "yield total" : "SUM component", cnuc, configure))
+        !CalculatePoint(cp, comp->IsYieldTotalTerm() ? "yield total" : "SUM component", cnuc, configure, results))
       return nan;
   }
   std::vector<TransformTerm> terms;
   if (!TransformTerms(pointIndex, cnuc, terms)) return nan;
   const double n = GetSampleThickness();
   const bool yield = IsYield();
-  auto valueOf = [](EPoint *p, int c) {
-    return (c == 1) ? p->GetFitE1CrossSection() : (c == 2) ? p->GetFitE2CrossSection() : p->GetFitCrossSection();
+  auto valueOf = [&results](EPoint *p, int c) {
+    return (c == 1) ? p->GetFitE1CrossSection(results) : (c == 2) ? p->GetFitE2CrossSection(results)
+                                                                  : p->GetFitCrossSection(results);
   };
   // the observable from the term values v_q (a point, or one sub-point of every term)
   auto transform = [&](const std::vector<double> &v) {
@@ -1592,7 +1594,7 @@ double ESegment::TransformedValue(int pointIndex, CNuc *cnuc, const Config &conf
     std::vector<double> naturalTerms(cnuc->NumNuclei(), 0.0);
     for (const TransformTerm &t : terms)
       if (!t.total) naturalTerms[t.nucleus - 1] += t.weight * valueOf(t.point, t.xsComponent);
-    basePoint->SetNaturalTerms(naturalTerms);
+    basePoint->SetNaturalTerms(results, naturalTerms);
   }
 
   std::vector<double> v(terms.size());
@@ -1639,17 +1641,17 @@ double ESegment::TransformedValue(int pointIndex, CNuc *cnuc, const Config &conf
       }
     }
     f[j - 1] = transform(v);
-    baseRaw[j - 1] = basePoint->GetSubPoint(j)->GetFitCrossSection();
+    baseRaw[j - 1] = basePoint->GetSubPoint(j)->GetFitCrossSection(results);
   }
-  const double baseIntegrated = basePoint->GetFitCrossSection();
-  for (int j = 1; j <= nsp; j++) basePoint->GetSubPoint(j)->SetFitCrossSection(f[j - 1]);
+  const double baseIntegrated = basePoint->GetFitCrossSection(results);
+  for (int j = 1; j <= nsp; j++) basePoint->GetSubPoint(j)->SetFitCrossSection(results, f[j - 1]);
   {
     EPoint::DopplerAppliedScope dopplerDone(basePoint);
-    basePoint->IntegrateTargetEffect(configure);
+    basePoint->IntegrateTargetEffect(configure, results);
   }
-  const double value = basePoint->GetFitCrossSection();
-  for (int j = 1; j <= nsp; j++) basePoint->GetSubPoint(j)->SetFitCrossSection(baseRaw[j - 1]);
-  basePoint->SetFitCrossSection(baseIntegrated);
+  const double value = basePoint->GetFitCrossSection(results);
+  for (int j = 1; j <= nsp; j++) basePoint->GetSubPoint(j)->SetFitCrossSection(results, baseRaw[j - 1]);
+  basePoint->SetFitCrossSection(results, baseIntegrated);
   return value;
 }
 
@@ -1658,7 +1660,7 @@ double ESegment::TransformedValue(int pointIndex, CNuc *cnuc, const Config &conf
  * combination with any additional components according to the operation type
  */
 double ESegment::CalculateTheoreticalCrossSection(int pointIndex, CNuc *cnuc, const Config &configure, EData *edata,
-                                                   bool precalculated) {
+                                                   azure2::Results &results, bool precalculated) {
   if (pointIndex < 0 || pointIndex >= NumPoints()) {
     return 0.0;
   }
@@ -1672,20 +1674,20 @@ double ESegment::CalculateTheoreticalCrossSection(int pointIndex, CNuc *cnuc, co
   // Calculate base point if not already calculated
   const double nan = std::numeric_limits<double>::quiet_NaN();
   if (!precalculated && (!basePoint->IsMapped() || ScopedPointMappingOff::Active()) &&
-      !CalculatePoint(basePoint, "base term", cnuc, configure))
+      !CalculatePoint(basePoint, "base term", cnuc, configure, results))
     return nan;
 
-  if (IsTransformed()) return TransformedValue(pointIndex, cnuc, configure, precalculated);
+  if (IsTransformed()) return TransformedValue(pointIndex, cnuc, configure, results, precalculated);
 
   // For E1/E2-only segments compare against the corresponding component of the
   // (angle-integrated capture) cross section instead of the full cross section.
   double baseValue;
   if (crossSectionComponent_ == 1)
-    baseValue = basePoint->GetFitE1CrossSection();
+    baseValue = basePoint->GetFitE1CrossSection(results);
   else if (crossSectionComponent_ == 2)
-    baseValue = basePoint->GetFitE2CrossSection();
+    baseValue = basePoint->GetFitE2CrossSection(results);
   else
-    baseValue = basePoint->GetFitCrossSection();
+    baseValue = basePoint->GetFitCrossSection(results);
 
   // A sample segment: every term is weighted by the isotopic
   // abundance of its entrance pair's compound nucleus, and the weighted terms
@@ -1701,7 +1703,7 @@ double ESegment::CalculateTheoreticalCrossSection(int pointIndex, CNuc *cnuc, co
 
   // If no components, return base value
   if (!HasComponents()) {
-    if (natural) basePoint->SetNaturalTerms(naturalTerms);
+    if (natural) basePoint->SetNaturalTerms(results, naturalTerms);
     return baseValue;
   }
 
@@ -1716,10 +1718,10 @@ double ESegment::CalculateTheoreticalCrossSection(int pointIndex, CNuc *cnuc, co
         if (componentPoint) {
           // No lock needed since each thread works on independent EData clones
           if (!precalculated && (!componentPoint->IsMapped() || ScopedPointMappingOff::Active()) &&
-              !CalculatePoint(componentPoint, "SUM component", cnuc, configure))
+              !CalculatePoint(componentPoint, "SUM component", cnuc, configure, results))
             return nan;
           // A non-finite term makes the sum non-finite (it was left out before 2026-11-01).
-          double compValue = componentPoint->GetFitCrossSection();
+          double compValue = componentPoint->GetFitCrossSection(results);
           // the term in the base point's frame (TermFrameFactor)
           double term = componentSegment->GetComponentScaling() * TermFrameFactor(basePoint, componentPoint) * compValue;
           if (natural) {
@@ -1732,7 +1734,7 @@ double ESegment::CalculateTheoreticalCrossSection(int pointIndex, CNuc *cnuc, co
         }
       }
     }
-    if (natural) basePoint->SetNaturalTerms(naturalTerms);
+    if (natural) basePoint->SetNaturalTerms(results, naturalTerms);
     return sum;
   } else if (segmentOperationType_ == RATIO) {
     if (componentSegments_.empty()) {
@@ -1746,10 +1748,10 @@ double ESegment::CalculateTheoreticalCrossSection(int pointIndex, CNuc *cnuc, co
       if (denominatorPoint) {
         // No lock needed since each thread works on independent EData clones
         if (!precalculated && (!denominatorPoint->IsMapped() || ScopedPointMappingOff::Active()) &&
-            !CalculatePoint(denominatorPoint, "RATIO denominator", cnuc, configure))
+            !CalculatePoint(denominatorPoint, "RATIO denominator", cnuc, configure, results))
           return nan;
 
-        double denominatorValue = denominatorPoint->GetFitCrossSection();
+        double denominatorValue = denominatorPoint->GetFitCrossSection(results);
         if (denominatorValue == 0.0) {
           // No ratio exists (e.g. the denominator's exit channel is closed at this energy).  Before 2026-11-01 the
           // point was 0, which a fit compared with the datum as if it were a calculated ratio.  Now NaN and a

@@ -79,7 +79,7 @@ struct BandData {
 /// the model as it lies against the data scaled by n*.
 /// `fixedMask` (Minuit order) is the fixed set of the fit -- including an
 /// external param.par's "fixed" flags; null takes the .azr's alone.
-bool BuildBandData(CNuc *compound, EData *data, const Config &config,
+bool BuildBandData(CNuc *compound, EData *data, azure2::Results &results, const Config &config,
                    const BandCovariance &savedCov, BandData &out,
                    const std::vector<bool> *fixedMask = nullptr);
 

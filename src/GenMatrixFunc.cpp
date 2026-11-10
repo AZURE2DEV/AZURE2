@@ -22,20 +22,20 @@
  * analyzing power are left as they are, while an analyzing-power sub-point keeps its (screened) cross
  * section as the weight of the target average.  The E1 and E2 components are scaled with the total.
  */
-void GenMatrixFunc::CalculateCrossSection(EPoint *point) {
+void GenMatrixFunc::CalculateCrossSection(EPoint *point, azure2::Results &results) {
   AZUREProfile::Timer profileTimer(AZUREProfile::kCrossSection);
-  this->CalculateBareCrossSection(point);
+  this->CalculateBareCrossSection(point, results);
   if (point->GetScreeningParam() == 0) return;
   if (point->IsAngularDist() || point->IsPhase()) return;
   if (point->IsAnalyzingPower() && !point->IsSubPoint()) return;
   const double f = point->ScreeningFactor();
   if (f == 1.0) return;
-  point->SetFitCrossSection(f * point->GetFitCrossSection());
-  point->SetFitE1CrossSection(f * point->GetFitE1CrossSection());
-  point->SetFitE2CrossSection(f * point->GetFitE2CrossSection());
+  point->SetFitCrossSection(results, f * point->GetFitCrossSection(results));
+  point->SetFitE1CrossSection(results, f * point->GetFitE1CrossSection(results));
+  point->SetFitE2CrossSection(results, f * point->GetFitE2CrossSection(results));
 }
 
-void GenMatrixFunc::CalculateBareCrossSection(EPoint *point) {
+void GenMatrixFunc::CalculateBareCrossSection(EPoint *point, azure2::Results &results) {
   complex sum(0., 0.);
   complex sumE1(0., 0.);
   complex sumE2(0., 0.);
@@ -98,7 +98,7 @@ void GenMatrixFunc::CalculateBareCrossSection(EPoint *point) {
     }
     // (1+delta_12) of an identical entrance pair: see the angle-integrated
     // branch below.
-    point->SetFitCrossSection(real(sum) / 100. * compound()->GetPair(aa)->GetEntranceSymmetryFactor());
+    point->SetFitCrossSection(results, real(sum) / 100. * compound()->GetPair(aa)->GetEntranceSymmetryFactor());
   } else {
     if (point->IsTotal() && !point->IsPhase()) {
       // The total cross section of the entrance pair by the optical theorem: with every channel of the J-group in its
@@ -116,9 +116,9 @@ void GenMatrixFunc::CalculateBareCrossSection(EPoint *point) {
           total += (2. * jValue + 1.) * 2. * real(this->GetTMatrixElement(k, m));
         }
       }
-      point->SetFitCrossSection(point->GetGeometricalFactor() * compound()->GetPair(aa)->GetI1I2Factor() * total / 100.);
-      point->SetFitE1CrossSection(0.);
-      point->SetFitE2CrossSection(0.);
+      point->SetFitCrossSection(results, point->GetGeometricalFactor() * compound()->GetPair(aa)->GetI1I2Factor() * total / 100.);
+      point->SetFitE1CrossSection(results, 0.);
+      point->SetFitE2CrossSection(results, 0.);
       return;
     }
     if (!point->IsPhase()) {
@@ -252,9 +252,9 @@ void GenMatrixFunc::CalculateBareCrossSection(EPoint *point) {
           reportedXS *= symmetryFactor;
           reportedE1XS *= symmetryFactor;
           reportedE2XS *= symmetryFactor;
-          point->SetFitCrossSection(reportedXS);
-          point->SetFitE1CrossSection(reportedE1XS);
-          point->SetFitE2CrossSection(reportedE2XS);
+          point->SetFitCrossSection(results, reportedXS);
+          point->SetFitE1CrossSection(results, reportedE1XS);
+          point->SetFitE2CrossSection(results, reportedE2XS);
           return;
         }
       }
@@ -425,14 +425,14 @@ void GenMatrixFunc::CalculateBareCrossSection(EPoint *point) {
         }
       }
       if (point->IsAngularDist()) {
-        point->SetAngularDists(angularCoeff);
+        point->SetAngularDists(results, angularCoeff);
         // A_0 = sigma_int / 4 pi (b/sr):  dsigma/dOmega_cm = A_0 [1 + sum_k a_k P_k(cos theta)]
-        point->SetAngDistA0(angleIntegratedXS / (4.0 * pi));
+        point->SetAngDistA0(results, angleIntegratedXS / (4.0 * pi));
         if (point->IsCoefficient()) {
           // an angular-coefficient data point: its fit value is its own order's coefficient
           const int kOrd = point->GetCoefficientOrder();
           const double ak = (kOrd >= 0 && kOrd < (int)angularCoeff.size()) ? angularCoeff[kOrd] : 0.0;
-          point->SetFitCrossSection(point->GetCoefficientAbsolute() ? ak * angleIntegratedXS / (4.0 * pi) : ak);
+          point->SetFitCrossSection(results, point->GetCoefficientAbsolute() ? ak * angleIntegratedXS / (4.0 * pi) : ak);
         }
         return;
       }
@@ -513,7 +513,7 @@ void GenMatrixFunc::CalculateBareCrossSection(EPoint *point) {
         }
         IT = complex(0., 1.) / sqrt(pi) * sum * point->GetGeometricalFactor() * itFactor;
       }
-      point->SetFitCrossSection((real(CT) + real(RT) + real(IT)) / 100.);
+      point->SetFitCrossSection(results, (real(CT) + real(RT) + real(IT)) / 100.);
     } else if (aa == exitPairNum) {
       double segmentJ = point->GetJ();
       int segmentL = point->GetL();
@@ -563,7 +563,7 @@ void GenMatrixFunc::CalculateBareCrossSection(EPoint *point) {
         // pairs to preserve existing fit conventions.
         if (entrancePair->IsIdentical() && phase < 0.0) phase += 180.0;
       }
-      point->SetFitCrossSection(phase);
+      point->SetFitCrossSection(results, phase);
     }
   }
 
@@ -578,15 +578,15 @@ void GenMatrixFunc::CalculateBareCrossSection(EPoint *point) {
     const int exitPType =
         compound()->GetPair(compound()->GetPairNumFromKey(point->GetExitKey()))->GetPType();
     const bool ok = (exitPType == 10)
-        ? this->CalculateCaptureAnalyzingPower(point, &spinSum, &ay)
+        ? this->CalculateCaptureAnalyzingPower(point, results, &spinSum, &ay)
         : this->CalculateAmplitudeMatrix(point, &spinSum, &ay);
     if (!ok) ay = 0.0;
-    point->SetAnalyzingPower(ay);
+    point->SetAnalyzingPower(results, ay);
     // A sub-point of a target-effect integration must keep the cross section
     // in place, because A_y is averaged over the target weighted by it. Every
     // other point reports A_y directly, so nothing downstream needs a special
     // case.
-    if (!point->IsSubPoint()) point->SetFitCrossSection(ay);
+    if (!point->IsSubPoint()) point->SetFitCrossSection(results, ay);
   }
 
   // Temporary validation hook: compare the Seyler amplitude-matrix route
@@ -597,7 +597,7 @@ void GenMatrixFunc::CalculateBareCrossSection(EPoint *point) {
     if (this->CalculateAmplitudeMatrix(point, &spinSum, &ay)) {
       std::printf("POLDEBUG %.6f %.6f %.10e %.10e %.6f\n",
                   point->GetCMEnergy(), point->GetCMAngle(),
-                  point->GetFitCrossSection(), spinSum, ay);
+                  point->GetFitCrossSection(results), spinSum, ay);
     }
   }
 }
@@ -842,7 +842,7 @@ bool GenMatrixFunc::CalculateAmplitudeMatrix(EPoint *point, double *spinSum,
   return true;
 }
 
-bool GenMatrixFunc::CalculateCaptureAnalyzingPower(EPoint *point,
+bool GenMatrixFunc::CalculateCaptureAnalyzingPower(EPoint *point, const azure2::Results &results,
                                                    double *unpolarized,
                                                    double *analyzingPower) {
   if (unpolarized) *unpolarized = 0.0;
@@ -899,7 +899,7 @@ bool GenMatrixFunc::CalculateCaptureAnalyzingPower(EPoint *point,
   // wrong. The point still holds the cross section here; the analyzing power
   // overwrites it only after this returns.
   if (std::getenv("AZURE2_CAPPOL_DEBUG")) {
-    const double xs = point->GetFitCrossSection();
+    const double xs = point->GetFitCrossSection(results);
     const double expect = 400.0 * pi / (point->GetGeometricalFactor() * compound()->GetPair(aaPair)->GetI1I2Factor());
     std::printf("CAPPOL %10.6f %8.3f  den %14.7e  xs %14.7e  ratio %14.7e"
                 "  expect %14.7e  Ay %12.6e\n",

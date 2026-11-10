@@ -149,7 +149,7 @@ bool AdjointApplies(Model &m, const vector_r &p) {
   GradAccum accum;
   accum.Init(lc);
   FitBarFn one = [](ESegment *, int, int, double) { return 1.0; };
-  const bool ok = AccumulateEGammaGradient(lc, ld, m.cfg, pmap, &sd, one, accum);
+  const bool ok = AccumulateEGammaGradient(lc, ld, ld->GetResults(), m.cfg, pmap, &sd, one, accum);
   delete lc;
   delete ld;
   return ok;

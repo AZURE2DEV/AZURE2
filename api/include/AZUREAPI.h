@@ -211,6 +211,8 @@ class AZUREAPI {
    * Returns a pointer to the EData object.
    */
   EData *data() const { return data_; };
+  /// The buffer every evaluation of this session writes and every array the session returns reads.
+  azure2::Results &results() const { return data_->GetResults(); }
   /*!
    * Returns a pointer to the CNuc object.
    */

@@ -807,7 +807,7 @@ int AZUREMain::operator()() {
                               << std::endl;
       }
       if (!cov.empty()) {
-        if (BuildBandData(compound(), data(), configure(), cov, bandData, &fitFixedMask)) {
+        if (BuildBandData(compound(), data(), data()->GetResults(), configure(), cov, bandData, &fitFixedMask)) {
           bandPtr = &bandData;
           configure().outStream << "Writing cross-section uncertainty bands..." << std::endl;
         } else {
@@ -824,7 +824,7 @@ int AZUREMain::operator()() {
         theFunc(params.GetMinuitParams().Params());
       }
     }
-    data()->WriteOutputFiles(configure(), false, bandPtr);
+    data()->WriteOutputFiles(configure(), data()->GetResults(), false, bandPtr);
     // s-wave scattering lengths of every particle pair at the parameters just written, and the
     // measured ones of the <scatteringLengths> block: the table goes to scatteringLengths.out only,
     // the run log (GUI execution screen) names the file.
