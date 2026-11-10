@@ -81,7 +81,9 @@ const GaussLegendreRule &QTransformRule() {
 }
 
 /// P_0(x) .. P_n(x) into p (size n + 1).
-void LegendreSeries(int n, double x, double *p) {
+// Kept out of line: inlined into CalcLegendreP (GCC 11, -O3), the T2 calculation at 1 thread ran 3.6 % more
+// instructions and 3.8 % more cycles than with this call; callgrind put all of the difference in CalcLegendreP.
+__attribute__((noinline)) void LegendreSeries(int n, double x, double *p) {
   p[0] = 1.0;
   if (n >= 1) p[1] = x;
   for (int l = 2; l <= n; l++) p[l] = (2.0 * l - 1.0) / l * x * p[l - 1] - (l - 1.0) / l * p[l - 2];  // as before 2026-10-25
