@@ -137,6 +137,13 @@ constexpr const char *kPotentialPairKind = "E_POTENTIAL_PAIR_KIND";
 constexpr const char *kPotentialRelativistic = "E_POTENTIAL_RELATIVISTIC";
 constexpr const char *kThmHybridPotential = "E_THM_HYBRID_POTENTIAL";
 constexpr const char *kOldPotentialBlock = "E_OLD_POTENTIAL_BLOCK";
+// Spin-orbit terms (a potential record's spin_orbit, pyazr, the API: SpinOrbitChecks.h)
+constexpr const char *kSoTwoSpins = "E_SO_TWO_SPINS";
+constexpr const char *kSoZeroSpin = "E_SO_ZERO_SPIN";
+constexpr const char *kSoRelativistic = "E_SO_RELATIVISTIC";
+constexpr const char *kSoThm = "E_SO_THM";
+constexpr const char *kSoNeedsJ = "E_SO_NEEDS_J";
+constexpr const char *kSoNoTerm = "E_SO_NO_TERM";
 // Warnings
 constexpr const char *kNotMeasurable = "W_NOT_MEASURABLE";
 constexpr const char *kBroadLevel = "W_BROAD_LEVEL";

@@ -338,7 +338,8 @@ int main() {
   const std::set<std::string> buildCodes = {"E_PAIR_KEY",    "E_DATA_FILE",   "W_DATA_FILE_NOT_READ",
                                             "E_NOT_BUILT",    "E_THM_RELATIVISTIC", "E_THM_COVARIANCE", "E_FOLD_CONFLICT",
                                             "E_POTENTIAL_TWICE", "E_POTENTIAL_PAIR_KIND", "E_POTENTIAL_RELATIVISTIC",
-                                            "E_THM_HYBRID_POTENTIAL", "E_OLD_POTENTIAL_BLOCK"};
+                                            "E_THM_HYBRID_POTENTIAL", "E_OLD_POTENTIAL_BLOCK", "E_SO_TWO_SPINS", "E_SO_ZERO_SPIN",
+                                            "E_SO_RELATIVISTIC", "E_SO_THM", "E_SO_NEEDS_J", "E_SO_NO_TERM"};
   for (const DiagnosticCode &c : DiagnosticCodes())
     if (!buildCodes.count(c.code)) check(std::string(c.code) + " has a case here", tested.count(c.code) == 1);
 

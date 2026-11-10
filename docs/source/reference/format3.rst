@@ -636,6 +636,10 @@ Hybrid potential, in ``<potentials>``.  The nuclear potential of one particle pa
      - ``woods_saxon depth <number> <energy unit> radius <number> <length unit> diffuseness <number> <length unit> | gaussian depth <number> <energy unit> width <number> <length unit>``
      - required
      - the central nuclear term V_N(r)
+   * - ``spin_orbit``
+     - ``woods_saxon depth <number> <energy unit> radius <number> <length unit> diffuseness <number> <length unit> on light|heavy operator 2l.s``
+     - optional
+     - a spin-orbit term for a pair with one spinning particle (spin_orbit_potential.md section 2.1); absent: none
    * - ``matching_radius``
      - ``<number> <length unit>``
      - optional (default ``15 fm``)
@@ -1857,6 +1861,24 @@ Diagnostic codes
    * - ``E_OLD_POTENTIAL_BLOCK``
      - error
      - the old <potential> block in a format-3 project (AZURE2 --convert writes potential records)
+   * - ``E_SO_TWO_SPINS``
+     - error
+     - a spin-orbit term on a pair whose two particles both have spin (the coupled treatment is not implemented)
+   * - ``E_SO_ZERO_SPIN``
+     - error
+     - a spin-orbit term acting on a particle of spin 0 (it would vanish)
+   * - ``E_SO_RELATIVISTIC``
+     - error
+     - a spin-orbit term in a project with relativistic kinematics
+   * - ``E_SO_THM``
+     - error
+     - a THM data set or extrapolation whose entrance pair's potential has a spin-orbit term
+   * - ``E_SO_NEEDS_J``
+     - error
+     - channel functions of a pair with a spin-orbit term asked for without J (pyazr, the API)
+   * - ``E_SO_NO_TERM``
+     - error
+     - channel functions of a pair without a spin-orbit term asked for with a J (pyazr, the API)
    * - ``W_NOT_MEASURABLE``
      - warning
      - a data set of a quantity that is computed for tests and comparison, not measured

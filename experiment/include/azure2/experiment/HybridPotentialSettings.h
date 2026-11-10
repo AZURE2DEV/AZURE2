@@ -27,8 +27,10 @@ struct HybridPotentialSetting {
   double coulomb_radius_fm = physics::HybridPotential().coulomb_radius_fm;    ///< R_C of the charged sphere (fm)
   double matching_radius_fm = physics::HybridPotential().matching_radius_fm;  ///< r_m (fm)
   double step_fm = physics::HybridPotential().step_fm;                        ///< Numerov step (fm)
-  /// The potential of this setting; throws std::invalid_argument when a parameter of its shape, R_C, r_m or the
-  /// step is not positive.
+  /// The spin-orbit term (a format-3 record's spin_orbit, pyazr's set_nuclear_potential); the old block has none.
+  std::optional<physics::SpinOrbitTerm> spin_orbit;
+  /// The potential of this setting; throws std::invalid_argument when a parameter of its shape, R_C, r_m, the
+  /// step or of the spin-orbit term is not positive.
   physics::HybridPotential Potential() const;
   /// "WoodsSaxon" or "Gaussian", the names pyazr uses.
   std::string ShapeName() const;
