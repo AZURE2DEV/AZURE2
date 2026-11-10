@@ -14,14 +14,9 @@
 #include "CNuc.h"
 #include "Config.h"
 #include "Constants.h"
-#include "Decay.h"
-#include "ECMGroup.h"
-#include "Interference.h"
 #include "JGroup.h"
-#include "KGroup.h"
-#include "KLGroup.h"
-#include "MGroup.h"
 #include "PPair.h"
+#include "PathwayTable.h"
 #include "azure2/physics/LevelParameters.h"
 
 namespace {
@@ -139,23 +134,25 @@ void WritePathwaysCheck(const CNuc &compound, const Config &configure) {
         << std::setw(11) << "J Group #"
         << std::setw(16) << "Entrance Ch. #"
         << std::setw(12) << "Exit Ch. #" << std::endl;
+    const azure2::PathwayTable &table = compound.Pathways();
     for (int i = 1; i <= compound.NumPairs(); i++) {
-      const PPair *pair = compound.GetPair(i);
-      for (int ii = 1; ii <= pair->NumDecays(); ii++) {
-        const Decay *decay = pair->GetDecay(ii);
-        for (int iii = 1; iii <= decay->NumKGroups(); iii++) {
-          const KGroup *kGroup = decay->GetKGroup(iii);
-          for (int iiii = 1; iiii <= kGroup->NumMGroups(); iiii++) {
+      const azure2::EntrancePathways &P = table.Entrance(i);
+      for (int ii = 1; ii <= (int)P.exits.size(); ii++) {
+        const azure2::ExitRow &decay = P.exits[ii - 1];
+        for (int iii = 1; iii <= decay.num_groups; iii++) {
+          const azure2::SpinGroupRow &kGroup = P.Group(decay, iii);
+          for (int iiii = 1; iiii <= kGroup.num_internal; iiii++) {
+            const azure2::InternalRow &mGroup = P.Internal(kGroup, iiii);
             out << std::setw(17) << i
                 << std::setw(9) << ii
-                << std::setw(14) << decay->GetPairNum()
+                << std::setw(14) << decay.pair
                 << std::setw(12) << iii
-                << std::setw(16) << kGroup->GetS()
-                << std::setw(13) << kGroup->GetSp()
+                << std::setw(16) << kGroup.s
+                << std::setw(13) << kGroup.sp
                 << std::setw(11) << iiii
-                << std::setw(11) << kGroup->GetMGroup(iiii)->GetJNum()
-                << std::setw(16) << kGroup->GetMGroup(iiii)->GetChNum()
-                << std::setw(12) << kGroup->GetMGroup(iiii)->GetChpNum() << std::endl;
+                << std::setw(11) << mGroup.group
+                << std::setw(16) << mGroup.ch
+                << std::setw(12) << mGroup.chp << std::endl;
           }
         }
         out << std::endl;
@@ -184,32 +181,32 @@ void WritePathwaysCheck(const CNuc &compound, const Config &configure) {
         << std::setw(11) << "Int. Ch #"
         << std::endl;
     for (int i = 1; i <= compound.NumPairs(); i++) {
-      const PPair *pair = compound.GetPair(i);
-      for (int ii = 1; ii <= pair->NumDecays(); ii++) {
-        const Decay *decay = pair->GetDecay(ii);
-        for (int iii = 1; iii <= decay->NumKGroups(); iii++) {
-          const KGroup *kGroup = decay->GetKGroup(iii);
-          for (int iiii = 1; iiii <= kGroup->NumECMGroups(); iiii++) {
-            const ECMGroup *theECMGroup = kGroup->GetECMGroup(iiii);
-            const JGroup *theECJGroup = compound.GetJGroup(theECMGroup->GetJGroupNum());
+      const azure2::EntrancePathways &P = table.Entrance(i);
+      for (int ii = 1; ii <= (int)P.exits.size(); ii++) {
+        const azure2::ExitRow &decay = P.exits[ii - 1];
+        for (int iii = 1; iii <= decay.num_groups; iii++) {
+          const azure2::SpinGroupRow &kGroup = P.Group(decay, iii);
+          for (int iiii = 1; iiii <= kGroup.num_external; iiii++) {
+            const azure2::ExternalRow &theECMGroup = P.External(kGroup, iiii);
+            const JGroup *theECJGroup = compound.GetJGroup(theECMGroup.final_group);
             out << std::setw(17) << i
                 << std::setw(9) << ii
-                << std::setw(14) << decay->GetPairNum()
+                << std::setw(14) << decay.pair
                 << std::setw(12) << iii
-                << std::setw(16) << kGroup->GetS()
-                << std::setw(13) << theECJGroup->GetChannel(theECMGroup->GetFinalChannel())->GetS()
+                << std::setw(16) << kGroup.s
+                << std::setw(13) << theECJGroup->GetChannel(theECMGroup.final_channel)->GetS()
                 << std::setw(11) << iiii
-                << std::setw(10) << theECMGroup->GetRadType() << theECMGroup->GetMult()
-                << std::setw(11) << theECMGroup->GetJ()
+                << std::setw(10) << theECMGroup.rad_type << theECMGroup.mult
+                << std::setw(11) << theECMGroup.J
                 << std::setw(11) << theECJGroup->GetJ()
-                << std::setw(11) << theECMGroup->GetL()
-                << std::setw(11) << theECJGroup->GetChannel(theECMGroup->GetFinalChannel())->GetL();
-            if (theECMGroup->IsChannelCapture())
+                << std::setw(11) << theECMGroup.l
+                << std::setw(11) << theECJGroup->GetChannel(theECMGroup.final_channel)->GetL();
+            if (theECMGroup.channel_capture)
               out << std::setw(13) << "Channel"
-                  << std::setw(13) << theECMGroup->GetChanCapDecay()
-                  << std::setw(11) << theECMGroup->GetChanCapKGroup()
-                  << std::setw(11) << theECMGroup->GetChanCapMGroup()
-                  << std::setw(11) << theECMGroup->GetIntChannelNum() << std::endl;
+                  << std::setw(13) << theECMGroup.cc_exit
+                  << std::setw(11) << theECMGroup.cc_group
+                  << std::setw(11) << theECMGroup.cc_pathway
+                  << std::setw(11) << theECMGroup.photon_channel << std::endl;
             else
               out << std::setw(15) << "Hard Sphere" << std::endl;
           }
@@ -258,23 +255,25 @@ void WriteAngularDistributionsCheck(const CNuc &compound, const Config &configur
                    << std::setw(10) << "z1z2"
                    << std::setw(10) << "type"
                    << std::endl;
+               // The interferences of each exit, a blank line after each (k, L) group.
+               const azure2::PathwayTable &table = compound.Pathways();
                for (int aa = 1; aa <= compound.NumPairs(); aa++) {
-                 for (int ir = 1; ir <= compound.GetPair(aa)->NumDecays(); ir++) {
-                   const Decay *theDecay = compound.GetPair(aa)->GetDecay(ir);
-                   for (int kl = 1; kl <= theDecay->NumKLGroups(); kl++) {
-                     const KLGroup *theKLGroup = theDecay->GetKLGroup(kl);
-                     for (int i = 1; i <= theKLGroup->NumInterferences(); i++) {
-                       const Interference *theInter = theKLGroup->GetInterference(i);
-                       out << std::setw(10) << theDecay->GetPairNum()
-                           << std::setw(10) << theKLGroup->GetK()
-                           << std::setw(10) << theKLGroup->GetLOrder()
-                           << std::setw(10) << theInter->GetM1()
-                           << std::setw(10) << theInter->GetM2()
-                           << std::setw(10) << theInter->GetZ1Z2()
-                           << std::setw(10) << theInter->GetInterferenceType()
-                           << std::endl;
-                     }
-                     out << std::endl;
+                 const azure2::EntrancePathways &P = table.Entrance(aa);
+                 for (const azure2::ExitRow &theDecay : P.exits) {
+                   for (int i = 0; i < theDecay.num_interferences; i++) {
+                     const azure2::FlatInterference &f = P.interferences[theDecay.first_interference + i];
+                     out << std::setw(10) << theDecay.pair
+                         << std::setw(10) << f.k
+                         << std::setw(10) << f.l
+                         << std::setw(10) << f.m1
+                         << std::setw(10) << f.m2
+                         << std::setw(10) << f.z
+                         << std::setw(10) << std::string{f.r1, f.r2}
+                         << std::endl;
+                     const bool lastOfGroup = i + 1 == theDecay.num_interferences ||
+                                              P.interferences[theDecay.first_interference + i + 1].k != f.k ||
+                                              P.interferences[theDecay.first_interference + i + 1].l != f.l;
+                     if (lastOfGroup) out << std::endl;
                    }
                  }
                }
