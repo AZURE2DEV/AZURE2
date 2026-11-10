@@ -447,6 +447,12 @@ ALLOWED_PENALTY_USES = {
     # The data covariance, moved out of src/EData.cpp (docs/upgrade/edata_split.md W2): the file defines the
     # covariance term, and PrepareCovarianceSeeds evaluates it for the seeds the gradient reads.
     ("src/EDataCovariance.cpp", "CovarianceChi2Correction"),
+    # The hand-over of a parameter vector, moved out of src/EData.cpp (docs/upgrade/edata_split.md M2): the file
+    # defines the target-effect prior totals (EData::ScreeningPenalty ...), each the sum of its effects' terms.
+    ("src/EDataHandOver.cpp", "ScreeningPenalty"),
+    ("src/EDataHandOver.cpp", "DensityPenalty"),
+    ("src/EDataHandOver.cpp", "DopplerPenalty"),
+    ("src/EDataHandOver.cpp", "ThicknessPenalty"),
 }
 for top in ("src", "api/src"):
     for name in sorted(os.listdir(os.path.join(ROOT, top))):
