@@ -65,6 +65,8 @@ computes one symbol" removes (3). Today's `EPoint` holds the datum, its channel 
 other points; hosts write into mapped points; every thread deep-copies `EData` and shares parts back (copy-on-write,
 node cache). That cycle through shared state produced the races and memory growth of 2026-08..11 (~55 % of ~126 dev
 fixes touched `EData`/`EPoint`/`ESegment`; at least 21 fixes repaired bugs introduced by earlier perf commits).
+Until they are replaced, those three classes are split into files with one job each; which file holds which member
+function is in the file map of `edata_split.md` §5.8.
 
 ## 3. Module contents (physical objects; physics stages are functions, not classes)
 

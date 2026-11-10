@@ -424,6 +424,28 @@ Stable now and edited by nobody: the output writer and the check files of `EData
 Each step is one commit (N4: two) on its own branch, mergeable alone, with the evidence of §1. "Sizes after" are counted
 at 070756a1; a step merged after other branches applies to their sizes the same differences.
 
+**Status (branch `feature/upgrade-4-edata-split-3`).** N1–N4, W1, W2 are merged.  On this branch, M1–M3 and all the D1
+files were made as verbatim moves (one commit per file, bodies unchanged), followed by one commit that keeps
+`LegendreSeries` out of line (the T2 calculation was 3.8 % slower in cycles when GCC inlined it into
+`EPoint::CalcLegendreP` once `EPoint.cpp` had shrunk):
+
+| step | new file (lines) | moved | old file after |
+|---|---|---|---|
+| D1 | `src/EDataTargetEffects.cpp` (964) | `SetUpTargetEffects` (with its component-grid block), `ReplaceSubPointGrids`, `GridNucleus` members, five file-local helpers: 938 | `EData.cpp` 3,516 |
+| D1 | `src/EDataExternalCapture.cpp` (521) | `CalculateECAmplitudes`, `CountECAmplitudes`, `ECSignature`, `ECSignaturePath`, their helpers; `ECProgressRedraw` is a private static member of `EData` (shared with `InitializeComponentSegments`): 501 | 3,015 |
+| M1 | `src/EDataParameters.cpp` (741) | offsets, `ApplyPriorCentres`, groups, `FillMnParams`, `SetUpDensityParams`, `DopplerParamOfEffect`: 717 | 2,298 |
+| M2 | `src/EDataHandOver.cpp` (363) | `Fill*FromParams`, `FillEnergyShiftsFromParamsImpl`, `ApplyScreening`, the four target-effect penalties: 348 | 1,950 |
+| D1 | `src/EPointCalculate.cpp` (419) | `Calculate`, thin target, observable integration, `MarkFailed`, `ScopedPointMappingOff` with its flag: 398 | `EPoint.cpp` 2,522 |
+| D1 | `src/EPointFolds.cpp` (478), `include/TELinearForm.h` (49) | the folds and their templates, `GridQuadrature`: 463; `TELinearForm`: 41 | 2,059 |
+| D1 | `src/EPointChannelTables.cpp` (712), `include/EPointTables.h` (111) | channel rows, sharing, Coulomb amplitude, table getters: 690; the three table types, namespace-level, aliased in `EPoint` | 1,369 |
+| D1 | `src/EPointLegendre.cpp` (183) | `CalcLegendreP`, `QLabBoost`, the Legendre accessors, the Gauss-Legendre helpers: 170 | 1,199 |
+| D1 | `src/EPointExternalCapture.cpp` (272) | the point's EC amplitudes, `GetECAmplitudeWithShift`, `ECPathwayAmplitude`: 248 | 951 |
+| M3 | `src/ESegmentParameters.cpp` (227) | shift accessors, shift and norm groups, shift function, shift prior: 217 | `ESegment.cpp` 1,149 |
+| M3 | `src/ESegmentShifts.cpp` (282) | re-energising after a shift, the channel tables of the last shift states, `ShiftedEnergy`: 268 | 881 |
+
+`EData.cpp` (1,950) still holds what later steps delete or rewrite: the component segments (S12), the point mapping,
+result layout, `Clone` and the parallel pass (S5's remainder), `Fill`/`MakePoints` and the load-time refusals (F1, F2).
+
 ### 5.1 Now, in parallel with H, I, G3
 
 **N1 — the output writer to `src/EDataOutputFiles.cpp`.** Moves `WriteNaturalDecomposition` (`EData.cpp` 231–265),
@@ -528,6 +550,39 @@ table accessor that stopped being inlined shows there first.
 The rows sum back to the files: `EData.cpp` 722 + 193 + 490 + 240 + 259 + 332 + 697 + 355 + 756 + 501 + 1,026 =
 5,571; `EPoint.cpp` 823 + 394 + 463 + 657 + 133 + 248 + 288 = 3,006; `ESegment.cpp` 641 + 217 + 270 + 318 = 1,446;
 `EDataThm.cpp` 772 + 461 = 1,233.
+
+### 5.8 File map of the three classes
+
+Where a member function lives (a person or an agent reading one file to change one thing).  Sizes in lines on this
+branch.
+
+| file | holds | lines |
+|---|---|---|
+| `include/EData.h` | the class `EData` | 565 |
+| `src/EData.cpp` | construction from specs (`Fill`, `MakePoints`) and the load-time refusals, containers and run flags, `Initialize` and the stage tables (`CalcLegendreP`, `BuildChannelTable`, `CalcEDependentValues`, `CalcCoulombAmplitude`), component segments, point mapping, result layout, `Clone`, the parallel point pass | 1,950 |
+| `src/EDataTargetEffects.cpp` | target effects, the sub-point grids of their points, energy windows, grid re-placement | 964 |
+| `src/EDataExternalCapture.cpp` | external-capture amplitudes of the data, the `intEC` file, its count and signature, the progress bar | 521 |
+| `src/EDataParameters.cpp` | parameter-block offsets, names and start values (`FillMnParams`), shift/norm/thickness groups, density parameters, prior centres | 741 |
+| `src/EDataHandOver.cpp` | a parameter vector into segments, effects and points (`Fill*FromParams`); target-effect prior totals | 363 |
+| `src/EDataCovariance.cpp` | data covariance groups, χ² correction, whitening, `covariance.out` | 275 |
+| `src/EDataOutputFiles.cpp` | `AZUREOut_*`, `.band`, `chiSquared.out`, `normalizations.out`, `shifts.out` | 522 |
+| `src/EDataCheckFiles.cpp` | the four data check files | 251 |
+| `src/EDataThm.cpp` | THM experiments: set-up, profiled norm and background | 773 |
+| `src/EDataThmReports.cpp` | `thm_experiments.out` and the THM tables of the API | 487 |
+| `include/EDataIterator.h`, `src/EDataIterator.cpp` | iteration over segments and points | 37, 113 |
+| `include/EPoint.h` | the class `EPoint`, `ScopedPointMappingOff` | 766 |
+| `include/EPointTables.h` | `EDependentTables`, `EDependentShare`, `ThmPsTable` (named `EPoint::…` by aliases) | 111 |
+| `include/TELinearForm.h` | the linear form the folds are evaluated on for gradient weights | 49 |
+| `src/EPoint.cpp` | constructors, datum and setting accessors, kinematics and frame conversion, THM and sub-point setters, result records, plan mapping | 951 |
+| `src/EPointCalculate.cpp` | `Calculate`, thin target, observable-wise integration, `MarkFailed`, the point-mapping-off scope | 419 |
+| `src/EPointFolds.cpp` | the apparatus folds of a target-effect point and their weights | 478 |
+| `src/EPointChannelTables.cpp` | channel rows, their recalculation and sharing, Coulomb amplitude, table getters | 712 |
+| `src/EPointLegendre.cpp` | Legendre polynomials, lab-frame Q-coefficient average | 183 |
+| `src/EPointExternalCapture.cpp` | the point's external-capture amplitudes, also at a shifted energy | 272 |
+| `include/ESegment.h` | the class `ESegment` | 580 |
+| `src/ESegment.cpp` | construction from specs, settings and kind flags, frame conversion, profiled norm, points and components, THM attachments | 881 |
+| `src/ESegmentParameters.cpp` | energy-shift values, shift and norm groups, shift function, shift prior | 227 |
+| `src/ESegmentShifts.cpp` | re-energising the points after a shift, channel tables of the last shift states | 282 |
 
 ## 6. Risks
 

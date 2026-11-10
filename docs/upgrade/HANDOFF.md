@@ -2,6 +2,52 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-10 (agent, brief S) — `EData`, `EPoint`, `ESegment` cut into files with one job (`feature/upgrade-4-edata-split-3`)
+
+**What file holds what now.** Eleven new source files and two new headers, each made by a verbatim move (bodies
+unchanged, one commit per file); the file map of all three classes is `edata_split.md` §5.8.
+- `EData`: `src/EDataTargetEffects.cpp` (target effects, sub-point grids, windows, grid re-placement; the
+  component-segment grid block stays inside `SetUpTargetEffects`, which S12 rewrites), `src/EDataExternalCapture.cpp`
+  (EC amplitudes of the data, the `intEC` file, its count and signature; `ECProgressRedraw` became a private static
+  member of `EData` because `InitializeComponentSegments` in `EData.cpp` uses it too), `src/EDataParameters.cpp`
+  (parameter-block offsets, names and start values, shift/norm/thickness groups, density parameters, prior centres),
+  `src/EDataHandOver.cpp` (a parameter vector into segments, effects and points; the four target-effect prior totals,
+  with four check-11 allowance rows).
+- `EPoint`: `src/EPointCalculate.cpp` (`Calculate`, thin target, observable-wise integration, `MarkFailed`,
+  `ScopedPointMappingOff` with its thread-local flag), `src/EPointFolds.cpp` with `include/TELinearForm.h` (the
+  apparatus folds), `src/EPointChannelTables.cpp` with `include/EPointTables.h` (channel tables, sharing, Coulomb
+  amplitude, getters; `EDependentTables`, `EDependentShare`, `ThmPsTable` are namespace-level types that `EPoint`
+  names by aliases; check 25 reads the new header), `src/EPointLegendre.cpp` (Legendre polynomials, Q-coefficient
+  average), `src/EPointExternalCapture.cpp` (the point's EC amplitudes, also at a shifted energy).
+- `ESegment`: `src/ESegmentParameters.cpp` (shift values, shift and norm groups, shift function, shift prior),
+  `src/ESegmentShifts.cpp` (re-energising after a shift, channel tables of the last shift states).
+Sizes: `EData.cpp` 4,454 → 1,950, `EPoint.cpp` 2,920 → 951, `ESegment.cpp` 1,366 → 881, `EPoint.h` 896 → 766,
+`EData.h` 560 → 565; the largest new file is `EDataTargetEffects.cpp` (964).
+
+**Not moved, and who takes it.** What is left in `EData.cpp` is what later steps delete or rewrite: the component
+segments (S12), point mapping, result layout, `Clone` and the parallel pass (the rest of S5), `Fill`/`MakePoints` and
+the load-time refusals (after 3d).  `EPoint.cpp` keeps the datum and frame code (S7), `ESegment.cpp` the frame code
+(S7) and the composition helpers (S10–S12).
+
+**One code change besides the moves.** Once `EPoint.cpp` had shrunk, GCC 11 (-O3) inlined the file-local
+`LegendreSeries` into `EPoint::CalcLegendreP`, and the T2 calculation ran 3.6 % more instructions and 3.8 % more
+cycles than the base (callgrind: all of it there).  A separate commit keeps the function out of line
+(`__attribute__((noinline))`; the CI builds GCC, Apple clang and MinGW GCC, not MSVC).  Cycles, minimum of 6 runs
+alternated with the base build at 1 thread: calculation −2.6 %, without the Coulomb table −0.6 %, 200-call fit −2.9 %;
+179 × 3 outputs identical before and after.
+
+**Verified.** Every move: 0 warnings; the diff of the removed lines against the new file's body and of the rest against
+the old file less those lines, both empty (shown exceptions: the namespace and signature lines of `ECProgressRedraw`,
+the alias lines of `EPoint.h`, the indentation of the moved table types); consistency test after `--tighten-sizes`;
+179 × 3 identical to `tab-p3f` (689 / 662 / 689; tags `tab-esplit3-c1` … `-c12`); `scripts/check.sh --quick`
+(ctest 165/165).  Also `tests/progress_bars` after the EC move and `tests/shift_fn`, `tests/energy_shift_sqrt` after
+the shift moves.  End of work (`TMAX=3 NT=3 work/verify-p4c.sh wt-esplit3 esplit3`): 179 × 3 identical, `ctest -LE slow` 165/165,
+`tests/run_tests.sh` 141 passed / 0 failed, 1 against 3 threads on T1–T3 and 13N in three bases 12 identical;
+`tests/format3_engine/check.sh` passed.
+
+**Open.** The branch starts from a320e818; the director rebases it onto the moved integration branch (the hybrid
+potential and the extrapolation grids edit `src/CMakeLists.txt`, `file_sizes.tsv` and possibly `EData::MakePoints`).
+
 ## 2026-11-10 (agent, brief U) — the hybrid potential as a format-3 record (`feature/upgrade-4-potential-record`)
 
 **Done.**

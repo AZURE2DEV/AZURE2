@@ -447,6 +447,12 @@ ALLOWED_PENALTY_USES = {
     # The data covariance, moved out of src/EData.cpp (docs/upgrade/edata_split.md W2): the file defines the
     # covariance term, and PrepareCovarianceSeeds evaluates it for the seeds the gradient reads.
     ("src/EDataCovariance.cpp", "CovarianceChi2Correction"),
+    # The hand-over of a parameter vector, moved out of src/EData.cpp (docs/upgrade/edata_split.md M2): the file
+    # defines the target-effect prior totals (EData::ScreeningPenalty ...), each the sum of its effects' terms.
+    ("src/EDataHandOver.cpp", "ScreeningPenalty"),
+    ("src/EDataHandOver.cpp", "DensityPenalty"),
+    ("src/EDataHandOver.cpp", "DopplerPenalty"),
+    ("src/EDataHandOver.cpp", "ThicknessPenalty"),
 }
 for top in ("src", "api/src"):
     for name in sorted(os.listdir(os.path.join(ROOT, top))):
@@ -635,9 +641,10 @@ for other in ("include/AZUREGrad.h", "include/AZURECalcMCMC.h", "pyazr/parameter
 
 # 25. The results of an evaluation belong to its caller (docs/upgrade/data_model.md S3, include/Results.h): a point and a
 #     data set hold where a record lies, never the values, so a copy of either cannot write into another owner's
-#     buffer.  EPoint.h and EData.h declare no member of a type that names Results -- a value, pointer, reference,
-#     container or smart pointer.  Function declarations may name it (the buffer is passed in).
-for rel in ("include/EPoint.h", "include/EData.h"):
+#     buffer.  EPoint.h (with EPointTables.h, its tables) and EData.h declare no member of a type that names
+#     Results -- a value, pointer, reference, container or smart pointer.  Function declarations may name it (the
+#     buffer is passed in).
+for rel in ("include/EPoint.h", "include/EPointTables.h", "include/EData.h"):
     text = re.sub(r"//[^\n]*|/\*.*?\*/|^\s*#[^\n]*", "", read(rel), flags=re.S | re.M)
     for stmt in re.split(r"[;{}]", text):
         if "(" in stmt or not re.search(r"\bResults\b", stmt):
