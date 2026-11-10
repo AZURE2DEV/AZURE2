@@ -9,10 +9,12 @@
 #include <memory>
 
 #include <cstring>
+#include <cstdint>
 #include "Constants.h"
 #include "UdrKernel.h"
 #include "SharedTable.h"
 #include "ChannelTable.h"
+#include "Results.h"
 
 /// A container structure for a reference to a data point.
 
@@ -36,6 +38,11 @@ class EData;
 class CNuc;
 class PPair;
 class TargetEffect;
+namespace azure2 {
+namespace experiment {
+struct AngleLimit;
+}
+}  // namespace azure2
 class DataLine;
 class Config;
 struct ThmWeightTable;
@@ -252,8 +259,8 @@ class EPoint {
   void SetIsTotal(bool v) { is_total_ = v; };
   //! A_y is kept beside the cross section rather than replacing it, because
   //! target-effect integration needs the cross section as the weight.
-  double GetAnalyzingPower() const { return analyzing_power_; };
-  void SetAnalyzingPower(double v) { analyzing_power_ = v; };
+  double GetAnalyzingPower() const { return Rec()[azure2::Results::kAy]; };
+  void SetAnalyzingPower(double v) { Rec()[azure2::Results::kAy] = v; };
   //! The user-defined resolution kernel built for this point (shared, so
   //! copies of the point and of the data set do not duplicate it), and the
   //! projectile rest energy (MeV) its time-of-flight conversion uses.
@@ -349,8 +356,8 @@ class EPoint {
   void SetCoefficientOrder(int k) { coefficient_order_ = k; };
   void SetCoefficientAbsolute(bool a) { coefficient_absolute_ = a; };
   /// A_0 = sigma_int / 4 pi (b/sr) of an angular-distribution point, set with its coefficients.
-  double GetAngDistA0() const { return ang_dist_a0_; };
-  void SetAngDistA0(double a0) { ang_dist_a0_ = a0; };
+  double GetAngDistA0() const { return Rec()[azure2::Results::kA0]; };
+  void SetAngDistA0(double a0) { Rec()[azure2::Results::kA0] = a0; };
   /// Number of stored angular-distribution coefficients.
   int GetNumAngularDists() const;
   /// Angular momentum of the secondary decay. UPOS points only.
@@ -387,11 +394,11 @@ class EPoint {
   /// Geometrical factor \f$\pi/k^2\f$.
   double GetGeometricalFactor() const;
   /// Cross section AZURE2 calculated here.
-  double GetFitCrossSection() const;
+  double GetFitCrossSection() const { return Rec()[azure2::Results::kSigma]; }
   /// Calculated cross section, E1 component only.
-  double GetFitE1CrossSection() const;
+  double GetFitE1CrossSection() const { return Rec()[azure2::Results::kSigmaE1]; }
   /// Calculated cross section, E2 component only.
-  double GetFitE2CrossSection() const;
+  double GetFitE2CrossSection() const { return Rec()[azure2::Results::kSigmaE2]; }
   /// Multiply a cross section by this to get the astrophysical S-factor.
   double GetSFactorConversion() const;
   /// \f$\sqrt{P_c}\f$ for the channel at (J-group, channel), both 1-based.
@@ -456,10 +463,6 @@ class EPoint {
   EnergyMap GetMap() const;
   /// Compute everything that depends on energy but not on the fit parameters. Run once before fitting.
   void Initialize(CNuc *, const Config &);
-  /// Lab energy to centre-of-mass energy.
-  double ConvertLabValue(double, PPair *);
-  /// Centre-of-mass energy to lab energy.
-  double ConvertCMValue(double, PPair *);
   /// Fill the centre-of-mass energy from the lab energy.
   void ConvertLabEnergy(PPair *);
   /// Fill the compound excitation energy.
@@ -480,8 +483,6 @@ class EPoint {
   double GetLabAngleMax() const { return labAngleMax_; };
   /// Why the last ConvertLabAngle returned false (a sentence for the error message).
   const std::string &GetLabAngleWhy() const { return labAngleWhy_; };
-  /// Centre-of-mass angle by the relativistic form, Iliadis C.37-C.38.
-  void ConvertCMAngle(PPair *, PPair *, const Config &);
   /// Fill the centre-of-mass cross section and uncertainty from the lab ones.
   void ConvertCrossSection(PPair *, PPair *);
   /// Centre-of-mass gamma angle, with the relativistic correction.
@@ -491,6 +492,11 @@ class EPoint {
   double CalculateCrossSectionConversionFactor(PPair *, PPair *);
   /// Relativistic lab -> c.m. angle and dOmega_lab/dOmega_cm of the detected particle (relativistic=1).
   bool RelativisticLabToCM(PPair *entrancePair, PPair *exitPair, double nrCMAngle, double &cmAngle, double &factor) const;
+ private:
+  /// Store what an angle map reported (the maximum lab angle, the reason), as the maps always did.
+  void ApplyAngleLimit(const azure2::experiment::AngleLimit &lim) const;
+
+ public:
   /// Lab motion (g, boost gamma) of the detected exit particle for the attenuation coefficients; false: Q as entered.
   bool QLabBoost(PPair *entrancePair, PPair *exitPair, double &g, double &gb) const;
   double CalculateCrossSectionGammaConversionFactor(PPair *);
@@ -501,13 +507,28 @@ class EPoint {
   /// Set \f$\pi/k^2\f$.
   void SetGeometricalFactor(double);
   /// Record the calculated cross section.
-  void SetFitCrossSection(double);
+  void SetFitCrossSection(double v) { Rec()[azure2::Results::kSigma] = v; }
   /// The abundance-weighted term of each compound nucleus at this point of a
   /// natural-target segment, indexed by nucleus (ESegment::CalculateTheoreticalCrossSection).
-  const std::vector<double> &GetNaturalTerms() const { return natural_terms_; }
-  void SetNaturalTerms(const std::vector<double> &terms) { natural_terms_ = terms; }
-  void SetFitE1CrossSection(double);
-  void SetFitE2CrossSection(double);
+  std::vector<double> GetNaturalTerms() const;
+  void SetNaturalTerms(const std::vector<double> &terms);
+  void SetFitE1CrossSection(double v) { Rec()[azure2::Results::kSigmaE1] = v; }
+  void SetFitE2CrossSection(double v) { Rec()[azure2::Results::kSigmaE2] = v; }
+  /// The point's result record (docs/upgrade/data_model.md S3): a fixed range of a Results buffer, bound by the
+  /// layout of the data set that holds the point (EData::LayoutResults), or by the caller of a calculation on a
+  /// point outside a data set (BindPrivateResults).  A copy of a point shares its record until it is bound again.
+  azure2::Results *ResultBuffer() const { return results_; }
+  std::size_t ResultSlot() const { return slot_; }
+  /// Slots for angular-distribution coefficients a unit needs: max_ang_dist_order + 1 for an angular-distribution
+  /// or coefficient point (GenMatrixFunc writes min(maxLOrder, max_ang_dist_order) + 1 of them), else 0.
+  int ResultAngularCapacity() const { return (is_ang_dist_ && max_ang_dist_order_ >= 0) ? max_ang_dist_order_ + 1 : 0; }
+  int ResultAngularSlots() const { return num_ang_slots_; }
+  int ResultNaturalSlots() const { return num_natural_slots_; }
+  /// Bind the point to the record at `slot` of `buffer`, with nAng angular and nNat natural slots.
+  void BindResults(azure2::Results *buffer, std::size_t slot, int nAng, int nNat);
+  /// Bind the point (a probe copy, a point outside any data set) to a one-record buffer of its own, holding the
+  /// values of the record it was bound to (zeros if none).
+  void BindPrivateResults(azure2::Results &scratch);
   /// A calculation that threw: NaN cross sections (total, E1, E2) on this point and on every point mapped onto it,
   /// and a warning naming the segment, the role of the point, its energy and the error, the first time in a run.
   /// Used by ESegment::CalculateTheoreticalCrossSection and EData::CalculatePointsInParallel (before 2026-11-01
@@ -683,7 +704,6 @@ class EPoint {
   int bohr_z1_ = 0;          ///< beam charge of the entrance pair, for Bohr straggling
   int bohr_z2_ = 0;          ///< target charge of the entrance pair
   SubGridSpec sub_grid_spec_;
-  double analyzing_power_ = 0.0;
   int entrance_key_;
   int exit_key_;
   int segment_key_;
@@ -708,10 +728,6 @@ class EPoint {
   double lab_crosssection_;
   double lab_dcrosssection_;
   double geofactor_;
-  double fitcrosssection_;
-  std::vector<double> natural_terms_;
-  double fitE1crosssection_;
-  double fitE2crosssection_;
   double sfactorconv_;
   double screen_k_ = 0.0;
   double screen_ue_ = 0.0;
@@ -749,10 +765,8 @@ class EPoint {
   // setup and on an energy shift; shared between EData clones (see
   // EDependentTables below) and written only through MutableLegendre().
   SharedTable<vector_r> legendreP_;
-  vector_r angularDists_;
   int coefficient_order_ = -1;
   bool coefficient_absolute_ = false;
-  double ang_dist_a0_ = 0.0;
   // The energy-dependent channel tables, one row per J group: L_o elements,
   // square roots of the penetrabilities, Coulomb and hard-sphere phase factors.
   // They are filled at setup and rewritten only when the point's energy or grid
@@ -815,6 +829,16 @@ class EPoint {
   // copied with their segments (segment vector growth, component segments, the fit's
   // pooled EData clones), and a stored ESegment* then dangles.
   int crossSectionComponent_;
+  // The result record (see ResultBuffer): no value of an evaluation is held in the point itself.
+  azure2::Results *results_ = nullptr;
+  std::size_t slot_ = 0;
+  std::uint16_t num_ang_slots_ = 0;
+  std::uint16_t num_natural_slots_ = 0;
+  double *Rec() const {
+    if (!results_) NoResultRecord();
+    return results_->slot.data() + slot_;
+  }
+  [[noreturn]] void NoResultRecord() const;
 };
 
 #endif

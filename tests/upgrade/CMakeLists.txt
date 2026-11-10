@@ -65,3 +65,16 @@ add_executable(derivatives_gsl_test derivatives_gsl_test.cpp)
 target_link_libraries(derivatives_gsl_test PRIVATE azure2_physics ${GSL_LIBRARIES})
 target_include_directories(derivatives_gsl_test PRIVATE ${GSL_INCLUDE_DIRS})
 add_test(NAME physics_derivatives_gsl COMMAND derivatives_gsl_test)
+
+# A fit does not depend on the number of threads: pooled working copies give a fresh copy's bits, and fits at 1 and
+# 4 threads evaluate the same vectors to the same values (tests/fit_threads/check.sh, docs/upgrade/fit_threads.md).
+add_test(NAME fit_threads COMMAND bash ${CMAKE_SOURCE_DIR}/tests/fit_threads/check.sh $<TARGET_FILE:AZURE2>)
+set_tests_properties(fit_threads PROPERTIES TIMEOUT 600)
+# Results read before they are written (docs/upgrade/data_model.md, S3 and check 16): T1-T3 calculated, extrapolated
+# and (T1) fitted with and without AZURE_POISON_RESULTS=1, outputs and the API's arrays equal; known cases listed.
+find_package(Python3 COMPONENTS Interpreter)
+if(Python3_Interpreter_FOUND)
+  add_test(NAME upgrade_poison_results
+           COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/poison_results_test.py --binary $<TARGET_FILE:AZURE2>)
+  set_tests_properties(upgrade_poison_results PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2" TIMEOUT 1800)
+endif()

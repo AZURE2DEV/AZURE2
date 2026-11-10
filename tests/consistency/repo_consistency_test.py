@@ -85,6 +85,7 @@ check_registered("tests/consistency", r".+_test\.py")
 check_registered("tests/upgrade", r".+_test\.cpp")
 check_registered("physics/tests", r".+_test\.cpp", "physics")
 check_registered("io/tests", r".+_test\.cpp", "io")
+check_registered("experiment/tests", r".+_test\.cpp", "experiment")
 
 
 # 3. Every regression directory is actually exercised by tests/run_tests.sh:
@@ -202,6 +203,23 @@ for dirpath, _, files in os.walk(os.path.join(ROOT, "io")):
                 continue
             problems.append(f"{rel}: includes {inc}; io/ may include only azure2/io/ headers and the C++ standard library")
 
+
+
+# 9b. experiment/ uses physics/ only (docs/upgrade/data_model.md section 2.5, decision M1): its own headers
+#     ("azure2/experiment/..."), physics/'s ("azure2/physics/...") and the C++ standard library.  An engine header
+#     (EPoint.h, Config.h), io/ or a system library makes the module depend on what it must not.
+for dirpath, _, files in os.walk(os.path.join(ROOT, "experiment")):
+    for name in sorted(files):
+        if not name.endswith((".h", ".hpp", ".cpp")):
+            continue
+        rel = os.path.relpath(os.path.join(dirpath, name), ROOT)
+        for inc in re.findall(r'^\s*#\s*include\s*([<"][^>"]+[>"])', read(rel), re.M):
+            if inc.startswith('"') and inc[1:-1].startswith(("azure2/experiment/", "azure2/physics/")):
+                continue
+            if inc.startswith("<") and re.fullmatch(r"[a-z_]+", inc[1:-1]):
+                continue
+            problems.append(f"{rel}: includes {inc}; experiment/ may include only azure2/experiment/ and azure2/physics/ "
+                            "headers and the C++ standard library")
 
 
 # 10. One set of physical constants (docs/upgrade/project.md section 5, step 5): physics/'s Constants.h holds u, hbar c,

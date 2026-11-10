@@ -210,6 +210,27 @@ distorted waves, stopping and straggling versus E and depth, kernel rows K_i(E_n
 | a file keyword | the project | one field | round trip of the test projects |
 | a kind of data (sum, ratio, yield, E1 part, …) | a model expression | one leaf filter or node, if not a combination of existing ones | the test project with that data |
 
+**State.** Two kinds only.
+
+- *Constant tables*, built once and never written afterwards: masses, constants, element symbols, the format-3 schema
+  and its quantity rows, the list of χ² terms. Each is reached through a function returning a `const` reference. This
+  is the only form of singleton in the code.
+- *Everything an evaluation writes* belongs to the caller and is passed in: the `Results` buffer, the per-stage
+  tables, per-task scratch. No function-level `static` or `thread_local` holds a value that a calculation reads back,
+  and no cache is keyed by "the last call". Such state made calculations depend on the thread count (the Coulomb memo,
+  removed in Phase 1); what is left of it (about 50 mutable statics in `src/`, `NuclearPotentialManager`, the caches of
+  `ECIntegral.cpp`) goes in Phase 6, with a consistency check that refuses new ones.
+
+**Extension.** Each row of the table above is an explicit table in one source file, whose rows hold the name, what
+the front ends need (units, fields, documentation) and the function that does the work: the quantity table of
+`experiment/` (`project_format3.md` §7), the χ² terms of `src/Objective.cpp`, the apparatus kernels and stopping models
+of Phase 5. A new feature is one row and one test; `--schema`, the documentation tables and the GUI forms are
+generated from the same rows, and a consistency check fails when a row is bypassed. Not used, on purpose:
+
+- classes that register themselves from a static object in their own `.cpp` (initialisation order is undefined, a
+  static library can drop them at link time, and no file lists what exists);
+- abstract-factory hierarchies and injection frameworks (indirection that removes no duplicated formula).
+
 ## 10. Tests
 
 Three synthetic test projects, generated from known parameters (a fit must recover them), small, seconds to run:

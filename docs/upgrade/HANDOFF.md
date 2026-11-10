@@ -2,6 +2,59 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-09 (night) — fits that depend on the thread count: two causes (branch `fix/upgrade-fit-threads`)
+
+Record: `fit_threads.md`. Diagnostic `AZURE_TRACE_FCN=1|fresh` (every χ² with its parameter vector in hex floats;
+`fresh` also on a fresh model copy).
+- **Cause A, fixed:** `EData::ReplaceSubPointGrids` kept a sub-point grid whose nodes lay within 10⁻¹² of the new
+  ones, so a pooled copy's grid, and its χ² in the last bits, depended on the vectors it had evaluated before. Shown:
+  pooled vs fresh copy differ at 60 of 79 T2 evaluations (none with `--no-grid-replacement` or exact comparison);
+  1 vs 4 threads, 34 of 59 common vectors with different χ². Fix: exact node comparison. After it, T2 at 1, 2, 4
+  threads evaluates the same 216 vectors with the same bits; 8 threads repeatable (3 runs). The 1-thread T2 fit moves
+  in its last digits (prior-covariance term 0.306025731622686 → 0.306025733674053; total 691.608). Cost within noise
+  (fit200 63.4 → 63.8 s at 1 thread). Test `tests/fit_threads/check.sh` (ctest `fit_threads`), fails with the
+  tolerance restored.
+- **Cause B, not fixed (needs `external/`):** Minuit2's call counter (`MnUserFcn.cxx:21`) is not atomic; at 4–8
+  threads it loses 13–28 counts in 200, so a `--max-calls` fit runs one more MIGRAD iteration, timing-dependent. This
+  is the whole 691.608 / 595.877 difference. An atomic increment (scratch build, not committed) makes T2 at 8 threads
+  and T1 at 4 threads end where 1 thread ends. Decision for the maintainers: patch the vendored Minuit2 (two lines).
+- **Open:** `param.fit` (snapshot at evaluation 100, 200, …) holds a schedule-dependent vector under the parallel
+  gradient; the shifted-capture memo `EPoint::GetECAmplitudeWithShift` keeps the level energy of a copy's first
+  shifted evaluation (inferred, not covered by T1–T3).
+
+## 2026-11-09 — Phase 4 S3 (a): results in a buffer, behind the old accessors (`feature/upgrade-4-results`)
+
+**Done** (`data_model.md` S3 (a), decision M2 (c)). `include/Results.h` (plain, no engine headers): one record per
+point and sub-point — σ, σ_E1, σ_E2, A_y, A_0, then (angular units) a count and max_ang_dist_order + 1 coefficients,
+then (points of a sample line) a count and one term per compound nucleus. `EPoint`'s seven result members are gone
+(`fitcrosssection_`, `fitE1/E2crosssection_`, `analyzing_power_`, `ang_dist_a0_`, `angularDists_`,
+`natural_terms_`); the accessors read the record. The buffer is the `EData`'s (one per working copy):
+`LayoutResults` at the end of `Initialize`, in `Clone` (the copy takes the source's values), and `EnsureResultsLayout`
+at the start of every evaluation (`BeginEvaluation`, last step of `FillEnergyShiftsFromParams`), which re-lays only
+when a point is not where the layout puts it (a re-placed sub-point grid, a copied segment). Probe copies in
+`EPoint::Calculate` and the reaction-rate points take a private one-record buffer. `ec_shifted_` stays: a memo
+keyed by exact energy (H6), not a result. `sizeof(EPoint)` 888 → 824 bytes; a unit is 24 bytes smaller overall.
+
+**`AZURE_POISON_RESULTS=1`** (documented in `command_line.rst`): the buffer is quiet NaN on entry to each
+evaluation. ctest `upgrade_poison_results`: T1–T3 calc / extrap / (T1) fit outputs and the API's arrays equal with
+and without it. One known case, listed by the test: K1, the API's E1/E2 arrays of lines that are not
+angle-integrated (never calculated there; 0 of a new record).
+
+**Verified:** 179 × 3 (menu 1, 1 thread) identical to the reference build (2040 files, run.log included), and
+identical again with `AZURE_POISON_RESULTS=1`; a 19-folder subset at 2 threads identical to 1 thread (only the
+Coulomb-table lookup counter in run.log differs); ctest −LE slow 131/131; T1 fit (menu 2) and T3 fit (`--use-gradient`) outputs identical to the reference, T3 also poisoned. Full T2 fit, 1 thread (bench invocation without a call limit): χ² 294.173 reference and branch, also poisoned; 292.7 s / 293.5 s, peak RSS 281.3 / 276.7 MB (run side by side); calc 1.06 / 1.07 s warm.
+
+**Stale reads found by reading (not reached by the test projects):** (1) `EPoint::Calculate`, automatic tolerance,
+`allPass` branch (`src/EPoint.cpp`, `this->SetFitCrossSection(bareValue)`): an E1/E2 data line (isDiff 5/6) with a
+sub-point fold keeps σ_E1/σ_E2 of the last evaluation that folded fully — a value carried between evaluations, so
+pool history (and the thread count) can enter a fit. (2) `ESegment::CalculateTheoreticalCrossSection` /
+`TransformedValue`: a failed term returns NaN before `SetNaturalTerms`, so the sample decomposition file prints the
+previous evaluation's terms for that point. (3) `MarkFailed` leaves NaN in σ_E1/σ_E2 of a non-capture point for
+good (only the API shows them).
+
+**Next:** S3 (b), split as proposed in the report (b1 engine calls take `Results&`; b2 owner moves to the caller;
+b3 gradient and MCMC); the stale reads above to S4.
+
 ## Phase 3 merged; guardrails (written 2026-11-09, after the plan entry below)
 
 **Merged into `feature/upgrade`:** `feature/upgrade-3-project`, **Phase 3** (design and record in `project.md`;

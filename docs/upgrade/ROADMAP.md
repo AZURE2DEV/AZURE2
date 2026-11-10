@@ -137,13 +137,40 @@ format-1 note in run.log. Open: `sources/` (the item above), `<scatteringLengths
 
 ## Phase 4 — Data are data
 
-- [ ] `experiment/` target: `Measurement` arrays converted to c.m. at load; results in per-evaluation arrays, not in
-      points; hosts no longer write into peers.
-- [ ] Model expressions (decision 12, `ARCHITECTURE.md` §3): `Observable` leaves with amplitude filters (multipole,
-      Jπ, l, s, internal/external) and nodes `Sum`, `Ratio`, `Scale`, `Weighted`; design note first; today's segment
-      types (isDiff codes, SUM/RATIO composites, multipolarity masks, natural targets) read into them. Test: every
-      test project's χ² unchanged; an E1-only and an E2-only fit of T1 against a closed form.
-Gate: bit-identical.
+Design: `data_model.md` (survey, types, decisions M1–M13, steps S1–S16), `data_kinds.md` (what the engine accepts,
+what EXFOR holds, the proposal for named quantities, targets, Rutherford ratios, resonance strengths),
+`project_format3.md` (the format the engine reads), `fit_threads.md` (the fit's dependence on the thread count).
+Started 2026-11-09; integration branch `feature/upgrade-4-data`.
+
+- [ ] State of an evaluation in one place (S1–S5): a `Results` buffer owned by the caller, with slots per calculation
+      unit; one model pass and one residual function; the mapping as a plan; no writes from one object into another and
+      nothing carried from one evaluation to the next. `AZURE_POISON_RESULTS=1` fails on any read before write.
+- [ ] `experiment/` target (S6–S8), a standalone library that links only `physics/`: frames (lab ↔ c.m., one
+      implementation), `Measurement` (immutable, shared between threads) and `MeasurementFrame` (what depends on fitted
+      shifts), and the model-expression nodes `Leaf`, `Sum`, `Scale`, `Weighted`, `Ratio`, `Transform` with `value` and
+      `backward`.
+- [ ] Model expressions in the engine (S9–S13): one keyword → tree table; the tree pass replaces the 19 loops and the
+      two compositions (forward in `ESegment`, adjoint in `AZUREGrad`); components as leaves; amplitude filters
+      (multipole, Jπ, l, s, internal/external) on any cross section. Test: every test project's χ² unchanged; an
+      E1-only and an E2-only fit of T1 against a closed form.
+- [ ] Format 3 (maintainer's decision 2026-11-09: no backward compatibility in the engine, a converter instead): a data
+      set states its quantity, unit, frame, reference (Rutherford or Mott), target by name and normalisation in words;
+      `<targets>` with names replaces `<targetInt>` index lists; `<modelData>` holds model-level data (resonance
+      strengths ωγ, scattering lengths, widths). Old files are read only by `AZURE2 --convert` / `pyazr.convert_azr`.
+      One table of quantities feeds the file validation, Python, the GUI and the documentation; `AZURE2 --schema` and
+      `--validate` give them to programs and AI agents.
+- [ ] New data kinds, in this order (`data_kinds.md` §5.3): ratio to Rutherford and to Mott; S factor as an engine
+      quantity (with it, the fix of pyazr's S-factor conversion, which uses mass numbers: σ +2.9 % for ³He+α at 93 keV,
+      +6.7 % for p+¹²C at 100 keV); named targets and thick-target yields per incident particle or per charge;
+      ωγ; Legendre coefficients with their normalisations. Extrapolation segments on a list, a file or an adaptive grid.
+- [ ] Recipe "a new kind of data" in `CLAUDE.md` and its checks (S16).
+Gate: outputs of the 179 projects × 3 bases bit-identical through the restructuring (S1–S13); for format 3, the outputs
+of the converted projects identical to the originals' on the previous engine.
+
+**`CNuc` split, to finish** (own track after `Results` lands; Phase 1 left it at steps 1–5 and 6a): `src/CNuc.cpp` is
+2,907 lines. Remaining (`cnuc_split.md`): 3b (iii) hybrid-potential channels, 3b (iv) `CoulombTable` / `--gsl-coul`,
+6b consumers of the pathway trees, 7 reader, parameter vector and printing out, `CNuc` deleted. With it a file-size
+ratchet in `tests/consistency/`: no source file may grow beyond its recorded size, and the record only goes down.
 
 ## Phase 5 — Energy grid, kernels, stopping, THM observable
 
@@ -165,6 +192,9 @@ Gate: outputs within the stated quadrature tolerance, each difference explained;
 - [ ] Parallel over grid-energy blocks with per-task scratch; explicit thread budget; remove pools, `EData::Clone`,
       point mapping, copy-on-write tables, `NodeTableCache`, process-wide memos; EC unit amplitudes per grid energy;
       rates and extrapolation on the grid (+ analytic narrow-resonance term).
+- [ ] No hidden state (`ARCHITECTURE.md` §9): the mutable function-level statics of `src/` (about 50), the
+      `NuclearPotentialManager` singleton and the `thread_local` caches of `ECIntegral.cpp` become caller-owned tables
+      or go; a consistency check refuses new ones.
 Gate: thread-count independence by construction; memory one problem regardless of threads; T2 benchmark recorded.
 
 ## Phase 7 — DWBA for THM vertices (leaf module; may start in parallel with Phases 4–6)

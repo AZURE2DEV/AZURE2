@@ -394,6 +394,15 @@ the target-effect combiner weights; ``AZURE_POOL_CHECK=1`` compares the pooled,
 parallel :math:`\chi^2` with a fresh serial one; ``AZURE_SERIAL_CHI2=1``
 evaluates every :math:`\chi^2` serially.
 
+``AZURE_TRACE_FCN=1`` prints to standard error, for every :math:`\chi^2`
+evaluation of a calculation or a fit, its number, its value and the parameter
+vector, in hexadecimal floating point (``[fcn] N chi2 | p...``), so that two runs
+(at different thread counts, say) can be compared value by value;
+``AZURE_TRACE_FCN=fresh`` also evaluates each fit vector on a fresh copy of the
+model and prints that value after ``|| fresh``, with the segments whose
+:math:`\chi^2` differ from the pooled working copy's (a fresh copy per
+evaluation: slow).
+
 ``AZURE_DUMP_NONFINITE=1`` (or ``=<threshold>``, default :math:`10^{10}`):
 whenever a :math:`\chi^2` evaluation is non-finite or above the threshold,
 append to ``nonfinite_dump.txt`` in the working directory the parameters that
@@ -402,6 +411,18 @@ non-finite contributions, and their offending points, including non-finite
 target-effect sub-points (at most 20 dumps per run).  A non-finite
 :math:`\chi^2`, or one above :math:`10^{100}`, is handed to Minuit2 as
 :math:`10^{100}`.
+
+``AZURE_POISON_RESULTS=1``: at the start of every evaluation (after the
+parameters, norms and energy shifts are handed to the data) every value the
+evaluation produces -- each point's and sub-point's calculated cross section,
+its E1 and E2 parts, A_y, A_0, angular-distribution coefficients and sample
+terms -- is set to a quiet NaN before it is calculated, so a value read before
+the evaluation writes it, for instance one kept from an earlier evaluation,
+appears as NaN in the output.  A test of the engine, not of a project: the
+output files of a correct engine do not change.  In pyazr the E1 and E2 parts
+(``calculated_segments_e1``, ``_e2``) of a line that is not an
+angle-integrated cross section become NaN, since they are never calculated
+there (0 without the variable).
 
 Examples
 --------

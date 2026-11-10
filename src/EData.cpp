@@ -793,31 +793,14 @@ int EData::MakePoints(const Config &configure, CNuc *theCNuc) {
                 theSegment->AddPoint(NewPoint);
                 EPoint *thePoint = theSegment->GetPoint(theSegment->NumPoints());
                 thePoint->SetParentData(this);
-                if (entrancePair->GetPType() == 20 && exitPair)
-                  thePoint->ConvertDecayEnergy(exitPair);
-                else if (!theSegment->IsCMDifferential())
-                  thePoint->ConvertLabEnergy(entrancePair);
-                else if (theSegment->IsCMDifferential())
-                  thePoint->ConvertLabEnergy(entrancePair);
                 // A RATIO is dimensionless: no cross-section conversion (as ESegment::Fill for data segments;
                 // the stored factor would otherwise divide the ratio in the lab output, kinflag.dat = 1).
                 const bool isRatio = theSegment->IsAdvanced() && theSegment->GetLegacyOperationType() == 1;
-                if (exitPair && exitPair->GetPType() == 0 && theSegment->IsDifferential() &&
-                    !theSegment->IsPhase() && !theSegment->IsAngularDist() && !theSegment->IsCMDifferential()) {
-                  const bool inRange = (theSegment->GetEntranceKey() == theSegment->GetExitKey())
-                                           ? thePoint->ConvertLabAngle(entrancePair)
-                                           : thePoint->ConvertLabAngle(entrancePair, exitPair, configure);
-                  if (!inRange) {
-                    configure.outStream << "ERROR: " << "test segment #" << theSegment->GetSegmentKey() << ": lab angle " << thePoint->GetLabAngle() << " deg at E_lab = " << thePoint->GetLabEnergy()
-    << " MeV: " << thePoint->GetLabAngleWhy() << "." << std::endl;
-                    return -1;
-                  }
-                  if (!isRatio) thePoint->ConvertCrossSection(entrancePair, exitPair);
-                }
-                if (exitPair && exitPair->GetPType() == 10 && theSegment->IsDifferential() &&
-                    !theSegment->IsPhase() && !theSegment->IsAngularDist() && !theSegment->IsCMDifferential()) {
-                  thePoint->ConvertLabAngleGammas(entrancePair);
-                  if (!isRatio) thePoint->ConvertCrossSectionGammas(entrancePair);
+                if (!theSegment->ConvertPointToCM(thePoint, entrancePair, exitPair, configure, !isRatio,
+                                                  ESegment::BeyondRange::Stop)) {
+                  configure.outStream << "ERROR: " << "test segment #" << theSegment->GetSegmentKey() << ": lab angle " << thePoint->GetLabAngle() << " deg at E_lab = " << thePoint->GetLabEnergy()
+                                      << " MeV: " << thePoint->GetLabAngleWhy() << "." << std::endl;
+                  return -1;
                 }
                 if (eStep == 0.0) break;
               }
@@ -1253,9 +1236,7 @@ int EData::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, const st
     PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(seg->GetEntranceKey()));
     PPair *exitPair = theCNuc->GetPairFromKey(seg->GetExitKey());  // nullptr for total capture (-1)
     // The c.m./lab factor the shift step uses for sub-points (ESegment::UpdatePointEnergyWithShift).
-    const double cmFactor = (entrancePair->GetPType() == 20 && exitPair)
-        ? (exitPair->GetM(1) + exitPair->GetM(2)) / exitPair->GetM(2)
-        : entrancePair->GetM(2) / (entrancePair->GetM(1) + entrancePair->GetM(2));
+    const double cmFactor = ESegment::CMEnergyFactor(entrancePair, exitPair);
     for (int i = 1; i <= seg->NumPoints(); i++) {
       EPoint *point = seg->GetPoint(i);
       if (!point->GetSubGridSpec().valid) continue;
@@ -1315,9 +1296,13 @@ int EData::ReplaceSubPointGrids(CNuc *theCNuc, const Config &configure, const st
     }
     std::vector<double> grid = AdaptiveIntegrationGrid(gc).GenerateGrid(spec.startEnergy, spec.endEnergy, g);
     std::vector<EPoint> &subs = point->GetSubPoints();
+    // The grid kept is the one placed now, bit for bit.  Before 2026-11-09 nodes within 1e-12 (relative) of the
+    // present ones counted as unchanged and the old grid stayed: which grid a working copy then held depended on
+    // the parameter vectors it had evaluated before, and Minuit's parallel gradient hands those out by thread, so
+    // the objective at one p differed between pooled copies in its last digits and a fit depended on the thread
+    // count (docs/upgrade/fit_threads.md).
     bool same = (subs.size() == grid.size());
-    for (size_t k = 0; same && k < grid.size(); k++)
-      same = std::fabs(subs[k].GetOriginalEnergy() - grid[k]) <= 1.0e-12 * std::max(1.0, std::fabs(grid[k]));
+    for (size_t k = 0; same && k < grid.size(); k++) same = subs[k].GetOriginalEnergy() == grid[k];
     if (same) return;
     if (subs.size() != grid.size())
       moved[q] = -1.0;
@@ -1534,11 +1519,7 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
   for (ESegmentIterator segment = GetSegments().begin(); segment < GetSegments().end(); segment++) {
     PPair *entrancePair = compound->GetPair(compound->GetPairNumFromKey(segment->GetEntranceKey()));
     PPair *exitPair = compound->GetPairFromKey(segment->GetExitKey());  // nullptr for total capture (-1)
-    double cmConversion;
-    if (entrancePair->GetPType() == 20 && exitPair)
-      cmConversion = (exitPair->GetM(1) + exitPair->GetM(2)) / exitPair->GetM(2);
-    else
-      cmConversion = entrancePair->GetM(2) / (entrancePair->GetM(1) + entrancePair->GetM(2));
+    const double cmConversion = ESegment::CMEnergyFactor(entrancePair, exitPair);
 
     if (segment->IsTargetEffect()) {
       TargetEffect *targetEffect = this->GetTargetEffect(segment->GetTargetEffectNum());
@@ -1747,17 +1728,9 @@ int EData::ReadTargetEffectsFile(const Config &configure, CNuc *compound) {
         // (EData::Initialize repeats this, idempotently, from the lab energy).
         PPair *compEntrance = compound->GetPair(compound->GetPairNumFromKey(component->GetEntranceKey()));
         PPair *compExit = compound->GetPairFromKey(component->GetExitKey());
-        double compConversion;
-        if (compEntrance->GetPType() == 20 && compExit)
-          compConversion = (compExit->GetM(1) + compExit->GetM(2)) / compExit->GetM(2);
-        else
-          compConversion = compEntrance->GetM(2) / (compEntrance->GetM(1) + compEntrance->GetM(2));
-        for (EPointIterator point = component->GetPoints().begin(); point < component->GetPoints().end(); point++) {
-          if (compEntrance->GetPType() == 20)
-            point->ConvertDecayEnergy(compExit);
-          else
-            point->ConvertLabEnergy(compEntrance);
-        }
+        const double compConversion = ESegment::CMEnergyFactor(compEntrance, compExit);
+        for (EPointIterator point = component->GetPoints().begin(); point < component->GetPoints().end(); point++)
+          ESegment::ConvertPointEnergyToCM(&*point, compEntrance, compExit);
         if (component->IsTargetEffect()) {
           TargetEffect *targetEffect = this->GetTargetEffect(component->GetTargetEffectNum());
           const int bohrZ1 = (compEntrance->GetPType() == 20) ? 0 : compEntrance->GetZ(1);
@@ -2043,6 +2016,7 @@ int EData::Initialize(CNuc *compound, const Config &configure) {
   // Labels of the compound nuclei, for the sample decomposition files.
   nucleusLabels_.clear();
   for (int k = 1; k <= compound->NumNuclei(); k++) nucleusLabels_.push_back(compound->NucleusLabel(k));
+  numNuclei_ = compound->NumNuclei();
   // Identical-particle phase-shift segment validation: warn once per segment
   // if the requested L is forbidden by Bose/Fermi symmetry on an identical
   // pair. The phase branch in GenMatrixFunc would silently report delta = 0
@@ -2163,6 +2137,8 @@ int EData::Initialize(CNuc *compound, const Config &configure) {
   // Every point of this stage has its rows now; nothing reads the channel table until the energies change, and the
   // table (about 64 bytes a row) is not kept beside the rows it filled (docs/upgrade/channel_table.md section 2).
   channelTable_.reset();
+  // The result records of every point and sub-point (Results.h); laid out again when the points change.
+  this->EnsureResultsLayout();
 
   return 0;
 }
@@ -3526,30 +3502,11 @@ int EData::InitializeComponentSegments(CNuc *theCNuc, const Config &configure) {
       EPoint *point = componentSegment.GetPoint(i);
 
       if (entrancePair && exitPair) {
-        if (entrancePair->GetPType() == 20) {
-          point->ConvertDecayEnergy(exitPair);
-        } else if (!componentSegment.IsCMDifferential()) {
-          point->ConvertLabEnergy(entrancePair);
-        } else if (componentSegment.IsCMDifferential()) {
-          point->ConvertLabEnergy(entrancePair);
-        }
-
-        if (exitPair->GetPType() == 0 && componentSegment.IsDifferential() &&
-            !componentSegment.IsPhase() && !componentSegment.IsAngularDist() && !componentSegment.IsCMDifferential()) {
-          const bool inRange = (entranceKey == exitKey) ? point->ConvertLabAngle(entrancePair)
-                                                        : point->ConvertLabAngle(entrancePair, exitPair, configure);
-          if (!inRange) {
-            configure.outStream << "ERROR: " << "component (" << entranceKey << " -> " << exitKey << ") of segment #" << componentSegment.GetSegmentKey() << ": lab angle " << point->GetLabAngle() << " deg at E_lab = " << point->GetLabEnergy()
-    << " MeV: " << point->GetLabAngleWhy() << "." << std::endl;
-            return -1;
-          }
-          point->ConvertCrossSection(entrancePair, exitPair);
-        }
-
-        if (exitPair->GetPType() == 10 && componentSegment.IsDifferential() &&
-            !componentSegment.IsPhase() && !componentSegment.IsAngularDist() && !componentSegment.IsCMDifferential()) {
-          point->ConvertLabAngleGammas(entrancePair);
-          point->ConvertCrossSectionGammas(entrancePair);
+        // The base segment's sequence, with the component's own pairs; a component's value is always converted.
+        if (!componentSegment.ConvertPointToCM(point, entrancePair, exitPair, configure, true, ESegment::BeyondRange::Stop)) {
+          configure.outStream << "ERROR: " << "component (" << entranceKey << " -> " << exitKey << ") of segment #" << componentSegment.GetSegmentKey() << ": lab angle " << point->GetLabAngle() << " deg at E_lab = " << point->GetLabEnergy()
+                              << " MeV: " << point->GetLabAngleWhy() << "." << std::endl;
+          return -1;
         }
         // The sub-points of a target effect were laid out (ReadTargetEffectsFile) from the copied base
         // point's c.m. angle, before this conversion with the component's own pair; put them at the
@@ -5327,6 +5284,58 @@ void EData::FillNormsFromParams(const vector_r &p) {
  */
 
 void EData::FillEnergyShiftsFromParams(const vector_r &p, EData *data, CNuc *theCNuc, const Config *configure) {
+  this->FillEnergyShiftsFromParamsImpl(p, data, theCNuc, configure);
+  this->BeginEvaluation();
+}
+
+template <class F>
+void EData::ForEachResultUnit(F f) {
+  const int nNatural = numNuclei_;
+  auto segment = [&](ESegment &seg) {
+    const int nat = seg.IsNatural() ? nNatural : 0;
+    for (EPoint &point : seg.GetPoints()) {
+      f(point, point.ResultAngularCapacity(), nat);
+      for (EPoint &sub : point.GetSubPoints()) f(sub, sub.ResultAngularCapacity(), 0);
+    }
+  };
+  for (ESegment &seg : segments_) segment(seg);
+  for (ESegment &seg : componentSegments_) segment(seg);
+}
+
+void EData::LayoutResults(const azure2::Results *source) {
+  size_t total = 0;
+  ForEachResultUnit([&](EPoint &, int nAng, int nNat) { total += azure2::Results::RecordSize(nAng, nNat); });
+  std::vector<double> next(total, 0.0);
+  size_t offset = 0;
+  ForEachResultUnit([&](EPoint &point, int nAng, int nNat) {
+    const azure2::Results *from = point.ResultBuffer();
+    if (from && (from == &results_ || from == source))
+      azure2::CopyRecord(from->slot.data() + point.ResultSlot(), point.ResultAngularSlots(), point.ResultNaturalSlots(),
+                         next.data() + offset, nAng, nNat);
+    point.BindResults(&results_, offset, nAng, nNat);
+    offset += azure2::Results::RecordSize(nAng, nNat);
+  });
+  results_.slot.swap(next);
+}
+
+void EData::EnsureResultsLayout() {
+  size_t offset = 0;
+  bool laidOut = true;
+  ForEachResultUnit([&](EPoint &point, int nAng, int nNat) {
+    if (!laidOut) return;
+    laidOut = point.ResultBuffer() == &results_ && point.ResultSlot() == offset &&
+              point.ResultAngularSlots() == nAng && point.ResultNaturalSlots() == nNat;
+    offset += azure2::Results::RecordSize(nAng, nNat);
+  });
+  if (!laidOut || offset != results_.slot.size()) this->LayoutResults(nullptr);
+}
+
+void EData::BeginEvaluation() {
+  this->EnsureResultsLayout();
+  if (azure2::Results::PoisonRequested()) results_.Poison();
+}
+
+void EData::FillEnergyShiftsFromParamsImpl(const vector_r &p, EData *data, CNuc *theCNuc, const Config *configure) {
   // The THM coherent backgrounds, the block after the shifts (none without
   // cbackground=): every caller fills the shifts right after the norms, with
   // the compound the model will run on.
@@ -5628,6 +5637,7 @@ EData *EData::Clone() const {
   dataCopy->nodeCache_ = this->nodeCache_;  // shared: a re-placed node is computed and held once
   dataCopy->priorCov_ = this->priorCov_;    // shared, read-only
   dataCopy->priorCovChi2_ = this->priorCovChi2_;
+  dataCopy->numNuclei_ = this->numNuclei_;
 
   // Build a mapping from component segment keys to cloned component segments
   std::unordered_map<int, ESegment *> clonedComponentMap;
@@ -5716,6 +5726,8 @@ EData *EData::Clone() const {
         if (!own.count(p->GetLocalMappedPoint(m)))
           throw std::logic_error("EData::Clone: a point of the copy maps a point that is not part of the copy");
   }
+  // The copy's own result records, holding this data set's values (a copied point held them before S3).
+  dataCopy->LayoutResults(&this->results_);
   return dataCopy;
 }
 
