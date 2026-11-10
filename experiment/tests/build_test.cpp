@@ -29,24 +29,25 @@ void check(const std::string &what, bool ok) {
 }
 
 // p+15N (1), a+12C (2), a+12C[4.43891] (3), g+16O (4), d+12C twice (5, 6), p+12C (7)
-std::vector<PairRow> Pairs() {
-  auto pair = [](int key, int type, int z1, double m1, int z2, double m2, double j1, double j2, double e2) {
-    PairRow p;
+LevelTables Pairs() {
+  auto pair = [](int key, int type, int z1, int a1, int z2, int a2, int twoJ1, int twoJ2, double e2) {
+    PairInfo p;
     p.key = key;
-    p.pType = type;
-    p.z1 = z1;
-    p.m1 = m1;
-    p.z2 = z2;
-    p.m2 = m2;
-    p.j1 = j1;
-    p.j2 = j2;
-    p.e2 = e2;
+    p.kind = type;
+    p.lightZ = z1;
+    p.lightA = a1;
+    p.heavyZ = z2;
+    p.heavyA = a2;
+    p.twoJLight = twoJ1;
+    p.twoJHeavy = twoJ2;
+    p.heavyExcitation = e2;
     return p;
   };
-  return {pair(1, 0, 1, 1.00728, 7, 15.0001, 0.5, 0.5, 0), pair(2, 0, 2, 4.0026, 6, 12.0, 0, 0, 0),
-          pair(3, 0, 2, 4.0026, 6, 12.0, 0, 2, 4.43891), pair(4, 10, 0, 0, 8, 15.9949, 1, 0, 0),
-          pair(5, 0, 1, 2.0141, 6, 12.0, 1, 0, 0), pair(6, 0, 1, 2.0141, 6, 12.0, 1, 0, 0),
-          pair(7, 0, 1, 1.00728, 6, 12.0, 0.5, 0, 0)};
+  LevelTables t;
+  t.pairs = {pair(1, 0, 1, 1, 7, 15, 1, 1, 0), pair(2, 0, 2, 4, 6, 12, 0, 0, 0), pair(3, 0, 2, 4, 6, 12, 0, 4, 4.43891),
+             pair(4, 10, 0, 0, 8, 16, 2, 0, 0), pair(5, 0, 1, 2, 6, 12, 2, 0, 0), pair(6, 0, 1, 2, 6, 12, 2, 0, 0),
+             pair(7, 0, 1, 1, 6, 12, 1, 0, 0)};
+  return t;
 }
 
 BuiltProject BuildText(const std::string &text, bool relativistic = false, bool readFiles = false) {

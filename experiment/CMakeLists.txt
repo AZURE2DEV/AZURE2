@@ -31,6 +31,7 @@ add_library(azure2_experiment STATIC
   src/Frames.cpp
   src/Json.cpp
   src/ModelDatum.cpp
+  src/LevelTables.cpp
   src/Quantities.cpp
   src/ReactionParser.cpp
   src/Schema.cpp
@@ -42,7 +43,7 @@ add_library(azure2_experiment STATIC
 add_library(azure2::experiment ALIAS azure2_experiment)
 # The reading path of a format-3 project (ProjectReader.h): the table above with io/'s document, record and <levels>
 # readers.
-add_library(azure2_experiment_reader STATIC src/ProjectReader.cpp)
+add_library(azure2_experiment_reader STATIC src/ProjectReader.cpp src/LevelTablesOfRows.cpp)
 target_link_libraries(azure2_experiment_reader PUBLIC azure2_experiment azure2_io)
 set_target_properties(azure2_experiment_reader PROPERTIES POSITION_INDEPENDENT_CODE ON CXX_EXTENSIONS OFF)
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")

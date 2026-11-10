@@ -20,7 +20,12 @@
 //   that apply no effect to an active key are not effects.
 // - Abundances: per sample (old name mapped to the target the data sets name) and compound nucleus.
 // - THM: the experiment of each active key, and the weight files.
-// AZURE2_SPEC_INJECT=1 moves one value of the format-3 side by one ulp, to show that the test fails on a difference.
+// - Model data, in the engine's row order (src/ModelData.cpp, ModelData::Read): the old <scatteringLengths> lines that
+//   give a residual (active, an uncertainty > 0) as the engine's constraint (pair key, s, Re a, sigma, Im a, sigma),
+//   then the datums of an old <modelData> section (BuildModelData against the tables of the old <levels> rows); the
+//   format-3 side: the datums Build made, a scattering length as the same constraint.  Doubles by their bits.
+// AZURE2_SPEC_INJECT=1 moves one value of the format-3 side by one ulp, to show that the test fails on a difference
+// (=2: the value of its first model datum).
 //   spec_equivalence_test <repository root>
 #include <algorithm>
 #include <cmath>
@@ -38,10 +43,14 @@
 
 #include "azure2/convert/Convert.h"
 #include "azure2/convert/SpecsFromOldLines.h"
+#include "azure2/convert/ScatteringLengthLine.h"
 #include "azure2/convert/ThmLines.h"
+#include "azure2/experiment/ModelDatum.h"
 #include "azure2/experiment/ProjectReader.h"
 #include "azure2/io/Convert.h"
 #include "azure2/io/Document.h"
+#include "azure2/io/LevelRows.h"
+#include "azure2/io/RecordReader.h"
 
 using namespace azure2;
 using namespace azure2::experiment;
@@ -410,6 +419,43 @@ void CompareEffects(const std::string &what, const SpecList<TargetEffectSpec> &a
 
 }  // namespace
 
+// A model datum as the engine's row: a scattering length as its constraint (ModelData::Read), else its fields.
+std::string DatumRow(const ModelDatum &d) {
+  char buf[512];
+  if (d.quantity == ModelQuantity::ScatteringLength)
+    std::snprintf(buf, sizeof buf, "scattering length pair %d s %a Re %a +- %a Im %a +- %a", d.pair,
+                  d.coherent ? -1.0 : 0.5 * d.twoS, d.value, d.error, d.hasImag ? d.imag : 0.0, d.hasImag ? d.imagError : 0.0);
+  else
+    std::snprintf(buf, sizeof buf, "%s level %d (%d, %d) %s pairs %d %d %d frame '%s' l %d 2s %d value %a +- %a unit %s",
+                  d.quantityName.c_str(), d.levelId, d.group, d.level, d.jpi.c_str(), d.entrancePair, d.exitPair, d.pair,
+                  d.frame.c_str(), d.l, d.twoS, d.value, d.error, d.unit.c_str());
+  return buf;
+}
+
+// The model-data rows of an old project in the engine's order: <scatteringLengths> lines with a residual, then the
+// datums of its <modelData> section.
+std::vector<std::string> OldModelDataRows(const io::Document &doc) {
+  std::vector<std::string> rows;
+  if (const io::Document::Section *s = doc.Find("scatteringLengths"))
+    for (const std::string &line : doc.Body(*s)) {
+      const convert::ScatteringLengthLine l = convert::ReadScatteringLengthLine(line);
+      if (l.kind != convert::ScatteringLengthLine::Constraint || l.active == 0) continue;
+      if (!(l.sigma > 0.0) && !(l.imSigma > 0.0)) continue;
+      char buf[256];
+      std::snprintf(buf, sizeof buf, "scattering length pair %d s %a Re %a +- %a Im %a +- %a", l.pairKey, l.s, l.value,
+                    l.sigma, l.hasImaginary ? l.imValue : 0.0, l.hasImaginary ? l.imSigma : 0.0);
+      rows.push_back(buf);
+    }
+  if (const io::Document::Section *s = doc.Find("modelData")) {
+    const io::RecordReadResult read = io::ReadRecords(doc, *s, Schema::KindsOfSection("modelData"));
+    const ValidationResult v = Schema::Validate({{"modelData", read.set.records}});
+    bool ok = false;
+    const LevelTables levels = LevelTablesOfRows(LevelRowsOf(doc, ok));
+    for (const ModelDatum &d : BuildModelData(v, levels.levels, levels.pairs).data) rows.push_back(DatumRow(d));
+  }
+  return rows;
+}
+
 int main(int argc, char **argv) {
   if (argc < 2) {
     std::printf("usage: spec_equivalence_test <repository root>\n");
@@ -560,6 +606,17 @@ int main(int argc, char **argv) {
       for (const auto &w : b.thm.extrapolationWeights) twb[w.first] = w.second;
       for (auto it = twa.begin(); it != twa.end();) it = activeExtrap.count(it->first) ? std::next(it) : twa.erase(it);
       Eq(std::string("THM extrapolation weights"), twa, twb);
+      std::vector<std::string> modelB;
+      for (std::size_t k = 0; k < b.modelData.size(); k++) {
+        ModelDatum d = b.modelData[k];
+        if (injected == 2 && k == 0) d.value = std::nextafter(d.value, 1e300);
+        modelB.push_back(DatumRow(d));
+      }
+      const std::vector<std::string> modelA = OldModelDataRows(doc);
+      for (std::size_t k = 0; k < std::max(modelA.size(), modelB.size()); k++)
+        if (k >= modelA.size() || k >= modelB.size() || modelA[k] != modelB[k])
+          problems.push_back("model data row " + std::to_string(k + 1) + ": " + (k < modelA.size() ? modelA[k] : "-") +
+                             " vs " + (k < modelB.size() ? modelB[k] : "-"));
     }
     const auto known = kRecorded.find(rel);
     if (known != kRecorded.end()) {

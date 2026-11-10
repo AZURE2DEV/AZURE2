@@ -3,7 +3,7 @@
 
 // What the engine's set-up consumes (data_model.md S9, project_format3.md step 3b): one plain struct per thing the
 // engine builds -- a data set, an extrapolation, a target / beam / detector effect with the data sets it applies to,
-// and the abundances of the samples.  A spec is filled once by its producer (today the old-line adaptor of convert/,
+// the abundances of the samples, and a model datum.  A spec is filled once by its producer (today the old-line adaptor of convert/,
 // SpecsFromOldLines.h; after step 3b also Schema::Build from format-3 records) and then only read: the engine's
 // constructors take it and nothing else.  Plain values, standard library only; energies in MeV, angles in degrees,
 // as the members say.  Where the engine needs a number as it was written (a token it checks or quotes in a message),
@@ -251,6 +251,49 @@ struct AbundanceSpecs {
   AbundancesSpec abundances;
   bool failed = false;
   std::string error;
+};
+
+/// Model data (docs/upgrade/project_format3.md section 3.10, ModelDatum.h): a literature value of a level property or
+/// of a scattering length, made by BuildModelData from a `datum` record.  Values are in the engine unit of the
+/// quantity's dimension (MeV for energies and widths, 1, fm, fm^-1/2), with the unit and factor as written kept for
+/// the output.
+/// The quantities a datum can be, each evaluated by the engine (src/ModelData.cpp).  ModelQuantities() maps the
+/// table's names (Quantities.cpp, record kind datum) to them; repo_consistency check 27 fails for a datum quantity of
+/// the table without a row there and a test named after it.
+enum class ModelQuantity {
+  ResonanceStrength,  ///< omega gamma = omega Gamma_a Gamma_b / Gamma (data_kinds.md eq. 8)
+  ResonanceEnergy,    ///< the observed level energy E_lambda, as E_x, E_cm or E_lab of a pair
+  TotalWidth,         ///< Gamma = sum_c |Gamma_c|
+  PartialWidth,       ///< Gamma of one pair: the sum over its channels
+  BranchingRatio,     ///< Gamma_b / Gamma
+  Anc,                ///< |C| of a closed channel (pair, l, s)
+  ScatteringLength    ///< Re and Im of the s-wave scattering length a_0 (include/ScatteringLength.h)
+};
+
+struct ModelDatum {
+  std::string name;
+  std::string source;
+  int line = 0;  ///< the record's header line
+  ModelQuantity quantity = ModelQuantity::ResonanceStrength;
+  std::string quantityName;
+  double value = 0.0;  ///< in the engine unit of the quantity's dimension
+  double error = 0.0;  ///< > 0, same unit
+  bool hasImag = false;  ///< scattering length: Im a_0 given
+  double imag = 0.0, imagError = 0.0;
+  std::string unit;  ///< the unit as written (for the output)
+  double unitFactor = 1.0;  ///< the written unit in engine units
+  // Level quantities: the level.
+  int levelId = 0;
+  int group = 0, level = 0;  ///< the engine's indices (LevelInfo)
+  std::string jpi;           ///< as written (3-)
+  // Pairs, as <levels> keys (0 when the quantity has none).
+  int entrancePair = 0;  ///< resonance_strength: the entrance pair a + A
+  int exitPair = 0;      ///< resonance_strength, branching_ratio: the exit pair b + B
+  int pair = 0;          ///< resonance_energy (E_cm, E_lab), partial_width, anc, scattering_length
+  std::string frame;     ///< resonance_energy: E_x, E_cm or E_lab
+  int l = -1;            ///< anc
+  int twoS = -1;         ///< anc, scattering_length (2s)
+  bool coherent = false; ///< scattering_length: the spin-weighted sum over the channel spins
 };
 
 }  // namespace experiment

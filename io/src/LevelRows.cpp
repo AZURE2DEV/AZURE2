@@ -1,6 +1,7 @@
 // The grammar of a <levels> line and of the section (LevelRows.h).
 #include "azure2/io/LevelRows.h"
 
+#include <cmath>
 #include <sstream>
 
 namespace azure2 {
@@ -71,6 +72,12 @@ LevelSection ReadLevelSection(std::istream &in) {
   }
   section.complete = (line == "</levels>");
   return section;
+}
+
+bool IdenticalParticles(const LevelRow &r) {
+  return r.z1() == r.z2() && std::fabs(r.m1() - r.m2()) < 1.0e-6 && std::fabs(r.j1() - r.j2()) < 1.0e-6 &&
+         r.pi1() == r.pi2() && std::fabs(r.g1() - r.g2()) < 1.0e-9 && std::fabs(r.e1() - r.e2()) < 1.0e-9 &&
+         r.pType() == 0;
 }
 
 }  // namespace io

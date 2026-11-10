@@ -57,13 +57,7 @@ PPair::PPair(const azure2::io::LevelRow &nucLine) {
   // 12C(2+)+12C(2+) could not be entered as identical; it is now e1 = e2 =
   // 4.439 MeV with j1 = j2 = 2.  The boson/fermion sign is +1 for integer 2j
   // (bosons) and -1 for half-integer 2j (fermions).
-  is_identical_ = (pair_z_[0] == pair_z_[1]) &&
-      (std::fabs(pair_m_[0] - pair_m_[1]) < 1.0e-6) &&
-      (std::fabs(pair_j_[0] - pair_j_[1]) < 1.0e-6) &&
-      (pair_pi_[0] == pair_pi_[1]) &&
-      (std::fabs(pair_g_[0] - pair_g_[1]) < 1.0e-9) &&
-      (std::fabs(pair_light_ex_e_ - pair_heavy_ex_e_) < 1.0e-9) &&
-      (pair_ptype_ == 0);
+  is_identical_ = azure2::io::IdenticalParticles(nucLine);
   if (is_identical_) {
     int two_j = static_cast<int>(2.0 * pair_j_[0] + 0.5);
     identical_sign_ = (two_j % 2 == 0) ? +1 : -1;

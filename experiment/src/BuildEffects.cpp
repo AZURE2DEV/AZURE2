@@ -321,9 +321,9 @@ void Abundances(Context &c) {
       std::set<std::pair<int, int>> compounds;
       for (const Member *m : users)
         for (int key : m->termEntranceKeys)
-          if (const PairRow *p = c.Pair(key))
-            if (p->z2 == nucleus->nucleus.Z && (int)std::lround(p->m2) == nucleus->nucleus.A)
-              compounds.insert({p->z1 + p->z2, (int)std::lround(p->m1) + (int)std::lround(p->m2)});
+          if (const PairInfo *p = c.Pair(key))
+            if (p->heavyZ == nucleus->nucleus.Z && p->heavyA == nucleus->nucleus.A)
+              compounds.insert({p->lightZ + p->heavyZ, p->lightA + p->heavyA});
       for (const auto &zA : compounds) {
         AbundanceRowSpec row;
         row.sample = t->name;

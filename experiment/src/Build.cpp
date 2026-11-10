@@ -9,6 +9,7 @@
 #include <sstream>
 
 #include "azure2/experiment/BuildContext.h"
+#include "azure2/experiment/ModelDatum.h"
 #include "azure2/physics/Elements.h"
 
 namespace azure2 {
@@ -21,25 +22,6 @@ bool BuiltProject::Ok() const {
   for (const Diagnostic &d : diagnostics)
     if (d.severity == Severity::Error) return false;
   return true;
-}
-
-std::string PairLabel(const PairRow &p) {
-  auto nuclide = [](int z, double m) { return std::to_string((int)std::lround(m)) + physics::ElementSymbol(z); };
-  std::string light;
-  const int a1 = (int)std::lround(p.m1);
-  if (p.pType == 10) light = "g";
-  else if (p.pType == 20) light = p.z1 < 0 ? "b-" : "b+";
-  else if (p.z1 == 0 && a1 == 1) light = "n";
-  else if (p.z1 == 1 && a1 == 1) light = "p";
-  else if (p.z1 == 1 && a1 == 2) light = "d";
-  else if (p.z1 == 1 && a1 == 3) light = "t";
-  else if (p.z1 == 2 && a1 == 3) light = "h";
-  else if (p.z1 == 2 && a1 == 4) light = "a";
-  else light = nuclide(p.z1, p.m1);
-  std::ostringstream e1, e2;
-  e1 << p.e1;
-  e2 << p.e2;
-  return light + (p.e1 != 0 ? "[" + e1.str() + "]" : "") + "+" + nuclide(p.z2, p.m2) + (p.e2 != 0 ? "[" + e2.str() + "]" : "");
 }
 
 namespace build {
@@ -64,11 +46,7 @@ void Context::Error(const char *code, const ValidatedRecord &record, const std::
   out_.diagnostics.push_back(d);
 }
 
-const PairRow *Context::Pair(int key) const {
-  for (const PairRow &p : pairs_)
-    if (p.key == key) return &p;
-  return nullptr;
-}
+const PairInfo *Context::Pair(int key) const { return PairByKey(key, pairs_); }
 
 const ValidatedRecord *Context::Record(const std::string &name, const std::string &kind) const {
   for (const ValidatedRecord &r : v_.records)
@@ -84,47 +62,6 @@ namespace {
 
 // ---------------------------------------------------------------- reactions (section 3.5)
 
-// Digits after the decimal point of a number as written ("4.439" -> 3; "4" -> 0; "4.4e0" -> 1).
-int Decimals(const std::string &text) {
-  const std::size_t dot = text.find('.');
-  if (dot == std::string::npos) return 0;
-  const std::size_t e = text.find_first_of("eE", dot);
-  return (int)((e == std::string::npos ? text.size() : e) - dot - 1);
-}
-
-// A written state [E_x] matches an excitation of <levels> to the digits written: [4.439] matches 4.43891 MeV.
-bool StateMatches(bool excited, const Number &written, double e) {
-  if (!excited || written.value == 0.0) return e == 0.0;
-  const double half = 0.5 * std::pow(10.0, -Decimals(written.text));
-  return std::fabs(e - written.value) <= half * (1.0 + 1e-9);
-}
-
-bool LightMatches(const Particle &p, const PairRow &pair) {
-  if (p.light == "g") return pair.pType == 10;
-  if (p.light == "b-") return pair.pType == 20 && pair.z1 < 0;
-  if (p.light == "b+") return pair.pType == 20 && pair.z1 > 0;
-  return pair.pType == 0 && p.Z == pair.z1 && p.A == (int)std::lround(pair.m1) &&
-         StateMatches(p.excited, p.excitation, pair.e1);
-}
-
-bool HeavyMatches(const Particle &p, const ResidualState &state, const PairRow &pair) {
-  return p.Z == pair.z2 && p.A == (int)std::lround(pair.m2) &&
-         StateMatches(state.kind == ResidualState::Excited, state.energy, pair.e2);
-}
-
-std::vector<int> Candidates(const Context &c, const Particle &light, const Particle &heavy, const ResidualState &state) {
-  std::vector<int> keys;
-  for (const PairRow &p : c.pairs_)
-    if (LightMatches(light, p) && HeavyMatches(heavy, state, p)) keys.push_back(p.key);
-  return keys;
-}
-
-std::vector<std::string> AllPairLabels(const Context &c) {
-  std::vector<std::string> labels;
-  for (const PairRow &p : c.pairs_) labels.push_back(std::to_string(p.key) + ": " + PairLabel(p));
-  return labels;
-}
-
 std::string Keys(const std::vector<int> &keys) {
   std::string s;
   for (int k : keys) s += (s.empty() ? "" : ", ") + std::to_string(k);
@@ -135,12 +72,10 @@ std::string Keys(const std::vector<int> &keys) {
 // `keyField` is "" for a term of a sum or ratio, which cannot carry a key.  Returns false after an error.
 bool ResolveSide(Context &c, const ValidatedRecord &r, const std::string &side, const Particle &light, const Particle &heavy,
                  const ResidualState &state, const std::string &text, const std::string &keyField, int &key) {
-  const std::vector<int> keys = Candidates(c, light, heavy, state);
+  const std::vector<int> keys = PairsNamed(light, heavy, state, c.pairs_);
   const Value *given = keyField.empty() ? nullptr : r.Get(keyField);
   if (keys.empty()) {
-    c.Error(codes::kUnknownPair, r, "reaction",
-            "the " + side + " of " + text + " is no pair of <levels> (particles and states); the pairs are listed",
-            AllPairLabels(c));
+    c.Error(codes::kUnknownPair, r, "reaction", UnknownPairMessage("the " + side + " of " + text), PairListing(c.pairs_));
     return false;
   }
   if (keys.size() == 1) {
@@ -155,9 +90,9 @@ bool ResolveSide(Context &c, const ValidatedRecord &r, const std::string &side, 
   }
   if (!given) {
     c.Error(codes::kAmbiguousPair, r, "reaction",
-            "the " + side + " of " + text + " names pairs " + Keys(keys) + " of <levels>" +
-                (keyField.empty() ? "; a term of a sum or ratio cannot carry a pair key"
-                                  : "; write " + keyField + " <key> to say which"),
+            AmbiguousPairMessage("the " + side + " of " + text, keys,
+                                 keyField.empty() ? "a term of a sum or ratio cannot carry a pair key"
+                                                  : "write " + keyField + " <key> to say which"),
             {Keys(keys)});
     return false;
   }
@@ -253,15 +188,16 @@ bool ReadPhaseShift(Context &c, const ValidatedRecord &r, ReactionSpec &spec) {
   spec.phaseJ = J->spin.twice / 2.0;
   spec.phaseL = (int)l->integer;
   spec.phaseS = s->spin.twice / 2.0;
-  const PairRow *p = c.Pair(spec.entranceKey);
+  const PairInfo *p = c.Pair(spec.entranceKey);
   if (!p) return true;
   const double sv = spec.phaseS, jv = spec.phaseJ, lv = spec.phaseL;
-  const bool sOk = sv >= std::fabs(p->j1 - p->j2) - 1e-6 && sv <= p->j1 + p->j2 + 1e-6;
+  const double j1 = p->twoJLight / 2.0, j2 = p->twoJHeavy / 2.0;
+  const bool sOk = sv >= std::fabs(j1 - j2) - 1e-6 && sv <= j1 + j2 + 1e-6;
   const bool jOk = jv >= std::fabs(lv - sv) - 1e-6 && jv <= lv + sv + 1e-6;
   if (!sOk || !jOk) {
     c.Error(codes::kFieldNotApplicable, r, sOk ? "J" : "s",
             "(J, l, s) = (" + J->spin.text + ", " + l->number.text + ", " + s->spin.text + ") is not a partial wave of pair " +
-                PairLabel(*p) + " (spins " + std::to_string(p->j1) + " and " + std::to_string(p->j2) + ")");
+                PairLabel(*p) + " (spins " + std::to_string(j1) + " and " + std::to_string(j2) + ")");
     return false;
   }
   return true;
@@ -279,8 +215,8 @@ bool ReadObservable(Context &c, const ValidatedRecord &r, const std::string &ang
     if (spec.exitKey == -1 && spec.combination == ReactionSpec::Combination::None) spec.observable = O::TotalCapture;
     spec.total = q == "sigma_total";
     if (q == "beta_delayed_spectrum") {
-      const PairRow *p = c.Pair(spec.entranceKey);
-      if (p && p->pType != 20) {
+      const PairInfo *p = c.Pair(spec.entranceKey);
+      if (p && p->kind != 20) {
         c.Error(codes::kReactionNotAllowed, r, "reaction", "a beta-delayed spectrum needs a beta entrance pair (type 20)");
         return false;
       }
@@ -612,13 +548,11 @@ bool BuildExtrapolation(Context &c, const ValidatedRecord &r, ExtrapolationSpec 
 
 }  // namespace
 
-BuiltProject Schema::Build(const ValidationResult &validated, const std::vector<PairRow> &pairs, const BuildOptions &options) {
+BuiltProject Schema::Build(const ValidationResult &validated, const LevelTables &levels, const BuildOptions &options) {
   BuiltProject out;
-  Context c(validated, pairs, options, out);
+  Context c(validated, levels.pairs, options, out);
   std::map<std::string, int> firstActiveOfScale;
   for (const ValidatedRecord &r : validated.records) {
-    if (r.kind == "datum" && r.quantity)  // <modelData> is not built in this step
-      for (const Refusal &x : r.quantity->refusals) out.checksLeftToEngine += x.checkedBy == "build" ? 1 : 0;
     if (r.kind != "dataset" && r.kind != "extrapolation") continue;
     Member m;
     m.record = &r;
@@ -640,6 +574,9 @@ BuiltProject Schema::Build(const ValidationResult &validated, const std::vector<
   }
   for (auto &x : out.thm.experiments) std::sort(x.datasetKeys.begin(), x.datasetKeys.end());
   build::BuildEffects(c);
+  ModelDataBuild modelData = BuildModelData(validated, levels.levels, levels.pairs);
+  out.modelData = std::move(modelData.data);
+  out.diagnostics.insert(out.diagnostics.end(), modelData.diagnostics.begin(), modelData.diagnostics.end());
   std::stable_sort(out.diagnostics.begin(), out.diagnostics.end(),
                    [](const Diagnostic &a, const Diagnostic &b) { return a.line < b.line; });
   if (!out.Ok()) {

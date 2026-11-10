@@ -151,7 +151,7 @@ int validateProject(const std::string &file, bool json) {
         // data files as the engine opens them: relative to the working directory
   const azure2::experiment::Format3Project c = azure2::experiment::ReadFormat3Text(bytes, read);
   const std::string note = "note: " + std::to_string(c.buildChecksSkipped) +
-                           " check(s) skipped (model-data refusals marked 'build'; <modelData> is built in a later step).";
+                           " check(s) skipped (the build checks need a valid project and its <levels>).";
   if (json) {
     std::cout << "[";
     for (std::size_t i = 0; i < c.diagnostics.size(); i++) std::cout << (i ? ",\n " : "\n ") << c.diagnostics[i].ToJson();

@@ -106,7 +106,7 @@ with tempfile.TemporaryDirectory() as tmp:
         lines = [l for l in out.splitlines() if l.startswith(broken + ":") and l[len(broken) + 1:].split(":")[0].isdigit()]
         check("--validate broken (text): one line per error, file:line: record.field: ...",
               code == 2 and len(lines) == len(BROKEN_CODES) and all(": d1." in l or ": d2." in l for l in lines), out)
-        check("--validate: the note on the checks skipped (model data, built in a later step)", "check(s) skipped" in out)
+        check("--validate: the note on the checks skipped", "check(s) skipped" in out)
     if pyazr:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")

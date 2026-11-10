@@ -3391,11 +3391,11 @@
   },
   "E_UNKNOWN_PAIR": {
    "severity": "error",
-   "meaning": "a reaction or pair of a datum that no pair of <levels> has (particles and states)"
+   "meaning": "a reaction or pair that no pair of <levels> has (particles and states)"
   },
   "E_AMBIGUOUS_PAIR": {
    "severity": "error",
-   "meaning": "a reaction or pair of a datum that two pairs of <levels> have"
+   "meaning": "a reaction or pair that two pairs of <levels> have (a data set says which with a pair key)"
   },
   "E_NOT_A_CHANNEL": {
    "severity": "error",

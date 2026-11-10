@@ -2,6 +2,7 @@
 #include "azure2/experiment/ProjectReader.h"
 
 #include <sstream>
+#include <utility>
 
 #include "azure2/io/Document.h"
 #include "azure2/io/LevelRows.h"
@@ -16,36 +17,18 @@ bool Format3Project::Ok() const {
   return true;
 }
 
-std::vector<PairRow> PairsOfLevels(const io::Document &doc, bool &ok) {
-  std::vector<PairRow> pairs;
+std::vector<io::LevelRow> LevelRowsOf(const io::Document &doc, bool &ok) {
   ok = false;
   const io::Document::Section *s = doc.Find("levels");
-  if (!s || s->close == io::Document::Section::npos) return pairs;
+  if (!s || s->close == io::Document::Section::npos) return {};
   std::ostringstream text;
   text << "<levels>\n";
   for (const std::string &line : doc.Body(*s)) text << line << "\n";
   text << "</levels>\n";
   std::istringstream in(text.str());
-  const io::LevelSection levels = io::ReadLevelSection(in);
+  io::LevelSection levels = io::ReadLevelSection(in);
   ok = !levels.malformed;
-  for (const io::LevelRow &r : levels.rows) {
-    bool seen = false;
-    for (const PairRow &p : pairs) seen = seen || p.key == r.ir();
-    if (seen) continue;
-    PairRow p;
-    p.key = r.ir();
-    p.pType = r.pType();
-    p.z1 = r.z1();
-    p.z2 = r.z2();
-    p.m1 = r.m1();
-    p.m2 = r.m2();
-    p.j1 = r.j1();
-    p.j2 = r.j2();
-    p.e1 = r.e1();
-    p.e2 = r.e2();
-    pairs.push_back(p);
-  }
-  return pairs;
+  return std::move(levels.rows);
 }
 
 bool RelativisticFlag(const io::Document &doc) {
@@ -83,13 +66,13 @@ Format3Project ReadFormat3Project(const io::Document &doc, const Format3ReadOpti
     if (r.quantity)
       for (const Refusal &x : r.quantity->refusals)
         if (x.checkedBy == "build") buildChecks++;
-  p.pairs = PairsOfLevels(doc, p.levelsRead);
+  p.levels = LevelTablesOfRows(LevelRowsOf(doc, p.levelsRead));
   if (options.build && p.Ok() && p.levelsRead) {
     BuildOptions b;
     b.projectDir = options.projectDir;
     b.readDataFiles = options.readDataFiles;
     b.relativistic = RelativisticFlag(doc);
-    p.built = Schema::Build(p.validated, p.pairs, b);
+    p.built = Schema::Build(p.validated, p.levels, b);
     p.diagnostics.insert(p.diagnostics.end(), p.built.diagnostics.begin(), p.built.diagnostics.end());
     p.buildChecksSkipped = p.built.checksLeftToEngine;
   } else {

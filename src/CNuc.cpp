@@ -1,6 +1,5 @@
 #include <cmath>
 #include <iostream>
-#include <cmath>
 #include <iomanip>
 #include <initializer_list>
 #include <sstream>
@@ -395,7 +394,7 @@ int CNuc::Fill(const Config &configure, const std::map<int, double> &radii) {
     for (int j = 1; j <= this->NumJGroups(); j++) this->GetJGroup(j)->SetNucleusLabelled(true);
 
   if (this->ReadAbundances(configure) == -1) return -1;
-  if (std::shared_ptr<const ModelDataSet> read = ModelData::Read(*this, configure)) modelData_ = read; else return -1;
+  if (std::shared_ptr<const ModelDataSet> read = ModelData::Read(*this, configure, section.rows)) modelData_ = read; else return -1;
   // right after the pairs are known, before any data file is read (a project whose data fail still gets it)
   WarnMassSeparationMismatch(*this, configure);
 

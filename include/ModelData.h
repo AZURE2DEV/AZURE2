@@ -8,6 +8,7 @@
 #include "Constants.h"
 #include "ScatteringLength.h"
 #include "azure2/experiment/ModelDatum.h"
+#include "azure2/io/LevelRows.h"
 
 class CNuc;
 class Config;
@@ -61,8 +62,10 @@ struct ModelDataSet {
 namespace ModelData {
 
 /// Read the model data of the project: the <scatteringLengths> and <modelData> sections, against the levels and
-/// pairs of `compound` (after <levels> is read).  Prints the warnings; nullptr (with every error printed) on an error.
-std::shared_ptr<const ModelDataSet> Read(CNuc &compound, const Config &configure);
+/// pairs of <levels> (the tables of its `rows`, LevelTablesOfRows; the level indices are `compound`'s, which is filled
+/// from the same rows).  Prints the warnings; nullptr (with every error printed) on an error.
+std::shared_ptr<const ModelDataSet> Read(CNuc &compound, const Config &configure,
+                                         const std::vector<azure2::io::LevelRow> &rows);
 
 /// The residual rows at the compound's current fit values, appended to r in row order.
 void Residuals(CNuc *compound, const Config &configure, const ModelDataSet &set, vector_r &r);
