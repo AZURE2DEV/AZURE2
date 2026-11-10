@@ -174,8 +174,6 @@ class ESegment {
   double GetEnergyShiftSqrt() const;
   /// sqrt(E) coefficient last applied to the points.
   double GetLastEnergyShiftSqrt() const;
-  /// sqrt(E) coefficient as declared in the input file (the penalty's reference).
-  double GetNominalEnergyShiftSqrt() const;
   /// Uncertainty on the sqrt(E) coefficient (MeV^1/2).
   double GetEnergyShiftSqrtError() const;
   /// Is the sqrt(E) coefficient a free fit parameter?
@@ -187,12 +185,9 @@ class ESegment {
   int GetShiftLeaderPos() const;
   /// Does this segment take its constant shift from another segment of its group?
   bool IsShiftGroupFollower() const;
-  /// Does another segment take its constant shift from this one?
-  bool HasShiftGroupFollowers() const;
   /// Make this segment a follower of the group member at position pos: its own
   /// shift stops being a fit parameter and starts at the given value.
   void SetShiftGroupFollower(int pos, double shift);
-  void SetHasShiftGroupFollowers(bool);
   /// Shift-function-group label ("" if none): segments with one label apply the shift
   /// function of the first of them but keep their own constant shifts.
   std::string GetShiftFnGroup() const;
@@ -203,12 +198,9 @@ class ESegment {
   int GetNormLeaderPos() const;
   /// Does this segment take its normalization from another segment of its group?
   bool IsNormGroupFollower() const;
-  /// Does another segment take its normalization from this one?
-  bool HasNormGroupFollowers() const;
   /// Make this segment a follower of the group member at position pos: it takes that
   /// member's norm and nominal norm, and carries no norm penalty of its own.
   void SetNormGroupFollower(int pos, double norm, double nominal);
-  void SetHasNormGroupFollowers(bool);
   /// Data-covariance file of the segment ("" if none): the segments naming one file
   /// share one covariance matrix (EData::ResolveCovarianceGroups).
   const std::string &GetCovarianceFile() const { return covarianceFile_; }
@@ -332,8 +324,6 @@ class ESegment {
   void SetEntranceKey(int);
   /// Number of segments to sum for total capture; 0 if not total capture.
   void SetIsTotalCapture(int);
-  /// Free or fix the normalization in the fit.
-  void SetVaryNorm(bool);
   void SetMinAngle(double);
   void SetMaxAngle(double);
   /// Point \p i, 1-based.
@@ -342,8 +332,6 @@ class ESegment {
   std::vector<EPoint> &GetPoints();
 
   // Advanced segment composition methods
-  /// Add a component named by its entrance and exit keys.
-  void AddComponent(int entranceKey, int exitKey);
   /// Add a component as a complete segment.
   void AddComponentSegment(ESegment *componentSegment);
   /// How the components combine: SUM or RATIO.
@@ -529,16 +517,13 @@ class ESegment {
   bool varyEnergyShift_;
   double energyShiftSqrt_;
   double lastEnergyShiftSqrt_;  // likewise for the sqrt(E) coefficient
-  double energyShiftSqrtNominal_;
   double energyShiftSqrtError_;
   bool varyEnergyShiftSqrt_;
   std::string shiftGroup_;
   int shiftLeaderPos_;
-  bool hasShiftGroupFollowers_;
   std::string shiftFnGroup_;
   std::string normGroup_;
   int normLeaderPos_;
-  bool hasNormGroupFollowers_;
   std::string covarianceFile_;
   int covGroup_ = -1;
   bool hasSqrtShiftBlock_;
@@ -584,7 +569,6 @@ class ESegment {
   std::vector<ESegment *> componentSegments_;
   OperationType segmentOperationType_;
   double componentScaling_;
-  mutable std::shared_ptr<std::mutex> componentCalculationMutex_;
 };
 
 #endif

@@ -90,18 +90,16 @@ ESegment::ESegment(const azure2::experiment::DatasetSpec &spec) : parameterNames
   lastEnergyShift_ = std::numeric_limits<double>::quiet_NaN();  // the points start unshifted: the first fill always applies the shift
   energyShiftError_ = spec.energyShiftError;
   varyEnergyShift_ = spec.varyEnergyShift;
-  energyShiftSqrt_ = energyShiftSqrtNominal_ = spec.energyShiftSqrt;
+  energyShiftSqrt_ = spec.energyShiftSqrt;
   lastEnergyShiftSqrt_ = std::numeric_limits<double>::quiet_NaN();
   energyShiftSqrtError_ = spec.energyShiftSqrtError;
   varyEnergyShiftSqrt_ = spec.varyEnergyShiftSqrt;
   shiftGroup_ = spec.shiftGroup;
   shiftLeaderPos_ = -1;
-  hasShiftGroupFollowers_ = false;
   shiftFnGroup_ = spec.shiftFunctionGroup;
   normGroup_ = spec.normGroup;
   covarianceFile_ = spec.covarianceFile;
   normLeaderPos_ = -1;
-  hasNormGroupFollowers_ = false;
   hasSqrtShiftBlock_ = spec.hasSqrtShift;
   shiftFnDeclared_ = spec.shiftFunction;
   shiftFnNominal_ = spec.shiftFunctionValues;
@@ -126,7 +124,6 @@ ESegment::ESegment(const azure2::experiment::DatasetSpec &spec) : parameterNames
   // Initialize advanced segment composition
   segmentOperationType_ = SUM;  // Default to SUM operation
   componentScaling_ = 1.0;
-  componentCalculationMutex_ = std::make_shared<std::mutex>();
 }
 
 /*!
@@ -150,16 +147,14 @@ ESegment::ESegment(const azure2::experiment::ExtrapolationSpec &spec) : paramete
   energyShiftError_ = 0.0;
   lastEnergyShift_ = std::numeric_limits<double>::quiet_NaN();  // the points start unshifted: the first fill always applies the shift
   varyEnergyShift_ = false;
-  energyShiftSqrt_ = energyShiftSqrtNominal_ = 0.0;
+  energyShiftSqrt_ = 0.0;
   lastEnergyShiftSqrt_ = std::numeric_limits<double>::quiet_NaN();
   energyShiftSqrtError_ = 0.0;
   shiftGroup_ = "";
   shiftLeaderPos_ = -1;
-  hasShiftGroupFollowers_ = false;
   shiftFnGroup_ = "";
   normGroup_ = "";
   normLeaderPos_ = -1;
-  hasNormGroupFollowers_ = false;
   hasSqrtShiftBlock_ = false;
   hasShiftFn_ = false;
   shiftFnConfig_ = nullptr;
@@ -178,7 +173,6 @@ ESegment::ESegment(const azure2::experiment::ExtrapolationSpec &spec) : paramete
 
   segmentOperationType_ = (operationType_ == 1) ? RATIO : SUM;
   componentScaling_ = 1.0;
-  componentCalculationMutex_ = std::make_shared<std::mutex>();
 }
 
 /*!
@@ -717,14 +711,6 @@ double ESegment::GetLastEnergyShiftSqrt() const {
 }
 
 /*!
- * Returns the sqrt(E) coefficient as declared in the input file.
- */
-
-double ESegment::GetNominalEnergyShiftSqrt() const {
-  return energyShiftSqrtNominal_;
-}
-
-/*!
  * Returns the uncertainty of the sqrt(E) coefficient.
  */
 
@@ -742,8 +728,6 @@ int ESegment::GetShiftLeaderPos() const { return shiftLeaderPos_; }
 
 bool ESegment::IsShiftGroupFollower() const { return shiftLeaderPos_ >= 0; }
 
-bool ESegment::HasShiftGroupFollowers() const { return hasShiftGroupFollowers_; }
-
 std::string ESegment::GetShiftFnGroup() const { return shiftFnGroup_; }
 
 void ESegment::SetShiftGroupFollower(int pos, double shift) {
@@ -752,15 +736,11 @@ void ESegment::SetShiftGroupFollower(int pos, double shift) {
   energyShift_ = shift;
 }
 
-void ESegment::SetHasShiftGroupFollowers(bool has) { hasShiftGroupFollowers_ = has; }
-
 std::string ESegment::GetNormGroup() const { return normGroup_; }
 
 int ESegment::GetNormLeaderPos() const { return normLeaderPos_; }
 
 bool ESegment::IsNormGroupFollower() const { return normLeaderPos_ >= 0; }
-
-bool ESegment::HasNormGroupFollowers() const { return hasNormGroupFollowers_; }
 
 void ESegment::SetNormGroupFollower(int pos, double norm, double nominal) {
   normLeaderPos_ = pos;
@@ -771,8 +751,6 @@ void ESegment::SetNormGroupFollower(int pos, double norm, double nominal) {
   dataNormNominal_ = nominal;
   dataNormError_ = 0.0;
 }
-
-void ESegment::SetHasNormGroupFollowers(bool has) { hasNormGroupFollowers_ = has; }
 
 bool ESegment::IsVaryEnergyShiftSqrt() const {
   return varyEnergyShiftSqrt_;
@@ -913,9 +891,7 @@ double ShiftedEnergy(double originalEnergy, double shift) {
  */
 
 void ESegment::UpdatePointEnergiesWithShift(CNuc *theCNuc, const Config *configure) {
-  // No lock needed since each thread works on independent EData clones
-  // after fixing EData::Clone to properly remap component segment pointers
-
+  // No lock: each thread re-energises the points of its own EData clone.
   for (int i = 0; i < NumPoints(); i++) UpdatePointEnergyWithShift(i, theCNuc, configure);
 }
 
@@ -1229,14 +1205,6 @@ void ESegment::SetIsTotalCapture(int num) {
 }
 
 /*!
- * Set the flag determining if the normalization is varied.
- */
-
-void ESegment::SetVaryNorm(bool varyNorm) {
-  varyNorm_ = varyNorm;
-}
-
-/*!
  * Sets the minimum angle for the segment.
  */
 void ESegment::SetMinAngle(double minAngle) {
@@ -1268,14 +1236,6 @@ std::vector<EPoint> &ESegment::GetPoints() {
 }
 
 // Advanced segment composition methods
-
-/*!
- * Adds a component segment defined by entrance and exit keys
- */
-void ESegment::AddComponent(int entranceKey, int exitKey) {
-  // This method is now deprecated - use AddComponentSegment instead
-  // Components should be full ESegment copies, not just entrance/exit keys
-}
 
 /*!
  * Adds a component segment (full ESegment copy)

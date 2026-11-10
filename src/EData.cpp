@@ -3215,7 +3215,6 @@ int EData::ResolveShiftGroups(const Config &configure) {
     }
     ESegment &leader = segments_[it->second];
     seg.SetShiftGroupFollower(it->second, leader.GetEnergyShift());
-    leader.SetHasShiftGroupFollowers(true);
   }
   for (const auto &g : leaders) {
     const ESegment &leader = segments_[g.second];
@@ -3503,7 +3502,6 @@ void EData::ResolveNormGroups(const Config &configure) {
     }
     ESegment &leader = segments_[it->second];
     seg.SetNormGroupFollower(it->second, leader.GetNorm(), leader.GetNominalNorm());
-    leader.SetHasNormGroupFollowers(true);
   }
   for (const auto &g : leaders) {
     const ESegment &leader = segments_[g.second];
