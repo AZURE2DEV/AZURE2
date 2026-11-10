@@ -363,28 +363,43 @@ void Tree::Sweep(const Inputs &in, std::size_t i0, std::size_t n, double *rows, 
   }
 }
 
+double *Tree::Rows(Workspace &ws, std::size_t count) const {
+  if (count <= Workspace::kInline) return ws.inlineRows;
+  ws.rows.resize(count);
+  return ws.rows.data();
+}
+
+double *Tree::Bar(Workspace &ws, std::size_t count) const {
+  double *bar = ws.inlineBar;
+  if (count > Workspace::kInline) {
+    ws.bar.resize(count);
+    bar = ws.bar.data();
+  }
+  std::fill(bar, bar + count, 0.0);
+  return bar;
+}
+
 void Tree::Evaluate(const Inputs &in, std::size_t n, double *out, Workspace &ws) const {
   if (nodes_.empty()) throw std::logic_error("experiment::Tree: empty tree");
-  ws.rows.resize(nodes_.size() * n);
-  Sweep(in, 0, n, ws.rows.data(), ws);
-  const double *root = ws.rows.data() + static_cast<std::size_t>(Root()) * n;
+  double *rows = Rows(ws, nodes_.size() * n);
+  Sweep(in, 0, n, rows, ws);
+  const double *root = rows + static_cast<std::size_t>(Root()) * n;
   for (std::size_t p = 0; p < n; p++) out[p] = root[p];
 }
 
-double Tree::Value(const Inputs &in, std::size_t i, Workspace &ws) const {
+double Tree::Value(const Inputs &in, std::size_t i, Workspace &ws, double *perGroup) const {
   if (nodes_.empty()) throw std::logic_error("experiment::Tree: empty tree");
-  ws.rows.resize(nodes_.size());
-  Sweep(in, i, 1, ws.rows.data(), ws);
-  return ws.rows[Root()];
+  double *rows = Rows(ws, nodes_.size());
+  Sweep(in, i, 1, rows, ws);
+  if (perGroup) AddNatural(in, i, rows, perGroup);
+  return rows[Root()];
 }
 
 bool Tree::Backward(const Inputs &in, std::size_t n, const double *g, Cotangents &cot, Workspace &ws) const {
   if (nodes_.empty()) throw std::logic_error("experiment::Tree: empty tree");
-  ws.rows.resize(nodes_.size() * n);
-  Sweep(in, 0, n, ws.rows.data(), ws);
-  ws.bar.assign(nodes_.size() * n, 0.0);
-  const double *rows = ws.rows.data();
-  double *bar = ws.bar.data();
+  double *rows = Rows(ws, nodes_.size() * n);
+  Sweep(in, 0, n, rows, ws);
+  double *bar = Bar(ws, nodes_.size() * n);
   for (std::size_t p = 0; p < n; p++) bar[static_cast<std::size_t>(Root()) * n + p] = g[p];
   bool ok = true;
   for (std::size_t k = nodes_.size(); k-- > 0;) {
@@ -450,13 +465,10 @@ bool Tree::Backward(const Inputs &in, std::size_t n, const double *g, Cotangents
   return ok;
 }
 
-void Tree::Natural(const Inputs &in, std::size_t i, double *perGroup, Workspace &ws) const {
-  if (nodes_.empty()) throw std::logic_error("experiment::Tree: empty tree");
-  ws.rows.resize(nodes_.size());
-  Sweep(in, i, 1, ws.rows.data(), ws);
+void Tree::AddNatural(const Inputs &in, std::size_t i, const double *rows, double *perGroup) const {
   for (std::size_t k = 0; k < nodes_.size(); k++) {
     const Node &nd = nodes_[k];
-    if (nd.kind == NodeKind::Weighted && nd.group >= 0) perGroup[nd.group] += ws.rows[k];
+    if (nd.kind == NodeKind::Weighted && nd.group >= 0) perGroup[nd.group] += rows[k];
     if (nd.kind == NodeKind::Transform) {
       for (const TransformTerm &term : transforms_[nd.input].terms) {
         if (term.total || term.group < 0) continue;
