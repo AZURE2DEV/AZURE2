@@ -211,6 +211,9 @@ class AZUREAPI {
    * Returns a pointer to the EData object.
    */
   EData *data() const { return data_; };
+  /// The buffer every evaluation of this session writes and every array the session returns reads: the session owns
+  /// it (docs/upgrade/data_model.md S3).
+  azure2::Results &results() const { return results_; }
   /*!
    * Returns a pointer to the CNuc object.
    */
@@ -571,6 +574,8 @@ class AZUREAPI {
   Config &configure_;
   EData *data_;
   CNuc *compound_;
+  // The results of this session's evaluations (results()); mutable as data_ is: the const evaluations write both.
+  mutable azure2::Results results_;
 
   // Parameters
   std::vector<bool> fixed_;

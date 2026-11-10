@@ -53,6 +53,7 @@ static std::vector<std::string> g_param_names;
 double AZURECalcMCMC::CalculateLogLikelihood(const vector_r &p) const {
   CNuc *localCompound = NULL;
   EData *localData = NULL;
+  WorkingData *working = nullptr;
 
   try {
     // Initialize pools on first use
@@ -62,7 +63,8 @@ double AZURECalcMCMC::CalculateLogLikelihood(const vector_r &p) const {
 
     // Get objects from pool
     localCompound = GetPooledCNuc();
-    localData = GetPooledEData();
+    working = GetPooledData();
+    localData = working->data.get();
 
     // Objects are already cloned, no need for deep copying
 
@@ -70,12 +72,12 @@ double AZURECalcMCMC::CalculateLogLikelihood(const vector_r &p) const {
     AZUREParams params;
     localCompound->FillCompoundFromParams(p);
     localData->FillNormsFromParams(p);
-    localData->FillEnergyShiftsFromParams(p, localData, localCompound, &configure());
+    localData->FillEnergyShiftsFromParams(p, working->results, localData, localCompound, &configure());
     if (configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure(), false);
     // Park formalism: a level with J <= 0 has no R-matrix meaning -- outside the prior.
     if ((configure().paramMask & Config::USE_PARK_FORMALISM) && localCompound->ParkNormPenalty() > 0.0) {
       ReturnPooledCNuc(localCompound);
-      ReturnPooledEData(localData);
+      ReturnPooledData(working);
       return -std::numeric_limits<double>::infinity();
     }
 
@@ -83,15 +85,16 @@ double AZURECalcMCMC::CalculateLogLikelihood(const vector_r &p) const {
   } catch (GSLException &e) {
     // Clean up and return bad likelihood for GSL errors
     if (localCompound) ReturnPooledCNuc(localCompound);
-    if (localData) ReturnPooledEData(localData);
+    if (working) ReturnPooledData(working);
     return -std::numeric_limits<double>::infinity();
   } catch (...) {
     // Clean up and return bad likelihood for any other errors
     if (localCompound) ReturnPooledCNuc(localCompound);
-    if (localData) ReturnPooledEData(localData);
+    if (working) ReturnPooledData(working);
     return -std::numeric_limits<double>::infinity();
   }
 
+  azure2::Results &results = working->results;
   // The model value of every point, then the data part of the objective (Objective::DataChi2): the data chi^2 with
   // THM norms profiled as the fit does (docs/upgrade/objective.md D1; before, the MCMC summed r^2 with whatever THM
   // norm the clone held) and the data covariance.  The segment priors are log-priors (CalculateLogPrior).
@@ -99,12 +102,13 @@ double AZURECalcMCMC::CalculateLogLikelihood(const vector_r &p) const {
     ESegment *segment = localData->GetSegment(i);
     if (!segment) continue;
     for (int pointIdx = 0; pointIdx < segment->NumPoints(); pointIdx++) {
-      double theoreticalValue = segment->CalculateTheoreticalCrossSection(pointIdx, localCompound, configure(), localData);
+      double theoreticalValue =
+          segment->CalculateTheoreticalCrossSection(pointIdx, localCompound, configure(), localData, results);
       EPoint *point = segment->GetPoint(pointIdx + 1);
-      if (point) point->SetFitCrossSection(theoreticalValue);
+      if (point) point->SetFitCrossSection(results, theoreticalValue);
     }
   }
-  ObjectiveContext context{localCompound, localData, p, configure()};
+  ObjectiveContext context{localCompound, localData, results, p, configure()};
   context.storeTotals = true;
   double chiSquared = Objective::Engine().DataChi2(context);
 
@@ -115,7 +119,7 @@ double AZURECalcMCMC::CalculateLogLikelihood(const vector_r &p) const {
 
   // Return objects to pool instead of deleting
   ReturnPooledCNuc(localCompound);
-  ReturnPooledEData(localData);
+  ReturnPooledData(working);
 
   // Convert chi-squared to log-likelihood: ln(L) = -0.5 * chi^2
   return -0.5 * chiSquared;
@@ -124,6 +128,7 @@ double AZURECalcMCMC::CalculateLogLikelihood(const vector_r &p) const {
 double AZURECalcMCMC::CalculateLogLikelihoodPhysical(const vector_r &params_) const {
   CNuc *localCompound = NULL;
   EData *localData = NULL;
+  WorkingData *working = nullptr;
   AZUREParams params;
 
   try {
@@ -134,7 +139,8 @@ double AZURECalcMCMC::CalculateLogLikelihoodPhysical(const vector_r &params_) co
 
     // Get objects from pool
     localCompound = GetPooledCNuc();
-    localData = GetPooledEData();
+    working = GetPooledData();
+    localData = working->data.get();
 
     // Objects are already cloned, no need for deep copying
 
@@ -143,18 +149,18 @@ double AZURECalcMCMC::CalculateLogLikelihoodPhysical(const vector_r &params_) co
 
     if (!isValid) {
       ReturnPooledCNuc(localCompound);
-      ReturnPooledEData(localData);
+      ReturnPooledData(working);
       return -std::numeric_limits<double>::infinity();
     }
   } catch (GSLException &e) {
     // Clean up and return bad likelihood for GSL errors
     if (localCompound) ReturnPooledCNuc(localCompound);
-    if (localData) ReturnPooledEData(localData);
+    if (working) ReturnPooledData(working);
     return -std::numeric_limits<double>::infinity();
   } catch (...) {
     // Clean up and return bad likelihood for any other errors
     if (localCompound) ReturnPooledCNuc(localCompound);
-    if (localData) ReturnPooledEData(localData);
+    if (working) ReturnPooledData(working);
     return -std::numeric_limits<double>::infinity();
   }
 
@@ -168,30 +174,32 @@ double AZURECalcMCMC::CalculateLogLikelihoodPhysical(const vector_r &params_) co
   // posterior = prior, R-matrix posterior at frozen norms; 2026-10-26).
   localData->FillNormsFromParams(params_);
   // After the compound: the sub-point grids are laid out from its fit values.
-  localData->FillEnergyShiftsFromParams(params_, localData, localCompound, &configure());
+  localData->FillEnergyShiftsFromParams(params_, working->results, localData, localCompound, &configure());
 
   // Fill Compound Nucleus From Minuit Parameters
   if (configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure(), false);
   // Park formalism: observed widths beyond the J > 0 bound are outside the prior.
   if ((configure().paramMask & Config::USE_PARK_FORMALISM) && localCompound->ParkNormPenalty() > 0.0) {
     ReturnPooledCNuc(localCompound);
-    ReturnPooledEData(localData);
+    ReturnPooledData(working);
     return -std::numeric_limits<double>::infinity();
   }
 
   // Sub-segments are now integrated into ESegment, no separate initialization needed
 
+  azure2::Results &results = working->results;
   // The model value of every point, then the data part of the objective, as CalculateLogLikelihood (D1).
   for (int i = 1; i <= localData->NumSegments(); i++) {
     ESegment *segment = localData->GetSegment(i);
     if (!segment) continue;
     for (int pointIdx = 0; pointIdx < segment->NumPoints(); pointIdx++) {
-      double theoreticalValue = segment->CalculateTheoreticalCrossSection(pointIdx, localCompound, configure(), localData);
+      double theoreticalValue =
+          segment->CalculateTheoreticalCrossSection(pointIdx, localCompound, configure(), localData, results);
       EPoint *point = segment->GetPoint(pointIdx + 1);
-      if (point) point->SetFitCrossSection(theoreticalValue);
+      if (point) point->SetFitCrossSection(results, theoreticalValue);
     }
   }
-  ObjectiveContext context{localCompound, localData, params_, configure()};
+  ObjectiveContext context{localCompound, localData, results, params_, configure()};
   context.storeTotals = true;
   double chiSquared = Objective::Engine().DataChi2(context);
 
@@ -202,7 +210,7 @@ double AZURECalcMCMC::CalculateLogLikelihoodPhysical(const vector_r &params_) co
 
   // Return objects to pool instead of deleting
   ReturnPooledCNuc(localCompound);
-  ReturnPooledEData(localData);
+  ReturnPooledData(working);
 
   // Convert chi-squared to log-likelihood: ln(L) = -0.5 * chi^2
   return -0.5 * chiSquared;
@@ -843,6 +851,7 @@ void mcmc_iteration_callback(int current_step, int total_steps) {
         if (!fullParams.empty()) {
           CNuc *localCompound = g_mcmc_for_callbacks->compound()->Clone();
           EData *localData = g_mcmc_for_callbacks->data()->Clone();
+          azure2::Results localResults;  // this snapshot's buffer
 
           bool isValid = true;
           vector_r rwaFullParams;  // full RWA parameter set for param.mcmc
@@ -851,7 +860,8 @@ void mcmc_iteration_callback(int current_step, int total_steps) {
             // For RWA parameters, use the same approach as CalculateLogLikelihood
             localCompound->FillCompoundFromParams(fullParams);
             localData->FillNormsFromParams(fullParams);
-            localData->FillEnergyShiftsFromParams(fullParams, localData, localCompound, &g_mcmc_for_callbacks->configure());
+            localData->FillEnergyShiftsFromParams(fullParams, localResults, localData, localCompound,
+                                                  &g_mcmc_for_callbacks->configure());
             if (g_mcmc_for_callbacks->configure().paramMask & Config::USE_BRUNE_FORMALISM) {
               localCompound->CalcShiftFunctions(g_mcmc_for_callbacks->configure());
             }
@@ -868,7 +878,8 @@ void mcmc_iteration_callback(int current_step, int total_steps) {
               localCompound->FillCompoundFromParams(params.GetMinuitParams().Params());
               localData->FillNormsFromParams(fullParams);
               // After the compound: the sub-point grids are laid out from its fit values.
-              localData->FillEnergyShiftsFromParams(fullParams, localData, localCompound, &g_mcmc_for_callbacks->configure());
+              localData->FillEnergyShiftsFromParams(fullParams, localResults, localData, localCompound,
+                                                  &g_mcmc_for_callbacks->configure());
               rwaFullParams = params.GetMinuitParams().Params();  // RWA params after TransformIn
               // FillMnParams read the clone's starting norms and shifts; the
               // sample's are in the tail of the physical vector, the same in
@@ -887,7 +898,7 @@ void mcmc_iteration_callback(int current_step, int total_steps) {
             // Calculate cross sections for all data points
             for (EDataIterator data = localData->begin(); data != localData->end(); data++) {
               if (!data.point()->IsMapped()) {
-                data.point()->Calculate(localCompound, g_mcmc_for_callbacks->configure());
+                data.point()->Calculate(localCompound, g_mcmc_for_callbacks->configure(), localResults);
               }
             }
             // Segments whose value the segment assembles (components, sample weights, transmission / yield): the
@@ -897,10 +908,11 @@ void mcmc_iteration_callback(int current_step, int total_steps) {
               if (!seg || !seg->NeedsAssembly()) continue;
               for (int pid = 0; pid < seg->NumPoints(); pid++)
                 seg->GetPoint(pid + 1)->SetFitCrossSection(
-                    seg->CalculateTheoreticalCrossSection(pid, localCompound, g_mcmc_for_callbacks->configure(), localData));
+                    localResults, seg->CalculateTheoreticalCrossSection(pid, localCompound, g_mcmc_for_callbacks->configure(),
+                                                                        localData, localResults));
             }
 
-            localData->WriteOutputFiles(g_mcmc_for_callbacks->configure(), true);
+            localData->WriteOutputFiles(g_mcmc_for_callbacks->configure(), localResults, true);
 
             if (!g_using_rwa_parameters) {
               localCompound->TransformOut(g_mcmc_for_callbacks->configure());
@@ -1412,7 +1424,7 @@ void AZURECalcMCMC::InitializePools() const {
 
   // Pre-allocate EData objects by cloning once
   for (int i = 0; i < pool_size; ++i) {
-    edata_pool_.push(std::unique_ptr<EData>(data_->Clone()));
+    edata_pool_.push(std::unique_ptr<WorkingData>(new WorkingData{std::unique_ptr<EData>(data_->Clone()), {}}));
   }
 
   pools_initialized_ = true;
@@ -1435,9 +1447,9 @@ CNuc *AZURECalcMCMC::GetPooledCNuc() const {
 }
 
 /*!
- * Get an EData object from the pool, creating new if pool is empty
+ * Get a working copy of the data set and its buffer from the pool, creating new if pool is empty
  */
-EData *AZURECalcMCMC::GetPooledEData() const {
+WorkingData *AZURECalcMCMC::GetPooledData() const {
   std::lock_guard<std::mutex> lock(pool_mutex_);
 
   if (!edata_pool_.empty()) {
@@ -1447,7 +1459,7 @@ EData *AZURECalcMCMC::GetPooledEData() const {
   }
 
   // Fallback: create new if pool is empty (shouldn't happen often)
-  return data_->Clone();
+  return new WorkingData{std::unique_ptr<EData>(data_->Clone()), {}};
 }
 
 /*!
@@ -1461,11 +1473,11 @@ void AZURECalcMCMC::ReturnPooledCNuc(CNuc *obj) const {
 }
 
 /*!
- * Return an EData object to the pool for reuse
+ * Return a working copy and its buffer to the pool for reuse
  */
-void AZURECalcMCMC::ReturnPooledEData(EData *obj) const {
+void AZURECalcMCMC::ReturnPooledData(WorkingData *obj) const {
   if (!obj) return;
 
   std::lock_guard<std::mutex> lock(pool_mutex_);
-  edata_pool_.push(std::unique_ptr<EData>(obj));
+  edata_pool_.push(std::unique_ptr<WorkingData>(obj));
 }

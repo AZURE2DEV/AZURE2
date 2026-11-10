@@ -198,7 +198,8 @@ class EData {
   void CalcCoulombAmplitude(CNuc *);
   void PrintCoulombAmplitude(const Config &, CNuc *);
   /// Write AZUREOut_*, chiSquared.out and the rest of the run's output files.
-  void WriteOutputFiles(const Config &, bool = false, const BandData * = nullptr);
+  /// The values written are those of `results`, the buffer of the last evaluation of this data set.
+  void WriteOutputFiles(const Config &, const azure2::Results &results, bool = false, const BandData * = nullptr);
   /// Park formalism: the J > 0 penalty of the last objective evaluation, for
   /// chiSquared.out (set by AZURECalc::operator(); 0 otherwise).
   void SetParkPenalty(double penalty) { parkPenalty_ = penalty; }
@@ -280,38 +281,40 @@ class EData {
   /// return value to their total gives the covariance chi2).  Sets each covariance
   /// segment's chi2 to the sum over its points of r_i (M^-1 r)_i (also in \p segChis,
   /// indexed by segment number, when given) and the points' seeds (M^-1 r)_i.
-  double CovarianceChi2Correction(std::vector<double> *segChis = nullptr);
+  double CovarianceChi2Correction(const azure2::Results &results, std::vector<double> *segChis = nullptr);
   /// Whiten the data rows of a residual vector (and of a row-major Jacobian with \p nCols
   /// columns, when given): r <- W r within every covariance group (W^T W = M^-1).  Rows are the
   /// points in segment order, as ComputeResidualJacobian lays them out.
   void WhitenResidualRows(std::vector<double> &residuals, std::vector<double> *jacobian, int nCols);
   /// covariance.out: each group's chi2 and the diagonal-only sum, at the current fit values.
-  void WriteCovarianceSummary(const Config &);
+  void WriteCovarianceSummary(const Config &, const azure2::Results &results);
   /// Forget the frozen model of the relvector terms; the next evaluation freezes it again.
   void RefreezeCovariance();
   /// True when any data-covariance group has relvector terms (a model frozen at the first evaluation).
   bool HasRelativeCovariance() const;
   /// Calculate the covariance segments' points at the current parameters and set their
   /// seeds, for a gradient pass that needs (M^-1 r) before it reaches the points.
-  void PrepareCovarianceSeeds(CNuc *, const Config &);
+  void PrepareCovarianceSeeds(CNuc *, const Config &, azure2::Results &results);
   /// The segment (1-based) whose norm segment s uses: its norm-group leader, or s itself.
   int NormOwner(int s) const;
   void FillMnParams(ROOT::Minuit2::MnUserParameters &);
   /// Write the normalizations back from a Minuit parameter vector.
   void FillNormsFromParams(const vector_r &);
   /// Write the energy shifts back from a Minuit parameter vector.  The last step of the hand-over of every
-  /// evaluation, so it ends with BeginEvaluation.
-  void FillEnergyShiftsFromParams(const vector_r &, EData *data = nullptr, CNuc *theCNuc = nullptr, const Config *configure = nullptr);
-  /// The result buffer of this data set (docs/upgrade/data_model.md S3 (a)): one record per point and sub-point of
-  /// its segments and component segments (Results.h), owned here, one per working copy.
-  azure2::Results &GetResults() { return results_; }
-  /// Lays the result records out again (LayoutResults) if a point or sub-point is not bound to the record the
-  /// layout would give it: a new point, a re-placed sub-point grid, a copied segment.  O(points), no allocation
-  /// when nothing changed.
-  void EnsureResultsLayout();
-  /// The start of an evaluation, after the hand-over: EnsureResultsLayout, then, under AZURE_POISON_RESULTS=1,
-  /// every result slot quiet NaN, so a value read before this evaluation writes it shows as NaN.
-  void BeginEvaluation();
+  /// evaluation, so it ends with BeginEvaluation(results): `results` is the buffer of the evaluation that follows,
+  /// owned by its caller.
+  void FillEnergyShiftsFromParams(const vector_r &, azure2::Results &results, EData *data = nullptr,
+                                  CNuc *theCNuc = nullptr, const Config *configure = nullptr);
+  /// Slots of a result buffer for this data set: one record per point and sub-point of its segments and component
+  /// segments (Results.h), as laid out by LayoutResults.  The data set holds the layout (each point its offset),
+  /// never the values.
+  std::size_t ResultsSize() const { return resultsSize_; }
+  /// The start of an evaluation into the caller's buffer `results`, after the hand-over: the records are laid out
+  /// again if a point or sub-point is not where the layout puts it (a new point, a re-placed sub-point grid, a copied
+  /// segment), each moving its values in `results` to its new record; `results` is sized for the layout (a new buffer
+  /// starts at 0); then, under AZURE_POISON_RESULTS=1, every slot is quiet NaN, so a value read before this
+  /// evaluation writes it shows as NaN.  O(points), no allocation when nothing changed.
+  void BeginEvaluation(azure2::Results &results);
   /// Lay the adaptive sub-point grids out again for the levels theCNuc holds now
   /// (its fit values, as observed parameters) and the segments' energy shifts, and
   /// rebuild the sub-points of every point whose grid changed.  Sub-points of a
@@ -393,14 +396,14 @@ class EData {
    * stores the profile, sets every segment's norm to the shared n* and its
    * chi^2 to that of its own points, and returns the group's chi^2.
    */
-  double ProfileThmGroup(int g);
+  double ProfileThmGroup(int g, const azure2::Results &results);
   /// Standardized residuals (f - d)/e of segment i under its group's last profile, one per point.
-  void ThmGroupResiduals(int g, int i, std::vector<double> &out);
+  void ThmGroupResiduals(int g, int i, const azure2::Results &results, std::vector<double> &out);
   /// The background (model units) that the output adds to the fit cross
   /// section of a point of segment i at c.m. energy E; 0 outside a group with one.
   double ThmBackgroundAt(int i, double energy);
   /// Profile of every experiment, trivial ones included, for the output and pyazr.
-  std::vector<ThmExperimentReport> ThmExperimentReports();
+  std::vector<ThmExperimentReport> ThmExperimentReports(const azure2::Results &results);
   /*!
    * The Coulomb line shape of THM experiment `name` (lineshape=on) at the
    * c.m. energies `energies` (MeV, x + A) and the current fit parameters of
@@ -446,7 +449,7 @@ class EData {
    * ESegment::CalculateTheoreticalCrossSection(..., precalculated = true).
    */
   static int CalculatePointsInParallel(const std::vector<ESegment *> &segments, CNuc *theCNuc,
-                                       const Config &configure);
+                                       const Config &configure, azure2::Results &results);
 
  private:
   std::vector<TargetEffect> targetEffects_;
@@ -490,7 +493,7 @@ class EData {
   /// Builds thmGroups_ from the <thm> experiments once the segments are read; -1 after an ERROR.
   int BuildThmGroups(const Config &, CNuc *, int numLines);
   /// Writes output/thm_experiments.out.
-  void WriteThmExperiments(const Config &);
+  void WriteThmExperiments(const Config &, const azure2::Results &results);
   double parkPenalty_ = 0.0;
   double abundancePenalty_ = 0.0;
   double scatteringLengthChi2_ = 0.0;
@@ -499,12 +502,13 @@ class EData {
   double priorCovChi2_ = 0.0;
   std::vector<std::string> nucleusLabels_;   // one per compound nucleus, for the natural decomposition file
   int numNuclei_ = 0;  // compound nuclei: the natural terms of a sample segment's points (Initialize)
-  /// The results of an evaluation (GetResults); never shared with a copy (Clone lays out its own).
-  azure2::Results results_;
-  /// One record per point and sub-point, in the order of segments_ then componentSegments_, each point before
-  /// its sub-points.  A point's record keeps the values it held (in this buffer or in `source`, the data set
-  /// being cloned); a point new to the layout starts at 0, as a newly constructed point did.
-  void LayoutResults(const azure2::Results *source);
+  /// Slots of a buffer laid out for this data set (ResultsSize).
+  std::size_t resultsSize_ = 0;
+  /// One record per point and sub-point, in the order of segments_ then componentSegments_, each point before its
+  /// sub-points: each gets its offset (EPoint::SetResultRecord).  With `results`, the buffer of the layout the points
+  /// had, a point's record keeps the values it held there; a point new to the layout starts at 0, as a newly
+  /// constructed point did.
+  void LayoutResults(azure2::Results *results);
   /// Calls f(point, angular slots, natural slots) for every point and sub-point in layout order.
   template <class F>
   void ForEachResultUnit(F f);

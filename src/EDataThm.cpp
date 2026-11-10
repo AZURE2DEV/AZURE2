@@ -664,7 +664,7 @@ bool EData::IsLastOfThmGroup(int g, int i) {
 
 namespace {
 // The points of the profiled segments of a group, concatenated in order.
-void GatherThmGroup(EData *data, const std::vector<int> &segments, std::vector<double> &m,
+void GatherThmGroup(EData *data, const azure2::Results &results, const std::vector<int> &segments, std::vector<double> &m,
                     std::vector<double> &d, std::vector<double> &e, std::vector<double> &energy) {
   m.clear();
   d.clear();
@@ -676,7 +676,7 @@ void GatherThmGroup(EData *data, const std::vector<int> &segments, std::vector<d
     for (int p = 1; p <= seg->NumPoints(); p++) {
       EPoint *pt = seg->GetPoint(p);
       if (!pt) continue;
-      m.push_back(pt->GetFitCrossSection());
+      m.push_back(pt->GetFitCrossSection(results));
       d.push_back(pt->GetCMCrossSection());
       e.push_back(pt->GetCMCrossSectionError());
       energy.push_back(pt->GetCMEnergy());
@@ -685,10 +685,10 @@ void GatherThmGroup(EData *data, const std::vector<int> &segments, std::vector<d
 }
 }  // namespace
 
-double EData::ProfileThmGroup(int g) {
+double EData::ProfileThmGroup(int g, const azure2::Results &results) {
   ThmGroup &group = thmGroups_[g];
   std::vector<double> m, d, e, energy;
-  GatherThmGroup(this, group.segments, m, d, e, energy);
+  GatherThmGroup(this, results, group.segments, m, d, e, energy);
   group.profile = SolveThmProfile(m, d, e, energy, group.terms);
   const ThmProfile &p = group.profile;
   double total = 0.0;
@@ -710,14 +710,14 @@ double EData::ProfileThmGroup(int g) {
   return total;
 }
 
-void EData::ThmGroupResiduals(int g, int i, std::vector<double> &out) {
+void EData::ThmGroupResiduals(int g, int i, const azure2::Results &results, std::vector<double> &out) {
   out.clear();
   const ThmProfile &p = thmGroups_[g].profile;
   ESegment *seg = GetSegment(i);
   for (int q = 1; q <= seg->NumPoints(); q++) {
     EPoint *pt = seg->GetPoint(q);
     if (!pt) continue;
-    out.push_back(p.Residual(pt->GetFitCrossSection(), pt->GetCMCrossSection(), pt->GetCMCrossSectionError(),
+    out.push_back(p.Residual(pt->GetFitCrossSection(results), pt->GetCMCrossSection(), pt->GetCMCrossSectionError(),
                              pt->GetCMEnergy()));
   }
 }
@@ -728,7 +728,7 @@ double EData::ThmBackgroundAt(int i, double energy) {
   return thmGroups_[g].profile.Background(energy);
 }
 
-std::vector<ThmExperimentReport> EData::ThmExperimentReports() {
+std::vector<ThmExperimentReport> EData::ThmExperimentReports(const azure2::Results &results) {
   std::vector<ThmExperimentReport> out;
   for (size_t g = 0; g < thmGroups_.size(); g++) {
     ThmGroup &group = thmGroups_[g];
@@ -740,7 +740,7 @@ std::vector<ThmExperimentReport> EData::ThmExperimentReports() {
       // Profiled per segment (ESegment::ProfileNormChiSquared) or not at all:
       // the same closed form, recomputed here for its uncertainty.
       std::vector<double> m, d, e, energy;
-      GatherThmGroup(this, group.segments, m, d, e, energy);
+      GatherThmGroup(this, results, group.segments, m, d, e, energy);
       p = SolveThmProfile(m, d, e, energy, group.terms);
     } else {
       p = group.profile;
@@ -767,7 +767,7 @@ std::vector<ThmExperimentReport> EData::ThmExperimentReports() {
   return out;
 }
 
-void EData::WriteThmExperiments(const Config &configure) {
+void EData::WriteThmExperiments(const Config &configure, const azure2::Results &results) {
   std::string file = configure.outputdir + "thm_experiments.out";
   std::ofstream out(file.c_str());
   if (!out) {
@@ -782,7 +782,7 @@ void EData::WriteThmExperiments(const Config &configure) {
          "# scaled by chi2/nu).\n";
   out.precision(10);
   out << std::scientific;
-  for (const ThmExperimentReport &r : ThmExperimentReports()) {
+  for (const ThmExperimentReport &r : ThmExperimentReports(results)) {
     out << "\nexperiment: " << r.name << "\nsegments:";
     for (size_t k = 0; k < r.segments.size(); k++) out << (k ? "," : " ") << r.segments[k];
     out << "\nbackground: " << r.background << "\npoints: " << r.points << "\nchi2: " << r.chi2

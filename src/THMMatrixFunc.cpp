@@ -203,7 +203,7 @@ THMMatrixFunc::THMMatrixFunc(CNuc *compound, const Config &configure) :
  * level matrix A (shared interior). Uses the entrance transfer form factors
  * M_l and exit penetrabilities stored on the point by CalcEDependentValues.
  */
-void THMMatrixFunc::CalculateTHMCrossSection(EPoint *point) {
+void THMMatrixFunc::CalculateTHMCrossSection(EPoint *point, azure2::Results &results) {
   int aa = compound()->GetPairNumFromKey(point->GetEntranceKey());
   int exitPairNum = compound()->GetPairNumFromKey(point->GetExitKey());
   PPair *entrancePair = compound()->GetPair(aa);
@@ -218,7 +218,7 @@ void THMMatrixFunc::CalculateTHMCrossSection(EPoint *point) {
   double kf = (exitEnergy > 0.0) ? std::sqrt(2.0 * muf * exitEnergy) / hbarc
                                  : 0.0;  // fm^-1
   if (kf == 0.0) {
-    point->SetFitCrossSection(0.0);
+    point->SetFitCrossSection(results, 0.0);
     return;
   }
   const double fluxFactor = ThmFluxFactor(configure(), entrancePair, point, kf, muf);
@@ -385,7 +385,7 @@ void THMMatrixFunc::CalculateTHMCrossSection(EPoint *point) {
   }
 
   ThmApplyWeights(configure(), point, sigma);
-  point->SetFitCrossSection(sigma);
+  point->SetFitCrossSection(results, sigma);
 }
 
 // ===========================================================================

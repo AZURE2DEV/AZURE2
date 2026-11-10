@@ -369,6 +369,19 @@ for top in ("experiment/src", "io/src"):
                 problems.append(f"{top}/{name}: diagnostic code {code} is not declared in Diagnostics.h or Record.h")
 
 
+# 25. The results of an evaluation belong to its caller (docs/upgrade/data_model.md S3, include/Results.h): a point and a
+#     data set hold where a record lies, never the values, so a copy of either cannot write into another owner's
+#     buffer.  EPoint.h and EData.h declare no member of a type that names Results -- a value, pointer, reference,
+#     container or smart pointer.  Function declarations may name it (the buffer is passed in).
+for rel in ("include/EPoint.h", "include/EData.h"):
+    text = re.sub(r"//[^\n]*|/\*.*?\*/|^\s*#[^\n]*", "", read(rel), flags=re.S | re.M)
+    for stmt in re.split(r"[;{}]", text):
+        if "(" in stmt or not re.search(r"\bResults\b", stmt):
+            continue  # a function (its parameters may name the buffer), or nothing about results
+        problems.append(f"{rel}: declares a results member ({' '.join(stmt.split())}); the buffer belongs to the "
+                        "caller of the evaluation and is passed in (include/Results.h)")
+
+
 if problems:
     for p in problems:
         print("FAIL", p)

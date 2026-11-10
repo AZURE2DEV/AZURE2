@@ -225,8 +225,8 @@ static bool NaturalAllowed(CNuc *theCNuc, ESegment &segment, int key, bool isTes
  * nucleus (ESegment::CalculateTheoreticalCrossSection).  Same frame as the
  * AZUREOut file (kinflag.dat), one line per point.
  */
-static void WriteNaturalDecomposition(const Config &configure, bool isExtrap, int kinflag,
-                                      const std::vector<std::string> &nucleusLabels, ESegment *segment) {
+static void WriteNaturalDecomposition(const Config &configure, const azure2::Results &results, bool isExtrap,
+                                      int kinflag, const std::vector<std::string> &nucleusLabels, ESegment *segment) {
   std::string name = configure.outputdir + "AZUREOut_sample_seg=" + std::to_string(segment->GetSegmentKey()) +
                      (isExtrap ? ".extrap" : ".out");
   std::ofstream out(name.c_str());
@@ -245,8 +245,8 @@ static void WriteNaturalDecomposition(const Config &configure, bool isExtrap, in
     double kin = (kinflag != 0) ? point->GetCrossSectionKinFactor() : 1.0;
     if (kin == 0.0) kin = 1.0;
     out << std::setw(18) << std::scientific << (kinflag != 0 ? point->GetLabEnergy() : point->GetCMEnergy())
-        << std::setw(18) << std::scientific << point->GetFitCrossSection() / kin;
-    const std::vector<double> &terms = point->GetNaturalTerms();
+        << std::setw(18) << std::scientific << point->GetFitCrossSection(results) / kin;
+    const std::vector<double> &terms = point->GetNaturalTerms(results);
     for (size_t k = 0; k < nucleusLabels.size(); k++)
       out << std::setw(18) << std::scientific << (k < terms.size() ? terms[k] / kin : 0.0);
     out << std::endl;
@@ -2137,8 +2137,9 @@ int EData::Initialize(CNuc *compound, const Config &configure) {
   // Every point of this stage has its rows now; nothing reads the channel table until the energies change, and the
   // table (about 64 bytes a row) is not kept beside the rows it filled (docs/upgrade/channel_table.md section 2).
   channelTable_.reset();
-  // The result records of every point and sub-point (Results.h); laid out again when the points change.
-  this->EnsureResultsLayout();
+  // Where the result record of every point and sub-point lies (Results.h); laid out again when the points change
+  // (BeginEvaluation).
+  this->LayoutResults(nullptr);
 
   return 0;
 }
@@ -2511,7 +2512,7 @@ static void WriteBandLine(std::ostream &o, double energy, double excitation,
     << std::endl;
 }
 
-void EData::WriteOutputFiles(const Config &configure, bool isFit, const BandData *band) {
+void EData::WriteOutputFiles(const Config &configure, const azure2::Results &results, bool isFit, const BandData *band) {
   AZUREOutput output(configure.outputdir);
   std::ofstream chiOut;
   if (!isFit && (configure.paramMask & Config::CALCULATE_WITH_DATA)) {
@@ -2540,7 +2541,7 @@ void EData::WriteOutputFiles(const Config &configure, bool isFit, const BandData
   // and the background written are those of these models.
   if (configure.paramMask & Config::CALCULATE_WITH_DATA)
     for (int g = 0; g < NumThmGroups(); g++)
-      if (!thmGroups_[g].trivial) ProfileThmGroup(g);
+      if (!thmGroups_[g].trivial) ProfileThmGroup(g, results);
 
   // When a covariance is available, write a sibling ".band" file per output file,
   // with the same block/point structure so the GUI can pair them.
@@ -2623,17 +2624,18 @@ void EData::WriteOutputFiles(const Config &configure, bool isFit, const BandData
         out.precision(10);
         if (segment->IsAngularDist()) {
           out << std::setw(18) << std::scientific << point->GetCMEnergy();
-          for (int i = 0; i < point->GetNumAngularDists(); i++) out << std::setw(18) << point->GetAngularDist(i);
+          for (int i = 0; i < point->GetNumAngularDists(results); i++)
+            out << std::setw(18) << point->GetAngularDist(results, i);
           out << std::endl;
           if (bandOut) WriteBandLine(*bandOut, point->GetCMEnergy(), point->GetExcitationEnergy(),
                                      point->GetCMAngle(), 0., 0., 0.);
         } else {
-          double fitCrossSection = point->GetFitCrossSection();
+          double fitCrossSection = point->GetFitCrossSection(results);
           if (thmBackground) fitCrossSection += ThmBackgroundAt(segmentIndex, point->GetCMEnergy());
           if (firstSumIterator != GetSegments().end()) {
             int pointIndex = point - segment->GetPoints().begin() + 1;
             for (ESegmentIterator it = firstSumIterator; it < segment; it++)
-              fitCrossSection += it->GetPoint(pointIndex)->GetFitCrossSection();
+              fitCrossSection += it->GetPoint(pointIndex)->GetFitCrossSection(results);
           }
           out << std::setw(18) << std::scientific << point->GetCMEnergy()
               << std::setw(18) << std::scientific << point->GetExcitationEnergy()
@@ -2663,18 +2665,19 @@ void EData::WriteOutputFiles(const Config &configure, bool isFit, const BandData
         out.precision(10);
         if (segment->IsAngularDist()) {
           out << std::setw(18) << std::scientific << point->GetCMEnergy();
-          for (int i = 0; i < point->GetNumAngularDists(); i++) out << std::setw(18) << point->GetAngularDist(i);
+          for (int i = 0; i < point->GetNumAngularDists(results); i++)
+            out << std::setw(18) << point->GetAngularDist(results, i);
           out << std::endl;
           if (bandOut) WriteBandLine(*bandOut, point->GetLabEnergy(), point->GetExcitationEnergy(),
                                      point->GetLabAngle(), 0., 0., 0.);
         } else {
-          double fitCrossSection = (point->GetFitCrossSection() +
+          double fitCrossSection = (point->GetFitCrossSection(results) +
                                     (thmBackground ? ThmBackgroundAt(segmentIndex, point->GetCMEnergy()) : 0.0)) /
                                    point->GetCrossSectionKinFactor();
           if (firstSumIterator != GetSegments().end()) {
             int pointIndex = point - segment->GetPoints().begin() + 1;
             for (ESegmentIterator it = firstSumIterator; it < segment; it++)
-              fitCrossSection += it->GetPoint(pointIndex)->GetFitCrossSection();
+              fitCrossSection += it->GetPoint(pointIndex)->GetFitCrossSection(results);
           }
           out << std::setw(18) << std::scientific << point->GetLabEnergy()
               << std::setw(18) << std::scientific << point->GetExcitationEnergy()
@@ -2729,7 +2732,8 @@ void EData::WriteOutputFiles(const Config &configure, bool isFit, const BandData
     out << std::endl
         << std::endl;
     out.flush();
-    if (segment->IsNatural()) WriteNaturalDecomposition(configure, output.IsExtrap(), kinflag, nucleusLabels_, &*segment);
+    if (segment->IsNatural())
+      WriteNaturalDecomposition(configure, results, output.IsExtrap(), kinflag, nucleusLabels_, &*segment);
     if (bandOut) {
       *bandOut << std::endl
                << std::endl;
@@ -2811,10 +2815,10 @@ void EData::WriteOutputFiles(const Config &configure, bool isFit, const BandData
            << std::endl;
     chiOut.flush();
     chiOut.close();
-    if (this->HasCovariance()) this->WriteCovarianceSummary(configure);
+    if (this->HasCovariance()) this->WriteCovarianceSummary(configure, results);
   }
   if (!isFit && (configure.paramMask & Config::CALCULATE_WITH_DATA) && NumThmGroups() > 0)
-    WriteThmExperiments(configure);
+    WriteThmExperiments(configure, results);
   if (isVaryNorm) {
     std::string outputfile = configure.outputdir + "normalizations.out";
     std::ofstream out(outputfile.c_str());
@@ -4704,7 +4708,7 @@ int EData::ResolveCovarianceGroups(const Config &configure) {
   return 0;
 }
 
-double EData::CovarianceChi2Correction(std::vector<double> *segChis) {
+double EData::CovarianceChi2Correction(const azure2::Results &results, std::vector<double> *segChis) {
   double correction = 0.0;
   std::vector<double> r, z;
   for (const std::shared_ptr<DataCovariance::Group> &gp : covGroups_) {
@@ -4716,7 +4720,7 @@ double EData::CovarianceChi2Correction(std::vector<double> *segChis) {
       EPoint *pt = seg->GetPoint(g.members[a].second + 1);
       const double norm = seg->GetNorm();
       const double err = pt->GetCMCrossSectionError() * norm;
-      r[a] = err != 0.0 ? (pt->GetFitCrossSection() - pt->GetCMCrossSection() * norm) / err : 0.0;
+      r[a] = err != 0.0 ? (pt->GetFitCrossSection(results) - pt->GetCMCrossSection() * norm) / err : 0.0;
       diag += r[a] * r[a];
     }
     g.EnsureFactored(r);
@@ -4778,7 +4782,7 @@ void EData::WhitenResidualRows(std::vector<double> &residuals, std::vector<doubl
  * current fit values and, for comparison, the sum of r_i^2 (the chi2 the same points
  * would have without their correlations).
  */
-void EData::WriteCovarianceSummary(const Config &configure) {
+void EData::WriteCovarianceSummary(const Config &configure, const azure2::Results &results) {
   std::ofstream out((configure.outputdir + "covariance.out").c_str());
   if (!out) return;
   out << "# file, fitted rows, rows, segments, chi2 (r^T M^-1 r), sum of r_i^2 (correlations ignored), relvector terms"
@@ -4795,7 +4799,7 @@ void EData::WriteCovarianceSummary(const Config &configure) {
       EPoint *pt = seg->GetPoint(g.members[a].second + 1);
       const double norm = seg->GetNorm();
       const double err = pt->GetCMCrossSectionError() * norm;
-      r[a] = err != 0.0 ? (pt->GetFitCrossSection() - pt->GetCMCrossSection() * norm) / err : 0.0;
+      r[a] = err != 0.0 ? (pt->GetFitCrossSection(results) - pt->GetCMCrossSection() * norm) / err : 0.0;
       diag += r[a] * r[a];
     }
     g.EnsureFactored(r);
@@ -4817,7 +4821,7 @@ void EData::RefreezeCovariance() {
   for (const std::shared_ptr<DataCovariance::Group> &gp : covGroups_) gp->Refreeze();
 }
 
-void EData::PrepareCovarianceSeeds(CNuc *theCNuc, const Config &configure) {
+void EData::PrepareCovarianceSeeds(CNuc *theCNuc, const Config &configure, azure2::Results &results) {
   if (covGroups_.empty()) return;
   std::vector<std::pair<ESegment *, int>> work;
   for (int s = 1; s <= this->NumSegments(); s++) {
@@ -4831,10 +4835,10 @@ void EData::PrepareCovarianceSeeds(CNuc *theCNuc, const Config &configure) {
   for (int k = 0; k < (int)work.size(); k++) {
     ScopedPointMappingOff noPointMapping;
     ESegment *seg = work[k].first;
-    const double th = seg->CalculateTheoreticalCrossSection(work[k].second, theCNuc, configure, this);
-    seg->GetPoint(work[k].second + 1)->SetFitCrossSection(th);
+    const double th = seg->CalculateTheoreticalCrossSection(work[k].second, theCNuc, configure, this, results);
+    seg->GetPoint(work[k].second + 1)->SetFitCrossSection(results, th);
   }
-  this->CovarianceChi2Correction();
+  this->CovarianceChi2Correction(results);
 }
 
 
@@ -5283,9 +5287,10 @@ void EData::FillNormsFromParams(const vector_r &p) {
  * Fills the Energy Shifts from the Minuit parameter array.
  */
 
-void EData::FillEnergyShiftsFromParams(const vector_r &p, EData *data, CNuc *theCNuc, const Config *configure) {
+void EData::FillEnergyShiftsFromParams(const vector_r &p, azure2::Results &results, EData *data, CNuc *theCNuc,
+                                       const Config *configure) {
   this->FillEnergyShiftsFromParamsImpl(p, data, theCNuc, configure);
-  this->BeginEvaluation();
+  this->BeginEvaluation(results);
 }
 
 template <class F>
@@ -5302,37 +5307,38 @@ void EData::ForEachResultUnit(F f) {
   for (ESegment &seg : componentSegments_) segment(seg);
 }
 
-void EData::LayoutResults(const azure2::Results *source) {
+void EData::LayoutResults(azure2::Results *results) {
   size_t total = 0;
   ForEachResultUnit([&](EPoint &, int nAng, int nNat) { total += azure2::Results::RecordSize(nAng, nNat); });
-  std::vector<double> next(total, 0.0);
+  std::vector<double> next(results ? total : 0, 0.0);
   size_t offset = 0;
   ForEachResultUnit([&](EPoint &point, int nAng, int nNat) {
-    const azure2::Results *from = point.ResultBuffer();
-    if (from && (from == &results_ || from == source))
-      azure2::CopyRecord(from->slot.data() + point.ResultSlot(), point.ResultAngularSlots(), point.ResultNaturalSlots(),
-                         next.data() + offset, nAng, nNat);
-    point.BindResults(&results_, offset, nAng, nNat);
+    if (results) {
+      const size_t from = point.ResultSlot();
+      const int fromAng = point.ResultAngularSlots(), fromNat = point.ResultNaturalSlots();
+      if (from != EPoint::kNoRecord && from + azure2::Results::RecordSize(fromAng, fromNat) <= results->slot.size())
+        azure2::CopyRecord(results->slot.data() + from, fromAng, fromNat, next.data() + offset, nAng, nNat);
+    }
+    point.SetResultRecord(offset, nAng, nNat);
     offset += azure2::Results::RecordSize(nAng, nNat);
   });
-  results_.slot.swap(next);
+  resultsSize_ = total;
+  if (results) results->slot.swap(next);
 }
 
-void EData::EnsureResultsLayout() {
+void EData::BeginEvaluation(azure2::Results &results) {
   size_t offset = 0;
   bool laidOut = true;
   ForEachResultUnit([&](EPoint &point, int nAng, int nNat) {
     if (!laidOut) return;
-    laidOut = point.ResultBuffer() == &results_ && point.ResultSlot() == offset &&
-              point.ResultAngularSlots() == nAng && point.ResultNaturalSlots() == nNat;
+    laidOut = point.ResultSlot() == offset && point.ResultAngularSlots() == nAng && point.ResultNaturalSlots() == nNat;
     offset += azure2::Results::RecordSize(nAng, nNat);
   });
-  if (!laidOut || offset != results_.slot.size()) this->LayoutResults(nullptr);
-}
-
-void EData::BeginEvaluation() {
-  this->EnsureResultsLayout();
-  if (azure2::Results::PoisonRequested()) results_.Poison();
+  if (!laidOut || offset != resultsSize_)
+    this->LayoutResults(&results);
+  else if (results.slot.size() != resultsSize_)
+    results.slot.resize(resultsSize_, 0.0);
+  if (azure2::Results::PoisonRequested()) results.Poison();
 }
 
 void EData::FillEnergyShiftsFromParamsImpl(const vector_r &p, EData *data, CNuc *theCNuc, const Config *configure) {
@@ -5726,8 +5732,9 @@ EData *EData::Clone() const {
         if (!own.count(p->GetLocalMappedPoint(m)))
           throw std::logic_error("EData::Clone: a point of the copy maps a point that is not part of the copy");
   }
-  // The copy's own result records, holding this data set's values (a copied point held them before S3).
-  dataCopy->LayoutResults(&this->results_);
+  // The copy's layout: its points carry this data set's offsets, which are the copy's own when the copy has the
+  // same points; the values are in the buffers of the callers that evaluate the two.
+  dataCopy->LayoutResults(nullptr);
   return dataCopy;
 }
 
@@ -5775,7 +5782,7 @@ std::vector<ESegment> &EData::GetSegments() {
  */
 
 int EData::CalculatePointsInParallel(const std::vector<ESegment *> &segments, CNuc *theCNuc,
-                                     const Config &configure) {
+                                     const Config &configure, azure2::Results &results) {
 #ifdef _OPENMP
   if (omp_in_parallel()) return -1;
 #else
@@ -5816,14 +5823,14 @@ int EData::CalculatePointsInParallel(const std::vector<ESegment *> &segments, CN
 #pragma omp parallel for schedule(dynamic, 1) reduction(+ : failed)
   for (int k = 0; k < (int)work.size(); k++) {
     try {
-      work[k]->Calculate(theCNuc, configure);
+      work[k]->Calculate(theCNuc, configure, results);
     } catch (const std::exception &e) {
       // NaN on the point and the points mapped onto it, reported once (EPoint::MarkFailed); 0 on the point alone,
       // silently, before 2026-11-01 -- and the CLI's objective takes these values (PrecalculatePoints).
-      work[k]->MarkFailed("point", configure, e.what());
+      work[k]->MarkFailed(results, "point", configure, e.what());
       failed++;
     } catch (...) {
-      work[k]->MarkFailed("point", configure, "unknown exception.");
+      work[k]->MarkFailed(results, "point", configure, "unknown exception.");
       failed++;
     }
   }

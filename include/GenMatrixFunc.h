@@ -6,6 +6,9 @@
 
 class EPoint;
 class CNuc;
+namespace azure2 {
+struct Results;
+}
 
 /// A temporaray T-Matrix structure
 
@@ -66,9 +69,9 @@ class GenMatrixFunc {
   }
   /// The observable of the point from the T-matrix the subclass built, times the electron-screening factor where the
   /// point carries one (CalculateBareCrossSection, then EPoint::ScreeningFactor).
-  void CalculateCrossSection(EPoint *);
+  void CalculateCrossSection(EPoint *, azure2::Results &results);
   /// The observable without electron screening.
-  void CalculateBareCrossSection(EPoint *);
+  void CalculateBareCrossSection(EPoint *, azure2::Results &results);
 
   /*!
    * Spin-summed |M|^2 from the channel-spin amplitude matrix, and the vector
@@ -96,7 +99,7 @@ class GenMatrixFunc {
    * object has already computed, external capture included.
    * Returns false for anything that is not a photon exit channel.
    */
-  bool CalculateCaptureAnalyzingPower(EPoint *point, double *unpolarized,
+  bool CalculateCaptureAnalyzingPower(EPoint *point, const azure2::Results &results, double *unpolarized,
                                       double *analyzingPower);
   /// Start a temporary T-matrix element for a \f$J,l,l'\f$ combination.
   void NewTempTMatrix(TempTMatrix);

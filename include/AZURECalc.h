@@ -5,6 +5,7 @@
 #include "Minuit2/FCNGradientBase.h"
 #include "Constants.h"
 #include "AZUREParams.h"
+#include "WorkingData.h"
 #include <vector>
 #include <memory>
 #include <mutex>
@@ -30,8 +31,15 @@ class AZURECalc : public ROOT::Minuit2::FCNGradientBase {
    * The AZURECalc object is created with reference to an EData and CNuc object.
    *. The runtime configurations are also passed through a Config structure.
    */
-  AZURECalc(EData *data, CNuc *compound, const Config &configure, ParameterLimitsManager *limitsManager = nullptr) :
+  /*!
+   * `results` is the buffer of the evaluations on `data` itself (a calculation, the final evaluation after a fit),
+   * owned by the caller, which then reads it (the output files).  A fit's evaluations run on pooled working copies,
+   * each with a buffer of its own (WorkingData).
+   */
+  AZURECalc(EData *data, azure2::Results &results, CNuc *compound, const Config &configure,
+            ParameterLimitsManager *limitsManager = nullptr) :
     configure_(configure),
+    results_(results),
     pools_initialized_(false) {
     data_ = data;
     compound_ = compound;
@@ -77,7 +85,7 @@ class AZURECalc : public ROOT::Minuit2::FCNGradientBase {
   /// Probe the analytic Jacobian at `p`; enables G2 for Minuit2 when it works.
   bool EnableG2(const std::vector<double> &p);
   /// AZURE_DUMP_NONFINITE diagnostic (see AZURECalc.cpp).
-  void DumpNonFinite(const vector_r &p, double chi, CNuc *lc, EData *ld) const;
+  void DumpNonFinite(const vector_r &p, double chi, CNuc *lc, EData *ld, const azure2::Results &results) const;
   /// True when the limits manager declares at least one nuisance parameter.
   bool HasNuisanceParameters() const;
   /*!
@@ -87,9 +95,9 @@ class AZURECalc : public ROOT::Minuit2::FCNGradientBase {
    * already inside a parallel region (Minuit's parallel numerical gradient) or
    * when AZURE_SERIAL_CHI2 is set; callers then use the per-point path.
    */
-  bool PrecalculatePoints(CNuc *lc, EData *ld, bool thmOnly = false) const;
-  /// chi^2 of `p` evaluated on the given working copies (optionally per segment).
-  double Chi2On(CNuc *lc, EData *ld, const vector_r &p, std::vector<double> *segChis = nullptr,
+  bool PrecalculatePoints(CNuc *lc, EData *ld, azure2::Results &results, bool thmOnly = false) const;
+  /// chi^2 of `p` evaluated on the given working copies, writing `results` (optionally per segment).
+  double Chi2On(CNuc *lc, EData *ld, azure2::Results &results, const vector_r &p, std::vector<double> *segChis = nullptr,
                 bool thmOnly = false) const;
   /*!
    * Side-effect-free chi-squared evaluation (no iteration counter / file output
@@ -214,9 +222,9 @@ class AZURECalc : public ROOT::Minuit2::FCNGradientBase {
    */
   void InitializePools() const;
   CNuc *GetPooledCNuc() const;
-  EData *GetPooledEData() const;
+  WorkingData *GetPooledData() const;
   void ReturnPooledCNuc(CNuc *obj) const;
-  void ReturnPooledEData(EData *obj) const;
+  void ReturnPooledData(WorkingData *obj) const;
 
   /*!
    * Write parameters to file
@@ -253,6 +261,7 @@ class AZURECalc : public ROOT::Minuit2::FCNGradientBase {
 
   const Config &configure_;
   EData *data_;
+  azure2::Results &results_;  ///< the caller's buffer for the evaluations on data_
   CNuc *compound_;
   ParameterLimitsManager *limitsManager_;
   double theErrorDef;
@@ -260,7 +269,7 @@ class AZURECalc : public ROOT::Minuit2::FCNGradientBase {
 
   // Object pools for memory reuse - store cloned objects directly
   mutable std::stack<std::unique_ptr<CNuc>> cnuc_pool_;
-  mutable std::stack<std::unique_ptr<EData>> edata_pool_;
+  mutable std::stack<std::unique_ptr<WorkingData>> edata_pool_;
   mutable std::mutex pool_mutex_;
   mutable bool pools_initialized_;
   bool g2Enabled_ = false;
@@ -280,6 +289,7 @@ class AZURECalc : public ROOT::Minuit2::FCNGradientBase {
   // copy per snapshot until long fits were OOM-killed.
   mutable std::unique_ptr<CNuc> output_compound_;
   mutable std::unique_ptr<EData> output_data_;
+  mutable azure2::Results output_results_;
   mutable std::mutex output_mutex_;
 };
 

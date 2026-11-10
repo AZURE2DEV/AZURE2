@@ -12,6 +12,9 @@ class EData;
 class Config;
 class EPoint;
 class ESegment;
+namespace azure2 {
+struct Results;
+}
 class ParamIndexMap;
 
 /*!
@@ -314,7 +317,7 @@ void AddAbundancePenaltyGradient(CNuc *compound, const Config &configure, GradAc
  */
 using FitBarFn = std::function<double(ESegment *, int, int, double)>;
 
-bool AccumulateEGammaGradient(CNuc *compound, EData *data, const Config &config,
+bool AccumulateEGammaGradient(CNuc *compound, EData *data, azure2::Results &results, const Config &config,
                               const ParamIndexMap &pmap,
                               const vector_matrix_r *shiftDeriv,
                               const FitBarFn &fitBarFn,
@@ -341,7 +344,7 @@ bool AccumulateEGammaGradient(CNuc *compound, EData *data, const Config &config,
  * row) but left zero, for a caller that fills them itself -- AZUREAPI does, with
  * the profiled norm (see ComputeTHMRows).
  */
-bool ComputeResidualJacobian(CNuc *compound, EData *data, const Config &config,
+bool ComputeResidualJacobian(CNuc *compound, EData *data, azure2::Results &results, const Config &config,
                              const ParamIndexMap &pmap,
                              const vector_matrix_r *shiftDeriv,
                              vector_r &residuals, vector_r &jacobian, int &nCols,
@@ -376,7 +379,8 @@ struct ShiftColumnCount {
  * left at `full`.  Defined in AZURECalc.cpp, beside the shift helpers the
  * analytic gradient shares.
  */
-ShiftColumnCount FillShiftColumns(CNuc *compound, EData *data, const Config &config, const ParamIndexMap &pmap,
+ShiftColumnCount FillShiftColumns(CNuc *compound, EData *data, azure2::Results &results, const Config &config,
+                                  const ParamIndexMap &pmap,
                                   const std::vector<bool> &fixed, const vector_r &full,
                                   const std::vector<char> *skipPacked, size_t nRes, int nCols, vector_r &jac);
 
@@ -390,7 +394,7 @@ ShiftColumnCount FillShiftColumns(CNuc *compound, EData *data, const Config &con
  *        (HOES) points are left zero for the caller to fill (the adjoint
  *        differentiates the T-matrix observable, not the HOES one).
  */
-bool ComputeModelGradients(CNuc *compound, EData *data, const Config &config,
+bool ComputeModelGradients(CNuc *compound, EData *data, azure2::Results &results, const Config &config,
                            const ParamIndexMap &pmap,
                            const vector_matrix_r *shiftDeriv,
                            std::map<EPoint *, vector_r> &gradByPoint,
@@ -443,7 +447,7 @@ struct THMRows {
  * filled at `full`, each THM point's fit cross section set to its model and a
  * profiled segment's norm to n*.
  */
-std::vector<THMRows> ComputeTHMRows(CNuc *compound, EData *data, const Config &config,
+std::vector<THMRows> ComputeTHMRows(CNuc *compound, EData *data, azure2::Results &results, const Config &config,
                                     const vector_r &full, const ParamIndexMap &pmap);
 
 #endif
