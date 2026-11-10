@@ -10,6 +10,8 @@ class EPoint;
 class CNuc;
 namespace azure2 {
 struct Results;
+struct EntrancePathways;
+struct ExitRow;
 }
 
 /// A temporaray T-Matrix structure
@@ -40,7 +42,6 @@ struct TempTMatrix {
  * AMatrixFunc and RMatrixFunc.
  */
 
-class Decay;
 
 class GenMatrixFunc {
  public:
@@ -179,7 +180,7 @@ class GenMatrixFunc {
   /// (EData::MapData) compute them once, and each point's sum is one term per
   /// order.  Entrance = exit pair, capture, and particle exits other than
   /// UPOS (whose sum keeps only the k-groups of equal channel spins).
-  const Decay *rt_decay_ = nullptr;
+  const azure2::ExitRow *rt_decay_ = nullptr;
   std::vector<complex> rt_wl_;
   /// The Coulomb-nuclear interference per (channel spin, l), BuildCoulombInterference.
   struct CoulombTerm {
@@ -189,7 +190,7 @@ class GenMatrixFunc {
   };
   std::vector<CoulombTerm> rt_it_;
   bool rt_it_built_ = false;
-  void BuildCoulombInterference(Decay *theDecay, bool elastic);
+  void BuildCoulombInterference(const azure2::EntrancePathways &P, const azure2::ExitRow &exit, bool elastic);
   std::vector<TempTMatrix> temp_t_matrices_;
   std::vector<TempTMatrix> temp_t_matrices_E1_;
   std::vector<TempTMatrix> temp_t_matrices_E2_;
