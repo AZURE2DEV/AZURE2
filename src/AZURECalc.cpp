@@ -385,7 +385,7 @@ ShiftColumnCount FillShiftColumns(CNuc *lc, EData *ld, azure2::Results &results,
       fk[f] = value;
       lc->FillCompoundFromParams(fk);
       ld->FillNormsFromParams(fk);
-      ld->FillEnergyShiftsFromParams(fk, ld, lc, &config);
+      ld->FillEnergyShiftsFromParams(fk, results, ld, lc, &config);
       allResiduals(out);
     };
     residualsAt(x0 + h, rPlus);
@@ -397,7 +397,7 @@ ShiftColumnCount FillShiftColumns(CNuc *lc, EData *ld, azure2::Results &results,
   // Leave the model at the parameters that were asked for.
   lc->FillCompoundFromParams(full);
   ld->FillNormsFromParams(full);
-  ld->FillEnergyShiftsFromParams(full, ld, lc, &config);
+  ld->FillEnergyShiftsFromParams(full, results, ld, lc, &config);
   return count;
 }
 
@@ -510,6 +510,7 @@ double AZURECalc::operator()(const vector_r &p) const {
 
   CNuc *localCompound = NULL;
   EData *localData = NULL;
+  WorkingData *working = nullptr;
   if (isFit) {
     // New multithreading with object pools
     if (!pools_initialized_) {
@@ -518,22 +519,20 @@ double AZURECalc::operator()(const vector_r &p) const {
 
     // Get objects from pool
     localCompound = GetPooledCNuc();
-    localData = GetPooledEData();
-
-    // Old multithreading
-    // localCompound = compound()->Clone();
-    // localData = data()->Clone();
+    working = GetPooledData();
+    localData = working->data.get();
   } else {
     localCompound = compound();
     localData = data();
   }
-  azure2::Results &results = localData->GetResults();
+  // The buffer of this evaluation: the working copy's, or the caller's for an evaluation on the data set itself.
+  azure2::Results &results = working ? working->results : results_;
 
   // Fill Compound Nucleus From Minuit Parameters
   const auto te0 = std::chrono::steady_clock::now();
   localCompound->FillCompoundFromParams(p);
   localData->FillNormsFromParams(p);
-  localData->FillEnergyShiftsFromParams(p, localData, localCompound, &configure());
+  localData->FillEnergyShiftsFromParams(p, results, localData, localCompound, &configure());
   // A chi-squared alone: no Park second derivatives (CNuc::CalcShiftFunctions).
   if (configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure(), false);
   const auto te1 = std::chrono::steady_clock::now();
@@ -580,7 +579,8 @@ double AZURECalc::operator()(const vector_r &p) const {
       Chi2On(localCompound, localData, results, p, &segPool);
       std::unique_ptr<CNuc> fc(compound()->Clone());
       std::unique_ptr<EData> fd(data()->Clone());
-      os << " || fresh " << Chi2On(fc.get(), fd.get(), fd->GetResults(), p, &segFresh);
+      azure2::Results freshResults;
+      os << " || fresh " << Chi2On(fc.get(), fd.get(), freshResults, p, &segFresh);
       for (size_t s = 1; s < segPool.size() && s < segFresh.size(); s++)
         if (segPool[s] != segFresh[s]) os << " segment " << s << " " << segPool[s] << " " << segFresh[s];
     }
@@ -605,11 +605,7 @@ double AZURECalc::operator()(const vector_r &p) const {
   if (isFit) {
     // New multithreading with object pools
     ReturnPooledCNuc(localCompound);
-    ReturnPooledEData(localData);
-
-    // Old multithreading
-    // delete localCompound;
-    // delete localData;
+    ReturnPooledData(working);
   }
 
   // A non-finite (or absurdly large) chi-squared must reach Minuit2 as a large
@@ -640,12 +636,12 @@ void AZURECalc::WriteIterationOutput(const vector_r &p) const {
   if (!output_data_) output_data_.reset(data()->Clone());
   CNuc *lc = output_compound_.get();
   EData *ld = output_data_.get();
-  azure2::Results &results = ld->GetResults();
+  azure2::Results &results = output_results_;
 
   try {
     lc->FillCompoundFromParams(p);
     ld->FillNormsFromParams(p);
-    ld->FillEnergyShiftsFromParams(p, ld, lc, &configure());
+    ld->FillEnergyShiftsFromParams(p, results, ld, lc, &configure());
     if (configure().paramMask & Config::USE_BRUNE_FORMALISM) lc->CalcShiftFunctions(configure());
 
     for (int i = 1; i <= ld->NumSegments(); i++) {
@@ -677,6 +673,7 @@ void AZURECalc::WriteIterationOutput(const vector_r &p) const {
     // snapshot starts from fresh clones.
     output_compound_.reset();
     output_data_.reset();
+    output_results_.slot.clear();
   }
 }
 
@@ -702,7 +699,7 @@ double AZURECalc::Chi2On(CNuc *lc, EData *ld, azure2::Results &results, const ve
                          bool thmOnly) const {
   lc->FillCompoundFromParams(p);
   ld->FillNormsFromParams(p);
-  ld->FillEnergyShiftsFromParams(p, ld, lc, &configure());
+  ld->FillEnergyShiftsFromParams(p, results, ld, lc, &configure());
   // A chi-squared alone: no Park second derivatives (CNuc::CalcShiftFunctions).
   if (configure().paramMask & Config::USE_BRUNE_FORMALISM) lc->CalcShiftFunctions(configure(), false);
   const bool pre = PrecalculatePoints(lc, ld, results, thmOnly);
@@ -733,12 +730,12 @@ double AZURECalc::Chi2Value(const vector_r &p, bool thmOnly) const {
   // calls; a fresh Clone() re-shifts every shifted segment and rebuilds the
   // mapping each time.
   CNuc *lc = GetPooledCNuc();
-  EData *ld = GetPooledEData();
+  WorkingData *working = GetPooledData();
   std::vector<double> segPooled;
   const bool poolCheck = std::getenv("AZURE_POOL_CHECK") != nullptr;
-  const double chi = Chi2On(lc, ld, ld->GetResults(), p, poolCheck ? &segPooled : nullptr, thmOnly);
+  const double chi = Chi2On(lc, working->data.get(), working->results, p, poolCheck ? &segPooled : nullptr, thmOnly);
   ReturnPooledCNuc(lc);
-  ReturnPooledEData(ld);
+  ReturnPooledData(working);
   if (poolCheck) {
     static std::atomic<int> pc{0};
     if (++pc <= 5) {
@@ -746,7 +743,8 @@ double AZURECalc::Chi2Value(const vector_r &p, bool thmOnly) const {
       EData *fd = data()->Clone();
       std::vector<double> segFresh;
       setEnvVar("AZURE_SERIAL_CHI2", "1");  // reference: per-point (serial) path on a fresh copy
-      const double chiFresh = Chi2On(fc, fd, fd->GetResults(), p, &segFresh, thmOnly);
+      azure2::Results freshResults;
+      const double chiFresh = Chi2On(fc, fd, freshResults, p, &segFresh, thmOnly);
       unsetEnvVar("AZURE_SERIAL_CHI2");
       delete fc;
       delete fd;
@@ -822,11 +820,12 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
   // Pooled working copies keep their applied energy shifts and mapping between calls; a fresh
   // Clone() re-shifted every shifted segment and rebuilt the mapping each time (~1 s here).
   CNuc *lc = GetPooledCNuc();
-  EData *ld = GetPooledEData();
-  azure2::Results &results = ld->GetResults();
+  WorkingData *working = GetPooledData();
+  EData *ld = working->data.get();
+  azure2::Results &results = working->results;
   lc->FillCompoundFromParams(p);
   ld->FillNormsFromParams(p);
-  ld->FillEnergyShiftsFromParams(p, ld, lc, &configure());
+  ld->FillEnergyShiftsFromParams(p, results, ld, lc, &configure());
 
   vector_matrix_r shiftDeriv;
   const vector_matrix_r *sdp = nullptr;
@@ -1213,7 +1212,7 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
   }
 
   ReturnPooledCNuc(lc);
-  ReturnPooledEData(ld);
+  ReturnPooledData(working);
 
   return grad;
 }
@@ -1330,11 +1329,12 @@ bool AZURECalc::ResidualJacobian(const vector_r &full, vector_r &residuals,
   // Pooled working copies keep their applied energy shifts and mapping between calls; a fresh
   // Clone() re-shifted every shifted segment and rebuilt the mapping each time (~1 s here).
   CNuc *lc = GetPooledCNuc();
-  EData *ld = GetPooledEData();
-  azure2::Results &results = ld->GetResults();
+  WorkingData *working = GetPooledData();
+  EData *ld = working->data.get();
+  azure2::Results &results = working->results;
   lc->FillCompoundFromParams(full);
   ld->FillNormsFromParams(full);
-  ld->FillEnergyShiftsFromParams(full, ld, lc, &configure());
+  ld->FillEnergyShiftsFromParams(full, results, ld, lc, &configure());
 
   vector_matrix_r shiftDeriv;
   const vector_matrix_r *sdp = nullptr;
@@ -1420,7 +1420,7 @@ bool AZURECalc::ResidualJacobian(const vector_r &full, vector_r &residuals,
   for (int a = 0; a < pmap.NumPacked(); a++) packedToFull[a] = pmap.PackedToFull(a);
 
   ReturnPooledCNuc(lc);
-  ReturnPooledEData(ld);
+  ReturnPooledData(working);
   return ok;
 }
 
@@ -1769,11 +1769,12 @@ bool AZURECalc::ResidualsOnly(const vector_r &full, vector_r &residuals) const {
   // Pooled working copies keep their applied energy shifts and mapping between calls; a fresh
   // Clone() re-shifted every shifted segment and rebuilt the mapping each time (~1 s here).
   CNuc *lc = GetPooledCNuc();
-  EData *ld = GetPooledEData();
-  azure2::Results &results = ld->GetResults();
+  WorkingData *working = GetPooledData();
+  EData *ld = working->data.get();
+  azure2::Results &results = working->results;
   lc->FillCompoundFromParams(full);
   ld->FillNormsFromParams(full);
-  ld->FillEnergyShiftsFromParams(full, ld, lc, &configure());
+  ld->FillEnergyShiftsFromParams(full, results, ld, lc, &configure());
   if (configure().paramMask & Config::USE_BRUNE_FORMALISM) lc->CalcShiftFunctions(configure(), false);
 
   residuals.clear();
@@ -1799,7 +1800,7 @@ bool AZURECalc::ResidualsOnly(const vector_r &full, vector_r &residuals) const {
   // Park and abundance-sum rows, as the last rows of ResidualJacobian.
   AppendModelRows(lc, configure(), nullptr, 0, residuals, nullptr);
   ReturnPooledCNuc(lc);
-  ReturnPooledEData(ld);
+  ReturnPooledData(working);
   return true;
 }
 
@@ -2052,9 +2053,9 @@ void AZURECalc::InitializePools() const {
     cnuc_pool_.push(std::unique_ptr<CNuc>(compound()->Clone()));
   }
 
-  // Pre-allocate EData objects by cloning once
+  // Pre-allocate EData objects by cloning once, each with an empty buffer (sized by its first evaluation)
   for (int i = 0; i < pool_size; ++i) {
-    edata_pool_.push(std::unique_ptr<EData>(data()->Clone()));
+    edata_pool_.push(std::unique_ptr<WorkingData>(new WorkingData{std::unique_ptr<EData>(data()->Clone()), {}}));
   }
 
   pools_initialized_ = true;
@@ -2077,9 +2078,9 @@ CNuc *AZURECalc::GetPooledCNuc() const {
 }
 
 /*!
- * Get an EData object from the pool, creating new if pool is empty
+ * Get a working copy of the data set and its buffer from the pool, creating new if pool is empty
  */
-EData *AZURECalc::GetPooledEData() const {
+WorkingData *AZURECalc::GetPooledData() const {
   std::lock_guard<std::mutex> lock(pool_mutex_);
 
   if (!edata_pool_.empty()) {
@@ -2089,7 +2090,7 @@ EData *AZURECalc::GetPooledEData() const {
   }
 
   // Fallback: create new if pool is empty (shouldn't happen often)
-  return data_->Clone();
+  return new WorkingData{std::unique_ptr<EData>(data_->Clone()), {}};
 }
 
 /*!
@@ -2103,13 +2104,13 @@ void AZURECalc::ReturnPooledCNuc(CNuc *obj) const {
 }
 
 /*!
- * Return an EData object to the pool for reuse
+ * Return a working copy and its buffer to the pool for reuse
  */
-void AZURECalc::ReturnPooledEData(EData *obj) const {
+void AZURECalc::ReturnPooledData(WorkingData *obj) const {
   if (!obj) return;
 
   std::lock_guard<std::mutex> lock(pool_mutex_);
-  edata_pool_.push(std::unique_ptr<EData>(obj));
+  edata_pool_.push(std::unique_ptr<WorkingData>(obj));
 }
 
 /*!

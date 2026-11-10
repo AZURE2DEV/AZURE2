@@ -301,18 +301,20 @@ class EData {
   /// Write the normalizations back from a Minuit parameter vector.
   void FillNormsFromParams(const vector_r &);
   /// Write the energy shifts back from a Minuit parameter vector.  The last step of the hand-over of every
-  /// evaluation, so it ends with BeginEvaluation.
-  void FillEnergyShiftsFromParams(const vector_r &, EData *data = nullptr, CNuc *theCNuc = nullptr, const Config *configure = nullptr);
-  /// The result buffer of this data set (docs/upgrade/data_model.md S3 (a)): one record per point and sub-point of
-  /// its segments and component segments (Results.h), owned here, one per working copy.
-  azure2::Results &GetResults() { return results_; }
-  /// Lays the result records out again (LayoutResults) if a point or sub-point is not bound to the record the
-  /// layout would give it: a new point, a re-placed sub-point grid, a copied segment.  O(points), no allocation
-  /// when nothing changed.
-  void EnsureResultsLayout();
-  /// The start of an evaluation, after the hand-over: EnsureResultsLayout, then, under AZURE_POISON_RESULTS=1,
-  /// every result slot quiet NaN, so a value read before this evaluation writes it shows as NaN.
-  void BeginEvaluation();
+  /// evaluation, so it ends with BeginEvaluation(results): `results` is the buffer of the evaluation that follows,
+  /// owned by its caller.
+  void FillEnergyShiftsFromParams(const vector_r &, azure2::Results &results, EData *data = nullptr,
+                                  CNuc *theCNuc = nullptr, const Config *configure = nullptr);
+  /// Slots of a result buffer for this data set: one record per point and sub-point of its segments and component
+  /// segments (Results.h), as laid out by LayoutResults.  The data set holds the layout (each point its offset),
+  /// never the values.
+  std::size_t ResultsSize() const { return resultsSize_; }
+  /// The start of an evaluation into the caller's buffer `results`, after the hand-over: the records are laid out
+  /// again if a point or sub-point is not where the layout puts it (a new point, a re-placed sub-point grid, a copied
+  /// segment), each moving its values in `results` to its new record; `results` is sized for the layout (a new buffer
+  /// starts at 0); then, under AZURE_POISON_RESULTS=1, every slot is quiet NaN, so a value read before this
+  /// evaluation writes it shows as NaN.  O(points), no allocation when nothing changed.
+  void BeginEvaluation(azure2::Results &results);
   /// Lay the adaptive sub-point grids out again for the levels theCNuc holds now
   /// (its fit values, as observed parameters) and the segments' energy shifts, and
   /// rebuild the sub-points of every point whose grid changed.  Sub-points of a
@@ -500,12 +502,13 @@ class EData {
   double priorCovChi2_ = 0.0;
   std::vector<std::string> nucleusLabels_;   // one per compound nucleus, for the natural decomposition file
   int numNuclei_ = 0;  // compound nuclei: the natural terms of a sample segment's points (Initialize)
-  /// The results of an evaluation (GetResults); never shared with a copy (Clone lays out its own).
-  azure2::Results results_;
-  /// One record per point and sub-point, in the order of segments_ then componentSegments_, each point before
-  /// its sub-points.  A point's record keeps the values it held (in this buffer or in `source`, the data set
-  /// being cloned); a point new to the layout starts at 0, as a newly constructed point did.
-  void LayoutResults(const azure2::Results *source);
+  /// Slots of a buffer laid out for this data set (ResultsSize).
+  std::size_t resultsSize_ = 0;
+  /// One record per point and sub-point, in the order of segments_ then componentSegments_, each point before its
+  /// sub-points: each gets its offset (EPoint::SetResultRecord).  With `results`, the buffer of the layout the points
+  /// had, a point's record keeps the values it held there; a point new to the layout starts at 0, as a newly
+  /// constructed point did.
+  void LayoutResults(azure2::Results *results);
   /// Calls f(point, angular slots, natural slots) for every point and sub-point in layout order.
   template <class F>
   void ForEachResultUnit(F f);

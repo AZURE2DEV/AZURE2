@@ -142,14 +142,15 @@ bool AdjointApplies(Model &m, const vector_r &p) {
   EData *ld = m.data->Clone();
   lc->FillCompoundFromParams(p);
   ld->FillNormsFromParams(p);
-  ld->FillEnergyShiftsFromParams(p, ld, lc, &m.cfg);
+  azure2::Results results;
+  ld->FillEnergyShiftsFromParams(p, results, ld, lc, &m.cfg);
   lc->CalcShiftFunctions(m.cfg);
   vector_matrix_r sd = BuildShiftDerivTable(lc, m.cfg);
   ParamIndexMap pmap = BuildParamIndexMap(lc, ld, std::vector<bool>());
   GradAccum accum;
   accum.Init(lc);
   FitBarFn one = [](ESegment *, int, int, double) { return 1.0; };
-  const bool ok = AccumulateEGammaGradient(lc, ld, ld->GetResults(), m.cfg, pmap, &sd, one, accum);
+  const bool ok = AccumulateEGammaGradient(lc, ld, results, m.cfg, pmap, &sd, one, accum);
   delete lc;
   delete ld;
   return ok;
@@ -181,7 +182,8 @@ double Variant(const std::string &label, const std::string &azr, bool expectAdjo
   check(label + (expectAdjoint ? ": analytic adjoint applies" : ": analytic adjoint bails (fallback path)"),
         adjoint == expectAdjoint);
 
-  AZURECalc calc(m.data, m.compound, m.cfg);
+  azure2::Results results;
+  AZURECalc calc(m.data, results, m.compound, m.cfg);
   calc.SetErrorDef(1.0);
   calc.SetFixedMask(fixed);
   m.data->SetFit(true);

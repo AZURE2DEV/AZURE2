@@ -182,6 +182,9 @@ int AZUREAPI::Initialize() {
   if (!SetUpPriorCovariance()) return -1;
 
   if (data()->Initialize(compound(), configure()) == -1) return -1;
+  // The session's buffer for the new layout, at 0 until an evaluation writes it (a read before any evaluation, such
+  // as GetThmExperiments, sees 0 as it did when the data set held the buffer).
+  results_.slot.assign(data()->ResultsSize(), 0.0);
 
   return 0;
 }
@@ -342,7 +345,7 @@ int AZUREAPI::UpdateSegments(vector_r &p) {
   // segments then hold the vector's values, as after CalculateChi2Physical).
   localData->FillNormsFromParams(params_);
   // After the compound: the sub-point grids are laid out from its fit values.
-  localData->FillEnergyShiftsFromParams(params_, localData, localCompound, &configure());
+  localData->FillEnergyShiftsFromParams(params_, results(), localData, localCompound, &configure());
   if (configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure());
 
   int newKey = -1;
@@ -452,7 +455,7 @@ int AZUREAPI::UpdateSegmentsRWA(vector_r &p) {
 
   AZUREParams params;
   localCompound->FillCompoundFromParams(params_);
-  localData->FillEnergyShiftsFromParams(params_, localData, localCompound, &configure());
+  localData->FillEnergyShiftsFromParams(params_, results(), localData, localCompound, &configure());
   if (configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure());
 
   int newKey = -1;
@@ -563,7 +566,7 @@ int AZUREAPI::UpdateSegmentsAllRWA(vector_r &p) {
 
   AZUREParams params;
   localCompound->FillCompoundFromParams(params_);
-  localData->FillEnergyShiftsFromParams(params_, localData, localCompound, &configure());
+  localData->FillEnergyShiftsFromParams(params_, results(), localData, localCompound, &configure());
   if (configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure());
 
   int newKey = -1;
@@ -935,6 +938,7 @@ bool AZUREAPI::RebuildImpl(const std::map<int, double> &radii) {
     configure().paramMask |= Config::USE_PREVIOUS_INTEGRALS;
     return false;
   }
+  results_.slot.assign(data()->ResultsSize(), 0.0);  // as after the first Initialize
   configure().paramMask |= Config::USE_PREVIOUS_INTEGRALS;
 
   // Without this the client keeps the pre-change parameter vector, names,
@@ -981,7 +985,7 @@ void AZUREAPI::FillFromFullRWA(const vector_r &full) const {
   EData *ld = data();
   lc->FillCompoundFromParams(full);
   ld->FillNormsFromParams(full);
-  ld->FillEnergyShiftsFromParams(full, ld, lc, &configure());
+  ld->FillEnergyShiftsFromParams(full, results(), ld, lc, &configure());
   if (configure().paramMask & Config::USE_BRUNE_FORMALISM) lc->CalcShiftFunctions(configure());
 }
 
@@ -1153,7 +1157,7 @@ double AZUREAPI::CalculateChi2Physical(const vector_r &physicalParams) const {
   // its norm entries, 2026-10-26; thm 783fef9, dev 7284d09).
   localData->FillNormsFromParams(params_);
   // After the compound: the sub-point grids are laid out from its fit values.
-  localData->FillEnergyShiftsFromParams(params_, localData, localCompound, &configure());
+  localData->FillEnergyShiftsFromParams(params_, results(), localData, localCompound, &configure());
   if (configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure());
 
   if (const PriorCovariance *pc = localData->GetPriorCovariance()) localData->SetPriorCovarianceChi2(pc->Chi2(params_));
@@ -1177,7 +1181,7 @@ bool AZUREAPI::Chi2GradEGammaNorm(const vector_r &full, vector_r &gradFull,
   EData *ld = data();
   lc->FillCompoundFromParams(full);
   ld->FillNormsFromParams(full);
-  ld->FillEnergyShiftsFromParams(full, ld, lc, &configure());
+  ld->FillEnergyShiftsFromParams(full, results(), ld, lc, &configure());
 
   vector_matrix_r shiftDeriv;
   const vector_matrix_r *sdp = nullptr;
@@ -1418,7 +1422,7 @@ vector_r AZUREAPI::CalculateResidualJacobianRWA(const vector_r &params, const st
   EData *ld = data();
   lc->FillCompoundFromParams(full);
   ld->FillNormsFromParams(full);
-  ld->FillEnergyShiftsFromParams(full, ld, lc, &configure());
+  ld->FillEnergyShiftsFromParams(full, results(), ld, lc, &configure());
 
   vector_matrix_r shiftDeriv;
   const vector_matrix_r *sdp = nullptr;
@@ -1573,7 +1577,7 @@ vector_r AZUREAPI::CalculateModelGradientsRWA(const vector_r &params) const {
   EData *ld = data();
   lc->FillCompoundFromParams(full);
   ld->FillNormsFromParams(full);
-  ld->FillEnergyShiftsFromParams(full, ld, lc, &configure());
+  ld->FillEnergyShiftsFromParams(full, results(), ld, lc, &configure());
 
   vector_matrix_r shiftDeriv;
   const vector_matrix_r *sdp = nullptr;

@@ -3,6 +3,7 @@
 
 #include "numcmc/mcmc.h"
 #include "Constants.h"
+#include "WorkingData.h"
 #include <vector>
 #include <memory>
 #include <mutex>
@@ -215,9 +216,9 @@ class AZURECalcMCMC {
    */
   void InitializePools() const;
   CNuc *GetPooledCNuc() const;
-  EData *GetPooledEData() const;
+  WorkingData *GetPooledData() const;
   void ReturnPooledCNuc(CNuc *obj) const;
-  void ReturnPooledEData(EData *obj) const;
+  void ReturnPooledData(WorkingData *obj) const;
 
  private:
   const Config &configure_;
@@ -254,7 +255,7 @@ class AZURECalcMCMC {
 
   // Object pools for memory reuse
   mutable std::stack<std::unique_ptr<CNuc>> cnuc_pool_;
-  mutable std::stack<std::unique_ptr<EData>> edata_pool_;
+  mutable std::stack<std::unique_ptr<WorkingData>> edata_pool_;  // each copy with the buffer it writes
   mutable std::mutex pool_mutex_;
   mutable bool pools_initialized_;
 };

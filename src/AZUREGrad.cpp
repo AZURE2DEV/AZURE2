@@ -1821,7 +1821,7 @@ std::vector<THMRows> ComputeTHMRows(CNuc *lc, EData *ld, azure2::Results &result
   // Norms and shifts are the caller's; the THM model depends on the R-matrix
   // parameters (and the shift already applied to the point energies).
   ld->FillNormsFromParams(full);
-  ld->FillEnergyShiftsFromParams(full, ld, lc, &config);
+  ld->FillEnergyShiftsFromParams(full, results, ld, lc, &config);
   fillCompound(full);
   std::vector<vector_r> m0, mp, mm;
   models(m0);

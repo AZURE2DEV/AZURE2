@@ -514,21 +514,24 @@ class EPoint {
   void SetNaturalTerms(azure2::Results &r, const std::vector<double> &terms);
   void SetFitE1CrossSection(azure2::Results &r, double v) { Rec(r)[azure2::Results::kSigmaE1] = v; }
   void SetFitE2CrossSection(azure2::Results &r, double v) { Rec(r)[azure2::Results::kSigmaE2] = v; }
-  /// The point's result record (docs/upgrade/data_model.md S3): a fixed range of a Results buffer, bound by the
-  /// layout of the data set that holds the point (EData::LayoutResults), or by the caller of a calculation on a
-  /// point outside a data set (BindPrivateResults).  A copy of a point shares its record until it is bound again.
-  azure2::Results *ResultBuffer() const { return results_; }
+  /// Where the point's result record lies in the buffer of an evaluation (Results.h, docs/upgrade/data_model.md S3):
+  /// its offset, assigned by the layout of the data set that holds the point (EData::LayoutResults) or by the caller
+  /// of a calculation on a point outside a data set (UsePrivateRecord); kNoRecord before either.  The point holds
+  /// no buffer: the values are in the caller's.
+  static constexpr std::size_t kNoRecord = static_cast<std::size_t>(-1);
   std::size_t ResultSlot() const { return slot_; }
   /// Slots for angular-distribution coefficients a unit needs: max_ang_dist_order + 1 for an angular-distribution
   /// or coefficient point (GenMatrixFunc writes min(maxLOrder, max_ang_dist_order) + 1 of them), else 0.
   int ResultAngularCapacity() const { return (is_ang_dist_ && max_ang_dist_order_ >= 0) ? max_ang_dist_order_ + 1 : 0; }
   int ResultAngularSlots() const { return num_ang_slots_; }
   int ResultNaturalSlots() const { return num_natural_slots_; }
-  /// Bind the point to the record at `slot` of `buffer`, with nAng angular and nNat natural slots.
-  void BindResults(azure2::Results *buffer, std::size_t slot, int nAng, int nNat);
-  /// Bind the point (a probe copy, a point outside any data set) to a one-record buffer of its own, holding the
-  /// values of the record it was bound to (zeros if none).
-  void BindPrivateResults(azure2::Results &scratch);
+  /// Place the point's record at offset `slot`, with nAng angular and nNat natural slots.
+  void SetResultRecord(std::size_t slot, int nAng, int nNat);
+  /// Give the point (a probe copy, a point outside any data set) the only record of `scratch`, at offset 0, holding
+  /// the values of its record in `values` (a probe copy reads its original's record); without `values`, zeros (NaN
+  /// under AZURE_POISON_RESULTS=1: the record of a new evaluation, as EData::BeginEvaluation gives).
+  void UsePrivateRecord(azure2::Results &scratch, const azure2::Results &values);
+  void UsePrivateRecord(azure2::Results &scratch);
   /// A calculation that threw: NaN cross sections (total, E1, E2) on this point and on every point mapped onto it,
   /// and a warning naming the segment, the role of the point, its energy and the error, the first time in a run.
   /// Used by ESegment::CalculateTheoreticalCrossSection and EData::CalculatePointsInParallel (before 2026-11-01
@@ -831,21 +834,23 @@ class EPoint {
   // copied with their segments (segment vector growth, component segments, the fit's
   // pooled EData clones), and a stored ESegment* then dangles.
   int crossSectionComponent_;
-  // The result record (see ResultBuffer): no value of an evaluation is held in the point itself.
-  azure2::Results *results_ = nullptr;
-  std::size_t slot_ = 0;
+  // Where the result record lies (see ResultSlot): no value of an evaluation is held in the point itself.
+  std::size_t slot_ = kNoRecord;
   std::uint16_t num_ang_slots_ = 0;
   std::uint16_t num_natural_slots_ = 0;
-  // The record in `r`, which must be the buffer the point is bound to (checked while the binding still exists).
+  // The point's record in the buffer `r`; a point without a record, or a buffer too short for it (not sized for the
+  // layout of the point's data set: EData::BeginEvaluation), throws.
   const double *Rec(const azure2::Results &r) const {
-    if (&r != results_) NoResultRecord();
+    if (slot_ == kNoRecord || slot_ + azure2::Results::RecordSize(num_ang_slots_, num_natural_slots_) > r.slot.size())
+      NoResultRecord(r);
     return r.slot.data() + slot_;
   }
   double *Rec(azure2::Results &r) const {
-    if (&r != results_) NoResultRecord();
+    if (slot_ == kNoRecord || slot_ + azure2::Results::RecordSize(num_ang_slots_, num_natural_slots_) > r.slot.size())
+      NoResultRecord(r);
     return r.slot.data() + slot_;
   }
-  [[noreturn]] void NoResultRecord() const;
+  [[noreturn]] void NoResultRecord(const azure2::Results &r) const;
 };
 
 #endif

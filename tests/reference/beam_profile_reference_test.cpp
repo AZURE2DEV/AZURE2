@@ -173,7 +173,7 @@ double engineFold(const Config &configure, EData &data, int effectNum, Sigma sig
   azure2::Results results;
   results.slot.assign(rec * (nSub + 1), 0.0);
   EPoint point(0.0, e0, 1, 2, false, false, false, 0.0, 0, 0);
-  point.BindResults(&results, 0, 0, 0);
+  point.SetResultRecord(0, 0, 0);
   point.SetParentData(&data);
   point.SetTargetEffectNum(effectNum);
   if (window) point.SetBinWindow(window[0], window[1]);
@@ -186,7 +186,7 @@ double engineFold(const Config &configure, EData &data, int effectNum, Sigma sig
   for (int i = 0; i < nSub; i++) {
     double e = hi - (hi - lo) * i / (nSub - 1);   // engine convention: high to low
     EPoint sub(0.0, e, 1, 2, false, false, false, 0.0, 0, 0);
-    sub.BindResults(&results, rec * (i + 1), 0, 0);
+    sub.SetResultRecord(rec * (i + 1), 0, 0);
     sub.SetFitCrossSection(results, sigma(e));
     point.AddSubPoint(sub);
   }

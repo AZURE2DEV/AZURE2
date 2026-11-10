@@ -2137,8 +2137,9 @@ int EData::Initialize(CNuc *compound, const Config &configure) {
   // Every point of this stage has its rows now; nothing reads the channel table until the energies change, and the
   // table (about 64 bytes a row) is not kept beside the rows it filled (docs/upgrade/channel_table.md section 2).
   channelTable_.reset();
-  // The result records of every point and sub-point (Results.h); laid out again when the points change.
-  this->EnsureResultsLayout();
+  // Where the result record of every point and sub-point lies (Results.h); laid out again when the points change
+  // (BeginEvaluation).
+  this->LayoutResults(nullptr);
 
   return 0;
 }
@@ -5286,9 +5287,10 @@ void EData::FillNormsFromParams(const vector_r &p) {
  * Fills the Energy Shifts from the Minuit parameter array.
  */
 
-void EData::FillEnergyShiftsFromParams(const vector_r &p, EData *data, CNuc *theCNuc, const Config *configure) {
+void EData::FillEnergyShiftsFromParams(const vector_r &p, azure2::Results &results, EData *data, CNuc *theCNuc,
+                                       const Config *configure) {
   this->FillEnergyShiftsFromParamsImpl(p, data, theCNuc, configure);
-  this->BeginEvaluation();
+  this->BeginEvaluation(results);
 }
 
 template <class F>
@@ -5305,37 +5307,38 @@ void EData::ForEachResultUnit(F f) {
   for (ESegment &seg : componentSegments_) segment(seg);
 }
 
-void EData::LayoutResults(const azure2::Results *source) {
+void EData::LayoutResults(azure2::Results *results) {
   size_t total = 0;
   ForEachResultUnit([&](EPoint &, int nAng, int nNat) { total += azure2::Results::RecordSize(nAng, nNat); });
-  std::vector<double> next(total, 0.0);
+  std::vector<double> next(results ? total : 0, 0.0);
   size_t offset = 0;
   ForEachResultUnit([&](EPoint &point, int nAng, int nNat) {
-    const azure2::Results *from = point.ResultBuffer();
-    if (from && (from == &results_ || from == source))
-      azure2::CopyRecord(from->slot.data() + point.ResultSlot(), point.ResultAngularSlots(), point.ResultNaturalSlots(),
-                         next.data() + offset, nAng, nNat);
-    point.BindResults(&results_, offset, nAng, nNat);
+    if (results) {
+      const size_t from = point.ResultSlot();
+      const int fromAng = point.ResultAngularSlots(), fromNat = point.ResultNaturalSlots();
+      if (from != EPoint::kNoRecord && from + azure2::Results::RecordSize(fromAng, fromNat) <= results->slot.size())
+        azure2::CopyRecord(results->slot.data() + from, fromAng, fromNat, next.data() + offset, nAng, nNat);
+    }
+    point.SetResultRecord(offset, nAng, nNat);
     offset += azure2::Results::RecordSize(nAng, nNat);
   });
-  results_.slot.swap(next);
+  resultsSize_ = total;
+  if (results) results->slot.swap(next);
 }
 
-void EData::EnsureResultsLayout() {
+void EData::BeginEvaluation(azure2::Results &results) {
   size_t offset = 0;
   bool laidOut = true;
   ForEachResultUnit([&](EPoint &point, int nAng, int nNat) {
     if (!laidOut) return;
-    laidOut = point.ResultBuffer() == &results_ && point.ResultSlot() == offset &&
-              point.ResultAngularSlots() == nAng && point.ResultNaturalSlots() == nNat;
+    laidOut = point.ResultSlot() == offset && point.ResultAngularSlots() == nAng && point.ResultNaturalSlots() == nNat;
     offset += azure2::Results::RecordSize(nAng, nNat);
   });
-  if (!laidOut || offset != results_.slot.size()) this->LayoutResults(nullptr);
-}
-
-void EData::BeginEvaluation() {
-  this->EnsureResultsLayout();
-  if (azure2::Results::PoisonRequested()) results_.Poison();
+  if (!laidOut || offset != resultsSize_)
+    this->LayoutResults(&results);
+  else if (results.slot.size() != resultsSize_)
+    results.slot.resize(resultsSize_, 0.0);
+  if (azure2::Results::PoisonRequested()) results.Poison();
 }
 
 void EData::FillEnergyShiftsFromParamsImpl(const vector_r &p, EData *data, CNuc *theCNuc, const Config *configure) {
@@ -5729,8 +5732,9 @@ EData *EData::Clone() const {
         if (!own.count(p->GetLocalMappedPoint(m)))
           throw std::logic_error("EData::Clone: a point of the copy maps a point that is not part of the copy");
   }
-  // The copy's own result records, holding this data set's values (a copied point held them before S3).
-  dataCopy->LayoutResults(&this->results_);
+  // The copy's layout: its points carry this data set's offsets, which are the copy's own when the copy has the
+  // same points; the values are in the buffers of the callers that evaluate the two.
+  dataCopy->LayoutResults(nullptr);
   return dataCopy;
 }
 

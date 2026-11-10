@@ -2045,7 +2045,7 @@ void EPoint::Calculate(CNuc *theCNuc, const Config &configure, azure2::Results &
     if (blend < 1.0 || autoTol > 0.) {
       EPoint probe(*this);
       azure2::Results probeResults;  // the probe's own record: it must not write the point's
-      probe.BindPrivateResults(probeResults);
+      probe.UsePrivateRecord(probeResults, results);
       probe.SetTargetEffectNum(0);
       probe.ClearLocalMappedPoints();
       probe.integrationPoints_.clear();
@@ -2097,7 +2097,7 @@ void EPoint::Calculate(CNuc *theCNuc, const Config &configure, azure2::Results &
           EPoint *mappedPoint = this->GetLocalMappedPoint(m);
           EPoint mappedProbe(*mappedPoint);
           azure2::Results probeResults;
-          mappedProbe.BindPrivateResults(probeResults);
+          mappedProbe.UsePrivateRecord(probeResults, results);
           mappedProbe.SetTargetEffectNum(0);
           mappedProbe.ClearLocalMappedPoints();
           mappedProbe.integrationPoints_.clear();
@@ -2130,7 +2130,7 @@ void EPoint::Calculate(CNuc *theCNuc, const Config &configure, azure2::Results &
         // value needs its own probe.
         EPoint mappedProbe(*mappedPoint);
         azure2::Results probeResults;
-        mappedProbe.BindPrivateResults(probeResults);
+        mappedProbe.UsePrivateRecord(probeResults, results);
         mappedProbe.SetTargetEffectNum(0);
         mappedProbe.ClearLocalMappedPoints();
         mappedProbe.integrationPoints_.clear();
@@ -2923,27 +2923,40 @@ void EPoint::SetNaturalTerms(azure2::Results &results, const std::vector<double>
   std::copy(terms.begin(), terms.end(), r + 1);
 }
 
-void EPoint::BindResults(azure2::Results *buffer, std::size_t slot, int nAng, int nNat) {
-  results_ = buffer;
+void EPoint::SetResultRecord(std::size_t slot, int nAng, int nNat) {
   slot_ = slot;
   num_ang_slots_ = (std::uint16_t)nAng;
   num_natural_slots_ = (std::uint16_t)nNat;
 }
 
-void EPoint::BindPrivateResults(azure2::Results &scratch) {
+void EPoint::UsePrivateRecord(azure2::Results &scratch, const azure2::Results &values) {
   const int nAng = this->ResultAngularCapacity();
   const int nNat = num_natural_slots_;
   std::vector<double> next(azure2::Results::RecordSize(nAng, nNat), 0.0);
-  // the values the copied record holds: what the copy read before (a copy of a point copied its result members)
-  if (results_) azure2::CopyRecord(results_->slot.data() + slot_, num_ang_slots_, num_natural_slots_, next.data(), nAng, nNat);
+  // the values of the record the copy was made from: what the copy read before (a copy of a point copied its
+  // result members)
+  azure2::CopyRecord(Rec(values), num_ang_slots_, num_natural_slots_, next.data(), nAng, nNat);
   scratch.slot.swap(next);
-  this->BindResults(&scratch, 0, nAng, nNat);
+  this->SetResultRecord(0, nAng, nNat);
 }
 
-void EPoint::NoResultRecord() const {
-  throw std::logic_error("EPoint: a result was read or written on a point without a result record (segment " +
-                         std::to_string(segment_key_) + ", E_lab " + std::to_string(lab_energy_) +
-                         " MeV): the data set's layout (EData::LayoutResults) or the caller's binding is missing");
+void EPoint::UsePrivateRecord(azure2::Results &scratch) {
+  const int nAng = this->ResultAngularCapacity();
+  const int nNat = num_natural_slots_;
+  scratch.slot.assign(azure2::Results::RecordSize(nAng, nNat), 0.0);
+  // the caller's buffer of a new evaluation (a reaction-rate point): NaN under AZURE_POISON_RESULTS, as every other
+  if (azure2::Results::PoisonRequested()) scratch.Poison();
+  this->SetResultRecord(0, nAng, nNat);
+}
+
+void EPoint::NoResultRecord(const azure2::Results &r) const {
+  throw std::logic_error(
+      "EPoint: a result was read or written on a point without a record in the buffer it was given (segment " +
+      std::to_string(segment_key_) + ", E_lab " + std::to_string(lab_energy_) + " MeV, offset " +
+      (slot_ == kNoRecord ? std::string("none") : std::to_string(slot_)) + ", buffer of " +
+      std::to_string(r.slot.size()) +
+      " slots): the data set's layout (EData::LayoutResults), its EData::BeginEvaluation with this buffer, or the "
+      "caller's UsePrivateRecord is missing");
 }
 
 /*!

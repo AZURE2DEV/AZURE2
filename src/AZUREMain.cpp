@@ -180,8 +180,11 @@ int AZUREMain::operator()() {
     // where the R-Matrix treatment of capture breaks down.
     compound()->CheckRadiativeWidths(configure(), params.GetMinuitParams().Params());
 
+    // The buffer of the evaluations on data() (the calculation, the final evaluation after a fit): this run owns it,
+    // and the output files and the band read it (docs/upgrade/data_model.md S3).
+    azure2::Results results;
     // Declare a new instance of FCNBase
-    AZURECalc theFunc(data(), compound(), configure(), &limitsManager);
+    AZURECalc theFunc(data(), results, compound(), configure(), &limitsManager);
     // The prior covariance replaces the diagonal prior of each of its parameters (docs/upgrade/objective.md D3).
     if (priorCov && priorCov->Size() > 0) {
       const std::vector<std::string> replaced = ReplaceDiagonalPriors(compound(), data(), *priorCov);
@@ -807,7 +810,7 @@ int AZUREMain::operator()() {
                               << std::endl;
       }
       if (!cov.empty()) {
-        if (BuildBandData(compound(), data(), data()->GetResults(), configure(), cov, bandData, &fitFixedMask)) {
+        if (BuildBandData(compound(), data(), results, configure(), cov, bandData, &fitFixedMask)) {
           bandPtr = &bandData;
           configure().outStream << "Writing cross-section uncertainty bands..." << std::endl;
         } else {
@@ -824,7 +827,7 @@ int AZUREMain::operator()() {
         theFunc(params.GetMinuitParams().Params());
       }
     }
-    data()->WriteOutputFiles(configure(), data()->GetResults(), false, bandPtr);
+    data()->WriteOutputFiles(configure(), results, false, bandPtr);
     // s-wave scattering lengths of every particle pair at the parameters just written, and the
     // measured ones of the <scatteringLengths> block: the table goes to scatteringLengths.out only,
     // the run log (GUI execution screen) names the file.
