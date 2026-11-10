@@ -83,20 +83,6 @@ struct ConvertResult {
 /// prior-covariance file under options.projectDir.
 ConvertResult ConvertToFormat3(const std::string &oldText, const ConvertOptions &options);
 
-/*!
- * The format-3 sections of a project text read with io::ReadRecords and validated with experiment's table:
- * every diagnostic (the reader's and the validator's), and the number of checks the validator leaves to the
- * format-3 reader of step 3b because they need <levels> or the data files (the quantities' refusals marked
- * "build", one per record and refusal).  Used by `AZURE2 --validate`, pyazr.validate and the converter on its own
- * output.
- */
-struct Format3Check {
-  std::vector<experiment::Diagnostic> diagnostics;
-  int buildChecksSkipped = 0;
-  bool Ok() const;
-};
-Format3Check CheckFormat3Text(const std::string &text, const std::string &fileName);
-
 /// The answers of --answers: a flat JSON object {"<record>.<field>": <string or number>, ...}.  Returns "" or what is
 /// wrong with the text.
 std::string ReadAnswersJson(const std::string &text, std::map<std::string, std::string> &answers);

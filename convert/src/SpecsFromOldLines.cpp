@@ -145,10 +145,18 @@ ExtrapolationSpec ExtrapolationOf(const ExtrapLine &s, int key, std::string &why
   why = ReadReaction(s, ExtrapolationObservable(thm ? s.isDiff() - 10 : s.isDiff()), thm, x.reaction);
   x.minE = s.minE();
   x.maxE = s.maxE();
-  x.eStep = s.eStep();
   x.minA = s.minA();
   x.maxA = s.maxA();
-  x.aStep = s.aStep();
+  // The old loops: energy += eStep from Emin while energy <= Emax, inside angle += aStep from Amin while angle <= Amax;
+  // a step of 0 gives one value.
+  for (double e = s.minE(); e <= s.maxE(); e += s.eStep()) {
+    x.energies.push_back(e);
+    if (s.eStep() == 0.0) break;
+  }
+  for (double a = s.minA(); a <= s.maxA(); a += s.aStep()) {
+    x.angles.push_back(a);
+    if (s.aStep() == 0.0) break;
+  }
   if (x.reaction.observable == Observable::AngularDistribution) x.maxAngDistOrder = s.maxAngDistOrder();
   return x;
 }

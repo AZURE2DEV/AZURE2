@@ -2,6 +2,40 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-10 (late morning) — format 3, step 3b-1, G2: records produce the engine's specs (`feature/upgrade-4-format3-reader`)
+
+**Done.**
+- `Schema::Build(validated records, pairs of <levels>, options) -> BuiltProject` (`experiment/include/azure2/experiment/Build.h`,
+  `src/Build.cpp`, `src/BuildEffects.cpp`): data sets, extrapolations, shared `normalization`/`energy_scale` (the record's
+  values written into every member; a scale's function only on its first active member, as `EData::ResolveShiftFunctions`
+  requires), effects (one `TargetEffectSpec` per distinct target/beam/detector/quadrature/fold_windows, ordered by the first
+  of its records), sample thicknesses, abundances (one row per isotope and compound nucleus its data sets reach), THM
+  membership (`ThmMembershipSpec`).  Reactions resolved against the pairs (states to the digits written; §3.5 pair-key rule).
+- Build diagnostics with table codes and a test each (`experiment/tests/build_test.cpp`): `E_UNKNOWN_PAIR`, `E_AMBIGUOUS_PAIR`
+  (names and wording of the model-data branch), `E_PAIR_KEY`, `E_DATA_FILE`, `E_NOT_BUILT` (what the table takes and this
+  engine cannot set up yet: units other than the engine's, c.m. or file/adaptive grids, column layouts, epochs, ...),
+  `E_THM_RELATIVISTIC`, `E_THM_COVARIANCE`, `E_FOLD_CONFLICT`; `E_FIELD_NOT_APPLICABLE` for a phase shift's (J, l, s).
+- The reading path `ReadFormat3Text/Project` (`experiment/.../ProjectReader.h`, library `azure2_experiment_reader`, links io/)
+  replaces convert/'s `CheckFormat3Text`; `AZURE2 --validate` and `pyazr.validate` build too (data files relative to the
+  working directory, as the engine opens them); the converter's self-check stays validation only.
+- `ExtrapolationSpec` holds its grid as lists (`energies`, `angles`): the old adaptor fills them by the old accumulating loops,
+  `Build` by decision F10; `EData::MakePoints` iterates the lists (`ESegment::GetEStep/GetAStep` deleted).
+- Spec-equivalence ctest `convert_spec_equivalence` (all 189 files: 186 convert, 183 equal, 3 recorded, 0 differ; rules in its
+  header; `AZURE2_SPEC_INJECT=1` shows it failing).
+- Converter: targets with a screening U_e or a density/temperature fit form are never merged (each old line had its own
+  parameter; tests/screening_6li/bare.azr had three merged); `PairLabel` writes a light particle's excitation; an existing
+  `<modelData>` section receives the converted `<scatteringLengths>` rows (one section); the `pair` value accepts `n[0.3]+20Ne`.
+
+**Verified** (build `work/b-fmt3`, 0 warnings, 3 threads): 179 × 3 against `tab-p3f` 689 / 662 / 689 identical (tag
+`tab-fmt3b`); `ctest -LE slow` 149/152 then the 3 failures fixed (a test's code list, a note's text, the data-file
+directory of `pyazr_validate`) and those plus `repo_consistency` rerun: pass; `tests/run_tests.sh` 135 passed, 0 failed;
+consistency checks pass.
+
+**Not done (next):** G2 item 4 (parameter-name stems; a norm-group follower has its own fixed parameter in the engine, which
+the converter's map sends to the same new name as the leader's: a decision); `<modelData>`/`<scatteringLengths>` are not
+built (the director joins the model-data branch); G3 entirely (`Config::ReadConfigFile` on format 3, reading order and
+`ExitPairKeysInFile`, the five §8.5 refusals, `--describe`, the converted-tree gate, docs).
+
 ## 2026-11-10 (day) — Phase 4 S1, S2 remainder and S4: one model pass (`feature/upgrade-4-model-pass`)
 
 **Done** (`data_model.md` S1, S2, S4; brief F).

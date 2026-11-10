@@ -29,8 +29,8 @@ def validate(path):
     Returns a list of dicts, one per diagnostic (docs/upgrade/project_format3.md section 6.2): ``severity``
     ("error", "warning"), ``code``, ``file``, ``line``, ``column``, ``section``, ``record_kind``, ``record``,
     ``field``, ``found``, ``allowed``, ``message`` and a syntax-only ``fix``.  An empty list: the file is valid.
-    The checks that need ``<levels>`` or the data files are left to the format-3 reader; their number is given as a
-    warning.  A format-1 or format-2 file raises ``ValueError`` with the conversion command (section 8.4).
+    The checks that need ``<levels>`` or the data files are made too (the engine's build of the project); a check of
+    model data, which is built in a later step, is counted and given as a warning.  A format-1 or format-2 file raises ``ValueError`` with the conversion command (section 8.4).
     Needs the compiled engine module.
     """
     import json
@@ -41,6 +41,6 @@ def validate(path):
     if refusal:
         raise ValueError(refusal)
     if skipped:
-        warnings.warn(f"{path}: {skipped} check(s) that need <levels> or the data files were not run; "
-                      "the format-3 reader of step 3b runs them", stacklevel=2)
+        warnings.warn(f"{path}: {skipped} check(s) of model data were not run (<modelData> is built in a later "
+                      "step)", stacklevel=2)
     return json.loads(diagnostics)

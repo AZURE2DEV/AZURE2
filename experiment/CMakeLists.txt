@@ -25,6 +25,8 @@ endif()
 add_library(azure2_experiment STATIC
   src/ColumnsGrid.cpp
   src/Diagnostics.cpp
+  src/Build.cpp
+  src/BuildEffects.cpp
   src/Expression.cpp
   src/Frames.cpp
   src/Json.cpp
@@ -38,6 +40,14 @@ add_library(azure2_experiment STATIC
   src/ValueParsers.cpp
   src/Values.cpp)
 add_library(azure2::experiment ALIAS azure2_experiment)
+# The reading path of a format-3 project (ProjectReader.h): the table above with io/'s document, record and <levels>
+# readers.
+add_library(azure2_experiment_reader STATIC src/ProjectReader.cpp)
+target_link_libraries(azure2_experiment_reader PUBLIC azure2_experiment azure2_io)
+set_target_properties(azure2_experiment_reader PROPERTIES POSITION_INDEPENDENT_CODE ON CXX_EXTENSIONS OFF)
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+  target_compile_options(azure2_experiment_reader PRIVATE -Wall -Wextra -Wpedantic)
+endif()
 target_include_directories(azure2_experiment PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_link_libraries(azure2_experiment PUBLIC azure2_physics azure2_io_record)
 target_compile_features(azure2_experiment PUBLIC cxx_std_17)
@@ -55,10 +65,10 @@ endif()
 # tests/schema/schema_v3.json (check 21).
 # (Sources named in full: repo_consistency checks that every tests/*_test.cpp is named here.)
 foreach(_src expression_test.cpp frames_test.cpp schema_test.cpp diagnostics_test.cpp quantities_test.cpp
-             parsers_test.cpp)
+             parsers_test.cpp build_test.cpp)
   string(REPLACE "_test.cpp" "" _t ${_src})
   add_executable(experiment_${_t}_test tests/${_src})
-  target_link_libraries(experiment_${_t}_test PRIVATE azure2_experiment azure2_io)
+  target_link_libraries(experiment_${_t}_test PRIVATE azure2_experiment_reader)
   if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     target_compile_options(experiment_${_t}_test PRIVATE -Wall -Wextra -Wpedantic)
   endif()

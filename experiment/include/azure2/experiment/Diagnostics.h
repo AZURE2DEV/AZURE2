@@ -123,6 +123,13 @@ constexpr const char *kLevelJpi = "E_LEVEL_JPI";
 constexpr const char *kUnknownPair = "E_UNKNOWN_PAIR";
 constexpr const char *kAmbiguousPair = "E_AMBIGUOUS_PAIR";
 constexpr const char *kNotAChannel = "E_NOT_A_CHANNEL";
+// Build checks (Schema::Build: they need <levels> or the data files)
+constexpr const char *kPairKey = "E_PAIR_KEY";
+constexpr const char *kDataFile = "E_DATA_FILE";
+constexpr const char *kNotBuilt = "E_NOT_BUILT";
+constexpr const char *kThmRelativistic = "E_THM_RELATIVISTIC";
+constexpr const char *kThmCovariance = "E_THM_COVARIANCE";
+constexpr const char *kFoldConflict = "E_FOLD_CONFLICT";
 // Warnings
 constexpr const char *kNotMeasurable = "W_NOT_MEASURABLE";
 constexpr const char *kBroadLevel = "W_BROAD_LEVEL";

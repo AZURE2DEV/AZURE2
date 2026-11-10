@@ -594,10 +594,18 @@ bool ParseValue(const ValueSpec &spec, TokenCursor &cur, ParseContext &ctx, Valu
         state = heavy.substr(br + 1, heavy.size() - br - 2);
         heavy = heavy.substr(0, br);
       }
+      // the light particle's excitation, as in a reaction label (a[3.0], section 3.5)
+      std::string light = plus == std::string::npos ? "" : t.text.substr(0, plus), lightExc;
+      const std::size_t lbr = light.find('[');
+      if (lbr != std::string::npos && light.back() == ']') {
+        lightExc = light.substr(lbr + 1, light.size() - lbr - 2);
+        light = light.substr(0, lbr);
+      }
       const char *code = nullptr;
-      Number e;
+      Number e, le;
       const bool ok = plus != std::string::npos &&
-                      ParseParticleText(t.text.substr(0, plus), true, out.pair.light, error, code) &&
+                      ParseParticleText(light, true, out.pair.light, error, code) &&
+                      (lightExc.empty() || (ParseNumberText(lightExc, le) && le.value >= 0)) &&
                       ParseParticleText(heavy, false, out.pair.heavy, error, code) &&
                       (state.empty() || state == "0" || (ParseNumberText(state, e) && e.value > 0));
       if (!ok) {
@@ -605,6 +613,10 @@ bool ParseValue(const ValueSpec &spec, TokenCursor &cur, ParseContext &ctx, Valu
                   ctx.Where() + ": '" + t.text + "' is not a particle pair <particle>+<nucleus>[<E_x>] (p+15N, a+12C[4.439])" +
                       (error.empty() ? "" : ": " + error));
         return false;
+      }
+      if (!lightExc.empty() && le.value > 0) {
+        out.pair.light.excited = true;
+        out.pair.light.excitation = le;
       }
       if (!state.empty() && state != "0") {
         out.pair.state.kind = ResidualState::Excited;

@@ -7,6 +7,7 @@
 #include "Build.h"
 #include "OldProject.h"
 #include "azure2/experiment/Json.h"
+#include "azure2/experiment/ProjectReader.h"
 #include "azure2/experiment/Schema.h"
 #include "azure2/io/Convert.h"
 #include "azure2/io/Document.h"
@@ -110,33 +111,6 @@ std::string ReadAnswersJson(const std::string &text, std::map<std::string, std::
   }
 }
 
-bool Format3Check::Ok() const {
-  for (const experiment::Diagnostic &d : diagnostics)
-    if (d.severity == experiment::Severity::Error) return false;
-  return true;
-}
-
-Format3Check CheckFormat3Text(const std::string &text, const std::string &fileName) {
-  using experiment::Schema;
-  Format3Check c;
-  const io::Document doc = io::Document::Parse(text);
-  std::vector<experiment::SectionRecords> sections;
-  for (const io::Document::Section &s : doc.Sections()) {
-    if (s.depth != 0 || Schema::KindsOfSection(s.name).empty()) continue;
-    const io::RecordReadResult r = io::ReadRecords(doc, s, Schema::KindsOfSection(s.name));
-    for (const io::RecordDiagnostic &d : r.diagnostics) c.diagnostics.push_back(experiment::FromRecordDiagnostic(d, s.name));
-    sections.push_back({s.name, r.set.records});
-  }
-  const experiment::ValidationResult v = Schema::Validate(sections);
-  c.diagnostics.insert(c.diagnostics.end(), v.diagnostics.begin(), v.diagnostics.end());
-  for (experiment::Diagnostic &d : c.diagnostics) d.file = fileName;
-  for (const experiment::ValidatedRecord &r : v.records)
-    if (r.quantity)
-      for (const experiment::Refusal &x : r.quantity->refusals)
-        if (x.checkedBy == "build") c.buildChecksSkipped++;
-  return c;
-}
-
 std::string NotFormat3Message(const std::string &text, const std::string &fileName) {
   const io::Document doc = io::Document::Parse(text);
   if (io::FormatOf(doc) == 3) {
@@ -196,9 +170,19 @@ ConvertResult ConvertToFormat3(const std::string &oldText, const ConvertOptions 
   if (!ReplaceSection(doc, "segmentsTest", "extrapolations", extrapolations) && !built.extrapolations.records.empty())
     InsertSection(doc, "", "extrapolations", extrapolations);
   ReplaceSection(doc, "abundances", "", {});
-  if (!ReplaceSection(doc, "scatteringLengths", built.modelData.records.empty() ? "" : "modelData", modelData) &&
-      !built.modelData.records.empty())
+  // One <modelData> section: a format-2 file may hold one already (format-3 datum records, copied as they are); the
+  // converted <scatteringLengths> rows follow its records.
+  const io::Document::Section *existing = doc.Find("modelData");
+  if (existing && existing->close != io::Document::Section::npos && !built.modelData.records.empty()) {
+    std::vector<std::string> body = doc.Body(*existing);
+    if (!body.empty()) body.push_back("");
+    body.insert(body.end(), modelData.begin(), modelData.end());
+    ReplaceBody(doc, *existing, body);
+    ReplaceSection(doc, "scatteringLengths", "", {});
+  } else if (!ReplaceSection(doc, "scatteringLengths", built.modelData.records.empty() ? "" : "modelData", modelData) &&
+             !built.modelData.records.empty()) {
     InsertSection(doc, "", "modelData", modelData);
+  }
   for (const auto &b : built.bodies) {
     if (b.first == "mcmc/parameters") {
       if (const io::Document::Section *m = doc.Find("mcmc"))
@@ -227,7 +211,9 @@ ConvertResult ConvertToFormat3(const std::string &oldText, const ConvertOptions 
   res.text = doc.Write();
 
   // Validate the output with the table (the converter never returns a file with errors).
-  const Format3Check check = CheckFormat3Text(res.text, "");
+  experiment::Format3ReadOptions read;
+  read.build = false;  // the build needs the data files, which the conversion reads but the fixtures do not carry
+  const experiment::Format3Project check = experiment::ReadFormat3Text(res.text, read);
   bool errors = false;
   for (const experiment::Diagnostic &d : check.diagnostics) {
     if (d.severity != experiment::Severity::Error) continue;
