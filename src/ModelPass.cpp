@@ -354,7 +354,8 @@ bool ModelPointBackward(ESegment &segment, int pointIndex, CNuc *compound, const
   // A Coulomb leaf depends on no parameter the caller back-propagates (its energy shift is differentiated by
   // finite differences, as every leaf's): it leaves the list, whose entries go through the R-matrix adjoint.
   for (std::size_t k = nl; k-- > 0;)
-    if (experiment::IsCoulombReference(p.leaves[k].part)) out.leaves.erase(out.leaves.begin() + static_cast<std::ptrdiff_t>(k));
+    if (experiment::IsCoulombReference(p.leaves[k].part))
+      out.leaves.erase(out.leaves.begin() + static_cast<std::ptrdiff_t>(k));
   return ok;
 }
 

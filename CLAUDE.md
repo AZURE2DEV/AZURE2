@@ -295,10 +295,25 @@ one), the schema and docs as above; later its tree builder (step 3).
    turns the record into a `DatasetSpec` (`SetupSpecs.h`: the observable, the reaction's pair keys, the windows,
    the nuisances with their `ParameterNames`); until it has one, `Build` refuses the quantity with `E_NOT_BUILT`, so
    a file never runs with a quantity the engine does not compute.  What the engine computes for the spec is the
-   model pass (`include/ModelPass.h`; the expression tree, S10).
-3. A test: a case in `experiment/tests/build_test.cpp` (the spec member by member, and its refusals), and when an old
+   model pass (`include/ModelPass.h`; the expression tree, S10).  A spec member the old lines never set (as
+   `ReactionSpec::coulombReference`) goes into the comparison of `convert/tests/spec_equivalence_test.cpp` too.
+   A refusal that depends on the target, beam or detector the data set names is made where the effects are built
+   (`experiment/src/BuildEffects.cpp`, `CoulombRatioFolds` is the pattern).
+3. If the spec needs a tree the existing kinds do not build: one row of `TreeKinds()` (`experiment/src/Prediction.cpp`,
+   its `TreeKind` and builder; `TreeKindOf` decides) and, for a value the R-matrix does not compute, a `LeafPart`.
+   Such a leaf's value at a point is computed in `PointInputs` (`src/ModelPass.cpp`) by a function of its own file
+   (`src/CoulombReference.cpp`: the Rutherford / Mott leaf, folded on the point's own sub-points with
+   `EPoint::IntegrateSubPointValues`, never a second quadrature); `ComposeModelValue` does not calculate a point for
+   it, and `ModelPointBackward` drops it from the leaves when no level parameter moves it.  A data value that is the
+   same in the lab and c.m. frames (a ratio) answers `ESegment::IsDimensionlessRatio`, so it is not converted at load.
+   Then `python3 tests/upgrade/predictions_test.py --binary <AZURE2> --write` (lines added for new projects only).
+4. A test: a case in `experiment/tests/build_test.cpp` (the spec member by member, and its refusals), a case in
+   `experiment/tests/prediction_test.cpp` for a new tree, and when an old
    construct converts to it, `convert_spec_equivalence` (the old line's spec equals the record's) and a run of the
-   converted file (`tests/format3_engine/check.sh` is the pattern: outputs byte for byte the old file's).
+   converted file (`tests/format3_engine/check.sh` is the pattern: outputs byte for byte the old file's).  A quantity
+   no old construct has gets a test project of its own in format 3 with an independent answer
+   (`tests/ratio_to_rutherford/`: `truth.py` with mpmath, `check.sh`, models under `models/` with their data in
+   `models/data/`; io_convert leaves a format-3 `.azr` alone).
    `AZURE2 --describe` must show the observable and the pair keys it resolved to.
 
 **A format-3 unit.** One `Unit` row in `experiment/src/Units.cpp`, `{token, dimension, factor to the dimension's

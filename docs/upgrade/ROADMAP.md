@@ -169,7 +169,8 @@ the model pass; the engine runs a format-3 file, `--describe`, the converted-tre
       strengths ωγ, scattering lengths, widths). Old files are read only by `AZURE2 --convert` / `pyazr.convert_azr`.
       One table of quantities feeds the file validation, Python, the GUI and the documentation; `AZURE2 --schema` and
       `--validate` give them to programs and AI agents.
-- [ ] New data kinds, in this order (`data_kinds.md` §5.3): ratio to Rutherford and to Mott; S factor as an engine
+- [ ] New data kinds, in this order (`data_kinds.md` §5.3): ratio to Rutherford and to Mott (done on
+      `feature/upgrade-4-rutherford`, brief L: the `rutherford` / `mott` leaf, `tests/ratio_to_rutherford`); S factor as an engine
       quantity (with it, the fix of pyazr's S-factor conversion, which uses mass numbers: σ +2.9 % for ³He+α at 93 keV,
       +6.7 % for p+¹²C at 100 keV); named targets and thick-target yields per incident particle or per charge;
       ωγ; Legendre coefficients with their normalisations. Extrapolation segments on a list, a file or an adaptive grid.
