@@ -324,14 +324,6 @@ int EPoint::GetL() const {
 }
 
 /*!
- * Returns the number of points mapped to the current point.
- */
-
-int EPoint::NumLocalMappedPoints() const {
-  return local_mapped_points_.size();
-}
-
-/*!
  * Returns the total number of sub-points contained within the present objet.  The sub-points are used to calculate the target effect integrals.
  */
 
@@ -1441,8 +1433,9 @@ void EPoint::CalcEDependentValues(CNuc *theCNuc, const Config &configure, bool i
   // (EData::FillEnergyShiftsFromParams), and two threads assigning the same
   // shared_ptr freed the tables under the other's copy-on-write
   // (heap-use-after-free, AddressSanitizer 2026-11-06; macOS CI aborts).
-  for (int i = 1; shareWithMapped && i <= this->NumLocalMappedPoints(); i++) {
-    EPoint *mappedPoint = this->GetLocalMappedPoint(i);
+  const azure2::MappedPoints mappedPts = this->PlanMapped();
+  for (int i = 1; shareWithMapped && i <= mappedPts.size(); i++) {
+    EPoint *mappedPoint = mappedPts[i - 1];
     if (mappedPoint->OwnsEDependentValues()) continue;
     mappedPoint->geofactor_ = geofactor_;
     mappedPoint->sfactorconv_ = sfactorconv_;
@@ -1923,8 +1916,9 @@ bool ScopedPointMappingOff::Active() { return tlPointMappingOff; }
 
 void EPoint::MarkFailed(azure2::Results &results, const char *role, const Config &configure, const char *why) {
   // Every fixed quantity NaN and no angular-distribution coefficient, on this point and every point mapped onto it.
-  for (int i = 0; i <= this->NumLocalMappedPoints(); i++) {
-    EPoint *p = i ? this->GetLocalMappedPoint(i) : this;
+  const azure2::MappedPoints mappedPts = this->PlanMapped();
+  for (int i = 0; i <= mappedPts.size(); i++) {
+    EPoint *p = i ? mappedPts[i - 1] : this;
     std::fill(p->Rec(results), p->Rec(results) + azure2::Results::kNumFixed, std::numeric_limits<double>::quiet_NaN());
     if (p->num_ang_slots_) p->Rec(results)[azure2::Results::AngularOffset()] = 0.0;
   }
@@ -1949,7 +1943,8 @@ void EPoint::Calculate(CNuc *theCNuc, const Config &configure, azure2::Results &
     throw std::runtime_error("injected failure (AZURE_TEST_FAIL_E).");
   // Points mapped onto this one (EData::MapData), unless mapping is switched
   // off on this thread (ScopedPointMappingOff).
-  const int numMapped = ScopedPointMappingOff::Active() ? 0 : this->NumLocalMappedPoints();
+  const azure2::MappedPoints mappedPts = ScopedPointMappingOff::Active() ? azure2::MappedPoints() : this->PlanMapped();
+  const int numMapped = mappedPts.size();
   if (!this->IsTargetEffect() ||
       !this->GetParentData()->GetTargetEffect(this->GetTargetEffectNum())->IsSubPointEffect()) {
     // THM (modified R-matrix) segments: reuse the shared interior (A-matrix)
@@ -1969,13 +1964,14 @@ void EPoint::Calculate(CNuc *theCNuc, const Config &configure, azure2::Results &
       thmFunc.InvertMatrices();
       thmFunc.CalculateTHMCrossSection(this, results);
       if (subPointNum && parent) {
-        for (int i = 1; i <= parent->NumLocalMappedPoints(); i++) {
-          EPoint *mappedSubPoint = parent->GetLocalMappedPoint(i)->GetSubPoint(subPointNum);
+        const azure2::MappedPoints parentMapped = parent->PlanMapped();
+        for (int i = 1; i <= parentMapped.size(); i++) {
+          EPoint *mappedSubPoint = parentMapped[i - 1]->GetSubPoint(subPointNum);
           thmFunc.CalculateTHMCrossSection(mappedSubPoint, results);
         }
       } else {
-        for (int i = 1; i <= this->NumLocalMappedPoints(); i++)
-          thmFunc.CalculateTHMCrossSection(this->GetLocalMappedPoint(i), results);
+        const azure2::MappedPoints ownMapped = this->PlanMapped();
+        for (int i = 1; i <= ownMapped.size(); i++) thmFunc.CalculateTHMCrossSection(ownMapped[i - 1], results);
       }
       return;
     }
@@ -2013,11 +2009,11 @@ void EPoint::Calculate(CNuc *theCNuc, const Config &configure, azure2::Results &
       theMatrixFunc->CalculateCrossSection(mapped, results);
     };
     if (subPointNum && parent) {
-      const int numParentMapped = ScopedPointMappingOff::Active() ? 0 : parent->NumLocalMappedPoints();
-      for (int i = 1; i <= numParentMapped; i++)
-        mappedCrossSection(parent->GetLocalMappedPoint(i)->GetSubPoint(subPointNum));
+      const azure2::MappedPoints parentMapped =
+          ScopedPointMappingOff::Active() ? azure2::MappedPoints() : parent->PlanMapped();
+      for (int i = 1; i <= parentMapped.size(); i++) mappedCrossSection(parentMapped[i - 1]->GetSubPoint(subPointNum));
     } else {
-      for (int i = 1; i <= numMapped; i++) mappedCrossSection(this->GetLocalMappedPoint(i));
+      for (int i = 1; i <= numMapped; i++) mappedCrossSection(mappedPts[i - 1]);
     }
   } else {
     TargetEffect *effect = this->GetParentData()->GetTargetEffect(this->GetTargetEffectNum());
@@ -2040,7 +2036,7 @@ void EPoint::Calculate(CNuc *theCNuc, const Config &configure, azure2::Results &
       azure2::Results probeResults;  // the probe's own record: it must not write the point's
       probe.UsePrivateRecord(probeResults, results);
       probe.SetTargetEffectNum(0);
-      probe.ClearLocalMappedPoints();
+      probe.DetachFromPlan();
       probe.integrationPoints_.clear();
       probe.Calculate(theCNuc, configure, probeResults);
       bareValue = probe.GetFitCrossSection(probeResults);
@@ -2077,7 +2073,7 @@ void EPoint::Calculate(CNuc *theCNuc, const Config &configure, azure2::Results &
       }
       bool allPass = true;
       for (int m = 0; m <= numMapped && allPass; m++) {
-        EPoint *host = (m == 0) ? this : this->GetLocalMappedPoint(m);
+        EPoint *host = (m == 0) ? this : mappedPts[m - 1];
         double sFirst = host->GetSubPoint(iFirst)->GetFitCrossSection(results);
         double sMid = host->GetSubPoint(iMid)->GetFitCrossSection(results);
         double sLast = host->GetSubPoint(iLast)->GetFitCrossSection(results);
@@ -2090,12 +2086,12 @@ void EPoint::Calculate(CNuc *theCNuc, const Config &configure, azure2::Results &
         this->SetFitCrossSection(results, bareValue);
         this->SetFitE1CrossSection(results, bareE1), this->SetFitE2CrossSection(results, bareE2);
         for (int m = 1; m <= numMapped; m++) {
-          EPoint *mappedPoint = this->GetLocalMappedPoint(m);
+          EPoint *mappedPoint = mappedPts[m - 1];
           EPoint mappedProbe(*mappedPoint);
           azure2::Results probeResults;
           mappedProbe.UsePrivateRecord(probeResults, results);
           mappedProbe.SetTargetEffectNum(0);
-          mappedProbe.ClearLocalMappedPoints();
+          mappedProbe.DetachFromPlan();
           mappedProbe.integrationPoints_.clear();
           mappedProbe.Calculate(theCNuc, configure, probeResults);
           mappedPoint->SetFitCrossSection(results, mappedProbe.GetFitCrossSection(probeResults));
@@ -2121,7 +2117,7 @@ void EPoint::Calculate(CNuc *theCNuc, const Config &configure, azure2::Results &
     if (blend < 1.0 && haveBare)
       this->SetFitCrossSection(results, blend * this->GetFitCrossSection(results) + (1.0 - blend) * bareValue);
     for (int i = 1; i <= numMapped; i++) {
-      EPoint *mappedPoint = this->GetLocalMappedPoint(i);
+      EPoint *mappedPoint = mappedPts[i - 1];
       mappedPoint->IntegrateTargetEffectForObservable(configure, results);
       if (blend < 1.0) {
         // The mapped point is another observable at the same energy: its bare
@@ -2130,7 +2126,7 @@ void EPoint::Calculate(CNuc *theCNuc, const Config &configure, azure2::Results &
         azure2::Results probeResults;
         mappedProbe.UsePrivateRecord(probeResults, results);
         mappedProbe.SetTargetEffectNum(0);
-        mappedProbe.ClearLocalMappedPoints();
+        mappedProbe.DetachFromPlan();
         mappedProbe.integrationPoints_.clear();
         mappedProbe.Calculate(theCNuc, configure, probeResults);
         mappedPoint->SetFitCrossSection(results, blend * mappedPoint->GetFitCrossSection(results) +
@@ -2152,7 +2148,8 @@ void EPoint::Calculate(CNuc *theCNuc, const Config &configure, azure2::Results &
  *    sigma(E_bar) for a box), sigma(E_bar) is used and no other sub-point is evaluated.
  */
 void EPoint::CalculateThinTarget(CNuc *theCNuc, const Config &configure, azure2::Results &results, TargetEffect *effect) {
-  const int numMapped = ScopedPointMappingOff::Active() ? 0 : this->NumLocalMappedPoints();
+  const azure2::MappedPoints mappedPts = ScopedPointMappingOff::Active() ? azure2::MappedPoints() : this->PlanMapped();
+  const int numMapped = mappedPts.size();
   const bool hasMapped = numMapped > 0;
   const int n = this->NumSubPoints();
   auto calcSub = [&](int i) {
@@ -2166,7 +2163,7 @@ void EPoint::CalculateThinTarget(CNuc *theCNuc, const Config &configure, azure2:
   auto integrateAll = [&]() {
     this->IntegrateTargetEffectForObservable(configure, results);
     for (int m = 1; m <= numMapped; m++)
-      this->GetLocalMappedPoint(m)->IntegrateTargetEffectForObservable(configure, results);
+      mappedPts[m - 1]->IntegrateTargetEffectForObservable(configure, results);
   };
   const double autoTol = effect->GetAutoTolerance();
   if (autoTol > 0. && !target_fallback_only_ && n >= 4) {
@@ -2185,7 +2182,7 @@ void EPoint::CalculateThinTarget(CNuc *theCNuc, const Config &configure, azure2:
     const double tBar = (ea > eb) ? std::min(std::max((ea - eBar) / (ea - eb), 0.0), 1.0) : 0.0;
     bool allPass = true;
     for (int m = 0; m <= numMapped && allPass; m++) {
-      EPoint *host = (m == 0) ? this : this->GetLocalMappedPoint(m);
+      EPoint *host = (m == 0) ? this : mappedPts[m - 1];
       const double sF = host->GetSubPoint(1)->GetFitCrossSection(results);
       const double sL = host->GetSubPoint(n)->GetFitCrossSection(results);
       const double sBar = (1.0 - tBar) * host->GetSubPoint(jb)->GetFitCrossSection(results) +
@@ -2199,7 +2196,7 @@ void EPoint::CalculateThinTarget(CNuc *theCNuc, const Config &configure, azure2:
       EPoint::TargetFallbackScope self(this);
       std::vector<std::unique_ptr<EPoint::TargetFallbackScope>> mapped;
       for (int m = 1; m <= numMapped; m++)
-        mapped.emplace_back(new EPoint::TargetFallbackScope(this->GetLocalMappedPoint(m)));
+        mapped.emplace_back(new EPoint::TargetFallbackScope(mappedPts[m - 1]));
       integrateAll();
       return;
     }
@@ -2326,21 +2323,6 @@ void EPoint::ClearMapping() {
   energy_map_.point = 0;
 }
 
-/*!
- * If a point is mapped to the current point, a pointer to the mapped point is added to a vector.
- */
-
-void EPoint::AddLocalMappedPoint(EPoint *point) {
-  local_mapped_points_.push_back(point);
-}
-
-/*!
- * Clears vector containing pointers to points mapped to the current point.
- */
-
-void EPoint::ClearLocalMappedPoints() {
-  local_mapped_points_.clear();
-}
 
 /*!
  * Sets the position of the corresponding TargetEffect object in the parent EData object.
@@ -2963,17 +2945,18 @@ void EPoint::NoResultRecord(const azure2::Results &r) const {
  * Returns a pointer to the parent EData object.
  */
 
+azure2::MappedPoints EPoint::PlanMapped() const {
+  if (plan_task_ < 0 || !parentData_) return azure2::MappedPoints();
+  const azure2::CalculationTask &task = parentData_->Plan().Task(plan_task_);
+  // only the host itself: a copy of it (a probe) or a point mapped onto it calculates itself alone
+  if (parentData_->PlanPoint(task.host) != this) return azure2::MappedPoints();
+  return azure2::MappedPoints(parentData_, &task.mapped);
+}
+
 EData *EPoint::GetParentData() const {
   return parentData_;
 }
 
-/*!
- * Returns a pointer to a point mapped to the current point specified by a position in the mapped point vector.
- */
-
-EPoint *EPoint::GetLocalMappedPoint(int mappedPointNum) const {
-  return local_mapped_points_[mappedPointNum - 1];
-}
 
 /*!
  * Returns a pointer to the specified sub-point in the current EPoint object.
@@ -2997,10 +2980,4 @@ std::vector<EPoint> &EPoint::GetSubPoints() {
   return integrationPoints_;
 }
 
-/*!
- * Returns a reference to the vector of pointers to mapped EPoint objects.
- */
 
-std::vector<EPoint *> &EPoint::GetMappedPoints() {
-  return local_mapped_points_;
-}

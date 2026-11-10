@@ -1,6 +1,7 @@
 #ifndef EDATA_H
 #define EDATA_H
 
+#include "CalculationPlan.h"
 #include "ChannelTable.h"
 #include "ESegment.h"
 #include "TargetEffect.h"
@@ -238,9 +239,23 @@ class EData {
   bool CheckTransformedSegments(const Config &);
   /// Map points at equal energies onto one another, so a shared energy is calculated once.
   /// The compound nucleus tells which segments have a particle exit; null is conservative.
+  /// Then the calculation plan is built from the mapping and checked (CalculationPlan.h).
   void MapData(CNuc *theCNuc = nullptr);
-  /// The mapping inside segments with components (MapData calls it last).
-  void MapComponentSegments(CNuc *theCNuc);
+  /// The mapping inside segments with components (MapData calls it last), appended to `mapping` as (host, mapped).
+  void MapComponentSegments(CNuc *theCNuc, std::vector<std::pair<azure2::PointRef, azure2::PointRef>> &mapping);
+  /// The calculation plan: which task calculates which point (CalculationPlan.h).
+  const azure2::CalculationPlan &Plan() const { return plan_; }
+  /// A point of the plan, by position (list 0: segments, 1: component segments).
+  EPoint *PlanPoint(const azure2::PointRef &r) {
+    ESegment &seg = r.list == azure2::PointRef::kSegments ? segments_[r.segment] : componentSegments_[r.segment];
+    return &seg.GetPoints()[r.point];
+  }
+  int NumPlanSegments(int list) const {
+    return list == azure2::PointRef::kSegments ? (int)segments_.size() : (int)componentSegments_.size();
+  }
+  ESegment *PlanSegment(int list, int s) {
+    return list == azure2::PointRef::kSegments ? &segments_[s] : &componentSegments_[s];
+  }
   /// Append a target-effect definition.
   void AddTargetEffect(TargetEffect);
   void SetNormParamOffset(int);
@@ -467,6 +482,7 @@ class EData {
   std::vector<TargetEffect> targetEffects_;
   std::vector<ESegment> segments_;
   std::deque<ESegment> componentSegments_;  // Separate storage for component segments (deque avoids pointer invalidation)
+  azure2::CalculationPlan plan_;  // built by MapData; positions only, so a copy of the data set copies it as it is
   /// The key of the next component segment (CreateComponentSegment): -1000, -1001, ... in creation order, one counter
   /// per data set, so a component's key depends on its project alone (not on what else the process loaded) and no
   /// two components share one (data_model.md section 1.3, H10).

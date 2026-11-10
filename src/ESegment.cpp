@@ -967,8 +967,8 @@ EPoint *ESegment::ShiftHost(int i) {
   if (map.point < 1 || map.point > i) return nullptr;
   EPoint *candidate = GetPoint(map.point);
   if (candidate->NumSubPoints() != point->NumSubPoints()) return nullptr;
-  for (int m = 1; m <= candidate->NumLocalMappedPoints(); m++)
-    if (candidate->GetLocalMappedPoint(m) == point) return candidate;
+  for (int m = 0, n = candidate->PlanMapped().size(); m < n; m++)
+    if (candidate->PlanMapped()[m] == point) return candidate;
   return nullptr;
 }
 
@@ -988,8 +988,8 @@ void ESegment::UpdatePointGroupEnergyWithShift(int i, CNuc *theCNuc, const Confi
   // segment's to move: it is re-energised with its own segment, on its own.
   std::less<const EPoint *> before;
   const EPoint *first = &points_.front(), *last = &points_.back();
-  for (int m = 1; m <= point->NumLocalMappedPoints(); m++) {
-    const EPoint *mapped = point->GetLocalMappedPoint(m);
+  for (int m = 0, n = point->PlanMapped().size(); m < n; m++) {
+    const EPoint *mapped = point->PlanMapped()[m];
     if (before(mapped, first) || before(last, mapped)) continue;
     const int j = (int)(mapped - first);
     if (j > i && j < NumPoints() && ShiftHost(j) == point) UpdatePointEnergyWithShift(j, theCNuc, configure);

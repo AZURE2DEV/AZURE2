@@ -523,7 +523,7 @@ bool GradTargetEffectAdjoint(EPoint *point, azure2::Results &results, double fit
   const bool isCoefNorm = point->IsCoefficient() && !point->GetCoefficientAbsolute();
   if (isCoefNorm) {
     if (xsComponent != 0) return false;
-    if (!ScopedPointMappingOff::Active() && (point->IsMapped() || point->NumLocalMappedPoints() > 0)) return false;
+    if (!ScopedPointMappingOff::Active() && (point->IsMapped() || point->PlanMapped().size() > 0)) return false;
   }
   if (isAy) {
     // Supported: particle-exit A_y, full observable, no point mapping in
@@ -533,7 +533,7 @@ bool GradTargetEffectAdjoint(EPoint *point, azure2::Results &results, double fit
     // A_y keeps its refusal: the attenuation folded into P_k has no
     // counterpart for the P_k^1 of the numerator.
     if (xsComponent != 0) return false;
-    if (!ScopedPointMappingOff::Active() && (point->IsMapped() || point->NumLocalMappedPoints() > 0)) return false;
+    if (!ScopedPointMappingOff::Active() && (point->IsMapped() || point->PlanMapped().size() > 0)) return false;
     const int exitPairNum = compound->GetPairNumFromKey(point->GetExitKey());
     if (compound->GetPair(exitPairNum)->GetPType() != 0) return false;
   }
@@ -1154,8 +1154,8 @@ std::vector<GradItem> BuildGradItems(EData *data, bool skipTHM) {
     if (m.point < 1 || m.point > hs->NumPoints()) return nullptr;
     EPoint *h = hs->GetPoint(m.point);
     if (!Groupable(hs, h) || h->GetCMEnergy() != pt->GetCMEnergy()) return nullptr;
-    for (int k = 1; k <= h->NumLocalMappedPoints(); k++)
-      if (h->GetLocalMappedPoint(k) == pt) return h;
+    for (int k = 0; k < h->PlanMapped().size(); k++)
+      if (h->PlanMapped()[k] == pt) return h;
     return nullptr;
   };
   std::vector<GradItem> items;
@@ -1172,8 +1172,8 @@ std::vector<GradItem> BuildGradItems(EData *data, bool skipTHM) {
       it.grouped = g;
       it.members.push_back({seg, s, p - 1, pt});
       if (g)
-        for (int k = 1; k <= pt->NumLocalMappedPoints(); k++) {
-          EPoint *m = pt->GetLocalMappedPoint(k);
+        for (int k = 0; k < pt->PlanMapped().size(); k++) {
+          EPoint *m = pt->PlanMapped()[k];
           auto w = where.find(m);
           if (w == where.end()) continue;
           ESegment *ms = data->GetSegment(w->second.first);

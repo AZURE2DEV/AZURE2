@@ -1,5 +1,6 @@
 #ifndef EPOINT_H
 #define EPOINT_H
+#include "CalculationPlan.h"
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -315,8 +316,6 @@ class EPoint {
   int GetMaxLOrder() const;
   /// Orbital angular momentum. Phase-shift points only.
   int GetL() const;
-  /// How many points are mapped onto this one.
-  int NumLocalMappedPoints() const;
   /// Number of sub-points, the samples a target-effect integral is evaluated on.
   int NumSubPoints() const;
   /// 1-based position of the TargetEffect in the parent EData.
@@ -640,8 +639,14 @@ class EPoint {
   /// parallel with the host, so the host must not copy its values into it (CalcEDependentValues).
   bool OwnsEDependentValues() const { return own_e_dependent_; }
   void SetOwnsEDependentValues(bool own) { own_e_dependent_ = own; }
-  void AddLocalMappedPoint(EPoint *);
-  void ClearLocalMappedPoints();
+  /// The task of the data set's calculation plan that calculates this point (CalculationPlan.h; -1: none, as for a
+  /// sub-point, a probe copy or a point outside a data set).  Set when the plan is built (EData::MapData).
+  int PlanTask() const { return plan_task_; }
+  void SetPlanTask(int task) { plan_task_ = task; }
+  /// Take a copy of the point out of the plan: it calculates itself alone (a probe).
+  void DetachFromPlan() { plan_task_ = -1; }
+  /// The points this point calculates besides itself, from its data set's plan (empty unless it is a task's host).
+  azure2::MappedPoints PlanMapped() const;
   void SetTargetEffectNum(int);
   void AddSubPoint(EPoint);
   void IntegrateTargetEffect(const Config &, azure2::Results &results);
@@ -712,10 +717,8 @@ class EPoint {
   void SetAngleKinFactor(double);
   void SetCrossSectionKinFactor(double);
   EData *GetParentData() const;
-  EPoint *GetLocalMappedPoint(int) const;
   EPoint *GetSubPoint(int);
   std::vector<EPoint> &GetSubPoints();
-  std::vector<EPoint *> &GetMappedPoints();
   void StoreSubpointOffsets();                                                          // Store offsets for adaptive grid preservation
   void ApplySubpointShift(double energyShift, CNuc *theCNuc, const Config &configure);  // Intelligent shift preserving resonance structure
  private:
@@ -869,7 +872,7 @@ class EPoint {
     bool hasLevelEnergy = false;
   };
   mutable std::vector<std::vector<ShiftedECAmplitude>> ec_shifted_;
-  std::vector<EPoint *> local_mapped_points_;
+  int plan_task_ = -1;  // see PlanTask
   std::vector<EPoint> integrationPoints_;
   EData *parentData_;
   // Which cross-section component the owning segment is compared against (0 full,
