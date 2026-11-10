@@ -36,10 +36,28 @@ the abundance defect), 7 missing (shift_subpoint_angle/template: refused for mis
 same in menu 1 and differ in menu 3 in extrapolation outputs only. 1 vs 2 threads on converted T1, T2, T3, 13N
 identical. The five refusals of §8.5 hold (three checked with dummy data files).
 
-**Open / for the director**: the abundance row a converter drops when no data set of the sample reaches its compound
-nucleus still enters the old engine's sum-to-one prior (`tests/angle_mapping`: Total-Abundance χ² 0 → 25 in format 3);
-a member of a varied shared normalization has a fixed parameter of its own also where its old line did not vary (S7
-removes it); `.azr`s that are not data-mode safe for 1-thread runs were not run at 2 threads beyond T2 (see report).
+**Follow-up (the director's decisions on the G-3 report).** 1 (951fd09f): the converter keeps a sample's row of a
+compound nucleus no line reaches (its isotope from the <levels> pairs with the lines' light particle; none or several
+is a question), Build gives it its abundance row: tests/angle_mapping is now identical but for name classes.
+2 (4e6e7f59): `BuildOptions::dataFiles` (`DataFiles::Required | NotUsed`); the engine reads a format-3 project with
+NotUsed and `EData::Fill` refuses an unread data file (`E_DATA_FILE`), `EData::MakePoints` warns
+(`W_DATA_FILE_NOT_READ`); `--validate` / `--describe` stay Required. 3 (9719363f): an unreadable data file refuses a
+data run; documented with the other differences from the old engine. 5 (597c7aad): §3.11's T2 quadratures.
+
+**Open.**
+- The engine counts a nucleus a sample does not list at abundance 1.0 in the sum-to-one prior (old behaviour, unchanged).
+  It showed in tests/angle_mapping before decision 1 (format 3: 7_13 at 1.0, Total-Abundance chi^2 25 instead of 0);
+  the targets step decides whether an unlisted nucleus counts.
+- A member of a varied shared normalization has a fixed parameter of its own also where its old line did not vary (S7
+  removes it).
+
+**Debt** (each removed by the step named):
+- `src/ProjectSetup.cpp` reads the old sections through the adaptor once per question (`ProjectExitPairKeys`,
+  `ProjectReactionPairs`, `ProjectHasThmData`, `EData::Fill`, `MakePoints`) — step 3d deletes the old branch.
+- `Format3ThmSection` (src/ConfigThm.cpp) writes old-grammar `segments=` / `weight[k]=` text for the <thm> parser — goes
+  when `ThmOptions` takes `ThmMembershipSpec` directly (the THM part of S7/3d).
+- Level parameters are still named `energy_<n>` / `width_<n>_<m>` in a format-3 run: `project_format3.md` is silent
+  (`<levels>` keeps its grammar, §3.2), so the names of level parameters are open for the `<levels>` step.
 
 ## 2026-11-10 (director, day) — Phase 4: the third wave merged (specs, `Schema::Build`, model data, one model pass)
 
