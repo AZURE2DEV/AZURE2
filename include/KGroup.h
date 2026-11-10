@@ -40,8 +40,10 @@ class KGroup {
   void AddECMGroup(ECMGroup);
   /// Internal pathway \\p i, 1-based.
   MGroup *GetMGroup(int);
+  const MGroup *GetMGroup(int i) const { return &mgroups_[i - 1]; }
   /// External-capture pathway \\p i, 1-based.
   ECMGroup *GetECMGroup(int);
+  const ECMGroup *GetECMGroup(int i) const { return &ec_mgroups_[i - 1]; }
 
  private:
   double s_;

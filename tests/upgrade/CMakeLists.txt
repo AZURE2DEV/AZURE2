@@ -66,6 +66,19 @@ target_link_libraries(derivatives_gsl_test PRIVATE azure2_physics ${GSL_LIBRARIE
 target_include_directories(derivatives_gsl_test PRIVATE ${GSL_INCLUDE_DIRS})
 add_test(NAME physics_derivatives_gsl COMMAND derivatives_gsl_test)
 
+# The results of an evaluation belong to its caller (include/Results.h, docs/upgrade/data_model.md S3): working copies
+# of T2, one copied from another, evaluated at different parameters one after the other and at the same time, each
+# buffer bit for bit equal to a fresh copy's.  Runs on a copy of T2's input files.
+add_executable(results_owner_test results_owner_test.cpp)
+target_link_libraries(results_owner_test PRIVATE AZURE2Core)
+set(_results_owner_dir ${CMAKE_CURRENT_BINARY_DIR}/results_owner)
+file(MAKE_DIRECTORY ${_results_owner_dir}/output ${_results_owner_dir}/checks)
+file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/T2/data ${CMAKE_CURRENT_SOURCE_DIR}/T2/cov_diff.txt
+          ${CMAKE_CURRENT_SOURCE_DIR}/T2/prior_cov.txt DESTINATION ${_results_owner_dir})
+add_test(NAME upgrade_results_owner COMMAND results_owner_test ${CMAKE_CURRENT_SOURCE_DIR}/T2/T2.azr
+         WORKING_DIRECTORY ${_results_owner_dir})
+set_tests_properties(upgrade_results_owner PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2" TIMEOUT 600)
+
 # A fit does not depend on the number of threads: pooled working copies give a fresh copy's bits, and fits at 1 and
 # 4 threads evaluate the same vectors to the same values (tests/fit_threads/check.sh, docs/upgrade/fit_threads.md).
 add_test(NAME fit_threads COMMAND bash ${CMAKE_SOURCE_DIR}/tests/fit_threads/check.sh $<TARGET_FILE:AZURE2>)

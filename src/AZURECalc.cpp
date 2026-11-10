@@ -16,6 +16,7 @@
 #include "ParameterLabel.h"
 #include "Config.h"
 #include "CNuc.h"
+#include "CNucReport.h"
 #include "EData.h"
 #include "ESegment.h"
 #include "EPoint.h"
@@ -28,7 +29,6 @@
 #include <iomanip>
 #include <thread>
 
-#include <algorithm>
 #include <cmath>
 #include <cstdlib>
 #include <limits>
@@ -104,15 +104,14 @@ bool g_deferCheckExit = false;
 // segment is self-contained: no components, and no point mapping onto segments
 // the shift does not move (see the eligibility guard in Gradient()).  All other segments then produce
 // identical +h/-h contributions that cancel in the central difference.
-double SegmentLocalChi2(ESegment *segment, CNuc *lc, const Config &config,
-                        EData *ld) {
+double SegmentLocalChi2(ESegment *segment, CNuc *lc, const Config &config, EData *ld, azure2::Results &results) {
   double chi = 0.0;
   const double norm = segment->GetNorm();
   for (int pid = 0; pid < segment->NumPoints(); pid++) {
-    double th = segment->CalculateTheoreticalCrossSection(pid, lc, config, ld);
+    double th = segment->CalculateTheoreticalCrossSection(pid, lc, config, ld, results);
     EPoint *pt = segment->GetPoint(pid + 1);
     if (!pt) continue;
-    pt->SetFitCrossSection(th);
+    pt->SetFitCrossSection(results, th);
     double r = th - pt->GetCMCrossSection() * norm;
     double err = pt->GetCMCrossSectionError() * norm;
     if (err != 0.0) chi += (r * r) / (err * err);
@@ -123,17 +122,10 @@ double SegmentLocalChi2(ESegment *segment, CNuc *lc, const Config &config,
 
 // A parameter whose prior is its own (normalization, energy shift, abundance, screening, density, Doppler,
 // thickness): the limits manager's nuisance flag adds nothing to it (CalculateNuisanceChiSquared skips it).  By
-// kind (ParamIndexMap), not by name.
+// kind (ParamKindRow::ownPrior), not by name.
 bool HasOwnPriorKind(const ParamIndexMap &pmap, int fullIndex) {
   if (fullIndex < 0 || fullIndex >= pmap.NumFull()) return false;
-  switch (pmap.Desc(fullIndex).kind) {
-    case ParamKind::Norm: case ParamKind::EnergyShift: case ParamKind::EnergyShiftSqrt: case ParamKind::EnergyShiftFn:
-    case ParamKind::Abundance: case ParamKind::Screening: case ParamKind::Density: case ParamKind::Doppler:
-    case ParamKind::Thickness:
-      return true;
-    default:
-      return false;
-  }
+  return KindRow(pmap.Desc(fullIndex).kind).ownPrior;
 }
 
 // The segments (1-based) whose points one energy-shift parameter moves, and how to
@@ -219,7 +211,8 @@ bool MappingConfined(const std::vector<std::vector<int>> &partners, const std::v
 
 }  // namespace
 
-ShiftColumnCount FillShiftColumns(CNuc *lc, EData *ld, const Config &config, const ParamIndexMap &pmap,
+ShiftColumnCount FillShiftColumns(CNuc *lc, EData *ld, azure2::Results &results, const Config &config,
+                                  const ParamIndexMap &pmap,
                                   const std::vector<bool> &fixed, const vector_r &full,
                                   const std::vector<char> *skipPacked, size_t nRes, int nCols, vector_r &jac) {
   ShiftColumnCount count;
@@ -261,7 +254,7 @@ ShiftColumnCount FillShiftColumns(CNuc *lc, EData *ld, const Config &config, con
       EPoint *pt = seg->GetPoint(pid + 1);
       if (!pt) return;
       present[pid] = 1;
-      const double model = seg->CalculateTheoreticalCrossSection(pid, lc, config, ld);
+      const double model = seg->CalculateTheoreticalCrossSection(pid, lc, config, ld, results);
       const double denom = pt->GetCMCrossSectionError() * norm;
       byPoint[pid] = (denom != 0.0) ? (model - pt->GetCMCrossSection() * norm) / denom : 0.0;
     };
@@ -287,14 +280,14 @@ ShiftColumnCount FillShiftColumns(CNuc *lc, EData *ld, const Config &config, con
   // chi-squared evaluation), then the residuals in row order.  If a point
   // failed in the pass, the combination recalculates point by point.
   auto allResiduals = [&](vector_r &out) {
-    const bool pre = EData::CalculatePointsInParallel(segments, lc, config) == 0;
+    const bool pre = EData::CalculatePointsInParallel(segments, lc, config, results) == 0;
     out.clear();
     for (ESegment *seg : segments) {
       const double norm = seg->GetNorm();
       for (int pid = 0; pid < seg->NumPoints(); pid++) {
         EPoint *pt = seg->GetPoint(pid + 1);
         if (!pt) continue;
-        const double model = seg->CalculateTheoreticalCrossSection(pid, lc, config, ld, pre);
+        const double model = seg->CalculateTheoreticalCrossSection(pid, lc, config, ld, results, pre);
         const double denom = pt->GetCMCrossSectionError() * norm;
         out.push_back((denom != 0.0) ? (model - pt->GetCMCrossSection() * norm) / denom : 0.0);
       }
@@ -385,7 +378,7 @@ ShiftColumnCount FillShiftColumns(CNuc *lc, EData *ld, const Config &config, con
       fk[f] = value;
       lc->FillCompoundFromParams(fk);
       ld->FillNormsFromParams(fk);
-      ld->FillEnergyShiftsFromParams(fk, ld, lc, &config);
+      ld->FillEnergyShiftsFromParams(fk, results, ld, lc, &config);
       allResiduals(out);
     };
     residualsAt(x0 + h, rPlus);
@@ -397,7 +390,7 @@ ShiftColumnCount FillShiftColumns(CNuc *lc, EData *ld, const Config &config, con
   // Leave the model at the parameters that were asked for.
   lc->FillCompoundFromParams(full);
   ld->FillNormsFromParams(full);
-  ld->FillEnergyShiftsFromParams(full, ld, lc, &config);
+  ld->FillEnergyShiftsFromParams(full, results, ld, lc, &config);
   return count;
 }
 
@@ -408,7 +401,7 @@ ShiftColumnCount FillShiftColumns(CNuc *lc, EData *ld, const Config &config, con
  * the largest or non-finite contributions, and their offending points (with any non-finite
  * target-effect sub-points).  At most 20 dumps per run.
  */
-void AZURECalc::DumpNonFinite(const vector_r &p, double chi, CNuc *lc, EData *ld) const {
+void AZURECalc::DumpNonFinite(const vector_r &p, double chi, CNuc *lc, EData *ld, const azure2::Results &results) const {
   double threshold = std::atof(std::getenv("AZURE_DUMP_NONFINITE"));
   if (!(threshold > 1.0)) threshold = 1.0e10;
   if (std::isfinite(chi) && chi <= threshold) return;
@@ -416,8 +409,8 @@ void AZURECalc::DumpNonFinite(const vector_r &p, double chi, CNuc *lc, EData *ld
   const int d = ++nDump;
   if (d > 20) return;
   AZUREParams names;
-  compound()->FillMnParams(names.GetMinuitParams(), &configure());
-  data()->FillMnParams(names.GetMinuitParams());
+  compound()->FillMnParams(names, &configure());
+  data()->FillMnParams(names);
   const auto &mp = names.GetMinuitParams();
   std::ostringstream out;
   out << "==== dump " << d << ": chi2 " << chi << " (threshold " << threshold << ")\n";
@@ -456,7 +449,7 @@ void AZURECalc::DumpNonFinite(const vector_r &p, double chi, CNuc *lc, EData *ld
     for (int pid = 1; pid <= seg->NumPoints(); pid++) {
       EPoint *pt = seg->GetPoint(pid);
       if (!pt) continue;
-      const double r = pt->GetFitCrossSection() - pt->GetCMCrossSection() * seg->GetNorm();
+      const double r = pt->GetFitCrossSection(results) - pt->GetCMCrossSection() * seg->GetNorm();
       const double e = pt->GetCMCrossSectionError() * seg->GetNorm();
       if (e != 0.0) c += r * r / (e * e);
     }
@@ -472,7 +465,7 @@ void AZURECalc::DumpNonFinite(const vector_r &p, double chi, CNuc *lc, EData *ld
     for (int pid = 1; pid <= seg->NumPoints() && shown < 6; pid++) {
       EPoint *pt = seg->GetPoint(pid);
       if (!pt) continue;
-      const double fit = pt->GetFitCrossSection();
+      const double fit = pt->GetFitCrossSection(results);
       const double e = pt->GetCMCrossSectionError() * seg->GetNorm();
       const double pull = (e != 0.0) ? (fit - pt->GetCMCrossSection() * seg->GetNorm()) / e : 0.0;
       if (std::isfinite(fit) && std::fabs(pull) < 1.0e4) continue;
@@ -482,7 +475,7 @@ void AZURECalc::DumpNonFinite(const vector_r &p, double chi, CNuc *lc, EData *ld
       int nBad = 0;
       double firstBadE = 0.0, firstBadS = 0.0;
       for (int j = 1; j <= pt->NumSubPoints(); j++) {
-        const double sv = pt->GetSubPoint(j)->GetFitCrossSection();
+        const double sv = pt->GetSubPoint(j)->GetFitCrossSection(results);
         if (!std::isfinite(sv) || std::fabs(sv) > 1.0e10) {
           if (!nBad) { firstBadE = pt->GetSubPoint(j)->GetCMEnergy(); firstBadS = sv; }
           nBad++;
@@ -510,6 +503,7 @@ double AZURECalc::operator()(const vector_r &p) const {
 
   CNuc *localCompound = NULL;
   EData *localData = NULL;
+  WorkingData *working = nullptr;
   if (isFit) {
     // New multithreading with object pools
     if (!pools_initialized_) {
@@ -518,28 +512,27 @@ double AZURECalc::operator()(const vector_r &p) const {
 
     // Get objects from pool
     localCompound = GetPooledCNuc();
-    localData = GetPooledEData();
-
-    // Old multithreading
-    // localCompound = compound()->Clone();
-    // localData = data()->Clone();
+    working = GetPooledData();
+    localData = working->data.get();
   } else {
     localCompound = compound();
     localData = data();
   }
+  // The buffer of this evaluation: the working copy's, or the caller's for an evaluation on the data set itself.
+  azure2::Results &results = working ? working->results : results_;
 
   // Fill Compound Nucleus From Minuit Parameters
   const auto te0 = std::chrono::steady_clock::now();
   localCompound->FillCompoundFromParams(p);
   localData->FillNormsFromParams(p);
-  localData->FillEnergyShiftsFromParams(p, localData, localCompound, &configure());
+  localData->FillEnergyShiftsFromParams(p, results, localData, localCompound, &configure());
   // A chi-squared alone: no Park second derivatives (CNuc::CalcShiftFunctions).
   if (configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure(), false);
   const auto te1 = std::chrono::steady_clock::now();
 
   // Calculate all points in one parallel pass when not already inside a parallel
   // region (MIGRAD with the analytic gradient, line searches, plain calculations).
-  const bool pre = PrecalculatePoints(localCompound, localData);
+  const bool pre = PrecalculatePoints(localCompound, localData, results);
   if (std::getenv("AZURE_GRAD_TIMING")) {
     static std::atomic<int> evals{0};
     const int c = ++evals;
@@ -555,17 +548,18 @@ double AZURECalc::operator()(const vector_r &p) const {
     ESegment *segment = localData->GetSegment(i);
     if (!segment) continue;
     for (int pointIdx = 0; pointIdx < segment->NumPoints(); pointIdx++) {
-      double theoreticalValue = segment->CalculateTheoreticalCrossSection(pointIdx, localCompound, configure(), localData, pre);
+      double theoreticalValue =
+          segment->CalculateTheoreticalCrossSection(pointIdx, localCompound, configure(), localData, results, pre);
       EPoint *point = segment->GetPoint(pointIdx + 1);
-      if (point) point->SetFitCrossSection(theoreticalValue);
+      if (point) point->SetFitCrossSection(results, theoreticalValue);
     }
   }
-  ObjectiveContext context{localCompound, localData, p, configure()};
+  ObjectiveContext context{localCompound, localData, results, p, configure()};
   context.storeTotals = true;
   if (limitsManager_) context.nuisance = [this](const vector_r &q) { return CalculateNuisanceChiSquared(q); };
   double chiSquared = Objective::Engine().Chi2(context);
 
-  if (std::getenv("AZURE_DUMP_NONFINITE")) DumpNonFinite(p, chiSquared, localCompound, localData);
+  if (std::getenv("AZURE_DUMP_NONFINITE")) DumpNonFinite(p, chiSquared, localCompound, localData, results);
   if (const char *trace = std::getenv("AZURE_TRACE_FCN")) {
     // Diagnostic (docs/upgrade/fit_threads.md): each objective value with its parameter vector, bit for bit
     // (hexadecimal floating point), so two runs can be compared value by value.  With "fresh", a fit's value is
@@ -575,10 +569,11 @@ double AZURECalc::operator()(const vector_r &p) const {
     for (double v : p) os << " " << v;
     if (isFit && std::string(trace) == "fresh") {
       std::vector<double> segPool, segFresh;
-      Chi2On(localCompound, localData, p, &segPool);
+      Chi2On(localCompound, localData, results, p, &segPool);
       std::unique_ptr<CNuc> fc(compound()->Clone());
       std::unique_ptr<EData> fd(data()->Clone());
-      os << " || fresh " << Chi2On(fc.get(), fd.get(), p, &segFresh);
+      azure2::Results freshResults;
+      os << " || fresh " << Chi2On(fc.get(), fd.get(), freshResults, p, &segFresh);
       for (size_t s = 1; s < segPool.size() && s < segFresh.size(); s++)
         if (segPool[s] != segFresh[s]) os << " segment " << s << " " << segPool[s] << " " << segFresh[s];
     }
@@ -603,11 +598,7 @@ double AZURECalc::operator()(const vector_r &p) const {
   if (isFit) {
     // New multithreading with object pools
     ReturnPooledCNuc(localCompound);
-    ReturnPooledEData(localData);
-
-    // Old multithreading
-    // delete localCompound;
-    // delete localData;
+    ReturnPooledData(working);
   }
 
   // A non-finite (or absurdly large) chi-squared must reach Minuit2 as a large
@@ -638,11 +629,12 @@ void AZURECalc::WriteIterationOutput(const vector_r &p) const {
   if (!output_data_) output_data_.reset(data()->Clone());
   CNuc *lc = output_compound_.get();
   EData *ld = output_data_.get();
+  azure2::Results &results = output_results_;
 
   try {
     lc->FillCompoundFromParams(p);
     ld->FillNormsFromParams(p);
-    ld->FillEnergyShiftsFromParams(p, ld, lc, &configure());
+    ld->FillEnergyShiftsFromParams(p, results, ld, lc, &configure());
     if (configure().paramMask & Config::USE_BRUNE_FORMALISM) lc->CalcShiftFunctions(configure());
 
     for (int i = 1; i <= ld->NumSegments(); i++) {
@@ -650,14 +642,13 @@ void AZURECalc::WriteIterationOutput(const vector_r &p) const {
       if (!segment) continue;
       for (int pid = 0; pid < segment->NumPoints(); pid++) {
         EPoint *pt = segment->GetPoint(pid + 1);
-        if (pt) pt->SetFitCrossSection(
-            segment->CalculateTheoreticalCrossSection(pid, lc, configure(), ld));
+        if (pt) pt->SetFitCrossSection(results, segment->CalculateTheoreticalCrossSection(pid, lc, configure(), ld, results));
       }
     }
 
     AZUREParams params;
-    lc->FillMnParams(params.GetMinuitParams(), &configure());
-    ld->FillMnParams(params.GetMinuitParams());
+    lc->FillMnParams(params, &configure());
+    ld->FillMnParams(params);
     // FillMnParams reads the levels' input values (GetE/GetGamma), not the
     // point being evaluated; copy p in so param.fit matches this snapshot.
     ROOT::Minuit2::MnUserParameters &mp = params.GetMinuitParams();
@@ -666,19 +657,20 @@ void AZURECalc::WriteIterationOutput(const vector_r &p) const {
     ld->SyncShiftGroupParams(mp);
     ld->SyncNormGroupParams(mp);
     WriteParameters(params, configure());
-    ld->WriteOutputFiles(configure(), true);
+    ld->WriteOutputFiles(configure(), results, true);
     lc->TransformOut(configure());
-    lc->PrintTransformParams(configure());
+    WriteParametersOut(*lc, configure());
   } catch (...) {
     // An intermediate snapshot is a convenience, never a reason to abort a fit.
     // A failure may leave the copies half-filled: drop them so the next
     // snapshot starts from fresh clones.
     output_compound_.reset();
     output_data_.reset();
+    output_results_.slot.clear();
   }
 }
 
-bool AZURECalc::PrecalculatePoints(CNuc *lc, EData *ld, bool thmOnly) const {
+bool AZURECalc::PrecalculatePoints(CNuc *lc, EData *ld, azure2::Results &results, bool thmOnly) const {
   // thmOnly: the THM segments alone (the THM-only finite differences of Chi2On).
   std::vector<ESegment *> segments;
   for (int i = 1; i <= ld->NumSegments(); i++) {
@@ -686,7 +678,7 @@ bool AZURECalc::PrecalculatePoints(CNuc *lc, EData *ld, bool thmOnly) const {
     if (!seg || (thmOnly && !seg->IsTHM())) continue;
     segments.push_back(seg);
   }
-  return EData::CalculatePointsInParallel(segments, lc, configure()) >= 0;
+  return EData::CalculatePointsInParallel(segments, lc, configure(), results) >= 0;
 }
 
 /*!
@@ -696,28 +688,29 @@ bool AZURECalc::PrecalculatePoints(CNuc *lc, EData *ld, bool thmOnly) const {
  * cost that scales with the THM points alone.  The nuisance, Park and abundance
  * penalties are left out there: Gradient() adds them analytically.
  */
-double AZURECalc::Chi2On(CNuc *lc, EData *ld, const vector_r &p, std::vector<double> *segChis, bool thmOnly) const {
+double AZURECalc::Chi2On(CNuc *lc, EData *ld, azure2::Results &results, const vector_r &p, std::vector<double> *segChis,
+                         bool thmOnly) const {
   lc->FillCompoundFromParams(p);
   ld->FillNormsFromParams(p);
-  ld->FillEnergyShiftsFromParams(p, ld, lc, &configure());
+  ld->FillEnergyShiftsFromParams(p, results, ld, lc, &configure());
   // A chi-squared alone: no Park second derivatives (CNuc::CalcShiftFunctions).
   if (configure().paramMask & Config::USE_BRUNE_FORMALISM) lc->CalcShiftFunctions(configure(), false);
-  const bool pre = PrecalculatePoints(lc, ld, thmOnly);
+  const bool pre = PrecalculatePoints(lc, ld, results, thmOnly);
 
   for (int i = 1; i <= ld->NumSegments(); i++) {
     ESegment *segment = ld->GetSegment(i);
     if (!segment) continue;
     if (thmOnly && !segment->IsTHM()) continue;
     for (int pid = 0; pid < segment->NumPoints(); pid++) {
-      double th = segment->CalculateTheoreticalCrossSection(pid, lc, configure(), ld, pre);
+      double th = segment->CalculateTheoreticalCrossSection(pid, lc, configure(), ld, results, pre);
       EPoint *pt = segment->GetPoint(pid + 1);
-      if (pt) pt->SetFitCrossSection(th);
+      if (pt) pt->SetFitCrossSection(results, th);
     }
   }
   // The objective of operator() (Objective.h), on these working copies: the finite-difference columns of
   // Gradient(), the AZURE_GRAD_CHECK reference and the LM / GSL-LM cost differentiate or minimize the same function.
   // thmOnly: the THM segments' data part alone, which adds to an analytic gradient that has every other term.
-  ObjectiveContext context{lc, ld, p, configure()};
+  ObjectiveContext context{lc, ld, results, p, configure()};
   context.segmentChi2 = segChis;
   context.thmOnly = thmOnly;
   if (limitsManager_) context.nuisance = [this](const vector_r &q) { return CalculateNuisanceChiSquared(q); };
@@ -730,12 +723,12 @@ double AZURECalc::Chi2Value(const vector_r &p, bool thmOnly) const {
   // calls; a fresh Clone() re-shifts every shifted segment and rebuilds the
   // mapping each time.
   CNuc *lc = GetPooledCNuc();
-  EData *ld = GetPooledEData();
+  WorkingData *working = GetPooledData();
   std::vector<double> segPooled;
   const bool poolCheck = std::getenv("AZURE_POOL_CHECK") != nullptr;
-  const double chi = Chi2On(lc, ld, p, poolCheck ? &segPooled : nullptr, thmOnly);
+  const double chi = Chi2On(lc, working->data.get(), working->results, p, poolCheck ? &segPooled : nullptr, thmOnly);
   ReturnPooledCNuc(lc);
-  ReturnPooledEData(ld);
+  ReturnPooledData(working);
   if (poolCheck) {
     static std::atomic<int> pc{0};
     if (++pc <= 5) {
@@ -743,7 +736,8 @@ double AZURECalc::Chi2Value(const vector_r &p, bool thmOnly) const {
       EData *fd = data()->Clone();
       std::vector<double> segFresh;
       setEnvVar("AZURE_SERIAL_CHI2", "1");  // reference: per-point (serial) path on a fresh copy
-      const double chiFresh = Chi2On(fc, fd, p, &segFresh, thmOnly);
+      azure2::Results freshResults;
+      const double chiFresh = Chi2On(fc, fd, freshResults, p, &segFresh, thmOnly);
       unsetEnvVar("AZURE_SERIAL_CHI2");
       delete fc;
       delete fd;
@@ -791,8 +785,8 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
       g_jacGradForCheck.clear();
       unsetEnvVar("AZURE_GRAD_ADJOINT");
       AZUREParams fpc;
-      compound()->FillMnParams(fpc.GetMinuitParams(), &configure());
-      data()->FillMnParams(fpc.GetMinuitParams());
+      compound()->FillMnParams(fpc, &configure());
+      data()->FillMnParams(fpc);
       const int nMnc = fpc.GetMinuitParams().Params().size();
       double worst = 0.0; int worstIdx = -1, nFree = 0;
       for (size_t i = 0; i < grad.size() && i < ga.size(); i++) {
@@ -819,10 +813,12 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
   // Pooled working copies keep their applied energy shifts and mapping between calls; a fresh
   // Clone() re-shifted every shifted segment and rebuilt the mapping each time (~1 s here).
   CNuc *lc = GetPooledCNuc();
-  EData *ld = GetPooledEData();
+  WorkingData *working = GetPooledData();
+  EData *ld = working->data.get();
+  azure2::Results &results = working->results;
   lc->FillCompoundFromParams(p);
   ld->FillNormsFromParams(p);
-  ld->FillEnergyShiftsFromParams(p, ld, lc, &configure());
+  ld->FillEnergyShiftsFromParams(p, results, ld, lc, &configure());
 
   vector_matrix_r shiftDeriv;
   const vector_matrix_r *sdp = nullptr;
@@ -844,7 +840,7 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
   std::vector<double> normData(ld->NumSegments() + 1, 0.0);
   // A data covariance couples the points: their cotangent is 2 (M^-1 r)_i / (cmErr n), which
   // needs every residual of the group first (one forward pass of those points).
-  if (ld->HasCovariance()) ld->PrepareCovarianceSeeds(lc, configure());
+  if (ld->HasCovariance()) ld->PrepareCovarianceSeeds(lc, configure(), results);
   FitBarFn fitBarFn = [&](ESegment *seg, int i, int pid, double model) -> double {
     EPoint *pt = seg->GetPoint(pid + 1);
     if (!pt) return 0.0;
@@ -880,7 +876,7 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
     return 2.0 * r / (err * err);
   };
 
-  bool eg = AccumulateEGammaGradient(lc, ld, configure(), pmap, sdp, fitBarFn, accum);
+  bool eg = AccumulateEGammaGradient(lc, ld, results, configure(), pmap, sdp, fitBarFn, accum);
   const auto tg1 = std::chrono::steady_clock::now();
   if (!eg && std::getenv("AZURE_GRAD_DEBUG")) {
     std::cerr << "[grad] analytic energy/gamma adjoint bailed -> full finite "
@@ -949,7 +945,7 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
   bool thmAnalytic = false;
   if (eg && haveTHM && !ThmFiniteDifferencesRequested()) {
     ParamIndexMap tmap = BuildParamIndexMap(lc, ld, fixedMask);
-    std::vector<THMRows> thm = ComputeTHMRows(lc, ld, configure(), p, tmap);
+    std::vector<THMRows> thm = ComputeTHMRows(lc, ld, results, configure(), p, tmap);
     const int nCols = tmap.NumPacked();
     for (const THMRows &tr : thm)
       for (int col = 0; col < nCols; col++) {
@@ -1037,7 +1033,7 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
           // their energy-dependent values (EPoint::Calculate).
           for (int m : target.segs) ld->GetSegment(m)->UpdatePointEnergiesWithShift(lc, &configure());
           double c = 0.0;
-          for (int m : target.segs) c += SegmentLocalChi2(ld->GetSegment(m), lc, configure(), ld);
+          for (int m : target.segs) c += SegmentLocalChi2(ld->GetSegment(m), lc, configure(), ld, results);
           return c;
         };
         const double d0 = target.Get(ld);
@@ -1209,15 +1205,15 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
   }
 
   ReturnPooledCNuc(lc);
-  ReturnPooledEData(ld);
+  ReturnPooledData(working);
 
   return grad;
 }
 
 std::vector<bool> AZURECalc::FixedMask() const {
   AZUREParams tp;
-  compound()->FillMnParams(tp.GetMinuitParams(), &configure());
-  data()->FillMnParams(tp.GetMinuitParams());
+  compound()->FillMnParams(tp, &configure());
+  data()->FillMnParams(tp);
   const int nMn = tp.GetMinuitParams().Params().size();
   if ((int)fixedMask_.size() == nMn) return fixedMask_;
   std::vector<bool> fixed(nMn);
@@ -1288,8 +1284,8 @@ bool AZURECalc::HasNuisanceParameters() const {
   // exists" is not the question; whether it declares any nuisance parameter is.
   if (!limitsManager_) return false;
   AZUREParams fp;
-  compound()->FillMnParams(fp.GetMinuitParams(), &configure());
-  data()->FillMnParams(fp.GetMinuitParams());
+  compound()->FillMnParams(fp, &configure());
+  data()->FillMnParams(fp);
   // Index the parameters exactly as CalculateNuisanceChiSquared and
   // AddNuisanceGradient do, and ignore the ones they skip: a nuisance flag on a
   // norm or shift adds nothing to chi^2 or the gradient (those penalties come
@@ -1302,7 +1298,7 @@ bool AZURECalc::HasNuisanceParameters() const {
   for (int i = 0; i < (int)fp.GetMinuitParams().Params().size(); i++) {
     const ROOT::Minuit2::MinuitParameter &mp = fp.GetMinuitParams().Parameter(i);
     const std::string &name = mp.GetName();
-    if (mp.IsFixed() && name.find("segment") == std::string::npos) continue;
+    if (mp.IsFixed() && !fp.Record(i).Row().segmentField) continue;  // the limits manager's numbering
     if (!HasOwnPriorKind(pmap, i) && limitsManager_->IsNuisanceParameterByIndex(nf)) {
       if (std::getenv("AZURE_GRAD_DEBUG"))
         std::cerr << "[grad] analytic G2 off: nuisance prior on '" << name << "'" << std::endl;
@@ -1326,10 +1322,12 @@ bool AZURECalc::ResidualJacobian(const vector_r &full, vector_r &residuals,
   // Pooled working copies keep their applied energy shifts and mapping between calls; a fresh
   // Clone() re-shifted every shifted segment and rebuilt the mapping each time (~1 s here).
   CNuc *lc = GetPooledCNuc();
-  EData *ld = GetPooledEData();
+  WorkingData *working = GetPooledData();
+  EData *ld = working->data.get();
+  azure2::Results &results = working->results;
   lc->FillCompoundFromParams(full);
   ld->FillNormsFromParams(full);
-  ld->FillEnergyShiftsFromParams(full, ld, lc, &configure());
+  ld->FillEnergyShiftsFromParams(full, results, ld, lc, &configure());
 
   vector_matrix_r shiftDeriv;
   const vector_matrix_r *sdp = nullptr;
@@ -1345,7 +1343,7 @@ bool AZURECalc::ResidualJacobian(const vector_r &full, vector_r &residuals,
   ParamIndexMap pmap = BuildParamIndexMap(lc, ld, fixed);
   int nCols = 0;
   const auto tj0 = std::chrono::steady_clock::now();
-  bool ok = ComputeResidualJacobian(lc, ld, configure(), pmap, sdp, residuals, jac, nCols);
+  bool ok = ComputeResidualJacobian(lc, ld, results, configure(), pmap, sdp, residuals, jac, nCols);
   const auto tj1 = std::chrono::steady_clock::now();
   int nShiftLocal = 0, nShiftFull = 0;
 
@@ -1355,7 +1353,7 @@ bool AZURECalc::ResidualJacobian(const vector_r &full, vector_r &residuals,
   // zero the Levenberg-Marquardt and GSL drivers flag the shifts as
   // data-insensitive and never move them.
   if (ok) {
-    const ShiftColumnCount cols = FillShiftColumns(lc, ld, configure(), pmap, fixed, full, nullptr,
+    const ShiftColumnCount cols = FillShiftColumns(lc, ld, results, configure(), pmap, fixed, full, nullptr,
                                                    residuals.size(), nCols, jac);
     nShiftLocal = cols.local;
     nShiftFull = cols.full;
@@ -1415,7 +1413,7 @@ bool AZURECalc::ResidualJacobian(const vector_r &full, vector_r &residuals,
   for (int a = 0; a < pmap.NumPacked(); a++) packedToFull[a] = pmap.PackedToFull(a);
 
   ReturnPooledCNuc(lc);
-  ReturnPooledEData(ld);
+  ReturnPooledData(working);
   return ok;
 }
 
@@ -1448,7 +1446,7 @@ double AZURECalc::RunLevenbergMarquardt(AZUREParams &params, int maxIter,
   std::vector<double> H(nFree * nFree), g(nFree), Hl(nFree * nFree), dx(nFree);
   std::vector<double> gScale(nFree, 1.0);  // see the convergence test
   for (int a = 0; a < nFree; a++)
-    if (mp.GetName(p2f[a]).rfind("density_", 0) == 0) gScale[a] = std::max(std::fabs(x[a]), 1.0);
+    if (params.Kind(p2f[a]) == ParamKind::Density) gScale[a] = std::max(std::fabs(x[a]), 1.0);
 
   for (int iter = 0; iter < maxIter; iter++) {
     if (iter > 0 && !ResidualJacobian(full, r, J, p2f)) break;
@@ -1764,10 +1762,12 @@ bool AZURECalc::ResidualsOnly(const vector_r &full, vector_r &residuals) const {
   // Pooled working copies keep their applied energy shifts and mapping between calls; a fresh
   // Clone() re-shifted every shifted segment and rebuilt the mapping each time (~1 s here).
   CNuc *lc = GetPooledCNuc();
-  EData *ld = GetPooledEData();
+  WorkingData *working = GetPooledData();
+  EData *ld = working->data.get();
+  azure2::Results &results = working->results;
   lc->FillCompoundFromParams(full);
   ld->FillNormsFromParams(full);
-  ld->FillEnergyShiftsFromParams(full, ld, lc, &configure());
+  ld->FillEnergyShiftsFromParams(full, results, ld, lc, &configure());
   if (configure().paramMask & Config::USE_BRUNE_FORMALISM) lc->CalcShiftFunctions(configure(), false);
 
   residuals.clear();
@@ -1778,7 +1778,7 @@ bool AZURECalc::ResidualsOnly(const vector_r &full, vector_r &residuals) const {
     for (int pid = 0; pid < segment->NumPoints(); pid++) {
       EPoint *pt = segment->GetPoint(pid + 1);
       if (!pt) continue;
-      double th = segment->CalculateTheoreticalCrossSection(pid, lc, configure(), ld);
+      double th = segment->CalculateTheoreticalCrossSection(pid, lc, configure(), ld, results);
       double denom = pt->GetCMCrossSectionError() * norm;
       residuals.push_back(denom != 0.0 ? (th - pt->GetCMCrossSection() * norm) / denom : 0.0);
     }
@@ -1793,7 +1793,7 @@ bool AZURECalc::ResidualsOnly(const vector_r &full, vector_r &residuals) const {
   // Park and abundance-sum rows, as the last rows of ResidualJacobian.
   AppendModelRows(lc, configure(), nullptr, 0, residuals, nullptr);
   ReturnPooledCNuc(lc);
-  ReturnPooledEData(ld);
+  ReturnPooledData(working);
   return true;
 }
 
@@ -2046,9 +2046,9 @@ void AZURECalc::InitializePools() const {
     cnuc_pool_.push(std::unique_ptr<CNuc>(compound()->Clone()));
   }
 
-  // Pre-allocate EData objects by cloning once
+  // Pre-allocate EData objects by cloning once, each with an empty buffer (sized by its first evaluation)
   for (int i = 0; i < pool_size; ++i) {
-    edata_pool_.push(std::unique_ptr<EData>(data()->Clone()));
+    edata_pool_.push(std::unique_ptr<WorkingData>(new WorkingData{std::unique_ptr<EData>(data()->Clone()), {}}));
   }
 
   pools_initialized_ = true;
@@ -2071,9 +2071,9 @@ CNuc *AZURECalc::GetPooledCNuc() const {
 }
 
 /*!
- * Get an EData object from the pool, creating new if pool is empty
+ * Get a working copy of the data set and its buffer from the pool, creating new if pool is empty
  */
-EData *AZURECalc::GetPooledEData() const {
+WorkingData *AZURECalc::GetPooledData() const {
   std::lock_guard<std::mutex> lock(pool_mutex_);
 
   if (!edata_pool_.empty()) {
@@ -2083,7 +2083,7 @@ EData *AZURECalc::GetPooledEData() const {
   }
 
   // Fallback: create new if pool is empty (shouldn't happen often)
-  return data_->Clone();
+  return new WorkingData{std::unique_ptr<EData>(data_->Clone()), {}};
 }
 
 /*!
@@ -2097,13 +2097,13 @@ void AZURECalc::ReturnPooledCNuc(CNuc *obj) const {
 }
 
 /*!
- * Return an EData object to the pool for reuse
+ * Return a working copy and its buffer to the pool for reuse
  */
-void AZURECalc::ReturnPooledEData(EData *obj) const {
+void AZURECalc::ReturnPooledData(WorkingData *obj) const {
   if (!obj) return;
 
   std::lock_guard<std::mutex> lock(pool_mutex_);
-  edata_pool_.push(std::unique_ptr<EData>(obj));
+  edata_pool_.push(std::unique_ptr<WorkingData>(obj));
 }
 
 /*!

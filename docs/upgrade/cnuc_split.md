@@ -27,75 +27,62 @@ and deliberately changed outputs, each change classified (sections 6, 7).
 
 Classes: **(a)** nucleus data → `System`; **(b)** a physics function of the System → `physics/`; **(c)** input parsing
 → `io/`; **(d)** output and reporting; **(e)** other (parameter vector and penalties → `inference/`; lifetime and
-plumbing). "Callers" counts call sites outside `CNuc.cpp` by file; "int." are callers inside `CNuc.cpp`. Line numbers
-are those of 93f8cbc5.
+plumbing). The table is the inventory of `src/CNuc.cpp` (2907 lines) and `include/CNuc.h` (306 lines) at a16f2a69,
+the start of `feature/upgrade-cnuc-split-3`, with the members defined in `src/CNucExternalCapture.cpp` (step 4).
+"Lines" is the definition's length (1 for a member defined in the header). "Callers" counts call sites outside
+`src/CNuc*.cpp` (ext.) and inside (int.), by a name search over `src/`, `api/src/`, `include/`, `tests/` (script
+`work/cnuc3/inventory.py`): names that other classes also use (`GetPair`, `GetNucleus`, `NumPairs`, `Fill`,
+`Initialize`, `Clone`) are over-counted (≈). "Destination" is where the member goes and the step of section 3 that
+moves it; "done" names the branch of this note's record (section 6) where the move is recorded.
 
-### 2.1 (a) Nucleus data
+### 2.1 Inventory at a16f2a69
 
-| member | callers | reads / writes | target |
-|---|---|---|---|
-| `NumNuclei`, `GetNucleus` (2), `NucleusLabel`, `FindOrAddNucleus` (private) | EData, ESegment, ParameterLabel, AZUREAPI, CNucSystem; int. Fill, PrintNuc, PrintTransformParams, AddPair | `nuclei_` (Z, A); FindOrAdd appends | `System::nuclei()` |
-| `NucleusOfPair` | none | `GetPair(n)->GetNucleus()` | delete (no caller) |
-| `NumPairs`, `GetPair`, `IsPairKey`, `GetPairNumFromKey`, `GetPairFromKey`, `IsPair`, `AddPair` | ~250 sites: AMatrixFunc, GenMatrixFunc, RMatrixFunc, EData, EPoint, ESegment, AZUREGrad, AZUREAPI, GUI, … | `pairs_`; Add/IsPair only from Fill | `System::partitions()` with a key → α map (the file's pair key is an io/ label) |
-| `NumJGroups`, `GetJGroup`, `IsJGroup`, `AddJGroup` | ~180 sites, same files | `jgroups_` (groups own channels, levels, pathways) | `System::blocks()`; levels as `JpiBlock` arrays |
-| `GetMaxLValue`, `SetMaxLValue` | int. Fill, ParseExternalCapture | `maxLValue_` (never initialized before Fill) | `System` (largest l) |
-| `CapturePairKeys`, `RatePairsProblem` | ReactionRate, AZUREMain, GUI MCMC thread | photon partitions of a nucleus | `System` queries (capture partitions of a nucleus) |
-| `IsTransformedIn`, `TransformError` | EData (3), CNucSystem; int. Initialize | `transformedIn_`, `transformError_` | disappear: level_parameters returns values, not a state |
-| `ThmCoherentValues`, `SetThmCoherentValues` | THMMatrixFunc, EDataThm | `thmCoherentValues_` (THM coherent backgrounds, fit parameters) | (e) `inference/` parameters handed to the THM observable |
-| `Clone` | AZURECalc, AZURECalcMCMC, EData, ReactionRate, ParameterLimitsManager (13) | deep copy | (e) disappears: the System is immutable and shared; per-evaluation parameters are arrays |
-
-### 2.2 (b) Physics functions of the System
-
-| member | callers | reads | writes | target |
+| member | lines | class | callers ext. / int. (main files) | destination |
 |---|---|---|---|---|
-| `CalcBoundaryConditions` (1975–2003) | int. Initialize | E of a group's first level, pair S, e; `ChannelFunc::Shift` | `AChannel::SetBoundaryCondition` | `boundary_values` — **moved (step 1)** |
-| `TransformIn` (1200–1610) | AZURECalcMCMC (3), ParameterLimitsManager, AZUREAPI (2), GUI MCMCTab; int. Initialize | input E, Γ/ANC/γ, flags; ChannelFunc, WhitFunc; B_c; `CalcExternalWidth` | `SetGamma`, `SetE` (formal), `SetParkNorm`, `SetSqrtNFFactor`; warnings | `amplitudes_from_observed`, `subtract_external_capture`, `formal_from_brune` — **moved (step 1)** except `SqrtNFFactor` (external capture, step 4) |
-| `TransformOut` (2540–2820) | AZUREMain, AZURECalc, AZURECalcMCMC (2), AZURE2, EData, ReactionRate, ParameterLimitsManager, AZUREAPI (5), GUI (3) | fit E, γ; B_c; ChannelFunc, WhitFunc; `CalcExternalWidth(false)` | `SetTransformE/Gamma/Iterations`, `SetSqrtNFFactor`, `SetExternalGamma`, `SetBigGamma` | formal → Brune iteration: `brune_from_formal` — **moved (step 1)**; observed widths with external capture: step 2 |
-| `ConvertAmplitudeBasis` (3422–3470) | AZUREParams::ReconcileBasis | Minuit values, `ShiftDerivative` | Minuit values and errors | `park_from_brune`, `brune_from_park` (step 2) |
-| `CalcShiftFunctions` (3237–3410), `InvalidateShiftFunctions` | ~40 sites (AZURECalc, AZURECalcMCMC, AZUREAPI, GUI, …); int. TransformOut | fit E, γ; Coulomb functions; process-wide memo `g_shiftDerivMemo` | level S_c, S'_c, S''_c, Park J, `SqrtNFFactor` | `channel_functions(α, l, E)` (needs pycoulomb) + Park norm from `park_from_brune`; the memo becomes the per-stage table (RULES §2.3) (step 3) |
-| `ParkNormPenalty`, `kParkNormScale` | AZURECalc (3), AZURECalcMCMC (2), AZUREAPI (3), AZUREGrad | level Park J | — | (e) a term of the `Objective` (Phase 2) |
-| `CalcExternalWidth` (3513–3595) | CNucLevelParameters; int. TransformIn, TransformOut | final state E, γ, N_f, conversion factor; `ECIntegral` | — | `physics/external_capture` (step 4) |
-| `SortPathways` (1616–1859) | int. Initialize | pairs, groups, channels, EC final states | Decay → KGroup → MGroup/ECMGroup trees on `PPair` | coupling coefficients per reaction in `observables` (step 5) |
-| `CalcAngularDists` (2051–2199) | int. Initialize | pathway trees; `AngCoeff::ClebGord`, `Racah` | KLGroup, Interference (Z̄₁Z̄₂), diagonal pathways | `observables` coefficients from `AngularCoupling` (step 5) |
-| `CalcCaptureAnalyzingPower` (2248–2379) | AMatrixFunc::PointTBar, GenMatrixFunc (lazy, mutex) | pathway trees; Racah, 9j | `Decay::AddCaptureAyTerm` | `observables` (step 5); the lazy build under a mutex becomes setup state |
-
-### 2.3 (c) Input parsing → `io/Project` (Phase 3)
-
-| member | callers | reads | writes |
-|---|---|---|---|
-| `Fill` (188–427) | AZUREMain, AZURE2, AZUREAPI (2), GUI (6), tests (6) | `<levels>` via `NucLine`, radius overrides, `includeAllJPi` | pairs, groups, channels, levels; calls the five below |
-| `AddHardSphereGroups` (606–653) | int. Fill | particle pairs | level-less groups (a System rule: every J^π the pairs allow up to l_max) |
-| `CheckIdenticalChannels` (669–695) | int. Fill | identical pairs with spin | refusal |
-| `ParseExternalCapture` (728–858), static `ExitPairKeysInFile` (707–726) | int. Fill | EC final states, segment exit keys (re-reads the file) | `SetECParams`, N_f integrals, conversion factors; 784–793 and 811–855 unreachable |
-| `ReadAbundances` (438–514, private) | int. Fill | `<abundances>` | `samples_` |
-| `CheckMassSeparationConsistency` (881–943) | int. Fill | masses, separation energies | warnings (a check of the System at load) |
-
-### 2.4 (d) Output and reporting
-
-| member | callers | writes |
-|---|---|---|
-| `PrintTransformParams` (2948–3036), `PrintRelativisticParams` (3048–3110) | AZUREMain, AZURECalcMCMC, AZURECalc | `parameters.out`, `relativistic.out` |
-| `GetTransformParams` (3114–3174) | AZURE2, AZURECalcMCMC, ParameterLimitsManager, AZUREAPI (5), GUI (3) | the observed parameters as a vector |
-| `CheckRadiativeWidths` (2841–2942) | AZUREMain (2) | warning Γ_γ/Γ_p > 0.1 |
-| `PrintNuc`, `PrintPathways`, `PrintBoundaryConditions`, `PrintAngularDists` | AZUREMain, AZUREAPI; int. Initialize | `checks/*.chk` |
-| `PrintCompoundFromParams` | none | `std::cout`; delete |
-
-The γ → Γ conversion (penetrability, Whittaker factor, static moments, (E_γ/ħc)^(2L+1)) was written five times: in
-`TransformIn`, `TransformOut`, `CheckRadiativeWidths`, `GetTransformParams`, `PrintTransformParams`. Since step 2 the
-reports read one function's output (`observed_levels`; the input direction is `amplitudes_from_observed`).
-
-### 2.5 (e) Parameter vector, penalties, lifetime
-
-| member | callers | target |
-|---|---|---|
-| `FillMnParams` (2439–2506) | 30 sites (AZURECalc, AZURECalcMCMC, AZUREAPI, ParameterLimitsManager, GUI, tests) | `inference/ParameterVector` |
-| `FillCompoundFromParams` (2512–2534), `FillCompoundFromParamsPhysical` (1136–1158) | ~40 sites | disappear: level_parameters takes θ |
-| abundance members: `HasAbundanceBlock`, `NumSamples`, `GetSample`, `FindSample`, `DefaultSample`, `NumAbundanceParams`, `AbundanceOrdinal`, `AbundanceOf`, `AbundanceParamName`, `GetAbundance`, `AbundanceSum`, `SampleSumSigma`, `AbundancePenalty`, `AbundanceSumPenalty` | AZURECalc, AZUREGrad, AZURECalcMCMC, EData, ESegment, ParameterLabel, AZUREAPI, GUI | samples are `experiment/` (target composition); penalties are `Objective` terms |
-| `ScatteringLengthConstraints`, `HasScatteringLengthConstraints` | AZURECalc (5), AZUREMain, AZURECalcMCMC, AZUREAPI | `Objective` term; constraints read by `io/` |
-| `Initialize` (945–1021) | AZUREMain, AZURE2, AZUREAPI (2), GUI (4), tests (3) | the setup stage: System + level_parameters + coefficients; disappears with the class |
+| `NumPairs`, `GetPair` | 3, 4 | (a) | ≈26 / 21, ≈310 / 110 (every observable, EData, EPoint, API, tests) | `System::partitions()` (step 6b) |
+| `IsPairKey`, `GetPairNumFromKey`, `GetPairFromKey` | 9, 12, 4 | (a) | 26 / 0, 114 / 1, 7 / 3 | key → α map of the System (the key is an `io/` label) |
+| `IsPair`, `AddPair` | 12, 4 | (a)/(c) | 0 / 3, 0 / 2 (Fill, ParseExternalCapture) | built from the records (step (c)) |
+| `NumJGroups`, `GetJGroup`, `IsJGroup`, `AddJGroup` | 3, 4, 16, 3 | (a) | 63 / 28, ≈235 / 136, 1 / 6, 0 / 3 | `System::blocks()`, levels as `JpiBlock` arrays (step 6b) |
+| `NumNuclei`, `GetNucleus` (2), `NucleusLabel`, `FindOrAddNucleus` | 3, 3+3, 5, 9 | (a) | 6 / 5, ≈51 / 24, 8 / 5, 0 / 1 | `System::nuclei()` |
+| `NucleusOfPair` | 3 | (a) | 0 / 0 | delete (no caller) |
+| `GetMaxLValue`, `SetMaxLValue` | 3, 3 | (a) | 0 / 1, 0 / 2 | `System` (largest l) |
+| `CapturePairKeys`, `RatePairsProblem` | 9, 15 | (a) | 2 / 2 (ReactionRate), 1 (AZUREMain) | System queries |
+| `IsTransformedIn`, `TransformError` | 1, 1 | (a) | 3 / 2 (EData), 0 / 1 | disappear: level_parameters returns values, not a state |
+| `CalcBoundaryConditions` | 35 | (b) | 0 / 1 (Initialize) | glue of `boundary_values` (done, step 1); goes with the class |
+| `TransformIn` | 206 | (b)+(d) | 6 / 1 (API, MCMC, ParameterLimitsManager) | glue of `amplitudes_from_observed`, `subtract_external_capture`, `formal_from_brune` (done, step 1); 95 lines are its warnings (d) |
+| `TransformOut`, `TransformToBrune`, `ObservedWidths` | 4, 104, 42 | (b)+(d) | 15 / 1, 0 / 2, 0 / 2 | glue of `brune_from_formal`, `observed_levels` (done, steps 1, 2); 35 lines of `TransformToBrune` are its warnings (d) |
+| `ConvertAmplitudeBasis` | 46 | (b)/(e) | 2 (AZUREParams) | glue of `park_from_brune`, `brune_from_park` on the parameter vector (done, step 2); goes with the parameter vector (step 7) |
+| `CalcShiftFunctions`, `InvalidateShiftFunctions` | 167, 9 | (b) | 34 / 1, 3 / 1 | `channel_functions` + Park's J; the memo `g_shiftDerivMemo` → the per-stage table (step 3b (ii) remainder, `channel_table.md` §2) |
+| `ParkNormPenalty`, `kParkNormScale` | 14 | (e) | 4 (Objective, MCMC) | a term of the `Objective` (it already asks it) |
+| `SortPathways` | 85 | (b) | 0 / 1 | fills the trees from `reaction_pathways` (done, step 6a); disappears with the trees (step 6b) |
+| `CalcAngularDists` | 144 | (b) | 0 / 1 | reads the trees, coefficients from `ObservableCoupling` (done, step 5); a consumer of step 6b |
+| `CalcCaptureAnalyzingPower` | 78 | (b) | 2 (AMatrixFunc, GenMatrixFunc; lazy, mutex) | the same; its lazy build becomes setup state (step 6b) |
+| `SetUpECFinalBlocks`, `ECFinalStatesFromFormal`, `SetUpFormalCaptureMasks`, `FormalCaptureMasksFromParams`, `FormalCaptureMasksOutsideAdjoint`, `MaskedLevelCoupled`, `FormalCaptureMask`, `HasFormalECFinalBlocks` | 52, 25, 37, 34, 12, 5, 5, 1 (`CNucExternalCapture.cpp`) | (b) | 0–1 each (AMatrixFunc, AZUREGrad) | glue of `external_capture` and `brune_from_formal` per evaluation (done, step 4); level_parameters of θ (step 7) |
+| `Fill` | 225 | (c) | ≈18 (AZUREMain, AZURE2, API, tests) | builds itself from plain `<levels>` records read by `io/` (step (c) of this branch) |
+| `ReadAbundances` | 77 | (c) | 0 / 1 | the `<abundances>` grammar into `io/`; the samples into `experiment/` (with the parameter vector, step 7) |
+| static `ExitPairKeysInFile` | 27 | (c) | 0 / 1 | a second reader of segment lines: the segment reader's |
+| `ParseExternalCapture` | 131 | (c)/(b) | 0 / 1 | final-state set-up (N_f integral, K_c); lines 784–797 and 815–859 unreachable: delete |
+| `AddHardSphereGroups` | 48 | (c)/(a) | 0 / 1 | a System rule (every J^π the pairs allow up to l_max) |
+| `CheckIdenticalChannels`, `CheckMassSeparationConsistency` | 27, 63 | (d) | 0 / 1 each (Fill) | checks file, const access (step (d)) |
+| `Initialize` | 80 | (e) | ≈24 | the setup stage; 37 of its lines are two warnings (d); disappears with the class |
+| `PrintNuc`, `PrintPathways`, `PrintBoundaryConditions`, `PrintAngularDists` | 86, 104, 37, 49 | (d) | 2 / 0, 0 / 1, 0 / 1, 0 / 1 | report file, const access (step (d)) |
+| `PrintTransformParams`, `PrintRelativisticParams` | 81, 63 | (d) | 3 (AZUREMain, AZURECalc, MCMC), 0 / 1 | report file (step (d)) |
+| `CheckRadiativeWidths` | 93 | (d) | 2 (AZUREMain) | 75 lines of message → checks file; the observed widths at a vector stay (`ObservedWidthsAt`) |
+| `PrintCompoundFromParams` | 14 | (d) | 0 / 0 | delete (no caller) |
+| `GetTransformParams` | 19 | (e) | 10 (API, AZURE2, MCMC, EData, ParameterLimitsManager, ReactionRate) | the observed parameter vector: with the parameter vector (step 7) |
+| `FillMnParams`, `FillCompoundFromParams`, `FillCompoundFromParamsPhysical` | 71, 23, 20 | (e) | 43, 36 / 3, 8 | `inference/ParameterVector`; level_parameters takes θ (step 7; another agent changes the vector now) |
+| abundance members (`HasAbundanceBlock`, `NumSamples`, `GetSample` (2), `FindSample`, `DefaultSample`, `NumAbundanceParams`, `AbundanceOrdinal`, `AbundanceOf`, `AbundanceParamName`, `GetAbundance`, `AbundanceSum`, `SampleSumSigma`, `AbundancePenalty`, `AbundanceSumPenalty`) | 1–13 each, 78 in all | (e) | 1–10 each (Objective, AZUREGrad, ESegment, API, ParameterLabel, MCMC) | samples → `experiment/` (target composition); penalties → `Objective` terms (step 7) |
+| `ScatteringLengthConstraints`, `HasScatteringLengthConstraints` | 1, 1 | (e) | 9, 8 | the constraints read by `io/`, the term in `Objective` (step 7) |
+| `ThmCoherentValues`, `SetThmCoherentValues` | 1, 1 | (e) | 2, 2 (THM) | parameters handed to the THM observable (step 7) |
+| `Clone` | 4 | (e) | ≈30 (AZURECalc, MCMC, ReactionRate) | disappears: the System is immutable and shared (Phase 6) |
+| the shift-derivative memo (`ShiftDerivKey`, `g_shiftDerivMemo`) | 35 | (b) | CalcShiftFunctions, InvalidateShiftFunctions | the per-stage table (step 3b (ii) remainder) |
 
 `DoubleFactorial` is declared in `CNuc.h` but defined in `src/DoubleFactorial.cpp` and not used by `CNuc`; its
 declaration moves with its users (`ECIntegral`, `EffectiveCharge`).
+
+By class, of the 2907 lines (definitions only): (a) 144, (b) 955 (of which ≈ 130 are the warnings of `TransformIn` and
+`TransformToBrune`), (c) 508, (d) 617, (e) 290 (of which 80 are `Initialize`); the other 393 are includes and the
+comments and blank lines between definitions.
 
 ### 2.6 GUI callers
 
@@ -415,11 +402,56 @@ Design section 10 (365c325f); physics (8f92d046); engine (416bd630). `SortPathwa
 do not exist); nothing is written. (c) 179 × 3 against the merged head db972c84: 2040/2040 identical. ctest
 119/119, `run_tests.sh` 133/133, 1 vs 8 threads identical.
 
+### Steps (d), (c) (branch `feature/upgrade-cnuc-split-3`, 2026-11-10)
+
+Done, each in its own commit, every one bit-identical (179 `.azr` × 3 bases against `tab-p3f`: 689 / 662 / 689 files
+identical after each), with `scripts/check.sh --quick` (ctest −LE slow 142/142, then 144/144 with the two io tests):
+
+- **(d) output and checks**: `src/CNucReport.cpp` (the four check files, `parameters.out`, `relativistic.out`) and
+  `src/CNucChecks.cpp` (the identical-channel refusal and warning, the Legendre-order warning, the
+  separation-energy/mass check, the radiative-width warning), reading the nucleus through const overloads of the
+  accessors; `CheckRadiativeWidths` split into `ObservedWidthsAt` (stays) and `WarnLargeRadiativeWidths`;
+  `PrintCompoundFromParams`, `NucleusOfPair` deleted.  The check files are written by no run of the 179: T1, T3, 13N
+  and `beam_profile_kernel` were run with the four checks on (file and screen), base and branch, identical.
+- **(d) transformation messages**: `src/CNucTransformMessages.cpp`, the warnings of `TransformIn` and
+  `TransformToBrune` (same wording).  Three 13N variants trigger the three column notes, identical to the base;
+  the external-capture, eigen-failure and not-converged messages are reached by no input.
+- **(c) input**: `NucLine` is `io/`'s `LevelRow` (`LevelRows.h`) with `ReadLevelSection`.  `Fill` builds from the
+  records.  ctest `io_level_rows` (10554 rows of 189 files against a verbatim copy of the old reader, every field);
+  six malformed variants give the base build's messages byte for byte.  The `<abundances>` line is read by
+  `convert/`'s `ReadAbundanceLine` (`azure2/convert/AbundanceLine.h`), the parser the converter to format 3 uses
+  too; the `io::ReadAbundanceSection` this step first wrote was a second parser of the same line and was removed
+  when the converter was merged (the old grammar goes with step 3d).
+- **(c) dead code**: the two unreachable branches of `ParseExternalCapture` and the write-only max-l members.
+
+`CNuc.cpp` 2907 → 1942 lines, `CNuc.h` 306 → 281.  Still in `CNuc.cpp` and its stream: `Fill` obtains the
+`<levels>` stream from `Config` and hands it to `io/` unread; `ExitPairKeysInFile` (a second reader of the first three
+tokens of segment lines) is not moved, see "Remaining steps".
+
 ### Remaining steps
 
-Steps 3b (iii), (iv), 6b (the consumers of the trees; with Phase 2's observables) and 7 of section 3. Step 4 (`physics/external_capture`) takes N_f^½, γ^ext and the final
-state's Brune amplitude and energy (section 8) out of `CNuc`, and should define the `--ignore-externals` mask on the
-observed (Brune) amplitudes in every basis.
+- **Step 4** is done (section 6 of `external_capture.md`, merged before this branch): N_f^½ and γ^ext come from
+  `physics/external_capture` through `src/CNucExternalCapture.cpp`, the final state's Brune amplitude and energy are
+  set there, and the `--ignore-externals` mask is defined on the input (Brune/Park) width in every basis
+  (`ALevel::ZeroInputWidth`). What is left in `CNuc.cpp` is one adapter call `SqrtNFFactor(...)` in each of
+  `TransformIn`, `TransformToBrune`, `CalcShiftFunctions`, `FillCompoundFromParams`,
+  `FillCompoundFromParamsPhysical`; the last two belong to the parameter vector (step 7).
+- **`ExitPairKeysInFile`**: `ParseExternalCapture` needs the exit keys of the active segments before the data are
+  read.  Either `Fill`'s callers pass them (EData knows the segments, but reads them after `Fill`), or the segment
+  readers (`SegLine`, `ExtrapLine`) provide them; both change behaviour on a malformed segment line, so they wait for a
+  decision.
+- **Step 6b** (consumers of the pathway trees read the System): about 270 tree accesses in `GenMatrixFunc` (92),
+  `AMatrixFunc` (78), `EData`, `RMatrixFunc`, `EPoint`, `AZUREAPI`, `CNucExternalCapture`, plus `CalcAngularDists`,
+  `CalcCaptureAnalyzingPower` and `WritePathwaysCheck`.  First a design addendum to section 10: where the per-stage
+  pathway table (the `reaction_pathways` result with the coupling coefficients) lives once it is not on `PPair`
+  (setup state owned by the caller, ARCHITECTURE §9), and how the hot loops index it.
+- **Step 3b (iii)** (hybrid channels as (α, l, j)): today's hybrid potential is central and keyed by the pair
+  (`NuclearPotentialManager::tagFor(pairKey)`), so the channel functions do not depend on j; (α, l, j) entries need a
+  spin-orbit term first (a new physics feature: `<potential>` grammar, `NuclearPotentialManager`, `CoulFunc`, the
+  table key in `ChannelTable`), with its design note.
+- **Step 3b (iv)**, **step 7** (class (e): `FillMnParams`, `FillCompoundFromParams*`, `GetTransformParams`,
+  `ConvertAmplitudeBasis`, the abundance members, penalties, `Initialize`, `Clone`) and the deletion of `CNuc`: not
+  started (another agent changes the parameter vector).
 
 ## 7. Step 1b: design
 

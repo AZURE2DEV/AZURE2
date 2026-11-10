@@ -29,6 +29,19 @@ namespace azure2 {
  *   a_0 .. a_{K-1}; then, for the point of a sample (natural) segment with N > 0 nuclei: the number of terms written,
  *   then N abundance-weighted terms, one per compound nucleus.
  *
+ * Who holds what.  The layout -- where each unit's record starts and how many angular and natural slots it has -- is
+ * a property of the data set and of every copy of it (EData::LayoutResults; a unit keeps its offset).  The storage
+ * belongs to whoever starts the evaluation: the CLI's calculation, each pooled working copy of a fit or of the MCMC,
+ * the Python session, a probe or a reaction-rate point.  A unit holds no pointer to a buffer, so a copy of a unit or
+ * of a data set cannot write into its original's values.
+ *
+ * The one way to reach a result: every accessor and every function that reads or writes one takes the buffer as an
+ * argument, `const Results &` to read and `Results &` to write -- `point->GetFitCrossSection(results)`,
+ * `point->Calculate(cnuc, config, results)`, `segment->CalculateTheoreticalCrossSection(i, cnuc, config, data,
+ * results)`.  There is no default buffer, no global and no thread-local one.  The owner hands its buffer to
+ * EData::FillEnergyShiftsFromParams, the last step of the hand-over (EData::BeginEvaluation), which sizes it for the
+ * data set's layout and, under AZURE_POISON_RESULTS=1, fills it with NaN.
+ *
  * The struct is plain (no engine headers), so it can move to the experiment library (Phase 4, S6/S7).
  */
 struct Results {

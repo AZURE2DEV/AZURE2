@@ -143,7 +143,10 @@ what EXFOR holds, the proposal for named quantities, targets, Rutherford ratios,
 Started 2026-11-09; integration branch `feature/upgrade-4-data`.
 Done by 2026-11-10 (merged, verified): S3 (a) `Results` behind the old accessors and `AZURE_POISON_RESULTS`; S6 frames;
 S8 expression nodes; the first cause of thread-dependent fits (S2, exact grid comparison); format 3 step 2 (record
-reader, the table, `--schema`). In work: S3 (b), parameter kinds, the converter and `--validate`, the `CNuc` split.
+reader, the table, `--schema`); S3 (b) the buffer owned by the caller; parameter kinds as records
+(`parameter_kinds.md`); format 3 step 3a (`convert/`: the converter old → format 3, `--validate`). In work: S1, the
+S2 remainder and S4 (one model pass); S15 (`<modelData>`, ωγ); format 3 step 3b-1 with S9 (the engine's set-up from
+specs, records → specs, `--describe`).
 
 - [ ] State of an evaluation in one place (S1–S5): a `Results` buffer owned by the caller, with slots per calculation
       unit; one model pass and one residual function; the mapping as a plan; no writes from one object into another and
@@ -170,10 +173,12 @@ reader, the table, `--schema`). In work: S3 (b), parameter kinds, the converter 
 Gate: outputs of the 179 projects × 3 bases bit-identical through the restructuring (S1–S13); for format 3, the outputs
 of the converted projects identical to the originals' on the previous engine.
 
-**`CNuc` split, to finish** (own track after `Results` lands; Phase 1 left it at steps 1–5 and 6a): `src/CNuc.cpp` is
-2,907 lines. Remaining (`cnuc_split.md`): 3b (iii) hybrid-potential channels, 3b (iv) `CoulombTable` / `--gsl-coul`,
-6b consumers of the pathway trees, 7 reader, parameter vector and printing out, `CNuc` deleted. With it a file-size
-ratchet in `tests/consistency/`: no source file may grow beyond its recorded size, and the record only goes down.
+**`CNuc` split, to finish** (own track; Phase 1 left it at steps 1–5 and 6a): `src/CNuc.cpp` was 2,907 lines and is
+1,954 after the moves of 2026-11-10 (printing, checks, transformation messages, the `<levels>` grammar to `io/`).
+Remaining (`cnuc_split.md`, "Remaining steps"): 3b (iii) hybrid-potential channels, 3b (iv) `CoulombTable` /
+`--gsl-coul`, 6b consumers of the pathway trees, 7 the parameter vector and the set-up out, `CNuc` deleted. The
+file-size ratchet is consistency check 26 (`tests/consistency/file_sizes.tsv`): no listed file grows, no other file
+passes 1,000 lines, and the record only goes down.
 
 ## Phase 5 — Energy grid, kernels, stopping, THM observable
 

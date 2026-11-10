@@ -2,6 +2,9 @@
 # the note, marked there: the target of section 3.7 has no 'phase' (only with 'stopping evaluation'); the formulas of
 # 'spread' and the energy_scale 'function' state their unit; the ratio of differential cross sections of section 3.5
 # is quantity dsigma_domega with unit 1.
+<config>
+format=3
+</config>
 <targets>
 target C13B                                     # section 3.7
     kind           layer

@@ -5,7 +5,9 @@ The engine holds the one table of record kinds, fields, quantities, units and di
 and agents read field names, allowed values and units from it rather than spelling them.
 """
 
-__all__ = ["schema"]
+import warnings
+
+__all__ = ["schema", "validate"]
 
 
 def schema():
@@ -19,3 +21,26 @@ def schema():
     """
     from .azrfile import _engine_module
     return _engine_module().schema()
+
+
+def validate(path):
+    """Check the format-3 project ``path`` against the table: every problem, as ``AZURE2 --validate --json`` reports it.
+
+    Returns a list of dicts, one per diagnostic (docs/upgrade/project_format3.md section 6.2): ``severity``
+    ("error", "warning"), ``code``, ``file``, ``line``, ``column``, ``section``, ``record_kind``, ``record``,
+    ``field``, ``found``, ``allowed``, ``message`` and a syntax-only ``fix``.  An empty list: the file is valid.
+    The checks that need ``<levels>`` or the data files are left to the format-3 reader; their number is given as a
+    warning.  A format-1 or format-2 file raises ``ValueError`` with the conversion command (section 8.4).
+    Needs the compiled engine module.
+    """
+    import json
+    from .azrfile import _engine_module
+    with open(path, "rb") as f:
+        text = f.read()  # bytes, as the engine reads a file
+    refusal, diagnostics, skipped = _engine_module().validate_format3_text(text, str(path))
+    if refusal:
+        raise ValueError(refusal)
+    if skipped:
+        warnings.warn(f"{path}: {skipped} check(s) that need <levels> or the data files were not run; "
+                      "the format-3 reader of step 3b runs them", stacklevel=2)
+    return json.loads(diagnostics)

@@ -45,17 +45,17 @@ class SegmentTerms : public ObjectiveTerm {
       const int thmGroup = ld->ThmGroupOf(i);
       if (thmGroup >= 0) {
         if (ld->IsLastOfThmGroup(thmGroup, i)) {
-          const double g = ld->ProfileThmGroup(thmGroup);
+          const double g = ld->ProfileThmGroup(thmGroup, c.results);
           chi2 += g;
           if (c.segmentChi2) (*c.segmentChi2)[i] = g;
         }
       } else if (segment->IsProfiledNorm()) {
-        segmentChiSquared = segment->ProfileNormChiSquared();
+        segmentChiSquared = segment->ProfileNormChiSquared(c.results);
       } else {
         for (int pointIdx = 0; pointIdx < segment->NumPoints(); pointIdx++) {
           EPoint *point = segment->GetPoint(pointIdx + 1);
           if (point) {
-            double residual = point->GetFitCrossSection() - point->GetCMCrossSection() * segment->GetNorm();
+            double residual = point->GetFitCrossSection(c.results) - point->GetCMCrossSection() * segment->GetNorm();
             double error = point->GetCMCrossSectionError() * segment->GetNorm();
             if (error != 0.0) segmentChiSquared += (residual * residual) / (error * error);
           }
@@ -90,7 +90,7 @@ class DataCovarianceTerm : public ObjectiveTerm {
  public:
   std::string Name() const override { return "data covariance"; }
   void Add(const ObjectiveContext &c, double &chi2) const override {
-    if (c.data->HasCovariance()) chi2 += c.data->CovarianceChi2Correction(c.segmentChi2);
+    if (c.data->HasCovariance()) chi2 += c.data->CovarianceChi2Correction(c.results, c.segmentChi2);
   }
 };
 

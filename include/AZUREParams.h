@@ -6,16 +6,19 @@
 #include <fstream>
 #include <iomanip>
 #include <string>
+#include <vector>
 #include "Constants.h"
+#include "ParameterKind.h"
 
 class Config;
 
 /// A container class to hold Minuit parameters in AZURE
 
 /*!
- * The AZUREParams class holds the Minuit parameters determined in the fit.
- * The class also has member functions corresponding to reading and writing of
- * the parameters and their errors.
+ * The AZUREParams class holds the Minuit parameters determined in the fit and,
+ * beside each, its ParameterRecord: what the parameter is and what it belongs
+ * to.  The class also has member functions corresponding to reading and writing
+ * of the parameters and their errors.
  */
 
 class CNuc;
@@ -23,6 +26,19 @@ class CNuc;
 class AZUREParams {
  public:
   ROOT::Minuit2::MnUserParameters &GetMinuitParams();
+  const ROOT::Minuit2::MnUserParameters &GetMinuitParams() const { return params_; }
+  /// Append a parameter (value and Minuit step in the unit of its kind, ParamKindTable()) with its record.  The
+  /// creation sites (CNuc::FillMnParams, EData::FillMnParams) are the only callers: the record is written where the
+  /// parameter is made, the one place that knows what it is.
+  void Add(const std::string &name, double value, double step, ParameterRecord record);
+  /// What parameter i (0-based, full vector) is; throws std::logic_error if the vector holds a parameter added
+  /// without its record.
+  const ParameterRecord &Record(int i) const;
+  const std::vector<ParameterRecord> &Records() const { return records_; }
+  ParamKind Kind(int i) const { return Record(i).kind; }
+  /// Index of the parameter whose name is exactly `name`, or -1: how a name in a file (param.sav, priors,
+  /// <parameterSettings>) is resolved to its parameter.  Whole names only, never a prefix.
+  int IndexOfName(const std::string &name) const;
   /// Read starting parameters from the configured external parameter file.
   void ReadUserParameters(const Config &);
   /// Read starting parameters from a named file.
@@ -49,10 +65,13 @@ class AZUREParams {
 
  private:
   /// The body of both ReadUserParameters overloads; "could not read" goes to out.  With
-  /// segmentEntries false (a run without data: extrapolation, reaction rates) the file's
-  /// segment_* lines -- data-segment normalizations and energy shifts -- are not applied.
+  /// segmentEntries false (a run without data: extrapolation, reaction rates) the file's rows for
+  /// data-segment parameters (ParamKindRow::segmentField: normalizations, energy shifts, thicknesses)
+  /// are not applied.
   void ApplyUserParameterFile(const std::string &filename, std::ostream &out, bool segmentEntries = true);
   ROOT::Minuit2::MnUserParameters params_;
+  std::vector<ParameterRecord> records_;  ///< one per entry of params_, in its order
+  std::vector<int> kindCount_;            ///< parameters of each kind so far (the next ordinal)
   int basisTag_ = kBasisUnknown;
 };
 

@@ -33,6 +33,8 @@
 struct ObjectiveContext {
   CNuc *compound;
   EData *data;
+  /// The buffer of the evaluation, holding the model value of every point of `data`.
+  const azure2::Results &results;
   const vector_r &p;
   const Config &config;
   /// Per-segment data chi^2 out (index = segment number, the THM experiment's at its last segment), or null.

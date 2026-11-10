@@ -4,7 +4,7 @@
 Project format 3: the table
 ===========================
 
-Schema version ``3.0``.  A format-3 project describes each data set, target, beam, detector, shared normalization, energy scale, extrapolation and model datum as one record: a header line ``<kind> <name>`` followed by one ``<key> <value>`` line per field, inside the section that holds the kind.  ``#`` starts a comment; a token with blanks is quoted; indentation is not significant.  Every closed choice below is a row of one table compiled into the engine; ``AZURE2 --schema`` prints it as JSON and ``pyazr.schema()`` returns it as a dict.  The design is ``docs/upgrade/project_format3.md``.
+Schema version ``3.0``.  A format-3 project describes each data set, target, beam, detector, shared normalization, energy scale, extrapolation and model datum as one record: a header line ``<kind> <name>`` followed by one ``<key> <value>`` line per field, inside the section that holds the kind.  ``#`` starts a comment; a token with blanks is quoted; indentation is not significant.  Every closed choice below is a row of one table compiled into the engine; ``AZURE2 --schema`` prints it as JSON and ``pyazr.schema()`` returns it as a dict.  ``AZURE2 --validate FILE`` (``pyazr.validate(path)``) checks a project against it and reports every problem; ``AZURE2 --convert OLD NEW --to 3`` (``pyazr.convert_azr(old, new, to=3)``) writes an older project in this format.  The design is ``docs/upgrade/project_format3.md``.
 
 Names are ``[A-Za-z][A-Za-z0-9_-]*`` and unique across the project; a field names another record by its name.  Within a section, record kinds and field keys are disjoint, so a line is a header or a field by its first word.
 
@@ -92,7 +92,7 @@ Value types
      - element symbols with their atoms per formula unit
    * - ``reaction_expr``
      - ``<reaction> { + <reaction> } | <reaction> / <reaction>``
-     - reactions <A><X>(<a>,<b>)<A><Y>[<E_x>\|total], a sum or a ratio of two, scaled terms <c>\*<reaction>, terms at a fixed angle '@ <angle> <unit> lab\|cm'
+     - reactions <A><X>[<E_x>](<a>,<b>)<A><Y>[<E_x>\|total] (the target's state for an excited entrance pair), a sum or a ratio of two, scaled terms <c>\*<reaction>, terms at a fixed angle '@ <angle> <unit> lab\|cm'
    * - ``columns``
      - ``<role> <role> ... | from_file``
      - the role of each column of the data file, energy and angle roles with their unit
@@ -126,8 +126,16 @@ Data set, in ``<data>``.  Measured values of one quantity in one data file (sect
      - ``<reaction> { + <reaction> } | <reaction> / <reaction>``
      - required
      - the reaction expression (section 3.5)
+   * - ``entrance_pair``
+     - ``<integer >= 1>``
+     - only when the reaction is one reaction (no sum, no ratio); optional
+     - the <levels> pair key of the entrance pair, only where the reaction label names two pairs
+   * - ``exit_pair``
+     - ``<integer >= 1>``
+     - only when the reaction is one reaction (no sum, no ratio); optional
+     - the <levels> pair key of the exit pair, only where the reaction label names two pairs
    * - ``quantity``
-     - ``sigma|sigma_total|dsigma_domega|sfactor|ratio_to_rutherford|ratio_to_mott|legendre|analyzing_power|phase_shift|yield|transmission|neutron_yield|beta_delayed_spectrum``
+     - ``sigma|sigma_nuclear|sigma_total|dsigma_domega|sfactor|ratio_to_rutherford|ratio_to_mott|legendre|analyzing_power|phase_shift|yield|transmission|neutron_yield|beta_delayed_spectrum``
      - required
      - what the numbers are (section 7.2)
    * - ``unit``
@@ -306,8 +314,16 @@ Extrapolation, in ``<extrapolations>``.  Model values on a grid, without data (s
      - ``<reaction> { + <reaction> } | <reaction> / <reaction>``
      - required
      - the reaction expression (section 3.5)
+   * - ``entrance_pair``
+     - ``<integer >= 1>``
+     - only when the reaction is one reaction (no sum, no ratio); optional
+     - the <levels> pair key of the entrance pair, only where the reaction label names two pairs
+   * - ``exit_pair``
+     - ``<integer >= 1>``
+     - only when the reaction is one reaction (no sum, no ratio); optional
+     - the <levels> pair key of the exit pair, only where the reaction label names two pairs
    * - ``quantity``
-     - ``sigma|sigma_total|dsigma_domega|sfactor|ratio_to_rutherford|ratio_to_mott|legendre|analyzing_power|phase_shift|yield|transmission|neutron_yield|beta_delayed_spectrum``
+     - ``sigma|sigma_nuclear|sigma_total|dsigma_domega|sfactor|ratio_to_rutherford|ratio_to_mott|legendre|analyzing_power|phase_shift|yield|transmission|neutron_yield|beta_delayed_spectrum``
      - required
      - what is computed (section 7.2)
    * - ``unit``
@@ -636,11 +652,47 @@ Cross section (``dataset``, ``extrapolation``).  Angle-integrated cross section 
    * - EXFOR
      - ``,SIG``, ``PAR,SIG``, ``,SIG,,TTA``
    * - refused (validate)
-     - charged_elastic: the angle-integrated elastic cross section of charged particles is infinite: give dsigma_domega or ratio_to_rutherford (LEXFOR p. S.2) (``E_REACTION_NOT_ALLOWED``)
+     - charged_elastic: the angle-integrated elastic cross section of charged particles is infinite: give dsigma_domega or ratio_to_rutherford (LEXFOR p. S.2); the integral of the nuclear amplitude alone is quantity sigma_nuclear (``E_REACTION_NOT_ALLOWED``)
    * - refused (validate)
      - multipole with a particle exit: a multipole filter selects photon multipoles (``E_FIELD_NOT_APPLICABLE``)
    * - refused (validate)
      - target kind infinite: a thick (infinite) target gives a yield: use quantity yield (``E_TARGET_KIND``)
+
+sigma_nuclear
+~~~~~~~~~~~~~
+
+Nuclear elastic integral (``dataset``, ``extrapolation``).  Angle-integrated elastic cross section of the nuclear amplitude alone, pi/k^2 sum g \|T\|^2; for a charged pair it leaves out the Coulomb amplitude and its interference and is not a measurable cross section: for tests, diagnostics and comparison with phase-shift formulas.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 20 80
+
+   * - property
+     - value
+   * - engine unit
+     - ``b``
+   * - units
+     - ``b`` (1), ``mb`` (0.001), ``ub`` (1e-06), ``nb`` (1e-09), ``1`` (--)
+   * -
+     - ``1`` only when the reaction is a ratio
+   * - energy column
+     - ``E_lab``, ``E_cm``
+   * - reaction
+     - elastic, charged entrance; sums and ratios
+   * - ``target``
+     - allowed
+   * - ``beam``
+     - allowed
+   * - ``detector``
+     - allowed
+   * - target kinds
+     - ``layer``, ``none``
+   * - tree
+     - ``SigmaNuclear(r) = pi/k^2 sum g |T|^2 (GenMatrixFunc, angle-integrated, entrance = exit)``
+   * - refused (validate)
+     - inelastic: the nuclear elastic integral is an elastic quantity (``E_REACTION_NOT_ALLOWED``)
+   * - refused (validate)
+     - neutral: for a neutral pair the elastic cross section is quantity sigma (``E_REACTION_NOT_ALLOWED``)
 
 sigma_total
 ~~~~~~~~~~~
@@ -697,6 +749,8 @@ Differential cross section (``dataset``, ``extrapolation``).  dsigma/dOmega at t
      - ``E_lab``, ``E_cm``
    * - angle column
      - required: ``theta_lab``, ``theta_cm``
+   * - window columns
+     - allowed (a beam with a profile)
    * - reaction
      - sums and ratios; no [total] exit
    * - ``target``
@@ -855,6 +909,14 @@ Legendre coefficients (``dataset``, ``extrapolation``).  c.m. Legendre coefficie
      - required
    * - ``orders``
      - required
+   * - ``target``
+     - allowed
+   * - ``beam``
+     - allowed
+   * - ``detector``
+     - allowed
+   * - target kinds
+     - ``layer``, ``none``
    * - norm
      - fixed when expansion is a_over_a0 or rsl: normalised coefficients carry no normalization: norm is fixed (data_formats.rst, Legendre data)
    * - tree
@@ -1067,6 +1129,8 @@ beta-delayed particle spectrum (``dataset``, ``extrapolation``).  The spectrum o
      - beta entrance pair (step 3)
    * - ``detector``
      - allowed
+   * - norm
+     - fixed, fit when always: the spectrum's scale is carried by the beta-feeding amplitudes
    * - tree
      - ``the leaves with EnergyIn = DecayLab``
    * - refused (build)
@@ -1251,7 +1315,7 @@ Asymptotic normalization coefficient (``datum``).  C of a bound level from its r
 scattering_length
 ~~~~~~~~~~~~~~~~~
 
-Scattering length (``datum``).  Re and Im of the scattering length of a neutral pair (include/ScatteringLength.h).
+Scattering length (``datum``).  Re and Im of the s-wave scattering length of a particle pair, Coulomb-modified for a charged pair (include/ScatteringLength.h).
 
 .. list-table::
    :header-rows: 1
@@ -1265,8 +1329,6 @@ Scattering length (``datum``).  Re and Im of the scattering length of a neutral 
      - ``fm`` (1)
    * - energy column
      - --
-   * - reaction
-     - neutral pair
    * - ``pair``
      - required
    * - ``s``
@@ -1279,8 +1341,6 @@ Scattering length (``datum``).  Re and Im of the scattering length of a neutral 
      - ``a_0 (Re, Im)``
    * - EXFOR
      - ``,AMP``, ``COH,AMP``
-   * - refused (validate)
-     - charged_pair: the scattering length is defined for a neutral pair (``E_REACTION_NOT_ALLOWED``)
 
 For every quantity: norm fit, profiled when the unit is arbitrary (the value is in arbitrary units: its normalization is free (fit without a prior) or profiled).
 
@@ -1527,8 +1587,6 @@ Column roles
      - ``energy`` unit in brackets
    * - ``E_cm``
      - ``energy`` unit in brackets
-   * - ``E_x``
-     - ``energy`` unit in brackets
    * - ``E_decay``
      - ``energy`` unit in brackets
    * - ``theta_lab``
@@ -1709,3 +1767,6 @@ Diagnostic codes
    * - ``E_DEGENERATE_NUISANCE``
      - error
      - efficiency and norm both free without a prior (F9)
+   * - ``W_NOT_MEASURABLE``
+     - warning
+     - a data set of a quantity that is computed for tests and comparison, not measured

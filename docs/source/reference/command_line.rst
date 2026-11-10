@@ -147,6 +147,35 @@ Available Options
        ``<potential>`` kept only with a hybrid potential, and ``format=2`` added
        to ``<config>``.  An old file still loads: it is read as its conversion,
        with a note.
+
+       ``--convert OLD NEW --to 3 [--json-report R] [--answers A] [--exact-grids] [--strict]
+       [--allow-questions]``: write ``OLD`` in project format 3 (:doc:`format3`; the design is
+       ``docs/upgrade/project_format3.md`` section 8) to ``NEW``, every data set, extrapolation,
+       target, beam, detector, shared normalization and energy scale a named record.  Where the old
+       file left a meaning implicit (a thick target's numbers per incident particle, a Gaussian
+       convolution as a beam spread, an effect that also folded the extrapolation of the same
+       index), the record states it with a ``# CONVERTED:`` comment and a note; values the old
+       engine did not use (a group member's own norm or shift) are dropped with a note; where the
+       old meaning cannot be written (two pairs with the same particles and states) the converter
+       asks.  ``R``: the report as JSON (notes, questions, the parameter names old -> new such as
+       ``segment_3_norm`` -> ``s03.norm``); ``A``: answers, a JSON object
+       ``{"<record>.<field>": value}``; ``--exact-grids``: the extrapolation energies as the list
+       the old engine accumulated instead of ``range lo hi step s`` with E_k = lo + k s;
+       ``--strict``: ask instead of noting an implicit meaning; ``--allow-questions``: write ``?``
+       for an unanswered question (the file then does not validate).  A prior-covariance file is
+       written beside ``NEW`` as ``<name>.f3<ext>`` with renamed parameters; data files are never
+       written; nothing existing is overwritten.  The output is validated before it is written.
+       ``--to 3`` is needed until this engine reads format 3 (it runs format-2 projects and
+       refuses a format-3 one).
+   * - ``--validate``
+     - ``--validate FILE [--json]``: read the format-3 project ``FILE``, check every record
+       against the table (:doc:`format3`) and print every problem, one per line as
+       ``file:line: record.field: severity code: message``, or with ``--json`` one JSON array of
+       diagnostics (code, line, column, section, record, field, found, allowed, message, and a
+       syntax-only fix).  The checks that need ``<levels>`` or the data files are left to the
+       format-3 reader; their number is printed as a note.  Exit 0 without errors, 2 with errors,
+       3 for a format-1 or format-2 file (with the conversion command), 1 when ``FILE`` cannot be
+       read.  ``pyazr.validate(path)`` returns the same diagnostics.
    * - ``--schema``
      - Print the table of project format 3 as one JSON document and exit: the
        record kinds and their fields with value types and conditions, the
@@ -425,7 +454,9 @@ evaluation produces -- each point's and sub-point's calculated cross section,
 its E1 and E2 parts, A_y, A_0, angular-distribution coefficients and sample
 terms -- is set to a quiet NaN before it is calculated, so a value read before
 the evaluation writes it, for instance one kept from an earlier evaluation,
-appears as NaN in the output.  A test of the engine, not of a project: the
+appears as NaN in the output.  This holds for every buffer an evaluation writes:
+the calculation's, each working copy's in a fit or an MCMC run, the Python
+session's and each reaction-rate point's.  A test of the engine, not of a project: the
 output files of a correct engine do not change.  In pyazr the E1 and E2 parts
 (``calculated_segments_e1``, ``_e2``) of a line that is not an
 angle-integrated cross section become NaN, since they are never calculated

@@ -21,8 +21,8 @@ writing a file and launching a fresh instance from it::
     path = model.write("13N_edited.azr")          # original file untouched
     azr = azure2(path)                            # run with the edited scheme
 
-The 31 fields of a channel line match ``NucLine`` in the AZURE2 source
-(``include/NucLine.h``); note the file stores ``2*S`` and ``2*L`` as integers,
+The 31 fields of a channel line match ``LevelRow`` in the AZURE2 source
+(``io/include/azure2/io/LevelRows.h``); note the file stores ``2*S`` and ``2*L`` as integers,
 which the ``S`` / ``L`` properties convert.  Optional trailing fields: the
 light particle's excitation energy ``e1`` (MeV, dev 2026-11-05) alone is a 32nd
 field; the THM binding energy and width flag are fields 32 and 33, and ``e1``
@@ -37,12 +37,12 @@ import re
 import tempfile
 from typing import List, NamedTuple, Optional
 
-# Field order of a <levels> channel line, matching NucLine's read order: 31
+# Field order of a <levels> channel line, matching LevelRow's read order: 31
 # mandatory fields, then optional trailing ones.  dev's optional 32nd column is
 # the light particle's excitation energy e1 (2026-11-05); thm's two optional
 # columns (binding energy, and a flag saying the gamma column holds a reduced
 # width amplitude rather than a partial width or ANC) came first.  The engine
-# tells them apart by the number of trailing fields (NucLine): 1 = e1 (dev),
+# tells them apart by the number of trailing fields (LevelRow): 1 = e1 (dev),
 # 2 = binding energy and flag (thm), 3 = binding energy, flag and e1.  Here the
 # fields are kept in that logical order; to_line() writes the layout back.
 _FIELDS = [
@@ -3693,24 +3693,61 @@ class AzrModel:
     def __repr__(self):
         return f"AzrModel({len(self.levels)} levels, source={self.source!r})"
 
-def convert_azr(old, new, overwrite=False):
-    """Write the project ``old`` in the updated file format (format 2) to ``new``.
+def convert_azr(old, new, overwrite=False, *, to=2, report=None, answers=None, exact_grids=False, strict=False,
+                allow_questions=False):
+    """Write the project ``old`` in the updated file format to ``new``.
 
-    The conversion is the engine's (``io::ConvertToFormat2``, the same as
-    ``AZURE2 --convert``; docs/upgrade/project.md section 4): ``<lastRun>`` and
-    ``<mcmc>``'s run settings are removed (nothing reads them),
-    ``useAdaptiveGrid`` moves from ``<potential>`` to ``<config>``,
-    ``<potential>`` stays only with a hybrid potential, and ``format=2`` is
-    added to ``<config>``; every other byte is kept.  An old file also loads as
-    it is (the engine reads it as its conversion).  ``new`` is not overwritten
-    unless ``overwrite``.  Returns the list of changes (empty for a file
-    already in format 2).
+    ``to=2`` (the default until the engine reads format 3): the format-2 conversion, the engine's
+    (``io::ConvertToFormat2``, the same as ``AZURE2 --convert``; docs/upgrade/project.md section 4):
+    ``<lastRun>`` and ``<mcmc>``'s run settings are removed (nothing reads them), ``useAdaptiveGrid`` moves from
+    ``<potential>`` to ``<config>``, ``<potential>`` stays only with a hybrid potential, and ``format=2`` is added to
+    ``<config>``; every other byte is kept.  An old file also loads as it is (the engine reads it as its
+    conversion).  Returns the list of changes (empty for a file already in format 2).
+
+    ``to=3``: project format 3, the converter of ``AZURE2 --convert OLD NEW --to 3`` (convert/,
+    docs/upgrade/project_format3.md section 8): every data set, extrapolation, target, beam and detector a named
+    record; implicit meanings stated with ``# CONVERTED:`` comments, unused values dropped, both listed in the report.
+    ``answers``: a dict ``{"<record>.<field>": value}`` for the converter's questions; ``exact_grids``,
+    ``strict``, ``allow_questions`` as the command-line options; ``report``: a path for the JSON report.  Side files
+    (a prior-covariance copy ``<name>.f3<ext>``) are written beside ``new``.  Returns the report as a dict; raises
+    ``ValueError`` (with the report's reason) when the project cannot be converted.  Data files are never written.
+
+    ``new`` (and the side files and the report) are not overwritten unless ``overwrite``.
     """
     _azure2 = _engine_module()
     with open(old, "rb") as f:
         text = f.read()  # bytes, converted as bytes (the file's encoding is kept)
     if os.path.exists(new) and not overwrite:
         raise FileExistsError(f"{new} exists; pass overwrite=True to replace it")
+    if to == 3:
+        import json
+        if os.path.abspath(old) == os.path.abspath(new):
+            raise ValueError("the converter never overwrites its input")
+        result = _azure2.convert_format3_text(text,
+                                              os.path.dirname(os.path.abspath(old)),
+                                              {str(k): str(v) for k, v in (answers or {}).items()},
+                                              exact_grids=bool(exact_grids), strict=bool(strict),
+                                              allow_questions=bool(allow_questions), input=str(old), output=str(new))
+        rep = json.loads(result["report"])
+        if report is not None:
+            if os.path.exists(report) and not overwrite:
+                raise FileExistsError(f"{report} exists; pass overwrite=True to replace it")
+            with open(report, "w") as f:
+                f.write(result["report"])
+        if not result["ok"]:
+            raise ValueError(f"{old} is not converted: {result['refusal']}")
+        outdir = os.path.dirname(os.path.abspath(new))
+        for name, data in result["side_files"]:
+            path = os.path.join(outdir, name)
+            if os.path.exists(path) and not overwrite:
+                raise FileExistsError(f"{path} exists; pass overwrite=True to replace it")
+            with open(path, "wb") as f:
+                f.write(data)
+        with open(new, "wb") as f:
+            f.write(result["text"])
+        return rep
+    if to != 2:
+        raise ValueError(f"to={to!r}: the converter writes format 2 or 3")
     converted, changes, problems = _azure2.convert_project_text(text)
     for p in problems:
         warnings.warn(f"{old}: {p}")

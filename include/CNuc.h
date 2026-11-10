@@ -16,6 +16,7 @@ class MnUserParameters;
 }
 }  // namespace ROOT
 class Config;
+class AZUREParams;
 
 /// An AZURE compound nucleus
 
@@ -62,8 +63,6 @@ class CNuc {
   /// Nucleus \p i, 1-based.
   CompoundNucleus *GetNucleus(int);
   const CompoundNucleus *GetNucleus(int) const;
-  /// 1-based nucleus of pair \p pairNum (1-based pair number).
-  int NucleusOfPair(int);
   /// "Z=10 A=23" style label of nucleus \p i.
   std::string NucleusLabel(int) const;
   /// Did the project carry an <abundances> block?  Only then are the
@@ -115,6 +114,7 @@ class CNuc {
   int GetPairNumFromKey(int);
   /// Pair \p i, 1-based.
   PPair *GetPair(int);
+  const PPair *GetPair(int) const;
   /// The pair with this key, or nullptr when no pair has it (a total-capture exit key -1, a typo): the
   /// GetPair(GetPairNumFromKey(key)) idiom read pairs_[-1] for those (audit 2026-10-25, item 32).
   PPair *GetPairFromKey(int key);
@@ -127,11 +127,9 @@ class CNuc {
   std::string RatePairsProblem(int entranceKey, int exitKey);
   /// \f$J^\pi\f$ group \p i, 1-based.
   JGroup *GetJGroup(int);
+  const JGroup *GetJGroup(int) const;
   void AddPair(PPair);
   void AddJGroup(JGroup);
-  /// Largest orbital angular momentum appearing in any channel.
-  int GetMaxLValue() const;
-  void SetMaxLValue(int);
 
   // -- building -------------------------------------------------------------
   /// Build the whole object from the nuclear and external-capture input files.
@@ -141,8 +139,6 @@ class CNuc {
   /// Adds a level-less J^pi group, with its particle channels, for every J^pi the particle pairs allow up to
   /// \p maxL that no active level provides. Such a group contributes hard-sphere scattering only.
   int AddHardSphereGroups(const Config &, int maxL);
-  /// Refuse (return -1) a channel with L+S odd on an identical pair with spin.
-  int CheckIdenticalChannels(const Config &);
   /// Read the external-capture file into the ECLevel vector and check each
   /// final state against the nuclear file.
   int ParseExternalCapture(const Config &, std::map<int, int> &);
@@ -151,14 +147,6 @@ class CNuc {
   /// that a calculation needs. Run after Fill, and again after anything that
   /// changes the Coulomb functions.
   void Initialize(const Config &);
-  /*!
-   * Warn where the separation energies and the masses of a compound nucleus's particle pairs disagree:
-   * S_b - S_a should equal (m1b + m2b - m1a - m2a) c^2.  Thresholds come from the separation energies and the
-   * kinematics from the masses, so a mismatch is never an error in the calculation, but it is how typos and mixed
-   * mass conventions show up.  Returns the number of warnings printed (tolerance kMassCheckTolerance).
-   */
-  int CheckMassSeparationConsistency(const Config &) const;
-  static constexpr double kMassCheckTolerance = 1.0e-3;  ///< MeV
 
   // -- derived quantities ---------------------------------------------------
   /// Boundary condition per channel, evaluated at the energy of the group's
@@ -227,29 +215,18 @@ class CNuc {
   void TransformOut(const Config &);
   /// The transformed physical parameters as a flat vector.
   vector_r GetTransformParams(const Config &configure);
-  /// Write the transformed parameters to parameters.out.
-  void PrintTransformParams(const Config &);
-  /// relativistic.out: the parameters.out levels in the E(s) (LANL EDA, ENDF KRL=1) convention.
-  void PrintRelativisticParams(const Config &) const;
+  /// The observed widths of a parameter vector in the levels' observed slots, as TransformOut computes them but
+  /// without its messages (for WarnLargeRadiativeWidths, CNucChecks.h); the fit state is set back to the vector.
+  /// False, with nothing set, if the transformation fails.
+  bool ObservedWidthsAt(const Config &, const vector_r &);
 
   // -- fitting --------------------------------------------------------------
-  /// Seed the Minuit parameter array from the current level parameters.
-  void FillMnParams(ROOT::Minuit2::MnUserParameters &, const Config *config = nullptr);
+  /// Seed the parameter vector from the current level parameters, each with its record (what it is).
+  void FillMnParams(AZUREParams &, const Config *config = nullptr);
   /// Write a Minuit parameter vector back into the levels.
   void FillCompoundFromParams(const vector_r &);
   /// As above, for a vector already in physical rather than formal parameters.
   void FillCompoundFromParamsPhysical(const vector_r &);
-  void PrintCompoundFromParams();
-  /// Warn once if any level has a radiative width not small against its
-  /// particle width, where the R-matrix treatment of capture breaks down.
-  void CheckRadiativeWidths(const Config &, const vector_r &);
-
-  // -- diagnostics ----------------------------------------------------------
-  /// Print pairs, groups, levels and channels as read, before Initialize.
-  void PrintNuc(const Config &);
-  void PrintPathways(const Config &);
-  void PrintBoundaryConditions(const Config &);
-  void PrintAngularDists(const Config &);
 
   /// Deep copy. AZURECalc gives each thread its own, since a calculation
   /// writes the fitted parameters into the object it runs on.
@@ -296,7 +273,6 @@ class CNuc {
   std::vector<AbundanceSample> samples_;
   bool hasAbundanceBlock_ = false;
   std::vector<ScatteringLength::Constraint> scatLenConstraints_;
-  int maxLValue_;
   bool transformedIn_ = false;
   std::vector<double> thmCoherentValues_;
 };

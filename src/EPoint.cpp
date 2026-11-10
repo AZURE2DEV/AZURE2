@@ -359,10 +359,10 @@ int EPoint::GetMaxAngDistOrder() const {
  * Return the number of angular distribution coefficients in the vector.
  */
 
-int EPoint::GetNumAngularDists() const {
+int EPoint::GetNumAngularDists(const azure2::Results &r) const {
   if (!num_ang_slots_) return 0;
   // as many as the last evaluation wrote; poisoned and not written in this one: the capacity, whose NaN values show
-  const double n = Rec()[azure2::Results::AngularOffset()];
+  const double n = Rec(r)[azure2::Results::AngularOffset()];
   return std::isnan(n) ? (int)num_ang_slots_ : (int)n;
 }
 
@@ -535,8 +535,8 @@ double EPoint::GetTargetThickness() const {
  * Returns the angular distribution coefficient corresponding to the given order;
  */
 
-double EPoint::GetAngularDist(int order) const {
-  return Rec()[azure2::Results::AngularOffset() + 1 + order];
+double EPoint::GetAngularDist(const azure2::Results &r, int order) const {
+  return Rec(r)[azure2::Results::AngularOffset() + 1 + order];
 }
 
 /*!
@@ -1924,16 +1924,16 @@ ScopedPointMappingOff::ScopedPointMappingOff() : previous_(tlPointMappingOff) { 
 ScopedPointMappingOff::~ScopedPointMappingOff() { tlPointMappingOff = previous_; }
 bool ScopedPointMappingOff::Active() { return tlPointMappingOff; }
 
-void EPoint::MarkFailed(const char *role, const Config &configure, const char *why) {
+void EPoint::MarkFailed(azure2::Results &results, const char *role, const Config &configure, const char *why) {
   const double nan = std::numeric_limits<double>::quiet_NaN();
-  this->SetFitCrossSection(nan);
-  this->SetFitE1CrossSection(nan);
-  this->SetFitE2CrossSection(nan);
+  this->SetFitCrossSection(results, nan);
+  this->SetFitE1CrossSection(results, nan);
+  this->SetFitE2CrossSection(results, nan);
   for (int i = 1; i <= this->NumLocalMappedPoints(); i++) {
     EPoint *mapped = this->GetLocalMappedPoint(i);
-    mapped->SetFitCrossSection(nan);
-    mapped->SetFitE1CrossSection(nan);
-    mapped->SetFitE2CrossSection(nan);
+    mapped->SetFitCrossSection(results, nan);
+    mapped->SetFitE1CrossSection(results, nan);
+    mapped->SetFitE2CrossSection(results, nan);
   }
   static std::atomic<bool> reported(false);
   if (!reported.exchange(true)) {
@@ -1944,7 +1944,8 @@ void EPoint::MarkFailed(const char *role, const Config &configure, const char *w
   }
 }
 
-void EPoint::Calculate(CNuc *theCNuc, const Config &configure, EPoint *parent, int subPointNum) {
+void EPoint::Calculate(CNuc *theCNuc, const Config &configure, azure2::Results &results, EPoint *parent,
+                       int subPointNum) {
   // Test hook (tests/pyazr/failed_point_test.py): AZURE_TEST_FAIL_E=<lab energy, MeV> makes the calculation of a
   // data or test point at that energy throw, AZURE_TEST_FAIL_EXIT=<pair key> only for that exit pair, so the
   // handling of a failed point (ESegment::CalculateTheoreticalCrossSection) can be exercised.
@@ -1973,15 +1974,15 @@ void EPoint::Calculate(CNuc *theCNuc, const Config &configure, EPoint *parent, i
       thmFunc.ClearMatrices();
       thmFunc.FillMatrices(this);
       thmFunc.InvertMatrices();
-      thmFunc.CalculateTHMCrossSection(this);
+      thmFunc.CalculateTHMCrossSection(this, results);
       if (subPointNum && parent) {
         for (int i = 1; i <= parent->NumLocalMappedPoints(); i++) {
           EPoint *mappedSubPoint = parent->GetLocalMappedPoint(i)->GetSubPoint(subPointNum);
-          thmFunc.CalculateTHMCrossSection(mappedSubPoint);
+          thmFunc.CalculateTHMCrossSection(mappedSubPoint, results);
         }
       } else {
         for (int i = 1; i <= this->NumLocalMappedPoints(); i++)
-          thmFunc.CalculateTHMCrossSection(this->GetLocalMappedPoint(i));
+          thmFunc.CalculateTHMCrossSection(this->GetLocalMappedPoint(i), results);
       }
       return;
     }
@@ -2006,7 +2007,7 @@ void EPoint::Calculate(CNuc *theCNuc, const Config &configure, EPoint *parent, i
     theMatrixFunc->FillMatrices(this);
     theMatrixFunc->InvertMatrices();
     theMatrixFunc->CalculateTMatrix(this);
-    theMatrixFunc->CalculateCrossSection(this);
+    theMatrixFunc->CalculateCrossSection(this, results);
     // A mapped point may have another exit pair (a component of a SUM, RATIO or total-capture segment, EData::MapData):
     // the solved level matrix is the same, only its T-matrix is built anew.  Mapped points are ordered by exit, so
     // each exit's T-matrix is built once.
@@ -2016,7 +2017,7 @@ void EPoint::Calculate(CNuc *theCNuc, const Config &configure, EPoint *parent, i
         theMatrixFunc->RecalculateTMatrix(mapped);
         tExitKey = mapped->GetExitKey();
       }
-      theMatrixFunc->CalculateCrossSection(mapped);
+      theMatrixFunc->CalculateCrossSection(mapped, results);
     };
     if (subPointNum && parent) {
       const int numParentMapped = ScopedPointMappingOff::Active() ? 0 : parent->NumLocalMappedPoints();
@@ -2028,7 +2029,7 @@ void EPoint::Calculate(CNuc *theCNuc, const Config &configure, EPoint *parent, i
   } else {
     TargetEffect *effect = this->GetParentData()->GetTargetEffect(this->GetTargetEffectNum());
     if (effect->IsTargetIntegration() && !effect->IsThickTarget()) {
-      this->CalculateThinTarget(theCNuc, configure, effect);
+      this->CalculateThinTarget(theCNuc, configure, results, effect);
       return;
     }
     const double blend = this->GetTargetBlendWeight();
@@ -2044,12 +2045,12 @@ void EPoint::Calculate(CNuc *theCNuc, const Config &configure, EPoint *parent, i
     if (blend < 1.0 || autoTol > 0.) {
       EPoint probe(*this);
       azure2::Results probeResults;  // the probe's own record: it must not write the point's
-      probe.BindPrivateResults(probeResults);
+      probe.UsePrivateRecord(probeResults, results);
       probe.SetTargetEffectNum(0);
       probe.ClearLocalMappedPoints();
       probe.integrationPoints_.clear();
-      probe.Calculate(theCNuc, configure);
-      bareValue = probe.GetFitCrossSection();
+      probe.Calculate(theCNuc, configure, probeResults);
+      bareValue = probe.GetFitCrossSection(probeResults);
       haveBare = true;
     }
 
@@ -2076,32 +2077,32 @@ void EPoint::Calculate(CNuc *theCNuc, const Config &configure, EPoint *parent, i
         if (configure.paramMask & Config::USE_EXTERNAL_CAPTURE)
           subPoint->RecalcEDependentValues(theCNuc, configure);
         if (hasMapped)
-          subPoint->Calculate(theCNuc, configure, this, probes[k]);
+          subPoint->Calculate(theCNuc, configure, results, this, probes[k]);
         else
-          subPoint->Calculate(theCNuc, configure);
+          subPoint->Calculate(theCNuc, configure, results);
       }
       bool allPass = true;
       for (int m = 0; m <= numMapped && allPass; m++) {
         EPoint *host = (m == 0) ? this : this->GetLocalMappedPoint(m);
-        double sFirst = host->GetSubPoint(iFirst)->GetFitCrossSection();
-        double sMid = host->GetSubPoint(iMid)->GetFitCrossSection();
-        double sLast = host->GetSubPoint(iLast)->GetFitCrossSection();
+        double sFirst = host->GetSubPoint(iFirst)->GetFitCrossSection(results);
+        double sMid = host->GetSubPoint(iMid)->GetFitCrossSection(results);
+        double sLast = host->GetSubPoint(iLast)->GetFitCrossSection(results);
         double estimate = std::fabs(0.5 * (sFirst + sLast) - sMid);
         if (effect->IsTargetIntegration()) estimate += 0.5 * std::fabs(sLast - sFirst);
         if (estimate > autoTol * std::max(std::fabs(sMid), 1e-300)) allPass = false;
       }
       if (allPass) {
-        this->SetFitCrossSection(bareValue);
+        this->SetFitCrossSection(results, bareValue);
         for (int m = 1; m <= numMapped; m++) {
           EPoint *mappedPoint = this->GetLocalMappedPoint(m);
           EPoint mappedProbe(*mappedPoint);
           azure2::Results probeResults;
-          mappedProbe.BindPrivateResults(probeResults);
+          mappedProbe.UsePrivateRecord(probeResults, results);
           mappedProbe.SetTargetEffectNum(0);
           mappedProbe.ClearLocalMappedPoints();
           mappedProbe.integrationPoints_.clear();
-          mappedProbe.Calculate(theCNuc, configure);
-          mappedPoint->SetFitCrossSection(mappedProbe.GetFitCrossSection());
+          mappedProbe.Calculate(theCNuc, configure, probeResults);
+          mappedPoint->SetFitCrossSection(results, mappedProbe.GetFitCrossSection(probeResults));
         }
         return;
       }
@@ -2114,28 +2115,28 @@ void EPoint::Calculate(CNuc *theCNuc, const Config &configure, EPoint *parent, i
         subPoint->RecalcEDependentValues(theCNuc, configure);
       }
       if (numMapped > 0)
-        subPoint->Calculate(theCNuc, configure, this, i);
+        subPoint->Calculate(theCNuc, configure, results, this, i);
       else
-        subPoint->Calculate(theCNuc, configure);
+        subPoint->Calculate(theCNuc, configure, results);
     }
-    this->IntegrateTargetEffectForObservable(configure);
+    this->IntegrateTargetEffectForObservable(configure, results);
     if (blend < 1.0 && haveBare)
-      this->SetFitCrossSection(blend * this->GetFitCrossSection() + (1.0 - blend) * bareValue);
+      this->SetFitCrossSection(results, blend * this->GetFitCrossSection(results) + (1.0 - blend) * bareValue);
     for (int i = 1; i <= numMapped; i++) {
       EPoint *mappedPoint = this->GetLocalMappedPoint(i);
-      mappedPoint->IntegrateTargetEffectForObservable(configure);
+      mappedPoint->IntegrateTargetEffectForObservable(configure, results);
       if (blend < 1.0) {
         // The mapped point is another observable at the same energy: its bare
         // value needs its own probe.
         EPoint mappedProbe(*mappedPoint);
         azure2::Results probeResults;
-        mappedProbe.BindPrivateResults(probeResults);
+        mappedProbe.UsePrivateRecord(probeResults, results);
         mappedProbe.SetTargetEffectNum(0);
         mappedProbe.ClearLocalMappedPoints();
         mappedProbe.integrationPoints_.clear();
-        mappedProbe.Calculate(theCNuc, configure);
-        mappedPoint->SetFitCrossSection(blend * mappedPoint->GetFitCrossSection() +
-                                        (1.0 - blend) * mappedProbe.GetFitCrossSection());
+        mappedProbe.Calculate(theCNuc, configure, probeResults);
+        mappedPoint->SetFitCrossSection(results, blend * mappedPoint->GetFitCrossSection(results) +
+                                                     (1.0 - blend) * mappedProbe.GetFitCrossSection(probeResults));
       }
     }
   }
@@ -2152,7 +2153,7 @@ void EPoint::Calculate(CNuc *theCNuc, const Config &configure, EPoint *parent, i
  *    the end nodes stays within the tolerance of sigma(E_bar) (a curvature bound, about three times the error of
  *    sigma(E_bar) for a box), sigma(E_bar) is used and no other sub-point is evaluated.
  */
-void EPoint::CalculateThinTarget(CNuc *theCNuc, const Config &configure, TargetEffect *effect) {
+void EPoint::CalculateThinTarget(CNuc *theCNuc, const Config &configure, azure2::Results &results, TargetEffect *effect) {
   const int numMapped = ScopedPointMappingOff::Active() ? 0 : this->NumLocalMappedPoints();
   const bool hasMapped = numMapped > 0;
   const int n = this->NumSubPoints();
@@ -2160,13 +2161,14 @@ void EPoint::CalculateThinTarget(CNuc *theCNuc, const Config &configure, TargetE
     EPoint *subPoint = this->GetSubPoint(i);
     if (configure.paramMask & Config::USE_EXTERNAL_CAPTURE) subPoint->RecalcEDependentValues(theCNuc, configure);
     if (hasMapped)
-      subPoint->Calculate(theCNuc, configure, this, i);
+      subPoint->Calculate(theCNuc, configure, results, this, i);
     else
-      subPoint->Calculate(theCNuc, configure);
+      subPoint->Calculate(theCNuc, configure, results);
   };
   auto integrateAll = [&]() {
-    this->IntegrateTargetEffectForObservable(configure);
-    for (int m = 1; m <= numMapped; m++) this->GetLocalMappedPoint(m)->IntegrateTargetEffectForObservable(configure);
+    this->IntegrateTargetEffectForObservable(configure, results);
+    for (int m = 1; m <= numMapped; m++)
+      this->GetLocalMappedPoint(m)->IntegrateTargetEffectForObservable(configure, results);
   };
   const double autoTol = effect->GetAutoTolerance();
   if (autoTol > 0. && !target_fallback_only_ && n >= 4) {
@@ -2186,9 +2188,10 @@ void EPoint::CalculateThinTarget(CNuc *theCNuc, const Config &configure, TargetE
     bool allPass = true;
     for (int m = 0; m <= numMapped && allPass; m++) {
       EPoint *host = (m == 0) ? this : this->GetLocalMappedPoint(m);
-      const double sF = host->GetSubPoint(1)->GetFitCrossSection(), sL = host->GetSubPoint(n)->GetFitCrossSection();
-      const double sBar = (1.0 - tBar) * host->GetSubPoint(jb)->GetFitCrossSection() +
-                          tBar * host->GetSubPoint(jb + 1)->GetFitCrossSection();
+      const double sF = host->GetSubPoint(1)->GetFitCrossSection(results);
+      const double sL = host->GetSubPoint(n)->GetFitCrossSection(results);
+      const double sBar = (1.0 - tBar) * host->GetSubPoint(jb)->GetFitCrossSection(results) +
+                          tBar * host->GetSubPoint(jb + 1)->GetFitCrossSection(results);
       const double chord = (1.0 - tChord) * sF + tChord * sL;
       if (std::fabs(chord - sBar) > autoTol * std::max(std::fabs(sBar), 1e-300)) allPass = false;
     }
@@ -2219,24 +2222,26 @@ void EPoint::CalculateThinTarget(CNuc *theCNuc, const Config &configure, TargetE
  * component is integrated with the same combiner by swapping it into the
  * sub-points' cross-section slot, exactly as the analyzing power is handled.
  */
-void EPoint::IntegrateTargetEffectComponents(const Config &configure) {
+void EPoint::IntegrateTargetEffectComponents(const Config &configure, azure2::Results &results) {
   if (crossSectionComponent_ == 0) return;
   const int n = this->NumSubPoints();
   if (n <= 0) return;
   std::vector<double> sigma(n);
-  for (int i = 1; i <= n; i++) sigma[i - 1] = this->GetSubPoint(i)->GetFitCrossSection();
-  const double total = this->GetFitCrossSection();
+  for (int i = 1; i <= n; i++) sigma[i - 1] = this->GetSubPoint(i)->GetFitCrossSection(results);
+  const double total = this->GetFitCrossSection(results);
 
-  for (int i = 1; i <= n; i++) this->GetSubPoint(i)->SetFitCrossSection(this->GetSubPoint(i)->GetFitE1CrossSection());
-  this->IntegrateTargetEffect(configure);
-  this->SetFitE1CrossSection(this->GetFitCrossSection());
+  for (int i = 1; i <= n; i++)
+    this->GetSubPoint(i)->SetFitCrossSection(results, this->GetSubPoint(i)->GetFitE1CrossSection(results));
+  this->IntegrateTargetEffect(configure, results);
+  this->SetFitE1CrossSection(results, this->GetFitCrossSection(results));
 
-  for (int i = 1; i <= n; i++) this->GetSubPoint(i)->SetFitCrossSection(this->GetSubPoint(i)->GetFitE2CrossSection());
-  this->IntegrateTargetEffect(configure);
-  this->SetFitE2CrossSection(this->GetFitCrossSection());
+  for (int i = 1; i <= n; i++)
+    this->GetSubPoint(i)->SetFitCrossSection(results, this->GetSubPoint(i)->GetFitE2CrossSection(results));
+  this->IntegrateTargetEffect(configure, results);
+  this->SetFitE2CrossSection(results, this->GetFitCrossSection(results));
 
-  for (int i = 1; i <= n; i++) this->GetSubPoint(i)->SetFitCrossSection(sigma[i - 1]);
-  this->SetFitCrossSection(total);
+  for (int i = 1; i <= n; i++) this->GetSubPoint(i)->SetFitCrossSection(results, sigma[i - 1]);
+  this->SetFitCrossSection(results, total);
 }
 
 /*!
@@ -2255,7 +2260,7 @@ void EPoint::IntegrateTargetEffectComponents(const Config &configure) {
  * quadrature, straggling and energy-loss treatment stay identical and there is
  * only one integration scheme to maintain.
  */
-void EPoint::IntegrateTargetEffectForObservable(const Config &configure) {
+void EPoint::IntegrateTargetEffectForObservable(const Config &configure, azure2::Results &results) {
   if (this->IsCoefficient() && !this->GetCoefficientAbsolute()) {
     // A normalised Legendre coefficient is a ratio like A_y: the absolute A_k = a_k A_0
     // and A_0 are each folded with the integrator (linear in the cross section), then
@@ -2264,41 +2269,40 @@ void EPoint::IntegrateTargetEffectForObservable(const Config &configure) {
     const int n = this->NumSubPoints();
     std::vector<double> ak(n), a0(n);
     for (int i = 1; i <= n; i++) {
-      ak[i - 1] = this->GetSubPoint(i)->GetFitCrossSection();
-      a0[i - 1] = this->GetSubPoint(i)->GetAngDistA0();
+      ak[i - 1] = this->GetSubPoint(i)->GetFitCrossSection(results);
+      a0[i - 1] = this->GetSubPoint(i)->GetAngDistA0(results);
     }
-    for (int i = 1; i <= n; i++) this->GetSubPoint(i)->SetFitCrossSection(a0[i - 1]);
-    this->IntegrateTargetEffect(configure);
-    const double denominator = this->GetFitCrossSection();
-    for (int i = 1; i <= n; i++) this->GetSubPoint(i)->SetFitCrossSection(ak[i - 1] * a0[i - 1]);
-    this->IntegrateTargetEffect(configure);
-    const double numerator = this->GetFitCrossSection();
-    for (int i = 1; i <= n; i++) this->GetSubPoint(i)->SetFitCrossSection(ak[i - 1]);
-    this->SetFitCrossSection(std::fabs(denominator) > 0.0 ? numerator / denominator : 0.0);
+    for (int i = 1; i <= n; i++) this->GetSubPoint(i)->SetFitCrossSection(results, a0[i - 1]);
+    this->IntegrateTargetEffect(configure, results);
+    const double denominator = this->GetFitCrossSection(results);
+    for (int i = 1; i <= n; i++) this->GetSubPoint(i)->SetFitCrossSection(results, ak[i - 1] * a0[i - 1]);
+    this->IntegrateTargetEffect(configure, results);
+    const double numerator = this->GetFitCrossSection(results);
+    for (int i = 1; i <= n; i++) this->GetSubPoint(i)->SetFitCrossSection(results, ak[i - 1]);
+    this->SetFitCrossSection(results, std::fabs(denominator) > 0.0 ? numerator / denominator : 0.0);
     return;
   }
   if (!this->IsAnalyzingPower()) {
-    this->IntegrateTargetEffect(configure);
-    this->IntegrateTargetEffectComponents(configure);
+    this->IntegrateTargetEffect(configure, results);
+    this->IntegrateTargetEffectComponents(configure, results);
     return;
   }
 
   const int n = this->NumSubPoints();
   std::vector<double> sigma(n);
-  for (int i = 1; i <= n; i++) sigma[i - 1] = this->GetSubPoint(i)->GetFitCrossSection();
+  for (int i = 1; i <= n; i++) sigma[i - 1] = this->GetSubPoint(i)->GetFitCrossSection(results);
 
-  this->IntegrateTargetEffect(configure);
-  const double denominator = this->GetFitCrossSection();
+  this->IntegrateTargetEffect(configure, results);
+  const double denominator = this->GetFitCrossSection(results);
 
   for (int i = 1; i <= n; i++)
-    this->GetSubPoint(i)->SetFitCrossSection(sigma[i - 1] *
-                                             this->GetSubPoint(i)->GetAnalyzingPower());
-  this->IntegrateTargetEffect(configure);
-  const double numerator = this->GetFitCrossSection();
+    this->GetSubPoint(i)->SetFitCrossSection(results, sigma[i - 1] * this->GetSubPoint(i)->GetAnalyzingPower(results));
+  this->IntegrateTargetEffect(configure, results);
+  const double numerator = this->GetFitCrossSection(results);
 
-  for (int i = 1; i <= n; i++) this->GetSubPoint(i)->SetFitCrossSection(sigma[i - 1]);
+  for (int i = 1; i <= n; i++) this->GetSubPoint(i)->SetFitCrossSection(results, sigma[i - 1]);
 
-  this->SetFitCrossSection(std::fabs(denominator) > 0.0 ? numerator / denominator : 0.0);
+  this->SetFitCrossSection(results, std::fabs(denominator) > 0.0 ? numerator / denominator : 0.0);
 }
 
 /*!
@@ -2838,9 +2842,10 @@ V EPoint::IntegrateKernelsImpl(const Config &configure, Read rd) {
   }
   return yield;
 }
-void EPoint::IntegrateTargetEffect(const Config &configure) {
-  this->SetFitCrossSection(this->IntegrateTargetEffectImpl<double>(
-      configure, [this](int j) { return this->GetSubPoint(j)->GetFitCrossSection(); }));
+void EPoint::IntegrateTargetEffect(const Config &configure, azure2::Results &results) {
+  this->SetFitCrossSection(results, this->IntegrateTargetEffectImpl<double>(configure, [this, &results](int j) {
+    return this->GetSubPoint(j)->GetFitCrossSection(results);
+  }));
 }
 
 bool EPoint::TargetEffectWeights(const Config &configure, std::vector<double> &c) {
@@ -2885,12 +2890,12 @@ void EPoint::SetTargetThickness(double targetThickness) {
  * Sets the angular distribution coefficients.
  */
 
-void EPoint::SetAngularDists(vector_r dists) {
+void EPoint::SetAngularDists(azure2::Results &results, vector_r dists) {
   if (dists.size() > num_ang_slots_)
     throw std::logic_error("EPoint::SetAngularDists: " + std::to_string(dists.size()) + " coefficients, " +
                            std::to_string(num_ang_slots_) + " result slots (segment " + std::to_string(segment_key_) +
                            ")");
-  double *r = Rec() + azure2::Results::AngularOffset();
+  double *r = Rec(results) + azure2::Results::AngularOffset();
   r[0] = (double)dists.size();
   std::copy(dists.begin(), dists.end(), r + 1);
 }
@@ -2901,44 +2906,57 @@ void EPoint::SetAngularDists(vector_r dists) {
  * of NaN, so the read shows (AZURE_POISON_RESULTS).
  */
 
-std::vector<double> EPoint::GetNaturalTerms() const {
+std::vector<double> EPoint::GetNaturalTerms(const azure2::Results &results) const {
   if (!num_natural_slots_) return {};
-  const double *r = Rec() + azure2::Results::NaturalOffset(num_ang_slots_);
+  const double *r = Rec(results) + azure2::Results::NaturalOffset(num_ang_slots_);
   const int n = std::isnan(r[0]) ? (int)num_natural_slots_ : (int)r[0];
   return std::vector<double>(r + 1, r + 1 + n);
 }
 
-void EPoint::SetNaturalTerms(const std::vector<double> &terms) {
+void EPoint::SetNaturalTerms(azure2::Results &results, const std::vector<double> &terms) {
   if (terms.size() > num_natural_slots_)
     throw std::logic_error("EPoint::SetNaturalTerms: " + std::to_string(terms.size()) + " terms, " +
                            std::to_string(num_natural_slots_) + " result slots (segment " +
                            std::to_string(segment_key_) + ")");
-  double *r = Rec() + azure2::Results::NaturalOffset(num_ang_slots_);
+  double *r = Rec(results) + azure2::Results::NaturalOffset(num_ang_slots_);
   r[0] = (double)terms.size();
   std::copy(terms.begin(), terms.end(), r + 1);
 }
 
-void EPoint::BindResults(azure2::Results *buffer, std::size_t slot, int nAng, int nNat) {
-  results_ = buffer;
+void EPoint::SetResultRecord(std::size_t slot, int nAng, int nNat) {
   slot_ = slot;
   num_ang_slots_ = (std::uint16_t)nAng;
   num_natural_slots_ = (std::uint16_t)nNat;
 }
 
-void EPoint::BindPrivateResults(azure2::Results &scratch) {
+void EPoint::UsePrivateRecord(azure2::Results &scratch, const azure2::Results &values) {
   const int nAng = this->ResultAngularCapacity();
   const int nNat = num_natural_slots_;
   std::vector<double> next(azure2::Results::RecordSize(nAng, nNat), 0.0);
-  // the values the copied record holds: what the copy read before (a copy of a point copied its result members)
-  if (results_) azure2::CopyRecord(Rec(), num_ang_slots_, num_natural_slots_, next.data(), nAng, nNat);
+  // the values of the record the copy was made from: what the copy read before (a copy of a point copied its
+  // result members)
+  azure2::CopyRecord(Rec(values), num_ang_slots_, num_natural_slots_, next.data(), nAng, nNat);
   scratch.slot.swap(next);
-  this->BindResults(&scratch, 0, nAng, nNat);
+  this->SetResultRecord(0, nAng, nNat);
 }
 
-void EPoint::NoResultRecord() const {
-  throw std::logic_error("EPoint: a result was read or written on a point without a result record (segment " +
-                         std::to_string(segment_key_) + ", E_lab " + std::to_string(lab_energy_) +
-                         " MeV): the data set's layout (EData::LayoutResults) or the caller's binding is missing");
+void EPoint::UsePrivateRecord(azure2::Results &scratch) {
+  const int nAng = this->ResultAngularCapacity();
+  const int nNat = num_natural_slots_;
+  scratch.slot.assign(azure2::Results::RecordSize(nAng, nNat), 0.0);
+  // the caller's buffer of a new evaluation (a reaction-rate point): NaN under AZURE_POISON_RESULTS, as every other
+  if (azure2::Results::PoisonRequested()) scratch.Poison();
+  this->SetResultRecord(0, nAng, nNat);
+}
+
+void EPoint::NoResultRecord(const azure2::Results &r) const {
+  throw std::logic_error(
+      "EPoint: a result was read or written on a point without a record in the buffer it was given (segment " +
+      std::to_string(segment_key_) + ", E_lab " + std::to_string(lab_energy_) + " MeV, offset " +
+      (slot_ == kNoRecord ? std::string("none") : std::to_string(slot_)) + ", buffer of " +
+      std::to_string(r.slot.size()) +
+      " slots): the data set's layout (EData::LayoutResults), its EData::BeginEvaluation with this buffer, or the "
+      "caller's UsePrivateRecord is missing");
 }
 
 /*!

@@ -471,6 +471,13 @@ add_test(NAME pyazr_schema
                  ${CMAKE_CURRENT_SOURCE_DIR}/schema_test.py)
 set_tests_properties(pyazr_schema PROPERTIES ENVIRONMENT "AZURE2_BIN=$<TARGET_FILE:AZURE2>")
 
+# AZURE2 --validate and pyazr.validate (the fixtures of experiment/tests/data/, a file with several errors, a format-2
+# file refused) and pyazr.convert_azr(..., to=3) against the committed conversion (docs/upgrade/project_format3.md 6.2, 8).
+add_test(NAME pyazr_validate
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/validate_test.py)
+set_tests_properties(pyazr_validate PROPERTIES ENVIRONMENT "AZURE2_BIN=$<TARGET_FILE:AZURE2>")
+
 # pyazr.convert_azr: an old project in the updated format (docs/upgrade/project.md section 4) -- format 2, idempotent,
 # the removed sections, the same chi-squared as the original.
 add_test(NAME pyazr_convert_azr
@@ -628,6 +635,14 @@ add_test(NAME pyazr_thickness
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/thickness_test.py)
 set_tests_properties(pyazr_thickness PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
+# Parameter kinds (include/ParameterKind.h, docs/upgrade/parameter_kinds.md): the engine's table of kinds, and on
+# projects holding every kind each parameter's name rebuilt from its record, the record against parameter_info, and
+# pyazr's Parameter.kind / sample / thm_* from the records.
+add_test(NAME pyazr_parameter_kinds
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/parameter_kinds_test.py)
+set_tests_properties(pyazr_parameter_kinds PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
 # The light particle's excitation energy, column 32 of a <levels> line (2026-11-05): AzrModel keeps the column
 # (and adds or drops it only when e1 changes to or from 0), Pair carries light_excitation (and still reads an

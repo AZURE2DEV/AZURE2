@@ -150,8 +150,11 @@ again, and a line without the column keeps its 31 columns
 Filtered views (``.free``, ``.energies``, ``.widths``, ``.norms``,
 ``.shifts``, ``.sqrt_shifts``, ``.fn_shifts``, ``.abundances``, ``.cbkg``) and lookups (``.by_level(...)``,
 ``.by_name(...)``, ``.by_physical_level()``) are all available. A
-parameter's ``kind`` is the engine's type code, in the order of the
-parameter vector:
+parameter's ``kind`` and its owner fields come from the record the engine
+writes where it creates the parameter (``Session.parameter_records()``), never
+from its name, which is only a label; ``pyazr.parameters.parameter_kinds()``
+returns the engine's table of kinds (code, key, unit, owner fields, flags). In
+the order of the parameter vector (the abundances follow the level block):
 
 ======  ===============  ===================================================
 code    ``kind``         parameters
@@ -165,10 +168,15 @@ code    ``kind``         parameters
 5       ``shift_fn``     shift-function parameters a0, a1, ...
                          (``segment_N_energy_shift_fnJ``)
 6       ``abundance``    isotopic abundances (``abundance_*``; after the
-                         level block)
+                         level block; :attr:`Parameter.sample` its sample)
 7       ``screening``    electron-screening potentials (``screening_<n>``)
 8       ``density``      fitted target densities (``density_<n>``)
-9       ``cbkg``         THM coherent background (``cbkg_*``), last
+9       ``doppler``      fitted Doppler temperatures (``doppler_<n>``)
+10      ``thickness``    fitted sample thicknesses (``segment_N_thickness``)
+11      ``cbkg``         THM coherent background (``cbkg_*``), last;
+                         ``thm_experiment``, ``thm_jpi``, ``thm_exit_key``,
+                         ``thm_channels`` and ``thm_term`` (0 Re c0, 1 Im
+                         c0, 2 Re c1, 3 Im c1) say which coefficient
 ======  ===============  ===================================================
 
 A THM segment's free norm is profiled, not a parameter, and has no entry. A ``LevelKey`` prints as

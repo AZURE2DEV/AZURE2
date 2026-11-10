@@ -167,7 +167,7 @@ class AMatrixFunc : public GenMatrixFunc {
    * itself.  A target-integrated A_y weights each sub-point's A_y by that cross
    * section, so its adjoint needs both (GradTargetEffectAdjoint).
    */
-  bool PointAdjoint(EPoint *point, double fitBar, GradAccum &accum,
+  bool PointAdjoint(EPoint *point, const azure2::Results &results, double fitBar, GradAccum &accum,
                     const vector_matrix_r *shiftDeriv = nullptr,
                     int xsComponent = 0, bool ayCrossSection = false);
   /*!
@@ -192,7 +192,7 @@ class AMatrixFunc : public GenMatrixFunc {
    * (Legendre polynomials, Coulomb amplitude, A_y coefficients) are read from
    * `point`.  Returns false, with `bar` unusable, where PointAdjoint would.
    */
-  bool PointTBar(EPoint *point, double fitBar, TMatrixCotangent &bar,
+  bool PointTBar(EPoint *point, const azure2::Results &results, double fitBar, TMatrixCotangent &bar,
                  int xsComponent = 0, bool ayCrossSection = false);
   /*!
    * The second half of PointAdjoint: back-propagates T-matrix cotangents to the

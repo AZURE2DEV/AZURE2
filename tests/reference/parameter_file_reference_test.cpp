@@ -39,10 +39,11 @@ int main() {
   }
   AZUREParams params;
   auto &mp = params.GetMinuitParams();
-  mp.Add("energy_1", 0.0, 0.5);
-  mp.Add("width_1_1", 1.0, 0.25);
-  mp.Add("energy_2", 1.0, 0.75);
-  mp.Add("width_2_1", 1.0, 0.125);
+  // Each parameter with its record (AZUREParams::Add), as CNuc::FillMnParams makes them: two levels of J group 1.
+  params.Add("energy_1", 0.0, 0.5, ParameterRecord::LevelEnergy(1, 1, 1));
+  params.Add("width_1_1", 1.0, 0.25, ParameterRecord::Width(1, 1, 1, 1));
+  params.Add("energy_2", 1.0, 0.75, ParameterRecord::LevelEnergy(1, 2, 2));
+  params.Add("width_2_1", 1.0, 0.125, ParameterRecord::Width(1, 2, 1, 2));
   params.ReadUserParameters(std::string(file));
   std::remove(file);
 

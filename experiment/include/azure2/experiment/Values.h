@@ -102,10 +102,11 @@ struct ResidualState {
 /// One reaction <target>(<projectile>,<ejectile>)<residual>[<state>].
 struct SingleReaction {
   Particle target, projectile, ejectile, residual;
+  ResidualState targetState;  ///< Ground or Excited: the state of the target nucleus (an excited entrance pair)
   ResidualState state;
   std::string text;
   int col = 0;
-  bool Elastic() const;           ///< same particles in and out, residual in its ground state, no particle excitation
+  bool Elastic() const;           ///< same particles in and out, the residual in the target's state, no particle excitation
   bool ChargedEntrance() const;   ///< both entrance particles charged
   bool IdenticalEntrance() const; ///< projectile and target the same nucleus
   bool GammaExit() const;         ///< the ejectile is a photon
@@ -136,7 +137,7 @@ struct ParticlePair {
 };
 
 struct ColumnRole {
-  std::string role;            ///< E_lab, E_cm, E_x, E_decay, theta_lab, theta_cm, order, value, error,
+  std::string role;            ///< E_lab, E_cm, E_decay, theta_lab, theta_cm, order, value, error,
                                ///< error_percent, window_lo, window_hi, _
   const Unit *unit = nullptr;  ///< for energy and angle roles
   int col = 0;

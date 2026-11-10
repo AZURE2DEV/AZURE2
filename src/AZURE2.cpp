@@ -13,10 +13,11 @@
 #include "azure2/io/Document.h"
 #include "azure2/experiment/Schema.h"
 #include "AZUREMain.h"
+#include "ProjectCommands.h"
 #include "Config.h"
-#include "NucLine.h"
-#include "SegLine.h"
-#include "ExtrapLine.h"
+#include "azure2/io/LevelRows.h"
+#include "azure2/convert/SegLine.h"
+#include "azure2/convert/ExtrapLine.h"
 #include "GSLException.h"
 #include "ECAmplitudeCache.h"
 #include "CoulombTable.h"
@@ -123,6 +124,13 @@ void printHelp() {
             << std::setw(25) << std::left << "\t--ec-convection-current:" << std::setw(0) << "The exact-form convection current (the default; undoes an earlier --no-ec-convection-current)." << std::endl
             << std::setw(25) << std::left << "\t--no-ec-convection-current:" << std::setw(0) << "With --no-long-wavelength: external capture with the charge (extended Siegert) part of the E_L operator only, without its convection-current part." << std::endl
             << std::setw(25) << std::left << "\t--convert:" << std::setw(0) << "--convert OLD NEW: write the old-format project OLD in the updated format (format 2) to NEW (not overwritten) and exit." << std::endl
+            << std::setw(25) << std::left << "\t" << std::setw(0) << "--convert OLD NEW --to 3 [--json-report R] [--answers A] [--exact-grids] [--strict] [--allow-questions]:" << std::endl
+            << std::setw(25) << std::left << "\t" << std::setw(0) << "write format 3 (records; docs/upgrade/project_format3.md section 8) and its side files <f>.f3<ext>," << std::endl
+            << std::setw(25) << std::left << "\t" << std::setw(0) << "R the JSON report (notes, questions, parameter names old -> new), A the answers {\"<record>.<field>\": value}," << std::endl
+            << std::setw(25) << std::left << "\t" << std::setw(0) << "--exact-grids the grids the old engine accumulated (F10), --strict ask where the old meaning was implicit," << std::endl
+            << std::setw(25) << std::left << "\t" << std::setw(0) << "--allow-questions '?' for unanswered questions. --to 3 is needed until this engine reads format 3." << std::endl
+            << std::setw(25) << std::left << "\t--validate:" << std::setw(0) << "--validate FILE [--json]: check a format-3 project against the table and print every problem" << std::endl
+            << std::setw(25) << std::left << "\t" << std::setw(0) << "(file:line: record.field: message, or a JSON array); exit 0 without errors, 2 with errors, 3 for format 1/2." << std::endl
             << std::setw(25) << std::left << "\t--schema:" << std::setw(0) << "Print the table of project format 3 (record kinds, fields, quantities, units, diagnostic codes) as JSON and exit." << std::endl
             << std::setw(25) << std::left << "\t--build-coulomb-table[=FILE]:" << std::setw(0) << "Build the Coulomb table (about 5 min on 4 threads, 88 MB; FILE as for --coulomb-table) and exit." << std::endl
             << std::setw(25) << std::left << "\t--grid-replacement:" << std::setw(0) << "Re-place the adaptive sub-point grids as levels and shifts move (the default)." << std::endl
@@ -559,37 +567,6 @@ void getParameterFile(bool useReadline, Config &configure) {
 }
 
 /*!
- * --convert OLD NEW: OLD's format-2 conversion (io::ConvertToFormat2; docs/upgrade/project.md section 4) written to
- * NEW, which must not exist; the changes are listed.  A file already in format 2 is copied unchanged.
- */
-static int convertProject(const std::string &from, const std::string &to) {
-  std::ifstream in(from, std::ios::binary);
-  if (!in) {
-    std::cout << "ERROR: --convert: cannot read " << from << std::endl;
-    return 1;
-  }
-  if (std::ifstream(to)) {
-    std::cout << "ERROR: --convert: " << to << " exists; it is not overwritten" << std::endl;
-    return 1;
-  }
-  std::ostringstream bytes;
-  bytes << in.rdbuf();
-  azure2::io::Document doc = azure2::io::Document::Parse(bytes.str());
-  for (const std::string &problem : doc.Problems()) std::cout << "WARNING: " << from << ": " << problem << std::endl;
-  const std::vector<std::string> changes = azure2::io::ConvertToFormat2(doc);
-  std::ofstream out(to, std::ios::binary);
-  out << doc.Write();
-  if (!out) {
-    std::cout << "ERROR: --convert: cannot write " << to << std::endl;
-    return 1;
-  }
-  if (changes.empty()) std::cout << from << " is already in format 2; copied to " << to << std::endl;
-  for (const std::string &c : changes) std::cout << "  " << c << std::endl;
-  std::cout << "Wrote " << to << " (format 2)." << std::endl;
-  return 0;
-}
-
-/*!
  * The section <name> of the project as a stream over its text (Config::SectionStream: io::Document, whole-line
  * tags; docs/upgrade/project.md), or a stream in the fail state when there is no such section.
  */
@@ -966,7 +943,7 @@ bool checkExternalCapture(Config &configure, const std::vector<SegPairs> &segPai
     if (line != "</levels>" && !in.eof()) {
       std::istringstream stm;
       stm.str(line);
-      NucLine tempNucLine(stm);
+      azure2::io::LevelRow tempNucLine(stm);
       if ((stm.rdstate() & (std::stringstream::failbit | std::stringstream::badbit))) {
         configure.outStream << "Problem reading nuclear information. Check configuration file.  The line:\n  "
                             << line << std::endl;
@@ -1098,135 +1075,66 @@ void cli_iteration_callback(int current_iteration, int total_iterations) {
   }
 }
 
-// Helper function to create pretty parameter names (same logic as MCMCTab::createPrettyParameterName)
-std::string createPrettyParameterName(const std::string &paramName) {
-  // Handle different parameter naming conventions from AZURE2
-
-  // Convention 1: Short form (from .sav files)
-  // Energy parameters: E1, E2, etc. -> "Level X Energy (MeV)"
-  if (paramName.length() > 1 && paramName[0] == 'E' && std::isdigit(paramName[1])) {
-    try {
-      int levelNum = std::stoi(paramName.substr(1));
-      if (levelNum > 0) {
-        return "Level " + std::to_string(levelNum) + " Energy (MeV)";
-      }
-    } catch (...) {}
+// The name the MCMC table prints for a parameter (the GUI's MCMC tab writes the same), from its record.
+static std::string PrettyParameterName(const ParameterRecord &r, const std::string &name) {
+  const std::string seg = "Segment " + std::to_string(r.segmentKey);
+  switch (r.kind) {
+    case ParamKind::LevelEnergy: return "Level " + std::to_string(r.levelNumber) + " Energy (MeV)";
+    case ParamKind::Gamma:
+      return "Level " + std::to_string(r.levelNumber) + " Channel " + std::to_string(r.channel) + " Width (eV)";
+    case ParamKind::Norm: return seg + " Normalization";
+    case ParamKind::Thickness: return seg + " Sample Thickness (atoms/b)";
+    case ParamKind::EnergyShift: return seg + " Energy Shift (keV)";
+    case ParamKind::EnergyShiftSqrt: return seg + " sqrt(E) Energy-Shift Coefficient (MeV^1/2)";
+    case ParamKind::EnergyShiftFn: return seg + " Energy-Shift Function a" + std::to_string(r.fnTerm);
+    case ParamKind::Screening: return "Screening U_e (eV), effect " + std::to_string(r.effect);
+    case ParamKind::Density: return "Target density (atoms/cm^2), effect " + std::to_string(r.effect);
+    case ParamKind::Doppler: return "Doppler temperature (K), effect " + std::to_string(r.effect);
+    case ParamKind::Abundance:
+      return "Abundance " + (r.sampleName.empty() ? std::string() : "sample " + r.sampleName + " ") +
+             "Z=" + std::to_string(r.nucleusZ) + " A=" + std::to_string(r.nucleusA);
+    case ParamKind::ThmCoherent: break;
   }
+  return name;
+}
 
-  // Width parameters: G11, G12, G21, etc. -> "Level X Channel Y Width (eV)"
-  if (paramName.length() > 2 && paramName[0] == 'G' && std::isdigit(paramName[1])) {
-    try {
-      std::string numPart = paramName.substr(1);
-      if (numPart.length() >= 2) {
-        int levelNum = std::stoi(numPart.substr(0, 1));
-        int channelNum = std::stoi(numPart.substr(1));
-        if (levelNum > 0 && channelNum > 0) {
-          return "Level " + std::to_string(levelNum) + " Channel " + std::to_string(channelNum) + " Width (eV)";
-        }
-      }
-    } catch (...) {}
+/*!
+ * The parameter a row of the <mcmc> <parameters> block names, or -1.  The row gives the parameter's own name (whole,
+ * not a prefix), or one of the GUI's short forms E<n> (energy of level n), G<n><c> (width of level n, one digit, in
+ * channel c), N<k> (normalization of segment k), S<k> (constant energy shift of segment k), which are resolved through
+ * the parameters' records.
+ */
+static int FindMcmcPriorParameter(const std::string &token, const AZUREParams &params) {
+  const int exact = params.IndexOfName(token);
+  if (exact >= 0) return exact;
+  if (token.size() < 2 || !std::isdigit((unsigned char)token[1])) return -1;
+  ParamKind kind = ParamKind::LevelEnergy;
+  int first = 0, second = -1;
+  try {
+    if (token[0] == 'E' || token[0] == 'N' || token[0] == 'S') {
+      kind = token[0] == 'E' ? ParamKind::LevelEnergy : token[0] == 'N' ? ParamKind::Norm : ParamKind::EnergyShift;
+      first = std::stoi(token.substr(1));
+    } else if (token[0] == 'G' && token.size() > 2) {
+      kind = ParamKind::Gamma;
+      first = std::stoi(token.substr(1, 1));
+      second = std::stoi(token.substr(2));
+      if (second <= 0) return -1;
+    } else {
+      return -1;
+    }
+  } catch (...) {
+    return -1;
   }
-
-  // Normalization: N1, N2, etc. -> "Segment X Normalization"
-  if (paramName.length() > 1 && paramName[0] == 'N' && std::isdigit(paramName[1])) {
-    try {
-      int segmentNum = std::stoi(paramName.substr(1));
-      if (segmentNum > 0) {
-        return "Segment " + std::to_string(segmentNum) + " Normalization";
-      }
-    } catch (...) {}
+  if (first <= 0) return -1;
+  for (int i = 0; i < (int)params.Records().size(); i++) {
+    const ParameterRecord &r = params.Records()[i];
+    if (r.kind != kind) continue;
+    if ((kind == ParamKind::LevelEnergy && r.levelNumber == first) ||
+        (kind == ParamKind::Gamma && r.levelNumber == first && r.channel == second) ||
+        ((kind == ParamKind::Norm || kind == ParamKind::EnergyShift) && r.segmentKey == first))
+      return i;
   }
-
-  // Energy shift: S1, S2, etc. -> "Segment X Energy Shift (keV)"
-  if (paramName.length() > 1 && paramName[0] == 'S' && std::isdigit(paramName[1])) {
-    try {
-      int segmentNum = std::stoi(paramName.substr(1));
-      if (segmentNum > 0) {
-        return "Segment " + std::to_string(segmentNum) + " Energy Shift (keV)";
-      }
-    } catch (...) {}
-  }
-
-  // Convention 2: Descriptive form (from Minuit parameter names)
-  // Width parameters: "width_X_Y" -> "Level X Channel Y Width (eV)"
-  if (paramName.find("width_") == 0) {
-    try {
-      size_t firstUnderscore = paramName.find('_');
-      size_t secondUnderscore = paramName.find('_', firstUnderscore + 1);
-      if (secondUnderscore != std::string::npos) {
-        int levelNum = std::stoi(paramName.substr(firstUnderscore + 1, secondUnderscore - firstUnderscore - 1));
-        int channelNum = std::stoi(paramName.substr(secondUnderscore + 1));
-        return "Level " + std::to_string(levelNum) + " Channel " + std::to_string(channelNum) + " Width (eV)";
-      }
-    } catch (...) {}
-  }
-
-  // Energy parameters: "energy_X" -> "Level X Energy (MeV)"
-  if (paramName.find("energy_") == 0) {
-    try {
-      int levelNum = std::stoi(paramName.substr(7));  // Skip "energy_"
-      return "Level " + std::to_string(levelNum) + " Energy (MeV)";
-    } catch (...) {}
-  }
-
-  // Segment normalization: "segment_X_norm" -> "Segment X Normalization"
-  if (paramName.find("segment_") == 0 && paramName.find("_norm") != std::string::npos) {
-    try {
-      size_t firstUnderscore = paramName.find('_');
-      size_t secondUnderscore = paramName.find('_', firstUnderscore + 1);
-      if (secondUnderscore != std::string::npos) {
-        int segmentNum = std::stoi(paramName.substr(firstUnderscore + 1, secondUnderscore - firstUnderscore - 1));
-        return "Segment " + std::to_string(segmentNum) + " Normalization";
-      }
-    } catch (...) {}
-  }
-
-  // Fitted sample thickness: "segment_X_thickness" -> "Segment X Sample Thickness (atoms/b)"
-  if (paramName.find("segment_") == 0 && paramName.size() > 10 &&
-      paramName.compare(paramName.size() - 10, 10, "_thickness") == 0)
-    return "Segment " + paramName.substr(8, paramName.size() - 18) + " Sample Thickness (atoms/b)";
-
-  // Segment energy shift: "segment_X_energy_shift" -> "Segment X Energy Shift (keV)"
-  if (paramName.find("segment_") == 0 && paramName.find("_energy_shift") != std::string::npos) {
-    try {
-      size_t firstUnderscore = paramName.find('_');
-      size_t secondUnderscore = paramName.find('_', firstUnderscore + 1);
-      if (secondUnderscore != std::string::npos) {
-        int segmentNum = std::stoi(paramName.substr(firstUnderscore + 1, secondUnderscore - firstUnderscore - 1));
-        const size_t fn = paramName.find("_energy_shift_fn");
-        if (fn != std::string::npos)
-          return "Segment " + std::to_string(segmentNum) + " Energy-Shift Function a" + paramName.substr(fn + 16);
-        if (paramName.find("_energy_shift_sqrt") != std::string::npos)
-          return "Segment " + std::to_string(segmentNum) + " sqrt(E) Energy-Shift Coefficient (MeV^1/2)";
-        return "Segment " + std::to_string(segmentNum) + " Energy Shift (keV)";
-      }
-    } catch (...) {}
-  }
-
-  // Electron screening: "screening_<n>" -> "Screening U_e (eV), effect n"
-  if (paramName.find("screening_") == 0) return "Screening U_e (eV), effect " + paramName.substr(10);
-  // Fitted target density: "density_<n>" -> "Target density (atoms/cm^2), effect n"
-  if (paramName.find("density_") == 0) return "Target density (atoms/cm^2), effect " + paramName.substr(8);
-  // Fitted Doppler temperature: "doppler_<n>" -> "Doppler temperature (K), effect n"
-  if (paramName.find("doppler_") == 0) return "Doppler temperature (K), effect " + paramName.substr(8);
-
-  // Isotopic abundance: "abundance[_<sample>]_Z_A" -> "Abundance [sample ..] Z=.. A=.."
-  if (paramName.find("abundance_") == 0) {
-    try {
-      size_t lastUnderscore = paramName.rfind('_');
-      size_t prevUnderscore = paramName.rfind('_', lastUnderscore - 1);
-      if (lastUnderscore != std::string::npos && prevUnderscore != std::string::npos && prevUnderscore > 9) {
-        int z = std::stoi(paramName.substr(prevUnderscore + 1, lastUnderscore - prevUnderscore - 1));
-        int a = std::stoi(paramName.substr(lastUnderscore + 1));
-        std::string sample = paramName.substr(10, prevUnderscore > 10 ? prevUnderscore - 10 : 0);
-        return "Abundance " + (sample.empty() ? std::string() : "sample " + sample + " ") +
-               "Z=" + std::to_string(z) + " A=" + std::to_string(a);
-      }
-    } catch (...) {}
-  }
-
-  // Generic fallback - keep original name
-  return paramName;
+  return -1;
 }
 
 int runMCMC(Config &configure, const MCMCParams &mcmcParams) {
@@ -1308,8 +1216,8 @@ int runMCMC(Config &configure, const MCMCParams &mcmcParams) {
 
     // Create parameter structure
     AZUREParams params;
-    compound->FillMnParams(params.GetMinuitParams(), &configure);
-    data->FillMnParams(params.GetMinuitParams());
+    compound->FillMnParams(params, &configure);
+    data->FillMnParams(params);
 
     // Read existing parameters if provided
     if (configure.paramMask & Config::USE_PREVIOUS_PARAMETERS) {
@@ -1363,7 +1271,7 @@ int runMCMC(Config &configure, const MCMCParams &mcmcParams) {
     }
 
     // Read priors from AZURE2 file if they exist
-    std::map<std::string, std::tuple<double, double, bool>> priorMap;  // paramName -> (priorMean, priorStd, usePrior)
+    std::map<int, std::tuple<double, double, bool>> priorMap;  // parameter index -> (priorMean, priorStd, usePrior)
     std::istringstream priorFile = SectionText(configure, "mcmc");
     if (priorFile.good()) {
       std::string line;
@@ -1424,15 +1332,30 @@ int runMCMC(Config &configure, const MCMCParams &mcmcParams) {
                 rawParamName = fileParamName;
               }
 
-              // Transform raw name to pretty name
-              std::string prettyParamName = createPrettyParameterName(rawParamName);
+              const int paramOfRow = FindMcmcPriorParameter(rawParamName, params);
 
               double priorMean = std::atof(parts[parts.size() - 3].c_str());
               double priorStd = std::atof(parts[parts.size() - 2].c_str());
               bool usePrior = (std::atoi(parts[parts.size() - 1].c_str()) == 1);
 
-              // Store using the pretty parameter name for lookup
-              priorMap[prettyParamName] = std::make_tuple(priorMean, priorStd, usePrior);
+              if (paramOfRow < 0) {
+                // A prior that is silently not applied is a wrong chain that looks right.
+                configure.outStream << "ERROR: <mcmc> <parameters> row \"" << line << "\": \"" << rawParamName
+                                    << "\" names no parameter of this model.  A row names a parameter by its whole "
+                                    << "name as in param.sav (energy_1, width_1_2, segment_1_norm, ...), optionally "
+                                    << "as \"label (name)\", or by the short forms E<n>, G<n><c>, N<k>, S<k>, "
+                                    << "followed by: value, prior mean, prior sigma, use (0 or 1)." << std::endl;
+                delete compound;
+                delete data;
+                return -1;
+              }
+              priorMap[paramOfRow] = std::make_tuple(priorMean, priorStd, usePrior);
+            } else {
+              configure.outStream << "ERROR: <mcmc> <parameters> row \"" << line << "\": expected a parameter name "
+                                  << "followed by: value, prior mean, prior sigma, use (0 or 1)." << std::endl;
+              delete compound;
+              delete data;
+              return -1;
             }
           }
         }
@@ -1458,8 +1381,7 @@ int runMCMC(Config &configure, const MCMCParams &mcmcParams) {
     int priorsFound = 0;
     for (int i = 0; i < params.GetMinuitParams().Params().size(); i++) {
       if (!params.GetMinuitParams().Parameter(i).IsFixed()) {
-        std::string rawParamName = params.GetMinuitParams().GetName(i);
-        std::string paramName = createPrettyParameterName(rawParamName);
+        std::string paramName = PrettyParameterName(params.Record(i), params.GetMinuitParams().GetName(i));
         double currentValue = initialParams[paramIndex];
 
         // Check if prior exists for this parameter
@@ -1471,10 +1393,10 @@ int runMCMC(Config &configure, const MCMCParams &mcmcParams) {
         double priorStd = 0.0;
         bool usePrior = false;
 
-        if (priorMap.find(paramName) != priorMap.end()) {
-          priorMean = std::get<0>(priorMap[paramName]);
-          priorStd = std::get<1>(priorMap[paramName]);
-          usePrior = std::get<2>(priorMap[paramName]);
+        if (priorMap.find(i) != priorMap.end()) {
+          priorMean = std::get<0>(priorMap[i]);
+          priorStd = std::get<1>(priorMap[i]);
+          usePrior = std::get<2>(priorMap[i]);
 
           // Only mark as found if usePrior is true AND std is positive
           if (usePrior && priorStd > 0.0) {
@@ -1621,23 +1543,9 @@ int main(int argc, char *argv[]) {
   // Set GSL Error Handler
   gsl_set_error_handler(&GSLException::GSLErrorHandler);
 
-  // --convert OLD NEW writes OLD's format-2 conversion to NEW and exits (docs/upgrade/project.md section 4)
-  for (int i = 1; i < argc; i++)
-    if (strcmp(argv[i], "--convert") == 0) {
-      if (i + 2 >= argc) {
-        std::cout << "ERROR: --convert needs two files: --convert old.azr new.azr" << std::endl;
-        return 1;
-      }
-      return convertProject(argv[i + 1], argv[i + 2]);
-    }
-
-  // --schema prints the table of project format 3 as JSON and exits (docs/upgrade/project_format3.md section 6.1);
-  // tests/schema/schema_v3.json is its committed copy
-  for (int i = 1; i < argc; i++)
-    if (strcmp(argv[i], "--schema") == 0) {
-      std::cout << azure2::experiment::Schema::ToJson() << std::endl;
-      return 0;
-    }
+  // --convert, --validate, --schema: the project-file commands (src/ProjectCommands.cpp), each of which exits
+  int projectCommandExit = 0;
+  if (RunProjectCommand(argc, argv, projectCommandExit)) return projectCommandExit;
 
   // --build-coulomb-table[=FILE] builds the table and exits
   for (int i = 1; i < argc; i++) {

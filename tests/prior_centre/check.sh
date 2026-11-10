@@ -14,7 +14,12 @@
 #   one   centre 1                              -> chi2_0 + ((n - 1)/0.15)^2
 #   shift segment 3 shift free, error 0.01 MeV, centre 0.005 MeV
 #                                               -> + ((0 - 0.005)/0.01)^2 = 0.25
-#   stale a row for segment 9 (no such segment) -> warning, chi2_0
+#   stale segment 2's line made inactive, a row for segment 2
+#                                               -> warning, the chi2 of the same
+#                                                  file without the row
+#   unknown a row for segment 9 (no such line), and a misspelt
+#         "segment_3_nrom": a prior that is silently not applied is a
+#         wrong fit that looks right       -> refused, no chi-squared
 #   bad   "segment_3_norm prior_centre abc", and a centre 0 for a norm
 #                                               -> refused, no chi-squared
 # The "Total Chi-Squared:" line on stdout includes the priors; chiSquared.out
@@ -34,18 +39,19 @@ export OMP_NUM_THREADS="${OMP_NUM_THREADS:-2}"
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/prior_centre.XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
 
-# run NAME "ROWS (\n-separated) or empty" [free-shift] -> the run directory
+# run NAME "ROWS (\n-separated) or empty" [free-shift] [inactive2] -> the run directory
 run() {
-  local d="$WORK/$1" rows="$2" shift3="${3:-}"
+  local d="$WORK/$1" rows="$2" shift3="${3:-}" off2="${4:-}"
   mkdir -p "$d/output" "$d/checks"
   cp -r "$SRC/data" "$d/"
-  awk -v rows="$rows" -v shift3="$shift3" '
+  awk -v rows="$rows" -v shift3="$shift3" -v off2="$off2" '
     { sub(/\r$/, "") }
     /^<segmentsData>/ {seg = 1; n = 0; print; next}
     /^<\/segmentsData>/ {seg = 0}
     seg && NF {
       n++
       if (n == 3 && shift3 != "") { $12 = "0"; $13 = "0.01"; $14 = "1" }
+      if (n == 2 && off2 != "") { $1 = "0" }
     }
     /^<\/parameterSettings>/ && rows != "" {print rows}
     {print}
@@ -68,12 +74,15 @@ ds="$(run same "segment_3_norm prior_centre 0.9950877877494786")"
 d1="$(run one "segment_3_norm prior_centre 1")"; c1="$(total "$d1")"
 dz="$(run shift0 "" free)";      cz="$(total "$dz")"
 dh="$(run shift "segment_3_energy_shift prior_centre 0.005" free)"; ch="$(total "$dh")"
-dx="$(run stale "segment_9_norm prior_centre 1")"; cx="$(total "$dx")"
+dy="$(run off2 "" "" inactive2)"; cy="$(total "$dy")"
+dx="$(run stale "segment_2_norm prior_centre 1" "" inactive2)"; cx="$(total "$dx")"
+du="$(run unknown "segment_9_norm prior_centre 1")"; cu="$(total "$du")"
+dt="$(run typo "segment_3_nrom prior_centre 1")"; ct="$(total "$dt")"
 db="$(run bad "segment_3_norm prior_centre abc")"; cb="$(total "$db")"
 dn="$(run nonpos "segment_3_norm prior_centre 0")"; cn="$(total "$dn")"
 
-echo "  chi2: classic $c0   centre 1 $c1   free shift $cz   its centre 0.005 $ch   stale $cx"
-for v in "$c0" "$c1" "$cz" "$ch" "$cx"; do
+echo "  chi2: classic $c0   centre 1 $c1   free shift $cz   its centre 0.005 $ch   line 2 inactive $cy, with its row $cx"
+for v in "$c0" "$c1" "$cz" "$ch" "$cy" "$cx"; do
   [ -n "$v" ] || { echo "  FAIL  a run produced no chi-squared"; exit 1; }
 done
 
@@ -97,11 +106,19 @@ if close "$(awk -v a="$ch" -v z="$cz" 'BEGIN{print a-z}')" 0.25 1e-6; then
 else
   fail "shift centre added $(awk -v a="$ch" -v z="$cz" 'BEGIN{print a-z}'), expected 0.25"
 fi
-if [ "$cx" = "$c0" ] && grep -q "names no active data segment" "$dx/run.log"; then
-  pass "a row for a missing segment: warned, ignored"
+if [ "$cx" = "$cy" ] && grep -q "names no active data segment" "$dx/run.log"; then
+  pass "a row for an inactive segment line: warned, ignored"
 else
-  fail "a row for a missing segment: chi2 $cx, warning $(grep -c 'names no active' "$dx/run.log")"
+  fail "a row for an inactive segment line: chi2 $cx (without the row $cy), warning $(grep -c 'names no active' "$dx/run.log")"
 fi
+for c in "unknown:$du:$cu" "typo:$dt:$ct"; do
+  IFS=: read -r what dir chi <<< "$c"
+  if [ -z "$chi" ] && grep -q "names no parameter a prior_centre row can move" "$dir/run.log"; then
+    pass "a row naming no segment line ($what) is refused"
+  else
+    fail "a row naming no segment line ($what) was not refused (chi2 '$chi')"
+  fi
+done
 if [ -z "$cb" ] && grep -q "is not \"segment_N_norm prior_centre value\"" "$db/run.log"; then
   pass "a malformed row is refused"
 else

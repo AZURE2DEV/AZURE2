@@ -3,6 +3,8 @@
 
 #include "numcmc/mcmc.h"
 #include "Constants.h"
+#include "ParameterKind.h"
+#include "WorkingData.h"
 #include <vector>
 #include <memory>
 #include <mutex>
@@ -56,23 +58,6 @@ class AZURECalcMCMC {
    * Handles physical parameters like AZUREAPI::UpdateSegments.
    */
   double LogProbabilityPhysical(const std::vector<double> &physicalParams) const;
-
-  /*!
-   * Kind of a fit parameter, mirroring the type codes of
-   * AZUREAPI::GetParameterInfo.
-   */
-  enum ParamKind { PARAM_ENERGY = 0,
-                   PARAM_WIDTH = 1,
-                   PARAM_NORM = 2,
-                   PARAM_SHIFT = 3,         // also a shift-function parameter aj (as dev)
-                   PARAM_SHIFT_SQRT = 4,    // sqrt(E) energy-shift coefficient
-                   PARAM_ABUNDANCE = 6,     // isotopic abundance (GetParameterInfo type 6)
-                   PARAM_SCREENING = 7,     // electron-screening U_e (GetParameterInfo type 7, as dev)
-                   PARAM_DENSITY = 8,       // fitted areal density (GetParameterInfo type 8, as dev)
-                   PARAM_DOPPLER = 9,       // fitted Doppler temperature (GetParameterInfo type 9, as dev)
-                   PARAM_THICKNESS = 10,    // fitted sample thickness (GetParameterInfo type 10, as dev)
-                   PARAM_CBKG = 11 };       // THM coherent background (cbkg_*; GetParameterInfo type 11, 9 before
-                                            // the merge of dev 3264896d)
 
   /*!
    * Run MCMC sampling with specified parameters.
@@ -135,7 +120,7 @@ class AZURECalcMCMC {
   /*!
    * Parameter kind of each varying parameter; empty until BuildAutoPriors().
    */
-  const std::vector<int> &VaryingParamKinds() const { return freeKinds_; };
+  const std::vector<ParamKind> &VaryingParamKinds() const { return freeKinds_; };
 
   /*!
    * Calculate log-prior contribution for given parameters.
@@ -215,9 +200,9 @@ class AZURECalcMCMC {
    */
   void InitializePools() const;
   CNuc *GetPooledCNuc() const;
-  EData *GetPooledEData() const;
+  WorkingData *GetPooledData() const;
   void ReturnPooledCNuc(CNuc *obj) const;
-  void ReturnPooledEData(EData *obj) const;
+  void ReturnPooledData(WorkingData *obj) const;
 
  private:
   const Config &configure_;
@@ -232,8 +217,9 @@ class AZURECalcMCMC {
   mutable vector_r all_rwa_;
   mutable vector_r all_indexes;
   mutable std::vector<bool> fixed_;
-  // Name of every parameter (fixed or not), in the order of fixed_
+  // Name and kind (its record's) of every parameter (fixed or not), in the order of fixed_
   mutable std::vector<std::string> paramNames_;
+  mutable std::vector<ParamKind> paramKinds_;
   mutable bool parametersInitialized_;
 
   // Prior information for Bayesian analysis, indexed over varying parameters
@@ -242,7 +228,7 @@ class AZURECalcMCMC {
   mutable std::vector<bool> usePriors_;
 
   // ParamKind of each varying parameter, filled by BuildAutoPriors()
-  mutable std::vector<int> freeKinds_;
+  mutable std::vector<ParamKind> freeKinds_;
 
   // Prior parameter covariance (<config> priorCovariance=): a multivariate Gaussian on its parameters, which replaces
   // their own diagonal (automatic or user) priors; set up by SetUpPriorCovariance() at the start of a run.
@@ -254,7 +240,7 @@ class AZURECalcMCMC {
 
   // Object pools for memory reuse
   mutable std::stack<std::unique_ptr<CNuc>> cnuc_pool_;
-  mutable std::stack<std::unique_ptr<EData>> edata_pool_;
+  mutable std::stack<std::unique_ptr<WorkingData>> edata_pool_;  // each copy with the buffer it writes
   mutable std::mutex pool_mutex_;
   mutable bool pools_initialized_;
 };

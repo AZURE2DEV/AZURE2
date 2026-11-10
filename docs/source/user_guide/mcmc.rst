@@ -97,13 +97,15 @@ Brune's and Park's bases is converted).
    A THM coherent background (``cbkg_*``) gets no automatic prior either: it
    is uniform unless you define one, and the run log counts them.
 
-   The sampler tells the kinds apart by the engine's parameter names
-   (``energy_*``, ``width_*``, ``segment_N_norm``, ``segment_N_energy_shift``,
-   ``segment_N_energy_shift_sqrt``, ``density_N``, ``doppler_N``,
-   ``segment_N_thickness``, ``cbkg_*``), and so does the tab when it
-   loads the parameters. If a name is not recognised
-   the run log says so and no automatic prior is set, rather than one being
-   put on the wrong parameter.
+   The sampler tells the kinds apart by what each parameter is (its kind,
+   recorded where AZURE2 creates it; :doc:`../reference/output_files`, "Kinds
+   of parameter"), not by its name. A row of the ``<mcmc>`` ``<parameters>``
+   block names its parameter by the whole name of ``param.par``
+   (``energy_1``, ``width_1_2``, ``segment_1_norm``, ...), optionally as
+   ``label (name)``, or by the short forms ``E<n>``, ``G<n><c>``, ``N<k>``,
+   ``S<k>``, followed by the value, prior mean, prior sigma and the use flag
+   (0 or 1). A row that names no parameter of the model stops the run with a
+   message, rather than leaving its prior out.
 
    A prior parameter covariance (``priorCovariance=<file>`` in ``<config>``,
    :doc:`chi_squared`, "Prior parameter covariance") enters the log prior as the

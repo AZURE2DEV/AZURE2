@@ -147,6 +147,13 @@ int main(int argc, char **argv) {
     ConvertToFormat2(e);
     check("a hybrid potential of one pair keeps the block", e.Find("potential") != nullptr);
   }
+  // format 3 (docs/upgrade/project_format3.md section 8.4): known as such, and left alone by the format-2 conversion
+  {
+    const std::string text = "<config>\nformat=3\n</config>\n<lastRun>\nx\n</lastRun>\n";
+    Document d = Document::Parse(text);
+    check("format=3 is format 3", FormatOf(d) == 3);
+    check("a format-3 file is not converted to format 2", ConvertToFormat2(d).empty() && d.Write() == text);
+  }
   if (files.empty()) {
     std::printf("  FAIL  no .azr found\n");
     failures++;

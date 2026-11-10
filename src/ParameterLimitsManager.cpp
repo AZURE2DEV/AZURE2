@@ -3,12 +3,10 @@
 #include "CNuc.h"
 #include "EData.h"
 #include "AZUREParams.h"
-#include "ParameterLabel.h"
 #include <fstream>
 #include <sstream>
 #include <iostream>
 #include <cmath>
-#include <regex>
 #include <cctype>
 #include <limits>
 
@@ -168,6 +166,7 @@ bool ParameterLimitsManager::ReadParameterSettings() {
         setting.useAsNuisance = (std::stoi(parts[6]) == 1);
         setting.category = parts[7];
         setting.minuitIndex = std::stoi(parts[8]);  // Store Minuit2 index
+        setting.parameterNameForm = true;
 
         parameterSettings_[setting.name] = setting;
       } else if (parts.size() == 12) {
@@ -205,17 +204,12 @@ bool ParameterLimitsManager::ReadParameterSettings() {
   return true;
 }
 
-std::string ParameterLimitsManager::SettingNameForMinuitName(const std::string &minuitName) {
-  if (minuitName.compare(0, 7, "energy_") == 0)
-    return "Level " + minuitName.substr(7) + " Energy (MeV)";
-  if (minuitName.compare(0, 6, "width_") == 0) {
-    size_t sep = minuitName.find('_', 6);
-    if (sep != std::string::npos)
-      return "Level " + minuitName.substr(6, sep - 6) +
-          " Channel " + minuitName.substr(sep + 1) + " Width (eV)";
-  }
-  // Normalizations and energy shifts are stored under their Minuit names already.
-  return minuitName;
+std::string ParameterLimitsManager::SettingNameFor(const ParameterRecord &record, const std::string &name) {
+  if (record.kind == ParamKind::LevelEnergy) return "Level " + std::to_string(record.levelNumber) + " Energy (MeV)";
+  if (record.kind == ParamKind::Gamma)
+    return "Level " + std::to_string(record.levelNumber) + " Channel " + std::to_string(record.channel) + " Width (eV)";
+  // Every other parameter is stored under its own name.
+  return name;
 }
 
 /*!
@@ -235,31 +229,35 @@ std::string ParameterLimitsManager::SettingNameForMinuitName(const std::string &
  * renumbered or removed), and its stale index then points at an unrelated
  * parameter.  12C+a (2026-10-16): 33 such bindings, among them a level energy
  * given segment_113_norm's nuisance flag, which switched off the analytic G2.
- * So the index fallback only pairs compatible names: a normalization or shift
- * entry (stored under its exact Minuit name) never falls back, and a "Level N
- * ..." entry only binds to a parameter of level N of the same kind (energy or
- * width; channel numbers are not compared, older files numbered them globally).
- * Entries in any other format fall back as before.
+ * So the index fallback only pairs compatible entries: an entry stored under a
+ * parameter's own name (the one-token form the GUI writes for normalizations,
+ * energy shifts and every parameter other than a level's) never falls back, and
+ * a "Level N ..." entry only binds to a parameter of level N of the same kind
+ * (energy or width, from the parameter's record; channel numbers are not
+ * compared, older files numbered them globally).  Entries in any other format
+ * fall back as before.
  */
-static bool SettingFitsParameter(const std::string &setting, const std::string &param) {
-  if (setting.compare(0, 8, "segment_") == 0) return false;  // exact Minuit names: matched by name or not at all
-  if (setting.compare(0, 5, "cbkg_") == 0) return false;     // THM coherent background: exact Minuit names too
-  if (setting.compare(0, 6, "Level ") != 0) return true;     // unknown format: keep the old behaviour
-  const size_t sp = setting.find(' ', 6);
+static bool SettingFitsParameter(const ParameterSetting &setting, const ParameterRecord &param) {
+  if (setting.parameterNameForm) return false;  // a parameter's own name: matched by name or not at all
+  const std::string &name = setting.name;
+  if (name.compare(0, 6, "Level ") != 0) return true;  // unknown format: keep the old behaviour
+  const size_t sp = name.find(' ', 6);
   if (sp == std::string::npos) return true;
-  const std::string level = setting.substr(6, sp - 6);
-  const bool isEnergy = setting.find(" Energy") != std::string::npos;
-  const bool isWidth = setting.find(" Width") != std::string::npos;
-  if (isEnergy) return param == "energy_" + level;
-  if (isWidth) return param.compare(0, 7 + level.size(), "width_" + level + "_") == 0;
+  const std::string level = name.substr(6, sp - 6);
+  const bool isEnergy = name.find(" Energy") != std::string::npos;
+  const bool isWidth = name.find(" Width") != std::string::npos;
+  if (isEnergy) return param.kind == ParamKind::LevelEnergy && std::to_string(param.levelNumber) == level;
+  if (isWidth) return param.kind == ParamKind::Gamma && std::to_string(param.levelNumber) == level;
   return true;
 }
 
 
-void ParameterLimitsManager::BuildIndexMap(const ROOT::Minuit2::MnUserParameters &p) {
+void ParameterLimitsManager::BuildIndexMap(const AZUREParams &params) {
+  const ROOT::Minuit2::MnUserParameters &p = params.GetMinuitParams();
+  // The GUI's numbering: the free parameters and every data-segment parameter, fixed or not.
   std::vector<int> nonFixedToActualIndex;
   for (int i = 0; i < (int)p.Params().size(); i++) {
-    if (!p.Parameter(i).IsFixed() || p.Parameter(i).GetName().find("segment") != std::string::npos) {
+    if (!p.Parameter(i).IsFixed() || params.Record(i).Row().segmentField) {
       nonFixedToActualIndex.push_back(i);
     }
   }
@@ -268,9 +266,9 @@ void ParameterLimitsManager::BuildIndexMap(const ROOT::Minuit2::MnUserParameters
   std::map<const ParameterSetting *, bool> claimed;
 
   for (size_t nonFixedIndex = 0; nonFixedIndex < nonFixedToActualIndex.size(); nonFixedIndex++) {
-    std::string settingName =
-        SettingNameForMinuitName(p.Parameter(nonFixedToActualIndex[nonFixedIndex]).GetName());
-    std::map<std::string, ParameterSetting>::iterator it = parameterSettings_.find(settingName);
+    const int i = nonFixedToActualIndex[nonFixedIndex];
+    std::map<std::string, ParameterSetting>::iterator it =
+        parameterSettings_.find(SettingNameFor(params.Record(i), p.GetName(i)));
     if (it != parameterSettings_.end()) {
       indexToSetting_[nonFixedIndex] = &it->second;
       claimed[&it->second] = true;
@@ -282,7 +280,7 @@ void ParameterLimitsManager::BuildIndexMap(const ROOT::Minuit2::MnUserParameters
     for (std::map<std::string, ParameterSetting>::iterator it = parameterSettings_.begin();
          it != parameterSettings_.end(); ++it) {
       if (it->second.minuitIndex == (int)nonFixedIndex && !claimed.count(&it->second) &&
-          SettingFitsParameter(it->first, p.Parameter(nonFixedToActualIndex[nonFixedIndex]).GetName())) {
+          SettingFitsParameter(it->second, params.Record(nonFixedToActualIndex[nonFixedIndex]))) {
         indexToSetting_[nonFixedIndex] = &it->second;
         claimed[&it->second] = true;
         break;
@@ -291,21 +289,19 @@ void ParameterLimitsManager::BuildIndexMap(const ROOT::Minuit2::MnUserParameters
   }
 
   // The same association keyed by the full-vector index, for the nuisance
-  // prior.  Norms, shifts, abundances, electron-screening potentials, fitted
-  // target densities, Doppler temperatures and sample thicknesses (dev) are left out, as the chi-squared always
-  // has: they carry their own priors (segment errors, <abundances>, the screening, densityfit, doppler and
-  // transmission / yield blocks).
+  // prior.  The parameters with a prior of their own (ParamKindRow::ownPrior: norms, shifts, abundances,
+  // electron-screening potentials, fitted target densities, Doppler temperatures and sample thicknesses) are left
+  // out, as the chi-squared always has: they carry their own priors (segment errors, <abundances>, the screening,
+  // densityfit, doppler and transmission / yield blocks).
   priorByActualIndex_.assign(p.Params().size(), NULL);
+  priorIsWidth_.assign(p.Params().size(), false);
   for (size_t nonFixedIndex = 0; nonFixedIndex < nonFixedToActualIndex.size(); nonFixedIndex++) {
     ParameterSetting *setting = indexToSetting_[nonFixedIndex];
     if (!setting || !setting->useAsNuisance) continue;
     const int actualIndex = nonFixedToActualIndex[nonFixedIndex];
-    const std::string &name = p.Parameter(actualIndex).GetName();
-    if (AZURELabel::IsNormName(name) || AZURELabel::IsEnergyShiftName(name) || name.compare(0, 10, "abundance_") == 0 ||
-        name.compare(0, 10, "screening_") == 0 || name.compare(0, 8, "density_") == 0 ||
-        name.compare(0, 8, "doppler_") == 0 || (name.compare(0, 8, "segment_") == 0 && AZURELabel::EndsWith(name, "_thickness")))
-      continue;
+    if (params.Record(actualIndex).Row().ownPrior) continue;
     priorByActualIndex_[actualIndex] = setting;
+    priorIsWidth_[actualIndex] = params.Kind(actualIndex) == ParamKind::Gamma && setting->category == "level";
   }
 }
 
@@ -314,122 +310,34 @@ ParameterSetting *ParameterLimitsManager::SettingForIndex(int nonFixedIndex) con
   return indexToSetting_[nonFixedIndex];
 }
 
-void ParameterLimitsManager::ApplyAllParameterSettings(ROOT::Minuit2::MnUserParameters &p) {
-  // Build mapping from non-fixed parameter index to actual parameter index
+void ParameterLimitsManager::ApplyAllParameterSettings(AZUREParams &params) {
+  const ROOT::Minuit2::MnUserParameters &p = params.GetMinuitParams();
+  // Build mapping from non-fixed parameter index to actual parameter index (as BuildIndexMap)
   std::vector<int> nonFixedToActualIndex;
-  for (int i = 0; i < p.Params().size(); i++) {
-    if (!p.Parameter(i).IsFixed() || p.Parameter(i).GetName().find("segment") != std::string::npos) {
+  for (int i = 0; i < (int)p.Params().size(); i++) {
+    if (!p.Parameter(i).IsFixed() || params.Record(i).Row().segmentField) {
       nonFixedToActualIndex.push_back(i);
     }
   }
 
-  BuildIndexMap(p);
+  BuildIndexMap(params);
 
   // Apply settings using non-fixed parameter indices
-  for (int nonFixedIndex = 0; nonFixedIndex < nonFixedToActualIndex.size(); nonFixedIndex++) {
+  for (int nonFixedIndex = 0; nonFixedIndex < (int)nonFixedToActualIndex.size(); nonFixedIndex++) {
     int actualIndex = nonFixedToActualIndex[nonFixedIndex];
-    ApplyParameterSettingByIndex(nonFixedIndex, actualIndex, p);
+    ApplyParameterSettingByIndex(nonFixedIndex, actualIndex, params);
   }
 }
 
-void ParameterLimitsManager::ApplyParameterSetting(const std::string &paramName, ROOT::Minuit2::MnUserParameters &p) {
-  // Try to find parameter settings by the GUI name format
-  // Since we now store parameters with their full GUI names like "Level 2 Energy (MeV)"
-  // we need to find the setting that corresponds to the Minuit parameter name like "energy_2"
-
-  ParameterSetting *setting = nullptr;
-  std::string matchedName = "";
-
-  // Search through all parameter settings to find a match
-  for (auto &entry : parameterSettings_) {
-    const std::string &guiName = entry.first;
-
-    // Try to match Minuit parameter names to GUI parameter names
-
-    // Energy parameters: paramName="energy_2" should match guiName="Level 2 Energy (MeV)"
-    if (paramName.find("energy_") == 0) {
-      std::string levelNum = paramName.substr(7);  // Extract number after "energy_"
-      std::string expectedName = "Level " + levelNum + " Energy (MeV)";
-      if (guiName == expectedName) {
-        setting = &entry.second;
-        matchedName = guiName;
-        break;
-      }
-    }
-
-    // Width parameters: paramName="width_2_3" should match guiName="Level 2 Channel 3 Width (eV)"
-    else if (paramName.find("width_") == 0) {
-      size_t firstUnderscore = paramName.find("_", 6);  // Find underscore after "width_"
-      if (firstUnderscore != std::string::npos) {
-        std::string levelNum = paramName.substr(6, firstUnderscore - 6);
-        std::string channelNum = paramName.substr(firstUnderscore + 1);
-        std::string expectedName = "Level " + levelNum + " Channel " + channelNum + " Width (eV)";
-        if (guiName == expectedName) {
-          setting = &entry.second;
-          matchedName = guiName;
-          break;
-        }
-      }
-    }
-
-    // Normalization parameters: paramName="segment_1_norm" should match guiName="segment_1_norm"
-    else if (paramName.find("_norm") != std::string::npos || paramName.find("_energy_shift") != std::string::npos ||
-             paramName.compare(0, 5, "cbkg_") == 0) {
-      if (guiName == paramName) {
-        setting = &entry.second;
-        matchedName = guiName;
-        break;
-      }
-    }
-  }
-
-  if (!setting) {
-    return;  // No settings found for this parameter
-  }
-
-  // Apply limits if they are not both zero (0,0 means free parameter)
-  // A limit that is not finite (a nan or inf left in the block, which the parser accepts since 2026-10-27) is no limit.
-  if (!std::isfinite(setting->lowerLimit) || !std::isfinite(setting->upperLimit)) {
-    std::cout << "WARNING: <parameterSettings> " << matchedName << ": a limit is not finite; no limit applied." << std::endl;
-  } else if (setting->lowerLimit != 0.0 || setting->upperLimit != 0.0) {
-    double lower = setting->lowerLimit;
-    double upper = setting->upperLimit;
-
-    // For width parameters (physical values need conversion to reduced)
-    if ((matchedName.find("width") != std::string::npos || matchedName.find("Width") != std::string::npos) && setting->category == "level") {
-      // Convert physical width limits to reduced width limits
-      lower = ConvertPhysicalLimitToReduced(setting->lowerLimit, paramName);
-      upper = ConvertPhysicalLimitToReduced(setting->upperLimit, paramName);
-    }
-
-    // If nuisance parameter, convert nominal value and error
-    if (setting->useAsNuisance && (matchedName.find("width") != std::string::npos || matchedName.find("Width") != std::string::npos)) {
-      setting->nominalValueReduced = ConvertPhysicalLimitToReduced(setting->nominalValue, paramName);
-      double errorSmall = std::abs(setting->nominalValue - ConvertPhysicalLimitToReduced(setting->nominalValue - setting->error, paramName));
-      double errorLarge = std::abs(ConvertPhysicalLimitToReduced(setting->nominalValue + setting->error, paramName) - setting->nominalValueReduced);
-      setting->errorReduced = std::max(errorSmall, errorLarge);
-    }
-
-    // Ensure lower < upper, swap if necessary
-    if (lower > upper) {
-      std::swap(lower, upper);
-    }
-
-    // Set limits in Minuit
-    if (p.Parameter(p.Index(paramName)).HasLimits()) {
-      p.RemoveLimits(paramName);
-    }
-    p.SetLimits(paramName, lower, upper);
-  }
-}
-
-void ParameterLimitsManager::ApplyParameterSettingByIndex(int nonFixedIndex, int actualIndex, ROOT::Minuit2::MnUserParameters &p) {
+void ParameterLimitsManager::ApplyParameterSettingByIndex(int nonFixedIndex, int actualIndex, AZUREParams &params) {
   ParameterSetting *setting = SettingForIndex(nonFixedIndex);
 
   if (!setting) {
     return;  // No settings found for this parameter index
   }
-  const std::string &matchedName = setting->name;
+  ROOT::Minuit2::MnUserParameters &p = params.GetMinuitParams();
+  // A level width's settings are partial widths (eV), converted to the reduced-width amplitude the fit varies.
+  const bool isWidth = params.Kind(actualIndex) == ParamKind::Gamma && setting->category == "level";
 
   // Apply limits if they are not both zero (0,0 means free parameter)
   if (setting->lowerLimit != 0.0 || setting->upperLimit != 0.0) {
@@ -437,11 +345,9 @@ void ParameterLimitsManager::ApplyParameterSettingByIndex(int nonFixedIndex, int
     double upper = setting->upperLimit;
 
     // For width parameters (physical values need conversion to reduced)
-    if ((matchedName.find("width") != std::string::npos || matchedName.find("Width") != std::string::npos) && setting->category == "level") {
-      // Convert physical width limits to reduced width limits
-      std::string paramName = p.Parameter(actualIndex).GetName();
-      lower = ConvertPhysicalLimitToReduced(setting->lowerLimit, paramName);
-      upper = ConvertPhysicalLimitToReduced(setting->upperLimit, paramName);
+    if (isWidth) {
+      lower = ConvertPhysicalLimitToReduced(setting->lowerLimit, actualIndex);
+      upper = ConvertPhysicalLimitToReduced(setting->upperLimit, actualIndex);
     }
 
     // Ensure lower < upper, swap if necessary
@@ -457,35 +363,20 @@ void ParameterLimitsManager::ApplyParameterSettingByIndex(int nonFixedIndex, int
     p.SetLimits(paramName, lower, upper);
   }
 
-  // If nuisance parameter, convert nominal value and error
-  if ((matchedName.find("segment") == std::string::npos) && setting->useAsNuisance) {
-    std::string paramName = p.Parameter(actualIndex).GetName();
-    setting->nominalValueReduced = ConvertPhysicalLimitToReduced(setting->nominalValue, paramName);
-    double errorSmall = std::abs(setting->nominalValueReduced - ConvertPhysicalLimitToReduced(setting->nominalValue - setting->error, paramName));
-    double errorLarge = std::abs(ConvertPhysicalLimitToReduced(setting->nominalValue + setting->error, paramName) - setting->nominalValueReduced);
+  // A nuisance prior on a width is given as a partial width (eV) and converted to the reduced-width amplitude; on any
+  // other parameter it is used as given (NuisancePrior reads the reduced values of a width only).
+  if (setting->useAsNuisance && isWidth) {
+    setting->nominalValueReduced = ConvertPhysicalLimitToReduced(setting->nominalValue, actualIndex);
+    double errorSmall = std::abs(setting->nominalValueReduced - ConvertPhysicalLimitToReduced(setting->nominalValue - setting->error, actualIndex));
+    double errorLarge = std::abs(ConvertPhysicalLimitToReduced(setting->nominalValue + setting->error, actualIndex) - setting->nominalValueReduced);
     setting->errorReduced = std::max(errorSmall, errorLarge);
+  } else if (setting->useAsNuisance) {
+    setting->nominalValueReduced = setting->nominalValue;
+    setting->errorReduced = setting->error;
   }
 }
 
-int ParameterLimitsManager::FindParameterIndex(const std::string &paramName) const {
-  AZUREParams tempParams;
-  compound_->FillMnParams(tempParams.GetMinuitParams(), config_);
-  if (data_) data_->FillMnParams(tempParams.GetMinuitParams());
-
-  for (int i = 0; i < tempParams.GetMinuitParams().Params().size(); ++i) {
-    if (tempParams.GetMinuitParams().Parameter(i).GetName() == paramName) {
-      return i;
-    }
-  }
-  return -1;
-}
-
-double ParameterLimitsManager::ConvertPhysicalLimitToReduced(double physicalLimit, const std::string &paramName) const {
-  int paramIndex = FindParameterIndex(paramName);
-  if (paramIndex == -1) {
-    return physicalLimit;
-  }
-
+double ParameterLimitsManager::ConvertPhysicalLimitToReduced(double physicalLimit, int paramIndex) const {
   CNuc *clone = compound_->Clone();
 
   // Fill clone with current parameters
@@ -495,6 +386,11 @@ double ParameterLimitsManager::ConvertPhysicalLimitToReduced(double physicalLimi
 
   try {
     vector_r currentParams = clone->GetTransformParams(*config_);
+    // Only the level parameters (and abundances) are in the physical vector; the callers convert widths only.
+    if (paramIndex < 0 || paramIndex >= (int)currentParams.size()) {
+      delete clone;
+      return physicalLimit;
+    }
 
     currentParams[paramIndex] = physicalLimit;
     clone->FillCompoundFromParamsPhysical(currentParams);
@@ -505,12 +401,12 @@ double ParameterLimitsManager::ConvertPhysicalLimitToReduced(double physicalLimi
     }
 
     AZUREParams tempParams;
-    clone->FillMnParams(tempParams.GetMinuitParams(), config_);
+    clone->FillMnParams(tempParams, config_);
 
     vector_r reducedParams = tempParams.GetMinuitParams().Params();
     delete clone;
 
-    if (paramIndex < reducedParams.size()) {
+    if (paramIndex < (int)reducedParams.size()) {
       double convertedLimit = reducedParams[paramIndex];
       return convertedLimit;
     } else {
@@ -522,188 +418,9 @@ double ParameterLimitsManager::ConvertPhysicalLimitToReduced(double physicalLimi
   }
 }
 
-bool ParameterLimitsManager::IsNuisanceParameter(const std::string &paramName) const {
-  // First try to find by Minuit non-fixed index if we can determine it
-  int actualIndex = FindParameterIndex(paramName);
-  if (actualIndex >= 0) {
-    // Convert actual index to non-fixed index
-    AZUREParams tempParams;
-    compound_->FillMnParams(tempParams.GetMinuitParams(), config_);
-    if (data_) data_->FillMnParams(tempParams.GetMinuitParams());
-
-    int nonFixedIndex = 0;
-    for (int i = 0; i <= actualIndex && i < tempParams.GetMinuitParams().Params().size(); i++) {
-      if (!tempParams.GetMinuitParams().Parameter(i).IsFixed()) {
-        if (i == actualIndex) {
-          // Found the non-fixed index corresponding to actualIndex
-          for (const auto &entry : parameterSettings_) {
-            if (entry.second.minuitIndex == nonFixedIndex) {
-              return entry.second.useAsNuisance;
-            }
-          }
-          break;
-        }
-        nonFixedIndex++;
-      }
-    }
-  }
-
-  // Fallback to name-based search for compatibility
-  for (const auto &entry : parameterSettings_) {
-    const std::string &guiName = entry.first;
-
-    // Energy parameters: paramName="energy_2" should match guiName="Level 2 Energy (MeV)"
-    if (paramName.find("energy_") == 0) {
-      std::string levelNum = paramName.substr(7);
-      std::string expectedName = "Level " + levelNum + " Energy (MeV)";
-      if (guiName == expectedName) {
-        return entry.second.useAsNuisance;
-      }
-    }
-
-    // Width parameters: paramName="width_2_3" should match guiName="Level 2 Channel 3 Width (eV)"
-    else if (paramName.find("width_") == 0) {
-      size_t firstUnderscore = paramName.find("_", 6);
-      if (firstUnderscore != std::string::npos) {
-        std::string levelNum = paramName.substr(6, firstUnderscore - 6);
-        std::string channelNum = paramName.substr(firstUnderscore + 1);
-        std::string expectedName = "Level " + levelNum + " Channel " + channelNum + " Width (eV)";
-        if (guiName == expectedName) {
-          return entry.second.useAsNuisance;
-        }
-      }
-    }
-
-    // Direct match for norm/shift parameters
-    else if (guiName == paramName) {
-      return entry.second.useAsNuisance;
-    }
-  }
-
-  return false;
-}
-
 bool ParameterLimitsManager::IsNuisanceParameterByIndex(int nonFixedIndex) const {
   const ParameterSetting *setting = SettingForIndex(nonFixedIndex);
   return setting ? setting->useAsNuisance : false;
-}
-
-double ParameterLimitsManager::GetParameterError(const std::string &paramName) const {
-  // First try to find by Minuit non-fixed index if we can determine it
-  int actualIndex = FindParameterIndex(paramName);
-  if (actualIndex >= 0) {
-    // Convert actual index to non-fixed index
-    AZUREParams tempParams;
-    compound_->FillMnParams(tempParams.GetMinuitParams(), config_);
-    if (data_) data_->FillMnParams(tempParams.GetMinuitParams());
-
-    int nonFixedIndex = 0;
-    for (int i = 0; i <= actualIndex && i < tempParams.GetMinuitParams().Params().size(); i++) {
-      if (!tempParams.GetMinuitParams().Parameter(i).IsFixed()) {
-        if (i == actualIndex) {
-          // Found the non-fixed index corresponding to actualIndex
-          for (const auto &entry : parameterSettings_) {
-            if (entry.second.minuitIndex == nonFixedIndex) {
-              return entry.second.error;
-            }
-          }
-          break;
-        }
-        nonFixedIndex++;
-      }
-    }
-  }
-
-  // Fallback to name-based search for compatibility
-  for (const auto &entry : parameterSettings_) {
-    const std::string &guiName = entry.first;
-
-    // Energy parameters
-    if (paramName.find("energy_") == 0) {
-      std::string levelNum = paramName.substr(7);
-      std::string expectedName = "Level " + levelNum + " Energy (MeV)";
-      if (guiName == expectedName) {
-        return entry.second.error;
-      }
-    }
-    // Width parameters
-    else if (paramName.find("width_") == 0) {
-      size_t firstUnderscore = paramName.find("_", 6);
-      if (firstUnderscore != std::string::npos) {
-        std::string levelNum = paramName.substr(6, firstUnderscore - 6);
-        std::string channelNum = paramName.substr(firstUnderscore + 1);
-        std::string expectedName = "Level " + levelNum + " Channel " + channelNum + " Width (eV)";
-        if (guiName == expectedName) {
-          return entry.second.error;
-        }
-      }
-    }
-    // Direct match for norm/shift parameters
-    else if (guiName == paramName) {
-      return entry.second.error;
-    }
-  }
-
-  return 0.0;
-}
-
-double ParameterLimitsManager::GetConvertedNominalValue(const std::string &paramName) const {
-  auto it = parameterSettings_.find(paramName);
-  if (it != parameterSettings_.end()) {
-    const ParameterSetting &setting = it->second;
-
-    // For width parameters (physical values need conversion to reduced)
-    // Width parameters have format: j=%d_la=%d_ch=%d_rwa
-    if (paramName.find("width") != std::string::npos && setting.category == "level") {
-      // Convert physical nominal value to reduced
-      return setting.nominalValueReduced;
-    } else {
-      // For non-width parameters, use nominal value as-is
-      return setting.nominalValue;
-    }
-  }
-  return 0.0;
-}
-
-double ParameterLimitsManager::GetConvertedError(const std::string &paramName) const {
-  auto it = parameterSettings_.find(paramName);
-  if (it != parameterSettings_.end()) {
-    const ParameterSetting &setting = it->second;
-
-    // For width parameters (physical values need conversion to reduced)
-    // Width parameters have format: j=%d_la=%d_ch=%d_rwa
-    if (paramName.find("width") != std::string::npos && setting.category == "level") {
-      return setting.errorReduced;  // Return reduced error for width parameters
-    } else {
-      // For non-width parameters, use error as-is
-      return setting.error;
-    }
-  }
-  return 0.0;
-}
-
-double ParameterLimitsManager::GetConvertedNominalValueByIndex(int nonFixedIndex) const {
-  // Find parameter settings by matching Minuit2 non-fixed index
-  const ParameterSetting *setting = SettingForIndex(nonFixedIndex);
-  if (!setting) return 0.0;
-
-  // For width parameters (physical values need conversion to reduced)
-  if ((setting->name.find("width") != std::string::npos || setting->name.find("Width") != std::string::npos) && setting->category == "level")
-    return setting->nominalValueReduced;  // Return reduced nominal value for width parameters
-  // For non-width parameters, use nominal value as-is
-  return setting->nominalValue;
-}
-
-double ParameterLimitsManager::GetConvertedErrorByIndex(int nonFixedIndex) const {
-  // Find parameter settings by matching Minuit2 non-fixed index
-  const ParameterSetting *setting = SettingForIndex(nonFixedIndex);
-  if (!setting) return 0.0;
-
-  // For width parameters (physical values need conversion to reduced)
-  if ((setting->name.find("width") != std::string::npos || setting->name.find("Width") != std::string::npos) && setting->category == "level")
-    return setting->errorReduced;  // Return reduced error for width parameters
-  // For non-width parameters, use error as-is
-  return setting->error;
 }
 
 bool ParameterLimitsManager::NuisancePriorPhysical(int actualIndex, double &nominal, double &error) const {
@@ -719,9 +436,7 @@ bool ParameterLimitsManager::NuisancePrior(int actualIndex, double &nominal, dou
   if (actualIndex < 0 || actualIndex >= (int)priorByActualIndex_.size()) return false;
   const ParameterSetting *setting = priorByActualIndex_[actualIndex];
   if (!setting) return false;
-  const bool isWidth = (setting->name.find("width") != std::string::npos ||
-                        setting->name.find("Width") != std::string::npos) &&
-                       setting->category == "level";
+  const bool isWidth = priorIsWidth_[actualIndex];
   nominal = isWidth ? setting->nominalValueReduced : setting->nominalValue;
   error = isWidth ? setting->errorReduced : setting->error;
   return error > 0.0;

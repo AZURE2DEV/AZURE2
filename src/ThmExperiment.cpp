@@ -1,4 +1,5 @@
 #include "ThmExperiment.h"
+#include "azure2/convert/ThmLines.h"
 #include "ThmOptical.h"
 #include "Constants.h"
 
@@ -57,42 +58,8 @@ std::vector<std::string> Split(const std::string &text, char sep) {
   return out;
 }
 
-// Far above any project's number of segment lines (each is a file).
-static const int kMaxThmSegment = 100000;
-
-// "1,2,5-7" -> {1,2,5,6,7}.  "" or what is wrong.
-std::string ParseSegmentList(const std::string &text, std::vector<int> &out) {
-  out.clear();
-  std::set<int> seen;
-  for (const std::string &item : Split(text, ',')) {
-    int lo, hi;
-    size_t dash = item.find('-', 1);
-    bool ok;
-    if (dash == std::string::npos) {
-      ok = ReadWholeInt(item, lo);
-      hi = lo;
-    } else {
-      ok = ReadWholeInt(item.substr(0, dash), lo) && ReadWholeInt(item.substr(dash + 1), hi) && hi >= lo;
-    }
-    if (!ok || lo < 1) return "segments='" + text + "': expected segment numbers >= 1 like 1,2,4-6";
-    // A bound before the range is expanded: 1-100000000 would fill memory.
-    if (hi > kMaxThmSegment) {
-      std::ostringstream why;
-      why << "segments='" << text << "': segment numbers go up to " << kMaxThmSegment;
-      return why.str();
-    }
-    for (int k = lo; k <= hi; k++) {
-      if (!seen.insert(k).second) {
-        std::ostringstream why;
-        why << "segments='" << text << "': segment " << k << " is listed twice";
-        return why.str();
-      }
-      out.push_back(k);
-    }
-  }
-  std::sort(out.begin(), out.end());
-  return "";
-}
+// "1,2,5-7" -> {1,2,5,6,7}: convert/'s ThmLines.h, the one reader of the list (shared with the converter).
+std::string ParseSegmentList(const std::string &text, std::vector<int> &out) { return azure2::convert::ParseThmSegmentList(text, out); }
 
 // "pmin-pmax" (MeV/c, 0 <= pmin <= pmax): the '-' whose both sides are numbers.
 bool ReadWindow(const std::string &text, double &lo, double &hi) {
@@ -279,51 +246,6 @@ std::string ThmCoherentParamStem(const std::string &experiment, double J, int pa
          "_" + ThmSpinText(s) + "," + std::to_string(l) + "," + ThmSpinText(sp) + "," + std::to_string(lp) + "_";
 }
 
-std::string ApplyThmCoherentValues(const std::string &experiment, const std::string &value,
-                                   const std::vector<std::string> &names, const std::map<std::string, double> &values,
-                                   std::string &out) {
-  std::vector<ThmExperiment::CoherentTerm> terms, result;
-  std::string why = ParseThmCoherentBackground(value, terms);
-  if (!why.empty()) return why;
-  static const char *parts[4] = {"re0", "im0", "re1", "im1"};
-  for (const ThmExperiment::CoherentTerm &t : terms) {
-    const std::string prefix = "cbkg_" + experiment + "_" + ThmSpinText(t.J) + (t.parity > 0 ? "+" : "-") + "_" +
-                               std::to_string(t.exitKey) + "_";
-    // The combinations (s,l,s',l') of this term among the names, in order.
-    std::vector<std::string> combos;
-    for (const std::string &n : names) {
-      if (n.compare(0, prefix.size(), prefix) != 0) continue;
-      size_t last = n.rfind('_');
-      if (last == std::string::npos || last < prefix.size()) continue;
-      std::string channels = n.substr(prefix.size(), last - prefix.size());
-      if (t.hasChannels && channels != ThmSpinText(t.s) + "," + std::to_string(t.l) + "," + ThmSpinText(t.sp) + "," +
-                                           std::to_string(t.lp))
-        continue;
-      if (std::find(combos.begin(), combos.end(), channels) == combos.end()) combos.push_back(channels);
-    }
-    if (combos.empty()) {
-      result.push_back(t);
-      continue;
-    }
-    for (const std::string &channels : combos) {
-      ThmExperiment::CoherentTerm c = t;
-      std::vector<std::string> f = Split(channels, ',');
-      if (f.size() != 4 || !ReadSpin(f[0], c.s) || !ReadWholeInt(f[1], c.l) || !ReadSpin(f[2], c.sp) ||
-          !ReadWholeInt(f[3], c.lp))
-        return "cbackground: parameter name with channels '" + channels + "' is not one AZURE2 makes";
-      c.hasChannels = true;
-      c.hasValues = true;
-      for (int k = 0; k < 2 * c.form; k++) {
-        std::map<std::string, double>::const_iterator it = values.find(prefix + channels + "_" + parts[k]);
-        if (it != values.end()) c.value[k] = it->second;
-      }
-      result.push_back(c);
-    }
-  }
-  out = FormatThmCoherentBackground(result);
-  return "";
-}
-
 std::string ParseThmCoherentBackground(const std::string &value, std::vector<ThmExperiment::CoherentTerm> &out) {
   out.clear();
   const std::string form =
@@ -469,19 +391,20 @@ bool ParseThmOptionLine(const std::string &key, const std::string &value, ThmOpt
     out.perPair = true;
     return !!(ks >> out.pairKey);
   }
-  if (key.compare(0, 6, "weight") == 0) {
+  {
     // weight[<k>]=<file> (k-th <segmentsData> line) or weightTest[<k>]=<file>
-    // (k-th <segmentsTest> line).  Which segments exist, and whether they are
+    // (k-th <segmentsTest> line): convert/'s ThmLines.h.  Which segments exist, and whether they are
     // THM, is checked once the data are read (EData::Fill / MakePoints).
-    out.kind = ThmOptionLine::WEIGHT;
-    out.test = key.compare(0, 11, "weightTest[") == 0;
-    const size_t open = out.test ? 10 : 6;
-    if (!(key.size() > open + 2 && key[open] == '[' && key.back() == ']' && !value.empty())) return false;
-    std::istringstream ks(key.substr(open + 1, key.size() - open - 2));
-    std::string rest;
-    if (!(ks >> out.segment) || out.segment < 1 || (ks >> rest)) return false;
-    out.file = value;
-    return true;
+    azure2::convert::ThmWeightKey weight;
+    bool valid = false;
+    if (azure2::convert::ReadThmWeightKey(key, value, weight, valid)) {
+      out.kind = ThmOptionLine::WEIGHT;
+      out.test = weight.test;
+      if (!valid) return false;
+      out.segment = weight.segment;
+      out.file = weight.file;
+      return true;
+    }
   }
   return false;
 }

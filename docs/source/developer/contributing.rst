@@ -80,7 +80,7 @@ Adding an ``.azr`` keyword or option
 The project file is read by two independent parsers
 (:doc:`architecture`), so a new keyword touches:
 
-#. the engine parser (``SegLine.h``, ``NucLine.h`` or ``Config.cpp``), the
+#. the engine parser (``SegLine.h``, ``io/`` ``LevelRows.h`` or ``Config.cpp``), the
    class that implements it, and a start-up error for invalid input;
 #. if it adds parameters or penalties: ``AZURECalc``, ``AZUREGrad``,
    ``AZUREMain`` (output) and ``api/src/AZUREAPI.cpp``, with the analytic

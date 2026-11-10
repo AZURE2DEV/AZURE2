@@ -6,11 +6,12 @@
 #include "AZUREParams.h"
 
 #include "GSLException.h"
-#include "ParameterLabel.h"
+#include <stdexcept>
 #include "ECAmplitudeCache.h"
 
 #include "Config.h"
 #include "CNuc.h"
+#include "CNucReport.h"
 #include "PPair.h"
 #include "EData.h"
 #include "ESegment.h"
@@ -32,7 +33,6 @@
 #include <limits>
 #include <new>
 #include <cmath>
-#include <algorithm>
 
 AZUREAPI::AZUREAPI(Config &configure) : configure_(configure), data_(nullptr), compound_(nullptr) {
   // A session rebuilds its model from the files (SetRadius, potential changes, mode switches): read each
@@ -54,8 +54,9 @@ AZUREAPI::~AZUREAPI() {
 // caller repeats the calculation point by point, so a failed point keeps the
 // serial path's handling (a NaN slot in UpdateSegments*, 0 or a skipped
 // component in a chi-squared) and the results equal the serial path's.
-static bool PrecalculateAll(const std::vector<ESegment *> &segments, CNuc *lc, const Config &cfg) {
-  return EData::CalculatePointsInParallel(segments, lc, cfg) == 0;
+static bool PrecalculateAll(const std::vector<ESegment *> &segments, CNuc *lc, const Config &cfg,
+                            azure2::Results &results) {
+  return EData::CalculatePointsInParallel(segments, lc, cfg, results) == 0;
 }
 
 // The segments the UpdateSegments* loops report: the first of each run of equal keys.
@@ -132,7 +133,7 @@ int AZUREAPI::Initialize() {
     return -1;
   }
   if ((configure().screenCheckMask | configure().fileCheckMask) &
-      Config::CHECK_COMPOUND_NUCLEUS) compound()->PrintNuc(configure());
+      Config::CHECK_COMPOUND_NUCLEUS) WriteCompoundNucleusCheck(*compound(), configure());
 
   if (!(configure().paramMask & Config::CALCULATE_REACTION_RATE)) {
     // Fill the data object from the segments and data file
@@ -181,6 +182,9 @@ int AZUREAPI::Initialize() {
   if (!SetUpPriorCovariance()) return -1;
 
   if (data()->Initialize(compound(), configure()) == -1) return -1;
+  // The session's buffer for the new layout, at 0 until an evaluation writes it (a read before any evaluation, such
+  // as GetThmExperiments, sees 0 as it did when the data set held the buffer).
+  results_.slot.assign(data()->ResultsSize(), 0.0);
 
   return 0;
 }
@@ -225,19 +229,21 @@ bool AZUREAPI::UpdateParameters() {
   all_.clear();
   all_rwa_.clear();
   names_.clear();
+  records_.clear();
   fixed_.clear();
   values_.clear();
   values_rwa_.clear();
 
   AZUREParams params;
-  compound()->FillMnParams(params.GetMinuitParams(), &configure());
-  data()->FillMnParams(params.GetMinuitParams());
+  compound()->FillMnParams(params, &configure());
+  data()->FillMnParams(params);
 
   compound()->FillCompoundFromParams(params.GetMinuitParams().Params());
 
   compound()->CalcShiftFunctions(configure());
   compound()->TransformOut(configure());
 
+  records_ = params.Records();
   for (int i = 0; i < params.GetMinuitParams().Params().size(); i++) {
     // if( !params.GetMinuitParams().Parameter(i).IsFixed( ) ){
     names_.push_back(params.GetMinuitParams().Parameter(i).GetName());
@@ -334,14 +340,14 @@ int AZUREAPI::UpdateSegments(vector_r &p) {
 
   if (!isValid) return 0;
 
-  localCompound->FillMnParams(params.GetMinuitParams());
-  localData->FillMnParams(params.GetMinuitParams());
+  localCompound->FillMnParams(params);
+  localData->FillMnParams(params);
   localCompound->FillCompoundFromParams(params.GetMinuitParams().Params());
   // Norms are the same in both bases (model curves do not use them, but the
   // segments then hold the vector's values, as after CalculateChi2Physical).
   localData->FillNormsFromParams(params_);
   // After the compound: the sub-point grids are laid out from its fit values.
-  localData->FillEnergyShiftsFromParams(params_, localData, localCompound, &configure());
+  localData->FillEnergyShiftsFromParams(params_, results(), localData, localCompound, &configure());
   if (configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure());
 
   int newKey = -1;
@@ -350,7 +356,7 @@ int AZUREAPI::UpdateSegments(vector_r &p) {
 
   std::vector<ESegment> &segments = localData->GetSegments();
   AZUREProfile::ScopedReport profileReport("api segments");
-  const bool pre = PrecalculateAll(ReportedSegments(segments), localCompound, configure());
+  const bool pre = PrecalculateAll(ReportedSegments(segments), localCompound, configure(), results());
   for (int i = 0; i < segments.size(); ++i) {
     newKey = segments[i].GetSegmentKey();
     if (prevKey == newKey) continue;
@@ -369,21 +375,21 @@ int AZUREAPI::UpdateSegments(vector_r &p) {
     if (segments[i].NeedsAssembly()) {
       for (int k = 0; k < data.size(); ++k) {
         // Use the new component-aware calculation method
-        double theoreticalValue = segments[i].CalculateTheoreticalCrossSection(k, localCompound, configure(), localData, pre);
+        double theoreticalValue = segments[i].CalculateTheoreticalCrossSection(k, localCompound, configure(), localData, results(), pre);
 
         // Update the point's fit cross section with the combined result
-        data[k].SetFitCrossSection(theoreticalValue);
+        data[k].SetFitCrossSection(results(), theoreticalValue);
 
         cross.push_back(theoreticalValue);
-        crossE1.push_back(data[k].GetFitE1CrossSection());
-        crossE2.push_back(data[k].GetFitE2CrossSection());
+        crossE1.push_back(data[k].GetFitE1CrossSection(results()));
+        crossE2.push_back(data[k].GetFitE2CrossSection(results()));
         angles.push_back(data[k].GetCMAngle());
         energies.push_back(data[k].GetCMEnergy());
         conv.push_back(data[k].GetSFactorConversion());
         excitationEnergies.push_back(data[k].GetExcitationEnergy());
-        angularDists.push_back((double)data[k].GetNumAngularDists());
-        for (int a = 0; a < data[k].GetNumAngularDists(); ++a)
-          angularDists.push_back(data[k].GetAngularDist(a));
+        angularDists.push_back((double)data[k].GetNumAngularDists(results()));
+        for (int a = 0; a < data[k].GetNumAngularDists(results()); ++a)
+          angularDists.push_back(data[k].GetAngularDist(results(), a));
       }
     } else {
       // Regular segment calculation (existing logic)
@@ -391,7 +397,7 @@ int AZUREAPI::UpdateSegments(vector_r &p) {
         bool failed = false;
         if (!pre && !data[k].IsMapped()) {
           try {
-            data[k].Calculate(localCompound, configure());
+            data[k].Calculate(localCompound, configure(), results());
           } catch (GSLException &e) {
             // A GSL failure at one point used to skip every push_back for it, so the arrays came back shorter
             // than the data and misaligned with it, silently (audit 2026-10-25, item 30).  Keep the slot: NaN.
@@ -399,16 +405,16 @@ int AZUREAPI::UpdateSegments(vector_r &p) {
           }
         }
         const double nan = std::numeric_limits<double>::quiet_NaN();
-        cross.push_back(failed ? nan : data[k].GetFitCrossSection());
-        crossE1.push_back(failed ? nan : data[k].GetFitE1CrossSection());
-        crossE2.push_back(failed ? nan : data[k].GetFitE2CrossSection());
+        cross.push_back(failed ? nan : data[k].GetFitCrossSection(results()));
+        crossE1.push_back(failed ? nan : data[k].GetFitE1CrossSection(results()));
+        crossE2.push_back(failed ? nan : data[k].GetFitE2CrossSection(results()));
         angles.push_back(data[k].GetCMAngle());
         energies.push_back(data[k].GetCMEnergy());
         conv.push_back(data[k].GetSFactorConversion());
         excitationEnergies.push_back(data[k].GetExcitationEnergy());
-        angularDists.push_back((double)data[k].GetNumAngularDists());
-        for (int a = 0; a < data[k].GetNumAngularDists(); ++a)
-          angularDists.push_back(data[k].GetAngularDist(a));
+        angularDists.push_back((double)data[k].GetNumAngularDists(results()));
+        for (int a = 0; a < data[k].GetNumAngularDists(results()); ++a)
+          angularDists.push_back(data[k].GetAngularDist(results(), a));
       }
     }
 
@@ -451,7 +457,7 @@ int AZUREAPI::UpdateSegmentsRWA(vector_r &p) {
 
   AZUREParams params;
   localCompound->FillCompoundFromParams(params_);
-  localData->FillEnergyShiftsFromParams(params_, localData, localCompound, &configure());
+  localData->FillEnergyShiftsFromParams(params_, results(), localData, localCompound, &configure());
   if (configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure());
 
   int newKey = -1;
@@ -460,7 +466,7 @@ int AZUREAPI::UpdateSegmentsRWA(vector_r &p) {
 
   std::vector<ESegment> &segments = localData->GetSegments();
   AZUREProfile::ScopedReport profileReport("api segments");
-  const bool pre = PrecalculateAll(ReportedSegments(segments), localCompound, configure());
+  const bool pre = PrecalculateAll(ReportedSegments(segments), localCompound, configure(), results());
   for (int i = 0; i < segments.size(); ++i) {
     newKey = segments[i].GetSegmentKey();
     if (prevKey == newKey) continue;
@@ -479,21 +485,21 @@ int AZUREAPI::UpdateSegmentsRWA(vector_r &p) {
     if (segments[i].NeedsAssembly()) {
       for (int k = 0; k < data.size(); ++k) {
         // Use the new component-aware calculation method
-        double theoreticalValue = segments[i].CalculateTheoreticalCrossSection(k, localCompound, configure(), localData, pre);
+        double theoreticalValue = segments[i].CalculateTheoreticalCrossSection(k, localCompound, configure(), localData, results(), pre);
 
         // Update the point's fit cross section with the combined result
-        data[k].SetFitCrossSection(theoreticalValue);
+        data[k].SetFitCrossSection(results(), theoreticalValue);
 
         cross.push_back(theoreticalValue);
-        crossE1.push_back(data[k].GetFitE1CrossSection());
-        crossE2.push_back(data[k].GetFitE2CrossSection());
+        crossE1.push_back(data[k].GetFitE1CrossSection(results()));
+        crossE2.push_back(data[k].GetFitE2CrossSection(results()));
         angles.push_back(data[k].GetCMAngle());
         energies.push_back(data[k].GetCMEnergy());
         conv.push_back(data[k].GetSFactorConversion());
         excitationEnergies.push_back(data[k].GetExcitationEnergy());
-        angularDists.push_back((double)data[k].GetNumAngularDists());
-        for (int a = 0; a < data[k].GetNumAngularDists(); ++a)
-          angularDists.push_back(data[k].GetAngularDist(a));
+        angularDists.push_back((double)data[k].GetNumAngularDists(results()));
+        for (int a = 0; a < data[k].GetNumAngularDists(results()); ++a)
+          angularDists.push_back(data[k].GetAngularDist(results(), a));
       }
     } else {
       // Regular segment calculation (existing logic)
@@ -501,7 +507,7 @@ int AZUREAPI::UpdateSegmentsRWA(vector_r &p) {
         bool failed = false;
         if (!pre && !data[k].IsMapped()) {
           try {
-            data[k].Calculate(localCompound, configure());
+            data[k].Calculate(localCompound, configure(), results());
           } catch (GSLException &e) {
             // A GSL failure at one point used to skip every push_back for it, so the arrays came back shorter
             // than the data and misaligned with it, silently (audit 2026-10-25, item 30).  Keep the slot: NaN.
@@ -509,16 +515,16 @@ int AZUREAPI::UpdateSegmentsRWA(vector_r &p) {
           }
         }
         const double nan = std::numeric_limits<double>::quiet_NaN();
-        cross.push_back(failed ? nan : data[k].GetFitCrossSection());
-        crossE1.push_back(failed ? nan : data[k].GetFitE1CrossSection());
-        crossE2.push_back(failed ? nan : data[k].GetFitE2CrossSection());
+        cross.push_back(failed ? nan : data[k].GetFitCrossSection(results()));
+        crossE1.push_back(failed ? nan : data[k].GetFitE1CrossSection(results()));
+        crossE2.push_back(failed ? nan : data[k].GetFitE2CrossSection(results()));
         angles.push_back(data[k].GetCMAngle());
         energies.push_back(data[k].GetCMEnergy());
         conv.push_back(data[k].GetSFactorConversion());
         excitationEnergies.push_back(data[k].GetExcitationEnergy());
-        angularDists.push_back((double)data[k].GetNumAngularDists());
-        for (int a = 0; a < data[k].GetNumAngularDists(); ++a)
-          angularDists.push_back(data[k].GetAngularDist(a));
+        angularDists.push_back((double)data[k].GetNumAngularDists(results()));
+        for (int a = 0; a < data[k].GetNumAngularDists(results()); ++a)
+          angularDists.push_back(data[k].GetAngularDist(results(), a));
       }
     }
 
@@ -562,7 +568,7 @@ int AZUREAPI::UpdateSegmentsAllRWA(vector_r &p) {
 
   AZUREParams params;
   localCompound->FillCompoundFromParams(params_);
-  localData->FillEnergyShiftsFromParams(params_, localData, localCompound, &configure());
+  localData->FillEnergyShiftsFromParams(params_, results(), localData, localCompound, &configure());
   if (configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure());
 
   int newKey = -1;
@@ -571,7 +577,7 @@ int AZUREAPI::UpdateSegmentsAllRWA(vector_r &p) {
 
   std::vector<ESegment> &segments = localData->GetSegments();
   AZUREProfile::ScopedReport profileReport("api segments");
-  const bool pre = PrecalculateAll(ReportedSegments(segments), localCompound, configure());
+  const bool pre = PrecalculateAll(ReportedSegments(segments), localCompound, configure(), results());
   for (int i = 0; i < segments.size(); ++i) {
     newKey = segments[i].GetSegmentKey();
     if (prevKey == newKey) continue;
@@ -590,21 +596,21 @@ int AZUREAPI::UpdateSegmentsAllRWA(vector_r &p) {
     if (segments[i].NeedsAssembly()) {
       for (int k = 0; k < data.size(); ++k) {
         // Use the new component-aware calculation method
-        double theoreticalValue = segments[i].CalculateTheoreticalCrossSection(k, localCompound, configure(), localData, pre);
+        double theoreticalValue = segments[i].CalculateTheoreticalCrossSection(k, localCompound, configure(), localData, results(), pre);
 
         // Update the point's fit cross section with the combined result
-        data[k].SetFitCrossSection(theoreticalValue);
+        data[k].SetFitCrossSection(results(), theoreticalValue);
 
         cross.push_back(theoreticalValue);
-        crossE1.push_back(data[k].GetFitE1CrossSection());
-        crossE2.push_back(data[k].GetFitE2CrossSection());
+        crossE1.push_back(data[k].GetFitE1CrossSection(results()));
+        crossE2.push_back(data[k].GetFitE2CrossSection(results()));
         angles.push_back(data[k].GetCMAngle());
         energies.push_back(data[k].GetCMEnergy());
         conv.push_back(data[k].GetSFactorConversion());
         excitationEnergies.push_back(data[k].GetExcitationEnergy());
-        angularDists.push_back((double)data[k].GetNumAngularDists());
-        for (int a = 0; a < data[k].GetNumAngularDists(); ++a)
-          angularDists.push_back(data[k].GetAngularDist(a));
+        angularDists.push_back((double)data[k].GetNumAngularDists(results()));
+        for (int a = 0; a < data[k].GetNumAngularDists(results()); ++a)
+          angularDists.push_back(data[k].GetAngularDist(results(), a));
       }
     } else {
       // Regular segment calculation (existing logic)
@@ -612,7 +618,7 @@ int AZUREAPI::UpdateSegmentsAllRWA(vector_r &p) {
         bool failed = false;
         if (!pre && !data[k].IsMapped()) {
           try {
-            data[k].Calculate(localCompound, configure());
+            data[k].Calculate(localCompound, configure(), results());
           } catch (GSLException &e) {
             // A GSL failure at one point used to skip every push_back for it, so the arrays came back shorter
             // than the data and misaligned with it, silently (audit 2026-10-25, item 30).  Keep the slot: NaN.
@@ -620,16 +626,16 @@ int AZUREAPI::UpdateSegmentsAllRWA(vector_r &p) {
           }
         }
         const double nan = std::numeric_limits<double>::quiet_NaN();
-        cross.push_back(failed ? nan : data[k].GetFitCrossSection());
-        crossE1.push_back(failed ? nan : data[k].GetFitE1CrossSection());
-        crossE2.push_back(failed ? nan : data[k].GetFitE2CrossSection());
+        cross.push_back(failed ? nan : data[k].GetFitCrossSection(results()));
+        crossE1.push_back(failed ? nan : data[k].GetFitE1CrossSection(results()));
+        crossE2.push_back(failed ? nan : data[k].GetFitE2CrossSection(results()));
         angles.push_back(data[k].GetCMAngle());
         energies.push_back(data[k].GetCMEnergy());
         conv.push_back(data[k].GetSFactorConversion());
         excitationEnergies.push_back(data[k].GetExcitationEnergy());
-        angularDists.push_back((double)data[k].GetNumAngularDists());
-        for (int a = 0; a < data[k].GetNumAngularDists(); ++a)
-          angularDists.push_back(data[k].GetAngularDist(a));
+        angularDists.push_back((double)data[k].GetNumAngularDists(results()));
+        for (int a = 0; a < data[k].GetNumAngularDists(results()); ++a)
+          angularDists.push_back(data[k].GetAngularDist(results(), a));
       }
     }
 
@@ -856,17 +862,17 @@ bool AZUREAPI::WriteOutputFiles() {
   CNuc *localCompound = compound();
   if (localCompound) {
     const vector_r none;
-    ObjectiveContext context{localCompound, data(), none, configure()};
+    ObjectiveContext context{localCompound, data(), results(), none, configure()};
     context.storeTotals = true;
     Objective::Engine().ModelChi2(context);
   }
-  data()->WriteOutputFiles(configure(), false, nullptr);
+  data()->WriteOutputFiles(configure(), results(), false, nullptr);
   return true;
 }
 
 std::vector<ThmExperimentReport> AZUREAPI::GetThmExperiments() const {
   if (data_ == nullptr) return std::vector<ThmExperimentReport>();
-  return data()->ThmExperimentReports();
+  return data()->ThmExperimentReports(results());
 }
 
 bool AZUREAPI::GetThmLineshape(const std::string &name, const vector_r &energies, ThmLineshapeReport &out,
@@ -934,6 +940,7 @@ bool AZUREAPI::RebuildImpl(const std::map<int, double> &radii) {
     configure().paramMask |= Config::USE_PREVIOUS_INTEGRALS;
     return false;
   }
+  results_.slot.assign(data()->ResultsSize(), 0.0);  // as after the first Initialize
   configure().paramMask |= Config::USE_PREVIOUS_INTEGRALS;
 
   // Without this the client keeps the pre-change parameter vector, names,
@@ -980,7 +987,7 @@ void AZUREAPI::FillFromFullRWA(const vector_r &full) const {
   EData *ld = data();
   lc->FillCompoundFromParams(full);
   ld->FillNormsFromParams(full);
-  ld->FillEnergyShiftsFromParams(full, ld, lc, &configure());
+  ld->FillEnergyShiftsFromParams(full, results(), ld, lc, &configure());
   if (configure().paramMask & Config::USE_BRUNE_FORMALISM) lc->CalcShiftFunctions(configure());
 }
 
@@ -994,14 +1001,14 @@ double AZUREAPI::EvaluateFilledChi2(vector_r *res) const {
   std::vector<std::vector<std::pair<int, size_t>>> groupRows(ld->NumThmGroups());
   // Every point in one parallel pass first (dev 37cdd34), as the CLI's AZURECalc::PrecalculatePoints.
   AZUREProfile::ScopedReport profileReport("api chi2");
-  const bool pre = PrecalculateAll(AllSegments(ld), lc, configure());
+  const bool pre = PrecalculateAll(AllSegments(ld), lc, configure(), results());
   for (int i = 1; i <= ld->NumSegments(); i++) {
     ESegment *segment = ld->GetSegment(i);
     if (!segment) continue;
     for (int pid = 0; pid < segment->NumPoints(); pid++) {
-      double th = segment->CalculateTheoreticalCrossSection(pid, lc, configure(), ld, pre);
+      double th = segment->CalculateTheoreticalCrossSection(pid, lc, configure(), ld, results(), pre);
       EPoint *point = segment->GetPoint(pid + 1);
-      if (point) point->SetFitCrossSection(th);
+      if (point) point->SetFitCrossSection(results(), th);
     }
 
     // A THM experiment: one profile (shared norm, background) over its
@@ -1014,11 +1021,11 @@ double AZUREAPI::EvaluateFilledChi2(vector_r *res) const {
           if (segment->GetPoint(pid + 1)) res->push_back(0.0);
       }
       if (ld->IsLastOfThmGroup(g, i)) {
-        chiSquared += ld->ProfileThmGroup(g);
+        chiSquared += ld->ProfileThmGroup(g, results());
         if (res) {
           std::vector<double> r;
           for (const std::pair<int, size_t> &row : groupRows[g]) {
-            ld->ThmGroupResiduals(g, row.first, r);
+            ld->ThmGroupResiduals(g, row.first, results(), r);
             std::copy(r.begin(), r.end(), res->begin() + row.second);
           }
         }
@@ -1030,13 +1037,13 @@ double AZUREAPI::EvaluateFilledChi2(vector_r *res) const {
     // (which also stores n* on the segment), exactly as the CLI does.
     double segChi = 0.0;
     const bool profiled = segment->IsProfiledNorm();
-    if (profiled) segChi = segment->ProfileNormChiSquared();
+    if (profiled) segChi = segment->ProfileNormChiSquared(results());
 
     const double norm = segment->GetNorm();
     for (int pid = 0; pid < segment->NumPoints(); pid++) {
       EPoint *point = segment->GetPoint(pid + 1);
       if (!point) continue;
-      double residual = point->GetFitCrossSection() - point->GetCMCrossSection() * norm;
+      double residual = point->GetFitCrossSection(results()) - point->GetCMCrossSection() * norm;
       double error = point->GetCMCrossSectionError() * norm;
       double r = (error != 0.0) ? residual / error : 0.0;
       if (!profiled) segChi += r * r;
@@ -1047,7 +1054,7 @@ double AZUREAPI::EvaluateFilledChi2(vector_r *res) const {
     chiSquared += segChi;
   }
   // Data covariance: r^T M^-1 r over each group in place of its points' r_i^2 (never a THM segment).
-  if (ld->HasCovariance()) chiSquared += ld->CovarianceChi2Correction();
+  if (ld->HasCovariance()) chiSquared += ld->CovarianceChi2Correction(results());
   return chiSquared;
 }
 
@@ -1056,7 +1063,7 @@ double AZUREAPI::EvaluateFilledChi2(vector_r *res) const {
 double AZUREAPI::FilledModelPenalties() const {
   // Park's J > 0 wall, the abundance priors and sum-to-one, measured scattering lengths (Objective T6, T7, T9).
   const vector_r none;
-  return Objective::Engine().ModelChi2(ObjectiveContext{compound(), data(), none, configure()});
+  return Objective::Engine().ModelChi2(ObjectiveContext{compound(), data(), results(), none, configure()});
 }
 
 double AZUREAPI::CalculateChi2RWA(const vector_r &rwaParams) const {
@@ -1142,8 +1149,8 @@ double AZUREAPI::CalculateChi2Physical(const vector_r &physicalParams) const {
   // global minimum of any minimiser driving this function.
   if (!isValid) return std::numeric_limits<double>::infinity();
 
-  localCompound->FillMnParams(params.GetMinuitParams());
-  localData->FillMnParams(params.GetMinuitParams());
+  localCompound->FillMnParams(params);
+  localData->FillMnParams(params);
   localCompound->FillCompoundFromParams(params.GetMinuitParams().Params());
   // The tail of the physical vector (normalizations, energy shifts, screening)
   // is the same in both bases (all_ is the transformed R-matrix block plus
@@ -1152,7 +1159,7 @@ double AZUREAPI::CalculateChi2Physical(const vector_r &physicalParams) const {
   // its norm entries, 2026-10-26; thm 783fef9, dev 7284d09).
   localData->FillNormsFromParams(params_);
   // After the compound: the sub-point grids are laid out from its fit values.
-  localData->FillEnergyShiftsFromParams(params_, localData, localCompound, &configure());
+  localData->FillEnergyShiftsFromParams(params_, results(), localData, localCompound, &configure());
   if (configure().paramMask & Config::USE_BRUNE_FORMALISM) localCompound->CalcShiftFunctions(configure());
 
   if (const PriorCovariance *pc = localData->GetPriorCovariance()) localData->SetPriorCovarianceChi2(pc->Chi2(params_));
@@ -1162,7 +1169,7 @@ double AZUREAPI::CalculateChi2Physical(const vector_r &physicalParams) const {
 
 std::vector<AZUREAPI::THMRows> AZUREAPI::ComputeTHMRows(const vector_r &full,
                                                         const ParamIndexMap &pmap) const {
-  return ::ComputeTHMRows(compound(), data(), configure(), full, pmap);
+  return ::ComputeTHMRows(compound(), data(), results(), configure(), full, pmap);
 }
 
 
@@ -1176,7 +1183,7 @@ bool AZUREAPI::Chi2GradEGammaNorm(const vector_r &full, vector_r &gradFull,
   EData *ld = data();
   lc->FillCompoundFromParams(full);
   ld->FillNormsFromParams(full);
-  ld->FillEnergyShiftsFromParams(full, ld, lc, &configure());
+  ld->FillEnergyShiftsFromParams(full, results(), ld, lc, &configure());
 
   vector_matrix_r shiftDeriv;
   const vector_matrix_r *sdp = nullptr;
@@ -1198,8 +1205,8 @@ bool AZUREAPI::Chi2GradEGammaNorm(const vector_r &full, vector_r &gradFull,
   // every residual of the group first (one forward pass of those points), and the
   // group's chi2 is r^T M^-1 r in place of the sum of r_i^2 accumulated below.
   if (ld->HasCovariance()) {
-    ld->PrepareCovarianceSeeds(lc, configure());
-    chi2 += ld->CovarianceChi2Correction();
+    ld->PrepareCovarianceSeeds(lc, configure(), results());
+    chi2 += ld->CovarianceChi2Correction(results());
   }
   FitBarFn fb = [&](ESegment *seg, int i, int pid, double model) -> double {
     EPoint *pt = seg->GetPoint(pid + 1);
@@ -1239,7 +1246,7 @@ bool AZUREAPI::Chi2GradEGammaNorm(const vector_r &full, vector_r &gradFull,
     return 2.0 * r / (err * err);
   };
 
-  bool ok = AccumulateEGammaGradient(lc, ld, configure(), pmap, sdp, fb, accum);
+  bool ok = AccumulateEGammaGradient(lc, ld, results(), configure(), pmap, sdp, fb, accum);
   // Measured scattering lengths: the level-matrix adjoint at each threshold (false -> finite differences).
   if (ok && lc->HasScatteringLengthConstraints())
     ok = ScatteringLength::Chi2Gradient(lc, configure(), lc->ScatteringLengthConstraints(), accum, sdp);
@@ -1247,7 +1254,7 @@ bool AZUREAPI::Chi2GradEGammaNorm(const vector_r &full, vector_r &gradFull,
     if (configure().paramMask & Config::USE_PARK_FORMALISM) AddParkPenaltyGradient(lc, configure(), accum);
     if (lc->HasAbundanceBlock()) AddAbundancePenaltyGradient(lc, configure(), accum);
     // Their values: the model terms of the objective (T6, T7, T9; before 2026-11-09 added here in the order 9, 6, 7).
-    chi2 += Objective::Engine().ModelChi2(ObjectiveContext{lc, ld, full, configure()});
+    chi2 += Objective::Engine().ModelChi2(ObjectiveContext{lc, ld, results(), full, configure()});
     accum.Scatter(pmap, gradFull);
     for (int s = 1; s <= ld->NumSegments(); s++) {
       ESegment *seg = ld->GetSegment(s);
@@ -1288,7 +1295,7 @@ vector_r AZUREAPI::CalculateChi2GradRWA(const vector_r &params) const {
         // A THM experiment, profiled by ComputeTHMRows: its residuals.
         for (double r : tr.r) c += r * r;
       } else if (seg->IsProfiledNorm()) {
-        c = seg->ProfileNormChiSquared();
+        c = seg->ProfileNormChiSquared(results());
       } else {
         for (double r : tr.r) c += r * r;
       }
@@ -1336,11 +1343,11 @@ bool AZUREAPI::NuisancePriorOf(int f, double &nominal, double &sigma) const {
     nuisanceRead_ = true;
     // A scratch parameter set: the limits manager applies the settings to it, not to the session's parameters.
     nuisanceParams_.reset(new AZUREParams);
-    compound()->FillMnParams(nuisanceParams_->GetMinuitParams(), &configure());
-    data()->FillMnParams(nuisanceParams_->GetMinuitParams());
+    compound()->FillMnParams(*nuisanceParams_, &configure());
+    data()->FillMnParams(*nuisanceParams_);
     nuisance_.reset(new ParameterLimitsManager(&configure(), compound(), data(), nuisanceParams_.get()));
     if (nuisance_->ReadParameterSettings())
-      nuisance_->ApplyAllParameterSettings(nuisanceParams_->GetMinuitParams());
+      nuisance_->ApplyAllParameterSettings(*nuisanceParams_);
   }
   if (!nuisance_) return false;
   // A parameter of the prior covariance has no diagonal prior of its own (objective.md D3).
@@ -1380,7 +1387,7 @@ double AZUREAPI::CalculateObjectiveRWA(const vector_r &params, std::vector<doubl
   const vector_r full = MapPackedToFull(params, all_rwa_, fixed_);
   FillFromFullRWA(full);
   EvaluateFilledChi2(nullptr);  // the model value of every point (the objective's data term recomputes the sum)
-  ObjectiveContext context{compound(), data(), full, configure()};
+  ObjectiveContext context{compound(), data(), results(), full, configure()};
   context.storeTotals = true;
   context.termsOut = terms;
   context.segmentPriorsOut = segments;
@@ -1417,7 +1424,7 @@ vector_r AZUREAPI::CalculateResidualJacobianRWA(const vector_r &params, const st
   EData *ld = data();
   lc->FillCompoundFromParams(full);
   ld->FillNormsFromParams(full);
-  ld->FillEnergyShiftsFromParams(full, ld, lc, &configure());
+  ld->FillEnergyShiftsFromParams(full, results(), ld, lc, &configure());
 
   vector_matrix_r shiftDeriv;
   const vector_matrix_r *sdp = nullptr;
@@ -1433,7 +1440,7 @@ vector_r AZUREAPI::CalculateResidualJacobianRWA(const vector_r &params, const st
   // THM rows are left zero by the adjoint and filled here: residuals with the
   // profiled norm, Jacobian from the HOES adjoint plus the
   // analytic dependence of the profiled scale (see ComputeTHMRows).
-  bool ok = ComputeResidualJacobian(lc, ld, configure(), pmap, sdp, residuals, jacobian, nCols,
+  bool ok = ComputeResidualJacobian(lc, ld, results(), configure(), pmap, sdp, residuals, jacobian, nCols,
                                     /*skipTHM=*/true);
 
   if (!ok) return vector_r{-1.0};
@@ -1481,7 +1488,7 @@ vector_r AZUREAPI::CalculateResidualJacobianRWA(const vector_r &params, const st
     bool anyTHM = false;
     for (int i = 1; i <= ld->NumSegments(); i++) anyTHM = anyTHM || (ld->GetSegment(i) && ld->GetSegment(i)->IsTHM());
     if (!anyTHM) {
-      FillShiftColumns(lc, ld, configure(), pmap, fixed_, full, &skip, residuals.size(), nCols, jacobian);
+      FillShiftColumns(lc, ld, results(), configure(), pmap, fixed_, full, &skip, residuals.size(), nCols, jacobian);
     } else {
       const size_t nRes = residuals.size();
       vector_r rPlus, rMinus;
@@ -1572,7 +1579,7 @@ vector_r AZUREAPI::CalculateModelGradientsRWA(const vector_r &params) const {
   EData *ld = data();
   lc->FillCompoundFromParams(full);
   ld->FillNormsFromParams(full);
-  ld->FillEnergyShiftsFromParams(full, ld, lc, &configure());
+  ld->FillEnergyShiftsFromParams(full, results(), ld, lc, &configure());
 
   vector_matrix_r shiftDeriv;
   const vector_matrix_r *sdp = nullptr;
@@ -1594,7 +1601,7 @@ vector_r AZUREAPI::CalculateModelGradientsRWA(const vector_r &params) const {
   // THM (HOES) rows come from the HOES adjoint (the T-matrix adjoint does not
   // cover them); see ComputeTHMRows.
   std::map<EPoint *, vector_r> grad;
-  if (!ComputeModelGradients(lc, ld, configure(), pmap, sdp, grad, /*skipTHM=*/true))
+  if (!ComputeModelGradients(lc, ld, results(), configure(), pmap, sdp, grad, /*skipTHM=*/true))
     return vector_r{-1.0};
   {
     std::vector<THMRows> thm = ComputeTHMRows(full, pmap);
@@ -1655,8 +1662,7 @@ vector_r AZUREAPI::GetNormalizationIndices() {
   int totalParams = all_rwa_.size();
   for (int i = 0; i < totalParams; ++i) {
     if (!fixed_[i]) {
-      // A segment norm (by form: a cbkg name can contain "norm")
-      if (AZURELabel::IsNormName(names_[i])) {
+      if (records_[i].kind == ParamKind::Norm) {
         indices.push_back(k);
       }
       ++k;
@@ -1673,8 +1679,9 @@ vector_r AZUREAPI::GetEnergyShiftIndices() {
   int totalParams = all_rwa_.size();
   for (int i = 0; i < totalParams; ++i) {
     if (!fixed_[i]) {
-      // A segment energy shift (by form: a cbkg name can contain "shift")
-      if (AZURELabel::IsEnergyShiftName(names_[i])) {
+      // Every energy-shift term: the constant, the sqrt(E) coefficient and the shift-function parameters
+      const ParamKind kind = records_[i].kind;
+      if (kind == ParamKind::EnergyShift || kind == ParamKind::EnergyShiftSqrt || kind == ParamKind::EnergyShiftFn) {
         indices.push_back(k);
       }
       ++k;
@@ -1700,6 +1707,10 @@ vector_r AZUREAPI::GetParameterInfo() const {
                   double level, double levelE, double channel, double L,
                   double S, double pair, double radtype, double segKey,
                   double wignerLimit, double inputIsRWA) {
+    // The walk below mirrors the creation order; the record, written at creation, says what the parameter is.
+    if (gi < (int)records_.size() && (double)(int)records_[gi].kind != type)
+      throw std::logic_error("GetParameterInfo: parameter " + std::to_string(gi) + " is not of kind " +
+                             std::to_string((int)type) + " in its record");
     info.push_back(type);
     info.push_back(jgroup);
     info.push_back(J);

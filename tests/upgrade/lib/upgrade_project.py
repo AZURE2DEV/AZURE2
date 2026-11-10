@@ -11,7 +11,7 @@ Only the standard library and numpy are needed (no pyazr), so the generators
 and the golden comparison run wherever the CLI runs.
 
 The ``.azr`` formats are those of docs/source/reference/data_formats.rst
-(``<levels>``: 31 columns, ``include/NucLine.h``; ``<segmentsData>``:
+(``<levels>``: 31 columns, ``io/include/azure2/io/LevelRows.h``; ``<segmentsData>``:
 ``include/SegLine.h``; ``<segmentsTest>``: ``include/ExtrapLine.h``).
 """
 

@@ -9,8 +9,14 @@ the same calculations with and without the variable and requires equal results:
   CLI    T1, T2, T3: menu 1 (calculate with data) and menu 3 (extrapolate); T1 also a short fit (menu 2,
          --max-calls), which goes through the pooled working copies and the analytic gradient.  Every output
          file must be byte for byte the same.
+  rate   tests/reaction_rate's p12C model, menu 5 (reaction rate): each rate point evaluates into a buffer of its
+         own (EPoint::UsePrivateRecord), poisoned as every other; reactionrates.out byte for byte.
   pyazr  T1, T2, T3: the values, E1 and E2 parts, angles, energies and angular-distribution coefficients of
-         every segment (AZUREAPI::UpdateSegments), each in its own process (the variable is read once).
+         every segment (AZUREAPI::UpdateSegments), each in its own process (the variable is read once).  The
+         session owns the buffer it evaluates into (AZUREAPI::results()).
+
+Every owner of a buffer is covered: the CLI calculation (menus 1 and 3), the fit's pooled working copies and the
+iteration snapshot (menu 2), the reaction rate (menu 5) and the Python session.
 
 Known case, accepted and listed: K1 -- the API returns the E1 and E2 parts of every point
 (AZUREAPI::UpdateSegments), but the evaluation writes them only for an angle-integrated cross section
@@ -38,6 +44,25 @@ import upgrade_project as up  # noqa: E402
 PROJECTS = {"T1": "T1.azr", "T2": "T2.azr", "T3": "T3.azr"}
 MENUS = {"calc": "1\n\n\n7\n", "extrap": "3\n\n\n7\n"}
 FIT = ("T1", "2\nn\n\n\n7\n", ["--max-calls=30"])
+RATE_DIR = os.path.normpath(os.path.join(HERE, "..", "reaction_rate"))
+RATE_MENU = "5\n\n1\n2\nyes\ntemperatures.dat\n"  # no parameter file, entrance 1, exit 2, temperatures from a file
+
+
+def run_rate(binary, poison, tmp):
+    """Menu 5 on tests/reaction_rate/models/p12C.azr: the output files, as run_cli."""
+    d = tempfile.mkdtemp(dir=tmp)
+    shutil.copy(os.path.join(RATE_DIR, "models", "p12C.azr"), os.path.join(d, "t.azr"))
+    shutil.copy(os.path.join(RATE_DIR, "temperatures.dat"), d)
+    for sub in ("output", "checks"):
+        os.makedirs(os.path.join(d, sub))
+    env = dict(os.environ, AZURE_POISON_RESULTS="1" if poison else "0")
+    r = subprocess.run([binary, "--no-gui", "--no-readline", "--no-coulomb-table", "t.azr"], input=RATE_MENU, cwd=d,
+                       env=env, capture_output=True, text=True, timeout=1800)
+    out = {}
+    for f in sorted(os.listdir(os.path.join(d, "output"))):
+        with open(os.path.join(d, "output", f), "rb") as fh:
+            out[f] = fh.read()
+    return r.returncode, out
 
 
 def run_cli(binary, project, menu, extra, poison, tmp):
@@ -52,6 +77,10 @@ def run_cli(binary, project, menu, extra, poison, tmp):
         shutil.rmtree(os.path.join(d, sub), ignore_errors=True)
         os.makedirs(os.path.join(d, sub))
     env = dict(os.environ, AZURE_POISON_RESULTS="1" if poison else "0")
+    if any(a.startswith("--max-calls") for a in extra):
+        # A fit bounded by --max-calls is reproducible at one thread only: Minuit2's call counter is not atomic, so
+        # with several threads the same fit can run one more iteration (docs/upgrade/fit_threads.md, cause B).
+        env["OMP_NUM_THREADS"] = "1"
     r = subprocess.run([binary, "--no-gui", "--no-readline", "--no-coulomb-table", *extra, PROJECTS[project]],
                        input=menu, cwd=d, env=env, capture_output=True, text=True, timeout=1800)
     out = {}
@@ -120,6 +149,16 @@ def main():
                 if plain.get(f) != poisoned.get(f):
                     problems.append(f"{project} {name}: output/{f} differs with poisoning")
             print(f"{project} {name}: {len(plain)} files compared")
+        rc0, plain = run_rate(binary, False, tmp)
+        rc1, poisoned = run_rate(binary, True, tmp)
+        if rc0 != rc1 or rc0 != 0:
+            problems.append(f"rate: exit {rc0} without, {rc1} with poisoning")
+        if "reactionrates.out" not in plain:
+            problems.append("rate: no reactionrates.out")
+        for f in sorted(set(plain) | set(poisoned)):
+            if plain.get(f) != poisoned.get(f):
+                problems.append(f"rate: output/{f} differs with poisoning")
+        print(f"rate p12C: {len(plain)} files compared")
     try:
         import pyazr.azure2  # noqa: F401
         have_api = True

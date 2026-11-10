@@ -2,6 +2,7 @@
 #define AZUREGRAD_H
 
 #include "Constants.h"
+#include "ParameterKind.h"
 #include <vector>
 #include <map>
 #include <tuple>
@@ -12,6 +13,9 @@ class EData;
 class Config;
 class EPoint;
 class ESegment;
+namespace azure2 {
+struct Results;
+}
 class ParamIndexMap;
 
 /*!
@@ -29,21 +33,7 @@ class ParamIndexMap;
  * flat vector the sampler perturbs.
  */
 
-/// Kinds of fit parameter, in their flat-vector ordering.
-enum class ParamKind {
-  LevelEnergy,  ///< E_lambda  for a (jGroup, level)
-  Gamma,        ///< gamma_lambda,c for a (jGroup, level, channel)
-  Norm,         ///< dataset normalization n_k for a segment
-  EnergyShift,  ///< per-segment energy shift (constant term)
-  EnergyShiftSqrt,  ///< per-segment sqrt(E) energy-shift coefficient
-  EnergyShiftFn,    ///< parameter aj of a segment's shift function ("shiftfn")
-  Abundance,        ///< isotopic abundance of a compound nucleus (projects with an <abundances> block)
-  Screening,        ///< electron-screening potential U_e (eV) of a <targetInt> line with a screening block
-  Density,          ///< fitted areal density (atoms/cm^2) of a <targetInt> line or density group (densityfit)
-  Doppler,          ///< fitted free-gas Doppler temperature (K) of a <targetInt> line ('doppler T vary sigma')
-  Thickness,        ///< fitted sample thickness (atoms/barn) of a transmission / yield segment ('transmission n vary sigma')
-  ThmCoherent       ///< Re or Im of a THM coherent-background amplitude (cbackground=)
-};
+// ParamKind, the kinds of fit parameter: ParameterKind.h (one enumeration for the engine, the API and pyazr).
 
 /// Description of one entry in the full (unfiltered) flat parameter vector.
 struct ParamDesc {
@@ -314,7 +304,7 @@ void AddAbundancePenaltyGradient(CNuc *compound, const Config &configure, GradAc
  */
 using FitBarFn = std::function<double(ESegment *, int, int, double)>;
 
-bool AccumulateEGammaGradient(CNuc *compound, EData *data, const Config &config,
+bool AccumulateEGammaGradient(CNuc *compound, EData *data, azure2::Results &results, const Config &config,
                               const ParamIndexMap &pmap,
                               const vector_matrix_r *shiftDeriv,
                               const FitBarFn &fitBarFn,
@@ -341,7 +331,7 @@ bool AccumulateEGammaGradient(CNuc *compound, EData *data, const Config &config,
  * row) but left zero, for a caller that fills them itself -- AZUREAPI does, with
  * the profiled norm (see ComputeTHMRows).
  */
-bool ComputeResidualJacobian(CNuc *compound, EData *data, const Config &config,
+bool ComputeResidualJacobian(CNuc *compound, EData *data, azure2::Results &results, const Config &config,
                              const ParamIndexMap &pmap,
                              const vector_matrix_r *shiftDeriv,
                              vector_r &residuals, vector_r &jacobian, int &nCols,
@@ -376,7 +366,8 @@ struct ShiftColumnCount {
  * left at `full`.  Defined in AZURECalc.cpp, beside the shift helpers the
  * analytic gradient shares.
  */
-ShiftColumnCount FillShiftColumns(CNuc *compound, EData *data, const Config &config, const ParamIndexMap &pmap,
+ShiftColumnCount FillShiftColumns(CNuc *compound, EData *data, azure2::Results &results, const Config &config,
+                                  const ParamIndexMap &pmap,
                                   const std::vector<bool> &fixed, const vector_r &full,
                                   const std::vector<char> *skipPacked, size_t nRes, int nCols, vector_r &jac);
 
@@ -390,7 +381,7 @@ ShiftColumnCount FillShiftColumns(CNuc *compound, EData *data, const Config &con
  *        (HOES) points are left zero for the caller to fill (the adjoint
  *        differentiates the T-matrix observable, not the HOES one).
  */
-bool ComputeModelGradients(CNuc *compound, EData *data, const Config &config,
+bool ComputeModelGradients(CNuc *compound, EData *data, azure2::Results &results, const Config &config,
                            const ParamIndexMap &pmap,
                            const vector_matrix_r *shiftDeriv,
                            std::map<EPoint *, vector_r> &gradByPoint,
@@ -443,7 +434,7 @@ struct THMRows {
  * filled at `full`, each THM point's fit cross section set to its model and a
  * profiled segment's norm to n*.
  */
-std::vector<THMRows> ComputeTHMRows(CNuc *compound, EData *data, const Config &config,
+std::vector<THMRows> ComputeTHMRows(CNuc *compound, EData *data, azure2::Results &results, const Config &config,
                                     const vector_r &full, const ParamIndexMap &pmap);
 
 #endif

@@ -9,16 +9,21 @@ radiation type) -- without having to parse the parameter names by hand.
 
 The numeric metadata is produced by ``AZUREAPI::GetParameterInfo`` (command
 ``GET_PARAMS_INFO``); see ``api/include/AZUREAPI.h`` for the field layout, which
-``Parameter.from_record`` mirrors.
+``Parameter.from_record`` mirrors.  What a parameter is -- its ``kind`` and what
+it belongs to -- comes from the record the engine writes where it creates the
+parameter (``Session.parameter_records``), never from its name.
 """
 
 from dataclasses import dataclass, fields
 from typing import Optional
 
 
-# Parameter kinds, indexed by the integer ``type`` code in the C++ record.
-_KINDS = {0: "energy", 1: "width", 2: "norm", 3: "shift", 4: "shift_sqrt", 5: "shift_fn",
-          6: "abundance", 7: "screening", 8: "density", 9: "doppler", 10: "thickness", 11: "cbkg"}
+def parameter_kinds():
+    """The kinds of fit parameter as the engine defines them (``ParameterKind.h``): one dict per kind, in the order of
+    their ``type`` codes, with ``code``, ``key`` (:attr:`Parameter.kind`), ``unit``, ``owner`` (the record fields that
+    say what it belongs to), ``own_prior``, ``segment_field``, ``vary_from_project`` and ``doc``."""
+    from . import _azure2
+    return _azure2.parameter_kinds()
 
 
 @dataclass(frozen=True)
@@ -68,7 +73,7 @@ class Parameter:
 
     index: int                      # position among *all* parameters
     name: str                       # raw AZURE2 parameter name
-    kind: str                       # 'energy' | 'width' | 'norm' | 'shift' | 'shift_sqrt' | 'shift_fn' | 'abundance' | 'screening' | 'density' | 'doppler' | 'thickness' | 'cbkg'
+    kind: str                       # the engine's key of its kind (parameter_kinds()): 'energy' | 'width' | 'norm' | 'shift' | 'shift_sqrt' | 'shift_fn' | 'abundance' | 'screening' | 'density' | 'doppler' | 'thickness' | 'cbkg'
     fixed: bool                     # held fixed during the fit?
     value: float                    # current (physical) value
     free_index: Optional[int]       # position among the non-fixed parameters
@@ -138,6 +143,17 @@ class Parameter:
     sample_kind: Optional[str] = None
     thickness_leader: Optional[int] = None
 
+    # THM coherent background (``kind == 'cbkg'``): the experiment, the combination as ``cbackground=`` writes it
+    # (J^pi text, exit pair key, "s,l,s',l'") and which coefficient: 0 Re c0, 1 Im c0, 2 Re c1, 3 Im c1.
+    thm_experiment: Optional[str] = None
+    thm_jpi: Optional[str] = None
+    thm_exit_key: Optional[int] = None
+    thm_channels: Optional[str] = None
+    thm_term: Optional[int] = None
+
+    # 1-based level count over all J groups (energy / width parameters): the numbering of param files and the GUI.
+    level_number: Optional[int] = None
+
     @property
     def nucleus(self):
         """``(Z, A)`` of an abundance parameter's compound nucleus, else ``None``."""
@@ -159,38 +175,56 @@ class Parameter:
         return f"{j}{'+' if self.parity > 0 else '-'}"
 
     @classmethod
-    def from_record(cls, index, name, record, free_index=None):
+    def from_record(cls, index, name, record, free_index=None, owner=None):
         """Build a :class:`Parameter` from one numeric record + its name.
 
         ``record`` is the slice of ``_NFIELDS`` doubles for this parameter as
-        returned by ``GET_PARAMS_INFO``.
+        returned by ``GET_PARAMS_INFO``; ``owner`` its dict of
+        ``Session.parameter_records()`` (kind and owner fields, from the record
+        the engine writes where it creates the parameter).  Without ``owner``
+        the kind comes from the type code and the string owner fields (an
+        abundance's sample name, a THM background's combination) are ``None``.
         """
         (type_code, jgroup, J, parity, level, level_energy, channel, L, S,
          pair, radtype, fixed, value, segment_key, wigner_limit,
          input_is_rwa) = record
+        owner = owner or {}
+        code = int(round(type_code))
+        kind = owner.get("kind") or {k["code"]: k["key"] for k in parameter_kinds()}.get(code, "unknown")
 
         rad = chr(int(round(radtype))) if radtype != -1 else None
 
         if int(round(type_code)) == 6:
             # an isotopic abundance: Z rides in the jgroup field, A in the level
             # field, the 1-based sample in the channel field and the prior sigma
-            # in the Wigner-limit field (AZUREAPI.h); the sample's name is in
-            # the parameter name, abundance[_<sample>]_<Z>_<A>
-            stem = name[len("abundance_"):] if name.startswith("abundance_") else name
-            sample = stem.rsplit("_", 2)[0] if stem.count("_") >= 2 else ""
+            # in the Wigner-limit field (AZUREAPI.h); the sample's name in the
+            # record (owner)
             return cls(
-                index=index, name=name, kind="abundance",
+                index=index, name=name, kind=kind,
                 fixed=bool(round(fixed)), value=float(value), free_index=free_index,
                 nucleus_Z=int(round(jgroup)), nucleus_A=int(round(level)),
-                prior_sigma=float(wigner_limit), sample=sample,
+                prior_sigma=float(wigner_limit), sample=owner.get("sample_name"),
                 sample_index=int(round(channel)) if channel >= 1 else None,
+            )
+
+        if int(round(type_code)) == 11:
+            # a THM coherent background: the numeric fields as below, the combination from the record (owner)
+            return cls(
+                index=index, name=name, kind=kind,
+                fixed=bool(round(fixed)), value=float(value), free_index=free_index,
+                jgroup=_opt(jgroup, integer=True), J=_opt(J), parity=_opt(parity, integer=True, sentinel=0.0),
+                channel=_opt(channel, integer=True), L=_opt(L, integer=True), S=_opt(S),
+                pair=_opt(pair, integer=True),
+                thm_experiment=owner.get("thm_experiment"), thm_jpi=owner.get("thm_jpi"),
+                thm_exit_key=owner.get("thm_exit_key"), thm_channels=owner.get("thm_channels"),
+                thm_term=owner.get("thm_term"),
             )
 
         if int(round(type_code)) == 7:
             # an electron-screening potential (eV): the effect number rides in the channel field, the
             # prior centre in the level-energy field and its sigma in the Wigner-limit field (AZUREAPI.h)
             return cls(
-                index=index, name=name, kind="screening",
+                index=index, name=name, kind=kind,
                 fixed=bool(round(fixed)), value=float(value), free_index=free_index,
                 effect=int(round(channel)), prior_nominal=float(level_energy),
                 prior_sigma=float(wigner_limit),
@@ -200,7 +234,7 @@ class Parameter:
             # a fitted target density (atoms/cm^2): the effect number in the channel field, the prior centre in
             # the level-energy field, its sigma in the Wigner-limit field and the grids' largest density in S
             return cls(
-                index=index, name=name, kind="density",
+                index=index, name=name, kind=kind,
                 fixed=bool(round(fixed)), value=float(value), free_index=free_index,
                 effect=int(round(channel)), prior_nominal=float(level_energy),
                 prior_sigma=float(wigner_limit), density_max=float(S),
@@ -209,7 +243,7 @@ class Parameter:
         if int(round(type_code)) == 9:
             # a fitted Doppler temperature (K): as a density, the layout temperature in S
             return cls(
-                index=index, name=name, kind="doppler",
+                index=index, name=name, kind=kind,
                 fixed=bool(round(fixed)), value=float(value), free_index=free_index,
                 effect=int(round(channel)), prior_nominal=float(level_energy),
                 prior_sigma=float(wigner_limit), doppler_max=float(S),
@@ -220,7 +254,7 @@ class Parameter:
             # prior sigma in the Wigner-limit field, 0/1 (transmission/yield) in the channel field and a follower's
             # leader key in L (AZUREAPI.h)
             return cls(
-                index=index, name=name, kind="thickness",
+                index=index, name=name, kind=kind,
                 fixed=bool(round(fixed)), value=float(value), free_index=free_index,
                 segment_key=int(round(segment_key)), prior_nominal=float(level_energy),
                 prior_sigma=float(wigner_limit), sample_kind="yield" if int(round(channel)) == 1 else "transmission",
@@ -230,7 +264,7 @@ class Parameter:
         return cls(
             index=index,
             name=name,
-            kind=_KINDS.get(int(round(type_code)), "unknown"),
+            kind=kind,
             fixed=bool(round(fixed)),
             value=float(value),
             free_index=free_index,
@@ -248,6 +282,7 @@ class Parameter:
             input_is_rwa=(bool(round(input_is_rwa))
                           if input_is_rwa != -1 else None),
             segment_key=_opt(segment_key, integer=True),
+            level_number=owner.get("level_number"),
         )
 
     def __repr__(self):

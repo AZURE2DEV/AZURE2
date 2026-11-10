@@ -48,7 +48,7 @@ class THMMatrixFunc : public AMatrixFunc {
  public:
   THMMatrixFunc(CNuc *compound, const Config &configure);
   /// Computes the HOES cross section for the point and stores it as the fit XS.
-  void CalculateTHMCrossSection(EPoint *point);
+  void CalculateTHMCrossSection(EPoint *point, azure2::Results &results);
   /*!
    * Reverse-mode derivative of the HOES cross section of `point` (one point
    * or folding sub-point, before any folding): accumulates fitBar d sigma/dE

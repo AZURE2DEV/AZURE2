@@ -1,6 +1,8 @@
 #include <cmath>
 #include "AZURECalc.h"
 #include "AZUREMain.h"
+#include "CNucChecks.h"
+#include "CNucReport.h"
 #include "Objective.h"
 #include "ScatteringLength.h"
 #include "ParameterLabel.h"
@@ -72,7 +74,7 @@ int AZUREMain::operator()() {
     return -1;
   }
   if ((configure().screenCheckMask | configure().fileCheckMask) &
-      Config::CHECK_COMPOUND_NUCLEUS) compound()->PrintNuc(configure());
+      Config::CHECK_COMPOUND_NUCLEUS) WriteCompoundNucleusCheck(*compound(), configure());
 
   if (!(configure().paramMask & Config::CALCULATE_REACTION_RATE)) {
     // Fill the data object from the segments and data file
@@ -123,8 +125,8 @@ int AZUREMain::operator()() {
 
   // Create new parameters for minuit, fill them from compound nucleus object and data file.
   AZUREParams params;
-  compound()->FillMnParams(params.GetMinuitParams(), &configure());
-  data()->FillMnParams(params.GetMinuitParams());
+  compound()->FillMnParams(params, &configure());
+  data()->FillMnParams(params);
   if (configure().paramMask & Config::USE_PREVIOUS_PARAMETERS) {
     configure().outStream << "Reading User Parameter File..." << std::endl;
     params.ReadUserParameters(configure());
@@ -174,14 +176,18 @@ int AZUREMain::operator()() {
     configure().outStream << "Applying parameter settings with Parameter Manager..." << std::endl;
     ParameterLimitsManager limitsManager(&configure(), compound(), data(), &params);
     limitsManager.ReadParameterSettings();
-    limitsManager.ApplyAllParameterSettings(params.GetMinuitParams());
+    limitsManager.ApplyAllParameterSettings(params);
 
     // Warn once if a level has a radiative width comparable to its particle width,
     // where the R-Matrix treatment of capture breaks down.
-    compound()->CheckRadiativeWidths(configure(), params.GetMinuitParams().Params());
+    if (compound()->ObservedWidthsAt(configure(), params.GetMinuitParams().Params()))
+      WarnLargeRadiativeWidths(*compound(), configure());
 
+    // The buffer of the evaluations on data() (the calculation, the final evaluation after a fit): this run owns it,
+    // and the output files and the band read it (docs/upgrade/data_model.md S3).
+    azure2::Results results;
     // Declare a new instance of FCNBase
-    AZURECalc theFunc(data(), compound(), configure(), &limitsManager);
+    AZURECalc theFunc(data(), results, compound(), configure(), &limitsManager);
     // The prior covariance replaces the diagonal prior of each of its parameters (docs/upgrade/objective.md D3).
     if (priorCov && priorCov->Size() > 0) {
       const std::vector<std::string> replaced = ReplaceDiagonalPriors(compound(), data(), *priorCov);
@@ -780,9 +786,9 @@ int AZUREMain::operator()() {
           const ROOT::Minuit2::MnUserParameters &mp = params.GetMinuitParams();
           std::vector<std::string> names;
           for (unsigned int i = 0; i < mp.Params().size(); i++) {
-            const std::string &nm = mp.GetName(i);
-            if (!mp.Parameter(i).IsFixed() && (nm.rfind("energy_", 0) == 0 || nm.rfind("width_", 0) == 0))
-              names.push_back(nm);
+            const ParamKind kind = params.Kind((int)i);
+            if (!mp.Parameter(i).IsFixed() && (kind == ParamKind::LevelEnergy || kind == ParamKind::Gamma))
+              names.push_back(mp.GetName(i));
           }
           if ((int)names.size() == bandCov.size()) bandCov.names = names;
         }
@@ -807,7 +813,7 @@ int AZUREMain::operator()() {
                               << std::endl;
       }
       if (!cov.empty()) {
-        if (BuildBandData(compound(), data(), configure(), cov, bandData, &fitFixedMask)) {
+        if (BuildBandData(compound(), data(), results, configure(), cov, bandData, &fitFixedMask)) {
           bandPtr = &bandData;
           configure().outStream << "Writing cross-section uncertainty bands..." << std::endl;
         } else {
@@ -824,7 +830,7 @@ int AZUREMain::operator()() {
         theFunc(params.GetMinuitParams().Params());
       }
     }
-    data()->WriteOutputFiles(configure(), false, bandPtr);
+    data()->WriteOutputFiles(configure(), results, false, bandPtr);
     // s-wave scattering lengths of every particle pair at the parameters just written, and the
     // measured ones of the <scatteringLengths> block: the table goes to scatteringLengths.out only,
     // the run log (GUI execution screen) names the file.
@@ -849,7 +855,8 @@ int AZUREMain::operator()() {
                               configure().rateParams.entrancePair, configure().rateParams.exitPair);
     // Warn once if a level has a radiative width comparable to its particle width,
     // where the R-Matrix treatment of capture breaks down.
-    compound()->CheckRadiativeWidths(configure(), params.GetMinuitParams().Params());
+    if (compound()->ObservedWidthsAt(configure(), params.GetMinuitParams().Params()))
+      WarnLargeRadiativeWidths(*compound(), configure());
     if (configure().paramMask & Config::USE_BRUNE_FORMALISM)
       compound()->CalcShiftFunctions(configure());
     if (configure().rateParams.useFile)
@@ -868,7 +875,7 @@ int AZUREMain::operator()() {
                           << std::endl;
     return -1;
   }
-  compound()->PrintTransformParams(configure());
+  WriteParametersOut(*compound(), configure());
 
   // Cleanup shared EC amplitude cache
   if (configure().paramMask & Config::USE_EXTERNAL_CAPTURE) {

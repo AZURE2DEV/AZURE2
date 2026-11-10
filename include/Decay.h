@@ -58,8 +58,10 @@ class Decay {
   void AddKLGroup(KLGroup);
   /// \f$s,s'\f$ group \p i, 1-based.
   KGroup *GetKGroup(int);
+  const KGroup *GetKGroup(int i) const { return &kgroups_[i - 1]; }
   /// \f$k,L\f$ group \p i, 1-based.
   KLGroup *GetKLGroup(int);
+  const KLGroup *GetKLGroup(int i) const { return &klgroups_[i - 1]; }
 
   //! Capture analyzing-power terms, filled by CNuc::CalcCaptureAnalyzingPower.
   int NumCaptureAyTerms() const;

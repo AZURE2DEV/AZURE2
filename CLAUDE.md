@@ -173,7 +173,8 @@ how each was checked:
 - **No hidden state.** Constant tables (masses, constants, the schema) are built
   once and reached through a function returning a `const` reference; nothing
   else is global. What a calculation writes belongs to the caller and is passed
-  in (`Results`, per-stage tables, scratch). Do not add a function-level
+  in (`Results`, per-stage tables, scratch); a point or a data set holds where
+  its record lies, never a buffer [`repo_consistency_test.py` check 25]. Do not add a function-level
   `static` or `thread_local` that holds a computed value, or a cache keyed by
   the last call. The mutable statics still in `src/` go in Phase 6
   (`docs/upgrade/ARCHITECTURE.md` section 9).
@@ -225,23 +226,57 @@ bypassed. Run it first (under a second), then the build and the tests of "Defini
 
 **A CLI flag.** `parseOptions`, `printHelp` and `docs/source/reference/command_line.rst` [check 1].
 
+**A new kind of fit parameter** (a nuisance, an apparatus parameter; `docs/upgrade/parameter_kinds.md`). What a
+parameter is lives in its record, never in its name [check 23: no prefix or suffix test of a parameter name].
+1. `include/ParameterKind.h`: the enum value (the next code) and its `ParamKindTable()` row (key, unit, owner fields,
+   `ownPrior` / `segmentField` / `varyFromProject`, doc); a `ParameterRecord` factory for new owner fields.
+2. Create it with `AZUREParams::Add(name, value, step, ParameterRecord::...)` in `CNuc::FillMnParams` or
+   `EData::FillMnParams`, the name built there by one function; every later question asks `params.Record(i)`.
+3. Follow the layout in `BuildParamIndexMap` and `AZUREAPI::GetParameterInfo` (it throws on a kind that disagrees
+   with the record); owner fields in the binding's `parameter_records()` and pyazr's `Parameter.from_record`.
+4. Docs: the kinds table of `reference/output_files.rst` and `parameter_kinds.md` section 1 [check 23]; a project
+   with the kind in `tests/pyazr/parameter_kinds_test.py` (its names rebuilt from the records).
+
 **A format-3 field** (a key of a record kind: `docs/upgrade/project_format3.md`, `experiment/README.md` §2).
-1. One `FieldDef` row in the kind's list in `experiment/src/Schema.cpp`: key, title, value type (`ValueSpec`; a
-   structured value is a `FormSpec` there), where it applies and where it is required (`Condition`), doc. If it depends
-   on the quantity, `ByQ(...)` there and a `QuantityField` in each row of `experiment/src/Quantities.cpp` that uses it.
+1. One `FieldDef` row in its kind's function in `experiment/src/Schema.cpp` (`DatasetKind()`, `TargetKind()`, ...),
+   made by the helper that says where it applies and whether it is required: `Req`, `Opt`, `RequiredWhen`,
+   `OptionalWhen`, `ByQ` (the quantity decides), wrapped in `Repeatable`/`Defaulted`/`RequiredIf` where needed, e.g.
+   `RequiredWhen("charge_state", "Charge state", IntAtLeast(1), Condition::Dimension({"per_charge"}), "the beam's
+   charge state q")`. A structured value is a `FormSpec` of `StructuredValues()` built from `Keyword(...)`/`Unkeyed(...)`
+   alternatives and `Pos`/`Kw`/`OptionalKw` parts. If the field depends on the quantity, `ByQ(...)` there and an
+   `Allows(...)`/`Requires(...)` in each quantity function of `experiment/src/Quantities.cpp` that uses it.
    No parser code: the value type's parser exists (`Parsers.h`); a new value type is a parser plus a case in `ParseValue`.
 2. A fixture line in `experiment/tests/data/` that validates, and a case in `experiment/tests/diagnostics_test.cpp`
    if the field brings a refusal of its own.
 3. `AZURE2 --schema > tests/schema/schema_v3.json`, bump `Schema::kVersion` if an existing project changes meaning
    [check 21: `experiment_schema`, `pyazr_schema`]; `python3 tools/gen_schema_docs.py` [check 18].
 
-**A format-3 quantity.** One `Quantity` row in `experiment/src/Quantities.cpp` (units, column roles, reaction rule,
-required and allowed fields, target kinds, norm rules, tree, EXFOR codes, refusals), a record of it in the `variants`
-of `experiment/tests/quantities_test.cpp` (the test fails for a row without one), then the schema and docs as above;
-later its tree builder (step 3).
+**A format-3 quantity.** One function in `experiment/src/Quantities.cpp` that fills its `Quantity` member by member,
+and its entry in `Quantities()`; members it does not set keep the defaults of `Quantities.h`:
+```cpp
+Quantity SFactor() {
+  Quantity q;
+  q.name = "sfactor";
+  q.title = "Astrophysical S factor";
+  q.doc = "S(E) = E sigma(E) exp(2 pi eta) with the engine's eta and atomic masses (data_kinds.md section 4.1).";
+  q.recordKinds = kDataKinds;
+  q.engineUnit = "MeV*b";
+  q.units = {AnyUnitOf("sfactor")};
+  q.energyRoles = {"E_cm", "E_lab"};
+  q.reaction = {R::kChargedEntrance, "charged entrance"};
+  q.fields = {Allows("multipole", kGammaExit)};
+  q.tree = "Scale_SF(E) o Sigma(r)";
+  q.exfor = {",SIG,,SFC", "PAR,SIG,,SFC", "EP/PAR,SIG,,SFC"};
+  q.refusals = {RefusedAtValidation("E_REACTION_NOT_ALLOWED", "neutral",
+                                    "the S factor is defined for charged particles (Gamow factor)")};
+  return q;
+}
+```
+Then a record of it in the `variants` of `experiment/tests/quantities_test.cpp` (the test fails for a row without
+one), the schema and docs as above; later its tree builder (step 3).
 
-**A format-3 unit.** One `Unit` row in `experiment/src/Units.cpp` (token, dimension, factor to the dimension's engine
-unit, aliases); `experiment_parsers` checks every row's dimension and factor and `experiment_quantities` tries the unit
+**A format-3 unit.** One `Unit` row in `experiment/src/Units.cpp`, `{token, dimension, factor to the dimension's
+engine unit[, aliases]}`, e.g. `{"keV", "energy", 1e-3}`; `experiment_parsers` checks every row's dimension and factor and `experiment_quantities` tries the unit
 on every quantity; then the schema and docs as above.
 
 **A format-3 diagnostic code.** A constant in `experiment/include/azure2/experiment/Diagnostics.h` (`io/`'s reader:
@@ -254,10 +289,16 @@ Reference commits: `git show --stat 062b1bfe` (segment keyword `shiftfngroup`), 
 
 - Put a new feature in its **own class and file**, as `ShftFunc`,
   `CoulombTable`, `DataCovariance` and `ScatteringLength` are. Do not grow the
-  large files further: `EData.cpp` (4300 lines), `CNuc.cpp`, `AMatrixFunc.cpp`,
-  `EPoint.cpp`, `AZURECalc.cpp`, `pyazr/azure2.py`, `pyazr/azrfile.py`.
-  Moving code out of them is welcome, but do it in its own commit with no
-  behaviour change and the full test suite run, never mixed into a feature.
+  large files further: every hand-written source file of `src/`, `include/`,
+  `physics/`, `io/`, `experiment/`, `api/src/`, `pyazr/` and `tools/` above
+  1,000 lines is listed with its line count in
+  `tests/consistency/file_sizes.tsv` [check 26: a listed file may not grow, an
+  unlisted one may not pass 1,000 lines; only the director adds an entry].
+  After shortening a listed file, `python3
+  tests/consistency/repo_consistency_test.py --tighten-sizes` lowers its record
+  (it never raises one). Moving code out of the large files is welcome, but do
+  it in its own commit with no behaviour change and the full test suite run,
+  never mixed into a feature.
 - Use **one definition** of each formula, format and convention, and call it from both
   the engine and the gradient. When pyazr needs it, expose it through
   `_azure2` rather than re-implementing it in Python (pyazr needs the compiled

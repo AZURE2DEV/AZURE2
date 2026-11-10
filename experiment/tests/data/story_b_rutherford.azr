@@ -1,5 +1,8 @@
 # User story (b), docs/upgrade/project_format3.md section 9.2: alpha + 12C elastic scattering as ratio to Rutherford,
 # lab frame, five angles in one file, 3 % common normalization.
+<config>
+format=3
+</config>
 <data>
 dataset aC_RTH
     reaction       12C(a,a)12C
