@@ -2,6 +2,96 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-10 (director, afternoon) — Phase 4: the fourth wave merged (expression tree, plan, `EData` split N1–N4, the engine runs format 3)
+
+**Merged into `feature/upgrade-4-data`** (`--no-ff`, in this order; each rehearsed, built and verified in a scratch
+worktree, the committed tree is that tree): H `feature/upgrade-4-expr` (55fa32ed: S10 the model pass evaluates the
+expression tree, S11 the gradient through `backward`, `--print-predictions`); I `feature/upgrade-4-plan` (8a36a61a: the
+model-pass follow-ups and S5, the calculation plan); P `feature/upgrade-4-edata-split-1` (9dff49fe: `EData` split
+N1–N4); G3 `feature/upgrade-4-format3-reader` (28dbb50a: one `<levels>` table, parameter names from the specs, the engine
+runs a format-3 project, `--describe`). Their entries are below.
+
+**The merged head as a whole** (28dbb50a; build `work/b-trial5`, 0 warnings): 179 × 3 identical to the Phase 3
+head (689 + 662 + 689 files); `ctest -LE slow` 163/163; `tests/run_tests.sh` 140 passed / 0 failed; calculations at 1 and
+3 threads 12/12 identical; T2 with a `<modelData>` section identical at 1 and 3 threads in the three bases; spec
+equivalence: 189 files, 185 converted, 183 equal, 2 recorded, 0 differ; the converted tree (exact grids, menu 1): of
+the 510 (483 formal) output files per basis 472 (445) identical, 38 classified, 0 differ, 0 missing. Not yet run on
+this head: 1 against 8 threads (the machine is shared with three agents).
+
+**What the director changed at the merges** (each in its merge commit's message):
+- pyazr is **2.18.0** (H and G3 both took 2.17.0): `predictions` (H) and `describe` (G3) are both exported
+  (`pyazr/__init__.py`, `pyazr/schema.py`).
+- `src/ProjectCommands.cpp` holds both commands (`--print-predictions`, `--describe`); the consistency test's list of
+  flags handled in `main` has both; `command_line.rst` has both rows.
+- `tests/consistency/file_sizes.tsv` at the merged counts: `AZUREAPI.cpp` 1837, `AZUREGrad.cpp` 1850, `CNuc.cpp` 1894,
+  `EData.cpp` 4793, `EPoint.cpp` 2983, `ESegment.cpp` 1406; `EDataThm.cpp` (773) is off the record.
+- Checked on the combined tree, because no branch could: `--print-predictions` of the converted T2 gives the 13
+  lines of the old file; the converted T2 runs with `AZURE_PLAN_CHECK=1`; its outputs are the old file's but for the
+  two classified files (`param.par`, `normalizations.out`).
+
+**Decisions of the director.**
+- I: the plan's task becomes the unit of work (a task evaluates its host and writes its mapped points without going
+  through the data set) in **Phase 6**, with the mutable statics, not now.
+- P: `EData::ThmGroupEnergyRange` as a public static member is accepted (its callers are free functions of the
+  set-up); it goes into the THM set-up's own file with step M of `edata_split.md`.
+- G3, on its report (the agent implemented them; commits in its entry):
+  1. The converter keeps every abundance row of a sample that a line uses, also a row no line reaches (the isotope
+     from the `<levels>` pairs with the sample's light particle; none or several is a question). The engine's rule
+     that a nucleus a sample does not list counts 1.0 in the sum-to-one prior is unchanged and **open for the targets
+     step**.
+  2. A run that uses no data (menu 3, extrapolation-only pyazr calls) does not need the data files:
+     `BuildOptions::dataFiles` (`Required | NotUsed`), `W_DATA_FILE_NOT_READ`. `--validate` and `--describe` stay
+     strict.
+  3. An unreadable data file refuses a data run (`E_DATA_FILE`); the old engine skipped the segment. Documented.
+  4. The start step of a fixed zero shift differs between the formats (`param.par` only): accepted as classified.
+- The converted-tree gate lives only in `work/fmt3c` (`gate.sh`, `mktree.sh`, `gatecmp.py`, `classify3.py`); it
+  becomes a committed tool with brief K (the director ran it with `work/director/gate.sh`).
+
+**Defects and debts found, not yet fixed** (owner in brackets):
+- An `AZURE_PLAN_CHECK=1` breach throws `std::logic_error` that nothing catches (abort without a message naming the
+  task) [Phase 6, with the task as unit of work].
+- Peak memory did not drop with S5 (the memory is in the tables, not in the points) [S7 measures again; Phase 6].
+- `--print-predictions` names a data set by its index (`data 3:`) also in a format-3 project, where it has a name
+  [S13/S14, with `predict`].
+- `ProjectSetup` re-reads the old sections once per question; `Format3ThmSection` writes old `<thm>` grammar for
+  the parser; level parameters are `energy_<n>` / `width_<n>_<m>` in format 3 [3d; S7/3d; the `<levels>` step].
+- The two T2 benchmarks of H and I differ by a factor 4 in absolute time (0.29 s against 1.1 s for a calculation):
+  each compared with its own start head and found no change, but the conditions differed (not recorded). The
+  director measures the merged head against the Phase 3 head when the machine is free, with 1 against 8 threads
+  [director, end of wave].
+- Not run by anyone: ThreadSanitizer (no runtime on this host), `ctest -L slow`.
+- Run-to-run variation of the Minuit call count at 2 threads (`energy_shift_sqrt` 40/41, `shift_fn` 36/37 calls,
+  same fitted outputs) is cause B of `fit_threads.md` (the PI: Minuit2 is not patched).
+
+**For the PI to see** (behaviour a user can meet; additions):
+- The API's `calculated_segments` of an E1-only / E2-only segment is its E1 / E2 part (confirmed earlier).
+- Format 3: a data run with an unreadable data file is refused (the old engine skipped the segment with a warning);
+  an extrapolation run does not need the data files; a sample keeps all its isotopes.
+- `AZURE2 --describe FILE [--json]` / `pyazr.describe`: how the engine understood a project (pairs, data files as
+  opened, effects, parameter names). `AZURE2 --print-predictions FILE` / `pyazr.predictions`: the expression each data
+  set is compared with.
+- The gradient of an E1-only / E2-only SUM with a component was wrong before S11 (0.29 and 1.0 of the largest
+  element against central differences); it is right now (1e-7). Fits with `--use-gradient` of such segments change.
+
+**Running now** (Opus agents, 3 threads each; briefs in `/data0/skowrons/AZURE2-upgrade/work/briefs/`):
+- O, `feature/upgrade-4-hybrid-potential` (`wt-hybrid`), `O_hybrid_potential.md`: the potential as an immutable value
+  in `physics/` (no manager singleton), e² = α ħc, the distorted decaying solution (the PI's Q4, Q5; moved outputs
+  classified).
+- Q, `feature/upgrade-4-edata-split-2` (`wt-esplit2`), `Q_edata_split_2.md`: W1 (dead code out of `EData`, `EPoint`,
+  `ESegment`), W2 (the data covariance into `src/EDataCovariance.cpp`).
+- L, `feature/upgrade-4-rutherford` (`wt-ruth`), `L_rutherford_ratio.md`: S14, the `rutherford` / `mott` leaves and the
+  quantities `ratio_to_rutherford`, `ratio_to_mott`.
+
+**The PI on the split, 2026-11-10:** he expected `EData` to be split directly. The director agrees and changes the
+order of `edata_split.md` §5: the cuts scheduled "after S7" (M1–M3) and under D1 are made now, as verbatim moves,
+right after Q (brief `S_edata_split_3.md`); S7 and Phases 5–6 then edit the small files. F1/F2 still wait for 3d.
+
+**Then.** S (the remaining mechanical cuts of `EData`, `EPoint`, `ESegment`, after Q), K (extrapolation grids: list,
+file, points/log, c.m., adaptive; commits the gate), J (units; S factor with the `nds.py` mass fix; yields per
+charge), R (S7 `Measurement`, after S), 3c, 3d, S12, S13, S16; the spin-orbit term
+(note §5 steps 3–5, after O); `EData` split F1/F2, M, D1; CNuc 3b (iv), 6b, 7; Phase 5 (with M3 (b)); Phase 6 (mutable
+statics, the task as unit of work). Merge `origin/dev` only when the reconstruction is complete.
+
 ## 2026-11-10 (evening) — format 3, step 3b-1, G-3: the engine runs a format-3 project (`feature/upgrade-4-format3-reader`)
 
 **Done** (brief G-3; report `work/fmt3c/REPORT.md`).
