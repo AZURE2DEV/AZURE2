@@ -287,7 +287,7 @@ class azure2:
         Parsed once and kept until the file changes on disk (modification time,
         size or inode) or :meth:`configure` runs.  Before 2026-11-03 every
         ``calculate_rwa`` call re-read and re-parsed the whole ``.azr`` once per
-        segment (the E1/E2 component check in :meth:`_segment_values`), and
+        segment (the E1/E2 component check of the time), and
         every :meth:`penalties`/:meth:`objective` call once more: 83 ms per call
         instead of 8 ms on the 3H+d model from /groups (NFS), and the reason
         forked workers there were slow.
@@ -2400,46 +2400,20 @@ class azure2:
         return [self._unpack_angular_dists(s.calculated_angular_dists(i))
                 for i in range(nsegments)]
 
-    def _observables(self):
-        """The observable of each result segment in data mode (``None`` in
-        extrapolation mode, or when the file's active segments do not match the
-        engine's), for :meth:`_segment_values`."""
-        if self.mode != "data":
-            return None
-        try:
-            return [d.observable for d in self._parsed("active")]
-        except Exception:
-            return None
-
-    def _segment_values(self, i, observables=None):
-        """The calculated observable of result segment ``i`` -- the E1 or E2
-        component for an ``angle-integrated-E1`` / ``-E2`` data segment, which is
-        what its chi-squared and residuals are built from, the total otherwise.
-
-        The engine stores the total and the two multipole components side by
-        side; until 2026-10-07 this returned the total for every segment, so
-        ``calculate_rwa`` and ``residual_jacobian`` disagreed on component
-        segments (8Be+alpha photodisintegration E2 data).  ``observables`` is
-        :meth:`_observables`, looked up once per call by the callers.
-        """
-        s = self.sess
-        if self.mode == "data":
-            if observables is None:
-                observables = self._observables()
-            obs = observables[i] if observables is not None and i < len(observables) else ""
-            if obs == "angle-integrated-E1":
-                return s.calculated_segments_e1(i)
-            if obs == "angle-integrated-E2":
-                return s.calculated_segments_e2(i)
-        return s.calculated_segments(i)
+    def _segment_values(self, i):
+        """The calculated values of result segment ``i``: the engine's model
+        value of every point, the value its chi-squared and residuals are built
+        from -- the E1 or E2 component for an ``angle-integrated-E1`` / ``-E2``
+        data segment, the combination of a SUM, RATIO, sample or transform
+        segment, the observable otherwise."""
+        return self.sess.calculated_segments(i)
 
     def calculate(self, params):
         """Calculated observable per segment, from a physical parameter vector.
         Cross sections are centre-of-mass, in b or b/sr; an E1/E2 component
         segment gets its component (see :meth:`_segment_values`)."""
         nsegments = int(self.sess.update_segments(params))
-        obs = self._observables()
-        return [self._segment_values(i, obs) for i in range(nsegments)]
+        return [self._segment_values(i) for i in range(nsegments)]
 
     def _mode_free_vector(self, params):
         """A free RWA vector for the engine's current layout.
@@ -2466,14 +2440,12 @@ class azure2:
     def calculate_rwa(self, params):
         """As calculate, from a free RWA vector. This is the usual entry point."""
         nsegments = int(self.sess.update_segments_rwa(self._mode_free_vector(params)))
-        obs = self._observables()
-        return [self._segment_values(i, obs) for i in range(nsegments)]
+        return [self._segment_values(i) for i in range(nsegments)]
 
     def calculate_all_rwa(self, params):
         """As calculate_rwa, taking every parameter rather than the free ones."""
         nsegments = int(self.sess.update_segments_all_rwa(params))
-        obs = self._observables()
-        return [self._segment_values(i, obs) for i in range(nsegments)]
+        return [self._segment_values(i) for i in range(nsegments)]
 
     def calculate_energies(self, params=None):
         """Centre-of-mass energies of the calculated points, per segment.
