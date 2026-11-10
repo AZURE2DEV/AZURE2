@@ -72,19 +72,6 @@ static void WriteBandLine(std::ostream &o, double energy, double excitation,
 }
 
 void EData::WriteOutputFiles(const Config &configure, azure2::Results &results, bool isFit, const BandData *band) {
-  AZUREOutput output(configure.outputdir);
-  std::ofstream chiOut;
-  if (!isFit && (configure.paramMask & Config::CALCULATE_WITH_DATA)) {
-    std::string chiOutFile = configure.outputdir + "chiSquared.out";
-    chiOut.open(chiOutFile.c_str());
-  }
-  chiOut << "Segment#," << " Chi-Squared, " << " N, " << " Norm, " << " Norm-Chi-Squared " << std::endl;
-
-  if (!(configure.paramMask & Config::CALCULATE_WITH_DATA)) output.SetExtrap();
-  bool isVaryNorm = false;
-  double totalChiSquared = 0.;
-  double totalNormChiSquared = 0.;
-  double totalN = 0.;
   // use kinflag.dat to control output option
   std::ifstream kinoption;
   kinoption.open("kinflag.dat");
@@ -104,6 +91,19 @@ void EData::WriteOutputFiles(const Config &configure, azure2::Results &results, 
       if (ThmGroupOf(i) < 0 && GetSegment(i)->IsProfiledNorm())
         results.objective.segmentChi2[i] = GetSegment(i)->ProfileNormChiSquared(results, results.objective.norm[i]);
   }
+
+  WriteSegmentFiles(configure, results, kinflag, band);
+  if (!isFit && (configure.paramMask & Config::CALCULATE_WITH_DATA)) WriteChiSquaredFile(configure, results);
+  if (!isFit && (configure.paramMask & Config::CALCULATE_WITH_DATA) && NumThmGroups() > 0)
+    WriteThmExperiments(configure, results);
+  WriteNormalizationsFile(configure, results);
+  WriteShiftsFile(configure, results);
+}
+
+void EData::WriteSegmentFiles(const Config &configure, const azure2::Results &results, int kinflag,
+                              const BandData *band) {
+  AZUREOutput output(configure.outputdir);
+  if (!(configure.paramMask & Config::CALCULATE_WITH_DATA)) output.SetExtrap();
 
   // When a covariance is available, write a sibling ".band" file per output file,
   // with the same block/point structure so the GUI can pair them.
@@ -137,7 +137,6 @@ void EData::WriteOutputFiles(const Config &configure, azure2::Results &results, 
       firstSumIterator = segment;
       // With component segments, no need to skip - total capture is handled within the segment
     }
-    if (segment->IsVaryNorm()) isVaryNorm = true;
     int aa = segment->GetEntranceKey();
     int ir = segment->GetExitKey();
     std::filebuf *buf;
@@ -265,33 +264,6 @@ void EData::WriteOutputFiles(const Config &configure, azure2::Results &results, 
         }
       }
     }
-    if (!isFit && (configure.paramMask & Config::CALCULATE_WITH_DATA)) {
-      // The normalization penalty as the fit sees it (AZURECalc::operator()):
-      // the deviation from the nominal normalization in units of its uncertainty,
-      // which the segment stores as a percentage.  This used to add a literal 1
-      // per segment, so the reported total was just the number of segments.
-      // A fixed norm pays no prior (docs/upgrade/objective.md D5), nor does a profiled THM norm, which is not a
-      // parameter: the fit adds no prior for it (D4).
-      double normChiSquared = 0.;
-      double normError = thisSegment->GetNominalNorm() / 100. * thisSegment->GetNormError();
-      if (normError != 0. && thisSegment->IsVaryNorm() && !thisSegment->IsProfiledNorm() &&
-          !thisSegment->IsNormPriorReplaced()) normChiSquared =
-                               pow((thisSegment->GetNorm() - thisSegment->GetNominalNorm()) / normError, 2.0);
-      const int thisIndex = (int)(thisSegment - GetSegments().begin()) + 1;
-      totalChiSquared += results.objective.segmentChi2[thisIndex];
-      totalNormChiSquared += normChiSquared;
-      totalN += thisSegment->NumPoints();
-      chiOut << thisSegment->GetSegmentKey()
-             << ","
-             << results.objective.segmentChi2[thisIndex]
-             << ","
-             << thisSegment->NumPoints()
-             << ","
-             << NormUsed(thisIndex, results)
-             << ","
-             << normChiSquared
-             << std::endl;
-    }
     out << std::endl
         << std::endl;
     out.flush();
@@ -304,85 +276,125 @@ void EData::WriteOutputFiles(const Config &configure, azure2::Results &results, 
     }
     firstSumIterator = GetSegments().end();
   }
+}
 
+void EData::WriteChiSquaredFile(const Config &configure, const azure2::Results &results) {
+  std::ofstream chiOut;
+  std::string chiOutFile = configure.outputdir + "chiSquared.out";
+  chiOut.open(chiOutFile.c_str());
+  chiOut << "Segment#," << " Chi-Squared, " << " N, " << " Norm, " << " Norm-Chi-Squared " << std::endl;
 
-  if (!isFit && (configure.paramMask & Config::CALCULATE_WITH_DATA)) {
-    chiOut << "Total-Chi-Squared: "
-           << totalChiSquared
-           << " Total-Norm-Chi-Squared: "
-           << totalNormChiSquared
-           << " Total-N: "
-           << totalN;
-    // Park formalism: the J > 0 wall, when a level sits beyond it.
-    if (configure.paramMask & Config::USE_PARK_FORMALISM)
-      chiOut << " Total-Park-Chi-Squared: " << results.objective.park;
-    // The energy-shift penalties the fit minimised (ESegment::AddShiftPenalty), when
-    // any shift is a fit parameter.  Without this the file reported less than the
-    // minimiser's own total by exactly this amount.
-    bool anyShiftVaried = false;
-    double totalShiftChiSquared = 0.;
-    for (ESegmentIterator segment = GetSegments().begin(); segment < GetSegments().end(); segment++) {
-      if (segment->IsVaryEnergyShift() || segment->IsVaryEnergyShiftSqrt()) anyShiftVaried = true;
-      if (segment->OwnsShiftFn())
-        for (int q = 0; q < segment->NumShiftFnParams(); q++)
-          if (segment->IsVaryShiftFn(q)) anyShiftVaried = true;
-      segment->AddShiftPenalty(totalShiftChiSquared);
-    }
-    if (anyShiftVaried) chiOut << " Total-Shift-Chi-Squared: " << totalShiftChiSquared;
-    // Isotopic abundances: their priors and the sum-to-one term.
-    if (results.objective.abundance != 0.0)
-      chiOut << " Total-Abundance-Chi-Squared: " << results.objective.abundance;
-    // Electron-screening priors, when a screening potential has one.
-    {
-      bool anyPrior = false;
-      for (int k = 1; k <= this->NumScreeningParams(); k++)
-        if (this->GetScreeningTargetEffect(k)->GetScreeningSigma() > 0.0) anyPrior = true;
-      if (anyPrior) chiOut << " Total-Screening-Chi-Squared: " << this->ScreeningPenalty();
-    }
-    // Fitted target densities: their priors, and the densities themselves (which param.sav also holds).
-    if (this->NumDensityParams() > 0) {
-      bool anyPrior = false;
-      for (int k = 1; k <= this->NumDensityParams(); k++)
-        if (this->GetDensityTargetEffect(k)->GetDensitySigma() > 0.0) anyPrior = true;
-      if (anyPrior) chiOut << " Total-Density-Chi-Squared: " << this->DensityPenalty();
-    }
-    // Fitted Doppler temperatures: their priors.
-    if (this->NumDopplerParams() > 0) {
-      bool anyPrior = false;
-      for (int k = 1; k <= this->NumDopplerParams(); k++)
-        if (this->GetDopplerTargetEffect(k)->GetDopplerSigma() > 0.0) anyPrior = true;
-      if (anyPrior) chiOut << " Total-Doppler-Chi-Squared: " << this->DopplerPenalty();
-    }
-    // Fitted sample thicknesses: their priors.
-    if (this->NumThicknessParams() > 0) {
-      bool anyPrior = false;
-      for (int k = 1; k <= this->NumThicknessParams(); k++) {
-        const ESegment *seg = &segments_[this->GetThicknessSegment(k) - 1];
-        if (seg->GetThicknessSigma() > 0.0 && !seg->IsThicknessGroupFollower()) anyPrior = true;
-      }
-      if (anyPrior) chiOut << " Total-Thickness-Chi-Squared: " << this->ThicknessPenalty();
-    }
-    // Nuisance priors (<parameterSettings> useAsNuisance), part of the objective in every path (objective.md D6).
-    if (results.objective.nuisance != 0.0) chiOut << " Total-Nuisance-Chi-Squared: " << results.objective.nuisance;
-    // The model data (T9): <scatteringLengths> (table in scatteringLengths.out) and <modelData> (modelData.out).
-    if (results.objective.scatteringLength != 0.0)
-      chiOut << " Total-Scattering-Length-Chi-Squared: " << results.objective.scatteringLength;
-    if (results.objective.hasModelData) chiOut << " Total-Model-Data-Chi-Squared: " << results.objective.modelData;
-    // Prior parameter covariance (<config> priorCovariance=): (p - mu)^T C^-1 (p - mu), whenever the key is set.
-    // Written with 15 significant digits (a new field: the older ones keep their 6).
-    if (!configure.priorCovariance.empty()) {
-      const std::streamsize prec = chiOut.precision(15);
-      chiOut << " Total-Prior-Covariance-Chi-Squared: " << results.objective.priorCovariance;
-      chiOut.precision(prec);
-    }
-    chiOut << std::endl
+  double totalChiSquared = 0.;
+  double totalNormChiSquared = 0.;
+  double totalN = 0.;
+  for (ESegmentIterator segment = GetSegments().begin(); segment < GetSegments().end(); segment++) {
+    ESegmentIterator thisSegment = segment;
+    // The normalization penalty as the fit sees it (AZURECalc::operator()):
+    // the deviation from the nominal normalization in units of its uncertainty,
+    // which the segment stores as a percentage.  This used to add a literal 1
+    // per segment, so the reported total was just the number of segments.
+    // A fixed norm pays no prior (docs/upgrade/objective.md D5), nor does a profiled THM norm, which is not a
+    // parameter: the fit adds no prior for it (D4).
+    double normChiSquared = 0.;
+    double normError = thisSegment->GetNominalNorm() / 100. * thisSegment->GetNormError();
+    if (normError != 0. && thisSegment->IsVaryNorm() && !thisSegment->IsProfiledNorm() &&
+        !thisSegment->IsNormPriorReplaced()) normChiSquared =
+                             pow((thisSegment->GetNorm() - thisSegment->GetNominalNorm()) / normError, 2.0);
+    const int thisIndex = (int)(thisSegment - GetSegments().begin()) + 1;
+    totalChiSquared += results.objective.segmentChi2[thisIndex];
+    totalNormChiSquared += normChiSquared;
+    totalN += thisSegment->NumPoints();
+    chiOut << thisSegment->GetSegmentKey()
+           << ","
+           << results.objective.segmentChi2[thisIndex]
+           << ","
+           << thisSegment->NumPoints()
+           << ","
+           << NormUsed(thisIndex, results)
+           << ","
+           << normChiSquared
            << std::endl;
-    chiOut.flush();
-    chiOut.close();
-    if (this->HasCovariance()) this->WriteCovarianceSummary(configure, results);
   }
-  if (!isFit && (configure.paramMask & Config::CALCULATE_WITH_DATA) && NumThmGroups() > 0)
-    WriteThmExperiments(configure, results);
+
+  chiOut << "Total-Chi-Squared: "
+         << totalChiSquared
+         << " Total-Norm-Chi-Squared: "
+         << totalNormChiSquared
+         << " Total-N: "
+         << totalN;
+  // Park formalism: the J > 0 wall, when a level sits beyond it.
+  if (configure.paramMask & Config::USE_PARK_FORMALISM)
+    chiOut << " Total-Park-Chi-Squared: " << results.objective.park;
+  // The energy-shift penalties the fit minimised (ESegment::AddShiftPenalty), when
+  // any shift is a fit parameter.  Without this the file reported less than the
+  // minimiser's own total by exactly this amount.
+  bool anyShiftVaried = false;
+  double totalShiftChiSquared = 0.;
+  for (ESegmentIterator segment = GetSegments().begin(); segment < GetSegments().end(); segment++) {
+    if (segment->IsVaryEnergyShift() || segment->IsVaryEnergyShiftSqrt()) anyShiftVaried = true;
+    if (segment->OwnsShiftFn())
+      for (int q = 0; q < segment->NumShiftFnParams(); q++)
+        if (segment->IsVaryShiftFn(q)) anyShiftVaried = true;
+    segment->AddShiftPenalty(totalShiftChiSquared);
+  }
+  if (anyShiftVaried) chiOut << " Total-Shift-Chi-Squared: " << totalShiftChiSquared;
+  // Isotopic abundances: their priors and the sum-to-one term.
+  if (results.objective.abundance != 0.0)
+    chiOut << " Total-Abundance-Chi-Squared: " << results.objective.abundance;
+  // Electron-screening priors, when a screening potential has one.
+  {
+    bool anyPrior = false;
+    for (int k = 1; k <= this->NumScreeningParams(); k++)
+      if (this->GetScreeningTargetEffect(k)->GetScreeningSigma() > 0.0) anyPrior = true;
+    if (anyPrior) chiOut << " Total-Screening-Chi-Squared: " << this->ScreeningPenalty();
+  }
+  // Fitted target densities: their priors, and the densities themselves (which param.sav also holds).
+  if (this->NumDensityParams() > 0) {
+    bool anyPrior = false;
+    for (int k = 1; k <= this->NumDensityParams(); k++)
+      if (this->GetDensityTargetEffect(k)->GetDensitySigma() > 0.0) anyPrior = true;
+    if (anyPrior) chiOut << " Total-Density-Chi-Squared: " << this->DensityPenalty();
+  }
+  // Fitted Doppler temperatures: their priors.
+  if (this->NumDopplerParams() > 0) {
+    bool anyPrior = false;
+    for (int k = 1; k <= this->NumDopplerParams(); k++)
+      if (this->GetDopplerTargetEffect(k)->GetDopplerSigma() > 0.0) anyPrior = true;
+    if (anyPrior) chiOut << " Total-Doppler-Chi-Squared: " << this->DopplerPenalty();
+  }
+  // Fitted sample thicknesses: their priors.
+  if (this->NumThicknessParams() > 0) {
+    bool anyPrior = false;
+    for (int k = 1; k <= this->NumThicknessParams(); k++) {
+      const ESegment *seg = &segments_[this->GetThicknessSegment(k) - 1];
+      if (seg->GetThicknessSigma() > 0.0 && !seg->IsThicknessGroupFollower()) anyPrior = true;
+    }
+    if (anyPrior) chiOut << " Total-Thickness-Chi-Squared: " << this->ThicknessPenalty();
+  }
+  // Nuisance priors (<parameterSettings> useAsNuisance), part of the objective in every path (objective.md D6).
+  if (results.objective.nuisance != 0.0) chiOut << " Total-Nuisance-Chi-Squared: " << results.objective.nuisance;
+  // The model data (T9): <scatteringLengths> (table in scatteringLengths.out) and <modelData> (modelData.out).
+  if (results.objective.scatteringLength != 0.0)
+    chiOut << " Total-Scattering-Length-Chi-Squared: " << results.objective.scatteringLength;
+  if (results.objective.hasModelData) chiOut << " Total-Model-Data-Chi-Squared: " << results.objective.modelData;
+  // Prior parameter covariance (<config> priorCovariance=): (p - mu)^T C^-1 (p - mu), whenever the key is set.
+  // Written with 15 significant digits (a new field: the older ones keep their 6).
+  if (!configure.priorCovariance.empty()) {
+    const std::streamsize prec = chiOut.precision(15);
+    chiOut << " Total-Prior-Covariance-Chi-Squared: " << results.objective.priorCovariance;
+    chiOut.precision(prec);
+  }
+  chiOut << std::endl
+         << std::endl;
+  chiOut.flush();
+  chiOut.close();
+  if (this->HasCovariance()) this->WriteCovarianceSummary(configure, results);
+}
+
+void EData::WriteNormalizationsFile(const Config &configure, const azure2::Results &results) {
+  bool isVaryNorm = false;
+  for (ESegmentIterator segment = GetSegments().begin(); segment < GetSegments().end(); segment++)
+    if (segment->IsVaryNorm()) isVaryNorm = true;
   if (isVaryNorm) {
     std::string outputfile = configure.outputdir + "normalizations.out";
     std::ofstream out(outputfile.c_str());
@@ -417,7 +429,9 @@ void EData::WriteOutputFiles(const Config &configure, azure2::Results &results, 
     } else
       configure.outStream << "Could not write normalization file." << std::endl;
   }
+}
 
+void EData::WriteShiftsFile(const Config &configure, const azure2::Results &results) {
   // Check if any energy shifts (constant or sqrt(E) term) are varied
   bool isVaryEnergyShift = false;
   for (ESegmentIterator segment = GetSegments().begin(); segment < GetSegments().end(); segment++) {

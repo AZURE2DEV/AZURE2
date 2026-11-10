@@ -512,6 +512,16 @@ class EData {
   int BuildThmGroups(const Config &, CNuc *, int numLines);
   /// Writes output/thm_experiments.out.
   void WriteThmExperiments(const Config &, const azure2::Results &results);
+  /// The parts of WriteOutputFiles (src/EDataOutputFiles.cpp), in the order it calls them.  The AZUREOut_* files with
+  /// their .band siblings (when `band` holds gradients) and the sample decompositions; kinflag 0 writes the c.m.
+  /// frame, 1 the lab frame (kinflag.dat).
+  void WriteSegmentFiles(const Config &, const azure2::Results &results, int kinflag, const BandData *band);
+  /// chiSquared.out: one row per segment, in the order of the segment files, then the totals.
+  void WriteChiSquaredFile(const Config &, const azure2::Results &results);
+  /// normalizations.out, when a segment's normalization is varied.
+  void WriteNormalizationsFile(const Config &, const azure2::Results &results);
+  /// shifts.out, when a segment's energy shift is varied, follows a group or has a shift function.
+  void WriteShiftsFile(const Config &, const azure2::Results &results);
   std::shared_ptr<const PriorCovariance> priorCov_;  // shared by every copy (read-only once set up)
   std::vector<std::string> nucleusLabels_;   // one per compound nucleus, for the natural decomposition file
   int numNuclei_ = 0;  // compound nuclei: the natural terms of a sample segment's points (Initialize)
