@@ -77,18 +77,33 @@ Selecting **Runtime Options...** opens a dialog with the following settings:
        just above a charged-particle threshold. Saved in the project
        (``<lastRun>``); since 2026-11-06 the GUI warns when it opens a project
        with this option set and offers to switch to the default functions.
-   * - **Use Brune formalism**
-     - Use the Brune parameterization for R-matrix parameters
-       (C.R. Brune, *Physical Review C* **66**, 044611, 2002). Recommended and
-       enabled by default. More numerically stable than the classical approach.
-       With it off, the physical parameters are transformed to formal ones per
-       :math:`J^\pi` group; since 2026-10-27 that transformation keeps each
-       level's identity whatever the order the levels are listed in (see the
-       note in :doc:`levels_channels`).
+   * - **Parametrization** (drop-down)
+     - The R-matrix parametrization, one of three:
+
+       * **Formal**: the standard Lane-Thomas parameters (pole energies and
+         reduced-width amplitudes for fixed boundary conditions).  The physical
+         parameters of the project are transformed to formal ones per
+         :math:`J^\pi` group; since 2026-10-27 that transformation keeps each
+         level's identity whatever the order the levels are listed in (see the
+         note in :doc:`levels_channels`).
+       * **Brune** (default, recommended): Brune's alternative parametrization
+         (C.R. Brune, *Physical Review C* **66**, 044611, 2002), with observed
+         level energies and reduced widths and no boundary-condition constants.
+         More numerically stable than the formal one.
+       * **Brune-Park**: Park's rescaled amplitudes on Brune's level matrix
+         (:math:`\gamma_\mathrm{Park} = \gamma_\mathrm{Brune}\sqrt{J}`); the
+         command line's ``--use-park`` (see :doc:`../reference/command_line`).
+         The name keeps Brune's part in it visible.
+
+       Before November 2026 these were two check boxes, **Use Brune formalism**
+       and **Use Park parametrization** (the second implying the first).  The
+       choice is kept with the GUI's other run settings in ``<lastRun>``;
+       command-line runs take it from ``--use-brune`` / ``--no-brune`` /
+       ``--use-park``.
    * - **Ignore external width if internal width is zeroed**
      - When enabled, the external gamma-ray width of a level is set to zero if
        no total gamma-ray width is specified.  The R-matrix formalism does not
-       implement it (nor Park's parametrization): the two cannot be selected
+       implement it (nor the Brune-Park parametrization): the two cannot be selected
        together, and a calculation with the R-matrix and either option runs
        the A-matrix with a warning (as the command line and pyazr do; see
        :doc:`../reference/command_line`).
@@ -123,8 +138,9 @@ Particle Pairs table.
 
 .. note::
 
-   The **Brune formalism** and **RMC capture formalism** are mutually exclusive.
-   Enabling one will automatically disable the other.
+   The **RMC capture formalism** needs the **Formal** parametrization.
+   Ticking it sets the drop-down to Formal and locks it; choosing Brune or
+   Brune-Park unticks and disables it.
 
 .. note::
 

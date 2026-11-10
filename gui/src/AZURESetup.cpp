@@ -1296,15 +1296,7 @@ void AZURESetup::editOptions() {
   else
     aDialog.useGSLCoulCheck->setChecked(false);
 
-  if (GetConfig().paramMask & Config::USE_BRUNE_FORMALISM)
-    aDialog.useBruneCheck->setChecked(true);
-  else
-    aDialog.useBruneCheck->setChecked(false);
-
-  if (GetConfig().paramMask & Config::USE_PARK_FORMALISM)
-    aDialog.useParkCheck->setChecked(true);
-  else
-    aDialog.useParkCheck->setChecked(false);
+  aDialog.setParametrization(EditOptionsDialog::parametrizationFromMask(GetConfig().paramMask));
 
   if (GetConfig().paramMask & Config::IGNORE_ZERO_WIDTHS)
     aDialog.ignoreExternalsCheck->setChecked(true);
@@ -1341,15 +1333,7 @@ void AZURESetup::editOptions() {
     else
       GetConfig().paramMask &= ~Config::USE_GSL_COULOMB_FUNC;
 
-    if (aDialog.useBruneCheck->isChecked())
-      GetConfig().paramMask |= Config::USE_BRUNE_FORMALISM;
-    else
-      GetConfig().paramMask &= ~Config::USE_BRUNE_FORMALISM;
-
-    if (aDialog.useParkCheck->isChecked())
-      GetConfig().paramMask |= (Config::USE_PARK_FORMALISM | Config::USE_BRUNE_FORMALISM);
-    else
-      GetConfig().paramMask &= ~Config::USE_PARK_FORMALISM;
+    GetConfig().paramMask = EditOptionsDialog::maskWithParametrization(GetConfig().paramMask, aDialog.parametrization());
 
     if (aDialog.ignoreExternalsCheck->isChecked()) {
       GetConfig().paramMask |= Config::IGNORE_ZERO_WIDTHS;

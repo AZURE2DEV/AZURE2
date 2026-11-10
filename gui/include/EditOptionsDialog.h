@@ -9,6 +9,7 @@ QT_BEGIN_NAMESPACE
 class QPushButton;
 class QGroupBox;
 class QCheckBox;
+class QComboBox;
 class QLineEdit;
 
 QT_END_NAMESPACE
@@ -23,8 +24,18 @@ class EditOptionsDialog : public QDialog {
 
  public:
   EditOptionsDialog(QWidget *parent = 0);
-  QCheckBox *useBruneCheck;
-  QCheckBox *useParkCheck;
+  /*! The R-matrix parametrization, one choice (2026-11-09; before, two check boxes "Use Brune formalism" and "Use Park
+   *  parametrization", the second implying the first).  Item data and indices are the values below.  "Brune-Park" is
+   *  the engine's Park mode (USE_PARK_FORMALISM, --use-park): Park's observed reduced widths on Brune's level matrix,
+   *  named so in the GUI to keep Brune's part in it visible (DeBoer). */
+  enum Parametrization { Formal = 0, Brune = 1, BrunePark = 2 };
+  QComboBox *parametrizationCombo;
+  int parametrization() const;
+  void setParametrization(int choice);
+  /*! The choice a paramMask holds: Park bit -> BrunePark, else Brune bit -> Brune, else Formal. */
+  static int parametrizationFromMask(unsigned int mask);
+  /*! mask with the Brune and Park bits set for choice (BrunePark sets both, as the engine expects); other bits kept. */
+  static unsigned int maskWithParametrization(unsigned int mask, int choice);
   QCheckBox *useGSLCoulCheck;
   QCheckBox *ignoreExternalsCheck;
   QCheckBox *useRMCCheck;
@@ -43,8 +54,7 @@ class EditOptionsDialog : public QDialog {
 
  private slots:
   void choosePriorCovariance();
-  void useBruneCheckChanged(int);
-  void useParkCheckChanged(int);
+  void parametrizationChanged(int);
   void useRMCCheckChanged(int);
 
  private:

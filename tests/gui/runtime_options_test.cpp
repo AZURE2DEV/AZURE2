@@ -9,6 +9,13 @@
 //      file field and its Choose... button; priorCovariance=<path> reads into the Config (comment stripped, a blank
 //      inside the path kept), is written back and read by the engine's own <config> reader; cleared, the key is
 //      dropped; a plain project has none.
+//   5. the parametrization (2026-11-09, DeBoer): one drop-down "Parametrization" with Formal / Brune / Brune-Park in
+//      that order (item data = EditOptionsDialog::Parametrization), no "Use Brune formalism" / "Use Park
+//      parametrization" check boxes; Brune is the default; choosing Brune or Brune-Park unticks and disables RMC
+//      capture, ticking RMC sets Formal and disables the drop-down; the paramMask round trip: Park bit -> Brune-Park
+//      (whatever the Brune bit), Brune bit -> Brune, neither -> Formal, and writing a choice back sets exactly the
+//      engine's bits (Brune-Park = Brune + Park) and keeps every other bit.  Before 2026-11-09 the dialog had the two
+//      check boxes, so (5) fails on older builds.
 // Before 2026-11-01 the check box sat below the pairs table and the file was written from it, so (1) and (2) and
 // the switch-off in (3) fail on older builds.
 //
@@ -17,6 +24,7 @@
 
 #include <QApplication>
 #include <QCheckBox>
+#include <QComboBox>
 #include <QDir>
 #include <QFile>
 #include <QGroupBox>
@@ -156,6 +164,54 @@ int main(int argc, char **argv) {
     ok("plain project has no prior covariance", setup.GetConfig().priorCovariance.empty());
     ok("plain project written", setup.writeProjectFile(pc));
     ok("plain project written without the key", !hasKey(readText(pc), "priorCovariance"));
+  }
+
+  // 5. The parametrization drop-down (2026-11-09).
+  {
+    EditOptionsDialog dialog;
+    QComboBox *combo = dialog.findChild<QComboBox *>("parametrizationCombo");
+    ok("Runtime Options dialog has the parametrization drop-down", combo != nullptr);
+    if (combo) {
+      ok("three choices, Formal / Brune / Brune-Park in that order",
+         combo->count() == 3 && combo->itemText(0) == "Formal" && combo->itemText(1) == "Brune" &&
+             combo->itemText(2) == "Brune-Park");
+      ok("item data are the Parametrization values",
+         combo->itemData(0).toInt() == EditOptionsDialog::Formal && combo->itemData(1).toInt() == EditOptionsDialog::Brune &&
+             combo->itemData(2).toInt() == EditOptionsDialog::BrunePark);
+      ok("Brune is the default", dialog.parametrization() == EditOptionsDialog::Brune);
+    }
+    bool oldChecks = false;
+    for (QCheckBox *c : dialog.findChildren<QCheckBox *>())
+      if (c->text().contains("Brune") || c->text().contains("Park")) oldChecks = true;
+    ok("no Brune / Park check boxes any more", !oldChecks);
+    if (combo) {
+      dialog.setParametrization(EditOptionsDialog::Formal);
+      ok("Formal: RMC capture available", dialog.useRMCCheck->isEnabled());
+      dialog.useRMCCheck->setChecked(true);
+      ok("RMC ticked: drop-down held at Formal and disabled", dialog.parametrization() == EditOptionsDialog::Formal && !combo->isEnabled());
+      dialog.useRMCCheck->setChecked(false);
+      ok("RMC unticked: drop-down enabled again", combo->isEnabled());
+      dialog.setParametrization(EditOptionsDialog::BrunePark);
+      ok("Brune-Park: RMC unticked and disabled", !dialog.useRMCCheck->isChecked() && !dialog.useRMCCheck->isEnabled());
+      dialog.useRMCCheck->setEnabled(true);
+      dialog.useRMCCheck->setChecked(true);
+      dialog.setParametrization(EditOptionsDialog::Brune);
+      ok("Brune after RMC: RMC unticked and disabled", !dialog.useRMCCheck->isChecked() && !dialog.useRMCCheck->isEnabled());
+    }
+    const unsigned int B = Config::USE_BRUNE_FORMALISM, P = Config::USE_PARK_FORMALISM, other = Config::USE_RMC_FORMALISM | 1u;
+    ok("mask -> choice: Park + Brune is Brune-Park", EditOptionsDialog::parametrizationFromMask(B | P) == EditOptionsDialog::BrunePark);
+    ok("mask -> choice: Park alone is Brune-Park", EditOptionsDialog::parametrizationFromMask(P) == EditOptionsDialog::BrunePark);
+    ok("mask -> choice: Brune is Brune", EditOptionsDialog::parametrizationFromMask(B | other) == EditOptionsDialog::Brune);
+    ok("mask -> choice: neither is Formal", EditOptionsDialog::parametrizationFromMask(other) == EditOptionsDialog::Formal);
+    ok("choice -> mask: Formal clears both bits, keeps the rest",
+       EditOptionsDialog::maskWithParametrization(B | P | other, EditOptionsDialog::Formal) == other);
+    ok("choice -> mask: Brune sets Brune only",
+       EditOptionsDialog::maskWithParametrization(P | other, EditOptionsDialog::Brune) == (B | other));
+    ok("choice -> mask: Brune-Park sets Brune and Park",
+       EditOptionsDialog::maskWithParametrization(other, EditOptionsDialog::BrunePark) == (B | P | other));
+    for (int c = 0; c < 3; c++)
+      ok("round trip of choice " + std::to_string(c),
+         EditOptionsDialog::parametrizationFromMask(EditOptionsDialog::maskWithParametrization(other, c)) == c);
   }
 
   if (failures) {

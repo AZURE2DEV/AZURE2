@@ -82,8 +82,8 @@ Available Options
    * - ``--no-readline``
      - Disable readline support for command-line input.
    * - ``--use-brune``
-     - Use the Brune parameterization (equivalent to the GUI's
-       "Use Brune formalism" option).  This is the default.
+     - Use the Brune parameterization (the GUI's **Parametrization**
+       choice "Brune" under Runtime Options).  This is the default.
    * - ``--no-brune``
      - Use the standard Lane-Thomas parameterization (constant boundary
        conditions) instead of Brune's or Park's.  The input parameters are
@@ -95,7 +95,8 @@ Available Options
        064612) in place of Brune's alternative level matrix.  The fit
        parameters are then the observed reduced width amplitudes,
        :math:`\Gamma_c = 2P_c\gamma_c^2`.  Same cross sections as the
-       default; see the note below.
+       default; see the note below.  The GUI's **Parametrization** choice
+       "Brune-Park".
    * - ``--ignore-externals``
      - Ignore external width if internal width is zeroed (equivalent to the
        GUI option).  This is the default.
@@ -304,7 +305,8 @@ interrupted job restarts from) and ``param.mcmc`` were written without the tag,
 so a ``--use-park`` fit resumed from its own ``param.fit`` had every amplitude
 converted a second time; give such a file the first line
 ``#parametrization 2 0`` before reading it in Park mode.  The GUI
-offers the mode as "Use Park parametrization" under Runtime Options.
+offers the mode as "Brune-Park" in the **Parametrization** drop-down under
+Runtime Options (before November 2026, a "Use Park parametrization" check box).
 
 Level-matrix solver and profiling
 ---------------------------------
