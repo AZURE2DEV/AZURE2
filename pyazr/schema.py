@@ -7,7 +7,7 @@ and agents read field names, allowed values and units from it rather than spelli
 
 import warnings
 
-__all__ = ["schema", "validate"]
+__all__ = ["schema", "validate", "predictions"]
 
 
 def schema():
@@ -44,3 +44,18 @@ def validate(path):
         warnings.warn(f"{path}: {skipped} check(s) of model data were not run (<modelData> is built in a later "
                       "step)", stacklevel=2)
     return json.loads(diagnostics)
+
+
+def predictions(path):
+    """What every data set and extrapolation of the project ``path`` predicts, as the engine's expression trees.
+
+    Returns the lines ``AZURE2 --print-predictions path`` prints: ``"data <key>: <tree>"`` for each data set, then
+    ``"extrapolation <key>: <tree>"`` (docs/source/reference/command_line.rst gives the tree's text form).  The
+    project is set up as a calculation would set it up, its data files read relative to the working directory.  A
+    set-up that fails raises ``ValueError`` with the engine's messages.  Needs the compiled engine module.
+    """
+    from .azrfile import _engine_module
+    lines, messages = _engine_module().predictions(str(path))
+    if any(line.endswith(": set-up failed") or line.startswith("project: ") for line in lines):
+        raise ValueError(f"{path}: the project cannot be set up:\n{messages}")
+    return list(lines)

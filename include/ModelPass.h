@@ -15,8 +15,8 @@ class ESegment;
  * residual compares with the datum.  It is the segment's combination of its points' leaf values: the base point's
  * value (or its E1 / E2 part), times its abundance in a sample segment, plus the scaled components of a SUM, over the
  * denominator of a RATIO, or the transmission / self-shielded yield of the weighted terms (at every sub-point, before
- * the base point's kernel).  A leaf value is never overwritten by a model value.  S10 replaces the body of the
- * combination by the expression tree (experiment/, Expression.h); the callers stay.
+ * the base point's kernel).  A leaf value is never overwritten by a model value.  The combination is the segment's
+ * expression tree (step S10: Predictions.h, experiment/Expression.h), built once at set-up.
  *
  * The residual of a datum is written once, here: r = (f - y n)/(dy n), f the model value, y and dy the c.m. datum
  * and its uncertainty, n the segment's normalization (on the data side, decision M5).

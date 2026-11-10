@@ -131,6 +131,7 @@ void printHelp() {
             << std::setw(25) << std::left << "\t" << std::setw(0) << "--allow-questions '?' for unanswered questions. --to 3 is needed until this engine reads format 3." << std::endl
             << std::setw(25) << std::left << "\t--validate:" << std::setw(0) << "--validate FILE [--json]: check a format-3 project against the table and print every problem" << std::endl
             << std::setw(25) << std::left << "\t" << std::setw(0) << "(file:line: record.field: message, or a JSON array); exit 0 without errors, 2 with errors, 3 for format 1/2." << std::endl
+            << std::setw(25) << std::left << "\t--print-predictions:" << std::setw(0) << "--print-predictions FILE: print the expression tree of every data set and extrapolation of FILE, one line each, and exit." << std::endl
             << std::setw(25) << std::left << "\t--schema:" << std::setw(0) << "Print the table of project format 3 (record kinds, fields, quantities, units, diagnostic codes) as JSON and exit." << std::endl
             << std::setw(25) << std::left << "\t--build-coulomb-table[=FILE]:" << std::setw(0) << "Build the Coulomb table (about 5 min on 4 threads, 88 MB; FILE as for --coulomb-table) and exit." << std::endl
             << std::setw(25) << std::left << "\t--grid-replacement:" << std::setw(0) << "Re-place the adaptive sub-point grids as levels and shifts move (the default)." << std::endl
@@ -1543,9 +1544,8 @@ int main(int argc, char *argv[]) {
   // Set GSL Error Handler
   gsl_set_error_handler(&GSLException::GSLErrorHandler);
 
-  // --convert, --validate, --schema: the project-file commands (src/ProjectCommands.cpp), each of which exits
-  int projectCommandExit = 0;
-  if (RunProjectCommand(argc, argv, projectCommandExit)) return projectCommandExit;
+  // --convert, --validate, --schema, --print-predictions: the project-file commands (src/ProjectCommands.cpp), each exits
+  if (int projectCommandExit = 0; RunProjectCommand(argc, argv, projectCommandExit)) return projectCommandExit;
 
   // --build-coulomb-table[=FILE] builds the table and exits
   for (int i = 1; i < argc; i++) {

@@ -61,7 +61,7 @@ void ESegment::SetReaction(const azure2::experiment::ReactionSpec &r) {
   if (isCoefficients_) maxAngDistOrder_ = 20;
   isAdvanced_ = (r.combination != azure2::experiment::ReactionSpec::Combination::None);
   operationType_ = (r.combination == azure2::experiment::ReactionSpec::Combination::Ratio) ? 1 : 0;
-  components_ = r.components;
+  reaction_ = r;
   naturalToken_ = r.sample;
   isTotal_ = r.total;
   transmission_ = r.transmission;

@@ -8,6 +8,12 @@
 #include <memory>
 #include "azure2/experiment/SetupSpecs.h"
 
+namespace azure2 {
+namespace experiment {
+struct Prediction;
+}  // namespace experiment
+}  // namespace azure2
+
 class EData;
 class CNuc;
 class Config;
@@ -266,7 +272,13 @@ class ESegment {
   /// Combination type as an integer: 0 sum, 1 ratio.
   int GetLegacyOperationType() const;
   /// The terms of a composite segment after the leading one.
-  const std::vector<azure2::experiment::ComponentSpec> &GetComponents() const { return components_; }
+  const std::vector<azure2::experiment::ComponentSpec> &GetComponents() const { return reaction_.components; }
+  /// The reaction, observable and model options as the spec gave them (before the set-up resolved pairs and terms).
+  const azure2::experiment::ReactionSpec &GetReaction() const { return reaction_; }
+  /// What the segment predicts at its points (src/Predictions.cpp, EData::BuildPredictions): built once at set-up,
+  /// immutable, shared by the working copies; null before it is built.
+  const azure2::experiment::Prediction *GetPrediction() const { return prediction_.get(); }
+  void SetPrediction(std::shared_ptr<const azure2::experiment::Prediction> p) { prediction_ = std::move(p); }
   /// Path of the data file this segment reads.
   std::string GetDataFile() const;
   /// Append a point.
@@ -588,7 +600,8 @@ class ESegment {
   bool yieldTotalTerm_ = false;  // IsYieldTotalTerm
   bool isCoefficients_ = false;
   bool coefficientsAbsolute_ = false;
-  std::vector<azure2::experiment::ComponentSpec> components_;  ///< the terms of a SUM / RATIO after the leading one
+  azure2::experiment::ReactionSpec reaction_;  ///< GetReaction
+  std::shared_ptr<const azure2::experiment::Prediction> prediction_;  ///< GetPrediction
   std::string datafile_;
   std::vector<EPoint> points_;
 

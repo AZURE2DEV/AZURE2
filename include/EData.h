@@ -236,6 +236,9 @@ class EData {
   bool FinishTransformedSegment(CNuc *, ESegment *, int key, bool isTest, const Config &);
   /// Every term of a transmission or yield segment on the base point's sub-point grid (after the target effects).
   bool CheckTransformedSegments(const Config &);
+  /// The expression tree of every segment (src/Predictions.cpp), once its components, pairs and sample are resolved;
+  /// false, with a message, if one cannot be built.
+  bool BuildPredictions(CNuc *, const Config &);
   /// Map points at equal energies onto one another, so a shared energy is calculated once.
   /// The compound nucleus tells which segments have a particle exit; null is conservative.
   void MapData(CNuc *theCNuc = nullptr);
