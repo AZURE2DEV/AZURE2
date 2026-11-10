@@ -144,9 +144,13 @@ Started 2026-11-09; integration branch `feature/upgrade-4-data`.
 Done by 2026-11-10 (merged, verified): S3 (a) `Results` behind the old accessors and `AZURE_POISON_RESULTS`; S6 frames;
 S8 expression nodes; the first cause of thread-dependent fits (S2, exact grid comparison); format 3 step 2 (record
 reader, the table, `--schema`); S3 (b) the buffer owned by the caller; parameter kinds as records
-(`parameter_kinds.md`); format 3 step 3a (`convert/`: the converter old → format 3, `--validate`). In work: S1, the
-S2 remainder and S4 (one model pass); S15 (`<modelData>`, ωγ); format 3 step 3b-1 with S9 (the engine's set-up from
-specs, records → specs, `--describe`).
+(`parameter_kinds.md`); format 3 step 3a (`convert/`: the converter old → format 3, `--validate`); S1 (history
+test), the S2 remainder and S4 (one model pass and one residual, `src/ModelPass.cpp`, check 28); S15 (`<modelData>`:
+ωγ, resonance energy, widths, branching ratio, ANC, scattering length; `ModelDataTerm`, check 27); S9 and format 3
+step 3b-1 as far as the specs (the engine's set-up consumes specs; `Schema::Build` makes them from format-3
+records; spec-equivalence test, 183 of 186 converted files equal, 3 recorded). In work: S10 and S11 (the model pass
+evaluates the expression tree, the gradient calls its `backward`); S5 (the calculation plan) with the follow-ups of
+the model pass; the engine runs a format-3 file, `--describe`, the converted-tree gate.
 
 - [ ] State of an evaluation in one place (S1–S5): a `Results` buffer owned by the caller, with slots per calculation
       unit; one model pass and one residual function; the mapping as a plan; no writes from one object into another and

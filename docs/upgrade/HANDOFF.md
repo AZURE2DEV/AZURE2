@@ -2,6 +2,82 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-10 (director, day) — Phase 4: the third wave merged (specs, `Schema::Build`, model data, one model pass)
+
+**Merged into `feature/upgrade-4-data`** (`--no-ff`, in this order): G1 `feature/upgrade-4-format3-reader` at 7342c790
+(d1711801: the set-up consumes specs, S9); E `feature/upgrade-4-model-data` (5d96d069: `<modelData>`, `ModelDataTerm`,
+S15); F `feature/upgrade-4-model-pass` (f7463bd8: S1, the rest of S2, S4); G2 `feature/upgrade-4-format3-reader` at
+2f57af31 (fe181256: `Schema::Build`). Their entries are below. **Procedure since the second wave:** every merge is
+rehearsed in a scratch worktree, the merged tree is built and verified there, and the tree committed is that tree
+(`git diff --cached` against the rehearsal is empty), so no merge commit is unbuilt.
+
+**The merged head as a whole** (fe181256; build `work/b-trial2`, 0 warnings): 179 × 3 identical to the Phase 3 head
+(689 + 662 + 689 files); `ctest -LE slow` 155/155; `tests/run_tests.sh` 137 passed / 0 failed; calculations at 1 and 8 threads
+12/12 identical; T2 with a `<modelData>` section identical at 1 and 8 threads in the three bases and identical to the tree
+before the model pass; spec-equivalence: 189 files, 186 converted, 183 equal, 3 recorded, 0 differ (one value moved
+by one ulp makes 119 files fail).
+
+**What the director changed at the merges** (each in its merge commit's message):
+- Consistency checks: **27** is the model data's (every datum quantity is evaluated and tested), **28** the model
+  pass's (one composition, one residual; it was 27 on its branch).
+- `ModelDataTerm` writes its totals to `Results::objective` (`scatteringLength`; `modelData`, `hasModelData` are new
+  members); `chiSquared.out` reads them there. Nothing the objective computes is stored in the data set any more.
+- The diagnostic codes of the model data and of `Build` are one list (63 codes); `E_UNKNOWN_PAIR` and
+  `E_AMBIGUOUS_PAIR` exist once and have a case in both tests.
+- `ESegment` lost both the stored χ² (F) and the grid steps (G2: an extrapolation's grid is a list).
+- `tests/schema/schema_v3.json` and `docs/source/reference/format3.rst` regenerated from the merged build;
+  `tests/consistency/file_sizes.tsv` set to the merged counts at each merge (lowered: `AZUREAPI.cpp` 2033,
+  `AZURECalc.cpp` 2075, `AZURECalcMCMC.cpp` 1434, `EData.cpp` 5571, `ESegment.cpp` 1446).
+
+**Decisions of the director** (the briefs of the next wave carry them):
+- G1: a composite block whose operation type is neither sum nor ratio is refused (the old engine ran it
+  inconsistently). Shared normalization and energy scale stay group labels with the engine's leader rule until S7.
+- E: the gradient of the level quantities (ωγ, widths, energies, branching, ANC) is a central difference of the
+  observed values (about 70 µs per evaluation on T2 against 77 ms for the data); the scattering lengths keep their
+  exact adjoint. `resonance_strength` and `branching_ratio` refuse a `[total]` exit.
+- F: the API's `UpdateSegments` will return the model value for E1-only / E2-only segments (today the leaf σ, while
+  χ² uses σ_E1 / σ_E2) — a behaviour change, with a test, in brief I. The MCMC snapshot writes the model value for
+  such segments (accepted; test in brief I). Covariance seeds move into `Results` with S5.
+- G2: a varied follower of a norm group keeps its own fixed parameter in the engine until S7 and is named
+  `<record>.value[<data set>]`; the converter's name map must be injective (test); `varname[50]` becomes a string.
+  `bad_key.azr` and `bad_sample.azr` stay recorded differences; `M_thick.azr` is a converter defect (brief G-3).
+  Units other than the engine's are refused by `Build` (`E_NOT_BUILT`) until the units step. Data files are read
+  relative to the working directory; `--describe` will print the resolved paths.
+
+**Defects found and not yet fixed** (owner in brackets):
+- A fixed energy shift changed between evaluations leaves a pooled working copy different from a fresh one
+  (`natural_neon`: χ² 5589.035 pooled, 3342.510 fresh, already at 041edabf) [brief I, part 1].
+- `tests/sum_lab_frame/sum_data.azr` and `tests/ratio_frame/ratio_data.azr` have no committed data [brief I].
+- `EPoint::DopplerAppliedScope` sets a flag on the base point during an evaluation; `src/ModelPass.cpp` has a
+  warn-once `static std::atomic<bool>` [Phase 6, mutable statics].
+- `CNuc::ObservedOfFitValues` writes the observed slots of the levels during an evaluation [Phase 6 / S16].
+- Pair labels are built in three places; `Build` has its own pair table (`PairRow`) beside the model data's
+  `PairInfo` [brief G-3, part A].
+
+**For the PI to see** (behaviour a user can meet; additions to the list of the entry of this morning):
+- New refusals: a composite block with an operation type other than sum or ratio; β-delayed segments with target
+  integration, a beam profile, screening or exit −1.
+- The API value of E1-only / E2-only segments (above).
+- Format 3: the follower parameter name; units other than the engine's refused for now; data-file paths relative to
+  the working directory.
+
+**Waiting for the PI** (unchanged): the two atomic increments in the vendored Minuit2; M3 (b); the electron mass in
+`EPoint.cpp` and the proton mass in `ECIntegral.cpp`; whether a spin-orbit hybrid potential is wanted. No ASan
+runtime on this host.
+
+**Running now** (Opus agents from fe181256, 3 threads each; briefs in `/data0/skowrons/AZURE2-upgrade/work/briefs/`):
+- H, `feature/upgrade-4-expr` (`wt-expr`), `H_expression_pass.md`: S10 (the model pass evaluates the expression
+  tree; `--print-predictions`) and S11 (the gradient through `backward`).
+- I, `feature/upgrade-4-plan` (`wt-plan`), `I_plan.md`: the follow-ups of the model pass (fixed-shift history, API
+  value, snapshot test, covariance seeds), then S5 (the calculation plan; one writer per slot).
+- G3, `feature/upgrade-4-format3-reader` (`wt-fmt3`), `G3_engine_runs_format3.md`: the model data joined to the
+  reader, the parameter-name stems, the engine runs a format-3 file, `--describe`, the converted-tree gate.
+
+**Then.** S7 `Measurement` (after S5; removes the follower parameters); 3c (pyazr's model on records); 3d (the tree
+converted, the old path deleted); units in `Build` with the new quantities — ratio to Rutherford/Mott (S14), S
+factor (with the `nds.py` mass fix), yields per charge; S12, S13, S16; extrapolation grids (list, file, adaptive);
+CNuc 6b and 7. Merge `origin/dev` only when the reconstruction is complete.
+
 ## 2026-11-10 (late morning) — format 3, step 3b-1, G2: records produce the engine's specs (`feature/upgrade-4-format3-reader`)
 
 **Done.**
