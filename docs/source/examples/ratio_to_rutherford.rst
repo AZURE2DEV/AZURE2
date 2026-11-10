@@ -94,7 +94,7 @@ What the engine understood (``AZURE2 --describe aC_story.azr``)::
        aC_RTH.shift.sqrt (energy shift sqrt, fixed)
 
 and the model expression (``AZURE2 --print-predictions``,
-``pyazr.predictions``): ``ratio(dsdo_cm(1->1), rutherford(1->1))``, the c.m.
+``pyazr.predictions``): ``data aC_RTH: ratio(dsdo_cm(1->1), rutherford(1->1))``, the c.m.
 elastic cross section of pair 1 over the Rutherford cross section of the same
 pair at the same point.  The five angles share one normalization parameter,
 ``aC_RTH.norm``, with its 3 % prior.  If the five angles were five files, five

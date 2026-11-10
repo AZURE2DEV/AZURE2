@@ -401,17 +401,17 @@ extrapolation 16: ratio(sigma(2->3), sigma(2->5))*J1/J0
 == tests/ratio_frame/models/ratio_data.azr
 == tests/ratio_frame/models/ratio_free.azr
 == tests/ratio_to_rutherford/models/aC_data.azr
-data 1: ratio(dsdo_cm(1->1), rutherford(1->1))
+data rth: ratio(dsdo_cm(1->1), rutherford(1->1))
 == tests/ratio_to_rutherford/models/aC_hs.azr
-extrapolation 1: dsdo_cm(1->1)
-extrapolation 2: ratio(dsdo_cm(1->1), rutherford(1->1))
-extrapolation 3: ratio(dsdo_cm(1->1), rutherford(1->1))
+extrapolation dsdo_cm: dsdo_cm(1->1)
+extrapolation rth_cm: ratio(dsdo_cm(1->1), rutherford(1->1))
+extrapolation rth_lab: ratio(dsdo_cm(1->1), rutherford(1->1))
 == tests/ratio_to_rutherford/models/aC_story.azr
-data 1: ratio(dsdo_cm(1->1), rutherford(1->1))
-extrapolation 1: ratio(dsdo_cm(1->1), rutherford(1->1))
+data aC_RTH: ratio(dsdo_cm(1->1), rutherford(1->1))
+extrapolation aC_RTH_curve: ratio(dsdo_cm(1->1), rutherford(1->1))
 == tests/ratio_to_rutherford/models/aa_hs.azr
-extrapolation 1: dsdo_cm(1->1)
-extrapolation 2: ratio(dsdo_cm(1->1), mott(1->1))
+extrapolation dsdo_cm: dsdo_cm(1->1)
+extrapolation mott_cm: ratio(dsdo_cm(1->1), mott(1->1))
 == tests/reaction_rate/models/moved.azr
 == tests/reaction_rate/models/moved_azr.azr
 == tests/reaction_rate/models/moved_azr_truth.azr
