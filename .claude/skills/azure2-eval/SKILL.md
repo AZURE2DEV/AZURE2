@@ -3538,7 +3538,8 @@ complete:
   tolerance on such a comparison without expecting 5.7e-10. It cancels wherever a ratio
   shares the constant.
 - 2026-09-16 -- THE LEVEL-MERGE TOLERANCE IS A HARD-CODED 1 keV.  A FIX WAS TRIED AND
-  REVERTED 2026-09-17; THE DEFECT IS STILL PRESENT.
+  REVERTED 2026-09-17.  FIXED 2026-10-24 ON DEV e239a12 BY LEVEL ID, NOT BY TOLERANCE: see the
+  2026-10-24 update at the end of this entry.
   `JGroup::IsLevel` (src/JGroup.cpp) decides whether a `<levels>` line belongs to a level
   already read by matching the level energy within `tol`, and `CNuc::Fill`
   (src/CNuc.cpp:168-174) then APPENDS that line's channel to the matched level.  With
@@ -3556,16 +3557,31 @@ complete:
   changing it retroactively alters how any previously saved `.azr` with a sub-keV same-J^pi
   pair is interpreted, and that risk outweighs the 17O blocker.  The patch is kept at
   `src/JGroup.cpp.patch_tol1e-6_reverted-2026-09-17` (untracked, next to the source).
-  CONSEQUENCES, STILL OPEN:
-  * The defect is unfixed.  A model needing two same-J^pi levels closer than 1 keV cannot
-    round-trip through a `.azr`.  17O needs another route -- constrain the pair apart, merge
-    them physically, or fix the read path properly (warn on merge rather than move `tol`).
-  * Nothing in the suite covers it: no test model has a same-J^pi gap under 15.5 keV, so
-    both tolerances pass 7/7.  A real fix needs its own round-trip regression test.
-  * ~/bin/AZURE2 (2026-09-16 21:54) and pyazr/_azure2*.so (2026-09-16 21:25) were built
-    WITH `tol = 1e-6` and still carry it -- the source revert did not touch them.  They are
-    to be rebuilt from reverted source once the running jobs finish; until then, results
-    from those builds used 1 eV.  Pre-change CLI binary: ~/bin/AZURE2.bak-2026-09-13_tol1e-3.
+  CONSEQUENCES AS OF 2026-09-17 (historical): the defect stayed open, no test model had a
+  same-J^pi gap under 15.5 keV, and the ~/bin/AZURE2 and pyazr .so built 2026-09-16 carried
+  `tol = 1e-6` until they were rebuilt.
+  UPDATE 2026-10-24 -- FIXED ON DEV e239a12 (fix/level-id-merge).  `tol` is unchanged; the
+  level ID (NucLine column 9) decides instead.  `CNuc::Fill` assigns a `<levels>` line to a
+  level of its J-group that carries the SAME level ID within 1 keV; failing that, to a level at
+  the IDENTICAL energy ("WARNING: level IDs a and b ... have the same J^pi and energy; their
+  lines are read as one level."); otherwise the line makes a NEW level ("WARNING: level ID b
+  ... is within 1 keV of level ID a ...; they are kept as two levels.").  Two same-J^pi levels
+  closer than 1 keV now round-trip through a `.azr` as long as their IDs differ.  Regression
+  test `tests/level_ids`.  Reported by the 17O+a session (3/2- at 8.2900 and 8.2893 MeV, IDs
+  91 and 22: chi2 44,430.5 with 32 free parameters merged -> 17,370.2 with 35 kept apart).
+  STILL TRUE AFTER THE FIX:
+  * Builds before e239a12, frozen per-campaign builds included, still merge by energy alone.
+    A pre-e239a12 fit with a sub-keV pair ran with one level where its file has two (13C+a
+    9-16-26 .. 9-24-26: 9/2+ at 9.862 and 9.86266 MeV, IDs 88/94); re-running it on a newer
+    build gives a different model.  Reproduce such a fit with its frozen build.
+  * `JGroup::IsLevel` itself is still an energy-only 1 keV match and still finds the final
+    state of an external-capture pair; two levels within 1 keV of that E_x are refused (audit
+    item 28, `tests/ec_final_state_ambiguous`).
+  * rmfit writes a close pair exactly only when the campaign's engine is >= e239a12
+    (`enginepin.keeps_close_levels`, 2026-11-08); older pins keep the 2026-10-10 separation.
+  * A very close pair is a formalism problem, not a reading one: the Brune/Park shift divided
+    differences take analytic limits below 1e-9 MeV since dev 6d3be80, but two levels with
+    parallel amplitudes still blow up as gap^-4.
 
 - 2026-10-01 (22Ne+a/10-1-26_claude) -- A <targetInt> LINE SHARED BY SEVERAL SEGMENTS
   CONVOLVED ALL OF THEM WITH TOO NARROW A GAUSSIAN. Every segment named on one line (and
