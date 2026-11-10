@@ -482,6 +482,13 @@ add_test(NAME pyazr_hybrid_threshold
                  ${CMAKE_CURRENT_SOURCE_DIR}/hybrid_threshold_test.py)
 set_tests_properties(pyazr_hybrid_threshold PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
 
+# The spin-orbit term of a hybrid pair through pyazr: channel functions per J against an independent integration, the
+# API's term equal to the record's, the refusals, external capture per J (tests/spin_orbit_potential, ec_ratio.csv).
+add_test(NAME pyazr_spin_orbit_potential
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/spin_orbit_potential_test.py)
+set_tests_properties(pyazr_spin_orbit_potential PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
 # The per-pair semantics of the hybrid potential on tests/hybrid_potential (its own folder's script): a pair's setting
 # beats the default, a pair without one inherits it, the API and the file give the same chi-squared, the Coulomb memo
 # sees a change of the potential; the project as committed against expected/chiSquared.out (about 20 s).
