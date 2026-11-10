@@ -2,6 +2,61 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-10 (director, night) — the sixth wave merged; a faster regime; the data structure is replaced, not carved
+
+**Merged into `feature/upgrade-4-data`** (`--no-ff`; each rehearsed, built and verified in a scratch worktree, the
+committed tree is that tree): the tools follow-up (the converted-tree gate as `tools/format3_gate.sh`), the
+pathway-table design (`cnuc_split.md` §11, with the director's decisions §11.11), the potential as a record of the
+project (`potential` in `<potentials>`; pyazr 2.23.0), and the cut of `EData`, `EPoint`, `ESegment` into files with
+one job (`edata_split.md` §5.8). Their entries are below.
+
+**The merged head as a whole** (build `work/b-trial11`, 0 warnings): 183 projects × 3 bases identical to the
+reference tag `tab-trial8` (704 + 677 + 704 files); `ctest -LE slow` 171/171; `ctest -L slow` 10/10 (run once, on the
+head before the potential record); `tests/run_tests.sh` 142 passed / 0 failed; calculations at 1 and 6 threads 12/12
+identical; T2 with a `<modelData>` section identical in the three bases; spec equivalence: 193 files, 185 converted,
+183 equal, 2 recorded, 0 differ; the converted tree: 483 (456 formal) identical, 38 classified, 0 differ, 0 missing.
+All of it was run on the merged tree of the last merge (`work/director/verify_trial11.out`). Not run on this head:
+1 against 8 threads, ThreadSanitizer.
+
+**The PI, 2026-11-10 (evening): go faster; the physics must stay the same.** What changes:
+- An agent checks each commit quickly (build, consistency test, the unit tests of the change, a handful of
+  projects) and runs the whole comparison once per branch or milestone; speed is measured once, at the end. The
+  director verifies once per merge and merges several branches together (`work/director/full_verify.sh`).
+- The data classes are not carved further. `EData`, `ESegment`, `EPoint` are **replaced**: what was measured is one
+  immutable shared object per data set, the working copy is a flat vector of calculation units addressed by the
+  plan, the functions that compute move onto these unchanged, and the three classes are deleted
+  (`work/briefs/X_data_structure.md`; its design page will be `docs/upgrade/data_structure.md`). This takes the place
+  of the steps S7 and S12 of `data_model.md` §6 and of the data-path part of Phase 6; `edata_split.md` §5 from F1 on
+  is superseded.
+
+**Decisions of the director.**
+- The pathway table (`cnuc_split.md` §11) is built in two branches: first everything outside the data classes (the
+  table, the check files, the set-up readers, the R-matrix route, the forward hot path), then, after the data
+  structure is replaced, the external-capture set-up, capture A_y at set-up and the deletion of the trees.
+- The spin–orbit term follows the PI's four answers (one spinning particle; FRESCO's convention; the same potential
+  for bound states and closed channels; e² = α ħc): `work/briefs/W_spin_orbit.md`.
+
+**Defects and debts found, not yet fixed** (owner in brackets):
+- An exit pair number is used as a decay position in the external-capture code of the data classes and in
+  `AZUREAPI::GetECIntegrals`; no project of `tests/` triggers it [second pathway branch, with a test project].
+- The not-found check of the exit in `GenMatrixFunc`/`AMatrixFunc` cannot be reached; the capture-A_y terms are built
+  lazily under a static mutex; `GetECIntegrals` uses the formal energy in every basis [pathway branches].
+- pyazr: `save_fit` of a format-3 project fails with `norms="fitted"`; `save_fit` of an old-format project does not
+  write a changed potential; `set_nuclear_potential` takes no matching radius or step [pyazr on records].
+- `io::WriteRecords` pads keys to 15 characters (`matching_radius` is misaligned); `classify.py` treats two
+  unreadable files as equal [tools].
+
+**Then.** Units, S factor and yields per charge (`J_units_scales.md`); pyazr's model on records, one set-up path for
+both formats, components as leaves in `predict`, the recipe "a new kind of data"; the rest of `CNuc`; Phase 5 (with
+the lab-frame comparison of shifted data); Phase 6 (what is left of the mutable statics); `FOR_THE_OWNER.md` and
+`ROADMAP.md` for the meeting with the owner; `origin/dev` merged only when the reconstruction is complete.
+
+**Running now** (Opus agents; briefs in `/data0/skowrons/AZURE2-upgrade/work/briefs/`, the PI allowed all 24 threads):
+the replacement of the data structure (`X_data_structure.md`, `feature/upgrade-4-data-structure`), the pathway table
+outside the data classes (`Y_pathway_table_1.md`, `feature/upgrade-4-pathway-table-1`), the spin–orbit term
+(`W_spin_orbit.md`, `feature/upgrade-4-spin-orbit`), units, S factor and yields per charge (`J_units_scales.md`,
+`feature/upgrade-4-units`).
+
 ## 2026-11-10 (agent, brief S) — `EData`, `EPoint`, `ESegment` cut into files with one job (`feature/upgrade-4-edata-split-3`)
 
 **What file holds what now.** Eleven new source files and two new headers, each made by a verbatim move (bodies
