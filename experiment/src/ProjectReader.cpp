@@ -3,6 +3,7 @@
 
 #include <sstream>
 
+#include "azure2/io/ConfigSection.h"
 #include "azure2/io/Document.h"
 #include "azure2/io/LevelRows.h"
 #include "azure2/io/RecordReader.h"
@@ -39,22 +40,10 @@ std::vector<io::LevelRow> LevelRowsOf(const io::Document &doc, bool &ok) {
 }
 
 bool RelativisticFlag(const io::Document &doc) {
-  const io::Document::Section *s = doc.Find("config");
-  if (!s || s->close == io::Document::Section::npos) return false;
-  bool relativistic = false;
-  for (std::string entry : doc.Body(*s)) {
-    const std::size_t hash = entry.find('#');
-    if (hash != std::string::npos) entry = entry.substr(0, hash);
-    const std::size_t eq = entry.find('=');
-    if (eq == std::string::npos) continue;
-    std::string key = entry.substr(0, eq), value = entry.substr(eq + 1);
-    key.erase(0, key.find_first_not_of(" \t\r"));
-    key.erase(key.find_last_not_of(" \t\r") + 1);
-    value.erase(0, value.find_first_not_of(" \t\r"));
-    value.erase(value.find_last_not_of(" \t\r") + 1);
-    if (key == "relativistic") relativistic = value == "1" || value == "true";  // as Config::ReadConfigFile
-  }
-  return relativistic;
+  std::size_t open = 0;
+  const io::ConfigSection config = io::ReadConfigSection(io::ConfigLinesOf(doc, open));
+  const io::ConfigEntry *e = config.Find("relativistic");
+  return config.closed && e && !e->positional && (e->value == "1" || e->value == "true");  // as Config::ReadConfigFile
 }
 
 Format3Project ReadFormat3Project(const io::Document &doc, const Format3ReadOptions &options) {

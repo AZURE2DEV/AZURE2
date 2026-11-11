@@ -34,13 +34,20 @@ fail=0
 mkdir -p "$WORK/proj/data"
 sed -n '1,/<\/levels>/p' "$HERE/../identical_entrance_reaction/projects/be8.azr" > "$WORK/proj/run.azr"
 cat >> "$WORK/proj/run.azr" <<'EOF'
-<segmentsData>
-1 1 2 0 100 0 180 0 1 0 0 0 0 0 data/p7li_aa_int.dat 0 0
-</segmentsData>
-<segmentsTest>
-</segmentsTest>
-<targetInt>
-</targetInt>
+<data>
+dataset p7li_aa_int
+    reaction       7Li(p,a)4He
+    quantity       sigma
+    unit           b
+    file           data/p7li_aa_int.dat
+    columns        E_lab[MeV] _ value error
+    energy_window  0 100 MeV
+    norm           1 fixed
+</data>
+<extrapolations>
+</extrapolations>
+<targets>
+</targets>
 EOF
 cat > "$WORK/proj/data/p7li_aa_int.dat" <<'EOF'
 0.3 0 3.315412e-02 9.946235e-04
@@ -61,7 +68,7 @@ cat > "$WORK/proj/fix.par" <<'EOF'
 energy_1 1.7755100e+01 1.7755100e+00
 width_1_1 8.5745701e-01 8.5745701e-02 fixed
 width_1_2 1.2520344e-01 1.2520344e-02
-segment_1_energy_shift 0.0000000e+00 5.0000000e-04
+p7li_aa_int.shift.offset 0.0000000e+00 5.0000000e-04
 EOF
 
 # fit NAME STDIN [flags] -- a fit (menu 2) from a copy of proj

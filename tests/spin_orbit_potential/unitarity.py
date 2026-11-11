@@ -5,7 +5,6 @@ d5/2 levels; elastic scattering the only open channel, so U_J = exp(2 i delta_J)
 optical theorem equals the angle-integrated elastic one at every energy (296 energies, to 1e-9; the outputs carry 11
 digits).  Also: the term moves sigma_el (it is applied).  Usage: unitarity.py AZURE2 WORKDIR"""
 import os
-import subprocess
 import sys
 
 import numpy as np
@@ -25,9 +24,8 @@ model = up.Project(
      up.Level(1.5, 1, 6.2, [C(n16o, 1, 4, 1.0e4)]), up.Level(0.5, 1, 15.0, [C(n16o, 1, 0, 5.0e6)])],
     data=[], tests=[up.TestSegment(1, 1, 0.05, 3.0, 0.01), up.TestSegment(1, 1, 0.05, 3.0, 0.01, extra="total 1")])
 os.makedirs(work, exist_ok=True)
-azr = model.write(work)
-subprocess.run([binary, "--convert", azr, os.path.join(work, "f3.azr"), "--to", "3"], check=True, capture_output=True)
-text = open(os.path.join(work, "f3.azr")).read()
+azr = model.write(work, binary)   # format 3 (upgrade_project converts its old text)
+text = open(azr).read()
 so = "    spin_orbit     woods_saxon depth 7 MeV radius 3.2 fm diffuseness 0.6 fm on light operator 2l.s\n"
 record = ("<potentials>\npotential n16O\n    pair           n+16O\n    coulomb_radius 3.5 fm\n"
           "    central        woods_saxon depth 40 MeV radius 3.2 fm diffuseness 0.6 fm\n" + so + "</potentials>\n")

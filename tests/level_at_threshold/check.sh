@@ -110,7 +110,8 @@ printf '%s 0 1e-10 1e-11\n' 3.0 4.0 5.0 6.0 > "$WORK/d_c12/c12_a_int.dat"
 printf '%s 0 1e-12 1e-13\n' 3.0 4.0 5.0 6.0 > "$WORK/d_c12/c12_el_int.dat"
 printf '%s 0 1e-3 1e-4\n' 0.3 0.6 1.0 1.5 > "$WORK/d_be8/p7li_aa_int.dat"
 printf '%s 0 1e-3 1e-4\n' 17.0 18.0 19.0 20.0 > "$WORK/d_be8/aa_p7li_int.dat"
-grep -v 'c12_a_diff' "$IDENT/c12c12.azr" > "$WORK/c12c12.azr"
+awk '$1 == "dataset" { skip = ($2 == "c12_a_diff") } /^$|^<\/data>/ { skip = 0 } !skip' \
+  "$IDENT/c12c12.azr" > "$WORK/c12c12.azr"   # without the data set c12_a_diff
 
 case_set c12c12 "$WORK/c12c12.azr" "$WORK/d_c12" 13.9336 0.3
 case_set be8 "$IDENT/be8.azr" "$WORK/d_be8" 17.2551 0.5

@@ -339,6 +339,26 @@ int main(int argc, char **argv) {
     const ConvertResult k = Convert({"", "1 1 -1 0.5 2.0 0.5 0 0 0 4\n", "", "", ""});
     check("exit -1 with test type 4: converted to [total]", k.ok && k.text.find("[total]") != std::string::npos);
   }
+  // ---- a sample <abundances> lacks, and a component naming a pair key <levels> lacks: the old engine refused the line
+  //      (WorkingCopy.cpp, NaturalAllowed and CheckComponentPairs), so the converter refuses it with that reason; an inactive
+  //      line converts
+  {
+    const std::string abund = "<abundances>\nnatNe: 10 21 0.9 1 0.01\n</abundances>\n";
+    const ConvertResult d = Convert({"1 5 5 0.1 2 0 180 0 1 0 0 0 0 0 nat.dat sample nosuch\n", "", "", abund, ""});
+    check("data line with a sample <abundances> lacks: refused",
+          !d.ok && d.refusal.find("data line 1: sample \"nosuch\" is not in the <abundances> block") != std::string::npos);
+    const ConvertResult t = Convert({"", "1 5 5 0.5 2.0 0.5 0 0 0 0 sample nosuch\n", "", abund, ""});
+    check("test line with a sample <abundances> lacks: refused",
+          !t.ok && t.refusal.find("test line 1: sample \"nosuch\" is not in the <abundances> block") != std::string::npos);
+    const ConvertResult i = Convert({"0 5 5 0.1 2 0 180 0 1 0 0 0 0 0 nat.dat sample nosuch\n", "", "", abund, ""});
+    check("inactive line with a sample <abundances> lacks: converted", i.ok);
+    const ConvertResult c = Convert({"1 5 5 0.1 2 0 180 0 1 0 0 0 0 0 nat.dat 1 0 1 9 9 -999\n", "", "", "", ""});
+    check("data line whose component names pair 9: refused",
+          !c.ok && c.refusal.find("data line 1: component 9 -> 9 names a pair key that is not in the compound nucleus") != std::string::npos);
+    const ConvertResult e = Convert({"", "1 5 5 0.5 2.0 0.5 0 0 0 0 1 0 1 5 9 -999\n", "", "", ""});
+    check("test line whose component names pair 9: refused",
+          !e.ok && e.refusal.find("test line 1: component 5 -> 9 names a pair key that is not in the compound nucleus") != std::string::npos);
+  }
   // ---- a sample's row of a compound nucleus no line reaches is kept: its isotope from the pair of <levels> that forms it
   //      with the lines' light particle (n + 22Ne -> 23Ne); a row no pair forms is a question, never a silent drop
   {
@@ -386,6 +406,25 @@ int main(int argc, char **argv) {
            F{{"reaction", "20Ne(n,n)20Ne"}, {"quantity", "neutron_yield"}, {"unit", "1"}, {"file", "tr2.dat"},
              {"columns", "E_lab[MeV] _ value error"}, {"energy_window", "0.1 2 MeV"}, {"norm", "1 fixed"}, {"target", "S"}});
     check("transmission: segment_1_thickness -> S.areal_density", Param(r, "segment_1_thickness") == "S.areal_density");
+  }
+  // ---- a line with transmission and yield, and a thicknessgroup member without its own block: the old engine refused
+  //      them (WorkingCopy::FinishTransformedSegment, ResolveThicknessGroups), so the converter refuses them with that reason
+  {
+    const ConvertResult b = Convert({"1 5 5 0.1 2 0 180 0 1 0 0 0 0 0 g.dat yield 0.05 transmission 0.05\n", "", "", "", ""});
+    check("transmission and yield on one line: refused",
+          !b.ok && b.refusal.find("data line 1: a line is a transmission or a yield, not both") != std::string::npos);
+    const ConvertResult m = Convert({"1 5 5 0.1 2 0 180 0 1 0 0 0 0 0 t.dat transmission 0.05 1 0 thicknessgroup S\n"
+                                     "1 5 5 0.1 2 0 180 0 1 0 0 0 0 0 g.dat thicknessgroup S\n", "", "", "", ""});
+    check("thicknessgroup member without transmission or yield: refused",
+          !m.ok && m.refusal.find("data line 2: thicknessgroup 'S' needs the line's own transmission or yield block") != std::string::npos);
+    // the old fit form's own refusals (SegLine): vary 2, a thicknessgroup without its label; a transmission of a
+    // differential cross section has no format-3 form (one quantity per data set)
+    const ConvertResult v = Convert({"1 5 5 0.1 2 0 180 0 1 0 0 0 0 0 t.dat transmission 0.05 2 0\n", "", "", "", ""});
+    check("transmission vary 2: refused", !v.ok && v.refusal.find("vary 0 or 1 (read 2)") != std::string::npos);
+    const ConvertResult l = Convert({"1 5 5 0.1 2 0 180 0 1 0 0 0 0 0 t.dat transmission 0.05 1 0 thicknessgroup\n", "", "", "", ""});
+    check("thicknessgroup without a label: refused", !l.ok && l.refusal.find("thicknessgroup needs a label") != std::string::npos);
+    const ConvertResult d = Convert({"1 5 5 0.1 2 0 180 1 1 0 0 0 0 0 t.dat transmission 0.05\n", "", "", "", ""});
+    check("transmission of a differential cross section: refused", !d.ok);
   }
   // ---- <segmentsTest>: x<k>, the grid E_k = lo + k step (F10) or, --exact-grids, the energies the old loop accumulated;
   //      test isDiff 3 + K: c.m. a_k/a_0 for k = 0..K (GenMatrixFunc: angularCoeff / A_0); one energy: a list
@@ -470,6 +509,24 @@ int main(int argc, char **argv) {
     check("density_2 -> tgt_y2.areal_density", Param(r, "density_2") == "tgt_y2.areal_density");
     check("screening_2 -> tgt_y2.screening", Param(r, "screening_2") == "tgt_y2.screening");
     check("doppler_3 -> tgt_y3.doppler", Param(r, "doppler_3") == "tgt_y3.doppler");
+  }
+  // ---- a doppler fit form the old engine refused (TargetEffect: vary 0 or 1, sigma >= 0 K, Tmax above T): refused with
+  //      its reason instead of converted to a fixed or fitted temperature
+  {
+    auto doppler = [](const std::string &block) {
+      return Convert({"1 1 2 0.2 1.4 0 180 0 1 0 0 0 0 0 y3.dat\n", "",
+                      "1 \"1\" 40 0 0 0 0 \"\" 0 0 0 0 \"\" 0 " + block + "\n", "", ""});
+    };
+    const ConvertResult v = doppler("doppler 300 2 0");
+    check("doppler vary 2: refused", !v.ok && v.refusal.find("vary \"2\" is not 0 or 1") != std::string::npos);
+    const ConvertResult s = doppler("doppler 300 1 -5");
+    check("doppler sigma < 0: refused", !s.ok && s.refusal.find("sigma \"-5\" is not a non-negative number (K)") != std::string::npos);
+    const ConvertResult t = doppler("doppler 300 1 0 200");
+    check("doppler Tmax below T: refused", !t.ok && t.refusal.find("Tmax \"200\" must be a temperature above T (K)") != std::string::npos);
+    const ConvertResult z = doppler("doppler 0");
+    check("doppler 0: refused", !z.ok && z.refusal.find("with the effective temperature T > 0 in kelvin") != std::string::npos);
+    const ConvertResult ok = doppler("doppler 300 1 0 900");
+    check("doppler 300 1 0 900: converted", ok.ok && ok.text.find("free_gas 300 K fit grid_max 900") != std::string::npos);
   }
   // ---- a shiftfn block on a follower of a shift group or of a shift-function group, or a line in both kinds of group:
   //      the old engine refused each (the working copy's group set-up), so the converter refuses it instead of dropping the block

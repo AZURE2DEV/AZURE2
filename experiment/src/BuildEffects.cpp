@@ -122,6 +122,9 @@ void TargetInto(Context &c, const ValidatedRecord &t, const ValidatedRecord &use
     const Value *temp = d->Get("temperature");
     if (temp) {
       const Nuisance &n = temp->nuisance;
+      // the effective temperature of the free-gas model (K) is positive; T <= 0 has no Doppler width (TargetEffect)
+      if (!(n.value.value > 0.0))
+        c.Error(codes::kOutOfRange, t, "doppler", "free_gas: the effective temperature must be > 0 K, not " + n.value.text);
       e.doppler = true;
       e.dopplerTemperature = n.value.value;
       if (n.mode == NuisanceMode::Fit || n.hasPrior || n.hasGridMax) {
@@ -335,6 +338,12 @@ void SampleThickness(Context &c, std::vector<Member> &members, bool isData) {
     const Value *d = target ? target->Get("areal_density") : nullptr;
     if (!d) continue;
     const Nuisance &n = d->nuisance;
+    // a thickness of 0 would make the engine read the data set as a plain cross section (Segment: n > 0 marks it)
+    if (!(n.value.value > 0.0)) {
+      c.Error(codes::kOutOfRange, *target, "areal_density",
+              "the sample thickness of a " + q + " must be > 0 atoms/b, not " + n.value.text);
+      continue;
+    }
     // the engine's sample thickness and its prior width are in atoms/b (Segment)
     ReactionSpec &r = isData ? c.out_.data.datasets.items[i].spec.reaction : c.out_.extrapolations.extrapolations.items[i].spec.reaction;
     (q == "transmission" ? r.transmission : r.yieldThickness) = ToUnit(n.value.value, n.unit, "atoms/b");

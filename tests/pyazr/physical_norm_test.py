@@ -11,7 +11,7 @@ Checks, on tests/13N/13N.azr with one normalization freed (5 % systematic error)
   1. a moved norm changes calculate_chi2 exactly as it changes calculate_chi2_rwa;
   2. no hysteresis: calculate_chi2 at the nominal vector gives the nominal value after a call
      with the moved norm, and calculate_chi2_rwa afterwards is unchanged;
-  3. with a <scatteringLengths> constraint the two bases still agree (the term is in both).
+  3. with a measured scattering length (a datum of <modelData>) the two bases still agree (the term is in both).
 (A vector the transform rejects now gives +inf instead of 0; CNuc::TransformIn only warns on a
 negative denominator, so no vector exercises that branch here.)
 
@@ -25,8 +25,6 @@ import sys
 import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import old_tree  # noqa: E402  (the old originals of converted projects)
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 
 failures = []
@@ -46,7 +44,7 @@ def main():
     sys.path.insert(0, ROOT)
     try:
         import numpy as np
-        from pyazr import azure2, AzrModel
+        from pyazr import azure2, Project
         import pyazr._azure2  # noqa: F401
     except Exception as e:  # pragma: no cover
         print(f"SKIP: engine not importable ({e})")
@@ -55,12 +53,10 @@ def main():
     work = tempfile.mkdtemp(prefix="pyazr_physical_norm_")
     try:
         src = os.path.join(ROOT, "tests", "13N")
-        shutil.copy(old_tree.original(os.path.join(src, "13N.azr")), work)  # the old file (format3_tree.md)
         shutil.copytree(os.path.join(src, "data"), os.path.join(work, "data"))
-        model = AzrModel.from_file(os.path.join(work, "13N.azr"))
-        model.set_segment_norm("meyer_84", vary=True, sys_error=5.0)
-        azr = os.path.join(work, "free_norm.azr")
-        model.write(azr)
+        model = Project.open(os.path.join(src, "13N.azr"))
+        model.set("meyer_84", norm="1 fit prior 1 5%")
+        azr = model.save(os.path.join(work, "free_norm.azr"))
 
         print("1. a moved normalization moves calculate_chi2 as it moves calculate_chi2_rwa")
         with azure2(azr, cwd=work) as m:
@@ -91,9 +87,8 @@ def main():
             check("calculate_chi2_rwa unchanged afterwards", rel(again, ref) <= 1e-12, f"{again} vs {ref}")
 
         print("\n3. with a scattering-length constraint the two bases still agree")
-        model.add_scattering_length(1, 0.5, 1.0, 0.2)
-        azr2 = os.path.join(work, "free_norm_sl.azr")
-        model.write(azr2)
+        model.add_datum("a_p12C", quantity="scattering_length", pair="p+12C", s="1/2", value="1.0 fm", error="0.2 fm")
+        azr2 = model.save(os.path.join(work, "free_norm_sl.azr"))
         with azure2(azr2, cwd=work) as m:
             x = np.asarray(m.params_rwa, float)
             kinds = [p.kind for p in m.parameters if not p.fixed]

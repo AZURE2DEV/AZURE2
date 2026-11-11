@@ -2,10 +2,12 @@
 """pyazr.predictions(path): the expression trees of a project's data sets and extrapolations (docs/upgrade/data_model.md
 section 3), the same lines as `AZURE2 --print-predictions` (AZURE2_BIN), on T2 (SUM, RATIO, sample, phase shift, ...),
 natural_neon (sample SUMs) and the format-3 project ratio_to_rutherford/models/aC_story (a data set and an extrapolation
-labelled by their record names, an old project's by their numbers); a project that cannot be set up raises ValueError.
+labelled by their record names, every data set of a format-3 project by its record name, an old project's by its
+number); a project that cannot be set up raises ValueError.
 Needs the compiled engine; skips (exit 77) without it.
 """
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -40,9 +42,15 @@ for rel in ("tests/upgrade/T2/T2.azr", "tests/natural_neon/natural_neon.azr", NA
     finally:
         os.chdir(cwd)
     check(f"{rel}: one line per data set and extrapolation", len(lines) > 0 and all(": " in l for l in lines), lines[:3])
+    text = open(os.path.join(d, name)).read()
     if rel == NAMED:
         check(f"{rel}: the data set and the extrapolation by their record names",
               [l.split(": ")[0] for l in lines] == ["data aC_RTH", "extrapolation aC_RTH_curve"], lines)
+    elif re.search(r"^format=3\s*$", text, re.M):
+        records = [f"{m.group(1).replace('dataset', 'data')} {m.group(2)}"
+                   for m in re.finditer(r"^(dataset|extrapolation) +(\S+)", text, re.M)]
+        check(f"{rel}: a format-3 project's data sets by their record names",
+              sorted(l.split(": ")[0] for l in lines) == sorted(records), lines[:3])
     else:
         check(f"{rel}: an old project's data sets by their numbers",
               all(l.split(": ")[0].split(" ", 1)[1].isdigit() for l in lines), lines[:3])

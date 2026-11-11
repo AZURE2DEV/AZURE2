@@ -9,7 +9,8 @@ refit1q is refit1 polished with the two levels whose widths had gone to zero
 removed (²¹Ne 5/2⁺ at 8.930 MeV and 3/2⁻ at 9.130 MeV). Earlier versions of
 this suite were built from refit1 (2026-10-18) and from the joint fit
 (`joint_fit.azr`, until 2026-10-18). The natural abundances (0.9048 / 0.0925 / 0.0027) are
-fixed in the `<abundances>` block.
+fixed on the target record `natural` (its isotopes). The file is format 3 (converted; the original is in
+`tests/convert/fixtures/tests/natural_neon/`).
 
 `tests/natural_target` checks the same features on a small synthetic
 p + ¹²C / ¹³C model. This suite runs them on a fitted model with real data, so
@@ -21,9 +22,8 @@ normalizations are fixed at the fitted values, so every segment reproduces
 the fit's own chi-squared. The suite has no energy shift: refit1q's only
 nonzero shift is on the Hinterberger data, which are not in the suite.
 
-`check.sh` runs the four test segments, with `<targetInt>` switched off,
-because it folds test segments with the same numbers as the data segments it
-names. It checks two things:
+`check.sh` runs the four extrapolations with their target integration switched off (their `beam` and
+`quadrature` fields removed): it folds them with the same numbers as the data sets of the same beam. It checks two things:
 - the natural sum equals 0.9048 σ(²¹Ne) + 0.0925 σ(²³Ne) + 0.0027 σ(²²Ne) on
   one lab-energy grid, with each nucleus's total taken from its own test
   segment, to 1e-9;
@@ -44,7 +44,7 @@ About 55 s on two threads.
 | 6 | Sikkema 1958 (20261) | ²⁰Ne | ²⁰Ne only, folded 10.6 keV | 245.029 (35; see below) |
 | 7 | Junghans et al., EPJ Web Conf. 239, 01006 (2020) (23755005), E_lab 0.84–1.26 MeV | natural Ne | natural sum, folded with the energy-dependent nELBE resolution | 946.069 (272) |
 
-Segments 5 and 6 share one `<targetInt>` line ("5,6") but have different
+Segments 5 and 6 share one beam record (the old `<targetInt>` line "5,6") but have different
 entrance pairs (n+²²Ne and n+²⁰Ne).  dev converts the shared lab sigma to
 c.m. once, with the first segment's pair (22/23), and folds segment 6 with
 that kernel too; thm gives every listed segment its own copy, converted with

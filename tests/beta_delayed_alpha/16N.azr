@@ -10,15 +10,9 @@ none                                                                            
 none                                                                                                #Coulomb Amplitudes Check
 none                                                                                                #Reaction Pathway Check
 none                                                                                                #Angular Distributions Check
-</config>
-<potential>
-useHybridPotential=0
 useAdaptiveGrid=1
-potentialType=0
-V0=150
-R=3.6
-a=0.6
-</potential>
+format=3
+</config>
 <levels>
 1 -1 7.11685 1 1 1 0 2 1 1 1 372528981856311.44 0 1 0 1 0 4.002603254 12 2 6 7.16192 7.16192 0 0 0.0 0 5.43 0 0 0
 1 -1 7.11685 1 1 2 2 2 1 1 0 0.83902143 0.5 1 2 -1 0 0.000548580 16.006101925 -1 7 7.16192 10.42091 0 0 0.0 20 5.43 2.0023 594000 0
@@ -30,18 +24,20 @@ a=0.6
 1 -1 20 1 1 2 2 2 3 1 0 -0.4181921 0.5 1 2 -1 0 0.000548580 16.006101925 -1 7 7.16192 10.42091 0 0 0.0 20 5.43 2.0023 594000 0
 
 </levels>
-<segmentsData>
-1              2              1              0              50             0              180            0              1              0              0              0              0              0               data/bda.dat 0 0
-</segmentsData>
-<segmentsTest>
-</segmentsTest>
-<targetInt>
-</targetInt>
+<data>
+# <segmentsData> line 1
+dataset bda
+    reaction       16N(b-,a)12C
+    quantity       beta_delayed_spectrum
+    unit           arbitrary
+    file           data/bda.dat
+    columns        E_decay[MeV] _ value error
+    energy_window  0 50 MeV
+    norm           1 fixed
+</data>
+<extrapolations>
+</extrapolations>
+<targets>
+</targets>
 <parameterSettings>
 </parameterSettings>
-<lastRun>
-</lastRun>
-<mcmc>
-<parameters>
-</parameters>
-</mcmc>

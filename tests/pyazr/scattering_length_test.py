@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
-"""Scattering lengths through pyazr: the <scatteringLengths> block helpers of AzrModel (pure Python),
+"""Scattering lengths through pyazr: the <scatteringLengths> block helpers of AzrModel (pure Python, on the old
+originals of the projects, tests/convert/fixtures),
 azure2.scattering_lengths against the reference values of tests/scattering_length, the constraint term
 in calculate_chi2_rwa / penalties(), chi2_and_grad and the residual_jacobian rows against central
-finite differences.  Model: tests/scattering_length/be7p_fit.azr (7Be+p, every kind of constraint line).
+finite differences.  Model: tests/scattering_length/be7p_fit.azr (7Be+p, every kind of constraint; in format 3
+the constraints are scattering_length data of <modelData>).
 
 The engine part needs the compiled module and skips cleanly without it.
 
@@ -17,6 +19,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 SRC = os.path.join(ROOT, "tests", "scattering_length")
 sys.path.insert(0, ROOT)
+sys.path.insert(0, HERE)
+import old_tree  # noqa: E402  (the old originals of converted projects)
 
 failures = []
 engine_skipped = False
@@ -41,7 +45,7 @@ except ImportError as e:  # as the other pyazr tests: no package dependencies (e
 
 tmp = tempfile.mkdtemp(prefix="pyazr_scatlen_")
 try:
-    m = AzrModel.from_file(os.path.join(SRC, "be7p_fit.azr"))
+    m = AzrModel.from_file(old_tree.original(os.path.join(SRC, "be7p_fit.azr")))
     lines = m.scattering_lengths
     check("block read: 5 lines", len(lines) == 5, lines)
     check("coherent line s = -1", lines[2].s == -1 and lines[2].value == 5.0, lines[2])
@@ -57,7 +61,7 @@ try:
     text = open(out).read()
     check("block kept where it was (after </segmentsData>, before <segmentsTest>)",
           text.index("</segmentsData>") < text.index("<scatteringLengths>") < text.index("<segmentsTest>"))
-    plain = AzrModel.from_file(os.path.join(SRC, "be7p.azr"))
+    plain = AzrModel.from_file(old_tree.original(os.path.join(SRC, "be7p.azr")))
     check("no block: empty list", plain.scattering_lengths == [])
     plain.add_scattering_length(1, 1, 17.0, 0.5)
     plain.write(os.path.join(tmp, "new.azr"))

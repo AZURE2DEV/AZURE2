@@ -13,8 +13,8 @@ and the derivative is a five-point central difference.  The ~1e-5 left in P and 
 against the alpha hbar c of the boundary values; with alpha hbar c the integration agrees with the
 Coulomb functions to ~1e-8 (physics_hybrid_potential), and this test asks for 1e-6.
 
-Model: tests/hybrid_potential/hybrid_potential.azr (p + 12C, pair 1) with its <potential> block
-replaced: once switched off, once a Woods-Saxon of depth 1e-9 MeV.  Compared through
+Model: tests/hybrid_potential/hybrid_potential.azr (p + 12C, pair 1) with its <potentials> section
+replaced: once empty (no potential), once one record for p + 12C, a Woods-Saxon of depth 1e-9 MeV.  Compared through
 `azure2.coulomb_functions` at l = 0..3, 0.3-4 MeV, at the channel radius and at an off-node radius.
 
 Needs the compiled engine; skips cleanly without it.
@@ -53,17 +53,18 @@ try:
     os.makedirs(os.path.join(work, "output"))
     shutil.copytree(os.path.join(os.path.dirname(SRC), "data"), os.path.join(work, "data"))
     text = open(SRC).read()
-    s = text.index("<potential>")
-    e = text.index("</potential>") + len("</potential>")
+    s = text.index("<potentials>")
+    e = text.index("</potentials>") + len("</potentials>")
 
-    def variant(name, block):
+    def variant(name, records):
         path = os.path.join(work, name + ".azr")
-        open(path, "w").write(text[:s] + block + text[e:])
+        open(path, "w").write(text[:s] + "<potentials>\n" + records + "</potentials>" + text[e:])
         return path
 
-    plain = azure2(variant("plain", "<potential>\nuseHybridPotential=0\n</potential>"), cwd=work)
-    tiny = azure2(variant("tiny", "<potential>\nuseHybridPotential=1\nuseAdaptiveGrid=1\npotentialType=0\n"
-                                  "V0=1e-9\nR=3.6\na=0.6\n</potential>"), cwd=work)
+    plain = azure2(variant("plain", ""), cwd=work)
+    tiny = azure2(variant("tiny", "potential p12C\n    pair            p+12C\n    coulomb_radius  3.5 fm\n"
+                                  "    central         woods_saxon depth 1e-9 MeV radius 3.6 fm diffuseness 0.6 fm\n"
+                                  "    matching_radius 15 fm\n    step            0.0275 fm\n"), cwd=work)
     energies = np.array([0.3, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0])
     worst_s = worst_p = 0.0
     for L in (0, 1, 2, 3):

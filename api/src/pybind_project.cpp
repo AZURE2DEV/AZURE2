@@ -80,7 +80,10 @@ std::vector<io::Token> ValueTokens(const std::string &key, const std::string &te
 
 }  // namespace
 
+void BindNuclearPart(py::module_ &m);  // pybind_nuclear_part.cpp: <levels>, <config>, <thm> read and edited
+
 void BindProject(py::module_ &m) {
+  BindNuclearPart(m);
   // The project file as a lossless document (io::Document; docs/upgrade/project.md section 2): pyazr's AzrModel
   // reads and edits the file through it, as the engine does.  Lines are str (decoded UTF-8, invalid bytes kept as
   // surrogates on the Python side by the caller); sections are (name, open, close, depth, parent) with close = -1 for

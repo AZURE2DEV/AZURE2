@@ -45,6 +45,9 @@ if [ -d "$OUT/tests/convert/fixtures" ]; then
     rel="${rel#./}"
     mkdir -p "$OUT/$(dirname "$rel")"
     cp "$OUT/tests/convert/fixtures/$rel" "$OUT/$rel"
+    # the conversion's side files (<stem>.f3<ext>, e.g. T2's prior_cov.f3.txt) are written again by the converter,
+    # which overwrites nothing: the committed ones go
+    find "$OUT/$(dirname "$rel")" -maxdepth 1 -type f -name '*.f3.*' ! -name '*.f3.azr' -delete
   done
   rm -rf "$OUT/tests/convert"
 fi

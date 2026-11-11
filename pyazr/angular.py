@@ -16,8 +16,8 @@ import tempfile
 
 import numpy as np
 
-from .azrfile import AzrModel
 from .azure2 import azure2
+from .project import Project, _is_format3
 
 
 def angular_distribution(azr_file, energies, entrance=1, exit=1, order=4,
@@ -65,26 +65,38 @@ def angular_distribution(azr_file, energies, entrance=1, exit=1, order=4,
     if energies.size == 0:
         return np.empty(0), np.empty((0, order + 1))
 
-    model = AzrModel.from_file(azr_file)
-
-    # add_extrapolation converts c.m. energies to the lab frame the file holds
-    # (frame="cm"), with the entrance pair's masses.  (AzrModel has no pairs()
-    # method, so the conversion that stood here always refused c.m. input.)
     frame = "lab" if lab else "cm"
-
-    # One single-point extrapolation per energy, so segment i is energy i and
-    # no interpolation onto a grid is involved.
-    model.clear_extrapolations()
-    for e in energies:
-        model.add_extrapolation(entrance=entrance, exit=exit,
-                                e_min=float(e), e_max=float(e), e_step=1.0,
-                                observable="angular-distribution", order=order,
-                                frame=frame)
-
     tmpdir = tempfile.mkdtemp(prefix="pyazr-angdist-")
     tmp_azr = os.path.join(tmpdir, "_angular_distribution.azr")
+    if _is_format3(azr_file):
+        # The project with its extrapolations replaced by one single-point grid per energy, so segment i is energy i
+        # and no interpolation onto a grid is involved: the Legendre coefficients a_k / a_0 (expansion a_over_a0),
+        # the energy in the frame asked for.
+        model = Project.open(azr_file)
+        for name, r in model.records().items():
+            if r.record_kind == "extrapolation":
+                model.remove(name)
+        reaction = model.reaction(entrance, exit)
+        for i, e in enumerate(energies):
+            model.add_extrapolation(f"angular_{i + 1}", reaction=reaction, quantity="legendre", unit="1",
+                                    expansion="a_over_a0", orders=f"0 {int(order)}",
+                                    energies=f"list {float(e)!r} MeV {frame}")
+        write = model.save
+    else:
+        # add_extrapolation converts c.m. energies to the lab frame the file holds (frame="cm"), with the entrance
+        # pair's masses.
+        from .azrfile import AzrModel
+        model = AzrModel.from_file(azr_file)
+        model.clear_extrapolations()
+        for e in energies:
+            model.add_extrapolation(entrance=entrance, exit=exit,
+                                    e_min=float(e), e_max=float(e), e_step=1.0,
+                                    observable="angular-distribution", order=order,
+                                    frame=frame)
+        write = model.write
+
     try:
-        model.write(tmp_azr)
+        write(tmp_azr)
 
         # The .azr keeps its paths relative to itself, so the instance has to
         # run where the original file lives.

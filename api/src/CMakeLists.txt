@@ -31,7 +31,7 @@ if(NOT pybind11_FOUND)
                     "Install pybind11 (e.g. pip install pybind11) and reconfigure "
                     "so `pyazr` can drive AZURE2 in-process.")
 else()
-    pybind11_add_module(_azure2 pybind_api.cpp pybind_convert.cpp pybind_model_data.cpp pybind_physics.cpp pybind_potentials.cpp pybind_project.cpp pybind_schema.cpp
+    pybind11_add_module(_azure2 pybind_api.cpp pybind_convert.cpp pybind_model_data.cpp pybind_nuclear_part.cpp pybind_physics.cpp pybind_potentials.cpp pybind_project.cpp pybind_schema.cpp
                       pybind_thm.cpp)
     # AZUREAPI carries AZURE2Core, which carries the engine's own dependencies
     # (Minuit2, GSL, BLAS, OpenMP) in the right link order -- see

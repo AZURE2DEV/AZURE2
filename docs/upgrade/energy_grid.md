@@ -621,8 +621,16 @@ Status of the decisions of §9:
 - D1 (the grid follows the level anchors, as today): taken; it keeps today's behaviour.
 - D4 (M3 (b)): the PI had chosen (b) before it was known to be an identity for χ²; it stays, as a simplification.
 - D8 (gradient sums reordered, rounding class): accepted; fits already depend on the thread count at that level.
-- D2, D3, D5, D6, D7: **open, for the PI**. D7 removes `external/erya` and D3 removes options that projects outside
-  the tree use: neither is done before he answers. None of them is needed by branches 1 to 4 and 6.
+- D2, D3, D5, D6, D7: **taken by the PI on 2026-11-11 ("yes to all")**, as recommended in §9:
+  - D2: the shared mesh is built (branch 7).
+  - D3: the automatic tolerance, the fold windows, the edge blending and the σ(Ē) fallback are deleted with branch 7.
+    `tests/target_effect_ranges` is rewritten on the mesh's error bound; the converter turns the old options into a
+    note of the conversion report, and projects outside the tree that use them (13C+α ND2021r) are converted with it.
+  - D5: lab-differential data are folded with θ_c.m. and the Jacobian per node (branch 9, physics class: every moved
+    project listed with the size).
+  - D6: one stopping scale per (material, projectile), fixed by default, with its prior (branch 5).
+  - D7: ERYA (`external/erya`, its CMake option and `tests/reference/compound_stopping_reference_test.cpp`'s use of
+    it) is removed in branch 5, after the stopping library is merged and its comparison with ERYA is on record.
 
 Corrections for the briefs:
 - §5.1: the active fraction is the stoichiometric fraction times the isotopic abundance (`isotope` lines of the
@@ -630,4 +638,4 @@ Corrections for the briefs:
 - §5.3, narrow resonance: the frames must be written out. With λ_r in the c.m. frame and ε_r in the lab frame per
   active nucleus the plateau is (λ_r²/2) ωγ (m_a + m_A)/(m_A ε_r); the test derives its closed form from the
   Breit–Wigner integral itself rather than quoting it.
-- Branch 1 is started first with branch 4; branch 3 when a thread budget frees. The order of the others as in §8.
+- Branches 1, 4 and 3 are running (2026-11-11). The order of the others as in §8.

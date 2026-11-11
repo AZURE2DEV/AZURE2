@@ -25,6 +25,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 T2 = os.path.join(ROOT, "tests", "upgrade", "T2")
 FIXTURES = os.path.join(ROOT, "convert", "tests", "fixtures")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import old_tree  # noqa: E402  (the old originals of converted projects)
 RTH = os.path.join(ROOT, "tests", "ratio_to_rutherford", "models")
 
 failures = []
@@ -58,7 +60,7 @@ def t2_dir(work, name, fmt3=True):
         shutil.copy(os.path.join(FIXTURES, "T2.f3.azr"), os.path.join(d, "T2.azr"))
     else:
         shutil.copy(os.path.join(T2, "prior_cov.txt"), d)
-        shutil.copy(os.path.join(T2, "T2.azr"), d)
+        shutil.copy(old_tree.original(os.path.join(T2, "T2.azr")), d)  # the old T2
     return os.path.join(d, "T2.azr")
 
 

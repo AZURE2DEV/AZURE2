@@ -27,17 +27,16 @@ SRC = os.path.join(ROOT, "tests", "13N")
 
 
 def integrals(work, use_brune):
-    from pyazr import AzrModel, azure2
+    from pyazr import Project, azure2
     d = os.path.join(work, "brune" if use_brune else "formal")
     shutil.copytree(SRC, d, ignore=shutil.ignore_patterns("output", "checks"))
     os.makedirs(os.path.join(d, "output"), exist_ok=True)
     os.makedirs(os.path.join(d, "checks"), exist_ok=True)
-    m = AzrModel.from_file(os.path.join(d, "13N.azr"))
-    m.add_level(J=0.5, parity=-1, energy=-3.0, level_fixed=True,
-                channels=[{"pair": 1, "L": 1, "S": 0.5, "gamma": 2.0, "fixed": True},
-                          {"pair": 2, "L": 1, "S": 0.5, "gamma": 0.0, "fixed": True}])
-    path = os.path.join(d, "model.azr")
-    m.write(path)
+    m = Project.open(os.path.join(d, "13N.azr"))
+    m.add_level(J=0.5, parity=-1, energy=-3.0, fixed=True,
+                channels=[{"pair": 1, "l": 1, "s": 0.5, "width": 2.0, "fixed": True},
+                          {"pair": 2, "l": 1, "s": 0.5, "width": 0.0, "fixed": True}])
+    path = m.save(os.path.join(d, "model.azr"))
     s = azure2(path, use_brune=use_brune)
     return s.ec_integrals(1, [0.2, 0.5, 1.0, 2.0])
 

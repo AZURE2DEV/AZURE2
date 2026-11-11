@@ -8,9 +8,9 @@ re-energised the segment's points with the shift still set from the file.  The f
 the FILE's shift (17O+a Kunz profile, 2026-10-29: 0 keV gave the +8 keV chi2 to every digit).  It needs a
 nonzero shift on the line and a <targetInt> sub-point effect on the segment.
 
-Model: tests/13N with only segment 3 (Meyer, 12C(p,p) at 84.3 deg lab) active, a Gaussian beam spread of 10 keV on
+Model: tests/13N with only the data set meyer_84 (12C(p,p) at 84.3 deg lab) active, a Gaussian beam spread of 10 keV on
 it (so the 0.457 MeV resonance lies in the sub-point windows of the points near it and the grid re-placement moves
-their grids with the shift; a capture segment would not do, its grids are never re-placed), and a shift of 10 keV (case a) or a sqrt(E) coefficient of 0.01 (case b) on its line, varied.  In one session:
+their grids with the shift; a capture segment would not do, its grids are never re-placed), and a shift of 10 keV (case a) or a sqrt(E) coefficient of 0.01 (case b) in its record, varied.  In one session:
 x = 0, 0, file value, 0.  Every call at 0 must agree to 1e-12 relative, and differ from the file value's.
 
 Run from anywhere:  python3 tests/pyazr/shift_first_call_test.py
@@ -21,8 +21,6 @@ import sys
 import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import old_tree  # noqa: E402  (the old originals of converted projects)
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 sys.path.insert(0, ROOT)
 
@@ -37,34 +35,24 @@ def check(name, ok, detail=""):
 
 try:
     import numpy as np                         # noqa: E402
-    from pyazr import azure2                   # noqa: E402
+    from pyazr import azure2, Project          # noqa: E402
 except Exception as err:                       # same skip as the other pyazr tests
     print(f"skip: pyazr engine not importable ({type(err).__name__}: {err})")
     sys.exit(0)
 
-SRC = old_tree.original(os.path.join(ROOT, "tests", "13N", "13N.azr"))  # the old file (format3_tree.md)
+SRC = os.path.join(ROOT, "tests", "13N", "13N.azr")
 
 
 def make_model(work, sqrt):
-    lines = open(SRC).read().split("\n")
-    i0, i1 = lines.index("<segmentsData>"), lines.index("</segmentsData>")
-    for i in range(i0 + 1, i1):
-        f = lines[i].split()
-        if not f:
-            continue
-        if i == i0 + 3:                        # segment 3: shift on, varied
-            if sqrt:
-                f += ["sqrtshift", "0.01", "0", "1"]
-            else:
-                f[11], f[13] = "0.01", "1"
-        else:
-            f[0] = "0"
-        lines[i] = " ".join(f)
-    j0, j1 = lines.index("<targetInt>"), lines.index("</targetInt>")
-    lines[j0 + 1:j1] = ['1 "3" 50 1 0.01 0 0 "" 0 0 0']
-    path = os.path.join(work, "first_call.azr")
-    open(path, "w").write("\n".join(lines))
-    return path
+    p = Project.open(SRC)
+    for name, r in p.records().items():
+        if r.record_kind == "dataset" and name != "meyer_84":
+            p.set(name, active="no")
+    p.add_beam("beam_meyer_84", spread="0.01 MeV lab")  # the Gaussian convolution of 10 keV
+    # the shift on, varied: a constant 10 keV (its prior as the old line's error, 5 keV) or a sqrt(E) coefficient
+    p.set("meyer_84", shift="sqrt 0.01 MeV^1/2 fit" if sqrt else "offset 0.01 MeV fit prior 0 0.005",
+          beam="beam_meyer_84", quadrature="points 50")
+    return p.save(os.path.join(work, "first_call.azr"))
 
 
 def run(label, sqrt):

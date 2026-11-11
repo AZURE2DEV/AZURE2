@@ -175,7 +175,7 @@ for mode in brune:"" lanethomas:"--no-brune" park:"--use-park"; do
 done
 
 # ---- (d) scattering lengths and electron screening ----------------------------------------------
-# The model with a <scatteringLengths> block (p+12C 1/2+ in channel space, p+12C* 5/2+ in level space;
+# The model with scattering-length data in <modelData> (p+12C 1/2+ in channel space, p+12C* 5/2+ in level space;
 # a real and a complex constraint), an angular distribution (29 angles at each of 10 energies, which
 # share one forward solve and take the bilinear-basis rows of the residual Jacobian), and electron
 # screening with U_e free on the elastic segments.  The scattering length of 1/2+ is evaluated at the
@@ -187,10 +187,29 @@ awk '!/^#/ { k++ } !/^#/ && k % 20 == 1 && n < 10 { n++
 mkext() {  # mkext LEVEL_ENERGY -> the extended model on stdout, the 3.65 MeV 1/2+ level moved to LEVEL_ENERGY
   awk -v e="$1" '{ sub(/\r$/, "") }
        $1 == "0.5" && $3 == "3.650000" { $3 = e }
+       $1 == "dataset" { ds = $2 }
+       ds != "" && ($0 == "" || /^<\/data>/) {
+         if (ds == "elastic_90" || ds == "elastic_150") print "    target         scr"
+         if (ds == "elastic_90") {
+           print ""
+           print "dataset angdist\n    reaction       12C(p,p)12C\n    quantity       dsigma_domega\n    unit           b/sr"
+           print "    file           data/angdist.dat\n    columns        E_lab[MeV] theta_lab[deg] value error"
+           print "    energy_window  0.5 7 MeV\n    angle_window   0 180 deg\n    norm           1 fixed\n    target         scr"
+         }
+         ds = ""
+       }
+       /^<\/data>/ {
+         print
+         print "<modelData>"
+         print "datum a_half\n    quantity       scattering_length\n    pair           p+12C\n    s              1/2"
+         print "    value          40 fm\n    error          0.5 fm\n"
+         print "datum a_five_half\n    quantity       scattering_length\n    pair           p+12C[0.8]\n    s              5/2"
+         print "    value          70 fm\n    error          0.5 fm\n    imag           -0.001 fm\n    imag_error     0.0002 fm"
+         print "</modelData>"
+         next
+       }
        { print }
-       /^1 1 1 0\.5 7 0 180 1 1 1 5 0 0 0 data\/elastic_90\.dat 0 0$/ { print "1 1 1 0.5 7 0 180 1 1 0 0 0 0 0 data/angdist.dat 0 0" }
-       /^<\/segmentsData>/ { print "<scatteringLengths>"; print "1 1 0.5 40 0.5"; print "1 2 2.5 70 0.5 -0.001 0.0002"; print "</scatteringLengths>" }
-       /^<targetInt>/ { print "1  \"1,2,3\"  200  0  0  0  0  \"\"  0  0  0  0  \"\"  0  0  0.04  20  50  screening  1000  1  0" }' "$HERE/channel_space.azr"
+       /^<targets>/ { print "target scr\n    kind           none\n    screening      1000 eV fit" }' "$HERE/channel_space.azr"
 }
 mkext 3.650000 > "$WORK/ext.azr"
 mkext 1.944000 > "$WORK/ext_pole.azr"

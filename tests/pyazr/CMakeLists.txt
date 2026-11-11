@@ -828,3 +828,11 @@ add_test(NAME pyazr_session_records
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_CURRENT_SOURCE_DIR}/session_records_test.py)
 set_tests_properties(pyazr_session_records PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")
+
+# The nuclear part of a format-3 project in pyazr.Project (docs/upgrade/pyazr_on_records.md, "Edits of the nuclear
+# part"): <levels> rows as levels and pairs, edits that change only the tokens they name, add / remove a level, the
+# refusals, <config> entries, <thm> options and experiments, and save_fit's level values on 13N.
+add_test(NAME pyazr_project_nuclear_part
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/project_nuclear_part_test.py)
+set_tests_properties(pyazr_project_nuclear_part PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2")

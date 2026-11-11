@@ -1,0 +1,37 @@
+<config>
+true #Perform A-Matrix Calculation
+output/ #Full Path to Output Directory
+checks/ #Full Path to Checks Directory
+none #Compond Nucleus Check
+none #Boundary Condition Check
+none #Data Check
+none #Lo-Matrix and Penetrability Check
+none #Legendre Polynomial Check
+none #Coulomb Amplitudes Check
+none #Reaction Pathway Check
+none #Angular Distributions Check
+</config>
+<levels>
+0.5 1 14.000000 0 1 1 1 0 1 1 0 22569861.6039 0.5 1 0 1 0 3.0160293 4.0026032 2 2 1.5866 1.5866 0 0 0.0 0 4.2 0 0 0
+
+</levels>
+<segmentsData>
+1 1 1 0 10 0 180 2 0.5 0 1 0 0 0 0 0 data/he3he4_phase.dat 0 0
+</segmentsData>
+<scatteringLengths>
+# active pairKey s value sigma [imValue imSigma]
+1 1 0.5 31.0 0.3
+</scatteringLengths>
+<segmentsTest>
+1 1 1 0.05 1.05 0.02 0 0 0 2 0.5 0
+</segmentsTest>
+<targetInt>
+</targetInt>
+<lastRun>
+9997
+""
+""
+0 0
+0 ""
+-1. -1. -1.
+</lastRun>

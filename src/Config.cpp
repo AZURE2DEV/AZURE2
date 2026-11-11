@@ -3,6 +3,7 @@
 #include "azure2/convert/PotentialBlock.h"
 #include "azure2/experiment/ProjectReader.h"
 #include "InputFiles.h"
+#include "azure2/io/ConfigSection.h"
 #include "azure2/io/Convert.h"
 #include "azure2/io/Document.h"
 #include <cstdlib>
@@ -134,8 +135,6 @@ int Config::ReadFormat3Project(const azure2::io::Document &doc) {
 }
 
 int Config::ReadConfigFile() {
-  std::string dummy;
-  std::string temp;
   // The <config> section of the project (io::Document; a tag is a whole trimmed line).
   std::unique_ptr<std::istream> section = SectionStream("config");
   if (!section) return -1;
@@ -158,104 +157,38 @@ int Config::ReadConfigFile() {
     }
   }
   useAdaptiveGrid = true;  // the default; a <config> key (format 2) or <potential> (format 1, converted) sets it
-  std::istream &in = *section;
-  std::string line = "";
-  getline(in, line);  // <config>
-  in >> temp;
-  getline(in, dummy);
-  if (temp == "true")
+  // The section's one grammar (io/ConfigSection.h): eleven positional entries, then key=value lines.
+  std::vector<std::string> lines;
+  for (std::string line; std::getline(*section, line);) lines.push_back(line);
+  const azure2::io::ConfigSection config = azure2::io::ReadConfigSection(lines);
+  auto value = [&config](const char *name) {
+    const azure2::io::ConfigEntry *e = config.Find(name);
+    return e ? e->value : std::string();
+  };
+  if (value("amatrix") == "true")
     paramMask |= USE_AMATRIX;
   else
     paramMask &= ~USE_AMATRIX;
-  getline(in, dummy);
-  int poundSignPos = dummy.find_last_of('#');
-  if (poundSignPos == std::string::npos)
-    temp = dummy;
-  else
-    temp = dummy.substr(0, poundSignPos);
-  int p2 = temp.find_last_not_of(" \n\t\r");
-  if (p2 != std::string::npos) {
-    int p1 = temp.find_first_not_of(" \n\t\r");
-    if (p1 == std::string::npos) p1 = 0;
-    outputdir = temp.substr(p1, (p2 - p1) + 1);
-  } else
-    outputdir = std::string();
-  getline(in, dummy);
-  poundSignPos = dummy.find_last_of('#');
-  if (poundSignPos == std::string::npos)
-    temp = dummy;
-  else
-    temp = dummy.substr(0, poundSignPos);
-  p2 = temp.find_last_not_of(" \n\t\r");
-  if (p2 != std::string::npos) {
-    int p1 = temp.find_first_not_of(" \n\t\r");
-    if (p1 == std::string::npos) p1 = 0;
-    checkdir = temp.substr(p1, (p2 - p1) + 1);
-  } else
-    checkdir = std::string();
-  in >> temp;
-  getline(in, dummy);
-  if (temp == "screen")
-    screenCheckMask |= CHECK_COMPOUND_NUCLEUS;
-  else if (temp == "file")
-    fileCheckMask |= CHECK_COMPOUND_NUCLEUS;
-  in >> temp;
-  getline(in, dummy);
-  if (temp == "screen")
-    screenCheckMask |= CHECK_BOUNDARY_CONDITIONS;
-  else if (temp == "file")
-    fileCheckMask |= CHECK_BOUNDARY_CONDITIONS;
-  in >> temp;
-  getline(in, dummy);
-  if (temp == "screen")
-    screenCheckMask |= CHECK_DATA;
-  else if (temp == "file")
-    fileCheckMask |= CHECK_DATA;
-  in >> temp;
-  getline(in, dummy);
-  if (temp == "screen")
-    screenCheckMask |= CHECK_ENERGY_DEP;
-  else if (temp == "file")
-    fileCheckMask |= CHECK_ENERGY_DEP;
-  in >> temp;
-  getline(in, dummy);
-  if (temp == "screen")
-    screenCheckMask |= CHECK_LEGENDRE;
-  else if (temp == "file")
-    fileCheckMask |= CHECK_LEGENDRE;
-  in >> temp;
-  getline(in, dummy);
-  if (temp == "screen")
-    screenCheckMask |= CHECK_COUL_AMPLITUDES;
-  else if (temp == "file")
-    fileCheckMask |= CHECK_COUL_AMPLITUDES;
-  in >> temp;
-  getline(in, dummy);
-  if (temp == "screen")
-    screenCheckMask |= CHECK_PATHWAYS;
-  else if (temp == "file")
-    fileCheckMask |= CHECK_PATHWAYS;
-  in >> temp;
-  getline(in, dummy);
-  if (temp == "screen")
-    screenCheckMask |= CHECK_ANGULAR_DISTS;
-  else if (temp == "file")
-    fileCheckMask |= CHECK_ANGULAR_DISTS;
-  // Optional key=value lines after the fixed ones. A reader that does not know a key skips it, so a
+  outputdir = value("output_dir");
+  checkdir = value("checks_dir");
+  const struct {
+    const char *name;
+    unsigned int mask;
+  } checks[] = {{"check_compound_nucleus", CHECK_COMPOUND_NUCLEUS}, {"check_boundary_conditions", CHECK_BOUNDARY_CONDITIONS},
+                {"check_data", CHECK_DATA},                         {"check_energy_dependence", CHECK_ENERGY_DEP},
+                {"check_legendre", CHECK_LEGENDRE},                 {"check_coulomb_amplitudes", CHECK_COUL_AMPLITUDES},
+                {"check_pathways", CHECK_PATHWAYS},                 {"check_angular_distributions", CHECK_ANGULAR_DISTS}};
+  for (const auto &c : checks) {
+    if (value(c.name) == "screen")
+      screenCheckMask |= c.mask;
+    else if (value(c.name) == "file")
+      fileCheckMask |= c.mask;
+  }
+  // The optional key=value lines (the last line of a key wins). A reader that does not know a key skips it, so a
   // project carrying them still opens in older builds.
-  line = "";
-  while (line != "</config>" && !in.eof()) {
-    getline(in, line);
-    std::string entry = line;
-    size_t hash = entry.find('#');
-    if (hash != std::string::npos) entry = entry.substr(0, hash);
-    size_t eq = entry.find('=');
-    if (eq == std::string::npos) continue;
-    std::string key = entry.substr(0, eq), value = entry.substr(eq + 1);
-    key.erase(0, key.find_first_not_of(" \t\r"));
-    key.erase(key.find_last_not_of(" \t\r") + 1);
-    value.erase(0, value.find_first_not_of(" \t\r"));
-    value.erase(value.find_last_not_of(" \t\r") + 1);
+  for (const azure2::io::ConfigEntry &e : config.entries) {
+    if (e.positional) continue;
+    const std::string &key = e.name, &value = e.value;
     if (key == "includeAllJPi")
       includeAllJPi = (value == "1" || value == "true");
     else if (key == "maxOrbitalMomentum")
@@ -270,10 +203,9 @@ int Config::ReadConfigFile() {
       priorCovariance = value;
     else if (key == "useAdaptiveGrid")  // format 2 (format 1: in <potential>)
       useAdaptiveGrid = (value == "1" || value == "true");
-    else if (key == "format")  // the file format (docs/upgrade/project.md section 4); read by io::FormatOf
-      continue;
+    // "format" is the file format (docs/upgrade/project.md section 4), read by io::FormatOf
   }
-  if (line != "</config>") return -1;
+  if (!config.closed) return -1;
   // A malformed optional block has already been reported: -2, so the caller
   // does not add a misleading "could not open" on top.
   if (this->ReadPotentialBlock() != 0) return -2;

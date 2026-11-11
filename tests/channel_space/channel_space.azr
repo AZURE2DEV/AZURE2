@@ -10,6 +10,7 @@ none #Legendre Polynomial Check
 none #Coulomb Amplitudes Check
 none #Reaction Pathway Check
 none #Angular Distributions Check
+format=3
 </config>
 <levels>
 0.5 1 3.100000 1 1 1 1 0 1 1 1 3000 0.5 1 0 1 0 1.00782 12.0 1 6 1.9435 1.9435 0 0 0.0 0 5.0 0 0 0
@@ -91,17 +92,52 @@ none #Angular Distributions Check
 2.5 1 4.500000 0 1 2 5 0 16 1 1 50000 0.5 1 2 1 0.8 1.00782 12.0 1 6 1.9435 1.9435 0 0 0.0 0 5.0 0 0 0
 
 </levels>
-<segmentsData>
-1 1 1 0.5 7 0 180 1 1 1 5 0 0 0 data/elastic_90.dat 0 0
-1 1 1 0.5 7 0 180 1 1 0 0 0 0 0 data/elastic_150.dat 0 0
-1 1 2 0.5 7 0 180 0 1 1 10 0 0 0 data/inelastic.dat 0 0
-1 1 3 0.5 7 0 180 0 1 0 0 0 0 0 data/capture.dat 0 0
-</segmentsData>
-<segmentsTest>
-</segmentsTest>
-<targetInt>
-</targetInt>
-<lastRun>
-</lastRun>
+<data>
+# <segmentsData> line 1
+dataset elastic_90
+    reaction       12C(p,p)12C
+    quantity       dsigma_domega
+    unit           b/sr
+    file           data/elastic_90.dat
+    columns        E_lab[MeV] theta_lab[deg] value error
+    energy_window  0.5 7 MeV
+    angle_window   0 180 deg
+    norm           1 fit prior 1 5%
+
+# <segmentsData> line 2
+dataset elastic_150
+    reaction       12C(p,p)12C
+    quantity       dsigma_domega
+    unit           b/sr
+    file           data/elastic_150.dat
+    columns        E_lab[MeV] theta_lab[deg] value error
+    energy_window  0.5 7 MeV
+    angle_window   0 180 deg
+    norm           1 fixed
+
+# <segmentsData> line 3
+dataset inelastic
+    reaction       12C(p,p)12C[0.8]
+    quantity       sigma
+    unit           b
+    file           data/inelastic.dat
+    columns        E_lab[MeV] _ value error
+    energy_window  0.5 7 MeV
+    norm           1 fit prior 1 10%
+
+# <segmentsData> line 4
+dataset capture
+    reaction       12C(p,g)13N
+    quantity       sigma
+    unit           b
+    file           data/capture.dat
+    columns        E_lab[MeV] _ value error
+    energy_window  0.5 7 MeV
+    norm           1 fixed
+</data>
+<extrapolations>
+</extrapolations>
+<targets>
+</targets>
 <parameterSettings>
 </parameterSettings>

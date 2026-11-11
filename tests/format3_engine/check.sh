@@ -2,8 +2,9 @@
 #
 # The engine runs a format-3 project (docs/upgrade/project_format3.md step 3b, G3): Config::ReadConfigFile reads it
 # through records -> Validate -> <levels> tables -> Schema::Build, and the set-up consumes the specs.
-#   1. T2 (tests/upgrade/T2), converted with --exact-grids, gives the old file's outputs byte for byte, param.par after
-#      the converter's parameter-name map (calculation, menu 1, Brune basis);
+#   1. T2's old original (tests/convert/fixtures/tests/upgrade/T2), converted with --exact-grids, gives the old file's
+#      outputs byte for byte, param.par after the converter's parameter-name map (calculation, menu 1, Brune basis);
+#      the conversion is the committed tests/upgrade/T2/T2.azr;
 #   2. T2_true with the <modelData> section below, in both formats: equal chiSquared.out and modelData.out;
 #   3. a data set named with 60 characters: its parameter names whole in param.par (no fixed-size name buffer);
 #   4. --describe of the converted T2: the pair keys, the resolved data file, the parameters, the rows read and kept
@@ -20,6 +21,7 @@ export LC_ALL=C
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 T2="$HERE/../upgrade/T2"
+T2OLD="$HERE/../convert/fixtures/tests/upgrade/T2"   # the old originals of T2.azr and T2_true.azr (format3_tree.md)
 AZURE2_BIN="${1:?usage: check.sh path/to/AZURE2}"
 AZURE2_BIN="$(cd "$(dirname "$AZURE2_BIN")" && pwd)/$(basename "$AZURE2_BIN")"
 . "$HERE/../lib/guard.sh"
@@ -51,10 +53,12 @@ convert() {
 }
 
 # ---- 1. T2 in both formats
-setup old "$T2/T2.azr"
+setup old "$T2OLD/T2.azr"
 run old 1
-setup new "$T2/T2.azr"
+setup new "$T2OLD/T2.azr"
 if convert new; then
+  cmp -s "$WORK/new/m3.azr" "$T2/T2.azr" && ok "the committed T2.azr is the conversion of its original, byte for byte" ||
+    bad "the committed T2.azr differs from the conversion of its original"
   mv "$WORK/new/m3.azr" "$WORK/new/m.azr"
   run new 1
   grep -q '^ERROR' "$WORK/new/run.log" && bad "T2 format 3: the engine refused it: $(grep -m1 '^ERROR' "$WORK/new/run.log")"
@@ -108,7 +112,7 @@ datum gamma5
     value 14 keV
     error 1 keV
 </modelData>'
-setup mdold "$T2/T2_true.azr"
+setup mdold "$T2OLD/T2_true.azr"
 printf '%s\n' "$MD" >> "$WORK/mdold/m.azr"
 setup mdnew "$WORK/mdold/m.azr"
 run mdold 1

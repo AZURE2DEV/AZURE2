@@ -1,5 +1,8 @@
 # channel_space — the channel-space level-matrix solution
 
+The project files are format 3 (`docs/upgrade/format3_tree.md`); the old lines quoted on this page are those of the
+originals in `tests/convert/fixtures/tests/channel_space/`.
+
 A synthetic p + 12C model built to exercise the channel-space route of
 `AMatrixFunc` (`include/ChannelSpace.h`): J = 1/2+ with eight levels and
 3/2- with seven, each with four channels (p0, the two channel spins of p1 to a

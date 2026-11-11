@@ -32,6 +32,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 MODELS = os.path.join(ROOT, "tests", "natural_target", "models")
 sys.path.insert(0, ROOT)
+sys.path.insert(0, HERE)
+import old_tree  # noqa: E402  (the old originals of converted projects)
 
 try:
     from pyazr.azrfile import AzrModel                        # noqa: E402
@@ -61,7 +63,7 @@ def main():
 def run(work):
     # ---- 1. the file side ------------------------------------------------------
     print("1. file side")
-    m = AzrModel.from_file(os.path.join(MODELS, "M.azr"))
+    m = AzrModel.from_file(old_tree.original(os.path.join(MODELS, "M.azr")))
     nuc = m.nuclei()
     check("two nuclei, 13N and 14N", [n.label for n in nuc] == ["13N", "14N"], str(nuc))
     check("pair keys per nucleus", nuc[Nucleus(7, 13)] == [1] and nuc[Nucleus(7, 14)] == [2], str(nuc))
@@ -73,7 +75,7 @@ def run(work):
     check("abundanceSumSigma written and read", m.abundance_sum_sigma == 0.01)
     m.abundance_sum_sigma = 0
     check("abundanceSumSigma removed", m.abundance_sum_sigma == 0.0)
-    a = AzrModel.from_file(os.path.join(MODELS, "A.azr"))
+    a = AzrModel.from_file(old_tree.original(os.path.join(MODELS, "A.azr")))
     check("a single-nucleus project has no block", not a.has_abundance_block and a.abundances[Nucleus(7, 13)] == (1.0, False, 0.0))
     a.set_abundance((7, 13), 0.9, False, 0.0)
     check("set_abundance creates the block after </levels>",
@@ -92,7 +94,7 @@ def run(work):
           TestSegmentSet.from_file(m.write(os.path.join(work, "m2.azr")))[0].natural and
           m.set_test_natural(1, False) == 1 and
           not TestSegmentSet.from_file(m.write(os.path.join(work, "m3.azr")))[0].natural)
-    r = AzrModel.from_file(os.path.join(MODELS, "bad_ratio.azr"))
+    r = AzrModel.from_file(old_tree.original(os.path.join(MODELS, "bad_ratio.azr")))
     try:
         r.set_test_natural(1, True)
         check("set_natural refuses a RATIO", False)
@@ -109,7 +111,7 @@ def run(work):
     # ---- 2. merge_projects reproduces M through the engine ----------------------
     print("\n2. merge_projects against the engine")
     merged = os.path.join(work, "AB.azr")
-    rep = merge_projects([os.path.join(MODELS, "A.azr"), os.path.join(MODELS, "B.azr")], merged,
+    rep = merge_projects([old_tree.original(os.path.join(MODELS, "A.azr")), old_tree.original(os.path.join(MODELS, "B.azr"))], merged,
                          {"13N": 0.6, "14N": 0.4})
     check("pair keys offset", rep.pair_map == [{1: 1}, {2: 3}], str(rep.pair_map))
     check("test segments renumbered", rep.test_map == [{1: 1}, {1: 2}], str(rep.test_map))
@@ -127,8 +129,8 @@ def run(work):
         with azure2(path, cwd=cwd, data_mode=False, use_brune=True) as s:
             x = np.asarray(s.params_rwa, float)
             return [np.asarray(v, float) for v in s.calculate_rwa(x)], s
-    out_a, _ = grids(os.path.join(MODELS, "A.azr"), work)
-    out_b, _ = grids(os.path.join(MODELS, "B.azr"), work)
+    out_a, _ = grids(old_tree.original(os.path.join(MODELS, "A.azr")), work)
+    out_b, _ = grids(old_tree.original(os.path.join(MODELS, "B.azr")), work)
     out_m, _ = grids(merged, work)
     check("merged 13N grid == A.azr", np.allclose(out_m[0], out_a[0], rtol=1e-10, atol=0), f"{np.max(np.abs(out_m[0] / out_a[0] - 1)):.2e}")
     check("merged 14N grid == B.azr", np.allclose(out_m[1], out_b[0], rtol=1e-10, atol=0), f"{np.max(np.abs(out_m[1] / out_b[0] - 1)):.2e}")
@@ -141,11 +143,11 @@ def run(work):
     # exactly A's J^pi list.
     print("\n2b. same J^pi in two nuclei")
     twin = os.path.join(work, "A_twin.azr")
-    with open(os.path.join(MODELS, "A.azr")) as f, open(twin, "w") as g:
+    with open(old_tree.original(os.path.join(MODELS, "A.azr"))) as f, open(twin, "w") as g:
         for ln in f:
             g.write(ln.replace(" 1.00782 12.0 1 6 ", " 1.00782 13.00335 1 6 ") if ln.strip() and ln.split()[0] != "<" and len(ln.split()) > 20 else ln)
     merged2 = os.path.join(work, "AA.azr")
-    merge_projects([os.path.join(MODELS, "A.azr"), twin], merged2, {"13N": 0.5, "14N": 0.5})
+    merge_projects([old_tree.original(os.path.join(MODELS, "A.azr")), twin], merged2, {"13N": 0.5, "14N": 0.5})
     aa = AzrModel.from_file(merged2)
     check("twin forms a second nucleus", sorted(n.label for n in aa.nuclei()) == ["13N", "14N"], str(aa.nuclei()))
     lvlmap = aa.engine_level_keys()
@@ -168,16 +170,16 @@ def run(work):
 
     # ---- 2c. named samples: several abundance sets in one project ----------------
     print("\n2c. samples")
-    ms = AzrModel.from_file(os.path.join(MODELS, "M_samples.azr"))
+    ms = AzrModel.from_file(old_tree.original(os.path.join(MODELS, "M_samples.azr")))
     smp = ms.samples
     check("two samples read", sorted(smp) == ["", "enr"] and smp["enr"][Nucleus(7, 14)] == (0.9, False, 0.0)
           and smp[""][Nucleus(7, 13)] == (0.6, False, 0.0), str(smp))
     check("abundances is the unnamed sample", ms.abundances == smp[""])
     check("sample sum sigma", ms.sample_sum_sigma("enr") == 0.01 and ms.sample_sum_sigma("") is None)
-    tsegs = TestSegmentSet.from_file(os.path.join(MODELS, "M_samples.azr"))
+    tsegs = TestSegmentSet.from_file(old_tree.original(os.path.join(MODELS, "M_samples.azr")))
     check("natural_sample on the test lines", [(s.natural, s.natural_sample) for s in tsegs] ==
           [(False, ""), (False, ""), (True, ""), (True, ""), (True, "enr"), (True, "enr")], str([(s.natural, s.natural_sample) for s in tsegs]))
-    ms2 = AzrModel.from_file(os.path.join(MODELS, "M_samples.azr"))
+    ms2 = AzrModel.from_file(old_tree.original(os.path.join(MODELS, "M_samples.azr")))
     ms2.set_abundance("13N", 0.3, True, 0.02, sample="enr")
     ms2.set_sample_sum_sigma("enr", 0.05)
     ms2.set_sample_sum_sigma("", 0.07)
@@ -186,7 +188,7 @@ def run(work):
           and ms2.sample_sum_sigma("") == 0.07 and TestSegmentSet.from_file.__func__ is not None
           and ms2._suffix.count("sample enr") == 3, ms2._suffix)
     msd = os.path.join(work, "M_samples_data.azr")
-    md = AzrModel.from_file(os.path.join(MODELS, "M_samples_data.azr"))
+    md = AzrModel.from_file(old_tree.original(os.path.join(MODELS, "M_samples_data.azr")))
     md.write(msd)
     # both data files must exist when the session opens (the engine silently drops a segment whose
     # file is missing); section 3 overwrites data.dat with its own mixture later
@@ -216,7 +218,7 @@ def run(work):
     # ---- 3. the runtime side ---------------------------------------------------
     print("\n3. runtime")
     mfile = os.path.join(work, "M.azr")
-    mm = AzrModel.from_file(os.path.join(MODELS, "M.azr"))
+    mm = AzrModel.from_file(old_tree.original(os.path.join(MODELS, "M.azr")))
     mm.set_abundance("14N", 0.4, True, 0.05)
     mm.set_abundance("13N", 0.6, True, 0.0)
     mm.abundance_sum_sigma = 0.01

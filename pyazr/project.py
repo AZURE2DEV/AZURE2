@@ -16,6 +16,7 @@ import warnings
 from collections import Counter
 
 from .described import _engine as _engine_module
+from .nuclear_part import NuclearPart
 
 __all__ = ["Project", "Record", "Nuisance", "FormatError", "records_from_csv"]
 
@@ -203,14 +204,16 @@ class Record:
         return f"<Record {self.record_kind} {self._name}>"
 
 
-class Project:
+class Project(NuclearPart):
     """A format-3 project as records (docs/upgrade/project_format3.md section 4.1).
 
     Open a file with :meth:`open`, or start from the nuclear part of one with :meth:`new`; read records with
     :meth:`records` or ``p[name]``; add them with ``add_<kind>`` (one method per record kind of the engine's table:
     ``help(p.add_dataset)`` lists the fields with their help and units) or :meth:`add`; edit with :meth:`set`,
     :meth:`rename`, :meth:`remove`; check with :meth:`validate` and :meth:`describe`; write with :meth:`save`; run with
-    :meth:`session`.  Data files are named relative to the project's directory (the directory of :attr:`path`), as a
+    :meth:`session`.  The nuclear part (:class:`pyazr.nuclear_part.NuclearPart`): :meth:`levels`, :meth:`pairs`,
+    :meth:`set_level`, :meth:`set_channel`, :meth:`set_pair`, :meth:`add_level`, :meth:`remove_level`; :meth:`config`,
+    :meth:`set_config`; :meth:`thm`, :meth:`set_thm`, :meth:`set_thm_experiment`, :meth:`remove_thm_experiment`.  Data files are named relative to the project's directory (the directory of :attr:`path`), as a
     session reads them.
 
     A field's value is the text the file holds (``norm="1 fit prior 1 8%"``), a number, a ``(value, "unit")`` tuple, a
@@ -397,7 +400,7 @@ class Project:
     def _apply(self, what, edit):
         """Run ``edit(doc)`` on a copy of the document and keep the copy when the engine's validator finds no error
         that the project did not have before; else raise FormatError with the new errors (``what`` heads the
-        message).  New warnings are issued as warnings."""
+        message).  New warnings are issued as warnings and returned (a list of the engine's diagnostics)."""
         before, _ = self._diagnostics()
         doc = _engine_module().Document.parse(self._doc.write())
         edit(doc)
@@ -412,6 +415,7 @@ class Project:
         for d in new:
             warnings.warn(f"{what}: {_diagnostic_text(d)}", stacklevel=3)
         self._doc = doc
+        return new
 
     @staticmethod
     def _new_diagnostics(before, after):
@@ -591,6 +595,25 @@ class Project:
                 raise
             raise FormatError(f"remove {name!r}: it is referenced by {', '.join(users)}", e.diagnostics) from None
 
+    def _replace_record_section(self, section, lines):
+        """The body of the record section ``section`` replaced by ``lines`` (records as the engine wrote them, e.g.
+        the session's potential records): the section removed when ``lines`` is empty, added where :meth:`add` adds
+        one when the project has none; validated as every edit."""
+        lines = [_bytes(x) for x in lines]
+
+        def edit(doc):
+            found = [s for s in self._sections(doc) if s["section"] == section and s["close"] > 0]
+            if found:
+                s = found[0]
+                if lines:
+                    doc.replace_lines(s["open"], s["close"] - 1, lines)
+                else:
+                    doc.replace_lines(s["open"] - 1, s["close"], [])
+            elif lines:
+                doc.replace_lines(*([_insert_at(doc)] * 2), [_bytes(f"<{section}>")] + lines + [_bytes(f"</{section}>")])
+
+        return self._apply(f"<{section}>", edit)
+
     # -- parameter values (pyazr.azure2.save_fit) -----------------------------------------------------------------
 
     def _write_parameter_values(self, values):
@@ -658,6 +681,12 @@ def records_from_csv(path, kind="dataset", project=None):
     return records
 
 
+def _is_format3(path):
+    """The project file at ``path`` is format 3 (io::FormatOf, the engine's reading of ``<config>``)."""
+    with open(os.fspath(path), "rb") as f:
+        return _engine_module().Document.parse(f.read()).format() == 3
+
+
 def write_parameter_values(path, values):
     """Write ``{parameter name: value in the engine's unit}`` into the format-3 project at ``path``
     (:meth:`Project._write_parameter_values`; pyazr.azure2.save_fit).  Returns the names written nowhere."""
@@ -685,15 +714,16 @@ def _rename_parameters(line, names):
 
 
 def _config_value(doc, key):
-    """``key=value`` of ``<config>`` as the engine reads it (the comment after '#' dropped, the last line winning)."""
+    """The value of a ``<config>`` entry as the engine reads it (``_azure2.config_entries``; the last line of a key
+    wins), None when absent."""
     value = None
-    for name, a, b, depth, _ in doc.sections():
-        if name != "config" or depth != 0 or b < 0:
-            continue
-        for i in range(a + 1, b):
-            entry = _text(doc.line(i)).split("#", 1)[0]
-            if "=" in entry and entry.split("=", 1)[0].strip() == key:
-                value = entry.split("=", 1)[1].strip()
+    try:
+        entries = _engine_module().config_entries(doc)[0]
+    except ValueError:  # no <config> section
+        return None
+    for e in entries:
+        if e["name"] == key:
+            value = _text(e["value"])
     return value
 
 

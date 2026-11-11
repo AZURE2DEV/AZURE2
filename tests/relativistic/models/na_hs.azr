@@ -12,23 +12,21 @@ none #Reaction Pathway Check
 none #Angular Distributions Check
 includeAllJPi=1
 maxOrbitalMomentum=0
+format=3
 </config>
 <levels>
 0.5 1 60.000000 1 1 1 1 0 1 1 1 0 0.5 1 0 1 0 1.00866491595 4.00260325413 0 2 -0.735 -0.735 0 0 0.0 0 3.0 0 0 0
 
 </levels>
-<segmentsData>
-</segmentsData>
-<segmentsTest>
-1 1 1 0.5 30.0 0.5 0 0 0 0 0
-</segmentsTest>
-<targetInt>
-</targetInt>
-<lastRun>
-9997
-""
-""
-0 0
-0 ""
--1. -1. -1.
-</lastRun>
+<data>
+</data>
+<extrapolations>
+# <segmentsTest> line 1
+extrapolation x1
+    reaction       4He(n,n)4He
+    quantity       sigma
+    unit           b
+    energies       list 0.5 1 1.5 2 2.5 3 3.5 4 4.5 5 5.5 6 6.5 7 7.5 8 8.5 9 9.5 10 10.5 11 11.5 12 12.5 13 13.5 14 14.5 15 15.5 16 16.5 17 17.5 18 18.5 19 19.5 20 20.5 21 21.5 22 22.5 23 23.5 24 24.5 25 25.5 26 26.5 27 27.5 28 28.5 29 29.5 30 MeV lab
+</extrapolations>
+<targets>
+</targets>

@@ -269,17 +269,17 @@ class Builder {
     }
     inAmbiguous = Ambiguous(*in);
     outAmbiguous = out && Ambiguous(*out);
-    std::string s = Nuclide(in->z2, in->A2()) + (in->e2 != 0 ? "[" + in->e2Text + "]" : "") + "(" + LightLabel(*in) +
-                    (in->e1 != 0 ? "[" + in->e1Text + "]" : "") + ",";
-    if (!out) {
-      s += "g)" + Nuclide(in->z1 + in->z2, in->A1() + in->A2()) + "[total]";
-      return s;
-    }
-    s += LightLabel(*out);
-    if (out->e1 != 0) s += "[" + out->e1Text + "]";
-    s += ")" + Nuclide(out->z2, out->A2());
-    if (out->e2 != 0) s += "[" + out->e2Text + "]";
-    return s;
+    const experiment::PairInfo outInfo = out ? out->Info() : experiment::PairInfo();
+    return experiment::ReactionLabel(in->Info(), out ? &outInfo : nullptr);
+  }
+  /// The old engine refused an active line whose component names a pair key <levels> lacks
+  /// (WorkingCopy::CheckComponentPairs); the reason, or "" when every component's pairs exist (exit -1 is total capture).
+  std::string MissingComponentPair(const std::vector<ComponentEntry> &components) const {
+    for (const ComponentEntry &c : components)
+      if (!Pair(c.entrance) || (c.exit != -1 && !Pair(c.exit)))
+        return "component " + std::to_string(c.entrance) + " -> " + std::to_string(c.exit) +
+               " names a pair key that is not in the compound nucleus";
+    return "";
   }
   static std::string PairLabel(const OldPair &p) { return experiment::PairLabel(p.Info()); }
 

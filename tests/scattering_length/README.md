@@ -1,5 +1,8 @@
 # scattering_length — s-wave scattering lengths at each pair's threshold
 
+The project files are format 3 (`docs/upgrade/format3_tree.md`); the old lines quoted on this page are those of the
+originals in `tests/convert/fixtures/tests/scattering_length/`.
+
 `check.sh` (run by `run_tests.sh`) tests `ScatteringLength` (src/ScatteringLength.cpp): the s-wave
 scattering length a0 = -a [M/(x^2 K1^2) - 2 I1/(x^2 K1)], M = gamma^T A gamma at E = 0
 (Paneru et al., PRC 99, 045807 (2019), Eq. 7), written to `output/scatteringLengths.out`, and the

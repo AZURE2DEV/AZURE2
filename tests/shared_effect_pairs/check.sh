@@ -12,8 +12,8 @@
 #
 # Model: tests/natural_neon (n + 20Ne pair 2, n + 22Ne pair 4) with two plain angle-integrated elastic data segments at
 # the same 41 lab energies (0.85 - 1.25 MeV, across the 21Ne / 23Ne resonances) and a 30 keV lab beam sigma:
-#   shared: one line "1,2";  split: one line per segment;  wrong: split with segment 2's sigma scaled by f(20Ne)/f(22Ne),
-#   which is what the old build computed for the shared line.
+#   shared: one beam record for both data sets;  split: one beam record per data set;  wrong: split with data set 2's
+#   spread scaled by f(20Ne)/f(22Ne), which is what the old build computed for the shared line.
 #   (a) shared == split for both segments to 1e-9 relative;
 #   (b) wrong differs from split on segment 2 by more than 1e-5 somewhere (4e-5 here: so (a) has teeth), segment 1 identical.
 # dev 1599725: (a) fails on segment 2 by the (b) amount (up to ~1e-3 near the resonances).
@@ -40,30 +40,38 @@ SIG=0.030
 RATIO="$(awk 'BEGIN { f20 = 19.99244018 / (1.008664916 + 19.99244018); f22 = 21.991385109 / (1.00866491588 + 21.991385109); printf "%.10f", f20 / f22 }')"
 SIG2="$(awk -v s="$SIG" -v r="$RATIO" 'BEGIN { printf "%.8f", s * r }')"
 
-# make_model NAME LINES...: the natural-neon project with the two plain segments and the given <targetInt> lines
+# make_model NAME BEAM1 SPREAD1 BEAM2 SPREAD2: the natural-neon project with two plain data sets (n + 20Ne, n + 22Ne) at the
+# same lab energies, each folded with its beam record (a Gaussian lab spread, MeV; the same name twice: one record)
 make_model() {
-  local name="$1"; shift
+  local name="$1" b1="$2" s1="$3" b2="$4" s2="$5"
   mkdir -p "$WORK/$name/output" "$WORK/$name/checks" "$WORK/$name/data"
   awk 'BEGIN { for (i = 0; i <= 40; i++) printf "%.4f 0 2.0 0.1\n", 0.85 + i * 0.01 }' > "$WORK/$name/data/shared.dat"
-  printf '%s\n' "$@" > "$WORK/$name/lines"
-  awk -v linesfile="$WORK/$name/lines" \
-      -v s1="1 2 2 0.5 1.5 0 180 0 1 0 0 0 0 0 data/shared.dat 0 0" \
-      -v s2="1 4 4 0.5 1.5 0 180 0 1 0 0 0 0 0 data/shared.dat 0 0" '
+  {
+    for k in 1 2; do
+      if [ $k = 1 ]; then r="20Ne(n,n)20Ne"; b="$b1"; else r="22Ne(n,n)22Ne"; b="$b2"; fi
+      printf 'dataset s%s\n    reaction       %s\n    quantity       sigma\n    unit           b\n' "$k" "$r"
+      printf '    file           data/shared.dat\n    columns        E_lab[MeV] _ value error\n'
+      printf '    energy_window  0.5 1.5 MeV\n    norm           1 fixed\n    beam           %s\n    quadrature     points 30\n\n' "$b"
+    done
+  } > "$WORK/$name/data.txt"
+  { printf 'beam %s\n    spread         %s MeV lab\n' "$b1" "$s1"
+    [ "$b2" = "$b1" ] || printf '\nbeam %s\n    spread         %s MeV lab\n' "$b2" "$s2"; } > "$WORK/$name/targets.txt"
+  awk -v d="$WORK/$name/data.txt" -v t="$WORK/$name/targets.txt" '
     { sub(/\r$/, "") }
-    /^<targetInt>$/ { print; while ((getline l < linesfile) > 0) print l; skip = 1; next }
-    /^<segmentsData>$/ { print; print s1; print s2; skip = 1; next }
-    /^<segmentsTest>$/ { print; skip = 1; next }
-    /^<\/targetInt>$|^<\/segmentsData>$|^<\/segmentsTest>$/ { skip = 0 }
+    /^<data>$/ { print; while ((getline l < d) > 0) print l; skip = 1; next }
+    /^<extrapolations>$/ { print; skip = 1; next }
+    /^<targets>$/ { print; while ((getline l < t) > 0) print l; skip = 1; next }
+    /^<\/data>$|^<\/extrapolations>$|^<\/targets>$/ { skip = 0 }
     !skip { print }' "$BASE/natural_neon.azr" > "$WORK/$name/t.azr"
 }
 run() { (cd "$WORK/$1" && printf '1\n\n\n7\n' | run_limited 900 "$AZURE2_BIN" --no-gui --no-readline t.azr > run.log 2>&1); }
-# yields NAME PAIR -> "E fit" rows of the segment with entrance = exit = PAIR
+# yields NAME PAIR -> "E fit" rows of the data set with entrance = exit = PAIR
 yields() { awk '{ sub(/\r$/, "") } NF >= 5 { printf "%.10f %.12e\n", $1, $4 }' "$WORK/$1/output/AZUREOut_aa=$2_R=$2.out" 2> /dev/null; }
 maxrel() { paste "$1" "$2" | awk 'BEGIN { m = 0 } { if ($4 == 0) { if ($2 != 0) m = 1 } else { r = $2 / $4 - 1; if (r < 0) r = -r; if (r > m) m = r } } END { printf "%.3e", m }'; }
 
-make_model shared "1 \"1,2\" 30 1 $SIG 0 0 \"\" 0 0 0"
-make_model split  "1 \"1\" 30 1 $SIG 0 0 \"\" 0 0 0" "1 \"2\" 30 1 $SIG 0 0 \"\" 0 0 0"
-make_model wrong  "1 \"1\" 30 1 $SIG 0 0 \"\" 0 0 0" "1 \"2\" 30 1 $SIG2 0 0 \"\" 0 0 0"
+make_model shared B "$SIG" B "$SIG"
+make_model split  B1 "$SIG" B2 "$SIG"
+make_model wrong  B1 "$SIG" B2 "$SIG2"
 for m in shared split wrong; do run "$m"; yields "$m" 2 > "$WORK/$m.y2"; yields "$m" 4 > "$WORK/$m.y4"; done
 n2="$(wc -l < "$WORK/shared.y2" | tr -d ' ')"; n4="$(wc -l < "$WORK/shared.y4" | tr -d ' ')"
 if [ "$n2" -eq 41 ] && [ "$n4" -eq 41 ]; then ok "the runs wrote 41 yields per segment (n + 20Ne, n + 22Ne)"; else bad "shared run wrote $n2 / $n4 yields, expected 41 / 41"; tail -3 "$WORK/shared/run.log"; fi

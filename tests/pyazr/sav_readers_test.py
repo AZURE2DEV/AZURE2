@@ -3,13 +3,13 @@
 
 AZURE2 matches `param.sav` rows to parameters by name (AZUREParams::
 ReadUserParameters), appends new parameters as the code grows (the
-`segment_<key>_energy_shift_sqrt` rows, 2026-10-05) and now writes a
+energy-shift sqrt rows, `<data set>.shift.sqrt` in format 3) and now writes a
 `#parametrization` tag line first (2026-10-06/07).  A positional reader is
 off by one or more rows on any file from another layout, with no error --
 an 8Be+alpha rate came out exactly 2x that way.  Pinned here on
 tests/identical_pp_res:
 
-  * an old-layout file (no _sqrt rows, no tag, one width nudged): the nudged
+  * an old-layout file (no .shift.sqrt rows, no tag, one width nudged): the nudged
     width is read, every missing row keeps the session's value, and
     bands.best_fit_params returns a vector of the free-parameter length;
   * update_sav_from_rwa_params writes rows back by name, appends the free
@@ -64,14 +64,14 @@ with tempfile.TemporaryDirectory() as tmp:
         target = widths[0]
         nudged = allrwa[target.index] * 1.05
 
-        # --- old layout: no _sqrt rows, no tag, one width nudged
+        # --- old layout: no .shift.sqrt rows, no tag, one width nudged
         with open(sav, "w") as fh:
             for p in m.parameters:
-                if p.name.endswith("_energy_shift_sqrt"):
+                if p.name.endswith(".shift.sqrt"):
                     continue
                 v = nudged if p.index == target.index else allrwa[p.index]
                 fh.write(f"{p.name:>28s} {v: .7e} {0.0: .7e}\n")
-        nsqrt = sum(1 for n in names if n.endswith("_energy_shift_sqrt"))
+        nsqrt = sum(1 for n in names if n.endswith(".shift.sqrt"))
         check("the old-layout file is shorter than the model", nsqrt > 0, f"{nsqrt} sqrt rows")
         full = m.full_rwa_from_sav(sav)
         check("nudged width read from the old-layout file", np.isclose(full[target.index], nudged))

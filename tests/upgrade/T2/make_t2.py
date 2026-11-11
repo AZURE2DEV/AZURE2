@@ -8,7 +8,12 @@ Writes, from the true parameters in TRUTH / NUISANCE below:
                      the nuisances at their nominal values with their priors
   data/*.dat         synthetic data (lab frame, the engine's input convention), noise drawn with SEED
   cov_diff.txt       covariance of the two differential segments (diagonal + one correlated vector)
-  prior_cov.txt      a two-parameter prior covariance (an external normalization measurement)
+  prior_cov.txt      a two-parameter prior covariance (an external normalization measurement), with the old
+                     parameter names (the original T2 in tests/convert/fixtures reads it)
+  prior_cov.f3.txt   the same with the format-3 names, written by the converter
+
+The projects are format 3: composed here in the old grammar (project()) and written as the engine's conversion,
+AZURE2 --convert OLD NEW --to 3 --exact-grids (write_format3); every engine run reads such a conversion.
   truth.json         the true values of every fitted parameter, in the units of parameters.out /
                      param.sav, for check_recovery.py
 
@@ -271,7 +276,9 @@ def segment_lines(fit, only=None, data_dir="data", cov=True):
     return "<segmentsData>\n" + "\n".join(rows) + "\n</segmentsData>\n<segmentsTest>\n</segmentsTest>\n"
 
 
-def target_lines(fit):
+def target_lines(fit, only=None):
+    """The <targetInt> block.  only=(k, ...): a line none of whose segments is in only is inactive (the truth runs;
+    the converter asks about an active line that applies to no active segment)."""
     dens = nz("s5_density", fit)
     dfit = f" densityfit 1 10% {3.0e17:.6g}" if fit else ""
     q = "1 5 1 0.995 0.98 0.96 0.93"
@@ -287,6 +294,8 @@ def target_lines(fit):
         f'1 "8" 20 1 0.002 0 0 "" 0 0 0 0 "" 0',                                       # SUM resolution
         f'1 "11,12" 30 1 {SIGMA_THM_LAB:.6f} 0 0 "" 0 0 0 0 "" 0',                      # THM resolution
     ]
+    if only is not None:
+        rows = [("1" if set(map(int, r.split('"')[1].split(","))) & set(only) else "0") + r[1:] for r in rows]
     return "<targetInt>\n" + "\n".join(rows) + "\n</targetInt>\n"
 
 
@@ -303,9 +312,12 @@ experiment[LC09] segments=11,12 beam=15N target=d spectator=n Ebeam=60
 
 
 def project(fit, only=None, data_dir="data", cov=True):
+    """The project text in the old grammar.  only=(k, ...): the truth run of these segments; the THM experiment is
+    left out of a run without its segments (a format-3 experiment whose data sets are all inactive is refused)."""
     extra = "priorCovariance=prior_cov.txt\n" if (fit and cov) else ""
     return (CONFIG.format(extra=extra) + level_lines(fit) + abundance_lines(fit) + segment_lines(fit, only, data_dir, cov)
-            + target_lines(fit) + "<parameterSettings>\n</parameterSettings>\n" + TAIL + THM_BLOCK)
+            + target_lines(fit, only) + "<parameterSettings>\n</parameterSettings>\n" + TAIL
+            + (THM_BLOCK if only is None or {11, 12} & set(only) else ""))
 
 
 def seg_range(s):
@@ -335,6 +347,22 @@ def write_data(path, s, values, errors):
             if s["key"] == 7:
                 row += f" {PROFILE_WINDOWS[i][0]:.6f} {PROFILE_WINDOWS[i][1]:.6f}"
             fh.write(row + "\n")
+
+
+def write_format3(binary, workdir, azr, text):
+    """Write the project text (composed in the old grammar) as its format-3 conversion workdir/azr: the converter,
+    AZURE2 --convert OLD NEW --to 3 --exact-grids, reads it from a temporary file beside the data files it names."""
+    old = f".{azr}.old"
+    open(os.path.join(workdir, old), "w").write(text)
+    try:
+        if os.path.exists(os.path.join(workdir, azr)):
+            os.remove(os.path.join(workdir, azr))
+        r = subprocess.run([binary, "--convert", old, azr, "--to", "3", "--exact-grids"], cwd=workdir,
+                           capture_output=True, text=True, env=dict(os.environ, OMP_NUM_THREADS="1", LC_ALL="C"))
+        if r.returncode != 0:
+            sys.exit(f"AZURE2 --convert of {azr} failed\n" + (r.stdout + r.stderr)[-3000:])
+    finally:
+        os.remove(os.path.join(workdir, old))
 
 
 def run_engine(binary, workdir, azr):
@@ -372,7 +400,7 @@ def model_lab(binary, tmp):
         d = os.path.join(tmp, "run" + "_".join(map(str, group)))
         os.makedirs(d)
         shutil.copytree(os.path.join(tmp, "data"), os.path.join(d, "data"))
-        open(os.path.join(d, "true.azr"), "w").write(project(fit=False, only=group))
+        write_format3(binary, d, "true.azr", project(fit=False, only=group))
         log = run_engine(binary, d, "true.azr")
         files = [f for f in os.listdir(os.path.join(d, "output")) if re.match(r"AZUREOut_aa=\d+_R=\d+\.out$", f)]
         if len(files) != 1:
@@ -392,7 +420,7 @@ def param_par(binary, workdir, azr_text):
     """param.par of a calculation of azr_text: name -> value (Brune basis: E in MeV, gamma in MeV^1/2)."""
     if os.path.isdir(os.path.join(workdir, "output")):
         shutil.rmtree(os.path.join(workdir, "output"))
-    open(os.path.join(workdir, "p.azr"), "w").write(azr_text)
+    write_format3(binary, workdir, "p.azr", azr_text)
     log = run_engine(binary, workdir, "p.azr")
     path = os.path.join(workdir, "output", "param.par")
     if not os.path.isfile(path):
@@ -499,9 +527,11 @@ def main():
         for r in cov:
             fh.write(" ".join(f"{x:.6e}" for x in r) + "\n")
 
-    open(os.path.join(root, "T2.azr"), "w").write(project(fit=True))
+    if os.path.exists(os.path.join(root, "prior_cov.f3.txt")):      # the converter writes it beside T2.azr
+        os.remove(os.path.join(root, "prior_cov.f3.txt"))
+    write_format3(binary, root, "T2.azr", project(fit=True))
     if not asimov:
-        open(os.path.join(HERE, "T2_true.azr"), "w").write(project(fit=False))
+        write_format3(binary, HERE, "T2_true.azr", project(fit=False))
         truth = dict(seed=SEED, levels=TRUTH, nuisance=NUISANCE, prior_cov_mean=list(mean),
                      fixed_widths_at_start={f"level {k[0]} channel {k[1]}": v for k, v in FIXED_AT_START.items()},
                      profile=PROFILE, sigma_thm_cm=SIGMA_THM_CM)

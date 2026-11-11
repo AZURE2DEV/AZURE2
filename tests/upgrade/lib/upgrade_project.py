@@ -3,16 +3,23 @@
 A project is described in Python (particle pairs, levels with their channels,
 data segments on lab-energy grids, test segments), written as an ``.azr`` with
 the true parameters, and its synthetic data are the engine's own observables at
-those parameters with Gaussian noise from a stated seed.  Nothing here depends
+those parameters with Gaussian noise from a stated seed.
+
+The ``.azr`` written is project format 3 (docs/upgrade/project_format3.md): the
+model is composed in the old grammar here (the <levels> columns, which format 3
+keeps, and one old segment line per data set and extrapolation) and converted by
+the engine's converter, ``AZURE2 --convert OLD NEW --to 3 --exact-grids``, so the
+committed T1 and T3 are exactly the conversions the generators write.  Nothing here depends
 on the machine: the AZURE2 binary comes from an argument, ``$AZURE2_BIN`` or
 ``$AZURE2_BINARY``, else the newest ``build*/src/AZURE2`` of the checkout.
 
 Only the standard library and numpy are needed (no pyazr), so the generators
 and the golden comparison run wherever the CLI runs.
 
-The ``.azr`` formats are those of docs/source/reference/data_formats.rst
-(``<levels>``: 31 columns, ``io/include/azure2/io/LevelRows.h``; ``<segmentsData>``:
-``include/SegLine.h``; ``<segmentsTest>``: ``include/ExtrapLine.h``).
+The old lines are those of docs/source/reference/data_formats.rst (``<levels>``:
+31 columns, ``io/include/azure2/io/LevelRows.h``; ``<segmentsData>``:
+``convert/include/azure2/convert/SegLine.h``; ``<segmentsTest>``: the converter's
+extrapolation lines).
 """
 
 import glob
@@ -222,7 +229,8 @@ class Project:
             out.append("")
         return "\n".join(out)
 
-    def azr_text(self):
+    def old_text(self):
+        """The project in the old grammar, the converter's input (write)."""
         cfg = ["true #Perform A-Matrix Calculation", "output/ #Full Path to Output Directory",
                "checks/ #Full Path to Checks Directory"] + ["none"] * 8
         txt = "<config>\n" + "\n".join(cfg) + "\n" + self.config_extra + "</config>\n"
@@ -237,16 +245,29 @@ class Project:
                 % self.rate)
         return txt
 
-    def write(self, directory, azr_name=None, data=None):
-        """Write <directory>/<name>.azr and, if given, the data files {segment name: rows}."""
+    def write(self, directory, binary, azr_name=None, data=None):
+        """Write <directory>/<name>.azr (format 3) and, if given, first the data files {segment name: rows}.
+
+        The old text goes to a temporary file in directory, which the converter (binary) reads with the data files
+        beside it and removes nothing else; the conversion is <name>.azr."""
         os.makedirs(os.path.join(directory, "data"), exist_ok=True)
-        path = os.path.join(directory, (azr_name or self.name) + ".azr")
-        with open(path, "w") as f:
-            f.write(self.azr_text())
         if data is not None:
             for seg in self.data:
                 write_data(os.path.join(directory, "data", seg.name + ".dat"), data[seg.name], seg)
-        return path
+        name = (azr_name or self.name) + ".azr"
+        old = f".{name}.old"
+        with open(os.path.join(directory, old), "w") as f:
+            f.write(self.old_text())
+        try:
+            if os.path.exists(os.path.join(directory, name)):
+                os.remove(os.path.join(directory, name))
+            p = subprocess.run([binary, "--convert", old, name, "--to", "3", "--exact-grids"], cwd=directory,
+                               capture_output=True, text=True, env=dict(os.environ, OMP_NUM_THREADS="1", LC_ALL="C"))
+            if p.returncode != 0:
+                raise RuntimeError(f"AZURE2 --convert of {name} failed:\n" + (p.stdout + p.stderr)[-3000:])
+        finally:
+            os.remove(os.path.join(directory, old))
+        return os.path.join(directory, name)
 
 
 def _num(x):
@@ -375,7 +396,7 @@ def truth_values(binary, project, threads=2):
     work = tempfile.mkdtemp(prefix=f"{project.name}_truth_")
     try:
         ones = {s.name: [(e, a, 1.0, 1.0) for e, a in s.points] for s in project.data}
-        azr = project.write(work, data=ones)
+        azr = project.write(work, binary, data=ones)
         with open(os.path.join(work, "temperatures.dat"), "w") as f:
             f.write("0.1\n")
         run(binary, work, azr, CALC, threads=threads)

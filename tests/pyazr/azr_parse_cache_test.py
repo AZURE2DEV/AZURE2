@@ -7,8 +7,8 @@ through active_datasets -> datasets -> SegmentSet.from_file), and every penaltie
 call once more.  On the 3H+d model from /groups (NFS) that was 83 ms per calculate_rwa against
 8 ms from local disk, and it is what made forked pyazr workers there slow (fork_bench, 2026-11-02).
 
-Checks, on tests/channel_space/channel_space.azr plus an angle-integrated-E1 copy of its capture
-segment (isDiff 5, so the E1-component path of calculate_rwa is exercised):
+Checks, on the old original of tests/channel_space/channel_space.azr (tests/convert/fixtures) plus an
+angle-integrated-E1 copy of its capture segment (isDiff 5, so the E1-component path of calculate_rwa is exercised):
   1. after the first evaluation, calculate_rwa / calculate / calculate_all_rwa / penalties /
      objective / segment_chi2 open the .azr ZERO times (the old code: once per segment per call);
   2. the values are unchanged: each segment is the engine's total, the E1 segment the engine's
@@ -32,6 +32,8 @@ import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
+sys.path.insert(0, HERE)
+import old_tree  # noqa: E402  (the old originals of converted projects)
 
 failures = []
 
@@ -84,7 +86,8 @@ def main():
         for d in ("output", "checks"):
             os.makedirs(os.path.join(work, d), exist_ok=True)
         azr = os.path.join(work, "cache.azr")
-        text = open(os.path.join(src, "channel_space.azr")).read()
+        # the old original: the test edits its segment lines and reads them back through the parse cache
+        text = open(old_tree.original(os.path.join(src, "channel_space.azr"))).read()
         e1_line = "1 1 3 0.5 7 0 180 5 1 0 0 0 0 0 data/capture.dat 0 0\n"
         text = text.replace("</segmentsData>\n", e1_line + "</segmentsData>\n", 1)
         with open(azr, "w") as f:

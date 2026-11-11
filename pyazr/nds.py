@@ -14,14 +14,14 @@ The two web services wrapped here:
   ENSDF adopted levels as JSON) when LiveChart cannot be reached.
 
 ``ExforData.to_azr`` converts an EXFOR dataset into an AZURE2 data file
-(``energy angle crossSection error``, lab frame) and returns the keyword
-arguments for :meth:`pyazr.AzrModel.add_data_segment`, so fetched data can be
-dropped straight into an evaluation::
+(``energy angle crossSection error``, lab frame) and returns what a data set
+needs, so fetched data go straight into an evaluation as a ``dataset`` record::
 
-    data = fetch_exfor("O2599004")                      # 13C(p,g)14N S-factor
-    kw = data.to_azr("run_dir/data", entrance=1, exit=2,
-                     observable="total-capture")
-    AzrModel.from_file("13N.azr").add_data_segment(**kw).write("13N_new.azr")
+    kw = fetch_exfor("O2599004").to_azr("run/data", entrance=1, exit=2)  # 13C(p,g)14N
+    p = pyazr.Project.open("run/14N.azr")
+    p.add_dataset("o2599004", reaction=p.reaction(1, 2), quantity="sigma", unit="b", norm="1 fixed",
+                  file=os.path.relpath(kw["data_file"], p.directory), columns="E_lab[MeV] _ value error")
+    p.save()
 
 A ratio to Rutherford or Mott (``,DA,,RTH``, ``,DA,,MOT``) is a format-3
 quantity: ``ExforData.to_dataset`` writes it (``pyazr/exfor_coulomb.py``).
@@ -209,14 +209,14 @@ class ExforData:
                target_mass=None, projectile_mass=None,
                cross_section_scale=1.0, energy_scale=1.0, angle_scale=1.0,
                file_name=None, rutherford=None):
-        """Write the dataset as an AZURE2 data file and return
-        :meth:`~pyazr.AzrModel.add_data_segment` keyword arguments.
+        """Write the dataset as an AZURE2 data file and return what a data set
+        needs (the module's example writes the format-3 record with
+        :meth:`pyazr.Project.add_dataset`).
 
         Returns a dict with ``data_file``, ``entrance``, ``exit``,
         ``observable``, ``energy_min``/``energy_max`` (lab MeV),
         ``angle_min``/``angle_max`` (deg) and ``norm_error`` (the EXFOR
-        ``ERR-SYS`` percent when present), ready to pass to
-        ``AzrModel.add_data_segment(**kw)``.
+        ``ERR-SYS`` percent when present).
 
         **Frames.** AZURE2 data files are always **lab** energy.  ``EN-CM``
         columns are converted with the standard ``E_lab = E_cm (m_t + m_p)/m_t``

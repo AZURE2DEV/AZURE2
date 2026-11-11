@@ -11,8 +11,8 @@
 #     nucleus's total taken from its own segment, to 1e-9;
 #   - the decomposition file carries those three weighted terms and they add
 #     up to the total.
-# The <targetInt> lines are switched off for this run: they fold the test
-# segments with the same numbers as the data segments they name.
+# The test segments' target integration is switched off for this run (their beam and quadrature fields are
+# removed): it folds them with the same numbers as the data segments of the same beam.
 # And on the data segments, folded (23 component segments, about 960,000 sub-point
 # energies): every output file of a calculation on 1 and on 4 threads is
 # byte-identical.  The component segments' energy-dependent values are computed in
@@ -56,8 +56,9 @@ nlines() { awk 'END { print NR }' "$1"; }
 dir="$WORK/run"
 mkdir -p "$dir/output" "$dir/checks"
 ln -s "$HERE/data" "$dir/data"
-awk '/<targetInt>/ { t = 1; print; next } /<\/targetInt>/ { t = 0 } t { sub(/^1 /, "0 ") } { print }' \
+awk '/^<extrapolations>$/ { x = 1 } /^<\/extrapolations>$/ { x = 0 } x && /^    (beam|quadrature) / { next } { print }' \
   "$HERE/natural_neon.azr" > "$dir/t.azr"
+awk '/^<extrapolations>$/,/^<\/extrapolations>$/' "$dir/t.azr" | grep -q '^    beam ' && bad "an extrapolation keeps its beam field"
 (cd "$dir" && printf '3\n\n\n7\n' | run_limited 900 "$AZURE2_BIN" --no-gui --no-readline t.azr > run.log 2>&1)
 
 f20="$dir/output/AZUREOut_aa=2_R=2.extrap"; f22="$dir/output/AZUREOut_aa=4_R=4.extrap"; f21="$dir/output/AZUREOut_aa=6_R=6.extrap"

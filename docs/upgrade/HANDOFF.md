@@ -2,6 +2,130 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-11 (director, afternoon) — merged: 176 of 183 project files in format 3; the engine edits the nuclear part of a project; Phase 5 decided and started
+
+**Merged on `feature/upgrade-4-data`, then on `feature/upgrade`** (all `--no-ff`, not pushed):
+- `feature/upgrade-4-tree-format3-4` (a573364b): group 8 of `format3_tree.md` (T1–T3 and the files left old in
+  converted directories).
+- `feature/upgrade-4-pyazr-records` (4d6e12de): the engine reads and edits `<levels>` rows, `<config>` entries and
+  `<thm>` lines of a format-3 project; `pyazr.Project` offers the edits; `save_fit`, bands, angular distributions,
+  tabulation, model averaging and the level transform work on a format-3 project without `AzrModel`.
+- `feature/upgrade-4-tree-format3-3` (05a6898c): group 6 (natural targets). 176 of the 183 convertible files are
+  format 3; left: group 7 (THM).
+- The PI's decisions on Phase 5 (D2, D3, D5, D6, D7: "yes to all", `energy_grid.md` §12).
+
+**Verified by the director** on the tree of the three merges together (rehearsal `trial19`, clean build, 0 warnings;
+`work/director/verify_trial19.out`):
+- All projects × 3 bases against the tree with group 8 and pyazr only (`tab-trial19a`, itself identical to the group-8
+  agent's tag, 732 / 705 / 732 files): 713 / 686 / 713 identical; every number of every output equal (largest relative
+  difference 0). What differs is text: `param.par` of `natural_neon` (parameter names), three sample headers of
+  `natural_neon` ("sample natural" for "sample 1"), 15 `run.log` of the converted natural-target and reaction-rate
+  models (the old-format note gone; a missing data file is an error in format 3 where the old path warned).
+- `ctest -LE slow` 186/186; `ctest -L slow` (2 threads) 10/10; `tests/run_tests.sh` 146 passed, 0 failed; 12
+  calculations identical at 1 and 6 threads; model-data χ² identical in three bases; spec equivalence 198 files, 183
+  converted, 183 equal, 0 recorded, 0 differ, 15 not converted; gate 483 (456 formal) identical, 38 classified, 0
+  differ, 0 missing. Reference tag from here: `tab-trial19` (base build `work/b-trial19`).
+
+**Director's judgements at the merge.**
+- Conflicts were resolved by hand in `src/CMakeLists.txt`, `tests/consistency/repo_consistency_test.py`,
+  `docs/upgrade/format3_tree.md`, `experiment/src/BuildEffects.cpp`, `tests/pyazr/predictions_test.py`; comments in
+  `convert/` that still named `EData` were renamed (check 31).
+- Accepted for now, to be tightened by the gaps branch: the total tolerance of `scattering_length` 1e-6 → 1e-4
+  (`modelData.out` prints five digits); `cli_route_exit` accepts any non-zero exit.
+- Accepted as right: format 3 refuses a Doppler temperature ≤ 0 and an areal density of 0; the converter refuses what
+  the old engine refused; `add_level` of pyazr does not renumber the other levels.
+- To fix (in the gaps branch): a refused format-3 project exits 255 with "Could not open"; a parameter file whose
+  names do not match is ignored without a word (`natural_neon`: χ² 36346 instead of 25647 before the `.sav` was
+  renamed); `sigma_total` on a natural target; a detector resolution on beta-delayed data; a data set's `thm <name>`
+  that names no experiment is not refused by validation.
+- Found by the pyazr agent on the *old* path and not fixed, because that path is to be deleted: `tabulate` on an old
+  project with `<targetInt>` applies the target effect to the tabulation (13N: 2.5e-12 for 6.5e-7 b);
+  `angular_distribution` on the old 13N returns NaN.
+
+**Running** (2026-11-11 afternoon):
+- `feature/upgrade-4-tree-format3-5`: the THM projects to format 3 (group 7).
+- `feature/upgrade-4-format3-gaps`: the defects and gaps listed above, the converter's open questions, the model
+  generators that still write old files, the set-up profile.
+- `feature/upgrade-4-pathway-table-2`: external capture on the pathway table, the old trees deleted.
+- `feature/upgrade-5-energy-tasks`: one level-matrix solve per distinct compound energy (bit-identical).
+- `feature/upgrade-5-layer-yield`: the yield of a finite layer as a quantity.
+- `feature/upgrade-5-lab-frame`: data compared in the laboratory frame; the c.m. copies of the data deleted.
+- Finished and being merged as a second batch: `feature/upgrade-5-stopping-1` (`stopping/`) and
+  `feature/upgrade-7-transfer-1` (`physics/transfer`), both leaf libraries nothing links.
+
+**Open for the PI and the owner.**
+- `stopping/data/electronic_coefficients.tsv` and the Barkas table were transcribed from Geant4's source (ICRU 49's
+  numbers; Geant4 Software License). Whether they may be shipped under AZURE2's GPL v3, and with which notice, is the
+  maintainers' decision; taking the numbers from the reports themselves or from a fit to the IAEA data base removes
+  the question.
+- Extensibility is counted from now on: every branch that adds a quantity or an apparatus effect reports the engine
+  files it had to touch; a drill with a fresh agent and only the recipes is run before the meeting with the owner.
+
+## 2026-11-11 (agent, pyazr records) — the engine edits the nuclear part; pyazr's modules off `AzrModel` (`feature/upgrade-4-pyazr-records`)
+
+**Done** (`AC_pyazr_off_azrfile.md`; design and state: `docs/upgrade/pyazr_on_records.md`, sections "Edits of the
+nuclear part", "Remaining uses", "Tests"). The engine reads and writes `<levels>` rows (`io/LevelRowText.h`,
+`experiment/LevelEdits.h`), `<config>` entries (`io/ConfigSection.h`, now the reader of `Config::ReadConfigFile`) and
+`<thm>` lines (`include/ThmBlockEdits.h`); bindings in `api/src/pybind_nuclear_part.cpp`. pyazr 2.32.0: `Project`
+levels / pairs / config / thm reads and edits (`pyazr/nuclear_part.py`); `save_fit` (now `pyazr/snapshot.py`),
+`scattering_length_chi2`, the potential records, `bands`, `angular`, `tabulate`, `modelavg`, `transform` work on a
+format-3 project without `AzrModel` (old files: one format test, the old branch). Nine pyazr tests moved to the
+format-3 files; three new tests (`io_level_row_text`, `io_config_section`, `pyazr_project_nuclear_part`).
+
+**Verified how**: see the branch report (all projects x 3 bases against `tab-tree3b`, the converted-tree gate,
+`ctest -LE slow`, `ctest -L slow`, `tests/run_tests.sh`, 1 vs 4 threads; `save_fit` on 13N and on the THM toy with
+a coherent background: the snapshot chi2 equals the old path's to every digit).
+
+**Open**: `nuclei.merge_projects` (waits for the natural-target records of group 6); 13 tests still read originals
+through `old_tree.py` and 12 more use `AzrModel` on format-3 files (the page's table says which and why); the skills
+and user pages that teach `AzrModel` (`.claude/skills/azure2-*`, `particle_pairs.rst`, ...).
+
+## 2026-11-11 (agent, tree to format 3, third part) — the natural-target projects (group 6); THM not started (`feature/upgrade-4-tree-format3-3`)
+
+**Done** (`AA3_tree_natural_thm.md`; plan and state: `docs/upgrade/format3_tree.md`). Group 6 is format 3: natural_neon
+(tests and example, the example's `.sav` renamed to the format-3 parameter names), the natural_target models but
+`M_thick`, `reaction_rate/models/n12C.azr`, `p12C.azr` (140 converted files in all). Rewritten on records:
+natural_neon, natural_target, shared_effect_pairs, component_subpoint_angle, doppler_fgm and transmission_yield with
+their generators (format 3; the old generators kept in the fixtures for the pyazr tests of the old reader);
+natural_target/make_models.py deleted (README). The converter refuses six more kinds of old line the old engine
+refused and the conversion used to run (component naming a missing pair key, a sample `<abundances>` lacks, doppler
+fit forms with vary 2 / sigma < 0 / Tmax <= T, transmission and yield on one line, a thicknessgroup member without its
+own block); format 3 refuses a Doppler temperature <= 0 and a sample areal density of 0 (`E_OUT_OF_RANGE`, both ran).
+
+**Verified how**: all projects x 3 bases against `tab-tree3b` (tag `tab-tree3c-1`, the new reference): identical but
+natural_neon's param.par names and sample-file headers; gate (`gtree3c`) 483 (456) identical, 38 classified, 0 differ,
+0 missing; spec equivalence 198 files, 183 converted, 183 equal, 0 recorded, 0 differ, 15 not converted (bad_key,
+bad_sample now refused); ctest, run_tests.sh and the thread comparison: see the branch report.
+
+**Open**: group 7 (THM, not started; the page's group-7 row lists the readers of 17O measured on a trial conversion),
+group 8; `total_optical` (a natural sum of totals has no format-3 form: three options in the page's §4, for the
+director); `M_thick.azr`; the converter could answer its "two areal densities" question itself for a doppler-only
+`<targetInt>` line on a transmission line (one sample target with the doppler field gives byte-identical outputs).
+
+## 2026-11-11 (agent, tree to format 3, group 8) — T1–T3 and the rest of the tree (`feature/upgrade-4-tree-format3-4`)
+
+**Done** (`AA4_tree_rest_group8.md`; plan and state: `docs/upgrade/format3_tree.md`). The 36 old files of group 8 are
+format 3 (`upgrade/T1–T3`, `relativistic`, `scattering_length`, `channel_space`, `beta_delayed_alpha`,
+`identical_entrance_reaction`, `identical_pp_res`, `hybrid_potential`, `sum_lab_frame`, `ratio_frame` models): 162
+of the 185 convertible files. Every check, unit test and tool that reads them edits records (list in the page, §3
+row 8); the golden comparisons of T1–T3 compare the old golden files as the format-3 projects write them (the
+converter's parameter names, the classes of `tools/format3_gate.py`); the generators of T1–T3 write format 3 through
+the converter and give the committed files byte for byte; `light_excitation/make_models.py` (run by its check)
+writes records. `tools/convert_tree.sh` drops a committed side file (`prior_cov.f3.txt`) before converting an
+original, so the gate converts T2 again.
+
+**Verified how** (page §3a): converted-tree gate `gtree3d` 483 (456) identical, 38 classified, 0 differ, 0 missing;
+all projects x 3 bases `tab-tree3d` (the new reference) against `tab-tree3b`: only the converted projects differ, by
+listed classes; spec equivalence 198/185/183/2/0/13; `ctest -LE slow` 183/183; `ctest -L slow` (OMP 2) 10/10;
+`tests/run_tests.sh` 145 passed, 1 failed (spin_orbit_potential, fixed, rerun passed); 1 vs 4 threads identical on
+T1-T3, 13N, identical_pp_res, two relativistic models; T2 benchmark at 1 thread 10899.8 / 691.608.
+
+**Open**: groups 6 and 7 (another branch); 23 developer generators that still write old files (page §5);
+`beta_delayed_alpha` (e), a Gaussian resolution on a beta-delayed spectrum, which format 3 cannot state (director);
+defects found (page §4): a refused format-3 project exits 255 with "Could not open ... Check that file exists."
+(`src/AZURE2.cpp`), a THM experiment whose data sets are all inactive is refused (`ConfigThm.cpp` writes
+`segments=`), `sigma` of a label that reads elastic is refused even with `exit_pair` naming another pair.
+
 ## 2026-11-11 (agent, Phase 5 design) — the energy grid, kernels, lab-frame comparison, finite layers (`feature/upgrade-5-design`)
 
 **Done.** The design note `docs/upgrade/energy_grid.md`, measured on 2363abac (no code changed). Measured with an

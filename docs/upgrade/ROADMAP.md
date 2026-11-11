@@ -158,8 +158,8 @@ State on 2026-11-11:
       one table that feeds the file validation, Python and the documentation. `AZURE2 --convert`, `--validate`,
       `--describe`, `--schema` (for programs and AI agents); `pyazr.Project` edits a project as records. The engine
       runs format 3; every converted test project gives the old outputs (the gate, `tools/format3_gate.sh`).
-- [ ] The engine reads **only** format 3. Done: two thirds of the test tree and of the examples are format 3 (126 of 185
-      project files, the originals kept as the converter's fixtures; `format3_tree.md`); `--validate` reports the
+- [ ] The engine reads **only** format 3. Done: all of the test tree and of the examples but the THM projects are
+      format 3 (176 of 183 project files, the originals kept as the converter's fixtures; `format3_tree.md`); `--validate` reports the
       data rows, covariance files and final states the run would refuse; pyazr's session reads a format-3 project
       from the engine (`pyazr_on_records.md`). In work: the rest of the tree. Then: old files refused with the
       converter's command, the old reading path and `pyazr/azrfile.py` (3,756 lines) deleted, a second round of

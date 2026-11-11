@@ -160,8 +160,9 @@ with tempfile.TemporaryDirectory() as tmp:
         print(f"tests/{suite} grad_fit")
         gen = os.path.join(tmp, suite)
         os.makedirs(gen)
-        mm = load_module(suite + "_models", os.path.join(ROOT, "tests", suite, "make_models.py"))
-        getattr(mm, maker)(os.path.join(ROOT, "tests", "reaction_rate", "models", "n12C.azr"), gen)
+        # the old generator and the old n12C (tests/convert/fixtures): these models are the old file class's
+        mm = load_module(suite + "_models", old_tree.original(os.path.join(ROOT, "tests", suite, "make_models.py")))
+        getattr(mm, maker)(old_tree.original(os.path.join(ROOT, "tests", "reaction_rate", "models", "n12C.azr")), gen)
         work = os.path.join(gen, "run")
         os.makedirs(os.path.join(work, "output"))
         os.makedirs(os.path.join(work, "checks"))

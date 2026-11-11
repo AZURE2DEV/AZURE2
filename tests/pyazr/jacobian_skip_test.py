@@ -6,7 +6,7 @@ evaluations each.  Up to 2026-10-30 every free one was differenced on every call
 holds through its own bounds: a 17O+a rmfit polish with 8 such terms spent ~16 of its ~18 evaluations per Jacobian
 (41 min each) on columns it then threw away.  ``skip`` names free columns not to difference; they come back zero.
 
-Model: tests/13N with only segments 3 and 4 (Meyer, 12C(p,p) at 84.3 and 114.5 deg) active, each with a free
+Model: tests/13N with only the data sets meyer_84 and meyer_114 (12C(p,p) at 84.3 and 114.5 deg) active, each with a free
 constant energy shift (10 keV).  Checks: (a) without skip both shift columns are nonzero; (b) skipping the first
 shift column leaves it exactly zero while the residuals, the other shift column and every adjoint column are
 bit-identical to the full call; (c) skipping both gives two zero columns, the rest identical; (d) a skip index
@@ -20,8 +20,6 @@ import sys
 import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import old_tree  # noqa: E402  (the old originals of converted projects)
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 sys.path.insert(0, ROOT)
 
@@ -36,29 +34,25 @@ def check(name, ok, detail=""):
 
 try:
     import numpy as np                         # noqa: E402
-    from pyazr import azure2                   # noqa: E402
+    from pyazr import azure2, Project          # noqa: E402
 except Exception as err:                       # same skip as the other pyazr tests
     print(f"skip: pyazr engine not importable ({type(err).__name__}: {err})")
     sys.exit(0)
 
-SRC = old_tree.original(os.path.join(ROOT, "tests", "13N", "13N.azr"))  # the old file (format3_tree.md)
+SRC = os.path.join(ROOT, "tests", "13N", "13N.azr")
 
 
 def make_model(work):
-    lines = open(SRC).read().split("\n")
-    i0, i1 = lines.index("<segmentsData>"), lines.index("</segmentsData>")
-    for i in range(i0 + 1, i1):
-        f = lines[i].split()
-        if not f:
+    p = Project.open(SRC)
+    for name, r in p.records().items():
+        if r.record_kind != "dataset":
             continue
-        if i in (i0 + 3, i0 + 4):              # segments 3 and 4: a free shift each
-            f[11], f[13] = "0.01", "1"
+        if name in ("meyer_84", "meyer_114"):  # segments 3 and 4 of the old file: a free shift each (the first
+            # with the prior of its old line's error, 5 keV)
+            p.set(name, shift="offset 0.01 MeV fit" + (" prior 0 0.005" if name == "meyer_84" else ""))
         else:
-            f[0] = "0"
-        lines[i] = " ".join(f)
-    path = os.path.join(work, "skip.azr")
-    open(path, "w").write("\n".join(lines))
-    return path
+            p.set(name, active="no")
+    return p.save(os.path.join(work, "skip.azr"))
 
 
 work = tempfile.mkdtemp(prefix="pyazr_jac_skip_")
