@@ -413,6 +413,43 @@ int main(int argc, char **argv) {
              {"columns", "E_lab[MeV] _ value error"}, {"energy_window", "0.1 2 MeV"}, {"norm", "1 fixed"}, {"target", "S"}});
     check("transmission: segment_1_thickness -> S.areal_density", Param(r, "segment_1_thickness") == "S.areal_density");
   }
+  // ---- a <targetInt> target over a line of a sample and a line of none (natural_target/models/M_thick): the sample's
+  //      line gets a copy of the target with the isotopes; with a fitted density it stays a question
+  {
+    const std::string lines = "1 5 5 0.1 2 0 180 0 1 0 0 0 0 0 a.dat\n"
+                              "1 5 5 0.1 2 0 180 0 1 0 0 0 0 0 b.dat 0 0 sample natNe\n";
+    const std::string abundances = "<abundances>\nnatNe: 10 21 0.9 0 0\n</abundances>\n";
+    const ConvertResult r = Convert({lines, "", "1 \"1,2\" 20 0 0 1 1e18 \"a0\" 1 1e-20 0 0 0 \"\" 0 0\n", abundances, ""});
+    check("shared layer over a sample's line and a plain line: converted without a question", r.ok && r.questions.empty());
+    const std::string a = Block(r.text, "dataset a"), b = Block(r.text, "dataset b");
+    check("the plain line on the layer, the sample's line on its copy",
+          a.find("target         tgt_a\n") != std::string::npos && b.find("target         tgt_b\n") != std::string::npos);
+    const std::string copy = Block(r.text, "target tgt_b"), plain = Block(r.text, "target tgt_a");
+    check("the copy carries the isotopes, the layer none",
+          copy.find("isotope        20Ne 0.9 fixed") != std::string::npos && copy.find("areal_density  1e18 atoms/cm2 fixed") != std::string::npos &&
+              !plain.empty() && plain.find("isotope") == std::string::npos);
+    const ConvertResult q = Convert({lines, "", "1 \"1,2\" 20 0 0 1 1e18 \"a0\" 1 1e-20 0 0 0 \"\" 0 0 densityfit 1 10%\n", abundances, ""});
+    check("the same with a fitted density: a question", !q.ok && !q.questions.empty());
+  }
+  // ---- a Doppler-only <targetInt> line on transmission lines: one sample target with the doppler field (no question
+  //      "two areal densities"); a fitted temperature on one line keeps its parameter; on two lines it stays a question
+  {
+    const ConvertResult r = Convert({"1 5 5 0.1 2 0 180 0 1 0 0 0 0 0 tr1.dat transmission 0.05\n"
+                                     "1 5 5 0.1 2 0 180 0 1 0 0 0 0 0 tr2.dat transmission 0.05\n"
+                                     "1 5 5 0.1 2 0 180 0 1 0 0 0 0 0 tr3.dat transmission 0.05\n",
+                                     "", "1 \"1,2\" 20 0 0 0 0 \"\" 0 0 0 0 \"\" 0 doppler 300\n"
+                                         "1 \"3\" 20 0 0 0 0 \"\" 0 0 0 0 \"\" 0 doppler 300 1 30\n", "", ""});
+    check("doppler on transmission lines: converted without a question", r.ok && r.questions.empty());
+    Expect("doppler on the sample target", r, "target tgt_tr1",
+           F{{"kind", "sample"}, {"active", "20Ne"}, {"areal_density", "0.05 atoms/b fixed"}, {"doppler", "free_gas 300 K fixed"}});
+    Expect("fitted doppler on the sample target", r, "target tgt_tr3",
+           F{{"kind", "sample"}, {"active", "20Ne"}, {"areal_density", "0.05 atoms/b fixed"}, {"doppler", "free_gas 300 K fit prior 300 30"}});
+    check("doppler_2 -> tgt_tr3.doppler", Param(r, "doppler_2") == "tgt_tr3.doppler");
+    const ConvertResult q = Convert({"1 5 5 0.1 2 0 180 0 1 0 0 0 0 0 tr1.dat transmission 0.05\n"
+                                     "1 5 5 0.1 2 0 180 0 1 0 0 0 0 0 tr2.dat transmission 0.05\n",
+                                     "", "1 \"1,2\" 20 0 0 0 0 \"\" 0 0 0 0 \"\" 0 doppler 300 1 30\n", "", ""});
+    check("a fitted doppler shared by two transmission lines: still the question", !q.ok && !q.questions.empty());
+  }
   // ---- a line with transmission and yield, and a thicknessgroup member without its own block: the old engine refused
   //      them (WorkingCopy::FinishTransformedSegment, ResolveThicknessGroups), so the converter refuses them with that reason
   {

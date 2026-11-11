@@ -99,6 +99,7 @@ std::string Builder::Run() {
   }
   BuildApparatus();
   BuildSamples();
+  MoveDopplerToSamples();
   NameApparatus();
   if (!res_.refusal.empty()) return res_.refusal;
   BuildData();

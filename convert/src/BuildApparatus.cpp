@@ -2,6 +2,8 @@
 // shared records (Builder.h).
 #include "Builder.h"
 
+#include <algorithm>
+
 namespace azure2 {
 namespace convert {
 
@@ -320,6 +322,39 @@ void Builder::BuildSamples() {
   }
 }
 
+// A Doppler-only <targetInt> line (no integration, no screening) on neutron-sample lines only (transmission or yield,
+// no <abundances> sample): the old line's temperature and the line's sample thickness are one target in format 3, a
+// sample with a doppler field (the same broadening of the same cross section), not two targets with two areal
+// densities.  A fitted temperature moves only when the line serves one data or test line (it stays one parameter).
+void Builder::MoveDopplerToSamples() {
+  for (Apparatus &a : apparatus_) {
+    const TargetIntLine &l = a.line->line;
+    if (!a.hasTarget || !l.isDoppler || l.isTargetIntegration == 1 || l.hasScreening) continue;
+    if (a.dataKeys.empty() && a.testKeys.empty()) continue;
+    if (l.dopplerFitRead && a.dataKeys.size() + a.testKeys.size() != 1) continue;
+    bool samples = true;
+    for (int k : a.dataKeys) {
+      const SegLine &s = *activeData_.at(k)->parsed;
+      samples = samples && (s.transmission() > 0 || s.yieldThickness() > 0) && !sampleOfData_.count(k);
+    }
+    for (int k : a.testKeys) {
+      const ExtrapLine &s = *activeTest_.at(k)->parsed;
+      samples = samples && (s.transmission() > 0 || s.yieldThickness() > 0) && !sampleOfTest_.count(k);
+    }
+    if (!samples) continue;
+    for (const io::Field &f : a.target.fields)
+      if (f.key == "doppler") a.dopplerOnSample = f.tokens;
+    if (a.dopplerOnSample.empty()) continue;
+    a.hasTarget = false;
+    // a fitted temperature is named after its sample target (AddSampleDoppler), not this line's target
+    const std::string old = "doppler_" + std::to_string(a.line->activeIndex);
+    auto &names = res_.parameterNames;
+    names.erase(std::remove_if(names.begin(), names.end(), [&](const auto &p) { return p.first == old; }), names.end());
+    Note(Construct::kDoppler, "", "<targetInt> line " + std::to_string(a.line->index) +
+                                      ": a Doppler broadening of neutron-sample lines is written as the doppler field of their sample targets");
+  }
+}
+
 // ================================================================ names and isotopes of the apparatus
 void Builder::NameApparatus() {
   // Samples: the isotopes of each sample, on the target of its data sets.
@@ -432,6 +467,11 @@ void Builder::NameApparatus() {
       const std::map<int, int> &samples = isData ? sampleOfData_ : sampleOfTest_;
       return samples.count(key) ? samples.at(key) : -1;
     };
+    // A <targetInt> target shared with lines of no or another sample: the old engine integrated every line over the one
+    // target and weighted only the sample's lines by the abundances.  Without a fitted target parameter that is a copy
+    // of the target for the sample's lines (the same layer, the isotopes on it); with one (density, Doppler, screening)
+    // the copies would be two parameters, so it stays a question.
+    std::map<int, std::vector<Member>> split;  // apparatus -> the sample's members that move to a copy of it
     for (const Member &m : members) {
       std::map<int, int> &apparatusOf = m.isData ? apparatusOfData_ : apparatusOfTest_;
       if (!(apparatusOf.count(m.key) && apparatus_[apparatusOf[m.key]].hasTarget)) {
@@ -439,15 +479,42 @@ void Builder::NameApparatus() {
         continue;
       }
       const int ai = apparatusOf[m.key];
-      targetApparatus.insert(ai);
+      const TargetIntLine &l = apparatus_[ai].line->line;
+      const bool freeTarget = l.densityFitRead || !l.densityGroup.empty() || l.dopplerFitRead ||
+                              (l.hasScreening && (l.screeningVary != 0 || l.screeningSigma > 0));
       const std::string &name = (m.isData ? dataName_ : testName_)[m.key];
+      bool mixed = false;
       for (const bool otherIsData : {true, false})
         for (int other : otherIsData ? apparatus_[ai].dataKeys : apparatus_[ai].testKeys)
-          if (sampleOf(otherIsData, other) != si)
-            Ask(Construct::kSample, name + ".target",
-                "its target (<targetInt> line " + std::to_string(apparatus_[ai].line->index) + ") is shared with " +
-                    (otherIsData ? dataName_ : testName_)[other] + ", which has not the same sample",
-                "");
+          if (sampleOf(otherIsData, other) != si) {
+            mixed = true;
+            if (freeTarget)
+              Ask(Construct::kSample, name + ".target",
+                  "its target (<targetInt> line " + std::to_string(apparatus_[ai].line->index) + ") is shared with " +
+                      (otherIsData ? dataName_ : testName_)[other] + ", which has not the same sample, and has a fitted parameter",
+                  "");
+          }
+      if (mixed && !freeTarget)
+        split[ai].push_back(m);
+      else
+        targetApparatus.insert(ai);
+    }
+    for (const auto &kv : split) {
+      Apparatus copy = apparatus_[kv.first];
+      copy.dataKeys.clear();
+      copy.testKeys.clear();
+      const int ci = (int)apparatus_.size();
+      for (const Member &m : kv.second) {
+        (m.isData ? copy.dataKeys : copy.testKeys).push_back(m.key);
+        std::vector<int> &keys = m.isData ? apparatus_[kv.first].dataKeys : apparatus_[kv.first].testKeys;
+        keys.erase(std::remove(keys.begin(), keys.end(), m.key), keys.end());
+        (m.isData ? apparatusOfData_ : apparatusOfTest_)[m.key] = ci;
+      }
+      apparatus_.push_back(copy);
+      targetApparatus.insert(ci);
+      Note(Construct::kSample, "", "<targetInt> line " + std::to_string(copy.line->index) + ": its target serves lines of " +
+                                       (smp.name.empty() ? std::string("the sample") : "sample " + smp.name) +
+                                       " and other lines; the sample's lines get a copy of it with the isotopes (no fitted target parameter)");
     }
     if (targetApparatus.size() + (ownTarget ? 1 : 0) > 1)
       Ask(Construct::kSample, (smp.name.empty() ? "natural" : smp.name) + ".target",

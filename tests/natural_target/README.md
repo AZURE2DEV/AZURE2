@@ -16,7 +16,7 @@ Both nuclei are built on the three-level p + 12C skeleton of `tests/convolution_
 | `B.azr` | p + 13C -> 14N (pair key 2): the 13C masses and spin, S_p(14N) = 7.5506 MeV, levels at the same c.m. energies so the resonances sit in the same window, other widths |
 | `M.azr` | A's and B's levels in one file, target `natural` with 12C 0.6 and 13C 0.4 fixed; extrapolations x1 (pair 1 alone), x2 (pair 2 alone), x3 = the sum 12C(p,p)12C + 13C(p,p)13C on the natural target (= 0.6 x1 + 0.4 x2), x4 = pair 2 on the natural target (= 0.4 x2) |
 | `A_thick.azr`, `B_thick.azr` | A and B under a target-integration effect (no beam spread) |
-| `M_thick.azr` | the same for M; **old format**: its conversion has four questions (a shared `<targetInt>` line over lines of different samples), see `docs/upgrade/format3_tree.md` |
+| `M_thick.azr` | the same for M: the old file's one `<targetInt>` line served x1, x2 (no sample) and x3, x4 (the natural sample); in format 3 the layer is written twice, `tgt_targetInt1` for x1, x2 and `tgt_targetInt1_2` with the isotopes for x3, x4 (the converter's copy of a target with no fitted parameter; outputs equal to the old file's) |
 | `M_samples.azr` | M plus a second target `enr` (0.1 / 0.9, its own sum-to-one width): x5 = the sum on `enr` = 0.1 x1 + 0.9 x2, x6 = pair 2 on `enr` = 0.9 x2 |
 | `M_samples_data.azr` | two data sets on two targets, four abundances free: the fit must find 0.6 / 0.4 and 0.1 / 0.9 |
 | `M_data.azr` | x3 as a data set reading `data.dat` (written by `check.sh` from A and B), abundances 0.5 / 0.5 free with an `isotope_sum` prior of width 0.01: the fit must find 0.6 / 0.4 |

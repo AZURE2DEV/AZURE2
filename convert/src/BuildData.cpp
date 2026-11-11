@@ -39,6 +39,20 @@ std::string Builder::SampleThicknessTarget(const std::string &record, int entran
   return t.name;
 }
 
+// The doppler field of a Doppler-only <targetInt> line on the sample target of one of its lines (MoveDopplerToSamples);
+// a fitted temperature's old name now names that target's.
+void Builder::AddSampleDoppler(const std::string &target, const Apparatus *app, int key, bool isData) {
+  if (!app || app->dopplerOnSample.empty()) return;
+  for (io::Record &t : out_.targets.records) {
+    if (t.kind != "target" || t.name != target) continue;
+    for (const io::Field &f : t.fields)
+      if (f.key == "doppler") return;  // a thicknessgroup's shared target has it from its first line
+    Add(t, "doppler", app->dopplerOnSample);
+  }
+  if (isData && app->line->line.dopplerFitRead) Param("doppler_" + std::to_string(app->line->activeIndex), target + ".doppler");
+  (void)key;
+}
+
 // ================================================================ data sets
 void Builder::BuildData() {
   // Groups: the leader is the first active line with the label (file order); its values are the group's.
@@ -400,8 +414,10 @@ void Builder::BuildData() {
         Ask(Construct::kThickness, name + ".target", "a sample thickness and a <targetInt> or <abundances> target: two areal densities", "");
       } else {
         const double n = s.transmission() > 0 ? s.transmission() : s.yieldThickness();
-        Add(r, "target", SampleThicknessTarget(name, s.entranceKey(), n, d.text, s.thicknessFit(), s.thicknessVary(),
-                                               s.thicknessSigma(), s.thicknessGroup(), d.key, true));
+        const std::string target = SampleThicknessTarget(name, s.entranceKey(), n, d.text, s.thicknessFit(), s.thicknessVary(),
+                                                         s.thicknessSigma(), s.thicknessGroup(), d.key, true);
+        AddSampleDoppler(target, app, d.key, true);
+        Add(r, "target", target);
       }
     }
 
@@ -586,8 +602,10 @@ void Builder::BuildExtrapolations() {
       } else {
         if (s.thicknessFitIgnored())
           Note(Construct::kThickness, name, "the fit form or thicknessgroup of a test line was ignored by the old engine: the thickness is fixed");
-        Add(r, "target", SampleThicknessTarget(name, s.entranceKey(), s.transmission() > 0 ? s.transmission() : s.yieldThickness(),
-                                               t.text, false, 0, 0.0, "", t.key, false));
+        const std::string target = SampleThicknessTarget(name, s.entranceKey(), s.transmission() > 0 ? s.transmission() : s.yieldThickness(),
+                                                         t.text, false, 0, 0.0, "", t.key, false);
+        AddSampleDoppler(target, app, t.key, false);
+        Add(r, "target", target);
       }
     }
     if (thm) {

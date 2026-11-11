@@ -14,7 +14,7 @@
 #       acts the same in --use-lm and --use-gsl-lm as in MIGRAD;
 #   (d) a level with channels of both nuclei and "natural 1" on a RATIO are refused by the run; a component
 #       naming a missing pair key and a sample <abundances> lacks (old files, tests/convert/fixtures) by the
-#       converter.  The models are format 3 but M_thick.azr (old: four converter questions, format3_tree.md).
+#       converter.  The models are format 3 (M_thick.azr: the layer target twice, without and with the isotopes).
 #
 #   ./tests/natural_target/check.sh path/to/AZURE2
 
