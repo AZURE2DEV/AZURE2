@@ -14,7 +14,7 @@ files) and `docs/source/user_guide/levels_channels.rst` (how level lines are gro
   levels are counted.
 - **Segment parameters**: `segment_<key>_norm`, `segment_<key>_energy_shift`, `segment_<key>_energy_shift_sqrt`
   (and the shift-function terms), where `<key>` is the 1-based position of the `<segmentsData>` line counting every
-  line, active or not (`Segment.key`, matching `Parameter.segment_key`; `EData::FillMnParams`).
+  line, active or not (`Segment.key`, matching `Parameter.segment_key`; `WorkingCopy::FillMnParams`).
 - **Consequence**: deactivating, removing or adding a level renames every later level parameter, and removing or
   inserting a `<segmentsData>` line renames every later segment parameter. A `param.sav` written before the edit then
   puts every later value on the wrong parameter, without an error.

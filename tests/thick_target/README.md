@@ -5,10 +5,10 @@ mutation of it.
 
 A `<targetInt>` line with target integration and a density of 0 means an infinitely thick target:
 the yield per incident particle, ∫₀^E₀ σ(E)/ε(E) dE, not divided by a density. Up to dev 5df7024
-`EData::SetUpTargetEffects` implemented that by overwriting the **shared** effect's density with
+`WorkingCopy::SetUpTargetEffects` implemented that by overwriting the **shared** effect's density with
 1e24 at the first point whose thickness came out below 1e-10 (audit 2026-10-25, item 17). Two
 things followed. That first point kept a target thickness of 0, and the Gaussian branch of
-`EPoint::IntegrateTargetEffectImpl` integrates from E₀ − thickness to E₀, so with a beam spread or
+`Unit::IntegrateTargetEffectImpl` integrates from E₀ − thickness to E₀, so with a beam spread or
 straggling on the line its yield was exactly 0 (13N segment 1, first point: 0 instead of 2.85e-14).
 And the branch also fired for a *thin* target whose stopping cross section evaluated to zero or
 below at some point, silently turning the rest of the line into a thick target with the yields

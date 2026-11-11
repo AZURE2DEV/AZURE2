@@ -285,7 +285,7 @@ engine would refuse is not opened in the editor (it is kept as it is).
    ``k`` is the segment's line number in ``<segmentsData>``, counting inactive
    lines — the numbering of ``segment_<k>_norm``, of the first column of
    ``normalizations.out`` and of ``chiSquared.out``, and of the output files
-   (``ESegment::GetSegmentKey``). ``weightTest[k]=<file>`` does the same for
+   (``Segment::GetSegmentKey``). ``weightTest[k]=<file>`` does the same for
    line ``k`` of ``<segmentsTest>`` (extrapolation of a THM segment with the
    weighted model; ``<segmentsTest>`` lines are numbered on their own, from 1).
    A relative path is taken from the directory of the ``.azr`` file; a path
@@ -309,7 +309,7 @@ engine would refuse is not opened in the editor (it is kept as it is).
 
    With a free (profiled) THM normalization a constant :math:`w` changes
    nothing but the norm: :math:`\chi^2` is identical, and since the norm
-   multiplies the *data* (:math:`n^* = S_{mm}/S_{md}`, ``ESegment::
+   multiplies the *data* (:math:`n^* = S_{mm}/S_{md}`, ``Segment::
    ProfileNormChiSquared``), ``w ≡ 2`` *doubles* the norm written to
    ``chiSquared.out`` and ``normalizations.out``. Only the energy dependence
    of :math:`w` matters, so the choice of :math:`E_\mathrm{norm}` below is
@@ -2672,7 +2672,7 @@ for every segment of the experiment (``ThmAngular.h``,
 *Angle.* :math:`\theta` is the c.m. angle of particle 1 of the segment's exit
 pair relative to particle 2, measured from the relative momentum of particle
 1 of the entrance pair relative to particle 2 -- the convention of AZURE2's
-ordinary differential segments (``EPoint::ConvertLabAngle``). When the
+ordinary differential segments (``Unit::ConvertLabAngle``). When the
 transferred particle :math:`x` is particle 1 of the entrance pair and the
 angle of the papers refers to particle 1 of the exit pair, it is their
 :math:`\theta_\mathrm{cm}`; otherwise give the supplementary window
@@ -3130,7 +3130,7 @@ Normalization, gradients and uncertainty bands
 ----------------------------------------------
 
 A THM segment with a free norm has its arbitrary scale profiled out
-(``ESegment::IsProfiledNorm``): :math:`n^* = S_{mm}/S_{md}` and
+(``Segment::IsProfiledNorm``): :math:`n^* = S_{mm}/S_{md}` and
 :math:`\chi^2 = S_{dd} - S_{md}^2/S_{mm}`, no penalty, no fit parameter (the
 segments of a THM experiment share one, with an optional background: see
 "THM experiments"). The model Jacobian :math:`J_m` of a THM point comes

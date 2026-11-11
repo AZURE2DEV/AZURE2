@@ -6,13 +6,13 @@
 // The rules of the comparison (each is a meaning the old engine gave a field, or a difference that section 8 records):
 // - Data sets and extrapolations by key (file order, inactive ones counted).  Of an inactive one only the key, the
 //   flag and the data file: the old engine read nothing else of it.
-// - Shared values (normalization, energy shift, sample thickness; EData::Resolve*Groups): the groups as partitions of
+// - Shared values (normalization, energy shift, sample thickness; WorkingCopy::Resolve*Groups): the groups as partitions of
 //   the active keys (a group of one is no group; labels differ: the converter names the records), the values on the
 //   first active member of each group and on ungrouped data sets only.  A follower's own old values are the recorded
 //   difference of meaning of section 8.1 (the old engine never used them; the converter drops them with a note).
 // - A prior centre: the effective centre (the prior_centre row, else the norm; the shift's, else 0).  A THM data set
-//   with a profiled norm: the norm value is not compared (profiled, ESegment::IsProfiledNorm).
-// - The angle window and grid of an angle-integrated observable are not compared (ESegment::IsInSegment tests the
+//   with a profiled norm: the norm value is not compared (profiled, Segment::IsProfiledNorm).
+// - The angle window and grid of an angle-integrated observable are not compared (Segment::IsInSegment tests the
 //   window of differential data only; an old test line on several angles repeated its energy grid, written once).
 // - A target effect: per active key, the effect the engine applies to it (a later <targetInt> line takes over a key),
 //   its members with their defaults made explicit (straggling coefficient 0 = Bohr, width multiplier 20, points per
@@ -148,7 +148,7 @@ std::set<std::set<int>> Partition(const std::map<int, std::string> &labelOfKey) 
 
 void CompareReaction(const std::string &w, const ReactionSpec &a, const ReactionSpec &b) {
   Eq(w + " entrance", a.entranceKey, b.entranceKey);
-  // total capture: the engine replaces the exit by the capture pairs of the entrance nucleus (EData::MakePoints, Fill)
+  // total capture: the engine replaces the exit by the capture pairs of the entrance nucleus (WorkingCopy::MakePoints, Fill)
   if (a.observable != Observable::TotalCapture) Eq(w + " exit", a.exitKey, b.exitKey);
   Eq(w + " observable", (int)a.observable, (int)b.observable);
   Eq(w + " thm", a.thm, b.thm);
@@ -409,7 +409,7 @@ void CompareEffects(const std::string &what, const SpecList<TargetEffectSpec> &a
   for (const auto &kv : ea) ka.insert(kv.first);
   for (const auto &kv : eb) kb.insert(kv.first);
   Eq(what + ": keys with an effect", ka, kb);
-  // the first line of each density group (EData::SetUpDensityParams: the group's density is its first line's)
+  // the first line of each density group (WorkingCopy::SetUpDensityParams: the group's density is its first line's)
   std::set<std::string> groupSeen;
   std::set<int> densityLeaderLines;
   for (std::size_t i = 0; i < a.items.size(); i++) {
@@ -652,7 +652,7 @@ int main(int argc, char **argv) {
       for (std::size_t i = 0; i < std::min(da.size(), db.size()); i++) {
         if (!da[i].active) continue;
         const ParameterNames &a = da[i].names, &n = db[i].names;
-        if (da[i].varyNorm && !da[i].reaction.thm) name(a.norm, n.norm);  // a THM norm is profiled (ESegment::IsProfiledNorm)
+        if (da[i].varyNorm && !da[i].reaction.thm) name(a.norm, n.norm);  // a THM norm is profiled (Segment::IsProfiledNorm)
         name(a.energyShift, n.energyShift);
         name(a.energyShiftSqrt, n.energyShiftSqrt);
         for (std::size_t j = 0; j < std::min(a.shiftFunction.size(), n.shiftFunction.size()); j++)

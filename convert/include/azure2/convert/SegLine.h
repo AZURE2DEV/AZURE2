@@ -261,7 +261,7 @@ class SegLine {
         //   covariance <file>
         // couples the segment's points to every other segment naming the same
         // file: chi^2 over them is r^T R^-1 r instead of the sum of r_i^2
-        // (EData::ResolveCovarianceGroups; the file format is in
+        // (WorkingCopy::ResolveCovarianceGroups; the file format is in
         // docs/source/reference/data_formats.rst).
         // A sample-thickness block,
         //   transmission <n> [<vary> <sigma>]   or   yield <n> [<vary> <sigma>]
@@ -271,7 +271,7 @@ class SegLine {
         //   thicknessgroup <label>
         // makes every segment carrying the label (each with its own
         // transmission or yield block) share ONE thickness, that of the first
-        // such segment in file order (EData::ResolveThicknessGroups).
+        // such segment in file order (WorkingCopy::ResolveThicknessGroups).
         // The blocks may come in any order.
         advancedStream.clear();
         std::string keyword;
@@ -332,7 +332,7 @@ class SegLine {
               break;
             }
           } else if (keyword == "transmission" || keyword == "yield") {
-            // a thick-sample neutron observable of the segment's cross section, n in atoms/barn (ESegment::IsTransformed):
+            // a thick-sample neutron observable of the segment's cross section, n in atoms/barn (Segment::IsTransformed):
             // transmission T = exp(-n sigma), capture/reaction yield Y0 = (sigma_x/sigma_t)(1 - exp(-n sigma_t)).
             // The fit form "transmission n vary sigma" makes n the parameter segment_<key>_thickness (vary 0/1, sigma
             // the Gaussian prior width in atoms/barn about n, 0 = none); ReadThicknessBlock.
@@ -479,7 +479,7 @@ class SegLine {
    * Returns the sample token ("sample <t>", alias "natural <t>"): "0" (none), "1" (the default sample) or a sample name.
    */
   const std::string &natural() const { return natural_; };
-  /// 1 for "total 1": the total cross section of the entrance pair by the optical theorem (ESegment::IsTotal).
+  /// 1 for "total 1": the total cross section of the entrance pair by the optical theorem (Segment::IsTotal).
   int total() const { return total_; };
   /// "transmission <n>": the segment is the transmission exp(-n sigma) of a sample n atoms/barn thick (0: not).
   double transmission() const { return transmission_; };
@@ -536,7 +536,7 @@ class SegLine {
    * Returns why the line could not be read ("" if it could, or if the reason is not known).
    */
   std::string parseError() const { return parseError_; };
-  /// A note about the line that did not fail it (printed by EData with the segment number).
+  /// A note about the line that did not fail it (printed by WorkingCopy with the segment number).
   std::string parseWarning() const { return parseWarning_; };
   /*!
    * Returns non-zero if this is an advanced segment (sum/ratio).

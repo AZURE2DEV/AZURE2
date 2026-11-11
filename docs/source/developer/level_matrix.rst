@@ -42,11 +42,11 @@ Computation Pipeline
 For every data point, the following sequence is executed:
 
 1. **ClearMatrices()** -- allocate and zero the matrices for each :math:`J^\pi` group.
-2. **FillMatrices(EPoint*)** -- compute the matrix elements from the R-matrix parameters.
+2. **FillMatrices(Unit*)** -- compute the matrix elements from the R-matrix parameters.
 3. **InvertMatrices()** -- factor the matrix (level route; the channel route
    is solved in ``FillMatrices``).
-4. **CalculateTMatrix(EPoint*)** -- compute the T-matrix (transition matrix) from the inverted matrix.
-5. **CalculateCrossSection(EPoint*)** -- compute the cross section from the T-matrix.
+4. **CalculateTMatrix(Unit*)** -- compute the T-matrix (transition matrix) from the inverted matrix.
+5. **CalculateCrossSection(Unit*)** -- compute the cross section from the T-matrix.
 
 A-Matrix Formalism
 ------------------
@@ -81,7 +81,7 @@ where:
 - :math:`L^0_c = S_c - B_c + iP_c` at the energy of the data point, with
   :math:`S_c` the shift function, :math:`P_c` the penetrability and
   :math:`B_c` the boundary condition of channel :math:`c`
-  (``GetLoElement``, ``EPoint.cpp:1496-1500``; Eq. :eq:`conv-ps` of
+  (``GetLoElement``, ``Unit.cpp:1496-1500``; Eq. :eq:`conv-ps` of
   :doc:`../theory/conventions`). Photon and β-decay channels have
   :math:`L^0_c = 0`.
 - The sum runs over all channels in the :math:`J^\pi` group
@@ -376,7 +376,7 @@ have :math:`\Omega_c = 1`. With ``--use-rmc`` the capture element is
 the phases :math:`\Omega`.
 
 Phase factors, penetrabilities, and Coulomb amplitudes are pre-computed and
-cached on the ``EPoint`` object.
+cached on the ``Unit`` object.
 
 R-Matrix Formalism
 -------------------
@@ -473,7 +473,7 @@ amplitude but the dimensionless
    C_\alpha(\theta) = \frac{\eta}{2\sqrt\pi}\,\csc^2\frac\theta2\,
    \exp\Big(-2i\eta\ln\sin\frac\theta2\Big)
 
-(``EPoint.cpp:1890-1902``; :math:`\theta` is the c.m. angle, :math:`\eta`
+(``Unit.cpp:1890-1902``; :math:`\theta` is the c.m. angle, :math:`\eta`
 the Sommerfeld parameter). The point-Coulomb amplitude relative to
 :math:`e^{2i\sigma_0}` is :math:`f_C = -(\sqrt\pi/k)\,C_\alpha` (fm). With
 :math:`T` as above,

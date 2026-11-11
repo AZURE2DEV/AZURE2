@@ -284,7 +284,7 @@ class Builder {
   static std::string PairLabel(const OldPair &p) { return experiment::PairLabel(p.Info()); }
 
   /// The channel spin of a phase-shift line without "spin s": the one spin of (J, l) of the entrance pair in the
-  /// level scheme (EData::Initialize refuses a line with several).  "" with res_.refusal set when there are several.
+  /// level scheme (WorkingCopy::Initialize refuses a line with several).  "" with res_.refusal set when there are several.
   std::string PhaseSpin(const std::string &record, int entrance, double J, int l);
   /// True when a term of the line is the elastic scattering of a charged pair, angle-integrated: the old engine
   /// computed the integral of the nuclear amplitude alone (pi/k^2 sum g |T|^2, GenMatrixFunc), which format 3 has no

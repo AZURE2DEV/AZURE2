@@ -104,7 +104,7 @@ add_executable(target_effect_line_test target_effect_line_test.cpp)
 target_link_libraries(target_effect_line_test PRIVATE AZURE2Core)
 add_test(NAME target_effect_line COMMAND target_effect_line_test)
 
-# The old-line adaptor (convert/'s SpecsFromOldLines.h) and ESegment's spec constructors: the isDiff table, components,
+# The old-line adaptor (convert/'s SpecsFromOldLines.h) and Segment's spec constructors: the isDiff table, components,
 # the reading refusals, prior centres, abundances, <targetInt> data-set lists.
 add_executable(old_line_specs_test old_line_specs_test.cpp)
 target_link_libraries(old_line_specs_test PRIVATE AZURE2Core)
@@ -166,7 +166,7 @@ set_tests_properties(parameter_file_reference PROPERTIES TIMEOUT 10)
 
 # The adaptive sub-point grid of the experimental effects (AdaptiveIntegrationGrid):
 # a Lorentzian moved across a fixed window, the grid laid out again at each position
-# as EData::ReplaceSubPointGrids does, its trapezoid integral against the closed form.
+# as WorkingCopy::ReplaceSubPointGrids does, its trapezoid integral against the closed form.
 # Checks the accuracy and that the error does not swing as the level moves.
 add_executable(adaptive_grid_reference_test adaptive_grid_reference_test.cpp)
 target_link_libraries(adaptive_grid_reference_test PRIVATE AZURE2Core)

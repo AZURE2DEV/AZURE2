@@ -18,6 +18,8 @@ import tempfile
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 sys.path.insert(0, ROOT)
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import old_tree  # noqa: E402  (the old originals of converted projects)
 try:
     from pyazr import AzrModel  # noqa: E402
     from pyazr.datasets import SegmentSet  # noqa: E402
@@ -36,7 +38,7 @@ def check(name, ok, detail=""):
 
 def main():
     import numpy as np
-    src = os.path.join(ROOT, "tests", "angular_coefficients", "models", "extrap.azr")
+    src = old_tree.original(os.path.join(ROOT, "tests", "angular_coefficients", "models", "extrap.azr"))
     work = tempfile.mkdtemp(prefix="pyazr_acoef_")
     try:
         print("1. the segment line")

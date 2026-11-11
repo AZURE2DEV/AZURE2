@@ -17,7 +17,7 @@ namespace convert {
  *   segment_<N>_energy_shift prior_centre <c>  the centre of its energy-shift prior
  *
  * Only rows of exactly three tokens whose second token is "prior_centre" are such rows; every other row is not one.
- * The grammar of EData::ReadPriorCentres, moved here so that the engine (until format 3 writes the centre in the
+ * The grammar of WorkingCopy::ReadPriorCentres, moved here so that the engine (until format 3 writes the centre in the
  * field, decision F14) and the converter read the row with one parser.
  */
 struct PriorCentreRow {

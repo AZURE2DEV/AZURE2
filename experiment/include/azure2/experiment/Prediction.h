@@ -63,8 +63,8 @@ struct LeafSelector {
 /// What a per-point factor array of the tree holds at a point.
 struct FactorRef {
   enum class Kind {
-    TermFrame,   ///< J_0 / J_k of a SUM or transform term k: the term into the frame of term 0 (ESegment::TermFrameFactor)
-    RatioFrame,  ///< J_k of a RATIO term k, its own lab-to-c.m. factor (ESegment::RatioTermFrameFactor)
+    TermFrame,   ///< J_0 / J_k of a SUM or transform term k: the term into the frame of term 0 (Segment::TermFrameFactor)
+    RatioFrame,  ///< J_k of a RATIO term k, its own lab-to-c.m. factor (Segment::RatioTermFrameFactor)
     SFactor,     ///< E exp(2 pi eta(E)) of term k's entrance pair at its point's c.m. energy E (MeV; S = this x sigma,
                  ///< physics/AstrophysicalFactor.h)
   };

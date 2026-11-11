@@ -15,6 +15,7 @@
 #                                               -> + ((0 - 0.005)/0.01)^2 = 0.25
 #   stale the original with data set 2's line inactive and a row for it, converted: the row is dropped, the chi2 of
 #         the same file without the row
+#   zero  centre 0 ("norm <n> fit prior 0 15%"): refused by --validate and by the run with E_PRIOR_CENTRE
 #   unknown, typo, bad, nonpos: rows of the original naming no line (segment_9_norm), misspelt (segment_3_nrom),
 #         malformed (abc) or a norm centre 0: the conversion is refused (a prior that is silently not applied is a
 #         wrong fit that looks right)
@@ -127,5 +128,19 @@ for c in "unknown:$du:names no parameter a prior_centre row can move" "typo:$dt:
     fail "the row of the original ($what) was not refused ($(grep -m1 ERROR "$dir/convert.log"))"
   fi
 done
+# zero: the format-3 counterpart of nonpos, "norm <n> fit prior 0 15%": refused by --validate and by the run
+# (E_PRIOR_CENTRE; a width relative to a centre 0 means nothing, and a prior silently not applied is a wrong fit)
+dzero="$(run zero 0)"
+(cd "$dzero" && $RUN "$AZURE2_BIN" --validate run.azr > validate.log 2>&1; echo "exit $?" >> validate.log)
+if grep -q "E_PRIOR_CENTRE" "$dzero/validate.log" && ! grep -q "^exit 0$" "$dzero/validate.log"; then
+  pass "a fitted norm with a prior centred at 0: refused by --validate (E_PRIOR_CENTRE)"
+else
+  fail "a prior centred at 0: --validate gave $(tail -1 "$dzero/validate.log"), $(grep -c E_PRIOR_CENTRE "$dzero/validate.log") E_PRIOR_CENTRE"
+fi
+if grep -q "E_PRIOR_CENTRE" "$dzero/run.log" && [ ! -s "$dzero/output/chiSquared.out" ]; then
+  pass "and by the run (E_PRIOR_CENTRE, no chiSquared.out)"
+else
+  fail "a prior centred at 0 ran: $(grep -c E_PRIOR_CENTRE "$dzero/run.log") E_PRIOR_CENTRE in the log"
+fi
 [ "$bad" -eq 0 ] && echo "  ok    explicit prior centres"
 exit "$bad"

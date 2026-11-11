@@ -13,7 +13,7 @@ the same calculations with and without the variable and requires equal results:
          transform at every sub-point) and natT (a sample transmission).  Every output file must be byte for byte
          the same.
   rate   tests/reaction_rate's p12C model, menu 5 (reaction rate): each rate point evaluates into a buffer of its
-         own (EPoint::UsePrivateRecord), poisoned as every other; reactionrates.out byte for byte.
+         own (Unit::UsePrivateRecord), poisoned as every other; reactionrates.out byte for byte.
   pyazr  T1, T2, T3: the values, E1 and E2 parts, angles, energies and angular-distribution coefficients of
          every segment (AZUREAPI::UpdateSegments), each in its own process (the variable is read once).  The
          session owns the buffer it evaluates into (AZUREAPI::results()).
@@ -24,7 +24,7 @@ iteration snapshot (menu 2), the reaction rate (menu 5) and the Python session.
 Known case, accepted and listed: K1 -- the API returns the E1 and E2 parts of every point
 (AZUREAPI::UpdateSegments), but the evaluation writes them only for an angle-integrated cross section
 (GenMatrixFunc::CalculateBareCrossSection; for a point with a sub-point fold, only on an E1/E2 data line,
-EPoint::IntegrateTargetEffectComponents).  Elsewhere they are the 0 of a new record; poisoned, NaN.  pyazr reads
+Unit::IntegrateTargetEffectComponents).  Elsewhere they are the 0 of a new record; poisoned, NaN.  pyazr reads
 them only for E1/E2 lines, which are written.
 
     poison_results_test.py [--binary AZURE2] [projects]      (AZURE2_BIN / AZURE2_BINARY, PYAZR_ENGINE_DIR)

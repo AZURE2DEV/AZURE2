@@ -50,6 +50,18 @@ void Builder::BuildData() {
     if (!s.normGroup().empty() && !normLeader.count(s.normGroup())) normLeader[s.normGroup()] = d.key;
     if (!s.shiftGroup().empty() && !shiftLeader.count(s.shiftGroup())) shiftLeader[s.shiftGroup()] = d.key;
     if (!s.shiftFnGroup().empty() && !fnLeader.count(s.shiftFnGroup())) fnLeader[s.shiftFnGroup()] = d.key;
+    // What the old engine refused (the working copy's group set-up) is refused here: a conversion must not make it run.
+    if (!s.shiftGroup().empty() && !s.shiftFnGroup().empty()) {
+      res_.refusal = "data line " + std::to_string(d.key) + " is in shift group '" + s.shiftGroup() + "' and in shift-function group '" +
+                     s.shiftFnGroup() + "', which the old engine refused";
+      return;
+    }
+    if (!s.shiftFnGroup().empty() && fnLeader[s.shiftFnGroup()] != d.key && !s.shiftFn().empty() &&
+        !activeData_[fnLeader[s.shiftFnGroup()]]->parsed->shiftFn().empty()) {  // a leader without one is refused below
+      res_.refusal = "data line " + std::to_string(d.key) + " declares a shiftfn, but it is not the first segment of shift-function group '" +
+                     s.shiftFnGroup() + "' (line " + std::to_string(fnLeader[s.shiftFnGroup()]) + " is), which the old engine refused";
+      return;
+    }
   }
   // Group records first: their names before the data sets reference them.
   for (const auto &g : normLeader) normName[g.first] = Unique(Sanitized(g.first));
@@ -132,6 +144,13 @@ void Builder::BuildData() {
     const bool thickTarget = app && app->hasTarget && app->line->line.isTargetIntegration == 1 && !(app->line->line.density > 0.0);
     const bool thinTarget = app && app->hasTarget && app->line->line.isTargetIntegration == 1 && app->line->line.density > 0.0;
     const bool ratio = s.isAdvanced() == 1 && s.operationType() == 1 && !s.components().empty();
+    // The old engine refused the exit key -1 with any data type but total capture (src/WorkingCopy.cpp, TotalCaptureCodeOk):
+    // format 3 writes both halves as one token ([total]), so converting the line would make a refused file run.
+    if (active && in && s.exitKey() == -1 && code != 3) {
+      res_.refusal = "data line " + std::to_string(d.key) +
+                     ": the exit key -1 (total capture) needs the total-capture data type (3 on a data line); the old engine refused it";
+      return;
+    }
 
     // reaction
     const std::string angleFrame = (code == 4 || code == 7) ? "cm" : "lab";
@@ -213,7 +232,7 @@ void Builder::BuildData() {
       quantity = "beta_delayed_spectrum";
       unit = "arbitrary";
     }
-    const bool profiled = thm && s.varyNorm() == 1;  // ESegment::IsProfiledNorm
+    const bool profiled = thm && s.varyNorm() == 1;  // Segment::IsProfiledNorm
     if (profiled) unit = "arbitrary";
     Add(r, "quantity", quantity, quantityComment);
     if (!quantityNote.empty()) unit = Implicit(Construct::kDataCode, name, "unit", unit, quantityNote);
@@ -269,7 +288,7 @@ void Builder::BuildData() {
       Add(r, "angle_window", NumberText(s.minA(), d.text) + " " + NumberText(s.maxA(), d.text) + " deg");
     }
 
-    // norm (ESegment: the prior is about the nominal norm, the prior_centre row's value when there is one)
+    // norm (Segment: the prior is about the nominal norm, the prior_centre row's value when there is one)
     Count(Construct::kNorm);
     if (!s.normGroup().empty() && normName.count(s.normGroup())) {
       if (normLeader[s.normGroup()] != d.key && (s.dataNorm() != activeData_[normLeader[s.normGroup()]]->parsed->dataNorm() ||
@@ -299,8 +318,12 @@ void Builder::BuildData() {
       if (lead.key != d.key && (s.energyShift() != 0 || s.varyEnergyShift() == 1))
         Note(Construct::kShiftGroup, name, "its own shift " + NumberText(s.energyShift(), d.text) +
                                                " was not used by the old engine (the group's is its first line's): dropped");
-      if (lead.key != d.key && !s.shiftFn().empty())
-        Note(Construct::kShiftGroup, name, "a shiftfn on a follower of a shift group: the old engine refused it");
+      if (active && lead.key != d.key && !s.shiftFn().empty()) {
+        // the old engine refused it (the block belongs on the group's first line): a conversion must not make it run
+        res_.refusal = "data line " + std::to_string(d.key) + " declares a shiftfn, but it is not the first segment of shift group '" +
+                       s.shiftGroup() + "' (line " + std::to_string(lead.key) + " is), which the old engine refused";
+        return;
+      }
       if (active) Param(sk + "_energy_shift", scaleName[s.shiftGroup()] + ".offset" + (lead.key == d.key ? "" : "[" + name + "]"));
     } else {
       if (s.energyShift() != 0 || s.varyEnergyShift() == 1) {
@@ -395,6 +418,12 @@ void Builder::BuildExtrapolations() {
     if (thm) Count(Construct::kThm);
     const OldPair *in = Pair(s.entranceKey());
     const bool ratio = s.isAdvanced() == 1 && s.operationType() == 1 && !s.components().empty();
+    // As for a data line: exit key -1 needs the total-capture type (4 on a test line), or the old engine refused it.
+    if (active && in && s.exitKey() == -1 && code != 4) {
+      res_.refusal = "test line " + std::to_string(t.key) +
+                     ": the exit key -1 (total capture) needs the total-capture data type (4 on a test line); the old engine refused it";
+      return;
+    }
     const std::string angleFrame = (code == 5 || code == 7) ? "cm" : "lab";
     std::vector<io::Token> reaction;
     std::vector<std::pair<std::string, std::string>> pairKeys;
@@ -473,7 +502,7 @@ void Builder::BuildExtrapolations() {
       }
       Add(r, "s", spin);
     }
-    // the energy grid: the old loop accumulates energy += step from Emin while energy <= Emax (EData::MakePoints)
+    // the energy grid: the old loop accumulates energy += step from Emin while energy <= Emax (WorkingCopy::MakePoints)
     // (one pass when the step is 0)
     const std::string lo = NumberText(s.minE(), t.text), hi = NumberText(s.maxE(), t.text), step = NumberText(s.eStep(), t.text);
     std::vector<double> energyValues;

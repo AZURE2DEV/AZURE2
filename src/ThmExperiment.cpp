@@ -394,7 +394,7 @@ bool ParseThmOptionLine(const std::string &key, const std::string &value, ThmOpt
   {
     // weight[<k>]=<file> (k-th <segmentsData> line) or weightTest[<k>]=<file>
     // (k-th <segmentsTest> line): convert/'s ThmLines.h.  Which segments exist, and whether they are
-    // THM, is checked once the data are read (EData::Fill / MakePoints).
+    // THM, is checked once the data are read (WorkingCopy::Fill / MakePoints).
     azure2::convert::ThmWeightKey weight;
     bool valid = false;
     if (azure2::convert::ReadThmWeightKey(key, value, weight, valid)) {
@@ -941,7 +941,7 @@ ThmProfile SolveThmProfile(const std::vector<double> &m, const std::vector<doubl
 
   std::vector<double> c, cov;
   if (terms == 0) {
-    // The model column alone: s = S_md/S_mm, as ESegment::ProfileNormChiSquared.
+    // The model column alone: s = S_md/S_mm, as Segment::ProfileNormChiSquared.
     double Smm = 0.0, Smd = 0.0;
     for (size_t i = 0; i < n; i++) {
       if (e[i] == 0.0) continue;

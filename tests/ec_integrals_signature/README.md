@@ -11,7 +11,7 @@ and gave a wrong chi-squared that looked like physics.
 AZURE2 now writes `intEC.dat.sig` beside the file: a 64-bit FNV-1a hash of
 every energy an amplitude is evaluated at, the structure of each capture
 block, the pairs involved and the Coulomb-function options
-(`EData::ECSignature`). A file offered for reuse must match in count *and*
+(`WorkingCopy::ECSignature`). A file offered for reuse must match in count *and*
 signature, otherwise a `WARNING` says why and the integrals are recomputed.
 
 `check.sh` runs `tests/13N` cut down to one gas-target capture segment

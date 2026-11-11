@@ -98,12 +98,12 @@ refused at once with the engine's message. An edit changes only the lines it tou
 - What an evaluation computes lives in a buffer the caller owns, not in the data points; the model's prediction for
   a data set is one small expression tree with one forward and one adjoint implementation (it was written in about
   20 loops, twice more in the gradient, and the residual formula 13 times).
-- The three data classes (`EData`, `ESegment`, `EPoint`: 10,665 lines in three files) are being **replaced**,
-  not patched. Done: their code is cut into 21 files with one job each (the largest has 1,826 lines; it was 5,457);
-  what was measured exists once, immutable and shared by every working copy; a term's settings are one shared
-  record; every point is an entry of one flat array, and a copy of the working data is a plain copy (15 MB instead
-  of 18.6 MB for the largest test project). In work: an immutable `DataSet` apart from a small `WorkingCopy`, and
-  the old class names deleted.
+- The three data classes (`EData`, `ESegment`, `EPoint`: 10,665 lines in three files) are **replaced**, not patched.
+  What the set-up fixes is one immutable `DataSet`, shared by every thread through a const pointer (the compiler
+  refuses a write after set-up); what an evaluation changes is a small flat `WorkingCopy`, copied with `=` (11.9 MB
+  instead of 18.6 MB for the largest test project); a point is one entry of a flat array (`Unit`, 480 bytes; it was
+  608), which still carries the apparatus fold as member functions until Phase 5. The code is in files with one job
+  each (the largest has 1,788 lines; it was 5,457), and the old class names are kept out by the consistency test.
 - `CNuc.cpp` went from 2,907 to 1,774 lines: printing, checks, messages, the `<levels>` grammar and the reaction
   pathways are files of their own. The pathways of a run are one immutable table built at set-up and shared by all
   threads; the capture analyzing-power terms are built at set-up too (a lazily built table behind a mutex is gone).
@@ -115,7 +115,7 @@ refused at once with the engine's message. An edit changes only the lines it tou
 
 ## What users notice
 
-- Old `.azr` files still load today. When the test tree is converted (half of it is; the rest is in work) the engine
+- Old `.azr` files still load today. When the test tree is converted (two thirds of it are; the rest is in work) the engine
   will read format 3 only and refuse an old file with a message that names the converter. Decision taken with Jakub:
   no backward compatibility inside the engine, a converter instead.
 - pyazr needs the compiled engine module to read a project: there is one reader, the engine's.
@@ -163,12 +163,14 @@ reads `CLAUDE.md` first, so it is given the recipes and is stopped by the checks
 
 ## What is in work and what comes next
 
-In work now: the last step of the data classes (`DataSet` and `WorkingCopy` apart, the old names deleted); the
-second half of the conversion of the test tree and the examples to format 3. Merged on 2026-11-11: validation that
-reports what a run would refuse (a data row that does not parse, a missing covariance file, a final state that is
-not a level), and pyazr's per-data-set functions on a format-3 project.
+In work now: the last third of the test tree and the examples to format 3, and pyazr's own modules off its second
+file grammar; external-capture amplitudes read from the pathway table and the old pathway trees deleted; and, beside
+Phase 4 because they depend on nothing in it, the stopping-power library (`stopping/`), the transfer library for
+the THM vertices (`physics/`, benchmarked against FRESCO) and the design note of Phase 5. Merged on 2026-11-11: the
+data classes replaced (`DataSet`, `WorkingCopy`, `Segment`, `Unit`); 126 of 185 project files in format 3; validation
+that reports what a run would refuse; pyazr's per-data-set functions on a format-3 project.
 
-Then, to close Phase 4: the old data classes and the old reading path deleted (with `pyazr/azrfile.py`, 3,756 lines of
+Then, to close Phase 4: the old reading path deleted (with `pyazr/azrfile.py`, 3,756 lines of
 a second grammar in Python); external-capture amplitudes computed at set-up and the old pathway trees deleted; the
 rest of `CNuc` (the parameter vector and the set-up from the level rows).
 

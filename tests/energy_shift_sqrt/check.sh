@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
-# sqrt(E) energy-shift term: (1) shifting a segment's energies with the
-# "sqrtshift" block must equal reading the same yields at the shifted energies;
+# sqrt(E) energy-shift term: (1) shifting a data set's energies with the
+# "shift sqrt" field must equal reading the same yields at the shifted energies;
 # (2) a MIGRAD fit must recover a known (a, b) from mislabelled energies, both
 # with Minuit's numerical gradient and with --use-gradient.
 #
@@ -58,8 +58,12 @@ fit_variant() {  # NAME EXTRA_FLAGS
     /<levels>/ { inlev = 1; print; next }
     /<\/levels>/ { inlev = 0 }
     inlev && NF > 12 { $4 = 1; $11 = 1; print; next }          # fix every energy and width
-    /<segmentsData>/ { print; print "1 1 1 0 100 40 40 4 1 0 0 0 1 1 data/xs_40_mislabelled.dat 0 0 sqrtshift 0 1 1"; skip = 1; next }
-    /<\/segmentsData>/ { skip = 0 }
+    /^<data>/ { print; print "dataset xs_40_mislabelled"; print "    reaction       1H(p,p)1H"; print "    quantity       dsigma_domega"
+                print "    unit           b/sr"; print "    file           data/xs_40_mislabelled.dat"
+                print "    columns        E_lab[MeV] theta_cm[deg] value error"; print "    energy_window  0 100 MeV"
+                print "    angle_window   40 40 deg"; print "    norm           1 fixed"
+                print "    shift          offset 0 MeV fit prior 0 1"; print "    shift          sqrt 0 MeV^1/2 fit prior 0 1"; skip = 1; next }
+    /^<\/data>/ { skip = 0 }
     skip { next }
     { print }' "$HERE/energy_shift_sqrt.azr" > "$dir/t.azr"
   (cd "$dir" && printf '2\n\n\n\n7\n' | $RUN "$AZURE2_BIN" $2 --no-gui --no-readline t.azr > run.log 2>&1)
@@ -67,8 +71,8 @@ fit_variant() {  # NAME EXTRA_FLAGS
     bad "$1: fit produced no param.sav"; tail -20 "$dir/run.log"; return
   fi
   local a b t
-  a="$(awk '$1 == "segment_1_energy_shift" { print $2 }' "$dir/output/param.sav")"
-  b="$(awk '$1 == "segment_1_energy_shift_sqrt" { print $2 }' "$dir/output/param.sav")"
+  a="$(awk '$1 == "xs_40_mislabelled.shift.offset" { print $2 }' "$dir/output/param.sav")"
+  b="$(awk '$1 == "xs_40_mislabelled.shift.sqrt" { print $2 }' "$dir/output/param.sav")"
   t="$(total "$dir")"
   if awk -v a="$a" 'BEGIN { d = a + 0.006; if (d < 0) d = -d; exit !(d < 1e-4) }'; then ok "$1: fitted constant shift a = $a (truth -0.006)"; else bad "$1: fitted constant shift a = $a, expected -0.006"; fi
   if awk -v b="$b" 'BEGIN { d = b - 0.005; if (d < 0) d = -d; exit !(d < 1e-4) }'; then ok "$1: fitted sqrt(E) coefficient b = $b (truth 0.005)"; else bad "$1: fitted sqrt(E) coefficient b = $b, expected 0.005"; fi

@@ -7,7 +7,7 @@
 /// A class to assist in writing AZURE output files
 
 /*!
- * The EData::WriteOutputFiles function simply loops over all ESegment and EPoint objects when
+ * The WorkingCopy::WriteOutputFiles function simply loops over all Segment and Unit objects when
  * writing the output of an AZURE calculation. To ensure that all output for a given entrance and exit
  * pair combination is written to a single file, the AZUREOutput class is used.  The AZUREOutput object
  * is a container for a vector of AZUREFBuffer objects.

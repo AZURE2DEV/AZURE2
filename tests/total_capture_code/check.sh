@@ -13,7 +13,9 @@
 #       equals AZUREOut_aa=1_R=2.extrap (13N has one capture pair) point by point;
 #   (d) the old test line "1 1 2 0.5 2.0 0.5 0 0 0 4" (the total-capture type with a real exit key, which the old engine
 #       ran as total capture with a warning), converted with AZURE2 --convert ... --to 3: a [total] extrapolation that
-#       equals (c).
+#       equals (c);
+#   (a), (b) the old lines "1 1 -1 0.5 2.0 0.5 0 0 0 0" (test line) and a data line with exit -1 and type 0, which the
+#       old engine refused: AZURE2 --convert refuses them with the old engine's reason and a non-zero exit, no file.
 # dev 510e6d1: the old lines of (c) with exit -1 and type 0 gave a segmentation fault (exit 139) with no output.
 #
 #   ./tests/total_capture_code/check.sh path/to/AZURE2
@@ -71,6 +73,20 @@ fd="$WORK/d/output/AZUREOut_aa=1_TOTAL_CAPTURE.extrap"
 if grep -q '^    reaction       12C(p,g)13N\[total\]$' "$WORK/d/m.azr" 2> /dev/null && run d && same "$ft" "$fd"; then
   ok "(d) the old total-capture type with exit pair 2 converts to [total] and equals (c)"
 else bad "(d) type 4 with exit 2: $(tail -1 "$WORK/d/convert.log" 2> /dev/null); $(status d); file $(ls -la "$fd" 2> /dev/null | awk '{print $5}') bytes"; fi
+
+# (a), (b) the old lines with exit -1 and a type that is not total capture, which the old engine refused: the converter
+# refuses them too, with the old engine's reason and a non-zero exit, and writes no file
+refused() {  # NAME SECTION LINE: the original with LINE as the first line of SECTION (segmentsTest or segmentsData)
+  local d="$WORK/$1"
+  mkdir -p "$d"; cp -r "$BASE/data" "$d/"
+  awk -v sec="<$2>" -v line="$3" '{ sub(/\r$/, "") } { print } $0 == sec { print line }' "$OLD" > "$d/old.azr"
+  (cd "$d" && run_limited 300 "$AZURE2_BIN" --convert old.azr m.azr --to 3 > convert.log 2>&1; echo "exit $?" >> convert.log)
+  [ ! -f "$d/m.azr" ] && ! grep -q '^exit 0$' "$d/convert.log" && grep -q "the exit key -1 (total capture) needs the total-capture data type" "$d/convert.log"
+}
+if refused a segmentsTest "1 1 -1 0.5 2.0 0.5 0 0 0 0"; then ok "(a) test line with exit -1 and type 0: the converter refuses it with the old engine's reason"
+else bad "(a) exit -1 with type 0 on a test line: $(tail -2 "$WORK/a/convert.log" | tr '\n' ' ')"; fi
+if refused b segmentsData "1 1 -1 0 5 0 180 0 1 0 0 0 0 0 data/artemov.dat 0 0"; then ok "(b) data line with exit -1 and type 0: the converter refuses it with the old engine's reason"
+else bad "(b) exit -1 with type 0 on a data line: $(tail -2 "$WORK/b/convert.log" | tr '\n' ' ')"; fi
 
 if [ "$failures" -ne 0 ]; then echo "$failures check(s) FAILED"; exit 1; fi
 echo "all checks passed"

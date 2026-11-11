@@ -7,7 +7,7 @@ mass numbers; audit item 8 had fixed its frame on 2026-10-26).
 
 Fixture: tests/pyazr/data/exfor_master T0001004 (12C(p,el), EN/MEV, ANG lab, DATA NO-DIM ,,RTH) and
 T0001005 (the same with ANG-CM).  Checks:
-  1. elastic_lab_to_cm against the engine's own formulae (EPoint::ConvertLabAngle / ConvertCrossSection);
+  1. elastic_lab_to_cm against the engine's own formulae (Unit::ConvertLabAngle / ConvertCrossSection);
   2. format3_quantity: RTH -> ratio_to_rutherford, MOT of identical particles -> ratio_to_mott; refused (ValueError,
      with the reason): RTH of identical particles (K2), MOT of different ones (point-nucleus Mott), an inelastic group;
   3. to_azr refuses a ratio; a no-dim differential that is not one is an analyzing power, written through;
@@ -65,11 +65,11 @@ lab = np.array([0.0, 10.0, 30.0, 60.0, 90.0, 120.0, 150.0, 170.0, 180.0])
 tc, jac = N.elastic_lab_to_cm(lab, MT, MP)
 g = MP / MT
 t = np.radians(lab)
-tc_engine = np.degrees(t + np.arcsin(g * np.sin(t)))                      # EPoint::ConvertLabAngle(pPair)
+tc_engine = np.degrees(t + np.arcsin(g * np.sin(t)))                      # Unit::ConvertLabAngle(pPair)
 check("theta_cm = theta_lab + asin(gamma sin theta_lab)", close(tc, tc_engine), (tc, tc_engine))
 inner = (lab > 0) & (lab < 180)
 tcr = np.radians(tc[inner])
-f_engine = np.sin(t[inner]) ** 2 / np.sin(tcr) ** 2 * np.cos(tcr - t[inner])  # EPoint::ConvertCrossSection
+f_engine = np.sin(t[inner]) ** 2 / np.sin(tcr) ** 2 * np.cos(tcr - t[inner])  # Unit::ConvertCrossSection
 check("J = sigma_cm/sigma_lab equals the engine's sin^2 cos form away from 0/180", close(jac[inner], f_engine, 1e-12),
       (jac[inner], f_engine))
 check("J finite at 0 and 180 degrees, (1+gamma)^-2 and (1-gamma)^-2",

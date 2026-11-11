@@ -158,7 +158,7 @@ State on 2026-11-11:
       one table that feeds the file validation, Python and the documentation. `AZURE2 --convert`, `--validate`,
       `--describe`, `--schema` (for programs and AI agents); `pyazr.Project` edits a project as records. The engine
       runs format 3; every converted test project gives the old outputs (the gate, `tools/format3_gate.sh`).
-- [ ] The engine reads **only** format 3. Done: half of the test tree and of the examples is format 3 (92 of 185
+- [ ] The engine reads **only** format 3. Done: two thirds of the test tree and of the examples are format 3 (126 of 185
       project files, the originals kept as the converter's fixtures; `format3_tree.md`); `--validate` reports the
       data rows, covariance files and final states the run would refuse; pyazr's session reads a format-3 project
       from the engine (`pyazr_on_records.md`). In work: the rest of the tree. Then: old files refused with the
@@ -176,8 +176,9 @@ the converted projects identical to the originals' but for the classified differ
 **The data classes replaced** (`data_structure.md`; the PI, 2026-11-10: replace, do not carve). `EData`, `EPoint`,
 `ESegment` were 10,665 lines in three files. Milestone 1 (merged): the measurement exists once. Milestone 2 (merged
 2026-11-11): a term's settings are one shared immutable record, every point and sub-point is a unit of one flat
-vector, the plan names units by index, a copy of the working copy is a plain copy. Milestone 3 (in work): an
-immutable `DataSet` and a small `WorkingCopy` apart, the three class names and their files deleted.
+vector, the plan names units by index, a copy of the working copy is a plain copy. Milestone 3 (merged
+2026-11-11): an immutable `DataSet` held as `shared_ptr<const DataSet>` and a small `WorkingCopy` apart; the unit
+is 480 bytes (was 608); the three class names and their files are deleted and consistency check 31 keeps them out.
 
 **`CNuc`, to finish** (`cnuc_split.md`): `src/CNuc.cpp` was 2,907 lines and is 1,774; printing, checks, messages, the
 level grammar, external-capture set-up and the bridge to `physics/` are files of their own; the pathway table is

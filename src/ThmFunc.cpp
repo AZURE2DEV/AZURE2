@@ -505,7 +505,7 @@ complex coulombTermUncached(PPair *pair, int l, double E, double p) {
 }  // namespace
 
 /*
- * EPoint::CalcEDependentValues asks for the term once per (J group, channel),
+ * Unit::CalcEDependentValues asks for the term once per (J group, channel),
  * so the same (pair, l, E, p) comes back several times in a row for one point
  * (7x on average in tests/7Li_p_a).  A small per-thread memo of the last
  * results makes the repeats free.  The key holds everything the value depends

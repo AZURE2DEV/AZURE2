@@ -35,7 +35,7 @@ import numpy as np
 
 mp.mp.dps = 20
 
-# include/Constants.h, and the amu of EData::BuildThmGroups (B from masses).
+# include/Constants.h, and the amu of WorkingCopy::BuildThmGroups (B from masses).
 HBARC = 197.32696310
 UCONV = 931.4940880
 FSTRUC = 1 / 137.0359996790

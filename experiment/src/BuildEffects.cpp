@@ -3,7 +3,7 @@
 // of the targets' isotopes.
 //
 // The engine sets up one effect per distinct combination of target, beam, detector, quadrature and fold windows; every
-// data set (and extrapolation) naming that combination gets a copy of it (EData::SetUpTargetEffects), and the effect's
+// data set (and extrapolation) naming that combination gets a copy of it (WorkingCopy::SetUpTargetEffects), and the effect's
 // parameters (screening U_e, Doppler temperature) are shared by the copies.  A target is one set of parameters
 // (section 3.7): its areal density is shared through the engine's density group when several effects use it; a
 // target whose screening or temperature is free must be used through one combination.  The effects are ordered by
@@ -335,7 +335,7 @@ void SampleThickness(Context &c, std::vector<Member> &members, bool isData) {
     const Value *d = target ? target->Get("areal_density") : nullptr;
     if (!d) continue;
     const Nuisance &n = d->nuisance;
-    // the engine's sample thickness and its prior width are in atoms/b (ESegment)
+    // the engine's sample thickness and its prior width are in atoms/b (Segment)
     ReactionSpec &r = isData ? c.out_.data.datasets.items[i].spec.reaction : c.out_.extrapolations.extrapolations.items[i].spec.reaction;
     (q == "transmission" ? r.transmission : r.yieldThickness) = ToUnit(n.value.value, n.unit, "atoms/b");
     if (!isData) continue;

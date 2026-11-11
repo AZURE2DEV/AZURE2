@@ -521,13 +521,22 @@ void Validator::CheckNorm(Work &w) {
   const io::Field *src = Source(w, "norm");
   Diagnostic d = Base(w, "norm", src->line, src->col);
   const std::string mode = NuisanceModeName(n->mode);
-  // Every THM data set with a fitted norm has it profiled (ESegment::IsProfiledNorm), in an experiment or not.
+  // Every THM data set with a fitted norm has it profiled (Segment::IsProfiledNorm), in an experiment or not.
   if (n->mode == NuisanceMode::Profiled && Holds(Condition::Present("thm"), w) == 0) {
     d.hasFound = true;
     d.found = mode;
     d.allowed = {"fixed", "fit"};
     Emit(d, codes::kModeNotAllowed, Where(w, "norm") + ": 'profiled' is the norm mode of THM data sets "
                                                        "(thm <experiment> or thm global, section 3.9)");
+    return;
+  }
+  // The engine reads a norm's prior width relative to its centre (a per cent of it, AZURECalc): a centre at 0 or below
+  // makes the width mean nothing (the old engine refused such a centre too: "must be positive").
+  if (n->mode == NuisanceMode::Fit && n->hasPrior && !(n->priorCentre.value > 0)) {
+    d.hasFound = true;
+    d.found = n->priorCentre.text;
+    Emit(d, codes::kPriorCentre, Where(w, "norm") + via + ": the prior of a fitted norm is centred at " + n->priorCentre.text +
+                                     ": the centre must be > 0 (the width is relative to it)");
     return;
   }
   std::vector<const NormRule *> rules;

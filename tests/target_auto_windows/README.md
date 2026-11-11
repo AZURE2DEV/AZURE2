@@ -4,7 +4,7 @@ Automatic target-integration windows from the level scheme (`"auto"` in the wind
 
 Outside the energy windows of a thin-target integration a point is evaluated once, at the depth-averaged energy
 E_bar of its target (`tests/target_window_fallback`). With `"auto"` the engine places the windows itself, per
-segment from that segment's entrance pair (`EData.cpp` `TargetWindowsFor`):
+segment from that segment's entrance pair (`WorkingCopy.cpp` `TargetWindowsFor`):
 
 - around every resonance narrow enough for sigma(E_bar) to miss its peak by more than the tolerance: for a
   Lorentzian of total width Gamma under a target of thickness Delta (energy loss plus twice the beam spread) the

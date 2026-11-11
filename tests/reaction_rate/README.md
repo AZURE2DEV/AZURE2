@@ -56,7 +56,7 @@ with 0.6 x the width); `p12C_2g_pert` is the same on the per-temperature path.
   parameters being evaluated. A 22 eV level moved by 5 keV in a parameter file fell between
   the 7 keV backbone nodes and the rate lost it. Now the resonances come from the parameters
   (a clone transformed out and refilled with the observed values, as the target-effect sub-grids
-  do in `EData::ReplaceSubPointGrids`).
+  do in `WorkingCopy::ReplaceSubPointGrids`).
 - The Boltzmann constant was 8.6171e-2 MeV/GK; CODATA 2018 is 8.617333262e-2 (the rate of a
   narrow resonance moves by E_r/kT x 2.7e-5, 0.1-0.3 %). The truth uses CODATA throughout.
 - Found while building the test: `gsl_integration_qagp` over E with breakpoints at a resonance's

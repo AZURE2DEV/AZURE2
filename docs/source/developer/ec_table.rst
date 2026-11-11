@@ -3,7 +3,7 @@ External-capture energy tables
 
 Status: on by default since October 2026 (``--no-ec-table`` turns it off).
 Code: ``include/ECTable.h``, ``src/ECTable.cpp``; callers
-``EPoint::CalculateECAmplitudes`` and ``EPoint::GetECAmplitudeWithShift``.
+``Unit::CalculateECAmplitudes`` and ``Unit::GetECAmplitudeWithShift``.
 Measurements: ``12C+a_onefile/10-20-26_EC_table_timing`` in the fit archive.
 
 Why
@@ -60,7 +60,7 @@ answers both at the channel radius):
 The amplitude at any energy is then the 8-point Lagrange interpolant of the
 stencil around :math:`u`, times the factor at that energy, times the exact
 entrance-channel factors (Coulomb and hard-sphere phases, photon-energy power)
-that ``EPoint`` always computed.  Sub-threshold entrance channels
+that ``Unit`` always computed.  Sub-threshold entrance channels
 (:math:`E_\mathrm{out} \le 0`, the Whittaker-Whittaker branch) are computed
 directly.
 
@@ -76,7 +76,7 @@ fails altogether sends the energies that need it to the direct integral.
 Shifted points
 --------------
 
-``EPoint::GetECAmplitudeWithShift`` returns the stored amplitude while the
+``Unit::GetECAmplitudeWithShift`` returns the stored amplitude while the
 point is at the energy it was computed at; at any other energy it evaluates the
 pathway at the point's current energy (``ECPathwayAmplitude``, the same code as
 start-up) and keeps the result until the energy moves again.  The final level's

@@ -11,9 +11,9 @@ What the code already had, and the one thing it did not
 Seyler's Eq. (4) needs five ingredients. AZURE2 had four of them:
 
 * **the collision matrix** :math:`U`, from the A- or R-matrix inversion;
-* **Coulomb and hard-sphere phases**, ``EPoint::GetExpCoulombPhase`` and the
+* **Coulomb and hard-sphere phases**, ``Unit::GetExpCoulombPhase`` and the
   hard-sphere phases stored per channel;
-* **the Coulomb amplitude** :math:`C(\theta)`, ``EPoint::GetCoulombAmplitude``;
+* **the Coulomb amplitude** :math:`C(\theta)`, ``Unit::GetCoulombAmplitude``;
 * **Clebsch–Gordan and Racah coefficients**, ``AngCoeff::ClebGord`` and
   ``AngCoeff::Racah``;
 * and the whole code is written in the **channel-spin representation** already,
@@ -21,7 +21,7 @@ Seyler's Eq. (4) needs five ingredients. AZURE2 had four of them:
   recoupled out of a :math:`jj` scheme.
 
 The missing ingredient was the angular functions. A search of ``src/`` and
-``include/`` turned up exactly one angular function, ``EPoint::GetLegendreP(L)``
+``include/`` turned up exactly one angular function, ``Unit::GetLegendreP(L)``
 — no associated Legendre functions and no spherical harmonics anywhere. As
 :doc:`polarization_theory` explains, this is not an oversight but a direct
 consequence of what the code had been asked to compute: unpolarized cross
@@ -195,7 +195,7 @@ defects surfaced that are worth describing because both were silent.
 **A valid extrapolation line was rejected outright.** ``ExtrapLine`` reads its
 ten fields and then calls ``getline`` to look for optional advanced-segment
 data. For a plain segment those ten fields are the whole line, so the stream is
-already at end-of-file and ``getline`` sets ``failbit``. ``EData::MakePoints``
+already at end-of-file and ``getline`` sets ``failbit``. ``WorkingCopy::MakePoints``
 tests ``rdstate()`` and returns :math:`-1` on it — which aborts the parse of
 ``<segmentsTest>`` entirely. One plain segment therefore discarded every test
 segment in the file, with no message. It had gone unnoticed because the GUI
@@ -203,7 +203,7 @@ always writes the trailing field; only a hand-written or generated ``.azr``
 trips it. The fix is to read only when something is left.
 
 **Target-effect sub-points never learned what they were.** A segment carrying
-target integration is not evaluated at its own points. ``EPoint::Calculate``
+target integration is not evaluated at its own points. ``Unit::Calculate``
 builds sub-points spanning the target thickness, evaluates those, and combines
 them into a yield. Sub-points are copied from the parent *before* the observable
 was stamped on it, so they never became analyzing-power points and the
@@ -215,8 +215,8 @@ Diagnosing this took longer than it should have because two plausible
 explanations had to be eliminated first: the stored points were verified to
 carry the flag correctly after ``MakePoints``, and pointer identity showed that
 the points being *calculated* were different objects entirely, with a null parent
-``EData``. Only then did the sub-point mechanism become the obvious candidate.
-``AddSubPoint`` now propagates the observable (``src/EPoint.cpp:1577``).
+``WorkingCopy``. Only then did the sub-point mechanism become the obvious candidate.
+``AddSubPoint`` now propagates the observable (``src/Unit.cpp:1577``).
 
 Averaging a ratio over a target
 --------------------------------
@@ -225,7 +225,7 @@ Fixing the flag exposed the physics point of Eq. :eq:`aytarget`: the existing
 integrator computes a yield, and running it on :math:`A_y` as though
 :math:`A_y` were a cross section is meaningless.
 
-``EPoint::IntegrateTargetEffectForObservable`` (``src/EPoint.cpp:1498``) runs the
+``Unit::IntegrateTargetEffectForObservable`` (``src/Unit.cpp:1498``) runs the
 existing yield integrator twice — once on :math:`\sigma`, once on the product
 :math:`\sigma A_y` — and divides:
 
@@ -561,7 +561,7 @@ What is not done
   :math:`e_k` coefficients in the same notation as the :math:`b_k` already
   coded.
 * **Attenuation coefficients for the capture** :math:`A_y`. When a segment
-  carries target effects, ``EPoint::CalcLegendreP`` folds the geometric
+  carries target effects, ``Unit::CalcLegendreP`` folds the geometric
   attenuation :math:`Q_k` into :math:`P_k`, but there is no :math:`Q_k^1` for
   the :math:`P_k^1` of the numerator. Use segments without target integration,
   which is the right choice for an analyzing power anyway.

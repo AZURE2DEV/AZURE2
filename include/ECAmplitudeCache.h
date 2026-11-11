@@ -7,7 +7,7 @@
 #include "Constants.h"
 
 /*!
- * Simple shared cache for EC amplitudes and their energies across all EPoints
+ * Simple shared cache for EC amplitudes and their energies across all units
  * This allows interpolation between different energy points when energy shifts are active
  */
 class ECAmplitudeCache {

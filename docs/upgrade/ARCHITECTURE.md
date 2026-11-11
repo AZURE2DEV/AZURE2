@@ -61,12 +61,17 @@ experiment/ ◄────────┘     ╲
 
 Why this is not spaghetti: spaghetti is (1) circular dependencies, (2) state written by several parts, (3) effects
 not visible from the call. The one-way rule removes (1), the single feedback loop removes (2), and "each module
-computes one symbol" removes (3). Today's `EPoint` holds the datum, its channel tables, its results and pointers to
-other points; hosts write into mapped points; every thread deep-copies `EData` and shares parts back (copy-on-write,
-node cache). That cycle through shared state produced the races and memory growth of 2026-08..11 (~55 % of ~126 dev
-fixes touched `EData`/`EPoint`/`ESegment`; at least 21 fixes repaired bugs introduced by earlier perf commits).
-Until they are replaced, those three classes are split into files with one job each; which file holds which member
-function is in the file map of `edata_split.md` §5.8.
+computes one symbol" removes (3). Until 2026-11 one data point (`EPoint`) held the datum, its channel tables, its
+results and pointers to other points; hosts wrote into mapped points; every thread deep-copied the data (`EData`) and
+shared parts back.  That cycle through shared state produced the races and memory growth of 2026-08..11 (~55 % of ~126
+dev fixes touched `EData`/`EPoint`/`ESegment`; at least 21 fixes repaired bugs introduced by earlier perf commits).
+The data path now has three types (`data_structure.md`): what was measured (`experiment::Measurement`), the data set
+as the set-up leaves it (`DataSet`, `include/DataSet.h`: segments with their settings and terms, target effects,
+covariance groups, parameter layout; immutable, one object shared by every working copy through a
+`shared_ptr<const DataSet>`), and the working copy (`WorkingCopy`, `include/WorkingCopy.h`: per segment a
+`SegmentState` of norms, shifts, frames and shift tables, the present values of the target-effect parameters, the
+calculation plan and one flat vector of calculation `Unit`s; copied by a plain copy).  An evaluation writes only its
+working copy and the caller's `Results`.
 
 ## 3. Module contents (physical objects; physics stages are functions, not classes)
 
@@ -301,6 +306,6 @@ tools/cls.sh tab-ref tab-new; grep '^## ' $WORK/cls-tab-new.tsv
 
 ## 12. Out of the tree at the end
 
-Qt/Qwt GUI (removed already, decision 3), ERYA (and `SRIM2013.xml`), numcmc, readline menus, the GSL fitter, per-thread `EData`/`CNuc` clones,
+Qt/Qwt GUI (removed already, decision 3), ERYA (and `SRIM2013.xml`), numcmc, readline menus, the GSL fitter, per-thread `WorkingCopy`/`CNuc` clones,
 point mapping, copy-on-write tables, `NodeTableCache`, process-wide memos, `external/coul` (→ pycoulomb). Kept
 externals: Minuit2, GSL (quadrature and special functions only), pybind11, pycoulomb.

@@ -116,7 +116,7 @@ For a particle channel with :math:`E_c > 0`, at the channel radius
 
 (``physics/src/ChannelFunctions.cpp``, ``penetrability`` and ``shift``, with an
 overflow guard used only where :math:`F_l^2 + G_l^2` overflows,
-:math:`\eta \gtrsim 110`; ``EPoint.cpp:1496-1500``). The energy derivative
+:math:`\eta \gtrsim 110`; ``Unit.cpp:1496-1500``). The energy derivative
 :math:`S_c'` (Brune and Park bases) is the Richardson-extrapolated central
 difference of :math:`S_c` with step :math:`10^{-3} E_c` (``shift_derivative``),
 good to about :math:`10^{-8}` relative. Below threshold,
@@ -136,7 +136,7 @@ The phases are
    = e^{i(\sigma_l - \sigma_0)}, \qquad
    \Omega_c = e^{i(\omega_c - \phi_c)}
 
-(``physics/src/ChannelFunctions.cpp``, ``exp_minus_i_phi``; ``EPoint.cpp:1505-1508``).
+(``physics/src/ChannelFunctions.cpp``, ``exp_minus_i_phi``; ``Unit.cpp:1505-1508``).
 
 - **Hard-sphere phase.** :math:`\phi_c = \arctan(F_l/G_l)` at
   :math:`\rho`, as in LT. The hard-sphere phase *shift* is :math:`-\phi_c`;
@@ -148,9 +148,9 @@ The phases are
 - **Photon channels.** :math:`L^0_c = 0`, :math:`\Omega_c = 1` and
   :math:`P_c^{1/2} = (E_\gamma/\hbar c)^{L+1/2}`, with
   :math:`E_\gamma = E - E_f` (MeV) and no recoil correction
-  (``EPoint.cpp:1522-1528``). With ``--use-rmc``, :math:`P_c = 1`.
+  (``Unit.cpp:1522-1528``). With ``--use-rmc``, :math:`P_c = 1`.
 - **β-decay channels.** :math:`P_c^{1/2}` is the square root of the
-  integrated Fermi function (``EPoint.cpp:1529-1538``).
+  integrated Fermi function (``Unit.cpp:1529-1538``).
 
 Boundary condition
 ^^^^^^^^^^^^^^^^^^
@@ -358,7 +358,7 @@ channel:
    \sum_{\lambda\mu}\gamma_{\lambda c}A_{\lambda\mu}\gamma_{\mu\gamma}.
 
 The external-capture amplitude to a final level :math:`f` with particle
-channel :math:`c_f = (\alpha, l_f, s)` is (``EPoint.cpp:1946-2005``,
+channel :math:`c_f = (\alpha, l_f, s)` is (``Unit.cpp:1946-2005``,
 ``ECIntegral.cpp:316-459``, ``AMatrixFunc.cpp:559-583``)
 
 .. math::
@@ -480,7 +480,7 @@ and deBoer (2020) Eq. (22) in the coupling order of Eq. :eq:`conv-coupling`
 (``CNuc.cpp:1918-1937``).
 
 Elastic scattering adds the Coulomb amplitude and its interference
-(``EPoint.cpp:1890-1934``, ``GenMatrixFunc.cpp:439-516``):
+(``Unit.cpp:1890-1934``, ``GenMatrixFunc.cpp:439-516``):
 
 .. math::
    :label: conv-elastic
@@ -512,7 +512,7 @@ pairs with spin and warned about for spin 0 (``CNuc.cpp:671-728, 947-980``).
 In elastic scattering the nuclear term is multiplied by 4 and the
 interference by 2. The Coulomb amplitude of channel spin :math:`s` is
 :math:`C_\alpha(\theta) + (-1)^s C_\alpha(\pi-\theta)`; for spin-0 bosons it
-is the symmetric sum (``EPoint.cpp:616-624, 1903-1925``;
+is the symmetric sum (``Unit.cpp:616-624, 1903-1925``;
 ``GenMatrixFunc.cpp:439-514``). A reaction with an identical entrance pair
 takes the factor 2 of Eq. :eq:`conv-sigma`. A reaction with an identical exit
 pair takes no factor: it counts events, not particles. The sign :math:`+1` for

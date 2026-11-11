@@ -436,7 +436,7 @@ bool CheckDataFile(Context &c, const ValidatedRecord &r, const DatasetSpec &d, s
   }
   const std::string canonicalData = cov ? CanonicalPath(path) : "";
   auto checkKept = [&](const DataRow &row) -> std::string {
-    if (cov) {  // the set-up takes sqrt(C_ii) as the row's uncertainty (ESegment::Fill)
+    if (cov) {  // the set-up takes sqrt(C_ii) as the row's uncertainty (Segment::Fill)
       const int fileRow = cov->RowOf(canonicalData, row.record);
       const double v = fileRow < 0 ? 0.0 : cov->Variance(fileRow, row.value);
       if (v > 0.0) return "";
@@ -476,7 +476,7 @@ bool CheckDataFile(Context &c, const ValidatedRecord &r, const DatasetSpec &d, s
 
 void NormInto(const Nuisance &n, DatasetSpec &d) {
   if (n.mode == NuisanceMode::Profiled) {
-    // A THM experiment's profiled scale (ESegment::IsProfiledNorm): a fitted norm, eliminated in closed form.
+    // A THM experiment's profiled scale (Segment::IsProfiledNorm): a fitted norm, eliminated in closed form.
     d.norm = 1.0;
     d.varyNorm = true;
     return;
@@ -559,7 +559,7 @@ bool BuildDataset(Context &c, const ValidatedRecord &r, DatasetSpec &d, Member &
   }
   build::EnergyWindow(r, d);
   // norm: its own nuisance, or a shared normalization record (its values in every member; the engine takes the group's
-  // from its first loaded member, EData::ResolveNormGroups)
+  // from its first loaded member, WorkingCopy::ResolveNormGroups)
   if (const Value *n = r.Get("norm")) {
     if (n->type == ValueType::Reference) {
       const ValidatedRecord *g = c.Record(n->word, "normalization");
@@ -586,7 +586,7 @@ bool BuildDataset(Context &c, const ValidatedRecord &r, DatasetSpec &d, Member &
       const bool sharesOffset = g->Has("offset");
       if (sharesOffset) {
         // shiftgroup: the scale's offset is the group's constant shift; its function belongs to the group's first
-        // active member (EData::ResolveShiftFunctions refuses a function on a follower)
+        // active member (WorkingCopy::ResolveShiftFunctions refuses a function on a follower)
         d.shiftGroup = g->name;
         if (const Value *o = g->Get("offset")) OffsetInto(o->nuisance, d);
         if (const Value *q = g->Get("sqrt")) {
@@ -702,7 +702,7 @@ bool BuildExtrapolation(Context &c, const ValidatedRecord &r, ExtrapolationSpec 
 // ---------------------------------------------------------------- parameter names (SetupSpecs.h, ParameterNames)
 
 // The names of the parameters the engine makes for each data set and extrapolation: the data set's own, a shared
-// record's for the first active member of its group (the engine's leader rule, EData::Resolve*Groups), and for a
+// record's for the first active member of its group (the engine's leader rule, WorkingCopy::Resolve*Groups), and for a
 // later member, whose parameter the engine keeps fixed, <record>.<field>[<data set>].
 void NameParameters(Context &c) {
   std::map<std::string, int> normLeader, shiftLeader, thicknessLeader;

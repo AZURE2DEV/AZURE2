@@ -5,7 +5,7 @@
 #include "Config.h"
 #include "CNuc.h"
 #include "CNucReport.h"
-#include "EData.h"
+#include "WorkingCopy.h"
 #include "ParameterLimitsManager.h"
 #include "AZUREParams.h"
 #include "PriorCovariance.h"
@@ -52,7 +52,7 @@ static std::vector<std::string> g_param_names;
 
 double AZURECalcMCMC::CalculateLogLikelihood(const vector_r &p) const {
   CNuc *localCompound = NULL;
-  EData *localData = NULL;
+  WorkingCopy *localData = NULL;
   WorkingData *working = nullptr;
 
   try {
@@ -81,7 +81,7 @@ double AZURECalcMCMC::CalculateLogLikelihood(const vector_r &p) const {
       return -std::numeric_limits<double>::infinity();
     }
 
-    // Sub-segments are now integrated into ESegment, no separate initialization needed
+    // Sub-segments are now integrated into Segment, no separate initialization needed
   } catch (GSLException &e) {
     // Clean up and return bad likelihood for GSL errors
     if (localCompound) ReturnPooledCNuc(localCompound);
@@ -116,7 +116,7 @@ double AZURECalcMCMC::CalculateLogLikelihood(const vector_r &p) const {
 
 double AZURECalcMCMC::CalculateLogLikelihoodPhysical(const vector_r &params_) const {
   CNuc *localCompound = NULL;
-  EData *localData = NULL;
+  WorkingCopy *localData = NULL;
   WorkingData *working = nullptr;
   AZUREParams params;
 
@@ -158,7 +158,7 @@ double AZURECalcMCMC::CalculateLogLikelihoodPhysical(const vector_r &params_) co
   localCompound->FillCompoundFromParams(params.GetMinuitParams().Params());
   // The tail of the physical vector (normalizations, energy shifts, screening)
   // is the same in both bases.  The norms were never copied out of it, so the
-  // pooled EData kept its starting norms: the sampler moved the norm
+  // pooled WorkingCopy kept its starting norms: the sampler moved the norm
   // parameters under their priors while the likelihood never saw them (norm
   // posterior = prior, R-matrix posterior at frozen norms; 2026-10-26).
   localData->FillNormsFromParams(params_);
@@ -174,7 +174,7 @@ double AZURECalcMCMC::CalculateLogLikelihoodPhysical(const vector_r &params_) co
     return -std::numeric_limits<double>::infinity();
   }
 
-  // Sub-segments are now integrated into ESegment, no separate initialization needed
+  // Sub-segments are now integrated into Segment, no separate initialization needed
 
   azure2::Results &results = working->results;
   // The model value of every point, then the data part of the objective, as CalculateLogLikelihood (D1).
@@ -347,7 +347,7 @@ void AZURECalcMCMC::BuildAutoPriors(bool useRWA) const {
   }
 
   // Every parameter of the vector, in its length and order, by its kind (its record, written by CNuc::FillMnParams
-  // and EData::FillMnParams).  (Re-walking the levels and segments, as this once did, gave an entry to a free THM
+  // and WorkingCopy::FillMnParams).  (Re-walking the levels and segments, as this once did, gave an entry to a free THM
   // norm, which is profiled and not a parameter; matching names duplicated the fit's prior rules.)
   std::vector<ParamKind> allKinds = paramKinds_;
   std::vector<double> allAutoMean;
@@ -806,7 +806,7 @@ void mcmc_iteration_callback(int current_step, int total_steps) {
 
         if (!fullParams.empty()) {
           CNuc *localCompound = g_mcmc_for_callbacks->compound()->Clone();
-          EData *localData = g_mcmc_for_callbacks->data()->Clone();
+          WorkingCopy *localData = g_mcmc_for_callbacks->data()->Clone();
           azure2::Results localResults;  // this snapshot's buffer
 
           bool isValid = true;
@@ -841,7 +841,7 @@ void mcmc_iteration_callback(int current_step, int total_steps) {
               // sample's are in the tail of the physical vector, the same in
               // both bases from the first data parameter on, so param.mcmc
               // gets the sampled values rather than the start (2026-10-26).
-              for (size_t i = (size_t)localData->GetNormParamOffset(); i < rwaFullParams.size() && i < fullParams.size(); i++)
+              for (size_t i = (size_t)localData->Data().GetNormParamOffset(); i < rwaFullParams.size() && i < fullParams.size(); i++)
                 rwaFullParams[i] = fullParams[i];
 
               if (g_mcmc_for_callbacks->configure().paramMask & Config::USE_BRUNE_FORMALISM) {
@@ -852,15 +852,15 @@ void mcmc_iteration_callback(int current_step, int total_steps) {
 
           if (isValid) {
             // Calculate cross sections for all data points
-            for (EDataIterator data = localData->begin(); data != localData->end(); data++) {
-              if (!data.point()->IsMapped()) {
-                data.point()->Calculate(localData, localCompound, g_mcmc_for_callbacks->configure(), localResults);
-              }
-            }
-            // The model values (ModelPass.h): the points above are calculated; the iterator skips the component
+            for (const Segment &seg : localData->Data().GetSegments())
+              if (!seg.HasComponents())
+                for (Unit &point : seg.GetPoints(*localData))
+                  if (!point.IsMapped())
+                    point.Calculate(localData, localCompound, g_mcmc_for_callbacks->configure(), localResults);
+            // The model values (ModelPass.h): the points above are calculated; the loop skips the component
             // segments, so those of a segment that assembles its value are calculated by the model pass.
-            for (int s = 1; s <= localData->NumSegments(); s++) {
-              ESegment *seg = localData->GetSegment(s);
+            for (int s = 1; s <= localData->Data().NumSegments(); s++) {
+              const Segment *seg = localData->Data().GetSegment(s);
               azure2::EvaluateModelSegment(*localData, *seg, localCompound, g_mcmc_for_callbacks->configure(), localResults,
                                            seg->NeedsAssembly() ? azure2::LeafValues::Calculate : azure2::LeafValues::Ready);
             }
@@ -1359,7 +1359,7 @@ void AZURECalcMCMC::LoadExistingSamples(const std::string &filename, std::vector
 }
 
 /*!
- * Initialize object pools with pre-allocated CNuc and EData objects
+ * Initialize object pools with pre-allocated CNuc and WorkingCopy objects
  */
 void AZURECalcMCMC::InitializePools() const {
   std::lock_guard<std::mutex> lock(pool_mutex_);
@@ -1373,9 +1373,9 @@ void AZURECalcMCMC::InitializePools() const {
     cnuc_pool_.push(std::unique_ptr<CNuc>(compound_->Clone()));
   }
 
-  // Pre-allocate EData objects by cloning once
+  // Pre-allocate WorkingCopy objects by cloning once
   for (int i = 0; i < pool_size; ++i) {
-    edata_pool_.push(std::unique_ptr<WorkingData>(new WorkingData{std::unique_ptr<EData>(data_->Clone()), {}}));
+    edata_pool_.push(std::unique_ptr<WorkingData>(new WorkingData{std::unique_ptr<WorkingCopy>(data_->Clone()), {}}));
   }
 
   pools_initialized_ = true;
@@ -1410,7 +1410,7 @@ WorkingData *AZURECalcMCMC::GetPooledData() const {
   }
 
   // Fallback: create new if pool is empty (shouldn't happen often)
-  return new WorkingData{std::unique_ptr<EData>(data_->Clone()), {}};
+  return new WorkingData{std::unique_ptr<WorkingCopy>(data_->Clone()), {}};
 }
 
 /*!

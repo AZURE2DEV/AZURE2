@@ -82,14 +82,23 @@ def output_blocks(path):
 
 
 def main(run):
-    lines = []
-    text = open(os.path.join(run, "t.azr")).read()
-    seg = text[text.index("<segmentsData>") + 15:text.index("</segmentsData>")]
-    for line in seg.splitlines():
+    # the active data sets of t.azr (format 3) in file order: reaction, file, windows, covariance
+    sets, cur = [], None
+    for line in open(os.path.join(run, "t.azr")):
         t = line.split()
-        if t and t[0] == "1":
-            lines.append(t)
-    covname = next(t[t.index("covariance") + 1] for t in lines if "covariance" in t)
+        if line.startswith("dataset "):
+            cur = {"name": t[1], "active": True, "energy": (0.0, 1e9), "angle": (0.0, 180.0)}
+            sets.append(cur)
+        elif not t or line.startswith("<"):
+            cur = None
+        elif cur is not None and t[0] in ("reaction", "file", "covariance"):
+            cur[t[0]] = " ".join(t[1:])
+        elif cur is not None and t[0] == "active":
+            cur["active"] = t[1] != "no"
+        elif cur is not None and t[0] in ("energy_window", "angle_window"):
+            cur["energy" if t[0] == "energy_window" else "angle"] = (float(t[1]), float(t[2]))
+    sets = [d for d in sets if d["active"]]
+    covname = next(d["covariance"] for d in sets if "covariance" in d)
     files, C, rel = read_cov(os.path.join(run, covname))
     offset, o = {}, 0
     for name, c in files:
@@ -98,19 +107,19 @@ def main(run):
     blocks = output_blocks(os.path.join(run, "output", "AZUREOut_aa=1_R=1.out"))
     rows, r, segof = [], [], []
     b = 0
-    for s, t in enumerate(lines, start=1):
-        if (t[1], t[2]) != ("1", "1"):
+    for s, d in enumerate(sets, start=1):
+        if d["reaction"] != "12C(p,p)12C":  # the blocks of AZUREOut_aa=1_R=1.out: pair 1 -> 1
             continue
         block = blocks[b]
         b += 1
-        if "covariance" not in t:
+        if "covariance" not in d:
             continue
-        e0, e1, a0, a1 = map(float, t[3:7])
-        path = t[14]
+        (e0, e1), (a0, a1) = d["energy"], d["angle"]
+        path = d["file"]
         recs = records(os.path.join(run, path))
         sel = [k for k, x in enumerate(recs) if e0 <= x[0] <= e1 and a0 <= x[1] <= a1]
         if len(sel) != len(block):
-            raise SystemExit("segment %d: %d records selected, %d in the output" % (s, len(sel), len(block)))
+            raise SystemExit("data set %d: %d records selected, %d in the output" % (s, len(sel), len(block)))
         for k, out in zip(sel, block):
             rows.append(offset[path] + k)
             r.append((out[3] - out[5]) / out[6])  # fit, data * n, error * n

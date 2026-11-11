@@ -4,29 +4,29 @@ KLGroup.cpp ALevel.cpp Decay.cpp PathwayTable.cpp CNucPathways.cpp CaptureAyRequ
 AMatrixFunc.cpp  DoubleFactorial.cpp EigenFunc.cpp  NFIntegral.cpp
 ECIntegral.cpp ECTable.cpp ECAmplitudeCache.cpp MatrixInv.cpp LevelMatrixSolver.cpp Profile.cpp ChannelSpace.cpp
 PPair.cpp AZURECalc.cpp Objective.cpp
-ECMGroup.cpp ReactionRate.cpp AZUREMain.cpp EData.cpp DataCovariance.cpp ShftFunc.cpp ScatteringLength.cpp ModelData.cpp CNucObserved.cpp
-RMatrixFunc.cpp AZUREOutput.cpp  EDataIterator.cpp   TargetEffect.cpp
-AZUREParams.cpp EPoint.cpp Interference.cpp CNuc.cpp Equation.cpp
-JGroup.cpp Config.cpp ESegment.cpp ModelPass.cpp CoulombReference.cpp Predictions.cpp CalculationPlan.cpp KGroup.cpp IntegratedFermiFunc.cpp
+ECMGroup.cpp ReactionRate.cpp AZUREMain.cpp WorkingCopy.cpp DataCovariance.cpp ShftFunc.cpp ScatteringLength.cpp ModelData.cpp CNucObserved.cpp
+RMatrixFunc.cpp AZUREOutput.cpp    TargetEffect.cpp
+AZUREParams.cpp Unit.cpp Interference.cpp CNuc.cpp Equation.cpp
+JGroup.cpp Config.cpp Segment.cpp ModelPass.cpp CoulombReference.cpp Predictions.cpp CalculationPlan.cpp KGroup.cpp IntegratedFermiFunc.cpp
 EffectiveCharge.cpp  GSLException.cpp ParameterLimitsManager.cpp
 AdaptiveIntegrationGrid.cpp AdaptiveExtrapolation.cpp AZUREGrad.cpp ThmFunc.cpp
-EDataOutputFiles.cpp
-EDataCheckFiles.cpp
-EDataCovariance.cpp
-EDataTargetEffects.cpp
-EDataExternalCapture.cpp
-EDataParameters.cpp
-EDataHandOver.cpp
-WorkingCopyUnits.cpp
-EPointCalculate.cpp
-EPointFolds.cpp
-EPointChannelTables.cpp
-EPointLegendre.cpp
-EPointExternalCapture.cpp
-ESegmentParameters.cpp
-ESegmentShifts.cpp
-THMMatrixFunc.cpp ThmVertexBoundary.cpp ThmNumerics.cpp EDataThm.cpp ConfigThm.cpp ThmExperiment.cpp ThmLineshape.cpp ThmDistortion.cpp ThmOptical.cpp ThmDwVertex.cpp ThmAngular.cpp CovarianceBand.cpp PriorCovariance.cpp ParameterLabel.cpp PolarizationFunc.cpp ChannelFunc.cpp CoulombTable.cpp
-EDataThmReports.cpp
+DataOutputFiles.cpp
+DataCheckFiles.cpp
+DataCovarianceGroups.cpp
+TargetSetup.cpp
+ExternalCaptureSetup.cpp
+DataParameters.cpp
+HandOver.cpp
+WorkingCopyUnits.cpp DataSet.cpp
+PointPass.cpp
+TargetFold.cpp
+ChannelTables.cpp
+UnitLegendre.cpp
+UnitExternalCapture.cpp
+SegmentParameters.cpp
+ShiftFrames.cpp
+THMMatrixFunc.cpp ThmVertexBoundary.cpp ThmNumerics.cpp ThmNorm.cpp ConfigThm.cpp ThmExperiment.cpp ThmLineshape.cpp ThmDistortion.cpp ThmOptical.cpp ThmDwVertex.cpp ThmAngular.cpp CovarianceBand.cpp PriorCovariance.cpp ParameterLabel.cpp PolarizationFunc.cpp ChannelFunc.cpp CoulombTable.cpp
+ThmReports.cpp
 CNucSystem.cpp CNucLevelParameters.cpp CNucExternalCapture.cpp CNucReport.cpp CNucChecks.cpp
 CNucTransformMessages.cpp ProjectSetup.cpp)
 

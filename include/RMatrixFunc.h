@@ -24,11 +24,11 @@ class RMatrixFunc : public GenMatrixFunc {
   /// Drop every stored matrix before the next point.
   void ClearMatrices();
   /// Build \f$R\f$ and \f$[1-RL]\f$ from the level parameters at this point.
-  void FillMatrices(EPoint *);
+  void FillMatrices(Unit *);
   /// Invert \f$[1-RL]\f$ and form \f$[1-RL]^{-1}R\f$.
   void InvertMatrices();
   /// T-matrix per reaction pathway from \f$[1-RL]^{-1}R\f$.
-  void CalculateTMatrix(EPoint *);
+  void CalculateTMatrix(Unit *);
   /*!
    * Instantiated in the parent class.
    */

@@ -7,8 +7,8 @@ prior.  A `<parameterSettings>` row
     segment_N_norm prior_centre c
     segment_N_energy_shift prior_centre c
 
-(`N` the segment key) moves only the centre (`EData::ApplyPriorCentres` with the centres the old-line reader `PriorCentresFromOldRows` read, which
-sets `ESegment::SetNominalNorm` / `SetNominalEnergyShift`; every penalty reads
+(`N` the segment key) moves only the centre (`WorkingCopy::ApplyPriorCentres` with the centres the old-line reader `PriorCentresFromOldRows` read, which
+sets `Segment::SetNominalNorm` / `SetNominalEnergyShift`; every penalty reads
 `GetNominalNorm` / `GetNominalEnergyShift`).  A file can then store fitted
 norms and keep its priors on the experimental values.  Older readers skip
 three-token rows.

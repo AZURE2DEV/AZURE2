@@ -2,6 +2,130 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-11 (director) — merged: the data classes replaced; two thirds of the tree in format 3; what runs now
+
+**Merged on `feature/upgrade-4-data`, then on `feature/upgrade`** (both `--no-ff`, not pushed):
+- `feature/upgrade-4-tree-format3-2` (92b046a8): groups 4b and 5 of `format3_tree.md` (shift, target, screening,
+  covariance and apparatus projects), 126 of 185 project files in format 3; the converter refuses what the old engine
+  refused and keeps an automatic tolerance without windows; a fitted normalization with a prior centred at 0 is
+  refused with a diagnostic code.
+- `feature/upgrade-4-data-structure-3` (2363abac): `DataSet` (immutable, `shared_ptr<const DataSet>`), `WorkingCopy`,
+  `Segment`, `Unit`; `EData`, `ESegment`, `EPoint` and their files deleted (consistency check 31).
+
+**Verified by the director** (clean builds of the rehearsal trees, 0 warnings).
+- The tree branch alone (rehearsal `trial17`, against `tab-trial16`): 685 / 658 / 685 files identical; the others are
+  `param.par` of 9 converted projects (parameter names only, values equal) and 36 `run.log`; `ctest -LE slow`
+  183/183; `tests/run_tests.sh` 146 passed, 0 failed; 12 calculations identical at 1 and 6 threads; model-data χ²
+  identical in three bases; spec equivalence 198 files, 185 converted, 183 equal, 2 recorded, 0 differ; gate 483
+  (456 formal) identical, 38 classified, 0 differ, 0 missing; `ctest -L slow` 10/10.
+- Both together (rehearsal `trial18` = 2363abac's tree, against `tab-trial17`): 728 / 701 / 728 files, all
+  identical; `ctest -LE slow` 183/183; `run_tests.sh` 146 / 0; 12 identical at 1 and 6 threads; χ² identical in three
+  bases; spec equivalence and gate with the same counts; `ctest -L slow` 10/10. Reference tag from here: `tab-trial18`.
+
+**Director's judgements at the merge.**
+- Two output texts still name the old classes on purpose (`src/WorkingCopy.cpp` "see EData::ECSignature)",
+  `convert/src/BuildData.cpp` "(the same index, EData::MakePoints)"): they are bytes of committed outputs; check 31
+  lists them as the only exceptions. They go with the outputs' next regeneration.
+- The agent's "pyazr behaviour change" (a target's `density` after an evaluation) is not visible to a user: the only
+  binding that returns a density builds a fresh `TargetEffect` from the line (`api/src/pybind_api.cpp`,
+  `parse_target_effect_line`), and the hand-over reads `EffectValues(n).density`. Nothing to fix.
+- `Unit` is 480 bytes but not yet a plain record: about 130 member functions, the apparatus fold among them
+  (`src/TargetFold.cpp`). That is Phase 5's work (kernels leave the unit), not a debt of this branch.
+
+**Procedure changed (the PI, 2026-11-11: "Can't we go faster?").** A merge is committed on the data branch as soon as
+all outputs are identical, and agents start from it; `feature/upgrade` takes it after the whole verification. One
+verification per batch of merges, its parts side by side: `work/director/full_verify2.sh WT TAG NT [REFTAG]`. Work that
+depends on nothing in progress starts at once (leaf libraries, the next phase's design).
+
+**Running** (branches from ec04bd55 or 2363abac):
+- `feature/upgrade-4-tree-format3-3`: natural targets and THM projects to format 3.
+- `feature/upgrade-4-tree-format3-4`: the last group (files left old in converted directories, T1–T3) and the model
+  generators.
+- `feature/upgrade-4-pyazr-records`: pyazr's own modules and tests off `azrfile.py`.
+- `feature/upgrade-4-pathway-table-2`: the decay-position defect of external capture, external capture on the
+  pathway table, the trees deleted.
+- `feature/upgrade-5-stopping-1`: the stopping-power library `stopping/` (leaf; links `physics/` only).
+- `feature/upgrade-7-transfer-1`: potentials, bound states, distorted waves and DWBA transfer in `physics/`, checked
+  against FRESCO 3.5 (installed outside the repository: `/data0/skowrons/AZURE2-upgrade/opt/fresco/README.md`).
+- `feature/upgrade-5-design` (finished, under review): `docs/upgrade/energy_grid.md`, the design of Phase 5.
+
+**Open** (unchanged unless said): the second validation round waits for the deletion of the old reading path; the
+UDR fold through a point has no end-to-end test; comments in `pyazr/azrfile.py` and `pyazr/datasets.py` name the old
+classes (the files go with the old path); the 6-thread fit's peak memory (+13 % at milestone 2) is to be measured
+again now that a copy is smaller; ThreadSanitizer and the Sphinx build have not been run on this state.
+
+## 2026-11-11 (agent, brief X3, milestone 3) — `DataSet` and `WorkingCopy` apart; the old data classes gone (`feature/upgrade-4-data-structure-3`)
+
+**Done** (commits 075af6db, b1d3daaf, the file moves, the class renames, these docs).
+- `DataSet` (`include/DataSet.h`, `src/DataSet.cpp`): what the set-up leaves fixed -- the segments (`Segment`, settings
+  and start values, priors, measurement, terms with their settings and frame at load), the target effects, the leaves,
+  the `PointSetUp` records of the points (adaptive-grid layout, UDR kernel), the covariance groups, the THM
+  experiments, the parameter layout, the prior covariance, the nuclei.  A working copy holds it as
+  `shared_ptr<const DataSet>`: the set-up writes it through `WorkingCopy::Draft()`, `Initialize` freezes it, a copy
+  shares it; a setting changed later (pyazr's prior covariance, `ReplaceDiagonalPriors`, a parameter layout laid out
+  again by `FillMnParams`) makes a new one (`ReviseDataSet`).  Shared and written after the set-up, named in the
+  headers: a covariance group's frozen relvector model (its mutex; refrozen only between minimizations) and the
+  node-table cache (its shards' mutexes).
+- `WorkingCopy` (was `EData`): per segment a `SegmentState` (`include/SegmentState.h`: norm, shifts with their last
+  applied values, the shift function `Equation` with its parameters, sample thickness; per term the unit range, the
+  present frame, the shift tables), `TargetEffectValues` (U_e, density, Doppler T: the fold and the penalties read
+  them there), the THM coherent values, the calculation plan (rebuilt when a shift moves), the unit vector.
+  `Segment`'s functions that touch state take the working copy or the state and are const.
+- The unit (`Unit`, was `EPoint`) 608 -> 480 bytes: its grid layout and UDR kernel are data-set records named by an
+  index, and the angle-limit message of a failed lab -> c.m. map is returned by `Segment::ConvertRowToCM`.  The data
+  iterator is gone.  The external-capture amplitudes stay in the unit (`Clone` drops the set-up's, as before).
+- Files and classes renamed (`data_structure.md` §3 lists them); consistency check 31 keeps the old names out.
+- `history_test`: a copy shares its source's data set; evaluations at A and B and the copy histories leave a
+  fingerprint of it unchanged (shown failing with a write of a segment's nominal norm in the hand-over).
+
+**Verified** (clean builds, 0 warnings).  On 075af6db (the data set apart; binary `work/ds3/AZURE2-A`): every
+project x 3 bases (tag `tab-ds3A`) against `tab-trial14` 737 / 710 / 737 identical; `ctest -LE slow` 182/182;
+`tests/run_tests.sh` 145 / 0; calculations at 1 and 3 threads identical (T1-T3, 13N, natural_neon, energy_shift_sqrt,
+shift_sqrt_subpoints/dense, shift_fn, 18O_p_a_thm; three bases, 27/27); fits at 1 thread byte-identical to
+`b-trial14` (T2 `--use-lm` and `--use-gradient` 200 calls, 13N, energy_shift_sqrt, screening_6li/fit, 18O_p_a_thm);
+the converted-tree gate 483 (456) identical, 38 classified, 0 differ, 0 missing.  The same set on 2bde09d3 (renames,
+docs; tag `tab-ds3F`): the same results, but `convert_fixtures` failed (the converter's comment text, fixed in
+ef4aebb6); on ef4aebb6: `ctest -LE slow` 182/182 and the gate (`g3ds3G`) as above.  Cycles (perf stat, 1 thread, min
+of 6, alternated with `b-trial14`): T2 calculation 645.3 M against 647.8 M, 200-call T2 fit 49.41 G against 50.00 G;
+peak RSS T2 fit 305 / 427 MB at 1 / 3 threads against 324 / 452, natural_neon calculation 1465 / 1468 against
+1499 / 1506 MB.  One copy after Initialize: T2 11.87 MB in 95 allocations, natural_neon 142.7 MB in 508 (15.06 MB /
+236 and 180.6 MB / 779 at the milestone-2 head).
+
+**Open.** pyazr's Python comments (`pyazr/azrfile.py`, `datasets.py`) and two files of the validation branch
+(`experiment/src/Build.cpp`, `BuildEffects.cpp`, excepted in check 31) still name the old classes; the
+`intEC.dat.sig` header keeps "see EData::ECSignature" (byte identity; change it with the next signature version).
+The UDR fold through a point has no project test (only the kernel's reference test).  The external-capture
+amplitudes of the set-up move out of the unit with the second pathway branch.
+
+## 2026-11-11 (agent, tree to format 3, second part) — shifts and apparatus projects, the director's decisions (`feature/upgrade-4-tree-format3-2`)
+
+**Done** (`AA2_tree_to_format3_rest.md`; plan and state: `docs/upgrade/format3_tree.md`). 126 of the 185 convertible
+project files are format 3 (34 more): the shift projects (`shift_fn`, `shift_groups`, `energy_shift_sqrt`,
+`pyazr/data/shift_fn_groups`) and the target, screening, covariance and apparatus projects (`electron_screening`,
+`screening_6li`, `target_density`, `data_covariance`, `angular_coefficients`, `beam_profile_kernel`, `hard_sphere`,
+`convolution_window`, `convolution_unify/models/bare`, `secondary_gamma/models/grad`). 16 checks rewritten to write or
+edit format-3 records (`energy_scale` records for shifts, the target's `screening` and `areal_density`), one generator
+(`clone_composite/make_models.py`) writes format 3, `beam_profile_kernel` reads committed extrapolation records.
+The director's decisions: the converter refuses an old line with exit key -1 and a type that is not total capture
+(old engine's reason, non-zero exit); an old automatic tolerance without windows becomes one window over every energy
+with that tolerance (outputs equal, compared); `norm ... fit prior 0 15%` (a centre at 0 or below) is refused by
+validation and the run with the new code `E_PRIOR_CENTRE` (`experiment/src/Validate.cpp`). The converter also
+refuses four more files the old engine refused and it used to convert into running files (a shiftfn on a follower of a
+shift group or of a shift-function group, a line in both kinds of group, densityfit / densitygroup without a thin
+target or with a beam profile / UDR). Three slow pyazr tests (`inactive_lines`, `shared_state`, `rmatrix_pole`), broken by
+the first half, edit format-3 records.
+
+**Verified how**: all projects x 3 bases against `tab-trial16` (tag `tab-tree3b`, the new reference): identical but
+`param.par` names of 9 converted projects; converted-tree gate (`gtree3b`): 483 (456) identical, 38 classified, 0
+differ, 0 missing; spec equivalence 198 files, 185 converted, 183 equal, 2 recorded, 0 differ, 13 not converted (one
+more refusal); `ctest -LE slow` 183/183, `ctest -L slow` 10/10; `tests/run_tests.sh` 146 passed, 0 failed; T1-T3, 13N,
+natural_neon at 1 and 4 threads byte-identical.
+
+**Open** (the page, §3 and §5): groups 6 (natural targets, with the generators of `doppler_fgm` and
+`transmission_yield` and `reaction_rate/models/n12C.azr`, `p12C.azr`), 7 (THM), 8 (T1-T3, relativistic, scattering
+lengths, ...); the 28 old-writing generators; the refusal switch (blocked: the unconverted groups, 20 pyazr tests of
+the old reader on the originals, the generators).
+
 ## 2026-11-11 (director, morning) — the eighth wave, second part merged: the flat working copy; validation that predicts the run's refusals; half of the test tree in format 3
 
 **Merged into `feature/upgrade-4-data`** (`--no-ff`; each rehearsed in a scratch worktree, built and verified once;

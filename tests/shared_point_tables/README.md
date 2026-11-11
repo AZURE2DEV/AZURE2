@@ -7,13 +7,13 @@ energy-dependent tables of every point and sub-point (copy on write), and a re-p
 tables of the nodes that did not move, so a copy costs a fraction of the data instead of a full copy
 (`tests/natural_neon`: about 0.8 GB per copy instead of 7.7 GB; a fit at four threads 7.6 GB at the start and
 9.2 GB after 50 minutes, instead of about 41 GB).  Re-placed nodes are shared between the copies
-(`NodeTableCache`), and the tables are packed into flat arrays.  See the developer guide, *EData, Data Points, and Target Effects*, "Memory: shared per-point
+(`NodeTableCache`), and the tables are packed into flat arrays.  See the developer guide, *WorkingCopy, Data Points, and Target Effects*, "Memory: shared per-point
 tables".
 
 Two races made fits with grid re-placement crash at four threads (`malloc(): unaligned tcache chunk detected`,
 segmentation faults), in dev 2d97b1f0 as well:
 
-- `EData::Clone` reset the mapped points only of the points `EDataIterator` visits, which skips segments with
+- `WorkingCopy::Clone` reset the mapped points only of the points the data iterator of that time visited, which skipped segments with
   components: the base points of natural-target and SUM segments kept mapping the ORIGINAL's component points,
   and every pooled copy filled them, from every thread at once.  `Clone` now checks that every mapped point
   belongs to the copy.

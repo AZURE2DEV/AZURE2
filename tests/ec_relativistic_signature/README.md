@@ -5,7 +5,7 @@ node table key (audit 2026-10-25, checklist t3-25).
 
 With `relativistic=1` in `<config>` every channel's eta, rho and flux factor change, so the
 external-capture amplitudes change too (0.1 to 1 % through the penetrabilities). Up to dev b80b857
-the switch was neither in the signature written beside `intEC.dat` (`EData::ECSignature`) nor in the
+the switch was neither in the signature written beside `intEC.dat` (`WorkingCopy::ECSignature`) nor in the
 `ECTable` key (`TermKey`): a relativistic run handed a file written without the switch read it back
 silently, the pattern of the long-wavelength signature bug fixed in 41a468b, and a pyazr session
 evaluating a model and then its relativistic variant reused the nodes computed for the other.

@@ -3,10 +3,10 @@
 A parameter file's `segment_*` entries are not applied in a run without data.
 
 An extrapolation (mode 3, `<segmentsTest>`) and a reaction-rate run number their test grids 1..N and
-`EData::FillMnParams` emits `segment_<k>_energy_shift`, `_energy_shift_sqrt`, `_energy_shift_fn<j>` and
+`WorkingCopy::FillMnParams` emits `segment_<k>_energy_shift`, `_energy_shift_sqrt`, `_energy_shift_fn<j>` and
 the normalization for each of them, so a `param.sav` written by a fit matched DATA segment k's fitted
 shift to TEST segment k by name (`AZUREParams::ApplyUserParameterFile`), and
-`EData::FillEnergyShiftsFromParams` applied it (a nonzero constant shift counts as active): the
+`WorkingCopy::FillEnergyShiftsFromParams` applied it (a nonzero constant shift counts as active): the
 requested grid moved by the shift, converted to c.m. -- the energy-shift twin of the `<targetInt>` trap
 (audit 2026-10-25, item 12).  `ReadUserParameters` now passes whether the run has data; without data the
 `segment_*` lines are skipped and the run log says how many.  pyazr's `load_sav` does the same in

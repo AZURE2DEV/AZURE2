@@ -2,7 +2,7 @@
 
 Progress bars of the external-capture amplitude loops (2026-11-06).
 
-`EData::CalculateECAmplitudes` (data segments) and `EData::InitializeComponentSegments` (component segments)
+`WorkingCopy::CalculateECAmplitudes` (data segments) and `WorkingCopy::InitializeComponentSegments` (component segments)
 compute the EC amplitudes of a segment's points in an OpenMP loop and redraw a 25-cell bar
 (`\r\tSegment #<key> [*********                ] 36%`). Up to dev 0119771 every thread incremented the shared
 point counter without synchronization and wrote its bar to the output stream piece by piece, without a lock. The

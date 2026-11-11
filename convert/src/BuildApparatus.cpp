@@ -5,6 +5,11 @@
 namespace azure2 {
 namespace convert {
 
+namespace {
+// MeV: the upper edge of the one window that stands for "every point" (above every lab energy a project holds).
+constexpr double kEveryEnergyMeV = 1.0e6;
+}  // namespace
+
 // ================================================================ <targetInt>
 void Builder::BuildApparatus() {
   for (const OldEffectLine &e : old_.effects) {
@@ -14,10 +19,23 @@ void Builder::BuildApparatus() {
       continue;
     }
     const TargetIntLine &l = e.line;
+    // A fitted density the old engine refused (TargetEffect: a thin target needed, no beam profile or UDR kernel): a
+    // conversion must not make the file run with the density fixed.
+    if (l.densityFitRead || !l.densityGroup.empty()) {
+      const char *why = nullptr;
+      if (l.isTargetIntegration != 1 || !(l.density > 0.0))
+        why = "densityfit / densitygroup need target integration with a density > 0 (a thin target)";
+      else if (l.isBeamProfile || l.isUdr)
+        why = "densityfit / densitygroup cannot be combined with a beam profile or a UDR kernel";
+      if (why) {
+        res_.refusal = "<targetInt> line " + std::to_string(e.index) + ": " + why + ", which the old engine refused";
+        return;
+      }
+    }
     Apparatus a;
     a.line = &e;
     const std::string n = std::to_string(e.activeIndex);
-    // The data and test lines it applies to (EData::ReadTargetEffectsFile: a listed key that is an active segment).
+    // The data and test lines it applies to (WorkingCopy::ReadTargetEffectsFile: a listed key that is an active segment).
     for (int k : e.segments) {
       const bool data = activeData_.count(k) != 0, test = activeTest_.count(k) != 0;
       if (!data && !test) {
@@ -171,10 +189,16 @@ void Builder::BuildApparatus() {
       if (l.hasResonanceWidthMultiplier) q += " width_multiplier " + NumberText(l.resonanceWidthMultiplier, e.text);
       if (l.hasPointsPerWidth) q += " per_width " + NumberText(l.pointsPerWidth, e.text);
       a.quadrature = Words(q);
-      if (l.hasRangesToken && (l.autoWindows || !l.ranges.empty())) {
+      if (l.hasRangesToken && (l.autoWindows || !l.ranges.empty() || l.autoTolerance > 0)) {
         Count(Construct::kWindows);
         std::string w;
-        if (l.autoWindows) {
+        if (!l.autoWindows && l.ranges.empty()) {
+          // An automatic tolerance with no windows (an empty ranges token) applies to every point; format 3 states the
+          // tolerance inside fold_windows, so the line becomes one window over every lab energy.
+          w = "0-" + ShortestText(kEveryEnergyMeV) + " MeV";
+          Note(Construct::kWindows, "", "<targetInt> line " + std::to_string(e.index) + ": an automatic tolerance without windows; format 3 writes one window over every energy (0-" +
+                                            ShortestText(kEveryEnergyMeV) + " MeV) with that tolerance");
+        } else if (l.autoWindows) {
           w = "auto";
           if (l.hasAutoWindowTolerance) w += ":" + ShortestText(l.autoWindowTolerance);
           if (l.hasAutoWindowMargin) w += ":" + ShortestText(l.autoWindowMargin);
@@ -195,7 +219,7 @@ void Builder::BuildApparatus() {
       Note(Construct::kEffectLine, "", "<targetInt> line " + std::to_string(e.index) + " applies no effect: dropped");
       continue;
     }
-    // Later lines take over a key (EData::ReadTargetEffectsFile overwrites the segment's effect number).
+    // Later lines take over a key (WorkingCopy::ReadTargetEffectsFile overwrites the segment's effect number).
     const int index = (int)apparatus_.size();
     for (int k : a.dataKeys) {
       if (apparatusOfData_.count(k))

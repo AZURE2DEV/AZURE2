@@ -23,7 +23,7 @@ namespace experiment {
  * boost of the detected particle (RelativisticLabToCM).  Photons: the aberration cos theta_c.m. = (cos theta_lab -
  * beta) / (1 - beta cos theta_lab), beta the c.m. velocity, and J = (1 - beta cos theta_lab)^2 / (1 - beta^2).
  *
- * Every expression is the engine's (src/EPoint.cpp before this file, include/Kinematics.h), operation for
+ * Every expression is the engine's (src/Unit.cpp before this file, include/Kinematics.h), operation for
  * operation, so the engine's results do not move by a bit.  Only the forward branch of a double-valued map is
  * modelled: a lab angle beyond the kinematic maximum is reported (AngleLimit), not converted.
  */

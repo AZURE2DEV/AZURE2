@@ -44,8 +44,8 @@
 #include "AZUREParams.h"
 #include "CNuc.h"
 #include "Config.h"
-#include "EData.h"
-#include "ESegment.h"
+#include "WorkingCopy.h"
+#include "Segment.h"
 
 Config *g_config = nullptr;
 
@@ -112,7 +112,7 @@ bool writeProject(const std::string &source, const std::string &target, bool con
 struct Model {
   Config cfg;
   CNuc *compound = nullptr;
-  EData *data = nullptr;
+  WorkingCopy *data = nullptr;
   AZUREParams params;
   explicit Model(const std::string &azr) : cfg(std::cout) {
     cfg.configfile = azr;
@@ -126,7 +126,7 @@ struct Model {
     g_config = &cfg;
     if (cfg.ReadConfigFile() < 0) return false;
     compound = new CNuc();
-    data = new EData();
+    data = new WorkingCopy();
     if (compound->Fill(cfg) == -1 || data->Fill(cfg, compound) == -1) return false;
     compound->Initialize(cfg);
     compound->FillMnParams(params, &cfg);
@@ -139,7 +139,7 @@ struct Model {
 // falls back to finite differences of Chi2Value where it does not).
 bool AdjointApplies(Model &m, const vector_r &p) {
   CNuc *lc = m.compound->Clone();
-  EData *ld = m.data->Clone();
+  WorkingCopy *ld = m.data->Clone();
   lc->FillCompoundFromParams(p);
   ld->FillNormsFromParams(p);
   azure2::Results results;
@@ -149,7 +149,7 @@ bool AdjointApplies(Model &m, const vector_r &p) {
   ParamIndexMap pmap = BuildParamIndexMap(lc, ld, std::vector<bool>());
   GradAccum accum;
   accum.Init(lc);
-  FitBarFn one = [](ESegment *, int, int, double) { return 1.0; };
+  FitBarFn one = [](const Segment *, int, int, double) { return 1.0; };
   const bool ok = AccumulateEGammaGradient(lc, ld, results, m.cfg, pmap, &sd, one, accum);
   delete lc;
   delete ld;

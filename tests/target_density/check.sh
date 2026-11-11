@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
 #
-# Fitted target density ("densityfit vary sigma [max]" and "densitygroup <label>" on a <targetInt> line).
+# Fitted target density (areal_density ... fit [prior ...] on a target record; one target record named by several data
+# sets is a density group; the old "densityfit" and "densitygroup" blocks of a <targetInt> line are the converter's).
 # Models from make_models.py: tests/13N, 12C(p,p) at 84.3 (and 114.5) deg lab, 0.3-0.9 MeV, levels fixed, a thin
 # target with a constant stopping cross section (10 keV at 1e18 atoms/cm^2).
 #
 #   1. data made at N = 1.1e18 (true.azr, 1 % errors): MIGRAD with the analytic gradient, --use-lm and --use-gsl-lm
-#      recover density_1 = 1.1e18 from 1e18 to 1e-4, with a final chi2 below 0.01 (122 at the start);
+#      recover the areal density N = 1.1e18 from 1e18 to 1e-4, with a final chi2 below 0.01 (122 at the start);
 #   2. the gradient: d chi2 / d N from finite differences agrees with the Jacobian path (AZURE_GRAD_CHECK);
 #   3. a 2 % prior about 1e18 pulls the fit between the two, Total-Density-Chi-Squared = ((N - 1e18)/2e16)^2;
-#   4. a density group: two segments, one parameter (density_1; no density_2), recovered from both;
+#   4. a density group: two segments, one parameter (t.areal_density, no other), recovered from both;
 #   5. densityfit on a line without target integration is refused.
 #
 #   ./tests/target_density/check.sh path/to/AZURE2
@@ -71,10 +72,10 @@ fi
 for v in "fit:--use-gradient" "fit_lm:--use-lm" "fit_gsl:--use-gsl-lm"; do
   name="${v%%:*}"; flags="${v#*:}"
   run "$name" "$HERE/fit.azr" 2 "$flags"
-  n="$(par "$name" density_1)"; c="$(chi "$name" Total-Chi-Squared)"
+  n="$(par "$name" tgt_meyer_84.areal_density)"; c="$(chi "$name" Total-Chi-Squared)"
   if [ -n "$n" ] && near "$n" 1.1e18 1e-4 && awk -v c="${c:-1e9}" 'BEGIN { exit !(c < 1e-2) }'; then
-    ok "$name ($flags): density_1 $n from 1e18 (truth 1.1e18), chi2 $c"
-  else bad "$name ($flags): density_1 ${n:-missing}, chi2 ${c:-missing}"; tail -5 "$WORK/$name/run.log"; fi
+    ok "$name ($flags): N $n from 1e18 (truth 1.1e18), chi2 $c"
+  else bad "$name ($flags): N ${n:-missing}, chi2 ${c:-missing}"; tail -5 "$WORK/$name/run.log"; fi
 done
 
 # ---- 2. the gradient ------------------------------------------------------------------------
@@ -85,26 +86,33 @@ else bad "gradient check: ${line:-no [grad-check] line}"; tail -5 "$WORK/grad/ru
 
 # ---- 3. a prior -------------------------------------------------------------------------------
 run prior "$HERE/fit_prior.azr" 2 "--use-gradient"
-n="$(par prior density_1)"; dc="$(chi prior Total-Density-Chi-Squared)"
+n="$(par prior tgt_meyer_84.areal_density)"; dc="$(chi prior Total-Density-Chi-Squared)"
 if [ -n "$n" ] && [ -n "$dc" ] && awk -v n="$n" -v s="$dc" 'BEGIN { p = ((n - 1e18) / 2e16)^2; d = s - p; if (d < 0) d = -d
        exit !(n > 1.0e18 && n < 1.1e18 && d <= 1e-4 * (p + 1)) }'; then
   ok "a 2 % prior pulls N to $n; Total-Density-Chi-Squared $dc = ((N - 1e18)/2e16)^2"
-else bad "prior fit: density_1 ${n:-missing}, Total-Density-Chi-Squared ${dc:-missing}"; tail -5 "$WORK/prior/run.log"; fi
+else bad "prior fit: N ${n:-missing}, Total-Density-Chi-Squared ${dc:-missing}"; tail -5 "$WORK/prior/run.log"; fi
 
 # ---- 4. a density group -----------------------------------------------------------------------
 run group "$HERE/fit_group.azr" 2 "--use-gradient"
-n="$(par group density_1)"; n2="$(par group density_2)"; c="$(chi group Total-Chi-Squared)"
+n="$(par group t.areal_density)"; n2="$(awk '$1 ~ /areal_density/ && $1 != "t.areal_density" { print $1 }' "$WORK/group/output/param.sav")"; c="$(chi group Total-Chi-Squared)"
 if [ -n "$n" ] && [ -z "$n2" ] && near "$n" 1.1e18 1e-4 && awk -v c="${c:-1e9}" 'BEGIN { exit !(c < 1e-2) }'; then
-  ok "a density group: one parameter, density_1 $n from both segments, chi2 $c"
-else bad "group fit: density_1 ${n:-missing}, density_2 '${n2}', chi2 ${c:-missing}"; tail -5 "$WORK/group/run.log"; fi
-if grep -q "the group's density is its first line's" "$WORK/group/run.log"; then ok "the second line's own density is noted and replaced"
-else bad "no note about the group member's own density"; fi
+  ok "a density group: one parameter, N $n from both segments, chi2 $c"
+else bad "group fit: N ${n:-missing}, density_2 '${n2}', chi2 ${c:-missing}"; tail -5 "$WORK/group/run.log"; fi
+# the old group's second line carried a density of its own, which the old engine replaced by the group's: the
+# converter drops it with a note (the format-3 group is one target record)
+OLDG="$HERE/../convert/fixtures/tests/target_density"
+(cd "$HERE" && "$AZURE2_BIN" --convert "$OLDG/fit_group.azr" "$WORK/group_conv.azr" --to 3 > "$WORK/group_conv.log" 2>&1)
+if grep -q "own density 2e+18 was not used by the old engine (the group's is its first line's): dropped" "$WORK/group_conv.log"; then
+  ok "the old group member's own density: dropped with a note by the converter"
+else bad "no converter note about the group member's own density"; fi
 
 # ---- 5. refused -------------------------------------------------------------------------------
-run bad "$HERE/bad.azr" 1 ""
-if grep -q "densityfit / densitygroup need target integration" "$WORK/bad/run.log" && [ ! -s "$(out bad)" ]; then
-  ok "densityfit on a line without target integration is refused"
-else bad "densityfit without target integration was not refused"; tail -5 "$WORK/bad/run.log"; fi
+# the old file (tests/convert/fixtures): a densityfit on a line without target integration, refused by the old engine;
+# the converter refuses it with that reason (format 3 has a fitted areal density only on a target record)
+(cd "$HERE" && "$AZURE2_BIN" --convert "$OLDG/bad.azr" "$WORK/bad_conv.azr" --to 3 > "$WORK/bad_conv.log" 2>&1)
+if grep -q "densityfit / densitygroup need target integration" "$WORK/bad_conv.log" && [ ! -f "$WORK/bad_conv.azr" ]; then
+  ok "densityfit on a line without target integration is refused (by the converter)"
+else bad "densityfit without target integration was not refused"; tail -3 "$WORK/bad_conv.log"; fi
 
 if [ "$failures" -eq 0 ]; then echo "PASS target_density"; exit 0; fi
 echo "FAIL target_density ($failures)"; exit 1

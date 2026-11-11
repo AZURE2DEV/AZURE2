@@ -317,7 +317,7 @@ for dirpath, _, files in os.walk(os.path.join(ROOT, "io")):
 #     structs) and the C++ standard library.  Its tests may also include io/'s reader ("azure2/io/..."): they read
 #     their fixtures as the engine will; so may the two files of the reading path, src/ProjectReader.cpp and
 #     src/LevelTablesOfRows.cpp (library azure2_experiment_reader, which links io/: records -> Validate -> <levels>
-#     tables -> Build, step 3b), which the table library azure2_experiment does not contain.  An engine header (EPoint.h, Config.h), another io/ header in
+#     tables -> Build, step 3b), which the table library azure2_experiment does not contain.  An engine header (Unit.h, Config.h), another io/ header in
 #     the table library or a system library makes the module depend on what it must not.
 for dirpath, _, files in os.walk(os.path.join(ROOT, "experiment")):
     for name in sorted(files):
@@ -429,8 +429,8 @@ PENALTIES = ("ParkNormPenalty", "AbundancePenalty", "AbundanceSumPenalty", "Scat
              "ScatteringLength::Residuals", "ScatteringLength::Chi2Gradient", "ModelData::Chi2", "ModelData::Residuals",
              "ModelData::Gradient", "ModelData::AppendRows",
              "ScreeningPenalty", "DensityPenalty", "DopplerPenalty", "ThicknessPenalty", "CovarianceChi2Correction")
-DEFINERS = {"src/Objective.cpp", "src/CNuc.cpp", "src/ScatteringLength.cpp", "src/ModelData.cpp", "src/EData.cpp",
-            "src/ESegment.cpp", "src/TargetEffect.cpp"}
+DEFINERS = {"src/Objective.cpp", "src/CNuc.cpp", "src/ScatteringLength.cpp", "src/ModelData.cpp", "src/WorkingCopy.cpp",
+            "src/Segment.cpp", "src/TargetEffect.cpp"}
 ALLOWED_PENALTY_USES = {
     # The MCMC splits the posterior: per-nucleus abundance priors are log-priors (CalculateLogPrior), so the
     # likelihood carries only the sum-to-one term (and the model data, Objective::ModelDataChi2); Park's wall rejects
@@ -440,21 +440,21 @@ ALLOWED_PENALTY_USES = {
     # The API's data chi^2 in residual form (EvaluateFilledChi2, the analytic gradient): T2 for its rows;
     # pyazr_objective checks it against the CLI's objective.
     ("api/src/AZUREAPI.cpp", "CovarianceChi2Correction"),
-    # The output writer, moved out of src/EData.cpp (docs/upgrade/edata_split.md N1): chiSquared.out prints the
+    # The output writer, moved out of src/WorkingCopy.cpp (docs/upgrade/edata_split.md N1): chiSquared.out prints the
     # target-effect prior totals, which Results::objective does not hold yet (decision D2 of the note).
-    ("src/EDataOutputFiles.cpp", "ScreeningPenalty"),
-    ("src/EDataOutputFiles.cpp", "DensityPenalty"),
-    ("src/EDataOutputFiles.cpp", "DopplerPenalty"),
-    ("src/EDataOutputFiles.cpp", "ThicknessPenalty"),
-    # The data covariance, moved out of src/EData.cpp (docs/upgrade/edata_split.md W2): the file defines the
+    ("src/DataOutputFiles.cpp", "ScreeningPenalty"),
+    ("src/DataOutputFiles.cpp", "DensityPenalty"),
+    ("src/DataOutputFiles.cpp", "DopplerPenalty"),
+    ("src/DataOutputFiles.cpp", "ThicknessPenalty"),
+    # The data covariance, moved out of src/WorkingCopy.cpp (docs/upgrade/edata_split.md W2): the file defines the
     # covariance term, and PrepareCovarianceSeeds evaluates it for the seeds the gradient reads.
-    ("src/EDataCovariance.cpp", "CovarianceChi2Correction"),
-    # The hand-over of a parameter vector, moved out of src/EData.cpp (docs/upgrade/edata_split.md M2): the file
-    # defines the target-effect prior totals (EData::ScreeningPenalty ...), each the sum of its effects' terms.
-    ("src/EDataHandOver.cpp", "ScreeningPenalty"),
-    ("src/EDataHandOver.cpp", "DensityPenalty"),
-    ("src/EDataHandOver.cpp", "DopplerPenalty"),
-    ("src/EDataHandOver.cpp", "ThicknessPenalty"),
+    ("src/DataCovarianceGroups.cpp", "CovarianceChi2Correction"),
+    # The hand-over of a parameter vector, moved out of src/WorkingCopy.cpp (docs/upgrade/edata_split.md M2): the file
+    # defines the target-effect prior totals (WorkingCopy::ScreeningPenalty ...), each the sum of its effects' terms.
+    ("src/HandOver.cpp", "ScreeningPenalty"),
+    ("src/HandOver.cpp", "DensityPenalty"),
+    ("src/HandOver.cpp", "DopplerPenalty"),
+    ("src/HandOver.cpp", "ThicknessPenalty"),
 }
 for top in ("src", "api/src"):
     for name in sorted(os.listdir(os.path.join(ROOT, top))):
@@ -643,10 +643,10 @@ for other in ("include/AZUREGrad.h", "include/AZURECalcMCMC.h", "pyazr/parameter
 
 # 25. The results of an evaluation belong to its caller (docs/upgrade/data_model.md S3, include/Results.h): a point and a
 #     data set hold where a record lies, never the values, so a copy of either cannot write into another owner's
-#     buffer.  EPoint.h (with EPointTables.h, its tables) and EData.h declare no member of a type that names
+#     buffer.  Unit.h (with UnitTables.h, its tables) and WorkingCopy.h declare no member of a type that names
 #     Results -- a value, pointer, reference, container or smart pointer.  Function declarations may name it (the
 #     buffer is passed in).
-for rel in ("include/EPoint.h", "include/EPointTables.h", "include/EData.h"):
+for rel in ("include/Unit.h", "include/UnitTables.h", "include/WorkingCopy.h"):
     text = re.sub(r"//[^\n]*|/\*.*?\*/|^\s*#[^\n]*", "", read(rel), flags=re.S | re.M)
     for stmt in re.split(r"[;{}]", text):
         if "(" in stmt or not re.search(r"\bResults\b", stmt):
@@ -679,11 +679,11 @@ if not RESIDUAL.search("double r = th - pt->GetCMCrossSection() * norm;"):
 # ... and the composition is the expression tree's (step S10, include/Predictions.h): the pieces it combines -- a
 # term's scaling and frame factor, a sample's abundance weight, the transmission / yield transform, the transform's
 # term list -- are read only where the tree's inputs are filled (src/ModelPass.cpp) or its setup is made
-# (src/Predictions.cpp), and defined in ESegment; experiment/ holds the arithmetic.  The adjoint of the composition is
+# (src/Predictions.cpp), and defined in Segment; experiment/ holds the arithmetic.  The adjoint of the composition is
 # the tree's backward too (step S11, azure2::ModelPointBackward), so the gradient reads none of them.
-PIECES = re.compile(r"(?<![\w:])(?:ESegment::)?(?:TermFrameFactor|RatioTermFrameFactor|TransformTerms|Transmission|YieldY0)"
+PIECES = re.compile(r"(?<![\w:])(?:Segment::)?(?:TermFrameFactor|RatioTermFrameFactor|TransformTerms|Transmission|YieldY0)"
                     r"\s*\(|(?:->|\.)GetComponentScaling\s*\(|(?:->|\.)GetAbundance\s*\(\s*\w*[Ss]ample")
-PIECES_ALLOWED = {"src/ModelPass.cpp", "src/Predictions.cpp", "src/ESegment.cpp", "include/ESegment.h"}
+PIECES_ALLOWED = {"src/ModelPass.cpp", "src/Predictions.cpp", "src/Segment.cpp", "include/Segment.h"}
 for top in ("src", "api/src", "include"):
     for name in sorted(os.listdir(os.path.join(ROOT, top))):
         rel = f"{top}/{name}"
@@ -694,31 +694,31 @@ for top in ("src", "api/src", "include"):
             problems.append(f"{rel}: composes a model value from its pieces ({m.group(0).strip()}); a data set's "
                             "prediction is its expression tree (include/Predictions.h, evaluated by "
                             "azure2::EvaluateModelPoint)")
-if not PIECES.search("w = compound->GetAbundance(sample, nucleus) * ESegment::TermFrameFactor(p, q);"):
+if not PIECES.search("w = compound->GetAbundance(sample, nucleus) * Segment::TermFrameFactor(p, q);"):
     problems.append("check 28: the composition pattern no longer matches the form it guards; update this check")
 
 
 # 29. The calculation plan (docs/upgrade/data_model.md S5, include/CalculationPlan.h): which point calculates which is
 #     the plan's, held by position in the data set (PointRef); a point holds the index of its task, never a pointer
 #     to another point.  A pointer from one point into another made Clone re-map every list, and a missed one had a
-#     working copy write into the original's points.  So: (a) no data member of EPoint is a pointer to an EPoint or a
+#     working copy write into the original's points.  So: (a) no data member of Unit is a pointer to an Unit or a
 #     container of such pointers; (b) the old mapped-point list and its accessors are gone; (c) a plan position is
-#     turned into a point (EData::PlanPoint) only by the plan (src/CalculationPlan.cpp), EPoint::PlanMapped and the
-#     plan's tests -- everything else asks EPoint::PlanMapped or the plan.
-POINT_PTR = re.compile(r"^\s*(?:mutable\s+)?(?:std::\w+<\s*)?(?:const\s+)?EPoint\s*\*(?:\s*>)?\s*\w+_\s*(?:=[^;]*)?;", re.M)
-eph = re.sub(r"//[^\n]*|/\*.*?\*/", "", read("include/EPoint.h"), flags=re.S)
-# the RAII scopes nested in EPoint (DopplerAppliedScope, ...) hold the point they set a flag on: not a member of EPoint
+#     turned into a point (WorkingCopy::PlanPoint) only by the plan (src/CalculationPlan.cpp), Unit::PlanMapped and the
+#     plan's tests -- everything else asks Unit::PlanMapped or the plan.
+POINT_PTR = re.compile(r"^\s*(?:mutable\s+)?(?:std::\w+<\s*)?(?:const\s+)?Unit\s*\*(?:\s*>)?\s*\w+_\s*(?:=[^;]*)?;", re.M)
+eph = re.sub(r"//[^\n]*|/\*.*?\*/", "", read("include/Unit.h"), flags=re.S)
+# the RAII scopes nested in Unit (DopplerAppliedScope, ...) hold the point they set a flag on: not a member of Unit
 eph = re.sub(r"\bclass\s+\w+Scope\b[^{;]*\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\};", "", eph)
 if "plan_task_" not in eph:
-    problems.append("check 29: EPoint's members are no longer found in include/EPoint.h; update this check")
+    problems.append("check 29: Unit's members are no longer found in include/Unit.h; update this check")
 for m in POINT_PTR.finditer(eph):
-    problems.append(f"include/EPoint.h: a point holds a pointer to a point ({m.group(0).strip()}); the calculation "
+    problems.append(f"include/Unit.h: a point holds a pointer to a point ({m.group(0).strip()}); the calculation "
                     "plan (include/CalculationPlan.h) says who calculates whom")
-if not POINT_PTR.search("  std::vector<EPoint *> mapped_;") or not POINT_PTR.search("  EPoint *host_ = nullptr;"):
+if not POINT_PTR.search("  std::vector<Unit *> mapped_;") or not POINT_PTR.search("  Unit *host_ = nullptr;"):
     problems.append("check 29: the member pattern no longer matches the forms it guards; update this check")
 OLD_MAPPING = re.compile(r"\b(?:\w*LocalMappedPoints?|local_mapped_points_|GetMappedPoints|EPointMapIterator)\b")
 PLAN_POINT = re.compile(r"\bPlanPoint\s*\(")
-PLAN_POINT_FILES = {"src/CalculationPlan.cpp", "src/EPoint.cpp", "include/EData.h", "tests/upgrade/plan_test.cpp"}
+PLAN_POINT_FILES = {"src/CalculationPlan.cpp", "src/Unit.cpp", "include/WorkingCopy.h", "tests/upgrade/plan_test.cpp"}
 for top in ("src", "api/src", "include", "tests/upgrade", "tests/reference"):
     for name in sorted(os.listdir(os.path.join(ROOT, top))):
         rel = f"{top}/{name}"
@@ -727,9 +727,9 @@ for top in ("src", "api/src", "include", "tests/upgrade", "tests/reference"):
         text = re.sub(r"//[^\n]*|/\*.*?\*/", "", read(rel), flags=re.S)
         if OLD_MAPPING.search(text):
             problems.append(f"{rel}: uses a mapped-point list of a point ({OLD_MAPPING.search(text).group(0)}); ask "
-                            "EPoint::PlanMapped or the calculation plan")
+                            "Unit::PlanMapped or the calculation plan")
         if rel not in PLAN_POINT_FILES and PLAN_POINT.search(text):
-            problems.append(f"{rel}: resolves a plan position itself (EData::PlanPoint); ask EPoint::PlanMapped or "
+            problems.append(f"{rel}: resolves a plan position itself (WorkingCopy::PlanPoint); ask Unit::PlanMapped or "
                             "the calculation plan (src/CalculationPlan.cpp)")
 
 
@@ -792,6 +792,34 @@ for rel, text in sorted(ALLOWED_MACHINE_PATHS - machine_path_hits):
 if not MACHINE_PATH.search("tools/runall.sh is in /" + "data0/x/tools") or not MACHINE_PATH.search("see " + HOME):
     problems.append("check 30: the path pattern no longer matches the forms it guards; update this check")
 
+# 31. The data classes are named after what they hold (docs/upgrade/data_structure.md): the data set (DataSet), the
+#     working copy (WorkingCopy), its units (Unit), a data set's segment (Segment).  The old names EData, ESegment and
+#     EPoint, which mixed settings and state, do not come back: no tracked file of the engine is named after them and no
+#     code names them.
+OLD_DATA_NAME = re.compile(r"\b(?:EData|ESegment|EPoint)\b")
+#     Two texts output files carry, kept as they were written so that those files stay byte-identical: the header of
+#     intEC.dat.sig (changes with the next signature version) and a comment the converter writes into a format-3
+#     project (changes with the converter's next fixture regeneration).
+OLD_DATA_NAME_OUTPUT = {("src/WorkingCopy.cpp", "see EData::ECSignature)"),
+                        ("convert/src/BuildData.cpp", "(the same index, EData::MakePoints)")}
+for rel in tracked_files():
+    if not rel.startswith(("src/", "include/", "api/", "tests/", "experiment/", "convert/", "io/", "physics/")):
+        continue
+    if re.match(r"(?:EData|ESegment|EPoint)", os.path.basename(rel)):
+        problems.append(f"{rel}: a file named after an old data class; see check 31")
+    if not rel.endswith((".cpp", ".h", ".hpp")):
+        continue
+    try:
+        text = read(rel)
+    except (OSError, UnicodeDecodeError):
+        continue
+    for number, line in enumerate(text.splitlines(), 1):
+        if OLD_DATA_NAME.search(line) and not any(r == rel and t in line for r, t in OLD_DATA_NAME_OUTPUT):
+            problems.append(f"{rel}:{number}: names an old data class ({OLD_DATA_NAME.search(line).group(0)}); the data "
+                            "set is DataSet, the working copy WorkingCopy, a unit Unit, a segment Segment (check 31)")
+if not OLD_DATA_NAME.search("EData *ld = data();") or OLD_DATA_NAME.search("EDataLike ECAmplitudeCache"):
+    problems.append("check 31: the old-name pattern no longer matches the forms it guards; update this check")
+
 if problems:
     for p in problems:
         print("FAIL", p)
@@ -799,4 +827,4 @@ if problems:
     sys.exit(1)
 print(f"repository consistent: {len(flags)} CLI flags, segment keywords, test registration, check.sh modes, pyazr version and exports, "
       f"format-3 reference page, {len(declared)} diagnostic codes, file sizes, one model pass and residual, one calculation plan, "
-      f"no machine paths")
+      f"no machine paths, no old data class names")

@@ -7,8 +7,8 @@
 #include <map>
 
 class CNuc;
-class EData;
-class EPoint;
+class WorkingCopy;
+class Unit;
 class Config;
 
 /// Fitted-parameter covariance, with each column tagged by its parameter
@@ -67,7 +67,7 @@ std::vector<std::vector<double>> RemapCovarianceToParamMap(const BandCovariance 
 struct BandData {
   CNuc *compound;
   std::vector<std::vector<double>> M;
-  std::map<EPoint *, std::vector<double>> grad;
+  std::map<Unit *, std::vector<double>> grad;
   /// One-sigma cross-section uncertainty from a gradient vector, \f$\sqrt{g^T M g}\f$.
   double dXS(const std::vector<double> &g) const;
 };
@@ -79,7 +79,7 @@ struct BandData {
 /// the model as it lies against the data scaled by n*.
 /// `fixedMask` (Minuit order) is the fixed set of the fit -- including an
 /// external param.par's "fixed" flags; null takes the .azr's alone.
-bool BuildBandData(CNuc *compound, EData *data, azure2::Results &results, const Config &config,
+bool BuildBandData(CNuc *compound, WorkingCopy *data, azure2::Results &results, const Config &config,
                    const BandCovariance &savedCov, BandData &out,
                    const std::vector<bool> *fixedMask = nullptr);
 

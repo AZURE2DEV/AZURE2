@@ -92,6 +92,7 @@ constexpr const char *kUnitNotAllowed = "E_UNIT_NOT_ALLOWED";
 constexpr const char *kNuisanceMode = "E_NUISANCE_MODE";
 constexpr const char *kModeNotAllowed = "E_MODE_NOT_ALLOWED";
 constexpr const char *kPriorSyntax = "E_PRIOR_SYNTAX";
+constexpr const char *kPriorCentre = "E_PRIOR_CENTRE";
 constexpr const char *kPartMissing = "E_PART_MISSING";
 constexpr const char *kPartTwice = "E_PART_TWICE";
 constexpr const char *kFormulaSyntax = "E_FORMULA_SYNTAX";

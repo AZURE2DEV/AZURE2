@@ -87,7 +87,7 @@ class ExtrapLine {
           }
         } else if (keyword == "transmission" || keyword == "yield") {
           // The fit form "n vary sigma" is read and its vary / sigma ignored: a test segment has no parameter and
-          // uses n (EData::MakePoints notes it).
+          // uses n (WorkingCopy::MakePoints notes it).
           double &n = (keyword == "transmission") ? transmission_ : yield_;
           bool fit = false;
           int vary = 0;
@@ -99,7 +99,7 @@ class ExtrapLine {
           }
           if (fit) thicknessFitIgnored_ = true;
         } else if (keyword == "covariance") {
-          hasCovariance_ = true;  // a data-segment block only: EData::MakePoints refuses the line
+          hasCovariance_ = true;  // a data-segment block only: WorkingCopy::MakePoints refuses the line
           break;
         } else if (keyword == "sqrtshift") {
           // data-segment blocks: a test segment has no shift, norm or shift function.  They used to stop the
@@ -244,7 +244,7 @@ class ExtrapLine {
 
   /// What could not be read when the line failed (empty when it did not, or for an older failure without a message).
   std::string parseError() const { return parseError_; };
-  /// A note about the line that did not fail it (printed by EData with the segment number).
+  /// A note about the line that did not fail it (printed by WorkingCopy with the segment number).
   std::string parseWarning() const { return parseWarning_; };
 
  private:

@@ -1,7 +1,7 @@
 // Unit test of the lab -> c.m. frames (azure2/experiment/Frames.h), using experiment/ and physics/ alone
 // (docs/upgrade/data_model.md step S6).
 //
-// 1. The engine's expressions as they stood in src/EPoint.cpp and include/Kinematics.h before S6, written out below
+// 1. The engine's expressions as they stood in src/Unit.cpp and include/Kinematics.h before S6, written out below
 //    on plain numbers, against the library on 20000 random kinematic settings each, bit for bit: an operation moved
 //    (pi / 180. * x as x * pi / 180., a factor taken out of a sum) changes the last bit somewhere and fails here.
 // 2. Closed forms, independent of those expressions:
@@ -81,7 +81,7 @@ double OldCMFromDecay(double m1, double m2, double e1) {
   return e1 + p2 / (std::sqrt(m2 * m2 + p2) + m2);
 }
 
-// EPoint::ConvertLabEnergy, both branches: cm, Ex, bin edges
+// Unit::ConvertLabEnergy, both branches: cm, Ex, bin edges
 void OldConvertLabEnergy(const Partition &p, bool rel, double eLab, double bl, double bh, double out[4]) {
   if (rel) {
     const double m1 = p.m1 * uconv, m2 = p.m2 * uconv;
@@ -98,13 +98,13 @@ void OldConvertLabEnergy(const Partition &p, bool rel, double eLab, double bl, d
   out[3] = bh * factor;
 }
 
-// EPoint::ConvertDecayEnergy
+// Unit::ConvertDecayEnergy
 double OldConvertDecayEnergy(const Partition &p, bool rel, double eLab) {
   if (rel) return OldCMFromDecay(p.m1 * uconv, p.m2 * uconv, eLab);
   return eLab / (p.m2) * (p.m1 + p.m2);
 }
 
-// EPoint::ConvertLabAngle(PPair *), non-relativistic part
+// Unit::ConvertLabAngle(PPair *), non-relativistic part
 bool OldElastic(const Partition &p, OldPoint &pt) {
   const double ratio = p.m1 / p.m2;
   if (ratio > 1.0) {
@@ -115,7 +115,7 @@ bool OldElastic(const Partition &p, OldPoint &pt) {
   return true;
 }
 
-// EPoint::ConvertLabAngleNR
+// Unit::ConvertLabAngleNR
 bool OldReactionNR(const Partition &in, const Partition &out, OldPoint &pt) {
   double qValue = in.sepE + in.exE - out.sepE - out.exE;
   double a13 = (in.m1 * out.m1) * pt.labEnergy / (pt.labEnergy + qValue) / (in.m1 + in.m2) / (out.m1 + out.m2);
@@ -138,7 +138,7 @@ bool OldReactionNR(const Partition &in, const Partition &out, OldPoint &pt) {
   return true;
 }
 
-// EPoint::RelativisticLabToCM
+// Unit::RelativisticLabToCM
 bool OldRelativistic(const Partition &in, const Partition &out, const OldPoint &pt, double nrCMAngle,
                      double &cmAngle, double &factor, double &maxOut) {
   const double m1 = in.m1 * uconv, m2 = in.m2 * uconv;

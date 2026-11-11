@@ -1,18 +1,18 @@
 # shared_tables_race
 
 Energy shifts on segments whose points are mapped onto points of another segment
-(`EData::MapData`), evaluated with several threads.
+(`WorkingCopy::MapData`), evaluated with several threads.
 
 Six segments at the same energies (the `shift_fn` test's linear-calibration data at 40 and
 90 degrees, three copies each) form one shift group with a fitted shift function, so every
 point of segments 2-6 is mapped onto a point of segment 1. On every fit step
-`EData::FillEnergyShiftsFromParams` re-energises the points in parallel, and each mapped
+`WorkingCopy::FillEnergyShiftsFromParams` re-energises the points in parallel, and each mapped
 point is re-energised by its own segment.
 
-Before the fix, `EPoint::RecalcEDependentValues` on the host point also gave its new tables
-to the points mapped onto it (`EPoint::CalcEDependentValues`, `mappedPoint->edep_ = edep_`).
+Before the fix, `Unit::RecalcEDependentValues` on the host point also gave its new tables
+to the points mapped onto it (`Unit::CalcEDependentValues`, `mappedPoint->edep_ = edep_`).
 That write came from the host's thread while the mapped point's own segment was re-energising
-the point on another thread (`EPoint::MutableEDep`). Two threads assigned the same
+the point on another thread (`Unit::MutableEDep`). Two threads assigned the same
 `shared_ptr`, and the tables were freed under the other thread's copy-on-write: a
 heap-use-after-free. Shared point tables (dev 3264896) turned an old overlapping write into a
 crash. AddressSanitizer found it on 2026-11-06. It caused the macOS CI aborts in `shift_fn`

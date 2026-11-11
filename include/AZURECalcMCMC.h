@@ -12,7 +12,7 @@
 #include <string>
 
 class Config;
-class EData;
+class WorkingCopy;
 class CNuc;
 class PriorCovariance;
 
@@ -28,10 +28,10 @@ class PriorCovariance;
 class AZURECalcMCMC {
  public:
   /*!
-   * The AZURECalcMCMC object is created with reference to an EData and CNuc object.
+   * The AZURECalcMCMC object is created with reference to an WorkingCopy and CNuc object.
    * The runtime configurations are also passed through a Config structure.
    */
-  AZURECalcMCMC(EData *data, CNuc *compound, const Config &configure) :
+  AZURECalcMCMC(WorkingCopy *data, CNuc *compound, const Config &configure) :
     configure_(configure),
     parametersInitialized_(false),
     pools_initialized_(false) {
@@ -147,9 +147,9 @@ class AZURECalcMCMC {
    */
   const Config &configure() const { return configure_; };
   /*!
-   * Returns a pointer to the EData object.
+   * Returns a pointer to the WorkingCopy object.
    */
-  EData *data() const { return data_; };
+  WorkingCopy *data() const { return data_; };
   /*!
    * Returns a pointer to the CNuc object.
    */
@@ -206,7 +206,7 @@ class AZURECalcMCMC {
 
  private:
   const Config &configure_;
-  EData *data_;
+  WorkingCopy *data_;
   CNuc *compound_;
   double theErrorDef;
 

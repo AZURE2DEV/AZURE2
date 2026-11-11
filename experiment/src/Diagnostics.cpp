@@ -53,6 +53,7 @@ const std::vector<DiagnosticCode> &DiagnosticCodes() {
       {kNuisanceMode, E, "a nuisance without its mode fixed or fit"},
       {kModeNotAllowed, E, "a nuisance mode or prior the quantity or field does not allow"},
       {kPriorSyntax, E, "a prior that is not 'prior <centre> <width>[%]' with a width > 0"},
+      {kPriorCentre, E, "a fitted norm whose prior is centred at 0 or below (its width is relative to the centre)"},
       {kPartMissing, E, "a structured value without one of its required keywords"},
       {kPartTwice, E, "a keyword given twice in a structured value"},
       {kFormulaSyntax, E, "a formula that is not quoted, or a parameter that is not <name>=<number>"},

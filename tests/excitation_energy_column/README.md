@@ -3,7 +3,7 @@
 The excitation-energy column of the output files includes the pair's
 excitation energy (audit 2026-10-25, 01_kinematics_frames B3; 2026-10-28).
 
-`EPoint::ConvertLabEnergy`, `ConvertExcitationEnergy` and `ConvertDecayEnergy`
+`Unit::ConvertLabEnergy`, `ConvertExcitationEnergy` and `ConvertDecayEnergy`
 set the point's excitation energy to E_cm + S, while the physics uses
 E_cm + S + E* of the pair (`CalcEDependentValues`). The E_x column of
 `AZUREOut_*` and the API's excitation energies were therefore low by E* for a

@@ -4,7 +4,7 @@
 A THM (HOES) excitation function has an arbitrary overall scale, so when its
 norm is free the engine does not fit it: every evaluation sets it to the
 chi-squared optimum n* = S_mm/S_md and counts S_dd - S_md^2/S_mm, with no norm
-penalty, and the norm is not a Minuit parameter (ESegment::IsProfiledNorm).
+penalty, and the norm is not a Minuit parameter (Segment::IsProfiledNorm).
 pyazr used to evaluate such a model at the norm written in the file (212924
 instead of 2137.83 on tests/7Li_p_a), list the profiled norm in
 parameter_info() (so ``m.parameters`` failed), refuse residual_jacobian, and

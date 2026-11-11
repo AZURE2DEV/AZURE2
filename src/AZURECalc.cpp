@@ -17,9 +17,9 @@
 #include "Config.h"
 #include "CNuc.h"
 #include "CNucReport.h"
-#include "EData.h"
-#include "ESegment.h"
-#include "EPoint.h"
+#include "WorkingCopy.h"
+#include "Segment.h"
+#include "Unit.h"
 #include "ParameterLimitsManager.h"
 #include "AZUREParams.h"
 #include "AZUREGrad.h"
@@ -104,14 +104,14 @@ bool g_deferCheckExit = false;
 // segment is self-contained: no components, and no point mapping onto segments
 // the shift does not move (see the eligibility guard in Gradient()).  All other segments then produce
 // identical +h/-h contributions that cancel in the central difference.
-double SegmentLocalChi2(ESegment *segment, CNuc *lc, const Config &config, EData *ld, azure2::Results &results) {
+double SegmentLocalChi2(const Segment *segment, CNuc *lc, const Config &config, WorkingCopy *ld, azure2::Results &results) {
   double chi = 0.0;
-  const double norm = segment->GetNorm();
+  const double norm = ld->State(*segment).norm;
   for (int pid = 0; pid < segment->NumPoints(); pid++) {
     azure2::EvaluateModelPoint(*ld, *segment, pid, lc, config, results, azure2::LeafValues::Calculate);
     chi += azure2::PointResidual(*ld, *segment, pid, results, norm).Chi2();
   }
-  segment->AddShiftPenalty(chi);
+  segment->AddShiftPenalty(ld->State(*segment), chi);
   return chi;
 }
 
@@ -130,37 +130,37 @@ struct ShiftParamTarget {
   ParamKind kind;
   int fnTerm;
   std::vector<int> segs;
-  double Get(EData *ld) const {
-    ESegment *seg = ld->GetSegment(segs.front());
-    if (kind == ParamKind::EnergyShiftSqrt) return seg->GetEnergyShiftSqrt();
-    if (kind == ParamKind::EnergyShiftFn) return seg->GetShiftFnValues()[fnTerm];
-    return seg->GetEnergyShift();
+  double Get(WorkingCopy *ld) const {
+    const Segment *seg = ld->Data().GetSegment(segs.front());
+    if (kind == ParamKind::EnergyShiftSqrt) return ld->State(*seg).energyShiftSqrt;
+    if (kind == ParamKind::EnergyShiftFn) return ld->State(*seg).shiftFnValues[fnTerm];
+    return ld->State(*seg).energyShift;
   }
-  void Set(EData *ld, double v) const {
+  void Set(WorkingCopy *ld, double v) const {
     for (int s : segs) {
-      ESegment *seg = ld->GetSegment(s);
-      if (kind == ParamKind::EnergyShiftSqrt) seg->SetEnergyShiftSqrt(v);
-      else if (kind == ParamKind::EnergyShiftFn) seg->SetShiftFnValue(fnTerm, v);
-      else seg->SetEnergyShift(v);
+      const Segment *seg = ld->Data().GetSegment(s);
+      if (kind == ParamKind::EnergyShiftSqrt) ld->State(*seg).energyShiftSqrt = v;
+      else if (kind == ParamKind::EnergyShiftFn) seg->SetShiftFnValue(ld->State(*seg), fnTerm, v);
+      else ld->State(*seg).energyShift = v;
     }
   }
   // Every member self-contained (no components, not a total-capture sum), so the
   // parameter moves these segments' rows and nothing else.
-  bool Local(EData *ld) const {
+  bool Local(WorkingCopy *ld) const {
     for (int s : segs) {
-      ESegment *seg = ld->GetSegment(s);
+      const Segment *seg = ld->Data().GetSegment(s);
       if (seg->HasComponents() || seg->IsTotalCapture()) return false;
     }
     return true;
   }
 };
 
-ShiftParamTarget ShiftTargets(EData *ld, const ParamDesc &d) {
+ShiftParamTarget ShiftTargets(WorkingCopy *ld, const ParamDesc &d) {
   ShiftParamTarget t{d.kind, d.fnTerm, {d.segment}};
   const int pos = d.segment - 1;
-  for (int s = 1; s <= ld->NumSegments(); s++) {
+  for (int s = 1; s <= ld->Data().NumSegments(); s++) {
     if (s == d.segment) continue;
-    ESegment *seg = ld->GetSegment(s);
+    const Segment *seg = ld->Data().GetSegment(s);
     if ((d.kind == ParamKind::EnergyShift && seg->GetShiftLeaderPos() == pos) ||
         (d.kind == ParamKind::EnergyShiftFn && seg->GetShiftFnSourcePos() == pos))
       t.segs.push_back(s);
@@ -169,18 +169,18 @@ ShiftParamTarget ShiftTargets(EData *ld, const ParamDesc &d) {
 }
 
 // For each segment (1-based), the other segments its points share a calculation
-// with through point mapping across segments (EData::MapData): those whose
+// with through point mapping across segments (WorkingCopy::MapData): those whose
 // points are mapped onto its points, and those its points are mapped onto.
-std::vector<std::vector<int>> CrossSegmentPartners(EData *ld) {
-  std::vector<std::vector<int>> partners(ld->NumSegments() + 1);
-  for (int s = 1; s <= ld->NumSegments(); s++) {
-    ESegment *seg = ld->GetSegment(s);
+std::vector<std::vector<int>> CrossSegmentPartners(WorkingCopy *ld) {
+  std::vector<std::vector<int>> partners(ld->Data().NumSegments() + 1);
+  for (int s = 1; s <= ld->Data().NumSegments(); s++) {
+    const Segment *seg = ld->Data().GetSegment(s);
     if (!seg) continue;
     for (int pid = 1; pid <= seg->NumPoints(); pid++) {
-      EPoint *pt = seg->GetPoint(*ld, pid);
+      Unit *pt = seg->GetPoint(*ld, pid);
       if (!pt || !pt->IsMapped()) continue;
       const int h = pt->GetMap().segment;
-      if (h == s || h < 1 || h > ld->NumSegments()) continue;
+      if (h == s || h < 1 || h > ld->Data().NumSegments()) continue;
       partners[s].push_back(h);
       partners[h].push_back(s);
     }
@@ -194,7 +194,7 @@ std::vector<std::vector<int>> CrossSegmentPartners(EData *ld) {
 
 // True when no point of `segs` shares a calculation with a point outside them.
 // A shift parameter that moves exactly `segs` can then be differenced on their
-// rows alone: EData::MapData maps across segments only where the shifts agree
+// rows alone: WorkingCopy::MapData maps across segments only where the shifts agree
 // as functions of the parameters, so mapped partners move together, and the
 // host -- first in data order -- is calculated first (`segs` is ascending).
 bool MappingConfined(const std::vector<std::vector<int>> &partners, const std::vector<int> &segs) {
@@ -206,7 +206,7 @@ bool MappingConfined(const std::vector<std::vector<int>> &partners, const std::v
 
 }  // namespace
 
-ShiftColumnCount FillShiftColumns(CNuc *lc, EData *ld, azure2::Results &results, const Config &config,
+ShiftColumnCount FillShiftColumns(CNuc *lc, WorkingCopy *ld, azure2::Results &results, const Config &config,
                                   const ParamIndexMap &pmap,
                                   const std::vector<bool> &fixed, const vector_r &full,
                                   const std::vector<char> *skipPacked, size_t nRes, int nCols, vector_r &jac) {
@@ -220,33 +220,33 @@ ShiftColumnCount FillShiftColumns(CNuc *lc, EData *ld, azure2::Results &results,
   // segment-local shift gradient in Gradient().
   bool rowLayoutUnknown = false;
   const std::vector<std::vector<int>> partners = CrossSegmentPartners(ld);
-  std::vector<int> rowStart(ld->NumSegments() + 2, 0);
-  std::vector<ESegment *> segments;
+  std::vector<int> rowStart(ld->Data().NumSegments() + 2, 0);
+  std::vector<const Segment *> segments;
   {
     int row = 0;
-    for (int s = 1; s <= ld->NumSegments(); s++) {
+    for (int s = 1; s <= ld->Data().NumSegments(); s++) {
       rowStart[s] = row;
-      ESegment *seg = ld->GetSegment(s);
+      const Segment *seg = ld->Data().GetSegment(s);
       if (!seg) continue;
       segments.push_back(seg);
       for (int pid = 0; pid < seg->NumPoints(); pid++) {
-        EPoint *pt = seg->GetPoint(*ld, pid + 1);
+        Unit *pt = seg->GetPoint(*ld, pid + 1);
         if (!pt) continue;
         row++;
       }
     }
-    rowStart[ld->NumSegments() + 1] = row;
+    rowStart[ld->Data().NumSegments() + 1] = row;
     if ((size_t)row != nRes) rowLayoutUnknown = true;  // row layout not understood: use the full path
   }
   // Residuals of one segment's rows, in row order, exactly as
   // ComputeResidualJacobian forms them.
-  auto segmentResiduals = [&](ESegment *seg, vector_r &out, bool parallel) {
+  auto segmentResiduals = [&](const Segment *seg, vector_r &out, bool parallel) {
     const int nPts = seg->NumPoints();
-    const double norm = seg->GetNorm();
+    const double norm = ld->State(*seg).norm;
     std::vector<double> byPoint(nPts, 0.0);
     std::vector<char> present(nPts, 0);
     auto one = [&](int pid) {
-      EPoint *pt = seg->GetPoint(*ld, pid + 1);
+      Unit *pt = seg->GetPoint(*ld, pid + 1);
       if (!pt) return;
       present[pid] = 1;
       azure2::EvaluateModelPoint(*ld, *seg, pid, lc, config, results, azure2::LeafValues::Calculate);
@@ -276,10 +276,10 @@ ShiftColumnCount FillShiftColumns(CNuc *lc, EData *ld, azure2::Results &results,
   auto allResiduals = [&](vector_r &out) {
     const bool pre = ld->CalculatePointsInParallel(segments, lc, config, results) == 0;
     out.clear();
-    for (ESegment *seg : segments) {
-      const double norm = seg->GetNorm();
+    for (const Segment *seg : segments) {
+      const double norm = ld->State(*seg).norm;
       for (int pid = 0; pid < seg->NumPoints(); pid++) {
-        EPoint *pt = seg->GetPoint(*ld, pid + 1);
+        Unit *pt = seg->GetPoint(*ld, pid + 1);
         if (!pt) continue;
         azure2::EvaluateModelPoint(*ld, *seg, pid, lc, config, results, pre ? azure2::LeafValues::Ready : azure2::LeafValues::Calculate);
         out.push_back(azure2::PointResidual(*ld, *seg, pid, results, norm).Pull());
@@ -308,7 +308,7 @@ ShiftColumnCount FillShiftColumns(CNuc *lc, EData *ld, azure2::Results &results,
       continue;
     }
     const int sNum = pmap.Desc(f).segment;
-    if (!rowLayoutUnknown && sNum >= 1 && sNum <= ld->NumSegments()) {
+    if (!rowLayoutUnknown && sNum >= 1 && sNum <= ld->Data().NumSegments()) {
       const ShiftParamTarget target = ShiftTargets(ld, pmap.Desc(f));
       // Mapping across segments keeps the column local while it stays among
       // the parameter's segments (MappingConfined): they are all moved, then
@@ -324,7 +324,7 @@ ShiftColumnCount FillShiftColumns(CNuc *lc, EData *ld, azure2::Results &results,
   // point (UpdatePointEnergyWithShift) and evaluating it touch only that
   // point.  (Parallel over segments instead left the largest segment running
   // alone at the end.)
-  auto updateSegment = [&](ESegment *seg) {
+  auto updateSegment = [&](const Segment *seg) {
     if (!InParallelRegion()) {
 #pragma omp parallel for schedule(dynamic, 1)
       for (int pid = 0; pid < seg->NumPoints(); pid++) seg->UpdatePointGroupEnergyWithShift(*ld, 0, pid, lc, &config);
@@ -340,13 +340,13 @@ ShiftColumnCount FillShiftColumns(CNuc *lc, EData *ld, azure2::Results &results,
     const double h = 1.0e-6 * (std::fabs(x0) + 1.0);
     const double d0 = ls.target.Get(ld);
     ls.target.Set(ld, x0 + h);
-    for (size_t m = 0; m < segs.size(); m++) updateSegment(ld->GetSegment(segs[m]));
-    for (size_t m = 0; m < segs.size(); m++) segmentResiduals(ld->GetSegment(segs[m]), rP[m], true);
+    for (size_t m = 0; m < segs.size(); m++) updateSegment(ld->Data().GetSegment(segs[m]));
+    for (size_t m = 0; m < segs.size(); m++) segmentResiduals(ld->Data().GetSegment(segs[m]), rP[m], true);
     ls.target.Set(ld, x0 - h);
-    for (size_t m = 0; m < segs.size(); m++) updateSegment(ld->GetSegment(segs[m]));
-    for (size_t m = 0; m < segs.size(); m++) segmentResiduals(ld->GetSegment(segs[m]), rM[m], true);
+    for (size_t m = 0; m < segs.size(); m++) updateSegment(ld->Data().GetSegment(segs[m]));
+    for (size_t m = 0; m < segs.size(); m++) segmentResiduals(ld->Data().GetSegment(segs[m]), rM[m], true);
     ls.target.Set(ld, d0);
-    for (size_t m = 0; m < segs.size(); m++) updateSegment(ld->GetSegment(segs[m]));
+    for (size_t m = 0; m < segs.size(); m++) updateSegment(ld->Data().GetSegment(segs[m]));
     for (size_t m = 0; m < segs.size(); m++) {
       const int sNum = segs[m];
       const size_t r0 = (size_t)rowStart[sNum], nSegRows = (size_t)(rowStart[sNum + 1] - rowStart[sNum]);
@@ -394,7 +394,7 @@ ShiftColumnCount FillShiftColumns(CNuc *lc, EData *ld, azure2::Results &results,
  * the largest or non-finite contributions, and their offending points (with any non-finite
  * target-effect sub-points).  At most 20 dumps per run.
  */
-void AZURECalc::DumpNonFinite(const vector_r &p, double chi, CNuc *lc, EData *ld, const azure2::Results &results) const {
+void AZURECalc::DumpNonFinite(const vector_r &p, double chi, CNuc *lc, WorkingCopy *ld, const azure2::Results &results) const {
   double threshold = std::atof(std::getenv("AZURE_DUMP_NONFINITE"));
   if (!(threshold > 1.0)) threshold = 1.0e10;
   if (std::isfinite(chi) && chi <= threshold) return;
@@ -435,32 +435,32 @@ void AZURECalc::DumpNonFinite(const vector_r &p, double chi, CNuc *lc, EData *ld
   }
   out << "-- segments with non-finite or largest chi2\n";
   std::vector<std::pair<double, int>> segs;
-  for (int i = 1; i <= ld->NumSegments(); i++) {
-    ESegment *seg = ld->GetSegment(i);
+  for (int i = 1; i <= ld->Data().NumSegments(); i++) {
+    const Segment *seg = ld->Data().GetSegment(i);
     if (!seg) continue;
     double c = 0.0;
     for (int pid = 1; pid <= seg->NumPoints(); pid++) {
-      EPoint *pt = seg->GetPoint(*ld, pid);
-      if (pt) c += azure2::PointResidual(*ld, *seg, pid - 1, results, seg->GetNorm()).Chi2();
+      Unit *pt = seg->GetPoint(*ld, pid);
+      if (pt) c += azure2::PointResidual(*ld, *seg, pid - 1, results, ld->State(*seg).norm).Chi2();
     }
     segs.push_back({std::isfinite(c) ? c : std::numeric_limits<double>::max(), i});
   }
   std::sort(segs.rbegin(), segs.rend());
   for (size_t k = 0; k < segs.size() && k < 5; k++) {
-    ESegment *seg = ld->GetSegment(segs[k].second);
+    const Segment *seg = ld->Data().GetSegment(segs[k].second);
     out << "  segment " << segs[k].second << " key " << seg->GetSegmentKey() << " (" << seg->GetEntranceKey() << "->"
         << seg->GetExitKey() << ") chi2 " << (segs[k].first == std::numeric_limits<double>::max() ? std::string("NON-FINITE") : std::to_string(segs[k].first))
-        << "  norm " << seg->GetNorm() << " shift " << seg->GetEnergyShift() << " sqrtshift " << seg->GetEnergyShiftSqrt() << "\n";
+        << "  norm " << ld->State(*seg).norm << " shift " << ld->State(*seg).energyShift << " sqrtshift " << ld->State(*seg).energyShiftSqrt << "\n";
     int shown = 0;
     for (int pid = 1; pid <= seg->NumPoints() && shown < 6; pid++) {
-      EPoint *pt = seg->GetPoint(*ld, pid);
+      Unit *pt = seg->GetPoint(*ld, pid);
       if (!pt) continue;
       const double fit = pt->GetModelValue(results);
-      const double pull = azure2::PointResidual(*ld, *seg, pid - 1, results, seg->GetNorm()).Pull();
+      const double pull = azure2::PointResidual(*ld, *seg, pid - 1, results, ld->State(*seg).norm).Pull();
       if (std::isfinite(fit) && std::fabs(pull) < 1.0e4) continue;
       shown++;
       out << "    point " << pid << " Elab " << pt->GetLabEnergy() << " Ecm " << pt->GetCMEnergy() << " angle "
-          << pt->GetCMAngle() << " fit " << fit << " data " << seg->CMValue(pid - 1) << " pull " << pull;
+          << pt->GetCMAngle() << " fit " << fit << " data " << Segment::CMValue(ld->State(*seg), pid - 1) << " pull " << pull;
       int nBad = 0;
       double firstBadE = 0.0, firstBadS = 0.0;
       for (int j = 1; j <= pt->NumSubPoints(); j++) {
@@ -491,7 +491,7 @@ double AZURECalc::operator()(const vector_r &p) const {
   bool isFit = data()->IsFit();
 
   CNuc *localCompound = NULL;
-  EData *localData = NULL;
+  WorkingCopy *localData = NULL;
   WorkingData *working = nullptr;
   if (isFit) {
     // New multithreading with object pools
@@ -551,7 +551,7 @@ double AZURECalc::operator()(const vector_r &p) const {
       std::vector<double> segPool, segFresh;
       Chi2On(localCompound, localData, results, p, &segPool);
       std::unique_ptr<CNuc> fc(compound()->Clone());
-      std::unique_ptr<EData> fd(data()->Clone());
+      std::unique_ptr<WorkingCopy> fd(data()->Clone());
       azure2::Results freshResults;
       os << " || fresh " << Chi2On(fc.get(), fd.get(), freshResults, p, &segFresh);
       for (size_t s = 1; s < segPool.size() && s < segFresh.size(); s++)
@@ -608,7 +608,7 @@ void AZURECalc::WriteIterationOutput(const vector_r &p) const {
   if (!output_compound_) output_compound_.reset(compound()->Clone());
   if (!output_data_) output_data_.reset(data()->Clone());
   CNuc *lc = output_compound_.get();
-  EData *ld = output_data_.get();
+  WorkingCopy *ld = output_data_.get();
   azure2::Results &results = output_results_;
 
   try {
@@ -643,11 +643,11 @@ void AZURECalc::WriteIterationOutput(const vector_r &p) const {
   }
 }
 
-bool AZURECalc::PrecalculatePoints(CNuc *lc, EData *ld, azure2::Results &results, bool thmOnly) const {
+bool AZURECalc::PrecalculatePoints(CNuc *lc, WorkingCopy *ld, azure2::Results &results, bool thmOnly) const {
   // thmOnly: the THM segments alone (the THM-only finite differences of Chi2On).
-  std::vector<ESegment *> segments;
-  for (int i = 1; i <= ld->NumSegments(); i++) {
-    ESegment *seg = ld->GetSegment(i);
+  std::vector<const Segment *> segments;
+  for (int i = 1; i <= ld->Data().NumSegments(); i++) {
+    const Segment *seg = ld->Data().GetSegment(i);
     if (!seg || (thmOnly && !seg->IsTHM())) continue;
     segments.push_back(seg);
   }
@@ -661,7 +661,7 @@ bool AZURECalc::PrecalculatePoints(CNuc *lc, EData *ld, azure2::Results &results
  * cost that scales with the THM points alone.  The nuisance, Park and abundance
  * penalties are left out there: Gradient() adds them analytically.
  */
-double AZURECalc::Chi2On(CNuc *lc, EData *ld, azure2::Results &results, const vector_r &p, std::vector<double> *segChis,
+double AZURECalc::Chi2On(CNuc *lc, WorkingCopy *ld, azure2::Results &results, const vector_r &p, std::vector<double> *segChis,
                          bool thmOnly) const {
   lc->FillCompoundFromParams(p);
   ld->FillNormsFromParams(p);
@@ -670,9 +670,9 @@ double AZURECalc::Chi2On(CNuc *lc, EData *ld, azure2::Results &results, const ve
   if (configure().paramMask & Config::USE_BRUNE_FORMALISM) lc->CalcShiftFunctions(configure(), false);
   const bool pre = PrecalculatePoints(lc, ld, results, thmOnly);
 
-  for (int i = 1; i <= ld->NumSegments(); i++)
-    if (!thmOnly || ld->GetSegment(i)->IsTHM())
-      azure2::EvaluateModelSegment(*ld, *ld->GetSegment(i), lc, configure(), results,
+  for (int i = 1; i <= ld->Data().NumSegments(); i++)
+    if (!thmOnly || ld->Data().GetSegment(i)->IsTHM())
+      azure2::EvaluateModelSegment(*ld, *ld->Data().GetSegment(i), lc, configure(), results,
                                    pre ? azure2::LeafValues::Ready : azure2::LeafValues::Calculate);
   // The objective of operator() (Objective.h), on these working copies: the finite-difference columns of
   // Gradient(), the AZURE_GRAD_CHECK reference and the LM / GSL-LM cost differentiate or minimize the same function.
@@ -700,7 +700,7 @@ double AZURECalc::Chi2Value(const vector_r &p, bool thmOnly) const {
     static std::atomic<int> pc{0};
     if (++pc <= 5) {
       CNuc *fc = compound()->Clone();
-      EData *fd = data()->Clone();
+      WorkingCopy *fd = data()->Clone();
       std::vector<double> segFresh;
       setEnvVar("AZURE_SERIAL_CHI2", "1");  // reference: per-point (serial) path on a fresh copy
       azure2::Results freshResults;
@@ -781,7 +781,7 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
   // Clone() re-shifted every shifted segment and rebuilt the mapping each time (~1 s here).
   CNuc *lc = GetPooledCNuc();
   WorkingData *working = GetPooledData();
-  EData *ld = working->data.get();
+  WorkingCopy *ld = working->data.get();
   azure2::Results &results = working->results;
   lc->FillCompoundFromParams(p);
   ld->FillNormsFromParams(p);
@@ -804,16 +804,16 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
   // gives the analytic normalization gradient, accumulated per segment here so
   // it needs no extra forward pass:
   //   d(chi2)/d(n_s) = sum_pts [ -2 r data/(cmErr^2 n^2) - 2 r^2/(cmErr^2 n^3) ].
-  std::vector<double> normData(ld->NumSegments() + 1, 0.0);
+  std::vector<double> normData(ld->Data().NumSegments() + 1, 0.0);
   // A data covariance couples the points: their cotangent is 2 (M^-1 r)_i / (cmErr n), which
   // needs every residual of the group first (one forward pass of those points).
-  if (ld->HasCovariance()) ld->PrepareCovarianceSeeds(lc, configure(), results);
-  FitBarFn fitBarFn = [&](ESegment *seg, int i, int pid, double model) -> double {
-    EPoint *pt = seg->GetPoint(*ld, pid + 1);
+  if (ld->Data().HasCovariance()) ld->PrepareCovarianceSeeds(lc, configure(), results);
+  FitBarFn fitBarFn = [&](const Segment *seg, int i, int pid, double model) -> double {
+    Unit *pt = seg->GetPoint(*ld, pid + 1);
     if (!pt) return 0.0;
-    double norm = seg->GetNorm();
-    double dataval = seg->CMValue(pid);
-    double cmErr = seg->CMError(pid);
+    double norm = ld->State(*seg).norm;
+    double dataval = Segment::CMValue(ld->State(*seg), pid);
+    double cmErr = Segment::CMError(ld->State(*seg), pid);
     const azure2::Residual res = azure2::DataResidual(model, dataval, cmErr, norm);
     const double r = res.difference, err = res.error;
     if (err == 0.0) return 0.0;
@@ -821,8 +821,8 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
       // chi2 = r^T M^-1 r with r_i = (model - d n)/(cmErr n): d chi2/d r_i = 2 z_i, z = M^-1 r;
       // d r_i/d model = 1/(cmErr n), d r_i/d n = -model/(cmErr n^2).
       const double z = pt->GetCovarianceSeed(results);
-      const int o = ld->NormOwner(i);
-      if (norm != 0.0 && o >= 1 && o < (int)normData.size() && ld->GetSegment(o)->IsVaryNorm()) {
+      const int o = ld->Data().NormOwner(i);
+      if (norm != 0.0 && o >= 1 && o < (int)normData.size() && ld->Data().GetSegment(o)->IsVaryNorm()) {
         const double dNorm = -2.0 * z * model / (cmErr * norm * norm);
 #pragma omp atomic
         normData[o] += dNorm;
@@ -830,8 +830,8 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
       return 2.0 * z / err;
     }
     // A norm-group follower's points move its leader's norm (o), the one parameter.
-    const int o = ld->NormOwner(i);
-    if (norm != 0.0 && o >= 1 && o < (int)normData.size() && ld->GetSegment(o)->IsVaryNorm()) {
+    const int o = ld->Data().NormOwner(i);
+    if (norm != 0.0 && o >= 1 && o < (int)normData.size() && ld->Data().GetSegment(o)->IsVaryNorm()) {
       double e2 = cmErr * cmErr;
       // fitBarFn runs inside the parallel point loop of AccumulateEGammaGradient,
       // and all points of a segment share the same normData[o], so guard the
@@ -868,8 +868,8 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
     ForEachThicknessPrior(ld, pmap, [&](int idx, double nominal, double e) {  // sample-thickness priors
       if (idx < (int)grad.size()) grad[idx] += 2.0 * (p[idx] - nominal) / (e * e);
     });
-    for (int s = 1; s <= ld->NumSegments(); s++) {  // normalizations
-      ESegment *seg = ld->GetSegment(s);
+    for (int s = 1; s <= ld->Data().NumSegments(); s++) {  // normalizations
+      const Segment *seg = ld->Data().GetSegment(s);
       if (!seg || !seg->IsVaryNorm() || seg->IsNormGroupFollower()) continue;  // a follower's norm is fixed
       // THM segments never enter the analytic accumulation (their normData
       // stays 0); their norm gradient -- data term AND penalty -- comes from
@@ -880,7 +880,7 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
       double g = normData[s];
       double n0 = seg->GetNominalNorm();
       double nerr = n0 / 100.0 * seg->GetNormError();
-      if (nerr != 0.0 && !seg->IsNormPriorReplaced()) g += 2.0 * (seg->GetNorm() - n0) / (nerr * nerr);
+      if (nerr != 0.0 && !seg->IsNormPriorReplaced()) g += 2.0 * (ld->State(*seg).norm - n0) / (nerr * nerr);
       grad[idx] = g;
     }
   }
@@ -896,8 +896,8 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
   // and everything with AZURE2_THM_FD=1, by central differences of the
   // THM-only chi^2).
   bool haveTHM = false;
-  for (int s = 1; s <= data()->NumSegments() && !haveTHM; s++) {
-    ESegment *seg = data()->GetSegment(s);
+  for (int s = 1; s <= data()->Data().NumSegments() && !haveTHM; s++) {
+    const Segment *seg = data()->Data().GetSegment(s);
     if (seg && seg->IsTHM()) haveTHM = true;
   }
 
@@ -926,7 +926,7 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
 
   // Segment-local energy-shift gradient is exact only when a shift's effect is
   // confined to its own segments' data term.  Point mapping across segments
-  // (EData::MapData) keeps it so as long as the mapped partners of those
+  // (WorkingCopy::MapData) keeps it so as long as the mapped partners of those
   // segments are among them (MappingConfined): partners move together, and
   // groupChi re-energises them all before it calculates them, host first.
   // Nuisance penalties handled by the limits manager can couple a shift to the
@@ -956,7 +956,7 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
       if (kind == ParamKind::Norm) {
         // A norm belongs to exactly one segment: non-THM norms are fully
         // analytic (handled above); THM norms are fully finite-difference.
-        ESegment *seg = data()->GetSegment(pmap.Desc(idx).segment);
+        const Segment *seg = data()->Data().GetSegment(pmap.Desc(idx).segment);
         if (!seg || !seg->IsTHM()) continue;
       }
       double x0 = p[idx];
@@ -987,25 +987,25 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
       // chi2 is not a sum over its segments).
       bool inThmGroup = false, inCovariance = false;
       for (int m : target.segs) {
-        inThmGroup = inThmGroup || ld->ThmGroupOf(m) >= 0;
-        inCovariance = inCovariance || ld->GetSegment(m)->GetCovarianceGroup() >= 0;
+        inThmGroup = inThmGroup || ld->Data().ThmGroupOf(m) >= 0;
+        inCovariance = inCovariance || ld->Data().GetSegment(m)->GetCovarianceGroup() >= 0;
       }
       if (!inCovariance && target.Local(ld) && !inThmGroup && MappingConfined(partners, target.segs)) {
         auto groupChi = [&](double v) {
           target.Set(ld, v);
           // Every segment is moved before any is calculated: a host calculates
           // the observables of points mapped onto it from other segments, with
-          // their energy-dependent values (EPoint::Calculate).
-          for (int m : target.segs) ld->GetSegment(m)->UpdatePointEnergiesWithShift(*ld, lc, &configure());
+          // their energy-dependent values (Unit::Calculate).
+          for (int m : target.segs) ld->Data().GetSegment(m)->UpdatePointEnergiesWithShift(*ld, lc, &configure());
           double c = 0.0;
-          for (int m : target.segs) c += SegmentLocalChi2(ld->GetSegment(m), lc, configure(), ld, results);
+          for (int m : target.segs) c += SegmentLocalChi2(ld->Data().GetSegment(m), lc, configure(), ld, results);
           return c;
         };
         const double d0 = target.Get(ld);
         double chiP = groupChi(x0 + h);
         double chiM = groupChi(x0 - h);
         target.Set(ld, d0);  // restore base state on the clone
-        for (int m : target.segs) ld->GetSegment(m)->UpdatePointEnergiesWithShift(*ld, lc, &configure());
+        for (int m : target.segs) ld->Data().GetSegment(m)->UpdatePointEnergiesWithShift(*ld, lc, &configure());
         grad[idx] = (chiP - chiM) / (2.0 * h);
 
         // Optional self-check: compare against the exact full-dataset finite
@@ -1036,7 +1036,7 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
     fdWhole[idx] = 1;
   }
   // Prior parameter covariance: 2 C^-1 (p - mu) on its parameters.
-  if (const PriorCovariance *pc = ld->GetPriorCovariance()) {
+  if (const PriorCovariance *pc = ld->Data().GetPriorCovariance()) {
     std::vector<double> pg(p.size(), 0.0);
     pc->AddGradient(p, pg);
     for (size_t i = 0; i < grad.size() && i < pg.size(); i++)
@@ -1108,7 +1108,7 @@ std::vector<double> AZURECalc::Gradient(const std::vector<double> &p) const {
         for (int v : parseList(ci)) extra.push_back(v);
       if (const char *cs = std::getenv("AZURE_GRAD_CHECK_SEGS"))
         for (int sNum : parseList(cs)) {
-          if (sNum < 1 || sNum > ld->NumSegments()) continue;
+          if (sNum < 1 || sNum > ld->Data().NumSegments()) continue;
           extra.push_back(pmap.NormIndex(sNum));
           extra.push_back(pmap.EnergyShiftIndex(sNum));
           extra.push_back(pmap.EnergyShiftSqrtIndex(sNum));
@@ -1288,7 +1288,7 @@ bool AZURECalc::ResidualJacobian(const vector_r &full, vector_r &residuals,
   // Clone() re-shifted every shifted segment and rebuilt the mapping each time (~1 s here).
   CNuc *lc = GetPooledCNuc();
   WorkingData *working = GetPooledData();
-  EData *ld = working->data.get();
+  WorkingCopy *ld = working->data.get();
   azure2::Results &results = working->results;
   lc->FillCompoundFromParams(full);
   ld->FillNormsFromParams(full);
@@ -1336,7 +1336,7 @@ bool AZURECalc::ResidualJacobian(const vector_r &full, vector_r &residuals,
 
   // Data covariance: whiten the data rows (and their Jacobian rows, energy-shift columns
   // included), w = W r per group (W^T W = M^-1), so sum w^2 = r^T M^-1 r.
-  if (ok && ld->HasCovariance()) ld->WhitenResidualRows(residuals, &jac, nCols);
+  if (ok && ld->Data().HasCovariance()) ld->WhitenResidualRows(residuals, &jac, nCols);
 
   // The model data (T9): their rows after the data rows, with their Jacobian rows (no energy-shift column).
   if (ok) ok = Objective::Engine().AppendModelDataRows(ObjectiveContext{lc, ld, results, full, configure()}, pmap, sdp,
@@ -1345,7 +1345,7 @@ bool AZURECalc::ResidualJacobian(const vector_r &full, vector_r &residuals,
   // Prior parameter covariance: its n whitened rows L^-1 (p - mu) last, Jacobian L^-1 on its parameters' columns.
   // The least-squares drivers (LM, GSL), the Jacobian-path gradient and G2 take the prior from these rows.
   if (ok)
-    if (const PriorCovariance *pc = ld->GetPriorCovariance())
+    if (const PriorCovariance *pc = ld->Data().GetPriorCovariance())
       pc->AppendRows(full, [&](int f) { return f < pmap.NumFull() ? pmap.FullToPacked(f) : -1; }, nCols, residuals,
                      &jac);
   // Park's J > 0 wall and the abundance sum-to-one term as rows (Objective.h AppendModelRows; objective.md D2, D7).
@@ -1705,7 +1705,7 @@ bool AZURECalc::ResidualsOnly(const vector_r &full, vector_r &residuals) const {
   // Clone() re-shifted every shifted segment and rebuilt the mapping each time (~1 s here).
   CNuc *lc = GetPooledCNuc();
   WorkingData *working = GetPooledData();
-  EData *ld = working->data.get();
+  WorkingCopy *ld = working->data.get();
   azure2::Results &results = working->results;
   lc->FillCompoundFromParams(full);
   ld->FillNormsFromParams(full);
@@ -1713,20 +1713,20 @@ bool AZURECalc::ResidualsOnly(const vector_r &full, vector_r &residuals) const {
   if (configure().paramMask & Config::USE_BRUNE_FORMALISM) lc->CalcShiftFunctions(configure(), false);
 
   residuals.clear();
-  for (int i = 1; i <= ld->NumSegments(); i++) {
-    ESegment *segment = ld->GetSegment(i);
+  for (int i = 1; i <= ld->Data().NumSegments(); i++) {
+    const Segment *segment = ld->Data().GetSegment(i);
     if (!segment) continue;
-    const double norm = segment->GetNorm();
+    const double norm = ld->State(*segment).norm;
     for (int pid = 0; pid < segment->NumPoints(); pid++) {
       azure2::EvaluateModelPoint(*ld, *segment, pid, lc, configure(), results, azure2::LeafValues::Calculate);
       residuals.push_back(azure2::PointResidual(*ld, *segment, pid, results, norm).Pull());
     }
   }
-  if (ld->HasCovariance()) ld->WhitenResidualRows(residuals, nullptr, 0);
+  if (ld->Data().HasCovariance()) ld->WhitenResidualRows(residuals, nullptr, 0);
   // The model data (T9), as in ResidualJacobian.
   Objective::Engine().ModelDataResiduals(ObjectiveContext{lc, ld, results, full, configure()}, residuals);
   // Prior parameter covariance, as the last rows of ResidualJacobian.
-  if (const PriorCovariance *pc = ld->GetPriorCovariance())
+  if (const PriorCovariance *pc = ld->Data().GetPriorCovariance())
     pc->AppendRows(full, [](int) { return -1; }, 0, residuals, nullptr);
   // Park and abundance-sum rows, as the last rows of ResidualJacobian.
   AppendModelRows(lc, configure(), nullptr, 0, residuals, nullptr);
@@ -1920,7 +1920,7 @@ double AZURECalc::RunGSLNonlinear(AZUREParams &params, int maxIter,
 }
 
 bool AZURECalc::CoveredByPriorCovariance(int f) const {
-  const PriorCovariance *pc = data()->GetPriorCovariance();
+  const PriorCovariance *pc = data()->Data().GetPriorCovariance();
   if (!pc) return false;
   const std::vector<int> &listed = pc->FullIndex();
   return std::find(listed.begin(), listed.end(), f) != listed.end();
@@ -1965,7 +1965,7 @@ double AZURECalc::CalculateNuisanceChiSquared(const vector_r &p) const {
 }
 
 /*!
- * Initialize object pools with pre-allocated CNuc and EData objects
+ * Initialize object pools with pre-allocated CNuc and WorkingCopy objects
  */
 void AZURECalc::InitializePools() const {
   std::lock_guard<std::mutex> lock(pool_mutex_);
@@ -1984,9 +1984,9 @@ void AZURECalc::InitializePools() const {
     cnuc_pool_.push(std::unique_ptr<CNuc>(compound()->Clone()));
   }
 
-  // Pre-allocate EData objects by cloning once, each with an empty buffer (sized by its first evaluation)
+  // Pre-allocate WorkingCopy objects by cloning once, each with an empty buffer (sized by its first evaluation)
   for (int i = 0; i < pool_size; ++i) {
-    edata_pool_.push(std::unique_ptr<WorkingData>(new WorkingData{std::unique_ptr<EData>(data()->Clone()), {}}));
+    edata_pool_.push(std::unique_ptr<WorkingData>(new WorkingData{std::unique_ptr<WorkingCopy>(data()->Clone()), {}}));
   }
 
   pools_initialized_ = true;
@@ -2021,7 +2021,7 @@ WorkingData *AZURECalc::GetPooledData() const {
   }
 
   // Fallback: create new if pool is empty (shouldn't happen often)
-  return new WorkingData{std::unique_ptr<EData>(data_->Clone()), {}};
+  return new WorkingData{std::unique_ptr<WorkingCopy>(data_->Clone()), {}};
 }
 
 /*!

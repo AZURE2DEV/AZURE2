@@ -7,7 +7,7 @@
 #include "azure2/physics/ChannelFunctions.h"
 #include "azure2/physics/Constants.h"
 
-// The expressions below are those of src/EPoint.cpp (ConvertLabEnergy, ConvertDecayEnergy, ConvertLabAngle,
+// The expressions below are those of src/Unit.cpp (ConvertLabEnergy, ConvertDecayEnergy, ConvertLabAngle,
 // ConvertLabAngleNR, RelativisticLabToCM, ConvertLabAngleGammas, ConvertCrossSection,
 // CalculateCrossSectionConversionFactor, CalculateCrossSectionGammaConversionFactor) and include/Kinematics.h
 // (CMFromLab, LabFromCM, CMFromDecay) as they stood, written with the same operations in the same order: the engine
@@ -245,7 +245,7 @@ void Merge(AngleLimit &into, const AngleLimit &from) {
 
 namespace {
 
-// The relativistic map of the detected particle at the row's c.m. energy (EPoint::RelativisticLabToCM before).
+// The relativistic map of the detected particle at the row's c.m. energy (Unit::RelativisticLabToCM before).
 bool RelativisticAngle(const Partition &in, const Partition &out, const FrameRow &row, double thetaLab,
                        double nrCMAngle, double &cmAngle, double &factor, AngleLimit &lim) {
   AngleLimit l;
@@ -265,7 +265,7 @@ bool ReactionAngleNR(const FrameRule &r, const FrameRow &row, double thetaLab, d
   return true;
 }
 
-// The c.m. angle of a detected particle (EPoint::ConvertLabAngle, both forms, before).
+// The c.m. angle of a detected particle (Unit::ConvertLabAngle, both forms, before).
 bool ParticleAngle(const FrameRule &r, FrameRow &row, double thetaLab, AngleLimit &lim) {
   if (r.elastic) {
     AngleLimit l;
@@ -294,7 +294,7 @@ bool ParticleAngle(const FrameRule &r, FrameRow &row, double thetaLab, AngleLimi
   return ReactionAngleNR(r, row, thetaLab, row.thetaCM, lim);
 }
 
-// y and dy of a detected particle in the c.m. frame (EPoint::ConvertCrossSection before).  Relativistic: where the
+// y and dy of a detected particle in the c.m. frame (Unit::ConvertCrossSection before).  Relativistic: where the
 // map does not reach the lab angle the Jacobian the row started with is kept.
 void ParticleValue(const FrameRule &r, FrameRow &row, double thetaLab, double y, double dy, AngleLimit &lim) {
   if (r.relativistic) {

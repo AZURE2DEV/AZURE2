@@ -6,18 +6,18 @@ the lab with its **own** pair's Jacobian.
 A lab-frame differential RATIO segment (`isDiff` 1, Advanced Mode "Ratio") compares the data with
 base / denominator in the lab.  Each term is evaluated in the c.m. frame of its own pair, σ_lab =
 σ_cm / J, so the model is (σ_cm,base / σ_cm,den) (J_den / J_base).  Up to dev 1b6c346
-`ESegment::CalculateTheoreticalCrossSection` computed both factors with the **base** segment's entrance
+`Segment::CalculateTheoreticalCrossSection` computed both factors with the **base** segment's entrance
 and exit pair and the base exit's type (audit 2026-10-25, item 15).  That was right for a denominator of
 the same pair, and for another particle pair at a general angle without `relativistic=1` (the
 non-relativistic Jacobian uses only the point's own lab and c.m. angles), but wrong for a denominator to
 another exit pair with `relativistic=1` (the Jacobian comes from the pair kinematics) or at exactly 0 or
 180 deg (the mass formula), and for a photon over a particle or a particle over a photon (the wrong kind
-of Jacobian for one of the two).  `ESegment::RatioTermFrameFactor` now gives each term its own factor,
+of Jacobian for one of the two).  `Segment::RatioTermFrameFactor` now gives each term its own factor,
 and 1 for a ratio that is not a lab-frame differential one (c.m., angle-integrated), as before.
 
 A second, related defect: in mode 3 the lab output (`kinflag.dat` = 1) of a RATIO test segment was
-divided by J_base, because `EData::MakePoints` converted the test points' cross sections while
-`ESegment::Fill` skips that for a (dimensionless) ratio data segment.  `MakePoints` skips it too now.
+divided by J_base, because `WorkingCopy::MakePoints` converted the test points' cross sections while
+`Segment::Fill` skips that for a (dimensionless) ratio data segment.  `MakePoints` skips it too now.
 
 ## Models (`make_models.py`)
 

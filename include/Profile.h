@@ -23,7 +23,7 @@ namespace AZUREProfile {
 enum Stage {
   kEvaluation,       ///< one chi-squared evaluation (AZURECalc::operator())
   kPoints,           ///< the parallel pass over the points of an evaluation
-  kEDependent,       ///< Coulomb functions, penetrabilities, shifts (EPoint::CalcEDependentValues)
+  kEDependent,       ///< Coulomb functions, penetrabilities, shifts (Unit::CalcEDependentValues)
   kFill,             ///< level-matrix (or channel-matrix) fill
   kFactor,           ///< factorization / channel-space solve
   kTMatrix,          ///< T-matrix from the solved matrices
