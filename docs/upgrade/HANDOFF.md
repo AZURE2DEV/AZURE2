@@ -2,6 +2,35 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-11 (agent, tree to format 3, second part) — shifts and apparatus projects, the director's decisions (`feature/upgrade-4-tree-format3-2`)
+
+**Done** (`AA2_tree_to_format3_rest.md`; plan and state: `docs/upgrade/format3_tree.md`). 126 of the 185 convertible
+project files are format 3 (34 more): the shift projects (`shift_fn`, `shift_groups`, `energy_shift_sqrt`,
+`pyazr/data/shift_fn_groups`) and the target, screening, covariance and apparatus projects (`electron_screening`,
+`screening_6li`, `target_density`, `data_covariance`, `angular_coefficients`, `beam_profile_kernel`, `hard_sphere`,
+`convolution_window`, `convolution_unify/models/bare`, `secondary_gamma/models/grad`). 16 checks rewritten to write or
+edit format-3 records (`energy_scale` records for shifts, the target's `screening` and `areal_density`), one generator
+(`clone_composite/make_models.py`) writes format 3, `beam_profile_kernel` reads committed extrapolation records.
+The director's decisions: the converter refuses an old line with exit key -1 and a type that is not total capture
+(old engine's reason, non-zero exit); an old automatic tolerance without windows becomes one window over every energy
+with that tolerance (outputs equal, compared); `norm ... fit prior 0 15%` (a centre at 0 or below) is refused by
+validation and the run with the new code `E_PRIOR_CENTRE` (`experiment/src/Validate.cpp`). The converter also
+refuses four more files the old engine refused and it used to convert into running files (a shiftfn on a follower of a
+shift group or of a shift-function group, a line in both kinds of group, densityfit / densitygroup without a thin
+target or with a beam profile / UDR). Three slow pyazr tests (`inactive_lines`, `shared_state`, `rmatrix_pole`), broken by
+the first half, edit format-3 records.
+
+**Verified how**: all projects x 3 bases against `tab-trial16` (tag `tab-tree3b`, the new reference): identical but
+`param.par` names of 9 converted projects; converted-tree gate (`gtree3b`): 483 (456) identical, 38 classified, 0
+differ, 0 missing; spec equivalence 198 files, 185 converted, 183 equal, 2 recorded, 0 differ, 13 not converted (one
+more refusal); `ctest -LE slow` 183/183, `ctest -L slow` 10/10; `tests/run_tests.sh` 146 passed, 0 failed; T1-T3, 13N,
+natural_neon at 1 and 4 threads byte-identical.
+
+**Open** (the page, §3 and §5): groups 6 (natural targets, with the generators of `doppler_fgm` and
+`transmission_yield` and `reaction_rate/models/n12C.azr`, `p12C.azr`), 7 (THM), 8 (T1-T3, relativistic, scattering
+lengths, ...); the 28 old-writing generators; the refusal switch (blocked: the unconverted groups, 20 pyazr tests of
+the old reader on the originals, the generators).
+
 ## 2026-11-11 (agent, tree to format 3) — the test tree converted, first half (`feature/upgrade-4-tree-format3`)
 
 **Done** (`AA_tree_to_format3.md`; plan and state: `docs/upgrade/format3_tree.md`). 92 of the 185 convertible

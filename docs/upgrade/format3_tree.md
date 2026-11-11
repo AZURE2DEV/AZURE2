@@ -72,13 +72,16 @@ and 12 pyazr tests), so the groups follow the projects, not the directory names.
 
 ## 3a. State at the last commit (verification)
 
-92 of the 185 convertible files are converted (85 projects of `tests/`, 7 examples); 4 are not converted by the
-converter and 8 are format 3 already (§2). The converted-tree gate on this tree (`REF=tab-trial8`, tag `gtree3a`)
-gives the base's counts: 483 (456 formal) identical, 38 classified, 0 differ, 0 missing (the originals laid back by
-`convert_tree.sh`). The tree's own run, `tab-tree3` (all projects × 3 bases), is the reference for the next agent: every
-output of a converted project equals the gate's conversion of its original (`classify.py tab-gtree3a tab-tree3`: the 39
-projects that differ are all unconverted ones, old against converted), and every output of an unconverted project
-equals `tab-trial13` (the 41 projects that differ from `tab-trial13` are all converted ones, by the gate's classes).
+126 of the 185 convertible files are converted (groups 1, 2, 3, 4a, 4b, 5): 119 projects of `tests/`, 7 examples.
+59 are left (groups 6, 7, 8, and `reaction_rate/models/n12C.azr`, `p12C.azr` of group 5). Not converted on purpose:
+`angular_coefficients/models/bad_norm.azr`, `bad_test.azr`, `natural_target/models/M_thick.azr` (old, in place), and
+the old-grammar refusals `electron_screening/bad.azr`, `target_density/bad.azr` (in the fixtures only; the converter
+refuses both, the second since this branch, so it no longer counts as convertible: the spec equivalence gives 198 files,
+185 converted, 183 equal, 2 recorded differences, 0 differ, 13 not converted). 8 files were format 3 already.
+The converted-tree gate (`REF=tab-trial8`, tag `gtree3b`) gives the base's counts: 483 (456 formal) identical, 38
+classified, 0 differ, 0 missing. The tree's own run, `tab-tree3b` (all projects × 3 bases), is the reference for the
+next agent: against `tab-trial16` every file is identical but `param.par` of 9 converted projects (the parameter
+names, values equal) and the `run.log` of the two refusal fixtures moved out of the tree (`run.log` is not compared).
 
 ## 4. Kept old on purpose, and checks that changed their model
 
@@ -111,10 +114,20 @@ messages of `prior_covariance` (and two gradient agreements at the 1e-15 level),
 - The groups not yet converted (§3).
 - `AZURE2 --convert` on purpose: `segline_formats`, `total_capture_code` (d), `ec_final_state_ambiguous` (e) convert an
   old model at run time; they keep working after the switch (the converter reads old files).
-- pyazr tests of the old file class, on the originals (`tests/pyazr/old_tree.py`): those listed in §3. Each loads the
+- pyazr tests of the old file class, on the originals (`tests/pyazr/old_tree.py`): those listed in §3 (groups 2, 4a,
+  4b, 5: `roundtrip`, `physical_norm`, `shift_first_call`, `target_density`, `jacobian_skip`, `jacobian_shift_columns`,
+  `zero_width_level`, `formal_capture_mask`, `composite_gradient`, `norm_group`, `prior_covariance`, `save_fit_norms`,
+  `extrap_layout`, `objective`, `shift_fn`, `sqrt_shift`, `data_covariance`, `angular_coefficients`, `screening`,
+  `parameter_kinds`). `docs/upgrade/pyazr_on_records.md` lists their replacements as "gone with formats 1-2" (old
+  segment fields, `SegmentSet`) or "to be built" (level-row edits); none was moved to the format-3 session for that
+  reason. `pyazr_inactive_lines` (part 2), `pyazr_shared_state` and `pyazr_rmatrix_pole` edit format-3 records. Each loads the
   original through `pyazr/azrfile.py` and runs the engine on it: they block the switch until pyazr's session reads
   format 3 and the old class is deleted (another agent's work).
-- The model generators `tests/*/make_models.py` (29 of them; `make_model.py` of `mcmc_physical_norm`) write old files.
+- `reaction_rate/models/n12C.azr`, `p12C.azr`, read as old lines by `doppler_fgm/make_models.py`,
+  `transmission_yield/make_models.py` (and through them by pyazr `doppler`, `thickness`, `parameter_kinds`,
+  `upgrade_plan_runtime`, `upgrade_poison_results`).
+- The model generators `tests/*/make_models.py` (29 of them; `make_model.py` of `mcmc_physical_norm`) write old files;
+  `clone_composite/make_models.py` writes format 3 since this branch.
   Their committed outputs are converted; those run by a check (`transmission_yield`, `light_excitation`,
   `natural_target`, ...) are rewritten with their group. The others are developer tools that read a tree project and
   write old lines: to regenerate, point them at the original (`tests/convert/fixtures/...`, as
