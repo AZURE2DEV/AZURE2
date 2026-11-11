@@ -33,7 +33,7 @@ identical; converted-tree gate (`REF=tab-trial8`, tag `gpyproj1`): 483 (456) ide
 missing; `ctest -LE slow` 180/180; `tests/run_tests.sh` 145 passed, 0 failed; T1–T3, 13N at 1 and 4 threads in three
 bases: every output file identical (run.log differs in Coulomb-table lookup counts and progress bars only); one edit
 on T2 costs 2.7 ms (one validation with build 0.8 ms).  New tests (each shown failing once with an injected error):
-`pyazr_project` (36 checks), `pyazr_save_fit_format3`, `pyazr_project_recipe`, `tools_classify`, a case of
+`pyazr_project` (37 checks), `pyazr_save_fit_format3`, `pyazr_project_recipe`, `tools_classify`, a case of
 `io_record_reader`.
 
 **Open.** `--describe --record NAME` on the command line (the engine function takes the name; only pyazr uses it);
