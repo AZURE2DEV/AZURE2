@@ -41,6 +41,11 @@ class Context {
   void Warn(const char *code, const ValidatedRecord &record, const std::string &field, const std::string &message,
             const std::string &found = "");
   const PairInfo *Pair(int key) const;
+  /// A file's path as the engine opens it: relative to the project directory ("" = the working directory).
+  std::string ProjectPath(const std::string &file) const {
+    const bool absolute = !file.empty() && (file[0] == '/' || file[0] == '\\');
+    return absolute || opt_.projectDir.empty() ? file : opt_.projectDir + "/" + file;
+  }
   /// The record named `name` of kind `kind`, or nullptr.
   const ValidatedRecord *Record(const std::string &name, const std::string &kind) const;
   /// The position of a record in the project (records in input order), for ordering.

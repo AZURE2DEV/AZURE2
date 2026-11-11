@@ -53,6 +53,7 @@ struct TargetEffectValues {
   double screeningUe = 0.0;         ///< electron-screening potential U_e (eV)
   double density = 0.0;             ///< areal density of the target (atoms/cm^2)
   double dopplerTemperature = 0.0;  ///< free-gas temperature (K)
+  double stoppingScale = 1.0;       ///< stopping scale s (TargetEffect::StoppingAt), dimensionless
 };
 
 #endif

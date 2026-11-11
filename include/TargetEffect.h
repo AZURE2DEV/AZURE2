@@ -8,6 +8,7 @@
 #include <iosfwd>
 #include "Constants.h"
 #include "Equation.h"
+#include "TargetStopping.h"
 #include "UdrKernel.h"
 #include "azure2/experiment/SetupSpecs.h"
 
@@ -172,17 +173,17 @@ class TargetEffect {
   /// of 1/epsilon differ by the quadrature's error, measured up to 8e-4 relative in tests/layer_yield (10 nodes across
   /// a layer of half the beam energy, epsilon ~ 1/E).  A grid that still ends inside the layer gives NaN.
   static constexpr double LayerGridMargin() { return 1.02; }
-  /// Energy loss (lab MeV) across the target at lab energy E: Delta with int_{E-Delta}^{E} dE'/epsilon = N, the
-  /// exact range integral (first-order epsilon(E) N before 2026-10-27, 2-8 % off for 5-20 % targets).
+  /// Energy loss (lab MeV) across the target at lab energy E: Delta with int_{E-Delta}^{E} dE'/(s epsilon) = N, the
+  /// exact range integral, at the line's density and stopping scale.
   double TargetThickness(double, const Config &) const;
-  /// The same for an areal density \p density instead of the current one.
-  double TargetThickness(double, const Config &, double density) const;
+  /// The same for an areal density \p density (atoms/cm^2) and a stopping scale \p scale instead of the line's.
+  double TargetThickness(double, const Config &, double density, double scale) const;
   /// Depth-averaged energy loss (lab MeV) in the target at lab energy E: E - E_bar with
   /// E_bar = int E' dE'/epsilon / int dE'/epsilon over [E - Delta, E] (Delta = TargetThickness).  The cross section
   /// at E_bar equals the target average for a cross section linear across the target; the remainder is about
   /// sigma'' Delta^2 / 24.  It is the single energy a thin-target point is evaluated at outside the windows of an
   /// energy-restricted target integration (Unit fallback, 2026-11-05).  0 for a thick target.
-  double MeanEnergyLoss(double, const Config &, double density) const;
+  double MeanEnergyLoss(double, const Config &, double density, double scale) const;
   /// Attenuation coefficient of the given order.
   double GetQCoefficient(int) const;
   /// Convolution coefficient of the given order.
@@ -192,7 +193,49 @@ class TargetEffect {
   void SetNumSubPoints(int);
   /// The keys of the data sets the effect applies to.
   std::vector<int> GetSegmentsList() const;
-  const Equation *GetStoppingPowerEq() const;
+  /*!
+   * The stopping the effect's target integration uses, lab MeV cm^2 per active nucleus, at lab energy \p eLab (MeV) and
+   * stopping scale \p scale: s x epsilon_active(E), epsilon from the target's source (formula | evaluation | table,
+   * TargetStopping).  The one function every caller asks; the scale is applied here and nowhere else.
+   */
+  double StoppingAt(double eLab, const Config &configure, double scale) const {
+    return scale * stopping_.PerActiveNucleus(eLab, configure);
+  }
+  const TargetStopping &GetStopping() const { return stopping_; }
+  /*!
+   * The stopping-scale nuisance s (energy_grid.md section 6.2, decision D6): one parameter per (material, projectile),
+   * shared by every effect with the same GetStoppingScaleKey(); made by WorkingCopy::SetUpStoppingScaleParams.  An
+   * evaluation or a table always has one (fixed at 1 unless the record says otherwise), a formula only when its
+   * record gives `scale`.  Its prior ((s - s0)/sigma)^2 counts when it is fitted; a fitted evaluation's scale without a
+   * written prior takes the library's stated uncertainty for the projectile class (TargetStopping::
+   * StatedRelUncertainty).
+   */
+  bool HasStoppingScale() const { return hasStoppingScale_; }
+  /// The scale as written, the start value and the prior centre (1 by default).
+  double GetStoppingScaleNominal() const { return stoppingScaleNominal_; }
+  bool IsStoppingScaleVaried() const { return stoppingScaleVary_; }
+  /// Prior width (absolute; s is dimensionless), 0 = none.
+  double GetStoppingScaleSigma() const { return stoppingScaleSigma_; }
+  /// True when the width is the library's default, not written (it is printed at set-up).
+  bool IsStoppingScaleSigmaDefault() const { return stoppingScaleSigmaDefault_; }
+  const std::string &GetStoppingScaleKey() const { return stoppingScaleKey_; }
+  const std::string &GetStoppingScaleName() const { return stoppingScaleName_; }
+  /// The labels the name is made of: the material ("TiN", or the target's name for a formula or table), the projectile.
+  const std::string &GetStoppingScaleMaterial() const { return stoppingScaleMaterial_; }
+  const std::string &GetStoppingScaleProjectile() const { return stoppingScaleProjectile_; }
+  /// The largest scale the sub-point grids span (as the layout density): s0 + 3 sigma, at least 1.1 s0, when fitted
+  /// with a prior; 1.5 s0 fitted without; s0 when fixed.
+  double GetLayoutStoppingScale() const;
+  /// The smallest scale a fit may take: s0 / 10.
+  double GetStoppingScaleMinimum() const { return 0.1 * stoppingScaleNominal_; }
+  void ReplaceStoppingScalePrior() { stoppingScalePriorReplaced_ = true; }
+  bool IsStoppingScalePriorReplaced() const { return stoppingScalePriorReplaced_; }
+  /// ((s - s0)/sigma)^2 at the present scale, or 0 without a prior or when s is fixed (objective.md D5).
+  double StoppingScalePenalty(double scale) const {
+    if (!hasStoppingScale_ || !stoppingScaleVary_ || stoppingScalePriorReplaced_ || stoppingScaleSigma_ <= 0.0) return 0.0;
+    const double r = (scale - stoppingScaleNominal_) / stoppingScaleSigma_;
+    return r * r;
+  }
   Equation *GetConvolutionEq();
 
   // Energy straggling (see StragglingSigma / IsBohrStraggling)
@@ -391,7 +434,14 @@ class TargetEffect {
   double density_ = 0.0;
   bool isThickTarget_ = false;   ///< target integration with density 0 (IsThickTarget)
   bool isLayerYield_ = false;    ///< yield per incident particle on a layer (IsLayerYield)
-  Equation stoppingPowerEq_;
+  TargetStopping stopping_;  ///< formula | evaluation | table (StoppingAt)
+  bool hasStoppingScale_ = false;
+  double stoppingScaleNominal_ = 1.0;
+  bool stoppingScaleVary_ = false;
+  double stoppingScaleSigma_ = 0.0;
+  bool stoppingScaleSigmaDefault_ = false;
+  bool stoppingScalePriorReplaced_ = false;
+  std::string stoppingScaleKey_, stoppingScaleName_, stoppingScaleMaterial_, stoppingScaleProjectile_;
   std::vector<int> datasetKeys_;  ///< the data sets it applies to (DatasetSpec::key)
   vector_r qCoefficients_;
   vector_r convCoefficients_;

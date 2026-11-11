@@ -38,7 +38,6 @@ TargetEffect::TargetEffect(const azure2::experiment::TargetEffectSpec &line, con
     const int numIntegrationPoints = line.numIntegrationPoints;
     const double sigma = line.sigma;
     const double density = line.density;
-    const int numParameters = (int)line.stoppingPowerParameters.size();
     const vector_r &parameters = line.stoppingPowerParameters;
     const int numConvCoefficients = (int)line.convolutionCoefficientValues.size();
     const vector_r &convCoefficients = line.convolutionCoefficientValues;
@@ -188,10 +187,21 @@ TargetEffect::TargetEffect(const azure2::experiment::TargetEffectSpec &line, con
     }
     if (dopplerError_) isDoppler_ = false;
     if (isTargetIntegration_) {
-      stoppingPowerEq_.Initialize(stoppingPowerEq, numParameters, configure);
-      for (int i = 0; i < numParameters; i++) {
-        stoppingPowerEq_.SetParameter(i, parameters[i], configure);
+      stopping_ = TargetStopping(line.stopping, stoppingPowerEq, parameters, configure);
+      const azure2::experiment::StoppingSpec &st = line.stopping;
+      hasStoppingScale_ = st.hasScale;
+      stoppingScaleNominal_ = st.scale;
+      stoppingScaleVary_ = st.scaleVary;
+      stoppingScaleSigma_ = st.scalePriorWidth;
+      // a fitted evaluation's scale without a written prior: the library's stated uncertainty (energy_grid.md 6.2)
+      if (st.scaleVary && !st.scaleHasPrior && stopping_.GetSource() == TargetStopping::Source::Evaluation) {
+        stoppingScaleSigma_ = stopping_.StatedRelUncertainty() * st.scale;
+        stoppingScaleSigmaDefault_ = true;
       }
+      stoppingScaleKey_ = st.scaleKey;
+      stoppingScaleName_ = st.scaleName;
+      stoppingScaleMaterial_ = st.scaleMaterial;
+      stoppingScaleProjectile_ = st.scaleProjectile;
     }
     if (isConvCoefficients_) {
       convolutionEq_.Initialize(convolutionEq, numConvCoefficients, configure);
@@ -583,7 +593,7 @@ void TargetEffect::GridExtent(double eCM, double thicknessCM, const Config &conf
       // target the thickness over the surface stopping power
       double areal = this->GetLayoutDensity();
       if (isThickTarget_) {
-        const double eps = cmFactor * stoppingPowerEq_.Evaluate(configure, eCM / cmFactor);
+        const double eps = cmFactor * this->StoppingAt(eCM / cmFactor, configure, stoppingScaleNominal_);
         areal = (eps > 0.0) ? thicknessCM / eps : 0.0;
       }
       backward += convolutionRange * this->BohrStragglingSigma(areal, cmFactor, z1, z2);
@@ -676,14 +686,20 @@ double TargetEffect::GetDensity() const {
  */
 
 double TargetEffect::TargetThickness(double energy, const Config &configure) const {
-  return this->TargetThickness(energy, configure, this->GetDensity());
+  return this->TargetThickness(energy, configure, this->GetDensity(), stoppingScaleNominal_);
 }
 
-double TargetEffect::TargetThickness(double energy, const Config &configure, double density) const {
-  const double eps0 = stoppingPowerEq_.Evaluate(configure, energy);
+double TargetEffect::GetLayoutStoppingScale() const {
+  if (!hasStoppingScale_ || !stoppingScaleVary_) return stoppingScaleNominal_;
+  const double s0 = stoppingScaleNominal_;
+  return (stoppingScaleSigma_ > 0.0) ? std::max(s0 + 3.0 * stoppingScaleSigma_, 1.1 * s0) : 1.5 * s0;
+}
+
+double TargetEffect::TargetThickness(double energy, const Config &configure, double density, double scale) const {
+  const double eps0 = this->StoppingAt(energy, configure, scale);
   if (!(eps0 > 0.0) || !(density > 0.0) || !(energy > 0.0)) return eps0 * density;
   auto invEps = [&](double e) {
-    const double eps = stoppingPowerEq_.Evaluate(configure, e);
+    const double eps = this->StoppingAt(e, configure, scale);
     return (eps > 0.0) ? 1.0 / eps : 0.0;
   };
   double delta = eps0 * density;
@@ -706,12 +722,12 @@ double TargetEffect::TargetThickness(double energy, const Config &configure, dou
   return delta;
 }
 
-double TargetEffect::MeanEnergyLoss(double energy, const Config &configure, double density) const {
+double TargetEffect::MeanEnergyLoss(double energy, const Config &configure, double density, double scale) const {
   if (isThickTarget_) return 0.0;
-  const double delta = this->TargetThickness(energy, configure, density);
+  const double delta = this->TargetThickness(energy, configure, density, scale);
   if (!(delta > 0.0) || !(delta <= energy)) return 0.0;
   auto invEps = [&](double e) {
-    const double eps = stoppingPowerEq_.Evaluate(configure, e);
+    const double eps = this->StoppingAt(e, configure, scale);
     return (eps > 0.0) ? 1.0 / eps : 0.0;
   };
   // Simpson on 32 panels: int (E - e)/epsilon de / int 1/epsilon de over [E - Delta, E]
@@ -797,7 +813,6 @@ std::vector<int> TargetEffect::GetSegmentsList() const {
  * cross section.
  */
 
-const Equation *TargetEffect::GetStoppingPowerEq() const { return &stoppingPowerEq_; }
 
 /*!
  * Returns the Equation object corresponding to the parametrized convolution.

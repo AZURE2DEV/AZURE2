@@ -116,10 +116,11 @@ class ParkTerm : public ObjectiveTerm {
 // T8: one term per kind of target-effect prior, in the engine's order.
 class TargetPriorTerm : public ObjectiveTerm {
  public:
-  enum Kind { Screening, Density, Doppler, Thickness };
+  enum Kind { Screening, Density, Doppler, Thickness, StoppingScale };
   explicit TargetPriorTerm(Kind k) : kind_(k) {}
   std::string Name() const override {
-    static const char *names[] = {"screening priors", "density priors", "Doppler priors", "thickness priors"};
+    static const char *names[] = {"screening priors", "density priors", "Doppler priors", "thickness priors",
+                                  "stopping-scale priors"};
     return names[kind_];
   }
   void Add(const ObjectiveContext &c, double &chi2) const override {
@@ -128,6 +129,7 @@ class TargetPriorTerm : public ObjectiveTerm {
       case Density: chi2 += c.data->DensityPenalty(); break;
       case Doppler: chi2 += c.data->DopplerPenalty(); break;
       case Thickness: chi2 += c.data->ThicknessPenalty(); break;
+      case StoppingScale: chi2 += c.data->StoppingScalePenalty(); break;
     }
   }
 
@@ -192,6 +194,7 @@ Objective::Objective() {
   terms_.emplace_back(new TargetPriorTerm(TargetPriorTerm::Density));
   terms_.emplace_back(new TargetPriorTerm(TargetPriorTerm::Doppler));
   terms_.emplace_back(new TargetPriorTerm(TargetPriorTerm::Thickness));
+  terms_.emplace_back(new TargetPriorTerm(TargetPriorTerm::StoppingScale));
   terms_.emplace_back(new AbundanceTerm);
   terms_.emplace_back(new ModelDataTerm);
   terms_.emplace_back(new PriorCovarianceTerm);
@@ -317,6 +320,13 @@ std::vector<std::string> ReplaceDiagonalPriors(CNuc *compound, WorkingCopy *data
           TargetEffect *te = ds.GetDopplerTargetEffect(d.doppler);
           had = te->GetDopplerSigma() > 0.0;
           te->ReplaceDopplerPrior();
+          break;
+        }
+        case ParamKind::StoppingScale: {
+          // the scale's settings are its first effect's; every effect of the scale is marked
+          for (int n = 1; n <= ds.NumTargetEffects(); n++)
+            if (ds.StoppingScaleParamOfEffect(n) == d.stoppingScale) ds.GetTargetEffect(n)->ReplaceStoppingScalePrior();
+          had = ds.GetStoppingScaleTargetEffect(d.stoppingScale)->GetStoppingScaleSigma() > 0.0;
           break;
         }
         case ParamKind::Abundance: {

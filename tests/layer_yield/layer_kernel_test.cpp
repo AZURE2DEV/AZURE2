@@ -88,7 +88,7 @@ Fold Run(const Config &configure, const TargetEffect &effect, const std::vector<
     Unit sub(0.0, nodes[i], 1, 2, false, false, false, 0.0, 0, 0);
     sub.SetResultRecord(rec * (i + 1), 0, 0);
     sub.SetFitCrossSection(results, sigma(nodes[i]));
-    sub.SetStoppingPower(f * effect.GetStoppingPowerEq()->Evaluate(configure, nodes[i] / f));
+    sub.SetStoppingPower(f * effect.StoppingAt(nodes[i] / f, configure, 1.0));
     data.UnitAt(unit).MakeSubPoint(sub);
     data.AppendUnit(sub);
   }
