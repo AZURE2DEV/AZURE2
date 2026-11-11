@@ -1,0 +1,113 @@
+<config>
+true                                                                                                #Perform A-Matrix Calculation
+output/                                                                                             #Full Path to Output Directory
+checks/                                                                                             #Full Path to Checks Directory
+none                                                                                                #Compond Nucleus Check
+none                                                                                                #Boundary Condition Check
+none                                                                                                #Data Check
+none                                                                                                #Lo-Matrix and Penetrability Check
+none                                                                                                #Legendre Polynomial Check
+none                                                                                                #Coulomb Amplitudes Check
+file                                                                                                    #Reaction Pathway Check
+none                                                                                                #Angular Distributions Check
+useAdaptiveGrid=1
+format=3
+</config>
+<levels>
+0.5    1          2.0    1    1    3    1    0   13    1    1              100000  0.5    1    0    1            0 1.008664916      12    0    6      4.94635      4.94635    0    0          0.0     0     3.6            0            0       0
+
+ 0.5   -1            0    1    1    1    1    2    1    1    0                1.62  0.5    1    0    1            0 1.00728      12    1    6      1.94351      1.94351    0    0          0.0     0     3.6            0            0       0
+ 0.5   -1            0    1    1    2    1    2    1    1    1                   0    1    1  0.5   -1            0       0 13.0057    0    7      1.94351            0    0    0          0.0    10       0            0            0       5
+
+ 0.5   -1           20    1    1    1    1    2    2    1    1               5e+06  0.5    1    0    1            0 1.00728      12    1    6      1.94351      1.94351    0    0          0.0     0     3.6            0            0       0
+ 0.5   -1           20    1    1    2    1    2    2    1    0                   0    1    1  0.5   -1            0       0 13.0057    0    7      1.94351            0    0    0          0.0    10       0            0            0       5
+
+ 0.5    1       2.3682    0    1    1    1    0    3    1    0               34000  0.5    1    0    1            0 1.00728      12    1    6      1.94351      1.94351    0    0          0.0     0     3.6            0            0       0
+ 0.5    1       2.3682    0    1    2    1    2    3    1    0               -0.48    1    1  0.5   -1            0       0 13.0057    0    7      1.94351            0    0    0          0.0    10       0            0            0       5
+
+ 0.5    1           20    1    1    1    1    0    4    1    1               5e+06  0.5    1    0    1            0 1.00728      12    1    6      1.94351      1.94351    0    0          0.0     0     3.6            0            0       0
+ 0.5    1           20    1    1    2    1    2    4    1    0                5400    1    1  0.5   -1            0       0 13.0057    0    7      1.94351            0    0    0          0.0    10       0            0            0       5
+
+ 1.5   -1       3.5032    0    1    1    1    2    5    1    0               55200  0.5    1    0    1            0 1.00728      12    1    6      1.94351      1.94351    0    0          0.0     0     3.6            0            0       0
+ 1.5   -1       3.5032    0    1    2    1    2    5    1    0               -0.49    1    1  0.5   -1            0       0 13.0057    0    7      1.94351            0    0    0          0.0    10       0            0            0       5
+ 1.5   -1       3.5032    0    1    2    1    4    5    1    0             0.00072    1    1  0.5   -1            0       0 13.0057    0    7      1.94351            0    0    0          0.0    10       0            0            0       5
+
+ 1.5   -1           20    1    1    1    1    2    6    1    1               5e+06  0.5    1    0    1            0 1.00728      12    1    6      1.94351      1.94351    0    0          0.0     0     3.6            0            0       0
+ 1.5   -1           20    1    1    2    1    2    6    1    0                -120    1    1  0.5   -1            0       0 13.0057    0    7      1.94351            0    0    0          0.0    10       0            0            0       5
+ 1.5   -1           20    1    1    2    1    4    6    1    0                1100    1    1  0.5   -1            0       0 13.0057    0    7      1.94351            0    0    0          0.0    10       0            0            0       5
+
+ 1.5    1           20    1    1    1    1    4    7    1    1               5e+06  0.5    1    0    1            0 1.00728      12    1    6      1.94351      1.94351    0    0          0.0     0     3.6            0            0       0
+ 1.5    1           20    1    1    2    1    2    7    1    0                   0    1    1  0.5   -1            0       0 13.0057    0    7      1.94351            0    0    0          0.0    10       0            0            0       5
+ 1.5    1           20    1    1    2    1    4    7    1    0                   0    1    1  0.5   -1            0       0 13.0057    0    7      1.94351            0    0    0          0.0    10       0            0            0       5
+
+ 2.5   -1           20    1    1    1    1    6    8    1    1               5e+06  0.5    1    0    1            0 1.00728      12    1    6      1.94351      1.94351    0    0          0.0     0     3.6            0            0       0
+ 2.5   -1           20    1    1    2    1    4    8    1    0                   0    1    1  0.5   -1            0       0 13.0057    0    7      1.94351            0    0    0          0.0    10       0            0            0       5
+ 2.5   -1           20    1    1    2    1    6    8    1    0                   0    1    1  0.5   -1            0       0 13.0057    0    7      1.94351            0    0    0          0.0    10       0            0            0       5
+
+ 2.5    1       3.5453    0    1    1    1    4    9    1    0               49000  0.5    1    0    1            0 1.00728      12    1    6      1.94351      1.94351    0    0          0.0     0     3.6            0            0       0
+ 2.5    1       3.5453    0    1    2    1    4    9    1    0               1e-05    1    1  0.5   -1            0       0 13.0057    0    7      1.94351            0    0    0          0.0    10       0            0            0       5
+ 2.5    1       3.5453    0    1    2    1    6    9    1    0                   0    1    1  0.5   -1            0       0 13.0057    0    7      1.94351            0    0    0          0.0    10       0            0            0       5
+
+ 2.5    1           20    1    1    1    1    4   10    1    1               5e+06  0.5    1    0    1            0 1.00728      12    1    6      1.94351      1.94351    0    0          0.0     0     3.6            0            0       0
+ 2.5    1           20    1    1    2    1    4   10    1    0                   0    1    1  0.5   -1            0       0 13.0057    0    7      1.94351            0    0    0          0.0    10       0            0            0       5
+ 2.5    1           20    1    1    2    1    6   10    1    0                   0    1    1  0.5   -1            0       0 13.0057    0    7      1.94351            0    0    0          0.0    10       0            0            0       5
+
+ 3.5   -1           20    1    1    1    1    6   11    1    0                   0  0.5    1    0    1            0 1.00728      12    1    6      1.94351      1.94351    0    0          0.0     0     3.6            0            0       0
+ 3.5   -1           20    1    1    2    1    6   11    1    0                   0    1    1  0.5   -1            0       0 13.0057    0    7      1.94351            0    0    0          0.0    10       0            0            0       5
+
+ 3.5    1           20    1    1    1    1    8   12    1    0                   0  0.5    1    0    1            0 1.00728      12    1    6      1.94351      1.94351    0    0          0.0     0     3.6            0            0       0
+ 3.5    1           20    1    1    2    1    6   12    1    0                   0    1    1  0.5   -1            0       0 13.0057    0    7      1.94351            0    0    0          0.0    10       0            0            0       5
+
+</levels>
+<data>
+dataset luna_hpge
+    reaction       12C(p,g)13N
+    quantity       sigma
+    unit           b
+    file           data/skowronski_luna_hpge.dat
+    columns        E_lab[MeV] _ value error
+    energy_window  0 5 MeV
+    norm           1 fixed
+
+dataset luna_hpge_total
+    reaction       12C(p,g)13N[total]
+    quantity       sigma
+    unit           b
+    file           data/skowronski_luna_hpge.dat
+    columns        E_lab[MeV] _ value error
+    energy_window  0 5 MeV
+    norm           1 fixed
+
+dataset luna_hpge_sum
+    reaction       12C(p,g)13N + 0.5*12C(p,g)13N
+    quantity       sigma
+    unit           b
+    file           data/skowronski_luna_hpge.dat
+    columns        E_lab[MeV] _ value error
+    energy_window  0 5 MeV
+    norm           1 fixed
+
+dataset kettner_55
+    reaction       12C(p,g)13N
+    quantity       dsigma_domega
+    unit           b/sr
+    file           data/kettner_55.dat
+    columns        E_lab[MeV] theta_lab[deg] value error
+    energy_window  0 5 MeV
+    angle_window   55 55 deg
+    norm           1 fixed
+
+dataset meyer_84
+    reaction       12C(p,p)12C
+    quantity       dsigma_domega
+    unit           b/sr
+    file           data/meyer_84.dat
+    columns        E_lab[MeV] theta_lab[deg] value error
+    energy_window  0 5 MeV
+    angle_window   84.3 84.3 deg
+    norm           1 fixed
+</data>
+<extrapolations>
+</extrapolations>
+<targets>
+</targets>

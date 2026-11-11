@@ -10,13 +10,25 @@
 #include <iomanip>
 #include <set>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 
 #include "CNuc.h"
 #include "Config.h"
 #include "ECTable.h"
+#include "ExternalCaptureExit.h"
 #include "WorkingCopy.h"
 #include "GSLException.h"
+
+int ExternalCaptureExit(const CNuc &compound, int entrancePair, int exitPair, int segmentKey) {
+  const int exit = compound.Pathways().Entrance(entrancePair).ExitOf(exitPair);
+  if (!exit)
+    throw std::runtime_error("data segment #" + std::to_string(segmentKey) + " asks for external capture from pair " +
+                             std::to_string(compound.GetPair(entrancePair)->GetPairKey()) + " to pair " +
+                             std::to_string(compound.GetPair(exitPair)->GetPairKey()) +
+                             ", but no reaction pathway leads from the one to the other");
+  return exit;
+}
 
 namespace {
 
@@ -96,7 +108,7 @@ long long WalkECAmplitudes(WorkingCopy &data, Segments &segments, CNuc *theCNuc,
         ALevel *ecLevel = theCNuc->GetJGroup(j)->GetLevel(la);
         int ir = theCNuc->GetPairNumFromKey(segment->GetExitKey());
         if (ecLevel->GetECPairNum() != ir) continue;
-        Decay *decay = entrancePair->GetDecay(ir);
+        Decay *decay = entrancePair->GetDecay(ExternalCaptureExit(*theCNuc, aa, ir, segment->GetSegmentKey()));
         if (hash) {
           // Which block this is, and the final state it captures to.  The
           // level energy enters every integral (Unit::CalculateECAmplitudes);
@@ -333,7 +345,14 @@ int WorkingCopy::CalculateECAmplitudes(CNuc *theCNuc, const Config &configure) {
   // checks guard the reuse: the number of amplitudes in the file, and the
   // signature recorded beside it (ECSignature).  If either disagrees, say so
   // and recompute rather than proceed.
-  ecSignature_ = ECSignature(theCNuc, configure);
+  // The walk of the signature is the first to resolve the exit of every data segment and leaf with external
+  // capture; an entrance without a pathway to the photon pair is refused here, before any amplitude is computed.
+  try {
+    ecSignature_ = ECSignature(theCNuc, configure);
+  } catch (const std::runtime_error &e) {
+    configure.outStream << "ERROR: " << e.what() << "." << std::endl;
+    return -1;
+  }
   ecOutputFile_ = outputfile;
   bool usePrevious = (configure.paramMask & Config::USE_PREVIOUS_INTEGRALS) != 0;
   if (usePrevious) {
@@ -477,11 +496,12 @@ int WorkingCopy::CalculateECAmplitudes(CNuc *theCNuc, const Config &configure) {
                   configure.outStream << "\r\tSegment #" << std::setw(12) << segmentKeyOut
                                       << std::setw(0) << " [*************************] 100%" << std::endl;
               }
+              Decay *decay = entrancePair->GetDecay(ExternalCaptureExit(*theCNuc, aa, ir, segment->GetSegmentKey()));
               for (UnitIterator point = segment->GetPoints(*this).begin();
                    point < segment->GetPoints(*this).end(); point++) {
                 {
-                  for (int k = 1; k <= entrancePair->GetDecay(ir)->NumKGroups(); k++) {
-                    for (int ecm = 1; ecm <= entrancePair->GetDecay(ir)->GetKGroup(k)->NumECMGroups(); ecm++) {
+                  for (int k = 1; k <= decay->NumKGroups(); k++) {
+                    for (int ecm = 1; ecm <= decay->GetKGroup(k)->NumECMGroups(); ecm++) {
                       if (!usePrevious) {
                         if (out.is_open()) out << point->GetECAmplitude(k, ecm) << std::endl;
                         for (UnitIterator subPoint = point->GetSubPoints(*this).begin();
@@ -587,11 +607,13 @@ int WorkingCopy::LeafECAmplitudes(CNuc *theCNuc, const Config &configure, bool u
               // Write the freshly calculated amplitudes to the file, or read the
               // previously saved ones back in.  The iteration order matches the
               // regular-segment loop in CalculateECAmplitudes exactly.
+              Decay *decay = entrancePair->GetDecay(
+                  ExternalCaptureExit(*theCNuc, aa, ir, Draft().segments_[leaf.first].TermKey(leaf.second)));
               for (UnitIterator point = Draft().segments_[leaf.first].TermPoints(*this, leaf.second).begin();
                    point < Draft().segments_[leaf.first].TermPoints(*this, leaf.second).end(); point++) {
                 if (!(point->IsMapped()) || point->OwnsEDependentValues()) {
-                  for (int k = 1; k <= entrancePair->GetDecay(ir)->NumKGroups(); k++) {
-                    for (int ecm = 1; ecm <= entrancePair->GetDecay(ir)->GetKGroup(k)->NumECMGroups(); ecm++) {
+                  for (int k = 1; k <= decay->NumKGroups(); k++) {
+                    for (int ecm = 1; ecm <= decay->GetKGroup(k)->NumECMGroups(); ecm++) {
                       if (!usePrevious) {
                         if (out.is_open()) out << point->GetECAmplitude(k, ecm) << std::endl;
                         for (UnitIterator subPoint = point->GetSubPoints(*this).begin();

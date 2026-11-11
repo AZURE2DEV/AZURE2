@@ -17,6 +17,7 @@
 #include "ECIntegral.h"
 #include "ECMGroup.h"
 #include "ECTable.h"
+#include "ExternalCaptureExit.h"
 #include "WorkingCopy.h"
 #include "Unit.h"
 #include "JGroup.h"
@@ -65,9 +66,11 @@ complex Unit::GetECAmplitudeWithShift(int kGroupNum, int ecMGroupNum, CNuc *theC
     ShiftedECAmplitude &memo = ec_shifted_[k][m];
     if (memo.valid && memo.energy == currentEnergy) return memo.amplitude;
 
-    PPair *entrancePair = theCNuc->GetPair(theCNuc->GetPairNumFromKey(this->GetEntranceKey()));
+    const int aa = theCNuc->GetPairNumFromKey(this->GetEntranceKey());
+    PPair *entrancePair = theCNuc->GetPair(aa);
     int ir = theCNuc->GetPairNumFromKey(this->GetExitKey());
-    KGroup *theKGroup = entrancePair->GetDecay(ir)->GetKGroup(kGroupNum);
+    KGroup *theKGroup =
+        entrancePair->GetDecay(ExternalCaptureExit(*theCNuc, aa, ir, segment_key_))->GetKGroup(kGroupNum);
     ECMGroup *theECMGroup = theKGroup->GetECMGroup(ecMGroupNum);
     int j = theECMGroup->GetJGroupNum();
     if (!memo.hasLevelEnergy) {
@@ -195,8 +198,9 @@ void Unit::CalculateECAmplitudes(WorkingCopy *data, CNuc *theCNuc, const Config 
           ALevel *ecLevel = theCNuc->GetJGroup(j)->GetLevel(la);
           int ir = theCNuc->GetPairNumFromKey(this->GetExitKey());
           if (ecLevel->GetECPairNum() == ir) {
-            for (int k = 1; k <= entrancePair->GetDecay(ir)->NumKGroups(); k++) {
-              KGroup *theKGroup = entrancePair->GetDecay(ir)->GetKGroup(k);
+            Decay *decay = entrancePair->GetDecay(ExternalCaptureExit(*theCNuc, aa, ir, segment_key_));
+            for (int k = 1; k <= decay->NumKGroups(); k++) {
+              KGroup *theKGroup = decay->GetKGroup(k);
               for (int ecm = 1; ecm <= theKGroup->NumECMGroups(); ecm++) {
                 ECMGroup *theECMGroup = theKGroup->GetECMGroup(ecm);
                 complex ecAmplitude = ECPathwayAmplitude(theCNuc, configure, entrancePair, j, ecLevel->GetECEnergy(),

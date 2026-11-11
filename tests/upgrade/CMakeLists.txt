@@ -69,6 +69,15 @@ add_test(NAME physics_pathway_table COMMAND pathway_table_test ${CMAKE_SOURCE_DI
          WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
 set_tests_properties(physics_pathway_table PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1" TIMEOUT 900)
 
+# The external-capture exit is found by the photon pair's number, and an exit without a pathway is refused naming the
+# data segment (include/ExternalCaptureExit.h; docs/upgrade/cnuc_split.md section 11.9, defect 1).
+add_executable(external_capture_exit_test external_capture_exit_test.cpp)
+target_link_libraries(external_capture_exit_test PRIVATE AZURE2Core)
+file(COPY ${CMAKE_SOURCE_DIR}/tests/ec_exit_position/models/ DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/ec_exit_position)
+add_test(NAME upgrade_external_capture_exit
+         COMMAND external_capture_exit_test ${CMAKE_CURRENT_BINARY_DIR}/ec_exit_position/neutron_pair_first.azr)
+set_tests_properties(upgrade_external_capture_exit PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1" TIMEOUT 300)
+
 # physics/ central_derivative against GSL's gsl_deriv_central, bit for bit (docs/upgrade/coulomb.md section 1.4).
 add_executable(derivatives_gsl_test derivatives_gsl_test.cpp)
 target_link_libraries(derivatives_gsl_test PRIVATE azure2_physics ${GSL_LIBRARIES})
