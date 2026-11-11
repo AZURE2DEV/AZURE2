@@ -131,9 +131,11 @@ the folds, on values already computed (`Unit::FoldSubPoints`).  Each task writes
     thickness and stopping), `Resolution`, `Doppler`, `Shift`, each a kernel on its sub-expression.
   - The same tree gives the value and, by the chain rule through each node, the gradient; each node is one class with
     `value` and `derivative`, tested alone.
-  - Today's `.azr` segment types (isDiff codes, SUM/RATIO composites, multipolarity masks, natural targets) are read
-    by `io/` into these trees, so old projects load unchanged; a new data type needs at most one new leaf filter or
-    node.
+  - A project is format 3 only: its records (data sets, extrapolations, targets, beams, detectors, model data) are
+    read by `io/` and built by `experiment/`'s table into these trees; a new data type needs at most one new leaf
+    filter or node. An older `.azr` (segment lines, isDiff codes, SUM/RATIO composites) is refused with one message
+    (`io::NotFormat3Message`, exit 3) and converted by `convert/` (`AZURE2 --convert`), the only code that knows the
+    old grammar; the engine library links nothing of it (repo_consistency check 34).
 - `Material`: elements and stoichiometry, density, phase (solid/gas), depth profile (implanted targets).
 - `stopping/`: AZURE2's own electronic-stopping evaluation and straggling (§7).
 - `EnergyGrid`: the evaluation energies E_n (§1, exact energies): data energies, shifted energies (updated when a

@@ -3,8 +3,7 @@
 Every project file of `tests/` and `examples/` is replaced, under its own name, by its format-3 conversion
 (`project_format3.md` §8.5 item 6), and every `check.sh` that makes variants of a project edits format-3 records
 instead of old keyword lines. This page is the plan and the state of that work: a successor continues from the
-first group whose state is not "converted". The engine's old reading path stays intact until the whole tree is
-converted, so the tree may be mixed at any commit.
+first group whose state is not "converted". The whole tree is format 3 and the engine reads nothing else (§5).
 
 ## 1. Rules
 
@@ -68,13 +67,14 @@ and 12 pyazr tests), so the groups follow the projects, not the directory names.
 | 6. natural targets | `natural_neon` (tests and example; the example's `natural_neon_fit.sav` renamed to the format-3 parameter names, outputs equal), `natural_target` (not `M_thick`; `bad_key`, `bad_sample` to the fixtures: the converter refuses them), `reaction_rate/models/n12C.azr`, `p12C.azr` (14 files) | rewritten: `natural_neon` (the extrapolations' `beam`/`quadrature` removed instead of the `<targetInt>` lines switched off), `natural_target` (parameters `natural.isotope.12C` ...; the shared-norm case writes a `normalization` record; the prior on the `isotope` field; `bad_key`, `bad_sample` through the converter), `shared_effect_pairs` (beam records), `component_subpoint_angle` (extrapolation records), `doppler_fgm` and `transmission_yield` with their generators `make_models.py` (format-3 records; the old generators kept in `tests/convert/fixtures/tests/<dir>/make_models.py` for the pyazr tests of the old reader), `natural_target/make_models.py` deleted (its README says how the models were made); unchanged and passing: `segline_formats`, `shared_point_tables`, `reaction_rate`, `angle_mapping`, `upgrade_plan_runtime`, `upgrade_poison_results`; `total_optical` left old here, format 3 since the gaps branch (§4); pyazr tests of the old reader on the originals: `natural_target`, `doppler`, `thickness`, `parameter_kinds` (the old generators); `pyazr_predictions` labels a format-3 project's data sets by name | converted (`M_thick` and `total_optical` since the gaps branch, §4) |
 | 7. THM | `18O_p_a_thm`, `17O`, `7Li_p_a`, `6Li_d`, `thm_coherent_background/toy`, examples `c12c12_tumino2018`, `o17_guardo2017_fit` (7 files; regression chi2 unchanged) | the checks edit THM records through `tests/lib/thm_records.sh` (`thm_set`/`thm_join`: a data set joins an experiment by its field `thm <experiment>`, the `<thm>` section without member lists; `thm_weight`: a weight table as the record's `thm_weight`; `THM_NOFOLD`: the beam records and the `beam`/`quadrature` fields) or by hand: rewritten `18O_p_a_thm`, `thm_band`, `thm_coherent_background`, `thm_coulomb_consistency`, `thm_distortion`, `thm_dw_vertex`, `thm_experiment`, `thm_fit`, `thm_fixed_angle`, `thm_lineshape`, `thm_park`, `thm_spectator_angles`, `thm_spectator_window`, `thm_energy_shift`, `thm_narrow_fold`, `thm_rwa_grid`, `thm_options`, `nuisance_prior`, `nuisance_kinds`, `mcmc_classification`; the old member and weight lists the old engine refused (`segments=` malformed, huge, a line in two experiments, past the last line, not THM; `weight[k]` past the last line, on a non-THM line, `weight[0]`) and a `<targetInt>` line on a THM segment through the converter on the originals (§4); unchanged and passing: `level_at_threshold`, `thm_threshold_grid`, `cli_route_exit`, `cli_yes_no`, `excitation_energy_column`, `kinematic_limits`, `no_brune_transform` (they read `7Li_p_ay` or only `<levels>`); `18O_p_a_thm/make_inputs.py` writes format 3; pyazr tests that edit records (`tests/pyazr/thm_records.py`): `thm_park`, `thm_adjoint`, `thm_nonbrune_grid`; pyazr tests of the old file class's THM API on the originals (`old_tree.py`): `thm_experiment`, `thm_lineshape`, `thm_spectator_window`, `thm_distortion`, `thm_fixed_angle`, `thm_dw_vertex`, `thm_spectator_angles`, `thm_coherent_background`, `thm_model_average`, `thm_vertex_reach`, `tabulate_thm`, `extrapolation_frame`, `geometry_no_transform`, `roundtrip` and `save_fit_norms` (their 7Li_p_a parts); unchanged and passing: `thm_park`'s neighbours `thm_vertex_memo_sessions`, `thm_profiled`, `model_average`, `parameter_kinds`, `level_grouping`, `azr_layout`, `convert_azr`, `no_brune_transform`, `project_nuclear_part` | converted |
 | 8. the rest | `upgrade/T1–T3` (`T1`, `T1_start`, `T2`, `T2_true`, `T3`, `T3_start`), `relativistic` (14 models), `scattering_length` (5), `channel_space`, `beta_delayed_alpha/16N`, `identical_entrance_reaction` (`be8`, `c12c12`, `dd_pt`), `identical_pp_res`, `hybrid_potential`, `sum_lab_frame` (`sum_data`, `extrap`), `ratio_frame/models` (`ratio_data`, `fixed_angle`) (36 files; `ec_m1_exact/models/m1` was converted with group 2) | rewritten: `upgrade` (`golden/golden.py` compares the golden files of the old originals as the format-3 project writes them: param.par through the converter's name map, the T3 classes of the scattering lengths; `golden/T2/regen_compare.py` the class "follower listed"; `recover.py` sets the `<modelData>` scattering lengths), `format3_engine` (the old T2 from the fixtures; the committed T2 = its conversion), `model_data`, `fit_threads`, `scattering_length` (the `<modelData>` data, refusals on records), `phase_channel_spin` (`s` required; the old segment without "spin" through the converter), `channel_space`, `beta_delayed_alpha` (but (e), §4), `fixed_param_par`, `relativistic` (g), `cli_route_exit`, `extrap_sav_segments`, `level_at_threshold` (its c12c12 part), `hybrid_potential/check_per_pair.py`, `scripts/bench_upgrade.sh`, `tests/reference/park_chi2_fallback_test.cpp` (the beam spread and window as records, project text only); the generators of T1–T3 (`upgrade/lib/upgrade_project.py`, `T1/generate.py`, `T3/generate.py`, `T2/make_t2.py`, `T2/check_recovery.py`) write format 3 through the converter and give the committed files byte for byte; pyazr tests that run the projects edit records: `hybrid_derivative`, `potential_sessions`, `api_model_value`, `composite_terms` (but its part 2b), `sav_readers`, `output_penalties`, `predictions`, `upgrade_unitarity`, `upgrade_breit_wigner`; pyazr tests of the old reader or the converter on the originals: `scattering_length` (its block part), `azr_parse_cache`, `potential_record`, `save_fit_format3` (part 2), `validate`, `convert_azr`, `session_records` (its old T2), `composite_terms` (2b); unchanged and passing: `cli_eof`, `fit_call_limit`, `mcmc_park_start`, `park_formalism`, `identical_entrance_reaction`, `mass_separation_check`, `check_files_data`, `failed_point`, `sum_lab_frame`, `ratio_frame`, `spin_orbit_potential` | converted |
-| 9. the refusal switch | — | §8.4 of `project_format3.md` | not started; only when nothing loads an old file |
+| 9. the refusal switch | `angular_coefficients/models/bad_norm.azr` (deleted: the refusal on the record), `bad_test.azr` (to the fixtures: the converter's refusal) | §8.4 of `project_format3.md`; `cli_route_exit`, `convert_params`, check 34 | done (`feature/upgrade-4-refusal-switch`, §5) |
 
 ## 3a. State at the last commit (verification)
 
 All convertible files are converted (groups 1-8; group 7, the THM projects, last; `natural_target/models/M_thick.azr`
-and the models of `total_optical` since the gaps branch, §4). Not converted on purpose:
-`angular_coefficients/models/bad_norm.azr`, `bad_test.azr` (old, in place), and the old-grammar refusals
+and the models of `total_optical` since the gaps branch, §4). Not converted on purpose (since the refusal switch every one in the fixtures only:
+`angular_coefficients/models/bad_test.azr` moved there, `bad_norm.azr` deleted, its refusal tested on the record) the
+old-grammar refusals
 `electron_screening/bad.azr`, `target_density/bad.azr`, `natural_target/models/bad_key.azr`, `bad_sample.azr` (in the
 fixtures only; the converter refuses each). The spec equivalence gives 202 files, 184 converted, 184 equal, 0 recorded
 differences, 0 differ, 18 not converted (12 written in format 3 from the start, the 6 above). What still reads old files is §5 (the refusal
@@ -164,27 +164,55 @@ the rewritten one on this branch, outputs diffed): identical for `thick_target`,
 messages of `prior_covariance` (and two gradient agreements at the 1e-15 level), the fixed-leader line of
 `norm_groups`, the converter's lines of `prior_centre`.
 
-## 5. What still reads old files (blocks the refusal switch)
+## 5. What reads old files: the converter only (the refusal switch, `feature/upgrade-4-refusal-switch`)
 
-Python is off the old formats (branch `feature/upgrade-4-pyazr-format3`, `pyazr_on_records.md`): `pyazr/azrfile.py`
-(`AzrModel`), `pyazr/datasets.py` (`SegmentSet`) and `tests/pyazr/old_tree.py` are deleted; a pyazr session,
-`Project.open` and every function that opens a project refuse a format-1/2 file with the engine's message
-(`convert::NotFormat3Message`, `pyazr.project.require_format3`). What is left for the refusal switch:
+The engine reads format 3 only. A file that is not a format-3 project is refused before anything of it is read
+(`Config::ReadConfigFile`, `io::NotFormat3Message`, exit 3; `project_format3.md` §8.4); pyazr refuses it with the same
+message. The only readers of an old file are the converter, `AZURE2 --convert` / `pyazr.convert_azr`, and
+`AZURE2 --convert-params` / `pyazr.convert_params` (a parameter file of an old project, renamed by its conversion's
+map). The originals in `tests/convert/fixtures/` are the converter's; checks that convert an old model at run time
+(`segline_formats`, `total_capture_code` (d), `ec_final_state_ambiguous` (e), `beta_delayed_alpha` (e),
+`pyazr/park_dsde`, the T1-T3 generators, `angular_coefficients` (g)) go through the converter and run its output.
+The GUI still writes the old grammar.
 
-- **The engine**: its old reading path (`src/Config*.cpp`'s old path, `EData`'s old segment readers), which the
-  next branch removes. A format-3 `<thm>` section still accepts an old `segments=` list (a defect: §3.9 says it
-  disappears); no committed check uses it.
-- **The GUI** (it reads and writes the old grammar).
-- **The converter** (on purpose; it keeps reading old files after the switch): `AZURE2 --convert`, `pyazr.convert_azr`
-  and the originals in `tests/convert/fixtures/`, used by the converter's own checks and by the pyazr converter
-  tests (`convert_azr`, `validate`, `save_fit_format3`, `potential_record`). `segline_formats`, `total_capture_code`
-  (d), `ec_final_state_ambiguous` (e) and `beta_delayed_alpha` (e) convert an old model at run time.
-- The generators of T1–T3 (`tests/upgrade/lib/upgrade_project.py`, `T1/generate.py`, `T3/generate.py`,
-  `T2/make_t2.py`) compose the old grammar and convert it (`AZURE2 --convert --to 3 --exact-grids`); they need the
-  converter only.
-- `light_excitation/make_models.py`, `clone_composite/make_models.py`, `doppler_fgm/make_models.py`,
-  `transmission_yield/make_models.py` write format 3; the old generators of `doppler_fgm` and `transmission_yield`
-  under `tests/convert/fixtures/` are deleted.
+**How the map of the old path was made.** A coverage build of the head before the switch (acb0cc3e, exported to
+`work/refuse/cov-src`, `--coverage -fprofile-update=atomic`, build `work/b-refuse-cov`) ran every project of the tree
+(menu 1, Brune basis, `tools/runall.sh`) and `ctest -LE slow` (203 tests; `pyazr_zero_width_fixed` and
+`upgrade_history` timed out under coverage); `gcov --json-format` per object, never-reached functions and runs of
+never-reached lines per file (`work/refuse/covtools/`). Not run under coverage: `tests/run_tests.sh` (the
+`check.sh`), fits, extrapolations. The coverage shows the old path *reached*: some test of the tree still ran an old
+file through the engine (the `OldDataSpecs` lines ran about 760 times), which is why the map below comes from reading
+each producer and each `if (!format3)` branch, with the coverage as the cross-check of what format 3 never reaches.
+
+| deleted (engine) | lines | reached only by |
+|---|---|---|
+| `src/ProjectSetup.cpp`: `OldTargetEffects`, `OldDataSpecs`, `OldExtrapolationSpecs`, the old branches of `WorkingCopy::Fill`, `MakePoints`, `CNuc::ReadAbundances`, `ProjectLevelSection`, `ProjectExitPairKeys`, `ProjectReactionPairs`, `ProjectHasThmData` | 93 | a project without `Config::format3` |
+| `src/Config.cpp`: the format-1 conversion on read (`io::ConvertToFormat2` in `SectionStream`, the note), the `<potential>` block reader (`convert::ReadPotentialBlock`) | 64 | formats 1, 2 |
+| `src/ConfigThm.cpp`, `src/ThmBlockEdits.cpp`, `src/ThmExperiment.cpp`, `include/ThmExperiment.h`, `include/ThmOptions.h`: the `segments=` key, the `weight[k]=` / `weightTest[k]=` options, `Format3ThmLines` (records written back as old lines), `ParseThmBlockLines`, `CheckThmBlockLines`; replaced by `ReadFormat3ThmSection` (members and tables from the records) | 268 (−, +135) | the old member lists; format 3 reached them through `Format3ThmLines` |
+| `src/ScatteringLength.cpp`, `include/ScatteringLength.h`: `ReadConstraints` (`<scatteringLengths>`), the constraint-list `Residuals`, `Chi2`, `Chi2Gradient`, `NumResiduals`, the measured part of `Report` | 127 | `<scatteringLengths>` |
+| `src/ModelData.cpp`, `include/ModelData.h`, `src/Objective.cpp`, `src/DataOutputFiles.cpp`, `include/Results.h`, `include/CNuc.h`: the rows of old lines, `inSection`, `linesPart`, `NumSectionResiduals`, `Total-Scattering-Length-Chi-Squared` | 65 | `<scatteringLengths>` |
+| `src/WorkingCopy.cpp`, `src/ThmNorm.cpp`: the `weight[k]` / `segments=` checks of a line number beyond the section and of a non-THM line | 32 | old member lists (the records cannot state them) |
+| `api/src/pybind_api.cpp`: `parse_segment_line`, `parse_extrapolation_line`, `parse_target_effect_line`, `LevelGrouper`, `convert_project_text` | 164 | no Python caller since pyazr 3 |
+| `api/src/pybind_thm.cpp`: `check_thm_block`, `read_thm_block`, `thm_option`, `thm_spin_text`, `thm_global_optical_for`, `read_thm_weight_table` | 117 | no Python caller |
+| `io/src/Convert.cpp`, `io/include/azure2/io/Convert.h`, `io/tests/convert_test.cpp`: `ConvertToFormat2` moved to `convert/src/Format2.cpp` (the converter's first step; test `convert_format2`); `FormatOf` and the refusal to `io/ProjectFormat.h` | 318 moved | the converter |
+| `src/ProjectCommands.cpp`: `--convert` without `--to 3` (format-2 output) | 22 | -- |
+
+**Functions of `convert/` the engine called, and now.** Before: `SpecsFromOldLines.h` (the four producers and
+`PriorCentresFromOldRows`; `src/ProjectSetup.cpp`), `PotentialBlock.h` (`src/Config.cpp`), `ThmLines.h`
+(`ParseThmSegmentList`, `ReadThmWeightKey`; `src/ThmExperiment.cpp`), `ScatteringLengthLine.h`
+(`src/ScatteringLength.cpp`), `NotFormat3Message` (`src/ProjectCommands.cpp`), `SegLine.h`, `ExtrapLine.h`,
+`TargetEffectSpecFromOldLine` (`api/src/pybind_api.cpp`). Now: none from `AZURE2Core` (`nm`: 0 undefined
+`azure2::convert` symbols in `libAZURE2Core.a`, 5 before; `src/CMakeLists.txt` no longer links
+`azure2_convert_specs`); the executable's `--convert`/`--convert-params` and the binding's `convert_format3_text`,
+`convert_parameter_file` link `azure2_convert`; `api/src/pybind_potentials.cpp` calls `convert::PotentialRecords` (the
+writer of `potential` records from settings, a format-3 caller: kept, a candidate to move to `experiment/`).
+
+**Unreached and kept** (coverage, read): `TargetEffect`'s refusals of the old block texts (`densityfit` sigma,
+`doppler vary`, ... in `src/TargetEffect.cpp` 129-175): the format-3 build fills the same spec text members and
+validation refuses first; they go when `TargetEffectSpec` carries typed values (a later branch; `src/TargetSetup.cpp`
+belongs to the node-layout branch). `SpecsFromOldLines` stays in `convert/` (the converter uses
+`PriorCentresFromOldRows`; `convert_spec_equivalence` and four reference tests build specs or effects from old lines
+through it).
 
 ## 6. User-guide pages that show old keyword lines (for a later documentation pass)
 
