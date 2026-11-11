@@ -11,7 +11,7 @@
 #include "AZUREParams.h"
 #include "CNuc.h"
 #include "Config.h"
-#include "EData.h"
+#include "WorkingCopy.h"
 #include "ExperimentAdapter.h"
 #include "Kinematics.h"
 #include "Results.h"

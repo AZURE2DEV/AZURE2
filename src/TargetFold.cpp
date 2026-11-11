@@ -9,8 +9,8 @@
 #include <vector>
 
 #include "Config.h"
-#include "EData.h"
-#include "EPoint.h"
+#include "WorkingCopy.h"
+#include "Unit.h"
 #include "TELinearForm.h"
 #include "TargetEffect.h"
 

@@ -4,7 +4,7 @@
 #include "ALevel.h"
 #include "CNuc.h"
 #include "Config.h"
-#include "ESegment.h"
+#include "Segment.h"
 #include "JGroup.h"
 #include "PPair.h"
 

@@ -8,7 +8,7 @@
 
 #include "CalculationPlan.h"
 #include "DataCovariance.h"
-#include "ESegment.h"
+#include "Segment.h"
 #include "TargetEffect.h"
 #include "ThmGroup.h"
 

@@ -1,7 +1,7 @@
 #ifndef ESEGMENT_H
 #define ESEGMENT_H
 
-#include "EPoint.h"
+#include "Unit.h"
 #include "Equation.h"
 #include "SegmentState.h"
 #include <vector>

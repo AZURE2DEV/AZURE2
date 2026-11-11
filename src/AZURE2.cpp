@@ -983,7 +983,7 @@ void startMessage(const Config &configure) {
 
 #ifdef USE_MCMC
 #include "CNuc.h"
-#include "EData.h"
+#include "WorkingCopy.h"
 #include "AZUREParams.h"
 #include "AZURECalcMCMC.h"
 #include <iomanip>

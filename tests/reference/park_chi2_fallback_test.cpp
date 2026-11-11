@@ -44,8 +44,8 @@
 #include "AZUREParams.h"
 #include "CNuc.h"
 #include "Config.h"
-#include "EData.h"
-#include "ESegment.h"
+#include "WorkingCopy.h"
+#include "Segment.h"
 
 Config *g_config = nullptr;
 

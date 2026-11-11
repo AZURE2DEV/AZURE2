@@ -9,9 +9,9 @@
 
 #include "CNuc.h"
 #include "Config.h"
-#include "EData.h"
-#include "EPoint.h"
-#include "ESegment.h"
+#include "WorkingCopy.h"
+#include "Unit.h"
+#include "Segment.h"
 #include "Kinematics.h"
 #include "PPair.h"
 #include "TargetEffect.h"

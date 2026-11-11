@@ -5,7 +5,7 @@
 #include "Config.h"
 #include "CNuc.h"
 #include "CNucReport.h"
-#include "EData.h"
+#include "WorkingCopy.h"
 #include "ParameterLimitsManager.h"
 #include "AZUREParams.h"
 #include "PriorCovariance.h"

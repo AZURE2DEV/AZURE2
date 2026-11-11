@@ -10,7 +10,7 @@
 
 #include "CNuc.h"
 #include "Config.h"
-#include "EData.h"
+#include "WorkingCopy.h"
 #include "azure2/convert/SpecsFromOldLines.h"
 #include "azure2/experiment/ProjectReader.h"
 

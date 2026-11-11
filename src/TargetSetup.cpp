@@ -22,7 +22,7 @@
 #include "AdaptiveIntegrationGrid.h"
 #include "CNuc.h"
 #include "Config.h"
-#include "EData.h"
+#include "WorkingCopy.h"
 #include "UdrKernel.h"
 
 /*!

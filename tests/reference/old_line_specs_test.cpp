@@ -12,8 +12,8 @@
 #include <string>
 #include <vector>
 
-#include "EData.h"
-#include "ESegment.h"
+#include "WorkingCopy.h"
+#include "Segment.h"
 #include "azure2/convert/SpecsFromOldLines.h"
 
 Config *g_config = nullptr;  // defined by the executable; the library reads it

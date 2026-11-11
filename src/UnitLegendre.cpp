@@ -5,8 +5,8 @@
 #include <vector>
 
 #include "CNuc.h"
-#include "EData.h"
-#include "EPoint.h"
+#include "WorkingCopy.h"
+#include "Unit.h"
 #include "Kinematics.h"
 #include "PPair.h"
 #include "TargetEffect.h"

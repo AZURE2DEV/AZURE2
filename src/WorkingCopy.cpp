@@ -4,7 +4,7 @@
 #include "CNuc.h"
 #include "Config.h"
 #include "CovarianceBand.h"
-#include "EData.h"
+#include "WorkingCopy.h"
 #include "ModelPass.h"
 #include "ECAmplitudeCache.h"
 #include "ECTable.h"

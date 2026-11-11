@@ -14,7 +14,7 @@
 
 #include "Config.h"
 #include "DataCovariance.h"
-#include "EData.h"
+#include "WorkingCopy.h"
 #include "ModelPass.h"
 
 std::shared_ptr<DataCovariance::File> EData::CovarianceFileFor(const std::string &path, const Config &configure) {

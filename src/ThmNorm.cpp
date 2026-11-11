@@ -13,7 +13,7 @@
 #include "ThmVertexBoundary.h"
 #include "Config.h"
 #include "CovarianceBand.h"
-#include "EData.h"
+#include "WorkingCopy.h"
 #include "Minuit2/MnUserParameters.h"
 #include "GSLException.h"
 #include "ThmLineshape.h"

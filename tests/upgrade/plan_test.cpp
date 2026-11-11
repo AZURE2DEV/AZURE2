@@ -19,9 +19,9 @@
 #include "CNuc.h"
 #include "CalculationPlan.h"
 #include "Config.h"
-#include "EData.h"
-#include "EPoint.h"
-#include "ESegment.h"
+#include "WorkingCopy.h"
+#include "Unit.h"
+#include "Segment.h"
 
 Config *g_config = nullptr;  // defined by the executable; the library reads it
 

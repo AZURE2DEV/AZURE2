@@ -12,7 +12,7 @@
 
 #include "CNuc.h"
 #include "Config.h"
-#include "EData.h"
+#include "WorkingCopy.h"
 
 void EData::FillThicknessFromParams(const vector_r &p) {
   if (set_->thicknessSegments_.empty() || set_->thicknessParamOffset_ < 0) return;

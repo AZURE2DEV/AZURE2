@@ -15,7 +15,7 @@
 #include "CNuc.h"
 #include "Config.h"
 #include "Constants.h"
-#include "EData.h"
+#include "WorkingCopy.h"
 #include "PPair.h"
 #include "ThmAngular.h"
 #include "ThmDistortion.h"

@@ -15,7 +15,7 @@
 #include "AZUREOutput.h"
 #include "Config.h"
 #include "CovarianceBand.h"
-#include "EData.h"
+#include "WorkingCopy.h"
 
 /*!
  * The decomposition of a sample segment, one file per segment since

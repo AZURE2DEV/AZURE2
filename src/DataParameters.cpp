@@ -19,7 +19,7 @@
 
 #include "AZUREParams.h"
 #include "Config.h"
-#include "EData.h"
+#include "WorkingCopy.h"
 #include "GSLException.h"
 #include "Minuit2/MnUserParameters.h"
 

@@ -1,6 +1,6 @@
 #include "CovarianceBand.h"
 #include "CNuc.h"
-#include "EData.h"
+#include "WorkingCopy.h"
 #include "AZUREParams.h"
 #include "Config.h"
 #include <fstream>

@@ -9,8 +9,8 @@
 #include "CNuc.h"
 #include "ChannelTable.h"
 #include "Config.h"
-#include "EData.h"
-#include "ESegment.h"
+#include "WorkingCopy.h"
+#include "Segment.h"
 #include "TargetEffect.h"
 
 namespace {

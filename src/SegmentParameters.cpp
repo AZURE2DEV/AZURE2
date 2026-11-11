@@ -7,7 +7,7 @@
 
 #include "Config.h"
 #include "Equation.h"
-#include "ESegment.h"
+#include "Segment.h"
 
 /*!
  * Returns the nominal energy shift value for the data segment.

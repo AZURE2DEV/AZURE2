@@ -5,7 +5,7 @@
 #include "DataSet.h"
 #include "SegmentState.h"
 #include "ChannelTable.h"
-#include "ESegment.h"
+#include "Segment.h"
 #include "TargetEffect.h"
 #include "NodeTableCache.h"
 #include "ThmExperiment.h"

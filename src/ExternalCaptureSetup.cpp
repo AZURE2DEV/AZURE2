@@ -15,7 +15,7 @@
 #include "CNuc.h"
 #include "Config.h"
 #include "ECTable.h"
-#include "EData.h"
+#include "WorkingCopy.h"
 #include "GSLException.h"
 
 namespace {

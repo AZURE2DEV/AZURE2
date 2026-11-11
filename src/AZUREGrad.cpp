@@ -6,13 +6,13 @@
 #include <iostream>
 #include <cstdlib>
 #include "CNuc.h"
-#include "EData.h"
+#include "WorkingCopy.h"
 #include "JGroup.h"
 #include "ALevel.h"
 #include "AChannel.h"
 #include "PPair.h"
-#include "ESegment.h"
-#include "EPoint.h"
+#include "Segment.h"
+#include "Unit.h"
 #include "TargetEffect.h"
 #include "AMatrixFunc.h"
 #include "Config.h"

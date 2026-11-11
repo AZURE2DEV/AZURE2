@@ -2,8 +2,8 @@
 #include "CaptureAyRequests.h"
 
 #include "CNuc.h"
-#include "EData.h"
-#include "ESegment.h"
+#include "WorkingCopy.h"
+#include "Segment.h"
 #include "PPair.h"
 
 void RequestCaptureAyTerms(CNuc &compound, EData &data) {

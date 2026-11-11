@@ -4,7 +4,7 @@
 #include "PolarizationFunc.h"
 #include "CNuc.h"
 #include "Config.h"
-#include "EPoint.h"
+#include "Unit.h"
 #include "AZUREGrad.h"
 #include "azure2/physics/ExternalCapture.h"
 #include <stdexcept>

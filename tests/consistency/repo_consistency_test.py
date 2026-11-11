@@ -427,8 +427,8 @@ PENALTIES = ("ParkNormPenalty", "AbundancePenalty", "AbundanceSumPenalty", "Scat
              "ScatteringLength::Residuals", "ScatteringLength::Chi2Gradient", "ModelData::Chi2", "ModelData::Residuals",
              "ModelData::Gradient", "ModelData::AppendRows",
              "ScreeningPenalty", "DensityPenalty", "DopplerPenalty", "ThicknessPenalty", "CovarianceChi2Correction")
-DEFINERS = {"src/Objective.cpp", "src/CNuc.cpp", "src/ScatteringLength.cpp", "src/ModelData.cpp", "src/EData.cpp",
-            "src/ESegment.cpp", "src/TargetEffect.cpp"}
+DEFINERS = {"src/Objective.cpp", "src/CNuc.cpp", "src/ScatteringLength.cpp", "src/ModelData.cpp", "src/WorkingCopy.cpp",
+            "src/Segment.cpp", "src/TargetEffect.cpp"}
 ALLOWED_PENALTY_USES = {
     # The MCMC splits the posterior: per-nucleus abundance priors are log-priors (CalculateLogPrior), so the
     # likelihood carries only the sum-to-one term (and the model data, Objective::ModelDataChi2); Park's wall rejects
@@ -438,21 +438,21 @@ ALLOWED_PENALTY_USES = {
     # The API's data chi^2 in residual form (EvaluateFilledChi2, the analytic gradient): T2 for its rows;
     # pyazr_objective checks it against the CLI's objective.
     ("api/src/AZUREAPI.cpp", "CovarianceChi2Correction"),
-    # The output writer, moved out of src/EData.cpp (docs/upgrade/edata_split.md N1): chiSquared.out prints the
+    # The output writer, moved out of src/WorkingCopy.cpp (docs/upgrade/edata_split.md N1): chiSquared.out prints the
     # target-effect prior totals, which Results::objective does not hold yet (decision D2 of the note).
-    ("src/EDataOutputFiles.cpp", "ScreeningPenalty"),
-    ("src/EDataOutputFiles.cpp", "DensityPenalty"),
-    ("src/EDataOutputFiles.cpp", "DopplerPenalty"),
-    ("src/EDataOutputFiles.cpp", "ThicknessPenalty"),
-    # The data covariance, moved out of src/EData.cpp (docs/upgrade/edata_split.md W2): the file defines the
+    ("src/DataOutputFiles.cpp", "ScreeningPenalty"),
+    ("src/DataOutputFiles.cpp", "DensityPenalty"),
+    ("src/DataOutputFiles.cpp", "DopplerPenalty"),
+    ("src/DataOutputFiles.cpp", "ThicknessPenalty"),
+    # The data covariance, moved out of src/WorkingCopy.cpp (docs/upgrade/edata_split.md W2): the file defines the
     # covariance term, and PrepareCovarianceSeeds evaluates it for the seeds the gradient reads.
-    ("src/EDataCovariance.cpp", "CovarianceChi2Correction"),
-    # The hand-over of a parameter vector, moved out of src/EData.cpp (docs/upgrade/edata_split.md M2): the file
+    ("src/DataCovarianceGroups.cpp", "CovarianceChi2Correction"),
+    # The hand-over of a parameter vector, moved out of src/WorkingCopy.cpp (docs/upgrade/edata_split.md M2): the file
     # defines the target-effect prior totals (EData::ScreeningPenalty ...), each the sum of its effects' terms.
-    ("src/EDataHandOver.cpp", "ScreeningPenalty"),
-    ("src/EDataHandOver.cpp", "DensityPenalty"),
-    ("src/EDataHandOver.cpp", "DopplerPenalty"),
-    ("src/EDataHandOver.cpp", "ThicknessPenalty"),
+    ("src/HandOver.cpp", "ScreeningPenalty"),
+    ("src/HandOver.cpp", "DensityPenalty"),
+    ("src/HandOver.cpp", "DopplerPenalty"),
+    ("src/HandOver.cpp", "ThicknessPenalty"),
 }
 for top in ("src", "api/src"):
     for name in sorted(os.listdir(os.path.join(ROOT, top))):
@@ -644,7 +644,7 @@ for other in ("include/AZUREGrad.h", "include/AZURECalcMCMC.h", "pyazr/parameter
 #     buffer.  EPoint.h (with EPointTables.h, its tables) and EData.h declare no member of a type that names
 #     Results -- a value, pointer, reference, container or smart pointer.  Function declarations may name it (the
 #     buffer is passed in).
-for rel in ("include/EPoint.h", "include/EPointTables.h", "include/EData.h"):
+for rel in ("include/Unit.h", "include/UnitTables.h", "include/WorkingCopy.h"):
     text = re.sub(r"//[^\n]*|/\*.*?\*/|^\s*#[^\n]*", "", read(rel), flags=re.S | re.M)
     for stmt in re.split(r"[;{}]", text):
         if "(" in stmt or not re.search(r"\bResults\b", stmt):
@@ -681,7 +681,7 @@ if not RESIDUAL.search("double r = th - pt->GetCMCrossSection() * norm;"):
 # the tree's backward too (step S11, azure2::ModelPointBackward), so the gradient reads none of them.
 PIECES = re.compile(r"(?<![\w:])(?:ESegment::)?(?:TermFrameFactor|RatioTermFrameFactor|TransformTerms|Transmission|YieldY0)"
                     r"\s*\(|(?:->|\.)GetComponentScaling\s*\(|(?:->|\.)GetAbundance\s*\(\s*\w*[Ss]ample")
-PIECES_ALLOWED = {"src/ModelPass.cpp", "src/Predictions.cpp", "src/ESegment.cpp", "include/ESegment.h"}
+PIECES_ALLOWED = {"src/ModelPass.cpp", "src/Predictions.cpp", "src/Segment.cpp", "include/Segment.h"}
 for top in ("src", "api/src", "include"):
     for name in sorted(os.listdir(os.path.join(ROOT, top))):
         rel = f"{top}/{name}"
@@ -704,19 +704,19 @@ if not PIECES.search("w = compound->GetAbundance(sample, nucleus) * ESegment::Te
 #     turned into a point (EData::PlanPoint) only by the plan (src/CalculationPlan.cpp), EPoint::PlanMapped and the
 #     plan's tests -- everything else asks EPoint::PlanMapped or the plan.
 POINT_PTR = re.compile(r"^\s*(?:mutable\s+)?(?:std::\w+<\s*)?(?:const\s+)?EPoint\s*\*(?:\s*>)?\s*\w+_\s*(?:=[^;]*)?;", re.M)
-eph = re.sub(r"//[^\n]*|/\*.*?\*/", "", read("include/EPoint.h"), flags=re.S)
+eph = re.sub(r"//[^\n]*|/\*.*?\*/", "", read("include/Unit.h"), flags=re.S)
 # the RAII scopes nested in EPoint (DopplerAppliedScope, ...) hold the point they set a flag on: not a member of EPoint
 eph = re.sub(r"\bclass\s+\w+Scope\b[^{;]*\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\};", "", eph)
 if "plan_task_" not in eph:
-    problems.append("check 29: EPoint's members are no longer found in include/EPoint.h; update this check")
+    problems.append("check 29: EPoint's members are no longer found in include/Unit.h; update this check")
 for m in POINT_PTR.finditer(eph):
-    problems.append(f"include/EPoint.h: a point holds a pointer to a point ({m.group(0).strip()}); the calculation "
+    problems.append(f"include/Unit.h: a point holds a pointer to a point ({m.group(0).strip()}); the calculation "
                     "plan (include/CalculationPlan.h) says who calculates whom")
 if not POINT_PTR.search("  std::vector<EPoint *> mapped_;") or not POINT_PTR.search("  EPoint *host_ = nullptr;"):
     problems.append("check 29: the member pattern no longer matches the forms it guards; update this check")
 OLD_MAPPING = re.compile(r"\b(?:\w*LocalMappedPoints?|local_mapped_points_|GetMappedPoints|EPointMapIterator)\b")
 PLAN_POINT = re.compile(r"\bPlanPoint\s*\(")
-PLAN_POINT_FILES = {"src/CalculationPlan.cpp", "src/EPoint.cpp", "include/EData.h", "tests/upgrade/plan_test.cpp"}
+PLAN_POINT_FILES = {"src/CalculationPlan.cpp", "src/Unit.cpp", "include/WorkingCopy.h", "tests/upgrade/plan_test.cpp"}
 for top in ("src", "api/src", "include", "tests/upgrade", "tests/reference"):
     for name in sorted(os.listdir(os.path.join(ROOT, top))):
         rel = f"{top}/{name}"

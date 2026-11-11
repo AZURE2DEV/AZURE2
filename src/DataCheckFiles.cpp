@@ -8,7 +8,7 @@
 
 #include "CNuc.h"
 #include "Config.h"
-#include "EData.h"
+#include "WorkingCopy.h"
 
 /*!
  * Prints the data point after the object is filled or points are created.

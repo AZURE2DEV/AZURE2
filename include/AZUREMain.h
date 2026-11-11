@@ -2,7 +2,7 @@
 #define AZUREMAIN_H
 
 #include "CNuc.h"
-#include "EData.h"
+#include "WorkingCopy.h"
 
 /// The top-level AZURE function class
 

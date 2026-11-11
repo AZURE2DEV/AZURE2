@@ -6,9 +6,9 @@
 #include <sstream>
 #include <stdexcept>
 
-#include "EData.h"
-#include "EPoint.h"
-#include "ESegment.h"
+#include "WorkingCopy.h"
+#include "Unit.h"
+#include "Segment.h"
 #include "Results.h"
 
 namespace azure2 {

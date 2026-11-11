@@ -16,5 +16,5 @@ src/AZURECalc.cpp	2075
 src/AZURECalcMCMC.cpp	1434
 src/AZUREGrad.cpp	1847
 src/CNuc.cpp	1777
-src/EData.cpp	1826
+src/WorkingCopy.cpp	1826
 src/ThmExperiment.cpp	1026
