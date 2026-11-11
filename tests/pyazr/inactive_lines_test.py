@@ -6,9 +6,8 @@ AZURE2 skips every level line with isActive == 0 (CNuc::Fill) and every data
 segment with isActive == 0, so neither takes part in the engine's numbering.
 Two places in pyazr used to count them anyway:
 
-  * AzrModel.engine_level_keys() numbered levels over all file lines, so
-    apply_fit / save_fit wrote a fit one level early in any J-group with an
-    inactive line -- which is how the 13C+alpha archive's 5/2+ block was
+  * the level bookkeeping numbered levels over all file lines, so save_fit
+    wrote a fit one level early in any J-group with an inactive line -- which is how the 13C+alpha archive's 5/2+ block was
     silently corrupted at two successive bakes.
 
   * azure2.penalties() / dataset_chi2() indexed datasets[i] for i below the
@@ -16,14 +15,15 @@ Two places in pyazr used to count them anyway:
     that sits past that position in the file and mislabeling datasets.
 
 Both are exercised here on the 13N model with one inactive level spliced into
-the middle of a J-group and one inactive segment spliced in front of the
+the middle of a J-group (Project.add_level, set_level(active=False), its rows
+moved in front of the group's second level; Project.levels() numbers the
+levels as the engine does, through experiment::LevelEdits) and one inactive segment spliced in front of the
 segment whose normalization is freed.
 
 Needs the compiled engine; skips cleanly without it.
 
 Run from anywhere:  python3 tests/pyazr/inactive_lines_test.py
 """
-import copy
 import glob
 import os
 import shutil
@@ -47,8 +47,7 @@ try:
     sys.path.insert(0, ROOT)
     os.environ.setdefault("OMP_NUM_THREADS", "2")
     import numpy as np
-    from pyazr import azure2, AzrModel
-    from pyazr.azrfile import AzrLevel
+    from pyazr import azure2, Project
 except Exception as err:                                   # engine not built
     print(f"skip: engine not available ({type(err).__name__}: {err})")
     sys.exit(77)
@@ -73,32 +72,39 @@ with tempfile.TemporaryDirectory() as tmp:
     os.makedirs(os.path.join(work, "checks"))
 
     print("1. an inactive level in the middle of a J-group")
-    model = AzrModel.from_file(os.path.join(work, "13N.azr"))
-    group = model.find(jpi="1/2+")
-    check("13N has a two-level 1/2+ group to splice into", len(group) == 2,
-          str(group))
-    ghost = AzrLevel([copy.deepcopy(c) for c in group[0].channels])
-    ghost.set_energy(10.0)
-    ghost.set_active(False)
-    for c in ghost.channels:
-        c.gamma = 1.0
-    at = model.levels.index(group[1])          # in front of the 20 MeV pole
-    model.levels.insert(at, ghost)
-    check("the level reports itself inactive", ghost.active is False)
-    keys = model.engine_level_keys()
-    check("engine_level_keys skips the inactive level",
-          ghost not in keys.values() and len(keys) == len(model.active_levels),
-          f"{len(keys)} keys for {len(model.active_levels)} active levels")
-    spliced = os.path.join(work, "spliced.azr")
-    model.write(spliced)
+    model = Project.open(os.path.join(work, "13N.azr"))
+    group = [lv for lv in model.levels() if lv.jpi == "1/2+"]
+    check("13N has a two-level 1/2+ group to splice into", len(group) == 2, str(group))
+    model.add_level(0.5, +1, 10.0, [dict(pair=c.pair, l=c.l, s=c.s, width=1.0, fixed=c.fixed)
+                                    for c in group[0].channels])
+    model.set_level("1/2+ 10", active=False)
+    spliced = model.save(os.path.join(work, "spliced.azr"))
+    # the ghost's rows (the last of the section) moved in front of the 20 MeV pole's first row
+    lines = open(spliced).read().split("\n")
+    ghost_rows = sorted(c.line - 1 for c in model.level("1/2+ 10").channels)
+    rows = [lines[i] for i in ghost_rows]
+    for i in reversed(ghost_rows):
+        del lines[i]
+    at = min(c.line - 1 for c in group[1].channels)
+    lines[at:at] = rows
+    open(spliced, "w").write("\n".join(lines))
+    model = Project.open(spliced)
+    ghost = [lv for lv in model.levels() if not lv.active]
+    check("the level reports itself inactive", len(ghost) == 1 and abs(ghost[0].energy - 10.0) < 1e-12, str(ghost))
+    active = [lv for lv in model.levels() if lv.active]
+    check("the engine's numbering skips the inactive level",
+          ghost[0].group == 0 and ghost[0].level == 0 and len({(lv.group, lv.level) for lv in active}) == len(active),
+          str([(lv.label, lv.group, lv.level) for lv in model.levels()]))
+    check("the ghost stands between the two 1/2+ levels",
+          min(c.line for c in group[0].channels) < min(c.line for c in ghost[0].channels)
+          < min(c.line for c in model.level(("1/2+", 20.0)).channels))
 
     with azure2(spliced, cwd=work) as m:
         x = np.asarray(m.params_rwa, float)
         chi2_ref = float(np.sum(m.calculate_chi2_rwa(x)))
         # every engine (jgroup, level) must land on a file level with the
         # same J^pi and energy
-        fresh = AzrModel.from_file(spliced)
-        keys = fresh.engine_level_keys()
+        keys = {(lv.group, lv.level): lv for lv in Project.open(spliced).levels() if lv.active}
         bad = []
         for key, lvls in m.parameters.by_physical_level().items():
             lv = keys.get((key.jgroup, key.level))
@@ -113,7 +119,7 @@ with tempfile.TemporaryDirectory() as tmp:
               "; ".join(bad[:4]))
 
         # perturb the 1/2+ background pole (the level after the ghost) and
-        # snapshot: the values must land on the 20 MeV line, not the ghost
+        # snapshot: the values must land on the 20 MeV rows, not the ghost
         pole = [p for p in m.parameters.widths
                 if p.J is not None and abs(p.J - 0.5) < 1e-9 and p.parity > 0
                 and p.level_energy is not None
@@ -124,32 +130,36 @@ with tempfile.TemporaryDirectory() as tmp:
             moved[p.free_index] *= 1.2
         chi2_moved = float(np.sum(m.calculate_chi2_rwa(moved)))
         snap, sav = m.save_fit(os.path.join(work, "snap.azr"), moved)
-        baked = AzrModel.from_file(snap)
-        g = [lv for lv in baked.levels if lv.jpi == "1/2+" and not lv.active]
-        check("the ghost line is still inactive and untouched",
+        baked = Project.open(snap)
+        g = [lv for lv in baked.levels() if lv.jpi == "1/2+" and not lv.active]
+        check("the ghost rows are still inactive and untouched",
               len(g) == 1 and abs(g[0].energy - 10.0) < 1e-9
-              and all(c.gamma == 1.0 for c in g[0].channels))
-        check("the pole's width changed on the active 20 MeV line",
-              any(c.gamma != group[1].channels[0].gamma
-                  for lv in baked.levels if lv.jpi == "1/2+" and lv.active
+              and all(c.width == 1.0 for c in g[0].channels))
+        check("the pole's width changed on the active 20 MeV rows",
+              any(c.width != group[1].channels[0].width
+                  for lv in baked.levels() if lv.jpi == "1/2+" and lv.active
                   and abs(lv.energy - 20.0) < 1e-9 for c in lv.channels))
 
-    probe = AzrModel.from_file(snap)
-    probe.set_output_dir(os.path.join(work, "output_snap"))
-    probe_path = probe.write(os.path.join(work, "snap_probe.azr"))
+    probe = Project.open(snap)
+    probe.set_config(output_dir=os.path.join(work, "output_snap") + "/")
+    probe_path = probe.save(os.path.join(work, "snap_probe.azr"))
+    os.makedirs(os.path.join(work, "output_snap"), exist_ok=True)
     with azure2(probe_path, cwd=work) as m2:
         chi2_back = float(np.sum(m2.calculate_chi2_rwa(m2.params_rwa)))
         check("the snapshot reproduces the perturbed chi-squared",
               np.isclose(chi2_back, chi2_moved, rtol=1e-6),
               f"{chi2_back} vs {chi2_moved} (unperturbed {chi2_ref})")
 
-    purged = AzrModel.from_file(snap)
-    gone = purged.purge_inactive_levels()
-    check("purge_inactive_levels removes exactly the ghost",
+    purged = Project.open(snap)
+    gone = [lv for lv in purged.levels() if not lv.active]
+    for lv in gone:
+        purged.remove_level(lv)
+    check("removing the inactive levels removes exactly the ghost",
           len(gone) == 1 and abs(gone[0].energy - 10.0) < 1e-9
-          and not [lv for lv in purged.levels if not lv.active])
-    purged.set_output_dir(os.path.join(work, "output_purged"))
-    purged_path = purged.write(os.path.join(work, "purged.azr"))
+          and not [lv for lv in purged.levels() if not lv.active])
+    purged.set_config(output_dir=os.path.join(work, "output_purged") + "/")
+    os.makedirs(os.path.join(work, "output_purged"), exist_ok=True)
+    purged_path = purged.save(os.path.join(work, "purged.azr"))
     with azure2(purged_path, cwd=work) as m3:
         chi2_purged = float(np.sum(m3.calculate_chi2_rwa(m3.params_rwa)))
         check("purging the inactive level changes nothing for the engine",

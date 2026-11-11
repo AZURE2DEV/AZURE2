@@ -15,7 +15,7 @@
 #   (c) the proton mass of pair 1 replaced by the bare proton (1.00727646688 u): a WARNING of -511.0 keV with the
 #       electron-mass hint;
 #   (d) every mass replaced by its mass number: no WARNING, one NOTE that the pairs use mass numbers;
-#   (e) the model of (b) with mass numbers, filled by pyazr's AzrModel.fill_masses (AME2020): no WARNING and no
+#   (e) the model of (b) with mass numbers, filled by pyazr's masses.fill_masses (AME2020): no WARNING and no
 #       NOTE, and the run completes (skipped without python3).
 #
 #   ./tests/mass_separation_check/check.sh path/to/AZURE2
@@ -76,19 +76,19 @@ if [ -n "$PY" ]; then
                         if ($6 == 2) $23 = sprintf("%.10f", $23 - 0.005) } {print}' \
     "$SRC/li7pn_ang_rel.azr" > "$d/numbers.azr"
   if "$PY" - "$HERE/../.." "$d/numbers.azr" "$d/t.azr" > "$d/fill.log" 2>&1 <<'PYEOF'
-# The pyazr package: since Phase 3 (docs/upgrade/project.md section 5) AzrModel reads the file through the engine's
-# document (_azure2), so the compiled module is needed; exit 3 = not built (the check is skipped).
+# pyazr.Project reads the file through the engine's document (_azure2), so the compiled module is needed; exit 3 =
+# not built (the check is skipped).
 import os, sys
 sys.path.insert(0, sys.argv[1])
 try:
-    from pyazr import azrfile
+    from pyazr import Project, masses
     from pyazr import _azure2  # noqa: F401
 except ImportError as e:
     print(f"no compiled pyazr module: {e}")
     sys.exit(3)
-m = azrfile.AzrModel.from_file(sys.argv[2])
-print(m.fill_masses())
-m.write(sys.argv[3])
+m = Project.open(sys.argv[2])
+print(masses.fill_masses(m))
+m.save(sys.argv[3])
 PYEOF
   then
     (cd "$d" && printf '1\n\n\n7\n' | run_limited 300 "$AZURE2_BIN" --no-gui --no-readline t.azr > run.log 2>&1)

@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """pyazr.tabulate on a project with THM experiments.
 
-tabulate() replaces the data segments of the project by its own (on-shell)
-tabulation segments.  The <thm> block keys experiment[...] segments= and
-weight[k] by data-segment line, so left in place they named the tabulation
-segments, and the engine refused the file ("segment 1 is not a THM segment").
+tabulate() replaces the data sets of the project by its own (on-shell)
+tabulation data sets.  Left in place, the THM experiments and weights would
+apply to them (once the engine refused such a file: "segment 1 is not a THM
+segment"); tabulate removes the THM experiments.
 
-On a copy of tests/18O_p_a_thm with its two THM segments made one experiment
-and a weight on segment 1: the tabulation runs, gives finite positive cross
-sections at the requested points, and equals the tabulation of the same
+On a copy of tests/18O_p_a_thm with its two THM data sets made one experiment
+and a weight table on the first: the tabulation runs, gives finite positive
+cross sections at the requested points, and equals the tabulation of the same
 project without the experiment and the weight.
 
 Needs the compiled engine; skips cleanly without it.
@@ -26,7 +26,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 SOURCE = os.path.join(ROOT, "tests", "18O_p_a_thm")
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import old_tree  # noqa: E402  (the old original: a test of the old file class, format3_tree.md section 5)
+from thm_records import set_experiment, thm_datasets  # noqa: E402
 AZR = "18O_p_a_thm.azr"
 
 failures = []
@@ -42,7 +42,7 @@ sys.path.insert(0, ROOT)
 os.environ.setdefault("OMP_NUM_THREADS", "2")
 try:
     import numpy                                               # noqa: F401
-    from pyazr.azrfile import AzrModel
+    from pyazr import Project
     from pyazr.tabulate import tabulate
     import pyazr._azure2                                       # noqa: F401
 except Exception as err:                                       # engine not built
@@ -51,7 +51,7 @@ except Exception as err:                                       # engine not buil
 
 
 def fresh_copy(dst):
-    old_tree.copytree(SOURCE, dst)
+    shutil.copytree(SOURCE, dst)
     for junk in ("output", "checks"):
         shutil.rmtree(os.path.join(dst, junk), ignore_errors=True)
         os.makedirs(os.path.join(dst, junk))
@@ -66,17 +66,17 @@ with tempfile.TemporaryDirectory() as tmp:
     fresh_copy(thm)
     with open(os.path.join(thm, "w.dat"), "w") as fh:
         fh.write("0.4 1.0\n1.0 2.0\n")
-    m = AzrModel.from_file(os.path.join(thm, AZR))
-    m.set_thm_experiment("E", [1, 2], background="linear")
-    m.set_thm_weight(1, "w.dat")
-    m.write(os.path.join(thm, AZR))
+    m = Project.open(os.path.join(thm, AZR))
+    set_experiment(m, "E", [1, 2], background="linear")
+    m.set(thm_datasets(m)[0], thm_weight="w.dat")
+    m.save(os.path.join(thm, AZR))
 
     kw = dict(rel_tol=5e-2, min_points=9, max_points=9, max_rounds=0)
     try:
         a = tabulate(os.path.join(thm, AZR), [(1, 2)], 0.55, 0.9, **kw)[(1, 2)]
-        check("a project with experiment[...] and weight[k] tabulates", True)
+        check("a project with an experiment and a thm_weight tabulates", True)
     except Exception as err:
-        check("a project with experiment[...] and weight[k] tabulates", False,
+        check("a project with an experiment and a thm_weight tabulates", False,
               f"{type(err).__name__}: {err}")
         a = None
     b = tabulate(os.path.join(plain, AZR), [(1, 2)], 0.55, 0.9, **kw)[(1, 2)]

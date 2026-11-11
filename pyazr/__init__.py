@@ -10,12 +10,11 @@ from .azure2 import azure2, ScatteringLength
 from .parameters import (Pair, PairSet, Parameter, ParameterSet, LevelKey,
                          NuclearPotential)
 from .scheme import LevelScheme, SchemeLevel, SchemeChannel
-from .azrfile import AzrModel, AzrLevel, AzrChannel, ScatteringLengthLine, PairMassCheck, convert_azr
+from .convert import convert_azr
 from . import masses
 from . import stopping
 from .physics import whittaker_wave
-from .datasets import (Segment, SegmentSet, TestSegment, TestSegmentSet,
-                       fitted_norms)
+from .outputs import fitted_norms
 # nds also defines a Level, but transform.Level owns the name here; reach the
 # other one as pyazr.nds.Level.
 from .nds import (ExforData, ExforDataset, GroundState, Gamma,
@@ -31,7 +30,7 @@ from .transform import (Channel, Level, TransformedChannel, TransformedLevel,
 from .angular import angular_distribution
 from .tabulate import tabulate, TabulatedCrossSection
 from .nuclei import (Nucleus, MergeReport, merge_projects, nucleus_of,
-                     nucleus_of_pair, nucleus_of_channel)
+                     nucleus_of_pair)
 from .bands import (Band, load_covariance, rmatrix_columns, best_fit_params,
                     live_parameters, step_sizes, sensitivities, trimmed_model,
                     uncertainty_bands, extrapolation_bands)
@@ -47,14 +46,13 @@ from .described import (DescribedDataset, DescribedDatasets, DescribedExtrapolat
 from .project import Project, Record, Nuisance, FormatError, records_from_csv
 from .nuclear_part import ProjectLevel, ProjectChannel, ProjectPair
 
-__all__ = ["azure2", "convert_azr", "ScatteringLength", "ScatteringLengthLine", "whittaker_wave",
+__all__ = ["azure2", "convert_azr", "ScatteringLength", "whittaker_wave",
            "tabulate", "TabulatedCrossSection",
            "angular_distribution",
            "Pair", "PairSet", "Parameter", "ParameterSet", "LevelKey",
            "NuclearPotential",
            "LevelScheme", "SchemeLevel", "SchemeChannel",
-           "AzrModel", "AzrLevel", "AzrChannel", "PairMassCheck", "masses", "stopping",
-           "Segment", "SegmentSet", "TestSegment", "TestSegmentSet",
+           "masses", "stopping",
            "fitted_norms",
            "ExforData", "ExforDataset", "GroundState", "Gamma",
            "Reference", "search_exfor", "fetch_exfor", "fetch_levels",
@@ -66,7 +64,7 @@ __all__ = ["azure2", "convert_azr", "ScatteringLength", "ScatteringLengthLine", 
            "levels_from_azr", "levels_from_scheme",
            "penetrability", "shift", "shift_derivative", "whittaker",
            "Nucleus", "MergeReport", "merge_projects", "nucleus_of",
-           "nucleus_of_pair", "nucleus_of_channel",
+           "nucleus_of_pair",
            "Band", "load_covariance", "rmatrix_columns", "best_fit_params",
            "live_parameters", "step_sizes", "sensitivities", "trimmed_model",
            "uncertainty_bands", "extrapolation_bands",
@@ -78,4 +76,4 @@ __all__ = ["azure2", "convert_azr", "ScatteringLength", "ScatteringLengthLine", 
            "Project", "Record", "Nuisance", "FormatError", "records_from_csv",
            "ProjectLevel", "ProjectChannel", "ProjectPair",
            "DescribedDataset", "DescribedDatasets", "DescribedExtrapolation", "DescribedExtrapolations"]
-__version__ = '2.33.0'
+__version__ = '3.0.0.dev0'

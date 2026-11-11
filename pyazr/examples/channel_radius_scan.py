@@ -9,7 +9,7 @@ standard way of choosing it.
 
 The scan is a loop over *files*: the radius lives in the <levels> block, and a
 session reads its model once at startup, so each radius is a new .azr and a new
-session.  `AzrModel.set_channel_radius` rewrites every channel line of that pair.
+session.  `Project.set_pair(pair, radius=)` rewrites every row of that pair.
 Every session is in-process (``pyazr.azure2`` owns the engine directly), so the
 loop just opens and closes one ``azure2()`` per radius -- no subprocesses.
 
@@ -32,7 +32,7 @@ os.environ.setdefault("OMP_NUM_THREADS", "4")
 
 import numpy as np
 
-from pyazr import AzrModel, azure2
+from pyazr import Project, azure2
 
 
 def main() -> int:
@@ -47,15 +47,15 @@ def main() -> int:
     here = args.azr.parent
     out = here / "output"
 
-    mdl = AzrModel.from_file(args.azr)
-    print(f"channel radii in {args.azr.name}: {mdl.channel_radii()}")
+    mdl = Project.open(args.azr)
+    print(f"channel radii in {args.azr.name}: {({q.key: q.radius for q in mdl.pairs() if q.kind == 0})}")
     print(f"\n{'a_c (fm)':>9} {'chi2':>12} {'chi2/N':>9}")
 
     rows = []
     for a in args.radii:
-        m2 = AzrModel.from_file(args.azr)
-        m2.set_channel_radius(args.pair, a)
-        path = m2.write(here / f"_radius_{a:g}.azr")
+        m2 = Project.open(args.azr)
+        m2.set_pair(args.pair, radius=a)
+        path = m2.save(here / f"_radius_{a:g}.azr")
         for cache in ("intEC.dat", "intEC.extrap"):
             f = out / cache
             if f.exists():

@@ -27,6 +27,10 @@ pyazr also writes every section, by editing the text in place: `AzrModel.to_text
 `modelavg` and `merge_projects`. `tests/pyazr/roundtrip_test.py` checks byte-identical round trips of the 189
 project files in `tests/` and `examples/`.
 
+(State when this page was written.  Since pyazr 3.0, 2026-11-11, `azrfile.py`, `datasets.py` and
+`roundtrip_test.py` are deleted: pyazr reads format 3 only, through `pyazr.Project` on the engine's document and
+grammars; `tests/pyazr/project_test.py` checks the round trip; `docs/upgrade/pyazr_on_records.md`.)
+
 **Where the two readers disagree** (each is a file whose meaning depends on the reader):
 1. Tags: pyazr finds `<levels>` as a substring, even inside a comment; it needs `<segmentsData>` with LF line endings;
    it looks for `<scatteringLengths>`, `<abundances>` and `<targetInt>` only after `</levels>`. The engine searches the
@@ -65,7 +69,8 @@ project files in `tests/` and `examples/`.
 3. pyazr reads through it: `AzrModel`'s parsing calls the binding (as `<thm>` already does), so pyazr and the engine
    read every file the same way. The places where they disagree today (§1) need decision P2.
 4. pyazr writes through it: the setters become typed edits of the `Project`; `to_text` is `Write()`. Check:
-   `roundtrip_test.py` and the edit tests.
+   `roundtrip_test.py` and the edit tests (since pyazr 3.0: `pyazr.Project`, checked by `project_test.py`,
+   `azr_layout_test.py` and `project_nuclear_part_test.py`).
 5. One mass table (the gate's second half): `fill_masses` and the engine's masses read the same table.
 
 ## 3. Decisions

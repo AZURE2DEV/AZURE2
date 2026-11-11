@@ -7,8 +7,8 @@ zeta), |N_C|^2 = exp[2 zeta arctan(2 (E_l - E)/G_l)] (Mukhamedzhanov, Kadyrov
 docs/source/theory/thm_implementation.rst, "Coulomb line shape").  Checked on
 tests/18O_p_a_thm with a made-up charged spectator, 18O(3He,a15N)d at 115 MeV:
 
-  1. AzrModel: set_thm_experiment(..., lineshape=True) round trip; lineshape
-     without kinematics and a bad value are refused like AZURE2 refuses them.
+  1. Project: an experiment with lineshape=on round trip; lineshape without
+     kinematics and a bad value are refused like AZURE2 refuses them.
   2. The engine against the CLI: calculate_chi2_rwa (rel 1e-9) and the output
      files written by write_output_files (thm_experiments.out included).
   3. thm_lineshape: E_sF, eta_0, zeta and the eta_sb estimate against the
@@ -36,9 +36,10 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 SOURCE = os.path.join(ROOT, "tests", "18O_p_a_thm")
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import old_tree  # noqa: E402  (the old original: a test of the old file class, format3_tree.md section 5)
+from thm_records import no_fold, set_experiment, thm_datasets  # noqa: E402
 AZR = "18O_p_a_thm.azr"
 KIN = "beam=18O target=3He spectator=d Ebeam=115"
+KINKEYS = dict(beam="18O", target="3He", spectator="d", Ebeam=115)
 
 failures = []
 
@@ -55,18 +56,15 @@ def rel(a, b):
 
 sys.path.insert(0, ROOT)
 os.environ.setdefault("OMP_NUM_THREADS", "2")
-# AzrModel is pure Python: load azrfile.py directly, as roundtrip_test does,
-# so these checks run where numpy (needed by the pyazr package) is missing.
-import importlib.util                                          # noqa: E402
-_spec = importlib.util.spec_from_file_location(
-    "azrfile", os.path.join(ROOT, "pyazr", "azrfile.py"))
-_azrfile = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(_azrfile)
-AzrModel = _azrfile.AzrModel
+try:
+    from pyazr import Project
+except Exception as err:                                   # engine not built
+    print(f"skip: engine not available ({type(err).__name__}: {err})")
+    sys.exit(77)
 
 
 def fresh_copy(dst):
-    old_tree.copytree(SOURCE, dst)
+    shutil.copytree(SOURCE, dst)
     for junk in ("output", "checks"):
         shutil.rmtree(os.path.join(dst, junk), ignore_errors=True)
         os.makedirs(os.path.join(dst, junk))
@@ -111,50 +109,34 @@ def kin(E):
 
 
 with tempfile.TemporaryDirectory() as tmp:
-    # -- 1. AzrModel ----------------------------------------------------------
-    print("1. AzrModel: lineshape key")
+    # -- 1. Project -----------------------------------------------------------
+    print("1. Project: lineshape key")
     proj = os.path.join(tmp, "model")
     fresh_copy(proj)
     src = os.path.join(proj, AZR)
-    m = AzrModel.from_file(src)
-    m.set_thm_experiment("A", [1, 2], beam="18O", target="3He", spectator="d", Ebeam=115,
-                         lineshape=True)
-    rec = {"segments": [1, 2], "background": "none", "beam": "18O", "target": "3He",
-           "spectator": "d", "Ebeam": 115.0, "lineshape": True}
-    check("record carries lineshape", m.thm_experiments() == {"A": rec}, m.thm_experiments())
+    m = Project.open(src)
+    set_experiment(m, "A", [1, 2], **KINKEYS, lineshape=True)
+    rec = {"beam": "18O", "target": "3He", "spectator": "d", "Ebeam": "115", "lineshape": "on"}
+    check("record carries lineshape", m.thm()["experiments"] == {"A": rec}, m.thm())
     one = os.path.join(proj, "one.azr")
-    m.write(one)
+    m.save(one)
     check("canonical line ends in lineshape=on",
-          f"experiment[A] segments=1,2 {KIN} lineshape=on\n" in open(one).read())
-    check("reloaded: same record", AzrModel.from_file(one).thm_experiments() == {"A": rec})
-    try:
-        AzrModel.from_file(src).set_thm_experiment("B", [1], lineshape=True)
-        check("refused: lineshape without kinematics", False, "no ValueError")
-    except ValueError as err:
-        check(f"refused: lineshape without kinematics ({err})", "needs the kinematics" in str(err))
-    for line, frag in [("experiment[A] segments=1 lineshape=yes", "expected on or off"),
-                       ("experiment[A] segments=1 lineshape=on", "needs the kinematics")]:
-        path = os.path.join(proj, "bad.azr")
-        with open(path, "w") as f:
-            f.write(open(src).read().rstrip("\n") + "\n<thm>\n" + line + "\n</thm>\n")
+          f"experiment[A] {KIN} lineshape=on\n" in open(one).read())
+    check("reloaded: same record", Project.open(one).thm()["experiments"] == {"A": rec})
+    first = thm_datasets(m)[0]
+    for what, fn, frag in [
+            ("lineshape without kinematics",
+             lambda: Project.open(src).set_thm_experiment("B", datasets=[first], lineshape="on"), "needs the kinematics"),
+            ("lineshape=yes", lambda: Project.open(one).set_thm_experiment("A", lineshape="yes"), "expected on or off")]:
         try:
-            AzrModel.from_file(path).thm_experiments()
-            check(f"file refused: {line!r}", False, "no ValueError")
+            fn()
+            check(f"refused: {what}", False, "no ValueError")
         except ValueError as err:
-            check(f"file refused like AZURE2: {line!r}", frag in str(err), str(err))
-    path = os.path.join(proj, "off.azr")
-    with open(path, "w") as f:
-        f.write(open(src).read().rstrip("\n") + f"\n<thm>\nexperiment[A] segments=1 {KIN} lineshape=off\n</thm>\n")
-    check("lineshape=off: no lineshape in the record",
-          "lineshape" not in AzrModel.from_file(path).thm_experiments()["A"])
+            check(f"refused like AZURE2: {what} ({str(err)[:100]})", frag in str(err), str(err))
 
     # -- the engine -----------------------------------------------------------
-    try:
-        import numpy as np
-        from pyazr import azure2
-    except Exception as err:                                   # engine not built
-        print(f"skip the engine part: engine not available ({type(err).__name__}: {err})")
-        sys.exit(1 if failures else 77)
+    import numpy as np
+    from pyazr import azure2
     binary = os.environ.get("AZURE2_BIN")
     if not binary:
         cands = [c for c in glob.glob(os.path.join(ROOT, "build*", "src", "AZURE2*"))
@@ -164,16 +146,18 @@ with tempfile.TemporaryDirectory() as tmp:
         print("skip the engine part: no AZURE2 binary to compare against")
         sys.exit(1 if failures else 77)
 
-    def project(name, block, one_level=False):
+    def project(name, keys=None, one_level=False):
+        """A copy with KEYS the one experiment of both data sets; ONE_LEVEL: level 1 only, no folding."""
         d = os.path.join(tmp, name)
         fresh_copy(d)
-        text = open(os.path.join(d, AZR)).read()
-        if one_level:                                          # level 1 only, no folding
-            text = re.sub(r"<targetInt>.*?</targetInt>", "<targetInt>\n</targetInt>", text, flags=re.S)
-            text = "\n".join(l for l in text.split("\n")
-                             if not (len(l.split()) > 30 and l.split()[2] == "8.805800"))
-        if block:
-            text = text.rstrip("\n") + "\n<thm>\n" + block + "\n</thm>\n"
+        mm = Project.open(os.path.join(d, AZR))
+        if one_level:
+            mm.remove_level(("1/2+", 8.8058))
+        if keys is not None:
+            set_experiment(mm, "A", [1, 2], **keys)
+        text = mm.text
+        if one_level:
+            text = no_fold(text)
         with open(os.path.join(d, "run.azr"), "w") as f:
             f.write(text)
         return d
@@ -184,8 +168,8 @@ with tempfile.TemporaryDirectory() as tmp:
                 for f in sorted(glob.glob(os.path.join(out, "*")))
                 if os.path.isfile(f) and not os.path.basename(f).startswith("intEC")}
 
-    block = f"experiment[A] segments=1,2 {KIN} lineshape=on"
-    cli_dir, py_dir = project("cli", block), project("py", block)
+    on = dict(KINKEYS, lineshape=True)
+    cli_dir, py_dir = project("cli", on), project("py", on)
     proc = subprocess.run([binary, "--no-gui", "--no-readline", "run.azr"], cwd=cli_dir,
                           input="1\n\n\n7\n", text=True, capture_output=True, timeout=600)
     hit = re.findall(r"Total Chi-Squared:\s*([0-9.eE+-]+)", proc.stdout.replace("\r", "\n"))
@@ -256,9 +240,9 @@ with tempfile.TemporaryDirectory() as tmp:
     check("thm_experiments.out has the zeta row", "zeta[2]" in from_cli["thm_experiments.out"])
 
     print("4. one level: calculate_rwa(on)/calculate_rwa(off) = |N_C|^2")
-    on_dir = project("on1", f"experiment[A] segments=1,2 {KIN} lineshape=on", one_level=True)
-    off_dir = project("off1", f"experiment[A] segments=1,2 {KIN}", one_level=True)
-    offk_dir = project("offk1", f"experiment[A] segments=1,2 {KIN} lineshape=off", one_level=True)
+    on_dir = project("on1", on, one_level=True)
+    off_dir = project("off1", KINKEYS, one_level=True)
+    offk_dir = project("offk1", dict(KINKEYS, lineshape=False), one_level=True)
     with azure2(os.path.join(off_dir, "run.azr"), cwd=off_dir) as s:
         x = np.asarray(s.params_rwa, float)
         m_off = np.concatenate([np.asarray(v) for v in s.calculate_rwa(x)])

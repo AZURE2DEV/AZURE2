@@ -16,7 +16,8 @@
 #       ERROR, no chiSquared.out;
 #   (d) control: the 7Li(p,n) test segment at 10 deg (inside theta_max) runs and gives finite numbers;
 #   (e) a lab-differential point BELOW the (p,n) threshold (E_p = 1.88 MeV, threshold 1.885) at 10 deg: refused ("below
-#       the threshold"); before, the Marion-Young map went NaN there with no message.
+#       the threshold"); before, the Marion-Young map went NaN there with no message;
+#   (f) a data point AT theta_max of (c): refused with E_LAB_JACOBIAN_AT_LIMIT (dOmega_lab/dOmega_cm = 0 there).
 # dev 265c259: (a)-(c) and (e) exit 0 with nan in the output files ((c) and (e) with no message at all).
 #
 #   ./tests/kinematic_limits/check.sh path/to/AZURE2
@@ -110,6 +111,37 @@ run e 3
 if [ "$(below e)" -ge 1 ] && [ ! -e "$WORK/e/output/AZUREOut_aa=5_R=2.extrap" ]; then
   ok "(e) a lab-differential point below the (p,n) threshold (E_p = 1.88 MeV): refused, no extrapolation file"
 else bad "(e) below threshold: messages $(below e), nan in $(has_nan e)"; fi
+
+# (f) a data point AT the maximum lab angle (12C + p as in (c), theta_max = asin(m_p/m_C)): the angle converts, but
+# dOmega_lab/dOmega_cm is 0 there and the lab-frame model would be divided by it: refused at set-up with
+# E_LAB_JACOBIAN_AT_LIMIT, no chiSquared.out.  The angle is theta_max (1 - 1e-12), inside the limit by far more than the
+# rounding of asin, so it is not refused as beyond it.  The model of (c) with its own data sets off.
+prep f "$N13"
+awk 'BEGIN{inl=0} /<levels>/{inl=1} /<\/levels>/{inl=0}
+     { if (inl && NF > 25 && $6 == 1) { t=$13; $13=$15; $15=t; t=$14; $14=$16; $16=t; t=$18; $18=$19; $19=t; t=$20; $20=$21; $21=t }
+       if ($1 == "reaction") { sub(/12C\(p,p\)12C/, "1H(12C,12C)1H"); sub(/12C\(p,g\)13N/, "1H(12C,g)13N"); $0 = "    " $0 }
+       if ($1 == "dataset") { print; $0 = "    active         no" }
+       print }' "$N13/13N.azr" > "$WORK/f/base.azr"
+awk 'BEGIN{inl=0} /<levels>/{inl=1} /<\/levels>/{inl=0}
+     inl && NF > 25 && $6 == 1 { r = $19 / $18; printf "%.17g\n", 180 / atan2(0, -1) * atan2(r, sqrt(1 - r * r)) * (1 - 1e-12); exit }' \
+  "$WORK/f/base.azr" > "$WORK/f/angle"
+printf '12.0 %s 1.0 0.1\n' "$(cat "$WORK/f/angle")" > "$WORK/f/data/limit.dat"
+export REC="dataset at_limit
+    reaction       1H(12C,12C)1H
+    quantity       dsigma_domega
+    unit           b/sr
+    file           data/limit.dat
+    columns        E_lab[MeV] theta_lab[deg] value error
+    energy_window  1 20 MeV
+    angle_window   0 10 deg
+    norm           1 fixed
+"
+awk '{ print } /^<data>$/ { print ENVIRON["REC"] }' "$WORK/f/base.azr" > "$WORK/f/m.azr"
+run f 1
+if grep -q "error E_LAB_JACOBIAN_AT_LIMIT: .*lies at the kinematic maximum lab angle" "$WORK/f/run.log" && [ "$(errors f)" -eq 0 ] &&
+   [ ! -s "$WORK/f/output/chiSquared.out" ]; then
+  ok "(f) a point at theta_max = $(cat "$WORK/f/angle") deg (12C + p): refused, E_LAB_JACOBIAN_AT_LIMIT, no chiSquared.out"
+else bad "(f) a point at theta_max: $(grep -m1 -E 'ERROR|error' "$WORK/f/run.log"); chiSquared.out: $(grep '^Total' "$WORK/f/output/chiSquared.out" 2> /dev/null)"; fi
 
 if [ "$failures" -ne 0 ]; then echo "$failures check(s) FAILED"; exit 1; fi
 echo "all checks passed"

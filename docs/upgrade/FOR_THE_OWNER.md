@@ -132,9 +132,10 @@ refused at once with the engine's message. An edit changes only the lines it tou
 
 ## What users notice
 
-- Old `.azr` files still load today. When the test tree is converted (two thirds of it are; the rest is in work) the engine
-  will read format 3 only and refuse an old file with a message that names the converter. Decision taken with Jakub:
-  no backward compatibility inside the engine, a converter instead.
+- Old `.azr` files still load in the engine today; pyazr (3.0.0.dev0) already refuses them with a message that
+  names the converter. Every project of the test tree is format 3, so the next branch makes the engine refuse an old
+  file in the same words and deletes its old reading path. Decision taken with Jakub: no backward compatibility
+  inside the engine, a converter instead.
 - pyazr needs the compiled engine module to read a project: there is one reader, the engine's.
 - No Qt GUI on this branch: a local web interface built on the same records and schema replaces it (Phase 9),
   checked against a 201-item parity list taken from the Qt code.
@@ -157,7 +158,11 @@ refused at once with the engine's message. An edit changes only the lines it tou
     profile, a UDR) are refused; before, one of them was not applied, without a message (a target integration
     with a beam spread is one kernel and works as before);
   - a THM data set that names an experiment the `<thm>` section does not define is refused at reading
-    (`E_THM_EXPERIMENT_UNKNOWN`).
+    (`E_THM_EXPERIMENT_UNKNOWN`);
+  - a format-3 `<thm>` section that still lists its members the old way (`segments=`, `weight[k]=`) is refused at
+    reading (`E_THM_OLD_LIST`): in format 3 the data sets name their experiment;
+  - a laboratory-frame differential point at the kinematic limit (dΩ_lab/dΩ_c.m. ≤ 10⁻⁶) is refused at set-up
+    (`E_LAB_JACOBIAN_AT_LIMIT`); without the refusal such a point gave χ² of 10¹⁷.
 
 ## Speed
 
@@ -174,6 +179,23 @@ Measured before Phase 4 (T2, 340 points with every apparatus kernel; `tests/upgr
 Each Phase 4 branch was measured against its own start and stayed within about ±2 % in CPU cycles. The whole of
 Phase 4 has not yet been measured against the Phase 3 head in one sitting. Speed is not the aim of Phases 1–4
 (structure is); Phases 5 and 6 are where it is won.
+
+Phase 5 so far (2026-11-11; 1 thread on a machine shared with other work, so read the ratios, not the seconds):
+
+| | before | now |
+|---|---|---|
+| `natural_neon`, one calculation: time (against the code at the branch point with `dev`) | 41.2 s | 8.0 s |
+| `natural_neon`, one calculation: peak memory (same two builds) | 4.52 GB | 1.46 GB |
+| 13N fit with `--use-gradient`, 200 calls (against the build before the gradient branch) | 50.7 s | 26.9 s |
+| 13N fit with `--use-lm` | 19.5 s | 12.8 s |
+| `natural_neon` fit with `--use-gradient`, 30 calls | 219.6 s | 105.7 s |
+| `natural_neon` fit with `--use-lm` | 291.1 s | 139.3 s |
+| T2 fit, plain MIGRAD, 200 calls | 39.9 s | 37.2 s |
+
+The first two rows were measured by the director (both runs one after the other, χ²/N of the first segment 10.9941
+in both); the fits are the gradient agent's series, read by the director from its timing files and not repeated. The
+gain is one level-matrix solve per distinct compound energy instead of one per data point or sub-point. A plain
+MIGRAD fit of a project without target integration gains little, as T2 shows.
 
 ## How to add a feature now
 
@@ -192,8 +214,25 @@ reads `CLAUDE.md` first, so it is given the recipes and is stopped by the checks
 In work now (2026-11-11, night): the sub-points of a folded data point stop being objects of their own and become
 entries of one node table per compound nucleus (the old point mapping deleted; every output must stay the same: the
 structural half of the shared energy grid); one generic kind of fit parameter for the parameters of apparatus
-effects, so that a kernel's width or a target's stopping scale is fitted without new engine code; pyazr moved off
-its old file class; an audit that every regression check still tests what it says after the conversion.
+effects, so that a kernel's width or a target's stopping scale is fitted without new engine code; the engine
+refusing old files, with its old reading path deleted (the close of Phase 4).
+
+**Do the checks still test what they say? (merged 2026-11-11, evening.)** A regression check that edits a project's
+text can go on passing after the conversion to format 3 because its pattern no longer matches anything and it
+compares a run with itself. All 126 checks were run with logging stand-ins for the text tools and the engine
+(`tools/edit_audit.sh`): 1,658 edit places, 40 that change nothing, 36 of them by design and 4 vacuous, in two
+checks; a third check tested nothing because the engine ignores a `<parameterSettings>` row that names no
+parameter. The three are rewritten and each fails with an injected error. A guard keeps it so
+(`tests/lib/edit_guard.sh`: an edit that changes nothing fails the check; a rule of the consistency test; a recipe
+in `CLAUDE.md`). Two defects of the test harness were found in the same batch: 33 pyazr tests ended as passed when
+the engine module could not be imported, and one was registered so that it never ran in a separate build
+directory; both fixed.
+
+**A crash that a full verification did not find.** The head merged at 19:25 on 2026-11-11 crashed in a
+least-squares fit (`--use-lm`) or a covariance band of a project with no free parameter. The whole verification
+had passed: no test ran that case. The agent that wrote the gradient found it in its timing series and fixed it
+with a test (`upgrade_energy_task_gradient`); the fix was merged the same evening. The lesson is the one of the
+audit above: the verification compares what the tests cover.
 
 Merged on 2026-11-11: the data classes replaced (`DataSet`, `WorkingCopy`, `Segment`, `Unit`); **all 183
 convertible project files in format 3**, the THM projects included; validation that reports what a run would
@@ -232,8 +271,10 @@ in its row but cannot be fitted: a parameter a fit varies still needs its own ki
 is not cheap -- the stopping scale of branch 5 edited 20 existing files. One generic kind that reads the kernel
 table's rows is the planned remedy.
 
-Then, to close Phase 4: the old reading path deleted (with `pyazr/azrfile.py`, 3,756 lines of
-a second grammar in Python); the rest of `CNuc` (the parameter vector and the set-up from the level rows).
+pyazr reads format 3 only since 3.0.0.dev0 (2026-11-11): `pyazr/azrfile.py` (3,756 lines of a second grammar in
+Python) and `datasets.py` are deleted, every pyazr test runs on the tree's format-3 projects, and a session or
+`Project.open` on an old file says how to convert it.  Then, to close Phase 4: the engine refuses old files and its
+old reading path is deleted; the rest of `CNuc` (the parameter vector and the set-up from the level rows).
 
 Phases 5–9 (`ROADMAP.md`): one energy grid with the apparatus as kernels, AZURE2's own stopping module, yields on
 finite layers, the comparison of energy-shifted data in the lab frame, and the THM observable (5); evaluation without

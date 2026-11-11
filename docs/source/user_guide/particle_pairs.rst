@@ -365,8 +365,8 @@ the Atomic Mass Data Center's file; the GUI embeds the same copy). In the GUI:
 
 In pyazr, ``pyazr.masses`` gives the table (``atomic_mass("12C")``,
 ``separation_energy("p", "12C")``, ``pair_masses("a", "12C")``), and
-``AzrModel.mass_check()`` / ``AzrModel.fill_masses()`` do what the dialog does
-for a file (see the pyazr page).
+``masses.mass_check(project)`` / ``masses.fill_masses(project)`` do what the
+dialog does for a :class:`pyazr.Project` (see the pyazr page).
 
 Filling S moves that pair's threshold, and with it the energy scale of every
 channel of the pair. A typical archive mismatch is a few keV, so compare the

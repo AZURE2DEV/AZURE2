@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
-"""Angular-coefficient data segments (isDiff 9) through pyazr (2026-10-26).
+"""Angular-coefficient data sets (``quantity legendre``) through pyazr (2026-10-26).
 
-  1. AzrModel.add_data_segment(observable="angular-coefficients") writes an isDiff 9 line, with "absolute 1"
-     when asked, and refuses absolute= on another observable; the datasets reader gives the observable and
-     the flag back.
+  1. Project.add writes a ``legendre`` data set with ``expansion a_over_a0`` (unit 1) or ``absolute`` (b/sr), and
+     refuses an expansion on another quantity; the records give the expansion back.
   2. With the compiled engine (skipped without it): a model whose coefficient data are the model's own
-     Legendre coefficients (from an isDiff 3 extrapolation of the same model) evaluates to chi2 ~ 0, and
+     Legendre coefficients (from the ``legendre`` extrapolation of the same model) evaluates to chi2 ~ 0, and
      calculate_rwa returns the coefficients in the data slots.
 
 Run from anywhere:  python3 tests/pyazr/angular_coefficients_test.py
@@ -18,11 +17,8 @@ import tempfile
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 sys.path.insert(0, ROOT)
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import old_tree  # noqa: E402  (the old originals of converted projects)
 try:
-    from pyazr import AzrModel  # noqa: E402
-    from pyazr.datasets import SegmentSet  # noqa: E402
+    from pyazr import Project, FormatError  # noqa: E402
 except Exception as err:                                   # engine not built: the package does not import
     print(f"skip: pyazr not importable ({type(err).__name__}: {err})")
     sys.exit(77)
@@ -36,32 +32,42 @@ def check(name, ok, detail=""):
         failures.append(name)
 
 
+REACTION = "13C(a,n)16O[6.12989]"
+
+
+def coefficient_set(model, name, absolute=False):
+    """A legendre data set on data/ak.dat at lab 5.9-6.4 MeV."""
+    model.add("dataset", name, reaction=REACTION, quantity="legendre", unit="b/sr" if absolute else "1",
+              expansion="absolute" if absolute else "a_over_a0", file="data/ak.dat",
+              columns="E_lab[MeV] order value error", energy_window="5.9 6.4 MeV", norm="1 fixed")
+
+
 def main():
     import numpy as np
-    src = old_tree.original(os.path.join(ROOT, "tests", "angular_coefficients", "models", "extrap.azr"))
+    src = os.path.join(ROOT, "tests", "angular_coefficients", "models", "extrap.azr")
     work = tempfile.mkdtemp(prefix="pyazr_acoef_")
     try:
-        print("1. the segment line")
-        model = AzrModel.from_file(src)
+        print("1. the data set records")
         os.makedirs(os.path.join(work, "data"), exist_ok=True)
         open(os.path.join(work, "data", "ak.dat"), "w").write("6.0  2  -0.5  0.01\n")
-        model.add_data_segment("data/ak.dat", 2, 5, observable="angular-coefficients", energy_min=5.9, energy_max=6.4)
-        model.add_data_segment("data/ak.dat", 2, 5, observable="angular-coefficients", energy_min=5.9, energy_max=6.4,
-                               absolute=True)
-        try:
-            model.add_data_segment("data/ak.dat", 2, 5, observable="differential", absolute=True)
-            check("absolute= on another observable is refused", False)
-        except ValueError:
-            check("absolute= on another observable is refused", True)
         azr = os.path.join(work, "m.azr")
-        model.write(azr)
-        lines = [l for l in open(azr).read().split("<segmentsData>")[1].split("</segmentsData>")[0].splitlines() if l.strip()]
-        check("two isDiff 9 lines, the second with 'absolute 1'",
-              len(lines) == 2 and lines[0].split()[7] == "9" and "absolute" not in lines[0] and lines[1].split()[-2:] == ["absolute", "1"], lines)
-        segs = SegmentSet.from_file(azr)
-        check("datasets: observable angular-coefficients, absolute flag read back",
-              [s.observable for s in segs] == ["angular-coefficients"] * 2 and [s.absolute for s in segs] == [False, True],
-              [(s.observable, s.absolute) for s in segs])
+        shutil.copy(src, azr)
+        model = Project.open(azr)
+        coefficient_set(model, "ak")
+        coefficient_set(model, "ak_abs", absolute=True)
+        try:
+            model.add("dataset", "bad", reaction=REACTION, quantity="dsigma_domega", unit="b/sr", expansion="absolute",
+                      file="data/ak.dat", columns="E_lab[MeV] theta_cm[deg] value error", norm="1 fixed")
+            check("an expansion on another quantity is refused", False)
+        except FormatError:
+            check("an expansion on another quantity is refused", "bad" not in model)
+        model.save()
+        back = Project.open(azr)
+        sets = [r for r in back.records().values() if r.record_kind == "dataset"]
+        check("two legendre data sets, the second absolute (b/sr)",
+              [(r["quantity"], r["expansion"], r["unit"]) for r in sets]
+              == [("legendre", "a_over_a0", "1"), ("legendre", "absolute", "b/sr")],
+              [r.fields for r in sets])
 
         print("\n2. through the engine")
         try:
@@ -70,27 +76,25 @@ def main():
         except Exception as e:
             print(f"  skip  engine not importable ({e})")
             return
-        # the model's own coefficients: an isDiff 3 extrapolation at the data energies
-        ext = AzrModel.from_file(src)
-        ext.set_output_dir("output/")
+        # the model's own coefficients: its legendre extrapolation at the data energies
         os.makedirs(os.path.join(work, "ext", "output"), exist_ok=True)
         os.makedirs(os.path.join(work, "ext", "checks"), exist_ok=True)
-        ext.write(os.path.join(work, "ext", "m.azr"))
+        shutil.copy(src, os.path.join(work, "ext", "m.azr"))
         with azure2(os.path.join(work, "ext", "m.azr"), cwd=os.path.join(work, "ext"), data_mode=False) as m:
             coef = m.calculate_angular_dists_rwa(m.params_rwa)[0]   # test segment 1: one array per energy
         n_e = len(coef)
-        check("isDiff 3 extrapolation gives coefficient arrays", n_e == 11 and all(len(c) >= 5 for c in coef), (n_e, [len(c) for c in coef][:3]))
+        check("the legendre extrapolation gives coefficient arrays", n_e == 11 and all(len(c) >= 5 for c in coef), (n_e, [len(c) for c in coef][:3]))
         # data at lab 6.0-6.3 (grid 5.9 + 0.05 i, i = 2..5): rows E_lab, k, a_k, err
         with open(os.path.join(work, "data", "ak.dat"), "w") as f:
             for i in range(2, 6):
                 for k in (2, 4):
                     f.write(f"{5.9 + 0.05 * i:.6f}  {k}  {coef[i][k]:.12e}  0.01\n")
-        dm = AzrModel.from_file(src)
-        dm.set_output_dir("output/")
-        dm.add_data_segment("data/ak.dat", 2, 5, observable="angular-coefficients", energy_min=5.9, energy_max=6.4)
+        shutil.copy(src, azr)
+        dm = Project.open(azr)
+        coefficient_set(dm, "ak")
         os.makedirs(os.path.join(work, "output"), exist_ok=True)
         os.makedirs(os.path.join(work, "checks"), exist_ok=True)
-        dm.write(azr)
+        dm.save()
         with azure2(azr, cwd=work) as m:
             chi2 = float(m.calculate_chi2_rwa(m.params_rwa)[0])
             vals = np.asarray(m.calculate_rwa(m.params_rwa)[0], float)

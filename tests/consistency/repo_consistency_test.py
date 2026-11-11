@@ -230,12 +230,12 @@ for name in sorted(os.listdir(os.path.join(ROOT, "tests"))):
             problems.append(f"tests/{name}/check.sh: not executable, so tests/run_tests.sh skips it (git update-index --chmod=+x)")
 
 
-# 4. pyazr's version is stated once, as MAJOR.MINOR.PATCH (pyproject.toml
-#    reads it from there).
+# 4. pyazr's version is stated once, in pyazr/__init__.py (pyproject.toml reads it from there), as
+#    MAJOR.MINOR.PATCH with an optional PEP 440 development suffix (.devN) while a major version is in work.
 init = read("pyazr/__init__.py")
 versions = re.findall(r"^__version__\s*=\s*['\"]([^'\"]+)['\"]", init, re.M)
-if len(versions) != 1 or not re.fullmatch(r"\d+\.\d+\.\d+", versions[0]):
-    problems.append(f"pyazr/__init__.py: expected one MAJOR.MINOR.PATCH __version__, found {versions}")
+if len(versions) != 1 or not re.fullmatch(r"\d+\.\d+\.\d+(\.dev\d+)?", versions[0]):
+    problems.append(f"pyazr/__init__.py: expected one MAJOR.MINOR.PATCH[.devN] __version__, found {versions}")
 
 
 # 5. Every name pyazr exports exists.  A stale __all__ entry breaks
@@ -250,23 +250,6 @@ if all_match:
     duplicates = sorted({n for n in exported if exported.count(n) > 1})
     if duplicates:
         problems.append(f"pyazr.__all__: listed twice: {', '.join(duplicates)}")
-
-
-# 6. The segment-line keyword blocks are the same set in both .azr readers.
-#    pyazr splits the tail by its own table, so a keyword the engine learns and
-#    pyazr does not is mangled by a load and save there.
-engine_kw = set()
-for header in ("convert/include/azure2/convert/SegLine.h", "convert/include/azure2/convert/ExtrapLine.h"):
-    engine_kw |= set(re.findall(r'keyword == "([a-z]+)"', read(header)))
-py_match = re.search(r"_KEYWORDS\s*=\s*\{(.*?)\}", read("pyazr/datasets.py"), re.S)
-py_kw = set(re.findall(r'"([a-z]+)"\s*:', py_match.group(1))) if py_match else set()
-for name, kw in (("pyazr/datasets.py _KEYWORDS", py_kw),):
-    for k in sorted(engine_kw - kw):
-        problems.append(f"segment keyword '{k}': read by the engine (convert/'s SegLine.h/ExtrapLine.h), unknown to {name}")
-    for k in sorted(kw - engine_kw):
-        problems.append(f"segment keyword '{k}': known to {name}, not read by the engine")
-if not engine_kw:
-    problems.append("could not find the segment keywords in convert/include/azure2/convert/SegLine.h; update this test")
 
 
 # 7. The repository carries its licence.
@@ -603,11 +586,6 @@ PY_NAME_TEST = re.compile(r'\.(?:startswith|endswith)\(\s*[rbf]*["\']' + STEM.re
 PY_NAME_REGEX = re.compile(r're\.(?:match|fullmatch|search|compile)\(\s*[rbf]*["\'][^"\']*'
                            r'(?:energy_|width_|segment_|abundance_|screening_|density_|doppler_|cbkg_)')
 ALLOWED_NAME_TESTS = {
-    # The <parameterSettings> "segment_<key>_norm|energy_shift prior_centre c" row, read and rewritten by pyazr's
-    # document layer (AzrModel.prior_centres / set_prior_centres, SegmentSet) without an engine session, so without a
-    # parameter vector to look the name up in.  The engine matches the row's name whole (convert/'s PriorCentresFromOldRows).
-    ("pyazr/datasets.py", "_PRIOR_CENTRE = re.compile("),
-    ("pyazr/azrfile.py", "_PRIOR_ROW = re.compile("),
     # An example script that reads param.par without the engine (pyazr.transform only).
     ("pyazr/examples/transform_widths.py", 'm = re.match(r"width_'),
 }
@@ -844,11 +822,30 @@ for rel in tracked_files():
 if not OLD_DATA_NAME.search("EData *ld = data();") or OLD_DATA_NAME.search("EDataLike ECAmplitudeCache"):
     problems.append("check 31: the old-name pattern no longer matches the forms it guards; update this check")
 
+# 33. A check's text edits can be shown to bite (docs/upgrade/format3_tree.md section 7): an edit in place (sed -i,
+#     perl -i, awk -i inplace) leaves no copy to compare with, so a pattern that matches nothing goes unnoticed; a
+#     tests/*/check.sh edits through tests/lib/edit_guard.sh (`edited SRC DEST awk ...`) instead.  The checks listed
+#     in IN_PLACE_AUDITED had in-place edits when the rule came in, and tools/edit_audit.sh showed that each of them
+#     changes its file; a new in-place edit elsewhere is listed.
+IN_PLACE = re.compile(r"\bsed\s+(?:-[a-zA-Z]+\s+)*-i|\bperl\s+-[a-zA-Z0-9]*i|\bawk\s+-i\s+inplace")
+IN_PLACE_AUDITED = {"data_covariance", "format3_engine", "extrapolation_grids", "validate_run_refusals"}
+for name in sorted(os.listdir(os.path.join(ROOT, "tests"))):
+    rel = f"tests/{name}/check.sh"
+    if name in IN_PLACE_AUDITED or not os.path.isfile(os.path.join(ROOT, rel)):
+        continue
+    for number, line in enumerate(read(rel).splitlines(), 1):
+        if not line.lstrip().startswith("#") and IN_PLACE.search(line):
+            problems.append(f"{rel}:{number}: edits a file in place; edit through tests/lib/edit_guard.sh (`edited SRC "
+                            "DEST awk ...`), which fails when the edit changes nothing (check 33)")
+if not IN_PLACE.search("sed -i.bak 's/a/b/' t.azr") or not IN_PLACE.search("perl -pi -e 's/a/b/' t.azr") or \
+        IN_PLACE.search("sed 's/a/b/' t.azr > u.azr"):
+    problems.append("check 33: the in-place pattern no longer matches the forms it guards; update this check")
+
 if problems:
     for p in problems:
         print("FAIL", p)
     print(f"{len(problems)} consistency problem(s)")
     sys.exit(1)
-print(f"repository consistent: {len(flags)} CLI flags, segment keywords, test registration, check.sh modes, pyazr version and exports, "
+print(f"repository consistent: {len(flags)} CLI flags, test registration, check.sh modes, pyazr version and exports, "
       f"format-3 reference page, {len(declared)} diagnostic codes, file sizes, one model pass and residual, one calculation plan, "
       f"no machine paths, no old data class names")

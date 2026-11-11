@@ -1,6 +1,7 @@
-// The engine's reading of the <thm> block, for pyazr's AzrModel (pyazr/azrfile.py), which edits files without a
-// session: AzrModel reads and checks every <thm> line here, so pyazr and AZURE2 take exactly the same blocks
-// (docs/upgrade/project.md section 5).  No files are read except by read_thm_weight_table.
+// The engine's reading of the <thm> block, for Python without a session (written for pyazr's old file class, deleted
+// in pyazr 3; parse_thm_cbackground and thm_nuclides still have callers): the <thm> lines are read and checked here,
+// so pyazr and AZURE2 take exactly the same blocks (docs/upgrade/project.md section 5).  No files are read except by
+// read_thm_weight_table.
 
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
@@ -35,7 +36,7 @@ py::dict CoherentTermDict(const ThmExperiment::CoherentTerm &t) {
   return d;
 }
 
-// One experiment as AzrModel keeps it: the keys given (in order) and, per key, the value -- the text as written
+// One experiment as read_thm_block returns it: the keys given (in order) and, per key, the value -- the text as written
 // for the keys whose value is a word or a specification, the number for Ebeam / psNodes / spectatorAngleNodes, the
 // sorted segment list, (text, Z, A, mass) for the three nuclei, on/off as a bool, and cbackground canonical.
 py::dict ExperimentDict(const ThmExperiment &x) {
@@ -71,7 +72,7 @@ py::dict ExperimentDict(const ThmExperiment &x) {
   return d;
 }
 
-// The block as AzrModel's settings: the five global options (later lines win), the per-pair spectator energies,
+// The block as read_thm_block returns it: the five global options (later lines win), the per-pair spectator energies,
 // the weight files, and the experiments by name in order of first appearance.  ValueError with AZURE2's message.
 py::dict ReadThmBlock(const std::vector<std::string> &lines) {
   std::vector<ThmOptionLine> options;

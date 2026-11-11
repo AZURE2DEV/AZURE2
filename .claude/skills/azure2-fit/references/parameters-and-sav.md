@@ -67,7 +67,7 @@ files) and `docs/source/user_guide/levels_channels.rst` (how level lines are gro
   J-group).
 - **A `Parameter`'s `pair` is the engine's pair number**, which counts particle pairs in the order `<levels>` first
   mentions them, not the file's pair key. In one model engine pair 1 is file key 2 and file key 1 is engine pair 6.
-  When calling `AzrModel.apply_fit` directly, pass `pairs=m.pairs`, or it cannot translate.
+  When calling `pyazr.snapshot.place_level_values` directly, pass `pairs=m.pairs`, or it cannot translate.
 
 ## Remapping after a level edit
 

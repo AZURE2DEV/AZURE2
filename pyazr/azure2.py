@@ -30,11 +30,7 @@ except ImportError as err:                            # pragma: no cover
 
 from .parameters import (Pair, PairSet, Parameter,
                          ParameterSet)
-# Imported inside the module rather than at package level: azrfile does not
-# depend on the compiled engine, and this keeps that direction of the
-# dependency one-way.
-from .azrfile import AzrModel
-from .project import _is_format3
+from .project import require_format3
 from .potentials import _HybridPotentials
 
 
@@ -181,6 +177,7 @@ class azure2(_HybridPotentials):
         """
         self._sess = None
         self._azr_cache = {}
+        require_format3(file)  # pyazr reads format 3 only: the engine's message names the conversion
         self.file = os.path.abspath(file)
         self.cwd = os.path.abspath(cwd if cwd is not None else (
             os.path.dirname(self.file) or "."))
@@ -282,9 +279,9 @@ class azure2(_HybridPotentials):
         return (st.st_mtime_ns, st.st_ctime_ns, st.st_size, st.st_ino)
 
     def _parsed(self, kind):
-        """The ``.azr`` parsed as ``kind`` -- ``"datasets"`` (:class:`SegmentSet`),
-        ``"active"`` (its active segments, checked against the engine's count),
-        ``"extrapolations"`` (:class:`TestSegmentSet`) or ``"model"`` (:class:`AzrModel`).
+        """The project's records as the engine describes them, as ``kind`` -- ``"datasets"``
+        (:class:`~pyazr.described.DescribedDatasets`), ``"active"`` (its active data sets, checked against the
+        engine's count) or ``"extrapolations"`` (:class:`~pyazr.described.DescribedExtrapolations`).
 
         Parsed once and kept until the file changes on disk (modification time,
         size or inode) or :meth:`configure` runs.  Before 2026-11-03 every
@@ -305,7 +302,7 @@ class azure2(_HybridPotentials):
             cache.clear()
             cache["stamp"] = stamp
         if kind not in cache:
-            if kind in ("datasets", "extrapolations"):  # format 3: the engine's description; older: the lines
+            if kind in ("datasets", "extrapolations"):  # the engine's description
                 from .described import session_records
                 cache[kind] = session_records(kind, self.file, self.cwd)
             elif kind == "active":
@@ -315,8 +312,6 @@ class azure2(_HybridPotentials):
                         f"{len(active)} active data sets in {self.file} but "
                         f"the engine reports {self.nsegments} segments.")
                 cache[kind] = active
-            elif kind == "model":
-                cache[kind] = AzrModel.from_file(self.file)
             else:
                 raise ValueError(kind)
         return cache[kind]
@@ -461,9 +456,8 @@ class azure2(_HybridPotentials):
 
     @property
     def datasets(self):
-        """Per-segment dataset provenance (format 3: a :class:`~pyazr.described.DescribedDatasets`, the engine's
-        description; older formats: a :class:`~pyazr.datasets.SegmentSet`): for each data segment, the data
-        file it came from, the reaction channel (entrance/exit pairs), energy /
+        """Per-segment dataset provenance (a :class:`~pyazr.described.DescribedDatasets`, the engine's
+        description): for each data set, the data file it came from, the reaction channel (entrance/exit pairs), energy /
         angle range, observable type, and normalization systematic error.
         ``print(azr.datasets.table())`` gives an overview; ``azr.datasets
         .sys_errors()`` returns the per-segment systematics the fits use.
@@ -473,10 +467,9 @@ class azure2(_HybridPotentials):
 
     @property
     def extrapolations(self):
-        """Per-segment extrapolation grids (format 3: :class:`~pyazr.described.DescribedExtrapolations`).
+        """Per-segment extrapolation grids (:class:`~pyazr.described.DescribedExtrapolations`).
 
-        A :class:`~pyazr.datasets.TestSegmentSet`: for each ``<segmentsTest>``
-        entry, the reaction channel, the energy / angle grid, and the observable
+        For each extrapolation record, the reaction channel, the energy / angle grid, and the observable
         type.  These describe the segments AZURE2 reports in extrapolation mode
         (:meth:`extrap_mode`), in the same order, so segment ``i`` of this set
         corresponds to index ``i`` of ``calculate``/``calculate_energies``.
@@ -739,6 +732,7 @@ class azure2(_HybridPotentials):
         skipped = 0
         segment_field = {k["key"]: k["segment_field"] for k in _azure2.parameter_kinds()}
         records = s.parameter_records()
+        self._match_parameter_file_names(path, list(vals), fixed, records, segment_field)
         for i in range(full.size):
             name = s.params_names(i)
             if name in vals:
@@ -770,6 +764,26 @@ class azure2(_HybridPotentials):
         self.params = s.params_values()
         self._parameters = None
         return np.asarray(self.params_rwa, float)
+
+    def _match_parameter_file_names(self, path, in_file, fixed, records, segment_field):
+        """The file's names against this run's parameters, by the engine's rule (experiment::MatchParameterFileNames,
+        as AZURE2 reads a param.sav): no name of the run raises ValueError with E_PARAMETER_FILE_NO_MATCH, names the
+        project lacks or run parameters the file leaves out warn with W_PARAMETER_FILE_NAMES.  Fixed data-set and
+        extrapolation nuisances may be left out; names the project gives to another run's parameters (an
+        extrapolation's in a data run) are neither applied nor unknown."""
+        import json
+        import warnings
+        s = self.sess
+        of_run = [s.params_names(i) for i in range(len(records))]
+        optional = [of_run[i] for i, r in enumerate(records) if segment_field[r["kind"]] and fixed[i]]
+        with open(self.file, "rb") as f:
+            other = list(_azure2.parameter_names(f.read()))
+        for text in _azure2.match_parameter_file_names(os.fspath(path), in_file, of_run, optional, other):
+            d = json.loads(text)
+            message = f"{d.get('code', '')}: {d.get('message', '')}"
+            if d.get("severity") == "error":
+                raise ValueError(message)
+            warnings.warn(message, stacklevel=3)
 
     def update_rwa_params_from_sav(self):
         """Reload the run's param.sav (matched by name) into the session --
@@ -912,8 +926,8 @@ class azure2(_HybridPotentials):
         want = np.asarray(self.transform_all_rwa(full, include_fixed=True), float)
 
         path = os.path.abspath(path)
-        from .snapshot import write_format3, write_old_format
-        (write_format3 if _is_format3(self.file) else write_old_format)(self, path, x, want, full, norms)
+        from .snapshot import write_format3
+        write_format3(self, path, x, want, full, norms)
 
         sav = None
         if param_sav:
@@ -952,15 +966,10 @@ class azure2(_HybridPotentials):
                 tmpdir = tempfile.mkdtemp(prefix=".azr_verify_", dir=self.cwd)
                 fd, probe = tempfile.mkstemp(suffix=".azr", dir=self.cwd)
                 os.close(fd)
-                if _is_format3(path):
-                    from .project import Project
-                    copy = Project.open(path)
-                    copy.set_config(output_dir=tmpdir.rstrip("/") + "/")
-                    copy.save(probe)
-                else:
-                    copy = AzrModel.from_file(path)
-                    copy.set_output_dir(tmpdir)
-                    copy.write(probe)
+                from .project import Project
+                copy = Project.open(path)
+                copy.set_config(output_dir=tmpdir.rstrip("/") + "/")
+                copy.save(probe)
                 with azure2(probe, cwd=self.cwd, **check_options) as check:
                     back_full = np.asarray(check.sess.params_all_rwa(), float)
                     got = np.asarray(check.transform_all_rwa(back_full, include_fixed=True), float)
@@ -1531,8 +1540,10 @@ class azure2(_HybridPotentials):
         return self.sess.thm_distortion(str(experiment), np.asarray(energies, float).ravel())
 
     def residuals(self, params=None):
-        """Standardized residuals ``(fit_i - data_i*n)/(cmErr_i*n)``, from a
-        forward pass alone.
+        """Standardized residuals ``(fit_i - data_i*n)/(err_i*n)``, from a
+        forward pass alone.  ``data_i`` and ``err_i`` are in the data set's own
+        frame and unit, as its file gives them (the model is brought to that
+        frame: a lab-frame data set is compared in the lab frame, not c.m.).
 
         The residual vector of :meth:`residual_jacobian` (same rows, in segment
         order) without its Jacobian, so it is as cheap as one chi-squared and
@@ -1759,7 +1770,7 @@ class azure2(_HybridPotentials):
         pair's threshold (Paneru et al., PRC 99, 045807 (2019), Eq. 7), a (1 - M)
         for a neutral pair; the same in every parametrization.  Call it on each
         sample of an MCMC chain for the posterior of a0.  The measured ones of
-        the ``<scatteringLengths>`` block are already part of
+        the ``scattering_length`` data of ``<modelData>`` are already part of
         :meth:`calculate_chi2_rwa` (see :meth:`penalties`)."""
         x = np.asarray(self.params_rwa if params is None else params, float)
         flat = np.asarray(self.sess.scattering_lengths_rwa(x), float).reshape(-1, 6)
@@ -1767,29 +1778,10 @@ class azure2(_HybridPotentials):
 
     def scattering_length_chi2(self, params=None):
         """chi-squared of the measured scattering lengths at a free RWA vector: the term the engine adds inside
-        :meth:`calculate_chi2_rwa`.  Format 3: the ``scattering_length`` data of ``<modelData>``, their rows of the
-        engine's model-data term (:func:`pyazr.model_data.model_data`); older formats: the active lines of
-        ``<scatteringLengths>``, recomputed from :meth:`scattering_lengths`."""
-        if _is_format3(self.file):
-            from .model_data import model_data
-            return float(sum(d.chi2 for d in model_data(self, params) if d.quantity == "scattering_length"))
-        lines = [e for e in self._parsed("model").scattering_lengths if e.active]
-        if not lines:
-            return 0.0
-        values = self.scattering_lengths(params)
-        pairs = {p.key: p for p in self.pairs}
-        chi2 = 0.0
-        for e in lines:
-            if e.s < 0:
-                w = pairs[e.pair].i1i2factor
-                a = sum((2 * v.s + 1) * w * v.a0 for v in values if v.pair == e.pair)
-            else:
-                a = next(v.a0 for v in values if v.pair == e.pair and abs(v.s - e.s) < 1e-6)
-            if e.sigma > 0:
-                chi2 += ((a.real - e.value) / e.sigma) ** 2
-            if e.im_sigma > 0:
-                chi2 += ((a.imag - e.im_value) / e.im_sigma) ** 2
-        return chi2
+        :meth:`calculate_chi2_rwa`: the ``scattering_length`` data of ``<modelData>``, their rows of the engine's
+        model-data term (:func:`pyazr.model_data.model_data`)."""
+        from .model_data import model_data
+        return float(sum(d.chi2 for d in model_data(self, params) if d.quantity == "scattering_length"))
 
     def park_norms(self, params=None):
         """Park formalism: the overlap J = 1 - sum_c gamma_c^2 dS_c/dE of every
@@ -1867,7 +1859,10 @@ class azure2(_HybridPotentials):
     def residual_jacobian(self, params, skip=None):
         """Standardized residuals and their Jacobian.
 
-        ``r_i = (fit_i - data_i*n)/(cmErr_i*n)`` so ``sum(r_i**2) == chi2``.
+        ``r_i = (fit_i - data_i*n)/(err_i*n)`` so ``sum(r_i**2) == chi2``, with
+        ``data_i`` and ``err_i`` in the data set's own frame and unit, as its
+        file gives them (the model is brought to that frame, as in
+        :meth:`residuals`).
 
         Returns ``(r, J)`` with ``r`` shape ``(n_res,)`` and ``J`` shape
         ``(n_res, n_params)``; columns match the non-fixed RWA parameters (the

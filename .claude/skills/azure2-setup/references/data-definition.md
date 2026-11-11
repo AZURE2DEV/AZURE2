@@ -71,10 +71,11 @@ share one level-matrix solution per point; `AZURE_NO_COMPONENT_MAPPING=1` restor
   `sample <name>` picks it on the segment line; parameters `abundance_<name>_Z_A`. Refused on RATIO, phase shifts
   (2), analysing powers (7), test angular-coefficient lines (3), in a project without the block, and for an
   undefined sample name. Output `AZUREOut_sample_seg=<key>.out/.extrap` (total plus one column per nucleus).
-- **Build such a project** with `pyazr.merge_projects(models, out, abundances={Nucleus(10, 21): 0.9048, ...},
-  shared=[...])` rather than by hand: it offsets pair keys, renumbers segments and remaps components and
-  `<targetInt>`; `<parameterSettings>` and `<mcmc>` are dropped. Edit with `AzrModel.samples`,
-  `set_abundance(..., sample=)`, `set_sample_sum_sigma`, `set_natural(key, "name")`; read
+- **Build such a project** (format 3) with `pyazr.merge_projects(projects, out, isotopes={"20Ne": 0.9048, ...},
+  shared=[{0: "vaughn", 1: "vaughn"}])` rather than by hand: the engine merges the `<levels>` rows (pair keys and
+  level IDs offset), every record is kept (colliding names renamed), and `isotopes` adds a `target` record with one
+  `isotope` field per target nucleus; member 0's `<parameterSettings>` and `<mcmc>` are kept, the others' dropped.
+  Edit the isotopes as record fields (`Project.set("natural", isotope=[...], isotope_sum=...)`); read
   `parameters.abundances` and `penalties()["abundance"]`.
 - **Cross-check a merge against its members**: each nucleus alone (other nuclei's components removed, abundances
   1/0/0) reproduces its standalone project's χ² to 1e-10 (`tests/natural_target/check.sh`). The real-data reference

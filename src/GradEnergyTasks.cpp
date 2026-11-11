@@ -446,6 +446,11 @@ bool EnergyTaskRows(CNuc *compound, WorkingCopy *data, Results &results, const C
   numTasks = list.size();
   const int nCols = pmap.NumPacked();
   rows.assign((size_t)n * nCols, 0.0);
+  if (nCols == 0) {  // no free parameter: the models only
+    points.swap(pass.points);
+    models.swap(pass.models);
+    return true;
+  }
 
   // The rows each task touches (for the size of its contributions).
   std::vector<int> rowsOfTask(list.size(), 0), seen(n, -1);
@@ -464,12 +469,12 @@ bool EnergyTaskRows(CNuc *compound, WorkingCopy *data, Results &results, const C
     long long size = 0;
     std::vector<long long> offset;
     while (end < list.size() && (end == begin || size + (long long)rowsOfTask[end] * nCols <= kRowBlockDoubles)) {
-      offset.push_back(size / (nCols > 0 ? nCols : 1));
+      offset.push_back(size / nCols);
       size += (long long)rowsOfTask[end] * nCols;
       end++;
     }
     buffer.assign((size_t)size, 0.0);
-    bufferRows.assign((size_t)(nCols > 0 ? size / nCols : 0), -1);
+    bufferRows.assign((size_t)(size / nCols), -1);
     std::vector<char> failed(end - begin, 0);
 #pragma omp parallel
     {

@@ -6,7 +6,8 @@ Turns the flat parameter / pair metadata (``azure2.parameters`` and
 with their (L, S, radiation type, partial width, fixed flag, Wigner limit).
 
 This is a *read-only* view of a running instance.  To edit the scheme (add or
-remove levels) and write it back to a file, see :mod:`pyazr.azrfile`.
+remove levels) and write it back to a file, see :class:`pyazr.Project` (``levels()``, ``add_level``,
+``remove_level``, ``set_level``, ``set_channel``).
 """
 
 from dataclasses import dataclass, field

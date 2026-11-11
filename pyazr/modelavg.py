@@ -44,7 +44,6 @@ run where numpy is missing.
 """
 
 import csv
-import importlib.util
 import json
 import math
 import os
@@ -95,7 +94,7 @@ def parameter_label(param, pairs=None):
     (``Parameter.level``), ``<key>`` the pair key the ``.azr`` writes: pass
     ``pairs=session.pairs`` so the engine's pair number is translated (the
     two differ when ``<levels>`` does not introduce the pairs in key order;
-    see :meth:`pyazr.azrfile.AzrModel.apply_fit`).
+    see :func:`pyazr.snapshot.place_level_values`).
     """
     kind = getattr(param, "kind", None)
     if kind == "energy":
@@ -512,47 +511,25 @@ def model_average(variants: Sequence[Variant], weights="aic", rescale=None,
 #  Writing the averaged parameters into a template .azr
 # ---------------------------------------------------------------------------
 
-def _azr_model_class():
-    """AzrModel, also when this file is loaded on its own (no package)."""
-    if __package__:
-        from .azrfile import AzrModel
-        return AzrModel
-    spec = importlib.util.spec_from_file_location(
-        "azrfile", os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                                "azrfile.py"))
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod.AzrModel
-
-
-def azr_parameter_slots(model):
-    """``{name: setter}`` for every level energy and width of a project: a :class:`pyazr.Project` (format 3) or
-    an AzrModel (older formats).
+def azr_parameter_slots(project):
+    """``{name: setter}`` for every level energy and width of ``project`` (a :class:`pyazr.Project`).
 
     Names as :func:`parameter_label` gives them; levels numbered as the engine
-    numbers them (active levels only; a Project's :attr:`~pyazr.nuclear_part.Level.level`).  A setter takes the
+    numbers them (active levels only; :attr:`pyazr.ProjectLevel.level`).  A setter takes the
     *physical* value (level energy in MeV; partial width in eV, or ANC in
-    fm^-1/2 for a closed channel), as a ``<levels>`` row holds it; on a Project it writes the value into the row
+    fm^-1/2 for a closed channel), as a ``<levels>`` row holds it, and writes it into the row
     at once (the engine's edit, ``Project._write_level_values``).
     """
-    if hasattr(model, "levels") and callable(model.levels):  # a Project: the engine's levels and rows
-        slots = {}
-        for lv in model.levels():
-            if not lv.active:
-                continue
-            slots[f"E[{level_label(lv.J, lv.parity, lv.level)}]"] = (
-                lambda v, lv=lv: _write_level(model, ("energy", lv.group, lv.level, 0, 0, 0, float(v))))
-            for c in lv.channels:
-                name = width_label(lv.J, lv.parity, lv.level, c.pair, c.l, c.s)
-                slots[name] = (lambda v, lv=lv, c=c: _write_level(
-                    model, ("width", lv.group, lv.level, c.pair, c.l, int(round(2 * c.s)), float(v))))
-        return slots
     slots = {}
-    for (_, n), lv in model.engine_level_keys().items():
-        slots[f"E[{level_label(lv.J, lv.parity, n)}]"] = lv.set_energy
+    for lv in project.levels():
+        if not lv.active:
+            continue
+        slots[f"E[{level_label(lv.J, lv.parity, lv.level)}]"] = (
+            lambda v, lv=lv: _write_level(project, ("energy", lv.group, lv.level, 0, 0, 0, float(v))))
         for c in lv.channels:
-            name = width_label(lv.J, lv.parity, n, c.pair, c.L, c.S)
-            slots[name] = (lambda v, c=c: setattr(c, "gamma", float(v)))
+            name = width_label(lv.J, lv.parity, lv.level, c.pair, c.l, c.s)
+            slots[name] = (lambda v, lv=lv, c=c: _write_level(
+                project, ("width", lv.group, lv.level, c.pair, c.l, int(round(2 * c.s)), float(v))))
     return slots
 
 
@@ -565,10 +542,10 @@ def _write_level(project, value):
 def write_averaged_azr(template, path, values, output_dir=None):
     """Write the averaged parameter values into a copy of ``template``.
 
-    ``template``: a ``.azr`` path, a :class:`pyazr.Project` or an AzrModel (not modified).  ``values``:
+    ``template``: the path of a format-3 project or a :class:`pyazr.Project` (not modified).  ``values``:
     a :class:`ModelAverage` (its means are written) or ``{name: value}``.
     Level energies and widths are matched by name (:func:`parameter_label`)
-    and set through AzrModel's own setters, so the result opens in the GUI
+    and written into the rows they come from by the engine's level edits, so the result opens in the GUI
     and in the engine like any other project; everything else in the file
     (radii, the ``<thm>`` block, data) is the template's.  A name the
     template has no slot for (a norm, a cbkg amplitude, a level the template
@@ -579,20 +556,11 @@ def write_averaged_azr(template, path, values, output_dir=None):
     variants' and need not be close to the best one when the variants
     disagree.  Returns ``(path, written, skipped)``.
     """
-    AzrModel = None
-    if _is_project(template):
-        from .project import Project
-        if isinstance(template, (str, os.PathLike)):
-            model = Project.open(os.fspath(template))
-        else:
-            model = Project(template.to_bytes(), template.path)  # a private copy: the caller's stays untouched
-    elif isinstance(template, (str, os.PathLike)):
-        AzrModel = _azr_model_class()
-        model = AzrModel.from_file(os.fspath(template))
+    from .project import Project
+    if isinstance(template, (str, os.PathLike)):
+        model = Project.open(os.fspath(template))
     else:
-        AzrModel = _azr_model_class()
-        # a private copy, so the caller's model stays untouched
-        model = _copy_model(AzrModel, template)
+        model = Project(template.to_bytes(), template.path)  # a private copy: the caller's stays untouched
     if isinstance(values, ModelAverage):
         values = values.values
     slots = azr_parameter_slots(model)
@@ -608,38 +576,8 @@ def write_averaged_azr(template, path, values, output_dir=None):
         warnings.warn(f"write_averaged_azr: {len(skipped)} name(s) not in the "
                       f"template, skipped: {', '.join(skipped[:10])}"
                       + (" ..." if len(skipped) > 10 else ""), stacklevel=2)
-    if AzrModel is None:  # a format-3 project (Project)
-        if output_dir is not None:
-            os.makedirs(output_dir, exist_ok=True)
-            model.set_config(output_dir=str(output_dir).rstrip("/") + "/")
-        model.save(os.fspath(path))
-        return os.fspath(path), written, skipped
     if output_dir is not None:
-        model.set_output_dir(output_dir)
-    model.write(os.fspath(path))
+        os.makedirs(output_dir, exist_ok=True)
+        model.set_config(output_dir=str(output_dir).rstrip("/") + "/")
+    model.save(os.fspath(path))
     return os.fspath(path), written, skipped
-
-
-def _is_project(template):
-    """``template`` is a format-3 project: a :class:`pyazr.Project` or the path of a format-3 file."""
-    if isinstance(template, (str, os.PathLike)):
-        if not __package__:
-            return False  # loaded on its own: the old file class only
-        from .project import _is_format3
-        return _is_format3(template)
-    return hasattr(template, "to_bytes") and hasattr(template, "levels")
-
-
-def _copy_model(AzrModel, template):
-    """A deep copy of an AzrModel through its own text (no shared levels)."""
-    import tempfile
-    fd, tmp = tempfile.mkstemp(suffix=".azr")
-    os.close(fd)
-    try:
-        with open(tmp, "w") as fh:
-            fh.write(template.to_text())
-        model = AzrModel.from_file(tmp)
-    finally:
-        os.remove(tmp)
-    model.source = template.source
-    return model

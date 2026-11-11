@@ -59,12 +59,16 @@ computational units, `plus=2` the universal grid). It exposes `reaction`, `year`
 ## 4. Converting to AZURE2
 
 `ExforData.to_azr(data_dir, entrance, exit, observable=None, …)` writes a data file (E_lab, θ, σ, δσ) and returns
-keyword arguments for `AzrModel.add_data_segment(**kw)`:
+what a data set needs (`data_file`, the windows, `norm_error`); the record is added with `Project.add_dataset`
+(an S factor: `to_sfactor_dataset`, a ratio to Rutherford: `to_dataset`, which return the record's text):
 
 ```python
-d = N.fetch_exfor("O2599004")
-kw = d.to_azr("run/data", entrance=1, exit=2, observable="total-capture")
-AzrModel.from_file("13N.azr").add_data_segment(**kw).write("13N_new.azr")
+d = N.fetch_exfor(entry_id)                       # a cross section in B, MB, ...
+kw = d.to_azr("run/data", entrance=1, exit=2)
+p = Project.open("run/13N.azr")
+p.add_dataset("xs", reaction=p.reaction(1, -1), quantity="sigma", unit="b", norm="1 fixed",
+              file=os.path.relpath(kw["data_file"], p.directory), columns="E_lab[MeV] _ value error")
+p.save()
 ```
 
 - `EN-CM` → lab by E_lab = E_c.m.(m_t + m_p)/m_t; `EN` is passed through as lab.

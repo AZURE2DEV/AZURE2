@@ -7,10 +7,9 @@ docs/source/theory/thm_implementation.rst, "Fixed-angle observable").
 Checked on tests/7Li_p_a (7Li+p -> a+a, two entrance l per channel spin,
 identical exit, 30 keV folding):
 
-  1. AzrModel: set_thm_experiment(..., theta=...) round trip and canonical
-     line; the refusals AZURE2 makes (malformed or reversed windows, beyond
-     180 deg, together with entranceL=coherent in either order).  Pure
-     Python: runs without numpy.
+  1. Project: an experiment with theta=... round trip and canonical line;
+     the refusals AZURE2 makes (malformed or reversed windows, beyond 180
+     deg; together with entranceL=coherent when a session is made).
   2. The engine against the CLI with theta=50-70: calculate_chi2_rwa
      (rel 1e-9) and the output files written by write_output_files.
   3. 0-180: 4 pi times the model is the angle-integrated model (rel 1e-12),
@@ -35,7 +34,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 SOURCE = os.path.join(ROOT, "tests", "7Li_p_a")
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import old_tree  # noqa: E402  (the old original: a test of the old file class, format3_tree.md section 5)
+from thm_records import datasets, session_refusal, set_experiment, thm_set  # noqa: E402
 AZR = "7Li_p_a.azr"
 
 failures = []
@@ -49,18 +48,15 @@ def check(name, ok, detail=""):
 
 sys.path.insert(0, ROOT)
 os.environ.setdefault("OMP_NUM_THREADS", "2")
-# AzrModel is pure Python: load azrfile.py directly, so these checks run
-# where numpy (needed by the pyazr package) is missing.
-import importlib.util                                          # noqa: E402
-_spec = importlib.util.spec_from_file_location(
-    "azrfile", os.path.join(ROOT, "pyazr", "azrfile.py"))
-_azrfile = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(_azrfile)
-AzrModel = _azrfile.AzrModel
+try:
+    from pyazr import Project
+except Exception as err:                                   # engine not built
+    print(f"skip: engine not available ({type(err).__name__}: {err})")
+    sys.exit(77)
 
 
 def fresh_copy(dst):
-    old_tree.copytree(SOURCE, dst)
+    shutil.copytree(SOURCE, dst)
     for junk in ("output", "checks"):
         shutil.rmtree(os.path.join(dst, junk), ignore_errors=True)
         os.makedirs(os.path.join(dst, junk))
@@ -69,60 +65,45 @@ def fresh_copy(dst):
 
 
 with tempfile.TemporaryDirectory() as tmp:
-    # -- 1. AzrModel ----------------------------------------------------------
-    print("1. AzrModel: theta")
+    # -- 1. Project -----------------------------------------------------------
+    print("1. Project: theta")
     proj = os.path.join(tmp, "model")
     fresh_copy(proj)
     src = os.path.join(proj, AZR)
-    m = AzrModel.from_file(src)
-    m.set_thm_experiment("A", [1], theta=(50, 70))
-    rec = {"segments": [1], "background": "none", "theta": "50-70"}
-    check("record carries theta", m.thm_experiments() == {"A": rec}, m.thm_experiments())
+    m = Project.open(src)
+    set_experiment(m, "A", [1], theta=(50, 70))
+    rec = {"theta": "50-70"}
+    check("record carries theta", m.thm()["experiments"] == {"A": rec}, m.thm())
     one = os.path.join(proj, "one.azr")
-    m.write(one)
-    check("canonical line ends in theta=50-70",
-          "experiment[A] segments=1 theta=50-70\n" in open(one).read())
-    check("reloaded: same record", AzrModel.from_file(one).thm_experiments() == {"A": rec})
-    m.set_thm_experiment("A", [1], theta="0-0")
-    check("a single angle (0-0)", m.thm_experiments()["A"]["theta"] == "0-0")
-    m.set_thm_experiment("A", [1], theta="all")
-    check("theta=all", m.thm_experiments()["A"]["theta"] == "all")
-    m.set_thm_experiment("A", [1])
-    check("no theta: no key", "theta" not in m.thm_experiments()["A"])
+    m.save(one)
+    check("canonical line ends in theta=50-70", "experiment[A] theta=50-70\n" in open(one).read())
+    check("reloaded: same record", Project.open(one).thm()["experiments"] == {"A": rec})
+    set_experiment(m, "A", [1], theta="0-0")
+    check("a single angle (0-0)", m.thm()["experiments"]["A"]["theta"] == "0-0")
+    set_experiment(m, "A", [1], theta="all")
+    check("theta=all", m.thm()["experiments"]["A"]["theta"] == "all")
+    set_experiment(m, "A", [1], background="none")
+    check("no theta: no key", "theta" not in m.thm()["experiments"]["A"])
     for value in ("70-50", "0-190", "forward", "60", "-10-20"):
         try:
-            AzrModel.from_file(src).set_thm_experiment("A", [1], theta=value)
+            set_experiment(Project.open(src), "A", [1], theta=value)
             check(f"refused: theta={value}", False, "no ValueError")
         except ValueError as err:
             check(f"refused like AZURE2: theta={value}", "expected all or thmin-thmax" in str(err),
                   str(err))
-    m = AzrModel.from_file(src)
-    m.set_thm_option("entranceL", "coherent")
-    try:
-        m.set_thm_experiment("A", [1], theta="50-70")
-        check("refused: theta with entranceL=coherent", False, "no ValueError")
-    except ValueError as err:
-        check("refused: theta with entranceL=coherent", "entranceL=coherent" in str(err), str(err))
-    m.set_thm_experiment("A", [1], theta="all")
-    check("theta=all with entranceL=coherent is fine", m.thm_experiments()["A"]["theta"] == "all")
-    m = AzrModel.from_file(src)
-    m.set_thm_experiment("A", [1], theta="50-70")
-    try:
-        m.set_thm_option("entranceL", "coherent")
-        check("refused: entranceL=coherent with a theta window", False, "no ValueError")
-    except ValueError as err:
-        check("refused: entranceL=coherent with a theta window", "entranceL=coherent" in str(err),
-              str(err))
-    check("model unchanged after the refusal", m.thm_options().get("entranceL", "incoherent")
-          == "incoherent", m.thm_options())
+    # theta with entranceL=coherent, in either order: the edits are taken, a session refuses the project
+    m = Project.open(src)
+    m.set_thm(entranceL="coherent")
+    set_experiment(m, "A", [1], theta="50-70")
+    bad, out = session_refusal(m, os.path.join(proj, "coherent_theta.azr"))
+    check("refused by the engine: theta with entranceL=coherent", bad and "entranceL=coherent" in out, out[-400:])
+    set_experiment(m, "A", [1], theta="all")
+    bad, out = session_refusal(m, os.path.join(proj, "coherent_all.azr"))
+    check("theta=all with entranceL=coherent is fine", not bad, out[-400:])
 
     # -- the engine -----------------------------------------------------------
-    try:
-        import numpy as np
-        from pyazr import azure2
-    except Exception as err:                                   # engine not built
-        print(f"skip the engine part: engine not available ({type(err).__name__}: {err})")
-        sys.exit(1 if failures else 77)
+    import numpy as np
+    from pyazr import azure2
     binary = os.environ.get("AZURE2_BIN")
     if not binary:
         cands = [c for c in glob.glob(os.path.join(ROOT, "build*", "src", "AZURE2*"))
@@ -136,8 +117,8 @@ with tempfile.TemporaryDirectory() as tmp:
         d = os.path.join(tmp, name)
         fresh_copy(d)
         text = open(os.path.join(d, AZR)).read()
-        if block:
-            text = text.rstrip("\n") + "\n<thm>\n" + block + "\n</thm>\n"
+        if block:  # the block's one experiment joined by the data set
+            text = thm_set(text, block, datasets(text))
         with open(os.path.join(d, "run.azr"), "w") as f:
             f.write(text)
         return d
@@ -152,7 +133,7 @@ with tempfile.TemporaryDirectory() as tmp:
         with azure2(os.path.join(d, "run.azr"), cwd=d) as s:
             return np.concatenate([np.asarray(v) for v in s.calculate_rwa(x)])
 
-    block = "experiment[A] segments=1 theta=50-70"
+    block = "experiment[A] theta=50-70"
     cli_dir, py_dir = project("cli", block), project("py", block)
     proc = subprocess.run([binary, "--no-gui", "--no-readline", "run.azr"], cwd=cli_dir,
                           input="1\n\n\n7\n", text=True, capture_output=True, timeout=600)
@@ -177,9 +158,9 @@ with tempfile.TemporaryDirectory() as tmp:
         check(f"write_output_files: {name} identical to the CLI's", from_py.get(name) == from_cli[name])
 
     print("3. 0-180 is the angle-integrated model / 4 pi")
-    nokey_dir = project("nokey", "experiment[A] segments=1")
-    all_dir = project("all", "experiment[A] segments=1 theta=all")
-    full_dir = project("full", "experiment[A] segments=1 theta=0-180")
+    nokey_dir = project("nokey", "experiment[A] background=none")
+    all_dir = project("all", "experiment[A] theta=all")
+    full_dir = project("full", "experiment[A] theta=0-180")
     m_nokey, m_full = model(nokey_dir, x), model(full_dir, x)
     worst = float(np.max(np.abs(4 * math.pi * m_full / m_nokey - 1)))
     check(f"4 pi model(0-180) == model (worst rel {worst:.1e}, {m_full.size} points)", worst < 1e-12)
@@ -198,8 +179,8 @@ with tempfile.TemporaryDirectory() as tmp:
     check(f"residual_jacobian agrees ({d_J:.1e}, {J_full.shape})", d_J < 1e-6)
 
     print("4. identical exit: symmetric about 90 deg")
-    f_dir = project("fwd", "experiment[A] segments=1 theta=30-60")
-    b_dir = project("bwd", "experiment[A] segments=1 theta=120-150")
+    f_dir = project("fwd", "experiment[A] theta=30-60")
+    b_dir = project("bwd", "experiment[A] theta=120-150")
     m_f, m_b = model(f_dir, x), model(b_dir, x)
     worst = float(np.max(np.abs(m_f / m_b - 1)))
     check(f"model(30-60) == model(120-150) (worst rel {worst:.1e})", worst < 1e-12)

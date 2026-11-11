@@ -136,7 +136,7 @@ In the calculation
   a data point (one residual row per constrained part).
 * **pyazr.**  :meth:`azure2.scattering_lengths` returns the values at any
   parameter vector, so a posterior of :math:`a_0` follows from an MCMC chain;
-  :class:`AzrModel` reads and writes the block.
+  the measured lengths are ``datum`` records of quantity ``scattering_length``, edited with :class:`pyazr.Project`.
 
 Validation
 ----------

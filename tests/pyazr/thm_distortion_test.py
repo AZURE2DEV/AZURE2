@@ -8,12 +8,12 @@ docs/source/theory/thm_implementation.rst, "Distortion factor R(E)").
 Checked on tests/18O_p_a_thm with a made-up charged spectator,
 18O(3He,a15N)d at 115 MeV:
 
-  1. AzrModel: set_thm_experiment(..., distortion=..., opticalAA=...) round
-     trip and canonical line; values AZURE2 refuses raise ValueError the same
+  1. Project: an experiment with distortion=..., opticalAA=... round trip
+     and canonical line; values AZURE2 refuses raise ValueError the same
      way; the Coulomb consistency rules (coulombIntegral=1 with R(E) on a
      distorted a + A wave, a ps window with distortionRatio=dw) refused as
-     AZURE2 refuses them; global optical potentials (names, :extrapolate,
-     the projectile, the mass range).  Pure Python: runs without numpy.
+     AZURE2 refuses them; global optical potentials (names, :extrapolate;
+     the projectile and the mass range refused when a session is made).
   2. The engine against the CLI: calculate_chi2_rwa (rel 1e-9) and the output
      files written by write_output_files (thm_experiments.out included).
   3. thm_distortion: |M|^2 and M_PW at E = 0.6 MeV against the mpmath values
@@ -41,7 +41,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 SOURCE = os.path.join(ROOT, "tests", "18O_p_a_thm")
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import old_tree  # noqa: E402  (the old original: a test of the old file class, format3_tree.md section 5)
+from thm_records import datasets, no_fold, session_refusal, set_experiment, thm_set  # noqa: E402
 AZR = "18O_p_a_thm.azr"
 KIN = "beam=18O target=3He spectator=d Ebeam=115"
 # tests/reference/thm_distortion_reference.py, case he3_qf (E, |M|^2, M_PW)
@@ -62,18 +62,15 @@ def rel(a, b):
 
 sys.path.insert(0, ROOT)
 os.environ.setdefault("OMP_NUM_THREADS", "2")
-# AzrModel is pure Python: load azrfile.py directly, as roundtrip_test does,
-# so these checks run where numpy (needed by the pyazr package) is missing.
-import importlib.util                                          # noqa: E402
-_spec = importlib.util.spec_from_file_location(
-    "azrfile", os.path.join(ROOT, "pyazr", "azrfile.py"))
-_azrfile = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(_azrfile)
-AzrModel = _azrfile.AzrModel
+try:
+    from pyazr import Project
+except Exception as err:                                   # engine not built
+    print(f"skip: engine not available ({type(err).__name__}: {err})")
+    sys.exit(77)
 
 
 def fresh_copy(dst):
-    old_tree.copytree(SOURCE, dst)
+    shutil.copytree(SOURCE, dst)
     for junk in ("output", "checks"):
         shutil.rmtree(os.path.join(dst, junk), ignore_errors=True)
         os.makedirs(os.path.join(dst, junk))
@@ -82,144 +79,113 @@ def fresh_copy(dst):
 
 
 with tempfile.TemporaryDirectory() as tmp:
-    # -- 1. AzrModel ----------------------------------------------------------
-    print("1. AzrModel: the distortion keys")
+    # -- 1. Project -----------------------------------------------------------
+    print("1. Project: the distortion keys")
     proj = os.path.join(tmp, "model")
     fresh_copy(proj)
     src = os.path.join(proj, AZR)
-    m = AzrModel.from_file(src)
+    kin = dict(beam="18O", target="3He", spectator="d", Ebeam=115)
+
+    def refused(what, fn, frag):
+        try:
+            fn()
+            check(f"refused: {what}", False, "no ValueError")
+        except ValueError as err:
+            check(f"refused like AZURE2: {frag}", frag in str(err), str(err))
+
+    def experiment(project, name, members, **keys):  # a fresh copy of the project when none is given
+        return set_experiment(project or Project.open(src), name, members, **keys)
+
+    m = Project.open(src)
     ws = [100, 4.2, 0.7, 20, 4.2, 0.7, 0, 0, 0, 4.2]
-    m.set_thm_experiment("A", [1, 2], beam="18O", target="3He", spectator="d", Ebeam=115,
-                         distortion="optical", opticalAA=ws, opticalSF="plane",
-                         spectatorAngle=8, distortionRef=0.7, distortionRatio="dw",
-                         boundState="yukawa:2")
-    rec = {"segments": [1, 2], "background": "none", "beam": "18O", "target": "3He",
-           "spectator": "d", "Ebeam": 115.0, "distortion": "optical",
+    experiment(m, "A", [1, 2], **kin, distortion="optical", opticalAA=ws, opticalSF="plane",
+               spectatorAngle=8, distortionRef=0.7, distortionRatio="dw", boundState="yukawa:2")
+    rec = {"beam": "18O", "target": "3He", "spectator": "d", "Ebeam": "115", "distortion": "optical",
            "opticalAA": "100,4.2,0.7,20,4.2,0.7,0,0,0,4.2", "opticalSF": "plane",
            "spectatorAngle": "8", "distortionRef": "0.7", "distortionRatio": "dw",
            "boundState": "yukawa:2"}
-    check("record carries the distortion keys", m.thm_experiments() == {"A": rec},
-          m.thm_experiments())
+    check("record carries the distortion keys", m.thm()["experiments"] == {"A": rec}, m.thm())
     one = os.path.join(proj, "one.azr")
-    m.write(one)
-    line = (f"experiment[A] segments=1,2 {KIN} distortion=optical "
+    m.save(one)
+    line = (f"experiment[A] {KIN} distortion=optical "
             "opticalAA=100,4.2,0.7,20,4.2,0.7,0,0,0,4.2 opticalSF=plane spectatorAngle=8 "
             "distortionRef=0.7 distortionRatio=dw boundState=yukawa:2\n")
     check("canonical line", line in open(one).read(), open(one).read()[-400:])
-    check("reloaded: same record", AzrModel.from_file(one).thm_experiments() == {"A": rec})
+    check("reloaded: same record", Project.open(one).thm()["experiments"] == {"A": rec})
     for kwargs, frag in [
             (dict(distortion="coulomb"), "needs the kinematics"),
-            (dict(distortion="coulomb", beam="18O", target="3He", spectator="d", Ebeam=115,
-                  opticalAA="plane"), "need distortion=optical"),
-            (dict(distortion="optical", beam="18O", target="3He", spectator="d", Ebeam=115,
-                  opticalSF=[50, 1.2, 0.6]), "ten numbers"),
-            (dict(beam="18O", target="3He", spectator="d", Ebeam=115, spectatorAngle=10),
-             "needs distortion=coulomb or distortion=optical")]:
-        try:
-            AzrModel.from_file(src).set_thm_experiment("B", [1], **kwargs)
-            check(f"refused: {kwargs}", False, "no ValueError")
-        except ValueError as err:
-            check(f"refused like AZURE2: {frag}", frag in str(err), str(err))
-    for text, frag in [
-            (f"experiment[A] segments=1 {KIN} distortion=dwba", "expected none, coulomb, optical or table"),
-            (f"experiment[A] segments=1 {KIN} distortion=optical opticalAA=50,0,0.6,0,0,0,0,0,0,0",
-             "ten numbers"),
-            (f"experiment[A] segments=1 {KIN} distortion=coulomb spectatorAngle=200", "expected qf"),
-            (f"experiment[A] segments=1 {KIN} distortion=coulomb distortionRatio=pw", "expected dwpw or dw"),
-            (f"experiment[A] segments=1 {KIN} distortion=coulomb boundState=hulthen",
-             "expected whittaker or yukawa"),
-            (f"experiment[A] segments=1 {KIN} theta=5", "expected all or thmin-thmax"),
-            ("experiment[A] segments=1 distortionRef=0.6", "needs distortion=coulomb")]:
-        path = os.path.join(proj, "bad.azr")
-        with open(path, "w") as f:
-            f.write(open(src).read().rstrip("\n") + "\n<thm>\n" + text + "\n</thm>\n")
-        try:
-            AzrModel.from_file(path).thm_experiments()
-            check(f"file refused: {text!r}", False, "no ValueError")
-        except ValueError as err:
-            check(f"file refused like AZURE2: {frag}", frag in str(err), str(err))
+            (dict(distortion="coulomb", **kin, opticalAA="plane"), "need distortion=optical"),
+            (dict(distortion="optical", **kin, opticalSF=[50, 1.2, 0.6]), "ten numbers"),
+            (dict(**kin, spectatorAngle=10), "needs distortion=coulomb or distortion=optical"),
+            (dict(**kin, distortion="dwba"), "expected none, coulomb, optical or table"),
+            (dict(**kin, distortion="optical", opticalAA="50,0,0.6,0,0,0,0,0,0,0"), "ten numbers"),
+            (dict(**kin, distortion="coulomb", spectatorAngle=200), "expected qf"),
+            (dict(**kin, distortion="coulomb", distortionRatio="pw"), "expected dwpw or dw"),
+            (dict(**kin, distortion="coulomb", boundState="hulthen"), "expected whittaker or yukawa"),
+            (dict(**kin, theta=5), "expected all or thmin-thmax"),
+            (dict(distortionRef=0.6), "needs distortion=coulomb")]:
+        refused(kwargs, lambda: experiment(None, "B", [1], **kwargs), frag)
 
     # Coulomb consistency (CheckThmCoulombConsistency, CheckThmExperiments):
     # C_l with R(E) on a distorted a + A wave counts the x-A Coulomb twice; a
     # ps window with distortionRatio=dw counts |phi|^2 twice.
-    print("1b. AzrModel: the Coulomb consistency rules")
-    kin = dict(beam="18O", target="3He", spectator="d", Ebeam=115)
-    mc = AzrModel.from_file(src)
-    mc.set_thm_option("coulombIntegral", True)
+    print("1b. Project: the Coulomb consistency rules")
+    mc = Project.open(src)
+    mc.set_thm(coulombIntegral=True)
     for kwargs in (dict(distortion="coulomb"), dict(distortion="optical", opticalSF="plane"),
                    dict(distortion="optical", opticalAA=ws)):
-        try:
-            mc.set_thm_experiment("C", [1, 2], **kin, **kwargs)
-            check(f"coulombIntegral=1 refused with {kwargs}", False, "no ValueError")
-        except ValueError as err:
-            check(f"coulombIntegral=1 refused with {kwargs}", "counted twice" in str(err), str(err))
-    mc.set_thm_experiment("C", [1, 2], **kin, distortion="optical", opticalAA="plane")
-    check("coulombIntegral=1 with opticalAA=plane accepted",
-          mc.thm_experiments()["C"]["opticalAA"] == "plane")
-    mr = AzrModel.from_file(src)
-    mr.set_thm_experiment("C", [1, 2], **kin, distortion="coulomb")
-    before = mr.thm_options()
+        refused(f"coulombIntegral=1 with {kwargs}", lambda: experiment(mc, "C", [1, 2], **kin, **kwargs),
+                "already contains it")
+    experiment(mc, "C", [1, 2], **kin, distortion="optical", opticalAA="plane")
+    check("coulombIntegral=1 with opticalAA=plane accepted", mc.thm()["experiments"]["C"]["opticalAA"] == "plane")
+    mr = Project.open(src)
+    experiment(mr, "C", [1, 2], **kin, distortion="coulomb")
+    before = mr.to_bytes()
     try:
-        mr.set_thm_option("coulombIntegral", True)
-        check("set_thm_option(coulombIntegral) refused with R(E)", False, "no ValueError")
+        mr.set_thm(coulombIntegral=True)
+        check("set_thm(coulombIntegral) refused with R(E)", False, "no ValueError")
     except ValueError as err:
-        check("set_thm_option(coulombIntegral) refused with R(E), model unchanged",
-              "counted twice" in str(err) and mr.thm_options() == before, str(err))
-    # A file written by hand with both: thm_options() refuses it as the engine
-    # does (Config::ReadThmBlock, CheckThmCoulombConsistency).
-    both = os.path.join(proj, "both.azr")
-    with open(both, "w") as fh:
-        fh.write(mr.to_text().replace("<thm>\n", "<thm>\ncoulombIntegral=1\n", 1))
-    try:
-        AzrModel.from_file(both).thm_options()
-        check("thm_options() refuses coulombIntegral=1 with R(E) in the file", False, "no ValueError")
-    except ValueError as err:
-        check("thm_options() refuses coulombIntegral=1 with R(E) in the file",
-              "counted twice" in str(err), str(err))
-    try:
-        AzrModel.from_file(src).set_thm_experiment("C", [1, 2], **kin, ps="hulthen:0-30",
-                                                   distortion="coulomb", distortionRatio="dw")
-        check("ps window with distortionRatio=dw refused", False, "no ValueError")
-    except ValueError as err:
-        check("ps window with distortionRatio=dw refused", "distortionRatio=dwpw" in str(err), str(err))
-    AzrModel.from_file(src).set_thm_experiment("C", [1, 2], **kin, ps="hulthen:0-30",
-                                               distortion="coulomb", distortionRatio="dwpw")
+        check("set_thm(coulombIntegral) refused with R(E), project unchanged",
+              "already contains it" in str(err) and mr.to_bytes() == before, str(err))
+    # A file written by hand with both: the engine's check of a format-3 <thm> refuses it.
+    from pyazr import _azure2
+    why = _azure2.check_format3_thm(mr.text.replace("<thm>\n", "<thm>\ncoulombIntegral=1\n", 1))
+    check("the engine refuses coulombIntegral=1 with R(E) in the file", "already contains it" in why, why)
+    refused("ps window with distortionRatio=dw",
+            lambda: experiment(None, "C", [1, 2], **kin, ps="hulthen:0-30", distortion="coulomb",
+                               distortionRatio="dw"), "distortionRatio=dwpw")
+    experiment(None, "C", [1, 2], **kin, ps="hulthen:0-30", distortion="coulomb", distortionRatio="dwpw")
     check("ps window with distortionRatio=dwpw accepted", True)
 
     # Global optical potentials (src/ThmOptical.cpp): 3He + 18O and d + 19F here.
-    print("1c. AzrModel: global optical potentials")
-    mg = AzrModel.from_file(src)
-    mg.set_thm_experiment("G", [1, 2], **kin, distortion="optical", opticalAA="liang09",
-                          opticalSF="ancai06")
-    check("names kept", mg.thm_experiments()["G"]["opticalAA"] == "liang09"
-          and mg.thm_experiments()["G"]["opticalSF"] == "ancai06", mg.thm_experiments()["G"])
+    print("1c. Project: global optical potentials")
+    mg = Project.open(src)
+    experiment(mg, "G", [1, 2], **kin, distortion="optical", opticalAA="liang09", opticalSF="ancai06")
+    g = mg.thm()["experiments"]["G"]
+    check("names kept", g["opticalAA"] == "liang09" and g["opticalSF"] == "ancai06", g)
     gl = os.path.join(proj, "global.azr")
-    mg.write(gl)
+    mg.save(gl)
     check("canonical line with names",
-          f"experiment[G] segments=1,2 {KIN} distortion=optical opticalAA=liang09 opticalSF=ancai06\n"
-          in open(gl).read())
-    mg.set_thm_experiment("G", [1, 2], **kin, distortion="optical", opticalAA="bg71:extrapolate")
-    check("name:extrapolate accepted", mg.thm_experiments()["G"]["opticalAA"] == "bg71:extrapolate")
+          f"experiment[G] {KIN} distortion=optical opticalAA=liang09 opticalSF=ancai06\n" in open(gl).read())
+    experiment(mg, "G", [1, 2], **kin, distortion="optical", opticalAA="bg71:extrapolate")
+    check("name:extrapolate accepted", mg.thm()["experiments"]["G"]["opticalAA"] == "bg71:extrapolate")
     for kwargs, frag in [
             (dict(opticalAA="liang"), "a global optical potential (ancai06, daehnick80"),
-            (dict(opticalAA="liang09:extra"), "a global optical potential"),
-            (dict(opticalAA="kd03"), "the a + A channel is 18O + 3He, which it does not describe"),
+            (dict(opticalAA="liang09:extra"), "a global optical potential")]:
+        refused(kwargs, lambda: experiment(None, "G", [1, 2], **kin, distortion="optical", **kwargs), frag)
+    for kwargs, frag in [
+            (dict(opticalAA="kd03"), "the a + A channel is 3He + 18O, which it does not describe"),
             (dict(opticalSF="mcfadden66"), "the s + F channel is d + 19F, which it does not describe"),
             (dict(opticalAA="bg71"), "target A = 18 (valid 40-208). Write bg71:extrapolate"),
             (dict(opticalSF="daehnick80"), "target A = 19 (valid 27-238)")]:
-        try:
-            AzrModel.from_file(src).set_thm_experiment("G", [1, 2], **kin, distortion="optical", **kwargs)
-            check(f"refused: {kwargs}", False, "no ValueError")
-        except ValueError as err:
-            check(f"refused like AZURE2: {frag}", frag in str(err), str(err))
+        # the edit is taken (the <thm> check of an edit does not know the pairs); a session refuses the project
+        bad, out = session_refusal(experiment(None, "G", [1, 2], **kin, distortion="optical", **kwargs),
+                                   os.path.join(proj, "global_refused.azr"))
+        check(f"refused by the engine: {frag}", bad and frag in out, out[-400:])
 
     # -- the engine -----------------------------------------------------------
-    try:
-        import numpy as np
-        from pyazr import azure2
-    except Exception as err:                                   # engine not built
-        print(f"skip the engine part: engine not available ({type(err).__name__}: {err})")
-        sys.exit(1 if failures else 77)
+    import numpy as np
+    from pyazr import azure2
     binary = os.environ.get("AZURE2_BIN")
     if not binary:
         cands = [c for c in glob.glob(os.path.join(ROOT, "build*", "src", "AZURE2*"))
@@ -234,9 +200,9 @@ with tempfile.TemporaryDirectory() as tmp:
         fresh_copy(d)
         text = open(os.path.join(d, AZR)).read()
         if not fold:
-            text = re.sub(r"<targetInt>.*?</targetInt>", "<targetInt>\n</targetInt>", text, flags=re.S)
-        if block:
-            text = text.rstrip("\n") + "\n<thm>\n" + block + "\n</thm>\n"
+            text = no_fold(text)
+        if block:  # the block's one experiment joined by both data sets
+            text = thm_set(text, block, datasets(text))
         with open(os.path.join(d, "run.azr"), "w") as f:
             f.write(text)
         return d
@@ -247,7 +213,7 @@ with tempfile.TemporaryDirectory() as tmp:
                 for f in sorted(glob.glob(os.path.join(out, "*")))
                 if os.path.isfile(f) and not os.path.basename(f).startswith("intEC")}
 
-    block = f"experiment[A] segments=1,2 {KIN} distortion=coulomb spectatorAngle=30"
+    block = f"experiment[A] {KIN} distortion=coulomb spectatorAngle=30"
     cli_dir, py_dir = project("cli", block), project("py", block)
     proc = subprocess.run([binary, "--no-gui", "--no-readline", "run.azr"], cwd=cli_dir,
                           input="1\n\n\n7\n", text=True, capture_output=True, timeout=600)
@@ -274,7 +240,7 @@ with tempfile.TemporaryDirectory() as tmp:
           from_cli["thm_experiments.out"].count("distortion_point") == 3)
 
     print("3. thm_distortion")
-    qf_dir = project("qf", f"experiment[A] segments=1,2 {KIN} distortion=coulomb")
+    qf_dir = project("qf", f"experiment[A] {KIN} distortion=coulomb")
     with azure2(os.path.join(qf_dir, "run.azr"), cwd=qf_dir) as s:
         r = s.thm_distortion("A", [REF_HE3_QF[0]])
         check(f"kind coulomb, theta_cm 180 (Trojan horse = target, qf): {r['kind']}, {r['theta_cm']}",
@@ -300,7 +266,7 @@ with tempfile.TemporaryDirectory() as tmp:
                 check(f"raises ({err})", frag in str(err), str(err))
 
     print("3b. thm_distortion with global potentials (liang09 for 3He + 18O, ancai06 for d + 19F)")
-    gd = project("global", f"experiment[A] segments=1,2 {KIN} distortion=optical "
+    gd = project("global", f"experiment[A] {KIN} distortion=optical "
                  "opticalAA=liang09 opticalSF=ancai06")
     with azure2(os.path.join(gd, "run.azr"), cwd=gd) as s:
         r = s.thm_distortion("A", [0.45, 0.6, 0.75])
@@ -309,7 +275,7 @@ with tempfile.TemporaryDirectory() as tmp:
         check("the description names both potentials",
               "liang09 (3He on 18O)" in r["description"] and "ancai06 (d on 19F)" in r["description"],
               r["description"])
-    bad = project("global_bad", f"experiment[A] segments=1,2 {KIN} distortion=optical "
+    bad = project("global_bad", f"experiment[A] {KIN} distortion=optical "
                   "opticalSF=daehnick80")
     try:
         with azure2(os.path.join(bad, "run.azr"), cwd=bad) as s:
@@ -327,9 +293,9 @@ with tempfile.TemporaryDirectory() as tmp:
     table = os.path.join(tmp, "w.dat")
     with open(table, "w") as f:
         f.write("# E w\n0.4 2.0\n1.0 0.5\n")
-    runs = {"off": f"experiment[A] segments=1,2 {KIN}",
-            "on": f"experiment[A] segments=1,2 {KIN} distortion=coulomb distortionRatio=dw",
-            "tab": f"experiment[A] segments=1,2 distortion=table:{table}"}
+    runs = {"off": f"experiment[A] {KIN}",
+            "on": f"experiment[A] {KIN} distortion=coulomb distortionRatio=dw",
+            "tab": f"experiment[A] distortion=table:{table}"}
     model = {}
     for name, blk in runs.items():
         d = project("nf_" + name, blk, fold=False)

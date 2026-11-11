@@ -4,6 +4,8 @@
 #include <string>
 #include <vector>
 
+#include "azure2/experiment/Diagnostics.h"
+
 namespace azure2 {
 namespace experiment {
 
@@ -99,6 +101,16 @@ double PhotonLabToCM(double beta, double thetaLab);
 double ParticleJacobian(const Partition &entrance, const Partition &exit, double eLab, double thetaLab, double thetaCM);
 /// Photon: (1 - beta cos theta_lab)^2 / (1 - beta^2), beta = CMVelocity.
 double PhotonJacobian(const Partition &entrance, double eLab, double thetaLab);
+
+/// The smallest dOmega_lab/dOmega_c.m. a laboratory-frame differential datum may have.  At the maximum lab angle of a
+/// two-valued map (a projectile heavier than the target, an endothermic exit near threshold) the Jacobian goes to 0 as
+/// the square root of the distance to that angle, and the model compared with the datum, sigma_c.m./J, diverges: a
+/// datum there is no measurement the model can be compared with.  1e-6 is reached about 1e-10 deg from the limit; the
+/// conversion of an angle written at the limit leaves J near 1e-8 (the rounding of sqrt near 0).
+constexpr double kMinLabJacobian = 1e-6;
+/// The set-up refusal of a datum whose Jacobian is not above kMinLabJacobian (or not finite): `where` names the data
+/// set (its data file), the point by its lab energy (MeV) and angle (deg).
+Diagnostic LabJacobianAtLimit(const std::string &where, double eLab, double thetaLab, double jacobian);
 
 // ---------------------------------------------------------------- the frame of a measurement
 

@@ -185,16 +185,19 @@ class NuclearPart:
                                  _level_address(level), int(pair), int(l), _two_s(s),
                                  width=None if width is None else float(width), fixed=fixed)
 
-    def set_pair(self, pair, *, radius=None, light_mass=None, heavy_mass=None, separation_energy=None):
-        """Set a pair's channel radius (fm), masses (u) or separation energy (MeV) on every row of the pair (the
-        separation energy also in the entrance-pair copy of the rows whose entrance it is).
+    def set_pair(self, pair, *, radius=None, light_mass=None, heavy_mass=None, separation_energy=None,
+                 light_excitation=None, heavy_excitation=None):
+        """Set a pair's channel radius (fm), masses (u), separation energy (MeV) or the excitation energies of its
+        light and heavy partner (MeV) on every row of the pair (the separation energy also in the entrance-pair copy
+        of the rows whose entrance it is).  The light partner's excitation is the optional last column of a row: a
+        row that does not write it gets it only for a value other than 0.
 
         The channel radius is the matching surface of the R-matrix: a new radius changes every penetrability, shift
         function and external-capture integral, so the level parameters no longer describe a fit -- refit before
         reading anything off the result."""
-        floats = {k: (None if v is None else float(v)) for k, v in
-                  dict(radius=radius, light_mass=light_mass, heavy_mass=heavy_mass,
-                       separation_energy=separation_energy).items()}
+        floats = {k: float(v) for k, v in
+                  dict(radius=radius, light_mass=light_mass, heavy_mass=heavy_mass, separation_energy=separation_energy,
+                       light_excitation=light_excitation, heavy_excitation=heavy_excitation).items() if v is not None}
         return self._edit_levels(f"pair {pair}", _engine_module().set_pair_edits, int(pair), **floats)
 
     def add_level(self, J, parity, energy, channels, *, fixed=True):
@@ -264,12 +267,14 @@ class NuclearPart:
                 out["options"][key] = value
         return out
 
-    def _edit_thm(self, what, changes):
+    def _edit_thm(self, what, changes, members=()):
         engine = _engine_module()
 
         def edit(doc):
             for call, args, remove in changes:
                 _replace(doc, _engine_call(what, call, doc, *args, remove=remove))
+            for dataset, experiment in members:
+                self._set_fields(doc, dataset, {"thm": experiment})
             from .project import FormatError
             why = engine.check_format3_thm(doc.write())
             if why:
@@ -284,13 +289,16 @@ class NuclearPart:
         engine = _engine_module()
         return self._edit_thm("<thm>", [(engine.thm_option_edits, (k, _thm_value(v)), v is None) for k, v in items.items()])
 
-    def set_thm_experiment(self, name, /, **keys):
+    def set_thm_experiment(self, name, /, *, datasets=None, **keys):
         """Set keys of ``experiment[name]`` (``background``, ``beam``, ``target``, ``spectator``, ``Ebeam``,
         ``cbackground``, ``distortion``, ...; ``None`` removes one); a new name adds the experiment.  Its data sets
-        name it in their ``thm`` field."""
+        name it in their ``thm`` field; ``datasets`` (names) sets that field of each to ``name`` in the same edit, as
+        a new experiment needs (it has no member until a data set names it, and a data set cannot name it before it
+        exists)."""
         engine = _engine_module()
         return self._edit_thm(f"<thm> experiment[{name}]",
-                              [(engine.thm_experiment_edits, (name, k, _thm_value(v)), v is None) for k, v in keys.items()])
+                              [(engine.thm_experiment_edits, (name, k, _thm_value(v)), v is None) for k, v in keys.items()],
+                              [(d, name) for d in (datasets or ())])
 
     def remove_thm_experiment(self, name):
         """Remove ``experiment[name]`` (every line of it); refused while a data set names it."""

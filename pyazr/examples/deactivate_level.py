@@ -7,10 +7,10 @@ Two ways, both shown below:
     instantly.  Use this to *probe* what a level does (compare cross sections
     with it on, off, or alone).
 
-  * FILE     -- AzrModel.deactivate_level() writes a new .azr in which the
-    level's widths are zeroed and fixed.  Use this to *persist* a "level
-    removed" model and refit it (the level stays in its J-group's shared
-    channel set, so the file is still valid).
+  * FILE     -- Project.set_level(level, active=False) writes a new project
+    in which the level's rows are inactive: the engine does not read them.  Use
+    this to *persist* a "level removed" model and refit it (the rows stay in
+    the file; set_level(level, active=True) brings the level back).
 
 A level is switched off by decoupling it from every channel (all its reduced
 widths = 0); its energy then no longer matters.  "Reactivating" is just not
@@ -19,7 +19,7 @@ zeroing it -- i.e. running the original parameters again.
 
 import numpy as np
 
-from pyazr import azure2, AzrModel
+from pyazr import azure2, Project
 
 
 azr = azure2("13N.azr")
@@ -32,7 +32,8 @@ for k in azr.physical_levels():
     print(f"  {k}   ({n} free widths)")
 
 # Pick one to study -- by (jpi, energy), by a LevelKey, or by index.
-target = azr.physical_levels()[0]                 # e.g. the first level
+target = next(k for k in azr.physical_levels() if k.energy)   # e.g. the first level above the ground state
+# (the ground state is the final state of the external capture: it cannot be switched off in the file)
 # target = azr._match_level(jpi="1/2-", energy=0.0)   # ...or select it explicitly
 
 
@@ -58,13 +59,13 @@ print(f"  {target} ONLY: {xs_only[s][0]:.5g}")
 
 
 # -- FILE: persist a "level removed" model to refit -------------------------
-model = AzrModel.from_file("13N.azr")
-removed = model.deactivate_level(jpi=target.jpi, energy=target.energy)
-print(f"\ndeactivated in file: {[str(r) for r in removed]}")
-path = model.write("13N_no_level.azr")            # original untouched
+model = Project.open("13N.azr")
+model.set_level((target.jpi, target.energy), active=False)
+print(f"\ndeactivated in file: {target.jpi} at {target.energy} MeV")
+path = model.save("13N_no_level.azr")             # original untouched
 azr2 = azure2(path)                               # refit / analyze this reduced model
 print(f"wrote {path}: {len(azr2.params)} free parameters "
       f"(was {len(azr.params)})")
 
 # Reactivating = just use the original model / parameters again (`best`),
-# or edit the AzrModel channels' gamma back to non-zero before writing.
+# or set_level(..., active=True) on the project.

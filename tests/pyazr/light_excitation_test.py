@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """The light particle's excitation energy, column 32 of a <levels> line (2026-11-05), through pyazr:
 
-  * AzrModel reads a 32-column line, writes it back byte for byte, and a 31-column file stays 31 columns;
-    AzrChannel.light_excitation / heavy_excitation / excitation (= e1 + e2, the threshold quantity); setting
-    light_excitation appends the column, setting it to 0 drops it again;
+  * pyazr.Project reads a 32-column row and gives the file back byte for byte; ProjectPair.light_excitation /
+    heavy_excitation (e1, e2); Project.set_pair(light_excitation=) writes the column on every row of the pair
+    (appended where a row has none, nothing else of the row changed), 0 on a row without it changes nothing; a new
+    level (add_level) takes the light excitation of its pair's rows;
   * Pair (the GET_PAIRS_INFO record) has light_excitation, heavy_excitation, threshold, label, and still reads
     a 19-field record of an older engine;
   * through the engine (skipped without the compiled module): the pair table reports e1 and the total, and the
@@ -26,11 +27,11 @@ SUITE = os.path.join(ROOT, "tests", "light_excitation")
 sys.path.insert(0, ROOT)
 
 try:
-    from pyazr.azrfile import AzrModel  # noqa: E402
+    from pyazr import Project  # noqa: E402
     from pyazr.parameters import Pair  # noqa: E402
 except ImportError as e:
     print(f"pyazr not importable ({e}); nothing to test")
-    sys.exit(0)
+    sys.exit(77)
 
 failures = []
 
@@ -49,65 +50,60 @@ try:
     spec.loader.exec_module(mm)
     mm.main(tmp)
 
-    # --- AzrModel (no engine) ---------------------------------------------------------------------
-    print("1. AzrModel and the 32nd column")
+    # --- Project ------------------------------------------------------------------------------------
+    print("1. Project and the 32nd column")
     for name in ("aC_light", "aC_heavy", "aC_heavy0", "cc_new"):
         path = os.path.join(tmp, name + ".azr")
-        check(f"{name}.azr round-trips byte for byte", AzrModel.from_file(path).to_text() == open(path).read())
-    light = AzrModel.from_file(os.path.join(tmp, "aC_light.azr"))
-    p2 = [c for lv in light.levels for c in lv.channels if c.pair == 2]
-    p1 = [c for lv in light.levels for c in lv.channels if c.pair == 1]
-    check("pair 2 lines have 32 fields, pair 1 lines 31",
-          all(len(c.to_line().split()) == 32 for c in p2) and all(len(c.to_line().split()) == 31 for c in p1))
-    c = p2[0]
-    check("light_excitation = e1, heavy_excitation = e2 = 0, excitation = e1 + e2",
-          (c.light_excitation, c.heavy_excitation, c.excitation) == (E2P, 0.0, E2P),
-          (c.light_excitation, c.heavy_excitation, c.excitation))
-    check("a 31-field line has light_excitation 0", p1[0].light_excitation == 0.0)
-    cc = AzrModel.from_file(os.path.join(tmp, "cc_new.azr")).levels[0].channels[0]
-    check("cc_new: excitation = e1 + e2 = 2 E*", abs(cc.excitation - 2 * E2P) < 1e-12, cc.excitation)
+        check(f"{name}.azr round-trips byte for byte", Project.open(path).to_bytes() == open(path, "rb").read())
+    light = Project.open(os.path.join(tmp, "aC_light.azr"))
+    lines = light.text.split("\n")
+    rows = lambda p, key: [lines[c.line - 1] for lv in p.levels() for c in lv.channels if c.pair == key]
+    check("pair 2 rows have 32 fields, pair 1 rows 31",
+          all(len(r.split()) == 32 for r in rows(light, 2)) and all(len(r.split()) == 31 for r in rows(light, 1)))
+    q = {p.key: p for p in light.pairs()}
+    check("light_excitation = e1, heavy_excitation = e2 = 0",
+          (q[2].light_excitation, q[2].heavy_excitation) == (E2P, 0.0), (q[2].light_excitation, q[2].heavy_excitation))
+    check("a 31-field row has light_excitation 0", q[1].light_excitation == 0.0)
+    cc = Project.open(os.path.join(tmp, "cc_new.azr")).pairs()[0]
+    check("cc_new: e1 + e2 = 2 E*", abs(cc.light_excitation + cc.heavy_excitation - 2 * E2P) < 1e-12,
+          (cc.light_excitation, cc.heavy_excitation))
 
-    heavy = AzrModel.from_file(os.path.join(tmp, "aC_heavy.azr"))
-    ch = heavy.levels[0].channels[0]
-    before = ch.to_line()
-    ch.light_excitation = 1.25
-    after = ch.to_line()
-    check("setting light_excitation appends the column and changes nothing else",
-          after == before + " 1.25" and AzrModel.from_file(os.path.join(tmp, "aC_heavy.azr")).levels[0].channels[0].to_line() == before,
-          repr(after))
-    ch.light_excitation = 0
-    check("setting it back to 0 drops the column (written only when nonzero)", ch.to_line() == before, repr(ch.to_line()))
-    ch.light_excitation = 0
-    check("setting 0 on a 31-field line leaves it alone", ch.to_line() == before and len(ch.to_line().split()) == 31)
-    ch2 = AzrModel.from_file(os.path.join(tmp, "aC_light.azr")).levels[0].channels[1]   # pair 2, 32 columns
-    ch2.gamma = 12345.0
-    line = ch2.to_line()
-    check("editing another field of a 32-column line keeps column 32",
-          line.split()[-1] == "4.43891" and line.split()[11] == "12345", line)
-    ch2.light_excitation = 0
-    check("dropping column 32 after an edit keeps the edit", len(ch2.to_line().split()) == 31 and
-          ch2.to_line().split()[11] == "12345", ch2.to_line())
+    # the nuclear part alone (no data set names a pair, so a pair whose state changes stays valid)
+    bare_heavy = Project.new(os.path.join(tmp, "aC_heavy_bare.azr"), nuclear_part=os.path.join(tmp, "aC_heavy.azr"))
+    bare_heavy.save()
+    heavy = Project.open(os.path.join(tmp, "aC_heavy_bare.azr"))
+    key = heavy.levels()[0].channels[0].pair
+    before = rows(heavy, key)
+    heavy.set_pair(key, light_excitation=1.25)
+    lines = heavy.text.split("\n")
+    after = rows(heavy, key)
+    check("set_pair(light_excitation=) appends the column on every row of the pair and changes nothing else",
+          after == [r + " 1.25" for r in before] and {p.key: p for p in heavy.pairs()}[key].light_excitation == 1.25, repr(after[:1]))
+    heavy.set_pair(key, light_excitation=0)
+    lines = heavy.text.split("\n")
+    check("setting it back to 0 writes 0 in the column", all(r.split()[-1] == "0" and len(r.split()) == 32
+                                                          for r in rows(heavy, key)), repr(rows(heavy, key)[:1]))
+    plain = Project.open(os.path.join(tmp, "aC_heavy_bare.azr"))
+    plain.set_pair(key, light_excitation=0)
+    check("setting 0 on 31-field rows leaves them alone",
+          plain.to_bytes() == open(os.path.join(tmp, "aC_heavy_bare.azr"), "rb").read())
     try:
-        from pyazr.azrfile import AzrChannel
-        # thm: 33 fields are the THM binding energy and width flag, 34 those and e1 (NucLine); 35 is refused
-        AzrChannel.from_line(" ".join(["0"] * 35))
-        check("a 35-field line is refused", False)
+        Project.open(os.path.join(tmp, "aC_heavy_bare.azr")).set_pair(key, light_excitation=-1.0)
+        check("a negative excitation is refused", False)
     except ValueError:
-        check("a 35-field line is refused", True)
-    thm_line = AzrChannel.from_line(" ".join(["0"] * 31 + ["2.2246", "0", "4.43891"]))
-    check("thm: a 34-field line is binding energy, flag and e1",
-          thm_line.binding_energy == 2.2246 and thm_line.light_excitation == 4.43891
-          and len(thm_line.to_line().split()) == 34)
+        check("a negative excitation is refused", True)
 
-    # clone / write / reread keeps e1
-    m = AzrModel.from_file(os.path.join(tmp, "aC_light.azr"))
-    out = os.path.join(tmp, "rewritten.azr")
-    m.add_level(J=2.0, parity=1, energy=15.0, channels=[dict(pair=2, L=0, S=2.0, gamma=10.0)])
-    m.write(out)
-    added = [c for lv in AzrModel.from_file(out).levels if abs(lv.energy - 15.0) < 1e-9 for c in lv.channels]
-    check("add_level: the new level's pair-2 lines carry the light excitation, its pair-1 line none",
-          any(a.pair == 2 for a in added) and all(a.light_excitation == (E2P if a.pair == 2 else 0.0) for a in added),
-          [a.to_line() for a in added])
+    # a new level of pair 2 carries the light excitation, its pair-1 row none
+    m = Project.new(os.path.join(tmp, "aC_light_bare.azr"), nuclear_part=os.path.join(tmp, "aC_light.azr"))
+    m.add_level(2.0, +1, 15.0, [dict(pair=2, l=0, s=2.0, width=10.0)])
+    out = m.save(os.path.join(tmp, "rewritten.azr"))
+    back = Project.open(out)
+    lines = back.text.split("\n")
+    added = [(c.pair, lines[c.line - 1]) for c in back.level(("2+", 15.0)).channels]
+    check("add_level: the new level's pair-2 rows carry the light excitation, its pair-1 row none",
+          any(k == 2 for k, _ in added)
+          and all((r.split()[-1] == "4.43891" and len(r.split()) == 32) if k == 2 else len(r.split()) == 31
+                  for k, r in added), added)
 
     # --- Pair (no engine) -------------------------------------------------------------------------
     print("2. Pair records")

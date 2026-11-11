@@ -12,10 +12,31 @@ global options and each experiment's keys, without a member list.  The same edit
                                     fields of its data sets and extrapolations (the THM projects' only target
                                     records are their beams)
 
+On a pyazr.Project (the same edits through the engine, each validated):
+
+    thm_datasets(project)           the names of the THM data sets (those with a `thm` field), in record order
+    set_experiment(project, name, members, **keys)
+                                    experiment[NAME] with exactly KEYS (keys it had and KEYS lacks are removed; a
+                                    value may be a number, a bool (on/off), a (lo, hi) range or a list, written as
+                                    the engine reads it), and the data sets MEMBERS (names, or 1-based positions
+                                    among thm_datasets) naming it; data sets that named it and are not MEMBERS go
+                                    back to `thm global`
+    session_refusal(project, path)  PROJECT saved to PATH and a pyazr session made on it in a child process (the
+                                    engine prints on the process's stdout): (refused, the engine's output).  The
+                                    rules that need the pairs (a ps window with spectatorEnergy, a global optical
+                                    potential's projectile and mass range) and entranceL=coherent with a theta
+                                    window are refused here, not by the edit
+    refusal(make, path)             the refusal of a variant: MAKE() returns the edited project, or raises
+                                    ValueError (the edit refused: its message); else the engine's output when a
+                                    session on it (saved to PATH) is refused; None when both take it
+
 A name that is not a THM data set of the text raises ValueError: a misspelt name must not leave a data set out of
 its experiment unnoticed.
 """
+import os
 import re
+import subprocess
+import sys
 
 
 def datasets(text):
@@ -80,3 +101,55 @@ def no_fold(text):
             continue
         out.append(line)
     return "\n".join(out)
+
+
+def thm_datasets(project):
+    return [n for n, r in project.records().items() if r.record_kind == "dataset" and "thm" in r]
+
+
+def _key_text(key, value):
+    if isinstance(value, bool):
+        return "on" if value else "off"
+    if isinstance(value, (tuple, list)):
+        if key in ("theta", "spectatorAngles"):
+            return "-".join(repr(v) if not isinstance(v, str) else v for v in value)
+        joiner = ";" if key == "cbackground" else ","
+        return joiner.join(v if isinstance(v, str) else repr(v) for v in value)
+    return value
+
+
+def set_experiment(project, name, members, **keys):
+    names = thm_datasets(project)
+    members = [names[m - 1] if isinstance(m, int) else m for m in members]
+    unknown = sorted(set(members) - set(names))
+    if unknown:
+        raise ValueError(f"no THM data set {unknown}")
+    th = project.thm() or {"experiments": {}}
+    had = th["experiments"].get(name, {})
+    changes = {k: None for k in had if k not in keys}
+    changes.update({k: _key_text(k, v) for k, v in keys.items() if v is not None})
+    project.set_thm_experiment(name, datasets=[n for n in members if project[n]["thm"] != name], **changes)
+    for n in names:
+        if n not in members and project[n]["thm"] == name:
+            project.set(n, thm="global")
+    return project
+
+
+_ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
+
+
+def session_refusal(project, path):
+    project.save(path)
+    p = subprocess.run([sys.executable, "-c", "import sys; sys.path.insert(0, sys.argv[1]); from pyazr import azure2;"
+                        " azure2(sys.argv[2], cwd=sys.argv[3])", _ROOT, path, os.path.dirname(path)],
+                       capture_output=True, text=True, timeout=600)
+    return p.returncode != 0, p.stdout + p.stderr
+
+
+def refusal(make, path):
+    try:
+        project = make()
+    except ValueError as err:
+        return str(err)
+    refused, out = session_refusal(project, path)
+    return out if refused else None

@@ -18,13 +18,12 @@
      parameter of a session gets a name the writer finds in the file, and
      writing the session's own physical values gives back its model.
 
-Pure Python except part 6: modelavg.py is loaded directly (no package
-import), so 1-5 run where numpy is missing.
+Needs the package (pyazr.Project reads the template through the compiled
+module); skips (77) without it.
 
 Run from anywhere:  python3 tests/pyazr/model_average_test.py
 """
 import csv
-import importlib.util
 import json
 import math
 import os
@@ -52,16 +51,14 @@ def close(a, b, tol=1e-12):
     return abs(a - b) <= tol * max(1.0, abs(a), abs(b))
 
 
-def load(name):
-    spec = importlib.util.spec_from_file_location(
-        name, os.path.join(ROOT, "pyazr", f"{name}.py"))
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
-
-
-ma = load("modelavg")
-AzrModel = load("azrfile").AzrModel
+sys.path.insert(0, ROOT)
+try:
+    from pyazr import modelavg as ma
+    from pyazr import Project
+    import pyazr._azure2  # noqa: F401
+except Exception as err:                                       # engine not built
+    print(f"skip: pyazr not importable ({type(err).__name__}: {err})")
+    sys.exit(77)
 Variant = ma.Variant
 
 
@@ -270,9 +267,9 @@ try:
     shutil.copytree(SOURCE, work)
     template = os.path.join(work, AZR)
     original = open(template).read()
-    model = AzrModel.from_file(template)
+    model = Project.open(template)
     slots = ma.azr_parameter_slots(model)
-    keys = model.engine_level_keys()
+    keys = {(lv.group, lv.level): lv for lv in model.levels() if lv.active}
     nE = len(keys)
     nG = sum(len(lv.channels) for lv in keys.values())
     check("one slot per level energy and per channel", len(slots) == nE + nG,
@@ -280,7 +277,7 @@ try:
     (jg, nlev), lv = sorted(keys.items())[0]
     ename = f"E[{ma.level_label(lv.J, lv.parity, nlev)}]"
     ch = lv.channels[-1]
-    gname = ma.width_label(lv.J, lv.parity, nlev, ch.pair, ch.L, ch.S)
+    gname = ma.width_label(lv.J, lv.parity, nlev, ch.pair, ch.l, ch.s)
     check("names of the first level are slots", ename in slots and gname in slots,
           f"{ename} {gname} {sorted(slots)[:4]}")
     path = os.path.join(work, "avg.azr")
@@ -292,24 +289,23 @@ try:
     check("written / skipped", sorted(written) == sorted([ename, gname])
           and sorted(skipped) == ["G[9+#7;p1;L0;S0.5]", "norm[1]"], (written, skipped))
     check("skipped names warn", any("skipped" in str(c.message) for c in caught))
-    back = AzrModel.from_file(out)
-    blv = back.engine_level_keys()[(jg, nlev)]
-    check("energy in every line of the level",
-          all(close(c.levelE, lv.energy + 0.0123) for c in blv.channels))
-    check("width in its channel", close(blv.channels[-1].gamma, 4321.5))
-    a_lines = original.splitlines()
+    back = Project.open(out)
+    blv = [b for b in back.levels() if (b.group, b.level) == (jg, nlev)][0]
     b_lines = open(out).read().splitlines()
+    check("the level's energy", close(blv.energy, lv.energy + 0.0123))
+    check("width in its channel", close(blv.channels[-1].width, 4321.5))
+    a_lines = original.splitlines()
     diff = [i for i, (p, q) in enumerate(zip(a_lines, b_lines)) if p != q]
-    check("only that level's lines changed",
+    check("only that level's rows changed",
           len(a_lines) == len(b_lines) and len(diff) == len(lv.channels), diff)
     check("template file untouched", open(template).read() == original)
     ma.write_averaged_azr(template, path, {})
     check("no values: the template byte for byte", open(path).read() == original)
-    mdl = AzrModel.from_file(template)
-    before = mdl.to_text()
+    mdl = Project.open(template)
+    before = mdl.to_bytes()
     elsewhere = os.path.join(tmp, "elsewhere") + "/"
     ma.write_averaged_azr(mdl, path, {gname: 7.0}, output_dir=elsewhere)
-    check("an AzrModel template is not modified", mdl.to_text() == before)
+    check("a Project template is not modified", mdl.to_bytes() == before)
     check("output_dir repoints <config>", elsewhere in open(path).read())
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")              # u, v: not in the template
@@ -328,19 +324,19 @@ try:
         sys.exit(1 if failures else 77)
     for junk in ("output", "checks"):
         os.makedirs(os.path.join(work, junk), exist_ok=True)
-    free = AzrModel.from_file(template)
-    for lv2 in free.levels:                     # free every energy and width
-        lv2.set_fixed(False)
+    free = Project.open(template)
+    for lv2 in free.levels():                   # free every energy and width
+        free.set_level(lv2, fixed=False)
         for c in lv2.channels:
-            c.channel_fixed = False
-    run = free.write(os.path.join(work, "run.azr"))
+            free.set_channel(lv2, c.pair, c.l, c.s, fixed=False)
+    run = free.save(os.path.join(work, "run.azr"))
     with azure2(run, cwd=work) as s:
         x0 = np.asarray(s.params_rwa, float)
         phys = np.asarray(s.transform_rwa(x0), float)
         rm = [p for p in s.parameters if not p.fixed and p.free_index is not None
               and p.kind in ("energy", "width")]
         labels = {ma.parameter_label(p, s.pairs): float(phys[p.free_index]) for p in rm}
-        slots = ma.azr_parameter_slots(AzrModel.from_file(run))
+        slots = ma.azr_parameter_slots(Project.open(run))
         check(f"every free R-matrix parameter ({len(rm)}) has a slot",
               len(rm) > 0 and all(k in slots for k in labels),
               [k for k in labels if k not in slots])

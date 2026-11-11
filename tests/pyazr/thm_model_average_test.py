@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """End-to-end smoke test of scripts/thm_model_average.py.
 
-On a copy of tests/18O_p_a_thm with its two THM segments made one experiment
+On a copy of tests/18O_p_a_thm with its two THM data sets made one experiment
 and the four widths freed:
 
-  1. --dry-run (no numpy, no engine): the variant grid of 2 radii x pw/dw is
-     listed with its priors, and the dw variants are reported as refused
-     (no distortion=), as AzrModel refuses them.  The line-shape and R(E)
+  1. --dry-run: the variant grid of 2 radii x pw/dw is listed with its
+     priors, and the dw variants are reported as refused (no distortion=),
+     as the engine's edit of the project refuses them.  The line-shape and R(E)
      axes: labels, R(E) collapsed for dw, and the refusals of a project
      without the kinematics keys.
   2. The run (needs numpy, scipy and the engine; skips cleanly otherwise),
@@ -37,7 +37,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 SOURCE = os.path.join(ROOT, "tests", "18O_p_a_thm")
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import old_tree  # noqa: E402  (the old original: a test of the old file class, format3_tree.md section 5)
+from thm_records import set_experiment  # noqa: E402
 AZR = "18O_p_a_thm.azr"
 SCRIPT = os.path.join(ROOT, "scripts", "thm_model_average.py")
 
@@ -54,30 +54,28 @@ def close(a, b, tol=1e-9):
     return abs(a - b) <= tol * max(1.0, abs(a), abs(b))
 
 
-def load(name):
-    spec = importlib.util.spec_from_file_location(
-        name, os.path.join(ROOT, "pyazr", f"{name}.py"))
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
-
-
-AzrModel = load("azrfile").AzrModel
-ma = load("modelavg")
+sys.path.insert(0, ROOT)
+try:
+    from pyazr import Project
+    from pyazr import modelavg as ma
+except Exception as err:                                   # engine not built
+    print(f"skip: engine not available ({type(err).__name__}: {err})")
+    sys.exit(77)
 
 tmp = tempfile.mkdtemp(prefix="thm_modelavg_")
 try:
     proj = os.path.join(tmp, "o18")
-    old_tree.copytree(SOURCE, proj)
+    shutil.copytree(SOURCE, proj)
     for junk in ("output", "checks"):
         shutil.rmtree(os.path.join(proj, junk), ignore_errors=True)
         os.makedirs(os.path.join(proj, junk))
-    model = AzrModel.from_file(os.path.join(proj, AZR))
-    model.set_thm_experiment("A", [1, 2])
-    for lv in model.levels:
+    model = Project.open(os.path.join(proj, AZR))
+    set_experiment(model, "A", [1, 2], background="none")
+    for lv in model.levels():
         for c in lv.channels:
-            c.channel_fixed = False
-    azr = model.write(os.path.join(proj, AZR))
+            model.set_channel(lv, c.pair, c.l, c.s, fixed=False)
+    azr = os.path.join(proj, AZR)
+    model.save(azr)
     common = [sys.executable, SCRIPT, azr, "--radius-pairs", "1",
               "--radii", "4.6", "5.1", "--vertex-model", "pw", "dw",
               "--prior", "radius=4.6:0.5"]
@@ -98,10 +96,10 @@ try:
           and not any("refused" in l for l in lines if "_pw" in l))
     check("dry run writes nothing", not os.path.exists(os.path.join(tmp, "out")))
 
-    kin = AzrModel.from_file(azr)
-    kin.set_thm_experiment("A", [1, 2], beam="18O", target="d", spectator="n",
-                           Ebeam=54)
-    kazr = kin.write(os.path.join(proj, "kin.azr"))
+    kin = Project.open(azr)
+    set_experiment(kin, "A", [1, 2], background="none", beam="18O", target="d", spectator="n", Ebeam=54)
+    kazr = os.path.join(proj, "kin.azr")
+    kin.save(kazr)
     axes = ["--vertex-model", "pw", "dw", "--optical", "coulomb",
             "--lineshape", "on", "off", "--distortion", "none", "coulomb"]
     labels = ["pw_ls-on_R-none", "pw_ls-on_R-coulomb", "pw_ls-off_R-none",
@@ -120,7 +118,7 @@ try:
           ref.get("pw_ls-off_R-none") is False and ref.get("pw_ls-on_R-none")
           and ref.get("pw_ls-off_R-coulomb"), r.stdout)
 
-    # The script's helpers, without a subprocess (pure Python).
+    # The script's helpers, without a subprocess.
     sspec = importlib.util.spec_from_file_location("thm_model_average", SCRIPT)
     tma = importlib.util.module_from_spec(sspec)
     sspec.loader.exec_module(tma)
@@ -205,10 +203,10 @@ try:
     check("averaged .azr written beside its data", os.path.exists(aazr)
           and os.path.isdir(os.path.join(out, "averaged", "data")))
     slots = {}
-    m2 = AzrModel.from_file(aazr)
-    for (_, n), lv in m2.engine_level_keys().items():
-        for c in lv.channels:
-            slots[ma.width_label(lv.J, lv.parity, n, c.pair, c.L, c.S)] = c.gamma
+    for lv in Project.open(aazr).levels():
+        if lv.active:
+            for c in lv.channels:
+                slots[ma.width_label(lv.J, lv.parity, lv.level, c.pair, c.l, c.s)] = c.width
     check("it carries the means", all(
         close(slots[k], a["mean"], 1e-6) for k, a in avg["parameters"].items()),
         {k: (slots.get(k), a["mean"]) for k, a in avg["parameters"].items()})
@@ -223,10 +221,11 @@ try:
     hook = os.path.join(tmp, "hook.py")
     with open(hook, "w") as fh:
         fh.write("def penalty(session, x):\n    return [3.0]\n")
-    hand = AzrModel.from_file(kazr)
-    hand.set_thm_experiment("A", [1, 2], beam="18O", target="d", spectator="n",
-                            Ebeam=54, lineshape=True, distortion="coulomb")
-    hazr = hand.write(os.path.join(proj, "hand.azr"))
+    hand = Project.open(kazr)
+    set_experiment(hand, "A", [1, 2], background="none", beam="18O", target="d", spectator="n",
+                   Ebeam=54, lineshape=True, distortion="coulomb")
+    hazr = os.path.join(proj, "hand.azr")
+    hand.save(hazr)
     with azure2(hazr, cwd=proj) as s:
         want = float(np.sum(s.calculate_chi2_rwa(np.asarray(s.params_rwa, float)))) + 9.0
     with azure2(kazr, cwd=proj) as s:

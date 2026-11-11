@@ -42,9 +42,8 @@ or width re-places the sub-point grids. The difference quotient then differs fro
 at fixed grids by ~1e-2 on those two parameters. This happens for any sub-point segment, whether
 or not it is transformed.
 
-A missing or crashed run is a failure, never a pass. The old generator (old segment lines) is kept in
-`tests/convert/fixtures/tests/transmission_yield/make_models.py` for the pyazr tests of the old file class
-(`tests/pyazr/old_tree.py`).
+A missing or crashed run is a failure, never a pass. `tests/pyazr/thickness_test.py` runs the session side
+(parameter records, penalties, gradient and Jacobian columns) on this generator's `grad_fit`.
 
     ./tests/transmission_yield/check.sh path/to/AZURE2      # ~40 s
     REF_AZURE2=path/to/reference/AZURE2 ./tests/transmission_yield/check.sh path/to/AZURE2   # with (m)

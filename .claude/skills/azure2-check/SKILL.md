@@ -130,7 +130,7 @@ Syntax and a worked example: `references/background-pole-saturation.md`.
 
 - **Existing level.** Rank by frozen Δχ²: recompute χ² with each level switched off at fixed parameters
   (`m.without_level(x, jpi=..., energy=...)`). For the candidates, refit with the level removed
-  (`AzrModel.remove_level` or `deactivate_level`, then refit). The frozen Δχ² is an upper bound; the refit Δχ² is the
+  (`Project.remove_level` or `Project.set_level(level, active=False)`, then refit). The frozen Δχ² is an upper bound; the refit Δχ² is the
   value to report. Report both, and which data sets' χ² move: a level supported by one data set is a different claim
   from one supported by all.
 - **New level or channel.** Add it (`add_level`, or free one more channel of an existing level), refit the subset it
@@ -139,7 +139,7 @@ Syntax and a worked example: `references/background-pole-saturation.md`.
 
 ## Channel-radius sensitivity
 
-`m.set_channel_radius(pair, r)` on a live session, or `AzrModel.set_channel_radius(pair, r)` and `write()` to
+`m.set_channel_radius(pair, r)` on a live session, or `Project.set_pair(pair, radius=r)` and `save()` to
 persist it. The radius is the matching surface: AZURE2 rebuilds the compound nucleus and data, recomputes
 penetrabilities, shift functions, boundary conditions, Wigner limits and every external-capture integral (the API
 does not reuse `output/intEC*`). A reduced width means something different at another radius, so the model is no

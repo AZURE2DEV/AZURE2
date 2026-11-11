@@ -9,7 +9,7 @@ sub-threshold ANC channel that prints "Denominator less than zero while
 transforming ... input 0.118102 fm^(-1/2)" (the 17O cross-check), which the
 CLI never prints because it never transforms an amplitude vector.  Now, on
 examples/o17_guardo2017_fit (1- level 7.6 keV below the n + 17O threshold,
-ANC channel; an extrapolation segment added here), in data and extrapolation
+ANC channel; an extrapolation record added here), in data and extrapolation
 mode:
 
   1. control: the physical path fed params_rwa still prints the warning
@@ -32,8 +32,6 @@ import tempfile
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 SOURCE = os.path.join(ROOT, "examples", "o17_guardo2017_fit")
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import old_tree  # noqa: E402  (the old original: a test of the old file class, format3_tree.md section 5)
 AZR = "o17_guardo2017_fit.azr"
 
 failures = []
@@ -77,14 +75,15 @@ else:
 # interleaved reliably within one process.
 with tempfile.TemporaryDirectory() as tmp:
     work = os.path.join(tmp, "w")
-    old_tree.copytree(SOURCE, work)
+    shutil.copytree(SOURCE, work)
     for junk in ("output", "checks"):
         shutil.rmtree(os.path.join(work, junk), ignore_errors=True)
         os.makedirs(os.path.join(work, junk))
-    from pyazr.azrfile import AzrModel
-    m = AzrModel.from_file(os.path.join(work, AZR))
-    m.add_extrapolation(1, 2, 0.01, 0.3, 0.01)
-    m.write(os.path.join(work, "ex.azr"))
+    from pyazr import Project
+    m = Project.open(os.path.join(work, AZR))
+    m.add("extrapolation", "ex", reaction=m.reaction(1, 2), quantity="sigma", unit="b",
+          energies="range 0.01 0.3 MeV lab step 0.01")
+    m.save(os.path.join(work, "ex.azr"))
     env = dict(os.environ, OMP_NUM_THREADS=os.environ.get("OMP_NUM_THREADS", "2"))
 
     def child(what, mode):

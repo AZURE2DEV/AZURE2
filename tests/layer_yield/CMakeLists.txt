@@ -11,4 +11,9 @@ if(Python3_Interpreter_FOUND)
            COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/pyazr_layer_test.py)
   set_tests_properties(pyazr_layer_yield PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=2;AZURE2_BIN=$<TARGET_FILE:AZURE2>"
                        SKIP_RETURN_CODE 77)
+  # as tests/pyazr/CMakeLists.txt: a scratch build keeps the engine module out of the checkout; without this line the
+  # test was skipped there (found November 2026)
+  if(PYAZR_OUTPUT_DIR)
+    set_property(TEST pyazr_layer_yield APPEND PROPERTY ENVIRONMENT "PYAZR_ENGINE_DIR=${PYAZR_OUTPUT_DIR}")
+  endif()
 endif()

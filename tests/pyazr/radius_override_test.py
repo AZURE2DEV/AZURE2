@@ -9,7 +9,7 @@ returned the read-back radius without comparing it with the request.
 
 Checks, on tests/channel_space/channel_space.azr (p+12C and p+12C*, both 5.0 fm, plus a gamma pair):
   1. set_channel_radius(1, 4.2) then (2, 6.3): both radii are in force, and chi2 equals a fresh
-     session on an .azr with both radii written by AzrModel.set_channel_radius;
+     session on an .azr with both radii written by Project.set_pair(radius=);
   2. a nuclear-potential change (clear_nuclear_potential, which rebuilds) keeps both;
   3. a mode switch (data_mode, which re-initializes) keeps both;
   4. setting a pair back to its file radius is an override like any other (chi2 as the file);
@@ -45,7 +45,7 @@ def main():
     sys.path.insert(0, ROOT)
     try:
         import numpy as np
-        from pyazr import azure2, AzrModel
+        from pyazr import azure2, Project
         import pyazr._azure2  # noqa: F401
     except Exception as e:  # pragma: no cover
         print(f"SKIP: engine not importable ({e})")
@@ -66,10 +66,11 @@ def main():
         for d in ("output", "checks"):
             os.makedirs(os.path.join(ref_dir, d), exist_ok=True)
         shutil.copytree(os.path.join(src, "data"), os.path.join(ref_dir, "data"))
-        mdl = AzrModel.from_file(base)
-        mdl.set_channel_radius(1, R1)
-        mdl.set_channel_radius(2, R2)
-        ref_azr = mdl.write(os.path.join(ref_dir, "both.azr"))
+        mdl = Project.open(base)
+        mdl.set_pair(1, radius=R1)
+        mdl.set_pair(2, radius=R2)
+        ref_azr = os.path.join(ref_dir, "both.azr")
+        mdl.save(ref_azr)
         with azure2(ref_azr, cwd=ref_dir) as r:
             check("reference file has both radii", [p.channel_radius for p in r.pairs][:2] == [R1, R2],
                   f"{[p.channel_radius for p in r.pairs]}")

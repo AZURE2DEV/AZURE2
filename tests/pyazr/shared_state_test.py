@@ -49,7 +49,7 @@ try:
     from pyazr import azure2, Project
 except Exception as err:
     print(f"skip: engine not available ({type(err).__name__}: {err})")
-    sys.exit(0)
+    sys.exit(77)
 
 
 def stage(tmp, tag):

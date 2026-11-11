@@ -33,7 +33,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 SOURCE = os.path.join(ROOT, "tests", "18O_p_a_thm")
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import old_tree  # noqa: E402  (the old original: a test of the old file class, format3_tree.md section 5)
+from thm_records import set_experiment  # noqa: E402
 AZR = "18O_p_a_thm.azr"
 KIN = dict(beam="18O", target="d", spectator="n", Ebeam=54)
 
@@ -50,15 +50,14 @@ sys.path.insert(0, ROOT)
 os.environ.setdefault("OMP_NUM_THREADS", "2")
 try:
     import numpy as np
-    from pyazr import azure2
-    from pyazr.azrfile import AzrModel
+    from pyazr import azure2, Project
 except Exception as err:                                   # engine not built
     print(f"skip: engine not available ({type(err).__name__}: {err})")
     sys.exit(77)
 
 
 def fresh_copy(dst):
-    old_tree.copytree(SOURCE, dst)
+    shutil.copytree(SOURCE, dst)
     for junk in ("output", "checks"):
         shutil.rmtree(os.path.join(dst, junk), ignore_errors=True)
         os.makedirs(os.path.join(dst, junk))
@@ -79,9 +78,9 @@ with tempfile.TemporaryDirectory() as tmp:
     src = os.path.join(work, AZR)
 
     print("1-2. Hulthen window 0-40 MeV/c")
-    m = AzrModel.from_file(src)
-    m.set_thm_experiment("A", [1, 2], ps="hulthen:0-40", psNodes=8, **KIN)
-    m.write(os.path.join(work, "win.azr"))
+    m = Project.open(src)
+    set_experiment(m, "A", [1, 2], background="none", ps="hulthen:0-40", psNodes=8, **KIN)
+    m.save(os.path.join(work, "win.azr"))
     with azure2(os.path.join(work, "win.azr"), cwd=work) as s:
         data_e = np.sort(np.concatenate([np.asarray(e, float) for e in s.calculate_energies()]))
         E = [0.55, 0.7, 0.9, 3.0, 5.0]
@@ -104,18 +103,18 @@ with tempfile.TemporaryDirectory() as tmp:
         check("all reached: no warning", np.all(r["reached"]) and not w, (r["reached"], w))
 
     print("3. delta (no window)")
-    m = AzrModel.from_file(src)
-    m.set_thm_experiment("A", [1, 2], **KIN)
-    m.write(os.path.join(work, "delta.azr"))
+    m = Project.open(src)
+    set_experiment(m, "A", [1, 2], background="none", **KIN)
+    m.save(os.path.join(work, "delta.azr"))
     with azure2(os.path.join(work, "delta.azr"), cwd=work) as s:
         r, w = vertex(s, [0.55, 3.0, 5.0])
         check("reached everywhere, no warning", np.all(r["reached"]) and not w, (r["reached"], w))
 
     print("4. vertexModel=dw")
-    m = AzrModel.from_file(src)
-    m.set_thm_experiment("A", [1, 2], distortion="coulomb", vertexModel="dw",
-                         spectatorAngles="cm:0-180", **KIN)
-    m.write(os.path.join(work, "dw.azr"))
+    m = Project.open(src)
+    set_experiment(m, "A", [1, 2], background="none", distortion="coulomb", vertexModel="dw",
+                   spectatorAngles="cm:0-180", **KIN)
+    m.save(os.path.join(work, "dw.azr"))
     with azure2(os.path.join(work, "dw.azr"), cwd=work) as s:
         r, w = vertex(s, [0.55, 0.9, 3.0])
         check("False outside the DW vertex grid only",

@@ -42,7 +42,7 @@ try:
     from pyazr import azure2
 except ImportError as e:
     print(f"SKIP: {e}")
-    sys.exit(0)
+    sys.exit(77)
 
 for project, azr in MODELS:
     work = tempfile.mkdtemp(prefix="objective_test.")

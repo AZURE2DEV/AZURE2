@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """pyazr and relativistic kinematics (relativistic=1 in <config>).
 
-AzrModel.relativistic reads and writes the key; an engine session on tests/relativistic/models/na_hs_rel.azr
+Project.config / set_config(relativistic=) read and write the key; an engine session on tests/relativistic/models/na_hs_rel.azr
 (n + 4He s-wave hard sphere) computes sigma = 4 pi sin^2(k a)/k^2 with k from the invariant mass at the c.m.
 energies it reports, and the non-relativistic model with k^2 = 2 mu T.
 
@@ -21,7 +21,7 @@ try:
     import pyazr  # noqa: E402
 except ImportError as e:  # as the other pyazr tests: a missing package dependency (e.g. mpmath) -> nothing to test
     print(f"pyazr not importable ({e}); nothing to test")
-    sys.exit(0)
+    sys.exit(77)
 
 U, HBARC = 931.49410242, 197.3269804
 MN, MA = 1.00866491595, 4.00260325413
@@ -40,16 +40,16 @@ def main():
     work = tempfile.mkdtemp(prefix="pyazr_rel_")
     fails = 0
     try:
-        m = pyazr.AzrModel.from_file(os.path.join(models, "na_hs.azr"))
-        assert not m.relativistic
-        m.relativistic = True
+        m = pyazr.Project.open(os.path.join(models, "na_hs.azr"))
+        assert "relativistic" not in m.config()
+        m.set_config(relativistic=True)
         path = os.path.join(work, "flip.azr")
-        m.write(path)
-        assert pyazr.AzrModel.from_file(path).relativistic, "relativistic=1 not written"
-        m.relativistic = False
-        m.write(path)
+        m.save(path)
+        assert pyazr.Project.open(path).config().get("relativistic") == "1", "relativistic=1 not written"
+        m.set_config(relativistic=None)
+        m.save(path)
         assert "relativistic" not in open(path).read(), "key not removed"
-        print("  ok    AzrModel.relativistic round trip")
+        print("  ok    Project.set_config(relativistic=) round trip")
         try:
             from pyazr import _azure2  # noqa: F401  the compiled engine
         except Exception as err:  # engine not built

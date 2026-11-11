@@ -11,11 +11,36 @@
 
 #include "azure2/convert/Convert.h"
 #include "azure2/experiment/Describe.h"
+#include "azure2/experiment/ParameterFileNames.h"
 #include "azure2/experiment/ProjectReader.h"
 
 namespace py = pybind11;
 
 void BindConvert(py::module_ &m) {
+  m.def(
+      "not_format3_message",
+      [](const std::string &text, const std::string &fileName) { return azure2::convert::NotFormat3Message(text, fileName); },
+      py::arg("text"), py::arg("file_name"),
+      "The engine's refusal of a text that is not a format-3 project (convert::NotFormat3Message: the format, the "
+      "first old section, the command AZURE2 --convert ... --to 3), or '' for a format-3 text.");
+  m.def(
+      "match_parameter_file_names",
+      [](const std::string &file, const std::vector<std::string> &inFile, const std::vector<std::string> &ofRun,
+         const std::vector<std::string> &optionalOfRun, const std::vector<std::string> &ofOtherRuns) {
+        azure2::experiment::ParameterFileNames names;
+        names.inFile = inFile;
+        names.ofRun = ofRun;
+        names.optionalOfRun = optionalOfRun;
+        names.ofOtherRuns = ofOtherRuns;
+        std::vector<std::string> out;
+        for (const azure2::experiment::Diagnostic &d : azure2::experiment::MatchParameterFileNames(file, names))
+          out.push_back(d.ToJson());
+        return out;
+      },
+      py::arg("file"), py::arg("in_file"), py::arg("of_run"), py::arg("optional_of_run"), py::arg("of_other_runs"),
+      "The names of a parameter file against a run's parameters, as AZURE2 matches them when it reads a param.sav "
+      "(experiment::MatchParameterFileNames): at most one diagnostic, as JSON -- E_PARAMETER_FILE_NO_MATCH when no "
+      "name of the file is a parameter of the run, W_PARAMETER_FILE_NAMES when some are not.");
   m.def(
       "validate_format3_text",
       [](const std::string &text, const std::string &fileName, const std::string &projectDir) -> py::tuple {

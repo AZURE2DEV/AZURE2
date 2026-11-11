@@ -32,7 +32,7 @@ over E as well); the pins of (b)-(d) changed with it:
 | (f) one acceptance | `ps=hulthen:0-40` byte-identical to the same with `spectatorAngles=cm:0-180 spectatorAngleNodes=16`; `cm:160-180` with the cut changes the model (q ≤ 40 MeV/c needs θ_cm ≳ 147°) |
 
 `tests/pyazr/thm_spectator_window_test.py` checks the same through pyazr
-(`AzrModel.set_thm_experiment(..., ps=..., psNodes=...)`, CLI == session,
+(`Project.set_thm_experiment(..., ps=..., psNodes=...)`, CLI == session,
 `session.thm_vertex` at every energy against an independent evaluation of
 the three-body kinematics -- nodes in cos θ_cm, weights |φ(q)|², T_s, ρ to
 1e-10 -- and one direction, `ps=hulthen:30-30`, equal to a `spectatorEnergy`

@@ -4,6 +4,7 @@
 #include <algorithm>
 
 #include "ThmExperiment.h"
+#include "azure2/experiment/ThmSectionLines.h"
 
 namespace {
 
@@ -16,11 +17,16 @@ std::string Trim(const std::string &s) {
 // The line before its comment, trimmed (as the reader takes it).
 std::string Entry(const std::string &line) { return Trim(line.substr(0, line.find('#'))); }
 
-bool IsExperiment(const std::string &entry) { return entry.compare(0, 11, "experiment[") == 0; }
+bool IsExperiment(const std::string &entry) { return azure2::experiment::ReadThmSectionLine(entry).experiment; }
 
-std::string ExperimentName(const std::string &entry) {
-  const std::size_t close = entry.find(']');
-  return close == std::string::npos ? std::string() : entry.substr(11, close - 11);
+std::string ExperimentName(const std::string &entry) { return azure2::experiment::ReadThmSectionLine(entry).name; }
+
+// The names of the experiments that have an active data set (a member).
+std::vector<std::string> MemberExperiments(const azure2::experiment::ThmMembershipSpec &thm) {
+  std::vector<std::string> names;
+  for (const auto &x : thm.experiments)
+    if (!x.datasetKeys.empty()) names.push_back(x.name);
+  return names;
 }
 
 // The key of a global line (text before '=', trimmed), "" for a line that is not one.
@@ -196,22 +202,20 @@ std::vector<std::string> ApplyThmLineEdits(const std::vector<std::string> &lines
 
 std::vector<std::string> Format3ThmLines(const std::vector<std::string> &section,
                                          const azure2::experiment::ThmMembershipSpec &thm) {
-  const std::vector<std::string> idle = ThmExperimentsWithoutMembers(thm);
+  const std::vector<std::string> members = MemberExperiments(thm);
   std::vector<std::string> out;
   for (std::string line : section) {
-    std::string trimmed = line.substr(0, line.find('#'));
-    trimmed.erase(0, trimmed.find_first_not_of(" \t\r"));
-    if (trimmed.compare(0, 11, "experiment[") == 0) {
-      const std::string name = trimmed.substr(11, trimmed.find(']') - 11);
-      if (std::find(idle.begin(), idle.end(), name) != idle.end()) continue;
+    const azure2::experiment::ThmSectionLine l = azure2::experiment::ReadThmSectionLine(line);
+    if (l.experiment && l.text.find(']') != std::string::npos) {
+      if (std::find(members.begin(), members.end(), l.name) == members.end()) continue;
       for (const auto &x : thm.experiments) {
-        if (x.name != name) continue;
+        if (x.name != l.name) continue;
         std::string keys;
         for (int k : x.datasetKeys) keys += (keys.empty() ? "" : ",") + std::to_string(k);
         line = line.substr(0, line.find('#')) + " segments=" + keys;
       }
     }
-    if (trimmed.compare(0, 6, "</thm>") == 0) {
+    if (l.text == "</thm>") {
       for (const auto &w : thm.datasetWeights) out.push_back("weight[" + std::to_string(w.first) + "]=" + w.second);
       for (const auto &w : thm.extrapolationWeights) out.push_back("weightTest[" + std::to_string(w.first) + "]=" + w.second);
     }
@@ -220,21 +224,32 @@ std::vector<std::string> Format3ThmLines(const std::vector<std::string> &section
   return out;
 }
 
-std::vector<std::string> ThmExperimentsWithoutMembers(const azure2::experiment::ThmMembershipSpec &thm) {
+std::vector<std::string> ThmExperimentsWithoutMembers(const std::vector<std::string> &section,
+                                                      const azure2::experiment::ThmMembershipSpec &thm) {
+  const std::vector<std::string> members = MemberExperiments(thm);
   std::vector<std::string> names;
   for (const auto &x : thm.experiments)
     if (x.datasetKeys.empty()) names.push_back(x.name);
+  for (const std::string &line : section) {
+    const azure2::experiment::ThmSectionLine l = azure2::experiment::ReadThmSectionLine(line);
+    if (!l.experiment || l.text.find(']') == std::string::npos) continue;
+    if (std::find(members.begin(), members.end(), l.name) == members.end() &&
+        std::find(names.begin(), names.end(), l.name) == names.end())
+      names.push_back(l.name);
+  }
   return names;
 }
 
 std::string CheckFormat3ThmMembers(const std::vector<std::string> &lines, const azure2::experiment::ThmMembershipSpec &thm) {
-  for (const auto &x : thm.experiments) {
+  for (const std::string &name : MemberExperiments(thm)) {
     bool found = false;
     for (std::size_t i = 0; i < lines.size() && !found; i++) {
-      const std::string entry = Entry(lines[i]);
-      found = IsExperiment(entry) && ExperimentName(entry) == x.name;
+      const azure2::experiment::ThmSectionLine l = azure2::experiment::ReadThmSectionLine(lines[i]);
+      found = l.experiment && l.name == name;
     }
-    if (!found) return "<thm> has no experiment[" + x.name + "], which data sets name (thm " + x.name + ")";
+    if (!found)
+      return "internal error: <thm> has no experiment[" + name + "], which active data sets name (thm " + name +
+             "); the project's reading should have refused it (E_THM_EXPERIMENT_UNKNOWN)";
   }
   return "";
 }

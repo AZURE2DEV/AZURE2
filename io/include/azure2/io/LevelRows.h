@@ -19,7 +19,7 @@ namespace io {
  * in MeV^1/2); 3 = the binding energy, the flag and e1.  The file writes the channel spin and l doubled; the row holds
  * s = (2s)/2 and l = (2l)/2 (integer division).  Energies in MeV (E_x of the compound nucleus for levelE), masses in
  * u, the channel radius in fm, gamma in the file's unit (eV for a width, fm^-1/2 for an ANC, MeV^1/2 with the flag).
- * pyazr's writer has the field list in Python (pyazr/azrfile.py).
+ * pyazr has no field list: it edits rows through experiment::LevelEdits (io/LevelRowText.h).
  */
 class LevelRow {
  public:

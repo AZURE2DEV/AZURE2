@@ -52,7 +52,7 @@ try:
     from pyazr import azure2, Project
 except ImportError as e:
     print(f"SKIP: {e}")
-    sys.exit(0)
+    sys.exit(77)
 
 work = tempfile.mkdtemp(prefix="ec_relativistic.")
 try:

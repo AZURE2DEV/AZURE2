@@ -285,6 +285,8 @@ LevelEdit SetPair(const io::Document &doc, int pairKey, const PairChange &change
   for (const std::optional<double> &x : {change.radius, change.lightMass, change.heavyMass})
     if (x && !(std::isfinite(*x) && *x > 0.0)) return Refused("a channel radius and a mass are positive numbers");
   if (!Finite(change.separationEnergy)) return Refused("a separation energy is a finite number (MeV)");
+  for (const std::optional<double> &x : {change.lightExcitation, change.heavyExcitation})
+    if (x && !(std::isfinite(*x) && *x >= 0.0)) return Refused("an excitation energy is a number >= 0 (MeV)");
   if (change.radius && t.row[first].pType() != 0)
     return Refused("pair " + std::to_string(pairKey) + " is a photon or beta pair: it has no channel radius");
   std::map<int, std::map<int, std::string>> byRow;
@@ -296,6 +298,9 @@ LevelEdit SetPair(const io::Document &doc, int pairKey, const PairChange &change
       if (change.lightMass) tokens[Column("m1")] = ShortestNumberText(*change.lightMass);
       if (change.heavyMass) tokens[Column("m2")] = ShortestNumberText(*change.heavyMass);
       if (change.separationEnergy) tokens[Column("sepE")] = ShortestNumberText(*change.separationEnergy);
+      if (change.heavyExcitation) tokens[Column("e2")] = ShortestNumberText(*change.heavyExcitation);
+      if (change.lightExcitation && (*change.lightExcitation != 0.0 || t.text[r].hasE1))
+        tokens[Column("e1")] = ShortestNumberText(*change.lightExcitation);
     }
     if (change.separationEnergy && row.aa() == pairKey)
       byRow[(int)r][Column("entranceSepE")] = ShortestNumberText(*change.separationEnergy);
@@ -442,6 +447,33 @@ LevelEdit LevelValueEdits(const io::Document &doc, const std::vector<LevelValue>
   LevelEdit e = RowEdits(t, byRow);
   e.unplaced = unplaced;
   return e;
+}
+
+MergedLevelRows MergeLevelRows(const std::vector<const io::Document *> &members) {
+  MergedLevelRows out;
+  int keyOffset = 0, idOffset = 0;
+  for (std::size_t k = 0; k < members.size(); k++) {
+    Rows t;
+    std::string why;
+    if (!ReadRows(*members[k], t, why)) {
+      out.error = "project " + std::to_string(k + 1) + ": " + why;
+      return out;
+    }
+    std::map<int, int> keys;
+    int maxKey = 0, maxID = 0;
+    for (const io::LevelRow &r : t.row) {
+      keys[r.ir()] = r.ir() + keyOffset;
+      maxKey = std::max(maxKey, r.ir());
+      maxID = std::max(maxID, r.levelID());
+    }
+    for (std::size_t r = 0; r < t.row.size(); r++)
+      out.rows.push_back(io::EditLevelRow(t.text[r], {{Column("ir"), std::to_string(keys[t.row[r].ir()])},
+                                                      {Column("levelID"), std::to_string(t.row[r].levelID() + idOffset)}}));
+    out.pairKeys.push_back(keys);
+    keyOffset += maxKey;
+    idOffset += maxID;
+  }
+  return out;
 }
 
 }  // namespace experiment

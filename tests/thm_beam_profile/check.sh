@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# The beam-profile kernel (<targetInt> ... beamprofile ...) folds a THM (HOES)
+# The beam-profile kernel (a beam record's profile) folds a THM (HOES)
 # point below the entrance threshold the way the Gaussian fold does.
 #
 # Model: examples/o18_lacognata2008 (18O(p,a)15N THM, 20/90/144 keV levels,
@@ -24,6 +24,7 @@ AZURE2_BIN="${1:?usage: check.sh path/to/AZURE2}"
 AZURE2_BIN="$(cd "$(dirname "$AZURE2_BIN")" && pwd)/$(basename "$AZURE2_BIN")"
 export OMP_NUM_THREADS="${OMP_NUM_THREADS:-2}"
 . "$HERE/../lib/guard.sh"
+. "$HERE/../lib/edit_guard.sh"
 RUN="$(guard_command "${TEST_TIMEOUT:-600}")"
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/thm_beam_profile.XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
@@ -31,23 +32,36 @@ OUT="AZUREOut_aa=1_R=2.out"
 SIGMA=0.018
 TOL=1e-4
 
-# project NAME TARGETINT-LINE [window]: a copy of the example with the given
-# <targetInt> line; "window" adds the +-1 eV window columns to the data.
+# project NAME AWK [window]: a copy of the example with its records edited by the awk program AWK (the edit must change
+# the file: tests/lib/edit_guard.sh); "window" adds the +-1 eV window columns to the data.
 project() {
   local d="$WORK/$1"
   mkdir -p "$d/data" "$d/output" "$d/checks"
   awk -v w="${3:-}" '/^#/ || !NF { next }
        { if (w != "") printf "%s %s %s %s %.9f %.9f\n", $1, $2, $3, $4, $1 - 1e-6, $1 + 1e-6
          else print }' "$SRC/data/thm_lc2008_hoes_bkgsub.dat" > "$d/data/thm_lc2008_hoes_bkgsub.dat"
-  awk -v t="$2" '/^<targetInt>/ { print; print t; skip = 1; next }
-       /^<\/targetInt>/ { skip = 0 } skip { next } { print }' \
-    "$SRC/o18_lacognata2008.azr" > "$d/run.azr"
+  edited "$SRC/o18_lacognata2008.azr" "$d/run.azr" awk "$2" || { echo "  FAIL  $1: the edit of the records hit nothing"; exit 1; }
   (cd "$d" && printf '1\n\n\n7\n' | $RUN "$AZURE2_BIN" --no-gui --no-readline run.azr > log 2>&1)
   [ -s "$d/output/$OUT" ] || { echo "  FAIL  $1: no $OUT"; tail -5 "$d/log" | sed 's/^/        /'; exit 1; }
 }
 
-project gauss "1  \"1\"  50  1  $SIGMA  0  0  \"\" 0  0  0  0  \"\" 0  0 0.04 5 50"
-project beam "1  \"1\"  50  0  0  0  0  \"\"  0  0  0  0  \"\"  0  0  0.04  5  50  beamprofile  1  0.1  100  0  1  $SIGMA  0  0" window
+# G: the beam's spread set to SIGMA (lab).
+GAUSS='$1 == "spread" { $0 = "    spread         '"$SIGMA"' MeV lab" } { print }'
+# B: the beam a profile of one flat component (xi 0.1 MeV, omega 100 MeV), a detector of resolution SIGMA (lab), and
+# the data's window columns (what AZURE2 --convert writes for the old line "... beamprofile 1 0.1 100 0 1 SIGMA 0 0").
+BEAM='/^beam beam_thm_lc2008_hoes_bkgsub$/ { beamrec = 1; print
+        print "    profile          skewed_gaussian xi 0.1 MeV omega 100 MeV alpha 0 weight 1"
+        print "    truncation       0"; print "    detailed_balance no"; next }
+      beamrec && !/^ / { beamrec = 0 }
+      beamrec { next }
+      $1 == "columns" { $0 = "    columns        E_lab[MeV] _ value error window_lo window_hi" }
+      /^    beam +beam_thm_lc2008_hoes_bkgsub$/ { print; print "    detector       det_window"; next }
+      /^<\/targets>/ { print ""; print "detector det_window"; print "    energy_resolution '"$SIGMA"' MeV lab" }
+      { print }'
+project gauss "$GAUSS"
+project beam "$BEAM" window
+grep -q '^    profile ' "$WORK/beam/run.azr" && grep -q '^    detector       det_window' "$WORK/beam/run.azr" &&
+  ! grep -q '^    spread' "$WORK/beam/run.azr" || { echo "  FAIL  beam: the beam record is not the profile"; exit 1; }
 
 # Column 1 E_cm, column 4 the folded model.  (\r: Windows line ends.)
 paste "$WORK/gauss/output/$OUT" "$WORK/beam/output/$OUT" | awk -v tol="$TOL" '

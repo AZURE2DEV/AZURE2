@@ -84,15 +84,14 @@ with every key at its default, gives identical results
 An unknown key, an unknown value, a negative spectator energy, a missing
 ``</thm>`` or a bad weight (below) prints ``ERROR: <thm> ...``, and AZURE2
 exits with a non-zero status before any calculation; ``pyazr`` refuses the
-project the same way. ``pyazr.AzrModel`` reads and edits the block with the
-GUI's rules (below): ``thm_options()`` returns the options as a dict,
-``set_thm_option(key, value)`` and ``clear_thm_option(key)`` change one,
-``set_thm_weight(segment, path, test=False)`` / ``clear_thm_weight`` a weight
-table (the segment must exist and be THM; the table is read with the engine's
-rules, a relative path from the directory of the .azr). A value the engine
-would refuse raises ``ValueError`` and leaves the model unchanged; a project
-whose block the engine refuses raises on any of them. Without an edit the
-block is carried through a save unchanged.
+project the same way. ``pyazr.Project`` reads and edits the section with the
+engine's rules: ``thm()`` returns the global options and the experiments,
+``set_thm(key=value)`` changes options (``None`` removes one), and a weight
+table is the data set's own ``thm_weight`` field (``project.set(<data set>,
+thm_weight=path)``; the table is read with the engine's rules, a relative path
+from the directory of the project). A value the engine would refuse raises
+``pyazr.FormatError`` and leaves the project unchanged. Without an edit the
+section is carried through a save unchanged.
 
 The Qt setup utility of the released versions edits the block under
 *Configure > THM Workspace...*, page *Model*
@@ -538,10 +537,11 @@ by :math:`n = 1/s`, :math:`b_k = a_k/s`. They are the uncertainties of the
 profile at fixed R-matrix parameters, not scaled by :math:`\chi^2/\nu`.
 ``pyazr``: ``session.thm_background(name)`` (norm, ``b``, ``cov``, ``sigma``,
 ``chi2``, ``status``) and ``session.thm_experiments()``; ``segment_norms()``
-gives the shared :math:`n^*` for each segment. ``AzrModel.thm_experiments()``,
-``set_thm_experiment(name, segments, background=..., beam=..., target=...,
-spectator=..., Ebeam=...)`` (replaces the record with one line) and
-``clear_thm_experiment(name)`` edit the lines with the engine's rules. In the
+gives the shared :math:`n^*` for each segment. ``Project.thm()["experiments"]``,
+``set_thm_experiment(name, background=..., spectator=..., ...)`` (sets or
+removes keys of the experiment's line; a data set joins the experiment by its
+own field ``thm <name>``) and ``remove_thm_experiment(name)`` edit the lines
+with the engine's rules. In the
 GUI, *Configure > THM Workspace...*, page *Experiments*, edits them
 (:doc:`../user_guide/configure_menu`, "THM Workspace"): every key of this
 section, and keeps any token it does not know as written.
@@ -669,7 +669,7 @@ is uncertain). ``pyazr``: kind ``"cbkg"`` (``parameters.cbkg``, with the J group
 entrance channel and exit pair), ``residual_jacobian`` and ``chi2_and_grad``
 carry their columns, ``thm_experiments()[name]["cbkg"]`` their values;
 ``save_fit`` writes the fitted values back into ``cbackground=`` (one explicit
-term per combination); ``AzrModel.set_thm_experiment(..., cbackground=...)``
+term per combination); ``Project.set_thm_experiment(..., cbackground=...)``
 and ``set_thm_cbackground(name, value)`` edit the key with the engine's rules.
 The GUI: *THM Workspace*, page *Experiments*, section *Coherent background*;
 the free parameters appear on the Fitting tab (tab *THM Background*), and
@@ -713,7 +713,7 @@ to :math:`1.4\times10^{-10}`; a 0–180° window times :math:`4\pi` equals the
 angle-integrated model with the background to :math:`6\times10^{-11}`; (d)
 synthetic 18O(p,α) data made with :math:`c_0 = 0.3 - 0.2i` are fitted by
 MIGRAD from :math:`c_0 = 0` back to :math:`0.29999897 - 0.19999902i`; (f) the
-refusals. ``tests/pyazr/thm_coherent_background_test.py``: ``AzrModel``, CLI ==
+refusals. ``tests/pyazr/thm_coherent_background_test.py``: ``pyazr.Project``, CLI ==
 session, the Jacobian of all ten free parameters (six R-matrix, four ``cbkg``
 of a linear term) against central differences (rel. about :math:`10^{-9}` for
 the ``cbkg`` columns; the test asks for :math:`10^{-4}`), ``save_fit`` round trip, a fixed zero background bit
@@ -914,7 +914,7 @@ otherwise; a sub-point of a folding grid beyond the limit takes
 frame) at the lowest and highest point energy. ``pyazr``:
 ``session.thm_lineshape(name, energies)`` returns :math:`E_{sF}`,
 :math:`\eta_0` and, per exit pair, :math:`\zeta`, :math:`\eta_{sb}` and per
-level the pole and :math:`|N_C|^2`; ``AzrModel.set_thm_experiment(...,
+level the pole and :math:`|N_C|^2`; ``Project.set_thm_experiment(...,
 lineshape=True)``. Extrapolation segments (``<segmentsTest>``) are in no
 experiment and carry no line shape. ``tests/thm_lineshape`` and
 ``tests/pyazr/thm_lineshape_test.py``.
@@ -1176,7 +1176,7 @@ model of ``examples/f19_pag_thm`` with its full window, and 16 nodes did not
 fit in 2 GB; now that model needs 481 MB in all with 16 nodes in a pyazr
 session (398 MB without a window; the CLI 636 and 520 MB, getrusage).
 
-*pyazr.* ``AzrModel.set_thm_experiment(..., ps="hulthen:0-40", psNodes=16)``;
+*pyazr.* ``Project.set_thm_experiment(..., ps="hulthen:0-40", psNodes=16)``;
 ``session.thm_vertex(name, energies)`` returns, per energy (lists over
 :math:`E` of arrays over its nodes), the nodes ``p_s``, ``weights``, ``T_s``,
 ``theta_cm`` and ``rho``, and per entrance channel
@@ -1437,7 +1437,7 @@ grid, the highest :math:`l` and :math:`R` at the ends of the data;
 :math:`|M|^2`, :math:`|M_\mathrm{PW}|^2`, :math:`R`, :math:`l_\mathrm{max}`)
 at the lowest point, :math:`E_\mathrm{ref}` and the highest point.
 ``pyazr``: ``session.thm_distortion(name, energies)``;
-``AzrModel.set_thm_experiment(..., distortion="optical",
+``Project.set_thm_experiment(..., distortion="optical",
 opticalAA=[V, R, a, W, RW, aW, WD, RD, aD, RC], opticalSF="coulomb",
 spectatorAngle=8, distortionRef=2.664, distortionRatio="dw",
 boundState="whittaker:3")``. ``distortion=table:<file>`` (the ``weight[k]``
@@ -1459,7 +1459,7 @@ part off (ten zeros) equals point Coulomb exactly. ``tests/thm_distortion``
 (CLI): ``distortion=none`` byte-identical to no key; a neutral spectator with
 a plane :math:`a + A` wave gives :math:`R = 1` to :math:`5\times 10^{-11}`; the
 model ratio equals the directly evaluated :math:`R`; the 12C+12C factors
-below; refusals. ``tests/pyazr/thm_distortion_test.py``: ``AzrModel``, CLI ==
+below; refusals. ``tests/pyazr/thm_distortion_test.py``: ``pyazr.Project``, CLI ==
 session, ``thm_distortion``, a table.
 
 *12C+12C: the published curves.* 12C(14N,α/p)d at 30 MeV (Tumino et al.,
@@ -1877,7 +1877,7 @@ the partial waves, the quadrature, the grid and the time;
 ``thm_experiments.out`` a ``vertex:`` line and ``dw_vertex_point`` rows
 (:math:`E`, :math:`q`, :math:`pa`, :math:`l`, :math:`G_{11}`,
 :math:`G_{22}`, :math:`G_{12}`) at the lowest, middle and highest point.
-``AzrModel.set_thm_experiment(..., distortion="optical",
+``Project.set_thm_experiment(..., distortion="optical",
 opticalAA=[...], vertexModel="dw")`` checks the same rules (also
 ``set_thm_option`` against an existing dw experiment);
 ``session.thm_vertex(name, energies)`` returns ``model = "dw"``, ``M2`` (the
@@ -1913,7 +1913,7 @@ at 54 MeV): ``vertexModel=pw`` byte-identical to no key, with and without
 :math:`10^{-9}` and the model is the plane-wave one within 5 % (3.5 % found; the
 kinematic :math:`p(E)` against :math:`q = 0`, largest near the node of
 :math:`M_0`); Coulomb: no :math:`R(E)`, a window changes the model; eleven
-refusals. ``tests/pyazr/thm_dw_vertex_test.py``: ``AzrModel`` and its
+refusals. ``tests/pyazr/thm_dw_vertex_test.py``: ``pyazr.Project`` and its
 refusals, CLI == session, ``thm_vertex`` (plane waves: ``M2_qf`` ==
 ``M2_pw`` to :math:`10^{-8}`), and without folding the model ratio dw/pw
 equals the vertex ratio of ``thm_vertex`` at every point (:math:`10^{-8}`),
@@ -2237,7 +2237,7 @@ list of names. The startup summary (and ``thm_experiments.out``) gives each
 global channel with its parameters, for :math:`s + F` at both ends of the
 data, e.g. ``s + F: kd03:extrapolate (n on 20Ne) Woods-Saxon V=53.3201 ...
 at E_lab = 2.72825 MeV (E = 0.45 MeV) to V=53.0977 ... at E_lab = 3.29548
-MeV (E = -0.09 MeV)``. ``AzrModel.set_thm_experiment(..., opticalAA="ancai06",
+MeV (E = -0.09 MeV)``. ``Project.set_thm_experiment(..., opticalAA="ancai06",
 opticalSF="kd03:extrapolate")`` checks the name, the projectile, the target
 mass range and the :math:`a + A` energy as the engine does (the :math:`s + F`
 energy needs the data and is the engine's). The GUI's optical row offers
@@ -2272,7 +2272,7 @@ the parser. ``tests/thm_distortion`` (CLI): ``opticalAA=ancai06`` equals its
 ten numbers at :math:`E_{aA}` in the model, ``kd03:extrapolate`` for n + 19F
 is warned and reported at both ends, four refusals.
 ``tests/pyazr/thm_distortion_test.py`` (and ``tests/gui/thm_workspace_test`` on
-``dev``): the same checks in ``AzrModel`` (and on the page), round trips byte for byte.
+``dev``): the same checks in ``pyazr.Project`` (and on the page), round trips byte for byte.
 
 *Size: the spread of standard choices, 19F(p,αγ)16O.* ``examples/f19_pag_thm``
 (19F + d at 55 MeV, :math:`a_p` = 5.136 fm, ``vertex=constant``, as in the
@@ -2520,7 +2520,7 @@ lines of ``thm_experiments.out`` name the window, the nodes, the branches
 and the cut; the ``distortion_point`` rows give
 :math:`\langle|M|^2\rangle` and :math:`\langle|M_\mathrm{PW}|^2\rangle`
 and the acceptance-weighted mean :math:`\theta_\mathrm{cm}`.
-``AzrModel.set_thm_experiment(..., spectatorAngles="cm:135-180" | (7, 30),
+``Project.set_thm_experiment(..., spectatorAngles="cm:135-180" | (7, 30),
 spectatorAngleNodes=8)``; ``session.thm_distortion`` returns the averages;
 ``session.thm_vertex`` the averaged DW vertex (one node, ``dw_q`` its mean
 :math:`q`) and the directions at the nearest grid energy
@@ -2548,7 +2548,7 @@ no-folding DW model weighted by :math:`(\kappa^2 + q^2)^{-2}` to
 :math:`5\times 10^{-8}`); the lab ``0-180`` over two branches equals
 ``cm:0-180`` to the printed digits; with the DW vertex a ``ps`` window
 covering every :math:`q` and a flat table change nothing; twelve refusals.
-``tests/pyazr/thm_spectator_angles_test.py``: ``AzrModel``, CLI == session
+``tests/pyazr/thm_spectator_angles_test.py``: ``pyazr.Project``, CLI == session
 for :math:`R` and the DW vertex, ``thm_distortion``, and the reported
 :math:`\bar G` is the one the model uses (:math:`2\times 10^{-9}`). Without
 the key every output file is byte-identical to the previous build (nine
@@ -2815,7 +2815,7 @@ Errors (``ERROR: <thm> experiment[<name>]: ...``, exit non-zero): a value
 that is not ``all`` or two numbers ``a-b`` with
 :math:`0 \le a \le b \le 180` (a single number, a reversed or negative window,
 beyond 180°), ``theta`` twice, a window together with
-``entranceL=coherent``. ``pyazr``: ``AzrModel.set_thm_experiment(...,
+``entranceL=coherent``. ``pyazr``: ``Project.set_thm_experiment(...,
 theta="50-70")`` (or ``(50, 70)``, ``"all"``) with the same rules; the
 session's residuals, Jacobian and output files follow. The GUI edits the key
 on the Experiments page (*Exit angle*).
@@ -2843,7 +2843,7 @@ any window, also with a ``ps`` window and a linear background; windows
 30–60° equals 120–150° for 7Li(p,α)α and 10–40° equals 140–170° for
 6Li(d,α)α, while 17O(n,α)14C (1\ :sup:`-`, 2\ :sup:`+`, 3\ :sup:`-`,
 5\ :sup:`-`) differs by up to 27 % between 20–60° and 120–160°; refusals.
-``tests/pyazr/thm_fixed_angle_test.py``: ``AzrModel``, CLI == session,
+``tests/pyazr/thm_fixed_angle_test.py``: ``pyazr.Project``, CLI == session,
 :math:`4\pi` model(0–180) == model to :math:`2\times 10^{-15}` in double
 precision, residuals and Jacobian unchanged, symmetry.
 
@@ -3052,11 +3052,10 @@ factors.
 The rules are in ``CheckThmExperiments`` and ``CheckThmCoulombConsistency``
 (``src/ThmExperiment.cpp``), called by ``Config::ReadThmBlock``
 (``src/ConfigThm.cpp``) and by the GUI's THM workspace, which also read the
-global keys with one function, ``ParseThmOptionLine``; ``pyazr.AzrModel``
-applies them in ``set_thm_experiment`` and ``set_thm_option`` with its Python
-port, and, when the compiled module is there, also asks the engine
-(``_azure2.check_thm_block``, the same parser without the files the block
-names), so that what the port would let through is refused all the same. Files without these
+global keys with one function, ``ParseThmOptionLine``; ``pyazr.Project``
+applies them in ``set_thm_experiment`` and ``set_thm`` through the engine
+(``_azure2.check_format3_thm``, the same parser without the files the section
+names). Files without these
 combinations give results identical to before, byte for byte.
 
 *Size* (models at the published parameters, not refitted; THM :math:`\chi^2`
@@ -3306,7 +3305,7 @@ read off a THM fit moves with them (the 19F :math:`l` ratios by factors 1.1-18
 in "Distorted-wave entrance vertex"). The model-dependence protocol fits
 every variant on its own and quotes the spread. ``pyazr.modelavg`` turns the
 fitted variants into one number per quantity; ``scripts/thm_model_average.py``
-produces the variants (one project per variant through ``AzrModel``, fitted
+produces the variants (one project per variant through ``pyazr.Project``, fitted
 one after the other, each in a fresh Python process, with scipy's
 ``least_squares`` on ``residuals`` and ``residual_jacobian`` plus the norm
 and shift penalty rows; pyazr itself does no fitting).
@@ -3387,7 +3386,7 @@ name: :func:`pyazr.modelavg.parameter_label` names a level energy
 engine's level number in the :math:`J^\pi` group, the pair key as the file
 writes it), which depends on the level scheme only. ``write_averaged_azr``
 writes the averaged energies and widths into a copy of a template ``.azr``
-through ``AzrModel``'s setters (a name the template does not have is skipped
+through the engine's level edits (``pyazr.Project``; a name the template does not have is skipped
 with a warning); the radii and THM settings stay the template's. Physical
 (observed) widths are averaged, which is meaningful across radii; reduced-width
 amplitudes are not, and channels entered as amplitudes (``gammaIsRWA``) carry
@@ -3463,11 +3462,11 @@ model with 17 strength rows ``jac`` rejected every step). Each variant is
 fitted in a fresh Python process that hands its result back as JSON, so no
 engine state can pass from one variant to the next (a ``vertex=constant``
 memo keyed by object address did, before October 2026); ``--in-process``
-fits them in the driver's process. A variant AzrModel
+fits them in the driver's process. A variant ``pyazr.Project``
 or the engine refuses (``vertexModel=dw`` without ``distortion=``, an
 optical potential outside its range) is recorded with the reason and
-skipped. ``--dry-run`` lists the grid and the refusals AzrModel already
-knows, without numpy or the engine. Output: ``variants.csv`` (one row per
+skipped. ``--dry-run`` lists the grid and the refusals the project edits already
+give, without fitting. Output: ``variants.csv`` (one row per
 variant), ``variants.json``, ``average.json``/``.csv``, ``summary.txt``,
 ``averaged/<project>_avg.azr`` beside a copy of the data, and ``work/`` with
 each variant's project and fitted snapshot. One engine session at a time, by

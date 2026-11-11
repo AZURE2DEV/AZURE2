@@ -70,7 +70,7 @@ Loaded Load(const std::string &file, Requests requests, bool withData) {
   if (l.compound->Fill(*l.cfg) == -1) return l;
   const int filled = (l.cfg->paramMask & Config::CALCULATE_WITH_DATA) ? l.data->Fill(*l.cfg, l.compound.get())
                                                                        : l.data->MakePoints(*l.cfg, l.compound.get());
-  if (filled == -1) return l;
+  if (filled != 0) return l;
   CNuc &c = *l.compound;
   if (requests == Requests::FromData) RequestCaptureAyTerms(c, *l.data);
   if (requests == Requests::AllForward || requests == Requests::AllReverse) {

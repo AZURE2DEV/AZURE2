@@ -568,8 +568,8 @@ temperature, no parameter) and its GUI misreads the line.
 .. tip::
 
    The recommended practice is to create and edit ``.azr`` files with
-   ``pyazr`` (:doc:`../user_guide/pyazr`), whose load-and-save round trip
-   ``tests/pyazr/roundtrip_test`` checks. The internal format may change
+   ``pyazr.Project`` (:doc:`../user_guide/pyazr`), whose load-and-save round trip
+   (every byte kept) ``tests/pyazr/project_test`` checks. The internal format may change
    between versions.
 
 Project Files in Format 3

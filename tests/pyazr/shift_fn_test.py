@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 """Energy-shift functions as pyazr sees them.
 
-A <segmentsData> line may end with ``shiftfn "<f(x)>" N v0 s0 vary0 ...`` (see
-include/SegLine.h, tests/shift_fn): E' = E + shift + f(x; a0, ...), x the lab
-energy in MeV, declared on a shift group's first segment for the whole group.
-pyazr must read the block, write it, and -- with the engine -- list the
-parameters (kind "shift_fn"), penalise them and difference them exactly as
+A format-3 ``energy_scale`` record may hold ``function "<f(x)>" MeV`` and one ``param`` per coefficient (tests/shift_fn,
+docs/upgrade/project_format3.md): E' = E + offset + f(x; a0, ...), x the lab energy in MeV, for every data set whose
+``shift`` names the record.  pyazr must read the records, write new ones, refuse a data set with two terms of one
+kind, and -- with the engine -- list the parameters (kind "shift_fn"), penalise them and difference them exactly as
 AZURE2 does.
 
 Run from anywhere:  python3 tests/pyazr/shift_fn_test.py
@@ -18,8 +17,6 @@ import tempfile
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 sys.path.insert(0, ROOT)
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import old_tree  # noqa: E402  (the old originals of converted projects)
 
 failures = []
 
@@ -32,62 +29,54 @@ def check(name, ok, detail=""):
 
 try:                                           # pyazr itself needs numpy
     import numpy as np                         # noqa: E402
-    from pyazr.datasets import SegmentSet      # noqa: E402
-    from pyazr.azrfile import AzrModel         # noqa: E402
+    from pyazr import Project, FormatError     # noqa: E402
 except Exception as err:                       # same skip as the other pyazr tests
     print(f"skip: pyazr not importable ({type(err).__name__}: {err})")
-    sys.exit(0)
+    sys.exit(77)
 
 PROJECT = os.path.join(ROOT, "tests", "shift_fn")
-AZR = old_tree.original(os.path.join(PROJECT, "shift_fn.azr"))  # the old file (format3_tree.md)
+AZR = os.path.join(PROJECT, "shift_fn.azr")
 
-print("1. the shiftfn block is read, with the group label")
-s = {x.key: x for x in SegmentSet.from_file(AZR)}
-check("segment 2: f = a0*sqrt(x), a0 = 0.003 fixed, no penalty",
-      s[2].shift_fn == "a0*sqrt(x)" and s[2].shift_fn_params == ((0.003, 0.0, False),),
-      (s[2].shift_fn, s[2].shift_fn_params))
-check("segment 1: sqrtshift, no function", s[1].shift_fn is None and abs(s[1].energy_shift_sqrt - 0.003) < 1e-12)
-check("segment 5: group G, f = a0*(x-1)", s[5].shift_group == "G" and s[5].shift_fn == "a0*(x-1)",
-      (s[5].shift_group, s[5].shift_fn))
-check("segment 6: group G, no function of its own", s[6].shift_group == "G" and s[6].shift_fn is None)
-check("data files still parsed", s[2].data_file == "data/xs_40.dat" and s[6].data_file == "data/xs_90_lin_mislabelled.dat",
-      (s[2].data_file, s[6].data_file))
-check("no composite flagged", all(not x.composite for x in s.values()))
 
-print("\n2. the block round-trips through AzrModel")
-m = AzrModel.from_file(AZR)
-check("byte-identical re-write", m.to_text() == open(AZR).read())
-m.add_data_segment("data/xs_90.dat", 1, 1, observable="differential-cm", angle_min=90, angle_max=90,
-                   shift_group="H", shift_fn="a0*x^1.5+a1", shift_fn_params=[(0.001, 0.002, True), (0, 0, False)])
-lines = [l for l in m.to_text().splitlines() if l.strip()]
-last = lines[[i for i, l in enumerate(lines) if l.strip() == "</segmentsData>"][0] - 1]
-check("add_data_segment writes the keyword blocks",
-      last.split()[-11:] == ["shiftgroup", "H", "shiftfn", '"a0*x^1.5+a1"', "2",
-                             "0.001", "0.002", "1", "0", "0", "0"], last)
-back = SegmentSet._parse(last.split(), 99)
-check("... and reads back", back.shift_fn == "a0*x^1.5+a1" and back.shift_group == "H"
-      and back.shift_fn_params == ((0.001, 0.002, True), (0.0, 0.0, False)), (back.shift_fn, back.shift_fn_params))
+def shifts(record):
+    v = record.get("shift", [])
+    return v if isinstance(v, list) else [v]
 
-m.add_data_segment("data/xs_90.dat", 1, 1, observable="differential-cm", angle_min=90, angle_max=90,
-                   energy_shift=0.001, energy_shift_error=0.01, vary_shift=True, shift_fn_group="F")
-lines = [l for l in m.to_text().splitlines() if l.strip()]
-last = lines[[i for i, l in enumerate(lines) if l.strip() == "</segmentsData>"][0] - 1]
-check("add_data_segment writes a shiftfngroup block", last.split()[-2:] == ["shiftfngroup", "F"], last)
-back = SegmentSet._parse(last.split(), 100)
-check("... and reads back, with its own constant shift",
-      back.shift_fn_group == "F" and back.shift_group is None and back.shift_fn is None
-      and abs(back.energy_shift - 0.001) < 1e-12 and back.vary_shift,
-      (back.shift_fn_group, back.shift_group, back.energy_shift, back.vary_shift))
-back = SegmentSet._parse(("1 1 1 0 100 40 40 4 1 0 0 0 0 0 data/xs_40.dat 0 0 shiftfngroup F normgroup N "
-                          "shiftfn \"a0*(sqrt(x)-sqrt(1.7))\" 1 0 0.02 1").split(), 101)
-check("a shiftfngroup block does not hide the blocks after it",
-      back.shift_fn_group == "F" and back.norm_group == "N" and back.shift_fn == "a0*(sqrt(x)-sqrt(1.7))",
-      (back.shift_fn_group, back.norm_group, back.shift_fn))
+
+print("1. the functions are read, with the group's record")
+proj = Project.open(AZR)
+check("xs_40_2 names xs_40_2_scale: f = a0*sqrt(x), a0 = 0.003 fixed, no penalty",
+      "xs_40_2_scale" in shifts(proj["xs_40_2"]) and proj["xs_40_2_scale"]["function"] == '"a0*sqrt(x)" MeV'
+      and proj["xs_40_2_scale"]["param"] == "a0 0.003 fixed", proj["xs_40_2_scale"].fields)
+check("xs_40: a sqrt term, no function", shifts(proj["xs_40"]) == ["offset 0.004 MeV fixed", "sqrt 0.003 MeV^1/2 fixed"],
+      shifts(proj["xs_40"]))
+check("xs_40_lin_mislabelled: group G, f = a0*(x-1)",
+      shifts(proj["xs_40_lin_mislabelled"]) == ["G"] and proj["G"]["function"] == '"a0*(x-1)" MeV',
+      (shifts(proj["xs_40_lin_mislabelled"]), proj["G"].fields))
+check("xs_90_lin_mislabelled: group G, no function of its own", shifts(proj["xs_90_lin_mislabelled"]) == ["G"])
+check("data files still read", proj["xs_40_2"]["file"] == "data/xs_40.dat"
+      and proj["xs_90_lin_mislabelled"]["file"] == "data/xs_90_lin_mislabelled.dat")
+
+print("\n2. new records: a scale with a function, a data set with its own offset and a shared function")
+spec = dict(reaction="1H(p,p)1H", quantity="dsigma_domega", unit="b/sr", file="data/xs_90.dat",
+            columns="E_lab[MeV] theta_cm[deg] value error", energy_window="0 100 MeV", angle_window="90 90 deg",
+            norm="1 fixed")
+m = Project.open(AZR)
+m.add("energy_scale", "H", function='"a0*x^1.5+a1" MeV', param=["a0 0.001 fit prior 0 0.002", "a1 0 fixed"])
+m.add("dataset", "xs_90_H", shift="H", **spec)
+check("the function and its two coefficients are written",
+      m["H"].text.split("\n")[1:] == ['    function       "a0*x^1.5+a1" MeV', "    param          a0 0.001 fit prior 0 0.002",
+                                      "    param          a1 0 fixed"] and shifts(m["xs_90_H"]) == ["H"], m["H"].text)
+m.add("energy_scale", "F", function='"a0*(sqrt(x)-sqrt(1.7))" MeV', param="a0 0 fit prior 0 0.02")
+m.add("dataset", "xs_90_F", shift=["offset 0.001 MeV fit prior 0 0.01", "F"], **spec)
+check("a data set with its own constant shift and the function of F",
+      shifts(m["xs_90_F"]) == ["offset 0.001 MeV fit prior 0 0.01", "F"], shifts(m["xs_90_F"]))
 try:
-    m.add_data_segment("data/xs_90.dat", 1, 1, shift_group="G", shift_fn_group="F")
-    check("shift_group together with shift_fn_group is refused", False, "no error")
-except ValueError:
-    check("shift_group together with shift_fn_group is refused", True)
+    m.add("dataset", "xs_90_GF", shift=["G", "F"], **spec)   # G holds an offset: two scales, two offsets
+    check("two energy scales on one data set are refused", False, "no error")
+except FormatError as err:
+    check("two energy scales on one data set are refused", "E_FIELD_TWICE" in err.codes and "xs_90_GF" not in m,
+          err.codes)
 
 print("\n3. with the engine: parameters, penalty, chi2 and Jacobian")
 try:
@@ -103,9 +92,9 @@ if have_engine:
         os.makedirs(os.path.join(work, "output"))
         os.makedirs(os.path.join(work, "checks"))
         # Free a0 of the group's function (penalty width 0.002 around 0.005).
-        text = open(AZR).read().replace('shiftfn "a0*(x-1)" 1 0.005 0 0', 'shiftfn "a0*(x-1)" 1 0.005 0.002 1')
+        proj.set("G", param="a0 0.005 fit prior 0 0.002")
         azr = os.path.join(work, "t.azr")
-        open(azr, "w").write(text)
+        proj.save(azr)
         expected = {}
         for l in open(os.path.join(PROJECT, "expected", "chiSquared.out")):
             t = l.strip().split(",")
@@ -113,11 +102,11 @@ if have_engine:
                 expected[int(t[0])] = float(t[1])
         with azure2(azr, cwd=work) as mdl:
             fn = mdl.parameters.fn_shifts
-            check("three shift_fn parameters (segments 2, 3, 5)", [p.segment_key for p in fn] == [2, 3, 5],
+            check("three shift_fn parameters (data sets 2, 3, 5)", [p.segment_key for p in fn] == [2, 3, 5],
                   [(p.name, p.segment_key) for p in fn])
-            check("named segment_<key>_energy_shift_fn0, fn_term 0",
-                  [p.name for p in fn] == ["segment_2_energy_shift_fn0", "segment_3_energy_shift_fn0",
-                                           "segment_5_energy_shift_fn0"] and all(p.fn_term == 0 for p in fn),
+            check("named <energy_scale>.a0, fn_term 0",
+                  [p.name for p in fn] == ["xs_40_2_scale.a0", "xs_40_3_scale.a0", "G.a0"]
+                  and all(p.fn_term == 0 for p in fn),
                   [(p.name, p.fn_term) for p in fn])
             free = [p for p in fn if not p.fixed]
             check("only segment 5's is free, at 0.005", [p.segment_key for p in free] == [5]

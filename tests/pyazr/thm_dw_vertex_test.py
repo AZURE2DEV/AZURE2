@@ -9,10 +9,10 @@ applied.  Checked on tests/18O_p_a_thm, 2H(18O,a15N)n at 54 MeV (neutron
 spectator, one 1/2+ group with l = 0, so the HOES model is |M_0|^2 times a
 level factor that does not depend on the vertex):
 
-  1. AzrModel: set_thm_experiment(..., vertexModel="dw") round trip and
-     canonical line; the combinations AZURE2 refuses raise ValueError the same
-     way, also set_thm_option(coulombIntegral / entranceL / spectatorEnergy)
-     against a dw experiment.  Pure Python: runs without numpy.
+  1. Project: an experiment with vertexModel=dw round trip and canonical
+     line; the combinations AZURE2 refuses are refused the same way (by the
+     edit, or when a session is made), also set_thm(coulombIntegral /
+     entranceL / spectatorEnergy) against a dw experiment.
   2. The engine against the CLI: calculate_chi2_rwa (rel 1e-9) and the output
      files of write_output_files (thm_experiments.out included).
   3. thm_vertex: model "dw"; plane waves in both channels: M2_qf == M2_pw
@@ -40,7 +40,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 SOURCE = os.path.join(ROOT, "tests", "18O_p_a_thm")
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import old_tree  # noqa: E402  (the old original: a test of the old file class, format3_tree.md section 5)
+from thm_records import datasets, no_fold, refusal, set_experiment, thm_set  # noqa: E402
 AZR = "18O_p_a_thm.azr"
 KIN = "beam=18O target=d spectator=n Ebeam=54"
 
@@ -59,18 +59,15 @@ def rel(a, b):
 
 sys.path.insert(0, ROOT)
 os.environ.setdefault("OMP_NUM_THREADS", "2")
-# AzrModel is pure Python: load azrfile.py directly, as roundtrip_test does,
-# so these checks run where numpy (needed by the pyazr package) is missing.
-import importlib.util                                          # noqa: E402
-_spec = importlib.util.spec_from_file_location(
-    "azrfile", os.path.join(ROOT, "pyazr", "azrfile.py"))
-_azrfile = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(_azrfile)
-AzrModel = _azrfile.AzrModel
+try:
+    from pyazr import Project
+except Exception as err:                                   # engine not built
+    print(f"skip: engine not available ({type(err).__name__}: {err})")
+    sys.exit(77)
 
 
 def fresh_copy(dst):
-    old_tree.copytree(SOURCE, dst)
+    shutil.copytree(SOURCE, dst)
     for junk in ("output", "checks"):
         shutil.rmtree(os.path.join(dst, junk), ignore_errors=True)
         os.makedirs(os.path.join(dst, junk))
@@ -79,24 +76,24 @@ def fresh_copy(dst):
 
 
 with tempfile.TemporaryDirectory() as tmp:
-    # -- 1. AzrModel ----------------------------------------------------------
-    print("1. AzrModel: vertexModel")
+    # -- 1. Project -----------------------------------------------------------
+    print("1. Project: vertexModel")
     proj = os.path.join(tmp, "model")
     fresh_copy(proj)
     src = os.path.join(proj, AZR)
-    m = AzrModel.from_file(src)
-    m.set_thm_experiment("A", [1, 2], beam="18O", target="d", spectator="n", Ebeam=54,
-                         distortion="coulomb", vertexModel="dw", ps="hulthen:0-30", psNodes=8)
-    rec = {"segments": [1, 2], "background": "none", "beam": "18O", "target": "d",
-           "spectator": "n", "Ebeam": 54.0, "ps": "hulthen:0-30", "psNodes": 8,
-           "distortion": "coulomb", "vertexModel": "dw"}
-    check("record carries vertexModel", m.thm_experiments() == {"A": rec}, m.thm_experiments())
-    one = os.path.join(proj, "one.azr")
-    m.write(one)
-    line = f"experiment[A] segments=1,2 {KIN} ps=hulthen:0-30 psNodes=8 distortion=coulomb vertexModel=dw\n"
-    check("canonical line", line in open(one).read(), open(one).read()[-400:])
-    check("reloaded: same record", AzrModel.from_file(one).thm_experiments() == {"A": rec})
     base = dict(beam="18O", target="d", spectator="n", Ebeam=54)
+    m = Project.open(src)
+    set_experiment(m, "A", [1, 2], **base, ps="hulthen:0-30", psNodes=8, distortion="coulomb", vertexModel="dw")
+    rec = {"beam": "18O", "target": "d", "spectator": "n", "Ebeam": "54", "ps": "hulthen:0-30", "psNodes": "8",
+           "distortion": "coulomb", "vertexModel": "dw"}
+    check("record carries vertexModel", m.thm()["experiments"] == {"A": rec}, m.thm())
+    one = os.path.join(proj, "one.azr")
+    m.save(one)
+    line = f"experiment[A] {KIN} ps=hulthen:0-30 psNodes=8 distortion=coulomb vertexModel=dw\n"
+    check("canonical line", line in open(one).read(), open(one).read()[-400:])
+    check("reloaded: same record", Project.open(one).thm()["experiments"] == {"A": rec})
+    bad = os.path.join(proj, "refused.azr")
+    # Refused by the edit, or (the rules that need the pairs) by the engine when a session is made.
     for kwargs, frag in [
             (dict(vertexModel="dw"), "needs distortion=coulomb or distortion=optical"),
             (dict(distortion="coulomb", distortionRef=0.7, vertexModel="dw"),
@@ -107,35 +104,33 @@ with tempfile.TemporaryDirectory() as tmp:
              "spectatorAngle= (one direction) and a ps window"),
             (dict(distortion="coulomb", theta="30-60", vertexModel="dw"), "not available with vertexModel=dw"),
             (dict(distortion="coulomb", vertexModel="dwba"), "expected pw or dw")]:
-        try:
-            AzrModel.from_file(src).set_thm_experiment("B", [1], **base, **kwargs)
-            check(f"refused: {kwargs}", False, "no ValueError")
-        except ValueError as err:
-            check(f"refused like AZURE2: {frag}", frag in str(err), str(err))
+        msg = refusal(lambda: set_experiment(Project.open(src), "B", [1], **base, **kwargs), bad)
+        check(f"refused like AZURE2: {frag}", msg is not None and frag in msg, msg and msg[-400:])
+
+    def with_option(project, key, value):
+        project.set_thm({key: value})
+        return project
+
+    def dw_after_option(key, value):
+        project = with_option(Project.open(src), key, value)
+        return set_experiment(project, "A", [1, 2], **base, distortion="coulomb", vertexModel="dw")
+
+    # the options against a dw experiment without a ps window (with one, spectatorEnergy is refused first for the
+    # window: "a ps window and spectatorEnergy both set")
+    dw_only = os.path.join(proj, "dw_only.azr")
+    set_experiment(Project.open(src), "A", [1, 2], **base, distortion="coulomb", vertexModel="dw").save(dw_only)
     for key, value, frag in [("coulombIntegral", True, "coulombIntegral=1"),
                              ("entranceL", "coherent", "entranceL=coherent"),
                              ("spectatorEnergy", 0.3, "spectatorEnergy for entrance pair")]:
-        mm = AzrModel.from_file(one)
-        try:
-            mm.set_thm_option(key, value)
-            check(f"set_thm_option({key}) refused with a dw experiment", False, "no ValueError")
-        except ValueError as err:
-            check(f"set_thm_option({key}) refused like AZURE2", frag in str(err), str(err))
-        mm = AzrModel.from_file(src)
-        mm.set_thm_option(key, value)
-        try:
-            mm.set_thm_experiment("A", [1, 2], **base, distortion="coulomb", vertexModel="dw")
-            check(f"dw experiment refused with {key}={value}", False, "no ValueError")
-        except ValueError as err:
-            check(f"dw experiment refused with {key}={value}", frag in str(err), str(err))
+        msg = refusal(lambda: with_option(Project.open(dw_only), key, value), bad)
+        check(f"set_thm({key}) refused like AZURE2 with a dw experiment", msg is not None and frag in msg,
+              msg and msg[-400:])
+        msg = refusal(lambda: dw_after_option(key, value), bad)
+        check(f"dw experiment refused with {key}={value}", msg is not None and frag in msg, msg and msg[-400:])
 
     # -- the engine -----------------------------------------------------------
-    try:
-        import numpy as np
-        from pyazr import azure2
-    except Exception as err:                                   # engine not built
-        print(f"skip the engine part: engine not available ({type(err).__name__}: {err})")
-        sys.exit(1 if failures else 77)
+    import numpy as np
+    from pyazr import azure2
     binary = os.environ.get("AZURE2_BIN")
     if not binary:
         cands = [c for c in glob.glob(os.path.join(ROOT, "build*", "src", "AZURE2*"))
@@ -150,9 +145,9 @@ with tempfile.TemporaryDirectory() as tmp:
         fresh_copy(d)
         text = open(os.path.join(d, AZR)).read()
         if not fold:
-            text = re.sub(r"<targetInt>.*?</targetInt>", "<targetInt>\n</targetInt>", text, flags=re.S)
-        if block:
-            text = text.rstrip("\n") + "\n<thm>\n" + block + "\n</thm>\n"
+            text = no_fold(text)
+        if block:  # the block's one experiment joined by both data sets
+            text = thm_set(text, block, datasets(text))
         with open(os.path.join(d, "run.azr"), "w") as f:
             f.write(text)
         return d
@@ -163,7 +158,7 @@ with tempfile.TemporaryDirectory() as tmp:
                 for f in sorted(glob.glob(os.path.join(out, "*")))
                 if os.path.isfile(f) and not os.path.basename(f).startswith("intEC")}
 
-    block = f"experiment[A] segments=1,2 {KIN} distortion=coulomb vertexModel=dw"
+    block = f"experiment[A] {KIN} distortion=coulomb vertexModel=dw"
     cli_dir, py_dir = project("cli", block), project("py", block)
     proc = subprocess.run([binary, "--no-gui", "--no-readline", "run.azr"], cwd=cli_dir,
                           input="1\n\n\n7\n", text=True, capture_output=True, timeout=600)
@@ -190,7 +185,7 @@ with tempfile.TemporaryDirectory() as tmp:
           from_cli["thm_experiments.out"].count("dw_vertex_point") == 3)
 
     print("3. thm_vertex")
-    pl_dir = project("plane", f"experiment[A] segments=1,2 {KIN} distortion=optical opticalAA=plane "
+    pl_dir = project("plane", f"experiment[A] {KIN} distortion=optical opticalAA=plane "
                               "opticalSF=plane vertexModel=dw")
     grid = np.linspace(0.45, 0.95, 26) + 0.003
     with azure2(os.path.join(pl_dir, "run.azr"), cwd=pl_dir) as s:
@@ -218,8 +213,8 @@ with tempfile.TemporaryDirectory() as tmp:
     for tag, extra in (("coulomb", "distortion=coulomb"),
                        ("window", "distortion=coulomb ps=hulthen:0-30 psNodes=8")):
         model, vert = {}, {}
-        for name, blk in (("pw", f"experiment[A] segments=1,2 {KIN}"),
-                          ("dw", f"experiment[A] segments=1,2 {KIN} {extra} vertexModel=dw")):
+        for name, blk in (("pw", f"experiment[A] {KIN}"),
+                          ("dw", f"experiment[A] {KIN} {extra} vertexModel=dw")):
             d = project(f"nf_{tag}_{name}", blk, fold=False)
             with azure2(os.path.join(d, "run.azr"), cwd=d) as s:
                 x = np.asarray(s.params_rwa, float)

@@ -505,10 +505,51 @@ void TestRelativistic() {
 
 }  // namespace
 
+// ---------------------------------------------------------------- 4. the kinematic limit
+
+/// At the maximum lab angle dOmega_lab/dOmega_cm goes to 0: elastic 12C on p (m1 > m2), the angle at the limit as the
+/// map gives it, a hair inside it, and well inside; the refusal of a datum there (E_LAB_JACOBIAN_AT_LIMIT).
+void TestJacobianAtLimit() {
+  Partition p;
+  p.m1 = 12.0;
+  p.m2 = 1.00727646688;
+  FrameRule r;
+  r.entrance = r.exit = p;
+  r.exitKind = ExitKind::Particle;
+  r.elastic = true;
+  r.labDifferential = true;
+  r.convertValue = true;
+  double cm = 0.0;
+  AngleLimit lim;
+  ElasticLabToCM(p, 1.0, cm, lim);
+  const double limit = lim.max;
+  const auto jacobianAt = [&r](double thetaLab, bool &reached) {
+    FrameRow row;
+    AngleLimit l;
+    reached = ConvertRow(r, 1.0, thetaLab, 0.0, 0.0, true, row, l);
+    return row.jacobian;
+  };
+  bool atReached = false, nearReached = false, insideReached = false;
+  const double at = jacobianAt(limit, atReached);
+  const double near = jacobianAt(limit * (1.0 - 1e-14), nearReached);
+  const double inside = jacobianAt(0.5 * limit, insideReached);
+  char d[160];
+  std::snprintf(d, sizeof d, "theta_max %.17g deg: J %.3g at it, %.3g a hair inside, %.3g at half", limit, at, near, inside);
+  check("at the maximum lab angle the angle converts and J is below kMinLabJacobian", atReached && nearReached &&
+        !(at > kMinLabJacobian) && !(near > kMinLabJacobian), d);
+  check("half way to it J is far above kMinLabJacobian", insideReached && inside > 1e3 * kMinLabJacobian, d);
+  const Diagnostic diag = LabJacobianAtLimit("segment #3 (data/x.dat)", 1.0, limit, at);
+  check("E_LAB_JACOBIAN_AT_LIMIT: the code, the point and the way out",
+        diag.code == "E_LAB_JACOBIAN_AT_LIMIT" && diag.severity == Severity::Error &&
+            diag.message.find("segment #3 (data/x.dat)") != std::string::npos &&
+            diag.message.find("c.m. frame") != std::string::npos);
+}
+
 int main() {
   TestBitForBit();
   TestClosedForms();
   TestRelativistic();
+  TestJacobianAtLimit();
   if (failures) {
     std::printf("%d FAILURE(S)\n", failures);
     return 1;

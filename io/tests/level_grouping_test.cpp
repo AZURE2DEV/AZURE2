@@ -1,4 +1,4 @@
-// io::LevelGrouper (LevelGrouping.h; docs/upgrade/project.md P2), the level rule of CNuc::Fill and pyazr's AzrModel:
+// io::LevelGrouper (LevelGrouping.h; docs/upgrade/project.md P2), the level rule of CNuc::Fill and pyazr's Project:
 // a line joins the level of its ID within 1 keV; otherwise one at the identical energy (SameEnergy); otherwise a new
 // level, reported (NewNearby) when another level of the group is within 1 keV; groups are independent.
 #include <cstdio>

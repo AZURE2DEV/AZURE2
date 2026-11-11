@@ -891,7 +891,7 @@ PYBIND11_MODULE(_azure2, m) {
 
   py::register_exception<AZURE2Error>(m, "AZURE2Error", PyExc_RuntimeError);
   BindPhysics(m);
-  BindThm(m);  // pybind_thm.cpp: the engine's reading of a <thm> block, for AzrModel
+  BindThm(m);  // pybind_thm.cpp: the engine's reading of a <thm> block
 
   m.def(
       "parameter_kinds",
@@ -984,7 +984,7 @@ PYBIND11_MODULE(_azure2, m) {
         return d;
       },
       py::arg("line"), "One <segmentsData> line as AZURE2 reads it (SegLine).");
-  // One <segmentsTest> line as the engine reads it (ExtrapLine), for pyazr's TestSegmentSet (project.md section 5).
+  // One <segmentsTest> line as the engine reads it (ExtrapLine) (project.md section 5; no pyazr caller since pyazr 3).
   m.def(
       "parse_extrapolation_line",
       [](const std::string &line) {
@@ -1047,7 +1047,7 @@ PYBIND11_MODULE(_azure2, m) {
         return d;
       },
       py::arg("line"), "One <targetInt> line as AZURE2 reads it (TargetEffect): screening, Doppler and density blocks.");
-  // The level of a <levels> line (io::LevelGrouper): the rule of CNuc::Fill, for pyazr's AzrModel.  assign returns
+  // The level of a <levels> line (io::LevelGrouper): the rule of CNuc::Fill (no pyazr caller since pyazr 3).  assign returns
   // (level, kind, other level, its first level ID); kind: "joined", "new", "same_energy", "new_nearby".
   {
     using azure2::io::LevelGrouper;

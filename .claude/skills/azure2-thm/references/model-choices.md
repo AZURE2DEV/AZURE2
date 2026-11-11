@@ -3,8 +3,8 @@
 Every key below is documented in `docs/source/theory/thm_implementation.rst`, cited here
 as *impl*. Global keys go in `<thm>`; per-experiment keys go on an
 `experiment[<name>]` line. Edit them with
-`AzrModel.set_thm_option` / `set_thm_experiment`, which apply the engine's rules and
-raise `ValueError` on a refusal.
+`pyazr.Project.set_thm` / `set_thm_experiment`, which apply the engine's rules and
+raise `pyazr.FormatError` (a `ValueError`) on a refusal.
 
 ## Global options
 

@@ -9,10 +9,10 @@ namespace azure2 {
 namespace io {
 
 /*!
- * Which level of a J^pi group a <levels> line belongs to: the one rule that the engine (CNuc::Fill) and pyazr
- * (AzrModel) both use (docs/upgrade/project.md, P2).  A line joins the level of its group that already holds a line
- * with the same level ID within 1 keV; failing that, a level at the identical energy (reported: two IDs read as one
- * level); otherwise it opens a new level (reported when another level lies within 1 keV: kept as two levels).
+ * Which level of a J^pi group a <levels> line belongs to: the one rule that the engine (CNuc::Fill) and pyazr's
+ * Project (through experiment::LevelEdits) both use (docs/upgrade/project.md, P2).  A line joins the level of its
+ * group that already holds a line with the same level ID within 1 keV; failing that, a level at the identical energy
+ * (reported: two IDs read as one level); otherwise it opens a new level (reported when another level lies within 1 keV: kept as two levels).
  * Lines are fed in file order, active lines only.
  */
 class LevelGrouper {

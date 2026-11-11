@@ -47,7 +47,7 @@ try:
     from pyazr import azure2
 except Exception as err:                                  # engine not built
     print(f"skip: engine not available ({type(err).__name__}: {err})")
-    sys.exit(0)
+    sys.exit(77)
 
 COMMON = dict(ignore_externals=True, use_long_wavelength=False)
 MODES = (("brune", dict(use_brune=True)),

@@ -89,7 +89,8 @@ The project file is read by two independent parsers
    gradient checked against finite differences;
 #. for a command-line flag: ``parseOptions``, ``printHelp`` and
    :doc:`../reference/command_line`;
-#. pyazr: ``datasets.py`` / ``azrfile.py``, and ``azure2.py`` if it changes
+#. pyazr: the binding of the engine's grammar the record or field needs (``api/src``) if
+   ``pyazr.Project`` must edit it, and ``azure2.py`` if it changes
    :math:`\chi^2`, with a test in ``tests/pyazr`` registered in its
    ``CMakeLists.txt``;
 #. the documentation: the user-guide page and :doc:`../reference/data_formats`
