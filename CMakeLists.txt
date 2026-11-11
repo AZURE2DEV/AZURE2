@@ -388,6 +388,10 @@ else()
     message(STATUS "ERYA SRIM utilities disabled")
 endif()
 
+# stopping/: AZURE2's stopping and straggling, a leaf library on physics/ (docs/upgrade/stopping.md).  Added after
+# ERYA only so that its comparison tool can link ERYA where it is built.
+add_subdirectory(stopping)
+
 # MCMC Bayesian sampling (optional)
 if(USE_MCMC)
     # Check if numcmc library directory exists

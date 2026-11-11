@@ -29,6 +29,10 @@ whoever asks for a calculation, and a project file that says in words what each 
 | 4. Data are data | Named records with units; new kinds of data; the data classes replaced; `CNuc` reduced | most of it done, see below |
 | 5–9 | Energy grid and apparatus kernels, own stopping, finite targets for yields; evaluation without copies; DWBA for THM; pyazr 3.0; web interface | not begun |
 
+**Stopping.** AZURE2 has its own stopping and straggling library, `stopping/` (ICRU 49 coefficients joined to Bethe
+with shell, Barkas and Bloch corrections, ZBL nuclear stopping, Bohr straggling propagated through the target, each
+value with an uncertainty and its source; `docs/upgrade/stopping.md`), built beside the engine and not yet used by it.
+
 **How every step is checked.** Each merge is verified as a whole: the 183 project files of the test suite run in
 three bases (Brune, formal, Park) and every output file is compared byte for byte with the previous head (726 + 699
 + 726 files); 182 unit and pyazr tests; the 145 regression projects with their own checks; calculations at 1

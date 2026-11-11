@@ -2,6 +2,29 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-11 (agent, stopping module, first branch) — `stopping/`: AZURE2's own stopping and straggling as a leaf library (`feature/upgrade-5-stopping-1`)
+
+**Done.** `stopping/` (design and numbers: `docs/upgrade/stopping.md`): materials from formulas or fractions with
+phase and density; electronic stopping of p and α from the ICRU 49 coefficient sets (Andersen–Ziegler 1977 and
+Ziegler 1977 forms, transcribed from Geant4 and checked against PSTAR/ASTAR) joined by log-log interpolation
+between 1 and 3 MeV/u to Bethe with Barkas–Berger shell, Ashley–Ritchie–Brandt Barkas and Bloch corrections; d, t,
+³He by velocity, heavier ions by Pierce–Blann effective charge; ZBL nuclear stopping; Bragg additivity with a named
+place for the compound correction; user tables and formulas with provenance; an assigned uncertainty on every value;
+N(E_in, E_out), E_out, range and their stopping-scale derivatives; Bohr straggling, Chu's factor and Yang's
+charge-state term as forms taking data (no data shipped), Tschalär propagation with the beam spread. Two data tables
+in `stopping/data/` with a source per row. The CLI `azure2-stopping`; the ERYA comparison
+`stopping/tools/compare_erya.sh`. Consistency check 32 (stopping/ includes only stopping/, physics/ and the standard
+library); `stopping/tests` registered; `stopping` in the size ratchet.
+
+**Verified how.** Build 0 warnings; the six unit tests and the CLI test pass, each unit test shown failing on
+injected errors (list in the report of this branch); consistency test, also shown failing on an injected include and
+an unregistered test; `scripts/check.sh --quick` (consistency, build, `ctest -LE slow` 190/190); T1–T3 and `tests/target_density` x 3 bases against `b-trial18`: 71/71/71 files identical.
+
+**Open.** Coefficients that do not reproduce ICRU 49 (p in C below 40 keV, α in Au below 0.5 MeV; stopping.md §9.1);
+no Chu table and no Yang constants; assigned (not fitted) uncertainties; no Python binding (two lines in
+`api/src/pybind_api.cpp`, stopping.md §11); the Geant4 notice question for the transcribed numbers (§12). Next:
+stopping.md §13.
+
 ## 2026-11-11 (agent, brief X3, milestone 3) — `DataSet` and `WorkingCopy` apart; the old data classes gone (`feature/upgrade-4-data-structure-3`)
 
 **Done** (commits 075af6db, b1d3daaf, the file moves, the class renames, these docs).
