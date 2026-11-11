@@ -269,6 +269,27 @@ bool SFactorOf(Context &c, const ValidatedRecord &r, ReactionSpec &spec) {
   return true;
 }
 
+// A reaction given with entrance_pair / exit_pair: its label names several pairs and the keys choose; elastic means
+// the same pair in and out, so the quantity's elastic rules are checked here on the keys (the validator left them).
+bool PairsDecideElastic(Context &c, const ValidatedRecord &r, const ReactionSpec &spec) {
+  if (!r.quantity || (!r.Has("entrance_pair") && !r.Has("exit_pair"))) return true;
+  const ReactionRule &rule = r.quantity->reaction;
+  const bool elastic = spec.entranceKey == spec.exitKey;
+  const PairInfo *p = c.Pair(spec.entranceKey);
+  const std::string pairs = "entrance pair " + std::to_string(spec.entranceKey) + ", exit pair " + std::to_string(spec.exitKey);
+  if (rule.Has(ReactionRule::kElastic) && !elastic) {
+    c.Error(codes::kReactionNotAllowed, r, "exit_pair",
+            "quantity '" + r.quantity->name + "' is defined for elastic scattering (one pair in and out), not " + pairs);
+    return false;
+  }
+  if (rule.Has(ReactionRule::kNoChargedElastic) && elastic && p && p->kind == 0 && p->lightZ * p->heavyZ != 0) {
+    c.Error(codes::kReactionNotAllowed, r, "exit_pair",
+            "quantity '" + r.quantity->name + "' is not defined for charged-particle elastic scattering (" + pairs + ")");
+    return false;
+  }
+  return true;
+}
+
 // The observable of a data set or an extrapolation from its quantity and its angle frame ("" angle-integrated).
 bool ReadObservable(Context &c, const ValidatedRecord &r, const std::string &angleFrame, ReactionSpec &spec) {
   const std::string q = r.quantity ? r.quantity->name : "";
@@ -280,6 +301,7 @@ bool ReadObservable(Context &c, const ValidatedRecord &r, const std::string &ang
     spec.observable = multipole == "E1" ? O::CrossSectionE1 : multipole == "E2" ? O::CrossSectionE2 : O::CrossSection;
     if (spec.exitKey == -1 && spec.combination == ReactionSpec::Combination::None) spec.observable = O::TotalCapture;
     spec.total = q == "sigma_total";
+    if (!PairsDecideElastic(c, r, spec)) return false;
     if (q == "sfactor") return SFactorOf(c, r, spec);
     if (q == "beta_delayed_spectrum") {
       const PairInfo *p = c.Pair(spec.entranceKey);
@@ -337,7 +359,7 @@ bool ReadObservable(Context &c, const ValidatedRecord &r, const std::string &ang
   }
   if (q == "phase_shift") {
     spec.observable = O::PhaseShift;
-    return ReadPhaseShift(c, r, spec);
+    return PairsDecideElastic(c, r, spec) && ReadPhaseShift(c, r, spec);
   }
   if (q == "legendre") {
     spec.observable = data ? O::AngularCoefficients : O::AngularDistribution;

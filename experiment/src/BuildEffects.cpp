@@ -437,8 +437,9 @@ void Abundances(Context &c) {
 
 // The total cross section of a target with isotopes (quantity sigma_total with a sum): the abundance-weighted sum of
 // each nucleus's total by the optical theorem, one elastic term per nucleus.  A sum means nothing else: refused
-// without isotopes on the target, with a term whose exit pair is not its entrance pair (not a total), with two terms
-// on one pair, or with a factor on a term (the abundance is the weight).  An inactive record is checked when it is
+// without isotopes on the target, with two terms on one pair, or with a factor on a term (the abundance is the
+// weight).  A term is elastic by its label (a term of a sum carries no pair keys); a single reaction with keys by
+// its keys (Build.cpp PairsDecideElastic).  An inactive record is checked when it is
 // switched on (BuildOptions::allRecordsActive): the converter writes an old inactive line without its sample.
 void NaturalTotals(Context &c, const std::vector<Member> &members) {
   for (const Member &m : members) {
@@ -448,13 +449,6 @@ void NaturalTotals(Context &c, const std::vector<Member> &members) {
                                         : c.out_.extrapolations.extrapolations.items[m.key - 1].spec.reaction;
     std::vector<ComponentSpec> terms = {ComponentSpec{spec.entranceKey, spec.exitKey}};
     terms.insert(terms.end(), spec.components.begin(), spec.components.end());
-    for (const ComponentSpec &t : terms)
-      if (t.exitKey != t.entranceKey) {
-        c.Error(codes::kReactionNotAllowed, r, "reaction",
-                "a total cross section is the elastic term of its pair by the optical theorem: pair " +
-                    std::to_string(t.exitKey) + " is not the entrance pair " + std::to_string(t.entranceKey));
-        break;
-      }
     if (spec.combination != ReactionSpec::Combination::Sum) continue;
     const Value *name = r.Get("target");
     const ValidatedRecord *target = name ? c.Record(name->word, "target") : nullptr;

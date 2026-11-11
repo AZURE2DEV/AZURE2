@@ -168,7 +168,7 @@ for seg in 'aa=1_R=2' 'aa=2_R=1' 'aa=1_R=1' 'aa=2_R=2'; do
   [ -s "$WORK/b_heavy_3/output/AZUREOut_$seg.extrap" ] || bad "(b) no AZUREOut_$seg.extrap"
 done
 run b_noex "$M/aC_light_noex.azr" 3
-run b_heavy_dsdo "$M/aC_heavy_dsdo.azr" 3   # the same (differential) extrapolations with the excitation on 12C
+run b_heavy_dsdo "$M/aC_heavy_dsdo.azr" 3   # the same (a,a') extrapolations with the excitation on 12C
 read -r w rest <<< "$(an compare "$WORK/b_heavy_dsdo/output" "$WORK/b_noex/output" 'AZUREOut_aa=1_R=2.extrap')"
 if gt "$w" 0.01; then ok "(b) without column 32 the light version differs by up to $w: e1 is what moves the threshold"
 else bad "(b) without column 32 the light version differs by only '$w': the check does not discriminate"; fi

@@ -266,6 +266,21 @@ int main() {
   ExpectOne("E_AMBIGUOUS_PAIR", BuildText(Data(dd)));
   ExpectOne("E_PAIR_KEY", BuildText(Data(kDataset + "    entrance_pair 1\n")));
   ExpectOne("E_PAIR_KEY", BuildText(Data(dd + "    entrance_pair 1\n    exit_pair 5\n")));
+  {
+    // a label that names several pairs (d+12C twice): the keys choose, and whether the reaction is elastic is whether
+    // they are one pair (PairsDecideElastic), not how the label reads
+    const std::string sigma = Set(dd, "quantity", "    quantity sigma");
+    const BuiltProject across = BuildText(Data(sigma + "    entrance_pair 5\n    exit_pair 6\n"));
+    check("sigma of 12C(d,d)12C from pair 5 to pair 6: inelastic, builds", across.diagnostics.empty());
+    const BuiltProject same = BuildText(Data(sigma + "    entrance_pair 5\n    exit_pair 5\n"));
+    ExpectOne("E_REACTION_NOT_ALLOWED", same);
+    check("sigma of 12C(d,d)12C on pair 5 alone: refused by the set-up as charged-particle elastic",
+          same.diagnostics.size() == 1 && same.diagnostics[0].message.find("(validation)") == std::string::npos &&
+              same.diagnostics[0].message.find("charged-particle elastic") != std::string::npos);
+    check("sigma_nuclear of 12C(d,d)12C on pair 6 alone: elastic, builds",
+          BuildText(Data(dd + "    entrance_pair 6\n    exit_pair 6\n")).diagnostics.empty());
+    ExpectOne("E_REACTION_NOT_ALLOWED", BuildText(Data(dd + "    entrance_pair 6\n    exit_pair 5\n")));
+  }
   ExpectOne("E_DATA_FILE", BuildText(Data(Set(kDataset, "file", "    file no_such_file.dat")), false, true));
   // a run that does not use the data (an extrapolation): the same file is a warning, and the project builds
   {

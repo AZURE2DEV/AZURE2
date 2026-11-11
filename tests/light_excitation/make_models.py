@@ -9,10 +9,10 @@ alpha' + 12C(2+, 4.43891 MeV), four levels with widths in both pairs.
   aC_heavy       the excitation on the heavy partner, as always: e2 = E*, J2 = 2+ (31 columns)
   aC_heavy0      the same with an explicit 32nd column "0" on every line
   aC_light       the excitation moved to the light partner: e1 = E* (column 32), J1 = 2+, J2 = 0+, e2 = 0
-  aC_heavy_dsdo  aC_heavy with the differential (a,a') extrapolations only, the reference of aC_light_noex
+  aC_heavy_dsdo  aC_heavy with the (a,a') extrapolations only (integrated and differential), the reference of aC_light_noex
   aC_light_noex  aC_light without column 32 -- pair 2 opens at S: the check must see the difference (its
-                 differential (a,a') extrapolations only: pair 2 is then a second a + 12C, the keys written,
-                 and an angle-integrated cross section of 12C(a,a)12C is refused as elastic)
+                 (a,a') extrapolations only: pair 2 is then a second a + 12C, the keys written; the
+                 angle-integrated one, sigma of the label 12C(a,a)12C from pair 1 to pair 2, is inelastic)
   bad_gamma      aC_heavy plus a gamma pair (type 10) with e1 = 1 MeV                -> ERROR
   bad_negative   aC_light with e1 = -E* (the elastic extrapolation only: a reaction label
                  cannot name a negative excitation)                                -> ERROR
@@ -146,7 +146,7 @@ def ac_tests(kind):
         ("x_exc_el_cm", 2, 2, 1.4, 4.5, 0.1, 30, 150, 30, "cm"),   # a' + 12C(2+) elastic
     ]
     if kind in ("light_noex", "heavy_dsdo"):
-        t = t[1:3]   # the differential (a,a') only: sigma with the label 12C(a,a)12C is refused as elastic
+        t = t[0:3]   # the (a,a') extrapolations: sigma with the label 12C(a,a)12C and two pairs is inelastic (the keys decide)
     return "".join(extrapolation(*x[:1], kind, *x[1:]) for x in t)
 
 

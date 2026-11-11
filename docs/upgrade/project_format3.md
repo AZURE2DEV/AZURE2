@@ -235,6 +235,12 @@ A reaction is `<target nucleus>(<projectile>,<ejectile>)<residual>[<state>]`:
   data set takes the pair carrying the THM columns" was not taken: the old engine uses the key written, the two pairs
   of that file carry different channels (pair 1 has eight levels pair 6 lacks), and the THM columns are read only by the
   THM vertex (`EDataThm.cpp`, `EPoint.cpp`); the rule would hold in that file but is no meaning the old engine has.]**
+- **With pair keys, the label says the particles and the keys say the pairs.** A label that needs keys names pairs
+  that are alike in particles and states (`tests/light_excitation`'s `aC_light_noex`: `12C(a,a)12C` from pair 1 to
+  pair 2, a second α + ¹²C opening at a threshold); whether the reaction is elastic is then whether the keys name one
+  pair, not how the label reads. The validator leaves a quantity's elastic rules (`elastic`, `no charged-particle
+  elastic`) to the set-up for such a record, which checks them on the keys (`Build.cpp` `PairsDecideElastic`,
+  `E_REACTION_NOT_ALLOWED` on `exit_pair`); the charge and identity rules stay the label's (they are the particles').
 
 Ordinal labels (`a1`, `p2`) are refused: an ordinal counts the states the project happens to include, which is a
 position. `a0`, `p0`, `n0`, `g0` are accepted as aliases of the ground state.
