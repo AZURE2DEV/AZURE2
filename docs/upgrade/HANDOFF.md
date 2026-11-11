@@ -2,6 +2,149 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-11 (director, 21:00) — merged: pyazr reads format 3 only, the audit of the checks with six refusals, the crash without free parameters fixed
+
+### State
+
+- `feature/upgrade-4-data` holds three merge commits (`feature/upgrade-4-pyazr-format3`,
+  `feature/upgrade-4-check-audit`, the last two commits of `feature/upgrade-5-energy-tasks-gradient`) with the
+  director's fixes of the test harness inside the first, and this documents commit. Its tree before the documents
+  commit is the rehearsal's (`rehearsal/trial24`, 58db64bb). `feature/upgrade` is merged with it. Nothing pushed.
+- Phase 4: what is left is the refusal switch (the engine refuses old files, its old reading path and the bindings
+  pyazr no longer calls are deleted; brief `work/briefs/AU_refusal_switch.md`, `feature/upgrade-4-refusal-switch`,
+  started from this head) and the rest of `CNuc`.
+- Phase 5, running since the afternoon, both from the head before this one (b8c970b0): branch 7 part 1 (the node
+  table, `feature/upgrade-5-grid-nodes`) and the generic fit-parameter kind for apparatus parameters
+  (`feature/upgrade-5-apparatus-parameters`). Both were told of the crash and not to fix it themselves; their merges
+  bring this head's fix.
+- Machine: 12 threads in total this night (PI). Agents 3 each; the director's verification is
+  `work/director/full_verify4.sh` (4 threads).
+
+### Director's verification
+
+The rehearsal with the pyazr branch, the harness fixes and the audit branch (36f3d85e, build `work/b-trial24`):
+
+| check | result |
+|---|---|
+| all projects, 3 bases, against the last verified batch (`tab-trial24` vs `tab-trial23g`) | 780/753/780 files; 779/752/779 identical; the one that differs per basis is the intended `run.log` of `relativistic/models/li7pn_edge_rel` (the set-up refusal is its last line) |
+| calculations at 1 against 3 threads (T1, T2, T3, 13N; 12 files, χ²) | identical |
+| `ctest -LE slow` | 202/202, none skipped |
+| `ctest -L slow` | 10/10 |
+| `tests/run_tests.sh` | 152 passed, 0 failed |
+| old against format 3 (`spec_equivalence`) | 206 files: 184 converted and equal, 0 differ, 22 not converted |
+| converted-tree gate against `tab-trial8` | 483 (456 formal) identical, 38 classified, 0 differ, 0 missing |
+| build | 0 warnings |
+
+Then the crash fix on top (58db64bb, the same build directory rebuilt, 0 warnings):
+
+| check | result |
+|---|---|
+| all projects, 3 bases, against the table above (`tab-trial24c` vs `tab-trial24`) | 780/753/780 files, all identical |
+| `ctest -R "upgrade\|grad\|consistency"` | 20/20, with the new `upgrade_energy_task_gradient` |
+| `thick_target_resonance` (no free parameter) as a fit with `--use-lm`, `--use-gradient`, plain | exit 0, χ² 30.909423272 in the three (the head before: exit 139 with `--use-lm`) |
+| T2 and 13N fits with `--use-lm` and `--use-gradient`, 200 calls, 1 thread, against the build of the head before (`work/b-trial23`) | every output file identical (4 fits) |
+
+Not repeated after the fix: the full `ctest`, `run_tests.sh`, the gate (the fix changes one function that only a
+gradient or a row pass reaches; the documents commit after it was checked with the consistency test).
+Logs: `work/director/v4_trial24.*.log`, `gate_trial24.log`, `cls_trial24c.log`.
+
+### Open, for the owner or the PI
+
+- The crash (next section) is the second time in this batch that "all tests pass" said less than it seemed (the
+  first: tests that passed without running). Proposed and not started: a small matrix of the tree's fit modes
+  (plain, `--use-gradient`, `--use-lm`, band) on one project of each kind, the no-free-parameter one included, as a
+  ctest of its own.
+- New refusals a user can meet: `E_THM_OLD_LIST`, `E_LAB_JACOBIAN_AT_LIMIT`; a refused format-3 set-up ends with
+  its own ERROR line. Listed in `FOR_THE_OWNER.md` ("What users notice").
+- pyazr 3.0.0.dev0 refuses an old file; the engine still reads it until the refusal switch is merged.
+
+### Fits and the number of threads, and a crash the director's last verification missed
+
+- **A crash was in the head merged at 19:25** (data branch b8c970b0): a least-squares fit (`--use-lm`) or a
+  covariance band of a project with **no free parameter** ended in a segmentation fault (`EnergyTaskRows` sized its
+  buffer by a column count of 0). Reproduced by the director with `thick_target_resonance --use-lm` on the merged
+  build; the build before the gradient branch runs it. The gradient agent found it in its own speed series and
+  fixed it (`src/GradEnergyTasks.cpp`: with no packed column the row pass returns the models only) with a test
+  (`upgrade_energy_task_gradient`: the scalar gradient, the residual Jacobian and the model gradients give the same
+  bits at 1 and 3 threads on T2; the no-free-parameter case runs; it segfaults with the fix removed). The fix is in
+  this batch. **Why the verification missed it:** no test of the tree ran a least-squares fit without free
+  parameters. The director's verification compares what the tests cover; it does not find what no test covers.
+- The speed of the gradient branch, the agent's series (1 thread, alternated with the build before it, machine load
+  10–13, read by the director from the raw timing files, not repeated): 13N `--use-gradient` 50.7 → 26.9 s, 13N
+  `--use-lm` 19.5 → 12.8 s, `natural_neon` `--use-gradient` (30 calls) 219.6 → 105.7 s, `--use-lm` 291.1 → 139.3 s;
+  T2 (plain MIGRAD, 200 calls) 39.9 → 37.2 s at 1 thread and 20.7 → 19.1 s at 3. The `thick_target_resonance`
+  numbers of that series (13.8 → 5.2 s, 7.9 → 4.6 s) are **not fits**: the project has no free parameter. The
+  5-thread T2 timing is still owed.
+- **Memory and time since the start of the upgrade, measured by the director** (one `natural_neon` calculation, 1
+  thread, both runs one after the other under the same load): the engine at the branch point (aab1de0d, build
+  `b-base`) peaks at 4.52 GB and takes 41.2 s; this batch's build peaks at 1.46 GB and takes 8.0 s; χ²/N of the
+  first segment 10.9941 in both, total χ² 3342.46 against 3342.51.
+
+### pyazr reads format 3 only (`feature/upgrade-4-pyazr-format3`, Phase 4) — director's review
+
+- What it does: `pyazr/azrfile.py` (3,756 lines, the old file class), `pyazr/datasets.py` and
+  `tests/pyazr/old_tree.py` are deleted; version `3.0.0.dev0`. A file that is not format 3 raises `FormatError`
+  with the engine's message (`pyazr.project.require_format3`); `pyazr.convert_azr` (default `to=3`) is the only
+  reader of an old file. What the old class could do and scripts need exists on records: `masses.mass_check` /
+  `fill_masses`, `set_pair(light_excitation=, heavy_excitation=)`, `snapshot.place_level_values`,
+  `outputs.fitted_norms`, `load_sav` with the engine's check of the parameter names, and `merge_projects` on format 3.
+- Engine diff read by the director: one new piece, `experiment/LevelEdits.h/.cpp` (`MergeLevelRows`: the level rows
+  of several projects in one section, pair keys and level IDs shifted; binding `merge_level_rows`). No defect found.
+- Tests: of the 54 test files of the old class 46 were moved onto records, 7 are kept as converter tests, 1
+  (round trip of the old writer) is deleted with its subject.
+- **Coverage lost, listed by the agent** (cases only the old class could build): two different targets tied to one
+  density; a thick-target yield of a sum; an inactive scattering-length constraint line; a follower's own ignored
+  norm; the `prior_centre` rows of `save_fit_norms`; old byte layouts; some THM refusals at session start; an
+  extrapolation without a frame refused; `light_excitation 0` written as "0". None is a format-3 feature without
+  a test elsewhere, by the agent's list; the director did not check each.
+- **Defects the agent found and did not fix** (engine side: given to the refusal-switch branch, brief AU):
+  `Project.set_config(output_dir=)` neither appends "/" nor creates the directory; a refused THM edit repeats its
+  prefix; `Project.set` on an unknown record raises `KeyError`; the out-of-range warning of a fitted density uses
+  old names; the CLI cross-checks of `sav_fixed_params` and `inactive_lines` search `build*/` and skip in a
+  separate build directory; the skills `azure2-setup` and `azure2-targets` describe the old grammar. Not given to
+  anyone yet: `check_format3_thm` accepts combinations the session refuses.
+- Bindings left without a Python caller (`check_thm_block`, `read_thm_block`, `thm_option`, `thm_spin_text`,
+  `thm_global_optical_for`, `read_thm_weight_table`, `parse_segment_line`, `parse_extrapolation_line`,
+  `parse_target_effect_line`, `LevelGrouper`): deleted with the engine's old reading path (brief AU).
+- Director's decision: the edit of `tests/mass_separation_check/check.sh` (it calls `masses.fill_masses`) is
+  accepted; run by the director with and without the engine module: all checks pass, part (e) runs with it.
+- **Two defects of the test harness found by the director in the rehearsal and fixed there** (tests that passed
+  without running): 33 `tests/pyazr/*_test.py` ended with exit 0 when the engine module could not be imported
+  (now 77, which ctest shows as skipped, the convention the other tests state); `pyazr_layer_yield` was registered
+  without `PYAZR_ENGINE_DIR` and had been skipped in every build outside the source tree (now it gets the
+  directory, runs and passes).
+
+### The audit of the checks and six refusals (`feature/upgrade-4-check-audit`, Phase 4) — director's review
+
+- The question was the director's, from the THM conversion: a check that edits a project's text with `sed` can go
+  on passing after a conversion because its pattern no longer matches anything and it compares a run with itself.
+  The agent answered it mechanically (`tools/edit_audit.sh`: every `check.sh` run with logging stand-ins for
+  `sed`/`awk`/`perl`/`python3` and for the engine; `tools/edit_audit_report.py`): 126 checks, 1,658 edit places,
+  40 that change nothing, of which 36 by design and **4 vacuous** (`target_effect_shared`, `thm_beam_profile`:
+  both edited the old `<targetInt>` block); one more check tested nothing for another reason (`nuisance_kinds`:
+  its `<parameterSettings>` row named a parameter that no longer exists, and the engine ignores such a row
+  silently). The three are rewritten on records and each fails with an injected engine error. The 25 pyazr tests
+  of the old class were out of its scope (the pyazr branch moved them; not audited since).
+- The guard that keeps it so: `tests/lib/edit_guard.sh` (`edited`, `must_differ`: an edit that changes nothing
+  fails the check), rule 33 of the consistency test (no unguarded in-place edit in a `check.sh`), the `CLAUDE.md`
+  recipe "A new regression check".
+- Six refusals, engine diff read by the director (338 lines): `E_THM_OLD_LIST` (a format-3 `<thm>` with
+  `segments=` or `weight[k]=` is refused at reading); an experiment no data set names is ignored with one warning;
+  one reading of an experiment's name (`experiment/ThmSectionLines.h`); a set-up refusal of a format-3 project
+  ends with its own ERROR line (`kFillRefused`; "Could not fill data object from file." no longer follows it: the
+  one `run.log` of the tree that changes, `relativistic/models/li7pn_edge_rel`); the converter keeps the sample
+  target on an inactive line or refuses with the reason; `E_LAB_JACOBIAN_AT_LIMIT` (a lab-frame differential point
+  where dΩ_lab/dΩ_cm ≤ 1e-6 is refused at set-up; without it such a point gave χ² 1.06e17). No defect found in the
+  reading. With the stopping codes of the data head the table has 93 diagnostic codes.
+- Open, given to brief AU: the silent `<parameterSettings>` row becomes a warning; the THM pages of `docs/source`
+  still show `segments=`. Noted: three checks use `\|` in `sed` basic expressions (GNU only); the audit tool's
+  key for an engine run drops lines with '/', so refusals that differ only in a file name group together; a full
+  audit takes about 2.5 h at one thread.
+- For the merge (director): the conflicts of this branch with the data head were lists two branches extended
+  (the stopping refusals and this branch's codes in `Diagnostics.h/.cpp`, the reference page, the schema, the
+  CMake source list): both sides kept (`work/director/union_conflict.py`), the schema and reference-page tests
+  pass on the result.
+
 ## 2026-11-11 (agent, check audit) — do the checks still test what they say? Six refusals (`feature/upgrade-4-check-audit`)
 
 **Done** (`AR_check_audit.md`; the audit in `docs/upgrade/format3_tree.md` section 7):
