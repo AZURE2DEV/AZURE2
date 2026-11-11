@@ -69,8 +69,9 @@ def describe(path, as_json=False):
 
     For every data set and extrapolation: the quantity, the observable computed, the reaction tree with the ``<levels>``
     pair keys each term resolved to, the windows, the data file as the engine opens it (the resolved path: relative to
-    the working directory), the target, beam and detector effects linked to it and its fit parameters with their names
-    and kinds; then the model data (docs/upgrade/project_format3.md section 6.3).  Returns the text, or with
+    the working directory), the rows of the data file read and kept inside the windows with the lab-energy range of the
+    kept rows (JSON: ``rows_read``, ``rows_kept``, ``kept_E_lab_MeV``, ``rows_error``), the target, beam and detector
+    effects linked to it and its fit parameters with their names and kinds; then the model data (docs/upgrade/project_format3.md section 6.3).  Returns the text, or with
     ``as_json`` a dict (``datasets``, ``extrapolations``, ``model_data``).  A project with an error raises
     ``ValueError`` with its diagnostics; a format-1 or format-2 file raises ``ValueError`` with the conversion command.
     Needs the compiled engine module.

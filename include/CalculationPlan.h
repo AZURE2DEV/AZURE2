@@ -35,9 +35,9 @@ namespace azure2 {
  * (EData::CalculatePointsInParallel).
  */
 struct PointRef {
-  enum List : int { kSegments = 0, kComponents = 1 };
-  int list = kSegments;  ///< which list of the data set: its data/test segments, or its component segments
-  int segment = 0;       ///< 0-based position of the segment in that list
+  enum List : int { kSegments = 0, kLeaves = 1 };
+  int list = kSegments;  ///< which list of the data set: the points of its segments, or of its leaves (EData::LeafRef)
+  int segment = 0;       ///< 0-based position of the segment, or of the leaf, in that list
   int point = 0;         ///< 0-based position of the point in its segment
 };
 
@@ -49,7 +49,7 @@ struct CalculationTask {
 class CalculationPlan {
  public:
   /// The plan of `data` from its mapping (EData::MapData): one task per point that is not mapped, in data order (the
-  /// segments, then the component segments), and each (host, mapped) pair of `mapping` appended to its host's task in
+  /// segments' own points, then the leaves' (EData::LeafRefs)), and each (host, mapped) pair of `mapping` appended to its host's task in
   /// the order given; every point's task index set (EPoint::SetPlanTask).  Then Check: a plan that breaks it throws
   /// std::logic_error.
   void Build(EData &data, const std::vector<std::pair<PointRef, PointRef>> &mapping);

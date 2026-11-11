@@ -78,8 +78,8 @@ struct Residual {
   double Chi2() const { return error != 0.0 ? (difference * difference) / (error * error) : 0.0; }
 };
 inline Residual DataResidual(double model, double y, double dy, double norm) { return {model - y * norm, dy * norm}; }
-/// The residual of a data point: its model value in `results` against its c.m. datum, with the norm n.
-Residual PointResidual(const EPoint &point, const Results &results, double norm);
+/// The residual of row i (0-based) of a segment: its model value in `results` against its c.m. datum, with the norm n.
+Residual PointResidual(const ESegment &segment, int i, const Results &results, double norm);
 
 }  // namespace azure2
 

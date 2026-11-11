@@ -6,7 +6,8 @@
 #      the converter's parameter-name map (calculation, menu 1, Brune basis);
 #   2. T2_true with the <modelData> section below, in both formats: equal chiSquared.out and modelData.out;
 #   3. a data set named with 60 characters: its parameter names whole in param.par (no fixed-size name buffer);
-#   4. --describe of the converted T2: the pair keys, the resolved data file, the parameters; --json parses;
+#   4. --describe of the converted T2: the pair keys, the resolved data file, the parameters, the rows read and kept
+#      (counted again here from the files and windows); --json parses;
 #   5. a format-3 file with an error is refused with the reader's diagnostic;
 #   6. the converted T2 at 1 and 2 threads: identical outputs;
 #   7. a run without data (menu 3) does not need the data files: with the data directory away, T2's extrapolations give
@@ -152,6 +153,43 @@ if [ -f "$WORK/new/m.azr" ]; then
     ok "--describe --json: a JSON document with the data sets and their pair keys"
   else
     bad "--describe --json: not a JSON document with the data sets"
+  fi
+  # The rows of each data set's measurement: read and kept as counted here from the file and the window.
+  if (cd "$WORK/new" && "$AZURE2_BIN" --describe m.azr --json) | python3 -c '
+import json, sys
+d = json.load(sys.stdin)
+bad = []
+for s in d["datasets"]:
+    if not s["active"]:
+        continue
+    lo, hi = s["E_lab_window_MeV"]
+    alo, ahi = s.get("angle_window_deg", [None, None])
+    read = kept = 0
+    es = []
+    for line in open(s["data_file_resolved"]):
+        t = line.split()
+        if not t or t[0].startswith("#"):
+            continue
+        read += 1
+        e, a = float(t[0]), float(t[1])
+        if lo <= e <= hi and (alo is None or alo <= a <= ahi):
+            kept += 1
+            es.append(e)
+    want = (read, kept, [min(es), max(es)] if es else None)
+    got = (s["rows_read"], s["rows_kept"], s.get("kept_E_lab_MeV"))
+    if want != got:
+        bad.append((s["name"], want, got))
+if bad:
+    print(bad)
+sys.exit(1 if bad else 0)'; then
+    ok "--describe --json: rows read and kept and the kept E_lab range of every data set, as counted from its file"
+  else
+    bad "--describe --json: rows read or kept differ from the file and the window"
+  fi
+  if echo "$d" | grep -Eq "^  rows: [0-9]+ read, [0-9]+ kept, E_lab "; then
+    ok "--describe: the rows read and kept and their E_lab range"
+  else
+    bad "--describe: no rows line"
   fi
 fi
 

@@ -6,6 +6,9 @@
 #include <vector>
 #include <mutex>
 #include <memory>
+#include <optional>
+#include "azure2/experiment/Frames.h"
+#include "azure2/experiment/Measurement.h"
 #include "azure2/experiment/SetupSpecs.h"
 
 namespace azure2 {
@@ -43,8 +46,6 @@ class ESegment {
   explicit ESegment(const azure2::experiment::DatasetSpec &);
   /// Build an extrapolation segment from its spec -- points on a grid, no data file.
   explicit ESegment(const azure2::experiment::ExtrapolationSpec &);
-  /// Does this point fall inside the segment's energy and angle ranges?
-  bool IsInSegment(EPoint);
   /// Differential cross section in the lab frame?
   bool IsDifferential() const;
   /// Differential cross section in the centre-of-mass frame?
@@ -108,21 +109,70 @@ class ESegment {
   int GetEntranceKey() const;
   /// Exit particle pair key.
   int GetExitKey() const;
-  /// Read the data file and keep the points inside the energy and angle ranges, converting from the lab frame where needed.
+  /// Read the data file and keep the rows inside the energy and angle ranges (the segment's measurement), one point
+  /// per row, converted from the lab frame where needed.
   int Fill(CNuc *, EData *, const Config &);
-  /// What ConvertPointToCM does with a lab angle beyond the kinematic maximum: stop (the value is not converted),
-  /// or convert the value at the load-time angle (an energy shift moved the point there mid-fit).
+  /// What the segment measured: its rows (shared, never written after set-up), their provenance, its prediction.
+  const azure2::experiment::Measurement &GetMeasurement() const { return *measurement_; }
+  bool HasMeasurement() const { return measurement_ != nullptr; }
+  /// Make `rows` the segment's measurement and one point per row (a data file's rows, or the grid of an
+  /// extrapolation), in the frame as read; ConvertRowToCM converts them.
+  void SetMeasurementRows(std::shared_ptr<const azure2::experiment::MeasurementRows> rows,
+                          const azure2::experiment::MeasurementProvenance &provenance, bool extrapolation, EData *data);
+  /// The grid of an extrapolation as its measurement: one row per (angle, energy), energies varying fastest, value
+  /// 0 and uncertainty 0.1 (lab MeV, deg).
+  void SetGridRows(const std::vector<double> &energies, const std::vector<double> &angles, EData *data);
+  /// The c.m. value, its uncertainty and dOmega_lab/dOmega_cm of row i (0-based) at the present energy shift; the
+  /// Jacobian of term t (the leaf's own exit pair) for a SUM or RATIO frame factor.
+  double CMValue(int i) const { return own_.frame.rows[i].yCM; }
+  double CMError(int i) const { return own_.frame.rows[i].dyCM; }
+  double Jacobian(int t, int i) const { return Units(t).frame.rows[i].jacobian; }
+  /// What ConvertRowToCM does with a lab angle beyond the kinematic maximum: stop (at load: the value is not
+  /// converted), or convert the value at the load-time angle (an energy shift moved the point there mid-fit).
   enum class BeyondRange { Stop, Convert };
-  /// The lab -> c.m. conversion of one point of this segment (docs/upgrade/data_model.md section 1.4), the one
-  /// sequence of Fill, UpdatePointEnergyWithShift, the test segments and the component segments (EData): E_c.m.
-  /// (ConvertPointEnergyToCM); for lab-frame differential data (not phase, angular-distribution or c.m. data) the
-  /// c.m. angle of a particle or photon exit; and, with convertValue (false for a RATIO: dimensionless), the value
-  /// and its uncertainty times dOmega_lab/dOmega_cm.  False where the lab angle is beyond the kinematic maximum
-  /// (EPoint::GetLabAngleWhy, GetLabAngleMax); the caller reports it.
-  bool ConvertPointToCM(EPoint *point, PPair *entrancePair, PPair *exitPair, const Config &configure,
-                        bool convertValue, BeyondRange beyond) const;
-  /// E_c.m. and E_x of a point: a beta-delayed point (entrance type 20) from its decay pair, else from the beam.
-  static void ConvertPointEnergyToCM(EPoint *point, PPair *entrancePair, PPair *exitPair);
+  /// The lab -> c.m. conversion of row i (0-based) of term t at the point's present lab energy
+  /// (docs/upgrade/data_structure.md section 1.2, experiment::ConvertRow): the one sequence of the load (Stop), of an
+  /// energy shift (Convert) and of the leaves, written into the term's frame and point.  With convertValue (false for
+  /// a ratio: dimensionless) the value and its uncertainty carry dOmega_lab/dOmega_cm.  False where the lab angle is
+  /// beyond the kinematic maximum (EPoint::GetLabAngleWhy, GetLabAngleMax); the caller reports it.
+  bool ConvertRowToCM(int t, int i, PPair *entrancePair, PPair *exitPair, bool convertValue, BeyondRange beyond);
+  /// E_c.m., E_x and the c.m. bin edges of row i of term t alone (the leaf grids are laid out before the leaves'
+  /// angles are converted).
+  void ConvertRowEnergyToCM(int t, int i, PPair *entrancePair, PPair *exitPair);
+  /// The frame of term t as it stands now becomes the frame an energy shift starts from (BeyondRange::Convert).
+  void KeepLoadFrame(int t) {
+    Units(t).loadFrame = std::make_shared<const azure2::experiment::MeasurementFrame>(Units(t).frame);
+  }
+
+  // ---- The terms of the segment's prediction (docs/upgrade/data_structure.md section 1.5).  Term 0 is the
+  // segment's own; term k >= 1 is its k-th leaf: a component of a SUM, RATIO or total-capture segment, or the total
+  // cross section of a yield segment.  A leaf is evaluated at the rows of the segment's measurement with its own
+  // pairs; its points are calculation units that hold no data, and it takes every setting (shift, flags, THM) from
+  // the segment.
+  int NumTerms() const { return 1 + (int)leaves_.size(); }
+  std::vector<EPoint> &TermPoints(int t) { return Units(t).points; }
+  const std::vector<EPoint> &TermPoints(int t) const { return Units(t).points; }
+  /// Point i (1-based) of term t.
+  EPoint *GetTermPoint(int t, int i) { return &Units(t).points[i - 1]; }
+  int TermEntranceKey(int t) const { return t ? leaves_[t - 1].entranceKey : entrancekey_; }
+  int TermExitKey(int t) const { return t ? leaves_[t - 1].exitKey : exitkey_; }
+  /// The key of the term in caches and the intEC file: the segment key, or the leaf's (negative, from the data set's
+  /// counter; never a data set of the file).
+  int TermKey(int t) const { return t ? leaves_[t - 1].key : segmentKey_; }
+  int TermTargetEffectNum(int t) const { return t ? leaves_[t - 1].targetEffectNum : targetEffectNum_; }
+  void SetTermTargetEffectNum(int t, int n);
+  /// The total cross section of the entrance pair (optical theorem): the segment is "total" (or the leaf is a yield
+  /// segment's total term) and the term's exit pair is its entrance pair.
+  bool IsTermTotal(int t) const;
+  /// The total-cross-section leaf of a yield segment: it enters Y0 as s_t and is not part of the segment's sum.
+  bool IsYieldTotalLeaf(int t) const { return t > 0 && leaves_[t - 1].yieldTotal; }
+  /// The scale factor of leaf t in the segment's sum (1 for term 0).
+  double LeafScaling(int t) const { return t ? leaves_[t - 1].scaling : 1.0; }
+  /// Add a leaf with these pairs, a fixed lab angle (deg; a RATIO denominator) or none, a scale factor and its key:
+  /// its points are the segment's (at the rows, with the frame at load) with the leaf's pairs.  Returns its term.
+  int AddLeaf(int entranceKey, int exitKey, std::optional<double> fixedAngle, double scaling, int key);
+  /// Make leaf t the total-cross-section term of a yield segment.
+  void MakeYieldTotalLeaf(int t);
   /// E_c.m. / E_lab of the segment's points, non-relativistic: (M1 + M2) / M2 of the decay pair for a beta-delayed
   /// point, M2 / (M1 + M2) of the entrance pair otherwise (the rigid shift of sub-points, the target-effect grids).
   static double CMEnergyFactor(PPair *entrancePair, PPair *exitPair);
@@ -266,8 +316,11 @@ class ESegment {
   }
   /// What the segment predicts at its points (src/Predictions.cpp, EData::BuildPredictions): built once at set-up,
   /// immutable, shared by the working copies; null before it is built.
-  const azure2::experiment::Prediction *GetPrediction() const { return prediction_.get(); }
-  void SetPrediction(std::shared_ptr<const azure2::experiment::Prediction> p) { prediction_ = std::move(p); }
+  const azure2::experiment::Prediction *GetPrediction() const {
+    return measurement_ ? measurement_->prediction.get() : nullptr;
+  }
+  /// Give the measurement its prediction (a new measurement that shares the rows: the points read them).
+  void SetPrediction(std::shared_ptr<const azure2::experiment::Prediction> p);
   /// Path of the data file this segment reads.
   std::string GetDataFile() const;
   /// Append a point.
@@ -315,15 +368,15 @@ class ESegment {
   /// Set the sqrt(E) coefficient; UpdatePointEnergiesWithShift applies it to the points.
   void SetEnergyShiftSqrt(double);
   void SetLastEnergyShiftSqrt(double);
-  /// Re-apply the current energy shift to every point, undoing the previous one.
+  /// Re-apply the current energy shift to every point of every term, undoing the previous one.
   void UpdatePointEnergiesWithShift(CNuc *theCNuc = NULL, const Config *configure = NULL);
-  /// The same for one point (0-based index) and its sub-points.
-  void UpdatePointEnergyWithShift(int i, CNuc *theCNuc, const Config *configure);
-  /// Point i (0-based) and, after it, every point mapped onto it; nothing if point i is itself
-  /// mapped onto an earlier point (its host does it).  The unit for parallel re-energising.
-  void UpdatePointGroupEnergyWithShift(int i, CNuc *theCNuc, const Config *configure);
-  /// The earlier point of this segment that point i (0-based) is mapped onto, or NULL.
-  EPoint *ShiftHost(int i);
+  /// The same for point i (0-based) of term t and its sub-points.
+  void UpdatePointEnergyWithShift(int t, int i, CNuc *theCNuc, const Config *configure);
+  /// Point i (0-based) of term t and, after it, every point of the term mapped onto it; nothing if point i is itself
+  /// mapped onto an earlier point of the term (its host does it).  The unit for parallel re-energising.
+  void UpdatePointGroupEnergyWithShift(int t, int i, CNuc *theCNuc, const Config *configure);
+  /// The earlier point of term t that its point i (0-based) is mapped onto, or NULL.
+  EPoint *ShiftHost(int t, int i);
   /// Change the exit pair key.
   void SetExitKey(int);
   /// Change the entrance pair key, for this segment and every point in it.
@@ -336,16 +389,14 @@ class ESegment {
   EPoint *GetPoint(int);
   /// The points, by reference.
   std::vector<EPoint> &GetPoints();
+  const std::vector<EPoint> &GetPoints() const { return own_.points; }
 
-  // Advanced segment composition methods
-  /// Add a component as a complete segment.
-  void AddComponentSegment(ESegment *componentSegment);
   /// How the components combine: SUM or RATIO.
   void SetOperationType(OperationType operation);
   /// How the components combine.
   OperationType GetOperationType() const;
-  /// Does this segment combine other segments?
-  bool HasComponents() const;
+  /// Does this segment combine other terms (it has leaves)?
+  bool HasComponents() const { return !leaves_.empty(); }
   /// A natural-target segment: its own term and every component is weighted
   /// by the isotopic abundance of the term's entrance pair's compound nucleus
   /// in the segment's sample (the trailing "natural <1|sample>" token of the
@@ -402,53 +453,23 @@ class ESegment {
     const double d = (thickness_ - GetNominalThickness()) / thicknessSigma_;
     return d * d;
   }
-  /// Components are plain cross sections (the base segment applies the transform).
-  void ClearTransform() {
-    transmission_ = 0.0;
-    yield_ = 0.0;
-    thickness_ = 0.0;
-    thicknessFit_ = false;
-    thicknessGroup_.clear();
-  }
-  /// The total-cross-section term of a yield segment (entrance pair to itself, "total 1"): it enters Y0 as s_t and
-  /// is not part of the segment's sum (EData::AddYieldTotalComponent).
-  bool IsYieldTotalTerm() const { return yieldTotalTerm_; }
-  void SetYieldTotalTerm() { yieldTotalTerm_ = true; isTotal_ = true; }
   /// The value the fit compares with the data is formed by the segment, not read off its points: components, a
   /// sample's abundance weights or a transmission / yield transform.
   bool NeedsAssembly() const { return HasComponents() || IsNatural() || IsTransformed(); }
   /// True when the point is integrated over sub-points (EPoint::IntegrateTargetEffect).
   static bool HasSubPointIntegration(EPoint *point);
-  /// IsTotal for this term: the segment is "total" and its exit pair is its entrance pair.
-  bool IsTotalTerm() const { return isTotal_ && this->GetExitKey() == this->GetEntranceKey(); }
-  void ApplyTotalToPoints();
+  /// IsTotal for the segment's own term: the segment is "total" and its exit pair is its entrance pair.
+  bool IsTotalTerm() const { return IsTermTotal(0); }
   int GetNaturalSample() const { return naturalSample_; }
   void SetNaturalSample(int sample) { naturalSample_ = sample; }
   /// The token as read ("0", "1" or a sample name), before resolution.
   const std::string &GetNaturalToken() const { return naturalToken_; }
-  /// Components are never weighted themselves (the base segment does it).
-  void SetNatural(bool natural) { if (!natural) naturalSample_ = 0; }
-  /// The component segments, by reference.
-  const std::vector<ESegment *> &GetComponentSegments() const;
-  /// Drop every component.
-  void ClearComponents();
-
-  // Per-component scaling factor applied when this segment is combined as a
-  // component of a parent advanced segment. Defaults to 1.0 (no scaling).
-  /// Scale factor applied to this segment when it is summed into a parent composite segment.
-  void SetComponentScaling(double scaling);
-  /// Scale factor as a component; 1.0 unless it is one.
-  double GetComponentScaling() const;
-  /// The factor that takes a SUM term's c.m. cross section into the frame of
-  /// the base point: the base point's lab-to-c.m. conversion factor over the
-  /// term's.  A lab-frame differential segment is compared in the base pair's
-  /// c.m. frame (sigma_cm = J_base sigma_lab, ESegment::Fill), while a
-  /// component to another exit pair is evaluated in its own c.m. frame with its
-  /// own Jacobian J_term, so the lab-frame sum  sum_i s_i sigma_cm,i / J_i
-  /// reads  sum_i s_i (J_base / J_i) sigma_cm,i  there.  1 when the frames
-  /// agree: c.m. or angle-integrated segments, a component of the same pair,
-  /// gamma terms of one entrance pair.
-  static double TermFrameFactor(const EPoint *basePoint, const EPoint *termPoint);
+  /// The factor that takes a SUM term's c.m. cross section into the frame of the base point at row i: the base's
+  /// lab-to-c.m. factor over the term's (experiment::TermFrameFactor).  A lab-frame differential segment is compared
+  /// in the base pair's c.m. frame (sigma_cm = J_base sigma_lab), while a component to another exit pair is evaluated
+  /// in its own c.m. frame with its own Jacobian J_term, so the lab-frame sum  sum_i s_i sigma_cm,i / J_i  reads
+  /// sum_i s_i (J_base / J_i) sigma_cm,i  there.  1 when the frames agree.
+  double TermFrameFactor(int t, int i) const;
 
   /// The lab-to-c.m. factor of one RATIO term (sigma_cm = J sigma_lab) at a point,
   /// with the TERM's own entrance and exit pair and the Jacobian of its own exit
@@ -457,15 +478,15 @@ class ESegment {
   /// them: the RATIO data value is dimensionless and ESegment::Fill skips the
   /// cross-section conversion).  Before 2026-10-27 the denominator's factor was
   /// computed with the BASE segment's pairs (audit item 15).
-  static double RatioTermFrameFactor(EPoint *point, const ESegment *term, CNuc *cnuc);
+  double RatioTermFrameFactor(int t, EPoint *point, CNuc *cnuc) const;
 
   /// Free-shift refills (docs/upgrade/channel_table.md section 2.1, interim until the objective has the analytic
   /// shift derivative): BeginShiftRefill, single-threaded before the parallel re-energise loop, keeps the tables of
   /// the segment's last kShiftTables shift states for UpdatePointEnergyWithShift to read (exact keys) and has every
   /// point record the rows it used; CommitShiftTable, single-threaded after the loop, turns those rows into the table
   /// of the present state (the shift values, bitwise), replacing the oldest; nothing writes a stored table.
-  void BeginShiftRefill(CNuc *, const Config &);
-  void CommitShiftTable(CNuc *, const Config &);
+  void BeginShiftRefill(int t, CNuc *, const Config &);
+  void CommitShiftTable(int t, CNuc *, const Config &);
   static constexpr std::size_t kShiftTables = 3;
 
  private:
@@ -475,9 +496,29 @@ class ESegment {
     std::vector<double> state;  ///< energy shift, sqrt shift, shift-function values
     std::shared_ptr<const ChannelTable> table;
   };
-  std::vector<ShiftTable> shiftTables_;  ///< most recent first
-  std::vector<std::vector<std::pair<ChannelTable::Key, ChannelTable::Row>>> shiftRows_;  ///< per point, during a refill
-  ChannelRowSource ShiftRowSource(int i);
+  /// What a term holds of the working state: its points (calculation units at the rows), its frame, and the channel
+  /// tables of its last shift states.
+  struct TermUnits {
+    std::vector<EPoint> points;
+    azure2::experiment::MeasurementFrame frame;  ///< the rows in the c.m. frame at the present shift
+    std::shared_ptr<const azure2::experiment::MeasurementFrame> loadFrame;  ///< KeepLoadFrame (shared by every copy)
+    std::vector<ShiftTable> shiftTables;  ///< most recent first
+    std::vector<std::vector<std::pair<ChannelTable::Key, ChannelTable::Row>>> shiftRows;  ///< per point, in a refill
+  };
+  /// A leaf: its pairs, key, fixed angle, scale, role and target effect, and its units.
+  struct Leaf {
+    int key = 0, entranceKey = 0, exitKey = 0;
+    std::optional<double> fixedAngle;  ///< deg lab
+    double scaling = 1.0;
+    bool yieldTotal = false;
+    int targetEffectNum = 0;
+    TermUnits units;
+  };
+  TermUnits own_;
+  std::vector<Leaf> leaves_;
+  TermUnits &Units(int t) { return t ? leaves_[t - 1].units : own_; }
+  const TermUnits &Units(int t) const { return t ? leaves_[t - 1].units : own_; }
+  ChannelRowSource ShiftRowSource(int t, int i);
   std::vector<double> ShiftState() const;
   bool isdifferential_;
   bool iscmdifferential_;
@@ -563,19 +604,32 @@ class ESegment {
   std::string thicknessGroup_;
   azure2::experiment::ParameterNames parameterNames_;
   int thicknessLeaderPos_ = -1;  // IsThicknessGroupFollower
-  bool yieldTotalTerm_ = false;  // IsYieldTotalTerm
   bool isCoefficients_ = false;
   bool coefficientsAbsolute_ = false;
   azure2::experiment::ReactionSpec reaction_;  ///< GetReaction
-  std::shared_ptr<const azure2::experiment::Prediction> prediction_;  ///< GetPrediction
+  std::shared_ptr<const azure2::experiment::Measurement> measurement_;  ///< GetMeasurement (shared by every copy)
   std::string datafile_;
   azure2::experiment::ColumnConversion columns_;  ///< the rows of datafile_ into the engine's units and frame (format 3)
-  std::vector<EPoint> points_;
-
-  // Advanced segment composition
-  std::vector<ESegment *> componentSegments_;
   OperationType segmentOperationType_;
-  double componentScaling_;
+};
+
+/*!
+ * A term of a segment by position: the segment and the term (0 its own, k its k-th leaf).  What the hand-over and
+ * the grid re-placement queue; it answers what they ask of a term, the term's pairs, key, target effect and points.
+ */
+struct TermRef {
+  ESegment *segment = nullptr;
+  int term = 0;
+  bool operator==(const TermRef &o) const { return segment == o.segment && term == o.term; }
+  bool operator!=(const TermRef &o) const { return !(*this == o); }
+  int NumPoints() const { return (int)segment->TermPoints(term).size(); }
+  /// Point i, 1-based.
+  EPoint *GetPoint(int i) const { return segment->GetTermPoint(term, i); }
+  std::vector<EPoint> &GetPoints() const { return segment->TermPoints(term); }
+  int GetEntranceKey() const { return segment->TermEntranceKey(term); }
+  int GetExitKey() const { return segment->TermExitKey(term); }
+  int GetSegmentKey() const { return segment->TermKey(term); }
+  int GetTargetEffectNum() const { return segment->TermTargetEffectNum(term); }
 };
 
 #endif

@@ -59,11 +59,28 @@ class ECSignatureHash {
 
 /*!
  * Walks the external-capture amplitudes of one set of segments in exactly the
- * order CalculateECAmplitudes and InitializeComponentSegments write them, and
+ * order CalculateECAmplitudes and InitializeLeaves write them, and
  * returns how many there are.  With a hash, it also feeds in what each block of
  * amplitudes depends on, and collects the pairs involved so their properties
  * can be added afterwards.
  */
+/// A leaf seen as the walk sees a segment: its pairs, its key and its points.
+struct LeafView {
+  ESegment *segment;
+  int term;
+  int GetEntranceKey() const { return segment->TermEntranceKey(term); }
+  int GetExitKey() const { return segment->TermExitKey(term); }
+  int GetSegmentKey() const { return segment->TermKey(term); }
+  std::vector<EPoint> &GetPoints() const { return segment->TermPoints(term); }
+};
+
+/// The leaves of `data` in the order InitializeLeaves writes their amplitudes.
+std::vector<LeafView> LeafViews(EData &data) {
+  std::vector<LeafView> views;
+  for (const EData::LeafRef &leaf : data.LeafRefs()) views.push_back({&data.GetSegments()[leaf.first], leaf.second});
+  return views;
+}
+
 template <class Segments>
 long long WalkECAmplitudes(Segments &segments, CNuc *theCNuc, ECSignatureHash *hash,
                            std::set<int> *pairs) {
@@ -126,8 +143,8 @@ long long WalkECAmplitudes(Segments &segments, CNuc *theCNuc, ECSignatureHash *h
             // The energies the amplitudes are evaluated at.  The angle does
             // not enter an EC amplitude, so it is not part of the signature.
             // The lab energy is included as well as the c.m. one because a
-            // component segment's c.m. energy is converted again, with its own
-            // entrance pair, after this point (InitializeComponentSegments).
+            // leaf's c.m. energy is converted again, with its own
+            // entrance pair, after this point (InitializeLeaves).
             hash->Add("point");
             hash->Add(point->GetLabEnergy());
             hash->Add(point->GetCMEnergy());
@@ -147,8 +164,8 @@ long long WalkECAmplitudes(Segments &segments, CNuc *theCNuc, ECSignatureHash *h
 /*!
  * Counts the external-capture amplitudes this model expects to read from, or
  * write to, an intEC file: those of the data segments, which
- * CalculateECAmplitudes writes, followed by those of the component segments,
- * which InitializeComponentSegments appends.  The walk mirrors both loops
+ * CalculateECAmplitudes writes, followed by those of the leaves,
+ * which InitializeLeaves appends.  The walk mirrors both loops
  * exactly; if either changes, WalkECAmplitudes must change with it.
  *
  * A count only catches a file built for a different number of points.  The
@@ -157,8 +174,8 @@ long long WalkECAmplitudes(Segments &segments, CNuc *theCNuc, ECSignatureHash *h
  */
 
 long long EData::CountECAmplitudes(CNuc *theCNuc, const Config &configure) {
-  return WalkECAmplitudes(GetSegments(), theCNuc, nullptr, nullptr) +
-      WalkECAmplitudes(componentSegments_, theCNuc, nullptr, nullptr);
+  std::vector<LeafView> leaves = LeafViews(*this);
+  return WalkECAmplitudes(GetSegments(), theCNuc, nullptr, nullptr) + WalkECAmplitudes(leaves, theCNuc, nullptr, nullptr);
 }
 
 /*!
@@ -216,7 +233,8 @@ std::string EData::ECSignature(CNuc *theCNuc, const Config &configure) {
   hash.Add("data segments");
   WalkECAmplitudes(GetSegments(), theCNuc, &hash, &pairs);
   hash.Add("component segments");
-  WalkECAmplitudes(componentSegments_, theCNuc, &hash, &pairs);
+  std::vector<LeafView> leaves = LeafViews(*this);
+  WalkECAmplitudes(leaves, theCNuc, &hash, &pairs);
 
   for (std::set<int>::const_iterator it = pairs.begin(); it != pairs.end(); ++it) {
     PPair *pair = theCNuc->GetPair(*it);
@@ -254,7 +272,7 @@ std::string EData::ECSignaturePath(const std::string &integralsFile) {
 
 namespace {
 
-// The 25-cell bar of the EC amplitude loops (CalculateECAmplitudes, InitializeComponentSegments) after `done` of
+// The 25-cell bar of the EC amplitude loops (CalculateECAmplitudes, InitializeLeaves) after `done` of
 // `total` points: a cell per 4 %, and the percentage of the cells filled.
 std::string ECProgressBar(int done, int total) {
   std::string progress = " [";
@@ -383,7 +401,7 @@ int EData::CalculateECAmplitudes(CNuc *theCNuc, const Config &configure) {
     in.open(configure.integralsfile.c_str());
   else {
     // The signature is written only once the file is complete, after the
-    // component segments are appended (InitializeComponentSegments).  Remove
+    // leaves are appended (InitializeLeaves).  Remove
     // the old one first, so that a run interrupted part way leaves a file
     // with no signature -- which is recomputed -- rather than one whose old
     // signature still vouches for it.

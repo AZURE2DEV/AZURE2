@@ -2,6 +2,45 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-10 (agent, brief X, milestone 1) — what was measured exists once (`feature/upgrade-4-data-structure`)
+
+**Design.** `docs/upgrade/data_structure.md`: `Measurement` (immutable, shared), the data set, a flat working copy;
+where every member of `EPoint`/`ESegment`/`EData` goes; the three milestones.
+
+**Done (milestone 1).**
+- `experiment::Measurement` (`experiment/include/azure2/experiment/Measurement.h`): the rows of a data set inside its
+  window as read (E_lab, angle, value, error after a covariance file, bins, file record, the Legendre-order flag) and
+  their provenance (file, rows read, rows kept, kept E_lab range), held as `shared_ptr<const>` by the segment and its
+  copies; an extrapolation's grid is a measurement too.  `ReadMeasurementRows` is the one reader (`DataLine` moved
+  to `experiment/`); the engine and `--describe` use it.
+- The points read their datum by row: `lab_crosssection_`, `lab_dcrosssection_`, `bin_low_lab_`, `bin_high_lab_`,
+  `fileRecord_`, `coefficient_order_`, `coefficient_absolute_`, `original_energy_` (of a row) are gone; a sub-point
+  takes its row's Legendre order (`EPoint::BelongToRowOf`).
+- One lab -> c.m. conversion, `experiment::ConvertRow`, writing a `MeasurementFrame` row; the load, the shift step and
+  the leaves call it (`ESegment::ConvertRowToCM`); a shifted row starts from the frame at load (H4).  y_c.m., dy_c.m.
+  and the Jacobian live only in the frame (`ESegment::CMValue`, `CMError`, `Jacobian`); `PointResidual` takes the
+  segment and the row.
+- Components are leaves of their segment (`ESegment::AddLeaf`, term k >= 1; the segment's own points are term 0):
+  `EData::componentSegments_`, `CreateComponentSegment` and the pointer re-mapping of `Clone` are gone; the shift
+  step, grid re-placement and target set-up take (segment, term) (`TermRef`); `EData::LeafRefs` keeps creation order
+  (plan, layout, intEC file).
+- `--describe [--json]` / `pyazr.describe` (pyazr 2.25.0): rows read and kept and the kept E_lab range per data set.
+
+**Verified** (build `work/b-dstruct`, 0 warnings): 183 x 3 against `tab-trial8` (tag `tab-dsm1a`): 704 / 677 / 704
+identical; `ctest -LE slow` 172/172 (upgrade_history, upgrade_plan_runtime, upgrade_poison_results among them);
+`tests/run_tests.sh` 141 passed, 1 failed (the story `--describe` of `tests/ratio_to_rutherford`: the new rows line;
+expected file updated, its check then passed); converted-tree gate (`gdsm1a`): 483 (456) identical, 38 classified,
+0 differ, 0 missing; `tests/format3_engine/check.sh` passed; calculations at 1 and 3 threads identical on T1-T3, 13N,
+natural_neon (three bases); fits at 1 thread identical to the base build (T1, T2, 13N), at 3 threads they differ from
+1 thread on the base build as well (T2: edm, chi2 in the last digits; T1, T3, 13N: the call count) -- not from this
+work.  Speed (min of 6 alternated runs, 1 thread, Coulomb table): T2 calculation 668.8 M cycles against 672.3 M,
+200-call T2 fit 53.47 G against 53.39 G; peak RSS T2 fit 349 / 427 MB at 1 / 3 threads against 360 / 441,
+natural_neon 1532 MB against 1551.
+
+**Open (milestones 2 and 3).** The working copy is not yet flat: units are still `EPoint`s inside segments (term 0 and
+leaves), each with its settings; the plan addresses (list, segment, point); `Clone` copies segments.  `EPoint`,
+`ESegment`, `EData` still exist.
+
 ## 2026-11-10 (agent, brief J) — units in format 3, the S factor as a quantity, yields per charge (`feature/upgrade-4-units`)
 
 **Done.**

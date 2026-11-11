@@ -6,6 +6,7 @@ dataset Y_curve (data set 1, line 47)
     15N(p,a)12C: entrance pair 1 (p+15N), exit pair 2 (a+12C)
   window E_lab 0 - 1.79769e+308 MeV
   data file <project>/data/yield_curve.dat
+  rows: 33 read, 33 kept, E_lab 0.8 - 1.2 MeV
   effect: target N15T, beam pbeam, detector -
   parameters:
     Y_curve.norm (norm, fit)

@@ -2,9 +2,11 @@
 #include "azure2/experiment/Describe.h"
 
 #include <filesystem>
+#include <fstream>
 #include <sstream>
 
 #include "azure2/experiment/Json.h"
+#include "azure2/experiment/Measurement.h"
 
 namespace azure2 {
 namespace experiment {
@@ -152,6 +154,41 @@ std::string ResolvedPath(const std::string &projectDir, const std::string &file)
   return ec ? path.string() : absolute.string();
 }
 
+/// What a data set's file holds as its measurement: the rows read and kept (inside the window) and the lab-energy
+/// range of the kept rows, by the reader the engine builds its measurements with (Measurement.h).  `error` is why
+/// the file could not be read ("" when it was).
+struct RowsOfFile {
+  MeasurementProvenance provenance;
+  std::string error;
+};
+RowsOfFile ReadRows(const Format3Project &p, const DatasetSpec &d) {
+  RowsOfFile out;
+  std::ifstream in(ResolvedPath(p.projectDir, d.dataFile));
+  if (!in) {
+    out.error = "the data file cannot be opened";
+    return out;
+  }
+  MeasurementRows rows;
+  std::string error;
+  if (!ReadMeasurementRows(in, d.dataFile, WindowOf(d), d.columns,
+                           d.reaction.observable == Observable::AngularCoefficients, nullptr, rows, out.provenance,
+                           error))
+    out.error = error.substr(0, error.find('\n'));
+  return out;
+}
+
+std::string Fmt(double x);
+
+std::string RowsText(const RowsOfFile &r) {
+  if (!r.error.empty()) return "  rows: " + r.error + "\n";
+  std::ostringstream out;
+  out << "  rows: " << r.provenance.rowsRead << " read, " << r.provenance.rowsKept << " kept";
+  if (r.provenance.rowsKept > 0)
+    out << ", E_lab " << Fmt(r.provenance.minEnergy) << " - " << Fmt(r.provenance.maxEnergy) << " MeV";
+  out << "\n";
+  return out.str();
+}
+
 /// The records of one kind in input order, the n-th of which is the spec with key n.
 std::vector<const ValidatedRecord *> RecordsOf(const Format3Project &p, const std::string &kind) {
   std::vector<const ValidatedRecord *> out;
@@ -202,6 +239,7 @@ std::string DescribeText(const Format3Project &p) {
       out << ", theta_" << (d.reaction.observable == Observable::DifferentialLab ? "lab " : "lab (data converted to c.m.) ")
           << Fmt(d.minA) << " - " << Fmt(d.maxA) << " deg";
     out << "\n  data file " << ResolvedPath(p.projectDir, d.dataFile) << "\n";
+    out << RowsText(ReadRows(p, d));
     for (const std::string &e : Effects(p.built.data.targetEffects, d.key)) out << "  effect: " << e << "\n";
     if (d.reaction.sample != "0") out << "  sample: " << d.reaction.sample << "\n";
     out << "  parameters:";
@@ -283,6 +321,13 @@ std::string DescribeJson(const Format3Project &p) {
     j.Key("E_lab_window_MeV").BeginArray().Number(d.minE).Number(d.maxE).EndArray();
     if (AngleObservable(d.reaction.observable)) j.Key("angle_window_deg").BeginArray().Number(d.minA).Number(d.maxA).EndArray();
     j.Key("data_file").String(d.dataFile).Key("data_file_resolved").String(ResolvedPath(p.projectDir, d.dataFile));
+    if (d.active) {
+      const RowsOfFile rows = ReadRows(p, d);
+      j.Key("rows_read").Integer(rows.provenance.rowsRead).Key("rows_kept").Integer(rows.provenance.rowsKept);
+      j.Key("rows_error").String(rows.error);
+      if (rows.error.empty() && rows.provenance.rowsKept > 0)
+        j.Key("kept_E_lab_MeV").BeginArray().Number(rows.provenance.minEnergy).Number(rows.provenance.maxEnergy).EndArray();
+    }
     j.Key("effects").StringArray(Effects(p.built.data.targetEffects, d.key));
     j.Key("sample").String(d.reaction.sample == "0" ? "" : d.reaction.sample);
     j.Key("parameters").BeginArray();
