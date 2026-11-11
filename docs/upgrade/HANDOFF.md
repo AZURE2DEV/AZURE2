@@ -2,6 +2,42 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-11 (director, 22:00) — a check of every fit route on every kind of free-parameter set; a second crash found by it, older than the upgrade
+
+Branch `feature/upgrade-5-fit-modes-check` (the director's own, from the head of 21:00), merged into
+`feature/upgrade-4-data` and `feature/upgrade`. Nothing pushed.
+
+- **`tests/fit_modes/check.sh`** (new; run by `tests/run_tests.sh`; about 95 s at 2 threads). The four minimizer
+  routes (MIGRAD, `--use-gradient`, `--use-lm`, `--use-gsl-lm`), each with `--covariance-band`, on four projects
+  that differ in what is free: none (`thick_target_resonance`), level parameters and norms (`upgrade/T1`), level
+  parameters and an areal density (`layer_yield/models/fit.azr`), two areal densities and a stopping scale
+  (`stopping_yield/models/fit.azr`; `--use-gradient` and `--use-lm` only). Checked: exit 0 and a total χ²; with no
+  free parameter the χ² is the calculation's digit for digit; otherwise the routes end at the same minimum (1e-5
+  relative; they agree to 1e-7 today: T1 462.27351–462.27354, layer yield 39.30580, stopping yield 72.03660–72.03661);
+  the band is written where a level parameter is free and skipped with a message that says why where none is.
+- **It fails where it should**: on the build of the head of 19:25 (b8c970b0) in all four routes of "none" (10
+  failed checks); on the build of the head of 21:00 in "none" with MIGRAD, plain and `--use-gradient` (4 failed
+  checks).
+- **The second crash, older than the upgrade.** A MIGRAD fit with `--covariance-band` of a project without free
+  parameters ended in a segmentation fault inside Minuit2 (`MnHesse` on a state with no variable parameter). The
+  code is the same at the branch point with `dev` (aab1de0d). `src/AZUREMain.cpp` now skips HESSE when the
+  minimum has no variable parameter (Minuit2 is not patched). The crash fixed at 21:00 was the least-squares
+  route's; the director's reproduction that evening ran MIGRAD without the band and therefore did not see this one.
+- **The band's message.** A fit that leaves no level parameter free (only target parameters, or nothing) got "this
+  fit produced no usable covariance", which is wrong: the covariance is fine, the band does not use it. It now
+  says: "Uncertainty band skipped: the fit has no free level parameter. The band propagates the covariance of level
+  energies, widths and the THM coherent background; the parameters of targets and data sets are not in it."
+- **A design gap, reported, not changed**: `BandPackedColumns` (`src/CovarianceBand.cpp`) keeps the kinds
+  `LevelEnergy`, `Gamma`, `ThmCoherent`. A fitted areal density, stopping scale, Doppler temperature or norm does
+  not widen the band of a yield, and a fit of such parameters alone gets no band. It is also one more place that
+  names parameter kinds (for the review of the generic apparatus kind). A question for the owner.
+- **19 more pyazr tests passed without running** when the engine module could not be imported (their skip path
+  was `return 0`; the 33 fixed at 21:00 were the ones with `sys.exit(0)`). All now return 77, which ctest shows as
+  skipped; `tests/CLAUDE.md` states the convention with the number.
+- Verification by the director: build 0 warnings; the check on three builds as above; the consistency test;
+  `ctest -R "pyazr|consistency|upgrade|cli"` on the new build: 125 of 125 pass, none skipped; no committed
+  expectation contains the old message.
+
 ## 2026-11-11 (director, 21:00) — merged: pyazr reads format 3 only, the audit of the checks with six refusals, the crash without free parameters fixed
 
 ### State

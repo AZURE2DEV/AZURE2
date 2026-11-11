@@ -64,7 +64,7 @@ def main():
         from pyazr import azure2
     except Exception as err:  # same skip as the other pyazr tests
         print(f"skip: pyazr engine not importable ({type(err).__name__}: {err})")
-        return 0
+        return 77
     failures = []
 
     def check(name, ok, detail=""):

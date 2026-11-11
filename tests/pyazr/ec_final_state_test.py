@@ -46,7 +46,7 @@ def main():
         from pyazr import azure2
     except ImportError as e:
         print(f"skipping: {e}")
-        return 0
+        return 77
     work = tempfile.mkdtemp(prefix="ec_final_state_")
     try:
         # (1) listed: runs
