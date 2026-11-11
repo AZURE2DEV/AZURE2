@@ -4,6 +4,14 @@
 #include <assert.h>
 #include <cmath>
 #include <stdexcept>
+#include <cstdio>
+#include <cstdlib>
+
+// The trees are no longer built (cnuc_split.md 11.6, step 8): any access stops the run.
+static void TreeReadAbort(const char *what) {
+  std::fprintf(stderr, "ABORT: PPair::%s: the pathway trees are not built\n", what);
+  std::abort();
+}
 
 /*!
  * A particle pair object is created from and entry in the nuclear input file.
@@ -106,6 +114,7 @@ int PPair::GetPType() const {
  */
 
 int PPair::NumDecays() const {
+  TreeReadAbort("NumDecays");
   return decays_.size();
 }
 
@@ -115,6 +124,7 @@ int PPair::NumDecays() const {
  */
 
 int PPair::IsDecay(Decay decay) {
+  TreeReadAbort("IsDecay");
   bool b = false;
   int c = 0;
   while (!b && c < this->NumDecays()) {
@@ -133,6 +143,7 @@ int PPair::IsDecay(Decay decay) {
  */
 
 int PPair::IsDecay(int pairNum) {
+  TreeReadAbort("IsDecay");
   bool b = false;
   int c = 0;
   while (!b && c < this->NumDecays()) {
@@ -301,6 +312,7 @@ double PPair::GetEntranceSymmetryFactor() const {
  */
 
 void PPair::AddDecay(Decay decay) {
+  TreeReadAbort("AddDecay");
   decays_.push_back(decay);
 }
 
@@ -321,6 +333,7 @@ void PPair::SetEntrance() {
  */
 
 Decay *PPair::GetDecay(int decayNum) {
+  TreeReadAbort("GetDecay");
   Decay *b = &decays_[decayNum - 1];
   return b;
 }

@@ -57,9 +57,6 @@ add_test(NAME physics_observable_coupling_gsl COMMAND observable_coupling_gsl_te
 # on every .azr under tests/, Brune and formal basis (docs/upgrade/cnuc_split.md section 10 (b)).
 add_executable(pathways_from_cnuc_test pathways_from_cnuc_test.cpp)
 target_link_libraries(pathways_from_cnuc_test PRIVATE AZURE2Core)
-add_test(NAME physics_pathways_from_cnuc COMMAND pathways_from_cnuc_test ${CMAKE_SOURCE_DIR}/tests
-         WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
-set_tests_properties(physics_pathways_from_cnuc PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=1" TIMEOUT 900)
 
 # Properties of the pathway table checked against the loaded CNuc without the builder's loops, on every .azr under
 # tests/ (docs/upgrade/cnuc_split.md section 11.6 step 1); it stays when the trees go.

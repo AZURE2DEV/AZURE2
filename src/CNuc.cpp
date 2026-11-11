@@ -695,7 +695,6 @@ void CNuc::Initialize(const Config &configure) {
   // Sort reaction pathways
   if (!(configure.paramMask & Config::USE_API))
     configure.outStream << "Sorting Reaction Pathways..." << std::endl;
-  this->SortPathways(configure);
   this->BuildPathways(configure);
   this->SetUpFormalCaptureMasks(configure);
   if ((configure.fileCheckMask | configure.screenCheckMask) & Config::CHECK_PATHWAYS)
@@ -705,7 +704,6 @@ void CNuc::Initialize(const Config &configure) {
   if (!(configure.paramMask & Config::USE_API))
     configure.outStream << "Calculating Angular Distribution Coefficients..." << std::endl;
   WarnTruncatedLegendreOrders(*this, configure);
-  this->CalcAngularDists(configure.maxLOrder);
   if ((configure.fileCheckMask | configure.screenCheckMask) & Config::CHECK_ANGULAR_DISTS)
     WriteAngularDistributionsCheck(*this, configure);
 }
