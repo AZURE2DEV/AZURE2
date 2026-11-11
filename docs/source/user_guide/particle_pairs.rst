@@ -121,10 +121,84 @@ Channel Radius
       re-running the calculation with different values. The channel radius
       **cannot** currently be used as a fit parameter.
 
+   The radius in this table applies to every channel of the pair unless the
+   **Per-channel radii** box below gives some of them their own
+   (:ref:`per-channel-radii`).
+
 External Capture Multipolarities
    For **(Particle, Gamma)** pairs only. Select **E1** and/or **E2**
    multipolarities. The code automatically determines the allowed intrinsic and
    angular momentum combinations based on the defined resonances.
+
+.. _per-channel-radii:
+
+Per-channel radii
+-----------------
+
+The formal theory allows a different radius for every channel
+:math:`c = (\alpha, l, s, J)`; elastic-scattering fits in particular can want
+one partial wave matched at a different surface from the others. The
+**Per-channel radii** box under the pairs table lists rows that give some
+channels of a particle pair a radius of their own; every other channel keeps
+the pair's radius from the table above.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 15 85
+
+   * - Column
+     - Meaning
+   * - Pair
+     - The pair key (the row number of the pairs table). Only particle pairs
+       have channel radii.
+   * - l
+     - The orbital angular momentum of the channels.
+   * - s
+     - The channel spin (``1/2``, ``3/2`` ...), or blank (``any``) for every
+       channel spin.
+   * - J
+     - The total spin of the level's :math:`J^\pi` group, or blank for every
+       J. With l and the pair, J fixes the parity.
+   * - Radius [fm]
+     - The radius of the channels the row matches.
+
+**+** adds a row for the selected pair (l = 0, at the pair's radius); edit l,
+s, J and the radius in the table. **-** removes the selected row.
+
+The most specific row wins: one naming l, s and J over one naming l and J,
+over one naming l and s, over one naming l alone. A channel matched by an
+"s" row and a "J" row but no row naming all three is refused (which one was
+meant is not clear); give it a row naming l, s and J. A row that matches no
+channel of the model draws a warning.
+
+Everything that is evaluated at the channel radius follows the channel: the
+penetrability, shift function and hard-sphere phase, the boundary condition,
+the Wigner limit (and so :math:`\theta^2`), the transformation between formal
+and observed parameters, the ANC conversion and :math:`N_f` integral of an
+external-capture final state, the external-capture radial integrals, and the
+s-wave scattering length (the l = 0 channel's radius). The level and channel
+details in the Levels tab show the channel's radius. The β-decay Fermi
+function keeps the pair's radius.
+
+.. warning::
+
+   **External capture needs one radius per transition.** The capture integral
+   runs from the channel radius outward, and the ANC is defined at the final
+   channel's radius. If the initial partial wave of a transition and its final
+   bound-state channel had different radii, where the external region starts
+   would not be defined, so AZURE2 refuses such a model with an ERROR naming the
+   two channels. Give the channels that capture connects the same radius, or
+   switch external capture off.
+
+As with the pair radius, a reduced width means something different at a
+different radius: after changing one, refit before reading anything off the
+result. The cached external-capture integrals (``intEC.dat``) carry the
+per-channel radii in their signature, so a changed radius is never served from
+an old cache.
+
+The rows are written to the project file as the ``<channelRadii>`` block
+(:doc:`../reference/data_formats`). AZURE2 builds before November 2026 ignore
+the block silently, and their GUI drops it when it saves the project.
 
 Identical Particles
 -------------------

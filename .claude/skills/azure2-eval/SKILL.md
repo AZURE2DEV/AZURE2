@@ -1603,6 +1603,7 @@ Other `.azr` edits without touching the GUI:
 ```python
 mdl.channel_radii()                                      # {pair: radius fm}
 mdl.set_channel_radius(1, 5.0)                           # 3He+alpha, all its lines
+mdl.set_channel_radius(1, 4.5, L=1)                      # its l = 1 channels only (<channelRadii>, dev 2026-11-10)
 mdl.set_segment_norm("Toth", vary=True, sys_error=8.0)   # percent, as stored
 mdl.set_segment_active("Spiger", False)                  # drop a dataset from the fit
 mdl.set_segment_datafile("Elwyn-F0012002", "data/new.dat")
@@ -2390,6 +2391,30 @@ first**: every rebuild re-read the `.azr` with only that call's override, so
 then the overrides persist through every rebuild, and `set_channel_radius`
 raises if the rebuilt model does not have the radius asked for. On an older
 build, write every radius into the `.azr` (`AzrModel`) and open a fresh session.
+**Per-channel radii (dev 2026-11-10, branch feature/channel-radii until merged).**
+One radius per pair was the only option before; now an optional `<channelRadii>`
+block right after `</levels>` gives some channels their own:
+`<pair key> <l> <radius> [s=<s>] [J=<J>]` (spins `1/2` or `0.5`, `#` comments).
+The most specific line wins (l+s+J > l+J > l+s > l); every channel without a line
+keeps its pair's radius (column 28, first line of the pair). Everything taken at the
+radius follows the channel: P, S, hard-sphere phase, B_c, Wigner limit / theta^2,
+the formal<->observed transform, the EC final state's ANC conversion and N_f, the EC
+radial integrals and table, the s-wave scattering length (the l = 0 channel's). The
+beta Fermi radius stays the pair's. **Refused**: an s line and a J line matching one
+channel without an l+s+J line; an **external-capture transition whose initial
+partial wave and final bound channel have different radii** (DeBoer 2026-11-10: the
+start of the external region is then undefined) -- so overriding only the entrance
+l = 0 radius of a 13N-style E1 model is an ERROR; give every channel capture connects
+the same radius. A line matching no channel is a WARNING. intEC.dat's signature
+includes the lines. pyazr: `AzrModel.set_channel_radius(pair, r, L=, S=, J=)`,
+`channel_radius_entries()`, `channel_radius_of(pair, L, S, J)`,
+`remove_channel_radius(...)`; session `azr.set_channel_radius(pair, r, L=, S=, J=)`
+(kept through rebuilds, wins over the file's line, survives a later pair-radius
+change) and `azr.channel_radius_table()`. GUI: Pairs tab, "Per-channel radii" box.
+**Older engines and GUIs ignore the block silently (the GUI drops it on save)** --
+check `~/AZURE2/INSTALLED` before relying on it. Tests: `tests/channel_radii`
+(phase shifts wave by wave against pair-radius models, 13N capture),
+`tests/pyazr/channel_radii_test.py`, `tests/gui/channel_radii_test`.
 **Sampling the radius in a likelihood (MCMC, many random radii in one session)
 leaked memory before dev e92043e (2026-11-04)**: the Coulomb-function memo is keyed
 on the radius and no rebuild cleared it, ~100 kB per new radius (3H+d free-radius

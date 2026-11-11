@@ -647,6 +647,38 @@ units are the corresponding sanity check for capture. AZURE2's Wigner limit
 Teichmann-Wigner sum-rule unit 3ħ²/(2μa²); a θ² quoted against the other
 common unit, ħ²/(μa²) (``lane_thomas_wigner()``), is 1.5 times larger.
 
+Per-channel radii
+-----------------
+
+A ``<channelRadii>`` line gives some channels of a pair a radius of their own
+(:ref:`per-channel-radii`). In a file, with :class:`pyazr.AzrModel`:
+
+.. code-block:: python
+
+   mdl = pyazr.AzrModel.from_file("p12C.azr")
+   mdl.set_channel_radius(1, 4.0, L=1)            # every l = 1 channel of pair 1
+   mdl.set_channel_radius(1, 4.5, L=2, J=2.5)     # l = 2, J = 5/2 only (S= narrows to a channel spin)
+   mdl.channel_radius_entries()                   # [ChannelRadiusEntry(pair=1, L=1, radius=4.0, S=None, J=None), ...]
+   mdl.channel_radius_of(1, 2, 0.5, 2.5)          # 4.5: the radius the engine gives that channel
+   mdl.remove_channel_radius(1, 2, J=2.5)
+   mdl.set_channel_radius(1, 5.0)                 # no L: the pair radius, on every line, as before
+   mdl.write("p12C_a4.azr")
+
+In a running session, as with the pair radius (a rebuild, kept through later
+rebuilds; a per-channel radius wins over the file's line for the same
+channels and stays when the pair radius changes):
+
+.. code-block:: python
+
+   azr.set_channel_radius(1, 4.0, L=1)            # returns the channels it matched
+   for r in azr.channel_radius_table():           # every channel's radius in the running model
+       print(r.jgroup, r.pair, r.L, r.S, r.J, r.parity, r.radius)
+
+A model the engine refuses (an ambiguous channel, external capture across two
+radii) raises ``RuntimeError`` and leaves the session unusable.
+:func:`pyazr.transform.levels_from_azr` and :attr:`~pyazr.azure2.level_scheme`
+(``SchemeChannel.radius``) use the channel's radius.
+
 The external region, and the caches
 -----------------------------------
 
@@ -657,7 +689,7 @@ integrate.
 
 .. code-block:: python
 
-   c = azr.coulomb_functions(pair=1, energies=E, L=0)   # radius=0 -> channel radius
+   c = azr.coulomb_functions(pair=1, energies=E, L=0)   # radius=0 -> the radius of the pair's l channels
    c["F"], c["G"], c["P"], c["S"], c["delta_hs"]
 
    paths = azr.ec_integrals(pair=1, energies=E)         # one entry per EC pathway

@@ -299,6 +299,28 @@ negative one, and two different values on lines of one pair. Two particles of
 a particle pair are identical when Z, mass, spin, parity, g-factor and
 excitation (``e1 = e2``) are all equal (:doc:`../user_guide/particle_pairs`).
 
+Per-channel radii.  A channel takes its pair's radius (the radius column of the
+pair's lines; the first line of the pair counts) unless an optional
+``<channelRadii>`` block right after ``</levels>`` gives it its own (AZURE2
+2026-11-10)::
+
+   <channelRadii>
+   1 1 4.0            # pair key 1, every l = 1 channel
+   1 2 4.5 J=5/2      # pair key 1, l = 2, J = 5/2 only
+   2 0 5.2 s=3/2      # pair key 2, l = 0, channel spin 3/2 only
+   </channelRadii>
+
+``<pair key> <l> <radius in fm> [s=<s>] [J=<J>]``, spins as ``1/2`` or
+``0.5``; ``#`` starts a comment. The most specific line wins (l+s+J > l+J >
+l+s > l). Refused with an ERROR: an unknown pair key, a gamma or beta pair, a
+negative l, a radius that is not positive, a malformed ``s=``/``J=``, a
+repeated (pair, l, s, J), a missing ``</channelRadii>``, a channel matched by
+an ``s=`` line and a ``J=`` line but no line naming all three, and an
+external-capture transition whose initial and final channels have different
+radii. A line that matches no channel draws a warning. Engines and GUIs before
+November 2026 ignore the block (the GUI drops it on save). Details in
+:ref:`per-channel-radii`.
+
 Several compound nuclei.  The compound nucleus of a pair is inferred from its
 columns (particle pair :math:`Z = z_1 + z_2`, :math:`A = \mathrm{round}(m_1 +
 m_2)`; gamma pair the heavy particle; beta pair the daughter), and a project
