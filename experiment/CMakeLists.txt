@@ -42,6 +42,7 @@ add_library(azure2_experiment STATIC
   src/KernelBeamProfile.cpp
   src/KernelDoppler.cpp
   src/KernelGaussian.cpp
+  src/KernelRectangular.cpp
   src/KernelTarget.cpp
   src/KernelUdr.cpp
   src/HybridPotentialSettings.cpp

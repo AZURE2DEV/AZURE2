@@ -262,17 +262,19 @@ sub-point energies, descending, and for a target their stopping), of the point
 (its energy, c.m./lab factor, target thickness, window, ...) and of the effect's
 parameters, listed in one table, ``Kernels()`` in ``experiment/src/Kernels.cpp``:
 
-=================  =========================  ====================================
-kernel             format-3 keyword           file
-=================  =========================  ====================================
-``target``         a ``target`` of the data   ``KernelTarget.cpp``
-                   set (thin, layer, thick)
-``gaussian``       ``beam.spread``            ``KernelGaussian.cpp``
-``beam_profile``   ``beam.profile``           ``KernelBeamProfile.cpp``
-``udr``            ``detector.udr``           ``KernelUdr.cpp``
-``doppler``        ``target.doppler``         ``KernelDoppler.cpp`` (a broadening,
-                                              applied first)
-=================  =========================  ====================================
+=================  ==============================================  ====================================
+kernel             format-3 keyword                                file
+=================  ==============================================  ====================================
+``target``         a ``target`` of the data set (thin, layer,      ``KernelTarget.cpp``
+                   thick)
+``gaussian``       ``beam.spread``                                 ``KernelGaussian.cpp``
+``beam_profile``   ``beam.profile``                                ``KernelBeamProfile.cpp``
+``udr``            ``detector.udr``                                ``KernelUdr.cpp``
+``doppler``        ``target.doppler``                              ``KernelDoppler.cpp`` (a broadening,
+                                                                   applied first)
+``rectangular``    ``detector.energy_resolution rectangular``      ``KernelRectangular.cpp``: the
+                   ``width <w>``                                   average over [E0 - w/2, E0 + w/2]
+=================  ==============================================  ====================================
 
 An effect has at most one broadening and one resolution kernel
 (``TargetEffect::Kernels``, chosen once when the effect is built; two resolution

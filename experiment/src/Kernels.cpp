@@ -14,6 +14,7 @@ Kernel GaussianKernel();
 Kernel BeamProfileKernel();
 Kernel UdrKernelRow();
 Kernel DopplerKernel();
+Kernel RectangularKernel();
 
 const std::vector<Kernel> &Kernels() {
   static const std::vector<Kernel> table = {
@@ -22,6 +23,7 @@ const std::vector<Kernel> &Kernels() {
       BeamProfileKernel(),
       UdrKernelRow(),
       DopplerKernel(),
+      RectangularKernel(),
   };
   return table;
 }

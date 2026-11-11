@@ -132,6 +132,61 @@ int main() {
     p.thickTarget = false;
   }
 
+  std::printf("rectangular resolution\n");
+  {
+    // window 20 keV lab about E0 = 1 MeV c.m.; f = 1/1.2, so 1/60 MeV c.m.; nodes every 1/6000 MeV over 3 windows
+    const Kernel &k = *KernelNamed("rectangular");
+    double width = 0.02;  // MeV, lab
+    p.values = &width;
+    p.numValues = 1;
+    const double f = point.cmFactor, w = f * width;
+    Grid g(1.0 + 1.5 * w, 1.0 - 1.5 * w, 300, 1.0);
+    auto at = [&](double (*s)(double)) {
+      std::vector<double> v;
+      for (double e : g.energy) v.push_back(s(e));
+      return v;
+    };
+    double v, wv;
+    FoldBoth(k, p, point, g, at([](double e) { return 2.0 + 5.0 * (e - 1.0); }), v, wv);
+    Close("sigma linear in E: the average is sigma(E0)", v, 2.0, 1e-13);
+    Close("the weights give the same value", wv, v, 1e-14);
+    // sigma'' = 2 a: sigma(E0) + sigma'' w^2/24, to the linear interpolation between nodes (h^2 sigma''/12 per
+    // interval averaged: h = w/100, a relative 1e-4 of the curvature term)
+    const std::vector<double> quad = at([](double e) { return 2.0 + 3.0 * (e - 1.0) + 400.0 * (e - 1.0) * (e - 1.0); });
+    FoldBoth(k, p, point, g, quad, v, wv);
+    const double h = (g.energy[0] - g.energy[1]);
+    Close("sigma quadratic: sigma(E0) + sigma'' w^2/24 (+ sigma'' h^2/12 of the interpolation)", v,
+          2.0 + 800.0 * w * w / 24.0 + 800.0 * h * h / 12.0, 1e-12);
+    // a step from 0 to 1 between two nodes just below E0 + w/4: the node values ramp across one interval
+    Grid s(1.0 + 1.5 * w, 1.0 - 1.5 * w, 300, 1.0);
+    const double eStep = s.energy[125];  // a node 0.25 w above E0 (125 intervals of w/100 below the top, 1.5 w)
+    std::vector<double> step;
+    for (double e : s.energy) step.push_back(e >= eStep ? 1.0 : 0.0);
+    FoldBoth(k, p, point, s, step, v, wv);
+    // the window [E0 - w/2, E0 + w/2] holds (E0 + w/2 - eStep) of value 1 and half an interval h of the ramp
+    Close("a step: the fraction of the window above it", v, (1.0 + 0.5 * w - eStep + 0.5 * h) / w, 1e-12);
+    // d/dw against central differences, on the quadratic (window edges between nodes)
+    width = 0.0201;
+    const double d = k.derivative(p, point, g.nodes, quad.data(), 0);
+    double plus, minus;
+    width = 0.0201 * (1.0 + 1e-6);
+    plus = k.fold(p, point, g.nodes, quad.data());
+    width = 0.0201 * (1.0 - 1e-6);
+    minus = k.fold(p, point, g.nodes, quad.data());
+    Close("dY/dw against central differences", d, (plus - minus) / (2.0 * 0.0201e-6), 1e-6);
+    SupportPoint sp;
+    sp.energy = 1.0;
+    sp.cmFactor = f;
+    double hi, lo;
+    EffectKernels ek;
+    ek.resolution = &k;
+    width = 0.02;
+    EffectSupport(ek, p, sp, hi, lo);
+    Check("support: the window [E0 - f w/2, E0 + f w/2]", hi == 1.0 + 0.5 * w && lo == 1.0 - 0.5 * w);
+    p.values = nullptr;
+    p.numValues = 0;
+  }
+
   std::printf("support\n");
   {
     SupportPoint s;
