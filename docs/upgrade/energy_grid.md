@@ -642,6 +642,63 @@ Whole runs (`perf stat` cycles, alternated with the base): fits of 8 MIGRAD call
 A 200-call T2 fit is not faster as a whole: at 1 thread 0.96× (its gradients' forward solves are still per host:
 29.0 of 53 s), at 5 threads 0.89× (17.0 s against 14.8, two runs each; not explained, see HANDOFF).
 
+**Branch 2 done (2026-11-11, `feature/upgrade-5-energy-tasks-gradient`), measured.** The analytic gradient, the least-squares rows and the model gradients run over the energy tasks (`src/GradEnergyTasks.cpp`):
+the point pass, each point's cotangent back through its expression tree and fold to its units, then per task one fill
+and factorisation, the T-matrix cotangents of each T-matrix group summed, one back-propagation of the merged bilinear
+terms per J-group (rows: per row, or by the task's bilinear basis). The sums are formed in an order fixed by the tasks,
+so a gradient and a fit give the same bits at any thread count. The 5-thread regression of branch 1 was the serial
+rebuild of the tasks (a fit that moves a shift rebuilds them at nearly every pass: 1.15 s of a 15.6 s T2 fit at 5
+threads); on flat arrays with parallel keys and sort it takes 0.37 s there (0.50 s over 234 passes at 3 threads).
+Calculations identical in the whole tree; fit end points move by rounding (the gradient at the same parameters agrees
+with the base to <= 4e-14 of its largest component; the natural_neon and screening fits stopped at the call limit
+amplify that along their unconverged paths). Times (2026-11-12, machine shared with another user's 12 threads, load
+10-13; min / median of 5 alternated runs for T2, median of 3 for the others; wall s):
+
+| fit | b-trial19 (before branch 1) | b-trial21 (branch 1) | this branch |
+|---|---|---|---|
+| T2, 200 calls, 1 thread | 40.7 / 41.1 | 39.4 / 39.9 | 36.9 / 37.2 |
+| T2, 200 calls, 3 threads | 18.9 / 20.6 | 20.6 / 20.7 | 18.4 / 19.1 |
+| 13N `--use-gradient`, 200 calls | — | 50.7 | 26.9 |
+| 13N `--use-lm` | — | 19.5 | 12.8 |
+| thick target `--use-gradient` / `--use-lm` (no free parameter) | — | 13.8 / 7.9 | 5.2 / 4.6 |
+| natural_neon `--use-gradient`, 30 calls | — | 219.6 | 105.7 |
+| natural_neon `--use-lm`, 30 calls | — | 291.1 | 139.3 |
+
+Peak RSS within 2 % of the base. Most of a T2 gradient is its finite-difference part (shifts, THM: about 1 s of the
+1.1 s at 1 thread), which this branch does not touch. The 5-thread acceptance time was not measured (budget of 3
+threads that night).
+
+**Follow-up after the merge of branches 2, 5 and 6: delete the point mapping (about an hour).** The mapping no longer
+saves anything: the energy tasks share the solves, and the gradient no longer uses it. Evidence: the whole tree with
+`AZURE_NO_POINT_MAPPING=1` (tag `tab-egrad-nomap`, three bases) gives every output file identical to `tab-trial21a`
+except the "Coulomb table: N lookups" line of `run.log` in `angle_mapping` and `sum_lab_frame/models/plain_data` (a
+work counter; the director accepts that it moves); the T2 200-call fit at 1 thread took 38.4 / 38.3 s without the
+mapping against 39.2 / 37.7 s with it (peak RSS 350.8 against 338.7 MB, +3.5 %); the `natural_neon` calculation
+6.44 / 6.37 s against 6.46 / 6.34 s, RSS equal. What the follow-up deletes, by file:
+- `src/WorkingCopy.cpp`: `MapData` becomes "build the plan" (`plan_.Build` with no mapping, one task per point);
+  `SharesCalculation`, the shift-form helpers only it uses, `MapLeaves`, the switches `AZURE_NO_POINT_MAPPING`,
+  `AZURE_NO_CROSS_SEGMENT_MAPPING`, `AZURE_NO_COMPONENT_MAPPING`; the `IsMapped`/`OwnsEDependentValues` conditions of
+  the two set-up loops of `CalcEDependentValues` (every point computes its own values).
+- `include/Unit.h`, `src/Unit.cpp`: `EnergyMap`, `IsMapped`, `GetMap`, `SetMap`, `ClearMapping`, `OwnsEDependentValues`,
+  `SetOwnsEDependentValues`, `PlanMapped`, the members `energy_map_`, `own_e_dependent_`.
+- `include/CalculationPlan.h`, `src/CalculationPlan.cpp`: `CalculationTask::mapped`, `MappedPoints`, the provider rule of
+  `TaskUnits` (each unit is its own provider), the mapped clauses of `Check`; `src/EnergyPass.cpp`: the mapped points
+  of a fold's ranges under `AZURE_PLAN_CHECK`.
+- `src/PointPass.cpp`: the mapped points of `Unit::Calculate`, `MarkFailed`, `FoldSubPoints`; the `MappedPoints`
+  parameter of `FoldThinTarget` (`src/TargetFold.cpp`, or its kernel after branch 6).
+- `src/TargetSetup.cpp` (`ReplaceSubPointGrids`): `mappedSegment`, the "a mapped point keeps its host's grid" branch,
+  the host/mapped grid invariant after re-placement.
+- `src/ChannelTables.cpp` (`shareWithMappedOf`), `src/ExternalCaptureSetup.cpp` (the two `IsMapped` conditions of the
+  component amplitudes and `intEC.dat`), `src/ShiftFrames.cpp` (the mapped host of a shifted point),
+  `src/HandOver.cpp` (copying a mapped point's values; re-running `MapData` after a shift), `src/AZURECalc.cpp`
+  (`MappingConfined` and the partners of the local shift columns), `src/AZURECalcMCMC.cpp`, `src/ModelPass.cpp`
+  (`CalculatesItself`), `src/DataCheckFiles.cpp` (the mapping column of the data check file).
+- Tests and documents: `tests/component_mapping/check.sh` (a, b: with/without), `tests/angle_mapping/check.sh`
+  (a, b: the data check's mapping), `tests/shift_fn_groups/check.sh`, `tests/sum_lab_frame/check.sh`,
+  `tests/pyazr/composite_gradient_test.py`, `tests/pyazr/failed_point_test.py` (the switches), the mapping sections and
+  switches of `docs/source/developer/edata_and_target_effects.rst`, `.claude/skills/azure2-setup/references/data-definition.md`.
+Verification: the full comparison (identical but the lookup lines), `AZURE_PLAN_CHECK=1` on the tree, the quick set.
+
 ## 9. Decisions for the PI, and risks
 
 **D1. The grid inside a fit stage.** (a) Today's rule: re-placed in the hand-over when a quantized level anchor
