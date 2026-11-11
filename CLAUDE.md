@@ -80,7 +80,9 @@ below (full text and reasons in `docs/upgrade/RULES.md`):
 | `src/`, `include/` | C++ engine | `AZURE2.cpp` (main, CLI flags) → `AZUREMain` → `CNuc` (levels, channels) + `DataSet` (the data as set up, immutable: segments, measurements, target effects, covariance; `include/DataSet.h`) held by each `WorkingCopy` (what an evaluation changes: norms, shifts, frames, the flat vector of calculation `Unit`s; `include/WorkingCopy.h`) → `AZURECalc` (χ²), `AZUREGrad` (gradients), `AZURECalcMCMC` |
 | `api/` | `AZUREAPI` + pybind11 module `_azure2` | Builds `pyazr/_azure2*.so` in place |
 | `io/` | The `.azr` document and its format conversion | Standalone (no engine headers); the engine and pyazr read the file through it |
+| `stopping/` | Stopping and straggling: materials, ICRU 49-form electronic and ZBL nuclear stopping, energy loss, range, Bohr/Tschalär straggling, with uncertainty and provenance | Uses `physics/` only; not yet linked by the engine; `docs/upgrade/stopping.md` |
 | `experiment/` | Model expressions (what a data set measures), lab → c.m. frames, the table of project format 3 | Uses `physics/` and `io/`'s `Record.h` only (no engine headers); `experiment/README.md` |
+| `physics/transfer` (in `physics/`) | Optical potentials, bound states, distorted waves, DWBA transfer, the THM vertex in the plane-wave limit | A leaf: target `azure2_physics_transfer`, used by nothing of the engine yet; checked against FRESCO (`docs/upgrade/transfer.md`) |
 | `pyazr/` | Python package | In-process engine; `.azr` editing (`azrfile.py`, `datasets.py`) on the engine's document and parsers |
 | `numcmc/` | Ensemble MCMC sampler | |
 | `external/` | Vendored Minuit2, erya/pugixml (Coulomb functions: `physics/coulomb/`, from pycoulomb) | **Do not edit**; it is upstream code |
@@ -228,6 +230,14 @@ bypassed. Run it first (under a second), then the build and the tests of "Defini
    from `pyazr/data/mass_1.mas20` (`pyazr.masses`; the engine's THM nuclei are generated from it and checked by
    `pyazr_thm_nuclide_masses`).
 
+**A new optical potential term** (`physics/transfer`, `docs/upgrade/transfer.md` §2).
+1. A field in `OpticalPotential` (`physics/include/azure2/physics/transfer/OpticalPotential.h`, with its formula, unit
+   and sign in the header's Eq. (2.1)), its `operator==`, its value in `TermsAt` (one member of `PotentialTerms` per
+   FRESCO TYPE, so that the listing stays comparable with FRESCO's fort.34) and its line in `Describe`.
+2. If it depends on l or j, its factor where `SolveDistortedWaves` and `SolveBoundState` build U_lj.
+3. A FRESCO case in `physics/tests/data/make_fresco_benchmarks.py` that uses it (run the script, commit the data) and
+   its check in `physics/tests/transfer_fresco_test.cpp`: the listing first, then S and the cross sections.
+
 **A model-only datum** (no beam energy: a resonance strength, a width, an ANC; `docs/upgrade/data_model.md` §4, M10).
 The objective gets no new term: T9, `ModelDataTerm`, evaluates every row of `<modelData>`.
 1. Its formula in `physics/` (`ResonanceQuantities.h` is the pattern) with a unit test against numbers by hand and its
@@ -329,6 +339,16 @@ factor, a yield per unit charge) is `ReactionSpec::scale` (`experiment/src/Build
 **A format-3 diagnostic code.** A constant in `experiment/include/azure2/experiment/Diagnostics.h` (`io/`'s reader:
 `io/include/azure2/io/Record.h`), its row in `DiagnosticCodes()` and a case in `experiment/tests/diagnostics_test.cpp`
 that triggers it alone [check 24].
+
+**A new material or a measured stopping table** (`stopping/`, `docs/upgrade/stopping.md`). A material is data, not
+code: `MaterialFromFormula("Ta2O5", Phase::kSolid, density)` or `MaterialFromFractions(...)`; elements 1-92 work
+without any edit. A measured stopping for one projectile goes in `Material::user_stopping`: `ReadStoppingTable` with a
+unit line (`E[MeV] eps[eV/1e15atoms/cm2]`, `S[MeV*cm2/g]` or `S[keV/um]`), a stated uncertainty and a provenance
+string, or a `formula`; it overrides the evaluation and `StoppingProvenance` shows it. New or better coefficients of
+an element are a row of `stopping/data/electronic_coefficients.tsv` with its source and uncertainty (never SRIM's,
+ERYA's or a table whose terms forbid redistribution); then regenerate `stopping/tests/data/reference.csv` with
+`stopping/tests/data/make_reference.py` and run `ctest -R stopping`. The library includes only `azure2/stopping/`,
+`azure2/physics/` and the standard library [check 32].
 
 Reference commits: `git show --stat 062b1bfe` (segment keyword `shiftfngroup`), `3e13fb28` (`normgroup`).
 

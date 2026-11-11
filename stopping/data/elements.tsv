@@ -1,0 +1,99 @@
+# Element data of the stopping module (docs/upgrade/stopping.md section 3).  One row per element, Z = 1..92.
+# A_r: standard atomic weight (u) and its stated interval, CIAAW abridged values (T. Prohaska et al., Pure Appl.
+#   Chem. 94 (2022) 573); eight elements without one carry the mass number of a long-lived isotope.
+# I_eV: mean excitation energy of the element (eV), ICRU Report 37 (1984) values as used by NIST PSTAR/ASTAR
+#   (ICRU Report 49, 1993); for H, He, N, O, F, Ne, Cl, Ar, Kr, Xe, Rn the gas value.
+# phase: the state of the element at room temperature and pressure (solid, liquid, gas).
+Z	symbol	A_r	A_r_unc	A_r_source	I_eV	phase
+1	H	1.0080	0.0002	CIAAW 2021 abridged standard atomic weight	19.2	gas
+2	He	4.0026	0.0001	CIAAW 2021 abridged standard atomic weight	41.8	gas
+3	Li	6.94	0.06	CIAAW 2021 abridged standard atomic weight	40	solid
+4	Be	9.0122	0.0001	CIAAW 2021 abridged standard atomic weight	63.7	solid
+5	B	10.81	0.02	CIAAW 2021 abridged standard atomic weight	76	solid
+6	C	12.011	0.002	CIAAW 2021 abridged standard atomic weight	81	solid
+7	N	14.007	0.001	CIAAW 2021 abridged standard atomic weight	82	gas
+8	O	15.999	0.001	CIAAW 2021 abridged standard atomic weight	95	gas
+9	F	18.998	0.001	CIAAW 2021 abridged standard atomic weight	115	gas
+10	Ne	20.180	0.001	CIAAW 2021 abridged standard atomic weight	137	gas
+11	Na	22.990	0.001	CIAAW 2021 abridged standard atomic weight	149	solid
+12	Mg	24.305	0.002	CIAAW 2021 abridged standard atomic weight	156	solid
+13	Al	26.982	0.001	CIAAW 2021 abridged standard atomic weight	166	solid
+14	Si	28.085	0.001	CIAAW 2021 abridged standard atomic weight	173	solid
+15	P	30.974	0.001	CIAAW 2021 abridged standard atomic weight	173	solid
+16	S	32.06	0.02	CIAAW 2021 abridged standard atomic weight	180	solid
+17	Cl	35.45	0.01	CIAAW 2021 abridged standard atomic weight	174	gas
+18	Ar	39.95	0.16	CIAAW 2021 abridged standard atomic weight	188	gas
+19	K	39.098	0.001	CIAAW 2021 abridged standard atomic weight	190	solid
+20	Ca	40.078	0.004	CIAAW 2021 abridged standard atomic weight	191	solid
+21	Sc	44.956	0.001	CIAAW 2021 abridged standard atomic weight	216	solid
+22	Ti	47.867	0.001	CIAAW 2021 abridged standard atomic weight	233	solid
+23	V	50.942	0.001	CIAAW 2021 abridged standard atomic weight	245	solid
+24	Cr	51.996	0.001	CIAAW 2021 abridged standard atomic weight	257	solid
+25	Mn	54.938	0.001	CIAAW 2021 abridged standard atomic weight	272	solid
+26	Fe	55.845	0.002	CIAAW 2021 abridged standard atomic weight	286	solid
+27	Co	58.933	0.001	CIAAW 2021 abridged standard atomic weight	297	solid
+28	Ni	58.693	0.001	CIAAW 2021 abridged standard atomic weight	311	solid
+29	Cu	63.546	0.003	CIAAW 2021 abridged standard atomic weight	322	solid
+30	Zn	65.38	0.02	CIAAW 2021 abridged standard atomic weight	330	solid
+31	Ga	69.723	0.001	CIAAW 2021 abridged standard atomic weight	334	solid
+32	Ge	72.630	0.008	CIAAW 2021 abridged standard atomic weight	350	solid
+33	As	74.922	0.001	CIAAW 2021 abridged standard atomic weight	347	solid
+34	Se	78.971	0.008	CIAAW 2021 abridged standard atomic weight	348	solid
+35	Br	79.904	0.003	CIAAW 2021 abridged standard atomic weight	343	liquid
+36	Kr	83.798	0.002	CIAAW 2021 abridged standard atomic weight	352	gas
+37	Rb	85.468	0.001	CIAAW 2021 abridged standard atomic weight	363	solid
+38	Sr	87.62	0.01	CIAAW 2021 abridged standard atomic weight	366	solid
+39	Y	88.906	0.001	CIAAW 2021 abridged standard atomic weight	379	solid
+40	Zr	91.222	0.003	CIAAW 2021 abridged standard atomic weight	393	solid
+41	Nb	92.906	0.001	CIAAW 2021 abridged standard atomic weight	417	solid
+42	Mo	95.95	0.01	CIAAW 2021 abridged standard atomic weight	424	solid
+43	Tc	98	1	no standard atomic weight: mass number of a long-lived isotope	428	solid
+44	Ru	101.07	0.02	CIAAW 2021 abridged standard atomic weight	441	solid
+45	Rh	102.91	0.01	CIAAW 2021 abridged standard atomic weight	449	solid
+46	Pd	106.42	0.01	CIAAW 2021 abridged standard atomic weight	470	solid
+47	Ag	107.87	0.01	CIAAW 2021 abridged standard atomic weight	470	solid
+48	Cd	112.41	0.01	CIAAW 2021 abridged standard atomic weight	469	solid
+49	In	114.82	0.01	CIAAW 2021 abridged standard atomic weight	488	solid
+50	Sn	118.71	0.01	CIAAW 2021 abridged standard atomic weight	488	solid
+51	Sb	121.76	0.01	CIAAW 2021 abridged standard atomic weight	487	solid
+52	Te	127.60	0.03	CIAAW 2021 abridged standard atomic weight	485	solid
+53	I	126.90	0.01	CIAAW 2021 abridged standard atomic weight	491	solid
+54	Xe	131.29	0.01	CIAAW 2021 abridged standard atomic weight	482	gas
+55	Cs	132.91	0.01	CIAAW 2021 abridged standard atomic weight	488	solid
+56	Ba	137.33	0.01	CIAAW 2021 abridged standard atomic weight	491	solid
+57	La	138.91	0.01	CIAAW 2021 abridged standard atomic weight	501	solid
+58	Ce	140.12	0.01	CIAAW 2021 abridged standard atomic weight	523	solid
+59	Pr	140.91	0.01	CIAAW 2021 abridged standard atomic weight	535	solid
+60	Nd	144.24	0.01	CIAAW 2021 abridged standard atomic weight	546	solid
+61	Pm	145	1	no standard atomic weight: mass number of a long-lived isotope	560	solid
+62	Sm	150.36	0.02	CIAAW 2021 abridged standard atomic weight	574	solid
+63	Eu	151.96	0.01	CIAAW 2021 abridged standard atomic weight	580	solid
+64	Gd	157.25	0.01	CIAAW 2021 abridged standard atomic weight	591	solid
+65	Tb	158.93	0.01	CIAAW 2021 abridged standard atomic weight	614	solid
+66	Dy	162.50	0.01	CIAAW 2021 abridged standard atomic weight	628	solid
+67	Ho	164.93	0.01	CIAAW 2021 abridged standard atomic weight	650	solid
+68	Er	167.26	0.01	CIAAW 2021 abridged standard atomic weight	658	solid
+69	Tm	168.93	0.01	CIAAW 2021 abridged standard atomic weight	674	solid
+70	Yb	173.05	0.02	CIAAW 2021 abridged standard atomic weight	684	solid
+71	Lu	174.97	0.01	CIAAW 2021 abridged standard atomic weight	694	solid
+72	Hf	178.49	0.01	CIAAW 2021 abridged standard atomic weight	705	solid
+73	Ta	180.95	0.01	CIAAW 2021 abridged standard atomic weight	718	solid
+74	W	183.84	0.01	CIAAW 2021 abridged standard atomic weight	727	solid
+75	Re	186.21	0.01	CIAAW 2021 abridged standard atomic weight	736	solid
+76	Os	190.23	0.03	CIAAW 2021 abridged standard atomic weight	746	solid
+77	Ir	192.22	0.01	CIAAW 2021 abridged standard atomic weight	757	solid
+78	Pt	195.08	0.02	CIAAW 2021 abridged standard atomic weight	790	solid
+79	Au	196.97	0.01	CIAAW 2021 abridged standard atomic weight	790	solid
+80	Hg	200.59	0.01	CIAAW 2021 abridged standard atomic weight	800	liquid
+81	Tl	204.38	0.01	CIAAW 2021 abridged standard atomic weight	810	solid
+82	Pb	207.2	1.1	CIAAW 2021 abridged standard atomic weight	823	solid
+83	Bi	208.98	0.01	CIAAW 2021 abridged standard atomic weight	823	solid
+84	Po	209	1	no standard atomic weight: mass number of a long-lived isotope	830	solid
+85	At	210	1	no standard atomic weight: mass number of a long-lived isotope	825	solid
+86	Rn	222	1	no standard atomic weight: mass number of a long-lived isotope	794	gas
+87	Fr	223	1	no standard atomic weight: mass number of a long-lived isotope	827	solid
+88	Ra	226	1	no standard atomic weight: mass number of a long-lived isotope	826	solid
+89	Ac	227	1	no standard atomic weight: mass number of a long-lived isotope	841	solid
+90	Th	232.04	0.01	CIAAW 2021 abridged standard atomic weight	847	solid
+91	Pa	231.04	0.01	CIAAW 2021 abridged standard atomic weight	878	solid
+92	U	238.03	0.01	CIAAW 2021 abridged standard atomic weight	890	solid

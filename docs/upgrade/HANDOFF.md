@@ -2,6 +2,104 @@
 
 Update this file at the end of every work session: what changed, what is next, what is open. Newest first.
 
+## 2026-11-11 (director, 14:00) — merged: the stopping library and the DWBA transfer library (leaves); stopping powers will be SRIM's
+
+Merged on the data branch (`--no-ff`), not pushed: `feature/upgrade-5-stopping-1` (`stopping/`) and
+`feature/upgrade-7-transfer-1` (`physics/transfer`). Both are leaf libraries: no engine file includes them, so no
+project output can move; the check was the build (0 warnings) and `ctest -LE slow` on the two together (197/197).
+
+What the director ran himself, beyond the agents' reports:
+- **Stopping against SRIM-2013** (LunaSRIM 1.0.0, electronic part, p and α in H, He, C, N, O, Ne, Al, Ti, Ta, Au,
+  0.02–10 MeV, gases as gases): most values within 3 %; p in Ta +6 to +7 % at 0.1–0.3 MeV; p in C −11 % and α in Au
+  −17 % at 0.02 MeV; α in C +7 to +11 % below 0.5 MeV; α above 5 MeV −3 to −5 % in several elements.
+- **FRESCO** on the committed (d,n) finite-range case: the cross sections equal `reference.txt` digit for digit.
+
+**Decision of the PI (2026-11-11), which replaces the licence question of the previous entry:** "I would use the
+SRIM stopping powers from my LunaSRIM repository. They are free to use as long as SRIM is cited." So:
+- the electronic coefficient table of the first branch (transcribed from Geant4's `G4BraggModel.cc` /
+  `G4BraggIonModel.cc`) and its Barkas table go; the stopping powers become SRIM-2013's (electronic for any ion,
+  gas/solid phase factor, compound correction, pair-specific nuclear stopping), ported to C++ from LunaSRIM
+  (github.com/skowrons94/LunaSRIM, MIT) with SRIM's data files `SCOEF03.DAT` and `SNUC03.dat`;
+- SRIM is cited in the data directory, in `stopping.md` and in the provenance text the library prints;
+- `ARCHITECTURE.md` §7 ("no SRIM, no ERYA, no LunaSRIM") and `stopping.md` §4, §5, §9, §12 are rewritten by that
+  branch (`feature/upgrade-5-stopping-2`, launched from this head). Until it is merged, `stopping/` computes with the
+  first branch's table: do not wire it into the engine before.
+- **For the owner:** LunaSRIM's own LICENSE says the SRIM data files are not under its MIT licence and stay under the
+  terms of SRIM's authors. They are copied into this repository on the PI's statement that they are free to use when
+  SRIM is cited; whether AZURE2's public repository ships them is the owner's decision (the alternative is a download
+  step, with the library reading the two files from a directory the user names).
+- The three coefficient discrepancies the first branch reported are moot (the rows go). The Chu table and the
+  Yang–O'Connor–Wang constants are not needed for now: the straggling becomes SRIM's (Bohr with TRIM's relativistic
+  factor and low-energy limit), propagated as before.
+
+Judgements on what the agents asked:
+- DWBA, post interaction: the default stays the whole V of the transferred particle with the core, and the choice
+  (whole / nuclear part) becomes an explicit setting when the library is wired to the THM observable.
+- Assigned uncertainties of the stopping power: provisional priors until the SRIM branch replaces them by SRIM's
+  published accuracy; the stopping scale per (material, projectile) (D6) takes its prior from there.
+
+Defects recorded, not fixed here:
+- `physics/coulomb` COULCC returns F and G with the wrong sign at isolated points beyond the turning point (l = 1,
+  η = 0.493, ρ = 8.55). The engine does not call COULCC there (it uses COULSM); only `physics/src/transfer/
+  RadialNumerics.cpp` and tests do. To be fixed or the routine dropped when the continuum part of the DWBA is written.
+
+Running: pathway table 2; one solve per compound energy; finite-layer yield (resumed to write its report); lab-frame
+comparison; THM projects to format 3; the gaps of format 3; SRIM stopping (new).
+Still owed to the PI: the count of engine files each new quantity touches (the finite-layer yield is the first), and
+the extension drill before the meeting with the owner.
+
+## 2026-11-11 (agent, brief AG) — `physics/transfer`, first part: potentials, bound states, distorted waves, DWBA to a bound state against FRESCO (`feature/upgrade-7-transfer-1`)
+
+**Done.** A leaf library in `physics/` (target `azure2_physics_transfer`, namespace `azure2::physics::transfer`;
+nothing of the engine uses it): `OpticalPotential` (Woods-Saxon volume, derivative surface, Thomas spin-orbit in
+FRESCO's 2 l.s convention, uniform-sphere Coulomb; three explicit radius conventions; `TermsAt` lists the terms as
+FRESCO's fort.34), `BoundState` (depth search by Sturm count and Casoratian, ANC, rms radius, D0; Whittaker and Yukawa
+tails), `DistortedWaves` (spin 0, 1/2, 1 with spin-orbit; S, sigma/sigma_R, reaction cross section),
+`Transfer` (post-form zero range with recoil and finite range, no remnant, interaction the whole or the nuclear part of
+V_sx; explicit spin sum), `ThmVertex` (M_l and the full form factor in the plane-wave limit), `RadialNumerics`.
+Formulas, conventions, validation table, limits, the continuum plan and the wiring: `docs/upgrade/transfer.md`.
+FRESCO benchmarks with inputs and outputs in `physics/tests/data/fresco/` (8 cases), regenerated by
+`physics/tests/data/make_fresco_benchmarks.py --fresco <binary>`; FRESCO receives our constants through its
+`unitmass` and `finec`.
+
+**Verified.** Tests `physics_transfer_bound_state`, `_distorted_waves`, `_thm_vertex`, `_fresco` pass; each failed
+once with an injected error (listed in the report of the branch). Against FRESCO: bound-state depth, rms, D0, ANC to
+the printed digits; S to 8e-6, sigma/sigma_R to 5e-5, sigma_R to 2e-6; transfer dsigma/dOmega (0-90 deg, > 1 % of the
+peak) 15N(d,n)16O finite range 3.3e-4, zero range 7e-6, 12C(6Li,d)16O finite range 1.8e-3 (FRESCO's own step
+dependence ~1e-3), zero range 4e-5. The engine's THM weight M(E) of `thm_distortion_test` case `optical` (E = 1 MeV)
+recomputed with the library: 2.7054435e-4 against the engine's 2.7054438e-4 (-9e-8 at h = 0.01 fm).
+`git diff --stat 2363abac -- src include api pyazr experiment convert` is empty.
+
+**Open.** Spin-orbit in the distorted waves of a transfer; remnant and prior form; level functions; the continuum
+(FRESCO bins); global optical sets; 18O(3He,d)19F and 12C(14N,d)24Mg benchmarks (not done); l > 40 (AngularCoupling's
+limit); the binding of the library in pyazr. Found outside the branch: COULCC (`physics/coulomb`) returns F and G
+with the wrong sign at isolated points beyond the turning point (transfer.md section 10); the library uses COULFG there.
+With the whole V_alpha-d (Coulomb tail) as post interaction FRESCO does not converge in its non-local range
+(transfer.md section 9).
+
+## 2026-11-11 (agent, stopping module, first branch) — `stopping/`: AZURE2's own stopping and straggling as a leaf library (`feature/upgrade-5-stopping-1`)
+
+**Done.** `stopping/` (design and numbers: `docs/upgrade/stopping.md`): materials from formulas or fractions with
+phase and density; electronic stopping of p and α from the ICRU 49 coefficient sets (Andersen–Ziegler 1977 and
+Ziegler 1977 forms, transcribed from Geant4 and checked against PSTAR/ASTAR) joined by log-log interpolation
+between 1 and 3 MeV/u to Bethe with Barkas–Berger shell, Ashley–Ritchie–Brandt Barkas and Bloch corrections; d, t,
+³He by velocity, heavier ions by Pierce–Blann effective charge; ZBL nuclear stopping; Bragg additivity with a named
+place for the compound correction; user tables and formulas with provenance; an assigned uncertainty on every value;
+N(E_in, E_out), E_out, range and their stopping-scale derivatives; Bohr straggling, Chu's factor and Yang's
+charge-state term as forms taking data (no data shipped), Tschalär propagation with the beam spread. Two data tables
+in `stopping/data/` with a source per row. The CLI `azure2-stopping`; the ERYA comparison
+`stopping/tools/compare_erya.sh`. Consistency check 32 (stopping/ includes only stopping/, physics/ and the standard
+library); `stopping/tests` registered; `stopping` in the size ratchet.
+
+**Verified how.** Build 0 warnings; the six unit tests and the CLI test pass, each unit test shown failing on
+injected errors (list in the report of this branch); consistency test, also shown failing on an injected include and
+an unregistered test; `scripts/check.sh --quick` (consistency, build, `ctest -LE slow` 190/190); T1–T3 and `tests/target_density` x 3 bases against `b-trial18`: 71/71/71 files identical.
+
+**Open.** Coefficients that do not reproduce ICRU 49 (p in C below 40 keV, α in Au below 0.5 MeV; stopping.md §9.1);
+no Chu table and no Yang constants; assigned (not fitted) uncertainties; no Python binding (two lines in
+`api/src/pybind_api.cpp`, stopping.md §11); the Geant4 notice question for the transcribed numbers (§12). Next:
+stopping.md §13.
+
 ## 2026-11-11 (director, afternoon) — merged: 176 of 183 project files in format 3; the engine edits the nuclear part of a project; Phase 5 decided and started
 
 **Merged on `feature/upgrade-4-data`, then on `feature/upgrade`** (all `--no-ff`, not pushed):

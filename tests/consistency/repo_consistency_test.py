@@ -53,7 +53,7 @@ def function_body(source, signature):
 #     branches shorten files too, and the record is tightened at each merge.  It runs first, because --tighten-sizes
 #     runs it alone.
 SIZE_LIMIT = 1000
-SIZE_DIRS = ("src", "include", "physics", "io", "experiment", "api/src", "pyazr", "tools")
+SIZE_DIRS = ("src", "include", "physics", "io", "experiment", "api/src", "pyazr", "tools", "stopping")
 SIZE_SUFFIXES = (".cpp", ".h", ".py", ".hpp", ".cc", ".c", ".H")
 SIZE_SKIP_DIRS = {"tests", "__pycache__"}  # test sources, bytecode
 SIZE_GENERATED = set()                     # generated files in SIZE_DIRS (none today), relative paths
@@ -192,6 +192,7 @@ check_registered("tests/upgrade", r".+_test\.cpp")
 check_registered("physics/tests", r".+_test\.cpp", "physics")
 check_registered("io/tests", r".+_test\.cpp", "io")
 check_registered("experiment/tests", r".+_test\.cpp", "experiment")
+check_registered("stopping/tests", r".+_test\.cpp", "stopping")
 
 
 # 3. Every regression directory is actually exercised by tests/run_tests.sh:
@@ -308,6 +309,32 @@ for dirpath, _, files in os.walk(os.path.join(ROOT, "io")):
             if inc.startswith("<") and re.fullmatch(r"[a-z_]+", inc[1:-1]):
                 continue
             problems.append(f"{rel}: includes {inc}; io/ may include only azure2/io/ headers and the C++ standard library")
+
+
+# 32. stopping/ is a leaf on physics/ (docs/upgrade/stopping.md section 1): its headers ("azure2/stopping/..."),
+#     physics/'s ("azure2/physics/..."), the C++ standard library, and the bare names of its own files where they live
+#     (src/'s generated-table header, the tests' check.h).  The one exception is the comparison with ERYA,
+#     tools/erya_compare.cpp, which reads ERYA's SRIMUtilities.h to print the comparison table and is no part of the
+#     library.
+STOPPING_OWN = {"src": {"TableText.h"}, "tests": {"check.h"}}
+STOPPING_EXCEPT = {(os.path.join("stopping", "tools", "erya_compare.cpp"), '"SRIMUtilities.h"')}
+for dirpath, _, files in os.walk(os.path.join(ROOT, "stopping")):
+    for name in sorted(files):
+        if not name.endswith((".h", ".hpp", ".cpp", ".in")):
+            continue
+        rel = os.path.relpath(os.path.join(dirpath, name), ROOT)
+        part = rel.split(os.sep)[1] if len(rel.split(os.sep)) > 2 else ""
+        for inc in re.findall(r'^\s*#\s*include\s*([<"][^>"]+[>"])', read(rel), re.M):
+            if inc.startswith('"') and inc[1:-1].startswith(("azure2/stopping/", "azure2/physics/")):
+                continue
+            if inc.startswith('"') and inc[1:-1] in STOPPING_OWN.get(part, set()):
+                continue
+            if inc.startswith("<") and re.fullmatch(r"[a-z_]+", inc[1:-1]):
+                continue
+            if (rel, inc) in STOPPING_EXCEPT:
+                continue
+            problems.append(f"{rel}: includes {inc}; stopping/ may include only azure2/stopping/ and azure2/physics/ "
+                            "headers, its own files and the C++ standard library (check 32)")
 
 
 
