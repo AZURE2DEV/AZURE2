@@ -213,9 +213,9 @@ std::vector<int> WorkingCopy::PassWork(const std::vector<const Segment *> &segme
   return work;
 }
 
-const azure2::EnergyTaskList &WorkingCopy::EnergyTasksOf(const std::vector<const Segment *> &segments, CNuc *theCNuc,
+const azure2::EnergyTaskList &WorkingCopy::EnergyTasksOf(const std::vector<const Segment *> &segments,
                                                          const Config &configure) {
-  return plan_.EnergyTasks(*this, theCNuc, configure, PassWork(segments));
+  return plan_.EnergyTasks(*this, configure, PassWork(segments));
 }
 
 /*!
@@ -258,7 +258,7 @@ int WorkingCopy::CalculatePointsInParallel(const std::vector<const Segment *> &s
   // The energy pass: one task per compound energy, each writing only its units' records.  A unit whose calculation
   // throws fails its plan task; the units after it are calculated with a new solve.
   AZUREProfile::Timer setupTimer(AZUREProfile::kEnergyTaskSetup);
-  const azure2::EnergyTaskList &tasks = plan_.EnergyTasks(*this, theCNuc, configure, work);
+  const azure2::EnergyTaskList &tasks = plan_.EnergyTasks(*this, configure, work);
   setupTimer.Stop();
   AZUREProfile::CountMany(AZUREProfile::kEnergyTasks, (long long)tasks.size());
   std::vector<std::vector<std::pair<int, std::string>>> taskFailures(tasks.size());

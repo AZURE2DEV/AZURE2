@@ -89,8 +89,11 @@ and factorisation, one T-matrix per (entrance, exit) pair and external-capture a
 the folds, on values already computed (`Unit::FoldSubPoints`).  Each task writes only its units' records.  The plan
 has one task per point (the point mapping, which made one point calculate others at its energy, is deleted).  Beside
 the units stands the stage's node table (`include/NodeTable.h`: one node per nucleus and bits of E_x with its channel
-rows, built at the end of the set-up, shared by every copy, and per folded point its slots on it); in this state the
-sub-point units still carry the calculation and `AZURE_NODE_CHECK=1` shows that the table says what they say.
+rows, built at the end of the set-up, shared by every copy) with, per plan task, one slot per unit naming its node;
+nodes the hand-over moves off the stage table (re-placed grids, shifted points) live in the working copy's own overflow
+table (`NodeOverflow`, placed by `WorkingCopy::PlaceOverflowNodes`).  The energy tasks are grouped by the slots' nodes;
+the sub-point units still carry the rest of the calculation, and `AZURE_NODE_CHECK=1` shows at every hand-over and
+point pass that every unit is at the node its slot names.
 
 ## 3. Module contents (physical objects; physics stages are functions, not classes)
 

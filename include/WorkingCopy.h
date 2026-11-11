@@ -408,8 +408,7 @@ class WorkingCopy {
                                 azure2::Results &results);
   /// The energy tasks of the point pass over \p segments (the ones CalculatePointsInParallel runs): the analytic
   /// gradient back-propagates through the same tasks (src/GradEnergyTasks.cpp).
-  const azure2::EnergyTaskList &EnergyTasksOf(const std::vector<const Segment *> &segments, CNuc *theCNuc,
-                                              const Config &configure);
+  const azure2::EnergyTaskList &EnergyTasksOf(const std::vector<const Segment *> &segments, const Config &configure);
 
  private:
   void LayOutUnits(std::vector<std::vector<Unit> *> *fresh);  // CompactUnits, PlaceSubPointGrids

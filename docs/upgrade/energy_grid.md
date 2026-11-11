@@ -255,12 +255,25 @@ copy-on-write tables of sub-points.
 **Status, branch 7 part 1 (2026-11-11).** The node table exists beside the sub-point units (`include/NodeTable.h`,
 `src/NodeTable.cpp`): one node per (nucleus, route, bits of E_x) of the units of the point pass, with its channel rows
 (a holder of the rows the first unit at the node computed: no second copy), built at the end of
-`WorkingCopy::Initialize`, held `shared_ptr<const>` by every copy; per plan task of a folded point its slots (the node
-of each sub-point, -1 off the table).  `AZURE_NODE_CHECK=1` compares them with the units before every parallel point
-pass.  Not yet done: the slots' per-(point, node) data (angle rows, stopping, screening, external-capture amplitudes),
-the readers (the energy pass, the kernels, the gradient's cotangents still address units), the copy's overflow table
-for re-placed and shifted nodes (they are counted as "off the table"), and the deletions (sub-point units,
-`SubPointAccess.h`, `NodeTableCache.h`, the copy-on-write tables).
+`WorkingCopy::Initialize`, held `shared_ptr<const>` by every copy.
+
+**Status, branch 7 part 2 (`feature/upgrade-5-grid-readers`, 2026-11-12).** Every slot is on a table: each plan task
+has one slot per unit it calculates (its point, or its sub-points), and each slot names a node of the stage table or of
+the working copy's **overflow table** (`NodeOverflow`), which the hand-over places from nothing for the tasks whose
+units moved (re-placed grids, `ReplaceSubPointGrids`; shifted points, `Segment::UpdatePointEnergyWithShift`) and the
+tasks already on it (`WorkingCopy::PlaceOverflowNodes`, end of `FillEnergyShiftsFromParamsImpl`).  The overflow table
+is a function of the vector handed over alone; its rows are let go before units are re-energised, so the
+copy-on-write of a unit's rows is not triggered by it.  `AZURE_NODE_CHECK=1` checks every unit of every task at every
+hand-over and every point pass: 0 off the tables, 0 on a wrong node (test `upgrade_node_check`).  The seam for the
+shift-kernel branch is the comment of `NodeOverflow`: what branch 8 deletes there (the rigid move of sub-points and
+their overflow entries).  First reader moved: the energy tasks are grouped by the slots' nodes (nucleus, route, E_x
+from the node tables, `CalculationPlan::EnergyTasks`; `EnergyTask::node`), no longer by recomputing E_x per unit.
+Not moved (the sub-point units still carry them): the observables the energy pass writes (unit records), the kernels'
+gather (`PointFold.cpp`: c.m. energy and stopping per sub-point), the result records, the gradient's unit cotangents,
+the external-capture amplitudes and `intEC.dat`, THM `thm_ps_`; not deleted: sub-point units, `SubPointAccess.h`,
+`NodeTableCache.h`, the copy-on-write tables.  What a slot must carry for them (the c.m. energy of the entrance pair,
+which is not E_x minus a constant to the last bit; the stopping, which a fitted stopping scale moves per copy; angle
+rows, Coulomb amplitude, screening, EC amplitudes) is listed in `HANDOFF.md`.
 
 ### 2.7 Thread-count independence by construction
 

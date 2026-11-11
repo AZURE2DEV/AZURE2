@@ -216,8 +216,11 @@ Phase 4); the sub-points of a folded data point becoming entries of one node tab
 second, the first half is merged: the old point mapping is deleted (every output identical; the energy tasks share
 the solves it used to share), and a node table of the compound energies is built beside the sub-points and checked
 against them on the whole tree, with the tools the next step needs (a refined quadrature, its classifier, node
-counts per project). No reader uses the table yet: moving the readers onto it and deleting the sub-point objects
-is the next branch, before the shared energy mesh. Merged in the same batch: one generic kind of fit parameter for
+counts per project). The branch after it (not yet merged) puts every unit of the calculation on a node of a table:
+nodes that move during a fit (a re-placed grid, an energy shift) go into a small table of the working copy, rebuilt
+whenever they move; the energy tasks are now grouped by node. The other readers (the folds, the gradient, the result
+records, external capture) still use the sub-point objects; moving them and deleting those objects is still to do,
+before the shared energy mesh. Merged in the same batch: one generic kind of fit parameter for
 the parameters of apparatus effects (see "How to add a feature now").
 
 **Do the checks still test what they say? (merged 2026-11-11, evening.)** A regression check that edits a project's

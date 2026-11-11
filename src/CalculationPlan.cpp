@@ -16,6 +16,7 @@
 #include "AMatrixFunc.h"
 #include "CNuc.h"
 #include "Config.h"
+#include "NodeTable.h"
 #include "Profile.h"
 #include "TargetEffect.h"
 #include "WorkingCopy.h"
@@ -164,31 +165,45 @@ void SortInPieces(std::vector<T> &v, Less less) {
   }
 }
 
-char RouteOf(const Unit &u, const Config &configure) {
-  if (u.IsTHM()) return 'T';
+char RouteOf(bool thm, const Config &configure) {
+  if (thm) return 'T';
   return (configure.paramMask & Config::USE_AMATRIX) ? 'A' : 'R';
 }
 
 }  // namespace
 
-const EnergyTaskList &CalculationPlan::EnergyTasks(WorkingCopy &data, CNuc *cnuc, const Config &configure,
+const EnergyTaskList &CalculationPlan::EnergyTasks(WorkingCopy &data, const Config &configure,
                                                   const std::vector<int> &work) {
-  // The units of the work in plan order, with their plan tasks, their E_x and amplitude sources now.
+  // The units of the work in plan order, with their plan tasks, their nodes (the slots of the working copy: the node
+  // tables give the nucleus, the route and E_x), and their amplitude sources now.
+  const NodeTable *stage = data.Nodes();
+  const NodeSlots *slots = data.Slots();
+  if (!stage || !slots) throw std::logic_error("CalculationPlan::EnergyTasks: the working copy has no node table");
+  const NodeOverflow &overflow = data.Overflow();
+  const int numStage = stage->Size();
   std::vector<UnitRef> units;
-  std::vector<int> owners;
-  units.reserve(energy_units_.size()), owners.reserve(energy_units_.size());
+  std::vector<int> owners, nodes;
+  units.reserve(energy_units_.size()), owners.reserve(energy_units_.size()), nodes.reserve(energy_units_.size());
   for (int t : work) {
     TaskUnits(data, t, units);
     owners.resize(units.size(), t);
+    nodes.insert(nodes.end(), slots->node.begin() + slots->begin[t], slots->node.begin() + slots->begin[t + 1]);
+    if (nodes.size() != units.size())
+      throw std::logic_error("CalculationPlan::EnergyTasks: the slots of plan task " + std::to_string(t) +
+                             " do not match its units");
   }
   const int n = (int)units.size();
+  auto nodeList = [&](int node) -> const NodeList & {
+    return node < numStage ? static_cast<const NodeList &>(*stage) : overflow;
+  };
+  auto at = [numStage](int node) { return node < numStage ? node : node - numStage; };
   std::vector<double> keys(n);
   std::vector<long long> sources(n);
   // Each unit's key is its own (reads only), so they are formed in parallel: a fit that moves an energy shift
   // rebuilds the tasks at every evaluation, and this serial section is what the other threads wait for.
 #pragma omp parallel for schedule(static) if (n > 4096)
   for (int k = 0; k < n; k++) {
-    keys[k] = AMatrixFunc::InEnergy(cnuc, &data.UnitAt(units[k]));
+    keys[k] = nodeList(nodes[k]).energy[at(nodes[k])];
     sources[k] = ECAmplitudeSource(data.UnitAt(units[k]), configure);
   }
   const bool same = work == energy_work_ && units == energy_units_ && sources == energy_sources_ &&
@@ -209,9 +224,11 @@ const EnergyTaskList &CalculationPlan::EnergyTasks(WorkingCopy &data, CNuc *cnuc
   std::vector<Key> order(n);
 #pragma omp parallel for schedule(static) if (n > 4096)
   for (int k = 0; k < n; k++) {
-    Unit &u = data.UnitAt(units[k]);
-    order[k] = {cnuc->GetPair(cnuc->GetPairNumFromKey(u.GetEntranceKey()))->GetNucleus(), RouteOf(u, configure),
-                keys[k], Bits(keys[k]), u.GetEntranceKey(), u.GetExitKey(), sources[k], k};
+    const Unit &u = data.UnitAt(units[k]);
+    const NodeList &list = nodeList(nodes[k]);
+    const int i = at(nodes[k]);
+    order[k] = {list.nucleus[i], RouteOf(list.thm[i] != 0, configure), keys[k], Bits(keys[k]), u.GetEntranceKey(),
+                u.GetExitKey(), sources[k], k};
   }
   // By task key (nucleus, route, E_x, bits), then by T-matrix group (entrance, exit, amplitude source), then in plan
   // order.  The order is total (the ordinal last), so sorting pieces in parallel and merging them gives the one serial
@@ -236,7 +253,7 @@ const EnergyTaskList &CalculationPlan::EnergyTasks(WorkingCopy &data, CNuc *cnuc
     if (k == 0 || o.nucleus != order[k - 1].nucleus || o.route != order[k - 1].route || o.bits != order[k - 1].bits) {
       list.tasks.emplace_back();
       EnergyTask &t = list.tasks.back();
-      t.nucleus = o.nucleus, t.route = o.route, t.energy = o.energy;
+      t.nucleus = o.nucleus, t.route = o.route, t.energy = o.energy, t.node = nodes[o.ordinal];
       start.push_back(k);
     }
     EnergyTask &task = list.tasks.back();
